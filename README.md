@@ -1,4 +1,4 @@
-# openEMS - Open Engine Monitoring System
+# openEMS - Open Source Engine Monitoring System
 
 **Version 1.0**
 
