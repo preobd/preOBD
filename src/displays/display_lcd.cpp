@@ -67,10 +67,10 @@ void displaySensor(Sensor *ptr, byte line) {
     lcd.print("   ");
 }
 
-void updateLCD(Sensor** sensors, byte numSensors) {
+void updateLCD(Sensor** sensors, int numSensors) {
     currentLine = 0;
     
-    for (byte i = 0; i < numSensors; i++) {
+    for (int i = 0; i < numSensors; i++) {
         if (sensors[i]->isEnabled && sensors[i]->display) {
             displaySensor(sensors[i], currentLine);
             currentLine++;
@@ -86,7 +86,7 @@ void clearLCD() {
 
 void initLCD() {}
 void displaySensor(Sensor *ptr, byte line) {}
-void updateLCD(Sensor** sensors, byte numSensors) {}
+void updateLCD(Sensor** sensors, int numSensors) {}
 void clearLCD() {}
 
 #endif

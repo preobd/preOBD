@@ -3,6 +3,7 @@
  */
 
 #include "sensor_types.h"
+#include "sensors.h"
 #include "config.h"
 
 // Declare all read functions
@@ -298,4 +299,5 @@ Sensor *sensors[] = {
     #endif
 };
 
-const byte numSensors = sizeof(sensors) / sizeof(sensors[0]);
+// Export the number of sensors
+const int numSensors = sizeof(sensors) / sizeof(sensors[0]);

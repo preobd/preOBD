@@ -8,11 +8,8 @@
 #include <Wire.h>
 #include "config.h"
 #include "sensor_types.h"
+#include "sensors.h"
 #include "outputs/output_base.h"
-
-// Declare external sensor array
-extern Sensor *sensors[];
-extern const byte numSensors;
 
 // Declare output module functions
 extern void initOutputModules();
@@ -21,7 +18,7 @@ extern void updateOutputs();
 
 // Declare display functions
 extern void initLCD();
-extern void updateLCD(Sensor**, byte);
+extern void updateLCD(Sensor**, int);
 
 // Declare alarm functions
 extern void initAlarm();
@@ -112,21 +109,21 @@ void setup() {
 
 void loop() {
     // Read all enabled sensors
-    for (byte i = 0; i < numSensors; i++) {
+    for (int i = 0; i < numSensors; i++) {
         if (sensors[i]->isEnabled && sensors[i]->readFunction != nullptr) {
             sensors[i]->readFunction(sensors[i]);
         }
     }
     
     // Send data to output modules
-    for (byte i = 0; i < numSensors; i++) {
+    for (int i = 0; i < numSensors; i++) {
         if (sensors[i]->isEnabled) {
             sendToOutputs(sensors[i]);
         }
     }
     
     // Check alarms
-    for (byte i = 0; i < numSensors; i++) {
+    for (int i = 0; i < numSensors; i++) {
         if (sensors[i]->isEnabled) {
             checkSensorAlarm(sensors[i]);
         }
