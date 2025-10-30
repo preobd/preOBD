@@ -4,6 +4,7 @@
 
 #include "sensor_types.h"
 #include "config.h"
+#include "platform.h"
 #include <SPI.h>
 
 #ifdef ENABLE_AMBIENT_TEMP
@@ -96,7 +97,7 @@ void readVDO120(Sensor *ptr) {
     delay(10);
     reading = analogRead(ptr->input);  // Discard first reading
     
-    if (reading >= 1020) {
+    if (reading >= (ADC_MAX_VALUE - 3)) {
         ptr->value = NAN;
         return;
     }
@@ -105,7 +106,7 @@ void readVDO120(Sensor *ptr) {
     float R2 = 2200.0;  // Bias resistor
     float R1 = R2 * (1023.0 / reading - 1.0);
     
-    // VDO120 lookup table
+    // VDO120 lookup table (resistance in Ω, temperature in °C)
     const byte size = 39;
     float ohms[] = {17162.35,12439.5,9134.53,6764.48,5087.6,3833.89,2929.9,2249.44,
                     1743.15,1364.07,1075.63,850.09,676.95,543.54,439.29,356.64,291.46,
@@ -114,7 +115,7 @@ void readVDO120(Sensor *ptr) {
     float temps[] = {-40,-35,-30,-25,-20,-15,-10,-5,0,5,10,15,20,25,30,35,40,45,50,55,
                      60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150};
     
-    ptr->value = interpolate(R1, size, ohms, temps);  // Store in Celsius
+    ptr->value = interpolate(R1, size, ohms, temps);
 }
 
 void readVDO150(Sensor *ptr) {
@@ -122,13 +123,13 @@ void readVDO150(Sensor *ptr) {
     delay(10);
     reading = analogRead(ptr->input);
     
-    if (reading >= 1020) {
+    if (reading >= (ADC_MAX_VALUE - 3)) {
         ptr->value = NAN;
         return;
     }
     
     float R2 = 2200.0;
-    float R1 = R2 * (1023.0 / reading - 1.0);
+    float R1 = R2 * ((float)ADC_MAX_VALUE / reading - 1.0);
     
     // VDO150 lookup table
     const byte size = 45;
@@ -149,7 +150,7 @@ void readVDO150(Sensor *ptr) {
 void readVDO5BAR(Sensor *ptr) {
     int reading = analogRead(ptr->input);
     
-    if (reading >= 1020) {
+    if (reading >= (ADC_MAX_VALUE - 3)) {
         ptr->value = NAN;
         return;
     }
@@ -164,7 +165,7 @@ void readVDO5BAR(Sensor *ptr) {
 void readVDO2BAR(Sensor *ptr) {
     int reading = analogRead(ptr->input);
     
-    if (reading >= 1020) {
+    if (reading >= (ADC_MAX_VALUE - 3)) {
         ptr->value = NAN;
         return;
     }
@@ -178,40 +179,44 @@ void readVDO2BAR(Sensor *ptr) {
 void readGenericBoost(Sensor *ptr) {
     int reading = analogRead(ptr->input);
     
-    if (reading >= 1020) {
+    if (reading >= (ADC_MAX_VALUE - 3)) {
         ptr->value = NAN;
         return;
     }
     
-    // Generic 3-wire MAP sensor: 1V = 0 bar, 2V = 1 bar, 3V = 2 bar
-    float voltage = reading * (5.0 / 1023.0);
+    float voltage = reading * (SYSTEM_VOLTAGE / (float)ADC_MAX_VALUE);
     
-    if (voltage < 1.0) {
+    if (voltage < 0.5) {
         ptr->value = 0;
     } else {
-        ptr->value = voltage - 1.0;  // Store in BAR
+        ptr->value = (voltage - 0.5) * (2.0 / (SYSTEM_VOLTAGE - 0.5));
     }
 }
 
 void readMPX4250AP(Sensor *ptr) {
-    // Same as generic boost for now
-    readGenericBoost(ptr);
+    int reading = analogRead(ptr->input);
+    
+    if (reading >= (ADC_MAX_VALUE - 3)) {
+        ptr->value = NAN;
+        return;
+    }
+    
+    float voltage = reading * (SYSTEM_VOLTAGE / (float)ADC_MAX_VALUE);
+    float kPa = ((voltage - 0.2) / (SYSTEM_VOLTAGE - 0.2)) * 230.0 + 20.0;
+    ptr->value = kPa / 100.0;  // Convert to bar
 }
 
 // ===== VOLTAGE READING =====
 
 void readVoltageDivider(Sensor *ptr) {
-    // Voltage divider: 100k from battery, 6k8 to ground
-    // Uses internal 1.1V reference
     int reading = analogRead(ptr->input);
     
-    if (reading < 10) {  // Very low reading indicates disconnected
+    if (reading < 10) {
         ptr->value = NAN;
         return;
     }
     
-    float dividerRatio = (100000.0 + 6800.0) / 6800.0;  // 15.70588
-    ptr->value = reading * dividerRatio * AREF_VOLTAGE / 1024.0;  // Store in volts
+    ptr->value = reading * VOLTAGE_DIVIDER_RATIO * AREF_VOLTAGE / (float)ADC_MAX_VALUE;
 }
 
 // ===== BME280 READING =====
@@ -239,7 +244,7 @@ float convertTemperature(float celsius, DisplayUnits units) {
     if (units == FAHRENHEIT) {
         return celsius * 9.0/5.0 + 32.0;
     }
-    return celsius;  // CELSIUS
+    return celsius;
 }
 
 float convertPressure(float bar, DisplayUnits units) {
@@ -248,14 +253,14 @@ float convertPressure(float bar, DisplayUnits units) {
     } else if (units == KPA) {
         return bar * 100.0;
     }
-    return bar;  // BAR
+    return bar;
 }
 
 float convertVoltage(float volts, DisplayUnits units) {
-    return volts;  // No conversion needed
+    return volts;
 }
 
-// OBDII conversion - converts from storage units to OBDII format
+// OBDII conversion functions
 float obdConvertTemp(float celsius) {
     return celsius + 40.0;  // OBDII format: A-40
 }
