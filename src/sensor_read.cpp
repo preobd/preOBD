@@ -156,7 +156,6 @@ void readVDO5BAR(Sensor *ptr) {
     }
     
     // VDO 5 bar sensor polynomial: y = -0.3682x² + 36.465x + 10.648
-    float x = reading * (5.0 / 1023.0);  // Convert to voltage
     float pressure = (-36.465 - sqrt(-1.4728 * reading + 1345.37859)) / 0.7364;
     
     ptr->value = pressure;  // Store in BAR
