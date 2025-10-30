@@ -6,9 +6,6 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// ===== HARDWARE CONFIGURATION =====
-#define TEENSY_40  // or ARDUINO_MEGA, TEENSY_36, etc.
-
 // ===== ENABLED OUTPUT MODULES =====
 #define ENABLE_CAN
 //#define ENABLE_REALDASH
