@@ -115,23 +115,24 @@ void readVDO120(Sensor *ptr) {
     float temps[] = {-40,-35,-30,-25,-20,-15,-10,-5,0,5,10,15,20,25,30,35,40,45,50,55,
                      60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150};
     
-    ptr->value = interpolate(R1, size, ohms, temps);
+    ptr->value = interpolate(R1, size, ohms, temps);  // Store in Celsius
 }
 
 void readVDO150(Sensor *ptr) {
     int reading = analogRead(ptr->input);
     delay(10);
-    reading = analogRead(ptr->input);
+    reading = analogRead(ptr->input);  // Discard first reading
     
     if (reading >= (ADC_MAX_VALUE - 3)) {
         ptr->value = NAN;
         return;
     }
     
+    // Calculate thermistor resistance
     float R2 = 2200.0;
     float R1 = R2 * ((float)ADC_MAX_VALUE / reading - 1.0);
     
-    // VDO150 lookup table
+    // VDO150 lookup table (resistance in Ω, temperature in °C)
     const byte size = 45;
     float ohms[] = {36563.56,26284.63,19149.20,14127.68,10540.68,7721.35,5720.88,4284.03,
                     3240.18,2473.60,1905.87,1486.65,1168.64,926.71,739.98,594.90,481.53,
@@ -143,6 +144,23 @@ void readVDO150(Sensor *ptr) {
                      160,165,170,175,180};
     
     ptr->value = interpolate(R1, size, ohms, temps);  // Store in Celsius
+}
+
+void STEINHART(Sensor *ptr) {
+    /* Use full Steinhart-Hart model.  B model wasn't as accurate.
+        0/45/150	25/45/150
+    A	1.597491234	1.590025176
+    B	2.63014794	2.65980073
+    C	-1.184237497	-1.665059362
+    float steinhart;                              	//steinhart equation to estimate temperature value at any resistance from curve of thermistor sensor
+    steinhart = log(resistance);                  	//lnR
+    steinhart = pow(steinhart,3);                 	//(lnR)^3
+    steinhart *= steinconstC;                     	//C*((lnR)^3)
+    steinhart += (steinconstB*(log(resistance))); 	//B*(lnR) + C*((lnR)^3)
+    steinhart += steinconstA;                     	//Complete equation, 1/T=A+BlnR+C(lnR)^3
+    steinhart = 1.0/steinhart;                    	//Inverse to isolate for T
+    steinhart -= 273.15;                          	//Conversion from kelvin to celcius
+    */
 }
 
 // ===== PRESSURE SENSOR READING =====
