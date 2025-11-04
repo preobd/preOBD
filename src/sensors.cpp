@@ -11,6 +11,7 @@ extern void readMAX6675(Sensor*);
 extern void readMAX31855(Sensor*);
 extern void readVDO120(Sensor*);
 extern void readVDO150(Sensor*);
+extern void readSteinhart(Sensor*);
 extern void readVDO5BAR(Sensor*);
 extern void readVDO2BAR(Sensor*);
 extern void readGenericBoost(Sensor*);
