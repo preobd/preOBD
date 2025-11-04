@@ -146,7 +146,7 @@ void readVDO150(Sensor *ptr) {
     ptr->value = interpolate(R1, size, ohms, temps);  // Store in Celsius
 }
 
-void STEINHART(Sensor *ptr) {
+//void STEINHART(Sensor *ptr) {
     /* Use full Steinhart-Hart model.  B model wasn't as accurate.
         0/45/150	25/45/150
     A	1.597491234	1.590025176
@@ -161,7 +161,7 @@ void STEINHART(Sensor *ptr) {
     steinhart = 1.0/steinhart;                    	//Inverse to isolate for T
     steinhart -= 273.15;                          	//Conversion from kelvin to celcius
     */
-}
+//}
 
 // ===== PRESSURE SENSOR READING =====
 
