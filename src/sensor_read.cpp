@@ -15,32 +15,38 @@ extern Adafruit_BME280 bme;
 // ===== UTILITY FUNCTIONS =====
 
 float interpolate(float X, byte size, float* x, float* y) {
+
     // Handle edge cases
-    if (X <= x[0]) return y[0];
-    if (X >= x[size-1]) return y[size-1];
-    
-    // Find the right segment
-    for (int i = 0; i < size-1; i++) {
-        if (X >= x[i] && X <= x[i+1]) {
-            // Linear interpolation: y = y1 + (x-x1)/(x2-x1) * (y2-y1)
-            return y[i] + ((X - x[i]) / (x[i+1] - x[i])) * (y[i+1] - y[i]);
-        }
-    }
-    return NAN;
+    if (X >= x[0]) return y[0];
+    if (X <= x[size-1]) return y[size-1];
+
+	// Find the right segment
+    for (int i=size-1; i>=0; i--) {
+		if (X >= x[i] && X <= x[i-1]) {
+			// Linear interpolation: y = y1 + ((x – x1) / (x2 – x1)) * (y2 – y1)
+			// VDO150 Example: 
+            //  value = -40 + ((X - 36563.56) / (26284.63 - 36563.56)) * (-35 - -40);
+			//  32000 Ω -> -37.780 °C
+			return y[i] + ((X - x[i]) / (x[i+1] - x[i])) * (y[i+1] - y[i]);
+		}
+	}
+	return NAN;
 }
 
 // ===== THERMOCOUPLE READING =====
 
 void readMAX6675(Sensor *ptr) {
+    SPI.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
     digitalWrite(ptr->input, LOW);
-    delay(1); // Allow chip select to settle
+    delayMicroseconds(1); // Allow chip select to settle
     
     uint16_t value = SPI.transfer(0x00);
     value <<= 8;
     value |= SPI.transfer(0x00);
     
     digitalWrite(ptr->input, HIGH);
-    
+    SPI.endTransaction();
+
     if (value & 0x4) {
         // No thermocouple attached
         ptr->value = NAN;
@@ -55,7 +61,7 @@ void readMAX31855(Sensor *ptr) {
     uint8_t buf[4];
     
     digitalWrite(ptr->input, LOW);
-    delay(1);
+    delayMicroseconds(1);
     
     for (int i = 0; i < 4; i++) {
         buf[i] = SPI.transfer(0x00);
@@ -104,8 +110,9 @@ void readVDO120(Sensor *ptr) {
     
     // Calculate thermistor resistance
     float R2 = 2200.0;  // Bias resistor
-    float R1 = R2 * (1023.0 / reading - 1.0);
-    
+    float R1 = (ADC_MAX_VALUE*SYSTEM_VOLTAGE)-(reading*AREF_VOLTAGE);
+	R1 = reading*AREF_VOLTAGE*R2 / R1;
+
     // VDO120 lookup table (resistance in Ω, temperature in °C)
     const byte size = 39;
     float ohms[] = {17162.35,12439.5,9134.53,6764.48,5087.6,3833.89,2929.9,2249.44,
@@ -130,7 +137,8 @@ void readVDO150(Sensor *ptr) {
     
     // Calculate thermistor resistance
     float R2 = 2200.0;
-    float R1 = R2 * ((float)ADC_MAX_VALUE / reading - 1.0);
+	float R1 = (ADC_MAX_VALUE*SYSTEM_VOLTAGE)-(reading*AREF_VOLTAGE);
+	R1 = reading*AREF_VOLTAGE*R2 / R1;
     
     // VDO150 lookup table (resistance in Ω, temperature in °C)
     const byte size = 45;
@@ -251,7 +259,8 @@ void readBME280Temp(Sensor *ptr) {
 
 void readBME280Pressure(Sensor *ptr) {
     #ifdef ENABLE_BAROMETRIC_PRESSURE
-    ptr->value = bme.readPressure() / 1000.0;  // Store in kPa
+    //ptr->value = bme.readPressure() / 1000.0;  // Store in kPa
+    ptr->value = bme.readPressure() / 100000.0;  // Store in bar
     #else
     ptr->value = NAN;
     #endif

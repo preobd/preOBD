@@ -59,7 +59,7 @@ void displaySensor(Sensor *ptr, byte line) {
             lcd.print("b");
         }
     } else if (ptr->displayUnits == KPA) {
-        lcd.print(displayValue, 0);  // No decimal for kPa
+        lcd.print(displayValue, 1);  // No decimal for kPa
         lcd.print("k");
     }
     
