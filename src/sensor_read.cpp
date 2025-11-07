@@ -109,7 +109,7 @@ void readVDO120(Sensor *ptr) {
     }
     
     // Calculate thermistor resistance
-    float R2 = 2200.0;  // Bias resistor
+    float R2 = 470.0;  // Bias resistor
     float R1 = (ADC_MAX_VALUE*SYSTEM_VOLTAGE)-(reading*AREF_VOLTAGE);
 	R1 = reading*AREF_VOLTAGE*R2 / R1;
 
@@ -136,7 +136,7 @@ void readVDO150(Sensor *ptr) {
     }
     
     // Calculate thermistor resistance
-    float R2 = 2200.0;
+    float R2 = 470.0;
 	float R1 = (ADC_MAX_VALUE*SYSTEM_VOLTAGE)-(reading*AREF_VOLTAGE);
 	R1 = reading*AREF_VOLTAGE*R2 / R1;
     
@@ -266,6 +266,25 @@ void readBME280Pressure(Sensor *ptr) {
     #endif
 }
 
+void readBME280Humidity(Sensor *ptr) {
+    #if defined(ENABLE_HUMIDITY)
+    ptr->value = bme.readHumidity();  // Store as percentage (0-100)
+    #else
+    ptr->value = NAN;
+    #endif
+}
+
+void readBME280Altitude(Sensor *ptr) {
+    #if defined(ENABLE_ALTITUDE)
+    // Calculate altitude from pressure using standard atmosphere model
+    // altitude = 44330 * (1 - (P/P0)^0.1903)
+    // where P is current pressure and P0 is sea level pressure
+    ptr->value = bme.readAltitude(SEA_LEVEL_PRESSURE_HPA);  // Store in meters
+    #else
+    ptr->value = NAN;
+    #endif
+}
+
 // ===== CONVERSION FUNCTIONS =====
 
 // Display conversion - converts from storage units to display units
@@ -289,6 +308,17 @@ float convertVoltage(float volts, DisplayUnits units) {
     return volts;
 }
 
+float convertHumidity(float humidity, DisplayUnits units) {
+    return humidity;  // Always displayed as percentage
+}
+
+float convertAltitude(float meters, DisplayUnits units) {
+    if (units == FEET) {
+        return meters * 3.28084;  // Convert meters to feet
+    }
+    return meters;
+}
+
 // OBDII conversion functions
 float obdConvertTemp(float celsius) {
     return celsius + 40.0;  // OBDII format: A-40
@@ -304,4 +334,12 @@ float obdConvertVoltage(float volts) {
 
 float obdConvertDirect(float value) {
     return value;  // Direct value (like MAX6675/MAX31855)
+}
+
+float obdConvertHumidity(float humidity) {
+    return humidity * 2.55;  // Convert 0-100% to 0-255 (OBDII format: A/2.55)
+}
+
+float obdConvertAltitude(float meters) {
+    return meters;  // Direct value in meters
 }

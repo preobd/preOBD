@@ -28,6 +28,8 @@
 //#define ENABLE_AUXILIARY_BATTERY
 #define ENABLE_AMBIENT_TEMP
 #define ENABLE_BAROMETRIC_PRESSURE
+#define ENABLE_HUMIDITY
+#define ENABLE_ALTITUDE
 
 // ===== ANALOG INPUTS =====
 #define OIL_TEMP_INPUT A0
@@ -68,6 +70,7 @@
 
 // ===== CALIBRATION =====
 #define AREF_VOLTAGE 1.065  // Measured internal reference voltage
+#define SEA_LEVEL_PRESSURE_HPA 1013.25  // standard atmospheric pressure (1013.25 hPa / 101.325 kPa)
 
 // ===== TIMING =====
 #define LOOP_DELAY_MS 100

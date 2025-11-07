@@ -19,15 +19,21 @@ extern void readMPX4250AP(Sensor*);
 extern void readVoltageDivider(Sensor*);
 extern void readBME280Temp(Sensor*);
 extern void readBME280Pressure(Sensor*);
+extern void readBME280Humidity(Sensor*);
+extern void readBME280Altitude(Sensor*);
 
 // Declare conversion functions
 extern float convertTemperature(float, DisplayUnits);
 extern float convertPressure(float, DisplayUnits);
 extern float convertVoltage(float, DisplayUnits);
+extern float convertHumidity(float, DisplayUnits);
+extern float convertAltitude(float, DisplayUnits);
 extern float obdConvertTemp(float);
 extern float obdConvertPressure(float);
 extern float obdConvertVoltage(float);
 extern float obdConvertDirect(float);
+extern float obdConvertHumidity(float);
+extern float obdConvertAltitude(float);
 
 // ===== SENSOR DEFINITIONS =====
 
@@ -259,6 +265,48 @@ Sensor absBarPressure = {
     .readFunction = readBME280Pressure,
     .displayConvert = convertPressure,
     .obdConvert = obdConvertPressure
+};
+#endif
+
+#ifdef ENABLE_HUMIDITY
+Sensor humidity = {
+    .input = 0,
+    .obd2pid = 0xA0,        // Custom PID for humidity (manufacturer specific range)
+    .obd2length = 1,
+    .value = 0,
+    .sensorType = BME280_HUMIDITY,
+    .abbrName = "HUM",
+    .displayName = "Relative Humidity",
+    .displayUnits = PERCENT,
+    .minValue = 0,
+    .maxValue = 100,
+    .alarm = false,
+    .display = true,
+    .isEnabled = true,
+    .readFunction = readBME280Humidity,
+    .displayConvert = convertHumidity,
+    .obdConvert = obdConvertHumidity
+};
+#endif
+
+#ifdef ENABLE_ALTITUDE
+Sensor altitude = {
+    .input = 0,
+    .obd2pid = 0xA1,        // Custom PID for altitude (manufacturer specific range)
+    .obd2length = 2,
+    .value = 0,
+    .sensorType = BME280_ALTITUDE,
+    .abbrName = "ALT",
+    .displayName = "Altitude",
+    .displayUnits = FEET,
+    .minValue = 0,
+    .maxValue = 0,
+    .alarm = false,
+    .display = true,
+    .isEnabled = true,
+    .readFunction = readBME280Altitude,
+    .displayConvert = convertAltitude,
+    .obdConvert = obdConvertAltitude
 };
 #endif
 

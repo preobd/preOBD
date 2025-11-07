@@ -23,7 +23,9 @@ enum SensorType {
     STEINHART,
     VOLTAGE_DIVIDER,
     BME280_TEMP,
-    BME280_PRESSURE
+    BME280_PRESSURE,
+    BME280_HUMIDITY,
+    BME280_ALTITUDE   
 };
 
 // Display units enumeration
@@ -33,7 +35,10 @@ enum DisplayUnits {
     BAR,
     PSI,
     KPA,
-    VOLTS
+    VOLTS,
+    PERCENT,
+    METERS,
+    FEET
 };
 
 // Sensor structure with function pointers
@@ -46,7 +51,7 @@ typedef struct Sensor {
     byte obd2length;
     
     // Data
-    float value;              // Stored in standard units (C, bar, volts)
+    float value;              // Stored in standard units (C, bar, volts, %, meters)
     
     // Type and identification
     SensorType sensorType;
