@@ -235,7 +235,7 @@ Sensor ambientAirTemp = {
     .sensorType = BME280_TEMP,
     .abbrName = "AMB",
     .displayName = "Ambient Air Temperature",
-    .displayUnits = CELSIUS,
+    .displayUnits = FAHRENHEIT,
     .minValue = 0,
     .maxValue = 0,
     .alarm = false,
@@ -254,9 +254,9 @@ Sensor absBarPressure = {
     .obd2length = 1,
     .value = 0,
     .sensorType = BME280_PRESSURE,
-    .abbrName = "ATM",
-    .displayName = "Atmospheric Pressure",
-    .displayUnits = KPA,
+    .abbrName = "ABP",
+    .displayName = "Absolute Barometric Pressure",
+    .displayUnits = INHG,
     .minValue = 0,
     .maxValue = 0,
     .alarm = false,
@@ -275,7 +275,7 @@ Sensor humidity = {
     .obd2length = 1,
     .value = 0,
     .sensorType = BME280_HUMIDITY,
-    .abbrName = "HUM",
+    .abbrName = " RH",
     .displayName = "Relative Humidity",
     .displayUnits = PERCENT,
     .minValue = 0,
@@ -345,6 +345,12 @@ Sensor *sensors[] = {
     #endif
     #ifdef ENABLE_BAROMETRIC_PRESSURE
     &absBarPressure,
+    #endif
+    #ifdef ENABLE_HUMIDITY
+    &humidity,
+    #endif
+    #ifdef ENABLE_ALTITUDE
+    &altitude,
     #endif
 };
 

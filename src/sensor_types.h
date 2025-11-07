@@ -35,6 +35,7 @@ enum DisplayUnits {
     BAR,
     PSI,
     KPA,
+    INHG,
     VOLTS,
     PERCENT,
     METERS,

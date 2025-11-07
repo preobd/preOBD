@@ -300,6 +300,8 @@ float convertPressure(float bar, DisplayUnits units) {
         return bar * 14.5038;
     } else if (units == KPA) {
         return bar * 100.0;
+    } else if (units == INHG) {
+        return bar * 29.53;
     }
     return bar;
 }
