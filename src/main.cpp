@@ -41,30 +41,30 @@ void setupADC() {
     // Configure analog reference based on platform
     #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
         // Arduino Uno/Nano - 5V system
-        analogReference(INTERNAL);  // 1.1V reference
+        analogReference(DEFAULT);  // 5V reference
         Serial.println("ADC: Using INTERNAL 1.1V reference (ATmega328)");
         
     #elif defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
         // Arduino Mega - 5V system
-        analogReference(INTERNAL1V1);  // 1.1V reference
-        Serial.println("ADC: Using INTERNAL1V1 reference (Mega)");
+        analogReference(DEFAULT);  // 5V reference
+        Serial.println("ADC: Using DEFAULT 5V reference");
         
     #elif defined(__MK20DX256__) || defined(__MK20DX128__)
         // Teensy 3.1/3.2 - 3.3V system
-        analogReference(INTERNAL);  // 1.2V reference
+        analogReference(DEFAULT);  // 3.3V reference
         analogReadResolution(ADC_RESOLUTION);
         analogReadAveraging(4);  // Average 4 samples for stability
-        Serial.println("ADC: Using INTERNAL 1.2V reference (Teensy 3.1/3.2)");
+        Serial.println("ADC: Using DEFAULT 3.3V reference (Teensy 3.1/3.2)");
         Serial.print("ADC: Resolution set to ");
         Serial.print(ADC_RESOLUTION);
         Serial.println(" bits");
         
     #elif defined(__MK64FX512__) || defined(__MK66FX1M0__)
         // Teensy 3.5/3.6 - 3.3V system
-        analogReference(INTERNAL);  // 1.2V reference
+        analogReference(DEFAULT);  // 3.3V reference
         analogReadResolution(ADC_RESOLUTION);
         analogReadAveraging(4);
-        Serial.println("ADC: Using INTERNAL 1.2V reference (Teensy 3.5/3.6)");
+        Serial.println("ADC: Using DEFAULT 3.3V reference (Teensy 3.5/3.6)");
         Serial.print("ADC: Resolution set to ");
         Serial.print(ADC_RESOLUTION);
         Serial.println(" bits");

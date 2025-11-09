@@ -103,25 +103,22 @@ void readVDO120(Sensor *ptr) {
     delay(10);
     reading = analogRead(ptr->input);  // Discard first reading
     
-    if (reading >= (ADC_MAX_VALUE - 3)) {
+    if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
         ptr->value = NAN;
         return;
     }
-    
+
     // Calculate thermistor resistance
-    float R2 = 470.0;  // Bias resistor
-    float R1 = (ADC_MAX_VALUE*SYSTEM_VOLTAGE)-(reading*AREF_VOLTAGE);
-	R1 = reading*AREF_VOLTAGE*R2 / R1;
+    float R2 = 2200.0;  // Bias resistor
+    float R1 = reading * R2 / (ADC_MAX_VALUE - reading);
 
     // VDO120 lookup table (resistance in Ω, temperature in °C)
-    const byte size = 39;
-    float ohms[] = {17162.35,12439.5,9134.53,6764.48,5087.6,3833.89,2929.9,2249.44,
-                    1743.15,1364.07,1075.63,850.09,676.95,543.54,439.29,356.64,291.46,
+    const byte size = 31;
+    float ohms[] = {1743.15,1364.07,1075.63,850.09,676.95,543.54,439.29,356.64,291.46,
                     239.56,197.29,161.46,134.03,113.96,97.05,82.36,70.12,59.73,51.21,
                     44.32,38.47,33.4,29.12,25.53,22.44,19.75,17.44,15.46,13.75,12.26,10.96};
-    float temps[] = {-40,-35,-30,-25,-20,-15,-10,-5,0,5,10,15,20,25,30,35,40,45,50,55,
-                     60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150};
-    
+    float temps[] = {0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,
+                    105,110,115,120,125,130,135,140,145,150};  
     ptr->value = interpolate(R1, size, ohms, temps);  // Store in Celsius
 }
 
@@ -130,27 +127,23 @@ void readVDO150(Sensor *ptr) {
     delay(10);
     reading = analogRead(ptr->input);  // Discard first reading
     
-    if (reading >= (ADC_MAX_VALUE - 3)) {
+    if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
         ptr->value = NAN;
         return;
     }
-    
+
     // Calculate thermistor resistance
-    float R2 = 470.0;
-	float R1 = (ADC_MAX_VALUE*SYSTEM_VOLTAGE)-(reading*AREF_VOLTAGE);
-	R1 = reading*AREF_VOLTAGE*R2 / R1;
-    
+    float R2 = 2200.0;  // Bias resistor
+    float R1 = reading * R2 / (ADC_MAX_VALUE - reading);
+
     // VDO150 lookup table (resistance in Ω, temperature in °C)
-    const byte size = 45;
-    float ohms[] = {36563.56,26284.63,19149.20,14127.68,10540.68,7721.35,5720.88,4284.03,
-                    3240.18,2473.60,1905.87,1486.65,1168.64,926.71,739.98,594.90,481.53,
+    const byte size = 37;
+    float ohms[] = {3240.18,2473.60,1905.87,1486.65,1168.64,926.71,739.98,594.90,481.53,
                     392.57,322.17,266.19,221.17,184.72,155.29,131.38,112.08,96.40,82.96,
                     71.44,61.92,54.01,47.24,41.42,36.51,32.38,28.81,25.70,23.0,20.66,18.59,
                     16.74,15.11,13.66,12.38,11.25,10.24};
-    float temps[] = {-40,-35,-30,-25,-20,-15,-10,-5,0,5,10,15,20,25,30,35,40,45,50,55,60,
-                     65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,
-                     160,165,170,175,180};
-    
+    float temps[] = {0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,
+                    110,115,120,125,130,135,140,145,150,155,160,165,170,175,180};
     ptr->value = interpolate(R1, size, ohms, temps);  // Store in Celsius
 }
 
@@ -179,7 +172,7 @@ void readSteinhart(Sensor *ptr) {
 void readVDO5BAR(Sensor *ptr) {
     int reading = analogRead(ptr->input);
     
-    if (reading >= (ADC_MAX_VALUE - 3)) {
+    if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
         ptr->value = NAN;
         return;
     }
@@ -193,7 +186,7 @@ void readVDO5BAR(Sensor *ptr) {
 void readVDO2BAR(Sensor *ptr) {
     int reading = analogRead(ptr->input);
     
-    if (reading >= (ADC_MAX_VALUE - 3)) {
+    if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
         ptr->value = NAN;
         return;
     }
@@ -207,7 +200,7 @@ void readVDO2BAR(Sensor *ptr) {
 void readGenericBoost(Sensor *ptr) {
     int reading = analogRead(ptr->input);
     
-    if (reading >= (ADC_MAX_VALUE - 3)) {
+    if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
         ptr->value = NAN;
         return;
     }
@@ -224,7 +217,7 @@ void readGenericBoost(Sensor *ptr) {
 void readMPX4250AP(Sensor *ptr) {
     int reading = analogRead(ptr->input);
     
-    if (reading >= (ADC_MAX_VALUE - 3)) {
+    if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
         ptr->value = NAN;
         return;
     }

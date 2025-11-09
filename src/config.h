@@ -69,10 +69,9 @@
 #define OIL_PRESSURE_MAX 5
 
 // ===== CALIBRATION =====
-#define AREF_VOLTAGE 1.065  // Measured internal reference voltage
 #define SEA_LEVEL_PRESSURE_HPA 1013.25  // standard atmospheric pressure (1013.25 hPa / 101.325 kPa)
 
 // ===== TIMING =====
-#define LOOP_DELAY_MS 100
+#define LOOP_DELAY_MS 200
 
 #endif

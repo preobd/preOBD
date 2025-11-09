@@ -12,21 +12,21 @@
     // Arduino Mega/Uno - 5V system with 1.1V internal reference
     #define SYSTEM_VOLTAGE 5.0
     #define SYSTEM_VOLTAGE_MV 5000  // For preprocessor comparisons
-    #define AREF_VOLTAGE 1.065
+    #define AREF_VOLTAGE 5.0    // Using VCC as reference
     #define ADC_RESOLUTION 10   // 10-bit ADC (0-1023)
     #define ADC_MAX_VALUE 1023
 #elif defined(__MK20DX256__) || defined(__MK20DX128__)
     // Teensy 3.x - 3.3V system with 1.2V internal reference
     #define SYSTEM_VOLTAGE 3.3
     #define SYSTEM_VOLTAGE_MV 3300
-    #define AREF_VOLTAGE 1.2
+    #define AREF_VOLTAGE 3.3    // Using VCC as reference
     #define ADC_RESOLUTION 12   // 12-bit ADC (0-4095)
     #define ADC_MAX_VALUE 4095
 #elif defined(__MK64FX512__) || defined(__MK66FX1M0__) || defined(__IMXRT1062__)
     // Teensy 3.5/3.6/4.x - can be 3.3V or 5V tolerant
     #define SYSTEM_VOLTAGE 3.3
     #define SYSTEM_VOLTAGE_MV 3300
-    #define AREF_VOLTAGE 1.2
+    #define AREF_VOLTAGE 3.3    // Using VCC as reference
     #define ADC_RESOLUTION 12   // 12-bit ADC (0-4095)
     #define ADC_MAX_VALUE 4095
 #elif defined(ARDUINO_SAM_DUE)
