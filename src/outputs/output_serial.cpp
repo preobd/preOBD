@@ -35,6 +35,7 @@ void sendSerialOutput(Sensor *ptr) {
         case BAR: Serial.print("bar"); break;
         case PSI: Serial.print("psi"); break;
         case KPA: Serial.print("kPa"); break;
+        case INHG: Serial.print("inHg"); break;
         case VOLTS: Serial.print("V"); break;
         case PERCENT: Serial.print("%"); break;
         case METERS: Serial.print("m"); break;

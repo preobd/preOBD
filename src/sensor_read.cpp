@@ -14,23 +14,19 @@ extern Adafruit_BME280 bme;
 
 // ===== UTILITY FUNCTIONS =====
 
-float interpolate(float X, byte size, float* x, float* y) {
-
+float interpolate(float X, byte size, const float* x, const float* y) {
     // Handle edge cases
     if (X >= x[0]) return y[0];
     if (X <= x[size-1]) return y[size-1];
 
-	// Find the right segment
-    for (int i=size-1; i>=0; i--) {
-		if (X >= x[i] && X <= x[i-1]) {
-			// Linear interpolation: y = y1 + ((x – x1) / (x2 – x1)) * (y2 – y1)
-			// VDO150 Example: 
-            //  value = -40 + ((X - 36563.56) / (26284.63 - 36563.56)) * (-35 - -40);
-			//  32000 Ω -> -37.780 °C
-			return y[i] + ((X - x[i]) / (x[i+1] - x[i])) * (y[i+1] - y[i]);
-		}
-	}
-	return NAN;
+    // Find the right segment
+    for (int i = size-1; i >= 0; i--) {
+        if (X >= x[i] && X <= x[i-1]) {
+            // Linear interpolation: y = y1 + ((x – x1) / (x2 – x1)) * (y2 – y1)
+            return y[i] + ((X - x[i]) / (x[i+1] - x[i])) * (y[i+1] - y[i]);
+        }
+    }
+    return NAN;
 }
 
 // ===== THERMOCOUPLE READING =====
@@ -38,7 +34,7 @@ float interpolate(float X, byte size, float* x, float* y) {
 void readMAX6675(Sensor *ptr) {
     SPI.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
     digitalWrite(ptr->input, LOW);
-    delayMicroseconds(1); // Allow chip select to settle
+    delayMicroseconds(1);
     
     uint16_t value = SPI.transfer(0x00);
     value <<= 8;
@@ -48,8 +44,7 @@ void readMAX6675(Sensor *ptr) {
     SPI.endTransaction();
 
     if (value & 0x4) {
-        // No thermocouple attached
-        ptr->value = NAN;
+        ptr->value = NAN;  // No thermocouple attached
     } else {
         value >>= 3;
         ptr->value = value * 0.25;  // Store in Celsius
@@ -86,7 +81,6 @@ void readMAX31855(Sensor *ptr) {
     
     // Extract temperature (top 14 bits)
     if (d & 0x80000000) {
-        // Negative value
         d = 0xFFFFC000 | ((d >> 18) & 0x00003FFF);
     } else {
         d >>= 18;
@@ -96,9 +90,9 @@ void readMAX31855(Sensor *ptr) {
     ptr->value = temp * 0.25;  // Store in Celsius
 }
 
-// ===== THERMISTOR READING =====
+// ===== GENERIC THERMISTOR - STEINHART-HART METHOD =====
 
-void readVDO120(Sensor *ptr) {
+void readThermistorSteinhart(Sensor *ptr) {
     int reading = analogRead(ptr->input);
     delay(10);
     reading = analogRead(ptr->input);  // Discard first reading
@@ -107,64 +101,82 @@ void readVDO120(Sensor *ptr) {
         ptr->value = NAN;
         return;
     }
-
+    
+    // Get calibration (with defaults if not provided)
+    ThermistorSteinhartCalibration* cal = getThermistorSteinhartCal(ptr);
+    
+    float R_bias = (cal != nullptr) ? cal->bias_resistor : 10000.0;
+    float A = (cal != nullptr) ? cal->steinhart_a : 1.129241e-3;
+    float B = (cal != nullptr) ? cal->steinhart_b : 2.341077e-4;
+    float C = (cal != nullptr) ? cal->steinhart_c : 8.775468e-8;
+    
     // Calculate thermistor resistance
-    float R2 = 2200.0;  // Bias resistor
-    float R1 = reading * R2 / (ADC_MAX_VALUE - reading);
+    float R_thermistor = reading * R_bias / (ADC_MAX_VALUE - reading);
+    
+    if (R_thermistor <= 0) {
+        ptr->value = NAN;
+        return;
+    }
+    
+    // Steinhart-Hart equation: 1/T = A + B*ln(R) + C*(ln(R))^3
+    float logR = log(R_thermistor);
+    float logR3 = logR * logR * logR;
+    float temp_kelvin = 1.0 / (A + (B * logR) + (C * logR3));
+    
+    ptr->value = temp_kelvin - 273.15;  // Store in Celsius
+}
 
-    // VDO120 lookup table (resistance in Ω, temperature in °C)
-    const byte size = 31;
-    float ohms[] = {1743.15,1364.07,1075.63,850.09,676.95,543.54,439.29,356.64,291.46,
-                    239.56,197.29,161.46,134.03,113.96,97.05,82.36,70.12,59.73,51.21,
-                    44.32,38.47,33.4,29.12,25.53,22.44,19.75,17.44,15.46,13.75,12.26,10.96};
-    float temps[] = {0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,
-                    105,110,115,120,125,130,135,140,145,150};  
-    ptr->value = interpolate(R1, size, ohms, temps);  // Store in Celsius
+// ===== GENERIC THERMISTOR - LOOKUP TABLE METHOD =====
+
+void readThermistorLookup(Sensor *ptr) {
+    int reading = analogRead(ptr->input);
+    delay(10);
+    reading = analogRead(ptr->input);  // Discard first reading
+    
+    if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
+        ptr->value = NAN;
+        return;
+    }
+    
+    // Get calibration (REQUIRED for lookup method)
+    ThermistorLookupCalibration* cal = getThermistorLookupCal(ptr);
+    
+    if (cal == nullptr) {
+        ptr->value = NAN;  // Can't do lookup without table
+        return;
+    }
+    
+    // Calculate thermistor resistance
+    float R_thermistor = reading * cal->bias_resistor / (ADC_MAX_VALUE - reading);
+    
+    if (R_thermistor <= 0) {
+        ptr->value = NAN;
+        return;
+    }
+    
+    // Interpolate temperature from lookup table
+    ptr->value = interpolate(R_thermistor, cal->table_size,
+                            cal->resistance_table, cal->temperature_table);
+}
+
+// ===== LEGACY THERMISTOR FUNCTIONS (Backward Compatibility) =====
+// These now just call the generic functions with hardcoded calibrations
+
+void readVDO120(Sensor *ptr) {
+    // This is now just a wrapper - deprecated but kept for compatibility
+    // Users should use readThermistorLookup with VDO_120C_LOOKUP instead
+    readThermistorLookup(ptr);
 }
 
 void readVDO150(Sensor *ptr) {
-    int reading = analogRead(ptr->input);
-    delay(10);
-    reading = analogRead(ptr->input);  // Discard first reading
-    
-    if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
-        ptr->value = NAN;
-        return;
-    }
-
-    // Calculate thermistor resistance
-    float R2 = 2200.0;  // Bias resistor
-    float R1 = reading * R2 / (ADC_MAX_VALUE - reading);
-
-    // VDO150 lookup table (resistance in Ω, temperature in °C)
-    const byte size = 37;
-    float ohms[] = {3240.18,2473.60,1905.87,1486.65,1168.64,926.71,739.98,594.90,481.53,
-                    392.57,322.17,266.19,221.17,184.72,155.29,131.38,112.08,96.40,82.96,
-                    71.44,61.92,54.01,47.24,41.42,36.51,32.38,28.81,25.70,23.0,20.66,18.59,
-                    16.74,15.11,13.66,12.38,11.25,10.24};
-    float temps[] = {0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,
-                    110,115,120,125,130,135,140,145,150,155,160,165,170,175,180};
-    ptr->value = interpolate(R1, size, ohms, temps);  // Store in Celsius
+    // This is now just a wrapper - deprecated but kept for compatibility
+    // Users should use readThermistorLookup with VDO_150C_LOOKUP instead
+    readThermistorLookup(ptr);
 }
 
 void readSteinhart(Sensor *ptr) {
-    /* Use full Steinhart-Hart model.  B model wasn't as accurate.
-        0/45/150	25/45/150
-    A	1.597491234	1.590025176
-    B	2.63014794	2.65980073
-    C	-1.184237497	-1.665059362
-    float steinhart;                              	//steinhart equation to estimate temperature value at any resistance from curve of thermistor sensor
-    steinhart = log(resistance);                  	//lnR
-    steinhart = pow(steinhart,3);                 	//(lnR)^3
-    steinhart *= steinconstC;                     	//C*((lnR)^3)
-    steinhart += (steinconstB*(log(resistance))); 	//B*(lnR) + C*((lnR)^3)
-    steinhart += steinconstA;                     	//Complete equation, 1/T=A+BlnR+C(lnR)^3
-    steinhart = 1.0/steinhart;                    	//Inverse to isolate for T
-    steinhart -= 273.15;                          	//Conversion from kelvin to celcius
-    */
-    ptr->value = NAN;
-    return;
-
+    // Deprecated - use readThermistorSteinhart instead
+    readThermistorSteinhart(ptr);
 }
 
 // ===== PRESSURE SENSOR READING =====
@@ -252,7 +264,6 @@ void readBME280Temp(Sensor *ptr) {
 
 void readBME280Pressure(Sensor *ptr) {
     #ifdef ENABLE_BAROMETRIC_PRESSURE
-    //ptr->value = bme.readPressure() / 1000.0;  // Store in kPa
     ptr->value = bme.readPressure() / 100000.0;  // Store in bar
     #else
     ptr->value = NAN;
@@ -269,9 +280,6 @@ void readBME280Humidity(Sensor *ptr) {
 
 void readBME280Altitude(Sensor *ptr) {
     #if defined(ENABLE_ALTITUDE)
-    // Calculate altitude from pressure using standard atmosphere model
-    // altitude = 44330 * (1 - (P/P0)^0.1903)
-    // where P is current pressure and P0 is sea level pressure
     ptr->value = bme.readAltitude(SEA_LEVEL_PRESSURE_HPA);  // Store in meters
     #else
     ptr->value = NAN;
@@ -280,7 +288,6 @@ void readBME280Altitude(Sensor *ptr) {
 
 // ===== CONVERSION FUNCTIONS =====
 
-// Display conversion - converts from storage units to display units
 float convertTemperature(float celsius, DisplayUnits units) {
     if (units == FAHRENHEIT) {
         return celsius * 9.0/5.0 + 32.0;
@@ -304,17 +311,18 @@ float convertVoltage(float volts, DisplayUnits units) {
 }
 
 float convertHumidity(float humidity, DisplayUnits units) {
-    return humidity;  // Always displayed as percentage
+    return humidity;
 }
 
 float convertAltitude(float meters, DisplayUnits units) {
     if (units == FEET) {
-        return meters * 3.28084;  // Convert meters to feet
+        return meters * 3.28084;
     }
     return meters;
 }
 
-// OBDII conversion functions
+// ===== OBDII CONVERSION FUNCTIONS =====
+
 float obdConvertTemp(float celsius) {
     return celsius + 40.0;  // OBDII format: A-40
 }
@@ -328,13 +336,13 @@ float obdConvertVoltage(float volts) {
 }
 
 float obdConvertDirect(float value) {
-    return value;  // Direct value (like MAX6675/MAX31855)
+    return value;
 }
 
 float obdConvertHumidity(float humidity) {
-    return humidity * 2.55;  // Convert 0-100% to 0-255 (OBDII format: A/2.55)
+    return humidity * 2.55;  // Convert 0-100% to 0-255
 }
 
 float obdConvertAltitude(float meters) {
-    return meters;  // Direct value in meters
+    return meters;
 }

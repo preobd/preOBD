@@ -1,0 +1,80 @@
+/*
+ * sensor_library.h - Predefined sensor configurations
+ * 
+ * This is the "sensor catalog" - choose from these presets in config.h
+ * 
+ * FOR SIMPLE SETUP: Just pick the sensor ID that matches your hardware
+ * FOR ADVANCED USERS: Use these as starting points or define custom calibrations
+ */
+
+#ifndef SENSOR_LIBRARY_H
+#define SENSOR_LIBRARY_H
+
+// ===== TEMPERATURE SENSORS =====
+
+// Thermocouples
+#define K_TYPE_THERMOCOUPLE_MAX6675   1
+#define K_TYPE_THERMOCOUPLE_MAX31855  2
+
+// VDO Thermistors - Lookup Table Method (Most Accurate)
+#define VDO_120C_LOOKUP              10  // VDO 120°C coolant/transfer case sensor
+#define VDO_150C_LOOKUP              11  // VDO 150°C oil temp sensor
+
+// VDO Thermistors - Steinhart-Hart Method (Faster, Good Accuracy)
+#define VDO_120C_STEINHART           12  // VDO 120°C with Steinhart-Hart
+#define VDO_150C_STEINHART           13  // VDO 150°C with Steinhart-Hart
+
+// Generic NTC Thermistors (Common from Amazon/eBay)
+#define GENERIC_NTC_10K_3950         20  // 10KΩ NTC, β=3950 (very common)
+#define GENERIC_NTC_10K_3435         21  // 10KΩ NTC, β=3435
+#define GENERIC_NTC_10K_3380         22  // 10KΩ NTC, β=3380
+
+// Custom/User-Defined
+#define CUSTOM_THERMISTOR_LOOKUP     29  // User provides lookup table
+#define CUSTOM_THERMISTOR_STEINHART  30  // User provides coefficients
+
+// ===== PRESSURE SENSORS =====
+
+// VDO Pressure Sensors
+#define VDO_5BAR_PRESSURE            40  // VDO 5-bar oil pressure (0-5 bar)
+#define VDO_2BAR_PRESSURE            41  // VDO 2-bar boost pressure (0-2 bar)
+
+// Generic Pressure Sensors
+#define GENERIC_MAP_0_250KPA         42  // Generic 0-250kPa MAP sensor
+#define MPX4250AP_SENSOR             43  // Freescale MPX4250AP (20-250kPa)
+
+// Custom/User-Defined
+#define CUSTOM_PRESSURE_SENSOR       49  // User provides calibration
+
+// ===== VOLTAGE SENSORS =====
+
+// Standard Battery Monitoring
+#define STANDARD_12V_DIVIDER         50  // 100kΩ/6.8kΩ for 5V systems
+#define STANDARD_12V_DIVIDER_3V3     51  // 100kΩ/22kΩ for 3.3V systems
+#define STANDARD_24V_DIVIDER         52  // For 24V truck systems
+
+// Custom/User-Defined
+#define CUSTOM_VOLTAGE_DIVIDER       59  // User provides R1/R2
+
+// ===== ENVIRONMENTAL SENSORS =====
+
+// BME280 (I2C sensor with temp, pressure, humidity)
+#define BME280_AMBIENT_TEMPERATURE   60
+#define BME280_BAROMETRIC_PRESSURE   61
+#define BME280_RELATIVE_HUMIDITY     62
+#define BME280_ESTIMATED_ALTITUDE    63
+
+// ===== USAGE EXAMPLES =====
+/*
+ * In config.h, simply pick a sensor:
+ * 
+ * #define ENABLE_COOLANT_TEMP
+ * #define COOLANT_SENSOR_TYPE    VDO_120C_LOOKUP
+ * #define COOLANT_TEMP_INPUT     A2
+ * 
+ * That's it! The system looks up all the calibration data automatically.
+ * 
+ * Advanced users can override with custom calibrations (see advanced_config.h)
+ */
+
+#endif
