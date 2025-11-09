@@ -159,26 +159,6 @@ void readThermistorLookup(Sensor *ptr) {
                             cal->resistance_table, cal->temperature_table);
 }
 
-// ===== LEGACY THERMISTOR FUNCTIONS (Backward Compatibility) =====
-// These now just call the generic functions with hardcoded calibrations
-
-void readVDO120(Sensor *ptr) {
-    // This is now just a wrapper - deprecated but kept for compatibility
-    // Users should use readThermistorLookup with VDO_120C_LOOKUP instead
-    readThermistorLookup(ptr);
-}
-
-void readVDO150(Sensor *ptr) {
-    // This is now just a wrapper - deprecated but kept for compatibility
-    // Users should use readThermistorLookup with VDO_150C_LOOKUP instead
-    readThermistorLookup(ptr);
-}
-
-void readSteinhart(Sensor *ptr) {
-    // Deprecated - use readThermistorSteinhart instead
-    readThermistorSteinhart(ptr);
-}
-
 // ===== PRESSURE SENSOR READING =====
 
 void readVDO5BAR(Sensor *ptr) {

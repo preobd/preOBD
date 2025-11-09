@@ -14,15 +14,12 @@ struct Sensor;
 enum SensorType { 
     MAX6675,
     MAX31855,
-    VDO120,              // Kept for backward compatibility
-    VDO150,              // Kept for backward compatibility
     THERMISTOR_LOOKUP,   // Generic thermistor with lookup table
     THERMISTOR_STEINHART,// Generic thermistor with Steinhart-Hart
     GENERIC_BOOST,
     MPX4250AP,
     VDO_2BAR,
     VDO_5BAR,
-    STEINHART,           // Deprecated - use THERMISTOR_STEINHART
     VOLTAGE_DIVIDER,
     BME280_TEMP,
     BME280_PRESSURE,
