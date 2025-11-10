@@ -89,17 +89,17 @@ static const ThermistorLookupCalibration vdo150_lookup_cal = {
 // VDO 120°C using Steinhart-Hart (curve-fitted from lookup table)
 static const ThermistorSteinhartCalibration vdo120_steinhart_cal = {
     .bias_resistor = 2200.0,
-    .steinhart_a = 1.234e-3,    // TODO: Calculate accurate coefficients
-    .steinhart_b = 2.345e-4,    // These are placeholders
-    .steinhart_c = 1.234e-7
+    .steinhart_a = 1.764445997570e-03,
+    .steinhart_b = 2.499534389889e-04,
+    .steinhart_c = 6.773335597401e-08
 };
 
 // VDO 150°C using Steinhart-Hart (curve-fitted from lookup table)
 static const ThermistorSteinhartCalibration vdo150_steinhart_cal = {
     .bias_resistor = 2200.0,
-    .steinhart_a = 1.456e-3,    // TODO: Calculate accurate coefficients
-    .steinhart_b = 2.567e-4,    // These are placeholders
-    .steinhart_c = 1.456e-7
+    .steinhart_a = 1.591623373219e-03,
+    .steinhart_b = 2.659356969556e-04,
+    .steinhart_c = -1.610552525653e-07
 };
 
 // Generic 10K NTC with β=3950 (very common thermistor)
