@@ -8,8 +8,6 @@
 #ifdef ENABLE_SERIAL_OUTPUT
 
 void initSerialOutput() {
-    Serial.begin(115200);
-    while (!Serial) {};
     Serial.println("Serial output initialized");
     Serial.println("Sensor,Value,Units");
 }
