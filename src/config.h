@@ -1,8 +1,8 @@
 /*
  * config.h - User Configuration File
  * 
- * SIMPLE USERS: Just pick sensor types from sensor_library.h
- * ADVANCED USERS: See advanced_config.h for custom calibrations
+ * BASIC SETUP: Just pick sensor types from sensor_library.h
+ * ADVANCED SETUP: See advanced_config.h for custom calibrations
  */
 
 #ifndef CONFIG_H

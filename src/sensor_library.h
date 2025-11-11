@@ -3,8 +3,8 @@
  * 
  * This is the "sensor catalog" - choose from these presets in config.h
  * 
- * FOR SIMPLE SETUP: Just pick the sensor ID that matches your hardware
- * FOR ADVANCED USERS: Use these as starting points or define custom calibrations
+ * FOR BASIC SETUP: Just pick the sensor ID that matches your hardware
+ * FOR ADVANCED users: Use these as starting points or define custom calibrations
  */
 
 #ifndef SENSOR_LIBRARY_H

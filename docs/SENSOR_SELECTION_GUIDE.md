@@ -1,6 +1,6 @@
 # Sensor Selection Guide
 
-## For Simple Users - Just Pick Your Sensor!
+## For Basic Setup - Just Pick Your Sensor!
 
 The new calibration system makes sensor configuration incredibly easy. You just need to know what physical sensor you have, then pick the matching ID from the catalog.
 

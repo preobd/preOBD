@@ -63,7 +63,6 @@
 #ifdef ENABLE_COOLANT_TEMP
     const SensorConfig* coolant_config = getSensorConfig(COOLANT_SENSOR_TYPE);
     
-    // Advanced users can provide custom calibration
     #ifdef COOLANT_CUSTOM_CALIBRATION
         static ThermistorSteinhartCalibration coolant_custom_cal = {
             .bias_resistor = COOLANT_BIAS_RESISTOR,
