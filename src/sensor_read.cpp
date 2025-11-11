@@ -159,9 +159,9 @@ void readThermistorLookup(Sensor *ptr) {
                             cal->resistance_table, cal->temperature_table);
 }
 
-// ===== PRESSURE SENSOR READING =====
+// ===== GENERIC PRESSURE SENSOR - LINEAR METHOD =====
 
-void readVDO5BAR(Sensor *ptr) {
+void readPressureLinear(Sensor *ptr) {
     int reading = analogRead(ptr->input);
     
     if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
@@ -169,27 +169,31 @@ void readVDO5BAR(Sensor *ptr) {
         return;
     }
     
-    // VDO 5 bar sensor polynomial: y = -0.3682x² + 36.465x + 10.648
-    float pressure = (-36.465 - sqrt(-1.4728 * reading + 1345.37859)) / 0.7364;
+    // Get calibration (with defaults if not provided)
+    PressureLinearCalibration* cal = getPressureLinearCal(ptr);
     
-    ptr->value = pressure;  // Store in BAR
+    // Default: 0.5V-4.5V → 0-5 bar (common automotive sensor)
+    float V_min = (cal != nullptr) ? cal->voltage_min : 0.5;
+    float V_max = (cal != nullptr) ? cal->voltage_max : 4.5;
+    float P_min = (cal != nullptr) ? cal->pressure_min : 0.0;
+    float P_max = (cal != nullptr) ? cal->pressure_max : 5.0;
+    
+    // Convert ADC reading to voltage
+    float voltage = reading * (AREF_VOLTAGE / (float)ADC_MAX_VALUE);
+    
+    // Clamp voltage to valid range
+    if (voltage < V_min) voltage = V_min;
+    if (voltage > V_max) voltage = V_max;
+    
+    // Linear interpolation: P = (V - V_min) / (V_max - V_min) * (P_max - P_min) + P_min
+    float pressure = ((voltage - V_min) / (V_max - V_min)) * (P_max - P_min) + P_min;
+    
+    ptr->value = pressure;  // Store in bar
 }
 
-void readVDO2BAR(Sensor *ptr) {
-    int reading = analogRead(ptr->input);
-    
-    if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
-        ptr->value = NAN;
-        return;
-    }
-    
-    // VDO 2 bar sensor polynomial: y = -3.1515x² + 93.686x + 9.6307
-    float pressure = (-93.686 - sqrt(-12.606 * reading + 8898.47120)) / 6.303;
-    
-    ptr->value = pressure;  // Store in BAR
-}
+// ===== GENERIC PRESSURE SENSOR - POLYNOMIAL METHOD =====
 
-void readGenericBoost(Sensor *ptr) {
+void readPressurePolynomial(Sensor *ptr) {
     int reading = analogRead(ptr->input);
     
     if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
@@ -197,26 +201,35 @@ void readGenericBoost(Sensor *ptr) {
         return;
     }
     
-    float voltage = reading * (SYSTEM_VOLTAGE / (float)ADC_MAX_VALUE);
+    // Get calibration (REQUIRED for polynomial method)
+    PressurePolynomialCalibration* cal = getPressurePolynomialCal(ptr);
     
-    if (voltage < 0.5) {
-        ptr->value = 0;
-    } else {
-        ptr->value = (voltage - 0.5) * (2.0 / (SYSTEM_VOLTAGE - 0.5));
-    }
-}
-
-void readMPX4250AP(Sensor *ptr) {
-    int reading = analogRead(ptr->input);
-    
-    if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
-        ptr->value = NAN;
+    if (cal == nullptr) {
+        ptr->value = NAN;  // Can't calculate without coefficients
         return;
     }
     
-    float voltage = reading * (SYSTEM_VOLTAGE / (float)ADC_MAX_VALUE);
-    float kPa = ((voltage - 0.2) / (SYSTEM_VOLTAGE - 0.2)) * 230.0 + 20.0;
-    ptr->value = kPa / 100.0;  // Convert to bar
+    // VDO sensors use quadratic equation: V = A*P² + B*P + C
+    // We need to solve for P: A*P² + B*P + (C - V) = 0
+    // Using quadratic formula: P = (-B ± sqrt(B² - 4*A*(C-V))) / (2*A)
+    
+    float voltage = reading * (AREF_VOLTAGE / (float)ADC_MAX_VALUE);
+    
+    float a = cal->poly_a;
+    float b = cal->poly_b;
+    float c = cal->poly_c - voltage;
+    
+    float discriminant = (b * b) - (4.0 * a * c);
+    
+    if (discriminant < 0) {
+        ptr->value = NAN;  // No real solution
+        return;
+    }
+    
+    // Take the positive root (pressure is always positive)
+    float pressure = (-b - sqrt(discriminant)) / (2.0 * a);
+    
+    ptr->value = pressure;  // Store in bar
 }
 
 // ===== VOLTAGE READING =====

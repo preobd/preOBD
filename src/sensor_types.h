@@ -46,6 +46,8 @@ enum CalibrationType {
     CAL_NONE,
     CAL_THERMISTOR_STEINHART,
     CAL_THERMISTOR_LOOKUP,
+    CAL_PRESSURE_POLYNOMIAL,
+    CAL_PRESSURE_LINEAR,
     CAL_PRESSURE,
     CAL_VOLTAGE_DIVIDER
 };
@@ -69,14 +71,22 @@ typedef struct {
     byte table_size;              // Number of entries in tables
 } ThermistorLookupCalibration;
 
-// Pressure sensor calibration
+// Pressure sensor calibration - Linear (most common)
+// P = (V - V_min) / (V_max - V_min) * (P_max - P_min) + P_min
 typedef struct {
-    float offset;          // Zero offset
-    float scale;           // Scale factor
-    float polynomial_a;    // For polynomial calibration
-    float polynomial_b;
-    float polynomial_c;
-} PressureCalibration;
+    float voltage_min;      // Minimum sensor voltage (V)
+    float voltage_max;      // Maximum sensor voltage (V)
+    float pressure_min;     // Pressure at V_min (bar)
+    float pressure_max;     // Pressure at V_max (bar)
+} PressureLinearCalibration;
+
+// Pressure sensor calibration - Polynomial (VDO sensors)
+// Uses quadratic formula to solve VDO's pressure-to-voltage polynomial
+typedef struct {
+    float poly_a;          // Polynomial coefficient A
+    float poly_b;          // Polynomial coefficient B
+    float poly_c;          // Polynomial coefficient C
+} PressurePolynomialCalibration;
 
 // Voltage divider calibration
 typedef struct {
@@ -149,12 +159,20 @@ inline ThermistorLookupCalibration* getThermistorLookupCal(Sensor* ptr) {
     return (ThermistorLookupCalibration*)ptr->calibrationData;
 }
 
-// Safely get pressure calibration
-inline PressureCalibration* getPressureCal(Sensor* ptr) {
+// Safely get pressure linear calibration
+inline PressureLinearCalibration* getPressureLinearCal(Sensor* ptr) {
     if (ptr->calibrationType != CAL_PRESSURE) {
         return nullptr;
     }
-    return (PressureCalibration*)ptr->calibrationData;
+    return (PressureLinearCalibration*)ptr->calibrationData;
+}
+
+// Safely get pressure linear calibration
+inline PressurePolynomialCalibration* getPressurePolynomialCal(Sensor* ptr) {
+    if (ptr->calibrationType != CAL_PRESSURE) {
+        return nullptr;
+    }
+    return (PressurePolynomialCalibration*)ptr->calibrationData;
 }
 
 // Safely get voltage divider calibration

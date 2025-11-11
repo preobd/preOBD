@@ -35,16 +35,21 @@
 
 // ===== PRESSURE SENSORS =====
 
-// VDO Pressure Sensors
+// VDO Pressure Sensors - Polynomial Method (Factory Calibration)
 #define VDO_5BAR_PRESSURE            40  // VDO 5-bar oil pressure (0-5 bar)
 #define VDO_2BAR_PRESSURE            41  // VDO 2-bar boost pressure (0-2 bar)
 
-// Generic Pressure Sensors
-#define GENERIC_MAP_0_250KPA         42  // Generic 0-250kPa MAP sensor
-#define MPX4250AP_SENSOR             43  // Freescale MPX4250AP (20-250kPa)
+// Generic Linear Pressure Sensors
+#define GENERIC_0_5V_5BAR            42  // Generic 0.5-4.5V linear, 0-5 bar
+#define GENERIC_0_5V_10BAR           43  // Generic 0.5-4.5V linear, 0-10 bar
+#define GENERIC_0_5V_100PSI          44  // Generic 0.5-4.5V linear, 0-100 psi
+
+// Specific Sensors
+#define MPX4250AP_PRESSURE           45  // Freescale (NXP) MPX4250AP (20-250kPa)
 
 // Custom/User-Defined
-#define CUSTOM_PRESSURE_SENSOR       49  // User provides calibration
+#define CUSTOM_PRESSURE_LINEAR       48  // User provides voltage/pressure ranges
+#define CUSTOM_PRESSURE_POLYNOMIAL   49  // User provides polynomial coefficients
 
 // ===== VOLTAGE SENSORS =====
 

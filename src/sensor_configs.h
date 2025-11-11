@@ -18,10 +18,8 @@ extern void readMAX6675(Sensor*);
 extern void readMAX31855(Sensor*);
 extern void readThermistorLookup(Sensor*);
 extern void readThermistorSteinhart(Sensor*);
-extern void readVDO5BAR(Sensor*);
-extern void readVDO2BAR(Sensor*);
-extern void readGenericBoost(Sensor*);
-extern void readMPX4250AP(Sensor*);
+extern void readPressureLinear(Sensor*);
+extern void readPressurePolynomial(Sensor*);
 extern void readVoltageDivider(Sensor*);
 extern void readBME280Temp(Sensor*);
 extern void readBME280Pressure(Sensor*);
@@ -124,6 +122,57 @@ static const ThermistorSteinhartCalibration generic_10k_3380_cal = {
     .steinhart_a = 1.536e-3,
     .steinhart_b = 2.393e-4,
     .steinhart_c = 1.031e-7
+};
+
+// ===== PRESSURE SENSOR CALIBRATIONS =====
+
+// VDO 5-bar pressure sensor polynomial calibration
+// Polynomial: V = -0.3682*P² + 36.465*P + 10.648
+// Solved for P using quadratic formula
+static const PressurePolynomialCalibration vdo_5bar_cal = {
+    .poly_a = -0.3682,
+    .poly_b = 36.465,
+    .poly_c = 10.648
+};
+
+// VDO 2-bar pressure sensor polynomial calibration  
+// Polynomial: V = -3.1515*P² + 93.686*P + 9.6307
+static const PressurePolynomialCalibration vdo_2bar_cal = {
+    .poly_a = -3.1515,
+    .poly_b = 93.686,
+    .poly_c = 9.6307
+};
+
+// Generic 0.5-4.5V linear sensor, 0-5 bar range
+static const PressureLinearCalibration generic_0_5bar_cal = {
+    .voltage_min = 0.5,
+    .voltage_max = 4.5,
+    .pressure_min = 0.0,
+    .pressure_max = 5.0
+};
+
+// Generic 0.5-4.5V linear sensor, 0-10 bar range
+static const PressureLinearCalibration generic_0_10bar_cal = {
+    .voltage_min = 0.5,
+    .voltage_max = 4.5,
+    .pressure_min = 0.0,
+    .pressure_max = 10.0
+};
+
+// Generic 0.5-4.5V linear sensor, 0-100 psi range (converted to bar)
+static const PressureLinearCalibration generic_0_100psi_cal = {
+    .voltage_min = 0.5,
+    .voltage_max = 4.5,
+    .pressure_min = 0.0,
+    .pressure_max = 6.89476  // 100 psi in bar
+};
+
+// Freescale (NXP) MPX4250AP (20-250 kPa, 0.2V-4.7V)
+static const PressureLinearCalibration mpx4250ap_cal = {
+    .voltage_min = 0.2,
+    .voltage_max = 4.7,
+    .pressure_min = 0.2,    // 20 kPa in bar
+    .pressure_max = 2.5     // 250 kPa in bar
 };
 
 // ===== SENSOR CONFIGURATION DATABASE =====
@@ -238,38 +287,72 @@ static const SensorConfig SENSOR_CONFIGS[] = {
         .calibrationData = (void*)&generic_10k_3380_cal
     },
     
+  
     // ===== PRESSURE SENSORS =====
+    // VDO Pressure Sensors - Polynomial Method
     {
         .sensorId = VDO_5BAR_PRESSURE,
         .name = "VDO 5-bar Pressure",
         .internalType = VDO_5BAR,
-        .readFunction = readVDO5BAR,
+        .readFunction = readPressurePolynomial,
         .displayConvert = convertPressure,
         .obdConvert = obdConvertPressure,
-        .calibrationType = CAL_NONE,
-        .calibrationData = nullptr
+        .calibrationType = CAL_PRESSURE_POLYNOMIAL,
+        .calibrationData = (void*)&vdo_5bar_cal
     },
     {
         .sensorId = VDO_2BAR_PRESSURE,
         .name = "VDO 2-bar Pressure",
         .internalType = VDO_2BAR,
-        .readFunction = readVDO2BAR,
+        .readFunction = readPressurePolynomial,
         .displayConvert = convertPressure,
         .obdConvert = obdConvertPressure,
-        .calibrationType = CAL_NONE,
-        .calibrationData = nullptr
-    },
-    {
-        .sensorId = MPX4250AP_SENSOR,
-        .name = "Freescale MPX4250AP",
-        .internalType = MPX4250AP,
-        .readFunction = readMPX4250AP,
-        .displayConvert = convertPressure,
-        .obdConvert = obdConvertPressure,
-        .calibrationType = CAL_NONE,
-        .calibrationData = nullptr
+        .calibrationType = CAL_PRESSURE_POLYNOMIAL,
+        .calibrationData = (void*)&vdo_2bar_cal
     },
     
+    // Generic Linear Pressure Sensors
+    {
+        .sensorId = GENERIC_0_5V_5BAR,
+        .name = "Generic 0-5 bar",
+        .internalType = GENERIC_BOOST,
+        .readFunction = readPressureLinear,
+        .displayConvert = convertPressure,
+        .obdConvert = obdConvertPressure,
+        .calibrationType = CAL_PRESSURE_LINEAR,
+        .calibrationData = (void*)&generic_0_5bar_cal
+    },
+    {
+        .sensorId = GENERIC_0_5V_10BAR,
+        .name = "Generic 0-10 bar",
+        .internalType = GENERIC_BOOST,
+        .readFunction = readPressureLinear,
+        .displayConvert = convertPressure,
+        .obdConvert = obdConvertPressure,
+        .calibrationType = CAL_PRESSURE_LINEAR,
+        .calibrationData = (void*)&generic_0_10bar_cal
+    },
+    {
+        .sensorId = GENERIC_0_5V_100PSI,
+        .name = "Generic 0-100 psi",
+        .internalType = GENERIC_BOOST,
+        .readFunction = readPressureLinear,
+        .displayConvert = convertPressure,
+        .obdConvert = obdConvertPressure,
+        .calibrationType = CAL_PRESSURE_LINEAR,
+        .calibrationData = (void*)&generic_0_100psi_cal
+    },
+    {
+        .sensorId = MPX4250AP_PRESSURE,
+        .name = "Freescale (NXP) MPX4250AP",
+        .internalType = MPX4250AP,
+        .readFunction = readPressureLinear,
+        .displayConvert = convertPressure,
+        .obdConvert = obdConvertPressure,
+        .calibrationType = CAL_PRESSURE_LINEAR,
+        .calibrationData = (void*)&mpx4250ap_cal
+    },
+
     // ===== VOLTAGE SENSORS =====
     // Note: These use platform.h voltage divider defaults
     {
