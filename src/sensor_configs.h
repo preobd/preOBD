@@ -21,6 +21,7 @@ extern void readThermistorSteinhart(Sensor*);
 extern void readPressureLinear(Sensor*);
 extern void readPressurePolynomial(Sensor*);
 extern void readVoltageDivider(Sensor*);
+extern void readVoltageDirect(Sensor*);
 extern void readBME280Temp(Sensor*);
 extern void readBME280Pressure(Sensor*);
 extern void readBME280Humidity(Sensor*);

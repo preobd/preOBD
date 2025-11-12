@@ -73,14 +73,20 @@
 //#define OIL_PRESSURE_MAX            5
 
 // === Primary Battery ===
-//#define ENABLE_PRIMARY_BATTERY
-//#define PRIMARY_BATTERY_SENSOR_TYPE   STANDARD_12V_DIVIDER  // Uses platform.h defaults
-//#define PRIMARY_BATTERY_INPUT         A8
+// #define ENABLE_PRIMARY_BATTERY
+// #define PRIMARY_BATTERY_SENSOR_TYPE   STANDARD_12V_DIVIDER  // Auto-configured
+// #define PRIMARY_BATTERY_INPUT         A8
 
 // === Secondary Battery ===
 //#define ENABLE_AUXILIARY_BATTERY
 //#define SECONDARY_BATTERY_SENSOR_TYPE  STANDARD_12V_DIVIDER
 //#define SECONDARY_BATTERY_INPUT        A7
+
+// === Custom Voltage Monitoring ===
+// Example: Monitoring a 5V rail directly (no divider needed)
+//#define ENABLE_CUSTOM_VOLTAGE
+//#define CUSTOM_VOLTAGE_SENSOR_TYPE     DIRECT_VOLTAGE_5V
+//#define CUSTOM_VOLTAGE_INPUT           A9
 
 // === Ambient Temperature (BME280) ===
 #define ENABLE_AMBIENT_TEMP

@@ -54,12 +54,21 @@
 // ===== VOLTAGE SENSORS =====
 
 // Standard Battery Monitoring
-#define STANDARD_12V_DIVIDER         50  // 100kΩ/6.8kΩ for 5V systems
-#define STANDARD_12V_DIVIDER_3V3     51  // 100kΩ/22kΩ for 3.3V systems
-#define STANDARD_24V_DIVIDER         52  // For 24V truck systems
+#define STANDARD_12V_DIVIDER      50  // Auto-configured for board voltage
+#define STANDARD_24V_DIVIDER      51  // For 24V truck systems
+
+// Custom Voltage Dividers
+#define CUSTOM_VOLTAGE_100K_10K   52  // 100kΩ / 10kΩ divider
+#define CUSTOM_VOLTAGE_100K_22K   53  // 100kΩ / 22kΩ divider (3.3V systems)
+#define CUSTOM_VOLTAGE_47K_10K    54  // 47kΩ / 10kΩ divider
+
+// Direct Voltage Reading (no divider)
+#define DIRECT_VOLTAGE_5V         55  // Direct 0-5V reading
+#define DIRECT_VOLTAGE_3V3        56  // Direct 0-3.3V reading
 
 // Custom/User-Defined
-#define CUSTOM_VOLTAGE_DIVIDER       59  // User provides R1/R2
+#define CUSTOM_VOLTAGE_DIVIDER    59  // User provides R1/R2
+
 
 // ===== ENVIRONMENTAL SENSORS =====
 

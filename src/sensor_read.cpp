@@ -242,7 +242,48 @@ void readVoltageDivider(Sensor *ptr) {
         return;
     }
     
-    ptr->value = reading * VOLTAGE_DIVIDER_RATIO * AREF_VOLTAGE / (float)ADC_MAX_VALUE;
+    // Get calibration (with defaults from platform.h if not provided)
+    VoltageDividerCalibration* cal = getVoltageDividerCal(ptr);
+    
+    float divider_ratio;
+    float correction = 1.0;
+    float offset = 0.0;
+    
+    if (cal != nullptr) {
+        // Use custom calibration
+        divider_ratio = (cal->r1 + cal->r2) / cal->r2;
+        correction = cal->correction;
+        offset = cal->offset;
+    } else {
+        // Use defaults from platform.h
+        divider_ratio = VOLTAGE_DIVIDER_RATIO;
+    }
+    
+    // Calculate voltage: V = ADC * (AREF / ADC_MAX) * divider_ratio * correction + offset
+    float voltage = (reading * AREF_VOLTAGE / (float)ADC_MAX_VALUE) * divider_ratio * correction + offset;
+    
+    ptr->value = voltage;
+}
+
+// Read voltage directly (no divider)
+void readVoltageDirect(Sensor *ptr) {
+    int reading = analogRead(ptr->input);
+    
+    if (reading < 10) {
+        ptr->value = NAN;
+        return;
+    }
+    
+    // Get calibration for correction/offset if provided
+    VoltageDividerCalibration* cal = getVoltageDividerCal(ptr);
+    
+    float correction = (cal != nullptr) ? cal->correction : 1.0;
+    float offset = (cal != nullptr) ? cal->offset : 0.0;
+    
+    // Direct voltage reading: V = ADC * (AREF / ADC_MAX) * correction + offset
+    float voltage = (reading * AREF_VOLTAGE / (float)ADC_MAX_VALUE) * correction + offset;
+    
+    ptr->value = voltage;
 }
 
 // ===== BME280 READING =====

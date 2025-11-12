@@ -92,7 +92,8 @@ typedef struct {
 typedef struct {
     float r1;              // High-side resistor (ohms)
     float r2;              // Low-side resistor (ohms)
-    float correction;      // Correction factor for ADC non-linearity
+    float correction;      // Correction factor (multiplier, typically 1.0)
+    float offset;          // Voltage offset (typically 0.0)
 } VoltageDividerCalibration;
 
 // ===== SENSOR STRUCTURE =====
