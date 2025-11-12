@@ -14,23 +14,23 @@ The system automatically selects the correct calibration based on your microcont
 
 **Monitoring 12V battery on Arduino Mega (5V system)?**
 ```cpp
-#define PRIMARY_BATTERY_SENSOR_TYPE  SENSOR_STANDARD_12V_DIVIDER
+#define PRIMARY_BATTERY_SENSOR_TYPE  STANDARD_12V_DIVIDER
 ```
 
 **Monitoring 12V battery on Teensy 4.0 (3.3V system)?**
 ```cpp
-#define PRIMARY_BATTERY_SENSOR_TYPE  SENSOR_STANDARD_12V_DIVIDER
+#define PRIMARY_BATTERY_SENSOR_TYPE  STANDARD_12V_DIVIDER
 ```
 *Note: Same sensor type - calibration is auto-selected based on platform!*
 
 **Monitoring 24V truck battery?**
 ```cpp
-#define PRIMARY_BATTERY_SENSOR_TYPE  SENSOR_STANDARD_24V_DIVIDER
+#define PRIMARY_BATTERY_SENSOR_TYPE  STANDARD_24V_DIVIDER
 ```
 
 **Monitoring a 5V power rail directly?**
 ```cpp
-#define VOLTAGE_SENSOR_TYPE  SENSOR_DIRECT_VOLTAGE_5V
+#define VOLTAGE_SENSOR_TYPE  DIRECT_VOLTAGE_5V
 ```
 
 ## Available Voltage Sensors
@@ -39,8 +39,8 @@ The system automatically selects the correct calibration based on your microcont
 
 | Sensor ID | Application | Divider | Notes |
 |-----------|-------------|---------|-------|
-| `SENSOR_STANDARD_12V_DIVIDER` | 12V battery | Auto-configured | Uses platform.h defaults |
-| `SENSOR_STANDARD_24V_DIVIDER` | 24V truck battery | 100kΩ/3.3kΩ | For large vehicles |
+| `STANDARD_12V_DIVIDER` | 12V battery | Auto-configured | Uses platform.h defaults |
+| `STANDARD_24V_DIVIDER` | 24V truck battery | 100kΩ/3.3kΩ | For large vehicles |
 
 **Platform Auto-Configuration:**
 - **5V systems (Mega):** 100kΩ/6.8kΩ divider
@@ -50,16 +50,16 @@ The system automatically selects the correct calibration based on your microcont
 
 | Sensor ID | Divider Ratio | Max Voltage | Use Case |
 |-----------|---------------|-------------|----------|
-| `SENSOR_CUSTOM_VOLTAGE_100K_10K` | 11:1 | ~50V | High voltage monitoring |
-| `SENSOR_CUSTOM_VOLTAGE_100K_22K` | 5.5:1 | ~18V | 12V with more resolution |
-| `SENSOR_CUSTOM_VOLTAGE_47K_10K` | 5.7:1 | ~19V | Alternative 12V divider |
+| `CUSTOM_VOLTAGE_100K_10K` | 11:1 | ~50V | High voltage monitoring |
+| `CUSTOM_VOLTAGE_100K_22K` | 5.5:1 | ~18V | 12V with more resolution |
+| `CUSTOM_VOLTAGE_47K_10K` | 5.7:1 | ~19V | Alternative 12V divider |
 
 ### Direct Voltage Reading
 
 | Sensor ID | Range | Use Case |
 |-----------|-------|----------|
-| `SENSOR_DIRECT_VOLTAGE_5V` | 0-5V | Power rail monitoring |
-| `SENSOR_DIRECT_VOLTAGE_3V3` | 0-3.3V | Low voltage signals |
+| `DIRECT_VOLTAGE_5V` | 0-5V | Power rail monitoring |
+| `DIRECT_VOLTAGE_3V3` | 0-3.3V | Low voltage signals |
 
 ## Configuration Examples
 
@@ -68,7 +68,7 @@ The system automatically selects the correct calibration based on your microcont
 ```cpp
 // config.h
 #define ENABLE_PRIMARY_BATTERY
-#define PRIMARY_BATTERY_SENSOR_TYPE   SENSOR_STANDARD_12V_DIVIDER
+#define PRIMARY_BATTERY_SENSOR_TYPE   STANDARD_12V_DIVIDER
 #define PRIMARY_BATTERY_INPUT         A8
 ```
 
@@ -88,11 +88,11 @@ The system automatically selects the correct calibration based on your microcont
 ```cpp
 // config.h
 #define ENABLE_PRIMARY_BATTERY
-#define PRIMARY_BATTERY_SENSOR_TYPE   SENSOR_STANDARD_12V_DIVIDER
+#define PRIMARY_BATTERY_SENSOR_TYPE   STANDARD_12V_DIVIDER
 #define PRIMARY_BATTERY_INPUT         A8
 
 #define ENABLE_AUXILIARY_BATTERY
-#define SECONDARY_BATTERY_SENSOR_TYPE SENSOR_STANDARD_12V_DIVIDER
+#define SECONDARY_BATTERY_SENSOR_TYPE STANDARD_12V_DIVIDER
 #define SECONDARY_BATTERY_INPUT       A7
 ```
 
@@ -103,7 +103,7 @@ Monitor house and starter batteries separately!
 ```cpp
 // config.h
 #define ENABLE_PRIMARY_BATTERY
-#define PRIMARY_BATTERY_SENSOR_TYPE   SENSOR_STANDARD_24V_DIVIDER
+#define PRIMARY_BATTERY_SENSOR_TYPE   STANDARD_24V_DIVIDER
 #define PRIMARY_BATTERY_INPUT         A8
 ```
 
@@ -158,7 +158,7 @@ Sensor customVoltage = {
 ```cpp
 // config.h
 #define ENABLE_5V_RAIL
-#define RAIL_5V_SENSOR_TYPE    SENSOR_DIRECT_VOLTAGE_5V
+#define RAIL_5V_SENSOR_TYPE    DIRECT_VOLTAGE_5V
 #define RAIL_5V_INPUT          A9
 ```
 
@@ -440,11 +440,11 @@ Multiply above values by 2:
 Use two voltage sensors to monitor voltage drop:
 ```cpp
 #define ENABLE_BATTERY_POSITIVE
-#define BATTERY_POS_SENSOR_TYPE  SENSOR_STANDARD_12V_DIVIDER
+#define BATTERY_POS_SENSOR_TYPE  STANDARD_12V_DIVIDER
 #define BATTERY_POS_INPUT        A8
 
 #define ENABLE_VOLTAGE_AT_LOAD
-#define LOAD_VOLTAGE_SENSOR_TYPE SENSOR_STANDARD_12V_DIVIDER
+#define LOAD_VOLTAGE_SENSOR_TYPE STANDARD_12V_DIVIDER
 #define LOAD_VOLTAGE_INPUT       A7
 ```
 
@@ -458,11 +458,11 @@ float voltage_drop = batteryPos.value - loadVoltage.value;
 Monitor house and starter batteries:
 ```cpp
 #define ENABLE_STARTER_BATTERY
-#define STARTER_BATTERY_SENSOR_TYPE  SENSOR_STANDARD_12V_DIVIDER
+#define STARTER_BATTERY_SENSOR_TYPE  STANDARD_12V_DIVIDER
 #define STARTER_BATTERY_INPUT        A8
 
 #define ENABLE_HOUSE_BATTERY
-#define HOUSE_BATTERY_SENSOR_TYPE    SENSOR_STANDARD_12V_DIVIDER
+#define HOUSE_BATTERY_SENSOR_TYPE    STANDARD_12V_DIVIDER
 #define HOUSE_BATTERY_INPUT          A7
 ```
 
@@ -471,11 +471,11 @@ Monitor house and starter batteries:
 Monitor solar panel and battery:
 ```cpp
 #define ENABLE_SOLAR_PANEL
-#define SOLAR_PANEL_SENSOR_TYPE      SENSOR_STANDARD_12V_DIVIDER
+#define SOLAR_PANEL_SENSOR_TYPE      STANDARD_12V_DIVIDER
 #define SOLAR_PANEL_INPUT            A9
 
 #define ENABLE_BATTERY_VOLTAGE
-#define BATTERY_VOLTAGE_SENSOR_TYPE  SENSOR_STANDARD_12V_DIVIDER
+#define BATTERY_VOLTAGE_SENSOR_TYPE  STANDARD_12V_DIVIDER
 #define BATTERY_VOLTAGE_INPUT        A8
 ```
 

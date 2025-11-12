@@ -128,17 +128,19 @@ static const ThermistorSteinhartCalibration generic_10k_3380_cal = {
 // ===== PRESSURE SENSOR CALIBRATIONS =====
 
 // VDO 5-bar pressure sensor polynomial calibration
-// Polynomial: V = -0.3682*P² + 36.465*P + 10.648
+// Polynomial: R = -0.3682*P² + 36.465*P + 10.648
 // Solved for P using quadratic formula
 static const PressurePolynomialCalibration vdo_5bar_cal = {
+    .bias_resistor = 2200.0,
     .poly_a = -0.3682,
     .poly_b = 36.465,
     .poly_c = 10.648
 };
 
 // VDO 2-bar pressure sensor polynomial calibration  
-// Polynomial: V = -3.1515*P² + 93.686*P + 9.6307
+// Polynomial: R = -3.1515*P² + 93.686*P + 9.6307
 static const PressurePolynomialCalibration vdo_2bar_cal = {
+    .bias_resistor = 2200.0,
     .poly_a = -3.1515,
     .poly_b = 93.686,
     .poly_c = 9.6307

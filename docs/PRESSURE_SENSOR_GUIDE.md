@@ -12,32 +12,32 @@ openEMS supports two types of pressure sensors:
 
 **VDO 5-bar oil pressure sensor?**
 ```cpp
-#define OIL_PRESSURE_SENSOR_TYPE  SENSOR_VDO_5BAR_PRESSURE
+#define OIL_PRESSURE_SENSOR_TYPE  VDO_5BAR_PRESSURE
 ```
 
 **VDO 2-bar boost pressure sensor?**
 ```cpp
-#define BOOST_PRESSURE_SENSOR_TYPE  SENSOR_VDO_2BAR_PRESSURE
+#define BOOST_PRESSURE_SENSOR_TYPE  VDO_2BAR_PRESSURE
 ```
 
 **Generic 0-5 bar sensor (0.5-4.5V)?**
 ```cpp
-#define PRESSURE_SENSOR_TYPE  SENSOR_GENERIC_0_5V_5BAR
+#define PRESSURE_SENSOR_TYPE  GENERIC_0_5V_5BAR
 ```
 
 **Generic 0-10 bar sensor (0.5-4.5V)?**
 ```cpp
-#define PRESSURE_SENSOR_TYPE  SENSOR_GENERIC_0_5V_10BAR
+#define PRESSURE_SENSOR_TYPE  GENERIC_0_5V_10BAR
 ```
 
 **Generic 0-100 psi sensor (0.5-4.5V)?**
 ```cpp
-#define PRESSURE_SENSOR_TYPE  SENSOR_GENERIC_0_5V_100PSI
+#define PRESSURE_SENSOR_TYPE  GENERIC_0_5V_100PSI
 ```
 
 **Freescale MPX4250AP MAP sensor?**
 ```cpp
-#define PRESSURE_SENSOR_TYPE  SENSOR_MPX4250AP
+#define PRESSURE_SENSOR_TYPE  MPX4250AP
 ```
 
 ## Available Pressure Sensors
@@ -46,8 +46,8 @@ openEMS supports two types of pressure sensors:
 
 | Sensor ID | Range | Notes |
 |-----------|-------|-------|
-| `SENSOR_VDO_5BAR_PRESSURE` | 0-5 bar | Oil pressure sensor |
-| `SENSOR_VDO_2BAR_PRESSURE` | 0-2 bar | Boost/intake pressure |
+| `VDO_5BAR_PRESSURE` | 0-5 bar | Oil pressure sensor |
+| `VDO_2BAR_PRESSURE` | 0-2 bar | Boost/intake pressure |
 
 **Characteristics:**
 - Non-linear voltage output
@@ -64,9 +64,9 @@ openEMS supports two types of pressure sensors:
 
 | Sensor ID | Range | Voltage | Notes |
 |-----------|-------|---------|-------|
-| `SENSOR_GENERIC_0_5V_5BAR` | 0-5 bar | 0.5-4.5V | Common automotive |
-| `SENSOR_GENERIC_0_5V_10BAR` | 0-10 bar | 0.5-4.5V | High-pressure applications |
-| `SENSOR_GENERIC_0_5V_100PSI` | 0-100 psi | 0.5-4.5V | Imperial units |
+| `GENERIC_0_5V_5BAR` | 0-5 bar | 0.5-4.5V | Common automotive |
+| `GENERIC_0_5V_10BAR` | 0-10 bar | 0.5-4.5V | High-pressure applications |
+| `GENERIC_0_5V_100PSI` | 0-100 psi | 0.5-4.5V | Imperial units |
 
 **Characteristics:**
 - Linear voltage-to-pressure relationship
@@ -93,7 +93,7 @@ openEMS supports two types of pressure sensors:
 ```cpp
 // config.h
 #define ENABLE_OIL_PRESSURE
-#define OIL_PRESSURE_SENSOR_TYPE    SENSOR_VDO_5BAR_PRESSURE
+#define OIL_PRESSURE_SENSOR_TYPE    VDO_5BAR_PRESSURE
 #define OIL_PRESSURE_INPUT          A3
 #define OIL_PRESSURE_MIN            1    // Alarm if below 1 bar
 #define OIL_PRESSURE_MAX            5
@@ -106,7 +106,7 @@ That's it! The VDO polynomial calibration is automatically loaded.
 ```cpp
 // config.h
 #define ENABLE_BOOST_PRESSURE
-#define BOOST_PRESSURE_SENSOR_TYPE  SENSOR_GENERIC_0_5V_5BAR
+#define BOOST_PRESSURE_SENSOR_TYPE  GENERIC_0_5V_5BAR
 #define BOOST_PRESSURE_INPUT        A4
 #define BOOST_PRESSURE_MIN          -1   // No minimum alarm
 #define BOOST_PRESSURE_MAX          2    // Alarm if over 2 bar
@@ -119,7 +119,7 @@ If you have a sensor with a different voltage/pressure range:
 ```cpp
 // config.h
 #define ENABLE_MY_PRESSURE
-#define MY_PRESSURE_SENSOR_TYPE     SENSOR_CUSTOM_PRESSURE_LINEAR
+#define MY_PRESSURE_SENSOR_TYPE     CUSTOM_PRESSURE_LINEAR
 #define MY_PRESSURE_INPUT           A5
 #define MY_PRESSURE_MIN             0
 #define MY_PRESSURE_MAX             8
@@ -224,7 +224,7 @@ This is normal - VDO sensors have a non-zero voltage at 0 pressure. The polynomi
 ### Pressure reads high at low values
 
 **For VDO sensors:**
-Make sure you're using the polynomial calibration (`SENSOR_VDO_5BAR_PRESSURE`), not a linear calibration.
+Make sure you're using the polynomial calibration (`VDO_5BAR_PRESSURE`), not a linear calibration.
 
 **For linear sensors:**
 Verify your sensor actually has a linear output. Some cheap sensors are non-linear.
@@ -241,6 +241,7 @@ Voltage = A*Pressure² + B*Pressure + C
 **Step 2:** Add calibration to `sensor_configs.h`:
 ```cpp
 static const PressurePolynomialCalibration my_custom_poly_cal = {
+    .bias_resistor = 2200.0,
     .poly_a = -0.123,   // Your A coefficient
     .poly_b = 12.345,   // Your B coefficient
     .poly_c = 0.567     // Your C coefficient

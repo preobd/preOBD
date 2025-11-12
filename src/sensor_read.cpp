@@ -195,6 +195,8 @@ void readPressureLinear(Sensor *ptr) {
 
 void readPressurePolynomial(Sensor *ptr) {
     int reading = analogRead(ptr->input);
+    delay(10);
+    reading = analogRead(ptr->input);  // Discard first reading
     
     if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
         ptr->value = NAN;
@@ -210,14 +212,18 @@ void readPressurePolynomial(Sensor *ptr) {
     }
     
     // VDO sensors use quadratic equation: V = A*P² + B*P + C
-    // We need to solve for P: A*P² + B*P + (C - V) = 0
-    // Using quadratic formula: P = (-B ± sqrt(B² - 4*A*(C-V))) / (2*A)
+    // We need to solve for P: A*P² + B*P + (C - R) = 0
+    // Using quadratic formula: P = (-B ± sqrt(B² - 4*A*(C-R))) / (2*A)
+    float R_sensor = reading * cal->bias_resistor / (ADC_MAX_VALUE - reading);
     
-    float voltage = reading * (AREF_VOLTAGE / (float)ADC_MAX_VALUE);
+    if (R_sensor <= 0) {
+        ptr->value = NAN;
+        return;
+    }
     
     float a = cal->poly_a;
     float b = cal->poly_b;
-    float c = cal->poly_c - voltage;
+    float c = cal->poly_c - R_sensor;
     
     float discriminant = (b * b) - (4.0 * a * c);
     
