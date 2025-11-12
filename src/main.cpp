@@ -41,51 +41,27 @@ void setupADC() {
     // Configure analog reference based on platform
     #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
         // Arduino Uno/Nano - 5V system
-        analogReference(DEFAULT);  // 5V reference
-        Serial.println("ADC: Using INTERNAL 1.1V reference (ATmega328)");
-        
+        analogReference(DEFAULT);  // 5V reference        
     #elif defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
         // Arduino Mega - 5V system
         analogReference(DEFAULT);  // 5V reference
-        Serial.println("ADC: Using DEFAULT 5V reference");
-        
     #elif defined(__MK20DX256__) || defined(__MK20DX128__)
         // Teensy 3.1/3.2 - 3.3V system
         analogReference(DEFAULT);  // 3.3V reference
         analogReadResolution(ADC_RESOLUTION);
         analogReadAveraging(4);  // Average 4 samples for stability
-        Serial.println("ADC: Using DEFAULT 3.3V reference (Teensy 3.1/3.2)");
-        Serial.print("ADC: Resolution set to ");
-        Serial.print(ADC_RESOLUTION);
-        Serial.println(" bits");
-        
     #elif defined(__MK64FX512__) || defined(__MK66FX1M0__)
         // Teensy 3.5/3.6 - 3.3V system
         analogReference(DEFAULT);  // 3.3V reference
         analogReadResolution(ADC_RESOLUTION);
-        analogReadAveraging(4);
-        Serial.println("ADC: Using DEFAULT 3.3V reference (Teensy 3.5/3.6)");
-        Serial.print("ADC: Resolution set to ");
-        Serial.print(ADC_RESOLUTION);
-        Serial.println(" bits");
-        
+        analogReadAveraging(4);        
     #elif defined(__IMXRT1062__)
         // Teensy 4.0/4.1 - 3.3V system
         analogReadResolution(ADC_RESOLUTION);
         analogReadAveraging(4);
-        Serial.println("ADC: Using 3.3V reference (Teensy 4.x)");
-        Serial.print("ADC: Resolution set to ");
-        Serial.print(ADC_RESOLUTION);
-        Serial.println(" bits");
-        
     #elif defined(ARDUINO_SAM_DUE)
         // Arduino Due - 3.3V system
         analogReadResolution(ADC_RESOLUTION);
-        Serial.println("ADC: Using 3.3V reference (Due)");
-        Serial.print("ADC: Resolution set to ");
-        Serial.print(ADC_RESOLUTION);
-        Serial.println(" bits");
-        
     #elif defined(ESP32)
         // ESP32 - 3.3V system
         analogReadResolution(ADC_RESOLUTION);
@@ -93,13 +69,8 @@ void setupADC() {
         // ADC_11db = 0-3.3V (default but less accurate)
         // ADC_6db = 0-2.2V (more accurate, use if voltage divider allows)
         analogSetAttenuation(ADC_11db);
-        Serial.println("ADC: Using 3.3V reference (ESP32)");
-        Serial.print("ADC: Resolution set to ");
-        Serial.print(ADC_RESOLUTION);
-        Serial.println(" bits");
         Serial.println("ADC: Attenuation set to 11db (0-3.3V range)");
-        Serial.println("NOTE: ESP32 ADC is non-linear, consider calibration");
-        
+        Serial.println("NOTE: ESP32 ADC is non-linear, consider calibration");        
     #else
         // Unknown platform - use default
         Serial.println("WARNING: Unknown platform, using default ADC settings");
@@ -122,7 +93,7 @@ void setupADC() {
     Serial.print("ADC max value: ");
     Serial.println(ADC_MAX_VALUE);
     
-    Serial.println("============================");
+    Serial.println("========================================");
 }
 
 void setup() {
@@ -130,8 +101,15 @@ void setup() {
     // Initialize serial for debugging
     Serial.begin(115200);
     while (!Serial && millis() < 3000) {};  // Wait up to 3 seconds for serial
-    Serial.println("=== openEMS v1.0 ===");
-    Serial.println("Open Engine Monitoring System");
+
+    Serial.println("                                        ");
+    Serial.println("                       ______  _______  ");
+    Serial.println("   ___  ___  ___ ___  / __/  |/  / __/  ");
+    Serial.println("  / _ \/ _ \/ -_) _ \/ _// /|_/ /\ \    ");
+    Serial.println("  \___/ .__/\__/_//_/___/_/  /_/___/    ");
+    Serial.println("     /_/                                ");
+    Serial.println("                                        ");
+    Serial.println("openEngine Monitoring System v1.0 ======");
     Serial.println("Initializing...");
     
     // Configure ADC for this platform
@@ -210,11 +188,11 @@ void setup() {
     delay(500);
     
     Serial.println("");
-    Serial.println("====================================");
+    Serial.println("========================================");
     Serial.println("  Initialization complete!");
     Serial.print("  Active sensors: ");
     Serial.println(numSensors);
-    Serial.println("====================================");
+    Serial.println("========================================");
     Serial.println("");
 }
 
