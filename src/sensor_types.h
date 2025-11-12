@@ -83,7 +83,7 @@ typedef struct {
 // Pressure sensor calibration - Polynomial (VDO sensors)
 // Uses quadratic formula to solve VDO's pressure-to-resistance polynomial
 typedef struct {
-    float bias_resistor;           // Pull-down resistor in ohms
+    float bias_resistor;   // Pull-down resistor in ohms
     float poly_a;          // Polynomial coefficient A
     float poly_b;          // Polynomial coefficient B
     float poly_c;          // Polynomial coefficient C
