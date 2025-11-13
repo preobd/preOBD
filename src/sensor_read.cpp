@@ -163,6 +163,8 @@ void readThermistorLookup(Sensor *ptr) {
 
 void readPressureLinear(Sensor *ptr) {
     int reading = analogRead(ptr->input);
+    delay(10);
+    reading = analogRead(ptr->input);  // Discard first reading
     
     if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
         ptr->value = NAN;
