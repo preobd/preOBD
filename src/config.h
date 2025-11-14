@@ -117,12 +117,12 @@
 // === Ambient Temperature (BME280) ===
 #define ENABLE_AMBIENT_TEMP
 #define AMBIENT_TEMP_SENSOR_TYPE      BME280_AMBIENT_TEMPERATURE
-//#define AMBIENT_DISPLAY_UNITS         FAHRENHEIT
+#define AMBIENT_DISPLAY_UNITS         FAHRENHEIT
 
 // === Barometric Pressure (BME280) ===
 #define ENABLE_BAROMETRIC_PRESSURE
 #define BARO_PRESSURE_SENSOR_TYPE     BME280_BAROMETRIC_PRESSURE
-//#define BARO_DISPLAY_UNITS            INHG  // inHg for US weather
+#define BARO_DISPLAY_UNITS            INHG  // inHg for US weather
 
 // === Humidity (BME280) ===
 #define ENABLE_HUMIDITY
