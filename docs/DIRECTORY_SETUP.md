@@ -9,9 +9,13 @@ openEMS/
 │
 ├── src/                        # All source code goes here
 │   ├── main.cpp               # Main program loop
-│   ├── config.h               # ⚠️ USER CONFIGURATION FILE
+│   ├── config.h               # ⚠️ USER CONFIGURATION FILE (simplified!)
+│   ├── platform.h             # Platform auto-detection
+│   ├── sensor_library.h       # Sensor catalog - 30+ sensors
+│   ├── sensor_configs.h       # Calibration database
 │   ├── sensor_types.h         # Sensor data structures
-│   ├── sensors.cpp            # Sensor definitions
+│   ├── sensors.cpp            # Sensor definitions (uses library)
+│   ├── sensors.h              # Sensor exports
 │   ├── sensor_read.cpp        # Sensor reading functions
 │   ├── alarm.cpp              # Alarm system
 │   │
@@ -27,11 +31,128 @@ openEMS/
 │       └── display_lcd.cpp    # LCD display
 │
 └── docs/                       # Documentation
-    ├── README.md              # Full documentation
-    ├── MIGRATION_GUIDE.md     # Migration from old code
-    ├── REFACTORING_SUMMARY.md # What changed and why
-    └── QUICK_REFERENCE.md     # Quick reference card
+    ├── README.md                       # Full documentation
+    ├── QUICK_REFERENCE.md              # Quick reference card
+    ├── SENSOR_SELECTION_GUIDE.md       # How to pick sensors
+    ├── PRESSURE_SENSOR_GUIDE.md        # Pressure sensor details
+    ├── VOLTAGE_SENSOR_GUIDE.md         # Voltage monitoring
+    ├── ADVANCED_CALIBRATION_GUIDE.md   # Custom sensors
+    └── DIRECTORY_SETUP.md              # This file
 ```
+
+## File Descriptions
+
+### Root Directory
+
+**platformio.ini**
+- Build configuration for different hardware platforms
+- Defines board types, build flags, dependencies
+- **Edit:** Only to add new board types
+
+### src/ - Core Source Files
+
+**main.cpp**
+- Main program loop
+- Initializes all subsystems
+- Calls sensor read → output → alarm → display
+- **Edit:** Rarely (only for major architectural changes)
+
+**config.h** ⭐ **START HERE**
+- User configuration file
+- Enable/disable sensors and outputs
+- Pick sensor types from catalog
+- Set pins and thresholds
+- **Edit:** YES - This is where you configure everything!
+
+**platform.h**
+- Automatically detects Arduino/Teensy/ESP32/Due
+- Configures ADC resolution, reference voltage
+- Sets platform-specific voltage dividers
+- **Edit:** NO - Automatic detection
+
+**sensor_library.h**
+- Catalog of 30+ sensor IDs
+- Browse this to find your sensor type
+- Just sensor IDs, no calibration data
+- **Edit:** NO - Reference only (add IDs for new sensors)
+
+**sensor_configs.h**
+- Centralized calibration database
+- Lookup tables for VDO sensors
+- Steinhart-Hart coefficients
+- Pressure sensor polynomials
+- **Edit:** YES - To add new sensor calibrations
+
+**sensor_types.h**
+- Data structure definitions
+- Sensor struct, calibration structs
+- Enum definitions (SensorType, DisplayUnits, etc.)
+- **Edit:** NO - Core architecture
+
+**sensors.cpp**
+- Sensor instance definitions
+- Uses `getSensorConfig()` to load calibrations
+- Maps config.h settings to sensor structs
+- **Edit:** SOMETIMES - When adding new sensors
+
+**sensors.h**
+- Exports sensor array for other modules
+- **Edit:** NO - Just exports
+
+**sensor_read.cpp**
+- All sensor reading implementations
+- Thermistor, thermocouple, pressure, voltage functions
+- Conversion functions (temperature, pressure, etc.)
+- **Edit:** RARELY - Only to add new sensor types
+
+**alarm.cpp**
+- Alarm system implementation
+- Checks thresholds, manages buzzer
+- Silence button handling
+- **Edit:** RARELY - To customize alarm behavior
+
+### src/outputs/ - Output Modules
+
+**output_base.h**
+- Output module interface definition
+- Defines OutputModule structure
+- **Edit:** NO - Core interface
+
+**output_manager.cpp**
+- Manages all output modules
+- Iterates through enabled outputs
+- **Edit:** SOMETIMES - When adding new output types
+
+**output_can.cpp**
+- CAN bus OBDII output
+- Standard diagnostic PIDs
+- **Edit:** RARELY - To add custom PIDs
+
+**output_realdash.cpp**
+- RealDash mobile dashboard output
+- Custom framing protocol
+- **Edit:** RARELY - RealDash protocol changes
+
+**output_serial.cpp**
+- Serial debugging output
+- CSV format for data logging
+- **Edit:** RARELY - To change output format
+
+**output_sdlog.cpp**
+- SD card data logging
+- CSV file creation and writing
+- **Edit:** SOMETIMES - To customize logging format
+
+### src/displays/ - Display Modules
+
+**display_lcd.cpp**
+- 20x4 character LCD display
+- I2C interface
+- **Edit:** SOMETIMES - To customize display layout
+
+### docs/ - Documentation
+
+See "Documentation Organization" section below.
 
 ## Step-by-Step Setup
 
@@ -55,8 +176,12 @@ openEMS/
    src/
    ├── main.cpp                    ← Copy here
    ├── config.h                    ← Copy here (EDIT THIS)
+   ├── platform.h                  ← Copy here (NEW v2.0)
+   ├── sensor_library.h            ← Copy here (NEW v2.0)
+   ├── sensor_configs.h            ← Copy here (NEW v2.0)
    ├── sensor_types.h              ← Copy here
    ├── sensors.cpp                 ← Copy here
+   ├── sensors.h                   ← Copy here
    ├── sensor_read.cpp             ← Copy here
    ├── alarm.cpp                   ← Copy here
    ├── outputs/
@@ -72,11 +197,14 @@ openEMS/
 
 4. **Add platformio.ini to root:**
    ```bash
-   # Copy platformio.ini to project root
    cp platformio.ini openEMS/
    ```
 
-5. **Build:**
+5. **Configure your sensors in config.h:**
+   - Open `sensor_library.h` to browse available sensors
+   - Edit `config.h` and pick sensor IDs
+
+6. **Build:**
    ```bash
    pio run
    ```
@@ -92,8 +220,12 @@ Create folder and put all files in it:
 openEMS/
 ├── openEMS.ino                 # Rename main.cpp to this
 ├── config.h
+├── platform.h
+├── sensor_library.h
+├── sensor_configs.h
 ├── sensor_types.h
 ├── sensors.cpp
+├── sensors.h
 ├── sensor_read.cpp
 ├── alarm.cpp
 ├── output_base.h
@@ -105,13 +237,13 @@ openEMS/
 └── display_lcd.cpp
 ```
 
-**If using flat structure, revert the include paths:**
-- Change `#include "../config.h"` back to `#include "config.h"`
-- Change `#include "outputs/output_base.h"` back to `#include "output_base.h"`
+**If using flat structure, update include paths:**
+- Change `#include "../config.h"` to `#include "config.h"`
+- Change `#include "outputs/output_base.h"` to `#include "output_base.h"`
 
 #### Option B: Use Subdirectories (Advanced)
 
-Same structure as PlatformIO, but you need to:
+Same structure as PlatformIO, but you need:
 1. Use the updated files with `../` includes
 2. Arduino IDE 1.6.6+ should handle it, but may have issues
 
@@ -136,13 +268,22 @@ If you're using a custom build system:
 **main.cpp** includes:
 ```cpp
 #include "config.h"
+#include "platform.h"
 #include "sensor_types.h"
+#include "sensors.h"
 #include "outputs/output_base.h"
+```
+
+**config.h** includes:
+```cpp
+#include "sensor_library.h"  // For sensor IDs
 ```
 
 **sensors.cpp** includes:
 ```cpp
 #include "sensor_types.h"
+#include "sensors.h"
+#include "sensor_configs.h"  // For getSensorConfig()
 #include "config.h"
 ```
 
@@ -150,6 +291,8 @@ If you're using a custom build system:
 ```cpp
 #include "sensor_types.h"
 #include "config.h"
+#include "platform.h"  // For ADC constants
+#include <SPI.h>
 ```
 
 **alarm.cpp** includes:
@@ -162,7 +305,7 @@ If you're using a custom build system:
 
 **output_base.h** includes:
 ```cpp
-#include "../sensor_types.h"
+#include "sensor_types.h"  // Uses ../sensor_types.h
 ```
 
 **output_manager.cpp** includes:
@@ -191,6 +334,9 @@ After setting up, verify:
 
 - [ ] All files are in correct locations
 - [ ] `config.h` is in `src/` directory
+- [ ] `platform.h` is in `src/` directory
+- [ ] `sensor_library.h` is in `src/` directory
+- [ ] `sensor_configs.h` is in `src/` directory
 - [ ] `output_base.h` is in `src/outputs/` directory
 - [ ] `display_lcd.cpp` is in `src/displays/` directory
 - [ ] Include paths use `../` to go up one directory
@@ -198,6 +344,23 @@ After setting up, verify:
 - [ ] platformio.ini is in project root (not in src/)
 
 ## Common Mistakes
+
+### ❌ Wrong: Missing sensor library files
+```
+src/
+├── main.cpp
+└── config.h          # Missing platform.h, sensor_library.h, etc!
+```
+
+### ✅ Correct: All files present
+```
+src/
+├── main.cpp
+├── config.h
+├── platform.h        # NEW
+├── sensor_library.h  # NEW
+└── sensor_configs.h  # NEW
+```
 
 ### ❌ Wrong: output_base.h in src/
 ```
@@ -218,28 +381,13 @@ src/
 ### ❌ Wrong: Missing ../ in includes
 ```cpp
 // In output_can.cpp
-#include "config.h"        // WRONG! Can't find it
+#include "config.h"        # WRONG! Can't find it
 ```
 
 ### ✅ Correct: Using ../ to go up
 ```cpp
 // In output_can.cpp
-#include "../config.h"     // CORRECT! Goes up to src/
-```
-
-### ❌ Wrong: platformio.ini in src/
-```
-src/
-├── platformio.ini         # WRONG!
-└── main.cpp
-```
-
-### ✅ Correct: platformio.ini in root
-```
-openEMS/
-├── platformio.ini         # CORRECT!
-└── src/
-    └── main.cpp
+#include "../config.h"     # CORRECT! Goes up to src/
 ```
 
 ## Testing Your Setup
@@ -251,6 +399,8 @@ openEMS/
    ls src/displays/
    ```
 
+   Should see all files including `platform.h`, `sensor_library.h`, `sensor_configs.h`
+
 2. **Try to compile:**
    ```bash
    pio run
@@ -258,55 +408,127 @@ openEMS/
 
 3. **Common errors and fixes:**
 
+   **Error:** `fatal error: platform.h: No such file or directory`
+   - **Fix:** Make sure platform.h is in src/ directory
+
+   **Error:** `fatal error: sensor_library.h: No such file or directory`
+   - **Fix:** Make sure sensor_library.h is in src/ directory
+
+   **Error:** `'getSensorConfig' was not declared in this scope`
+   - **Fix:** Make sure sensor_configs.h is included in sensors.cpp
+
    **Error:** `fatal error: config.h: No such file or directory`
    - **Fix:** Check that config.h is in src/ directory
    - **Fix:** Check include path uses `../config.h` in subdirectories
 
-   **Error:** `fatal error: output_base.h: No such file or directory`
-   - **Fix:** Make sure output_base.h is in src/outputs/
-   - **Fix:** Check main.cpp uses `#include "outputs/output_base.h"`
+## Migration from v1.0
 
-   **Error:** `multiple definition of 'initCAN'`
-   - **Fix:** Don't compile the same .cpp file twice
-   - **Fix:** Make sure you don't have duplicate files
+If you have v1.0 and want to upgrade:
 
-## Migration from Flat Structure
-
-If you have all files in one directory and want to organize:
-
-1. **Create subdirectories:**
+1. **Backup your old config.h:**
    ```bash
-   mkdir src/outputs
-   mkdir src/displays
+   cp src/config.h src/config.h.v1.0.backup
    ```
 
-2. **Move output files:**
-   ```bash
-   mv src/output_*.cpp src/outputs/
-   mv src/output_base.h src/outputs/
-   ```
+2. **Add new v2.0 files:**
+   - Copy `platform.h` to src/
+   - Copy `sensor_library.h` to src/
+   - Copy `sensor_configs.h` to src/
 
-3. **Move display files:**
-   ```bash
-   mv src/display_*.cpp src/displays/
-   ```
+3. **Update config.h:**
+   - Add sensor type definitions
+   - See MIGRATION_GUIDE.md for details
 
-4. **Update includes** using the files I provided above
+4. **Update sensors.cpp:**
+   - Add `getSensorConfig()` calls
+   - See MIGRATION_GUIDE.md for examples
 
 5. **Test compile:**
    ```bash
    pio run
    ```
 
+See [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) for complete step-by-step instructions.
+
+## Documentation Organization
+
+### docs/README.md
+Comprehensive documentation covering:
+- Complete feature list
+- Detailed hardware setup
+- Wiring diagrams
+- Troubleshooting
+- Adding new sensors/outputs
+
+### docs/QUICK_REFERENCE.md
+Quick lookup for:
+- Common tasks
+- Sensor catalog
+- Pin assignments
+- Troubleshooting checklist
+
+### docs/SENSOR_SELECTION_GUIDE.md
+How to pick the right sensor:
+- Sensor catalog with examples
+- Lookup vs Steinhart comparison
+- Complete configuration examples
+
+### docs/MIGRATION_GUIDE.md
+Upgrading from older versions:
+- What changed and why
+- Step-by-step migration
+- Sensor conversion table
+- Testing and verification
+
+### docs/PRESSURE_SENSOR_GUIDE.md
+Everything about pressure sensors:
+- VDO vs generic sensors
+- Wiring and calibration
+- Troubleshooting pressure readings
+
+### docs/VOLTAGE_SENSOR_GUIDE.md
+Battery and voltage monitoring:
+- Platform auto-configuration
+- Voltage divider setup
+- Calibration procedures
+
+### docs/ADVANCED_CALIBRATION_GUIDE.md
+For advanced users:
+- Custom sensor calibrations
+- Adding to sensor library
+- Steinhart-Hart coefficients
+- Lookup table creation
+
+### docs/DIRECTORY_SETUP.md
+This file - explains project structure.
+
 ## Next Steps
 
 Once your directory structure is set up:
 
-1. **Edit config.h** to match your hardware
-2. **Compile** to verify everything works
-3. **Upload** to your microcontroller
-4. **Test** each sensor individually
-5. **Enable** additional features as needed
+1. **Browse sensor catalog:**
+   - Open `src/sensor_library.h`
+   - Find sensor IDs for your hardware
+
+2. **Edit config.h:**
+   - Pick sensor types from catalog
+   - Set pin assignments
+   - Configure thresholds
+
+3. **Compile:**
+   ```bash
+   pio run
+   ```
+
+4. **Upload:**
+   ```bash
+   pio run -t upload
+   ```
+
+5. **Test:**
+   - Monitor serial output
+   - Verify sensor readings
+   - Check platform detection
 
 ## Quick Commands Reference
 
@@ -330,3 +552,23 @@ pio run -t clean
 pio run -e teensy40
 pio run -e megaatmega2560
 ```
+
+## Getting Help
+
+**Setup issues:**
+1. Check this file for correct structure
+2. Verify all files are in correct locations
+3. Check include paths with `../` notation
+
+**Configuration issues:**
+1. See SENSOR_SELECTION_GUIDE.md
+2. See QUICK_REFERENCE.md
+3. Ask in GitHub Discussions
+
+**Migration issues:**
+1. See MIGRATION_GUIDE.md
+2. Post before/after config in Discussions
+
+---
+
+**Organized structure makes adding sensors and troubleshooting much easier!**
