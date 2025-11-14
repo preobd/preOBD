@@ -32,7 +32,7 @@ float interpolate(float X, byte size, const float* x, const float* y) {
 // Centralized ADC reading with validation
 // Reads analog pin twice (discarding first reading) and validates range
 // Returns: ADC reading value, sets isValid to false if reading is out of range
-int readAnalogWithValidation(int pin, bool* isValid) {
+int readAnalogPin(int pin, bool* isValid) {
     int reading = analogRead(pin);
     delay(10);
     reading = analogRead(pin);  // Discard first reading
@@ -44,7 +44,7 @@ int readAnalogWithValidation(int pin, bool* isValid) {
 
 // Calculate resistance from ADC reading using voltage divider formula
 // R_sensor = reading * R_bias / (ADC_MAX - reading)
-float calculateResistanceFromADC(int reading, float biasResistor) {
+float calculateResistance(int reading, float biasResistor) {
     if (reading >= ADC_MAX_VALUE) {
         return NAN;  // Avoid division by zero
     }
@@ -116,7 +116,7 @@ void readMAX31855(Sensor *ptr) {
 
 void readThermistorSteinhart(Sensor *ptr) {
     bool isValid;
-    int reading = readAnalogWithValidation(ptr->input, &isValid);
+    int reading = readAnalogPin(ptr->input, &isValid);
 
     if (!isValid) {
         ptr->value = NAN;
@@ -132,7 +132,7 @@ void readThermistorSteinhart(Sensor *ptr) {
     float C = (cal != nullptr) ? cal->steinhart_c : 8.775468e-8;
 
     // Calculate thermistor resistance
-    float R_thermistor = calculateResistanceFromADC(reading, R_bias);
+    float R_thermistor = calculateResistance(reading, R_bias);
 
     if (isnan(R_thermistor) || R_thermistor <= 0) {
         ptr->value = NAN;
@@ -151,7 +151,7 @@ void readThermistorSteinhart(Sensor *ptr) {
 
 void readThermistorLookup(Sensor *ptr) {
     bool isValid;
-    int reading = readAnalogWithValidation(ptr->input, &isValid);
+    int reading = readAnalogPin(ptr->input, &isValid);
 
     if (!isValid) {
         ptr->value = NAN;
@@ -167,7 +167,7 @@ void readThermistorLookup(Sensor *ptr) {
     }
 
     // Calculate thermistor resistance
-    float R_thermistor = calculateResistanceFromADC(reading, cal->bias_resistor);
+    float R_thermistor = calculateResistance(reading, cal->bias_resistor);
 
     if (isnan(R_thermistor) || R_thermistor <= 0) {
         ptr->value = NAN;
@@ -183,7 +183,7 @@ void readThermistorLookup(Sensor *ptr) {
 
 void readPressureLinear(Sensor *ptr) {
     bool isValid;
-    int reading = readAnalogWithValidation(ptr->input, &isValid);
+    int reading = readAnalogPin(ptr->input, &isValid);
 
     if (!isValid) {
         ptr->value = NAN;
@@ -216,7 +216,7 @@ void readPressureLinear(Sensor *ptr) {
 
 void readPressurePolynomial(Sensor *ptr) {
     bool isValid;
-    int reading = readAnalogWithValidation(ptr->input, &isValid);
+    int reading = readAnalogPin(ptr->input, &isValid);
 
     if (!isValid) {
         ptr->value = NAN;
@@ -234,7 +234,7 @@ void readPressurePolynomial(Sensor *ptr) {
     // VDO sensors use quadratic equation: V = A*P² + B*P + C
     // We need to solve for P: A*P² + B*P + (C - R) = 0
     // Using quadratic formula: P = (-B ± sqrt(B² - 4*A*(C-R))) / (2*A)
-    float R_sensor = calculateResistanceFromADC(reading, cal->bias_resistor);
+    float R_sensor = calculateResistance(reading, cal->bias_resistor);
 
     if (isnan(R_sensor) || R_sensor <= 0) {
         ptr->value = NAN;
