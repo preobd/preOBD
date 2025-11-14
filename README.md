@@ -34,12 +34,13 @@ Open-source, modular engine monitoring system for classic cars and vehicles with
 ### 1. Hardware Requirements
 
 **Microcontroller (choose one):**
-- Teensy 4.0 (recommended - 14-bit ADC, native CAN)
+- Teensy 4.0/4.1 (recommended - 14-bit ADC, native FlexCAN)
+- Teensy 3.2/3.5/3.6 (12-bit ADC, native FlexCAN)
 - Arduino Mega 2560
-- Teensy 3.x
+- Arduino Due
 
 **Optional Modules:**
-- MCP2515 CAN module (if no native CAN)
+- MCP2515 CAN module (only needed if not using Teensy native CAN)
 - 20x4 I2C LCD display
 - SD card module
 - BME280 sensor
@@ -79,6 +80,10 @@ Edit `src/config.h` to enable your sensors and set pins:
 // Enable desired outputs
 #define ENABLE_CAN
 #define ENABLE_LCD
+
+// For Teensy boards, choose CAN implementation:
+#define USE_FLEXCAN_NATIVE  // Use built-in FlexCAN (no external chip)
+// OR leave undefined to use external MCP2515
 ```
 
 That's it! The system is ready to compile and run.
@@ -161,10 +166,23 @@ VDO Sensors (Thermistors/Pressure):
   Ground → GND
   (Use 2.2kΩ pulldown for thermistors)
 
-CAN Bus:
+CAN Bus (Native FlexCAN on Teensy 4.0/4.1):
+  TX (Pin 22) → CAN Transceiver TX
+  RX (Pin 23) → CAN Transceiver RX
+  (Requires external CAN transceiver like MCP2562 or SN65HVD230)
   CAN_H → Vehicle CAN High
   CAN_L → Vehicle CAN Low
   GND   → Vehicle GND
+
+CAN Bus (MCP2515 Module - any board):
+  CS  → Pin 9 (configurable)
+  INT → Pin 2 (configurable)
+  SCK → Pin 13 (SPI)
+  MISO → Pin 12 (SPI)
+  MOSI → Pin 11 (SPI)
+  CAN_H → Vehicle CAN High
+  CAN_L → Vehicle CAN Low
+  GND → Vehicle GND
 
 LCD (I2C):
   VCC → 5V
@@ -198,9 +216,12 @@ Modify lookup tables in `sensor_read.cpp` for VDO sensors, or adjust conversion 
 - Check pin assignments in config.h
 
 **CAN not working:**
-- Verify 120Ω termination resistors
-- Check CAN_H and CAN_L connections
-- Confirm 500kbps baud rate
+- Native FlexCAN: Verify CAN transceiver is powered and connected to pins 22/23
+- MCP2515: Check CS and INT pin assignments in config.h
+- Verify 120Ω termination resistors at both ends of CAN bus
+- Check CAN_H and CAN_L connections (not reversed)
+- Confirm 500kbps baud rate matches vehicle CAN bus
+- Check serial monitor for "Native FlexCAN initialized" or "MCP2515 CAN initialized" message
 
 **LCD blank:**
 - Try I2C address 0x3F instead of 0x27

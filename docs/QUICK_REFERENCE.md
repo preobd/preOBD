@@ -52,6 +52,10 @@ In `sensors.cpp`, find your sensor:
 In `config.h`:
 ```cpp
 #define ENABLE_CAN
+
+// For Teensy boards, choose CAN implementation:
+#define USE_FLEXCAN_NATIVE  // Use built-in FlexCAN
+// OR leave undefined to use external MCP2515
 ```
 
 ### Enable Multiple Outputs
@@ -129,24 +133,36 @@ In `config.h`:
 
 ## Pin Assignments Reference
 
-### Arduino Mega / Teensy 4.0
+### Arduino Mega / Teensy (MCP2515 CAN)
 
 | Pin | Purpose | Notes |
 |-----|---------|-------|
 | A0-A7 | Analog sensors | Thermistors, pressure |
 | A8-A15 | Additional analog | Teensy only |
-| 2 | CAN INT | Interrupt pin |
+| 2 | CAN INT | MCP2515 interrupt pin |
 | 3 | Buzzer | PWM output |
 | 4 | Silence button | Digital input |
 | 6 | CHT thermocouple CS | SPI chip select |
 | 7 | EGT thermocouple CS | SPI chip select |
-| 9 | CAN CS | SPI chip select |
+| 9 | CAN CS | MCP2515 chip select |
 | 12 | SPI MISO | Hardware SPI |
 | 13 | SPI SCK | Hardware SPI |
 | 50 | SPI MISO | Mega only |
 | 51 | SPI MOSI | Mega only |
 | SDA | I2C Data | LCD, BME280 |
 | SCL | I2C Clock | LCD, BME280 |
+
+### Teensy Native FlexCAN Pins
+
+| Board | CAN1 TX | CAN1 RX | CAN2 TX | CAN2 RX | CAN3 TX | CAN3 RX |
+|-------|---------|---------|---------|---------|---------|---------|
+| Teensy 4.0 | 22 | 23 | 0 | 1 | 31 | 30 |
+| Teensy 4.1 | 22 | 23 | 0 | 1 | 31 | 30 |
+| Teensy 3.2 | 3 | 4 | - | - | - | - |
+| Teensy 3.5 | 3 | 4 | - | - | - | - |
+| Teensy 3.6 | 3 | 4 | 33 | 34 | - | - |
+
+**Note:** Native FlexCAN requires external CAN transceiver (MCP2562, SN65HVD230, etc.)
 
 ## OBDII PID Quick Reference
 
@@ -190,8 +206,12 @@ In `config.h`:
 - [ ] Verify wiring (CANH, CANL, GND)
 - [ ] Check 120Ω termination resistors
 - [ ] Verify baud rate (500kbps)
-- [ ] Check CAN_CS and CAN_INT pins
+- [ ] **Native FlexCAN:** Check transceiver is powered, pins 22/23 connected
+- [ ] **Native FlexCAN:** Check `USE_FLEXCAN_NATIVE` is defined
+- [ ] **MCP2515:** Check CAN_CS (pin 9) and CAN_INT (pin 2) pins
+- [ ] **MCP2515:** Verify `USE_FLEXCAN_NATIVE` is NOT defined
 - [ ] Enable with `#define ENABLE_CAN`
+- [ ] Check serial monitor for init message
 
 ### Alarm Not Triggering
 - [ ] Verify thresholds in config.h

@@ -16,6 +16,20 @@
 //#define ENABLE_SERIAL_OUTPUT
 //#define ENABLE_SD_LOGGING
 
+// ===== CAN CONFIGURATION =====
+// Choose CAN implementation (only relevant if ENABLE_CAN is defined above)
+//
+// For Teensy 3.x/4.x boards:
+//   - USE_FLEXCAN_NATIVE: Use built-in FlexCAN peripheral (no external chip needed)
+//     * Teensy 4.0/4.1: CAN1 TX=22, RX=23 (also CAN2 and CAN3 available)
+//     * Teensy 3.2/3.5/3.6: CAN1 TX=3, RX=4 (CAN2 available on 3.6)
+//   - Leave undefined: Use external MCP2515 chip via SPI (requires CAN_CS and CAN_INT pins)
+//
+// For other boards (Arduino Mega, Uno, Due):
+//   - Must use external MCP2515 chip (USE_FLEXCAN_NATIVE not supported)
+//
+//#define USE_FLEXCAN_NATIVE  // Uncomment to use built-in FlexCAN on Teensy boards
+
 // ===== ENABLED DISPLAY MODULES =====
 #define ENABLE_LCD
 //#define ENABLE_OLED
