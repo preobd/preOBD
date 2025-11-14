@@ -29,6 +29,28 @@ float interpolate(float X, byte size, const float* x, const float* y) {
     return NAN;
 }
 
+// Centralized ADC reading with validation
+// Reads analog pin twice (discarding first reading) and validates range
+// Returns: ADC reading value, sets isValid to false if reading is out of range
+int readAnalogWithValidation(int pin, bool* isValid) {
+    int reading = analogRead(pin);
+    delay(10);
+    reading = analogRead(pin);  // Discard first reading
+
+    // Check if reading is within valid range (not stuck at rails)
+    *isValid = (reading < (ADC_MAX_VALUE - 3) && reading > 3);
+    return reading;
+}
+
+// Calculate resistance from ADC reading using voltage divider formula
+// R_sensor = reading * R_bias / (ADC_MAX - reading)
+float calculateResistanceFromADC(int reading, float biasResistor) {
+    if (reading >= ADC_MAX_VALUE) {
+        return NAN;  // Avoid division by zero
+    }
+    return reading * biasResistor / (ADC_MAX_VALUE - reading);
+}
+
 // ===== THERMOCOUPLE READING =====
 
 void readMAX6675(Sensor *ptr) {
@@ -93,27 +115,26 @@ void readMAX31855(Sensor *ptr) {
 // ===== GENERIC THERMISTOR - STEINHART-HART METHOD =====
 
 void readThermistorSteinhart(Sensor *ptr) {
-    int reading = analogRead(ptr->input);
-    delay(10);
-    reading = analogRead(ptr->input);  // Discard first reading
-    
-    if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
+    bool isValid;
+    int reading = readAnalogWithValidation(ptr->input, &isValid);
+
+    if (!isValid) {
         ptr->value = NAN;
         return;
     }
-    
+
     // Get calibration (with defaults if not provided)
     ThermistorSteinhartCalibration* cal = getThermistorSteinhartCal(ptr);
-    
+
     float R_bias = (cal != nullptr) ? cal->bias_resistor : 10000.0;
     float A = (cal != nullptr) ? cal->steinhart_a : 1.129241e-3;
     float B = (cal != nullptr) ? cal->steinhart_b : 2.341077e-4;
     float C = (cal != nullptr) ? cal->steinhart_c : 8.775468e-8;
-    
+
     // Calculate thermistor resistance
-    float R_thermistor = reading * R_bias / (ADC_MAX_VALUE - reading);
-    
-    if (R_thermistor <= 0) {
+    float R_thermistor = calculateResistanceFromADC(reading, R_bias);
+
+    if (isnan(R_thermistor) || R_thermistor <= 0) {
         ptr->value = NAN;
         return;
     }
@@ -129,27 +150,26 @@ void readThermistorSteinhart(Sensor *ptr) {
 // ===== GENERIC THERMISTOR - LOOKUP TABLE METHOD =====
 
 void readThermistorLookup(Sensor *ptr) {
-    int reading = analogRead(ptr->input);
-    delay(10);
-    reading = analogRead(ptr->input);  // Discard first reading
-    
-    if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
+    bool isValid;
+    int reading = readAnalogWithValidation(ptr->input, &isValid);
+
+    if (!isValid) {
         ptr->value = NAN;
         return;
     }
-    
+
     // Get calibration (REQUIRED for lookup method)
     ThermistorLookupCalibration* cal = getThermistorLookupCal(ptr);
-    
+
     if (cal == nullptr) {
         ptr->value = NAN;  // Can't do lookup without table
         return;
     }
-    
+
     // Calculate thermistor resistance
-    float R_thermistor = reading * cal->bias_resistor / (ADC_MAX_VALUE - reading);
-    
-    if (R_thermistor <= 0) {
+    float R_thermistor = calculateResistanceFromADC(reading, cal->bias_resistor);
+
+    if (isnan(R_thermistor) || R_thermistor <= 0) {
         ptr->value = NAN;
         return;
     }
@@ -162,15 +182,14 @@ void readThermistorLookup(Sensor *ptr) {
 // ===== GENERIC PRESSURE SENSOR - LINEAR METHOD =====
 
 void readPressureLinear(Sensor *ptr) {
-    int reading = analogRead(ptr->input);
-    delay(10);
-    reading = analogRead(ptr->input);  // Discard first reading
-    
-    if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
+    bool isValid;
+    int reading = readAnalogWithValidation(ptr->input, &isValid);
+
+    if (!isValid) {
         ptr->value = NAN;
         return;
     }
-    
+
     // Get calibration (with defaults if not provided)
     PressureLinearCalibration* cal = getPressureLinearCal(ptr);
     
@@ -196,29 +215,28 @@ void readPressureLinear(Sensor *ptr) {
 // ===== GENERIC PRESSURE SENSOR - POLYNOMIAL METHOD =====
 
 void readPressurePolynomial(Sensor *ptr) {
-    int reading = analogRead(ptr->input);
-    delay(10);
-    reading = analogRead(ptr->input);  // Discard first reading
-    
-    if (reading >= (ADC_MAX_VALUE - 3) || reading <= 3) {
+    bool isValid;
+    int reading = readAnalogWithValidation(ptr->input, &isValid);
+
+    if (!isValid) {
         ptr->value = NAN;
         return;
     }
-    
+
     // Get calibration (REQUIRED for polynomial method)
     PressurePolynomialCalibration* cal = getPressurePolynomialCal(ptr);
-    
+
     if (cal == nullptr) {
         ptr->value = NAN;  // Can't calculate without coefficients
         return;
     }
-    
+
     // VDO sensors use quadratic equation: V = A*P² + B*P + C
     // We need to solve for P: A*P² + B*P + (C - R) = 0
     // Using quadratic formula: P = (-B ± sqrt(B² - 4*A*(C-R))) / (2*A)
-    float R_sensor = reading * cal->bias_resistor / (ADC_MAX_VALUE - reading);
-    
-    if (R_sensor <= 0) {
+    float R_sensor = calculateResistanceFromADC(reading, cal->bias_resistor);
+
+    if (isnan(R_sensor) || R_sensor <= 0) {
         ptr->value = NAN;
         return;
     }
@@ -361,6 +379,24 @@ float convertAltitude(float meters, DisplayUnits units) {
         return meters * 3.28084;
     }
     return meters;
+}
+
+// ===== UNIT STRING CONVERSION =====
+
+const char* getUnitString(DisplayUnits units) {
+    switch (units) {
+        case CELSIUS: return "C";
+        case FAHRENHEIT: return "F";
+        case BAR: return "bar";
+        case PSI: return "psi";
+        case KPA: return "kPa";
+        case INHG: return "inHg";
+        case VOLTS: return "V";
+        case PERCENT: return "%";
+        case METERS: return "m";
+        case FEET: return "ft";
+        default: return "";
+    }
 }
 
 // ===== OBDII CONVERSION FUNCTIONS =====
