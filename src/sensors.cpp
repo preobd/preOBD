@@ -45,7 +45,7 @@
     Sensor EGT = {
         .input = EGT_INPUT,
         .obd2pid = 0x78,
-        .obd2length = 9,
+        .obd2length = 2,  // 2 bytes for high-temp range (was 9, but max single-frame is 6)
         .value = 0,
         .sensorType = egt_config->internalType,
         .abbrName = "EGT",
@@ -189,7 +189,7 @@
     Sensor boostPressure = {
         .input = BOOST_PRESSURE_INPUT,
         .obd2pid = 0x6F,
-        .obd2length = 3,
+        .obd2length = 2,  // 2 bytes sufficient for pressure range (was 3)
         .value = 0,
         .sensorType = boost_config->internalType,
         .abbrName = "BST",
