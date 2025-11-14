@@ -10,7 +10,6 @@
 // ===== SENSOR DEFINITIONS =====
 
 #ifdef ENABLE_CHT
-    // Get preset configuration from sensor library
     const SensorConfig* cht_config = getSensorConfig(CHT_SENSOR_TYPE);
     
     Sensor CHT = {
@@ -21,7 +20,12 @@
         .sensorType = cht_config->internalType,
         .abbrName = "CHT",
         .displayName = cht_config->name,
-        .displayUnits = CELSIUS,
+        // Use sensor-specific override or global default
+        #ifdef CHT_DISPLAY_UNITS
+        .displayUnits = CHT_DISPLAY_UNITS,
+        #else
+        .displayUnits = DEFAULT_TEMPERATURE_UNITS,
+        #endif
         .minValue = CHT_MIN,
         .maxValue = CHT_MAX,
         .alarm = true,
@@ -46,7 +50,11 @@
         .sensorType = egt_config->internalType,
         .abbrName = "EGT",
         .displayName = egt_config->name,
-        .displayUnits = CELSIUS,
+        #ifdef EGT_DISPLAY_UNITS
+        .displayUnits = EGT_DISPLAY_UNITS,
+        #else
+        .displayUnits = DEFAULT_TEMPERATURE_UNITS,
+        #endif
         .minValue = EGT_MIN,
         .maxValue = EGT_MAX,
         .alarm = true,
@@ -80,7 +88,11 @@
         .sensorType = coolant_config->internalType,
         .abbrName = "WTR",
         .displayName = coolant_config->name,
-        .displayUnits = CELSIUS,
+        #ifdef COOLANT_DISPLAY_UNITS
+        .displayUnits = COOLANT_DISPLAY_UNITS,
+        #else
+        .displayUnits = DEFAULT_TEMPERATURE_UNITS,
+        #endif
         .minValue = COOLANT_TEMP_MIN,
         .maxValue = COOLANT_TEMP_MAX,
         .alarm = true,
@@ -89,7 +101,6 @@
         .readFunction = coolant_config->readFunction,
         .displayConvert = coolant_config->displayConvert,
         .obdConvert = coolant_config->obdConvert,
-        // Use custom calibration if provided, otherwise use preset
         #ifdef COOLANT_CUSTOM_CALIBRATION
         .calibrationData = &coolant_custom_cal,
         .calibrationType = CAL_THERMISTOR_STEINHART
@@ -120,7 +131,11 @@
         .sensorType = oil_config->internalType,
         .abbrName = "OIL",
         .displayName = oil_config->name,
-        .displayUnits = CELSIUS,
+        #ifdef OIL_DISPLAY_UNITS
+        .displayUnits = OIL_DISPLAY_UNITS,
+        #else
+        .displayUnits = DEFAULT_TEMPERATURE_UNITS,
+        #endif
         .minValue = OIL_TEMP_MIN,
         .maxValue = OIL_TEMP_MAX,
         .alarm = true,
@@ -150,7 +165,11 @@
         .sensorType = tcase_config->internalType,
         .abbrName = "TRANS",
         .displayName = tcase_config->name,
-        .displayUnits = CELSIUS,
+        #ifdef TCASE_DISPLAY_UNITS
+        .displayUnits = TCASE_DISPLAY_UNITS,
+        #else
+        .displayUnits = DEFAULT_TEMPERATURE_UNITS,
+        #endif
         .minValue = TCASE_TEMP_MIN,
         .maxValue = TCASE_TEMP_MAX,
         .alarm = true,
@@ -175,7 +194,11 @@
         .sensorType = boost_config->internalType,
         .abbrName = "BST",
         .displayName = boost_config->name,
-        .displayUnits = BAR,
+        #ifdef BOOST_DISPLAY_UNITS
+        .displayUnits = BOOST_DISPLAY_UNITS,
+        #else
+        .displayUnits = DEFAULT_PRESSURE_UNITS,
+        #endif
         .minValue = BOOST_PRESSURE_MIN,
         .maxValue = BOOST_PRESSURE_MAX,
         .alarm = false,
@@ -200,7 +223,11 @@
         .sensorType = oil_press_config->internalType,
         .abbrName = "OPS",
         .displayName = oil_press_config->name,
-        .displayUnits = BAR,
+        #ifdef OIL_PRESSURE_DISPLAY_UNITS
+        .displayUnits = OIL_PRESSURE_DISPLAY_UNITS,
+        #else
+        .displayUnits = DEFAULT_PRESSURE_UNITS,
+        #endif
         .minValue = OIL_PRESSURE_MIN,
         .maxValue = OIL_PRESSURE_MAX,
         .alarm = true,
@@ -225,7 +252,7 @@
         .sensorType = bat1_config->internalType,
         .abbrName = "BAT",
         .displayName = bat1_config->name,
-        .displayUnits = VOLTS,
+        .displayUnits = VOLTS,  // Always volts
         .minValue = 0,
         .maxValue = 0,
         .alarm = false,
@@ -250,7 +277,7 @@
         .sensorType = bat2_config->internalType,
         .abbrName = "AUX",
         .displayName = bat2_config->name,
-        .displayUnits = VOLTS,
+        .displayUnits = VOLTS,  // Always volts
         .minValue = 0,
         .maxValue = 0,
         .alarm = false,
@@ -268,14 +295,18 @@
     const SensorConfig* ambient_config = getSensorConfig(AMBIENT_TEMP_SENSOR_TYPE);
     
     Sensor ambientAirTemp = {
-        .input = 0,  // I2C sensor, no analog input
+        .input = 0,
         .obd2pid = 0x46,
         .obd2length = 1,
         .value = 0,
         .sensorType = ambient_config->internalType,
         .abbrName = "AMB",
         .displayName = ambient_config->name,
-        .displayUnits = FAHRENHEIT,
+        #ifdef AMBIENT_DISPLAY_UNITS
+        .displayUnits = AMBIENT_DISPLAY_UNITS,
+        #else
+        .displayUnits = DEFAULT_TEMPERATURE_UNITS,
+        #endif
         .minValue = 0,
         .maxValue = 0,
         .alarm = false,
@@ -293,14 +324,18 @@
     const SensorConfig* baro_config = getSensorConfig(BARO_PRESSURE_SENSOR_TYPE);
     
     Sensor absBarPressure = {
-        .input = 0,  // I2C sensor, no analog input
+        .input = 0,
         .obd2pid = 0x33,
         .obd2length = 1,
         .value = 0,
         .sensorType = baro_config->internalType,
         .abbrName = "ABP",
         .displayName = baro_config->name,
-        .displayUnits = INHG,
+        #ifdef BARO_DISPLAY_UNITS
+        .displayUnits = BARO_DISPLAY_UNITS,
+        #else
+        .displayUnits = DEFAULT_PRESSURE_UNITS,
+        #endif
         .minValue = 0,
         .maxValue = 0,
         .alarm = false,
@@ -318,14 +353,14 @@
     const SensorConfig* humidity_config = getSensorConfig(HUMIDITY_SENSOR_TYPE);
     
     Sensor humidity = {
-        .input = 0,  // I2C sensor, no analog input
+        .input = 0,
         .obd2pid = 0xA0,
         .obd2length = 1,
         .value = 0,
         .sensorType = humidity_config->internalType,
         .abbrName = " RH",
         .displayName = humidity_config->name,
-        .displayUnits = PERCENT,
+        .displayUnits = PERCENT,  // Always percent
         .minValue = 0,
         .maxValue = 100,
         .alarm = false,
@@ -343,14 +378,18 @@
     const SensorConfig* altitude_config = getSensorConfig(ALTITUDE_SENSOR_TYPE);
     
     Sensor altitude = {
-        .input = 0,  // I2C sensor, no analog input
+        .input = 0,
         .obd2pid = 0xA1,
         .obd2length = 2,
         .value = 0,
         .sensorType = altitude_config->internalType,
         .abbrName = "ALT",
         .displayName = altitude_config->name,
-        .displayUnits = FEET,
+        #ifdef ALTITUDE_DISPLAY_UNITS
+        .displayUnits = ALTITUDE_DISPLAY_UNITS,
+        #else
+        .displayUnits = DEFAULT_ALTITUDE_UNITS,
+        #endif
         .minValue = 0,
         .maxValue = 0,
         .alarm = false,

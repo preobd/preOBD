@@ -20,36 +20,58 @@
 #define ENABLE_LCD
 //#define ENABLE_OLED
 
+// ===== GLOBAL DISPLAY UNITS DEFAULTS =====
+// Set your preferred units for each measurement type
+// Individual sensors can override these defaults below
+
+// Temperature default (CELSIUS or FAHRENHEIT)
+#define DEFAULT_TEMPERATURE_UNITS  CELSIUS
+
+// Pressure default (BAR, PSI, or KPA)
+#define DEFAULT_PRESSURE_UNITS     BAR
+
+// Altitude default (METERS or FEET)
+#define DEFAULT_ALTITUDE_UNITS     FEET
+
+// NOTE: Voltage is always displayed in VOLTS
+// NOTE: Humidity is always displayed in PERCENT
+
 // ===== SENSOR CONFIGURATION =====
 // For each sensor: enable it, pick a type, assign a pin
+// Optionally override display units for individual sensors
 
 // === CHT (Cylinder Head Temperature) ===
 #define ENABLE_CHT
-#define CHT_SENSOR_TYPE       K_TYPE_THERMOCOUPLE_MAX6675  // Pick from sensor_library.h
-#define CHT_INPUT             6                             // SPI chip select pin
+#define CHT_SENSOR_TYPE       K_TYPE_THERMOCOUPLE_MAX6675
+#define CHT_INPUT             6
 #define CHT_MIN               -1
 #define CHT_MAX               495
+// Override display units for this sensor (optional)
+//#define CHT_DISPLAY_UNITS     FAHRENHEIT  // Uncomment to use F instead of default
 
 // === EGT (Exhaust Gas Temperature) ===
 #define ENABLE_EGT
-#define EGT_SENSOR_TYPE       K_TYPE_THERMOCOUPLE_MAX31855  // Pick from sensor_library.h
-#define EGT_INPUT             7                             // SPI chip select pin
+#define EGT_SENSOR_TYPE       K_TYPE_THERMOCOUPLE_MAX31855
+#define EGT_INPUT             7
 #define EGT_MIN               -1
 #define EGT_MAX               600
+//#define EGT_DISPLAY_UNITS     CELSIUS
 
 // === Coolant Temperature ===
 #define ENABLE_COOLANT_TEMP
-#define COOLANT_SENSOR_TYPE   VDO_120C_LOOKUP              // Pick from sensor_library.h
-#define COOLANT_TEMP_INPUT    A2                           // Analog pin
+#define COOLANT_SENSOR_TYPE   VDO_120C_LOOKUP
+#define COOLANT_TEMP_INPUT    A2
 #define COOLANT_TEMP_MIN      -1
 #define COOLANT_TEMP_MAX      100
+//#define COOLANT_DISPLAY_UNITS FAHRENHEIT
 
 // === Oil Temperature ===
 #define ENABLE_OIL_TEMP
-#define OIL_TEMP_SENSOR_TYPE  VDO_150C_STEINHART          // Try Steinhart for faster reads
+#define OIL_TEMP_SENSOR_TYPE  VDO_150C_STEINHART
 #define OIL_TEMP_INPUT        A0
 #define OIL_TEMP_MIN          -1
 #define OIL_TEMP_MAX          150
+//#define OIL_DISPLAY_UNITS     CELSIUS
 
 // === Transfer Case Temperature ===
 //#define ENABLE_TCASE_TEMP
@@ -57,6 +79,7 @@
 //#define TCASE_TEMP_INPUT        A1
 //#define TCASE_TEMP_MIN          -1
 //#define TCASE_TEMP_MAX          100
+//#define TCASE_DISPLAY_UNITS     FAHRENHEIT
 
 // === Boost Pressure ===
 //#define ENABLE_BOOST_PRESSURE
@@ -64,6 +87,7 @@
 //#define BOOST_PRESSURE_INPUT        A4
 //#define BOOST_PRESSURE_MIN          -1
 //#define BOOST_PRESSURE_MAX          2
+//#define BOOST_DISPLAY_UNITS         PSI  // Override to PSI
 
 // === Oil Pressure ===
 //#define ENABLE_OIL_PRESSURE
@@ -71,11 +95,13 @@
 //#define OIL_PRESSURE_INPUT          A3
 //#define OIL_PRESSURE_MIN            1
 //#define OIL_PRESSURE_MAX            5
+//#define OIL_PRESSURE_DISPLAY_UNITS  BAR
 
 // === Primary Battery ===
 // #define ENABLE_PRIMARY_BATTERY
-// #define PRIMARY_BATTERY_SENSOR_TYPE   STANDARD_12V_DIVIDER  // Auto-configured
+// #define PRIMARY_BATTERY_SENSOR_TYPE   STANDARD_12V_DIVIDER
 // #define PRIMARY_BATTERY_INPUT         A8
+// Voltage is always displayed in VOLTS
 
 // === Secondary Battery ===
 //#define ENABLE_AUXILIARY_BATTERY
@@ -91,22 +117,22 @@
 // === Ambient Temperature (BME280) ===
 #define ENABLE_AMBIENT_TEMP
 #define AMBIENT_TEMP_SENSOR_TYPE      BME280_AMBIENT_TEMPERATURE
-// No input pin needed - uses I2C
+//#define AMBIENT_DISPLAY_UNITS         FAHRENHEIT
 
 // === Barometric Pressure (BME280) ===
 #define ENABLE_BAROMETRIC_PRESSURE
 #define BARO_PRESSURE_SENSOR_TYPE     BME280_BAROMETRIC_PRESSURE
-// No input pin needed - uses I2C
+//#define BARO_DISPLAY_UNITS            INHG  // inHg for US weather
 
 // === Humidity (BME280) ===
 #define ENABLE_HUMIDITY
 #define HUMIDITY_SENSOR_TYPE          BME280_RELATIVE_HUMIDITY
-// No input pin needed - uses I2C
+// Humidity is always displayed in PERCENT
 
 // === Altitude (BME280) ===
 #define ENABLE_ALTITUDE
 #define ALTITUDE_SENSOR_TYPE          BME280_ESTIMATED_ALTITUDE
-// No input pin needed - uses I2C
+//#define ALTITUDE_DISPLAY_UNITS        FEET
 
 // ===== DIGITAL I/O =====
 #define CAN_INT 2
@@ -118,7 +144,7 @@
 #define SILENCE_DURATION 30000  // ms
 
 // ===== CALIBRATION =====
-#define SEA_LEVEL_PRESSURE_HPA 1013.25  // standard atmospheric pressure (1013.25 hPa / 101.325 kPa)
+#define SEA_LEVEL_PRESSURE_HPA 1013.25
 
 // ===== TIMING =====
 #define LOOP_DELAY_MS 200

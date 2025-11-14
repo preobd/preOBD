@@ -105,8 +105,8 @@ void setup() {
     Serial.println("                                        ");
     Serial.println("                       ______  _______  ");
     Serial.println("   ___  ___  ___ ___  / __/  |/  / __/  ");
-    Serial.println("  / _ \/ _ \/ -_) _ \/ _// /|_/ /\ \    ");
-    Serial.println("  \___/ .__/\__/_//_/___/_/  /_/___/    ");
+    Serial.println("  / _ \\/ _ \\/ -_) _ \\/ _// /|_/ /\\ \\    ");
+    Serial.println("  \\___/ .__/\\__/_//_/___/_/  /_/___/    ");
     Serial.println("     /_/                                ");
     Serial.println("                                        ");
     Serial.println("openEngine Monitoring System v1.0 ======");
