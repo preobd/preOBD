@@ -110,11 +110,12 @@ void setup() {
     Serial.println("     /_/                                ");
     Serial.println("                                        ");
     Serial.println("openEngine Monitoring System v1.0 ======");
-    Serial.println("Initializing...");
+    Serial.println("                                        ");
     
     // Configure ADC for this platform
     setupADC();
-
+    
+    Serial.println("Initializing...");
     // Initialize SPI for thermocouples
     SPI.begin();
     
