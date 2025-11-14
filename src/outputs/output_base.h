@@ -21,4 +21,54 @@ void initOutputModules();
 void sendToOutputs(Sensor* sensor);
 void updateOutputs();
 
+// ===== OBDII FRAME BUILDING =====
+
+// Build standard OBDII Mode 01 frame data (ISO 15765-4 compliant)
+// Fixes: 1) Correct length byte calculation, 2) Big-endian byte order
+// Parameters:
+//   frameData - 8-byte buffer to fill
+//   ptr - Sensor with obd2pid, obd2length, and obdConvert()
+// Returns: true if successful, false if data size invalid
+inline bool buildOBD2Frame(byte* frameData, Sensor* ptr) {
+    byte mode = 0x41;  // Mode 01: Show current data
+    byte dataBytes = ptr->obd2length;
+
+    // Validate data size (max 6 bytes in single CAN frame)
+    if (dataBytes == 0 || dataBytes > 6) {
+        return false;
+    }
+
+    // Clear frame
+    for (int i = 0; i < 8; i++) {
+        frameData[i] = 0;
+    }
+
+    // Byte 0: Length = mode + PID + data (ISO 15765-4 single-frame format)
+    frameData[0] = 2 + dataBytes;  // FIX: Was just dataBytes, now 2 + dataBytes
+    frameData[1] = mode;
+    frameData[2] = ptr->obd2pid;
+
+    // Convert value to OBDII format using sensor's conversion function
+    float obdValue = ptr->obdConvert(ptr->value);
+
+    // Encode data based on size (big-endian / MSB first)
+    if (dataBytes == 1) {
+        // 1-byte data (most temperatures, percentages)
+        frameData[3] = (byte)obdValue;
+    } else if (dataBytes == 2) {
+        // 2-byte data (RPM, high-precision temps, pressures)
+        uint16_t value = (uint16_t)obdValue;
+        frameData[3] = (value >> 8) & 0xFF;  // MSB first (FIX: Was LSB first)
+        frameData[4] = value & 0xFF;         // LSB second
+    } else {
+        // 3-6 byte data (rare, but supported)
+        uint32_t value = (uint32_t)obdValue;
+        for (byte i = 0; i < dataBytes; i++) {
+            frameData[3 + i] = (value >> ((dataBytes - 1 - i) * 8)) & 0xFF;
+        }
+    }
+
+    return true;
+}
+
 #endif

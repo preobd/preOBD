@@ -185,4 +185,9 @@ inline VoltageDividerCalibration* getVoltageDividerCal(Sensor* ptr) {
     return (VoltageDividerCalibration*)ptr->calibrationData;
 }
 
+// ===== UTILITY FUNCTIONS =====
+
+// Get string representation of display unit
+const char* getUnitString(DisplayUnits units);
+
 #endif

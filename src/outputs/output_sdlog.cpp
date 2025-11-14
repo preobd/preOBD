@@ -59,7 +59,7 @@ void sendSDLog(Sensor *ptr) {
     
     // Convert to display units for logging
     float displayValue = ptr->displayConvert(ptr->value, ptr->displayUnits);
-    
+
     // Write CSV line: timestamp, sensor name, value, units
     logFile.print(millis());
     logFile.print(",");
@@ -67,17 +67,7 @@ void sendSDLog(Sensor *ptr) {
     logFile.print(",");
     logFile.print(displayValue, 2);
     logFile.print(",");
-    
-    // Write units
-    switch (ptr->displayUnits) {
-        case CELSIUS: logFile.print("C"); break;
-        case FAHRENHEIT: logFile.print("F"); break;
-        case BAR: logFile.print("bar"); break;
-        case PSI: logFile.print("psi"); break;
-        case KPA: logFile.print("kPa"); break;
-        case VOLTS: logFile.print("V"); break;
-    }
-    
+    logFile.print(getUnitString(ptr->displayUnits));
     logFile.println();
 }
 

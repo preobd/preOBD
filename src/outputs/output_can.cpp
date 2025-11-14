@@ -25,22 +25,14 @@ void sendCAN(Sensor *ptr) {
     if (isnan(ptr->value)) {
         return;  // Don't send invalid data
     }
-    
-    byte frameData[8] = {0};
-    
-    // Build OBDII frame
-    frameData[0] = ptr->obd2length;  // Number of additional bytes
-    frameData[1] = 0x41;             // Mode 01: Show current data
-    frameData[2] = ptr->obd2pid;     // PID
-    
-    // Convert value to OBDII format using sensor's conversion function
-    float obdValue = ptr->obdConvert(ptr->value);
-    uint16_t value = (uint16_t)obdValue;
-    
-    // Split into bytes (little endian for compatibility)
-    frameData[3] = value & 0xFF;         // LSB
-    frameData[4] = (value >> 8) & 0xFF;  // MSB
-    
+
+    byte frameData[8];
+
+    // Build OBDII frame using shared helper (fixes length byte and endianness)
+    if (!buildOBD2Frame(frameData, ptr)) {
+        return;  // Invalid data size
+    }
+
     // Send on standard OBDII ECU response ID
     CAN.beginPacket(0x7E8, 8);
     CAN.write(frameData, 8);
