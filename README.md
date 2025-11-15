@@ -255,8 +255,6 @@ See [LICENSE](LICENSE) file for details.
 
 Created by [Your Name] for the classic car community.
 
-Based on years of experience with vehicle diagnostics and open-source examples.
-
 ## Support
 
 - **Issues:** [GitHub Issues](https://github.com/yourusername/openEMS/issues)

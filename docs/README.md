@@ -318,21 +318,11 @@ Please:
 
 ## Credits
 
-Created for the classic car and experimental aircraft community.
+Created for the classic car community.
 
 MIT License - Free for personal and commercial use.
 
 See [LICENSE](LICENSE) file for details.
-
-## Credits
-
-Created for the classic car community.
-
-Built on:
-- Function pointer architecture for extensibility
-- Pre-calibrated sensor library for ease of use
-- Platform auto-detection for cross-compatibility
-- Years of community knowledge and testing
 
 ## Support
 
