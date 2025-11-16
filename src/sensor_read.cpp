@@ -413,6 +413,13 @@ void readBME280Altitude(Sensor *ptr) {
     #endif
 }
 
+// ===== DIGITAL FLOAT SWITCH =====
+
+void readDigitalFloatSwitch(Sensor *ptr) {
+    // Read digital state: HIGH (1) = normal/ok, LOW (0) = low level
+    ptr->value = (float)digitalRead(ptr->input);
+}
+
 // ===== CONVERSION FUNCTIONS =====
 
 float convertTemperature(float celsius, DisplayUnits units) {
@@ -450,6 +457,13 @@ float convertAltitude(float meters, DisplayUnits units) {
         return meters * 3.28084;
     }
     return meters;
+}
+
+float convertFloatSwitch(float value, DisplayUnits units) {
+    if (units == PERCENT) {
+        return value * 100.0;  // 0% (low) or 100% (ok)
+    }
+    return value;  // 0 or 1
 }
 
 // ===== UNIT STRING CONVERSION =====
@@ -498,4 +512,8 @@ float obdConvertHumidity(float humidity) {
 
 float obdConvertAltitude(float meters) {
     return meters;
+}
+
+float obdConvertFloatSwitch(float value) {
+    return value * 255.0;  // OBDII format: 0 or 255
 }

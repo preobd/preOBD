@@ -11,7 +11,7 @@
 struct Sensor;
 
 // Sensor type enumeration
-enum SensorType { 
+enum SensorType {
     MAX6675,
     MAX31855,
     THERMISTOR_LOOKUP,
@@ -25,7 +25,8 @@ enum SensorType {
     BME280_TEMP,
     BME280_PRESSURE,
     BME280_HUMIDITY,
-    BME280_ALTITUDE   
+    BME280_ALTITUDE,
+    DIGITAL_FLOAT_SWITCH
 };
 
 // Display units enumeration
