@@ -26,7 +26,7 @@ enum SensorType {
     BME280_PRESSURE,
     BME280_HUMIDITY,
     BME280_ALTITUDE,
-    DIGITAL_FLOAT_SWITCH
+    FLOAT_SWITCH
 };
 
 // Display units enumeration

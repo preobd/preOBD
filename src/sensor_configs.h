@@ -480,7 +480,7 @@ static const SensorConfig SENSOR_CONFIGS[] = {
     {
         .sensorId = DIGITAL_FLOAT_SWITCH,
         .name = "Digital Float Switch",
-        .internalType = DIGITAL_FLOAT_SWITCH,
+        .internalType = FLOAT_SWITCH,
         .readFunction = readDigitalFloatSwitch,
         .displayConvert = convertFloatSwitch,
         .obdConvert = obdConvertFloatSwitch,
