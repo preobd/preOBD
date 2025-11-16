@@ -27,6 +27,7 @@ extern void readBME280Temp(Sensor*);
 extern void readBME280Pressure(Sensor*);
 extern void readBME280Humidity(Sensor*);
 extern void readBME280Altitude(Sensor*);
+extern void readDigitalFloatSwitch(Sensor*);
 
 // Forward declare conversion functions
 extern float convertTemperature(float, DisplayUnits);
@@ -35,6 +36,7 @@ extern float convertVoltage(float, DisplayUnits);
 extern float convertRPM(float, DisplayUnits);
 extern float convertHumidity(float, DisplayUnits);
 extern float convertAltitude(float, DisplayUnits);
+extern float convertFloatSwitch(float, DisplayUnits);
 extern float obdConvertTemp(float);
 extern float obdConvertPressure(float);
 extern float obdConvertVoltage(float);
@@ -42,6 +44,7 @@ extern float obdConvertDirect(float);
 extern float obdConvertRPM(float);
 extern float obdConvertHumidity(float);
 extern float obdConvertAltitude(float);
+extern float obdConvertFloatSwitch(float);
 
 // ===== VDO 120°C LOOKUP TABLES =====
 
@@ -469,6 +472,18 @@ static const SensorConfig SENSOR_CONFIGS[] = {
         .readFunction = readBME280Altitude,
         .displayConvert = convertAltitude,
         .obdConvert = obdConvertAltitude,
+        .calibrationType = CAL_NONE,
+        .calibrationData = nullptr
+    },
+
+    // ===== DIGITAL SENSORS =====
+    {
+        .sensorId = DIGITAL_FLOAT_SWITCH,
+        .name = "Digital Float Switch",
+        .internalType = DIGITAL_FLOAT_SWITCH,
+        .readFunction = readDigitalFloatSwitch,
+        .displayConvert = convertFloatSwitch,
+        .obdConvert = obdConvertFloatSwitch,
         .calibrationType = CAL_NONE,
         .calibrationData = nullptr
     }

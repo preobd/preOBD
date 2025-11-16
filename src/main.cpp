@@ -138,6 +138,12 @@ void setup() {
     initRPM(RPM_INPUT);
     #endif
 
+    // Initialize coolant level sensor
+    #ifdef ENABLE_COOLANT_LEVEL
+    pinMode(COOLANT_LEVEL_INPUT, INPUT);
+    Serial.println("✓ Coolant level sensor initialized");
+    #endif
+
     // Initialize I2C for BME280 and LCD
     Wire.begin();
     #if defined(ESP32)

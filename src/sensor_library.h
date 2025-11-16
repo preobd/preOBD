@@ -84,6 +84,11 @@
 #define BME280_RELATIVE_HUMIDITY     82
 #define BME280_ESTIMATED_ALTITUDE    83
 
+// ===== DIGITAL SENSORS =====
+
+// Float Switches
+#define DIGITAL_FLOAT_SWITCH         90  // Generic float switch (coolant level, etc.)
+
 // ===== USAGE EXAMPLES =====
 /*
  * In config.h, simply pick a sensor:

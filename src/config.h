@@ -79,6 +79,13 @@
 #define COOLANT_TEMP_MAX      100
 //#define COOLANT_DISPLAY_UNITS FAHRENHEIT
 
+// === Coolant Level (Float Switch) ===
+#define ENABLE_COOLANT_LEVEL
+#define COOLANT_LEVEL_SENSOR_TYPE  DIGITAL_FLOAT_SWITCH
+#define COOLANT_LEVEL_INPUT        5     // Digital pin
+#define COOLANT_LEVEL_MIN          0     // Alarm if 0 (low level)
+#define COOLANT_LEVEL_MAX          1     // OK if 1 (normal level)
+
 // === Oil Temperature ===
 #define ENABLE_OIL_TEMP
 #define OIL_TEMP_SENSOR_TYPE  VDO_150C_STEINHART

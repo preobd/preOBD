@@ -443,6 +443,31 @@
     };
 #endif
 
+#ifdef ENABLE_COOLANT_LEVEL
+    const SensorConfig* level_config = getSensorConfig(COOLANT_LEVEL_SENSOR_TYPE);
+
+    Sensor coolantLevel = {
+        .input = COOLANT_LEVEL_INPUT,
+        .obd2pid = 0xA2,
+        .obd2length = 1,
+        .value = 0,
+        .sensorType = level_config->internalType,
+        .abbrName = "LVL",
+        .displayName = level_config->name,
+        .displayUnits = PERCENT,  // Display as 0% (low) or 100% (ok)
+        .minValue = COOLANT_LEVEL_MIN,
+        .maxValue = COOLANT_LEVEL_MAX,
+        .alarm = true,
+        .display = true,
+        .isEnabled = true,
+        .readFunction = level_config->readFunction,
+        .displayConvert = level_config->displayConvert,
+        .obdConvert = level_config->obdConvert,
+        .calibrationData = level_config->calibrationData,
+        .calibrationType = level_config->calibrationType
+    };
+#endif
+
 // ===== SENSOR ARRAY =====
 // Order of sensors in this array determines display order
 Sensor *sensors[] = {
@@ -487,6 +512,9 @@ Sensor *sensors[] = {
     #endif
     #ifdef ENABLE_ALTITUDE
     &altitude,
+    #endif
+    #ifdef ENABLE_COOLANT_LEVEL
+    &coolantLevel,
     #endif
 };
 
