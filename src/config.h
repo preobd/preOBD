@@ -128,6 +128,21 @@
 //#define CUSTOM_VOLTAGE_SENSOR_TYPE     DIRECT_VOLTAGE_5V
 //#define CUSTOM_VOLTAGE_INPUT           A9
 
+// ===== RPM Sensing =====
+// #define ENABLE_ENGINE_RPM
+// #define RPM_SENSOR_TYPE       W_PHASE_RPM_12_POLE  // Pick your alternator
+// #define RPM_INPUT             5                     // Interrupt-capable pin
+// #define RPM_MIN               500   // Idle RPM alarm threshold
+// #define RPM_MAX               6500  // Over-rev alarm threshold
+
+// For custom pole count:
+//#define RPM_SENSOR_TYPE       W_PHASE_RPM_CUSTOM
+//#define RPM_CUSTOM_CALIBRATION
+//#define RPM_POLES             12
+//#define RPM_TIMEOUT_MS        2000
+//#define RPM_MIN_VALID         300
+//#define RPM_MAX_VALID         8000
+
 // === Ambient Temperature (BME280) ===
 #define ENABLE_AMBIENT_TEMP
 #define AMBIENT_TEMP_SENSOR_TYPE      BME280_AMBIENT_TEMPERATURE

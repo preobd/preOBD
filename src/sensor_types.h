@@ -14,13 +14,14 @@ struct Sensor;
 enum SensorType { 
     MAX6675,
     MAX31855,
-    THERMISTOR_LOOKUP,   // Generic thermistor with lookup table
-    THERMISTOR_STEINHART,// Generic thermistor with Steinhart-Hart
+    THERMISTOR_LOOKUP,
+    THERMISTOR_STEINHART,
     GENERIC_BOOST,
     MPX4250AP,
     VDO_2BAR,
     VDO_5BAR,
     VOLTAGE_DIVIDER,
+    W_PHASE_RPM,
     BME280_TEMP,
     BME280_PRESSURE,
     BME280_HUMIDITY,
@@ -36,6 +37,7 @@ enum DisplayUnits {
     KPA,
     INHG,
     VOLTS,
+    RPM,
     PERCENT,
     METERS,
     FEET
@@ -49,7 +51,8 @@ enum CalibrationType {
     CAL_PRESSURE_POLYNOMIAL,
     CAL_PRESSURE_LINEAR,
     CAL_PRESSURE,
-    CAL_VOLTAGE_DIVIDER
+    CAL_VOLTAGE_DIVIDER,
+    CAL_RPM
 };
 
 // ===== CALIBRATION STRUCTURES =====
@@ -96,6 +99,15 @@ typedef struct {
     float correction;      // Correction factor (multiplier, typically 1.0)
     float offset;          // Voltage offset (typically 0.0)
 } VoltageDividerCalibration;
+
+// ===== RPM CALIBRATION STRUCTURES =====
+typedef struct {
+    byte poles;              // Number of alternator poles
+    float pulses_per_rev;    // Calculated from poles
+    uint16_t timeout_ms;     // Timeout for zero RPM (ms)
+    uint16_t min_rpm;        // Minimum valid RPM
+    uint16_t max_rpm;        // Maximum valid RPM
+} RPMCalibration;
 
 // ===== SENSOR STRUCTURE =====
 
@@ -183,6 +195,14 @@ inline VoltageDividerCalibration* getVoltageDividerCal(Sensor* ptr) {
         return nullptr;
     }
     return (VoltageDividerCalibration*)ptr->calibrationData;
+}
+
+// Safely get RPM calibration
+inline RPMCalibration* getRPMCal(Sensor* ptr) {
+    if (ptr->calibrationType != CAL_RPM) {
+        return nullptr;
+    }
+    return (RPMCalibration*)ptr->calibrationData;
 }
 
 // ===== UTILITY FUNCTIONS =====

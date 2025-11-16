@@ -132,7 +132,13 @@ void setup() {
     Serial.println("✓ EGT chip select initialized");
     #endif
     
-   // Initialize I2C for BME280 and LCD
+    // Initialize RPM sensing
+    #ifdef ENABLE_ENGINE_RPM
+    extern void initRPM(byte);
+    initRPM(RPM_INPUT);
+    #endif
+
+    // Initialize I2C for BME280 and LCD
     Wire.begin();
     #if defined(ESP32)
     // ESP32 may need explicit SDA/SCL pins

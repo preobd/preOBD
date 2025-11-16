@@ -59,10 +59,10 @@ void displaySensor(Sensor *ptr, byte line) {
             lcd.print("b");
         }
     } else if (ptr->displayUnits == KPA) {
-        lcd.print(displayValue, 1);  // No decimal for kPa
+        lcd.print(displayValue, 1);
         lcd.print("k");
     } else if (ptr->displayUnits == INHG) {
-        lcd.print(displayValue, 2);  // No decimal for kPa
+        lcd.print(displayValue, 2);
         lcd.print("");
     } else if (ptr->displayUnits == PERCENT) {
         lcd.print(displayValue, 0);  // No decimal for humidity
@@ -73,6 +73,8 @@ void displaySensor(Sensor *ptr, byte line) {
     } else if (ptr->displayUnits == FEET) {
         lcd.print(displayValue, 0);  // No decimal for altitude
         lcd.print("ft");
+    } else if (ptr->displayUnits == RPM) {
+        lcd.print(displayValue, 0);  // No decimal for RPM
     }
     // Clear remaining characters in field (assuming 9 chars per field)
     //lcd.print("   ");

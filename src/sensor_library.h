@@ -69,14 +69,20 @@
 // Custom/User-Defined
 #define CUSTOM_VOLTAGE_DIVIDER    59  // User provides R1/R2
 
+// ===== RPM SENSORS =====
+
+#define W_PHASE_RPM_12_POLE      60  // 12-pole alternator
+#define W_PHASE_RPM_14_POLE      61  // 14-pole alternator
+#define W_PHASE_RPM_16_POLE      62  // 16-pole alternator
+#define W_PHASE_RPM_CUSTOM       69  // Custom pole count
 
 // ===== ENVIRONMENTAL SENSORS =====
 
 // BME280 (I2C sensor with temp, pressure, humidity)
-#define BME280_AMBIENT_TEMPERATURE   60
-#define BME280_BAROMETRIC_PRESSURE   61
-#define BME280_RELATIVE_HUMIDITY     62
-#define BME280_ESTIMATED_ALTITUDE    63
+#define BME280_AMBIENT_TEMPERATURE   80
+#define BME280_BAROMETRIC_PRESSURE   81
+#define BME280_RELATIVE_HUMIDITY     82
+#define BME280_ESTIMATED_ALTITUDE    83
 
 // ===== USAGE EXAMPLES =====
 /*

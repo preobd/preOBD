@@ -22,6 +22,7 @@ extern void readPressureLinear(Sensor*);
 extern void readPressurePolynomial(Sensor*);
 extern void readVoltageDivider(Sensor*);
 extern void readVoltageDirect(Sensor*);
+extern void readWPhaseRPM(Sensor*);
 extern void readBME280Temp(Sensor*);
 extern void readBME280Pressure(Sensor*);
 extern void readBME280Humidity(Sensor*);
@@ -31,12 +32,14 @@ extern void readBME280Altitude(Sensor*);
 extern float convertTemperature(float, DisplayUnits);
 extern float convertPressure(float, DisplayUnits);
 extern float convertVoltage(float, DisplayUnits);
+extern float convertRPM(float, DisplayUnits);
 extern float convertHumidity(float, DisplayUnits);
 extern float convertAltitude(float, DisplayUnits);
 extern float obdConvertTemp(float);
 extern float obdConvertPressure(float);
 extern float obdConvertVoltage(float);
 extern float obdConvertDirect(float);
+extern float obdConvertRPM(float);
 extern float obdConvertHumidity(float);
 extern float obdConvertAltitude(float);
 
@@ -176,6 +179,33 @@ static const PressureLinearCalibration mpx4250ap_cal = {
     .voltage_max = 4.7,
     .pressure_min = 0.2,    // 20 kPa in bar
     .pressure_max = 2.5     // 250 kPa in bar
+};
+
+// ===== RPM CALIBRATIONS =====
+
+// Common alternator configurations
+static const RPMCalibration rpm_12pole_cal = {
+    .poles = 12,
+    .pulses_per_rev = 12.0 / 2.0,  // 6 pulses per revolution
+    .timeout_ms = 2000,             // 2 second timeout
+    .min_rpm = 300,
+    .max_rpm = 8000
+};
+
+static const RPMCalibration rpm_14pole_cal = {
+    .poles = 14,
+    .pulses_per_rev = 14.0 / 2.0,  // 7 pulses per revolution
+    .timeout_ms = 2000,
+    .min_rpm = 300,
+    .max_rpm = 8000
+};
+
+static const RPMCalibration rpm_16pole_cal = {
+    .poles = 16,
+    .pulses_per_rev = 16.0 / 2.0,  // 8 pulses per revolution
+    .timeout_ms = 2000,
+    .min_rpm = 300,
+    .max_rpm = 8000
 };
 
 // ===== SENSOR CONFIGURATION DATABASE =====
@@ -368,7 +398,39 @@ static const SensorConfig SENSOR_CONFIGS[] = {
         .calibrationType = CAL_NONE,
         .calibrationData = nullptr
     },
-    
+
+    // ===== RPM SENSORS =====
+    {
+    .sensorId = W_PHASE_RPM_12_POLE,
+    .name = "W-Phase RPM (12-pole)",
+    .internalType = W_PHASE_RPM,
+    .readFunction = readWPhaseRPM,
+    .displayConvert = convertRPM,
+    .obdConvert = obdConvertRPM,
+    .calibrationType = CAL_RPM,
+    .calibrationData = (void*)&rpm_12pole_cal
+    },
+    {
+    .sensorId = W_PHASE_RPM_14_POLE,
+    .name = "W-Phase RPM (14-pole)",
+    .internalType = W_PHASE_RPM,
+    .readFunction = readWPhaseRPM,
+    .displayConvert = convertRPM,
+    .obdConvert = obdConvertRPM,
+    .calibrationType = CAL_RPM,
+    .calibrationData = (void*)&rpm_14pole_cal
+    },
+    {
+    .sensorId = W_PHASE_RPM_16_POLE,
+    .name = "W-Phase RPM (16-pole)",
+    .internalType = W_PHASE_RPM,
+    .readFunction = readWPhaseRPM,
+    .displayConvert = convertRPM,
+    .obdConvert = obdConvertRPM,
+    .calibrationType = CAL_RPM,
+    .calibrationData = (void*)&rpm_16pole_cal
+    },
+
     // ===== BME280 SENSORS =====
     {
         .sensorId = BME280_AMBIENT_TEMPERATURE,

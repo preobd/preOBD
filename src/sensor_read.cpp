@@ -312,6 +312,73 @@ void readVoltageDirect(Sensor *ptr) {
     ptr->value = voltage;
 }
 
+// ===== RPM SENSING - INTERRUPT-BASED =====
+
+// Global variables for RPM calculation
+volatile unsigned long rpm_pulse_count = 0;
+volatile unsigned long rpm_last_time = 0;
+volatile unsigned long rpm_pulse_interval = 0;
+unsigned long rpm_calc_time = 0;
+
+// Interrupt service routine
+void rpmPulseISR() {
+    unsigned long now = micros();
+    unsigned long interval = now - rpm_last_time;
+    
+    // Debounce: ignore pulses faster than 100 µs (600,000 RPM equivalent)
+    if (interval > 100) {
+        rpm_pulse_interval = interval;
+        rpm_pulse_count++;
+        rpm_last_time = now;
+    }
+}
+
+// Initialize RPM sensing
+void initRPM(byte pin) {
+    pinMode(pin, INPUT);
+    attachInterrupt(digitalPinToInterrupt(pin), rpmPulseISR, RISING);
+    Serial.print("✓ RPM sensing initialized on pin ");
+    Serial.println(pin);
+}
+
+// Read W-Phase RPM
+void readWPhaseRPM(Sensor *ptr) {
+    // Get calibration
+    RPMCalibration* cal = getRPMCal(ptr);
+    if (cal == nullptr) {
+        ptr->value = NAN;
+        return;
+    }
+    
+    // Calculate time since last pulse
+    unsigned long now = millis();
+    unsigned long time_since_pulse = now - (rpm_last_time / 1000);
+    
+    // Check for timeout (engine stopped)
+    if (time_since_pulse > cal->timeout_ms) {
+        ptr->value = 0;
+        return;
+    }
+    
+    // Calculate RPM from pulse interval
+    // Formula: RPM = (60,000,000 µs/min) / (interval_µs × pulses_per_rev)
+    if (rpm_pulse_interval > 0) {
+        float rpm = 60000000.0 / (rpm_pulse_interval * cal->pulses_per_rev);
+        
+        // Validate range
+        if (rpm >= cal->min_rpm && rpm <= cal->max_rpm) {
+            // Apply simple smoothing filter (optional)
+            if (!isnan(ptr->value) && ptr->value > 0) {
+                ptr->value = (ptr->value * 0.8) + (rpm * 0.2);
+            } else {
+                ptr->value = rpm;
+            }
+        } else {
+            ptr->value = NAN;  // Out of range
+        }
+    }
+}
+
 // ===== BME280 READING =====
 
 void readBME280Temp(Sensor *ptr) {
@@ -370,6 +437,10 @@ float convertVoltage(float volts, DisplayUnits units) {
     return volts;
 }
 
+float convertRPM(float rpm, DisplayUnits units) {
+    return rpm;  // RPM is always displayed as RPM
+}
+
 float convertHumidity(float humidity, DisplayUnits units) {
     return humidity;
 }
@@ -415,6 +486,10 @@ float obdConvertVoltage(float volts) {
 
 float obdConvertDirect(float value) {
     return value;
+}
+
+float obdConvertRPM(float rpm) {
+    return rpm / 4.0;  // OBDII format: RPM = ((A×256)+B)/4
 }
 
 float obdConvertHumidity(float humidity) {

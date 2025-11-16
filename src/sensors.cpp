@@ -291,6 +291,46 @@
     };
 #endif
 
+#ifdef ENABLE_ENGINE_RPM
+    const SensorConfig* rpm_config = getSensorConfig(RPM_SENSOR_TYPE);
+    
+    #ifdef RPM_CUSTOM_CALIBRATION
+        static RPMCalibration rpm_custom_cal = {
+            .poles = RPM_POLES,
+            .pulses_per_rev = RPM_POLES / 2.0,
+            .timeout_ms = RPM_TIMEOUT_MS,
+            .min_rpm = RPM_MIN_VALID,
+            .max_rpm = RPM_MAX_VALID
+        };
+    #endif
+    
+    Sensor engineRPM = {
+        .input = RPM_INPUT,
+        .obd2pid = 0x0C,
+        .obd2length = 2,
+        .value = 0,
+        .sensorType = rpm_config->internalType,
+        .abbrName = "RPM",
+        .displayName = rpm_config->name,
+        .displayUnits = RPM,
+        .minValue = RPM_MIN,
+        .maxValue = RPM_MAX,
+        .alarm = true,
+        .display = true,
+        .isEnabled = true,
+        .readFunction = rpm_config->readFunction,
+        .displayConvert = rpm_config->displayConvert,
+        .obdConvert = rpm_config->obdConvert,
+        #ifdef RPM_CUSTOM_CALIBRATION
+        .calibrationData = &rpm_custom_cal,
+        .calibrationType = CAL_RPM
+        #else
+        .calibrationData = rpm_config->calibrationData,
+        .calibrationType = rpm_config->calibrationType
+        #endif
+    };
+#endif
+
 #ifdef ENABLE_AMBIENT_TEMP
     const SensorConfig* ambient_config = getSensorConfig(AMBIENT_TEMP_SENSOR_TYPE);
     
@@ -432,6 +472,9 @@ Sensor *sensors[] = {
     #endif
     #ifdef ENABLE_AUXILIARY_BATTERY
     &auxiliaryBattery,
+    #endif
+    #ifdef ENABLE_ENGINE_RPM
+    &engineRPM,
     #endif
     #ifdef ENABLE_AMBIENT_TEMP
     &ambientAirTemp,
