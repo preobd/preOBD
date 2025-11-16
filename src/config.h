@@ -85,6 +85,8 @@
 #define COOLANT_LEVEL_INPUT        5     // Digital pin
 #define COOLANT_LEVEL_MIN          0     // Alarm if 0 (low level)
 #define COOLANT_LEVEL_MAX          1     // OK if 1 (normal level)
+// For normally open (NO) switches, uncomment the line below:
+//#define COOLANT_LEVEL_INVERTED         // Invert reading for NO switches
 
 // === Oil Temperature ===
 #define ENABLE_OIL_TEMP

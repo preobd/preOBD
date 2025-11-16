@@ -416,8 +416,17 @@ void readBME280Altitude(Sensor *ptr) {
 // ===== DIGITAL FLOAT SWITCH =====
 
 void readDigitalFloatSwitch(Sensor *ptr) {
-    // Read digital state: HIGH (1) = normal/ok, LOW (0) = low level
-    ptr->value = (float)digitalRead(ptr->input);
+    // Read digital state from the pin
+    float rawValue = (float)digitalRead(ptr->input);
+
+    // Support both normally closed (NC) and normally open (NO) switches
+    #ifdef COOLANT_LEVEL_INVERTED
+    // Normally open: Float UP (ok) = OPEN = LOW, Float DOWN (low) = CLOSED = HIGH
+    ptr->value = 1.0 - rawValue;  // Invert the reading
+    #else
+    // Normally closed (default): Float UP (ok) = CLOSED = HIGH, Float DOWN (low) = OPEN = LOW
+    ptr->value = rawValue;
+    #endif
 }
 
 // ===== CONVERSION FUNCTIONS =====
