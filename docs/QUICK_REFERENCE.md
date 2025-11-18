@@ -118,7 +118,7 @@ In `config.h`:
 | BME280 temperature | `BME280_AMBIENT_TEMPERATURE` |
 | BME280 pressure | `BME280_BAROMETRIC_PRESSURE` |
 | BME280 humidity | `BME280_RELATIVE_HUMIDITY` |
-| BME280 altitude | `BME280_ESTIMATED_ALTITUDE` |
+| BME280 elevation | `BME280_ESTIMATED_ELEVATION` |
 
 ## Sensor Value Storage
 

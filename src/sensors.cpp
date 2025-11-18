@@ -414,32 +414,32 @@
     };
 #endif
 
-#ifdef ENABLE_ALTITUDE
-    const SensorConfig* altitude_config = getSensorConfig(ALTITUDE_SENSOR_TYPE);
+#ifdef ENABLE_ELEVATION
+    const SensorConfig* elevation_config = getSensorConfig(ELEVATION_SENSOR_TYPE);
     
-    Sensor altitude = {
+    Sensor elevation = {
         .input = 0,
         .obd2pid = 0xA1,
         .obd2length = 2,
         .value = 0,
-        .sensorType = altitude_config->internalType,
+        .sensorType = elevation_config->internalType,
         .abbrName = "ALT",
-        .displayName = altitude_config->name,
-        #ifdef ALTITUDE_DISPLAY_UNITS
-        .displayUnits = ALTITUDE_DISPLAY_UNITS,
+        .displayName = elevation_config->name,
+        #ifdef ELEVATION_DISPLAY_UNITS
+        .displayUnits = ELEVATION_DISPLAY_UNITS,
         #else
-        .displayUnits = DEFAULT_ALTITUDE_UNITS,
+        .displayUnits = DEFAULT_ELEVATION_UNITS,
         #endif
         .minValue = 0,
         .maxValue = 0,
         .alarm = false,
         .display = true,
         .isEnabled = true,
-        .readFunction = altitude_config->readFunction,
-        .displayConvert = altitude_config->displayConvert,
-        .obdConvert = altitude_config->obdConvert,
-        .calibrationData = altitude_config->calibrationData,
-        .calibrationType = altitude_config->calibrationType
+        .readFunction = elevation_config->readFunction,
+        .displayConvert = elevation_config->displayConvert,
+        .obdConvert = elevation_config->obdConvert,
+        .calibrationData = elevation_config->calibrationData,
+        .calibrationType = elevation_config->calibrationType
     };
 #endif
 
@@ -510,8 +510,8 @@ Sensor *sensors[] = {
     #ifdef ENABLE_HUMIDITY
     &humidity,
     #endif
-    #ifdef ENABLE_ALTITUDE
-    &altitude,
+    #ifdef ENABLE_ELEVATION
+    &elevation,
     #endif
     #ifdef ENABLE_COOLANT_LEVEL
     &coolantLevel,

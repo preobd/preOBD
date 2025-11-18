@@ -406,7 +406,7 @@ void readBME280Humidity(Sensor *ptr) {
 }
 
 void readBME280Altitude(Sensor *ptr) {
-    #if defined(ENABLE_ALTITUDE)
+    #if defined(ENABLE_ELEVATION)
     ptr->value = bme.readAltitude(SEA_LEVEL_PRESSURE_HPA);  // Store in meters
     #else
     ptr->value = NAN;

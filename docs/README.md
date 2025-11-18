@@ -29,7 +29,7 @@ Open-source, modular engine monitoring system for classic cars and vehicles with
 **Other:**
 - Battery voltage monitoring (auto-configured dividers)
 - BME280 humidity
-- BME280 altitude estimation
+- BME280 elevation estimation
 
 ## Quick Start
 
@@ -193,7 +193,7 @@ The system includes 30+ pre-calibrated sensors. Here are some popular ones:
 
 **Environmental:**
 - `BME280_RELATIVE_HUMIDITY`
-- `BME280_ESTIMATED_ALTITUDE`
+- `BME280_ESTIMATED_ELEVATION`
 
 See [Sensor Selection Guide](docs/SENSOR_SELECTION_GUIDE.md) for complete catalog.
 

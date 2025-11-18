@@ -466,9 +466,9 @@ static const SensorConfig SENSOR_CONFIGS[] = {
         .calibrationData = nullptr
     },
     {
-        .sensorId = BME280_ESTIMATED_ALTITUDE,
+        .sensorId = BME280_ESTIMATED_ELEVATION,
         .name = "BME280 Altitude",
-        .internalType = BME280_ALTITUDE,
+        .internalType = BME280_ELEVATION,
         .readFunction = readBME280Altitude,
         .displayConvert = convertAltitude,
         .obdConvert = obdConvertAltitude,

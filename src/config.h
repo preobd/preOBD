@@ -45,7 +45,7 @@
 #define DEFAULT_PRESSURE_UNITS     BAR
 
 // Altitude default (METERS or FEET)
-#define DEFAULT_ALTITUDE_UNITS     FEET
+#define DEFAULT_ELEVATION_UNITS     FEET
 
 // NOTE: Voltage is always displayed in VOLTS
 // NOTE: Humidity is always displayed in PERCENT
@@ -168,9 +168,9 @@
 // Humidity is always displayed in PERCENT
 
 // === Altitude (BME280) ===
-#define ENABLE_ALTITUDE
-#define ALTITUDE_SENSOR_TYPE          BME280_ESTIMATED_ALTITUDE
-//#define ALTITUDE_DISPLAY_UNITS        FEET
+#define ENABLE_ELEVATION
+#define ELEVATION_SENSOR_TYPE          BME280_ESTIMATED_ELEVATION
+//#define ELEVATION_DISPLAY_UNITS        FEET
 
 // ===== DIGITAL I/O =====
 #define CAN_INT 2

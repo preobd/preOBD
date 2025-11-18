@@ -68,10 +68,10 @@ void displaySensor(Sensor *ptr, byte line) {
         lcd.print(displayValue, 0);  // No decimal for humidity
         lcd.print("%");
     } else if (ptr->displayUnits == METERS) {
-        lcd.print(displayValue, 0);  // No decimal for altitude
+        lcd.print(displayValue, 0);  // No decimal for elevation
         lcd.print("m");
     } else if (ptr->displayUnits == FEET) {
-        lcd.print(displayValue, 0);  // No decimal for altitude
+        lcd.print(displayValue, 0);  // No decimal for elevation
         lcd.print("ft");
     } else if (ptr->displayUnits == RPM) {
         lcd.print(displayValue, 0);  // No decimal for RPM

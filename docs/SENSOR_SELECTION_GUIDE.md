@@ -82,7 +82,7 @@ The new calibration system makes sensor configuration incredibly easy. You just 
 | Temperature | `BME280_TEMPERATURE` |
 | Pressure | `BME280_PRESSURE` |
 | Humidity | `BME280_HUMIDITY` |
-| Altitude | `BME280_ALTITUDE` |
+| Altitude | `BME280_ELEVATION` |
 
 ## Lookup vs. Steinhart-Hart
 

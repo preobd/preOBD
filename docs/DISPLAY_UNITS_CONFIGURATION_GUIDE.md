@@ -14,7 +14,7 @@ In `config.h`, set your preferred units for each measurement type:
 // ===== GLOBAL DISPLAY UNITS DEFAULTS =====
 #define DEFAULT_TEMPERATURE_UNITS  CELSIUS    // or FAHRENHEIT
 #define DEFAULT_PRESSURE_UNITS     BAR        // or PSI, KPA, INHG
-#define DEFAULT_ALTITUDE_UNITS     FEET       // or METERS
+#define DEFAULT_ELEVATION_UNITS     FEET       // or METERS
 ```
 
 All sensors will use these defaults unless you override them individually.
@@ -74,7 +74,7 @@ For any sensor, add a `_DISPLAY_UNITS` definition:
 // Global defaults
 #define DEFAULT_TEMPERATURE_UNITS  CELSIUS
 #define DEFAULT_PRESSURE_UNITS     BAR
-#define DEFAULT_ALTITUDE_UNITS     METERS
+#define DEFAULT_ELEVATION_UNITS     METERS
 
 // All sensors will use metric units
 #define ENABLE_CHT
@@ -94,7 +94,7 @@ For any sensor, add a `_DISPLAY_UNITS` definition:
 // Global defaults
 #define DEFAULT_TEMPERATURE_UNITS  FAHRENHEIT
 #define DEFAULT_PRESSURE_UNITS     PSI
-#define DEFAULT_ALTITUDE_UNITS     FEET
+#define DEFAULT_ELEVATION_UNITS     FEET
 
 // All sensors will use imperial units
 ```
@@ -105,7 +105,7 @@ For any sensor, add a `_DISPLAY_UNITS` definition:
 // Global defaults (mostly metric)
 #define DEFAULT_TEMPERATURE_UNITS  CELSIUS
 #define DEFAULT_PRESSURE_UNITS     BAR
-#define DEFAULT_ALTITUDE_UNITS     FEET
+#define DEFAULT_ELEVATION_UNITS     FEET
 
 // CHT override to Fahrenheit (pilot preference)
 #define ENABLE_CHT
@@ -137,7 +137,7 @@ For any sensor, add a `_DISPLAY_UNITS` definition:
 
 #define DEFAULT_TEMPERATURE_UNITS  CELSIUS
 #define DEFAULT_PRESSURE_UNITS     BAR        // For oil/boost
-#define DEFAULT_ALTITUDE_UNITS     FEET
+#define DEFAULT_ELEVATION_UNITS     FEET
 
 // Override barometric pressure for altimeter setting
 #define ENABLE_BAROMETRIC_PRESSURE
@@ -151,7 +151,7 @@ For any sensor, add a `_DISPLAY_UNITS` definition:
 // European standards
 #define DEFAULT_TEMPERATURE_UNITS  CELSIUS
 #define DEFAULT_PRESSURE_UNITS     BAR
-#define DEFAULT_ALTITUDE_UNITS     METERS
+#define DEFAULT_ELEVATION_UNITS     METERS
 
 // No overrides needed - everything metric
 ```
@@ -162,7 +162,7 @@ For any sensor, add a `_DISPLAY_UNITS` definition:
 // American standards
 #define DEFAULT_TEMPERATURE_UNITS  FAHRENHEIT
 #define DEFAULT_PRESSURE_UNITS     PSI
-#define DEFAULT_ALTITUDE_UNITS     FEET
+#define DEFAULT_ELEVATION_UNITS     FEET
 
 // No overrides needed - everything imperial
 ```
@@ -182,7 +182,7 @@ For each sensor type, here's the override define name:
 | Oil Pressure | `OIL_PRESSURE_DISPLAY_UNITS` | BAR, PSI, KPA |
 | Boost Pressure | `BOOST_DISPLAY_UNITS` | BAR, PSI, KPA |
 | Barometric Pressure | `BARO_DISPLAY_UNITS` | BAR, PSI, KPA, INHG |
-| Altitude | `ALTITUDE_DISPLAY_UNITS` | METERS, FEET |
+| Altitude | `ELEVATION_DISPLAY_UNITS` | METERS, FEET |
 | Voltage | (none) | Always VOLTS |
 | Humidity | (none) | Always PERCENT |
 
@@ -223,7 +223,7 @@ A: No. OBDII output always uses standard OBDII formats regardless of display uni
 A: The code will fail to compile with a clear error. You must define all three defaults:
 - `DEFAULT_TEMPERATURE_UNITS`
 - `DEFAULT_PRESSURE_UNITS`
-- `DEFAULT_ALTITUDE_UNITS`
+- `DEFAULT_ELEVATION_UNITS`
 
 **Q: Can I override a sensor to use metric when global is imperial?**  
 A: Yes! Overrides work in both directions. Example:
@@ -242,7 +242,7 @@ Make sure you have all three global defaults in config.h:
 ```cpp
 #define DEFAULT_TEMPERATURE_UNITS  CELSIUS
 #define DEFAULT_PRESSURE_UNITS     BAR
-#define DEFAULT_ALTITUDE_UNITS     FEET
+#define DEFAULT_ELEVATION_UNITS     FEET
 ```
 
 ### Sensor shows wrong units on LCD
@@ -283,7 +283,7 @@ Verify the override is **above** the sensor definition in config.h:
 // ===== GLOBAL DISPLAY UNITS =====
 #define DEFAULT_TEMPERATURE_UNITS  CELSIUS
 #define DEFAULT_PRESSURE_UNITS     BAR
-#define DEFAULT_ALTITUDE_UNITS     FEET
+#define DEFAULT_ELEVATION_UNITS     FEET
 
 // ===== CHT - Critical sensor, pilot wants Fahrenheit =====
 #define ENABLE_CHT
