@@ -51,7 +51,6 @@ enum CalibrationType {
     CAL_THERMISTOR_LOOKUP,
     CAL_PRESSURE_POLYNOMIAL,
     CAL_PRESSURE_LINEAR,
-    CAL_PRESSURE,
     CAL_VOLTAGE_DIVIDER,
     CAL_RPM
 };
@@ -176,15 +175,15 @@ inline ThermistorLookupCalibration* getThermistorLookupCal(Sensor* ptr) {
 
 // Safely get pressure linear calibration
 inline PressureLinearCalibration* getPressureLinearCal(Sensor* ptr) {
-    if (ptr->calibrationType != CAL_PRESSURE) {
+    if (ptr->calibrationType != CAL_PRESSURE_LINEAR) {
         return nullptr;
     }
     return (PressureLinearCalibration*)ptr->calibrationData;
 }
 
-// Safely get pressure linear calibration
+// Safely get pressure polynomial calibration
 inline PressurePolynomialCalibration* getPressurePolynomialCal(Sensor* ptr) {
-    if (ptr->calibrationType != CAL_PRESSURE) {
+    if (ptr->calibrationType != CAL_PRESSURE_POLYNOMIAL) {
         return nullptr;
     }
     return (PressurePolynomialCalibration*)ptr->calibrationData;
