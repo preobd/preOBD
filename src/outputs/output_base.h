@@ -7,6 +7,7 @@
 
 #include "../input.h"
 #include "sensor_types.h"
+#include "../sensor_library.h"
 
 // Output module structure
 typedef struct {
@@ -50,7 +51,7 @@ inline bool buildOBD2Frame(byte* frameData, Input* ptr) {
     frameData[2] = ptr->obd2pid;
 
     // Convert value to OBDII format using sensor's conversion function
-    float obdValue = ptr->obdConvert(ptr->value);
+    float obdValue = getObdConvertFunc(ptr->measurementType)(ptr->value);
 
     // Encode data based on size (big-endian / MSB first)
     if (dataBytes == 1) {

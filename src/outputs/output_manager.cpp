@@ -52,7 +52,7 @@ void initOutputModules() {
 }
 
 void sendToOutputs(Input* input) {
-    if (!input->isEnabled || isnan(input->value)) {
+    if (!input->flags.isEnabled || isnan(input->value)) {
         return;
     }
 

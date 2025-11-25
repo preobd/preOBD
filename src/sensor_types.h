@@ -11,6 +11,19 @@
 // Sensor enum is defined in input.h
 // Units enum defined below
 
+// Measurement type enumeration
+// Defines the physical quantity being measured (what, not how)
+// This determines which conversion functions to use for display and OBD output
+enum MeasurementType {
+    MEASURE_TEMPERATURE,  // Celsius -> F/C
+    MEASURE_PRESSURE,     // Bar -> PSI/kPa/inHg/bar
+    MEASURE_VOLTAGE,      // Volts
+    MEASURE_RPM,          // RPM
+    MEASURE_HUMIDITY,     // Percent
+    MEASURE_ELEVATION,    // Meters -> feet/meters
+    MEASURE_DIGITAL       // Digital on/off (float switch)
+};
+
 // Display units enumeration
 enum DisplayUnits {
     CELSIUS,

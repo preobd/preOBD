@@ -6,6 +6,7 @@
 #include "../config.h"
 #include "../input.h"
 #include "../sensor_types.h"
+#include "../sensor_library.h"
 
 #ifdef ENABLE_LCD
 
@@ -24,12 +25,7 @@ void initLCD() {
 }
 
 void displaySensor(Input *ptr, byte line) {
-    if (!ptr->isEnabled || !ptr->display) {
-        return;
-    }
-
-    // Check if displayConvert function is valid
-    if (ptr->displayConvert == nullptr) {
+    if (!ptr->flags.isEnabled || !ptr->flags.display) {
         return;
     }
 
@@ -49,8 +45,8 @@ void displaySensor(Input *ptr, byte line) {
     }
 
     // Convert to display units
-    float displayValue = ptr->displayConvert(ptr->value, ptr->displayUnits);
-    
+    float displayValue = getDisplayConvertFunc(ptr->measurementType)(ptr->value, ptr->displayUnits);
+
     // Print value with appropriate precision
     if (ptr->displayUnits == CELSIUS || ptr->displayUnits == FAHRENHEIT) {
         lcd.print(displayValue, 0);  // No decimal for temperature
@@ -91,7 +87,7 @@ void updateLCD(Input** inputs, int numInputs) {
     currentLine = 0;
 
     for (int i = 0; i < numInputs; i++) {
-        if (inputs[i]->isEnabled && inputs[i]->display) {
+        if (inputs[i]->flags.isEnabled && inputs[i]->flags.display) {
             displaySensor(inputs[i], currentLine);
             currentLine++;
         }

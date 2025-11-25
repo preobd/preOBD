@@ -236,14 +236,14 @@ void loop() {
 
     // Send data to output modules
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].isEnabled) {
+        if (inputs[i].flags.isEnabled) {
             sendToOutputs(&inputs[i]);
         }
     }
 
     // Check alarms
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].isEnabled) {
+        if (inputs[i].flags.isEnabled) {
             checkSensorAlarm(&inputs[i]);
         }
     }
@@ -257,7 +257,7 @@ void loop() {
     static Input* inputPtrs[MAX_INPUTS];
     uint8_t activeCount = 0;
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].isEnabled) {
+        if (inputs[i].flags.isEnabled) {
             inputPtrs[activeCount++] = &inputs[i];
         }
     }

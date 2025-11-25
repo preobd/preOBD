@@ -22,7 +22,7 @@ void checkSensorAlarm(Input *ptr) {
     return;
     #endif
 
-    if (!ptr->alarm || !ptr->isEnabled || isnan(ptr->value)) {
+    if (!ptr->flags.alarm || !ptr->flags.isEnabled || isnan(ptr->value)) {
         return;
     }
 

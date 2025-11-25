@@ -7,6 +7,7 @@
 #include "platform.h"
 #include "input.h"
 #include "sensor_types.h"
+#include "sensor_library.h"
 #include <SPI.h>
 
 #ifdef USE_BME280
@@ -149,7 +150,7 @@ void readThermistorSteinhart(Input *ptr) {
     // Get calibration values (from custom RAM or PROGMEM preset)
     float R_bias, A, B, C;
 #ifdef USE_INPUT_BASED_ARCHITECTURE
-    if (ptr->useCustomCalibration && ptr->calibrationType == CAL_THERMISTOR_STEINHART) {
+    if (ptr->flags.useCustomCalibration && ptr->calibrationType == CAL_THERMISTOR_STEINHART) {
         // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
         R_bias = ptr->customCalibration.steinhart.bias_resistor;
         A = ptr->customCalibration.steinhart.steinhart_a;
@@ -239,7 +240,7 @@ void readPressureLinear(Input *ptr) {
     // Get calibration values (from custom RAM or PROGMEM preset)
     float V_min, V_max, P_min, P_max;
 #ifdef USE_INPUT_BASED_ARCHITECTURE
-    if (ptr->useCustomCalibration && ptr->calibrationType == CAL_PRESSURE_LINEAR) {
+    if (ptr->flags.useCustomCalibration && ptr->calibrationType == CAL_PRESSURE_LINEAR) {
         // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
         V_min = ptr->customCalibration.pressureLinear.voltage_min;
         V_max = ptr->customCalibration.pressureLinear.voltage_max;
@@ -289,7 +290,7 @@ void readPressurePolynomial(Input *ptr) {
     // Get calibration values (from custom RAM or PROGMEM preset)
     float bias_resistor, a, b, c;
 #ifdef USE_INPUT_BASED_ARCHITECTURE
-    if (ptr->useCustomCalibration && ptr->calibrationType == CAL_PRESSURE_POLYNOMIAL) {
+    if (ptr->flags.useCustomCalibration && ptr->calibrationType == CAL_PRESSURE_POLYNOMIAL) {
         // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
         bias_resistor = ptr->customCalibration.pressurePolynomial.bias_resistor;
         a = ptr->customCalibration.pressurePolynomial.poly_a;
@@ -593,4 +594,32 @@ float obdConvertElevation(float meters) {
 
 float obdConvertFloatSwitch(float value) {
     return value * 255.0;  // OBDII format: 0 or 255
+}
+
+// ===== MEASUREMENT TYPE CONVERSION HELPERS =====
+
+DisplayConvertFunc getDisplayConvertFunc(MeasurementType type) {
+    switch (type) {
+        case MEASURE_TEMPERATURE: return convertTemperature;
+        case MEASURE_PRESSURE: return convertPressure;
+        case MEASURE_VOLTAGE: return convertVoltage;
+        case MEASURE_RPM: return convertRPM;
+        case MEASURE_HUMIDITY: return convertHumidity;
+        case MEASURE_ELEVATION: return convertElevation;
+        case MEASURE_DIGITAL: return convertFloatSwitch;
+        default: return convertVoltage;
+    }
+}
+
+ObdConvertFunc getObdConvertFunc(MeasurementType type) {
+    switch (type) {
+        case MEASURE_TEMPERATURE: return obdConvertTemperature;
+        case MEASURE_PRESSURE: return obdConvertPressure;
+        case MEASURE_VOLTAGE: return obdConvertVoltage;
+        case MEASURE_RPM: return obdConvertRPM;
+        case MEASURE_HUMIDITY: return obdConvertHumidity;
+        case MEASURE_ELEVATION: return obdConvertElevation;
+        case MEASURE_DIGITAL: return obdConvertFloatSwitch;
+        default: return obdConvertVoltage;
+    }
 }

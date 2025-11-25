@@ -40,7 +40,7 @@ struct EEPROMHeader {
         input->pin = INPUT_##N##_PIN; \
         input->application = INPUT_##N##_APPLICATION; \
         input->sensor = INPUT_##N##_SENSOR; \
-        input->isEnabled = true; \
+        input->flags.isEnabled = true; \
         \
         /* Load Application preset from flash */ \
         const ApplicationPreset* flashPreset = getApplicationPreset(INPUT_##N##_APPLICATION); \
@@ -56,9 +56,9 @@ struct EEPROMHeader {
             input->maxValue = preset.defaultMaxValue; \
             input->obd2pid = preset.obd2pid; \
             input->obd2length = preset.obd2length; \
-            input->alarm = preset.defaultAlarmEnabled; \
-            input->display = preset.defaultDisplayEnabled; \
-            input->useCustomCalibration = false; \
+            input->flags.alarm = preset.defaultAlarmEnabled; \
+            input->flags.display = preset.defaultDisplayEnabled; \
+            input->flags.useCustomCalibration = false; \
         } \
         \
         /* Load Sensor info from flash */ \
@@ -67,8 +67,7 @@ struct EEPROMHeader {
             SensorInfo info; \
             loadSensorInfo(flashInfo, &info); \
             input->readFunction = info.readFunction; \
-            input->displayConvert = info.displayConvert; \
-            input->obdConvert = info.obdConvert; \
+            input->measurementType = info.measurementType; \
             input->calibrationType = info.calibrationType; \
             input->presetCalibration = info.defaultCalibration; \
         } \
@@ -153,7 +152,7 @@ struct EEPROMHeader {
 #undef _POPULATE_CUSTOM_CAL_0
 #define _POPULATE_CUSTOM_CAL_0(input) \
     do { \
-        (input)->useCustomCalibration = true; \
+        (input)->flags.useCustomCalibration = true; \
         if ((input)->calibrationType == CAL_THERMISTOR_STEINHART) { \
             memcpy(&(input)->customCalibration.steinhart, &input_0_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
         } else if ((input)->calibrationType == CAL_PRESSURE_LINEAR) { \
@@ -170,7 +169,7 @@ struct EEPROMHeader {
 #undef _POPULATE_CUSTOM_CAL_1
 #define _POPULATE_CUSTOM_CAL_1(input) \
     do { \
-        (input)->useCustomCalibration = true; \
+        (input)->flags.useCustomCalibration = true; \
         if ((input)->calibrationType == CAL_THERMISTOR_STEINHART) { \
             memcpy(&(input)->customCalibration.steinhart, &input_1_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
         } else if ((input)->calibrationType == CAL_PRESSURE_LINEAR) { \
@@ -187,7 +186,7 @@ struct EEPROMHeader {
 #undef _POPULATE_CUSTOM_CAL_2
 #define _POPULATE_CUSTOM_CAL_2(input) \
     do { \
-        (input)->useCustomCalibration = true; \
+        (input)->flags.useCustomCalibration = true; \
         if ((input)->calibrationType == CAL_THERMISTOR_STEINHART) { \
             memcpy(&(input)->customCalibration.steinhart, &input_2_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
         } else if ((input)->calibrationType == CAL_PRESSURE_LINEAR) { \
@@ -204,7 +203,7 @@ struct EEPROMHeader {
 #undef _POPULATE_CUSTOM_CAL_3
 #define _POPULATE_CUSTOM_CAL_3(input) \
     do { \
-        (input)->useCustomCalibration = true; \
+        (input)->flags.useCustomCalibration = true; \
         if ((input)->calibrationType == CAL_THERMISTOR_STEINHART) { \
             memcpy(&(input)->customCalibration.steinhart, &input_3_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
         } else if ((input)->calibrationType == CAL_PRESSURE_LINEAR) { \
@@ -221,7 +220,7 @@ struct EEPROMHeader {
 #undef _POPULATE_CUSTOM_CAL_4
 #define _POPULATE_CUSTOM_CAL_4(input) \
     do { \
-        (input)->useCustomCalibration = true; \
+        (input)->flags.useCustomCalibration = true; \
         if ((input)->calibrationType == CAL_THERMISTOR_STEINHART) { \
             memcpy(&(input)->customCalibration.steinhart, &input_4_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
         } else if ((input)->calibrationType == CAL_PRESSURE_LINEAR) { \
@@ -238,7 +237,7 @@ struct EEPROMHeader {
 #undef _POPULATE_CUSTOM_CAL_5
 #define _POPULATE_CUSTOM_CAL_5(input) \
     do { \
-        (input)->useCustomCalibration = true; \
+        (input)->flags.useCustomCalibration = true; \
         if ((input)->calibrationType == CAL_THERMISTOR_STEINHART) { \
             memcpy(&(input)->customCalibration.steinhart, &input_5_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
         } else if ((input)->calibrationType == CAL_PRESSURE_LINEAR) { \
@@ -255,7 +254,7 @@ struct EEPROMHeader {
 #undef _POPULATE_CUSTOM_CAL_6
 #define _POPULATE_CUSTOM_CAL_6(input) \
     do { \
-        (input)->useCustomCalibration = true; \
+        (input)->flags.useCustomCalibration = true; \
         if ((input)->calibrationType == CAL_THERMISTOR_STEINHART) { \
             memcpy(&(input)->customCalibration.steinhart, &input_6_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
         } else if ((input)->calibrationType == CAL_PRESSURE_LINEAR) { \
@@ -272,7 +271,7 @@ struct EEPROMHeader {
 #undef _POPULATE_CUSTOM_CAL_7
 #define _POPULATE_CUSTOM_CAL_7(input) \
     do { \
-        (input)->useCustomCalibration = true; \
+        (input)->flags.useCustomCalibration = true; \
         if ((input)->calibrationType == CAL_THERMISTOR_STEINHART) { \
             memcpy(&(input)->customCalibration.steinhart, &input_7_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
         } else if ((input)->calibrationType == CAL_PRESSURE_LINEAR) { \
@@ -289,7 +288,7 @@ struct EEPROMHeader {
 #undef _POPULATE_CUSTOM_CAL_8
 #define _POPULATE_CUSTOM_CAL_8(input) \
     do { \
-        (input)->useCustomCalibration = true; \
+        (input)->flags.useCustomCalibration = true; \
         if ((input)->calibrationType == CAL_THERMISTOR_STEINHART) { \
             memcpy(&(input)->customCalibration.steinhart, &input_8_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
         } else if ((input)->calibrationType == CAL_PRESSURE_LINEAR) { \
@@ -306,7 +305,7 @@ struct EEPROMHeader {
 #undef _POPULATE_CUSTOM_CAL_9
 #define _POPULATE_CUSTOM_CAL_9(input) \
     do { \
-        (input)->useCustomCalibration = true; \
+        (input)->flags.useCustomCalibration = true; \
         if ((input)->calibrationType == CAL_THERMISTOR_STEINHART) { \
             memcpy(&(input)->customCalibration.steinhart, &input_9_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
         } else if ((input)->calibrationType == CAL_PRESSURE_LINEAR) { \
@@ -376,7 +375,7 @@ void initInputManager() {
     // Count active inputs and initialize SPI chip select pins
     numActiveInputs = 0;
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].pin != 0xFF && inputs[i].isEnabled) {
+        if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) {
             numActiveInputs++;
 
             // Initialize CS pins for SPI sensors (thermocouples)
@@ -420,7 +419,7 @@ bool saveInputConfig() {
     uint8_t savedCount = 0;
 
     for (uint8_t i = 0; i < MAX_INPUTS && savedCount < numActiveInputs; i++) {
-        if (inputs[i].pin != 0xFF && inputs[i].isEnabled) {
+        if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) {
             EEPROM.put(addr, inputs[i]);
             addr += EEPROM_INPUT_SIZE;
             savedCount++;
@@ -567,10 +566,10 @@ bool setInputApplication(uint8_t pin, Application app) {
     
     input->obd2pid = preset.obd2pid;
     input->obd2length = preset.obd2length;
-    input->alarm = preset.defaultAlarmEnabled;
-    input->display = preset.defaultDisplayEnabled;
-    input->isEnabled = true;
-    input->useCustomCalibration = false;  // Use preset calibration
+    input->flags.alarm = preset.defaultAlarmEnabled;
+    input->flags.display = preset.defaultDisplayEnabled;
+    input->flags.isEnabled = true;
+    input->flags.useCustomCalibration = false;  // Use preset calibration
 
     // Increment count if this is a new input
     if (isNewInput) {
@@ -602,13 +601,12 @@ bool setInputSensor(uint8_t pin, Sensor sensor) {
     // Apply sensor info to input
     input->sensor = sensor;
     input->readFunction = info.readFunction;
-    input->displayConvert = info.displayConvert;
-    input->obdConvert = info.obdConvert;
+    input->measurementType = info.measurementType;
     input->calibrationType = info.calibrationType;
 
     // Point to calibration in PROGMEM (don't copy to RAM unless custom)
     input->presetCalibration = info.defaultCalibration;
-    input->useCustomCalibration = false;
+    input->flags.useCustomCalibration = false;
 
     return true;
 }
@@ -662,7 +660,7 @@ bool enableInput(uint8_t pin, bool enable) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
 
-    input->isEnabled = enable;
+    input->flags.isEnabled = enable;
     return true;
 }
 
@@ -670,7 +668,7 @@ bool enableInputAlarm(uint8_t pin, bool enable) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
 
-    input->alarm = enable;
+    input->flags.alarm = enable;
     return true;
 }
 
@@ -678,7 +676,7 @@ bool enableInputDisplay(uint8_t pin, bool enable) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
 
-    input->display = enable;
+    input->flags.display = enable;
     return true;
 }
 
@@ -692,7 +690,7 @@ bool clearInput(uint8_t pin) {
     // Recount active inputs
     numActiveInputs = 0;
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].pin != 0xFF && inputs[i].isEnabled) {
+        if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) {
             numActiveInputs++;
         }
     }
@@ -705,7 +703,7 @@ bool setInputCalibrationSteinhart(uint8_t pin, float bias, float a, float b, flo
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
 
-    input->useCustomCalibration = true;
+    input->flags.useCustomCalibration = true;
     input->customCalibration.steinhart.bias_resistor = bias;
     input->customCalibration.steinhart.steinhart_a = a;
     input->customCalibration.steinhart.steinhart_b = b;
@@ -718,7 +716,7 @@ bool setInputCalibrationLookup(uint8_t pin, float bias) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
 
-    input->useCustomCalibration = true;
+    input->flags.useCustomCalibration = true;
     input->customCalibration.lookup.bias_resistor = bias;
 
     return true;
@@ -728,7 +726,7 @@ bool setInputCalibrationPressureLinear(uint8_t pin, float vMin, float vMax, floa
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
 
-    input->useCustomCalibration = true;
+    input->flags.useCustomCalibration = true;
     input->customCalibration.pressureLinear.voltage_min = vMin;
     input->customCalibration.pressureLinear.voltage_max = vMax;
     input->customCalibration.pressureLinear.pressure_min = pMin;
@@ -741,7 +739,7 @@ bool setInputCalibrationPressurePolynomial(uint8_t pin, float bias, float a, flo
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
 
-    input->useCustomCalibration = true;
+    input->flags.useCustomCalibration = true;
     input->customCalibration.pressurePolynomial.bias_resistor = bias;
     input->customCalibration.pressurePolynomial.poly_a = a;
     input->customCalibration.pressurePolynomial.poly_b = b;
@@ -754,7 +752,7 @@ bool clearInputCalibration(uint8_t pin) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
 
-    input->useCustomCalibration = false;
+    input->flags.useCustomCalibration = false;
     memset(&input->customCalibration, 0, sizeof(CalibrationOverride));
 
     return true;
@@ -763,7 +761,7 @@ bool clearInputCalibration(uint8_t pin) {
 // ===== RUNTIME =====
 void readAllInputs() {
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].pin != 0xFF && inputs[i].isEnabled && inputs[i].readFunction != nullptr) {
+        if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled && inputs[i].readFunction != nullptr) {
             inputs[i].readFunction(&inputs[i]);
         }
     }
@@ -802,11 +800,11 @@ void printInputInfo(uint8_t pin) {
     Serial.print(F("  Value: "));
     Serial.println(input->value);
     Serial.print(F("  Enabled: "));
-    Serial.println(input->isEnabled ? F("Yes") : F("No"));
+    Serial.println(input->flags.isEnabled ? F("Yes") : F("No"));
     Serial.print(F("  Alarm: "));
-    Serial.println(input->alarm ? F("Yes") : F("No"));
+    Serial.println(input->flags.alarm ? F("Yes") : F("No"));
     Serial.print(F("  Display: "));
-    Serial.println(input->display ? F("Yes") : F("No"));
+    Serial.println(input->flags.display ? F("Yes") : F("No"));
 }
 
 void listAllInputs() {
@@ -814,7 +812,7 @@ void listAllInputs() {
     bool found = false;
 
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].pin != 0xFF && inputs[i].isEnabled) {
+        if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) {
             found = true;
             Serial.print(F("  "));
             if (inputs[i].pin >= A0) {

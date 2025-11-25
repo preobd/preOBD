@@ -4,6 +4,7 @@
 
 #include "output_base.h"
 #include "../config.h"
+#include "../sensor_library.h"
 
 #ifdef ENABLE_SERIAL_OUTPUT
 
@@ -20,7 +21,7 @@ void sendSerialOutput(Input *ptr) {
         Serial.print("ERROR");
     } else {
         // Display in human-readable format
-        float displayValue = ptr->displayConvert(ptr->value, ptr->displayUnits);
+        float displayValue = getDisplayConvertFunc(ptr->measurementType)(ptr->value, ptr->displayUnits);
         Serial.print(displayValue, 2);
     }
 
