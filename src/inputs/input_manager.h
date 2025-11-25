@@ -12,7 +12,7 @@
 #ifndef INPUT_MANAGER_H
 #define INPUT_MANAGER_H
 
-#include "config.h"
+#include "../config.h"
 #include <Arduino.h>
 #include "input.h"
 

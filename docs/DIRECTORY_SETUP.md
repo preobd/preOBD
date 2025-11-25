@@ -8,16 +8,23 @@ openEMS/
 ├── README.md                   # Project overview
 │
 ├── src/                        # All source code goes here
+│   ├── config.h               # ⚠️ USER CONFIGURATION FILE (at root for easy access!)
+│   ├── advanced_config.h      # Advanced/power-user configuration
 │   ├── main.cpp               # Main program loop
-│   ├── config.h               # ⚠️ USER CONFIGURATION FILE (simplified!)
-│   ├── platform.h             # Platform auto-detection
-│   ├── sensor_library.h       # Sensor catalog - 30+ sensors
-│   ├── sensor_configs.h       # Calibration database
-│   ├── sensor_types.h         # Sensor data structures
-│   ├── sensors.cpp            # Sensor definitions (uses library)
-│   ├── sensors.h              # Sensor exports
-│   ├── sensor_read.cpp        # Sensor reading functions
 │   ├── alarm.cpp              # Alarm system
+│   │
+│   ├── lib/                   # Framework/library code (read-only reference)
+│   │   ├── platform.h             # Platform auto-detection
+│   │   ├── sensor_library.h       # Sensor catalog - 30+ sensors
+│   │   ├── sensor_calibration_data.h  # Calibration database
+│   │   ├── sensor_types.h         # Sensor data structures
+│   │   └── application_presets.h  # Application presets (CHT, OIL_TEMP, etc.)
+│   │
+│   ├── inputs/                # Input system (sensor management)
+│   │   ├── input.h                # Core input data structure
+│   │   ├── input_manager.h/cpp    # Input configuration manager
+│   │   ├── sensor_read.cpp        # Sensor reading functions
+│   │   └── serial_config.h/cpp    # Serial configuration interface
 │   │
 │   ├── outputs/               # Output module directory
 │   │   ├── output_base.h      # Output interface
@@ -49,7 +56,19 @@ openEMS/
 - Defines board types, build flags, dependencies
 - **Edit:** Only to add new board types
 
-### src/ - Core Source Files
+### src/ - Application Files (Root Level)
+
+**config.h** ⭐ **START HERE**
+- User configuration file (at root for easy access!)
+- Enable/disable sensors and outputs
+- Pick sensor types from catalog
+- Set pins and thresholds
+- **Edit:** YES - This is where you configure everything!
+
+**advanced_config.h**
+- Advanced/power-user configuration
+- Custom sensor calibrations (optional)
+- **Edit:** Only if using custom sensors
 
 **main.cpp**
 - Main program loop
@@ -57,12 +76,12 @@ openEMS/
 - Calls sensor read → output → alarm → display
 - **Edit:** Rarely (only for major architectural changes)
 
-**config.h** ⭐ **START HERE**
-- User configuration file
-- Enable/disable sensors and outputs
-- Pick sensor types from catalog
-- Set pins and thresholds
-- **Edit:** YES - This is where you configure everything!
+**alarm.cpp**
+- Alarm system implementation
+- Monitors sensor thresholds
+- **Edit:** Only to modify alarm behavior
+
+### src/lib/ - Framework/Library Code (Read-Only)
 
 **platform.h**
 - Automatically detects Arduino/Teensy/ESP32/Due
@@ -73,10 +92,9 @@ openEMS/
 **sensor_library.h**
 - Catalog of 30+ sensor IDs
 - Browse this to find your sensor type
-- Just sensor IDs, no calibration data
 - **Edit:** NO - Reference only (add IDs for new sensors)
 
-**sensor_configs.h**
+**sensor_calibration_data.h**
 - Centralized calibration database
 - Lookup tables for VDO sensors
 - Steinhart-Hart coefficients
@@ -85,19 +103,25 @@ openEMS/
 
 **sensor_types.h**
 - Data structure definitions
-- Sensor struct, calibration structs
-- Enum definitions (SensorType, DisplayUnits, etc.)
+- Calibration structs, enum definitions
 - **Edit:** NO - Core architecture
 
-**sensors.cpp**
-- Sensor instance definitions
-- Uses `getSensorConfig()` to load calibrations
-- Maps config.h settings to sensor structs
-- **Edit:** SOMETIMES - When adding new sensors
+**application_presets.h**
+- Application type presets (CHT, OIL_TEMP, OIL_PRESSURE, etc.)
+- Default units, min/max values, OBD-II PIDs
+- **Edit:** NO - Reference only
 
-**sensors.h**
-- Exports sensor array for other modules
-- **Edit:** NO - Just exports
+### src/inputs/ - Input System
+
+**input.h**
+- Core input data structure
+- Application and Sensor enums
+- **Edit:** NO - Core architecture
+
+**input_manager.h/cpp**
+- Input configuration manager
+- EEPROM persistence and runtime configuration
+- **Edit:** RARELY - Only for advanced features
 
 **sensor_read.cpp**
 - All sensor reading implementations
@@ -105,11 +129,9 @@ openEMS/
 - Conversion functions (temperature, pressure, etc.)
 - **Edit:** RARELY - Only to add new sensor types
 
-**alarm.cpp**
-- Alarm system implementation
-- Checks thresholds, manages buzzer
-- Silence button handling
-- **Edit:** RARELY - To customize alarm behavior
+**serial_config.h/cpp**
+- Serial command interface for runtime configuration
+- **Edit:** RARELY - Only to add new commands
 
 ### src/outputs/ - Output Modules
 
@@ -507,7 +529,7 @@ This file - explains project structure.
 Once your directory structure is set up:
 
 1. **Browse sensor catalog:**
-   - Open `src/sensor_library.h`
+   - Open `src/lib/sensor_library.h`
    - Find sensor IDs for your hardware
 
 2. **Edit config.h:**

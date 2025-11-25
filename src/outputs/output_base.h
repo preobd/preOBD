@@ -5,9 +5,9 @@
 #ifndef OUTPUT_BASE_H
 #define OUTPUT_BASE_H
 
-#include "../input.h"
-#include "sensor_types.h"
-#include "../sensor_library.h"
+#include "../inputs/input.h"
+#include "../lib/sensor_types.h"
+#include "../lib/sensor_library.h"
 
 // Output module structure
 typedef struct {

@@ -3,10 +3,10 @@
  * Works with both EEPROM config and compile-time config
  */
 
-#include "config.h"
+#include "../config.h"
 #include "input_manager.h"
-#include "application_presets.h"
-#include "sensor_library.h"
+#include "../lib/application_presets.h"
+#include "../lib/sensor_library.h"
 #include <EEPROM.h>
 #include <string.h>
 
@@ -31,7 +31,7 @@ struct EEPROMHeader {
 #ifdef USE_STATIC_CONFIG
 
 // Include custom calibrations for static builds
-#include "advanced_config.h"
+#include "../advanced_config.h"
 
 // Helper macro to populate a single input from config.h defines
 #define POPULATE_INPUT(N, idx) \

@@ -12,7 +12,7 @@ This guide shows you how to add custom sensors or multiple instances of the same
 
 ## Using Preset Calibrations
 
-**Easiest option!** Just pick a sensor from `sensor_library.h` in `config.h`:
+**Easiest option!** Just pick a sensor from `src/lib/sensor_library.h` in `config.h`:
 
 ```cpp
 // In config.h
@@ -281,7 +281,7 @@ For Arduino Uno (2KB RAM total), you can add a few custom sensors without issues
 
 ## Available Sensor Types
 
-See `sensor_library.h` for the full list of preset sensors:
+See `src/lib/sensor_library.h` for the full list of preset sensors:
 
 ### Thermocouples
 - `K_TYPE_THERMOCOUPLE_MAX6675`
@@ -318,4 +318,4 @@ See `sensor_library.h` for the full list of preset sensors:
 
 - Check `src/advanced_config.h` for more examples
 - Look at existing sensor definitions in `src/sensors.cpp`
-- See `src/sensor_library.h` for available preset sensors
+- See `src/src/lib/sensor_library.h` for available preset sensors

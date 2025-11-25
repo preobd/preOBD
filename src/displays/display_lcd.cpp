@@ -4,9 +4,9 @@
  */
 
 #include "../config.h"
-#include "../input.h"
-#include "../sensor_types.h"
-#include "../sensor_library.h"
+#include "../inputs/input.h"
+#include "../lib/sensor_types.h"
+#include "../lib/sensor_library.h"
 
 #ifdef ENABLE_LCD
 

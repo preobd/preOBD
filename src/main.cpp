@@ -7,14 +7,14 @@
 #include <SPI.h>
 #include <Wire.h>
 #include "config.h"
-#include "platform.h"
+#include "lib/platform.h"
 
 // Input-based architecture (supports both EEPROM and compile-time config)
-#include "sensor_types.h"
-#include "input.h"
-#include "input_manager.h"
+#include "lib/sensor_types.h"
+#include "inputs/input.h"
+#include "inputs/input_manager.h"
 #ifndef USE_STATIC_CONFIG
-    #include "serial_config.h"  // Only needed for EEPROM/serial config mode
+    #include "inputs/serial_config.h"  // Only needed for EEPROM/serial config mode
 #endif
 #include "outputs/output_base.h"
 

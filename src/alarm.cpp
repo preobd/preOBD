@@ -2,8 +2,8 @@
  * alarm.cpp - Alarm system management
  */
 
-#include "input.h"
-#include "sensor_types.h"
+#include "inputs/input.h"
+#include "lib/sensor_types.h"
 #include "config.h"
 
 static bool alarmActive = false;

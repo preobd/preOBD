@@ -3,11 +3,11 @@
  * Works with both EEPROM config and compile-time config
  */
 
-#include "config.h"
-#include "platform.h"
+#include "../config.h"
+#include "../lib/platform.h"
 #include "input.h"
-#include "sensor_types.h"
-#include "sensor_library.h"
+#include "../lib/sensor_types.h"
+#include "../lib/sensor_library.h"
 #include <SPI.h>
 
 #ifdef USE_BME280

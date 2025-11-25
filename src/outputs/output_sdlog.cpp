@@ -5,7 +5,7 @@
 
 #include "output_base.h"
 #include "../config.h"
-#include "../sensor_library.h"
+#include "../lib/sensor_library.h"
 
 #ifdef ENABLE_SD_LOGGING
 

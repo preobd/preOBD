@@ -92,7 +92,7 @@
 
 #ifdef USE_STATIC_CONFIG
     // Include the enums we need from the input-based architecture
-    #include "input.h"
+    #include "inputs/input.h"
 
     // ===== INPUT DEFINITIONS =====
 

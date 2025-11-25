@@ -15,7 +15,7 @@
 #define APPLICATION_PRESETS_H
 
 #include <Arduino.h>
-#include "input.h"
+#include "../inputs/input.h"
 
 // ===== APPLICATION PRESET STRUCTURE =====
 struct ApplicationPreset {

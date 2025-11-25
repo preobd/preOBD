@@ -10,7 +10,7 @@
 #define SENSOR_LIBRARY_H
 
 #include <Arduino.h>
-#include "input.h"
+#include "../inputs/input.h"
 #include "sensor_calibration_data.h"
 
 // Forward declare read functions

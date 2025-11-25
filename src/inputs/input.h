@@ -13,7 +13,7 @@
 #define USE_INPUT_BASED_ARCHITECTURE
 
 #include <Arduino.h>
-#include "sensor_types.h"
+#include "../lib/sensor_types.h"
 
 // Forward declarations
 struct Input;
