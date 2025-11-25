@@ -160,15 +160,22 @@ openEMS/
 ├── src/                    # Source code
 │   ├── main.cpp           # Main program loop
 │   ├── config.h           # ⚠️ USER CONFIGURATION
-│   ├── platform.h         # Auto-detects hardware
-│   ├── input.h            # Input-based architecture
-│   ├── input_manager.cpp  # Runtime configuration
-│   ├── sensor_library.h   # 30+ pre-calibrated sensors
-│   ├── sensor_configs.h   # Calibration database
-│   ├── sensor_read.cpp    # Sensor reading functions
-│   ├── serial_config.h    # Serial command interface
-│   ├── outputs/           # Output modules (CAN, Serial, etc.)
-│   └── displays/          # Display modules (LCD, etc.)
+│   ├── advanced_config.h  # Advanced features config
+│   ├── alarm.cpp          # Alarm system
+│   ├── inputs/            # Input and sensor management
+│   │   ├── input.h
+│   │   ├── input_manager.cpp/h
+│   │   ├── sensor_read.cpp
+│   │   └── serial_config.cpp/h
+│   ├── lib/               # Library components
+│   │   ├── platform.h
+│   │   ├── sensor_types.h
+│   │   ├── sensor_library.h
+│   │   ├── sensor_calibration_data.h
+│   │   └── application_presets.h
+│   ├── outputs/           # Output modules (CAN, Serial, SD)
+│   ├── displays/          # Display modules (LCD, etc.)
+│   └── test/              # Test mode system
 │
 └── docs/                   # Documentation
     ├── README.md
@@ -178,6 +185,7 @@ openEMS/
     ├── VOLTAGE_SENSOR_GUIDE.md
     ├── W_PHASE_RPM_GUIDE.md
     ├── ADVANCED_CALIBRATION_GUIDE.md
+    ├── DISCLAIMER.md
     └── DIRECTORY_SETUP.md
 ```
 

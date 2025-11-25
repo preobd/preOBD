@@ -97,7 +97,7 @@ Example: Adding a second coolant temperature sensor
 #### Step 2: Add the sensor definition to `sensors.cpp`
 
 ```cpp
-// In src/sensors.cpp, after the other sensor definitions:
+// In src/inputs/input_manager.cpp, after the other sensor definitions:
 
 #ifdef ENABLE_COOLANT_TEMP_2
     const SensorConfig* coolant2_config = getSensorConfig(COOLANT_TEMP_2_SENSOR_TYPE);
@@ -128,7 +128,7 @@ Example: Adding a second coolant temperature sensor
 #### Step 3: Add to sensor array in `sensors.cpp`
 
 ```cpp
-// In src/sensors.cpp, find the sensors[] array and add:
+// In src/inputs/input_manager.cpp, find the sensors[] array and add:
 
 Sensor *sensors[] = {
     #ifdef ENABLE_CHT
@@ -222,7 +222,7 @@ For sensors that don't fit existing patterns:
 ### Step 2: Define calibration and sensor in `sensors.cpp`
 
 ```cpp
-// In src/sensors.cpp, after other sensor definitions:
+// In src/inputs/input_manager.cpp, after other sensor definitions:
 
 #ifdef ENABLE_MY_CUSTOM_SENSOR
     // Define calibration (stays in RAM, no PROGMEM needed)
@@ -317,5 +317,5 @@ See `src/lib/sensor_library.h` for the full list of preset sensors:
 ## Need Help?
 
 - Check `src/advanced_config.h` for more examples
-- Look at existing sensor definitions in `src/sensors.cpp`
-- See `src/src/lib/sensor_library.h` for available preset sensors
+- Look at existing sensor definitions in `src/inputs/input_manager.cpp`
+- See `src/lib/sensor_library.h` for available preset sensors
