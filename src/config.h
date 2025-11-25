@@ -30,6 +30,26 @@
 // Uncomment to use compile-time config instead of EEPROM:
 #define USE_STATIC_CONFIG
 
+// ===== TEST MODE =====
+// Uncomment to enable test mode (allows testing outputs without physical sensors)
+// Test mode uses function pointer substitution to inject simulated sensor values
+// Memory overhead when enabled: 4.3KB flash, 185 bytes RAM
+// Memory overhead when disabled: 0 bytes (completely removed by preprocessor)
+#define ENABLE_TEST_MODE
+
+#ifdef ENABLE_TEST_MODE
+    // Test mode trigger pin (hold LOW during boot to activate test mode)
+    #define TEST_MODE_TRIGGER_PIN 5
+
+    // Default test scenario to run on startup (0-4, or 0xFF for none)
+    // 0 = Normal Operation
+    // 1 = Alarm Test - Overheating
+    // 2 = Sensor Fault Simulation
+    // 3 = Engine Startup Sequence
+    // 4 = Dynamic Driving Conditions
+    #define DEFAULT_TEST_SCENARIO 0
+#endif
+
 // ===== BME280 SENSOR SUPPORT =====
 // Always enable BME280 library support
 // (The linker will optimize out code if no BME280 sensors are configured)

@@ -32,6 +32,11 @@ extern void initAlarm();
 extern void checkSensorAlarm(Input*);
 extern void updateAlarm();
 
+// Test mode (if enabled)
+#ifdef ENABLE_TEST_MODE
+#include "test/test_mode.h"
+#endif
+
 // BME280 sensor (if any BME280 sensors are configured)
 #ifdef USE_BME280
 #include <Adafruit_Sensor.h>
@@ -220,6 +225,37 @@ void setup() {
     Serial.println(numActiveInputs);
     Serial.println(F("========================================"));
     Serial.println(F(""));
+
+    // ===== TEST MODE ACTIVATION =====
+#ifdef ENABLE_TEST_MODE
+    // Initialize test mode system
+    initTestMode();
+
+    // Check if test mode trigger pin is pulled LOW
+    pinMode(TEST_MODE_TRIGGER_PIN, INPUT_PULLUP);
+    delay(10);  // Allow pin to stabilize
+
+    if (digitalRead(TEST_MODE_TRIGGER_PIN) == LOW) {
+        Serial.println(F(""));
+        Serial.println(F("========================================"));
+        Serial.println(F("  TEST MODE TRIGGER DETECTED!"));
+        Serial.println(F("========================================"));
+        Serial.println(F(""));
+
+        // List available scenarios
+        listTestScenarios();
+
+        // Start default scenario (if not 0xFF)
+        #if DEFAULT_TEST_SCENARIO != 0xFF
+        startTestScenario(DEFAULT_TEST_SCENARIO);
+        #else
+        Serial.println(F("Test mode initialized but no default scenario set."));
+        Serial.println(F("Use serial commands to start a scenario."));
+        #endif
+    } else {
+        Serial.println(F("Test mode available (pin 5 is HIGH, normal operation)"));
+    }
+#endif
 }
 
 void loop() {
@@ -266,6 +302,14 @@ void loop() {
 
     // Update output modules (for any housekeeping)
     updateOutputs();
+
+    // ===== TEST MODE UPDATE =====
+#ifdef ENABLE_TEST_MODE
+    // Update test mode (checks for scenario completion, etc.)
+    if (isTestModeActive()) {
+        updateTestMode();
+    }
+#endif
 
     // Delay between iterations
     delay(LOOP_DELAY_MS);
