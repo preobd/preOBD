@@ -160,7 +160,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .name = "Voltage Divider",
         .readFunction = readVoltageDivider,
         .measurementType = MEASURE_VOLTAGE,
-        .calibrationType = CAL_NONE,
+        .calibrationType = CAL_VOLTAGE_DIVIDER,
         .defaultCalibration = nullptr
     },
 
