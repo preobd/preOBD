@@ -7,14 +7,22 @@
 #define PLATFORM_H
 
 // ===== AUTOMATIC PLATFORM DETECTION =====
-#if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__) || \
-    defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
-    // Arduino Mega/Uno - 5V system with 1.1V internal reference
+#if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
+    // Arduino Uno - 5V system with 1.1V internal reference
     #define SYSTEM_VOLTAGE 5.0
     #define SYSTEM_VOLTAGE_MV 5000  // For preprocessor comparisons
     #define AREF_VOLTAGE 5.0    // Using VCC as reference
     #define ADC_RESOLUTION 10   // 10-bit ADC (0-1023)
     #define ADC_MAX_VALUE 1023
+    #define MAX_INPUTS 6        // Arduino Uno analog inputs
+#elif defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+    // Arduino Mega - 5V system with 1.1V internal reference
+    #define SYSTEM_VOLTAGE 5.0
+    #define SYSTEM_VOLTAGE_MV 5000
+    #define AREF_VOLTAGE 5.0
+    #define ADC_RESOLUTION 10
+    #define ADC_MAX_VALUE 1023
+    #define MAX_INPUTS 16       // Arduino Mega analog inputs
 #elif defined(__MK20DX256__) || defined(__MK20DX128__)
     // Teensy 3.x - 3.3V system with 1.2V internal reference
     #define SYSTEM_VOLTAGE 3.3
@@ -22,13 +30,23 @@
     #define AREF_VOLTAGE 3.3    // Using VCC as reference
     #define ADC_RESOLUTION 12   // 12-bit ADC (0-4095)
     #define ADC_MAX_VALUE 4095
-#elif defined(__MK64FX512__) || defined(__MK66FX1M0__) || defined(__IMXRT1062__)
-    // Teensy 3.5/3.6/4.x - can be 3.3V or 5V tolerant
+    #define MAX_INPUTS 24       // Teensy 3.x analog inputs
+#elif defined(__MK64FX512__) || defined(__MK66FX1M0__)
+    // Teensy 3.5/3.6 - can be 3.3V or 5V tolerant
     #define SYSTEM_VOLTAGE 3.3
     #define SYSTEM_VOLTAGE_MV 3300
     #define AREF_VOLTAGE 3.3    // Using VCC as reference
     #define ADC_RESOLUTION 12   // 12-bit ADC (0-4095)
     #define ADC_MAX_VALUE 4095
+    #define MAX_INPUTS 32       // Teensy 3.5/3.6 analog inputs
+#elif defined(__IMXRT1062__)
+    // Teensy 4.x - can be 3.3V or 5V tolerant
+    #define SYSTEM_VOLTAGE 3.3
+    #define SYSTEM_VOLTAGE_MV 3300
+    #define AREF_VOLTAGE 3.3    // Using VCC as reference
+    #define ADC_RESOLUTION 12   // 12-bit ADC (0-4095)
+    #define ADC_MAX_VALUE 4095
+    #define MAX_INPUTS 40       // Teensy 4.x analog inputs
 #elif defined(ARDUINO_SAM_DUE)
     // Arduino Due
     #define SYSTEM_VOLTAGE 3.3
@@ -36,6 +54,7 @@
     #define AREF_VOLTAGE 3.3
     #define ADC_RESOLUTION 12
     #define ADC_MAX_VALUE 4095
+    #define MAX_INPUTS 12       // Arduino Due analog inputs
 #elif defined(ESP32)
     // ESP32
     #define SYSTEM_VOLTAGE 3.3
@@ -43,6 +62,7 @@
     #define AREF_VOLTAGE 3.3
     #define ADC_RESOLUTION 12
     #define ADC_MAX_VALUE 4095
+    #define MAX_INPUTS 32       // ESP32 analog inputs
 #else
     // Default safe values for unknown platforms
     #define SYSTEM_VOLTAGE 3.3
@@ -50,6 +70,7 @@
     #define AREF_VOLTAGE 3.3
     #define ADC_RESOLUTION 10
     #define ADC_MAX_VALUE 1023
+    #define MAX_INPUTS 8        // Default/Unknown platform
 #endif
 
 // ===== VOLTAGE DIVIDER CONFIGURATION =====
@@ -69,5 +90,8 @@
 #endif
 
 #define VOLTAGE_DIVIDER_RATIO ((VOLTAGE_DIVIDER_R1 + VOLTAGE_DIVIDER_R2) / VOLTAGE_DIVIDER_R2)
+
+// ===== PLATFORM INITIALIZATION FUNCTIONS =====
+void setupADC();  // Configure ADC settings for the current platform
 
 #endif

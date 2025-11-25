@@ -13,27 +13,9 @@
 #define INPUT_MANAGER_H
 
 #include "../config.h"
+#include "../lib/platform.h"
 #include <Arduino.h>
 #include "input.h"
-
-// Platform-specific max inputs
-#ifndef MAX_INPUTS
-    #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
-        #define MAX_INPUTS 6   // Arduino Uno
-    #elif defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
-        #define MAX_INPUTS 16  // Arduino Mega
-    #elif defined(__MK20DX256__) || defined(__MK20DX128__)
-        #define MAX_INPUTS 24  // Teensy 3.x
-    #elif defined(__MK64FX512__) || defined(__MK66FX1M0__)
-        #define MAX_INPUTS 32  // Teensy 3.5/3.6
-    #elif defined(__IMXRT1062__)
-        #define MAX_INPUTS 40  // Teensy 4.x
-    #elif defined(ESP32)
-        #define MAX_INPUTS 32  // ESP32
-    #else
-        #define MAX_INPUTS 8   // Default/Unknown
-    #endif
-#endif
 
 // Global inputs array
 extern Input inputs[MAX_INPUTS];
