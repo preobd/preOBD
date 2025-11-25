@@ -12,7 +12,7 @@ void initSerialOutput() {
     Serial.println("Sensor,Value,Units");
 }
 
-void sendSerialOutput(Sensor *ptr) {
+void sendSerialOutput(Input *ptr) {
     Serial.print(ptr->abbrName);
     Serial.print(",");
 
@@ -36,7 +36,7 @@ void updateSerialOutput() {
 #else
 
 void initSerialOutput() {}
-void sendSerialOutput(Sensor *ptr) {}
+void sendSerialOutput(Input *ptr) {}
 void updateSerialOutput() {}
 
 #endif

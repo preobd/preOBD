@@ -1,14 +1,39 @@
 /*
  * config.h - User Configuration File
- * 
- * BASIC SETUP: Just pick sensor types from sensor_library.h
- * ADVANCED SETUP: See advanced_config.h for custom calibrations
+ *
+ * === BUILD MODE SELECTION ===
+ * Choose ONE of the following modes:
+ *
+ * MODE 1: EEPROM/Serial Config
+ *   - Runtime serial configuration via commands
+ *   - EEPROM persistence for settings
+ *   - Recommended for: Teensy 4.x, ESP32, Arduino Mega
+ *   To enable: Leave USE_STATIC_CONFIG commented out
+ *
+ * MODE 2: Compile-Time Config [RECOMMENDED]
+ *   - Configure sensors at compile time in sensors_config.h
+ *   - No EEPROM, no serial config overhead
+ *   - Smaller footprint than Mode 1
+ *   - Recommended for: Arduino Uno, memory-constrained boards
+ *   To enable: #define USE_STATIC_CONFIG
+ *
+ * Both modes use the same Input-based architecture and share all code.
+ * The only difference is where configuration comes from:
+ *   Mode 1: EEPROM (set via serial commands)
+ *   Mode 2: config.h (set at compile time)
  */
 
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#include "sensor_library.h"  // Import sensor catalog
+// ===== BUILD MODE =====
+// Uncomment to use compile-time config instead of EEPROM:
+#define USE_STATIC_CONFIG
+
+// ===== BME280 SENSOR SUPPORT =====
+// Always enable BME280 library support
+// (The linker will optimize out code if no BME280 sensors are configured)
+#define USE_BME280
 
 // ===== ENABLED OUTPUT MODULES =====
 //#define ENABLE_CAN
@@ -44,133 +69,82 @@
 // Pressure default (BAR, PSI, or KPA)
 #define DEFAULT_PRESSURE_UNITS     BAR
 
-// Altitude default (METERS or FEET)
+// Elevation default (METERS or FEET)
 #define DEFAULT_ELEVATION_UNITS     FEET
 
 // NOTE: Voltage is always displayed in VOLTS
 // NOTE: Humidity is always displayed in PERCENT
 
-// ===== SENSOR CONFIGURATION =====
-// For each sensor: enable it, pick a type, assign a pin
-// Optionally override display units for individual sensors
+// ===== COMPILE-TIME SENSOR CONFIGURATION (MODE 2 ONLY) =====
+// This section is ONLY used when USE_STATIC_CONFIG is defined above.
+// For EEPROM mode (MODE 1), configure sensors via serial commands instead.
+//
+// Each input is defined with three simple parameters:
+//   INPUT_N_PIN         - Analog or digital pin number
+//   INPUT_N_APPLICATION - Measurement type (CHT, OIL_TEMP, etc.)
+//   INPUT_N_SENSOR      - Hardware device type (MAX6675, VDO_150C_STEINHART, etc.)
+//
+// All metadata (display names, OBD2 PIDs, alarm thresholds, conversion functions)
+// is automatically populated from application_presets.h and sensor_library.h.
+//
+// CUSTOM CALIBRATIONS:
+// To override default sensor calibrations, see advanced_config.h for examples.
 
-// === CHT (Cylinder Head Temperature) ===
-#define ENABLE_CHT
-#define CHT_SENSOR_TYPE       K_TYPE_THERMOCOUPLE_MAX6675
-#define CHT_INPUT             6
-#define CHT_MIN               -1
-#define CHT_MAX               495
-// Override display units for this sensor (optional)
-//#define CHT_DISPLAY_UNITS     FAHRENHEIT  // Uncomment to use F instead of default
+#ifdef USE_STATIC_CONFIG
+    // Include the enums we need from the input-based architecture
+    #include "input.h"
 
-// === EGT (Exhaust Gas Temperature) ===
-#define ENABLE_EGT
-#define EGT_SENSOR_TYPE       K_TYPE_THERMOCOUPLE_MAX31855
-#define EGT_INPUT             7
-#define EGT_MIN               -1
-#define EGT_MAX               600
-//#define EGT_DISPLAY_UNITS     CELSIUS
+    // ===== INPUT DEFINITIONS =====
 
-// === Coolant Temperature ===
-#define ENABLE_COOLANT_TEMP
-#define COOLANT_SENSOR_TYPE   VDO_120C_LOOKUP
-#define COOLANT_TEMP_INPUT    A2
-#define COOLANT_TEMP_MIN      -1
-#define COOLANT_TEMP_MAX      100
-//#define COOLANT_DISPLAY_UNITS FAHRENHEIT
+    // Input 0: CHT (Cylinder Head Temperature)
+    #define INPUT_0_PIN         6
+    #define INPUT_0_APPLICATION CHT
+    #define INPUT_0_SENSOR      MAX6675
 
-// === Coolant Level (Float Switch) ===
-#define ENABLE_COOLANT_LEVEL
-#define COOLANT_LEVEL_SENSOR_TYPE  DIGITAL_FLOAT_SWITCH
-#define COOLANT_LEVEL_INPUT        5     // Digital pin
-#define COOLANT_LEVEL_MIN          0     // Alarm if 0 (low level)
-#define COOLANT_LEVEL_MAX          1     // OK if 1 (normal level)
-// For normally open (NO) switches, uncomment the line below:
-//#define COOLANT_LEVEL_INVERTED         // Invert reading for NO switches
+    // Input 1: EGT (Exhaust Gas Temperature)
+    #define INPUT_1_PIN         7
+    #define INPUT_1_APPLICATION EGT
+    #define INPUT_1_SENSOR      MAX31855
 
-// === Oil Temperature ===
-#define ENABLE_OIL_TEMP
-#define OIL_TEMP_SENSOR_TYPE  VDO_150C_STEINHART
-#define OIL_TEMP_INPUT        A0
-#define OIL_TEMP_MIN          -1
-#define OIL_TEMP_MAX          150
-//#define OIL_DISPLAY_UNITS     CELSIUS
+    // Input 2: Coolant Temperature
+    #define INPUT_2_PIN         A2
+    #define INPUT_2_APPLICATION COOLANT_TEMP
+    #define INPUT_2_SENSOR      VDO_120C_LOOKUP
 
-// === Transfer Case Temperature ===
-//#define ENABLE_TCASE_TEMP
-//#define TCASE_TEMP_SENSOR_TYPE  VDO_120C_LOOKUP
-//#define TCASE_TEMP_INPUT        A1
-//#define TCASE_TEMP_MIN          -1
-//#define TCASE_TEMP_MAX          100
-//#define TCASE_DISPLAY_UNITS     FAHRENHEIT
+    // Input 3: Oil Temperature
+    #define INPUT_3_PIN         A0
+    #define INPUT_3_APPLICATION OIL_TEMP
+    #define INPUT_3_SENSOR      VDO_150C_STEINHART
 
-// === Boost Pressure ===
-//#define ENABLE_BOOST_PRESSURE
-//#define BOOST_PRESSURE_SENSOR_TYPE  VDO_2BAR_PRESSURE
-//#define BOOST_PRESSURE_INPUT        A4
-//#define BOOST_PRESSURE_MIN          -1
-//#define BOOST_PRESSURE_MAX          2
-//#define BOOST_DISPLAY_UNITS         PSI  // Override to PSI
+    // Input 4: Primary Battery
+    // #define INPUT_4_PIN         A8
+    // #define INPUT_4_APPLICATION PRIMARY_BATTERY
+    // #define INPUT_4_SENSOR      STANDARD_12V_DIVIDER
 
-// === Oil Pressure ===
-//#define ENABLE_OIL_PRESSURE
-//#define OIL_PRESSURE_SENSOR_TYPE    VDO_5BAR_PRESSURE
-//#define OIL_PRESSURE_INPUT          A3
-//#define OIL_PRESSURE_MIN            1
-//#define OIL_PRESSURE_MAX            5
-//#define OIL_PRESSURE_DISPLAY_UNITS  BAR
+    // Input 5: Ambient Temperature (BME280)
+    #define INPUT_5_PIN         0        // BME280 is I2C, no analog pin
+    #define INPUT_5_APPLICATION AMBIENT_TEMP
+    #define INPUT_5_SENSOR      BME280_AMBIENT_TEMPERATURE
 
-// === Primary Battery ===
-// #define ENABLE_PRIMARY_BATTERY
-// #define PRIMARY_BATTERY_SENSOR_TYPE   STANDARD_12V_DIVIDER
-// #define PRIMARY_BATTERY_INPUT         A8
-// Voltage is always displayed in VOLTS
+    // Input 6: Barometric Pressure (BME280)
+    #define INPUT_6_PIN         0        // BME280 is I2C
+    #define INPUT_6_APPLICATION BAROMETRIC_PRESSURE
+    #define INPUT_6_SENSOR      BME280_BAROMETRIC_PRESSURE
 
-// === Secondary Battery ===
-//#define ENABLE_AUXILIARY_BATTERY
-//#define SECONDARY_BATTERY_SENSOR_TYPE  STANDARD_12V_DIVIDER
-//#define SECONDARY_BATTERY_INPUT        A7
+    // Input 7: Humidity (BME280)
+    #define INPUT_7_PIN         0        // BME280 is I2C
+    #define INPUT_7_APPLICATION HUMIDITY
+    #define INPUT_7_SENSOR      BME280_RELATIVE_HUMIDITY
 
-// === Custom Voltage Monitoring ===
-// Example: Monitoring a 5V rail directly (no divider needed)
-//#define ENABLE_CUSTOM_VOLTAGE
-//#define CUSTOM_VOLTAGE_SENSOR_TYPE     DIRECT_VOLTAGE_5V
-//#define CUSTOM_VOLTAGE_INPUT           A9
+    // ===== OPTIONAL: UNIT OVERRIDES =====
+    // By default, units come from ApplicationPreset defaults
+    // Uncomment to override for specific inputs:
 
-// ===== RPM Sensing =====
-// #define ENABLE_ENGINE_RPM
-// #define RPM_SENSOR_TYPE       W_PHASE_RPM_12_POLE  // Pick your alternator
-// #define RPM_INPUT             5                     // Interrupt-capable pin
-// #define RPM_MIN               500   // Idle RPM alarm threshold
-// #define RPM_MAX               6500  // Over-rev alarm threshold
+    // #define INPUT_0_UNITS FAHRENHEIT  // Override CHT to F
+    // #define INPUT_2_UNITS FAHRENHEIT  // Override Coolant to F
+    #define INPUT_6_UNITS INHG        // Override baro to inHg
 
-// For custom pole count:
-//#define RPM_SENSOR_TYPE       W_PHASE_RPM_CUSTOM
-//#define RPM_CUSTOM_CALIBRATION
-//#define RPM_POLES             12
-//#define RPM_TIMEOUT_MS        2000
-//#define RPM_MIN_VALID         300
-//#define RPM_MAX_VALID         8000
-
-// === Ambient Temperature (BME280) ===
-#define ENABLE_AMBIENT_TEMP
-#define AMBIENT_TEMP_SENSOR_TYPE      BME280_AMBIENT_TEMPERATURE
-#define AMBIENT_DISPLAY_UNITS         FAHRENHEIT
-
-// === Barometric Pressure (BME280) ===
-#define ENABLE_BAROMETRIC_PRESSURE
-#define BARO_PRESSURE_SENSOR_TYPE     BME280_BAROMETRIC_PRESSURE
-#define BARO_DISPLAY_UNITS            INHG  // inHg for US weather
-
-// === Humidity (BME280) ===
-#define ENABLE_HUMIDITY
-#define HUMIDITY_SENSOR_TYPE          BME280_RELATIVE_HUMIDITY
-// Humidity is always displayed in PERCENT
-
-// === Altitude (BME280) ===
-#define ENABLE_ELEVATION
-#define ELEVATION_SENSOR_TYPE          BME280_ESTIMATED_ELEVATION
-//#define ELEVATION_DISPLAY_UNITS        FEET
+#endif // USE_STATIC_CONFIG
 
 // ===== DIGITAL I/O =====
 #define CAN_INT 2
@@ -179,25 +153,13 @@
 #define CAN_CS 9
 
 // ===== ALARM CONFIGURATION =====
-#define SILENCE_DURATION 30000  // ms
+#define ENABLE_ALARMS               // Comment out to globally disable all alarms
+#define SILENCE_DURATION 30000  // ms (how long silence button mutes alarm)
 
 // ===== CALIBRATION =====
 #define SEA_LEVEL_PRESSURE_HPA 1013.25
 
 // ===== TIMING =====
 #define LOOP_DELAY_MS 200
-
-// ===== ADVANCED CALIBRATION (Optional) =====
-// Uncomment to use custom calibrations instead of presets
-// See advanced_config.h for examples
-
-// Example: Custom coolant sensor with 470Ω bias resistor
-// #define COOLANT_CUSTOM_CALIBRATION
-// #ifdef COOLANT_CUSTOM_CALIBRATION
-//     #define COOLANT_BIAS_RESISTOR     470.0
-//     #define COOLANT_STEINHART_A       1.299e-3
-//     #define COOLANT_STEINHART_B       2.401e-4
-//     #define COOLANT_STEINHART_C       1.301e-7
-// #endif
 
 #endif

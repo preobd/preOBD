@@ -1,9 +1,11 @@
 /*
  * display_lcd.cpp - LCD display module
+ * Works with both EEPROM config and compile-time config
  */
 
-#include "../sensor_types.h"
 #include "../config.h"
+#include "../input.h"
+#include "../sensor_types.h"
 
 #ifdef ENABLE_LCD
 
@@ -21,26 +23,31 @@ void initLCD() {
     Serial.println("LCD initialized");
 }
 
-void displaySensor(Sensor *ptr, byte line) {
+void displaySensor(Input *ptr, byte line) {
     if (!ptr->isEnabled || !ptr->display) {
         return;
     }
-    
+
+    // Check if displayConvert function is valid
+    if (ptr->displayConvert == nullptr) {
+        return;
+    }
+
     // Calculate column position (0-9 for left, 10-19 for right)
     byte col = (line >= 4) ? 10 : 0;
     byte row = (line >= 4) ? line - 4 : line;
-    
+
     lcd.setCursor(col, row);
-    
+
     // Print sensor abbreviation
     lcd.print(ptr->abbrName);
     lcd.print(":");
-    
+
     if (isnan(ptr->value)) {
         lcd.print("ERR");
         return;
     }
-    
+
     // Convert to display units
     float displayValue = ptr->displayConvert(ptr->value, ptr->displayUnits);
     
@@ -80,12 +87,12 @@ void displaySensor(Sensor *ptr, byte line) {
     //lcd.print("   ");
 }
 
-void updateLCD(Sensor** sensors, int numSensors) {
+void updateLCD(Input** inputs, int numInputs) {
     currentLine = 0;
-    
-    for (int i = 0; i < numSensors; i++) {
-        if (sensors[i]->isEnabled && sensors[i]->display) {
-            displaySensor(sensors[i], currentLine);
+
+    for (int i = 0; i < numInputs; i++) {
+        if (inputs[i]->isEnabled && inputs[i]->display) {
+            displaySensor(inputs[i], currentLine);
             currentLine++;
         }
     }
@@ -98,8 +105,8 @@ void clearLCD() {
 #else
 
 void initLCD() {}
-void displaySensor(Sensor *ptr, byte line) {}
-void updateLCD(Sensor** sensors, int numSensors) {}
+void displaySensor(Input *ptr, byte line) {}
+void updateLCD(Input** inputs, int numInputs) {}
 void clearLCD() {}
 
 #endif

@@ -1,29 +1,48 @@
 /*
  * sensor_read.cpp - All sensor reading implementations
+ * Works with both EEPROM config and compile-time config
  */
 
-#include "sensor_types.h"
 #include "config.h"
 #include "platform.h"
+#include "input.h"
+#include "sensor_types.h"
 #include <SPI.h>
 
-#ifdef ENABLE_AMBIENT_TEMP
+#ifdef USE_BME280
 #include <Adafruit_BME280.h>
 extern Adafruit_BME280 bme;
 #endif
 
+// Helper macros to read calibration data from PROGMEM
+#define READ_FLOAT_PROGMEM(addr) pgm_read_float(&(addr))
+#define READ_BYTE_PROGMEM(addr) pgm_read_byte(&(addr))
+#define READ_WORD_PROGMEM(addr) pgm_read_word(&(addr))
+#define READ_PTR_PROGMEM(addr) ((const float*)pgm_read_ptr(&(addr)))
+
 // ===== UTILITY FUNCTIONS =====
 
+// Linear interpolation with PROGMEM support
 float interpolate(float X, byte size, const float* x, const float* y) {
-    // Handle edge cases
-    if (X >= x[0]) return y[0];
-    if (X <= x[size-1]) return y[size-1];
+    // Handle edge cases - read from PROGMEM
+    float x0 = READ_FLOAT_PROGMEM(x[0]);
+    float xLast = READ_FLOAT_PROGMEM(x[size-1]);
+
+    if (X >= x0) return READ_FLOAT_PROGMEM(y[0]);
+    if (X <= xLast) return READ_FLOAT_PROGMEM(y[size-1]);
 
     // Find the right segment
     for (int i = size-1; i >= 0; i--) {
-        if (X >= x[i] && X <= x[i-1]) {
+        float xi = READ_FLOAT_PROGMEM(x[i]);
+        float xi_prev = READ_FLOAT_PROGMEM(x[i-1]);
+
+        if (X >= xi && X <= xi_prev) {
             // Linear interpolation: y = y1 + ((x – x1) / (x2 – x1)) * (y2 – y1)
-            return y[i] + ((X - x[i]) / (x[i+1] - x[i])) * (y[i+1] - y[i]);
+            float yi = READ_FLOAT_PROGMEM(y[i]);
+            float xi_next = READ_FLOAT_PROGMEM(x[i+1]);
+            float yi_next = READ_FLOAT_PROGMEM(y[i+1]);
+
+            return yi + ((X - xi) / (xi_next - xi)) * (yi_next - yi);
         }
     }
     return NAN;
@@ -53,16 +72,16 @@ float calculateResistance(int reading, float biasResistor) {
 
 // ===== THERMOCOUPLE READING =====
 
-void readMAX6675(Sensor *ptr) {
+void readMAX6675(Input *ptr) {
     SPI.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
-    digitalWrite(ptr->input, LOW);
+    digitalWrite(ptr->pin, LOW);
     delayMicroseconds(1);
-    
+
     uint16_t value = SPI.transfer(0x00);
     value <<= 8;
     value |= SPI.transfer(0x00);
-    
-    digitalWrite(ptr->input, HIGH);
+
+    digitalWrite(ptr->pin, HIGH);
     SPI.endTransaction();
 
     if (value & 0x4) {
@@ -73,19 +92,21 @@ void readMAX6675(Sensor *ptr) {
     }
 }
 
-void readMAX31855(Sensor *ptr) {
+void readMAX31855(Input *ptr) {
     uint32_t d = 0;
     uint8_t buf[4];
-    
-    digitalWrite(ptr->input, LOW);
+
+    SPI.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
+    digitalWrite(ptr->pin, LOW);
     delayMicroseconds(1);
-    
+
     for (int i = 0; i < 4; i++) {
         buf[i] = SPI.transfer(0x00);
     }
-    
-    digitalWrite(ptr->input, HIGH);
-    
+
+    digitalWrite(ptr->pin, HIGH);
+    SPI.endTransaction();
+
     // Combine bytes
     d = buf[0];
     d <<= 8;
@@ -100,36 +121,56 @@ void readMAX31855(Sensor *ptr) {
         ptr->value = NAN;
         return;
     }
-    
-    // Extract temperature (top 14 bits)
+
+    // Extract temperature (top 14 bits, bits 31-18)
+    int16_t temp_raw;
     if (d & 0x80000000) {
-        d = 0xFFFFC000 | ((d >> 18) & 0x00003FFF);
+        // Negative temperature
+        temp_raw = 0xFFFFC000 | ((d >> 18) & 0x00003FFF);
     } else {
-        d >>= 18;
+        // Positive temperature
+        temp_raw = (d >> 18) & 0x00003FFF;
     }
-    
-    float temp = d;
-    ptr->value = temp * 0.25;  // Store in Celsius
+
+    ptr->value = temp_raw * 0.25;  // Store in Celsius
 }
 
 // ===== GENERIC THERMISTOR - STEINHART-HART METHOD =====
 
-void readThermistorSteinhart(Sensor *ptr) {
+void readThermistorSteinhart(Input *ptr) {
     bool isValid;
-    int reading = readAnalogPin(ptr->input, &isValid);
+    int reading = readAnalogPin(ptr->pin, &isValid);
 
     if (!isValid) {
         ptr->value = NAN;
         return;
     }
 
-    // Get calibration (with defaults if not provided)
-    ThermistorSteinhartCalibration* cal = getThermistorSteinhartCal(ptr);
-
-    float R_bias = (cal != nullptr) ? cal->bias_resistor : 10000.0;
-    float A = (cal != nullptr) ? cal->steinhart_a : 1.129241e-3;
-    float B = (cal != nullptr) ? cal->steinhart_b : 2.341077e-4;
-    float C = (cal != nullptr) ? cal->steinhart_c : 8.775468e-8;
+    // Get calibration values (from custom RAM or PROGMEM preset)
+    float R_bias, A, B, C;
+#ifdef USE_INPUT_BASED_ARCHITECTURE
+    if (ptr->useCustomCalibration && ptr->calibrationType == CAL_THERMISTOR_STEINHART) {
+        // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
+        R_bias = ptr->customCalibration.steinhart.bias_resistor;
+        A = ptr->customCalibration.steinhart.steinhart_a;
+        B = ptr->customCalibration.steinhart.steinhart_b;
+        C = ptr->customCalibration.steinhart.steinhart_c;
+    } else
+#endif
+    if (ptr->presetCalibration != nullptr && ptr->calibrationType == CAL_THERMISTOR_STEINHART) {
+        // Read from preset calibration (PROGMEM)
+        const ThermistorSteinhartCalibration* cal = (const ThermistorSteinhartCalibration*)ptr->presetCalibration;
+        R_bias = pgm_read_float(&cal->bias_resistor);
+        A = pgm_read_float(&cal->steinhart_a);
+        B = pgm_read_float(&cal->steinhart_b);
+        C = pgm_read_float(&cal->steinhart_c);
+    } else {
+        // Use defaults
+        R_bias = 10000.0;
+        A = 1.129241e-3;
+        B = 2.341077e-4;
+        C = 8.775468e-8;
+    }
 
     // Calculate thermistor resistance
     float R_thermistor = calculateResistance(reading, R_bias);
@@ -149,55 +190,77 @@ void readThermistorSteinhart(Sensor *ptr) {
 
 // ===== GENERIC THERMISTOR - LOOKUP TABLE METHOD =====
 
-void readThermistorLookup(Sensor *ptr) {
+void readThermistorLookup(Input *ptr) {
     bool isValid;
-    int reading = readAnalogPin(ptr->input, &isValid);
+    int reading = readAnalogPin(ptr->pin, &isValid);
 
     if (!isValid) {
         ptr->value = NAN;
         return;
     }
 
-    // Get calibration (REQUIRED for lookup method)
-    ThermistorLookupCalibration* cal = getThermistorLookupCal(ptr);
-
-    if (cal == nullptr) {
+    // Get calibration from PROGMEM (REQUIRED for lookup method)
+    if (ptr->calibrationType != CAL_THERMISTOR_LOOKUP || ptr->presetCalibration == nullptr) {
         ptr->value = NAN;  // Can't do lookup without table
         return;
     }
 
-    // Calculate thermistor resistance
-    float R_thermistor = calculateResistance(reading, cal->bias_resistor);
+    const ThermistorLookupCalibration* cal = (const ThermistorLookupCalibration*)ptr->presetCalibration;
+
+    // Read calibration values from PROGMEM
+    float R_bias = pgm_read_float(&cal->bias_resistor);
+    float R_thermistor = calculateResistance(reading, R_bias);
 
     if (isnan(R_thermistor) || R_thermistor <= 0) {
         ptr->value = NAN;
         return;
     }
-    
-    // Interpolate temperature from lookup table
-    ptr->value = interpolate(R_thermistor, cal->table_size,
-                            cal->resistance_table, cal->temperature_table);
+
+    // Read lookup table info from PROGMEM
+    byte table_size = pgm_read_byte(&cal->table_size);
+    const float* resistance_table = (const float*)pgm_read_ptr(&cal->resistance_table);
+    const float* temperature_table = (const float*)pgm_read_ptr(&cal->temperature_table);
+
+    ptr->value = interpolate(R_thermistor, table_size,
+                            resistance_table, temperature_table);
 }
 
 // ===== GENERIC PRESSURE SENSOR - LINEAR METHOD =====
 
-void readPressureLinear(Sensor *ptr) {
+void readPressureLinear(Input *ptr) {
     bool isValid;
-    int reading = readAnalogPin(ptr->input, &isValid);
+    int reading = readAnalogPin(ptr->pin, &isValid);
 
     if (!isValid) {
         ptr->value = NAN;
         return;
     }
 
-    // Get calibration (with defaults if not provided)
-    PressureLinearCalibration* cal = getPressureLinearCal(ptr);
-    
-    // Default: 0.5V-4.5V → 0-5 bar (common automotive sensor)
-    float V_min = (cal != nullptr) ? cal->voltage_min : 0.5;
-    float V_max = (cal != nullptr) ? cal->voltage_max : 4.5;
-    float P_min = (cal != nullptr) ? cal->pressure_min : 0.0;
-    float P_max = (cal != nullptr) ? cal->pressure_max : 5.0;
+    // Get calibration values (from custom RAM or PROGMEM preset)
+    float V_min, V_max, P_min, P_max;
+#ifdef USE_INPUT_BASED_ARCHITECTURE
+    if (ptr->useCustomCalibration && ptr->calibrationType == CAL_PRESSURE_LINEAR) {
+        // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
+        V_min = ptr->customCalibration.pressureLinear.voltage_min;
+        V_max = ptr->customCalibration.pressureLinear.voltage_max;
+        P_min = ptr->customCalibration.pressureLinear.pressure_min;
+        P_max = ptr->customCalibration.pressureLinear.pressure_max;
+    } else
+#endif
+    if (ptr->presetCalibration != nullptr && ptr->calibrationType == CAL_PRESSURE_LINEAR) {
+        // Read from preset calibration (PROGMEM)
+        const LinearCalibration* cal = (const LinearCalibration*)ptr->presetCalibration;
+        V_min = pgm_read_float(&cal->voltage_min);
+        V_max = pgm_read_float(&cal->voltage_max);
+        P_min = pgm_read_float(&cal->pressure_min);
+        P_max = pgm_read_float(&cal->pressure_max);
+    } else {
+        // Default: 0.5V-4.5V → 0-5 bar (common automotive sensor)
+        V_min = 0.5;
+        V_max = 4.5;
+        P_min = 0.0;
+        P_max = 5.0;
+    }
     
     // Convert ADC reading to voltage
     float voltage = reading * (AREF_VOLTAGE / (float)ADC_MAX_VALUE);
@@ -214,19 +277,34 @@ void readPressureLinear(Sensor *ptr) {
 
 // ===== GENERIC PRESSURE SENSOR - POLYNOMIAL METHOD =====
 
-void readPressurePolynomial(Sensor *ptr) {
+void readPressurePolynomial(Input *ptr) {
     bool isValid;
-    int reading = readAnalogPin(ptr->input, &isValid);
+    int reading = readAnalogPin(ptr->pin, &isValid);
 
     if (!isValid) {
         ptr->value = NAN;
         return;
     }
 
-    // Get calibration (REQUIRED for polynomial method)
-    PressurePolynomialCalibration* cal = getPressurePolynomialCal(ptr);
-
-    if (cal == nullptr) {
+    // Get calibration values (from custom RAM or PROGMEM preset)
+    float bias_resistor, a, b, c;
+#ifdef USE_INPUT_BASED_ARCHITECTURE
+    if (ptr->useCustomCalibration && ptr->calibrationType == CAL_PRESSURE_POLYNOMIAL) {
+        // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
+        bias_resistor = ptr->customCalibration.pressurePolynomial.bias_resistor;
+        a = ptr->customCalibration.pressurePolynomial.poly_a;
+        b = ptr->customCalibration.pressurePolynomial.poly_b;
+        c = ptr->customCalibration.pressurePolynomial.poly_c;
+    } else
+#endif
+    if (ptr->presetCalibration != nullptr && ptr->calibrationType == CAL_PRESSURE_POLYNOMIAL) {
+        // Read from preset calibration (PROGMEM)
+        const PolynomialCalibration* cal = (const PolynomialCalibration*)ptr->presetCalibration;
+        bias_resistor = pgm_read_float(&cal->bias_resistor);
+        a = pgm_read_float(&cal->poly_a);
+        b = pgm_read_float(&cal->poly_b);
+        c = pgm_read_float(&cal->poly_c);
+    } else {
         ptr->value = NAN;  // Can't calculate without coefficients
         return;
     }
@@ -234,16 +312,14 @@ void readPressurePolynomial(Sensor *ptr) {
     // VDO sensors use quadratic equation: V = A*P² + B*P + C
     // We need to solve for P: A*P² + B*P + (C - R) = 0
     // Using quadratic formula: P = (-B ± sqrt(B² - 4*A*(C-R))) / (2*A)
-    float R_sensor = calculateResistance(reading, cal->bias_resistor);
+    float R_sensor = calculateResistance(reading, bias_resistor);
 
     if (isnan(R_sensor) || R_sensor <= 0) {
         ptr->value = NAN;
         return;
     }
-    
-    float a = cal->poly_a;
-    float b = cal->poly_b;
-    float c = cal->poly_c - R_sensor;
+
+    c = c - R_sensor;
     
     float discriminant = (b * b) - (4.0 * a * c);
     
@@ -260,55 +336,47 @@ void readPressurePolynomial(Sensor *ptr) {
 
 // ===== VOLTAGE READING =====
 
-void readVoltageDivider(Sensor *ptr) {
-    int reading = analogRead(ptr->input);
-    
+void readVoltageDivider(Input *ptr) {
+    int reading = analogRead(ptr->pin);
+
     if (reading < 10) {
         ptr->value = NAN;
         return;
     }
-    
+
     // Get calibration (with defaults from platform.h if not provided)
-    VoltageDividerCalibration* cal = getVoltageDividerCal(ptr);
-    
+    VoltageDividerCalibration* cal = nullptr;
     float divider_ratio;
     float correction = 1.0;
     float offset = 0.0;
-    
-    if (cal != nullptr) {
-        // Use custom calibration
-        divider_ratio = (cal->r1 + cal->r2) / cal->r2;
-        correction = cal->correction;
-        offset = cal->offset;
+
+    if (ptr->calibrationType == CAL_VOLTAGE_DIVIDER) {
+        // Note: Voltage divider doesn't use the union, it would need to be added
+        // For now, use platform defaults
+        divider_ratio = VOLTAGE_DIVIDER_RATIO;
     } else {
         // Use defaults from platform.h
         divider_ratio = VOLTAGE_DIVIDER_RATIO;
     }
-    
+
     // Calculate voltage: V = ADC * (AREF / ADC_MAX) * divider_ratio * correction + offset
     float voltage = (reading * AREF_VOLTAGE / (float)ADC_MAX_VALUE) * divider_ratio * correction + offset;
-    
+
     ptr->value = voltage;
 }
 
 // Read voltage directly (no divider)
-void readVoltageDirect(Sensor *ptr) {
-    int reading = analogRead(ptr->input);
-    
+void readVoltageDirect(Input *ptr) {
+    int reading = analogRead(ptr->pin);
+
     if (reading < 10) {
         ptr->value = NAN;
         return;
     }
-    
-    // Get calibration for correction/offset if provided
-    VoltageDividerCalibration* cal = getVoltageDividerCal(ptr);
-    
-    float correction = (cal != nullptr) ? cal->correction : 1.0;
-    float offset = (cal != nullptr) ? cal->offset : 0.0;
-    
-    // Direct voltage reading: V = ADC * (AREF / ADC_MAX) * correction + offset
-    float voltage = (reading * AREF_VOLTAGE / (float)ADC_MAX_VALUE) * correction + offset;
-    
+
+    // Direct voltage reading: V = ADC * (AREF / ADC_MAX)
+    float voltage = (reading * AREF_VOLTAGE / (float)ADC_MAX_VALUE);
+
     ptr->value = voltage;
 }
 
@@ -342,31 +410,31 @@ void initRPM(byte pin) {
 }
 
 // Read W-Phase RPM
-void readWPhaseRPM(Sensor *ptr) {
-    // Get calibration
-    RPMCalibration* cal = getRPMCal(ptr);
-    if (cal == nullptr) {
-        ptr->value = NAN;
-        return;
-    }
-    
+void readWPhaseRPM(Input *ptr) {
+    // Note: RPM calibration not yet in union, using defaults
+    // TODO: Add RPM calibration to Input union
+    float pulses_per_rev = 3.0;  // Default for 12-pole alternator
+    uint16_t timeout_ms = 2000;  // 2 second timeout
+    uint16_t min_rpm = 100;
+    uint16_t max_rpm = 10000;
+
     // Calculate time since last pulse
     unsigned long now = millis();
     unsigned long time_since_pulse = now - (rpm_last_time / 1000);
-    
+
     // Check for timeout (engine stopped)
-    if (time_since_pulse > cal->timeout_ms) {
+    if (time_since_pulse > timeout_ms) {
         ptr->value = 0;
         return;
     }
-    
+
     // Calculate RPM from pulse interval
     // Formula: RPM = (60,000,000 µs/min) / (interval_µs × pulses_per_rev)
     if (rpm_pulse_interval > 0) {
-        float rpm = 60000000.0 / (rpm_pulse_interval * cal->pulses_per_rev);
-        
+        float rpm = 60000000.0 / (rpm_pulse_interval * pulses_per_rev);
+
         // Validate range
-        if (rpm >= cal->min_rpm && rpm <= cal->max_rpm) {
+        if (rpm >= min_rpm && rpm <= max_rpm) {
             // Apply simple smoothing filter (optional)
             if (!isnan(ptr->value) && ptr->value > 0) {
                 ptr->value = (ptr->value * 0.8) + (rpm * 0.2);
@@ -381,32 +449,32 @@ void readWPhaseRPM(Sensor *ptr) {
 
 // ===== BME280 READING =====
 
-void readBME280Temp(Sensor *ptr) {
-    #ifdef ENABLE_AMBIENT_TEMP
+void readBME280Temp(Input *ptr) {
+    #ifdef USE_BME280
     ptr->value = bme.readTemperature();  // Store in Celsius
     #else
     ptr->value = NAN;
     #endif
 }
 
-void readBME280Pressure(Sensor *ptr) {
-    #ifdef ENABLE_BAROMETRIC_PRESSURE
+void readBME280Pressure(Input *ptr) {
+    #ifdef USE_BME280
     ptr->value = bme.readPressure() / 100000.0;  // Store in bar
     #else
     ptr->value = NAN;
     #endif
 }
 
-void readBME280Humidity(Sensor *ptr) {
-    #if defined(ENABLE_HUMIDITY)
+void readBME280Humidity(Input *ptr) {
+    #ifdef USE_BME280
     ptr->value = bme.readHumidity();  // Store as percentage (0-100)
     #else
     ptr->value = NAN;
     #endif
 }
 
-void readBME280Altitude(Sensor *ptr) {
-    #if defined(ENABLE_ELEVATION)
+void readBME280Elevation(Input *ptr) {
+    #ifdef USE_BME280
     ptr->value = bme.readAltitude(SEA_LEVEL_PRESSURE_HPA);  // Store in meters
     #else
     ptr->value = NAN;
@@ -415,9 +483,9 @@ void readBME280Altitude(Sensor *ptr) {
 
 // ===== DIGITAL FLOAT SWITCH =====
 
-void readDigitalFloatSwitch(Sensor *ptr) {
+void readDigitalFloatSwitch(Input *ptr) {
     // Read digital state from the pin
-    float rawValue = (float)digitalRead(ptr->input);
+    float rawValue = (float)digitalRead(ptr->pin);
 
     // Support both normally closed (NC) and normally open (NO) switches
     #ifdef COOLANT_LEVEL_INVERTED
@@ -461,7 +529,7 @@ float convertHumidity(float humidity, DisplayUnits units) {
     return humidity;
 }
 
-float convertAltitude(float meters, DisplayUnits units) {
+float convertElevation(float meters, DisplayUnits units) {
     if (units == FEET) {
         return meters * 3.28084;
     }
@@ -495,7 +563,7 @@ const char* getUnitString(DisplayUnits units) {
 
 // ===== OBDII CONVERSION FUNCTIONS =====
 
-float obdConvertTemp(float celsius) {
+float obdConvertTemperature(float celsius) {
     return celsius + 40.0;  // OBDII format: A-40
 }
 
@@ -519,7 +587,7 @@ float obdConvertHumidity(float humidity) {
     return humidity * 2.55;  // Convert 0-100% to 0-255
 }
 
-float obdConvertAltitude(float meters) {
+float obdConvertElevation(float meters) {
     return meters;
 }
 

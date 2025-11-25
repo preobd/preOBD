@@ -5,6 +5,7 @@
 #ifndef OUTPUT_BASE_H
 #define OUTPUT_BASE_H
 
+#include "../input.h"
 #include "sensor_types.h"
 
 // Output module structure
@@ -12,13 +13,13 @@ typedef struct {
     const char* name;
     bool enabled;
     void (*init)(void);
-    void (*send)(Sensor*);
+    void (*send)(Input*);
     void (*update)(void);  // Called each loop iteration
 } OutputModule;
 
 // Output module initialization
 void initOutputModules();
-void sendToOutputs(Sensor* sensor);
+void sendToOutputs(Input* input);
 void updateOutputs();
 
 // ===== OBDII FRAME BUILDING =====
@@ -27,9 +28,9 @@ void updateOutputs();
 // Fixes: 1) Correct length byte calculation, 2) Big-endian byte order
 // Parameters:
 //   frameData - 8-byte buffer to fill
-//   ptr - Sensor with obd2pid, obd2length, and obdConvert()
+//   ptr - Input with obd2pid, obd2length, and obdConvert()
 // Returns: true if successful, false if data size invalid
-inline bool buildOBD2Frame(byte* frameData, Sensor* ptr) {
+inline bool buildOBD2Frame(byte* frameData, Input* ptr) {
     byte mode = 0x41;  // Mode 01: Show current data
     byte dataBytes = ptr->obd2length;
 

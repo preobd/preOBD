@@ -2,6 +2,7 @@
  * alarm.cpp - Alarm system management
  */
 
+#include "input.h"
 #include "sensor_types.h"
 #include "config.h"
 
@@ -15,11 +16,16 @@ void initAlarm() {
     noTone(BUZZER);
 }
 
-void checkSensorAlarm(Sensor *ptr) {
+void checkSensorAlarm(Input *ptr) {
+    // Check global alarm enable flag first
+    #ifndef ENABLE_ALARMS
+    return;
+    #endif
+
     if (!ptr->alarm || !ptr->isEnabled || isnan(ptr->value)) {
         return;
     }
-    
+
     // Check if value is outside threshold
     if (ptr->value >= ptr->maxValue || ptr->value <= ptr->minValue) {
         alarmActive = true;

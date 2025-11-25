@@ -7,19 +7,19 @@
 
 // Declare external functions from output modules
 extern void initCAN();
-extern void sendCAN(Sensor*);
+extern void sendCAN(Input*);
 extern void updateCAN();
 
 extern void initRealdash();
-extern void sendRealdash(Sensor*);
+extern void sendRealdash(Input*);
 extern void updateRealdash();
 
 extern void initSerialOutput();
-extern void sendSerialOutput(Sensor*);
+extern void sendSerialOutput(Input*);
 extern void updateSerialOutput();
 
 extern void initSDLog();
-extern void sendSDLog(Sensor*);
+extern void sendSDLog(Input*);
 extern void updateSDLog();
 
 // Define output modules array
@@ -51,14 +51,14 @@ void initOutputModules() {
     }
 }
 
-void sendToOutputs(Sensor* sensor) {
-    if (!sensor->isEnabled || isnan(sensor->value)) {
+void sendToOutputs(Input* input) {
+    if (!input->isEnabled || isnan(input->value)) {
         return;
     }
-    
+
     for (int i = 0; i < numOutputModules; i++) {
         if (outputModules[i].enabled && outputModules[i].send != nullptr) {
-            outputModules[i].send(sensor);
+            outputModules[i].send(input);
         }
     }
 }

@@ -12,7 +12,7 @@ void initRealdash() {
     Serial.println("RealDash output initialized");
 }
 
-void sendRealdash(Sensor *ptr) {
+void sendRealdash(Input *ptr) {
     if (isnan(ptr->value)) {
         return;
     }
@@ -41,7 +41,7 @@ void updateRealdash() {
 #else
 
 void initRealdash() {}
-void sendRealdash(Sensor *ptr) {}
+void sendRealdash(Input *ptr) {}
 void updateRealdash() {}
 
 #endif

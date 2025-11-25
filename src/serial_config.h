@@ -1,0 +1,29 @@
+/*
+ * serial_config.h - Serial Command Interface
+ *
+ * Provides serial command interface for runtime configuration of inputs.
+ *
+ * NOTE: Only compiled in EEPROM/runtime configuration mode (not in static/compile-time mode)
+ */
+
+#ifndef SERIAL_CONFIG_H
+#define SERIAL_CONFIG_H
+
+#include "config.h"
+
+#ifdef USE_INPUT_BASED_ARCHITECTURE
+
+#include <Arduino.h>
+
+// Initialize serial command handler
+void initSerialConfig();
+
+// Process serial commands (call from loop)
+void processSerialCommands();
+
+// Handle a single command (char* to avoid String class RAM overhead)
+void handleSerialCommand(char* cmd);
+
+#endif // USE_INPUT_BASED_ARCHITECTURE
+
+#endif // SERIAL_CONFIG_H

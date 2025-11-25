@@ -1,0 +1,435 @@
+/*
+ * serial_config.cpp - Serial Command Interface Implementation
+ * NO String class - uses char* and fixed buffers for minimal RAM usage
+ *
+ * NOTE: Only compiled in EEPROM/runtime configuration mode (not in static/compile-time mode)
+ */
+
+#include "config.h"
+
+#ifdef USE_INPUT_BASED_ARCHITECTURE
+
+#include "serial_config.h"
+#include "input_manager.h"
+#include "input.h"
+#include <string.h>
+#include <ctype.h>
+
+// Command buffer - fixed size, no String class
+#define CMD_BUFFER_SIZE 80
+static char commandBuffer[CMD_BUFFER_SIZE];
+static uint8_t cmdIndex = 0;
+
+// Helper: trim whitespace in-place
+static void trim(char* str) {
+    if (!str || *str == '\0') return;
+
+    // Trim leading
+    char* start = str;
+    while (*start && isspace(*start)) start++;
+
+    // Trim trailing
+    char* end = start + strlen(start) - 1;
+    while (end > start && isspace(*end)) end--;
+    *(end + 1) = '\0';
+
+    // Move trimmed string to start
+    if (start != str) {
+        memmove(str, start, strlen(start) + 1);
+    }
+}
+
+// Helper: convert to uppercase in-place
+static void toUpper(char* str) {
+    while (*str) {
+        *str = toupper(*str);
+        str++;
+    }
+}
+
+// Helper: case-insensitive string compare
+static bool streq(const char* a, const char* b) {
+    while (*a && *b) {
+        if (toupper(*a) != toupper(*b)) return false;
+        a++;
+        b++;
+    }
+    return *a == *b;
+}
+
+void initSerialConfig() {
+    Serial.println();
+    Serial.println(F("========================================"));
+    Serial.println(F("  openEMS Serial Configuration"));
+    Serial.println(F("  Type 'HELP' for commands"));
+    Serial.println(F("========================================"));
+    Serial.println();
+    cmdIndex = 0;
+    commandBuffer[0] = '\0';
+}
+
+void processSerialCommands() {
+    while (Serial.available()) {
+        char c = Serial.read();
+
+        if (c == '\n' || c == '\r') {
+            if (cmdIndex > 0) {
+                commandBuffer[cmdIndex] = '\0';
+                trim(commandBuffer);
+                if (commandBuffer[0] != '\0') {
+                    handleSerialCommand(commandBuffer);
+                }
+                cmdIndex = 0;
+                commandBuffer[0] = '\0';
+                Serial.print(F("\n> "));
+            }
+        } else if (cmdIndex < CMD_BUFFER_SIZE - 1) {
+            commandBuffer[cmdIndex++] = c;
+        }
+    }
+}
+
+// Parse pin number (A0-A15 or digital)
+static uint8_t parsePin(const char* pinStr) {
+    if (!pinStr) return 0;
+
+    if (toupper(pinStr[0]) == 'A') {
+        return A0 + atoi(pinStr + 1);
+    }
+    return atoi(pinStr);
+}
+
+// Parse Application enum from string
+static Application parseApplication(const char* appStr) {
+    if (!appStr) return APP_NONE;
+
+    if (streq(appStr, "CHT")) return CHT;
+    if (streq(appStr, "EGT")) return EGT;
+    if (streq(appStr, "COOLANT_TEMP")) return COOLANT_TEMP;
+    if (streq(appStr, "OIL_TEMP")) return OIL_TEMP;
+    if (streq(appStr, "TCASE_TEMP")) return TCASE_TEMP;
+    if (streq(appStr, "OIL_PRESSURE")) return OIL_PRESSURE;
+    if (streq(appStr, "BOOST_PRESSURE")) return BOOST_PRESSURE;
+    if (streq(appStr, "FUEL_PRESSURE")) return FUEL_PRESSURE;
+    if (streq(appStr, "PRIMARY_BATTERY")) return PRIMARY_BATTERY;
+    if (streq(appStr, "AUXILIARY_BATTERY")) return AUXILIARY_BATTERY;
+    if (streq(appStr, "COOLANT_LEVEL")) return COOLANT_LEVEL;
+    if (streq(appStr, "AMBIENT_TEMP")) return AMBIENT_TEMP;
+    if (streq(appStr, "BAROMETRIC_PRESSURE")) return BAROMETRIC_PRESSURE;
+    if (streq(appStr, "HUMIDITY")) return HUMIDITY;
+    if (streq(appStr, "ELEVATION")) return ELEVATION;
+    if (streq(appStr, "ENGINE_RPM")) return ENGINE_RPM;
+
+    return APP_NONE;
+}
+
+// Parse Sensor enum from string
+static Sensor parseSensor(const char* sensorStr) {
+    if (!sensorStr) return SENSOR_NONE;
+
+    if (streq(sensorStr, "MAX6675")) return MAX6675;
+    if (streq(sensorStr, "MAX31855")) return MAX31855;
+    if (streq(sensorStr, "VDO_120C_LOOKUP")) return VDO_120C_LOOKUP;
+    if (streq(sensorStr, "VDO_150C_LOOKUP")) return VDO_150C_LOOKUP;
+    if (streq(sensorStr, "VDO_120C_STEINHART")) return VDO_120C_STEINHART;
+    if (streq(sensorStr, "VDO_150C_STEINHART")) return VDO_150C_STEINHART;
+    if (streq(sensorStr, "VDO_2BAR")) return VDO_2BAR;
+    if (streq(sensorStr, "VDO_5BAR")) return VDO_5BAR;
+    if (streq(sensorStr, "VOLTAGE_DIVIDER")) return VOLTAGE_DIVIDER;
+    if (streq(sensorStr, "W_PHASE_RPM")) return W_PHASE_RPM;
+    if (streq(sensorStr, "BME280_TEMP")) return BME280_TEMP;
+    if (streq(sensorStr, "BME280_PRESSURE")) return BME280_PRESSURE;
+    if (streq(sensorStr, "BME280_HUMIDITY")) return BME280_HUMIDITY;
+    if (streq(sensorStr, "BME280_ELEVATION")) return BME280_ELEVATION;
+    if (streq(sensorStr, "FLOAT_SWITCH")) return FLOAT_SWITCH;
+
+    return SENSOR_NONE;
+}
+
+// Parse Units enum from string
+static Units parseUnits(const char* unitsStr) {
+    if (!unitsStr) return CELSIUS;
+
+    if (streq(unitsStr, "CELSIUS") || streq(unitsStr, "C")) return CELSIUS;
+    if (streq(unitsStr, "FAHRENHEIT") || streq(unitsStr, "F")) return FAHRENHEIT;
+    if (streq(unitsStr, "PSI")) return PSI;
+    if (streq(unitsStr, "BAR")) return BAR;
+    if (streq(unitsStr, "KPA")) return KPA;
+    if (streq(unitsStr, "VOLTS") || streq(unitsStr, "V")) return VOLTS;
+    if (streq(unitsStr, "RPM")) return RPM;
+    if (streq(unitsStr, "PERCENT") || streq(unitsStr, "%")) return PERCENT;
+    if (streq(unitsStr, "METERS") || streq(unitsStr, "M")) return METERS;
+    if (streq(unitsStr, "FEET") || streq(unitsStr, "FT")) return FEET;
+
+    return CELSIUS;  // Default
+}
+
+void handleSerialCommand(char* cmd) {
+    if (!cmd) return;
+
+    trim(cmd);
+    toUpper(cmd);
+
+    // ===== HELP =====
+    if (streq(cmd, "HELP") || streq(cmd, "?")) {
+        Serial.println();
+        Serial.println(F("Available Commands:"));
+        Serial.println();
+        Serial.println(F("LIST Commands:"));
+        Serial.println(F("  LIST INPUTS        - Show all configured inputs"));
+        Serial.println(F("  LIST TYPES         - Show available Type presets"));
+        Serial.println(F("  LIST SENSOR_TYPES  - Show available Sensor Types"));
+        Serial.println();
+        Serial.println(F("SET Commands:"));
+        Serial.println(F("  SET <pin> TYPE <type>"));
+        Serial.println(F("  SET <pin> SENSOR_TYPE <sensor>"));
+        Serial.println(F("  SET <pin> NAME <name>"));
+        Serial.println(F("  SET <pin> DISPLAY_NAME <name>"));
+        Serial.println(F("  SET <pin> UNITS <units>"));
+        Serial.println(F("  SET <pin> ALARM <min> <max>"));
+        Serial.println();
+        Serial.println(F("Control Commands:"));
+        Serial.println(F("  ENABLE <pin>"));
+        Serial.println(F("  DISABLE <pin>"));
+        Serial.println(F("  CLEAR <pin>"));
+        Serial.println(F("  INFO <pin>"));
+        Serial.println();
+        Serial.println(F("Config Commands:"));
+        Serial.println(F("  SAVE    - Save config to EEPROM"));
+        Serial.println(F("  LOAD    - Load config from EEPROM"));
+        Serial.println(F("  RESET   - Clear all configuration"));
+        Serial.println();
+        Serial.println(F("Examples:"));
+        Serial.println(F("  SET A2 TYPE CHT"));
+        Serial.println(F("  SET A2 SENSOR_TYPE MAX6675"));
+        Serial.println(F("  SET A2 UNITS CELSIUS"));
+        Serial.println(F("  ENABLE A2"));
+        Serial.println(F("  SAVE"));
+        return;
+    }
+
+    // ===== LIST COMMANDS =====
+    if (streq(cmd, "LIST INPUTS")) {
+        listAllInputs();
+        return;
+    }
+
+    if (streq(cmd, "LIST APPLICATIONS")) {
+        listApplicationPresets();
+        return;
+    }
+
+    if (streq(cmd, "LIST SENSORS")) {
+        listSensors();
+        return;
+    }
+
+    // ===== SET COMMANDS =====
+    if (strncmp(cmd, "SET ", 4) == 0) {
+        char* rest = cmd + 4;
+        trim(rest);
+
+        // Find first space to separate pin from field
+        char* firstSpace = strchr(rest, ' ');
+        if (!firstSpace) {
+            Serial.println(F("ERROR: Invalid SET command"));
+            return;
+        }
+
+        // Extract pin string
+        *firstSpace = '\0';
+        char* pinStr = rest;
+        char* fieldAndValue = firstSpace + 1;
+        trim(fieldAndValue);
+
+        uint8_t pin = parsePin(pinStr);
+
+        // SET <pin> APPLICATION <application>
+        if (strncmp(fieldAndValue, "APPLICATION ", 12) == 0) {
+            char* appStr = fieldAndValue + 12;
+            trim(appStr);
+            Application app = parseApplication(appStr);
+            if (app == APP_NONE) {
+                Serial.println(F("ERROR: Invalid Application"));
+                return;
+            }
+            if (setInputApplication(pin, app)) {
+                Serial.print(F("Input "));
+                Serial.print(pinStr);
+                Serial.print(F(" configured as "));
+                Serial.println(appStr);
+            }
+            return;
+        }
+
+        // SET <pin> SENSOR <sensor>
+        if (strncmp(fieldAndValue, "SENSOR ", 7) == 0) {
+            char* sensorStr = fieldAndValue + 7;
+            trim(sensorStr);
+            Sensor sensor = parseSensor(sensorStr);
+            if (sensor == SENSOR_NONE) {
+                Serial.println(F("ERROR: Invalid Sensor"));
+                return;
+            }
+            if (setInputSensor(pin, sensor)) {
+                Serial.print(F("Input "));
+                Serial.print(pinStr);
+                Serial.print(F(" sensor set to "));
+                Serial.println(sensorStr);
+            }
+            return;
+        }
+
+        // SET <pin> NAME <name>
+        if (strncmp(fieldAndValue, "NAME ", 5) == 0) {
+            char* name = fieldAndValue + 5;
+            trim(name);
+            if (setInputName(pin, name)) {
+                Serial.print(F("Input "));
+                Serial.print(pinStr);
+                Serial.print(F(" name set to "));
+                Serial.println(name);
+            }
+            return;
+        }
+
+        // SET <pin> DISPLAY_NAME <name>
+        if (strncmp(fieldAndValue, "DISPLAY_NAME ", 13) == 0) {
+            char* name = fieldAndValue + 13;
+            trim(name);
+            if (setInputDisplayName(pin, name)) {
+                Serial.print(F("Input "));
+                Serial.print(pinStr);
+                Serial.print(F(" display name set to "));
+                Serial.println(name);
+            }
+            return;
+        }
+
+        // SET <pin> UNITS <units>
+        if (strncmp(fieldAndValue, "UNITS ", 6) == 0) {
+            char* unitsStr = fieldAndValue + 6;
+            trim(unitsStr);
+            Units units = parseUnits(unitsStr);
+            if (setInputUnits(pin, units)) {
+                Serial.print(F("Input "));
+                Serial.print(pinStr);
+                Serial.print(F(" units set to "));
+                Serial.println(unitsStr);
+            }
+            return;
+        }
+
+        // SET <pin> ALARM <min> <max>
+        if (strncmp(fieldAndValue, "ALARM ", 6) == 0) {
+            char* values = fieldAndValue + 6;
+            trim(values);
+            char* spacePos = strchr(values, ' ');
+            if (!spacePos) {
+                Serial.println(F("ERROR: ALARM requires min and max values"));
+                return;
+            }
+            *spacePos = '\0';
+            float minVal = atof(values);
+            float maxVal = atof(spacePos + 1);
+            if (setInputAlarmRange(pin, minVal, maxVal)) {
+                Serial.print(F("Input "));
+                Serial.print(pinStr);
+                Serial.print(F(" alarm range set to "));
+                Serial.print(minVal);
+                Serial.print(F(" - "));
+                Serial.println(maxVal);
+            }
+            return;
+        }
+
+        Serial.println(F("ERROR: Unknown SET field"));
+        return;
+    }
+
+    // ===== ENABLE/DISABLE =====
+    if (strncmp(cmd, "ENABLE ", 7) == 0) {
+        char* pinStr = cmd + 7;
+        trim(pinStr);
+        uint8_t pin = parsePin(pinStr);
+        if (enableInput(pin, true)) {
+            Serial.print(F("Input "));
+            Serial.print(pinStr);
+            Serial.println(F(" enabled"));
+        }
+        return;
+    }
+
+    if (strncmp(cmd, "DISABLE ", 8) == 0) {
+        char* pinStr = cmd + 8;
+        trim(pinStr);
+        uint8_t pin = parsePin(pinStr);
+        if (enableInput(pin, false)) {
+            Serial.print(F("Input "));
+            Serial.print(pinStr);
+            Serial.println(F(" disabled"));
+        }
+        return;
+    }
+
+    // ===== CLEAR =====
+    if (strncmp(cmd, "CLEAR ", 6) == 0) {
+        char* pinStr = cmd + 6;
+        trim(pinStr);
+        uint8_t pin = parsePin(pinStr);
+        if (clearInput(pin)) {
+            Serial.print(F("Input "));
+            Serial.print(pinStr);
+            Serial.println(F(" cleared"));
+        }
+        return;
+    }
+
+    // ===== INFO =====
+    if (strncmp(cmd, "INFO ", 5) == 0) {
+        char* pinStr = cmd + 5;
+        trim(pinStr);
+        uint8_t pin = parsePin(pinStr);
+        printInputInfo(pin);
+        return;
+    }
+
+    // ===== CONFIG COMMANDS =====
+    if (streq(cmd, "SAVE")) {
+        if (saveInputConfig()) {
+            Serial.println(F("Configuration saved to EEPROM"));
+        } else {
+            Serial.println(F("ERROR: Failed to save configuration"));
+        }
+        return;
+    }
+
+    if (streq(cmd, "LOAD")) {
+        if (loadInputConfig()) {
+            Serial.println(F("Configuration loaded from EEPROM"));
+        } else {
+            Serial.println(F("ERROR: Failed to load configuration"));
+        }
+        return;
+    }
+
+    if (streq(cmd, "RESET")) {
+        Serial.println(F("WARNING: This will erase all configuration!"));
+        Serial.println(F("Type RESET CONFIRM to proceed"));
+        return;
+    }
+
+    if (streq(cmd, "RESET CONFIRM")) {
+        resetInputConfig();
+        Serial.println(F("Configuration reset"));
+        return;
+    }
+
+    // Unknown command
+    Serial.print(F("ERROR: Unknown command '"));
+    Serial.print(cmd);
+    Serial.println(F("'"));
+    Serial.println(F("Type HELP for available commands"));
+}
+
+#endif // USE_INPUT_BASED_ARCHITECTURE

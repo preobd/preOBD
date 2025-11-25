@@ -43,7 +43,7 @@ void initSDLog() {
     }
 }
 
-void sendSDLog(Sensor *ptr) {
+void sendSDLog(Input *ptr) {
     if (!logFile) {
         return;  // File not open
     }
@@ -95,7 +95,7 @@ void closeSDLog() {
 
 // Dummy functions if SD logging is disabled
 void initSDLog() {}
-void sendSDLog(Sensor *ptr) {}
+void sendSDLog(Input *ptr) {}
 void updateSDLog() {}
 void closeSDLog() {}
 

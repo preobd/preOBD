@@ -1,10 +1,12 @@
 /*
  * output_can.cpp - CAN bus output module
  * Supports both native FlexCAN (Teensy 3.x/4.x) and MCP2515 (all boards)
+ * Works with both EEPROM config and compile-time config
  */
 
-#include "output_base.h"
 #include "../config.h"
+#include "output_base.h"
+#include "../input.h"
 
 #ifdef ENABLE_CAN
 
@@ -41,7 +43,7 @@ void initCAN() {
     #endif
 }
 
-void sendCAN(Sensor *ptr) {
+void sendCAN(Input *ptr) {
     if (isnan(ptr->value)) {
         return;  // Don't send invalid data
     }
@@ -87,7 +89,7 @@ void updateCAN() {
 
 // Dummy functions if CAN is disabled
 void initCAN() {}
-void sendCAN(Sensor *ptr) {}
+void sendCAN(Input *ptr) {}
 void updateCAN() {}
 
 #endif

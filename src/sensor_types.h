@@ -1,5 +1,6 @@
 /*
  * sensor_types.h - Sensor type definitions and structures
+ * Now unified for Input-based architecture only
  */
 
 #ifndef SENSOR_TYPES_H
@@ -7,30 +8,11 @@
 
 #include <Arduino.h>
 
-// Forward declaration
-struct Sensor;
-
-// Sensor type enumeration
-enum SensorType {
-    MAX6675,
-    MAX31855,
-    THERMISTOR_LOOKUP,
-    THERMISTOR_STEINHART,
-    GENERIC_BOOST,
-    MPX4250AP,
-    VDO_2BAR,
-    VDO_5BAR,
-    VOLTAGE_DIVIDER,
-    W_PHASE_RPM,
-    BME280_TEMP,
-    BME280_PRESSURE,
-    BME280_HUMIDITY,
-    BME280_ELEVATION,
-    FLOAT_SWITCH
-};
+// Sensor enum is defined in input.h
+// Units enum defined below
 
 // Display units enumeration
-enum DisplayUnits { 
+enum DisplayUnits {
     CELSIUS,
     FAHRENHEIT,
     BAR,
@@ -44,6 +26,9 @@ enum DisplayUnits {
     FEET
 };
 
+// Type alias for compatibility with new Input-based architecture
+typedef DisplayUnits Units;
+
 // Calibration type enumeration (for type safety)
 enum CalibrationType {
     CAL_NONE,
@@ -52,7 +37,7 @@ enum CalibrationType {
     CAL_PRESSURE_POLYNOMIAL,
     CAL_PRESSURE_LINEAR,
     CAL_VOLTAGE_DIVIDER,
-    CAL_RPM
+    CAL_RPM,
 };
 
 // ===== CALIBRATION STRUCTURES =====
@@ -92,6 +77,10 @@ typedef struct {
     float poly_c;          // Polynomial coefficient C
 } PressurePolynomialCalibration;
 
+// Type aliases for compatibility with new Input-based architecture
+typedef PressureLinearCalibration LinearCalibration;
+typedef PressurePolynomialCalibration PolynomialCalibration;
+
 // Voltage divider calibration
 typedef struct {
     float r1;              // High-side resistor (ohms)
@@ -109,101 +98,8 @@ typedef struct {
     uint16_t max_rpm;        // Maximum valid RPM
 } RPMCalibration;
 
-// ===== SENSOR STRUCTURE =====
-
-typedef struct Sensor {
-    // Hardware
-    byte input;
-    
-    // OBDII
-    byte obd2pid;
-    byte obd2length;
-    
-    // Data
-    float value;              // Stored in standard units (C, bar, volts, %, meters)
-    
-    // Type and identification
-    SensorType sensorType;
-    const char *abbrName;
-    const char *displayName;
-    
-    // Display
-    DisplayUnits displayUnits;
-    
-    // Thresholds
-    float minValue;
-    float maxValue;
-    
-    // Flags
-    bool alarm;
-    bool display;
-    bool isEnabled;
-    
-    // Function pointers
-    void (*readFunction)(struct Sensor*);
-    float (*displayConvert)(float value, DisplayUnits units);
-    float (*obdConvert)(float value);  // Convert to OBDII format
-    
-    // Calibration data (type-safe via calibrationType)
-    void* calibrationData;
-    CalibrationType calibrationType;
-    
-} Sensor;
-
-// Function pointer type definitions for clarity
-typedef void (*SensorReadFunc)(Sensor*);
-typedef float (*ConvertFunc)(float, DisplayUnits);
-typedef float (*OBDConvertFunc)(float);
-
-// ===== HELPER FUNCTIONS FOR TYPE SAFETY =====
-
-// Safely get thermistor Steinhart calibration
-inline ThermistorSteinhartCalibration* getThermistorSteinhartCal(Sensor* ptr) {
-    if (ptr->calibrationType != CAL_THERMISTOR_STEINHART) {
-        return nullptr;
-    }
-    return (ThermistorSteinhartCalibration*)ptr->calibrationData;
-}
-
-// Safely get thermistor lookup calibration
-inline ThermistorLookupCalibration* getThermistorLookupCal(Sensor* ptr) {
-    if (ptr->calibrationType != CAL_THERMISTOR_LOOKUP) {
-        return nullptr;
-    }
-    return (ThermistorLookupCalibration*)ptr->calibrationData;
-}
-
-// Safely get pressure linear calibration
-inline PressureLinearCalibration* getPressureLinearCal(Sensor* ptr) {
-    if (ptr->calibrationType != CAL_PRESSURE_LINEAR) {
-        return nullptr;
-    }
-    return (PressureLinearCalibration*)ptr->calibrationData;
-}
-
-// Safely get pressure polynomial calibration
-inline PressurePolynomialCalibration* getPressurePolynomialCal(Sensor* ptr) {
-    if (ptr->calibrationType != CAL_PRESSURE_POLYNOMIAL) {
-        return nullptr;
-    }
-    return (PressurePolynomialCalibration*)ptr->calibrationData;
-}
-
-// Safely get voltage divider calibration
-inline VoltageDividerCalibration* getVoltageDividerCal(Sensor* ptr) {
-    if (ptr->calibrationType != CAL_VOLTAGE_DIVIDER) {
-        return nullptr;
-    }
-    return (VoltageDividerCalibration*)ptr->calibrationData;
-}
-
-// Safely get RPM calibration
-inline RPMCalibration* getRPMCal(Sensor* ptr) {
-    if (ptr->calibrationType != CAL_RPM) {
-        return nullptr;
-    }
-    return (RPMCalibration*)ptr->calibrationData;
-}
+// Legacy code removed: StaticSensor struct, wrapper conversion logic, and old sensor array system.
+// All code now uses unified Input-based architecture with compile-time or runtime configuration.
 
 // ===== UTILITY FUNCTIONS =====
 
