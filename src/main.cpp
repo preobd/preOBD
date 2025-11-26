@@ -58,7 +58,7 @@ void setup() {
     Serial.println(F("  \\___/ .__/\\__/_//_/___/_/  /_/___/    "));
     Serial.println(F("     /_/                                "));
     Serial.println(F("                                        "));
-    Serial.println(F("openEngine Monitoring System v0.3.1 ===="));
+    Serial.println(F("openEngine Monitoring System v0.3.2 ===="));
     Serial.println(F("                                        "));
     
     // Configure ADC for this platform
