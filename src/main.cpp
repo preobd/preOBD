@@ -58,14 +58,14 @@ void setup() {
     Serial.println(F("  \\___/ .__/\\__/_//_/___/_/  /_/___/    "));
     Serial.println(F("     /_/                                "));
     Serial.println(F("                                        "));
-    Serial.println(F("openEngine Monitoring System v1.0 ======"));
+    Serial.println(F("openEngine Monitoring System v0.3.1 ===="));
     Serial.println(F("                                        "));
     
     // Configure ADC for this platform
     setupADC();
-
-    Serial.println(F("Initializing..."));
-
+    Serial.println(F(""));
+    Serial.println(F("✓ ADC configured"));
+    
     // Initialize input manager (loads from EEPROM or config.h)
     initInputManager();
 
@@ -81,19 +81,7 @@ void setup() {
     // Note: CS pins for thermocouples are initialized in initInputManager()
     // RPM and digital sensors would be initialized here if needed
     /*
-        // Initialize chip select pins for thermocouples
-    #ifdef ENABLE_CHT
-    pinMode(CHT_INPUT, OUTPUT);
-    digitalWrite(CHT_INPUT, HIGH);
-    Serial.println(F("✓ CHT chip select initialized"));
-    #endif
-
-    #ifdef ENABLE_EGT
-    pinMode(EGT_INPUT, OUTPUT);
-    digitalWrite(EGT_INPUT, HIGH);
-    Serial.println(F("✓ EGT chip select initialized"));
-    #endif
-
+    
     // Initialize RPM sensing
     #ifdef ENABLE_ENGINE_RPM
     extern void initRPM(byte);
@@ -159,9 +147,9 @@ void setup() {
     Serial.println(F("========================================"));
     Serial.println(F("  Initialization complete!"));
 #ifdef USE_STATIC_CONFIG
-    Serial.println(F("  Mode: Input-Based (Compile-Time Config)"));
+    Serial.println(F("  Mode: Compile-Time Config"));
 #else
-    Serial.println(F("  Mode: Input-Based (EEPROM Config)"));
+    Serial.println(F("  Mode: EEPROM Config"));
 #endif
     Serial.print(F("  Active inputs: "));
     Serial.println(numActiveInputs);

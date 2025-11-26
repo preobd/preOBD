@@ -390,7 +390,7 @@ void initInputManager() {
         }
     }
 
-    Serial.print(F("Initialized "));
+    Serial.print(F("✓ Loaded "));
     Serial.print(numActiveInputs);
     Serial.println(F(" inputs from compile-time config"));
 
@@ -426,7 +426,7 @@ bool saveInputConfig() {
         }
     }
 
-    Serial.print(F("Saved "));
+    Serial.print(F("✓ Saved "));
     Serial.print(savedCount);
     Serial.println(F(" inputs to EEPROM"));
     return true;
@@ -466,7 +466,7 @@ bool loadInputConfig() {
         addr += EEPROM_INPUT_SIZE;
     }
 
-    Serial.print(F("Loaded "));
+    Serial.print(F("✓ Loaded "));
     Serial.print(numActiveInputs);
     Serial.println(F(" inputs from EEPROM"));
     return true;
