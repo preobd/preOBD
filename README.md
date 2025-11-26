@@ -260,8 +260,23 @@ Contributions welcome:
 5. What you've already tried
 
 ## License
+openEMS is licensed under a custom **MIT + NonCommercial License**.
 
-MIT License - Free for personal and commercial use.
+### What You Can Do (Personal / Noncommercial Use)
+- Use the software for personal projects
+- Modify, fork, or extend the software
+- Publish your modifications (noncommercially)
+- Learn from and build upon the source code
+- Use it for educational or research purposes
+
+### What You Cannot Do (Without Permission)
+- Sell the software
+- Bundle it into a product you sell
+- Use it in a for‑profit business
+- Monetize it in any form
+- Distribute commercial derivatives
+
+For commercial use, contact: info@preobd.com
 
 See [LICENSE](LICENSE) file for complete terms.
 
