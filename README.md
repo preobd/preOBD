@@ -80,7 +80,7 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 - Smallest memory footprint
 - No runtime configuration overhead
 
-**Runtime Mode (Teensy/Mega, experimentation):**
+**Runtime Mode (Teensy/Mega, under-development):**
 - Configure sensors via serial commands
 - Settings saved to EEPROM
 - Change configuration without recompiling
