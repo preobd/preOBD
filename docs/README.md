@@ -359,9 +359,8 @@ I2C address is typically 0x27 or 0x3F.
 
 Compatible with standard OBDII tools:
 - Torque Pro
-- RaceChrono
-- Harry's Lap Timer
 - OBDLink scan tools
+- Most OBDII diagnostic apps
 
 **Configuration:**
 ```cpp

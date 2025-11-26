@@ -193,8 +193,6 @@ openEMS/
 
 openEMS outputs standard OBDII PIDs via CAN bus, making it compatible with:
 - Torque Pro
-- RaceChrono
-- Harry's Lap Timer
 - OBDLink scan tools
 - Most OBDII diagnostic apps
 
