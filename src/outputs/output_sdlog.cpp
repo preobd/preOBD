@@ -11,8 +11,6 @@
 
 #include <SD.h>
 
-#define SD_CS_PIN 53  // Adjust for your hardware
-
 File logFile;
 unsigned long lastLogTime = 0;
 const unsigned long LOG_INTERVAL = 1000;  // Log every 1 second

@@ -39,7 +39,7 @@
 
 #ifdef ENABLE_TEST_MODE
     // Test mode trigger pin (hold LOW during boot to activate test mode)
-    #define TEST_MODE_TRIGGER_PIN 5
+    #define TEST_MODE_TRIGGER_PIN 6
 
     // Default test scenario to run on startup (0-4, or 0xFF for none)
     // 0 = Normal Operation
@@ -172,7 +172,9 @@
 #define CAN_INT 2
 #define BUZZER 3
 #define SILENCE 4
+#define SD_CS_PIN 5  // Adjust for your hardware
 #define CAN_CS 9
+
 
 // ===== ALARM CONFIGURATION =====
 #define ENABLE_ALARMS               // Comment out to globally disable all alarms
