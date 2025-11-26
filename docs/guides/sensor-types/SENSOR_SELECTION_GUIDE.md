@@ -165,7 +165,7 @@ That's it! No need to specify read functions, conversion functions, or calibrati
 
 ## What If My Sensor Isn't Listed?
 
-See `docs/ADVANCED_CALIBRATION.md` for information on:
+See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) for information on:
 - Adding custom thermistor coefficients
 - Creating custom lookup tables
 - Defining completely new sensor types

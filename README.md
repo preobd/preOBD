@@ -139,14 +139,24 @@ SAVE
 
 ## Documentation
 
+**Getting Started:**
+- **[Quick Reference](docs/getting-started/QUICK_REFERENCE.md)** - Common tasks and lookups
+- **[Directory Structure](docs/getting-started/DIRECTORY_SETUP.md)** - File organization
+
+**Sensor Guides:**
+- **[Sensor Selection Guide](docs/guides/sensor-types/SENSOR_SELECTION_GUIDE.md)** - Choose the right sensor
+- **[Pressure Sensor Guide](docs/guides/sensor-types/PRESSURE_SENSOR_GUIDE.md)** - Pressure sensor specifics
+- **[Voltage Monitoring Guide](docs/guides/sensor-types/VOLTAGE_SENSOR_GUIDE.md)** - Battery monitoring
+- **[W-Phase RPM Guide](docs/guides/sensor-types/W_PHASE_RPM_GUIDE.md)** - RPM sensing for classics
+- **[Digital Sensor Guide](docs/guides/sensor-types/DIGITAL_SENSOR_GUIDE.md)** - Float switches and digital inputs
+
+**Configuration:**
+- **[Adding Sensors](docs/guides/configuration/ADDING_SENSORS.md)** - How to add new sensors
+- **[Advanced Calibration](docs/guides/configuration/ADVANCED_CALIBRATION_GUIDE.md)** - Custom sensor setup
+- **[Display Units](docs/guides/configuration/DISPLAY_UNITS_CONFIGURATION_GUIDE.md)** - Configure display units
+
+**Complete Documentation:**
 - **[Full Documentation](docs/README.md)** - Complete system guide
-- **[Quick Reference](docs/QUICK_REFERENCE.md)** - Common tasks and lookups
-- **[Sensor Selection Guide](docs/SENSOR_SELECTION_GUIDE.md)** - Choose the right sensor
-- **[Pressure Sensor Guide](docs/PRESSURE_SENSOR_GUIDE.md)** - Pressure sensor specifics
-- **[Voltage Monitoring Guide](docs/VOLTAGE_SENSOR_GUIDE.md)** - Battery monitoring
-- **[W-Phase RPM Guide](docs/W_PHASE_RPM_GUIDE.md)** - RPM sensing for classics
-- **[Advanced Calibration](docs/ADVANCED_CALIBRATION_GUIDE.md)** - Custom sensor setup
-- **[Directory Structure](docs/DIRECTORY_SETUP.md)** - File organization
 - **[Disclaimer](DISCLAIMER.md)** - Safety information and limitations
 
 ## Project Structure
@@ -178,15 +188,24 @@ openEMS/
 │   └── test/              # Test mode system
 │
 └── docs/                   # Documentation
-    ├── README.md
-    ├── QUICK_REFERENCE.md
-    ├── SENSOR_SELECTION_GUIDE.md
-    ├── PRESSURE_SENSOR_GUIDE.md
-    ├── VOLTAGE_SENSOR_GUIDE.md
-    ├── W_PHASE_RPM_GUIDE.md
-    ├── ADVANCED_CALIBRATION_GUIDE.md
-    ├── DISCLAIMER.md
-    └── DIRECTORY_SETUP.md
+    ├── README.md           # Complete documentation
+    ├── DISCLAIMER.md       # Safety information
+    ├── getting-started/    # Getting started guides
+    │   ├── QUICK_REFERENCE.md
+    │   └── DIRECTORY_SETUP.md
+    ├── guides/             # User guides
+    │   ├── sensor-types/   # Sensor-specific guides
+    │   │   ├── SENSOR_SELECTION_GUIDE.md
+    │   │   ├── PRESSURE_SENSOR_GUIDE.md
+    │   │   ├── VOLTAGE_SENSOR_GUIDE.md
+    │   │   ├── DIGITAL_SENSOR_GUIDE.md
+    │   │   └── W_PHASE_RPM_GUIDE.md
+    │   └── configuration/  # Configuration guides
+    │       ├── ADDING_SENSORS.md
+    │       ├── ADVANCED_CALIBRATION_GUIDE.md
+    │       └── DISPLAY_UNITS_CONFIGURATION_GUIDE.md
+    └── reference/          # Reference materials
+        └── README.md
 ```
 
 ## OBDII Compatibility

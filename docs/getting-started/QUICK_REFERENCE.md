@@ -159,7 +159,7 @@ Junction → 22kΩ (3.3V) or 6.8kΩ (5V) → GND
 SET Pin5 APPLICATION ENGINE_RPM W_PHASE_RPM_12_POLE
 ```
 
-**⚠️ CRITICAL:** See [W_PHASE_RPM_GUIDE.md](W_PHASE_RPM_GUIDE.md) for voltage protection circuit. Teensy boards require 22kΩ/4.7kΩ divider with 3.3V zener!
+**⚠️ CRITICAL:** See [W_PHASE_RPM_GUIDE.md](../guides/sensor-types/W_PHASE_RPM_GUIDE.md) for voltage protection circuit. Teensy boards require 22kΩ/4.7kΩ divider with 3.3V zener!
 
 **Sensor types:**
 - `W_PHASE_RPM_12_POLE` - Most common
@@ -546,12 +546,12 @@ RPM,2450,RPM
 ## Getting More Help
 
 **Documentation:**
-- [Full Documentation](README.md) - Complete guide
-- [Sensor Selection Guide](SENSOR_SELECTION_GUIDE.md) - Choose sensors
-- [Pressure Sensor Guide](PRESSURE_SENSOR_GUIDE.md) - Pressure specifics
-- [Voltage Guide](VOLTAGE_SENSOR_GUIDE.md) - Battery monitoring
-- [RPM Guide](W_PHASE_RPM_GUIDE.md) - RPM for classics
-- [Advanced Calibration](ADVANCED_CALIBRATION_GUIDE.md) - Custom sensors
+- [Full Documentation](../README.md) - Complete guide
+- [Sensor Selection Guide](../guides/sensor-types/SENSOR_SELECTION_GUIDE.md) - Choose sensors
+- [Pressure Sensor Guide](../guides/sensor-types/PRESSURE_SENSOR_GUIDE.md) - Pressure specifics
+- [Voltage Guide](../guides/sensor-types/VOLTAGE_SENSOR_GUIDE.md) - Battery monitoring
+- [RPM Guide](../guides/sensor-types/W_PHASE_RPM_GUIDE.md) - RPM for classics
+- [Advanced Calibration](../guides/configuration/ADVANCED_CALIBRATION_GUIDE.md) - Custom sensors
 
 **Support:**
 - GitHub Issues - Bug reports

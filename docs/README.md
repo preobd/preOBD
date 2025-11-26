@@ -160,7 +160,7 @@ Auto-configured: 100kΩ/22kΩ for 3.3V, 100kΩ/6.8kΩ for 5V
 ```
 
 **W-Phase RPM:**
-See [W_PHASE_RPM_GUIDE.md](W_PHASE_RPM_GUIDE.md) for voltage protection circuit details.
+See [W_PHASE_RPM_GUIDE.md](guides/sensor-types/W_PHASE_RPM_GUIDE.md) for voltage protection circuit details.
 
 **CAN Bus:**
 
@@ -254,7 +254,7 @@ RESET       - Clear all configuration
 
 ## Sensor Library
 
-openEMS includes 30+ pre-calibrated sensor configurations. See [SENSOR_SELECTION_GUIDE.md](SENSOR_SELECTION_GUIDE.md) for the complete list.
+openEMS includes 30+ pre-calibrated sensor configurations. See [SENSOR_SELECTION_GUIDE.md](guides/sensor-types/SENSOR_SELECTION_GUIDE.md) for the complete list.
 
 ### Temperature Sensors
 
@@ -466,7 +466,7 @@ Use compile-time configuration mode and limit to 6 sensors maximum.
 
 ### Adding Custom Sensors
 
-See [ADVANCED_CALIBRATION_GUIDE.md](ADVANCED_CALIBRATION_GUIDE.md) for instructions on:
+See [ADVANCED_CALIBRATION_GUIDE.md](guides/configuration/ADVANCED_CALIBRATION_GUIDE.md) for instructions on:
 - Creating custom thermistor calibrations
 - Adding new sensor types
 - Extending the sensor library
@@ -492,7 +492,7 @@ See [ADVANCED_CALIBRATION_GUIDE.md](ADVANCED_CALIBRATION_GUIDE.md) for instructi
 
 **Before asking:**
 1. Read documentation thoroughly
-2. Check [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
+2. Check [QUICK_REFERENCE.md](getting-started/QUICK_REFERENCE.md)
 3. Review troubleshooting section
 4. Search GitHub issues
 

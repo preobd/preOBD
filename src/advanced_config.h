@@ -106,7 +106,7 @@
     // #endif
 #endif
 
-// Step 3: Add sensor definition to sensors.cpp (see ADDING_SENSORS.md)
+// Step 3: Add sensor definition to sensors.cpp (see docs/guides/configuration/ADDING_SENSORS.md)
 */
 
 // =============================================================================

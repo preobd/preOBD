@@ -53,16 +53,23 @@ openEMS/
 │
 └── docs/                       # Documentation
     ├── README.md                       # Complete documentation
-    ├── QUICK_REFERENCE.md              # Quick lookup guide
-    ├── SENSOR_SELECTION_GUIDE.md       # How to choose sensors
-    ├── PRESSURE_SENSOR_GUIDE.md        # Pressure sensor details
-    ├── VOLTAGE_SENSOR_GUIDE.md         # Voltage monitoring
-    ├── W_PHASE_RPM_GUIDE.md            # RPM sensing for classics
-    ├── DIGITAL_SENSOR_GUIDE.md         # Float switches
-    ├── ADVANCED_CALIBRATION_GUIDE.md   # Custom sensor calibration
-    ├── ADDING_SENSORS.md               # How to add new sensors
     ├── DISCLAIMER.md                   # Safety and warranty disclaimer
-    └── DIRECTORY_SETUP.md              # This file
+    ├── getting-started/                # Getting started guides
+    │   ├── QUICK_REFERENCE.md          # Quick lookup guide
+    │   └── DIRECTORY_SETUP.md          # This file
+    ├── guides/                         # User guides
+    │   ├── sensor-types/               # Sensor-specific guides
+    │   │   ├── SENSOR_SELECTION_GUIDE.md
+    │   │   ├── PRESSURE_SENSOR_GUIDE.md
+    │   │   ├── VOLTAGE_SENSOR_GUIDE.md
+    │   │   ├── DIGITAL_SENSOR_GUIDE.md
+    │   │   └── W_PHASE_RPM_GUIDE.md
+    │   └── configuration/              # Configuration guides
+    │       ├── ADDING_SENSORS.md
+    │       ├── ADVANCED_CALIBRATION_GUIDE.md
+    │       └── DISPLAY_UNITS_CONFIGURATION_GUIDE.md
+    └── reference/                      # Reference materials
+        └── README.md                   # Placeholder for future content
 ```
 
 ---
@@ -349,46 +356,58 @@ This directory contains the comprehensive test mode system for testing outputs w
 - Troubleshooting
 - **Edit:** SOMETIMES (to improve clarity or add sections)
 
-**docs/QUICK_REFERENCE.md**
+**docs/DISCLAIMER.md**
+- Safety and warranty information
+- **Edit:** RARELY (legal/safety updates only)
+
+---
+
+### Getting Started
+
+**docs/getting-started/QUICK_REFERENCE.md**
 - Fast lookup for common tasks
 - Sensor catalog summary
 - Pin assignments
 - Command reference
 - **Edit:** SOMETIMES (when adding new quick references)
 
+**docs/getting-started/DIRECTORY_SETUP.md**
+- This file - explains project structure
+- **Edit:** WHEN PROJECT STRUCTURE CHANGES
+
 ---
 
-### Sensor-Specific Guides
+### Sensor Type Guides
 
-**docs/SENSOR_SELECTION_GUIDE.md**
+**docs/guides/sensor-types/SENSOR_SELECTION_GUIDE.md**
 - How to pick the right sensor
 - Sensor catalog with examples
 - Lookup vs Steinhart comparison
 - Complete configuration examples
 - **Edit:** WHEN ADDING NEW SENSORS
 
-**docs/PRESSURE_SENSOR_GUIDE.md**
+**docs/guides/sensor-types/PRESSURE_SENSOR_GUIDE.md**
 - Everything about pressure sensors
 - VDO vs generic sensors
 - Wiring and calibration
 - Troubleshooting pressure readings
 - **Edit:** WHEN ADDING PRESSURE SENSORS
 
-**docs/VOLTAGE_SENSOR_GUIDE.md**
+**docs/guides/sensor-types/VOLTAGE_SENSOR_GUIDE.md**
 - Battery and voltage monitoring
 - Platform auto-configuration
 - Voltage divider setup
 - Calibration procedures
 - **Edit:** FOR VOLTAGE-RELATED UPDATES
 
-**docs/W_PHASE_RPM_GUIDE.md**
+**docs/guides/sensor-types/W_PHASE_RPM_GUIDE.md**
 - RPM sensing for classics without electronic ignition
 - Voltage protection circuits (CRITICAL for 3.3V boards!)
 - Wiring and calibration
 - Troubleshooting RPM readings
 - **Edit:** FOR RPM UPDATES
 
-**docs/DIGITAL_SENSOR_GUIDE.md**
+**docs/guides/sensor-types/DIGITAL_SENSOR_GUIDE.md**
 - Float switches and digital inputs
 - Normally closed vs normally open
 - Wiring and configuration
@@ -396,9 +415,16 @@ This directory contains the comprehensive test mode system for testing outputs w
 
 ---
 
-### Advanced Documentation
+### Configuration Guides
 
-**docs/ADVANCED_CALIBRATION_GUIDE.md**
+**docs/guides/configuration/ADDING_SENSORS.md**
+- How to add completely new sensor types
+- Code structure and patterns
+- Testing new sensors
+- Contributing back to project
+- **Edit:** WHEN SIMPLIFYING CONTRIBUTION PROCESS
+
+**docs/guides/configuration/ADVANCED_CALIBRATION_GUIDE.md**
 - For users with sensors not in library
 - Custom sensor calibrations
 - Adding to sensor library
@@ -406,16 +432,19 @@ This directory contains the comprehensive test mode system for testing outputs w
 - Lookup table creation
 - **Edit:** WHEN ADDING CALIBRATION METHODS
 
-**docs/ADDING_SENSORS.md**
-- How to add completely new sensor types
-- Code structure and patterns
-- Testing new sensors
-- Contributing back to project
-- **Edit:** WHEN SIMPLIFYING CONTRIBUTION PROCESS
+**docs/guides/configuration/DISPLAY_UNITS_CONFIGURATION_GUIDE.md**
+- Configuring display units (Celsius/Fahrenheit, PSI/bar, etc.)
+- Unit conversion settings
+- **Edit:** WHEN ADDING NEW UNIT OPTIONS
 
-**docs/DIRECTORY_SETUP.md**
-- This file - explains project structure
-- **Edit:** WHEN STRUCTURE CHANGES
+---
+
+### Reference Materials
+
+**docs/reference/README.md**
+- Placeholder for future reference documentation
+- Pin mappings, command reference, troubleshooting, etc.
+- **Edit:** WHEN ADDING REFERENCE CONTENT
 
 ---
 
@@ -671,11 +700,11 @@ Input = {
 
 **File organization questions:**
 - Check this document first
-- See docs/README.md for system overview
+- See [docs/README.md](../README.md) for system overview
 - Ask in GitHub Discussions
 
 **Configuration questions:**
-- See docs/QUICK_REFERENCE.md
+- See [docs/getting-started/QUICK_REFERENCE.md](QUICK_REFERENCE.md)
 - Check relevant sensor guide
 - Post in GitHub Discussions with your config.h
 
