@@ -7,7 +7,7 @@
 
 #include "../config.h"
 
-#ifdef USE_INPUT_BASED_ARCHITECTURE
+#ifndef USE_STATIC_CONFIG
 
 #include "serial_config.h"
 #include "input_manager.h"
@@ -89,7 +89,10 @@ void processSerialCommands() {
     }
 }
 
-// Parse pin number (A0-A15 or digital)
+/**
+ * Parse a pin string into a pin number.
+ * Accepts "A0"-"A15" for analog pins, or numeric strings for digital pins.
+ */
 static uint8_t parsePin(const char* pinStr) {
     if (!pinStr) return 0;
 
@@ -170,19 +173,19 @@ void handleSerialCommand(char* cmd) {
     trim(cmd);
     toUpper(cmd);
 
-    // ===== HELP =====
+    // ===== HELP & INFO COMMANDS =====
     if (streq(cmd, "HELP") || streq(cmd, "?")) {
         Serial.println();
         Serial.println(F("Available Commands:"));
         Serial.println();
         Serial.println(F("LIST Commands:"));
-        Serial.println(F("  LIST INPUTS        - Show all configured inputs"));
-        Serial.println(F("  LIST TYPES         - Show available Type presets"));
-        Serial.println(F("  LIST SENSOR_TYPES  - Show available Sensor Types"));
+        Serial.println(F("  LIST INPUTS         - Show all configured inputs"));
+        Serial.println(F("  LIST APPLICATIONS   - Show available Type presets"));
+        Serial.println(F("  LIST SENSORS        - Show available Sensor Types"));
         Serial.println();
         Serial.println(F("SET Commands:"));
-        Serial.println(F("  SET <pin> TYPE <type>"));
-        Serial.println(F("  SET <pin> SENSOR_TYPE <sensor>"));
+        Serial.println(F("  SET <pin> APPLICATION <application>"));
+        Serial.println(F("  SET <pin> SENSOR <sensor>"));
         Serial.println(F("  SET <pin> NAME <name>"));
         Serial.println(F("  SET <pin> DISPLAY_NAME <name>"));
         Serial.println(F("  SET <pin> UNITS <units>"));
@@ -200,8 +203,8 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  RESET   - Clear all configuration"));
         Serial.println();
         Serial.println(F("Examples:"));
-        Serial.println(F("  SET A2 TYPE CHT"));
-        Serial.println(F("  SET A2 SENSOR_TYPE MAX6675"));
+        Serial.println(F("  SET A2 APPLICATION CHT"));
+        Serial.println(F("  SET A2 SENSOR MAX6675"));
         Serial.println(F("  SET A2 UNITS CELSIUS"));
         Serial.println(F("  ENABLE A2"));
         Serial.println(F("  SAVE"));
@@ -209,6 +212,7 @@ void handleSerialCommand(char* cmd) {
     }
 
     // ===== LIST COMMANDS =====
+    // Query available presets and show configured inputs
     if (streq(cmd, "LIST INPUTS")) {
         listAllInputs();
         return;
@@ -225,6 +229,7 @@ void handleSerialCommand(char* cmd) {
     }
 
     // ===== SET COMMANDS =====
+    // Modify input configuration - Syntax: SET <pin> <field> <value>
     if (strncmp(cmd, "SET ", 4) == 0) {
         char* rest = cmd + 4;
         trim(rest);
@@ -232,7 +237,9 @@ void handleSerialCommand(char* cmd) {
         // Find first space to separate pin from field
         char* firstSpace = strchr(rest, ' ');
         if (!firstSpace) {
-            Serial.println(F("ERROR: Invalid SET command"));
+            Serial.println(F("ERROR: Invalid SET syntax"));
+            Serial.println(F("  Usage: SET <pin> <field> <value>"));
+            Serial.println(F("  Example: SET A0 APPLICATION CHT"));
             return;
         }
 
@@ -250,7 +257,10 @@ void handleSerialCommand(char* cmd) {
             trim(appStr);
             Application app = parseApplication(appStr);
             if (app == APP_NONE) {
-                Serial.println(F("ERROR: Invalid Application"));
+                Serial.print(F("ERROR: Unknown application '"));
+                Serial.print(appStr);
+                Serial.println(F("'"));
+                Serial.println(F("  Hint: Use 'LIST APPLICATIONS' to see valid options"));
                 return;
             }
             if (setInputApplication(pin, app)) {
@@ -268,7 +278,10 @@ void handleSerialCommand(char* cmd) {
             trim(sensorStr);
             Sensor sensor = parseSensor(sensorStr);
             if (sensor == SENSOR_NONE) {
-                Serial.println(F("ERROR: Invalid Sensor"));
+                Serial.print(F("ERROR: Unknown sensor '"));
+                Serial.print(sensorStr);
+                Serial.println(F("'"));
+                Serial.println(F("  Hint: Use 'LIST SENSORS' to see valid options"));
                 return;
             }
             if (setInputSensor(pin, sensor)) {
@@ -347,7 +360,8 @@ void handleSerialCommand(char* cmd) {
         return;
     }
 
-    // ===== ENABLE/DISABLE =====
+    // ===== ENABLE/DISABLE COMMANDS =====
+    // Control input active state
     if (strncmp(cmd, "ENABLE ", 7) == 0) {
         char* pinStr = cmd + 7;
         trim(pinStr);
@@ -372,7 +386,7 @@ void handleSerialCommand(char* cmd) {
         return;
     }
 
-    // ===== CLEAR =====
+    // ===== CLEAR COMMAND =====
     if (strncmp(cmd, "CLEAR ", 6) == 0) {
         char* pinStr = cmd + 6;
         trim(pinStr);
@@ -385,7 +399,7 @@ void handleSerialCommand(char* cmd) {
         return;
     }
 
-    // ===== INFO =====
+    // ===== INFO COMMAND =====
     if (strncmp(cmd, "INFO ", 5) == 0) {
         char* pinStr = cmd + 5;
         trim(pinStr);
@@ -394,7 +408,8 @@ void handleSerialCommand(char* cmd) {
         return;
     }
 
-    // ===== CONFIG COMMANDS =====
+    // ===== PERSISTENCE COMMANDS =====
+    // EEPROM save/load/reset
     if (streq(cmd, "SAVE")) {
         if (saveInputConfig()) {
             Serial.println(F("Configuration saved to EEPROM"));
@@ -432,4 +447,4 @@ void handleSerialCommand(char* cmd) {
     Serial.println(F("Type HELP for available commands"));
 }
 
-#endif // USE_INPUT_BASED_ARCHITECTURE
+#endif // USE_STATIC_CONFIG

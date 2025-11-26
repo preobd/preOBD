@@ -4,6 +4,50 @@
  * Core structure for runtime-configurable sensor inputs.
  * Each Input represents a physical pin that can be assigned an Application (preset)
  * and Sensor (hardware device) at runtime via serial commands or EEPROM.
+ *
+ * ============================================================================
+ * ARCHITECTURE OVERVIEW
+ * ============================================================================
+ *
+ * The system uses a two-level hierarchy:
+ *
+ *   APPLICATION (what you're measuring)
+ *       │
+ *       ├── CHT (Cylinder Head Temperature)
+ *       ├── OIL_PRESSURE
+ *       ├── COOLANT_TEMP
+ *       └── ... (see Application enum)
+ *
+ *   SENSOR (hardware device)
+ *       │
+ *       ├── MAX6675 (K-type thermocouple amplifier)
+ *       ├── VDO_120C_LOOKUP (VDO thermistor, lookup table)
+ *       ├── VDO_5BAR (VDO pressure sender)
+ *       └── ... (see Sensor enum)
+ *
+ * When you assign an Application to a pin, it loads defaults from
+ * ApplicationPreset (application_presets.h):
+ *   - Default sensor type
+ *   - Display name and abbreviation
+ *   - Alarm thresholds
+ *   - OBD-II PID mapping
+ *
+ * You can then override the sensor type if using different hardware.
+ * The Sensor determines which read function and calibration data to use.
+ *
+ * ============================================================================
+ * MEMORY LAYOUT
+ * ============================================================================
+ *
+ * Input struct: ~100 bytes each
+ * - Stored in RAM (inputs[] array)
+ * - Calibration data pointed to PROGMEM (not copied)
+ * - Custom calibration stored in RAM only if overridden
+ *
+ * For Arduino Uno (2KB RAM), practical limit is ~10 inputs.
+ * For Teensy/Mega, can support 20+ inputs easily.
+ *
+ * ============================================================================
  */
 
 #ifndef INPUT_H
@@ -22,22 +66,30 @@ struct Input;
 // High-level application presets (CHT, OIL_PRESSURE, etc.)
 enum Application {
     APP_NONE = 0,
-    CHT,
-    EGT,
-    COOLANT_TEMP,
-    OIL_TEMP,
-    TCASE_TEMP,
-    OIL_PRESSURE,
-    BOOST_PRESSURE,
-    FUEL_PRESSURE,
-    PRIMARY_BATTERY,
-    AUXILIARY_BATTERY,
-    COOLANT_LEVEL,
-    AMBIENT_TEMP,
-    BAROMETRIC_PRESSURE,
-    HUMIDITY,
-    ELEVATION,
-    ENGINE_RPM
+
+    // Temperature measurements
+    CHT,                    // Cylinder Head Temperature
+    EGT,                    // Exhaust Gas Temperature
+    COOLANT_TEMP,           // Engine coolant / water temperature
+    OIL_TEMP,               // Engine oil temperature
+    TCASE_TEMP,             // Transfer case / transmission temperature
+    AMBIENT_TEMP,           // Outside air temperature
+
+    // Pressure measurements
+    OIL_PRESSURE,           // Engine oil pressure
+    BOOST_PRESSURE,         // Turbo/supercharger boost
+    FUEL_PRESSURE,          // Fuel system pressure
+    BAROMETRIC_PRESSURE,    // Atmospheric pressure (altitude)
+
+    // Electrical measurements
+    PRIMARY_BATTERY,        // Main vehicle battery
+    AUXILIARY_BATTERY,      // Secondary/aux battery
+
+    // Other measurements
+    COOLANT_LEVEL,          // Coolant reservoir level (float switch)
+    HUMIDITY,               // Relative humidity (BME280)
+    ELEVATION,              // Calculated altitude (BME280)
+    ENGINE_RPM              // Engine speed via W-phase
 };
 
 // ===== SENSOR (HARDWARE DEVICE) =====

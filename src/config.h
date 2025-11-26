@@ -11,7 +11,7 @@
  *   To enable: Leave USE_STATIC_CONFIG commented out
  *
  * MODE 2: Compile-Time Config [RECOMMENDED]
- *   - Configure sensors at compile time in sensors_config.h
+ *   - Configure sensors at compile time in config.h
  *   - No EEPROM, no serial config overhead
  *   - Smaller footprint than Mode 1
  *   - Recommended for: Arduino Uno, memory-constrained boards
@@ -95,20 +95,22 @@
 // NOTE: Voltage is always displayed in VOLTS
 // NOTE: Humidity is always displayed in PERCENT
 
-// ===== COMPILE-TIME SENSOR CONFIGURATION (MODE 2 ONLY) =====
+// ===== SENSOR DEFINITIONS (Compile-Time Mode Only) =====
 // This section is ONLY used when USE_STATIC_CONFIG is defined above.
 // For EEPROM mode (MODE 1), configure sensors via serial commands instead.
 //
-// Each input is defined with three simple parameters:
-//   INPUT_N_PIN         - Analog or digital pin number
-//   INPUT_N_APPLICATION - Measurement type (CHT, OIL_TEMP, etc.)
-//   INPUT_N_SENSOR      - Hardware device type (MAX6675, VDO_150C_STEINHART, etc.)
+// Each input needs three defines:
+//   INPUT_N_PIN         - Physical pin (A0-A15 for analog, or digital pin)
+//   INPUT_N_APPLICATION - What you're measuring (from Application enum)
+//   INPUT_N_SENSOR      - Hardware type (from Sensor enum)
 //
-// All metadata (display names, OBD2 PIDs, alarm thresholds, conversion functions)
-// is automatically populated from application_presets.h and sensor_library.h.
+// Optional per-input overrides:
+//   INPUT_N_UNITS       - Override display units (e.g., FAHRENHEIT)
 //
-// CUSTOM CALIBRATIONS:
-// To override default sensor calibrations, see advanced_config.h for examples.
+// The system auto-populates display names, alarm thresholds, OBD-II PIDs,
+// and calibration data from the application presets and sensor library.
+//
+// For custom calibrations, see advanced_config.h
 
 #ifdef USE_STATIC_CONFIG
     // Include the enums we need from the input-based architecture

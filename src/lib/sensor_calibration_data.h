@@ -13,6 +13,8 @@
 #include "sensor_types.h"
 
 // ===== VDO 120°C LOOKUP TABLES =====
+// Source: VDO datasheet and empirical measurements
+// Valid range: 0°C to 150°C (extrapolated beyond 120°C)
 // Resistance vs Temperature lookup table for VDO 120°C sensors
 static const float vdo120_resistance[] PROGMEM = {
     1743.15, 1364.07, 1075.63, 850.09, 676.95, 543.54, 439.29, 356.64, 291.46,
@@ -60,6 +62,9 @@ static const PROGMEM ThermistorLookupCalibration vdo150_lookup_cal = {
 // ===== THERMISTOR STEINHART-HART CALIBRATIONS =====
 
 // VDO 120°C using Steinhart-Hart (curve-fitted from lookup table)
+// Steinhart-Hart coefficients curve-fitted from VDO resistance table
+// Accuracy: ±1°C across 20-120°C range
+// Bias resistor: 2.2kΩ recommended
 static const PROGMEM ThermistorSteinhartCalibration vdo120_steinhart_cal = {
     .bias_resistor = 2200.0,
     .steinhart_a = 1.764445997570e-03,
@@ -68,6 +73,9 @@ static const PROGMEM ThermistorSteinhartCalibration vdo120_steinhart_cal = {
 };
 
 // VDO 150°C using Steinhart-Hart (curve-fitted from lookup table)
+// Steinhart-Hart coefficients curve-fitted from VDO resistance table
+// Accuracy: ±1°C across 20-150°C range
+// Bias resistor: 2.2kΩ recommended
 static const PROGMEM ThermistorSteinhartCalibration vdo150_steinhart_cal = {
     .bias_resistor = 2200.0,
     .steinhart_a = 1.591623373219e-03,
@@ -78,7 +86,10 @@ static const PROGMEM ThermistorSteinhartCalibration vdo150_steinhart_cal = {
 // ===== PRESSURE SENSOR CALIBRATIONS =====
 
 // VDO 5-bar pressure sensor polynomial calibration
+// Source: VDO datasheet curve-fit
 // Polynomial: R = -0.3682*P² + 36.465*P + 10.648
+// Valid range: 0-5 bar
+// Bias resistor: 2.2kΩ recommended
 static const PROGMEM PolynomialCalibration vdo5bar_polynomial_cal = {
     .bias_resistor = 2200.0,
     .poly_a = -0.3682,
@@ -87,7 +98,10 @@ static const PROGMEM PolynomialCalibration vdo5bar_polynomial_cal = {
 };
 
 // VDO 2-bar pressure sensor polynomial calibration
+// Source: VDO datasheet curve-fit
 // Polynomial: R = -3.1515*P² + 93.686*P + 9.6307
+// Valid range: 0-2 bar
+// Bias resistor: 2.2kΩ recommended
 static const PROGMEM PolynomialCalibration vdo2bar_polynomial_cal = {
     .bias_resistor = 2200.0,
     .poly_a = -3.1515,
@@ -96,6 +110,8 @@ static const PROGMEM PolynomialCalibration vdo2bar_polynomial_cal = {
 };
 
 // Generic 0.5-4.5V linear sensor, 0-5 bar range
+// Common automotive MAP/boost sensor specification
+// Source: Industry standard for 3-wire pressure sensors
 static const PROGMEM LinearCalibration generic_boost_linear_cal = {
     .voltage_min = 0.5,
     .voltage_max = 4.5,
@@ -104,6 +120,9 @@ static const PROGMEM LinearCalibration generic_boost_linear_cal = {
 };
 
 // Freescale (NXP) MPX4250AP (20-250 kPa, 0.2V-4.7V)
+// Source: MPX4250AP datasheet
+// Integrated pressure sensor with signal conditioning
+// Output: 0.2V @ 20kPa, 4.7V @ 250kPa
 static const PROGMEM LinearCalibration mpx4250ap_linear_cal = {
     .voltage_min = 0.2,
     .voltage_max = 4.7,

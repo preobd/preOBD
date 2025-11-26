@@ -11,7 +11,7 @@
 
 #include "../config.h"
 
-#ifdef USE_INPUT_BASED_ARCHITECTURE
+#ifndef USE_STATIC_CONFIG
 
 #include <Arduino.h>
 
@@ -24,6 +24,6 @@ void processSerialCommands();
 // Handle a single command (char* to avoid String class RAM overhead)
 void handleSerialCommand(char* cmd);
 
-#endif // USE_INPUT_BASED_ARCHITECTURE
+#endif // USE_STATIC_CONFIG
 
 #endif // SERIAL_CONFIG_H

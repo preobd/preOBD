@@ -61,19 +61,13 @@ void setup() {
     Serial.println(F("openEngine Monitoring System v0.3.2 ===="));
     Serial.println(F("                                        "));
     
-    // Configure ADC for this platform
-    setupADC();
-    Serial.println(F(""));
-    Serial.println(F("✓ ADC configured"));
-    
     // Initialize input manager (loads from EEPROM or config.h)
     initInputManager();
 
-#ifndef USE_STATIC_CONFIG
-    // Initialize serial configuration interface (only in EEPROM mode)
-    initSerialConfig();
-#endif
-
+    // Configure ADC for this platform
+    setupADC();
+    Serial.println(F("✓ ADC configured"));
+    
     // Initialize SPI for thermocouples and other SPI sensors
     SPI.begin();
     Serial.println(F("✓ SPI bus initialized"));
@@ -153,6 +147,17 @@ void setup() {
 #endif
     Serial.print(F("  Active inputs: "));
     Serial.println(numActiveInputs);
+    Serial.print(F("  System voltage: "));
+    Serial.print(SYSTEM_VOLTAGE);
+    Serial.println(F("V"));
+    Serial.print(F("  ADC reference: "));
+    Serial.print(AREF_VOLTAGE);
+    Serial.println(F("V"));
+    Serial.print(F("  ADC resolution: "));
+    Serial.print(ADC_RESOLUTION);
+    Serial.println(F(" bits"));
+    Serial.print(F("  ADC max value: "));
+    Serial.println(ADC_MAX_VALUE);
     Serial.println(F("========================================"));
     Serial.println(F(""));
 
@@ -185,6 +190,11 @@ void setup() {
     } else {
         Serial.println(F("Test mode available (pin 5 is HIGH, normal operation)"));
     }
+#endif
+
+#ifndef USE_STATIC_CONFIG
+    // Initialize serial configuration interface (only in EEPROM mode)
+    initSerialConfig();
 #endif
 }
 

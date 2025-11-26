@@ -1,9 +1,20 @@
 /*
  * sensor_library.h - Hardware Sensor Library
  *
- * Defines hardware-specific sensors (MAX6675, VDO_5BAR, etc.) with their
- * read functions, conversion functions, and calibration data. These live in
- * flash memory and are referenced when setting up inputs.
+ * This file defines the catalog of supported sensors. Each entry maps a
+ * Sensor enum value to:
+ *   - Human-readable name
+ *   - Read function (how to get data from hardware)
+ *   - Measurement type (temperature, pressure, etc.)
+ *   - Calibration type and default calibration data
+ *
+ * HOW TO ADD A NEW SENSOR:
+ * 1. Add enum value to Sensor in input.h
+ * 2. Add calibration data to sensor_calibration_data.h (if needed)
+ * 3. Add SensorInfo entry to SENSOR_LIBRARY[] below
+ * 4. Add string parsing to serial_config.cpp (runtime mode)
+ *
+ * MEMORY: All data here is stored in PROGMEM (flash), not RAM.
  */
 
 #ifndef SENSOR_LIBRARY_H

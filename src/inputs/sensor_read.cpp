@@ -23,42 +23,68 @@ extern Adafruit_BME280 bme;
 
 // ===== UTILITY FUNCTIONS =====
 
-// Linear interpolation with PROGMEM support
-float interpolate(float X, byte size, const float* x, const float* y) {
+/**
+ * Linear interpolation in a PROGMEM lookup table.
+ *
+ * Performs linear interpolation to find a Y value for a given X value in a
+ * pair of lookup tables stored in flash memory (PROGMEM).
+ *
+ * Commonly used for thermistor resistance-to-temperature conversion, where
+ * resistance values are stored in descending order (high resistance = low temp).
+ *
+ * @param value       The X value to look up
+ * @param tableSize   Number of entries in the lookup tables
+ * @param xTable      X values in PROGMEM (must be sorted, typically descending)
+ * @param yTable      Corresponding Y values in PROGMEM
+ * @return Interpolated Y value, or NAN if lookup fails
+ *
+ * @note X table is traversed backwards assuming descending order.
+ *       For ascending tables, modify the iteration direction.
+ */
+float interpolate(float value, byte tableSize, const float* xTable, const float* yTable) {
     // Handle edge cases - read from PROGMEM
-    float x0 = READ_FLOAT_PROGMEM(x[0]);
-    float xLast = READ_FLOAT_PROGMEM(x[size-1]);
+    float x0 = READ_FLOAT_PROGMEM(xTable[0]);
+    float xLast = READ_FLOAT_PROGMEM(xTable[tableSize-1]);
 
-    if (X >= x0) return READ_FLOAT_PROGMEM(y[0]);
-    if (X <= xLast) return READ_FLOAT_PROGMEM(y[size-1]);
+    if (value >= x0) return READ_FLOAT_PROGMEM(yTable[0]);
+    if (value <= xLast) return READ_FLOAT_PROGMEM(yTable[tableSize-1]);
 
     // Find the right segment
-    for (int i = size-1; i >= 0; i--) {
-        float xi = READ_FLOAT_PROGMEM(x[i]);
-        float xi_prev = READ_FLOAT_PROGMEM(x[i-1]);
+    // Iterate backwards since tables are typically in descending order
+    for (int i = tableSize-1; i >= 0; i--) {
+        float xi = READ_FLOAT_PROGMEM(xTable[i]);
+        float xi_prev = READ_FLOAT_PROGMEM(xTable[i-1]);
 
-        if (X >= xi && X <= xi_prev) {
+        if (value >= xi && value <= xi_prev) {
             // Linear interpolation: y = y1 + ((x – x1) / (x2 – x1)) * (y2 – y1)
-            float yi = READ_FLOAT_PROGMEM(y[i]);
-            float xi_next = READ_FLOAT_PROGMEM(x[i+1]);
-            float yi_next = READ_FLOAT_PROGMEM(y[i+1]);
+            float yi = READ_FLOAT_PROGMEM(yTable[i]);
+            float xi_next = READ_FLOAT_PROGMEM(xTable[i+1]);
+            float yi_next = READ_FLOAT_PROGMEM(yTable[i+1]);
 
-            return yi + ((X - xi) / (xi_next - xi)) * (yi_next - yi);
+            return yi + ((value - xi) / (xi_next - xi)) * (yi_next - yi);
         }
     }
     return NAN;
 }
 
+// Readings within this margin of 0 or ADC_MAX are considered "railed"
+// (sensor disconnected, shorted, or out of range)
+#define ADC_RAIL_MARGIN 3
+
 // Centralized ADC reading with validation
 // Reads analog pin twice (discarding first reading) and validates range
 // Returns: ADC reading value, sets isValid to false if reading is out of range
 int readAnalogPin(int pin, bool* isValid) {
-    int reading = analogRead(pin);
-    delay(10);
-    reading = analogRead(pin);  // Discard first reading
+    // First reading after switching pins may be inaccurate due to ADC multiplexer
+    // settling and sample-and-hold capacitor charging. Read twice, keep second.
+    // Note: 10ms delay between reads improves stability but is currently disabled
+    // to minimize loop time. Uncomment if experiencing noisy readings.
+    analogRead(pin);              // Discard first reading (multiplexer settling)
+    //delay(10);                  // Optional: Allow ADC input to stabilize
+    int reading = analogRead(pin); // Actual measurement
 
     // Check if reading is within valid range (not stuck at rails)
-    *isValid = (reading < (ADC_MAX_VALUE - 3) && reading > 3);
+    *isValid = (reading < (ADC_MAX_VALUE - ADC_RAIL_MARGIN) && reading > ADC_RAIL_MARGIN);
     return reading;
 }
 

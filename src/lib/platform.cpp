@@ -46,20 +46,4 @@ void setupADC() {
         analogReadResolution(ADC_RESOLUTION);
         #endif
     #endif
-
-    // Print system configuration
-    Serial.println(F("=== System Configuration ==="));
-    Serial.print(F("System voltage: "));
-    Serial.print(SYSTEM_VOLTAGE);
-    Serial.println(F("V"));
-    Serial.print(F("ADC reference: "));
-    Serial.print(AREF_VOLTAGE);
-    Serial.println(F("V"));
-    Serial.print(F("ADC resolution: "));
-    Serial.print(ADC_RESOLUTION);
-    Serial.println(F(" bits"));
-    Serial.print(F("ADC max value: "));
-    Serial.println(ADC_MAX_VALUE);
-
-    Serial.println(F("========================================"));
 }

@@ -14,11 +14,14 @@
 Input inputs[MAX_INPUTS];
 uint8_t numActiveInputs = 0;
 
-// ===== EEPROM CONSTANTS =====
-#define EEPROM_MAGIC 0x4F454D53      // "OEMS"
-#define EEPROM_VERSION 1
-#define EEPROM_HEADER_SIZE 8
-#define EEPROM_INPUT_SIZE sizeof(Input)
+// ===== EEPROM LAYOUT =====
+// EEPROM stores configuration persistently for runtime mode.
+// Layout: [Header (8 bytes)] [Input 0] [Input 1] ... [Input N]
+
+#define EEPROM_MAGIC 0x4F454D53            // "OEMS" in ASCII - validates EEPROM has our data
+#define EEPROM_VERSION 1                   // Increment when Input struct changes (forces re-config)
+#define EEPROM_HEADER_SIZE sizeof(EEPROMHeader)  // Header size
+#define EEPROM_INPUT_SIZE sizeof(Input)    // ~100 bytes per input
 
 struct EEPROMHeader {
     uint32_t magic;
@@ -33,7 +36,39 @@ struct EEPROMHeader {
 // Include custom calibrations for static builds
 #include "../advanced_config.h"
 
-// Helper macro to populate a single input from config.h defines
+/*
+ * ============================================================================
+ * POPULATE_INPUT Macro System
+ * ============================================================================
+ *
+ * PURPOSE:
+ * Converts compile-time config.h definitions into runtime Input structures.
+ * This must be a macro (not a function) because we need C preprocessor token
+ * pasting (##) to read INPUT_0_PIN, INPUT_1_PIN, etc.
+ *
+ * HOW IT WORKS:
+ * 1. Reads INPUT_N_PIN, INPUT_N_APPLICATION, INPUT_N_SENSOR from config.h
+ * 2. Loads default values from ApplicationPreset (flash)
+ * 3. Loads sensor info from SensorInfo (flash)
+ * 4. Optionally applies INPUT_N_UNITS override if defined
+ * 5. Optionally applies INPUT_N_CUSTOM_CALIBRATION if defined
+ *
+ * THE _POPULATE_UNITS_N PATTERN:
+ * We define empty placeholder macros (_POPULATE_UNITS_0, _POPULATE_UNITS_1, etc.)
+ * that do nothing by default. If INPUT_N_UNITS is defined in config.h, we
+ * #undef and redefine the corresponding _POPULATE_UNITS_N to apply the override.
+ * This allows optional per-input unit overrides without #ifdef inside the macro.
+ *
+ * Same pattern applies to _POPULATE_CUSTOM_CAL_N for calibration overrides.
+ *
+ * DEBUGGING:
+ * If inputs aren't populating correctly:
+ * 1. Verify INPUT_N_PIN/APPLICATION/SENSOR are all defined in config.h
+ * 2. Check that N matches idx (INPUT_0 -> index 0, INPUT_1 -> index 1)
+ * 3. Add Serial.print() statements inside the macro temporarily
+ *
+ * ============================================================================
+ */
 #define POPULATE_INPUT(N, idx) \
     do { \
         Input* input = &inputs[idx]; \
@@ -488,6 +523,12 @@ void resetInputConfig() {
 }
 
 // ===== HELPER FUNCTIONS =====
+
+/**
+ * Find an input configuration by its physical pin number.
+ * @param pin  Pin number (use A0, A1, etc. for analog pins)
+ * @return Pointer to Input struct, or nullptr if pin not configured
+ */
 Input* getInputByPin(uint8_t pin) {
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         if (inputs[i].pin == pin) {
@@ -497,6 +538,12 @@ Input* getInputByPin(uint8_t pin) {
     return nullptr;
 }
 
+/**
+ * Find an input configuration by its array index.
+ * @param index  Array index (0 to MAX_INPUTS-1)
+ * @return Pointer to Input struct, or nullptr if index out of range
+ * @note  Unlike getInputByPin(), this returns even unconfigured slots
+ */
 Input* getInputByIndex(uint8_t index) {
     if (index < MAX_INPUTS) {
         return &inputs[index];
@@ -504,6 +551,11 @@ Input* getInputByIndex(uint8_t index) {
     return nullptr;
 }
 
+/**
+ * Get the array index for a given pin number.
+ * @param pin  Pin number to search for
+ * @return Array index (0 to MAX_INPUTS-1), or 0xFF if not found
+ */
 uint8_t getInputIndex(uint8_t pin) {
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         if (inputs[i].pin == pin) {
@@ -513,7 +565,10 @@ uint8_t getInputIndex(uint8_t pin) {
     return 0xFF;  // Not found
 }
 
-// Find first available slot
+/**
+ * Find the first unused slot in the inputs array.
+ * @return Array index of free slot, or 0xFF if array is full
+ */
 static uint8_t findFreeSlot() {
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         if (inputs[i].pin == 0xFF) {
@@ -532,7 +587,10 @@ bool setInputApplication(uint8_t pin, Application app) {
     if (input == nullptr) {
         uint8_t slot = findFreeSlot();
         if (slot == 0xFF) {
-            Serial.println(F("ERROR: No free input slots"));
+            Serial.print(F("ERROR: No free input slots (max "));
+            Serial.print(MAX_INPUTS);
+            Serial.println(F(" inputs)"));
+            Serial.println(F("  Hint: Use 'CLEAR <pin>' to remove an existing input"));
             return false;
         }
         input = &inputs[slot];
