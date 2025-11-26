@@ -5,6 +5,7 @@
 
 #include "output_base.h"
 #include "../config.h"
+#include "../lib/sensor_library.h"
 
 #ifdef ENABLE_SD_LOGGING
 
@@ -56,9 +57,9 @@ void sendSDLog(Input *ptr) {
     if (isnan(ptr->value)) {
         return;  // Don't log invalid data
     }
-    
+
     // Convert to display units for logging
-    float displayValue = ptr->displayConvert(ptr->value, ptr->displayUnits);
+    float displayValue = getDisplayConvertFunc(ptr->measurementType)(ptr->value, ptr->displayUnits);
 
     // Write CSV line: timestamp, sensor name, value, units
     logFile.print(millis());

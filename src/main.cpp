@@ -7,14 +7,14 @@
 #include <SPI.h>
 #include <Wire.h>
 #include "config.h"
-#include "platform.h"
+#include "lib/platform.h"
 
 // Input-based architecture (supports both EEPROM and compile-time config)
-#include "sensor_types.h"
-#include "input.h"
-#include "input_manager.h"
+#include "lib/sensor_types.h"
+#include "inputs/input.h"
+#include "inputs/input_manager.h"
 #ifndef USE_STATIC_CONFIG
-    #include "serial_config.h"  // Only needed for EEPROM/serial config mode
+    #include "inputs/serial_config.h"  // Only needed for EEPROM/serial config mode
 #endif
 #include "outputs/output_base.h"
 
@@ -32,6 +32,11 @@ extern void initAlarm();
 extern void checkSensorAlarm(Input*);
 extern void updateAlarm();
 
+// Test mode (if enabled)
+#ifdef ENABLE_TEST_MODE
+#include "test/test_mode.h"
+#endif
+
 // BME280 sensor (if any BME280 sensors are configured)
 #ifdef USE_BME280
 #include <Adafruit_Sensor.h>
@@ -39,64 +44,6 @@ extern void updateAlarm();
 Adafruit_BME280 bme;
 #endif
 
-void setupADC() {
-    // Configure analog reference based on platform
-    #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
-        // Arduino Uno/Nano - 5V system
-        analogReference(DEFAULT);  // 5V reference        
-    #elif defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
-        // Arduino Mega - 5V system
-        analogReference(DEFAULT);  // 5V reference
-    #elif defined(__MK20DX256__) || defined(__MK20DX128__)
-        // Teensy 3.1/3.2 - 3.3V system
-        analogReference(DEFAULT);  // 3.3V reference
-        analogReadResolution(ADC_RESOLUTION);
-        analogReadAveraging(4);  // Average 4 samples for stability
-    #elif defined(__MK64FX512__) || defined(__MK66FX1M0__)
-        // Teensy 3.5/3.6 - 3.3V system
-        analogReference(DEFAULT);  // 3.3V reference
-        analogReadResolution(ADC_RESOLUTION);
-        analogReadAveraging(4);        
-    #elif defined(__IMXRT1062__)
-        // Teensy 4.0/4.1 - 3.3V system
-        analogReadResolution(ADC_RESOLUTION);
-        analogReadAveraging(4);
-    #elif defined(ARDUINO_SAM_DUE)
-        // Arduino Due - 3.3V system
-        analogReadResolution(ADC_RESOLUTION);
-    #elif defined(ESP32)
-        // ESP32 - 3.3V system
-        analogReadResolution(ADC_RESOLUTION);
-        // Set attenuation for full 0-3.3V range
-        // ADC_11db = 0-3.3V (default but less accurate)
-        // ADC_6db = 0-2.2V (more accurate, use if voltage divider allows)
-        analogSetAttenuation(ADC_11db);
-        Serial.println(F("ADC: Attenuation set to 11db (0-3.3V range)"));
-        Serial.println(F("NOTE: ESP32 ADC is non-linear, consider calibration"));
-    #else
-        // Unknown platform - use default
-        Serial.println(F("WARNING: Unknown platform, using default ADC settings"));
-        #ifdef ADC_RESOLUTION
-        analogReadResolution(ADC_RESOLUTION);
-        #endif
-    #endif
-    
-    // Print system configuration
-    Serial.println(F("=== System Configuration ==="));
-    Serial.print(F("System voltage: "));
-    Serial.print(SYSTEM_VOLTAGE);
-    Serial.println(F("V"));
-    Serial.print(F("ADC reference: "));
-    Serial.print(AREF_VOLTAGE);
-    Serial.println(F("V"));
-    Serial.print(F("ADC resolution: "));
-    Serial.print(ADC_RESOLUTION);
-    Serial.println(F(" bits"));
-    Serial.print(F("ADC max value: "));
-    Serial.println(ADC_MAX_VALUE);
-
-    Serial.println(F("========================================"));
-}
 
 void setup() {
 
@@ -111,15 +58,15 @@ void setup() {
     Serial.println(F("  \\___/ .__/\\__/_//_/___/_/  /_/___/    "));
     Serial.println(F("     /_/                                "));
     Serial.println(F("                                        "));
-    Serial.println(F("openEngine Monitoring System v1.0 ======"));
+    Serial.println(F("openEngine Monitoring System v0.3.1 ===="));
     Serial.println(F("                                        "));
     
     // Configure ADC for this platform
     setupADC();
-
-    Serial.println(F("Initializing..."));
-
-    // Initialize input manager (loads from EEPROM or sensors_config.h)
+    Serial.println(F(""));
+    Serial.println(F("✓ ADC configured"));
+    
+    // Initialize input manager (loads from EEPROM or config.h)
     initInputManager();
 
 #ifndef USE_STATIC_CONFIG
@@ -134,19 +81,7 @@ void setup() {
     // Note: CS pins for thermocouples are initialized in initInputManager()
     // RPM and digital sensors would be initialized here if needed
     /*
-        // Initialize chip select pins for thermocouples
-    #ifdef ENABLE_CHT
-    pinMode(CHT_INPUT, OUTPUT);
-    digitalWrite(CHT_INPUT, HIGH);
-    Serial.println(F("✓ CHT chip select initialized"));
-    #endif
-
-    #ifdef ENABLE_EGT
-    pinMode(EGT_INPUT, OUTPUT);
-    digitalWrite(EGT_INPUT, HIGH);
-    Serial.println(F("✓ EGT chip select initialized"));
-    #endif
-
+    
     // Initialize RPM sensing
     #ifdef ENABLE_ENGINE_RPM
     extern void initRPM(byte);
@@ -212,14 +147,45 @@ void setup() {
     Serial.println(F("========================================"));
     Serial.println(F("  Initialization complete!"));
 #ifdef USE_STATIC_CONFIG
-    Serial.println(F("  Mode: Input-Based (Compile-Time Config)"));
+    Serial.println(F("  Mode: Compile-Time Config"));
 #else
-    Serial.println(F("  Mode: Input-Based (EEPROM Config)"));
+    Serial.println(F("  Mode: EEPROM Config"));
 #endif
     Serial.print(F("  Active inputs: "));
     Serial.println(numActiveInputs);
     Serial.println(F("========================================"));
     Serial.println(F(""));
+
+    // ===== TEST MODE ACTIVATION =====
+#ifdef ENABLE_TEST_MODE
+    // Initialize test mode system
+    initTestMode();
+
+    // Check if test mode trigger pin is pulled LOW
+    pinMode(TEST_MODE_TRIGGER_PIN, INPUT_PULLUP);
+    delay(10);  // Allow pin to stabilize
+
+    if (digitalRead(TEST_MODE_TRIGGER_PIN) == LOW) {
+        Serial.println(F(""));
+        Serial.println(F("========================================"));
+        Serial.println(F("  TEST MODE TRIGGER DETECTED!"));
+        Serial.println(F("========================================"));
+        Serial.println(F(""));
+
+        // List available scenarios
+        listTestScenarios();
+
+        // Start default scenario (if not 0xFF)
+        #if DEFAULT_TEST_SCENARIO != 0xFF
+        startTestScenario(DEFAULT_TEST_SCENARIO);
+        #else
+        Serial.println(F("Test mode initialized but no default scenario set."));
+        Serial.println(F("Use serial commands to start a scenario."));
+        #endif
+    } else {
+        Serial.println(F("Test mode available (pin 5 is HIGH, normal operation)"));
+    }
+#endif
 }
 
 void loop() {
@@ -236,14 +202,14 @@ void loop() {
 
     // Send data to output modules
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].isEnabled) {
+        if (inputs[i].flags.isEnabled) {
             sendToOutputs(&inputs[i]);
         }
     }
 
     // Check alarms
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].isEnabled) {
+        if (inputs[i].flags.isEnabled) {
             checkSensorAlarm(&inputs[i]);
         }
     }
@@ -257,7 +223,7 @@ void loop() {
     static Input* inputPtrs[MAX_INPUTS];
     uint8_t activeCount = 0;
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].isEnabled) {
+        if (inputs[i].flags.isEnabled) {
             inputPtrs[activeCount++] = &inputs[i];
         }
     }
@@ -266,6 +232,14 @@ void loop() {
 
     // Update output modules (for any housekeeping)
     updateOutputs();
+
+    // ===== TEST MODE UPDATE =====
+#ifdef ENABLE_TEST_MODE
+    // Update test mode (checks for scenario completion, etc.)
+    if (isTestModeActive()) {
+        updateTestMode();
+    }
+#endif
 
     // Delay between iterations
     delay(LOOP_DELAY_MS);

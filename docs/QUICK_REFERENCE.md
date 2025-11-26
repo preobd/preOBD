@@ -1,441 +1,570 @@
-# Quick Reference Card
+# openEMS Quick Reference
 
-## File Quick Guide
+**Fast lookup guide for common tasks and configurations**
 
-| File | Purpose | Edit This? |
-|------|---------|------------|
-| **config.h** | Pick sensors, set pins | ✅ YES (super easy!) |
-| **sensor_library.h** | Sensor catalog (read-only) | 👀 Browse for IDs |
-| **main.cpp** | Main program loop | ⚠️ Rarely |
-| **platform.h** | Auto-detects hardware | ❌ No (automatic) |
-| **sensor_configs.h** | Calibration database | ⚠️ To add new sensors |
-| **sensors.cpp** | Sensor definitions | ⚠️ When adding sensors |
-| **sensor_read.cpp** | Sensor reading functions | ❌ No (uses library) |
-| **sensor_types.h** | Data structures | ❌ No |
-| **output_*.cpp** | Output modules | ⚠️ When adding outputs |
-| **display_lcd.cpp** | LCD display | ⚠️ To customize display |
-| **alarm.cpp** | Alarm system | ⚠️ To customize alarms |
+---
 
-## Common Tasks
+## ⚠️ Safety First
 
-### Enable a Sensor
+- **Beta software** - use at your own risk
+- **Always maintain mechanical backup gauges**
+- **Test thoroughly before trusting readings**
+- **Monitor your engine actively during testing**
 
-1. Look up sensor type in `sensor_library.h`
-2. Edit `config.h`:
+---
 
+## Configuration Quick Start
+
+### Compile-Time Mode (Arduino Uno, Stable Setups)
+
+**In config.h:**
 ```cpp
-#define ENABLE_CHT
-#define CHT_SENSOR_TYPE       K_TYPE_THERMOCOUPLE_MAX6675  // From catalog
-#define CHT_INPUT             6                             // Your pin
-#define CHT_MIN               -1
-#define CHT_MAX               495
+// Enable compile-time mode
+#define USE_STATIC_CONFIG
+
+// Configure an input (repeat for each sensor)
+#define INPUT_1_PIN            6              // Pin number
+#define INPUT_1_APPLICATION    CHT            // What you're measuring
+#define INPUT_1_SENSOR         K_TYPE_THERMOCOUPLE_MAX6675  // Hardware type
 ```
 
-**That's it!** Calibration is automatic.
+### Runtime Mode (Teensy, Mega, Development)
 
-### Disable a Sensor
-
-Comment out in `config.h`:
+**Leave compile-time mode disabled:**
 ```cpp
-//#define ENABLE_CHT
+// In config.h - leave this commented out:
+// #define USE_STATIC_CONFIG
 ```
 
-### Change Display Units
-
-In `sensors.cpp`, find your sensor:
-```cpp
-.displayUnits = FAHRENHEIT,  // or CELSIUS, PSI, BAR, etc.
+**Configure via serial (115200 baud):**
+```
+SET A2 APPLICATION COOLANT_TEMP VDO_120C_LOOKUP
+SET A3 APPLICATION OIL_PRESSURE VDO_5BAR_PRESSURE
+SAVE
 ```
 
-### Enable CAN Output
+---
 
-In `config.h`:
+## Common Sensor Configurations
+
+### K-Type Thermocouple (CHT/EGT)
+
+**Compile-Time:**
 ```cpp
-#define ENABLE_CAN
-
-// For Teensy boards, choose CAN implementation:
-#define USE_FLEXCAN_NATIVE  // Use built-in FlexCAN
-// OR leave undefined to use external MCP2515
+#define INPUT_1_PIN            6
+#define INPUT_1_APPLICATION    CHT
+#define INPUT_1_SENSOR         K_TYPE_THERMOCOUPLE_MAX6675
 ```
 
-### Enable Multiple Outputs
-
-In `config.h`:
-```cpp
-#define ENABLE_CAN
-#define ENABLE_LCD
-#define ENABLE_SERIAL_OUTPUT
+**Runtime:**
+```
+SET Pin6 APPLICATION CHT K_TYPE_THERMOCOUPLE_MAX6675
 ```
 
-### Change Alarm Thresholds
-
-In `config.h`:
-```cpp
-#define CHT_MAX 495
-#define OIL_PRESSURE_MIN 1
+**Wiring:**
+```
+MAX6675 VCC → 5V (or 3.3V)
+MAX6675 GND → GND
+MAX6675 SCK → Pin 13 (SPI)
+MAX6675 SO  → Pin 12 (SPI MISO)
+MAX6675 CS  → Pin 6 (or your configured pin)
 ```
 
-## Sensor Catalog Quick Reference
+### VDO Temperature Sensor (Coolant/Oil)
 
-### Temperature Sensors
+**Compile-Time:**
+```cpp
+#define INPUT_2_PIN            A2
+#define INPUT_2_APPLICATION    COOLANT_TEMP
+#define INPUT_2_SENSOR         VDO_120C_LOOKUP
+```
 
-| What You Have | Sensor ID to Use |
-|---------------|------------------|
-| MAX6675 thermocouple | `K_TYPE_THERMOCOUPLE_MAX6675` |
-| MAX31855 thermocouple | `K_TYPE_THERMOCOUPLE_MAX31855` |
-| VDO 120°C sensor (most accurate) | `VDO_120C_LOOKUP` |
-| VDO 120°C sensor (faster) | `VDO_120C_STEINHART` |
-| VDO 150°C sensor (most accurate) | `VDO_150C_LOOKUP` |
-| VDO 150°C sensor (faster) | `VDO_150C_STEINHART` |
-| Generic 10K NTC (Amazon) | `GENERIC_NTC_10K_3950` |
-| BME280 ambient temp | `BME280_AMBIENT_TEMPERATURE` |
+**Runtime:**
+```
+SET A2 APPLICATION COOLANT_TEMP VDO_120C_LOOKUP
+```
 
-### Pressure Sensors
+**Wiring:**
+```
+VDO Sensor Terminal 1 → Analog pin (A2)
+VDO Sensor Terminal 2 → GND
+Add 2.2kΩ pull-down resistor: Pin → 2.2kΩ → GND
+```
 
-| What You Have | Sensor ID to Use |
-|---------------|------------------|
-| VDO 5-bar oil pressure | `VDO_5BAR_PRESSURE` |
-| VDO 2-bar boost | `VDO_2BAR_PRESSURE` |
-| Generic 0-5 bar linear | `GENERIC_0_5V_5BAR` |
-| Generic 0-10 bar linear | `GENERIC_0_5V_10BAR` |
-| Generic 0-100 psi linear | `GENERIC_0_5V_100PSI` |
-| Freescale MPX4250AP | `MPX4250AP_PRESSURE` |
-| BME280 baro pressure | `BME280_BAROMETRIC_PRESSURE` |
+**Choose sensor type:**
+- `VDO_120C_LOOKUP` - Most accurate (±0.5°C)
+- `VDO_120C_STEINHART` - Slightly less accurate (±1°C)
+- `VDO_150C_LOOKUP` - For 150°C sensors
+- `VDO_150C_STEINHART` - For 150°C sensors
 
-### Voltage Sensors
+### VDO Pressure Sensor (Oil/Boost)
 
-| What You Have | Sensor ID to Use |
-|---------------|------------------|
-| 12V battery (any board) | `STANDARD_12V_DIVIDER` * |
-| 24V truck battery | `STANDARD_24V_DIVIDER` |
+**Compile-Time:**
+```cpp
+#define INPUT_3_PIN            A3
+#define INPUT_3_APPLICATION    OIL_PRESSURE
+#define INPUT_3_SENSOR         VDO_5BAR_PRESSURE
+```
 
-\* Automatically uses correct divider for your board!
+**Runtime:**
+```
+SET A3 APPLICATION OIL_PRESSURE VDO_5BAR_PRESSURE
+```
 
-### Environmental Sensors
+**Wiring:**
+```
+VDO Sensor Ground → GND
+VDO Sensor Signal → Analog pin (A3)
+VDO Sensor +12V   → Vehicle 12V
+No external resistors needed
+```
 
-| What You Have | Sensor ID to Use |
-|---------------|------------------|
-| BME280 temperature | `BME280_AMBIENT_TEMPERATURE` |
-| BME280 pressure | `BME280_BAROMETRIC_PRESSURE` |
-| BME280 humidity | `BME280_RELATIVE_HUMIDITY` |
-| BME280 elevation | `BME280_ESTIMATED_ELEVATION` |
+**Sensor types:**
+- `VDO_5BAR_PRESSURE` - 0-5 bar (0-73 PSI)
+- `VDO_2BAR_PRESSURE` - 0-2 bar (0-29 PSI)
 
-## Sensor Value Storage
+### Battery Voltage
 
-| Sensor Type | Stored As | Display Conversion | OBDII Conversion |
-|-------------|-----------|-------------------|------------------|
-| Temperature | Celsius | C or F | A-40 |
-| Pressure | bar | bar, psi, or kPa | A/10 |
-| Voltage | volts | V | A/10 |
-| Thermocouple | Celsius | C or F | Direct (A) |
-| Humidity | percent | % | A*2.55 |
-| Altitude | meters | m or ft | Direct (A) |
+**Compile-Time:**
+```cpp
+#define INPUT_4_PIN            A8
+#define INPUT_4_APPLICATION    PRIMARY_BATTERY
+#define INPUT_4_SENSOR         STANDARD_12V_DIVIDER
+```
 
-## Pin Assignments Reference
+**Runtime:**
+```
+SET A8 APPLICATION PRIMARY_BATTERY STANDARD_12V_DIVIDER
+```
 
-### Arduino Mega / Teensy (MCP2515 CAN)
+**Wiring:**
+```
+Battery + → 100kΩ → Junction → Analog pin
+Junction → 22kΩ (3.3V) or 6.8kΩ (5V) → GND
+```
 
-| Pin | Purpose | Notes |
-|-----|---------|-------|
-| A0-A7 | Analog sensors | Thermistors, pressure |
-| A8-A15 | Additional analog | Teensy only |
-| 2 | CAN INT | MCP2515 interrupt pin |
-| 3 | Buzzer | PWM output |
-| 4 | Silence button | Digital input |
-| 6 | CHT thermocouple CS | SPI chip select |
-| 7 | EGT thermocouple CS | SPI chip select |
-| 9 | CAN CS | MCP2515 chip select |
-| 12 | SPI MISO | Hardware SPI |
-| 13 | SPI SCK | Hardware SPI |
-| 50 | SPI MISO | Mega only |
-| 51 | SPI MOSI | Mega only |
-| SDA | I2C Data | LCD, BME280 |
-| SCL | I2C Clock | LCD, BME280 |
+**Automatic:** Platform auto-configures correct divider based on board voltage.
 
-### Teensy Native FlexCAN Pins
+### W-Phase RPM (Classic Cars)
 
-| Board | CAN1 TX | CAN1 RX | CAN2 TX | CAN2 RX | CAN3 TX | CAN3 RX |
-|-------|---------|---------|---------|---------|---------|---------|
-| Teensy 4.0 | 22 | 23 | 0 | 1 | 31 | 30 |
-| Teensy 4.1 | 22 | 23 | 0 | 1 | 31 | 30 |
-| Teensy 3.2 | 3 | 4 | - | - | - | - |
-| Teensy 3.5 | 3 | 4 | - | - | - | - |
-| Teensy 3.6 | 3 | 4 | 33 | 34 | - | - |
+**Compile-Time:**
+```cpp
+#define INPUT_5_PIN            5
+#define INPUT_5_APPLICATION    ENGINE_RPM
+#define INPUT_5_SENSOR         W_PHASE_RPM_12_POLE
+```
 
-**Note:** Native FlexCAN requires external CAN transceiver (MCP2562, SN65HVD230, etc.)
+**Runtime:**
+```
+SET Pin5 APPLICATION ENGINE_RPM W_PHASE_RPM_12_POLE
+```
 
-## OBDII PID Quick Reference
+**⚠️ CRITICAL:** See [W_PHASE_RPM_GUIDE.md](W_PHASE_RPM_GUIDE.md) for voltage protection circuit. Teensy boards require 22kΩ/4.7kΩ divider with 3.3V zener!
 
-| PID | Sensor | Format | Example |
-|-----|--------|--------|---------|
-| 0x05 | Coolant Temp | A-40 | 80°C = 120 |
-| 0x33 | Baro Pressure | A/10 | 101kPa = 1010 |
-| 0x46 | Ambient Temp | A-40 | 25°C = 65 |
-| 0x5C | Oil Temp | A-40 | 90°C = 130 |
-| 0x6F | Boost Pressure | A/10 | 1.5bar = 15 |
-| 0x78 | EGT | A | 600°C = 600 |
-| 0xA0 | Humidity | A/2.55 | 50% = 128 |
-| 0xA1 | Altitude | A (MSB), B (LSB) | 1000m |
-| 0xC8 | CHT | A | 495°C = 495 |
-| 0xC9 | Transfer Case | A-40 | 75°C = 115 |
-| 0xCA | Oil Pressure | A/10 | 4.5bar = 45 |
-| 0xCB | Battery 1 | A/10 | 13.8V = 138 |
-| 0xCC | Battery 2 | A/10 | 13.5V = 135 |
+**Sensor types:**
+- `W_PHASE_RPM_12_POLE` - Most common
+- `W_PHASE_RPM_14_POLE` - High-output alternators
+- `W_PHASE_RPM_16_POLE` - Some marine/industrial
+
+### BME280 Environmental Sensor
+
+**Compile-Time:**
+```cpp
+#define INPUT_6_PIN            0x76  // I2C address
+#define INPUT_6_APPLICATION    AMBIENT_TEMP
+#define INPUT_6_SENSOR         BME280_AMBIENT_TEMPERATURE
+```
+
+**Runtime:**
+```
+SET 0x76 APPLICATION AMBIENT_TEMP BME280_AMBIENT_TEMPERATURE
+```
+
+**Wiring:**
+```
+BME280 VCC → 3.3V
+BME280 GND → GND
+BME280 SDA → Pin 18 (I2C SDA)
+BME280 SCL → Pin 19 (I2C SCL)
+```
+
+**Available:**
+- `BME280_AMBIENT_TEMPERATURE`
+- `BME280_BAROMETRIC_PRESSURE`
+- `BME280_RELATIVE_HUMIDITY`
+- `BME280_ESTIMATED_ALTITUDE`
+
+---
+
+## Serial Commands Reference
+
+### Configuration Commands
+
+```
+SET <pin> APPLICATION <app> <sensor>  Configure input
+ENABLE <pin>                          Enable input
+DISABLE <pin>                         Disable input
+CLEAR <pin>                           Remove input
+SET <pin> NAME <name>                 Set short name (e.g. "CHT")
+SET <pin> DISPLAY_NAME <name>         Set LCD name
+SET <pin> UNITS <unit>                Override display units
+```
+
+### Query Commands
+
+```
+LIST INPUTS          Show all configured inputs
+LIST APPLICATIONS    Show available application types
+LIST SENSORS         Show available sensor types
+INFO <pin>           Show detailed info for one input
+HELP                 Show command help
+```
+
+### System Commands
+
+```
+SAVE         Save configuration to EEPROM
+LOAD         Load configuration from EEPROM
+RESET        Clear all configuration
+```
+
+---
+
+## Applications (What You're Measuring)
+
+```
+CHT                 - Cylinder Head Temperature
+EGT                 - Exhaust Gas Temperature
+COOLANT_TEMP        - Coolant/Water Temperature
+OIL_TEMP            - Oil Temperature
+TCASE_TEMP          - Transfer Case Temperature
+OIL_PRESSURE        - Oil Pressure
+BOOST_PRESSURE      - Turbo Boost Pressure
+FUEL_PRESSURE       - Fuel Pressure
+PRIMARY_BATTERY     - Main Battery Voltage
+AUXILIARY_BATTERY   - Auxiliary Battery Voltage
+COOLANT_LEVEL       - Coolant Level (float switch)
+AMBIENT_TEMP        - Outside Air Temperature
+BAROMETRIC_PRESSURE - Barometric Pressure
+HUMIDITY            - Relative Humidity
+ELEVATION           - Estimated Altitude
+ENGINE_RPM          - Engine RPM
+```
+
+---
+
+## Sensor Types (Hardware)
+
+### Temperature
+```
+K_TYPE_THERMOCOUPLE_MAX6675    MAX6675 K-type TC
+K_TYPE_THERMOCOUPLE_MAX31855   MAX31855 K-type TC
+VDO_120C_LOOKUP                VDO 120°C (lookup table)
+VDO_120C_STEINHART             VDO 120°C (Steinhart-Hart)
+VDO_150C_LOOKUP                VDO 150°C (lookup table)
+VDO_150C_STEINHART             VDO 150°C (Steinhart-Hart)
+GENERIC_NTC_10K_3950           Generic 10K NTC, β=3950K
+GENERIC_NTC_10K_3435           Generic 10K NTC, β=3435K
+GENERIC_NTC_10K_3380           Generic 10K NTC, β=3380K
+BME280_AMBIENT_TEMPERATURE     BME280 ambient temp
+```
+
+### Pressure
+```
+VDO_5BAR_PRESSURE              VDO 5-bar (0-73 PSI)
+VDO_2BAR_PRESSURE              VDO 2-bar (0-29 PSI)
+GENERIC_0_5V_5BAR              Generic 0.5-4.5V → 0-5 bar
+GENERIC_0_5V_10BAR             Generic 0.5-4.5V → 0-10 bar
+GENERIC_0_5V_100PSI            Generic 0.5-4.5V → 0-100 PSI
+MPX4250AP_PRESSURE             Freescale MPX4250AP MAP
+BME280_BAROMETRIC_PRESSURE     BME280 barometric
+```
+
+### RPM
+```
+W_PHASE_RPM_12_POLE            12-pole alternator
+W_PHASE_RPM_14_POLE            14-pole alternator
+W_PHASE_RPM_16_POLE            16-pole alternator
+```
+
+### Other
+```
+STANDARD_12V_DIVIDER           12V battery monitoring
+BME280_RELATIVE_HUMIDITY       BME280 humidity
+BME280_ESTIMATED_ALTITUDE      BME280 elevation
+DIGITAL_FLOAT_SWITCH           Float switch (NC or NO)
+```
+
+---
+
+## Display Units
+
+**Available Units:**
+```
+CELSIUS / FAHRENHEIT           Temperature
+BAR / PSI / KPA                Pressure
+VOLTS                          Voltage (fixed)
+RPM                            RPM (fixed)
+PERCENT                        Humidity (fixed)
+METERS / FEET                  Elevation
+```
+
+**Set defaults in config.h:**
+```cpp
+#define DEFAULT_TEMPERATURE_UNITS  CELSIUS
+#define DEFAULT_PRESSURE_UNITS     BAR
+#define DEFAULT_ELEVATION_UNITS    FEET
+```
+
+**Override per sensor (runtime mode):**
+```
+SET A2 UNITS FAHRENHEIT
+SET A3 UNITS PSI
+```
+
+---
+
+## Pin Designations
+
+**Analog Pins:**
+```
+A0, A1, A2, ... A15            Arduino Mega (A0-A15)
+A0, A1, A2, ... A13            Teensy 4.0 (A0-A13)
+A0, A1, ... A5                 Arduino Uno (A0-A5)
+```
+
+**Digital Pins:**
+```
+Pin2, Pin3, Pin4, ... Pin53    Any digital pin
+6, 7, 8, ...                   Alternate format (no "Pin")
+```
+
+**SPI Pins (MAX6675/MAX31855):**
+```
+Pin6, Pin7, etc.               CS (Chip Select) pins
+Pin13                          SCK (shared, SPI clock)
+Pin12                          MISO (shared, SPI data)
+```
+
+**I2C Addresses (BME280):**
+```
+0x76                           BME280 default address
+0x77                           BME280 alternate address
+```
+
+---
 
 ## Troubleshooting Quick Checks
 
 ### Sensor Shows NAN
-- [ ] Check wiring
-- [ ] Verify pin number in config.h
-- [ ] **NEW: Check sensor type matches actual hardware**
-- [ ] Verify power to sensor
 
-### Wrong Values (But Not NAN)
-- [ ] **NEW: Verify sensor ID is correct**
-- [ ] Check you picked the right sensor from catalog
-- [ ] For VDO sensors: lookup vs Steinhart won't be identical
-- [ ] Enable serial output to see raw values
+1. Check wiring - most common issue
+2. Verify sensor type matches physical sensor
+3. Check pin number is correct
+4. Test sensor with multimeter
 
-### LCD Not Working
-- [ ] Check I2C address (0x27 or 0x3F)
-- [ ] Verify SDA/SCL connections
-- [ ] Check 5V power to LCD
-- [ ] Enable with `#define ENABLE_LCD`
+### Wrong Reading
+
+1. Verify correct sensor type (VDO 120C vs 150C)
+2. Check bias resistor value (should be 2.2kΩ)
+3. Measure sensor resistance at known temperature
+4. Compare to datasheet values
 
 ### CAN Not Working
-- [ ] Verify wiring (CANH, CANL, GND)
-- [ ] Check 120Ω termination resistors
-- [ ] Verify baud rate (500kbps)
-- [ ] **Native FlexCAN:** Check transceiver is powered, pins 22/23 connected
-- [ ] **Native FlexCAN:** Check `USE_FLEXCAN_NATIVE` is defined
-- [ ] **MCP2515:** Check CAN_CS (pin 9) and CAN_INT (pin 2) pins
-- [ ] **MCP2515:** Verify `USE_FLEXCAN_NATIVE` is NOT defined
-- [ ] Enable with `#define ENABLE_CAN`
-- [ ] Check serial monitor for init message
 
-### Alarm Not Triggering
-- [ ] Verify thresholds in config.h
-- [ ] Check alarm enabled on sensor:
-```cpp
-.alarm = true,
+**Native FlexCAN (Teensy):**
+- Define `USE_FLEXCAN_NATIVE` in config.h
+- Check Pin 22 (TX) and Pin 23 (RX)
+- Verify CAN transceiver has power
+- Check for 120Ω termination
+
+**MCP2515:**
+- Check CS and INT pin assignments
+- Verify SPI connections
+- Check CAN_H and CAN_L not reversed
+
+### LCD Blank
+
+- Try I2C address 0x3F instead of 0x27
+- Check SDA/SCL connections (Pin 18/19)
+- Verify 5V power (or 3.3V for 3.3V boards)
+- Adjust contrast pot on LCD module
+
+---
+
+## Memory Usage Guidelines
+
+**Arduino Uno (2KB RAM):**
+- 3-6 sensors maximum
+- Use compile-time configuration
+- Disable unused outputs
+- Minimize enabled features
+
+**Arduino Mega (8KB RAM):**
+- 10-15 sensors comfortably
+- Either configuration mode works
+- All outputs available
+
+**Teensy 4.0 (1MB RAM):**
+- Essentially unlimited sensors (limited by pins)
+- Either configuration mode works
+- All features available
+
+---
+
+## Build Commands
+
+### PlatformIO
+
+```bash
+pio run                        Compile for default board
+pio run -e teensy40            Compile for Teensy 4.0
+pio run -e megaatmega2560      Compile for Arduino Mega
+pio run -t upload              Upload to board
+pio device monitor             Open serial monitor (115200 baud)
+pio run -t clean               Clean build files
 ```
-- [ ] Verify buzzer connected to pin 3
-- [ ] Check value is outside min/max
 
-### Platform Not Detected Correctly
-- [ ] Check serial output for detected platform
-- [ ] Verify board selection in platformio.ini
-- [ ] Check platform.h supports your board
+### Arduino IDE
 
-## Compilation Errors
+1. Open openEMS.ino
+2. Tools → Board → Select your board
+3. Tools → Port → Select COM port
+4. Click Upload button
+5. Tools → Serial Monitor (set to 115200 baud)
 
-### "Sensor type not found" or similar
-- Check sensor ID spelling in config.h
-- Verify ID exists in sensor_library.h
+---
 
-### "Sensor not declared"
-- Add `#define ENABLE_SENSORNAME` in config.h
+## Platform Auto-Configuration
 
-### "undefined reference to getSensorConfig"
-- Make sure sensor_configs.h is included
-- Check that sensor ID is in SENSOR_CONFIGS array
+**System automatically detects:**
 
-### "not enough memory"
-- Disable unused sensors/outputs
-- Reduce sensor array size
-- Use simpler output methods
-- Use Steinhart method instead of lookup tables
+| Platform | Voltage | ADC Bits | ADC Max | Battery Divider |
+|----------|---------|----------|---------|-----------------|
+| Mega     | 5.0V    | 10       | 1023    | 100kΩ / 6.8kΩ   |
+| Teensy 4.x | 3.3V  | 12       | 4095    | 100kΩ / 22kΩ    |
+| Teensy 3.x | 3.3V  | 12       | 4095    | 100kΩ / 22kΩ    |
+| Uno      | 5.0V    | 10       | 1023    | 100kΩ / 6.8kΩ   |
+| Due      | 3.3V    | 12       | 4095    | 100kΩ / 22kΩ    |
 
-## Serial Commands
+---
 
-Enable serial output:
+## Typical Configurations
+
+### Minimal (3 sensors, Arduino Uno)
+
 ```cpp
+#define USE_STATIC_CONFIG
+#define ENABLE_LCD
 #define ENABLE_SERIAL_OUTPUT
+
+#define INPUT_1_PIN         A0
+#define INPUT_1_APPLICATION COOLANT_TEMP
+#define INPUT_1_SENSOR      VDO_120C_LOOKUP
+
+#define INPUT_2_PIN         A1
+#define INPUT_2_APPLICATION OIL_PRESSURE
+#define INPUT_2_SENSOR      VDO_5BAR_PRESSURE
+
+#define INPUT_3_PIN         A2
+#define INPUT_3_APPLICATION PRIMARY_BATTERY
+#define INPUT_3_SENSOR      STANDARD_12V_DIVIDER
 ```
 
-Connect at 115200 baud. Output format:
+### Standard (8 sensors, Arduino Mega/Teensy)
+
+```cpp
+// Leave USE_STATIC_CONFIG undefined for runtime mode
+#define ENABLE_LCD
+#define ENABLE_CAN
+#define ENABLE_SERIAL_OUTPUT
+
+// Configure via serial:
+SET Pin6 APPLICATION CHT K_TYPE_THERMOCOUPLE_MAX6675
+SET Pin7 APPLICATION EGT K_TYPE_THERMOCOUPLE_MAX6675
+SET A0 APPLICATION COOLANT_TEMP VDO_120C_LOOKUP
+SET A1 APPLICATION OIL_TEMP VDO_120C_LOOKUP
+SET A2 APPLICATION OIL_PRESSURE VDO_5BAR_PRESSURE
+SET A3 APPLICATION BOOST_PRESSURE VDO_2BAR_PRESSURE
+SET A8 APPLICATION PRIMARY_BATTERY STANDARD_12V_DIVIDER
+SET Pin5 APPLICATION ENGINE_RPM W_PHASE_RPM_12_POLE
+SAVE
+```
+
+### Full Feature (Teensy 4.0)
+
+Runtime mode with all outputs enabled:
+- CHT, EGT (thermocouples)
+- Coolant, oil temps (VDO thermistors)
+- Oil pressure, boost (VDO pressure)
+- Battery voltage
+- RPM (W-phase)
+- Ambient conditions (BME280)
+- LCD display
+- CAN bus output
+- RealDash protocol
+- SD card logging
+
+---
+
+## Serial Output Format
+
+**CSV Format:**
 ```
 Sensor,Value,Units
 CHT,485.2,C
 EGT,610.5,C
 WTR,92.0,C
+OIL,2.5,bar
+BAT,13.8,V
+RPM,2450,RPM
 ```
 
-## Configuration Pattern
+**Baud Rate:** 115200
 
-```cpp
-// Step 1: Enable the sensor
-#define ENABLE_[SENSOR_NAME]
-
-// Step 2: Pick sensor type from catalog
-#define [SENSOR_NAME]_SENSOR_TYPE  [ID_FROM_CATALOG]
-
-// Step 3: Assign pin
-#define [SENSOR_NAME]_INPUT  [PIN]
-
-// Step 4: Set thresholds (optional)
-#define [SENSOR_NAME]_MIN  [value]
-#define [SENSOR_NAME]_MAX  [value]
-```
-
-**Example:**
-```cpp
-#define ENABLE_COOLANT_TEMP
-#define COOLANT_SENSOR_TYPE   VDO_120C_LOOKUP
-#define COOLANT_TEMP_INPUT    A2
-#define COOLANT_TEMP_MIN      -1
-#define COOLANT_TEMP_MAX      100
-```
-
-## Advanced: Custom Calibration Override
-
-If you need different calibration than preset:
-
-```cpp
-#define ENABLE_COOLANT_TEMP
-#define COOLANT_SENSOR_TYPE   CUSTOM_THERMISTOR_STEINHART
-#define COOLANT_TEMP_INPUT    A2
-
-// Override with custom calibration
-#define COOLANT_CUSTOM_CALIBRATION
-#define COOLANT_BIAS_RESISTOR     470.0
-#define COOLANT_STEINHART_A       1.299e-3
-#define COOLANT_STEINHART_B       2.401e-4
-#define COOLANT_STEINHART_C       1.301e-7
-```
-
-See [Advanced Calibration Guide](ADVANCED_CALIBRATION_GUIDE.md) for details.
-
-## Platform Auto-Configuration
-
-The system automatically detects and configures:
-
-**Arduino Mega:**
-- 5V system, 10-bit ADC (0-1023)
-- 5V reference voltage
-- 100kΩ/6.8kΩ battery divider
-
-**Teensy 3.x/4.x:**
-- 3.3V system, 12-bit ADC (0-4095)
-- 3.3V reference voltage
-- 100kΩ/22kΩ battery divider
-- ADC averaging enabled
-
-**ESP32:**
-- 3.3V system, 12-bit ADC (0-4095)
-- 3.3V reference voltage
-- 11dB attenuation (0-3.3V range)
-
-**Arduino Due:**
-- 3.3V system, 12-bit ADC (0-4095)
-- 3.3V reference voltage
-
-## Build Commands
-
-### PlatformIO
-```bash
-pio run                    # Compile
-pio run -t upload          # Upload
-pio device monitor         # Open serial monitor
-pio run -e teensy40        # Build for specific board
-pio run -e megaatmega2560  # Build for Arduino Mega
-```
-
-### Arduino IDE
-1. Select board: Tools → Board
-2. Select port: Tools → Port
-3. Click Upload button
-
-## Quick Diagnostic Output
-
-Serial output will show:
-```
-=== openEMS v2.0 ===
-Open Engine Monitoring System
-Initializing...
-
-=== System Configuration ===
-System voltage: 3.3V
-ADC reference: 3.3V
-ADC resolution: 12 bits
-ADC max value: 4095
-============================
-
-BME280 initialized (at 0x76)
-LCD initialized
-CAN initialized
-Initialization complete!
-Active sensors: 11
-```
-
-## Sensor Accuracy Comparison
-
-**VDO Thermistors:**
-- Lookup table: ±0.5°C (most accurate)
-- Steinhart-Hart: ±1-2°C (very good, faster)
-
-**Choice:** Use lookup for critical sensors (CHT), Steinhart for less critical (coolant).
-
-## Memory Usage Estimates
-
-**Typical configuration (8 sensors, CAN, LCD):**
-- RAM: ~3KB
-- Flash: ~35KB
-
-**Minimal configuration (3 sensors, serial only):**
-- RAM: ~1.5KB
-- Flash: ~25KB
-
-**Maximum configuration (20 sensors, all outputs):**
-- RAM: ~6KB
-- Flash: ~50KB
-
-## Getting Help
-
-1. **Check documentation:**
-   - Sensor Selection Guide (90% of questions)
-   - Pressure/Voltage guides for those sensors
-   - Advanced Calibration for custom sensors
-
-2. **Enable serial debugging:**
-   ```cpp
-   #define ENABLE_SERIAL_OUTPUT
-   ```
-
-3. **Post in GitHub Discussions:**
-   - Include sensor type from catalog
-   - Include serial output
-   - Include config.h relevant section
-
-4. **File GitHub Issue for bugs:**
-   - Include platform (Teensy 4.0, etc.)
-   - Include error message
-   - Include minimal config.h to reproduce
-
-## Most Common Mistakes
-
-1. ❌ Not picking sensor type from catalog
-   - ✅ Open sensor_library.h and find your sensor
-
-2. ❌ Mixing up lookup vs Steinhart sensor IDs
-   - ✅ Both work, lookup is more accurate
-
-3. ❌ Forgetting to define sensor type
-   - ✅ Must have both ENABLE_X and X_SENSOR_TYPE
-
-4. ❌ Wrong sensor ID for physical hardware
-   - ✅ Double-check catalog ID matches your sensor
-
-## Version Migration
-
-**From v1.0 to v2.0:**
-1. Replace manual calibration with sensor IDs
-2. Remove old read function references
-3. Add sensor type definitions
-4. Test and verify readings match
-
-See [Migration Guide](MIGRATION_GUIDE.md) for step-by-step instructions.
+**Use for:**
+- Debugging sensor readings
+- Data logging to computer
+- Custom dashboards
+- Analysis and graphing
 
 ---
 
-**💡 Pro Tip:** Start with just one sensor, verify it works, then add more. Much easier to debug!
+## Common Mistakes to Avoid
+
+1. **Wrong sensor type** - VDO 120C vs 150C makes huge difference
+2. **Missing pull-down resistor** - VDO thermistors need 2.2kΩ
+3. **Wrong I2C address** - Try both 0x27 and 0x3F for LCD
+4. **5V to 3.3V board** - Will destroy Teensy instantly!
+5. **No CAN termination** - CAN bus needs 120Ω resistors
+6. **Loose connections** - Vibration in engine bay
+7. **Too many sensors on Uno** - Max 6 sensors
+8. **Forgetting to SAVE** - Runtime config must be saved to EEPROM
+
+---
+
+## Getting More Help
+
+**Documentation:**
+- [Full Documentation](README.md) - Complete guide
+- [Sensor Selection Guide](SENSOR_SELECTION_GUIDE.md) - Choose sensors
+- [Pressure Sensor Guide](PRESSURE_SENSOR_GUIDE.md) - Pressure specifics
+- [Voltage Guide](VOLTAGE_SENSOR_GUIDE.md) - Battery monitoring
+- [RPM Guide](W_PHASE_RPM_GUIDE.md) - RPM for classics
+- [Advanced Calibration](ADVANCED_CALIBRATION_GUIDE.md) - Custom sensors
+
+**Support:**
+- GitHub Issues - Bug reports
+- GitHub Discussions - Questions and help
+- Search existing issues first
+
+**When asking for help, include:**
+- Board type (Mega, Teensy 4.0, etc.)
+- Configuration mode (compile-time or runtime)
+- Sensor types
+- Serial output showing problem
+- What you've already tried
+
+---
+
+**Remember: This is beta software. Test thoroughly and maintain mechanical backup gauges!**

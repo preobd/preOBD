@@ -13,7 +13,7 @@
 #define USE_INPUT_BASED_ARCHITECTURE
 
 #include <Arduino.h>
-#include "sensor_types.h"
+#include "../lib/sensor_types.h"
 
 // Forward declarations
 struct Input;
@@ -164,18 +164,22 @@ struct Input {
 
     // === Runtime Data ===
     float value;                    // Current sensor reading
-    bool isEnabled;                 // Input enabled/disabled
-    bool alarm;                     // Alarm enabled
-    bool display;                   // Show on LCD
+
+    // === Flags (packed into 1 byte) ===
+    struct {
+        uint8_t isEnabled : 1;      // Input enabled/disabled
+        uint8_t alarm : 1;          // Alarm enabled
+        uint8_t display : 1;        // Show on LCD
+        uint8_t useCustomCalibration : 1;  // Use custom or preset calibration
+        uint8_t reserved : 4;       // Reserved for future use
+    } flags;
 
     // === Function Pointers ===
     void (*readFunction)(Input*);
-    float (*displayConvert)(float, Units);
-    float (*obdConvert)(float);
+    MeasurementType measurementType;
 
     // === Calibration Data ===
     CalibrationType calibrationType;
-    bool useCustomCalibration;           // Use custom or preset?
     const void* presetCalibration;       // Pointer to PROGMEM preset
     CalibrationOverride customCalibration; // Custom calibration (16 bytes)
 };

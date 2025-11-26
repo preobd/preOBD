@@ -9,7 +9,7 @@
 #ifndef SERIAL_CONFIG_H
 #define SERIAL_CONFIG_H
 
-#include "config.h"
+#include "../config.h"
 
 #ifdef USE_INPUT_BASED_ARCHITECTURE
 

@@ -24,7 +24,7 @@ The new calibration system makes sensor configuration incredibly easy. You just 
 #define COOLANT_TEMP_MAX      100
 ```
 
-3. Open `src/sensor_library.h` and find VDO sensors:
+3. Open `src/lib/sensor_library.h` and find VDO sensors:
 ```cpp
 // VDO Thermistors - Lookup Table Method (Most Accurate)
 #define VDO_120C_LOOKUP              10

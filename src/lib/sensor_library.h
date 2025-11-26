@@ -10,7 +10,7 @@
 #define SENSOR_LIBRARY_H
 
 #include <Arduino.h>
-#include "input.h"
+#include "../inputs/input.h"
 #include "sensor_calibration_data.h"
 
 // Forward declare read functions
@@ -46,13 +46,20 @@ extern float obdConvertHumidity(float value);
 extern float obdConvertElevation(float value);
 extern float obdConvertFloatSwitch(float value);
 
+// Helper functions to get conversion function pointers from measurement type
+// These allow us to derive conversion functions at runtime instead of storing them
+typedef float (*DisplayConvertFunc)(float, Units);
+typedef float (*ObdConvertFunc)(float);
+
+DisplayConvertFunc getDisplayConvertFunc(MeasurementType type);
+ObdConvertFunc getObdConvertFunc(MeasurementType type);
+
 // ===== SENSOR INFO STRUCTURE =====
 struct SensorInfo {
     Sensor sensor;
     const char* name;
     void (*readFunction)(Input*);
-    float (*displayConvert)(float, Units);
-    float (*obdConvert)(float);
+    MeasurementType measurementType;
     CalibrationType calibrationType;
     const void* defaultCalibration;
 };
@@ -64,8 +71,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = MAX6675,
         .name = "K-Type Thermocouple (MAX6675)",
         .readFunction = readMAX6675,
-        .displayConvert = convertTemperature,
-        .obdConvert = obdConvertTemperature,
+        .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_NONE,
         .defaultCalibration = nullptr
     },
@@ -73,8 +79,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = MAX31855,
         .name = "K-Type Thermocouple (MAX31855)",
         .readFunction = readMAX31855,
-        .displayConvert = convertTemperature,
-        .obdConvert = obdConvertTemperature,
+        .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_NONE,
         .defaultCalibration = nullptr
     },
@@ -84,8 +89,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = VDO_120C_LOOKUP,
         .name = "VDO 120C (Lookup)",
         .readFunction = readThermistorLookup,
-        .displayConvert = convertTemperature,
-        .obdConvert = obdConvertTemperature,
+        .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_THERMISTOR_LOOKUP,
         .defaultCalibration = &vdo120_lookup_cal
     },
@@ -93,8 +97,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = VDO_150C_LOOKUP,
         .name = "VDO 150C (Lookup)",
         .readFunction = readThermistorLookup,
-        .displayConvert = convertTemperature,
-        .obdConvert = obdConvertTemperature,
+        .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_THERMISTOR_LOOKUP,
         .defaultCalibration = &vdo150_lookup_cal
     },
@@ -104,8 +107,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = VDO_120C_STEINHART,
         .name = "VDO 120C (Steinhart)",
         .readFunction = readThermistorSteinhart,
-        .displayConvert = convertTemperature,
-        .obdConvert = obdConvertTemperature,
+        .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_THERMISTOR_STEINHART,
         .defaultCalibration = &vdo120_steinhart_cal
     },
@@ -113,8 +115,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = VDO_150C_STEINHART,
         .name = "VDO 150C (Steinhart)",
         .readFunction = readThermistorSteinhart,
-        .displayConvert = convertTemperature,
-        .obdConvert = obdConvertTemperature,
+        .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_THERMISTOR_STEINHART,
         .defaultCalibration = &vdo150_steinhart_cal
     },
@@ -124,8 +125,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = VDO_2BAR,
         .name = "VDO 2 Bar",
         .readFunction = readPressurePolynomial,
-        .displayConvert = convertPressure,
-        .obdConvert = obdConvertPressure,
+        .measurementType = MEASURE_PRESSURE,
         .calibrationType = CAL_PRESSURE_POLYNOMIAL,
         .defaultCalibration = &vdo2bar_polynomial_cal
     },
@@ -133,8 +133,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = VDO_5BAR,
         .name = "VDO 5 Bar",
         .readFunction = readPressurePolynomial,
-        .displayConvert = convertPressure,
-        .obdConvert = obdConvertPressure,
+        .measurementType = MEASURE_PRESSURE,
         .calibrationType = CAL_PRESSURE_POLYNOMIAL,
         .defaultCalibration = &vdo5bar_polynomial_cal
     },
@@ -142,8 +141,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = GENERIC_BOOST,
         .name = "Generic Boost",
         .readFunction = readPressureLinear,
-        .displayConvert = convertPressure,
-        .obdConvert = obdConvertPressure,
+        .measurementType = MEASURE_PRESSURE,
         .calibrationType = CAL_PRESSURE_LINEAR,
         .defaultCalibration = &generic_boost_linear_cal
     },
@@ -151,8 +149,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = MPX4250AP,
         .name = "MPX4250AP",
         .readFunction = readPressureLinear,
-        .displayConvert = convertPressure,
-        .obdConvert = obdConvertPressure,
+        .measurementType = MEASURE_PRESSURE,
         .calibrationType = CAL_PRESSURE_LINEAR,
         .defaultCalibration = &mpx4250ap_linear_cal
     },
@@ -162,9 +159,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = VOLTAGE_DIVIDER,
         .name = "Voltage Divider",
         .readFunction = readVoltageDivider,
-        .displayConvert = convertVoltage,
-        .obdConvert = obdConvertVoltage,
-        .calibrationType = CAL_NONE,
+        .measurementType = MEASURE_VOLTAGE,
+        .calibrationType = CAL_VOLTAGE_DIVIDER,
         .defaultCalibration = nullptr
     },
 
@@ -173,8 +169,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = W_PHASE_RPM,
         .name = "W-Phase RPM",
         .readFunction = readWPhaseRPM,
-        .displayConvert = convertRPM,
-        .obdConvert = obdConvertRPM,
+        .measurementType = MEASURE_RPM,
         .calibrationType = CAL_NONE,
         .defaultCalibration = nullptr
     },
@@ -184,8 +179,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = BME280_TEMP,
         .name = "BME280 Temperature",
         .readFunction = readBME280Temp,
-        .displayConvert = convertTemperature,
-        .obdConvert = obdConvertTemperature,
+        .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_NONE,
         .defaultCalibration = nullptr
     },
@@ -193,8 +187,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = BME280_PRESSURE,
         .name = "BME280 Pressure",
         .readFunction = readBME280Pressure,
-        .displayConvert = convertPressure,
-        .obdConvert = obdConvertPressure,
+        .measurementType = MEASURE_PRESSURE,
         .calibrationType = CAL_NONE,
         .defaultCalibration = nullptr
     },
@@ -202,8 +195,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = BME280_HUMIDITY,
         .name = "BME280 Humidity",
         .readFunction = readBME280Humidity,
-        .displayConvert = convertHumidity,
-        .obdConvert = obdConvertHumidity,
+        .measurementType = MEASURE_HUMIDITY,
         .calibrationType = CAL_NONE,
         .defaultCalibration = nullptr
     },
@@ -211,8 +203,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = BME280_ELEVATION,
         .name = "BME280 Elevation",
         .readFunction = readBME280Elevation,
-        .displayConvert = convertElevation,
-        .obdConvert = obdConvertElevation,
+        .measurementType = MEASURE_ELEVATION,
         .calibrationType = CAL_NONE,
         .defaultCalibration = nullptr
     },
@@ -222,8 +213,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = FLOAT_SWITCH,
         .name = "Float Switch",
         .readFunction = readDigitalFloatSwitch,
-        .displayConvert = convertFloatSwitch,
-        .obdConvert = obdConvertFloatSwitch,
+        .measurementType = MEASURE_DIGITAL,
         .calibrationType = CAL_NONE,
         .defaultCalibration = nullptr
     }

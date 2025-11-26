@@ -2,8 +2,8 @@
  * alarm.cpp - Alarm system management
  */
 
-#include "input.h"
-#include "sensor_types.h"
+#include "inputs/input.h"
+#include "lib/sensor_types.h"
 #include "config.h"
 
 static bool alarmActive = false;
@@ -22,7 +22,7 @@ void checkSensorAlarm(Input *ptr) {
     return;
     #endif
 
-    if (!ptr->alarm || !ptr->isEnabled || isnan(ptr->value)) {
+    if (!ptr->flags.alarm || !ptr->flags.isEnabled || isnan(ptr->value)) {
         return;
     }
 

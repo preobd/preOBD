@@ -3,10 +3,11 @@
  * Works with both EEPROM config and compile-time config
  */
 
-#include "config.h"
-#include "platform.h"
+#include "../config.h"
+#include "../lib/platform.h"
 #include "input.h"
-#include "sensor_types.h"
+#include "../lib/sensor_types.h"
+#include "../lib/sensor_library.h"
 #include <SPI.h>
 
 #ifdef USE_BME280
@@ -149,7 +150,7 @@ void readThermistorSteinhart(Input *ptr) {
     // Get calibration values (from custom RAM or PROGMEM preset)
     float R_bias, A, B, C;
 #ifdef USE_INPUT_BASED_ARCHITECTURE
-    if (ptr->useCustomCalibration && ptr->calibrationType == CAL_THERMISTOR_STEINHART) {
+    if (ptr->flags.useCustomCalibration && ptr->calibrationType == CAL_THERMISTOR_STEINHART) {
         // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
         R_bias = ptr->customCalibration.steinhart.bias_resistor;
         A = ptr->customCalibration.steinhart.steinhart_a;
@@ -239,7 +240,7 @@ void readPressureLinear(Input *ptr) {
     // Get calibration values (from custom RAM or PROGMEM preset)
     float V_min, V_max, P_min, P_max;
 #ifdef USE_INPUT_BASED_ARCHITECTURE
-    if (ptr->useCustomCalibration && ptr->calibrationType == CAL_PRESSURE_LINEAR) {
+    if (ptr->flags.useCustomCalibration && ptr->calibrationType == CAL_PRESSURE_LINEAR) {
         // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
         V_min = ptr->customCalibration.pressureLinear.voltage_min;
         V_max = ptr->customCalibration.pressureLinear.voltage_max;
@@ -289,7 +290,7 @@ void readPressurePolynomial(Input *ptr) {
     // Get calibration values (from custom RAM or PROGMEM preset)
     float bias_resistor, a, b, c;
 #ifdef USE_INPUT_BASED_ARCHITECTURE
-    if (ptr->useCustomCalibration && ptr->calibrationType == CAL_PRESSURE_POLYNOMIAL) {
+    if (ptr->flags.useCustomCalibration && ptr->calibrationType == CAL_PRESSURE_POLYNOMIAL) {
         // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
         bias_resistor = ptr->customCalibration.pressurePolynomial.bias_resistor;
         a = ptr->customCalibration.pressurePolynomial.poly_a;
@@ -344,20 +345,36 @@ void readVoltageDivider(Input *ptr) {
         return;
     }
 
-    // Get calibration (with defaults from platform.h if not provided)
-    VoltageDividerCalibration* cal = nullptr;
-    float divider_ratio;
-    float correction = 1.0;
-    float offset = 0.0;
-
-    if (ptr->calibrationType == CAL_VOLTAGE_DIVIDER) {
-        // Note: Voltage divider doesn't use the union, it would need to be added
-        // For now, use platform defaults
-        divider_ratio = VOLTAGE_DIVIDER_RATIO;
+    // Get calibration values (from custom RAM or PROGMEM preset)
+    float r1, r2, correction, offset;
+#ifdef USE_INPUT_BASED_ARCHITECTURE
+    if (ptr->flags.useCustomCalibration && ptr->calibrationType == CAL_VOLTAGE_DIVIDER) {
+        // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
+        r1 = ptr->customCalibration.voltageDivider.r1;
+        r2 = ptr->customCalibration.voltageDivider.r2;
+        correction = ptr->customCalibration.voltageDivider.correction;
+        offset = ptr->customCalibration.voltageDivider.offset;
+    } else
+#endif
+    if (ptr->presetCalibration != nullptr && ptr->calibrationType == CAL_VOLTAGE_DIVIDER) {
+        // Read from preset calibration (PROGMEM)
+        const VoltageDividerCalibration* cal = (const VoltageDividerCalibration*)ptr->presetCalibration;
+        r1 = pgm_read_float(&cal->r1);
+        r2 = pgm_read_float(&cal->r2);
+        correction = pgm_read_float(&cal->correction);
+        offset = pgm_read_float(&cal->offset);
     } else {
         // Use defaults from platform.h
-        divider_ratio = VOLTAGE_DIVIDER_RATIO;
+        // Calculate r1 and r2 from VOLTAGE_DIVIDER_RATIO
+        // If VOLTAGE_DIVIDER_RATIO = (r1 + r2) / r2, we can use any r2 and calculate r1
+        r2 = 1000.0;  // Arbitrary base value
+        r1 = (VOLTAGE_DIVIDER_RATIO - 1.0) * r2;
+        correction = 1.0;
+        offset = 0.0;
     }
+
+    // Calculate divider ratio from resistor values
+    float divider_ratio = (r1 + r2) / r2;
 
     // Calculate voltage: V = ADC * (AREF / ADC_MAX) * divider_ratio * correction + offset
     float voltage = (reading * AREF_VOLTAGE / (float)ADC_MAX_VALUE) * divider_ratio * correction + offset;
@@ -593,4 +610,32 @@ float obdConvertElevation(float meters) {
 
 float obdConvertFloatSwitch(float value) {
     return value * 255.0;  // OBDII format: 0 or 255
+}
+
+// ===== MEASUREMENT TYPE CONVERSION HELPERS =====
+
+DisplayConvertFunc getDisplayConvertFunc(MeasurementType type) {
+    switch (type) {
+        case MEASURE_TEMPERATURE: return convertTemperature;
+        case MEASURE_PRESSURE: return convertPressure;
+        case MEASURE_VOLTAGE: return convertVoltage;
+        case MEASURE_RPM: return convertRPM;
+        case MEASURE_HUMIDITY: return convertHumidity;
+        case MEASURE_ELEVATION: return convertElevation;
+        case MEASURE_DIGITAL: return convertFloatSwitch;
+        default: return convertVoltage;
+    }
+}
+
+ObdConvertFunc getObdConvertFunc(MeasurementType type) {
+    switch (type) {
+        case MEASURE_TEMPERATURE: return obdConvertTemperature;
+        case MEASURE_PRESSURE: return obdConvertPressure;
+        case MEASURE_VOLTAGE: return obdConvertVoltage;
+        case MEASURE_RPM: return obdConvertRPM;
+        case MEASURE_HUMIDITY: return obdConvertHumidity;
+        case MEASURE_ELEVATION: return obdConvertElevation;
+        case MEASURE_DIGITAL: return obdConvertFloatSwitch;
+        default: return obdConvertVoltage;
+    }
 }

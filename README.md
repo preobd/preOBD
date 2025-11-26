@@ -1,54 +1,94 @@
 # openEMS - Open Source Engine Monitoring System
 
-**Version 1.0**
+**⚠️ BETA SOFTWARE** - See [DISCLAIMER](DISCLAIMER.md) for important safety information.
 
 Open-source, modular engine monitoring system for classic cars and vehicles without OBDII diagnostics.
 
-## Features
+## What is openEMS?
 
-✅ **Modular Architecture** - Enable only the sensors you need  
-✅ **Multiple Outputs** - CAN bus, RealDash, Serial, SD logging  
-✅ **Standard OBDII PIDs** - Works with existing diagnostic tools  
-✅ **Configurable Alarms** - Set thresholds with silence button  
-✅ **LCD Display** - Real-time monitoring on 20x4 I2C display  
-✅ **Function Pointers** - Clean, extensible code architecture  
+openEMS provides comprehensive engine monitoring for vehicles that lack modern electronic systems. It monitors temperature, pressure, voltage, and RPM sensors, providing data via LCD display, CAN bus (OBDII compatible), serial output, and data logging.
+
+**What it does:**
+- Monitors multiple temperature sensors (thermocouples, thermistors)
+- Monitors pressure sensors (oil, boost, fuel)
+- Monitors battery voltage
+- Monitors engine RPM (via alternator W-phase)
+- Displays data on LCD screen
+- Outputs standard OBDII PIDs via CAN bus
+- Logs data to serial and SD card
+- Configurable alarms with audible alerts
+
+**What it doesn't do:**
+- Engine control (monitoring only, no outputs to engine)
+- Replace mechanical gauges (use as supplement, not replacement)
+- Interface with existing factory ECUs or OBDII systems
+- Provide safety certification or guarantees
+
+## Current Capabilities
+
+**Sensor Support:**
+- 17+ sensor types
+- 30+ pre-calibrated sensor configurations
+- Custom calibration support for non-standard sensors
+
+**Configuration:**
+- Compile-time configuration mode (minimal RAM, recommended for Arduino Uno)
+- Runtime configuration mode (serial commands, EEPROM storage)
+
+**Hardware Platforms:**
+- Arduino Uno (2KB RAM, limited sensors)
+- Arduino Mega 2560 (8KB RAM, full features)
+- Teensy 3.x/4.x (native CAN, excellent ADC)
+- Arduino Due, ESP32 (less tested)
+
+**Outputs:**
+- 20x4 I2C LCD display
+- CAN bus (standard OBDII PIDs)
+- RealDash mobile dashboard
+- Serial CSV output
+- SD card data logging
 
 ## Supported Sensors
 
 **Temperature:**
 - MAX6675/MAX31855 K-type thermocouples (CHT, EGT)
-- VDO thermistors (coolant, oil, transfer case)
-- BME280 (ambient temperature)
+- VDO thermistors (120°C, 150°C) - coolant, oil, transfer case
+- Generic NTC thermistors with various β values
+- BME280 ambient temperature
 
 **Pressure:**
-- VDO pressure sensors (oil, boost)
-- Generic MAP sensors
-- BME280 (barometric pressure)
+- VDO pressure sensors (2-bar, 5-bar) - oil, boost
+- Generic linear sensors (0.5-4.5V)
+- Freescale MPX4250AP MAP sensor
+- BME280 barometric pressure
+
+**RPM:**
+- W-phase alternator sensing (for classics without electronic ignition)
+- Configurable for 12/14/16-pole alternators
 
 **Other:**
-- Battery voltage monitoring
-- Future: RPM, fuel level, and more
+- Battery voltage monitoring (auto-configured per platform)
+- Float switches (coolant level, fuel level)
+- BME280 humidity and elevation
 
 ## Quick Start
 
-### 1. Hardware Requirements
+### 1. Choose Configuration Mode
 
-**Microcontroller (choose one):**
-- Teensy 4.0/4.1 (recommended - 14-bit ADC, native FlexCAN)
-- Teensy 3.2/3.5/3.6 (12-bit ADC, native FlexCAN)
-- Arduino Mega 2560
-- Arduino Due
+**Compile-Time Mode (Arduino Uno, stable setups):**
+- Configure sensors in `config.h` at compile time
+- Smallest memory footprint
+- No runtime configuration overhead
 
-**Optional Modules:**
-- MCP2515 CAN module (only needed if not using Teensy native CAN)
-- 20x4 I2C LCD display
-- SD card module
-- BME280 sensor
+**Runtime Mode (Teensy/Mega, experimentation):**
+- Configure sensors via serial commands
+- Settings saved to EEPROM
+- Change configuration without recompiling
 
 ### 2. Installation
 
 ```bash
-# Clone or download the project
+# Clone the repository
 git clone https://github.com/yourusername/openEMS.git
 cd openEMS
 
@@ -62,31 +102,52 @@ pio run -t upload
 pio device monitor
 ```
 
-### 3. Configuration
+### 3. Basic Configuration
 
-Edit `src/config.h` to enable your sensors and set pins:
+**Compile-Time Mode (config.h):**
 
 ```cpp
-// Enable the sensors you have
-#define ENABLE_CHT
-#define ENABLE_EGT
-#define ENABLE_COOLANT_TEMP
+// Choose compile-time mode
+#define USE_STATIC_CONFIG
 
-// Set your pin assignments
-#define CHT_INPUT 6
-#define EGT_INPUT 7
-#define COOLANT_TEMP_INPUT A2
-
-// Enable desired outputs
-#define ENABLE_CAN
+// Enable outputs
 #define ENABLE_LCD
+#define ENABLE_SERIAL_OUTPUT
 
-// For Teensy boards, choose CAN implementation:
-#define USE_FLEXCAN_NATIVE  // Use built-in FlexCAN (no external chip)
-// OR leave undefined to use external MCP2515
+// Configure sensors
+#define INPUT_1_PIN            6
+#define INPUT_1_APPLICATION    CHT
+#define INPUT_1_SENSOR         K_TYPE_THERMOCOUPLE_MAX6675
+
+#define INPUT_2_PIN            A2
+#define INPUT_2_APPLICATION    COOLANT_TEMP
+#define INPUT_2_SENSOR         VDO_120C_LOOKUP
+
+#define INPUT_3_PIN            A3
+#define INPUT_3_APPLICATION    OIL_PRESSURE
+#define INPUT_3_SENSOR         VDO_5BAR_PRESSURE
 ```
 
-That's it! The system is ready to compile and run.
+**Runtime Mode (serial commands):**
+
+```
+SET A0 APPLICATION CHT K_TYPE_THERMOCOUPLE_MAX6675
+SET A1 APPLICATION COOLANT_TEMP VDO_120C_LOOKUP
+SET A2 APPLICATION OIL_PRESSURE VDO_5BAR_PRESSURE
+SAVE
+```
+
+## Documentation
+
+- **[Full Documentation](docs/README.md)** - Complete system guide
+- **[Quick Reference](docs/QUICK_REFERENCE.md)** - Common tasks and lookups
+- **[Sensor Selection Guide](docs/SENSOR_SELECTION_GUIDE.md)** - Choose the right sensor
+- **[Pressure Sensor Guide](docs/PRESSURE_SENSOR_GUIDE.md)** - Pressure sensor specifics
+- **[Voltage Monitoring Guide](docs/VOLTAGE_SENSOR_GUIDE.md)** - Battery monitoring
+- **[W-Phase RPM Guide](docs/W_PHASE_RPM_GUIDE.md)** - RPM sensing for classics
+- **[Advanced Calibration](docs/ADVANCED_CALIBRATION_GUIDE.md)** - Custom sensor setup
+- **[Directory Structure](docs/DIRECTORY_SETUP.md)** - File organization
+- **[Disclaimer](DISCLAIMER.md)** - Safety information and limitations
 
 ## Project Structure
 
@@ -94,181 +155,99 @@ That's it! The system is ready to compile and run.
 openEMS/
 ├── platformio.ini          # Build configuration
 ├── README.md               # This file
+├── DISCLAIMER.md           # Safety information
 │
 ├── src/                    # Source code
-│   ├── main.cpp           # Main program
-│   ├── config.h           # ⚠️ EDIT THIS
-│   ├── outputs/           # Output modules (CAN, Serial, etc.)
-│   └── displays/          # Display modules (LCD, etc.)
+│   ├── main.cpp           # Main program loop
+│   ├── config.h           # ⚠️ USER CONFIGURATION
+│   ├── advanced_config.h  # Advanced features config
+│   ├── alarm.cpp          # Alarm system
+│   ├── inputs/            # Input and sensor management
+│   │   ├── input.h
+│   │   ├── input_manager.cpp/h
+│   │   ├── sensor_read.cpp
+│   │   └── serial_config.cpp/h
+│   ├── lib/               # Library components
+│   │   ├── platform.h
+│   │   ├── sensor_types.h
+│   │   ├── sensor_library.h
+│   │   ├── sensor_calibration_data.h
+│   │   └── application_presets.h
+│   ├── outputs/           # Output modules (CAN, Serial, SD)
+│   ├── displays/          # Display modules (LCD, etc.)
+│   └── test/              # Test mode system
 │
 └── docs/                   # Documentation
-    ├── README.md          # Full documentation
-    └── QUICK_REFERENCE.md # Quick lookup guide
+    ├── README.md
+    ├── QUICK_REFERENCE.md
+    ├── SENSOR_SELECTION_GUIDE.md
+    ├── PRESSURE_SENSOR_GUIDE.md
+    ├── VOLTAGE_SENSOR_GUIDE.md
+    ├── W_PHASE_RPM_GUIDE.md
+    ├── ADVANCED_CALIBRATION_GUIDE.md
+    ├── DISCLAIMER.md
+    └── DIRECTORY_SETUP.md
 ```
-
-## Documentation
-
-- **[Full Documentation](docs/README.md)** - Complete guide
-- **[Quick Reference](docs/QUICK_REFERENCE.md)** - Common tasks
-- **[Directory Setup](docs/DIRECTORY_SETUP.md)** - File organization
-
-## Adding Sensors
-
-Adding new sensors is easy:
-
-1. Write a read function in `sensor_read.cpp`
-2. Define the sensor in `sensors.cpp`
-3. Enable it in `config.h`
-
-No need to modify core code! See the [documentation](docs/README.md#adding-a-new-sensor) for examples.
-
-## Adding Outputs
-
-Adding output modules is straightforward:
-
-1. Create `output_yourtype.cpp` in `src/outputs/`
-2. Register it in `output_manager.cpp`
-3. Enable it in `config.h`
-
-See the [SD logging example](src/outputs/output_sdlog.cpp) for reference.
-
-## Supported Outputs
-
-- **CAN Bus** - Standard OBDII PIDs for diagnostic tools
-- **RealDash** - Custom dashboard on mobile devices
-- **Serial** - Debugging and data logging via USB
-- **SD Card** - Local data logging (optional)
 
 ## OBDII Compatibility
 
-openEMS uses standard OBDII PIDs, making it compatible with:
-
+openEMS outputs standard OBDII PIDs via CAN bus, making it compatible with:
 - Torque Pro
 - RaceChrono
 - Harry's Lap Timer
-- OBDLink
-- Most OBDII scan tools and apps
+- OBDLink scan tools
+- Most OBDII diagnostic apps
 
-## Wiring Examples
-
-### Teensy 4.0 Basic Setup
-
-```
-Thermocouples (MAX6675):
-  VCC → 5V
-  GND → GND
-  SCK → Pin 13 (SPI)
-  SO  → Pin 12 (SPI MISO)
-  CS  → Pin 6 (configurable)
-
-VDO Sensors (Thermistors/Pressure):
-  Signal → Analog pin (A0-A13)
-  Ground → GND
-  (Use 2.2kΩ pulldown for thermistors)
-
-CAN Bus (Native FlexCAN on Teensy 4.0/4.1):
-  TX (Pin 22) → CAN Transceiver TX
-  RX (Pin 23) → CAN Transceiver RX
-  (Requires external CAN transceiver like MCP2562 or SN65HVD230)
-  CAN_H → Vehicle CAN High
-  CAN_L → Vehicle CAN Low
-  GND   → Vehicle GND
-
-CAN Bus (MCP2515 Module - any board):
-  CS  → Pin 9 (configurable)
-  INT → Pin 2 (configurable)
-  SCK → Pin 13 (SPI)
-  MISO → Pin 12 (SPI)
-  MOSI → Pin 11 (SPI)
-  CAN_H → Vehicle CAN High
-  CAN_L → Vehicle CAN Low
-  GND → Vehicle GND
-
-LCD (I2C):
-  VCC → 5V
-  GND → GND
-  SDA → Pin 18 (I2C)
-  SCL → Pin 19 (I2C)
-```
-
-See [full wiring guide](docs/README.md#wiring) for detailed connections.
-
-## Calibration
-
-### Voltage Reference
-
-Measure your board's internal voltage reference:
-
-```cpp
-// In config.h
-#define AREF_VOLTAGE 1.065  // Replace with measured value
-```
-
-### Sensor Calibration
-
-Modify lookup tables in `sensor_read.cpp` for VDO sensors, or adjust conversion functions.
-
-## Troubleshooting
-
-**Sensor shows NAN:**
-- Check wiring and connections
-- Verify sensor type matches configuration
-- Check pin assignments in config.h
-
-**CAN not working:**
-- Native FlexCAN: Verify CAN transceiver is powered and connected to pins 22/23
-- MCP2515: Check CS and INT pin assignments in config.h
-- Verify 120Ω termination resistors at both ends of CAN bus
-- Check CAN_H and CAN_L connections (not reversed)
-- Confirm 500kbps baud rate matches vehicle CAN bus
-- Check serial monitor for "Native FlexCAN initialized" or "MCP2515 CAN initialized" message
-
-**LCD blank:**
-- Try I2C address 0x3F instead of 0x27
-- Check SDA/SCL connections
-- Verify 5V power
-
-See [troubleshooting guide](docs/README.md#troubleshooting) for more help.
+**Note:** openEMS emulates OBDII for tool compatibility but does not interface with factory vehicle ECUs.
 
 ## Performance
 
-- **Loop time:** ~93ms with all sensors enabled
-- **Memory:** ~2.7KB RAM, ~30KB program space
-- **Update rate:** Configurable (default 100ms)
+**Typical Configuration (8 sensors, CAN, LCD):**
+- Loop time: ~93ms
+- RAM usage: ~3KB
+- Flash usage: ~35KB
+- Update rate: 200ms (configurable)
+
+**Arduino Uno (minimal, 3-6 sensors):**
+- RAM usage: ~1.5-2KB
+- Flash usage: ~25-30KB
+- Fully functional with compile-time mode
 
 ## Contributing
 
-Contributions welcome! Please:
+Contributions welcome:
 
-1. Test thoroughly on hardware
-2. Document new sensors/features
-3. Follow existing code style
-4. Update documentation
+1. **Sensor calibrations** - Share your sensor data
+2. **Platform testing** - Test on different hardware
+3. **Documentation** - Improve clarity
+4. **Bug reports** - Help make it more reliable
+
+**Please:**
+- Test thoroughly on hardware before submitting
+- Document new sensors with datasheets
+- Follow existing code style
+- Update documentation
+
+## Community and Support
+
+**Getting Help:**
+- **GitHub Issues** - Bug reports and feature requests
+- **GitHub Discussions** - Questions and setup help
+- **Documentation** - Start here for most questions
+
+**When asking for help, include:**
+1. Hardware platform (Arduino Mega, Teensy 4.0, etc.)
+2. Sensor types being used
+3. Configuration mode (compile-time or runtime)
+4. Serial output showing the issue
+5. What you've already tried
 
 ## License
 
 MIT License - Free for personal and commercial use.
 
-See [LICENSE](LICENSE) file for details.
-
-## Credits
-
-Created by [Your Name] for the classic car community.
-
-## Support
-
-- **Issues:** [GitHub Issues](https://github.com/yourusername/openEMS/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/yourusername/openEMS/discussions)
-- **Documentation:** [Full Docs](docs/README.md)
-
-## Version History
-
-**v1.0 (2024)** - Initial modular release
-- Function pointer architecture
-- Modular output system
-- Configuration-driven design
-- Support for 11+ sensor types
-- Multiple output options
+See [LICENSE](LICENSE) file for complete terms.
 
 ---
 
+**openEMS is beta software. See [DISCLAIMER](DISCLAIMER.md) for important safety information and limitations.**

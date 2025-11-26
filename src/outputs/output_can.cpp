@@ -6,7 +6,7 @@
 
 #include "../config.h"
 #include "output_base.h"
-#include "../input.h"
+#include "../inputs/input.h"
 
 #ifdef ENABLE_CAN
 

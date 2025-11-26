@@ -5,7 +5,7 @@
  * NOTE: Only compiled in EEPROM/runtime configuration mode (not in static/compile-time mode)
  */
 
-#include "config.h"
+#include "../config.h"
 
 #ifdef USE_INPUT_BASED_ARCHITECTURE
 
