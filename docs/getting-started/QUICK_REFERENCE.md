@@ -23,9 +23,9 @@
 #define USE_STATIC_CONFIG
 
 // Configure an input (repeat for each sensor)
-#define INPUT_1_PIN            6              // Pin number
-#define INPUT_1_APPLICATION    CHT            // What you're measuring
-#define INPUT_1_SENSOR         K_TYPE_THERMOCOUPLE_MAX6675  // Hardware type
+#define INPUT_0_PIN            6              // Pin number
+#define INPUT_0_APPLICATION    CHT            // What you're measuring
+#define INPUT_0_SENSOR         MAX6675        // Hardware sensor type
 ```
 
 ### Runtime Mode (Teensy, Mega, Development)
@@ -38,8 +38,9 @@
 
 **Configure via serial (115200 baud):**
 ```
-SET A2 APPLICATION COOLANT_TEMP VDO_120C_LOOKUP
-SET A3 APPLICATION OIL_PRESSURE VDO_5BAR_PRESSURE
+SET A2 APPLICATION COOLANT_TEMP
+SET A2 SENSOR VDO_120C_LOOKUP
+ENABLE A2
 SAVE
 ```
 
@@ -51,14 +52,17 @@ SAVE
 
 **Compile-Time:**
 ```cpp
-#define INPUT_1_PIN            6
-#define INPUT_1_APPLICATION    CHT
-#define INPUT_1_SENSOR         K_TYPE_THERMOCOUPLE_MAX6675
+#define INPUT_0_PIN            6
+#define INPUT_0_APPLICATION    CHT
+#define INPUT_0_SENSOR         MAX6675
 ```
 
 **Runtime:**
 ```
-SET Pin6 APPLICATION CHT K_TYPE_THERMOCOUPLE_MAX6675
+SET 6 APPLICATION CHT
+SET 6 SENSOR MAX6675
+ENABLE 6
+SAVE
 ```
 
 **Wiring:**
@@ -70,18 +74,25 @@ MAX6675 SO  → Pin 12 (SPI MISO)
 MAX6675 CS  → Pin 6 (or your configured pin)
 ```
 
+**Sensor types:**
+- `MAX6675` - Standard K-type thermocouple amplifier
+- `MAX31855` - Higher accuracy K-type amplifier
+
 ### VDO Temperature Sensor (Coolant/Oil)
 
 **Compile-Time:**
 ```cpp
-#define INPUT_2_PIN            A2
-#define INPUT_2_APPLICATION    COOLANT_TEMP
-#define INPUT_2_SENSOR         VDO_120C_LOOKUP
+#define INPUT_1_PIN            A2
+#define INPUT_1_APPLICATION    COOLANT_TEMP
+#define INPUT_1_SENSOR         VDO_120C_LOOKUP
 ```
 
 **Runtime:**
 ```
-SET A2 APPLICATION COOLANT_TEMP VDO_120C_LOOKUP
+SET A2 APPLICATION COOLANT_TEMP
+SET A2 SENSOR VDO_120C_LOOKUP
+ENABLE A2
+SAVE
 ```
 
 **Wiring:**
@@ -91,8 +102,8 @@ VDO Sensor Terminal 2 → GND
 Add 2.2kΩ pull-down resistor: Pin → 2.2kΩ → GND
 ```
 
-**Choose sensor type:**
-- `VDO_120C_LOOKUP` - Most accurate (±0.5°C)
+**Sensor types:**
+- `VDO_120C_LOOKUP` - Most accurate for 120°C sensors (±0.5°C)
 - `VDO_120C_STEINHART` - Slightly less accurate (±1°C)
 - `VDO_150C_LOOKUP` - For 150°C sensors
 - `VDO_150C_STEINHART` - For 150°C sensors
@@ -101,14 +112,17 @@ Add 2.2kΩ pull-down resistor: Pin → 2.2kΩ → GND
 
 **Compile-Time:**
 ```cpp
-#define INPUT_3_PIN            A3
-#define INPUT_3_APPLICATION    OIL_PRESSURE
-#define INPUT_3_SENSOR         VDO_5BAR_PRESSURE
+#define INPUT_2_PIN            A3
+#define INPUT_2_APPLICATION    OIL_PRESSURE
+#define INPUT_2_SENSOR         VDO_5BAR
 ```
 
 **Runtime:**
 ```
-SET A3 APPLICATION OIL_PRESSURE VDO_5BAR_PRESSURE
+SET A3 APPLICATION OIL_PRESSURE
+SET A3 SENSOR VDO_5BAR
+ENABLE A3
+SAVE
 ```
 
 **Wiring:**
@@ -120,79 +134,100 @@ No external resistors needed
 ```
 
 **Sensor types:**
-- `VDO_5BAR_PRESSURE` - 0-5 bar (0-73 PSI)
-- `VDO_2BAR_PRESSURE` - 0-2 bar (0-29 PSI)
+- `VDO_5BAR` - 0-5 bar (0-73 PSI)
+- `VDO_2BAR` - 0-2 bar (0-29 PSI)
 
 ### Battery Voltage
 
 **Compile-Time:**
 ```cpp
-#define INPUT_4_PIN            A8
-#define INPUT_4_APPLICATION    PRIMARY_BATTERY
-#define INPUT_4_SENSOR         STANDARD_12V_DIVIDER
+#define INPUT_3_PIN            A8
+#define INPUT_3_APPLICATION    PRIMARY_BATTERY
+#define INPUT_3_SENSOR         VOLTAGE_DIVIDER
 ```
 
 **Runtime:**
 ```
-SET A8 APPLICATION PRIMARY_BATTERY STANDARD_12V_DIVIDER
+SET A8 APPLICATION PRIMARY_BATTERY
+SET A8 SENSOR VOLTAGE_DIVIDER
+ENABLE A8
+SAVE
 ```
 
 **Wiring:**
 ```
 Battery + → 100kΩ → Junction → Analog pin
-Junction → 22kΩ (3.3V) or 6.8kΩ (5V) → GND
+Junction → 22kΩ (3.3V boards) or 6.8kΩ (5V boards) → GND
 ```
 
-**Automatic:** Platform auto-configures correct divider based on board voltage.
+**Note:** Platform auto-configures correct divider ratio based on detected board voltage.
 
 ### W-Phase RPM (Classic Cars)
 
 **Compile-Time:**
 ```cpp
-#define INPUT_5_PIN            5
-#define INPUT_5_APPLICATION    ENGINE_RPM
-#define INPUT_5_SENSOR         W_PHASE_RPM_12_POLE
+#define INPUT_4_PIN            5
+#define INPUT_4_APPLICATION    ENGINE_RPM
+#define INPUT_4_SENSOR         W_PHASE_RPM
 ```
 
 **Runtime:**
 ```
-SET Pin5 APPLICATION ENGINE_RPM W_PHASE_RPM_12_POLE
+SET 5 APPLICATION ENGINE_RPM
+SET 5 SENSOR W_PHASE_RPM
+ENABLE 5
+SAVE
 ```
 
-**⚠️ CRITICAL:** See [W_PHASE_RPM_GUIDE.md](../guides/sensor-types/W_PHASE_RPM_GUIDE.md) for voltage protection circuit. Teensy boards require 22kΩ/4.7kΩ divider with 3.3V zener!
-
-**Sensor types:**
-- `W_PHASE_RPM_12_POLE` - Most common
-- `W_PHASE_RPM_14_POLE` - High-output alternators
-- `W_PHASE_RPM_16_POLE` - Some marine/industrial
+**⚠️ CRITICAL:** See [W_PHASE_RPM_GUIDE.md](../guides/sensor-types/W_PHASE_RPM_GUIDE.md) for voltage protection circuit. Teensy boards (3.3V) require 22kΩ/4.7kΩ divider with 3.3V zener!
 
 ### BME280 Environmental Sensor
 
 **Compile-Time:**
 ```cpp
-#define INPUT_6_PIN            0x76  // I2C address
-#define INPUT_6_APPLICATION    AMBIENT_TEMP
-#define INPUT_6_SENSOR         BME280_AMBIENT_TEMPERATURE
+#define INPUT_5_PIN            0x76  // I2C address
+#define INPUT_5_APPLICATION    AMBIENT_TEMP
+#define INPUT_5_SENSOR         BME280_TEMP
 ```
 
 **Runtime:**
 ```
-SET 0x76 APPLICATION AMBIENT_TEMP BME280_AMBIENT_TEMPERATURE
+SET 0x76 APPLICATION AMBIENT_TEMP
+SET 0x76 SENSOR BME280_TEMP
+ENABLE 0x76
+SAVE
 ```
 
 **Wiring:**
 ```
 BME280 VCC → 3.3V
 BME280 GND → GND
-BME280 SDA → Pin 18 (I2C SDA)
-BME280 SCL → Pin 19 (I2C SCL)
+BME280 SDA → SDA pin (board-specific)
+BME280 SCL → SCL pin (board-specific)
 ```
 
-**Available:**
-- `BME280_AMBIENT_TEMPERATURE`
-- `BME280_BAROMETRIC_PRESSURE`
-- `BME280_RELATIVE_HUMIDITY`
-- `BME280_ESTIMATED_ALTITUDE`
+**Sensor types:**
+- `BME280_TEMP` - Ambient temperature
+- `BME280_PRESSURE` - Barometric pressure
+- `BME280_HUMIDITY` - Relative humidity
+- `BME280_ELEVATION` - Estimated altitude
+
+### Digital Float Switch (Coolant Level)
+
+**Compile-Time:**
+```cpp
+#define INPUT_6_PIN            7
+#define INPUT_6_APPLICATION    COOLANT_LEVEL
+#define INPUT_6_SENSOR         FLOAT_SWITCH
+```
+
+**Runtime:**
+```
+SET 7 APPLICATION COOLANT_LEVEL
+SET 7 SENSOR FLOAT_SWITCH
+ENABLE 7
+SAVE
+```
 
 ---
 
@@ -200,337 +235,129 @@ BME280 SCL → Pin 19 (I2C SCL)
 
 ### Configuration Commands
 
-```
-SET <pin> APPLICATION <app> <sensor>  Configure input
-ENABLE <pin>                          Enable input
-DISABLE <pin>                         Disable input
-CLEAR <pin>                           Remove input
-SET <pin> NAME <name>                 Set short name (e.g. "CHT")
-SET <pin> DISPLAY_NAME <name>         Set LCD name
-SET <pin> UNITS <unit>                Override display units
-```
+| Command | Description |
+|---------|-------------|
+| `SET <pin> APPLICATION <app>` | Set measurement type for an input |
+| `SET <pin> SENSOR <sensor>` | Set hardware sensor type |
+| `SET <pin> NAME <name>` | Set short display name (3-4 chars) |
+| `SET <pin> DISPLAY_NAME <name>` | Set full display name |
+| `SET <pin> UNITS <units>` | Set display units |
+| `SET <pin> ALARM <min> <max>` | Set alarm thresholds |
+| `ENABLE <pin>` | Enable an input |
+| `DISABLE <pin>` | Disable an input |
+| `CLEAR <pin>` | Remove input configuration |
 
 ### Query Commands
 
-```
-LIST INPUTS          Show all configured inputs
-LIST APPLICATIONS    Show available application types
-LIST SENSORS         Show available sensor types
-INFO <pin>           Show detailed info for one input
-HELP                 Show command help
-```
+| Command | Description |
+|---------|-------------|
+| `LIST INPUTS` | Show all configured inputs |
+| `LIST APPLICATIONS` | Show available application types |
+| `LIST SENSORS` | Show available sensor types |
+| `INFO <pin>` | Show detailed info for one input |
+| `HELP` | Show all available commands |
 
 ### System Commands
 
-```
-SAVE         Save configuration to EEPROM
-LOAD         Load configuration from EEPROM
-RESET        Clear all configuration
-```
+| Command | Description |
+|---------|-------------|
+| `SAVE` | Save configuration to EEPROM |
+| `LOAD` | Load configuration from EEPROM |
+| `RESET` | Clear all configuration (requires confirmation) |
+| `RESET CONFIRM` | Confirm configuration reset |
+
+### Pin Formats
+
+- Analog pins: `A0`, `A1`, `A2`, ... `A15`
+- Digital pins: `0`, `1`, `2`, ... `53`
+- I2C addresses: `0x76`, `0x77` (for BME280)
+
+### Available Units
+
+| Unit | Description |
+|------|-------------|
+| `CELSIUS` or `C` | Temperature in Celsius |
+| `FAHRENHEIT` or `F` | Temperature in Fahrenheit |
+| `PSI` | Pressure in PSI |
+| `BAR` | Pressure in bar |
+| `KPA` | Pressure in kilopascals |
+| `VOLTS` or `V` | Voltage |
+| `RPM` | Revolutions per minute |
+| `PERCENT` or `%` | Percentage |
+| `METERS` or `M` | Altitude in meters |
+| `FEET` or `FT` | Altitude in feet |
 
 ---
 
-## Applications (What You're Measuring)
+## Application Types
 
-```
-CHT                 - Cylinder Head Temperature
-EGT                 - Exhaust Gas Temperature
-COOLANT_TEMP        - Coolant/Water Temperature
-OIL_TEMP            - Oil Temperature
-TCASE_TEMP          - Transfer Case Temperature
-OIL_PRESSURE        - Oil Pressure
-BOOST_PRESSURE      - Turbo Boost Pressure
-FUEL_PRESSURE       - Fuel Pressure
-PRIMARY_BATTERY     - Main Battery Voltage
-AUXILIARY_BATTERY   - Auxiliary Battery Voltage
-COOLANT_LEVEL       - Coolant Level (float switch)
-AMBIENT_TEMP        - Outside Air Temperature
-BAROMETRIC_PRESSURE - Barometric Pressure
-HUMIDITY            - Relative Humidity
-ELEVATION           - Estimated Altitude
-ENGINE_RPM          - Engine RPM
-```
-
----
-
-## Sensor Types (Hardware)
-
-### Temperature
-```
-K_TYPE_THERMOCOUPLE_MAX6675    MAX6675 K-type TC
-K_TYPE_THERMOCOUPLE_MAX31855   MAX31855 K-type TC
-VDO_120C_LOOKUP                VDO 120°C (lookup table)
-VDO_120C_STEINHART             VDO 120°C (Steinhart-Hart)
-VDO_150C_LOOKUP                VDO 150°C (lookup table)
-VDO_150C_STEINHART             VDO 150°C (Steinhart-Hart)
-GENERIC_NTC_10K_3950           Generic 10K NTC, β=3950K
-GENERIC_NTC_10K_3435           Generic 10K NTC, β=3435K
-GENERIC_NTC_10K_3380           Generic 10K NTC, β=3380K
-BME280_AMBIENT_TEMPERATURE     BME280 ambient temp
-```
-
-### Pressure
-```
-VDO_5BAR_PRESSURE              VDO 5-bar (0-73 PSI)
-VDO_2BAR_PRESSURE              VDO 2-bar (0-29 PSI)
-GENERIC_0_5V_5BAR              Generic 0.5-4.5V → 0-5 bar
-GENERIC_0_5V_10BAR             Generic 0.5-4.5V → 0-10 bar
-GENERIC_0_5V_100PSI            Generic 0.5-4.5V → 0-100 PSI
-MPX4250AP_PRESSURE             Freescale MPX4250AP MAP
-BME280_BAROMETRIC_PRESSURE     BME280 barometric
-```
-
-### RPM
-```
-W_PHASE_RPM_12_POLE            12-pole alternator
-W_PHASE_RPM_14_POLE            14-pole alternator
-W_PHASE_RPM_16_POLE            16-pole alternator
-```
-
-### Other
-```
-STANDARD_12V_DIVIDER           12V battery monitoring
-BME280_RELATIVE_HUMIDITY       BME280 humidity
-BME280_ESTIMATED_ALTITUDE      BME280 elevation
-DIGITAL_FLOAT_SWITCH           Float switch (NC or NO)
-```
+| Application | Description | Default Sensor |
+|-------------|-------------|----------------|
+| `CHT` | Cylinder Head Temperature | MAX6675 |
+| `EGT` | Exhaust Gas Temperature | MAX31855 |
+| `COOLANT_TEMP` | Engine Coolant Temperature | VDO_120C_LOOKUP |
+| `OIL_TEMP` | Engine Oil Temperature | VDO_150C_STEINHART |
+| `TCASE_TEMP` | Transfer Case Temperature | VDO_150C_STEINHART |
+| `OIL_PRESSURE` | Engine Oil Pressure | VDO_5BAR |
+| `BOOST_PRESSURE` | Boost/Manifold Pressure | GENERIC_BOOST |
+| `FUEL_PRESSURE` | Fuel Pressure | VDO_5BAR |
+| `PRIMARY_BATTERY` | Main Battery Voltage | VOLTAGE_DIVIDER |
+| `AUXILIARY_BATTERY` | Secondary Battery Voltage | VOLTAGE_DIVIDER |
+| `COOLANT_LEVEL` | Coolant Level Switch | FLOAT_SWITCH |
+| `AMBIENT_TEMP` | Ambient Temperature | BME280_TEMP |
+| `BAROMETRIC_PRESSURE` | Barometric Pressure | BME280_PRESSURE |
+| `HUMIDITY` | Relative Humidity | BME280_HUMIDITY |
+| `ELEVATION` | Estimated Altitude | BME280_ELEVATION |
+| `ENGINE_RPM` | Engine RPM | W_PHASE_RPM |
 
 ---
 
-## Display Units
+## Sensor Types
 
-**Available Units:**
-```
-CELSIUS / FAHRENHEIT           Temperature
-BAR / PSI / KPA                Pressure
-VOLTS                          Voltage (fixed)
-RPM                            RPM (fixed)
-PERCENT                        Humidity (fixed)
-METERS / FEET                  Elevation
-```
+### Thermocouples
+- `MAX6675` - K-Type thermocouple (MAX6675 amplifier)
+- `MAX31855` - K-Type thermocouple (MAX31855 amplifier)
 
-**Set defaults in config.h:**
-```cpp
-#define DEFAULT_TEMPERATURE_UNITS  CELSIUS
-#define DEFAULT_PRESSURE_UNITS     BAR
-#define DEFAULT_ELEVATION_UNITS    FEET
-```
+### Thermistors (VDO)
+- `VDO_120C_LOOKUP` - VDO 120°C (lookup table)
+- `VDO_120C_STEINHART` - VDO 120°C (Steinhart-Hart)
+- `VDO_150C_LOOKUP` - VDO 150°C (lookup table)
+- `VDO_150C_STEINHART` - VDO 150°C (Steinhart-Hart)
 
-**Override per sensor (runtime mode):**
-```
-SET A2 UNITS FAHRENHEIT
-SET A3 UNITS PSI
-```
+### Pressure Sensors
+- `VDO_2BAR` - VDO 0-2 bar
+- `VDO_5BAR` - VDO 0-5 bar
+- `GENERIC_BOOST` - Generic 0-5V boost sensor
+- `MPX4250AP` - Freescale MAP sensor
 
----
+### Voltage & RPM
+- `VOLTAGE_DIVIDER` - Standard 12V battery monitoring
+- `W_PHASE_RPM` - W-phase alternator RPM
 
-## Pin Designations
+### Environmental (BME280)
+- `BME280_TEMP` - Temperature
+- `BME280_PRESSURE` - Barometric pressure
+- `BME280_HUMIDITY` - Relative humidity
+- `BME280_ELEVATION` - Altitude estimation
 
-**Analog Pins:**
-```
-A0, A1, A2, ... A15            Arduino Mega (A0-A15)
-A0, A1, A2, ... A13            Teensy 4.0 (A0-A13)
-A0, A1, ... A5                 Arduino Uno (A0-A5)
-```
-
-**Digital Pins:**
-```
-Pin2, Pin3, Pin4, ... Pin53    Any digital pin
-6, 7, 8, ...                   Alternate format (no "Pin")
-```
-
-**SPI Pins (MAX6675/MAX31855):**
-```
-Pin6, Pin7, etc.               CS (Chip Select) pins
-Pin13                          SCK (shared, SPI clock)
-Pin12                          MISO (shared, SPI data)
-```
-
-**I2C Addresses (BME280):**
-```
-0x76                           BME280 default address
-0x77                           BME280 alternate address
-```
+### Digital
+- `FLOAT_SWITCH` - Digital float switch input
 
 ---
 
-## Troubleshooting Quick Checks
+## Platform Quick Reference
 
-### Sensor Shows NAN
-
-1. Check wiring - most common issue
-2. Verify sensor type matches physical sensor
-3. Check pin number is correct
-4. Test sensor with multimeter
-
-### Wrong Reading
-
-1. Verify correct sensor type (VDO 120C vs 150C)
-2. Check bias resistor value (should be 2.2kΩ)
-3. Measure sensor resistance at known temperature
-4. Compare to datasheet values
-
-### CAN Not Working
-
-**Native FlexCAN (Teensy):**
-- Define `USE_FLEXCAN_NATIVE` in config.h
-- Check Pin 22 (TX) and Pin 23 (RX)
-- Verify CAN transceiver has power
-- Check for 120Ω termination
-
-**MCP2515:**
-- Check CS and INT pin assignments
-- Verify SPI connections
-- Check CAN_H and CAN_L not reversed
-
-### LCD Blank
-
-- Try I2C address 0x3F instead of 0x27
-- Check SDA/SCL connections (Pin 18/19)
-- Verify 5V power (or 3.3V for 3.3V boards)
-- Adjust contrast pot on LCD module
+| Board | ADC | Voltage | Max Inputs | Notes |
+|-------|-----|---------|------------|-------|
+| Arduino Uno | 10-bit | 5V | 6 | Use compile-time mode |
+| Arduino Mega | 10-bit | 5V | 16 | Good all-rounder |
+| Teensy 4.0/4.1 | 12-bit | 3.3V | 16 | Best performance, native CAN |
+| Arduino Due | 12-bit | 3.3V | 16 | High resolution ADC |
+| ESP32 | 12-bit | 3.3V | 16 | WiFi capable |
 
 ---
 
-## Memory Usage Guidelines
-
-**Arduino Uno (2KB RAM):**
-- 3-6 sensors maximum
-- Use compile-time configuration
-- Disable unused outputs
-- Minimize enabled features
-
-**Arduino Mega (8KB RAM):**
-- 10-15 sensors comfortably
-- Either configuration mode works
-- All outputs available
-
-**Teensy 4.0 (1MB RAM):**
-- Essentially unlimited sensors (limited by pins)
-- Either configuration mode works
-- All features available
-
----
-
-## Build Commands
-
-### PlatformIO
-
-```bash
-pio run                        Compile for default board
-pio run -e teensy40            Compile for Teensy 4.0
-pio run -e megaatmega2560      Compile for Arduino Mega
-pio run -t upload              Upload to board
-pio device monitor             Open serial monitor (115200 baud)
-pio run -t clean               Clean build files
-```
-
-### Arduino IDE
-
-1. Open openEMS.ino
-2. Tools → Board → Select your board
-3. Tools → Port → Select COM port
-4. Click Upload button
-5. Tools → Serial Monitor (set to 115200 baud)
-
----
-
-## Platform Auto-Configuration
-
-**System automatically detects:**
-
-| Platform | Voltage | ADC Bits | ADC Max | Battery Divider |
-|----------|---------|----------|---------|-----------------|
-| Mega     | 5.0V    | 10       | 1023    | 100kΩ / 6.8kΩ   |
-| Teensy 4.x | 3.3V  | 12       | 4095    | 100kΩ / 22kΩ    |
-| Teensy 3.x | 3.3V  | 12       | 4095    | 100kΩ / 22kΩ    |
-| Uno      | 5.0V    | 10       | 1023    | 100kΩ / 6.8kΩ   |
-| Due      | 3.3V    | 12       | 4095    | 100kΩ / 22kΩ    |
-
----
-
-## Typical Configurations
-
-### Minimal (3 sensors, Arduino Uno)
-
-```cpp
-#define USE_STATIC_CONFIG
-#define ENABLE_LCD
-#define ENABLE_SERIAL_OUTPUT
-
-#define INPUT_1_PIN         A0
-#define INPUT_1_APPLICATION COOLANT_TEMP
-#define INPUT_1_SENSOR      VDO_120C_LOOKUP
-
-#define INPUT_2_PIN         A1
-#define INPUT_2_APPLICATION OIL_PRESSURE
-#define INPUT_2_SENSOR      VDO_5BAR_PRESSURE
-
-#define INPUT_3_PIN         A2
-#define INPUT_3_APPLICATION PRIMARY_BATTERY
-#define INPUT_3_SENSOR      STANDARD_12V_DIVIDER
-```
-
-### Standard (8 sensors, Arduino Mega/Teensy)
-
-```cpp
-// Leave USE_STATIC_CONFIG undefined for runtime mode
-#define ENABLE_LCD
-#define ENABLE_CAN
-#define ENABLE_SERIAL_OUTPUT
-
-// Configure via serial:
-SET Pin6 APPLICATION CHT K_TYPE_THERMOCOUPLE_MAX6675
-SET Pin7 APPLICATION EGT K_TYPE_THERMOCOUPLE_MAX6675
-SET A0 APPLICATION COOLANT_TEMP VDO_120C_LOOKUP
-SET A1 APPLICATION OIL_TEMP VDO_120C_LOOKUP
-SET A2 APPLICATION OIL_PRESSURE VDO_5BAR_PRESSURE
-SET A3 APPLICATION BOOST_PRESSURE VDO_2BAR_PRESSURE
-SET A8 APPLICATION PRIMARY_BATTERY STANDARD_12V_DIVIDER
-SET Pin5 APPLICATION ENGINE_RPM W_PHASE_RPM_12_POLE
-SAVE
-```
-
-### Full Feature (Teensy 4.0)
-
-Runtime mode with all outputs enabled:
-- CHT, EGT (thermocouples)
-- Coolant, oil temps (VDO thermistors)
-- Oil pressure, boost (VDO pressure)
-- Battery voltage
-- RPM (W-phase)
-- Ambient conditions (BME280)
-- LCD display
-- CAN bus output
-- RealDash protocol
-- SD card logging
-
----
-
-## Serial Output Format
-
-**CSV Format:**
-```
-Sensor,Value,Units
-CHT,485.2,C
-EGT,610.5,C
-WTR,92.0,C
-OIL,2.5,bar
-BAT,13.8,V
-RPM,2450,RPM
-```
-
-**Baud Rate:** 115200
-
-**Use for:**
-- Debugging sensor readings
-- Data logging to computer
-- Custom dashboards
-- Analysis and graphing
-
----
-
-## Common Mistakes to Avoid
+## Common Mistakes
 
 1. **Wrong sensor type** - VDO 120C vs 150C makes huge difference
 2. **Missing pull-down resistor** - VDO thermistors need 2.2kΩ
@@ -568,3 +395,5 @@ RPM,2450,RPM
 ---
 
 **Remember: This is beta software. Test thoroughly and maintain mechanical backup gauges!**
+
+**For the classic car community.**

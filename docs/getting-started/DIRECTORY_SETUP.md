@@ -10,7 +10,8 @@
 openEMS/
 ├── platformio.ini              # PlatformIO build configuration
 ├── README.md                   # Project overview, quick start
-├── LICENSE                     # MIT License
+├── LICENSE                     # MIT + NonCommercial License
+├── DISCLAIMER.md               # Safety and warranty disclaimer
 │
 ├── src/                        # All source code
 │   ├── main.cpp               # Main program loop
@@ -53,7 +54,6 @@ openEMS/
 │
 └── docs/                       # Documentation
     ├── README.md                       # Complete documentation
-    ├── DISCLAIMER.md                   # Safety and warranty disclaimer
     ├── getting-started/                # Getting started guides
     │   ├── QUICK_REFERENCE.md          # Quick lookup guide
     │   └── DIRECTORY_SETUP.md          # This file
@@ -69,102 +69,96 @@ openEMS/
     │       ├── ADVANCED_CALIBRATION_GUIDE.md
     │       └── DISPLAY_UNITS_CONFIGURATION_GUIDE.md
     └── reference/                      # Reference materials
-        └── README.md                   # Placeholder for future content
+        └── README.md
 ```
 
 ---
 
-## File Descriptions
+## File-by-File Guide
 
 ### Root Directory
 
 **platformio.ini**
-- Build configuration for different hardware platforms
-- Defines board types, build flags, library dependencies
-- **Edit:** Only when adding new board types or libraries
+- PlatformIO build configuration
+- Defines environments for each supported board
+- Library dependencies
+- **Edit:** SOMETIMES (to add new board support or libraries)
 
 **README.md**
-- Project overview and quick start guide
-- Safety warnings and beta status
-- Basic configuration examples
-- **Edit:** Rarely (for project-wide changes)
+- Project overview and quick start
+- Links to all documentation
+- **Edit:** SOMETIMES (for major feature updates)
 
 **LICENSE**
-- MIT License terms
-- **Edit:** Never
+- MIT + NonCommercial License terms
+- **Edit:** NEVER
+
+**DISCLAIMER.md**
+- Safety information and limitations
+- Beta status warning
+- **Edit:** RARELY (legal/safety updates only)
 
 ---
 
-## src/ - Core Source Files
+## src/ - Source Code
 
-### Main Program
+### Core Files
 
 **main.cpp**
-- Main program initialization and loop
-- Calls: input manager → sensor read → outputs → displays → alarms
-- **Edit:** Rarely (only for architectural changes)
+- Main program loop
+- Initialization sequence
+- Calls input reading, output sending, alarm checking
+- **Edit:** RARELY (only for major system changes)
 
-### User Configuration
+**config.h** ⭐
+- Primary user configuration file
+- Build mode selection (compile-time vs runtime)
+- Input definitions (for compile-time mode)
+- Output enables (LCD, CAN, Serial, SD)
+- **Edit:** YES - This is where you configure your system
 
-**config.h** ⭐ **START HERE - THIS IS WHERE YOU CONFIGURE EVERYTHING**
-- Choose configuration mode (compile-time or runtime)
-- Enable/disable outputs (CAN, LCD, serial, etc.)
-- Set default display units (Celsius/Fahrenheit, etc.)
-- Configure sensors (compile-time mode only)
-- **Edit:** YES - This is the main configuration file!
-
-**Example sections:**
 ```cpp
-// Choose mode
-#define USE_STATIC_CONFIG    // Compile-time (comment out for runtime)
+// Build Mode Selection
+#define USE_STATIC_CONFIG     // Enable compile-time mode
 
-// Enable outputs
+// Input Configuration (compile-time mode)
+#define INPUT_0_PIN            6
+#define INPUT_0_APPLICATION    CHT
+#define INPUT_0_SENSOR         MAX6675
+
+// Output Enables
 #define ENABLE_LCD
 #define ENABLE_CAN
-
-// Set defaults
-#define DEFAULT_TEMPERATURE_UNITS  CELSIUS
-#define DEFAULT_PRESSURE_UNITS     BAR
-
-// Configure inputs (compile-time mode)
-#define INPUT_1_PIN            A0
-#define INPUT_1_APPLICATION    COOLANT_TEMP
-#define INPUT_1_SENSOR         VDO_120C_LOOKUP
+#define ENABLE_SERIAL_OUTPUT
 ```
 
 **advanced_config.h**
-- Advanced feature configuration
-- Test mode settings and configuration
-- Custom alarm thresholds
-- Expert-level options
-- **Edit:** SOMETIMES (for advanced features and testing)
-
----
-
-### Alarm System
+- Advanced settings and customizations
+- Custom calibration overrides
+- Test mode configuration
+- **Edit:** SOMETIMES (for custom calibrations)
 
 **alarm.cpp**
-- Monitors sensor values against thresholds
-- Triggers buzzer on out-of-range conditions
-- Silence button handling
-- **Edit:** RARELY (to customize alarm behavior)
+- Alarm logic and thresholds
+- Audible and visual alarm handling
+- **Edit:** RARELY (alarm behavior is configurable via inputs)
 
 ---
 
 ## src/inputs/ - Input and Sensor Management
 
-This directory contains all input-related functionality including sensor reading, configuration, and serial interface.
+This directory contains the unified input-based architecture that supports both compile-time and runtime configuration.
 
 **input.h**
 - Defines the Input structure (core of the system)
 - Application enum (CHT, OIL_PRESSURE, etc.)
-- Sensor enum (VDO_120C_LOOKUP, K_TYPE_THERMOCOUPLE_MAX6675, etc.)
+- Sensor enum (MAX6675, VDO_120C_LOOKUP, etc.)
 - Calibration override union
 - **Edit:** NO - Core architecture definition
 
 **Key concepts:**
 - **Application** = What you're measuring (e.g., OIL_PRESSURE)
-- **Sensor** = Hardware device (e.g., VDO_5BAR_PRESSURE)
+- **Sensor** = Hardware device (e.g., VDO_5BAR)
 - **Input** = Physical pin with assigned application and sensor
 
 **input_manager.cpp / input_manager.h**
@@ -185,14 +179,17 @@ This directory contains all input-related functionality including sensor reading
 **serial_config.h / serial_config.cpp**
 - Serial command interface for runtime configuration
 - Command parser and handlers
-- Only compiled in runtime mode
+- Only compiled when USE_STATIC_CONFIG is NOT defined
 - **Edit:** RARELY (when adding new commands)
 
-**Commands implemented:**
-- SET, ENABLE, DISABLE, CLEAR
-- LIST INPUTS, LIST APPLICATIONS, LIST SENSORS
-- SAVE, LOAD, RESET
-- INFO, HELP
+**Serial Commands (runtime mode only):**
+
+| Category | Commands |
+|----------|----------|
+| Configuration | `SET <pin> APPLICATION <app>`, `SET <pin> SENSOR <sensor>` |
+| Control | `ENABLE`, `DISABLE`, `CLEAR` |
+| Query | `LIST INPUTS`, `LIST APPLICATIONS`, `LIST SENSORS`, `INFO` |
+| System | `SAVE`, `LOAD`, `RESET`, `HELP` |
 
 ---
 
@@ -217,21 +214,25 @@ This directory contains core library components, sensor definitions, and platfor
 **sensor_types.h**
 - Data structure definitions
 - Calibration structure types
-- DisplayUnits enum
+- Units enum (CELSIUS, PSI, BAR, etc.)
 - **Edit:** NO - Core type definitions
 
 **sensor_library.h**
-- Catalog of 30+ sensor IDs
-- Browse this to find your sensor type
-- Just identifiers, no calibration data
+- Catalog of 30+ sensor definitions
+- Maps sensor IDs to read functions and calibrations
+- All stored in PROGMEM (flash memory)
 - **Edit:** YES (when adding new sensor types to library)
 
-**Example entries:**
+**Sensor entries include:**
 ```cpp
-#define K_TYPE_THERMOCOUPLE_MAX6675  1
-#define VDO_120C_LOOKUP              10
-#define VDO_5BAR_PRESSURE            20
-#define W_PHASE_RPM_12_POLE          70
+{
+    .sensor = VDO_120C_LOOKUP,
+    .name = "VDO 120C (Lookup)",
+    .readFunction = readThermistorLookup,
+    .measurementType = MEASURE_TEMPERATURE,
+    .calibrationType = CAL_THERMISTOR_LOOKUP,
+    .defaultCalibration = &vdo120_lookup_cal
+}
 ```
 
 **sensor_calibration_data.h**
@@ -246,14 +247,14 @@ This directory contains core library components, sensor definitions, and platfor
 - Temperature lookup tables
 - Steinhart-Hart coefficients for thermistors
 - Pressure sensor linear/polynomial calibrations
-- RPM pole count configurations
-- Voltage divider values
+- Voltage divider configurations
 
 **application_presets.h**
 - Pre-configured application settings
-- Default alarm thresholds per application type
-- Application-specific display settings
-- **Edit:** SOMETIMES (when adding new application types or modifying defaults)
+- Default sensor assignments per application
+- Default alarm thresholds
+- OBD-II PID mappings
+- **Edit:** SOMETIMES (when adding new application types)
 
 ---
 
@@ -291,7 +292,7 @@ This directory contains all output implementations for sending sensor data to va
 **output_sdlog.cpp**
 - SD card data logging
 - CSV file creation and writing
-- **Edit:** SOMETIMES (to customize logging format or add features)
+- **Edit:** SOMETIMES (to customize logging format)
 
 ---
 
@@ -355,10 +356,6 @@ This directory contains the comprehensive test mode system for testing outputs w
 - Configuration guide
 - Troubleshooting
 - **Edit:** SOMETIMES (to improve clarity or add sections)
-
-**docs/DISCLAIMER.md**
-- Safety and warranty information
-- **Edit:** RARELY (legal/safety updates only)
 
 ---
 
@@ -481,21 +478,58 @@ board = uno
 build_flags = -Os -Wall
 ```
 
+### Building
+
+**Build default target:**
+```bash
+pio run
+```
+
+**Build specific target:**
+```bash
+pio run -e teensy40
+pio run -e megaatmega2560
+pio run -e uno
+```
+
+**Upload:**
+```bash
+pio run -t upload
+pio run -e teensy40 -t upload
+```
+
+**Monitor:**
+```bash
+pio device monitor
+```
+
+### Switching Configuration Modes
+
+**To Compile-Time Mode:**
+```cpp
+// In config.h
+#define USE_STATIC_CONFIG
+```
+
+**To Runtime Mode:**
+```cpp
+// In config.h - comment out:
+// #define USE_STATIC_CONFIG
+```
+
 ---
 
 ## Understanding the Architecture
 
-### Phase 1a: Unified Input-Based System
+### Unified Input-Based System
 
-**Current state:** COMPLETE ✅
-
-The system now uses a single, unified architecture for both configuration modes:
+The system uses a single, unified architecture for both configuration modes:
 
 ```
 Input = {
     pin,                 // Physical pin (A0, Pin6, etc.)
     application,         // What you're measuring (CHT, OIL_PRESSURE)
-    sensor,              // Hardware device (VDO_120C_LOOKUP)
+    sensor,              // Hardware device (MAX6675, VDO_5BAR)
     calibration          // How to convert readings (from library)
 }
 ```
@@ -534,134 +568,12 @@ Input = {
 ### Data Flow
 
 ```
-1. Initialization:
-   config.h OR EEPROM → Input Manager → Input Array
-
-2. Main Loop (every 200ms):
-   Input Array → Read Sensors → Update Values
-   ↓
-   Values → Output Modules (CAN, Serial, SD)
-   Values → Display Module (LCD)
-   Values → Alarm System → Check Thresholds → Buzzer
-
-3. Runtime Config (if enabled):
-   Serial Commands → Input Manager → EEPROM → Input Array
-```
-
----
-
-## Step-by-Step Setup Process
-
-### Method 1: PlatformIO (Recommended)
-
-1. **Install PlatformIO:**
-   ```bash
-   pip install platformio
-   ```
-
-2. **Clone and enter project:**
-   ```bash
-   git clone https://github.com/yourusername/openEMS.git
-   cd openEMS
-   ```
-
-3. **Edit configuration:**
-   ```bash
-   nano src/config.h    # or your preferred editor
-   ```
-
-4. **Build and upload:**
-   ```bash
-   pio run              # Compile
-   pio run -t upload    # Upload to board
-   pio device monitor   # View serial output
-   ```
-
-### Method 2: Arduino IDE
-
-1. **Open project:**
-   - Rename openEMS folder to openEMS.ino
-   - Or create openEMS.ino that includes main.cpp
-
-2. **Install libraries:**
-   - Adafruit BME280
-   - LiquidCrystal_I2C
-   - CAN (for MCP2515)
-   - FlexCAN_T4 (for Teensy)
-
-3. **Select board and port:**
-   - Tools → Board → Your board
-   - Tools → Port → Your COM port
-
-4. **Upload:**
-   - Click Upload button
-
----
-
-## Common Tasks
-
-### Adding a New Sensor to Library
-
-1. **Choose sensor ID in src/lib/sensor_library.h:**
-   ```cpp
-   #define MY_NEW_SENSOR_100  50  // Pick unused ID
-   ```
-
-2. **Add calibration in src/lib/sensor_calibration_data.h:**
-   ```cpp
-   static const ThermistorSteinhartCalibration my_sensor_cal PROGMEM = {
-       .bias_resistor = 2200.0,
-       .steinhart_a = 1.234e-3,
-       .steinhart_b = 2.345e-4,
-       .steinhart_c = 3.456e-7
-   };
-   ```
-
-3. **Add to SENSOR_CONFIGS array in src/lib/sensor_calibration_data.h:**
-   ```cpp
-   {
-       .sensorId = MY_NEW_SENSOR_100,
-       .name = "My Sensor 100C",
-       .internalType = THERMISTOR_STEINHART,
-       .readFunction = readThermistorSteinhart,
-       .displayConvert = convertTemperature,
-       .obdConvert = obdConvertTemp,
-       .calibrationData = &my_sensor_cal,
-       .calibrationType = CAL_THERMISTOR_STEINHART
-   }
-   ```
-
-4. **Test and document:**
-   - Verify readings at known temperatures
-   - Update documentation
-   - Share with community!
-
-### Changing Platform
-
-1. **Edit platformio.ini default_envs:**
-   ```ini
-   [platformio]
-   default_envs = teensy40    # Change this
-   ```
-
-2. **Or build specific target:**
-   ```bash
-   pio run -e teensy40
-   pio run -e megaatmega2560
-   ```
-
-### Switching Configuration Modes
-
-**To Compile-Time:**
-```cpp
-// In config.h
-#define USE_STATIC_CONFIG
-```
-
-**To Runtime:**
-```cpp
-// In config.h - comment out:
-// #define USE_STATIC_CONFIG
+1. Sensor → ADC reading
+2. ADC → Calibration function → Engineering units
+3. Engineering units → Display conversion → Display
+4. Engineering units → OBD conversion → CAN bus
+5. Engineering units → Serial output
+6. Engineering units → SD card log
 ```
 
 ---

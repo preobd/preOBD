@@ -1,44 +1,85 @@
 # Pressure Sensor Configuration Guide
 
+**Complete guide to pressure sensor setup in openEMS**
+
+---
+
 ## Overview
 
 openEMS supports two types of pressure sensors:
-1. **Linear sensors** - Most modern automotive sensors (0.5-4.5V output)
-2. **VDO polynomial sensors** - VDO brand sensors with non-linear characteristics
+
+1. **VDO Polynomial Sensors** - VDO brand sensors with non-linear characteristics
+2. **Linear Sensors** - Generic 0.5-4.5V output sensors
+
+---
 
 ## Quick Selection Guide
 
-### What sensor do you have?
+### VDO Sensors
 
-**VDO 5-bar oil pressure sensor?**
+**VDO 5-bar oil pressure sensor:**
+
+*Compile-Time:*
 ```cpp
-#define OIL_PRESSURE_SENSOR_TYPE  VDO_5BAR_PRESSURE
+#define INPUT_0_PIN            A3
+#define INPUT_0_APPLICATION    OIL_PRESSURE
+#define INPUT_0_SENSOR         VDO_5BAR
 ```
 
-**VDO 2-bar boost pressure sensor?**
-```cpp
-#define BOOST_PRESSURE_SENSOR_TYPE  VDO_2BAR_PRESSURE
+*Runtime:*
+```
+SET A3 APPLICATION OIL_PRESSURE
+SET A3 SENSOR VDO_5BAR
+ENABLE A3
+SAVE
 ```
 
-**Generic 0-5 bar sensor (0.5-4.5V)?**
+**VDO 2-bar boost/intake pressure sensor:**
+
+*Compile-Time:*
 ```cpp
-#define PRESSURE_SENSOR_TYPE  GENERIC_0_5V_5BAR
+#define INPUT_1_PIN            A4
+#define INPUT_1_APPLICATION    BOOST_PRESSURE
+#define INPUT_1_SENSOR         VDO_2BAR
 ```
 
-**Generic 0-10 bar sensor (0.5-4.5V)?**
-```cpp
-#define PRESSURE_SENSOR_TYPE  GENERIC_0_5V_10BAR
+*Runtime:*
+```
+SET A4 APPLICATION BOOST_PRESSURE
+SET A4 SENSOR VDO_2BAR
+ENABLE A4
+SAVE
 ```
 
-**Generic 0-100 psi sensor (0.5-4.5V)?**
+### Generic Linear Sensors
+
+**Generic 0-5 bar (0.5-4.5V output):**
+
+*Compile-Time:*
 ```cpp
-#define PRESSURE_SENSOR_TYPE  GENERIC_0_5V_100PSI
+#define INPUT_2_PIN            A5
+#define INPUT_2_APPLICATION    BOOST_PRESSURE
+#define INPUT_2_SENSOR         GENERIC_BOOST
 ```
 
-**Freescale MPX4250AP MAP sensor?**
-```cpp
-#define PRESSURE_SENSOR_TYPE  MPX4250AP
+*Runtime:*
 ```
+SET A5 APPLICATION BOOST_PRESSURE
+SET A5 SENSOR GENERIC_BOOST
+ENABLE A5
+SAVE
+```
+
+**Freescale MPX4250AP MAP sensor:**
+
+*Compile-Time:*
+```cpp
+#define INPUT_3_PIN            A6
+#define INPUT_3_APPLICATION    BOOST_PRESSURE
+#define INPUT_3_SENSOR         MPX4250AP
+```
+
+---
 
 ## Available Pressure Sensors
 
@@ -46,8 +87,8 @@ openEMS supports two types of pressure sensors:
 
 | Sensor ID | Range | Notes |
 |-----------|-------|-------|
-| `VDO_5BAR_PRESSURE` | 0-5 bar | Oil pressure sensor |
-| `VDO_2BAR_PRESSURE` | 0-2 bar | Boost/intake pressure |
+| `VDO_5BAR` | 0-5 bar (0-73 PSI) | Oil pressure, fuel pressure |
+| `VDO_2BAR` | 0-2 bar (0-29 PSI) | Boost/intake pressure |
 
 **Characteristics:**
 - Non-linear voltage output
@@ -55,257 +96,270 @@ openEMS supports two types of pressure sensors:
 - Very accurate (±1% typical)
 - Common in European vehicles
 
-**Wiring:**
-- Red: +5V
-- Black: Ground
-- White/Signal: Analog input
-
 ### Generic Linear Sensors
 
-| Sensor ID | Range | Voltage | Notes |
-|-----------|-------|---------|-------|
-| `GENERIC_0_5V_5BAR` | 0-5 bar | 0.5-4.5V | Common automotive |
-| `GENERIC_0_5V_10BAR` | 0-10 bar | 0.5-4.5V | High-pressure applications |
-| `GENERIC_0_5V_100PSI` | 0-100 psi | 0.5-4.5V | Imperial units |
+| Sensor ID | Range | Voltage |
+|-----------|-------|---------|
+| `GENERIC_BOOST` | 0-5 bar | 0.5-4.5V |
+| `MPX4250AP` | 20-250 kPa | 0.2-4.7V |
 
 **Characteristics:**
 - Linear voltage-to-pressure relationship
-- 0.5V = minimum pressure
-- 4.5V = maximum pressure
 - Industry standard pinout
+- Available from many manufacturers
 
-**Typical Wiring:**
-- Pin 1: Signal output
-- Pin 2: +5V supply
-- Pin 3: Ground
+---
 
-### Specific Sensors
+## Wiring
 
-**Freescale MPX4250AP**
-- Range: 20-250 kPa (0.2-2.5 bar)
-- Output: 0.2-4.7V
-- Common in automotive MAP applications
+### VDO Pressure Sensors (3-wire)
 
-## Configuration Examples
+```
+VDO Sensor:
+  Ground (Black)  → GND
+  Signal (White)  → Analog pin (e.g., A3)
+  +12V (Red)      → Vehicle 12V supply
 
-### Example 1: VDO Oil Pressure Sensor
-
-```cpp
-// config.h
-#define ENABLE_OIL_PRESSURE
-#define OIL_PRESSURE_SENSOR_TYPE    VDO_5BAR_PRESSURE
-#define OIL_PRESSURE_INPUT          A3
-#define OIL_PRESSURE_MIN            1    // Alarm if below 1 bar
-#define OIL_PRESSURE_MAX            5
+No external resistors needed!
 ```
 
-That's it! The VDO polynomial calibration is automatically loaded.
+**Typical wire colors:**
+- Black: Ground
+- White: Signal (0-5V output)
+- Red: +12V supply (some sensors are 5V powered)
 
-### Example 2: Generic Boost Sensor
+### Generic 3-Wire Sensors
 
-```cpp
-// config.h
-#define ENABLE_BOOST_PRESSURE
-#define BOOST_PRESSURE_SENSOR_TYPE  GENERIC_0_5V_5BAR
-#define BOOST_PRESSURE_INPUT        A4
-#define BOOST_PRESSURE_MIN          -1   // No minimum alarm
-#define BOOST_PRESSURE_MAX          2    // Alarm if over 2 bar
+```
+Generic Sensor:
+  Pin 1 (Signal) → Analog pin
+  Pin 2 (+5V)    → 5V supply
+  Pin 3 (Ground) → GND
+
+No external resistors needed!
 ```
 
-### Example 3: Custom Pressure Range
+### Protection Circuit (Recommended)
 
-If you have a sensor with a different voltage/pressure range:
+For noisy automotive environments:
 
-```cpp
-// config.h
-#define ENABLE_MY_PRESSURE
-#define MY_PRESSURE_SENSOR_TYPE     CUSTOM_PRESSURE_LINEAR
-#define MY_PRESSURE_INPUT           A5
-#define MY_PRESSURE_MIN             0
-#define MY_PRESSURE_MAX             8
-
-// Define custom calibration
-#define MY_PRESSURE_CUSTOM_CALIBRATION
-#define MY_PRESSURE_VOLTAGE_MIN     0.5   // Voltage at 0 bar
-#define MY_PRESSURE_VOLTAGE_MAX     4.5   // Voltage at 8 bar
-#define MY_PRESSURE_MIN_BAR         0.0
-#define MY_PRESSURE_MAX_BAR         8.0
+```
+Sensor Signal ----[100Ω]----+---- Analog pin
+                            |
+                         [100nF]
+                            |
+                           GND
 ```
 
-Then in `sensors.cpp`:
-```cpp
-#ifdef MY_PRESSURE_CUSTOM_CALIBRATION
-    static PressureLinearCalibration my_pressure_cal = {
-        .voltage_min = MY_PRESSURE_VOLTAGE_MIN,
-        .voltage_max = MY_PRESSURE_VOLTAGE_MAX,
-        .pressure_min = MY_PRESSURE_MIN_BAR,
-        .pressure_max = MY_PRESSURE_MAX_BAR
-    };
-#endif
+The 100Ω resistor and 100nF capacitor form a low-pass filter to reduce noise.
 
-Sensor myPressure = {
-    // ... standard fields ...
-    #ifdef MY_PRESSURE_CUSTOM_CALIBRATION
-    .calibrationData = &my_pressure_cal,
-    .calibrationType = CAL_PRESSURE_LINEAR
-    #else
-    .calibrationData = my_pressure_config->calibrationData,
-    .calibrationType = my_pressure_config->calibrationType
-    #endif
-};
-```
+---
 
 ## Understanding Pressure Units
 
 openEMS stores pressure internally in **bar** and converts for display.
 
-**Conversion factors:**
-- 1 bar = 14.5038 psi
+**Conversion reference:**
+- 1 bar = 14.5038 PSI
 - 1 bar = 100 kPa
 - 1 bar = 29.53 inHg
 
-**Display units** are set per sensor in `sensors.cpp`:
+**Set display units per sensor:**
+
+*Compile-Time (in advanced_config.h):*
 ```cpp
-.displayUnits = BAR,    // or PSI, KPA, INHG
+#define INPUT_0_UNITS          PSI
 ```
 
-## Wiring Best Practices
+*Runtime:*
+```
+SET A3 UNITS PSI
+SAVE
+```
 
-### Power Supply
-- Use clean, regulated 5V
-- Add 100nF capacitor near sensor (power to ground)
-- Keep power wires short and twisted
+---
 
-### Signal Wire
-- Use shielded cable if possible
-- Keep away from high-current wires (injectors, ignition)
-- Add 100nF capacitor at ADC input (signal to ground)
+## Typical Pressure Ranges
 
-### Grounding
-- Use chassis ground for sensor ground
-- Ensure good ground connection
-- Star grounding preferred (all sensors to one point)
+### Oil Pressure
+- **Idle:** 0.5-1 bar (7-15 PSI)
+- **Cruise:** 2-3 bar (30-45 PSI)
+- **Maximum:** 5-7 bar (70-100 PSI)
+
+**Alarm settings:**
+```cpp
+// Compile-time
+#define INPUT_0_APPLICATION    OIL_PRESSURE
+// Default alarm: warn if below 1 bar at operating temperature
+```
+
+### Boost Pressure (Turbocharged)
+- **Naturally aspirated:** ~1 bar (atmospheric)
+- **Low boost:** 0-0.5 bar gauge (0-7 PSI)
+- **High boost:** 1-2 bar gauge (15-30 PSI)
+
+### Fuel Pressure
+- **Carbureted:** 0.1-0.2 bar (1.5-3 PSI)
+- **TBI:** 0.5-1 bar (7-15 PSI)
+- **Port injection:** 2.5-4 bar (35-60 PSI)
+
+---
+
+## Configuration Examples
+
+### Example 1: VDO Oil Pressure with Alarm
+
+*Compile-Time:*
+```cpp
+#define INPUT_0_PIN            A3
+#define INPUT_0_APPLICATION    OIL_PRESSURE
+#define INPUT_0_SENSOR         VDO_5BAR
+```
+
+*Runtime:*
+```
+SET A3 APPLICATION OIL_PRESSURE
+SET A3 SENSOR VDO_5BAR
+SET A3 ALARM 1 5
+ENABLE A3
+SAVE
+```
+
+The alarm will trigger if oil pressure drops below 1 bar.
+
+### Example 2: Turbo Boost Pressure
+
+*Compile-Time:*
+```cpp
+#define INPUT_1_PIN            A4
+#define INPUT_1_APPLICATION    BOOST_PRESSURE
+#define INPUT_1_SENSOR         VDO_2BAR
+```
+
+*Runtime:*
+```
+SET A4 APPLICATION BOOST_PRESSURE
+SET A4 SENSOR VDO_2BAR
+SET A4 ALARM -1 1.5
+ENABLE A4
+SAVE
+```
+
+The alarm will trigger if boost exceeds 1.5 bar (-1 means no low alarm).
+
+### Example 3: Multiple Pressure Sensors
+
+*Compile-Time:*
+```cpp
+// Oil pressure
+#define INPUT_0_PIN            A3
+#define INPUT_0_APPLICATION    OIL_PRESSURE
+#define INPUT_0_SENSOR         VDO_5BAR
+
+// Boost pressure
+#define INPUT_1_PIN            A4
+#define INPUT_1_APPLICATION    BOOST_PRESSURE
+#define INPUT_1_SENSOR         VDO_2BAR
+
+// Fuel pressure
+#define INPUT_2_PIN            A5
+#define INPUT_2_APPLICATION    FUEL_PRESSURE
+#define INPUT_2_SENSOR         VDO_5BAR
+```
+
+---
 
 ## Troubleshooting
 
-### Sensor reads 0 or maximum value constantly
-
-**Possible causes:**
-- Disconnected sensor
-- Wiring issue (check continuity)
-- Wrong voltage range in calibration
+### Sensor reads 0 or maximum constantly
 
 **Check:**
-```cpp
-// Enable serial output to see raw values
-#define ENABLE_SERIAL_OUTPUT
+1. Wiring connections - most common issue
+2. Verify sensor has power (+5V or +12V as required)
+3. Measure voltage at analog pin with multimeter
+
+**Debug with serial output:**
 ```
+INFO A3
+```
+This shows the raw ADC value and calculated pressure.
 
 ### Readings are unstable/noisy
 
 **Solutions:**
-1. Add capacitors (100nF) at sensor and ADC input
-2. Use shielded cable
+1. Add 100nF capacitor at analog pin (signal to ground)
+2. Add 100Ω series resistor before capacitor
 3. Check ground connections
-4. Increase `LOOP_DELAY_MS` to reduce noise
+4. Route wires away from ignition components
+5. Use shielded cable for long runs
 
-### Readings are offset (e.g., shows 0.5 bar at 0 psi)
-
-**For linear sensors:**
-Check voltage_min and pressure_min match your sensor:
-```cpp
-.voltage_min = 0.5,    // What voltage at minimum pressure?
-.pressure_min = 0.0,   // What is minimum pressure?
-```
+### Readings are offset
 
 **For VDO sensors:**
-This is normal - VDO sensors have a non-zero voltage at 0 pressure. The polynomial calibration handles this.
+This is normal - VDO sensors have a non-zero voltage at 0 pressure. The polynomial calibration handles this correctly.
+
+**For linear sensors:**
+Verify the sensor's actual output range matches the calibration:
+- Measure voltage at 0 pressure (should be ~0.5V for 0.5-4.5V sensors)
+- Measure voltage at known pressure
+- If different, may need custom calibration
 
 ### Pressure reads high at low values
 
-**For VDO sensors:**
-Make sure you're using the polynomial calibration (`VDO_5BAR_PRESSURE`), not a linear calibration.
+**Possible causes:**
+- Using linear calibration for VDO sensor (use VDO_5BAR, not GENERIC_BOOST)
+- Sensor ground not connected properly
+- Wrong sensor type selected
 
-**For linear sensors:**
-Verify your sensor actually has a linear output. Some cheap sensors are non-linear.
+---
 
-## Custom Polynomial Sensors
+## Hardware Installation
 
-If you have a non-VDO sensor with a known polynomial calibration:
+### Mounting Location
+- Mount sensor close to measurement point
+- Use appropriate fittings (1/8" NPT typical for oil pressure)
+- Use thread sealant on fittings
 
-**Step 1:** Determine the polynomial equation from datasheet:
-```
-Voltage = A*Pressure² + B*Pressure + C
-```
+### Thread Adapters
+Common adapters:
+- 1/8" NPT (most common)
+- M10x1.0 (some European)
+- M14x1.5 (older vehicles)
 
-**Step 2:** Add calibration to `sensor_configs.h`:
-```cpp
-static const PressurePolynomialCalibration my_custom_poly_cal = {
-    .bias_resistor = 2200.0,
-    .poly_a = -0.123,   // Your A coefficient
-    .poly_b = 12.345,   // Your B coefficient
-    .poly_c = 0.567     // Your C coefficient
-};
-```
+### Pressure Range Selection
+- Choose sensor with range 20-50% above expected maximum
+- Too large a range reduces resolution
+- Too small may damage sensor
 
-**Step 3:** Add to sensor database or use in custom sensor definition.
+---
 
-## Advanced: Validating Your Calibration
-
-### Method 1: Known Pressure Source
-Use a pressure gauge and pump to test:
-1. Apply 0 pressure → should read ~0
-2. Apply known pressure → compare reading
-3. Apply maximum pressure → verify range
-
-### Method 2: Compare to Working Gauge
-If you have an existing working gauge:
-1. Monitor both simultaneously
-2. Record readings at various pressures
-3. Adjust calibration if needed
-
-### Method 3: Datasheet Validation
-1. Measure sensor voltage with multimeter
-2. Calculate expected pressure from voltage using datasheet
-3. Compare to openEMS reading
-4. Should match within ±2%
-
-## Sensor Specifications
-
-### Typical Operating Ranges
-
-**Oil Pressure:**
-- Idle: 0.5-1 bar (7-15 psi)
-- Cruise: 2-3 bar (30-45 psi)
-- Max: 5-7 bar (70-100 psi)
-
-**Boost Pressure:**
-- Naturally aspirated: ~1 bar (atmospheric)
-- Low boost: 0-0.5 bar (0-7 psi)
-- High boost: 1-2 bar (15-30 psi)
-
-**Fuel Pressure:**
-- Carbureted: 0.1-0.2 bar (1.5-3 psi)
-- TBI: 0.5-1 bar (7-15 psi)
-- Port injection: 2.5-4 bar (35-60 psi)
-- Direct injection: 50-200 bar (700-3000 psi) - special sensors required
-
-## Safety Notes
+## Safety Considerations
 
 ⚠️ **High Pressure Warning:**
-- Sensors above 10 bar require special installation
-- Always use appropriate fittings and hoses
+- Fuel and oil systems are under significant pressure
+- Always relieve pressure before disconnecting
+- Use appropriate rated fittings and hoses
 - Test for leaks before operating
 
 ⚠️ **Electrical Safety:**
-- Verify voltage range matches your system (5V vs 3.3V)
+- Verify voltage range matches your microcontroller (5V vs 3.3V)
 - Never apply more than 5.5V to sensor
-- Use proper ESD precautions when handling sensors
+- Ground sensor properly to avoid noise
 
-## Getting Help
+⚠️ **Fire Hazard:**
+- Fuel pressure sensors must use fuel-rated fittings
+- Keep electrical connections away from fuel
+- Use proper automotive connectors
 
-If your pressure sensor isn't listed:
-1. Check the datasheet for voltage/pressure relationship
-2. Determine if it's linear or polynomial
-3. Post in GitHub Discussions with sensor details
-4. Community can help add it to the library!
+---
+
+## Custom Calibration
+
+If your pressure sensor isn't in the library, see [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) for:
+- Creating linear calibrations
+- Polynomial calibrations for non-linear sensors
+- Contributing calibrations to the library
+
+---
+
+**For the classic car community.**

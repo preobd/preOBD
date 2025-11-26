@@ -1,190 +1,321 @@
 # Sensor Selection Guide
 
+**How to choose and configure sensors for openEMS**
+
+---
+
 ## For Basic Setup - Just Pick Your Sensor!
 
-The new calibration system makes sensor configuration incredibly easy. You just need to know what physical sensor you have, then pick the matching ID from the catalog.
+The sensor library makes configuration easy. You just need to know what physical sensor you have, then pick the matching ID from the catalog.
 
-## Step-by-Step Example
+---
 
-### Example: Adding a Coolant Temperature Sensor
+## Quick Start Examples
 
-**What you have:** VDO 120°C coolant temperature sensor
+### Example 1: Compile-Time Mode (config.h)
 
-**Steps:**
-
-1. Open `src/config.h`
-
-2. Find the coolant temperature section:
 ```cpp
-// === Coolant Temperature ===
-#define ENABLE_COOLANT_TEMP
-#define COOLANT_SENSOR_TYPE   ????                  // What goes here?
-#define COOLANT_TEMP_INPUT    A2                    // Your analog pin
-#define COOLANT_TEMP_MIN      -1
-#define COOLANT_TEMP_MAX      100
+// Enable compile-time mode
+#define USE_STATIC_CONFIG
+
+// Input 0: CHT with K-type thermocouple
+#define INPUT_0_PIN            6
+#define INPUT_0_APPLICATION    CHT
+#define INPUT_0_SENSOR         MAX6675
+
+// Input 1: Coolant with VDO sensor
+#define INPUT_1_PIN            A2
+#define INPUT_1_APPLICATION    COOLANT_TEMP
+#define INPUT_1_SENSOR         VDO_120C_LOOKUP
+
+// Input 2: Oil pressure with VDO sensor
+#define INPUT_2_PIN            A3
+#define INPUT_2_APPLICATION    OIL_PRESSURE
+#define INPUT_2_SENSOR         VDO_5BAR
 ```
 
-3. Open `src/lib/sensor_library.h` and find VDO sensors:
-```cpp
-// VDO Thermistors - Lookup Table Method (Most Accurate)
-#define VDO_120C_LOOKUP              10
-#define VDO_150C_LOOKUP              11
+### Example 2: Runtime Mode (Serial Commands)
 
-// VDO Thermistors - Steinhart-Hart Method (Faster)
-#define VDO_120C_STEINHART           12
-#define VDO_150C_STEINHART           13
+```
+SET 6 APPLICATION CHT
+SET 6 SENSOR MAX6675
+ENABLE 6
+
+SET A2 APPLICATION COOLANT_TEMP
+SET A2 SENSOR VDO_120C_LOOKUP
+ENABLE A2
+
+SET A3 APPLICATION OIL_PRESSURE
+SET A3 SENSOR VDO_5BAR
+ENABLE A3
+
+SAVE
 ```
 
-4. Pick one and use it in config.h:
-```cpp
-#define COOLANT_SENSOR_TYPE   VDO_120C_LOOKUP      // That's it!
-```
+**That's it!** The system automatically handles calibration, conversion functions, and display formatting.
 
-**Done!** The system automatically:
-- Selects the right read function
-- Loads the correct calibration data
-- Sets up proper conversions
+---
 
 ## Sensor Catalog
 
-### Temperature Sensors
+### Temperature Sensors - Thermocouples
 
-| Sensor Type | Sensor ID | Method | Notes |
-|-------------|-----------|--------|-------|
-| K-Type Thermocouple (MAX6675) | `K_TYPE_THERMOCOUPLE_MAX6675` | Direct | For CHT, EGT |
-| K-Type Thermocouple (MAX31855) | `K_TYPE_THERMOCOUPLE_MAX31855` | Direct | For CHT, EGT |
-| VDO 120°C Thermistor | `VDO_120C_LOOKUP` | Lookup | Coolant, transfer case |
-| VDO 120°C Thermistor | `VDO_120C_STEINHART` | Steinhart | Same sensor, faster |
-| VDO 150°C Thermistor | `VDO_150C_LOOKUP` | Lookup | Oil temperature |
-| VDO 150°C Thermistor | `VDO_150C_STEINHART` | Steinhart | Same sensor, faster |
-| Generic 10K NTC (β=3950) | `GENERIC_NTC_10K_3950` | Steinhart | Common Amazon sensor |
-| Generic 10K NTC (β=3435) | `GENERIC_NTC_10K_3435` | Steinhart | Another variant |
-| Generic 10K NTC (β=3380) | `GENERIC_NTC_10K_3380` | Steinhart | Another variant |
+| Sensor ID | Description | Range | Interface |
+|-----------|-------------|-------|-----------|
+| `MAX6675` | K-Type thermocouple (MAX6675 amplifier) | 0-1024°C | SPI |
+| `MAX31855` | K-Type thermocouple (MAX31855 amplifier) | -200-1350°C | SPI |
+
+**Best for:** CHT (Cylinder Head Temperature), EGT (Exhaust Gas Temperature)
+
+**Wiring:**
+```
+MAX6675 VCC → 5V (or 3.3V)
+MAX6675 GND → GND
+MAX6675 SCK → Pin 13 (SPI clock)
+MAX6675 SO  → Pin 12 (SPI MISO)
+MAX6675 CS  → Your configured pin (e.g., Pin 6)
+```
+
+### Temperature Sensors - VDO Thermistors
+
+| Sensor ID | Description | Range | Method |
+|-----------|-------------|-------|--------|
+| `VDO_120C_LOOKUP` | VDO 120°C sender (lookup table) | -40 to 120°C | Most accurate |
+| `VDO_120C_STEINHART` | VDO 120°C sender (Steinhart-Hart) | -40 to 120°C | Faster |
+| `VDO_150C_LOOKUP` | VDO 150°C sender (lookup table) | -40 to 150°C | Most accurate |
+| `VDO_150C_STEINHART` | VDO 150°C sender (Steinhart-Hart) | -40 to 150°C | Faster |
+
+**Best for:** Coolant temperature, oil temperature, transfer case temperature
+
+**Wiring:**
+```
+VDO Sensor Terminal 1 → Analog pin
+VDO Sensor Terminal 2 → GND
+Add 2.2kΩ resistor: Analog pin → 2.2kΩ → GND
+```
 
 ### Pressure Sensors
 
-| Sensor Type | Sensor ID | Range | Notes |
-|-------------|-----------|-------|-------|
-| VDO 5-bar | `VDO_5BAR_PRESSURE` | 0-5 bar | Oil pressure |
-| VDO 2-bar | `VDO_2BAR_PRESSURE` | 0-2 bar | Boost pressure |
-| Freescale MPX4250AP | `MPX4250AP_SENSOR` | 20-250 kPa | Generic MAP |
+| Sensor ID | Description | Range |
+|-----------|-------------|-------|
+| `VDO_2BAR` | VDO 0-2 bar pressure sender | 0-29 PSI |
+| `VDO_5BAR` | VDO 0-5 bar pressure sender | 0-73 PSI |
+| `GENERIC_BOOST` | Generic 0.5-4.5V boost sensor | Configurable |
+| `MPX4250AP` | Freescale MAP sensor | 20-250 kPa |
+
+**Best for:** Oil pressure, boost pressure, fuel pressure
+
+**VDO Pressure Wiring:**
+```
+VDO Sensor Ground → GND
+VDO Sensor Signal → Analog pin
+VDO Sensor +12V   → Vehicle 12V (if required)
+No external resistors needed
+```
 
 ### Voltage Sensors
 
-| Sensor Type | Sensor ID | Notes |
-|-------------|-----------|-------|
-| 12V Battery Monitor | `STANDARD_12V_DIVIDER` | Auto-configured for your board |
+| Sensor ID | Description | Notes |
+|-----------|-------------|-------|
+| `VOLTAGE_DIVIDER` | Standard 12V battery monitoring | Auto-configured per platform |
+
+**Wiring:**
+```
+Battery + → 100kΩ → Junction → Analog pin
+Junction → Lower resistor → GND
+  - 22kΩ for 3.3V boards (Teensy)
+  - 6.8kΩ for 5V boards (Arduino)
+```
+
+**Note:** Platform auto-detects board voltage and configures the correct divider ratio.
+
+### RPM Sensors
+
+| Sensor ID | Description | Notes |
+|-----------|-------------|-------|
+| `W_PHASE_RPM` | W-phase alternator RPM | Requires voltage protection circuit |
+
+**⚠️ CRITICAL:** See [W_PHASE_RPM_GUIDE.md](W_PHASE_RPM_GUIDE.md) for required voltage protection. 3.3V boards require zener protection!
 
 ### Environmental Sensors (BME280)
 
-| Sensor Type | Sensor ID |
-|-------------|-----------|
-| Temperature | `BME280_TEMPERATURE` |
-| Pressure | `BME280_PRESSURE` |
-| Humidity | `BME280_HUMIDITY` |
-| Altitude | `BME280_ELEVATION` |
+| Sensor ID | Description |
+|-----------|-------------|
+| `BME280_TEMP` | Ambient temperature |
+| `BME280_PRESSURE` | Barometric pressure |
+| `BME280_HUMIDITY` | Relative humidity |
+| `BME280_ELEVATION` | Altitude estimation |
+
+**Wiring:**
+```
+BME280 VCC → 3.3V
+BME280 GND → GND
+BME280 SDA → SDA pin
+BME280 SCL → SCL pin
+```
+
+### Digital Sensors
+
+| Sensor ID | Description |
+|-----------|-------------|
+| `FLOAT_SWITCH` | Digital float switch (coolant level, etc.) |
+
+---
 
 ## Lookup vs. Steinhart-Hart
 
-For VDO thermistors, you can choose between two methods:
+For VDO thermistors, you can choose between two calibration methods:
 
-### Lookup Table Method
-- **More accurate** - Uses manufacturer's exact resistance table
+### Lookup Table Method (`_LOOKUP`)
+- **More accurate** - Uses manufacturer's exact resistance/temperature table
 - **Slightly slower** - Interpolates between table values
-- **Recommended for:** Critical sensors (CHT, EGT)
+- **Recommended for:** Critical sensors (coolant, oil temp)
 
-### Steinhart-Hart Method
-- **Faster** - Direct calculation
+### Steinhart-Hart Method (`_STEINHART`)
+- **Faster** - Direct mathematical calculation
 - **Very good accuracy** - Within 1-2°C of lookup
 - **Recommended for:** Non-critical sensors, faster loop times
 
-**Example:**
-```cpp
-// Most accurate (uses manufacturer's lookup table)
-#define COOLANT_SENSOR_TYPE   VDO_120C_LOOKUP
-
-// Faster but still accurate (uses Steinhart-Hart equation)
-#define COOLANT_SENSOR_TYPE   VDO_120C_STEINHART
-```
-
-You can even mix methods:
-```cpp
-#define COOLANT_SENSOR_TYPE   VDO_120C_LOOKUP      // Critical - use lookup
-#define OIL_TEMP_SENSOR_TYPE  VDO_150C_STEINHART   // Less critical - faster
-```
-
-## Complete Example config.h
+**Example - mixing methods:**
 
 ```cpp
-// === CHT (Cylinder Head Temperature) ===
-#define ENABLE_CHT
-#define CHT_SENSOR_TYPE       K_TYPE_THERMOCOUPLE_MAX6675
-#define CHT_INPUT             6
-#define CHT_MIN               -1
-#define CHT_MAX               495
-
-// === EGT (Exhaust Gas Temperature) ===
-#define ENABLE_EGT
-#define EGT_SENSOR_TYPE       K_TYPE_THERMOCOUPLE_MAX31855
-#define EGT_INPUT             7
-#define EGT_MIN               -1
-#define EGT_MAX               600
-
-// === Coolant Temperature ===
-#define ENABLE_COOLANT_TEMP
-#define COOLANT_SENSOR_TYPE   VDO_120C_LOOKUP
-#define COOLANT_TEMP_INPUT    A2
-#define COOLANT_TEMP_MIN      -1
-#define COOLANT_TEMP_MAX      100
-
-// === Oil Temperature ===
-#define ENABLE_OIL_TEMP
-#define OIL_TEMP_SENSOR_TYPE  VDO_150C_STEINHART
-#define OIL_TEMP_INPUT        A0
-#define OIL_TEMP_MIN          -1
-#define OIL_TEMP_MAX          150
-
-// === Oil Pressure ===
-#define ENABLE_OIL_PRESSURE
-#define OIL_PRESSURE_SENSOR_TYPE  VDO_5BAR_PRESSURE
-#define OIL_PRESSURE_INPUT        A3
-#define OIL_PRESSURE_MIN          1
-#define OIL_PRESSURE_MAX          5
-
-// === Primary Battery ===
-#define ENABLE_PRIMARY_BATTERY
-#define PRIMARY_BATTERY_SENSOR_TYPE  STANDARD_12V_DIVIDER
-#define PRIMARY_BATTERY_INPUT        A8
-
-// === Ambient Temperature (BME280) ===
-#define ENABLE_AMBIENT_TEMP
-#define AMBIENT_TEMP_SENSOR_TYPE  BME280_TEMPERATURE
+// Compile-time config
+#define INPUT_0_SENSOR         VDO_120C_LOOKUP      // Critical - maximum accuracy
+#define INPUT_1_SENSOR         VDO_150C_STEINHART   // Less critical - faster
 ```
 
-That's it! No need to specify read functions, conversion functions, or calibration data - it's all handled automatically.
+---
 
-## What If My Sensor Isn't Listed?
+## Application Types
 
-See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) for information on:
-- Adding custom thermistor coefficients
-- Creating custom lookup tables
-- Defining completely new sensor types
+Each input needs both an **Application** (what you're measuring) and a **Sensor** (physical hardware).
 
-But for 90% of users, the presets will work perfectly!
+| Application | Description | Typical Sensors |
+|-------------|-------------|-----------------|
+| `CHT` | Cylinder Head Temperature | MAX6675, MAX31855 |
+| `EGT` | Exhaust Gas Temperature | MAX31855 |
+| `COOLANT_TEMP` | Engine Coolant Temperature | VDO_120C_LOOKUP |
+| `OIL_TEMP` | Engine Oil Temperature | VDO_150C_LOOKUP |
+| `TCASE_TEMP` | Transfer Case Temperature | VDO_150C_LOOKUP |
+| `OIL_PRESSURE` | Engine Oil Pressure | VDO_5BAR |
+| `BOOST_PRESSURE` | Turbo/Supercharger Boost | VDO_2BAR, GENERIC_BOOST |
+| `FUEL_PRESSURE` | Fuel Rail Pressure | VDO_5BAR |
+| `PRIMARY_BATTERY` | Main Battery Voltage | VOLTAGE_DIVIDER |
+| `AUXILIARY_BATTERY` | Secondary Battery Voltage | VOLTAGE_DIVIDER |
+| `COOLANT_LEVEL` | Coolant Level Switch | FLOAT_SWITCH |
+| `AMBIENT_TEMP` | Ambient Temperature | BME280_TEMP |
+| `BAROMETRIC_PRESSURE` | Barometric Pressure | BME280_PRESSURE |
+| `HUMIDITY` | Relative Humidity | BME280_HUMIDITY |
+| `ELEVATION` | Altitude | BME280_ELEVATION |
+| `ENGINE_RPM` | Engine RPM | W_PHASE_RPM |
+
+---
+
+## Complete Configuration Example
+
+### Compile-Time Mode (config.h)
+
+```cpp
+// Build mode
+#define USE_STATIC_CONFIG
+
+// Output enables
+#define ENABLE_LCD
+#define ENABLE_SERIAL_OUTPUT
+
+// Input 0: CHT with K-type thermocouple
+#define INPUT_0_PIN            6
+#define INPUT_0_APPLICATION    CHT
+#define INPUT_0_SENSOR         MAX6675
+
+// Input 1: Coolant temperature
+#define INPUT_1_PIN            A2
+#define INPUT_1_APPLICATION    COOLANT_TEMP
+#define INPUT_1_SENSOR         VDO_120C_LOOKUP
+
+// Input 2: Oil temperature
+#define INPUT_2_PIN            A0
+#define INPUT_2_APPLICATION    OIL_TEMP
+#define INPUT_2_SENSOR         VDO_150C_STEINHART
+
+// Input 3: Oil pressure
+#define INPUT_3_PIN            A3
+#define INPUT_3_APPLICATION    OIL_PRESSURE
+#define INPUT_3_SENSOR         VDO_5BAR
+
+// Input 4: Battery voltage
+#define INPUT_4_PIN            A8
+#define INPUT_4_APPLICATION    PRIMARY_BATTERY
+#define INPUT_4_SENSOR         VOLTAGE_DIVIDER
+
+// Input 5: Engine RPM
+#define INPUT_5_PIN            5
+#define INPUT_5_APPLICATION    ENGINE_RPM
+#define INPUT_5_SENSOR         W_PHASE_RPM
+```
+
+### Runtime Mode (Serial Commands)
+
+```
+SET 6 APPLICATION CHT
+SET 6 SENSOR MAX6675
+ENABLE 6
+
+SET A2 APPLICATION COOLANT_TEMP
+SET A2 SENSOR VDO_120C_LOOKUP
+ENABLE A2
+
+SET A0 APPLICATION OIL_TEMP
+SET A0 SENSOR VDO_150C_STEINHART
+ENABLE A0
+
+SET A3 APPLICATION OIL_PRESSURE
+SET A3 SENSOR VDO_5BAR
+ENABLE A3
+
+SET A8 APPLICATION PRIMARY_BATTERY
+SET A8 SENSOR VOLTAGE_DIVIDER
+ENABLE A8
+
+SET 5 APPLICATION ENGINE_RPM
+SET 5 SENSOR W_PHASE_RPM
+ENABLE 5
+
+SAVE
+```
+
+---
 
 ## Common Questions
 
-**Q: Can I use multiple of the same sensor type?**  
-A: Yes! Each sensor is independent. You can have multiple VDO_120C sensors on different pins.
+**Q: Can I use multiple of the same sensor type?**
+A: Yes! Each input is independent. You can have multiple VDO_120C sensors on different pins.
 
-**Q: What's the difference between VDO_120C_LOOKUP and VDO_120C_STEINHART?**  
-A: Same physical sensor, different math. Lookup is more accurate, Steinhart is faster.
+**Q: What's the difference between LOOKUP and STEINHART?**
+A: Same physical sensor, different math. Lookup is more accurate (±0.5°C), Steinhart is faster (±1°C).
 
-**Q: Do I need to know what bias resistor I used?**  
-A: No! The presets include the correct bias resistor for each sensor.
+**Q: Do I need to specify the bias resistor value?**
+A: No! The presets include the correct bias resistor (2.2kΩ for VDO sensors).
 
-**Q: What if I used a different bias resistor?**  
-A: See the advanced calibration guide to override the preset.
+**Q: What if I used a different bias resistor?**
+A: See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) to override.
 
-**Q: How do I know which generic NTC thermistor I have?**  
+**Q: How do I know which generic NTC thermistor I have?**
 A: Check your sensor datasheet for the β (beta) value. Most cheap NTC thermistors are β=3950.
+
+**Q: My sensor isn't listed - what do I do?**
+A: See [ADDING_SENSORS.md](../configuration/ADDING_SENSORS.md) for adding custom sensors.
+
+---
+
+## Related Guides
+
+- [Pressure Sensor Guide](PRESSURE_SENSOR_GUIDE.md) - Detailed pressure sensor info
+- [Voltage Sensor Guide](VOLTAGE_SENSOR_GUIDE.md) - Battery monitoring details
+- [W-Phase RPM Guide](W_PHASE_RPM_GUIDE.md) - RPM sensing for classics
+- [Digital Sensor Guide](DIGITAL_SENSOR_GUIDE.md) - Float switches and digital inputs
+- [Advanced Calibration](../configuration/ADVANCED_CALIBRATION_GUIDE.md) - Custom sensor setup
+
+---
+
+**For the classic car community.**

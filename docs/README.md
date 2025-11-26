@@ -32,6 +32,9 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 - Arduino Uno to Teensy 4.x compatibility
 - Open-source and community-driven
 
+**⚠️ Beta Software Notice:**
+This is beta software under active development. Always maintain mechanical backup gauges and thoroughly test before relying on readings for critical engine monitoring.
+
 ---
 
 ## System Architecture
@@ -42,11 +45,11 @@ openEMS uses an **input-based system** where each physical pin (Input) is assign
 
 1. **Application** - What you're measuring (CHT, OIL_PRESSURE, etc.)
 2. **Sensor** - Physical hardware device (VDO sensor, thermocouple, etc.)
-3. **Calibration** - Conversion from raw readings to engineering units
+3. **Calibration** - Conversion from raw readings to engineering units (automatic from library)
 
 This separates "what you want to measure" from "hardware you're using."
 
-**Example:**
+**Example data flow:**
 ```
 VDO Oil Pressure Sensor → Pin A3 → 512 (raw ADC) → 2.5 bar → LCD: "OIL:2.5 BAR"
 ```
@@ -66,46 +69,21 @@ VDO Oil Pressure Sensor → Pin A3 → 512 (raw ADC) → 2.5 bar → LCD: "OIL:2
 - Ideal for experimentation
 - Requires more RAM (~3KB+)
 
-Both modes use identical underlying code.
-
-### Memory Architecture
-
-**Flash (Program Memory):**
-- Sensor calibration data stored in PROGMEM
-- Lookup tables in flash (not RAM)
-- Steinhart-Hart coefficients in flash
-
-**RAM:**
-- Input array (~140 bytes per configured input)
-- Active sensor readings
-- Output buffers
-
-**EEPROM (runtime mode only):**
-- Configuration storage
-- 4KB on Mega, 1KB on Teensy
-
-### Platform Auto-Detection
-
-openEMS automatically detects and configures:
-- System voltage (3.3V or 5V)
-- ADC resolution (10-bit or 12-bit)
-- Reference voltage
-- Voltage dividers for battery monitoring
+Both modes use identical underlying code - the same Input structure, sensor library, calibration functions, and output modules.
 
 ---
 
 ## Hardware Setup
 
-### Supported Microcontrollers
+### Supported Platforms
 
-| Platform | Voltage | ADC | RAM | Flash | CAN | Notes |
-|----------|---------|-----|-----|-------|-----|-------|
-| **Arduino Mega** | 5V | 10-bit | 8KB | 256KB | External | Good I/O, well-supported |
-| **Teensy 4.0** | 3.3V | 14-bit | 1MB | 2MB | Native | Best performance |
-| **Teensy 3.2** | 3.3V | 12-bit | 64KB | 256KB | Native | Good balance |
-| **Arduino Uno** | 5V | 10-bit | 2KB | 32KB | External | Minimal config only |
-| **Arduino Due** | 3.3V | 12-bit | 96KB | 512KB | External | Less tested |
-| **ESP32** | 3.3V | 12-bit | 520KB | 4MB | Native | Wi-Fi capable, less tested |
+| Platform | ADC | Voltage | Max Inputs | CAN | Recommended For |
+|----------|-----|---------|------------|-----|-----------------|
+| Arduino Uno | 10-bit | 5V | 6 | MCP2515 | Simple setups, compile-time only |
+| Arduino Mega | 10-bit | 5V | 16 | MCP2515 | General purpose |
+| Teensy 4.0/4.1 | 12-bit | 3.3V | 16 | Native | Best performance, modern features |
+| Arduino Due | 12-bit | 3.3V | 16 | Native | High resolution ADC |
+| ESP32 | 12-bit | 3.3V | 16 | Native | WiFi capability |
 
 ### Critical: Voltage Compatibility
 
@@ -120,7 +98,7 @@ openEMS automatically detects and configures:
 - Use 3.3V sensors or voltage dividers
 - Platform auto-configures 3.3V voltage dividers
 
-### Sensor Connections
+### Wiring Overview
 
 **Thermocouples (MAX6675/MAX31855):**
 ```
@@ -132,16 +110,16 @@ MAX6675 Module:
   CS  → Configurable pin (e.g., Pin 6)
 ```
 
-**VDO Thermistors (2-wire):**
+**VDO Temperature Sensors:**
 ```
 VDO Sensor:
   Terminal 1 → Analog pin (e.g., A2)
-  Terminal 2 → GND
+  Terminal 2 → GND (if 2-wire)
   
 Required: 2.2kΩ pull-down resistor (pin → resistor → GND)
 ```
 
-**VDO Pressure Sensors (3-wire):**
+**VDO Pressure Sensors:**
 ```
 VDO Sensor:
   Ground → GND
@@ -151,16 +129,13 @@ VDO Sensor:
 No external resistors needed
 ```
 
-**Battery Voltage:**
+**Voltage Monitoring:**
 ```
-Battery + → Voltage divider → Analog pin
-Battery - → GND
-
-Auto-configured: 100kΩ/22kΩ for 3.3V, 100kΩ/6.8kΩ for 5V
+Battery + → 100kΩ → Junction → Analog pin
+Junction → Lower resistor → GND
+  - 22kΩ for 3.3V boards (Teensy)
+  - 6.8kΩ for 5V boards (Arduino)
 ```
-
-**W-Phase RPM:**
-See [W_PHASE_RPM_GUIDE.md](guides/sensor-types/W_PHASE_RPM_GUIDE.md) for voltage protection circuit details.
 
 **CAN Bus:**
 
@@ -179,7 +154,7 @@ MCP2515 INT → Configurable pin (default: Pin 2)
 MCP2515 SCK/MISO/MOSI → SPI pins
 ```
 
-Requires 120Ω termination resistors at both ends of CAN bus.
+CAN bus requires 120Ω termination resistors at both ends.
 
 ---
 
@@ -194,20 +169,20 @@ Requires 120Ω termination resistors at both ends of CAN bus.
 
 **Configure inputs:**
 ```cpp
-// Input 1: CHT with K-type thermocouple
-#define INPUT_1_PIN            6
-#define INPUT_1_APPLICATION    CHT
-#define INPUT_1_SENSOR         K_TYPE_THERMOCOUPLE_MAX6675
+// Input 0: CHT with K-type thermocouple
+#define INPUT_0_PIN            6
+#define INPUT_0_APPLICATION    CHT
+#define INPUT_0_SENSOR         MAX6675
 
-// Input 2: Coolant with VDO sensor
-#define INPUT_2_PIN            A2
-#define INPUT_2_APPLICATION    COOLANT_TEMP
-#define INPUT_2_SENSOR         VDO_120C_LOOKUP
+// Input 1: Coolant with VDO sensor
+#define INPUT_1_PIN            A2
+#define INPUT_1_APPLICATION    COOLANT_TEMP
+#define INPUT_1_SENSOR         VDO_120C_LOOKUP
 
-// Input 3: Oil pressure with VDO sensor
-#define INPUT_3_PIN            A3
-#define INPUT_3_APPLICATION    OIL_PRESSURE
-#define INPUT_3_SENSOR         VDO_5BAR_PRESSURE
+// Input 2: Oil pressure with VDO sensor
+#define INPUT_2_PIN            A3
+#define INPUT_2_APPLICATION    OIL_PRESSURE
+#define INPUT_2_SENSOR         VDO_5BAR
 ```
 
 ### Runtime Mode
@@ -215,24 +190,39 @@ Requires 120Ω termination resistors at both ends of CAN bus.
 **Enable in config.h:**
 ```cpp
 // Leave USE_STATIC_CONFIG commented out
+// #define USE_STATIC_CONFIG
 ```
 
 **Configure via serial commands (115200 baud):**
 ```
-SET Pin6 APPLICATION CHT K_TYPE_THERMOCOUPLE_MAX6675
-SET A2 APPLICATION COOLANT_TEMP VDO_120C_LOOKUP
-SET A3 APPLICATION OIL_PRESSURE VDO_5BAR_PRESSURE
+SET 6 APPLICATION CHT
+SET 6 SENSOR MAX6675
+ENABLE 6
+
+SET A2 APPLICATION COOLANT_TEMP
+SET A2 SENSOR VDO_120C_LOOKUP
+ENABLE A2
+
+SET A3 APPLICATION OIL_PRESSURE
+SET A3 SENSOR VDO_5BAR
+ENABLE A3
+
 SAVE
 ```
 
-### Serial Commands
+### Serial Commands Reference
 
 **Configuration:**
 ```
-SET <pin> APPLICATION <app> <sensor>  - Configure an input
-ENABLE <pin>                          - Enable an input
-DISABLE <pin>                         - Disable an input
-CLEAR <pin>                           - Remove an input
+SET <pin> APPLICATION <app>   - Set measurement type
+SET <pin> SENSOR <sensor>     - Set hardware sensor
+SET <pin> NAME <n>            - Set short name (3-4 chars)
+SET <pin> DISPLAY_NAME <n>    - Set full display name
+SET <pin> UNITS <units>       - Set display units
+SET <pin> ALARM <min> <max>   - Set alarm thresholds
+ENABLE <pin>                  - Enable an input
+DISABLE <pin>                 - Disable an input
+CLEAR <pin>                   - Remove an input
 ```
 
 **Query:**
@@ -241,13 +231,15 @@ LIST INPUTS          - Show all configured inputs
 LIST APPLICATIONS    - Show available applications
 LIST SENSORS         - Show available sensor types
 INFO <pin>           - Show details for one input
+HELP                 - Show all commands
 ```
 
 **System:**
 ```
-SAVE        - Save configuration to EEPROM
-LOAD        - Load configuration from EEPROM
-RESET       - Clear all configuration
+SAVE              - Save configuration to EEPROM
+LOAD              - Load configuration from EEPROM
+RESET             - Clear all configuration (requires confirmation)
+RESET CONFIRM     - Confirm configuration reset
 ```
 
 ---
@@ -256,293 +248,213 @@ RESET       - Clear all configuration
 
 openEMS includes 30+ pre-calibrated sensor configurations. See [SENSOR_SELECTION_GUIDE.md](guides/sensor-types/SENSOR_SELECTION_GUIDE.md) for the complete list.
 
-### Temperature Sensors
+### Thermocouples
+| Sensor | Description | Temp Range |
+|--------|-------------|------------|
+| `MAX6675` | K-Type with MAX6675 amplifier | 0-1024°C |
+| `MAX31855` | K-Type with MAX31855 amplifier | -200-1350°C |
 
-**Thermocouples:**
-- `K_TYPE_THERMOCOUPLE_MAX6675` - MAX6675 amplifier
-- `K_TYPE_THERMOCOUPLE_MAX31855` - MAX31855 amplifier
-
-**VDO Thermistors:**
-- `VDO_120C_LOOKUP` - VDO 120°C sender, lookup table (±0.5°C)
-- `VDO_120C_STEINHART` - VDO 120°C sender, Steinhart-Hart (±1°C)
-- `VDO_150C_LOOKUP` - VDO 150°C sender, lookup table
-- `VDO_150C_STEINHART` - VDO 150°C sender, Steinhart-Hart
-
-**Generic NTC:**
-- `GENERIC_NTC_10K_3950` - 10KΩ NTC, β=3950K
-- `GENERIC_NTC_10K_3435` - 10KΩ NTC, β=3435K
-- `GENERIC_NTC_10K_3380` - 10KΩ NTC, β=3380K
+### VDO Thermistors
+| Sensor | Description | Temp Range |
+|--------|-------------|------------|
+| `VDO_120C_LOOKUP` | VDO 120°C (lookup table, most accurate) | -40-120°C |
+| `VDO_120C_STEINHART` | VDO 120°C (Steinhart-Hart equation) | -40-120°C |
+| `VDO_150C_LOOKUP` | VDO 150°C (lookup table) | -40-150°C |
+| `VDO_150C_STEINHART` | VDO 150°C (Steinhart-Hart equation) | -40-150°C |
 
 ### Pressure Sensors
+| Sensor | Description | Range |
+|--------|-------------|-------|
+| `VDO_2BAR` | VDO 0-2 bar | 0-29 PSI |
+| `VDO_5BAR` | VDO 0-5 bar | 0-73 PSI |
+| `GENERIC_BOOST` | Generic 0-5V boost sensor | Configurable |
+| `MPX4250AP` | Freescale MAP sensor | 20-250 kPa |
 
-**VDO:**
-- `VDO_5BAR_PRESSURE` - VDO 5-bar (0-73 PSI)
-- `VDO_2BAR_PRESSURE` - VDO 2-bar (0-29 PSI)
-
-**Generic Linear:**
-- `GENERIC_0_5V_5BAR` - 0.5-4.5V → 0-5 bar
-- `GENERIC_0_5V_10BAR` - 0.5-4.5V → 0-10 bar
-- `GENERIC_0_5V_100PSI` - 0.5-4.5V → 0-100 PSI
-
-**Specific Models:**
-- `MPX4250AP_PRESSURE` - Freescale MPX4250AP (20-250 kPa)
-
-### RPM Sensors
-
-- `W_PHASE_RPM_12_POLE` - 12-pole alternator (most common)
-- `W_PHASE_RPM_14_POLE` - 14-pole alternator
-- `W_PHASE_RPM_16_POLE` - 16-pole alternator
-
-### Other
-
-- `STANDARD_12V_DIVIDER` - 12V battery monitoring
-- `BME280_AMBIENT_TEMPERATURE` - BME280 temperature
-- `BME280_BAROMETRIC_PRESSURE` - BME280 pressure
-- `BME280_RELATIVE_HUMIDITY` - BME280 humidity
-- `BME280_ESTIMATED_ALTITUDE` - BME280 elevation
-- `DIGITAL_FLOAT_SWITCH` - Float switch
+### Other Sensors
+| Sensor | Description |
+|--------|-------------|
+| `VOLTAGE_DIVIDER` | Battery voltage monitoring |
+| `W_PHASE_RPM` | W-phase alternator RPM |
+| `BME280_TEMP` | Environmental temperature |
+| `BME280_PRESSURE` | Barometric pressure |
+| `BME280_HUMIDITY` | Relative humidity |
+| `BME280_ELEVATION` | Altitude estimation |
+| `FLOAT_SWITCH` | Digital level switch |
 
 ---
 
 ## Wiring Guide
 
-### Wire Selection
+### Critical Safety Notes
 
-- Use automotive-grade TXL or GXL wire (18 AWG minimum)
-- Never use solid core wire
-- Use proper crimp terminals
-- Protect wiring with split loom or conduit
-- Route away from hot exhaust and moving parts
+**⚠️ 3.3V Boards (Teensy, Due, ESP32):**
+Never connect 12V signals directly! Always use voltage dividers and protection circuits. The W-phase RPM signal from an alternator can reach 40V+ at high RPM.
 
-### Grounding
+**⚠️ W-Phase RPM Circuit:**
+See [W_PHASE_RPM_GUIDE.md](guides/sensor-types/W_PHASE_RPM_GUIDE.md) for the required voltage protection circuit. For 3.3V boards, use:
+- 22kΩ/4.7kΩ voltage divider
+- 3.3V zener diode protection
+- 100nF filtering capacitor
 
-- Use single, clean ground point for all sensors
-- Connect to engine block or chassis ground
-- Star ground topology preferred
-- Never daisy-chain sensor grounds
+### Thermistor Bias Resistors
 
-### Noise Reduction
+VDO thermistors require a bias (pull-down) resistor:
 
-- Route sensor wires away from ignition wires
-- Use shielded cable for RPM sensing
-- Add 100nF capacitor across sensor inputs
-- Twist sensor signal and ground wires together
-- Keep sensor wires short (< 3 feet if possible)
+| Sensor Type | Bias Resistor |
+|-------------|---------------|
+| VDO 120C | 2.2kΩ |
+| VDO 150C | 2.2kΩ |
+| Generic NTC 10K | 10kΩ |
+
+**Wiring:**
+```
+VCC (5V or 3.3V) → Thermistor → Analog Pin
+                                    ↓
+                              Bias Resistor → GND
+```
+
+### I2C Addressing
+
+Common I2C addresses:
+
+| Device | Addresses |
+|--------|-----------|
+| 20x4 LCD | 0x27 or 0x3F |
+| BME280 | 0x76 or 0x77 |
 
 ---
 
 ## Outputs
 
 ### LCD Display
+- 20x4 character display via I2C
+- Rotates through configured sensors
+- Shows alarm status
 
-**20x4 I2C Character Display**
-
-**Wiring:**
-```
-LCD VCC → 5V (or 3.3V)
-LCD GND → GND
-LCD SDA → Pin 18 (I2C SDA)
-LCD SCL → Pin 19 (I2C SCL)
-```
-
-**Display Format:**
-```
-CHT:485C  EGT:610C
-WTR:92C   OIL:2.5bar
-BAT:13.8V RPM:2450
-STATUS: OK
-```
-
-I2C address is typically 0x27 or 0x3F.
-
-### CAN Bus / OBDII
-
-Compatible with standard OBDII tools:
-- Torque Pro
-- OBDLink scan tools
-- Most OBDII diagnostic apps
-
-**Configuration:**
-```cpp
-#define ENABLE_CAN
-// For Teensy:
-#define USE_FLEXCAN_NATIVE
-```
+### CAN Bus (OBDII)
+- Standard OBDII PIDs
+- Compatible with Torque Pro, RaceChrono, etc.
+- Custom PID mapping available
 
 ### Serial Output
-
-**CSV Format:**
-```
-Sensor,Value,Units
-CHT,485.2,C
-EGT,610.5,C
-```
-
-Baud rate: 115200
-
-**Configuration:**
-```cpp
-#define ENABLE_SERIAL_OUTPUT
-```
+- CSV format at 115200 baud
+- Useful for debugging and data logging
+- Can connect to PC logging software
 
 ### SD Card Logging
-
-Local timestamped CSV logging.
-
-**Configuration:**
-```cpp
-#define ENABLE_SD_LOGGING
-#define SD_CS_PIN 10
-```
+- Automatic file creation
+- Timestamped entries
+- Configurable logging interval
 
 ---
 
 ## Troubleshooting
 
-### Sensor Shows NAN
+### Common Issues
 
-1. Check all connections are secure
+**No readings / stuck at zero:**
+1. Check wiring connections
 2. Verify correct sensor type selected
-3. Check pin assignments in config
-4. Measure sensor resistance with multimeter
+3. For thermistors, ensure bias resistor is present
+4. Check pin assignments match physical wiring
 
-### Wrong Temperature Reading
+**Erratic readings:**
+1. Add filtering capacitor (100nF) near sensor
+2. Check for loose connections
+3. Shield wiring from ignition interference
+4. Verify power supply stability
 
-**If reading is significantly off:**
-- Verify correct sensor type (VDO 120C vs 150C)
-- Check bias resistor value (should be 2.2kΩ for VDO)
-- Measure sensor resistance at known temperature
+**LCD not working:**
+1. Check I2C address (try 0x27 and 0x3F)
+2. Verify SDA/SCL connections
+3. Enable LCD in config.h: `#define ENABLE_LCD`
 
-**If reading is close but consistently off:**
-- May need custom calibration
-- Check ADC reference voltage
+**CAN bus not communicating:**
+1. Check 120Ω termination resistors
+2. Verify CAN_H and CAN_L connections
+3. Check transceiver power supply
+4. Confirm baud rate matches (typically 500kbps)
 
-### Pressure Reading Issues
-
-**Zero or negative pressure:**
-- Check sensor power supply (needs 12V)
-- Verify sensor ground connection
-- Measure sensor output voltage directly
-
-**Reading doesn't change:**
-- Sensor may be failed or stuck
-- Verify sensor type matches configuration
-
-### CAN Bus Not Working
-
-**For Native FlexCAN (Teensy):**
-- Verify `USE_FLEXCAN_NATIVE` is defined
-- Check CAN transceiver power
-- Verify RX/TX connections (Pin 22/23 on Teensy 4.0)
-
-**For MCP2515:**
-- Check CS and INT pin assignments
-- Verify SPI connections
-- Check CAN_H and CAN_L not reversed
-
-**For Both:**
-- Check 120Ω termination resistors
-- Verify baud rate (usually 500 kbps)
-
-### LCD Display Issues
-
-**Blank display:**
-- Check power connections (5V and GND)
-- Try I2C address 0x3F instead of 0x27
-- Check contrast adjustment pot on LCD
-
-**Garbled display:**
-- Wrong I2C address selected
-- Loose connections
-- Check I2C pullup resistors
-
-### Memory Issues (Arduino Uno)
-
-Use compile-time configuration mode and limit to 6 sensors maximum.
+**EEPROM not saving (runtime mode):**
+1. Ensure SAVE command is issued
+2. Check for "Configuration saved" confirmation
+3. Verify USE_STATIC_CONFIG is NOT defined
 
 ---
 
 ## Advanced Topics
 
-### Adding Custom Sensors
+### Custom Calibrations
 
-See [ADVANCED_CALIBRATION_GUIDE.md](guides/configuration/ADVANCED_CALIBRATION_GUIDE.md) for instructions on:
-- Creating custom thermistor calibrations
-- Adding new sensor types
-- Extending the sensor library
-- Contributing calibrations
+See [ADVANCED_CALIBRATION_GUIDE.md](guides/configuration/ADVANCED_CALIBRATION_GUIDE.md) for:
+- Creating custom Steinhart-Hart coefficients
+- Building lookup tables
+- Pressure sensor polynomial fitting
+- Contributing calibrations to the library
 
-### Performance Optimization
+### Adding New Sensors
 
-**For maximum speed:**
-- Reduce number of sensors
-- Optimize loop timing
-- Use DMA for displays (Teensy only)
+See [ADDING_SENSORS.md](guides/configuration/ADDING_SENSORS.md) for:
+- Sensor library architecture
+- Adding new sensor definitions
+- Testing new sensors
+- Submitting contributions
 
-**For minimum power:**
-- Use sleep modes between readings
-- Reduce display brightness
-- Power down unused peripherals
+### Test Mode
+
+Enable test mode for bench testing without physical sensors:
+
+```cpp
+// In advanced_config.h
+#define ENABLE_TEST_MODE
+#define TEST_MODE_TRIGGER_PIN 5
+```
+
+Ground pin 5 at startup to enter test mode, which generates synthetic sensor values for testing outputs.
 
 ---
 
-## Community and Contributing
+## Performance
 
-### Getting Help
+**Typical Configuration (8 sensors, CAN, LCD):**
+- Loop time: ~93ms
+- RAM usage: ~3KB
+- Flash usage: ~35KB
+- Update rate: 200ms (configurable)
 
-**Before asking:**
-1. Read documentation thoroughly
-2. Check [QUICK_REFERENCE.md](getting-started/QUICK_REFERENCE.md)
-3. Review troubleshooting section
-4. Search GitHub issues
+**Arduino Uno (minimal, 3-6 sensors):**
+- RAM usage: ~1.5-2KB
+- Flash usage: ~25-30KB
+- Fully functional with compile-time mode
 
-**When asking, provide:**
-- Hardware platform
-- Configuration mode
-- Sensor types being used
-- Serial output showing issue
-- What you've tried
+---
 
-### Contributing
+## Contributing
 
-**Contributions welcome:**
-1. Sensor calibrations with datasheets
-2. Platform testing and reports
-3. Bug reports with reproduction steps
-4. Code improvements with hardware testing
-5. Documentation improvements
+Contributions welcome:
 
-**Please:**
-- Test thoroughly on hardware
+1. **Sensor calibrations** - Share your sensor data
+2. **Platform testing** - Test on different hardware
+3. **Documentation** - Improve clarity
+4. **Bug reports** - Help make it more reliable
+
+**Guidelines:**
+- Test thoroughly on hardware before submitting
+- Document new sensors with datasheets
 - Follow existing code style
 - Update documentation
-- Provide clear explanations
 
 ---
 
-## Appendix
+## License
 
-### Pin Reference
+openEMS is licensed under a custom **MIT + NonCommercial License**.
 
-**Arduino Mega:**
-- Analog: A0-A15
-- Digital: 2-53
-- SPI: 50 (MISO), 51 (MOSI), 52 (SCK)
-- I2C: 20 (SDA), 21 (SCL)
-
-**Teensy 4.0:**
-- Analog: A0-A13
-- Digital: 0-39
-- SPI: 12 (MISO), 11 (MOSI), 13 (SCK)
-- I2C: 18 (SDA), 19 (SCL)
-- CAN: 22 (TX), 23 (RX)
-
-**Arduino Uno:**
-- Analog: A0-A5
-- Digital: 2-13
-- SPI: 12 (MISO), 11 (MOSI), 13 (SCK)
-- I2C: A4 (SDA), A5 (SCL)
+**Personal/Noncommercial Use:** Free to use, modify, and share
+**Commercial Use:** Contact info@preobd.com
 
 ---
 
-**See [DISCLAIMER](../DISCLAIMER.md) for important safety information.**
+**For the classic car community.**
+
+**Remember: This is beta software. Test thoroughly and maintain mechanical backup gauges!**

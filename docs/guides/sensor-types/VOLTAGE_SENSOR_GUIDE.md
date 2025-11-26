@@ -1,488 +1,368 @@
 # Voltage Sensor Configuration Guide
 
+**Complete guide to battery and voltage monitoring in openEMS**
+
+---
+
 ## Overview
 
-openEMS supports two types of voltage monitoring:
-1. **Voltage dividers** - For voltages above ADC range (battery monitoring)
-2. **Direct voltage** - For voltages within ADC range (5V rail monitoring)
+openEMS supports voltage monitoring through resistor voltage dividers. The system automatically configures the correct divider ratio based on your microcontroller platform (3.3V or 5V).
 
-The system automatically selects the correct calibration based on your microcontroller platform.
+---
 
-## Quick Selection Guide
+## Quick Start
 
-### Standard Applications
+### Standard 12V Battery Monitoring
 
-**Monitoring 12V battery on Arduino Mega (5V system)?**
+*Compile-Time:*
 ```cpp
-#define PRIMARY_BATTERY_SENSOR_TYPE  STANDARD_12V_DIVIDER
+#define INPUT_0_PIN            A8
+#define INPUT_0_APPLICATION    PRIMARY_BATTERY
+#define INPUT_0_SENSOR         VOLTAGE_DIVIDER
 ```
 
-**Monitoring 12V battery on Teensy 4.0 (3.3V system)?**
-```cpp
-#define PRIMARY_BATTERY_SENSOR_TYPE  STANDARD_12V_DIVIDER
+*Runtime:*
 ```
-*Note: Same sensor type - calibration is auto-selected based on platform!*
-
-**Monitoring 24V truck battery?**
-```cpp
-#define PRIMARY_BATTERY_SENSOR_TYPE  STANDARD_24V_DIVIDER
+SET A8 APPLICATION PRIMARY_BATTERY
+SET A8 SENSOR VOLTAGE_DIVIDER
+ENABLE A8
+SAVE
 ```
 
-**Monitoring a 5V power rail directly?**
-```cpp
-#define VOLTAGE_SENSOR_TYPE  DIRECT_VOLTAGE_5V
-```
+**That's it!** The system automatically selects the correct divider ratio for your board.
+
+---
 
 ## Available Voltage Sensors
 
-### Standard Battery Monitoring
-
-| Sensor ID | Application | Divider | Notes |
-|-----------|-------------|---------|-------|
-| `STANDARD_12V_DIVIDER` | 12V battery | Auto-configured | Uses platform.h defaults |
-| `STANDARD_24V_DIVIDER` | 24V truck battery | 100kΩ/3.3kΩ | For large vehicles |
+| Sensor ID | Application | Notes |
+|-----------|-------------|-------|
+| `VOLTAGE_DIVIDER` | 12V battery monitoring | Auto-configured per platform |
 
 **Platform Auto-Configuration:**
-- **5V systems (Mega):** 100kΩ/6.8kΩ divider
-- **3.3V systems (Teensy):** 100kΩ/22kΩ divider
+- **5V systems (Arduino Mega/Uno):** Expects 100kΩ/6.8kΩ divider
+- **3.3V systems (Teensy/Due/ESP32):** Expects 100kΩ/22kΩ divider
 
-### Custom Voltage Dividers
+---
 
-| Sensor ID | Divider Ratio | Max Voltage | Use Case |
-|-----------|---------------|-------------|----------|
-| `CUSTOM_VOLTAGE_100K_10K` | 11:1 | ~50V | High voltage monitoring |
-| `CUSTOM_VOLTAGE_100K_22K` | 5.5:1 | ~18V | 12V with more resolution |
-| `CUSTOM_VOLTAGE_47K_10K` | 5.7:1 | ~19V | Alternative 12V divider |
+## Wiring
 
-### Direct Voltage Reading
+### Standard 12V Battery Divider
 
-| Sensor ID | Range | Use Case |
-|-----------|-------|----------|
-| `DIRECT_VOLTAGE_5V` | 0-5V | Power rail monitoring |
-| `DIRECT_VOLTAGE_3V3` | 0-3.3V | Low voltage signals |
+**For 5V boards (Arduino Mega, Uno):**
+```
+Battery + ----[100kΩ]----+----[6.8kΩ]---- GND
+                         |
+                      [100nF]
+                         |
+                      Analog Pin (A8)
+```
+
+**For 3.3V boards (Teensy, Due, ESP32):**
+```
+Battery + ----[100kΩ]----+----[22kΩ]---- GND
+                         |
+                      [100nF]
+                         |
+                      Analog Pin (A8)
+```
+
+**Components:**
+- R1: 100kΩ ±1% (high side)
+- R2: 6.8kΩ or 22kΩ ±1% (low side, per platform)
+- C1: 100nF ceramic capacitor (noise filtering)
+
+### Protection Circuit (Recommended)
+
+Add a zener diode for transient protection:
+```
+Battery + ----[100kΩ]----+----[R2]---- GND
+                         |
+                      [Zener]
+                         |
+                      [100nF]
+                         |
+                      Analog Pin
+
+Zener: 5.1V for 5V boards, 3.3V for 3.3V boards
+```
+
+---
 
 ## Configuration Examples
 
-### Example 1: Standard 12V Battery Monitoring
+### Example 1: Primary Battery with Alarm
 
+*Compile-Time:*
 ```cpp
-// config.h
-#define ENABLE_PRIMARY_BATTERY
-#define PRIMARY_BATTERY_SENSOR_TYPE   STANDARD_12V_DIVIDER
-#define PRIMARY_BATTERY_INPUT         A8
+#define INPUT_0_PIN            A8
+#define INPUT_0_APPLICATION    PRIMARY_BATTERY
+#define INPUT_0_SENSOR         VOLTAGE_DIVIDER
 ```
 
-**Hardware:**
-- 100kΩ resistor from battery + to A8
-- 6.8kΩ resistor from A8 to ground (5V systems)
-- OR 22kΩ resistor from A8 to ground (3.3V systems)
-- 100nF capacitor from A8 to ground (noise filtering)
+*Runtime:*
+```
+SET A8 APPLICATION PRIMARY_BATTERY
+SET A8 SENSOR VOLTAGE_DIVIDER
+SET A8 ALARM 11.5 15
+ENABLE A8
+SAVE
+```
 
-**That's it!** The system automatically:
-- Selects correct divider ratio for your board
-- Uses appropriate ADC reference voltage
-- Scales reading correctly
+Alarms at <11.5V (low battery) or >15V (overcharging).
 
 ### Example 2: Dual Battery System
 
+*Compile-Time:*
 ```cpp
-// config.h
-#define ENABLE_PRIMARY_BATTERY
-#define PRIMARY_BATTERY_SENSOR_TYPE   STANDARD_12V_DIVIDER
-#define PRIMARY_BATTERY_INPUT         A8
+// Starter battery
+#define INPUT_0_PIN            A8
+#define INPUT_0_APPLICATION    PRIMARY_BATTERY
+#define INPUT_0_SENSOR         VOLTAGE_DIVIDER
 
-#define ENABLE_AUXILIARY_BATTERY
-#define SECONDARY_BATTERY_SENSOR_TYPE STANDARD_12V_DIVIDER
-#define SECONDARY_BATTERY_INPUT       A7
+// House/auxiliary battery
+#define INPUT_1_PIN            A7
+#define INPUT_1_APPLICATION    AUXILIARY_BATTERY
+#define INPUT_1_SENSOR         VOLTAGE_DIVIDER
 ```
 
-Monitor house and starter batteries separately!
+*Runtime:*
+```
+SET A8 APPLICATION PRIMARY_BATTERY
+SET A8 SENSOR VOLTAGE_DIVIDER
+SET A8 NAME STRT
+ENABLE A8
 
-### Example 3: 24V Truck System
+SET A7 APPLICATION AUXILIARY_BATTERY
+SET A7 SENSOR VOLTAGE_DIVIDER
+SET A7 NAME HOUS
+ENABLE A7
 
-```cpp
-// config.h
-#define ENABLE_PRIMARY_BATTERY
-#define PRIMARY_BATTERY_SENSOR_TYPE   STANDARD_24V_DIVIDER
-#define PRIMARY_BATTERY_INPUT         A8
+SAVE
 ```
 
-**Hardware:**
-- 100kΩ resistor from battery + to A8
-- 3.3kΩ resistor from A8 to ground
-- 100nF capacitor from A8 to ground
-
-### Example 4: Custom Voltage Divider
-
-If you need a different divider ratio:
-
-```cpp
-// config.h
-#define ENABLE_CUSTOM_VOLTAGE
-#define CUSTOM_VOLTAGE_SENSOR_TYPE    SENSOR_CUSTOM_VOLTAGE_DIVIDER
-#define CUSTOM_VOLTAGE_INPUT          A9
-
-// Define custom calibration
-#define CUSTOM_VOLTAGE_CUSTOM_CALIBRATION
-#define CUSTOM_VOLTAGE_R1             150000.0  // 150kΩ high side
-#define CUSTOM_VOLTAGE_R2             10000.0   // 10kΩ low side
-#define CUSTOM_VOLTAGE_CORRECTION     1.0
-#define CUSTOM_VOLTAGE_OFFSET         0.0
-```
-
-Then in `sensors.cpp`:
-```cpp
-#ifdef CUSTOM_VOLTAGE_CUSTOM_CALIBRATION
-    static VoltageDividerCalibration custom_voltage_cal = {
-        .r1 = CUSTOM_VOLTAGE_R1,
-        .r2 = CUSTOM_VOLTAGE_R2,
-        .correction = CUSTOM_VOLTAGE_CORRECTION,
-        .offset = CUSTOM_VOLTAGE_OFFSET
-    };
-#endif
-
-Sensor customVoltage = {
-    // ... standard fields ...
-    #ifdef CUSTOM_VOLTAGE_CUSTOM_CALIBRATION
-    .calibrationData = &custom_voltage_cal,
-    .calibrationType = CAL_VOLTAGE_DIVIDER
-    #else
-    .calibrationData = custom_voltage_config->calibrationData,
-    .calibrationType = custom_voltage_config->calibrationType
-    #endif
-};
-```
-
-### Example 5: Direct 5V Rail Monitoring
-
-```cpp
-// config.h
-#define ENABLE_5V_RAIL
-#define RAIL_5V_SENSOR_TYPE    DIRECT_VOLTAGE_5V
-#define RAIL_5V_INPUT          A9
-```
-
-**Hardware:**
-- Connect 5V rail directly to A9
-- Add 1kΩ series resistor for protection (optional)
-- Add 100nF capacitor to ground
+---
 
 ## Understanding Voltage Dividers
 
 ### Basic Principle
 
-A voltage divider reduces voltage to safe levels for the ADC:
+A voltage divider reduces high voltage to safe levels for the ADC:
 
 ```
-Battery + ----[R1]----+----[R2]---- GND
-                      |
-                   ADC Pin
+V_in ----[R1]----+----[R2]---- GND
+                 |
+              V_out (to ADC)
 ```
 
 **Voltage at ADC:**
 ```
-V_ADC = V_Battery × (R2 / (R1 + R2))
+V_out = V_in × (R2 / (R1 + R2))
 ```
 
 **Measured voltage:**
 ```
-V_Battery = V_ADC × ((R1 + R2) / R2)
+V_in = V_out × ((R1 + R2) / R2)
 ```
 
-### Choosing Resistor Values
+### Standard Divider Calculations
 
-**For 12V battery on 5V system:**
-- Want V_ADC < 1.1V for internal reference
-- Using 100kΩ / 6.8kΩ: 12V → 0.76V ✓
+**For 5V systems with 100kΩ/6.8kΩ:**
+- Divider ratio: 6.8 / (100 + 6.8) = 0.0636
+- At 12V battery: 12 × 0.0636 = 0.76V at ADC ✓
+- At 15V battery: 15 × 0.0636 = 0.95V at ADC ✓
+- Maximum safe: ~78V (would give 5V at ADC)
 
-**For 12V battery on 3.3V system:**
-- Want V_ADC < 3.0V
-- Using 100kΩ / 22kΩ: 12V → 2.16V ✓
+**For 3.3V systems with 100kΩ/22kΩ:**
+- Divider ratio: 22 / (100 + 22) = 0.180
+- At 12V battery: 12 × 0.180 = 2.16V at ADC ✓
+- At 15V battery: 15 × 0.180 = 2.70V at ADC ✓
+- Maximum safe: ~18V (would give 3.3V at ADC)
 
-**General rules:**
-1. Use high resistance (100kΩ+) to minimize current draw
-2. Keep ratio such that max voltage → ~70% of ADC range
-3. Add capacitor for noise filtering
+---
 
-### Standard Divider Ratios
+## Battery Voltage Reference
 
-| Application | R1 | R2 | Max Voltage | System |
-|-------------|-----|-----|-------------|--------|
-| 12V battery | 100kΩ | 6.8kΩ | ~15V | 5V ADC |
-| 12V battery | 100kΩ | 22kΩ | ~15V | 3.3V ADC |
-| 24V battery | 100kΩ | 3.3kΩ | ~30V | 5V ADC |
-| High voltage | 1MΩ | 10kΩ | ~100V | 5V ADC |
+### 12V Lead-Acid Battery States
 
-## Hardware Setup
+| Voltage | State | Action |
+|---------|-------|--------|
+| 12.6V+ | Fully charged (100%) | Normal |
+| 12.4V | 75% charged | Normal |
+| 12.2V | 50% charged | Consider charging |
+| 12.0V | 25% charged | Recharge soon |
+| 11.8V | Nearly discharged | Recharge now |
+| <11.5V | Critically low | May damage battery |
 
-### Recommended Circuit
+### Charging System Voltages
 
-```
-Battery + ----[100kΩ]----+----[R2]---- GND
-                         |
-                      [100nF]
-                         |
-                      ADC Pin
-```
+| Voltage | Condition | Notes |
+|---------|-----------|-------|
+| 13.5-14.5V | Normal charging | Alternator working |
+| <13.5V | Undercharging | Check alternator/belt |
+| >14.8V | Overcharging | Check regulator |
+| >15.5V | Dangerous | Disconnect load, investigate |
 
-**Components:**
-- R1: 100kΩ ±1% (high side)
-- R2: Selected based on application (see table above)
-- C1: 100nF ceramic capacitor (noise filtering)
+### 24V Systems (Trucks)
 
-### Breadboard Testing
+Multiply 12V values by 2:
+- Fully charged: ~25.2V
+- Normal charging: 27-29V
+- Use 100kΩ/3.3kΩ divider
 
-1. Build voltage divider on breadboard
-2. Measure with multimeter at ADC pin
-3. Verify voltage is < ADC reference
-4. Connect to Arduino and test
-
-### PCB Design Tips
-
-1. **Place resistors close to ADC pin**
-2. **Use 1% tolerance resistors for accuracy**
-3. **Add TVS diode for transient protection**
-4. **Keep traces short**
-5. **Ground plane under ADC traces**
-
-### Protection
-
-**Optional protection circuit:**
-```
-Battery + ----[100kΩ]----+----[R2]---- GND
-                         |
-                      [Zener]  (5.1V for 5V system)
-                         |
-                      [100nF]
-                         |
-                      ADC Pin
-```
-
-Zener diode clamps voltage to safe level if battery voltage exceeds expected range.
+---
 
 ## Calibration
 
-### Method 1: Resistance Measurement
+### Method 1: Measure Actual Resistors
 
-Most accurate - measure actual resistor values:
+Most accurate method:
 
-1. Measure R1 with DMM: 98.5kΩ (example)
-2. Measure R2 with DMM: 6.75kΩ (example)
-3. Update config:
-```cpp
-#define CUSTOM_VOLTAGE_R1  98500.0
-#define CUSTOM_VOLTAGE_R2  6750.0
-```
+1. Measure R1 with multimeter: e.g., 98.5kΩ
+2. Measure R2 with multimeter: e.g., 6.75kΩ
+3. Use custom calibration in advanced_config.h
 
-### Method 2: Known Voltage Calibration
+### Method 2: Known Voltage Comparison
 
-Compare to accurate voltmeter:
-
-1. Measure battery with accurate meter: 12.65V
+1. Measure battery with accurate voltmeter: 12.65V
 2. Read openEMS display: 12.80V (0.15V high)
-3. Calculate correction factor: 12.65 / 12.80 = 0.988
-4. Update config:
-```cpp
-#define CUSTOM_VOLTAGE_CORRECTION  0.988
-```
+3. Note the error for future correction
 
 ### Method 3: Two-Point Calibration
 
-For best accuracy across range:
+For best accuracy:
+1. Measure at low voltage (11V)
+2. Measure at high voltage (14V)
+3. Calculate correction factor
 
-1. Measure at low voltage (11V) and high voltage (14V)
-2. Calculate linear regression
-3. Determine correction and offset
-4. Update calibration
-
-### Validating Calibration
-
-1. Compare to known accurate meter
-2. Test at multiple voltages (11V, 12V, 13V, 14V)
-3. Should be within ±0.1V across range
-4. If not, check resistor values and connections
-
-## Advanced Features
-
-### Correction Factor
-
-Used to compensate for:
-- ADC non-linearity
-- Resistor tolerance
-- Temperature drift
-
-```cpp
-.correction = 1.05  // 5% correction
-```
-
-### Voltage Offset
-
-Used to compensate for:
-- ADC offset error
-- Systematic measurement error
-
-```cpp
-.offset = 0.2  // Add 0.2V to all readings
-```
-
-### Example: Full Custom Calibration
-
-After testing with accurate meter:
-```cpp
-static VoltageDividerCalibration my_custom_cal = {
-    .r1 = 98500.0,      // Measured R1
-    .r2 = 6750.0,       // Measured R2
-    .correction = 0.988, // Calibration factor
-    .offset = 0.05      // Small offset correction
-};
-```
+---
 
 ## Troubleshooting
 
-### Voltage Reads High
+### Voltage reads too high
 
 **Possible causes:**
-1. R1 measured incorrectly (actual value lower)
-2. R2 measured incorrectly (actual value higher)
-3. Bad ADC reference
+- R1 actual value lower than expected
+- R2 actual value higher than expected
+- ADC reference voltage incorrect
 
 **Solutions:**
-- Re-measure resistors with accurate DMM
-- Check AREF_VOLTAGE in platform.h
-- Use correction factor
+- Measure actual resistor values
+- Check ADC reference voltage setting
 
-### Voltage Reads Low
+### Voltage reads too low
 
 **Possible causes:**
-1. Opposite of above
-2. Poor connection
-3. Voltage drop in wiring
+- R1 actual value higher than expected
+- R2 actual value lower than expected
+- Poor connection adding resistance
 
 **Solutions:**
 - Check all connections
-- Measure voltage at ADC pin
-- Use thicker wire from battery
+- Measure voltage at ADC pin with multimeter
 
-### Erratic Readings
+### Erratic readings
 
 **Possible causes:**
-1. Missing capacitor
-2. Poor ground
-3. Electrical noise
+- Missing filter capacitor
+- Poor ground connection
+- Electrical noise
 
 **Solutions:**
 - Add 100nF capacitor at ADC pin
 - Use shielded cable
-- Keep wiring away from ignition/injectors
-- Increase LOOP_DELAY_MS
+- Check ground connection
+- Route wires away from ignition components
 
-### Readings Drift with Temperature
+### Readings drift with temperature
 
 **Possible causes:**
-1. Resistor temperature coefficient
-2. ADC temperature drift
+- Resistor temperature coefficient
+- ADC temperature drift
 
 **Solutions:**
 - Use 1% metal film resistors (low tempco)
 - Keep resistors away from heat sources
-- Recalibrate at operating temperature
+
+---
+
+## Advanced Applications
+
+### Monitoring Voltage Drop
+
+Use two voltage sensors to monitor voltage drop across cables:
+
+*Compile-Time:*
+```cpp
+#define INPUT_0_PIN            A8
+#define INPUT_0_APPLICATION    PRIMARY_BATTERY
+#define INPUT_0_SENSOR         VOLTAGE_DIVIDER
+
+#define INPUT_1_PIN            A7
+#define INPUT_1_APPLICATION    AUXILIARY_BATTERY
+#define INPUT_1_SENSOR         VOLTAGE_DIVIDER
+```
+
+Measure at battery and at load - difference shows cable drop.
+
+### Solar System Monitoring
+
+Monitor solar panel and battery:
+
+```cpp
+#define INPUT_0_PIN            A8
+#define INPUT_0_APPLICATION    PRIMARY_BATTERY
+#define INPUT_0_SENSOR         VOLTAGE_DIVIDER
+
+#define INPUT_1_PIN            A9
+#define INPUT_1_APPLICATION    AUXILIARY_BATTERY
+#define INPUT_1_SENSOR         VOLTAGE_DIVIDER
+```
+
+---
+
+## Hardware Best Practices
+
+### Resistor Selection
+- Use 1% tolerance metal film resistors
+- 1/4W rating is sufficient
+- Match temperature coefficients
+
+### PCB Design Tips
+- Place resistors close to ADC pin
+- Use ground plane under ADC traces
+- Keep traces short
+- Add TVS diode for surge protection
+
+### Mounting
+- Mount divider near microcontroller
+- Protect from moisture and vibration
+- Use proper automotive connectors
+
+---
 
 ## Safety Considerations
 
 ⚠️ **Electrical Safety:**
 - Always disconnect battery before wiring
-- Double-check polarity before connecting
+- Double-check polarity
 - Use fused connection (1A fuse recommended)
-- Ensure proper insulation of all connections
+- Ensure proper insulation
 
 ⚠️ **Reverse Polarity Protection:**
 Consider adding a diode:
 ```
-Battery + ----[Diode]----[100kΩ]----+----[R2]---- GND
-                                     |
-                                  ADC Pin
-```
-Diode (1N4148) protects against reverse connection.
-
-⚠️ **Overvoltage Protection:**
-- Add Zener diode for transient protection
-- Use TVS diode on automotive applications
-- Consider MOV for surge protection
-
-## Battery Voltage Interpretation
-
-### 12V Lead-Acid Battery States
-
-| Voltage | State | Notes |
-|---------|-------|-------|
-| 12.6V+ | Fully charged | 100% SOC |
-| 12.4V | 75% charged | Good condition |
-| 12.2V | 50% charged | Recharge soon |
-| 12.0V | 25% charged | Recharge now |
-| 11.8V | Nearly dead | Critical |
-| <11.5V | Damaged | May not recover |
-
-**While running (alternator charging):**
-- Normal: 13.5-14.5V
-- Low: <13.5V (weak alternator)
-- High: >14.8V (overcharging - check regulator)
-
-### 24V System (Truck)
-
-Multiply above values by 2:
-- Fully charged: ~25.2V
-- Running: 27-29V
-
-## Common Applications
-
-### Monitoring Voltage Drop
-
-Use two voltage sensors to monitor voltage drop:
-```cpp
-#define ENABLE_BATTERY_POSITIVE
-#define BATTERY_POS_SENSOR_TYPE  STANDARD_12V_DIVIDER
-#define BATTERY_POS_INPUT        A8
-
-#define ENABLE_VOLTAGE_AT_LOAD
-#define LOAD_VOLTAGE_SENSOR_TYPE STANDARD_12V_DIVIDER
-#define LOAD_VOLTAGE_INPUT       A7
+Battery + ----[1N4148]----[100kΩ]----+----[R2]---- GND
+                                      |
+                                   ADC Pin
 ```
 
-Calculate drop in main loop:
-```cpp
-float voltage_drop = batteryPos.value - loadVoltage.value;
-```
+⚠️ **Transient Protection:**
+Automotive electrical systems have spikes up to 100V. Use:
+- Zener diode at ADC pin
+- TVS diode at divider input
+- MOV for surge protection
 
-### Dual Battery System
+---
 
-Monitor house and starter batteries:
-```cpp
-#define ENABLE_STARTER_BATTERY
-#define STARTER_BATTERY_SENSOR_TYPE  STANDARD_12V_DIVIDER
-#define STARTER_BATTERY_INPUT        A8
-
-#define ENABLE_HOUSE_BATTERY
-#define HOUSE_BATTERY_SENSOR_TYPE    STANDARD_12V_DIVIDER
-#define HOUSE_BATTERY_INPUT          A7
-```
-
-### Solar System Monitoring
-
-Monitor solar panel and battery:
-```cpp
-#define ENABLE_SOLAR_PANEL
-#define SOLAR_PANEL_SENSOR_TYPE      STANDARD_12V_DIVIDER
-#define SOLAR_PANEL_INPUT            A9
-
-#define ENABLE_BATTERY_VOLTAGE
-#define BATTERY_VOLTAGE_SENSOR_TYPE  STANDARD_12V_DIVIDER
-#define BATTERY_VOLTAGE_INPUT        A8
-```
-
-## Getting Help
-
-Need a custom voltage divider?
-1. Calculate required ratio
-2. Post in GitHub Discussions
-3. Community can help with resistor values
-4. Contribute calibration back to library!
+**For the classic car community.**
