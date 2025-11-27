@@ -113,20 +113,19 @@ MAX6675 Module:
 **VDO Temperature Sensors:**
 ```
 VDO Sensor:
-  Terminal 1 → Analog pin (e.g., A2)
-  Terminal 2 → GND (if 2-wire)
-  
+  Signal wire → Analog pin (e.g., A2)
+  Ground → Chassis ground (sensor body)
+
 Required: 2.2kΩ pull-down resistor (pin → resistor → GND)
 ```
 
 **VDO Pressure Sensors:**
 ```
 VDO Sensor:
-  Ground → GND
-  Sensor → Analog pin (e.g., A3)
-  +12V → Vehicle 12V supply
+  Signal wire → Analog pin (e.g., A3)
+  Ground → Chassis ground (sensor body)
 
-No external resistors needed
+Required: 2.2kΩ pull-down resistor (pin → resistor → GND)
 ```
 
 **Voltage Monitoring:**

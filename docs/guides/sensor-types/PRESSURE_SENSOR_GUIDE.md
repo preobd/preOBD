@@ -112,21 +112,17 @@ SAVE
 
 ## Wiring
 
-### VDO Pressure Sensors (3-wire)
+### VDO Pressure Sensors (1-wire)
 
 ```
 VDO Sensor:
-  Ground (Black)  → GND
-  Signal (White)  → Analog pin (e.g., A3)
-  +12V (Red)      → Vehicle 12V supply
+  Signal wire → Analog pin (e.g., A3)
+  Ground → Chassis ground (sensor body)
 
-No external resistors needed!
+Required: 2.2kΩ pull-down resistor (pin → resistor → GND)
 ```
 
-**Typical wire colors:**
-- Black: Ground
-- White: Signal (0-5V output)
-- Red: +12V supply (some sensors are 5V powered)
+**Note:** VDO pressure sensors are 1-wire resistive sensors that ground through the chassis when properly mounted. Only the signal wire needs to be connected to the microcontroller. Like VDO temperature sensors, they require a 2.2kΩ pull-down resistor to measure the resistance changes.
 
 ### Generic 3-Wire Sensors
 

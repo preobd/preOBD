@@ -97,8 +97,8 @@ SAVE
 
 **Wiring:**
 ```
-VDO Sensor Terminal 1 → Analog pin (A2)
-VDO Sensor Terminal 2 → GND
+VDO Sensor Signal wire → Analog pin (A2)
+VDO Sensor Ground → Chassis ground (sensor body)
 Add 2.2kΩ pull-down resistor: Pin → 2.2kΩ → GND
 ```
 
@@ -127,10 +127,9 @@ SAVE
 
 **Wiring:**
 ```
-VDO Sensor Ground → GND
-VDO Sensor Signal → Analog pin (A3)
-VDO Sensor +12V   → Vehicle 12V
-No external resistors needed
+VDO Sensor Signal wire → Analog pin (A3)
+VDO Sensor Ground → Chassis ground (sensor body)
+Add 2.2kΩ pull-down resistor: Pin → 2.2kΩ → GND
 ```
 
 **Sensor types:**

@@ -89,8 +89,8 @@ MAX6675 CS  → Your configured pin (e.g., Pin 6)
 
 **Wiring:**
 ```
-VDO Sensor Terminal 1 → Analog pin
-VDO Sensor Terminal 2 → GND
+VDO Sensor Signal wire → Analog pin
+VDO Sensor Ground → Chassis ground (sensor body)
 Add 2.2kΩ resistor: Analog pin → 2.2kΩ → GND
 ```
 
@@ -107,10 +107,9 @@ Add 2.2kΩ resistor: Analog pin → 2.2kΩ → GND
 
 **VDO Pressure Wiring:**
 ```
-VDO Sensor Ground → GND
-VDO Sensor Signal → Analog pin
-VDO Sensor +12V   → Vehicle 12V (if required)
-No external resistors needed
+VDO Sensor Signal wire → Analog pin
+VDO Sensor Ground → Chassis ground (sensor body)
+Add 2.2kΩ pull-down resistor: Analog pin → 2.2kΩ → GND
 ```
 
 ### Voltage Sensors
