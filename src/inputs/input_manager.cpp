@@ -499,6 +499,32 @@ bool loadInputConfig() {
     for (uint8_t i = 0; i < numActiveInputs; i++) {
         EEPROM.get(addr, inputs[i]);
         addr += EEPROM_INPUT_SIZE;
+
+        // Re-initialize function pointers and sensor-specific data
+        // (Function pointers can't be reliably stored in EEPROM)
+        const SensorInfo* flashInfo = getSensorInfo(inputs[i].sensor);
+        if (flashInfo) {
+            SensorInfo info;
+            loadSensorInfo(flashInfo, &info);
+            inputs[i].readFunction = info.readFunction;
+            inputs[i].measurementType = info.measurementType;
+            inputs[i].calibrationType = info.calibrationType;
+
+            // Restore preset calibration pointer if not using custom calibration
+            if (!inputs[i].flags.useCustomCalibration) {
+                inputs[i].presetCalibration = info.defaultCalibration;
+            }
+        }
+
+        // Initialize CS pins for SPI sensors (thermocouples)
+        if (inputs[i].sensor == MAX6675 || inputs[i].sensor == MAX31855) {
+            pinMode(inputs[i].pin, OUTPUT);
+            digitalWrite(inputs[i].pin, HIGH);  // CS idle state is HIGH
+            Serial.print(F("✓ Initialized CS pin "));
+            Serial.print(inputs[i].pin);
+            Serial.print(F(" for "));
+            Serial.println(inputs[i].abbrName);
+        }
     }
 
     Serial.print(F("✓ Loaded "));
@@ -665,6 +691,14 @@ bool setInputSensor(uint8_t pin, Sensor sensor) {
     // Point to calibration in PROGMEM (don't copy to RAM unless custom)
     input->presetCalibration = info.defaultCalibration;
     input->flags.useCustomCalibration = false;
+
+    // Initialize CS pins for SPI sensors (thermocouples)
+    if (sensor == MAX6675 || sensor == MAX31855) {
+        pinMode(input->pin, OUTPUT);
+        digitalWrite(input->pin, HIGH);  // CS idle state is HIGH
+        Serial.print(F("  Initialized CS pin "));
+        Serial.println(input->pin);
+    }
 
     return true;
 }

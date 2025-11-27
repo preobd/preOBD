@@ -60,17 +60,17 @@ void setup() {
     Serial.println(F("                                        "));
     Serial.println(F("openEngine Monitoring System v0.3.2 ===="));
     Serial.println(F("                                        "));
-    
-    // Initialize input manager (loads from EEPROM or config.h)
-    initInputManager();
 
     // Configure ADC for this platform
     setupADC();
     Serial.println(F("✓ ADC configured"));
     
-    // Initialize SPI for thermocouples and other SPI sensors
+    // Initialize SPI BEFORE input manager (needed for thermocouple CS pin setup)
     SPI.begin();
     Serial.println(F("✓ SPI bus initialized"));
+
+    // Initialize input manager (loads from EEPROM or config.h)
+    initInputManager();
 
     // Note: CS pins for thermocouples are initialized in initInputManager()
     // RPM and digital sensors would be initialized here if needed
@@ -188,7 +188,9 @@ void setup() {
         Serial.println(F("Use serial commands to start a scenario."));
         #endif
     } else {
-        Serial.println(F("Test mode available (pin 5 is HIGH, normal operation)"));
+        Serial.print(F("Test mode available (pin "));
+        Serial.print(TEST_MODE_TRIGGER_PIN);
+        Serial.println(F(" is HIGH, normal operation)"));
     }
 #endif
 

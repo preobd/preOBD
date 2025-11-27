@@ -39,7 +39,7 @@
 
 #ifdef ENABLE_TEST_MODE
     // Test mode trigger pin (hold LOW during boot to activate test mode)
-    #define TEST_MODE_TRIGGER_PIN 6
+    #define TEST_MODE_TRIGGER_PIN 8
 
     // Default test scenario to run on startup (0-4, or 0xFF for none)
     // 0 = Normal Operation
@@ -139,7 +139,7 @@
     #define INPUT_3_SENSOR      VDO_150C_STEINHART
 
     // Input 4: Primary Battery
-    // #define INPUT_4_PIN         A8
+    // #define INPUT_4_PIN         A5
     // #define INPUT_4_APPLICATION PRIMARY_BATTERY
     // #define INPUT_4_SENSOR      STANDARD_12V_DIVIDER
 

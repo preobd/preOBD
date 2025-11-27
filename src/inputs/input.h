@@ -198,7 +198,7 @@ struct Input {
 
     // === User Configuration ===
     char abbrName[8];               // "CHT", "OIL" (for LCD display)
-    char displayName[16];           // "CylHdTemp" (full name)
+    char displayName[24];           // "Cylinder Head Temp" (full name)
     Application application;        // What we're measuring (CHT, OIL_PRESSURE, etc.)
     Sensor sensor;                  // Hardware device (MAX6675, VDO_5BAR, etc.)
     Units displayUnits;             // Display units (CELSIUS, PSI, etc.)
