@@ -26,6 +26,9 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+// ===== FIRMWARE VERSION =====
+#define FIRMWARE_VERSION "openEMS v0.3.3-alpha"
+
 // ===== BUILD MODE =====
 // Uncomment to use compile-time config instead of EEPROM:
 #define USE_STATIC_CONFIG

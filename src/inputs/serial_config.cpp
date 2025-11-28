@@ -202,6 +202,11 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  LOAD    - Load config from EEPROM"));
         Serial.println(F("  RESET   - Clear all configuration"));
         Serial.println();
+        Serial.println(F("System Commands:"));
+        Serial.println(F("  VERSION - Display firmware and EEPROM version"));
+        Serial.println(F("  DUMP    - Show full configuration"));
+        Serial.println(F("  RELOAD  - Trigger watchdog reset (system reboot)"));
+        Serial.println();
         Serial.println(F("Examples:"));
         Serial.println(F("  SET A2 APPLICATION CHT"));
         Serial.println(F("  SET A2 SENSOR MAX6675"));
@@ -437,6 +442,51 @@ void handleSerialCommand(char* cmd) {
     if (streq(cmd, "RESET CONFIRM")) {
         resetInputConfig();
         Serial.println(F("Configuration reset"));
+        return;
+    }
+
+    // ===== VERSION COMMAND =====
+    if (streq(cmd, "VERSION")) {
+        Serial.println();
+        Serial.println(F("========================================"));
+        Serial.print(F("  Firmware: "));
+        Serial.println(F(FIRMWARE_VERSION));
+        Serial.print(F("  EEPROM Version: "));
+        Serial.println(EEPROM_VERSION);
+        Serial.print(F("  Active Inputs: "));
+        extern uint8_t numActiveInputs;
+        Serial.print(numActiveInputs);
+        Serial.print(F("/"));
+        Serial.println(MAX_INPUTS);
+        Serial.println(F("========================================"));
+        Serial.println();
+        return;
+    }
+
+    // ===== DUMP COMMAND =====
+    if (streq(cmd, "DUMP")) {
+        Serial.println();
+        Serial.println(F("========================================"));
+        Serial.println(F("  Full Configuration Dump"));
+        Serial.println(F("========================================"));
+        Serial.println();
+        listAllInputs();
+        Serial.println();
+        Serial.println(F("To save this configuration to EEPROM, type: SAVE"));
+        Serial.println();
+        return;
+    }
+
+    // ===== RELOAD COMMAND =====
+    if (streq(cmd, "RELOAD")) {
+        Serial.println();
+        Serial.println(F("Triggering watchdog reset..."));
+        Serial.println(F("System will reload in 2 seconds."));
+        Serial.flush();
+        // Infinite loop to trigger watchdog
+        while (true) {
+            // Do nothing - watchdog will reset the system
+        }
         return;
     }
 

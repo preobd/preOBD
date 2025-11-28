@@ -8,6 +8,7 @@
 #include <Wire.h>
 #include "config.h"
 #include "lib/platform.h"
+#include "lib/watchdog.h"
 
 // Input-based architecture (supports both EEPROM and compile-time config)
 #include "lib/sensor_types.h"
@@ -58,7 +59,8 @@ void setup() {
     Serial.println(F("  \\___/ .__/\\__/_//_/___/_/  /_/___/    "));
     Serial.println(F("     /_/                                "));
     Serial.println(F("                                        "));
-    Serial.println(F("openEngine Monitoring System v0.3.2 ===="));
+    Serial.println(F("openEngine Monitoring System ==========="));
+    Serial.println(F("Firmware version" FIRMWARE_VERSION));
     Serial.println(F("                                        "));
 
     // Configure ADC for this platform
@@ -198,11 +200,15 @@ void setup() {
     // Initialize serial configuration interface (only in EEPROM mode)
     initSerialConfig();
 #endif
+
+    // Enable watchdog timer (2 second timeout)
+    watchdogEnable(2000);
+    Serial.println(F("Watchdog enabled (2s timeout)"));
 }
 
 void loop() {
-    // ===== UNIFIED INPUT-BASED ARCHITECTURE =====
-    // Works with both EEPROM config and compile-time config
+    // Reset watchdog at start of every loop iteration
+    watchdogReset();
 
 #ifndef USE_STATIC_CONFIG
     // Process serial configuration commands (only in EEPROM mode)
