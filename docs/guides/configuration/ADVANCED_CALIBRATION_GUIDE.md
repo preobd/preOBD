@@ -1,298 +1,407 @@
 # Advanced Calibration Guide
 
-This guide is for advanced users who need to customize sensor calibrations beyond the presets.
+**Custom calibration for sensors not in the preset library**
+
+---
 
 ## When Do You Need Custom Calibration?
 
-- Your thermistor uses a non-standard bias resistor
-- You have a thermistor not in the preset library
-- You want to fine-tune accuracy based on testing
-- You have custom lookup tables from a datasheet
-- Your sensor requires unique calibration constants
+Most users won't need this guide. The preset sensor library covers common automotive sensors including VDO temperature and pressure senders, thermocouples, and generic NTC thermistors.
 
-## Method 1: Override Steinhart-Hart Coefficients
+**You need custom calibration when:**
 
-### Example: Custom Coolant Sensor
+- Using a thermistor not in the preset library
+- Your sensor requires different Steinhart-Hart coefficients
+- You have a pressure sensor with non-standard voltage output
+- Fine-tuning accuracy based on testing with a reference thermometer
+- Using a different bias resistor than the default
 
-You have a thermistor with known Steinhart-Hart coefficients that differ from the presets.
+**You don't need custom calibration for:**
 
-**In config.h:**
-```cpp
-#define ENABLE_COOLANT_TEMP
-#define COOLANT_SENSOR_TYPE   CUSTOM_THERMISTOR_STEINHART  // Use custom type
-#define COOLANT_TEMP_INPUT    A2
-#define COOLANT_TEMP_MIN      -1
-#define COOLANT_TEMP_MAX      100
+- VDO 120°C or 150°C temperature sensors (use presets)
+- VDO 2-bar or 5-bar pressure sensors (use presets)
+- MAX6675 or MAX31855 thermocouples (no calibration needed)
+- Changing the bias resistor value (use `VDO_BIAS_RESISTOR` in config.h)
 
-// Define custom calibration
-#define COOLANT_CUSTOM_CALIBRATION
-#define COOLANT_BIAS_RESISTOR     470.0         // Your bias resistor
-#define COOLANT_STEINHART_A       1.597491234   // From datasheet
-#define COOLANT_STEINHART_B       2.63014794    // or calculated
-#define COOLANT_STEINHART_C      -1.184237497   // from curve fit
-```
+---
 
-### Finding Steinhart-Hart Coefficients
+## Quick Start: Custom Thermistor
 
-#### Method A: From Datasheet
-Some manufacturers provide A, B, C coefficients directly.
-
-#### Method B: From β (Beta) Value
-If you only have β:
-```
-A = 1.129241e-3
-B = 2.341077e-4  
-C = 8.775468e-8
-
-// Adjust B based on β:
-B_actual = B × (3950 / your_β)
-```
-
-#### Method C: Calculate from Three Points
-If you have resistance at three temperatures:
-
-1. Use an online Steinhart-Hart calculator
-2. Input your three R/T pairs
-3. Get A, B, C coefficients
-
-Good websites:
-- https://www.thinksrs.com/downloads/programs/therm%20calc/ntccalibrator/ntccalculator.html
-- https://www.daycounter.com/Calculators/Steinhart-Hart-Thermistor-Calculator.phtml
-
-## Method 2: Custom Lookup Tables
-
-### Example: Custom Thermistor with Manufacturer Table
-
-You have a datasheet with a resistance vs. temperature table.
-
-**Step 1: Add your table to `sensor_configs.h`**
+**Step 1:** Define the input in `config.h`:
 
 ```cpp
-// Custom sensor lookup tables
-static const float custom_thermistor_resistance[] = {
-    5000.0, 4200.0, 3500.0, 2900.0, 2400.0, 2000.0, 1650.0, 1370.0,
-    // ... your values from datasheet
-};
+#define USE_STATIC_CONFIG
 
-static const float custom_thermistor_temperature[] = {
-    0, 10, 20, 30, 40, 50, 60, 70,
-    // ... matching temperatures
-};
-
-static const ThermistorLookupCalibration custom_lookup_cal = {
-    .bias_resistor = 10000.0,  // Your bias resistor
-    .resistance_table = custom_thermistor_resistance,
-    .temperature_table = custom_thermistor_temperature,
-    .table_size = 8  // Number of points
-};
+#define INPUT_3_PIN            A0
+#define INPUT_3_APPLICATION    OIL_TEMP
+#define INPUT_3_SENSOR         VDO_150C_STEINHART  // Base sensor type
 ```
 
-**Step 2: Add to sensor config database**
+**Step 2:** Add custom calibration in `advanced_config.h`:
 
 ```cpp
-{
-    .sensorId = CUSTOM_THERMISTOR_LOOKUP,
-    .name = "My Custom Thermistor",
-    .internalType = THERMISTOR_LOOKUP,
-    .readFunction = readThermistorLookup,
-    .displayConvert = convertTemperature,
-    .obdConvert = obdConvertTemp,
-    .calibrationType = CAL_THERMISTOR_LOOKUP,
-    .calibrationData = (void*)&custom_lookup_cal
-},
+#define INPUT_3_CUSTOM_CALIBRATION
+
+DEFINE_CUSTOM_THERMISTOR(input_3,
+    1000.0,         // bias_resistor (Ω)
+    1.591e-03,      // steinhart_a
+    2.659e-04,      // steinhart_b
+    -1.610e-07      // steinhart_c
+)
 ```
 
-**Step 3: Use in config.h**
+That's it. The custom calibration automatically overrides the preset values.
+
+---
+
+## How Custom Calibration Works
+
+openEMS uses a two-level system:
+
+1. **Preset calibration** — stored in flash (PROGMEM), loaded from sensor library
+2. **Custom calibration** — stored in RAM, overrides the preset when defined
+
+When you define `INPUT_N_CUSTOM_CALIBRATION`, the system:
+1. Loads the base sensor configuration (read function, measurement type)
+2. Replaces the preset calibration data with your custom values
+3. Sets a flag so the read function uses your calibration
+
+**Important:** Custom calibration only works in compile-time mode (`USE_STATIC_CONFIG`). Runtime serial configuration uses preset calibrations only.
+
+---
+
+## Calibration Macros
+
+### DEFINE_CUSTOM_THERMISTOR
+
+For NTC thermistors using Steinhart-Hart equation.
 
 ```cpp
-#define COOLANT_SENSOR_TYPE   CUSTOM_THERMISTOR_LOOKUP
+DEFINE_CUSTOM_THERMISTOR(name,
+    bias_resistor,    // Pull-down resistor value (Ω)
+    steinhart_a,      // Steinhart-Hart A coefficient
+    steinhart_b,      // Steinhart-Hart B coefficient
+    steinhart_c       // Steinhart-Hart C coefficient
+)
 ```
 
-## Method 3: Multiple Custom Sensors
-
-If you have multiple custom sensors with different calibrations:
-
-**In config.h:**
+**Example:**
 ```cpp
-// Coolant - custom 470Ω bias
-#define ENABLE_COOLANT_TEMP
-#define COOLANT_SENSOR_TYPE   CUSTOM_THERMISTOR_STEINHART
-#define COOLANT_TEMP_INPUT    A2
-#define COOLANT_CUSTOM_CALIBRATION
-#define COOLANT_BIAS_RESISTOR     470.0
-#define COOLANT_STEINHART_A       1.299e-3
-#define COOLANT_STEINHART_B       2.401e-4
-#define COOLANT_STEINHART_C       1.301e-7
+#define INPUT_2_CUSTOM_CALIBRATION
 
-// Oil - different custom calibration
-#define ENABLE_OIL_TEMP
-#define OIL_TEMP_SENSOR_TYPE  CUSTOM_THERMISTOR_STEINHART
-#define OIL_TEMP_INPUT        A0
-#define OIL_TEMP_CUSTOM_CALIBRATION
-#define OIL_BIAS_RESISTOR         2200.0
-#define OIL_STEINHART_A           1.456e-3
-#define OIL_STEINHART_B           2.567e-4
-#define OIL_STEINHART_C           1.456e-7
+DEFINE_CUSTOM_THERMISTOR(input_2,
+    1000.0,         // 1kΩ bias resistor
+    1.129e-03,      // A coefficient
+    2.341e-04,      // B coefficient
+    8.775e-08       // C coefficient
+)
 ```
 
-Each sensor gets its own calibration!
+### DEFINE_CUSTOM_PRESSURE_LINEAR
 
-## Method 4: Runtime Calibration from SD Card
-
-### Coming Soon!
-
-The architecture supports loading calibrations from SD card at runtime:
+For pressure sensors with linear voltage output (most 3-wire sensors).
 
 ```cpp
-// Pseudo-code for future feature
-ThermistorSteinhartCalibration cal;
-loadCalibrationFromSD("coolant_cal.bin", &cal);
-coolantTemp.calibrationData = &cal;
+DEFINE_CUSTOM_PRESSURE_LINEAR(name,
+    voltage_min,      // Output voltage at minimum pressure (V)
+    voltage_max,      // Output voltage at maximum pressure (V)
+    pressure_min,     // Minimum pressure (bar)
+    pressure_max      // Maximum pressure (bar)
+)
 ```
 
-This will allow:
-- Storing multiple calibration profiles
-- Swapping sensors without recompiling
-- Fine-tuning calibration in the field
-- Sharing calibrations between users
-
-## Calibration Best Practices
-
-### 1. Start with a Preset
-Even if you need custom calibration, start with the closest preset to ensure your wiring is correct.
-
-### 2. Validate Against Known Temperature
-Use an accurate thermometer to validate your sensor at a known temperature (ice water = 0°C, boiling water = 100°C).
-
-### 3. Document Your Calibration
-Add comments to config.h explaining your calibration source:
+**Example:** 0.5-4.5V sensor, 0-10 bar range:
 ```cpp
-// Calibration from XYZ Sensor datasheet rev 2.3
-// Validated with ice water test: 0.2°C error
-#define COOLANT_STEINHART_A  1.299e-3
+#define INPUT_4_CUSTOM_CALIBRATION
+
+DEFINE_CUSTOM_PRESSURE_LINEAR(input_4,
+    0.5,    // 0.5V at 0 bar
+    4.5,    // 4.5V at 10 bar
+    0.0,    // 0 bar minimum
+    10.0    // 10 bar maximum
+)
 ```
 
-### 4. Use Lookup Tables for Critical Sensors
-For critical sensors (CHT, EGT), prefer lookup tables over Steinhart-Hart when available.
+### DEFINE_CUSTOM_PRESSURE_POLY
 
-### 5. Test Over Expected Range
-Don't just test at room temperature - test at the actual operating range.
+For VDO-style resistive pressure sensors using polynomial fit.
 
-## Calculating Bias Resistor Value
-
-The bias resistor affects the temperature range and resolution:
-
-**Formula:**
-```
-R_bias ≈ R_thermistor_at_midpoint
+```cpp
+DEFINE_CUSTOM_PRESSURE_POLY(name,
+    bias_resistor,    // Pull-down resistor value (Ω)
+    poly_a,           // Quadratic coefficient (P² term)
+    poly_b,           // Linear coefficient (P term)
+    poly_c            // Constant term
+)
 ```
 
-For example:
-- If your sensor is 10kΩ at 25°C, use a 10kΩ bias
-- If your sensor is 2.2kΩ at 50°C, use a 2.2kΩ bias
+The polynomial relates resistance to pressure: `R = a×P² + b×P + c`
 
-**Why it matters:**
-- Too high: Poor resolution at high temperatures
-- Too low: Poor resolution at low temperatures
-- Just right: Best resolution across your operating range
+**Example:**
+```cpp
+#define INPUT_5_CUSTOM_CALIBRATION
+
+DEFINE_CUSTOM_PRESSURE_POLY(input_5,
+    1000.0,     // 1kΩ bias resistor
+    -0.3682,    // poly_a
+    36.465,     // poly_b
+    10.648      // poly_c
+)
+```
+
+### DEFINE_CUSTOM_RPM
+
+For alternator W-phase or other RPM sensors.
+
+```cpp
+DEFINE_CUSTOM_RPM(name,
+    poles,            // Number of alternator poles
+    timeout_ms,       // Timeout for zero RPM detection (ms)
+    min_rpm,          // Minimum valid RPM
+    max_rpm           // Maximum valid RPM
+)
+```
+
+**Example:** 18-pole alternator:
+```cpp
+#define INPUT_6_CUSTOM_CALIBRATION
+
+DEFINE_CUSTOM_RPM(input_6,
+    18,       // 18-pole alternator
+    2000,     // 2 second timeout
+    300,      // Ignore below 300 RPM
+    8000      // Ignore above 8000 RPM
+)
+```
+
+---
+
+## Naming Convention
+
+The calibration struct name **must** follow this pattern:
+
+```
+input_N_custom_cal
+```
+
+Where `N` matches your `INPUT_N_` definition in config.h.
+
+| config.h Define | Calibration Name |
+|-----------------|------------------|
+| `INPUT_0_CUSTOM_CALIBRATION` | `input_0_custom_cal` |
+| `INPUT_3_CUSTOM_CALIBRATION` | `input_3_custom_cal` |
+| `INPUT_7_CUSTOM_CALIBRATION` | `input_7_custom_cal` |
+
+The macro automatically creates the correctly-named struct.
+
+---
+
+## Finding Steinhart-Hart Coefficients
+
+### Method 1: From Datasheet
+
+Some manufacturers provide A, B, C coefficients directly. Look for "Steinhart-Hart" in the datasheet.
+
+### Method 2: From β (Beta) Value
+
+If your thermistor specifies a β value (e.g., β=3950):
+
+For a 10kΩ NTC with β=3950:
+```cpp
+DEFINE_CUSTOM_THERMISTOR(input_N,
+    10000.0,        // 10kΩ bias (match thermistor nominal)
+    1.129241e-03,   // A
+    2.341077e-04,   // B
+    8.775468e-08    // C
+)
+```
+
+For different β values, the B coefficient scales approximately:
+```
+B_actual ≈ B_3950 × (3950 / your_β)
+```
+
+### Method 3: Calculate from Three Points
+
+If you have resistance measurements at three temperatures:
+
+1. Measure resistance at three known temperatures (e.g., ice water, room temp, boiling water)
+2. Use an online Steinhart-Hart calculator:
+   - [SRS Thermistor Calculator](https://www.thinksrs.com/downloads/programs/therm%20calc/ntccalibrator/ntccalculator.html)
+   - [Daycounter Calculator](https://www.daycounter.com/Calculators/Steinhart-Hart-Thermistor-Calculator.phtml)
+3. Enter your R/T pairs and get A, B, C coefficients
+
+**Example measurements:**
+| Temperature | Resistance |
+|-------------|------------|
+| 0°C (ice water) | 32,650Ω |
+| 25°C (room) | 10,000Ω |
+| 100°C (boiling) | 680Ω |
+
+### Method 4: Empirical Calibration
+
+If you have a reference thermometer:
+
+1. Start with the closest preset (e.g., `VDO_120C_STEINHART`)
+2. Compare readings at several temperatures
+3. If readings are consistently off, adjust coefficients
+4. Small A changes shift the whole curve
+5. B changes affect the slope
+6. C changes affect curvature at extremes
+
+---
 
 ## Common Thermistor Types
 
-### NTC 10K β=3950 (Most Common)
+### Generic NTC 10K β=3950 (Most Common)
+
 ```cpp
-#define BIAS_RESISTOR  10000.0
-#define STEINHART_A    1.129241e-3
-#define STEINHART_B    2.341077e-4
-#define STEINHART_C    8.775468e-8
+DEFINE_CUSTOM_THERMISTOR(input_N,
+    10000.0,        // 10kΩ bias resistor
+    1.129241e-03,   // A
+    2.341077e-04,   // B
+    8.775468e-08    // C
+)
 ```
 
-### NTC 10K β=3435
+### Generic NTC 10K β=3435
+
 ```cpp
-#define BIAS_RESISTOR  10000.0
-#define STEINHART_A    1.468e-3
-#define STEINHART_B    2.383e-4
-#define STEINHART_C    1.007e-7
+DEFINE_CUSTOM_THERMISTOR(input_N,
+    10000.0,        // 10kΩ bias resistor
+    1.468e-03,      // A
+    2.383e-04,      // B
+    1.007e-07       // C
+)
 ```
 
-### VDO 120°C (120°C range, for coolant)
+### Generic NTC 10K β=3380
+
 ```cpp
-#define BIAS_RESISTOR  2200.0
-// Use VDO_120C_LOOKUP or VDO_120C_STEINHART preset
+DEFINE_CUSTOM_THERMISTOR(input_N,
+    10000.0,        // 10kΩ bias resistor
+    1.579e-03,      // A
+    2.349e-04,      // B
+    1.027e-07       // C
+)
 ```
 
-### VDO 150°C (150°C range, for oil)
+---
+
+## Bias Resistor Selection
+
+The bias resistor value significantly affects ADC resolution. See [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) for detailed analysis.
+
+**Quick summary:**
+
+| Resistor | Best For |
+|----------|----------|
+| 1kΩ | Default, good balance (recommended) |
+| 470Ω | Maximum resolution, data logging |
+| 2.2kΩ | Low power |
+
+Set the global default in `config.h`:
+
 ```cpp
-#define BIAS_RESISTOR  2200.0
-// Use VDO_150C_LOOKUP or VDO_150C_STEINHART preset
+#define VDO_BIAS_RESISTOR 1000.0
 ```
 
-## Troubleshooting Calibration
+For custom calibration, specify the bias resistor in the macro:
 
-### Readings Too High/Low Across Range
-- Check bias resistor value
-- Verify wiring (thermistor to ADC, bias to ground)
-- Confirm ADC reference voltage setting
+```cpp
+DEFINE_CUSTOM_THERMISTOR(input_3,
+    470.0,          // Using 470Ω for this sensor
+    1.591e-03,
+    2.659e-04,
+    -1.610e-07
+)
+```
 
-### Readings Accurate at One Point, Wrong Elsewhere
-- Your Steinhart coefficients may be incorrect
-- Consider using lookup table instead
-- Verify β value if using beta-parameter
+---
 
-### Erratic Readings
-- Add 100nF capacitor across thermistor
+## Complete Example
+
+Here's a complete example with multiple custom sensors:
+
+**config.h:**
+```cpp
+#define USE_STATIC_CONFIG
+
+// Standard VDO sensor (uses preset)
+#define INPUT_0_PIN            A2
+#define INPUT_0_APPLICATION    COOLANT_TEMP
+#define INPUT_0_SENSOR         VDO_120C_LOOKUP
+
+// Custom thermistor (override calibration)
+#define INPUT_1_PIN            A0
+#define INPUT_1_APPLICATION    OIL_TEMP
+#define INPUT_1_SENSOR         VDO_150C_STEINHART
+
+// Custom pressure sensor (override calibration)
+#define INPUT_2_PIN            A3
+#define INPUT_2_APPLICATION    BOOST_PRESSURE
+#define INPUT_2_SENSOR         GENERIC_LINEAR_PRESSURE
+```
+
+**advanced_config.h:**
+```cpp
+// Custom calibration for oil temp (Input 1)
+#define INPUT_1_CUSTOM_CALIBRATION
+
+DEFINE_CUSTOM_THERMISTOR(input_1,
+    1000.0,         // 1kΩ bias (different from default)
+    1.125e-03,      // Custom A coefficient
+    2.347e-04,      // Custom B coefficient
+    8.566e-08       // Custom C coefficient
+)
+
+// Custom calibration for boost sensor (Input 2)
+#define INPUT_2_CUSTOM_CALIBRATION
+
+DEFINE_CUSTOM_PRESSURE_LINEAR(input_2,
+    0.5,            // 0.5V at 0 bar
+    4.5,            // 4.5V at 3 bar
+    0.0,            // 0 bar minimum
+    3.0             // 3 bar maximum
+)
+```
+
+---
+
+## Troubleshooting
+
+### Readings are completely wrong
+
+- Verify the calibration name matches: `input_N_custom_cal`
+- Check that `INPUT_N_CUSTOM_CALIBRATION` is defined (not commented out)
+- Confirm the sensor type in config.h matches your calibration type
+
+### Readings are close but not accurate
+
+- Double-check your Steinhart-Hart coefficients
+- Verify bias resistor value matches physical resistor
+- Test against a reference thermometer at multiple temperatures
+
+### Custom calibration not being used
+
+- Ensure you're using compile-time mode (`USE_STATIC_CONFIG`)
+- Check that advanced_config.h is included properly
+- Verify the input index matches (INPUT_3 needs input_3_custom_cal)
+
+### NAN or erratic readings
+
+- Check wiring (sensor to analog pin, bias resistor to ground)
+- Verify bias resistor is installed
 - Check for loose connections
-- Increase LOOP_DELAY_MS
-- Enable ADC averaging in platform.h
 
-### Readings Always Show NAN
-- Check that calibrationData pointer is valid
-- Verify calibrationType matches read function
-- Check sensor is actually connected
+---
 
-## Example: Complete Custom Sensor
+## Related Documentation
 
-Here's a complete example of adding a totally custom sensor:
+- [Bias Resistor Guide](../hardware/BIAS_RESISTOR_GUIDE.md) — Choosing the right bias resistor
+- [Sensor Selection Guide](../sensor-types/SENSOR_SELECTION_GUIDE.md) — Preset sensor options
+- [Adding Sensors](ADDING_SENSORS.md) — Adding entirely new sensor types to the library
 
-**1. Add calibration to sensor_configs.h:**
-```cpp
-static const ThermistorSteinhartCalibration my_sensor_cal = {
-    .bias_resistor = 4700.0,
-    .steinhart_a = 1.234e-3,
-    .steinhart_b = 2.345e-4,
-    .steinhart_c = 3.456e-7
-};
+---
 
-// Add to SENSOR_CONFIGS array:
-{
-    .sensorId = 99,  // Pick unused number
-    .name = "My Custom Sensor",
-    .internalType = THERMISTOR_STEINHART,
-    .readFunction = readThermistorSteinhart,
-    .displayConvert = convertTemperature,
-    .obdConvert = obdConvertTemp,
-    .calibrationType = CAL_THERMISTOR_STEINHART,
-    .calibrationData = (void*)&my_sensor_cal
-}
-```
-
-**2. Add to sensor_library.h:**
-```cpp
-#define MY_CUSTOM_SENSOR  99
-```
-
-**3. Use in config.h:**
-```cpp
-#define ENABLE_COOLANT_TEMP
-#define COOLANT_SENSOR_TYPE  MY_CUSTOM_SENSOR
-#define COOLANT_TEMP_INPUT   A2
-```
-
-Done! Your custom sensor is now part of the library.
-
-## Getting Help
-
-If you're stuck on calibration:
-1. Post your sensor datasheet on GitHub Discussions
-2. Share your three-point resistance/temperature measurements
-3. Community can help calculate coefficients
-4. Consider contributing your calibration back to the project!
+**For the classic car community.**
