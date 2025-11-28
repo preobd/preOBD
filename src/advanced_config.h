@@ -14,6 +14,8 @@
 #ifndef ADVANCED_CONFIG_H
 #define ADVANCED_CONFIG_H
 
+#include "config.h"  // For VDO_BIAS_RESISTOR and other global defines
+
 // =============================================================================
 // HELPER MACROS FOR CUSTOM SENSORS
 // =============================================================================
@@ -135,10 +137,10 @@
 #define OIL_PRESSURE_CUSTOM_CALIBRATION
 #ifdef OIL_PRESSURE_CUSTOM_CALIBRATION
     DEFINE_CUSTOM_PRESSURE_POLY(oil_pressure,
-        2200.0,     // bias_resistor
-        -0.3682,    // poly_a
-        36.465,     // poly_b
-        10.648      // poly_c
+        VDO_BIAS_RESISTOR,  // bias_resistor (uses global default)
+        -0.3682,            // poly_a
+        36.465,             // poly_b
+        10.648              // poly_c
     )
 #endif
 */
@@ -181,10 +183,10 @@ STEP 2: Add custom calibration in advanced_config.h (this file)
    #define INPUT_5_CUSTOM_CALIBRATION
    #ifdef INPUT_5_CUSTOM_CALIBRATION
        DEFINE_CUSTOM_THERMISTOR(input_5,
-           2200.0,         // bias_resistor (Ω)
-           1.764e-03,      // steinhart_a
-           2.499e-04,      // steinhart_b
-           6.773e-08       // steinhart_c
+           VDO_BIAS_RESISTOR,  // bias_resistor (uses global default)
+           1.764e-03,          // steinhart_a
+           2.499e-04,          // steinhart_b
+           6.773e-08           // steinhart_c
        )
    #endif
 

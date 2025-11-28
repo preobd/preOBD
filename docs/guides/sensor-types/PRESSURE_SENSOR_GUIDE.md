@@ -119,10 +119,10 @@ VDO Sensor:
   Signal wire → Analog pin (e.g., A3)
   Ground → Chassis ground (sensor body)
 
-Required: 2.2kΩ pull-down resistor (pin → resistor → GND)
+Required: Pull-down resistor (VDO_BIAS_RESISTOR in config.h) from pin → resistor → GND
 ```
 
-**Note:** VDO pressure sensors are 1-wire resistive sensors that ground through the chassis when properly mounted. Only the signal wire needs to be connected to the microcontroller. Like VDO temperature sensors, they require a 2.2kΩ pull-down resistor to measure the resistance changes.
+**Note:** VDO pressure sensors are 1-wire resistive sensors that ground through the chassis when properly mounted. Only the signal wire needs to be connected to the microcontroller. Like VDO temperature sensors, they require a pull-down resistor (configurable via VDO_BIAS_RESISTOR in config.h) to measure the resistance changes.
 
 ### Generic 3-Wire Sensors
 

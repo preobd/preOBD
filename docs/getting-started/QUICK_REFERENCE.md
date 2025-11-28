@@ -99,7 +99,7 @@ SAVE
 ```
 VDO Sensor Signal wire → Analog pin (A2)
 VDO Sensor Ground → Chassis ground (sensor body)
-Add 2.2kΩ pull-down resistor: Pin → 2.2kΩ → GND
+Add pull-down resistor: Pin → resistor → GND
 ```
 
 **Sensor types:**
@@ -129,7 +129,7 @@ SAVE
 ```
 VDO Sensor Signal wire → Analog pin (A3)
 VDO Sensor Ground → Chassis ground (sensor body)
-Add 2.2kΩ pull-down resistor: Pin → 2.2kΩ → GND
+Add pull-down resistor: Pin → resistor → GND
 ```
 
 **Sensor types:**
@@ -359,7 +359,7 @@ SAVE
 ## Common Mistakes
 
 1. **Wrong sensor type** - VDO 120C vs 150C makes huge difference
-2. **Missing pull-down resistor** - VDO thermistors need 2.2kΩ
+2. **Missing pull-down resistor** - VDO thermistors need pull-down (see VDO_BIAS_RESISTOR in config.h)
 3. **Wrong I2C address** - Try both 0x27 and 0x3F for LCD
 4. **5V to 3.3V board** - Will destroy Teensy instantly!
 5. **No CAN termination** - CAN bus needs 120Ω resistors

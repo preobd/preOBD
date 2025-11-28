@@ -181,6 +181,7 @@
 #define SILENCE_DURATION 30000  // ms (how long silence button mutes alarm)
 
 // ===== CALIBRATION =====
+#define VDO_BIAS_RESISTOR 1000.0  // Default pull-down resistor for VDO sensors (Ω)
 #define SEA_LEVEL_PRESSURE_HPA 1013.25
 
 // ===== TIMING =====

@@ -116,7 +116,7 @@ VDO Sensor:
   Signal wire → Analog pin (e.g., A2)
   Ground → Chassis ground (sensor body)
 
-Required: 2.2kΩ pull-down resistor (pin → resistor → GND)
+Required: Pull-down resistor (VDO_BIAS_RESISTOR in config.h) from pin → resistor → GND
 ```
 
 **VDO Pressure Sensors:**
@@ -125,7 +125,7 @@ VDO Sensor:
   Signal wire → Analog pin (e.g., A3)
   Ground → Chassis ground (sensor body)
 
-Required: 2.2kΩ pull-down resistor (pin → resistor → GND)
+Required: Pull-down resistor (VDO_BIAS_RESISTOR in config.h) from pin → resistor → GND
 ```
 
 **Voltage Monitoring:**
@@ -301,8 +301,8 @@ VDO thermistors require a bias (pull-down) resistor:
 
 | Sensor Type | Bias Resistor |
 |-------------|---------------|
-| VDO 120C | 2.2kΩ |
-| VDO 150C | 2.2kΩ |
+| VDO 120C | 1kΩ default (configurable in config.h) |
+| VDO 150C | 1kΩ default (configurable in config.h) |
 | Generic NTC 10K | 10kΩ |
 
 **Wiring:**
