@@ -13,6 +13,7 @@
 #include "serial_config.h"
 #include "input_manager.h"
 #include "input.h"
+#include "../lib/system_mode.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -174,6 +175,40 @@ void handleSerialCommand(char* cmd) {
     trim(cmd);
     toUpper(cmd);
 
+    // ===== MODE COMMANDS (always available to prevent deadlock) =====
+    if (streq(cmd, "CONFIG")) {
+        setMode(MODE_CONFIG);
+        return;
+    }
+
+    if (streq(cmd, "RUN")) {
+        setMode(MODE_RUN);
+        return;
+    }
+
+    // ===== COMMAND GATING (based on current mode) =====
+    // In RUN mode, only allow read-only commands
+    if (isInRunMode()) {
+        // Read-only commands allowed in RUN mode
+        bool isReadOnly =
+            streq(cmd, "HELP") ||
+            streq(cmd, "?") ||
+            streq(cmd, "VERSION") ||
+            streq(cmd, "DUMP") ||
+            streq(cmd, "INFO") ||
+            strncmp(cmd, "LIST", 4) == 0;  // LIST, LIST INPUTS, etc.
+
+        if (!isReadOnly) {
+            Serial.println();
+            Serial.println(F("========================================"));
+            Serial.println(F("  ERROR: Configuration locked in RUN mode"));
+            Serial.println(F("  Type CONFIG to enter configuration mode"));
+            Serial.println(F("========================================"));
+            Serial.println();
+            return;
+        }
+    }
+
     // ===== HELP & INFO COMMANDS =====
     if (streq(cmd, "HELP") || streq(cmd, "?")) {
         Serial.println();
@@ -204,6 +239,8 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  RESET   - Clear all configuration"));
         Serial.println();
         Serial.println(F("System Commands:"));
+        Serial.println(F("  CONFIG  - Enter configuration mode (unlock config)"));
+        Serial.println(F("  RUN     - Enter run mode (lock config, resume sensors)"));
         Serial.println(F("  VERSION - Display firmware and EEPROM version"));
         Serial.println(F("  DUMP    - Show full configuration"));
         Serial.println(F("  RELOAD  - Trigger watchdog reset (system reboot)"));

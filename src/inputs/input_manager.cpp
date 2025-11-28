@@ -356,7 +356,7 @@ struct EEPROMHeader {
 #endif // USE_STATIC_CONFIG
 
 // ===== INITIALIZATION =====
-void initInputManager() {
+bool initInputManager() {
     // Clear all inputs
     memset(inputs, 0, sizeof(inputs));
     numActiveInputs = 0;
@@ -428,13 +428,16 @@ void initInputManager() {
     Serial.print(F("✓ Loaded "));
     Serial.print(numActiveInputs);
     Serial.println(F(" inputs from compile-time config"));
+    return true;  // Static config always valid
 
 #else
     // ===== RUNTIME EEPROM CONFIGURATION MODE =====
     // Try to load from EEPROM
-    if (!loadInputConfig()) {
+    bool eepromLoaded = loadInputConfig();
+    if (!eepromLoaded) {
         Serial.println(F("No valid config in EEPROM - starting with blank configuration"));
     }
+    return eepromLoaded;
 #endif
 }
 

@@ -35,7 +35,7 @@
 // Test mode uses function pointer substitution to inject simulated sensor values
 // Memory overhead when enabled: 4.3KB flash, 185 bytes RAM
 // Memory overhead when disabled: 0 bytes (completely removed by preprocessor)
-//#define ENABLE_TEST_MODE
+#define ENABLE_TEST_MODE
 
 #ifdef ENABLE_TEST_MODE
     // Test mode trigger pin (hold LOW during boot to activate test mode)
@@ -171,14 +171,14 @@
 // ===== DIGITAL I/O =====
 #define CAN_INT 2
 #define BUZZER 3
-#define SILENCE 4
+#define MODE_BUTTON 4  // Multi-function: Hold during boot for CONFIG mode, press in RUN mode to silence alarm
 #define SD_CS_PIN 5  // Adjust for your hardware
 #define CAN_CS 9
 
 
 // ===== ALARM CONFIGURATION =====
 #define ENABLE_ALARMS               // Comment out to globally disable all alarms
-#define SILENCE_DURATION 30000  // ms (how long silence button mutes alarm)
+#define SILENCE_DURATION 30000  // ms (how long MODE_BUTTON mutes alarm)
 
 // ===== CALIBRATION =====
 #define VDO_BIAS_RESISTOR 1000.0  // Default pull-down resistor for VDO sensors (Ω)

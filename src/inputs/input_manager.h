@@ -22,7 +22,7 @@ extern Input inputs[MAX_INPUTS];
 extern uint8_t numActiveInputs;
 
 // ===== INITIALIZATION =====
-void initInputManager();              // Initialize and load from EEPROM
+bool initInputManager();              // Initialize and load from EEPROM (returns true if EEPROM config loaded)
 
 // ===== CONFIGURATION =====
 bool setInputApplication(uint8_t pin, Application app);

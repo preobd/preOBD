@@ -17,6 +17,7 @@
 #include "inputs/input_manager.h"
 #ifndef USE_STATIC_CONFIG
     #include "inputs/serial_config.h"  // Only needed for EEPROM/serial config mode
+    #include "lib/system_mode.h"        // System mode (CONFIG/RUN)
 #endif
 #include "outputs/output_base.h"
 
@@ -73,7 +74,7 @@ void setup() {
     Serial.println(F("✓ SPI bus initialized"));
 
     // Initialize input manager (loads from EEPROM or config.h)
-    initInputManager();
+    bool eepromConfigLoaded = initInputManager();
 
     // Note: CS pins for thermocouples are initialized in initInputManager()
     // RPM and digital sensors would be initialized here if needed
@@ -200,6 +201,11 @@ void setup() {
 #ifndef USE_STATIC_CONFIG
     // Initialize serial configuration interface (only in EEPROM mode)
     initSerialConfig();
+
+    // Initialize system mode and detect boot mode
+    initSystemMode();
+    SystemMode bootMode = detectBootMode(eepromConfigLoaded);
+    setMode(bootMode);
 #endif
 
     // Enable watchdog timer (2 second timeout)
@@ -214,6 +220,23 @@ void loop() {
 #ifndef USE_STATIC_CONFIG
     // Process serial configuration commands (only in EEPROM mode)
     processSerialCommands();
+
+    // If in CONFIG mode, skip sensor reading and outputs
+    if (isInConfigMode()) {
+        #ifdef ENABLE_LCD
+        // Update display to show CONFIG MODE message
+        static Input* inputPtrs[MAX_INPUTS];
+        uint8_t activeCount = 0;
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].flags.isEnabled) {
+                inputPtrs[activeCount++] = &inputs[i];
+            }
+        }
+        updateLCD(inputPtrs, activeCount);
+        #endif
+        delay(LOOP_DELAY_MS);
+        return;  // Early return - don't read sensors or send outputs
+    }
 #endif
 
     // Read all enabled inputs

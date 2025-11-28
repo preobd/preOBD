@@ -8,12 +8,23 @@
 
 #ifdef ENABLE_SERIAL_OUTPUT
 
+#ifndef USE_STATIC_CONFIG
+    #include "../lib/system_mode.h"
+#endif
+
 void initSerialOutput() {
     Serial.println("Serial output initialized");
     Serial.println("Sensor,Value,Units");
 }
 
 void sendSerialOutput(Input *ptr) {
+    #ifndef USE_STATIC_CONFIG
+        // In CONFIG mode, suppress serial output
+        if (isInConfigMode()) {
+            return;
+        }
+    #endif
+
     Serial.print(ptr->abbrName);
     Serial.print(",");
 
