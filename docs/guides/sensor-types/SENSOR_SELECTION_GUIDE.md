@@ -91,7 +91,7 @@ MAX6675 CS  → Your configured pin (e.g., Pin 6)
 ```
 VDO Sensor Signal wire → Analog pin
 VDO Sensor Ground → Chassis ground (sensor body)
-Add pull-down resistor: Analog pin → resistor → GND
+Add 1kΩ resistor (see guide for options): Analog pin → resistor → GND
 ```
 
 ### Pressure Sensors
@@ -109,7 +109,7 @@ Add pull-down resistor: Analog pin → resistor → GND
 ```
 VDO Sensor Signal wire → Analog pin
 VDO Sensor Ground → Chassis ground (sensor body)
-Add pull-down resistor: Analog pin → resistor → GND
+Add 1kΩ resistor (see guide for options): Analog pin → resistor → GND
 ```
 
 ### Voltage Sensors
@@ -294,7 +294,7 @@ A: Yes! Each input is independent. You can have multiple VDO_120C sensors on dif
 A: Same physical sensor, different math. Lookup is more accurate (±0.5°C), Steinhart is faster (±1°C).
 
 **Q: Do I need to specify the bias resistor value?**
-A: No! The presets include the default bias resistor (defined by VDO_BIAS_RESISTOR in config.h).
+A: No! The presets use the default 1kΩ bias resistor (defined by VDO_BIAS_RESISTOR in config.h).
 
 **Q: What if I used a different bias resistor?**
 A: See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) to override.

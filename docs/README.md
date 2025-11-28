@@ -305,6 +305,8 @@ VDO thermistors require a bias (pull-down) resistor:
 | VDO 150C | 1kΩ default (configurable in config.h) |
 | Generic NTC 10K | 10kΩ |
 
+See [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md)
+
 **Wiring:**
 ```
 VCC (5V or 3.3V) → Thermistor → Analog Pin
