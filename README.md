@@ -33,7 +33,7 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 
 **Configuration:**
 - Compile-time configuration mode (minimal RAM, recommended for Arduino Uno)
-- Runtime configuration mode (serial commands, EEPROM storage)
+- Runtime configuration mode (serial commands, EEPROM storage, CONFIG/RUN mode separation)
 
 **Hardware Platforms:**
 - Arduino Uno (2KB RAM, limited sensors)
@@ -131,11 +131,16 @@ pio device monitor
 **Runtime Mode (serial commands):**
 
 ```
+CONFIG                                                # Enter CONFIG mode
 SET A0 APPLICATION CHT K_TYPE_THERMOCOUPLE_MAX6675
 SET A1 APPLICATION COOLANT_TEMP VDO_120C_LOOKUP
 SET A2 APPLICATION OIL_PRESSURE VDO_5BAR_PRESSURE
 SAVE
+RUN                                                   # Enter RUN mode (starts sensors)
 ```
+
+**Hardware Requirements (Runtime Mode):**
+- MODE_BUTTON (Pin 4): Hold during boot to enter CONFIG mode, press in RUN mode to silence alarms
 
 ## Documentation
 
@@ -154,6 +159,7 @@ SAVE
 - **[Adding Sensors](docs/guides/configuration/ADDING_SENSORS.md)** - How to add new sensors
 - **[Advanced Calibration](docs/guides/configuration/ADVANCED_CALIBRATION_GUIDE.md)** - Custom sensor setup
 - **[Display Units](docs/guides/configuration/DISPLAY_UNITS_CONFIGURATION_GUIDE.md)** - Configure display units
+- **[Config/Run Mode Guide](docs/guides/configuration/CONFIG_RUN_MODE_GUIDE.md)** - CONFIG vs RUN mode (runtime mode only)
 
 **Complete Documentation:**
 - **[Full Documentation](docs/README.md)** - Complete system guide
