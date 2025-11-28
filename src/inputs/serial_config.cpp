@@ -6,6 +6,7 @@
  */
 
 #include "../config.h"
+#include "../version.h"
 
 #ifndef USE_STATIC_CONFIG
 
@@ -450,7 +451,7 @@ void handleSerialCommand(char* cmd) {
         Serial.println();
         Serial.println(F("========================================"));
         Serial.print(F("  Firmware: "));
-        Serial.println(F(FIRMWARE_VERSION));
+        Serial.println(FIRMWARE_VERSION);
         Serial.print(F("  EEPROM Version: "));
         Serial.println(EEPROM_VERSION);
         Serial.print(F("  Active Inputs: "));

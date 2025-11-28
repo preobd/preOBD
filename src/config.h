@@ -26,19 +26,16 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// ===== FIRMWARE VERSION =====
-#define FIRMWARE_VERSION "openEMS v0.3.3-alpha"
-
 // ===== BUILD MODE =====
 // Uncomment to use compile-time config instead of EEPROM:
-#define USE_STATIC_CONFIG
+//#define USE_STATIC_CONFIG
 
 // ===== TEST MODE =====
 // Uncomment to enable test mode (allows testing outputs without physical sensors)
 // Test mode uses function pointer substitution to inject simulated sensor values
 // Memory overhead when enabled: 4.3KB flash, 185 bytes RAM
 // Memory overhead when disabled: 0 bytes (completely removed by preprocessor)
-#define ENABLE_TEST_MODE
+//#define ENABLE_TEST_MODE
 
 #ifdef ENABLE_TEST_MODE
     // Test mode trigger pin (hold LOW during boot to activate test mode)

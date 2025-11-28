@@ -7,6 +7,7 @@
 #include <SPI.h>
 #include <Wire.h>
 #include "config.h"
+#include "version.h"
 #include "lib/platform.h"
 #include "lib/watchdog.h"
 
@@ -60,7 +61,7 @@ void setup() {
     Serial.println(F("     /_/                                "));
     Serial.println(F("                                        "));
     Serial.println(F("openEngine Monitoring System ==========="));
-    Serial.println(F("Firmware version" FIRMWARE_VERSION));
+    Serial.println("Firmware version " FIRMWARE_VERSION);
     Serial.println(F("                                        "));
 
     // Configure ADC for this platform

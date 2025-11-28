@@ -4,6 +4,7 @@
  */
 
 #include "../config.h"
+#include "../version.h"
 #include "input_manager.h"
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
@@ -19,7 +20,6 @@ uint8_t numActiveInputs = 0;
 // Layout: [Header (8 bytes)] [Input 0] [Input 1] ... [Input N]
 
 #define EEPROM_MAGIC 0x4F454D53            // "OEMS" in ASCII - validates EEPROM has our data
-#define EEPROM_VERSION 1                   // Increment when Input struct changes (forces re-config)
 #define EEPROM_HEADER_SIZE sizeof(EEPROMHeader)  // Header size
 #define EEPROM_INPUT_SIZE sizeof(Input)    // ~100 bytes per input
 
