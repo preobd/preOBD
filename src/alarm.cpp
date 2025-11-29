@@ -12,7 +12,7 @@ static unsigned long silenceStartTime = 0;
 
 void initAlarm() {
     pinMode(BUZZER, OUTPUT);
-    pinMode(SILENCE, INPUT);
+    pinMode(MODE_BUTTON, INPUT);
     noTone(BUZZER);
 }
 
@@ -33,8 +33,8 @@ void checkSensorAlarm(Input *ptr) {
 }
 
 void updateAlarm() {
-    // Check silence button
-    if (digitalRead(SILENCE) == HIGH) {
+    // Check MODE_BUTTON for alarm silence (only functional in RUN mode)
+    if (digitalRead(MODE_BUTTON) == HIGH) {
         silenced = true;
         silenceStartTime = millis();
     }

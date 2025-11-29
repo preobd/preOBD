@@ -7,7 +7,9 @@
 #include <SPI.h>
 #include <Wire.h>
 #include "config.h"
+#include "version.h"
 #include "lib/platform.h"
+#include "lib/watchdog.h"
 
 // Input-based architecture (supports both EEPROM and compile-time config)
 #include "lib/sensor_types.h"
@@ -15,6 +17,7 @@
 #include "inputs/input_manager.h"
 #ifndef USE_STATIC_CONFIG
     #include "inputs/serial_config.h"  // Only needed for EEPROM/serial config mode
+    #include "lib/system_mode.h"        // System mode (CONFIG/RUN)
 #endif
 #include "outputs/output_base.h"
 
@@ -58,19 +61,24 @@ void setup() {
     Serial.println(F("  \\___/ .__/\\__/_//_/___/_/  /_/___/    "));
     Serial.println(F("     /_/                                "));
     Serial.println(F("                                        "));
-    Serial.println(F("openEngine Monitoring System v0.3.2 ===="));
+    Serial.println(F("openEngine Monitoring System ==========="));
+    Serial.println("Firmware version " FIRMWARE_VERSION);
     Serial.println(F("                                        "));
 
     // Configure ADC for this platform
     setupADC();
     Serial.println(F("✓ ADC configured"));
-    
+
     // Initialize SPI BEFORE input manager (needed for thermocouple CS pin setup)
     SPI.begin();
     Serial.println(F("✓ SPI bus initialized"));
 
     // Initialize input manager (loads from EEPROM or config.h)
+#ifndef USE_STATIC_CONFIG
+    bool eepromConfigLoaded = initInputManager();
+#else
     initInputManager();
+#endif
 
     // Note: CS pins for thermocouples are initialized in initInputManager()
     // RPM and digital sensors would be initialized here if needed
@@ -197,16 +205,51 @@ void setup() {
 #ifndef USE_STATIC_CONFIG
     // Initialize serial configuration interface (only in EEPROM mode)
     initSerialConfig();
+
+    // Initialize system mode and detect boot mode
+    initSystemMode();
+    SystemMode bootMode = detectBootMode(eepromConfigLoaded);
+    setMode(bootMode);
+
+    // Only enable watchdog in RUN mode (CONFIG mode doesn't need it)
+    if (bootMode == MODE_RUN) {
+        watchdogEnable(2000);
+        Serial.println(F("Watchdog enabled (2s timeout)"));
+    } else {
+        Serial.println(F("Watchdog disabled (CONFIG mode)"));
+    }
+#else
+    // Always enable watchdog in static config mode
+    watchdogEnable(2000);
+    Serial.println(F("Watchdog enabled (2s timeout)"));
 #endif
 }
 
 void loop() {
-    // ===== UNIFIED INPUT-BASED ARCHITECTURE =====
-    // Works with both EEPROM config and compile-time config
+    // Reset watchdog at start of every loop iteration
+    watchdogReset();
 
 #ifndef USE_STATIC_CONFIG
     // Process serial configuration commands (only in EEPROM mode)
     processSerialCommands();
+
+    // If in CONFIG mode, skip sensor reading and outputs
+    if (isInConfigMode()) {
+        #ifdef ENABLE_LCD
+        // Update display to show configured sensors (enabled or not)
+        static Input* inputPtrs[MAX_INPUTS];
+        uint8_t activeCount = 0;
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            // In CONFIG mode, show any sensor with a valid pin (configured)
+            if (inputs[i].pin != 0xFF) {
+                inputPtrs[activeCount++] = &inputs[i];
+            }
+        }
+        updateLCD(inputPtrs, activeCount);
+        #endif
+        delay(LOOP_DELAY_MS);
+        return;  // Early return - don't read sensors or send outputs
+    }
 #endif
 
     // Read all enabled inputs

@@ -26,7 +26,7 @@
 - CAN transceiver (MCP2515 or FlexCAN on Teensy)
 - SD card module
 - Piezo buzzer
-- Momentary push button (silence)
+- Momentary push button (MODE_BUTTON - alarm silence & config mode entry)
 - Digital float switch or jumper wire
 - Potentiometers (for simulating analog sensors)
 
@@ -218,15 +218,15 @@
 | ALM-T-05 | Multiple simultaneous alarms | 🟡 | Both | Trigger 2 sensors | Both alarms fire, single buzzer |
 | ALM-T-06 | Alarm recovery | 🟡 | Both | Value returns to normal range | Buzzer stops |
 
-### 5.3 Silence Button
+### 5.3 MODE_BUTTON (Multi-Function)
 
 | Test ID | Description | Priority | Mode | Steps | Expected Result |
 |---------|-------------|----------|------|-------|-----------------|
-| ALM-S-01 | Silence button detection | 🔴 | Both | Press silence button during alarm | Buzzer stops immediately |
-| ALM-S-02 | Silence duration | 🔴 | Both | Wait 30 seconds after silence | Buzzer resumes if alarm still active |
-| ALM-S-03 | Silence pin config | 🟡 | Both | Check #define SILENCE pin | Correct pin (default 4) |
-| ALM-S-04 | Silence state tracking | 🟡 | Both | Check `silenced` flag in code | Flag set when button pressed |
-| ALM-S-05 | Silence auto-unsilence | 🟡 | Both | Observe after SILENCE_DURATION | Auto-unsilences after 30s |
+| ALM-MB-01 | Alarm silence detection | 🔴 | Both | Press MODE_BUTTON during alarm in RUN mode | Buzzer stops immediately |
+| ALM-MB-02 | Silence duration | 🔴 | Both | Wait 30 seconds after silence | Buzzer resumes if alarm still active |
+| ALM-MB-03 | MODE_BUTTON pin config | 🟡 | Both | Check #define MODE_BUTTON pin | Correct pin (default 4) |
+| ALM-MB-04 | Silence state tracking | 🟡 | Both | Check `silenced` flag in code | Flag set when button pressed |
+| ALM-MB-05 | Silence auto-unsilence | 🟡 | Both | Observe after SILENCE_DURATION | Auto-unsilences after 30s |
 
 ### 5.4 Buzzer Control
 
@@ -285,6 +285,26 @@
 | PER-S-02 | No EEPROM access | 🟡 | Compile | Check EEPROM after many restarts | No writes (wear-free) |
 | PER-S-03 | Faster boot time | 🟢 | Compile | Measure time to "Init complete" | <1s vs ~2s for EEPROM mode |
 | PER-S-04 | Guaranteed config | 🟡 | Compile | Corrupt EEPROM, restart | Config unaffected |
+
+### 6.4 Config/Run Mode System (EEPROM Mode Only)
+
+| Test ID | Description | Priority | Mode | Steps | Expected Result |
+|---------|-------------|----------|------|-------|-----------------|
+| MODE-01 | Boot to CONFIG (no EEPROM) | 🔴 | EEPROM | 1. Clear EEPROM<br>2. Restart | Boots to CONFIG mode automatically |
+| MODE-02 | Boot to CONFIG (button held) | 🔴 | EEPROM | 1. Hold MODE_BUTTON during boot<br>2. Release after 1s | "CONFIG BUTTON DETECTED", enters CONFIG mode |
+| MODE-03 | Boot to RUN (valid EEPROM) | 🔴 | EEPROM | 1. Valid config in EEPROM<br>2. Restart without button | "Starting in RUN mode" |
+| MODE-04 | CONFIG command from RUN | 🔴 | EEPROM | 1. In RUN mode<br>2. Send "CONFIG" | Enters CONFIG mode, shows transition message |
+| MODE-05 | RUN command from CONFIG | 🔴 | EEPROM | 1. In CONFIG mode<br>2. Send "RUN" | Enters RUN mode, shows transition message |
+| MODE-06 | Write commands blocked in RUN | 🔴 | EEPROM | 1. In RUN mode<br>2. Send "SET A0 APPLICATION CHT" | Error: "Configuration locked in RUN mode" |
+| MODE-07 | Read commands allowed in RUN | 🔴 | EEPROM | 1. In RUN mode<br>2. Send "LIST INPUTS" | Command executes successfully |
+| MODE-08 | Write commands allowed in CONFIG | 🔴 | EEPROM | 1. In CONFIG mode<br>2. Send "SET A0 APPLICATION CHT" | Command executes successfully |
+| MODE-09 | Serial CSV disabled in CONFIG | 🔴 | EEPROM | 1. In CONFIG mode<br>2. Check serial output | No CSV data printed |
+| MODE-10 | Serial CSV enabled in RUN | 🔴 | EEPROM | 1. In RUN mode<br>2. Check serial output | CSV data printed normally |
+| MODE-11 | Sensors paused in CONFIG | 🔴 | EEPROM | 1. In CONFIG mode<br>2. Apply sensor changes | Sensors not read, values frozen |
+| MODE-12 | Sensors active in RUN | 🔴 | EEPROM | 1. In RUN mode<br>2. Apply sensor changes | Sensors read, values update |
+| MODE-13 | MODE_BUTTON in RUN (alarm silence) | 🔴 | EEPROM | 1. In RUN mode<br>2. Alarm active<br>3. Press MODE_BUTTON | Alarm silenced (30s) |
+| MODE-14 | MODE_BUTTON in CONFIG (no effect) | 🟡 | EEPROM | 1. In CONFIG mode<br>2. Press MODE_BUTTON | No effect (button only for alarm in RUN) |
+| MODE-15 | CONFIG/RUN always available | 🔴 | EEPROM | 1. In any mode<br>2. Send CONFIG or RUN | Mode switches successfully (no deadlock) |
 
 ---
 

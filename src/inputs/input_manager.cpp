@@ -4,6 +4,7 @@
  */
 
 #include "../config.h"
+#include "../version.h"
 #include "input_manager.h"
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
@@ -19,7 +20,6 @@ uint8_t numActiveInputs = 0;
 // Layout: [Header (8 bytes)] [Input 0] [Input 1] ... [Input N]
 
 #define EEPROM_MAGIC 0x4F454D53            // "OEMS" in ASCII - validates EEPROM has our data
-#define EEPROM_VERSION 1                   // Increment when Input struct changes (forces re-config)
 #define EEPROM_HEADER_SIZE sizeof(EEPROMHeader)  // Header size
 #define EEPROM_INPUT_SIZE sizeof(Input)    // ~100 bytes per input
 
@@ -356,7 +356,7 @@ struct EEPROMHeader {
 #endif // USE_STATIC_CONFIG
 
 // ===== INITIALIZATION =====
-void initInputManager() {
+bool initInputManager() {
     // Clear all inputs
     memset(inputs, 0, sizeof(inputs));
     numActiveInputs = 0;
@@ -428,28 +428,51 @@ void initInputManager() {
     Serial.print(F("✓ Loaded "));
     Serial.print(numActiveInputs);
     Serial.println(F(" inputs from compile-time config"));
+    return true;  // Static config always valid
 
 #else
     // ===== RUNTIME EEPROM CONFIGURATION MODE =====
     // Try to load from EEPROM
-    if (!loadInputConfig()) {
+    bool eepromLoaded = loadInputConfig();
+    if (!eepromLoaded) {
         Serial.println(F("No valid config in EEPROM - starting with blank configuration"));
     }
+    return eepromLoaded;
 #endif
 }
 
 // ===== EEPROM PERSISTENCE =====
+
+/**
+ * Calculate XOR checksum of all active inputs
+ * Used to detect EEPROM corruption
+ */
+static uint8_t calculateConfigChecksum() {
+    uint8_t checksum = 0;
+
+    for (uint8_t i = 0; i < numActiveInputs; i++) {
+        // Find the i-th active input
+        uint8_t activeCount = 0;
+        for (uint8_t j = 0; j < MAX_INPUTS; j++) {
+            if (inputs[j].pin != 0xFF && inputs[j].flags.isEnabled) {
+                if (activeCount == i) {
+                    // XOR all bytes of this input
+                    const uint8_t* data = (const uint8_t*)&inputs[j];
+                    for (size_t k = 0; k < sizeof(Input); k++) {
+                        checksum ^= data[k];
+                    }
+                    break;
+                }
+                activeCount++;
+            }
+        }
+    }
+
+    return checksum;
+}
+
 bool saveInputConfig() {
-    EEPROMHeader header;
-    header.magic = EEPROM_MAGIC;
-    header.version = EEPROM_VERSION;
-    header.numInputs = numActiveInputs;
-    header.reserved = 0;
-
-    // Write header
-    EEPROM.put(0, header);
-
-    // Write inputs
+    // Write inputs first (header needs checksum)
     uint16_t addr = EEPROM_HEADER_SIZE;
     uint8_t savedCount = 0;
 
@@ -464,6 +487,22 @@ bool saveInputConfig() {
     Serial.print(F("✓ Saved "));
     Serial.print(savedCount);
     Serial.println(F(" inputs to EEPROM"));
+
+    // Calculate checksum
+    uint8_t checksum = calculateConfigChecksum();
+
+    // Write header with checksum
+    EEPROMHeader header;
+    header.magic = EEPROM_MAGIC;
+    header.version = EEPROM_VERSION;
+    header.numInputs = numActiveInputs;
+    header.reserved = checksum;  // Store checksum in reserved field
+
+    EEPROM.put(0, header);
+
+    Serial.print(F("✓ Checksum: 0x"));
+    Serial.println(checksum, HEX);
+
     return true;
 }
 
@@ -526,6 +565,30 @@ bool loadInputConfig() {
             Serial.println(inputs[i].abbrName);
         }
     }
+
+    // Verify checksum
+    uint8_t storedChecksum = header.reserved;
+    uint8_t calculatedChecksum = calculateConfigChecksum();
+
+    if (storedChecksum != calculatedChecksum) {
+        Serial.print(F("ERROR: EEPROM checksum mismatch! Stored: 0x"));
+        Serial.print(storedChecksum, HEX);
+        Serial.print(F(", Calculated: 0x"));
+        Serial.println(calculatedChecksum, HEX);
+        Serial.println(F("Configuration may be corrupted. Please reconfigure."));
+
+        // Clear corrupted data
+        memset(inputs, 0, sizeof(inputs));
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            inputs[i].pin = 0xFF;
+        }
+        numActiveInputs = 0;
+
+        return false;
+    }
+
+    Serial.print(F("✓ Checksum verified: 0x"));
+    Serial.println(storedChecksum, HEX);
 
     Serial.print(F("✓ Loaded "));
     Serial.print(numActiveInputs);
@@ -604,6 +667,54 @@ static uint8_t findFreeSlot() {
     return 0xFF;  // No free slots
 }
 
+/**
+ * Validate input configuration
+ * Checks for:
+ * - Pin conflicts (duplicate pin assignments)
+ * - Alarm threshold sanity (min < max)
+ * Returns true if valid, false if errors found
+ */
+static bool validateInputConfig(Input* input) {
+    if (!input) return false;
+
+    // Check for pin conflicts with other enabled inputs
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        Input* other = &inputs[i];
+
+        // Skip self-comparison and uninitialized slots
+        if (other == input || other->pin == 0xFF) {
+            continue;
+        }
+
+        // Check if another enabled input uses the same pin
+        if (other->flags.isEnabled && other->pin == input->pin) {
+            Serial.print(F("ERROR: Pin "));
+            if (input->pin >= A0) {
+                Serial.print(F("A"));
+                Serial.print(input->pin - A0);
+            } else {
+                Serial.print(input->pin);
+            }
+            Serial.println(F(" already in use"));
+            return false;
+        }
+    }
+
+    // Check alarm threshold sanity (only if alarms enabled)
+    if (input->flags.alarm) {
+        if (input->minValue >= input->maxValue) {
+            Serial.print(F("ERROR: Invalid alarm range ("));
+            Serial.print(input->minValue);
+            Serial.print(F(" >= "));
+            Serial.print(input->maxValue);
+            Serial.println(F(")"));
+            return false;
+        }
+    }
+
+    return true;
+}
+
 // ===== CONFIGURATION FUNCTIONS =====
 bool setInputApplication(uint8_t pin, Application app) {
     // Find or create input
@@ -658,6 +769,16 @@ bool setInputApplication(uint8_t pin, Application app) {
     // Increment count if this is a new input
     if (isNewInput) {
         numActiveInputs++;
+    }
+
+    // Validate configuration before finalizing
+    if (!validateInputConfig(input)) {
+        // Validation failed - revert changes
+        if (isNewInput) {
+            input->pin = 0xFF;  // Mark as free
+            numActiveInputs--;
+        }
+        return false;
     }
 
     // Set up sensor (function pointers + calibration)
@@ -732,6 +853,16 @@ bool setInputUnits(uint8_t pin, Units units) {
 bool setInputAlarmRange(uint8_t pin, float minValue, float maxValue) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
+
+    // Validate range
+    if (minValue >= maxValue) {
+        Serial.print(F("ERROR: Min alarm ("));
+        Serial.print(minValue);
+        Serial.print(F(") must be less than max alarm ("));
+        Serial.print(maxValue);
+        Serial.println(F(")"));
+        return false;
+    }
 
     // Store in STANDARD UNITS (caller's responsibility to provide correct units)
     input->minValue = minValue;

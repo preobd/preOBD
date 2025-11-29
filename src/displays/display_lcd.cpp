@@ -16,6 +16,9 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 byte degree[8] = {140, 146, 146, 140, 128, 128, 128, 128};
 byte currentLine = 0;
 
+// Forward declarations
+void showConfigModeMessage();
+
 void initLCD() {
     lcd.init();
     lcd.backlight();
@@ -25,10 +28,6 @@ void initLCD() {
 }
 
 void displaySensor(Input *ptr, byte line) {
-    if (!ptr->flags.isEnabled || !ptr->flags.display) {
-        return;
-    }
-
     // Calculate column position (0-9 for left, 10-19 for right)
     byte col = (line >= 4) ? 10 : 0;
     byte row = (line >= 4) ? line - 4 : line;
@@ -39,8 +38,27 @@ void displaySensor(Input *ptr, byte line) {
     lcd.print(ptr->abbrName);
     lcd.print(":");
 
+    // If sensor is not enabled, show "CFG"
+    if (!ptr->flags.isEnabled) {
+        lcd.print("CFG");
+        return;
+    }
+
+    // If display flag is off, don't show
+    if (!ptr->flags.display) {
+        return;
+    }
+
+    // Check for invalid values (NaN or exactly 0.0 which likely means unread in CONFIG mode)
     if (isnan(ptr->value)) {
         lcd.print("ERR");
+        return;
+    }
+
+    // If value is exactly 0.0, show "---" (likely in CONFIG mode, not yet read)
+    // This handles the case where sensor is enabled but system hasn't read it yet
+    if (ptr->value == 0.0f) {
+        lcd.print("---");
         return;
     }
 
@@ -86,16 +104,40 @@ void displaySensor(Input *ptr, byte line) {
 void updateLCD(Input** inputs, int numInputs) {
     currentLine = 0;
 
-    for (int i = 0; i < numInputs; i++) {
-        if (inputs[i]->flags.isEnabled && inputs[i]->flags.display) {
-            displaySensor(inputs[i], currentLine);
-            currentLine++;
+    // If no sensors configured, show CONFIG MODE message
+    if (numInputs == 0) {
+        static bool configMsgShown = false;
+        if (!configMsgShown) {
+            showConfigModeMessage();
+            configMsgShown = true;
         }
+        return;
+    }
+
+    // Clear the CONFIG MODE message when first sensor is configured
+    static bool firstSensorShown = false;
+    if (!firstSensorShown) {
+        lcd.clear();
+        firstSensorShown = true;
+    }
+
+    // Display all sensors (enabled will show values, disabled will show "CFG")
+    for (int i = 0; i < numInputs; i++) {
+        displaySensor(inputs[i], currentLine);
+        currentLine++;
     }
 }
 
 void clearLCD() {
     lcd.clear();
+}
+
+void showConfigModeMessage() {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("CONFIG MODE");
+    lcd.setCursor(0, 1);
+    lcd.print("Use serial console");
 }
 
 #else
@@ -104,5 +146,6 @@ void initLCD() {}
 void displaySensor(Input *ptr, byte line) {}
 void updateLCD(Input** inputs, int numInputs) {}
 void clearLCD() {}
+void showConfigModeMessage() {}
 
 #endif

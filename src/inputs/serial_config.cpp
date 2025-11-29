@@ -6,12 +6,14 @@
  */
 
 #include "../config.h"
+#include "../version.h"
 
 #ifndef USE_STATIC_CONFIG
 
 #include "serial_config.h"
 #include "input_manager.h"
 #include "input.h"
+#include "../lib/system_mode.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -173,6 +175,40 @@ void handleSerialCommand(char* cmd) {
     trim(cmd);
     toUpper(cmd);
 
+    // ===== MODE COMMANDS (always available to prevent deadlock) =====
+    if (streq(cmd, "CONFIG")) {
+        setMode(MODE_CONFIG);
+        return;
+    }
+
+    if (streq(cmd, "RUN")) {
+        setMode(MODE_RUN);
+        return;
+    }
+
+    // ===== COMMAND GATING (based on current mode) =====
+    // In RUN mode, only allow read-only commands
+    if (isInRunMode()) {
+        // Read-only commands allowed in RUN mode
+        bool isReadOnly =
+            streq(cmd, "HELP") ||
+            streq(cmd, "?") ||
+            streq(cmd, "VERSION") ||
+            streq(cmd, "DUMP") ||
+            streq(cmd, "INFO") ||
+            strncmp(cmd, "LIST", 4) == 0;  // LIST, LIST INPUTS, etc.
+
+        if (!isReadOnly) {
+            Serial.println();
+            Serial.println(F("========================================"));
+            Serial.println(F("  ERROR: Configuration locked in RUN mode"));
+            Serial.println(F("  Type CONFIG to enter configuration mode"));
+            Serial.println(F("========================================"));
+            Serial.println();
+            return;
+        }
+    }
+
     // ===== HELP & INFO COMMANDS =====
     if (streq(cmd, "HELP") || streq(cmd, "?")) {
         Serial.println();
@@ -201,6 +237,13 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  SAVE    - Save config to EEPROM"));
         Serial.println(F("  LOAD    - Load config from EEPROM"));
         Serial.println(F("  RESET   - Clear all configuration"));
+        Serial.println();
+        Serial.println(F("System Commands:"));
+        Serial.println(F("  CONFIG  - Enter configuration mode (unlock config)"));
+        Serial.println(F("  RUN     - Enter run mode (lock config, resume sensors)"));
+        Serial.println(F("  VERSION - Display firmware and EEPROM version"));
+        Serial.println(F("  DUMP    - Show full configuration"));
+        Serial.println(F("  RELOAD  - Trigger watchdog reset (system reboot)"));
         Serial.println();
         Serial.println(F("Examples:"));
         Serial.println(F("  SET A2 APPLICATION CHT"));
@@ -437,6 +480,56 @@ void handleSerialCommand(char* cmd) {
     if (streq(cmd, "RESET CONFIRM")) {
         resetInputConfig();
         Serial.println(F("Configuration reset"));
+        return;
+    }
+
+    // ===== VERSION COMMAND =====
+    if (streq(cmd, "VERSION")) {
+        Serial.println();
+        Serial.println(F("========================================"));
+        Serial.print(F("  Firmware: "));
+        Serial.println(FIRMWARE_VERSION);
+        Serial.print(F("  EEPROM Version: "));
+        Serial.println(EEPROM_VERSION);
+        Serial.print(F("  Active Inputs: "));
+        extern uint8_t numActiveInputs;
+        Serial.print(numActiveInputs);
+        Serial.print(F("/"));
+        Serial.println(MAX_INPUTS);
+        Serial.println(F("========================================"));
+        Serial.println();
+        return;
+    }
+
+    // ===== DUMP COMMAND =====
+    if (streq(cmd, "DUMP")) {
+        Serial.println();
+        Serial.println(F("========================================"));
+        Serial.println(F("  Full Configuration Dump"));
+        Serial.println(F("========================================"));
+        Serial.println();
+        listAllInputs();
+        Serial.println();
+        Serial.println(F("To save this configuration to EEPROM, type: SAVE"));
+        Serial.println();
+        return;
+    }
+
+    // ===== RELOAD COMMAND =====
+    if (streq(cmd, "RELOAD")) {
+        Serial.println();
+        Serial.println(F("Triggering watchdog reset..."));
+        Serial.println(F("System will reload in 2 seconds."));
+        Serial.flush();
+
+        // Enable watchdog if not already enabled (e.g., in CONFIG mode)
+        extern void watchdogEnable(uint16_t);
+        watchdogEnable(2000);
+
+        // Infinite loop to trigger watchdog
+        while (true) {
+            // Do nothing - watchdog will reset the system
+        }
         return;
     }
 

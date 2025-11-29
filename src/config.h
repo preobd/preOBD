@@ -171,14 +171,14 @@
 // ===== DIGITAL I/O =====
 #define CAN_INT 2
 #define BUZZER 3
-#define SILENCE 4
-#define SD_CS_PIN 5  // Adjust for your hardware
+#define SD_CS_PIN 4  // Adjust for your hardware
+#define MODE_BUTTON 5  // Multi-function: Hold during boot for CONFIG mode, press in RUN mode to silence alarm
 #define CAN_CS 9
 
 
 // ===== ALARM CONFIGURATION =====
 #define ENABLE_ALARMS               // Comment out to globally disable all alarms
-#define SILENCE_DURATION 30000  // ms (how long silence button mutes alarm)
+#define SILENCE_DURATION 30000  // ms (how long MODE_BUTTON mutes alarm)
 
 // ===== CALIBRATION =====
 #define VDO_BIAS_RESISTOR 1000.0  // Default pull-down resistor for VDO sensors (Ω)
