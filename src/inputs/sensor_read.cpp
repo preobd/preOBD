@@ -444,12 +444,36 @@ void rpmPulseISR() {
     }
 }
 
-// Initialize RPM sensing
-void initRPM(byte pin) {
-    pinMode(pin, INPUT);
-    attachInterrupt(digitalPinToInterrupt(pin), rpmPulseISR, RISING);
-    Serial.print("✓ RPM sensing initialized on pin ");
-    Serial.println(pin);
+// ===== SENSOR INITIALIZATION FUNCTIONS =====
+// These are called during input manager initialization
+
+// Initialize thermocouple chip select pins
+void initThermocoupleCS(Input* ptr) {
+    pinMode(ptr->pin, OUTPUT);
+    digitalWrite(ptr->pin, HIGH);  // CS idle state is HIGH
+    Serial.print(F("✓ Thermocouple CS pin "));
+    Serial.print(ptr->pin);
+    Serial.print(F(" for "));
+    Serial.println(ptr->abbrName);
+}
+
+// Initialize W-Phase RPM sensing (interrupt-based)
+void initWPhaseRPM(Input* ptr) {
+    pinMode(ptr->pin, INPUT);
+    attachInterrupt(digitalPinToInterrupt(ptr->pin), rpmPulseISR, RISING);
+    Serial.print(F("✓ RPM sensing on pin "));
+    Serial.print(ptr->pin);
+    Serial.print(F(" for "));
+    Serial.println(ptr->abbrName);
+}
+
+// Initialize digital float switch
+void initFloatSwitch(Input* ptr) {
+    pinMode(ptr->pin, INPUT_PULLUP);  // Most float switches need pullup
+    Serial.print(F("✓ Digital input on pin "));
+    Serial.print(ptr->pin);
+    Serial.print(F(" for "));
+    Serial.println(ptr->abbrName);
 }
 
 // Read W-Phase RPM

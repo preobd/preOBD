@@ -407,20 +407,20 @@ bool initInputManager() {
     #endif
     // Add more if needed (up to MAX_INPUTS)
 
-    // Count active inputs and initialize SPI chip select pins
+    // Count active inputs and initialize sensors
     numActiveInputs = 0;
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) {
             numActiveInputs++;
 
-            // Initialize CS pins for SPI sensors (thermocouples)
-            if (inputs[i].sensor == MAX6675 || inputs[i].sensor == MAX31855) {
-                pinMode(inputs[i].pin, OUTPUT);
-                digitalWrite(inputs[i].pin, HIGH);  // CS idle state is HIGH
-                Serial.print(F("✓ Initialized CS pin "));
-                Serial.print(inputs[i].pin);
-                Serial.print(F(" for "));
-                Serial.println(inputs[i].abbrName);
+            // Call sensor-specific initialization function if it exists
+            const SensorInfo* flashInfo = getSensorInfo(inputs[i].sensor);
+            if (flashInfo) {
+                SensorInfo info;
+                loadSensorInfo(flashInfo, &info);
+                if (info.initFunction) {
+                    info.initFunction(&inputs[i]);
+                }
             }
         }
     }
@@ -553,16 +553,11 @@ bool loadInputConfig() {
             if (!inputs[i].flags.useCustomCalibration) {
                 inputs[i].presetCalibration = info.defaultCalibration;
             }
-        }
 
-        // Initialize CS pins for SPI sensors (thermocouples)
-        if (inputs[i].sensor == MAX6675 || inputs[i].sensor == MAX31855) {
-            pinMode(inputs[i].pin, OUTPUT);
-            digitalWrite(inputs[i].pin, HIGH);  // CS idle state is HIGH
-            Serial.print(F("✓ Initialized CS pin "));
-            Serial.print(inputs[i].pin);
-            Serial.print(F(" for "));
-            Serial.println(inputs[i].abbrName);
+            // Call sensor-specific initialization function if it exists
+            if (info.initFunction) {
+                info.initFunction(&inputs[i]);
+            }
         }
     }
 
@@ -813,12 +808,9 @@ bool setInputSensor(uint8_t pin, Sensor sensor) {
     input->presetCalibration = info.defaultCalibration;
     input->flags.useCustomCalibration = false;
 
-    // Initialize CS pins for SPI sensors (thermocouples)
-    if (sensor == MAX6675 || sensor == MAX31855) {
-        pinMode(input->pin, OUTPUT);
-        digitalWrite(input->pin, HIGH);  // CS idle state is HIGH
-        Serial.print(F("  Initialized CS pin "));
-        Serial.println(input->pin);
+    // Call sensor-specific initialization function if it exists
+    if (info.initFunction) {
+        info.initFunction(input);
     }
 
     return true;
