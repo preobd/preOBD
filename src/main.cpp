@@ -206,11 +206,19 @@ void setup() {
     initSystemMode();
     SystemMode bootMode = detectBootMode(eepromConfigLoaded);
     setMode(bootMode);
-#endif
 
-    // Enable watchdog timer (2 second timeout)
+    // Only enable watchdog in RUN mode (CONFIG mode doesn't need it)
+    if (bootMode == MODE_RUN) {
+        watchdogEnable(2000);
+        Serial.println(F("Watchdog enabled (2s timeout)"));
+    } else {
+        Serial.println(F("Watchdog disabled (CONFIG mode)"));
+    }
+#else
+    // Always enable watchdog in static config mode
     watchdogEnable(2000);
     Serial.println(F("Watchdog enabled (2s timeout)"));
+#endif
 }
 
 void loop() {

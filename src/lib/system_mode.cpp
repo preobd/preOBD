@@ -4,6 +4,7 @@
 
 #include "system_mode.h"
 #include "../config.h"
+#include "watchdog.h"
 
 // Current system mode
 static SystemMode currentMode = MODE_RUN;
@@ -24,19 +25,25 @@ void setMode(SystemMode newMode) {
     SystemMode oldMode = currentMode;
     currentMode = newMode;
 
-    // Print mode transition message
+    // Handle mode transitions
     if (oldMode != newMode) {
         Serial.println();
         if (newMode == MODE_CONFIG) {
+            // Disable watchdog when entering CONFIG mode
+            watchdogDisable();
             Serial.println(F("========================================"));
             Serial.println(F("  ENTERED CONFIG MODE"));
             Serial.println(F("  Sensors paused, configuration unlocked"));
+            Serial.println(F("  Watchdog disabled"));
             Serial.println(F("  Type RUN to resume normal operation"));
             Serial.println(F("========================================"));
         } else {
+            // Enable watchdog when entering RUN mode
+            watchdogEnable(2000);
             Serial.println(F("========================================"));
             Serial.println(F("  ENTERED RUN MODE"));
             Serial.println(F("  Sensors active, configuration locked"));
+            Serial.println(F("  Watchdog enabled (2s timeout)"));
             Serial.println(F("  Type CONFIG to modify configuration"));
             Serial.println(F("========================================"));
         }
