@@ -68,13 +68,17 @@ void setup() {
     // Configure ADC for this platform
     setupADC();
     Serial.println(F("✓ ADC configured"));
-    
+
     // Initialize SPI BEFORE input manager (needed for thermocouple CS pin setup)
     SPI.begin();
     Serial.println(F("✓ SPI bus initialized"));
 
     // Initialize input manager (loads from EEPROM or config.h)
+#ifndef USE_STATIC_CONFIG
     bool eepromConfigLoaded = initInputManager();
+#else
+    initInputManager();
+#endif
 
     // Note: CS pins for thermocouples are initialized in initInputManager()
     // RPM and digital sensors would be initialized here if needed
