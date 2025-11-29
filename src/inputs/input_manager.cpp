@@ -472,16 +472,7 @@ static uint8_t calculateConfigChecksum() {
 }
 
 bool saveInputConfig() {
-    EEPROMHeader header;
-    header.magic = EEPROM_MAGIC;
-    header.version = EEPROM_VERSION;
-    header.numInputs = numActiveInputs;
-    header.reserved = 0;
-
-    // Write header
-    EEPROM.put(0, header);
-
-    // Write inputs
+    // Write inputs first (header needs checksum)
     uint16_t addr = EEPROM_HEADER_SIZE;
     uint8_t savedCount = 0;
 
@@ -497,9 +488,17 @@ bool saveInputConfig() {
     Serial.print(savedCount);
     Serial.println(F(" inputs to EEPROM"));
 
-    // Calculate and save checksum
+    // Calculate checksum
     uint8_t checksum = calculateConfigChecksum();
-    EEPROM.update(6, checksum);  // Address 6 = reserved field in header
+
+    // Write header with checksum
+    EEPROMHeader header;
+    header.magic = EEPROM_MAGIC;
+    header.version = EEPROM_VERSION;
+    header.numInputs = numActiveInputs;
+    header.reserved = checksum;  // Store checksum in reserved field
+
+    EEPROM.put(0, header);
 
     Serial.print(F("✓ Checksum: 0x"));
     Serial.println(checksum, HEX);
@@ -577,6 +576,14 @@ bool loadInputConfig() {
         Serial.print(F(", Calculated: 0x"));
         Serial.println(calculatedChecksum, HEX);
         Serial.println(F("Configuration may be corrupted. Please reconfigure."));
+
+        // Clear corrupted data
+        memset(inputs, 0, sizeof(inputs));
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            inputs[i].pin = 0xFF;
+        }
+        numActiveInputs = 0;
+
         return false;
     }
 

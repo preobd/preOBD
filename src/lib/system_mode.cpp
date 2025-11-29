@@ -6,6 +6,11 @@
 #include "../config.h"
 #include "watchdog.h"
 
+#ifdef ENABLE_LCD
+extern void showConfigModeMessage();
+extern void clearLCD();
+#endif
+
 // Current system mode
 static SystemMode currentMode = MODE_RUN;
 
@@ -13,7 +18,7 @@ static SystemMode currentMode = MODE_RUN;
 #define BOOT_DETECT_DELAY_MS 10  // Stabilization delay for boot detection
 
 void initSystemMode() {
-    pinMode(MODE_BUTTON, INPUT);  // No pullup - external pullup assumed
+    pinMode(MODE_BUTTON, INPUT_PULLUP);  // Internal pullup - button pulls to GND when pressed
     currentMode = MODE_RUN;  // Default to RUN mode for safety
 }
 
@@ -31,21 +36,34 @@ void setMode(SystemMode newMode) {
         if (newMode == MODE_CONFIG) {
             // Disable watchdog when entering CONFIG mode
             watchdogDisable();
+
             Serial.println(F("========================================"));
             Serial.println(F("  ENTERED CONFIG MODE"));
             Serial.println(F("  Sensors paused, configuration unlocked"));
             Serial.println(F("  Watchdog disabled"));
             Serial.println(F("  Type RUN to resume normal operation"));
             Serial.println(F("========================================"));
+
+            #ifdef ENABLE_LCD
+            // Clear LCD (message will be shown by loop if no sensors)
+            extern void clearLCD();
+            clearLCD();
+            #endif
         } else {
             // Enable watchdog when entering RUN mode
             watchdogEnable(2000);
+
             Serial.println(F("========================================"));
             Serial.println(F("  ENTERED RUN MODE"));
             Serial.println(F("  Sensors active, configuration locked"));
             Serial.println(F("  Watchdog enabled (2s timeout)"));
             Serial.println(F("  Type CONFIG to modify configuration"));
             Serial.println(F("========================================"));
+
+            #ifdef ENABLE_LCD
+            // Clear LCD when entering RUN mode (sensors will update it)
+            clearLCD();
+            #endif
         }
         Serial.println();
     }

@@ -521,6 +521,11 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("Triggering watchdog reset..."));
         Serial.println(F("System will reload in 2 seconds."));
         Serial.flush();
+
+        // Enable watchdog if not already enabled (e.g., in CONFIG mode)
+        extern void watchdogEnable(uint16_t);
+        watchdogEnable(2000);
+
         // Infinite loop to trigger watchdog
         while (true) {
             // Do nothing - watchdog will reset the system

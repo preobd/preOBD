@@ -232,11 +232,12 @@ void loop() {
     // If in CONFIG mode, skip sensor reading and outputs
     if (isInConfigMode()) {
         #ifdef ENABLE_LCD
-        // Update display to show CONFIG MODE message
+        // Update display to show configured sensors (enabled or not)
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            if (inputs[i].flags.isEnabled) {
+            // In CONFIG mode, show any sensor with a valid pin (configured)
+            if (inputs[i].pin != 0xFF) {
                 inputPtrs[activeCount++] = &inputs[i];
             }
         }

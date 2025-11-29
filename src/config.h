@@ -28,7 +28,7 @@
 
 // ===== BUILD MODE =====
 // Uncomment to use compile-time config instead of EEPROM:
-//#define USE_STATIC_CONFIG
+#define USE_STATIC_CONFIG
 
 // ===== TEST MODE =====
 // Uncomment to enable test mode (allows testing outputs without physical sensors)
@@ -171,8 +171,8 @@
 // ===== DIGITAL I/O =====
 #define CAN_INT 2
 #define BUZZER 3
-#define MODE_BUTTON 4  // Multi-function: Hold during boot for CONFIG mode, press in RUN mode to silence alarm
-#define SD_CS_PIN 5  // Adjust for your hardware
+#define SD_CS_PIN 4  // Adjust for your hardware
+#define MODE_BUTTON 5  // Multi-function: Hold during boot for CONFIG mode, press in RUN mode to silence alarm
 #define CAN_CS 9
 
 
