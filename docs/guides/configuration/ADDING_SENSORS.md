@@ -152,20 +152,28 @@ In `src/lib/sensor_library.h`, add the sensor entry:
 ```cpp
 static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     // ... existing sensors ...
-    
+
     // My Custom Thermistor (Steinhart-Hart)
     {
         .sensor = MY_CUSTOM_THERMISTOR,
         .name = "My Custom 10K NTC",
         .readFunction = readThermistorSteinhart,
+        .initFunction = nullptr,  // No special init needed (analog sensors)
         .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_THERMISTOR_STEINHART,
         .defaultCalibration = &my_custom_thermistor_cal
     },
-    
+
     // ... rest of sensors ...
 };
 ```
+
+**Note on initFunction:**
+- Set to `nullptr` for most sensors (analog inputs, I2C sensors like BME280)
+- Only needed for sensors requiring special initialization:
+  - Thermocouples (MAX6675/MAX31855): Use `initThermocoupleCS` (sets up SPI CS pin)
+  - RPM sensors (W_PHASE_RPM): Use `initWPhaseRPM` (attaches interrupt)
+  - Digital inputs (FLOAT_SWITCH): Use `initFloatSwitch` (sets INPUT_PULLUP mode)
 
 ### Step 4: Add to Serial Parser (Runtime Mode)
 
