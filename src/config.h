@@ -1,6 +1,13 @@
 /*
  * config.h - User Configuration File
  *
+ * QUICK START CHECKLIST:
+ * □ Choose build mode (line 41): EEPROM or compile-time?
+ * □ Set hardware pins (line 48): MODE_BUTTON, BUZZER, etc.
+ * □ Enable output modules (line 65): CAN? Serial? SD logging?
+ * □ Enable display (line 88): LCD or OLED?
+ * □ Configure sensors (line 140+): Only if using USE_STATIC_CONFIG
+ *
  * === BUILD MODE SELECTION ===
  * Choose ONE of the following modes:
  *
@@ -26,43 +33,43 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// ===== BUILD MODE =====
+// ============================================================================
+// STEP 1: BUILD MODE SELECTION
+// ============================================================================
+
 // Uncomment to use compile-time config instead of EEPROM:
-#define USE_STATIC_CONFIG
+//#define USE_STATIC_CONFIG
 
-// ===== TEST MODE =====
-// Uncomment to enable test mode (allows testing outputs without physical sensors)
-// Test mode uses function pointer substitution to inject simulated sensor values
-// Memory overhead when enabled: 4.3KB flash, 185 bytes RAM
-// Memory overhead when disabled: 0 bytes (completely removed by preprocessor)
-#define ENABLE_TEST_MODE
+// ============================================================================
+// STEP 2: HARDWARE PIN ASSIGNMENTS
+// ============================================================================
 
-#ifdef ENABLE_TEST_MODE
-    // Test mode trigger pin (hold LOW during boot to activate test mode)
-    #define TEST_MODE_TRIGGER_PIN 8
+// ----- System Control Pins -----
+#define MODE_BUTTON 5   // Multi-function: Hold during boot for CONFIG mode,
+                        // press in RUN mode to silence alarm
 
-    // Default test scenario to run on startup (0-4, or 0xFF for none)
-    // 0 = Normal Operation
-    // 1 = Alarm Test - Overheating
-    // 2 = Sensor Fault Simulation
-    // 3 = Engine Startup Sequence
-    // 4 = Dynamic Driving Conditions
-    #define DEFAULT_TEST_SCENARIO 0
-#endif
+#define BUZZER 3        // Alarm buzzer output
 
-// ===== BME280 SENSOR SUPPORT =====
-// Always enable BME280 library support
-// (The linker will optimize out code if no BME280 sensors are configured)
-#define USE_BME280
+// ----- CAN Bus Pins (only needed if using external MCP2515 chip) -----
+#define CAN_CS 9        // MCP2515 chip select
+#define CAN_INT 2       // MCP2515 interrupt pin
 
-// ===== ENABLED OUTPUT MODULES =====
+// ----- SD Card Pins -----
+#define SD_CS_PIN 4     // SD card chip select (adjust for your hardware)
+
+// ============================================================================
+// STEP 3: ENABLED MODULES
+// ============================================================================
+
+// ----- Output Modules -----
+// Uncomment the modules you want to use
 //#define ENABLE_CAN
 //#define ENABLE_REALDASH
 //#define ENABLE_SERIAL_OUTPUT
 //#define ENABLE_SD_LOGGING
 
-// ===== CAN CONFIGURATION =====
-// Choose CAN implementation (only relevant if ENABLE_CAN is defined above)
+// ----- CAN Configuration (only relevant if ENABLE_CAN is defined) -----
+// Choose CAN implementation:
 //
 // For Teensy 3.x/4.x boards:
 //   - USE_FLEXCAN_NATIVE: Use built-in FlexCAN peripheral (no external chip needed)
@@ -75,13 +82,23 @@
 //
 //#define USE_FLEXCAN_NATIVE  // Uncomment to use built-in FlexCAN on Teensy boards
 
-// ===== ENABLED DISPLAY MODULES =====
+// ----- Display Modules -----
+// Choose ONE display type (or comment both out for no display)
 #define ENABLE_LCD
 //#define ENABLE_OLED
 
-// ===== GLOBAL DISPLAY UNITS DEFAULTS =====
+// ----- BME280 Environmental Sensor Support -----
+// BME280 is an I2C sensor that provides temperature, pressure, and humidity
+// The library is always included, but unused code is optimized out by the linker
+// if you don't configure any BME280 sensor inputs below
+#define USE_BME280
+
+// ============================================================================
+// STEP 4: DISPLAY UNITS DEFAULTS
+// ============================================================================
+
 // Set your preferred units for each measurement type
-// Individual sensors can override these defaults below
+// Individual sensors can override these defaults in the sensor definitions section
 
 // Temperature default (CELSIUS or FAHRENHEIT)
 #define DEFAULT_TEMPERATURE_UNITS  CELSIUS
@@ -95,7 +112,10 @@
 // NOTE: Voltage is always displayed in VOLTS
 // NOTE: Humidity is always displayed in PERCENT
 
-// ===== SENSOR DEFINITIONS (Compile-Time Mode Only) =====
+// ============================================================================
+// STEP 5: SENSOR CONFIGURATION (Compile-Time Mode Only)
+// ============================================================================
+
 // This section is ONLY used when USE_STATIC_CONFIG is defined above.
 // For EEPROM mode (MODE 1), configure sensors via serial commands instead.
 //
@@ -116,7 +136,7 @@
     // Include the enums we need from the input-based architecture
     #include "inputs/input.h"
 
-    // ===== INPUT DEFINITIONS =====
+    // ----- Input Definitions -----
 
     // Input 0: CHT (Cylinder Head Temperature)
     #define INPUT_0_PIN         6
@@ -158,7 +178,7 @@
     #define INPUT_7_APPLICATION HUMIDITY
     #define INPUT_7_SENSOR      BME280_RELATIVE_HUMIDITY
 
-    // ===== OPTIONAL: UNIT OVERRIDES =====
+    // ----- Optional: Unit Overrides -----
     // By default, units come from ApplicationPreset defaults
     // Uncomment to override for specific inputs:
 
@@ -168,23 +188,69 @@
 
 #endif // USE_STATIC_CONFIG
 
-// ===== DIGITAL I/O =====
-#define CAN_INT 2
-#define BUZZER 3
-#define SD_CS_PIN 4  // Adjust for your hardware
-#define MODE_BUTTON 5  // Multi-function: Hold during boot for CONFIG mode, press in RUN mode to silence alarm
-#define CAN_CS 9
+// ============================================================================
+// STEP 6: ALARM CONFIGURATION
+// ============================================================================
 
-
-// ===== ALARM CONFIGURATION =====
 #define ENABLE_ALARMS               // Comment out to globally disable all alarms
-#define SILENCE_DURATION 30000  // ms (how long MODE_BUTTON mutes alarm)
+#define SILENCE_DURATION 30000      // ms (how long MODE_BUTTON mutes alarm)
 
-// ===== CALIBRATION =====
-#define VDO_BIAS_RESISTOR 1000.0  // Default pull-down resistor for VDO sensors (Ω)
-#define SEA_LEVEL_PRESSURE_HPA 1013.25
+// ============================================================================
+// STEP 7: CALIBRATION CONSTANTS
+// ============================================================================
 
-// ===== TIMING =====
-#define LOOP_DELAY_MS 200
+#define VDO_BIAS_RESISTOR 1000.0        // Default pull-down resistor for VDO sensors (Ω)
+#define SEA_LEVEL_PRESSURE_HPA 1013.25  // Sea level pressure for altitude calculations
+
+// ============================================================================
+// STEP 8: TIMING / PERFORMANCE TUNING
+// ============================================================================
+
+// Controls update frequency for different system components
+// Lower values = more frequent updates = higher CPU usage
+
+#define SENSOR_READ_INTERVAL_MS 50      // Read all sensors every 50ms (20Hz)
+                                         // Fast enough for responsive alarms
+
+#define ALARM_CHECK_INTERVAL_MS 50      // Check alarms every 50ms (20Hz)
+                                         // Safety critical - frequent checks
+
+#define CAN_OUTPUT_INTERVAL_MS 100      // CAN bus updates every 100ms (10Hz)
+                                         // Smooth dashboard updates
+
+#define REALDASH_INTERVAL_MS 100        // RealDash updates every 100ms (10Hz)
+                                         // Same as CAN for smooth mobile dashboard
+
+#define LCD_UPDATE_INTERVAL_MS 500      // LCD display every 500ms (2Hz)
+                                         // Our eyes can't read faster anyway
+
+#define SERIAL_CSV_INTERVAL_MS 1000     // Serial CSV every 1000ms (1Hz)
+                                         // Prevents flooding serial buffer
+
+#define SD_LOG_INTERVAL_MS 5000         // SD card logging every 5000ms (0.2Hz)
+                                         // Reduces file size and SD wear
+
+// ============================================================================
+// TEST MODE (Optional - for developers/testing only)
+// ============================================================================
+
+// Uncomment to enable test mode (allows testing outputs without physical sensors)
+// Test mode uses function pointer substitution to inject simulated sensor values
+// Memory overhead when enabled: 4.3KB flash, 185 bytes RAM
+// Memory overhead when disabled: 0 bytes (completely removed by preprocessor)
+#define ENABLE_TEST_MODE
+
+#ifdef ENABLE_TEST_MODE
+    // Test mode trigger pin (hold LOW during boot to activate test mode)
+    #define TEST_MODE_TRIGGER_PIN 8
+
+    // Default test scenario to run on startup (0-4, or 0xFF for none)
+    // 0 = Normal Operation
+    // 1 = Alarm Test - Overheating
+    // 2 = Sensor Fault Simulation
+    // 3 = Engine Startup Sequence
+    // 4 = Dynamic Driving Conditions
+    #define DEFAULT_TEST_SCENARIO 0
+#endif
 
 #endif

@@ -47,6 +47,27 @@ extern void updateAlarm();
 Adafruit_BME280 bme;
 #endif
 
+// ===== TIME-SLICING STATE =====
+// Tracks last execution time for each time-sliced operation
+static uint32_t lastSensorRead = 0;
+#ifdef ENABLE_ALARMS
+static uint32_t lastAlarmCheck = 0;
+#endif
+#ifdef ENABLE_CAN_OUTPUT
+static uint32_t lastCANOutput = 0;
+#endif
+#ifdef ENABLE_REALDASH
+static uint32_t lastRealdashOutput = 0;
+#endif
+#ifdef ENABLE_LCD
+static uint32_t lastLCDUpdate = 0;
+#endif
+#ifdef ENABLE_SERIAL_OUTPUT
+static uint32_t lastSerialCSV = 0;
+#endif
+#ifdef ENABLE_SD_LOGGING
+static uint32_t lastSDLog = 0;
+#endif
 
 void setup() {
 
@@ -80,22 +101,8 @@ void setup() {
     initInputManager();
 #endif
 
-    // Note: CS pins for thermocouples are initialized in initInputManager()
-    // RPM and digital sensors would be initialized here if needed
-    /*
-    
-    // Initialize RPM sensing
-    #ifdef ENABLE_ENGINE_RPM
-    extern void initRPM(byte);
-    initRPM(RPM_INPUT);
-    #endif
-
-    // Initialize coolant level sensor
-    #ifdef ENABLE_COOLANT_LEVEL
-    pinMode(COOLANT_LEVEL_INPUT, INPUT);
-    Serial.println(F("✓ Coolant level sensor initialized"));
-    #endif
-    */
+    // Note: All sensor-specific initialization (CS pins, RPM interrupts, digital inputs)
+    // is handled automatically by initInputManager() via sensor init function pointers
 
     // Initialize I2C for BME280 and LCD
     Wire.begin();
@@ -226,76 +233,138 @@ void setup() {
 }
 
 void loop() {
+    // Get current time once per loop
+    uint32_t now = millis();
+
     // Reset watchdog at start of every loop iteration
     watchdogReset();
 
 #ifndef USE_STATIC_CONFIG
-    // Process serial configuration commands (only in EEPROM mode)
+    // Process serial configuration commands (non-blocking, always runs)
     processSerialCommands();
 
     // If in CONFIG mode, skip sensor reading and outputs
     if (isInConfigMode()) {
         #ifdef ENABLE_LCD
-        // Update display to show configured sensors (enabled or not)
-        static Input* inputPtrs[MAX_INPUTS];
-        uint8_t activeCount = 0;
-        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            // In CONFIG mode, show any sensor with a valid pin (configured)
-            if (inputs[i].pin != 0xFF) {
-                inputPtrs[activeCount++] = &inputs[i];
+        // Update display to show CONFIG MODE message
+        // (only update display, still time-sliced)
+        if (now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
+            static Input* inputPtrs[MAX_INPUTS];
+            uint8_t activeCount = 0;
+            for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+                // In CONFIG mode, show any sensor with a valid pin (configured)
+                if (inputs[i].pin != 0xFF) {
+                    inputPtrs[activeCount++] = &inputs[i];
+                }
             }
+            updateLCD(inputPtrs, activeCount);
+            lastLCDUpdate = now;
         }
-        updateLCD(inputPtrs, activeCount);
         #endif
-        delay(LOOP_DELAY_MS);
         return;  // Early return - don't read sensors or send outputs
     }
 #endif
 
-    // Read all enabled inputs
-    readAllInputs();
-
-    // Send data to output modules
-    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].flags.isEnabled) {
-            sendToOutputs(&inputs[i]);
-        }
+    // ===== SENSOR READING (20Hz) =====
+    // Read ALL sensors at this interval for fresh alarm data
+    if (now - lastSensorRead >= SENSOR_READ_INTERVAL_MS) {
+        readAllInputs();
+        lastSensorRead = now;
     }
 
-    // Check alarms
-    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].flags.isEnabled) {
-            checkSensorAlarm(&inputs[i]);
+    // ===== ALARM CHECKING (20Hz) =====
+    // Safety critical - check frequently
+    if (now - lastAlarmCheck >= ALARM_CHECK_INTERVAL_MS) {
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].flags.isEnabled) {
+                checkSensorAlarm(&inputs[i]);
+            }
         }
+        updateAlarm();  // Update buzzer state
+        lastAlarmCheck = now;
     }
 
-    // Update alarm state
-    updateAlarm();
+    // ===== CAN BUS OUTPUT (10Hz default) =====
+    // Time-sliced CAN output for smooth dashboards
+    #ifdef ENABLE_CAN_OUTPUT
+    if (now - lastCANOutput >= CAN_OUTPUT_INTERVAL_MS) {
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].flags.isEnabled) {
+                sendToOutputs(&inputs[i]);  // Calls sendCANOutput() internally
+            }
+        }
+        lastCANOutput = now;
+    }
+    #endif
 
-    // Update display
+    // ===== REALDASH OUTPUT (10Hz default) =====
+    // Time-sliced RealDash output for smooth mobile dashboard
+    #ifdef ENABLE_REALDASH
+    if (now - lastRealdashOutput >= REALDASH_INTERVAL_MS) {
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].flags.isEnabled) {
+                sendToOutputs(&inputs[i]);  // Calls sendRealdash() internally
+            }
+        }
+        lastRealdashOutput = now;
+    }
+    #endif
+
+    // ===== SERIAL CSV OUTPUT (1Hz default) =====
+    // Time-sliced to avoid flooding serial buffer
+    #ifdef ENABLE_SERIAL_OUTPUT
+    if (now - lastSerialCSV >= SERIAL_CSV_INTERVAL_MS) {
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].flags.isEnabled) {
+                sendToOutputs(&inputs[i]);  // Calls sendSerialOutput() internally
+            }
+        }
+        lastSerialCSV = now;
+    }
+    #endif
+
+    // ===== SD CARD LOGGING (0.2Hz default) =====
+    // Time-sliced to reduce SD wear and file size
+    #ifdef ENABLE_SD_LOGGING
+    if (now - lastSDLog >= SD_LOG_INTERVAL_MS) {
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].flags.isEnabled) {
+                sendToOutputs(&inputs[i]);  // Calls sendSDOutput() internally
+            }
+        }
+        lastSDLog = now;
+    }
+    #endif
+
+    // ===== LCD DISPLAY UPDATE (2Hz default) =====
+    // Time-sliced - humans can't read faster anyway
     #ifdef ENABLE_LCD
-    // Create pointer array for compatibility with updateLCD
-    static Input* inputPtrs[MAX_INPUTS];
-    uint8_t activeCount = 0;
-    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].flags.isEnabled) {
-            inputPtrs[activeCount++] = &inputs[i];
+    if (now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
+        // Create pointer array for compatibility with updateLCD
+        static Input* inputPtrs[MAX_INPUTS];
+        uint8_t activeCount = 0;
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].flags.isEnabled) {
+                inputPtrs[activeCount++] = &inputs[i];
+            }
         }
+        updateLCD(inputPtrs, activeCount);
+        lastLCDUpdate = now;
     }
-    updateLCD(inputPtrs, activeCount);
     #endif
 
     // Update output modules (for any housekeeping)
+    // Note: This runs every loop - add time-slicing here if needed
     updateOutputs();
 
     // ===== TEST MODE UPDATE =====
-#ifdef ENABLE_TEST_MODE
+    #ifdef ENABLE_TEST_MODE
     // Update test mode (checks for scenario completion, etc.)
     if (isTestModeActive()) {
         updateTestMode();
     }
-#endif
+    #endif
 
-    // Delay between iterations
-    delay(LOOP_DELAY_MS);
+    // NO DELAY - loop runs as fast as possible
+    // Time-slicing controls when operations execute
 }
