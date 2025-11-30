@@ -69,6 +69,129 @@ static uint32_t lastSerialCSV = 0;
 static uint32_t lastSDLog = 0;
 #endif
 
+// ===== TIME-SLICED OPERATION FUNCTIONS =====
+// Extract repetitive time-slice checks into named functions for clarity
+
+#ifndef USE_STATIC_CONFIG
+// Update LCD display in CONFIG mode
+static void updateConfigModeDisplay(uint32_t now) {
+    #ifdef ENABLE_LCD
+    if (now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
+        static Input* inputPtrs[MAX_INPUTS];
+        uint8_t activeCount = 0;
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            // In CONFIG mode, show any sensor with a valid pin (configured)
+            if (inputs[i].pin != 0xFF) {
+                inputPtrs[activeCount++] = &inputs[i];
+            }
+        }
+        updateLCD(inputPtrs, activeCount);
+        lastLCDUpdate = now;
+    }
+    #endif
+}
+#endif
+
+// Read all sensors at configured interval
+static void updateSensors(uint32_t now) {
+    if (now - lastSensorRead >= SENSOR_READ_INTERVAL_MS) {
+        readAllInputs();
+        lastSensorRead = now;
+    }
+}
+
+// Check alarms for all enabled inputs
+static void updateAlarms(uint32_t now) {
+    #ifdef ENABLE_ALARMS
+    if (now - lastAlarmCheck >= ALARM_CHECK_INTERVAL_MS) {
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].flags.isEnabled) {
+                checkSensorAlarm(&inputs[i]);
+            }
+        }
+        updateAlarm();  // Update buzzer state
+        lastAlarmCheck = now;
+    }
+    #endif
+}
+
+// Send data to all time-sliced output modules
+static void updateOutputs_TimeSliced(uint32_t now) {
+    // CAN output (10Hz)
+    #ifdef ENABLE_CAN_OUTPUT
+    if (now - lastCANOutput >= CAN_OUTPUT_INTERVAL_MS) {
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].flags.isEnabled) {
+                sendToOutputs(&inputs[i]);
+            }
+        }
+        lastCANOutput = now;
+    }
+    #endif
+
+    // RealDash output (10Hz)
+    #ifdef ENABLE_REALDASH
+    if (now - lastRealdashOutput >= REALDASH_INTERVAL_MS) {
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].flags.isEnabled) {
+                sendToOutputs(&inputs[i]);
+            }
+        }
+        lastRealdashOutput = now;
+    }
+    #endif
+
+    // Serial CSV output (1Hz)
+    #ifdef ENABLE_SERIAL_OUTPUT
+    if (now - lastSerialCSV >= SERIAL_CSV_INTERVAL_MS) {
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].flags.isEnabled) {
+                sendToOutputs(&inputs[i]);
+            }
+        }
+        lastSerialCSV = now;
+    }
+    #endif
+
+    // SD card logging (0.2Hz)
+    #ifdef ENABLE_SD_LOGGING
+    if (now - lastSDLog >= SD_LOG_INTERVAL_MS) {
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].flags.isEnabled) {
+                sendToOutputs(&inputs[i]);
+            }
+        }
+        lastSDLog = now;
+    }
+    #endif
+}
+
+// Update LCD display in RUN mode
+static void updateDisplay(uint32_t now) {
+    #ifdef ENABLE_LCD
+    if (now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
+        static Input* inputPtrs[MAX_INPUTS];
+        uint8_t activeCount = 0;
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].flags.isEnabled) {
+                inputPtrs[activeCount++] = &inputs[i];
+            }
+        }
+        updateLCD(inputPtrs, activeCount);
+        lastLCDUpdate = now;
+    }
+    #endif
+}
+
+// Update test mode (wrapper for conditional compilation)
+static void updateTestMode_Wrapper() {
+    #ifdef ENABLE_TEST_MODE
+    if (isTestModeActive()) {
+        updateTestMode();
+    }
+    #endif
+}
+
 void setup() {
 
     // Initialize serial for debugging
@@ -245,125 +368,22 @@ void loop() {
 
     // If in CONFIG mode, skip sensor reading and outputs
     if (isInConfigMode()) {
-        #ifdef ENABLE_LCD
-        // Update display to show CONFIG MODE message
-        // (only update display, still time-sliced)
-        if (now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
-            static Input* inputPtrs[MAX_INPUTS];
-            uint8_t activeCount = 0;
-            for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-                // In CONFIG mode, show any sensor with a valid pin (configured)
-                if (inputs[i].pin != 0xFF) {
-                    inputPtrs[activeCount++] = &inputs[i];
-                }
-            }
-            updateLCD(inputPtrs, activeCount);
-            lastLCDUpdate = now;
-        }
-        #endif
+        updateConfigModeDisplay(now);
         return;  // Early return - don't read sensors or send outputs
     }
 #endif
 
-    // ===== SENSOR READING (20Hz) =====
-    // Read ALL sensors at this interval for fresh alarm data
-    if (now - lastSensorRead >= SENSOR_READ_INTERVAL_MS) {
-        readAllInputs();
-        lastSensorRead = now;
-    }
+    // Read sensors, check alarms, send outputs, update display
+    updateSensors(now);
+    updateAlarms(now);
+    updateOutputs_TimeSliced(now);
+    updateDisplay(now);
 
-    // ===== ALARM CHECKING (20Hz) =====
-    // Safety critical - check frequently
-    if (now - lastAlarmCheck >= ALARM_CHECK_INTERVAL_MS) {
-        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            if (inputs[i].flags.isEnabled) {
-                checkSensorAlarm(&inputs[i]);
-            }
-        }
-        updateAlarm();  // Update buzzer state
-        lastAlarmCheck = now;
-    }
-
-    // ===== CAN BUS OUTPUT (10Hz default) =====
-    // Time-sliced CAN output for smooth dashboards
-    #ifdef ENABLE_CAN_OUTPUT
-    if (now - lastCANOutput >= CAN_OUTPUT_INTERVAL_MS) {
-        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            if (inputs[i].flags.isEnabled) {
-                sendToOutputs(&inputs[i]);  // Calls sendCANOutput() internally
-            }
-        }
-        lastCANOutput = now;
-    }
-    #endif
-
-    // ===== REALDASH OUTPUT (10Hz default) =====
-    // Time-sliced RealDash output for smooth mobile dashboard
-    #ifdef ENABLE_REALDASH
-    if (now - lastRealdashOutput >= REALDASH_INTERVAL_MS) {
-        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            if (inputs[i].flags.isEnabled) {
-                sendToOutputs(&inputs[i]);  // Calls sendRealdash() internally
-            }
-        }
-        lastRealdashOutput = now;
-    }
-    #endif
-
-    // ===== SERIAL CSV OUTPUT (1Hz default) =====
-    // Time-sliced to avoid flooding serial buffer
-    #ifdef ENABLE_SERIAL_OUTPUT
-    if (now - lastSerialCSV >= SERIAL_CSV_INTERVAL_MS) {
-        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            if (inputs[i].flags.isEnabled) {
-                sendToOutputs(&inputs[i]);  // Calls sendSerialOutput() internally
-            }
-        }
-        lastSerialCSV = now;
-    }
-    #endif
-
-    // ===== SD CARD LOGGING (0.2Hz default) =====
-    // Time-sliced to reduce SD wear and file size
-    #ifdef ENABLE_SD_LOGGING
-    if (now - lastSDLog >= SD_LOG_INTERVAL_MS) {
-        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            if (inputs[i].flags.isEnabled) {
-                sendToOutputs(&inputs[i]);  // Calls sendSDOutput() internally
-            }
-        }
-        lastSDLog = now;
-    }
-    #endif
-
-    // ===== LCD DISPLAY UPDATE (2Hz default) =====
-    // Time-sliced - humans can't read faster anyway
-    #ifdef ENABLE_LCD
-    if (now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
-        // Create pointer array for compatibility with updateLCD
-        static Input* inputPtrs[MAX_INPUTS];
-        uint8_t activeCount = 0;
-        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            if (inputs[i].flags.isEnabled) {
-                inputPtrs[activeCount++] = &inputs[i];
-            }
-        }
-        updateLCD(inputPtrs, activeCount);
-        lastLCDUpdate = now;
-    }
-    #endif
-
-    // Update output modules (for any housekeeping)
-    // Note: This runs every loop - add time-slicing here if needed
+    // Housekeeping: drain CAN RX buffer, handle incoming messages
     updateOutputs();
 
-    // ===== TEST MODE UPDATE =====
-    #ifdef ENABLE_TEST_MODE
-    // Update test mode (checks for scenario completion, etc.)
-    if (isTestModeActive()) {
-        updateTestMode();
-    }
-    #endif
+    // Update test mode if active
+    updateTestMode_Wrapper();
 
     // NO DELAY - loop runs as fast as possible
     // Time-slicing controls when operations execute
