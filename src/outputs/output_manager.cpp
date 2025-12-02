@@ -51,15 +51,36 @@ void initOutputModules() {
     }
 }
 
-void sendToOutputs(Input* input) {
+// Send to a specific output type (for time-sliced calling)
+void sendToOutput(Input* input, OutputType type) {
     if (!input->flags.isEnabled || isnan(input->value)) {
         return;
     }
 
-    for (int i = 0; i < numOutputModules; i++) {
-        if (outputModules[i].enabled && outputModules[i].send != nullptr) {
-            outputModules[i].send(input);
-        }
+    switch (type) {
+        case OUTPUT_CAN:
+            #ifdef ENABLE_CAN
+            sendCAN(input);
+            #endif
+            break;
+
+        case OUTPUT_REALDASH:
+            #ifdef ENABLE_REALDASH
+            sendRealdash(input);
+            #endif
+            break;
+
+        case OUTPUT_SERIAL:
+            #ifdef ENABLE_SERIAL_OUTPUT
+            sendSerialOutput(input);
+            #endif
+            break;
+
+        case OUTPUT_SD:
+            #ifdef ENABLE_SD_LOGGING
+            sendSDLog(input);
+            #endif
+            break;
     }
 }
 
