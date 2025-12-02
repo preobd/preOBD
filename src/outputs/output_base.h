@@ -18,9 +18,17 @@ typedef struct {
     void (*update)(void);  // Called each loop iteration
 } OutputModule;
 
+// Output types for time-sliced calling
+enum OutputType {
+    OUTPUT_CAN,
+    OUTPUT_REALDASH,
+    OUTPUT_SERIAL,
+    OUTPUT_SD
+};
+
 // Output module initialization
 void initOutputModules();
-void sendToOutputs(Input* input);
+void sendToOutput(Input* input, OutputType type);  // Time-sliced single output
 void updateOutputs();
 
 // ===== OBDII FRAME BUILDING =====

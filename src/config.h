@@ -17,7 +17,7 @@
  *   - Recommended for: Teensy 4.x, ESP32, Arduino Mega
  *   To enable: Leave USE_STATIC_CONFIG commented out
  *
- * MODE 2: Compile-Time Config [RECOMMENDED]
+ * MODE 2: Compile-Time Config
  *   - Configure sensors at compile time in config.h
  *   - No EEPROM, no serial config overhead
  *   - Smaller footprint than Mode 1
@@ -38,7 +38,7 @@
 // ============================================================================
 
 // Uncomment to use compile-time config instead of EEPROM:
-//#define USE_STATIC_CONFIG
+#define USE_STATIC_CONFIG
 
 // ============================================================================
 // STEP 2: HARDWARE PIN ASSIGNMENTS
@@ -209,7 +209,7 @@
 // Controls update frequency for different system components
 // Lower values = more frequent updates = higher CPU usage
 
-#define SENSOR_READ_INTERVAL_MS 50      // Read all sensors every 50ms (20Hz)
+#define SENSOR_READ_INTERVAL_MS 50       // Default read interval for fast sensors (20Hz)
                                          // Fast enough for responsive alarms
 
 #define ALARM_CHECK_INTERVAL_MS 50      // Check alarms every 50ms (20Hz)

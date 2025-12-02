@@ -13,6 +13,7 @@
 
 // Input-based architecture (supports both EEPROM and compile-time config)
 #include "lib/sensor_types.h"
+#include "lib/sensor_library.h"
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
 #ifndef USE_STATIC_CONFIG
@@ -49,7 +50,7 @@ Adafruit_BME280 bme;
 
 // ===== TIME-SLICING STATE =====
 // Tracks last execution time for each time-sliced operation
-static uint32_t lastSensorRead = 0;
+static uint32_t lastInputRead[MAX_INPUTS];  // Per-sensor read timing
 #ifdef ENABLE_ALARMS
 static uint32_t lastAlarmCheck = 0;
 #endif
@@ -92,11 +93,20 @@ static void updateConfigModeDisplay(uint32_t now) {
 }
 #endif
 
-// Read all sensors at configured interval
+// Read sensors at their individual configured intervals
 static void updateSensors(uint32_t now) {
-    if (now - lastSensorRead >= SENSOR_READ_INTERVAL_MS) {
-        readAllInputs();
-        lastSensorRead = now;
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        if (!inputs[i].flags.isEnabled) continue;
+
+        // Get sensor-specific minimum read interval
+        const SensorInfo* sensorInfo = getSensorInfo(inputs[i].sensor);
+        uint16_t interval = pgm_read_word(&sensorInfo->minReadInterval);
+
+        // Check if enough time has elapsed for this sensor
+        if (now - lastInputRead[i] >= interval) {
+            inputs[i].readFunction(&inputs[i]);
+            lastInputRead[i] = now;
+        }
     }
 }
 
@@ -122,7 +132,7 @@ static void updateOutputs_TimeSliced(uint32_t now) {
     if (now - lastCANOutput >= CAN_OUTPUT_INTERVAL_MS) {
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
             if (inputs[i].flags.isEnabled) {
-                sendToOutputs(&inputs[i]);
+                sendToOutput(&inputs[i], OUTPUT_CAN);
             }
         }
         lastCANOutput = now;
@@ -134,7 +144,7 @@ static void updateOutputs_TimeSliced(uint32_t now) {
     if (now - lastRealdashOutput >= REALDASH_INTERVAL_MS) {
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
             if (inputs[i].flags.isEnabled) {
-                sendToOutputs(&inputs[i]);
+                sendToOutput(&inputs[i], OUTPUT_REALDASH);
             }
         }
         lastRealdashOutput = now;
@@ -146,7 +156,7 @@ static void updateOutputs_TimeSliced(uint32_t now) {
     if (now - lastSerialCSV >= SERIAL_CSV_INTERVAL_MS) {
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
             if (inputs[i].flags.isEnabled) {
-                sendToOutputs(&inputs[i]);
+                sendToOutput(&inputs[i], OUTPUT_SERIAL);
             }
         }
         lastSerialCSV = now;
@@ -158,7 +168,7 @@ static void updateOutputs_TimeSliced(uint32_t now) {
     if (now - lastSDLog >= SD_LOG_INTERVAL_MS) {
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
             if (inputs[i].flags.isEnabled) {
-                sendToOutputs(&inputs[i]);
+                sendToOutput(&inputs[i], OUTPUT_SD);
             }
         }
         lastSDLog = now;
@@ -274,6 +284,11 @@ void setup() {
     Serial.println(F(""));
     Serial.println(F("Waiting for sensors to stabilize..."));
     delay(1000);  // Increased from 500ms - MAX6675 needs ~220ms for first conversion
+
+    // Initialize per-sensor read timers (all start at 0)
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        lastInputRead[i] = 0;
+    }
 
     Serial.println(F(""));
     Serial.println(F("========================================"));
