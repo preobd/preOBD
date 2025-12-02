@@ -58,6 +58,21 @@ Physical Sensor → Read Function → Calibration → Engineering Units
     VDO 120C    readThermistorLookup  vdo120_lookup  85.3°C
 ```
 
+### Time-Sliced Architecture
+
+openEMS uses a **non-blocking time-sliced loop** where each sensor reads at its own optimal interval:
+
+- **MAX6675 thermocouple:** 250ms (respects ~220ms conversion time)
+- **MAX31855 thermocouple:** 100ms (faster chip)
+- **Analog sensors:** 50ms (fast for responsive alarms)
+- **Digital inputs:** 50ms (fast polling)
+
+This architecture ensures:
+- Slow sensors don't block fast sensors
+- No blocking `delay()` calls in the main loop
+- Serial commands processed immediately
+- Each sensor operates at peak efficiency
+
 ---
 
 ## Adding a New Sensor Type
@@ -152,20 +167,38 @@ In `src/lib/sensor_library.h`, add the sensor entry:
 ```cpp
 static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     // ... existing sensors ...
-    
+
     // My Custom Thermistor (Steinhart-Hart)
     {
         .sensor = MY_CUSTOM_THERMISTOR,
         .name = "My Custom 10K NTC",
         .readFunction = readThermistorSteinhart,
+        .initFunction = nullptr,  // No special init needed (analog sensors)
         .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_THERMISTOR_STEINHART,
-        .defaultCalibration = &my_custom_thermistor_cal
+        .defaultCalibration = &my_custom_thermistor_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS  // Fast analog read (50ms default)
     },
-    
+
     // ... rest of sensors ...
 };
 ```
+
+**Note on initFunction:**
+- Set to `nullptr` for most sensors (analog inputs, I2C sensors like BME280)
+- Only needed for sensors requiring special initialization:
+  - Thermocouples (MAX6675/MAX31855): Use `initThermocoupleCS` (sets up SPI CS pin)
+  - RPM sensors (W_PHASE_RPM): Use `initWPhaseRPM` (attaches interrupt)
+  - Digital inputs (FLOAT_SWITCH): Use `initFloatSwitch` (sets INPUT_PULLUP mode)
+
+**Note on minReadInterval:**
+- Specifies minimum milliseconds between reads for this sensor type
+- Prevents reading sensors faster than their conversion time
+- Common values:
+  - `250` - MAX6675 thermocouple (needs ~220ms for conversion)
+  - `100` - MAX31855 thermocouple (faster than MAX6675)
+  - `SENSOR_READ_INTERVAL_MS` - Fast analog/digital sensors (50ms default)
+- Each sensor reads at its own optimal interval without blocking others
 
 ### Step 4: Add to Serial Parser (Runtime Mode)
 

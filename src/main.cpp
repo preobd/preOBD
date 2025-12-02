@@ -13,6 +13,7 @@
 
 // Input-based architecture (supports both EEPROM and compile-time config)
 #include "lib/sensor_types.h"
+#include "lib/sensor_library.h"
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
 #ifndef USE_STATIC_CONFIG
@@ -47,6 +48,97 @@ extern void updateAlarm();
 Adafruit_BME280 bme;
 #endif
 
+// ===== TIME-SLICING STATE =====
+// Tracks last execution time for each time-sliced operation
+static uint32_t lastInputRead[MAX_INPUTS];  // Per-sensor read timing
+#ifdef ENABLE_ALARMS
+static uint32_t lastAlarmCheck = 0;
+#endif
+#ifdef ENABLE_LCD
+static uint32_t lastLCDUpdate = 0;
+#endif
+
+// ===== TIME-SLICED OPERATION FUNCTIONS =====
+// Extract repetitive time-slice checks into named functions for clarity
+
+#ifndef USE_STATIC_CONFIG
+// Update LCD display in CONFIG mode
+static void updateConfigModeDisplay(uint32_t now) {
+    #ifdef ENABLE_LCD
+    if (now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
+        static Input* inputPtrs[MAX_INPUTS];
+        uint8_t activeCount = 0;
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            // In CONFIG mode, show any sensor with a valid pin (configured)
+            if (inputs[i].pin != 0xFF) {
+                inputPtrs[activeCount++] = &inputs[i];
+            }
+        }
+        updateLCD(inputPtrs, activeCount);
+        lastLCDUpdate = now;
+    }
+    #endif
+}
+#endif
+
+// Read sensors at their individual configured intervals
+static void updateSensors(uint32_t now) {
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        if (!inputs[i].flags.isEnabled) continue;
+
+        // Get sensor-specific minimum read interval
+        const SensorInfo* sensorInfo = getSensorInfo(inputs[i].sensor);
+        uint16_t interval = pgm_read_word(&sensorInfo->minReadInterval);
+
+        // Check if enough time has elapsed for this sensor
+        if (now - lastInputRead[i] >= interval) {
+            inputs[i].readFunction(&inputs[i]);
+            lastInputRead[i] = now;
+        }
+    }
+}
+
+// Check alarms for all enabled inputs
+static void updateAlarms(uint32_t now) {
+    #ifdef ENABLE_ALARMS
+    if (now - lastAlarmCheck >= ALARM_CHECK_INTERVAL_MS) {
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].flags.isEnabled) {
+                checkSensorAlarm(&inputs[i]);
+            }
+        }
+        updateAlarm();  // Update buzzer state
+        lastAlarmCheck = now;
+    }
+    #endif
+}
+
+
+// Update LCD display in RUN mode
+static void updateDisplay(uint32_t now) {
+    #ifdef ENABLE_LCD
+    if (now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
+        static Input* inputPtrs[MAX_INPUTS];
+        uint8_t activeCount = 0;
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].flags.isEnabled) {
+                inputPtrs[activeCount++] = &inputs[i];
+            }
+        }
+        updateLCD(inputPtrs, activeCount);
+        lastLCDUpdate = now;
+    }
+    #endif
+}
+
+// Update test mode (wrapper for conditional compilation)
+static void updateTestMode_Wrapper() {
+    #ifdef ENABLE_TEST_MODE
+    if (isTestModeActive()) {
+        updateTestMode();
+    }
+    #endif
+}
 
 void setup() {
 
@@ -80,22 +172,8 @@ void setup() {
     initInputManager();
 #endif
 
-    // Note: CS pins for thermocouples are initialized in initInputManager()
-    // RPM and digital sensors would be initialized here if needed
-    /*
-    
-    // Initialize RPM sensing
-    #ifdef ENABLE_ENGINE_RPM
-    extern void initRPM(byte);
-    initRPM(RPM_INPUT);
-    #endif
-
-    // Initialize coolant level sensor
-    #ifdef ENABLE_COOLANT_LEVEL
-    pinMode(COOLANT_LEVEL_INPUT, INPUT);
-    Serial.println(F("✓ Coolant level sensor initialized"));
-    #endif
-    */
+    // Note: All sensor-specific initialization (CS pins, RPM interrupts, digital inputs)
+    // is handled automatically by initInputManager() via sensor init function pointers
 
     // Initialize I2C for BME280 and LCD
     Wire.begin();
@@ -144,6 +222,11 @@ void setup() {
     Serial.println(F(""));
     Serial.println(F("Waiting for sensors to stabilize..."));
     delay(1000);  // Increased from 500ms - MAX6675 needs ~220ms for first conversion
+
+    // Initialize per-sensor read timers (all start at 0)
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        lastInputRead[i] = 0;
+    }
 
     Serial.println(F(""));
     Serial.println(F("========================================"));
@@ -226,76 +309,33 @@ void setup() {
 }
 
 void loop() {
+    // Get current time once per loop
+    uint32_t now = millis();
+
     // Reset watchdog at start of every loop iteration
     watchdogReset();
 
 #ifndef USE_STATIC_CONFIG
-    // Process serial configuration commands (only in EEPROM mode)
+    // Process serial configuration commands (non-blocking, always runs)
     processSerialCommands();
 
     // If in CONFIG mode, skip sensor reading and outputs
     if (isInConfigMode()) {
-        #ifdef ENABLE_LCD
-        // Update display to show configured sensors (enabled or not)
-        static Input* inputPtrs[MAX_INPUTS];
-        uint8_t activeCount = 0;
-        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            // In CONFIG mode, show any sensor with a valid pin (configured)
-            if (inputs[i].pin != 0xFF) {
-                inputPtrs[activeCount++] = &inputs[i];
-            }
-        }
-        updateLCD(inputPtrs, activeCount);
-        #endif
-        delay(LOOP_DELAY_MS);
+        updateConfigModeDisplay(now);
         return;  // Early return - don't read sensors or send outputs
     }
 #endif
 
-    // Read all enabled inputs
-    readAllInputs();
+    // Read sensors, check alarms, send outputs, update display
+    updateSensors(now);
+    updateAlarms(now);
+    sendToOutputs(now);  // Data-driven time-sliced output sending
+    updateDisplay(now);
+    updateOutputs();     // Housekeeping: drain buffers, handle RX
 
-    // Send data to output modules
-    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].flags.isEnabled) {
-            sendToOutputs(&inputs[i]);
-        }
-    }
+    // Update test mode if active
+    updateTestMode_Wrapper();
 
-    // Check alarms
-    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].flags.isEnabled) {
-            checkSensorAlarm(&inputs[i]);
-        }
-    }
-
-    // Update alarm state
-    updateAlarm();
-
-    // Update display
-    #ifdef ENABLE_LCD
-    // Create pointer array for compatibility with updateLCD
-    static Input* inputPtrs[MAX_INPUTS];
-    uint8_t activeCount = 0;
-    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].flags.isEnabled) {
-            inputPtrs[activeCount++] = &inputs[i];
-        }
-    }
-    updateLCD(inputPtrs, activeCount);
-    #endif
-
-    // Update output modules (for any housekeeping)
-    updateOutputs();
-
-    // ===== TEST MODE UPDATE =====
-#ifdef ENABLE_TEST_MODE
-    // Update test mode (checks for scenario completion, etc.)
-    if (isTestModeActive()) {
-        updateTestMode();
-    }
-#endif
-
-    // Delay between iterations
-    delay(LOOP_DELAY_MS);
+    // NO DELAY - loop runs as fast as possible
+    // Time-slicing controls when operations execute
 }

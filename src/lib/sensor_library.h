@@ -21,6 +21,7 @@
 #define SENSOR_LIBRARY_H
 
 #include <Arduino.h>
+#include "../config.h"
 #include "../inputs/input.h"
 #include "sensor_calibration_data.h"
 
@@ -38,6 +39,11 @@ extern void readBME280Pressure(Input*);
 extern void readBME280Humidity(Input*);
 extern void readBME280Elevation(Input*);
 extern void readDigitalFloatSwitch(Input*);
+
+// Forward declare init functions (sensors that need special initialization)
+extern void initThermocoupleCS(Input*);
+extern void initWPhaseRPM(Input*);
+extern void initFloatSwitch(Input*);
 
 // Forward declare conversion functions
 extern float convertTemperature(float value, Units targetUnits);
@@ -70,9 +76,11 @@ struct SensorInfo {
     Sensor sensor;
     const char* name;
     void (*readFunction)(Input*);
+    void (*initFunction)(Input*);    // Optional: NULL if no special init needed
     MeasurementType measurementType;
     CalibrationType calibrationType;
     const void* defaultCalibration;
+    uint16_t minReadInterval;        // Minimum ms between reads (0 = use global default)
 };
 
 // ===== SENSOR LIBRARY (PROGMEM - Flash Memory) =====
@@ -82,17 +90,21 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = MAX6675,
         .name = "K-Type Thermocouple (MAX6675)",
         .readFunction = readMAX6675,
+        .initFunction = initThermocoupleCS,
         .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_NONE,
-        .defaultCalibration = nullptr
+        .defaultCalibration = nullptr,
+        .minReadInterval = 250  // MAX6675 needs ~220ms for temperature conversion
     },
     {
         .sensor = MAX31855,
         .name = "K-Type Thermocouple (MAX31855)",
         .readFunction = readMAX31855,
+        .initFunction = initThermocoupleCS,
         .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_NONE,
-        .defaultCalibration = nullptr
+        .defaultCalibration = nullptr,
+        .minReadInterval = 100  // MAX31855 is faster than MAX6675
     },
 
     // ===== VDO THERMISTORS - LOOKUP =====
@@ -100,17 +112,21 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = VDO_120C_LOOKUP,
         .name = "VDO 120C (Lookup)",
         .readFunction = readThermistorLookup,
+        .initFunction = nullptr,
         .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_THERMISTOR_LOOKUP,
-        .defaultCalibration = &vdo120_lookup_cal
+        .defaultCalibration = &vdo120_lookup_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS
     },
     {
         .sensor = VDO_150C_LOOKUP,
         .name = "VDO 150C (Lookup)",
         .readFunction = readThermistorLookup,
+        .initFunction = nullptr,
         .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_THERMISTOR_LOOKUP,
-        .defaultCalibration = &vdo150_lookup_cal
+        .defaultCalibration = &vdo150_lookup_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS
     },
 
     // ===== VDO THERMISTORS - STEINHART =====
@@ -118,17 +134,21 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = VDO_120C_STEINHART,
         .name = "VDO 120C (Steinhart)",
         .readFunction = readThermistorSteinhart,
+        .initFunction = nullptr,
         .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_THERMISTOR_STEINHART,
-        .defaultCalibration = &vdo120_steinhart_cal
+        .defaultCalibration = &vdo120_steinhart_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS
     },
     {
         .sensor = VDO_150C_STEINHART,
         .name = "VDO 150C (Steinhart)",
         .readFunction = readThermistorSteinhart,
+        .initFunction = nullptr,
         .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_THERMISTOR_STEINHART,
-        .defaultCalibration = &vdo150_steinhart_cal
+        .defaultCalibration = &vdo150_steinhart_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS
     },
 
     // ===== PRESSURE SENSORS =====
@@ -136,33 +156,41 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = VDO_2BAR,
         .name = "VDO 2 Bar",
         .readFunction = readPressurePolynomial,
+        .initFunction = nullptr,
         .measurementType = MEASURE_PRESSURE,
         .calibrationType = CAL_PRESSURE_POLYNOMIAL,
-        .defaultCalibration = &vdo2bar_polynomial_cal
+        .defaultCalibration = &vdo2bar_polynomial_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS
     },
     {
         .sensor = VDO_5BAR,
         .name = "VDO 5 Bar",
         .readFunction = readPressurePolynomial,
+        .initFunction = nullptr,
         .measurementType = MEASURE_PRESSURE,
         .calibrationType = CAL_PRESSURE_POLYNOMIAL,
-        .defaultCalibration = &vdo5bar_polynomial_cal
+        .defaultCalibration = &vdo5bar_polynomial_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS
     },
     {
         .sensor = GENERIC_BOOST,
         .name = "Generic Boost",
         .readFunction = readPressureLinear,
+        .initFunction = nullptr,
         .measurementType = MEASURE_PRESSURE,
         .calibrationType = CAL_PRESSURE_LINEAR,
-        .defaultCalibration = &generic_boost_linear_cal
+        .defaultCalibration = &generic_boost_linear_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS
     },
     {
         .sensor = MPX4250AP,
         .name = "MPX4250AP",
         .readFunction = readPressureLinear,
+        .initFunction = nullptr,
         .measurementType = MEASURE_PRESSURE,
         .calibrationType = CAL_PRESSURE_LINEAR,
-        .defaultCalibration = &mpx4250ap_linear_cal
+        .defaultCalibration = &mpx4250ap_linear_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS
     },
 
     // ===== VOLTAGE SENSORS =====
@@ -170,9 +198,11 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = VOLTAGE_DIVIDER,
         .name = "Voltage Divider",
         .readFunction = readVoltageDivider,
+        .initFunction = nullptr,
         .measurementType = MEASURE_VOLTAGE,
         .calibrationType = CAL_VOLTAGE_DIVIDER,
-        .defaultCalibration = nullptr
+        .defaultCalibration = nullptr,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS
     },
 
     // ===== RPM SENSORS =====
@@ -180,9 +210,11 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = W_PHASE_RPM,
         .name = "W-Phase RPM",
         .readFunction = readWPhaseRPM,
+        .initFunction = initWPhaseRPM,
         .measurementType = MEASURE_RPM,
         .calibrationType = CAL_NONE,
-        .defaultCalibration = nullptr
+        .defaultCalibration = nullptr,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS
     },
 
     // ===== BME280 SENSORS =====
@@ -190,33 +222,41 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = BME280_TEMP,
         .name = "BME280 Temperature",
         .readFunction = readBME280Temp,
+        .initFunction = nullptr,
         .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_NONE,
-        .defaultCalibration = nullptr
+        .defaultCalibration = nullptr,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS
     },
     {
         .sensor = BME280_PRESSURE,
         .name = "BME280 Pressure",
         .readFunction = readBME280Pressure,
+        .initFunction = nullptr,
         .measurementType = MEASURE_PRESSURE,
         .calibrationType = CAL_NONE,
-        .defaultCalibration = nullptr
+        .defaultCalibration = nullptr,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS
     },
     {
         .sensor = BME280_HUMIDITY,
         .name = "BME280 Humidity",
         .readFunction = readBME280Humidity,
+        .initFunction = nullptr,
         .measurementType = MEASURE_HUMIDITY,
         .calibrationType = CAL_NONE,
-        .defaultCalibration = nullptr
+        .defaultCalibration = nullptr,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS
     },
     {
         .sensor = BME280_ELEVATION,
         .name = "BME280 Elevation",
         .readFunction = readBME280Elevation,
+        .initFunction = nullptr,
         .measurementType = MEASURE_ELEVATION,
         .calibrationType = CAL_NONE,
-        .defaultCalibration = nullptr
+        .defaultCalibration = nullptr,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS
     },
 
     // ===== DIGITAL SENSORS =====
@@ -224,9 +264,11 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .sensor = FLOAT_SWITCH,
         .name = "Float Switch",
         .readFunction = readDigitalFloatSwitch,
+        .initFunction = initFloatSwitch,
         .measurementType = MEASURE_DIGITAL,
         .calibrationType = CAL_NONE,
-        .defaultCalibration = nullptr
+        .defaultCalibration = nullptr,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS
     }
 };
 
