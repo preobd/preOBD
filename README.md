@@ -226,10 +226,8 @@ openEMS outputs standard OBDII PIDs via CAN bus, making it compatible with:
 ## Performance
 
 **Typical Configuration (8 sensors, CAN, LCD):**
-- Loop time: ~93ms
 - RAM usage: ~3KB
 - Flash usage: ~35KB
-- Update rate: 200ms (configurable)
 
 **Arduino Uno (minimal, 3-6 sensors):**
 - RAM usage: ~1.5-2KB

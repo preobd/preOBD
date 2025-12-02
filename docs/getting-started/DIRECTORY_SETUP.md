@@ -262,16 +262,40 @@ This directory contains core library components, sensor definitions, and platfor
 
 This directory contains all output implementations for sending sensor data to various devices and protocols.
 
+**Architecture: Data-Driven Time-Sliced Outputs**
+
+openEMS uses a **fully data-driven output architecture** where all outputs are defined in a single array with their send intervals:
+
+```cpp
+OutputModule outputModules[] = {
+    {"CAN", true, initCAN, sendCAN, updateCAN, 100},       // 10Hz
+    {"RealDash", true, initRealdash, sendRealdash, updateRealdash, 100},
+    {"Serial", true, initSerialOutput, sendSerialOutput, updateSerialOutput, 1000},
+    {"SD_Log", true, initSDLog, sendSDLog, updateSDLog, 5000}
+};
+```
+
+Each output runs at its own independent interval without blocking others:
+- **CAN/RealDash:** 100ms (10Hz) - smooth dashboards
+- **Serial CSV:** 1000ms (1Hz) - avoid flooding
+- **SD logging:** 5000ms (0.2Hz) - reduce wear
+
+**Benefits:**
+- Adding new output = ONE line in array
+- No changes to main.cpp
+- Fully scalable architecture
+- Consistent with sensor library pattern
+
 **output_base.h**
 - Output module interface definition
-- Defines OutputModule structure
+- Defines OutputModule structure with `sendInterval` field
 - **Edit:** NO - Core interface
 
 **output_manager.cpp**
-- Manages all output modules
-- Iterates through enabled outputs
-- Calls update() on each module
-- **Edit:** SOMETIMES (when adding new output types)
+- Data-driven output coordinator
+- Time-sliced sending via `sendToOutputs(now)`
+- Per-output timing management
+- **Edit:** YES - Add new output module here (one line in array)
 
 **output_can.cpp**
 - CAN bus OBDII output
