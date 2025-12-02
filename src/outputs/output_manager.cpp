@@ -4,6 +4,7 @@
 
 #include "output_base.h"
 #include "../config.h"
+#include "../inputs/input_manager.h"
 
 // Declare external functions from output modules
 extern void initCAN();
@@ -22,68 +23,58 @@ extern void initSDLog();
 extern void sendSDLog(Input*);
 extern void updateSDLog();
 
-// Define output modules array
+// Define output modules array with send intervals
 OutputModule outputModules[] = {
     #ifdef ENABLE_CAN
-    {"CAN", true, initCAN, sendCAN, updateCAN},
+    {"CAN", true, initCAN, sendCAN, updateCAN, CAN_OUTPUT_INTERVAL_MS},
     #endif
-    
+
     #ifdef ENABLE_REALDASH
-    {"RealDash", true, initRealdash, sendRealdash, updateRealdash},
+    {"RealDash", true, initRealdash, sendRealdash, updateRealdash, REALDASH_INTERVAL_MS},
     #endif
-    
+
     #ifdef ENABLE_SERIAL_OUTPUT
-    {"Serial", true, initSerialOutput, sendSerialOutput, updateSerialOutput},
+    {"Serial", true, initSerialOutput, sendSerialOutput, updateSerialOutput, SERIAL_CSV_INTERVAL_MS},
     #endif
-    
+
     #ifdef ENABLE_SD_LOGGING
-    {"SD_Log", true, initSDLog, sendSDLog, updateSDLog},
+    {"SD_Log", true, initSDLog, sendSDLog, updateSDLog, SD_LOG_INTERVAL_MS},
     #endif
 };
 
 const int numOutputModules = sizeof(outputModules) / sizeof(outputModules[0]);
+
+// Track last send time for each output module
+static uint32_t lastOutputSend[sizeof(outputModules) / sizeof(outputModules[0])];
 
 void initOutputModules() {
     for (int i = 0; i < numOutputModules; i++) {
         if (outputModules[i].enabled && outputModules[i].init != nullptr) {
             outputModules[i].init();
         }
+        lastOutputSend[i] = 0;  // Initialize timing
     }
 }
 
-// Send to a specific output type (for time-sliced calling)
-void sendToOutput(Input* input, OutputType type) {
-    if (!input->flags.isEnabled || isnan(input->value)) {
-        return;
-    }
+// Send data to all outputs at their configured intervals
+void sendToOutputs(uint32_t now) {
+    for (int i = 0; i < numOutputModules; i++) {
+        if (!outputModules[i].enabled) continue;
 
-    switch (type) {
-        case OUTPUT_CAN:
-            #ifdef ENABLE_CAN
-            sendCAN(input);
-            #endif
-            break;
-
-        case OUTPUT_REALDASH:
-            #ifdef ENABLE_REALDASH
-            sendRealdash(input);
-            #endif
-            break;
-
-        case OUTPUT_SERIAL:
-            #ifdef ENABLE_SERIAL_OUTPUT
-            sendSerialOutput(input);
-            #endif
-            break;
-
-        case OUTPUT_SD:
-            #ifdef ENABLE_SD_LOGGING
-            sendSDLog(input);
-            #endif
-            break;
+        // Check if enough time has elapsed for this output
+        if (now - lastOutputSend[i] >= outputModules[i].sendInterval) {
+            // Send all enabled inputs to this output
+            for (uint8_t j = 0; j < MAX_INPUTS; j++) {
+                if (inputs[j].flags.isEnabled && !isnan(inputs[j].value)) {
+                    outputModules[i].send(&inputs[j]);
+                }
+            }
+            lastOutputSend[i] = now;
+        }
     }
 }
 
+// Housekeeping - called every loop (drain buffers, handle RX, etc.)
 void updateOutputs() {
     for (int i = 0; i < numOutputModules; i++) {
         if (outputModules[i].enabled && outputModules[i].update != nullptr) {

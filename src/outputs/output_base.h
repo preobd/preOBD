@@ -16,6 +16,7 @@ typedef struct {
     void (*init)(void);
     void (*send)(Input*);
     void (*update)(void);  // Called each loop iteration
+    uint16_t sendInterval;  // Milliseconds between sends
 } OutputModule;
 
 // Output types for time-sliced calling
@@ -26,10 +27,10 @@ enum OutputType {
     OUTPUT_SD
 };
 
-// Output module initialization
+// Output module functions
 void initOutputModules();
-void sendToOutput(Input* input, OutputType type);  // Time-sliced single output
-void updateOutputs();
+void sendToOutputs(uint32_t now);  // Send data to all outputs (time-sliced)
+void updateOutputs();              // Housekeeping (drain buffers, etc.)
 
 // ===== OBDII FRAME BUILDING =====
 

@@ -54,20 +54,8 @@ static uint32_t lastInputRead[MAX_INPUTS];  // Per-sensor read timing
 #ifdef ENABLE_ALARMS
 static uint32_t lastAlarmCheck = 0;
 #endif
-#ifdef ENABLE_CAN_OUTPUT
-static uint32_t lastCANOutput = 0;
-#endif
-#ifdef ENABLE_REALDASH
-static uint32_t lastRealdashOutput = 0;
-#endif
 #ifdef ENABLE_LCD
 static uint32_t lastLCDUpdate = 0;
-#endif
-#ifdef ENABLE_SERIAL_OUTPUT
-static uint32_t lastSerialCSV = 0;
-#endif
-#ifdef ENABLE_SD_LOGGING
-static uint32_t lastSDLog = 0;
 #endif
 
 // ===== TIME-SLICED OPERATION FUNCTIONS =====
@@ -125,56 +113,6 @@ static void updateAlarms(uint32_t now) {
     #endif
 }
 
-// Send data to all time-sliced output modules
-static void updateOutputs_TimeSliced(uint32_t now) {
-    // CAN output (10Hz)
-    #ifdef ENABLE_CAN_OUTPUT
-    if (now - lastCANOutput >= CAN_OUTPUT_INTERVAL_MS) {
-        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            if (inputs[i].flags.isEnabled) {
-                sendToOutput(&inputs[i], OUTPUT_CAN);
-            }
-        }
-        lastCANOutput = now;
-    }
-    #endif
-
-    // RealDash output (10Hz)
-    #ifdef ENABLE_REALDASH
-    if (now - lastRealdashOutput >= REALDASH_INTERVAL_MS) {
-        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            if (inputs[i].flags.isEnabled) {
-                sendToOutput(&inputs[i], OUTPUT_REALDASH);
-            }
-        }
-        lastRealdashOutput = now;
-    }
-    #endif
-
-    // Serial CSV output (1Hz)
-    #ifdef ENABLE_SERIAL_OUTPUT
-    if (now - lastSerialCSV >= SERIAL_CSV_INTERVAL_MS) {
-        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            if (inputs[i].flags.isEnabled) {
-                sendToOutput(&inputs[i], OUTPUT_SERIAL);
-            }
-        }
-        lastSerialCSV = now;
-    }
-    #endif
-
-    // SD card logging (0.2Hz)
-    #ifdef ENABLE_SD_LOGGING
-    if (now - lastSDLog >= SD_LOG_INTERVAL_MS) {
-        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            if (inputs[i].flags.isEnabled) {
-                sendToOutput(&inputs[i], OUTPUT_SD);
-            }
-        }
-        lastSDLog = now;
-    }
-    #endif
-}
 
 // Update LCD display in RUN mode
 static void updateDisplay(uint32_t now) {
@@ -391,11 +329,9 @@ void loop() {
     // Read sensors, check alarms, send outputs, update display
     updateSensors(now);
     updateAlarms(now);
-    updateOutputs_TimeSliced(now);
+    sendToOutputs(now);  // Data-driven time-sliced output sending
     updateDisplay(now);
-
-    // Housekeeping: drain CAN RX buffer, handle incoming messages
-    updateOutputs();
+    updateOutputs();     // Housekeeping: drain buffers, handle RX
 
     // Update test mode if active
     updateTestMode_Wrapper();
