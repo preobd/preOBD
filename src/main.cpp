@@ -14,6 +14,7 @@
 // Input-based architecture (supports both EEPROM and compile-time config)
 #include "lib/sensor_types.h"
 #include "lib/sensor_library.h"
+#include "lib/system_config.h"
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
 #ifndef USE_STATIC_CONFIG
@@ -164,6 +165,11 @@ void setup() {
     // Initialize SPI BEFORE input manager (needed for thermocouple CS pin setup)
     SPI.begin();
     Serial.println(F("✓ SPI bus initialized"));
+
+    // Initialize system config (loads from EEPROM or uses defaults from config.h)
+#ifndef USE_STATIC_CONFIG
+    initSystemConfig();
+#endif
 
     // Initialize input manager (loads from EEPROM or config.h)
 #ifndef USE_STATIC_CONFIG

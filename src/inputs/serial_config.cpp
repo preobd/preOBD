@@ -14,6 +14,8 @@
 #include "input_manager.h"
 #include "input.h"
 #include "../lib/system_mode.h"
+#include "../lib/system_config.h"
+#include "../outputs/output_base.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -234,6 +236,12 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  CLEAR <pin>  - Reset input to unconfigured"));
         Serial.println(F("  INFO <pin>  - Show detailed pin info"));
         Serial.println();
+        Serial.println(F("Output Commands:"));
+        Serial.println(F("  OUTPUT LIST  - Show all output modules"));
+        Serial.println(F("  OUTPUT <name> ENABLE  - Enable output (CAN, RealDash, Serial, SD_Log)"));
+        Serial.println(F("  OUTPUT <name> DISABLE  - Disable output"));
+        Serial.println(F("  OUTPUT <name> INTERVAL <ms>  - Set output interval"));
+        Serial.println();
         Serial.println(F("Config Commands:"));
         Serial.println(F("  SAVE  - Save config to EEPROM"));
         Serial.println(F("  LOAD  - Load config from EEPROM"));
@@ -251,6 +259,8 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  SET A2 APPLICATION COOLANT_TEMP"));
         Serial.println(F("  SET A2 SENSOR VDO_120C"));
         Serial.println(F("  ENABLE A2"));
+        Serial.println(F("  OUTPUT CAN ENABLE"));
+        Serial.println(F("  OUTPUT CAN INTERVAL 100"));
         Serial.println(F("  SAVE"));
         return;
     }
@@ -479,6 +489,82 @@ void handleSerialCommand(char* cmd) {
         return;
     }
 
+    // ===== OUTPUT COMMANDS =====
+    if (strncmp(cmd, "OUTPUT ", 7) == 0) {
+        char* rest = cmd + 7;
+        trim(rest);
+
+        // OUTPUT LIST / OUTPUT STATUS
+        if (streq(rest, "LIST") || streq(rest, "STATUS")) {
+            listOutputs();
+            return;
+        }
+
+        // Parse: OUTPUT <name> <action> [value]
+        char* firstSpace = strchr(rest, ' ');
+        if (!firstSpace) {
+            Serial.println(F("ERROR: Invalid OUTPUT syntax"));
+            Serial.println(F("  Usage: OUTPUT <name> <ENABLE|DISABLE|INTERVAL> [ms]"));
+            return;
+        }
+
+        *firstSpace = '\0';
+        char* outputName = rest;
+        char* action = firstSpace + 1;
+        trim(action);
+
+        OutputModule* output = getOutputByName(outputName);
+        if (!output) {
+            Serial.print(F("ERROR: Unknown output '"));
+            Serial.print(outputName);
+            Serial.println(F("'"));
+            Serial.println(F("  Hint: Use 'OUTPUT LIST' to see available outputs"));
+            return;
+        }
+
+        // OUTPUT <name> ENABLE
+        if (streq(action, "ENABLE")) {
+            if (setOutputEnabled(outputName, true)) {
+                Serial.print(output->name);
+                Serial.println(F(" output enabled"));
+            }
+            return;
+        }
+
+        // OUTPUT <name> DISABLE
+        if (streq(action, "DISABLE")) {
+            if (setOutputEnabled(outputName, false)) {
+                Serial.print(output->name);
+                Serial.println(F(" output disabled"));
+            }
+            return;
+        }
+
+        // OUTPUT <name> INTERVAL <ms>
+        if (strncmp(action, "INTERVAL ", 9) == 0) {
+            char* intervalStr = action + 9;
+            trim(intervalStr);
+            uint16_t interval = atoi(intervalStr);
+
+            if (interval < 10 || interval > 60000) {
+                Serial.println(F("ERROR: Interval must be 10-60000ms"));
+                return;
+            }
+
+            if (setOutputInterval(outputName, interval)) {
+                Serial.print(output->name);
+                Serial.print(F(" interval set to "));
+                Serial.print(interval);
+                Serial.println(F("ms"));
+            }
+            return;
+        }
+
+        Serial.println(F("ERROR: Unknown OUTPUT action"));
+        Serial.println(F("  Valid actions: ENABLE, DISABLE, INTERVAL <ms>"));
+        return;
+    }
+
     // ===== INFO COMMAND =====
     if (strncmp(cmd, "INFO ", 5) == 0) {
         char* pinStr = cmd + 5;
@@ -491,8 +577,12 @@ void handleSerialCommand(char* cmd) {
     // ===== PERSISTENCE COMMANDS =====
     // EEPROM save/load/reset
     if (streq(cmd, "SAVE")) {
-        if (saveInputConfig()) {
-            Serial.println(F("Configuration saved to EEPROM"));
+        bool success = true;
+        success &= saveInputConfig();
+        success &= saveSystemConfig();
+
+        if (success) {
+            Serial.println(F("✓ Configuration saved to EEPROM"));
         } else {
             Serial.println(F("ERROR: Failed to save configuration"));
         }
@@ -500,8 +590,13 @@ void handleSerialCommand(char* cmd) {
     }
 
     if (streq(cmd, "LOAD")) {
-        if (loadInputConfig()) {
-            Serial.println(F("Configuration loaded from EEPROM"));
+        bool inputsOK = loadInputConfig();
+        bool systemOK = loadSystemConfig();
+
+        if (inputsOK && systemOK) {
+            Serial.println(F("✓ Configuration loaded from EEPROM"));
+        } else if (inputsOK || systemOK) {
+            Serial.println(F("WARNING: Partial configuration loaded"));
         } else {
             Serial.println(F("ERROR: Failed to load configuration"));
         }
@@ -516,7 +611,8 @@ void handleSerialCommand(char* cmd) {
 
     if (streq(cmd, "RESET CONFIRM")) {
         resetInputConfig();
-        Serial.println(F("Configuration reset"));
+        resetSystemConfig();
+        Serial.println(F("✓ All configuration reset to defaults"));
         return;
     }
 

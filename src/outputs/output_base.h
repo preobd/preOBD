@@ -25,6 +25,12 @@ void initOutputModules();
 void sendToOutputs(uint32_t now);  // Send data to all outputs (time-sliced)
 void updateOutputs();              // Housekeeping (drain buffers, etc.)
 
+// Runtime configuration API
+bool setOutputEnabled(const char* name, bool enabled);
+bool setOutputInterval(const char* name, uint16_t interval);
+OutputModule* getOutputByName(const char* name);
+void listOutputs();
+
 // ===== OBDII FRAME BUILDING =====
 
 // Build standard OBDII Mode 01 frame data (ISO 15765-4 compliant)
