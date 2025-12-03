@@ -89,7 +89,7 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/openEMS.git
+git clone https://github.com/preobd/openEMS.git
 cd openEMS
 
 # Build with PlatformIO
