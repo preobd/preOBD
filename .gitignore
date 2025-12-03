@@ -65,3 +65,6 @@ tmp/
 
 # Don't ignore project-level PlatformIO config
 # Keep platformio.ini tracked (remove if you intentionally want it ignored)
+
+# Private workflow documentation
+MAINTAINING.md
