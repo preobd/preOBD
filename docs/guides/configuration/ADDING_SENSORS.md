@@ -21,13 +21,22 @@ If your sensor is already in the library, you just need to configure it:
 #define INPUT_0_SENSOR         VDO_120C_LOOKUP
 ```
 
-**Runtime (serial commands):**
+**Runtime (serial commands) - Combined Syntax (Recommended):**
+```
+SET A2 COOLANT_TEMP VDO_120C_LOOKUP
+ENABLE A2
+SAVE
+```
+
+**Runtime (serial commands) - Legacy Syntax (Still Supported):**
 ```
 SET A2 APPLICATION COOLANT_TEMP
 SET A2 SENSOR VDO_120C_LOOKUP
 ENABLE A2
 SAVE
 ```
+
+> **New in v0.4.0:** Combined command syntax allows setting both application and sensor in one line!
 
 ---
 

@@ -33,7 +33,11 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 
 **Configuration:**
 - Compile-time configuration mode (minimal RAM, recommended for Arduino Uno)
-- Runtime configuration mode (serial commands, EEPROM storage, CONFIG/RUN mode separation)
+- **Runtime configuration mode** (serial commands, EEPROM storage, CONFIG/RUN mode separation)
+  - **NEW in v0.4.0:** Configure outputs, display, and system parameters at runtime
+  - Enable/disable CAN, RealDash, Serial CSV, SD logging without recompiling
+  - Adjust output intervals, display units, and timing on-the-fly
+  - Combined sensor command syntax for faster setup
 
 **Hardware Platforms:**
 - Arduino Uno (2KB RAM, limited sensors)

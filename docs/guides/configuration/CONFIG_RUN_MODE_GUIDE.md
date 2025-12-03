@@ -207,6 +207,79 @@ These commands are **always available** to prevent system deadlock:
 
 ---
 
+## Runtime Configuration Capabilities (v0.4.0+)
+
+Starting with firmware v0.4.0, CONFIG mode now supports comprehensive runtime configuration beyond just sensors. You can now configure outputs, display settings, and system parameters without recompiling firmware.
+
+### What Can Be Configured at Runtime
+
+**Sensor Configuration:**
+- Add/remove sensors
+- Change sensor types and applications
+- Set alarm thresholds
+- *(Traditional CONFIG mode functionality)*
+
+**Output Configuration (NEW):**
+- Enable/disable output modules (CAN, RealDash, Serial CSV, SD logging)
+- Adjust output intervals (10-60000ms)
+- No recompilation needed to switch outputs
+
+**Display Configuration (NEW):**
+- Switch between LCD, OLED, or no display
+- Change I2C address for LCD
+- Set default units (temperature, pressure, elevation)
+
+**System Configuration (NEW):**
+- VDO bias resistor value (for different VDO sensor types)
+- Sea level pressure (for accurate altitude)
+- Timing intervals (sensor read, alarm check, LCD update)
+
+### Example: Runtime Output Configuration
+
+```
+CONFIG                          # Enter CONFIG mode
+OUTPUT LIST                     # Show current output status
+OUTPUT CAN ENABLE              # Enable CAN output
+OUTPUT CAN INTERVAL 100        # Set CAN to 100ms
+OUTPUT RealDash ENABLE         # Enable RealDash
+OUTPUT RealDash INTERVAL 50    # Set RealDash to 50ms (smoother gauges)
+OUTPUT SD_Log DISABLE          # Disable SD logging to save power
+SAVE                           # Persist changes
+RUN                            # Resume normal operation
+```
+
+### Example: Runtime Display Configuration
+
+```
+CONFIG
+DISPLAY UNITS TEMP F           # Use Fahrenheit by default
+DISPLAY UNITS PRESSURE PSI     # Use PSI for pressure
+DISPLAY LCD ADDRESS 0x3F       # Change I2C address if needed
+SAVE
+RUN
+```
+
+### Example: Adjust VDO Resistor for Different Sensors
+
+```
+CONFIG
+SYSTEM VDO_BIAS 2200          # Switch to 2.2k VDO sensors
+SAVE
+RUN
+```
+
+### Benefits of Runtime Configuration
+
+1. **No Recompilation** - Switch outputs, display type, or adjust intervals instantly
+2. **Field Updates** - Change configuration without reflashing firmware
+3. **Quick Testing** - Try different output intervals or display settings
+4. **Persistent** - All settings save to EEPROM alongside sensor config
+5. **Safe** - All changes happen in CONFIG mode (sensors paused)
+
+For complete command reference, see [Serial Command Reference](../../reference/SERIAL_COMMANDS.md).
+
+---
+
 ## Typical Workflows
 
 ### Initial Setup (First Boot)
