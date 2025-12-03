@@ -122,8 +122,8 @@ Community support is provided on a best-effort basis through GitHub:
 
 ## Contact
 
-- **Issues:** https://github.com/yourusername/openEMS/issues
-- **Discussions:** https://github.com/yourusername/openEMS/discussions
+- **Issues:** https://github.com/preobd/openEMS/issues
+- **Discussions:** https://github.com/preobd/openEMS/discussions
 - **Documentation:** See docs/ folder
 
 ---
