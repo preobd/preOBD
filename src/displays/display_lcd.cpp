@@ -13,18 +13,73 @@
 #include <LiquidCrystal_I2C.h>
 
 LiquidCrystal_I2C lcd(0x27, 20, 4);
-byte degree[8] = {140, 146, 146, 140, 128, 128, 128, 128};
 byte currentLine = 0;
+
+// Custom character icon definitions
+enum ICONS{
+    ICON_DEGREE,
+    ICON_THERMOMETER,
+    ICON_OIL_CAN,
+    ICON_TURBO,
+    ICON_BATTERY,
+    ICON_TACHOMETER,
+    ICON_COOLANT,
+    ICON_OIL
+};
+
+byte degree_icon[8] = {0xc,0x12,0x12,0xc,0x0,0x0,0x0,0x0};
+byte thermometer_icon[8] = {0x4,0xa,0xa,0xa,0x11,0x1f,0xe,0x0};
+byte oil_can_icon[8] = {0x02,0x05,0x0E,0x11,0x11,0x11,0x1F,0x00};
+//byte oil_icon[8] = {0x04,0x0E,0x1F,0x1D,0x1D,0x1B,0x0E,0x00}; //big drop
+byte oil_icon[8] = {0x00,0x04,0x0E,0x1D,0x1D,0x1B,0x0E,0x00}; //small drop
+byte turbo_icon[8] = {0x00,0x0F,0x1E,0x1B,0x15,0x1B,0x0E,0x00};
+byte battery_icon[8] = {0x00,0x00,0x0A,0x1F,0x11,0x11,0x1F,0x00};
+byte tachometer_icon[8] = {0x00,0x0E,0x11,0x11,0x15,0x11,0x0E,0x00};
+byte coolant_icon[8] = {0x04,0x07,0x04,0x07,0x04,0x0E,0x0E,0x04};
 
 // Forward declarations
 void showConfigModeMessage();
+byte getIconForApplication(Application app);
 
 void initLCD() {
     lcd.init();
     lcd.backlight();
-    lcd.createChar(0, degree);
+    lcd.createChar(ICON_DEGREE, degree_icon);
+    lcd.createChar(ICON_THERMOMETER, thermometer_icon);
+    lcd.createChar(ICON_OIL_CAN, oil_can_icon);
+    lcd.createChar(ICON_TURBO, turbo_icon);
+    lcd.createChar(ICON_BATTERY, battery_icon);
+    lcd.createChar(ICON_TACHOMETER, tachometer_icon);
+    lcd.createChar(ICON_COOLANT, coolant_icon);
+    lcd.createChar(ICON_OIL, oil_icon);
     lcd.clear();
     Serial.println("LCD initialized");
+}
+
+byte getIconForApplication(Application app) {
+    switch (app) {
+        case CHT:
+        case EGT:
+        case TCASE_TEMP:
+        case AMBIENT_TEMP:
+            return ICON_THERMOMETER;
+        case COOLANT_TEMP:
+            return ICON_COOLANT;
+        case OIL_TEMP:
+        case OIL_PRESSURE:
+            return ICON_OIL;
+        case FUEL_PRESSURE:
+            return ICON_OIL_CAN;
+        case BOOST_PRESSURE:
+            return ICON_TURBO;
+        case PRIMARY_BATTERY:
+        case AUXILIARY_BATTERY:
+            return ICON_BATTERY;
+        case ENGINE_RPM:
+            return ICON_TACHOMETER;
+        default:
+            return 32; // space
+    }
 }
 
 void displaySensor(Input *ptr, byte line) {
@@ -34,71 +89,71 @@ void displaySensor(Input *ptr, byte line) {
 
     lcd.setCursor(col, row);
 
-    // Print sensor abbreviation
-    lcd.print(ptr->abbrName);
-    lcd.print(":");
+    int charsPrinted = 0;
 
-    // If sensor is not enabled, show "CFG"
-    if (!ptr->flags.isEnabled) {
-        lcd.print("CFG");
-        return;
-    }
+    if (ptr->flags.display) {
+        // Print icon
+        lcd.write(getIconForApplication(ptr->application));
+        charsPrinted++;
 
-    // If display flag is off, don't show
-    if (!ptr->flags.display) {
-        return;
-    }
+        // Print sensor abbreviation
+        charsPrinted += lcd.print(ptr->abbrName);
+        charsPrinted += lcd.print(":");
 
-    // Check for invalid values (NaN or exactly 0.0 which likely means unread in CONFIG mode)
-    if (isnan(ptr->value)) {
-        lcd.print("ERR");
-        return;
-    }
-
-    // If value is exactly 0.0, show "---" (likely in CONFIG mode, not yet read)
-    // This handles the case where sensor is enabled but system hasn't read it yet
-    if (ptr->value == 0.0f) {
-        lcd.print("---");
-        return;
-    }
-
-    // Convert to display units
-    float displayValue = getDisplayConvertFunc(ptr->measurementType)(ptr->value, ptr->displayUnits);
-
-    // Print value with appropriate precision
-    if (ptr->displayUnits == CELSIUS || ptr->displayUnits == FAHRENHEIT) {
-        lcd.print(displayValue, 0);  // No decimal for temperature
-        lcd.write((byte)0);          // Degree symbol
-    } else if (ptr->displayUnits == VOLTS) {
-        lcd.print(displayValue, 1);  // 1 decimal for voltage
-        lcd.print("V");
-    } else if (ptr->displayUnits == BAR || ptr->displayUnits == PSI) {
-        lcd.print(displayValue, 1);  // 1 decimal for pressure
-        if (ptr->displayUnits == PSI) {
-            lcd.print("p");
-        } else {
-            lcd.print("b");
+        // If sensor is not enabled, show "CFG"
+        if (!ptr->flags.isEnabled) {
+            charsPrinted += lcd.print("CFG");
         }
-    } else if (ptr->displayUnits == KPA) {
-        lcd.print(displayValue, 1);
-        lcd.print("k");
-    } else if (ptr->displayUnits == INHG) {
-        lcd.print(displayValue, 2);
-        lcd.print("");
-    } else if (ptr->displayUnits == PERCENT) {
-        lcd.print(displayValue, 0);  // No decimal for humidity
-        lcd.print("%");
-    } else if (ptr->displayUnits == METERS) {
-        lcd.print(displayValue, 0);  // No decimal for elevation
-        lcd.print("m");
-    } else if (ptr->displayUnits == FEET) {
-        lcd.print(displayValue, 0);  // No decimal for elevation
-        lcd.print("ft");
-    } else if (ptr->displayUnits == RPM) {
-        lcd.print(displayValue, 0);  // No decimal for RPM
+        // Check for invalid values (NaN)
+        else if (isnan(ptr->value)) {
+            charsPrinted += lcd.print("ERR");
+        }
+        // If value is exactly 0.0, show "---" (likely in CONFIG mode, not yet read)
+        else if (ptr->value == 0.0f) {
+            charsPrinted += lcd.print("---");
+        } else {
+            // Convert to display units
+            float displayValue = getDisplayConvertFunc(ptr->measurementType)(ptr->value, ptr->displayUnits);
+
+            // Print value with appropriate precision
+            if (ptr->displayUnits == CELSIUS || ptr->displayUnits == FAHRENHEIT) {
+                charsPrinted += lcd.print(displayValue, 0);  // No decimal for temperature
+                lcd.write((byte)ICON_DEGREE);
+                charsPrinted++;
+            } else if (ptr->displayUnits == VOLTS) {
+                charsPrinted += lcd.print(displayValue, 1);  // 1 decimal for voltage
+                charsPrinted += lcd.print("V");
+            } else if (ptr->displayUnits == BAR || ptr->displayUnits == PSI) {
+                charsPrinted += lcd.print(displayValue, 1);  // 1 decimal for pressure
+                if (ptr->displayUnits == PSI) {
+                    charsPrinted += lcd.print("p");
+                } else {
+                    charsPrinted += lcd.print("b");
+                }
+            } else if (ptr->displayUnits == KPA) {
+                charsPrinted += lcd.print(displayValue, 1);
+                charsPrinted += lcd.print("k");
+            } else if (ptr->displayUnits == INHG) {
+                charsPrinted += lcd.print(displayValue, 2);
+            } else if (ptr->displayUnits == PERCENT) {
+                charsPrinted += lcd.print(displayValue, 0);  // No decimal for humidity
+                charsPrinted += lcd.print("%");
+            } else if (ptr->displayUnits == METERS) {
+                charsPrinted += lcd.print(displayValue, 0);  // No decimal for elevation
+                charsPrinted += lcd.print("m");
+            } else if (ptr->displayUnits == FEET) {
+                charsPrinted += lcd.print(displayValue, 0);  // No decimal for elevation
+                charsPrinted += lcd.print("ft");
+            } else if (ptr->displayUnits == RPM) {
+                charsPrinted += lcd.print(displayValue, 0);  // No decimal for RPM
+            }
+        }
     }
-    // Clear remaining characters in field (assuming 9 chars per field)
-    //lcd.print("   ");
+
+    // Pad remaining space in the 10-character block to clear old data
+    for (int i = charsPrinted; i < 10; i++) {
+        lcd.print(" ");
+    }
 }
 
 void updateLCD(Input** inputs, int numInputs) {

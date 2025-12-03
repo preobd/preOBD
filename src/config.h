@@ -159,9 +159,9 @@
     #define INPUT_3_SENSOR      VDO_150C_STEINHART
 
     // Input 4: Primary Battery
-    // #define INPUT_4_PIN         A5
-    // #define INPUT_4_APPLICATION PRIMARY_BATTERY
-    // #define INPUT_4_SENSOR      STANDARD_12V_DIVIDER
+    #define INPUT_4_PIN         A5
+    #define INPUT_4_APPLICATION PRIMARY_BATTERY
+    #define INPUT_4_SENSOR      STANDARD_12V_DIVIDER
 
     // Input 5: Ambient Temperature (BME280)
     #define INPUT_5_PIN         0        // BME280 is I2C, no analog pin
