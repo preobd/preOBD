@@ -38,7 +38,7 @@
 // ============================================================================
 
 // Uncomment to use compile-time config instead of EEPROM:
-#define USE_STATIC_CONFIG
+//#define USE_STATIC_CONFIG
 
 // ============================================================================
 // STEP 2: HARDWARE PIN ASSIGNMENTS
