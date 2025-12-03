@@ -242,6 +242,22 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  OUTPUT <name> DISABLE  - Disable output"));
         Serial.println(F("  OUTPUT <name> INTERVAL <ms>  - Set output interval"));
         Serial.println();
+        Serial.println(F("Display Commands:"));
+        Serial.println(F("  DISPLAY STATUS  - Show display configuration"));
+        Serial.println(F("  DISPLAY TYPE <LCD|OLED|NONE>  - Set display type"));
+        Serial.println(F("  DISPLAY LCD ADDRESS <hex>  - Set I2C address (e.g., 0x27)"));
+        Serial.println(F("  DISPLAY UNITS TEMP <C|F>  - Default temperature units"));
+        Serial.println(F("  DISPLAY UNITS PRESSURE <BAR|PSI|KPA>  - Default pressure units"));
+        Serial.println(F("  DISPLAY UNITS ELEVATION <M|FT>  - Default elevation units"));
+        Serial.println();
+        Serial.println(F("System Commands (Advanced):"));
+        Serial.println(F("  SYSTEM STATUS  - Show system configuration"));
+        Serial.println(F("  SYSTEM VDO_BIAS <ohms>  - VDO resistor value"));
+        Serial.println(F("  SYSTEM SEA_LEVEL <hPa>  - Sea level pressure"));
+        Serial.println(F("  SYSTEM INTERVAL SENSOR <ms>  - Sensor read interval"));
+        Serial.println(F("  SYSTEM INTERVAL ALARM <ms>  - Alarm check interval"));
+        Serial.println(F("  SYSTEM INTERVAL LCD <ms>  - LCD update interval"));
+        Serial.println();
         Serial.println(F("Config Commands:"));
         Serial.println(F("  SAVE  - Save config to EEPROM"));
         Serial.println(F("  LOAD  - Load config from EEPROM"));
@@ -565,6 +581,270 @@ void handleSerialCommand(char* cmd) {
         return;
     }
 
+    // ===== DISPLAY COMMANDS =====
+    if (strncmp(cmd, "DISPLAY ", 8) == 0) {
+        char* rest = cmd + 8;
+        trim(rest);
+
+        // DISPLAY STATUS
+        if (streq(rest, "STATUS")) {
+            Serial.println(F("=== Display Configuration ==="));
+            Serial.print(F("Type: "));
+            switch (systemConfig.displayType) {
+                case DISPLAY_NONE: Serial.println(F("None")); break;
+                case DISPLAY_LCD: Serial.println(F("LCD")); break;
+                case DISPLAY_OLED: Serial.println(F("OLED")); break;
+                default: Serial.println(F("Unknown")); break;
+            }
+            Serial.print(F("LCD I2C Address: 0x"));
+            Serial.println(systemConfig.lcdI2CAddress, HEX);
+            Serial.print(F("Temperature Units: "));
+            Serial.println(systemConfig.defaultTempUnits == CELSIUS ? F("Celsius") : F("Fahrenheit"));
+            Serial.print(F("Pressure Units: "));
+            switch (systemConfig.defaultPressUnits) {
+                case BAR: Serial.println(F("Bar")); break;
+                case PSI: Serial.println(F("PSI")); break;
+                case KPA: Serial.println(F("kPa")); break;
+                default: Serial.println(F("Unknown")); break;
+            }
+            Serial.print(F("Elevation Units: "));
+            Serial.println(systemConfig.defaultElevUnits == METERS ? F("Meters") : F("Feet"));
+            return;
+        }
+
+        // DISPLAY TYPE <LCD|OLED|NONE>
+        if (strncmp(rest, "TYPE ", 5) == 0) {
+            char* typeStr = rest + 5;
+            trim(typeStr);
+            if (streq(typeStr, "LCD")) {
+                systemConfig.displayType = DISPLAY_LCD;
+                Serial.println(F("Display type set to LCD"));
+            } else if (streq(typeStr, "OLED")) {
+                systemConfig.displayType = DISPLAY_OLED;
+                Serial.println(F("Display type set to OLED"));
+            } else if (streq(typeStr, "NONE")) {
+                systemConfig.displayType = DISPLAY_NONE;
+                Serial.println(F("Display disabled"));
+            } else {
+                Serial.println(F("ERROR: Invalid display type. Valid: LCD, OLED, NONE"));
+            }
+            return;
+        }
+
+        // DISPLAY LCD ADDRESS <hex>
+        if (strncmp(rest, "LCD ADDRESS ", 12) == 0) {
+            char* addrStr = rest + 12;
+            trim(addrStr);
+            // Parse hex address (e.g., "0x27" or "27")
+            char* endptr;
+            long addr = strtol(addrStr, &endptr, 16);
+            if (addr >= 0x03 && addr <= 0x77) {
+                systemConfig.lcdI2CAddress = (uint8_t)addr;
+                Serial.print(F("LCD I2C address set to 0x"));
+                Serial.println(systemConfig.lcdI2CAddress, HEX);
+            } else {
+                Serial.println(F("ERROR: Invalid I2C address (valid range: 0x03-0x77)"));
+            }
+            return;
+        }
+
+        // DISPLAY UNITS TEMP <C|F>
+        if (strncmp(rest, "UNITS TEMP ", 11) == 0) {
+            char* unitStr = rest + 11;
+            trim(unitStr);
+            if (streq(unitStr, "C") || streq(unitStr, "CELSIUS")) {
+                systemConfig.defaultTempUnits = CELSIUS;
+                Serial.println(F("Default temperature units set to Celsius"));
+            } else if (streq(unitStr, "F") || streq(unitStr, "FAHRENHEIT")) {
+                systemConfig.defaultTempUnits = FAHRENHEIT;
+                Serial.println(F("Default temperature units set to Fahrenheit"));
+            } else {
+                Serial.println(F("ERROR: Invalid units. Valid: C, F, CELSIUS, FAHRENHEIT"));
+            }
+            return;
+        }
+
+        // DISPLAY UNITS PRESSURE <BAR|PSI|KPA>
+        if (strncmp(rest, "UNITS PRESSURE ", 15) == 0) {
+            char* unitStr = rest + 15;
+            trim(unitStr);
+            if (streq(unitStr, "BAR")) {
+                systemConfig.defaultPressUnits = BAR;
+                Serial.println(F("Default pressure units set to Bar"));
+            } else if (streq(unitStr, "PSI")) {
+                systemConfig.defaultPressUnits = PSI;
+                Serial.println(F("Default pressure units set to PSI"));
+            } else if (streq(unitStr, "KPA")) {
+                systemConfig.defaultPressUnits = KPA;
+                Serial.println(F("Default pressure units set to kPa"));
+            } else {
+                Serial.println(F("ERROR: Invalid units. Valid: BAR, PSI, KPA"));
+            }
+            return;
+        }
+
+        // DISPLAY UNITS ELEVATION <M|FT>
+        if (strncmp(rest, "UNITS ELEVATION ", 16) == 0) {
+            char* unitStr = rest + 16;
+            trim(unitStr);
+            if (streq(unitStr, "M") || streq(unitStr, "METERS")) {
+                systemConfig.defaultElevUnits = METERS;
+                Serial.println(F("Default elevation units set to Meters"));
+            } else if (streq(unitStr, "FT") || streq(unitStr, "FEET")) {
+                systemConfig.defaultElevUnits = FEET;
+                Serial.println(F("Default elevation units set to Feet"));
+            } else {
+                Serial.println(F("ERROR: Invalid units. Valid: M, FT, METERS, FEET"));
+            }
+            return;
+        }
+
+        Serial.println(F("ERROR: Unknown DISPLAY command"));
+        Serial.println(F("  Valid commands:"));
+        Serial.println(F("    DISPLAY STATUS"));
+        Serial.println(F("    DISPLAY TYPE <LCD|OLED|NONE>"));
+        Serial.println(F("    DISPLAY LCD ADDRESS <hex>"));
+        Serial.println(F("    DISPLAY UNITS TEMP <C|F>"));
+        Serial.println(F("    DISPLAY UNITS PRESSURE <BAR|PSI|KPA>"));
+        Serial.println(F("    DISPLAY UNITS ELEVATION <M|FT>"));
+        return;
+    }
+
+    // ===== SYSTEM COMMANDS =====
+    if (strncmp(cmd, "SYSTEM ", 7) == 0) {
+        char* rest = cmd + 7;
+        trim(rest);
+
+        // SYSTEM STATUS
+        if (streq(rest, "STATUS")) {
+            Serial.println(F("=== System Configuration ==="));
+            Serial.print(F("VDO Bias Resistor: "));
+            Serial.print(systemConfig.vdoBiasResistor);
+            Serial.println(F(" ohms"));
+            Serial.print(F("Sea Level Pressure: "));
+            Serial.print(systemConfig.seaLevelPressure);
+            Serial.println(F(" hPa"));
+            Serial.println();
+            Serial.println(F("Hardware Pins:"));
+            Serial.print(F("  Mode Button: "));
+            Serial.println(systemConfig.modeButtonPin);
+            Serial.print(F("  Buzzer: "));
+            Serial.println(systemConfig.buzzerPin);
+            Serial.print(F("  CAN CS: "));
+            Serial.println(systemConfig.canCSPin);
+            Serial.print(F("  CAN INT: "));
+            Serial.println(systemConfig.canIntPin);
+            Serial.print(F("  SD CS: "));
+            Serial.println(systemConfig.sdCSPin);
+            if (systemConfig.testModePin != 0xFF) {
+                Serial.print(F("  Test Mode Pin: "));
+                Serial.println(systemConfig.testModePin);
+            }
+            Serial.println();
+            Serial.println(F("Timing Intervals:"));
+            Serial.print(F("  Sensor Read: "));
+            Serial.print(systemConfig.sensorReadInterval);
+            Serial.println(F("ms"));
+            Serial.print(F("  Alarm Check: "));
+            Serial.print(systemConfig.alarmCheckInterval);
+            Serial.println(F("ms"));
+            Serial.print(F("  LCD Update: "));
+            Serial.print(systemConfig.lcdUpdateInterval);
+            Serial.println(F("ms"));
+            return;
+        }
+
+        // SYSTEM VDO_BIAS <ohms>
+        if (strncmp(rest, "VDO_BIAS ", 9) == 0) {
+            char* valueStr = rest + 9;
+            trim(valueStr);
+            float value = atof(valueStr);
+            if (value >= 100 && value <= 10000) {
+                systemConfig.vdoBiasResistor = value;
+                Serial.print(F("VDO bias resistor set to "));
+                Serial.print(value);
+                Serial.println(F(" ohms"));
+            } else {
+                Serial.println(F("ERROR: VDO bias must be 100-10000 ohms"));
+            }
+            return;
+        }
+
+        // SYSTEM SEA_LEVEL <hPa>
+        if (strncmp(rest, "SEA_LEVEL ", 10) == 0) {
+            char* valueStr = rest + 10;
+            trim(valueStr);
+            float value = atof(valueStr);
+            if (value >= 800 && value <= 1200) {
+                systemConfig.seaLevelPressure = value;
+                Serial.print(F("Sea level pressure set to "));
+                Serial.print(value);
+                Serial.println(F(" hPa"));
+            } else {
+                Serial.println(F("ERROR: Sea level pressure must be 800-1200 hPa"));
+            }
+            return;
+        }
+
+        // SYSTEM INTERVAL SENSOR <ms>
+        if (strncmp(rest, "INTERVAL SENSOR ", 16) == 0) {
+            char* valueStr = rest + 16;
+            trim(valueStr);
+            uint16_t value = atoi(valueStr);
+            if (value >= 10 && value <= 10000) {
+                systemConfig.sensorReadInterval = value;
+                Serial.print(F("Sensor read interval set to "));
+                Serial.print(value);
+                Serial.println(F("ms"));
+            } else {
+                Serial.println(F("ERROR: Sensor interval must be 10-10000ms"));
+            }
+            return;
+        }
+
+        // SYSTEM INTERVAL ALARM <ms>
+        if (strncmp(rest, "INTERVAL ALARM ", 15) == 0) {
+            char* valueStr = rest + 15;
+            trim(valueStr);
+            uint16_t value = atoi(valueStr);
+            if (value >= 10 && value <= 10000) {
+                systemConfig.alarmCheckInterval = value;
+                Serial.print(F("Alarm check interval set to "));
+                Serial.print(value);
+                Serial.println(F("ms"));
+            } else {
+                Serial.println(F("ERROR: Alarm interval must be 10-10000ms"));
+            }
+            return;
+        }
+
+        // SYSTEM INTERVAL LCD <ms>
+        if (strncmp(rest, "INTERVAL LCD ", 13) == 0) {
+            char* valueStr = rest + 13;
+            trim(valueStr);
+            uint16_t value = atoi(valueStr);
+            if (value >= 10 && value <= 10000) {
+                systemConfig.lcdUpdateInterval = value;
+                Serial.print(F("LCD update interval set to "));
+                Serial.print(value);
+                Serial.println(F("ms"));
+            } else {
+                Serial.println(F("ERROR: LCD interval must be 10-10000ms"));
+            }
+            return;
+        }
+
+        Serial.println(F("ERROR: Unknown SYSTEM command"));
+        Serial.println(F("  Valid commands:"));
+        Serial.println(F("    SYSTEM STATUS"));
+        Serial.println(F("    SYSTEM VDO_BIAS <ohms>"));
+        Serial.println(F("    SYSTEM SEA_LEVEL <hPa>"));
+        Serial.println(F("    SYSTEM INTERVAL SENSOR <ms>"));
+        Serial.println(F("    SYSTEM INTERVAL ALARM <ms>"));
+        Serial.println(F("    SYSTEM INTERVAL LCD <ms>"));
+        return;
+    }
+
     // ===== INFO COMMAND =====
     if (strncmp(cmd, "INFO ", 5) == 0) {
         char* pinStr = cmd + 5;
@@ -641,8 +921,54 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  Full Configuration Dump"));
         Serial.println(F("========================================"));
         Serial.println();
+
+        // Show inputs
         listAllInputs();
         Serial.println();
+
+        // Show outputs
+        listOutputs();
+        Serial.println();
+
+        // Show display config
+        Serial.println(F("=== Display Configuration ==="));
+        Serial.print(F("Type: "));
+        switch (systemConfig.displayType) {
+            case DISPLAY_NONE: Serial.println(F("None")); break;
+            case DISPLAY_LCD: Serial.println(F("LCD")); break;
+            case DISPLAY_OLED: Serial.println(F("OLED")); break;
+            default: Serial.println(F("Unknown")); break;
+        }
+        Serial.print(F("LCD I2C Address: 0x"));
+        Serial.println(systemConfig.lcdI2CAddress, HEX);
+        Serial.print(F("Default Units: Temp="));
+        Serial.print(systemConfig.defaultTempUnits == CELSIUS ? F("C") : F("F"));
+        Serial.print(F(", Press="));
+        switch (systemConfig.defaultPressUnits) {
+            case BAR: Serial.print(F("Bar")); break;
+            case PSI: Serial.print(F("PSI")); break;
+            case KPA: Serial.print(F("kPa")); break;
+        }
+        Serial.print(F(", Elev="));
+        Serial.println(systemConfig.defaultElevUnits == METERS ? F("M") : F("Ft"));
+        Serial.println();
+
+        // Show system config
+        Serial.println(F("=== System Configuration ==="));
+        Serial.print(F("VDO Bias: "));
+        Serial.print(systemConfig.vdoBiasResistor);
+        Serial.print(F(" ohms, Sea Level: "));
+        Serial.print(systemConfig.seaLevelPressure);
+        Serial.println(F(" hPa"));
+        Serial.print(F("Intervals: Sensor="));
+        Serial.print(systemConfig.sensorReadInterval);
+        Serial.print(F("ms, Alarm="));
+        Serial.print(systemConfig.alarmCheckInterval);
+        Serial.print(F("ms, LCD="));
+        Serial.print(systemConfig.lcdUpdateInterval);
+        Serial.println(F("ms"));
+        Serial.println();
+
         Serial.println(F("To save this configuration to EEPROM, type: SAVE"));
         Serial.println();
         return;
