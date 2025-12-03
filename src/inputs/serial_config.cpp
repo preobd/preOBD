@@ -309,11 +309,14 @@ void handleSerialCommand(char* cmd) {
 
             if (app != APP_NONE && sensor != SENSOR_NONE) {
                 // Valid combined command
-                bool success = true;
-                success &= setInputApplication(pin, app);
-                success &= setInputSensor(pin, sensor);
+                // First set application (which also calls setInputSensor with preset sensor)
+                if (setInputApplication(pin, app)) {
+                    // Then override sensor if different from preset
+                    Input* input = getInputByPin(pin);
+                    if (input && input->sensor != sensor) {
+                        setInputSensor(pin, sensor);
+                    }
 
-                if (success) {
                     Serial.print(F("Input "));
                     Serial.print(pinStr);
                     Serial.print(F(" configured as "));
