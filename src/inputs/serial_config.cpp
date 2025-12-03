@@ -220,35 +220,36 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  LIST SENSORS        - Show available Sensor Types"));
         Serial.println();
         Serial.println(F("SET Commands:"));
-        Serial.println(F("  SET <pin> APPLICATION <application>"));
-        Serial.println(F("  SET <pin> SENSOR <sensor>"));
-        Serial.println(F("  SET <pin> NAME <name>"));
-        Serial.println(F("  SET <pin> DISPLAY_NAME <name>"));
-        Serial.println(F("  SET <pin> UNITS <units>"));
-        Serial.println(F("  SET <pin> ALARM <min> <max>"));
+        Serial.println(F("  SET <pin> <app> <sensor>  - Combined config (e.g., SET 6 CHT MAX6675)"));
+        Serial.println(F("  SET <pin> APPLICATION <application>  - Set measurement type"));
+        Serial.println(F("  SET <pin> SENSOR <sensor>  - Set hardware sensor"));
+        Serial.println(F("  SET <pin> NAME <name>  - Set abbreviated name (8 chars)"));
+        Serial.println(F("  SET <pin> DISPLAY_NAME <name>  - Set full name (24 chars)"));
+        Serial.println(F("  SET <pin> UNITS <units>  - Override display units"));
+        Serial.println(F("  SET <pin> ALARM <min> <max>  - Set alarm thresholds"));
         Serial.println();
         Serial.println(F("Control Commands:"));
-        Serial.println(F("  ENABLE <pin>"));
-        Serial.println(F("  DISABLE <pin>"));
-        Serial.println(F("  CLEAR <pin>"));
-        Serial.println(F("  INFO <pin>"));
+        Serial.println(F("  ENABLE <pin>  - Enable input reading"));
+        Serial.println(F("  DISABLE <pin>  - Disable input reading"));
+        Serial.println(F("  CLEAR <pin>  - Reset input to unconfigured"));
+        Serial.println(F("  INFO <pin>  - Show detailed pin info"));
         Serial.println();
         Serial.println(F("Config Commands:"));
-        Serial.println(F("  SAVE    - Save config to EEPROM"));
-        Serial.println(F("  LOAD    - Load config from EEPROM"));
-        Serial.println(F("  RESET   - Clear all configuration"));
+        Serial.println(F("  SAVE  - Save config to EEPROM"));
+        Serial.println(F("  LOAD  - Load config from EEPROM"));
+        Serial.println(F("  RESET  - Clear all configuration"));
         Serial.println();
         Serial.println(F("System Commands:"));
         Serial.println(F("  CONFIG  - Enter configuration mode (unlock config)"));
-        Serial.println(F("  RUN     - Enter run mode (lock config, resume sensors)"));
-        Serial.println(F("  VERSION - Display firmware and EEPROM version"));
-        Serial.println(F("  DUMP    - Show full configuration"));
+        Serial.println(F("  RUN  - Enter run mode (lock config, resume sensors)"));
+        Serial.println(F("  VERSION  - Display firmware and EEPROM version"));
+        Serial.println(F("  DUMP  - Show full configuration"));
         Serial.println(F("  RELOAD  - Trigger watchdog reset (system reboot)"));
         Serial.println();
         Serial.println(F("Examples:"));
-        Serial.println(F("  SET A2 APPLICATION CHT"));
-        Serial.println(F("  SET A2 SENSOR MAX6675"));
-        Serial.println(F("  SET A2 UNITS CELSIUS"));
+        Serial.println(F("  SET 6 CHT MAX6675  (combined syntax)"));
+        Serial.println(F("  SET A2 APPLICATION COOLANT_TEMP"));
+        Serial.println(F("  SET A2 SENSOR VDO_120C"));
         Serial.println(F("  ENABLE A2"));
         Serial.println(F("  SAVE"));
         return;
@@ -293,6 +294,39 @@ void handleSerialCommand(char* cmd) {
         trim(fieldAndValue);
 
         uint8_t pin = parsePin(pinStr);
+
+        // Try combined syntax: SET <pin> <application> <sensor>
+        // Example: SET 6 CHT MAX6675
+        char* firstToken = fieldAndValue;
+        char* secondSpace = strchr(firstToken, ' ');
+        if (secondSpace) {
+            *secondSpace = '\0';
+            char* secondToken = secondSpace + 1;
+            trim(secondToken);
+
+            Application app = parseApplication(firstToken);
+            Sensor sensor = parseSensor(secondToken);
+
+            if (app != APP_NONE && sensor != SENSOR_NONE) {
+                // Valid combined command
+                bool success = true;
+                success &= setInputApplication(pin, app);
+                success &= setInputSensor(pin, sensor);
+
+                if (success) {
+                    Serial.print(F("Input "));
+                    Serial.print(pinStr);
+                    Serial.print(F(" configured as "));
+                    Serial.print(firstToken);
+                    Serial.print(F(" with "));
+                    Serial.println(secondToken);
+                }
+                return;
+            }
+
+            // Restore space for fallthrough to existing handlers
+            *secondSpace = ' ';
+        }
 
         // SET <pin> APPLICATION <application>
         if (strncmp(fieldAndValue, "APPLICATION ", 12) == 0) {
