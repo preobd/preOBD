@@ -419,32 +419,26 @@ RELOAD
 # 1. Enter config mode (if in RUN mode)
 CONFIG
 
-# 2. Configure sensors
+# 2. Configure sensors (automatically enabled by SET command)
 SET 6 CHT MAX6675
 SET 7 EGT MAX31855
 SET A0 OIL_TEMP VDO_150C
 SET A2 OIL_PRESSURE VDO_10BAR
 
-# 3. Enable all sensors
-ENABLE 6
-ENABLE 7
-ENABLE A0
-ENABLE A2
-
-# 4. Configure outputs
+# 3. Configure outputs
 OUTPUT CAN ENABLE
 OUTPUT CAN INTERVAL 100
 OUTPUT RealDash ENABLE
 OUTPUT RealDash INTERVAL 50
 
-# 5. Set display preferences
+# 4. Set display preferences
 DISPLAY UNITS TEMP F
 DISPLAY UNITS PRESSURE PSI
 
-# 6. Save configuration
+# 5. Save configuration
 SAVE
 
-# 7. Return to run mode
+# 6. Return to run mode
 RUN
 ```
 

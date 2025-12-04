@@ -194,20 +194,13 @@ CAN bus requires 120Ω termination resistors at both ends.
 
 **Configure via serial commands (115200 baud):**
 ```
-SET 6 APPLICATION CHT
-SET 6 SENSOR MAX6675
-ENABLE 6
-
-SET A2 APPLICATION COOLANT_TEMP
-SET A2 SENSOR VDO_120C_LOOKUP
-ENABLE A2
-
-SET A3 APPLICATION OIL_PRESSURE
-SET A3 SENSOR VDO_5BAR
-ENABLE A3
-
+SET 6 CHT MAX6675
+SET A2 COOLANT_TEMP VDO_120C_LOOKUP
+SET A3 OIL_PRESSURE VDO_5BAR
 SAVE
 ```
+
+> Note: SET automatically enables sensors. Use ENABLE only if previously disabled.
 
 ### Serial Commands Reference
 

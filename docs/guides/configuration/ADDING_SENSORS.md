@@ -24,7 +24,6 @@ If your sensor is already in the library, you just need to configure it:
 **Runtime (serial commands) - Combined Syntax (Recommended):**
 ```
 SET A2 COOLANT_TEMP VDO_120C_LOOKUP
-ENABLE A2
 SAVE
 ```
 
@@ -32,11 +31,12 @@ SAVE
 ```
 SET A2 APPLICATION COOLANT_TEMP
 SET A2 SENSOR VDO_120C_LOOKUP
-ENABLE A2
 SAVE
 ```
 
 > **New in v0.4.0:** Combined command syntax allows setting both application and sensor in one line!
+
+> **Note:** The SET command automatically enables the sensor. Use ENABLE only if the sensor was previously disabled.
 
 ---
 
@@ -380,9 +380,7 @@ Your sensor should appear in the list.
 
 **Runtime mode:**
 ```
-SET A0 APPLICATION COOLANT_TEMP
-SET A0 SENSOR MY_CUSTOM_THERMISTOR
-ENABLE A0
+SET A0 COOLANT_TEMP MY_CUSTOM_THERMISTOR
 INFO A0
 ```
 

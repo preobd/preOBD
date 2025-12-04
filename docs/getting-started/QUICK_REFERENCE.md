@@ -38,11 +38,11 @@
 
 **Configure via serial (115200 baud):**
 ```
-SET A2 APPLICATION COOLANT_TEMP
-SET A2 SENSOR VDO_120C_LOOKUP
-ENABLE A2
+SET A2 COOLANT_TEMP VDO_120C_LOOKUP
 SAVE
 ```
+
+> Note: SET automatically enables the sensor. Use ENABLE only if the sensor was previously disabled.
 
 ---
 
@@ -59,9 +59,7 @@ SAVE
 
 **Runtime:**
 ```
-SET 6 APPLICATION CHT
-SET 6 SENSOR MAX6675
-ENABLE 6
+SET 6 CHT MAX6675
 SAVE
 ```
 
@@ -89,9 +87,7 @@ MAX6675 CS  → Pin 6 (or your configured pin)
 
 **Runtime:**
 ```
-SET A2 APPLICATION COOLANT_TEMP
-SET A2 SENSOR VDO_120C_LOOKUP
-ENABLE A2
+SET A2 COOLANT_TEMP VDO_120C_LOOKUP
 SAVE
 ```
 
@@ -119,9 +115,7 @@ Add 1kΩ pull-down resistor: Pin → resistor → GND
 
 **Runtime:**
 ```
-SET A3 APPLICATION OIL_PRESSURE
-SET A3 SENSOR VDO_5BAR
-ENABLE A3
+SET A3 OIL_PRESSURE VDO_5BAR
 SAVE
 ```
 
@@ -147,9 +141,7 @@ Add 1kΩ pull-down resistor: Pin → resistor → GND
 
 **Runtime:**
 ```
-SET A8 APPLICATION PRIMARY_BATTERY
-SET A8 SENSOR VOLTAGE_DIVIDER
-ENABLE A8
+SET A8 PRIMARY_BATTERY VOLTAGE_DIVIDER
 SAVE
 ```
 
@@ -172,9 +164,7 @@ Junction → 22kΩ (3.3V boards) or 6.8kΩ (5V boards) → GND
 
 **Runtime:**
 ```
-SET 5 APPLICATION ENGINE_RPM
-SET 5 SENSOR W_PHASE_RPM
-ENABLE 5
+SET 5 ENGINE_RPM W_PHASE_RPM
 SAVE
 ```
 
@@ -191,9 +181,7 @@ SAVE
 
 **Runtime:**
 ```
-SET 0x76 APPLICATION AMBIENT_TEMP
-SET 0x76 SENSOR BME280_TEMP
-ENABLE 0x76
+SET 0x76 AMBIENT_TEMP BME280_TEMP
 SAVE
 ```
 
@@ -222,9 +210,7 @@ BME280 SCL → SCL pin (board-specific)
 
 **Runtime:**
 ```
-SET 7 APPLICATION COOLANT_LEVEL
-SET 7 SENSOR FLOAT_SWITCH
-ENABLE 7
+SET 7 COOLANT_LEVEL FLOAT_SWITCH
 SAVE
 ```
 
