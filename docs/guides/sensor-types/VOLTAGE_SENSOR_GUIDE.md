@@ -24,7 +24,6 @@ openEMS supports voltage monitoring through resistor voltage dividers. The syste
 *Runtime:*
 ```
 SET A8 PRIMARY_BATTERY VOLTAGE_DIVIDER
-SAVE
 ```
 
 **That's it!** The system automatically selects the correct divider ratio for your board.

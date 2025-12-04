@@ -48,7 +48,6 @@ Hz = (3000 × 12) / 120 = 300 Hz
 
 ```
 SET 5 ENGINE_RPM W_PHASE_RPM
-SAVE
 ```
 
 ---

@@ -39,10 +39,13 @@
 **Configure via serial (115200 baud):**
 ```
 SET A2 COOLANT_TEMP VDO_120C_LOOKUP
+# ... configure more sensors as needed ...
 SAVE
 ```
 
-> Note: SET automatically enables the sensor. Use ENABLE only if the sensor was previously disabled.
+> **Important:** Configure all your sensors first, then use `SAVE` once at the end. Each SAVE writes to EEPROM (limited write cycles).
+>
+> **Note:** SET automatically enables the sensor. Use ENABLE only if the sensor was previously disabled.
 
 ---
 
@@ -60,7 +63,6 @@ SAVE
 **Runtime:**
 ```
 SET 6 CHT MAX6675
-SAVE
 ```
 
 **Wiring:**
@@ -88,7 +90,6 @@ MAX6675 CS  → Pin 6 (or your configured pin)
 **Runtime:**
 ```
 SET A2 COOLANT_TEMP VDO_120C_LOOKUP
-SAVE
 ```
 
 **Wiring:**
@@ -116,7 +117,6 @@ Add 1kΩ pull-down resistor: Pin → resistor → GND
 **Runtime:**
 ```
 SET A3 OIL_PRESSURE VDO_5BAR
-SAVE
 ```
 
 **Wiring:**
@@ -142,7 +142,6 @@ Add 1kΩ pull-down resistor: Pin → resistor → GND
 **Runtime:**
 ```
 SET A8 PRIMARY_BATTERY VOLTAGE_DIVIDER
-SAVE
 ```
 
 **Wiring:**
@@ -165,7 +164,6 @@ Junction → 22kΩ (3.3V boards) or 6.8kΩ (5V boards) → GND
 **Runtime:**
 ```
 SET 5 ENGINE_RPM W_PHASE_RPM
-SAVE
 ```
 
 **⚠️ CRITICAL:** See [W_PHASE_RPM_GUIDE.md](../guides/sensor-types/W_PHASE_RPM_GUIDE.md) for voltage protection circuit. Teensy boards (3.3V) require 22kΩ/4.7kΩ divider with 3.3V zener!
@@ -182,7 +180,6 @@ SAVE
 **Runtime:**
 ```
 SET 0x76 AMBIENT_TEMP BME280_TEMP
-SAVE
 ```
 
 **Wiring:**
@@ -211,8 +208,9 @@ BME280 SCL → SCL pin (board-specific)
 **Runtime:**
 ```
 SET 7 COOLANT_LEVEL FLOAT_SWITCH
-SAVE
 ```
+
+> **💡 Remember:** After configuring all your sensors, use `SAVE` to write to EEPROM. Don't save after every command!
 
 ---
 

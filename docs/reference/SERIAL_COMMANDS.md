@@ -292,6 +292,33 @@ RESET
 RESET CONFIRM
 ```
 
+### Best Practices
+
+**⚠️ Important:** EEPROM has limited write cycles (~100,000 writes). Follow these guidelines:
+
+✅ **DO:**
+- Configure all your sensors, outputs, and settings first
+- Use `SAVE` once at the end of your configuration session
+- Test your configuration in RUN mode before saving
+
+❌ **DON'T:**
+- Save after every single command
+- Repeatedly save the same configuration
+- Use SAVE in automated scripts that run frequently
+
+**Example workflow:**
+```
+CONFIG                            # Enter config mode
+SET 6 CHT MAX6675                 # Configure sensor 1
+SET A2 COOLANT_TEMP VDO_120C      # Configure sensor 2
+SET A3 OIL_PRESSURE VDO_5BAR      # Configure sensor 3
+OUTPUT CAN ENABLE                 # Enable CAN output
+OUTPUT CAN INTERVAL 100           # Set CAN interval
+DISPLAY UNITS TEMP F              # Set temperature units
+SAVE                              # Save everything once
+RUN                               # Test it out
+```
+
 ### EEPROM Layout
 
 ```

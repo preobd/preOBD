@@ -29,7 +29,6 @@ openEMS supports two types of pressure sensors:
 *Runtime:*
 ```
 SET A3 OIL_PRESSURE VDO_5BAR
-SAVE
 ```
 
 **VDO 2-bar boost/intake pressure sensor:**
@@ -44,7 +43,6 @@ SAVE
 *Runtime:*
 ```
 SET A4 BOOST_PRESSURE VDO_2BAR
-SAVE
 ```
 
 ### Generic Linear Sensors
@@ -61,7 +59,6 @@ SAVE
 *Runtime:*
 ```
 SET A5 BOOST_PRESSURE GENERIC_BOOST
-SAVE
 ```
 
 **Freescale MPX4250AP MAP sensor:**

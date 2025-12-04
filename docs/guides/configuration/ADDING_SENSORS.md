@@ -24,19 +24,19 @@ If your sensor is already in the library, you just need to configure it:
 **Runtime (serial commands) - Combined Syntax (Recommended):**
 ```
 SET A2 COOLANT_TEMP VDO_120C_LOOKUP
-SAVE
 ```
 
 **Runtime (serial commands) - Legacy Syntax (Still Supported):**
 ```
 SET A2 APPLICATION COOLANT_TEMP
 SET A2 SENSOR VDO_120C_LOOKUP
-SAVE
 ```
 
 > **New in v0.4.0:** Combined command syntax allows setting both application and sensor in one line!
-
+>
 > **Note:** The SET command automatically enables the sensor. Use ENABLE only if the sensor was previously disabled.
+>
+> **Remember:** Use `SAVE` after configuring all sensors to write to EEPROM. Don't save after every command!
 
 ---
 
