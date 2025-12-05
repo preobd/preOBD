@@ -195,6 +195,15 @@ void showConfigModeMessage() {
     lcd.print("Use serial console");
 }
 
+void enableLCD() {
+    lcd.backlight();
+}
+
+void disableLCD() {
+    lcd.noBacklight();
+    lcd.clear();
+}
+
 #else
 
 void initLCD() {}
@@ -202,5 +211,7 @@ void displaySensor(Input *ptr, byte line) {}
 void updateLCD(Input** inputs, int numInputs) {}
 void clearLCD() {}
 void showConfigModeMessage() {}
+void enableLCD() {}
+void disableLCD() {}
 
 #endif

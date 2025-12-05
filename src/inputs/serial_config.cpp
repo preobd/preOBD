@@ -19,6 +19,10 @@
 #include <string.h>
 #include <ctype.h>
 
+// Display control functions
+extern void enableLCD();
+extern void disableLCD();
+
 // Command buffer - fixed size, no String class
 #define CMD_BUFFER_SIZE 80
 static char commandBuffer[CMD_BUFFER_SIZE];
@@ -1061,6 +1065,7 @@ void handleSerialCommand(char* cmd) {
         // DISPLAY ENABLE
         if (streq(rest, "ENABLE")) {
             systemConfig.displayEnabled = 1;
+            enableLCD();  // Turn on backlight
             Serial.println(F("✓ Display enabled"));
             return;
         }
@@ -1068,6 +1073,7 @@ void handleSerialCommand(char* cmd) {
         // DISPLAY DISABLE
         if (streq(rest, "DISABLE")) {
             systemConfig.displayEnabled = 0;
+            disableLCD();  // Turn off backlight and clear display
             Serial.println(F("✓ Display disabled"));
             return;
         }
