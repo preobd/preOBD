@@ -66,7 +66,7 @@ static uint32_t lastLCDUpdate = 0;
 // Update LCD display in CONFIG mode
 static void updateConfigModeDisplay(uint32_t now) {
     #ifdef ENABLE_LCD
-    if (now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
+    if (systemConfig.displayEnabled && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
@@ -118,7 +118,7 @@ static void updateAlarms(uint32_t now) {
 // Update LCD display in RUN mode
 static void updateDisplay(uint32_t now) {
     #ifdef ENABLE_LCD
-    if (now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
+    if (systemConfig.displayEnabled && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {

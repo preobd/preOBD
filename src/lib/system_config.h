@@ -44,7 +44,8 @@ struct SystemConfig {
     uint8_t outputEnabled[NUM_OUTPUTS];    // 4 bytes (bool per output)
     uint16_t outputInterval[NUM_OUTPUTS];  // 8 bytes (interval ms)
 
-    // Display Settings (5 bytes)
+    // Display Settings (6 bytes)
+    uint8_t displayEnabled;      // Display on/off (bool)
     uint8_t displayType;         // LCD/OLED/None (DisplayType enum)
     uint8_t lcdI2CAddress;       // I2C address (default 0x27)
     Units defaultTempUnits;      // CELSIUS/FAHRENHEIT (Units enum)
@@ -69,7 +70,7 @@ struct SystemConfig {
     // Physical Constants (4 bytes)
     float seaLevelPressure;      // hPa for altitude
 
-    uint8_t reserved[7];         // Future expansion (increased from 3 to 7)
+    uint8_t reserved[6];         // Future expansion (reduced from 7 to 6)
 };
 
 // Global system config instance

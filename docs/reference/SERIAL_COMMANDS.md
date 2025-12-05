@@ -121,6 +121,68 @@ Example:
   Command: SET 5 RPM 12 3.0 1.02 2000 100 8000
 ```
 
+#### Thermistor and Pressure Calibration
+
+Custom calibrations for thermistor and pressure sensors.
+
+**Clear Custom Calibration:**
+```
+SET <pin> CALIBRATION PRESET
+```
+Reverts to sensor library preset calibration.
+
+**Pressure Linear Calibration:**
+```
+SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>
+```
+- `vmin`, `vmax` - Voltage range (V), typically 0.5-4.5V
+- `pmin`, `pmax` - Pressure range (bar)
+
+Example:
+```
+SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 7.0
+```
+
+**Generic Bias Resistor:**
+```
+SET <pin> BIAS <resistor>
+```
+Set bias resistor (Ω) for Steinhart-Hart, Lookup, or Pressure Polynomial calibrations.
+
+Examples:
+```
+SET A0 BIAS 4700    # 4.7kΩ bias resistor
+SET A2 BIAS 2200    # 2.2kΩ for VDO sensors
+```
+
+**Steinhart-Hart Calibration:**
+```
+SET <pin> STEINHART <bias_r> <a> <b> <c>
+```
+For thermistors with Steinhart-Hart coefficients. Supports scientific notation.
+
+Example:
+```
+SET A0 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
+```
+
+**Pressure Polynomial Calibration:**
+```
+SET <pin> PRESSURE_POLY <bias_r> <a> <b> <c>
+```
+For VDO-style polynomial pressure sensors.
+
+Example:
+```
+SET A1 PRESSURE_POLY 184 -6.75e-4 2.54e-6 1.87e-9
+```
+
+**Query Calibration:**
+```
+INFO <pin> CALIBRATION
+```
+Show active calibration values (custom or preset).
+
 ### Input Control
 
 ```
@@ -206,6 +268,8 @@ Configure display settings at runtime.
 
 ```
 DISPLAY STATUS                           # Show current configuration
+DISPLAY ENABLE                           # Enable display
+DISPLAY DISABLE                          # Disable display
 DISPLAY TYPE <LCD|OLED|NONE>            # Set display type
 DISPLAY LCD ADDRESS <hex>                # Set I2C address
 DISPLAY UNITS TEMP <C|F>                 # Default temperature units
@@ -216,6 +280,12 @@ DISPLAY UNITS ELEVATION <M|FT>          # Default elevation units
 ### Examples
 
 ```
+# Temporarily disable display (saves battery)
+DISPLAY DISABLE
+
+# Re-enable display
+DISPLAY ENABLE
+
 # Switch to OLED display
 DISPLAY TYPE OLED
 
@@ -231,9 +301,6 @@ DISPLAY UNITS PRESSURE PSI
 # Use feet for elevation
 DISPLAY UNITS ELEVATION FT
 
-# Disable display
-DISPLAY TYPE NONE
-
 # Check current settings
 DISPLAY STATUS
 ```
@@ -246,6 +313,7 @@ DISPLAY STATUS
 Shows:
 ```
 === Display Configuration ===
+Status: Enabled
 Type: LCD
 LCD I2C Address: 0x27
 Temperature Units: Celsius
@@ -263,19 +331,17 @@ Advanced system parameters and timing intervals.
 
 ```
 SYSTEM STATUS                    # Show all system configuration
-SYSTEM VDO_BIAS <ohms>          # VDO pull-down resistor (100-10000)
 SYSTEM SEA_LEVEL <hPa>          # Sea level pressure (800-1200)
 SYSTEM INTERVAL SENSOR <ms>     # Sensor read interval (10-10000)
 SYSTEM INTERVAL ALARM <ms>      # Alarm check interval (10-10000)
 SYSTEM INTERVAL LCD <ms>        # LCD update interval (10-10000)
 ```
 
+Note: `SYSTEM STATUS` also displays compile-time defaults like `DEFAULT_BIAS_RESISTOR`.
+
 ### Examples
 
 ```
-# Configure VDO bias resistor for 2.2k sensors
-SYSTEM VDO_BIAS 2200
-
 # Set sea level pressure for accurate altitude
 SYSTEM SEA_LEVEL 1013.25
 
@@ -554,16 +620,6 @@ RELOAD  # Reboot to reinitialize display
 
 ### Adjust for Different VDO Sensors
 
-```
-# Switch to 2.2k VDO sensors
-SYSTEM VDO_BIAS 2200
-SAVE
-
-# Switch back to 1k VDO sensors
-SYSTEM VDO_BIAS 1000
-SAVE
-```
-
 ---
 
 ## Command Tips
@@ -571,6 +627,7 @@ SAVE
 ### Pin Notation
 - Digital pins: `0`, `1`, `2`, etc.
 - Analog pins: `A0`, `A1`, `A2`, etc.
+- I2C sensors: `I2C` (for BME280, etc.)
 - SPI pins: `10`, `11`, `12`, `13` (standard SPI bus)
 - Special: `18`, `19` (interrupt-capable for RPM)
 

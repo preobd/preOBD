@@ -84,8 +84,10 @@ void resetSystemConfig() {
 
     // Display defaults
     #ifdef ENABLE_LCD
+    systemConfig.displayEnabled = 1;
     systemConfig.displayType = DISPLAY_LCD;
     #else
+    systemConfig.displayEnabled = 0;
     systemConfig.displayType = DISPLAY_NONE;
     #endif
 
@@ -119,7 +121,7 @@ void resetSystemConfig() {
     systemConfig.seaLevelPressure = SEA_LEVEL_PRESSURE_HPA;
 
     // Reserved space
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 6; i++) {
         systemConfig.reserved[i] = 0;
     }
 

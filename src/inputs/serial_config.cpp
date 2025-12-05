@@ -262,6 +262,8 @@ void handleSerialCommand(char* cmd) {
         Serial.println();
         Serial.println(F("Display Commands:"));
         Serial.println(F("  DISPLAY STATUS  - Show display configuration"));
+        Serial.println(F("  DISPLAY ENABLE  - Enable display"));
+        Serial.println(F("  DISPLAY DISABLE  - Disable display"));
         Serial.println(F("  DISPLAY TYPE <LCD|OLED|NONE>  - Set display type"));
         Serial.println(F("  DISPLAY LCD ADDRESS <hex>  - Set I2C address (e.g., 0x27)"));
         Serial.println(F("  DISPLAY UNITS TEMP <C|F>  - Default temperature units"));
@@ -1031,6 +1033,8 @@ void handleSerialCommand(char* cmd) {
         // DISPLAY STATUS
         if (streq(rest, "STATUS")) {
             Serial.println(F("=== Display Configuration ==="));
+            Serial.print(F("Status: "));
+            Serial.println(systemConfig.displayEnabled ? F("Enabled") : F("Disabled"));
             Serial.print(F("Type: "));
             switch (systemConfig.displayType) {
                 case DISPLAY_NONE: Serial.println(F("None")); break;
@@ -1051,6 +1055,20 @@ void handleSerialCommand(char* cmd) {
             }
             Serial.print(F("Elevation Units: "));
             Serial.println(systemConfig.defaultElevUnits == METERS ? F("Meters") : F("Feet"));
+            return;
+        }
+
+        // DISPLAY ENABLE
+        if (streq(rest, "ENABLE")) {
+            systemConfig.displayEnabled = 1;
+            Serial.println(F("✓ Display enabled"));
+            return;
+        }
+
+        // DISPLAY DISABLE
+        if (streq(rest, "DISABLE")) {
+            systemConfig.displayEnabled = 0;
+            Serial.println(F("✓ Display disabled"));
             return;
         }
 
@@ -1144,6 +1162,8 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("ERROR: Unknown DISPLAY command"));
         Serial.println(F("  Valid commands:"));
         Serial.println(F("    DISPLAY STATUS"));
+        Serial.println(F("    DISPLAY ENABLE"));
+        Serial.println(F("    DISPLAY DISABLE"));
         Serial.println(F("    DISPLAY TYPE <LCD|OLED|NONE>"));
         Serial.println(F("    DISPLAY LCD ADDRESS <hex>"));
         Serial.println(F("    DISPLAY UNITS TEMP <C|F>"));
