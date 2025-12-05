@@ -1477,6 +1477,7 @@ void handleSerialCommand(char* cmd) {
             case BAR: Serial.print(F("Bar")); break;
             case PSI: Serial.print(F("PSI")); break;
             case KPA: Serial.print(F("kPa")); break;
+            default: Serial.print(F("Unknown")); break;
         }
         Serial.print(F(", Elev="));
         Serial.println(systemConfig.defaultElevUnits == METERS ? F("M") : F("Ft"));
