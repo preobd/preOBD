@@ -95,10 +95,16 @@ void processSerialCommands() {
 
 /**
  * Parse a pin string into a pin number.
- * Accepts "A0"-"A15" for analog pins, or numeric strings for digital pins.
+ * Accepts "A0"-"A15" for analog pins, numeric strings for digital pins,
+ * or "I2C" for I2C sensors (BME280, etc).
  */
 static uint8_t parsePin(const char* pinStr) {
     if (!pinStr) return 0;
+
+    // Handle "I2C" keyword for I2C sensors (BME280, etc)
+    if (streq(pinStr, "I2C")) {
+        return 0;  // I2C sensors use pin 0 as placeholder
+    }
 
     if (toupper(pinStr[0]) == 'A') {
         return A0 + atoi(pinStr + 1);
@@ -285,6 +291,7 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  SET 6 CHT MAX6675  (combined syntax)"));
         Serial.println(F("  SET A2 APPLICATION COOLANT_TEMP"));
         Serial.println(F("  SET A2 SENSOR VDO_120C"));
+        Serial.println(F("  SET I2C AMBIENT_TEMP BME280_TEMP  (I2C sensors)"));
         Serial.println(F("  SET A1 PRESSURE_LINEAR 0.5 4.5 0 7  (custom pressure)"));
         Serial.println(F("  SET A0 BIAS 4700  (change bias resistor)"));
         Serial.println(F("  ENABLE A2"));

@@ -1101,9 +1101,11 @@ void listSensors() {
     Serial.println(F("Other:"));
     Serial.println(F("  VOLTAGE_DIVIDER        - Battery voltage (12V divider)"));
     Serial.println(F("  W_PHASE_RPM            - W-phase alternator RPM"));
-    Serial.println(F("  BME280_TEMP            - BME280 temperature"));
-    Serial.println(F("  BME280_PRESSURE        - BME280 barometric pressure"));
-    Serial.println(F("  BME280_HUMIDITY        - BME280 relative humidity"));
-    Serial.println(F("  BME280_ELEVATION       - BME280 altitude"));
+    Serial.println(F("  BME280_TEMP            - BME280 temperature (I2C)"));
+    Serial.println(F("  BME280_PRESSURE        - BME280 barometric pressure (I2C)"));
+    Serial.println(F("  BME280_HUMIDITY        - BME280 relative humidity (I2C)"));
+    Serial.println(F("  BME280_ELEVATION       - BME280 altitude (I2C)"));
     Serial.println(F("  FLOAT_SWITCH           - Float/level switch (digital)"));
+    Serial.println();
+    Serial.println(F("Note: Use 'I2C' as pin for BME280 sensors (e.g. SET I2C AMBIENT_TEMP BME280_TEMP)"));
 }
