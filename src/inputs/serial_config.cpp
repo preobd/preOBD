@@ -229,6 +229,7 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  SET <pin> DISPLAY_NAME <name>  - Set full name (24 chars)"));
         Serial.println(F("  SET <pin> UNITS <units>  - Override display units"));
         Serial.println(F("  SET <pin> ALARM <min> <max>  - Set alarm thresholds"));
+        Serial.println(F("  SET <pin> RPM <poles> <ratio> [<mult>] <timeout> <min> <max>"));
         Serial.println();
         Serial.println(F("Control Commands:"));
         Serial.println(F("  ENABLE <pin>  - Enable input reading"));
@@ -459,6 +460,131 @@ void handleSerialCommand(char* cmd) {
                 Serial.print(F(" - "));
                 Serial.println(maxVal);
             }
+            return;
+        }
+
+        // SET <pin> RPM <poles> <ratio> [<mult>] <timeout> <min> <max>
+        // Supports 5 parameters (mult defaults to 1.0) or 6 parameters (custom mult)
+        if (strncmp(fieldAndValue, "RPM ", 4) == 0) {
+            char* params = fieldAndValue + 4;
+            trim(params);
+
+            // Count tokens to determine if calibration_mult is provided
+            char paramsCopy[80];
+            strncpy(paramsCopy, params, sizeof(paramsCopy) - 1);
+            paramsCopy[sizeof(paramsCopy) - 1] = '\0';
+
+            int tokenCount = 0;
+            char* token = strtok(paramsCopy, " ");
+            while (token != nullptr && tokenCount < 7) {
+                tokenCount++;
+                token = strtok(nullptr, " ");
+            }
+
+            if (tokenCount != 5 && tokenCount != 6) {
+                Serial.println(F("ERROR: RPM requires 5 or 6 parameters"));
+                Serial.println(F("  Usage: SET <pin> RPM <poles> <ratio> <timeout> <min> <max>"));
+                Serial.println(F("     or: SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>"));
+                Serial.println(F("  Example: SET 5 RPM 12 3.0 2000 100 8000"));
+                Serial.println(F("       or: SET 5 RPM 12 3.0 1.02 2000 100 8000"));
+                return;
+            }
+
+            // Parse parameters
+            byte poles;
+            float pulley_ratio;
+            float calibration_mult = 1.0;  // Default
+            uint16_t timeout_ms;
+            uint16_t min_rpm;
+            uint16_t max_rpm;
+
+            token = strtok(params, " ");
+            if (!token) { Serial.println(F("ERROR: Missing poles")); return; }
+            poles = (byte)atoi(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) { Serial.println(F("ERROR: Missing pulley_ratio")); return; }
+            pulley_ratio = atof(token);
+
+            if (tokenCount == 6) {
+                // 6 parameters: custom calibration_mult provided
+                token = strtok(nullptr, " ");
+                if (!token) { Serial.println(F("ERROR: Missing calibration_mult")); return; }
+                calibration_mult = atof(token);
+            }
+
+            token = strtok(nullptr, " ");
+            if (!token) { Serial.println(F("ERROR: Missing timeout_ms")); return; }
+            timeout_ms = (uint16_t)atoi(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) { Serial.println(F("ERROR: Missing min_rpm")); return; }
+            min_rpm = (uint16_t)atoi(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) { Serial.println(F("ERROR: Missing max_rpm")); return; }
+            max_rpm = (uint16_t)atoi(token);
+
+            // Validate parameters
+            if (poles < 2 || poles > 32) {
+                Serial.println(F("ERROR: Poles must be between 2 and 32"));
+                return;
+            }
+            if (pulley_ratio < 0.5 || pulley_ratio > 10.0) {
+                Serial.println(F("ERROR: Pulley ratio must be between 0.5 and 10.0"));
+                return;
+            }
+            if (calibration_mult < 0.5 || calibration_mult > 2.0) {
+                Serial.println(F("ERROR: Calibration multiplier must be between 0.5 and 2.0"));
+                return;
+            }
+            if (timeout_ms < 100 || timeout_ms > 10000) {
+                Serial.println(F("ERROR: Timeout must be between 100 and 10000 ms"));
+                return;
+            }
+            if (min_rpm >= max_rpm) {
+                Serial.println(F("ERROR: min_rpm must be less than max_rpm"));
+                return;
+            }
+
+            // Apply custom calibration
+            Input* input = getInputByPin(pin);
+            if (!input) {
+                Serial.println(F("ERROR: Input not configured"));
+                return;
+            }
+
+            // Set custom calibration
+            input->flags.useCustomCalibration = true;
+            input->customCalibration.rpm.poles = poles;
+            input->customCalibration.rpm.pulley_ratio = pulley_ratio;
+            input->customCalibration.rpm.calibration_mult = calibration_mult;
+            input->customCalibration.rpm.timeout_ms = timeout_ms;
+            input->customCalibration.rpm.min_rpm = min_rpm;
+            input->customCalibration.rpm.max_rpm = max_rpm;
+
+            Serial.print(F("RPM calibration set for pin "));
+            Serial.println(pinStr);
+            Serial.print(F("  Poles: "));
+            Serial.println(poles);
+            Serial.print(F("  Pulley Ratio: "));
+            Serial.print(pulley_ratio, 2);
+            Serial.println(F(":1"));
+            Serial.print(F("  Calibration Mult: "));
+            Serial.println(calibration_mult, 4);
+            Serial.print(F("  Timeout: "));
+            Serial.print(timeout_ms);
+            Serial.println(F(" ms"));
+            Serial.print(F("  Valid Range: "));
+            Serial.print(min_rpm);
+            Serial.print(F("-"));
+            Serial.print(max_rpm);
+            Serial.println(F(" RPM"));
+            float effective_ppr = (poles / 2.0) * pulley_ratio * calibration_mult;
+            Serial.print(F("  Effective: "));
+            Serial.print(effective_ppr, 2);
+            Serial.println(F(" pulses/engine-rev"));
+
             return;
         }
 
