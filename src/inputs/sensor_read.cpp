@@ -478,12 +478,51 @@ void initFloatSwitch(Input* ptr) {
 
 // Read W-Phase RPM
 void readWPhaseRPM(Input *ptr) {
-    // Note: RPM calibration not yet in union, using defaults
-    // TODO: Add RPM calibration to Input union
-    float pulses_per_rev = 3.0;  // Default for 12-pole alternator
-    uint16_t timeout_ms = 2000;  // 2 second timeout
-    uint16_t min_rpm = 100;
-    uint16_t max_rpm = 10000;
+    // Get calibration parameters
+    byte poles;
+    float pulley_ratio;
+    float calibration_mult;
+    uint16_t timeout_ms;
+    uint16_t min_rpm;
+    uint16_t max_rpm;
+
+    if (ptr->flags.useCustomCalibration) {
+        // Use custom calibration from Input union
+        poles = ptr->customCalibration.rpm.poles;
+        pulley_ratio = ptr->customCalibration.rpm.pulley_ratio;
+        calibration_mult = ptr->customCalibration.rpm.calibration_mult;
+        timeout_ms = ptr->customCalibration.rpm.timeout_ms;
+        min_rpm = ptr->customCalibration.rpm.min_rpm;
+        max_rpm = ptr->customCalibration.rpm.max_rpm;
+    } else {
+        // Use preset calibration from sensor library
+        const SensorInfo* sensorInfo = getSensorInfo(ptr->sensor);
+        if (sensorInfo && sensorInfo->defaultCalibration) {
+            const RPMCalibration* cal = (const RPMCalibration*)sensorInfo->defaultCalibration;
+            poles = cal->poles;
+            pulley_ratio = cal->pulley_ratio;
+            calibration_mult = cal->calibration_mult;
+            timeout_ms = cal->timeout_ms;
+            min_rpm = cal->min_rpm;
+            max_rpm = cal->max_rpm;
+        } else {
+            // Fallback defaults (12-pole, 3:1 ratio)
+            poles = 12;             // Most common automotive alternator
+            pulley_ratio = 3.0;     // Typical automotive ratio
+            calibration_mult = 1.0; // No adjustment
+            timeout_ms = 2000;
+            min_rpm = 100;
+            max_rpm = 10000;
+        }
+    }
+
+    // Calculate pulses per alternator revolution from poles
+    // A 12-pole alternator produces 6 pulses per revolution (poles/2)
+    float pulses_per_rev = (float)poles / 2.0;
+
+    // Calculate base calibration factor (pulses per engine revolution)
+    // Accounts for both alternator pulses and pulley ratio
+    float calibration_factor = pulses_per_rev * pulley_ratio;
 
     // Calculate time since last pulse
     unsigned long now = millis();
@@ -495,18 +534,18 @@ void readWPhaseRPM(Input *ptr) {
         return;
     }
 
-    // Calculate RPM from pulse interval
-    // Formula: RPM = (60,000,000 µs/min) / (interval_µs × pulses_per_rev)
+    // Calculate ENGINE RPM from pulse interval
+    // Formula: Engine_RPM = (60,000,000 / (interval × pulses_per_rev × pulley_ratio)) × calibration_mult
     if (rpm_pulse_interval > 0) {
-        float rpm = 60000000.0 / (rpm_pulse_interval * pulses_per_rev);
+        float engine_rpm = (60000000.0 / (rpm_pulse_interval * calibration_factor)) * calibration_mult;
 
         // Validate range
-        if (rpm >= min_rpm && rpm <= max_rpm) {
-            // Apply simple smoothing filter (optional)
+        if (engine_rpm >= min_rpm && engine_rpm <= max_rpm) {
+            // Apply simple smoothing filter
             if (!isnan(ptr->value) && ptr->value > 0) {
-                ptr->value = (ptr->value * 0.8) + (rpm * 0.2);
+                ptr->value = (ptr->value * 0.8) + (engine_rpm * 0.2);
             } else {
-                ptr->value = rpm;
+                ptr->value = engine_rpm;
             }
         } else {
             ptr->value = NAN;  // Out of range

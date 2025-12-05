@@ -175,14 +175,15 @@ union CalibrationOverride {
         float offset;
     } voltageDivider;
     
-    // RPM sensor (10 bytes + padding)
+    // RPM sensor (15 bytes + padding)
     struct {
         byte poles;
-        float pulses_per_rev;
+        float pulley_ratio;
+        float calibration_mult;
         uint16_t timeout_ms;
         uint16_t min_rpm;
         uint16_t max_rpm;
-        byte padding[2];
+        byte padding[1];
     } rpm;
     
     // Raw bytes for memset/EEPROM operations
