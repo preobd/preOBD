@@ -66,11 +66,10 @@ struct SystemConfig {
     uint8_t testModePin;
     uint16_t reserved2;
 
-    // Physical Constants (8 bytes)
-    float vdoBiasResistor;       // Pull-down resistor (ohms)
+    // Physical Constants (4 bytes)
     float seaLevelPressure;      // hPa for altitude
 
-    uint8_t reserved[3];         // Future expansion
+    uint8_t reserved[7];         // Future expansion (increased from 3 to 7)
 };
 
 // Global system config instance

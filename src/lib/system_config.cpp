@@ -116,11 +116,10 @@ void resetSystemConfig() {
     systemConfig.reserved2 = 0;
 
     // Physical constants
-    systemConfig.vdoBiasResistor = VDO_BIAS_RESISTOR;
     systemConfig.seaLevelPressure = SEA_LEVEL_PRESSURE_HPA;
 
     // Reserved space
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 7; i++) {
         systemConfig.reserved[i] = 0;
     }
 

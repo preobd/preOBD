@@ -260,7 +260,6 @@ void handleSerialCommand(char* cmd) {
         Serial.println();
         Serial.println(F("System Commands (Advanced):"));
         Serial.println(F("  SYSTEM STATUS  - Show system configuration"));
-        Serial.println(F("  SYSTEM VDO_BIAS <ohms>  - VDO resistor value"));
         Serial.println(F("  SYSTEM SEA_LEVEL <hPa>  - Sea level pressure"));
         Serial.println(F("  SYSTEM INTERVAL SENSOR <ms>  - Sensor read interval"));
         Serial.println(F("  SYSTEM INTERVAL ALARM <ms>  - Alarm check interval"));
@@ -1150,9 +1149,6 @@ void handleSerialCommand(char* cmd) {
         // SYSTEM STATUS
         if (streq(rest, "STATUS")) {
             Serial.println(F("=== System Configuration ==="));
-            Serial.print(F("VDO Bias Resistor: "));
-            Serial.print(systemConfig.vdoBiasResistor);
-            Serial.println(F(" ohms"));
             Serial.print(F("Sea Level Pressure: "));
             Serial.print(systemConfig.seaLevelPressure);
             Serial.println(F(" hPa"));
@@ -1183,22 +1179,6 @@ void handleSerialCommand(char* cmd) {
             Serial.print(F("  LCD Update: "));
             Serial.print(systemConfig.lcdUpdateInterval);
             Serial.println(F("ms"));
-            return;
-        }
-
-        // SYSTEM VDO_BIAS <ohms>
-        if (strncmp(rest, "VDO_BIAS ", 9) == 0) {
-            char* valueStr = rest + 9;
-            trim(valueStr);
-            float value = atof(valueStr);
-            if (value >= 100 && value <= 10000) {
-                systemConfig.vdoBiasResistor = value;
-                Serial.print(F("VDO bias resistor set to "));
-                Serial.print(value);
-                Serial.println(F(" ohms"));
-            } else {
-                Serial.println(F("ERROR: VDO bias must be 100-10000 ohms"));
-            }
             return;
         }
 
@@ -1269,7 +1249,6 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("ERROR: Unknown SYSTEM command"));
         Serial.println(F("  Valid commands:"));
         Serial.println(F("    SYSTEM STATUS"));
-        Serial.println(F("    SYSTEM VDO_BIAS <ohms>"));
         Serial.println(F("    SYSTEM SEA_LEVEL <hPa>"));
         Serial.println(F("    SYSTEM INTERVAL SENSOR <ms>"));
         Serial.println(F("    SYSTEM INTERVAL ALARM <ms>"));
@@ -1485,9 +1464,7 @@ void handleSerialCommand(char* cmd) {
 
         // Show system config
         Serial.println(F("=== System Configuration ==="));
-        Serial.print(F("VDO Bias: "));
-        Serial.print(systemConfig.vdoBiasResistor);
-        Serial.print(F(" ohms, Sea Level: "));
+        Serial.print(F("Sea Level: "));
         Serial.print(systemConfig.seaLevelPressure);
         Serial.println(F(" hPa"));
         Serial.print(F("Intervals: Sensor="));
