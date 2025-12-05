@@ -1057,12 +1057,26 @@ void listAllInputs() {
 
 void listApplicationPresets() {
     Serial.println(F("Available Application Presets:"));
-    Serial.println(F("  CHT             - Cylinder Head Temp"));
-    Serial.println(F("  EGT             - Exhaust Gas Temp"));
-    Serial.println(F("  COOLANT_TEMP    - Coolant Temperature"));
-    Serial.println(F("  OIL_TEMP        - Oil Temperature"));
-    Serial.println(F("  OIL_PRESSURE    - Oil Pressure"));
-    Serial.println(F("  PRIMARY_BATTERY - Primary Battery Voltage"));
+    Serial.println(F("Temperature:"));
+    Serial.println(F("  CHT                 - Cylinder Head Temp"));
+    Serial.println(F("  EGT                 - Exhaust Gas Temp"));
+    Serial.println(F("  COOLANT_TEMP        - Coolant Temperature"));
+    Serial.println(F("  OIL_TEMP            - Oil Temperature"));
+    Serial.println(F("  TCASE_TEMP          - Transfer Case/Trans Temp"));
+    Serial.println(F("  AMBIENT_TEMP        - Outside Air Temp"));
+    Serial.println(F("Pressure:"));
+    Serial.println(F("  OIL_PRESSURE        - Oil Pressure"));
+    Serial.println(F("  BOOST_PRESSURE      - Turbo/Supercharger Boost"));
+    Serial.println(F("  FUEL_PRESSURE       - Fuel System Pressure"));
+    Serial.println(F("  BAROMETRIC_PRESSURE - Atmospheric Pressure"));
+    Serial.println(F("Electrical:"));
+    Serial.println(F("  PRIMARY_BATTERY     - Main Battery Voltage"));
+    Serial.println(F("  AUXILIARY_BATTERY   - Aux Battery Voltage"));
+    Serial.println(F("Other:"));
+    Serial.println(F("  COOLANT_LEVEL       - Coolant Level (Float)"));
+    Serial.println(F("  HUMIDITY            - Relative Humidity"));
+    Serial.println(F("  ELEVATION           - Altitude"));
+    Serial.println(F("  ENGINE_RPM          - Engine Speed (W-phase)"));
 }
 
 void listSensors() {
