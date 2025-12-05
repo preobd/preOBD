@@ -131,4 +131,17 @@ static const PROGMEM LinearCalibration mpx4250ap_linear_cal = {
     .pressure_max = 2.5     // 250 kPa = 2.5 bar
 };
 
+// ===== RPM CALIBRATION =====
+
+// Default W-Phase RPM calibration (12-pole alternator, 3:1 pulley ratio)
+// Suitable for most automotive alternators
+static const PROGMEM RPMCalibration default_rpm_cal = {
+    .poles = 12,             // Most common automotive alternator
+    .pulley_ratio = 3.0,     // Typical automotive ratio (range 2.5-3.5:1)
+    .calibration_mult = 1.0, // No fine-tuning by default
+    .timeout_ms = 2000,      // 2 seconds without pulse = engine stopped
+    .min_rpm = 100,          // Minimum valid RPM (reject noise)
+    .max_rpm = 10000         // Maximum valid RPM (reject spikes)
+};
+
 #endif // SENSOR_CALIBRATION_DATA_H

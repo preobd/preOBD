@@ -212,8 +212,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .readFunction = readWPhaseRPM,
         .initFunction = initWPhaseRPM,
         .measurementType = MEASURE_RPM,
-        .calibrationType = CAL_NONE,
-        .defaultCalibration = nullptr,
+        .calibrationType = CAL_RPM,
+        .defaultCalibration = &default_rpm_cal,
         .minReadInterval = SENSOR_READ_INTERVAL_MS
     },
 
