@@ -140,6 +140,10 @@ static Sensor parseSensor(const char* sensorStr) {
     if (streq(sensorStr, "VDO_150C_LOOKUP")) return VDO_150C_LOOKUP;
     if (streq(sensorStr, "VDO_120C_STEINHART")) return VDO_120C_STEINHART;
     if (streq(sensorStr, "VDO_150C_STEINHART")) return VDO_150C_STEINHART;
+    if (streq(sensorStr, "THERMISTOR_LOOKUP")) return THERMISTOR_LOOKUP;
+    if (streq(sensorStr, "THERMISTOR_STEINHART")) return THERMISTOR_STEINHART;
+    if (streq(sensorStr, "GENERIC_BOOST")) return GENERIC_BOOST;
+    if (streq(sensorStr, "MPX4250AP")) return MPX4250AP;
     if (streq(sensorStr, "VDO_2BAR")) return VDO_2BAR;
     if (streq(sensorStr, "VDO_5BAR")) return VDO_5BAR;
     if (streq(sensorStr, "VOLTAGE_DIVIDER")) return VOLTAGE_DIVIDER;
