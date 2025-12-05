@@ -60,6 +60,67 @@ SET A0 UNITS PSI
 SET A0 ALARM 10 80
 ```
 
+### Advanced Calibration (Runtime)
+
+Custom sensor calibrations can be set at runtime (stored in EEPROM when saved).
+
+#### RPM Calibration
+
+For W-phase alternator RPM sensors. Allows custom alternator specifications and pulley ratio.
+
+**Syntax:**
+```
+SET <pin> RPM <poles> <ratio> <timeout> <min> <max>
+SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>
+```
+
+**Parameters:**
+- `poles` - Alternator pole count (8, 10, 12, 14, 16)
+- `ratio` - Pulley ratio (alternator/engine, typically 2.0-3.5)
+- `mult` - (Optional) Fine-tuning multiplier (default 1.0)
+- `timeout` - Zero RPM timeout in ms (100-10000)
+- `min` - Minimum valid RPM (reject noise)
+- `max` - Maximum valid RPM (reject spikes)
+
+**Examples:**
+```
+# Default setup: 12-pole, 3:1 ratio
+SET 5 RPM 12 3.0 2000 100 8000
+
+# Fine-tuned: 12-pole, 3:1 ratio, +2% adjustment
+SET 5 RPM 12 3.0 1.02 2000 100 8000
+
+# Older vehicle: 12-pole, 2:1 ratio
+SET 5 RPM 12 2.0 2000 100 8000
+
+# High-output alternator: 18-pole, 3:1 ratio
+SET 5 RPM 18 3.0 2000 300 8000
+```
+
+**Determining your pulley ratio:**
+```
+Ratio = Crank_Pulley_Diameter / Alt_Pulley_Diameter
+
+Example:
+  Crank pulley: 6 inches
+  Alt pulley: 2 inches
+  Ratio = 6 / 2 = 3.0 (3:1)
+```
+
+**Fine-tuning calibration:**
+```
+1. Set correct poles and estimated ratio
+2. Compare to external tachometer
+3. Calculate: mult = Actual_RPM / Displayed_RPM
+4. Update with 6-parameter command
+
+Example:
+  External shows: 2040 RPM
+  openEMS shows: 2000 RPM
+  mult = 2040 / 2000 = 1.02
+  Command: SET 5 RPM 12 3.0 1.02 2000 100 8000
+```
+
 ### Input Control
 
 ```
