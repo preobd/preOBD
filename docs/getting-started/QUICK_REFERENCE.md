@@ -172,14 +172,14 @@ SET 5 ENGINE_RPM W_PHASE_RPM
 
 **Compile-Time:**
 ```cpp
-#define INPUT_5_PIN            0x76  // I2C address
+#define INPUT_5_PIN            0      // I2C sensor (auto-detected at 0x76/0x77)
 #define INPUT_5_APPLICATION    AMBIENT_TEMP
 #define INPUT_5_SENSOR         BME280_TEMP
 ```
 
 **Runtime:**
 ```
-SET 0x76 AMBIENT_TEMP BME280_TEMP
+SET I2C AMBIENT_TEMP BME280_TEMP
 ```
 
 **Wiring:**
@@ -253,7 +253,7 @@ SET 7 COOLANT_LEVEL FLOAT_SWITCH
 
 - Analog pins: `A0`, `A1`, `A2`, ... `A15`
 - Digital pins: `0`, `1`, `2`, ... `53`
-- I2C addresses: `0x76`, `0x77` (for BME280)
+- I2C sensors: `I2C` (for BME280, auto-detected) or `0` in compile-time mode
 
 ### Available Units
 

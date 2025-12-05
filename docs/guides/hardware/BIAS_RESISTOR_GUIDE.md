@@ -15,9 +15,9 @@
 The default in openEMS is **1kΩ**. You can change this in `config.h`:
 
 ```cpp
-#define VDO_BIAS_RESISTOR 1000.0    // Default: 1kΩ
-// #define VDO_BIAS_RESISTOR 470.0  // Maximum resolution
-// #define VDO_BIAS_RESISTOR 2200.0 // Low power
+#define DEFAULT_BIAS_RESISTOR 1000.0    // Default: 1kΩ
+// #define DEFAULT_BIAS_RESISTOR 470.0  // Maximum resolution
+// #define DEFAULT_BIAS_RESISTOR 2200.0 // Low power
 ```
 
 ---
@@ -193,7 +193,7 @@ In `config.h`, set your chosen value:
 ```cpp
 // Bias resistor for VDO temperature and pressure sensors
 // Options: 470.0 (max resolution), 1000.0 (balanced), 2200.0 (low power)
-#define VDO_BIAS_RESISTOR 1000.0
+#define DEFAULT_BIAS_RESISTOR 1000.0
 ```
 
 This value is used by the calibration system to correctly calculate resistance from ADC readings.
@@ -214,7 +214,7 @@ VCC (5V or 3.3V)
    GND
 ```
 
-**Important:** The software value must match your physical resistor. If you have 2.2kΩ resistors installed but set `VDO_BIAS_RESISTOR` to 1000.0, your readings will be incorrect.
+**Important:** The software value must match your physical resistor. If you have 2.2kΩ resistors installed but set `DEFAULT_BIAS_RESISTOR` to 1000.0, your readings will be incorrect.
 
 ### Resistor Specifications
 
@@ -228,7 +228,7 @@ VCC (5V or 3.3V)
 
 ### Readings seem wrong after changing resistor
 
-- Verify `VDO_BIAS_RESISTOR` in config.h matches physical resistor
+- Verify `DEFAULT_BIAS_RESISTOR` in config.h matches physical resistor
 - Check resistor is installed correctly (between analog pin and GND)
 - Measure actual resistor value with multimeter (1% tolerance matters)
 
@@ -287,6 +287,18 @@ The 2.2kΩ value became common in hobbyist projects because:
 4. It's a common resistor value
 
 However, this approach optimizes for **room temperature accuracy**, not operating temperature accuracy. For engine monitoring where we care most about 80-120°C readings, a lower bias resistor makes more sense.
+
+### Runtime Calibration Override
+
+In runtime configuration mode, you can override the bias resistor for individual sensors without recompiling:
+
+```
+SET A0 BIAS 2200    # Use 2.2kΩ for this specific sensor
+```
+
+This allows you to use different bias resistor values for different sensors, or adjust calibration without changing `DEFAULT_BIAS_RESISTOR` in config.h. The runtime bias setting applies to Steinhart-Hart, Lookup Table, and Pressure Polynomial calibrations.
+
+See [SERIAL_COMMANDS.md](../../reference/SERIAL_COMMANDS.md) for details on runtime calibration commands.
 
 ### Optimal Bias Resistor Theory
 

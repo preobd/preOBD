@@ -110,10 +110,10 @@ VDO Sensor:
   Signal wire → Analog pin (e.g., A3)
   Ground → Chassis ground (sensor body)
 
-Required: Pull-down resistor (VDO_BIAS_RESISTOR in config.h) from pin → resistor → GND
+Required: Pull-down resistor (DEFAULT_BIAS_RESISTOR in config.h) from pin → resistor → GND
 ```
 
-**Note:** VDO pressure sensors are 1-wire resistive sensors that ground through the chassis when properly mounted. Only the signal wire needs to be connected to the microcontroller. Like VDO temperature sensors, they require a pull-down resistor (configurable via VDO_BIAS_RESISTOR in config.h) to measure the resistance changes.
+**Note:** VDO pressure sensors are 1-wire resistive sensors that ground through the chassis when properly mounted. Only the signal wire needs to be connected to the microcontroller. Like VDO temperature sensors, they require a pull-down resistor (configurable via DEFAULT_BIAS_RESISTOR in config.h or runtime `SET <pin> BIAS` command) to measure the resistance changes.
 
 ### Generic 3-Wire Sensors
 
@@ -338,8 +338,36 @@ Common adapters:
 
 ## Custom Calibration
 
-If your pressure sensor isn't in the library, see [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) for:
-- Creating linear calibrations
+If your pressure sensor isn't in the library, you can create custom calibrations.
+
+### Runtime Custom Calibration
+
+**Linear pressure sensor (e.g., 0.5-4.5V, 0-3 bar):**
+```
+SET A5 BOOST_PRESSURE GENERIC_BOOST
+SET A5 PRESSURE_LINEAR 0.5 4.5 0.0 3.0
+SET A5 DISPLAY_NAME "Boost"
+SAVE
+```
+
+**VDO-style polynomial sensor:**
+```
+SET A3 OIL_PRESSURE VDO_5BAR
+SET A3 PRESSURE_POLY 1000 -0.3682 36.465 10.648
+SAVE
+```
+
+**Adjust bias resistor for VDO sensor:**
+```
+SET A3 OIL_PRESSURE VDO_5BAR
+SET A3 BIAS 2200    # Use 2.2kΩ bias resistor
+SAVE
+```
+
+### Compile-Time Custom Calibration
+
+See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) for:
+- Creating linear calibrations with macros
 - Polynomial calibrations for non-linear sensors
 - Contributing calibrations to the library
 

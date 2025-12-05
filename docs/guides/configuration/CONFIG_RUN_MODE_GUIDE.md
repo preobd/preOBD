@@ -189,6 +189,13 @@ These commands are **always available** to prevent system deadlock:
 | `SET <pin> DISPLAY_NAME <name>` | Set display name |
 | `SET <pin> UNITS <units>` | Override display units |
 | `SET <pin> ALARM <min> <max>` | Set alarm thresholds |
+| `SET <pin> BIAS <resistor>` | Set bias resistor (Ω) |
+| `SET <pin> STEINHART <bias> <a> <b> <c>` | Steinhart-Hart calibration |
+| `SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>` | Linear pressure calibration |
+| `SET <pin> PRESSURE_POLY <bias> <a> <b> <c>` | Polynomial pressure calibration |
+| `SET <pin> RPM <poles> <ratio> <timeout> <min> <max>` | RPM calibration |
+| `SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>` | RPM with fine-tuning |
+| `SET <pin> CALIBRATION PRESET` | Revert to preset calibration |
 | `ENABLE <pin>` | Enable sensor |
 | `DISABLE <pin>` | Disable sensor |
 | `CLEAR <pin>` | Remove sensor |
@@ -230,9 +237,14 @@ Starting with firmware v0.4.0, CONFIG mode now supports comprehensive runtime co
 - Set default units (temperature, pressure, elevation)
 
 **System Configuration (NEW):**
-- VDO bias resistor value (for different VDO sensor types)
 - Sea level pressure (for accurate altitude)
 - Timing intervals (sensor read, alarm check, LCD update)
+
+**Advanced Calibration (NEW):**
+- Custom calibrations for thermistors (Steinhart-Hart, lookup table)
+- Custom calibrations for pressure sensors (linear, polynomial)
+- Fine-tuned RPM calibration (poles, pulley ratio, multiplier)
+- Per-sensor bias resistor override
 
 ### Example: Runtime Output Configuration
 
@@ -259,11 +271,18 @@ SAVE
 RUN
 ```
 
-### Example: Adjust VDO Resistor for Different Sensors
+### Example: Custom Sensor Calibration
 
 ```
 CONFIG
-SYSTEM VDO_BIAS 2200          # Switch to 2.2k VDO sensors
+SET A0 OIL_TEMP THERMISTOR_STEINHART
+SET A0 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8  # Custom thermistor
+SET A1 BOOST_PRESSURE GENERIC_BOOST
+SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 3.0              # Custom pressure sensor
+SET A3 OIL_PRESSURE VDO_5BAR
+SET A3 BIAS 2200                                    # Use 2.2kΩ bias for this sensor
+SET 5 ENGINE_RPM W_PHASE_RPM
+SET 5 RPM 12 3.0 1.02 2000 100 8000                # Fine-tuned RPM
 SAVE
 RUN
 ```

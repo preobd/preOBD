@@ -116,7 +116,7 @@ VDO Sensor:
   Signal wire → Analog pin (e.g., A2)
   Ground → Chassis ground (sensor body)
 
-Required: Pull-down resistor (VDO_BIAS_RESISTOR in config.h) from pin → resistor → GND
+Required: Pull-down resistor (DEFAULT_BIAS_RESISTOR in config.h) from pin → resistor → GND
 ```
 
 **VDO Pressure Sensors:**
@@ -125,7 +125,7 @@ VDO Sensor:
   Signal wire → Analog pin (e.g., A3)
   Ground → Chassis ground (sensor body)
 
-Required: Pull-down resistor (VDO_BIAS_RESISTOR in config.h) from pin → resistor → GND
+Required: Pull-down resistor (DEFAULT_BIAS_RESISTOR in config.h) from pin → resistor → GND
 ```
 
 **Voltage Monitoring:**
