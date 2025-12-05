@@ -1153,6 +1153,11 @@ void handleSerialCommand(char* cmd) {
             Serial.print(systemConfig.seaLevelPressure);
             Serial.println(F(" hPa"));
             Serial.println();
+            Serial.println(F("Compile-Time Defaults:"));
+            Serial.print(F("  Default Bias Resistor: "));
+            Serial.print(DEFAULT_BIAS_RESISTOR);
+            Serial.println(F(" Ω"));
+            Serial.println();
             Serial.println(F("Hardware Pins:"));
             Serial.print(F("  Mode Button: "));
             Serial.println(systemConfig.modeButtonPin);
