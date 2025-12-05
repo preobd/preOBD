@@ -230,6 +230,14 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  SET <pin> UNITS <units>  - Override display units"));
         Serial.println(F("  SET <pin> ALARM <min> <max>  - Set alarm thresholds"));
         Serial.println();
+        Serial.println(F("Calibration Commands:"));
+        Serial.println(F("  SET <pin> CALIBRATION PRESET  - Clear custom, use preset"));
+        Serial.println(F("  SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>"));
+        Serial.println(F("  SET <pin> BIAS <resistor>  - Set bias resistor (Ohms)"));
+        Serial.println(F("  SET <pin> STEINHART <bias> <a> <b> <c>  - Steinhart-Hart"));
+        Serial.println(F("  SET <pin> PRESSURE_POLY <bias> <a> <b> <c>  - VDO polynomial"));
+        Serial.println(F("  INFO <pin> CALIBRATION  - Show calibration details"));
+        Serial.println();
         Serial.println(F("Control Commands:"));
         Serial.println(F("  ENABLE <pin>  - Enable input reading"));
         Serial.println(F("  DISABLE <pin>  - Disable input reading"));
@@ -274,6 +282,8 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  SET 6 CHT MAX6675  (combined syntax)"));
         Serial.println(F("  SET A2 APPLICATION COOLANT_TEMP"));
         Serial.println(F("  SET A2 SENSOR VDO_120C"));
+        Serial.println(F("  SET A1 PRESSURE_LINEAR 0.5 4.5 0 7  (custom pressure)"));
+        Serial.println(F("  SET A0 BIAS 4700  (change bias resistor)"));
         Serial.println(F("  ENABLE A2"));
         Serial.println(F("  OUTPUT CAN ENABLE"));
         Serial.println(F("  OUTPUT CAN INTERVAL 100"));
@@ -459,6 +469,304 @@ void handleSerialCommand(char* cmd) {
                 Serial.print(F(" - "));
                 Serial.println(maxVal);
             }
+            return;
+        }
+
+        // SET <pin> CALIBRATION PRESET
+        // Clears custom calibration and reverts to sensor library preset
+        if (strncmp(fieldAndValue, "CALIBRATION PRESET", 18) == 0) {
+            Input* input = getInputByPin(pin);
+            if (!input) {
+                Serial.println(F("ERROR: Input not configured"));
+                return;
+            }
+
+            // Clear custom calibration
+            input->flags.useCustomCalibration = false;
+            memset(&input->customCalibration, 0, sizeof(CalibrationOverride));
+
+            Serial.print(F("Cleared custom calibration for pin "));
+            Serial.println(pinStr);
+            Serial.println(F("Using preset calibration from sensor library"));
+            return;
+        }
+
+        // SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>
+        if (strncmp(fieldAndValue, "PRESSURE_LINEAR ", 16) == 0) {
+            char* params = fieldAndValue + 16;
+            trim(params);
+
+            // Parse 4 float parameters
+            float vmin, vmax, pmin, pmax;
+            char* token = strtok(params, " ");
+            if (!token) {
+                Serial.println(F("ERROR: PRESSURE_LINEAR requires 4 parameters"));
+                Serial.println(F("  Usage: SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>"));
+                Serial.println(F("  Example: SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 7.0"));
+                return;
+            }
+            vmin = atof(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) {
+                Serial.println(F("ERROR: PRESSURE_LINEAR requires 4 parameters"));
+                return;
+            }
+            vmax = atof(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) {
+                Serial.println(F("ERROR: PRESSURE_LINEAR requires 4 parameters"));
+                return;
+            }
+            pmin = atof(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) {
+                Serial.println(F("ERROR: PRESSURE_LINEAR requires 4 parameters"));
+                return;
+            }
+            pmax = atof(token);
+
+            // Validate parameters
+            if (vmin >= vmax) {
+                Serial.println(F("ERROR: vmin must be less than vmax"));
+                return;
+            }
+            if (vmin < 0.0 || vmax > 5.0) {
+                Serial.println(F("ERROR: Voltage range must be 0.0-5.0V"));
+                return;
+            }
+            if (pmin >= pmax) {
+                Serial.println(F("ERROR: pmin must be less than pmax"));
+                return;
+            }
+            if (pmin < 0.0) {
+                Serial.println(F("ERROR: pmin must be >= 0.0"));
+                return;
+            }
+
+            // Get input and apply calibration
+            Input* input = getInputByPin(pin);
+            if (!input || !input->flags.isEnabled) {
+                Serial.println(F("ERROR: Input not configured"));
+                return;
+            }
+
+            // Apply custom calibration
+            input->flags.useCustomCalibration = true;
+            input->customCalibration.pressureLinear.voltage_min = vmin;
+            input->customCalibration.pressureLinear.voltage_max = vmax;
+            input->customCalibration.pressureLinear.pressure_min = pmin;
+            input->customCalibration.pressureLinear.pressure_max = pmax;
+
+            Serial.print(F("Pressure Linear calibration set for pin "));
+            Serial.println(pinStr);
+            Serial.print(F("  Voltage Range: "));
+            Serial.print(vmin, 2);
+            Serial.print(F("-"));
+            Serial.print(vmax, 2);
+            Serial.println(F(" V"));
+            Serial.print(F("  Pressure Range: "));
+            Serial.print(pmin, 2);
+            Serial.print(F("-"));
+            Serial.print(pmax, 2);
+            Serial.println(F(" bar"));
+            return;
+        }
+
+        // SET <pin> BIAS <resistor>
+        // Generic bias resistor command - works with Steinhart-Hart, Lookup, and Pressure Polynomial
+        if (strncmp(fieldAndValue, "BIAS ", 5) == 0) {
+            char* biasStr = fieldAndValue + 5;
+            trim(biasStr);
+            float bias = atof(biasStr);
+
+            // Get input
+            Input* input = getInputByPin(pin);
+            if (!input || !input->flags.isEnabled) {
+                Serial.println(F("ERROR: Input not configured"));
+                return;
+            }
+
+            // Validate calibration type supports bias resistor
+            if (input->calibrationType != CAL_THERMISTOR_STEINHART &&
+                input->calibrationType != CAL_THERMISTOR_LOOKUP &&
+                input->calibrationType != CAL_PRESSURE_POLYNOMIAL) {
+                Serial.print(F("ERROR: Calibration type "));
+                Serial.print(input->calibrationType);
+                Serial.println(F(" does not use bias resistor"));
+                Serial.println(F("  BIAS works with: Thermistor (Steinhart-Hart), Thermistor (Lookup), Pressure (Polynomial)"));
+                return;
+            }
+
+            // Validate value
+            if (bias <= 0 || bias > 1000000) {
+                Serial.println(F("ERROR: Bias resistor must be 0-1MΩ"));
+                return;
+            }
+
+            // Apply to appropriate union member based on type
+            input->flags.useCustomCalibration = true;
+
+            if (input->calibrationType == CAL_THERMISTOR_STEINHART) {
+                input->customCalibration.steinhart.bias_resistor = bias;
+            } else if (input->calibrationType == CAL_THERMISTOR_LOOKUP) {
+                input->customCalibration.lookup.bias_resistor = bias;
+            } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) {
+                input->customCalibration.pressurePolynomial.bias_resistor = bias;
+            }
+
+            Serial.print(F("Bias resistor set for pin "));
+            Serial.print(pinStr);
+            Serial.print(F(": "));
+            Serial.print(bias, 1);
+            Serial.println(F(" Ω"));
+            return;
+        }
+
+        // SET <pin> STEINHART <bias_r> <a> <b> <c>
+        if (strncmp(fieldAndValue, "STEINHART ", 10) == 0) {
+            char* params = fieldAndValue + 10;
+            trim(params);
+
+            // Parse 4 float parameters
+            float bias_r, a, b, c;
+            char* token = strtok(params, " ");
+            if (!token) {
+                Serial.println(F("ERROR: STEINHART requires 4 parameters"));
+                Serial.println(F("  Usage: SET <pin> STEINHART <bias_r> <a> <b> <c>"));
+                Serial.println(F("  Example: SET A0 STEINHART 10000 0.001129 0.0002341 0.00000008775"));
+                return;
+            }
+            bias_r = atof(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) {
+                Serial.println(F("ERROR: STEINHART requires 4 parameters"));
+                return;
+            }
+            a = atof(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) {
+                Serial.println(F("ERROR: STEINHART requires 4 parameters"));
+                return;
+            }
+            b = atof(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) {
+                Serial.println(F("ERROR: STEINHART requires 4 parameters"));
+                return;
+            }
+            c = atof(token);
+
+            // Validate parameters
+            if (bias_r <= 0) {
+                Serial.println(F("ERROR: bias_r must be > 0"));
+                return;
+            }
+            if (a == 0 || b == 0 || c == 0) {
+                Serial.println(F("WARNING: Zero coefficient detected - may indicate error"));
+            }
+
+            // Get input and apply calibration
+            Input* input = getInputByPin(pin);
+            if (!input || !input->flags.isEnabled) {
+                Serial.println(F("ERROR: Input not configured"));
+                return;
+            }
+
+            // Apply custom calibration
+            input->flags.useCustomCalibration = true;
+            input->customCalibration.steinhart.bias_resistor = bias_r;
+            input->customCalibration.steinhart.steinhart_a = a;
+            input->customCalibration.steinhart.steinhart_b = b;
+            input->customCalibration.steinhart.steinhart_c = c;
+
+            Serial.print(F("Steinhart-Hart calibration set for pin "));
+            Serial.println(pinStr);
+            Serial.print(F("  Bias Resistor: "));
+            Serial.print(bias_r, 1);
+            Serial.println(F(" Ω"));
+            Serial.print(F("  A: "));
+            Serial.println(a, 10);
+            Serial.print(F("  B: "));
+            Serial.println(b, 10);
+            Serial.print(F("  C: "));
+            Serial.println(c, 10);
+            return;
+        }
+
+        // SET <pin> PRESSURE_POLY <bias_r> <a> <b> <c>
+        if (strncmp(fieldAndValue, "PRESSURE_POLY ", 14) == 0) {
+            char* params = fieldAndValue + 14;
+            trim(params);
+
+            // Parse 4 float parameters
+            float bias_r, a, b, c;
+            char* token = strtok(params, " ");
+            if (!token) {
+                Serial.println(F("ERROR: PRESSURE_POLY requires 4 parameters"));
+                Serial.println(F("  Usage: SET <pin> PRESSURE_POLY <bias_r> <a> <b> <c>"));
+                Serial.println(F("  Example: SET A1 PRESSURE_POLY 184 -6.75e-4 2.54e-6 1.87e-9"));
+                return;
+            }
+            bias_r = atof(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) {
+                Serial.println(F("ERROR: PRESSURE_POLY requires 4 parameters"));
+                return;
+            }
+            a = atof(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) {
+                Serial.println(F("ERROR: PRESSURE_POLY requires 4 parameters"));
+                return;
+            }
+            b = atof(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) {
+                Serial.println(F("ERROR: PRESSURE_POLY requires 4 parameters"));
+                return;
+            }
+            c = atof(token);
+
+            // Validate parameters
+            if (bias_r <= 0) {
+                Serial.println(F("ERROR: bias_r must be > 0"));
+                return;
+            }
+
+            // Get input and apply calibration
+            Input* input = getInputByPin(pin);
+            if (!input || !input->flags.isEnabled) {
+                Serial.println(F("ERROR: Input not configured"));
+                return;
+            }
+
+            // Apply custom calibration
+            input->flags.useCustomCalibration = true;
+            input->customCalibration.pressurePolynomial.bias_resistor = bias_r;
+            input->customCalibration.pressurePolynomial.poly_a = a;
+            input->customCalibration.pressurePolynomial.poly_b = b;
+            input->customCalibration.pressurePolynomial.poly_c = c;
+
+            Serial.print(F("Pressure Polynomial calibration set for pin "));
+            Serial.println(pinStr);
+            Serial.print(F("  Bias Resistor: "));
+            Serial.print(bias_r, 1);
+            Serial.println(F(" Ω"));
+            Serial.print(F("  A: "));
+            Serial.println(a, 10);
+            Serial.print(F("  B: "));
+            Serial.println(b, 10);
+            Serial.print(F("  C: "));
+            Serial.println(c, 10);
             return;
         }
 
@@ -847,9 +1155,106 @@ void handleSerialCommand(char* cmd) {
 
     // ===== INFO COMMAND =====
     if (strncmp(cmd, "INFO ", 5) == 0) {
-        char* pinStr = cmd + 5;
-        trim(pinStr);
-        uint8_t pin = parsePin(pinStr);
+        char* rest = cmd + 5;
+        trim(rest);
+
+        // Check for INFO <pin> CALIBRATION
+        char* spacePos = strchr(rest, ' ');
+        if (spacePos) {
+            *spacePos = '\0';
+            char* pinStr = rest;
+            char* subcommand = spacePos + 1;
+            trim(subcommand);
+
+            if (streq(subcommand, "CALIBRATION")) {
+                uint8_t pin = parsePin(pinStr);
+                Input* input = getInputByPin(pin);
+                if (!input || !input->flags.isEnabled) {
+                    Serial.println(F("ERROR: Input not configured"));
+                    return;
+                }
+
+                Serial.print(F("Pin "));
+                Serial.print(pinStr);
+                Serial.println(F(" Calibration:"));
+                Serial.print(F("  Type: "));
+                switch (input->calibrationType) {
+                    case CAL_THERMISTOR_STEINHART: Serial.println(F("THERMISTOR_STEINHART")); break;
+                    case CAL_THERMISTOR_LOOKUP: Serial.println(F("THERMISTOR_LOOKUP")); break;
+                    case CAL_PRESSURE_POLYNOMIAL: Serial.println(F("PRESSURE_POLYNOMIAL")); break;
+                    case CAL_PRESSURE_LINEAR: Serial.println(F("PRESSURE_LINEAR")); break;
+                    case CAL_VOLTAGE_DIVIDER: Serial.println(F("VOLTAGE_DIVIDER")); break;
+                    case CAL_RPM: Serial.println(F("RPM")); break;
+                    default: Serial.println(F("NONE")); break;
+                }
+
+                Serial.print(F("  Source: "));
+                if (input->flags.useCustomCalibration) {
+                    Serial.println(F("Custom (RAM)"));
+
+                    // Print custom calibration values based on type
+                    if (input->calibrationType == CAL_THERMISTOR_STEINHART) {
+                        Serial.print(F("  Bias Resistor: "));
+                        Serial.print(input->customCalibration.steinhart.bias_resistor, 1);
+                        Serial.println(F(" Ω"));
+                        Serial.print(F("  A: "));
+                        Serial.println(input->customCalibration.steinhart.steinhart_a, 10);
+                        Serial.print(F("  B: "));
+                        Serial.println(input->customCalibration.steinhart.steinhart_b, 10);
+                        Serial.print(F("  C: "));
+                        Serial.println(input->customCalibration.steinhart.steinhart_c, 10);
+                    } else if (input->calibrationType == CAL_THERMISTOR_LOOKUP) {
+                        Serial.print(F("  Bias Resistor: "));
+                        Serial.print(input->customCalibration.lookup.bias_resistor, 1);
+                        Serial.println(F(" Ω"));
+                    } else if (input->calibrationType == CAL_PRESSURE_LINEAR) {
+                        Serial.print(F("  Voltage Range: "));
+                        Serial.print(input->customCalibration.pressureLinear.voltage_min, 2);
+                        Serial.print(F("-"));
+                        Serial.print(input->customCalibration.pressureLinear.voltage_max, 2);
+                        Serial.println(F(" V"));
+                        Serial.print(F("  Pressure Range: "));
+                        Serial.print(input->customCalibration.pressureLinear.pressure_min, 2);
+                        Serial.print(F("-"));
+                        Serial.print(input->customCalibration.pressureLinear.pressure_max, 2);
+                        Serial.println(F(" bar"));
+                    } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) {
+                        Serial.print(F("  Bias Resistor: "));
+                        Serial.print(input->customCalibration.pressurePolynomial.bias_resistor, 1);
+                        Serial.println(F(" Ω"));
+                        Serial.print(F("  A: "));
+                        Serial.println(input->customCalibration.pressurePolynomial.poly_a, 10);
+                        Serial.print(F("  B: "));
+                        Serial.println(input->customCalibration.pressurePolynomial.poly_b, 10);
+                        Serial.print(F("  C: "));
+                        Serial.println(input->customCalibration.pressurePolynomial.poly_c, 10);
+                    } else if (input->calibrationType == CAL_RPM) {
+                        Serial.print(F("  Poles: "));
+                        Serial.println(input->customCalibration.rpm.poles);
+                        Serial.print(F("  Pulley Ratio: "));
+                        Serial.println(input->customCalibration.rpm.pulley_ratio, 2);
+                        Serial.print(F("  Calibration Mult: "));
+                        Serial.println(input->customCalibration.rpm.calibration_mult, 4);
+                        Serial.print(F("  Timeout: "));
+                        Serial.print(input->customCalibration.rpm.timeout_ms);
+                        Serial.println(F(" ms"));
+                        Serial.print(F("  RPM Range: "));
+                        Serial.print(input->customCalibration.rpm.min_rpm);
+                        Serial.print(F("-"));
+                        Serial.println(input->customCalibration.rpm.max_rpm);
+                    }
+                } else {
+                    Serial.println(F("Preset (PROGMEM)"));
+                }
+                return;
+            }
+
+            // Restore space for unknown subcommand
+            *spacePos = ' ';
+        }
+
+        // Default: INFO <pin>
+        uint8_t pin = parsePin(rest);
         printInputInfo(pin);
         return;
     }
