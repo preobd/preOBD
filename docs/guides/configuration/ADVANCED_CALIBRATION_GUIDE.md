@@ -155,22 +155,54 @@ For alternator W-phase or other RPM sensors.
 
 ```cpp
 DEFINE_CUSTOM_RPM(name,
-    poles,            // Number of alternator poles
+    poles,            // Number of alternator poles (8, 10, 12, 14, 16)
+    pulley_ratio,     // Alternator/Engine pulley ratio (e.g., 3.0 for 3:1)
+    calibration_mult, // Fine-tuning multiplier (default 1.0)
     timeout_ms,       // Timeout for zero RPM detection (ms)
     min_rpm,          // Minimum valid RPM
     max_rpm           // Maximum valid RPM
 )
 ```
 
-**Example:** 18-pole alternator:
+**Example:** 18-pole alternator, 3:1 pulley ratio:
 ```cpp
 #define INPUT_6_CUSTOM_CALIBRATION
 
 DEFINE_CUSTOM_RPM(input_6,
     18,       // 18-pole alternator
+    3.0,      // 3:1 pulley ratio (alternator to engine)
+    1.0,      // No fine-tuning (adjust empirically if needed)
     2000,     // 2 second timeout
     300,      // Ignore below 300 RPM
     8000      // Ignore above 8000 RPM
+)
+```
+
+**Example:** 12-pole alternator, 2:1 pulley ratio (older vehicles):
+```cpp
+#define INPUT_3_CUSTOM_CALIBRATION
+
+DEFINE_CUSTOM_RPM(input_3,
+    12,       // 12-pole alternator (most common)
+    2.0,      // 2:1 pulley ratio
+    1.0,      // No fine-tuning
+    2000,     // 2 second timeout
+    100,      // Minimum RPM
+    10000     // Maximum RPM
+)
+```
+
+**Example:** Fine-tuned calibration after testing:
+```cpp
+#define INPUT_5_CUSTOM_CALIBRATION
+
+DEFINE_CUSTOM_RPM(input_5,
+    12,       // 12-pole alternator
+    3.0,      // 3:1 pulley ratio (measured)
+    1.0204,   // Fine-tuned +2.04% (compared to external tach)
+    2000,     // 2 second timeout
+    100,      // Minimum RPM
+    8000      // Maximum RPM
 )
 ```
 
