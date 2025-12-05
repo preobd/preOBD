@@ -104,11 +104,12 @@ typedef struct {
 
 // ===== RPM CALIBRATION STRUCTURES =====
 typedef struct {
-    byte poles;              // Number of alternator poles
-    float pulses_per_rev;    // Calculated from poles
-    uint16_t timeout_ms;     // Timeout for zero RPM (ms)
-    uint16_t min_rpm;        // Minimum valid RPM
-    uint16_t max_rpm;        // Maximum valid RPM
+    byte poles;              // Number of alternator poles (8, 10, 12, 14, 16)
+    float pulley_ratio;      // Alternator/Engine pulley ratio (e.g., 3.0 for 3:1)
+    float calibration_mult;  // Fine-tuning multiplier (default 1.0, adjust empirically)
+    uint16_t timeout_ms;     // Timeout for zero RPM (ms, default 2000)
+    uint16_t min_rpm;        // Minimum valid RPM (default 100)
+    uint16_t max_rpm;        // Maximum valid RPM (default 10000)
 } RPMCalibration;
 
 // Legacy code removed: StaticSensor struct, wrapper conversion logic, and old sensor array system.

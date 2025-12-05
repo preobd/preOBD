@@ -28,10 +28,7 @@ openEMS supports two types of pressure sensors:
 
 *Runtime:*
 ```
-SET A3 APPLICATION OIL_PRESSURE
-SET A3 SENSOR VDO_5BAR
-ENABLE A3
-SAVE
+SET A3 OIL_PRESSURE VDO_5BAR
 ```
 
 **VDO 2-bar boost/intake pressure sensor:**
@@ -45,10 +42,7 @@ SAVE
 
 *Runtime:*
 ```
-SET A4 APPLICATION BOOST_PRESSURE
-SET A4 SENSOR VDO_2BAR
-ENABLE A4
-SAVE
+SET A4 BOOST_PRESSURE VDO_2BAR
 ```
 
 ### Generic Linear Sensors
@@ -64,10 +58,7 @@ SAVE
 
 *Runtime:*
 ```
-SET A5 APPLICATION BOOST_PRESSURE
-SET A5 SENSOR GENERIC_BOOST
-ENABLE A5
-SAVE
+SET A5 BOOST_PRESSURE GENERIC_BOOST
 ```
 
 **Freescale MPX4250AP MAP sensor:**
@@ -119,10 +110,10 @@ VDO Sensor:
   Signal wire → Analog pin (e.g., A3)
   Ground → Chassis ground (sensor body)
 
-Required: Pull-down resistor (VDO_BIAS_RESISTOR in config.h) from pin → resistor → GND
+Required: Pull-down resistor (DEFAULT_BIAS_RESISTOR in config.h) from pin → resistor → GND
 ```
 
-**Note:** VDO pressure sensors are 1-wire resistive sensors that ground through the chassis when properly mounted. Only the signal wire needs to be connected to the microcontroller. Like VDO temperature sensors, they require a pull-down resistor (configurable via VDO_BIAS_RESISTOR in config.h) to measure the resistance changes.
+**Note:** VDO pressure sensors are 1-wire resistive sensors that ground through the chassis when properly mounted. Only the signal wire needs to be connected to the microcontroller. Like VDO temperature sensors, they require a pull-down resistor (configurable via DEFAULT_BIAS_RESISTOR in config.h or runtime `SET <pin> BIAS` command) to measure the resistance changes.
 
 ### Generic 3-Wire Sensors
 
@@ -214,10 +205,8 @@ SAVE
 
 *Runtime:*
 ```
-SET A3 APPLICATION OIL_PRESSURE
-SET A3 SENSOR VDO_5BAR
+SET A3 OIL_PRESSURE VDO_5BAR
 SET A3 ALARM 1 5
-ENABLE A3
 SAVE
 ```
 
@@ -234,10 +223,8 @@ The alarm will trigger if oil pressure drops below 1 bar.
 
 *Runtime:*
 ```
-SET A4 APPLICATION BOOST_PRESSURE
-SET A4 SENSOR VDO_2BAR
+SET A4 BOOST_PRESSURE VDO_2BAR
 SET A4 ALARM -1 1.5
-ENABLE A4
 SAVE
 ```
 
@@ -351,8 +338,36 @@ Common adapters:
 
 ## Custom Calibration
 
-If your pressure sensor isn't in the library, see [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) for:
-- Creating linear calibrations
+If your pressure sensor isn't in the library, you can create custom calibrations.
+
+### Runtime Custom Calibration
+
+**Linear pressure sensor (e.g., 0.5-4.5V, 0-3 bar):**
+```
+SET A5 BOOST_PRESSURE GENERIC_BOOST
+SET A5 PRESSURE_LINEAR 0.5 4.5 0.0 3.0
+SET A5 DISPLAY_NAME "Boost"
+SAVE
+```
+
+**VDO-style polynomial sensor:**
+```
+SET A3 OIL_PRESSURE VDO_5BAR
+SET A3 PRESSURE_POLY 1000 -0.3682 36.465 10.648
+SAVE
+```
+
+**Adjust bias resistor for VDO sensor:**
+```
+SET A3 OIL_PRESSURE VDO_5BAR
+SET A3 BIAS 2200    # Use 2.2kΩ bias resistor
+SAVE
+```
+
+### Compile-Time Custom Calibration
+
+See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) for:
+- Creating linear calibrations with macros
 - Polynomial calibrations for non-linear sensors
 - Contributing calibrations to the library
 

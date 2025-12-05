@@ -8,6 +8,7 @@
 #include "../inputs/input.h"
 #include "../lib/sensor_types.h"
 #include "../lib/sensor_library.h"
+#include "../lib/system_config.h"  // For OutputID enum
 
 // Output module structure
 typedef struct {
@@ -19,18 +20,16 @@ typedef struct {
     uint16_t sendInterval;  // Milliseconds between sends
 } OutputModule;
 
-// Output types for time-sliced calling
-enum OutputType {
-    OUTPUT_CAN,
-    OUTPUT_REALDASH,
-    OUTPUT_SERIAL,
-    OUTPUT_SD
-};
-
 // Output module functions
 void initOutputModules();
 void sendToOutputs(uint32_t now);  // Send data to all outputs (time-sliced)
 void updateOutputs();              // Housekeeping (drain buffers, etc.)
+
+// Runtime configuration API
+bool setOutputEnabled(const char* name, bool enabled);
+bool setOutputInterval(const char* name, uint16_t interval);
+OutputModule* getOutputByName(const char* name);
+void listOutputs();
 
 // ===== OBDII FRAME BUILDING =====
 

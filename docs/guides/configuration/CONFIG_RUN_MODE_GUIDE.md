@@ -189,6 +189,13 @@ These commands are **always available** to prevent system deadlock:
 | `SET <pin> DISPLAY_NAME <name>` | Set display name |
 | `SET <pin> UNITS <units>` | Override display units |
 | `SET <pin> ALARM <min> <max>` | Set alarm thresholds |
+| `SET <pin> BIAS <resistor>` | Set bias resistor (Ω) |
+| `SET <pin> STEINHART <bias> <a> <b> <c>` | Steinhart-Hart calibration |
+| `SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>` | Linear pressure calibration |
+| `SET <pin> PRESSURE_POLY <bias> <a> <b> <c>` | Polynomial pressure calibration |
+| `SET <pin> RPM <poles> <ratio> <timeout> <min> <max>` | RPM calibration |
+| `SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>` | RPM with fine-tuning |
+| `SET <pin> CALIBRATION PRESET` | Revert to preset calibration |
 | `ENABLE <pin>` | Enable sensor |
 | `DISABLE <pin>` | Disable sensor |
 | `CLEAR <pin>` | Remove sensor |
@@ -204,6 +211,91 @@ These commands are **always available** to prevent system deadlock:
   Type CONFIG to enter configuration mode
 ========================================
 ```
+
+---
+
+## Runtime Configuration Capabilities (v0.4.0+)
+
+Starting with firmware v0.4.0, CONFIG mode now supports comprehensive runtime configuration beyond just sensors. You can now configure outputs, display settings, and system parameters without recompiling firmware.
+
+### What Can Be Configured at Runtime
+
+**Sensor Configuration:**
+- Add/remove sensors
+- Change sensor types and applications
+- Set alarm thresholds
+- *(Traditional CONFIG mode functionality)*
+
+**Output Configuration (NEW):**
+- Enable/disable output modules (CAN, RealDash, Serial CSV, SD logging)
+- Adjust output intervals (10-60000ms)
+- No recompilation needed to switch outputs
+
+**Display Configuration (NEW):**
+- Switch between LCD, OLED, or no display
+- Change I2C address for LCD
+- Set default units (temperature, pressure, elevation)
+
+**System Configuration (NEW):**
+- Sea level pressure (for accurate altitude)
+- Timing intervals (sensor read, alarm check, LCD update)
+
+**Advanced Calibration (NEW):**
+- Custom calibrations for thermistors (Steinhart-Hart, lookup table)
+- Custom calibrations for pressure sensors (linear, polynomial)
+- Fine-tuned RPM calibration (poles, pulley ratio, multiplier)
+- Per-sensor bias resistor override
+
+### Example: Runtime Output Configuration
+
+```
+CONFIG                          # Enter CONFIG mode
+OUTPUT LIST                     # Show current output status
+OUTPUT CAN ENABLE              # Enable CAN output
+OUTPUT CAN INTERVAL 100        # Set CAN to 100ms
+OUTPUT RealDash ENABLE         # Enable RealDash
+OUTPUT RealDash INTERVAL 50    # Set RealDash to 50ms (smoother gauges)
+OUTPUT SD_Log DISABLE          # Disable SD logging to save power
+SAVE                           # Persist changes
+RUN                            # Resume normal operation
+```
+
+### Example: Runtime Display Configuration
+
+```
+CONFIG
+DISPLAY UNITS TEMP F           # Use Fahrenheit by default
+DISPLAY UNITS PRESSURE PSI     # Use PSI for pressure
+DISPLAY LCD ADDRESS 0x3F       # Change I2C address if needed
+SAVE
+RUN
+```
+
+### Example: Custom Sensor Calibration
+
+```
+CONFIG
+SET A0 OIL_TEMP THERMISTOR_STEINHART
+SET A0 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8  # Custom thermistor
+SET A1 BOOST_PRESSURE GENERIC_BOOST
+SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 3.0              # Custom pressure sensor
+SET A3 OIL_PRESSURE VDO_5BAR
+SET A3 BIAS 2200                                    # Use 2.2kΩ bias for this sensor
+SET 5 ENGINE_RPM W_PHASE_RPM
+SET 5 RPM 12 3.0 1.02 2000 100 8000                # Fine-tuned RPM
+SAVE
+RUN
+```
+
+### Benefits of Runtime Configuration
+
+1. **No Recompilation** - Switch outputs, display type, or adjust intervals instantly
+2. **Field Updates** - Change configuration without reflashing firmware
+3. **Quick Testing** - Try different output intervals or display settings
+4. **Persistent** - All settings save to EEPROM alongside sensor config
+5. **Safe** - All changes happen in CONFIG mode (sensors paused)
+
+For complete command reference, see [Serial Command Reference](../../reference/SERIAL_COMMANDS.md).
 
 ---
 

@@ -23,10 +23,7 @@ openEMS supports digital (on/off) sensors for monitoring fluid levels, door swit
 
 *Runtime:*
 ```
-SET 7 APPLICATION COOLANT_LEVEL
-SET 7 SENSOR FLOAT_SWITCH
-ENABLE 7
-SAVE
+SET 7 COOLANT_LEVEL FLOAT_SWITCH
 ```
 
 ---
@@ -106,10 +103,7 @@ The 100nF capacitor filters electrical noise from the engine bay.
 
 *Runtime:*
 ```
-SET 7 APPLICATION COOLANT_LEVEL
-SET 7 SENSOR FLOAT_SWITCH
-ENABLE 7
-SAVE
+SET 7 COOLANT_LEVEL FLOAT_SWITCH
 ```
 
 ### Example 2: Multiple Level Sensors
@@ -129,15 +123,11 @@ SAVE
 
 *Runtime:*
 ```
-SET 7 APPLICATION COOLANT_LEVEL
-SET 7 SENSOR FLOAT_SWITCH
+SET 7 COOLANT_LEVEL FLOAT_SWITCH
 SET 7 NAME COOL
-ENABLE 7
 
-SET 8 APPLICATION COOLANT_LEVEL
-SET 8 SENSOR FLOAT_SWITCH
+SET 8 COOLANT_LEVEL FLOAT_SWITCH
 SET 8 NAME FUEL
-ENABLE 8
 
 SAVE
 ```
@@ -262,10 +252,8 @@ For other digital sensors (door switches, limit switches, etc.), use the same FL
 
 Or via runtime:
 ```
-SET 9 APPLICATION COOLANT_LEVEL
-SET 9 SENSOR FLOAT_SWITCH
+SET 9 COOLANT_LEVEL FLOAT_SWITCH
 SET 9 NAME DOOR
-ENABLE 9
 SAVE
 ```
 

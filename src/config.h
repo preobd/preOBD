@@ -38,7 +38,7 @@
 // ============================================================================
 
 // Uncomment to use compile-time config instead of EEPROM:
-#define USE_STATIC_CONFIG
+//#define USE_STATIC_CONFIG
 
 // ============================================================================
 // STEP 2: HARDWARE PIN ASSIGNMENTS
@@ -199,7 +199,7 @@
 // STEP 7: CALIBRATION CONSTANTS
 // ============================================================================
 
-#define VDO_BIAS_RESISTOR 1000.0        // Default pull-down resistor for VDO sensors (Ω)
+#define DEFAULT_BIAS_RESISTOR 1000.0    // Default pull-down resistor for thermistor and polynomial pressure sensors (Ω)
 #define SEA_LEVEL_PRESSURE_HPA 1013.25  // Sea level pressure for altitude calculations
 
 // ============================================================================

@@ -1057,24 +1057,55 @@ void listAllInputs() {
 
 void listApplicationPresets() {
     Serial.println(F("Available Application Presets:"));
-    Serial.println(F("  CHT             - Cylinder Head Temp"));
-    Serial.println(F("  EGT             - Exhaust Gas Temp"));
-    Serial.println(F("  COOLANT_TEMP    - Coolant Temperature"));
-    Serial.println(F("  OIL_TEMP        - Oil Temperature"));
-    Serial.println(F("  OIL_PRESSURE    - Oil Pressure"));
-    Serial.println(F("  PRIMARY_BATTERY - Primary Battery Voltage"));
+    Serial.println(F("Temperature:"));
+    Serial.println(F("  CHT                 - Cylinder Head Temp"));
+    Serial.println(F("  EGT                 - Exhaust Gas Temp"));
+    Serial.println(F("  COOLANT_TEMP        - Coolant Temperature"));
+    Serial.println(F("  OIL_TEMP            - Oil Temperature"));
+    Serial.println(F("  TCASE_TEMP          - Transfer Case/Trans Temp"));
+    Serial.println(F("  AMBIENT_TEMP        - Outside Air Temp"));
+    Serial.println(F("Pressure:"));
+    Serial.println(F("  OIL_PRESSURE        - Oil Pressure"));
+    Serial.println(F("  BOOST_PRESSURE      - Turbo/Supercharger Boost"));
+    Serial.println(F("  FUEL_PRESSURE       - Fuel System Pressure"));
+    Serial.println(F("  BAROMETRIC_PRESSURE - Atmospheric Pressure"));
+    Serial.println(F("Electrical:"));
+    Serial.println(F("  PRIMARY_BATTERY     - Main Battery Voltage"));
+    Serial.println(F("  AUXILIARY_BATTERY   - Aux Battery Voltage"));
+    Serial.println(F("Other:"));
+    Serial.println(F("  COOLANT_LEVEL       - Coolant Level (Float)"));
+    Serial.println(F("  HUMIDITY            - Relative Humidity"));
+    Serial.println(F("  ELEVATION           - Altitude"));
+    Serial.println(F("  ENGINE_RPM          - Engine Speed (W-phase)"));
 }
 
 void listSensors() {
     Serial.println(F("Available Sensor Types:"));
-    Serial.println(F("  MAX6675"));
-    Serial.println(F("  MAX31855"));
-    Serial.println(F("  VDO_120C_LOOKUP"));
-    Serial.println(F("  VDO_150C_LOOKUP"));
-    Serial.println(F("  VDO_120C_STEINHART"));
-    Serial.println(F("  VDO_150C_STEINHART"));
-    Serial.println(F("  VDO_2BAR"));
-    Serial.println(F("  VDO_5BAR"));
-    Serial.println(F("  VOLTAGE_DIVIDER"));
-    Serial.println(F("  ... (see sensor_library.h for complete list)"));
+    Serial.println(F("Thermocouples:"));
+    Serial.println(F("  MAX6675                - K-type via MAX6675 (0-1024°C)"));
+    Serial.println(F("  MAX31855               - K-type via MAX31855 (-270-1372°C)"));
+    Serial.println(F("Thermistors (VDO):"));
+    Serial.println(F("  VDO_120C_LOOKUP        - VDO 120°C (lookup table)"));
+    Serial.println(F("  VDO_150C_LOOKUP        - VDO 150°C (lookup table)"));
+    Serial.println(F("  VDO_120C_STEINHART     - VDO 120°C (Steinhart-Hart)"));
+    Serial.println(F("  VDO_150C_STEINHART     - VDO 150°C (Steinhart-Hart)"));
+    Serial.println(F("Thermistors (Generic):"));
+    Serial.println(F("  THERMISTOR_LOOKUP      - Generic (requires custom cal)"));
+    Serial.println(F("  THERMISTOR_STEINHART   - Generic (requires custom cal)"));
+    Serial.println(F("Pressure (Linear):"));
+    Serial.println(F("  GENERIC_BOOST          - 0.5-4.5V linear (0-5 bar)"));
+    Serial.println(F("  MPX4250AP              - Freescale/NXP (20-250 kPa)"));
+    Serial.println(F("Pressure (VDO Polynomial):"));
+    Serial.println(F("  VDO_2BAR               - VDO 2-bar pressure"));
+    Serial.println(F("  VDO_5BAR               - VDO 5-bar pressure"));
+    Serial.println(F("Other:"));
+    Serial.println(F("  VOLTAGE_DIVIDER        - Battery voltage (12V divider)"));
+    Serial.println(F("  W_PHASE_RPM            - W-phase alternator RPM"));
+    Serial.println(F("  BME280_TEMP            - BME280 temperature (I2C)"));
+    Serial.println(F("  BME280_PRESSURE        - BME280 barometric pressure (I2C)"));
+    Serial.println(F("  BME280_HUMIDITY        - BME280 relative humidity (I2C)"));
+    Serial.println(F("  BME280_ELEVATION       - BME280 altitude (I2C)"));
+    Serial.println(F("  FLOAT_SWITCH           - Float/level switch (digital)"));
+    Serial.println();
+    Serial.println(F("Note: Use 'I2C' as pin for BME280 sensors (e.g. SET I2C AMBIENT_TEMP BME280_TEMP)"));
 }

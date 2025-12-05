@@ -23,14 +23,23 @@ This guide explains how to add engine RPM sensing using the alternator's W-phase
 
 ### How It Works
 
-Most alternators have 3-phase stator windings. The W-phase outputs AC pulses proportional to engine RPM:
+Most alternators have 3-phase stator windings. The W-phase outputs AC pulses proportional to **alternator** RPM. Since alternators typically spin 2.5-3.5 times faster than the engine (due to pulley ratio), we must account for this:
 
 ```
-Alternator_Hz = (Engine_RPM × Poles) / 120
+Formula: Engine_RPM = (60M / (interval_µs × pulses_per_alt_rev × pulley_ratio)) × calibration_mult
 
-Example for 12-pole alternator at 3000 RPM:
-Hz = (3000 × 12) / 120 = 300 Hz
+Where:
+- pulses_per_alt_rev = poles / 2  (12-pole = 6 pulses per revolution)
+- pulley_ratio = alternator/engine speed ratio (typically 3:1)
+- calibration_mult = fine-tuning multiplier (default 1.0)
+
+Example for 12-pole alternator, 3:1 pulley ratio at 2000 RPM:
+- Alternator spins at: 2000 × 3 = 6000 RPM
+- Alternator_Hz = (6000 × 12) / 120 = 600 Hz
+- Engine_RPM calculated = 2000 RPM ✓
 ```
+
+**Default calibration:** 12 poles, 3:1 pulley ratio (most common automotive setup)
 
 ---
 
@@ -47,10 +56,11 @@ Hz = (3000 × 12) / 120 = 300 Hz
 ### Runtime Configuration
 
 ```
-SET 5 APPLICATION ENGINE_RPM
-SET 5 SENSOR W_PHASE_RPM
-ENABLE 5
-SAVE
+SET 5 ENGINE_RPM W_PHASE_RPM
+
+# (Optional) Customize RPM calibration:
+# SET <pin> RPM <poles> <ratio> [<mult>] <timeout> <min> <max>
+SET 5 RPM 12 3.0 2000 100 8000    # 12 poles, 3:1 ratio (default)
 ```
 
 ---
@@ -192,27 +202,84 @@ Alternator W-Phase
 
 ### Step 4: Determine Alternator Poles
 
-**Method 1: Test and calculate**
-1. Connect circuit and run test code
-2. Read frequency at known RPM (use tachometer)
-3. Calculate: `Poles = (Frequency × 120) / RPM`
-
-**Method 2: Common specs**
-- Most automotive: 12 poles
+**Method 1: Check alternator specs**
+- Most automotive alternators: 12 poles (most common)
 - High-output alternators: 14-16 poles
 - Small engines: 8-12 poles
+- Look for datasheet or part number
 
-**Example calculation:**
+**Method 2: Calculate from known RPM**
+1. Temporarily set poles=2, ratio=1.0 in configuration
+2. Run engine at known RPM (use external tachometer)
+3. Read displayed RPM value
+4. Calculate: `Actual_Poles = Displayed_RPM / Known_RPM × 2`
+
+**Example:**
 ```
-Measured: 200 Hz at 2000 RPM
-Poles = (200 × 120) / 2000 = 12 poles
+Known engine RPM: 2000
+Displayed with poles=2, ratio=1.0: 12000
+Actual poles = 12000 / 2000 × 2 = 12 poles ✓
 ```
+
+### Step 5: Determine Pulley Ratio
+
+The pulley ratio determines how much faster the alternator spins than the engine.
+
+**Method 1: Measure pulley diameters**
+```
+Pulley Ratio = Crank_Pulley_Diameter / Alternator_Pulley_Diameter
+
+Example:
+Crank pulley: 6 inches
+Alternator pulley: 2 inches
+Ratio = 6 / 2 = 3.0 (3:1)  ← Most common
+```
+
+**Method 2: Count pulley teeth (for toothed pulleys)**
+```
+Ratio = Crank_Teeth / Alt_Teeth
+```
+
+**Method 3: Empirical calibration (most accurate)**
+1. Set correct poles (from Step 4)
+2. Set estimated ratio (3.0 is most common)
+3. Compare to external tachometer at various RPM
+4. Adjust ratio OR use calibration multiplier for fine-tuning
+
+**Common ratios:**
+- **3:1** - Most common automotive (2.5-3.5 range)
+- **2:1** - Older vehicles and light trucks
+- **2.5:1** - Some modern vehicles
+
+### Step 6: Fine-Tune Calibration (Optional)
+
+After setting poles and pulley ratio, you may want to fine-tune using the calibration multiplier.
+
+**Calibration multiplier workflow:**
+1. Set poles and estimated pulley ratio
+2. Compare openEMS RPM to external tachometer
+3. Calculate: `calibration_mult = Actual_RPM / Displayed_RPM`
+4. Update calibration with new multiplier
+
+**Example:**
+```
+External tach shows: 2040 RPM
+openEMS shows: 2000 RPM
+calibration_mult = 2040 / 2000 = 1.02
+
+Update configuration:
+SET 5 RPM 12 3.0 1.02 2000 100 8000
+```
+
+This is similar to adjusting the potentiometer on an aftermarket tachometer.
 
 ---
 
 ## Configuration
 
-### Basic Setup
+### Basic Setup (Default Calibration)
+
+Uses default: 12 poles, 3:1 pulley ratio
 
 *Compile-Time:*
 ```cpp
@@ -223,14 +290,57 @@ Poles = (200 × 120) / 2000 = 12 poles
 
 *Runtime:*
 ```
-SET 5 APPLICATION ENGINE_RPM
-SET 5 SENSOR W_PHASE_RPM
+SET 5 ENGINE_RPM W_PHASE_RPM
 SET 5 ALARM 500 6500
-ENABLE 5
 SAVE
 ```
 
 The alarm triggers below 500 RPM (stall warning) or above 6500 RPM (over-rev).
+
+### Custom Calibration (Compile-Time)
+
+For non-standard alternators, use `advanced_config.h`:
+
+```cpp
+// In config.h or sensors_config.h:
+#define INPUT_0_PIN         5
+#define INPUT_0_APPLICATION ENGINE_RPM
+#define INPUT_0_SENSOR      W_PHASE_RPM
+
+// In advanced_config.h:
+#define INPUT_0_CUSTOM_CALIBRATION
+#ifdef INPUT_0_CUSTOM_CALIBRATION
+    DEFINE_CUSTOM_RPM(input_0,
+        18,      // poles (18-pole alternator)
+        3.0,     // pulley_ratio (3:1 alternator to engine)
+        1.0,     // calibration_mult (no fine-tuning)
+        2000,    // timeout_ms
+        300,     // min_rpm
+        8000     // max_rpm
+    )
+#endif
+```
+
+### Custom Calibration (Runtime)
+
+Adjust calibration via serial commands:
+
+```
+# Initial setup (5 parameters - calibration_mult defaults to 1.0):
+SET 5 RPM 12 3.0 2000 100 8000
+
+# Fine-tuned setup (6 parameters - custom calibration_mult):
+SET 5 RPM 12 3.0 1.02 2000 100 8000
+
+# Different alternator (14-pole, 2.5:1 ratio):
+SET 5 RPM 14 2.5 2000 100 8000
+
+# Query current calibration:
+INFO 5
+
+# Save to EEPROM:
+SAVE
+```
 
 ---
 
@@ -248,13 +358,20 @@ The alarm triggers below 500 RPM (stall warning) or above 6500 RPM (over-rev).
 
 **Possible causes:**
 1. Wrong pole count setting
-2. Alternator pulley ratio not 1:1 with engine
-3. Interference from ignition system
+2. Wrong pulley ratio (most common issue!)
+3. Calibration multiplier needs adjustment
+4. Interference from ignition system
 
 **Solutions:**
-1. Recalculate pole count
-2. Account for pulley ratio: `Engine_RPM = Alt_RPM × (Alt_pulley / Crank_pulley)`
-3. Add shielding to signal wire
+1. **Check pole count:** Follow Step 4 to determine correct poles
+2. **Measure pulley ratio:** Follow Step 5 methods
+   - Default is 3:1 (most common)
+   - Try 2:1 if reading is 50% too high
+   - Try 2.5:1 if reading is 20% too high
+3. **Fine-tune with calibration multiplier:** Follow Step 6
+   - `calibration_mult = Actual_RPM / Displayed_RPM`
+   - Example: If showing 1980 but should be 2000, use mult=1.01
+4. Add shielding to signal wire if readings are unstable
 
 ### RPM is erratic/jumpy
 

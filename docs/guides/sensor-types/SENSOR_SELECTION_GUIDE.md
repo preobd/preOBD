@@ -37,20 +37,13 @@ The sensor library makes configuration easy. You just need to know what physical
 ### Example 2: Runtime Mode (Serial Commands)
 
 ```
-SET 6 APPLICATION CHT
-SET 6 SENSOR MAX6675
-ENABLE 6
-
-SET A2 APPLICATION COOLANT_TEMP
-SET A2 SENSOR VDO_120C_LOOKUP
-ENABLE A2
-
-SET A3 APPLICATION OIL_PRESSURE
-SET A3 SENSOR VDO_5BAR
-ENABLE A3
-
+SET 6 CHT MAX6675
+SET A2 COOLANT_TEMP VDO_120C_LOOKUP
+SET A3 OIL_PRESSURE VDO_5BAR
 SAVE
 ```
+
+> Note: SET automatically enables sensors. Use ENABLE only if previously disabled.
 
 **That's it!** The system automatically handles calibration, conversion functions, and display formatting.
 
@@ -92,6 +85,24 @@ MAX6675 CS  → Your configured pin (e.g., Pin 6)
 VDO Sensor Signal wire → Analog pin
 VDO Sensor Ground → Chassis ground (sensor body)
 Add 1kΩ resistor (see guide for options): Analog pin → resistor → GND
+```
+
+### Temperature Sensors - Generic Thermistors
+
+| Sensor ID | Description | Notes |
+|-----------|-------------|-------|
+| `THERMISTOR_LOOKUP` | Generic lookup table thermistor | Requires custom calibration |
+| `THERMISTOR_STEINHART` | Generic Steinhart-Hart thermistor | Requires custom calibration |
+
+**Best for:** Custom NTC thermistors, non-VDO sensors
+
+**Configuration:** Use runtime `SET <pin> STEINHART` or compile-time custom calibration macros. See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md).
+
+**Wiring:**
+```
+Thermistor Signal wire → Analog pin
+Thermistor Ground → Ground
+Add bias resistor (match nominal resistance): Analog pin → resistor → GND
 ```
 
 ### Pressure Sensors
@@ -256,30 +267,12 @@ Each input needs both an **Application** (what you're measuring) and a **Sensor*
 ### Runtime Mode (Serial Commands)
 
 ```
-SET 6 APPLICATION CHT
-SET 6 SENSOR MAX6675
-ENABLE 6
-
-SET A2 APPLICATION COOLANT_TEMP
-SET A2 SENSOR VDO_120C_LOOKUP
-ENABLE A2
-
-SET A0 APPLICATION OIL_TEMP
-SET A0 SENSOR VDO_150C_STEINHART
-ENABLE A0
-
-SET A3 APPLICATION OIL_PRESSURE
-SET A3 SENSOR VDO_5BAR
-ENABLE A3
-
-SET A8 APPLICATION PRIMARY_BATTERY
-SET A8 SENSOR VOLTAGE_DIVIDER
-ENABLE A8
-
-SET 5 APPLICATION ENGINE_RPM
-SET 5 SENSOR W_PHASE_RPM
-ENABLE 5
-
+SET 6 CHT MAX6675
+SET A2 COOLANT_TEMP VDO_120C_LOOKUP
+SET A0 OIL_TEMP VDO_150C_STEINHART
+SET A3 OIL_PRESSURE VDO_5BAR
+SET A8 PRIMARY_BATTERY VOLTAGE_DIVIDER
+SET 5 ENGINE_RPM W_PHASE_RPM
 SAVE
 ```
 
@@ -294,10 +287,10 @@ A: Yes! Each input is independent. You can have multiple VDO_120C sensors on dif
 A: Same physical sensor, different math. Lookup is more accurate (±0.5°C), Steinhart is faster (±1°C).
 
 **Q: Do I need to specify the bias resistor value?**
-A: No! The presets use the default 1kΩ bias resistor (defined by VDO_BIAS_RESISTOR in config.h).
+A: No! The presets use the default 1kΩ bias resistor (defined by DEFAULT_BIAS_RESISTOR in config.h).
 
 **Q: What if I used a different bias resistor?**
-A: See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) to override.
+A: In runtime mode, use `SET <pin> BIAS <resistor>` command. In compile-time mode, see [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) to override.
 
 **Q: How do I know which generic NTC thermistor I have?**
 A: Check your sensor datasheet for the β (beta) value. Most cheap NTC thermistors are β=3950.

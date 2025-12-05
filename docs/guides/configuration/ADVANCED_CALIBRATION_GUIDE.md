@@ -21,7 +21,7 @@ Most users won't need this guide. The preset sensor library covers common automo
 - VDO 120°C or 150°C temperature sensors (use presets)
 - VDO 2-bar or 5-bar pressure sensors (use presets)
 - MAX6675 or MAX31855 thermocouples (no calibration needed)
-- Changing the bias resistor value (use `VDO_BIAS_RESISTOR` in config.h)
+- Changing the bias resistor value (use `DEFAULT_BIAS_RESISTOR` in config.h or runtime `SET <pin> BIAS` command)
 
 ---
 
@@ -66,7 +66,53 @@ When you define `INPUT_N_CUSTOM_CALIBRATION`, the system:
 2. Replaces the preset calibration data with your custom values
 3. Sets a flag so the read function uses your calibration
 
-**Important:** Custom calibration only works in compile-time mode (`USE_STATIC_CONFIG`). Runtime serial configuration uses preset calibrations only.
+**Important:** There are two ways to use custom calibrations:
+
+1. **Compile-time mode**: Define custom calibrations in `advanced_config.h` using macros (described below)
+2. **Runtime mode**: Use serial commands to set custom calibrations dynamically (see [Runtime Calibration](#runtime-calibration))
+
+---
+
+## Runtime Calibration
+
+In runtime configuration mode (without `USE_STATIC_CONFIG`), you can set custom calibrations via serial commands without recompiling. These calibrations are stored in EEPROM when you `SAVE`.
+
+**Available runtime calibration commands:**
+
+```
+SET <pin> CALIBRATION PRESET              # Revert to preset calibration
+SET <pin> BIAS <resistor>                 # Set bias resistor (Ω)
+SET <pin> STEINHART <bias> <a> <b> <c>    # Steinhart-Hart calibration
+SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>  # Linear pressure
+SET <pin> PRESSURE_POLY <bias> <a> <b> <c>  # Polynomial pressure
+SET <pin> RPM <poles> <ratio> <timeout> <min> <max>  # RPM (5 params)
+SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>  # RPM (6 params, with fine-tuning)
+INFO <pin> CALIBRATION                    # View active calibration
+```
+
+**Example: Custom Steinhart-Hart thermistor at runtime:**
+```
+SET A0 OIL_TEMP THERMISTOR_STEINHART
+SET A0 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
+SET A0 DISPLAY_NAME "Oil Temp"
+SAVE
+```
+
+**Example: Custom linear pressure sensor:**
+```
+SET A1 BOOST_PRESSURE GENERIC_BOOST
+SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 3.0
+SAVE
+```
+
+**Example: Fine-tuned RPM calibration:**
+```
+SET 5 ENGINE_RPM W_PHASE_RPM
+SET 5 RPM 12 3.0 1.02 2000 100 8000
+SAVE
+```
+
+See [SERIAL_COMMANDS.md](../../reference/SERIAL_COMMANDS.md) for complete runtime calibration command reference.
 
 ---
 
@@ -155,22 +201,54 @@ For alternator W-phase or other RPM sensors.
 
 ```cpp
 DEFINE_CUSTOM_RPM(name,
-    poles,            // Number of alternator poles
+    poles,            // Number of alternator poles (8, 10, 12, 14, 16)
+    pulley_ratio,     // Alternator/Engine pulley ratio (e.g., 3.0 for 3:1)
+    calibration_mult, // Fine-tuning multiplier (default 1.0)
     timeout_ms,       // Timeout for zero RPM detection (ms)
     min_rpm,          // Minimum valid RPM
     max_rpm           // Maximum valid RPM
 )
 ```
 
-**Example:** 18-pole alternator:
+**Example:** 18-pole alternator, 3:1 pulley ratio:
 ```cpp
 #define INPUT_6_CUSTOM_CALIBRATION
 
 DEFINE_CUSTOM_RPM(input_6,
     18,       // 18-pole alternator
+    3.0,      // 3:1 pulley ratio (alternator to engine)
+    1.0,      // No fine-tuning (adjust empirically if needed)
     2000,     // 2 second timeout
     300,      // Ignore below 300 RPM
     8000      // Ignore above 8000 RPM
+)
+```
+
+**Example:** 12-pole alternator, 2:1 pulley ratio (older vehicles):
+```cpp
+#define INPUT_3_CUSTOM_CALIBRATION
+
+DEFINE_CUSTOM_RPM(input_3,
+    12,       // 12-pole alternator (most common)
+    2.0,      // 2:1 pulley ratio
+    1.0,      // No fine-tuning
+    2000,     // 2 second timeout
+    100,      // Minimum RPM
+    10000     // Maximum RPM
+)
+```
+
+**Example:** Fine-tuned calibration after testing:
+```cpp
+#define INPUT_5_CUSTOM_CALIBRATION
+
+DEFINE_CUSTOM_RPM(input_5,
+    12,       // 12-pole alternator
+    3.0,      // 3:1 pulley ratio (measured)
+    1.0204,   // Fine-tuned +2.04% (compared to external tach)
+    2000,     // 2 second timeout
+    100,      // Minimum RPM
+    8000      // Maximum RPM
 )
 ```
 
@@ -303,10 +381,10 @@ The bias resistor value significantly affects ADC resolution. See [BIAS_RESISTOR
 Set the global default in `config.h`:
 
 ```cpp
-#define VDO_BIAS_RESISTOR 1000.0
+#define DEFAULT_BIAS_RESISTOR 1000.0
 ```
 
-For custom calibration, specify the bias resistor in the macro:
+For custom calibration in compile-time mode, specify the bias resistor in the macro:
 
 ```cpp
 DEFINE_CUSTOM_THERMISTOR(input_3,
@@ -315,6 +393,12 @@ DEFINE_CUSTOM_THERMISTOR(input_3,
     2.659e-04,
     -1.610e-07
 )
+```
+
+For runtime configuration, use the `SET <pin> BIAS` command:
+
+```
+SET A0 BIAS 470    # Set 470Ω bias resistor for this sensor
 ```
 
 ---

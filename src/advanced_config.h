@@ -14,7 +14,7 @@
 #ifndef ADVANCED_CONFIG_H
 #define ADVANCED_CONFIG_H
 
-#include "config.h"  // For VDO_BIAS_RESISTOR and other global defines
+#include "config.h"  // For DEFAULT_BIAS_RESISTOR and other global defines
 
 // =============================================================================
 // HELPER MACROS FOR CUSTOM SENSORS
@@ -51,11 +51,12 @@
     };
 
 // Define a custom RPM calibration
-// Usage: DEFINE_CUSTOM_RPM(SENSOR_NAME, poles, timeout, min, max)
-#define DEFINE_CUSTOM_RPM(name, num_poles, timeout, min_rpm, max_rpm) \
+// Usage: DEFINE_CUSTOM_RPM(SENSOR_NAME, poles, pulley_ratio, calibration_mult, timeout, min, max)
+#define DEFINE_CUSTOM_RPM(name, num_poles, ratio, mult, timeout, min_rpm, max_rpm) \
     static RPMCalibration name##_custom_cal = { \
         .poles = num_poles, \
-        .pulses_per_rev = (float)num_poles / 2.0, \
+        .pulley_ratio = ratio, \
+        .calibration_mult = mult, \
         .timeout_ms = timeout, \
         .min_rpm = min_rpm, \
         .max_rpm = max_rpm \
@@ -137,7 +138,7 @@
 #define OIL_PRESSURE_CUSTOM_CALIBRATION
 #ifdef OIL_PRESSURE_CUSTOM_CALIBRATION
     DEFINE_CUSTOM_PRESSURE_POLY(oil_pressure,
-        VDO_BIAS_RESISTOR,  // bias_resistor (uses global default)
+        DEFAULT_BIAS_RESISTOR,  // bias_resistor (uses global default)
         -0.3682,            // poly_a
         36.465,             // poly_b
         10.648              // poly_c
@@ -146,7 +147,7 @@
 */
 
 // =============================================================================
-// EXAMPLE 5: Custom RPM Sensor (18-pole alternator)
+// EXAMPLE 5: Custom RPM Sensor (18-pole alternator, 3:1 pulley ratio)
 // =============================================================================
 
 /*
@@ -154,6 +155,8 @@
 #ifdef RPM_CUSTOM_CALIBRATION
     DEFINE_CUSTOM_RPM(rpm,
         18,      // poles
+        3.0,     // pulley_ratio (3:1 alternator to engine)
+        1.0,     // calibration_mult (fine-tune after testing)
         2000,    // timeout_ms
         300,     // min_rpm
         8000     // max_rpm
@@ -183,7 +186,7 @@ STEP 2: Add custom calibration in advanced_config.h (this file)
    #define INPUT_5_CUSTOM_CALIBRATION
    #ifdef INPUT_5_CUSTOM_CALIBRATION
        DEFINE_CUSTOM_THERMISTOR(input_5,
-           VDO_BIAS_RESISTOR,  // bias_resistor (uses global default)
+           DEFAULT_BIAS_RESISTOR,  // bias_resistor (uses global default)
            1.764e-03,          // steinhart_a
            2.499e-04,          // steinhart_b
            6.773e-08           // steinhart_c

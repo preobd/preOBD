@@ -23,34 +23,29 @@ extern void initSDLog();
 extern void sendSDLog(Input*);
 extern void updateSDLog();
 
-// Define output modules array with send intervals
+// Define output modules array - always compiled, controlled by runtime flags
 OutputModule outputModules[] = {
-    #ifdef ENABLE_CAN
-    {"CAN", true, initCAN, sendCAN, updateCAN, CAN_OUTPUT_INTERVAL_MS},
-    #endif
-
-    #ifdef ENABLE_REALDASH
-    {"RealDash", true, initRealdash, sendRealdash, updateRealdash, REALDASH_INTERVAL_MS},
-    #endif
-
-    #ifdef ENABLE_SERIAL_OUTPUT
-    {"Serial", true, initSerialOutput, sendSerialOutput, updateSerialOutput, SERIAL_CSV_INTERVAL_MS},
-    #endif
-
-    #ifdef ENABLE_SD_LOGGING
-    {"SD_Log", true, initSDLog, sendSDLog, updateSDLog, SD_LOG_INTERVAL_MS},
-    #endif
+    {"CAN", false, initCAN, sendCAN, updateCAN, 100},
+    {"RealDash", false, initRealdash, sendRealdash, updateRealdash, 100},
+    {"Serial", false, initSerialOutput, sendSerialOutput, updateSerialOutput, 1000},
+    {"SD_Log", false, initSDLog, sendSDLog, updateSDLog, 5000},
 };
 
-const int numOutputModules = sizeof(outputModules) / sizeof(outputModules[0]);
+const int numOutputModules = 4;  // Always 4, no sizeof() needed
 
 // Track last send time for each output module
 static uint32_t lastOutputSend[sizeof(outputModules) / sizeof(outputModules[0])];
 
 void initOutputModules() {
+    // Apply runtime configuration from system config
     for (int i = 0; i < numOutputModules; i++) {
+        outputModules[i].enabled = systemConfig.outputEnabled[i];
+        outputModules[i].sendInterval = systemConfig.outputInterval[i];
+
         if (outputModules[i].enabled && outputModules[i].init != nullptr) {
             outputModules[i].init();
+            Serial.print(F("✓ Initialized "));
+            Serial.println(outputModules[i].name);
         }
         lastOutputSend[i] = 0;  // Initialize timing
     }
@@ -79,6 +74,79 @@ void updateOutputs() {
     for (int i = 0; i < numOutputModules; i++) {
         if (outputModules[i].enabled && outputModules[i].update != nullptr) {
             outputModules[i].update();
+        }
+    }
+}
+
+// ===== RUNTIME CONFIGURATION API =====
+
+/**
+ * Find output module by name
+ * @param name Output name (case-sensitive)
+ * @return Pointer to OutputModule, or nullptr if not found
+ */
+OutputModule* getOutputByName(const char* name) {
+    for (int i = 0; i < numOutputModules; i++) {
+        if (strcmp(outputModules[i].name, name) == 0) {
+            return &outputModules[i];
+        }
+    }
+    return nullptr;
+}
+
+/**
+ * Enable or disable an output module
+ * @param name Output name
+ * @param enabled true to enable, false to disable
+ * @return true if successful
+ */
+bool setOutputEnabled(const char* name, bool enabled) {
+    OutputModule* output = getOutputByName(name);
+    if (!output) return false;
+
+    int index = output - outputModules;  // Calculate index
+    output->enabled = enabled;
+    systemConfig.outputEnabled[index] = enabled ? 1 : 0;
+
+    // Initialize if enabling for first time
+    if (enabled && output->init != nullptr) {
+        output->init();
+    }
+
+    return true;
+}
+
+/**
+ * Set output send interval
+ * @param name Output name
+ * @param interval Interval in milliseconds
+ * @return true if successful
+ */
+bool setOutputInterval(const char* name, uint16_t interval) {
+    OutputModule* output = getOutputByName(name);
+    if (!output) return false;
+
+    int index = output - outputModules;  // Calculate index
+    output->sendInterval = interval;
+    systemConfig.outputInterval[index] = interval;
+
+    return true;
+}
+
+/**
+ * List all outputs with their status
+ */
+void listOutputs() {
+    Serial.println(F("=== Output Modules ==="));
+    for (int i = 0; i < numOutputModules; i++) {
+        Serial.print(outputModules[i].name);
+        Serial.print(F(": "));
+        if (outputModules[i].enabled) {
+            Serial.print(F("Enabled, Interval: "));
+            Serial.print(outputModules[i].sendInterval);
+            Serial.println(F("ms"));
+        } else {
+            Serial.println(F("Disabled"));
         }
     }
 }

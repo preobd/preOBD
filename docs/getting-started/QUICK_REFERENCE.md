@@ -38,11 +38,14 @@
 
 **Configure via serial (115200 baud):**
 ```
-SET A2 APPLICATION COOLANT_TEMP
-SET A2 SENSOR VDO_120C_LOOKUP
-ENABLE A2
+SET A2 COOLANT_TEMP VDO_120C_LOOKUP
+# ... configure more sensors as needed ...
 SAVE
 ```
+
+> **Important:** Configure all your sensors first, then use `SAVE` once at the end. Each SAVE writes to EEPROM (limited write cycles).
+>
+> **Note:** SET automatically enables the sensor. Use ENABLE only if the sensor was previously disabled.
 
 ---
 
@@ -59,10 +62,7 @@ SAVE
 
 **Runtime:**
 ```
-SET 6 APPLICATION CHT
-SET 6 SENSOR MAX6675
-ENABLE 6
-SAVE
+SET 6 CHT MAX6675
 ```
 
 **Wiring:**
@@ -89,10 +89,7 @@ MAX6675 CS  → Pin 6 (or your configured pin)
 
 **Runtime:**
 ```
-SET A2 APPLICATION COOLANT_TEMP
-SET A2 SENSOR VDO_120C_LOOKUP
-ENABLE A2
-SAVE
+SET A2 COOLANT_TEMP VDO_120C_LOOKUP
 ```
 
 **Wiring:**
@@ -119,10 +116,7 @@ Add 1kΩ pull-down resistor: Pin → resistor → GND
 
 **Runtime:**
 ```
-SET A3 APPLICATION OIL_PRESSURE
-SET A3 SENSOR VDO_5BAR
-ENABLE A3
-SAVE
+SET A3 OIL_PRESSURE VDO_5BAR
 ```
 
 **Wiring:**
@@ -147,10 +141,7 @@ Add 1kΩ pull-down resistor: Pin → resistor → GND
 
 **Runtime:**
 ```
-SET A8 APPLICATION PRIMARY_BATTERY
-SET A8 SENSOR VOLTAGE_DIVIDER
-ENABLE A8
-SAVE
+SET A8 PRIMARY_BATTERY VOLTAGE_DIVIDER
 ```
 
 **Wiring:**
@@ -172,10 +163,7 @@ Junction → 22kΩ (3.3V boards) or 6.8kΩ (5V boards) → GND
 
 **Runtime:**
 ```
-SET 5 APPLICATION ENGINE_RPM
-SET 5 SENSOR W_PHASE_RPM
-ENABLE 5
-SAVE
+SET 5 ENGINE_RPM W_PHASE_RPM
 ```
 
 **⚠️ CRITICAL:** See [W_PHASE_RPM_GUIDE.md](../guides/sensor-types/W_PHASE_RPM_GUIDE.md) for voltage protection circuit. Teensy boards (3.3V) require 22kΩ/4.7kΩ divider with 3.3V zener!
@@ -184,17 +172,14 @@ SAVE
 
 **Compile-Time:**
 ```cpp
-#define INPUT_5_PIN            0x76  // I2C address
+#define INPUT_5_PIN            0      // I2C sensor (auto-detected at 0x76/0x77)
 #define INPUT_5_APPLICATION    AMBIENT_TEMP
 #define INPUT_5_SENSOR         BME280_TEMP
 ```
 
 **Runtime:**
 ```
-SET 0x76 APPLICATION AMBIENT_TEMP
-SET 0x76 SENSOR BME280_TEMP
-ENABLE 0x76
-SAVE
+SET I2C AMBIENT_TEMP BME280_TEMP
 ```
 
 **Wiring:**
@@ -222,11 +207,10 @@ BME280 SCL → SCL pin (board-specific)
 
 **Runtime:**
 ```
-SET 7 APPLICATION COOLANT_LEVEL
-SET 7 SENSOR FLOAT_SWITCH
-ENABLE 7
-SAVE
+SET 7 COOLANT_LEVEL FLOAT_SWITCH
 ```
+
+> **💡 Remember:** After configuring all your sensors, use `SAVE` to write to EEPROM. Don't save after every command!
 
 ---
 
@@ -269,7 +253,7 @@ SAVE
 
 - Analog pins: `A0`, `A1`, `A2`, ... `A15`
 - Digital pins: `0`, `1`, `2`, ... `53`
-- I2C addresses: `0x76`, `0x77` (for BME280)
+- I2C sensors: `I2C` (for BME280, auto-detected) or `0` in compile-time mode
 
 ### Available Units
 

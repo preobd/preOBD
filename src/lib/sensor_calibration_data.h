@@ -46,7 +46,7 @@ static const float vdo150_temperature[] PROGMEM = {
 
 // VDO 120°C using lookup table
 static const PROGMEM ThermistorLookupCalibration vdo120_lookup_cal = {
-    .bias_resistor = VDO_BIAS_RESISTOR,
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
     .resistance_table = vdo120_resistance,
     .temperature_table = vdo120_temperature,
     .table_size = 31
@@ -54,7 +54,7 @@ static const PROGMEM ThermistorLookupCalibration vdo120_lookup_cal = {
 
 // VDO 150°C using lookup table
 static const PROGMEM ThermistorLookupCalibration vdo150_lookup_cal = {
-    .bias_resistor = VDO_BIAS_RESISTOR,
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
     .resistance_table = vdo150_resistance,
     .temperature_table = vdo150_temperature,
     .table_size = 37
@@ -65,9 +65,9 @@ static const PROGMEM ThermistorLookupCalibration vdo150_lookup_cal = {
 // VDO 120°C using Steinhart-Hart (curve-fitted from lookup table)
 // Steinhart-Hart coefficients curve-fitted from VDO resistance table
 // Accuracy: ±1°C across 20-120°C range
-// Bias resistor: Set by VDO_BIAS_RESISTOR in config.h
+// Bias resistor: Set by DEFAULT_BIAS_RESISTOR in config.h
 static const PROGMEM ThermistorSteinhartCalibration vdo120_steinhart_cal = {
-    .bias_resistor = VDO_BIAS_RESISTOR,
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
     .steinhart_a = 1.764445997570e-03,
     .steinhart_b = 2.499534389889e-04,
     .steinhart_c = 6.773335597401e-08
@@ -76,9 +76,9 @@ static const PROGMEM ThermistorSteinhartCalibration vdo120_steinhart_cal = {
 // VDO 150°C using Steinhart-Hart (curve-fitted from lookup table)
 // Steinhart-Hart coefficients curve-fitted from VDO resistance table
 // Accuracy: ±1°C across 20-150°C range
-// Bias resistor: Set by VDO_BIAS_RESISTOR in config.h
+// Bias resistor: Set by DEFAULT_BIAS_RESISTOR in config.h
 static const PROGMEM ThermistorSteinhartCalibration vdo150_steinhart_cal = {
-    .bias_resistor = VDO_BIAS_RESISTOR,
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
     .steinhart_a = 1.591623373219e-03,
     .steinhart_b = 2.659356969556e-04,
     .steinhart_c = -1.610552525653e-07
@@ -90,9 +90,9 @@ static const PROGMEM ThermistorSteinhartCalibration vdo150_steinhart_cal = {
 // Source: VDO datasheet curve-fit
 // Polynomial: R = -0.3682*P² + 36.465*P + 10.648
 // Valid range: 0-5 bar
-// Bias resistor: Set by VDO_BIAS_RESISTOR in config.h
+// Bias resistor: Set by DEFAULT_BIAS_RESISTOR in config.h
 static const PROGMEM PolynomialCalibration vdo5bar_polynomial_cal = {
-    .bias_resistor = VDO_BIAS_RESISTOR,
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
     .poly_a = -0.3682,
     .poly_b = 36.465,
     .poly_c = 10.648
@@ -102,9 +102,9 @@ static const PROGMEM PolynomialCalibration vdo5bar_polynomial_cal = {
 // Source: VDO datasheet curve-fit
 // Polynomial: R = -3.1515*P² + 93.686*P + 9.6307
 // Valid range: 0-2 bar
-// Bias resistor: Set by VDO_BIAS_RESISTOR in config.h
+// Bias resistor: Set by DEFAULT_BIAS_RESISTOR in config.h
 static const PROGMEM PolynomialCalibration vdo2bar_polynomial_cal = {
-    .bias_resistor = VDO_BIAS_RESISTOR,
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
     .poly_a = -3.1515,
     .poly_b = 93.686,
     .poly_c = 9.6307
@@ -129,6 +129,30 @@ static const PROGMEM LinearCalibration mpx4250ap_linear_cal = {
     .voltage_max = 4.7,
     .pressure_min = 0.2,    // 20 kPa = 0.2 bar
     .pressure_max = 2.5     // 250 kPa = 2.5 bar
+};
+
+// ===== RPM CALIBRATION =====
+
+// Default W-Phase RPM calibration (12-pole alternator, 3:1 pulley ratio)
+// Suitable for most automotive alternators
+static const PROGMEM RPMCalibration default_rpm_cal = {
+    .poles = 12,             // Most common automotive alternator
+    .pulley_ratio = 3.0,     // Typical automotive ratio (range 2.5-3.5:1)
+    .calibration_mult = 1.0, // No fine-tuning by default
+    .timeout_ms = 2000,      // 2 seconds without pulse = engine stopped
+    .min_rpm = 100,          // Minimum valid RPM (reject noise)
+    .max_rpm = 10000         // Maximum valid RPM (reject spikes)
+};
+
+// Alternative: 12-pole alternator with 2:1 pulley ratio
+// Common in older vehicles and light trucks
+static const PROGMEM RPMCalibration rpm_12p_2to1_cal = {
+    .poles = 12,             // 12-pole alternator
+    .pulley_ratio = 2.0,     // 2:1 alternator to engine ratio
+    .calibration_mult = 1.0, // No fine-tuning by default
+    .timeout_ms = 2000,      // 2 seconds without pulse = engine stopped
+    .min_rpm = 100,          // Minimum valid RPM (reject noise)
+    .max_rpm = 10000         // Maximum valid RPM (reject spikes)
 };
 
 #endif // SENSOR_CALIBRATION_DATA_H
