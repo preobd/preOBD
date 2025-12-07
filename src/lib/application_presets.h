@@ -30,53 +30,54 @@ struct ApplicationPreset {
     uint8_t obd2length;            // OBD-II response length
     bool defaultAlarmEnabled;
     bool defaultDisplayEnabled;
+    MeasurementType expectedMeasurementType;  // Expected physical quantity
 };
 
 // ===== APPLICATION PRESETS (PROGMEM - Flash Memory) =====
 
 static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     // CHT - Cylinder Head Temperature
-    // Order: application, name, displayName, defaultSensor, defaultUnits, defaultMinValue, defaultMaxValue, obd2pid, obd2length, defaultAlarmEnabled, defaultDisplayEnabled
-    { CHT, "CHT", "Cylinder Head Temp", MAX6675, CELSIUS, -1, 260, 0xC8, 1, true, true },
+    // Order: application, name, displayName, defaultSensor, defaultUnits, defaultMinValue, defaultMaxValue, obd2pid, obd2length, defaultAlarmEnabled, defaultDisplayEnabled, expectedMeasurementType
+    { CHT, "CHT", "Cylinder Head Temp", MAX6675, CELSIUS, -1, 260, 0xC8, 1, true, true, MEASURE_TEMPERATURE },
 
     // EGT - Exhaust Gas Temperature
-    { EGT, "EGT", "Exhaust Gas Temp", MAX31855, CELSIUS, -1, 600, 0x78, 2, true, true },
+    { EGT, "EGT", "Exhaust Gas Temp", MAX31855, CELSIUS, -1, 600, 0x78, 2, true, true, MEASURE_TEMPERATURE },
 
     // COOLANT_TEMP - Engine Coolant Temperature
-    { COOLANT_TEMP, "WTR", "Coolant Temp", VDO_120C_LOOKUP, CELSIUS, -1, 100, 0x05, 1, true, true },
+    { COOLANT_TEMP, "WTR", "Coolant Temp", VDO_120C_LOOKUP, CELSIUS, -1, 100, 0x05, 1, true, true, MEASURE_TEMPERATURE },
 
     // OIL_TEMP - Engine Oil Temperature
-    { OIL_TEMP, "OIL", "Oil Temp", VDO_150C_STEINHART, CELSIUS, -1, 150, 0x5C, 1, true, true },
+    { OIL_TEMP, "OIL", "Oil Temp", VDO_150C_STEINHART, CELSIUS, -1, 150, 0x5C, 1, true, true, MEASURE_TEMPERATURE },
 
     // TCASE_TEMP - Transfer Case Temperature
-    { TCASE_TEMP, "TRANS", "Transfer Case Temp", VDO_120C_LOOKUP, CELSIUS, -1, 100, 0xC9, 1, true, true },
+    { TCASE_TEMP, "TRANS", "Transfer Case Temp", VDO_120C_LOOKUP, CELSIUS, -1, 100, 0xC9, 1, true, true, MEASURE_TEMPERATURE },
 
     // OIL_PRESSURE - Engine Oil Pressure
-    { OIL_PRESSURE, "OPS", "Oil Pressure", VDO_5BAR, BAR, 1, 5, 0xCA, 1, true, true },
+    { OIL_PRESSURE, "OPS", "Oil Pressure", VDO_5BAR, BAR, 1, 5, 0xCA, 1, true, true, MEASURE_PRESSURE },
 
     // BOOST_PRESSURE - Boost/Intake Pressure
-    { BOOST_PRESSURE, "BST", "Boost Pressure", VDO_2BAR, BAR, -1, 2, 0x6F, 2, false, true },
+    { BOOST_PRESSURE, "BST", "Boost Pressure", VDO_2BAR, BAR, -1, 2, 0x6F, 2, false, true, MEASURE_PRESSURE },
 
     // PRIMARY_BATTERY - Primary Battery Voltage
-    { PRIMARY_BATTERY, "BAT", "Primary Battery", VOLTAGE_DIVIDER, VOLTS, 10, 15, 0xCB, 1, false, true },
+    { PRIMARY_BATTERY, "BAT", "Primary Battery", VOLTAGE_DIVIDER, VOLTS, 10, 15, 0xCB, 1, false, true, MEASURE_VOLTAGE },
 
     // AUXILIARY_BATTERY - Auxiliary Battery Voltage
-    { AUXILIARY_BATTERY, "AUX", "Auxiliary Battery", VOLTAGE_DIVIDER, VOLTS, 0, 0, 0xCC, 1, false, true },
+    { AUXILIARY_BATTERY, "AUX", "Auxiliary Battery", VOLTAGE_DIVIDER, VOLTS, 0, 0, 0xCC, 1, false, true, MEASURE_VOLTAGE },
 
     // AMBIENT_TEMP - Ambient Air Temperature (BME280)
-    { AMBIENT_TEMP, "AMB", "Ambient Air Temperature", BME280_TEMP, CELSIUS, 0, 0, 0x46, 1, false, true },
+    { AMBIENT_TEMP, "AMB", "Ambient Air Temperature", BME280_TEMP, CELSIUS, 0, 0, 0x46, 1, false, true, MEASURE_TEMPERATURE },
 
     // BAROMETRIC_PRESSURE - Barometric Pressure (BME280)
-    { BAROMETRIC_PRESSURE, "ABP", "Barometric Pressure", BME280_PRESSURE, BAR, 0, 0, 0x33, 1, false, true },
+    { BAROMETRIC_PRESSURE, "ABP", "Barometric Pressure", BME280_PRESSURE, BAR, 0, 0, 0x33, 1, false, true, MEASURE_PRESSURE },
 
     // HUMIDITY - Relative Humidity (BME280)
-    { HUMIDITY, " RH", "Relative Humidity", BME280_HUMIDITY, PERCENT, 0, 0, 0, 0, false, true },
+    { HUMIDITY, " RH", "Relative Humidity", BME280_HUMIDITY, PERCENT, 0, 0, 0, 0, false, true, MEASURE_HUMIDITY },
 
     // ELEVATION - Elevation (BME280)
-    { ELEVATION, "ELV", "Elevation", BME280_ELEVATION, METERS, 0, 0, 0xA1, 2, false, true },
+    { ELEVATION, "ELV", "Elevation", BME280_ELEVATION, METERS, 0, 0, 0xA1, 2, false, true, MEASURE_ELEVATION },
 
     // COOLANT_LEVEL - Coolant Level (Float Switch)
-    { COOLANT_LEVEL, "LVL", "Level", FLOAT_SWITCH, PERCENT, 0, 1, 0xA2, 1, true, true }
+    { COOLANT_LEVEL, "LVL", "Level", FLOAT_SWITCH, PERCENT, 0, 1, 0xA2, 1, true, true, MEASURE_DIGITAL }
 };
 
 #define NUM_APPLICATION_PRESETS (sizeof(APPLICATION_PRESETS) / sizeof(ApplicationPreset))
@@ -95,6 +96,13 @@ inline const ApplicationPreset* getApplicationPreset(Application app) {
 // Load entire preset from PROGMEM into RAM (helper for cleaner code)
 inline void loadApplicationPreset(const ApplicationPreset* flashPreset, ApplicationPreset* ramCopy) {
     memcpy_P(ramCopy, flashPreset, sizeof(ApplicationPreset));
+}
+
+// Get expected measurement type for application from APPLICATION_PRESETS
+inline MeasurementType getApplicationExpectedMeasurementType(Application app) {
+    const ApplicationPreset* preset = getApplicationPreset(app);
+    if (preset == nullptr) return MEASURE_TEMPERATURE;  // Default fallback
+    return (MeasurementType)pgm_read_byte(&preset->expectedMeasurementType);
 }
 
 #endif // APPLICATION_PRESETS_H

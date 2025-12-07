@@ -291,4 +291,14 @@ inline void loadSensorInfo(const SensorInfo* flashInfo, SensorInfo* ramCopy) {
     memcpy_P(ramCopy, flashInfo, sizeof(SensorInfo));
 }
 
+// Get sensor measurement type from SENSOR_LIBRARY
+inline MeasurementType getSensorMeasurementType(Sensor sensor) {
+    for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+        if (pgm_read_byte(&SENSOR_LIBRARY[i].sensor) == sensor) {
+            return (MeasurementType)pgm_read_byte(&SENSOR_LIBRARY[i].measurementType);
+        }
+    }
+    return MEASURE_TEMPERATURE;  // Default fallback
+}
+
 #endif // SENSOR_LIBRARY_H
