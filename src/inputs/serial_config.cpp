@@ -15,6 +15,9 @@
 #include "input.h"
 #include "../lib/system_mode.h"
 #include "../lib/system_config.h"
+#include "../lib/platform.h"
+#include "../lib/application_presets.h"
+#include "../lib/sensor_library.h"
 #include "../outputs/output_base.h"
 #include <string.h>
 #include <ctype.h>
@@ -102,18 +105,117 @@ void processSerialCommands() {
  * Accepts "A0"-"A15" for analog pins, numeric strings for digital pins,
  * or "I2C" for I2C sensors (BME280, etc).
  */
-static uint8_t parsePin(const char* pinStr) {
-    if (!pinStr) return 0;
+static uint8_t parsePin(const char* pinStr, bool* isValid) {
+    if (!pinStr) {
+        if (isValid) *isValid = false;
+        return 0;
+    }
+
+    if (isValid) *isValid = true;
 
     // Handle "I2C" keyword for I2C sensors (BME280, etc)
     if (streq(pinStr, "I2C")) {
         return 0;  // I2C sensors use pin 0 as placeholder
     }
 
+    // Analog pins
     if (toupper(pinStr[0]) == 'A') {
-        return A0 + atoi(pinStr + 1);
+        int analogNum = atoi(pinStr + 1);
+        uint8_t pin = A0 + analogNum;
+
+        // Validate against platform capabilities
+        #if defined(__IMXRT1062__)  // Teensy 4.x
+            #if defined(ARDUINO_TEENSY41)
+                if (analogNum < 0 || analogNum > 17) {
+                    if (isValid) *isValid = false;
+                    Serial.print(F("ERROR: Pin A"));
+                    Serial.print(analogNum);
+                    Serial.println(F(" not available (Teensy 4.1 supports A0-A17)"));
+                    return 0;
+                }
+            #else  // Teensy 4.0
+                if (analogNum < 0 || analogNum > 13) {
+                    if (isValid) *isValid = false;
+                    Serial.print(F("ERROR: Pin A"));
+                    Serial.print(analogNum);
+                    Serial.println(F(" not available (Teensy 4.0 supports A0-A13)"));
+                    return 0;
+                }
+            #endif
+        #elif defined(__AVR_ATmega2560__)  // Arduino Mega
+            if (analogNum < 0 || analogNum > 15) {
+                if (isValid) *isValid = false;
+                Serial.print(F("ERROR: Pin A"));
+                Serial.print(analogNum);
+                Serial.println(F(" not available (Arduino Mega supports A0-A15)"));
+                return 0;
+            }
+        #elif defined(__AVR_ATmega328P__)  // Arduino Uno
+            if (analogNum < 0 || analogNum > 5) {
+                if (isValid) *isValid = false;
+                Serial.print(F("ERROR: Pin A"));
+                Serial.print(analogNum);
+                Serial.println(F(" not available (Arduino Uno supports A0-A5)"));
+                return 0;
+            }
+        #else
+            // Generic validation using MAX_INPUTS from platform.h
+            if (analogNum < 0 || analogNum >= MAX_INPUTS) {
+                if (isValid) *isValid = false;
+                Serial.print(F("ERROR: Pin A"));
+                Serial.print(analogNum);
+                Serial.println(F(" not available on this platform"));
+                return 0;
+            }
+        #endif
+
+        return pin;
     }
-    return atoi(pinStr);
+
+    // Digital pins
+    uint8_t pin = atoi(pinStr);
+
+    // Validate digital pin range
+    #if defined(__IMXRT1062__)  // Teensy 4.x
+        #if defined(ARDUINO_TEENSY41)
+            if (pin > 54) {  // Teensy 4.1: pins 0-54
+                if (isValid) *isValid = false;
+                Serial.print(F("ERROR: Digital pin "));
+                Serial.print(pin);
+                Serial.println(F(" not available (Teensy 4.1 supports 0-54)"));
+                return 0;
+            }
+        #else  // Teensy 4.0
+            if (pin > 39) {  // Teensy 4.0: pins 0-39
+                if (isValid) *isValid = false;
+                Serial.print(F("ERROR: Digital pin "));
+                Serial.print(pin);
+                Serial.println(F(" not available (Teensy 4.0 supports 0-39)"));
+                return 0;
+            }
+        #endif
+    #elif defined(__AVR_ATmega2560__)  // Mega has 54 digital pins
+        if (pin > 53) {
+            if (isValid) *isValid = false;
+            Serial.print(F("ERROR: Digital pin "));
+            Serial.print(pin);
+            Serial.println(F(" not available (Arduino Mega supports 0-53)"));
+            return 0;
+        }
+    #elif defined(__AVR_ATmega328P__)  // Uno has 14 digital pins
+        if (pin > 13) {
+            if (isValid) *isValid = false;
+            Serial.print(F("ERROR: Digital pin "));
+            Serial.print(pin);
+            Serial.println(F(" not available (Arduino Uno supports 0-13)"));
+            return 0;
+        }
+    #else
+        // For unknown platforms, allow any pin (no validation)
+        // This prevents breaking support for new platforms
+    #endif
+
+    return pin;
 }
 
 // Parse Application enum from string
@@ -345,7 +447,9 @@ void handleSerialCommand(char* cmd) {
         char* fieldAndValue = firstSpace + 1;
         trim(fieldAndValue);
 
-        uint8_t pin = parsePin(pinStr);
+        bool pinValid = false;
+        uint8_t pin = parsePin(pinStr, &pinValid);
+        if (!pinValid) return;
 
         // Try combined syntax: SET <pin> <application> <sensor>
         // Example: SET 6 CHT MAX6675
@@ -361,6 +465,39 @@ void handleSerialCommand(char* cmd) {
 
             if (app != APP_NONE && sensor != SENSOR_NONE) {
                 // Valid combined command
+                // Check sensor/application compatibility
+                MeasurementType sensorMeasType = getSensorMeasurementType(sensor);
+                MeasurementType appMeasType = getApplicationExpectedMeasurementType(app);
+
+                if (sensorMeasType != appMeasType) {
+                    Serial.print(F("WARNING: Sensor/application type mismatch - "));
+                    Serial.print(secondToken);
+                    Serial.print(F(" measures "));
+                    // Print measurement type names
+                    switch(sensorMeasType) {
+                        case MEASURE_TEMPERATURE: Serial.print(F("TEMPERATURE")); break;
+                        case MEASURE_PRESSURE: Serial.print(F("PRESSURE")); break;
+                        case MEASURE_VOLTAGE: Serial.print(F("VOLTAGE")); break;
+                        case MEASURE_RPM: Serial.print(F("RPM")); break;
+                        case MEASURE_HUMIDITY: Serial.print(F("HUMIDITY")); break;
+                        case MEASURE_ELEVATION: Serial.print(F("ELEVATION")); break;
+                        case MEASURE_DIGITAL: Serial.print(F("DIGITAL")); break;
+                    }
+                    Serial.print(F(" but "));
+                    Serial.print(firstToken);
+                    Serial.print(F(" expects "));
+                    switch(appMeasType) {
+                        case MEASURE_TEMPERATURE: Serial.print(F("TEMPERATURE")); break;
+                        case MEASURE_PRESSURE: Serial.print(F("PRESSURE")); break;
+                        case MEASURE_VOLTAGE: Serial.print(F("VOLTAGE")); break;
+                        case MEASURE_RPM: Serial.print(F("RPM")); break;
+                        case MEASURE_HUMIDITY: Serial.print(F("HUMIDITY")); break;
+                        case MEASURE_ELEVATION: Serial.print(F("ELEVATION")); break;
+                        case MEASURE_DIGITAL: Serial.print(F("DIGITAL")); break;
+                    }
+                    Serial.println();
+                }
+
                 // First set application (which also calls setInputSensor with preset sensor)
                 if (setInputApplication(pin, app)) {
                     // Then override sensor if different from preset
@@ -673,8 +810,10 @@ void handleSerialCommand(char* cmd) {
                 Serial.println(F("ERROR: vmin must be less than vmax"));
                 return;
             }
-            if (vmin < 0.0 || vmax > 5.0) {
-                Serial.println(F("ERROR: Voltage range must be 0.0-5.0V"));
+            if (vmin < 0.0 || vmax > SYSTEM_VOLTAGE) {
+                Serial.print(F("ERROR: Voltage range must be 0.0-"));
+                Serial.print(SYSTEM_VOLTAGE);
+                Serial.println(F("V for this platform"));
                 return;
             }
             if (pmin >= pmax) {
@@ -740,9 +879,13 @@ void handleSerialCommand(char* cmd) {
                 return;
             }
 
-            // Validate value
-            if (bias <= 0 || bias > 1000000) {
-                Serial.println(F("ERROR: Bias resistor must be 0-1MΩ"));
+            // Validate value (10Ω to 10MΩ covers all practical thermistors)
+            #define BIAS_R_MIN 10.0
+            #define BIAS_R_MAX 10000000.0
+            if (bias < BIAS_R_MIN || bias > BIAS_R_MAX) {
+                Serial.print(F("ERROR: Bias resistor ("));
+                Serial.print(bias, 1);
+                Serial.println(F("Ω) must be between 10Ω and 10MΩ"));
                 return;
             }
 
@@ -919,7 +1062,9 @@ void handleSerialCommand(char* cmd) {
     if (strncmp(cmd, "ENABLE ", 7) == 0) {
         char* pinStr = cmd + 7;
         trim(pinStr);
-        uint8_t pin = parsePin(pinStr);
+        bool pinValid = false;
+        uint8_t pin = parsePin(pinStr, &pinValid);
+        if (!pinValid) return;
         if (enableInput(pin, true)) {
             Serial.print(F("Input "));
             Serial.print(pinStr);
@@ -931,7 +1076,9 @@ void handleSerialCommand(char* cmd) {
     if (strncmp(cmd, "DISABLE ", 8) == 0) {
         char* pinStr = cmd + 8;
         trim(pinStr);
-        uint8_t pin = parsePin(pinStr);
+        bool pinValid = false;
+        uint8_t pin = parsePin(pinStr, &pinValid);
+        if (!pinValid) return;
         if (enableInput(pin, false)) {
             Serial.print(F("Input "));
             Serial.print(pinStr);
@@ -944,7 +1091,9 @@ void handleSerialCommand(char* cmd) {
     if (strncmp(cmd, "CLEAR ", 6) == 0) {
         char* pinStr = cmd + 6;
         trim(pinStr);
-        uint8_t pin = parsePin(pinStr);
+        bool pinValid = false;
+        uint8_t pin = parsePin(pinStr, &pinValid);
+        if (!pinValid) return;
         if (clearInput(pin)) {
             Serial.print(F("Input "));
             Serial.print(pinStr);
@@ -1312,7 +1461,9 @@ void handleSerialCommand(char* cmd) {
             trim(subcommand);
 
             if (streq(subcommand, "CALIBRATION")) {
-                uint8_t pin = parsePin(pinStr);
+                bool pinValid = false;
+                uint8_t pin = parsePin(pinStr, &pinValid);
+                if (!pinValid) return;
                 Input* input = getInputByPin(pin);
                 if (!input || !input->flags.isEnabled) {
                     Serial.println(F("ERROR: Input not configured"));
@@ -1399,7 +1550,9 @@ void handleSerialCommand(char* cmd) {
         }
 
         // Default: INFO <pin>
-        uint8_t pin = parsePin(rest);
+        bool pinValid = false;
+        uint8_t pin = parsePin(rest, &pinValid);
+        if (!pinValid) return;
         printInputInfo(pin);
         return;
     }
