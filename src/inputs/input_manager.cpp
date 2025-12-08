@@ -798,6 +798,9 @@ bool setInputSensor(uint8_t pin, Sensor sensor) {
     SensorInfo info;
     loadSensorInfo(flashInfo, &info);
 
+    // Check if sensor is actually changing (to avoid redundant init)
+    bool sensorChanged = (input->sensor != sensor);
+
     // Apply sensor info to input
     input->sensor = sensor;
     input->readFunction = info.readFunction;
@@ -808,8 +811,8 @@ bool setInputSensor(uint8_t pin, Sensor sensor) {
     input->presetCalibration = info.defaultCalibration;
     input->flags.useCustomCalibration = false;
 
-    // Call sensor-specific initialization function if it exists
-    if (info.initFunction) {
+    // Call sensor-specific initialization function only if sensor changed
+    if (sensorChanged && info.initFunction) {
         info.initFunction(input);
     }
 
