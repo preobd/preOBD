@@ -470,7 +470,7 @@ void handleSerialCommand(char* cmd) {
                 MeasurementType appMeasType = getApplicationExpectedMeasurementType(app);
 
                 if (sensorMeasType != appMeasType) {
-                    Serial.print(F("WARNING: Sensor/application type mismatch - "));
+                    Serial.print(F("ERROR: Sensor/application type mismatch - "));
                     Serial.print(secondToken);
                     Serial.print(F(" measures "));
                     // Print measurement type names
@@ -496,6 +496,7 @@ void handleSerialCommand(char* cmd) {
                         case MEASURE_DIGITAL: Serial.print(F("DIGITAL")); break;
                     }
                     Serial.println();
+                    return;  // Reject the configuration
                 }
 
                 // First set application (which also calls setInputSensor with preset sensor)
