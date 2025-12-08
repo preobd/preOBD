@@ -1364,6 +1364,28 @@ void handleSerialCommand(char* cmd) {
 
         // SYSTEM STATUS
         if (streq(rest, "STATUS")) {
+            // Platform identification
+            Serial.println(F("=== Platform Information ==="));
+            Serial.print(F("Platform: "));
+            Serial.println(F(PLATFORM_NAME));
+            Serial.print(F("I2C Clock: "));
+            Serial.println(F(I2C_CLOCK_SPEED));
+            Serial.print(F("Features: Serial"));
+            #ifdef USE_BME280
+                Serial.print(F(", BME280"));
+            #endif
+            #ifdef ENABLE_LCD
+                Serial.print(F(", LCD"));
+            #endif
+            #ifdef ENABLE_TEST_MODE
+                Serial.print(F(", Test Mode"));
+            #endif
+            #ifdef ENABLE_CAN
+                Serial.print(F(", CAN"));
+            #endif
+            Serial.println();
+            Serial.println();
+
             printSystemConfig();
             Serial.println();
             Serial.println(F("Compile-Time Defaults:"));
@@ -1671,10 +1693,6 @@ void handleSerialCommand(char* cmd) {
         }
         Serial.print(F(", Elev="));
         Serial.println(systemConfig.defaultElevUnits == METERS ? F("M") : F("Ft"));
-        Serial.println();
-
-        // Show system config
-        printSystemConfig();
         Serial.println();
 
         Serial.println(F("To save this configuration to EEPROM, type: SAVE"));

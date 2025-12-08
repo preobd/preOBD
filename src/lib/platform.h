@@ -9,6 +9,8 @@
 // ===== AUTOMATIC PLATFORM DETECTION =====
 #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
     // Arduino Uno - 5V system with 1.1V internal reference
+    #define PLATFORM_NAME "Arduino Uno"
+    #define I2C_CLOCK_SPEED "400kHz"
     #define SYSTEM_VOLTAGE 5.0
     #define SYSTEM_VOLTAGE_MV 5000  // For preprocessor comparisons
     #define AREF_VOLTAGE 5.0    // Using VCC as reference
@@ -17,6 +19,8 @@
     #define MAX_INPUTS 6        // Arduino Uno analog inputs
 #elif defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
     // Arduino Mega - 5V system with 1.1V internal reference
+    #define PLATFORM_NAME "Arduino Mega 2560"
+    #define I2C_CLOCK_SPEED "400kHz"
     #define SYSTEM_VOLTAGE 5.0
     #define SYSTEM_VOLTAGE_MV 5000
     #define AREF_VOLTAGE 5.0
@@ -25,6 +29,8 @@
     #define MAX_INPUTS 16       // Arduino Mega analog inputs
 #elif defined(__MK20DX256__) || defined(__MK20DX128__)
     // Teensy 3.x - 3.3V system with 1.2V internal reference
+    #define PLATFORM_NAME "Teensy 3.x"
+    #define I2C_CLOCK_SPEED "400kHz"
     #define SYSTEM_VOLTAGE 3.3
     #define SYSTEM_VOLTAGE_MV 3300
     #define AREF_VOLTAGE 3.3    // Using VCC as reference
@@ -33,6 +39,8 @@
     #define MAX_INPUTS 24       // Teensy 3.x analog inputs
 #elif defined(__MK64FX512__) || defined(__MK66FX1M0__)
     // Teensy 3.5/3.6 - can be 3.3V or 5V tolerant
+    #define PLATFORM_NAME "Teensy 3.5/3.6"
+    #define I2C_CLOCK_SPEED "400kHz"
     #define SYSTEM_VOLTAGE 3.3
     #define SYSTEM_VOLTAGE_MV 3300
     #define AREF_VOLTAGE 3.3    // Using VCC as reference
@@ -41,6 +49,14 @@
     #define MAX_INPUTS 32       // Teensy 3.5/3.6 analog inputs
 #elif defined(__IMXRT1062__)
     // Teensy 4.x - can be 3.3V or 5V tolerant
+    #if defined(ARDUINO_TEENSY41)
+        #define PLATFORM_NAME "Teensy 4.1"
+    #elif defined(ARDUINO_TEENSY40)
+        #define PLATFORM_NAME "Teensy 4.0"
+    #else
+        #define PLATFORM_NAME "Teensy 4.x"
+    #endif
+    #define I2C_CLOCK_SPEED "400kHz"
     #define SYSTEM_VOLTAGE 3.3
     #define SYSTEM_VOLTAGE_MV 3300
     #define AREF_VOLTAGE 3.3    // Using VCC as reference
@@ -49,6 +65,8 @@
     #define MAX_INPUTS 40       // Teensy 4.x analog inputs
 #elif defined(ARDUINO_SAM_DUE)
     // Arduino Due
+    #define PLATFORM_NAME "Arduino Due"
+    #define I2C_CLOCK_SPEED "400kHz"
     #define SYSTEM_VOLTAGE 3.3
     #define SYSTEM_VOLTAGE_MV 3300
     #define AREF_VOLTAGE 3.3
@@ -57,6 +75,8 @@
     #define MAX_INPUTS 12       // Arduino Due analog inputs
 #elif defined(ESP32)
     // ESP32
+    #define PLATFORM_NAME "ESP32"
+    #define I2C_CLOCK_SPEED "100kHz"
     #define SYSTEM_VOLTAGE 3.3
     #define SYSTEM_VOLTAGE_MV 3300
     #define AREF_VOLTAGE 3.3
@@ -65,6 +85,8 @@
     #define MAX_INPUTS 32       // ESP32 analog inputs
 #else
     // Default safe values for unknown platforms
+    #define PLATFORM_NAME "Unknown"
+    #define I2C_CLOCK_SPEED "400kHz"
     #define SYSTEM_VOLTAGE 3.3
     #define SYSTEM_VOLTAGE_MV 3300
     #define AREF_VOLTAGE 3.3
