@@ -1003,12 +1003,32 @@ void printInputInfo(uint8_t pin) {
     }
     Serial.print(F("  Name: "));
     Serial.println(input->abbrName);
-    Serial.print(F("  Display Name: "));
-    Serial.println(input->displayName);
+
+    // Print application name from PROGMEM
     Serial.print(F("  Application: "));
-    Serial.println(input->application);
+    const ApplicationPreset* appPreset = getApplicationPreset(input->application);
+    if (appPreset) {
+        ApplicationPreset app;
+        loadApplicationPreset(appPreset, &app);
+        Serial.println(app.displayName);
+    } else {
+        Serial.print(F("UNKNOWN ("));
+        Serial.print(input->application);
+        Serial.println(F(")"));
+    }
+
+    // Print sensor name from PROGMEM
     Serial.print(F("  Sensor Type: "));
-    Serial.println(input->sensor);
+    const SensorInfo* sensorInfo = getSensorInfo(input->sensor);
+    if (sensorInfo) {
+        SensorInfo sensor;
+        loadSensorInfo(sensorInfo, &sensor);
+        Serial.println(sensor.name);
+    } else {
+        Serial.print(F("UNKNOWN ("));
+        Serial.print(input->sensor);
+        Serial.println(F(")"));
+    }
     Serial.print(F("  Units: "));
     Serial.println(input->displayUnits);
     Serial.print(F("  Alarm Range: "));
