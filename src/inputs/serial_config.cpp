@@ -68,6 +68,35 @@ static bool streq(const char* a, const char* b) {
     return *a == *b;
 }
 
+// Helper function to print system configuration details
+static void printSystemConfig() {
+    Serial.println(F("=== System Configuration ==="));
+    extern uint8_t numActiveInputs;
+    Serial.print(F("Active Inputs: "));
+    Serial.println(numActiveInputs);
+    Serial.print(F("System Voltage: "));
+    Serial.print(SYSTEM_VOLTAGE);
+    Serial.println(F("V"));
+    Serial.print(F("ADC Reference: "));
+    Serial.print(AREF_VOLTAGE);
+    Serial.println(F("V"));
+    Serial.print(F("ADC Resolution: "));
+    Serial.print(ADC_RESOLUTION);
+    Serial.println(F(" bits"));
+    Serial.print(F("ADC Max Value: "));
+    Serial.println(ADC_MAX_VALUE);
+    Serial.print(F("Sea Level Pressure: "));
+    Serial.print(systemConfig.seaLevelPressure);
+    Serial.println(F(" hPa"));
+    Serial.print(F("Intervals: Sensor="));
+    Serial.print(systemConfig.sensorReadInterval);
+    Serial.print(F("ms, Alarm="));
+    Serial.print(systemConfig.alarmCheckInterval);
+    Serial.print(F("ms, LCD="));
+    Serial.print(systemConfig.lcdUpdateInterval);
+    Serial.println(F("ms"));
+}
+
 void initSerialConfig() {
     Serial.println();
     Serial.println(F("========================================"));
@@ -470,7 +499,7 @@ void handleSerialCommand(char* cmd) {
                 MeasurementType appMeasType = getApplicationExpectedMeasurementType(app);
 
                 if (sensorMeasType != appMeasType) {
-                    Serial.print(F("WARNING: Sensor/application type mismatch - "));
+                    Serial.print(F("ERROR: Sensor/application type mismatch - "));
                     Serial.print(secondToken);
                     Serial.print(F(" measures "));
                     // Print measurement type names
@@ -496,6 +525,7 @@ void handleSerialCommand(char* cmd) {
                         case MEASURE_DIGITAL: Serial.print(F("DIGITAL")); break;
                     }
                     Serial.println();
+                    return;  // Reject the configuration
                 }
 
                 // First set application (which also calls setInputSensor with preset sensor)
@@ -1334,10 +1364,29 @@ void handleSerialCommand(char* cmd) {
 
         // SYSTEM STATUS
         if (streq(rest, "STATUS")) {
-            Serial.println(F("=== System Configuration ==="));
-            Serial.print(F("Sea Level Pressure: "));
-            Serial.print(systemConfig.seaLevelPressure);
-            Serial.println(F(" hPa"));
+            // Platform identification
+            Serial.println(F("=== Platform Information ==="));
+            Serial.print(F("Platform: "));
+            Serial.println(F(PLATFORM_NAME));
+            Serial.print(F("I2C Clock: "));
+            Serial.println(F(I2C_CLOCK_SPEED));
+            Serial.print(F("Features: Serial"));
+            #ifdef USE_BME280
+                Serial.print(F(", BME280"));
+            #endif
+            #ifdef ENABLE_LCD
+                Serial.print(F(", LCD"));
+            #endif
+            #ifdef ENABLE_TEST_MODE
+                Serial.print(F(", Test Mode"));
+            #endif
+            #ifdef ENABLE_CAN
+                Serial.print(F(", CAN"));
+            #endif
+            Serial.println();
+            Serial.println();
+
+            printSystemConfig();
             Serial.println();
             Serial.println(F("Compile-Time Defaults:"));
             Serial.print(F("  Default Bias Resistor: "));
@@ -1359,17 +1408,6 @@ void handleSerialCommand(char* cmd) {
                 Serial.print(F("  Test Mode Pin: "));
                 Serial.println(systemConfig.testModePin);
             }
-            Serial.println();
-            Serial.println(F("Timing Intervals:"));
-            Serial.print(F("  Sensor Read: "));
-            Serial.print(systemConfig.sensorReadInterval);
-            Serial.println(F("ms"));
-            Serial.print(F("  Alarm Check: "));
-            Serial.print(systemConfig.alarmCheckInterval);
-            Serial.println(F("ms"));
-            Serial.print(F("  LCD Update: "));
-            Serial.print(systemConfig.lcdUpdateInterval);
-            Serial.println(F("ms"));
             return;
         }
 
@@ -1655,20 +1693,6 @@ void handleSerialCommand(char* cmd) {
         }
         Serial.print(F(", Elev="));
         Serial.println(systemConfig.defaultElevUnits == METERS ? F("M") : F("Ft"));
-        Serial.println();
-
-        // Show system config
-        Serial.println(F("=== System Configuration ==="));
-        Serial.print(F("Sea Level: "));
-        Serial.print(systemConfig.seaLevelPressure);
-        Serial.println(F(" hPa"));
-        Serial.print(F("Intervals: Sensor="));
-        Serial.print(systemConfig.sensorReadInterval);
-        Serial.print(F("ms, Alarm="));
-        Serial.print(systemConfig.alarmCheckInterval);
-        Serial.print(F("ms, LCD="));
-        Serial.print(systemConfig.lcdUpdateInterval);
-        Serial.println(F("ms"));
         Serial.println();
 
         Serial.println(F("To save this configuration to EEPROM, type: SAVE"));

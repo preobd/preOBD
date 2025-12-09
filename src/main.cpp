@@ -239,9 +239,6 @@ void setup() {
     Serial.println(F("  Initialization complete!"));
 #ifdef USE_STATIC_CONFIG
     Serial.println(F("  Mode: Compile-Time Config"));
-#else
-    Serial.println(F("  Mode: EEPROM Config"));
-#endif
     Serial.print(F("  Active inputs: "));
     Serial.println(numActiveInputs);
     Serial.print(F("  System voltage: "));
@@ -257,6 +254,9 @@ void setup() {
     Serial.println(ADC_MAX_VALUE);
     Serial.println(F("========================================"));
     Serial.println(F(""));
+#else
+    Serial.println(F(""));
+#endif
 
     // ===== TEST MODE ACTIVATION =====
 #ifdef ENABLE_TEST_MODE

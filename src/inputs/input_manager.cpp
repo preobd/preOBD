@@ -798,6 +798,9 @@ bool setInputSensor(uint8_t pin, Sensor sensor) {
     SensorInfo info;
     loadSensorInfo(flashInfo, &info);
 
+    // Check if sensor is actually changing (to avoid redundant init)
+    bool sensorChanged = (input->sensor != sensor);
+
     // Apply sensor info to input
     input->sensor = sensor;
     input->readFunction = info.readFunction;
@@ -808,8 +811,8 @@ bool setInputSensor(uint8_t pin, Sensor sensor) {
     input->presetCalibration = info.defaultCalibration;
     input->flags.useCustomCalibration = false;
 
-    // Call sensor-specific initialization function if it exists
-    if (info.initFunction) {
+    // Call sensor-specific initialization function only if sensor changed
+    if (sensorChanged && info.initFunction) {
         info.initFunction(input);
     }
 
@@ -1000,12 +1003,32 @@ void printInputInfo(uint8_t pin) {
     }
     Serial.print(F("  Name: "));
     Serial.println(input->abbrName);
-    Serial.print(F("  Display Name: "));
-    Serial.println(input->displayName);
+
+    // Print application name from PROGMEM
     Serial.print(F("  Application: "));
-    Serial.println(input->application);
+    const ApplicationPreset* appPreset = getApplicationPreset(input->application);
+    if (appPreset) {
+        ApplicationPreset app;
+        loadApplicationPreset(appPreset, &app);
+        Serial.println(app.displayName);
+    } else {
+        Serial.print(F("UNKNOWN ("));
+        Serial.print(input->application);
+        Serial.println(F(")"));
+    }
+
+    // Print sensor name from PROGMEM
     Serial.print(F("  Sensor Type: "));
-    Serial.println(input->sensor);
+    const SensorInfo* sensorInfo = getSensorInfo(input->sensor);
+    if (sensorInfo) {
+        SensorInfo sensor;
+        loadSensorInfo(sensorInfo, &sensor);
+        Serial.println(sensor.name);
+    } else {
+        Serial.print(F("UNKNOWN ("));
+        Serial.print(input->sensor);
+        Serial.println(F(")"));
+    }
     Serial.print(F("  Units: "));
     Serial.println(input->displayUnits);
     Serial.print(F("  Alarm Range: "));
