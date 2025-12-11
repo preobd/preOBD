@@ -33,7 +33,8 @@
 struct ApplicationPreset {
     Application application;        // Enum value (for compatibility - will be removed in Phase 11)
     const char* name;              // PRIMARY KEY: "CHT", "OIL_TEMP", "BOOST_PRESSURE"
-    const char* label;             // Display string: "Cylinder Head Temp", "Oil Temp"
+    const char* abbreviation;      // Short label: "CHT", "OIL", "MAP"
+    const char* label;             // Display string: "Cylinder Head Temperature", "Oil Temperature"
     const char* description;       // Help text (nullable)
     Sensor defaultSensor;          // Default hardware sensor
     Units defaultUnits;            // Default display units
@@ -51,51 +52,67 @@ struct ApplicationPreset {
 static const char PSTR_APP_NONE[] PROGMEM = "NONE";
 
 static const char PSTR_CHT[] PROGMEM = "CHT";
-static const char PSTR_CHT_LABEL[] PROGMEM = "Cylinder Head Temp";
+static const char PSTR_CHT_ABBR[] PROGMEM = "CHT";
+static const char PSTR_CHT_LABEL[] PROGMEM = "Cylinder Head Temperature";
 
 static const char PSTR_EGT[] PROGMEM = "EGT";
-static const char PSTR_EGT_LABEL[] PROGMEM = "Exhaust Gas Temp";
+static const char PSTR_EGT_ABBR[] PROGMEM = "EGT";
+static const char PSTR_EGT_LABEL[] PROGMEM = "Exhaust Gas Temperature";
 
 static const char PSTR_COOLANT_TEMP[] PROGMEM = "COOLANT_TEMP";
-static const char PSTR_COOLANT_TEMP_LABEL[] PROGMEM = "Coolant Temp";
+static const char PSTR_COOLANT_TEMP_ABBR[] PROGMEM = "WTR";
+static const char PSTR_COOLANT_TEMP_LABEL[] PROGMEM = "Coolant Temperature";
 
 static const char PSTR_OIL_TEMP[] PROGMEM = "OIL_TEMP";
-static const char PSTR_OIL_TEMP_LABEL[] PROGMEM = "Oil Temp";
+static const char PSTR_OIL_TEMP_ABBR[] PROGMEM = "OIL";
+static const char PSTR_OIL_TEMP_LABEL[] PROGMEM = "Oil Temperature";
 
 static const char PSTR_TCASE_TEMP[] PROGMEM = "TCASE_TEMP";
-static const char PSTR_TCASE_TEMP_LABEL[] PROGMEM = "Transfer Case Temp";
+static const char PSTR_TCASE_TEMP_ABBR[] PROGMEM = "TCASE";
+static const char PSTR_TCASE_TEMP_LABEL[] PROGMEM = "Transfer Case Temperature";
 
 static const char PSTR_AMBIENT_TEMP[] PROGMEM = "AMBIENT_TEMP";
+static const char PSTR_AMBIENT_TEMP_ABBR[] PROGMEM = "AMB";
 static const char PSTR_AMBIENT_TEMP_LABEL[] PROGMEM = "Ambient Air Temperature";
 
 static const char PSTR_OIL_PRESSURE[] PROGMEM = "OIL_PRESSURE";
+static const char PSTR_OIL_PRESSURE_ABBR[] PROGMEM = "OILP";
 static const char PSTR_OIL_PRESSURE_LABEL[] PROGMEM = "Oil Pressure";
 
 static const char PSTR_BOOST_PRESSURE[] PROGMEM = "BOOST_PRESSURE";
-static const char PSTR_BOOST_PRESSURE_LABEL[] PROGMEM = "Boost Pressure";
+static const char PSTR_BOOST_PRESSURE_ABBR[] PROGMEM = "MAP";
+static const char PSTR_BOOST_PRESSURE_LABEL[] PROGMEM = "Turbo Boost Pressure";
 
 static const char PSTR_FUEL_PRESSURE[] PROGMEM = "FUEL_PRESSURE";
+static const char PSTR_FUEL_PRESSURE_ABBR[] PROGMEM = "FUEL";
 static const char PSTR_FUEL_PRESSURE_LABEL[] PROGMEM = "Fuel Pressure";
 
 static const char PSTR_BAROMETRIC_PRESSURE[] PROGMEM = "BAROMETRIC_PRESSURE";
+static const char PSTR_BAROMETRIC_PRESSURE_ABBR[] PROGMEM = "BARO";
 static const char PSTR_BAROMETRIC_PRESSURE_LABEL[] PROGMEM = "Barometric Pressure";
 
 static const char PSTR_PRIMARY_BATTERY[] PROGMEM = "PRIMARY_BATTERY";
+static const char PSTR_PRIMARY_BATTERY_ABBR[] PROGMEM = "BAT1";
 static const char PSTR_PRIMARY_BATTERY_LABEL[] PROGMEM = "Primary Battery";
 
 static const char PSTR_AUXILIARY_BATTERY[] PROGMEM = "AUXILIARY_BATTERY";
+static const char PSTR_AUXILIARY_BATTERY_ABBR[] PROGMEM = "BAT2";
 static const char PSTR_AUXILIARY_BATTERY_LABEL[] PROGMEM = "Auxiliary Battery";
 
 static const char PSTR_COOLANT_LEVEL[] PROGMEM = "COOLANT_LEVEL";
+static const char PSTR_COOLANT_LEVEL_ABBR[] PROGMEM = "CLVL";
 static const char PSTR_COOLANT_LEVEL_LABEL[] PROGMEM = "Coolant Level";
 
 static const char PSTR_HUMIDITY[] PROGMEM = "HUMIDITY";
+static const char PSTR_HUMIDITY_ABBR[] PROGMEM = " RH";
 static const char PSTR_HUMIDITY_LABEL[] PROGMEM = "Relative Humidity";
 
 static const char PSTR_ELEVATION[] PROGMEM = "ELEVATION";
+static const char PSTR_ELEVATION_ABBR[] PROGMEM = "ELEV";
 static const char PSTR_ELEVATION_LABEL[] PROGMEM = "Elevation";
 
 static const char PSTR_ENGINE_RPM[] PROGMEM = "ENGINE_RPM";
+static const char PSTR_ENGINE_RPM_ABBR[] PROGMEM = "RPM";
 static const char PSTR_ENGINE_RPM_LABEL[] PROGMEM = "Engine RPM";
 
 // ===== APPLICATION PRESETS (PROGMEM - Flash Memory) =====
@@ -120,6 +137,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = APP_NONE,
         .name = PSTR_APP_NONE,
+        .abbreviation = nullptr,
         .label = nullptr,
         .description = nullptr,
         .defaultSensor = SENSOR_NONE,
@@ -139,6 +157,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = CHT,
         .name = PSTR_CHT,
+        .abbreviation = PSTR_CHT_ABBR,
         .label = PSTR_CHT_LABEL,
         .description = nullptr,
         .defaultSensor = MAX6675,
@@ -157,6 +176,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = EGT,
         .name = PSTR_EGT,
+        .abbreviation = PSTR_EGT_ABBR,
         .label = PSTR_EGT_LABEL,
         .description = nullptr,
         .defaultSensor = MAX31855,
@@ -175,6 +195,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = COOLANT_TEMP,
         .name = PSTR_COOLANT_TEMP,
+        .abbreviation = PSTR_COOLANT_TEMP_ABBR,
         .label = PSTR_COOLANT_TEMP_LABEL,
         .description = nullptr,
         .defaultSensor = VDO_120C_LOOKUP,
@@ -193,6 +214,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = OIL_TEMP,
         .name = PSTR_OIL_TEMP,
+        .abbreviation = PSTR_OIL_TEMP_ABBR,
         .label = PSTR_OIL_TEMP_LABEL,
         .description = nullptr,
         .defaultSensor = VDO_150C_STEINHART,
@@ -211,6 +233,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = TCASE_TEMP,
         .name = PSTR_TCASE_TEMP,
+        .abbreviation = PSTR_TCASE_TEMP_ABBR,
         .label = PSTR_TCASE_TEMP_LABEL,
         .description = nullptr,
         .defaultSensor = VDO_120C_LOOKUP,
@@ -229,6 +252,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = AMBIENT_TEMP,
         .name = PSTR_AMBIENT_TEMP,
+        .abbreviation = PSTR_AMBIENT_TEMP_ABBR,
         .label = PSTR_AMBIENT_TEMP_LABEL,
         .description = nullptr,
         .defaultSensor = BME280_TEMP,
@@ -248,6 +272,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = OIL_PRESSURE,
         .name = PSTR_OIL_PRESSURE,
+        .abbreviation = PSTR_OIL_PRESSURE_ABBR,
         .label = PSTR_OIL_PRESSURE_LABEL,
         .description = nullptr,
         .defaultSensor = VDO_5BAR,
@@ -266,6 +291,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = BOOST_PRESSURE,
         .name = PSTR_BOOST_PRESSURE,
+        .abbreviation = PSTR_BOOST_PRESSURE_ABBR,
         .label = PSTR_BOOST_PRESSURE_LABEL,
         .description = nullptr,
         .defaultSensor = VDO_2BAR,
@@ -284,6 +310,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = FUEL_PRESSURE,
         .name = PSTR_FUEL_PRESSURE,
+        .abbreviation = PSTR_FUEL_PRESSURE_ABBR,
         .label = nullptr,
         .description = nullptr,
         .defaultSensor = SENSOR_NONE,
@@ -302,6 +329,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = BAROMETRIC_PRESSURE,
         .name = PSTR_BAROMETRIC_PRESSURE,
+        .abbreviation = PSTR_BAROMETRIC_PRESSURE_ABBR,
         .label = PSTR_BAROMETRIC_PRESSURE_LABEL,
         .description = nullptr,
         .defaultSensor = BME280_PRESSURE,
@@ -321,6 +349,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = PRIMARY_BATTERY,
         .name = PSTR_PRIMARY_BATTERY,
+        .abbreviation = PSTR_PRIMARY_BATTERY_ABBR,
         .label = PSTR_PRIMARY_BATTERY_LABEL,
         .description = nullptr,
         .defaultSensor = VOLTAGE_DIVIDER,
@@ -339,6 +368,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = AUXILIARY_BATTERY,
         .name = PSTR_AUXILIARY_BATTERY,
+        .abbreviation = PSTR_AUXILIARY_BATTERY_ABBR,
         .label = PSTR_AUXILIARY_BATTERY_LABEL,
         .description = nullptr,
         .defaultSensor = VOLTAGE_DIVIDER,
@@ -358,6 +388,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = COOLANT_LEVEL,
         .name = PSTR_COOLANT_LEVEL,
+        .abbreviation = PSTR_COOLANT_LEVEL_ABBR,
         .label = PSTR_COOLANT_LEVEL_LABEL,
         .description = nullptr,
         .defaultSensor = FLOAT_SWITCH,
@@ -377,6 +408,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = HUMIDITY,
         .name = PSTR_HUMIDITY,
+        .abbreviation = PSTR_HUMIDITY_ABBR,
         .label = PSTR_HUMIDITY_LABEL,
         .description = nullptr,
         .defaultSensor = BME280_HUMIDITY,
@@ -395,6 +427,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = ELEVATION,
         .name = PSTR_ELEVATION,
+        .abbreviation = PSTR_ELEVATION_ABBR,
         .label = PSTR_ELEVATION_LABEL,
         .description = nullptr,
         .defaultSensor = BME280_ELEVATION,
@@ -414,6 +447,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     {
         .application = ENGINE_RPM,
         .name = PSTR_ENGINE_RPM,
+        .abbreviation = PSTR_ENGINE_RPM_ABBR,
         .label = nullptr,
         .description = nullptr,
         .defaultSensor = SENSOR_NONE,

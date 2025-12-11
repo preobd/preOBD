@@ -44,7 +44,7 @@ struct InputEEPROM {
 
     // === User Configuration (stored as hashes) ===
     char abbrName[8];               // "CHT", "OIL"
-    char displayName[24];           // "Cylinder Head Temp"
+    char displayName[32];           // "Cylinder Head Temp"
     uint16_t applicationHash;       // djb2_hash of application name
     uint16_t sensorHash;            // djb2_hash of sensor name
     uint16_t unitsHash;             // djb2_hash of units name
@@ -117,9 +117,9 @@ struct InputEEPROM {
         if (flashPreset) { \
             ApplicationPreset preset; \
             loadApplicationPreset(flashPreset, &preset); \
-            strncpy(input->abbrName, preset.name, sizeof(input->abbrName) - 1); \
+            strncpy_P(input->abbrName, preset.abbreviation, sizeof(input->abbrName) - 1); \
             input->abbrName[sizeof(input->abbrName) - 1] = '\0'; \
-            strncpy(input->displayName, preset.label, sizeof(input->displayName) - 1); \
+            strncpy_P(input->displayName, preset.label, sizeof(input->displayName) - 1); \
             input->displayName[sizeof(input->displayName) - 1] = '\0'; \
             input->unitsIndex = preset.defaultUnits; \
             input->minValue = preset.defaultMinValue; \
@@ -449,7 +449,7 @@ bool initInputManager() {
             numActiveInputs++;
 
             // Call sensor-specific initialization function if it exists
-            const SensorInfo* flashInfo = getSensorInfo(inputs[i].sensorIndex);
+            const SensorInfo* flashInfo = getSensorByIndex(inputs[i].sensorIndex);
             if (flashInfo) {
                 SensorInfo info;
                 loadSensorInfo(flashInfo, &info);
@@ -842,10 +842,19 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
 
     // Apply preset to input
     input->applicationIndex = appIndex;
-    strncpy(input->abbrName, preset.name, sizeof(input->abbrName) - 1);
+
+    // Read abbreviation and label from PROGMEM pointers
+    // (loadApplicationPreset copies the struct, but string pointers still point to PROGMEM)
+    strncpy_P(input->abbrName, preset.abbreviation, sizeof(input->abbrName) - 1);
     input->abbrName[sizeof(input->abbrName) - 1] = '\0';
-    strncpy(input->displayName, preset.label, sizeof(input->displayName) - 1);
+
+    if (preset.label) {
+        strncpy_P(input->displayName, preset.label, sizeof(input->displayName) - 1);
+    } else {
+        strncpy_P(input->displayName, preset.name, sizeof(input->displayName) - 1);
+    }
     input->displayName[sizeof(input->displayName) - 1] = '\0';
+
     input->sensorIndex = preset.defaultSensor;
     input->unitsIndex = preset.defaultUnits;
     
