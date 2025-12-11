@@ -174,8 +174,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .calibrationType = CAL_NONE,
         .defaultCalibration = nullptr,
         .minReadInterval = 250,  // MAX6675 needs ~220ms for temperature conversion
-        .minValue = -200.0,      // K-type thermocouple minimum
-        .maxValue = 1350.0,      // MAX6675 maximum (K-type can go to 1372°C)
+        .minValue = 0.0,      // K-type thermocouple minimum
+        .maxValue = 1024.0,      // MAX6675 maximum (K-type can go to 1372°C)
         .nameHash = 0x2A23  // djb2_hash("MAX6675")
     },
     // Index 2: MAX31855
@@ -209,7 +209,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .defaultCalibration = &vdo120_lookup_cal,
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = -40.0,       // VDO sensor minimum
-        .maxValue = 120.0,       // VDO 120°C maximum
+        .maxValue = 150.0,       // VDO 120°C maximum
         .nameHash = 0xAE3C  // djb2_hash("VDO_120C_LOOKUP")
     },
     // Index 4: VDO_150C_LOOKUP
@@ -225,7 +225,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .defaultCalibration = &vdo150_lookup_cal,
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = -40.0,       // VDO sensor minimum
-        .maxValue = 150.0,       // VDO 150°C maximum
+        .maxValue = 180.0,       // VDO 150°C maximum
         .nameHash = 0x619F  // djb2_hash("VDO_150C_LOOKUP")
     },
 
@@ -243,7 +243,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .defaultCalibration = &vdo120_steinhart_cal,
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = -40.0,
-        .maxValue = 120.0,
+        .maxValue = 150.0,
         .nameHash = 0x7434  // djb2_hash("VDO_120C_STEINHART")
     },
     // Index 6: VDO_150C_STEINHART
@@ -259,7 +259,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .defaultCalibration = &vdo150_steinhart_cal,
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = -40.0,
-        .maxValue = 150.0,
+        .maxValue = 180.0,
         .nameHash = 0x90B7  // djb2_hash("VDO_150C_STEINHART")
     },
 
