@@ -199,7 +199,7 @@ struct Input {
 
     // === User Configuration ===
     char abbrName[8];               // "CHT", "OIL" (for LCD display)
-    char displayName[24];           // "Cylinder Head Temp" (full name)
+    char displayName[32];           // "Cylinder Head Temperature" (full name)
     uint8_t applicationIndex;       // Index into APPLICATION_PRESETS[] array
     uint8_t sensorIndex;            // Index into SENSOR_LIBRARY[] array
     uint8_t unitsIndex;             // Index into UNITS_REGISTRY[] array

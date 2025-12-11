@@ -67,7 +67,7 @@ extern float obdConvertFloatSwitch(float value);
 
 // Helper functions to get conversion function pointers from measurement type
 // These allow us to derive conversion functions at runtime instead of storing them
-typedef float (*DisplayConvertFunc)(float, Units);
+typedef float (*DisplayConvertFunc)(float, uint8_t);
 typedef float (*ObdConvertFunc)(float);
 
 DisplayConvertFunc getDisplayConvertFunc(MeasurementType type);

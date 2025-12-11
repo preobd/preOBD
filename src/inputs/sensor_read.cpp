@@ -652,32 +652,32 @@ float convertToBaseUnits(float displayValue, uint8_t unitsIndex) {
 // Legacy conversion functions - now just call the registry-based functions
 // These are kept for backward compatibility with enum-based code
 
-float convertTemperature(float celsius, DisplayUnits units) {
-    return convertFromBaseUnits(celsius, units);
+float convertTemperature(float celsius, uint8_t unitsIndex) {
+    return convertFromBaseUnits(celsius, unitsIndex);
 }
 
-float convertPressure(float bar, DisplayUnits units) {
-    return convertFromBaseUnits(bar, units);
+float convertPressure(float bar, uint8_t unitsIndex) {
+    return convertFromBaseUnits(bar, unitsIndex);
 }
 
-float convertVoltage(float volts, DisplayUnits units) {
-    return convertFromBaseUnits(volts, units);
+float convertVoltage(float volts, uint8_t unitsIndex) {
+    return convertFromBaseUnits(volts, unitsIndex);
 }
 
-float convertRPM(float rpm, DisplayUnits units) {
-    return convertFromBaseUnits(rpm, units);
+float convertRPM(float rpm, uint8_t unitsIndex) {
+    return convertFromBaseUnits(rpm, unitsIndex);
 }
 
-float convertHumidity(float humidity, DisplayUnits units) {
-    return convertFromBaseUnits(humidity, units);
+float convertHumidity(float humidity, uint8_t unitsIndex) {
+    return convertFromBaseUnits(humidity, unitsIndex);
 }
 
-float convertElevation(float meters, DisplayUnits units) {
-    return convertFromBaseUnits(meters, units);
+float convertElevation(float meters, uint8_t unitsIndex) {
+    return convertFromBaseUnits(meters, unitsIndex);
 }
 
-float convertFloatSwitch(float value, DisplayUnits units) {
-    return convertFromBaseUnits(value, units);
+float convertFloatSwitch(float value, uint8_t unitsIndex) {
+    return convertFromBaseUnits(value, unitsIndex);
 }
 
 // ===== UNIT STRING CONVERSION =====
