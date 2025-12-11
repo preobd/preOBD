@@ -187,23 +187,12 @@ void displaySensor(Input *ptr, byte line) {
                 lcd.write((byte)ICON_DEGREE);
                 charsPrinted++;
             } else if (unitInfo) {
-                // For LCD space constraints, use abbreviated symbols
-                if (ptr->unitsIndex == PSI) {
-                    charsPrinted += lcd.print("p");
-                } else if (ptr->unitsIndex == BAR) {
-                    charsPrinted += lcd.print("b");
-                } else if (ptr->unitsIndex == KPA) {
-                    charsPrinted += lcd.print("k");
-                } else if (ptr->unitsIndex == VOLTS) {
-                    charsPrinted += lcd.print("V");
-                } else if (ptr->unitsIndex == PERCENT) {
-                    charsPrinted += lcd.print("%");
-                } else if (ptr->unitsIndex == METERS) {
-                    charsPrinted += lcd.print("m");
-                } else if (ptr->unitsIndex == FEET) {
-                    charsPrinted += lcd.print("ft");
+                // Use symbol from registry
+                const char* symPtr = (const char*)pgm_read_ptr(&unitInfo->symbol);
+                if (symPtr) {
+                    lcd.print((__FlashStringHelper*)symPtr);
+                    charsPrinted += strlen_P(symPtr);
                 }
-                // RPM has no suffix on LCD (space constraint)
             }
         }
     }
