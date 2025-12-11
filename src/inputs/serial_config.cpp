@@ -318,7 +318,7 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  SET <pin> APPLICATION <application>  - Set measurement type"));
         Serial.println(F("  SET <pin> SENSOR <sensor>  - Set hardware sensor"));
         Serial.println(F("  SET <pin> NAME <name>  - Set abbreviated name (8 chars)"));
-        Serial.println(F("  SET <pin> DISPLAY_NAME <name>  - Set full name (24 chars)"));
+        Serial.println(F("  SET <pin> DISPLAY_NAME <name>  - Set full name (32 chars)"));
         Serial.println(F("  SET <pin> UNITS <units>  - Override display units"));
         Serial.println(F("  SET <pin> ALARM <min> <max>  - Set alarm thresholds"));
         Serial.println();
@@ -374,7 +374,7 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("Examples:"));
         Serial.println(F("  SET 6 CHT MAX6675  (combined syntax)"));
         Serial.println(F("  SET A2 APPLICATION COOLANT_TEMP"));
-        Serial.println(F("  SET A2 SENSOR VDO_120C"));
+        Serial.println(F("  SET A2 SENSOR VDO_120C_STEINHART"));
         Serial.println(F("  SET I2C AMBIENT_TEMP BME280_TEMP  (I2C sensors)"));
         Serial.println(F("  SET A1 PRESSURE_LINEAR 0.5 4.5 0 7  (custom pressure)"));
         Serial.println(F("  SET A0 BIAS 4700  (change bias resistor)"));
