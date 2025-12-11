@@ -8,6 +8,7 @@
 #include "input_manager.h"
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
+#include "../lib/units_registry.h"
 #include <EEPROM.h>
 #include <string.h>
 
@@ -17,17 +18,51 @@ uint8_t numActiveInputs = 0;
 
 // ===== EEPROM LAYOUT =====
 // EEPROM stores configuration persistently for runtime mode.
-// Layout: [Header (8 bytes)] [Input 0] [Input 1] ... [Input N]
+// Layout: [Header (8 bytes)] [InputEEPROM 0] [InputEEPROM 1] ... [InputEEPROM N]
+//
+// IMPORTANT: We store hashes (not indices) in EEPROM for stability.
+// Registry indices can change when entries are reordered, but hashes remain stable.
+// At boot time, we resolve hashes back to current indices.
 
 #define EEPROM_MAGIC 0x4F454D53            // "OEMS" in ASCII - validates EEPROM has our data
 #define EEPROM_HEADER_SIZE sizeof(EEPROMHeader)  // Header size
-#define EEPROM_INPUT_SIZE sizeof(Input)    // ~100 bytes per input
+#define EEPROM_INPUT_SIZE sizeof(InputEEPROM)    // ~70 bytes per input (smaller than Input!)
 
 struct EEPROMHeader {
     uint32_t magic;
     uint16_t version;
     uint8_t numInputs;
     uint8_t reserved;
+};
+
+// InputEEPROM - Compact struct for EEPROM storage
+// Only stores user-configurable fields (not runtime data or function pointers)
+// Uses hashes instead of indices for stability across registry reordering
+struct InputEEPROM {
+    // === Hardware ===
+    uint8_t pin;                    // Physical pin
+
+    // === User Configuration (stored as hashes) ===
+    char abbrName[8];               // "CHT", "OIL"
+    char displayName[24];           // "Cylinder Head Temp"
+    uint16_t applicationHash;       // djb2_hash of application name
+    uint16_t sensorHash;            // djb2_hash of sensor name
+    uint16_t unitsHash;             // djb2_hash of units name
+
+    // === Alarm Thresholds (in STANDARD UNITS) ===
+    float minValue;
+    float maxValue;
+
+    // === OBDII ===
+    uint8_t obd2pid;
+    uint8_t obd2length;
+
+    // === Flags ===
+    uint8_t flagsByte;              // Packed flags
+
+    // === Calibration ===
+    uint8_t calibrationType;
+    CalibrationOverride customCalibration;  // 16 bytes
 };
 
 // ===== STATIC CONFIG GENERATOR (Compile-Time) =====
@@ -472,13 +507,51 @@ static uint8_t calculateConfigChecksum() {
 }
 
 bool saveInputConfig() {
-    // Write inputs first (header needs checksum)
+    // Convert Input structs to InputEEPROM structs (indices → hashes)
     uint16_t addr = EEPROM_HEADER_SIZE;
     uint8_t savedCount = 0;
 
     for (uint8_t i = 0; i < MAX_INPUTS && savedCount < numActiveInputs; i++) {
         if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) {
-            EEPROM.put(addr, inputs[i]);
+            InputEEPROM eepromInput;
+            memset(&eepromInput, 0, sizeof(InputEEPROM));
+
+            // Copy simple fields
+            eepromInput.pin = inputs[i].pin;
+            strncpy(eepromInput.abbrName, inputs[i].abbrName, sizeof(eepromInput.abbrName) - 1);
+            strncpy(eepromInput.displayName, inputs[i].displayName, sizeof(eepromInput.displayName) - 1);
+            eepromInput.minValue = inputs[i].minValue;
+            eepromInput.maxValue = inputs[i].maxValue;
+            eepromInput.obd2pid = inputs[i].obd2pid;
+            eepromInput.obd2length = inputs[i].obd2length;
+            eepromInput.calibrationType = inputs[i].calibrationType;
+            memcpy(&eepromInput.customCalibration, &inputs[i].customCalibration, sizeof(CalibrationOverride));
+
+            // Pack flags into single byte
+            eepromInput.flagsByte =
+                (inputs[i].flags.isEnabled ? 0x01 : 0) |
+                (inputs[i].flags.alarm ? 0x02 : 0) |
+                (inputs[i].flags.display ? 0x04 : 0) |
+                (inputs[i].flags.useCustomCalibration ? 0x08 : 0);
+
+            // Convert indices to hashes by looking up names in registries
+            const ApplicationPreset* appPreset = getApplicationByIndex(inputs[i].applicationIndex);
+            if (appPreset) {
+                eepromInput.applicationHash = pgm_read_word(&appPreset->nameHash);
+            }
+
+            const SensorInfo* sensorInfo = getSensorByIndex(inputs[i].sensorIndex);
+            if (sensorInfo) {
+                eepromInput.sensorHash = pgm_read_word(&sensorInfo->nameHash);
+            }
+
+            const UnitsInfo* unitsInfo = getUnitsByIndex(inputs[i].unitsIndex);
+            if (unitsInfo) {
+                eepromInput.unitsHash = pgm_read_word(&unitsInfo->nameHash);
+            }
+
+            // Write to EEPROM
+            EEPROM.put(addr, eepromInput);
             addr += EEPROM_INPUT_SIZE;
             savedCount++;
         }
@@ -486,7 +559,7 @@ bool saveInputConfig() {
 
     Serial.print(F("✓ Saved "));
     Serial.print(savedCount);
-    Serial.println(F(" inputs to EEPROM"));
+    Serial.println(F(" inputs to EEPROM (hash-based)"));
 
     // Calculate checksum
     uint8_t checksum = calculateConfigChecksum();
@@ -517,7 +590,11 @@ bool loadInputConfig() {
 
     // Check version
     if (header.version != EEPROM_VERSION) {
-        Serial.println(F("EEPROM version mismatch - ignoring"));
+        Serial.print(F("EEPROM version mismatch (found "));
+        Serial.print(header.version);
+        Serial.print(F(", expected "));
+        Serial.print(EEPROM_VERSION);
+        Serial.println(F(") - ignoring"));
         return false;
     }
 
@@ -527,7 +604,7 @@ bool loadInputConfig() {
         inputs[i].pin = 0xFF;
     }
 
-    // Read inputs
+    // Read inputs from EEPROM and convert hashes → indices
     uint16_t addr = EEPROM_HEADER_SIZE;
     numActiveInputs = header.numInputs;
 
@@ -536,12 +613,35 @@ bool loadInputConfig() {
     }
 
     for (uint8_t i = 0; i < numActiveInputs; i++) {
-        EEPROM.get(addr, inputs[i]);
+        InputEEPROM eepromInput;
+        EEPROM.get(addr, eepromInput);
         addr += EEPROM_INPUT_SIZE;
+
+        // Copy simple fields
+        inputs[i].pin = eepromInput.pin;
+        strncpy(inputs[i].abbrName, eepromInput.abbrName, sizeof(inputs[i].abbrName) - 1);
+        strncpy(inputs[i].displayName, eepromInput.displayName, sizeof(inputs[i].displayName) - 1);
+        inputs[i].minValue = eepromInput.minValue;
+        inputs[i].maxValue = eepromInput.maxValue;
+        inputs[i].obd2pid = eepromInput.obd2pid;
+        inputs[i].obd2length = eepromInput.obd2length;
+        inputs[i].calibrationType = (CalibrationType)eepromInput.calibrationType;
+        memcpy(&inputs[i].customCalibration, &eepromInput.customCalibration, sizeof(CalibrationOverride));
+
+        // Unpack flags from single byte
+        inputs[i].flags.isEnabled = (eepromInput.flagsByte & 0x01) != 0;
+        inputs[i].flags.alarm = (eepromInput.flagsByte & 0x02) != 0;
+        inputs[i].flags.display = (eepromInput.flagsByte & 0x04) != 0;
+        inputs[i].flags.useCustomCalibration = (eepromInput.flagsByte & 0x08) != 0;
+
+        // Resolve hashes to current indices
+        inputs[i].applicationIndex = getApplicationIndexByHash(eepromInput.applicationHash);
+        inputs[i].sensorIndex = getSensorIndexByHash(eepromInput.sensorHash);
+        inputs[i].unitsIndex = getUnitsIndexByHash(eepromInput.unitsHash);
 
         // Re-initialize function pointers and sensor-specific data
         // (Function pointers can't be reliably stored in EEPROM)
-        const SensorInfo* flashInfo = getSensorInfo(inputs[i].sensorIndex);
+        const SensorInfo* flashInfo = getSensorByIndex(inputs[i].sensorIndex);
         if (flashInfo) {
             SensorInfo info;
             loadSensorInfo(flashInfo, &info);

@@ -301,6 +301,28 @@ inline const UnitsInfo* getUnitsByHash(uint16_t hash) {
 }
 
 /**
+ * Get Units index by hash value (O(n) linear search)
+ *
+ * Searches the registry for a unit with matching name hash or alias hash.
+ * Returns the array index (0-10), which matches the DisplayUnits enum value.
+ *
+ * @param hash  16-bit hash value to search for
+ * @return      Array index (0-10), or 0 (CELSIUS) if not found
+ */
+inline uint8_t getUnitsIndexByHash(uint16_t hash) {
+    for (uint8_t i = 0; i < NUM_UNITS; i++) {
+        const UnitsInfo* info = &UNITS_REGISTRY[i];
+        uint16_t nameHash = pgm_read_word(&info->nameHash);
+        uint16_t aliasHash = pgm_read_word(&info->aliasHash);
+
+        if (hash == nameHash || hash == aliasHash) {
+            return i;
+        }
+    }
+    return 0;  // CELSIUS (default)
+}
+
+/**
  * Get UnitsInfo by name string (O(n) hash-based search)
  *
  * Hashes the input string and searches for matching unit.

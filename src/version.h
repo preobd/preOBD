@@ -11,6 +11,7 @@
 
 // EEPROM configuration version
 // Increment when Input struct layout changes (forces reconfiguration)
-#define EEPROM_VERSION 1
+// Version 2: Changed from storing enum indices to storing name hashes (Phase 5)
+#define EEPROM_VERSION 2
 
 #endif
