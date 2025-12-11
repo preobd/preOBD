@@ -75,29 +75,33 @@ byte getIconForApplication(uint8_t appIndex) {
     const ApplicationPreset* preset = getApplicationByIndex(appIndex);
     if (!preset) return 32;
 
-    // Read name and measurement type from PROGMEM
-    const char* name = (const char*)pgm_read_ptr(&preset->name);
+    // Read name from PROGMEM into RAM buffer
+    const char* namePtr = (const char*)pgm_read_ptr(&preset->name);
+    char nameBuf[32];
+    strncpy_P(nameBuf, namePtr, sizeof(nameBuf) - 1);
+    nameBuf[sizeof(nameBuf) - 1] = '\0';
+
     MeasurementType measType = (MeasurementType)pgm_read_byte(&preset->expectedMeasurementType);
 
-    // Pattern matching on name (using strstr_P for PROGMEM strings)
+    // Pattern matching on name (now in RAM)
     // Check specific patterns first, then fall back to measurement type
 
-    if (strstr_P(name, PSTR("COOLANT")) && strstr_P(name, PSTR("TEMP"))) {
+    if (strstr(nameBuf, "COOLANT") && strstr(nameBuf, "TEMP")) {
         return ICON_COOLANT;
     }
-    if (strstr_P(name, PSTR("OIL"))) {
+    if (strstr(nameBuf, "OIL")) {
         return ICON_OIL;
     }
-    if (strstr_P(name, PSTR("FUEL"))) {
+    if (strstr(nameBuf, "FUEL")) {
         return ICON_OIL_CAN;
     }
-    if (strstr_P(name, PSTR("BOOST"))) {
+    if (strstr(nameBuf, "BOOST")) {
         return ICON_TURBO;
     }
-    if (strstr_P(name, PSTR("BATTERY"))) {
+    if (strstr(nameBuf, "BATTERY")) {
         return ICON_BATTERY;
     }
-    if (strstr_P(name, PSTR("RPM"))) {
+    if (strstr(nameBuf, "RPM")) {
         return ICON_TACHOMETER;
     }
 

@@ -1123,9 +1123,8 @@ void printInputInfo(uint8_t pin) {
     Serial.print(F("  Application: "));
     const ApplicationPreset* appPreset = getApplicationByIndex(input->applicationIndex);
     if (appPreset) {
-        ApplicationPreset app;
-        loadApplicationPreset(appPreset, &app);
-        Serial.println(app.label);
+        const char* label = READ_APP_LABEL(appPreset);
+        Serial.println((const __FlashStringHelper*)label);
     } else {
         Serial.print(F("UNKNOWN ("));
         Serial.print(input->applicationIndex);
@@ -1136,9 +1135,8 @@ void printInputInfo(uint8_t pin) {
     Serial.print(F("  Sensor Type: "));
     const SensorInfo* sensorInfo = getSensorByIndex(input->sensorIndex);
     if (sensorInfo) {
-        SensorInfo sensor;
-        loadSensorInfo(sensorInfo, &sensor);
-        Serial.println(sensor.name);
+        const char* label = READ_SENSOR_LABEL(sensorInfo);
+        Serial.println((const __FlashStringHelper*)label);
     } else {
         Serial.print(F("UNKNOWN ("));
         Serial.print(input->sensorIndex);
