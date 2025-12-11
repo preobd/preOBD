@@ -7,6 +7,8 @@
 #include "../inputs/input.h"
 #include "../lib/sensor_types.h"
 #include "../lib/sensor_library.h"
+#include "../lib/application_presets.h"
+#include "../lib/units_registry.h"
 
 #ifdef ENABLE_LCD
 
@@ -39,7 +41,7 @@ byte coolant_icon[8] = {0x04,0x07,0x04,0x07,0x04,0x0E,0x0E,0x04};
 
 // Forward declarations
 void showConfigModeMessage();
-byte getIconForApplication(Application app);
+byte getIconForApplication(uint8_t appIndex);
 
 void initLCD() {
     lcd.init();
@@ -56,26 +58,58 @@ void initLCD() {
     Serial.println("LCD initialized");
 }
 
-byte getIconForApplication(Application app) {
-    switch (app) {
-        case CHT:
-        case EGT:
-        case TCASE_TEMP:
-        case AMBIENT_TEMP:
+/**
+ * Get icon for application using registry-based pattern matching
+ *
+ * Uses application name patterns and measurement types to determine
+ * the appropriate icon. This is data-driven - no code changes needed
+ * when adding new applications.
+ *
+ * @param appIndex Index into APPLICATION_PRESETS array
+ * @return Icon character code (custom LCD characters)
+ */
+byte getIconForApplication(uint8_t appIndex) {
+    if (appIndex >= NUM_APPLICATION_PRESETS) return 32; // space
+
+    // Get application info from registry
+    const ApplicationPreset* preset = getApplicationByIndex(appIndex);
+    if (!preset) return 32;
+
+    // Read name and measurement type from PROGMEM
+    const char* name = (const char*)pgm_read_ptr(&preset->name);
+    MeasurementType measType = (MeasurementType)pgm_read_byte(&preset->expectedMeasurementType);
+
+    // Pattern matching on name (using strstr_P for PROGMEM strings)
+    // Check specific patterns first, then fall back to measurement type
+
+    if (strstr_P(name, PSTR("COOLANT")) && strstr_P(name, PSTR("TEMP"))) {
+        return ICON_COOLANT;
+    }
+    if (strstr_P(name, PSTR("OIL"))) {
+        return ICON_OIL;
+    }
+    if (strstr_P(name, PSTR("FUEL"))) {
+        return ICON_OIL_CAN;
+    }
+    if (strstr_P(name, PSTR("BOOST"))) {
+        return ICON_TURBO;
+    }
+    if (strstr_P(name, PSTR("BATTERY"))) {
+        return ICON_BATTERY;
+    }
+    if (strstr_P(name, PSTR("RPM"))) {
+        return ICON_TACHOMETER;
+    }
+
+    // Fallback to measurement type
+    switch (measType) {
+        case MEASURE_TEMPERATURE:
             return ICON_THERMOMETER;
-        case COOLANT_TEMP:
-            return ICON_COOLANT;
-        case OIL_TEMP:
-        case OIL_PRESSURE:
-            return ICON_OIL;
-        case FUEL_PRESSURE:
-            return ICON_OIL_CAN;
-        case BOOST_PRESSURE:
-            return ICON_TURBO;
-        case PRIMARY_BATTERY:
-        case AUXILIARY_BATTERY:
+        case MEASURE_PRESSURE:
+            return ICON_TURBO;  // Generic pressure icon
+        case MEASURE_VOLTAGE:
             return ICON_BATTERY;
-        case ENGINE_RPM:
+        case MEASURE_RPM:
             return ICON_TACHOMETER;
         default:
             return 32; // space
@@ -115,37 +149,57 @@ void displaySensor(Input *ptr, byte line) {
             // Convert to display units
             float displayValue = getDisplayConvertFunc(ptr->measurementType)(ptr->value, ptr->unitsIndex);
 
+            // Get unit info from registry
+            const UnitsInfo* unitInfo = getUnitsByIndex(ptr->unitsIndex);
+            MeasurementType measType = MEASURE_TEMPERATURE;
+            if (unitInfo) {
+                measType = (MeasurementType)pgm_read_byte(&unitInfo->measurementType);
+            }
+
+            // Determine decimal precision based on measurement type
+            int decimals = 1;  // Default: 1 decimal place
+            switch (measType) {
+                case MEASURE_TEMPERATURE:
+                case MEASURE_HUMIDITY:
+                case MEASURE_ELEVATION:
+                case MEASURE_RPM:
+                case MEASURE_DIGITAL:
+                    decimals = 0;  // No decimals for these
+                    break;
+                case MEASURE_PRESSURE:
+                    decimals = (ptr->unitsIndex == INHG) ? 2 : 1;  // 2 decimals for inHg
+                    break;
+                case MEASURE_VOLTAGE:
+                    decimals = 1;  // 1 decimal for voltage
+                    break;
+            }
+
             // Print value with appropriate precision
-            if (ptr->unitsIndex == CELSIUS || ptr->unitsIndex == FAHRENHEIT) {
-                charsPrinted += lcd.print(displayValue, 0);  // No decimal for temperature
+            charsPrinted += lcd.print(displayValue, decimals);
+
+            // Print unit symbol from registry
+            if (measType == MEASURE_TEMPERATURE) {
+                // Temperature gets a degree symbol before the unit
                 lcd.write((byte)ICON_DEGREE);
                 charsPrinted++;
-            } else if (ptr->unitsIndex == VOLTS) {
-                charsPrinted += lcd.print(displayValue, 1);  // 1 decimal for voltage
-                charsPrinted += lcd.print("V");
-            } else if (ptr->unitsIndex == BAR || ptr->unitsIndex == PSI) {
-                charsPrinted += lcd.print(displayValue, 1);  // 1 decimal for pressure
+            } else if (unitInfo) {
+                // For LCD space constraints, use abbreviated symbols
                 if (ptr->unitsIndex == PSI) {
                     charsPrinted += lcd.print("p");
-                } else {
+                } else if (ptr->unitsIndex == BAR) {
                     charsPrinted += lcd.print("b");
+                } else if (ptr->unitsIndex == KPA) {
+                    charsPrinted += lcd.print("k");
+                } else if (ptr->unitsIndex == VOLTS) {
+                    charsPrinted += lcd.print("V");
+                } else if (ptr->unitsIndex == PERCENT) {
+                    charsPrinted += lcd.print("%");
+                } else if (ptr->unitsIndex == METERS) {
+                    charsPrinted += lcd.print("m");
+                } else if (ptr->unitsIndex == FEET) {
+                    charsPrinted += lcd.print("ft");
                 }
-            } else if (ptr->unitsIndex == KPA) {
-                charsPrinted += lcd.print(displayValue, 1);
-                charsPrinted += lcd.print("k");
-            } else if (ptr->unitsIndex == INHG) {
-                charsPrinted += lcd.print(displayValue, 2);
-            } else if (ptr->unitsIndex == PERCENT) {
-                charsPrinted += lcd.print(displayValue, 0);  // No decimal for humidity
-                charsPrinted += lcd.print("%");
-            } else if (ptr->unitsIndex == METERS) {
-                charsPrinted += lcd.print(displayValue, 0);  // No decimal for elevation
-                charsPrinted += lcd.print("m");
-            } else if (ptr->unitsIndex == FEET) {
-                charsPrinted += lcd.print(displayValue, 0);  // No decimal for elevation
-                charsPrinted += lcd.print("ft");
-            } else if (ptr->unitsIndex == RPM) {
-                charsPrinted += lcd.print(displayValue, 0);  // No decimal for RPM
+                // RPM has no suffix on LCD (space constraint)
             }
         }
     }
