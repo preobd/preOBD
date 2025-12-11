@@ -857,14 +857,16 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     }
     input->displayName[sizeof(input->displayName) - 1] = '\0';
 
-    input->sensorIndex = preset.defaultSensor;
+    // Don't set sensorIndex yet - let setInputSensor() do it
+    // (This allows sensorChanged check to work correctly)
+    uint8_t defaultSensor = preset.defaultSensor;
     input->unitsIndex = preset.defaultUnits;
-    
+
     // CRITICAL: Store min/max in STANDARD UNITS (no conversion!)
     // Preset already has values in Celsius, bar, volts, etc.
     input->minValue = preset.defaultMinValue;
     input->maxValue = preset.defaultMaxValue;
-    
+
     input->obd2pid = preset.obd2pid;
     input->obd2length = preset.obd2length;
     input->flags.alarm = preset.defaultAlarmEnabled;
@@ -888,7 +890,8 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     }
 
     // Set up sensor (function pointers + calibration)
-    return setInputSensor(pin, input->sensorIndex);
+    // This also sets input->sensorIndex
+    return setInputSensor(pin, defaultSensor);
 }
 
 bool setInputSensor(uint8_t pin, uint8_t sensorIndex) {
@@ -923,6 +926,7 @@ bool setInputSensor(uint8_t pin, uint8_t sensorIndex) {
     input->flags.useCustomCalibration = false;
 
     // Call sensor-specific initialization function only if sensor changed
+    // (Prevents duplicate init when setting same sensor twice)
     if (sensorChanged && info.initFunction) {
         info.initFunction(input);
     }
