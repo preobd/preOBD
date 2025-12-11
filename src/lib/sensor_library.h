@@ -75,7 +75,6 @@ ObdConvertFunc getObdConvertFunc(MeasurementType type);
 
 // ===== SENSOR INFO STRUCTURE =====
 struct SensorInfo {
-    Sensor sensor;                   // Enum value (for compatibility - will be removed in Phase 11)
     const char* name;                // PRIMARY KEY: "MAX6675", "VDO_120C_LOOKUP"
     const char* label;               // Display string: "K-Type Thermocouple (MAX6675)"
     const char* description;         // Help text (nullable)
@@ -146,7 +145,7 @@ static const char PSTR_FLOAT_SWITCH_LABEL[] PROGMEM = "Float Switch";
 static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     // Index 0: SENSOR_NONE (placeholder)
     {
-        .sensor = SENSOR_NONE,
+
         .name = PSTR_NONE,
         .label = nullptr,
         .description = nullptr,
@@ -164,7 +163,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     // ===== THERMOCOUPLES =====
     // Index 1: MAX6675
     {
-        .sensor = MAX6675,
+
         .name = PSTR_MAX6675,
         .label = PSTR_MAX6675_LABEL,
         .description = nullptr,
@@ -180,7 +179,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
     // Index 2: MAX31855
     {
-        .sensor = MAX31855,
+
         .name = PSTR_MAX31855,
         .label = PSTR_MAX31855_LABEL,
         .description = nullptr,
@@ -198,7 +197,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     // ===== VDO THERMISTORS - LOOKUP =====
     // Index 3: VDO_120C_LOOKUP
     {
-        .sensor = VDO_120C_LOOKUP,
+
         .name = PSTR_VDO_120C_LOOKUP,
         .label = PSTR_VDO_120C_LOOKUP_LABEL,
         .description = nullptr,
@@ -214,7 +213,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
     // Index 4: VDO_150C_LOOKUP
     {
-        .sensor = VDO_150C_LOOKUP,
+
         .name = PSTR_VDO_150C_LOOKUP,
         .label = PSTR_VDO_150C_LOOKUP_LABEL,
         .description = nullptr,
@@ -232,7 +231,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     // ===== VDO THERMISTORS - STEINHART =====
     // Index 5: VDO_120C_STEINHART
     {
-        .sensor = VDO_120C_STEINHART,
+
         .name = PSTR_VDO_120C_STEINHART,
         .label = PSTR_VDO_120C_STEINHART_LABEL,
         .description = nullptr,
@@ -248,7 +247,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
     // Index 6: VDO_150C_STEINHART
     {
-        .sensor = VDO_150C_STEINHART,
+
         .name = PSTR_VDO_150C_STEINHART,
         .label = PSTR_VDO_150C_STEINHART_LABEL,
         .description = nullptr,
@@ -266,7 +265,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     // ===== GENERIC THERMISTORS (PLACEHOLDERS) =====
     // Index 7: THERMISTOR_LOOKUP (placeholder - not yet implemented)
     {
-        .sensor = THERMISTOR_LOOKUP,
+
         .name = PSTR_THERMISTOR_LOOKUP,
         .label = nullptr,
         .description = nullptr,
@@ -282,7 +281,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
     // Index 8: THERMISTOR_STEINHART (placeholder - not yet implemented)
     {
-        .sensor = THERMISTOR_STEINHART,
+
         .name = PSTR_THERMISTOR_STEINHART,
         .label = nullptr,
         .description = nullptr,
@@ -300,7 +299,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     // ===== PRESSURE SENSORS =====
     // Index 9: GENERIC_BOOST
     {
-        .sensor = GENERIC_BOOST,
+
         .name = PSTR_GENERIC_BOOST,
         .label = PSTR_GENERIC_BOOST_LABEL,
         .description = nullptr,
@@ -316,7 +315,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
     // Index 10: MPX4250AP
     {
-        .sensor = MPX4250AP,
+
         .name = PSTR_MPX4250AP,
         .label = PSTR_MPX4250AP,
         .description = nullptr,
@@ -332,7 +331,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
     // Index 11: VDO_2BAR
     {
-        .sensor = VDO_2BAR,
+
         .name = PSTR_VDO_2BAR,
         .label = PSTR_VDO_2BAR_LABEL,
         .description = nullptr,
@@ -348,7 +347,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
     // Index 12: VDO_5BAR
     {
-        .sensor = VDO_5BAR,
+
         .name = PSTR_VDO_5BAR,
         .label = PSTR_VDO_5BAR_LABEL,
         .description = nullptr,
@@ -366,7 +365,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     // ===== VOLTAGE SENSORS =====
     // Index 13: VOLTAGE_DIVIDER
     {
-        .sensor = VOLTAGE_DIVIDER,
+
         .name = PSTR_VOLTAGE_DIVIDER,
         .label = PSTR_VOLTAGE_DIVIDER_LABEL,
         .description = nullptr,
@@ -384,7 +383,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     // ===== RPM SENSORS =====
     // Index 14: W_PHASE_RPM
     {
-        .sensor = W_PHASE_RPM,
+
         .name = PSTR_W_PHASE_RPM,
         .label = PSTR_W_PHASE_RPM_LABEL,
         .description = nullptr,
@@ -402,7 +401,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     // ===== BME280 SENSORS =====
     // Index 15: BME280_TEMP
     {
-        .sensor = BME280_TEMP,
+
         .name = PSTR_BME280_TEMP,
         .label = PSTR_BME280_TEMP_LABEL,
         .description = nullptr,
@@ -418,7 +417,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
     // Index 16: BME280_PRESSURE
     {
-        .sensor = BME280_PRESSURE,
+
         .name = PSTR_BME280_PRESSURE,
         .label = PSTR_BME280_PRESSURE_LABEL,
         .description = nullptr,
@@ -434,7 +433,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
     // Index 17: BME280_HUMIDITY
     {
-        .sensor = BME280_HUMIDITY,
+
         .name = PSTR_BME280_HUMIDITY,
         .label = PSTR_BME280_HUMIDITY_LABEL,
         .description = nullptr,
@@ -450,7 +449,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
     // Index 18: BME280_ELEVATION
     {
-        .sensor = BME280_ELEVATION,
+
         .name = PSTR_BME280_ELEVATION,
         .label = PSTR_BME280_ELEVATION_LABEL,
         .description = nullptr,
@@ -468,7 +467,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     // ===== DIGITAL SENSORS =====
     // Index 19: FLOAT_SWITCH
     {
-        .sensor = FLOAT_SWITCH,
+
         .name = PSTR_FLOAT_SWITCH,
         .label = PSTR_FLOAT_SWITCH_LABEL,
         .description = nullptr,
@@ -489,9 +488,9 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
 // ===== HELPER FUNCTIONS =====
 
 // Get Sensor info from flash memory (O(1) direct array indexing)
-inline const SensorInfo* getSensorInfo(Sensor sensor) {
-    if (sensor >= NUM_SENSORS) return nullptr;
-    const SensorInfo* info = &SENSOR_LIBRARY[sensor];
+inline const SensorInfo* getSensorInfo(uint8_t index) {
+    if (index >= NUM_SENSORS) return nullptr;
+    const SensorInfo* info = &SENSOR_LIBRARY[index];
     // Validate entry (check if label is non-null for implemented sensors)
     if (pgm_read_ptr(&info->label) == nullptr) return nullptr;
     return info;
@@ -527,9 +526,9 @@ inline void loadSensorInfo(const SensorInfo* flashInfo, SensorInfo* ramCopy) {
 }
 
 // Get sensor measurement type from SENSOR_LIBRARY (O(1) direct array indexing)
-inline MeasurementType getSensorMeasurementType(Sensor sensor) {
-    if (sensor >= NUM_SENSORS) return MEASURE_TEMPERATURE;
-    return (MeasurementType)pgm_read_byte(&SENSOR_LIBRARY[sensor].measurementType);
+inline MeasurementType getSensorMeasurementType(uint8_t index) {
+    if (index >= NUM_SENSORS) return MEASURE_TEMPERATURE;
+    return (MeasurementType)pgm_read_byte(&SENSOR_LIBRARY[index].measurementType);
 }
 
 // Helper macros for reading individual fields from PROGMEM

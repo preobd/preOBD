@@ -381,8 +381,8 @@ bool initInputManager() {
     // Initialize with invalid values
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         inputs[i].pin = 0xFF;  // Invalid pin
-        inputs[i].applicationIndex = (uint8_t)APP_NONE;
-        inputs[i].sensorIndex = (uint8_t)SENSOR_NONE;
+        inputs[i].applicationIndex = 0;  // 0 = NONE
+        inputs[i].sensorIndex = 0;       // 0 = NONE
     }
 
 #ifdef USE_STATIC_CONFIG

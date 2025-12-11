@@ -31,13 +31,12 @@
 
 // ===== APPLICATION PRESET STRUCTURE =====
 struct ApplicationPreset {
-    Application application;        // Enum value (for compatibility - will be removed in Phase 11)
     const char* name;              // PRIMARY KEY: "CHT", "OIL_TEMP", "BOOST_PRESSURE"
     const char* abbreviation;      // Short label: "CHT", "OIL", "MAP"
     const char* label;             // Display string: "Cylinder Head Temperature", "Oil Temperature"
     const char* description;       // Help text (nullable)
-    Sensor defaultSensor;          // Default hardware sensor
-    Units defaultUnits;            // Default display units
+    uint8_t defaultSensor;         // Default hardware sensor (index into SENSOR_LIBRARY)
+    uint8_t defaultUnits;          // Default display units (index into UNITS_REGISTRY)
     float defaultMinValue;         // Alarm minimum (STANDARD UNITS!)
     float defaultMaxValue;         // Alarm maximum (STANDARD UNITS!)
     uint8_t obd2pid;              // OBD-II PID
@@ -135,13 +134,13 @@ static const char PSTR_ENGINE_RPM_LABEL[] PROGMEM = "Engine RPM";
 static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     // Index 0: APP_NONE (placeholder)
     {
-        .application = APP_NONE,
+
         .name = PSTR_APP_NONE,
         .abbreviation = nullptr,
         .label = nullptr,
         .description = nullptr,
-        .defaultSensor = SENSOR_NONE,
-        .defaultUnits = CELSIUS,
+        .defaultSensor = 0,
+        .defaultUnits = 0,
         .defaultMinValue = 0.0,
         .defaultMaxValue = 0.0,
         .obd2pid = 0,
@@ -155,13 +154,13 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     // ===== TEMPERATURE APPLICATIONS =====
     // Index 1: CHT - Cylinder Head Temperature
     {
-        .application = CHT,
+
         .name = PSTR_CHT,
         .abbreviation = PSTR_CHT_ABBR,
         .label = PSTR_CHT_LABEL,
         .description = nullptr,
-        .defaultSensor = MAX6675,
-        .defaultUnits = CELSIUS,
+        .defaultSensor = 1,
+        .defaultUnits = 0,
         .defaultMinValue = -1.0,
         .defaultMaxValue = 260.0,
         .obd2pid = 0xC8,
@@ -174,13 +173,13 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
 
     // Index 2: EGT - Exhaust Gas Temperature
     {
-        .application = EGT,
+
         .name = PSTR_EGT,
         .abbreviation = PSTR_EGT_ABBR,
         .label = PSTR_EGT_LABEL,
         .description = nullptr,
-        .defaultSensor = MAX31855,
-        .defaultUnits = CELSIUS,
+        .defaultSensor = 2,
+        .defaultUnits = 0,
         .defaultMinValue = -1.0,
         .defaultMaxValue = 600.0,
         .obd2pid = 0x78,
@@ -193,13 +192,13 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
 
     // Index 3: COOLANT_TEMP - Engine Coolant Temperature
     {
-        .application = COOLANT_TEMP,
+
         .name = PSTR_COOLANT_TEMP,
         .abbreviation = PSTR_COOLANT_TEMP_ABBR,
         .label = PSTR_COOLANT_TEMP_LABEL,
         .description = nullptr,
-        .defaultSensor = VDO_120C_LOOKUP,
-        .defaultUnits = CELSIUS,
+        .defaultSensor = 3,
+        .defaultUnits = 0,
         .defaultMinValue = -1.0,
         .defaultMaxValue = 100.0,
         .obd2pid = 0x05,
@@ -212,13 +211,13 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
 
     // Index 4: OIL_TEMP - Engine Oil Temperature
     {
-        .application = OIL_TEMP,
+
         .name = PSTR_OIL_TEMP,
         .abbreviation = PSTR_OIL_TEMP_ABBR,
         .label = PSTR_OIL_TEMP_LABEL,
         .description = nullptr,
-        .defaultSensor = VDO_150C_STEINHART,
-        .defaultUnits = CELSIUS,
+        .defaultSensor = 6,
+        .defaultUnits = 0,
         .defaultMinValue = -1.0,
         .defaultMaxValue = 150.0,
         .obd2pid = 0x5C,
@@ -231,13 +230,13 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
 
     // Index 5: TCASE_TEMP - Transfer Case Temperature
     {
-        .application = TCASE_TEMP,
+
         .name = PSTR_TCASE_TEMP,
         .abbreviation = PSTR_TCASE_TEMP_ABBR,
         .label = PSTR_TCASE_TEMP_LABEL,
         .description = nullptr,
-        .defaultSensor = VDO_120C_LOOKUP,
-        .defaultUnits = CELSIUS,
+        .defaultSensor = 3,
+        .defaultUnits = 0,
         .defaultMinValue = -1.0,
         .defaultMaxValue = 100.0,
         .obd2pid = 0xC9,
@@ -250,13 +249,13 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
 
     // Index 6: AMBIENT_TEMP - Ambient Air Temperature (BME280)
     {
-        .application = AMBIENT_TEMP,
+
         .name = PSTR_AMBIENT_TEMP,
         .abbreviation = PSTR_AMBIENT_TEMP_ABBR,
         .label = PSTR_AMBIENT_TEMP_LABEL,
         .description = nullptr,
-        .defaultSensor = BME280_TEMP,
-        .defaultUnits = CELSIUS,
+        .defaultSensor = 15,
+        .defaultUnits = 0,
         .defaultMinValue = 0.0,
         .defaultMaxValue = 0.0,
         .obd2pid = 0x46,
@@ -270,13 +269,13 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     // ===== PRESSURE APPLICATIONS =====
     // Index 7: OIL_PRESSURE - Engine Oil Pressure
     {
-        .application = OIL_PRESSURE,
+
         .name = PSTR_OIL_PRESSURE,
         .abbreviation = PSTR_OIL_PRESSURE_ABBR,
         .label = PSTR_OIL_PRESSURE_LABEL,
         .description = nullptr,
-        .defaultSensor = VDO_5BAR,
-        .defaultUnits = BAR,
+        .defaultSensor = 12,
+        .defaultUnits = 2,
         .defaultMinValue = 1.0,
         .defaultMaxValue = 5.0,
         .obd2pid = 0xCA,
@@ -289,13 +288,13 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
 
     // Index 8: BOOST_PRESSURE - Boost/Intake Pressure
     {
-        .application = BOOST_PRESSURE,
+
         .name = PSTR_BOOST_PRESSURE,
         .abbreviation = PSTR_BOOST_PRESSURE_ABBR,
         .label = PSTR_BOOST_PRESSURE_LABEL,
         .description = nullptr,
-        .defaultSensor = VDO_2BAR,
-        .defaultUnits = BAR,
+        .defaultSensor = 11,
+        .defaultUnits = 2,
         .defaultMinValue = -1.0,
         .defaultMaxValue = 2.0,
         .obd2pid = 0x6F,
@@ -308,13 +307,13 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
 
     // Index 9: FUEL_PRESSURE (placeholder - not yet implemented)
     {
-        .application = FUEL_PRESSURE,
+
         .name = PSTR_FUEL_PRESSURE,
         .abbreviation = PSTR_FUEL_PRESSURE_ABBR,
         .label = nullptr,
         .description = nullptr,
-        .defaultSensor = SENSOR_NONE,
-        .defaultUnits = BAR,
+        .defaultSensor = 0,
+        .defaultUnits = 2,
         .defaultMinValue = 0.0,
         .defaultMaxValue = 0.0,
         .obd2pid = 0,
@@ -327,13 +326,13 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
 
     // Index 10: BAROMETRIC_PRESSURE - Barometric Pressure (BME280)
     {
-        .application = BAROMETRIC_PRESSURE,
+
         .name = PSTR_BAROMETRIC_PRESSURE,
         .abbreviation = PSTR_BAROMETRIC_PRESSURE_ABBR,
         .label = PSTR_BAROMETRIC_PRESSURE_LABEL,
         .description = nullptr,
-        .defaultSensor = BME280_PRESSURE,
-        .defaultUnits = BAR,
+        .defaultSensor = 16,
+        .defaultUnits = 2,
         .defaultMinValue = 0.0,
         .defaultMaxValue = 0.0,
         .obd2pid = 0x33,
@@ -347,13 +346,13 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     // ===== VOLTAGE APPLICATIONS =====
     // Index 11: PRIMARY_BATTERY - Primary Battery Voltage
     {
-        .application = PRIMARY_BATTERY,
+
         .name = PSTR_PRIMARY_BATTERY,
         .abbreviation = PSTR_PRIMARY_BATTERY_ABBR,
         .label = PSTR_PRIMARY_BATTERY_LABEL,
         .description = nullptr,
-        .defaultSensor = VOLTAGE_DIVIDER,
-        .defaultUnits = VOLTS,
+        .defaultSensor = 13,
+        .defaultUnits = 6,
         .defaultMinValue = 10.0,
         .defaultMaxValue = 15.0,
         .obd2pid = 0xCB,
@@ -366,13 +365,13 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
 
     // Index 12: AUXILIARY_BATTERY - Auxiliary Battery Voltage
     {
-        .application = AUXILIARY_BATTERY,
+
         .name = PSTR_AUXILIARY_BATTERY,
         .abbreviation = PSTR_AUXILIARY_BATTERY_ABBR,
         .label = PSTR_AUXILIARY_BATTERY_LABEL,
         .description = nullptr,
-        .defaultSensor = VOLTAGE_DIVIDER,
-        .defaultUnits = VOLTS,
+        .defaultSensor = 13,
+        .defaultUnits = 6,
         .defaultMinValue = 0.0,
         .defaultMaxValue = 0.0,
         .obd2pid = 0xCC,
@@ -386,13 +385,13 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     // ===== DIGITAL APPLICATIONS =====
     // Index 13: COOLANT_LEVEL - Coolant Level (Float Switch)
     {
-        .application = COOLANT_LEVEL,
+
         .name = PSTR_COOLANT_LEVEL,
         .abbreviation = PSTR_COOLANT_LEVEL_ABBR,
         .label = PSTR_COOLANT_LEVEL_LABEL,
         .description = nullptr,
-        .defaultSensor = FLOAT_SWITCH,
-        .defaultUnits = PERCENT,
+        .defaultSensor = 19,
+        .defaultUnits = 8,
         .defaultMinValue = 0.0,
         .defaultMaxValue = 1.0,
         .obd2pid = 0xA2,
@@ -406,13 +405,13 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     // ===== ENVIRONMENTAL APPLICATIONS =====
     // Index 14: HUMIDITY - Relative Humidity (BME280)
     {
-        .application = HUMIDITY,
+
         .name = PSTR_HUMIDITY,
         .abbreviation = PSTR_HUMIDITY_ABBR,
         .label = PSTR_HUMIDITY_LABEL,
         .description = nullptr,
-        .defaultSensor = BME280_HUMIDITY,
-        .defaultUnits = PERCENT,
+        .defaultSensor = 17,
+        .defaultUnits = 8,
         .defaultMinValue = 0.0,
         .defaultMaxValue = 0.0,
         .obd2pid = 0,
@@ -425,13 +424,13 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
 
     // Index 15: ELEVATION - Elevation (BME280)
     {
-        .application = ELEVATION,
+
         .name = PSTR_ELEVATION,
         .abbreviation = PSTR_ELEVATION_ABBR,
         .label = PSTR_ELEVATION_LABEL,
         .description = nullptr,
-        .defaultSensor = BME280_ELEVATION,
-        .defaultUnits = METERS,
+        .defaultSensor = 18,
+        .defaultUnits = 9,
         .defaultMinValue = 0.0,
         .defaultMaxValue = 0.0,
         .obd2pid = 0xA1,
@@ -445,13 +444,13 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     // ===== RPM APPLICATIONS =====
     // Index 16: ENGINE_RPM (placeholder - not yet implemented)
     {
-        .application = ENGINE_RPM,
+
         .name = PSTR_ENGINE_RPM,
         .abbreviation = PSTR_ENGINE_RPM_ABBR,
         .label = nullptr,
         .description = nullptr,
-        .defaultSensor = SENSOR_NONE,
-        .defaultUnits = RPM,
+        .defaultSensor = 0,
+        .defaultUnits = 7,
         .defaultMinValue = 0.0,
         .defaultMaxValue = 0.0,
         .obd2pid = 0,
@@ -521,12 +520,12 @@ inline uint8_t getApplicationIndexByName(const char* name) {
  * Legacy compatibility function - uses enum value directly.
  * Validates that the entry is implemented (non-null label).
  *
- * @param app  Application enum value
+ * @param index  Application index (0-16)
  * @return     Pointer to ApplicationPreset in PROGMEM, or nullptr if invalid/unimplemented
  */
-inline const ApplicationPreset* getApplicationPreset(Application app) {
-    if (app >= NUM_APPLICATION_PRESETS) return nullptr;
-    const ApplicationPreset* preset = &APPLICATION_PRESETS[app];
+inline const ApplicationPreset* getApplicationPreset(uint8_t index) {
+    if (index >= NUM_APPLICATION_PRESETS) return nullptr;
+    const ApplicationPreset* preset = &APPLICATION_PRESETS[index];
     // Validate entry (check if label is non-null for implemented applications)
     if (pgm_read_ptr(&preset->label) == nullptr) return nullptr;
     return preset;
@@ -549,12 +548,12 @@ inline void loadApplicationPreset(const ApplicationPreset* flashPreset, Applicat
 /**
  * Get expected measurement type for application from APPLICATION_PRESETS (O(1) direct array indexing)
  *
- * @param app  Application enum value
+ * @param index  Application index (0-16)
  * @return     Expected MeasurementType for this application
  */
-inline MeasurementType getApplicationExpectedMeasurementType(Application app) {
-    if (app >= NUM_APPLICATION_PRESETS) return MEASURE_TEMPERATURE;
-    return (MeasurementType)pgm_read_byte(&APPLICATION_PRESETS[app].expectedMeasurementType);
+inline MeasurementType getApplicationExpectedMeasurementType(uint8_t index) {
+    if (index >= NUM_APPLICATION_PRESETS) return MEASURE_TEMPERATURE;
+    return (MeasurementType)pgm_read_byte(&APPLICATION_PRESETS[index].expectedMeasurementType);
 }
 
 /**

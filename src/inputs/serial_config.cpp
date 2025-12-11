@@ -442,8 +442,8 @@ void handleSerialCommand(char* cmd) {
             if (appIndex != 0 && sensorIndex != 0) {  // 0 = NONE
                 // Valid combined command
                 // Check sensor/application compatibility
-                MeasurementType sensorMeasType = getSensorMeasurementType((Sensor)sensorIndex);
-                MeasurementType appMeasType = getApplicationExpectedMeasurementType((Application)appIndex);
+                MeasurementType sensorMeasType = getSensorMeasurementType(sensorIndex);
+                MeasurementType appMeasType = getApplicationExpectedMeasurementType(appIndex);
 
                 if (sensorMeasType != appMeasType) {
                     Serial.print(F("ERROR: Sensor/application type mismatch - "));
