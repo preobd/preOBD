@@ -84,7 +84,7 @@ struct EEPROMHeader {
             loadApplicationPreset(flashPreset, &preset); \
             strncpy(input->abbrName, preset.name, sizeof(input->abbrName) - 1); \
             input->abbrName[sizeof(input->abbrName) - 1] = '\0'; \
-            strncpy(input->displayName, preset.displayName, sizeof(input->displayName) - 1); \
+            strncpy(input->displayName, preset.label, sizeof(input->displayName) - 1); \
             input->displayName[sizeof(input->displayName) - 1] = '\0'; \
             input->displayUnits = preset.defaultUnits; \
             input->minValue = preset.defaultMinValue; \
@@ -744,7 +744,7 @@ bool setInputApplication(uint8_t pin, Application app) {
     input->application = preset.application;
     strncpy(input->abbrName, preset.name, sizeof(input->abbrName) - 1);
     input->abbrName[sizeof(input->abbrName) - 1] = '\0';
-    strncpy(input->displayName, preset.displayName, sizeof(input->displayName) - 1);
+    strncpy(input->displayName, preset.label, sizeof(input->displayName) - 1);
     input->displayName[sizeof(input->displayName) - 1] = '\0';
     input->sensor = preset.defaultSensor;
     input->displayUnits = preset.defaultUnits;
@@ -1010,7 +1010,7 @@ void printInputInfo(uint8_t pin) {
     if (appPreset) {
         ApplicationPreset app;
         loadApplicationPreset(appPreset, &app);
-        Serial.println(app.displayName);
+        Serial.println(app.label);
     } else {
         Serial.print(F("UNKNOWN ("));
         Serial.print(input->application);
