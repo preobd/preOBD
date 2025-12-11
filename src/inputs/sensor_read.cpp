@@ -8,6 +8,7 @@
 #include "input.h"
 #include "../lib/sensor_types.h"
 #include "../lib/sensor_library.h"
+#include "../lib/units_registry.h"
 #include <SPI.h>
 
 #ifdef USE_BME280
@@ -604,67 +605,105 @@ void readDigitalFloatSwitch(Input *ptr) {
 }
 
 // ===== CONVERSION FUNCTIONS =====
+// Registry-based conversion - uses data from UNITS_REGISTRY
+
+/**
+ * Convert from base units to display units using registry conversion factors
+ *
+ * Base units by measurement type:
+ * - Temperature: Celsius
+ * - Pressure: Bar
+ * - Voltage: Volts
+ * - RPM: RPM
+ * - Humidity: Percent
+ * - Elevation: Meters
+ *
+ * @param baseValue  Value in base units
+ * @param unitsIndex Index into UNITS_REGISTRY (0-10)
+ * @return           Value in display units
+ */
+float convertFromBaseUnits(float baseValue, uint8_t unitsIndex) {
+    if (unitsIndex >= NUM_UNITS) return baseValue;
+
+    const UnitsInfo* info = &UNITS_REGISTRY[unitsIndex];
+    float factor = pgm_read_float(&info->conversionFactor);
+    float offset = pgm_read_float(&info->conversionOffset);
+
+    return baseValue * factor + offset;
+}
+
+/**
+ * Convert from display units to base units (inverse of convertFromBaseUnits)
+ *
+ * @param displayValue Value in display units
+ * @param unitsIndex   Index into UNITS_REGISTRY (0-10)
+ * @return             Value in base units
+ */
+float convertToBaseUnits(float displayValue, uint8_t unitsIndex) {
+    if (unitsIndex >= NUM_UNITS) return displayValue;
+
+    const UnitsInfo* info = &UNITS_REGISTRY[unitsIndex];
+    float factor = pgm_read_float(&info->conversionFactor);
+    float offset = pgm_read_float(&info->conversionOffset);
+
+    return (displayValue - offset) / factor;
+}
+
+// Legacy conversion functions - now just call the registry-based functions
+// These are kept for backward compatibility with enum-based code
 
 float convertTemperature(float celsius, DisplayUnits units) {
-    if (units == FAHRENHEIT) {
-        return celsius * 9.0/5.0 + 32.0;
-    }
-    return celsius;
+    return convertFromBaseUnits(celsius, units);
 }
 
 float convertPressure(float bar, DisplayUnits units) {
-    if (units == PSI) {
-        return bar * 14.5038;
-    } else if (units == KPA) {
-        return bar * 100.0;
-    } else if (units == INHG) {
-        return bar * 29.53;
-    }
-    return bar;
+    return convertFromBaseUnits(bar, units);
 }
 
 float convertVoltage(float volts, DisplayUnits units) {
-    return volts;
+    return convertFromBaseUnits(volts, units);
 }
 
 float convertRPM(float rpm, DisplayUnits units) {
-    return rpm;  // RPM is always displayed as RPM
+    return convertFromBaseUnits(rpm, units);
 }
 
 float convertHumidity(float humidity, DisplayUnits units) {
-    return humidity;
+    return convertFromBaseUnits(humidity, units);
 }
 
 float convertElevation(float meters, DisplayUnits units) {
-    if (units == FEET) {
-        return meters * 3.28084;
-    }
-    return meters;
+    return convertFromBaseUnits(meters, units);
 }
 
 float convertFloatSwitch(float value, DisplayUnits units) {
-    if (units == PERCENT) {
-        return value * 100.0;  // 0% (low) or 100% (ok)
-    }
-    return value;  // 0 or 1
+    return convertFromBaseUnits(value, units);
 }
 
 // ===== UNIT STRING CONVERSION =====
 
+/**
+ * Get unit symbol string from registry (registry-based)
+ *
+ * Returns pointer to symbol string in PROGMEM. Caller should use
+ * in Serial.print(F()) or similar PROGMEM-aware context.
+ *
+ * @param unitsIndex Index into UNITS_REGISTRY (0-10)
+ * @return           Pointer to symbol string in PROGMEM
+ */
+const char* getUnitStringByIndex(uint8_t unitsIndex) {
+    if (unitsIndex >= NUM_UNITS) return PSTR("");
+
+    const UnitsInfo* info = &UNITS_REGISTRY[unitsIndex];
+    return (const char*)pgm_read_ptr(&info->symbol);
+}
+
+/**
+ * Legacy enum-based unit string lookup
+ * Kept for backward compatibility - just calls registry version
+ */
 const char* getUnitString(DisplayUnits units) {
-    switch (units) {
-        case CELSIUS: return "C";
-        case FAHRENHEIT: return "F";
-        case BAR: return "bar";
-        case PSI: return "psi";
-        case KPA: return "kPa";
-        case INHG: return "inHg";
-        case VOLTS: return "V";
-        case PERCENT: return "%";
-        case METERS: return "m";
-        case FEET: return "ft";
-        default: return "";
-    }
+    return getUnitStringByIndex(units);
 }
 
 // ===== OBDII CONVERSION FUNCTIONS =====
