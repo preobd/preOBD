@@ -93,7 +93,7 @@ void displaySensor(Input *ptr, byte line) {
 
     if (ptr->flags.display) {
         // Print icon
-        lcd.write(getIconForApplication(ptr->application));
+        lcd.write(getIconForApplication(ptr->applicationIndex));
         charsPrinted++;
 
         // Print sensor abbreviation
@@ -113,38 +113,38 @@ void displaySensor(Input *ptr, byte line) {
             charsPrinted += lcd.print("---");
         } else {
             // Convert to display units
-            float displayValue = getDisplayConvertFunc(ptr->measurementType)(ptr->value, ptr->displayUnits);
+            float displayValue = getDisplayConvertFunc(ptr->measurementType)(ptr->value, ptr->unitsIndex);
 
             // Print value with appropriate precision
-            if (ptr->displayUnits == CELSIUS || ptr->displayUnits == FAHRENHEIT) {
+            if (ptr->unitsIndex == CELSIUS || ptr->unitsIndex == FAHRENHEIT) {
                 charsPrinted += lcd.print(displayValue, 0);  // No decimal for temperature
                 lcd.write((byte)ICON_DEGREE);
                 charsPrinted++;
-            } else if (ptr->displayUnits == VOLTS) {
+            } else if (ptr->unitsIndex == VOLTS) {
                 charsPrinted += lcd.print(displayValue, 1);  // 1 decimal for voltage
                 charsPrinted += lcd.print("V");
-            } else if (ptr->displayUnits == BAR || ptr->displayUnits == PSI) {
+            } else if (ptr->unitsIndex == BAR || ptr->unitsIndex == PSI) {
                 charsPrinted += lcd.print(displayValue, 1);  // 1 decimal for pressure
-                if (ptr->displayUnits == PSI) {
+                if (ptr->unitsIndex == PSI) {
                     charsPrinted += lcd.print("p");
                 } else {
                     charsPrinted += lcd.print("b");
                 }
-            } else if (ptr->displayUnits == KPA) {
+            } else if (ptr->unitsIndex == KPA) {
                 charsPrinted += lcd.print(displayValue, 1);
                 charsPrinted += lcd.print("k");
-            } else if (ptr->displayUnits == INHG) {
+            } else if (ptr->unitsIndex == INHG) {
                 charsPrinted += lcd.print(displayValue, 2);
-            } else if (ptr->displayUnits == PERCENT) {
+            } else if (ptr->unitsIndex == PERCENT) {
                 charsPrinted += lcd.print(displayValue, 0);  // No decimal for humidity
                 charsPrinted += lcd.print("%");
-            } else if (ptr->displayUnits == METERS) {
+            } else if (ptr->unitsIndex == METERS) {
                 charsPrinted += lcd.print(displayValue, 0);  // No decimal for elevation
                 charsPrinted += lcd.print("m");
-            } else if (ptr->displayUnits == FEET) {
+            } else if (ptr->unitsIndex == FEET) {
                 charsPrinted += lcd.print(displayValue, 0);  // No decimal for elevation
                 charsPrinted += lcd.print("ft");
-            } else if (ptr->displayUnits == RPM) {
+            } else if (ptr->unitsIndex == RPM) {
                 charsPrinted += lcd.print(displayValue, 0);  // No decimal for RPM
             }
         }

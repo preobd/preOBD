@@ -73,8 +73,8 @@ struct EEPROMHeader {
     do { \
         Input* input = &inputs[idx]; \
         input->pin = INPUT_##N##_PIN; \
-        input->application = INPUT_##N##_APPLICATION; \
-        input->sensor = INPUT_##N##_SENSOR; \
+        input->applicationIndex = INPUT_##N##_APPLICATION; \
+        input->sensorIndex = INPUT_##N##_SENSOR; \
         input->flags.isEnabled = true; \
         \
         /* Load Application preset from flash */ \
@@ -86,7 +86,7 @@ struct EEPROMHeader {
             input->abbrName[sizeof(input->abbrName) - 1] = '\0'; \
             strncpy(input->displayName, preset.label, sizeof(input->displayName) - 1); \
             input->displayName[sizeof(input->displayName) - 1] = '\0'; \
-            input->displayUnits = preset.defaultUnits; \
+            input->unitsIndex = preset.defaultUnits; \
             input->minValue = preset.defaultMinValue; \
             input->maxValue = preset.defaultMaxValue; \
             input->obd2pid = preset.obd2pid; \
@@ -130,43 +130,43 @@ struct EEPROMHeader {
 // Redefine unit override helpers for each input that has INPUT_N_UNITS defined
 #ifdef INPUT_0_UNITS
 #undef _POPULATE_UNITS_0
-#define _POPULATE_UNITS_0(input) (input)->displayUnits = INPUT_0_UNITS
+#define _POPULATE_UNITS_0(input) (input)->unitsIndex = INPUT_0_UNITS
 #endif
 #ifdef INPUT_1_UNITS
 #undef _POPULATE_UNITS_1
-#define _POPULATE_UNITS_1(input) (input)->displayUnits = INPUT_1_UNITS
+#define _POPULATE_UNITS_1(input) (input)->unitsIndex = INPUT_1_UNITS
 #endif
 #ifdef INPUT_2_UNITS
 #undef _POPULATE_UNITS_2
-#define _POPULATE_UNITS_2(input) (input)->displayUnits = INPUT_2_UNITS
+#define _POPULATE_UNITS_2(input) (input)->unitsIndex = INPUT_2_UNITS
 #endif
 #ifdef INPUT_3_UNITS
 #undef _POPULATE_UNITS_3
-#define _POPULATE_UNITS_3(input) (input)->displayUnits = INPUT_3_UNITS
+#define _POPULATE_UNITS_3(input) (input)->unitsIndex = INPUT_3_UNITS
 #endif
 #ifdef INPUT_4_UNITS
 #undef _POPULATE_UNITS_4
-#define _POPULATE_UNITS_4(input) (input)->displayUnits = INPUT_4_UNITS
+#define _POPULATE_UNITS_4(input) (input)->unitsIndex = INPUT_4_UNITS
 #endif
 #ifdef INPUT_5_UNITS
 #undef _POPULATE_UNITS_5
-#define _POPULATE_UNITS_5(input) (input)->displayUnits = INPUT_5_UNITS
+#define _POPULATE_UNITS_5(input) (input)->unitsIndex = INPUT_5_UNITS
 #endif
 #ifdef INPUT_6_UNITS
 #undef _POPULATE_UNITS_6
-#define _POPULATE_UNITS_6(input) (input)->displayUnits = INPUT_6_UNITS
+#define _POPULATE_UNITS_6(input) (input)->unitsIndex = INPUT_6_UNITS
 #endif
 #ifdef INPUT_7_UNITS
 #undef _POPULATE_UNITS_7
-#define _POPULATE_UNITS_7(input) (input)->displayUnits = INPUT_7_UNITS
+#define _POPULATE_UNITS_7(input) (input)->unitsIndex = INPUT_7_UNITS
 #endif
 #ifdef INPUT_8_UNITS
 #undef _POPULATE_UNITS_8
-#define _POPULATE_UNITS_8(input) (input)->displayUnits = INPUT_8_UNITS
+#define _POPULATE_UNITS_8(input) (input)->unitsIndex = INPUT_8_UNITS
 #endif
 #ifdef INPUT_9_UNITS
 #undef _POPULATE_UNITS_9
-#define _POPULATE_UNITS_9(input) (input)->displayUnits = INPUT_9_UNITS
+#define _POPULATE_UNITS_9(input) (input)->unitsIndex = INPUT_9_UNITS
 #endif
 
 // Helper macro to load custom calibration if defined
@@ -364,8 +364,8 @@ bool initInputManager() {
     // Initialize with invalid values
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         inputs[i].pin = 0xFF;  // Invalid pin
-        inputs[i].application = APP_NONE;
-        inputs[i].sensor = SENSOR_NONE;
+        inputs[i].applicationIndex = (uint8_t)APP_NONE;
+        inputs[i].sensorIndex = (uint8_t)SENSOR_NONE;
     }
 
 #ifdef USE_STATIC_CONFIG
@@ -414,7 +414,7 @@ bool initInputManager() {
             numActiveInputs++;
 
             // Call sensor-specific initialization function if it exists
-            const SensorInfo* flashInfo = getSensorInfo(inputs[i].sensor);
+            const SensorInfo* flashInfo = getSensorInfo(inputs[i].sensorIndex);
             if (flashInfo) {
                 SensorInfo info;
                 loadSensorInfo(flashInfo, &info);
@@ -541,7 +541,7 @@ bool loadInputConfig() {
 
         // Re-initialize function pointers and sensor-specific data
         // (Function pointers can't be reliably stored in EEPROM)
-        const SensorInfo* flashInfo = getSensorInfo(inputs[i].sensor);
+        const SensorInfo* flashInfo = getSensorInfo(inputs[i].sensorIndex);
         if (flashInfo) {
             SensorInfo info;
             loadSensorInfo(flashInfo, &info);
@@ -741,13 +741,13 @@ bool setInputApplication(uint8_t pin, Application app) {
     loadApplicationPreset(flashPreset, &preset);
 
     // Apply preset to input
-    input->application = preset.application;
+    input->applicationIndex = preset.application;
     strncpy(input->abbrName, preset.name, sizeof(input->abbrName) - 1);
     input->abbrName[sizeof(input->abbrName) - 1] = '\0';
     strncpy(input->displayName, preset.label, sizeof(input->displayName) - 1);
     input->displayName[sizeof(input->displayName) - 1] = '\0';
-    input->sensor = preset.defaultSensor;
-    input->displayUnits = preset.defaultUnits;
+    input->sensorIndex = preset.defaultSensor;
+    input->unitsIndex = preset.defaultUnits;
     
     // CRITICAL: Store min/max in STANDARD UNITS (no conversion!)
     // Preset already has values in Celsius, bar, volts, etc.
@@ -777,7 +777,7 @@ bool setInputApplication(uint8_t pin, Application app) {
     }
 
     // Set up sensor (function pointers + calibration)
-    return setInputSensor(pin, input->sensor);
+    return setInputSensor(pin, input->sensorIndex);
 }
 
 bool setInputSensor(uint8_t pin, Sensor sensor) {
@@ -799,10 +799,10 @@ bool setInputSensor(uint8_t pin, Sensor sensor) {
     loadSensorInfo(flashInfo, &info);
 
     // Check if sensor is actually changing (to avoid redundant init)
-    bool sensorChanged = (input->sensor != sensor);
+    bool sensorChanged = (input->sensorIndex != sensor);
 
     // Apply sensor info to input
-    input->sensor = sensor;
+    input->sensorIndex = sensor;
     input->readFunction = info.readFunction;
     input->measurementType = info.measurementType;
     input->calibrationType = info.calibrationType;
@@ -841,7 +841,7 @@ bool setInputUnits(uint8_t pin, Units units) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
 
-    input->displayUnits = units;
+    input->unitsIndex = units;
     return true;
 }
 
@@ -1006,31 +1006,31 @@ void printInputInfo(uint8_t pin) {
 
     // Print application name from PROGMEM
     Serial.print(F("  Application: "));
-    const ApplicationPreset* appPreset = getApplicationPreset(input->application);
+    const ApplicationPreset* appPreset = getApplicationPreset(input->applicationIndex);
     if (appPreset) {
         ApplicationPreset app;
         loadApplicationPreset(appPreset, &app);
         Serial.println(app.label);
     } else {
         Serial.print(F("UNKNOWN ("));
-        Serial.print(input->application);
+        Serial.print(input->applicationIndex);
         Serial.println(F(")"));
     }
 
     // Print sensor name from PROGMEM
     Serial.print(F("  Sensor Type: "));
-    const SensorInfo* sensorInfo = getSensorInfo(input->sensor);
+    const SensorInfo* sensorInfo = getSensorInfo(input->sensorIndex);
     if (sensorInfo) {
         SensorInfo sensor;
         loadSensorInfo(sensorInfo, &sensor);
         Serial.println(sensor.name);
     } else {
         Serial.print(F("UNKNOWN ("));
-        Serial.print(input->sensor);
+        Serial.print(input->sensorIndex);
         Serial.println(F(")"));
     }
     Serial.print(F("  Units: "));
-    Serial.println(input->displayUnits);
+    Serial.println(input->unitsIndex);
     Serial.print(F("  Alarm Range: "));
     Serial.print(input->minValue);
     Serial.print(F(" - "));
@@ -1065,11 +1065,11 @@ void listAllInputs() {
             Serial.print(inputs[i].displayName);
             Serial.print(F(") = "));
             Serial.print(inputs[i].value);
-            Serial.println(inputs[i].displayUnits == CELSIUS ? F("°C") :
-                          inputs[i].displayUnits == FAHRENHEIT ? F("°F") :
-                          inputs[i].displayUnits == PSI ? F(" PSI") :
-                          inputs[i].displayUnits == BAR ? F(" BAR") :
-                          inputs[i].displayUnits == VOLTS ? F("V") : F(""));
+            Serial.println(inputs[i].unitsIndex == CELSIUS ? F("°C") :
+                          inputs[i].unitsIndex == FAHRENHEIT ? F("°F") :
+                          inputs[i].unitsIndex == PSI ? F(" PSI") :
+                          inputs[i].unitsIndex == BAR ? F(" BAR") :
+                          inputs[i].unitsIndex == VOLTS ? F("V") : F(""));
         }
     }
 

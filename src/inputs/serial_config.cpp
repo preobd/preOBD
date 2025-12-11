@@ -532,7 +532,7 @@ void handleSerialCommand(char* cmd) {
                 if (setInputApplication(pin, app)) {
                     // Then override sensor if different from preset
                     Input* input = getInputByPin(pin);
-                    if (input && input->sensor != sensor) {
+                    if (input && input->sensorIndex != sensor) {
                         setInputSensor(pin, sensor);
                     }
 

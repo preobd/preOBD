@@ -496,7 +496,7 @@ void readWPhaseRPM(Input *ptr) {
         max_rpm = ptr->customCalibration.rpm.max_rpm;
     } else {
         // Use preset calibration from sensor library
-        const SensorInfo* sensorInfo = getSensorInfo(ptr->sensor);
+        const SensorInfo* sensorInfo = getSensorInfo(ptr->sensorIndex);
         if (sensorInfo && sensorInfo->defaultCalibration) {
             const RPMCalibration* cal = (const RPMCalibration*)sensorInfo->defaultCalibration;
             poles = cal->poles;

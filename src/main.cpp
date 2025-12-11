@@ -88,7 +88,7 @@ static void updateSensors(uint32_t now) {
         if (!inputs[i].flags.isEnabled) continue;
 
         // Get sensor-specific minimum read interval
-        const SensorInfo* sensorInfo = getSensorInfo(inputs[i].sensor);
+        const SensorInfo* sensorInfo = getSensorInfo((Sensor)inputs[i].sensorIndex);
         uint16_t interval = pgm_read_word(&sensorInfo->minReadInterval);
 
         // Check if enough time has elapsed for this sensor
