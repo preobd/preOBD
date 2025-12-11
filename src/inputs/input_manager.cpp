@@ -811,11 +811,11 @@ static bool validateInputConfig(Input* input) {
 }
 
 // ===== CONFIGURATION FUNCTIONS =====
-bool setInputApplication(uint8_t pin, Application app) {
+bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     // Find or create input
     Input* input = getInputByPin(pin);
     bool isNewInput = (input == nullptr);
-    
+
     if (input == nullptr) {
         uint8_t slot = findFreeSlot();
         if (slot == 0xFF) {
@@ -830,7 +830,7 @@ bool setInputApplication(uint8_t pin, Application app) {
     }
 
     // Get Application preset from flash
-    const ApplicationPreset* flashPreset = getApplicationPreset(app);
+    const ApplicationPreset* flashPreset = getApplicationByIndex(appIndex);
     if (flashPreset == nullptr) {
         Serial.println(F("ERROR: Invalid Type"));
         return false;
@@ -841,7 +841,7 @@ bool setInputApplication(uint8_t pin, Application app) {
     loadApplicationPreset(flashPreset, &preset);
 
     // Apply preset to input
-    input->applicationIndex = preset.application;
+    input->applicationIndex = appIndex;
     strncpy(input->abbrName, preset.name, sizeof(input->abbrName) - 1);
     input->abbrName[sizeof(input->abbrName) - 1] = '\0';
     strncpy(input->displayName, preset.label, sizeof(input->displayName) - 1);
@@ -880,7 +880,7 @@ bool setInputApplication(uint8_t pin, Application app) {
     return setInputSensor(pin, input->sensorIndex);
 }
 
-bool setInputSensor(uint8_t pin, Sensor sensor) {
+bool setInputSensor(uint8_t pin, uint8_t sensorIndex) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) {
         Serial.println(F("ERROR: Input not configured"));
@@ -888,7 +888,7 @@ bool setInputSensor(uint8_t pin, Sensor sensor) {
     }
 
     // Get Sensor info from flash
-    const SensorInfo* flashInfo = getSensorInfo(sensor);
+    const SensorInfo* flashInfo = getSensorByIndex(sensorIndex);
     if (flashInfo == nullptr) {
         Serial.println(F("ERROR: Invalid Sensor Type"));
         return false;
@@ -899,10 +899,10 @@ bool setInputSensor(uint8_t pin, Sensor sensor) {
     loadSensorInfo(flashInfo, &info);
 
     // Check if sensor is actually changing (to avoid redundant init)
-    bool sensorChanged = (input->sensorIndex != sensor);
+    bool sensorChanged = (input->sensorIndex != sensorIndex);
 
     // Apply sensor info to input
-    input->sensorIndex = sensor;
+    input->sensorIndex = sensorIndex;
     input->readFunction = info.readFunction;
     input->measurementType = info.measurementType;
     input->calibrationType = info.calibrationType;
@@ -937,11 +937,11 @@ bool setInputDisplayName(uint8_t pin, const char* displayName) {
     return true;
 }
 
-bool setInputUnits(uint8_t pin, Units units) {
+bool setInputUnits(uint8_t pin, uint8_t unitsIndex) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
 
-    input->unitsIndex = units;
+    input->unitsIndex = unitsIndex;
     return true;
 }
 
@@ -1106,7 +1106,7 @@ void printInputInfo(uint8_t pin) {
 
     // Print application name from PROGMEM
     Serial.print(F("  Application: "));
-    const ApplicationPreset* appPreset = getApplicationPreset(input->applicationIndex);
+    const ApplicationPreset* appPreset = getApplicationByIndex(input->applicationIndex);
     if (appPreset) {
         ApplicationPreset app;
         loadApplicationPreset(appPreset, &app);
@@ -1119,7 +1119,7 @@ void printInputInfo(uint8_t pin) {
 
     // Print sensor name from PROGMEM
     Serial.print(F("  Sensor Type: "));
-    const SensorInfo* sensorInfo = getSensorInfo(input->sensorIndex);
+    const SensorInfo* sensorInfo = getSensorByIndex(input->sensorIndex);
     if (sensorInfo) {
         SensorInfo sensor;
         loadSensorInfo(sensorInfo, &sensor);

@@ -25,11 +25,11 @@ extern uint8_t numActiveInputs;
 bool initInputManager();              // Initialize and load from EEPROM (returns true if EEPROM config loaded)
 
 // ===== CONFIGURATION =====
-bool setInputApplication(uint8_t pin, Application app);
-bool setInputSensor(uint8_t pin, Sensor sensor);
+bool setInputApplication(uint8_t pin, uint8_t appIndex);
+bool setInputSensor(uint8_t pin, uint8_t sensorIndex);
 bool setInputName(uint8_t pin, const char* name);
 bool setInputDisplayName(uint8_t pin, const char* displayName);
-bool setInputUnits(uint8_t pin, Units units);
+bool setInputUnits(uint8_t pin, uint8_t unitsIndex);
 bool setInputAlarmRange(uint8_t pin, float minValue, float maxValue);
 bool setInputOBD(uint8_t pin, uint8_t pid, uint8_t length);
 bool enableInput(uint8_t pin, bool enable);

@@ -323,6 +323,21 @@ inline uint8_t getUnitsIndexByHash(uint16_t hash) {
 }
 
 /**
+ * Get Units index by name string (O(n) hash-based search)
+ *
+ * Hashes the input string and searches for matching unit.
+ * Case-insensitive. Returns index instead of pointer.
+ *
+ * @param name  Unit name or alias ("CELSIUS", "C", "PSI", etc)
+ * @return      Array index (0-10), or 0 (CELSIUS) if not found
+ */
+inline uint8_t getUnitsIndexByName(const char* name) {
+    if (!name) return 0;
+    uint16_t hash = djb2_hash(name);
+    return getUnitsIndexByHash(hash);
+}
+
+/**
  * Get UnitsInfo by name string (O(n) hash-based search)
  *
  * Hashes the input string and searches for matching unit.

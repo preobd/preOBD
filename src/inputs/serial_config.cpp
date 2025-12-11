@@ -18,6 +18,7 @@
 #include "../lib/platform.h"
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
+#include "../lib/units_registry.h"
 #include "../outputs/output_base.h"
 #include <string.h>
 #include <ctype.h>
@@ -247,73 +248,19 @@ static uint8_t parsePin(const char* pinStr, bool* isValid) {
     return pin;
 }
 
-// Parse Application enum from string
-static Application parseApplication(const char* appStr) {
-    if (!appStr) return APP_NONE;
-
-    if (streq(appStr, "CHT")) return CHT;
-    if (streq(appStr, "EGT")) return EGT;
-    if (streq(appStr, "COOLANT_TEMP")) return COOLANT_TEMP;
-    if (streq(appStr, "OIL_TEMP")) return OIL_TEMP;
-    if (streq(appStr, "TCASE_TEMP")) return TCASE_TEMP;
-    if (streq(appStr, "OIL_PRESSURE")) return OIL_PRESSURE;
-    if (streq(appStr, "BOOST_PRESSURE")) return BOOST_PRESSURE;
-    if (streq(appStr, "FUEL_PRESSURE")) return FUEL_PRESSURE;
-    if (streq(appStr, "PRIMARY_BATTERY")) return PRIMARY_BATTERY;
-    if (streq(appStr, "AUXILIARY_BATTERY")) return AUXILIARY_BATTERY;
-    if (streq(appStr, "COOLANT_LEVEL")) return COOLANT_LEVEL;
-    if (streq(appStr, "AMBIENT_TEMP")) return AMBIENT_TEMP;
-    if (streq(appStr, "BAROMETRIC_PRESSURE")) return BAROMETRIC_PRESSURE;
-    if (streq(appStr, "HUMIDITY")) return HUMIDITY;
-    if (streq(appStr, "ELEVATION")) return ELEVATION;
-    if (streq(appStr, "ENGINE_RPM")) return ENGINE_RPM;
-
-    return APP_NONE;
+// Parse Application index from string (registry-based)
+static uint8_t parseApplication(const char* appStr) {
+    return getApplicationIndexByName(appStr);
 }
 
-// Parse Sensor enum from string
-static Sensor parseSensor(const char* sensorStr) {
-    if (!sensorStr) return SENSOR_NONE;
-
-    if (streq(sensorStr, "MAX6675")) return MAX6675;
-    if (streq(sensorStr, "MAX31855")) return MAX31855;
-    if (streq(sensorStr, "VDO_120C_LOOKUP")) return VDO_120C_LOOKUP;
-    if (streq(sensorStr, "VDO_150C_LOOKUP")) return VDO_150C_LOOKUP;
-    if (streq(sensorStr, "VDO_120C_STEINHART")) return VDO_120C_STEINHART;
-    if (streq(sensorStr, "VDO_150C_STEINHART")) return VDO_150C_STEINHART;
-    if (streq(sensorStr, "THERMISTOR_LOOKUP")) return THERMISTOR_LOOKUP;
-    if (streq(sensorStr, "THERMISTOR_STEINHART")) return THERMISTOR_STEINHART;
-    if (streq(sensorStr, "GENERIC_BOOST")) return GENERIC_BOOST;
-    if (streq(sensorStr, "MPX4250AP")) return MPX4250AP;
-    if (streq(sensorStr, "VDO_2BAR")) return VDO_2BAR;
-    if (streq(sensorStr, "VDO_5BAR")) return VDO_5BAR;
-    if (streq(sensorStr, "VOLTAGE_DIVIDER")) return VOLTAGE_DIVIDER;
-    if (streq(sensorStr, "W_PHASE_RPM")) return W_PHASE_RPM;
-    if (streq(sensorStr, "BME280_TEMP")) return BME280_TEMP;
-    if (streq(sensorStr, "BME280_PRESSURE")) return BME280_PRESSURE;
-    if (streq(sensorStr, "BME280_HUMIDITY")) return BME280_HUMIDITY;
-    if (streq(sensorStr, "BME280_ELEVATION")) return BME280_ELEVATION;
-    if (streq(sensorStr, "FLOAT_SWITCH")) return FLOAT_SWITCH;
-
-    return SENSOR_NONE;
+// Parse Sensor index from string (registry-based)
+static uint8_t parseSensor(const char* sensorStr) {
+    return getSensorIndexByName(sensorStr);
 }
 
-// Parse Units enum from string
-static Units parseUnits(const char* unitsStr) {
-    if (!unitsStr) return CELSIUS;
-
-    if (streq(unitsStr, "CELSIUS") || streq(unitsStr, "C")) return CELSIUS;
-    if (streq(unitsStr, "FAHRENHEIT") || streq(unitsStr, "F")) return FAHRENHEIT;
-    if (streq(unitsStr, "PSI")) return PSI;
-    if (streq(unitsStr, "BAR")) return BAR;
-    if (streq(unitsStr, "KPA")) return KPA;
-    if (streq(unitsStr, "VOLTS") || streq(unitsStr, "V")) return VOLTS;
-    if (streq(unitsStr, "RPM")) return RPM;
-    if (streq(unitsStr, "PERCENT") || streq(unitsStr, "%")) return PERCENT;
-    if (streq(unitsStr, "METERS") || streq(unitsStr, "M")) return METERS;
-    if (streq(unitsStr, "FEET") || streq(unitsStr, "FT")) return FEET;
-
-    return CELSIUS;  // Default
+// Parse Units index from string (registry-based)
+static uint8_t parseUnits(const char* unitsStr) {
+    return getUnitsIndexByName(unitsStr);
 }
 
 void handleSerialCommand(char* cmd) {
@@ -489,14 +436,14 @@ void handleSerialCommand(char* cmd) {
             char* secondToken = secondSpace + 1;
             trim(secondToken);
 
-            Application app = parseApplication(firstToken);
-            Sensor sensor = parseSensor(secondToken);
+            uint8_t appIndex = parseApplication(firstToken);
+            uint8_t sensorIndex = parseSensor(secondToken);
 
-            if (app != APP_NONE && sensor != SENSOR_NONE) {
+            if (appIndex != 0 && sensorIndex != 0) {  // 0 = NONE
                 // Valid combined command
                 // Check sensor/application compatibility
-                MeasurementType sensorMeasType = getSensorMeasurementType(sensor);
-                MeasurementType appMeasType = getApplicationExpectedMeasurementType(app);
+                MeasurementType sensorMeasType = getSensorMeasurementType((Sensor)sensorIndex);
+                MeasurementType appMeasType = getApplicationExpectedMeasurementType((Application)appIndex);
 
                 if (sensorMeasType != appMeasType) {
                     Serial.print(F("ERROR: Sensor/application type mismatch - "));
@@ -529,11 +476,11 @@ void handleSerialCommand(char* cmd) {
                 }
 
                 // First set application (which also calls setInputSensor with preset sensor)
-                if (setInputApplication(pin, app)) {
+                if (setInputApplication(pin, appIndex)) {
                     // Then override sensor if different from preset
                     Input* input = getInputByPin(pin);
-                    if (input && input->sensorIndex != sensor) {
-                        setInputSensor(pin, sensor);
+                    if (input && input->sensorIndex != sensorIndex) {
+                        setInputSensor(pin, sensorIndex);
                     }
 
                     Serial.print(F("Input "));
@@ -554,15 +501,15 @@ void handleSerialCommand(char* cmd) {
         if (strncmp(fieldAndValue, "APPLICATION ", 12) == 0) {
             char* appStr = fieldAndValue + 12;
             trim(appStr);
-            Application app = parseApplication(appStr);
-            if (app == APP_NONE) {
+            uint8_t appIndex = parseApplication(appStr);
+            if (appIndex == 0) {  // 0 = APP_NONE
                 Serial.print(F("ERROR: Unknown application '"));
                 Serial.print(appStr);
                 Serial.println(F("'"));
                 Serial.println(F("  Hint: Use 'LIST APPLICATIONS' to see valid options"));
                 return;
             }
-            if (setInputApplication(pin, app)) {
+            if (setInputApplication(pin, appIndex)) {
                 Serial.print(F("Input "));
                 Serial.print(pinStr);
                 Serial.print(F(" configured as "));
@@ -575,15 +522,15 @@ void handleSerialCommand(char* cmd) {
         if (strncmp(fieldAndValue, "SENSOR ", 7) == 0) {
             char* sensorStr = fieldAndValue + 7;
             trim(sensorStr);
-            Sensor sensor = parseSensor(sensorStr);
-            if (sensor == SENSOR_NONE) {
+            uint8_t sensorIndex = parseSensor(sensorStr);
+            if (sensorIndex == 0) {  // 0 = SENSOR_NONE
                 Serial.print(F("ERROR: Unknown sensor '"));
                 Serial.print(sensorStr);
                 Serial.println(F("'"));
                 Serial.println(F("  Hint: Use 'LIST SENSORS' to see valid options"));
                 return;
             }
-            if (setInputSensor(pin, sensor)) {
+            if (setInputSensor(pin, sensorIndex)) {
                 Serial.print(F("Input "));
                 Serial.print(pinStr);
                 Serial.print(F(" sensor set to "));
@@ -622,8 +569,8 @@ void handleSerialCommand(char* cmd) {
         if (strncmp(fieldAndValue, "UNITS ", 6) == 0) {
             char* unitsStr = fieldAndValue + 6;
             trim(unitsStr);
-            Units units = parseUnits(unitsStr);
-            if (setInputUnits(pin, units)) {
+            uint8_t unitsIndex = parseUnits(unitsStr);
+            if (setInputUnits(pin, unitsIndex)) {
                 Serial.print(F("Input "));
                 Serial.print(pinStr);
                 Serial.print(F(" units set to "));
