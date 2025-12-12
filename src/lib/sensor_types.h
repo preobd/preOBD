@@ -8,8 +8,24 @@
 
 #include <Arduino.h>
 
-// Sensor enum is defined in input.h
-// Units enum defined below
+// Display units enumeration
+// Indices match UNITS_REGISTRY array positions
+enum DisplayUnits {
+    CELSIUS = 0,
+    FAHRENHEIT = 1,
+    BAR = 2,
+    PSI = 3,
+    KPA = 4,
+    INHG = 5,
+    VOLTS = 6,
+    RPM = 7,
+    PERCENT = 8,
+    METERS = 9,
+    FEET = 10
+};
+
+// Type alias for compatibility
+typedef DisplayUnits Units;
 
 // Measurement type enumeration
 // Defines the physical quantity being measured (what, not how)
@@ -23,24 +39,6 @@ enum MeasurementType {
     MEASURE_ELEVATION,    // Meters -> feet/meters
     MEASURE_DIGITAL       // Digital on/off (float switch)
 };
-
-// Display units enumeration
-enum DisplayUnits {
-    CELSIUS,
-    FAHRENHEIT,
-    BAR,
-    PSI,
-    KPA,
-    INHG,
-    VOLTS,
-    RPM,
-    PERCENT,
-    METERS,
-    FEET
-};
-
-// Type alias for compatibility with new Input-based architecture
-typedef DisplayUnits Units;
 
 // Calibration type enumeration (for type safety)
 enum CalibrationType {
@@ -114,10 +112,5 @@ typedef struct {
 
 // Legacy code removed: StaticSensor struct, wrapper conversion logic, and old sensor array system.
 // All code now uses unified Input-based architecture with compile-time or runtime configuration.
-
-// ===== UTILITY FUNCTIONS =====
-
-// Get string representation of display unit
-const char* getUnitString(DisplayUnits units);
 
 #endif

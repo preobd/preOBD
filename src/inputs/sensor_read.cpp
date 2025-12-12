@@ -649,36 +649,6 @@ float convertToBaseUnits(float displayValue, uint8_t unitsIndex) {
     return (displayValue - offset) / factor;
 }
 
-// Legacy conversion functions - now just call the registry-based functions
-// These are kept for backward compatibility with enum-based code
-
-float convertTemperature(float celsius, uint8_t unitsIndex) {
-    return convertFromBaseUnits(celsius, unitsIndex);
-}
-
-float convertPressure(float bar, uint8_t unitsIndex) {
-    return convertFromBaseUnits(bar, unitsIndex);
-}
-
-float convertVoltage(float volts, uint8_t unitsIndex) {
-    return convertFromBaseUnits(volts, unitsIndex);
-}
-
-float convertRPM(float rpm, uint8_t unitsIndex) {
-    return convertFromBaseUnits(rpm, unitsIndex);
-}
-
-float convertHumidity(float humidity, uint8_t unitsIndex) {
-    return convertFromBaseUnits(humidity, unitsIndex);
-}
-
-float convertElevation(float meters, uint8_t unitsIndex) {
-    return convertFromBaseUnits(meters, unitsIndex);
-}
-
-float convertFloatSwitch(float value, uint8_t unitsIndex) {
-    return convertFromBaseUnits(value, unitsIndex);
-}
 
 // ===== UNIT STRING CONVERSION =====
 
@@ -696,14 +666,6 @@ const char* getUnitStringByIndex(uint8_t unitsIndex) {
 
     const UnitsInfo* info = &UNITS_REGISTRY[unitsIndex];
     return (const char*)pgm_read_ptr(&info->symbol);
-}
-
-/**
- * Legacy enum-based unit string lookup
- * Kept for backward compatibility - just calls registry version
- */
-const char* getUnitString(DisplayUnits units) {
-    return getUnitStringByIndex(units);
 }
 
 // ===== OBDII CONVERSION FUNCTIONS =====
@@ -741,19 +703,6 @@ float obdConvertFloatSwitch(float value) {
 }
 
 // ===== MEASUREMENT TYPE CONVERSION HELPERS =====
-
-DisplayConvertFunc getDisplayConvertFunc(MeasurementType type) {
-    switch (type) {
-        case MEASURE_TEMPERATURE: return convertTemperature;
-        case MEASURE_PRESSURE: return convertPressure;
-        case MEASURE_VOLTAGE: return convertVoltage;
-        case MEASURE_RPM: return convertRPM;
-        case MEASURE_HUMIDITY: return convertHumidity;
-        case MEASURE_ELEVATION: return convertElevation;
-        case MEASURE_DIGITAL: return convertFloatSwitch;
-        default: return convertVoltage;
-    }
-}
 
 ObdConvertFunc getObdConvertFunc(MeasurementType type) {
     switch (type) {

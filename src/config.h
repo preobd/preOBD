@@ -121,8 +121,8 @@
 //
 // Each input needs three defines:
 //   INPUT_N_PIN         - Physical pin (A0-A15 for analog, or digital pin)
-//   INPUT_N_APPLICATION - What you're measuring (from Application enum)
-//   INPUT_N_SENSOR      - Hardware type (from Sensor enum)
+//   INPUT_N_APPLICATION - What you're measuring (from Application Presets)
+//   INPUT_N_SENSOR      - Hardware type (from Sensor )
 //
 // Optional per-input overrides:
 //   INPUT_N_UNITS       - Override display units (e.g., FAHRENHEIT)

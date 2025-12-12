@@ -110,7 +110,7 @@ byte getIconForApplication(uint8_t appIndex) {
         case MEASURE_TEMPERATURE:
             return ICON_THERMOMETER;
         case MEASURE_PRESSURE:
-            return ICON_TURBO;  // Generic pressure icon
+            return 32;  // Generic pressure icon
         case MEASURE_VOLTAGE:
             return ICON_BATTERY;
         case MEASURE_RPM:
@@ -151,7 +151,7 @@ void displaySensor(Input *ptr, byte line) {
             charsPrinted += lcd.print("---");
         } else {
             // Convert to display units
-            float displayValue = getDisplayConvertFunc(ptr->measurementType)(ptr->value, ptr->unitsIndex);
+            float displayValue = convertFromBaseUnits(ptr->value, ptr->unitsIndex);
 
             // Get unit info from registry
             const UnitsInfo* unitInfo = getUnitsByIndex(ptr->unitsIndex);

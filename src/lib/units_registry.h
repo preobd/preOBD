@@ -1,19 +1,13 @@
 /*
  * units_registry.h - Display Units Registry
  *
- * Defines a registry-based architecture for display units to replace
- * switch-based parsing and conversion logic.
+ * Defines a registry-based architecture for display units.
  *
  * ARCHITECTURE:
  * - All units stored in PROGMEM (flash memory) to save RAM
  * - Hash-based name lookup for O(1) average case performance
- * - Index-based access matches existing enum values for compatibility
+ * - Index-based access for fast direct lookup
  * - Multiple aliases per unit (e.g., "C", "CELSIUS")
- *
- * PHASE 1: ADDITIVE ONLY
- * - This registry coexists with existing DisplayUnits enum
- * - No existing code is modified
- * - Validates architecture before wider adoption
  */
 
 #ifndef UNITS_REGISTRY_H
@@ -39,7 +33,6 @@
  *   conversionOffset = 32.0
  */
 struct UnitsInfo {
-    DisplayUnits unit;              // Enum value (for compatibility)
     const char* name;               // Full name: "CELSIUS", "FAHRENHEIT", etc (PROGMEM)
     const char* alias;              // Short alias: "C", "F", "psi", etc (PROGMEM)
     const char* symbol;             // Display symbol: "C", "F", "psi", etc (PROGMEM)
@@ -109,7 +102,6 @@ static const char PSTR_FT_SYMBOL[] PROGMEM = "ft";
 static const PROGMEM UnitsInfo UNITS_REGISTRY[] = {
     // Index 0: CELSIUS (base unit for temperature)
     {
-        .unit = CELSIUS,
         .name = PSTR_CELSIUS,
         .alias = PSTR_C,
         .symbol = PSTR_C,
@@ -122,7 +114,6 @@ static const PROGMEM UnitsInfo UNITS_REGISTRY[] = {
 
     // Index 1: FAHRENHEIT
     {
-        .unit = FAHRENHEIT,
         .name = PSTR_FAHRENHEIT,
         .alias = PSTR_F,
         .symbol = PSTR_F,
@@ -135,7 +126,6 @@ static const PROGMEM UnitsInfo UNITS_REGISTRY[] = {
 
     // Index 2: BAR (base unit for pressure)
     {
-        .unit = BAR,
         .name = PSTR_BAR,
         .alias = PSTR_BAR,       // Same as name
         .symbol = PSTR_BAR_SYMBOL,
@@ -148,7 +138,6 @@ static const PROGMEM UnitsInfo UNITS_REGISTRY[] = {
 
     // Index 3: PSI
     {
-        .unit = PSI,
         .name = PSTR_PSI,
         .alias = PSTR_PSI,
         .symbol = PSTR_PSI_SYMBOL,
@@ -161,7 +150,6 @@ static const PROGMEM UnitsInfo UNITS_REGISTRY[] = {
 
     // Index 4: KPA
     {
-        .unit = KPA,
         .name = PSTR_KPA,
         .alias = PSTR_KPA,
         .symbol = PSTR_KPA_SYMBOL,
@@ -174,7 +162,6 @@ static const PROGMEM UnitsInfo UNITS_REGISTRY[] = {
 
     // Index 5: INHG
     {
-        .unit = INHG,
         .name = PSTR_INHG,
         .alias = PSTR_INHG,
         .symbol = PSTR_INHG_SYMBOL,
@@ -187,7 +174,6 @@ static const PROGMEM UnitsInfo UNITS_REGISTRY[] = {
 
     // Index 6: VOLTS (base unit)
     {
-        .unit = VOLTS,
         .name = PSTR_VOLTS,
         .alias = PSTR_V,
         .symbol = PSTR_V,
@@ -200,7 +186,6 @@ static const PROGMEM UnitsInfo UNITS_REGISTRY[] = {
 
     // Index 7: RPM (base unit)
     {
-        .unit = RPM,
         .name = PSTR_RPM,
         .alias = PSTR_RPM,
         .symbol = PSTR_RPM_SYMBOL,
@@ -213,7 +198,6 @@ static const PROGMEM UnitsInfo UNITS_REGISTRY[] = {
 
     // Index 8: PERCENT (base unit)
     {
-        .unit = PERCENT,
         .name = PSTR_PERCENT,
         .alias = PSTR_PERCENT_SYMBOL,
         .symbol = PSTR_PERCENT_SYMBOL,
@@ -226,7 +210,6 @@ static const PROGMEM UnitsInfo UNITS_REGISTRY[] = {
 
     // Index 9: METERS (base unit for elevation)
     {
-        .unit = METERS,
         .name = PSTR_METERS,
         .alias = PSTR_M,
         .symbol = PSTR_M_SYMBOL,
@@ -239,7 +222,6 @@ static const PROGMEM UnitsInfo UNITS_REGISTRY[] = {
 
     // Index 10: FEET
     {
-        .unit = FEET,
         .name = PSTR_FEET,
         .alias = PSTR_FT,
         .symbol = PSTR_FT_SYMBOL,
@@ -259,10 +241,10 @@ constexpr uint8_t NUM_UNITS = sizeof(UNITS_REGISTRY) / sizeof(UNITS_REGISTRY[0])
 /**
  * Get UnitsInfo by array index (O(1) direct access)
  *
- * This function provides direct array access using the DisplayUnits enum value.
- * Since array indices match enum values, this is the fastest lookup method.
+ * This function provides direct array access using the unit index.
+ * This is the fastest lookup method.
  *
- * @param index  Array index (0-10, should match DisplayUnits enum)
+ * @param index  Array index (0-10)
  * @return       Pointer to UnitsInfo in PROGMEM, or nullptr if invalid
  */
 inline const UnitsInfo* getUnitsByIndex(uint8_t index) {
@@ -297,10 +279,10 @@ inline const UnitsInfo* getUnitsByHash(uint16_t hash) {
 }
 
 /**
- * Get Units index by hash value (O(n) linear search)
+ * Get unit index by hash value (O(n) linear search)
  *
  * Searches the registry for a unit with matching name hash or alias hash.
- * Returns the array index (0-10), which matches the DisplayUnits enum value.
+ * Returns the array index (0-10).
  *
  * @param hash  16-bit hash value to search for
  * @return      Array index (0-10), or 0 (CELSIUS) if not found
@@ -319,7 +301,7 @@ inline uint8_t getUnitsIndexByHash(uint16_t hash) {
 }
 
 /**
- * Get Units index by name string (O(n) hash-based search)
+ * Get unit index by name string (O(n) hash-based search)
  *
  * Hashes the input string and searches for matching unit.
  * Case-insensitive. Returns index instead of pointer.

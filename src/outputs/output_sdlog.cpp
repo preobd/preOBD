@@ -57,7 +57,7 @@ void sendSDLog(Input *ptr) {
     }
 
     // Convert to display units for logging
-    float displayValue = getDisplayConvertFunc(ptr->measurementType)(ptr->value, ptr->unitsIndex);
+    float displayValue = convertFromBaseUnits(ptr->value, ptr->unitsIndex);
 
     // Write CSV line: timestamp, sensor name, value, units
     logFile.print(millis());
@@ -66,7 +66,7 @@ void sendSDLog(Input *ptr) {
     logFile.print(",");
     logFile.print(displayValue, 2);
     logFile.print(",");
-    logFile.print(getUnitString(ptr->unitsIndex));
+    logFile.print(getUnitStringByIndex(ptr->unitsIndex));
     logFile.println();
 }
 

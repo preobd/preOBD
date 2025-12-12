@@ -16,14 +16,14 @@
  *       ├── CHT (Cylinder Head Temperature)
  *       ├── OIL_PRESSURE
  *       ├── COOLANT_TEMP
- *       └── ... (see Application enum)
+ *       └── ... (see Application Presets)
  *
  *   SENSOR (hardware device)
  *       │
  *       ├── MAX6675 (K-type thermocouple amplifier)
  *       ├── VDO_120C_LOOKUP (VDO thermistor, lookup table)
  *       ├── VDO_5BAR (VDO pressure sender)
- *       └── ... (see Sensor enum)
+ *       └── ... (see Sensor Library)
  *
  * When you assign an Application to a pin, it loads defaults from
  * ApplicationPreset (application_presets.h):

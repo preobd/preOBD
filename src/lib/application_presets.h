@@ -462,10 +462,10 @@ constexpr uint8_t NUM_APPLICATION_PRESETS = sizeof(APPLICATION_PRESETS) / sizeof
 /**
  * Get ApplicationPreset by array index (O(1) direct access)
  *
- * This function provides direct array access using the Application enum value.
- * Since array indices match enum values, this is the fastest lookup method.
+ * This function provides direct array access using the application index.
+ * This is the fastest lookup method.
  *
- * @param index  Array index (0-16, should match Application enum)
+ * @param index  Array index (0-16)
  * @return       Pointer to ApplicationPreset in PROGMEM, or nullptr if invalid
  */
 inline const ApplicationPreset* getApplicationByIndex(uint8_t index) {
@@ -510,7 +510,6 @@ inline uint8_t getApplicationIndexByName(const char* name) {
 /**
  * Get ApplicationPreset from flash memory (O(1) direct array indexing)
  *
- * Legacy compatibility function - uses enum value directly.
  * Validates that the entry is implemented (non-null label).
  *
  * @param index  Application index (0-16)
@@ -558,7 +557,7 @@ inline MeasurementType getApplicationExpectedMeasurementType(uint8_t index) {
 #define READ_APP_LABEL(preset) ((const char*)pgm_read_ptr(&(preset)->label))
 #define READ_APP_DESCRIPTION(preset) ((const char*)pgm_read_ptr(&(preset)->description))
 #define READ_APP_DEFAULT_SENSOR(preset) ((Sensor)pgm_read_byte(&(preset)->defaultSensor))
-#define READ_APP_DEFAULT_UNITS(preset) ((Units)pgm_read_byte(&(preset)->defaultUnits))
+#define READ_APP_DEFAULT_UNITS(preset) ((uint8_t)pgm_read_byte(&(preset)->defaultUnits))
 #define READ_APP_MIN_VALUE(preset) pgm_read_float(&(preset)->defaultMinValue)
 #define READ_APP_MAX_VALUE(preset) pgm_read_float(&(preset)->defaultMaxValue)
 

@@ -47,14 +47,10 @@ extern void initThermocoupleCS(Input*);
 extern void initWPhaseRPM(Input*);
 extern void initFloatSwitch(Input*);
 
-// Forward declare conversion functions
-extern float convertTemperature(float value, Units targetUnits);
-extern float convertPressure(float value, Units targetUnits);
-extern float convertVoltage(float value, Units targetUnits);
-extern float convertRPM(float value, Units targetUnits);
-extern float convertHumidity(float value, Units targetUnits);
-extern float convertElevation(float value, Units targetUnits);
-extern float convertFloatSwitch(float value, Units targetUnits);
+// Forward declare unit conversion functions (registry-based)
+extern float convertFromBaseUnits(float baseValue, uint8_t unitsIndex);
+extern float convertToBaseUnits(float displayValue, uint8_t unitsIndex);
+extern const char* getUnitStringByIndex(uint8_t unitsIndex);
 
 // Forward declare OBD conversion functions
 extern float obdConvertTemperature(float value);
@@ -65,12 +61,9 @@ extern float obdConvertHumidity(float value);
 extern float obdConvertElevation(float value);
 extern float obdConvertFloatSwitch(float value);
 
-// Helper functions to get conversion function pointers from measurement type
-// These allow us to derive conversion functions at runtime instead of storing them
-typedef float (*DisplayConvertFunc)(float, uint8_t);
+// Helper function to get OBD conversion function pointer from measurement type
 typedef float (*ObdConvertFunc)(float);
 
-DisplayConvertFunc getDisplayConvertFunc(MeasurementType type);
 ObdConvertFunc getObdConvertFunc(MeasurementType type);
 
 // ===== SENSOR INFO STRUCTURE =====

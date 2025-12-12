@@ -9,7 +9,7 @@
 #define SYSTEM_CONFIG_H
 
 #include <Arduino.h>
-#include "sensor_types.h"  // For Units enum (CELSIUS, BAR, FEET, etc.)
+#include "sensor_types.h"  // For Units, MeasurementType enums
 
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
@@ -48,9 +48,9 @@ struct SystemConfig {
     uint8_t displayEnabled;      // Display on/off (bool)
     uint8_t displayType;         // LCD/OLED/None (DisplayType enum)
     uint8_t lcdI2CAddress;       // I2C address (default 0x27)
-    Units defaultTempUnits;      // CELSIUS/FAHRENHEIT (Units enum)
-    Units defaultPressUnits;     // BAR/PSI/KPA (Units enum)
-    Units defaultElevUnits;      // METERS/FEET (Units enum)
+    Units defaultTempUnits;      // CELSIUS / FAHRENHEIT
+    Units defaultPressUnits;     // BAR / PSI / KPA
+    Units defaultElevUnits;      // METERS / FEET
 
     // Timing Intervals (8 bytes)
     uint16_t sensorReadInterval;
