@@ -487,22 +487,20 @@ bool initInputManager() {
 static uint8_t calculateConfigChecksum() {
     uint8_t checksum = 0;
 
+    // Read InputEEPROM structs from EEPROM and checksum them
+    // This ensures we're checksumming what was actually saved, not runtime data
+    uint16_t addr = EEPROM_HEADER_SIZE;
     for (uint8_t i = 0; i < numActiveInputs; i++) {
-        // Find the i-th active input
-        uint8_t activeCount = 0;
-        for (uint8_t j = 0; j < MAX_INPUTS; j++) {
-            if (inputs[j].pin != 0xFF && inputs[j].flags.isEnabled) {
-                if (activeCount == i) {
-                    // XOR all bytes of this input
-                    const uint8_t* data = (const uint8_t*)&inputs[j];
-                    for (size_t k = 0; k < sizeof(Input); k++) {
-                        checksum ^= data[k];
-                    }
-                    break;
-                }
-                activeCount++;
-            }
+        InputEEPROM eepromInput;
+        EEPROM.get(addr, eepromInput);
+
+        // XOR all bytes of the EEPROM structure
+        const uint8_t* data = (const uint8_t*)&eepromInput;
+        for (size_t k = 0; k < sizeof(InputEEPROM); k++) {
+            checksum ^= data[k];
         }
+
+        addr += EEPROM_INPUT_SIZE;
     }
 
     return checksum;
@@ -521,7 +519,9 @@ bool saveInputConfig() {
             // Copy simple fields
             eepromInput.pin = inputs[i].pin;
             strncpy(eepromInput.abbrName, inputs[i].abbrName, sizeof(eepromInput.abbrName) - 1);
+            eepromInput.abbrName[sizeof(eepromInput.abbrName) - 1] = '\0';  // Ensure null termination
             strncpy(eepromInput.displayName, inputs[i].displayName, sizeof(eepromInput.displayName) - 1);
+            eepromInput.displayName[sizeof(eepromInput.displayName) - 1] = '\0';  // Ensure null termination
             eepromInput.minValue = inputs[i].minValue;
             eepromInput.maxValue = inputs[i].maxValue;
             eepromInput.obd2pid = inputs[i].obd2pid;
