@@ -67,7 +67,7 @@ static const char PSTR_OIL_TEMP_ABBR[] PROGMEM = "OIL";
 static const char PSTR_OIL_TEMP_LABEL[] PROGMEM = "Oil Temperature";
 
 static const char PSTR_TCASE_TEMP[] PROGMEM = "TCASE_TEMP";
-static const char PSTR_TCASE_TEMP_ABBR[] PROGMEM = "TCASE";
+static const char PSTR_TCASE_TEMP_ABBR[] PROGMEM = " TC";
 static const char PSTR_TCASE_TEMP_LABEL[] PROGMEM = "Transfer Case Temperature";
 
 static const char PSTR_AMBIENT_TEMP[] PROGMEM = "AMBIENT_TEMP";
@@ -75,7 +75,7 @@ static const char PSTR_AMBIENT_TEMP_ABBR[] PROGMEM = "AMB";
 static const char PSTR_AMBIENT_TEMP_LABEL[] PROGMEM = "Ambient Air Temperature";
 
 static const char PSTR_OIL_PRESSURE[] PROGMEM = "OIL_PRESSURE";
-static const char PSTR_OIL_PRESSURE_ABBR[] PROGMEM = "OILP";
+static const char PSTR_OIL_PRESSURE_ABBR[] PROGMEM = " OP";
 static const char PSTR_OIL_PRESSURE_LABEL[] PROGMEM = "Oil Pressure";
 
 static const char PSTR_BOOST_PRESSURE[] PROGMEM = "BOOST_PRESSURE";
@@ -83,7 +83,7 @@ static const char PSTR_BOOST_PRESSURE_ABBR[] PROGMEM = "MAP";
 static const char PSTR_BOOST_PRESSURE_LABEL[] PROGMEM = "Turbo Boost Pressure";
 
 static const char PSTR_FUEL_PRESSURE[] PROGMEM = "FUEL_PRESSURE";
-static const char PSTR_FUEL_PRESSURE_ABBR[] PROGMEM = "FUEL";
+static const char PSTR_FUEL_PRESSURE_ABBR[] PROGMEM = " FP";
 static const char PSTR_FUEL_PRESSURE_LABEL[] PROGMEM = "Fuel Pressure";
 
 static const char PSTR_BAROMETRIC_PRESSURE[] PROGMEM = "BAROMETRIC_PRESSURE";
@@ -99,7 +99,7 @@ static const char PSTR_AUXILIARY_BATTERY_ABBR[] PROGMEM = "AUX";
 static const char PSTR_AUXILIARY_BATTERY_LABEL[] PROGMEM = "Auxiliary Battery";
 
 static const char PSTR_COOLANT_LEVEL[] PROGMEM = "COOLANT_LEVEL";
-static const char PSTR_COOLANT_LEVEL_ABBR[] PROGMEM = "CLVL";
+static const char PSTR_COOLANT_LEVEL_ABBR[] PROGMEM = "LVL";
 static const char PSTR_COOLANT_LEVEL_LABEL[] PROGMEM = "Coolant Level";
 
 static const char PSTR_HUMIDITY[] PROGMEM = "HUMIDITY";
