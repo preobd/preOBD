@@ -10,8 +10,8 @@
  *   - Physical sensor limits (for validation)
  *
  * HOW TO ADD A NEW SENSOR:
- * 1. Add enum value to Sensor in input.h (for now - Phase 11 will remove this)
- * 2. Add calibration data to sensor_calibration_data.h (if needed)
+ * 1. Add calibration data to sensor_calibration_data.h (if needed)
+ * 2. Add PROGMEM strings for name and label
  * 3. Add SensorInfo entry to SENSOR_LIBRARY[] below with unique name
  * 4. Compute hash: python3 -c "h=5381; s='YOUR_NAME'; [h:=(h<<5)+h+ord(c.upper()) for c in s]; print(f'0x{h&0xFFFF:04X}')"
  *
@@ -129,16 +129,10 @@ static const char PSTR_FLOAT_SWITCH_LABEL[] PROGMEM = "Float Switch";
 
 // ===== SENSOR LIBRARY (PROGMEM - Flash Memory) =====
 //
-// IMPORTANT: Array order MUST match Sensor enum values!
-// - SENSOR_LIBRARY[0] = SENSOR_NONE
-// - SENSOR_LIBRARY[1] = MAX6675
-// - SENSOR_LIBRARY[n] = sensor with enum value n
-//
 // To add a new sensor:
-// 1. Add enum value at END of Sensor enum (next sequential number)
-// 2. Add SensorInfo entry at END of this array (index = enum value)
-// 3. Update NUM_SENSORS to match new array size
-// 4. Do NOT insert in the middle - causes enum value shifts
+// 1. Add PROGMEM strings for name and label above
+// 2. Add SensorInfo entry at END of this array
+// 3. Compute nameHash using Python one-liner in header
 //
 // Placeholder entries (name = nullptr) reserve slots for unimplemented sensors.
 //
@@ -483,7 +477,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     }
 };
 
-#define NUM_SENSORS 20  // Must match number of Sensor enum values (0-19)
+// Automatically calculate the number of sensors
+constexpr uint8_t NUM_SENSORS = sizeof(SENSOR_LIBRARY) / sizeof(SENSOR_LIBRARY[0]);
 
 // ===== HELPER FUNCTIONS =====
 

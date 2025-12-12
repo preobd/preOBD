@@ -91,11 +91,6 @@ static const char PSTR_FT_SYMBOL[] PROGMEM = "ft";
 /**
  * UNITS_REGISTRY - Complete unit definitions
  *
- * IMPORTANT: Array order MUST match DisplayUnits enum values!
- * - UNITS_REGISTRY[0] = CELSIUS
- * - UNITS_REGISTRY[1] = FAHRENHEIT
- * - UNITS_REGISTRY[n] = unit with enum value n
- *
  * BASE UNITS (conversionFactor = 1.0, conversionOffset = 0.0):
  * - Temperature: Celsius
  * - Pressure: Bar
@@ -256,7 +251,8 @@ static const PROGMEM UnitsInfo UNITS_REGISTRY[] = {
     }
 };
 
-#define NUM_UNITS 11  // Must match number of DisplayUnits enum values (0-10)
+// Automatically calculate the number of units
+constexpr uint8_t NUM_UNITS = sizeof(UNITS_REGISTRY) / sizeof(UNITS_REGISTRY[0]);
 
 // ===== HELPER FUNCTIONS =====
 

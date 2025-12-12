@@ -8,7 +8,7 @@
  * ARCHITECTURE:
  * - All data stored in PROGMEM (flash memory) to save RAM
  * - Hash-based name lookup for O(1) average case performance
- * - Index-based access matches existing enum values for compatibility
+ * - Index-based access for direct lookup
  * - Primary key: .name field for stable identification
  *
  * IMPORTANT: Min/max values are stored in STANDARD UNITS:
@@ -17,7 +17,7 @@
  * - Voltage: volts
  *
  * HOW TO ADD A NEW APPLICATION:
- * 1. Add enum value to Application in input.h (for now - Phase 11 will remove this)
+ * 1. Add PROGMEM strings for name and label
  * 2. Add ApplicationPreset entry to APPLICATION_PRESETS[] below with unique name
  * 3. Compute hash: python3 -c "h=5381; s='YOUR_NAME'; [h:=(h<<5)+h+ord(c.upper()) for c in s]; print(f'0x{h&0xFFFF:04X}')"
  */
@@ -87,7 +87,7 @@ static const char PSTR_FUEL_PRESSURE_ABBR[] PROGMEM = "FUEL";
 static const char PSTR_FUEL_PRESSURE_LABEL[] PROGMEM = "Fuel Pressure";
 
 static const char PSTR_BAROMETRIC_PRESSURE[] PROGMEM = "BAROMETRIC_PRESSURE";
-static const char PSTR_BAROMETRIC_PRESSURE_ABBR[] PROGMEM = "BARO";
+static const char PSTR_BAROMETRIC_PRESSURE_ABBR[] PROGMEM = "ABP";
 static const char PSTR_BAROMETRIC_PRESSURE_LABEL[] PROGMEM = "Barometric Pressure";
 
 static const char PSTR_PRIMARY_BATTERY[] PROGMEM = "PRIMARY_BATTERY";
@@ -116,18 +116,10 @@ static const char PSTR_ENGINE_RPM_LABEL[] PROGMEM = "Engine RPM";
 
 // ===== APPLICATION PRESETS (PROGMEM - Flash Memory) =====
 //
-// IMPORTANT: Array order MUST match Application enum values!
-// - APPLICATION_PRESETS[0] = APP_NONE
-// - APPLICATION_PRESETS[1] = CHT
-// - APPLICATION_PRESETS[n] = application with enum value n
-//
 // To add a new application:
-// 1. Add enum value at END of Application enum (next sequential number)
-// 2. Add PROGMEM strings for name and label above
-// 3. Add ApplicationPreset entry at END of this array (index = enum value)
-// 4. Compute nameHash using Python one-liner in header
-// 5. Update NUM_APPLICATION_PRESETS to match new array size
-// 6. Do NOT insert in the middle - causes enum value shifts
+// 1. Add PROGMEM strings for name and label above
+// 2. Add ApplicationPreset entry at END of this array
+// 3. Compute nameHash using Python one-liner in header
 //
 // Placeholder entries (label = nullptr) reserve slots for unimplemented applications.
 //
@@ -462,7 +454,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     }
 };
 
-#define NUM_APPLICATION_PRESETS 17  // Must match number of Application enum values (0-16)
+// Automatically calculate the number of application presets
+constexpr uint8_t NUM_APPLICATION_PRESETS = sizeof(APPLICATION_PRESETS) / sizeof(APPLICATION_PRESETS[0]);
 
 // ===== HELPER FUNCTIONS =====
 
