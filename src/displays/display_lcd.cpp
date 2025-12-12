@@ -14,7 +14,12 @@
 
 #include <LiquidCrystal_I2C.h>
 
-LiquidCrystal_I2C lcd(0x27, 20, 4);
+// LCD display configuration
+#define LCD_COLS 20
+#define LCD_ROWS 4
+#define LCD_COLUMNS_PER_SENSOR (LCD_COLS / 2)  // Split display into 2 columns
+
+LiquidCrystal_I2C lcd(0x27, LCD_COLS, LCD_ROWS);
 byte currentLine = 0;
 
 // Custom character icon definitions
@@ -121,9 +126,9 @@ byte getIconForApplication(uint8_t appIndex) {
 }
 
 void displaySensor(Input *ptr, byte line) {
-    // Calculate column position (0-9 for left, 10-19 for right)
-    byte col = (line >= 4) ? 10 : 0;
-    byte row = (line >= 4) ? line - 4 : line;
+    // Calculate column position based on LCD_COLUMNS_PER_SENSOR
+    byte col = (line >= LCD_ROWS) ? LCD_COLUMNS_PER_SENSOR : 0;
+    byte row = (line >= LCD_ROWS) ? line - LCD_ROWS : line;
 
     lcd.setCursor(col, row);
 
@@ -131,24 +136,73 @@ void displaySensor(Input *ptr, byte line) {
 
     if (ptr->flags.display) {
         // Print icon
-        lcd.write(getIconForApplication(ptr->applicationIndex));
-        charsPrinted++;
+        if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
+            lcd.write(getIconForApplication(ptr->applicationIndex));
+            charsPrinted++;
+        }
 
         // Print sensor abbreviation
-        charsPrinted += lcd.print(ptr->abbrName);
-        charsPrinted += lcd.print(":");
+        if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
+            int abbrLen = strlen(ptr->abbrName);
+            int charsAvailable = LCD_COLUMNS_PER_SENSOR - charsPrinted;
+            if (abbrLen > charsAvailable) abbrLen = charsAvailable;
+            for (int i = 0; i < abbrLen; i++) {
+                lcd.print(ptr->abbrName[i]);
+            }
+            charsPrinted += abbrLen;
+        }
+
+        // Print colon
+        if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
+            lcd.print(":");
+            charsPrinted++;
+        }
 
         // If sensor is not enabled, show "CFG"
         if (!ptr->flags.isEnabled) {
-            charsPrinted += lcd.print("CFG");
+            if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
+                int remaining = LCD_COLUMNS_PER_SENSOR - charsPrinted;
+                if (remaining >= 3) {
+                    charsPrinted += lcd.print("CFG");
+                } else {
+                    // Print as much as we can fit
+                    const char* msg = "CFG";
+                    for (int i = 0; i < remaining; i++) {
+                        lcd.print(msg[i]);
+                        charsPrinted++;
+                    }
+                }
+            }
         }
         // Check for invalid values (NaN)
         else if (isnan(ptr->value)) {
-            charsPrinted += lcd.print("ERR");
+            if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
+                int remaining = LCD_COLUMNS_PER_SENSOR - charsPrinted;
+                if (remaining >= 3) {
+                    charsPrinted += lcd.print("ERR");
+                } else {
+                    const char* msg = "ERR";
+                    for (int i = 0; i < remaining; i++) {
+                        lcd.print(msg[i]);
+                        charsPrinted++;
+                    }
+                }
+            }
         }
         // If value is exactly 0.0, show "---" (likely in CONFIG mode, not yet read)
         else if (ptr->value == 0.0f) {
-            charsPrinted += lcd.print("---");
+            if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
+                int remaining = LCD_COLUMNS_PER_SENSOR - charsPrinted;
+                if (remaining >= 3) {
+                    charsPrinted += lcd.print("---");
+                } else {
+                    const char* msg = "---";
+                    for (int i = 0; i < remaining; i++) {
+                        lcd.print(msg[i]);
+                        charsPrinted++;
+                    }
+                }
+            }
         } else {
             // Convert to display units
             float displayValue = convertFromBaseUnits(ptr->value, ptr->unitsIndex);
@@ -179,27 +233,52 @@ void displaySensor(Input *ptr, byte line) {
                     break;
             }
 
-            // Print value with appropriate precision
-            charsPrinted += lcd.print(displayValue, decimals);
+            // Print value with appropriate precision (if space available)
+            if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
+                // Format the value to a string first to check length
+                char valBuffer[12];
+                dtostrf(displayValue, 1, decimals, valBuffer);
+                int valLen = strlen(valBuffer);
+                int charsAvailable = LCD_COLUMNS_PER_SENSOR - charsPrinted;
 
-            // Print unit symbol from registry
-            if (measType == MEASURE_TEMPERATURE) {
-                // Temperature gets a degree symbol before the unit
-                lcd.write((byte)ICON_DEGREE);
-                charsPrinted++;
-            } else if (unitInfo) {
-                // Use symbol from registry
-                const char* symPtr = (const char*)pgm_read_ptr(&unitInfo->symbol);
-                if (symPtr) {
-                    lcd.print((__FlashStringHelper*)symPtr);
-                    charsPrinted += strlen_P(symPtr);
+                // If value + unit symbols won't fit, truncate
+                if (valLen > charsAvailable) {
+                    valLen = charsAvailable;
+                }
+
+                for (int i = 0; i < valLen; i++) {
+                    lcd.print(valBuffer[i]);
+                    charsPrinted++;
+                }
+            }
+
+            // Print unit symbol from registry (if space available)
+            if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
+                if (measType == MEASURE_TEMPERATURE) {
+                    // Temperature gets a degree symbol before the unit
+                    lcd.write((byte)ICON_DEGREE);
+                    charsPrinted++;
+                } else if (unitInfo) {
+                    // Use symbol from registry
+                    const char* symPtr = (const char*)pgm_read_ptr(&unitInfo->symbol);
+                    if (symPtr) {
+                        int symLen = strlen_P(symPtr);
+                        int charsAvailable = LCD_COLUMNS_PER_SENSOR - charsPrinted;
+                        if (symLen > charsAvailable) symLen = charsAvailable;
+
+                        for (int i = 0; i < symLen; i++) {
+                            char c = pgm_read_byte(symPtr + i);
+                            lcd.print(c);
+                            charsPrinted++;
+                        }
+                    }
                 }
             }
         }
     }
 
-    // Pad remaining space in the 10-character block to clear old data
-    for (int i = charsPrinted; i < 10; i++) {
+    // Pad remaining space in the column to clear old data
+    for (int i = charsPrinted; i < LCD_COLUMNS_PER_SENSOR; i++) {
         lcd.print(" ");
     }
 }
