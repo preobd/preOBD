@@ -1184,11 +1184,8 @@ void listAllInputs() {
             Serial.print(inputs[i].displayName);
             Serial.print(F(") = "));
             Serial.print(inputs[i].value);
-            Serial.println(inputs[i].unitsIndex == CELSIUS ? F("°C") :
-                          inputs[i].unitsIndex == FAHRENHEIT ? F("°F") :
-                          inputs[i].unitsIndex == PSI ? F(" PSI") :
-                          inputs[i].unitsIndex == BAR ? F(" BAR") :
-                          inputs[i].unitsIndex == VOLTS ? F("V") : F(""));
+            Serial.print(F(" "));
+            Serial.println(getUnitStringByIndex(inputs[i].unitsIndex));
         }
     }
 

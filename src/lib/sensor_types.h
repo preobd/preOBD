@@ -8,25 +8,6 @@
 
 #include <Arduino.h>
 
-// Display units enumeration
-// Indices match UNITS_REGISTRY array positions
-enum DisplayUnits {
-    CELSIUS = 0,
-    FAHRENHEIT = 1,
-    BAR = 2,
-    PSI = 3,
-    KPA = 4,
-    INHG = 5,
-    VOLTS = 6,
-    RPM = 7,
-    PERCENT = 8,
-    METERS = 9,
-    FEET = 10
-};
-
-// Type alias for compatibility
-typedef DisplayUnits Units;
-
 // Measurement type enumeration
 // Defines the physical quantity being measured (what, not how)
 // This determines which conversion functions to use for display and OBD output

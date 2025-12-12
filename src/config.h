@@ -99,15 +99,16 @@
 
 // Set your preferred units for each measurement type
 // Individual sensors can override these defaults in the sensor definitions section
+// These are resolved to indices at boot time via the units registry
 
-// Temperature default (CELSIUS or FAHRENHEIT)
-#define DEFAULT_TEMPERATURE_UNITS  CELSIUS
+// Temperature default ("CELSIUS" or "FAHRENHEIT")
+#define DEFAULT_TEMPERATURE_UNITS  "CELSIUS"
 
-// Pressure default (BAR, PSI, or KPA)
-#define DEFAULT_PRESSURE_UNITS     BAR
+// Pressure default ("BAR", "PSI", or "KPA")
+#define DEFAULT_PRESSURE_UNITS     "BAR"
 
-// Elevation default (METERS or FEET)
-#define DEFAULT_ELEVATION_UNITS     FEET
+// Elevation default ("METERS" or "FEET")
+#define DEFAULT_ELEVATION_UNITS    "FEET"
 
 // NOTE: Voltage is always displayed in VOLTS
 // NOTE: Humidity is always displayed in PERCENT

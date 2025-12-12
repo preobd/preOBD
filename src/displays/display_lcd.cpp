@@ -171,7 +171,8 @@ void displaySensor(Input *ptr, byte line) {
                     decimals = 0;  // No decimals for these
                     break;
                 case MEASURE_PRESSURE:
-                    decimals = (ptr->unitsIndex == INHG) ? 2 : 1;  // 2 decimals for inHg
+                    // inHg uses 2 decimals, others use 1
+                    decimals = (ptr->unitsIndex == getUnitsIndexByName("INHG")) ? 2 : 1;
                     break;
                 case MEASURE_VOLTAGE:
                     decimals = 1;  // 1 decimal for voltage

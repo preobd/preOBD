@@ -1186,16 +1186,11 @@ void handleSerialCommand(char* cmd) {
             Serial.print(F("LCD I2C Address: 0x"));
             Serial.println(systemConfig.lcdI2CAddress, HEX);
             Serial.print(F("Temperature Units: "));
-            Serial.println(systemConfig.defaultTempUnits == CELSIUS ? F("Celsius") : F("Fahrenheit"));
+            Serial.println(getUnitStringByIndex(systemConfig.defaultTempUnits));
             Serial.print(F("Pressure Units: "));
-            switch (systemConfig.defaultPressUnits) {
-                case BAR: Serial.println(F("Bar")); break;
-                case PSI: Serial.println(F("PSI")); break;
-                case KPA: Serial.println(F("kPa")); break;
-                default: Serial.println(F("Unknown")); break;
-            }
+            Serial.println(getUnitStringByIndex(systemConfig.defaultPressUnits));
             Serial.print(F("Elevation Units: "));
-            Serial.println(systemConfig.defaultElevUnits == METERS ? F("Meters") : F("Feet"));
+            Serial.println(getUnitStringByIndex(systemConfig.defaultElevUnits));
             return;
         }
 
@@ -1251,16 +1246,16 @@ void handleSerialCommand(char* cmd) {
             return;
         }
 
-        // DISPLAY UNITS TEMP <C|F>
+        // DISPLAY UNITS TEMP <C|F|CELSIUS|FAHRENHEIT>
         if (strncmp(rest, "UNITS TEMP ", 11) == 0) {
             char* unitStr = rest + 11;
             trim(unitStr);
-            if (streq(unitStr, "C") || streq(unitStr, "CELSIUS")) {
-                systemConfig.defaultTempUnits = CELSIUS;
-                Serial.println(F("Default temperature units set to Celsius"));
-            } else if (streq(unitStr, "F") || streq(unitStr, "FAHRENHEIT")) {
-                systemConfig.defaultTempUnits = FAHRENHEIT;
-                Serial.println(F("Default temperature units set to Fahrenheit"));
+            uint8_t index = getUnitsIndexByName(unitStr);
+            const UnitsInfo* info = getUnitsByIndex(index);
+            if (info && pgm_read_byte(&info->measurementType) == MEASURE_TEMPERATURE) {
+                systemConfig.defaultTempUnits = index;
+                Serial.print(F("Default temperature units set to "));
+                Serial.println(getUnitStringByIndex(index));
             } else {
                 Serial.println(F("ERROR: Invalid units. Valid: C, F, CELSIUS, FAHRENHEIT"));
             }
@@ -1271,31 +1266,28 @@ void handleSerialCommand(char* cmd) {
         if (strncmp(rest, "UNITS PRESSURE ", 15) == 0) {
             char* unitStr = rest + 15;
             trim(unitStr);
-            if (streq(unitStr, "BAR")) {
-                systemConfig.defaultPressUnits = BAR;
-                Serial.println(F("Default pressure units set to Bar"));
-            } else if (streq(unitStr, "PSI")) {
-                systemConfig.defaultPressUnits = PSI;
-                Serial.println(F("Default pressure units set to PSI"));
-            } else if (streq(unitStr, "KPA")) {
-                systemConfig.defaultPressUnits = KPA;
-                Serial.println(F("Default pressure units set to kPa"));
+            uint8_t index = getUnitsIndexByName(unitStr);
+            const UnitsInfo* info = getUnitsByIndex(index);
+            if (info && pgm_read_byte(&info->measurementType) == MEASURE_PRESSURE) {
+                systemConfig.defaultPressUnits = index;
+                Serial.print(F("Default pressure units set to "));
+                Serial.println(getUnitStringByIndex(index));
             } else {
-                Serial.println(F("ERROR: Invalid units. Valid: BAR, PSI, KPA"));
+                Serial.println(F("ERROR: Invalid units. Valid: BAR, PSI, KPA, INHG"));
             }
             return;
         }
 
-        // DISPLAY UNITS ELEVATION <M|FT>
+        // DISPLAY UNITS ELEVATION <M|FT|METERS|FEET>
         if (strncmp(rest, "UNITS ELEVATION ", 16) == 0) {
             char* unitStr = rest + 16;
             trim(unitStr);
-            if (streq(unitStr, "M") || streq(unitStr, "METERS")) {
-                systemConfig.defaultElevUnits = METERS;
-                Serial.println(F("Default elevation units set to Meters"));
-            } else if (streq(unitStr, "FT") || streq(unitStr, "FEET")) {
-                systemConfig.defaultElevUnits = FEET;
-                Serial.println(F("Default elevation units set to Feet"));
+            uint8_t index = getUnitsIndexByName(unitStr);
+            const UnitsInfo* info = getUnitsByIndex(index);
+            if (info && pgm_read_byte(&info->measurementType) == MEASURE_ELEVATION) {
+                systemConfig.defaultElevUnits = index;
+                Serial.print(F("Default elevation units set to "));
+                Serial.println(getUnitStringByIndex(index));
             } else {
                 Serial.println(F("ERROR: Invalid units. Valid: M, FT, METERS, FEET"));
             }
@@ -1641,16 +1633,11 @@ void handleSerialCommand(char* cmd) {
         Serial.print(F("LCD I2C Address: 0x"));
         Serial.println(systemConfig.lcdI2CAddress, HEX);
         Serial.print(F("Default Units: Temp="));
-        Serial.print(systemConfig.defaultTempUnits == CELSIUS ? F("C") : F("F"));
+        Serial.print(getUnitStringByIndex(systemConfig.defaultTempUnits));
         Serial.print(F(", Press="));
-        switch (systemConfig.defaultPressUnits) {
-            case BAR: Serial.print(F("Bar")); break;
-            case PSI: Serial.print(F("PSI")); break;
-            case KPA: Serial.print(F("kPa")); break;
-            default: Serial.print(F("Unknown")); break;
-        }
+        Serial.print(getUnitStringByIndex(systemConfig.defaultPressUnits));
         Serial.print(F(", Elev="));
-        Serial.println(systemConfig.defaultElevUnits == METERS ? F("M") : F("Ft"));
+        Serial.println(getUnitStringByIndex(systemConfig.defaultElevUnits));
         Serial.println();
 
         Serial.println(F("To save this configuration to EEPROM, type: SAVE"));
