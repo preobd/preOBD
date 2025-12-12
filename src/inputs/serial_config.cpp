@@ -144,8 +144,19 @@ static uint8_t parsePin(const char* pinStr, bool* isValid) {
     if (isValid) *isValid = true;
 
     // Handle "I2C" keyword for I2C sensors (BME280, etc)
+    // Use a virtual pin counter to allow multiple I2C sensors
+    // Virtual pins start at 0xF0 (240) - well above any real pin number
     if (streq(pinStr, "I2C")) {
-        return 0;  // I2C sensors use pin 0 as placeholder
+        static uint8_t i2cVirtualPinCounter = 0xF0;
+
+        // Check if we've exceeded the virtual pin range
+        if (i2cVirtualPinCounter >= 0xFE) {
+            Serial.println(F("ERROR: Too many I2C sensors configured (max 14)"));
+            if (isValid) *isValid = false;
+            return 0;
+        }
+
+        return i2cVirtualPinCounter++;
     }
 
     // Analog pins

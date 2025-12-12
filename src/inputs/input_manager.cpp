@@ -786,7 +786,9 @@ static bool validateInputConfig(Input* input) {
         // Check if another enabled input uses the same pin
         if (other->flags.isEnabled && other->pin == input->pin) {
             Serial.print(F("ERROR: Pin "));
-            if (input->pin >= A0) {
+            if (input->pin >= 0xF0) {
+                Serial.print(F("I2C"));
+            } else if (input->pin >= A0) {
                 Serial.print(F("A"));
                 Serial.print(input->pin - A0);
             } else {
@@ -1110,7 +1112,9 @@ void printInputInfo(uint8_t pin) {
 
     Serial.println(F("Input Configuration:"));
     Serial.print(F("  Pin: "));
-    if (pin >= A0) {
+    if (pin >= 0xF0) {
+        Serial.println(F("I2C"));
+    } else if (pin >= A0) {
         Serial.print(F("A"));
         Serial.println(pin - A0);
     } else {
@@ -1166,7 +1170,9 @@ void listAllInputs() {
         if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) {
             found = true;
             Serial.print(F("  "));
-            if (inputs[i].pin >= A0) {
+            if (inputs[i].pin >= 0xF0) {
+                Serial.print(F("I2C"));
+            } else if (inputs[i].pin >= A0) {
                 Serial.print(F("A"));
                 Serial.print(inputs[i].pin - A0);
             } else {
