@@ -91,11 +91,11 @@ static const char PSTR_BAROMETRIC_PRESSURE_ABBR[] PROGMEM = "ABP";
 static const char PSTR_BAROMETRIC_PRESSURE_LABEL[] PROGMEM = "Barometric Pressure";
 
 static const char PSTR_PRIMARY_BATTERY[] PROGMEM = "PRIMARY_BATTERY";
-static const char PSTR_PRIMARY_BATTERY_ABBR[] PROGMEM = "BAT1";
+static const char PSTR_PRIMARY_BATTERY_ABBR[] PROGMEM = "BAT";
 static const char PSTR_PRIMARY_BATTERY_LABEL[] PROGMEM = "Primary Battery";
 
 static const char PSTR_AUXILIARY_BATTERY[] PROGMEM = "AUXILIARY_BATTERY";
-static const char PSTR_AUXILIARY_BATTERY_ABBR[] PROGMEM = "BAT2";
+static const char PSTR_AUXILIARY_BATTERY_ABBR[] PROGMEM = "AUX";
 static const char PSTR_AUXILIARY_BATTERY_LABEL[] PROGMEM = "Auxiliary Battery";
 
 static const char PSTR_COOLANT_LEVEL[] PROGMEM = "COOLANT_LEVEL";
