@@ -1186,11 +1186,11 @@ void handleSerialCommand(char* cmd) {
             Serial.print(F("LCD I2C Address: 0x"));
             Serial.println(systemConfig.lcdI2CAddress, HEX);
             Serial.print(F("Temperature Units: "));
-            Serial.println(getUnitStringByIndex(systemConfig.defaultTempUnits));
+            Serial.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultTempUnits));
             Serial.print(F("Pressure Units: "));
-            Serial.println(getUnitStringByIndex(systemConfig.defaultPressUnits));
+            Serial.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultPressUnits));
             Serial.print(F("Elevation Units: "));
-            Serial.println(getUnitStringByIndex(systemConfig.defaultElevUnits));
+            Serial.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultElevUnits));
             return;
         }
 
@@ -1255,7 +1255,7 @@ void handleSerialCommand(char* cmd) {
             if (info && pgm_read_byte(&info->measurementType) == MEASURE_TEMPERATURE) {
                 systemConfig.defaultTempUnits = index;
                 Serial.print(F("Default temperature units set to "));
-                Serial.println(getUnitStringByIndex(index));
+                Serial.println((__FlashStringHelper*)getUnitStringByIndex(index));
             } else {
                 Serial.println(F("ERROR: Invalid units. Valid: C, F, CELSIUS, FAHRENHEIT"));
             }
@@ -1271,7 +1271,7 @@ void handleSerialCommand(char* cmd) {
             if (info && pgm_read_byte(&info->measurementType) == MEASURE_PRESSURE) {
                 systemConfig.defaultPressUnits = index;
                 Serial.print(F("Default pressure units set to "));
-                Serial.println(getUnitStringByIndex(index));
+                Serial.println((__FlashStringHelper*)getUnitStringByIndex(index));
             } else {
                 Serial.println(F("ERROR: Invalid units. Valid: BAR, PSI, KPA, INHG"));
             }
@@ -1287,7 +1287,7 @@ void handleSerialCommand(char* cmd) {
             if (info && pgm_read_byte(&info->measurementType) == MEASURE_ELEVATION) {
                 systemConfig.defaultElevUnits = index;
                 Serial.print(F("Default elevation units set to "));
-                Serial.println(getUnitStringByIndex(index));
+                Serial.println((__FlashStringHelper*)getUnitStringByIndex(index));
             } else {
                 Serial.println(F("ERROR: Invalid units. Valid: M, FT, METERS, FEET"));
             }
@@ -1633,11 +1633,11 @@ void handleSerialCommand(char* cmd) {
         Serial.print(F("LCD I2C Address: 0x"));
         Serial.println(systemConfig.lcdI2CAddress, HEX);
         Serial.print(F("Default Units: Temp="));
-        Serial.print(getUnitStringByIndex(systemConfig.defaultTempUnits));
+        Serial.print((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultTempUnits));
         Serial.print(F(", Press="));
-        Serial.print(getUnitStringByIndex(systemConfig.defaultPressUnits));
+        Serial.print((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultPressUnits));
         Serial.print(F(", Elev="));
-        Serial.println(getUnitStringByIndex(systemConfig.defaultElevUnits));
+        Serial.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultElevUnits));
         Serial.println();
 
         Serial.println(F("To save this configuration to EEPROM, type: SAVE"));

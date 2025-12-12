@@ -37,7 +37,7 @@ void sendSerialOutput(Input *ptr) {
     }
 
     Serial.print(",");
-    Serial.print(getUnitStringByIndex(ptr->unitsIndex));
+    Serial.print((__FlashStringHelper*)getUnitStringByIndex(ptr->unitsIndex));
     Serial.println();
 }
 

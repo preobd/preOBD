@@ -1185,7 +1185,7 @@ void listAllInputs() {
             Serial.print(F(") = "));
             Serial.print(inputs[i].value);
             Serial.print(F(" "));
-            Serial.println(getUnitStringByIndex(inputs[i].unitsIndex));
+            Serial.println((__FlashStringHelper*)getUnitStringByIndex(inputs[i].unitsIndex));
         }
     }
 
