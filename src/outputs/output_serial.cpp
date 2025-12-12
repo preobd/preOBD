@@ -32,12 +32,12 @@ void sendSerialOutput(Input *ptr) {
         Serial.print("ERROR");
     } else {
         // Display in human-readable format
-        float displayValue = getDisplayConvertFunc(ptr->measurementType)(ptr->value, ptr->displayUnits);
+        float displayValue = convertFromBaseUnits(ptr->value, ptr->unitsIndex);
         Serial.print(displayValue, 2);
     }
 
     Serial.print(",");
-    Serial.print(getUnitString(ptr->displayUnits));
+    Serial.print(getUnitStringByIndex(ptr->unitsIndex));
     Serial.println();
 }
 

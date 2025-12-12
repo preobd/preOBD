@@ -4,6 +4,7 @@
 
 #include "system_config.h"
 #include "../config.h"
+#include "units_registry.h"
 #include <EEPROM.h>
 
 // Global system config instance
@@ -92,9 +93,11 @@ void resetSystemConfig() {
     #endif
 
     systemConfig.lcdI2CAddress = 0x27;
-    systemConfig.defaultTempUnits = DEFAULT_TEMPERATURE_UNITS;
-    systemConfig.defaultPressUnits = DEFAULT_PRESSURE_UNITS;
-    systemConfig.defaultElevUnits = DEFAULT_ELEVATION_UNITS;
+
+    // Resolve unit names to indices at boot time
+    systemConfig.defaultTempUnits = getUnitsIndexByName(DEFAULT_TEMPERATURE_UNITS);
+    systemConfig.defaultPressUnits = getUnitsIndexByName(DEFAULT_PRESSURE_UNITS);
+    systemConfig.defaultElevUnits = getUnitsIndexByName(DEFAULT_ELEVATION_UNITS);
 
     // Timing intervals
     systemConfig.sensorReadInterval = SENSOR_READ_INTERVAL_MS;

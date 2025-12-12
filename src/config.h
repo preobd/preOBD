@@ -99,15 +99,16 @@
 
 // Set your preferred units for each measurement type
 // Individual sensors can override these defaults in the sensor definitions section
+// These are resolved to indices at boot time via the units registry
 
-// Temperature default (CELSIUS or FAHRENHEIT)
-#define DEFAULT_TEMPERATURE_UNITS  CELSIUS
+// Temperature default ("CELSIUS" or "FAHRENHEIT")
+#define DEFAULT_TEMPERATURE_UNITS  "CELSIUS"
 
-// Pressure default (BAR, PSI, or KPA)
-#define DEFAULT_PRESSURE_UNITS     BAR
+// Pressure default ("BAR", "PSI", or "KPA")
+#define DEFAULT_PRESSURE_UNITS     "BAR"
 
-// Elevation default (METERS or FEET)
-#define DEFAULT_ELEVATION_UNITS     FEET
+// Elevation default ("METERS" or "FEET")
+#define DEFAULT_ELEVATION_UNITS    "FEET"
 
 // NOTE: Voltage is always displayed in VOLTS
 // NOTE: Humidity is always displayed in PERCENT
@@ -116,13 +117,29 @@
 // STEP 5: SENSOR CONFIGURATION (Compile-Time Mode Only)
 // ============================================================================
 
-// This section is ONLY used when USE_STATIC_CONFIG is defined above.
+// ⚠️  DEPRECATION NOTICE - Updated Architecture (registry-architecture-refactor branch)
+// ============================================================================
+// This section and the #ifdef USE_STATIC_CONFIG logic below have been replaced
+// with a new registry-based architecture. Configuration is now managed by a
+// configurator tool that generates config from the registries.
+//
+// Branch: feature/registry-architecture-refactor
+//
+// The new approach eliminates enum/registry synchronization and establishes
+// registries as the single source of truth for Sensors, Applications, and Units.
+// Configuration is now generated from string-based registry names rather than
+// compile-time enums.
+//
+// This legacy section remains for reference but is no longer used by the system.
+// ============================================================================
+
+// Legacy compile-time configuration (to be replaced):
 // For EEPROM mode (MODE 1), configure sensors via serial commands instead.
 //
 // Each input needs three defines:
 //   INPUT_N_PIN         - Physical pin (A0-A15 for analog, or digital pin)
-//   INPUT_N_APPLICATION - What you're measuring (from Application enum)
-//   INPUT_N_SENSOR      - Hardware type (from Sensor enum)
+//   INPUT_N_APPLICATION - What you're measuring (from Application Presets)
+//   INPUT_N_SENSOR      - Hardware type (from Sensor )
 //
 // Optional per-input overrides:
 //   INPUT_N_UNITS       - Override display units (e.g., FAHRENHEIT)

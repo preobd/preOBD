@@ -1,10 +1,22 @@
 /*
  * advanced_config.h - Advanced Configuration for Custom Sensors
  *
- * This file provides examples and helper macros for adding custom sensors
- * that aren't part of the standard sensor library.
+ * ⚠️  DEPRECATION NOTICE - Updated Architecture (registry-architecture-refactor branch)
+ * ==================================================================================
+ * This file and the custom calibration approach documented here have been replaced
+ * with a new registry-based architecture. Custom sensor calibrations are now managed
+ * by a configurator tool.
  *
- * USAGE:
+ * Branch: feature/registry-architecture-refactor
+ *
+ * The new approach eliminates enum/registry synchronization and uses string-based
+ * registry names as the single source of truth. Custom calibrations are now configured
+ * through the configurator tool rather than compile-time macros.
+ *
+ * This legacy file remains for reference but is no longer used by the system.
+ * ==================================================================================
+ *
+ * LEGACY USAGE (no longer applicable):
  * 1. Uncomment the examples below or copy them to create your custom sensor
  * 2. Modify the calibration values to match your sensor
  * 3. In config.h, enable your sensor and set its type
@@ -169,7 +181,16 @@
 // =============================================================================
 
 /*
-USING CUSTOM CALIBRATIONS WITH sensors_config.h
+⚠️  DEPRECATION NOTICE - Updated Architecture
+------------------------------------------------
+This approach to custom calibrations has been replaced by the new registry-based
+architecture. The #ifdef USE_STATIC_CONFIG logic and compile-time sensor
+configuration described below are now managed by a configurator tool.
+
+See: ~/.claude/plans/registry_architecture_spec.md
+Branch: feature/registry-architecture-refactor
+
+LEGACY APPROACH (no longer used):
 ------------------------------------------------
 When using compile-time configuration (USE_STATIC_CONFIG), you can override
 the default calibration for any sensor.
