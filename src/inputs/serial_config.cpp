@@ -283,10 +283,6 @@ void handleSerialCommand(char* cmd) {
 
     // Parse command for multi-word commands (find first space)
     char* firstSpace = strchr(cmd, ' ');
-    char* secondSpace = nullptr;
-    if (firstSpace) {
-        secondSpace = strchr(firstSpace + 1, ' ');
-    }
 
     // ===== MODE COMMANDS (always available to prevent deadlock) =====
     if (streq(cmd, "CONFIG") || strncmp(cmd, "CONFIG ", 7) == 0) {
@@ -1668,13 +1664,16 @@ void handleSerialCommand(char* cmd) {
     }
 
     // ===== DUMP COMMAND =====
-    if (streq(cmd, "DUMP")) {
+    if (streq(cmd, "DUMP") || strncmp(cmd, "DUMP ", 5) == 0) {
         // Check for "DUMP JSON" variant
-        if (secondSpace && streq(secondSpace + 1, "JSON")) {
-            Serial.println();
-            dumpConfigToJSON(Serial);
-            Serial.println();
-            return;
+        if (firstSpace) {
+            char* subCmd = firstSpace + 1;
+            if (streq(subCmd, "JSON")) {
+                Serial.println();
+                dumpConfigToJSON(Serial);
+                Serial.println();
+                return;
+            }
         }
 
         // Regular DUMP (human-readable)
