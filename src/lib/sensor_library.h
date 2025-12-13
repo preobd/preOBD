@@ -526,4 +526,15 @@ inline MeasurementType getSensorMeasurementType(uint8_t index) {
 #define READ_SENSOR_MIN_VALUE(info) pgm_read_float(&(info)->minValue)
 #define READ_SENSOR_MAX_VALUE(info) pgm_read_float(&(info)->maxValue)
 
+/**
+ * Get sensor name by index (reverse lookup for JSON export)
+ *
+ * @param index  Sensor index (0-NUM_SENSORS)
+ * @return       Sensor name string in PROGMEM, or nullptr if invalid
+ */
+inline const char* getSensorNameByIndex(uint8_t index) {
+    if (index >= NUM_SENSORS) return nullptr;
+    return READ_SENSOR_NAME(&SENSOR_LIBRARY[index]);
+}
+
 #endif // SENSOR_LIBRARY_H

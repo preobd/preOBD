@@ -561,4 +561,15 @@ inline MeasurementType getApplicationExpectedMeasurementType(uint8_t index) {
 #define READ_APP_MIN_VALUE(preset) pgm_read_float(&(preset)->defaultMinValue)
 #define READ_APP_MAX_VALUE(preset) pgm_read_float(&(preset)->defaultMaxValue)
 
+/**
+ * Get application name by index (reverse lookup for JSON export)
+ *
+ * @param index  Application index (0-16)
+ * @return       Application name string in PROGMEM, or nullptr if invalid
+ */
+inline const char* getApplicationNameByIndex(uint8_t index) {
+    if (index >= NUM_APPLICATION_PRESETS) return nullptr;
+    return READ_APP_NAME(&APPLICATION_PRESETS[index]);
+}
+
 #endif // APPLICATION_PRESETS_H
