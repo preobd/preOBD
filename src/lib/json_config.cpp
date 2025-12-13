@@ -232,10 +232,19 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     constants["seaLevelPressure"] = systemConfig.seaLevelPressure;
 }
 
+// JSON Schema Version
+// Increment when making backward-incompatible changes to JSON structure
+// Version history:
+//   1 - Initial release (v0.4.1-alpha)
+#define JSON_SCHEMA_VERSION 1
+
 // Main export function - dump entire config to JSON
 void dumpConfigToJSON(Print& output) {
     // Allocate JSON document (ArduinoJson v7 handles sizing automatically)
     JsonDocument doc;
+
+    // Schema version (for future migration support)
+    doc["schemaVersion"] = JSON_SCHEMA_VERSION;
 
     // Firmware info
     JsonObject firmware = doc["firmware"].to<JsonObject>();
@@ -466,6 +475,23 @@ bool loadConfigFromJSON(const char* jsonString) {
         return false;
     }
 
+    // Check schema version for migration support
+    uint8_t schemaVer = doc["schemaVersion"] | 1;  // Default to v1 if missing (old configs)
+
+    if (schemaVer > JSON_SCHEMA_VERSION) {
+        Serial.print(F("WARNING: Config from newer schema v"));
+        Serial.print(schemaVer);
+        Serial.print(F(", current is v"));
+        Serial.println(JSON_SCHEMA_VERSION);
+        Serial.println(F("Some features may not load correctly."));
+    } else if (schemaVer < JSON_SCHEMA_VERSION) {
+        Serial.print(F("INFO: Migrating config from schema v"));
+        Serial.print(schemaVer);
+        Serial.print(F(" to v"));
+        Serial.println(JSON_SCHEMA_VERSION);
+        // Future: Add migration logic here for breaking changes
+    }
+
     // Import system config
     if (doc["system"].isNull() == false) {
         JsonObject system = doc["system"];
@@ -483,6 +509,10 @@ bool loadConfigFromJSON(const char* jsonString) {
             return false;
         }
     }
+
+    Serial.print(F("Successfully loaded config (schema v"));
+    Serial.print(schemaVer);
+    Serial.println(F(")"));
 
     return true;
 }

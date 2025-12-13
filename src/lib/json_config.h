@@ -6,6 +6,14 @@
  * - DUMP JSON command (export to serial)
  * - CONFIG SAVE <filename> (export to SD card)
  * - CONFIG LOAD <filename> (import from SD card)
+ *
+ * SCHEMA VERSIONING:
+ * The JSON schema is versioned independently of firmware version.
+ * Schema version is included in exported JSON: {"schemaVersion": 1, ...}
+ * See docs/JSON_MIGRATION_GUIDE.md for details on maintaining compatibility.
+ *
+ * Current Schema Version: 1
+ *   - Initial release (v0.4.1-alpha)
  */
 
 #ifndef JSON_CONFIG_H
