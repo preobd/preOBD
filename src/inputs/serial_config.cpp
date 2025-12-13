@@ -28,6 +28,9 @@
 extern void enableLCD();
 extern void disableLCD();
 
+// Display manager functions
+#include "../lib/display_manager.h"
+
 // Command buffer - fixed size, no String class
 #define CMD_BUFFER_SIZE 80
 static char commandBuffer[CMD_BUFFER_SIZE];
@@ -1250,17 +1253,17 @@ void handleSerialCommand(char* cmd) {
 
         // DISPLAY ENABLE
         if (streq(rest, "ENABLE")) {
-            systemConfig.displayEnabled = 1;
-            enableLCD();  // Turn on backlight
-            Serial.println(F("✓ Display enabled"));
+            systemConfig.displayEnabled = 1;    // Update config (for SAVE)
+            setDisplayRuntime(true);             // Update runtime immediately
+            Serial.println(F("✓ Display enabled (use SAVE to persist)"));
             return;
         }
 
         // DISPLAY DISABLE
         if (streq(rest, "DISABLE")) {
-            systemConfig.displayEnabled = 0;
-            disableLCD();  // Turn off backlight and clear display
-            Serial.println(F("✓ Display disabled"));
+            systemConfig.displayEnabled = 0;    // Update config (for SAVE)
+            setDisplayRuntime(false);            // Update runtime immediately
+            Serial.println(F("✓ Display disabled (use SAVE to persist)"));
             return;
         }
 

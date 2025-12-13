@@ -20,6 +20,8 @@
 #ifndef USE_STATIC_CONFIG
     #include "inputs/serial_config.h"  // Only needed for EEPROM/serial config mode
     #include "lib/system_mode.h"        // System mode (CONFIG/RUN)
+    #include "lib/button_handler.h"     // Multi-function button handler
+    #include "lib/display_manager.h"    // Display runtime state management
 #endif
 #include "outputs/output_base.h"
 
@@ -66,7 +68,7 @@ static uint32_t lastLCDUpdate = 0;
 // Update LCD display in CONFIG mode
 static void updateConfigModeDisplay(uint32_t now) {
     #ifdef ENABLE_LCD
-    if (systemConfig.displayEnabled && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
+    if (isDisplayActive() && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
@@ -118,7 +120,7 @@ static void updateAlarms(uint32_t now) {
 // Update LCD display in RUN mode
 static void updateDisplay(uint32_t now) {
     #ifdef ENABLE_LCD
-    if (systemConfig.displayEnabled && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
+    if (isDisplayActive() && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
@@ -219,6 +221,18 @@ void setup() {
     Serial.print(F("Initializing alarm system... "));
     initAlarm();
     Serial.println(F("OK"));
+
+#ifndef USE_STATIC_CONFIG
+    // Initialize button handler
+    Serial.print(F("Initializing button handler... "));
+    initButtonHandler();
+    Serial.println(F("OK"));
+
+    // Initialize display manager (after systemConfig is loaded)
+    Serial.print(F("Initializing display manager... "));
+    initDisplayManager();
+    Serial.println(F("OK"));
+#endif
 
     // Initialize output modules
     Serial.println(F("Initializing output modules..."));
@@ -324,6 +338,16 @@ void loop() {
 #ifndef USE_STATIC_CONFIG
     // Process serial configuration commands (non-blocking, always runs)
     processSerialCommands();
+
+    // Process button events (short press = silence alarm, long press = toggle display)
+    ButtonPress buttonEvent = updateButtonHandler();
+    if (buttonEvent == BUTTON_SHORT_PRESS) {
+        // Short press handled by alarm system (already reads the button)
+        // No action needed here
+    } else if (buttonEvent == BUTTON_LONG_PRESS) {
+        // Long press toggles display
+        toggleDisplayRuntime();
+    }
 
     // If in CONFIG mode, skip sensor reading and outputs
     if (isInConfigMode()) {
