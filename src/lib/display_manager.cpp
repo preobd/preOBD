@@ -3,6 +3,9 @@
  */
 
 #include "display_manager.h"
+
+#ifndef USE_STATIC_CONFIG
+
 #include "system_config.h"
 
 // Display control functions from display modules
@@ -53,3 +56,5 @@ void setDisplayRuntime(bool enabled) {
         disableLCD();
     }
 }
+
+#endif // USE_STATIC_CONFIG

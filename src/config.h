@@ -150,58 +150,6 @@
 // For custom calibrations, see advanced_config.h
 
 #ifdef USE_STATIC_CONFIG
-    // Include the enums we need from the input-based architecture
-    #include "inputs/input.h"
-
-    // ----- Input Definitions -----
-
-    // Input 0: CHT (Cylinder Head Temperature)
-    #define INPUT_0_PIN         6
-    #define INPUT_0_APPLICATION CHT
-    #define INPUT_0_SENSOR      MAX6675
-
-    // Input 1: EGT (Exhaust Gas Temperature)
-    #define INPUT_1_PIN         7
-    #define INPUT_1_APPLICATION EGT
-    #define INPUT_1_SENSOR      MAX31855
-
-    // Input 2: Coolant Temperature
-    #define INPUT_2_PIN         A2
-    #define INPUT_2_APPLICATION COOLANT_TEMP
-    #define INPUT_2_SENSOR      VDO_120C_LOOKUP
-
-    // Input 3: Oil Temperature
-    #define INPUT_3_PIN         A0
-    #define INPUT_3_APPLICATION OIL_TEMP
-    #define INPUT_3_SENSOR      VDO_150C_STEINHART
-
-    // Input 4: Primary Battery
-    #define INPUT_4_PIN         A5
-    #define INPUT_4_APPLICATION PRIMARY_BATTERY
-    #define INPUT_4_SENSOR      STANDARD_12V_DIVIDER
-
-    // Input 5: Ambient Temperature (BME280)
-    #define INPUT_5_PIN         0        // BME280 is I2C, no analog pin
-    #define INPUT_5_APPLICATION AMBIENT_TEMP
-    #define INPUT_5_SENSOR      BME280_AMBIENT_TEMPERATURE
-
-    // Input 6: Barometric Pressure (BME280)
-    #define INPUT_6_PIN         0        // BME280 is I2C
-    #define INPUT_6_APPLICATION BAROMETRIC_PRESSURE
-    #define INPUT_6_SENSOR      BME280_BAROMETRIC_PRESSURE
-
-    // Input 7: Humidity (BME280)
-    #define INPUT_7_PIN         0        // BME280 is I2C
-    #define INPUT_7_APPLICATION HUMIDITY
-    #define INPUT_7_SENSOR      BME280_RELATIVE_HUMIDITY
-
-    // ----- Optional: Unit Overrides -----
-    // By default, units come from ApplicationPreset defaults
-    // Uncomment to override for specific inputs:
-
-    // #define INPUT_0_UNITS FAHRENHEIT  // Override CHT to F
-    // #define INPUT_2_UNITS FAHRENHEIT  // Override Coolant to F
-    #define INPUT_6_UNITS INHG        // Override baro to inHg
 
 #endif // USE_STATIC_CONFIG
 
@@ -255,7 +203,7 @@
 // Test mode uses function pointer substitution to inject simulated sensor values
 // Memory overhead when enabled: 4.3KB flash, 185 bytes RAM
 // Memory overhead when disabled: 0 bytes (completely removed by preprocessor)
-#define ENABLE_TEST_MODE
+//#define ENABLE_TEST_MODE
 
 #ifdef ENABLE_TEST_MODE
     // Test mode trigger pin (hold LOW during boot to activate test mode)

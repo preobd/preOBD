@@ -21,8 +21,8 @@
     #include "inputs/serial_config.h"  // Only needed for EEPROM/serial config mode
     #include "lib/system_mode.h"        // System mode (CONFIG/RUN)
     #include "lib/button_handler.h"     // Multi-function button handler
-    #include "lib/display_manager.h"    // Display runtime state management
 #endif
+#include "lib/display_manager.h"    // Display runtime state management (works in both modes)
 #include "outputs/output_base.h"
 
 // Declare output module functions
@@ -223,16 +223,15 @@ void setup() {
     Serial.println(F("OK"));
 
 #ifndef USE_STATIC_CONFIG
-    // Initialize button handler
+    // Initialize button handler (only in EEPROM mode)
     Serial.print(F("Initializing button handler... "));
     initButtonHandler();
     Serial.println(F("OK"));
-
-    // Initialize display manager (after systemConfig is loaded)
-    Serial.print(F("Initializing display manager... "));
-    initDisplayManager();
-    Serial.println(F("OK"));
 #endif
+
+    // Initialize display manager (works in both static and EEPROM modes)
+    // In static mode, this is a no-op (always returns true for isDisplayActive)
+    initDisplayManager();
 
     // Initialize output modules
     Serial.println(F("Initializing output modules..."));
