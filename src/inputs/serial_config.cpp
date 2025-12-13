@@ -19,6 +19,7 @@
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
 #include "../lib/units_registry.h"
+#include "../lib/json_config.h"
 #include "../outputs/output_base.h"
 #include <string.h>
 #include <ctype.h>
@@ -280,8 +281,58 @@ void handleSerialCommand(char* cmd) {
     trim(cmd);
     toUpper(cmd);
 
+    // Parse command for multi-word commands (find first space)
+    char* firstSpace = strchr(cmd, ' ');
+
     // ===== MODE COMMANDS (always available to prevent deadlock) =====
-    if (streq(cmd, "CONFIG")) {
+    if (streq(cmd, "CONFIG") || strncmp(cmd, "CONFIG ", 7) == 0) {
+        // Check for CONFIG SAVE or CONFIG LOAD subcommands
+        if (firstSpace) {
+            char* subCmd = firstSpace + 1;
+            toUpper(subCmd);
+
+            if (strncmp(subCmd, "SAVE", 4) == 0) {
+                // CONFIG SAVE [filename]
+                char* filename = nullptr;
+                char* filenameStart = subCmd + 4;
+                while (*filenameStart == ' ') filenameStart++;  // Skip spaces
+                if (*filenameStart != '\0') {
+                    filename = filenameStart;
+                }
+
+                Serial.println();
+                if (saveConfigToSD(filename)) {
+                    Serial.println(F("Configuration saved successfully"));
+                } else {
+                    Serial.println(F("ERROR: Failed to save configuration"));
+                }
+                Serial.println();
+                return;
+            }
+
+            if (strncmp(subCmd, "LOAD", 4) == 0) {
+                // CONFIG LOAD <filename>
+                char* filename = subCmd + 4;
+                while (*filename == ' ') filename++;  // Skip spaces
+
+                if (*filename == '\0') {
+                    Serial.println(F("ERROR: Filename required for CONFIG LOAD"));
+                    return;
+                }
+
+                Serial.println();
+                if (loadConfigFromSD(filename)) {
+                    Serial.println(F("Configuration loaded successfully"));
+                    Serial.println(F("Type SAVE to persist to EEPROM"));
+                } else {
+                    Serial.println(F("ERROR: Failed to load configuration"));
+                }
+                Serial.println();
+                return;
+            }
+        }
+
+        // No subcommand or unknown subcommand - enter CONFIG mode
         setMode(MODE_CONFIG);
         return;
     }
@@ -379,7 +430,10 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  CONFIG  - Enter configuration mode (unlock config)"));
         Serial.println(F("  RUN  - Enter run mode (lock config, resume sensors)"));
         Serial.println(F("  VERSION  - Display firmware and EEPROM version"));
-        Serial.println(F("  DUMP  - Show full configuration"));
+        Serial.println(F("  DUMP  - Show full configuration (human-readable)"));
+        Serial.println(F("  DUMP JSON  - Export configuration as JSON"));
+        Serial.println(F("  CONFIG SAVE [filename]  - Save configuration to SD card"));
+        Serial.println(F("  CONFIG LOAD <filename>  - Load configuration from SD card"));
         Serial.println(F("  RELOAD  - Trigger watchdog reset (system reboot)"));
         Serial.println();
         Serial.println(F("Examples:"));
@@ -1606,7 +1660,19 @@ void handleSerialCommand(char* cmd) {
     }
 
     // ===== DUMP COMMAND =====
-    if (streq(cmd, "DUMP")) {
+    if (streq(cmd, "DUMP") || strncmp(cmd, "DUMP ", 5) == 0) {
+        // Check for "DUMP JSON" variant
+        if (firstSpace) {
+            char* subCmd = firstSpace + 1;
+            if (streq(subCmd, "JSON")) {
+                Serial.println();
+                dumpConfigToJSON(Serial);
+                Serial.println();
+                return;
+            }
+        }
+
+        // Regular DUMP (human-readable)
         Serial.println();
         Serial.println(F("========================================"));
         Serial.println(F("  Full Configuration Dump"));
