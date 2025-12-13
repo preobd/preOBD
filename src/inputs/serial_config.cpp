@@ -291,7 +291,6 @@ void handleSerialCommand(char* cmd) {
             char* subCmd = firstSpace + 1;
             toUpper(subCmd);
 
-#ifdef ENABLE_SD_LOGGING
             if (strncmp(subCmd, "SAVE", 4) == 0) {
                 // CONFIG SAVE [filename]
                 char* filename = nullptr;
@@ -331,7 +330,6 @@ void handleSerialCommand(char* cmd) {
                 Serial.println();
                 return;
             }
-#endif
         }
 
         // No subcommand or unknown subcommand - enter CONFIG mode
@@ -434,10 +432,8 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  VERSION  - Display firmware and EEPROM version"));
         Serial.println(F("  DUMP  - Show full configuration (human-readable)"));
         Serial.println(F("  DUMP JSON  - Export configuration as JSON"));
-#ifdef ENABLE_SD_LOGGING
         Serial.println(F("  CONFIG SAVE [filename]  - Save configuration to SD card"));
         Serial.println(F("  CONFIG LOAD <filename>  - Load configuration from SD card"));
-#endif
         Serial.println(F("  RELOAD  - Trigger watchdog reset (system reboot)"));
         Serial.println();
         Serial.println(F("Examples:"));

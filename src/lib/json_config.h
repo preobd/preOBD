@@ -38,10 +38,8 @@ bool importSystemConfigFromJSON(JsonObject& systemObj);
 bool importInputsFromJSON(JsonArray& inputsArray);
 bool importInputFromJSON(JsonObject& inputObj, uint8_t index);
 
-// SD card backup/restore
-#ifdef ENABLE_SD_LOGGING
+// SD card backup/restore (always available, independent of ENABLE_SD_LOGGING)
 bool saveConfigToSD(const char* filename = nullptr);
 bool loadConfigFromSD(const char* filename);
-#endif
 
 #endif // JSON_CONFIG_H

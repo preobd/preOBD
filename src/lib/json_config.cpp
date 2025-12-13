@@ -12,7 +12,8 @@
 #include "../config.h"
 #include "../version.h"
 
-#ifdef ENABLE_SD_LOGGING
+// SD library is built-in to Arduino framework
+#if defined(ARDUINO)
 #include <SD.h>
 #endif
 
@@ -517,8 +518,6 @@ bool loadConfigFromJSON(const char* jsonString) {
     return true;
 }
 
-#ifdef ENABLE_SD_LOGGING
-
 // Save configuration to SD card
 bool saveConfigToSD(const char* filename) {
     if (!SD.begin(systemConfig.sdCSPin)) {
@@ -605,5 +604,3 @@ bool loadConfigFromSD(const char* filename) {
 
     return success;
 }
-
-#endif // ENABLE_SD_LOGGING
