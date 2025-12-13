@@ -12,7 +12,7 @@ static unsigned long silenceStartTime = 0;
 
 void initAlarm() {
     pinMode(BUZZER, OUTPUT);
-    pinMode(MODE_BUTTON, INPUT);
+    pinMode(MODE_BUTTON, INPUT_PULLUP);  // Internal pullup - button pulls to GND when pressed
     noTone(BUZZER);
 }
 
@@ -34,7 +34,8 @@ void checkSensorAlarm(Input *ptr) {
 
 void updateAlarm() {
     // Check MODE_BUTTON for alarm silence (only functional in RUN mode)
-    if (digitalRead(MODE_BUTTON) == HIGH) {
+    // Button is active LOW (INPUT_PULLUP - button pulls to GND when pressed)
+    if (digitalRead(MODE_BUTTON) == LOW) {
         silenced = true;
         silenceStartTime = millis();
     }
