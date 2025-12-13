@@ -976,6 +976,31 @@ bool setInputAlarmRange(uint8_t pin, float minValue, float maxValue) {
         return false;
     }
 
+    // Validate against sensor capabilities
+    const SensorInfo* sensorInfo = getSensorByIndex(input->sensorIndex);
+    if (sensorInfo && input->sensorIndex != 0) {  // Skip validation for SENSOR_NONE
+        // Check if alarm range exceeds sensor's physical capabilities
+        if (minValue < sensorInfo->minValue || maxValue > sensorInfo->maxValue) {
+            Serial.print(F("WARNING: Alarm range ("));
+            Serial.print(minValue);
+            Serial.print(F(" - "));
+            Serial.print(maxValue);
+            Serial.print(F(") exceeds sensor capability ("));
+            Serial.print(sensorInfo->minValue);
+            Serial.print(F(" - "));
+            Serial.print(sensorInfo->maxValue);
+
+            // Print sensor name for clarity
+            char sensorName[32];
+            strcpy_P(sensorName, (const char*)sensorInfo->name);
+            Serial.print(F(") for "));
+            Serial.println(sensorName);
+
+            // Don't fail - allow the user to set it, but warn them
+            // This is useful for sensors that might be replaced or for edge cases
+        }
+    }
+
     // Store in STANDARD UNITS (caller's responsibility to provide correct units)
     input->minValue = minValue;
     input->maxValue = maxValue;
