@@ -312,41 +312,51 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         return false;  // Invalid registry entry (0 = NONE)
     }
 
-    // Configure input
+    // Use input manager functions to properly configure the input
+    // This ensures all function pointers and calibration are wired correctly
+    extern bool setInputApplication(uint8_t pin, uint8_t appIndex);
+    extern bool setInputSensor(uint8_t pin, uint8_t sensorIndex);
+    extern bool setInputUnits(uint8_t pin, uint8_t unitsIndex);
+    extern bool setInputName(uint8_t pin, const char* name);
+    extern bool setInputDisplayName(uint8_t pin, const char* displayName);
+    extern bool setInputAlarmRange(uint8_t pin, float minValue, float maxValue);
+    extern bool enableInput(uint8_t pin, bool enable);
+    extern bool enableInputAlarm(uint8_t pin, bool enable);
+    extern bool enableInputDisplay(uint8_t pin, bool enable);
+    extern bool setInputOBD(uint8_t pin, uint8_t pid, uint8_t length);
+
+    // Get pointer to input struct and set pin
     Input* input = &inputs[index];
     input->pin = pin;
-    input->applicationIndex = appIdx;
-    input->sensorIndex = sensorIdx;
-    input->unitsIndex = unitsIdx;
+
+    // Apply configuration using input manager functions
+    setInputApplication(pin, appIdx);
+    setInputSensor(pin, sensorIdx);
+    setInputUnits(pin, unitsIdx);
 
     // Set names
     if (inputObj["abbr"].isNull() == false) {
-        strncpy(input->abbrName, inputObj["abbr"], sizeof(input->abbrName) - 1);
-        input->abbrName[sizeof(input->abbrName) - 1] = '\0';
+        setInputName(pin, inputObj["abbr"]);
     }
-
     if (inputObj["name"].isNull() == false) {
-        strncpy(input->displayName, inputObj["name"], sizeof(input->displayName) - 1);
-        input->displayName[sizeof(input->displayName) - 1] = '\0';
+        setInputDisplayName(pin, inputObj["name"]);
     }
 
     // Set alarm thresholds
     if (inputObj["alarm"].isNull() == false) {
         JsonObject alarm = inputObj["alarm"];
-        input->minValue = alarm["min"];
-        input->maxValue = alarm["max"];
+        setInputAlarmRange(pin, alarm["min"], alarm["max"]);
     }
 
     // Set flags
-    input->flags.isEnabled = inputObj["enabled"] | true;
-    input->flags.alarm = inputObj["alarmEnabled"] | true;
-    input->flags.display = inputObj["displayEnabled"] | true;
+    enableInput(pin, inputObj["enabled"] | true);
+    enableInputAlarm(pin, inputObj["alarmEnabled"] | true);
+    enableInputDisplay(pin, inputObj["displayEnabled"] | true);
 
     // OBD2
     if (inputObj["obd2"].isNull() == false) {
         JsonObject obd2 = inputObj["obd2"];
-        input->obd2pid = obd2["pid"];
-        input->obd2length = obd2["length"];
+        setInputOBD(pin, obd2["pid"], obd2["length"]);
     }
 
     // Calibration (if custom)
@@ -520,6 +530,9 @@ bool loadConfigFromJSON(const char* jsonString) {
 
 // Save configuration to SD card
 bool saveConfigToSD(const char* filename) {
+    pinMode(systemConfig.sdCSPin, OUTPUT);
+    digitalWrite(systemConfig.sdCSPin, LOW);
+
     if (!SD.begin(systemConfig.sdCSPin)) {
         Serial.println(F("ERROR: SD card initialization failed"));
         return false;
@@ -556,6 +569,8 @@ bool saveConfigToSD(const char* filename) {
     dumpConfigToJSON(configFile);
 
     configFile.close();
+    digitalWrite(systemConfig.sdCSPin, HIGH);
+
 
     Serial.print(F("Configuration saved to: "));
     Serial.println(filepath);
@@ -565,6 +580,9 @@ bool saveConfigToSD(const char* filename) {
 
 // Load configuration from SD card
 bool loadConfigFromSD(const char* filename) {
+    pinMode(systemConfig.sdCSPin, OUTPUT);
+    digitalWrite(systemConfig.sdCSPin, LOW);
+    
     if (!SD.begin(systemConfig.sdCSPin)) {
         Serial.println(F("ERROR: SD card initialization failed"));
         return false;
@@ -593,6 +611,7 @@ bool loadConfigFromSD(const char* filename) {
         jsonString += (char)configFile.read();
     }
     configFile.close();
+    digitalWrite(systemConfig.sdCSPin, HIGH);
 
     // Load configuration
     bool success = loadConfigFromJSON(jsonString.c_str());
