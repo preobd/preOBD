@@ -14,10 +14,16 @@
  *
  * Current Schema Version: 1
  *   - Initial release (v0.4.1-alpha)
+ *
+ * NOTE: JSON features are only available in EEPROM mode (runtime config).
+ *       Static compile-time builds do not include JSON to save memory.
  */
 
 #ifndef JSON_CONFIG_H
 #define JSON_CONFIG_H
+
+// JSON features only available in EEPROM mode (not static config)
+#ifndef USE_STATIC_CONFIG
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -42,4 +48,5 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index);
 bool saveConfigToSD(const char* filename = nullptr);
 bool loadConfigFromSD(const char* filename);
 
+#endif // USE_STATIC_CONFIG
 #endif // JSON_CONFIG_H

@@ -1,6 +1,14 @@
 /*
  * json_config.cpp - JSON Configuration Export/Import Implementation
+ *
+ * NOTE: This entire file is excluded from static config builds to save memory.
+ *       JSON features are only available in EEPROM mode (runtime config).
  */
+
+#include "../config.h"
+
+// Only compile JSON features for EEPROM mode (not static config)
+#ifndef USE_STATIC_CONFIG
 
 #include "json_config.h"
 #include "system_config.h"
@@ -9,7 +17,6 @@
 #include "units_registry.h"
 #include "sensor_library.h"
 #include "application_presets.h"
-#include "../config.h"
 #include "../version.h"
 
 // SD library is built-in to Arduino framework
@@ -623,3 +630,5 @@ bool loadConfigFromSD(const char* filename) {
 
     return success;
 }
+
+#endif // USE_STATIC_CONFIG
