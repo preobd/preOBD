@@ -202,6 +202,7 @@
 // Test mode uses function pointer substitution to inject simulated sensor values
 // Memory overhead when enabled: 4.3KB flash, 185 bytes RAM
 // Memory overhead when disabled: 0 bytes (completely removed by preprocessor)
+// WARNING: Do NOT enable for Uno builds - uses 4.3KB flash that Uno doesn't have
 #define ENABLE_TEST_MODE
 
 #ifdef ENABLE_TEST_MODE
