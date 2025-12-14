@@ -108,6 +108,10 @@ def generate_thin_library_files(
     with open(os.path.join(project_dir, 'src/lib/sensor_library.h'), 'r') as f:
         sensor_template = f.read()
 
+    # Fix include paths for the new location
+    sensor_template = re.sub(r'#include "\.\./', r'#include "../../', sensor_template)
+    sensor_template = re.sub(r'#include "([^./].*?)"', r'#include "../\1"', sensor_template)
+
     pstr_def_pattern = re.compile(r'static const char (PSTR_\w+)\[\] PROGMEM = ".*?";')
     kept_pstr_defs = "\n".join(
         match.group(0) for match in pstr_def_pattern.finditer(sensor_template)
@@ -139,6 +143,10 @@ def generate_thin_library_files(
     # --- Generate thinned application library ---
     with open(os.path.join(project_dir, 'src/lib/application_presets.h'), 'r') as f:
         app_template = f.read()
+
+    # Fix include paths for the new location
+    app_template = re.sub(r'#include "\.\./', r'#include "../../', app_template)
+    app_template = re.sub(r'#include "([^./].*?)"', r'#include "../\1"', app_template)
 
     kept_pstr_defs = "\n".join(
         match.group(0) for match in pstr_def_pattern.finditer(app_template)
