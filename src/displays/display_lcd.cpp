@@ -7,8 +7,14 @@
 #include "../inputs/input.h"
 #include "../lib/sensor_types.h"
 #include "../lib/sensor_library.h"
-#include "../lib/application_presets.h"
 #include "../lib/units_registry.h"
+#ifdef USE_STATIC_CONFIG
+#include "../lib/generated/application_presets_static.h"
+#include "../lib/generated/sensor_library_static.h"
+#else
+#include "../lib/application_presets.h"
+#include "../lib/sensor_library.h"
+#endif
 
 #ifdef ENABLE_LCD
 
