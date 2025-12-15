@@ -34,14 +34,7 @@
 #define CONFIG_H
 
 // ============================================================================
-// STEP 1: BUILD MODE SELECTION
-// ============================================================================
-
-// Uncomment to use compile-time config instead of EEPROM:
-//#define USE_STATIC_CONFIG
-
-// ============================================================================
-// STEP 2: HARDWARE PIN ASSIGNMENTS
+// STEP 1: HARDWARE PIN ASSIGNMENTS
 // ============================================================================
 
 // ----- System Control Pins -----
@@ -58,7 +51,7 @@
 #define SD_CS_PIN 4     // SD card chip select (adjust for your hardware)
 
 // ============================================================================
-// STEP 3: ENABLED MODULES
+// STEP 2: ENABLED MODULES
 // ============================================================================
 
 // ----- Output Modules -----
@@ -94,7 +87,7 @@
 #define USE_BME280
 
 // ============================================================================
-// STEP 4: DISPLAY UNITS DEFAULTS
+// STEP 3: DISPLAY UNITS DEFAULTS
 // ============================================================================
 
 // Set your preferred units for each measurement type
@@ -114,61 +107,21 @@
 // NOTE: Humidity is always displayed in PERCENT
 
 // ============================================================================
-// STEP 5: SENSOR CONFIGURATION (Compile-Time Mode Only)
-// ============================================================================
-
-// ⚠️  DEPRECATION NOTICE - Updated Architecture (registry-architecture-refactor branch)
-// ============================================================================
-// This section and the #ifdef USE_STATIC_CONFIG logic below have been replaced
-// with a new registry-based architecture. Configuration is now managed by a
-// configurator tool that generates config from the registries.
-//
-// Branch: feature/registry-architecture-refactor
-//
-// The new approach eliminates enum/registry synchronization and establishes
-// registries as the single source of truth for Sensors, Applications, and Units.
-// Configuration is now generated from string-based registry names rather than
-// compile-time enums.
-//
-// This legacy section remains for reference but is no longer used by the system.
-// ============================================================================
-
-// Legacy compile-time configuration (to be replaced):
-// For EEPROM mode (MODE 1), configure sensors via serial commands instead.
-//
-// Each input needs three defines:
-//   INPUT_N_PIN         - Physical pin (A0-A15 for analog, or digital pin)
-//   INPUT_N_APPLICATION - What you're measuring (from Application Presets)
-//   INPUT_N_SENSOR      - Hardware type (from Sensor )
-//
-// Optional per-input overrides:
-//   INPUT_N_UNITS       - Override display units (e.g., FAHRENHEIT)
-//
-// The system auto-populates display names, alarm thresholds, OBD-II PIDs,
-// and calibration data from the application presets and sensor library.
-//
-// For custom calibrations, see advanced_config.h
-
-#ifdef USE_STATIC_CONFIG
-
-#endif // USE_STATIC_CONFIG
-
-// ============================================================================
-// STEP 6: ALARM CONFIGURATION
+// STEP 4: ALARM CONFIGURATION
 // ============================================================================
 
 #define ENABLE_ALARMS               // Comment out to globally disable all alarms
 #define SILENCE_DURATION 30000      // ms (how long MODE_BUTTON mutes alarm)
 
 // ============================================================================
-// STEP 7: CALIBRATION CONSTANTS
+// STEP 5: CALIBRATION CONSTANTS
 // ============================================================================
 
 #define DEFAULT_BIAS_RESISTOR 1000.0    // Default pull-down resistor for thermistor and polynomial pressure sensors (Ω)
 #define SEA_LEVEL_PRESSURE_HPA 1013.25  // Sea level pressure for altitude calculations
 
 // ============================================================================
-// STEP 8: TIMING / PERFORMANCE TUNING
+// STEP 6: TIMING / PERFORMANCE TUNING
 // ============================================================================
 
 // Controls update frequency for different system components
@@ -196,7 +149,7 @@
                                          // Reduces file size and SD wear
 
 // ============================================================================
-// TEST MODE (Optional - for developers/testing only)
+// STEP 7: TEST MODE (Optional - for developers/testing only)
 // ============================================================================
 
 // Uncomment to enable test mode (allows testing outputs without physical sensors)
@@ -204,7 +157,7 @@
 // Memory overhead when enabled: 4.3KB flash, 185 bytes RAM
 // Memory overhead when disabled: 0 bytes (completely removed by preprocessor)
 // WARNING: Do NOT enable for Uno builds - uses 4.3KB flash that Uno doesn't have
-#define ENABLE_TEST_MODE
+//#define ENABLE_TEST_MODE
 
 #ifdef ENABLE_TEST_MODE
     // Test mode trigger pin (hold LOW during boot to activate test mode)
@@ -219,4 +172,29 @@
     #define DEFAULT_TEST_SCENARIO 0
 #endif
 
-#endif
+// ============================================================================
+// STEP 8: SENSOR CONFIGURATION (Optional - Compile-Time Mode Only)
+// ============================================================================
+
+// Uncomment to use compile-time config instead of EEPROM:
+//#define USE_STATIC_CONFIG
+
+#ifdef USE_STATIC_CONFIG
+
+// ============================================================================
+// STATIC SENSOR CONFIGURATION
+// Generated by openEMS-config v1.0.0 on 2025-12-14 16:42:18
+// Platform: megaatmega2560
+// DO NOT EDIT MANUALLY - Use tools/configure.py to regenerate
+// ============================================================================
+
+#define NUM_CONFIGURED_INPUTS 1
+
+// ----- Input 0: EGT -----
+#define INPUT_0_PIN           6           
+#define INPUT_0_APPLICATION   2            // EGT
+#define INPUT_0_SENSOR        2            // MAX31855
+
+#endif // USE_STATIC_CONFIG
+
+#endif // CONFIG_H

@@ -3,14 +3,19 @@
  * Works with both EEPROM config and compile-time config
  */
 
-#include "../config.h"
-#include "../version.h"
-#include "input_manager.h"
-#include "../lib/application_presets.h"
-#include "../lib/sensor_library.h"
-#include "../lib/units_registry.h"
 #include <EEPROM.h>
 #include <string.h>
+ #include "../config.h"
+#include "../version.h"
+#include "input_manager.h"
+#include "../lib/units_registry.h"
+#ifdef USE_STATIC_CONFIG
+#include "../lib/generated/application_presets_static.h"
+#include "../lib/generated/sensor_library_static.h"
+#else
+#include "../lib/application_presets.h"
+#include "../lib/sensor_library.h"
+#endif
 
 // ===== GLOBAL STATE =====
 Input inputs[MAX_INPUTS];
