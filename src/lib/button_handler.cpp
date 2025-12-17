@@ -48,21 +48,30 @@ ButtonPress updateButtonHandler() {
             pressHandled = false;
         }
 
+        // While button is held, check if we've reached long press threshold
+        if (newState && buttonState && !pressHandled && pressStartTime > 0) {
+            uint32_t pressDuration = now - pressStartTime;
+            if (pressDuration >= LONG_PRESS_MS) {
+                // Long press threshold reached - trigger action for preview
+                pressHandled = true;
+                return BUTTON_LONG_PRESS;
+            }
+        }
+
         // Detect button release (transition from pressed to not pressed)
         if (!newState && buttonState) {
             // Button just released
-            if (!pressHandled && pressStartTime > 0) {
+            if (pressStartTime > 0) {
                 uint32_t pressDuration = now - pressStartTime;
                 pressStartTime = 0;
 
-                // Determine press type
-                if (pressDuration >= LONG_PRESS_MS) {
-                    buttonState = newState;
-                    return BUTTON_LONG_PRESS;
-                } else {
+                // If long press was already handled, this release is just confirmation
+                // If not handled yet, it's a short press
+                if (!pressHandled) {
                     buttonState = newState;
                     return BUTTON_SHORT_PRESS;
                 }
+                pressHandled = false;
             }
         }
 
