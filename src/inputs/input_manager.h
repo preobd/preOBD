@@ -35,6 +35,8 @@ bool setInputOBD(uint8_t pin, uint8_t pid, uint8_t length);
 bool enableInput(uint8_t pin, bool enable);
 bool enableInputAlarm(uint8_t pin, bool enable);
 bool enableInputDisplay(uint8_t pin, bool enable);
+bool setInputAlarmWarmup(uint8_t pin, uint16_t warmupTime_ms);
+bool setInputAlarmPersist(uint8_t pin, uint16_t persistTime_ms);
 bool clearInput(uint8_t pin);
 
 // ===== CALIBRATION OVERRIDES =====

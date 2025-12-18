@@ -1062,6 +1062,22 @@ bool enableInputDisplay(uint8_t pin, bool enable) {
     return true;
 }
 
+bool setInputAlarmWarmup(uint8_t pin, uint16_t warmupTime_ms) {
+    Input* input = getInputByPin(pin);
+    if (input == nullptr) return false;
+
+    input->alarmContext.warmupTime_ms = warmupTime_ms;
+    return true;
+}
+
+bool setInputAlarmPersist(uint8_t pin, uint16_t persistTime_ms) {
+    Input* input = getInputByPin(pin);
+    if (input == nullptr) return false;
+
+    input->alarmContext.persistTime_ms = persistTime_ms;
+    return true;
+}
+
 bool clearInput(uint8_t pin) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
