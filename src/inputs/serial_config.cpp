@@ -386,6 +386,10 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  SET <pin> DISPLAY_NAME <name>  - Set full name (32 chars)"));
         Serial.println(F("  SET <pin> UNITS <units>  - Override display units"));
         Serial.println(F("  SET <pin> ALARM <min> <max>  - Set alarm thresholds"));
+        Serial.println(F("  SET <pin> ALARM ENABLE  - Enable alarm for input"));
+        Serial.println(F("  SET <pin> ALARM DISABLE  - Disable alarm for input"));
+        Serial.println(F("  SET <pin> WARMUP <ms>  - Override alarm warmup time"));
+        Serial.println(F("  SET <pin> PERSIST <ms>  - Override alarm persistence time"));
         Serial.println();
         Serial.println(F("Calibration Commands:"));
         Serial.println(F("  SET <pin> CALIBRATION PRESET  - Clear custom, use preset"));
@@ -400,6 +404,7 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  DISABLE <pin>  - Disable input reading"));
         Serial.println(F("  CLEAR <pin>  - Reset input to unconfigured"));
         Serial.println(F("  INFO <pin>  - Show detailed pin info"));
+        Serial.println(F("  INFO <pin> ALARM  - Show alarm status and configuration"));
         Serial.println();
         Serial.println(F("Output Commands:"));
         Serial.println(F("  OUTPUT LIST  - Show all output modules"));
@@ -446,6 +451,11 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  SET I2C AMBIENT_TEMP BME280_TEMP  (I2C sensors)"));
         Serial.println(F("  SET A1 PRESSURE_LINEAR 0.5 4.5 0 7  (custom pressure)"));
         Serial.println(F("  SET A0 BIAS 4700  (change bias resistor)"));
+        Serial.println(F("  SET A2 ALARM 50 120  (set alarm thresholds)"));
+        Serial.println(F("  SET A2 ALARM ENABLE  (enable alarm)"));
+        Serial.println(F("  SET A2 WARMUP 30000  (30 second warmup)"));
+        Serial.println(F("  SET A2 PERSIST 2000  (2 second persistence)"));
+        Serial.println(F("  INFO A2 ALARM  (show alarm status)"));
         Serial.println(F("  ENABLE A2"));
         Serial.println(F("  OUTPUT CAN ENABLE"));
         Serial.println(F("  OUTPUT CAN INTERVAL 100"));
@@ -643,6 +653,26 @@ void handleSerialCommand(char* cmd) {
                 Serial.print(pinStr);
                 Serial.print(F(" units set to "));
                 Serial.println(unitsStr);
+            }
+            return;
+        }
+
+        // SET <pin> ALARM ENABLE
+        if (strncmp(fieldAndValue, "ALARM ENABLE", 12) == 0) {
+            if (enableInputAlarm(pin, true)) {
+                Serial.print(F("Input "));
+                Serial.print(pinStr);
+                Serial.println(F(" alarm enabled"));
+            }
+            return;
+        }
+
+        // SET <pin> ALARM DISABLE
+        if (strncmp(fieldAndValue, "ALARM DISABLE", 13) == 0) {
+            if (enableInputAlarm(pin, false)) {
+                Serial.print(F("Input "));
+                Serial.print(pinStr);
+                Serial.println(F(" alarm disabled"));
             }
             return;
         }
@@ -1098,6 +1128,44 @@ void handleSerialCommand(char* cmd) {
             return;
         }
 
+        // SET <pin> WARMUP <ms>
+        if (strncmp(fieldAndValue, "WARMUP ", 7) == 0) {
+            char* valueStr = fieldAndValue + 7;
+            trim(valueStr);
+            uint16_t value = atoi(valueStr);
+            if (value > 300000) {  // Max 5 minutes
+                Serial.println(F("ERROR: Warmup time must be 0-300000ms"));
+                return;
+            }
+            if (setInputAlarmWarmup(pin, value)) {
+                Serial.print(F("Input "));
+                Serial.print(pinStr);
+                Serial.print(F(" alarm warmup set to "));
+                Serial.print(value);
+                Serial.println(F("ms"));
+            }
+            return;
+        }
+
+        // SET <pin> PERSIST <ms>
+        if (strncmp(fieldAndValue, "PERSIST ", 8) == 0) {
+            char* valueStr = fieldAndValue + 8;
+            trim(valueStr);
+            uint16_t value = atoi(valueStr);
+            if (value > 60000) {  // Max 60 seconds
+                Serial.println(F("ERROR: Persistence time must be 0-60000ms"));
+                return;
+            }
+            if (setInputAlarmPersist(pin, value)) {
+                Serial.print(F("Input "));
+                Serial.print(pinStr);
+                Serial.print(F(" alarm persistence set to "));
+                Serial.print(value);
+                Serial.println(F("ms"));
+            }
+            return;
+        }
+
         Serial.println(F("ERROR: Unknown SET field"));
         return;
     }
@@ -1504,6 +1572,54 @@ void handleSerialCommand(char* cmd) {
             char* pinStr = rest;
             char* subcommand = spacePos + 1;
             trim(subcommand);
+
+            if (streq(subcommand, "ALARM")) {
+                bool pinValid = false;
+                uint8_t pin = parsePin(pinStr, &pinValid);
+                if (!pinValid) return;
+                Input* input = getInputByPin(pin);
+                if (!input || !input->flags.isEnabled) {
+                    Serial.println(F("ERROR: Input not configured"));
+                    return;
+                }
+
+                Serial.print(F("Pin "));
+                Serial.print(pinStr);
+                Serial.println(F(" Alarm Configuration:"));
+
+                Serial.print(F("  Alarm Enabled: "));
+                Serial.println(input->flags.alarm ? F("YES") : F("NO"));
+
+                Serial.print(F("  Alarm State: "));
+                switch (input->alarmContext.state) {
+                    case ALARM_DISABLED: Serial.println(F("DISABLED")); break;
+                    case ALARM_INIT: Serial.println(F("INIT")); break;
+                    case ALARM_WARMUP: Serial.println(F("WARMUP")); break;
+                    case ALARM_READY: Serial.println(F("READY")); break;
+                    case ALARM_ACTIVE: Serial.println(F("ACTIVE")); break;
+                    default: Serial.println(F("UNKNOWN")); break;
+                }
+
+                Serial.print(F("  Currently In Alarm: "));
+                Serial.println(input->flags.isInAlarm ? F("YES") : F("NO"));
+
+                Serial.print(F("  Warmup Time: "));
+                Serial.print(input->alarmContext.warmupTime_ms);
+                Serial.println(F("ms"));
+
+                Serial.print(F("  Persistence Time: "));
+                Serial.print(input->alarmContext.persistTime_ms);
+                Serial.println(F("ms"));
+
+                Serial.print(F("  Thresholds: "));
+                Serial.print(input->minValue);
+                Serial.print(F(" - "));
+                Serial.print(input->maxValue);
+                Serial.print(F(" "));
+                Serial.println((__FlashStringHelper*)getUnitStringByIndex(input->unitsIndex));
+
+                return;
+            }
 
             if (streq(subcommand, "CALIBRATION")) {
                 bool pinValid = false;
