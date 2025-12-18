@@ -22,7 +22,8 @@ enum OutputID {
     OUTPUT_REALDASH = 1,
     OUTPUT_SERIAL = 2,
     OUTPUT_SD = 3,
-    NUM_OUTPUTS = 4
+    OUTPUT_ALARM = 4,
+    NUM_OUTPUTS = 5
 };
 
 // Display types
