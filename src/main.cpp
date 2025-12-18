@@ -34,10 +34,8 @@ extern void updateOutputs();
 extern void initLCD();
 extern void updateLCD(Input**, int);
 
-// Declare alarm functions
-extern void initAlarm();
-extern void checkSensorAlarm(Input*);
-extern void updateAlarm();
+// Alarm logic module
+#include "inputs/alarm_logic.h"
 
 // Test mode (if enabled)
 #ifdef ENABLE_TEST_MODE
@@ -105,12 +103,7 @@ static void updateSensors(uint32_t now) {
 static void updateAlarms(uint32_t now) {
     #ifdef ENABLE_ALARMS
     if (now - lastAlarmCheck >= ALARM_CHECK_INTERVAL_MS) {
-        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            if (inputs[i].flags.isEnabled) {
-                checkSensorAlarm(&inputs[i]);
-            }
-        }
-        updateAlarm();  // Update buzzer state
+        updateAllInputAlarms(now);  // Update alarm state for all inputs
         lastAlarmCheck = now;
     }
     #endif
@@ -216,11 +209,6 @@ void setup() {
     Serial.print(F("Initializing LCD... "));
     initLCD();
     #endif
-
-    // Initialize alarm system
-    Serial.print(F("Initializing alarm system... "));
-    initAlarm();
-    Serial.println(F("OK"));
 
 #ifndef USE_STATIC_CONFIG
     // Initialize button handler (only in EEPROM mode)
