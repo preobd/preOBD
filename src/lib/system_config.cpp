@@ -83,6 +83,14 @@ void resetSystemConfig() {
     systemConfig.outputInterval[OUTPUT_SD] = 5000;
     #endif
 
+    #ifdef ENABLE_ALARMS
+    systemConfig.outputEnabled[OUTPUT_ALARM] = 1;
+    systemConfig.outputInterval[OUTPUT_ALARM] = 100;  // 10Hz check rate
+    #else
+    systemConfig.outputEnabled[OUTPUT_ALARM] = 0;
+    systemConfig.outputInterval[OUTPUT_ALARM] = 100;
+    #endif
+
     // Display defaults
     #ifdef ENABLE_LCD
     systemConfig.displayEnabled = 1;

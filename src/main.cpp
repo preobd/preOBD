@@ -20,7 +20,9 @@
 #ifndef USE_STATIC_CONFIG
     #include "inputs/serial_config.h"  // Only needed for EEPROM/serial config mode
     #include "lib/system_mode.h"        // System mode (CONFIG/RUN)
+    #include "lib/button_handler.h"     // Multi-function button handler
 #endif
+#include "lib/display_manager.h"    // Display runtime state management (works in both modes)
 #include "outputs/output_base.h"
 
 // Declare output module functions
@@ -32,10 +34,8 @@ extern void updateOutputs();
 extern void initLCD();
 extern void updateLCD(Input**, int);
 
-// Declare alarm functions
-extern void initAlarm();
-extern void checkSensorAlarm(Input*);
-extern void updateAlarm();
+// Alarm logic module
+#include "inputs/alarm_logic.h"
 
 // Test mode (if enabled)
 #ifdef ENABLE_TEST_MODE
@@ -66,7 +66,7 @@ static uint32_t lastLCDUpdate = 0;
 // Update LCD display in CONFIG mode
 static void updateConfigModeDisplay(uint32_t now) {
     #ifdef ENABLE_LCD
-    if (systemConfig.displayEnabled && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
+    if (isDisplayActive() && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
@@ -103,12 +103,7 @@ static void updateSensors(uint32_t now) {
 static void updateAlarms(uint32_t now) {
     #ifdef ENABLE_ALARMS
     if (now - lastAlarmCheck >= ALARM_CHECK_INTERVAL_MS) {
-        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            if (inputs[i].flags.isEnabled) {
-                checkSensorAlarm(&inputs[i]);
-            }
-        }
-        updateAlarm();  // Update buzzer state
+        updateAllInputAlarms(now);  // Update alarm state for all inputs
         lastAlarmCheck = now;
     }
     #endif
@@ -118,7 +113,7 @@ static void updateAlarms(uint32_t now) {
 // Update LCD display in RUN mode
 static void updateDisplay(uint32_t now) {
     #ifdef ENABLE_LCD
-    if (systemConfig.displayEnabled && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
+    if (isDisplayActive() && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
@@ -215,10 +210,16 @@ void setup() {
     initLCD();
     #endif
 
-    // Initialize alarm system
-    Serial.print(F("Initializing alarm system... "));
-    initAlarm();
+#ifndef USE_STATIC_CONFIG
+    // Initialize button handler (only in EEPROM mode)
+    Serial.print(F("Initializing button handler... "));
+    initButtonHandler();
     Serial.println(F("OK"));
+#endif
+
+    // Initialize display manager (works in both static and EEPROM modes)
+    // In static mode, this is a no-op (always returns true for isDisplayActive)
+    initDisplayManager();
 
     // Initialize output modules
     Serial.println(F("Initializing output modules..."));
@@ -324,6 +325,16 @@ void loop() {
 #ifndef USE_STATIC_CONFIG
     // Process serial configuration commands (non-blocking, always runs)
     processSerialCommands();
+
+    // Process button events (short press = silence alarm, long press = toggle display)
+    ButtonPress buttonEvent = updateButtonHandler();
+    if (buttonEvent == BUTTON_SHORT_PRESS) {
+        // Short press handled by alarm system (already reads the button)
+        // No action needed here
+    } else if (buttonEvent == BUTTON_LONG_PRESS) {
+        // Long press toggles display
+        toggleDisplayRuntime();
+    }
 
     // If in CONFIG mode, skip sensor reading and outputs
     if (isInConfigMode()) {

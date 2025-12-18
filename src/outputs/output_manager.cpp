@@ -23,15 +23,20 @@ extern void initSDLog();
 extern void sendSDLog(Input*);
 extern void updateSDLog();
 
+extern void initAlarmOutput();
+extern void sendAlarmOutput(Input*);
+extern void updateAlarmOutput();
+
 // Define output modules array - always compiled, controlled by runtime flags
 OutputModule outputModules[] = {
     {"CAN", false, initCAN, sendCAN, updateCAN, 100},
     {"RealDash", false, initRealdash, sendRealdash, updateRealdash, 100},
     {"Serial", false, initSerialOutput, sendSerialOutput, updateSerialOutput, 1000},
     {"SD_Log", false, initSDLog, sendSDLog, updateSDLog, 5000},
+    {"Alarm", true, initAlarmOutput, sendAlarmOutput, updateAlarmOutput, 100},
 };
 
-const int numOutputModules = 4;  // Always 4, no sizeof() needed
+const int numOutputModules = 5;  // Updated from 4 to 5
 
 // Track last send time for each output module
 static uint32_t lastOutputSend[sizeof(outputModules) / sizeof(outputModules[0])];

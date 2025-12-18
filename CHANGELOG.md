@@ -7,8 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **BREAKING**: Alarm system refactored to state-machine architecture
+  - Alarms now have configurable warmup period to prevent false alarms during engine startup
+  - Alarms require fault persistence before triggering to prevent transient false alarms
+  - Alarm is now a true output module (can be enabled/disabled via `OUTPUT` command)
+  - Per-input alarm state tracking via `Input.flags.isInAlarm`
+  - Old `alarm.cpp` replaced with `alarm_logic.cpp` (state evaluation) and `output_alarm.cpp` (hardware control)
+
 ### Added
-- **Runtime Output Configuration**: Enable/disable output modules (CAN, RealDash, Serial CSV, SD logging) via serial commands
+- Alarm warmup period per application type (e.g., 30s for CHT, 60s for coolant)
+- Alarm fault persistence timing (e.g., 2s persistence prevents transient spikes)
+- `AlarmContext` structure in `Input` for alarm state machine management
+- `AlarmState` enum: DISABLED, INIT, WARMUP, READY, ACTIVE
+- `OUTPUT Alarm` serial command support (enable/disable/interval)
+- Per-input alarm state visible in all outputs (enables future CAN alarm frames, etc.)
+- `warmupTime_ms` and `persistTime_ms` fields in `ApplicationPreset`
+- **Runtime Output Configuration**: Enable/disable output modules (CAN, RealDash, Serial CSV, SD logging, Alarm) via serial commands
 - **Runtime Display Configuration**: Switch display type (LCD/OLED/None), I2C address, and default units without recompiling
 - **Runtime System Configuration**: Configure VDO bias resistor, sea level pressure, and timing intervals via serial
 - **Combined Sensor Command**: New `SET <pin> <app> <sensor>` syntax for faster configuration
@@ -27,8 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - EEPROM version incremented to 2
 - Output intervals now configurable at runtime (10-60000ms)
 - Compile-time `#define ENABLE_*` flags now serve as factory defaults only
+- NUM_OUTPUTS increased from 4 to 5 (added OUTPUT_ALARM)
 
 ### Fixed
+- False alarms during engine cold start (oil pressure, coolant temp, etc.)
+- False alarms from transient sensor noise/spikes
 - Removed duplicate `OutputType` enum, now uses centralized `OutputID`
 - Avoided duplicate sensor initialization in combined SET command
 - Used correct `Units` enum type in SystemConfig for display defaults
