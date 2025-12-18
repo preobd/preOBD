@@ -8,6 +8,7 @@
  #include "../config.h"
 #include "../version.h"
 #include "input_manager.h"
+#include "alarm_logic.h"
 #include "../lib/units_registry.h"
 #ifdef USE_STATIC_CONFIG
 #include "../lib/generated/application_presets_static.h"
@@ -467,6 +468,19 @@ bool initInputManager() {
         }
     }
 
+    // Initialize alarm contexts from application presets
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) {
+            // Get preset to load warmup/persist times
+            const ApplicationPreset* flashPreset = getApplicationByIndex(inputs[i].applicationIndex);
+            if (flashPreset) {
+                ApplicationPreset preset;
+                loadApplicationPreset(flashPreset, &preset);
+                initInputAlarmContext(&inputs[i], millis(), preset.warmupTime_ms, preset.persistTime_ms);
+            }
+        }
+    }
+
     Serial.print(F("✓ Loaded "));
     Serial.print(numActiveInputs);
     Serial.println(F(" inputs from compile-time config"));
@@ -880,6 +894,9 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     input->flags.display = preset.defaultDisplayEnabled;
     input->flags.isEnabled = true;
     input->flags.useCustomCalibration = false;  // Use preset calibration
+
+    // Initialize alarm context from preset
+    initInputAlarmContext(input, millis(), preset.warmupTime_ms, preset.persistTime_ms);
 
     // Increment count if this is a new input
     if (isNewInput) {
