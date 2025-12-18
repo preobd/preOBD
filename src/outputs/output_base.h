@@ -43,8 +43,8 @@ inline bool buildOBD2Frame(byte* frameData, Input* ptr) {
     byte mode = 0x41;  // Mode 01: Show current data
     byte dataBytes = ptr->obd2length;
 
-    // Validate data size (max 6 bytes in single CAN frame)
-    if (dataBytes == 0 || dataBytes > 6) {
+    // Validate data size (max 5 bytes to fit in frameData[3..7])
+    if (dataBytes == 0 || dataBytes > 5) {
         return false;
     }
 
@@ -71,7 +71,7 @@ inline bool buildOBD2Frame(byte* frameData, Input* ptr) {
         frameData[3] = (value >> 8) & 0xFF;  // MSB first (FIX: Was LSB first)
         frameData[4] = value & 0xFF;         // LSB second
     } else {
-        // 3-6 byte data (rare, but supported)
+        // 3-5 byte data (rare, but supported)
         uint32_t value = (uint32_t)obdValue;
         for (byte i = 0; i < dataBytes; i++) {
             frameData[3 + i] = (value >> ((dataBytes - 1 - i) * 8)) & 0xFF;

@@ -62,7 +62,6 @@ ButtonPress updateButtonHandler() {
         if (!newState && buttonState) {
             // Button just released
             if (pressStartTime > 0) {
-                uint32_t pressDuration = now - pressStartTime;
                 pressStartTime = 0;
 
                 // If long press was already handled, this release is just confirmation
