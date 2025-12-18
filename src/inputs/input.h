@@ -120,6 +120,25 @@ union CalibrationOverride {
     byte raw[16];
 };
 
+// ===== ALARM STATE MACHINE =====
+// Alarm state machine states
+enum AlarmState : uint8_t {
+    ALARM_DISABLED = 0,  // Alarm feature disabled for this input
+    ALARM_INIT,          // Initial state after configuration/boot
+    ALARM_WARMUP,        // Sensor warming up, alarm blocked
+    ALARM_READY,         // Normal operation, alarm checking active
+    ALARM_ACTIVE         // Currently in alarm condition
+};
+
+// Per-input alarm runtime context (12 bytes)
+struct AlarmContext {
+    AlarmState state;           // Current alarm state (1 byte)
+    uint32_t stateEntryTime;    // When current state was entered (4 bytes)
+    uint32_t faultStartTime;    // When threshold violation started (4 bytes, 0 = no violation)
+    uint16_t warmupTime_ms;     // Warmup duration in milliseconds (2 bytes)
+    uint16_t persistTime_ms;    // Fault persistence time in milliseconds (2 bytes)
+};
+
 // ===== INPUT STRUCTURE =====
 // Runtime configuration for a physical input pin
 // Size: ~100 bytes per input
@@ -148,13 +167,17 @@ struct Input {
     // === Runtime Data ===
     float value;                    // Current sensor reading
 
+    // === Alarm State Management ===
+    AlarmContext alarmContext;      // Alarm state machine context (12 bytes)
+
     // === Flags (packed into 1 byte) ===
     struct {
         uint8_t isEnabled : 1;      // Input enabled/disabled
         uint8_t alarm : 1;          // Alarm enabled
         uint8_t display : 1;        // Show on LCD
+        uint8_t isInAlarm : 1;      // Currently in alarm state
         uint8_t useCustomCalibration : 1;  // Use custom or preset calibration
-        uint8_t reserved : 4;       // Reserved for future use
+        uint8_t reserved : 3;       // Reserved for future use
     } flags;
 
     // === Function Pointers ===
