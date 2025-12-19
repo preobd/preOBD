@@ -28,6 +28,8 @@ from openems_config.config_generator import (
     generate_config_block,
     update_config_h,
     generate_thin_library_files,
+    generate_advanced_config_block,
+    update_advanced_config_h,
 )
 
 TOOL_VERSION = "1.0.0"
@@ -91,6 +93,78 @@ def prompt_for_selection(options: List[Dict[str, Any]], title: str, default: int
         except ValueError:
             print("  \u2717 Please enter a number.")
 
+def prompt_for_custom_calibration(inp: Dict[str, Any], registries: Dict) -> Optional[Dict[str, Any]]:
+    """Prompts user if they want to add custom calibration for this input."""
+    print(f"\nCustom calibration for Input {inp['input_number']}?")
+    choice = input("Add custom calibration? [y/N]: ").strip().lower()
+
+    if choice != 'y':
+        return None
+
+    # Get sensor info to determine calibration type
+    sensor_info = next((s for s in registries['sensors'] if s['index'] == inp['sensor_index']), None)
+    if not sensor_info:
+        print("  Error: Could not find sensor info")
+        return None
+
+    cal_type_name = sensor_info.get('calibrationType', '')
+
+    print(f"\nCalibration type for {sensor_info['name']}: {cal_type_name}")
+    print("Available calibration types:")
+    print("  1. Thermistor (Steinhart-Hart)")
+    print("  2. Pressure (Linear)")
+    print("  3. Pressure (Polynomial/VDO)")
+    print("  4. RPM")
+
+    while True:
+        try:
+            cal_choice = input("Select calibration type [1-4]: ").strip()
+            cal_choice = int(cal_choice)
+            if cal_choice in [1, 2, 3, 4]:
+                break
+            print("  Invalid selection. Choose 1-4.")
+        except ValueError:
+            print("  Please enter a number.")
+
+    calibration = {"type": cal_choice}
+
+    if cal_choice == 1:  # Thermistor Steinhart-Hart
+        calibration.update({
+            "calibration_name": "ThermistorSteinhartCalibration",
+            "bias_resistor": float(input("Bias resistor (Ohms) [1000.0]: ").strip() or "1000.0"),
+            "steinhart_a": float(input("Steinhart A coefficient [1.129e-3]: ").strip() or "1.129e-3"),
+            "steinhart_b": float(input("Steinhart B coefficient [2.341e-4]: ").strip() or "2.341e-4"),
+            "steinhart_c": float(input("Steinhart C coefficient [8.775e-8]: ").strip() or "8.775e-8")
+        })
+    elif cal_choice == 2:  # Pressure Linear
+        calibration.update({
+            "calibration_name": "LinearCalibration",
+            "voltage_min": float(input("Minimum voltage (V) [0.5]: ").strip() or "0.5"),
+            "voltage_max": float(input("Maximum voltage (V) [4.5]: ").strip() or "4.5"),
+            "pressure_min": float(input("Minimum pressure (bar) [0.0]: ").strip() or "0.0"),
+            "pressure_max": float(input("Maximum pressure (bar) [5.0]: ").strip() or "5.0")
+        })
+    elif cal_choice == 3:  # Pressure Polynomial
+        calibration.update({
+            "calibration_name": "PolynomialCalibration",
+            "bias_resistor": float(input("Bias resistor (Ohms) [1000.0]: ").strip() or "1000.0"),
+            "poly_a": float(input("Polynomial A coefficient [-0.3682]: ").strip() or "-0.3682"),
+            "poly_b": float(input("Polynomial B coefficient [36.465]: ").strip() or "36.465"),
+            "poly_c": float(input("Polynomial C coefficient [10.648]: ").strip() or "10.648")
+        })
+    elif cal_choice == 4:  # RPM
+        calibration.update({
+            "calibration_name": "RPMCalibration",
+            "poles": int(input("Number of poles [12]: ").strip() or "12"),
+            "pulley_ratio": float(input("Pulley ratio [3.0]: ").strip() or "3.0"),
+            "calibration_mult": float(input("Calibration multiplier [1.0]: ").strip() or "1.0"),
+            "timeout_ms": int(input("Timeout (ms) [2000]: ").strip() or "2000"),
+            "min_rpm": int(input("Minimum RPM [100]: ").strip() or "100"),
+            "max_rpm": int(input("Maximum RPM [10000]: ").strip() or "10000")
+        })
+
+    return calibration
+
 def edit_input(inp: Dict[str, Any], platform: str, used_pins: List[str], registries: Dict) -> Dict[str, Any]:
     """Interactive prompt to edit a single input."""
     print(f"\n--- Editing Input {inp['input_number']} ---")
@@ -109,6 +183,14 @@ def edit_input(inp: Dict[str, Any], platform: str, used_pins: List[str], registr
         "application": selected_app['name'], "application_index": app_index,
         "sensor": next(s['name'] for s in compatible_sensors if s['index'] == sensor_index), "sensor_index": sensor_index
     })
+
+    # Prompt for custom calibration
+    custom_cal = prompt_for_custom_calibration(inp, registries)
+    if custom_cal:
+        inp['custom_calibration'] = custom_cal
+    elif 'custom_calibration' in inp:
+        del inp['custom_calibration']
+
     return inp
 
 def main():
@@ -181,11 +263,18 @@ def main():
             compatible_sensors = [s for s in registries['sensors'] if s['is_implemented'] and s['measurementType'] == selected_app['expectedMeasurementType']]
             sensor_index = prompt_for_selection(compatible_sensors, f"Compatible sensors for {selected_app['name']}")
 
-            inputs.append({
+            new_input = {
                 "input_number": len(inputs), "pin": pin,
                 "application": selected_app['name'], "application_index": app_index,
                 "sensor": next(s['name'] for s in compatible_sensors if s['index'] == sensor_index), "sensor_index": sensor_index
-            })
+            }
+
+            # Prompt for custom calibration
+            custom_cal = prompt_for_custom_calibration(new_input, registries)
+            if custom_cal:
+                new_input['custom_calibration'] = custom_cal
+
+            inputs.append(new_input)
 
             if input("\nConfigure another input? [y/N]: ").strip().lower() != 'y': break
 
@@ -214,6 +303,22 @@ def main():
         print(f"\u2713 Generated with {len(inputs)} inputs")
     else:
         print(f"\u2717 Failed to update {config_h_path}", file=sys.stderr)
+
+    # Generate advanced_config.h if there are custom calibrations
+    advanced_config_path = os.path.join(args.project_dir, 'src', 'advanced_config.h')
+    advanced_block = generate_advanced_config_block(inputs, TOOL_VERSION)
+    if advanced_block:
+        print("\nGenerating advanced_config.h...")
+        if update_advanced_config_h(advanced_config_path, advanced_block):
+            print(f"\u2713 Backup: {advanced_config_path}.bak")
+            print(f"\u2713 Generated custom calibrations for {len([i for i in inputs if 'custom_calibration' in i])} inputs")
+        else:
+            print(f"\u2717 Failed to update {advanced_config_path}", file=sys.stderr)
+    else:
+        # Clear custom calibrations if none are defined
+        if os.path.exists(advanced_config_path):
+            update_advanced_config_h(advanced_config_path, None)
+            print("\u2713 Cleared custom calibrations from advanced_config.h")
 
     if args.generate_thin_libs:
         print("\nGenerating thin libraries...")
