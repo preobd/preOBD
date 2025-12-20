@@ -9,7 +9,7 @@
   "inputs": [
     {
       "idx": 0,
-      "pin": "A0",
+      "pin": "6",
       "application": "CHT",
       "applicationIndex": 1,
       "sensor": "MAX6675",
@@ -17,7 +17,7 @@
     },
     {
       "idx": 1,
-      "pin": "A1",
+      "pin": "7",
       "application": "CHT",
       "applicationIndex": 1,
       "sensor": "MAX6675",
