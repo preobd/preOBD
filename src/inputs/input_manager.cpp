@@ -1294,8 +1294,11 @@ void listSensors() {
     Serial.println(F("Thermistors (Generic):"));
     Serial.println(F("  THERMISTOR_LOOKUP      - Generic (requires custom cal)"));
     Serial.println(F("  THERMISTOR_STEINHART   - Generic (requires custom cal)"));
-    Serial.println(F("Pressure (Linear):"));
+    Serial.println(F("Temperature (Linear - 5V sensors):"));
+    Serial.println(F("  GENERIC_TEMP_LINEAR    - 0.5-4.5V linear (-40 to 150°C)"));
+    Serial.println(F("Pressure (Linear - 5V sensors):"));
     Serial.println(F("  GENERIC_BOOST          - 0.5-4.5V linear (0-5 bar)"));
+    Serial.println(F("  GENERIC_PRESSURE_150PSI - 0.5-4.5V linear (0-150 PSI / 10 bar)"));
     Serial.println(F("  MPX4250AP              - Freescale/NXP (20-250 kPa)"));
     Serial.println(F("Pressure (VDO Polynomial):"));
     Serial.println(F("  VDO_2BAR               - VDO 2-bar pressure"));
@@ -1309,5 +1312,6 @@ void listSensors() {
     Serial.println(F("  BME280_ELEVATION       - BME280 altitude (I2C)"));
     Serial.println(F("  FLOAT_SWITCH           - Float/level switch (digital)"));
     Serial.println();
+    Serial.println(F("IMPORTANT: 5V sensors (0.5-4.5V) require voltage dividers for 3.3V systems!"));
     Serial.println(F("Note: Use 'I2C' as pin for BME280 sensors (e.g. SET I2C AMBIENT_TEMP BME280_TEMP)"));
 }

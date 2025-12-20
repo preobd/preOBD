@@ -109,6 +109,10 @@ static const char PSTR_THERMISTOR_LOOKUP[] PROGMEM = "THERMISTOR_LOOKUP";
 static const char PSTR_THERMISTOR_STEINHART[] PROGMEM = "THERMISTOR_STEINHART";
 static const char PSTR_GENERIC_BOOST[] PROGMEM = "GENERIC_BOOST";
 static const char PSTR_GENERIC_BOOST_LABEL[] PROGMEM = "Generic Boost";
+static const char PSTR_GENERIC_TEMP_LINEAR[] PROGMEM = "GENERIC_TEMP_LINEAR";
+static const char PSTR_GENERIC_TEMP_LINEAR_LABEL[] PROGMEM = "Generic Linear Temperature";
+static const char PSTR_GENERIC_PRESSURE_150PSI[] PROGMEM = "GENERIC_PRESSURE_150PSI";
+static const char PSTR_GENERIC_PRESSURE_150PSI_LABEL[] PROGMEM = "Generic 150 PSI Pressure";
 static const char PSTR_MPX4250AP[] PROGMEM = "MPX4250AP";
 static const char PSTR_VDO_2BAR[] PROGMEM = "VDO_2BAR";
 static const char PSTR_VDO_2BAR_LABEL[] PROGMEM = "VDO 2 Bar";
@@ -301,8 +305,27 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
 
+    // ===== LINEAR TEMPERATURE SENSORS =====
+    // Index 9: GENERIC_TEMP_LINEAR
+    {
+
+        .name = PSTR_GENERIC_TEMP_LINEAR,
+        .label = PSTR_GENERIC_TEMP_LINEAR_LABEL,
+        .description = nullptr,
+        .readFunction = readLinearSensor,
+        .initFunction = nullptr,
+        .measurementType = MEASURE_TEMPERATURE,
+        .calibrationType = CAL_LINEAR,
+        .defaultCalibration = &generic_temp_linear_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS,
+        .minValue = -40.0,
+        .maxValue = 150.0,
+        .nameHash = 0xDF11,  // djb2_hash("GENERIC_TEMP_LINEAR")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
+    },
+
     // ===== PRESSURE SENSORS =====
-    // Index 9: GENERIC_BOOST
+    // Index 10: GENERIC_BOOST
     {
 
         .name = PSTR_GENERIC_BOOST,
@@ -319,7 +342,24 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x59C8,  // djb2_hash("GENERIC_BOOST")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
-    // Index 10: MPX4250AP
+    // Index 11: GENERIC_PRESSURE_150PSI
+    {
+
+        .name = PSTR_GENERIC_PRESSURE_150PSI,
+        .label = PSTR_GENERIC_PRESSURE_150PSI_LABEL,
+        .description = nullptr,
+        .readFunction = readLinearSensor,
+        .initFunction = nullptr,
+        .measurementType = MEASURE_PRESSURE,
+        .calibrationType = CAL_LINEAR,
+        .defaultCalibration = &generic_pressure_150psi_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS,
+        .minValue = 0.0,
+        .maxValue = 10.34,       // 150 PSI = 10.34 bar
+        .nameHash = 0xA67B,  // djb2_hash("GENERIC_PRESSURE_150PSI")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
+    },
+    // Index 12: MPX4250AP
     {
 
         .name = PSTR_MPX4250AP,
@@ -336,7 +376,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0xDF76,  // djb2_hash("MPX4250AP")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
-    // Index 11: VDO_2BAR
+    // Index 13: VDO_2BAR
     {
 
         .name = PSTR_VDO_2BAR,
@@ -353,7 +393,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x1ED4,  // djb2_hash("VDO_2BAR")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
-    // Index 12: VDO_5BAR
+    // Index 14: VDO_5BAR
     {
 
         .name = PSTR_VDO_5BAR,
@@ -372,7 +412,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== VOLTAGE SENSORS =====
-    // Index 13: VOLTAGE_DIVIDER
+    // Index 15: VOLTAGE_DIVIDER
     {
 
         .name = PSTR_VOLTAGE_DIVIDER,
@@ -391,7 +431,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== RPM SENSORS =====
-    // Index 14: W_PHASE_RPM
+    // Index 16: W_PHASE_RPM
     {
 
         .name = PSTR_W_PHASE_RPM,
@@ -410,7 +450,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== BME280 SENSORS =====
-    // Index 15: BME280_TEMP
+    // Index 17: BME280_TEMP
     {
 
         .name = PSTR_BME280_TEMP,
@@ -427,7 +467,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x72A8,  // djb2_hash("BME280_TEMP")
         .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
-    // Index 16: BME280_PRESSURE
+    // Index 18: BME280_PRESSURE
     {
 
         .name = PSTR_BME280_PRESSURE,
@@ -444,7 +484,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x454B,  // djb2_hash("BME280_PRESSURE")
         .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
-    // Index 17: BME280_HUMIDITY
+    // Index 19: BME280_HUMIDITY
     {
 
         .name = PSTR_BME280_HUMIDITY,
@@ -461,7 +501,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x381F,  // djb2_hash("BME280_HUMIDITY")
         .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
-    // Index 18: BME280_ELEVATION
+    // Index 20: BME280_ELEVATION
     {
 
         .name = PSTR_BME280_ELEVATION,
@@ -480,7 +520,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== DIGITAL SENSORS =====
-    // Index 19: FLOAT_SWITCH
+    // Index 21: FLOAT_SWITCH
     {
 
         .name = PSTR_FLOAT_SWITCH,
