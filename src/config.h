@@ -2,32 +2,10 @@
  * config.h - User Configuration File
  *
  * QUICK START CHECKLIST:
- * □ Choose build mode (line 41): EEPROM or compile-time?
- * □ Set hardware pins (line 48): MODE_BUTTON, BUZZER, etc.
- * □ Enable output modules (line 65): CAN? Serial? SD logging?
- * □ Enable display (line 88): LCD or OLED?
- * □ Configure sensors (line 140+): Only if using USE_STATIC_CONFIG
- *
- * === BUILD MODE SELECTION ===
- * Choose ONE of the following modes:
- *
- * MODE 1: EEPROM/Serial Config
- *   - Runtime serial configuration via commands
- *   - EEPROM persistence for settings
- *   - Recommended for: Teensy 4.x, ESP32, Arduino Mega
- *   To enable: Leave USE_STATIC_CONFIG commented out
- *
- * MODE 2: Compile-Time Config
- *   - Configure sensors at compile time in config.h
- *   - No EEPROM, no serial config overhead
- *   - Smaller footprint than Mode 1
- *   - Recommended for: Arduino Uno, memory-constrained boards
- *   To enable: #define USE_STATIC_CONFIG
- *
- * Both modes use the same Input-based architecture and share all code.
- * The only difference is where configuration comes from:
- *   Mode 1: EEPROM (set via serial commands)
- *   Mode 2: config.h (set at compile time)
+ * □ Set hardware pins: MODE_BUTTON, BUZZER, etc.
+ * □ Enable output modules: CAN? Serial? SD logging?
+ * □ Enable display: LCD or OLED?
+ * □ Configure sensors: Only if using USE_STATIC_CONFIG
  */
 
 #ifndef CONFIG_H
@@ -39,6 +17,7 @@
 
 // ----- System Control Pins -----
 #define MODE_BUTTON 5   // Multi-function: Hold during boot for CONFIG mode,
+                        // hold briefly during RUN mode to toggle display on/off,
                         // press in RUN mode to silence alarm
 
 #define BUZZER 3        // Alarm buzzer output
@@ -49,6 +28,7 @@
 
 // ----- SD Card Pins -----
 #define SD_CS_PIN 4     // SD card chip select (adjust for your hardware)
+//#define SD_CS_PIN BUILTIN_SDCARD  // Use built-in SD card on supported boards (Teensy 4.x)
 
 // ============================================================================
 // STEP 2: ENABLED MODULES
