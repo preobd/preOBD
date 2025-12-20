@@ -69,7 +69,7 @@ static const char* getCalibrationType(const Input* input) {
         case CAL_THERMISTOR_STEINHART: return "THERMISTOR_STEINHART";
         case CAL_THERMISTOR_LOOKUP: return "THERMISTOR_LOOKUP";
         case CAL_PRESSURE_POLYNOMIAL: return "PRESSURE_POLYNOMIAL";
-        case CAL_PRESSURE_LINEAR: return "PRESSURE_LINEAR";
+        case CAL_LINEAR: return "LINEAR";
         case CAL_VOLTAGE_DIVIDER: return "VOLTAGE_DIVIDER";
         case CAL_RPM: return "RPM";
         default: return "UNKNOWN";
@@ -100,11 +100,11 @@ static void exportCalibration(JsonObject& calObj, const Input* input) {
             params["biasResistor"] = input->customCalibration.lookup.bias_resistor;
             break;
 
-        case CAL_PRESSURE_LINEAR:
+        case CAL_LINEAR:
             params["voltageMin"] = input->customCalibration.pressureLinear.voltage_min;
             params["voltageMax"] = input->customCalibration.pressureLinear.voltage_max;
-            params["pressureMin"] = input->customCalibration.pressureLinear.pressure_min;
-            params["pressureMax"] = input->customCalibration.pressureLinear.pressure_max;
+            params["outputMin"] = input->customCalibration.pressureLinear.output_min;
+            params["outputMax"] = input->customCalibration.pressureLinear.output_max;
             break;
 
         case CAL_PRESSURE_POLYNOMIAL:

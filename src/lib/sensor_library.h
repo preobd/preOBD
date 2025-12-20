@@ -33,7 +33,7 @@ extern void readMAX31855(Input*);
 extern void readThermistorLookup(Input*);
 extern void readThermistorSteinhart(Input*);
 extern void readPressurePolynomial(Input*);
-extern void readPressureLinear(Input*);
+extern void readLinearSensor(Input*);
 extern void readVoltageDivider(Input*);
 extern void readWPhaseRPM(Input*);
 extern void readBME280Temp(Input*);
@@ -308,10 +308,10 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .name = PSTR_GENERIC_BOOST,
         .label = PSTR_GENERIC_BOOST_LABEL,
         .description = nullptr,
-        .readFunction = readPressureLinear,
+        .readFunction = readLinearSensor,
         .initFunction = nullptr,
         .measurementType = MEASURE_PRESSURE,
-        .calibrationType = CAL_PRESSURE_LINEAR,
+        .calibrationType = CAL_LINEAR,
         .defaultCalibration = &generic_boost_linear_cal,
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = -1.0,        // ~1 bar vacuum
@@ -325,10 +325,10 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .name = PSTR_MPX4250AP,
         .label = PSTR_MPX4250AP,
         .description = nullptr,
-        .readFunction = readPressureLinear,
+        .readFunction = readLinearSensor,
         .initFunction = nullptr,
         .measurementType = MEASURE_PRESSURE,
-        .calibrationType = CAL_PRESSURE_LINEAR,
+        .calibrationType = CAL_LINEAR,
         .defaultCalibration = &mpx4250ap_linear_cal,
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = 0.2,         // 20 kPa minimum

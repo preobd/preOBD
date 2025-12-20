@@ -81,13 +81,13 @@ union CalibrationOverride {
         byte padding[12];
     } lookup;
     
-    // Linear pressure sensor (16 bytes)
+    // Linear sensor - temperature, pressure, etc. (16 bytes)
     struct {
         float voltage_min;
         float voltage_max;
-        float pressure_min;
-        float pressure_max;
-    } pressureLinear;
+        float output_min;
+        float output_max;
+    } pressureLinear;  // Named for backwards compatibility, works for all linear sensors
     
     // Polynomial pressure sensor (16 bytes)
     struct {

@@ -911,8 +911,8 @@ void handleSerialCommand(char* cmd) {
             input->flags.useCustomCalibration = true;
             input->customCalibration.pressureLinear.voltage_min = vmin;
             input->customCalibration.pressureLinear.voltage_max = vmax;
-            input->customCalibration.pressureLinear.pressure_min = pmin;
-            input->customCalibration.pressureLinear.pressure_max = pmax;
+            input->customCalibration.pressureLinear.output_min = pmin;
+            input->customCalibration.pressureLinear.output_max = pmax;
 
             Serial.print(F("Pressure Linear calibration set for pin "));
             Serial.println(pinStr);
@@ -1639,7 +1639,7 @@ void handleSerialCommand(char* cmd) {
                     case CAL_THERMISTOR_STEINHART: Serial.println(F("THERMISTOR_STEINHART")); break;
                     case CAL_THERMISTOR_LOOKUP: Serial.println(F("THERMISTOR_LOOKUP")); break;
                     case CAL_PRESSURE_POLYNOMIAL: Serial.println(F("PRESSURE_POLYNOMIAL")); break;
-                    case CAL_PRESSURE_LINEAR: Serial.println(F("PRESSURE_LINEAR")); break;
+                    case CAL_LINEAR: Serial.println(F("PRESSURE_LINEAR")); break;
                     case CAL_VOLTAGE_DIVIDER: Serial.println(F("VOLTAGE_DIVIDER")); break;
                     case CAL_RPM: Serial.println(F("RPM")); break;
                     default: Serial.println(F("NONE")); break;
@@ -1664,16 +1664,16 @@ void handleSerialCommand(char* cmd) {
                         Serial.print(F("  Bias Resistor: "));
                         Serial.print(input->customCalibration.lookup.bias_resistor, 1);
                         Serial.println(F(" Ω"));
-                    } else if (input->calibrationType == CAL_PRESSURE_LINEAR) {
+                    } else if (input->calibrationType == CAL_LINEAR) {
                         Serial.print(F("  Voltage Range: "));
                         Serial.print(input->customCalibration.pressureLinear.voltage_min, 2);
                         Serial.print(F("-"));
                         Serial.print(input->customCalibration.pressureLinear.voltage_max, 2);
                         Serial.println(F(" V"));
                         Serial.print(F("  Pressure Range: "));
-                        Serial.print(input->customCalibration.pressureLinear.pressure_min, 2);
+                        Serial.print(input->customCalibration.pressureLinear.output_min, 2);
                         Serial.print(F("-"));
-                        Serial.print(input->customCalibration.pressureLinear.pressure_max, 2);
+                        Serial.print(input->customCalibration.pressureLinear.output_max, 2);
                         Serial.println(F(" bar"));
                     } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) {
                         Serial.print(F("  Bias Resistor: "));

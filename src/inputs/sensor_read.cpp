@@ -253,9 +253,11 @@ void readThermistorLookup(Input *ptr) {
                             resistance_table, temperature_table);
 }
 
-// ===== GENERIC PRESSURE SENSOR - LINEAR METHOD =====
+// ===== LINEAR SENSOR - GENERIC METHOD =====
+// Works for any linear sensor: temperature, pressure, voltage, etc.
+// Units determined by measurementType field
 
-void readPressureLinear(Input *ptr) {
+void readLinearSensor(Input *ptr) {
     bool isValid;
     int reading = readAnalogPin(ptr->pin, &isValid);
 
@@ -265,42 +267,42 @@ void readPressureLinear(Input *ptr) {
     }
 
     // Get calibration values (from custom RAM or PROGMEM preset)
-    float V_min, V_max, P_min, P_max;
+    float V_min, V_max, output_min, output_max;
 #ifdef USE_INPUT_BASED_ARCHITECTURE
-    if (ptr->flags.useCustomCalibration && ptr->calibrationType == CAL_PRESSURE_LINEAR) {
+    if (ptr->flags.useCustomCalibration && ptr->calibrationType == CAL_LINEAR) {
         // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
         V_min = ptr->customCalibration.pressureLinear.voltage_min;
         V_max = ptr->customCalibration.pressureLinear.voltage_max;
-        P_min = ptr->customCalibration.pressureLinear.pressure_min;
-        P_max = ptr->customCalibration.pressureLinear.pressure_max;
+        output_min = ptr->customCalibration.pressureLinear.output_min;
+        output_max = ptr->customCalibration.pressureLinear.output_max;
     } else
 #endif
-    if (ptr->presetCalibration != nullptr && ptr->calibrationType == CAL_PRESSURE_LINEAR) {
+    if (ptr->presetCalibration != nullptr && ptr->calibrationType == CAL_LINEAR) {
         // Read from preset calibration (PROGMEM)
         const LinearCalibration* cal = (const LinearCalibration*)ptr->presetCalibration;
         V_min = pgm_read_float(&cal->voltage_min);
         V_max = pgm_read_float(&cal->voltage_max);
-        P_min = pgm_read_float(&cal->pressure_min);
-        P_max = pgm_read_float(&cal->pressure_max);
+        output_min = pgm_read_float(&cal->output_min);
+        output_max = pgm_read_float(&cal->output_max);
     } else {
-        // Default: 0.5V-4.5V → 0-5 bar (common automotive sensor)
+        // Default: 0.5V-4.5V → 0-5 bar (common automotive pressure sensor)
         V_min = 0.5;
         V_max = 4.5;
-        P_min = 0.0;
-        P_max = 5.0;
+        output_min = 0.0;
+        output_max = 5.0;
     }
-    
+
     // Convert ADC reading to voltage
     float voltage = reading * (AREF_VOLTAGE / (float)ADC_MAX_VALUE);
-    
+
     // Clamp voltage to valid range
     if (voltage < V_min) voltage = V_min;
     if (voltage > V_max) voltage = V_max;
-    
-    // Linear interpolation: P = (V - V_min) / (V_max - V_min) * (P_max - P_min) + P_min
-    float pressure = ((voltage - V_min) / (V_max - V_min)) * (P_max - P_min) + P_min;
-    
-    ptr->value = pressure;  // Store in bar
+
+    // Linear interpolation: Y = (V - V_min) / (V_max - V_min) * (Y_max - Y_min) + Y_min
+    float outputValue = ((voltage - V_min) / (V_max - V_min)) * (output_max - output_min) + output_min;
+
+    ptr->value = outputValue;  // Store in base units (°C for temp, bar for pressure, etc.)
 }
 
 // ===== GENERIC PRESSURE SENSOR - POLYNOMIAL METHOD =====
