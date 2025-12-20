@@ -27,7 +27,7 @@ enum CalibrationType {
     CAL_THERMISTOR_STEINHART,
     CAL_THERMISTOR_LOOKUP,
     CAL_PRESSURE_POLYNOMIAL,
-    CAL_PRESSURE_LINEAR,
+    CAL_LINEAR,              // Linear sensor (temperature, pressure, etc.)
     CAL_VOLTAGE_DIVIDER,
     CAL_RPM,
 };
@@ -51,14 +51,14 @@ typedef struct {
     byte table_size;              // Number of entries in tables
 } ThermistorLookupCalibration;
 
-// Pressure sensor calibration - Linear (most common)
-// P = (V - V_min) / (V_max - V_min) * (P_max - P_min) + P_min
+// Linear sensor calibration (works for temperature, pressure, voltage, etc.)
+// Y = (V - V_min) / (V_max - V_min) * (Y_max - Y_min) + Y_min
 typedef struct {
     float voltage_min;      // Minimum sensor voltage (V)
     float voltage_max;      // Maximum sensor voltage (V)
-    float pressure_min;     // Pressure at V_min (bar)
-    float pressure_max;     // Pressure at V_max (bar)
-} PressureLinearCalibration;
+    float output_min;       // Output value at V_min (units depend on measurementType)
+    float output_max;       // Output value at V_max (units depend on measurementType)
+} LinearCalibration;
 
 // Pressure sensor calibration - Polynomial (VDO sensors)
 // Uses quadratic formula to solve VDO's pressure-to-resistance polynomial
@@ -68,9 +68,6 @@ typedef struct {
     float poly_b;          // Polynomial coefficient B
     float poly_c;          // Polynomial coefficient C
 } PressurePolynomialCalibration;
-
-// Type aliases for compatibility with new Input-based architecture
-typedef PressureLinearCalibration LinearCalibration;
 typedef PressurePolynomialCalibration PolynomialCalibration;
 
 // Voltage divider calibration

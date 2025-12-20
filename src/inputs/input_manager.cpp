@@ -185,8 +185,8 @@ struct InputEEPROM {
             input->flags.useCustomCalibration = true; \
             if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
                 memcpy(&input->customCalibration.steinhart, &input_0_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_0_custom_cal, sizeof(PressureLinearCalibration)); \
+            } else if (input->calibrationType == CAL_LINEAR) { \
+                memcpy(&input->customCalibration.pressureLinear, &input_0_custom_cal, sizeof(LinearCalibration)); \
             } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
                 memcpy(&input->customCalibration.pressurePolynomial, &input_0_custom_cal, sizeof(PressurePolynomialCalibration)); \
             } else if (input->calibrationType == CAL_RPM) { \
@@ -205,8 +205,8 @@ struct InputEEPROM {
             input->flags.useCustomCalibration = true; \
             if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
                 memcpy(&input->customCalibration.steinhart, &input_1_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_1_custom_cal, sizeof(PressureLinearCalibration)); \
+            } else if (input->calibrationType == CAL_LINEAR) { \
+                memcpy(&input->customCalibration.pressureLinear, &input_1_custom_cal, sizeof(LinearCalibration)); \
             } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
                 memcpy(&input->customCalibration.pressurePolynomial, &input_1_custom_cal, sizeof(PressurePolynomialCalibration)); \
             } else if (input->calibrationType == CAL_RPM) { \
@@ -225,8 +225,8 @@ struct InputEEPROM {
             input->flags.useCustomCalibration = true; \
             if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
                 memcpy(&input->customCalibration.steinhart, &input_2_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_2_custom_cal, sizeof(PressureLinearCalibration)); \
+            } else if (input->calibrationType == CAL_LINEAR) { \
+                memcpy(&input->customCalibration.pressureLinear, &input_2_custom_cal, sizeof(LinearCalibration)); \
             } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
                 memcpy(&input->customCalibration.pressurePolynomial, &input_2_custom_cal, sizeof(PressurePolynomialCalibration)); \
             } else if (input->calibrationType == CAL_RPM) { \
@@ -245,8 +245,8 @@ struct InputEEPROM {
             input->flags.useCustomCalibration = true; \
             if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
                 memcpy(&input->customCalibration.steinhart, &input_3_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_3_custom_cal, sizeof(PressureLinearCalibration)); \
+            } else if (input->calibrationType == CAL_LINEAR) { \
+                memcpy(&input->customCalibration.pressureLinear, &input_3_custom_cal, sizeof(LinearCalibration)); \
             } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
                 memcpy(&input->customCalibration.pressurePolynomial, &input_3_custom_cal, sizeof(PressurePolynomialCalibration)); \
             } else if (input->calibrationType == CAL_RPM) { \
@@ -265,8 +265,8 @@ struct InputEEPROM {
             input->flags.useCustomCalibration = true; \
             if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
                 memcpy(&input->customCalibration.steinhart, &input_4_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_4_custom_cal, sizeof(PressureLinearCalibration)); \
+            } else if (input->calibrationType == CAL_LINEAR) { \
+                memcpy(&input->customCalibration.pressureLinear, &input_4_custom_cal, sizeof(LinearCalibration)); \
             } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
                 memcpy(&input->customCalibration.pressurePolynomial, &input_4_custom_cal, sizeof(PressurePolynomialCalibration)); \
             } else if (input->calibrationType == CAL_RPM) { \
@@ -285,8 +285,8 @@ struct InputEEPROM {
             input->flags.useCustomCalibration = true; \
             if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
                 memcpy(&input->customCalibration.steinhart, &input_5_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_5_custom_cal, sizeof(PressureLinearCalibration)); \
+            } else if (input->calibrationType == CAL_LINEAR) { \
+                memcpy(&input->customCalibration.pressureLinear, &input_5_custom_cal, sizeof(LinearCalibration)); \
             } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
                 memcpy(&input->customCalibration.pressurePolynomial, &input_5_custom_cal, sizeof(PressurePolynomialCalibration)); \
             } else if (input->calibrationType == CAL_RPM) { \
@@ -305,8 +305,8 @@ struct InputEEPROM {
             input->flags.useCustomCalibration = true; \
             if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
                 memcpy(&input->customCalibration.steinhart, &input_6_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_6_custom_cal, sizeof(PressureLinearCalibration)); \
+            } else if (input->calibrationType == CAL_LINEAR) { \
+                memcpy(&input->customCalibration.pressureLinear, &input_6_custom_cal, sizeof(LinearCalibration)); \
             } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
                 memcpy(&input->customCalibration.pressurePolynomial, &input_6_custom_cal, sizeof(PressurePolynomialCalibration)); \
             } else if (input->calibrationType == CAL_RPM) { \
@@ -325,8 +325,8 @@ struct InputEEPROM {
             input->flags.useCustomCalibration = true; \
             if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
                 memcpy(&input->customCalibration.steinhart, &input_7_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_7_custom_cal, sizeof(PressureLinearCalibration)); \
+            } else if (input->calibrationType == CAL_LINEAR) { \
+                memcpy(&input->customCalibration.pressureLinear, &input_7_custom_cal, sizeof(LinearCalibration)); \
             } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
                 memcpy(&input->customCalibration.pressurePolynomial, &input_7_custom_cal, sizeof(PressurePolynomialCalibration)); \
             } else if (input->calibrationType == CAL_RPM) { \
@@ -345,8 +345,8 @@ struct InputEEPROM {
             input->flags.useCustomCalibration = true; \
             if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
                 memcpy(&input->customCalibration.steinhart, &input_8_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_8_custom_cal, sizeof(PressureLinearCalibration)); \
+            } else if (input->calibrationType == CAL_LINEAR) { \
+                memcpy(&input->customCalibration.pressureLinear, &input_8_custom_cal, sizeof(LinearCalibration)); \
             } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
                 memcpy(&input->customCalibration.pressurePolynomial, &input_8_custom_cal, sizeof(PressurePolynomialCalibration)); \
             } else if (input->calibrationType == CAL_RPM) { \
@@ -365,8 +365,8 @@ struct InputEEPROM {
             input->flags.useCustomCalibration = true; \
             if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
                 memcpy(&input->customCalibration.steinhart, &input_9_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_9_custom_cal, sizeof(PressureLinearCalibration)); \
+            } else if (input->calibrationType == CAL_LINEAR) { \
+                memcpy(&input->customCalibration.pressureLinear, &input_9_custom_cal, sizeof(LinearCalibration)); \
             } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
                 memcpy(&input->customCalibration.pressurePolynomial, &input_9_custom_cal, sizeof(PressurePolynomialCalibration)); \
             } else if (input->calibrationType == CAL_RPM) { \
@@ -1127,8 +1127,8 @@ bool setInputCalibrationPressureLinear(uint8_t pin, float vMin, float vMax, floa
     input->flags.useCustomCalibration = true;
     input->customCalibration.pressureLinear.voltage_min = vMin;
     input->customCalibration.pressureLinear.voltage_max = vMax;
-    input->customCalibration.pressureLinear.pressure_min = pMin;
-    input->customCalibration.pressureLinear.pressure_max = pMax;
+    input->customCalibration.pressureLinear.output_min = pMin;
+    input->customCalibration.pressureLinear.output_max = pMax;
 
     return true;
 }
@@ -1294,8 +1294,12 @@ void listSensors() {
     Serial.println(F("Thermistors (Generic):"));
     Serial.println(F("  THERMISTOR_LOOKUP      - Generic (requires custom cal)"));
     Serial.println(F("  THERMISTOR_STEINHART   - Generic (requires custom cal)"));
-    Serial.println(F("Pressure (Linear):"));
+    Serial.println(F("Temperature (Linear - 5V sensors):"));
+    Serial.println(F("  GENERIC_TEMP_LINEAR    - 0.5-4.5V linear (-40 to 150°C)"));
+    Serial.println(F("Pressure (Linear - 5V sensors):"));
     Serial.println(F("  GENERIC_BOOST          - 0.5-4.5V linear (0-5 bar)"));
+    Serial.println(F("  GENERIC_PRESSURE_150PSI - 0.5-4.5V linear (0-150 PSI / 10 bar)"));
+    Serial.println(F("  AEM_30_2130_150        - AEM 150 PSI (0-150 PSI / 10 bar)"));
     Serial.println(F("  MPX4250AP              - Freescale/NXP (20-250 kPa)"));
     Serial.println(F("Pressure (VDO Polynomial):"));
     Serial.println(F("  VDO_2BAR               - VDO 2-bar pressure"));
@@ -1309,5 +1313,6 @@ void listSensors() {
     Serial.println(F("  BME280_ELEVATION       - BME280 altitude (I2C)"));
     Serial.println(F("  FLOAT_SWITCH           - Float/level switch (digital)"));
     Serial.println();
+    Serial.println(F("IMPORTANT: 5V sensors (0.5-4.5V) require voltage dividers for 3.3V systems!"));
     Serial.println(F("Note: Use 'I2C' as pin for BME280 sensors (e.g. SET I2C AMBIENT_TEMP BME280_TEMP)"));
 }
