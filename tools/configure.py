@@ -57,10 +57,17 @@ def load_registries(project_dir: str) -> Optional[Dict[str, List[Dict[str, Any]]
         print(f"Error: Could not find a registry file. {e}", file=sys.stderr)
         return None
 
-def prompt_for_pin(platform: str, used_pins: List[str], default: str = "") -> str:
+def prompt_for_pin(platform: str, used_pins: List[str], default: str = "", sensor_info: Optional[Dict] = None) -> str:
     """Prompts the user for a pin and validates it."""
+    sensor_pin_requirement = sensor_info.get('pinTypeRequirement') if sensor_info else None
+
     while True:
-        prompt = f"Pin (e.g., A0, 6) [{default}]: " if default else "Pin (e.g., A0, 6): "
+        # Customize prompt for I2C sensors
+        if sensor_pin_requirement == 'PIN_I2C':
+            prompt = f"Pin (use 'I2C' for I2C sensors) [{default}]: " if default else "Pin (use 'I2C' for I2C sensors): "
+        else:
+            prompt = f"Pin (e.g., A0, 6) [{default}]: " if default else "Pin (e.g., A0, 6): "
+
         pin_str = input(prompt).strip().upper() or default
         if not pin_str: continue
 
@@ -68,7 +75,7 @@ def prompt_for_pin(platform: str, used_pins: List[str], default: str = "") -> st
         if default and pin_str == default.upper() and default.upper() in temp_used_pins:
             temp_used_pins.remove(default.upper())
 
-        error = validate_pin(pin_str, platform, temp_used_pins)
+        error = validate_pin(pin_str, platform, temp_used_pins, sensor_pin_requirement)
         if error:
             print(f"  \u2717 Invalid pin: {error}")
         else:
@@ -212,19 +219,22 @@ def edit_input(inp: Dict[str, Any], platform: str, used_pins: List[str], registr
     """Interactive prompt to edit a single input."""
     print(f"\n--- Editing Input {inp['input_number']} ---")
 
-    pin = prompt_for_pin(platform, used_pins, default=str(inp['pin']))
-
+    # Select application and sensor first (needed for pin validation)
     available_apps = [app for app in registries['applications'] if app['is_implemented']]
     app_index = prompt_for_selection(available_apps, "Applications", default=inp['application_index'])
     selected_app = next(app for app in available_apps if app['index'] == app_index)
 
     compatible_sensors = [s for s in registries['sensors'] if s['is_implemented'] and s['measurementType'] == selected_app['expectedMeasurementType']]
     sensor_index = prompt_for_selection(compatible_sensors, f"Compatible sensors for {selected_app['name']}", default=inp['sensor_index'])
+    selected_sensor = next(s for s in compatible_sensors if s['index'] == sensor_index)
+
+    # Now prompt for pin with sensor validation
+    pin = prompt_for_pin(platform, used_pins, default=str(inp['pin']), sensor_info=selected_sensor)
 
     inp.update({
         "pin": pin,
         "application": selected_app['name'], "application_index": app_index,
-        "sensor": next(s['name'] for s in compatible_sensors if s['index'] == sensor_index), "sensor_index": sensor_index
+        "sensor": selected_sensor['name'], "sensor_index": sensor_index
     })
 
     # Prompt for custom calibration
@@ -271,6 +281,20 @@ def main():
                 print("Error: Only mode='static' configs can be loaded.", file=sys.stderr)
                 sys.exit(1)
 
+            # Validate pin type compatibility
+            from openems_config.validators import validate_pin_type_compatibility
+            pin_errors = validate_pin_type_compatibility(
+                config_data.get("inputs", []),
+                registries['sensors'],
+                platform
+            )
+            if pin_errors:
+                print("\nConfiguration errors found:", file=sys.stderr)
+                for error in pin_errors:
+                    print(f"  \u2717 {error}", file=sys.stderr)
+                print("\nPlease fix these errors before continuing.", file=sys.stderr)
+                sys.exit(1)
+
             # Convert from unified format to internal format
             inputs = convert_from_unified_format(config_data.get("inputs", []))
             print(f"Loaded {len(inputs)} inputs from {args.load}")
@@ -309,19 +333,22 @@ def main():
             used_pins = [str(i['pin']) for i in inputs]
             print(f"\n=== Adding Input {len(inputs)} ===")
 
-            pin = prompt_for_pin(platform, used_pins)
-
+            # Select application and sensor first (needed for pin validation)
             available_apps = [app for app in registries['applications'] if app['is_implemented']]
             app_index = prompt_for_selection(available_apps, "Applications")
             selected_app = next(app for app in available_apps if app['index'] == app_index)
 
             compatible_sensors = [s for s in registries['sensors'] if s['is_implemented'] and s['measurementType'] == selected_app['expectedMeasurementType']]
             sensor_index = prompt_for_selection(compatible_sensors, f"Compatible sensors for {selected_app['name']}")
+            selected_sensor = next(s for s in compatible_sensors if s['index'] == sensor_index)
+
+            # Now prompt for pin with sensor validation
+            pin = prompt_for_pin(platform, used_pins, sensor_info=selected_sensor)
 
             new_input = {
                 "input_number": len(inputs), "pin": pin,
                 "application": selected_app['name'], "application_index": app_index,
-                "sensor": next(s['name'] for s in compatible_sensors if s['index'] == sensor_index), "sensor_index": sensor_index
+                "sensor": selected_sensor['name'], "sensor_index": sensor_index
             }
 
             # Prompt for custom calibration

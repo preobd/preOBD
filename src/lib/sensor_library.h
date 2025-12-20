@@ -66,6 +66,14 @@ typedef float (*ObdConvertFunc)(float);
 
 ObdConvertFunc getObdConvertFunc(MeasurementType type);
 
+// ===== PIN TYPE REQUIREMENT ENUMERATION =====
+// Defines what type of pin a sensor requires for operation
+enum PinTypeRequirement {
+    PIN_ANALOG,     // Sensor requires analog pin (uses analogRead)
+    PIN_DIGITAL,    // Sensor requires digital pin (uses digitalWrite, digitalRead, interrupts)
+    PIN_I2C         // Sensor uses I2C bus (pin field must be "I2C")
+};
+
 // ===== SENSOR INFO STRUCTURE =====
 struct SensorInfo {
     const char* name;                // PRIMARY KEY: "MAX6675", "VDO_120C_LOOKUP"
@@ -80,6 +88,7 @@ struct SensorInfo {
     float minValue;                  // Sensor's physical minimum (in standard units)
     float maxValue;                  // Sensor's physical maximum (in standard units)
     uint16_t nameHash;               // Precomputed djb2_hash(name) for fast lookup
+    PinTypeRequirement pinTypeRequirement;  // What type of pin this sensor requires
 };
 
 // ===== STRING LITERALS IN PROGMEM =====
@@ -144,7 +153,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = 0,
         .minValue = 0.0,
         .maxValue = 0.0,
-        .nameHash = 0x2F75  // djb2_hash("NONE")
+        .nameHash = 0x2F75,  // djb2_hash("NONE")
+        .pinTypeRequirement = PIN_ANALOG  // Default for placeholder
     },
 
     // ===== THERMOCOUPLES =====
@@ -162,7 +172,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = 250,  // MAX6675 needs ~220ms for temperature conversion
         .minValue = 0.0,      // K-type thermocouple minimum
         .maxValue = 1024.0,      // MAX6675 maximum (K-type can go to 1372°C)
-        .nameHash = 0x2A23  // djb2_hash("MAX6675")
+        .nameHash = 0x2A23,  // djb2_hash("MAX6675")
+        .pinTypeRequirement = PIN_DIGITAL  // Uses SPI CS pin (digitalWrite)
     },
     // Index 2: MAX31855
     {
@@ -178,7 +189,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = 100,  // MAX31855 is faster than MAX6675
         .minValue = -200.0,      // K-type thermocouple minimum
         .maxValue = 1350.0,      // MAX31855 maximum
-        .nameHash = 0x6B91  // djb2_hash("MAX31855")
+        .nameHash = 0x6B91,  // djb2_hash("MAX31855")
+        .pinTypeRequirement = PIN_DIGITAL  // Uses SPI CS pin (digitalWrite)
     },
 
     // ===== VDO THERMISTORS - LOOKUP =====
@@ -196,7 +208,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = -40.0,       // VDO sensor minimum
         .maxValue = 150.0,       // VDO 120°C maximum
-        .nameHash = 0xAE3C  // djb2_hash("VDO_120C_LOOKUP")
+        .nameHash = 0xAE3C,  // djb2_hash("VDO_120C_LOOKUP")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
     // Index 4: VDO_150C_LOOKUP
     {
@@ -212,7 +225,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = -40.0,       // VDO sensor minimum
         .maxValue = 180.0,       // VDO 150°C maximum
-        .nameHash = 0x619F  // djb2_hash("VDO_150C_LOOKUP")
+        .nameHash = 0x619F,  // djb2_hash("VDO_150C_LOOKUP")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
 
     // ===== VDO THERMISTORS - STEINHART =====
@@ -230,7 +244,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = -40.0,
         .maxValue = 150.0,
-        .nameHash = 0x7434  // djb2_hash("VDO_120C_STEINHART")
+        .nameHash = 0x7434,  // djb2_hash("VDO_120C_STEINHART")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
     // Index 6: VDO_150C_STEINHART
     {
@@ -246,7 +261,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = -40.0,
         .maxValue = 180.0,
-        .nameHash = 0x90B7  // djb2_hash("VDO_150C_STEINHART")
+        .nameHash = 0x90B7,  // djb2_hash("VDO_150C_STEINHART")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
 
     // ===== GENERIC THERMISTORS (PLACEHOLDERS) =====
@@ -264,7 +280,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = 0,
         .minValue = -40.0,
         .maxValue = 150.0,
-        .nameHash = 0xF00F  // djb2_hash("THERMISTOR_LOOKUP")
+        .nameHash = 0xF00F,  // djb2_hash("THERMISTOR_LOOKUP")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
     // Index 8: THERMISTOR_STEINHART (placeholder - not yet implemented)
     {
@@ -280,7 +297,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = 0,
         .minValue = -40.0,
         .maxValue = 150.0,
-        .nameHash = 0xC927  // djb2_hash("THERMISTOR_STEINHART")
+        .nameHash = 0xC927,  // djb2_hash("THERMISTOR_STEINHART")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
 
     // ===== PRESSURE SENSORS =====
@@ -298,7 +316,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = -1.0,        // ~1 bar vacuum
         .maxValue = 3.0,         // 3 bar boost
-        .nameHash = 0x59C8  // djb2_hash("GENERIC_BOOST")
+        .nameHash = 0x59C8,  // djb2_hash("GENERIC_BOOST")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
     // Index 10: MPX4250AP
     {
@@ -314,7 +333,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = 0.2,         // 20 kPa minimum
         .maxValue = 2.5,         // 250 kPa maximum
-        .nameHash = 0xDF76  // djb2_hash("MPX4250AP")
+        .nameHash = 0xDF76,  // djb2_hash("MPX4250AP")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
     // Index 11: VDO_2BAR
     {
@@ -330,7 +350,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = 0.0,
         .maxValue = 2.0,
-        .nameHash = 0x1ED4  // djb2_hash("VDO_2BAR")
+        .nameHash = 0x1ED4,  // djb2_hash("VDO_2BAR")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
     // Index 12: VDO_5BAR
     {
@@ -346,7 +367,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = 0.0,
         .maxValue = 5.0,
-        .nameHash = 0xC3F7  // djb2_hash("VDO_5BAR")
+        .nameHash = 0xC3F7,  // djb2_hash("VDO_5BAR")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
 
     // ===== VOLTAGE SENSORS =====
@@ -364,7 +386,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = 0.0,
         .maxValue = 30.0,        // Typical automotive max
-        .nameHash = 0x311D  // djb2_hash("VOLTAGE_DIVIDER")
+        .nameHash = 0x311D,  // djb2_hash("VOLTAGE_DIVIDER")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
 
     // ===== RPM SENSORS =====
@@ -382,7 +405,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = 0.0,
         .maxValue = 10000.0,     // Typical max RPM
-        .nameHash = 0x1F3A  // djb2_hash("W_PHASE_RPM")
+        .nameHash = 0x1F3A,  // djb2_hash("W_PHASE_RPM")
+        .pinTypeRequirement = PIN_DIGITAL  // Uses digitalPinToInterrupt
     },
 
     // ===== BME280 SENSORS =====
@@ -400,7 +424,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = -40.0,       // BME280 spec minimum
         .maxValue = 85.0,        // BME280 spec maximum
-        .nameHash = 0x72A8  // djb2_hash("BME280_TEMP")
+        .nameHash = 0x72A8,  // djb2_hash("BME280_TEMP")
+        .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
     // Index 16: BME280_PRESSURE
     {
@@ -416,7 +441,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = 0.3,         // 300 hPa minimum
         .maxValue = 1.1,         // 1100 hPa maximum
-        .nameHash = 0x454B  // djb2_hash("BME280_PRESSURE")
+        .nameHash = 0x454B,  // djb2_hash("BME280_PRESSURE")
+        .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
     // Index 17: BME280_HUMIDITY
     {
@@ -432,7 +458,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = 0.0,
         .maxValue = 100.0,
-        .nameHash = 0x381F  // djb2_hash("BME280_HUMIDITY")
+        .nameHash = 0x381F,  // djb2_hash("BME280_HUMIDITY")
+        .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
     // Index 18: BME280_ELEVATION
     {
@@ -448,7 +475,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = -500.0,      // Below sea level
         .maxValue = 9000.0,      // ~9000m = ~29500 feet (Mt Everest)
-        .nameHash = 0x2619  // djb2_hash("BME280_ELEVATION")
+        .nameHash = 0x2619,  // djb2_hash("BME280_ELEVATION")
+        .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
 
     // ===== DIGITAL SENSORS =====
@@ -466,7 +494,8 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = 0.0,         // Digital: 0 or 1
         .maxValue = 1.0,
-        .nameHash = 0xF22C  // djb2_hash("FLOAT_SWITCH")
+        .nameHash = 0xF22C,  // djb2_hash("FLOAT_SWITCH")
+        .pinTypeRequirement = PIN_DIGITAL  // Uses digitalRead
     }
 };
 

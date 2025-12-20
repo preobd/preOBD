@@ -194,3 +194,58 @@ def validate_hash_algorithm(
                 errors.append(f"Alias hash mismatch for UNIT[{unit['index']}]:{unit['alias']}. Expected 0x{expected_hash:04X}, found 0x{unit['aliasHash']:04X}")
 
     return errors
+
+def validate_pin_type_compatibility(
+    config_inputs: List[Dict[str, Any]],
+    sensors: List[Dict[str, Any]],
+    platform: str
+) -> List[str]:
+    """
+    Validates that pins assigned to sensors are compatible with sensor requirements.
+    Returns a list of error messages.
+
+    Args:
+        config_inputs: List of input configurations from JSON (unified v1 format)
+        sensors: List of sensor definitions from registry parser
+        platform: Target platform name
+
+    Returns:
+        List of error messages (empty if all valid)
+    """
+    from .platform import parse_pin
+
+    errors = []
+    for inp in config_inputs:
+        sensor = next((s for s in sensors if s['index'] == inp.get('sensorIndex')), None)
+        if not sensor:
+            continue
+        pin_requirement = sensor.get('pinTypeRequirement')
+        if not pin_requirement:
+            continue
+        pin_str = inp.get('pin', '')
+        requirement = pin_requirement.replace("PIN_", "").lower()
+
+        # I2C sensors must use "I2C" as pin string
+        if requirement == 'i2c':
+            if pin_str.upper() != "I2C":
+                errors.append(f"Input {inp.get('idx')}: I2C sensor '{sensor['name']}' must use 'I2C' as pin (not {pin_str})")
+            continue
+
+        # Non-I2C sensors cannot use "I2C" as pin
+        if pin_str.upper() == "I2C":
+            errors.append(f"Input {inp.get('idx')}: Sensor '{sensor['name']}' cannot use 'I2C' as pin (only I2C sensors)")
+            continue
+
+        # Parse and validate analog/digital pins
+        parsed = parse_pin(pin_str)
+        if not parsed:
+            continue
+        pin_type, pin_num = parsed
+
+        if requirement == 'digital' and pin_type == 'analog':
+            errors.append(f"Input {inp.get('idx')}: Sensor '{sensor['name']}' requires a digital pin, but {pin_str} is an analog pin")
+        elif requirement == 'analog' and pin_type == 'digital':
+            errors.append(f"Input {inp.get('idx')}: Sensor '{sensor['name']}' requires an analog pin, but {pin_str} is a digital pin")
+
+    return errors
+
