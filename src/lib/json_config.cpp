@@ -148,7 +148,9 @@ void exportInputToJSON(JsonObject& inputObj, const Input* input) {
 
     // Application, sensor, units (use registry names)
     inputObj["app"] = reinterpret_cast<const char*>(getApplicationNameByIndex(input->applicationIndex));
+    inputObj["applicationIndex"] = input->applicationIndex;
     inputObj["sensor"] = reinterpret_cast<const char*>(getSensorNameByIndex(input->sensorIndex));
+    inputObj["sensorIndex"] = input->sensorIndex;
     inputObj["units"] = reinterpret_cast<const char*>(getUnitStringByIndex(input->unitsIndex));
 
     // Alarm thresholds
@@ -253,6 +255,7 @@ void dumpConfigToJSON(Print& output) {
 
     // Schema version (for future migration support)
     doc["schemaVersion"] = JSON_SCHEMA_VERSION;
+    doc["mode"] = "runtime";
 
     // Firmware info
     JsonObject firmware = doc["firmware"].to<JsonObject>();
@@ -496,18 +499,18 @@ bool loadConfigFromJSON(const char* jsonString) {
     // Check schema version for migration support
     uint8_t schemaVer = doc["schemaVersion"] | 1;  // Default to v1 if missing (old configs)
 
-    if (schemaVer > JSON_SCHEMA_VERSION) {
-        Serial.print(F("WARNING: Config from newer schema v"));
-        Serial.print(schemaVer);
-        Serial.print(F(", current is v"));
-        Serial.println(JSON_SCHEMA_VERSION);
-        Serial.println(F("Some features may not load correctly."));
-    } else if (schemaVer < JSON_SCHEMA_VERSION) {
-        Serial.print(F("INFO: Migrating config from schema v"));
-        Serial.print(schemaVer);
-        Serial.print(F(" to v"));
-        Serial.println(JSON_SCHEMA_VERSION);
-        // Future: Add migration logic here for breaking changes
+    if (schemaVer != JSON_SCHEMA_VERSION) {
+        Serial.print(F("ERROR: Only schemaVersion 1 is supported. Got: "));
+        Serial.println(schemaVer);
+        return false;
+    }
+
+    // Validate mode field
+    const char* mode = doc["mode"] | "runtime";
+    if (strcmp(mode, "runtime") != 0) {
+        Serial.print(F("ERROR: Only mode='runtime' configs can be imported. Got: "));
+        Serial.println(mode);
+        return false;
     }
 
     // Import system config

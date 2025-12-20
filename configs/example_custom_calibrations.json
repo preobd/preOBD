@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "mode": "static",
+  "metadata": {
+    "toolVersion": "1.0.0",
+    "platform": "megaatmega2560",
+    "timestamp": 1766183649
+  },
+  "inputs": [
+    {
+      "idx": 0,
+      "pin": "A0",
+      "application": "COOLANT_TEMP",
+      "applicationIndex": 1,
+      "sensor": "VDO_120C_STEINHART",
+      "sensorIndex": 1,
+      "calibration": {
+        "type": "THERMISTOR_STEINHART",
+        "source": "CUSTOM",
+        "params": {
+          "biasResistor": 1000.0,
+          "steinhartA": 0.001129,
+          "steinhartB": 0.0002341,
+          "steinhartC": 8.775e-08
+        }
+      }
+    },
+    {
+      "idx": 1,
+      "pin": "A1",
+      "application": "OIL_PRESSURE",
+      "applicationIndex": 3,
+      "sensor": "GENERIC_BOOST_LINEAR",
+      "sensorIndex": 4,
+      "calibration": {
+        "type": "PRESSURE_LINEAR",
+        "source": "CUSTOM",
+        "params": {
+          "voltageMin": 0.5,
+          "voltageMax": 4.5,
+          "pressureMin": 0.0,
+          "pressureMax": 5.0
+        }
+      }
+    }
+  ]
+}

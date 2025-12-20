@@ -6,7 +6,6 @@
 #include "../config.h"
 #include "../inputs/input.h"
 #include "../lib/sensor_types.h"
-#include "../lib/sensor_library.h"
 #include "../lib/units_registry.h"
 #ifdef USE_STATIC_CONFIG
 #include "../lib/generated/application_presets_static.h"

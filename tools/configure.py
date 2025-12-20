@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from typing import List, Dict, Any, Optional
 
 # Ensure the script can find the openems_config package
@@ -28,8 +29,8 @@ from openems_config.config_generator import (
     generate_config_block,
     update_config_h,
     generate_thin_library_files,
-    generate_advanced_config_block,
-    update_advanced_config_h,
+    generate_static_calibrations_file,
+    write_static_calibrations_file,
 )
 
 TOOL_VERSION = "1.0.0"
@@ -126,44 +127,86 @@ def prompt_for_custom_calibration(inp: Dict[str, Any], registries: Dict) -> Opti
         except ValueError:
             print("  Please enter a number.")
 
-    calibration = {"type": cal_choice}
+    # Map choice to type string
+    type_map = {
+        1: "THERMISTOR_STEINHART",
+        2: "PRESSURE_LINEAR",
+        3: "PRESSURE_POLYNOMIAL",
+        4: "RPM"
+    }
+
+    calibration = {
+        "type": type_map[cal_choice],
+        "source": "CUSTOM",
+        "params": {}
+    }
 
     if cal_choice == 1:  # Thermistor Steinhart-Hart
-        calibration.update({
-            "calibration_name": "ThermistorSteinhartCalibration",
-            "bias_resistor": float(input("Bias resistor (Ohms) [1000.0]: ").strip() or "1000.0"),
-            "steinhart_a": float(input("Steinhart A coefficient [1.129e-3]: ").strip() or "1.129e-3"),
-            "steinhart_b": float(input("Steinhart B coefficient [2.341e-4]: ").strip() or "2.341e-4"),
-            "steinhart_c": float(input("Steinhart C coefficient [8.775e-8]: ").strip() or "8.775e-8")
-        })
+        calibration["params"] = {
+            "biasResistor": float(input("Bias resistor (Ohms) [1000.0]: ").strip() or "1000.0"),
+            "steinhartA": float(input("Steinhart A coefficient [1.129e-3]: ").strip() or "1.129e-3"),
+            "steinhartB": float(input("Steinhart B coefficient [2.341e-4]: ").strip() or "2.341e-4"),
+            "steinhartC": float(input("Steinhart C coefficient [8.775e-8]: ").strip() or "8.775e-8")
+        }
     elif cal_choice == 2:  # Pressure Linear
-        calibration.update({
-            "calibration_name": "LinearCalibration",
-            "voltage_min": float(input("Minimum voltage (V) [0.5]: ").strip() or "0.5"),
-            "voltage_max": float(input("Maximum voltage (V) [4.5]: ").strip() or "4.5"),
-            "pressure_min": float(input("Minimum pressure (bar) [0.0]: ").strip() or "0.0"),
-            "pressure_max": float(input("Maximum pressure (bar) [5.0]: ").strip() or "5.0")
-        })
+        calibration["params"] = {
+            "voltageMin": float(input("Minimum voltage (V) [0.5]: ").strip() or "0.5"),
+            "voltageMax": float(input("Maximum voltage (V) [4.5]: ").strip() or "4.5"),
+            "pressureMin": float(input("Minimum pressure (bar) [0.0]: ").strip() or "0.0"),
+            "pressureMax": float(input("Maximum pressure (bar) [5.0]: ").strip() or "5.0")
+        }
     elif cal_choice == 3:  # Pressure Polynomial
-        calibration.update({
-            "calibration_name": "PolynomialCalibration",
-            "bias_resistor": float(input("Bias resistor (Ohms) [1000.0]: ").strip() or "1000.0"),
-            "poly_a": float(input("Polynomial A coefficient [-0.3682]: ").strip() or "-0.3682"),
-            "poly_b": float(input("Polynomial B coefficient [36.465]: ").strip() or "36.465"),
-            "poly_c": float(input("Polynomial C coefficient [10.648]: ").strip() or "10.648")
-        })
+        calibration["params"] = {
+            "biasResistor": float(input("Bias resistor (Ohms) [1000.0]: ").strip() or "1000.0"),
+            "polyA": float(input("Polynomial A coefficient [-0.3682]: ").strip() or "-0.3682"),
+            "polyB": float(input("Polynomial B coefficient [36.465]: ").strip() or "36.465"),
+            "polyC": float(input("Polynomial C coefficient [10.648]: ").strip() or "10.648")
+        }
     elif cal_choice == 4:  # RPM
-        calibration.update({
-            "calibration_name": "RPMCalibration",
+        calibration["params"] = {
             "poles": int(input("Number of poles [12]: ").strip() or "12"),
-            "pulley_ratio": float(input("Pulley ratio [3.0]: ").strip() or "3.0"),
-            "calibration_mult": float(input("Calibration multiplier [1.0]: ").strip() or "1.0"),
-            "timeout_ms": int(input("Timeout (ms) [2000]: ").strip() or "2000"),
-            "min_rpm": int(input("Minimum RPM [100]: ").strip() or "100"),
-            "max_rpm": int(input("Maximum RPM [10000]: ").strip() or "10000")
-        })
+            "pulleyRatio": float(input("Pulley ratio [3.0]: ").strip() or "3.0"),
+            "calibrationMult": float(input("Calibration multiplier [1.0]: ").strip() or "1.0"),
+            "timeoutMs": int(input("Timeout (ms) [2000]: ").strip() or "2000"),
+            "minRpm": int(input("Minimum RPM [100]: ").strip() or "100"),
+            "maxRpm": int(input("Maximum RPM [10000]: ").strip() or "10000")
+        }
 
     return calibration
+
+def convert_to_unified_format(inputs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Converts internal format to unified v1 JSON schema format."""
+    unified_inputs = []
+    for inp in inputs:
+        unified_inp = {
+            "idx": inp['input_number'],
+            "pin": inp['pin'],
+            "application": inp['application'],
+            "applicationIndex": inp['application_index'],
+            "sensor": inp['sensor'],
+            "sensorIndex": inp['sensor_index']
+        }
+        if 'calibration' in inp:
+            unified_inp['calibration'] = inp['calibration']
+        unified_inputs.append(unified_inp)
+    return unified_inputs
+
+def convert_from_unified_format(inputs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Converts unified v1 JSON schema format to internal format."""
+    internal_inputs = []
+    for inp in inputs:
+        internal_inp = {
+            "input_number": inp['idx'],
+            "pin": inp['pin'],
+            "application": inp['application'],
+            "application_index": inp['applicationIndex'],
+            "sensor": inp['sensor'],
+            "sensor_index": inp['sensorIndex']
+        }
+        if 'calibration' in inp:
+            internal_inp['calibration'] = inp['calibration']
+        internal_inputs.append(internal_inp)
+    return internal_inputs
 
 def edit_input(inp: Dict[str, Any], platform: str, used_pins: List[str], registries: Dict) -> Dict[str, Any]:
     """Interactive prompt to edit a single input."""
@@ -187,9 +230,9 @@ def edit_input(inp: Dict[str, Any], platform: str, used_pins: List[str], registr
     # Prompt for custom calibration
     custom_cal = prompt_for_custom_calibration(inp, registries)
     if custom_cal:
-        inp['custom_calibration'] = custom_cal
-    elif 'custom_calibration' in inp:
-        del inp['custom_calibration']
+        inp['calibration'] = custom_cal
+    elif 'calibration' in inp:
+        del inp['calibration']
 
     return inp
 
@@ -217,7 +260,19 @@ def main():
         should_add_new = False
         try:
             with open(args.load, 'r') as f:
-                inputs = json.load(f).get("inputs", [])
+                config_data = json.load(f)
+
+            # Validate unified v1 schema
+            if config_data.get("schemaVersion") != 1:
+                print("Error: Only schemaVersion 1 is supported.", file=sys.stderr)
+                sys.exit(1)
+
+            if config_data.get("mode") != "static":
+                print("Error: Only mode='static' configs can be loaded.", file=sys.stderr)
+                sys.exit(1)
+
+            # Convert from unified format to internal format
+            inputs = convert_from_unified_format(config_data.get("inputs", []))
             print(f"Loaded {len(inputs)} inputs from {args.load}")
 
             while True:
@@ -272,7 +327,7 @@ def main():
             # Prompt for custom calibration
             custom_cal = prompt_for_custom_calibration(new_input, registries)
             if custom_cal:
-                new_input['custom_calibration'] = custom_cal
+                new_input['calibration'] = custom_cal
 
             inputs.append(new_input)
 
@@ -292,7 +347,17 @@ def main():
 
     if save_path:
         with open(save_path, 'w') as f:
-            json.dump({"metadata": {"tool_version": TOOL_VERSION, "platform": platform}, "inputs": inputs}, f, indent=2)
+            unified_config = {
+                "schemaVersion": 1,
+                "mode": "static",
+                "metadata": {
+                    "toolVersion": TOOL_VERSION,
+                    "platform": platform,
+                    "timestamp": int(time.time())
+                },
+                "inputs": convert_to_unified_format(inputs)
+            }
+            json.dump(unified_config, f, indent=2)
         print(f"\u2713 Saved to {save_path}")
 
     print("\nGenerating config.h...")
@@ -304,21 +369,23 @@ def main():
     else:
         print(f"\u2717 Failed to update {config_h_path}", file=sys.stderr)
 
-    # Generate advanced_config.h if there are custom calibrations
-    advanced_config_path = os.path.join(args.project_dir, 'src', 'advanced_config.h')
-    advanced_block = generate_advanced_config_block(inputs, TOOL_VERSION)
-    if advanced_block:
-        print("\nGenerating advanced_config.h...")
-        if update_advanced_config_h(advanced_config_path, advanced_block):
-            print(f"\u2713 Backup: {advanced_config_path}.bak")
-            print(f"\u2713 Generated custom calibrations for {len([i for i in inputs if 'custom_calibration' in i])} inputs")
+    # Generate static_calibrations.h if there are custom calibrations
+    static_cal_content = generate_static_calibrations_file(inputs, TOOL_VERSION)
+    static_cal_path = os.path.join(args.project_dir, 'src', 'lib', 'generated', 'static_calibrations.h')
+
+    if static_cal_content:
+        print("\nGenerating static_calibrations.h...")
+        if write_static_calibrations_file(static_cal_path, static_cal_content):
+            cal_count = len([i for i in inputs if 'calibration' in i and i['calibration'].get('source') == 'CUSTOM'])
+            print(f"\u2713 Generated custom calibrations for {cal_count} inputs")
+            print(f"\u2713 File: {static_cal_path}")
         else:
-            print(f"\u2717 Failed to update {advanced_config_path}", file=sys.stderr)
+            print(f"\u2717 Failed to write {static_cal_path}", file=sys.stderr)
     else:
-        # Clear custom calibrations if none are defined
-        if os.path.exists(advanced_config_path):
-            update_advanced_config_h(advanced_config_path, None)
-            print("\u2713 Cleared custom calibrations from advanced_config.h")
+        # Remove the file if no custom calibrations exist
+        if os.path.exists(static_cal_path):
+            os.remove(static_cal_path)
+            print("\u2713 Removed static_calibrations.h (no custom calibrations)")
 
     if args.generate_thin_libs:
         print("\nGenerating thin libraries...")

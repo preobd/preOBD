@@ -537,4 +537,6 @@ inline const char* getSensorNameByIndex(uint8_t index) {
     return READ_SENSOR_NAME(&SENSOR_LIBRARY[index]);
 }
 
+// ===== END HELPER FUNCTIONS =====
+
 #endif // SENSOR_LIBRARY_H

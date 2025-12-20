@@ -124,4 +124,14 @@
 // Add your manual custom calibrations below, or use tools/configure.py
 // to generate them automatically
 
+// =============================================================================
+// AUTO-GENERATED CALIBRATIONS
+// =============================================================================
+// Include generated calibrations from tools/configure.py
+#ifdef USE_STATIC_CONFIG
+#if __has_include("lib/generated/static_calibrations.h")
+#include "lib/generated/static_calibrations.h"
+#endif
+#endif
+
 #endif // ADVANCED_CONFIG_H

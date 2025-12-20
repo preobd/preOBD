@@ -1,26 +1,27 @@
 {
+  "schemaVersion": 1,
+  "mode": "static",
   "metadata": {
-    "tool_version": "1.0.0",
-    "platform": "uno"
+    "toolVersion": "1.0.0",
+    "platform": "megaatmega2560",
+    "timestamp": 1766184187
   },
   "inputs": [
     {
-      "input_number": 0,
+      "idx": 0,
       "pin": "A0",
       "application": "CHT",
-      "application_index": 1,
+      "applicationIndex": 1,
       "sensor": "MAX6675",
-      "sensor_index": 1,
-      "notes": "Cylinder 1 CHT probe"
+      "sensorIndex": 1
     },
     {
-      "input_number": 1,
+      "idx": 1,
       "pin": "A1",
       "application": "CHT",
-      "application_index": 1,
+      "applicationIndex": 1,
       "sensor": "MAX6675",
-      "sensor_index": 1,
-      "notes": "Cylinder 2 CHT probe"
+      "sensorIndex": 1
     }
   ]
 }
