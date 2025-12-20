@@ -31,7 +31,7 @@ The tool will prompt you for each input's pin, application, and sensor.
 To load a previously saved configuration from a JSON file, use the `--load` flag:
 
 ```bash
-python3 tools/configure.py --load configs/my_vehicle_config.json
+python3 tools/configure.py --load tools/saved-configs/my_vehicle_config.json
 ```
 
 **Generating Thinned Libraries**

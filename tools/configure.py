@@ -369,8 +369,9 @@ def main():
             filename = input("File: ").strip()
             if filename:
                 if not filename.endswith(".json"): filename += ".json"
-                if not os.path.exists('configs'): os.makedirs('configs')
-                save_path = os.path.join('configs', os.path.basename(filename))
+                saved_configs_dir = os.path.join(os.path.dirname(__file__), 'saved-configs')
+                if not os.path.exists(saved_configs_dir): os.makedirs(saved_configs_dir)
+                save_path = os.path.join(saved_configs_dir, os.path.basename(filename))
 
     if save_path:
         with open(save_path, 'w') as f:

@@ -63,7 +63,7 @@ Follow the prompts:
 ### Example: Loading and Editing Configuration
 
 ```bash
-python3 tools/configure.py --load configs/my_config.json
+python3 tools/configure.py --load tools/saved-configs/my_config.json
 ```
 
 This loads an existing configuration. You can then:
@@ -164,7 +164,7 @@ The tool automatically creates backup files:
 python3 tools/configure.py
 
 # Load and edit existing configuration
-python3 tools/configure.py --load configs/my_config.json
+python3 tools/configure.py --load tools/saved-configs/my_config.json
 
 # Specify project directory
 python3 tools/configure.py --project-dir /path/to/project
@@ -236,8 +236,8 @@ python3 tools/configure.py --generate-thin-libs
 
 1. **Start with defaults**: The tool provides sensible default values for each calibration type
 2. **Test incrementally**: Add one custom calibration at a time and test
-3. **Keep backups**: The tool creates `.bak` files, but also save your JSON configs
-4. **Use version control**: Commit your `configs/*.json` files to track changes
+3. **Keep backups**: The tool creates `.bak` files and saves JSON configs to `tools/saved-configs/`
+4. **Use version control**: Commit your `tools/saved-configs/*.json` files to track changes
 5. **Document your sensors**: Use descriptive names and note the sensor part numbers
 
 ## Troubleshooting
