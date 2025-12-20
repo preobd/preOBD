@@ -1299,6 +1299,7 @@ void listSensors() {
     Serial.println(F("Pressure (Linear - 5V sensors):"));
     Serial.println(F("  GENERIC_BOOST          - 0.5-4.5V linear (0-5 bar)"));
     Serial.println(F("  GENERIC_PRESSURE_150PSI - 0.5-4.5V linear (0-150 PSI / 10 bar)"));
+    Serial.println(F("  AEM_30_2130_150        - AEM 150 PSI (0-150 PSI / 10 bar)"));
     Serial.println(F("  MPX4250AP              - Freescale/NXP (20-250 kPa)"));
     Serial.println(F("Pressure (VDO Polynomial):"));
     Serial.println(F("  VDO_2BAR               - VDO 2-bar pressure"));
