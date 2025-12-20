@@ -16,7 +16,7 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 - Displays data on LCD screen
 - Outputs standard OBDII PIDs via CAN bus
 - Logs data to serial and SD card
-- Configurable alarms with audible alerts
+- Smart alarm system with warmup periods and fault persistence (prevents false alarms)
 
 **What it doesn't do:**
 - Engine control (monitoring only, no outputs to engine)
@@ -34,10 +34,11 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 **Configuration:**
 - Compile-time configuration mode (minimal RAM, recommended for Arduino Uno)
 - **Runtime configuration mode** (serial commands, EEPROM storage, CONFIG/RUN mode separation)
-  - **NEW in v0.4.0:** Configure outputs, display, and system parameters at runtime
-  - Enable/disable CAN, RealDash, Serial CSV, SD logging without recompiling
+  - Configure outputs, display, and system parameters at runtime
+  - Enable/disable CAN, RealDash, Serial CSV, SD logging, Alarm output without recompiling
   - Adjust output intervals, display units, and timing on-the-fly
   - Combined sensor command syntax for faster setup
+  - Custom alarm warmup and fault persistence times per input
 
 **Hardware Platforms:**
 - Arduino Uno (2KB RAM, limited sensors)

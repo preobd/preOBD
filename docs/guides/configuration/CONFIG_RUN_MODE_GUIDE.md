@@ -381,11 +381,16 @@ For complete command reference, see [Serial Command Reference](../../reference/S
 | **Serial CSV output** | Disabled | Enabled |
 | **CAN bus output** | Disabled | Enabled |
 | **SD card logging** | Disabled | Enabled |
+| **Alarm output** | Inactive (all states: DISABLED) | Active (state machine running) |
 | **Write commands** | Allowed | Blocked |
 | **Read commands** | Allowed | Allowed |
-| **Alarm system** | Inactive | Active |
 | **MODE_BUTTON** | No effect | Silences alarm |
 | **Main loop** | Early return | Full execution |
+
+**Note on Alarm System:**
+- In RUN mode, alarms use a state machine: DISABLED → INIT → WARMUP → READY ↔ ACTIVE
+- Warmup periods prevent false alarms during cold start (e.g., 30s for CHT, 60s for oil pressure)
+- See [Alarm System Guide](ALARM_SYSTEM_GUIDE.md) for complete documentation
 
 ---
 
@@ -583,9 +588,10 @@ RUN
 ## Related Documentation
 
 - [Adding Sensors Guide](ADDING_SENSORS.md) - How to configure sensors
-- [Serial Command Reference](../../reference/SERIAL_COMMANDS.md) - Complete command list (if available)
-- [EEPROM Persistence](../../reference/EEPROM_FORMAT.md) - EEPROM format details (if available)
-- [Testing Plan](../../../TESTING_PLAN.md) - Mode system test cases (section 6.4)
+- [Alarm System Guide](ALARM_SYSTEM_GUIDE.md) - Alarm state machine and configuration
+- [Serial Command Reference](../../reference/SERIAL_COMMANDS.md) - Complete command list
+- [EEPROM Structure](../../architecture/EEPROM_STRUCTURE.md) - EEPROM layout and versioning
+- [Registry System](../../architecture/REGISTRY_SYSTEM.md) - Hash-based sensor/application lookups
 
 ---
 
@@ -616,4 +622,5 @@ RUN
 ---
 
 **Last Updated:** 2025-01-28
-**Firmware Version:** 0.3.0-alpha+
+**Firmware Version:** 0.5.0-alpha (Unreleased)
+**EEPROM Version:** 3 (Alarm refactor, SystemConfig expansion)

@@ -1,12 +1,19 @@
-# JSON Configuration Migration Guide
+# JSON Configuration Guide
 
-This guide helps you maintain backward compatibility when evolving the openEMS configuration structures.
+**Version:** 0.5.0-alpha (Unreleased)
+**Last Updated:** 2025-12-19
+
+This guide covers JSON configuration in openEMS: creating configurations with `configure.py`, importing/exporting JSON, SD card backup/restore, custom calibrations, and maintaining backward compatibility when evolving firmware.
 
 ## Table of Contents
 - [Overview](#overview)
+- [JSON Schema Format](#json-schema-format)
+- [Creating Configurations with configure.py](#creating-configurations-with-configurepy)
+- [SD Card Backup and Restore](#sd-card-backup-and-restore)
+- [Custom Calibrations in JSON](#custom-calibrations-in-json)
 - [Schema Versioning](#schema-versioning)
-- [Adding Fields](#adding-fields)
-- [Removing Fields](#removing-fields)
+- [Adding Fields (Developer Guide)](#adding-fields-developer-guide)
+- [Removing Fields (Developer Guide)](#removing-fields-developer-guide)
 - [Migration Checklist](#migration-checklist)
 - [Examples](#examples)
 
@@ -14,7 +21,12 @@ This guide helps you maintain backward compatibility when evolving the openEMS c
 
 ## Overview
 
-The JSON configuration system exports/imports the complete openEMS configuration. As the firmware evolves, you may need to add, modify, or remove fields from the configuration structures.
+The JSON configuration system in openEMS serves multiple purposes:
+
+1. **Static Configuration** - Generate compile-time configs with `configure.py` (saves EEPROM wear, enables optimizations)
+2. **Runtime Backup/Restore** - Save and load complete system state to/from SD card
+3. **Configuration Transfer** - Share configs between devices or archive proven setups
+4. **Development** - Maintain backward compatibility as firmware evolves
 
 ### Key Principles
 
@@ -22,6 +34,409 @@ The JSON configuration system exports/imports the complete openEMS configuration
 2. **Use default values** - New fields should have sensible defaults
 3. **Version your schema** - Track changes with schema version numbers
 4. **Test round-trips** - Verify DUMP → SAVE → LOAD → DUMP produces identical output
+
+### Use Cases
+
+| Use Case | Tool | Workflow |
+|----------|------|----------|
+| **Initial Setup** | `configure.py` | Generate static config from scratch |
+| **Backup Configuration** | Serial commands | `CONFIG SAVE backup.json` to SD card |
+| **Restore Configuration** | Serial commands | `CONFIG LOAD backup.json` from SD card |
+| **Share Configurations** | Both | Export JSON, edit, import on another device |
+| **Custom Calibrations** | `configure.py` | Interactive prompts for calibration parameters |
+
+---
+
+## JSON Schema Format
+
+### Schema v1 Structure
+
+```json
+{
+  "schemaVersion": 1,
+  "mode": "static",
+  "metadata": {
+    "toolVersion": "1.0.0",
+    "platform": "megaatmega2560",
+    "timestamp": 1704067200
+  },
+  "inputs": [
+    {
+      "idx": 0,
+      "pin": "6",
+      "application": "CHT",
+      "sensor": "MAX6675",
+      "calibration": null
+    },
+    {
+      "idx": 1,
+      "pin": "A0",
+      "application": "OIL_TEMP",
+      "sensor": "VDO_150C_STEINHART",
+      "calibration": {
+        "type": "THERMISTOR_STEINHART",
+        "parameters": {
+          "a": 0.00112764,
+          "b": 0.000234282,
+          "c": 8.52635e-08,
+          "r25": 796.4,
+          "seriesR": 1000.0
+        }
+      }
+    }
+  ]
+}
+```
+
+### Field Descriptions
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `schemaVersion` | number | Yes | JSON schema version (currently 1) |
+| `mode` | string | Yes | Configuration mode: "static" or "runtime" |
+| `metadata.toolVersion` | string | No | Version of configure.py that generated this |
+| `metadata.platform` | string | Yes | Target platform (e.g., "megaatmega2560") |
+| `metadata.timestamp` | number | No | Unix timestamp of generation |
+| `inputs` | array | Yes | Array of input configurations (0-10 elements) |
+| `inputs[].idx` | number | Yes | Input index (0-9) |
+| `inputs[].pin` | string | Yes | Pin assignment (e.g., "A0", "6", "I2C") |
+| `inputs[].application` | string | Yes | Application name (e.g., "CHT", "OIL_TEMP") |
+| `inputs[].sensor` | string | Yes | Sensor name (e.g., "MAX6675", "VDO_150C") |
+| `inputs[].calibration` | object/null | No | Custom calibration (null = use sensor default) |
+
+---
+
+## Creating Configurations with configure.py
+
+The `configure.py` tool generates static configurations and optionally saves them as JSON files. This is the recommended way to create new configurations.
+
+### Basic Workflow
+
+```bash
+# Navigate to project root
+cd /path/to/openEMS
+
+# Run configuration tool
+python3 tools/configure.py
+
+# Follow interactive prompts:
+# 1. Select application (CHT, OIL_TEMP, etc.)
+# 2. Select sensor (MAX6675, VDO_150C, etc.)
+# 3. Enter pin assignment (6, A0, I2C, etc.)
+# 4. Configure custom calibration (if needed)
+# 5. Repeat for additional inputs
+```
+
+### JSON Output Options
+
+`configure.py` can save configurations as JSON files:
+
+```bash
+# Generate config and save JSON to tools/saved-configs/
+python3 tools/configure.py
+
+# At the end, you'll be prompted:
+Save this configuration to JSON? (y/n): y
+Enter filename (e.g., my_config.json): dual_cht_config.json
+
+# File saved to: tools/saved-configs/dual_cht_config.json
+```
+
+### Loading Saved Configurations
+
+```bash
+# Load a previously saved JSON configuration
+python3 tools/configure.py --load tools/saved-configs/dual_cht_config.json
+
+# Review and edit the configuration
+# Save changes back to JSON or generate new config.h
+```
+
+### For detailed configure.py documentation, see:
+- **[tools/README.md](../tools/README.md)** - Complete configure.py usage guide
+
+---
+
+## SD Card Backup and Restore
+
+openEMS supports runtime backup and restore of the complete system configuration via SD card. This includes:
+- All input configurations (pin, application, sensor, calibration)
+- System settings (output modules, display, timing, pins)
+- Alarm thresholds and warmup times
+
+### Prerequisites
+
+1. **SD Card Module** - Wired to SPI bus (CS pin configurable via `systemConfig.sdCSPin`)
+2. **Firmware Compiled with SD Support** - SD output module enabled
+3. **Formatted SD Card** - FAT16/FAT32 format
+
+### Backup Configuration to SD Card
+
+```bash
+# Export current configuration to SD card
+> CONFIG SAVE my_backup.json
+
+# Response:
+Configuration saved to: my_backup.json
+```
+
+**What gets saved:**
+- Schema version (for migration support)
+- Firmware version (for reference)
+- Platform information
+- All input configurations
+- System configuration (outputs, display, timing, pins)
+- Alarm settings (per-input warmup, persistence)
+
+### Restore Configuration from SD Card
+
+```bash
+# Load configuration from SD card
+> CONFIG LOAD my_backup.json
+
+# Response:
+Configuration loaded from: my_backup.json
+Inputs restored: 5
+System config restored: OK
+
+# IMPORTANT: Changes are in RAM only!
+# Persist to EEPROM:
+> SAVE
+```
+
+**What gets restored:**
+- Input configurations (pins, apps, sensors, calibrations)
+- System settings (outputs, display, timing)
+- Alarm thresholds and warmup times
+
+**Note:** After `CONFIG LOAD`, the configuration is active but **not persisted to EEPROM** until you run `SAVE`.
+
+### Workflow: Complete Backup/Restore
+
+```bash
+# === Backup Workflow ===
+# 1. Configure system via serial commands
+> SET 6 CHT MAX6675
+> SET A0 OIL_TEMP VDO_150C_STEINHART
+> OUTPUT CAN ENABLE
+> OUTPUT CAN INTERVAL 100
+
+# 2. Persist to EEPROM
+> SAVE
+
+# 3. Backup to SD card
+> CONFIG SAVE production_config.json
+Configuration saved to: production_config.json
+
+# === Restore Workflow (on same or different device) ===
+# 1. Load from SD card
+> CONFIG LOAD production_config.json
+
+# 2. Review loaded configuration
+> SHOW INPUTS
+> SHOW OUTPUTS
+
+# 3. Persist to EEPROM
+> SAVE
+
+# 4. Verify with DUMP
+> DUMP JSON
+[Should match production_config.json contents]
+```
+
+### Use Cases for SD Card Backup/Restore
+
+1. **Device Replacement** - Quickly configure replacement hardware with proven settings
+2. **Multiple Profiles** - Swap between different configurations (e.g., "dyno_tune.json", "street_config.json")
+3. **Configuration Archival** - Keep timestamped backups of known-good configs
+4. **Rollback** - Restore previous configuration after experimental changes
+5. **Fleet Deployment** - Distribute identical configs to multiple vehicles
+
+---
+
+## Custom Calibrations in JSON
+
+openEMS supports **four types** of custom calibrations that can be specified in JSON configs. These override sensor defaults with user-specific parameters.
+
+### Calibration Type 1: THERMISTOR_STEINHART
+
+**For:** Generic thermistors not in the VDO library
+
+**Parameters:**
+- `a`, `b`, `c` - Steinhart-Hart coefficients
+- `r25` - Resistance at 25°C (Ω)
+- `seriesR` - Series resistor value (Ω)
+
+**JSON Example:**
+```json
+{
+  "idx": 0,
+  "pin": "A0",
+  "application": "CUSTOM_TEMP",
+  "sensor": "THERMISTOR_STEINHART",
+  "calibration": {
+    "type": "THERMISTOR_STEINHART",
+    "parameters": {
+      "a": 0.00112764,
+      "b": 0.000234282,
+      "c": 8.52635e-08,
+      "r25": 796.4,
+      "seriesR": 1000.0
+    }
+  }
+}
+```
+
+**configure.py prompts:**
+```bash
+Sensor: THERMISTOR_STEINHART
+Use default calibration? (y/n): n
+
+Enter custom Steinhart-Hart calibration:
+  Coefficient A: 0.00112764
+  Coefficient B: 0.000234282
+  Coefficient C: 8.52635e-08
+  R25 (Ω): 796.4
+  Series resistor (Ω): 1000.0
+```
+
+### Calibration Type 2: PRESSURE_LINEAR
+
+**For:** Linear pressure sensors (e.g., 0.5V = 0 bar, 4.5V = 5 bar)
+
+**Parameters:**
+- `voltageMin` - Voltage at minimum pressure (V)
+- `voltageMax` - Voltage at maximum pressure (V)
+- `pressureMin` - Minimum pressure (bar)
+- `pressureMax` - Maximum pressure (bar)
+
+**JSON Example:**
+```json
+{
+  "idx": 1,
+  "pin": "A1",
+  "application": "OIL_PRESSURE",
+  "sensor": "GENERIC_PRESSURE",
+  "calibration": {
+    "type": "PRESSURE_LINEAR",
+    "parameters": {
+      "voltageMin": 0.5,
+      "voltageMax": 4.5,
+      "pressureMin": 0.0,
+      "pressureMax": 10.0
+    }
+  }
+}
+```
+
+**configure.py prompts:**
+```bash
+Sensor: GENERIC_PRESSURE
+Use default calibration? (y/n): n
+
+Enter linear pressure calibration:
+  Voltage at min pressure (V): 0.5
+  Voltage at max pressure (V): 4.5
+  Minimum pressure (bar): 0.0
+  Maximum pressure (bar): 10.0
+```
+
+### Calibration Type 3: PRESSURE_POLY
+
+**For:** Non-linear pressure sensors requiring polynomial correction
+
+**Parameters:**
+- `c0`, `c1`, `c2`, `c3` - Polynomial coefficients (pressure = c0 + c1*V + c2*V² + c3*V³)
+
+**JSON Example:**
+```json
+{
+  "idx": 2,
+  "pin": "A2",
+  "application": "BOOST",
+  "sensor": "GENERIC_BOOST",
+  "calibration": {
+    "type": "PRESSURE_POLY",
+    "parameters": {
+      "c0": -1.2,
+      "c1": 2.5,
+      "c2": -0.15,
+      "c3": 0.005
+    }
+  }
+}
+```
+
+**configure.py prompts:**
+```bash
+Sensor: GENERIC_BOOST
+Use default calibration? (y/n): n
+
+Enter polynomial pressure calibration (pressure = c0 + c1*V + c2*V² + c3*V³):
+  Coefficient c0: -1.2
+  Coefficient c1: 2.5
+  Coefficient c2: -0.15
+  Coefficient c3: 0.005
+```
+
+### Calibration Type 4: RPM
+
+**For:** Custom RPM sensors with non-standard pulses per revolution
+
+**Parameters:**
+- `pulsesPerRev` - Number of pulses per revolution (e.g., 3 for W-phase alternator)
+
+**JSON Example:**
+```json
+{
+  "idx": 3,
+  "pin": "2",
+  "application": "ENGINE_RPM",
+  "sensor": "W_PHASE_RPM",
+  "calibration": {
+    "type": "RPM",
+    "parameters": {
+      "pulsesPerRev": 3.0
+    }
+  }
+}
+```
+
+**configure.py prompts:**
+```bash
+Sensor: W_PHASE_RPM
+Use default calibration? (y/n): n
+
+Enter RPM calibration:
+  Pulses per revolution: 3.0
+```
+
+### Using Custom Calibrations
+
+**In configure.py:**
+```bash
+# During sensor configuration, you'll be prompted:
+Use default calibration for VDO_150C_STEINHART? (y/n): n
+
+# Then answer prompts for the specific calibration type
+# The JSON file will include the calibration parameters
+```
+
+**Manual JSON editing:**
+```bash
+# 1. Generate base config
+python3 tools/configure.py
+
+# 2. Save to JSON
+Save this configuration to JSON? y
+Filename: my_config.json
+
+# 3. Edit JSON file to add/modify calibration
+nano tools/saved-configs/my_config.json
+
+# 4. Reload and regenerate
+python3 tools/configure.py --load tools/saved-configs/my_config.json
+```
 
 ---
 
@@ -51,7 +466,7 @@ The JSON schema version is independent of the firmware version. It only incremen
 
 ---
 
-## Adding Fields
+## Adding Fields (Developer Guide)
 
 ### To SystemConfig Struct
 
@@ -255,7 +670,7 @@ switch (input->calibrationType) {
 
 ---
 
-## Removing Fields
+## Removing Fields (Developer Guide)
 
 ### Breaking Change - Requires Migration
 
@@ -598,13 +1013,22 @@ For complex migrations, consider writing a Python script to transform old JSON t
 
 ---
 
+## See Also
+
+- **[tools/README.md](../tools/README.md)** - Complete configure.py documentation
+- **[JSON_QUICK_REFERENCE.md](JSON_QUICK_REFERENCE.md)** - Quick cheat sheet for JSON changes
+- **[SERIAL_COMMANDS.md](reference/SERIAL_COMMANDS.md)** - CONFIG SAVE/LOAD commands
+- **[EEPROM_STRUCTURE.md](architecture/EEPROM_STRUCTURE.md)** - How configurations are stored
+- **[REGISTRY_SYSTEM.md](architecture/REGISTRY_SYSTEM.md)** - Understanding sensor/app registries
+- **[CHANGELOG.md](../CHANGELOG.md)** - Version-specific changes and breaking changes
+
 ## Questions?
 
 - Check `docs/CHANGELOG.md` for version-specific changes
 - Review this guide for structural changes
 - Test with `DUMP JSON → CONFIG SAVE → CONFIG LOAD → DUMP JSON` cycle
-- Report issues at https://github.com/anthropics/claude-code/issues
+- For custom calibrations, see configure.py documentation in tools/README.md
 
-**Last Updated:** 2025-12-13
-**Schema Version:** 1
-**Firmware Version:** 0.4.1-alpha
+---
+
+**End of Guide**

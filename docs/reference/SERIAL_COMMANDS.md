@@ -221,6 +221,7 @@ OUTPUT <name> INTERVAL <ms>   # Set send interval (10-60000ms)
 - `RealDash` - RealDash CAN frames
 - `Serial` - CSV serial output
 - `SD_Log` - SD card data logging
+- `Alarm` - Alarm system (buzzer, LED)
 
 ### Examples
 
@@ -256,7 +257,55 @@ CAN: Enabled, Interval: 100ms
 RealDash: Enabled, Interval: 50ms
 Serial: Disabled
 SD_Log: Disabled
+Alarm: Enabled, Interval: 500ms
 ```
+
+### Alarm-Specific Configuration
+
+The Alarm output module controls the alarm hardware (buzzer, LEDs, etc.). For detailed alarm system documentation, see [Alarm System Guide](../guides/configuration/ALARM_SYSTEM_GUIDE.md).
+
+**Commands:**
+```
+OUTPUT Alarm ENABLE          # Enable alarm output hardware
+OUTPUT Alarm DISABLE         # Disable alarm output (silent mode)
+OUTPUT Alarm INTERVAL <ms>   # Set alarm check interval (10-10000ms, default: 500ms)
+```
+
+**Per-Input Alarm Tuning:**
+```
+ALARM <pin> WARMUP <ms>      # Set custom warmup time (overrides application default)
+ALARM <pin> PERSIST <ms>     # Set custom fault persistence time
+```
+
+**Examples:**
+```
+# Enable alarm system
+OUTPUT Alarm ENABLE
+
+# Check alarms every 250ms (faster response)
+OUTPUT Alarm INTERVAL 250
+
+# Custom warmup for oil pressure (45 seconds instead of default 60s)
+ALARM A1 WARMUP 45000
+
+# Custom persistence for CHT (faster alarm response)
+ALARM 6 PERSIST 1000
+
+# Check alarm status
+OUTPUT LIST
+INFO A1
+```
+
+**Alarm State Machine:**
+Each input tracks alarm state: DISABLED → INIT → WARMUP → READY ↔ ACTIVE
+
+- **DISABLED**: Alarm off for this input
+- **INIT**: 1-second initialization after alarm enabled
+- **WARMUP**: Sensor-specific warmup (0-60s depending on application)
+- **READY**: Normal monitoring, alarm checking active
+- **ACTIVE**: Alarm condition met, buzzer sounding
+
+See [Alarm System Guide](../guides/configuration/ALARM_SYSTEM_GUIDE.md) for complete state machine documentation.
 
 ---
 

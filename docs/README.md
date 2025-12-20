@@ -17,6 +17,8 @@ See [DISCLAIMER](../DISCLAIMER.md) for safety information and software limitatio
 7. [Outputs](#outputs)
 8. [Troubleshooting](#troubleshooting)
 9. [Advanced Topics](#advanced-topics)
+10. [Architecture & Internal Documentation](#architecture--internal-documentation)
+11. [Complete Documentation Index](#complete-documentation-index)
 
 ---
 
@@ -418,6 +420,70 @@ Ground pin 5 at startup to enter test mode, which generates synthetic sensor val
 - RAM usage: ~1.5-2KB
 - Flash usage: ~25-30KB
 - Fully functional with compile-time mode
+
+---
+
+## Architecture & Internal Documentation
+
+For developers and contributors, openEMS provides comprehensive internal architecture documentation:
+
+### Core Architecture Guides
+
+- **[Registry System](architecture/REGISTRY_SYSTEM.md)** - Hash-based sensor/application lookups, PROGMEM storage, registry architecture
+- **[EEPROM Structure](architecture/EEPROM_STRUCTURE.md)** - Memory layout, versioning, migration, wear management
+- **[Alarm System](guides/configuration/ALARM_SYSTEM_GUIDE.md)** - 5-state alarm machine, warmup, fault persistence
+
+### Configuration & Development Tools
+
+- **[configure.py Guide](../tools/README.md)** - Python configuration tool, JSON schema, custom calibrations, thin libraries
+- **[JSON Configuration Guide](JSON_CONFIGURATION_GUIDE.md)** - JSON format, backup/restore, custom calibrations, schema versioning
+- **[JSON Quick Reference](JSON_QUICK_REFERENCE.md)** - Quick cheat sheet for JSON changes
+- **[Pin Requirements Guide](guides/hardware/PIN_REQUIREMENTS_GUIDE.md)** - Pin type validation, platform limits, troubleshooting
+
+### Runtime Configuration
+
+- **[Config Run Mode Guide](guides/configuration/CONFIG_RUN_MODE_GUIDE.md)** - Runtime vs static configuration, OUTPUT/DISPLAY/SYSTEM commands
+- **[Serial Commands Reference](reference/SERIAL_COMMANDS.md)** - Complete serial command documentation
+
+---
+
+## Complete Documentation Index
+
+### Getting Started
+- [QUICK_REFERENCE.md](getting-started/QUICK_REFERENCE.md) - Quick start guide and command reference
+
+### Configuration Guides
+- [CONFIG_RUN_MODE_GUIDE.md](guides/configuration/CONFIG_RUN_MODE_GUIDE.md) - Runtime vs compile-time configuration
+- [ADDING_SENSORS.md](guides/configuration/ADDING_SENSORS.md) - Adding new sensor types
+- [ADVANCED_CALIBRATION_GUIDE.md](guides/configuration/ADVANCED_CALIBRATION_GUIDE.md) - Custom sensor calibrations
+- [ALARM_SYSTEM_GUIDE.md](guides/configuration/ALARM_SYSTEM_GUIDE.md) - Alarm state machine and configuration
+
+### Sensor Type Guides
+- [SENSOR_SELECTION_GUIDE.md](guides/sensor-types/SENSOR_SELECTION_GUIDE.md) - Complete sensor catalog
+- [THERMOCOUPLE_GUIDE.md](guides/sensor-types/THERMOCOUPLE_GUIDE.md) - MAX6675/MAX31855 usage
+- [VDO_SENSOR_GUIDE.md](guides/sensor-types/VDO_SENSOR_GUIDE.md) - VDO temperature/pressure sensors
+- [W_PHASE_RPM_GUIDE.md](guides/sensor-types/W_PHASE_RPM_GUIDE.md) - RPM measurement from alternator
+- [BME280_GUIDE.md](guides/sensor-types/BME280_GUIDE.md) - Environmental sensor usage
+
+### Hardware Guides
+- [PIN_REQUIREMENTS_GUIDE.md](guides/hardware/PIN_REQUIREMENTS_GUIDE.md) - Pin types, validation, platform limits
+
+### Output Guides
+- [LCD_DISPLAY_GUIDE.md](guides/outputs/LCD_DISPLAY_GUIDE.md) - LCD configuration and usage
+- [CAN_BUS_GUIDE.md](guides/outputs/CAN_BUS_GUIDE.md) - CAN bus setup and OBDII PIDs
+- [REALDASH_GUIDE.md](guides/outputs/REALDASH_GUIDE.md) - RealDash integration
+
+### Architecture Documentation
+- [REGISTRY_SYSTEM.md](architecture/REGISTRY_SYSTEM.md) - Registry-based architecture internals
+- [EEPROM_STRUCTURE.md](architecture/EEPROM_STRUCTURE.md) - EEPROM memory layout and versioning
+
+### Reference Documentation
+- [SERIAL_COMMANDS.md](reference/SERIAL_COMMANDS.md) - Complete serial command reference
+- [JSON_CONFIGURATION_GUIDE.md](JSON_CONFIGURATION_GUIDE.md) - JSON format and backup/restore
+- [JSON_QUICK_REFERENCE.md](JSON_QUICK_REFERENCE.md) - JSON modification quick reference
+
+### Development Tools
+- [tools/README.md](../tools/README.md) - configure.py and Python toolchain documentation
 
 ---
 
