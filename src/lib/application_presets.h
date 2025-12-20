@@ -608,4 +608,6 @@ inline const char* getApplicationNameByIndex(uint8_t index) {
     return READ_APP_NAME(&APPLICATION_PRESETS[index]);
 }
 
+// ===== END HELPER FUNCTIONS =====
+
 #endif // APPLICATION_PRESETS_H
