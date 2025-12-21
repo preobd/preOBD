@@ -42,13 +42,6 @@ extern void updateLCD(Input**, int);
 #include "test/test_mode.h"
 #endif
 
-// BME280 sensor (if any BME280 sensors are configured)
-#ifdef USE_BME280
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BME280.h>
-Adafruit_BME280 bme;
-#endif
-
 // ===== TIME-SLICING STATE =====
 // Tracks last execution time for each time-sliced operation
 static uint32_t lastInputRead[MAX_INPUTS];  // Per-sensor read timing
@@ -160,6 +153,17 @@ void setup() {
     // Initialize SPI BEFORE input manager (needed for thermocouple CS pin setup)
     SPI.begin();
     Serial.println(F("✓ SPI bus initialized"));
+    
+    // Initialize I2C for BME280 and LCD
+    Wire.begin();
+    #if defined(ESP32)
+    // ESP32 may need explicit SDA/SCL pins
+    // Wire.begin(SDA_PIN, SCL_PIN);  // Uncomment and set if needed
+    Wire.setClock(100000);  // 100kHz for stability
+    #else
+    Wire.setClock(400000);  // 400kHz for most platforms
+    #endif
+    Serial.println(F("✓ I2C initialized"));
 
     // Initialize system config (loads from EEPROM or uses defaults from config.h)
 #ifndef USE_STATIC_CONFIG
@@ -173,48 +177,14 @@ void setup() {
     initInputManager();
 #endif
 
-    // Note: All sensor-specific initialization (CS pins, RPM interrupts, digital inputs)
-    // is handled automatically by initInputManager() via sensor init function pointers
-
-    // Initialize I2C for BME280 and LCD
-    Wire.begin();
-    #if defined(ESP32)
-    // ESP32 may need explicit SDA/SCL pins
-    // Wire.begin(SDA_PIN, SCL_PIN);  // Uncomment and set if needed
-    Wire.setClock(100000);  // 100kHz for stability
-    #else
-    Wire.setClock(400000);  // 400kHz for most platforms
-    #endif
-    Serial.println(F("✓ I2C initialized"));
-    
-    // Initialize BME280 (if any BME280 sensors are configured)
-    #ifdef USE_BME280
-    Serial.print(F("Initializing BME280... "));
-    if (!bme.begin(0x76, &Wire)) {
-        Serial.println(F("FAILED!"));
-        Serial.println(F("   BME280 not found at 0x76, trying 0x77..."));
-        if (!bme.begin(0x77, &Wire)) {
-            Serial.println(F("   BME280 not found - BME280 sensors will read NAN"));
-            // Note: In input-based architecture, sensors are disabled via serial commands
-
-        } else {
-            Serial.println(F("OK (at 0x77)"));
-        }
-    } else {
-        Serial.println(F("OK (at 0x76)"));
-    }
-    #endif
     // Initialize display
     #ifdef ENABLE_LCD
-    Serial.print(F("Initializing LCD... "));
     initLCD();
     #endif
 
 #ifndef USE_STATIC_CONFIG
     // Initialize button handler (only in EEPROM mode)
-    Serial.print(F("Initializing button handler... "));
     initButtonHandler();
-    Serial.println(F("OK"));
 #endif
 
     // Initialize display manager (works in both static and EEPROM modes)
@@ -222,7 +192,6 @@ void setup() {
     initDisplayManager();
 
     // Initialize output modules
-    Serial.println(F("Initializing output modules..."));
     initOutputModules();
 
     // Wait for sensors to stabilize

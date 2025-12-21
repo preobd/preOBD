@@ -10,11 +10,13 @@
 #include "../lib/sensor_library.h"
 #include "../lib/units_registry.h"
 #include <SPI.h>
-
-#ifdef USE_BME280
+#include <Wire.h>
 #include <Adafruit_BME280.h>
-extern Adafruit_BME280 bme;
-#endif
+
+// Shared BME280 object and state (lazy initialization)
+static Adafruit_BME280* bme280_ptr = nullptr;
+static bool bme280_initialized = false;
+static uint8_t bme280_i2c_address = 0x00;  // 0 = not yet detected
 
 // Helper macros to read calibration data from PROGMEM
 #define READ_FLOAT_PROGMEM(addr) pgm_read_float(&(addr))
@@ -556,38 +558,79 @@ void readWPhaseRPM(Input *ptr) {
     }
 }
 
+// ===== BME280 INITIALIZATION =====
+
+void initBME280(Input* ptr) {
+    // If already initialized, nothing to do
+    if (bme280_initialized) {
+        return;
+    }
+
+    // Create BME280 object on first use
+    if (!bme280_ptr) {
+        bme280_ptr = new Adafruit_BME280();
+    }
+
+    // Auto-detect I2C address (try 0x76 first, then 0x77)
+    if (bme280_ptr->begin(0x76, &Wire)) {
+        bme280_initialized = true;
+        bme280_i2c_address = 0x76;
+    } else if (bme280_ptr->begin(0x77, &Wire)) {
+        bme280_initialized = true;
+        bme280_i2c_address = 0x77;
+    }
+
+    if (bme280_initialized) {
+        Serial.print(F("✓ BME280 (0x"));
+        Serial.print(bme280_i2c_address, HEX);
+        Serial.print(F(") "));
+        // Show virtual pin number (I2C:0, I2C:1, etc.)
+        if (ptr->pin >= 0xF0) {
+            Serial.print(F("I2C:"));
+            Serial.print(ptr->pin - 0xF0);
+            Serial.print(F(" for "));
+        }
+        Serial.println(ptr->abbrName);
+    } else {
+        Serial.println(F("⚠ BME280 not found at 0x76 or 0x77"));
+        Serial.println(F("⚠ BME280 sensors will read NAN"));
+        delete bme280_ptr;
+        bme280_ptr = nullptr;
+    }
+}
+
 // ===== BME280 READING =====
 
 void readBME280Temp(Input *ptr) {
-    #ifdef USE_BME280
-    ptr->value = bme.readTemperature();  // Store in Celsius
-    #else
-    ptr->value = NAN;
-    #endif
+    if (bme280_ptr && bme280_initialized) {
+        ptr->value = bme280_ptr->readTemperature();  // Store in Celsius
+    } else {
+        ptr->value = NAN;
+    }
 }
 
 void readBME280Pressure(Input *ptr) {
-    #ifdef USE_BME280
-    ptr->value = bme.readPressure() / 100000.0;  // Store in bar
-    #else
-    ptr->value = NAN;
-    #endif
+    if (bme280_ptr && bme280_initialized) {
+        ptr->value = bme280_ptr->readPressure() / 100000.0;  // Store in bar
+    } else {
+        ptr->value = NAN;
+    }
 }
 
 void readBME280Humidity(Input *ptr) {
-    #ifdef USE_BME280
-    ptr->value = bme.readHumidity();  // Store as percentage (0-100)
-    #else
-    ptr->value = NAN;
-    #endif
+    if (bme280_ptr && bme280_initialized) {
+        ptr->value = bme280_ptr->readHumidity();  // Store as percentage (0-100)
+    } else {
+        ptr->value = NAN;
+    }
 }
 
 void readBME280Elevation(Input *ptr) {
-    #ifdef USE_BME280
-    ptr->value = bme.readAltitude(SEA_LEVEL_PRESSURE_HPA);  // Store in meters
-    #else
-    ptr->value = NAN;
-    #endif
+    if (bme280_ptr && bme280_initialized) {
+        ptr->value = bme280_ptr->readAltitude(SEA_LEVEL_PRESSURE_HPA);  // Store in meters
+    } else {
+        ptr->value = NAN;
+    }
 }
 
 // ===== DIGITAL FLOAT SWITCH =====

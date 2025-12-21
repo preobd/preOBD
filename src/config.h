@@ -62,9 +62,8 @@
 
 // ----- BME280 Environmental Sensor Support -----
 // BME280 is an I2C sensor that provides temperature, pressure, and humidity
-// The library is always included, but unused code is optimized out by the linker
-// if you don't configure any BME280 sensor inputs below
-#define USE_BME280
+// Configure BME280 sensors like any other sensor using SET I2C commands
+// or static config with INPUT_N_PIN = 0xF0 (or I2C_PIN)
 
 // ============================================================================
 // STEP 3: DISPLAY UNITS DEFAULTS

@@ -65,7 +65,7 @@ void initLCD() {
     lcd.createChar(ICON_COOLANT, coolant_icon);
     lcd.createChar(ICON_OIL, oil_icon);
     lcd.clear();
-    Serial.println("LCD initialized");
+    Serial.println("✓ LCD initialized");
 }
 
 /**

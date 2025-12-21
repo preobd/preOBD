@@ -46,6 +46,7 @@ extern void readDigitalFloatSwitch(Input*);
 extern void initThermocoupleCS(Input*);
 extern void initWPhaseRPM(Input*);
 extern void initFloatSwitch(Input*);
+extern void initBME280(Input*);
 
 // Forward declare unit conversion functions (registry-based)
 extern float convertFromBaseUnits(float baseValue, uint8_t unitsIndex);
@@ -476,7 +477,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .label = PSTR_BME280_TEMP_LABEL,
         .description = nullptr,
         .readFunction = readBME280Temp,
-        .initFunction = nullptr,
+        .initFunction = initBME280,
         .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_NONE,
         .defaultCalibration = nullptr,
@@ -493,7 +494,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .label = PSTR_BME280_PRESSURE_LABEL,
         .description = nullptr,
         .readFunction = readBME280Pressure,
-        .initFunction = nullptr,
+        .initFunction = initBME280,
         .measurementType = MEASURE_PRESSURE,
         .calibrationType = CAL_NONE,
         .defaultCalibration = nullptr,
@@ -510,7 +511,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .label = PSTR_BME280_HUMIDITY_LABEL,
         .description = nullptr,
         .readFunction = readBME280Humidity,
-        .initFunction = nullptr,
+        .initFunction = initBME280,
         .measurementType = MEASURE_HUMIDITY,
         .calibrationType = CAL_NONE,
         .defaultCalibration = nullptr,
@@ -527,7 +528,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .label = PSTR_BME280_ELEVATION_LABEL,
         .description = nullptr,
         .readFunction = readBME280Elevation,
-        .initFunction = nullptr,
+        .initFunction = initBME280,
         .measurementType = MEASURE_ELEVATION,
         .calibrationType = CAL_NONE,
         .defaultCalibration = nullptr,
