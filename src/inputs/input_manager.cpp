@@ -1317,5 +1317,6 @@ void listSensors() {
     Serial.println(F("  FLOAT_SWITCH           - Float/level switch (digital)"));
     Serial.println();
     Serial.println(F("IMPORTANT: 5V sensors (0.5-4.5V) require voltage dividers for 3.3V systems!"));
-    Serial.println(F("Note: Use 'I2C' as pin for BME280 sensors (e.g. SET I2C AMBIENT_TEMP BME280_TEMP)"));
+    Serial.println(F("Note: Use 'I2C' for new I2C sensors, 'I2C:0', 'I2C:1' etc. for existing ones"));
+    Serial.println(F("      Examples: SET I2C AMBIENT_TEMP BME280_TEMP  or  INFO I2C:0"));
 }

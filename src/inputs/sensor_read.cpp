@@ -572,20 +572,28 @@ void initBME280(Input* ptr) {
     }
 
     // Auto-detect I2C address (try 0x76 first, then 0x77)
-    Serial.print(F("Initializing BME280... "));
-
     if (bme280_ptr->begin(0x76, &Wire)) {
-        Serial.println(F("OK (at 0x76)"));
         bme280_initialized = true;
         bme280_i2c_address = 0x76;
     } else if (bme280_ptr->begin(0x77, &Wire)) {
-        Serial.println(F("OK (at 0x77)"));
         bme280_initialized = true;
         bme280_i2c_address = 0x77;
+    }
+
+    if (bme280_initialized) {
+        Serial.print(F("✓ BME280 (0x"));
+        Serial.print(bme280_i2c_address, HEX);
+        Serial.print(F(") "));
+        // Show virtual pin number (I2C:0, I2C:1, etc.)
+        if (ptr->pin >= 0xF0) {
+            Serial.print(F("I2C:"));
+            Serial.print(ptr->pin - 0xF0);
+            Serial.print(F(" for "));
+        }
+        Serial.println(ptr->abbrName);
     } else {
-        Serial.println(F("FAILED!"));
-        Serial.println(F("   BME280 not found at 0x76 or 0x77"));
-        Serial.println(F("   BME280 sensors will read NAN"));
+        Serial.println(F("⚠ BME280 not found at 0x76 or 0x77"));
+        Serial.println(F("⚠ BME280 sensors will read NAN"));
         delete bme280_ptr;
         bme280_ptr = nullptr;
     }

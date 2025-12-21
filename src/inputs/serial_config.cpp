@@ -163,6 +163,25 @@ static uint8_t parsePin(const char* pinStr, bool* isValid) {
         return i2cVirtualPinCounter++;
     }
 
+    // Handle "I2C:n" format for referencing existing I2C sensors (e.g., "I2C:0", "I2C:1")
+    if (strncmp(pinStr, "I2C:", 4) == 0 || strncmp(pinStr, "i2c:", 4) == 0) {
+        const char* numStr = pinStr + 4;
+        int i2cIndex = atoi(numStr);
+
+        // Validate I2C index range (0-13 for 14 total I2C sensors)
+        if (i2cIndex < 0 || i2cIndex > 13) {
+            Serial.print(F("ERROR: I2C index "));
+            Serial.print(i2cIndex);
+            Serial.println(F(" out of range (valid: 0-13)"));
+            if (isValid) *isValid = false;
+            return 0;
+        }
+
+        // Convert I2C index to virtual pin number
+        uint8_t virtualPin = 0xF0 + i2cIndex;
+        return virtualPin;
+    }
+
     // Analog pins
     if (toupper(pinStr[0]) == 'A') {
         int analogNum = atoi(pinStr + 1);
@@ -448,7 +467,9 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  SET 6 CHT MAX6675  (combined syntax)"));
         Serial.println(F("  SET A2 APPLICATION COOLANT_TEMP"));
         Serial.println(F("  SET A2 SENSOR VDO_120C_STEINHART"));
-        Serial.println(F("  SET I2C AMBIENT_TEMP BME280_TEMP  (I2C sensors)"));
+        Serial.println(F("  SET I2C AMBIENT_TEMP BME280_TEMP  (new I2C sensor)"));
+        Serial.println(F("  SET I2C:0 ALARM 10 50  (modify existing I2C sensor)"));
+        Serial.println(F("  INFO I2C:1  (query I2C sensor)"));
         Serial.println(F("  SET A1 PRESSURE_LINEAR 0.5 4.5 0 7  (custom pressure)"));
         Serial.println(F("  SET A0 BIAS 4700  (change bias resistor)"));
         Serial.println(F("  SET A2 ALARM 50 120  (set alarm thresholds)"));

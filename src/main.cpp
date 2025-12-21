@@ -153,6 +153,17 @@ void setup() {
     // Initialize SPI BEFORE input manager (needed for thermocouple CS pin setup)
     SPI.begin();
     Serial.println(F("✓ SPI bus initialized"));
+    
+    // Initialize I2C for BME280 and LCD
+    Wire.begin();
+    #if defined(ESP32)
+    // ESP32 may need explicit SDA/SCL pins
+    // Wire.begin(SDA_PIN, SCL_PIN);  // Uncomment and set if needed
+    Wire.setClock(100000);  // 100kHz for stability
+    #else
+    Wire.setClock(400000);  // 400kHz for most platforms
+    #endif
+    Serial.println(F("✓ I2C initialized"));
 
     // Initialize system config (loads from EEPROM or uses defaults from config.h)
 #ifndef USE_STATIC_CONFIG
@@ -165,23 +176,6 @@ void setup() {
 #else
     initInputManager();
 #endif
-
-    // Note: All sensor-specific initialization (CS pins, RPM interrupts, digital inputs)
-    // is handled automatically by initInputManager() via sensor init function pointers
-
-    // Initialize I2C for BME280 and LCD
-    Wire.begin();
-    #if defined(ESP32)
-    // ESP32 may need explicit SDA/SCL pins
-    // Wire.begin(SDA_PIN, SCL_PIN);  // Uncomment and set if needed
-    Wire.setClock(100000);  // 100kHz for stability
-    #else
-    Wire.setClock(400000);  // 400kHz for most platforms
-    #endif
-    Serial.println(F("✓ I2C initialized"));
-
-    // Note: BME280 initialization now happens automatically when first BME280 sensor is configured
-    // via the initBME280() function in sensor_read.cpp
 
     // Initialize display
     #ifdef ENABLE_LCD
