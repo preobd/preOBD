@@ -1176,7 +1176,9 @@ void printInputInfo(uint8_t pin) {
     Serial.println(F("Input Configuration:"));
     Serial.print(F("  Pin: "));
     if (pin >= 0xF0) {
-        Serial.println(F("I2C"));
+        // Show virtual pin number (I2C:0, I2C:1, etc.)
+        Serial.print(F("I2C:"));
+        Serial.println(pin - 0xF0);
     } else if (pin >= A0) {
         Serial.print(F("A"));
         Serial.println(pin - A0);
@@ -1234,7 +1236,8 @@ void listAllInputs() {
             found = true;
             Serial.print(F("  "));
             if (inputs[i].pin >= 0xF0) {
-                Serial.print(F("I2C"));
+                Serial.print(F("I2C:"));
+                Serial.print(inputs[i].pin - 0xF0);
             } else if (inputs[i].pin >= A0) {
                 Serial.print(F("A"));
                 Serial.print(inputs[i].pin - A0);

@@ -42,13 +42,6 @@ extern void updateLCD(Input**, int);
 #include "test/test_mode.h"
 #endif
 
-// BME280 sensor (if any BME280 sensors are configured)
-#ifdef USE_BME280
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BME280.h>
-Adafruit_BME280 bme;
-#endif
-
 // ===== TIME-SLICING STATE =====
 // Tracks last execution time for each time-sliced operation
 static uint32_t lastInputRead[MAX_INPUTS];  // Per-sensor read timing
@@ -186,24 +179,10 @@ void setup() {
     Wire.setClock(400000);  // 400kHz for most platforms
     #endif
     Serial.println(F("✓ I2C initialized"));
-    
-    // Initialize BME280 (if any BME280 sensors are configured)
-    #ifdef USE_BME280
-    Serial.print(F("Initializing BME280... "));
-    if (!bme.begin(0x76, &Wire)) {
-        Serial.println(F("FAILED!"));
-        Serial.println(F("   BME280 not found at 0x76, trying 0x77..."));
-        if (!bme.begin(0x77, &Wire)) {
-            Serial.println(F("   BME280 not found - BME280 sensors will read NAN"));
-            // Note: In input-based architecture, sensors are disabled via serial commands
 
-        } else {
-            Serial.println(F("OK (at 0x77)"));
-        }
-    } else {
-        Serial.println(F("OK (at 0x76)"));
-    }
-    #endif
+    // Note: BME280 initialization now happens automatically when first BME280 sensor is configured
+    // via the initBME280() function in sensor_read.cpp
+
     // Initialize display
     #ifdef ENABLE_LCD
     Serial.print(F("Initializing LCD... "));
