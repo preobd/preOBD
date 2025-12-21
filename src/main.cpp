@@ -179,15 +179,12 @@ void setup() {
 
     // Initialize display
     #ifdef ENABLE_LCD
-    Serial.print(F("Initializing LCD... "));
     initLCD();
     #endif
 
 #ifndef USE_STATIC_CONFIG
     // Initialize button handler (only in EEPROM mode)
-    Serial.print(F("Initializing button handler... "));
     initButtonHandler();
-    Serial.println(F("OK"));
 #endif
 
     // Initialize display manager (works in both static and EEPROM modes)
@@ -195,7 +192,6 @@ void setup() {
     initDisplayManager();
 
     // Initialize output modules
-    Serial.println(F("Initializing output modules..."));
     initOutputModules();
 
     // Wait for sensors to stabilize
