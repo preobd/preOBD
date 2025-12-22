@@ -1,6 +1,5 @@
 /*
  * sensor_read.cpp - All sensor reading implementations
- * Works with both EEPROM config and compile-time config
  */
 
 #include "../config.h"
@@ -178,16 +177,13 @@ void readThermistorSteinhart(Input *ptr) {
 
     // Get calibration values (from custom RAM or PROGMEM preset)
     float R_bias, A, B, C;
-#ifdef USE_INPUT_BASED_ARCHITECTURE
     if (ptr->flags.useCustomCalibration && ptr->calibrationType == CAL_THERMISTOR_STEINHART) {
         // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
         R_bias = ptr->customCalibration.steinhart.bias_resistor;
         A = ptr->customCalibration.steinhart.steinhart_a;
         B = ptr->customCalibration.steinhart.steinhart_b;
         C = ptr->customCalibration.steinhart.steinhart_c;
-    } else
-#endif
-    if (ptr->presetCalibration != nullptr && ptr->calibrationType == CAL_THERMISTOR_STEINHART) {
+    } else if (ptr->presetCalibration != nullptr && ptr->calibrationType == CAL_THERMISTOR_STEINHART) {
         // Read from preset calibration (PROGMEM)
         const ThermistorSteinhartCalibration* cal = (const ThermistorSteinhartCalibration*)ptr->presetCalibration;
         R_bias = pgm_read_float(&cal->bias_resistor);
@@ -231,16 +227,13 @@ void readThermistorBeta(Input *ptr) {
 
     // Get calibration values (from custom RAM or PROGMEM preset)
     float R_bias, beta, R0, T0_celsius;
-#ifdef USE_INPUT_BASED_ARCHITECTURE
     if (ptr->flags.useCustomCalibration && ptr->calibrationType == CAL_THERMISTOR_BETA) {
         // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
         R_bias = ptr->customCalibration.beta.bias_resistor;
         beta = ptr->customCalibration.beta.beta;
         R0 = ptr->customCalibration.beta.r0;
         T0_celsius = ptr->customCalibration.beta.t0;
-    } else
-#endif
-    if (ptr->presetCalibration != nullptr && ptr->calibrationType == CAL_THERMISTOR_BETA) {
+    } else if (ptr->presetCalibration != nullptr && ptr->calibrationType == CAL_THERMISTOR_BETA) {
         // Read from preset calibration (PROGMEM)
         const BetaCalibration* cal = (const BetaCalibration*)ptr->presetCalibration;
         R_bias = pgm_read_float(&cal->bias_resistor);
@@ -326,16 +319,13 @@ void readLinearSensor(Input *ptr) {
 
     // Get calibration values (from custom RAM or PROGMEM preset)
     float V_min, V_max, output_min, output_max;
-#ifdef USE_INPUT_BASED_ARCHITECTURE
     if (ptr->flags.useCustomCalibration && ptr->calibrationType == CAL_LINEAR) {
         // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
         V_min = ptr->customCalibration.pressureLinear.voltage_min;
         V_max = ptr->customCalibration.pressureLinear.voltage_max;
         output_min = ptr->customCalibration.pressureLinear.output_min;
         output_max = ptr->customCalibration.pressureLinear.output_max;
-    } else
-#endif
-    if (ptr->presetCalibration != nullptr && ptr->calibrationType == CAL_LINEAR) {
+    } else if (ptr->presetCalibration != nullptr && ptr->calibrationType == CAL_LINEAR) {
         // Read from preset calibration (PROGMEM)
         const LinearCalibration* cal = (const LinearCalibration*)ptr->presetCalibration;
         V_min = pgm_read_float(&cal->voltage_min);
@@ -376,16 +366,13 @@ void readPressurePolynomial(Input *ptr) {
 
     // Get calibration values (from custom RAM or PROGMEM preset)
     float bias_resistor, a, b, c;
-#ifdef USE_INPUT_BASED_ARCHITECTURE
     if (ptr->flags.useCustomCalibration && ptr->calibrationType == CAL_PRESSURE_POLYNOMIAL) {
         // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
         bias_resistor = ptr->customCalibration.pressurePolynomial.bias_resistor;
         a = ptr->customCalibration.pressurePolynomial.poly_a;
         b = ptr->customCalibration.pressurePolynomial.poly_b;
         c = ptr->customCalibration.pressurePolynomial.poly_c;
-    } else
-#endif
-    if (ptr->presetCalibration != nullptr && ptr->calibrationType == CAL_PRESSURE_POLYNOMIAL) {
+    } else if (ptr->presetCalibration != nullptr && ptr->calibrationType == CAL_PRESSURE_POLYNOMIAL) {
         // Read from preset calibration (PROGMEM)
         const PolynomialCalibration* cal = (const PolynomialCalibration*)ptr->presetCalibration;
         bias_resistor = pgm_read_float(&cal->bias_resistor);
@@ -434,16 +421,13 @@ void readVoltageDivider(Input *ptr) {
 
     // Get calibration values (from custom RAM or PROGMEM preset)
     float r1, r2, correction, offset;
-#ifdef USE_INPUT_BASED_ARCHITECTURE
     if (ptr->flags.useCustomCalibration && ptr->calibrationType == CAL_VOLTAGE_DIVIDER) {
         // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
         r1 = ptr->customCalibration.voltageDivider.r1;
         r2 = ptr->customCalibration.voltageDivider.r2;
         correction = ptr->customCalibration.voltageDivider.correction;
         offset = ptr->customCalibration.voltageDivider.offset;
-    } else
-#endif
-    if (ptr->presetCalibration != nullptr && ptr->calibrationType == CAL_VOLTAGE_DIVIDER) {
+    } else if (ptr->presetCalibration != nullptr && ptr->calibrationType == CAL_VOLTAGE_DIVIDER) {
         // Read from preset calibration (PROGMEM)
         const VoltageDividerCalibration* cal = (const VoltageDividerCalibration*)ptr->presetCalibration;
         r1 = pgm_read_float(&cal->r1);

@@ -16,7 +16,7 @@
  *   - Initial release (v0.4.1-alpha)
  *
  * NOTE: JSON features are only available in EEPROM mode (runtime config).
- *       Static compile-time builds do not include JSON to save memory.
+ *       Static builds do not include JSON to save memory.
  */
 
 #ifndef JSON_CONFIG_H

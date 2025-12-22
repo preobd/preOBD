@@ -1,6 +1,5 @@
 /*
  * input_manager.cpp - Input Configuration & Management Implementation
- * Works with both EEPROM config and compile-time config
  */
 
 #include <EEPROM.h>
@@ -396,7 +395,7 @@ bool initInputManager() {
     // Configure inputs using the registry-based functions
     // This reuses the same runtime configuration logic
 
-    Serial.println(F("Initializing from compile-time configuration..."));
+    Serial.println(F("Initializing from static configuration..."));
 
     #ifdef INPUT_0_PIN
         CONFIGURE_INPUT(0, 0);
@@ -483,7 +482,7 @@ bool initInputManager() {
 
     Serial.print(F("✓ Loaded "));
     Serial.print(numActiveInputs);
-    Serial.println(F(" inputs from compile-time config"));
+    Serial.println(F(" inputs from static config"));
     return true;  // Static config always valid
 
 #else

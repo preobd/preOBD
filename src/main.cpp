@@ -11,18 +11,17 @@
 #include "lib/platform.h"
 #include "lib/watchdog.h"
 
-// Input-based architecture (supports both EEPROM and compile-time config)
 #include "lib/sensor_types.h"
 #include "lib/sensor_library.h"
 #include "lib/system_config.h"
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
 #ifndef USE_STATIC_CONFIG
-    #include "inputs/serial_config.h"  // Only needed for EEPROM/serial config mode
+    #include "inputs/serial_config.h"   // Only needed for EEPROM/serial config mode
     #include "lib/system_mode.h"        // System mode (CONFIG/RUN)
     #include "lib/button_handler.h"     // Multi-function button handler
 #endif
-#include "lib/display_manager.h"    // Display runtime state management (works in both modes)
+#include "lib/display_manager.h"        // Display runtime state management
 #include "outputs/output_base.h"
 
 // Declare output module functions

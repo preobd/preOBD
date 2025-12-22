@@ -29,7 +29,7 @@ uint8_t calculateChecksum(SystemConfig* cfg) {
 
 /**
  * Initialize system configuration
- * Try loading from EEPROM, fallback to compile-time defaults
+ * Try loading from EEPROM, fallback to defaults
  */
 void initSystemConfig() {
     // Try loading from EEPROM
@@ -38,13 +38,13 @@ void initSystemConfig() {
         return;
     }
 
-    // Fallback: Use compile-time defaults from config.h
+    // Fallback: Use defaults from config.h
     Serial.println(F("Using default system config"));
     resetSystemConfig();
 }
 
 /**
- * Reset system configuration to compile-time defaults
+ * Reset system configuration to defaults
  */
 void resetSystemConfig() {
     systemConfig.magic = SYSTEM_CONFIG_MAGIC;

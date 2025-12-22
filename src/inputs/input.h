@@ -53,9 +53,6 @@
 #ifndef INPUT_H
 #define INPUT_H
 
-// Flag indicating unified Input-based architecture is in use (always defined)
-#define USE_INPUT_BASED_ARCHITECTURE
-
 #include <Arduino.h>
 #include "../lib/sensor_types.h"
 

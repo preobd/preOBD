@@ -80,7 +80,7 @@ extern SystemConfig systemConfig;
 void initSystemConfig();         // Load from EEPROM or set defaults
 bool saveSystemConfig();         // Save to EEPROM
 bool loadSystemConfig();         // Load from EEPROM
-void resetSystemConfig();        // Reset to compile-time defaults
+void resetSystemConfig();        // Reset to defaults
 uint8_t calculateChecksum(SystemConfig* cfg);
 
 #endif // SYSTEM_CONFIG_H
