@@ -2,7 +2,7 @@
  * input_manager.h - Input Configuration & Management
  *
  * Manages configuration and runtime operation of input pins, including:
- * - Initialization from EEPROM or compile-time config (sensors_config.h)
+ * - Initialization from EEPROM or static config
  * - Setting Application (measurement type) and Sensor (hardware)
  * - EEPROM persistence (in EEPROM/serial config mode)
  * - Runtime queries and modifications

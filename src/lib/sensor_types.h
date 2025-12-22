@@ -1,6 +1,5 @@
 /*
  * sensor_types.h - Sensor type definitions and structures
- * Now unified for Input-based architecture only
  */
 
 #ifndef SENSOR_TYPES_H
@@ -97,8 +96,5 @@ typedef struct {
     uint16_t min_rpm;        // Minimum valid RPM (default 100)
     uint16_t max_rpm;        // Maximum valid RPM (default 10000)
 } RPMCalibration;
-
-// Legacy code removed: StaticSensor struct, wrapper conversion logic, and old sensor array system.
-// All code now uses unified Input-based architecture with compile-time or runtime configuration.
 
 #endif

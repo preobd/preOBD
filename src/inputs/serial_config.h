@@ -3,7 +3,7 @@
  *
  * Provides serial command interface for runtime configuration of inputs.
  *
- * NOTE: Only compiled in EEPROM/runtime configuration mode (not in static/compile-time mode)
+ * NOTE: Only compiled in EEPROM/runtime configuration mode (not in static mode)
  */
 
 #ifndef SERIAL_CONFIG_H

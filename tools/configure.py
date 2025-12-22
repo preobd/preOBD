@@ -3,7 +3,7 @@
 openEMS Static Configuration Tool
 
 An interactive CLI to generate static sensor configurations for openEMS,
-reducing the reliance on EEPROM and enabling compile-time optimizations.
+reducing the reliance on EEPROM and enabling static build optimizations.
 """
 import argparse
 import json

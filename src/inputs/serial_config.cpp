@@ -2,7 +2,7 @@
  * serial_config.cpp - Serial Command Interface Implementation
  * NO String class - uses char* and fixed buffers for minimal RAM usage
  *
- * NOTE: Only compiled in EEPROM/runtime configuration mode (not in static/compile-time mode)
+ * NOTE: Only compiled in EEPROM/runtime configuration mode (not in static mode)
  */
 
 #include "../config.h"

@@ -8,7 +8,6 @@
  * Features:
  * - Pre-defined test scenarios (normal operation, alarms, faults, etc.)
  * - Dynamic time-based value generation (ramps, waves, random walks)
- * - Works with both EEPROM and compile-time configuration modes
  * - Zero overhead when ENABLE_TEST_MODE is not defined
  */
 

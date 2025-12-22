@@ -1,7 +1,6 @@
 /*
  * output_can.cpp - CAN bus output module
  * Supports both native FlexCAN (Teensy 3.x/4.x) and MCP2515 (all boards)
- * Works with both EEPROM config and compile-time config
  */
 
 #include "../config.h"

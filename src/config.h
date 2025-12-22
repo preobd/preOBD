@@ -147,10 +147,10 @@
 #endif
 
 // ============================================================================
-// STEP 8: SENSOR CONFIGURATION (Optional - Compile-Time Mode Only)
+// STEP 8: SENSOR CONFIGURATION (Optional - Static Build Only)
 // ============================================================================
 
-// Uncomment to use compile-time config instead of EEPROM:
+// Uncomment to use static config instead of EEPROM:
 //#define USE_STATIC_CONFIG
 
 #ifdef USE_STATIC_CONFIG

@@ -1,6 +1,5 @@
 /*
  * display_lcd.cpp - LCD display module
- * Works with both EEPROM config and compile-time config
  */
 
 #include "../config.h"
