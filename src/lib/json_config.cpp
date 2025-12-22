@@ -67,6 +67,7 @@ static const char* getCalibrationType(const Input* input) {
     switch (input->calibrationType) {
         case CAL_NONE: return "NONE";
         case CAL_THERMISTOR_STEINHART: return "THERMISTOR_STEINHART";
+        case CAL_THERMISTOR_BETA: return "THERMISTOR_BETA";
         case CAL_THERMISTOR_LOOKUP: return "THERMISTOR_LOOKUP";
         case CAL_PRESSURE_POLYNOMIAL: return "PRESSURE_POLYNOMIAL";
         case CAL_LINEAR: return "LINEAR";
@@ -94,6 +95,13 @@ static void exportCalibration(JsonObject& calObj, const Input* input) {
             params["steinhartA"] = input->customCalibration.steinhart.steinhart_a;
             params["steinhartB"] = input->customCalibration.steinhart.steinhart_b;
             params["steinhartC"] = input->customCalibration.steinhart.steinhart_c;
+            break;
+
+        case CAL_THERMISTOR_BETA:
+            params["biasResistor"] = input->customCalibration.beta.bias_resistor;
+            params["beta"] = input->customCalibration.beta.beta;
+            params["r0"] = input->customCalibration.beta.r0;
+            params["t0"] = input->customCalibration.beta.t0;
             break;
 
         case CAL_THERMISTOR_LOOKUP:

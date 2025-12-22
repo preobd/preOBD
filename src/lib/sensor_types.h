@@ -26,6 +26,7 @@ enum CalibrationType {
     CAL_NONE,
     CAL_THERMISTOR_STEINHART,
     CAL_THERMISTOR_LOOKUP,
+    CAL_THERMISTOR_BETA,
     CAL_PRESSURE_POLYNOMIAL,
     CAL_LINEAR,              // Linear sensor (temperature, pressure, etc.)
     CAL_VOLTAGE_DIVIDER,
@@ -42,6 +43,15 @@ typedef struct {
     float steinhart_b;      // Steinhart-Hart B coefficient
     float steinhart_c;      // Steinhart-Hart C coefficient
 } ThermistorSteinhartCalibration;
+
+// Thermistor calibration using Beta parameter equation
+// T(K) = 1 / (1/T0(K) + (1/β) * ln(R/R0))
+typedef struct {
+    float bias_resistor;    // Pull-down resistor in ohms
+    float beta;             // Beta coefficient in Kelvin (typically 3000-5000K)
+    float r0;               // Reference resistance in ohms (typically at 25°C)
+    float t0;               // Reference temperature in Celsius (user input, converted to K for calc)
+} BetaCalibration;
 
 // Thermistor calibration using lookup table interpolation
 typedef struct {

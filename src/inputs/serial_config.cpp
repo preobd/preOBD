@@ -415,6 +415,7 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>"));
         Serial.println(F("  SET <pin> BIAS <resistor>  - Set bias resistor (Ohms)"));
         Serial.println(F("  SET <pin> STEINHART <bias> <a> <b> <c>  - Steinhart-Hart"));
+        Serial.println(F("  SET <pin> BETA <bias> <beta> <r0> <t0>  - Beta equation"));
         Serial.println(F("  SET <pin> PRESSURE_POLY <bias> <a> <b> <c>  - VDO polynomial"));
         Serial.println(F("  INFO <pin> CALIBRATION  - Show calibration details"));
         Serial.println();
@@ -967,11 +968,12 @@ void handleSerialCommand(char* cmd) {
             // Validate calibration type supports bias resistor
             if (input->calibrationType != CAL_THERMISTOR_STEINHART &&
                 input->calibrationType != CAL_THERMISTOR_LOOKUP &&
+                input->calibrationType != CAL_THERMISTOR_BETA &&
                 input->calibrationType != CAL_PRESSURE_POLYNOMIAL) {
                 Serial.print(F("ERROR: Calibration type "));
                 Serial.print(input->calibrationType);
                 Serial.println(F(" does not use bias resistor"));
-                Serial.println(F("  BIAS works with: Thermistor (Steinhart-Hart), Thermistor (Lookup), Pressure (Polynomial)"));
+                Serial.println(F("  BIAS works with: Thermistor (Steinhart-Hart), Thermistor (Beta), Thermistor (Lookup), Pressure (Polynomial)"));
                 return;
             }
 
@@ -990,6 +992,8 @@ void handleSerialCommand(char* cmd) {
 
             if (input->calibrationType == CAL_THERMISTOR_STEINHART) {
                 input->customCalibration.steinhart.bias_resistor = bias;
+            } else if (input->calibrationType == CAL_THERMISTOR_BETA) {
+                input->customCalibration.beta.bias_resistor = bias;
             } else if (input->calibrationType == CAL_THERMISTOR_LOOKUP) {
                 input->customCalibration.lookup.bias_resistor = bias;
             } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) {
@@ -1075,6 +1079,93 @@ void handleSerialCommand(char* cmd) {
             Serial.println(b, 10);
             Serial.print(F("  C: "));
             Serial.println(c, 10);
+            return;
+        }
+
+        // SET <pin> BETA <bias_r> <beta> <r0> <t0>
+        if (strncmp(fieldAndValue, "BETA ", 5) == 0) {
+            char* params = fieldAndValue + 5;
+            trim(params);
+
+            // Parse 4 float parameters
+            float bias_r, beta, r0, t0;
+            char* token = strtok(params, " ");
+            if (!token) {
+                Serial.println(F("ERROR: BETA requires 4 parameters"));
+                Serial.println(F("  Usage: SET <pin> BETA <bias_r> <beta> <r0> <t0>"));
+                Serial.println(F("  Example: SET A0 BETA 10000 3950 10000 25"));
+                Serial.println(F("  Where: bias_r=bias resistor (Ω), beta=β coefficient (K),"));
+                Serial.println(F("         r0=ref resistance (Ω), t0=ref temp (°C, typically 25)"));
+                return;
+            }
+            bias_r = atof(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) {
+                Serial.println(F("ERROR: BETA requires 4 parameters"));
+                return;
+            }
+            beta = atof(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) {
+                Serial.println(F("ERROR: BETA requires 4 parameters"));
+                return;
+            }
+            r0 = atof(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) {
+                Serial.println(F("ERROR: BETA requires 4 parameters"));
+                return;
+            }
+            t0 = atof(token);
+
+            // Validate parameters
+            if (bias_r <= 0) {
+                Serial.println(F("ERROR: bias_r must be > 0"));
+                return;
+            }
+            if (beta < 1000 || beta > 10000) {
+                Serial.println(F("WARNING: Beta typically 2000-6000K. Value may be incorrect."));
+            }
+            if (r0 <= 0) {
+                Serial.println(F("ERROR: r0 must be > 0"));
+                return;
+            }
+            if (t0 < -40 || t0 > 150) {
+                Serial.println(F("WARNING: t0 typically 25°C. Value may be incorrect."));
+            }
+
+            // Get input and apply calibration
+            Input* input = getInputByPin(pin);
+            if (!input || !input->flags.isEnabled) {
+                Serial.println(F("ERROR: Input not configured"));
+                return;
+            }
+
+            // Apply custom calibration
+            input->flags.useCustomCalibration = true;
+            input->calibrationType = CAL_THERMISTOR_BETA;
+            input->customCalibration.beta.bias_resistor = bias_r;
+            input->customCalibration.beta.beta = beta;
+            input->customCalibration.beta.r0 = r0;
+            input->customCalibration.beta.t0 = t0;
+
+            Serial.print(F("Beta calibration set for pin "));
+            Serial.println(pinStr);
+            Serial.print(F("  Bias Resistor: "));
+            Serial.print(bias_r, 1);
+            Serial.println(F(" Ω"));
+            Serial.print(F("  Beta: "));
+            Serial.print(beta, 1);
+            Serial.println(F(" K"));
+            Serial.print(F("  R0: "));
+            Serial.print(r0, 1);
+            Serial.println(F(" Ω"));
+            Serial.print(F("  T0: "));
+            Serial.print(t0, 1);
+            Serial.println(F(" °C"));
             return;
         }
 
@@ -1658,6 +1749,7 @@ void handleSerialCommand(char* cmd) {
                 Serial.print(F("  Type: "));
                 switch (input->calibrationType) {
                     case CAL_THERMISTOR_STEINHART: Serial.println(F("THERMISTOR_STEINHART")); break;
+                    case CAL_THERMISTOR_BETA: Serial.println(F("THERMISTOR_BETA")); break;
                     case CAL_THERMISTOR_LOOKUP: Serial.println(F("THERMISTOR_LOOKUP")); break;
                     case CAL_PRESSURE_POLYNOMIAL: Serial.println(F("PRESSURE_POLYNOMIAL")); break;
                     case CAL_LINEAR: Serial.println(F("PRESSURE_LINEAR")); break;
@@ -1681,6 +1773,19 @@ void handleSerialCommand(char* cmd) {
                         Serial.println(input->customCalibration.steinhart.steinhart_b, 10);
                         Serial.print(F("  C: "));
                         Serial.println(input->customCalibration.steinhart.steinhart_c, 10);
+                    } else if (input->calibrationType == CAL_THERMISTOR_BETA) {
+                        Serial.print(F("  Bias Resistor: "));
+                        Serial.print(input->customCalibration.beta.bias_resistor, 1);
+                        Serial.println(F(" Ω"));
+                        Serial.print(F("  Beta: "));
+                        Serial.print(input->customCalibration.beta.beta, 1);
+                        Serial.println(F(" K"));
+                        Serial.print(F("  R0: "));
+                        Serial.print(input->customCalibration.beta.r0, 1);
+                        Serial.println(F(" Ω"));
+                        Serial.print(F("  T0: "));
+                        Serial.print(input->customCalibration.beta.t0, 1);
+                        Serial.println(F(" °C"));
                     } else if (input->calibrationType == CAL_THERMISTOR_LOOKUP) {
                         Serial.print(F("  Bias Resistor: "));
                         Serial.print(input->customCalibration.lookup.bias_resistor, 1);
