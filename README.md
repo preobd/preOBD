@@ -20,7 +20,6 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 
 **What it doesn't do:**
 - Engine control (monitoring only, no outputs to engine)
-- Replace mechanical gauges (use as supplement, not replacement)
 - Interface with existing factory ECUs or OBDII systems
 - Provide safety certification or guarantees
 
@@ -32,18 +31,18 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 - Custom calibration support for non-standard sensors
 
 **Configuration:**
-- Compile-time configuration mode (minimal RAM, recommended for Arduino Uno)
 - **Runtime configuration mode** (serial commands, EEPROM storage, CONFIG/RUN mode separation)
   - Configure outputs, display, and system parameters at runtime
   - Enable/disable CAN, RealDash, Serial CSV, SD logging, Alarm output without recompiling
   - Adjust output intervals, display units, and timing on-the-fly
   - Combined sensor command syntax for faster setup
   - Custom alarm warmup and fault persistence times per input
+- Static builds via Python configuration (minimal RAM)
 
 **Hardware Platforms:**
-- Arduino Uno (2KB RAM, limited sensors)
-- Arduino Mega 2560 (8KB RAM, full features)
 - Teensy 3.x/4.x (native CAN, excellent ADC)
+- Arduino Mega 2560 (8KB RAM, full features)
+- Arduino Uno (2KB RAM, limited sensors)
 - Arduino Due, ESP32 (less tested)
 
 **Outputs:**
@@ -78,19 +77,7 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 
 ## Quick Start
 
-### 1. Choose Configuration Mode
-
-**Compile-Time Mode (Arduino Uno, stable setups):**
-- Configure sensors in `config.h` at compile time
-- Smallest memory footprint
-- No runtime configuration overhead
-
-**Runtime Mode (Teensy/Mega, under-development):**
-- Configure sensors via serial commands
-- Settings saved to EEPROM
-- Change configuration without recompiling
-
-### 2. Installation
+### 1. Installation
 
 ```bash
 # Clone the repository
@@ -107,48 +94,27 @@ pio run -t upload
 pio device monitor
 ```
 
-### 3. Basic Configuration
-
-**Compile-Time Mode (config.h):**
-
-```cpp
-// Choose compile-time mode
-#define USE_STATIC_CONFIG
-
-// Enable outputs
-#define ENABLE_LCD
-#define ENABLE_SERIAL_OUTPUT
-
-// Configure sensors
-#define INPUT_1_PIN            6
-#define INPUT_1_APPLICATION    CHT
-#define INPUT_1_SENSOR         K_TYPE_THERMOCOUPLE_MAX6675
-
-#define INPUT_2_PIN            A2
-#define INPUT_2_APPLICATION    COOLANT_TEMP
-#define INPUT_2_SENSOR         VDO_120C_LOOKUP
-
-#define INPUT_3_PIN            A3
-#define INPUT_3_APPLICATION    OIL_PRESSURE
-#define INPUT_3_SENSOR         VDO_5BAR_PRESSURE
-```
+### 2. Basic Configuration
 
 **Runtime Mode (serial commands):**
 
 ```
 CONFIG                                                # Enter CONFIG mode
-SET 6 APPLICATION CHT
-SET 6 SENSOR MAX6675
-SET A2 APPLICATION COOLANT_TEMP
-SET A2 SENSOR VDO_120C_LOOKUP
-SET A3 APPLICATION OIL_PRESSURE
-SET A3 SENSOR VDO_5BAR_PRESSURE
+SET 7 EGT MAX31855
+SET A0 OIL_TEMP VDO_150C_STEINHART
+SET A1 COOLANT_TEMP VDO_120C_STEINHART
+SET A2 OIL_PRESSURE VDO_5BAR_PRESSURE
+SET A3 BOOST_PRESSURE MPX4250AP
+SET A6 PRIMARY_BATTERY VOLTAGE_DIVIDER
+SET I2C:0 AMBIENT_TEMP BME280_TEMP
 SAVE
 RUN                                                   # Enter RUN mode (starts sensors)
 ```
 
-**Hardware Requirements (Runtime Mode):**
-- MODE_BUTTON (Pin 4): Hold during boot to enter CONFIG mode, press in RUN mode to silence alarms
+**Multi-function button (Runtime Mode):**
+- Hold during boot to enter CONFIG mode
+- Press in RUN mode to silence alarms
+- Hold briefly during RUN mode to toggle display on/off
 
 ## Documentation
 
@@ -230,17 +196,6 @@ openEMS outputs standard OBDII PIDs via CAN bus, making it compatible with:
 - Most OBDII diagnostic apps
 
 **Note:** openEMS emulates OBDII for tool compatibility but does not interface with factory vehicle ECUs.
-
-## Performance
-
-**Typical Configuration (8 sensors, CAN, LCD):**
-- RAM usage: ~3KB
-- Flash usage: ~35KB
-
-**Arduino Uno (minimal, 3-6 sensors):**
-- RAM usage: ~1.5-2KB
-- Flash usage: ~25-30KB
-- Fully functional with compile-time mode
 
 ## Contributing
 
