@@ -73,7 +73,15 @@ union CalibrationOverride {
         float steinhart_b;
         float steinhart_c;
     } steinhart;
-    
+
+    // Thermistor Beta (16 bytes)
+    struct {
+        float bias_resistor;
+        float beta;
+        float r0;
+        float t0;
+    } beta;
+
     // Thermistor Lookup (4 bytes + padding)
     // Tables stay in flash, only bias resistor is overridable
     struct {

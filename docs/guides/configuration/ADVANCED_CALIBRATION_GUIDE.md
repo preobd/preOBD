@@ -83,6 +83,7 @@ In runtime configuration mode (without `USE_STATIC_CONFIG`), you can set custom 
 SET <pin> CALIBRATION PRESET              # Revert to preset calibration
 SET <pin> BIAS <resistor>                 # Set bias resistor (Ω)
 SET <pin> STEINHART <bias> <a> <b> <c>    # Steinhart-Hart calibration
+SET <pin> BETA <bias> <beta> <r0> <t0>    # Beta equation calibration
 SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>  # Linear pressure
 SET <pin> PRESSURE_POLY <bias> <a> <b> <c>  # Polynomial pressure
 SET <pin> RPM <poles> <ratio> <timeout> <min> <max>  # RPM (5 params)
@@ -94,6 +95,14 @@ INFO <pin> CALIBRATION                    # View active calibration
 ```
 SET A0 OIL_TEMP THERMISTOR_STEINHART
 SET A0 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
+SET A0 DISPLAY_NAME "Oil Temp"
+SAVE
+```
+
+**Example: Custom Beta equation thermistor at runtime:**
+```
+SET A0 OIL_TEMP THERMISTOR_STEINHART
+SET A0 BETA 10000 3950 10000 25
 SET A0 DISPLAY_NAME "Oil Temp"
 SAVE
 ```
@@ -142,6 +151,37 @@ DEFINE_CUSTOM_THERMISTOR(input_2,
     8.775e-08       // C coefficient
 )
 ```
+
+### DEFINE_CUSTOM_THERMISTOR_BETA
+
+For NTC thermistors using the simplified Beta parameter equation. Easier to use when you know the Beta coefficient (often provided in thermistor datasheets).
+
+**Beta equation:** `T(K) = 1 / (1/T₀(K) + (1/β) × ln(R/R₀))`
+
+```cpp
+DEFINE_CUSTOM_THERMISTOR_BETA(name,
+    bias_resistor,    // Pull-down resistor value (Ω)
+    beta,             // Beta coefficient (K, typically 3000-5000)
+    r0,               // Reference resistance at T₀ (Ω)
+    t0                // Reference temperature (°C, typically 25)
+)
+```
+
+**Example:** 10K NTC thermistor with β=3950K:
+```cpp
+#define INPUT_2_CUSTOM_CALIBRATION
+
+DEFINE_CUSTOM_THERMISTOR_BETA(input_2,
+    10000.0,        // 10kΩ bias resistor
+    3950.0,         // β = 3950K
+    10000.0,        // R₀ = 10kΩ at T₀
+    25.0            // T₀ = 25°C
+)
+```
+
+**When to use Beta vs Steinhart-Hart:**
+- **Use Beta:** When your thermistor datasheet provides a Beta coefficient (simpler, good accuracy ±2°C)
+- **Use Steinhart-Hart:** When you need maximum accuracy (±0.1°C) or have calculated Steinhart-Hart coefficients
 
 ### DEFINE_CUSTOM_PRESSURE_LINEAR
 
