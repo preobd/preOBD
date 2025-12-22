@@ -147,7 +147,7 @@ SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 7.0
 ```
 SET <pin> BIAS <resistor>
 ```
-Set bias resistor (Ω) for Steinhart-Hart, Lookup, or Pressure Polynomial calibrations.
+Set bias resistor (Ω) for Steinhart-Hart, Beta, Lookup, or Pressure Polynomial calibrations.
 
 Examples:
 ```
@@ -164,6 +164,21 @@ For thermistors with Steinhart-Hart coefficients. Supports scientific notation.
 Example:
 ```
 SET A0 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
+```
+
+**Beta Equation Calibration:**
+```
+SET <pin> BETA <bias_r> <beta> <r0> <t0>
+```
+For thermistors with known Beta coefficient. Simpler alternative to Steinhart-Hart.
+- `bias_r`: Bias resistor (Ω)
+- `beta`: Beta coefficient (K, typically 3000-5000)
+- `r0`: Reference resistance at T₀ (Ω)
+- `t0`: Reference temperature (°C, typically 25)
+
+Example:
+```
+SET A0 BETA 10000 3950 10000 25  # 10K NTC thermistor, β=3950K
 ```
 
 **Pressure Polynomial Calibration:**

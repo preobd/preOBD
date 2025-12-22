@@ -178,7 +178,7 @@ python3 tools/configure.py --generate-thin-libs
 
 ## Calibration Examples
 
-### Example 1: Custom Thermistor for Coolant Temperature
+### Example 1: Custom Thermistor (Steinhart-Hart) for Coolant Temperature
 
 ```json
 "custom_calibration": {
@@ -191,7 +191,22 @@ python3 tools/configure.py --generate-thin-libs
 }
 ```
 
-### Example 2: Custom Linear Pressure Sensor
+### Example 2: Custom Thermistor (Beta Equation) for Oil Temperature
+
+```json
+"custom_calibration": {
+  "type": 3,
+  "calibration_name": "BetaCalibration",
+  "bias_resistor": 10000.0,
+  "beta": 3950.0,
+  "r0": 10000.0,
+  "t0": 25.0
+}
+```
+
+**Note:** Beta equation is simpler than Steinhart-Hart when you know the Beta coefficient (often provided in thermistor datasheets). Provides good accuracy (±2°C) with only 4 parameters instead of Steinhart-Hart's complex coefficients.
+
+### Example 3: Custom Linear Pressure Sensor
 
 ```json
 "custom_calibration": {
@@ -204,11 +219,11 @@ python3 tools/configure.py --generate-thin-libs
 }
 ```
 
-### Example 3: Custom VDO Polynomial Pressure Sensor
+### Example 4: Custom VDO Polynomial Pressure Sensor
 
 ```json
 "custom_calibration": {
-  "type": 3,
+  "type": 4,
   "calibration_name": "PolynomialCalibration",
   "bias_resistor": 1000.0,
   "poly_a": -0.3682,
@@ -217,11 +232,11 @@ python3 tools/configure.py --generate-thin-libs
 }
 ```
 
-### Example 4: Custom RPM Calibration
+### Example 5: Custom RPM Calibration
 
 ```json
 "custom_calibration": {
-  "type": 4,
+  "type": 5,
   "calibration_name": "RPMCalibration",
   "poles": 18,
   "pulley_ratio": 3.0,
