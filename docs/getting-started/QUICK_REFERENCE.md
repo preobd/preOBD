@@ -76,7 +76,7 @@ SET A5 TCASE_TEMP VDO_150C_STEINHART  # Transfer case
 ```
 VDO Sensor Signal → Analog pin (A2)
 VDO Sensor Ground → Chassis ground
-Add bias resistor: Pin → 1kΩ → 5V
+Add bias resistor: Pin → 1kΩ → 3.3V/5V
 ```
 
 ### Generic NTC Thermistor
@@ -93,7 +93,7 @@ SET A2 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
 **Wiring:**
 ```
 NTC Thermistor → Between analog pin and GND
-Bias resistor  → Between analog pin and 5V
+Bias resistor  → Between analog pin and 3.3V/5V
 (Typically 10kΩ bias for 10K NTC)
 ```
 
