@@ -21,296 +21,184 @@ Most users won't need this guide. The preset sensor library covers common automo
 - VDO 120°C or 150°C temperature sensors (use presets)
 - VDO 2-bar or 5-bar pressure sensors (use presets)
 - MAX6675 or MAX31855 thermocouples (no calibration needed)
-- Changing the bias resistor value (use `DEFAULT_BIAS_RESISTOR` in config.h or runtime `SET <pin> BIAS` command)
+- Changing just the bias resistor value (use `SET <pin> BIAS <ohms>`)
 
 ---
 
-## Quick Start: Custom Thermistor
+## Quick Start
 
-**Step 1:** Define the input in `config.h`:
+### Custom Thermistor (Steinhart-Hart)
 
-```cpp
-#define USE_STATIC_CONFIG
-
-#define INPUT_3_PIN            A0
-#define INPUT_3_APPLICATION    OIL_TEMP
-#define INPUT_3_SENSOR         VDO_150C_STEINHART  // Base sensor type
-```
-
-**Step 2:** Add custom calibration in `advanced_config.h`:
-
-```cpp
-#define INPUT_3_CUSTOM_CALIBRATION
-
-DEFINE_CUSTOM_THERMISTOR(input_3,
-    1000.0,         // bias_resistor (Ω)
-    1.591e-03,      // steinhart_a
-    2.659e-04,      // steinhart_b
-    -1.610e-07      // steinhart_c
-)
-```
-
-That's it. The custom calibration automatically overrides the preset values.
-
----
-
-## How Custom Calibration Works
-
-openEMS uses a two-level system:
-
-1. **Preset calibration** — stored in flash (PROGMEM), loaded from sensor library
-2. **Custom calibration** — stored in RAM, overrides the preset when defined
-
-When you define `INPUT_N_CUSTOM_CALIBRATION`, the system:
-1. Loads the base sensor configuration (read function, measurement type)
-2. Replaces the preset calibration data with your custom values
-3. Sets a flag so the read function uses your calibration
-
-**Important:** There are two ways to use custom calibrations:
-
-1. **Compile-time mode**: Define custom calibrations in `advanced_config.h` using macros (described below)
-2. **Runtime mode**: Use serial commands to set custom calibrations dynamically (see [Runtime Calibration](#runtime-calibration))
-
----
-
-## Runtime Calibration
-
-In runtime configuration mode (without `USE_STATIC_CONFIG`), you can set custom calibrations via serial commands without recompiling. These calibrations are stored in EEPROM when you `SAVE`.
-
-**Available runtime calibration commands:**
-
-```
-SET <pin> CALIBRATION PRESET              # Revert to preset calibration
-SET <pin> BIAS <resistor>                 # Set bias resistor (Ω)
-SET <pin> STEINHART <bias> <a> <b> <c>    # Steinhart-Hart calibration
-SET <pin> BETA <bias> <beta> <r0> <t0>    # Beta equation calibration
-SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>  # Linear pressure
-SET <pin> PRESSURE_POLY <bias> <a> <b> <c>  # Polynomial pressure
-SET <pin> RPM <poles> <ratio> <timeout> <min> <max>  # RPM (5 params)
-SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>  # RPM (6 params, with fine-tuning)
-INFO <pin> CALIBRATION                    # View active calibration
-```
-
-**Example: Custom Steinhart-Hart thermistor at runtime:**
 ```
 SET A0 OIL_TEMP THERMISTOR_STEINHART
 SET A0 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
-SET A0 DISPLAY_NAME "Oil Temp"
 SAVE
 ```
 
-**Example: Custom Beta equation thermistor at runtime:**
+### Custom Thermistor (Beta Equation)
+
 ```
 SET A0 OIL_TEMP THERMISTOR_STEINHART
 SET A0 BETA 10000 3950 10000 25
-SET A0 DISPLAY_NAME "Oil Temp"
 SAVE
 ```
 
-**Example: Custom linear pressure sensor:**
+### Custom Linear Pressure Sensor
+
 ```
 SET A1 BOOST_PRESSURE GENERIC_BOOST
 SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 3.0
 SAVE
 ```
 
-**Example: Fine-tuned RPM calibration:**
+### Adjust Bias Resistor Only
+
+```
+SET A0 BIAS 2200
+SAVE
+```
+
+---
+
+## Calibration Commands Reference
+
+### STEINHART - Steinhart-Hart Thermistor
+
+```
+SET <pin> STEINHART <bias> <a> <b> <c>
+```
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `bias` | Pull-down resistor (Ω) | 10000 |
+| `a` | Steinhart-Hart A coefficient | 1.129e-3 |
+| `b` | Steinhart-Hart B coefficient | 2.341e-4 |
+| `c` | Steinhart-Hart C coefficient | 8.775e-8 |
+
+**Example:** 10kΩ NTC thermistor with known coefficients:
+```
+SET A0 OIL_TEMP THERMISTOR_STEINHART
+SET A0 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
+SAVE
+```
+
+### BETA - Beta Equation Thermistor
+
+```
+SET <pin> BETA <bias> <beta> <r0> <t0>
+```
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `bias` | Pull-down resistor (Ω) | 10000 |
+| `beta` | Beta coefficient (K) | 3950 |
+| `r0` | Resistance at T0 (Ω) | 10000 |
+| `t0` | Reference temperature (°C) | 25 |
+
+**Example:** Generic 10kΩ NTC with β=3950:
+```
+SET A0 OIL_TEMP THERMISTOR_STEINHART
+SET A0 BETA 10000 3950 10000 25
+SAVE
+```
+
+The Beta equation is simpler than Steinhart-Hart when you know the Beta value (often in datasheets). Accuracy is typically ±2°C.
+
+### PRESSURE_LINEAR - Linear Voltage Sensor
+
+```
+SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>
+```
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `vmin` | Voltage at minimum pressure (V) | 0.5 |
+| `vmax` | Voltage at maximum pressure (V) | 4.5 |
+| `pmin` | Minimum pressure (bar) | 0.0 |
+| `pmax` | Maximum pressure (bar) | 3.0 |
+
+**Example:** 0.5-4.5V sensor, 0-3 bar range:
+```
+SET A1 BOOST_PRESSURE GENERIC_BOOST
+SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 3.0
+SAVE
+```
+
+### PRESSURE_POLY - Polynomial Pressure Sensor
+
+```
+SET <pin> PRESSURE_POLY <bias> <a> <b> <c>
+```
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `bias` | Pull-down resistor (Ω) | 1000 |
+| `a` | Quadratic coefficient (P² term) | -0.3682 |
+| `b` | Linear coefficient (P term) | 36.465 |
+| `c` | Constant term | 10.648 |
+
+The polynomial relates resistance to pressure: `R = a×P² + b×P + c`
+
+**Example:** Custom VDO-style sensor:
+```
+SET A3 OIL_PRESSURE VDO_5BAR
+SET A3 PRESSURE_POLY 1000 -0.3682 36.465 10.648
+SAVE
+```
+
+### RPM - Alternator RPM Calibration
+
+```
+SET <pin> RPM <poles> <ratio> <timeout> <min> <max>
+SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>
+```
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `poles` | Alternator pole count | 12 |
+| `ratio` | Pulley ratio (alt:engine) | 3.0 |
+| `mult` | Fine-tuning multiplier (optional) | 1.02 |
+| `timeout` | Zero RPM timeout (ms) | 2000 |
+| `min` | Minimum valid RPM | 100 |
+| `max` | Maximum valid RPM | 8000 |
+
+**Example:** 14-pole alternator, 2.5:1 ratio:
 ```
 SET 5 ENGINE_RPM W_PHASE_RPM
+SET 5 RPM 14 2.5 2000 100 8000
+SAVE
+```
+
+**Example:** Fine-tuned after testing:
+```
 SET 5 RPM 12 3.0 1.02 2000 100 8000
 SAVE
 ```
 
-See [SERIAL_COMMANDS.md](../../reference/SERIAL_COMMANDS.md) for complete runtime calibration command reference.
-
----
-
-## Calibration Macros
-
-### DEFINE_CUSTOM_THERMISTOR
-
-For NTC thermistors using Steinhart-Hart equation.
-
-```cpp
-DEFINE_CUSTOM_THERMISTOR(name,
-    bias_resistor,    // Pull-down resistor value (Ω)
-    steinhart_a,      // Steinhart-Hart A coefficient
-    steinhart_b,      // Steinhart-Hart B coefficient
-    steinhart_c       // Steinhart-Hart C coefficient
-)
-```
-
-**Example:**
-```cpp
-#define INPUT_2_CUSTOM_CALIBRATION
-
-DEFINE_CUSTOM_THERMISTOR(input_2,
-    1000.0,         // 1kΩ bias resistor
-    1.129e-03,      // A coefficient
-    2.341e-04,      // B coefficient
-    8.775e-08       // C coefficient
-)
-```
-
-### DEFINE_CUSTOM_THERMISTOR_BETA
-
-For NTC thermistors using the simplified Beta parameter equation. Easier to use when you know the Beta coefficient (often provided in thermistor datasheets).
-
-**Beta equation:** `T(K) = 1 / (1/T₀(K) + (1/β) × ln(R/R₀))`
-
-```cpp
-DEFINE_CUSTOM_THERMISTOR_BETA(name,
-    bias_resistor,    // Pull-down resistor value (Ω)
-    beta,             // Beta coefficient (K, typically 3000-5000)
-    r0,               // Reference resistance at T₀ (Ω)
-    t0                // Reference temperature (°C, typically 25)
-)
-```
-
-**Example:** 10K NTC thermistor with β=3950K:
-```cpp
-#define INPUT_2_CUSTOM_CALIBRATION
-
-DEFINE_CUSTOM_THERMISTOR_BETA(input_2,
-    10000.0,        // 10kΩ bias resistor
-    3950.0,         // β = 3950K
-    10000.0,        // R₀ = 10kΩ at T₀
-    25.0            // T₀ = 25°C
-)
-```
-
-**When to use Beta vs Steinhart-Hart:**
-- **Use Beta:** When your thermistor datasheet provides a Beta coefficient (simpler, good accuracy ±2°C)
-- **Use Steinhart-Hart:** When you need maximum accuracy (±0.1°C) or have calculated Steinhart-Hart coefficients
-
-### DEFINE_CUSTOM_PRESSURE_LINEAR
-
-For pressure sensors with linear voltage output (most 3-wire sensors).
-
-```cpp
-DEFINE_CUSTOM_PRESSURE_LINEAR(name,
-    voltage_min,      // Output voltage at minimum pressure (V)
-    voltage_max,      // Output voltage at maximum pressure (V)
-    pressure_min,     // Minimum pressure (bar)
-    pressure_max      // Maximum pressure (bar)
-)
-```
-
-**Example:** 0.5-4.5V sensor, 0-10 bar range:
-```cpp
-#define INPUT_4_CUSTOM_CALIBRATION
-
-DEFINE_CUSTOM_PRESSURE_LINEAR(input_4,
-    0.5,    // 0.5V at 0 bar
-    4.5,    // 4.5V at 10 bar
-    0.0,    // 0 bar minimum
-    10.0    // 10 bar maximum
-)
-```
-
-### DEFINE_CUSTOM_PRESSURE_POLY
-
-For VDO-style resistive pressure sensors using polynomial fit.
-
-```cpp
-DEFINE_CUSTOM_PRESSURE_POLY(name,
-    bias_resistor,    // Pull-down resistor value (Ω)
-    poly_a,           // Quadratic coefficient (P² term)
-    poly_b,           // Linear coefficient (P term)
-    poly_c            // Constant term
-)
-```
-
-The polynomial relates resistance to pressure: `R = a×P² + b×P + c`
-
-**Example:**
-```cpp
-#define INPUT_5_CUSTOM_CALIBRATION
-
-DEFINE_CUSTOM_PRESSURE_POLY(input_5,
-    1000.0,     // 1kΩ bias resistor
-    -0.3682,    // poly_a
-    36.465,     // poly_b
-    10.648      // poly_c
-)
-```
-
-### DEFINE_CUSTOM_RPM
-
-For alternator W-phase or other RPM sensors.
-
-```cpp
-DEFINE_CUSTOM_RPM(name,
-    poles,            // Number of alternator poles (8, 10, 12, 14, 16)
-    pulley_ratio,     // Alternator/Engine pulley ratio (e.g., 3.0 for 3:1)
-    calibration_mult, // Fine-tuning multiplier (default 1.0)
-    timeout_ms,       // Timeout for zero RPM detection (ms)
-    min_rpm,          // Minimum valid RPM
-    max_rpm           // Maximum valid RPM
-)
-```
-
-**Example:** 18-pole alternator, 3:1 pulley ratio:
-```cpp
-#define INPUT_6_CUSTOM_CALIBRATION
-
-DEFINE_CUSTOM_RPM(input_6,
-    18,       // 18-pole alternator
-    3.0,      // 3:1 pulley ratio (alternator to engine)
-    1.0,      // No fine-tuning (adjust empirically if needed)
-    2000,     // 2 second timeout
-    300,      // Ignore below 300 RPM
-    8000      // Ignore above 8000 RPM
-)
-```
-
-**Example:** 12-pole alternator, 2:1 pulley ratio (older vehicles):
-```cpp
-#define INPUT_3_CUSTOM_CALIBRATION
-
-DEFINE_CUSTOM_RPM(input_3,
-    12,       // 12-pole alternator (most common)
-    2.0,      // 2:1 pulley ratio
-    1.0,      // No fine-tuning
-    2000,     // 2 second timeout
-    100,      // Minimum RPM
-    10000     // Maximum RPM
-)
-```
-
-**Example:** Fine-tuned calibration after testing:
-```cpp
-#define INPUT_5_CUSTOM_CALIBRATION
-
-DEFINE_CUSTOM_RPM(input_5,
-    12,       // 12-pole alternator
-    3.0,      // 3:1 pulley ratio (measured)
-    1.0204,   // Fine-tuned +2.04% (compared to external tach)
-    2000,     // 2 second timeout
-    100,      // Minimum RPM
-    8000      // Maximum RPM
-)
-```
-
----
-
-## Naming Convention
-
-The calibration struct name **must** follow this pattern:
+### BIAS - Change Bias Resistor Only
 
 ```
-input_N_custom_cal
+SET <pin> BIAS <ohms>
 ```
 
-Where `N` matches your `INPUT_N_` definition in config.h.
+**Example:** Use 2.2kΩ instead of default 1kΩ:
+```
+SET A0 BIAS 2200
+SAVE
+```
 
-| config.h Define | Calibration Name |
-|-----------------|------------------|
-| `INPUT_0_CUSTOM_CALIBRATION` | `input_0_custom_cal` |
-| `INPUT_3_CUSTOM_CALIBRATION` | `input_3_custom_cal` |
-| `INPUT_7_CUSTOM_CALIBRATION` | `input_7_custom_cal` |
+### View Current Calibration
 
-The macro automatically creates the correctly-named struct.
+```
+INFO <pin> CALIBRATION
+```
+
+### Revert to Preset
+
+```
+SET <pin> CALIBRATION PRESET
+SAVE
+```
 
 ---
 
@@ -320,174 +208,132 @@ The macro automatically creates the correctly-named struct.
 
 Some manufacturers provide A, B, C coefficients directly. Look for "Steinhart-Hart" in the datasheet.
 
-### Method 2: From β (Beta) Value
+### Method 2: From Beta Value
 
-If your thermistor specifies a β value (e.g., β=3950):
+Most cheap NTC thermistors specify a β (Beta) value. Use the `BETA` command directly:
 
-For a 10kΩ NTC with β=3950:
-```cpp
-DEFINE_CUSTOM_THERMISTOR(input_N,
-    10000.0,        // 10kΩ bias (match thermistor nominal)
-    1.129241e-03,   // A
-    2.341077e-04,   // B
-    8.775468e-08    // C
-)
+```
+SET A0 BETA 10000 3950 10000 25
 ```
 
-For different β values, the B coefficient scales approximately:
-```
-B_actual ≈ B_3950 × (3950 / your_β)
-```
+Or convert to Steinhart-Hart approximately:
+
+| Beta Value | Typical A | Typical B | Typical C |
+|------------|-----------|-----------|-----------|
+| β=3380 | 1.40e-3 | 2.37e-4 | 9.90e-8 |
+| β=3435 | 1.35e-3 | 2.39e-4 | 9.50e-8 |
+| β=3950 | 1.13e-3 | 2.34e-4 | 8.78e-8 |
+| β=4050 | 1.10e-3 | 2.35e-4 | 8.50e-8 |
 
 ### Method 3: Calculate from Three Points
 
-If you have resistance measurements at three temperatures:
+If you have resistance measurements at three known temperatures:
 
-1. Measure resistance at three known temperatures (e.g., ice water, room temp, boiling water)
-2. Use an online Steinhart-Hart calculator:
-   - [SRS Thermistor Calculator](https://www.thinksrs.com/downloads/programs/therm%20calc/ntccalibrator/ntccalculator.html)
-   - [Daycounter Calculator](https://www.daycounter.com/Calculators/Steinhart-Hart-Thermistor-Calculator.phtml)
-3. Enter your R/T pairs and get A, B, C coefficients
+1. Measure resistance at three temperatures (e.g., ice water 0°C, room 25°C, hot water 60°C)
+2. Use an online Steinhart-Hart calculator
+3. Enter the three R/T pairs to get A, B, C coefficients
 
-**Example measurements:**
-| Temperature | Resistance |
-|-------------|------------|
-| 0°C (ice water) | 32,650Ω |
-| 25°C (room) | 10,000Ω |
-| 100°C (boiling) | 680Ω |
-
-### Method 4: Empirical Calibration
-
-If you have a reference thermometer:
-
-1. Start with the closest preset (e.g., `VDO_120C_STEINHART`)
-2. Compare readings at several temperatures
-3. If readings are consistently off, adjust coefficients
-4. Small A changes shift the whole curve
-5. B changes affect the slope
-6. C changes affect curvature at extremes
-
----
-
-## Common Thermistor Types
-
-### Generic NTC 10K β=3950 (Most Common)
-
-```cpp
-DEFINE_CUSTOM_THERMISTOR(input_N,
-    10000.0,        // 10kΩ bias resistor
-    1.129241e-03,   // A
-    2.341077e-04,   // B
-    8.775468e-08    // C
-)
-```
-
-### Generic NTC 10K β=3435
-
-```cpp
-DEFINE_CUSTOM_THERMISTOR(input_N,
-    10000.0,        // 10kΩ bias resistor
-    1.468e-03,      // A
-    2.383e-04,      // B
-    1.007e-07       // C
-)
-```
-
-### Generic NTC 10K β=3380
-
-```cpp
-DEFINE_CUSTOM_THERMISTOR(input_N,
-    10000.0,        // 10kΩ bias resistor
-    1.579e-03,      // A
-    2.349e-04,      // B
-    1.027e-07       // C
-)
-```
+**Recommended calculator:** Search for "Steinhart-Hart coefficient calculator"
 
 ---
 
 ## Bias Resistor Selection
 
-The bias resistor value significantly affects ADC resolution. See [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) for detailed analysis.
+The bias (pull-down) resistor affects measurement resolution. Default is 1kΩ.
 
-**Quick summary:**
+| Resistor | Best Resolution At | Use Case |
+|----------|-------------------|----------|
+| 470Ω | High temperatures | Oil temp, EGT monitoring |
+| 1kΩ | Mid-range (default) | General purpose |
+| 2.2kΩ | Low temperatures | Ambient, intake air |
+| 10kΩ | Very low temps | Cold climate |
 
-| Resistor | Best For |
-|----------|----------|
-| 1kΩ | Default, good balance (recommended) |
-| 470Ω | Maximum resolution, data logging |
-| 2.2kΩ | Low power |
+**Rule of thumb:** Match the bias resistor to the thermistor's resistance at your most critical temperature range.
 
-Set the global default in `config.h`:
-
-```cpp
-#define DEFAULT_BIAS_RESISTOR 1000.0
-```
-
-For custom calibration in compile-time mode, specify the bias resistor in the macro:
-
-```cpp
-DEFINE_CUSTOM_THERMISTOR(input_3,
-    470.0,          // Using 470Ω for this sensor
-    1.591e-03,
-    2.659e-04,
-    -1.610e-07
-)
-```
-
-For runtime configuration, use the `SET <pin> BIAS` command:
-
-```
-SET A0 BIAS 470    # Set 470Ω bias resistor for this sensor
-```
+See [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) for detailed analysis.
 
 ---
 
-## Complete Example
+## Static Builds
 
-Here's a complete example with multiple custom sensors:
+For static builds (`USE_STATIC_CONFIG`), use `tools/configure.py` which will prompt for custom calibrations:
 
-**config.h:**
-```cpp
-#define USE_STATIC_CONFIG
-
-// Standard VDO sensor (uses preset)
-#define INPUT_0_PIN            A2
-#define INPUT_0_APPLICATION    COOLANT_TEMP
-#define INPUT_0_SENSOR         VDO_120C_LOOKUP
-
-// Custom thermistor (override calibration)
-#define INPUT_1_PIN            A0
-#define INPUT_1_APPLICATION    OIL_TEMP
-#define INPUT_1_SENSOR         VDO_150C_STEINHART
-
-// Custom pressure sensor (override calibration)
-#define INPUT_2_PIN            A3
-#define INPUT_2_APPLICATION    BOOST_PRESSURE
-#define INPUT_2_SENSOR         GENERIC_LINEAR_PRESSURE
+```bash
+python3 tools/configure.py
 ```
 
-**advanced_config.h:**
-```cpp
-// Custom calibration for oil temp (Input 1)
-#define INPUT_1_CUSTOM_CALIBRATION
+When adding sensors, it will ask:
+```
+Add custom calibration? [y/N]: y
+```
 
-DEFINE_CUSTOM_THERMISTOR(input_1,
-    1000.0,         // 1kΩ bias (different from default)
-    1.125e-03,      // Custom A coefficient
-    2.347e-04,      // Custom B coefficient
-    8.566e-08       // Custom C coefficient
-)
+Then guide you through the calibration parameters. The tool generates the appropriate `advanced_config.h` entries automatically.
 
-// Custom calibration for boost sensor (Input 2)
-#define INPUT_2_CUSTOM_CALIBRATION
+See `tools/README_ADVANCED_CONFIG.md` for detailed static build calibration documentation.
 
-DEFINE_CUSTOM_PRESSURE_LINEAR(input_2,
-    0.5,            // 0.5V at 0 bar
-    4.5,            // 4.5V at 3 bar
-    0.0,            // 0 bar minimum
-    3.0             // 3 bar maximum
-)
+---
+
+## Examples
+
+### Example 1: Generic 10kΩ NTC Thermistor
+
+You have a cheap 10kΩ NTC thermistor with β=3950.
+
+```
+SET A0 OIL_TEMP THERMISTOR_STEINHART
+SET A0 BETA 10000 3950 10000 25
+SET A0 ALARM 60 130
+SAVE
+```
+
+### Example 2: Bosch Temperature Sender
+
+You have a Bosch temperature sender with known coefficients.
+
+```
+SET A1 COOLANT_TEMP THERMISTOR_STEINHART
+SET A1 STEINHART 1000 1.46e-3 2.38e-4 1.01e-7
+SET A1 ALARM 60 105
+SAVE
+```
+
+### Example 3: Chinese MAP Sensor
+
+You have a generic 0.5-4.5V MAP sensor rated 0-3 bar.
+
+```
+SET A2 BOOST_PRESSURE GENERIC_BOOST
+SET A2 PRESSURE_LINEAR 0.5 4.5 0.0 3.0
+SET A2 ALARM -1 2.0
+SAVE
+```
+
+### Example 4: Fine-Tuning VDO Sensor
+
+Your VDO sensor reads 3% low compared to a reference thermometer.
+
+```
+# First, check current calibration
+INFO A0 CALIBRATION
+
+# Apply 3% correction by adjusting bias resistor
+# If readings are low, try a slightly lower bias
+SET A0 BIAS 970
+SAVE
+```
+
+### Example 5: Custom RPM for Unusual Alternator
+
+You have a 16-pole alternator with a 2.8:1 pulley ratio.
+
+```
+SET 5 ENGINE_RPM W_PHASE_RPM
+SET 5 RPM 16 2.8 2000 100 8000
+SAVE
+
+# After testing, readings are 1.5% high
+SET 5 RPM 16 2.8 0.985 2000 100 8000
+SAVE
 ```
 
 ---
@@ -496,23 +342,24 @@ DEFINE_CUSTOM_PRESSURE_LINEAR(input_2,
 
 ### Readings are completely wrong
 
-- Verify the calibration name matches: `input_N_custom_cal`
-- Check that `INPUT_N_CUSTOM_CALIBRATION` is defined (not commented out)
-- Confirm the sensor type in config.h matches your calibration type
+- Verify the sensor type matches your physical sensor
+- Check that calibration command syntax is correct
+- Use `INFO <pin> CALIBRATION` to verify settings were saved
 
 ### Readings are close but not accurate
 
-- Double-check your Steinhart-Hart coefficients
-- Verify bias resistor value matches physical resistor
-- Test against a reference thermometer at multiple temperatures
+- Fine-tune bias resistor value
+- For thermistors: verify Steinhart-Hart coefficients
+- For RPM: adjust calibration multiplier
+- Compare against a known reference at multiple points
 
-### Custom calibration not being used
+### Calibration not being used
 
-- Ensure you're using compile-time mode (`USE_STATIC_CONFIG`)
-- Check that advanced_config.h is included properly
-- Verify the input index matches (INPUT_3 needs input_3_custom_cal)
+- Ensure you ran `SAVE` after setting calibration
+- Check `INFO <pin>` to verify custom calibration is active
+- Try `SET <pin> CALIBRATION PRESET` then re-enter your calibration
 
-### NAN or erratic readings
+### NaN or erratic readings
 
 - Check wiring (sensor to analog pin, bias resistor to ground)
 - Verify bias resistor is installed
@@ -520,11 +367,12 @@ DEFINE_CUSTOM_PRESSURE_LINEAR(input_2,
 
 ---
 
-## Related Documentation
+## See Also
 
-- [Bias Resistor Guide](../hardware/BIAS_RESISTOR_GUIDE.md) — Choosing the right bias resistor
-- [Sensor Selection Guide](../sensor-types/SENSOR_SELECTION_GUIDE.md) — Preset sensor options
-- [Adding Sensors](ADDING_SENSORS.md) — Adding entirely new sensor types to the library
+- [SENSOR_SELECTION_GUIDE.md](../sensor-types/SENSOR_SELECTION_GUIDE.md) - Preset sensor options
+- [VDO_SENSOR_GUIDE.md](../sensor-types/VDO_SENSOR_GUIDE.md) - VDO thermistor details
+- [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) - Bias resistor selection
+- [ADDING_SENSORS.md](ADDING_SENSORS.md) - Adding new sensor types to the library
 
 ---
 

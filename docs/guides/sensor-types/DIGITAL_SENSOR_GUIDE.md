@@ -1,4 +1,4 @@
-# Digital Sensor Configuration Guide
+# Digital Sensor Guide
 
 **Float switches, level sensors, and digital inputs for openEMS**
 
@@ -14,16 +14,9 @@ openEMS supports digital (on/off) sensors for monitoring fluid levels, door swit
 
 ### Coolant Level Float Switch
 
-*Compile-Time:*
-```cpp
-#define INPUT_0_PIN            7
-#define INPUT_0_APPLICATION    COOLANT_LEVEL
-#define INPUT_0_SENSOR         FLOAT_SWITCH
-```
-
-*Runtime:*
 ```
 SET 7 COOLANT_LEVEL FLOAT_SWITCH
+SAVE
 ```
 
 ---
@@ -94,34 +87,13 @@ The 100nF capacitor filters electrical noise from the engine bay.
 
 ### Example 1: Basic Coolant Level
 
-*Compile-Time:*
-```cpp
-#define INPUT_0_PIN            7
-#define INPUT_0_APPLICATION    COOLANT_LEVEL
-#define INPUT_0_SENSOR         FLOAT_SWITCH
-```
-
-*Runtime:*
 ```
 SET 7 COOLANT_LEVEL FLOAT_SWITCH
+SAVE
 ```
 
 ### Example 2: Multiple Level Sensors
 
-*Compile-Time:*
-```cpp
-// Coolant level
-#define INPUT_0_PIN            7
-#define INPUT_0_APPLICATION    COOLANT_LEVEL
-#define INPUT_0_SENSOR         FLOAT_SWITCH
-
-// Fuel level (if using float switch)
-#define INPUT_1_PIN            8
-#define INPUT_1_APPLICATION    COOLANT_LEVEL  // Reuse for fuel
-#define INPUT_1_SENSOR         FLOAT_SWITCH
-```
-
-*Runtime:*
 ```
 SET 7 COOLANT_LEVEL FLOAT_SWITCH
 SET 7 NAME COOL
@@ -244,13 +216,6 @@ Float switches can be used for:
 
 For other digital sensors (door switches, limit switches, etc.), use the same FLOAT_SWITCH sensor type:
 
-```cpp
-#define INPUT_0_PIN            9
-#define INPUT_0_APPLICATION    COOLANT_LEVEL  // Reuse application
-#define INPUT_0_SENSOR         FLOAT_SWITCH
-```
-
-Or via runtime:
 ```
 SET 9 COOLANT_LEVEL FLOAT_SWITCH
 SET 9 NAME DOOR
@@ -258,6 +223,13 @@ SAVE
 ```
 
 The display name can be customized to match your application.
+
+---
+
+## See Also
+
+- [SENSOR_SELECTION_GUIDE.md](SENSOR_SELECTION_GUIDE.md) - Complete sensor catalog
+- [PIN_REQUIREMENTS_GUIDE.md](../hardware/PIN_REQUIREMENTS_GUIDE.md) - Pin type requirements
 
 ---
 

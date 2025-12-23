@@ -17,28 +17,16 @@ Thermocouples are ideal for high-temperature measurements like Cylinder Head Tem
 
 ## Quick Start
 
-### Serial Commands
-
+### CHT (Cylinder Head Temperature)
 ```
 SET 6 CHT MAX6675
 SAVE
 ```
 
-Or for EGT with the higher-range chip:
-
+### EGT (Exhaust Gas Temperature)
 ```
 SET 7 EGT MAX31855
 SAVE
-```
-
-### Static Builds
-
-For `configure.py` or config.h:
-
-```cpp
-#define INPUT_0_PIN            6
-#define INPUT_0_APPLICATION    CHT
-#define INPUT_0_SENSOR         MAX6675
 ```
 
 ---
@@ -312,9 +300,9 @@ VCC → 5V
 
 ## See Also
 
-- [Sensor Selection Guide](SENSOR_SELECTION_GUIDE.md) - Complete sensor catalog
-- [Advanced Calibration](../configuration/ADVANCED_CALIBRATION_GUIDE.md) - Custom sensor setup
-- [Pin Requirements](../hardware/PIN_REQUIREMENTS_GUIDE.md) - Pin type requirements
+- [SENSOR_SELECTION_GUIDE.md](SENSOR_SELECTION_GUIDE.md) - Complete sensor catalog
+- [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) - Custom sensor setup
+- [PIN_REQUIREMENTS_GUIDE.md](../hardware/PIN_REQUIREMENTS_GUIDE.md) - Pin type requirements
 
 ---
 

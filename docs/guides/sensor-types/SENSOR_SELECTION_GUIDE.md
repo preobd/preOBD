@@ -4,37 +4,9 @@
 
 ---
 
-## For Basic Setup - Just Pick Your Sensor!
+## Quick Start - Just Pick Your Sensor!
 
 The sensor library makes configuration easy. You just need to know what physical sensor you have, then pick the matching ID from the catalog.
-
----
-
-## Quick Start Examples
-
-### Example 1: Compile-Time Mode (config.h)
-
-```cpp
-// Enable compile-time mode
-#define USE_STATIC_CONFIG
-
-// Input 0: CHT with K-type thermocouple
-#define INPUT_0_PIN            6
-#define INPUT_0_APPLICATION    CHT
-#define INPUT_0_SENSOR         MAX6675
-
-// Input 1: Coolant with VDO sensor
-#define INPUT_1_PIN            A2
-#define INPUT_1_APPLICATION    COOLANT_TEMP
-#define INPUT_1_SENSOR         VDO_120C_LOOKUP
-
-// Input 2: Oil pressure with VDO sensor
-#define INPUT_2_PIN            A3
-#define INPUT_2_APPLICATION    OIL_PRESSURE
-#define INPUT_2_SENSOR         VDO_5BAR
-```
-
-### Example 2: Runtime Mode (Serial Commands)
 
 ```
 SET 6 CHT MAX6675
@@ -42,8 +14,6 @@ SET A2 COOLANT_TEMP VDO_120C_LOOKUP
 SET A3 OIL_PRESSURE VDO_5BAR
 SAVE
 ```
-
-> Note: SET automatically enables sensors. Use ENABLE only if previously disabled.
 
 **That's it!** The system automatically handles calibration, conversion functions, and display formatting.
 
@@ -62,12 +32,14 @@ SAVE
 
 **Wiring:**
 ```
-MAX6675 VCC → 5V (or 3.3V)
-MAX6675 GND → GND
-MAX6675 SCK → Pin 13 (SPI clock)
-MAX6675 SO  → Pin 12 (SPI MISO)
-MAX6675 CS  → Your configured pin (e.g., Pin 6)
+MAX6675/MAX31855 VCC → 5V (or 3.3V)
+MAX6675/MAX31855 GND → GND
+MAX6675/MAX31855 SCK → Pin 13 (SPI clock - shared)
+MAX6675/MAX31855 SO  → Pin 12 (SPI MISO - shared)
+MAX6675/MAX31855 CS  → Your configured pin (unique per sensor)
 ```
+
+See [THERMOCOUPLE_GUIDE.md](THERMOCOUPLE_GUIDE.md) for detailed setup.
 
 ### Temperature Sensors - VDO Thermistors
 
@@ -83,9 +55,11 @@ MAX6675 CS  → Your configured pin (e.g., Pin 6)
 **Wiring:**
 ```
 VDO Sensor Signal wire → Analog pin
-VDO Sensor Ground → Chassis ground (sensor body)
-Add 1kΩ resistor (see guide for options): Analog pin → resistor → GND
+VDO Sensor Ground → Chassis ground (sensor body grounds through engine block)
+Add pull-down resistor: Analog pin → 1kΩ resistor → GND
 ```
+
+See [VDO_SENSOR_GUIDE.md](VDO_SENSOR_GUIDE.md) for detailed setup.
 
 ### Temperature Sensors - Generic Thermistors
 
@@ -96,14 +70,7 @@ Add 1kΩ resistor (see guide for options): Analog pin → resistor → GND
 
 **Best for:** Custom NTC thermistors, non-VDO sensors
 
-**Configuration:** Use runtime `SET <pin> STEINHART` or compile-time custom calibration macros. See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md).
-
-**Wiring:**
-```
-Thermistor Signal wire → Analog pin
-Thermistor Ground → Ground
-Add bias resistor (match nominal resistance): Analog pin → resistor → GND
-```
+See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) for custom calibration.
 
 ### Pressure Sensors
 
@@ -120,8 +87,10 @@ Add bias resistor (match nominal resistance): Analog pin → resistor → GND
 ```
 VDO Sensor Signal wire → Analog pin
 VDO Sensor Ground → Chassis ground (sensor body)
-Add 1kΩ resistor (see guide for options): Analog pin → resistor → GND
+Add pull-down resistor: Analog pin → 1kΩ resistor → GND
 ```
+
+See [PRESSURE_SENSOR_GUIDE.md](PRESSURE_SENSOR_GUIDE.md) for detailed setup.
 
 ### Voltage Sensors
 
@@ -164,6 +133,8 @@ BME280 SDA → SDA pin
 BME280 SCL → SCL pin
 ```
 
+See [BME280_GUIDE.md](BME280_GUIDE.md) for detailed setup.
+
 ### Digital Sensors
 
 | Sensor ID | Description |
@@ -187,11 +158,10 @@ For VDO thermistors, you can choose between two calibration methods:
 - **Recommended for:** Non-critical sensors, faster loop times
 
 **Example - mixing methods:**
-
-```cpp
-// Compile-time config
-#define INPUT_0_SENSOR         VDO_120C_LOOKUP      // Critical - maximum accuracy
-#define INPUT_1_SENSOR         VDO_150C_STEINHART   // Less critical - faster
+```
+SET A0 COOLANT_TEMP VDO_120C_LOOKUP     # Critical - maximum accuracy
+SET A1 OIL_TEMP VDO_150C_STEINHART      # Less critical - faster
+SAVE
 ```
 
 ---
@@ -223,56 +193,28 @@ Each input needs both an **Application** (what you're measuring) and a **Sensor*
 
 ## Complete Configuration Example
 
-### Compile-Time Mode (config.h)
-
-```cpp
-// Build mode
-#define USE_STATIC_CONFIG
-
-// Output enables
-#define ENABLE_LCD
-#define ENABLE_SERIAL_OUTPUT
-
-// Input 0: CHT with K-type thermocouple
-#define INPUT_0_PIN            6
-#define INPUT_0_APPLICATION    CHT
-#define INPUT_0_SENSOR         MAX6675
-
-// Input 1: Coolant temperature
-#define INPUT_1_PIN            A2
-#define INPUT_1_APPLICATION    COOLANT_TEMP
-#define INPUT_1_SENSOR         VDO_120C_LOOKUP
-
-// Input 2: Oil temperature
-#define INPUT_2_PIN            A0
-#define INPUT_2_APPLICATION    OIL_TEMP
-#define INPUT_2_SENSOR         VDO_150C_STEINHART
-
-// Input 3: Oil pressure
-#define INPUT_3_PIN            A3
-#define INPUT_3_APPLICATION    OIL_PRESSURE
-#define INPUT_3_SENSOR         VDO_5BAR
-
-// Input 4: Battery voltage
-#define INPUT_4_PIN            A8
-#define INPUT_4_APPLICATION    PRIMARY_BATTERY
-#define INPUT_4_SENSOR         VOLTAGE_DIVIDER
-
-// Input 5: Engine RPM
-#define INPUT_5_PIN            5
-#define INPUT_5_APPLICATION    ENGINE_RPM
-#define INPUT_5_SENSOR         W_PHASE_RPM
 ```
-
-### Runtime Mode (Serial Commands)
-
-```
+# Thermocouple for CHT
 SET 6 CHT MAX6675
+
+# VDO sensors for coolant, oil temp, oil pressure
 SET A2 COOLANT_TEMP VDO_120C_LOOKUP
 SET A0 OIL_TEMP VDO_150C_STEINHART
 SET A3 OIL_PRESSURE VDO_5BAR
+
+# Battery voltage
 SET A8 PRIMARY_BATTERY VOLTAGE_DIVIDER
+
+# Engine RPM from alternator
 SET 5 ENGINE_RPM W_PHASE_RPM
+
+# Set alarms
+SET 6 ALARM 50 260
+SET A2 ALARM 60 105
+SET A0 ALARM 60 130
+SET A3 ALARM 0.5 6
+
+# Save to EEPROM
 SAVE
 ```
 
@@ -287,26 +229,27 @@ A: Yes! Each input is independent. You can have multiple VDO_120C sensors on dif
 A: Same physical sensor, different math. Lookup is more accurate (±0.5°C), Steinhart is faster (±1°C).
 
 **Q: Do I need to specify the bias resistor value?**
-A: No! The presets use the default 1kΩ bias resistor (defined by DEFAULT_BIAS_RESISTOR in config.h).
+A: No. The presets use the default 1kΩ bias resistor (defined by DEFAULT_BIAS_RESISTOR).
 
 **Q: What if I used a different bias resistor?**
-A: In runtime mode, use `SET <pin> BIAS <resistor>` command. In compile-time mode, see [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) to override.
+A: Use `SET <pin> BIAS <ohms>` command. Example: `SET A0 BIAS 2200`
 
-**Q: How do I know which generic NTC thermistor I have?**
-A: Check your sensor datasheet for the β (beta) value. Most cheap NTC thermistors are β=3950.
+**Q: How do I see what sensors are available?**
+A: Use `LIST SENSORS` command.
 
-**Q: My sensor isn't listed - what do I do?**
-A: See [ADDING_SENSORS.md](../configuration/ADDING_SENSORS.md) for adding custom sensors.
+**Q: How do I see what applications are available?**
+A: Use `LIST APPLICATIONS` command.
 
 ---
 
-## Related Guides
+## See Also
 
-- [Pressure Sensor Guide](PRESSURE_SENSOR_GUIDE.md) - Detailed pressure sensor info
-- [Voltage Sensor Guide](VOLTAGE_SENSOR_GUIDE.md) - Battery monitoring details
-- [W-Phase RPM Guide](W_PHASE_RPM_GUIDE.md) - RPM sensing for classics
-- [Digital Sensor Guide](DIGITAL_SENSOR_GUIDE.md) - Float switches and digital inputs
-- [Advanced Calibration](../configuration/ADVANCED_CALIBRATION_GUIDE.md) - Custom sensor setup
+- [THERMOCOUPLE_GUIDE.md](THERMOCOUPLE_GUIDE.md) - MAX6675/MAX31855 setup
+- [VDO_SENSOR_GUIDE.md](VDO_SENSOR_GUIDE.md) - VDO temperature sensors
+- [PRESSURE_SENSOR_GUIDE.md](PRESSURE_SENSOR_GUIDE.md) - Pressure sensor setup
+- [W_PHASE_RPM_GUIDE.md](W_PHASE_RPM_GUIDE.md) - RPM from alternator
+- [BME280_GUIDE.md](BME280_GUIDE.md) - Environmental sensor
+- [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) - Custom calibrations
 
 ---
 
