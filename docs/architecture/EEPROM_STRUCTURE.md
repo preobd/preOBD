@@ -20,12 +20,13 @@
 
 ## Overview
 
-openEMS uses EEPROM (Electrically Erasable Programmable Read-Only Memory) to persist configuration across power cycles. The EEPROM structure has evolved through **three versions** to support new features while maintaining data integrity.
+openEMS uses EEPROM (Electrically Erasable Programmable Read-Only Memory) to persist configuration across power cycles. The EEPROM structure uses **hash-based storage** for portability across firmware versions.
 
 **Key Concepts:**
 - **Versioned storage:** Each EEPROM write includes version number
+- **Hash-based:** Sensor/application names stored as hashes, not indices
 - **Checksum validation:** Detects corruption from power loss or wear
-- **Auto-migration:** Incompatible versions trigger clean reset
+- **Auto-reset:** Incompatible versions trigger clean reset
 - **Dual configuration:** Input configs + System config stored separately
 
 ---
@@ -38,18 +39,18 @@ openEMS uses EEPROM (Electrically Erasable Programmable Read-Only Memory) to per
 ┌──────────────────────────────────────────────────────────┐
 │ Address Range    │ Content                │ Size         │
 ├──────────────────┼────────────────────────┼──────────────┤
-│ 0x0000 - 0x0007  │ Input Header           │ 8 bytes      │
-│ 0x0008 - 0x03EF  │ Input Configs (10)     │ 1000 bytes   │
+│ 0x0000 - 0x0007  │ EEPROM Header          │ 8 bytes      │
+│ 0x0008 - 0x02C7  │ Input Configs (10)     │ ~700 bytes   │
 │ 0x03F0 - 0x041F  │ System Config          │ 48 bytes     │
 ├──────────────────┼────────────────────────┼──────────────┤
-│ Total Used                                │ 1056 bytes   │
+│ Total Used                                │ ~760 bytes   │
 └──────────────────────────────────────────────────────────┘
 ```
 
 **Platform EEPROM Sizes:**
-- Arduino Uno: 1024 bytes (INPUT-ONLY, no SystemConfig)
+- Arduino Uno: 1024 bytes (full support)
 - Arduino Mega: 4096 bytes (full support)
-- Teensy 4.0/4.1: 1080 bytes (exact fit!)
+- Teensy 4.0/4.1: 1080 bytes (full support)
 - ESP32: Emulated (512-4096 bytes configurable)
 
 ---
@@ -61,8 +62,7 @@ openEMS uses EEPROM (Electrically Erasable Programmable Read-Only Memory) to per
 | Version | Firmware | Key Changes | EEPROM Changes |
 |---------|----------|-------------|----------------|
 | **v1** | v0.3.x | Enum-based system | Stored sensor/app indices |
-| **v2** | v0.4.0 | Registry architecture | Switched to hash-based storage |
-| **v3** | v0.5.0 | Alarm refactor | Added OUTPUT_ALARM, expanded SystemConfig |
+| **v2** | v0.4.0+ | Registry architecture | Switched to hash-based storage |
 
 ### Version 1 (v0.3.x - Deprecated)
 
@@ -70,17 +70,6 @@ openEMS uses EEPROM (Electrically Erasable Programmable Read-Only Memory) to per
 - Sensor and application stored as **enum indices**
 - No hash-based lookups
 - Fragile: Adding sensors mid-enum broke existing EEPROMs
-- No SystemConfig structure
-
-**InputEEPROM Structure:**
-```cpp
-struct InputEEPROM_v1 {
-    uint8_t pin;
-    uint8_t sensorIndex;      // Enum value (e.g., SENSOR_MAX6675 = 1)
-    uint8_t applicationIndex; // Enum value (e.g., APP_CHT = 0)
-    // ... other fields ...
-};
-```
 
 **Problem:**
 If you inserted a new sensor into the enum:
@@ -96,7 +85,7 @@ All saved configurations became invalid.
 
 ---
 
-### Version 2 (v0.4.0 - Current for Inputs)
+### Version 2 (v0.4.0+ - Current)
 
 **Introduced:** Registry architecture (hash-based storage)
 
@@ -106,27 +95,6 @@ All saved configurations became invalid.
 - Portable across firmware versions (hash stays constant)
 - Added `unitsHash` for unit conversion
 
-**InputEEPROM Structure:**
-```cpp
-struct InputEEPROM_v2 {
-    uint8_t pin;
-    char abbrName[8];
-    char displayName[32];
-    uint16_t applicationHash;  // djb2_hash("CHT") = 0xD984
-    uint16_t sensorHash;       // djb2_hash("MAX6675") = 0x2A23
-    uint16_t unitsHash;        // djb2_hash("CELSIUS") = 0x82DD
-    float minValue;
-    float maxValue;
-    uint8_t obd2pid;
-    uint8_t obd2length;
-    uint8_t flagsByte;
-    CalibrationType calibrationType;
-    CalibrationOverride customCalibration;
-};
-```
-
-**Size:** ~100 bytes per input
-
 **Benefits:**
 - Adding sensor doesn't break EEPROM (hash remains same)
 - Can reorder registry without affecting saved configs
@@ -134,76 +102,87 @@ struct InputEEPROM_v2 {
 
 ---
 
-### Version 3 (v0.5.0-alpha - Current for SystemConfig)
-
-**Introduced:** Alarm system refactor
-
-**Key Changes:**
-- Added `OUTPUT_ALARM` (5th output module)
-- Incremented `NUM_OUTPUTS` from 4 to 5
-- Expanded SystemConfig from 42 to 48 bytes
-- Added alarm warmup/persistence to ApplicationPresets (PROGMEM only)
-
-**SystemConfig Changes:**
-```cpp
-// v2: NUM_OUTPUTS = 4 (CAN, RealDash, Serial, SD)
-// v3: NUM_OUTPUTS = 5 (CAN, RealDash, Serial, SD, Alarm)
-
-uint8_t outputEnabled[NUM_OUTPUTS];    // 4 bytes → 5 bytes
-uint16_t outputInterval[NUM_OUTPUTS];  // 8 bytes → 10 bytes
-```
-
-**Note:** Input EEPROM version remains v2 (only SystemConfig incremented to v3)
-
----
-
 ## Input Configuration Storage
 
-### Input Header (8 bytes @ 0x0000)
+### EEPROM Header (8 bytes @ 0x0000)
 
 ```cpp
-struct InputHeader {
-    uint16_t magic;       // 0x4945 ("IE" - Input EEPROM)
-    uint8_t version;      // 2 (current)
+struct EEPROMHeader {
+    uint32_t magic;       // 0x4F454D53 ("OEMS" in ASCII)
+    uint16_t version;     // EEPROM_VERSION (currently 2)
     uint8_t numInputs;    // 0-10 (MAX_INPUTS)
-    uint8_t checksum;     // XOR of all InputEEPROM structs
-    uint8_t reserved[3];  // Future use
+    uint8_t reserved;     // Stores XOR checksum
 };
 ```
 
 **Purpose:**
-- **Magic:** Detect uninitialized EEPROM (0xFFFF on new chips)
-- **Version:** Trigger migration if mismatch
+- **Magic:** Detect uninitialized EEPROM (0xFFFFFFFF on new chips)
+- **Version:** Trigger reset if mismatch
 - **numInputs:** How many InputEEPROM structs follow
-- **Checksum:** Detect corruption
+- **reserved:** Stores checksum for corruption detection
 
-### Input Slots (1000 bytes @ 0x0008)
+### InputEEPROM Structure (~70 bytes each)
 
-**Layout:**
-- 10 slots × 100 bytes = 1000 bytes
-- Each slot stores one `InputEEPROM` struct
-- Empty slots filled with 0xFF
+```cpp
+struct InputEEPROM {
+    // Hardware (1 byte)
+    uint8_t pin;
 
-**Example:**
+    // User Configuration - stored as hashes (46 bytes)
+    char abbrName[8];              // "CHT", "OIL"
+    char displayName[32];          // "Cylinder Head Temp"
+    uint16_t applicationHash;      // djb2_hash of application name
+    uint16_t sensorHash;           // djb2_hash of sensor name
+    uint16_t unitsHash;            // djb2_hash of units name
+
+    // Alarm Thresholds (8 bytes)
+    float minValue;
+    float maxValue;
+
+    // OBDII (2 bytes)
+    uint8_t obd2pid;
+    uint8_t obd2length;
+
+    // Flags (1 byte)
+    uint8_t flagsByte;             // Packed: enabled, alarm, display, useCustomCal
+
+    // Calibration (17 bytes)
+    uint8_t calibrationType;
+    CalibrationOverride customCalibration;  // 16-byte union
+};
+```
+
+**Size:** ~70 bytes per input
+
+### Input Slots Layout
+
 ```
 Address  | Content
 ---------|---------------------------
-0x0008   | InputEEPROM[0] (Pin A0)
-0x006C   | InputEEPROM[1] (Pin 6)
-0x00D0   | InputEEPROM[2] (Pin A2)
-0x0134   | Empty (0xFF...)
-...
-0x03EC   | InputEEPROM[9] or Empty
+0x0008   | InputEEPROM[0]
+0x0052   | InputEEPROM[1]
+0x009C   | InputEEPROM[2]
+...      | ...
+0x02C7   | InputEEPROM[9] (last slot)
 ```
 
-### Calibration Override Storage
+### Flags Byte Packing
 
-**Included in InputEEPROM:**
+```cpp
+flagsByte =
+    (isEnabled           ? 0x01 : 0) |
+    (alarm               ? 0x02 : 0) |
+    (display             ? 0x04 : 0) |
+    (useCustomCalibration? 0x08 : 0);
+```
+
+### Calibration Override Union
+
 ```cpp
 union CalibrationOverride {
-    ThermistorSteinhart steinhart;
-    PressureLinear pressureLinear;
-    PressurePolynomial pressurePolynomial;
+    ThermistorSteinhartCalibration steinhart;
+    PressureLinearCalibration pressureLinear;
+    PressurePolynomialCalibration pressurePolynomial;
     RPMCalibration rpm;
     byte raw[16];  // 16-byte union
 };
@@ -221,10 +200,10 @@ union CalibrationOverride {
 struct SystemConfig {
     // Header (4 bytes)
     uint16_t magic;              // 0x5343 ("SC")
-    uint8_t version;             // 3 (current)
+    uint8_t version;             // SYSTEM_CONFIG_VERSION (currently 3)
     uint8_t checksum;            // XOR checksum
 
-    // Output Modules (12 bytes)
+    // Output Modules (15 bytes)
     uint8_t outputEnabled[5];    // CAN, RealDash, Serial, SD, Alarm
     uint16_t outputInterval[5];  // Intervals in ms
 
@@ -258,7 +237,7 @@ struct SystemConfig {
 };
 ```
 
-**Location:** 0x03F0 (after 10 input slots)
+**Location:** 0x03F0 (well after input slots)
 
 **Default Values:**
 Set from `config.h` compile-time defines:
@@ -270,27 +249,36 @@ Set from `config.h` compile-time defines:
 
 ## Checksum Validation
 
-### Input Header Checksum
+### Input Checksum
 
-**Algorithm:** XOR of all InputEEPROM structs
+**Algorithm:** XOR of all InputEEPROM struct bytes
 ```cpp
-uint8_t calculateInputChecksum(InputEEPROM* inputs, uint8_t count) {
+uint8_t calculateConfigChecksum() {
     uint8_t checksum = 0;
-    for (uint8_t i = 0; i < count; i++) {
-        byte* ptr = (byte*)&inputs[i];
-        for (size_t j = 0; j < sizeof(InputEEPROM); j++) {
-            checksum ^= ptr[j];
+    uint16_t addr = EEPROM_HEADER_SIZE;
+
+    for (uint8_t i = 0; i < numActiveInputs; i++) {
+        InputEEPROM eepromInput;
+        EEPROM.get(addr, eepromInput);
+
+        const uint8_t* data = (const uint8_t*)&eepromInput;
+        for (size_t k = 0; k < sizeof(InputEEPROM); k++) {
+            checksum ^= data[k];
         }
+        addr += sizeof(InputEEPROM);
     }
     return checksum;
 }
 ```
 
-**Validation:**
+**Validation on load:**
 ```cpp
-if (header.checksum != calculateInputChecksum(...)) {
-    Serial.println("ERROR: Input config corrupted!");
-    resetInputConfig();  // Clear EEPROM
+uint8_t storedChecksum = header.reserved;
+uint8_t calculatedChecksum = calculateConfigChecksum();
+
+if (storedChecksum != calculatedChecksum) {
+    Serial.println("ERROR: EEPROM checksum mismatch!");
+    // Clear corrupted data and reset
 }
 ```
 
@@ -327,30 +315,28 @@ uint8_t calculateChecksum(SystemConfig* cfg) {
 ### Boot-Time Version Check
 
 **Sequence:**
-1. Read Input Header from EEPROM
-2. Check magic number (0x4945)
+1. Read EEPROM Header
+2. Check magic number (0x4F454D53)
 3. Compare version to `EEPROM_VERSION` constant
 4. If mismatch → Reset to defaults
 
 **Code Flow:**
 ```cpp
-InputHeader header;
+EEPROMHeader header;
 EEPROM.get(0, header);
 
-if (header.magic != 0x4945) {
+if (header.magic != EEPROM_MAGIC) {
     Serial.println("EEPROM uninitialized");
-    resetInputConfig();
-    return;
+    return false;  // Will use defaults
 }
 
 if (header.version != EEPROM_VERSION) {
-    Serial.print("EEPROM version mismatch! Found v");
+    Serial.print("EEPROM version mismatch (found ");
     Serial.print(header.version);
-    Serial.print(", expected v");
-    Serial.println(EEPROM_VERSION);
-    Serial.println("Resetting to defaults...");
-    resetInputConfig();
-    return;
+    Serial.print(", expected ");
+    Serial.print(EEPROM_VERSION);
+    Serial.println(") - ignoring");
+    return false;  // Will use defaults
 }
 
 // Version matches, load config
@@ -380,225 +366,88 @@ if (temp.magic != SYSTEM_CONFIG_MAGIC ||
 1. **Simplicity:** Migration code complex and error-prone
 2. **Safety:** Partial migration worse than clean slate
 3. **Infrequency:** Firmware updates rare, re-config acceptable
-4. **Testing burden:** Every migration path needs validation
-
-**User Experience:**
-```
-========================================
-  EEPROM VERSION MISMATCH
-  Found v1, expected v2
-  Configuration reset to defaults
-  Please reconfigure via CONFIG mode
-========================================
-```
-
-User must reconfigure sensors via serial commands or `configure.py`.
+4. **Clarity:** User knows config was reset, not silently altered
 
 ---
 
 ## EEPROM Wear Management
 
-### EEPROM Endurance
+### Write Endurance
 
-**Typical ratings:**
-- ATmega328 (Uno): 100,000 write cycles
-- ATmega2560 (Mega): 100,000 write cycles
-- Teensy 4.x: Emulated, wear leveling built-in
-- ESP32: Flash-based, ~10,000 cycles (with wear leveling)
+**Typical EEPROM specs:**
+- 100,000 write cycles per cell (AVR)
+- 10,000-100,000 cycles (ESP32 flash emulation)
+
+### Write Patterns
+
+**Low-frequency writes (safe):**
+- User issues `SAVE` command (manual)
+- Firmware update (version bump resets anyway)
+
+**openEMS does NOT:**
+- Auto-save on every change
+- Write sensor readings to EEPROM
+- Use EEPROM for data logging
 
 ### Best Practices
 
-**DO:**
-- Configure once, save once
-- Test in CONFIG mode before saving
-- Save only after complete configuration session
-
-**DON'T:**
-- Save after every command
-- Use SAVE in automated scripts
-- Repeatedly save identical config
-
-**Example Good Workflow:**
-```
-CONFIG
-SET 6 CHT MAX6675
-SET A0 OIL_TEMP VDO_150C
-SET A2 OIL_PRESSURE VDO_5BAR
-OUTPUT CAN ENABLE
-OUTPUT CAN INTERVAL 100
-DISPLAY UNITS TEMP F
-SAVE   # ← Single save at end
-RUN
-```
-
-**Example Bad Workflow:**
-```
-CONFIG
-SET 6 CHT MAX6675
-SAVE   # ← DON'T DO THIS
-SET A0 OIL_TEMP VDO_150C
-SAVE   # ← DON'T DO THIS
-SET A2 OIL_PRESSURE VDO_5BAR
-SAVE   # ← DON'T DO THIS
-```
-
-### Wear Calculation
-
-**Scenario:** Configure 5 sensors, save daily
-- 1 SAVE per day × 365 days/year = 365 writes/year
-- 100,000 cycles ÷ 365 writes/year = **273 years lifespan**
-
-**Conclusion:** EEPROM wear not a practical concern for normal use.
+1. **Batch changes:** Configure all inputs, then `SAVE` once
+2. **Use SD for logging:** EEPROM is for config only
+3. **Avoid power cycling:** Complete `SAVE` before power-off
 
 ---
 
 ## Troubleshooting
 
-### Problem: "EEPROM version mismatch" on boot
+### "EEPROM uninitialized"
 
-**Symptom:**
-```
-EEPROM version mismatch! Found v1, expected v2
-Resetting to defaults...
-```
+**Cause:** First boot or EEPROM erased
+**Solution:** Normal - configure via serial commands, then `SAVE`
 
-**Cause:** Firmware upgrade changed EEPROM version
+### "EEPROM version mismatch"
 
-**Solution:** This is expected behavior. Reconfigure via serial:
-```
-CONFIG
-# Re-enter your sensor configuration
-SET 6 CHT MAX6675
-SET A2 COOLANT_TEMP VDO_120C
-SAVE
-RUN
-```
+**Cause:** Firmware updated with new EEPROM format
+**Solution:** Re-configure via serial commands, then `SAVE`
 
----
+### "EEPROM checksum mismatch"
 
-### Problem: Configuration lost after power cycle
+**Cause:** Corruption (power loss during write, EEPROM wear)
+**Solution:**
+1. Run `RESET` to clear corrupted data
+2. Re-configure via serial commands
+3. `SAVE` to write fresh config
 
-**Symptom:** System boots to CONFIG mode every time
+### Configuration Lost After Power Cycle
 
-**Diagnosis:**
-1. Check if SAVE was successful:
-```
-SAVE
-# Should see: "Configuration saved to EEPROM"
-```
-
-2. Verify EEPROM after save:
-```
-DUMP
-# Should show all configured inputs
-```
-
-**Causes:**
-- SAVE command never issued
-- Checksum validation failing (corrupted EEPROM)
-- EEPROM hardware failure (rare)
+**Possible causes:**
+1. Forgot to run `SAVE` command
+2. Power lost during `SAVE`
+3. EEPROM wear (rare)
 
 **Solution:**
-```
-CONFIG
-# Reconfigure
-SAVE
-# Verify: "Configuration saved to EEPROM"
-VERSION
-# Verify: Shows expected EEPROM version
-RUN
-```
+1. Always run `SAVE` after configuring
+2. Verify with `DUMP` command before power-off
 
----
+### Arduino Uno Memory Constraints
 
-### Problem: "Configuration corrupted" message
+**Uno has 1024 bytes EEPROM:**
+- Header: 8 bytes
+- 10 inputs × ~70 bytes = 700 bytes
+- SystemConfig: 48 bytes @ 0x03F0
+- **Total:** ~760 bytes (fits!)
 
-**Symptom:**
-```
-ERROR: Input config checksum mismatch!
-Configuration may be corrupted.
-Resetting to defaults...
-```
-
-**Causes:**
-- Power loss during SAVE
-- EEPROM bit errors (wear or radiation)
-- Hardware defect
-
-**Solution:**
-1. Reconfigure system
-2. Save configuration
-3. If problem persists → suspect hardware issue
-
----
-
-### Problem: Can't save configuration (EEPROM full)
-
-**Symptom:**
-```
-ERROR: Too many inputs configured
-Maximum: 10 inputs
-```
-
-**Platform:** Arduino Uno (1024 byte EEPROM)
-
-**Solution:**
-- Arduino Uno limited to ~8-9 inputs max
-- Upgrade to Mega (4096 bytes) or Teensy for more inputs
-- Use compile-time mode (`USE_STATIC_CONFIG`) for max efficiency
-
----
-
-## Memory Layout by Platform
-
-### Arduino Uno (1024 bytes)
-
-```
-┌────────────────────────────────────┐
-│ 0x0000 - 0x0007  │ Input Header   │ ✓
-│ 0x0008 - 0x02EF  │ 7 Inputs       │ ✓
-│ 0x02F0 - 0x03EF  │ Unused         │
-│ 0x03F0 - 0x03FF  │ SystemConfig*  │ ✗ (beyond 1KB)
-└────────────────────────────────────┘
-```
-**Limited:** No SystemConfig support (too small)
-
-### Arduino Mega (4096 bytes)
-
-```
-┌────────────────────────────────────┐
-│ 0x0000 - 0x0007  │ Input Header   │ ✓
-│ 0x0008 - 0x03EF  │ 10 Inputs      │ ✓
-│ 0x03F0 - 0x041F  │ SystemConfig   │ ✓
-│ 0x0420 - 0x0FFF  │ Available      │ 3KB free!
-└────────────────────────────────────┘
-```
-**Full Support:** All features available
-
-### Teensy 4.0/4.1 (1080 bytes emulated)
-
-```
-┌────────────────────────────────────┐
-│ 0x0000 - 0x0007  │ Input Header   │ ✓
-│ 0x0008 - 0x03EF  │ 10 Inputs      │ ✓
-│ 0x03F0 - 0x041F  │ SystemConfig   │ ✓
-│ 0x0420 - 0x0437  │ Available      │ 24 bytes
-└────────────────────────────────────┘
-```
-**Exact Fit:** Design optimized for Teensy 4.x
+**If issues occur:**
+- Reduce MAX_INPUTS in config.h
+- Use static builds (no EEPROM needed)
 
 ---
 
 ## See Also
 
-- [Registry System](REGISTRY_SYSTEM.md) - Hash-based sensor/application lookups
-- [Config/Run Mode Guide](../guides/configuration/CONFIG_RUN_MODE_GUIDE.md) - Configuration workflow
-- [Serial Command Reference](../reference/SERIAL_COMMANDS.md) - SAVE/LOAD commands
-- [Input Manager Source](../../src/inputs/input_manager.cpp) - EEPROM persistence implementation
-- [System Config Source](../../src/lib/system_config.cpp) - SystemConfig persistence
+- [Registry System](REGISTRY_SYSTEM.md) - Hash-based lookup architecture
+- [Adding Sensors](../guides/configuration/ADDING_SENSORS.md) - Adding new sensor types
+- [Serial Commands](../reference/SERIAL_COMMANDS.md) - SAVE, LOAD, RESET commands
 
 ---
 
-**Last Updated:** 2025-01-28
-**Current EEPROM Version:** 2 (Inputs), 3 (SystemConfig)
-**Firmware Version:** 0.5.0-alpha (Unreleased)
+**For the classic car community.**
