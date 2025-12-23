@@ -1,63 +1,59 @@
 # Adding Sensors to openEMS
 
-**Guide for adding new sensor types to the sensor library**
+**Developer guide for adding new sensor types to the sensor library**
 
 ---
 
 ## Overview
 
-openEMS uses a unified input-based architecture where sensors are defined in the sensor library (`src/lib/sensor_library.h`) with their calibration data in a separate file (`src/lib/sensor_calibration_data.h`). This separation keeps calibration data in flash memory (PROGMEM) rather than RAM, which is critical for memory-constrained platforms like Arduino Uno.
+This guide is for **developers and contributors** who want to add new sensor types to the openEMS sensor library. If you just want to configure an existing sensor or use custom calibration values, see:
+
+- **[QUICK_REFERENCE.md](../../getting-started/QUICK_REFERENCE.md)** - Configure existing sensors
+- **[ADVANCED_CALIBRATION_GUIDE.md](ADVANCED_CALIBRATION_GUIDE.md)** - Custom calibration for existing sensor types
+
+openEMS uses a **registry-based architecture** where sensors are defined in PROGMEM arrays with hash-based lookups. This allows adding new sensors without breaking existing EEPROM configurations.
 
 ---
 
-## Quick Reference: Adding a Pre-Defined Sensor
+## Quick Reference: Using a Pre-Defined Sensor
 
-If your sensor is already in the library, you just need to configure it:
+If your sensor is already in the library, configure it via serial commands:
 
-**Compile-Time (config.h):**
-```cpp
-#define INPUT_0_PIN            A2
-#define INPUT_0_APPLICATION    COOLANT_TEMP
-#define INPUT_0_SENSOR         VDO_120C_LOOKUP
-```
-
-**Runtime (serial commands) - Combined Syntax (Recommended):**
 ```
 SET A2 COOLANT_TEMP VDO_120C_LOOKUP
+SAVE
 ```
 
-**Runtime (serial commands) - Legacy Syntax (Still Supported):**
-```
-SET A2 APPLICATION COOLANT_TEMP
-SET A2 SENSOR VDO_120C_LOOKUP
-```
-
-> **New in v0.4.0:** Combined command syntax allows setting both application and sensor in one line!
->
-> **Note:** The SET command automatically enables the sensor. Use ENABLE only if the sensor was previously disabled.
->
-> **Remember:** Use `SAVE` after configuring all sensors to write to EEPROM. Don't save after every command!
+Or for static builds, use `tools/configure.py` to generate the configuration.
 
 ---
 
 ## Architecture Overview
 
-### The Three Layers
+### Registry-Based System
 
-1. **Application Layer** (`application_presets.h`)
-   - Defines what you're measuring (CHT, OIL_PRESSURE, etc.)
-   - Sets default sensors, units, alarm thresholds
-   - Maps to OBD-II PIDs
+openEMS uses **hash-based registries** instead of enums. This provides:
 
-2. **Sensor Layer** (`sensor_library.h`)
+- **EEPROM portability** - Sensor names are stored as hashes, not array indices
+- **Runtime flexibility** - New sensors don't break existing configurations
+- **Memory efficiency** - All data stored in PROGMEM (flash), not RAM
+
+### The Three Registries
+
+1. **Sensor Library** (`src/lib/sensor_library.h`)
    - Defines physical sensors (MAX6675, VDO_120C_LOOKUP, etc.)
-   - Links sensors to read functions
-   - Points to calibration data
+   - Links sensors to read functions and calibration data
+   - ~20 sensors, ~3KB in PROGMEM
 
-3. **Calibration Layer** (`sensor_calibration_data.h`)
-   - Contains actual calibration values
-   - Lookup tables, Steinhart-Hart coefficients, polynomial coefficients
-   - All stored in PROGMEM (flash memory)
+2. **Application Presets** (`src/lib/application_presets.h`)
+   - Defines what you're measuring (CHT, OIL_PRESSURE, etc.)
+   - Sets default sensors, units, alarm thresholds, OBD-II PIDs
+   - ~16 applications, ~2KB in PROGMEM
+
+3. **Units Registry** (`src/lib/units_registry.h`)
+   - Defines display units (CELSIUS, BAR, PSI, etc.)
+   - Contains conversion factors
+   - ~11 units, ~500 bytes in PROGMEM
 
 ### Data Flow
 
@@ -76,43 +72,23 @@ openEMS uses a **non-blocking time-sliced loop** where each sensor reads at its 
 - **Analog sensors:** 50ms (fast for responsive alarms)
 - **Digital inputs:** 50ms (fast polling)
 
-This architecture ensures:
-- Slow sensors don't block fast sensors
-- No blocking `delay()` calls in the main loop
-- Serial commands processed immediately
-- Each sensor operates at peak efficiency
-
 ---
 
 ## Adding a New Sensor Type
 
-### Step 1: Add the Sensor Enum
+### Step 1: Compute the Name Hash
 
-In `src/inputs/input.h`, add your sensor to the Sensor enum:
+The hash is used for EEPROM storage and lookups. Compute it first:
 
-```cpp
-enum Sensor {
-    SENSOR_NONE = 0,
-    
-    // Thermocouples
-    MAX6675,
-    MAX31855,
-    
-    // VDO Thermistors
-    VDO_120C_LOOKUP,
-    VDO_120C_STEINHART,
-    // ... existing sensors ...
-    
-    // Add your new sensor here
-    MY_CUSTOM_THERMISTOR,    // <-- New sensor
-    
-    SENSOR_COUNT  // Keep this last
-};
+```bash
+python3 -c "h=5381; s='MY_NEW_SENSOR'; [h:=(h<<5)+h+ord(c.upper()) for c in s]; print(f'0x{h&0xFFFF:04X}')"
 ```
 
-### Step 2: Add Calibration Data
+Example output: `0xABCD`
 
-In `src/lib/sensor_calibration_data.h`, add the calibration data:
+### Step 2: Add Calibration Data (if needed)
+
+In `src/lib/sensor_calibration_data.h`, add calibration data if your sensor needs it:
 
 **For a Thermistor (Steinhart-Hart):**
 ```cpp
@@ -125,311 +101,305 @@ static const PROGMEM ThermistorSteinhartCalibration my_custom_thermistor_cal = {
 };
 ```
 
-**For a Thermistor (Lookup Table):**
+**For a Lookup Table Thermistor:**
 ```cpp
-// My Custom Thermistor - Lookup table
-// Format: {resistance_ohms, temperature_celsius}
-static const PROGMEM ThermistorLookupPoint my_custom_lookup_table[] = {
-    {32650, -40},
-    {15000, 0},
-    {5000, 25},
-    {1800, 50},
-    {750, 75},
-    {350, 100},
-    {180, 120}
+// Lookup table: ADC value → temperature (°C)
+static const PROGMEM LookupEntry my_thermistor_lookup[] = {
+    {50,  150.0},   // ADC 50  → 150°C
+    {100, 120.0},
+    {200, 100.0},
+    {300,  80.0},
+    {400,  60.0},
+    {500,  40.0},
+    {600,  25.0},
+    {700,  10.0},
+    {800,  -5.0},
+    {900, -20.0},
 };
+#define MY_THERMISTOR_LOOKUP_SIZE 10
 
-static const PROGMEM ThermistorLookupCalibration my_custom_lookup_cal = {
-    .bias_resistor = 2200.0,
-    .table = my_custom_lookup_table,
-    .table_size = sizeof(my_custom_lookup_table) / sizeof(ThermistorLookupPoint)
+static const PROGMEM ThermistorLookupCalibration my_thermistor_lookup_cal = {
+    .bias_resistor = 1000.0,
+    .lookup_table = my_thermistor_lookup,
+    .table_size = MY_THERMISTOR_LOOKUP_SIZE
 };
 ```
 
-**For a Pressure Sensor (Linear):**
+**For a Linear Pressure Sensor:**
 ```cpp
-// My Custom Pressure Sensor - 0.5-4.5V output, 0-10 bar range
+// Linear 0.5-4.5V sensor, 0-10 bar range
 static const PROGMEM PressureLinearCalibration my_pressure_cal = {
-    .voltage_min = 0.5,    // Voltage at minimum pressure
-    .voltage_max = 4.5,    // Voltage at maximum pressure
-    .pressure_min = 0.0,   // Minimum pressure (bar)
-    .pressure_max = 10.0   // Maximum pressure (bar)
+    .voltage_min = 0.5,
+    .voltage_max = 4.5,
+    .pressure_min = 0.0,
+    .pressure_max = 10.0
 };
 ```
 
-**For a Pressure Sensor (Polynomial):**
+### Step 3: Add PROGMEM Strings
+
+In `src/lib/sensor_library.h`, add the name and label strings:
+
 ```cpp
-// My Custom Pressure Sensor - Polynomial fit
-// pressure = a + b*v + c*v^2 where v is voltage
-static const PROGMEM PressurePolynomialCalibration my_poly_pressure_cal = {
-    .bias_offset = 0.0,    // Offset adjustment
-    .coeff_a = -0.5,       // Constant term
-    .coeff_b = 1.25,       // Linear term
-    .coeff_c = 0.05        // Quadratic term
-};
+// Near the top with other PSTR definitions
+static const char PSTR_MY_NEW_SENSOR[] PROGMEM = "MY_NEW_SENSOR";
+static const char PSTR_MY_NEW_SENSOR_LABEL[] PROGMEM = "My New 10K NTC Sensor";
 ```
 
-### Step 3: Add to Sensor Library
+### Step 4: Add to SENSOR_LIBRARY Array
 
-In `src/lib/sensor_library.h`, add the sensor entry:
+Add a new entry at the **end** of the `SENSOR_LIBRARY[]` array:
 
 ```cpp
 static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     // ... existing sensors ...
-
-    // My Custom Thermistor (Steinhart-Hart)
+    
+    // My New Sensor
     {
-        .sensor = MY_CUSTOM_THERMISTOR,
-        .name = "My Custom 10K NTC",
-        .readFunction = readThermistorSteinhart,
-        .initFunction = nullptr,  // No special init needed (analog sensors)
+        .name = PSTR_MY_NEW_SENSOR,
+        .label = PSTR_MY_NEW_SENSOR_LABEL,
+        .description = nullptr,
+        .readFunction = readThermistorSteinhart,  // Reuse existing function
+        .initFunction = nullptr,                   // No special init needed
         .measurementType = MEASURE_TEMPERATURE,
         .calibrationType = CAL_THERMISTOR_STEINHART,
         .defaultCalibration = &my_custom_thermistor_cal,
-        .minReadInterval = SENSOR_READ_INTERVAL_MS  // Fast analog read (50ms default)
+        .minReadInterval = SENSOR_READ_INTERVAL_MS,  // 50ms default
+        .minValue = -40.0,
+        .maxValue = 150.0,
+        .nameHash = 0xABCD,  // From Step 1
+        .pinTypeRequirement = PIN_ANALOG
     },
-
-    // ... rest of sensors ...
 };
 ```
 
-**Note on initFunction:**
-- Set to `nullptr` for most sensors (analog inputs, I2C sensors like BME280)
-- Only needed for sensors requiring special initialization:
-  - Thermocouples (MAX6675/MAX31855): Use `initThermocoupleCS` (sets up SPI CS pin)
-  - RPM sensors (W_PHASE_RPM): Use `initWPhaseRPM` (attaches interrupt)
-  - Digital inputs (FLOAT_SWITCH): Use `initFloatSwitch` (sets INPUT_PULLUP mode)
+**Important:** Add new sensors at the END of the array. The array position doesn't matter for lookups (hash-based), but keeping additions at the end makes diffs cleaner.
 
-**Note on minReadInterval:**
-- Specifies minimum milliseconds between reads for this sensor type
-- Prevents reading sensors faster than their conversion time
-- Common values:
-  - `250` - MAX6675 thermocouple (needs ~220ms for conversion)
-  - `100` - MAX31855 thermocouple (faster than MAX6675)
-  - `SENSOR_READ_INTERVAL_MS` - Fast analog/digital sensors (50ms default)
-- Each sensor reads at its own optimal interval without blocking others
+### Step 5: Validate
 
-### Step 4: Add to Serial Parser (Runtime Mode)
+Run the validation tool to check for hash collisions:
 
-In `src/inputs/serial_config.cpp`, add parsing for your sensor:
+```bash
+python3 tools/validate_registries.py
+```
+
+Expected output:
+```
+Validating sensor_library.h...
+  ✓ No hash collisions detected
+  ✓ All hashes match djb2 algorithm
+```
+
+### Step 6: Test
+
+1. Build and upload:
+   ```bash
+   pio run -t upload
+   pio device monitor
+   ```
+
+2. Verify sensor appears:
+   ```
+   LIST SENSORS
+   ```
+
+3. Configure and test:
+   ```
+   CONFIG
+   SET A0 OIL_TEMP MY_NEW_SENSOR
+   SAVE
+   RUN
+   INFO A0
+   ```
+
+---
+
+## SensorInfo Field Reference
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `const char*` | PROGMEM string - sensor name for commands |
+| `label` | `const char*` | PROGMEM string - human-readable label |
+| `description` | `const char*` | PROGMEM string - optional description (can be nullptr) |
+| `readFunction` | `void (*)(Input*)` | Function that reads the sensor |
+| `initFunction` | `void (*)(Input*)` | Optional init function (nullptr if not needed) |
+| `measurementType` | `MeasurementType` | MEASURE_TEMPERATURE, MEASURE_PRESSURE, etc. |
+| `calibrationType` | `CalibrationType` | CAL_NONE, CAL_THERMISTOR_STEINHART, etc. |
+| `defaultCalibration` | `const void*` | Pointer to calibration data in PROGMEM |
+| `minReadInterval` | `uint16_t` | Minimum ms between reads |
+| `minValue` | `float` | Minimum valid reading |
+| `maxValue` | `float` | Maximum valid reading |
+| `nameHash` | `uint16_t` | Precomputed djb2 hash of name |
+| `pinTypeRequirement` | `PinType` | PIN_ANALOG, PIN_DIGITAL, PIN_I2C, etc. |
+
+### initFunction Values
+
+| Value | Use Case |
+|-------|----------|
+| `nullptr` | Most sensors (analog, I2C like BME280) |
+| `initThermocoupleCS` | MAX6675, MAX31855 (sets up SPI CS pin) |
+| `initWPhaseRPM` | W_PHASE_RPM (attaches interrupt) |
+| `initFloatSwitch` | FLOAT_SWITCH (sets INPUT_PULLUP mode) |
+
+### minReadInterval Values
+
+| Value | Use Case |
+|-------|----------|
+| `250` | MAX6675 (needs ~220ms conversion time) |
+| `100` | MAX31855 (faster than MAX6675) |
+| `SENSOR_READ_INTERVAL_MS` | Fast analog/digital sensors (50ms default) |
+
+---
+
+## Adding a New Read Function
+
+If your sensor needs a custom read function, add it to `src/inputs/sensor_read.cpp`:
 
 ```cpp
-static Sensor parseSensor(const char* sensorStr) {
-    // ... existing sensors ...
+/**
+ * Read my custom sensor
+ * @param input Pointer to Input structure
+ */
+void readMyCustomSensor(Input* input) {
+    // Get calibration data from PROGMEM
+    MyCustomCalibration cal;
+    memcpy_P(&cal, input->customCalibration, sizeof(MyCustomCalibration));
     
-    if (streq(sensorStr, "MY_CUSTOM_THERMISTOR")) return MY_CUSTOM_THERMISTOR;
+    // Read the sensor
+    int rawValue = analogRead(input->pin);
     
-    return SENSOR_NONE;
+    // Convert to engineering units
+    float result = /* your conversion math */;
+    
+    // Validate and store result
+    if (result < input->minValue || result > input->maxValue) {
+        input->value = NAN;  // Invalid reading
+    } else {
+        input->value = result;
+    }
 }
+```
+
+Declare it in `src/inputs/sensor_read.h`:
+
+```cpp
+void readMyCustomSensor(Input* input);
 ```
 
 ---
 
-## Using Custom Calibration at Runtime
+## Adding a New Application Type
 
-If you need to override the default calibration for a specific installation, you can use custom calibration in `advanced_config.h`:
+Applications define what you're measuring. To add a new application:
 
-```cpp
-// In advanced_config.h
+### Step 1: Compute Hash
 
-// Custom calibration for Input 0
-#define INPUT_0_CUSTOM_CALIBRATION
-
-// Define the custom calibration data
-static ThermistorSteinhartCalibration input_0_custom_cal = {
-    .bias_resistor = 2200.0,
-    .steinhart_a = 1.764e-03,
-    .steinhart_b = 2.499e-04,
-    .steinhart_c = 6.773e-08
-};
+```bash
+python3 -c "h=5381; s='MY_NEW_APP'; [h:=(h<<5)+h+ord(c.upper()) for c in s]; print(f'0x{h&0xFFFF:04X}')"
 ```
 
-This allows you to use an existing sensor type but with modified calibration values.
+### Step 2: Add PROGMEM Strings
+
+In `src/lib/application_presets.h`:
+
+```cpp
+static const char PSTR_MY_NEW_APP[] PROGMEM = "MY_NEW_APP";
+static const char PSTR_MY_NEW_APP_LABEL[] PROGMEM = "My New Application";
+static const char PSTR_MY_NEW_APP_ABBR[] PROGMEM = "NEW";
+```
+
+### Step 3: Add to APPLICATION_PRESETS Array
+
+```cpp
+static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
+    // ... existing applications ...
+    
+    {
+        .name = PSTR_MY_NEW_APP,
+        .label = PSTR_MY_NEW_APP_LABEL,
+        .abbreviation = PSTR_MY_NEW_APP_ABBR,
+        .measurementType = MEASURE_TEMPERATURE,
+        .defaultSensorHash = 0xABCD,      // Hash of default sensor name
+        .defaultUnitsHash = 0x1234,       // Hash of default units
+        .minValue = -40.0,
+        .maxValue = 150.0,
+        .obd2Pid = 0x00,                  // No OBD-II mapping (or assign a PID)
+        .obd2DataLength = 0,
+        .warmupTime_ms = 30000,           // 30 second warmup for alarms
+        .persistTime_ms = 2000,           // 2 second persistence
+        .nameHash = 0x5678                // From Step 1
+    },
+};
+```
 
 ---
 
 ## Calibration Types Reference
 
-### CAL_THERMISTOR_STEINHART
-
-For NTC thermistors using the Steinhart-Hart equation:
-```
-1/T = A + B*ln(R) + C*(ln(R))^3
-```
-
-Structure:
-```cpp
-struct ThermistorSteinhartCalibration {
-    float bias_resistor;   // Bias resistor value in ohms
-    float steinhart_a;     // Steinhart-Hart A coefficient
-    float steinhart_b;     // Steinhart-Hart B coefficient
-    float steinhart_c;     // Steinhart-Hart C coefficient
-};
-```
-
-### CAL_THERMISTOR_LOOKUP
-
-For thermistors with manufacturer-provided resistance/temperature tables:
-
-Structure:
-```cpp
-struct ThermistorLookupPoint {
-    float resistance;      // Resistance in ohms
-    float temperature;     // Temperature in Celsius
-};
-
-struct ThermistorLookupCalibration {
-    float bias_resistor;
-    const ThermistorLookupPoint* table;
-    uint8_t table_size;
-};
-```
-
-### CAL_PRESSURE_LINEAR
-
-For pressure sensors with linear voltage output:
-
-Structure:
-```cpp
-struct PressureLinearCalibration {
-    float voltage_min;     // Voltage at minimum pressure
-    float voltage_max;     // Voltage at maximum pressure
-    float pressure_min;    // Minimum pressure (bar)
-    float pressure_max;    // Maximum pressure (bar)
-};
-```
-
-### CAL_PRESSURE_POLYNOMIAL
-
-For pressure sensors requiring polynomial correction:
-
-Structure:
-```cpp
-struct PressurePolynomialCalibration {
-    float bias_offset;     // Offset adjustment
-    float coeff_a;         // Constant term
-    float coeff_b;         // Linear coefficient
-    float coeff_c;         // Quadratic coefficient
-};
-```
-
-### CAL_VOLTAGE_DIVIDER
-
-For voltage measurements through a resistor divider:
-
-Structure:
-```cpp
-struct VoltageDividerCalibration {
-    float r_high;          // Upper resistor (to voltage source)
-    float r_low;           // Lower resistor (to ground)
-    float offset;          // Calibration offset
-};
-```
-
-### CAL_NONE
-
-For sensors that don't require calibration (e.g., thermocouples with built-in linearization):
-- Set `.calibrationType = CAL_NONE`
-- Set `.defaultCalibration = nullptr`
+| Type | Structure | Use Case |
+|------|-----------|----------|
+| `CAL_NONE` | None | Sensors that don't need calibration (thermocouples) |
+| `CAL_THERMISTOR_STEINHART` | `ThermistorSteinhartCalibration` | NTC thermistors with S-H coefficients |
+| `CAL_THERMISTOR_LOOKUP` | `ThermistorLookupCalibration` | Thermistors with lookup tables |
+| `CAL_PRESSURE_LINEAR` | `PressureLinearCalibration` | Linear voltage-to-pressure sensors |
+| `CAL_PRESSURE_POLYNOMIAL` | `PressurePolynomialCalibration` | VDO-style resistive pressure sensors |
+| `CAL_VOLTAGE_DIVIDER` | `VoltageDividerCalibration` | Voltage divider circuits |
+| `CAL_RPM` | `RPMCalibration` | RPM sensors (W-phase, hall effect) |
 
 ---
 
 ## Read Functions Reference
 
-Available read functions in `sensor_read.cpp`:
-
-| Function | Sensor Types | Notes |
-|----------|--------------|-------|
-| `readMAX6675` | K-type thermocouple | SPI, CS pin required |
-| `readMAX31855` | K-type thermocouple | SPI, CS pin required |
-| `readThermistorSteinhart` | NTC thermistors | Uses Steinhart-Hart |
-| `readThermistorLookup` | NTC thermistors | Uses lookup table |
-| `readPressureLinear` | Pressure sensors | Linear V to P mapping |
-| `readPressurePolynomial` | Pressure sensors | Polynomial correction |
-| `readVoltageDivider` | Voltage monitoring | With divider compensation |
-| `readWPhaseRPM` | Alternator RPM | Frequency measurement |
-| `readBME280Temp` | BME280 | I2C temperature |
-| `readBME280Pressure` | BME280 | I2C pressure |
-| `readBME280Humidity` | BME280 | I2C humidity |
-| `readDigitalSwitch` | Float switches | Digital input |
+| Function | Input Type | Output | Sensors |
+|----------|------------|--------|---------|
+| `readThermistorSteinhart` | Analog | °C | NTC thermistors |
+| `readThermistorLookup` | Analog | °C | Thermistors with tables |
+| `readMAX6675` | SPI | °C | MAX6675 K-type |
+| `readMAX31855` | SPI | °C | MAX31855 K-type |
+| `readLinearSensor` | Analog | varies | 0.5-4.5V sensors |
+| `readPressurePolynomial` | Analog | bar | VDO resistive pressure |
+| `readVoltageDivider` | Analog | V | Battery voltage |
+| `readWPhaseRPM` | Interrupt | RPM | Alternator W-phase |
+| `readDigitalFloatSwitch` | Digital | 0/1 | Float switches |
+| `readBME280Temp` | I2C | °C | BME280 environmental |
 
 ---
 
-## Testing Your New Sensor
+## Testing Checklist
 
-### 1. Compile and Upload
-
-```bash
-pio run -e megaatmega2560 -t upload
-```
-
-### 2. Verify in Serial Monitor
-
-```bash
-pio device monitor
-```
-
-For runtime mode:
-```
-LIST SENSORS
-```
-
-Your sensor should appear in the list.
-
-### 3. Configure and Test
-
-**Runtime mode:**
-```
-SET A0 COOLANT_TEMP MY_CUSTOM_THERMISTOR
-INFO A0
-```
-
-**Compile-time mode:**
-```cpp
-#define INPUT_0_PIN            A0
-#define INPUT_0_APPLICATION    COOLANT_TEMP
-#define INPUT_0_SENSOR         MY_CUSTOM_THERMISTOR
-```
-
-### 4. Validate Readings
-
-Compare readings against a known reference:
-- Use a calibrated thermometer for temperature sensors
-- Use a calibrated gauge for pressure sensors
-- Check multiple points across the range
-
----
-
-## RAM Usage Notes
-
-**Preset calibrations (PROGMEM):** Stored in flash, use ~0 bytes RAM ✅
-**Custom calibrations via macros:** Stored in RAM, use ~20-40 bytes each ⚠️
-
-For Arduino Uno (2KB RAM total), you can add a few custom calibrations without issues. For many custom sensors, consider adding them to the library in PROGMEM.
+- [ ] Hash computed and added to SensorInfo
+- [ ] Sensor appears in `LIST SENSORS`
+- [ ] Can configure via `SET <pin> <app> <sensor>`
+- [ ] Readings are reasonable at room temperature
+- [ ] Readings respond to changes
+- [ ] Min/max values are enforced
+- [ ] NaN returned for invalid readings
+- [ ] No RAM increase on Arduino Uno (calibration in PROGMEM)
+- [ ] `validate_registries.py` passes (no hash collisions)
+- [ ] EEPROM save/load works correctly
 
 ---
 
 ## Contributing Your Sensor
 
-If you've calibrated a sensor that others might use:
+If you've added a useful sensor type, consider contributing it back:
 
-1. Add the calibration to `sensor_calibration_data.h`
-2. Add the sensor to `sensor_library.h`
-3. Add parsing in `serial_config.cpp`
-4. Test thoroughly
-5. Submit a pull request with:
-   - Sensor datasheet or manufacturer link
-   - Calibration method used
+1. **Test thoroughly** on actual hardware
+2. **Document** the sensor (datasheet, wiring, calibration source)
+3. **Follow code style** of existing sensors
+4. **Run validation** tools before submitting
+5. **Submit a pull request** with:
+   - Code changes
    - Test results
+   - Datasheet or calibration reference
 
 ---
 
-## Need Help?
+## See Also
 
-- Check `src/advanced_config.h` for examples
-- Look at existing sensor definitions in `src/lib/sensor_library.h`
-- See `src/lib/sensor_calibration_data.h` for calibration examples
-- Ask in GitHub Discussions
+- **[REGISTRY_SYSTEM.md](../../architecture/REGISTRY_SYSTEM.md)** - Hash-based registry architecture
+- **[ADVANCED_CALIBRATION_GUIDE.md](ADVANCED_CALIBRATION_GUIDE.md)** - Custom calibration for existing sensors
+- **[SENSOR_SELECTION_GUIDE.md](../sensor-types/SENSOR_SELECTION_GUIDE.md)** - Available sensors
 
 ---
 
