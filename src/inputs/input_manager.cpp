@@ -639,8 +639,10 @@ bool loadInputConfig() {
 
         // Copy simple fields
         inputs[i].pin = eepromInput.pin;
-        strncpy(inputs[i].abbrName, eepromInput.abbrName, sizeof(inputs[i].abbrName) - 1);
-        strncpy(inputs[i].displayName, eepromInput.displayName, sizeof(inputs[i].displayName) - 1);
+        strncpy(inputs[i].abbrName, eepromInput.abbrName, sizeof(inputs[i].abbrName));
+        inputs[i].abbrName[sizeof(inputs[i].abbrName) - 1] = '\0';  // Ensure null termination
+        strncpy(inputs[i].displayName, eepromInput.displayName, sizeof(inputs[i].displayName));
+        inputs[i].displayName[sizeof(inputs[i].displayName) - 1] = '\0';  // Ensure null termination
         inputs[i].minValue = eepromInput.minValue;
         inputs[i].maxValue = eepromInput.maxValue;
         inputs[i].obd2pid = eepromInput.obd2pid;
