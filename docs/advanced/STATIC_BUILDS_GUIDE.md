@@ -453,7 +453,7 @@ python3 tools/configure.py --load tools/saved-configs/my_config.json
 ## Related Documentation
 
 - **[tools/README.md](../../tools/README.md)** - Complete configure.py documentation
-- **[JSON Configuration Guide](../JSON_CONFIGURATION_GUIDE.md)** - JSON format details
+- **[JSON Configuration Guide](../guides/configuration/JSON_CONFIGURATION_GUIDE.md)** - JSON format details
 - **[Sensor Selection Guide](../guides/sensor-types/SENSOR_SELECTION_GUIDE.md)** - Sensor catalog
 - **[Advanced Calibration Guide](../guides/configuration/ADVANCED_CALIBRATION_GUIDE.md)** - Calibration details
 

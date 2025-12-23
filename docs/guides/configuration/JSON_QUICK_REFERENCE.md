@@ -183,7 +183,7 @@ if (schemaVer == 1) {
 | `src/lib/json_config.cpp` | Export/import functions | Any struct change |
 | `src/lib/json_config.cpp` | `JSON_SCHEMA_VERSION` | Breaking change only |
 | `src/lib/json_config.h` | Version history comment | Schema version change |
-| `docs/JSON_CONFIGURATION_GUIDE.md` | Document change | Any change |
+| `docs/guides/configuration/JSON_CONFIGURATION_GUIDE.md` | Document change | Any change |
 | `docs/CHANGELOG.md` | User-facing notes | Any change |
 
 ## Example: Full Workflow
@@ -244,7 +244,7 @@ git commit -m "feat: Add display brightness control"
 
 ## Need Help?
 
-- See full guide: `docs/JSON_CONFIGURATION_GUIDE.md`
+- See full guide: `docs/guides/configuration/JSON_CONFIGURATION_GUIDE.md`
 - Check examples in configuration guide
 - Review recent commits for patterns
 - Test with `DUMP JSON` → `CONFIG LOAD` cycle

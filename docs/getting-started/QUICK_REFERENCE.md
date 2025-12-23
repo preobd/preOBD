@@ -150,7 +150,7 @@ Junction → 6.8kΩ → GND (for 5V boards)
 SET 3 ENGINE_RPM W_PHASE_RPM
 ```
 
-**⚠️ CRITICAL:** Requires voltage protection circuit for 3.3V boards! See [W_PHASE_RPM_GUIDE.md](guides/sensor-types/W_PHASE_RPM_GUIDE.md).
+**⚠️ CRITICAL:** Requires voltage protection circuit for 3.3V boards! See [W_PHASE_RPM_GUIDE.md](../guides/sensor-types/W_PHASE_RPM_GUIDE.md).
 
 ### Environmental (BME280)
 
@@ -322,7 +322,7 @@ SET <pin> BIAS <resistor>                         # Override bias resistor
 | Arduino Mega | 10-bit | 5V | 16 | Good all-rounder |
 | Arduino Due | 12-bit | 3.3V | 16 | High resolution ADC |
 | ESP32 | 12-bit | 3.3V | 16 | WiFi capable |
-| Arduino Uno | 10-bit | 5V | 6 | Limited RAM, use [static builds](advanced/STATIC_BUILDS_GUIDE.md) |
+| Arduino Uno | 10-bit | 5V | 6 | Limited RAM, use [static builds](../advanced/STATIC_BUILDS_GUIDE.md) |
 
 ---
 
@@ -373,9 +373,9 @@ SET <pin> BIAS <resistor>                         # Override bias resistor
 ## Getting Help
 
 **Documentation:**
-- [Full Documentation](README.md)
-- [Sensor Selection Guide](guides/sensor-types/SENSOR_SELECTION_GUIDE.md)
-- [Serial Commands Reference](reference/SERIAL_COMMANDS.md)
+- [Full Documentation](../README.md)
+- [Sensor Selection Guide](../guides/sensor-types/SENSOR_SELECTION_GUIDE.md)
+- [Serial Commands Reference](../reference/SERIAL_COMMANDS.md)
 
 **Support:**
 - GitHub Issues - Bug reports

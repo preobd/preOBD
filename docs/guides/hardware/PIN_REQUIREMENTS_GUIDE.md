@@ -573,7 +573,7 @@ Pin (e.g., A0, 6): 6
 
 ## See Also
 
-- **[configure.py Documentation](../../tools/README.md)** - Detailed usage of the configuration tool
+- **[configure.py Documentation](../../../tools/README.md)** - Detailed usage of the configuration tool
 - **[Sensor Selection Guide](../sensor-types/SENSOR_SELECTION_GUIDE.md)** - Choosing the right sensor for your application
 - **[Adding Sensors Guide](../configuration/ADDING_SENSORS.md)** - Step-by-step sensor integration
 - **[EEPROM Structure Documentation](../../architecture/EEPROM_STRUCTURE.md)** - How pin configurations are stored
