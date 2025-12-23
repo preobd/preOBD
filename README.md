@@ -4,6 +4,8 @@
 
 Open-source, modular engine monitoring system for classic cars and vehicles without OBDII diagnostics.
 
+---
+
 ## What is openEMS?
 
 openEMS provides comprehensive engine monitoring for vehicles that lack modern electronic systems. It monitors temperature, pressure, voltage, and RPM sensors, providing data via LCD display, CAN bus (OBDII compatible), serial output, and data logging.
@@ -16,34 +18,42 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 - Displays data on LCD screen
 - Outputs standard OBDII PIDs via CAN bus
 - Logs data to serial and SD card
-- Smart alarm system with warmup periods and fault persistence (prevents false alarms)
+- Configurable alarms with audible alerts
 
 **What it doesn't do:**
 - Engine control (monitoring only, no outputs to engine)
 - Interface with existing factory ECUs or OBDII systems
 - Provide safety certification or guarantees
 
-## Current Capabilities
+---
 
-**Sensor Support:**
-- 17+ sensor types
-- 30+ pre-calibrated sensor configurations
-- Custom calibration support for non-standard sensors
+## Supported Hardware
 
-**Configuration:**
-- **Runtime configuration mode** (serial commands, EEPROM storage, CONFIG/RUN mode separation)
-  - Configure outputs, display, and system parameters at runtime
-  - Enable/disable CAN, RealDash, Serial CSV, SD logging, Alarm output without recompiling
-  - Adjust output intervals, display units, and timing on-the-fly
-  - Combined sensor command syntax for faster setup
-  - Custom alarm warmup and fault persistence times per input
-- Static builds via Python configuration (minimal RAM)
-
-**Hardware Platforms:**
-- Teensy 3.x/4.x (native CAN, excellent ADC)
+**Platforms:**
+- Teensy 4.0/4.1 (native CAN, excellent ADC)
 - Arduino Mega 2560 (8KB RAM, full features)
-- Arduino Uno (2KB RAM, limited sensors)
-- Arduino Due, ESP32 (less tested)
+- Arduino Due, ESP32 (12-bit ADC)
+- Arduino Uno (2KB RAM, limited - see [Static Builds](docs/advanced/STATIC_BUILDS_GUIDE.md))
+
+**Sensors:**
+
+*Temperature:*
+- K-type thermocouples (MAX6675, MAX31855) for CHT/EGT
+- VDO thermistors (120°C, 150°C) for coolant, oil, transmission
+- Generic NTC thermistors (10K, with Beta or Steinhart-Hart coefficients)
+- Linear temperature sensors (0.5-4.5V output)
+
+*Pressure:*
+- VDO resistive pressure senders (2-bar, 5-bar, 10-bar)
+- Generic linear pressure sensors (0.5-4.5V, any range)
+- Freescale/NXP MAP sensors (MPX4250)
+
+*Other:*
+- Battery voltage monitoring (with divider)
+- W-phase alternator RPM sensing
+- BME280 environmental (temp, pressure, humidity, altitude)
+- Digital inputs (float switches, warning lights)
+- Custom calibration support for unlisted sensors
 
 **Outputs:**
 - 20x4 I2C LCD display
@@ -52,32 +62,11 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 - Serial CSV output
 - SD card data logging
 
-## Supported Sensors
-
-**Temperature:**
-- MAX6675/MAX31855 K-type thermocouples (CHT, EGT)
-- VDO thermistors (120°C, 150°C) - coolant, oil, transfer case
-- Generic NTC thermistors with various β values
-- BME280 ambient temperature
-
-**Pressure:**
-- VDO pressure sensors (2-bar, 5-bar) - oil, boost
-- Generic linear sensors (0.5-4.5V)
-- Freescale MPX4250AP MAP sensor
-- BME280 barometric pressure
-
-**RPM:**
-- W-phase alternator sensing (for classics without electronic ignition)
-- Configurable for 12/14/16-pole alternators
-
-**Other:**
-- Battery voltage monitoring (auto-configured per platform)
-- Float switches (coolant level, fuel level)
-- BME280 humidity and elevation
+---
 
 ## Quick Start
 
-### 1. Installation
+### Installation
 
 ```bash
 # Clone the repository
@@ -90,13 +79,13 @@ pio run
 # Upload to your board
 pio run -t upload
 
-# Monitor serial output
+# Open serial monitor (115200 baud)
 pio device monitor
 ```
 
-### 2. Basic Configuration
+### Configure Sensors
 
-**Runtime Mode (serial commands):**
+Connect to the serial monitor and enter configuration commands:
 
 ```
 CONFIG                                                # Enter CONFIG mode
@@ -111,33 +100,83 @@ SAVE
 RUN                                                   # Enter RUN mode (starts sensors)
 ```
 
-**Multi-function button (Runtime Mode):**
-- Hold during boot to enter CONFIG mode
-- Press in RUN mode to silence alarms
+**Multi-function button (Pin 5):**
+- Hold during boot → Enter CONFIG mode
+- Press in RUN mode → Silence alarms for 30 seconds
 - Hold briefly during RUN mode to toggle display on/off
+
+**Serial commands in RUN mode:**
+```
+LIST INPUTS              # Show configured sensors
+INFO A2                  # Show details for one sensor
+VERSION                  # Show firmware version
+```
+
+---
 
 ## Documentation
 
-**Getting Started:**
-- **[Quick Reference](docs/getting-started/QUICK_REFERENCE.md)** - Common tasks and lookups
-- **[Directory Structure](docs/getting-started/DIRECTORY_SETUP.md)** - File organization
+### Getting Started
+- **[Quick Reference](docs/getting-started/QUICK_REFERENCE.md)** - Command cheat sheet and common tasks
+- **[Directory Structure](docs/getting-started/DIRECTORY_SETUP.md)** - Project file organization
 
-**Sensor Guides:**
-- **[Sensor Selection Guide](docs/guides/sensor-types/SENSOR_SELECTION_GUIDE.md)** - Choose the right sensor
-- **[Pressure Sensor Guide](docs/guides/sensor-types/PRESSURE_SENSOR_GUIDE.md)** - Pressure sensor specifics
+### Sensor Guides
+- **[Sensor Selection Guide](docs/guides/sensor-types/SENSOR_SELECTION_GUIDE.md)** - Complete sensor catalog
+- **[Pressure Sensor Guide](docs/guides/sensor-types/PRESSURE_SENSOR_GUIDE.md)** - Pressure sensor wiring
 - **[Voltage Monitoring Guide](docs/guides/sensor-types/VOLTAGE_SENSOR_GUIDE.md)** - Battery monitoring
 - **[W-Phase RPM Guide](docs/guides/sensor-types/W_PHASE_RPM_GUIDE.md)** - RPM sensing for classics
-- **[Digital Sensor Guide](docs/guides/sensor-types/DIGITAL_SENSOR_GUIDE.md)** - Float switches and digital inputs
+- **[Digital Sensor Guide](docs/guides/sensor-types/DIGITAL_SENSOR_GUIDE.md)** - Float switches
 
-**Configuration:**
-- **[Adding Sensors](docs/guides/configuration/ADDING_SENSORS.md)** - How to add new sensors
-- **[Advanced Calibration](docs/guides/configuration/ADVANCED_CALIBRATION_GUIDE.md)** - Custom sensor setup
-- **[Display Units](docs/guides/configuration/DISPLAY_UNITS_CONFIGURATION_GUIDE.md)** - Configure display units
-- **[Config/Run Mode Guide](docs/guides/configuration/CONFIG_RUN_MODE_GUIDE.md)** - CONFIG vs RUN mode (runtime mode only)
+### Configuration
+- **[Serial Commands Reference](docs/reference/SERIAL_COMMANDS.md)** - Complete command list
+- **[CONFIG/RUN Mode Guide](docs/guides/configuration/CONFIG_RUN_MODE_GUIDE.md)** - Safe configuration workflow
+- **[Alarm System Guide](docs/guides/configuration/ALARM_SYSTEM_GUIDE.md)** - Alarm state machine
+- **[Advanced Calibration](docs/guides/configuration/ADVANCED_CALIBRATION_GUIDE.md)** - Custom sensor calibrations
 
-**Complete Documentation:**
-- **[Full Documentation](docs/README.md)** - Complete system guide
-- **[Disclaimer](DISCLAIMER.md)** - Safety information and limitations
+### Advanced Topics
+- **[Static Builds Guide](docs/advanced/STATIC_BUILDS_GUIDE.md)** - Compile-time configuration for Uno/constrained boards
+- **[Complete Documentation](docs/README.md)** - Full documentation index
+
+---
+
+## Common Commands
+
+### Configuration (in CONFIG mode)
+
+```
+SET <pin> <app> <sensor>    # Configure a sensor (e.g., SET A2 COOLANT_TEMP VDO_120C_LOOKUP)
+SET <pin> ALARM <min> <max> # Set alarm thresholds
+SET <pin> UNITS <unit>      # Set display units (CELSIUS, FAHRENHEIT, PSI, BAR, etc.)
+SET <pin> NAME <name>       # Set short display name
+CLEAR <pin>                 # Remove a sensor
+ENABLE <pin>                # Enable a disabled sensor
+DISABLE <pin>               # Disable a sensor
+SAVE                        # Save configuration to EEPROM
+```
+
+### Query (any mode)
+
+```
+LIST INPUTS               # Show all configured sensors
+LIST APPLICATIONS         # Show available application types
+LIST SENSORS              # Show available sensor types  
+INFO <pin>                # Show details for one input
+DUMP                      # Show complete system state
+VERSION                   # Show firmware version
+```
+
+### System
+
+```
+CONFIG                    # Enter configuration mode
+RUN                       # Enter run mode (start monitoring)
+RESET                     # Clear all configuration (requires confirmation)
+OUTPUT <name> ENABLE      # Enable output module (CAN, Serial, SD_Log, Alarm)
+OUTPUT <name> DISABLE     # Disable output module
+DISPLAY STATUS            # Show display configuration
+```
+
+---
 
 ## Project Structure
 
@@ -146,56 +185,23 @@ openEMS/
 ├── platformio.ini          # Build configuration
 ├── README.md               # This file
 ├── DISCLAIMER.md           # Safety information
-│
 ├── src/                    # Source code
-│   ├── main.cpp           # Main program loop
-│   ├── config.h           # ⚠️ USER CONFIGURATION
-│   ├── advanced_config.h  # Advanced features config
-│   ├── alarm.cpp          # Alarm system
-│   ├── inputs/            # Input and sensor management
-│   │   ├── input.h
-│   │   ├── input_manager.cpp/h
-│   │   ├── sensor_read.cpp
-│   │   └── serial_config.cpp/h
-│   ├── lib/               # Library components
-│   │   ├── platform.h
-│   │   ├── sensor_types.h
-│   │   ├── sensor_library.h
-│   │   ├── sensor_calibration_data.h
-│   │   └── application_presets.h
-│   ├── outputs/           # Output modules (CAN, Serial, SD)
-│   ├── displays/          # Display modules (LCD, etc.)
-│   └── test/              # Test mode system
-│
+│   ├── main.cpp            # Main program loop
+│   ├── config.h            # Hardware configuration
+│   ├── advanced_config.h   # Advanced features
+│   ├── inputs/             # Input and sensor management
+│   ├── lib/                # Sensor library and calibrations
+│   ├── outputs/            # Output modules (CAN, Serial, SD)
+│   ├── displays/           # Display modules (LCD, OLED)
+│   └── test/               # Test mode system
 └── docs/                   # Documentation
-    ├── README.md           # Complete documentation
-    ├── DISCLAIMER.md       # Safety information
-    ├── getting-started/    # Getting started guides
-    │   ├── QUICK_REFERENCE.md
-    │   └── DIRECTORY_SETUP.md
+    ├── getting-started/    # Quick start guides
     ├── guides/             # User guides
-    │   ├── sensor-types/   # Sensor-specific guides
-    │   │   ├── SENSOR_SELECTION_GUIDE.md
-    │   │   ├── PRESSURE_SENSOR_GUIDE.md
-    │   │   ├── VOLTAGE_SENSOR_GUIDE.md
-    │   │   ├── DIGITAL_SENSOR_GUIDE.md
-    │   │   └── W_PHASE_RPM_GUIDE.md
-    │   └── configuration/  # Configuration guides
-    │       ├── ADDING_SENSORS.md
-    │       ├── ADVANCED_CALIBRATION_GUIDE.md
-    │       └── DISPLAY_UNITS_CONFIGURATION_GUIDE.md
-    └── reference/          # Reference materials
-        └── README.md
+    ├── reference/          # Command reference
+    └── advanced/           # Advanced topics
 ```
 
-## OBDII Compatibility
-
-openEMS outputs standard OBDII PIDs via CAN bus, making it compatible with:
-- Torque Pro
-- OBDLink scan tools
-- Most OBDII diagnostic apps
-
-**Note:** openEMS emulates OBDII for tool compatibility but does not interface with factory vehicle ECUs.
+---
 
 ## Contributing
 

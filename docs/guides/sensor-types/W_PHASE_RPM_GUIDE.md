@@ -1,4 +1,4 @@
-# W-Phase Alternator RPM Sensing Guide
+# W-Phase Alternator RPM Guide
 
 **RPM measurement for classic cars without electronic ignition**
 
@@ -26,17 +26,11 @@ This guide explains how to add engine RPM sensing using the alternator's W-phase
 Most alternators have 3-phase stator windings. The W-phase outputs AC pulses proportional to **alternator** RPM. Since alternators typically spin 2.5-3.5 times faster than the engine (due to pulley ratio), we must account for this:
 
 ```
-Formula: Engine_RPM = (60M / (interval_µs × pulses_per_alt_rev × pulley_ratio)) × calibration_mult
+Engine_RPM = (Alternator_Pulses × 60) / (poles/2 × pulley_ratio)
 
 Where:
-- pulses_per_alt_rev = poles / 2  (12-pole = 6 pulses per revolution)
+- poles = alternator pole count (typically 12)
 - pulley_ratio = alternator/engine speed ratio (typically 3:1)
-- calibration_mult = fine-tuning multiplier (default 1.0)
-
-Example for 12-pole alternator, 3:1 pulley ratio at 2000 RPM:
-- Alternator spins at: 2000 × 3 = 6000 RPM
-- Alternator_Hz = (6000 × 12) / 120 = 600 Hz
-- Engine_RPM calculated = 2000 RPM ✓
 ```
 
 **Default calibration:** 12 poles, 3:1 pulley ratio (most common automotive setup)
@@ -45,29 +39,23 @@ Example for 12-pole alternator, 3:1 pulley ratio at 2000 RPM:
 
 ## Quick Start
 
-### Compile-Time Configuration
-
-```cpp
-#define INPUT_0_PIN            5
-#define INPUT_0_APPLICATION    ENGINE_RPM
-#define INPUT_0_SENSOR         W_PHASE_RPM
-```
-
-### Runtime Configuration
-
 ```
 SET 5 ENGINE_RPM W_PHASE_RPM
+SAVE
+```
 
-# (Optional) Customize RPM calibration:
-# SET <pin> RPM <poles> <ratio> [<mult>] <timeout> <min> <max>
-SET 5 RPM 12 3.0 2000 100 8000    # 12 poles, 3:1 ratio (default)
+With custom calibration (14-pole alternator, 2.5:1 ratio):
+```
+SET 5 ENGINE_RPM W_PHASE_RPM
+SET 5 RPM 14 2.5 2000 100 8000
+SAVE
 ```
 
 ---
 
 ## Required Hardware
 
-### Components (Universal Circuit - Recommended)
+### Components (Universal Circuit)
 
 | Component | Value | Notes |
 |-----------|-------|-------|
@@ -93,7 +81,7 @@ SET 5 RPM 12 3.0 2000 100 8000    # 12 poles, 3:1 ratio (default)
 
 ## Circuit Design
 
-### Universal Protection Circuit (Recommended)
+### Universal Protection Circuit
 
 This circuit works with both 3.3V and 5V boards - just change the zener:
 
@@ -133,8 +121,6 @@ Alternator W-Phase
 ---
 
 ## Wiring Diagram
-
-### Complete Circuit
 
 ```
                     Alternator
@@ -209,7 +195,7 @@ Alternator W-Phase
 - Look for datasheet or part number
 
 **Method 2: Calculate from known RPM**
-1. Temporarily set poles=2, ratio=1.0 in configuration
+1. Set poles=2, ratio=1.0 in configuration
 2. Run engine at known RPM (use external tachometer)
 3. Read displayed RPM value
 4. Calculate: `Actual_Poles = Displayed_RPM / Known_RPM × 2`
@@ -235,43 +221,10 @@ Alternator pulley: 2 inches
 Ratio = 6 / 2 = 3.0 (3:1)  ← Most common
 ```
 
-**Method 2: Count pulley teeth (for toothed pulleys)**
-```
-Ratio = Crank_Teeth / Alt_Teeth
-```
-
-**Method 3: Empirical calibration (most accurate)**
-1. Set correct poles (from Step 4)
-2. Set estimated ratio (3.0 is most common)
-3. Compare to external tachometer at various RPM
-4. Adjust ratio OR use calibration multiplier for fine-tuning
-
 **Common ratios:**
 - **3:1** - Most common automotive (2.5-3.5 range)
 - **2:1** - Older vehicles and light trucks
 - **2.5:1** - Some modern vehicles
-
-### Step 6: Fine-Tune Calibration (Optional)
-
-After setting poles and pulley ratio, you may want to fine-tune using the calibration multiplier.
-
-**Calibration multiplier workflow:**
-1. Set poles and estimated pulley ratio
-2. Compare openEMS RPM to external tachometer
-3. Calculate: `calibration_mult = Actual_RPM / Displayed_RPM`
-4. Update calibration with new multiplier
-
-**Example:**
-```
-External tach shows: 2040 RPM
-openEMS shows: 2000 RPM
-calibration_mult = 2040 / 2000 = 1.02
-
-Update configuration:
-SET 5 RPM 12 3.0 1.02 2000 100 8000
-```
-
-This is similar to adjusting the potentiometer on an aftermarket tachometer.
 
 ---
 
@@ -281,14 +234,6 @@ This is similar to adjusting the potentiometer on an aftermarket tachometer.
 
 Uses default: 12 poles, 3:1 pulley ratio
 
-*Compile-Time:*
-```cpp
-#define INPUT_0_PIN            5
-#define INPUT_0_APPLICATION    ENGINE_RPM
-#define INPUT_0_SENSOR         W_PHASE_RPM
-```
-
-*Runtime:*
 ```
 SET 5 ENGINE_RPM W_PHASE_RPM
 SET 5 ALARM 500 6500
@@ -297,50 +242,48 @@ SAVE
 
 The alarm triggers below 500 RPM (stall warning) or above 6500 RPM (over-rev).
 
-### Custom Calibration (Compile-Time)
-
-For non-standard alternators, use `advanced_config.h`:
-
-```cpp
-// In config.h or sensors_config.h:
-#define INPUT_0_PIN         5
-#define INPUT_0_APPLICATION ENGINE_RPM
-#define INPUT_0_SENSOR      W_PHASE_RPM
-
-// In advanced_config.h:
-#define INPUT_0_CUSTOM_CALIBRATION
-#ifdef INPUT_0_CUSTOM_CALIBRATION
-    DEFINE_CUSTOM_RPM(input_0,
-        18,      // poles (18-pole alternator)
-        3.0,     // pulley_ratio (3:1 alternator to engine)
-        1.0,     // calibration_mult (no fine-tuning)
-        2000,    // timeout_ms
-        300,     // min_rpm
-        8000     // max_rpm
-    )
-#endif
-```
-
-### Custom Calibration (Runtime)
-
-Adjust calibration via serial commands:
+### Custom Calibration
 
 ```
-# Initial setup (5 parameters - calibration_mult defaults to 1.0):
-SET 5 RPM 12 3.0 2000 100 8000
-
-# Fine-tuned setup (6 parameters - custom calibration_mult):
-SET 5 RPM 12 3.0 1.02 2000 100 8000
-
-# Different alternator (14-pole, 2.5:1 ratio):
-SET 5 RPM 14 2.5 2000 100 8000
-
-# Query current calibration:
-INFO 5
-
-# Save to EEPROM:
+SET 5 ENGINE_RPM W_PHASE_RPM
+SET 5 RPM <poles> <ratio> <timeout> <min> <max>
 SAVE
 ```
+
+**Parameters:**
+- `poles` - Alternator pole count (8-18 typical)
+- `ratio` - Pulley ratio (1.0-4.0 typical)
+- `timeout` - Timeout in ms before showing 0 RPM (default 2000)
+- `min` - Minimum valid RPM (default 100)
+- `max` - Maximum valid RPM (default 8000)
+
+**Examples:**
+```
+# 12-pole, 3:1 ratio (default)
+SET 5 RPM 12 3.0 2000 100 8000
+
+# 14-pole alternator, 2.5:1 ratio
+SET 5 RPM 14 2.5 2000 100 8000
+
+# High-revving engine
+SET 5 RPM 12 3.0 2000 500 10000
+```
+
+### Fine-Tuning with Calibration Multiplier
+
+If readings are close but not exact:
+
+```
+SET 5 RPM 12 3.0 1.02 2000 100 8000
+```
+
+The `1.02` is a calibration multiplier (similar to adjusting a potentiometer on an aftermarket tachometer).
+
+**Calibration workflow:**
+1. Set poles and pulley ratio
+2. Compare openEMS RPM to external tachometer
+3. Calculate: `mult = Actual_RPM / Displayed_RPM`
+4. Update with multiplier
 
 ---
 
@@ -365,13 +308,8 @@ SAVE
 **Solutions:**
 1. **Check pole count:** Follow Step 4 to determine correct poles
 2. **Measure pulley ratio:** Follow Step 5 methods
-   - Default is 3:1 (most common)
-   - Try 2:1 if reading is 50% too high
-   - Try 2.5:1 if reading is 20% too high
-3. **Fine-tune with calibration multiplier:** Follow Step 6
-   - `calibration_mult = Actual_RPM / Displayed_RPM`
-   - Example: If showing 1980 but should be 2000, use mult=1.01
-4. Add shielding to signal wire if readings are unstable
+3. **Fine-tune:** Use calibration multiplier
+4. Add shielding to signal wire
 
 ### RPM is erratic/jumpy
 
@@ -393,7 +331,7 @@ SAVE
 
 ## Parts List
 
-**Universal circuit (recommended):**
+**Universal circuit:**
 | Qty | Component | Notes |
 |-----|-----------|-------|
 | 1 | 22kΩ resistor 1/4W | |
@@ -431,20 +369,17 @@ SAVE
 - Keep away from rotating parts
 
 ⚠️ **Over-Rev Protection:**
-- Set appropriate RPM_MAX alarm
+- Set appropriate max RPM alarm
 - Consider adding warning LED
 - Don't rely solely on openEMS - maintain mechanical backup
 
 ---
 
-## Related Guides
+## See Also
 
-- [Sensor Selection Guide](SENSOR_SELECTION_GUIDE.md) - Complete sensor catalog
-- [Advanced Calibration](../configuration/ADVANCED_CALIBRATION_GUIDE.md) - Custom pole counts
-- [Adding Sensors](../configuration/ADDING_SENSORS.md) - Adding new sensor types
+- [SENSOR_SELECTION_GUIDE.md](SENSOR_SELECTION_GUIDE.md) - Complete sensor catalog
+- [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) - Custom calibrations
 
 ---
-
-**Questions? Post in GitHub Discussions with your alternator specs!**
 
 **For the classic car community.**

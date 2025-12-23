@@ -22,18 +22,17 @@
 
 The openEMS registry system provides a **flexible, memory-efficient** way to manage sensors, applications, and units. Instead of fixed enum values, the system uses **hash-based string lookups** with all data stored in flash memory (PROGMEM).
 
-**Key Architecture Decision (v0.4.0):**
+**Key Architecture Decision:**
 Replaced enum-based system with registry architecture to enable:
-- Runtime extensibility
-- Smaller RAM footprint
-- EEPROM portability
+- EEPROM portability across firmware versions
 - Easier addition of new sensors/applications
+- Smaller RAM footprint (all data in PROGMEM)
 
 ---
 
 ## Why Registry Architecture?
 
-### Problem with Enum-Based System (v0.3.x and earlier)
+### Problem with Enum-Based System
 
 **Old approach:**
 ```cpp
@@ -53,10 +52,9 @@ struct InputEEPROM {
 **Problems:**
 1. **Rigid:** Adding sensor requires recompiling all code
 2. **EEPROM fragility:** Inserting sensor mid-enum breaks existing EEPROMs
-3. **Memory waste:** Full enum compiled even if only using 3 sensors
-4. **No runtime extensibility:** Cannot add sensors via serial/JSON
+3. **No runtime extensibility:** Cannot add sensors via serial/JSON
 
-### Solution: Registry Architecture (v0.4.0+)
+### Solution: Registry Architecture
 
 **New approach:**
 ```cpp
@@ -78,9 +76,8 @@ struct InputEEPROM {
 **Benefits:**
 1. **Flexible:** New sensors added without breaking EEPROM
 2. **Portable:** Hash remains constant regardless of array position
-3. **Memory-efficient:** Only used registries loaded
-4. **Extensible:** Future support for custom sensors via JSON
-5. **Fast:** O(n) linear search acceptable for small registries (~20 items)
+3. **Extensible:** Future support for custom sensors via JSON
+4. **Fast:** O(n) linear search acceptable for small registries (~20 items)
 
 ---
 
@@ -98,27 +95,8 @@ openEMS has **three registries**, all stored in PROGMEM (flash):
 - Init function pointer (optional)
 - Measurement type (TEMPERATURE, PRESSURE, etc.)
 - Calibration type and default calibration data
-- Physical min/max limits
-- Minimum read interval
-- Pin type requirement (ANALOG, DIGITAL, I2C)
-
-**Example:**
-```cpp
-{
-    .name = PSTR_MAX6675,                // "MAX6675"
-    .label = PSTR_MAX6675_LABEL,         // "K-Type Thermocouple (MAX6675)"
-    .readFunction = readMAX6675,
-    .initFunction = initThermocoupleCS,
-    .measurementType = MEASUREMENT_TEMPERATURE,
-    .calibrationType = CALIBRATION_NONE,
-    .defaultCalibration = nullptr,
-    .minReadInterval = 250,              // 250ms between reads
-    .minValue = 0.0,                     // 0°C
-    .maxValue = 1024.0,                  // 1024°C
-    .nameHash = 0x2A23,                  // djb2_hash("MAX6675")
-    .pinTypeRequirement = PIN_DIGITAL    // Requires digital pin for SPI CS
-}
-```
+- Physical sensor limits (min/max values)
+- Precomputed name hash
 
 ### 2. Application Presets
 **File:** `src/lib/application_presets.h`
@@ -126,137 +104,69 @@ openEMS has **three registries**, all stored in PROGMEM (flash):
 **Primary Key:** Application name (e.g., "CHT", "OIL_PRESSURE")
 
 **Contains:**
-- Abbreviation and label
-- Default sensor recommendation
-- Default display units
-- Default alarm thresholds (in STANDARD units)
+- Default sensor hash
+- Default display units hash
 - OBD-II PID mapping
-- Warmup time and persistence time for alarms
-- OBD conversion function
-
-**Example:**
-```cpp
-{
-    .name = PSTR_CHT,                    // "CHT"
-    .abbr = PSTR_CHT_ABBR,               // "CHT"
-    .label = PSTR_CHT_LABEL,             // "Cylinder Head Temperature"
-    .defaultSensorName = PSTR_MAX6675,   // "MAX6675"
-    .defaultUnitsName = PSTR_CELSIUS,    // "CELSIUS"
-    .minValue = 50.0,                    // 50°C alarm minimum
-    .maxValue = 400.0,                   // 400°C alarm maximum
-    .obd2pid = 0x05,                     // PID 0x05 (Engine Coolant Temp)
-    .obd2length = 1,
-    .warmupTime_ms = 30000,              // 30-second alarm warmup
-    .persistTime_ms = 2000,              // 2-second fault persistence
-    .nameHash = 0xD984                   // djb2_hash("CHT")
-}
-```
+- Alarm thresholds (min/max)
+- Warmup and persistence timing
+- Precomputed name hash
 
 ### 3. Units Registry
 **File:** `src/lib/units_registry.h`
 **Size:** ~11 units
-**Primary Key:** Unit name (e.g., "CELSIUS", "BAR", "PSI")
+**Primary Key:** Unit name (e.g., "CELSIUS", "BAR")
 
 **Contains:**
-- Full name and alias (e.g., "CELSIUS" / "C")
 - Display symbol
-- Measurement type
 - Conversion factor and offset
-- Hash values for both name and alias
-
-**Example:**
-```cpp
-{
-    .name = PSTR_CELSIUS,                // "CELSIUS"
-    .alias = PSTR_CELSIUS_ALIAS,         // "C"
-    .symbol = PSTR_CELSIUS_SYMBOL,       // "°C"
-    .measurementType = MEASUREMENT_TEMPERATURE,
-    .conversionFactor = 1.0,             // Standard unit (no conversion)
-    .conversionOffset = 0.0,
-    .nameHash = 0x82DD,                  // djb2_hash("CELSIUS")
-    .aliasHash = 0xB5E8                  // djb2_hash("C")
-}
-```
+- Measurement type
+- Name hash and alias hash
 
 ---
 
 ## Hash-Based Lookups
 
-### DJB2 Hash Algorithm
+### The DJB2 Algorithm
 
-openEMS uses the **DJB2 hash function**, a simple and effective hash for embedded systems:
+openEMS uses the **djb2 hash algorithm** (Daniel J. Bernstein):
 
 ```cpp
 uint16_t djb2_hash(const char* str) {
-    uint32_t hash = 5381;  // Magic number
+    uint16_t hash = 5381;
     char c;
-
     while ((c = *str++)) {
-        c = toupper(c);    // Case-insensitive
+        c = toupper(c);  // Case-insensitive
         hash = ((hash << 5) + hash) + c;  // hash * 33 + c
     }
-
-    return (uint16_t)(hash & 0xFFFF);  // 16-bit output
+    return hash;
 }
 ```
 
 **Properties:**
-- **16-bit output:** 0-65535 (2 bytes per hash)
-- **Case-insensitive:** "MAX6675" and "max6675" produce same hash
-- **Fast:** Simple arithmetic, no table lookups
-- **Good distribution:** Low collision probability for small datasets
+- 16-bit output (0x0000 - 0xFFFF)
+- Case-insensitive (all converted to uppercase)
+- Fast computation
+- Good distribution for short strings
 
-**Hash Calculation Examples:**
-```
-djb2_hash("MAX6675")     → 0x2A23
-djb2_hash("VDO_5BAR")    → 0xC3F7
-djb2_hash("CHT")         → 0xD984
-djb2_hash("CELSIUS")     → 0x82DD
-djb2_hash("C")           → 0xB5E8
-```
+### Why Hashes Instead of Indices?
 
-### Lookup Process
-
-**1. User command:**
-```
-SET 6 CHT MAX6675
-```
-
-**2. Hash computation:**
+**Index-based (fragile):**
 ```cpp
-uint16_t appHash  = djb2_hash("CHT");       // 0xD984
-uint16_t sensHash = djb2_hash("MAX6675");   // 0x2A23
+// EEPROM stores: sensorIndex = 5
+// If we insert a new sensor at position 3...
+// Index 5 now points to WRONG sensor!
 ```
 
-**3. Registry search:**
+**Hash-based (robust):**
 ```cpp
-// Find application by hash
-for (uint8_t i = 0; i < NUM_APPLICATIONS; i++) {
-    uint16_t hash = pgm_read_word(&APPLICATION_PRESETS[i].nameHash);
-    if (hash == appHash) {
-        // Found! Index = i
-        break;
-    }
-}
+// EEPROM stores: sensorHash = 0x2A23 (hash of "MAX6675")
+// We can add, remove, reorder sensors freely
+// Hash 0x2A23 still finds "MAX6675"
 ```
-
-**4. EEPROM storage:**
-```cpp
-// EEPROM stores hash (portable across firmware versions)
-eepromInput.applicationHash = 0xD984;
-eepromInput.sensorHash = 0x2A23;
-```
-
-**Performance:**
-- **Worst case:** O(n) linear search through registry
-- **Acceptable:** n ≈ 20 sensors, 16 applications, 11 units
-- **Fast enough:** Search completes in <1ms on AVR
 
 ---
 
 ## PROGMEM Storage
-
-All registries are stored in **PROGMEM (flash memory)**, not RAM.
 
 ### Why PROGMEM?
 
@@ -325,14 +235,14 @@ uint16_t sensHash = djb2_hash("VDO_5BAR");      // 0xC3F7
 
 **3. Lookup application** (`src/lib/application_presets.h`)
 ```cpp
-uint8_t appIndex = findApplicationByHash(appHash);
+uint8_t appIndex = getApplicationIndexByHash(appHash);
 // Search PROGMEM for hash 0x2361
 // Returns index 6 (OIL_PRESSURE is 7th entry, 0-indexed)
 ```
 
 **4. Lookup sensor** (`src/lib/sensor_library.h`)
 ```cpp
-uint8_t sensIndex = findSensorByHash(sensHash);
+uint8_t sensIndex = getSensorIndexByHash(sensHash);
 // Search PROGMEM for hash 0xC3F7
 // Returns index 11 (VDO_5BAR is 12th entry)
 ```
@@ -347,7 +257,7 @@ input->sensorIndex = sensIndex;
 const ApplicationPreset* app = &APPLICATION_PRESETS[appIndex];
 input->minValue = pgm_read_float(&app->minValue);  // 0.5 bar
 input->maxValue = pgm_read_float(&app->maxValue);  // 10.0 bar
-input->unitsIndex = findUnitsByName(...);          // BAR
+input->unitsIndex = getUnitsIndexByHash(...);      // BAR
 ```
 
 **6. EEPROM persistence** (`src/inputs/input_manager.cpp`)
@@ -366,8 +276,8 @@ InputEEPROM eepromInput;
 EEPROM.get(address, eepromInput);
 
 // Re-lookup by hash (hash remains valid even if registry order changed!)
-uint8_t appIndex = findApplicationByHash(eepromInput.applicationHash);
-uint8_t sensIndex = findSensorByHash(eepromInput.sensorHash);
+uint8_t appIndex = getApplicationIndexByHash(eepromInput.applicationHash);
+uint8_t sensIndex = getSensorIndexByHash(eepromInput.sensorHash);
 ```
 
 ---
@@ -395,8 +305,8 @@ static const char PSTR_MY_NEW_SENSOR_LABEL[] PROGMEM = "My New Sensor Descriptio
     .label = PSTR_MY_NEW_SENSOR_LABEL,
     .readFunction = readMyNewSensor,
     .initFunction = nullptr,  // or initMyNewSensor
-    .measurementType = MEASUREMENT_TEMPERATURE,
-    .calibrationType = CALIBRATION_NONE,
+    .measurementType = MEASURE_TEMPERATURE,
+    .calibrationType = CAL_NONE,
     .defaultCalibration = nullptr,
     .minReadInterval = 100,
     .minValue = -40.0,
@@ -406,18 +316,13 @@ static const char PSTR_MY_NEW_SENSOR_LABEL[] PROGMEM = "My New Sensor Descriptio
 }
 ```
 
-**4. Update count:**
-```cpp
-#define SENSOR_LIBRARY_SIZE 21  // Was 20, now 21
-```
-
-**5. Validate** (optional but recommended)
+**4. Validate** (recommended)
 ```bash
 python3 tools/validate_registries.py
 # Checks for hash collisions, duplicate names, etc.
 ```
 
-**Result:** New sensor immediately available via `SET <pin> APPLICATION MY_NEW_SENSOR`
+**Result:** New sensor immediately available via `SET <pin> <app> MY_NEW_SENSOR`
 
 ---
 
@@ -503,28 +408,28 @@ uint16_t djb2_hash_P(const char* str);     // PROGMEM string
 
 **Sensor lookups:**
 ```cpp
-uint8_t findSensorByName(const char* name);
-uint8_t findSensorByHash(uint16_t hash);
+uint8_t getSensorIndexByName(const char* name);
+uint8_t getSensorIndexByHash(uint16_t hash);
 const SensorInfo* getSensorByIndex(uint8_t index);
 ```
 
 **Application lookups:**
 ```cpp
-uint8_t findApplicationByName(const char* name);
-uint8_t findApplicationByHash(uint16_t hash);
+uint8_t getApplicationIndexByName(const char* name);
+uint8_t getApplicationIndexByHash(uint16_t hash);
 const ApplicationPreset* getApplicationByIndex(uint8_t index);
 ```
 
 **Units lookups:**
 ```cpp
-uint8_t findUnitsByName(const char* name);
-uint8_t findUnitsByHash(uint16_t hash);
+uint8_t getUnitsIndexByName(const char* name);
+uint8_t getUnitsIndexByHash(uint16_t hash);
 const UnitsInfo* getUnitsByIndex(uint8_t index);
 ```
 
-### EEPROM Format (v2+)
+### EEPROM Format
 
-**Old format (v1):**
+**Old format (v1 - deprecated):**
 ```cpp
 struct InputEEPROM_v1 {
     uint8_t sensorIndex;      // Breaks if registry order changes!
@@ -532,26 +437,23 @@ struct InputEEPROM_v1 {
 };
 ```
 
-**New format (v2+):**
+**Current format (v2+):**
 ```cpp
-struct InputEEPROM_v2 {
+struct InputEEPROM {
     uint16_t sensorHash;      // Portable across firmware versions
     uint16_t applicationHash;
     uint16_t unitsHash;
+    // ... other fields ...
 };
 ```
 
 **Version migration:**
 When EEPROM version mismatch detected, firmware resets EEPROM to defaults.
 
----
-
-## Benefits Summary
+### Benefits Summary
 
 | Feature | Enum System | Registry System |
 |---------|-------------|-----------------|
-| **RAM Usage** | High (~5.5KB for full registry) | Low (~200 bytes runtime) |
-| **Flash Usage** | Same | Same |
 | **EEPROM Portability** | Fragile (breaks on reorder) | Robust (hash-based) |
 | **Extensibility** | Requires recompile | Runtime-friendly |
 | **Lookup Speed** | O(1) array index | O(n) linear search |
@@ -571,6 +473,4 @@ When EEPROM version mismatch detected, firmware resets EEPROM to defaults.
 
 ---
 
-**Last Updated:** 2025-01-28
-**Firmware Version:** 0.5.0-alpha (Unreleased)
-**EEPROM Version:** 2+ (Registry-based)
+**For the classic car community.**

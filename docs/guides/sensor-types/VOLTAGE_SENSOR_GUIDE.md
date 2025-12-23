@@ -1,360 +1,210 @@
-# Voltage Sensor Configuration Guide
+# Voltage Sensor Guide
 
-**Complete guide to battery and voltage monitoring in openEMS**
+**Battery and voltage monitoring for automotive applications**
 
 ---
 
 ## Overview
 
-openEMS supports voltage monitoring through resistor voltage dividers. The system automatically configures the correct divider ratio based on your microcontroller platform (3.3V or 5V).
+The `VOLTAGE_DIVIDER` sensor type monitors battery voltage using a resistor divider network. openEMS auto-configures the correct divider ratio based on your board's voltage level.
 
 ---
 
 ## Quick Start
 
-### Standard 12V Battery Monitoring
+### Serial Commands
 
-*Compile-Time:*
-```cpp
-#define INPUT_0_PIN            A8
-#define INPUT_0_APPLICATION    PRIMARY_BATTERY
-#define INPUT_0_SENSOR         VOLTAGE_DIVIDER
-```
-
-*Runtime:*
 ```
 SET A8 PRIMARY_BATTERY VOLTAGE_DIVIDER
+SAVE
 ```
 
-**That's it!** The system automatically selects the correct divider ratio for your board.
+For dual-battery setups:
 
----
-
-## Available Voltage Sensors
-
-| Sensor ID | Application | Notes |
-|-----------|-------------|-------|
-| `VOLTAGE_DIVIDER` | 12V battery monitoring | Auto-configured per platform |
-
-**Platform Auto-Configuration:**
-- **5V systems (Arduino Mega/Uno):** Expects 100kΩ/6.8kΩ divider
-- **3.3V systems (Teensy/Due/ESP32):** Expects 100kΩ/22kΩ divider
+```
+SET A8 PRIMARY_BATTERY VOLTAGE_DIVIDER
+SET A9 AUXILIARY_BATTERY VOLTAGE_DIVIDER
+SAVE
+```
 
 ---
 
 ## Wiring
 
-### Standard 12V Battery Divider
+### Voltage Divider Circuit
 
-**For 5V boards (Arduino Mega, Uno):**
-```
-Battery + ----[100kΩ]----+----[6.8kΩ]---- GND
-                         |
-                      [100nF]
-                         |
-                      Analog Pin (A8)
-```
+You MUST use a voltage divider - connecting 12V directly to an Arduino pin will damage it!
 
-**For 3.3V boards (Teensy, Due, ESP32):**
 ```
-Battery + ----[100kΩ]----+----[22kΩ]---- GND
-                         |
-                      [100nF]
-                         |
-                      Analog Pin (A8)
+Battery (+12V)
+     |
+   [R1]  ← High-side resistor (100kΩ)
+     |
+     +----→ Analog Pin
+     |
+   [R2]  ← Low-side resistor (varies by board)
+     |
+    GND
 ```
 
-**Components:**
-- R1: 100kΩ ±1% (high side)
-- R2: 6.8kΩ or 22kΩ ±1% (low side, per platform)
-- C1: 100nF ceramic capacitor (noise filtering)
+### Resistor Values by Board
 
-### Protection Circuit (Recommended)
+| Board Type | R1 (High) | R2 (Low) | Max Input |
+|------------|-----------|----------|-----------|
+| 5V boards (Uno, Mega) | 100kΩ | 6.8kΩ | ~18V |
+| 3.3V boards (Teensy) | 100kΩ | 22kΩ | ~15V |
 
-Add a zener diode for transient protection:
+**Formula:**
 ```
-Battery + ----[100kΩ]----+----[R2]---- GND
-                         |
-                      [Zener]
-                         |
-                      [100nF]
-                         |
-                      Analog Pin
-
-Zener: 5.1V for 5V boards, 3.3V for 3.3V boards
+V_out = V_in × R2 / (R1 + R2)
+V_in = V_out × (R1 + R2) / R2
 ```
+
+### Example: 5V Arduino
+
+With 100kΩ/6.8kΩ divider:
+- At 12V input: 12 × 6.8 / (100 + 6.8) = 0.76V at pin
+- At 15V input: 15 × 6.8 / (100 + 6.8) = 0.95V at pin
+- Max safe input: 5 × (100 + 6.8) / 6.8 = 78.5V (but use 18V max for safety margin)
+
+### Example: 3.3V Teensy
+
+With 100kΩ/22kΩ divider:
+- At 12V input: 12 × 22 / (100 + 22) = 2.16V at pin
+- At 15V input: 15 × 22 / (100 + 22) = 2.70V at pin
+- Max safe input: 3.3 × (100 + 22) / 22 = 18.3V
 
 ---
 
 ## Configuration Examples
 
-### Example 1: Primary Battery with Alarm
+### Primary Battery with Alarm
 
-*Compile-Time:*
-```cpp
-#define INPUT_0_PIN            A8
-#define INPUT_0_APPLICATION    PRIMARY_BATTERY
-#define INPUT_0_SENSOR         VOLTAGE_DIVIDER
-```
-
-*Runtime:*
-```
-SET A8 APPLICATION PRIMARY_BATTERY
-SET A8 SENSOR VOLTAGE_DIVIDER
-SET A8 ALARM 11.5 15
-ENABLE A8
-SAVE
-```
-
-Alarms at <11.5V (low battery) or >15V (overcharging).
-
-### Example 2: Dual Battery System
-
-*Compile-Time:*
-```cpp
-// Starter battery
-#define INPUT_0_PIN            A8
-#define INPUT_0_APPLICATION    PRIMARY_BATTERY
-#define INPUT_0_SENSOR         VOLTAGE_DIVIDER
-
-// House/auxiliary battery
-#define INPUT_1_PIN            A7
-#define INPUT_1_APPLICATION    AUXILIARY_BATTERY
-#define INPUT_1_SENSOR         VOLTAGE_DIVIDER
-```
-
-*Runtime:*
 ```
 SET A8 PRIMARY_BATTERY VOLTAGE_DIVIDER
-SET A8 NAME STRT
-
-SET A7 AUXILIARY_BATTERY VOLTAGE_DIVIDER
-SET A7 NAME HOUS
-
+SET A8 ALARM 11.5 15.0
 SAVE
 ```
 
----
+Triggers alarm below 11.5V (low battery) or above 15.0V (overcharging).
 
-## Understanding Voltage Dividers
-
-### Basic Principle
-
-A voltage divider reduces high voltage to safe levels for the ADC:
+### Dual Battery System
 
 ```
-V_in ----[R1]----+----[R2]---- GND
-                 |
-              V_out (to ADC)
+SET A8 PRIMARY_BATTERY VOLTAGE_DIVIDER
+SET A8 ALARM 11.5 15.0
+SET A9 AUXILIARY_BATTERY VOLTAGE_DIVIDER
+SET A9 ALARM 11.5 15.0
+SAVE
 ```
-
-**Voltage at ADC:**
-```
-V_out = V_in × (R2 / (R1 + R2))
-```
-
-**Measured voltage:**
-```
-V_in = V_out × ((R1 + R2) / R2)
-```
-
-### Standard Divider Calculations
-
-**For 5V systems with 100kΩ/6.8kΩ:**
-- Divider ratio: 6.8 / (100 + 6.8) = 0.0636
-- At 12V battery: 12 × 0.0636 = 0.76V at ADC ✓
-- At 15V battery: 15 × 0.0636 = 0.95V at ADC ✓
-- Maximum safe: ~78V (would give 5V at ADC)
-
-**For 3.3V systems with 100kΩ/22kΩ:**
-- Divider ratio: 22 / (100 + 22) = 0.180
-- At 12V battery: 12 × 0.180 = 2.16V at ADC ✓
-- At 15V battery: 15 × 0.180 = 2.70V at ADC ✓
-- Maximum safe: ~18V (would give 3.3V at ADC)
-
----
-
-## Battery Voltage Reference
-
-### 12V Lead-Acid Battery States
-
-| Voltage | State | Action |
-|---------|-------|--------|
-| 12.6V+ | Fully charged (100%) | Normal |
-| 12.4V | 75% charged | Normal |
-| 12.2V | 50% charged | Consider charging |
-| 12.0V | 25% charged | Recharge soon |
-| 11.8V | Nearly discharged | Recharge now |
-| <11.5V | Critically low | May damage battery |
-
-### Charging System Voltages
-
-| Voltage | Condition | Notes |
-|---------|-----------|-------|
-| 13.5-14.5V | Normal charging | Alternator working |
-| <13.5V | Undercharging | Check alternator/belt |
-| >14.8V | Overcharging | Check regulator |
-| >15.5V | Dangerous | Disconnect load, investigate |
-
-### 24V Systems (Trucks)
-
-Multiply 12V values by 2:
-- Fully charged: ~25.2V
-- Normal charging: 27-29V
-- Use 100kΩ/3.3kΩ divider
 
 ---
 
 ## Calibration
 
-### Method 1: Measure Actual Resistors
+### Auto-Configuration
 
-Most accurate method:
+openEMS automatically detects your board voltage and configures the divider ratio. For most setups, no calibration is needed.
 
-1. Measure R1 with multimeter: e.g., 98.5kΩ
-2. Measure R2 with multimeter: e.g., 6.75kΩ
-3. Use custom calibration in advanced_config.h
+### Custom Divider Values
 
-### Method 2: Known Voltage Comparison
+If you used different resistor values:
 
-1. Measure battery with accurate voltmeter: 12.65V
-2. Read openEMS display: 12.80V (0.15V high)
-3. Note the error for future correction
+```
+SET A8 VOLTAGE <R1> <R2> [correction] [offset]
+```
 
-### Method 3: Two-Point Calibration
+**Example:** Using 47kΩ/10kΩ divider:
+```
+SET A8 VOLTAGE 47000 10000
+SAVE
+```
 
-For best accuracy:
-1. Measure at low voltage (11V)
-2. Measure at high voltage (14V)
-3. Calculate correction factor
+### Fine-Tuning
+
+If readings are slightly off, add a correction factor:
+
+```
+SET A8 VOLTAGE 100000 6800 1.02 0
+SAVE
+```
+
+- `1.02` = 2% correction multiplier
+- `0` = no offset
 
 ---
 
 ## Troubleshooting
 
-### Voltage reads too high
+### Reading Shows 0V
+
+**Check:**
+1. Battery is connected
+2. Divider circuit wired correctly
+3. Correct analog pin specified
+
+### Reading is Incorrect
 
 **Possible causes:**
-- R1 actual value lower than expected
-- R2 actual value higher than expected
-- ADC reference voltage incorrect
+1. Wrong resistor values
+2. Resistor tolerance (use 1% resistors for accuracy)
+3. ADC reference voltage varies
 
 **Solutions:**
-- Measure actual resistor values
-- Check ADC reference voltage setting
+1. Measure actual resistor values with multimeter
+2. Use `SET A8 VOLTAGE <actual_R1> <actual_R2>`
+3. Add correction factor if needed
 
-### Voltage reads too low
-
-**Possible causes:**
-- R1 actual value higher than expected
-- R2 actual value lower than expected
-- Poor connection adding resistance
+### Reading is Noisy
 
 **Solutions:**
-- Check all connections
-- Measure voltage at ADC pin with multimeter
-
-### Erratic readings
-
-**Possible causes:**
-- Missing filter capacitor
-- Poor ground connection
-- Electrical noise
-
-**Solutions:**
-- Add 100nF capacitor at ADC pin
-- Use shielded cable
-- Check ground connection
-- Route wires away from ignition components
-
-### Readings drift with temperature
-
-**Possible causes:**
-- Resistor temperature coefficient
-- ADC temperature drift
-
-**Solutions:**
-- Use 1% metal film resistors (low tempco)
-- Keep resistors away from heat sources
+1. Add 100nF capacitor at junction (to ground)
+2. Use shorter wires
+3. Route away from ignition components
 
 ---
 
-## Advanced Applications
+## Hardware Recommendations
 
-### Monitoring Voltage Drop
+### Resistors
 
-Use two voltage sensors to monitor voltage drop across cables:
-
-*Compile-Time:*
-```cpp
-#define INPUT_0_PIN            A8
-#define INPUT_0_APPLICATION    PRIMARY_BATTERY
-#define INPUT_0_SENSOR         VOLTAGE_DIVIDER
-
-#define INPUT_1_PIN            A7
-#define INPUT_1_APPLICATION    AUXILIARY_BATTERY
-#define INPUT_1_SENSOR         VOLTAGE_DIVIDER
-```
-
-Measure at battery and at load - difference shows cable drop.
-
-### Solar System Monitoring
-
-Monitor solar panel and battery:
-
-```cpp
-#define INPUT_0_PIN            A8
-#define INPUT_0_APPLICATION    PRIMARY_BATTERY
-#define INPUT_0_SENSOR         VOLTAGE_DIVIDER
-
-#define INPUT_1_PIN            A9
-#define INPUT_1_APPLICATION    AUXILIARY_BATTERY
-#define INPUT_1_SENSOR         VOLTAGE_DIVIDER
-```
-
----
-
-## Hardware Best Practices
-
-### Resistor Selection
 - Use 1% tolerance metal film resistors
 - 1/4W rating is sufficient
-- Match temperature coefficients
+- Consider SMD resistors for compact builds
 
-### PCB Design Tips
-- Place resistors close to ADC pin
-- Use ground plane under ADC traces
-- Keep traces short
-- Add TVS diode for surge protection
+### Protection (Optional)
 
-### Mounting
-- Mount divider near microcontroller
-- Protect from moisture and vibration
-- Use proper automotive connectors
+Add a 5.1V zener (for 5V boards) or 3.3V zener (for 3.3V boards) from analog pin to ground for extra protection against voltage spikes.
+
+```
+Analog Pin
+     |
+   [Zener]
+     |
+    GND
+```
 
 ---
 
-## Safety Considerations
+## Multiple Voltage Inputs
 
-⚠️ **Electrical Safety:**
-- Always disconnect battery before wiring
-- Double-check polarity
-- Use fused connection (1A fuse recommended)
-- Ensure proper insulation
+You can monitor multiple voltage sources:
 
-⚠️ **Reverse Polarity Protection:**
-Consider adding a diode:
 ```
-Battery + ----[1N4148]----[100kΩ]----+----[R2]---- GND
-                                      |
-                                   ADC Pin
+SET A8 PRIMARY_BATTERY VOLTAGE_DIVIDER
+SET A9 AUXILIARY_BATTERY VOLTAGE_DIVIDER
+SET A10 IGNITION_VOLTAGE VOLTAGE_DIVIDER
+SAVE
 ```
 
-⚠️ **Transient Protection:**
-Automotive electrical systems have spikes up to 100V. Use:
-- Zener diode at ADC pin
-- TVS diode at divider input
-- MOV for surge protection
+Each input needs its own voltage divider circuit.
+
+---
+
+## See Also
+
+- [Sensor Selection Guide](SENSOR_SELECTION_GUIDE.md) - Complete sensor catalog
+- [Pin Requirements](../hardware/PIN_REQUIREMENTS_GUIDE.md) - Analog pin information
 
 ---
 

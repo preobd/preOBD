@@ -153,7 +153,7 @@ python3 tools/configure.py --load tools/saved-configs/dual_cht_config.json
 ```
 
 ### For detailed configure.py documentation, see:
-- **[tools/README.md](../tools/README.md)** - Complete configure.py usage guide
+- **[tools/README.md](../../../tools/README.md)** - Complete configure.py usage guide
 
 ---
 
@@ -1015,12 +1015,12 @@ For complex migrations, consider writing a Python script to transform old JSON t
 
 ## See Also
 
-- **[tools/README.md](../tools/README.md)** - Complete configure.py documentation
+- **[tools/README.md](../../../tools/README.md)** - Complete configure.py documentation
 - **[JSON_QUICK_REFERENCE.md](JSON_QUICK_REFERENCE.md)** - Quick cheat sheet for JSON changes
-- **[SERIAL_COMMANDS.md](reference/SERIAL_COMMANDS.md)** - CONFIG SAVE/LOAD commands
-- **[EEPROM_STRUCTURE.md](architecture/EEPROM_STRUCTURE.md)** - How configurations are stored
-- **[REGISTRY_SYSTEM.md](architecture/REGISTRY_SYSTEM.md)** - Understanding sensor/app registries
-- **[CHANGELOG.md](../CHANGELOG.md)** - Version-specific changes and breaking changes
+- **[SERIAL_COMMANDS.md](../../reference/SERIAL_COMMANDS.md)** - CONFIG SAVE/LOAD commands
+- **[EEPROM_STRUCTURE.md](../../architecture/EEPROM_STRUCTURE.md)** - How configurations are stored
+- **[REGISTRY_SYSTEM.md](../../architecture/REGISTRY_SYSTEM.md)** - Understanding sensor/app registries
+- **[CHANGELOG.md](../../../CHANGELOG.md)** - Version-specific changes and breaking changes
 
 ## Questions?
 

@@ -15,7 +15,7 @@ openEMS/
 │
 ├── src/                        # All source code
 │   ├── main.cpp               # Main program loop
-│   ├── config.h               # ⭐ USER CONFIGURATION FILE
+│   ├── config.h               # ⭐ HARDWARE CONFIGURATION FILE
 │   ├── advanced_config.h      # Advanced features configuration
 │   ├── alarm.cpp              # Alarm system
 │   │
@@ -25,14 +25,15 @@ openEMS/
 │   │   ├── input_manager.h    # Input manager exports
 │   │   ├── sensor_read.cpp    # Sensor reading functions
 │   │   ├── serial_config.h    # Serial command interface
-│   │   └── serial_config.cpp  # Serial command implementation
+│   │   ├── serial_config.cpp  # Serial command implementation
+│   │   └── alarm_logic.cpp    # Alarm state machine
 │   │
 │   ├── lib/                   # Library components
 │   │   ├── platform.h         # Platform auto-detection
 │   │   ├── sensor_types.h     # Data structures
 │   │   ├── sensor_library.h   # Sensor catalog (30+ sensors)
 │   │   ├── sensor_calibration_data.h  # Calibration database
-│   │   └── application_presets.h      # Application preset configurations
+│   │   └── application_presets.h      # Application configurations
 │   │
 │   ├── outputs/               # Output module directory
 │   │   ├── output_base.h      # Output interface
@@ -40,7 +41,8 @@ openEMS/
 │   │   ├── output_can.cpp     # CAN bus (OBDII)
 │   │   ├── output_realdash.cpp # RealDash protocol
 │   │   ├── output_serial.cpp  # Serial CSV output
-│   │   └── output_sdlog.cpp   # SD card logging
+│   │   ├── output_sdlog.cpp   # SD card logging
+│   │   └── output_alarm.cpp   # Alarm hardware control
 │   │
 │   ├── displays/              # Display module directory
 │   │   └── display_lcd.cpp    # 20x4 LCD display
@@ -53,23 +55,33 @@ openEMS/
 │       └── test_value_generator.cpp  # Test value generators
 │
 └── docs/                       # Documentation
-    ├── README.md                       # Complete documentation
-    ├── getting-started/                # Getting started guides
+    ├── README.md                       # Documentation hub
+    ├── getting-started/
     │   ├── QUICK_REFERENCE.md          # Quick lookup guide
     │   └── DIRECTORY_SETUP.md          # This file
-    ├── guides/                         # User guides
+    ├── guides/
     │   ├── sensor-types/               # Sensor-specific guides
     │   │   ├── SENSOR_SELECTION_GUIDE.md
     │   │   ├── PRESSURE_SENSOR_GUIDE.md
     │   │   ├── VOLTAGE_SENSOR_GUIDE.md
     │   │   ├── DIGITAL_SENSOR_GUIDE.md
     │   │   └── W_PHASE_RPM_GUIDE.md
-    │   └── configuration/              # Configuration guides
-    │       ├── ADDING_SENSORS.md
-    │       ├── ADVANCED_CALIBRATION_GUIDE.md
-    │       └── DISPLAY_UNITS_CONFIGURATION_GUIDE.md
-    └── reference/                      # Reference materials
-        └── README.md
+    │   ├── configuration/              # Configuration guides
+    │   │   ├── CONFIG_RUN_MODE_GUIDE.md
+    │   │   ├── ADDING_SENSORS.md
+    │   │   ├── ADVANCED_CALIBRATION_GUIDE.md
+    │   │   └── ALARM_SYSTEM_GUIDE.md
+    │   └── hardware/
+    │       ├── BIAS_RESISTOR_GUIDE.md
+    │       └── PIN_REQUIREMENTS_GUIDE.md
+    ├── reference/
+    │   ├── SERIAL_COMMANDS.md
+    │   └── README.md
+    ├── architecture/                   # Developer documentation
+    │   ├── REGISTRY_SYSTEM.md
+    │   └── EEPROM_STRUCTURE.md
+    └── advanced/
+        └── STATIC_BUILDS_GUIDE.md      # Compile-time configuration
 ```
 
 ---
@@ -111,22 +123,20 @@ openEMS/
 - **Edit:** RARELY (only for major system changes)
 
 **config.h** ⭐
-- Primary user configuration file
-- Build mode selection (compile-time vs runtime)
-- Input definitions (for compile-time mode)
-- Output enables (LCD, CAN, Serial, SD)
-- **Edit:** YES - This is where you configure your system
+- Hardware configuration file
+- Pin assignments (MODE_BUTTON, BUZZER, CAN_CS, etc.)
+- Output module enables (LCD, CAN, Serial, SD)
+- Optional: Static build configuration
+- **Edit:** YES - This is where you configure your hardware
 
 ```cpp
-// Build Mode Selection
-#define USE_STATIC_CONFIG     // Enable compile-time mode
+// Hardware Pin Assignments
+#define MODE_BUTTON 5   // Multi-function button
+#define BUZZER 3        // Alarm buzzer output
+#define CAN_CS 9        // MCP2515 chip select
+#define CAN_INT 2       // MCP2515 interrupt
 
-// Input Configuration (compile-time mode)
-#define INPUT_0_PIN            6
-#define INPUT_0_APPLICATION    CHT
-#define INPUT_0_SENSOR         MAX6675
-
-// Output Enables
+// Output Module Enables
 #define ENABLE_LCD
 #define ENABLE_CAN
 #define ENABLE_SERIAL_OUTPUT
@@ -134,26 +144,22 @@ openEMS/
 
 **advanced_config.h**
 - Advanced settings and customizations
-- Custom calibration overrides
+- Custom calibration overrides (for static builds)
 - Test mode configuration
 - **Edit:** SOMETIMES (for custom calibrations)
-
-**alarm.cpp**
-- Alarm logic and thresholds
-- Audible and visual alarm handling
-- **Edit:** RARELY (alarm behavior is configurable via inputs)
 
 ---
 
 ## src/inputs/ - Input and Sensor Management
 
-This directory contains the unified input-based architecture that supports both compile-time and runtime configuration.
+This directory contains the input-based architecture for sensor configuration.
 
 **input.h**
 - Defines the Input structure (core of the system)
-- Application enum (CHT, OIL_PRESSURE, etc.)
-- Sensor enum (MAX6675, VDO_120C_LOOKUP, etc.)
+- Application presets (CHT, OIL_PRESSURE, etc.)
+- Sensor types (MAX6675, VDO_120C_LOOKUP, etc.)
 - Calibration override union
+- Alarm context structure
 - **Edit:** NO - Core architecture definition
 
 **Key concepts:**
@@ -162,9 +168,8 @@ This directory contains the unified input-based architecture that supports both 
 - **Input** = Physical pin with assigned application and sensor
 
 **input_manager.cpp / input_manager.h**
-- Manages input configuration (both modes)
-- EEPROM save/load (runtime mode)
-- Compile-time config processing (static mode)
+- Manages input configuration
+- EEPROM save/load functionality
 - Input initialization and validation
 - **Edit:** NO - Core system management
 
@@ -172,157 +177,92 @@ This directory contains the unified input-based architecture that supports both 
 - All sensor reading implementations
 - Thermistor, thermocouple, pressure, voltage functions
 - Unit conversion functions (temp, pressure, etc.)
-- Display conversion functions
-- OBDII conversion functions
-- **Edit:** RARELY (only when adding completely new sensor types)
+- **Edit:** SOMETIMES (when adding new sensor types)
 
 **serial_config.h / serial_config.cpp**
-- Serial command interface for runtime configuration
-- Command parser and handlers
-- Only compiled when USE_STATIC_CONFIG is NOT defined
+- Serial command interface
+- Parses and handles all serial commands
 - **Edit:** RARELY (when adding new commands)
 
-**Serial Commands (runtime mode only):**
-
-| Category | Commands |
-|----------|----------|
-| Configuration | `SET <pin> APPLICATION <app>`, `SET <pin> SENSOR <sensor>` |
-| Control | `ENABLE`, `DISABLE`, `CLEAR` |
-| Query | `LIST INPUTS`, `LIST APPLICATIONS`, `LIST SENSORS`, `INFO` |
-| System | `SAVE`, `LOAD`, `RESET`, `HELP` |
+**alarm_logic.cpp**
+- Alarm state machine implementation
+- Warmup, persistence, fault detection
+- **Edit:** RARELY (alarm behavior is configurable)
 
 ---
 
 ## src/lib/ - Library Components
 
-This directory contains core library components, sensor definitions, and platform abstractions.
-
 **platform.h**
-- Automatically detects Arduino, Teensy, ESP32, Due
-- Configures system voltage (3.3V or 5V)
-- Sets ADC resolution (10-bit or 12-bit)
-- Configures voltage dividers for battery monitoring
-- **Edit:** NO - Automatic detection handles everything
-
-**What it detects:**
-- Board type and family
-- System voltage
-- ADC resolution and range
-- Appropriate voltage dividers
-- Platform-specific optimizations
+- Auto-detects microcontroller platform
+- Sets ADC resolution, voltage references, pin mappings
+- **Edit:** SOMETIMES (when adding new board support)
 
 **sensor_types.h**
-- Data structure definitions
-- Calibration structure types
-- Units enum (CELSIUS, PSI, BAR, etc.)
-- **Edit:** NO - Core type definitions
+- Core data structures for calibration
+- Measurement types (temperature, pressure, etc.)
+- Calibration type enums
+- **Edit:** RARELY (when adding new calibration methods)
 
 **sensor_library.h**
-- Catalog of 30+ sensor definitions
-- Maps sensor IDs to read functions and calibrations
-- All stored in PROGMEM (flash memory)
-- **Edit:** YES (when adding new sensor types to library)
-
-**Sensor entries include:**
-```cpp
-{
-    .sensor = VDO_120C_LOOKUP,
-    .name = "VDO 120C (Lookup)",
-    .readFunction = readThermistorLookup,
-    .measurementType = MEASURE_TEMPERATURE,
-    .calibrationType = CAL_THERMISTOR_LOOKUP,
-    .defaultCalibration = &vdo120_lookup_cal
-}
-```
+- Catalog of supported sensors
+- Sensor info structures with read functions
+- Default calibration references
+- **Edit:** YES (when adding new sensors)
 
 **sensor_calibration_data.h**
-- Centralized calibration database
-- Lookup tables for VDO sensors
+- All default sensor calibrations in PROGMEM
+- VDO lookup tables
 - Steinhart-Hart coefficients
-- Pressure sensor polynomials
-- All stored in PROGMEM (flash, not RAM)
-- **Edit:** YES (when adding new sensor calibrations)
-
-**What's stored here:**
-- Temperature lookup tables
-- Steinhart-Hart coefficients for thermistors
-- Pressure sensor linear/polynomial calibrations
-- Voltage divider configurations
+- Pressure sensor calibrations
+- **Edit:** YES (when adding calibration data)
 
 **application_presets.h**
 - Pre-configured application settings
 - Default sensor assignments per application
 - Default alarm thresholds
 - OBD-II PID mappings
-- **Edit:** SOMETIMES (when adding new application types)
+- **Edit:** SOMETIMES (when adding applications)
 
 ---
 
 ## src/outputs/ - Output Modules
 
-This directory contains all output implementations for sending sensor data to various devices and protocols.
-
-**Architecture: Data-Driven Time-Sliced Outputs**
-
-openEMS uses a **fully data-driven output architecture** where all outputs are defined in a single array with their send intervals:
-
-```cpp
-OutputModule outputModules[] = {
-    {"CAN", true, initCAN, sendCAN, updateCAN, 100},       // 10Hz
-    {"RealDash", true, initRealdash, sendRealdash, updateRealdash, 100},
-    {"Serial", true, initSerialOutput, sendSerialOutput, updateSerialOutput, 1000},
-    {"SD_Log", true, initSDLog, sendSDLog, updateSDLog, 5000}
-};
-```
-
-Each output runs at its own independent interval without blocking others:
-- **CAN/RealDash:** 100ms (10Hz) - smooth dashboards
-- **Serial CSV:** 1000ms (1Hz) - avoid flooding
-- **SD logging:** 5000ms (0.2Hz) - reduce wear
-
-**Benefits:**
-- Adding new output = ONE line in array
-- No changes to main.cpp
-- Fully scalable architecture
-- Consistent with sensor library pattern
-
 **output_base.h**
-- Output module interface definition
-- Defines OutputModule structure with `sendInterval` field
-- **Edit:** NO - Core interface
+- Output module interface
+- Common output functions
+- **Edit:** RARELY
 
 **output_manager.cpp**
-- Data-driven output coordinator
-- Time-sliced sending via `sendToOutputs(now)`
-- Per-output timing management
-- **Edit:** YES - Add new output module here (one line in array)
+- Coordinates all output modules
+- Schedules output updates
+- **Edit:** RARELY (when adding new output types)
 
 **output_can.cpp**
-- CAN bus OBDII output
-- Standard diagnostic PIDs
-- Compatible with Torque, RaceChrono, scan tools
-- **Edit:** RARELY (to add custom PIDs or change mapping)
+- CAN bus output (OBDII PIDs)
+- MCP2515 or FlexCAN support
+- **Edit:** RARELY
 
 **output_realdash.cpp**
-- RealDash mobile dashboard protocol
-- Custom framing for RealDash app
-- **Edit:** RARELY (RealDash protocol is stable)
+- RealDash mobile app protocol
+- **Edit:** RARELY
 
 **output_serial.cpp**
-- Serial CSV output for debugging/logging
-- Human-readable format
-- **Edit:** RARELY (to change output format)
+- Serial CSV output
+- **Edit:** SOMETIMES (to customize format)
 
 **output_sdlog.cpp**
 - SD card data logging
-- CSV file creation and writing
-- **Edit:** SOMETIMES (to customize logging format)
+- **Edit:** SOMETIMES (to customize format)
+
+**output_alarm.cpp**
+- Alarm hardware control (buzzer, LED)
+- Reads alarm states from inputs
+- **Edit:** RARELY
 
 ---
 
 ## src/displays/ - Display Modules
-
-This directory contains display driver implementations for visual output.
 
 **display_lcd.cpp**
 - 20x4 character LCD display driver
@@ -375,13 +315,10 @@ This directory contains the comprehensive test mode system for testing outputs w
 ### Core Documentation
 
 **docs/README.md**
-- Complete system documentation
-- Hardware setup and wiring
-- Configuration guide
-- Troubleshooting
-- **Edit:** SOMETIMES (to improve clarity or add sections)
-
----
+- Complete documentation hub
+- Links to all guides
+- Quick reference tables
+- **Edit:** SOMETIMES (when adding new documentation)
 
 ### Getting Started
 
@@ -396,8 +333,6 @@ This directory contains the comprehensive test mode system for testing outputs w
 - This file - explains project structure
 - **Edit:** WHEN PROJECT STRUCTURE CHANGES
 
----
-
 ### Sensor Type Guides
 
 **docs/guides/sensor-types/SENSOR_SELECTION_GUIDE.md**
@@ -411,166 +346,60 @@ This directory contains the comprehensive test mode system for testing outputs w
 - Everything about pressure sensors
 - VDO vs generic sensors
 - Wiring and calibration
-- Troubleshooting pressure readings
 - **Edit:** WHEN ADDING PRESSURE SENSORS
 
 **docs/guides/sensor-types/VOLTAGE_SENSOR_GUIDE.md**
 - Battery and voltage monitoring
 - Platform auto-configuration
 - Voltage divider setup
-- Calibration procedures
 - **Edit:** FOR VOLTAGE-RELATED UPDATES
 
 **docs/guides/sensor-types/W_PHASE_RPM_GUIDE.md**
 - RPM sensing for classics without electronic ignition
 - Voltage protection circuits (CRITICAL for 3.3V boards!)
-- Wiring and calibration
-- Troubleshooting RPM readings
-- **Edit:** FOR RPM UPDATES
+- **Edit:** FOR RPM-RELATED UPDATES
 
 **docs/guides/sensor-types/DIGITAL_SENSOR_GUIDE.md**
 - Float switches and digital inputs
-- Normally closed vs normally open
 - Wiring and configuration
-- **Edit:** FOR DIGITAL SENSOR UPDATES
-
----
+- **Edit:** FOR DIGITAL INPUT UPDATES
 
 ### Configuration Guides
 
+**docs/guides/configuration/CONFIG_RUN_MODE_GUIDE.md**
+- CONFIG vs RUN mode operation
+- Safe configuration workflow
+- Command reference by mode
+- **Edit:** WHEN COMMAND BEHAVIOR CHANGES
+
+**docs/guides/configuration/ALARM_SYSTEM_GUIDE.md**
+- 5-state alarm state machine
+- Warmup and persistence
+- Troubleshooting false alarms
+- **Edit:** WHEN ALARM SYSTEM CHANGES
+
 **docs/guides/configuration/ADDING_SENSORS.md**
-- How to add completely new sensor types
-- Code structure and patterns
-- Testing new sensors
-- Contributing back to project
-- **Edit:** WHEN SIMPLIFYING CONTRIBUTION PROCESS
+- How to add new sensor types to the library
+- Registry architecture
+- **Edit:** FOR CONTRIBUTORS
 
 **docs/guides/configuration/ADVANCED_CALIBRATION_GUIDE.md**
-- For users with sensors not in library
 - Custom sensor calibrations
-- Adding to sensor library
-- Steinhart-Hart coefficient calculation
-- Lookup table creation
+- Steinhart-Hart coefficients
+- Custom pressure curves
 - **Edit:** WHEN ADDING CALIBRATION METHODS
 
-**docs/guides/configuration/DISPLAY_UNITS_CONFIGURATION_GUIDE.md**
-- Configuring display units (Celsius/Fahrenheit, PSI/bar, etc.)
-- Unit conversion settings
-- **Edit:** WHEN ADDING NEW UNIT OPTIONS
+### Advanced
+
+**docs/advanced/STATIC_BUILDS_GUIDE.md**
+- Compile-time configuration for Arduino Uno
+- Memory optimization
+- When to use static builds
+- **Edit:** WHEN STATIC BUILD SYSTEM CHANGES
 
 ---
 
-### Reference Materials
-
-**docs/reference/README.md**
-- Placeholder for future reference documentation
-- Pin mappings, command reference, troubleshooting, etc.
-- **Edit:** WHEN ADDING REFERENCE CONTENT
-
----
-
-## Build System
-
-### PlatformIO Configuration
-
-**platformio.ini sections:**
-
-```ini
-[platformio]
-default_envs = megaatmega2560    # Default build target
-
-[env]
-framework = arduino
-monitor_speed = 115200
-lib_deps = ...                   # Shared libraries
-
-[env:megaatmega2560]            # Arduino Mega
-platform = atmelavr
-board = megaatmega2560
-build_flags = -Os -Wall
-
-[env:teensy40]                  # Teensy 4.0
-platform = teensy
-board = teensy40
-build_flags = -O2 -Wall
-lib_deps = ${env.lib_deps}
-    FlexCAN_T4                  # Native CAN library
-
-[env:uno]                       # Arduino Uno
-platform = atmelavr
-board = uno
-build_flags = -Os -Wall
-```
-
-### Building
-
-**Build default target:**
-```bash
-pio run
-```
-
-**Build specific target:**
-```bash
-pio run -e teensy40
-pio run -e megaatmega2560
-pio run -e uno
-```
-
-**Upload:**
-```bash
-pio run -t upload
-pio run -e teensy40 -t upload
-```
-
-**Monitor:**
-```bash
-pio device monitor
-```
-
-### Switching Configuration Modes
-
-**To Compile-Time Mode:**
-```cpp
-// In config.h
-#define USE_STATIC_CONFIG
-```
-
-**To Runtime Mode:**
-```cpp
-// In config.h - comment out:
-// #define USE_STATIC_CONFIG
-```
-
----
-
-## Understanding the Architecture
-
-### Unified Input-Based System
-
-The system uses a single, unified architecture for both configuration modes:
-
-```
-Input = {
-    pin,                 // Physical pin (A0, Pin6, etc.)
-    application,         // What you're measuring (CHT, OIL_PRESSURE)
-    sensor,              // Hardware device (MAX6675, VDO_5BAR)
-    calibration          // How to convert readings (from library)
-}
-```
-
-**Both modes use the same:**
-- Input structure
-- Sensor library
-- Calibration database
-- Reading functions
-- Output modules
-- Display code
-
-**Only difference:**
-- **Compile-time:** Inputs defined in config.h, fixed at compile
-- **Runtime:** Inputs configured via serial, saved to EEPROM
-
-### Memory Management
+## Memory Management
 
 **Flash (PROGMEM):**
 - Sensor calibration tables
@@ -584,17 +413,20 @@ Input = {
 - Output buffers
 - Display buffers
 
-**EEPROM (runtime mode only):**
+**EEPROM:**
 - Configuration header
 - Input configurations
+- System configuration
 - Persists across power cycles
 
-### Data Flow
+---
+
+## Data Flow
 
 ```
 1. Sensor → ADC reading
-2. ADC → Calibration function → Engineering units
-3. Engineering units → Display conversion → Display
+2. ADC → Calibration function → Engineering units (standard)
+3. Engineering units → Display conversion → Display units
 4. Engineering units → OBD conversion → CAN bus
 5. Engineering units → Serial output
 6. Engineering units → SD card log
@@ -642,7 +474,7 @@ Input = {
 **Configuration questions:**
 - See [docs/getting-started/QUICK_REFERENCE.md](QUICK_REFERENCE.md)
 - Check relevant sensor guide
-- Post in GitHub Discussions with your config.h
+- Post in GitHub Discussions with your config
 
 **Bug reports:**
 - GitHub Issues
