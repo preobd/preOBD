@@ -55,8 +55,9 @@ const PROGMEM InputTestConfig scenario1_configs[] = {
       .period_ms = 45000, .forceAlarm = false, .forceNaN = false }
 };
 
+const char scenario1_name[] PROGMEM = "Normal Operation";
 const PROGMEM TestScenario scenario1_normalOperation = {
-    .name = "Normal Operation",
+    .name = scenario1_name,
     .duration_ms = 120000,  // 2 minutes
     .numInputOverrides = 7,
     .inputConfigs = scenario1_configs
@@ -81,8 +82,9 @@ const PROGMEM InputTestConfig scenario2_configs[] = {
       .period_ms = 12000, .forceAlarm = false, .forceNaN = false }
 };
 
+const char scenario2_name[] PROGMEM = "Alarm Test - Overheating";
 const PROGMEM TestScenario scenario2_alarmTest = {
-    .name = "Alarm Test - Overheating",
+    .name = scenario2_name,
     .duration_ms = 30000,  // 30 seconds
     .numInputOverrides = 3,
     .inputConfigs = scenario2_configs
@@ -114,8 +116,9 @@ const PROGMEM InputTestConfig scenario3_configs[] = {
       .period_ms = 0, .forceAlarm = false, .forceNaN = false }
 };
 
+const char scenario3_name[] PROGMEM = "Sensor Fault Simulation";
 const PROGMEM TestScenario scenario3_sensorFault = {
-    .name = "Sensor Fault Simulation",
+    .name = scenario3_name,
     .duration_ms = 45000,  // 45 seconds
     .numInputOverrides = 4,
     .inputConfigs = scenario3_configs
@@ -148,8 +151,9 @@ const PROGMEM InputTestConfig scenario4_configs[] = {
       .period_ms = 0, .forceAlarm = false, .forceNaN = false }
 };
 
+const char scenario4_name[] PROGMEM = "Engine Startup Sequence";
 const PROGMEM TestScenario scenario4_engineStartup = {
-    .name = "Engine Startup Sequence",
+    .name = scenario4_name,
     .duration_ms = 120000,  // 2 minutes
     .numInputOverrides = 5,
     .inputConfigs = scenario4_configs
@@ -186,8 +190,9 @@ const PROGMEM InputTestConfig scenario5_configs[] = {
       .period_ms = 60000, .forceAlarm = false, .forceNaN = false }
 };
 
+const char scenario5_name[] PROGMEM = "Dynamic Driving Conditions";
 const PROGMEM TestScenario scenario5_drivingConditions = {
-    .name = "Dynamic Driving Conditions",
+    .name = scenario5_name,
     .duration_ms = 180000,  // 3 minutes
     .numInputOverrides = 6,
     .inputConfigs = scenario5_configs
