@@ -87,12 +87,12 @@ void updateOutputs() {
 
 /**
  * Find output module by name
- * @param name Output name (case-sensitive)
+ * @param name Output name (case-insensitive)
  * @return Pointer to OutputModule, or nullptr if not found
  */
 OutputModule* getOutputByName(const char* name) {
     for (int i = 0; i < numOutputModules; i++) {
-        if (strcmp(outputModules[i].name, name) == 0) {
+        if (strcasecmp(outputModules[i].name, name) == 0) {
             return &outputModules[i];
         }
     }
