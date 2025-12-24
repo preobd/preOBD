@@ -33,112 +33,104 @@
 -->
 
 <RealDashCAN version="2">
+  <frames>
+    <!-- ===== CYLINDER HEAD TEMPERATURE ===== -->
+    <!-- Custom PID 0xC8 (200 decimal) - No standard RealDash ID -->
+    <frame id="0x0c80:200,2,1">
+      <value targetId="1000" name="CHT: Cylinder Head Temp" units="C" offset="3" length="1">
+        <conversion>V-40</conversion>
+      </value>
+    </frame>
+  
+    <!-- ===== EXHAUST GAS TEMPERATURE ===== -->
+    <!-- Custom PID 0x78 (120 decimal) - Maps to RealDash EGT1 -->
+    <frame id="0x0c80:120,2,1">
+      <value targetId="106" units="C" offset="3" length="2" endianness="big">
+        <conversion>V-40</conversion>
+      </value>
+    </frame>
 
-  <!-- ===== CYLINDER HEAD TEMPERATURE ===== -->
-  <!-- Custom PID 0xC8 (200 decimal) - No standard RealDash ID -->
-  <frame id="0x0c80:200,2,1">
-    <value name="CHT: Cylinder Head Temp" units="C" offset="3" length="1">
-      <conversion>V-40</conversion>
-    </value>
-  </frame>
+    <!-- ===== COOLANT TEMPERATURE ===== -->
+    <!-- Standard OBD-II PID 0x05 (5 decimal) - Maps to RealDash Coolant Temperature -->
+    <frame id="0x0c80:5,2,1">
+      <value targetId="14" units="C" offset="3" length="1">
+        <conversion>V-40</conversion>
+      </value>
+    </frame>
+    <!-- ===== ENGINE OIL TEMPERATURE ===== -->
+    <!-- Standard OBD-II PID 0x5C (92 decimal) - Maps to RealDash Engine Oil Temperature -->
+    <frame id="0x0c80:92,2,1">
+      <value targetId="152" units="C" offset="3" length="1">
+        <conversion>V-40</conversion>
+      </value>
+    </frame>
+    <!-- ===== TRANSFER CASE / TRANSMISSION TEMPERATURE ===== -->
+    <!-- Custom PID 0xC9 (201 decimal) - Maps to RealDash Transmission Oil Temperature -->
+    <frame id="0x0c80:201,2,1">
+      <value targetId="138" units="C" offset="3" length="1">
+        <conversion>V-40</conversion>
+      </value>
+    </frame>
+    <!-- ===== ENGINE OIL PRESSURE ===== -->
+    <!-- Custom PID 0xCA (202 decimal) - Maps to RealDash Engine Oil Pressure -->
+    <!-- Data stored in bar, transmitted as bar*10 -->
+    <frame id="0x0c80:202,2,1">
+      <value targetId="151" units="bar" offset="3" length="1">
+        <conversion>V/10</conversion>
+      </value>
+    </frame>
+    <!-- ===== BOOST PRESSURE ===== -->
+    <!-- Custom PID 0x53 (83 decimal) - Maps to RealDash Boost -->
+    <!-- Data stored in bar, transmitted as bar*10 -->
+    <frame id="0x0c80:83,2,1">
+      <value targetId="31" units="bar" offset="3" length="2" endianness="big">
+        <conversion>V/10</conversion>
+      </value>
+    </frame>
+    <!-- ===== PRIMARY BATTERY VOLTAGE ===== -->
+    <!-- Custom PID 0xCB (203 decimal) - Maps to RealDash Battery Voltage -->
+    <frame id="0x0c80:203,2,1">
+      <value targetId="12" units="V" offset="3" length="1">
+        <conversion>V/10</conversion>
+      </value>
+    </frame>
+    <!-- ===== AUXILIARY BATTERY VOLTAGE ===== -->
+    <!-- Custom PID 0xCC (204 decimal) - No standard RealDash ID -->
+    <frame id="0x0c80:204,2,1">
+      <value targetId="1001" name="Auxiliary Battery" units="V" offset="3" length="1">
+        <conversion>V/10</conversion>
+      </value>
+    </frame>
+    <!-- ===== AMBIENT AIR TEMPERATURE ===== -->
+    <!-- Standard OBD-II PID 0x46 (70 decimal) - Maps to RealDash Ambient Temperature -->
+    <frame id="0x0c80:70,2,1">
+      <value targetId="173" units="C" offset="3" length="1">
+        <conversion>V-40</conversion>
+      </value>
+    </frame>
+    <!-- ===== BAROMETRIC PRESSURE ===== -->
+    <!-- Standard OBD-II PID 0x33 (51 decimal) - Maps to RealDash Barometric Pressure -->
+    <!-- Data stored in bar, transmitted as bar*10, convert to kPa -->
+    <frame id="0x0c80:51,2,1">
+      <value targetId="11" units="kPa" offset="3" length="1">
+        <conversion>V*10</conversion>
+      </value>
+    </frame>
 
-  <!-- ===== EXHAUST GAS TEMPERATURE ===== -->
-  <!-- Custom PID 0x78 (120 decimal) - Maps to RealDash EGT1 -->
-  <frame id="0x0c80:120,2,1">
-    <value targetId="106" units="C" offset="3" length="2" endianness="big">
-      <conversion>V-40</conversion>
-    </value>
-  </frame>
-
-  <!-- ===== COOLANT TEMPERATURE ===== -->
-  <!-- Standard OBD-II PID 0x05 (5 decimal) - Maps to RealDash Coolant Temperature -->
-  <frame id="0x0c80:5,2,1">
-    <value targetId="14" units="C" offset="3" length="1">
-      <conversion>V-40</conversion>
-    </value>
-  </frame>
-
-  <!-- ===== ENGINE OIL TEMPERATURE ===== -->
-  <!-- Standard OBD-II PID 0x5C (92 decimal) - Maps to RealDash Engine Oil Temperature -->
-  <frame id="0x0c80:92,2,1">
-    <value targetId="152" units="C" offset="3" length="1">
-      <conversion>V-40</conversion>
-    </value>
-  </frame>
-
-  <!-- ===== TRANSFER CASE / TRANSMISSION TEMPERATURE ===== -->
-  <!-- Custom PID 0xC9 (201 decimal) - Maps to RealDash Transmission Oil Temperature -->
-  <frame id="0x0c80:201,2,1">
-    <value targetId="138" units="C" offset="3" length="1">
-      <conversion>V-40</conversion>
-    </value>
-  </frame>
-
-  <!-- ===== ENGINE OIL PRESSURE ===== -->
-  <!-- Custom PID 0xCA (202 decimal) - Maps to RealDash Engine Oil Pressure -->
-  <frame id="0x0c80:202,2,1">
-    <value targetId="151" units="bar" offset="3" length="1">
-      <conversion>V/10</conversion>
-    </value>
-  </frame>
-
-  <!-- ===== BOOST / MANIFOLD PRESSURE ===== -->
-  <!-- Custom PID 0x6F (111 decimal) - Maps to RealDash MAP -->
-  <!-- IMPORTANT: Unit conversion bar → kPa (1 bar = 100 kPa) -->
-  <frame id="0x0c80:111,2,1">
-    <value targetId="31" units="kPa" offset="3" length="2" endianness="big">
-      <conversion>V*10</conversion>
-    </value>
-  </frame>
-
-  <!-- ===== PRIMARY BATTERY VOLTAGE ===== -->
-  <!-- Custom PID 0xCB (203 decimal) - Maps to RealDash Battery Voltage -->
-  <frame id="0x0c80:203,2,1">
-    <value targetId="12" units="V" offset="3" length="1">
-      <conversion>V/10</conversion>
-    </value>
-  </frame>
-
-  <!-- ===== AUXILIARY BATTERY VOLTAGE ===== -->
-  <!-- Custom PID 0xCC (204 decimal) - No standard RealDash ID -->
-  <frame id="0x0c80:204,2,1">
-    <value name="Auxiliary Battery" units="V" offset="3" length="1">
-      <conversion>V/10</conversion>
-    </value>
-  </frame>
-
-  <!-- ===== AMBIENT AIR TEMPERATURE ===== -->
-  <!-- Standard OBD-II PID 0x46 (70 decimal) - Maps to RealDash Ambient Temperature -->
-  <frame id="0x0c80:70,2,1">
-    <value targetId="173" units="C" offset="3" length="1">
-      <conversion>V-40</conversion>
-    </value>
-  </frame>
-
-  <!-- ===== BAROMETRIC PRESSURE ===== -->
-  <!-- Standard OBD-II PID 0x33 (51 decimal) - Maps to RealDash Barometric Pressure -->
-  <!-- Data is already in kPa, no conversion needed -->
-  <frame id="0x0c80:51,2,1">
-    <value targetId="11" units="kPa" offset="3" length="1">
-      <conversion>V</conversion>
-    </value>
-  </frame>
-
-  <!-- ===== ELEVATION / ALTITUDE ===== -->
-  <!-- Custom PID 0xA1 (161 decimal) - No standard RealDash ID -->
-  <frame id="0x0c80:161,2,1">
-    <value name="Elevation" units="m" offset="3" length="2" endianness="big">
-      <conversion>V</conversion>
-    </value>
-  </frame>
-
-  <!-- ===== COOLANT LEVEL ===== -->
-  <!-- Custom PID 0xA2 (162 decimal) - Maps to RealDash Coolant Level -->
-  <!-- Conversion: 0-255 → 0-100% -->
-  <frame id="0x0c80:162,2,1">
-    <value targetId="177" units="%" offset="3" length="1">
-      <conversion>V/2.55</conversion>
-    </value>
-  </frame>
-
+    <!-- ===== ELEVATION / ALTITUDE ===== -->
+    <!-- Custom PID 0xA1 (161 decimal) - No standard RealDash ID -->
+    <frame id="0x0c80:161,2,1">
+      <value targetId="1002" name="Elevation" units="m" offset="3" length="2" endianness="big">
+        <conversion>V</conversion>
+      </value>
+    </frame>
+    <!-- ===== COOLANT LEVEL ===== -->
+    <!-- Custom PID 0xA2 (162 decimal) - Maps to RealDash Coolant Level -->
+    <!-- Conversion: 0-255 → 0-100% -->
+    <frame id="0x0c80:162,2,1">
+      <value targetId="177" units="%" offset="3" length="1">
+        <conversion>V/2.55</conversion>
+      </value>
+    </frame>
+  </frames>
 </RealDashCAN>
