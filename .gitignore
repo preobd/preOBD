@@ -1,0 +1,71 @@
+# PlatformIO generic ignores
+# https://docs.platformio.org/en/latest/core/userguide/projectconf.html
+
+# PlatformIO build and package folders
+.pio/
+.pioenvs/
+.piolibdeps/
+.pio/build/
+
+# Build artifacts
+*.elf
+*.bin
+*.hex
+*.map
+*.o
+*.a
+*.lib
+*.pio
+
+# PlatformIO debug/log
+pio-debug.log
+build_flags.json
+
+# Common editor/IDE folders
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Eclipse/CLion and other project files
+.cproject
+.project
+.settings/
+*.launch
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python virtualenv / environment
+venv/
+.env
+env/
+ENV/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.pyo
+pip-wheel-metadata/
+*.egg-info/
+
+# Test & coverage outputs
+.coverage
+coverage/
+htmlcov/
+.pytest_cache/
+
+# Misc
+*.log
+temp/
+tmp/
+*.swp
+*.bak
+
+# Don't ignore project-level PlatformIO config
+# Keep platformio.ini tracked (remove if you intentionally want it ignored)
+
+# Private workflow documentation
+MAINTAINING.md
+TESTING_PLAN.md
