@@ -33,8 +33,8 @@ python3 tools/configure.py
 
 # Follow the interactive prompts to configure sensors
 
-# Build and upload
-pio run -e uno -t upload
+# Build and upload (use uno_static environment)
+pio run -e uno_static -t upload
 ```
 
 ---
@@ -385,7 +385,9 @@ python3 tools/configure.py --load tools/saved-configs/uno_basic.json
 
 ## What Gets Disabled
 
-When using static builds (`USE_STATIC_CONFIG` defined):
+When using static builds (`USE_STATIC_CONFIG` defined in platformio.ini):
+
+**Note**: The `uno_static` environment in platformio.ini automatically enables `USE_STATIC_CONFIG` and excludes the ArduinoJson library, saving 4-8KB of flash.
 
 | Feature | Static Build | Default |
 |---------|--------------|---------|

@@ -30,10 +30,11 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 ## Supported Hardware
 
 **Platforms:**
-- Teensy 4.0/4.1 (native CAN, excellent ADC)
-- Arduino Mega 2560 (8KB RAM, full features)
+- **Teensy 4.1** (recommended - 8MB flash, built-in SD, native CAN, excellent ADC)
+- Teensy 4.0 (2MB flash, native CAN, excellent ADC)
+- Arduino Mega 2560 (256KB flash, 8KB RAM, full features)
 - Arduino Due, ESP32 (12-bit ADC)
-- Arduino Uno (2KB RAM, limited - see [Static Builds](docs/advanced/STATIC_BUILDS_GUIDE.md))
+- Arduino Uno (32KB flash, 2KB RAM, limited - see [Static Builds](docs/advanced/STATIC_BUILDS_GUIDE.md))
 
 **Sensors:**
 
@@ -73,15 +74,26 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 git clone https://github.com/preobd/openEMS.git
 cd openEMS
 
-# Build with PlatformIO
-pio run
+# Build for your platform
+pio run -e teensy41      # Teensy 4.1 with built-in SD (recommended)
+pio run -e teensy40      # Teensy 4.0
+pio run -e mega2560      # Arduino Mega 2560
+pio run -e uno_static    # Arduino Uno (static config)
 
 # Upload to your board
-pio run -t upload
+pio run -e teensy41 -t upload
 
 # Open serial monitor (115200 baud)
 pio device monitor
 ```
+
+**Configuration Files:**
+- **platformio.ini** - Controls which features compile into firmware
+- **src/config.h** - Hardware pins, timing intervals, default units
+
+All builds include all output modules. Use serial commands to enable/disable outputs at runtime.
+
+See [Build Configuration Guide](docs/guides/configuration/BUILD_CONFIGURATION_GUIDE.md) for details.
 
 ### Configure Sensors
 

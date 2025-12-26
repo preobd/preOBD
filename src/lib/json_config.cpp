@@ -20,7 +20,14 @@
 #include "../version.h"
 
 #include <SdFat.h>
-SdFat SD;
+
+// SD object: Shared with output_sdlog.cpp if SD logging is enabled
+// If SD logging is not enabled, we define it here for JSON config use
+#ifndef ENABLE_SD_LOGGING
+    SdFat SD;
+#else
+    extern SdFat SD;  // Defined in output_sdlog.cpp
+#endif
 
 // External references
 extern Input inputs[MAX_INPUTS];
