@@ -91,13 +91,16 @@ void resetSystemConfig() {
     systemConfig.outputInterval[OUTPUT_ALARM] = 100;
     #endif
 
-    // Display defaults
-    #ifdef ENABLE_LCD
-    systemConfig.displayEnabled = 1;
-    systemConfig.displayType = DISPLAY_LCD;
+    // Display defaults (only one display type should be defined in platformio.ini)
+    #if defined(ENABLE_LCD)
+        systemConfig.displayEnabled = 1;
+        systemConfig.displayType = DISPLAY_LCD;
+    #elif defined(ENABLE_OLED)
+        systemConfig.displayEnabled = 1;
+        systemConfig.displayType = DISPLAY_OLED;
     #else
-    systemConfig.displayEnabled = 0;
-    systemConfig.displayType = DISPLAY_NONE;
+        systemConfig.displayEnabled = 0;
+        systemConfig.displayType = DISPLAY_NONE;
     #endif
 
     systemConfig.lcdI2CAddress = 0x27;
@@ -116,8 +119,15 @@ void resetSystemConfig() {
     // Hardware pins
     systemConfig.modeButtonPin = MODE_BUTTON;
     systemConfig.buzzerPin = BUZZER;
+
+    #ifndef USE_FLEXCAN_NATIVE
     systemConfig.canCSPin = CAN_CS;
     systemConfig.canIntPin = CAN_INT;
+    #else
+    systemConfig.canCSPin = 0xFF;  // Not used with native FlexCAN
+    systemConfig.canIntPin = 0xFF; // Not used with native FlexCAN
+    #endif
+
     systemConfig.sdCSPin = SD_CS_PIN;
 
     #ifdef TEST_MODE_TRIGGER_PIN

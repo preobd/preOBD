@@ -217,14 +217,23 @@ See **[Alarm System Guide](../guides/configuration/ALARM_SYSTEM_GUIDE.md)** for 
 
 Control output modules at runtime.
 
-### Commands
+### Output Module Availability
 
+Output modules must be compiled into firmware to be available. Standard builds (`teensy41`, `teensy40`, `mega2560`) include all outputs by default.
+
+**Check which outputs are compiled in**:
 ```
-OUTPUT LIST                      # Show all output modules with status
+OUTPUT LIST    # or LIST OUTPUTS
+```
+
+**Runtime control** (for compiled-in outputs):
+```
 OUTPUT <name> ENABLE             # Enable output module
 OUTPUT <name> DISABLE            # Disable output module
 OUTPUT <name> INTERVAL <ms>      # Set send interval (10-60000ms)
 ```
+
+**Note**: If an output is not listed by `OUTPUT LIST`, it wasn't compiled into your build. See [Build Configuration Guide](../guides/configuration/BUILD_CONFIGURATION_GUIDE.md) to create a custom environment with the outputs you need.
 
 ### Available Outputs
 
