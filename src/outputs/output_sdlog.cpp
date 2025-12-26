@@ -9,9 +9,10 @@
 
 #ifdef ENABLE_SD_LOGGING
 
-#include <SD.h>
+#include <SdFat.h>
+SdFat SD;
 
-File logFile;
+FsFile logFile;
 unsigned long lastLogTime = 0;
 const unsigned long LOG_INTERVAL = 1000;  // Log every 1 second
 

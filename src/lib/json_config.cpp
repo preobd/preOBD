@@ -19,10 +19,8 @@
 #include "application_presets.h"
 #include "../version.h"
 
-// SD library is built-in to Arduino framework
-#if defined(ARDUINO)
-#include <SD.h>
-#endif
+#include <SdFat.h>
+SdFat SD;
 
 // External references
 extern Input inputs[MAX_INPUTS];
@@ -576,7 +574,7 @@ bool saveConfigToSD(const char* filename) {
     filepath[sizeof(filepath) - 1] = '\0';
 
     // Open file for writing
-    File configFile = SD.open(filepath, FILE_WRITE);
+    FsFile configFile = SD.open(filepath, FILE_WRITE);
     if (!configFile) {
         Serial.print(F("ERROR: Failed to open file: "));
         Serial.println(filepath);
@@ -616,7 +614,7 @@ bool loadConfigFromSD(const char* filename) {
     filepath[sizeof(filepath) - 1] = '\0';
 
     // Open file for reading
-    File configFile = SD.open(filepath, FILE_READ);
+    FsFile configFile = SD.open(filepath, FILE_READ);
     if (!configFile) {
         Serial.print(F("ERROR: Failed to open file: "));
         Serial.println(filepath);
