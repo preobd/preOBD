@@ -9,6 +9,8 @@
 
 #ifdef ENABLE_SD_LOGGING
 
+// Suppress SdFat warning about FS.h conflict with Teensy's File class
+#define DISABLE_FS_H_WARNING
 #include <SdFat.h>
 SdFat SD;
 

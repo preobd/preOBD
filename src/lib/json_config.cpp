@@ -19,6 +19,8 @@
 #include "application_presets.h"
 #include "../version.h"
 
+// Suppress SdFat warning about FS.h conflict with Teensy's File class
+#define DISABLE_FS_H_WARNING
 #include <SdFat.h>
 
 // SD object: Shared with output_sdlog.cpp if SD logging is enabled
