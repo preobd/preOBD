@@ -24,6 +24,21 @@
 #include "lib/display_manager.h"        // Display runtime state management
 #include "outputs/output_base.h"
 
+// Transport abstraction layer
+#include "lib/message_router.h"
+#include "lib/message_api.h"
+#include "lib/transport_serial.h"
+
+// Global transport instances
+SerialTransport usbSerial(&Serial, "USB", 115200);
+#if defined(__MK66FX1M0__) || defined(__IMXRT1062__) || defined(__MK64FX512__) || defined(__MK20DX256__)
+// Teensy platforms have hardware Serial1
+SerialTransport hwSerial1(&Serial1, "SERIAL1", 115200);
+#elif defined(__AVR_ATmega2560__)
+// Arduino Mega has Serial1-3
+SerialTransport hwSerial1(&Serial1, "SERIAL1", 115200);
+#endif
+
 // Declare output module functions
 extern void initOutputModules();
 extern void sendToOutputs(Input*);
@@ -134,25 +149,33 @@ void setup() {
     Serial.begin(115200);
     while (!Serial && millis() < 3000) {};  // Wait up to 3 seconds for serial
 
-    Serial.println(F("                                        "));
-    Serial.println(F("                       ______  _______  "));
-    Serial.println(F("   ___  ___  ___ ___  / __/  |/  / __/  "));
-    Serial.println(F("  / _ \\/ _ \\/ -_) _ \\/ _// /|_/ /\\ \\    "));
-    Serial.println(F("  \\___/ .__/\\__/_//_/___/_/  /_/___/    "));
-    Serial.println(F("     /_/                                "));
-    Serial.println(F("                                        "));
-    Serial.println(F("openEngine Monitoring System ==========="));
-    Serial.println("Firmware version " FIRMWARE_VERSION);
-    Serial.println(F("                                        "));
+    // Initialize transport router
+    router.registerTransport(TRANSPORT_USB_SERIAL, &usbSerial);
+    #if defined(__MK66FX1M0__) || defined(__IMXRT1062__) || defined(__MK64FX512__) || defined(__MK20DX256__) || defined(__AVR_ATmega2560__)
+    router.registerTransport(TRANSPORT_SERIAL1, &hwSerial1);
+    #endif
+    router.begin();  // Load config from EEPROM
+
+    msg.debug.println(F("                                        "));
+    msg.debug.println(F("                       ______  _______  "));
+    msg.debug.println(F("   ___  ___  ___ ___  / __/  |/  / __/  "));
+    msg.debug.println(F("  / _ \\/ _ \\/ -_) _ \\/ _// /|_/ /\\ \\    "));
+    msg.debug.println(F("  \\___/ .__/\\__/_//_/___/_/  /_/___/    "));
+    msg.debug.println(F("     /_/                                "));
+    msg.debug.println(F("                                        "));
+    msg.debug.println(F("openEngine Monitoring System ==========="));
+    msg.debug.print("Firmware version ");
+    msg.debug.println(FIRMWARE_VERSION);
+    msg.debug.println(F("                                        "));
 
     // Configure ADC for this platform
     setupADC();
-    Serial.println(F("✓ ADC configured"));
+    msg.debug.println(F("✓ ADC configured"));
 
     // Initialize SPI BEFORE input manager (needed for thermocouple CS pin setup)
     SPI.begin();
-    Serial.println(F("✓ SPI bus initialized"));
-    
+    msg.debug.println(F("✓ SPI bus initialized"));
+
     // Initialize I2C for BME280 and LCD
     Wire.begin();
     #if defined(ESP32)
@@ -162,7 +185,7 @@ void setup() {
     #else
     Wire.setClock(400000);  // 400kHz for most platforms
     #endif
-    Serial.println(F("✓ I2C initialized"));
+    msg.debug.println(F("✓ I2C initialized"));
 
     // Initialize system config (loads from EEPROM or uses defaults from config.h)
 #ifndef USE_STATIC_CONFIG
@@ -194,8 +217,8 @@ void setup() {
     initOutputModules();
 
     // Wait for sensors to stabilize
-    Serial.println(F(""));
-    Serial.println(F("Waiting for sensors to stabilize..."));
+    msg.debug.println(F(""));
+    msg.debug.println(F("Waiting for sensors to stabilize..."));
     delay(1000);  // Increased from 500ms - MAX6675 needs ~220ms for first conversion
 
     // Initialize per-sensor read timers (all start at 0)
@@ -203,28 +226,28 @@ void setup() {
         lastInputRead[i] = 0;
     }
 
-    Serial.println(F(""));
-    Serial.println(F("========================================"));
-    Serial.println(F("  Initialization complete!"));
+    msg.debug.println(F(""));
+    msg.debug.println(F("========================================"));
+    msg.debug.println(F("  Initialization complete!"));
 #ifdef USE_STATIC_CONFIG
-    Serial.println(F("  Mode: Compile-Time Config"));
-    Serial.print(F("  Active inputs: "));
-    Serial.println(numActiveInputs);
-    Serial.print(F("  System voltage: "));
-    Serial.print(SYSTEM_VOLTAGE);
-    Serial.println(F("V"));
-    Serial.print(F("  ADC reference: "));
-    Serial.print(AREF_VOLTAGE);
-    Serial.println(F("V"));
-    Serial.print(F("  ADC resolution: "));
-    Serial.print(ADC_RESOLUTION);
-    Serial.println(F(" bits"));
-    Serial.print(F("  ADC max value: "));
-    Serial.println(ADC_MAX_VALUE);
-    Serial.println(F("========================================"));
-    Serial.println(F(""));
+    msg.debug.println(F("  Mode: Compile-Time Config"));
+    msg.debug.print(F("  Active inputs: "));
+    msg.debug.println(numActiveInputs);
+    msg.debug.print(F("  System voltage: "));
+    msg.debug.print(SYSTEM_VOLTAGE);
+    msg.debug.println(F("V"));
+    msg.debug.print(F("  ADC reference: "));
+    msg.debug.print(AREF_VOLTAGE);
+    msg.debug.println(F("V"));
+    msg.debug.print(F("  ADC resolution: "));
+    msg.debug.print(ADC_RESOLUTION);
+    msg.debug.println(F(" bits"));
+    msg.debug.print(F("  ADC max value: "));
+    msg.debug.println(ADC_MAX_VALUE);
+    msg.debug.println(F("========================================"));
+    msg.debug.println(F(""));
 #else
-    Serial.println(F(""));
+    msg.debug.println(F(""));
 #endif
 
     // ===== TEST MODE ACTIVATION =====
@@ -237,11 +260,11 @@ void setup() {
     delay(10);  // Allow pin to stabilize
 
     if (digitalRead(TEST_MODE_TRIGGER_PIN) == LOW) {
-        Serial.println(F(""));
-        Serial.println(F("========================================"));
-        Serial.println(F("  TEST MODE TRIGGER DETECTED!"));
-        Serial.println(F("========================================"));
-        Serial.println(F(""));
+        msg.debug.println(F(""));
+        msg.debug.println(F("========================================"));
+        msg.debug.println(F("  TEST MODE TRIGGER DETECTED!"));
+        msg.debug.println(F("========================================"));
+        msg.debug.println(F(""));
 
         // List available scenarios
         listTestScenarios();
@@ -250,13 +273,13 @@ void setup() {
         #if DEFAULT_TEST_SCENARIO != 0xFF
         startTestScenario(DEFAULT_TEST_SCENARIO);
         #else
-        Serial.println(F("Test mode initialized but no default scenario set."));
-        Serial.println(F("Use serial commands to start a scenario."));
+        msg.debug.println(F("Test mode initialized but no default scenario set."));
+        msg.debug.println(F("Use serial commands to start a scenario."));
         #endif
     } else {
-        Serial.print(F("Test mode available (pin "));
-        Serial.print(TEST_MODE_TRIGGER_PIN);
-        Serial.println(F(" is HIGH, normal operation)"));
+        msg.debug.print(F("Test mode available (pin "));
+        msg.debug.print(TEST_MODE_TRIGGER_PIN);
+        msg.debug.println(F(" is HIGH, normal operation)"));
     }
 #endif
 
@@ -272,14 +295,14 @@ void setup() {
     // Only enable watchdog in RUN mode (CONFIG mode doesn't need it)
     if (bootMode == MODE_RUN) {
         watchdogEnable(2000);
-        Serial.println(F("Watchdog enabled (2s timeout)"));
+        msg.debug.println(F("Watchdog enabled (2s timeout)"));
     } else {
-        Serial.println(F("Watchdog disabled (CONFIG mode)"));
+        msg.debug.println(F("Watchdog disabled (CONFIG mode)"));
     }
 #else
     // Always enable watchdog in static config mode
     watchdogEnable(2000);
-    Serial.println(F("Watchdog enabled (2s timeout)"));
+    msg.debug.println(F("Watchdog enabled (2s timeout)"));
 #endif
 }
 
@@ -289,6 +312,9 @@ void loop() {
 
     // Reset watchdog at start of every loop iteration
     watchdogReset();
+
+    // Update transport router (poll transports, handle housekeeping)
+    router.update();
 
 #ifndef USE_STATIC_CONFIG
     // Process serial configuration commands (non-blocking, always runs)
