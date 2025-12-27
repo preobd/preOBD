@@ -135,6 +135,13 @@ enum AlarmState : uint8_t {
     ALARM_ACTIVE         // Currently in alarm condition
 };
 
+// Alarm severity levels (hierarchical)
+enum AlarmSeverity : uint8_t {
+    SEVERITY_NORMAL = 0,   // No alarm or warning
+    SEVERITY_WARNING = 1,  // Warning threshold exceeded
+    SEVERITY_ALARM = 2     // Alarm threshold exceeded
+};
+
 // Per-input alarm runtime context (12 bytes)
 struct AlarmContext {
     AlarmState state;           // Current alarm state (1 byte)
@@ -174,6 +181,7 @@ struct Input {
 
     // === Alarm State Management ===
     AlarmContext alarmContext;      // Alarm state machine context (12 bytes)
+    AlarmSeverity currentSeverity;  // Current severity level (1 byte)
 
     // === Flags (packed into 1 byte) ===
     struct {

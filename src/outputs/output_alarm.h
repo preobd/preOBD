@@ -38,6 +38,12 @@ void updateAlarmOutput();
 // These functions allow other modules (LCD, etc.) to check alarm status
 
 /**
+ * Get worst-case alarm severity across all enabled inputs
+ * @return AlarmSeverity (NORMAL, WARNING, or ALARM)
+ */
+AlarmSeverity getSystemSeverity();
+
+/**
  * Check if any input is currently in alarm
  * @return true if at least one enabled input has isInAlarm flag set
  */

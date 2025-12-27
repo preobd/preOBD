@@ -32,7 +32,21 @@ void initAlarmOutput() {
     // Button is active LOW (pulls pin to GND when pressed)
     pinMode(MODE_BUTTON, INPUT_PULLUP);
 
-    Serial.println(F("✓ Alarm output initialized"));
+#ifdef ENABLE_LEDS
+    // Configure LED output pins
+    pinMode(GREEN_LED, OUTPUT);
+    pinMode(YELLOW_LED, OUTPUT);
+    pinMode(RED_LED, OUTPUT);
+
+    // Initialize all LEDs to off
+    digitalWrite(GREEN_LED, LOW);
+    digitalWrite(YELLOW_LED, LOW);
+    digitalWrite(RED_LED, LOW);
+
+    Serial.println(F("✓ Alarm output initialized (buzzer + LEDs)"));
+#else
+    Serial.println(F("✓ Alarm output initialized (buzzer)"));
+#endif
 }
 
 // ===== OUTPUT MODULE INTERFACE =====
@@ -42,6 +56,33 @@ void sendAlarmOutput(Input* input) {
     // We don't send per-input data, just need to satisfy the interface
     // (Actual alarm decision happens in updateAlarmOutput which scans all inputs)
 }
+
+// ===== HELPER FUNCTIONS =====
+
+// Scan all inputs and return worst-case severity
+AlarmSeverity getSystemSeverity() {
+    AlarmSeverity worstSeverity = SEVERITY_NORMAL;
+
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        if (inputs[i].flags.isEnabled) {
+            if (inputs[i].currentSeverity > worstSeverity) {
+                worstSeverity = inputs[i].currentSeverity;
+            }
+        }
+    }
+
+    return worstSeverity;
+}
+
+#ifdef ENABLE_LEDS
+// Update LED states based on system severity
+void updateLEDs(AlarmSeverity severity) {
+    // Mutually exclusive LED control
+    digitalWrite(GREEN_LED, (severity == SEVERITY_NORMAL) ? HIGH : LOW);
+    digitalWrite(YELLOW_LED, (severity == SEVERITY_WARNING) ? HIGH : LOW);
+    digitalWrite(RED_LED, (severity == SEVERITY_ALARM) ? HIGH : LOW);
+}
+#endif
 
 void updateAlarmOutput() {
     // ===== SILENCE BUTTON HANDLING =====
@@ -60,20 +101,17 @@ void updateAlarmOutput() {
     }
 
     // ===== ALARM STATE SCANNING =====
-    // Scan all inputs to see if ANY are in alarm
-    bool anyAlarmActive = false;
-    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].flags.isEnabled && inputs[i].flags.isInAlarm) {
-            anyAlarmActive = true;
-            break;  // Early exit - we only need to know if ANY alarm is active
-        }
-    }
+    // Scan all inputs to determine worst-case severity
+    AlarmSeverity systemSeverity = getSystemSeverity();
+
+#ifdef ENABLE_LEDS
+    // ===== LED CONTROL =====
+    updateLEDs(systemSeverity);
+#endif
 
     // ===== BUZZER CONTROL =====
-    // Sound alarm if:
-    // 1. At least one input is in alarm, AND
-    // 2. Alarm is not silenced
-    if (anyAlarmActive && !alarmSilenced) {
+    // Sound alarm only on RED (SEVERITY_ALARM), not on YELLOW (SEVERITY_WARNING)
+    if (systemSeverity == SEVERITY_ALARM && !alarmSilenced) {
         tone(BUZZER, 700);  // 700 Hz alarm tone
     } else {
         noTone(BUZZER);     // Turn off buzzer
@@ -83,13 +121,7 @@ void updateAlarmOutput() {
 // ===== QUERY FUNCTIONS =====
 
 bool isAnyAlarmActive() {
-    // Scan all inputs to check if any are in alarm
-    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].flags.isEnabled && inputs[i].flags.isInAlarm) {
-            return true;
-        }
-    }
-    return false;
+    return getSystemSeverity() == SEVERITY_ALARM;
 }
 
 bool isAlarmSilenced() {
