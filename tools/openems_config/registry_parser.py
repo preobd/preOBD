@@ -29,11 +29,41 @@ def _extract_struct_block(content: str, struct_name: str) -> Optional[str]:
     match = block_pattern.search(content)
     return match.group(1) if match else None
 
-def _parse_structs(struct_content: str, pstr_macros: Dict[str, str]) -> List[Dict[str, Any]]:
+def _parse_enum_constants(enum_header_path: str) -> Dict[str, int]:
+    """
+    Parses the generated registry_enums.h to extract enum constant values.
+    Returns a dictionary mapping enum names to their numeric values.
+    """
+    enum_map = {}
+    try:
+        with open(enum_header_path, 'r') as f:
+            content = f.read()
+
+        # Match enum constant definitions like "SENSOR_MAX6675 = 1"
+        enum_pattern = re.compile(r'(\w+)\s*=\s*(\d+)')
+        for match in enum_pattern.finditer(content):
+            name = match.group(1)
+            value = int(match.group(2))
+            enum_map[name] = value
+    except FileNotFoundError:
+        # If enum file doesn't exist yet, return empty map
+        pass
+
+    return enum_map
+
+def _parse_structs(struct_content: str, pstr_macros: Dict[str, str], enum_constants: Dict[str, int] = None) -> List[Dict[str, Any]]:
     """
     Parses a block of C structs into a list of Python dictionaries.
     Also captures the raw C block for each struct.
+
+    Args:
+        struct_content: The C struct array content to parse
+        pstr_macros: Dictionary mapping PSTR macro names to their string values
+        enum_constants: Optional dictionary mapping enum names to their numeric values
     """
+    if enum_constants is None:
+        enum_constants = {}
+
     # This pattern captures:
     # 1. The entire struct block, including its preceding index comment.
     # 2. The index number from the comment (optional).
@@ -66,6 +96,9 @@ def _parse_structs(struct_content: str, pstr_macros: Dict[str, str]) -> List[Dic
             if value_str in pstr_macros:
                 value = pstr_macros[value_str]
                 item['used_pstr_macros'].append(value_str)
+            elif value_str in enum_constants:
+                # Resolve enum constant to its numeric value
+                value = enum_constants[value_str]
             elif value_str == 'nullptr':
                 value = None
             elif value_str == 'true':
@@ -103,11 +136,16 @@ def parse_sensor_library(header_path: str) -> List[Dict[str, Any]]:
     if 'PSTR_NONE' not in pstr_macros:
         pstr_macros['PSTR_NONE'] = 'NONE'
 
+    # Load enum constants from generated header
+    import os
+    enum_header_path = os.path.join(os.path.dirname(header_path), 'generated', 'registry_enums.h')
+    enum_constants = _parse_enum_constants(enum_header_path)
+
     struct_content = _extract_struct_block(content, 'SENSOR_LIBRARY')
     if not struct_content:
         return []
 
-    return _parse_structs(struct_content, pstr_macros)
+    return _parse_structs(struct_content, pstr_macros, enum_constants)
 
 
 def parse_application_presets(header_path: str) -> List[Dict[str, Any]]:
@@ -121,11 +159,16 @@ def parse_application_presets(header_path: str) -> List[Dict[str, Any]]:
     if 'PSTR_APP_NONE' not in pstr_macros:
         pstr_macros['PSTR_APP_NONE'] = 'NONE'
 
+    # Load enum constants from generated header
+    import os
+    enum_header_path = os.path.join(os.path.dirname(header_path), 'generated', 'registry_enums.h')
+    enum_constants = _parse_enum_constants(enum_header_path)
+
     struct_content = _extract_struct_block(content, 'APPLICATION_PRESETS')
     if not struct_content:
         return []
 
-    return _parse_structs(struct_content, pstr_macros)
+    return _parse_structs(struct_content, pstr_macros, enum_constants)
 
 
 def parse_units_registry(header_path: str) -> List[Dict[str, Any]]:
@@ -136,8 +179,14 @@ def parse_units_registry(header_path: str) -> List[Dict[str, Any]]:
         content = f.read()
 
     pstr_macros = _parse_pstr_macros(content)
+
+    # Load enum constants from generated header
+    import os
+    enum_header_path = os.path.join(os.path.dirname(header_path), 'generated', 'registry_enums.h')
+    enum_constants = _parse_enum_constants(enum_header_path)
+
     struct_content = _extract_struct_block(content, 'UNITS_REGISTRY')
     if not struct_content:
         return []
 
-    return _parse_structs(struct_content, pstr_macros)
+    return _parse_structs(struct_content, pstr_macros, enum_constants)
