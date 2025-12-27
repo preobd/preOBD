@@ -49,8 +49,6 @@ void initOutputModules() {
 
         if (outputModules[i].enabled && outputModules[i].init != nullptr) {
             outputModules[i].init();
-            Serial.print(F("✓ Initialized "));
-            Serial.println(outputModules[i].name);
         }
         lastOutputSend[i] = 0;  // Initialize timing
     }

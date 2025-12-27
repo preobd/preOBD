@@ -42,6 +42,54 @@ void initInputAlarmContext(Input* input, uint32_t now, uint16_t warmupTime_ms, u
     input->alarmContext.warmupTime_ms = warmupTime_ms;
     input->alarmContext.persistTime_ms = persistTime_ms;
     input->flags.isInAlarm = false;
+    input->currentSeverity = SEVERITY_NORMAL;
+}
+
+// Evaluate alarm severity for an input
+AlarmSeverity evaluateSeverity(Input* input, uint32_t now) {
+    // Safety: NaN values are treated as normal
+    if (isnan(input->value)) {
+        return SEVERITY_NORMAL;
+    }
+
+    AlarmContext* ctx = &input->alarmContext;
+
+    // During warmup/init/disabled, always return normal
+    if (ctx->state == ALARM_WARMUP || ctx->state == ALARM_INIT || ctx->state == ALARM_DISABLED) {
+        return SEVERITY_NORMAL;
+    }
+
+    bool alarmViolation = false;
+    bool warningViolation = false;
+
+    // Check high-side threshold (maxValue)
+    if (input->maxValue < 999) {  // Threshold enabled (999 is disabled marker)
+        float warningMax = input->maxValue * (WARNING_THRESHOLD_PERCENT / 100.0);
+        if (input->value >= input->maxValue) {
+            alarmViolation = true;
+        } else if (input->value >= warningMax) {
+            warningViolation = true;
+        }
+    }
+
+    // Check low-side threshold (minValue)
+    if (input->minValue > -999) {  // Threshold enabled (-999 is disabled marker)
+        float warningMin = input->minValue + (input->minValue * (100 - WARNING_THRESHOLD_PERCENT) / 100.0);
+        if (input->value <= input->minValue) {
+            alarmViolation = true;
+        } else if (input->value <= warningMin) {
+            warningViolation = true;
+        }
+    }
+
+    // Return worst-case severity
+    if (alarmViolation && ctx->faultStartTime > 0 && (now - ctx->faultStartTime >= ctx->persistTime_ms)) {
+        return SEVERITY_ALARM;
+    } else if (warningViolation || (alarmViolation && ctx->faultStartTime > 0)) {
+        return SEVERITY_WARNING;  // Warning triggers immediately OR during alarm persist wait
+    }
+
+    return SEVERITY_NORMAL;
 }
 
 // Update alarm state for a single input
@@ -122,6 +170,9 @@ void updateInputAlarmState(Input* input, uint32_t now) {
             ctx->state = ALARM_READY;
         }
     }
+
+    // Update severity level (new feature)
+    input->currentSeverity = evaluateSeverity(input, now);
 }
 
 // Update alarm state for all enabled inputs

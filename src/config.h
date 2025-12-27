@@ -32,6 +32,14 @@
 
 #define BUZZER 3        // Alarm buzzer output pin
 
+// ----- LED Status Indicator Pins -----
+// Only active when ENABLE_LEDS is defined in platformio.ini
+#ifdef ENABLE_LEDS
+    #define GREEN_LED 28      // Normal operation indicator
+    #define YELLOW_LED 29     // Warning level indicator
+    #define RED_LED 30       // Alarm level indicator
+#endif
+
 // ----- CAN Bus Pins -----
 // Only needed if using external MCP2515 chip (not needed for Teensy native FlexCAN)
 #ifndef USE_FLEXCAN_NATIVE
@@ -63,7 +71,8 @@
 // ALARM CONFIGURATION
 // ============================================================================
 
-#define SILENCE_DURATION 30000      // ms (how long MODE_BUTTON mutes alarm)
+#define SILENCE_DURATION 30000       // ms (how long MODE_BUTTON mutes alarm)
+#define WARNING_THRESHOLD_PERCENT 90 // Warning triggers at 90% of alarm threshold
 
 // ============================================================================
 // CALIBRATION CONSTANTS
