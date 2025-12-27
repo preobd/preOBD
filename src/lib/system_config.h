@@ -12,7 +12,7 @@
 
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
-#define SYSTEM_CONFIG_VERSION 3         // Increment when struct changes (v3: added OUTPUT_ALARM, NUM_OUTPUTS 4->5)
+#define SYSTEM_CONFIG_VERSION 4         // Increment when struct changes (v4: added router config, expanded to 64 bytes)
 #define SYSTEM_CONFIG_ADDRESS 0x03F0    // Address in EEPROM (after inputs)
 #define SYSTEM_CONFIG_SIZE sizeof(SystemConfig)
 
@@ -33,7 +33,7 @@ enum DisplayType {
     DISPLAY_OLED = 2
 };
 
-// System configuration structure (48 bytes)
+// System configuration structure (64 bytes - expanded from 48)
 struct SystemConfig {
     // Header (4 bytes)
     uint16_t magic;              // 0x5343 validation
@@ -41,8 +41,8 @@ struct SystemConfig {
     uint8_t checksum;            // XOR checksum
 
     // Output Modules (12 bytes)
-    uint8_t outputEnabled[NUM_OUTPUTS];    // 4 bytes (bool per output)
-    uint16_t outputInterval[NUM_OUTPUTS];  // 8 bytes (interval ms)
+    uint8_t outputEnabled[NUM_OUTPUTS];    // 5 bytes (bool per output)
+    uint16_t outputInterval[NUM_OUTPUTS];  // 10 bytes (interval ms)
 
     // Display Settings (6 bytes)
     uint8_t displayEnabled;      // Display on/off (bool)
@@ -70,7 +70,19 @@ struct SystemConfig {
     // Physical Constants (4 bytes)
     float seaLevelPressure;      // hPa for altitude
 
-    uint8_t reserved[6];         // Future expansion (reduced from 7 to 6)
+    // Transport Router Configuration (16 bytes) - NEW in v4
+    struct {
+        uint8_t control_primary;     // TransportID for CONTROL plane
+        uint8_t control_secondary;   // Multi-cast target or TRANSPORT_NONE
+        uint8_t data_primary;        // TransportID for DATA plane
+        uint8_t data_secondary;      // Multi-cast target or TRANSPORT_NONE
+        uint8_t debug_primary;       // TransportID for DEBUG plane
+        uint8_t debug_secondary;     // Multi-cast target or TRANSPORT_NONE
+        uint8_t bt_type;             // BluetoothType enum (0=none)
+        uint8_t bt_auth_required;    // 0=disabled, 1=enabled
+        uint16_t bt_pin;             // 4-digit PIN (0=not set)
+        uint8_t reserved_router[6];  // Future expansion
+    } router;
 };
 
 // Global system config instance

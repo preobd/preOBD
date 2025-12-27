@@ -5,6 +5,7 @@
 #include "system_config.h"
 #include "../config.h"
 #include "units_registry.h"
+#include "message_router.h"  // For TransportID enum
 #include <EEPROM.h>
 
 // Global system config instance
@@ -141,9 +142,23 @@ void resetSystemConfig() {
     // Physical constants
     systemConfig.seaLevelPressure = SEA_LEVEL_PRESSURE_HPA;
 
-    // Reserved space
+    // Transport Router Configuration (NEW in v4)
+    // Default: All planes → USB Serial
+    systemConfig.router.control_primary = TRANSPORT_USB_SERIAL;
+    systemConfig.router.control_secondary = TRANSPORT_NONE;
+    systemConfig.router.data_primary = TRANSPORT_USB_SERIAL;
+    systemConfig.router.data_secondary = TRANSPORT_NONE;
+    systemConfig.router.debug_primary = TRANSPORT_USB_SERIAL;
+    systemConfig.router.debug_secondary = TRANSPORT_NONE;
+
+    // Bluetooth defaults (disabled)
+    systemConfig.router.bt_type = 0;  // BT_TYPE_NONE
+    systemConfig.router.bt_auth_required = 0;  // Disabled by default
+    systemConfig.router.bt_pin = 0;  // Not set
+
+    // Reserved router space
     for (int i = 0; i < 6; i++) {
-        systemConfig.reserved[i] = 0;
+        systemConfig.router.reserved_router[i] = 0;
     }
 
     // Calculate checksum
