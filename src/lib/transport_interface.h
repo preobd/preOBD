@@ -117,6 +117,12 @@ public:
         return n;
     }
 
+    size_t println() {
+        size_t n = write('\r');
+        n += write('\n');
+        return n;
+    }
+
     size_t print(int n) {
         char buf[12];
         itoa(n, buf, 10);
