@@ -21,6 +21,8 @@
 #include "../lib/units_registry.h"
 #include "../lib/json_config.h"
 #include "../outputs/output_base.h"
+#include "../lib/message_router.h"
+#include "../lib/message_api.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -71,6 +73,48 @@ static bool streq(const char* a, const char* b) {
         b++;
     }
     return *a == *b;
+}
+
+// Helper: Parse message plane name
+static MessagePlane parsePlane(const char* str) {
+    if (streq(str, "CONTROL")) return PLANE_CONTROL;
+    if (streq(str, "DATA")) return PLANE_DATA;
+    if (streq(str, "DEBUG")) return PLANE_DEBUG;
+    return NUM_PLANES;  // Invalid
+}
+
+// Helper: Parse transport ID
+static TransportID parseTransport(const char* str) {
+    if (streq(str, "USB_SERIAL") || streq(str, "USB") || streq(str, "SERIAL")) return TRANSPORT_USB_SERIAL;
+    if (streq(str, "SERIAL1")) return TRANSPORT_SERIAL1;
+    if (streq(str, "SERIAL2")) return TRANSPORT_SERIAL2;
+    if (streq(str, "SERIAL3")) return TRANSPORT_SERIAL3;
+    if (streq(str, "BLUETOOTH") || streq(str, "BT") || streq(str, "BLE")) return TRANSPORT_BLUETOOTH;
+    if (streq(str, "NONE")) return TRANSPORT_NONE;
+    return NUM_TRANSPORTS;  // Invalid
+}
+
+// Helper: Get plane name
+static const char* getPlaneName(MessagePlane plane) {
+    switch (plane) {
+        case PLANE_CONTROL: return "CONTROL";
+        case PLANE_DATA: return "DATA";
+        case PLANE_DEBUG: return "DEBUG";
+        default: return "UNKNOWN";
+    }
+}
+
+// Helper: Get transport name
+static const char* getTransportName(TransportID id) {
+    switch (id) {
+        case TRANSPORT_NONE: return "NONE";
+        case TRANSPORT_USB_SERIAL: return "USB_SERIAL";
+        case TRANSPORT_SERIAL1: return "SERIAL1";
+        case TRANSPORT_SERIAL2: return "SERIAL2";
+        case TRANSPORT_SERIAL3: return "SERIAL3";
+        case TRANSPORT_BLUETOOTH: return "BLUETOOTH";
+        default: return "UNKNOWN";
+    }
 }
 
 // Helper function to print system configuration details
@@ -441,6 +485,13 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("  DISPLAY UNITS TEMP <C|F>  - Default temperature units"));
         Serial.println(F("  DISPLAY UNITS PRESSURE <BAR|PSI|KPA>  - Default pressure units"));
         Serial.println(F("  DISPLAY UNITS ELEVATION <M|FT>  - Default elevation units"));
+        Serial.println();
+        Serial.println(F("Transport Commands:"));
+        Serial.println(F("  TRANSPORT LIST  - Show current transport assignments"));
+        Serial.println(F("  TRANSPORT CONTROL <transport>  - Route control messages"));
+        Serial.println(F("  TRANSPORT DATA <transport>  - Route sensor data output"));
+        Serial.println(F("  TRANSPORT DEBUG <transport>  - Route debug messages"));
+        Serial.println(F("    Transports: USB_SERIAL, SERIAL1, SERIAL2, SERIAL3, BLUETOOTH"));
         Serial.println();
         Serial.println(F("System Commands (Advanced):"));
         Serial.println(F("  SYSTEM STATUS  - Show system configuration"));
@@ -1541,6 +1592,76 @@ void handleSerialCommand(char* cmd) {
         Serial.println(F("    DISPLAY UNITS TEMP <C|F>"));
         Serial.println(F("    DISPLAY UNITS PRESSURE <BAR|PSI|KPA>"));
         Serial.println(F("    DISPLAY UNITS ELEVATION <M|FT>"));
+        return;
+    }
+
+    // ===== TRANSPORT COMMANDS =====
+    if (strncmp(cmd, "TRANSPORT ", 10) == 0) {
+        char* rest = cmd + 10;
+        trim(rest);
+
+        // TRANSPORT LIST or TRANSPORT STATUS
+        if (streq(rest, "LIST") || streq(rest, "STATUS")) {
+            router.listTransports();
+            return;
+        }
+
+        // TRANSPORT <PLANE> <TRANSPORT>
+        // Parse plane and transport
+        char* space = strchr(rest, ' ');
+        if (!space) {
+            Serial.println(F("ERROR: Invalid TRANSPORT command"));
+            Serial.println(F("Usage: TRANSPORT <CONTROL|DATA|DEBUG> <transport>"));
+            Serial.println(F("   or: TRANSPORT LIST"));
+            Serial.println(F(""));
+            Serial.println(F("Available transports:"));
+            Serial.println(F("  USB_SERIAL (or USB, SERIAL) - USB Serial port"));
+            Serial.println(F("  SERIAL1 - Hardware Serial1"));
+            Serial.println(F("  SERIAL2 - Hardware Serial2 (if available)"));
+            Serial.println(F("  SERIAL3 - Hardware Serial3 (if available)"));
+            Serial.println(F("  BLUETOOTH (or BT, BLE) - Bluetooth module"));
+            return;
+        }
+
+        *space = '\0';
+        char* planeName = rest;
+        char* transportName = space + 1;
+        trim(planeName);
+        trim(transportName);
+
+        // Parse plane
+        MessagePlane plane = parsePlane(planeName);
+        if (plane >= NUM_PLANES) {
+            Serial.print(F("ERROR: Invalid plane '"));
+            Serial.print(planeName);
+            Serial.println(F("'"));
+            Serial.println(F("Valid planes: CONTROL, DATA, DEBUG"));
+            return;
+        }
+
+        // Parse transport
+        TransportID transport = parseTransport(transportName);
+        if (transport >= NUM_TRANSPORTS) {
+            Serial.print(F("ERROR: Invalid transport '"));
+            Serial.print(transportName);
+            Serial.println(F("'"));
+            Serial.println(F("Valid transports: USB_SERIAL, SERIAL1, SERIAL2, SERIAL3, BLUETOOTH"));
+            return;
+        }
+
+        // Set transport
+        if (router.setTransport(plane, transport)) {
+            Serial.print(F("✓ "));
+            Serial.print(getPlaneName(plane));
+            Serial.print(F(" plane → "));
+            Serial.println(getTransportName(transport));
+            Serial.println(F("NOTE: Configuration will be lost on reboot unless you SAVE"));
+        } else {
+            Serial.print(F("ERROR: Transport "));
+            Serial.print(getTransportName(transport));
+            Serial.println(F(" is not available"));
+            Serial.println(F("Make sure the hardware is connected and registered"));
+        }
         return;
     }
 
