@@ -41,20 +41,27 @@ void MessageRouter::registerTransport(TransportID id, TransportInterface* transp
 }
 
 void MessageRouter::loadConfig() {
-    // TODO: Load from SystemConfig.router once EEPROM struct is extended
-    // For now, use defaults (all planes → USB Serial)
-    primaryTransport[PLANE_CONTROL] = TRANSPORT_USB_SERIAL;
-    primaryTransport[PLANE_DATA] = TRANSPORT_USB_SERIAL;
-    primaryTransport[PLANE_DEBUG] = TRANSPORT_USB_SERIAL;
+    // Load from SystemConfig.router (persisted in EEPROM)
+    primaryTransport[PLANE_CONTROL] = systemConfig.router.control_primary;
+    primaryTransport[PLANE_DATA] = systemConfig.router.data_primary;
+    primaryTransport[PLANE_DEBUG] = systemConfig.router.debug_primary;
 
-    secondaryTransport[PLANE_CONTROL] = TRANSPORT_NONE;
-    secondaryTransport[PLANE_DATA] = TRANSPORT_NONE;
-    secondaryTransport[PLANE_DEBUG] = TRANSPORT_NONE;
+    secondaryTransport[PLANE_CONTROL] = systemConfig.router.control_secondary;
+    secondaryTransport[PLANE_DATA] = systemConfig.router.data_secondary;
+    secondaryTransport[PLANE_DEBUG] = systemConfig.router.debug_secondary;
 }
 
 void MessageRouter::saveConfig() {
-    // TODO: Save to SystemConfig.router and call saveSystemConfig()
-    // Will be implemented when system_config.h is extended
+    // Save to SystemConfig.router
+    systemConfig.router.control_primary = primaryTransport[PLANE_CONTROL];
+    systemConfig.router.control_secondary = secondaryTransport[PLANE_CONTROL];
+    systemConfig.router.data_primary = primaryTransport[PLANE_DATA];
+    systemConfig.router.data_secondary = secondaryTransport[PLANE_DATA];
+    systemConfig.router.debug_primary = primaryTransport[PLANE_DEBUG];
+    systemConfig.router.debug_secondary = secondaryTransport[PLANE_DEBUG];
+
+    // Persist to EEPROM
+    saveSystemConfig();
 }
 
 TransportInterface* MessageRouter::getTransport(MessagePlane plane, bool primary) {
