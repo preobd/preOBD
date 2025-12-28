@@ -191,6 +191,25 @@ def update_config_h(config_h_path: str, new_block: str) -> bool:
     except IOError:
         return False
 
+def remove_label_fields_from_struct(raw_c_block: str) -> str:
+    """
+    Replaces .label = PSTR_XXX_LABEL with .label = nullptr to save memory.
+
+    Args:
+        raw_c_block: The C struct block to modify
+
+    Returns:
+        Modified C struct block with nullptr labels
+    """
+    # Replace .label = PSTR_*_LABEL with .label = nullptr
+    # Match .label = PSTR_SOMETHING_LABEL or .label = PSTR_SOMETHING
+    result = re.sub(
+        r'(\.label\s*=\s*)PSTR_\w+(?:_LABEL)?',
+        r'\1nullptr',
+        raw_c_block
+    )
+    return result
+
 def add_thin_library_header(content: str, library_type: str, tool_version: str) -> str:
     """
     Replaces the file header with a data-only thin library header.
@@ -267,13 +286,22 @@ def generate_thin_library_files(
     used_application_indices.add(0)
 
     # Collect all required PSTR macros from the used sensors and applications
+    # Exclude label macros to save memory in static builds
     required_pstr_macros = set()
     for sensor in sensors:
         if sensor['index'] in used_sensor_indices:
-            required_pstr_macros.update(sensor['used_pstr_macros'])
+            # Filter out label macros (those ending with _LABEL)
+            required_pstr_macros.update(
+                macro for macro in sensor['used_pstr_macros']
+                if not macro.endswith('_LABEL')
+            )
     for app in applications:
         if app['index'] in used_application_indices:
-            required_pstr_macros.update(app['used_pstr_macros'])
+            # Filter out label macros (those ending with _LABEL)
+            required_pstr_macros.update(
+                macro for macro in app['used_pstr_macros']
+                if not macro.endswith('_LABEL')
+            )
 
     # --- Generate thinned sensor library ---
     with open(os.path.join(project_dir, 'src/lib/sensor_library.h'), 'r') as f:
@@ -299,7 +327,9 @@ def generate_thin_library_files(
     )
 
     sensor_structs_str = ",\n".join(
-        s['raw_c_block'] for s in sorted(sensors, key=lambda x: x['index']) if s['index'] in used_sensor_indices
+        remove_label_fields_from_struct(s['raw_c_block'])
+        for s in sorted(sensors, key=lambda x: x['index'])
+        if s['index'] in used_sensor_indices
     )
 
     thinned_sensor_content = re.sub(
@@ -323,6 +353,16 @@ def generate_thin_library_files(
 
     # Add data-only header
     thinned_sensor_content = add_thin_library_header(thinned_sensor_content, "sensor", tool_version)
+
+    # Fix helper function validation to check name instead of label
+    thinned_sensor_content = thinned_sensor_content.replace(
+        '// Validate entry (check if label is non-null for implemented sensors)',
+        '// Validate entry (check if name is non-null for implemented sensors)'
+    )
+    thinned_sensor_content = thinned_sensor_content.replace(
+        'if (pgm_read_ptr(&info->label) == nullptr) return nullptr;',
+        'if (pgm_read_ptr(&info->name) == nullptr) return nullptr;'
+    )
 
     with open(os.path.join(output_dir, 'sensor_library_static.h'), 'w') as f:
         f.write(thinned_sensor_content)
@@ -350,7 +390,9 @@ def generate_thin_library_files(
     )
 
     app_structs_str = ",\n".join(
-        a['raw_c_block'] for a in sorted(applications, key=lambda x: x['index']) if a['index'] in used_application_indices
+        remove_label_fields_from_struct(a['raw_c_block'])
+        for a in sorted(applications, key=lambda x: x['index'])
+        if a['index'] in used_application_indices
     )
 
     thinned_app_content = re.sub(
@@ -372,6 +414,16 @@ def generate_thin_library_files(
 
     # Add data-only header
     thinned_app_content = add_thin_library_header(thinned_app_content, "application", tool_version)
+
+    # Fix helper function validation to check name instead of label
+    thinned_app_content = thinned_app_content.replace(
+        '// Validate entry (check if label is non-null for implemented applications)',
+        '// Validate entry (check if name is non-null for implemented applications)'
+    )
+    thinned_app_content = thinned_app_content.replace(
+        'if (pgm_read_ptr(&preset->label) == nullptr) return nullptr;',
+        'if (pgm_read_ptr(&preset->name) == nullptr) return nullptr;'
+    )
 
     with open(os.path.join(output_dir, 'application_presets_static.h'), 'w') as f:
         f.write(thinned_app_content)

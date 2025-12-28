@@ -118,7 +118,7 @@ def _parse_structs(struct_content: str, pstr_macros: Dict[str, str], enum_consta
 
             item[key] = value
 
-        if item.get('label', item.get('name')) is None:
+        if item.get('name') is None:
             item['is_implemented'] = False
 
         registries.append(item)
