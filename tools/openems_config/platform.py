@@ -7,7 +7,7 @@ from typing import Dict, Any, Tuple, Optional, List
 
 # Platform-specific limits
 PLATFORM_LIMITS = {
-    "uno": {"analog": 6, "digital": 14, "max_inputs": 6},
+    "uno": {"analog": 6, "digital": 14, "max_inputs": 8},
     "megaatmega2560": {"analog": 16, "digital": 54, "max_inputs": 16},
     "teensy36": {"analog": 25, "digital": 58, "max_inputs": 25},
     "teensy40": {"analog": 14, "digital": 40, "max_inputs": 14},
