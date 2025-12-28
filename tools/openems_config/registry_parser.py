@@ -118,7 +118,9 @@ def _parse_structs(struct_content: str, pstr_macros: Dict[str, str], enum_consta
 
             item[key] = value
 
-        if item.get('name') is None:
+        # A sensor/app is implemented if it has a label (or name if label is missing)
+        # Placeholder entries have label=nullptr to indicate they're not ready
+        if item.get('label', item.get('name')) is None:
             item['is_implemented'] = False
 
         registries.append(item)
