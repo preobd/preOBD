@@ -10,6 +10,9 @@
  *   msg.control.println(F("Configuration saved"));
  *   msg.data.print(ptr->abbrName);
  *   msg.debug.println(F("✓ ADC configured"));
+ *
+ * Build Flags:
+ *   -D DISABLE_DEBUG_MESSAGES - Compile out all debug messages (saves flash/RAM)
  */
 
 #ifndef MESSAGE_API_H
@@ -194,11 +197,45 @@ public:
     }
 };
 
+// Stub class for disabled debug messages (all methods compile to no-ops)
+#ifdef DISABLE_DEBUG_MESSAGES
+class MessageStreamStub {
+public:
+    MessageStreamStub(MessagePlane p) { (void)p; }  // Suppress unused parameter warning
+
+    // All methods are inline no-ops that the optimizer will eliminate
+    inline size_t print(const char* str) { (void)str; return 0; }
+    inline size_t println(const char* str) { (void)str; return 0; }
+    inline size_t println() { return 0; }
+    inline size_t print(int n) { (void)n; return 0; }
+    inline size_t println(int n) { (void)n; return 0; }
+    inline size_t print(unsigned int n) { (void)n; return 0; }
+    inline size_t println(unsigned int n) { (void)n; return 0; }
+    inline size_t print(long n) { (void)n; return 0; }
+    inline size_t println(long n) { (void)n; return 0; }
+    inline size_t print(unsigned long n) { (void)n; return 0; }
+    inline size_t println(unsigned long n) { (void)n; return 0; }
+    inline size_t print(float f, int digits = 2) { (void)f; (void)digits; return 0; }
+    inline size_t println(float f, int digits = 2) { (void)f; (void)digits; return 0; }
+    inline size_t print(double d, int digits = 2) { (void)d; (void)digits; return 0; }
+    inline size_t println(double d, int digits = 2) { (void)d; (void)digits; return 0; }
+    inline size_t print(const __FlashStringHelper* str) { (void)str; return 0; }
+    inline size_t println(const __FlashStringHelper* str) { (void)str; return 0; }
+    inline size_t write(const uint8_t* data, size_t len) { (void)data; (void)len; return 0; }
+    inline size_t write(uint8_t c) { (void)c; return 0; }
+};
+#endif
+
 // Global message API instance
 struct MessageAPI {
     MessageStream control;
     MessageStream data;
-    MessageStream debug;
+
+#ifdef DISABLE_DEBUG_MESSAGES
+    MessageStreamStub debug;  // Stub version - compiles to no-ops
+#else
+    MessageStream debug;      // Full version
+#endif
 
     MessageAPI() : control(PLANE_CONTROL), data(PLANE_DATA), debug(PLANE_DEBUG) {}
 };
