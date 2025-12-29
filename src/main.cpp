@@ -313,12 +313,12 @@ void loop() {
     // Reset watchdog at start of every loop iteration
     watchdogReset();
 
-    // Update transport router (poll transports, handle housekeeping)
-    router.update();
+    // Update transport router (poll transports, handle housekeeping, process commands)
+    router.update();  // Now handles command input from ALL transports
 
 #ifndef USE_STATIC_CONFIG
-    // Process serial configuration commands (non-blocking, always runs)
-    processSerialCommands();
+    // NOTE: processSerialCommands() is now deprecated - router.update() handles it
+    // Kept for reference but does nothing (see serial_config.cpp)
 
     // Process button events (short press = silence alarm, long press = toggle display)
     ButtonPress buttonEvent = updateButtonHandler();
