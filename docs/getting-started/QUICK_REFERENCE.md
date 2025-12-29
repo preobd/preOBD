@@ -349,7 +349,7 @@ SET <pin> BIAS <resistor>                         # Override bias resistor
 | Arduino Mega | 10-bit | 5V | 16 | Good all-rounder |
 | Arduino Due | 12-bit | 3.3V | 16 | High resolution ADC |
 | ESP32 | 12-bit | 3.3V | 16 | WiFi capable |
-| Arduino Uno | 10-bit | 5V | 6 | Limited RAM, use [static builds](../advanced/STATIC_BUILDS_GUIDE.md) |
+| Arduino Uno | 10-bit | 5V | 8 | Limited RAM, use [static builds](../advanced/STATIC_BUILDS_GUIDE.md) |
 
 ---
 
