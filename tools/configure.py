@@ -373,8 +373,15 @@ def main():
     for i, inp in enumerate(inputs):
         inp['input_number'] = i
 
-    save_path = args.load
-    if not save_path:
+    save_path = None
+
+    # Determine if we should save
+    if args.load:
+        # Only save if changes were made
+        if config_modified or should_add_new:
+            save_path = args.load
+    else:
+        # For new configurations, ask user if they want to save
         if input("\nSave to JSON? [y/N]: ").strip().lower() == 'y':
             filename = input("File: ").strip()
             if filename:
