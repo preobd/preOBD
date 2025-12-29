@@ -111,7 +111,7 @@ Settings persist across power cycles in EEPROM.
 | teensy40 | Teensy 4.0 | 2MB | All | External SD module needed |
 | teensy36 | Teensy 3.6 | 1MB | All | Older platform |
 | mega2560 | Arduino Mega | 256KB | All | Good for prototyping |
-| uno_static | Arduino Uno | 32KB | LCD + Serial only | Memory-constrained |
+| uno_static | Arduino Uno | 32KB | LCD + Serial + Alarms only | Memory-constrained |
 | debug | Teensy 4.1 | 8MB | All + Debug | Debug symbols enabled |
 
 ### Build Commands
@@ -134,7 +134,7 @@ pio run -e debug
 | Teensy 4.0 | 144KB | 7.0% | 1.9MB |
 | Teensy 3.6 | ~140KB | 14% | ~860KB |
 | Mega 2560 | 132KB | 52% | 122KB |
-| Uno (minimal) | N/A | ~90% | ~3KB |
+| Uno (minimal) | N/A | ~77% | ~8KB |
 
 **Conclusion**: Teensy 4.x and Mega 2560 have plenty of resources. No need for minimal builds.
 
@@ -254,7 +254,7 @@ lib_deps =
 ### For Memory-Constrained Boards (Arduino Uno)
 
 1. **Use static configuration** (`USE_STATIC_CONFIG`) - Excludes JSON library (~4-8KB)
-2. **Disable unused outputs** - Only enable LCD + Serial
+2. **Disable unused outputs** - Only enable LCD + Serial + Alarms
 3. **Exclude SD and CAN** - Saves ~30KB combined
 4. **Disable test mode** - Saves ~4KB
 
@@ -265,6 +265,7 @@ build_flags =
     -D USE_STATIC_CONFIG
     -D ENABLE_LCD
     -D ENABLE_SERIAL_OUTPUT
+    -D ENABLE_ALARMS
     # No CAN, SD, or RealDash
 lib_deps =
     ${core_libs.lib_deps}
