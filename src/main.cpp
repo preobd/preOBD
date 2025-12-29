@@ -32,11 +32,13 @@
 // Global transport instances
 SerialTransport usbSerial(&Serial, "USB", 115200);
 #if defined(__MK66FX1M0__) || defined(__IMXRT1062__) || defined(__MK64FX512__) || defined(__MK20DX256__)
-// Teensy platforms have hardware Serial1
+// Teensy platforms have hardware Serial1, Serial2, etc.
 SerialTransport hwSerial1(&Serial1, "SERIAL1", 115200);
+SerialTransport hwSerial2(&Serial2, "SERIAL2", 9600);  // Default 9600 for HC-05/HM-10
 #elif defined(__AVR_ATmega2560__)
 // Arduino Mega has Serial1-3
 SerialTransport hwSerial1(&Serial1, "SERIAL1", 115200);
+SerialTransport hwSerial2(&Serial2, "SERIAL2", 9600);  // Default 9600 for HC-05/HM-10
 #endif
 
 // Declare output module functions
@@ -149,10 +151,17 @@ void setup() {
     Serial.begin(115200);
     while (!Serial && millis() < 3000) {};  // Wait up to 3 seconds for serial
 
+    // Initialize hardware UARTs for Bluetooth modules (if wired)
+    #if defined(__MK66FX1M0__) || defined(__IMXRT1062__) || defined(__MK64FX512__) || defined(__MK20DX256__) || defined(__AVR_ATmega2560__)
+    Serial1.begin(115200);  // Can be used for data output or control
+    Serial2.begin(9600);    // Default baud for HC-05/HM-10 Bluetooth modules
+    #endif
+
     // Initialize transport router
     router.registerTransport(TRANSPORT_USB_SERIAL, &usbSerial);
     #if defined(__MK66FX1M0__) || defined(__IMXRT1062__) || defined(__MK64FX512__) || defined(__MK20DX256__) || defined(__AVR_ATmega2560__)
     router.registerTransport(TRANSPORT_SERIAL1, &hwSerial1);
+    router.registerTransport(TRANSPORT_SERIAL2, &hwSerial2);
     #endif
     router.begin();  // Load config from EEPROM
 
