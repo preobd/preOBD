@@ -28,6 +28,9 @@
 #include "lib/message_router.h"
 #include "lib/message_api.h"
 #include "lib/transport_serial.h"
+#ifdef ESP32
+#include "lib/transports/transport_bluetooth_esp32.h"
+#endif
 
 // Global transport instances
 SerialTransport usbSerial(&Serial, "USB", 115200);
@@ -39,6 +42,11 @@ SerialTransport hwSerial2(&Serial2, "SERIAL2", 9600);  // Default 9600 for HC-05
 // Arduino Mega has Serial1-3
 SerialTransport hwSerial1(&Serial1, "SERIAL1", 115200);
 SerialTransport hwSerial2(&Serial2, "SERIAL2", 9600);  // Default 9600 for HC-05/HM-10
+#endif
+
+#ifdef ESP32
+// ESP32 Bluetooth Classic transport
+BluetoothTransportESP32 btESP32("openEMS");
 #endif
 
 // Declare output module functions
@@ -162,6 +170,14 @@ void setup() {
     #if defined(__MK66FX1M0__) || defined(__IMXRT1062__) || defined(__MK64FX512__) || defined(__MK20DX256__) || defined(__AVR_ATmega2560__)
     router.registerTransport(TRANSPORT_SERIAL1, &hwSerial1);
     router.registerTransport(TRANSPORT_SERIAL2, &hwSerial2);
+    #endif
+    #ifdef ESP32
+    if (btESP32.begin()) {
+        router.registerTransport(TRANSPORT_BLUETOOTH, &btESP32);
+        msg.debug.println(F("✓ ESP32 Bluetooth initialized"));
+    } else {
+        msg.debug.println(F("⚠ ESP32 Bluetooth failed to initialize"));
+    }
     #endif
     router.begin();  // Load config from EEPROM
 
