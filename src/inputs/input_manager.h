@@ -46,6 +46,13 @@ bool setInputCalibrationPressureLinear(uint8_t pin, float vMin, float vMax, floa
 bool setInputCalibrationPressurePolynomial(uint8_t pin, float bias, float a, float b, float c);
 bool clearInputCalibration(uint8_t pin);
 
+// ===== HELPER FUNCTIONS =====
+Input* getInputByPin(uint8_t pin);   // Find input by pin number
+Input* getInputByIndex(uint8_t index); // Get input by array index
+uint8_t getInputIndex(uint8_t pin);  // Get array index for pin
+
+#ifndef USE_STATIC_CONFIG
+
 // ===== PERSISTENCE =====
 bool saveInputConfig();               // Save all inputs to EEPROM
 bool loadInputConfig();               // Load all inputs from EEPROM
@@ -53,14 +60,13 @@ void resetInputConfig();              // Clear all inputs and EEPROM
 
 // ===== RUNTIME =====
 void readAllInputs();                 // Read all enabled inputs
-Input* getInputByPin(uint8_t pin);   // Find input by pin number
-Input* getInputByIndex(uint8_t index); // Get input by array index
-uint8_t getInputIndex(uint8_t pin);  // Get array index for pin
 
 // ===== INFO =====
 void printInputInfo(uint8_t pin);    // Print detailed input information
 void listAllInputs();                // List all active inputs
 void listApplicationPresets();       // List available Applications
 void listSensors();                  // List available Sensors
+
+#endif // USE_STATIC_CONFIG
 
 #endif // INPUT_MANAGER_H

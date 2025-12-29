@@ -498,6 +498,8 @@ bool initInputManager() {
 
 // ===== EEPROM PERSISTENCE =====
 
+#ifndef USE_STATIC_CONFIG
+
 /**
  * Calculate XOR checksum of all active inputs
  * Used to detect EEPROM corruption
@@ -727,6 +729,8 @@ void resetInputConfig() {
 
     Serial.println(F("Configuration reset"));
 }
+
+#endif // USE_STATIC_CONFIG
 
 // ===== HELPER FUNCTIONS =====
 
@@ -1158,6 +1162,9 @@ bool clearInputCalibration(uint8_t pin) {
 }
 
 // ===== RUNTIME =====
+
+#ifndef USE_STATIC_CONFIG
+
 void readAllInputs() {
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled && inputs[i].readFunction != nullptr) {
@@ -1167,6 +1174,7 @@ void readAllInputs() {
 }
 
 // ===== INFO/LISTING =====
+
 void printInputInfo(uint8_t pin) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) {
@@ -1321,3 +1329,5 @@ void listSensors() {
     Serial.println(F("Note: Use 'I2C' for new I2C sensors, 'I2C:0', 'I2C:1' etc. for existing ones"));
     Serial.println(F("      Examples: SET I2C AMBIENT_TEMP BME280_TEMP  or  INFO I2C:0"));
 }
+
+#endif // USE_STATIC_CONFIG

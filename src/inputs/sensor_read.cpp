@@ -6,16 +6,23 @@
 #include "../lib/platform.h"
 #include "input.h"
 #include "../lib/sensor_types.h"
+#ifdef USE_STATIC_CONFIG
+#include "../lib/generated/sensor_library_static.h"
+#else
 #include "../lib/sensor_library.h"
+#endif
 #include "../lib/units_registry.h"
 #include <SPI.h>
 #include <Wire.h>
+
+#ifdef ENABLE_BME280
 #include <Adafruit_BME280.h>
 
 // Shared BME280 object and state (lazy initialization)
 static Adafruit_BME280* bme280_ptr = nullptr;
 static bool bme280_initialized = false;
 static uint8_t bme280_i2c_address = 0x00;  // 0 = not yet detected
+#endif
 
 // Helper macros to read calibration data from PROGMEM
 #define READ_FLOAT_PROGMEM(addr) pgm_read_float(&(addr))
@@ -600,6 +607,8 @@ void readWPhaseRPM(Input *ptr) {
 
 // ===== BME280 INITIALIZATION =====
 
+#ifdef ENABLE_BME280
+
 void initBME280(Input* ptr) {
     // If already initialized, nothing to do
     if (bme280_initialized) {
@@ -672,6 +681,20 @@ void readBME280Elevation(Input *ptr) {
         ptr->value = NAN;
     }
 }
+
+#else
+
+// Stub implementations when BME280 is disabled
+void initBME280(Input* ptr) {
+    Serial.println(F("⚠ BME280 support not compiled in"));
+}
+
+void readBME280Temp(Input *ptr) { ptr->value = NAN; }
+void readBME280Pressure(Input *ptr) { ptr->value = NAN; }
+void readBME280Humidity(Input *ptr) { ptr->value = NAN; }
+void readBME280Elevation(Input *ptr) { ptr->value = NAN; }
+
+#endif // ENABLE_BME280
 
 // ===== DIGITAL FLOAT SWITCH =====
 
