@@ -93,6 +93,13 @@ public:
 
     // Poll transports, handle incoming data (called each loop)
     void update();
+
+private:
+    // Process incoming commands from control plane transports
+    void processIncomingCommands();
+
+    // Read and process characters from a specific transport
+    void processCommandFromTransport(TransportInterface* transport);
 };
 
 // Global router instance
