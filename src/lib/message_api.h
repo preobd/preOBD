@@ -103,6 +103,33 @@ public:
         return println((int)n);
     }
 
+    // Print with base (HEX, DEC, BIN, OCT)
+    size_t print(int n, int base) {
+        char buf[20];
+        if (base == HEX) {
+            utoa(n, buf, 16);
+        } else if (base == BIN) {
+            utoa(n, buf, 2);
+        } else if (base == OCT) {
+            utoa(n, buf, 8);
+        } else {
+            itoa(n, buf, 10);
+        }
+        return print(buf);
+    }
+
+    size_t println(int n, int base) {
+        return print(n, base) + println();
+    }
+
+    size_t print(unsigned int n, int base) {
+        return print((int)n, base);
+    }
+
+    size_t println(unsigned int n, int base) {
+        return print((unsigned int)n, base) + println();
+    }
+
     size_t print(long n) {
         char buf[16];
         ltoa(n, buf, 10);
@@ -211,6 +238,10 @@ public:
     inline size_t println(int n) { (void)n; return 0; }
     inline size_t print(unsigned int n) { (void)n; return 0; }
     inline size_t println(unsigned int n) { (void)n; return 0; }
+    inline size_t print(int n, int base) { (void)n; (void)base; return 0; }
+    inline size_t println(int n, int base) { (void)n; (void)base; return 0; }
+    inline size_t print(unsigned int n, int base) { (void)n; (void)base; return 0; }
+    inline size_t println(unsigned int n, int base) { (void)n; (void)base; return 0; }
     inline size_t print(long n) { (void)n; return 0; }
     inline size_t println(long n) { (void)n; return 0; }
     inline size_t print(unsigned long n) { (void)n; return 0; }

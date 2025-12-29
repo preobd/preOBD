@@ -119,63 +119,73 @@ static const char* getTransportName(TransportID id) {
 
 // Helper function to print system configuration details
 static void printSystemConfig() {
-    Serial.println(F("=== System Configuration ==="));
+    msg.control.println(F("=== System Configuration ==="));
     extern uint8_t numActiveInputs;
-    Serial.print(F("Active Inputs: "));
-    Serial.println(numActiveInputs);
-    Serial.print(F("System Voltage: "));
-    Serial.print(SYSTEM_VOLTAGE);
-    Serial.println(F("V"));
-    Serial.print(F("ADC Reference: "));
-    Serial.print(AREF_VOLTAGE);
-    Serial.println(F("V"));
-    Serial.print(F("ADC Resolution: "));
-    Serial.print(ADC_RESOLUTION);
-    Serial.println(F(" bits"));
-    Serial.print(F("ADC Max Value: "));
-    Serial.println(ADC_MAX_VALUE);
-    Serial.print(F("Sea Level Pressure: "));
-    Serial.print(systemConfig.seaLevelPressure);
-    Serial.println(F(" hPa"));
-    Serial.print(F("Intervals: Sensor="));
-    Serial.print(systemConfig.sensorReadInterval);
-    Serial.print(F("ms, Alarm="));
-    Serial.print(systemConfig.alarmCheckInterval);
-    Serial.print(F("ms, LCD="));
-    Serial.print(systemConfig.lcdUpdateInterval);
-    Serial.println(F("ms"));
+    msg.control.print(F("Active Inputs: "));
+    msg.control.println(numActiveInputs);
+    msg.control.print(F("System Voltage: "));
+    msg.control.print(SYSTEM_VOLTAGE);
+    msg.control.println(F("V"));
+    msg.control.print(F("ADC Reference: "));
+    msg.control.print(AREF_VOLTAGE);
+    msg.control.println(F("V"));
+    msg.control.print(F("ADC Resolution: "));
+    msg.control.print(ADC_RESOLUTION);
+    msg.control.println(F(" bits"));
+    msg.control.print(F("ADC Max Value: "));
+    msg.control.println(ADC_MAX_VALUE);
+    msg.control.print(F("Sea Level Pressure: "));
+    msg.control.print(systemConfig.seaLevelPressure);
+    msg.control.println(F(" hPa"));
+    msg.control.print(F("Intervals: Sensor="));
+    msg.control.print(systemConfig.sensorReadInterval);
+    msg.control.print(F("ms, Alarm="));
+    msg.control.print(systemConfig.alarmCheckInterval);
+    msg.control.print(F("ms, LCD="));
+    msg.control.print(systemConfig.lcdUpdateInterval);
+    msg.control.println(F("ms"));
 }
 
 void initSerialConfig() {
-    Serial.println();
-    Serial.println(F("========================================"));
-    Serial.println(F("  openEMS Serial Configuration"));
-    Serial.println(F("  Type 'HELP' for commands"));
-    Serial.println(F("========================================"));
-    Serial.println();
+    msg.control.println();
+    msg.control.println(F("========================================"));
+    msg.control.println(F("  openEMS Serial Configuration"));
+    msg.control.println(F("  Type 'HELP' for commands"));
+    msg.control.println(F("========================================"));
+    msg.control.println();
     cmdIndex = 0;
     commandBuffer[0] = '\0';
 }
 
-void processSerialCommands() {
-    while (Serial.available()) {
-        char c = Serial.read();
-
-        if (c == '\n' || c == '\r') {
-            if (cmdIndex > 0) {
-                commandBuffer[cmdIndex] = '\0';
-                trim(commandBuffer);
-                if (commandBuffer[0] != '\0') {
-                    handleSerialCommand(commandBuffer);
-                }
-                cmdIndex = 0;
-                commandBuffer[0] = '\0';
-                Serial.print(F("\n> "));
+/**
+ * Handle incoming character input (called by MessageRouter)
+ * This function is called character-by-character from router.update()
+ */
+void handleCommandInput(char c) {
+    if (c == '\n' || c == '\r') {
+        if (cmdIndex > 0) {
+            commandBuffer[cmdIndex] = '\0';
+            trim(commandBuffer);
+            if (commandBuffer[0] != '\0') {
+                handleSerialCommand(commandBuffer);
             }
-        } else if (cmdIndex < CMD_BUFFER_SIZE - 1) {
-            commandBuffer[cmdIndex++] = c;
+            cmdIndex = 0;
+            commandBuffer[0] = '\0';
+            msg.control.print(F("\n> "));  // Prompt goes to active control transport
         }
+    } else if (cmdIndex < CMD_BUFFER_SIZE - 1) {
+        commandBuffer[cmdIndex++] = c;
     }
+}
+
+/**
+ * Legacy function for backward compatibility
+ * Now just a no-op since router.update() handles command polling
+ */
+void processSerialCommands() {
+    // This function is deprecated - command input is now handled by
+    // router.update() calling handleCommandInput()
+    // Kept for backward compatibility, but does nothing
 }
 
 /**
@@ -199,7 +209,7 @@ static uint8_t parsePin(const char* pinStr, bool* isValid) {
 
         // Check if we've exceeded the virtual pin range
         if (i2cVirtualPinCounter >= 0xFE) {
-            Serial.println(F("ERROR: Too many I2C sensors configured (max 14)"));
+            msg.control.println(F("ERROR: Too many I2C sensors configured (max 14)"));
             if (isValid) *isValid = false;
             return 0;
         }
@@ -214,9 +224,9 @@ static uint8_t parsePin(const char* pinStr, bool* isValid) {
 
         // Validate I2C index range (0-13 for 14 total I2C sensors)
         if (i2cIndex < 0 || i2cIndex > 13) {
-            Serial.print(F("ERROR: I2C index "));
-            Serial.print(i2cIndex);
-            Serial.println(F(" out of range (valid: 0-13)"));
+            msg.control.print(F("ERROR: I2C index "));
+            msg.control.print(i2cIndex);
+            msg.control.println(F(" out of range (valid: 0-13)"));
             if (isValid) *isValid = false;
             return 0;
         }
@@ -236,43 +246,43 @@ static uint8_t parsePin(const char* pinStr, bool* isValid) {
             #if defined(ARDUINO_TEENSY41)
                 if (analogNum < 0 || analogNum > 17) {
                     if (isValid) *isValid = false;
-                    Serial.print(F("ERROR: Pin A"));
-                    Serial.print(analogNum);
-                    Serial.println(F(" not available (Teensy 4.1 supports A0-A17)"));
+                    msg.control.print(F("ERROR: Pin A"));
+                    msg.control.print(analogNum);
+                    msg.control.println(F(" not available (Teensy 4.1 supports A0-A17)"));
                     return 0;
                 }
             #else  // Teensy 4.0
                 if (analogNum < 0 || analogNum > 13) {
                     if (isValid) *isValid = false;
-                    Serial.print(F("ERROR: Pin A"));
-                    Serial.print(analogNum);
-                    Serial.println(F(" not available (Teensy 4.0 supports A0-A13)"));
+                    msg.control.print(F("ERROR: Pin A"));
+                    msg.control.print(analogNum);
+                    msg.control.println(F(" not available (Teensy 4.0 supports A0-A13)"));
                     return 0;
                 }
             #endif
         #elif defined(__AVR_ATmega2560__)  // Arduino Mega
             if (analogNum < 0 || analogNum > 15) {
                 if (isValid) *isValid = false;
-                Serial.print(F("ERROR: Pin A"));
-                Serial.print(analogNum);
-                Serial.println(F(" not available (Arduino Mega supports A0-A15)"));
+                msg.control.print(F("ERROR: Pin A"));
+                msg.control.print(analogNum);
+                msg.control.println(F(" not available (Arduino Mega supports A0-A15)"));
                 return 0;
             }
         #elif defined(__AVR_ATmega328P__)  // Arduino Uno
             if (analogNum < 0 || analogNum > 5) {
                 if (isValid) *isValid = false;
-                Serial.print(F("ERROR: Pin A"));
-                Serial.print(analogNum);
-                Serial.println(F(" not available (Arduino Uno supports A0-A5)"));
+                msg.control.print(F("ERROR: Pin A"));
+                msg.control.print(analogNum);
+                msg.control.println(F(" not available (Arduino Uno supports A0-A5)"));
                 return 0;
             }
         #else
             // Generic validation using MAX_INPUTS from platform.h
             if (analogNum < 0 || analogNum >= MAX_INPUTS) {
                 if (isValid) *isValid = false;
-                Serial.print(F("ERROR: Pin A"));
-                Serial.print(analogNum);
-                Serial.println(F(" not available on this platform"));
+                msg.control.print(F("ERROR: Pin A"));
+                msg.control.print(analogNum);
+                msg.control.println(F(" not available on this platform"));
                 return 0;
             }
         #endif
@@ -288,34 +298,34 @@ static uint8_t parsePin(const char* pinStr, bool* isValid) {
         #if defined(ARDUINO_TEENSY41)
             if (pin > 54) {  // Teensy 4.1: pins 0-54
                 if (isValid) *isValid = false;
-                Serial.print(F("ERROR: Digital pin "));
-                Serial.print(pin);
-                Serial.println(F(" not available (Teensy 4.1 supports 0-54)"));
+                msg.control.print(F("ERROR: Digital pin "));
+                msg.control.print(pin);
+                msg.control.println(F(" not available (Teensy 4.1 supports 0-54)"));
                 return 0;
             }
         #else  // Teensy 4.0
             if (pin > 39) {  // Teensy 4.0: pins 0-39
                 if (isValid) *isValid = false;
-                Serial.print(F("ERROR: Digital pin "));
-                Serial.print(pin);
-                Serial.println(F(" not available (Teensy 4.0 supports 0-39)"));
+                msg.control.print(F("ERROR: Digital pin "));
+                msg.control.print(pin);
+                msg.control.println(F(" not available (Teensy 4.0 supports 0-39)"));
                 return 0;
             }
         #endif
     #elif defined(__AVR_ATmega2560__)  // Mega has 54 digital pins
         if (pin > 53) {
             if (isValid) *isValid = false;
-            Serial.print(F("ERROR: Digital pin "));
-            Serial.print(pin);
-            Serial.println(F(" not available (Arduino Mega supports 0-53)"));
+            msg.control.print(F("ERROR: Digital pin "));
+            msg.control.print(pin);
+            msg.control.println(F(" not available (Arduino Mega supports 0-53)"));
             return 0;
         }
     #elif defined(__AVR_ATmega328P__)  // Uno has 14 digital pins
         if (pin > 13) {
             if (isValid) *isValid = false;
-            Serial.print(F("ERROR: Digital pin "));
-            Serial.print(pin);
-            Serial.println(F(" not available (Arduino Uno supports 0-13)"));
+            msg.control.print(F("ERROR: Digital pin "));
+            msg.control.print(pin);
+            msg.control.println(F(" not available (Arduino Uno supports 0-13)"));
             return 0;
         }
     #else
@@ -366,13 +376,13 @@ void handleSerialCommand(char* cmd) {
                     filename = filenameStart;
                 }
 
-                Serial.println();
+                msg.control.println();
                 if (saveConfigToSD(filename)) {
-                    Serial.println(F("Configuration saved successfully"));
+                    msg.control.println(F("Configuration saved successfully"));
                 } else {
-                    Serial.println(F("ERROR: Failed to save configuration"));
+                    msg.control.println(F("ERROR: Failed to save configuration"));
                 }
-                Serial.println();
+                msg.control.println();
                 return;
             }
 
@@ -382,18 +392,18 @@ void handleSerialCommand(char* cmd) {
                 while (*filename == ' ') filename++;  // Skip spaces
 
                 if (*filename == '\0') {
-                    Serial.println(F("ERROR: Filename required for CONFIG LOAD"));
+                    msg.control.println(F("ERROR: Filename required for CONFIG LOAD"));
                     return;
                 }
 
-                Serial.println();
+                msg.control.println();
                 if (loadConfigFromSD(filename)) {
-                    Serial.println(F("Configuration loaded successfully"));
-                    Serial.println(F("Type SAVE to persist to EEPROM"));
+                    msg.control.println(F("Configuration loaded successfully"));
+                    msg.control.println(F("Type SAVE to persist to EEPROM"));
                 } else {
-                    Serial.println(F("ERROR: Failed to load configuration"));
+                    msg.control.println(F("ERROR: Failed to load configuration"));
                 }
-                Serial.println();
+                msg.control.println();
                 return;
             }
         }
@@ -421,118 +431,118 @@ void handleSerialCommand(char* cmd) {
             strncmp(cmd, "LIST", 4) == 0;  // LIST, LIST INPUTS, etc.
 
         if (!isReadOnly) {
-            Serial.println();
-            Serial.println(F("========================================"));
-            Serial.println(F("  ERROR: Configuration locked in RUN mode"));
-            Serial.println(F("  Type CONFIG to enter configuration mode"));
-            Serial.println(F("========================================"));
-            Serial.println();
+            msg.control.println();
+            msg.control.println(F("========================================"));
+            msg.control.println(F("  ERROR: Configuration locked in RUN mode"));
+            msg.control.println(F("  Type CONFIG to enter configuration mode"));
+            msg.control.println(F("========================================"));
+            msg.control.println();
             return;
         }
     }
 
     // ===== HELP & INFO COMMANDS =====
     if (streq(cmd, "HELP") || streq(cmd, "?")) {
-        Serial.println();
-        Serial.println(F("Available Commands:"));
-        Serial.println();
-        Serial.println(F("LIST Commands:"));
-        Serial.println(F("  LIST INPUTS         - Show all configured inputs"));
-        Serial.println(F("  LIST APPLICATIONS   - Show available Type presets"));
-        Serial.println(F("  LIST SENSORS        - Show available Sensor Types"));
-        Serial.println();
-        Serial.println(F("SET Commands:"));
-        Serial.println(F("  SET <pin> <app> <sensor>  - Combined config (e.g., SET 6 CHT MAX6675)"));
-        Serial.println(F("  SET <pin> APPLICATION <application>  - Set measurement type"));
-        Serial.println(F("  SET <pin> SENSOR <sensor>  - Set hardware sensor"));
-        Serial.println(F("  SET <pin> NAME <name>  - Set abbreviated name (8 chars)"));
-        Serial.println(F("  SET <pin> DISPLAY_NAME <name>  - Set full name (32 chars)"));
-        Serial.println(F("  SET <pin> UNITS <units>  - Override display units"));
-        Serial.println(F("  SET <pin> ALARM <min> <max>  - Set alarm thresholds"));
-        Serial.println(F("  SET <pin> ALARM ENABLE  - Enable alarm for input"));
-        Serial.println(F("  SET <pin> ALARM DISABLE  - Disable alarm for input"));
-        Serial.println(F("  SET <pin> WARMUP <ms>  - Override alarm warmup time"));
-        Serial.println(F("  SET <pin> PERSIST <ms>  - Override alarm persistence time"));
-        Serial.println();
-        Serial.println(F("Calibration Commands:"));
-        Serial.println(F("  SET <pin> CALIBRATION PRESET  - Clear custom, use preset"));
-        Serial.println(F("  SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>"));
-        Serial.println(F("  SET <pin> BIAS <resistor>  - Set bias resistor (Ohms)"));
-        Serial.println(F("  SET <pin> STEINHART <bias> <a> <b> <c>  - Steinhart-Hart"));
-        Serial.println(F("  SET <pin> BETA <bias> <beta> <r0> <t0>  - Beta equation"));
-        Serial.println(F("  SET <pin> PRESSURE_POLY <bias> <a> <b> <c>  - VDO polynomial"));
-        Serial.println(F("  INFO <pin> CALIBRATION  - Show calibration details"));
-        Serial.println();
-        Serial.println(F("Control Commands:"));
-        Serial.println(F("  ENABLE <pin>  - Enable input reading"));
-        Serial.println(F("  DISABLE <pin>  - Disable input reading"));
-        Serial.println(F("  CLEAR <pin>  - Reset input to unconfigured"));
-        Serial.println(F("  INFO <pin>  - Show detailed pin info"));
-        Serial.println(F("  INFO <pin> ALARM  - Show alarm status and configuration"));
-        Serial.println();
-        Serial.println(F("Output Commands:"));
-        Serial.println(F("  OUTPUT LIST  - Show all output modules"));
-        Serial.println(F("  OUTPUT <name> ENABLE  - Enable output (CAN, RealDash, Serial, SD_Log)"));
-        Serial.println(F("  OUTPUT <name> DISABLE  - Disable output"));
-        Serial.println(F("  OUTPUT <name> INTERVAL <ms>  - Set output interval"));
-        Serial.println();
-        Serial.println(F("Display Commands:"));
-        Serial.println(F("  DISPLAY STATUS  - Show display configuration"));
-        Serial.println(F("  DISPLAY ENABLE  - Enable display"));
-        Serial.println(F("  DISPLAY DISABLE  - Disable display"));
-        Serial.println(F("  DISPLAY TYPE <LCD|OLED|NONE>  - Set display type"));
-        Serial.println(F("  DISPLAY LCD ADDRESS <hex>  - Set I2C address (e.g., 0x27)"));
-        Serial.println(F("  DISPLAY UNITS TEMP <C|F>  - Default temperature units"));
-        Serial.println(F("  DISPLAY UNITS PRESSURE <BAR|PSI|KPA>  - Default pressure units"));
-        Serial.println(F("  DISPLAY UNITS ELEVATION <M|FT>  - Default elevation units"));
-        Serial.println();
-        Serial.println(F("Transport Commands:"));
-        Serial.println(F("  TRANSPORT LIST  - Show current transport assignments"));
-        Serial.println(F("  TRANSPORT CONTROL <transport>  - Route control messages"));
-        Serial.println(F("  TRANSPORT DATA <transport>  - Route sensor data output"));
-        Serial.println(F("  TRANSPORT DEBUG <transport>  - Route debug messages"));
-        Serial.println(F("    Transports: USB_SERIAL, SERIAL1, SERIAL2, SERIAL3, BLUETOOTH"));
-        Serial.println();
-        Serial.println(F("System Commands (Advanced):"));
-        Serial.println(F("  SYSTEM STATUS  - Show system configuration"));
-        Serial.println(F("  SYSTEM SEA_LEVEL <hPa>  - Sea level pressure"));
-        Serial.println(F("  SYSTEM INTERVAL SENSOR <ms>  - Sensor read interval"));
-        Serial.println(F("  SYSTEM INTERVAL ALARM <ms>  - Alarm check interval"));
-        Serial.println(F("  SYSTEM INTERVAL LCD <ms>  - LCD update interval"));
-        Serial.println();
-        Serial.println(F("Config Commands:"));
-        Serial.println(F("  SAVE  - Save config to EEPROM"));
-        Serial.println(F("  LOAD  - Load config from EEPROM"));
-        Serial.println(F("  RESET  - Clear all configuration"));
-        Serial.println();
-        Serial.println(F("System Commands:"));
-        Serial.println(F("  CONFIG  - Enter configuration mode (unlock config)"));
-        Serial.println(F("  RUN  - Enter run mode (lock config, resume sensors)"));
-        Serial.println(F("  VERSION  - Display firmware and EEPROM version"));
-        Serial.println(F("  DUMP  - Show full configuration (human-readable)"));
-        Serial.println(F("  DUMP JSON  - Export configuration as JSON"));
-        Serial.println(F("  CONFIG SAVE [filename]  - Save configuration to SD card"));
-        Serial.println(F("  CONFIG LOAD <filename>  - Load configuration from SD card"));
-        Serial.println(F("  RELOAD  - Trigger watchdog reset (system reboot)"));
-        Serial.println();
-        Serial.println(F("Examples:"));
-        Serial.println(F("  SET 6 CHT MAX6675  (combined syntax)"));
-        Serial.println(F("  SET A2 APPLICATION COOLANT_TEMP"));
-        Serial.println(F("  SET A2 SENSOR VDO_120C_STEINHART"));
-        Serial.println(F("  SET I2C AMBIENT_TEMP BME280_TEMP  (new I2C sensor)"));
-        Serial.println(F("  SET I2C:0 ALARM 10 50  (modify existing I2C sensor)"));
-        Serial.println(F("  INFO I2C:1  (query I2C sensor)"));
-        Serial.println(F("  SET A1 PRESSURE_LINEAR 0.5 4.5 0 7  (custom pressure)"));
-        Serial.println(F("  SET A0 BIAS 4700  (change bias resistor)"));
-        Serial.println(F("  SET A2 ALARM 50 120  (set alarm thresholds)"));
-        Serial.println(F("  SET A2 ALARM ENABLE  (enable alarm)"));
-        Serial.println(F("  SET A2 WARMUP 30000  (30 second warmup)"));
-        Serial.println(F("  SET A2 PERSIST 2000  (2 second persistence)"));
-        Serial.println(F("  INFO A2 ALARM  (show alarm status)"));
-        Serial.println(F("  ENABLE A2"));
-        Serial.println(F("  OUTPUT CAN ENABLE"));
-        Serial.println(F("  OUTPUT CAN INTERVAL 100"));
-        Serial.println(F("  SAVE"));
+        msg.control.println();
+        msg.control.println(F("Available Commands:"));
+        msg.control.println();
+        msg.control.println(F("LIST Commands:"));
+        msg.control.println(F("  LIST INPUTS         - Show all configured inputs"));
+        msg.control.println(F("  LIST APPLICATIONS   - Show available Type presets"));
+        msg.control.println(F("  LIST SENSORS        - Show available Sensor Types"));
+        msg.control.println();
+        msg.control.println(F("SET Commands:"));
+        msg.control.println(F("  SET <pin> <app> <sensor>  - Combined config (e.g., SET 6 CHT MAX6675)"));
+        msg.control.println(F("  SET <pin> APPLICATION <application>  - Set measurement type"));
+        msg.control.println(F("  SET <pin> SENSOR <sensor>  - Set hardware sensor"));
+        msg.control.println(F("  SET <pin> NAME <name>  - Set abbreviated name (8 chars)"));
+        msg.control.println(F("  SET <pin> DISPLAY_NAME <name>  - Set full name (32 chars)"));
+        msg.control.println(F("  SET <pin> UNITS <units>  - Override display units"));
+        msg.control.println(F("  SET <pin> ALARM <min> <max>  - Set alarm thresholds"));
+        msg.control.println(F("  SET <pin> ALARM ENABLE  - Enable alarm for input"));
+        msg.control.println(F("  SET <pin> ALARM DISABLE  - Disable alarm for input"));
+        msg.control.println(F("  SET <pin> WARMUP <ms>  - Override alarm warmup time"));
+        msg.control.println(F("  SET <pin> PERSIST <ms>  - Override alarm persistence time"));
+        msg.control.println();
+        msg.control.println(F("Calibration Commands:"));
+        msg.control.println(F("  SET <pin> CALIBRATION PRESET  - Clear custom, use preset"));
+        msg.control.println(F("  SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>"));
+        msg.control.println(F("  SET <pin> BIAS <resistor>  - Set bias resistor (Ohms)"));
+        msg.control.println(F("  SET <pin> STEINHART <bias> <a> <b> <c>  - Steinhart-Hart"));
+        msg.control.println(F("  SET <pin> BETA <bias> <beta> <r0> <t0>  - Beta equation"));
+        msg.control.println(F("  SET <pin> PRESSURE_POLY <bias> <a> <b> <c>  - VDO polynomial"));
+        msg.control.println(F("  INFO <pin> CALIBRATION  - Show calibration details"));
+        msg.control.println();
+        msg.control.println(F("Control Commands:"));
+        msg.control.println(F("  ENABLE <pin>  - Enable input reading"));
+        msg.control.println(F("  DISABLE <pin>  - Disable input reading"));
+        msg.control.println(F("  CLEAR <pin>  - Reset input to unconfigured"));
+        msg.control.println(F("  INFO <pin>  - Show detailed pin info"));
+        msg.control.println(F("  INFO <pin> ALARM  - Show alarm status and configuration"));
+        msg.control.println();
+        msg.control.println(F("Output Commands:"));
+        msg.control.println(F("  OUTPUT LIST  - Show all output modules"));
+        msg.control.println(F("  OUTPUT <name> ENABLE  - Enable output (CAN, RealDash, Serial, SD_Log)"));
+        msg.control.println(F("  OUTPUT <name> DISABLE  - Disable output"));
+        msg.control.println(F("  OUTPUT <name> INTERVAL <ms>  - Set output interval"));
+        msg.control.println();
+        msg.control.println(F("Display Commands:"));
+        msg.control.println(F("  DISPLAY STATUS  - Show display configuration"));
+        msg.control.println(F("  DISPLAY ENABLE  - Enable display"));
+        msg.control.println(F("  DISPLAY DISABLE  - Disable display"));
+        msg.control.println(F("  DISPLAY TYPE <LCD|OLED|NONE>  - Set display type"));
+        msg.control.println(F("  DISPLAY LCD ADDRESS <hex>  - Set I2C address (e.g., 0x27)"));
+        msg.control.println(F("  DISPLAY UNITS TEMP <C|F>  - Default temperature units"));
+        msg.control.println(F("  DISPLAY UNITS PRESSURE <BAR|PSI|KPA>  - Default pressure units"));
+        msg.control.println(F("  DISPLAY UNITS ELEVATION <M|FT>  - Default elevation units"));
+        msg.control.println();
+        msg.control.println(F("Transport Commands:"));
+        msg.control.println(F("  TRANSPORT LIST  - Show current transport assignments"));
+        msg.control.println(F("  TRANSPORT CONTROL <transport>  - Route control messages"));
+        msg.control.println(F("  TRANSPORT DATA <transport>  - Route sensor data output"));
+        msg.control.println(F("  TRANSPORT DEBUG <transport>  - Route debug messages"));
+        msg.control.println(F("    Transports: USB_SERIAL, SERIAL1, SERIAL2, SERIAL3, BLUETOOTH"));
+        msg.control.println();
+        msg.control.println(F("System Commands (Advanced):"));
+        msg.control.println(F("  SYSTEM STATUS  - Show system configuration"));
+        msg.control.println(F("  SYSTEM SEA_LEVEL <hPa>  - Sea level pressure"));
+        msg.control.println(F("  SYSTEM INTERVAL SENSOR <ms>  - Sensor read interval"));
+        msg.control.println(F("  SYSTEM INTERVAL ALARM <ms>  - Alarm check interval"));
+        msg.control.println(F("  SYSTEM INTERVAL LCD <ms>  - LCD update interval"));
+        msg.control.println();
+        msg.control.println(F("Config Commands:"));
+        msg.control.println(F("  SAVE  - Save config to EEPROM"));
+        msg.control.println(F("  LOAD  - Load config from EEPROM"));
+        msg.control.println(F("  RESET  - Clear all configuration"));
+        msg.control.println();
+        msg.control.println(F("System Commands:"));
+        msg.control.println(F("  CONFIG  - Enter configuration mode (unlock config)"));
+        msg.control.println(F("  RUN  - Enter run mode (lock config, resume sensors)"));
+        msg.control.println(F("  VERSION  - Display firmware and EEPROM version"));
+        msg.control.println(F("  DUMP  - Show full configuration (human-readable)"));
+        msg.control.println(F("  DUMP JSON  - Export configuration as JSON"));
+        msg.control.println(F("  CONFIG SAVE [filename]  - Save configuration to SD card"));
+        msg.control.println(F("  CONFIG LOAD <filename>  - Load configuration from SD card"));
+        msg.control.println(F("  RELOAD  - Trigger watchdog reset (system reboot)"));
+        msg.control.println();
+        msg.control.println(F("Examples:"));
+        msg.control.println(F("  SET 6 CHT MAX6675  (combined syntax)"));
+        msg.control.println(F("  SET A2 APPLICATION COOLANT_TEMP"));
+        msg.control.println(F("  SET A2 SENSOR VDO_120C_STEINHART"));
+        msg.control.println(F("  SET I2C AMBIENT_TEMP BME280_TEMP  (new I2C sensor)"));
+        msg.control.println(F("  SET I2C:0 ALARM 10 50  (modify existing I2C sensor)"));
+        msg.control.println(F("  INFO I2C:1  (query I2C sensor)"));
+        msg.control.println(F("  SET A1 PRESSURE_LINEAR 0.5 4.5 0 7  (custom pressure)"));
+        msg.control.println(F("  SET A0 BIAS 4700  (change bias resistor)"));
+        msg.control.println(F("  SET A2 ALARM 50 120  (set alarm thresholds)"));
+        msg.control.println(F("  SET A2 ALARM ENABLE  (enable alarm)"));
+        msg.control.println(F("  SET A2 WARMUP 30000  (30 second warmup)"));
+        msg.control.println(F("  SET A2 PERSIST 2000  (2 second persistence)"));
+        msg.control.println(F("  INFO A2 ALARM  (show alarm status)"));
+        msg.control.println(F("  ENABLE A2"));
+        msg.control.println(F("  OUTPUT CAN ENABLE"));
+        msg.control.println(F("  OUTPUT CAN INTERVAL 100"));
+        msg.control.println(F("  SAVE"));
         return;
     }
 
@@ -562,9 +572,9 @@ void handleSerialCommand(char* cmd) {
         // Find first space to separate pin from field
         char* firstSpace = strchr(rest, ' ');
         if (!firstSpace) {
-            Serial.println(F("ERROR: Invalid SET syntax"));
-            Serial.println(F("  Usage: SET <pin> <field> <value>"));
-            Serial.println(F("  Example: SET A0 APPLICATION CHT"));
+            msg.control.println(F("ERROR: Invalid SET syntax"));
+            msg.control.println(F("  Usage: SET <pin> <field> <value>"));
+            msg.control.println(F("  Example: SET A0 APPLICATION CHT"));
             return;
         }
 
@@ -597,32 +607,32 @@ void handleSerialCommand(char* cmd) {
                 MeasurementType appMeasType = getApplicationExpectedMeasurementType(appIndex);
 
                 if (sensorMeasType != appMeasType) {
-                    Serial.print(F("ERROR: Sensor/application type mismatch - "));
-                    Serial.print(secondToken);
-                    Serial.print(F(" measures "));
+                    msg.control.print(F("ERROR: Sensor/application type mismatch - "));
+                    msg.control.print(secondToken);
+                    msg.control.print(F(" measures "));
                     // Print measurement type names
                     switch(sensorMeasType) {
-                        case MEASURE_TEMPERATURE: Serial.print(F("TEMPERATURE")); break;
-                        case MEASURE_PRESSURE: Serial.print(F("PRESSURE")); break;
-                        case MEASURE_VOLTAGE: Serial.print(F("VOLTAGE")); break;
-                        case MEASURE_RPM: Serial.print(F("RPM")); break;
-                        case MEASURE_HUMIDITY: Serial.print(F("HUMIDITY")); break;
-                        case MEASURE_ELEVATION: Serial.print(F("ELEVATION")); break;
-                        case MEASURE_DIGITAL: Serial.print(F("DIGITAL")); break;
+                        case MEASURE_TEMPERATURE: msg.control.print(F("TEMPERATURE")); break;
+                        case MEASURE_PRESSURE: msg.control.print(F("PRESSURE")); break;
+                        case MEASURE_VOLTAGE: msg.control.print(F("VOLTAGE")); break;
+                        case MEASURE_RPM: msg.control.print(F("RPM")); break;
+                        case MEASURE_HUMIDITY: msg.control.print(F("HUMIDITY")); break;
+                        case MEASURE_ELEVATION: msg.control.print(F("ELEVATION")); break;
+                        case MEASURE_DIGITAL: msg.control.print(F("DIGITAL")); break;
                     }
-                    Serial.print(F(" but "));
-                    Serial.print(firstToken);
-                    Serial.print(F(" expects "));
+                    msg.control.print(F(" but "));
+                    msg.control.print(firstToken);
+                    msg.control.print(F(" expects "));
                     switch(appMeasType) {
-                        case MEASURE_TEMPERATURE: Serial.print(F("TEMPERATURE")); break;
-                        case MEASURE_PRESSURE: Serial.print(F("PRESSURE")); break;
-                        case MEASURE_VOLTAGE: Serial.print(F("VOLTAGE")); break;
-                        case MEASURE_RPM: Serial.print(F("RPM")); break;
-                        case MEASURE_HUMIDITY: Serial.print(F("HUMIDITY")); break;
-                        case MEASURE_ELEVATION: Serial.print(F("ELEVATION")); break;
-                        case MEASURE_DIGITAL: Serial.print(F("DIGITAL")); break;
+                        case MEASURE_TEMPERATURE: msg.control.print(F("TEMPERATURE")); break;
+                        case MEASURE_PRESSURE: msg.control.print(F("PRESSURE")); break;
+                        case MEASURE_VOLTAGE: msg.control.print(F("VOLTAGE")); break;
+                        case MEASURE_RPM: msg.control.print(F("RPM")); break;
+                        case MEASURE_HUMIDITY: msg.control.print(F("HUMIDITY")); break;
+                        case MEASURE_ELEVATION: msg.control.print(F("ELEVATION")); break;
+                        case MEASURE_DIGITAL: msg.control.print(F("DIGITAL")); break;
                     }
-                    Serial.println();
+                    msg.control.println();
                     return;  // Reject the configuration
                 }
 
@@ -634,12 +644,12 @@ void handleSerialCommand(char* cmd) {
                         setInputSensor(pin, sensorIndex);
                     }
 
-                    Serial.print(F("Input "));
-                    Serial.print(pinStr);
-                    Serial.print(F(" configured as "));
-                    Serial.print(firstToken);
-                    Serial.print(F(" with "));
-                    Serial.println(secondToken);
+                    msg.control.print(F("Input "));
+                    msg.control.print(pinStr);
+                    msg.control.print(F(" configured as "));
+                    msg.control.print(firstToken);
+                    msg.control.print(F(" with "));
+                    msg.control.println(secondToken);
                 }
                 return;
             }
@@ -654,17 +664,17 @@ void handleSerialCommand(char* cmd) {
             trim(appStr);
             uint8_t appIndex = parseApplication(appStr);
             if (appIndex == 0) {  // 0 = APP_NONE
-                Serial.print(F("ERROR: Unknown application '"));
-                Serial.print(appStr);
-                Serial.println(F("'"));
-                Serial.println(F("  Hint: Use 'LIST APPLICATIONS' to see valid options"));
+                msg.control.print(F("ERROR: Unknown application '"));
+                msg.control.print(appStr);
+                msg.control.println(F("'"));
+                msg.control.println(F("  Hint: Use 'LIST APPLICATIONS' to see valid options"));
                 return;
             }
             if (setInputApplication(pin, appIndex)) {
-                Serial.print(F("Input "));
-                Serial.print(pinStr);
-                Serial.print(F(" configured as "));
-                Serial.println(appStr);
+                msg.control.print(F("Input "));
+                msg.control.print(pinStr);
+                msg.control.print(F(" configured as "));
+                msg.control.println(appStr);
             }
             return;
         }
@@ -675,17 +685,17 @@ void handleSerialCommand(char* cmd) {
             trim(sensorStr);
             uint8_t sensorIndex = parseSensor(sensorStr);
             if (sensorIndex == 0) {  // 0 = SENSOR_NONE
-                Serial.print(F("ERROR: Unknown sensor '"));
-                Serial.print(sensorStr);
-                Serial.println(F("'"));
-                Serial.println(F("  Hint: Use 'LIST SENSORS' to see valid options"));
+                msg.control.print(F("ERROR: Unknown sensor '"));
+                msg.control.print(sensorStr);
+                msg.control.println(F("'"));
+                msg.control.println(F("  Hint: Use 'LIST SENSORS' to see valid options"));
                 return;
             }
             if (setInputSensor(pin, sensorIndex)) {
-                Serial.print(F("Input "));
-                Serial.print(pinStr);
-                Serial.print(F(" sensor set to "));
-                Serial.println(sensorStr);
+                msg.control.print(F("Input "));
+                msg.control.print(pinStr);
+                msg.control.print(F(" sensor set to "));
+                msg.control.println(sensorStr);
             }
             return;
         }
@@ -695,10 +705,10 @@ void handleSerialCommand(char* cmd) {
             char* name = fieldAndValue + 5;
             trim(name);
             if (setInputName(pin, name)) {
-                Serial.print(F("Input "));
-                Serial.print(pinStr);
-                Serial.print(F(" name set to "));
-                Serial.println(name);
+                msg.control.print(F("Input "));
+                msg.control.print(pinStr);
+                msg.control.print(F(" name set to "));
+                msg.control.println(name);
             }
             return;
         }
@@ -708,10 +718,10 @@ void handleSerialCommand(char* cmd) {
             char* name = fieldAndValue + 13;
             trim(name);
             if (setInputDisplayName(pin, name)) {
-                Serial.print(F("Input "));
-                Serial.print(pinStr);
-                Serial.print(F(" display name set to "));
-                Serial.println(name);
+                msg.control.print(F("Input "));
+                msg.control.print(pinStr);
+                msg.control.print(F(" display name set to "));
+                msg.control.println(name);
             }
             return;
         }
@@ -722,10 +732,10 @@ void handleSerialCommand(char* cmd) {
             trim(unitsStr);
             uint8_t unitsIndex = parseUnits(unitsStr);
             if (setInputUnits(pin, unitsIndex)) {
-                Serial.print(F("Input "));
-                Serial.print(pinStr);
-                Serial.print(F(" units set to "));
-                Serial.println(unitsStr);
+                msg.control.print(F("Input "));
+                msg.control.print(pinStr);
+                msg.control.print(F(" units set to "));
+                msg.control.println(unitsStr);
             }
             return;
         }
@@ -733,9 +743,9 @@ void handleSerialCommand(char* cmd) {
         // SET <pin> ALARM ENABLE
         if (strncmp(fieldAndValue, "ALARM ENABLE", 12) == 0) {
             if (enableInputAlarm(pin, true)) {
-                Serial.print(F("Input "));
-                Serial.print(pinStr);
-                Serial.println(F(" alarm enabled"));
+                msg.control.print(F("Input "));
+                msg.control.print(pinStr);
+                msg.control.println(F(" alarm enabled"));
             }
             return;
         }
@@ -743,9 +753,9 @@ void handleSerialCommand(char* cmd) {
         // SET <pin> ALARM DISABLE
         if (strncmp(fieldAndValue, "ALARM DISABLE", 13) == 0) {
             if (enableInputAlarm(pin, false)) {
-                Serial.print(F("Input "));
-                Serial.print(pinStr);
-                Serial.println(F(" alarm disabled"));
+                msg.control.print(F("Input "));
+                msg.control.print(pinStr);
+                msg.control.println(F(" alarm disabled"));
             }
             return;
         }
@@ -756,19 +766,19 @@ void handleSerialCommand(char* cmd) {
             trim(values);
             char* spacePos = strchr(values, ' ');
             if (!spacePos) {
-                Serial.println(F("ERROR: ALARM requires min and max values"));
+                msg.control.println(F("ERROR: ALARM requires min and max values"));
                 return;
             }
             *spacePos = '\0';
             float minVal = atof(values);
             float maxVal = atof(spacePos + 1);
             if (setInputAlarmRange(pin, minVal, maxVal)) {
-                Serial.print(F("Input "));
-                Serial.print(pinStr);
-                Serial.print(F(" alarm range set to "));
-                Serial.print(minVal);
-                Serial.print(F(" - "));
-                Serial.println(maxVal);
+                msg.control.print(F("Input "));
+                msg.control.print(pinStr);
+                msg.control.print(F(" alarm range set to "));
+                msg.control.print(minVal);
+                msg.control.print(F(" - "));
+                msg.control.println(maxVal);
             }
             return;
         }
@@ -778,7 +788,7 @@ void handleSerialCommand(char* cmd) {
         if (strncmp(fieldAndValue, "CALIBRATION PRESET", 18) == 0) {
             Input* input = getInputByPin(pin);
             if (!input) {
-                Serial.println(F("ERROR: Input not configured"));
+                msg.control.println(F("ERROR: Input not configured"));
                 return;
             }
 
@@ -786,9 +796,9 @@ void handleSerialCommand(char* cmd) {
             input->flags.useCustomCalibration = false;
             memset(&input->customCalibration, 0, sizeof(CalibrationOverride));
 
-            Serial.print(F("Cleared custom calibration for pin "));
-            Serial.println(pinStr);
-            Serial.println(F("Using preset calibration from sensor library"));
+            msg.control.print(F("Cleared custom calibration for pin "));
+            msg.control.println(pinStr);
+            msg.control.println(F("Using preset calibration from sensor library"));
             return;
         }
 
@@ -811,11 +821,11 @@ void handleSerialCommand(char* cmd) {
             }
 
             if (tokenCount != 5 && tokenCount != 6) {
-                Serial.println(F("ERROR: RPM requires 5 or 6 parameters"));
-                Serial.println(F("  Usage: SET <pin> RPM <poles> <ratio> <timeout> <min> <max>"));
-                Serial.println(F("     or: SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>"));
-                Serial.println(F("  Example: SET 5 RPM 12 3.0 2000 100 8000"));
-                Serial.println(F("       or: SET 5 RPM 12 3.0 1.02 2000 100 8000"));
+                msg.control.println(F("ERROR: RPM requires 5 or 6 parameters"));
+                msg.control.println(F("  Usage: SET <pin> RPM <poles> <ratio> <timeout> <min> <max>"));
+                msg.control.println(F("     or: SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>"));
+                msg.control.println(F("  Example: SET 5 RPM 12 3.0 2000 100 8000"));
+                msg.control.println(F("       or: SET 5 RPM 12 3.0 1.02 2000 100 8000"));
                 return;
             }
 
@@ -828,58 +838,58 @@ void handleSerialCommand(char* cmd) {
             uint16_t max_rpm;
 
             token = strtok(params, " ");
-            if (!token) { Serial.println(F("ERROR: Missing poles")); return; }
+            if (!token) { msg.control.println(F("ERROR: Missing poles")); return; }
             poles = (byte)atoi(token);
 
             token = strtok(nullptr, " ");
-            if (!token) { Serial.println(F("ERROR: Missing pulley_ratio")); return; }
+            if (!token) { msg.control.println(F("ERROR: Missing pulley_ratio")); return; }
             pulley_ratio = atof(token);
 
             if (tokenCount == 6) {
                 // 6 parameters: custom calibration_mult provided
                 token = strtok(nullptr, " ");
-                if (!token) { Serial.println(F("ERROR: Missing calibration_mult")); return; }
+                if (!token) { msg.control.println(F("ERROR: Missing calibration_mult")); return; }
                 calibration_mult = atof(token);
             }
 
             token = strtok(nullptr, " ");
-            if (!token) { Serial.println(F("ERROR: Missing timeout_ms")); return; }
+            if (!token) { msg.control.println(F("ERROR: Missing timeout_ms")); return; }
             timeout_ms = (uint16_t)atoi(token);
 
             token = strtok(nullptr, " ");
-            if (!token) { Serial.println(F("ERROR: Missing min_rpm")); return; }
+            if (!token) { msg.control.println(F("ERROR: Missing min_rpm")); return; }
             min_rpm = (uint16_t)atoi(token);
 
             token = strtok(nullptr, " ");
-            if (!token) { Serial.println(F("ERROR: Missing max_rpm")); return; }
+            if (!token) { msg.control.println(F("ERROR: Missing max_rpm")); return; }
             max_rpm = (uint16_t)atoi(token);
 
             // Validate parameters
             if (poles < 2 || poles > 32) {
-                Serial.println(F("ERROR: Poles must be between 2 and 32"));
+                msg.control.println(F("ERROR: Poles must be between 2 and 32"));
                 return;
             }
             if (pulley_ratio < 0.5 || pulley_ratio > 10.0) {
-                Serial.println(F("ERROR: Pulley ratio must be between 0.5 and 10.0"));
+                msg.control.println(F("ERROR: Pulley ratio must be between 0.5 and 10.0"));
                 return;
             }
             if (calibration_mult < 0.5 || calibration_mult > 2.0) {
-                Serial.println(F("ERROR: Calibration multiplier must be between 0.5 and 2.0"));
+                msg.control.println(F("ERROR: Calibration multiplier must be between 0.5 and 2.0"));
                 return;
             }
             if (timeout_ms < 100 || timeout_ms > 10000) {
-                Serial.println(F("ERROR: Timeout must be between 100 and 10000 ms"));
+                msg.control.println(F("ERROR: Timeout must be between 100 and 10000 ms"));
                 return;
             }
             if (min_rpm >= max_rpm) {
-                Serial.println(F("ERROR: min_rpm must be less than max_rpm"));
+                msg.control.println(F("ERROR: min_rpm must be less than max_rpm"));
                 return;
             }
 
             // Apply custom calibration
             Input* input = getInputByPin(pin);
             if (!input) {
-                Serial.println(F("ERROR: Input not configured"));
+                msg.control.println(F("ERROR: Input not configured"));
                 return;
             }
 
@@ -892,27 +902,27 @@ void handleSerialCommand(char* cmd) {
             input->customCalibration.rpm.min_rpm = min_rpm;
             input->customCalibration.rpm.max_rpm = max_rpm;
 
-            Serial.print(F("RPM calibration set for pin "));
-            Serial.println(pinStr);
-            Serial.print(F("  Poles: "));
-            Serial.println(poles);
-            Serial.print(F("  Pulley Ratio: "));
-            Serial.print(pulley_ratio, 2);
-            Serial.println(F(":1"));
-            Serial.print(F("  Calibration Mult: "));
-            Serial.println(calibration_mult, 4);
-            Serial.print(F("  Timeout: "));
-            Serial.print(timeout_ms);
-            Serial.println(F(" ms"));
-            Serial.print(F("  Valid Range: "));
-            Serial.print(min_rpm);
-            Serial.print(F("-"));
-            Serial.print(max_rpm);
-            Serial.println(F(" RPM"));
+            msg.control.print(F("RPM calibration set for pin "));
+            msg.control.println(pinStr);
+            msg.control.print(F("  Poles: "));
+            msg.control.println(poles);
+            msg.control.print(F("  Pulley Ratio: "));
+            msg.control.print(pulley_ratio, 2);
+            msg.control.println(F(":1"));
+            msg.control.print(F("  Calibration Mult: "));
+            msg.control.println(calibration_mult, 4);
+            msg.control.print(F("  Timeout: "));
+            msg.control.print(timeout_ms);
+            msg.control.println(F(" ms"));
+            msg.control.print(F("  Valid Range: "));
+            msg.control.print(min_rpm);
+            msg.control.print(F("-"));
+            msg.control.print(max_rpm);
+            msg.control.println(F(" RPM"));
             float effective_ppr = (poles / 2.0) * pulley_ratio * calibration_mult;
-            Serial.print(F("  Effective: "));
-            Serial.print(effective_ppr, 2);
-            Serial.println(F(" pulses/engine-rev"));
+            msg.control.print(F("  Effective: "));
+            msg.control.print(effective_ppr, 2);
+            msg.control.println(F(" pulses/engine-rev"));
             return;
         }
 
@@ -925,58 +935,58 @@ void handleSerialCommand(char* cmd) {
             float vmin, vmax, pmin, pmax;
             char* token = strtok(params, " ");
             if (!token) {
-                Serial.println(F("ERROR: PRESSURE_LINEAR requires 4 parameters"));
-                Serial.println(F("  Usage: SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>"));
-                Serial.println(F("  Example: SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 7.0"));
+                msg.control.println(F("ERROR: PRESSURE_LINEAR requires 4 parameters"));
+                msg.control.println(F("  Usage: SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>"));
+                msg.control.println(F("  Example: SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 7.0"));
                 return;
             }
             vmin = atof(token);
 
             token = strtok(nullptr, " ");
             if (!token) {
-                Serial.println(F("ERROR: PRESSURE_LINEAR requires 4 parameters"));
+                msg.control.println(F("ERROR: PRESSURE_LINEAR requires 4 parameters"));
                 return;
             }
             vmax = atof(token);
 
             token = strtok(nullptr, " ");
             if (!token) {
-                Serial.println(F("ERROR: PRESSURE_LINEAR requires 4 parameters"));
+                msg.control.println(F("ERROR: PRESSURE_LINEAR requires 4 parameters"));
                 return;
             }
             pmin = atof(token);
 
             token = strtok(nullptr, " ");
             if (!token) {
-                Serial.println(F("ERROR: PRESSURE_LINEAR requires 4 parameters"));
+                msg.control.println(F("ERROR: PRESSURE_LINEAR requires 4 parameters"));
                 return;
             }
             pmax = atof(token);
 
             // Validate parameters
             if (vmin >= vmax) {
-                Serial.println(F("ERROR: vmin must be less than vmax"));
+                msg.control.println(F("ERROR: vmin must be less than vmax"));
                 return;
             }
             if (vmin < 0.0 || vmax > SYSTEM_VOLTAGE) {
-                Serial.print(F("ERROR: Voltage range must be 0.0-"));
-                Serial.print(SYSTEM_VOLTAGE);
-                Serial.println(F("V for this platform"));
+                msg.control.print(F("ERROR: Voltage range must be 0.0-"));
+                msg.control.print(SYSTEM_VOLTAGE);
+                msg.control.println(F("V for this platform"));
                 return;
             }
             if (pmin >= pmax) {
-                Serial.println(F("ERROR: pmin must be less than pmax"));
+                msg.control.println(F("ERROR: pmin must be less than pmax"));
                 return;
             }
             if (pmin < 0.0) {
-                Serial.println(F("ERROR: pmin must be >= 0.0"));
+                msg.control.println(F("ERROR: pmin must be >= 0.0"));
                 return;
             }
 
             // Get input and apply calibration
             Input* input = getInputByPin(pin);
             if (!input || !input->flags.isEnabled) {
-                Serial.println(F("ERROR: Input not configured"));
+                msg.control.println(F("ERROR: Input not configured"));
                 return;
             }
 
@@ -987,18 +997,18 @@ void handleSerialCommand(char* cmd) {
             input->customCalibration.pressureLinear.output_min = pmin;
             input->customCalibration.pressureLinear.output_max = pmax;
 
-            Serial.print(F("Pressure Linear calibration set for pin "));
-            Serial.println(pinStr);
-            Serial.print(F("  Voltage Range: "));
-            Serial.print(vmin, 2);
-            Serial.print(F("-"));
-            Serial.print(vmax, 2);
-            Serial.println(F(" V"));
-            Serial.print(F("  Pressure Range: "));
-            Serial.print(pmin, 2);
-            Serial.print(F("-"));
-            Serial.print(pmax, 2);
-            Serial.println(F(" bar"));
+            msg.control.print(F("Pressure Linear calibration set for pin "));
+            msg.control.println(pinStr);
+            msg.control.print(F("  Voltage Range: "));
+            msg.control.print(vmin, 2);
+            msg.control.print(F("-"));
+            msg.control.print(vmax, 2);
+            msg.control.println(F(" V"));
+            msg.control.print(F("  Pressure Range: "));
+            msg.control.print(pmin, 2);
+            msg.control.print(F("-"));
+            msg.control.print(pmax, 2);
+            msg.control.println(F(" bar"));
             return;
         }
 
@@ -1012,7 +1022,7 @@ void handleSerialCommand(char* cmd) {
             // Get input
             Input* input = getInputByPin(pin);
             if (!input || !input->flags.isEnabled) {
-                Serial.println(F("ERROR: Input not configured"));
+                msg.control.println(F("ERROR: Input not configured"));
                 return;
             }
 
@@ -1021,10 +1031,10 @@ void handleSerialCommand(char* cmd) {
                 input->calibrationType != CAL_THERMISTOR_LOOKUP &&
                 input->calibrationType != CAL_THERMISTOR_BETA &&
                 input->calibrationType != CAL_PRESSURE_POLYNOMIAL) {
-                Serial.print(F("ERROR: Calibration type "));
-                Serial.print(input->calibrationType);
-                Serial.println(F(" does not use bias resistor"));
-                Serial.println(F("  BIAS works with: Thermistor (Steinhart-Hart), Thermistor (Beta), Thermistor (Lookup), Pressure (Polynomial)"));
+                msg.control.print(F("ERROR: Calibration type "));
+                msg.control.print(input->calibrationType);
+                msg.control.println(F(" does not use bias resistor"));
+                msg.control.println(F("  BIAS works with: Thermistor (Steinhart-Hart), Thermistor (Beta), Thermistor (Lookup), Pressure (Polynomial)"));
                 return;
             }
 
@@ -1032,9 +1042,9 @@ void handleSerialCommand(char* cmd) {
             #define BIAS_R_MIN 10.0
             #define BIAS_R_MAX 10000000.0
             if (bias < BIAS_R_MIN || bias > BIAS_R_MAX) {
-                Serial.print(F("ERROR: Bias resistor ("));
-                Serial.print(bias, 1);
-                Serial.println(F("Ω) must be between 10Ω and 10MΩ"));
+                msg.control.print(F("ERROR: Bias resistor ("));
+                msg.control.print(bias, 1);
+                msg.control.println(F("Ω) must be between 10Ω and 10MΩ"));
                 return;
             }
 
@@ -1051,11 +1061,11 @@ void handleSerialCommand(char* cmd) {
                 input->customCalibration.pressurePolynomial.bias_resistor = bias;
             }
 
-            Serial.print(F("Bias resistor set for pin "));
-            Serial.print(pinStr);
-            Serial.print(F(": "));
-            Serial.print(bias, 1);
-            Serial.println(F(" Ω"));
+            msg.control.print(F("Bias resistor set for pin "));
+            msg.control.print(pinStr);
+            msg.control.print(F(": "));
+            msg.control.print(bias, 1);
+            msg.control.println(F(" Ω"));
             return;
         }
 
@@ -1068,47 +1078,47 @@ void handleSerialCommand(char* cmd) {
             float bias_r, a, b, c;
             char* token = strtok(params, " ");
             if (!token) {
-                Serial.println(F("ERROR: STEINHART requires 4 parameters"));
-                Serial.println(F("  Usage: SET <pin> STEINHART <bias_r> <a> <b> <c>"));
-                Serial.println(F("  Example: SET A0 STEINHART 10000 0.001129 0.0002341 0.00000008775"));
+                msg.control.println(F("ERROR: STEINHART requires 4 parameters"));
+                msg.control.println(F("  Usage: SET <pin> STEINHART <bias_r> <a> <b> <c>"));
+                msg.control.println(F("  Example: SET A0 STEINHART 10000 0.001129 0.0002341 0.00000008775"));
                 return;
             }
             bias_r = atof(token);
 
             token = strtok(nullptr, " ");
             if (!token) {
-                Serial.println(F("ERROR: STEINHART requires 4 parameters"));
+                msg.control.println(F("ERROR: STEINHART requires 4 parameters"));
                 return;
             }
             a = atof(token);
 
             token = strtok(nullptr, " ");
             if (!token) {
-                Serial.println(F("ERROR: STEINHART requires 4 parameters"));
+                msg.control.println(F("ERROR: STEINHART requires 4 parameters"));
                 return;
             }
             b = atof(token);
 
             token = strtok(nullptr, " ");
             if (!token) {
-                Serial.println(F("ERROR: STEINHART requires 4 parameters"));
+                msg.control.println(F("ERROR: STEINHART requires 4 parameters"));
                 return;
             }
             c = atof(token);
 
             // Validate parameters
             if (bias_r <= 0) {
-                Serial.println(F("ERROR: bias_r must be > 0"));
+                msg.control.println(F("ERROR: bias_r must be > 0"));
                 return;
             }
             if (a == 0 || b == 0 || c == 0) {
-                Serial.println(F("WARNING: Zero coefficient detected - may indicate error"));
+                msg.control.println(F("WARNING: Zero coefficient detected - may indicate error"));
             }
 
             // Get input and apply calibration
             Input* input = getInputByPin(pin);
             if (!input || !input->flags.isEnabled) {
-                Serial.println(F("ERROR: Input not configured"));
+                msg.control.println(F("ERROR: Input not configured"));
                 return;
             }
 
@@ -1119,17 +1129,17 @@ void handleSerialCommand(char* cmd) {
             input->customCalibration.steinhart.steinhart_b = b;
             input->customCalibration.steinhart.steinhart_c = c;
 
-            Serial.print(F("Steinhart-Hart calibration set for pin "));
-            Serial.println(pinStr);
-            Serial.print(F("  Bias Resistor: "));
-            Serial.print(bias_r, 1);
-            Serial.println(F(" Ω"));
-            Serial.print(F("  A: "));
-            Serial.println(a, 10);
-            Serial.print(F("  B: "));
-            Serial.println(b, 10);
-            Serial.print(F("  C: "));
-            Serial.println(c, 10);
+            msg.control.print(F("Steinhart-Hart calibration set for pin "));
+            msg.control.println(pinStr);
+            msg.control.print(F("  Bias Resistor: "));
+            msg.control.print(bias_r, 1);
+            msg.control.println(F(" Ω"));
+            msg.control.print(F("  A: "));
+            msg.control.println(a, 10);
+            msg.control.print(F("  B: "));
+            msg.control.println(b, 10);
+            msg.control.print(F("  C: "));
+            msg.control.println(c, 10);
             return;
         }
 
@@ -1142,56 +1152,56 @@ void handleSerialCommand(char* cmd) {
             float bias_r, beta, r0, t0;
             char* token = strtok(params, " ");
             if (!token) {
-                Serial.println(F("ERROR: BETA requires 4 parameters"));
-                Serial.println(F("  Usage: SET <pin> BETA <bias_r> <beta> <r0> <t0>"));
-                Serial.println(F("  Example: SET A0 BETA 10000 3950 10000 25"));
-                Serial.println(F("  Where: bias_r=bias resistor (Ω), beta=β coefficient (K),"));
-                Serial.println(F("         r0=ref resistance (Ω), t0=ref temp (°C, typically 25)"));
+                msg.control.println(F("ERROR: BETA requires 4 parameters"));
+                msg.control.println(F("  Usage: SET <pin> BETA <bias_r> <beta> <r0> <t0>"));
+                msg.control.println(F("  Example: SET A0 BETA 10000 3950 10000 25"));
+                msg.control.println(F("  Where: bias_r=bias resistor (Ω), beta=β coefficient (K),"));
+                msg.control.println(F("         r0=ref resistance (Ω), t0=ref temp (°C, typically 25)"));
                 return;
             }
             bias_r = atof(token);
 
             token = strtok(nullptr, " ");
             if (!token) {
-                Serial.println(F("ERROR: BETA requires 4 parameters"));
+                msg.control.println(F("ERROR: BETA requires 4 parameters"));
                 return;
             }
             beta = atof(token);
 
             token = strtok(nullptr, " ");
             if (!token) {
-                Serial.println(F("ERROR: BETA requires 4 parameters"));
+                msg.control.println(F("ERROR: BETA requires 4 parameters"));
                 return;
             }
             r0 = atof(token);
 
             token = strtok(nullptr, " ");
             if (!token) {
-                Serial.println(F("ERROR: BETA requires 4 parameters"));
+                msg.control.println(F("ERROR: BETA requires 4 parameters"));
                 return;
             }
             t0 = atof(token);
 
             // Validate parameters
             if (bias_r <= 0) {
-                Serial.println(F("ERROR: bias_r must be > 0"));
+                msg.control.println(F("ERROR: bias_r must be > 0"));
                 return;
             }
             if (beta < 1000 || beta > 10000) {
-                Serial.println(F("WARNING: Beta typically 2000-6000K. Value may be incorrect."));
+                msg.control.println(F("WARNING: Beta typically 2000-6000K. Value may be incorrect."));
             }
             if (r0 <= 0) {
-                Serial.println(F("ERROR: r0 must be > 0"));
+                msg.control.println(F("ERROR: r0 must be > 0"));
                 return;
             }
             if (t0 < -40 || t0 > 150) {
-                Serial.println(F("WARNING: t0 typically 25°C. Value may be incorrect."));
+                msg.control.println(F("WARNING: t0 typically 25°C. Value may be incorrect."));
             }
 
             // Get input and apply calibration
             Input* input = getInputByPin(pin);
             if (!input || !input->flags.isEnabled) {
-                Serial.println(F("ERROR: Input not configured"));
+                msg.control.println(F("ERROR: Input not configured"));
                 return;
             }
 
@@ -1203,20 +1213,20 @@ void handleSerialCommand(char* cmd) {
             input->customCalibration.beta.r0 = r0;
             input->customCalibration.beta.t0 = t0;
 
-            Serial.print(F("Beta calibration set for pin "));
-            Serial.println(pinStr);
-            Serial.print(F("  Bias Resistor: "));
-            Serial.print(bias_r, 1);
-            Serial.println(F(" Ω"));
-            Serial.print(F("  Beta: "));
-            Serial.print(beta, 1);
-            Serial.println(F(" K"));
-            Serial.print(F("  R0: "));
-            Serial.print(r0, 1);
-            Serial.println(F(" Ω"));
-            Serial.print(F("  T0: "));
-            Serial.print(t0, 1);
-            Serial.println(F(" °C"));
+            msg.control.print(F("Beta calibration set for pin "));
+            msg.control.println(pinStr);
+            msg.control.print(F("  Bias Resistor: "));
+            msg.control.print(bias_r, 1);
+            msg.control.println(F(" Ω"));
+            msg.control.print(F("  Beta: "));
+            msg.control.print(beta, 1);
+            msg.control.println(F(" K"));
+            msg.control.print(F("  R0: "));
+            msg.control.print(r0, 1);
+            msg.control.println(F(" Ω"));
+            msg.control.print(F("  T0: "));
+            msg.control.print(t0, 1);
+            msg.control.println(F(" °C"));
             return;
         }
 
@@ -1229,44 +1239,44 @@ void handleSerialCommand(char* cmd) {
             float bias_r, a, b, c;
             char* token = strtok(params, " ");
             if (!token) {
-                Serial.println(F("ERROR: PRESSURE_POLY requires 4 parameters"));
-                Serial.println(F("  Usage: SET <pin> PRESSURE_POLY <bias_r> <a> <b> <c>"));
-                Serial.println(F("  Example: SET A1 PRESSURE_POLY 184 -6.75e-4 2.54e-6 1.87e-9"));
+                msg.control.println(F("ERROR: PRESSURE_POLY requires 4 parameters"));
+                msg.control.println(F("  Usage: SET <pin> PRESSURE_POLY <bias_r> <a> <b> <c>"));
+                msg.control.println(F("  Example: SET A1 PRESSURE_POLY 184 -6.75e-4 2.54e-6 1.87e-9"));
                 return;
             }
             bias_r = atof(token);
 
             token = strtok(nullptr, " ");
             if (!token) {
-                Serial.println(F("ERROR: PRESSURE_POLY requires 4 parameters"));
+                msg.control.println(F("ERROR: PRESSURE_POLY requires 4 parameters"));
                 return;
             }
             a = atof(token);
 
             token = strtok(nullptr, " ");
             if (!token) {
-                Serial.println(F("ERROR: PRESSURE_POLY requires 4 parameters"));
+                msg.control.println(F("ERROR: PRESSURE_POLY requires 4 parameters"));
                 return;
             }
             b = atof(token);
 
             token = strtok(nullptr, " ");
             if (!token) {
-                Serial.println(F("ERROR: PRESSURE_POLY requires 4 parameters"));
+                msg.control.println(F("ERROR: PRESSURE_POLY requires 4 parameters"));
                 return;
             }
             c = atof(token);
 
             // Validate parameters
             if (bias_r <= 0) {
-                Serial.println(F("ERROR: bias_r must be > 0"));
+                msg.control.println(F("ERROR: bias_r must be > 0"));
                 return;
             }
 
             // Get input and apply calibration
             Input* input = getInputByPin(pin);
             if (!input || !input->flags.isEnabled) {
-                Serial.println(F("ERROR: Input not configured"));
+                msg.control.println(F("ERROR: Input not configured"));
                 return;
             }
 
@@ -1277,17 +1287,17 @@ void handleSerialCommand(char* cmd) {
             input->customCalibration.pressurePolynomial.poly_b = b;
             input->customCalibration.pressurePolynomial.poly_c = c;
 
-            Serial.print(F("Pressure Polynomial calibration set for pin "));
-            Serial.println(pinStr);
-            Serial.print(F("  Bias Resistor: "));
-            Serial.print(bias_r, 1);
-            Serial.println(F(" Ω"));
-            Serial.print(F("  A: "));
-            Serial.println(a, 10);
-            Serial.print(F("  B: "));
-            Serial.println(b, 10);
-            Serial.print(F("  C: "));
-            Serial.println(c, 10);
+            msg.control.print(F("Pressure Polynomial calibration set for pin "));
+            msg.control.println(pinStr);
+            msg.control.print(F("  Bias Resistor: "));
+            msg.control.print(bias_r, 1);
+            msg.control.println(F(" Ω"));
+            msg.control.print(F("  A: "));
+            msg.control.println(a, 10);
+            msg.control.print(F("  B: "));
+            msg.control.println(b, 10);
+            msg.control.print(F("  C: "));
+            msg.control.println(c, 10);
             return;
         }
 
@@ -1297,15 +1307,15 @@ void handleSerialCommand(char* cmd) {
             trim(valueStr);
             uint16_t value = atoi(valueStr);
             if (value > 300000) {  // Max 5 minutes
-                Serial.println(F("ERROR: Warmup time must be 0-300000ms"));
+                msg.control.println(F("ERROR: Warmup time must be 0-300000ms"));
                 return;
             }
             if (setInputAlarmWarmup(pin, value)) {
-                Serial.print(F("Input "));
-                Serial.print(pinStr);
-                Serial.print(F(" alarm warmup set to "));
-                Serial.print(value);
-                Serial.println(F("ms"));
+                msg.control.print(F("Input "));
+                msg.control.print(pinStr);
+                msg.control.print(F(" alarm warmup set to "));
+                msg.control.print(value);
+                msg.control.println(F("ms"));
             }
             return;
         }
@@ -1316,20 +1326,20 @@ void handleSerialCommand(char* cmd) {
             trim(valueStr);
             uint16_t value = atoi(valueStr);
             if (value > 60000) {  // Max 60 seconds
-                Serial.println(F("ERROR: Persistence time must be 0-60000ms"));
+                msg.control.println(F("ERROR: Persistence time must be 0-60000ms"));
                 return;
             }
             if (setInputAlarmPersist(pin, value)) {
-                Serial.print(F("Input "));
-                Serial.print(pinStr);
-                Serial.print(F(" alarm persistence set to "));
-                Serial.print(value);
-                Serial.println(F("ms"));
+                msg.control.print(F("Input "));
+                msg.control.print(pinStr);
+                msg.control.print(F(" alarm persistence set to "));
+                msg.control.print(value);
+                msg.control.println(F("ms"));
             }
             return;
         }
 
-        Serial.println(F("ERROR: Unknown SET field"));
+        msg.control.println(F("ERROR: Unknown SET field"));
         return;
     }
 
@@ -1342,9 +1352,9 @@ void handleSerialCommand(char* cmd) {
         uint8_t pin = parsePin(pinStr, &pinValid);
         if (!pinValid) return;
         if (enableInput(pin, true)) {
-            Serial.print(F("Input "));
-            Serial.print(pinStr);
-            Serial.println(F(" enabled"));
+            msg.control.print(F("Input "));
+            msg.control.print(pinStr);
+            msg.control.println(F(" enabled"));
         }
         return;
     }
@@ -1356,9 +1366,9 @@ void handleSerialCommand(char* cmd) {
         uint8_t pin = parsePin(pinStr, &pinValid);
         if (!pinValid) return;
         if (enableInput(pin, false)) {
-            Serial.print(F("Input "));
-            Serial.print(pinStr);
-            Serial.println(F(" disabled"));
+            msg.control.print(F("Input "));
+            msg.control.print(pinStr);
+            msg.control.println(F(" disabled"));
         }
         return;
     }
@@ -1371,9 +1381,9 @@ void handleSerialCommand(char* cmd) {
         uint8_t pin = parsePin(pinStr, &pinValid);
         if (!pinValid) return;
         if (clearInput(pin)) {
-            Serial.print(F("Input "));
-            Serial.print(pinStr);
-            Serial.println(F(" cleared"));
+            msg.control.print(F("Input "));
+            msg.control.print(pinStr);
+            msg.control.println(F(" cleared"));
         }
         return;
     }
@@ -1392,8 +1402,8 @@ void handleSerialCommand(char* cmd) {
         // Parse: OUTPUT <name> <action> [value]
         char* firstSpace = strchr(rest, ' ');
         if (!firstSpace) {
-            Serial.println(F("ERROR: Invalid OUTPUT syntax"));
-            Serial.println(F("  Usage: OUTPUT <name> <ENABLE|DISABLE|INTERVAL> [ms]"));
+            msg.control.println(F("ERROR: Invalid OUTPUT syntax"));
+            msg.control.println(F("  Usage: OUTPUT <name> <ENABLE|DISABLE|INTERVAL> [ms]"));
             return;
         }
 
@@ -1404,18 +1414,18 @@ void handleSerialCommand(char* cmd) {
 
         OutputModule* output = getOutputByName(outputName);
         if (!output) {
-            Serial.print(F("ERROR: Unknown output '"));
-            Serial.print(outputName);
-            Serial.println(F("'"));
-            Serial.println(F("  Hint: Use 'OUTPUT LIST' to see available outputs"));
+            msg.control.print(F("ERROR: Unknown output '"));
+            msg.control.print(outputName);
+            msg.control.println(F("'"));
+            msg.control.println(F("  Hint: Use 'OUTPUT LIST' to see available outputs"));
             return;
         }
 
         // OUTPUT <name> ENABLE
         if (streq(action, "ENABLE")) {
             if (setOutputEnabled(outputName, true)) {
-                Serial.print(output->name);
-                Serial.println(F(" output enabled"));
+                msg.control.print(output->name);
+                msg.control.println(F(" output enabled"));
             }
             return;
         }
@@ -1423,8 +1433,8 @@ void handleSerialCommand(char* cmd) {
         // OUTPUT <name> DISABLE
         if (streq(action, "DISABLE")) {
             if (setOutputEnabled(outputName, false)) {
-                Serial.print(output->name);
-                Serial.println(F(" output disabled"));
+                msg.control.print(output->name);
+                msg.control.println(F(" output disabled"));
             }
             return;
         }
@@ -1436,21 +1446,21 @@ void handleSerialCommand(char* cmd) {
             uint16_t interval = atoi(intervalStr);
 
             if (interval < 10 || interval > 60000) {
-                Serial.println(F("ERROR: Interval must be 10-60000ms"));
+                msg.control.println(F("ERROR: Interval must be 10-60000ms"));
                 return;
             }
 
             if (setOutputInterval(outputName, interval)) {
-                Serial.print(output->name);
-                Serial.print(F(" interval set to "));
-                Serial.print(interval);
-                Serial.println(F("ms"));
+                msg.control.print(output->name);
+                msg.control.print(F(" interval set to "));
+                msg.control.print(interval);
+                msg.control.println(F("ms"));
             }
             return;
         }
 
-        Serial.println(F("ERROR: Unknown OUTPUT action"));
-        Serial.println(F("  Valid actions: ENABLE, DISABLE, INTERVAL <ms>"));
+        msg.control.println(F("ERROR: Unknown OUTPUT action"));
+        msg.control.println(F("  Valid actions: ENABLE, DISABLE, INTERVAL <ms>"));
         return;
     }
 
@@ -1461,24 +1471,24 @@ void handleSerialCommand(char* cmd) {
 
         // DISPLAY STATUS
         if (streq(rest, "STATUS")) {
-            Serial.println(F("=== Display Configuration ==="));
-            Serial.print(F("Status: "));
-            Serial.println(systemConfig.displayEnabled ? F("Enabled") : F("Disabled"));
-            Serial.print(F("Type: "));
+            msg.control.println(F("=== Display Configuration ==="));
+            msg.control.print(F("Status: "));
+            msg.control.println(systemConfig.displayEnabled ? F("Enabled") : F("Disabled"));
+            msg.control.print(F("Type: "));
             switch (systemConfig.displayType) {
-                case DISPLAY_NONE: Serial.println(F("None")); break;
-                case DISPLAY_LCD: Serial.println(F("LCD")); break;
-                case DISPLAY_OLED: Serial.println(F("OLED")); break;
-                default: Serial.println(F("Unknown")); break;
+                case DISPLAY_NONE: msg.control.println(F("None")); break;
+                case DISPLAY_LCD: msg.control.println(F("LCD")); break;
+                case DISPLAY_OLED: msg.control.println(F("OLED")); break;
+                default: msg.control.println(F("Unknown")); break;
             }
-            Serial.print(F("LCD I2C Address: 0x"));
-            Serial.println(systemConfig.lcdI2CAddress, HEX);
-            Serial.print(F("Temperature Units: "));
-            Serial.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultTempUnits));
-            Serial.print(F("Pressure Units: "));
-            Serial.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultPressUnits));
-            Serial.print(F("Elevation Units: "));
-            Serial.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultElevUnits));
+            msg.control.print(F("LCD I2C Address: 0x"));
+            msg.control.println(systemConfig.lcdI2CAddress, HEX);
+            msg.control.print(F("Temperature Units: "));
+            msg.control.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultTempUnits));
+            msg.control.print(F("Pressure Units: "));
+            msg.control.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultPressUnits));
+            msg.control.print(F("Elevation Units: "));
+            msg.control.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultElevUnits));
             return;
         }
 
@@ -1486,7 +1496,7 @@ void handleSerialCommand(char* cmd) {
         if (streq(rest, "ENABLE")) {
             systemConfig.displayEnabled = 1;    // Update config (for SAVE)
             setDisplayRuntime(true);             // Update runtime immediately
-            Serial.println(F("✓ Display enabled (use SAVE to persist)"));
+            msg.control.println(F("✓ Display enabled (use SAVE to persist)"));
             return;
         }
 
@@ -1494,7 +1504,7 @@ void handleSerialCommand(char* cmd) {
         if (streq(rest, "DISABLE")) {
             systemConfig.displayEnabled = 0;    // Update config (for SAVE)
             setDisplayRuntime(false);            // Update runtime immediately
-            Serial.println(F("✓ Display disabled (use SAVE to persist)"));
+            msg.control.println(F("✓ Display disabled (use SAVE to persist)"));
             return;
         }
 
@@ -1504,15 +1514,15 @@ void handleSerialCommand(char* cmd) {
             trim(typeStr);
             if (streq(typeStr, "LCD")) {
                 systemConfig.displayType = DISPLAY_LCD;
-                Serial.println(F("Display type set to LCD"));
+                msg.control.println(F("Display type set to LCD"));
             } else if (streq(typeStr, "OLED")) {
                 systemConfig.displayType = DISPLAY_OLED;
-                Serial.println(F("Display type set to OLED"));
+                msg.control.println(F("Display type set to OLED"));
             } else if (streq(typeStr, "NONE")) {
                 systemConfig.displayType = DISPLAY_NONE;
-                Serial.println(F("Display disabled"));
+                msg.control.println(F("Display disabled"));
             } else {
-                Serial.println(F("ERROR: Invalid display type. Valid: LCD, OLED, NONE"));
+                msg.control.println(F("ERROR: Invalid display type. Valid: LCD, OLED, NONE"));
             }
             return;
         }
@@ -1526,10 +1536,10 @@ void handleSerialCommand(char* cmd) {
             long addr = strtol(addrStr, &endptr, 16);
             if (addr >= 0x03 && addr <= 0x77) {
                 systemConfig.lcdI2CAddress = (uint8_t)addr;
-                Serial.print(F("LCD I2C address set to 0x"));
-                Serial.println(systemConfig.lcdI2CAddress, HEX);
+                msg.control.print(F("LCD I2C address set to 0x"));
+                msg.control.println(systemConfig.lcdI2CAddress, HEX);
             } else {
-                Serial.println(F("ERROR: Invalid I2C address (valid range: 0x03-0x77)"));
+                msg.control.println(F("ERROR: Invalid I2C address (valid range: 0x03-0x77)"));
             }
             return;
         }
@@ -1542,10 +1552,10 @@ void handleSerialCommand(char* cmd) {
             const UnitsInfo* info = getUnitsByIndex(index);
             if (info && pgm_read_byte(&info->measurementType) == MEASURE_TEMPERATURE) {
                 systemConfig.defaultTempUnits = index;
-                Serial.print(F("Default temperature units set to "));
-                Serial.println((__FlashStringHelper*)getUnitStringByIndex(index));
+                msg.control.print(F("Default temperature units set to "));
+                msg.control.println((__FlashStringHelper*)getUnitStringByIndex(index));
             } else {
-                Serial.println(F("ERROR: Invalid units. Valid: C, F, CELSIUS, FAHRENHEIT"));
+                msg.control.println(F("ERROR: Invalid units. Valid: C, F, CELSIUS, FAHRENHEIT"));
             }
             return;
         }
@@ -1558,10 +1568,10 @@ void handleSerialCommand(char* cmd) {
             const UnitsInfo* info = getUnitsByIndex(index);
             if (info && pgm_read_byte(&info->measurementType) == MEASURE_PRESSURE) {
                 systemConfig.defaultPressUnits = index;
-                Serial.print(F("Default pressure units set to "));
-                Serial.println((__FlashStringHelper*)getUnitStringByIndex(index));
+                msg.control.print(F("Default pressure units set to "));
+                msg.control.println((__FlashStringHelper*)getUnitStringByIndex(index));
             } else {
-                Serial.println(F("ERROR: Invalid units. Valid: BAR, PSI, KPA, INHG"));
+                msg.control.println(F("ERROR: Invalid units. Valid: BAR, PSI, KPA, INHG"));
             }
             return;
         }
@@ -1574,24 +1584,24 @@ void handleSerialCommand(char* cmd) {
             const UnitsInfo* info = getUnitsByIndex(index);
             if (info && pgm_read_byte(&info->measurementType) == MEASURE_ELEVATION) {
                 systemConfig.defaultElevUnits = index;
-                Serial.print(F("Default elevation units set to "));
-                Serial.println((__FlashStringHelper*)getUnitStringByIndex(index));
+                msg.control.print(F("Default elevation units set to "));
+                msg.control.println((__FlashStringHelper*)getUnitStringByIndex(index));
             } else {
-                Serial.println(F("ERROR: Invalid units. Valid: M, FT, METERS, FEET"));
+                msg.control.println(F("ERROR: Invalid units. Valid: M, FT, METERS, FEET"));
             }
             return;
         }
 
-        Serial.println(F("ERROR: Unknown DISPLAY command"));
-        Serial.println(F("  Valid commands:"));
-        Serial.println(F("    DISPLAY STATUS"));
-        Serial.println(F("    DISPLAY ENABLE"));
-        Serial.println(F("    DISPLAY DISABLE"));
-        Serial.println(F("    DISPLAY TYPE <LCD|OLED|NONE>"));
-        Serial.println(F("    DISPLAY LCD ADDRESS <hex>"));
-        Serial.println(F("    DISPLAY UNITS TEMP <C|F>"));
-        Serial.println(F("    DISPLAY UNITS PRESSURE <BAR|PSI|KPA>"));
-        Serial.println(F("    DISPLAY UNITS ELEVATION <M|FT>"));
+        msg.control.println(F("ERROR: Unknown DISPLAY command"));
+        msg.control.println(F("  Valid commands:"));
+        msg.control.println(F("    DISPLAY STATUS"));
+        msg.control.println(F("    DISPLAY ENABLE"));
+        msg.control.println(F("    DISPLAY DISABLE"));
+        msg.control.println(F("    DISPLAY TYPE <LCD|OLED|NONE>"));
+        msg.control.println(F("    DISPLAY LCD ADDRESS <hex>"));
+        msg.control.println(F("    DISPLAY UNITS TEMP <C|F>"));
+        msg.control.println(F("    DISPLAY UNITS PRESSURE <BAR|PSI|KPA>"));
+        msg.control.println(F("    DISPLAY UNITS ELEVATION <M|FT>"));
         return;
     }
 
@@ -1610,16 +1620,16 @@ void handleSerialCommand(char* cmd) {
         // Parse plane and transport
         char* space = strchr(rest, ' ');
         if (!space) {
-            Serial.println(F("ERROR: Invalid TRANSPORT command"));
-            Serial.println(F("Usage: TRANSPORT <CONTROL|DATA|DEBUG> <transport>"));
-            Serial.println(F("   or: TRANSPORT LIST"));
-            Serial.println(F(""));
-            Serial.println(F("Available transports:"));
-            Serial.println(F("  USB_SERIAL (or USB, SERIAL) - USB Serial port"));
-            Serial.println(F("  SERIAL1 - Hardware Serial1"));
-            Serial.println(F("  SERIAL2 - Hardware Serial2 (if available)"));
-            Serial.println(F("  SERIAL3 - Hardware Serial3 (if available)"));
-            Serial.println(F("  BLUETOOTH (or BT, BLE) - Bluetooth module"));
+            msg.control.println(F("ERROR: Invalid TRANSPORT command"));
+            msg.control.println(F("Usage: TRANSPORT <CONTROL|DATA|DEBUG> <transport>"));
+            msg.control.println(F("   or: TRANSPORT LIST"));
+            msg.control.println(F(""));
+            msg.control.println(F("Available transports:"));
+            msg.control.println(F("  USB_SERIAL (or USB, SERIAL) - USB Serial port"));
+            msg.control.println(F("  SERIAL1 - Hardware Serial1"));
+            msg.control.println(F("  SERIAL2 - Hardware Serial2 (if available)"));
+            msg.control.println(F("  SERIAL3 - Hardware Serial3 (if available)"));
+            msg.control.println(F("  BLUETOOTH (or BT, BLE) - Bluetooth module"));
             return;
         }
 
@@ -1632,35 +1642,35 @@ void handleSerialCommand(char* cmd) {
         // Parse plane
         MessagePlane plane = parsePlane(planeName);
         if (plane >= NUM_PLANES) {
-            Serial.print(F("ERROR: Invalid plane '"));
-            Serial.print(planeName);
-            Serial.println(F("'"));
-            Serial.println(F("Valid planes: CONTROL, DATA, DEBUG"));
+            msg.control.print(F("ERROR: Invalid plane '"));
+            msg.control.print(planeName);
+            msg.control.println(F("'"));
+            msg.control.println(F("Valid planes: CONTROL, DATA, DEBUG"));
             return;
         }
 
         // Parse transport
         TransportID transport = parseTransport(transportName);
         if (transport >= NUM_TRANSPORTS) {
-            Serial.print(F("ERROR: Invalid transport '"));
-            Serial.print(transportName);
-            Serial.println(F("'"));
-            Serial.println(F("Valid transports: USB_SERIAL, SERIAL1, SERIAL2, SERIAL3, BLUETOOTH"));
+            msg.control.print(F("ERROR: Invalid transport '"));
+            msg.control.print(transportName);
+            msg.control.println(F("'"));
+            msg.control.println(F("Valid transports: USB_SERIAL, SERIAL1, SERIAL2, SERIAL3, BLUETOOTH"));
             return;
         }
 
         // Set transport
         if (router.setTransport(plane, transport)) {
-            Serial.print(F("✓ "));
-            Serial.print(getPlaneName(plane));
-            Serial.print(F(" plane → "));
-            Serial.println(getTransportName(transport));
-            Serial.println(F("NOTE: Configuration will be lost on reboot unless you SAVE"));
+            msg.control.print(F("✓ "));
+            msg.control.print(getPlaneName(plane));
+            msg.control.print(F(" plane → "));
+            msg.control.println(getTransportName(transport));
+            msg.control.println(F("NOTE: Configuration will be lost on reboot unless you SAVE"));
         } else {
-            Serial.print(F("ERROR: Transport "));
-            Serial.print(getTransportName(transport));
-            Serial.println(F(" is not available"));
-            Serial.println(F("Make sure the hardware is connected and registered"));
+            msg.control.print(F("ERROR: Transport "));
+            msg.control.print(getTransportName(transport));
+            msg.control.println(F(" is not available"));
+            msg.control.println(F("Make sure the hardware is connected and registered"));
         }
         return;
     }
@@ -1673,48 +1683,48 @@ void handleSerialCommand(char* cmd) {
         // SYSTEM STATUS
         if (streq(rest, "STATUS")) {
             // Platform identification
-            Serial.println(F("=== Platform Information ==="));
-            Serial.print(F("Platform: "));
-            Serial.println(F(PLATFORM_NAME));
-            Serial.print(F("I2C Clock: "));
-            Serial.println(F(I2C_CLOCK_SPEED));
-            Serial.print(F("Features: Serial"));
+            msg.control.println(F("=== Platform Information ==="));
+            msg.control.print(F("Platform: "));
+            msg.control.println(F(PLATFORM_NAME));
+            msg.control.print(F("I2C Clock: "));
+            msg.control.println(F(I2C_CLOCK_SPEED));
+            msg.control.print(F("Features: Serial"));
             #ifdef USE_BME280
-                Serial.print(F(", BME280"));
+                msg.control.print(F(", BME280"));
             #endif
             #ifdef ENABLE_LCD
-                Serial.print(F(", LCD"));
+                msg.control.print(F(", LCD"));
             #endif
             #ifdef ENABLE_TEST_MODE
-                Serial.print(F(", Test Mode"));
+                msg.control.print(F(", Test Mode"));
             #endif
             #ifdef ENABLE_CAN
-                Serial.print(F(", CAN"));
+                msg.control.print(F(", CAN"));
             #endif
-            Serial.println();
-            Serial.println();
+            msg.control.println();
+            msg.control.println();
 
             printSystemConfig();
-            Serial.println();
-            Serial.println(F("Compile-Time Defaults:"));
-            Serial.print(F("  Default Bias Resistor: "));
-            Serial.print(DEFAULT_BIAS_RESISTOR);
-            Serial.println(F(" Ω"));
-            Serial.println();
-            Serial.println(F("Hardware Pins:"));
-            Serial.print(F("  Mode Button: "));
-            Serial.println(systemConfig.modeButtonPin);
-            Serial.print(F("  Buzzer: "));
-            Serial.println(systemConfig.buzzerPin);
-            Serial.print(F("  CAN CS: "));
-            Serial.println(systemConfig.canCSPin);
-            Serial.print(F("  CAN INT: "));
-            Serial.println(systemConfig.canIntPin);
-            Serial.print(F("  SD CS: "));
-            Serial.println(systemConfig.sdCSPin);
+            msg.control.println();
+            msg.control.println(F("Compile-Time Defaults:"));
+            msg.control.print(F("  Default Bias Resistor: "));
+            msg.control.print(DEFAULT_BIAS_RESISTOR);
+            msg.control.println(F(" Ω"));
+            msg.control.println();
+            msg.control.println(F("Hardware Pins:"));
+            msg.control.print(F("  Mode Button: "));
+            msg.control.println(systemConfig.modeButtonPin);
+            msg.control.print(F("  Buzzer: "));
+            msg.control.println(systemConfig.buzzerPin);
+            msg.control.print(F("  CAN CS: "));
+            msg.control.println(systemConfig.canCSPin);
+            msg.control.print(F("  CAN INT: "));
+            msg.control.println(systemConfig.canIntPin);
+            msg.control.print(F("  SD CS: "));
+            msg.control.println(systemConfig.sdCSPin);
             if (systemConfig.testModePin != 0xFF) {
-                Serial.print(F("  Test Mode Pin: "));
-                Serial.println(systemConfig.testModePin);
+                msg.control.print(F("  Test Mode Pin: "));
+                msg.control.println(systemConfig.testModePin);
             }
             return;
         }
@@ -1726,11 +1736,11 @@ void handleSerialCommand(char* cmd) {
             float value = atof(valueStr);
             if (value >= 800 && value <= 1200) {
                 systemConfig.seaLevelPressure = value;
-                Serial.print(F("Sea level pressure set to "));
-                Serial.print(value);
-                Serial.println(F(" hPa"));
+                msg.control.print(F("Sea level pressure set to "));
+                msg.control.print(value);
+                msg.control.println(F(" hPa"));
             } else {
-                Serial.println(F("ERROR: Sea level pressure must be 800-1200 hPa"));
+                msg.control.println(F("ERROR: Sea level pressure must be 800-1200 hPa"));
             }
             return;
         }
@@ -1742,11 +1752,11 @@ void handleSerialCommand(char* cmd) {
             uint16_t value = atoi(valueStr);
             if (value >= 10 && value <= 10000) {
                 systemConfig.sensorReadInterval = value;
-                Serial.print(F("Sensor read interval set to "));
-                Serial.print(value);
-                Serial.println(F("ms"));
+                msg.control.print(F("Sensor read interval set to "));
+                msg.control.print(value);
+                msg.control.println(F("ms"));
             } else {
-                Serial.println(F("ERROR: Sensor interval must be 10-10000ms"));
+                msg.control.println(F("ERROR: Sensor interval must be 10-10000ms"));
             }
             return;
         }
@@ -1758,11 +1768,11 @@ void handleSerialCommand(char* cmd) {
             uint16_t value = atoi(valueStr);
             if (value >= 10 && value <= 10000) {
                 systemConfig.alarmCheckInterval = value;
-                Serial.print(F("Alarm check interval set to "));
-                Serial.print(value);
-                Serial.println(F("ms"));
+                msg.control.print(F("Alarm check interval set to "));
+                msg.control.print(value);
+                msg.control.println(F("ms"));
             } else {
-                Serial.println(F("ERROR: Alarm interval must be 10-10000ms"));
+                msg.control.println(F("ERROR: Alarm interval must be 10-10000ms"));
             }
             return;
         }
@@ -1774,22 +1784,22 @@ void handleSerialCommand(char* cmd) {
             uint16_t value = atoi(valueStr);
             if (value >= 10 && value <= 10000) {
                 systemConfig.lcdUpdateInterval = value;
-                Serial.print(F("LCD update interval set to "));
-                Serial.print(value);
-                Serial.println(F("ms"));
+                msg.control.print(F("LCD update interval set to "));
+                msg.control.print(value);
+                msg.control.println(F("ms"));
             } else {
-                Serial.println(F("ERROR: LCD interval must be 10-10000ms"));
+                msg.control.println(F("ERROR: LCD interval must be 10-10000ms"));
             }
             return;
         }
 
-        Serial.println(F("ERROR: Unknown SYSTEM command"));
-        Serial.println(F("  Valid commands:"));
-        Serial.println(F("    SYSTEM STATUS"));
-        Serial.println(F("    SYSTEM SEA_LEVEL <hPa>"));
-        Serial.println(F("    SYSTEM INTERVAL SENSOR <ms>"));
-        Serial.println(F("    SYSTEM INTERVAL ALARM <ms>"));
-        Serial.println(F("    SYSTEM INTERVAL LCD <ms>"));
+        msg.control.println(F("ERROR: Unknown SYSTEM command"));
+        msg.control.println(F("  Valid commands:"));
+        msg.control.println(F("    SYSTEM STATUS"));
+        msg.control.println(F("    SYSTEM SEA_LEVEL <hPa>"));
+        msg.control.println(F("    SYSTEM INTERVAL SENSOR <ms>"));
+        msg.control.println(F("    SYSTEM INTERVAL ALARM <ms>"));
+        msg.control.println(F("    SYSTEM INTERVAL LCD <ms>"));
         return;
     }
 
@@ -1812,44 +1822,44 @@ void handleSerialCommand(char* cmd) {
                 if (!pinValid) return;
                 Input* input = getInputByPin(pin);
                 if (!input || !input->flags.isEnabled) {
-                    Serial.println(F("ERROR: Input not configured"));
+                    msg.control.println(F("ERROR: Input not configured"));
                     return;
                 }
 
-                Serial.print(F("Pin "));
-                Serial.print(pinStr);
-                Serial.println(F(" Alarm Configuration:"));
+                msg.control.print(F("Pin "));
+                msg.control.print(pinStr);
+                msg.control.println(F(" Alarm Configuration:"));
 
-                Serial.print(F("  Alarm Enabled: "));
-                Serial.println(input->flags.alarm ? F("YES") : F("NO"));
+                msg.control.print(F("  Alarm Enabled: "));
+                msg.control.println(input->flags.alarm ? F("YES") : F("NO"));
 
-                Serial.print(F("  Alarm State: "));
+                msg.control.print(F("  Alarm State: "));
                 switch (input->alarmContext.state) {
-                    case ALARM_DISABLED: Serial.println(F("DISABLED")); break;
-                    case ALARM_INIT: Serial.println(F("INIT")); break;
-                    case ALARM_WARMUP: Serial.println(F("WARMUP")); break;
-                    case ALARM_READY: Serial.println(F("READY")); break;
-                    case ALARM_ACTIVE: Serial.println(F("ACTIVE")); break;
-                    default: Serial.println(F("UNKNOWN")); break;
+                    case ALARM_DISABLED: msg.control.println(F("DISABLED")); break;
+                    case ALARM_INIT: msg.control.println(F("INIT")); break;
+                    case ALARM_WARMUP: msg.control.println(F("WARMUP")); break;
+                    case ALARM_READY: msg.control.println(F("READY")); break;
+                    case ALARM_ACTIVE: msg.control.println(F("ACTIVE")); break;
+                    default: msg.control.println(F("UNKNOWN")); break;
                 }
 
-                Serial.print(F("  Currently In Alarm: "));
-                Serial.println(input->flags.isInAlarm ? F("YES") : F("NO"));
+                msg.control.print(F("  Currently In Alarm: "));
+                msg.control.println(input->flags.isInAlarm ? F("YES") : F("NO"));
 
-                Serial.print(F("  Warmup Time: "));
-                Serial.print(input->alarmContext.warmupTime_ms);
-                Serial.println(F("ms"));
+                msg.control.print(F("  Warmup Time: "));
+                msg.control.print(input->alarmContext.warmupTime_ms);
+                msg.control.println(F("ms"));
 
-                Serial.print(F("  Persistence Time: "));
-                Serial.print(input->alarmContext.persistTime_ms);
-                Serial.println(F("ms"));
+                msg.control.print(F("  Persistence Time: "));
+                msg.control.print(input->alarmContext.persistTime_ms);
+                msg.control.println(F("ms"));
 
-                Serial.print(F("  Thresholds: "));
-                Serial.print(input->minValue);
-                Serial.print(F(" - "));
-                Serial.print(input->maxValue);
-                Serial.print(F(" "));
-                Serial.println((__FlashStringHelper*)getUnitStringByIndex(input->unitsIndex));
+                msg.control.print(F("  Thresholds: "));
+                msg.control.print(input->minValue);
+                msg.control.print(F(" - "));
+                msg.control.print(input->maxValue);
+                msg.control.print(F(" "));
+                msg.control.println((__FlashStringHelper*)getUnitStringByIndex(input->unitsIndex));
 
                 return;
             }
@@ -1860,95 +1870,95 @@ void handleSerialCommand(char* cmd) {
                 if (!pinValid) return;
                 Input* input = getInputByPin(pin);
                 if (!input || !input->flags.isEnabled) {
-                    Serial.println(F("ERROR: Input not configured"));
+                    msg.control.println(F("ERROR: Input not configured"));
                     return;
                 }
 
-                Serial.print(F("Pin "));
-                Serial.print(pinStr);
-                Serial.println(F(" Calibration:"));
-                Serial.print(F("  Type: "));
+                msg.control.print(F("Pin "));
+                msg.control.print(pinStr);
+                msg.control.println(F(" Calibration:"));
+                msg.control.print(F("  Type: "));
                 switch (input->calibrationType) {
-                    case CAL_THERMISTOR_STEINHART: Serial.println(F("THERMISTOR_STEINHART")); break;
-                    case CAL_THERMISTOR_BETA: Serial.println(F("THERMISTOR_BETA")); break;
-                    case CAL_THERMISTOR_LOOKUP: Serial.println(F("THERMISTOR_LOOKUP")); break;
-                    case CAL_PRESSURE_POLYNOMIAL: Serial.println(F("PRESSURE_POLYNOMIAL")); break;
-                    case CAL_LINEAR: Serial.println(F("PRESSURE_LINEAR")); break;
-                    case CAL_VOLTAGE_DIVIDER: Serial.println(F("VOLTAGE_DIVIDER")); break;
-                    case CAL_RPM: Serial.println(F("RPM")); break;
-                    default: Serial.println(F("NONE")); break;
+                    case CAL_THERMISTOR_STEINHART: msg.control.println(F("THERMISTOR_STEINHART")); break;
+                    case CAL_THERMISTOR_BETA: msg.control.println(F("THERMISTOR_BETA")); break;
+                    case CAL_THERMISTOR_LOOKUP: msg.control.println(F("THERMISTOR_LOOKUP")); break;
+                    case CAL_PRESSURE_POLYNOMIAL: msg.control.println(F("PRESSURE_POLYNOMIAL")); break;
+                    case CAL_LINEAR: msg.control.println(F("PRESSURE_LINEAR")); break;
+                    case CAL_VOLTAGE_DIVIDER: msg.control.println(F("VOLTAGE_DIVIDER")); break;
+                    case CAL_RPM: msg.control.println(F("RPM")); break;
+                    default: msg.control.println(F("NONE")); break;
                 }
 
-                Serial.print(F("  Source: "));
+                msg.control.print(F("  Source: "));
                 if (input->flags.useCustomCalibration) {
-                    Serial.println(F("Custom (RAM)"));
+                    msg.control.println(F("Custom (RAM)"));
 
                     // Print custom calibration values based on type
                     if (input->calibrationType == CAL_THERMISTOR_STEINHART) {
-                        Serial.print(F("  Bias Resistor: "));
-                        Serial.print(input->customCalibration.steinhart.bias_resistor, 1);
-                        Serial.println(F(" Ω"));
-                        Serial.print(F("  A: "));
-                        Serial.println(input->customCalibration.steinhart.steinhart_a, 10);
-                        Serial.print(F("  B: "));
-                        Serial.println(input->customCalibration.steinhart.steinhart_b, 10);
-                        Serial.print(F("  C: "));
-                        Serial.println(input->customCalibration.steinhart.steinhart_c, 10);
+                        msg.control.print(F("  Bias Resistor: "));
+                        msg.control.print(input->customCalibration.steinhart.bias_resistor, 1);
+                        msg.control.println(F(" Ω"));
+                        msg.control.print(F("  A: "));
+                        msg.control.println(input->customCalibration.steinhart.steinhart_a, 10);
+                        msg.control.print(F("  B: "));
+                        msg.control.println(input->customCalibration.steinhart.steinhart_b, 10);
+                        msg.control.print(F("  C: "));
+                        msg.control.println(input->customCalibration.steinhart.steinhart_c, 10);
                     } else if (input->calibrationType == CAL_THERMISTOR_BETA) {
-                        Serial.print(F("  Bias Resistor: "));
-                        Serial.print(input->customCalibration.beta.bias_resistor, 1);
-                        Serial.println(F(" Ω"));
-                        Serial.print(F("  Beta: "));
-                        Serial.print(input->customCalibration.beta.beta, 1);
-                        Serial.println(F(" K"));
-                        Serial.print(F("  R0: "));
-                        Serial.print(input->customCalibration.beta.r0, 1);
-                        Serial.println(F(" Ω"));
-                        Serial.print(F("  T0: "));
-                        Serial.print(input->customCalibration.beta.t0, 1);
-                        Serial.println(F(" °C"));
+                        msg.control.print(F("  Bias Resistor: "));
+                        msg.control.print(input->customCalibration.beta.bias_resistor, 1);
+                        msg.control.println(F(" Ω"));
+                        msg.control.print(F("  Beta: "));
+                        msg.control.print(input->customCalibration.beta.beta, 1);
+                        msg.control.println(F(" K"));
+                        msg.control.print(F("  R0: "));
+                        msg.control.print(input->customCalibration.beta.r0, 1);
+                        msg.control.println(F(" Ω"));
+                        msg.control.print(F("  T0: "));
+                        msg.control.print(input->customCalibration.beta.t0, 1);
+                        msg.control.println(F(" °C"));
                     } else if (input->calibrationType == CAL_THERMISTOR_LOOKUP) {
-                        Serial.print(F("  Bias Resistor: "));
-                        Serial.print(input->customCalibration.lookup.bias_resistor, 1);
-                        Serial.println(F(" Ω"));
+                        msg.control.print(F("  Bias Resistor: "));
+                        msg.control.print(input->customCalibration.lookup.bias_resistor, 1);
+                        msg.control.println(F(" Ω"));
                     } else if (input->calibrationType == CAL_LINEAR) {
-                        Serial.print(F("  Voltage Range: "));
-                        Serial.print(input->customCalibration.pressureLinear.voltage_min, 2);
-                        Serial.print(F("-"));
-                        Serial.print(input->customCalibration.pressureLinear.voltage_max, 2);
-                        Serial.println(F(" V"));
-                        Serial.print(F("  Pressure Range: "));
-                        Serial.print(input->customCalibration.pressureLinear.output_min, 2);
-                        Serial.print(F("-"));
-                        Serial.print(input->customCalibration.pressureLinear.output_max, 2);
-                        Serial.println(F(" bar"));
+                        msg.control.print(F("  Voltage Range: "));
+                        msg.control.print(input->customCalibration.pressureLinear.voltage_min, 2);
+                        msg.control.print(F("-"));
+                        msg.control.print(input->customCalibration.pressureLinear.voltage_max, 2);
+                        msg.control.println(F(" V"));
+                        msg.control.print(F("  Pressure Range: "));
+                        msg.control.print(input->customCalibration.pressureLinear.output_min, 2);
+                        msg.control.print(F("-"));
+                        msg.control.print(input->customCalibration.pressureLinear.output_max, 2);
+                        msg.control.println(F(" bar"));
                     } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) {
-                        Serial.print(F("  Bias Resistor: "));
-                        Serial.print(input->customCalibration.pressurePolynomial.bias_resistor, 1);
-                        Serial.println(F(" Ω"));
-                        Serial.print(F("  A: "));
-                        Serial.println(input->customCalibration.pressurePolynomial.poly_a, 10);
-                        Serial.print(F("  B: "));
-                        Serial.println(input->customCalibration.pressurePolynomial.poly_b, 10);
-                        Serial.print(F("  C: "));
-                        Serial.println(input->customCalibration.pressurePolynomial.poly_c, 10);
+                        msg.control.print(F("  Bias Resistor: "));
+                        msg.control.print(input->customCalibration.pressurePolynomial.bias_resistor, 1);
+                        msg.control.println(F(" Ω"));
+                        msg.control.print(F("  A: "));
+                        msg.control.println(input->customCalibration.pressurePolynomial.poly_a, 10);
+                        msg.control.print(F("  B: "));
+                        msg.control.println(input->customCalibration.pressurePolynomial.poly_b, 10);
+                        msg.control.print(F("  C: "));
+                        msg.control.println(input->customCalibration.pressurePolynomial.poly_c, 10);
                     } else if (input->calibrationType == CAL_RPM) {
-                        Serial.print(F("  Poles: "));
-                        Serial.println(input->customCalibration.rpm.poles);
-                        Serial.print(F("  Pulley Ratio: "));
-                        Serial.println(input->customCalibration.rpm.pulley_ratio, 2);
-                        Serial.print(F("  Calibration Mult: "));
-                        Serial.println(input->customCalibration.rpm.calibration_mult, 4);
-                        Serial.print(F("  Timeout: "));
-                        Serial.print(input->customCalibration.rpm.timeout_ms);
-                        Serial.println(F(" ms"));
-                        Serial.print(F("  RPM Range: "));
-                        Serial.print(input->customCalibration.rpm.min_rpm);
-                        Serial.print(F("-"));
-                        Serial.println(input->customCalibration.rpm.max_rpm);
+                        msg.control.print(F("  Poles: "));
+                        msg.control.println(input->customCalibration.rpm.poles);
+                        msg.control.print(F("  Pulley Ratio: "));
+                        msg.control.println(input->customCalibration.rpm.pulley_ratio, 2);
+                        msg.control.print(F("  Calibration Mult: "));
+                        msg.control.println(input->customCalibration.rpm.calibration_mult, 4);
+                        msg.control.print(F("  Timeout: "));
+                        msg.control.print(input->customCalibration.rpm.timeout_ms);
+                        msg.control.println(F(" ms"));
+                        msg.control.print(F("  RPM Range: "));
+                        msg.control.print(input->customCalibration.rpm.min_rpm);
+                        msg.control.print(F("-"));
+                        msg.control.println(input->customCalibration.rpm.max_rpm);
                     }
                 } else {
-                    Serial.println(F("Preset (PROGMEM)"));
+                    msg.control.println(F("Preset (PROGMEM)"));
                 }
                 return;
             }
@@ -1973,9 +1983,9 @@ void handleSerialCommand(char* cmd) {
         success &= saveSystemConfig();
 
         if (success) {
-            Serial.println(F("✓ Configuration saved to EEPROM"));
+            msg.control.println(F("✓ Configuration saved to EEPROM"));
         } else {
-            Serial.println(F("ERROR: Failed to save configuration"));
+            msg.control.println(F("ERROR: Failed to save configuration"));
         }
         return;
     }
@@ -1985,43 +1995,43 @@ void handleSerialCommand(char* cmd) {
         bool systemOK = loadSystemConfig();
 
         if (inputsOK && systemOK) {
-            Serial.println(F("✓ Configuration loaded from EEPROM"));
+            msg.control.println(F("✓ Configuration loaded from EEPROM"));
         } else if (inputsOK || systemOK) {
-            Serial.println(F("WARNING: Partial configuration loaded"));
+            msg.control.println(F("WARNING: Partial configuration loaded"));
         } else {
-            Serial.println(F("ERROR: Failed to load configuration"));
+            msg.control.println(F("ERROR: Failed to load configuration"));
         }
         return;
     }
 
     if (streq(cmd, "RESET")) {
-        Serial.println(F("WARNING: This will erase all configuration!"));
-        Serial.println(F("Type RESET CONFIRM to proceed"));
+        msg.control.println(F("WARNING: This will erase all configuration!"));
+        msg.control.println(F("Type RESET CONFIRM to proceed"));
         return;
     }
 
     if (streq(cmd, "RESET CONFIRM")) {
         resetInputConfig();
         resetSystemConfig();
-        Serial.println(F("✓ All configuration reset to defaults"));
+        msg.control.println(F("✓ All configuration reset to defaults"));
         return;
     }
 
     // ===== VERSION COMMAND =====
     if (streq(cmd, "VERSION")) {
-        Serial.println();
-        Serial.println(F("========================================"));
-        Serial.print(F("  Firmware: "));
-        Serial.println(FIRMWARE_VERSION);
-        Serial.print(F("  EEPROM Version: "));
-        Serial.println(EEPROM_VERSION);
-        Serial.print(F("  Active Inputs: "));
+        msg.control.println();
+        msg.control.println(F("========================================"));
+        msg.control.print(F("  Firmware: "));
+        msg.control.println(FIRMWARE_VERSION);
+        msg.control.print(F("  EEPROM Version: "));
+        msg.control.println(EEPROM_VERSION);
+        msg.control.print(F("  Active Inputs: "));
         extern uint8_t numActiveInputs;
-        Serial.print(numActiveInputs);
-        Serial.print(F("/"));
-        Serial.println(MAX_INPUTS);
-        Serial.println(F("========================================"));
-        Serial.println();
+        msg.control.print(numActiveInputs);
+        msg.control.print(F("/"));
+        msg.control.println(MAX_INPUTS);
+        msg.control.println(F("========================================"));
+        msg.control.println();
         return;
     }
 
@@ -2031,57 +2041,57 @@ void handleSerialCommand(char* cmd) {
         if (firstSpace) {
             char* subCmd = firstSpace + 1;
             if (streq(subCmd, "JSON")) {
-                Serial.println();
+                msg.control.println();
                 dumpConfigToJSON(Serial);
-                Serial.println();
+                msg.control.println();
                 return;
             }
         }
 
         // Regular DUMP (human-readable)
-        Serial.println();
-        Serial.println(F("========================================"));
-        Serial.println(F("  Full Configuration Dump"));
-        Serial.println(F("========================================"));
-        Serial.println();
+        msg.control.println();
+        msg.control.println(F("========================================"));
+        msg.control.println(F("  Full Configuration Dump"));
+        msg.control.println(F("========================================"));
+        msg.control.println();
 
         // Show inputs
         listAllInputs();
-        Serial.println();
+        msg.control.println();
 
         // Show outputs
         listOutputs();
-        Serial.println();
+        msg.control.println();
 
         // Show display config
-        Serial.println(F("=== Display Configuration ==="));
-        Serial.print(F("Type: "));
+        msg.control.println(F("=== Display Configuration ==="));
+        msg.control.print(F("Type: "));
         switch (systemConfig.displayType) {
-            case DISPLAY_NONE: Serial.println(F("None")); break;
-            case DISPLAY_LCD: Serial.println(F("LCD")); break;
-            case DISPLAY_OLED: Serial.println(F("OLED")); break;
-            default: Serial.println(F("Unknown")); break;
+            case DISPLAY_NONE: msg.control.println(F("None")); break;
+            case DISPLAY_LCD: msg.control.println(F("LCD")); break;
+            case DISPLAY_OLED: msg.control.println(F("OLED")); break;
+            default: msg.control.println(F("Unknown")); break;
         }
-        Serial.print(F("LCD I2C Address: 0x"));
-        Serial.println(systemConfig.lcdI2CAddress, HEX);
-        Serial.print(F("Default Units: Temp="));
-        Serial.print((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultTempUnits));
-        Serial.print(F(", Press="));
-        Serial.print((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultPressUnits));
-        Serial.print(F(", Elev="));
-        Serial.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultElevUnits));
-        Serial.println();
+        msg.control.print(F("LCD I2C Address: 0x"));
+        msg.control.println(systemConfig.lcdI2CAddress, HEX);
+        msg.control.print(F("Default Units: Temp="));
+        msg.control.print((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultTempUnits));
+        msg.control.print(F(", Press="));
+        msg.control.print((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultPressUnits));
+        msg.control.print(F(", Elev="));
+        msg.control.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultElevUnits));
+        msg.control.println();
 
-        Serial.println(F("To save this configuration to EEPROM, type: SAVE"));
-        Serial.println();
+        msg.control.println(F("To save this configuration to EEPROM, type: SAVE"));
+        msg.control.println();
         return;
     }
 
     // ===== RELOAD COMMAND =====
     if (streq(cmd, "RELOAD")) {
-        Serial.println();
-        Serial.println(F("Triggering watchdog reset..."));
-        Serial.println(F("System will reload in 2 seconds."));
+        msg.control.println();
+        msg.control.println(F("Triggering watchdog reset..."));
+        msg.control.println(F("System will reload in 2 seconds."));
         Serial.flush();
 
         // Enable watchdog if not already enabled (e.g., in CONFIG mode)
@@ -2096,10 +2106,10 @@ void handleSerialCommand(char* cmd) {
     }
 
     // Unknown command
-    Serial.print(F("ERROR: Unknown command '"));
-    Serial.print(cmd);
-    Serial.println(F("'"));
-    Serial.println(F("Type HELP for available commands"));
+    msg.control.print(F("ERROR: Unknown command '"));
+    msg.control.print(cmd);
+    msg.control.println(F("'"));
+    msg.control.println(F("Type HELP for available commands"));
 }
 
 #endif // USE_STATIC_CONFIG

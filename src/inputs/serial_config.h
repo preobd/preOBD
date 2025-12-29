@@ -24,6 +24,9 @@ void processSerialCommands();
 // Handle a single command (char* to avoid String class RAM overhead)
 void handleSerialCommand(char* cmd);
 
+// Handle incoming character input (called by MessageRouter)
+void handleCommandInput(char c);
+
 #endif // USE_STATIC_CONFIG
 
 #endif // SERIAL_CONFIG_H
