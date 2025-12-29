@@ -15,6 +15,10 @@
     #include <FlexCAN_T4.h>
     FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16> Can0;
     #define USING_FLEXCAN
+#elif defined(ESP32)
+    // Use native TWAI (CAN) on ESP32
+    #include <ESP32-TWAI-CAN.hpp>
+    #define USING_ESP32_TWAI
 #else
     // Use MCP2515 via SPI (all other boards or when FlexCAN not selected)
     #include <CAN.h>
@@ -28,6 +32,17 @@ void initCAN() {
         Can0.setBaudRate(500000);  // 500 kbps
         Can0.setMaxMB(16);
         Serial.println("Native FlexCAN initialized (500kbps)");
+    #elif defined(USING_ESP32_TWAI)
+        // Initialize ESP32 TWAI (CAN)
+        // Default pins: GPIO21 (TX), GPIO22 (RX)
+        // Note: External CAN transceiver required (MCP2551, TJA1050, SN65HVD230, etc.)
+        ESP32Can.setPins(GPIO_NUM_21, GPIO_NUM_22);  // TX, RX
+        ESP32Can.setSpeed(ESP32Can.convertSpeed(500));  // 500 kbps
+        if (ESP32Can.begin()) {
+            Serial.println("ESP32 TWAI (CAN) initialized (500kbps)");
+        } else {
+            Serial.println("ESP32 TWAI init failed!");
+        }
     #else
         // Initialize MCP2515 via SPI
         CAN.setPins(CAN_CS, CAN_INT);
@@ -66,6 +81,16 @@ void sendCAN(Input *ptr) {
             msg.buf[i] = frameData[i];
         }
         Can0.write(msg);
+    #elif defined(USING_ESP32_TWAI)
+        // Send using ESP32 TWAI
+        CanFrame frame;
+        frame.identifier = 0x7E8;
+        frame.extd = 0;  // Standard 11-bit ID
+        frame.data_length_code = 8;
+        for (int i = 0; i < 8; i++) {
+            frame.data[i] = frameData[i];
+        }
+        ESP32Can.writeFrame(frame);
     #else
         // Send using MCP2515
         CAN.beginPacket(0x7E8, 8);
@@ -79,6 +104,11 @@ void updateCAN() {
     #ifdef USING_FLEXCAN
         CAN_message_t msg;
         while (Can0.read(msg)) {
+            // Process received CAN messages here if needed in future
+        }
+    #elif defined(USING_ESP32_TWAI)
+        CanFrame frame;
+        if (ESP32Can.readFrame(frame, 0)) {  // Non-blocking read
             // Process received CAN messages here if needed in future
         }
     #endif
