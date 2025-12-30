@@ -165,6 +165,12 @@ void setup() {
     Serial2.begin(9600);    // Default baud for HC-05/HM-10 Bluetooth modules
     #endif
 
+    // Initialize system config (loads from EEPROM or uses defaults from config.h)
+    // MUST happen before router.begin() so router can load correct transport mappings
+#ifndef USE_STATIC_CONFIG
+    initSystemConfig();
+#endif
+
     // Initialize transport router
     router.registerTransport(TRANSPORT_USB_SERIAL, &usbSerial);
     #if defined(__MK66FX1M0__) || defined(__IMXRT1062__) || defined(__MK64FX512__) || defined(__MK20DX256__) || defined(__AVR_ATmega2560__)
@@ -211,11 +217,6 @@ void setup() {
     Wire.setClock(400000);  // 400kHz for most platforms
     #endif
     msg.debug.println(F("✓ I2C initialized"));
-
-    // Initialize system config (loads from EEPROM or uses defaults from config.h)
-#ifndef USE_STATIC_CONFIG
-    initSystemConfig();
-#endif
 
     // Initialize input manager (loads from EEPROM or config.h)
 #ifndef USE_STATIC_CONFIG

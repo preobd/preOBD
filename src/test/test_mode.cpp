@@ -110,7 +110,7 @@ void initTestMode() {
         testModeState.originalReadFunctions[i] = nullptr;
     }
 
-    Serial.println(F("Test mode system initialized"));
+    Serial.println(F("✓ Test mode system initialized"));
 }
 
 bool startTestScenario(uint8_t scenarioIndex) {

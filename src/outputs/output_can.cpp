@@ -50,7 +50,7 @@ void initCAN() {
             Serial.println("MCP2515 CAN init failed!");
             return;
         }
-        Serial.println("MCP2515 CAN initialized (500kbps)");
+        Serial.println("✓ MCP2515 CAN initialized (500kbps)");
 
         // Uncomment for testing
         // CAN.loopback();
