@@ -1986,7 +1986,7 @@ void handleSerialCommand(char* cmd) {
     if (streq(cmd, "SAVE")) {
         bool success = true;
         success &= saveInputConfig();
-        success &= saveSystemConfig();
+        router.saveConfig();  // Syncs transport routing to systemConfig.router AND saves ALL systemConfig to EEPROM
 
         if (success) {
             msg.control.println(F("✓ Configuration saved to EEPROM"));
