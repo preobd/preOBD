@@ -52,8 +52,11 @@ void resetSystemConfig() {
     systemConfig.version = SYSTEM_CONFIG_VERSION;
 
     // Output defaults (check config.h for #define ENABLE_*)
+    // Data outputs default OFF to keep USB clean - user must explicitly enable
+    // Safety outputs default ON when compiled in
+
     #ifdef ENABLE_CAN
-    systemConfig.outputEnabled[OUTPUT_CAN] = 1;
+    systemConfig.outputEnabled[OUTPUT_CAN] = 0;  // OFF - data plane output
     systemConfig.outputInterval[OUTPUT_CAN] = CAN_OUTPUT_INTERVAL_MS;
     #else
     systemConfig.outputEnabled[OUTPUT_CAN] = 0;
@@ -61,7 +64,7 @@ void resetSystemConfig() {
     #endif
 
     #ifdef ENABLE_REALDASH
-    systemConfig.outputEnabled[OUTPUT_REALDASH] = 1;
+    systemConfig.outputEnabled[OUTPUT_REALDASH] = 0;  // OFF - data plane output
     systemConfig.outputInterval[OUTPUT_REALDASH] = REALDASH_INTERVAL_MS;
     #else
     systemConfig.outputEnabled[OUTPUT_REALDASH] = 0;
@@ -69,7 +72,7 @@ void resetSystemConfig() {
     #endif
 
     #ifdef ENABLE_SERIAL_OUTPUT
-    systemConfig.outputEnabled[OUTPUT_SERIAL] = 1;
+    systemConfig.outputEnabled[OUTPUT_SERIAL] = 0;  // OFF - clogs USB serial
     systemConfig.outputInterval[OUTPUT_SERIAL] = SERIAL_CSV_INTERVAL_MS;
     #else
     systemConfig.outputEnabled[OUTPUT_SERIAL] = 0;
@@ -77,7 +80,7 @@ void resetSystemConfig() {
     #endif
 
     #ifdef ENABLE_SD_LOGGING
-    systemConfig.outputEnabled[OUTPUT_SD] = 1;
+    systemConfig.outputEnabled[OUTPUT_SD] = 0;  // OFF - requires SD card hardware
     systemConfig.outputInterval[OUTPUT_SD] = SD_LOG_INTERVAL_MS;
     #else
     systemConfig.outputEnabled[OUTPUT_SD] = 0;
@@ -85,7 +88,7 @@ void resetSystemConfig() {
     #endif
 
     #ifdef ENABLE_ALARMS
-    systemConfig.outputEnabled[OUTPUT_ALARM] = 1;
+    systemConfig.outputEnabled[OUTPUT_ALARM] = 1;  // ON - safety critical
     systemConfig.outputInterval[OUTPUT_ALARM] = 100;  // 10Hz check rate
     #else
     systemConfig.outputEnabled[OUTPUT_ALARM] = 0;
