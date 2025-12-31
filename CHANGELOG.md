@@ -5,9 +5,32 @@ All notable changes to openEMS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
 
+### Added
+- **Transport abstraction layer** - Unified multi-transport architecture for serial communications
+- **MessageRouter system** - Centralized message routing with priority-based transport selection
+- **ESP32 Bluetooth Classic support** - Native Bluetooth Serial transport for ESP32 platforms
+- **UART Bluetooth module support** - HC-05/HM-10 Bluetooth module support for Teensy and AVR platforms
+- **ESP32 native CAN support** - TWAI (Two-Wire Automotive Interface) implementation for ESP32
+- **Multi-transport command routing** - Serial commands accepted from any registered transport (USB, UART, Bluetooth)
+- **Multi-transport output routing** - RealDash and serial output to all connected transports simultaneously
+- **TransportInterface API** - Abstract interface for adding new communication transports
 
-## [0.5.0] - 2025-12-22
+### Changed
+- **Serial command input** - Now uses MessageRouter to poll all transports instead of USB-only
+- **RealDash output** - Broadcasts to all connected transports (USB, Bluetooth, Serial)
+- **Serial output** - Broadcasts sensor data to all connected transports
+- **Message routing** - Migrated from direct Serial calls to msg.control API with router
+
+### Technical Details
+- ESP32 CAN uses GPIO21 (TX) and GPIO22 (RX) with 500 kbps for OBDII compatibility
+- ESP32 CAN requires external transceiver (MCP2551, TJA1050, SN65HVD230)
+- ESP32 Bluetooth device name: "openEMS"
+- Transport system supports USB Serial, Serial1, Serial2, and ESP32 Bluetooth
+- All transports operate at 115200 baud (except Serial2 defaults to 9600 for HC-05/HM-10)
+
+## [0.5.0-alpha] - 2025-12-22
 
 ### Added
 - **Beta (β) equation thermistor calibration support** - Alternative calibration method for thermistors
