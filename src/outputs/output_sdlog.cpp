@@ -19,15 +19,14 @@ unsigned long lastLogTime = 0;
 const unsigned long LOG_INTERVAL = 1000;  // Log every 1 second
 
 void initSDLog() {
-    Serial.print("Initializing SD card...");
     
     if (!SD.begin(SD_CS_PIN)) {
-        Serial.println("SD init failed!");
+        Serial.println("⚠ SD init failed!");
         return;
     }
-    
-    Serial.println("SD card ready");
-    
+
+    Serial.print("✓ SD card initialized");
+
     // Create or open log file with timestamp
     char filename[20];
     snprintf(filename, sizeof(filename), "log_%lu.csv", millis());

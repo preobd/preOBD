@@ -213,6 +213,22 @@ lib_deps =
 
 openEMS uses modular library dependency groups for clarity:
 
+### Standard Feature Set
+
+```ini
+[standard_features]
+build_flags =
+    -D ENABLE_CAN           # CAN bus output
+    -D ENABLE_REALDASH      # RealDash protocol output
+    -D ENABLE_SERIAL_OUTPUT # CSV serial output
+    -D ENABLE_SD_LOGGING    # SD card data logging
+    -D ENABLE_LCD           # LCD display
+    -D ENABLE_ALARMS        # Alarm system
+    -D ENABLE_LEDS          # LED indicators
+    -D ENABLE_TEST_MODE     # Test mode for development
+    -D ENABLE_BME280        # BME280 environmental sensor
+```
+
 ### Available Library Groups
 
 ```ini
@@ -222,7 +238,7 @@ lib_deps = adafruit/Adafruit Unified Sensor
 [display_libs]     # LCD display
 lib_deps = marcoschwartz/LiquidCrystal_I2C
 
-[can_libs]         # MCP2515 CAN (external chip)
+[can_libs]         # MCP2515 CAN (external chip for Mega/Uno/Due)
 lib_deps = sandeepmistry/CAN
 
 [sd_libs]          # SD card logging
@@ -235,6 +251,94 @@ lib_deps = adafruit/Adafruit BME280 Library
 lib_deps = bblanchon/ArduinoJson
 ```
 
+### Platform-Specific CAN Libraries
+
+CAN support varies by platform:
+
+| Platform | CAN Implementation | Library | Notes |
+|----------|-------------------|---------|-------|
+| **Teensy 4.x/3.x** | Native FlexCAN | FlexCAN_T4 | Built-in CAN controller, no external chip needed |
+| **ESP32** | Native TWAI | ESP32-TWAI-CAN | Built-in CAN controller, **external transceiver required** |
+| **Mega/Uno/Due** | External MCP2515 | sandeepmistry/CAN | Requires MCP2515 CAN controller via SPI |
+
+**Example - ESP32 with native CAN:**
+```ini
+[env:esp32dev]
+platform = espressif32
+board = esp32dev
+build_flags =
+    ${standard_features.build_flags}  # Includes ENABLE_CAN
+lib_deps =
+    ${core_libs.lib_deps}
+    ${display_libs.lib_deps}
+    ${sd_libs.lib_deps}
+    ${sensor_libs.lib_deps}
+    ${eeprom_libs.lib_deps}
+    https://github.com/handmade0octopus/ESP32-TWAI-CAN.git  # ESP32 native CAN
+```
+
+**Example - Teensy 4.1 with native CAN:**
+```ini
+[env:teensy41]
+platform = teensy
+board = teensy41
+build_flags =
+    -D TEENSY_41
+    -D USE_FLEXCAN_NATIVE  # Enable native FlexCAN
+    ${standard_features.build_flags}
+lib_deps =
+    ${core_libs.lib_deps}
+    ${display_libs.lib_deps}
+    ${sd_libs.lib_deps}
+    ${sensor_libs.lib_deps}
+    ${eeprom_libs.lib_deps}
+    https://github.com/tonton81/FlexCAN_T4.git  # Teensy native CAN
+```
+
+**Example - Arduino Mega with MCP2515:**
+```ini
+[env:mega2560]
+platform = atmelavr
+board = megaatmega2560
+build_flags =
+    ${standard_features.build_flags}
+lib_deps =
+    ${core_libs.lib_deps}
+    ${display_libs.lib_deps}
+    ${can_libs.lib_deps}  # MCP2515 via SPI
+    ${sd_libs.lib_deps}
+    ${sensor_libs.lib_deps}
+    ${eeprom_libs.lib_deps}
+```
+
+### Platform-Specific Bluetooth Support
+
+Bluetooth support is platform-dependent and requires no build flags:
+
+| Platform | Bluetooth Support | Implementation | Library Required |
+|----------|------------------|----------------|------------------|
+| **ESP32** | Bluetooth Classic | Native ESP32 BluetoothSerial | Built-in (no external library) |
+| **Teensy/Mega/AVR** | Via UART module | HC-05, HM-10, or similar | No library (uses Serial1/Serial2) |
+
+**ESP32 Bluetooth Classic** is automatically detected and enabled at runtime if the platform is ESP32. No build flags needed.
+
+**UART Bluetooth modules** (HC-05, HM-10) can be connected to any hardware serial port (Serial1, Serial2) on Teensy, Mega, or AVR platforms. These are transparent serial bridges - no special code or libraries required.
+
+**Example - ESP32 with native Bluetooth:**
+```ini
+[env:esp32dev]
+platform = espressif32
+board = esp32dev
+build_flags =
+    -D ESP32  # Automatically enables Bluetooth Classic support
+    ${standard_features.build_flags}
+```
+
+At runtime, ESP32 will initialize Bluetooth Classic with device name "openEMS" and register it as a transport for RealDash and serial commands.
+
+**Example - Teensy with HC-05 Bluetooth module:**
+No special configuration needed - just wire HC-05 TX/RX to Serial2 (pins 7/8 on Teensy 4.1). The transport system automatically makes Serial2 available for commands and RealDash output.
+
 ### Conditional Dependencies
 
 Only include libraries your build needs:
@@ -243,7 +347,7 @@ Only include libraries your build needs:
 lib_deps =
     ${core_libs.lib_deps}      # Always
     ${display_libs.lib_deps}   # If ENABLE_LCD defined
-    ${can_libs.lib_deps}       # If ENABLE_CAN + external MCP2515
+    ${can_libs.lib_deps}       # If ENABLE_CAN + external MCP2515 (Mega/Uno/Due)
     ${sd_libs.lib_deps}        # If ENABLE_SD_LOGGING defined
     ${sensor_libs.lib_deps}    # Always (BME280)
     ${eeprom_libs.lib_deps}    # If NOT USE_STATIC_CONFIG

@@ -60,7 +60,7 @@ public:
 
     // ========== Transport Metadata ==========
 
-    // Get transport name (e.g., "USB", "SERIAL1", "BLUETOOTH")
+    // Get transport name (e.g., "USB", "SERIAL1", "ESP32_BT")
     virtual const char* getName() const = 0;
 
     // Get capability flags (CAP_READ | CAP_WRITE | ...)

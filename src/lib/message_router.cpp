@@ -143,7 +143,7 @@ void MessageRouter::listTransports() {
 
     // Show plane assignments
     const char* planeNames[] = {"CONTROL", "DATA", "DEBUG"};
-    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3", "BLUETOOTH"};
+    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3", "ESP32_BT"};
 
     for (int i = 0; i < NUM_PLANES; i++) {
         ctrl->print(planeNames[i]);
@@ -215,6 +215,36 @@ void MessageRouter::update() {
         }
     }
 
-    // TODO: Check for incoming commands on control plane transports
-    // This will be integrated with serial_config.cpp command handling
+    // Process incoming commands from control plane transports
+    processIncomingCommands();
+}
+
+void MessageRouter::processIncomingCommands() {
+    // Forward declaration of the handler from serial_config.cpp
+    extern void handleCommandInput(char c);
+
+    // Poll primary control transport
+    TransportInterface* ctrl = getTransport(PLANE_CONTROL, true);
+    if (ctrl && ctrl->isConnected() && ctrl->available()) {
+        setActiveControlTransport(ctrl);
+        processCommandFromTransport(ctrl);
+    }
+
+    // Poll secondary control transport (if configured)
+    TransportInterface* ctrl2 = getTransport(PLANE_CONTROL, false);
+    if (ctrl2 && ctrl2->isConnected() && ctrl2->available()) {
+        setActiveControlTransport(ctrl2);
+        processCommandFromTransport(ctrl2);
+    }
+}
+
+void MessageRouter::processCommandFromTransport(TransportInterface* transport) {
+    // Forward declaration of the handler from serial_config.cpp
+    extern void handleCommandInput(char c);
+
+    // Read and process all available characters
+    while (transport->available()) {
+        char c = transport->read();
+        handleCommandInput(c);
+    }
 }

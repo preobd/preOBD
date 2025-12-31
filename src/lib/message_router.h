@@ -30,7 +30,7 @@ enum TransportID {
     TRANSPORT_SERIAL1 = 2,      // Hardware Serial1
     TRANSPORT_SERIAL2 = 3,      // Hardware Serial2
     TRANSPORT_SERIAL3 = 4,      // Hardware Serial3
-    TRANSPORT_BLUETOOTH = 5,    // Bluetooth (any type)
+    TRANSPORT_ESP32_BT = 5,     // ESP32 built-in Bluetooth Classic
     NUM_TRANSPORTS = 6
 };
 
@@ -93,6 +93,13 @@ public:
 
     // Poll transports, handle incoming data (called each loop)
     void update();
+
+private:
+    // Process incoming commands from control plane transports
+    void processIncomingCommands();
+
+    // Read and process characters from a specific transport
+    void processCommandFromTransport(TransportInterface* transport);
 };
 
 // Global router instance

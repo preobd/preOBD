@@ -16,7 +16,7 @@ RealDash is a customizable digital dashboard application for iOS and Android tha
 To connect openEMS to RealDash, you need one of the following:
 
 ### Option 1: Bluetooth Serial Adapter (Recommended)
-- **Hardware**: HC-05 or HC-06 Bluetooth module
+- **Hardware**: HC-05 or HM-10 Bluetooth module
 - **Connection**: Connect to openEMS serial TX/RX pins
 - **Pros**: Wireless, easy to use, works while driving
 - **Cons**: Requires additional hardware (~$5-10)
@@ -79,7 +79,7 @@ The XML file tells RealDash how to decode openEMS sensor data.
 **For Bluetooth:**
 5. Select **Bluetooth** as connection type
 6. Select your Bluetooth module from the list
-   - HC-05 usually shows as "HC-05"
+   - HM-10 usually shows as "HM-10"
    - You may need to pair it first in your device's Bluetooth settings
 7. Set **Baud Rate**: `115200`
 8. Select **Protocol**: `RealDash CAN`
@@ -188,7 +188,7 @@ Repeat for all sensors you want to display.
 
 **Bluetooth-specific:**
 - Bluetooth module may have power issues
-- Check wiring and power supply to HC-05/HC-06
+- Check wiring and power supply to HC-05/HM-10
 - Some phones have aggressive Bluetooth power saving - disable it
 - Move phone closer to Bluetooth module
 
