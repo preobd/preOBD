@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0-beta] - 2025-12-31
+
 ### Added
 - **Transport abstraction layer** - Unified multi-transport architecture for serial communications
 - **MessageRouter system** - Centralized message routing with priority-based transport selection
@@ -149,6 +151,7 @@ Previous development releases. See git history for details.
 
 ---
 
-[Unreleased]: https://github.com/preobd/openEMS/compare/v0.5.0...HEAD
-[0.5.0]: https://github.com/preobd/openEMS/compare/v0.4.0-alpha...v0.5.0
+[Unreleased]: https://github.com/preobd/openEMS/compare/v0.6.0-beta...HEAD
+[0.6.0-beta]: https://github.com/preobd/openEMS/compare/v0.5.0-alpha...v0.6.0-beta
+[0.5.0-alpha]: https://github.com/preobd/openEMS/compare/v0.4.0-alpha...v0.5.0-alpha
 [0.4.0-alpha]: https://github.com/preobd/openEMS/releases/tag/v0.4.0-alpha
