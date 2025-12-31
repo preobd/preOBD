@@ -30,7 +30,7 @@ enum TransportID {
     TRANSPORT_SERIAL1 = 2,      // Hardware Serial1
     TRANSPORT_SERIAL2 = 3,      // Hardware Serial2
     TRANSPORT_SERIAL3 = 4,      // Hardware Serial3
-    TRANSPORT_BLUETOOTH = 5,    // Bluetooth (any type)
+    TRANSPORT_ESP32_BT = 5,     // ESP32 built-in Bluetooth Classic
     NUM_TRANSPORTS = 6
 };
 

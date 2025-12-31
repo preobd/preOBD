@@ -6,7 +6,7 @@
  *
  * Usage:
  *   BluetoothTransportESP32 bt("openEMS");
- *   router.registerTransport(TRANSPORT_BLUETOOTH, &bt);
+ *   router.registerTransport(TRANSPORT_ESP32_BT, &bt);
  *
  * Note: Only available on ESP32 platform
  */

@@ -95,7 +95,7 @@ static TransportID parseTransport(const char* str) {
     if (streq(str, "SERIAL1")) return TRANSPORT_SERIAL1;
     if (streq(str, "SERIAL2")) return TRANSPORT_SERIAL2;
     if (streq(str, "SERIAL3")) return TRANSPORT_SERIAL3;
-    if (streq(str, "BLUETOOTH") || streq(str, "BT") || streq(str, "BLE")) return TRANSPORT_BLUETOOTH;
+    if (streq(str, "ESP32_BT") || streq(str, "ESP32") || streq(str, "ESP32BT")) return TRANSPORT_ESP32_BT;
     if (streq(str, "NONE")) return TRANSPORT_NONE;
     return NUM_TRANSPORTS;  // Invalid
 }
@@ -118,7 +118,7 @@ static const char* getTransportName(TransportID id) {
         case TRANSPORT_SERIAL1: return "SERIAL1";
         case TRANSPORT_SERIAL2: return "SERIAL2";
         case TRANSPORT_SERIAL3: return "SERIAL3";
-        case TRANSPORT_BLUETOOTH: return "BLUETOOTH";
+        case TRANSPORT_ESP32_BT: return "ESP32_BT";
         default: return "UNKNOWN";
     }
 }
@@ -507,7 +507,7 @@ void handleSerialCommand(char* cmd) {
         msg.control.println(F("  TRANSPORT CONTROL <transport>  - Route control messages"));
         msg.control.println(F("  TRANSPORT DATA <transport>  - Route sensor data output"));
         msg.control.println(F("  TRANSPORT DEBUG <transport>  - Route debug messages"));
-        msg.control.println(F("    Transports: USB_SERIAL, SERIAL1, SERIAL2, SERIAL3, BLUETOOTH"));
+        msg.control.println(F("    Transports: USB_SERIAL, SERIAL1, SERIAL2, SERIAL3, ESP32_BT"));
         msg.control.println();
         msg.control.println(F("System Commands (Advanced):"));
         msg.control.println(F("  SYSTEM STATUS  - Show system configuration"));
@@ -1635,7 +1635,7 @@ void handleSerialCommand(char* cmd) {
             msg.control.println(F("  SERIAL1 - Hardware Serial1"));
             msg.control.println(F("  SERIAL2 - Hardware Serial2 (if available)"));
             msg.control.println(F("  SERIAL3 - Hardware Serial3 (if available)"));
-            msg.control.println(F("  BLUETOOTH (or BT, BLE) - Bluetooth module"));
+            msg.control.println(F("  ESP32_BT (or ESP32) - ESP32 built-in Bluetooth Classic (ESP32 only)"));
             return;
         }
 
@@ -1661,7 +1661,7 @@ void handleSerialCommand(char* cmd) {
             msg.control.print(F("ERROR: Invalid transport '"));
             msg.control.print(transportName);
             msg.control.println(F("'"));
-            msg.control.println(F("Valid transports: USB_SERIAL, SERIAL1, SERIAL2, SERIAL3, BLUETOOTH"));
+            msg.control.println(F("Valid transports: USB_SERIAL, SERIAL1, SERIAL2, SERIAL3, ESP32_BT"));
             return;
         }
 

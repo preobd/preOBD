@@ -143,7 +143,7 @@ void MessageRouter::listTransports() {
 
     // Show plane assignments
     const char* planeNames[] = {"CONTROL", "DATA", "DEBUG"};
-    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3", "BLUETOOTH"};
+    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3", "ESP32_BT"};
 
     for (int i = 0; i < NUM_PLANES; i++) {
         ctrl->print(planeNames[i]);

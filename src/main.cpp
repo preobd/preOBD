@@ -179,7 +179,7 @@ void setup() {
     #endif
     #ifdef ESP32
     if (btESP32.begin()) {
-        router.registerTransport(TRANSPORT_BLUETOOTH, &btESP32);
+        router.registerTransport(TRANSPORT_ESP32_BT, &btESP32);
         msg.debug.println(F("✓ ESP32 Bluetooth initialized"));
     } else {
         msg.debug.println(F("⚠ ESP32 Bluetooth failed to initialize"));
