@@ -1,10 +1,11 @@
 /*
- * output_serial.cpp - Serial output for debugging
+ * output_serial.cpp - Serial CSV output for data plane
  */
 
 #include "output_base.h"
 #include "../config.h"
 #include "../lib/sensor_library.h"
+#include "../lib/message_api.h"
 
 #ifdef ENABLE_SERIAL_OUTPUT
 
@@ -13,8 +14,7 @@
 #endif
 
 void initSerialOutput() {
-    Serial.println("Serial output initialized");
-    Serial.println("Sensor,Value,Units");
+    msg.data.println("✓ Serial output initialized");
 }
 
 void sendSerialOutput(Input *ptr) {
@@ -25,20 +25,20 @@ void sendSerialOutput(Input *ptr) {
         }
     #endif
 
-    Serial.print(ptr->abbrName);
-    Serial.print(",");
+    msg.data.print(ptr->abbrName);
+    msg.data.print(",");
 
     if (isnan(ptr->value)) {
-        Serial.print("ERROR");
+        msg.data.print("ERROR");
     } else {
         // Display in human-readable format
         float displayValue = convertFromBaseUnits(ptr->value, ptr->unitsIndex);
-        Serial.print(displayValue, 2);
+        msg.data.print(displayValue, 2);
     }
 
-    Serial.print(",");
-    Serial.print((__FlashStringHelper*)getUnitStringByIndex(ptr->unitsIndex));
-    Serial.println();
+    msg.data.print(",");
+    msg.data.print((__FlashStringHelper*)getUnitStringByIndex(ptr->unitsIndex));
+    msg.data.println();
 }
 
 void updateSerialOutput() {

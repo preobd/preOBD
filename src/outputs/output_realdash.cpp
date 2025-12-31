@@ -1,15 +1,16 @@
 /*
- * output_realdash.cpp - RealDash CAN output module
+ * output_realdash.cpp - RealDash binary CAN output for data plane
  */
 
 #include "output_base.h"
 #include "../config.h"
+#include "../lib/message_api.h"
 
 #ifdef ENABLE_REALDASH
 
 void initRealdash() {
-    Serial.begin(115200);
-    Serial.println("RealDash output initialized");
+    // Serial initialization happens in main.cpp
+    msg.data.println("✓ RealDash output initialized");
 }
 
 void sendRealdash(Input *ptr) {
@@ -28,10 +29,10 @@ void sendRealdash(Input *ptr) {
         return;  // Invalid data size
     }
 
-    // Send RealDash frame
-    Serial.write(preamble, 4);
-    Serial.write((const byte*)&canFrameId, 4);
-    Serial.write(frameData, 8);
+    // Send RealDash frame to data plane
+    msg.data.write(preamble, 4);
+    msg.data.write((const byte*)&canFrameId, 4);
+    msg.data.write(frameData, 8);
 }
 
 void updateRealdash() {
