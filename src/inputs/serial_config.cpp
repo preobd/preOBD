@@ -26,6 +26,12 @@
 #include <string.h>
 #include <ctype.h>
 
+// AVR watchdog for system reset
+#if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__) || \
+    defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+    #include <avr/wdt.h>
+#endif
+
 // Display control functions
 extern void enableLCD();
 extern void disableLCD();
@@ -2089,18 +2095,40 @@ void handleSerialCommand(char* cmd) {
 
     // ===== RELOAD COMMAND =====
     if (streq(cmd, "RELOAD")) {
-        msg.control.println();
-        msg.control.println(F("Triggering watchdog reset..."));
-        msg.control.println(F("System will reload in 2 seconds."));
+        // Print directly to Serial to bypass router buffering
+        Serial.println();
+        Serial.println(F("Triggering watchdog reset..."));
+        Serial.println(F("System will reload in 2 seconds."));
         Serial.flush();
+        delay(100);  // Ensure message is sent
 
-        // Enable watchdog if not already enabled (e.g., in CONFIG mode)
-        extern void watchdogEnable(uint16_t);
-        watchdogEnable(2000);
+        // Force watchdog enable (even if it was disabled in CONFIG mode)
+        #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__) || \
+            defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+            // AVR: Proper watchdog initialization sequence
+            cli();  // Disable interrupts
+            wdt_reset();  // Reset watchdog
+            // Clear WDRF in MCUSR
+            MCUSR &= ~(1<<WDRF);
+            // Enable watchdog with 2s timeout
+            wdt_enable(WDTO_2S);
+            sei();  // Re-enable interrupts
+            Serial.println(F("Watchdog force-enabled (AVR)"));
+            Serial.flush();
+        #else
+            extern void watchdogEnable(uint16_t);
+            watchdogEnable(2000);
+            Serial.println(F("Watchdog enabled"));
+            Serial.flush();
+        #endif
 
         // Infinite loop to trigger watchdog
+        // NOTE: Empty loop doesn't work - must call millis() periodically for AVR watchdog
+        uint32_t lastCheck = millis();
         while (true) {
-            // Do nothing - watchdog will reset the system
+            if (millis() - lastCheck >= 500) {
+                lastCheck = millis();
+            }
         }
         return;
     }
