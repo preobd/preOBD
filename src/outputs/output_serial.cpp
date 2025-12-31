@@ -14,8 +14,7 @@
 #endif
 
 void initSerialOutput() {
-    msg.data.println("Serial output initialized");
-    msg.data.println("Sensor,Value,Units");
+    msg.data.println("✓ Serial output initialized");
 }
 
 void sendSerialOutput(Input *ptr) {

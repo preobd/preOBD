@@ -10,7 +10,7 @@
 
 void initRealdash() {
     // Serial initialization happens in main.cpp
-    msg.data.println("RealDash output initialized");
+    msg.data.println("✓ RealDash output initialized");
 }
 
 void sendRealdash(Input *ptr) {

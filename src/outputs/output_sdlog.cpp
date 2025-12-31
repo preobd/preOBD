@@ -21,7 +21,7 @@ const unsigned long LOG_INTERVAL = 1000;  // Log every 1 second
 void initSDLog() {
     
     if (!SD.begin(SD_CS_PIN)) {
-        Serial.println("SD init failed!");
+        Serial.println("⚠ SD init failed!");
         return;
     }
 

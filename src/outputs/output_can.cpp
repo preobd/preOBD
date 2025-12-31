@@ -31,7 +31,7 @@ void initCAN() {
         Can0.begin();
         Can0.setBaudRate(500000);  // 500 kbps
         Can0.setMaxMB(16);
-        Serial.println("Native FlexCAN initialized (500kbps)");
+        Serial.println("✓ Native FlexCAN initialized (500kbps)");
     #elif defined(USING_ESP32_TWAI)
         // Initialize ESP32 TWAI (CAN)
         // Default pins: GPIO21 (TX), GPIO22 (RX)
@@ -39,15 +39,15 @@ void initCAN() {
         ESP32Can.setPins(GPIO_NUM_21, GPIO_NUM_22);  // TX, RX
         ESP32Can.setSpeed(ESP32Can.convertSpeed(500));  // 500 kbps
         if (ESP32Can.begin()) {
-            Serial.println("ESP32 TWAI (CAN) initialized (500kbps)");
+            Serial.println("✓ ESP32 TWAI (CAN) initialized (500kbps)");
         } else {
-            Serial.println("ESP32 TWAI init failed!");
+            Serial.println("⚠ ESP32 TWAI init failed!");
         }
     #else
         // Initialize MCP2515 via SPI
         CAN.setPins(CAN_CS, CAN_INT);
         if (!CAN.begin(500E3)) {
-            Serial.println("MCP2515 CAN init failed!");
+            Serial.println("⚠ MCP2515 CAN init failed!");
             return;
         }
         Serial.println("✓ MCP2515 CAN initialized (500kbps)");
