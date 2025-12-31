@@ -137,7 +137,7 @@ router.registerTransport(TRANSPORT_USB_SERIAL, &usbSerial);
 router.registerTransport(TRANSPORT_SERIAL1, &hwSerial1);
 router.registerTransport(TRANSPORT_SERIAL2, &hwSerial2);
 #ifdef ESP32
-router.registerTransport(TRANSPORT_BLUETOOTH, &btESP32);
+router.registerTransport(TRANSPORT_ESP32_BT, &btESP32);
 #endif
 
 router.begin();  // Initialize all transports
@@ -151,7 +151,7 @@ enum TransportID {
     TRANSPORT_USB_SERIAL,
     TRANSPORT_SERIAL1,
     TRANSPORT_SERIAL2,
-    TRANSPORT_BLUETOOTH,
+    TRANSPORT_ESP32_BT,
     TRANSPORT_WIFI,        // Reserved for future use
     TRANSPORT_ETHERNET,    // Reserved for future use
     TRANSPORT_MAX
@@ -257,7 +257,7 @@ router.registerTransport(TRANSPORT_SERIAL2, &hwSerial2);
 #ifdef ESP32
 BluetoothTransportESP32 btESP32("openEMS");
 if (btESP32.begin()) {
-    router.registerTransport(TRANSPORT_BLUETOOTH, &btESP32);
+    router.registerTransport(TRANSPORT_ESP32_BT, &btESP32);
     msg.debug.println(F("✓ ESP32 Bluetooth initialized"));
 }
 #endif
