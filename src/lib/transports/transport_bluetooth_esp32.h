@@ -8,7 +8,7 @@
  *   BluetoothTransportESP32 bt("openEMS");
  *   router.registerTransport(TRANSPORT_ESP32_BT, &bt);
  *
- * Note: Only available on ESP32 platform
+ * Note: Only available on original ESP32 (not S3, C3, or other BLE-only variants)
  */
 
 #ifndef TRANSPORT_BLUETOOTH_ESP32_H
@@ -16,7 +16,8 @@
 
 #include "../transport_interface.h"
 
-#ifdef ESP32
+// Only compile for original ESP32 with Bluetooth Classic support
+#if defined(CONFIG_IDF_TARGET_ESP32) || (defined(ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(CONFIG_IDF_TARGET_ESP32C3))
 #include <BluetoothSerial.h>
 
 class BluetoothTransportESP32 : public TransportInterface {

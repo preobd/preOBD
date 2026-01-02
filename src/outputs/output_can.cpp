@@ -34,9 +34,14 @@ void initCAN() {
         Serial.println("✓ Native FlexCAN initialized (500kbps)");
     #elif defined(USING_ESP32_TWAI)
         // Initialize ESP32 TWAI (CAN)
-        // Default pins: GPIO21 (TX), GPIO22 (RX)
         // Note: External CAN transceiver required (MCP2551, TJA1050, SN65HVD230, etc.)
-        ESP32Can.setPins(GPIO_NUM_21, GPIO_NUM_22);  // TX, RX
+        #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
+            // ESP32-S3/C3 pins: GPIO20 (TX), GPIO21 (RX) - GPIO22 doesn't exist on S3
+            ESP32Can.setPins(GPIO_NUM_20, GPIO_NUM_21);  // TX, RX
+        #else
+            // Original ESP32 pins: GPIO21 (TX), GPIO22 (RX)
+            ESP32Can.setPins(GPIO_NUM_21, GPIO_NUM_22);  // TX, RX
+        #endif
         ESP32Can.setSpeed(ESP32Can.convertSpeed(500));  // 500 kbps
         if (ESP32Can.begin()) {
             Serial.println("✓ ESP32 TWAI (CAN) initialized (500kbps)");
