@@ -24,6 +24,9 @@
 #ifdef ENABLE_RELAY_OUTPUT
 #include "../outputs/output_relay.h"
 #endif
+#ifdef ENABLE_TEST_MODE
+#include "../test/test_mode.h"
+#endif
 #include "../lib/message_router.h"
 #include "../lib/message_api.h"
 #include <string.h>
@@ -160,6 +163,11 @@ static const char PSTR_HELP_RELAY[] PROGMEM = "RELAY";
 static const char PSTR_HELP_RELAY_DESC[] PROGMEM = "Relay Control - Threshold-based relay outputs for cooling fans, alarms, etc.";
 #endif
 
+#ifdef ENABLE_TEST_MODE
+static const char PSTR_HELP_TEST[] PROGMEM = "TEST";
+static const char PSTR_HELP_TEST_DESC[] PROGMEM = "Test Mode - Simulate sensor inputs with predefined scenarios";
+#endif
+
 static const char PSTR_HELP_DISPLAY[] PROGMEM = "DISPLAY";
 static const char PSTR_HELP_DISPLAY_DESC[] PROGMEM = "Display Config - LCD/OLED settings and unit preferences";
 
@@ -181,6 +189,9 @@ static void printHelpOutput();
 #ifdef ENABLE_RELAY_OUTPUT
 static void printHelpRelay();
 #endif
+#ifdef ENABLE_TEST_MODE
+static void printHelpTest();
+#endif
 static void printHelpDisplay();
 static void printHelpTransport();
 static void printHelpSystem();
@@ -197,6 +208,9 @@ static const HelpCategory HELP_CATEGORIES[] PROGMEM = {
     {PSTR_HELP_OUTPUT, PSTR_HELP_OUTPUT_DESC, printHelpOutput},
 #ifdef ENABLE_RELAY_OUTPUT
     {PSTR_HELP_RELAY, PSTR_HELP_RELAY_DESC, printHelpRelay},
+#endif
+#ifdef ENABLE_TEST_MODE
+    {PSTR_HELP_TEST, PSTR_HELP_TEST_DESC, printHelpTest},
 #endif
     {PSTR_HELP_DISPLAY, PSTR_HELP_DISPLAY_DESC, printHelpDisplay},
     {PSTR_HELP_TRANSPORT, PSTR_HELP_TRANSPORT_DESC, printHelpTransport},
@@ -328,6 +342,23 @@ static void printHelpRelay() {
     msg.control.println(F("  RELAY <0-1> THRESHOLD <on> <off>  - Set activation thresholds"));
     msg.control.println(F("  RELAY <0-1> MODE <AUTO_HIGH|AUTO_LOW|ON|OFF>  - Set relay mode"));
     msg.control.println(F("  RELAY <0-1> DISABLE  - Disable relay"));
+    msg.control.println();
+}
+#endif
+
+#ifdef ENABLE_TEST_MODE
+static void printHelpTest() {
+    msg.control.println();
+    msg.control.println(F("=== TEST Commands ==="));
+    msg.control.println(F("Simulate sensor inputs with predefined test scenarios"));
+    msg.control.println();
+    msg.control.println(F("  TEST LIST  - Show available test scenarios"));
+    msg.control.println(F("  TEST <0-4>  - Start a specific test scenario"));
+    msg.control.println(F("  TEST STOP  - Stop current test scenario"));
+    msg.control.println(F("  TEST STATUS  - Show current test status"));
+    msg.control.println();
+    msg.control.println(F("Note: Test mode replaces real sensor readings with simulated values"));
+    msg.control.println(F("      All outputs (LCD, CAN, logging) continue to function normally"));
     msg.control.println();
 }
 #endif
@@ -480,6 +511,9 @@ static void printHelpQuick() {
     msg.control.println(F("OUTPUT: LIST | <name> ENABLE/DISABLE/INTERVAL"));
 #ifdef ENABLE_RELAY_OUTPUT
     msg.control.println(F("RELAY: LIST | <0-1> STATUS/PIN/INPUT/THRESHOLD/MODE/DISABLE"));
+#endif
+#ifdef ENABLE_TEST_MODE
+    msg.control.println(F("TEST: LIST | <0-4> | STOP | STATUS"));
 #endif
     msg.control.println(F("DISPLAY: STATUS | ENABLE/DISABLE | TYPE | LCD ADDRESS | UNITS"));
     msg.control.println(F("TRANSPORT: LIST | CONTROL/DATA/DEBUG <transport>"));
@@ -773,7 +807,11 @@ void handleSerialCommand(char* cmd) {
             streq(cmd, "VERSION") ||
             streq(cmd, "DUMP") ||
             streq(cmd, "INFO") ||
-            strncmp(cmd, "LIST", 4) == 0;  // LIST, LIST INPUTS, etc.
+            strncmp(cmd, "LIST", 4) == 0 ||  // LIST, LIST INPUTS, etc.
+#ifdef ENABLE_TEST_MODE
+            strncmp(cmd, "TEST", 4) == 0 ||  // TEST, TEST LIST, etc.
+#endif
+            false;  // Sentinel
 
         if (!isReadOnly) {
             msg.control.println();
@@ -2030,6 +2068,87 @@ void handleSerialCommand(char* cmd) {
         msg.control.println(F("  Usage: RELAY <0-1> THRESHOLD <on> <off>"));
         msg.control.println(F("  Usage: RELAY <0-1> MODE <AUTO_HIGH|AUTO_LOW|ON|OFF>"));
         msg.control.println(F("  Usage: RELAY <0-1> DISABLE"));
+        return;
+    }
+#endif
+
+#ifdef ENABLE_TEST_MODE
+    // ===== TEST COMMANDS =====
+    if (strncmp(cmd, "TEST", 4) == 0) {
+        // Handle standalone "TEST" command
+        if (streq(cmd, "TEST")) {
+            msg.control.println(F("ERROR: TEST requires a subcommand"));
+            msg.control.println(F("  Usage: TEST LIST"));
+            msg.control.println(F("  Usage: TEST <0-4>"));
+            msg.control.println(F("  Usage: TEST STOP"));
+            msg.control.println(F("  Usage: TEST STATUS"));
+            return;
+        }
+
+        char* rest = cmd + 4;
+        trim(rest);
+
+        // TEST LIST
+        if (streq(rest, "LIST")) {
+            listTestScenarios();
+            return;
+        }
+
+        // TEST STOP
+        if (streq(rest, "STOP")) {
+            if (!isTestModeActive()) {
+                msg.control.println(F("No test scenario is currently running"));
+            } else {
+                stopTestMode();
+                msg.control.println(F("Test mode stopped"));
+            }
+            return;
+        }
+
+        // TEST STATUS
+        if (streq(rest, "STATUS")) {
+            if (!isTestModeActive()) {
+                msg.control.println(F("Test mode: INACTIVE"));
+            } else {
+                msg.control.println(F("Test mode: ACTIVE"));
+                msg.control.println(F("  Use TEST LIST to see all scenarios"));
+            }
+            return;
+        }
+
+        // TEST <scenario_number>
+        // Try to parse as a number
+        char* endPtr;
+        long scenarioNum = strtol(rest, &endPtr, 10);
+
+        // Check if parsing succeeded and entire string was consumed
+        if (endPtr != rest && *endPtr == '\0') {
+            // Valid number
+            if (scenarioNum < 0 || scenarioNum >= getNumTestScenarios()) {
+                msg.control.print(F("ERROR: Invalid scenario index (must be 0-"));
+                msg.control.print(getNumTestScenarios() - 1);
+                msg.control.println(F(")"));
+                msg.control.println(F("Use TEST LIST to see available scenarios"));
+                return;
+            }
+
+            // Start the test scenario
+            if (startTestScenario((uint8_t)scenarioNum)) {
+                msg.control.println(F("Test scenario started"));
+                msg.control.println(F("  Use TEST STATUS to check progress"));
+                msg.control.println(F("  Use TEST STOP to end early"));
+            } else {
+                msg.control.println(F("ERROR: Failed to start test scenario"));
+            }
+            return;
+        }
+
+        // Unknown TEST subcommand
+        msg.control.println(F("ERROR: Unknown TEST command"));
+        msg.control.println(F("  Usage: TEST LIST"));
+        msg.control.println(F("  Usage: TEST <0-4>"));
+        msg.control.println(F("  Usage: TEST STOP"));
+        msg.control.println(F("  Usage: TEST STATUS"));
         return;
     }
 #endif
