@@ -2,8 +2,8 @@
  * generic_calibrations.h - Generic Sensor Calibration Data
  *
  * Contains calibrations for generic/aftermarket sensors without specific
- * manufacturer designation. Includes common automotive pressure and
- * temperature sensor specifications.
+ * manufacturer designation. Includes common automotive sensors for pressure,
+ * temperature, and speed.
  */
 
 #ifndef GENERIC_CALIBRATIONS_H
@@ -47,6 +47,21 @@ static const PROGMEM LinearCalibration generic_temp_linear_cal = {
     .voltage_max = 4.5,
     .output_min = -40.0,    // Temperature in °C (base unit)
     .output_max = 150.0
+};
+
+// ===== SPEED SENSOR CALIBRATION =====
+
+// Generic Hall Effect Speed Sensor calibration
+// Compatible with VDO (YBE100530), OEM sensors, and generic 3-wire hall effect sensors
+// User must determine pulses_per_rev empirically by counting teeth or testing
+// This provides a reasonable starting point for common configurations
+static const PROGMEM SpeedCalibration hall_speed_sensor_cal = {
+    .pulses_per_rev = 100,          // Common transmission gear tooth count (user must verify)
+    .tire_circumference_mm = 2000,  // ~205/55R16 tire (user should measure actual tire)
+    .final_drive_ratio = 3.73,      // Common differential ratio (user must verify)
+    .calibration_mult = 1.0,        // Fine-tuning multiplier (adjust after testing)
+    .timeout_ms = 2000,             // 2 seconds without pulse = stopped
+    .max_speed_kph = 300            // Maximum valid speed (safety check)
 };
 
 #endif // GENERIC_CALIBRATIONS_H
