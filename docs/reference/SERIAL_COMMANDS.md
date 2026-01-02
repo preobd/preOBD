@@ -417,10 +417,39 @@ CONFIG LOAD <filename>           # Load from SD card
 
 View system status and configuration.
 
-### Commands
+### Help System
+
+The help system is hierarchical and organized by category:
 
 ```
-HELP                             # Show command list
+HELP                             # Show category overview
+HELP <category>                  # Show detailed help for category
+HELP QUICK                       # Show compact command reference
+?                                # Alias for HELP
+```
+
+**Available Categories:**
+- `HELP LIST` - Discovery commands (list inputs, applications, sensors)
+- `HELP SET` - Basic configuration commands (application, sensor, names, units, alarms)
+- `HELP CALIBRATION` - Advanced sensor calibration (RPM, speed, pressure, temperature)
+- `HELP CONTROL` - Input control (enable, disable, clear, info)
+- `HELP OUTPUT` - Output module configuration (CAN, RealDash, Serial, SD logging)
+- `HELP DISPLAY` - Display settings (LCD/OLED, unit preferences)
+- `HELP TRANSPORT` - Message routing (control, data, debug messages)
+- `HELP SYSTEM` - System configuration (sea level, intervals)
+- `HELP CONFIG` - Persistence and modes (save, load, reset, version, dump)
+
+**Examples:**
+```
+HELP                            # Show all categories
+HELP SET                        # Show all SET commands
+HELP CALIBRATION                # Show calibration commands
+HELP QUICK                      # Show compact reference
+```
+
+### Other Query Commands
+
+```
 VERSION                          # Show firmware version
 DUMP                             # Show complete system state
 DUMP JSON                        # Export configuration as JSON

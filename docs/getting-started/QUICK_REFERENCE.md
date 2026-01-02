@@ -198,6 +198,24 @@ SET 4 COOLANT_LEVEL FLOAT_SWITCH
 
 ## Command Reference
 
+### Getting Help
+
+The help system is hierarchical and organized by category:
+
+| Command | Description |
+|---------|-------------|
+| `HELP` | Show category overview |
+| `HELP <category>` | Show detailed help (LIST, SET, CALIBRATION, CONTROL, OUTPUT, DISPLAY, TRANSPORT, SYSTEM, CONFIG) |
+| `HELP QUICK` | Show compact command reference |
+| `?` | Alias for HELP |
+
+**Examples:**
+```
+HELP                    # Show all categories
+HELP SET                # Show all SET commands
+HELP CALIBRATION        # Show calibration commands
+```
+
 ### Configuration Commands (CONFIG mode only)
 
 | Command | Description | Example |
@@ -221,6 +239,7 @@ SET 4 COOLANT_LEVEL FLOAT_SWITCH
 | `INFO <pin>` | Show input details |
 | `DUMP` | Show complete configuration |
 | `VERSION` | Show firmware version |
+| `HELP <category>` | Show help for category |
 
 ### System Commands
 
