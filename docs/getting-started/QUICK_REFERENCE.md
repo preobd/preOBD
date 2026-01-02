@@ -68,7 +68,7 @@ Use `LIST SENSORS` to see all available sensor types.
 
 ### 3. Operate
 
-**MODE_BUTTON (Pin 5):**
+**MODE_BUTTON:**
 - Hold during boot → Enter CONFIG mode
 - Press in RUN mode → Silence alarms for 30 seconds
 

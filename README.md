@@ -115,7 +115,7 @@ SAVE
 RUN                                                   # Enter RUN mode (starts sensors)
 ```
 
-**Multi-function button (Pin 5):**
+**Multi-function button:**
 - Hold during boot → Enter CONFIG mode
 - Press in RUN mode → Silence alarms for 30 seconds
 - Hold briefly during RUN mode to toggle display on/off
