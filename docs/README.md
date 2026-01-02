@@ -25,7 +25,7 @@ See [DISCLAIMER](../DISCLAIMER.md) for safety information and software limitatio
 openEMS provides comprehensive engine monitoring for vehicles that lack modern electronic systems. It's designed for classic cars that typically have minimal instrumentation.
 
 **Key Features:**
-- Multiple sensor type support (temperature, pressure, voltage, RPM)
+- Multiple sensor type support (temperature, pressure, voltage, RPM, speed)
 - Pre-calibrated sensor library
 - Flexible configuration
 - Multiple outputs (LCD, CAN, serial, SD logging)
@@ -222,6 +222,7 @@ openEMS includes 30+ pre-calibrated sensor configurations:
 |--------|-------------|
 | `VOLTAGE_DIVIDER` | 12V battery monitoring |
 | `W_PHASE_RPM` | Alternator W-phase RPM |
+| `HALL_SPEED` | Hall effect speed sensor (VDO, OEM, generic) |
 | `FLOAT_SWITCH` | Digital level switch |
 | `BME280_TEMP` | Ambient temperature |
 | `BME280_PRESSURE` | Barometric pressure |
@@ -248,6 +249,7 @@ Each input measures a specific application:
 | `PRIMARY_BATTERY` | Main Battery | 1s | VOLTAGE_DIVIDER |
 | `AUXILIARY_BATTERY` | Secondary Battery | 2s | VOLTAGE_DIVIDER |
 | `ENGINE_RPM` | Engine Speed | 0s | W_PHASE_RPM |
+| `VEHICLE_SPEED` | Vehicle Speed | 0s | HALL_SPEED |
 | `COOLANT_LEVEL` | Coolant Level | 0s | FLOAT_SWITCH |
 | `AMBIENT_TEMP` | Ambient Temperature | 2s | BME280_TEMP |
 
@@ -319,6 +321,7 @@ OUTPUT Alarm INTERVAL 500   # Check alarms every 500ms
 - [THERMOCOUPLE_GUIDE.md](guides/sensor-types/THERMOCOUPLE_GUIDE.md) - MAX6675/MAX31855
 - [VDO_SENSOR_GUIDE.md](guides/sensor-types/VDO_SENSOR_GUIDE.md) - VDO temperature/pressure
 - [W_PHASE_RPM_GUIDE.md](guides/sensor-types/W_PHASE_RPM_GUIDE.md) - RPM for classic cars
+- [HALL_SPEED_GUIDE.md](guides/sensor-types/HALL_SPEED_GUIDE.md) - Vehicle speed sensing
 - [PRESSURE_SENSOR_GUIDE.md](guides/sensor-types/PRESSURE_SENSOR_GUIDE.md) - Pressure sensors
 - [VOLTAGE_SENSOR_GUIDE.md](guides/sensor-types/VOLTAGE_SENSOR_GUIDE.md) - Voltage monitoring
 - [DIGITAL_SENSOR_GUIDE.md](guides/sensor-types/DIGITAL_SENSOR_GUIDE.md) - Float switches

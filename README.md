@@ -15,6 +15,7 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 - Monitors pressure sensors (oil, boost, fuel)
 - Monitors battery voltage
 - Monitors engine RPM (via alternator W-phase)
+- Monitors vehicle speed (via hall effect sensors)
 - Displays data on LCD screen
 - Outputs standard OBDII PIDs via CAN bus
 - Logs data to serial and SD card
@@ -53,6 +54,7 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 *Other:*
 - Battery voltage monitoring (with divider)
 - W-phase alternator RPM sensing
+- Hall effect speed sensors (VDO, OEM, generic 3-wire)
 - BME280 environmental (temp, pressure, humidity, altitude)
 - Digital inputs (float switches, warning lights)
 - Custom calibration support for unlisted sensors
@@ -138,6 +140,7 @@ VERSION                  # Show firmware version
 - **[Pressure Sensor Guide](docs/guides/sensor-types/PRESSURE_SENSOR_GUIDE.md)** - Pressure sensor wiring
 - **[Voltage Monitoring Guide](docs/guides/sensor-types/VOLTAGE_SENSOR_GUIDE.md)** - Battery monitoring
 - **[W-Phase RPM Guide](docs/guides/sensor-types/W_PHASE_RPM_GUIDE.md)** - RPM sensing for classics
+- **[Hall Effect Speed Guide](docs/guides/sensor-types/HALL_SPEED_GUIDE.md)** - Vehicle speed sensing
 - **[Digital Sensor Guide](docs/guides/sensor-types/DIGITAL_SENSOR_GUIDE.md)** - Float switches
 
 ### Configuration
