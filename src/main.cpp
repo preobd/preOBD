@@ -29,7 +29,12 @@
 #include "lib/message_api.h"
 #include "lib/transport_serial.h"
 #ifdef ESP32
-#include "lib/transports/transport_bluetooth_esp32.h"
+// Include appropriate Bluetooth transport for ESP32 variant
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
+    #include "lib/transports/transport_ble_esp32.h"
+#else
+    #include "lib/transports/transport_bluetooth_esp32.h"
+#endif
 #endif
 
 // Global transport instances
@@ -45,8 +50,12 @@ SerialTransport hwSerial2(&Serial2, "SERIAL2", 9600);  // Default 9600 for HC-05
 #endif
 
 #ifdef ESP32
-// ESP32 Bluetooth Classic transport
-BluetoothTransportESP32 btESP32("openEMS");
+// ESP32 Bluetooth transport (Classic or BLE depending on chip)
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
+    BLETransportESP32 btESP32("openEMS");
+#else
+    BluetoothTransportESP32 btESP32("openEMS");
+#endif
 #endif
 
 // Declare output module functions
