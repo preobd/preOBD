@@ -225,6 +225,7 @@ void displaySensor(Input *ptr, byte line) {
                 case MEASURE_HUMIDITY:
                 case MEASURE_ELEVATION:
                 case MEASURE_RPM:
+                case MEASURE_SPEED:
                 case MEASURE_DIGITAL:
                     decimals = 0;  // No decimals for these
                     break;
