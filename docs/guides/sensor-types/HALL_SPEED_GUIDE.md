@@ -1,65 +1,89 @@
-# VDO Hall Effect Speed Sensor (YBE100530)
+# Hall Effect Speed Sensor (HALL_SPEED)
 
 ## Overview
 
-The VDO Hall Effect Speed Sensor (part number YBE100530 / 340.214/13/4) is a 3-pin hall effect sensor used for measuring vehicle speed. This sensor generates pulses based on gear teeth or magnets passing by, which are counted and converted to vehicle speed in km/h or mph.
+The HALL_SPEED sensor type supports any 3-wire hall effect speed sensor for measuring vehicle speed. These sensors generate pulses based on gear teeth or magnets passing by, which are counted and converted to vehicle speed in km/h or mph.
+
+### Compatible Sensors
+
+This implementation works with:
+- **VDO sensors** (YBE100530, 340.214/13/4)
+- **OEM sensors** (GM, Ford, Chrysler, Land Rover, etc.)
+- **Generic 3-wire hall effect sensors** (power, ground, signal)
+
+The configuration and calibration process is the same regardless of manufacturer.
 
 ## ⚠️ CRITICAL: Voltage Protection Required
 
-**WARNING:** The VDO sensor outputs a **12V signal** but Teensy 4.1 uses **3.3V logic**. You **MUST** add voltage protection before connecting the sensor signal to any Teensy pin, or you will damage your board!
+**WARNING:** Many hall effect sensors (including VDO) output a **12V signal** which can damage microcontroller inputs. You **MUST** verify your sensor's output voltage matches your board's logic level. If the sensor outputs higher voltage than your board can handle, add voltage protection or you will damage your board!
 
 ### Recommended Protection Circuit (Zener Diode Clamp)
 
+**For 12V sensors to 3.3V logic (e.g., Teensy 4.1):**
 ```
-VDO Pin 3 (Signal) ───[1kΩ resistor]───┬─── Teensy Digital Pin
-                                       │
-                                   3.3V Zener Diode
-                                       │
-                                      GND
+Sensor Signal ───[1kΩ resistor]───┬─── Microcontroller Digital Pin
+                                  │
+                              3.3V Zener Diode
+                                  │
+                                 GND
 ```
 
 **Components:**
 - 1kΩ resistor (current limiting)
-- 3.3V Zener diode (BZX55C3V3 or similar)
+- Zener diode matching your logic level (3.3V for Teensy 4.1, 5V for Arduino Uno, etc.)
+  - For 3.3V: BZX55C3V3 or similar
+  - For 5V: BZX55C5V1 or similar
 
 **Why this works:**
 - The 1kΩ resistor limits current through the Zener diode
-- The Zener diode clamps the voltage to a safe 3.3V maximum
-- When the signal is > 3.3V, the Zener conducts and shunts excess voltage to ground
-- When the signal is < 3.3V, the Zener acts as an open circuit
+- The Zener diode clamps the voltage to a safe level matching your board's logic
+- When the signal exceeds the Zener voltage, it conducts and shunts excess to ground
+- When the signal is below the Zener voltage, it acts as an open circuit
 
 ### Alternative Protection Methods
 
 **Option 2: Resistor Voltage Divider**
 ```
-VDO Pin 3 ───[10kΩ]───┬───[4.7kΩ]─── GND
-                       │
-                    Teensy Pin
+Sensor Signal ───[R1]───┬───[R2]─── GND
+                         │
+                   Board Input Pin
 ```
-- Output voltage: 12V × (4.7kΩ / 14.7kΩ) ≈ 3.84V
-- **Note:** May need additional clamping for safety
+- Calculate resistors based on sensor voltage and board logic level
+- Example for 12V→3.3V: R1=10kΩ, R2=4.7kΩ gives ~3.8V
+- **Note:** May need additional clamping diode for safety
 
 **Option 3: Level Shifter IC (Most Robust)**
-- Use a bidirectional level shifter like TXS0108E
-- Handles 12V to 3.3V conversion with built-in protection
+- Use a bidirectional level shifter (e.g., TXS0108E)
+- Handles voltage conversion with built-in protection
 - More expensive but safest option
+- Recommended for production use
 
 ## Wiring
 
-### VDO Sensor Pinout
+### Generic 3-Wire Hall Effect Sensor Pinout
 
-**YBE100530 Connector (3 pins):**
-- **Pin 1:** +12V power (vehicle power, red/white wire)
+Most hall effect speed sensors use a standard 3-wire configuration:
+- **Pin 1:** Power (+5V to +12V, typically vehicle power)
+- **Pin 2:** Ground (common ground with microcontroller)
+- **Pin 3:** Signal output (square wave pulses matching power voltage)
+
+**Note:** Pin numbering and wire colors vary by manufacturer. Always verify with your sensor's datasheet.
+
+### VDO Sensor Specific Pinout (YBE100530)
+
+**YBE100530 Connector:**
+- **Pin 1:** +12V power (red/white wire)
 - **Pin 2:** Ground (black wire)
-- **Pin 3:** Signal output (12V square wave pulses, red/black wire)
+- **Pin 3:** Signal output - 12V pulses (red/black wire)
+- **Compatible Harness:** STC4637
 
-### Connection to Teensy 4.1
+### Connection to Microcontroller
 
-1. Connect VDO Pin 1 to vehicle +12V (switched ignition recommended)
-2. Connect VDO Pin 2 to vehicle ground AND Teensy ground (common ground essential!)
-3. Connect VDO Pin 3 to voltage protection circuit, then to any Teensy digital pin (e.g., pin 2, 3, 5, 6, etc.)
+1. Connect sensor power pin to appropriate voltage source (typically vehicle +12V or +5V)
+2. Connect sensor ground to vehicle ground AND microcontroller ground (common ground is essential!)
+3. Connect sensor signal to voltage protection circuit (if needed), then to any digital input pin with interrupt capability
 
-**Compatible Harness:** STC4637 (TD5 tail light plug style connector) works with this sensor
+**Important:** Ensure common ground between sensor and microcontroller. Without shared ground, signals will be unreliable.
 
 ## How It Works
 
@@ -110,7 +134,7 @@ You must determine these parameters for your specific vehicle:
 
 1. **Initial Setup:**
    ```
-   SET 2 VEHICLE_SPEED VDO_SPEED_SENSOR
+   SET 2 VEHICLE_SPEED HALL_SPEED
    SETCAL 2 SPEED 100 2008 3.73 1.0 2000 300
    SAVE
    ```
@@ -167,8 +191,8 @@ You must determine these parameters for your specific vehicle:
 
 ### Basic Configuration
 ```bash
-# Configure input on pin 2 as vehicle speed with VDO sensor
-SET 2 VEHICLE_SPEED VDO_SPEED_SENSOR
+# Configure input on pin 2 as vehicle speed with hall effect sensor
+SET 2 VEHICLE_SPEED HALL_SPEED
 
 # Set calibration (example values - adjust for your vehicle)
 SETCAL 2 SPEED 100 2008 3.73 1.0 2000 300
@@ -202,7 +226,7 @@ CLEAR 2
 
 ## OBD-II Integration
 
-The VDO speed sensor automatically integrates with OBD-II output:
+The HALL_SPEED sensor automatically integrates with OBD-II output:
 
 - **PID:** 0x0D (Vehicle Speed)
 - **Format:** Single byte (0-255 km/h)
@@ -231,16 +255,16 @@ Compatible with:
 
 ## Example Configurations
 
-### Land Rover Defender with 205/55R16 Tires
+### Land Rover Defender with 205/55R16 Tires (VDO YBE100530)
 ```
-SET 2 VEHICLE_SPEED VDO_SPEED_SENSOR
+SET 2 VEHICLE_SPEED HALL_SPEED
 SETCAL 2 SPEED 100 2008 3.54 1.0 2000 250
 SAVE
 ```
 
 ### Generic 4x4 with 285/75R16 Tires (Larger)
 ```
-SET 2 VEHICLE_SPEED VDO_SPEED_SENSOR
+SET 2 VEHICLE_SPEED HALL_SPEED
 SETCAL 2 SPEED 100 2436 3.73 1.0 2000 200
 SAVE
 ```
@@ -248,7 +272,7 @@ SAVE
 
 ### Off-Road Vehicle with 33" Tires
 ```
-SET 2 VEHICLE_SPEED VDO_SPEED_SENSOR
+SET 2 VEHICLE_SPEED HALL_SPEED
 SETCAL 2 SPEED 100 2616 4.10 1.0 2000 160
 SAVE
 ```
