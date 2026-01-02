@@ -120,7 +120,18 @@ union CalibrationOverride {
         uint16_t max_rpm;
         byte padding[1];
     } rpm;
-    
+
+    // Speed sensor (16 bytes)
+    struct {
+        uint8_t pulses_per_rev;
+        uint16_t tire_circumference_mm;
+        float final_drive_ratio;
+        float calibration_mult;
+        uint16_t timeout_ms;
+        uint16_t max_speed_kph;
+        byte padding[3];
+    } speed;
+
     // Raw bytes for memset/EEPROM operations
     byte raw[16];
 };

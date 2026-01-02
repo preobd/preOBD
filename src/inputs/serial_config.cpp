@@ -472,6 +472,8 @@ void handleSerialCommand(char* cmd) {
         msg.control.println();
         msg.control.println(F("Calibration Commands:"));
         msg.control.println(F("  SET <pin> CALIBRATION PRESET  - Clear custom, use preset"));
+        msg.control.println(F("  SET <pin> RPM <poles> <ratio> [<mult>] <timeout> <min> <max>"));
+        msg.control.println(F("  SET <pin> SPEED <ppr> <tire_circ> <ratio> [<mult>] <timeout> <max>"));
         msg.control.println(F("  SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>"));
         msg.control.println(F("  SET <pin> BIAS <resistor>  - Set bias resistor (Ohms)"));
         msg.control.println(F("  SET <pin> STEINHART <bias> <a> <b> <c>  - Steinhart-Hart"));
@@ -929,6 +931,131 @@ void handleSerialCommand(char* cmd) {
             msg.control.print(F("  Effective: "));
             msg.control.print(effective_ppr, 2);
             msg.control.println(F(" pulses/engine-rev"));
+            return;
+        }
+
+        // SET <pin> SPEED <pulses_per_rev> <tire_circ_mm> <drive_ratio> [<mult>] <timeout> <max_speed>
+        // Supports 5 parameters (mult defaults to 1.0) or 6 parameters (custom mult)
+        if (strncmp(fieldAndValue, "SPEED ", 6) == 0) {
+            char* params = fieldAndValue + 6;
+            trim(params);
+
+            // Count tokens to determine if calibration_mult is provided
+            char paramsCopy[80];
+            strncpy(paramsCopy, params, sizeof(paramsCopy) - 1);
+            paramsCopy[sizeof(paramsCopy) - 1] = '\0';
+
+            int tokenCount = 0;
+            char* token = strtok(paramsCopy, " ");
+            while (token != nullptr && tokenCount < 7) {
+                tokenCount++;
+                token = strtok(nullptr, " ");
+            }
+
+            if (tokenCount != 5 && tokenCount != 6) {
+                msg.control.println(F("ERROR: SPEED requires 5 or 6 parameters"));
+                msg.control.println(F("  Usage: SET <pin> SPEED <ppr> <tire_circ> <ratio> <timeout> <max_speed>"));
+                msg.control.println(F("     or: SET <pin> SPEED <ppr> <tire_circ> <ratio> <mult> <timeout> <max_speed>"));
+                msg.control.println(F("  Example: SET 2 SPEED 100 2008 3.73 2000 300"));
+                msg.control.println(F("       or: SET 2 SPEED 100 2008 3.73 1.05 2000 300"));
+                return;
+            }
+
+            // Parse parameters
+            uint8_t pulses_per_rev;
+            uint16_t tire_circumference_mm;
+            float final_drive_ratio;
+            float calibration_mult = 1.0;  // Default
+            uint16_t timeout_ms;
+            uint16_t max_speed_kph;
+
+            token = strtok(params, " ");
+            if (!token) { msg.control.println(F("ERROR: Missing pulses_per_rev")); return; }
+            pulses_per_rev = (uint8_t)atoi(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) { msg.control.println(F("ERROR: Missing tire_circumference_mm")); return; }
+            tire_circumference_mm = (uint16_t)atoi(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) { msg.control.println(F("ERROR: Missing final_drive_ratio")); return; }
+            final_drive_ratio = atof(token);
+
+            if (tokenCount == 6) {
+                // 6 parameters: custom calibration_mult provided
+                token = strtok(nullptr, " ");
+                if (!token) { msg.control.println(F("ERROR: Missing calibration_mult")); return; }
+                calibration_mult = atof(token);
+            }
+
+            token = strtok(nullptr, " ");
+            if (!token) { msg.control.println(F("ERROR: Missing timeout_ms")); return; }
+            timeout_ms = (uint16_t)atoi(token);
+
+            token = strtok(nullptr, " ");
+            if (!token) { msg.control.println(F("ERROR: Missing max_speed_kph")); return; }
+            max_speed_kph = (uint16_t)atoi(token);
+
+            // Validate parameters
+            if (pulses_per_rev < 1 || pulses_per_rev > 250) {
+                msg.control.println(F("ERROR: Pulses per rev must be between 1 and 250"));
+                return;
+            }
+            if (tire_circumference_mm < 500 || tire_circumference_mm > 5000) {
+                msg.control.println(F("ERROR: Tire circumference must be between 500 and 5000 mm"));
+                return;
+            }
+            if (final_drive_ratio < 0.5 || final_drive_ratio > 10.0) {
+                msg.control.println(F("ERROR: Drive ratio must be between 0.5 and 10.0"));
+                return;
+            }
+            if (calibration_mult < 0.5 || calibration_mult > 2.0) {
+                msg.control.println(F("ERROR: Calibration multiplier must be between 0.5 and 2.0"));
+                return;
+            }
+            if (timeout_ms < 100 || timeout_ms > 10000) {
+                msg.control.println(F("ERROR: Timeout must be between 100 and 10000 ms"));
+                return;
+            }
+            if (max_speed_kph < 50 || max_speed_kph > 500) {
+                msg.control.println(F("ERROR: Max speed must be between 50 and 500 km/h"));
+                return;
+            }
+
+            // Apply custom calibration
+            Input* input = getInputByPin(pin);
+            if (!input) {
+                msg.control.println(F("ERROR: Input not configured"));
+                return;
+            }
+
+            // Set custom calibration
+            input->flags.useCustomCalibration = true;
+            input->customCalibration.speed.pulses_per_rev = pulses_per_rev;
+            input->customCalibration.speed.tire_circumference_mm = tire_circumference_mm;
+            input->customCalibration.speed.final_drive_ratio = final_drive_ratio;
+            input->customCalibration.speed.calibration_mult = calibration_mult;
+            input->customCalibration.speed.timeout_ms = timeout_ms;
+            input->customCalibration.speed.max_speed_kph = max_speed_kph;
+
+            msg.control.print(F("Speed calibration set for pin "));
+            msg.control.println(pinStr);
+            msg.control.print(F("  Pulses/Rev: "));
+            msg.control.println(pulses_per_rev);
+            msg.control.print(F("  Tire Circumference: "));
+            msg.control.print(tire_circumference_mm);
+            msg.control.println(F(" mm"));
+            msg.control.print(F("  Drive Ratio: "));
+            msg.control.print(final_drive_ratio, 2);
+            msg.control.println(F(":1"));
+            msg.control.print(F("  Calibration Mult: "));
+            msg.control.println(calibration_mult, 4);
+            msg.control.print(F("  Timeout: "));
+            msg.control.print(timeout_ms);
+            msg.control.println(F(" ms"));
+            msg.control.print(F("  Max Speed: "));
+            msg.control.print(max_speed_kph);
+            msg.control.println(F(" km/h"));
             return;
         }
 
@@ -1962,6 +2089,22 @@ void handleSerialCommand(char* cmd) {
                         msg.control.print(input->customCalibration.rpm.min_rpm);
                         msg.control.print(F("-"));
                         msg.control.println(input->customCalibration.rpm.max_rpm);
+                    } else if (input->calibrationType == CAL_SPEED) {
+                        msg.control.print(F("  Pulses/Rev: "));
+                        msg.control.println(input->customCalibration.speed.pulses_per_rev);
+                        msg.control.print(F("  Tire Circumference: "));
+                        msg.control.print(input->customCalibration.speed.tire_circumference_mm);
+                        msg.control.println(F(" mm"));
+                        msg.control.print(F("  Drive Ratio: "));
+                        msg.control.println(input->customCalibration.speed.final_drive_ratio, 2);
+                        msg.control.print(F("  Calibration Mult: "));
+                        msg.control.println(input->customCalibration.speed.calibration_mult, 4);
+                        msg.control.print(F("  Timeout: "));
+                        msg.control.print(input->customCalibration.speed.timeout_ms);
+                        msg.control.println(F(" ms"));
+                        msg.control.print(F("  Max Speed: "));
+                        msg.control.print(input->customCalibration.speed.max_speed_kph);
+                        msg.control.println(F(" km/h"));
                     }
                 } else {
                     msg.control.println(F("Preset (PROGMEM)"));

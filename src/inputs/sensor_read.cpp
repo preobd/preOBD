@@ -59,6 +59,9 @@
 // RPM sensors
 #include "sensors/rpm/w_phase.cpp"
 
+// Speed sensors
+#include "sensors/speed/hall_speed.cpp"
+
 // I2C sensors (BME280 environmental sensor)
 #include "sensors/i2c/bme280.cpp"
 
@@ -166,6 +169,13 @@ float obdConvertFloatSwitch(float value) {
     return value * 255.0;  // OBDII format: 0 or 255
 }
 
+float obdConvertSpeed(float kph) {
+    // OBD-II PID 0x0D format: Vehicle Speed in km/h (range 0-255)
+    // Direct value, no conversion needed
+    if (kph > 255.0) return 255.0;  // Clamp to max
+    return kph;
+}
+
 // ===== MEASUREMENT TYPE CONVERSION HELPERS =====
 
 ObdConvertFunc getObdConvertFunc(MeasurementType type) {
@@ -177,6 +187,7 @@ ObdConvertFunc getObdConvertFunc(MeasurementType type) {
         case MEASURE_HUMIDITY: return obdConvertHumidity;
         case MEASURE_ELEVATION: return obdConvertElevation;
         case MEASURE_DIGITAL: return obdConvertFloatSwitch;
+        case MEASURE_SPEED: return obdConvertSpeed;
         default: return obdConvertVoltage;
     }
 }

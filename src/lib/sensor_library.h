@@ -41,12 +41,14 @@ extern void readBME280Pressure(Input*);
 extern void readBME280Humidity(Input*);
 extern void readBME280Elevation(Input*);
 extern void readDigitalFloatSwitch(Input*);
+extern void readHallSpeed(Input*);
 
 // Forward declare init functions (sensors that need special initialization)
 extern void initThermocoupleCS(Input*);
 extern void initWPhaseRPM(Input*);
 extern void initFloatSwitch(Input*);
 extern void initBME280(Input*);
+extern void initHallSpeed(Input*);
 
 // Forward declare unit conversion functions (registry-based)
 extern float convertFromBaseUnits(float baseValue, uint8_t unitsIndex);
@@ -61,6 +63,7 @@ extern float obdConvertRPM(float value);
 extern float obdConvertHumidity(float value);
 extern float obdConvertElevation(float value);
 extern float obdConvertFloatSwitch(float value);
+extern float obdConvertSpeed(float value);
 
 // Helper function to get OBD conversion function pointer from measurement type
 typedef float (*ObdConvertFunc)(float);
@@ -135,6 +138,8 @@ static const char PSTR_BME280_ELEVATION[] PROGMEM = "BME280_ELEVATION";
 static const char PSTR_BME280_ELEVATION_LABEL[] PROGMEM = "BME280 Elevation";
 static const char PSTR_FLOAT_SWITCH[] PROGMEM = "FLOAT_SWITCH";
 static const char PSTR_FLOAT_SWITCH_LABEL[] PROGMEM = "Float Switch";
+static const char PSTR_HALL_SPEED[] PROGMEM = "HALL_SPEED";
+static const char PSTR_HALL_SPEED_LABEL[] PROGMEM = "Hall Effect Speed Sensor";
 
 // ===== SENSOR LIBRARY (PROGMEM - Flash Memory) =====
 //
@@ -556,6 +561,24 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .maxValue = 1.0,
         .nameHash = 0xF22C,  // djb2_hash("FLOAT_SWITCH")
         .pinTypeRequirement = PIN_DIGITAL  // Uses digitalRead
+    },
+
+    // ===== SPEED SENSORS =====
+    // Index 23: HALL_SPEED
+    {
+        .name = PSTR_HALL_SPEED,
+        .label = PSTR_HALL_SPEED_LABEL,
+        .description = nullptr,
+        .readFunction = readHallSpeed,
+        .initFunction = initHallSpeed,
+        .measurementType = MEASURE_SPEED,
+        .calibrationType = CAL_SPEED,
+        .defaultCalibration = &hall_speed_sensor_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS,
+        .minValue = 0.0,
+        .maxValue = 300.0,     // 300 km/h maximum
+        .nameHash = 0xB076,    // djb2_hash("HALL_SPEED")
+        .pinTypeRequirement = PIN_DIGITAL  // Uses digitalPinToInterrupt
     }
 };
 
