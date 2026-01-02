@@ -135,7 +135,7 @@ You must determine these parameters for your specific vehicle:
 1. **Initial Setup:**
    ```
    SET 2 VEHICLE_SPEED HALL_SPEED
-   SETCAL 2 SPEED 100 2008 3.73 1.0 2000 300
+   SET 2 SPEED 100 2008 3.73 1.0 2000 300
    SAVE
    ```
    *(Parameters: pulses_per_rev tire_circumference_mm final_drive_ratio calibration_mult timeout_ms max_speed_kph)*
@@ -155,7 +155,7 @@ You must determine these parameters for your specific vehicle:
 
 4. **Update and Save:**
    ```
-   SETCAL 2 SPEED 100 2008 3.73 1.05 2000 300
+   SET 2 SPEED 100 2008 3.73 1.05 2000 300
    SAVE
    ```
 
@@ -195,7 +195,7 @@ You must determine these parameters for your specific vehicle:
 SET 2 VEHICLE_SPEED HALL_SPEED
 
 # Set calibration (example values - adjust for your vehicle)
-SETCAL 2 SPEED 100 2008 3.73 1.0 2000 300
+SET 2 SPEED 100 2008 3.73 1.0 2000 300
 
 # Save configuration to EEPROM
 SAVE
@@ -258,14 +258,14 @@ Compatible with:
 ### Land Rover Defender with 205/55R16 Tires (VDO YBE100530)
 ```
 SET 2 VEHICLE_SPEED HALL_SPEED
-SETCAL 2 SPEED 100 2008 3.54 1.0 2000 250
+SET 2 SPEED 100 2008 3.54 1.0 2000 250
 SAVE
 ```
 
 ### Generic 4x4 with 285/75R16 Tires (Larger)
 ```
 SET 2 VEHICLE_SPEED HALL_SPEED
-SETCAL 2 SPEED 100 2436 3.73 1.0 2000 200
+SET 2 SPEED 100 2436 3.73 1.0 2000 200
 SAVE
 ```
 *(285/75R16 ≈ 2436mm circumference)*
@@ -273,7 +273,7 @@ SAVE
 ### Off-Road Vehicle with 33" Tires
 ```
 SET 2 VEHICLE_SPEED HALL_SPEED
-SETCAL 2 SPEED 100 2616 4.10 1.0 2000 160
+SET 2 SPEED 100 2616 4.10 1.0 2000 160
 SAVE
 ```
 *(33" diameter ≈ 2616mm circumference, 4.10:1 gearing)*
