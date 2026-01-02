@@ -37,7 +37,7 @@ pio run -t upload
 ### 3. Activate Test Mode
 
 **Hardware Method (Recommended):**
-- Connect pin 5 to GND
+- Connect `TEST_MODE_TRIGGER_PIN` (defined in `config.h`) to GND
 - Power on or reset the device
 - Test mode activates automatically
 
@@ -88,7 +88,7 @@ While test mode is active:
 
 ### 6. Exit Test Mode
 
-- Remove the GND jumper from pin 5
+- Remove the GND jumper from `TEST_MODE_TRIGGER_PIN`
 - Reset the device
 - Normal sensor operation resumes
 
@@ -181,7 +181,7 @@ In `src/config.h`:
 
 ```cpp
 #define ENABLE_TEST_MODE              // Enable/disable test mode
-#define TEST_MODE_TRIGGER_PIN 5       // Pin to pull LOW for activation
+#define TEST_MODE_TRIGGER_PIN 8       // Pin to pull LOW for activation
 #define DEFAULT_TEST_SCENARIO 0       // Scenario to run on trigger (0-4, or 0xFF for none)
 ```
 
@@ -256,7 +256,7 @@ const TestScenario* const TEST_SCENARIOS[] PROGMEM = {
 ### Test Mode Not Activating
 
 **Check:**
-- Pin 5 is actually connected to GND (use multimeter)
+- `TEST_MODE_TRIGGER_PIN` is actually connected to GND (use multimeter)
 - `ENABLE_TEST_MODE` is defined in `config.h`
 - Firmware was recompiled and uploaded after enabling test mode
 - Serial monitor shows "TEST MODE TRIGGER DETECTED"
@@ -286,7 +286,7 @@ const TestScenario* const TEST_SCENARIOS[] PROGMEM = {
 ## FAQ
 
 **Q: Can I leave test mode enabled in production?**
-A: Yes! With the pin floating HIGH (not pulled LOW), test mode is initialized but not activated. The overhead is minimal (~4.3 KB flash). However, for absolute minimal footprint, comment out `ENABLE_TEST_MODE` for production builds.
+A: Yes! With `TEST_MODE_TRIGGER_PIN` floating HIGH (not pulled LOW), test mode is initialized but not activated. The overhead is minimal (~4.3 KB flash). However, for absolute minimal footprint, comment out `ENABLE_TEST_MODE` for production builds.
 
 **Q: Can I change scenarios without rebooting?**
 A: Currently no - test mode is activated on boot. Future enhancement could add serial commands to switch scenarios at runtime.
