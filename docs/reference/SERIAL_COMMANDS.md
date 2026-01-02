@@ -31,12 +31,13 @@ RUN                              # Start monitoring
 2. [Custom Calibration](#custom-calibration)
 3. [Alarm Configuration](#alarm-configuration)
 4. [Output Configuration](#output-configuration)
-5. [Display Configuration](#display-configuration)
-6. [System Configuration](#system-configuration)
-7. [Mode Commands](#mode-commands)
-8. [Persistence Commands](#persistence-commands)
-9. [Query Commands](#query-commands)
-10. [Quick Reference Examples](#quick-reference-examples)
+5. [Relay Control](#relay-control)
+6. [Display Configuration](#display-configuration)
+7. [System Configuration](#system-configuration)
+8. [Mode Commands](#mode-commands)
+9. [Persistence Commands](#persistence-commands)
+10. [Query Commands](#query-commands)
+11. [Quick Reference Examples](#quick-reference-examples)
 
 ---
 
@@ -277,6 +278,84 @@ Serial: Disabled
 SD_Log: Disabled
 Alarm: Enabled, Interval: 500ms
 ```
+
+---
+
+## Relay Control
+
+**Note**: Relay functionality requires `ENABLE_RELAY_OUTPUT` to be defined in `config.h`.
+
+Control automatic relay outputs based on sensor thresholds. Useful for cooling fans, warning lights, pumps, and other switched loads.
+
+### Commands
+
+```
+RELAY LIST                           # Show all relay status
+RELAY <0-1> STATUS                   # Show specific relay configuration
+RELAY <0-1> PIN <pin>                # Set relay output pin
+RELAY <0-1> INPUT <pin>              # Link relay to sensor input
+RELAY <0-1> THRESHOLD <on> <off>     # Set ON/OFF thresholds with hysteresis
+RELAY <0-1> MODE <mode>              # Set relay mode
+RELAY <0-1> DISABLE                  # Disable relay
+```
+
+### Relay Modes
+
+| Mode | Description |
+|------|-------------|
+| `AUTO_HIGH` | Relay ON when sensor rises above ON threshold, OFF when falls below OFF threshold |
+| `AUTO_LOW` | Relay ON when sensor falls below ON threshold, OFF when rises above OFF threshold |
+| `ON` | Manual override - always ON |
+| `OFF` | Manual override - always OFF |
+
+### Examples
+
+**Cooling fan (AUTO_HIGH mode)**:
+```
+# Configure relay 0 for cooling fan control
+RELAY 0 PIN 23                       # Relay connected to digital pin 23
+RELAY 0 INPUT A2                     # Monitor coolant temperature on A2
+RELAY 0 THRESHOLD 90 85              # Fan ON at 90°C, OFF at 85°C
+RELAY 0 MODE AUTO_HIGH               # Activate on high temperature
+```
+
+**Low pressure warning (AUTO_LOW mode)**:
+```
+# Configure relay 1 for low oil pressure warning light
+RELAY 1 PIN 22                       # Warning light on pin 22
+RELAY 1 INPUT A3                     # Monitor oil pressure on A3
+RELAY 1 THRESHOLD 15 20              # Light ON below 15 PSI, OFF above 20 PSI
+RELAY 1 MODE AUTO_LOW                # Activate on low pressure
+```
+
+**Manual override**:
+```
+RELAY 0 MODE ON                      # Force fan ON for testing
+RELAY 0 MODE AUTO_HIGH               # Resume automatic control
+```
+
+### Relay Status Display
+
+```
+RELAY LIST
+```
+Shows:
+```
+=== Relay Status ===
+
+Relay 0:
+  Mode: AUTO_HIGH
+  Output Pin: 23
+  Input: A2 (Coolant Temp)
+  Thresholds: ON=90.0°C, OFF=85.0°C
+  Current Value: 82.3°C
+  State: OFF
+
+Relay 1:
+  Mode: DISABLED
+```
+
+**For detailed relay configuration guide, see [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md)**.
 
 ---
 

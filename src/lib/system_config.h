@@ -12,7 +12,7 @@
 
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
-#define SYSTEM_CONFIG_VERSION 4         // Increment when struct changes (v4: added router config, expanded to 64 bytes)
+#define SYSTEM_CONFIG_VERSION 5         // Increment when struct changes (v5: added relay config, expanded to 96 bytes)
 #define SYSTEM_CONFIG_ADDRESS 0x03F0    // Address in EEPROM (after inputs)
 #define SYSTEM_CONFIG_SIZE sizeof(SystemConfig)
 
@@ -23,7 +23,12 @@ enum OutputID {
     OUTPUT_SERIAL = 2,
     OUTPUT_SD = 3,
     OUTPUT_ALARM = 4,
+#ifdef ENABLE_RELAY_OUTPUT
+    OUTPUT_RELAY = 5,
+    NUM_OUTPUTS = 6
+#else
     NUM_OUTPUTS = 5
+#endif
 };
 
 // Display types
@@ -33,7 +38,11 @@ enum DisplayType {
     DISPLAY_OLED = 2
 };
 
-// System configuration structure (64 bytes - expanded from 48)
+#ifdef ENABLE_RELAY_OUTPUT
+#include "../outputs/output_relay.h"
+#endif
+
+// System configuration structure (96 bytes with relay support - expanded from 64 bytes in v4)
 struct SystemConfig {
     // Header (4 bytes)
     uint16_t magic;              // 0x5343 validation
@@ -83,6 +92,11 @@ struct SystemConfig {
         uint16_t bt_pin;             // 4-digit PIN (0=not set)
         uint8_t reserved_router[6];  // Future expansion
     } router;
+
+#ifdef ENABLE_RELAY_OUTPUT
+    // Relay Configuration (32 bytes) - NEW in v5
+    RelayConfig relays[MAX_RELAYS];  // 2 relays × 16 bytes = 32 bytes
+#endif
 };
 
 // Global system config instance

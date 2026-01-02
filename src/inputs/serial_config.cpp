@@ -21,6 +21,9 @@
 #include "../lib/units_registry.h"
 #include "../lib/json_config.h"
 #include "../outputs/output_base.h"
+#ifdef ENABLE_RELAY_OUTPUT
+#include "../outputs/output_relay.h"
+#endif
 #include "../lib/message_router.h"
 #include "../lib/message_api.h"
 #include <string.h>
@@ -152,6 +155,11 @@ static const char PSTR_HELP_CONTROL_DESC[] PROGMEM = "Input Control - Enable, di
 static const char PSTR_HELP_OUTPUT[] PROGMEM = "OUTPUT";
 static const char PSTR_HELP_OUTPUT_DESC[] PROGMEM = "Output Modules - Configure CAN, RealDash, Serial, and SD logging";
 
+#ifdef ENABLE_RELAY_OUTPUT
+static const char PSTR_HELP_RELAY[] PROGMEM = "RELAY";
+static const char PSTR_HELP_RELAY_DESC[] PROGMEM = "Relay Control - Threshold-based relay outputs for cooling fans, alarms, etc.";
+#endif
+
 static const char PSTR_HELP_DISPLAY[] PROGMEM = "DISPLAY";
 static const char PSTR_HELP_DISPLAY_DESC[] PROGMEM = "Display Config - LCD/OLED settings and unit preferences";
 
@@ -170,6 +178,9 @@ static void printHelpSet();
 static void printHelpCalibration();
 static void printHelpControl();
 static void printHelpOutput();
+#ifdef ENABLE_RELAY_OUTPUT
+static void printHelpRelay();
+#endif
 static void printHelpDisplay();
 static void printHelpTransport();
 static void printHelpSystem();
@@ -184,6 +195,9 @@ static const HelpCategory HELP_CATEGORIES[] PROGMEM = {
     {PSTR_HELP_CALIBRATION, PSTR_HELP_CALIBRATION_DESC, printHelpCalibration},
     {PSTR_HELP_CONTROL, PSTR_HELP_CONTROL_DESC, printHelpControl},
     {PSTR_HELP_OUTPUT, PSTR_HELP_OUTPUT_DESC, printHelpOutput},
+#ifdef ENABLE_RELAY_OUTPUT
+    {PSTR_HELP_RELAY, PSTR_HELP_RELAY_DESC, printHelpRelay},
+#endif
     {PSTR_HELP_DISPLAY, PSTR_HELP_DISPLAY_DESC, printHelpDisplay},
     {PSTR_HELP_TRANSPORT, PSTR_HELP_TRANSPORT_DESC, printHelpTransport},
     {PSTR_HELP_SYSTEM, PSTR_HELP_SYSTEM_DESC, printHelpSystem},
@@ -300,6 +314,23 @@ static void printHelpOutput() {
     msg.control.println(F("  OUTPUT <name> INTERVAL <ms>  - Set output interval"));
     msg.control.println();
 }
+
+#ifdef ENABLE_RELAY_OUTPUT
+static void printHelpRelay() {
+    msg.control.println();
+    msg.control.println(F("=== RELAY Commands ==="));
+    msg.control.println(F("Threshold-based relay outputs for cooling fans, alarms, etc."));
+    msg.control.println();
+    msg.control.println(F("  RELAY LIST  - Show all relay status"));
+    msg.control.println(F("  RELAY <0-1> STATUS  - Show specific relay"));
+    msg.control.println(F("  RELAY <0-1> PIN <pin>  - Set relay output pin"));
+    msg.control.println(F("  RELAY <0-1> INPUT <pin>  - Link relay to sensor input"));
+    msg.control.println(F("  RELAY <0-1> THRESHOLD <on> <off>  - Set activation thresholds"));
+    msg.control.println(F("  RELAY <0-1> MODE <AUTO_HIGH|AUTO_LOW|ON|OFF>  - Set relay mode"));
+    msg.control.println(F("  RELAY <0-1> DISABLE  - Disable relay"));
+    msg.control.println();
+}
+#endif
 
 static void printHelpDisplay() {
     msg.control.println();
@@ -447,6 +478,9 @@ static void printHelpQuick() {
     msg.control.println(F("             PRESSURE_POLY | BIAS"));
     msg.control.println(F("CONTROL: ENABLE | DISABLE | CLEAR | INFO [<pin>] [ALARM|CALIBRATION]"));
     msg.control.println(F("OUTPUT: LIST | <name> ENABLE/DISABLE/INTERVAL"));
+#ifdef ENABLE_RELAY_OUTPUT
+    msg.control.println(F("RELAY: LIST | <0-1> STATUS/PIN/INPUT/THRESHOLD/MODE/DISABLE"));
+#endif
     msg.control.println(F("DISPLAY: STATUS | ENABLE/DISABLE | TYPE | LCD ADDRESS | UNITS"));
     msg.control.println(F("TRANSPORT: LIST | CONTROL/DATA/DEBUG <transport>"));
     msg.control.println(F("SYSTEM: STATUS | SEA_LEVEL | INTERVAL SENSOR/ALARM/LCD"));
@@ -1858,6 +1892,145 @@ void handleSerialCommand(char* cmd) {
         msg.control.println(F("  Valid actions: ENABLE, DISABLE, INTERVAL <ms>"));
         return;
     }
+
+#ifdef ENABLE_RELAY_OUTPUT
+    // ===== RELAY COMMANDS =====
+    if (strncmp(cmd, "RELAY ", 6) == 0) {
+        char* rest = cmd + 6;
+        trim(rest);
+
+        // RELAY LIST
+        if (streq(rest, "LIST")) {
+            printAllRelayStatus();
+            return;
+        }
+
+        // Parse: RELAY <index> <action> [params]
+        uint8_t relayIndex = atoi(rest);
+        if (relayIndex >= MAX_RELAYS) {
+            msg.control.print(F("ERROR: Invalid relay index (0-"));
+            msg.control.print(MAX_RELAYS - 1);
+            msg.control.println(F(")"));
+            return;
+        }
+
+        // Find next space
+        char* action = strchr(rest, ' ');
+        if (!action) {
+            printRelayStatus(relayIndex);  // Just show status if no action
+            return;
+        }
+        action++;
+        trim(action);
+
+        // RELAY <index> STATUS
+        if (streq(action, "STATUS")) {
+            printRelayStatus(relayIndex);
+            return;
+        }
+
+        // RELAY <index> PIN <pin>
+        if (strncmp(action, "PIN ", 4) == 0) {
+            uint8_t pin = atoi(action + 4);
+            if (setRelayPin(relayIndex, pin)) {
+                msg.control.print(F("Relay "));
+                msg.control.print(relayIndex);
+                msg.control.print(F(" pin set to "));
+                msg.control.println(pin);
+            }
+            return;
+        }
+
+        // RELAY <index> INPUT <pin>
+        if (strncmp(action, "INPUT ", 6) == 0) {
+            bool isValid = false;
+            uint8_t inputPin = parsePin(action + 6, &isValid);
+            if (!isValid) {
+                msg.control.println(F("ERROR: Invalid pin number"));
+                return;
+            }
+            if (setRelayInput(relayIndex, inputPin)) {
+                msg.control.print(F("Relay "));
+                msg.control.print(relayIndex);
+                msg.control.print(F(" linked to input on pin "));
+                msg.control.println(inputPin);
+            }
+            return;
+        }
+
+        // RELAY <index> THRESHOLD <on> <off>
+        if (strncmp(action, "THRESHOLD ", 10) == 0) {
+            char* params = action + 10;
+            float thresholdOn = atof(params);
+            char* offStr = strchr(params, ' ');
+            if (!offStr) {
+                msg.control.println(F("ERROR: THRESHOLD requires two values"));
+                msg.control.println(F("  Usage: RELAY <index> THRESHOLD <on> <off>"));
+                return;
+            }
+            float thresholdOff = atof(offStr + 1);
+
+            if (setRelayThresholds(relayIndex, thresholdOn, thresholdOff)) {
+                msg.control.print(F("Relay "));
+                msg.control.print(relayIndex);
+                msg.control.print(F(" thresholds: ON="));
+                msg.control.print(thresholdOn);
+                msg.control.print(F(", OFF="));
+                msg.control.println(thresholdOff);
+            }
+            return;
+        }
+
+        // RELAY <index> MODE <AUTO_HIGH|AUTO_LOW|ON|OFF>
+        if (strncmp(action, "MODE ", 5) == 0) {
+            char* mode = action + 5;
+            trim(mode);
+
+            RelayMode newMode;
+            if (streq(mode, "AUTO_HIGH")) {
+                newMode = RELAY_AUTO_HIGH;
+            } else if (streq(mode, "AUTO_LOW")) {
+                newMode = RELAY_AUTO_LOW;
+            } else if (streq(mode, "ON")) {
+                newMode = RELAY_MANUAL_ON;
+            } else if (streq(mode, "OFF")) {
+                newMode = RELAY_MANUAL_OFF;
+            } else {
+                msg.control.println(F("ERROR: Invalid mode"));
+                msg.control.println(F("  Valid modes: AUTO_HIGH, AUTO_LOW, ON, OFF"));
+                return;
+            }
+
+            if (setRelayMode(relayIndex, newMode)) {
+                msg.control.print(F("Relay "));
+                msg.control.print(relayIndex);
+                msg.control.print(F(" mode set to "));
+                msg.control.println(mode);
+            }
+            return;
+        }
+
+        // RELAY <index> DISABLE
+        if (streq(action, "DISABLE")) {
+            if (setRelayMode(relayIndex, RELAY_DISABLED)) {
+                msg.control.print(F("Relay "));
+                msg.control.print(relayIndex);
+                msg.control.println(F(" disabled"));
+            }
+            return;
+        }
+
+        msg.control.println(F("ERROR: Unknown RELAY command"));
+        msg.control.println(F("  Usage: RELAY LIST"));
+        msg.control.println(F("  Usage: RELAY <0-1> STATUS"));
+        msg.control.println(F("  Usage: RELAY <0-1> PIN <pin>"));
+        msg.control.println(F("  Usage: RELAY <0-1> INPUT <pin>"));
+        msg.control.println(F("  Usage: RELAY <0-1> THRESHOLD <on> <off>"));
+        msg.control.println(F("  Usage: RELAY <0-1> MODE <AUTO_HIGH|AUTO_LOW|ON|OFF>"));
+        msg.control.println(F("  Usage: RELAY <0-1> DISABLE"));
+        return;
+    }
+#endif
 
     // ===== DISPLAY COMMANDS =====
     if (strncmp(cmd, "DISPLAY ", 8) == 0) {

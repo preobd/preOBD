@@ -19,9 +19,10 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 - Outputs standard OBDII PIDs via CAN bus
 - Logs data to serial and SD card
 - Configurable alarms with audible alerts
+- **Controls 12V relays** based on sensor thresholds (cooling fans, pumps, warning lights)
 
 **What it doesn't do:**
-- Engine control (monitoring only, no outputs to engine)
+- Engine control (monitoring only, relay outputs are auxiliary only)
 - Interface with existing factory ECUs or OBDII systems
 - Provide safety certification or guarantees
 
@@ -143,6 +144,7 @@ VERSION                  # Show firmware version
 - **[Serial Commands Reference](docs/reference/SERIAL_COMMANDS.md)** - Complete command list
 - **[CONFIG/RUN Mode Guide](docs/guides/configuration/CONFIG_RUN_MODE_GUIDE.md)** - Safe configuration workflow
 - **[Alarm System Guide](docs/guides/configuration/ALARM_SYSTEM_GUIDE.md)** - Alarm state machine
+- **[Relay Control Guide](docs/guides/outputs/RELAY_CONTROL.md)** - Automatic relay control for fans, pumps, and lights
 - **[Advanced Calibration](docs/guides/configuration/ADVANCED_CALIBRATION_GUIDE.md)** - Custom sensor calibrations
 
 ### Advanced Topics

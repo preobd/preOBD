@@ -27,6 +27,12 @@ extern void initAlarmOutput();
 extern void sendAlarmOutput(Input*);
 extern void updateAlarmOutput();
 
+#ifdef ENABLE_RELAY_OUTPUT
+extern void initRelayOutput();
+extern void sendRelayOutput(Input*);
+extern void updateRelayOutput();
+#endif
+
 // Define output modules array - always compiled, controlled by runtime flags
 OutputModule outputModules[] = {
     {"CAN", false, initCAN, sendCAN, updateCAN, 100},
@@ -34,9 +40,16 @@ OutputModule outputModules[] = {
     {"Serial", false, initSerialOutput, sendSerialOutput, updateSerialOutput, 1000},
     {"SD_Log", false, initSDLog, sendSDLog, updateSDLog, 5000},
     {"Alarm", true, initAlarmOutput, sendAlarmOutput, updateAlarmOutput, 100},
+#ifdef ENABLE_RELAY_OUTPUT
+    {"Relay", true, initRelayOutput, sendRelayOutput, updateRelayOutput, 100},
+#endif
 };
 
-const int numOutputModules = 5;  // Updated from 4 to 5
+#ifdef ENABLE_RELAY_OUTPUT
+const int numOutputModules = 6;
+#else
+const int numOutputModules = 5;
+#endif
 
 // Track last send time for each output module
 static uint32_t lastOutputSend[sizeof(outputModules) / sizeof(outputModules[0])];
