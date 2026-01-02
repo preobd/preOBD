@@ -626,17 +626,6 @@ The relay module is **independent** from the alarm system:
 - Relay threshold: 90°C (turn on cooling)
 - Fan activates at 90°C, alarm triggers at 110°C
 
-### EEPROM Migration
-
-When upgrading from v4 to v5:
-1. System detects v4 config on boot
-2. Copies old 64-byte structure
-3. Initializes relay fields with defaults (all disabled)
-4. Saves new v5 config (96 bytes)
-5. Prints "Migration complete" to serial
-
-**No user action required** - migration is automatic.
-
 ### Update Rate
 
 Relays are evaluated every **100ms** (10 Hz) by default.
@@ -772,4 +761,4 @@ RELAY 0 STATUS
 
 ---
 
-**Questions or issues?** Report at https://github.com/anthropics/openEMS/issues
+**Questions or issues?** Report at https://github.com/preobd/openEMS/issues
