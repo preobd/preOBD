@@ -8,10 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Hierarchical help system** - Organized help by category (LIST, SET, CALIBRATION, CONTROL, OUTPUT, DISPLAY, TRANSPORT, SYSTEM, CONFIG)
+- **Hierarchical help system** - Organized help by category (LIST, SET, CALIBRATION, CONTROL, OUTPUT, RELAY, DISPLAY, TRANSPORT, SYSTEM, CONFIG)
 - **HELP <category> command** - Detailed help for specific command categories
 - **HELP QUICK command** - Compact command reference for experienced users
 - **Help category overview** - HELP command shows all available categories with descriptions
+- **Relay output control** - Automatic threshold-based relay outputs with hysteresis
+- **RELAY commands** - Serial commands for configuring relay outputs (PIN, INPUT, THRESHOLD, MODE)
+- **Relay control modes** - AUTO_HIGH, AUTO_LOW, and manual override (ON/OFF)
+- **Dual relay support** - 2 independent relay channels with separate configurations
+- **Relay EEPROM persistence** - Relay configurations saved to EEPROM
 
 ### Changed
 - **HELP command** - Now shows category overview instead of flat 104-line command list

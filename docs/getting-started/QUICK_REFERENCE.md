@@ -205,7 +205,7 @@ The help system is hierarchical and organized by category:
 | Command | Description |
 |---------|-------------|
 | `HELP` | Show category overview |
-| `HELP <category>` | Show detailed help (LIST, SET, CALIBRATION, CONTROL, OUTPUT, DISPLAY, TRANSPORT, SYSTEM, CONFIG) |
+| `HELP <category>` | Show detailed help (LIST, SET, CALIBRATION, CONTROL, OUTPUT, RELAY, DISPLAY, TRANSPORT, SYSTEM, CONFIG) |
 | `HELP QUICK` | Show compact command reference |
 | `?` | Alias for HELP |
 
@@ -268,6 +268,26 @@ HELP CALIBRATION        # Show calibration commands
 | `DISPLAY DISABLE` | Disable display |
 | `DISPLAY UNITS TEMP <C\|F>` | Set temperature units |
 | `DISPLAY UNITS PRESSURE <BAR\|PSI\|KPA>` | Set pressure units |
+
+### Relay Commands (requires ENABLE_RELAY_OUTPUT)
+
+| Command | Description |
+|---------|-------------|
+| `RELAY LIST` | Show all relay status |
+| `RELAY <0-1> PIN <pin>` | Set relay output pin |
+| `RELAY <0-1> INPUT <pin>` | Link to sensor input |
+| `RELAY <0-1> THRESHOLD <on> <off>` | Set ON/OFF thresholds |
+| `RELAY <0-1> MODE <mode>` | AUTO_HIGH, AUTO_LOW, ON, OFF |
+
+**Example - Cooling fan:**
+```
+RELAY 0 PIN 23              # Relay on pin 23
+RELAY 0 INPUT A2            # Monitor coolant temp
+RELAY 0 THRESHOLD 90 85     # ON at 90°C, OFF at 85°C
+RELAY 0 MODE AUTO_HIGH      # Activate on high temp
+```
+
+See [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md) for details.
 
 ---
 
