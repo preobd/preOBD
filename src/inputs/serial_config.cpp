@@ -920,6 +920,7 @@ void handleSerialCommand(char* cmd) {
                         case MEASURE_PRESSURE: msg.control.print(F("PRESSURE")); break;
                         case MEASURE_VOLTAGE: msg.control.print(F("VOLTAGE")); break;
                         case MEASURE_RPM: msg.control.print(F("RPM")); break;
+                        case MEASURE_SPEED: msg.control.print(F("SPEED")); break;
                         case MEASURE_HUMIDITY: msg.control.print(F("HUMIDITY")); break;
                         case MEASURE_ELEVATION: msg.control.print(F("ELEVATION")); break;
                         case MEASURE_DIGITAL: msg.control.print(F("DIGITAL")); break;
@@ -932,6 +933,7 @@ void handleSerialCommand(char* cmd) {
                         case MEASURE_PRESSURE: msg.control.print(F("PRESSURE")); break;
                         case MEASURE_VOLTAGE: msg.control.print(F("VOLTAGE")); break;
                         case MEASURE_RPM: msg.control.print(F("RPM")); break;
+                        case MEASURE_SPEED: msg.control.print(F("SPEED")); break;
                         case MEASURE_HUMIDITY: msg.control.print(F("HUMIDITY")); break;
                         case MEASURE_ELEVATION: msg.control.print(F("ELEVATION")); break;
                         case MEASURE_DIGITAL: msg.control.print(F("DIGITAL")); break;
