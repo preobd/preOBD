@@ -123,6 +123,74 @@ static const char* getTransportName(TransportID id) {
     }
 }
 
+// ===== HELP SYSTEM =====
+// Category-based help system for hierarchical command reference
+
+// Function pointer type for help printer functions
+typedef void (*HelpPrinter)();
+
+// Help category structure
+struct HelpCategory {
+    const char* name;           // Category name (in PROGMEM)
+    const char* description;    // Short description (in PROGMEM)
+    HelpPrinter printer;        // Function to print detailed help
+};
+
+// PROGMEM string literals for category names and descriptions
+static const char PSTR_HELP_LIST[] PROGMEM = "LIST";
+static const char PSTR_HELP_LIST_DESC[] PROGMEM = "Discovery - Show available inputs, applications, and sensors";
+
+static const char PSTR_HELP_SET[] PROGMEM = "SET";
+static const char PSTR_HELP_SET_DESC[] PROGMEM = "Configuration - Configure input pins (application, sensor, names, units, alarms)";
+
+static const char PSTR_HELP_CALIBRATION[] PROGMEM = "CALIBRATION";
+static const char PSTR_HELP_CALIBRATION_DESC[] PROGMEM = "Advanced - Custom sensor calibration (RPM, speed, pressure, temperature)";
+
+static const char PSTR_HELP_CONTROL[] PROGMEM = "CONTROL";
+static const char PSTR_HELP_CONTROL_DESC[] PROGMEM = "Input Control - Enable, disable, clear, and query input status";
+
+static const char PSTR_HELP_OUTPUT[] PROGMEM = "OUTPUT";
+static const char PSTR_HELP_OUTPUT_DESC[] PROGMEM = "Output Modules - Configure CAN, RealDash, Serial, and SD logging";
+
+static const char PSTR_HELP_DISPLAY[] PROGMEM = "DISPLAY";
+static const char PSTR_HELP_DISPLAY_DESC[] PROGMEM = "Display Config - LCD/OLED settings and unit preferences";
+
+static const char PSTR_HELP_TRANSPORT[] PROGMEM = "TRANSPORT";
+static const char PSTR_HELP_TRANSPORT_DESC[] PROGMEM = "Message Routing - Route control, data, and debug messages";
+
+static const char PSTR_HELP_SYSTEM[] PROGMEM = "SYSTEM";
+static const char PSTR_HELP_SYSTEM_DESC[] PROGMEM = "System Config - Sea level pressure, read intervals (advanced)";
+
+static const char PSTR_HELP_CONFIG[] PROGMEM = "CONFIG";
+static const char PSTR_HELP_CONFIG_DESC[] PROGMEM = "Persistence & Modes - Save, load, reset, and system control";
+
+// Forward declarations for help printing functions
+static void printHelpList();
+static void printHelpSet();
+static void printHelpCalibration();
+static void printHelpControl();
+static void printHelpOutput();
+static void printHelpDisplay();
+static void printHelpTransport();
+static void printHelpSystem();
+static void printHelpConfig();
+static void printHelpOverview();
+static void printHelpQuick();
+
+// Help category registry (in flash memory)
+static const HelpCategory HELP_CATEGORIES[] PROGMEM = {
+    {PSTR_HELP_LIST, PSTR_HELP_LIST_DESC, printHelpList},
+    {PSTR_HELP_SET, PSTR_HELP_SET_DESC, printHelpSet},
+    {PSTR_HELP_CALIBRATION, PSTR_HELP_CALIBRATION_DESC, printHelpCalibration},
+    {PSTR_HELP_CONTROL, PSTR_HELP_CONTROL_DESC, printHelpControl},
+    {PSTR_HELP_OUTPUT, PSTR_HELP_OUTPUT_DESC, printHelpOutput},
+    {PSTR_HELP_DISPLAY, PSTR_HELP_DISPLAY_DESC, printHelpDisplay},
+    {PSTR_HELP_TRANSPORT, PSTR_HELP_TRANSPORT_DESC, printHelpTransport},
+    {PSTR_HELP_SYSTEM, PSTR_HELP_SYSTEM_DESC, printHelpSystem},
+    {PSTR_HELP_CONFIG, PSTR_HELP_CONFIG_DESC, printHelpConfig}
+};
+static const uint8_t NUM_HELP_CATEGORIES = sizeof(HELP_CATEGORIES) / sizeof(HelpCategory);
+
 // Helper function to print system configuration details
 static void printSystemConfig() {
     msg.control.println(F("=== System Configuration ==="));
@@ -150,6 +218,243 @@ static void printSystemConfig() {
     msg.control.print(F("ms, LCD="));
     msg.control.print(systemConfig.lcdUpdateInterval);
     msg.control.println(F("ms"));
+}
+
+// ===== HELP PRINTER FUNCTIONS =====
+
+static void printHelpList() {
+    msg.control.println();
+    msg.control.println(F("=== LIST Commands ==="));
+    msg.control.println(F("Discovery commands to explore available options"));
+    msg.control.println();
+    msg.control.println(F("  LIST INPUTS         - Show all configured inputs"));
+    msg.control.println(F("  LIST APPLICATIONS   - Show available Type presets"));
+    msg.control.println(F("  LIST SENSORS        - Show available Sensor Types"));
+    msg.control.println();
+}
+
+static void printHelpSet() {
+    msg.control.println();
+    msg.control.println(F("=== SET Commands ==="));
+    msg.control.println(F("Configure input pins (application, sensor, names, units, alarms)"));
+    msg.control.println();
+    msg.control.println(F("Basic Configuration:"));
+    msg.control.println(F("  SET <pin> <app> <sensor>  - Combined config (e.g., SET 6 CHT MAX6675)"));
+    msg.control.println(F("  SET <pin> APPLICATION <application>  - Set measurement type"));
+    msg.control.println(F("  SET <pin> SENSOR <sensor>  - Set hardware sensor"));
+    msg.control.println();
+    msg.control.println(F("Naming:"));
+    msg.control.println(F("  SET <pin> NAME <name>  - Set abbreviated name (8 chars)"));
+    msg.control.println(F("  SET <pin> DISPLAY_NAME <name>  - Set full name (32 chars)"));
+    msg.control.println(F("  SET <pin> UNITS <units>  - Override display units"));
+    msg.control.println();
+    msg.control.println(F("Alarms:"));
+    msg.control.println(F("  SET <pin> ALARM <min> <max>  - Set alarm thresholds"));
+    msg.control.println(F("  SET <pin> ALARM ENABLE  - Enable alarm for input"));
+    msg.control.println(F("  SET <pin> ALARM DISABLE  - Disable alarm for input"));
+    msg.control.println(F("  SET <pin> WARMUP <ms>  - Override alarm warmup time"));
+    msg.control.println(F("  SET <pin> PERSIST <ms>  - Override alarm persistence time"));
+    msg.control.println();
+    msg.control.println(F("See also: HELP CALIBRATION for advanced sensor calibration"));
+    msg.control.println();
+}
+
+static void printHelpCalibration() {
+    msg.control.println();
+    msg.control.println(F("=== CALIBRATION Commands ==="));
+    msg.control.println(F("Advanced sensor calibration (RPM, speed, pressure, temperature)"));
+    msg.control.println();
+    msg.control.println(F("  SET <pin> CALIBRATION PRESET  - Clear custom, use preset"));
+    msg.control.println(F("  SET <pin> RPM <poles> <ratio> [<mult>] <timeout> <min> <max>"));
+    msg.control.println(F("  SET <pin> SPEED <ppr> <tire_circ> <ratio> [<mult>] <timeout> <max>"));
+    msg.control.println(F("  SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>"));
+    msg.control.println(F("  SET <pin> BIAS <resistor>  - Set bias resistor (Ohms)"));
+    msg.control.println(F("  SET <pin> STEINHART <bias> <a> <b> <c>  - Steinhart-Hart"));
+    msg.control.println(F("  SET <pin> BETA <bias> <beta> <r0> <t0>  - Beta equation"));
+    msg.control.println(F("  SET <pin> PRESSURE_POLY <bias> <a> <b> <c>  - VDO polynomial"));
+    msg.control.println(F("  INFO <pin> CALIBRATION  - Show calibration details"));
+    msg.control.println();
+}
+
+static void printHelpControl() {
+    msg.control.println();
+    msg.control.println(F("=== CONTROL Commands ==="));
+    msg.control.println(F("Enable, disable, clear, and query input status"));
+    msg.control.println();
+    msg.control.println(F("  ENABLE <pin>  - Enable input reading"));
+    msg.control.println(F("  DISABLE <pin>  - Disable input reading"));
+    msg.control.println(F("  CLEAR <pin>  - Reset input to unconfigured"));
+    msg.control.println(F("  INFO <pin>  - Show detailed pin info"));
+    msg.control.println(F("  INFO <pin> ALARM  - Show alarm status and configuration"));
+    msg.control.println();
+}
+
+static void printHelpOutput() {
+    msg.control.println();
+    msg.control.println(F("=== OUTPUT Commands ==="));
+    msg.control.println(F("Configure CAN, RealDash, Serial, and SD logging"));
+    msg.control.println();
+    msg.control.println(F("  OUTPUT LIST  - Show all output modules"));
+    msg.control.println(F("  OUTPUT <name> ENABLE  - Enable output (CAN, RealDash, Serial, SD_Log)"));
+    msg.control.println(F("  OUTPUT <name> DISABLE  - Disable output"));
+    msg.control.println(F("  OUTPUT <name> INTERVAL <ms>  - Set output interval"));
+    msg.control.println();
+}
+
+static void printHelpDisplay() {
+    msg.control.println();
+    msg.control.println(F("=== DISPLAY Commands ==="));
+    msg.control.println(F("LCD/OLED settings and unit preferences"));
+    msg.control.println();
+    msg.control.println(F("  DISPLAY STATUS  - Show display configuration"));
+    msg.control.println(F("  DISPLAY ENABLE  - Enable display"));
+    msg.control.println(F("  DISPLAY DISABLE  - Disable display"));
+    msg.control.println(F("  DISPLAY TYPE <LCD|OLED|NONE>  - Set display type"));
+    msg.control.println(F("  DISPLAY LCD ADDRESS <hex>  - Set I2C address (e.g., 0x27)"));
+    msg.control.println(F("  DISPLAY UNITS TEMP <C|F>  - Default temperature units"));
+    msg.control.println(F("  DISPLAY UNITS PRESSURE <BAR|PSI|KPA>  - Default pressure units"));
+    msg.control.println(F("  DISPLAY UNITS ELEVATION <M|FT>  - Default elevation units"));
+    msg.control.println();
+}
+
+static void printHelpTransport() {
+    msg.control.println();
+    msg.control.println(F("=== TRANSPORT Commands ==="));
+    msg.control.println(F("Route control, data, and debug messages"));
+    msg.control.println();
+    msg.control.println(F("  TRANSPORT LIST  - Show current transport assignments"));
+    msg.control.println(F("  TRANSPORT CONTROL <transport>  - Route control messages"));
+    msg.control.println(F("  TRANSPORT DATA <transport>  - Route sensor data output"));
+    msg.control.println(F("  TRANSPORT DEBUG <transport>  - Route debug messages"));
+    msg.control.println(F("    Transports: USB_SERIAL, SERIAL1, SERIAL2, SERIAL3, ESP32_BT"));
+    msg.control.println();
+}
+
+static void printHelpSystem() {
+    msg.control.println();
+    msg.control.println(F("=== SYSTEM Commands ==="));
+    msg.control.println(F("System configuration (advanced settings)"));
+    msg.control.println();
+    msg.control.println(F("  SYSTEM STATUS  - Show system configuration"));
+    msg.control.println(F("  SYSTEM SEA_LEVEL <hPa>  - Sea level pressure"));
+    msg.control.println(F("  SYSTEM INTERVAL SENSOR <ms>  - Sensor read interval"));
+    msg.control.println(F("  SYSTEM INTERVAL ALARM <ms>  - Alarm check interval"));
+    msg.control.println(F("  SYSTEM INTERVAL LCD <ms>  - LCD update interval"));
+    msg.control.println();
+}
+
+static void printHelpConfig() {
+    msg.control.println();
+    msg.control.println(F("=== CONFIG Commands ==="));
+    msg.control.println(F("Persistence, modes, and system control"));
+    msg.control.println();
+    msg.control.println(F("Persistence:"));
+    msg.control.println(F("  SAVE  - Save config to EEPROM"));
+    msg.control.println(F("  LOAD  - Load config from EEPROM"));
+    msg.control.println(F("  RESET  - Clear all configuration"));
+    msg.control.println();
+    msg.control.println(F("Modes:"));
+    msg.control.println(F("  CONFIG  - Enter configuration mode (unlock config)"));
+    msg.control.println(F("  RUN  - Enter run mode (lock config, resume sensors)"));
+    msg.control.println(F("  RELOAD  - Trigger watchdog reset (system reboot)"));
+    msg.control.println();
+    msg.control.println(F("Information:"));
+    msg.control.println(F("  VERSION  - Display firmware and EEPROM version"));
+    msg.control.println(F("  DUMP  - Show full configuration (human-readable)"));
+    msg.control.println(F("  DUMP JSON  - Export configuration as JSON"));
+    msg.control.println(F("  CONFIG SAVE [filename]  - Save configuration to SD card"));
+    msg.control.println(F("  CONFIG LOAD <filename>  - Load configuration from SD card"));
+    msg.control.println();
+    msg.control.println(F("Examples:"));
+    msg.control.println(F("  SET 6 CHT MAX6675  (combined syntax)"));
+    msg.control.println(F("  SET A2 APPLICATION COOLANT_TEMP"));
+    msg.control.println(F("  SET A2 SENSOR VDO_120C_STEINHART"));
+    msg.control.println(F("  SET I2C AMBIENT_TEMP BME280_TEMP  (new I2C sensor)"));
+    msg.control.println(F("  SET I2C:0 ALARM 10 50  (modify existing I2C sensor)"));
+    msg.control.println(F("  INFO I2C:1  (query I2C sensor)"));
+    msg.control.println(F("  SET A1 PRESSURE_LINEAR 0.5 4.5 0 7  (custom pressure)"));
+    msg.control.println(F("  SET A0 BIAS 4700  (change bias resistor)"));
+    msg.control.println(F("  SET A2 ALARM 50 120  (set alarm thresholds)"));
+    msg.control.println(F("  SET A2 ALARM ENABLE  (enable alarm)"));
+    msg.control.println(F("  SET A2 WARMUP 30000  (30 second warmup)"));
+    msg.control.println(F("  SET A2 PERSIST 2000  (2 second persistence)"));
+    msg.control.println(F("  INFO A2 ALARM  (show alarm status)"));
+    msg.control.println(F("  ENABLE A2"));
+    msg.control.println(F("  OUTPUT CAN ENABLE"));
+    msg.control.println(F("  OUTPUT CAN INTERVAL 100"));
+    msg.control.println(F("  SAVE"));
+    msg.control.println();
+}
+
+static void printHelpOverview() {
+    msg.control.println();
+    msg.control.println(F("=== openEMS Command Reference ==="));
+    msg.control.println();
+    msg.control.println(F("Available help categories (use HELP <category>):"));
+    msg.control.println();
+
+    // Iterate through categories and print formatted list
+    for (uint8_t i = 0; i < NUM_HELP_CATEGORIES; i++) {
+        msg.control.print(F("  "));
+
+        #ifdef __AVR__
+            // AVR: Read from PROGMEM
+            char nameBuf[16];
+            char descBuf[80];
+            strcpy_P(nameBuf, (char*)pgm_read_ptr(&HELP_CATEGORIES[i].name));
+            strcpy_P(descBuf, (char*)pgm_read_ptr(&HELP_CATEGORIES[i].description));
+            msg.control.print(nameBuf);
+            // Pad to align descriptions
+            for (uint8_t j = strlen(nameBuf); j < 14; j++) {
+                msg.control.print(' ');
+            }
+            msg.control.print(F("- "));
+            msg.control.println(descBuf);
+        #else
+            // ESP32/other: Can read directly
+            msg.control.print(HELP_CATEGORIES[i].name);
+            // Pad to align descriptions
+            uint8_t nameLen = strlen(HELP_CATEGORIES[i].name);
+            for (uint8_t j = nameLen; j < 14; j++) {
+                msg.control.print(' ');
+            }
+            msg.control.print(F("- "));
+            msg.control.println(HELP_CATEGORIES[i].description);
+        #endif
+    }
+
+    msg.control.println();
+    msg.control.println(F("Quick commands:"));
+    msg.control.println(F("  HELP QUICK      - Compact command list"));
+    msg.control.println(F("  ?               - Alias for HELP"));
+    msg.control.println(F("  VERSION         - Firmware version"));
+    msg.control.println(F("  DUMP            - Show full configuration"));
+    msg.control.println();
+    msg.control.println(F("Examples:"));
+    msg.control.println(F("  HELP SET        - Show all SET commands"));
+    msg.control.println(F("  HELP CALIBRATION - Show calibration commands"));
+    msg.control.println();
+}
+
+static void printHelpQuick() {
+    msg.control.println();
+    msg.control.println(F("=== Quick Command Reference ==="));
+    msg.control.println();
+    msg.control.println(F("LIST: INPUTS | APPLICATIONS | SENSORS"));
+    msg.control.println(F("SET: <pin> <app> <sensor> | APPLICATION | SENSOR | NAME | DISPLAY_NAME"));
+    msg.control.println(F("     UNITS | ALARM [ENABLE|DISABLE|<min> <max>] | WARMUP | PERSIST"));
+    msg.control.println(F("CALIBRATION: PRESET | RPM | SPEED | PRESSURE_LINEAR | STEINHART | BETA"));
+    msg.control.println(F("             PRESSURE_POLY | BIAS"));
+    msg.control.println(F("CONTROL: ENABLE | DISABLE | CLEAR | INFO [<pin>] [ALARM|CALIBRATION]"));
+    msg.control.println(F("OUTPUT: LIST | <name> ENABLE/DISABLE/INTERVAL"));
+    msg.control.println(F("DISPLAY: STATUS | ENABLE/DISABLE | TYPE | LCD ADDRESS | UNITS"));
+    msg.control.println(F("TRANSPORT: LIST | CONTROL/DATA/DEBUG <transport>"));
+    msg.control.println(F("SYSTEM: STATUS | SEA_LEVEL | INTERVAL SENSOR/ALARM/LCD"));
+    msg.control.println(F("CONFIG: SAVE | LOAD | RESET | CONFIG [SAVE|LOAD] | RUN | VERSION | DUMP"));
+    msg.control.println(F("        RELOAD"));
+    msg.control.println();
+    msg.control.println(F("For detailed help: HELP <category>"));
+    msg.control.println();
 }
 
 void initSerialConfig() {
@@ -449,108 +754,65 @@ void handleSerialCommand(char* cmd) {
 
     // ===== HELP & INFO COMMANDS =====
     if (streq(cmd, "HELP") || streq(cmd, "?")) {
-        msg.control.println();
-        msg.control.println(F("Available Commands:"));
-        msg.control.println();
-        msg.control.println(F("LIST Commands:"));
-        msg.control.println(F("  LIST INPUTS         - Show all configured inputs"));
-        msg.control.println(F("  LIST APPLICATIONS   - Show available Type presets"));
-        msg.control.println(F("  LIST SENSORS        - Show available Sensor Types"));
-        msg.control.println();
-        msg.control.println(F("SET Commands:"));
-        msg.control.println(F("  SET <pin> <app> <sensor>  - Combined config (e.g., SET 6 CHT MAX6675)"));
-        msg.control.println(F("  SET <pin> APPLICATION <application>  - Set measurement type"));
-        msg.control.println(F("  SET <pin> SENSOR <sensor>  - Set hardware sensor"));
-        msg.control.println(F("  SET <pin> NAME <name>  - Set abbreviated name (8 chars)"));
-        msg.control.println(F("  SET <pin> DISPLAY_NAME <name>  - Set full name (32 chars)"));
-        msg.control.println(F("  SET <pin> UNITS <units>  - Override display units"));
-        msg.control.println(F("  SET <pin> ALARM <min> <max>  - Set alarm thresholds"));
-        msg.control.println(F("  SET <pin> ALARM ENABLE  - Enable alarm for input"));
-        msg.control.println(F("  SET <pin> ALARM DISABLE  - Disable alarm for input"));
-        msg.control.println(F("  SET <pin> WARMUP <ms>  - Override alarm warmup time"));
-        msg.control.println(F("  SET <pin> PERSIST <ms>  - Override alarm persistence time"));
-        msg.control.println();
-        msg.control.println(F("Calibration Commands:"));
-        msg.control.println(F("  SET <pin> CALIBRATION PRESET  - Clear custom, use preset"));
-        msg.control.println(F("  SET <pin> RPM <poles> <ratio> [<mult>] <timeout> <min> <max>"));
-        msg.control.println(F("  SET <pin> SPEED <ppr> <tire_circ> <ratio> [<mult>] <timeout> <max>"));
-        msg.control.println(F("  SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>"));
-        msg.control.println(F("  SET <pin> BIAS <resistor>  - Set bias resistor (Ohms)"));
-        msg.control.println(F("  SET <pin> STEINHART <bias> <a> <b> <c>  - Steinhart-Hart"));
-        msg.control.println(F("  SET <pin> BETA <bias> <beta> <r0> <t0>  - Beta equation"));
-        msg.control.println(F("  SET <pin> PRESSURE_POLY <bias> <a> <b> <c>  - VDO polynomial"));
-        msg.control.println(F("  INFO <pin> CALIBRATION  - Show calibration details"));
-        msg.control.println();
-        msg.control.println(F("Control Commands:"));
-        msg.control.println(F("  ENABLE <pin>  - Enable input reading"));
-        msg.control.println(F("  DISABLE <pin>  - Disable input reading"));
-        msg.control.println(F("  CLEAR <pin>  - Reset input to unconfigured"));
-        msg.control.println(F("  INFO <pin>  - Show detailed pin info"));
-        msg.control.println(F("  INFO <pin> ALARM  - Show alarm status and configuration"));
-        msg.control.println();
-        msg.control.println(F("Output Commands:"));
-        msg.control.println(F("  OUTPUT LIST  - Show all output modules"));
-        msg.control.println(F("  OUTPUT <name> ENABLE  - Enable output (CAN, RealDash, Serial, SD_Log)"));
-        msg.control.println(F("  OUTPUT <name> DISABLE  - Disable output"));
-        msg.control.println(F("  OUTPUT <name> INTERVAL <ms>  - Set output interval"));
-        msg.control.println();
-        msg.control.println(F("Display Commands:"));
-        msg.control.println(F("  DISPLAY STATUS  - Show display configuration"));
-        msg.control.println(F("  DISPLAY ENABLE  - Enable display"));
-        msg.control.println(F("  DISPLAY DISABLE  - Disable display"));
-        msg.control.println(F("  DISPLAY TYPE <LCD|OLED|NONE>  - Set display type"));
-        msg.control.println(F("  DISPLAY LCD ADDRESS <hex>  - Set I2C address (e.g., 0x27)"));
-        msg.control.println(F("  DISPLAY UNITS TEMP <C|F>  - Default temperature units"));
-        msg.control.println(F("  DISPLAY UNITS PRESSURE <BAR|PSI|KPA>  - Default pressure units"));
-        msg.control.println(F("  DISPLAY UNITS ELEVATION <M|FT>  - Default elevation units"));
-        msg.control.println();
-        msg.control.println(F("Transport Commands:"));
-        msg.control.println(F("  TRANSPORT LIST  - Show current transport assignments"));
-        msg.control.println(F("  TRANSPORT CONTROL <transport>  - Route control messages"));
-        msg.control.println(F("  TRANSPORT DATA <transport>  - Route sensor data output"));
-        msg.control.println(F("  TRANSPORT DEBUG <transport>  - Route debug messages"));
-        msg.control.println(F("    Transports: USB_SERIAL, SERIAL1, SERIAL2, SERIAL3, ESP32_BT"));
-        msg.control.println();
-        msg.control.println(F("System Commands (Advanced):"));
-        msg.control.println(F("  SYSTEM STATUS  - Show system configuration"));
-        msg.control.println(F("  SYSTEM SEA_LEVEL <hPa>  - Sea level pressure"));
-        msg.control.println(F("  SYSTEM INTERVAL SENSOR <ms>  - Sensor read interval"));
-        msg.control.println(F("  SYSTEM INTERVAL ALARM <ms>  - Alarm check interval"));
-        msg.control.println(F("  SYSTEM INTERVAL LCD <ms>  - LCD update interval"));
-        msg.control.println();
-        msg.control.println(F("Config Commands:"));
-        msg.control.println(F("  SAVE  - Save config to EEPROM"));
-        msg.control.println(F("  LOAD  - Load config from EEPROM"));
-        msg.control.println(F("  RESET  - Clear all configuration"));
-        msg.control.println();
-        msg.control.println(F("System Commands:"));
-        msg.control.println(F("  CONFIG  - Enter configuration mode (unlock config)"));
-        msg.control.println(F("  RUN  - Enter run mode (lock config, resume sensors)"));
-        msg.control.println(F("  VERSION  - Display firmware and EEPROM version"));
-        msg.control.println(F("  DUMP  - Show full configuration (human-readable)"));
-        msg.control.println(F("  DUMP JSON  - Export configuration as JSON"));
-        msg.control.println(F("  CONFIG SAVE [filename]  - Save configuration to SD card"));
-        msg.control.println(F("  CONFIG LOAD <filename>  - Load configuration from SD card"));
-        msg.control.println(F("  RELOAD  - Trigger watchdog reset (system reboot)"));
-        msg.control.println();
-        msg.control.println(F("Examples:"));
-        msg.control.println(F("  SET 6 CHT MAX6675  (combined syntax)"));
-        msg.control.println(F("  SET A2 APPLICATION COOLANT_TEMP"));
-        msg.control.println(F("  SET A2 SENSOR VDO_120C_STEINHART"));
-        msg.control.println(F("  SET I2C AMBIENT_TEMP BME280_TEMP  (new I2C sensor)"));
-        msg.control.println(F("  SET I2C:0 ALARM 10 50  (modify existing I2C sensor)"));
-        msg.control.println(F("  INFO I2C:1  (query I2C sensor)"));
-        msg.control.println(F("  SET A1 PRESSURE_LINEAR 0.5 4.5 0 7  (custom pressure)"));
-        msg.control.println(F("  SET A0 BIAS 4700  (change bias resistor)"));
-        msg.control.println(F("  SET A2 ALARM 50 120  (set alarm thresholds)"));
-        msg.control.println(F("  SET A2 ALARM ENABLE  (enable alarm)"));
-        msg.control.println(F("  SET A2 WARMUP 30000  (30 second warmup)"));
-        msg.control.println(F("  SET A2 PERSIST 2000  (2 second persistence)"));
-        msg.control.println(F("  INFO A2 ALARM  (show alarm status)"));
-        msg.control.println(F("  ENABLE A2"));
-        msg.control.println(F("  OUTPUT CAN ENABLE"));
-        msg.control.println(F("  OUTPUT CAN INTERVAL 100"));
-        msg.control.println(F("  SAVE"));
+        // Check for category argument
+        if (firstSpace) {
+            char* category = firstSpace + 1;
+            trim(category);
+
+            // Special case: HELP QUICK
+            if (streq(category, "QUICK")) {
+                printHelpQuick();
+                return;
+            }
+
+            // Look up category in table
+            bool found = false;
+            for (uint8_t i = 0; i < NUM_HELP_CATEGORIES; i++) {
+                #ifdef __AVR__
+                    // AVR: Read from PROGMEM
+                    char nameBuf[16];
+                    strcpy_P(nameBuf, (char*)pgm_read_ptr(&HELP_CATEGORIES[i].name));
+                    if (streq(category, nameBuf)) {
+                        HelpPrinter printer = (HelpPrinter)pgm_read_ptr(&HELP_CATEGORIES[i].printer);
+                        printer();
+                        found = true;
+                        break;
+                    }
+                #else
+                    // ESP32/other: Direct access
+                    if (streq(category, HELP_CATEGORIES[i].name)) {
+                        HELP_CATEGORIES[i].printer();
+                        found = true;
+                        break;
+                    }
+                #endif
+            }
+
+            if (!found) {
+                // Unknown category - show error and list valid categories
+                msg.control.println();
+                msg.control.print(F("ERROR: Unknown help category '"));
+                msg.control.print(category);
+                msg.control.println(F("'"));
+                msg.control.println();
+                msg.control.println(F("Available categories:"));
+                for (uint8_t i = 0; i < NUM_HELP_CATEGORIES; i++) {
+                    msg.control.print(F("  "));
+                    #ifdef __AVR__
+                        char nameBuf[16];
+                        strcpy_P(nameBuf, (char*)pgm_read_ptr(&HELP_CATEGORIES[i].name));
+                        msg.control.println(nameBuf);
+                    #else
+                        msg.control.println(HELP_CATEGORIES[i].name);
+                    #endif
+                }
+                msg.control.println(F("  QUICK"));
+                msg.control.println();
+            }
+        } else {
+            // No argument - show overview
+            printHelpOverview();
+        }
         return;
     }
 
