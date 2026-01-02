@@ -17,7 +17,8 @@ enum MeasurementType {
     MEASURE_RPM,          // RPM
     MEASURE_HUMIDITY,     // Percent
     MEASURE_ELEVATION,    // Meters -> feet/meters
-    MEASURE_DIGITAL       // Digital on/off (float switch)
+    MEASURE_DIGITAL,      // Digital on/off (float switch)
+    MEASURE_SPEED         // Vehicle speed in km/h
 };
 
 // Calibration type enumeration (for type safety)
@@ -30,6 +31,7 @@ enum CalibrationType {
     CAL_LINEAR,              // Linear sensor (temperature, pressure, etc.)
     CAL_VOLTAGE_DIVIDER,
     CAL_RPM,
+    CAL_SPEED                // Speed sensor calibration
 };
 
 // ===== CALIBRATION STRUCTURES =====
@@ -96,5 +98,15 @@ typedef struct {
     uint16_t min_rpm;        // Minimum valid RPM (default 100)
     uint16_t max_rpm;        // Maximum valid RPM (default 10000)
 } RPMCalibration;
+
+// ===== SPEED CALIBRATION STRUCTURE =====
+typedef struct {
+    uint8_t pulses_per_rev;      // Number of pulses per wheel/shaft revolution (gear teeth)
+    uint16_t tire_circumference_mm; // Tire rolling circumference in millimeters
+    float final_drive_ratio;     // Differential/transmission ratio (e.g., 3.73 for 3.73:1)
+    float calibration_mult;      // Fine-tuning multiplier (default 1.0)
+    uint16_t timeout_ms;         // Timeout for zero speed (ms, default 2000)
+    uint16_t max_speed_kph;      // Maximum valid speed in km/h (safety check, default 300)
+} SpeedCalibration;
 
 #endif
