@@ -95,6 +95,11 @@ void resetSystemConfig() {
     systemConfig.outputInterval[OUTPUT_ALARM] = 100;
     #endif
 
+    #ifdef ENABLE_RELAY_OUTPUT
+    systemConfig.outputEnabled[OUTPUT_RELAY] = 1;  // ON - user-configured relay control
+    systemConfig.outputInterval[OUTPUT_RELAY] = 100;  // 10Hz check rate
+    #endif
+
     // Display defaults (only one display type should be defined in platformio.ini)
     #if defined(ENABLE_LCD)
         systemConfig.displayEnabled = 1;
@@ -164,6 +169,19 @@ void resetSystemConfig() {
         systemConfig.router.reserved_router[i] = 0;
     }
 
+#ifdef ENABLE_RELAY_OUTPUT
+    // Relay defaults (NEW in v5)
+    for (int i = 0; i < MAX_RELAYS; i++) {
+        systemConfig.relays[i].outputPin = 0xFF;       // Unconfigured
+        systemConfig.relays[i].inputIndex = 0xFF;      // Unassigned
+        systemConfig.relays[i].mode = RELAY_DISABLED;
+        systemConfig.relays[i].reserved = 0;
+        systemConfig.relays[i].thresholdOn = 0.0;
+        systemConfig.relays[i].thresholdOff = 0.0;
+        systemConfig.relays[i].reserved2 = 0;
+    }
+#endif
+
     // Calculate checksum
     systemConfig.checksum = calculateChecksum(&systemConfig);
 }
@@ -196,9 +214,45 @@ bool loadSystemConfig() {
         return false;
     }
 
+#ifdef ENABLE_RELAY_OUTPUT
+    // Handle migration from v4 to v5 (relay feature added)
+    if (temp.version == 4) {
+        Serial.println(F("Migrating system config from v4 to v5"));
+
+        // Load old 64-byte config (v4)
+        // Copy first 64 bytes to systemConfig
+        uint8_t* src = (uint8_t*)&temp;
+        uint8_t* dst = (uint8_t*)&systemConfig;
+        memcpy(dst, src, 64);  // Copy v4 data
+
+        // Initialize new relay fields with defaults
+        for (int i = 0; i < MAX_RELAYS; i++) {
+            systemConfig.relays[i].outputPin = 0xFF;
+            systemConfig.relays[i].inputIndex = 0xFF;
+            systemConfig.relays[i].mode = RELAY_DISABLED;
+            systemConfig.relays[i].reserved = 0;
+            systemConfig.relays[i].thresholdOn = 0.0;
+            systemConfig.relays[i].thresholdOff = 0.0;
+            systemConfig.relays[i].reserved2 = 0;
+        }
+
+        // Update version number
+        systemConfig.version = SYSTEM_CONFIG_VERSION;
+
+        // Save migrated config
+        saveSystemConfig();
+        Serial.println(F("✓ Migration complete"));
+        return true;
+    }
+#endif
+
     // Check version
     if (temp.version != SYSTEM_CONFIG_VERSION) {
-        Serial.println(F("System config version mismatch - ignoring"));
+        Serial.print(F("System config version mismatch (expected "));
+        Serial.print(SYSTEM_CONFIG_VERSION);
+        Serial.print(F(", got "));
+        Serial.print(temp.version);
+        Serial.println(F(") - ignoring"));
         return false;
     }
 
