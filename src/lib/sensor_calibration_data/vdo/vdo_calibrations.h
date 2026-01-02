@@ -112,10 +112,11 @@ static const PROGMEM PolynomialCalibration vdo2bar_polynomial_cal = {
 
 // ===== SPEED SENSOR CALIBRATION =====
 
-// Default VDO Hall Effect Speed Sensor calibration (YBE100530)
+// Generic Hall Effect Speed Sensor calibration
+// Compatible with VDO (YBE100530), OEM sensors, and generic 3-wire hall effect sensors
 // User must determine pulses_per_rev empirically by counting teeth or testing
 // This provides a reasonable starting point for common configurations
-static const PROGMEM SpeedCalibration vdo_speed_sensor_cal = {
+static const PROGMEM SpeedCalibration hall_speed_sensor_cal = {
     .pulses_per_rev = 100,          // Common transmission gear tooth count (user must verify)
     .tire_circumference_mm = 2000,  // ~205/55R16 tire (user should measure actual tire)
     .final_drive_ratio = 3.73,      // Common differential ratio (user must verify)

@@ -138,8 +138,8 @@ static const char PSTR_BME280_ELEVATION[] PROGMEM = "BME280_ELEVATION";
 static const char PSTR_BME280_ELEVATION_LABEL[] PROGMEM = "BME280 Elevation";
 static const char PSTR_FLOAT_SWITCH[] PROGMEM = "FLOAT_SWITCH";
 static const char PSTR_FLOAT_SWITCH_LABEL[] PROGMEM = "Float Switch";
-static const char PSTR_VDO_SPEED_SENSOR[] PROGMEM = "VDO_SPEED_SENSOR";
-static const char PSTR_VDO_SPEED_SENSOR_LABEL[] PROGMEM = "VDO Hall Speed Sensor";
+static const char PSTR_HALL_SPEED[] PROGMEM = "HALL_SPEED";
+static const char PSTR_HALL_SPEED_LABEL[] PROGMEM = "Hall Effect Speed Sensor";
 
 // ===== SENSOR LIBRARY (PROGMEM - Flash Memory) =====
 //
@@ -564,20 +564,20 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== SPEED SENSORS =====
-    // Index 23: VDO_SPEED_SENSOR
+    // Index 23: HALL_SPEED
     {
-        .name = PSTR_VDO_SPEED_SENSOR,
-        .label = PSTR_VDO_SPEED_SENSOR_LABEL,
+        .name = PSTR_HALL_SPEED,
+        .label = PSTR_HALL_SPEED_LABEL,
         .description = nullptr,
         .readFunction = readHallSpeed,
         .initFunction = initHallSpeed,
         .measurementType = MEASURE_SPEED,
         .calibrationType = CAL_SPEED,
-        .defaultCalibration = &vdo_speed_sensor_cal,
+        .defaultCalibration = &hall_speed_sensor_cal,
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = 0.0,
         .maxValue = 300.0,     // 300 km/h maximum
-        .nameHash = 0x3CD7,    // djb2_hash("VDO_SPEED_SENSOR")
+        .nameHash = 0xB076,    // djb2_hash("HALL_SPEED")
         .pinTypeRequirement = PIN_DIGITAL  // Uses digitalPinToInterrupt
     }
 };
