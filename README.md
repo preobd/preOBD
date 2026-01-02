@@ -171,9 +171,12 @@ SAVE                        # Save configuration to EEPROM
 ### Query (any mode)
 
 ```
+HELP                      # Show help category overview
+HELP <category>           # Show detailed help (LIST, SET, CALIBRATION, etc.)
+HELP QUICK                # Show compact command reference
 LIST INPUTS               # Show all configured sensors
 LIST APPLICATIONS         # Show available application types
-LIST SENSORS              # Show available sensor types  
+LIST SENSORS              # Show available sensor types
 INFO <pin>                # Show details for one input
 DUMP                      # Show complete system state
 VERSION                   # Show firmware version

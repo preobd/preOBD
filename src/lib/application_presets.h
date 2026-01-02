@@ -117,6 +117,10 @@ static const char PSTR_ENGINE_RPM[] PROGMEM = "ENGINE_RPM";
 static const char PSTR_ENGINE_RPM_ABBR[] PROGMEM = "RPM";
 static const char PSTR_ENGINE_RPM_LABEL[] PROGMEM = "Engine RPM";
 
+static const char PSTR_VEHICLE_SPEED[] PROGMEM = "VEHICLE_SPEED";
+static const char PSTR_VEHICLE_SPEED_ABBR[] PROGMEM = "SPD";
+static const char PSTR_VEHICLE_SPEED_LABEL[] PROGMEM = "Vehicle Speed";
+
 // ===== APPLICATION PRESETS (PROGMEM - Flash Memory) =====
 //
 // To add a new application:
@@ -487,6 +491,27 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_RPM,
         .nameHash = 0x4429,  // djb2_hash("ENGINE_RPM")
         .warmupTime_ms = 2000,  // 2 seconds warmup
+        .persistTime_ms = 0  // No persistence needed
+    },
+
+    // ===== SPEED APPLICATIONS =====
+    // Index 17: VEHICLE_SPEED
+    {
+        .name = PSTR_VEHICLE_SPEED,
+        .abbreviation = PSTR_VEHICLE_SPEED_ABBR,
+        .label = PSTR_VEHICLE_SPEED_LABEL,
+        .description = nullptr,
+        .defaultSensor = SENSOR_HALL_SPEED,
+        .defaultUnits = 11,  // KPH
+        .defaultMinValue = 0.0,
+        .defaultMaxValue = 0.0,  // No alarm by default (informational only)
+        .obd2pid = 0x0D,  // OBD-II PID 0x0D: Vehicle Speed
+        .obd2length = 1,  // Single byte response
+        .defaultAlarmEnabled = false,
+        .defaultDisplayEnabled = true,
+        .expectedMeasurementType = MEASURE_SPEED,
+        .nameHash = 0x46F5,  // djb2_hash("VEHICLE_SPEED")
+        .warmupTime_ms = 0,  // No warmup needed
         .persistTime_ms = 0  // No persistence needed
     }
 };

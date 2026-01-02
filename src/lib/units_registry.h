@@ -81,6 +81,12 @@ static const char PSTR_FEET[] PROGMEM = "FEET";
 static const char PSTR_FT[] PROGMEM = "FT";
 static const char PSTR_FT_SYMBOL[] PROGMEM = "ft";
 
+static const char PSTR_KPH[] PROGMEM = "KPH";
+static const char PSTR_KPH_SYMBOL[] PROGMEM = "km/h";
+
+static const char PSTR_MPH[] PROGMEM = "MPH";
+static const char PSTR_MPH_SYMBOL[] PROGMEM = "mph";
+
 /**
  * UNITS_REGISTRY - Complete unit definitions
  *
@@ -230,6 +236,30 @@ static const PROGMEM UnitsInfo UNITS_REGISTRY[] = {
         .conversionOffset = 0.0,
         .nameHash = 0xA0C9,  // djb2_hash("FEET")
         .aliasHash = 0x739F  // djb2_hash("FT")
+    },
+
+    // Index 11: KPH (base unit for speed)
+    {
+        .name = PSTR_KPH,
+        .alias = PSTR_KPH,
+        .symbol = PSTR_KPH_SYMBOL,
+        .measurementType = MEASURE_SPEED,
+        .conversionFactor = 1.0,
+        .conversionOffset = 0.0,
+        .nameHash = 0xFC88,  // djb2_hash("KPH")
+        .aliasHash = 0xFC88  // same as name
+    },
+
+    // Index 12: MPH
+    {
+        .name = PSTR_MPH,
+        .alias = PSTR_MPH,
+        .symbol = PSTR_MPH_SYMBOL,
+        .measurementType = MEASURE_SPEED,
+        .conversionFactor = 0.621371,  // km/h to mph conversion
+        .conversionOffset = 0.0,
+        .nameHash = 0x050A,  // djb2_hash("MPH")
+        .aliasHash = 0x050A  // same as name
     }
 };
 

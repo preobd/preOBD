@@ -142,6 +142,15 @@ CAN bus requires 120Ω termination resistors at both ends.
 
 ### Serial Commands
 
+The help system is hierarchical and organized by category. Use `HELP` to see all categories, or `HELP <category>` for detailed help:
+
+```
+HELP                    # Show all help categories
+HELP SET                # Show all SET commands
+HELP CALIBRATION        # Show calibration commands
+HELP QUICK              # Show compact command reference
+```
+
 Configure sensors using the `SET` command:
 
 ```

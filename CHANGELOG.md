@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Hierarchical help system** - Organized help by category (LIST, SET, CALIBRATION, CONTROL, OUTPUT, DISPLAY, TRANSPORT, SYSTEM, CONFIG)
+- **HELP <category> command** - Detailed help for specific command categories
+- **HELP QUICK command** - Compact command reference for experienced users
+- **Help category overview** - HELP command shows all available categories with descriptions
+
+### Changed
+- **HELP command** - Now shows category overview instead of flat 104-line command list
+- **Help organization** - Commands grouped by function for better discoverability
+
 ## [0.6.0-beta] - 2025-12-31
 
 ### Added
