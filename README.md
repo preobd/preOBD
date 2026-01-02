@@ -144,7 +144,7 @@ VERSION                  # Show firmware version
 - **[Serial Commands Reference](docs/reference/SERIAL_COMMANDS.md)** - Complete command list
 - **[CONFIG/RUN Mode Guide](docs/guides/configuration/CONFIG_RUN_MODE_GUIDE.md)** - Safe configuration workflow
 - **[Alarm System Guide](docs/guides/configuration/ALARM_SYSTEM_GUIDE.md)** - Alarm state machine
-- **[Relay Control Guide](docs/RELAY_CONTROL.md)** - Automatic relay control for fans, pumps, and lights
+- **[Relay Control Guide](docs/guides/outputs/RELAY_CONTROL.md)** - Automatic relay control for fans, pumps, and lights
 - **[Advanced Calibration](docs/guides/configuration/ADVANCED_CALIBRATION_GUIDE.md)** - Custom sensor calibrations
 
 ### Advanced Topics
