@@ -461,22 +461,22 @@ static void printHelpOverview() {
 
         #ifdef __AVR__
             // AVR: Read from PROGMEM
-            char nameBuf[16];
-            char descBuf[80];
-            strcpy_P(nameBuf, (char*)pgm_read_ptr(&HELP_CATEGORIES[i].name));
-            strcpy_P(descBuf, (char*)pgm_read_ptr(&HELP_CATEGORIES[i].description));
-            msg.control.print(nameBuf);
+            const char* name = (const char*)pgm_read_ptr(&HELP_CATEGORIES[i].name);
+            const char* desc = (const char*)pgm_read_ptr(&HELP_CATEGORIES[i].description);
+
+            msg.control.print((__FlashStringHelper*)name);
             // Pad to align descriptions
-            for (uint8_t j = strlen(nameBuf); j < 14; j++) {
-                msg.control.print(' ');
+            uint8_t nameLen = strlen_P(name);
+            for (uint8_t j = nameLen; j < 14; j++) {
+                msg.control.write(' ');
             }
             msg.control.print(F("- "));
-            msg.control.println(descBuf);
+            msg.control.println((__FlashStringHelper*)desc);
         #else
-            // ESP32/other: Can read directly
+            // ESP32/other: Read from PROGMEM
             msg.control.print(HELP_CATEGORIES[i].name);
-            // Pad to align descriptions
-            uint8_t nameLen = strlen(HELP_CATEGORIES[i].name);
+            // Pad to align descriptions (use strlen_P for PROGMEM strings)
+            uint8_t nameLen = strlen_P(HELP_CATEGORIES[i].name);
             for (uint8_t j = nameLen; j < 14; j++) {
                 msg.control.print(' ');
             }
