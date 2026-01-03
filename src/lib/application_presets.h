@@ -82,7 +82,7 @@ static const char PSTR_OIL_PRESSURE_ABBR[] PROGMEM = " OP";
 static const char PSTR_OIL_PRESSURE_LABEL[] PROGMEM = "Oil Pressure";
 
 static const char PSTR_BOOST_PRESSURE[] PROGMEM = "BOOST_PRESSURE";
-static const char PSTR_BOOST_PRESSURE_ABBR[] PROGMEM = "MAP";
+static const char PSTR_BOOST_PRESSURE_ABBR[] PROGMEM = "BST";
 static const char PSTR_BOOST_PRESSURE_LABEL[] PROGMEM = "Turbo Boost Pressure";
 
 static const char PSTR_FUEL_PRESSURE[] PROGMEM = "FUEL_PRESSURE";
