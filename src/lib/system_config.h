@@ -53,13 +53,14 @@ struct SystemConfig {
     uint8_t outputEnabled[NUM_OUTPUTS];    // 5 bytes (bool per output)
     uint16_t outputInterval[NUM_OUTPUTS];  // 10 bytes (interval ms)
 
-    // Display Settings (6 bytes)
+    // Display Settings (7 bytes)
     uint8_t displayEnabled;      // Display on/off (bool)
     uint8_t displayType;         // LCD/OLED/None (DisplayType enum)
     uint8_t lcdI2CAddress;       // I2C address (default 0x27)
     uint8_t defaultTempUnits;    // Unit index: 0=Celsius, 1=Fahrenheit
     uint8_t defaultPressUnits;   // Unit index: 2=Bar, 3=PSI, 4=kPa
     uint8_t defaultElevUnits;    // Unit index: 9=Meters, 10=Feet
+    uint8_t defaultSpeedUnits;   // Unit index: 11=KPH, 12=MPH
 
     // Timing Intervals (8 bytes)
     uint16_t sensorReadInterval;

@@ -236,6 +236,7 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     defaultUnits["temperature"] = reinterpret_cast<const char*>(getUnitStringByIndex(systemConfig.defaultTempUnits));
     defaultUnits["pressure"] = reinterpret_cast<const char*>(getUnitStringByIndex(systemConfig.defaultPressUnits));
     defaultUnits["elevation"] = reinterpret_cast<const char*>(getUnitStringByIndex(systemConfig.defaultElevUnits));
+    defaultUnits["speed"] = reinterpret_cast<const char*>(getUnitStringByIndex(systemConfig.defaultSpeedUnits));
 
     // Timing intervals
     JsonObject timing = systemObj["timing"].to<JsonObject>();
@@ -465,6 +466,10 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
             if (units["elevation"].isNull() == false) {
                 uint8_t idx = getUnitsIndexByName(units["elevation"]);
                 if (idx != 0) systemConfig.defaultElevUnits = idx;
+            }
+            if (units["speed"].isNull() == false) {
+                uint8_t idx = getUnitsIndexByName(units["speed"]);
+                if (idx != 0) systemConfig.defaultSpeedUnits = idx;
             }
         }
     }

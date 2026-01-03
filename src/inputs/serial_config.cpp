@@ -2179,6 +2179,8 @@ void handleSerialCommand(char* cmd) {
             msg.control.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultPressUnits));
             msg.control.print(F("Elevation Units: "));
             msg.control.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultElevUnits));
+            msg.control.print(F("Speed Units: "));
+            msg.control.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultSpeedUnits));
             return;
         }
 
@@ -2278,6 +2280,22 @@ void handleSerialCommand(char* cmd) {
                 msg.control.println((__FlashStringHelper*)getUnitStringByIndex(index));
             } else {
                 msg.control.println(F("ERROR: Invalid units. Valid: M, FT, METERS, FEET"));
+            }
+            return;
+        }
+
+        // DISPLAY UNITS SPEED <KPH|MPH>
+        if (strncmp(rest, "UNITS SPEED ", 12) == 0) {
+            char* unitStr = rest + 12;
+            trim(unitStr);
+            uint8_t index = getUnitsIndexByName(unitStr);
+            const UnitsInfo* info = getUnitsByIndex(index);
+            if (info && pgm_read_byte(&info->measurementType) == MEASURE_SPEED) {
+                systemConfig.defaultSpeedUnits = index;
+                msg.control.print(F("Default speed units set to "));
+                msg.control.println((__FlashStringHelper*)getUnitStringByIndex(index));
+            } else {
+                msg.control.println(F("ERROR: Invalid units. Valid: KPH, MPH"));
             }
             return;
         }
@@ -2785,7 +2803,9 @@ void handleSerialCommand(char* cmd) {
         msg.control.print(F(", Press="));
         msg.control.print((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultPressUnits));
         msg.control.print(F(", Elev="));
-        msg.control.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultElevUnits));
+        msg.control.print((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultElevUnits));
+        msg.control.print(F(", Speed="));
+        msg.control.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultSpeedUnits));
         msg.control.println();
 
         msg.control.println(F("To save this configuration to EEPROM, type: SAVE"));

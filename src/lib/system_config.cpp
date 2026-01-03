@@ -118,6 +118,7 @@ void resetSystemConfig() {
     systemConfig.defaultTempUnits = getUnitsIndexByName(DEFAULT_TEMPERATURE_UNITS);
     systemConfig.defaultPressUnits = getUnitsIndexByName(DEFAULT_PRESSURE_UNITS);
     systemConfig.defaultElevUnits = getUnitsIndexByName(DEFAULT_ELEVATION_UNITS);
+    systemConfig.defaultSpeedUnits = getUnitsIndexByName(DEFAULT_SPEED_UNITS);
 
     // Timing intervals
     systemConfig.sensorReadInterval = SENSOR_READ_INTERVAL_MS;
