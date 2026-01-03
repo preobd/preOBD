@@ -17,7 +17,7 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 - Monitors engine RPM (via alternator W-phase)
 - Monitors vehicle speed (via hall effect sensors)
 - Displays data on LCD screen
-- Outputs standard OBDII PIDs via CAN bus
+- Outputs standard OBD-II PIDs via CAN bus (request/response and broadcast modes)
 - Logs data to serial and SD card
 - Configurable alarms with audible alerts
 - **Controls 12V relays** based on sensor thresholds (cooling fans, pumps, warning lights)
@@ -61,8 +61,8 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 
 **Outputs:**
 - 20x4 I2C LCD display
-- CAN bus (standard OBDII PIDs)
-- RealDash mobile dashboard
+- CAN bus with OBD-II request/response (works with ELM327 adapters and Torque app)
+- RealDash mobile dashboard (CAN broadcast mode)
 - Serial CSV output
 - SD card data logging
 
