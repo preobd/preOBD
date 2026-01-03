@@ -33,22 +33,12 @@ openEMS now supports standard OBD-II request/response protocol (SAE J1979), allo
 
 openEMS CAN pins operate at logic level (3.3V or 5V) and need a transceiver to communicate on the CAN bus.
 
-**Recommended transceivers:**
-- **MCP2551** - 5V, common, works with all platforms
-- **TJA1050** - 5V, automotive grade
-- **SN65HVD230** - 3.3V, for ESP32 and Teensy
+**⚠️ Critical requirement**: You must use a CAN transceiver that matches your platform's voltage:
+- **3.3V platforms** (Teensy, ESP32, Due): Use **SN65HVD230** or MCP2562
+- **5V platforms** (Arduino Mega, Uno): Use **MCP2551** or TJA1050
 
-**Wiring example (MCP2551):**
-```
-openEMS      MCP2551      Vehicle CAN
---------     --------     -----------
-CAN_TX   →   TXD
-CAN_RX   ←   RXD
-3.3V/5V  →   VDD
-GND      →   VSS
-             CANH     →   CAN High
-             CANL     →   CAN Low
-```
+**For complete transceiver selection, wiring diagrams, and troubleshooting, see:**
+[CAN Transceiver Hardware Guide](../hardware/CAN_TRANSCEIVER_GUIDE.md)
 
 ### 2. ELM327 Bluetooth Adapter
 
@@ -431,6 +421,7 @@ processOBD2Request(0x7DF, testRequest, 8);
 
 ## See Also
 
+- [CAN Transceiver Hardware Guide](../hardware/CAN_TRANSCEIVER_GUIDE.md) - Transceiver selection and wiring
 - [RealDash Setup Guide](REALDASH_SETUP_GUIDE.md) - Broadcast mode configuration
 - [OBD-II PID Reference](../../reference/OBD2_PID_REFERENCE.md) - Complete PID table
 - [Serial Commands](../../reference/SERIAL_COMMANDS.md) - Sensor configuration

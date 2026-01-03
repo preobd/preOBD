@@ -119,7 +119,12 @@ Junction → Lower resistor → GND
 
 **CAN Bus:**
 
-*For Teensy with Native FlexCAN:*
+**⚠️ All CAN functionality requires an external CAN transceiver** (MCP2551, SN65HVD230, etc.)
+
+For complete wiring diagrams, transceiver selection, and troubleshooting, see:
+[CAN Transceiver Hardware Guide](guides/hardware/CAN_TRANSCEIVER_GUIDE.md)
+
+*Quick reference - Teensy with Native FlexCAN:*
 ```
 Teensy Pin 22 (CAN_TX) → CAN transceiver TX
 Teensy Pin 23 (CAN_RX) → CAN transceiver RX
@@ -127,11 +132,12 @@ Transceiver CAN_H → Vehicle CAN High
 Transceiver CAN_L → Vehicle CAN Low
 ```
 
-*For Boards with MCP2515:*
+*Quick reference - Boards with MCP2515:*
 ```
 MCP2515 CS → Configurable pin (default: Pin 9)
 MCP2515 INT → Configurable pin (default: Pin 2)
 MCP2515 SCK/MISO/MOSI → SPI pins
+MCP2515 requires external MCP2551/TJA1050 transceiver
 ```
 
 CAN bus requires 120Ω termination resistors at both ends.
@@ -344,6 +350,7 @@ See [OBD-II Scanner Guide](guides/outputs/OBD2_SCANNER_GUIDE.md) for setup.
 - [RELAY_CONTROL.md](guides/outputs/RELAY_CONTROL.md) - Relay control outputs
 
 ### Hardware Guides
+- [CAN_TRANSCEIVER_GUIDE.md](guides/hardware/CAN_TRANSCEIVER_GUIDE.md) - CAN transceiver selection and wiring
 - [BIAS_RESISTOR_GUIDE.md](guides/hardware/BIAS_RESISTOR_GUIDE.md) - Resistor selection
 - [PIN_REQUIREMENTS_GUIDE.md](guides/hardware/PIN_REQUIREMENTS_GUIDE.md) - Pin validation
 
