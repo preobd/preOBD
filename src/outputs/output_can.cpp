@@ -243,7 +243,7 @@ static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
     // Validate minimum frame structure
     if (len < 3) return;
 
-    uint8_t length = data[0];
+    // data[0] is frame length, not validated per OBD-II spec
     uint8_t mode = data[1];
     uint8_t pid = data[2];
 
