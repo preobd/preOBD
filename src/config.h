@@ -63,9 +63,11 @@
 #define DEFAULT_TEMPERATURE_UNITS  "CELSIUS"     // or "FAHRENHEIT"
 #define DEFAULT_PRESSURE_UNITS     "BAR"         // or "PSI", "KPA"
 #define DEFAULT_ELEVATION_UNITS    "FEET"        // or "METERS"
+#define DEFAULT_SPEED_UNITS        "MPH"         // or "KPH"
 
 // NOTE: Voltage is always in VOLTS
 // NOTE: Humidity is always in PERCENT
+// NOTE: RPM is always in RPM
 
 // ============================================================================
 // ALARM CONFIGURATION
