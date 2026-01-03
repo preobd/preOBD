@@ -209,7 +209,7 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     // Output modules
     JsonObject outputs = systemObj["outputs"].to<JsonObject>();
 
-    const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm"};
+    const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm", "relay"};
     for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
         JsonObject output = outputs[outputNames[i]].to<JsonObject>();
         output["enabled"] = (bool)systemConfig.outputEnabled[i];
@@ -415,7 +415,7 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
     // Output modules
     if (systemObj["outputs"].isNull() == false) {
         JsonObject outputs = systemObj["outputs"];
-        const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm"};
+        const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm", "relay"};
 
         for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
             if (outputs[outputNames[i]].isNull() == false) {
