@@ -802,7 +802,7 @@ void handleSerialCommand(char* cmd) {
     if (isInRunMode()) {
         // Read-only commands allowed in RUN mode
         bool isReadOnly =
-            streq(cmd, "HELP") ||
+            strncmp(cmd, "HELP", 4) == 0 ||  // HELP, HELP CONFIG, etc.
             streq(cmd, "?") ||
             streq(cmd, "VERSION") ||
             streq(cmd, "DUMP") ||
@@ -825,9 +825,9 @@ void handleSerialCommand(char* cmd) {
     }
 
     // ===== HELP & INFO COMMANDS =====
-    if (streq(cmd, "HELP") || streq(cmd, "?")) {
+    if (strncmp(cmd, "HELP", 4) == 0 || streq(cmd, "?")) {
         // Check for category argument
-        if (firstSpace) {
+        if (firstSpace && cmd[4] == ' ') {  // Ensure it's "HELP " not "HELPABC"
             char* category = firstSpace + 1;
             trim(category);
 
@@ -851,8 +851,9 @@ void handleSerialCommand(char* cmd) {
                         break;
                     }
                 #else
-                    // ESP32/other: Direct access
-                    if (streq(category, HELP_CATEGORIES[i].name)) {
+                    // ESP32/other: Read from PROGMEM
+                    const char* name = (const char*)HELP_CATEGORIES[i].name;
+                    if (strcasecmp_P(category, name) == 0) {
                         HELP_CATEGORIES[i].printer();
                         found = true;
                         break;
