@@ -303,6 +303,18 @@ OUTPUT Alarm ENABLE
 OUTPUT Alarm INTERVAL 500   # Check alarms every 500ms
 ```
 
+### OBD-II Scanner Support
+
+Standard OBD-II request/response for Bluetooth scanners.
+
+```
+OUTPUT CAN ENABLE
+# Works automatically with ELM327 Bluetooth adapters
+# Supports apps: Torque, OBD Fusion, Car Scanner, DashCommand
+```
+
+See [OBD-II Scanner Guide](guides/outputs/OBD2_SCANNER_GUIDE.md) for setup.
+
 ---
 
 ## Documentation Index
@@ -326,12 +338,18 @@ OUTPUT Alarm INTERVAL 500   # Check alarms every 500ms
 - [VOLTAGE_SENSOR_GUIDE.md](guides/sensor-types/VOLTAGE_SENSOR_GUIDE.md) - Voltage monitoring
 - [DIGITAL_SENSOR_GUIDE.md](guides/sensor-types/DIGITAL_SENSOR_GUIDE.md) - Float switches
 
+### Output Guides
+- [REALDASH_SETUP_GUIDE.md](guides/outputs/REALDASH_SETUP_GUIDE.md) - RealDash dashboard
+- [OBD2_SCANNER_GUIDE.md](guides/outputs/OBD2_SCANNER_GUIDE.md) - ELM327 / Torque setup
+- [RELAY_CONTROL.md](guides/outputs/RELAY_CONTROL.md) - Relay control outputs
+
 ### Hardware Guides
 - [BIAS_RESISTOR_GUIDE.md](guides/hardware/BIAS_RESISTOR_GUIDE.md) - Resistor selection
 - [PIN_REQUIREMENTS_GUIDE.md](guides/hardware/PIN_REQUIREMENTS_GUIDE.md) - Pin validation
 
 ### Reference
 - [SERIAL_COMMANDS.md](reference/SERIAL_COMMANDS.md) - Complete command reference
+- [OBD2_PID_REFERENCE.md](reference/OBD2_PID_REFERENCE.md) - OBD-II PID catalog
 
 ### Architecture (Contributors)
 - [REGISTRY_SYSTEM.md](architecture/REGISTRY_SYSTEM.md) - Hash-based sensor lookups

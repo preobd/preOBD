@@ -196,6 +196,33 @@ SET 4 COOLANT_LEVEL FLOAT_SWITCH
 
 ---
 
+## Output Modules
+
+### OBD-II Scanner Support (ELM327 / Torque)
+
+```
+OUTPUT CAN ENABLE                   # Enable CAN output
+# Plug in ELM327 Bluetooth adapter to OBD-II port
+# Open Torque app → Settings → OBD/ECU → Connection → Bluetooth
+# Select your ELM327 adapter
+# View real-time sensor data
+```
+
+**Supported apps**: Torque, OBD Fusion, Car Scanner, DashCommand
+
+See [OBD-II Scanner Guide](../guides/outputs/OBD2_SCANNER_GUIDE.md) for details.
+
+### RealDash Dashboard
+
+```
+OUTPUT RealDash ENABLE              # Enable RealDash CAN output
+# Works simultaneously with OBD-II scanners (hybrid mode)
+```
+
+See [RealDash Setup Guide](../guides/outputs/REALDASH_SETUP_GUIDE.md) for details.
+
+---
+
 ## Command Reference
 
 ### Getting Help
