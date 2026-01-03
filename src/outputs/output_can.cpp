@@ -11,6 +11,7 @@
 #include "../config.h"
 #include "output_base.h"
 #include "../inputs/input.h"
+#include "../inputs/input_manager.h"
 
 #ifdef ENABLE_CAN
 
