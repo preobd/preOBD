@@ -12,7 +12,7 @@
 
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
-#define SYSTEM_CONFIG_VERSION 5         // Increment when struct changes (v5: added relay config, expanded to 96 bytes)
+#define SYSTEM_CONFIG_VERSION 1         // Increment when struct changes
 #define SYSTEM_CONFIG_ADDRESS 0x03F0    // Address in EEPROM (after inputs)
 #define SYSTEM_CONFIG_SIZE sizeof(SystemConfig)
 
