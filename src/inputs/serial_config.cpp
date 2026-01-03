@@ -180,6 +180,9 @@ static const char PSTR_HELP_SYSTEM_DESC[] PROGMEM = "System Config - Sea level p
 static const char PSTR_HELP_CONFIG[] PROGMEM = "CONFIG";
 static const char PSTR_HELP_CONFIG_DESC[] PROGMEM = "Persistence & Modes - Save, load, reset, and system control";
 
+static const char PSTR_HELP_EXAMPLES[] PROGMEM = "EXAMPLES";
+static const char PSTR_HELP_EXAMPLES_DESC[] PROGMEM = "Usage Examples - Common configuration workflows and patterns";
+
 // Forward declarations for help printing functions
 static void printHelpList();
 static void printHelpSet();
@@ -196,6 +199,7 @@ static void printHelpDisplay();
 static void printHelpTransport();
 static void printHelpSystem();
 static void printHelpConfig();
+static void printHelpExamples();
 static void printHelpOverview();
 static void printHelpQuick();
 
@@ -215,7 +219,8 @@ static const HelpCategory HELP_CATEGORIES[] PROGMEM = {
     {PSTR_HELP_DISPLAY, PSTR_HELP_DISPLAY_DESC, printHelpDisplay},
     {PSTR_HELP_TRANSPORT, PSTR_HELP_TRANSPORT_DESC, printHelpTransport},
     {PSTR_HELP_SYSTEM, PSTR_HELP_SYSTEM_DESC, printHelpSystem},
-    {PSTR_HELP_CONFIG, PSTR_HELP_CONFIG_DESC, printHelpConfig}
+    {PSTR_HELP_CONFIG, PSTR_HELP_CONFIG_DESC, printHelpConfig},
+    {PSTR_HELP_EXAMPLES, PSTR_HELP_EXAMPLES_DESC, printHelpExamples}
 };
 static const uint8_t NUM_HELP_CATEGORIES = sizeof(HELP_CATEGORIES) / sizeof(HelpCategory);
 
@@ -376,6 +381,7 @@ static void printHelpDisplay() {
     msg.control.println(F("  DISPLAY UNITS TEMP <C|F>  - Default temperature units"));
     msg.control.println(F("  DISPLAY UNITS PRESSURE <BAR|PSI|KPA>  - Default pressure units"));
     msg.control.println(F("  DISPLAY UNITS ELEVATION <M|FT>  - Default elevation units"));
+    msg.control.println(F("  DISPLAY UNITS SPEED <KPH|MPH>  - Default speed units"));
     msg.control.println();
 }
 
@@ -427,20 +433,35 @@ static void printHelpConfig() {
     msg.control.println(F("  CONFIG SAVE [filename]  - Save configuration to SD card"));
     msg.control.println(F("  CONFIG LOAD <filename>  - Load configuration from SD card"));
     msg.control.println();
-    msg.control.println(F("Examples:"));
+}
+
+static void printHelpExamples() {
+    msg.control.println();
+    msg.control.println(F("=== Usage Examples ==="));
+    msg.control.println(F("Common configuration workflows and patterns"));
+    msg.control.println();
+    msg.control.println(F("Basic sensor configuration:"));
     msg.control.println(F("  SET 6 CHT MAX6675  (combined syntax)"));
     msg.control.println(F("  SET A2 APPLICATION COOLANT_TEMP"));
     msg.control.println(F("  SET A2 SENSOR VDO_120C_STEINHART"));
+    msg.control.println();
+    msg.control.println(F("I2C sensor configuration:"));
     msg.control.println(F("  SET I2C AMBIENT_TEMP BME280_TEMP  (new I2C sensor)"));
     msg.control.println(F("  SET I2C:0 ALARM 10 50  (modify existing I2C sensor)"));
     msg.control.println(F("  INFO I2C:1  (query I2C sensor)"));
+    msg.control.println();
+    msg.control.println(F("Advanced sensor setup:"));
     msg.control.println(F("  SET A1 PRESSURE_LINEAR 0.5 4.5 0 7  (custom pressure)"));
     msg.control.println(F("  SET A0 BIAS 4700  (change bias resistor)"));
-    msg.control.println(F("  SET A2 ALARM 50 120  (set alarm thresholds)"));
-    msg.control.println(F("  SET A2 ALARM ENABLE  (enable alarm)"));
     msg.control.println(F("  SET A2 WARMUP 30000  (30 second warmup)"));
     msg.control.println(F("  SET A2 PERSIST 2000  (2 second persistence)"));
+    msg.control.println();
+    msg.control.println(F("Alarm configuration:"));
+    msg.control.println(F("  SET A2 ALARM 50 120  (set alarm thresholds)"));
+    msg.control.println(F("  SET A2 ALARM ENABLE  (enable alarm)"));
     msg.control.println(F("  INFO A2 ALARM  (show alarm status)"));
+    msg.control.println();
+    msg.control.println(F("Output and control:"));
     msg.control.println(F("  ENABLE A2"));
     msg.control.println(F("  OUTPUT CAN ENABLE"));
     msg.control.println(F("  OUTPUT CAN INTERVAL 100"));
@@ -461,22 +482,22 @@ static void printHelpOverview() {
 
         #ifdef __AVR__
             // AVR: Read from PROGMEM
-            char nameBuf[16];
-            char descBuf[80];
-            strcpy_P(nameBuf, (char*)pgm_read_ptr(&HELP_CATEGORIES[i].name));
-            strcpy_P(descBuf, (char*)pgm_read_ptr(&HELP_CATEGORIES[i].description));
-            msg.control.print(nameBuf);
+            const char* name = (const char*)pgm_read_ptr(&HELP_CATEGORIES[i].name);
+            const char* desc = (const char*)pgm_read_ptr(&HELP_CATEGORIES[i].description);
+
+            msg.control.print((__FlashStringHelper*)name);
             // Pad to align descriptions
-            for (uint8_t j = strlen(nameBuf); j < 14; j++) {
-                msg.control.print(' ');
+            uint8_t nameLen = strlen_P(name);
+            for (uint8_t j = nameLen; j < 14; j++) {
+                msg.control.write(' ');
             }
             msg.control.print(F("- "));
-            msg.control.println(descBuf);
+            msg.control.println((__FlashStringHelper*)desc);
         #else
-            // ESP32/other: Can read directly
+            // ESP32/other: Read from PROGMEM
             msg.control.print(HELP_CATEGORIES[i].name);
-            // Pad to align descriptions
-            uint8_t nameLen = strlen(HELP_CATEGORIES[i].name);
+            // Pad to align descriptions (use strlen_P for PROGMEM strings)
+            uint8_t nameLen = strlen_P(HELP_CATEGORIES[i].name);
             for (uint8_t j = nameLen; j < 14; j++) {
                 msg.control.print(' ');
             }
@@ -802,7 +823,7 @@ void handleSerialCommand(char* cmd) {
     if (isInRunMode()) {
         // Read-only commands allowed in RUN mode
         bool isReadOnly =
-            streq(cmd, "HELP") ||
+            strncmp(cmd, "HELP", 4) == 0 ||  // HELP, HELP CONFIG, etc.
             streq(cmd, "?") ||
             streq(cmd, "VERSION") ||
             streq(cmd, "DUMP") ||
@@ -825,9 +846,9 @@ void handleSerialCommand(char* cmd) {
     }
 
     // ===== HELP & INFO COMMANDS =====
-    if (streq(cmd, "HELP") || streq(cmd, "?")) {
+    if (strncmp(cmd, "HELP", 4) == 0 || streq(cmd, "?")) {
         // Check for category argument
-        if (firstSpace) {
+        if (firstSpace && cmd[4] == ' ') {  // Ensure it's "HELP " not "HELPABC"
             char* category = firstSpace + 1;
             trim(category);
 
@@ -851,8 +872,9 @@ void handleSerialCommand(char* cmd) {
                         break;
                     }
                 #else
-                    // ESP32/other: Direct access
-                    if (streq(category, HELP_CATEGORIES[i].name)) {
+                    // ESP32/other: Read from PROGMEM
+                    const char* name = (const char*)HELP_CATEGORIES[i].name;
+                    if (strcasecmp_P(category, name) == 0) {
                         HELP_CATEGORIES[i].printer();
                         found = true;
                         break;
@@ -2178,6 +2200,8 @@ void handleSerialCommand(char* cmd) {
             msg.control.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultPressUnits));
             msg.control.print(F("Elevation Units: "));
             msg.control.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultElevUnits));
+            msg.control.print(F("Speed Units: "));
+            msg.control.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultSpeedUnits));
             return;
         }
 
@@ -2277,6 +2301,22 @@ void handleSerialCommand(char* cmd) {
                 msg.control.println((__FlashStringHelper*)getUnitStringByIndex(index));
             } else {
                 msg.control.println(F("ERROR: Invalid units. Valid: M, FT, METERS, FEET"));
+            }
+            return;
+        }
+
+        // DISPLAY UNITS SPEED <KPH|MPH>
+        if (strncmp(rest, "UNITS SPEED ", 12) == 0) {
+            char* unitStr = rest + 12;
+            trim(unitStr);
+            uint8_t index = getUnitsIndexByName(unitStr);
+            const UnitsInfo* info = getUnitsByIndex(index);
+            if (info && pgm_read_byte(&info->measurementType) == MEASURE_SPEED) {
+                systemConfig.defaultSpeedUnits = index;
+                msg.control.print(F("Default speed units set to "));
+                msg.control.println((__FlashStringHelper*)getUnitStringByIndex(index));
+            } else {
+                msg.control.println(F("ERROR: Invalid units. Valid: KPH, MPH"));
             }
             return;
         }
@@ -2784,7 +2824,9 @@ void handleSerialCommand(char* cmd) {
         msg.control.print(F(", Press="));
         msg.control.print((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultPressUnits));
         msg.control.print(F(", Elev="));
-        msg.control.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultElevUnits));
+        msg.control.print((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultElevUnits));
+        msg.control.print(F(", Speed="));
+        msg.control.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultSpeedUnits));
         msg.control.println();
 
         msg.control.println(F("To save this configuration to EEPROM, type: SAVE"));

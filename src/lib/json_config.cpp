@@ -209,7 +209,7 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     // Output modules
     JsonObject outputs = systemObj["outputs"].to<JsonObject>();
 
-    const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm"};
+    const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm", "relay"};
     for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
         JsonObject output = outputs[outputNames[i]].to<JsonObject>();
         output["enabled"] = (bool)systemConfig.outputEnabled[i];
@@ -236,6 +236,7 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     defaultUnits["temperature"] = reinterpret_cast<const char*>(getUnitStringByIndex(systemConfig.defaultTempUnits));
     defaultUnits["pressure"] = reinterpret_cast<const char*>(getUnitStringByIndex(systemConfig.defaultPressUnits));
     defaultUnits["elevation"] = reinterpret_cast<const char*>(getUnitStringByIndex(systemConfig.defaultElevUnits));
+    defaultUnits["speed"] = reinterpret_cast<const char*>(getUnitStringByIndex(systemConfig.defaultSpeedUnits));
 
     // Timing intervals
     JsonObject timing = systemObj["timing"].to<JsonObject>();
@@ -415,7 +416,7 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
     // Output modules
     if (systemObj["outputs"].isNull() == false) {
         JsonObject outputs = systemObj["outputs"];
-        const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm"};
+        const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm", "relay"};
 
         for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
             if (outputs[outputNames[i]].isNull() == false) {
@@ -465,6 +466,10 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
             if (units["elevation"].isNull() == false) {
                 uint8_t idx = getUnitsIndexByName(units["elevation"]);
                 if (idx != 0) systemConfig.defaultElevUnits = idx;
+            }
+            if (units["speed"].isNull() == false) {
+                uint8_t idx = getUnitsIndexByName(units["speed"]);
+                if (idx != 0) systemConfig.defaultSpeedUnits = idx;
             }
         }
     }

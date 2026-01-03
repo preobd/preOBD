@@ -207,13 +207,14 @@ struct SystemConfig {
     uint8_t outputEnabled[5];    // CAN, RealDash, Serial, SD, Alarm
     uint16_t outputInterval[5];  // Intervals in ms
 
-    // Display Settings (6 bytes)
+    // Display Settings (7 bytes)
     uint8_t displayEnabled;
     uint8_t displayType;         // LCD/OLED/None
     uint8_t lcdI2CAddress;       // Default 0x27
     uint8_t defaultTempUnits;    // Unit index
     uint8_t defaultPressUnits;
     uint8_t defaultElevUnits;
+    uint8_t defaultSpeedUnits;
 
     // Timing Intervals (8 bytes)
     uint16_t sensorReadInterval;
