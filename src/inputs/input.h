@@ -164,10 +164,12 @@ struct AlarmContext {
 
 // ===== INPUT STRUCTURE =====
 // Runtime configuration for a physical input pin
-// Size: ~100 bytes per input
+// Size: ~102 bytes per input (was ~100 before bus_id fields added)
 struct Input {
-    // === Hardware (1 byte) ===
-    uint8_t pin;                    // Physical pin (A0-A15, or digital)
+    // === Hardware (3 bytes) ===
+    uint8_t pin;                    // Physical pin (A0-A15, or digital, or 0xF0-0xFE for I2C virtual)
+    uint8_t i2c_bus_id;             // I2C bus ID (0-2 for Wire/Wire1/Wire2), 0 = default
+    uint8_t spi_bus_id;             // SPI bus ID (0-2 for SPI/SPI1/SPI2), 0 = default
 
     // === User Configuration ===
     char abbrName[8];               // "CHT", "OIL" (for LCD display)
