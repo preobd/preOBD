@@ -494,15 +494,15 @@ static void printHelpOverview() {
             msg.control.print(F("- "));
             msg.control.println((__FlashStringHelper*)desc);
         #else
-            // ESP32/other: Read from PROGMEM
-            msg.control.print(HELP_CATEGORIES[i].name);
+            // ESP32/Teensy/other: Read from PROGMEM
+            msg.control.print((__FlashStringHelper*)HELP_CATEGORIES[i].name);
             // Pad to align descriptions (use strlen_P for PROGMEM strings)
             uint8_t nameLen = strlen_P(HELP_CATEGORIES[i].name);
             for (uint8_t j = nameLen; j < 14; j++) {
-                msg.control.print(' ');
+                msg.control.write(' ');
             }
             msg.control.print(F("- "));
-            msg.control.println(HELP_CATEGORIES[i].description);
+            msg.control.println((__FlashStringHelper*)HELP_CATEGORIES[i].description);
         #endif
     }
 
