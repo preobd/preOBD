@@ -5,6 +5,7 @@
 #include "output_base.h"
 #include "../config.h"
 #include "../lib/sensor_library.h"
+#include "../lib/units_registry.h"
 #include "../lib/message_api.h"
 
 #ifdef ENABLE_SERIAL_OUTPUT

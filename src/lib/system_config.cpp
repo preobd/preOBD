@@ -7,10 +7,34 @@
 #include "units_registry.h"
 #include "message_router.h"  // For TransportID enum
 #include "bus_defaults.h"
+#include "message_api.h"
 #include <EEPROM.h>
 
 // Global system config instance
 SystemConfig systemConfig;
+
+void printSystemStatus() {
+    msg.control.println(F("=== System Configuration ==="));
+
+    msg.control.print(F("Sea Level Pressure: "));
+    msg.control.print(systemConfig.seaLevelPressure);
+    msg.control.println(F(" hPa"));
+
+    msg.control.print(F("Global Intervals: Sensor="));
+    msg.control.print(systemConfig.sensorReadInterval);
+    msg.control.print(F("ms, Alarm="));
+    msg.control.print(systemConfig.alarmCheckInterval);
+    msg.control.println(F("ms"));
+
+    msg.control.print(F("Default Units: Temp="));
+    msg.control.print((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultTempUnits));
+    msg.control.print(F(", Pressure="));
+    msg.control.print((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultPressUnits));
+    msg.control.print(F(", Elevation="));
+    msg.control.print((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultElevUnits));
+    msg.control.print(F(", Speed="));
+    msg.control.println((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultSpeedUnits));
+}
 
 /**
  * Calculate XOR checksum for SystemConfig structure

@@ -86,7 +86,13 @@ public:
     // Set transport for a specific plane
     bool setTransport(MessagePlane plane, TransportID transportId, bool secondary = false);
 
-    // List all transports and their current assignments
+    // Query current transport routing (STATUS)
+    void printTransportStatus();
+
+    // List available transports (LIST)
+    void listAvailableTransports();
+
+    // List all transports and their current assignments (old function, kept for compatibility)
     void listTransports();
 
     // ========== Update Loop ==========

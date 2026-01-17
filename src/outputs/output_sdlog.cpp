@@ -6,6 +6,7 @@
 #include "output_base.h"
 #include "../config.h"
 #include "../lib/sensor_library.h"
+#include "../lib/units_registry.h"
 
 #ifdef ENABLE_SD_LOGGING
 

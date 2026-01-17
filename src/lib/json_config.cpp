@@ -232,6 +232,8 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     snprintf(addrBuf, sizeof(addrBuf), "0x%02X", systemConfig.lcdI2CAddress);
     display["address"] = addrBuf;
 
+    display["updateInterval"] = systemConfig.lcdUpdateInterval;
+
     JsonObject defaultUnits = display["defaultUnits"].to<JsonObject>();
     defaultUnits["temperature"] = reinterpret_cast<const char*>(getUnitStringByIndex(systemConfig.defaultTempUnits));
     defaultUnits["pressure"] = reinterpret_cast<const char*>(getUnitStringByIndex(systemConfig.defaultPressUnits));
@@ -242,7 +244,6 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     JsonObject timing = systemObj["timing"].to<JsonObject>();
     timing["sensorRead"] = systemConfig.sensorReadInterval;
     timing["alarmCheck"] = systemConfig.alarmCheckInterval;
-    timing["lcdUpdate"] = systemConfig.lcdUpdateInterval;
 
     // Hardware pins
     JsonObject pins = systemObj["pins"].to<JsonObject>();
@@ -451,6 +452,11 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
             }
         }
 
+        // Display update interval
+        if (display["updateInterval"].isNull() == false) {
+            systemConfig.lcdUpdateInterval = display["updateInterval"];
+        }
+
         // Default units
         if (display["defaultUnits"].isNull() == false) {
             JsonObject units = display["defaultUnits"];
@@ -479,7 +485,11 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
         JsonObject timing = systemObj["timing"];
         systemConfig.sensorReadInterval = timing["sensorRead"];
         systemConfig.alarmCheckInterval = timing["alarmCheck"];
-        systemConfig.lcdUpdateInterval = timing["lcdUpdate"];
+
+        // Backward compatibility: check for lcdUpdate in timing section (old location)
+        if (timing["lcdUpdate"].isNull() == false) {
+            systemConfig.lcdUpdateInterval = timing["lcdUpdate"];
+        }
     }
 
     // Hardware pins
@@ -652,6 +662,86 @@ bool loadConfigFromSD(const char* filename) {
     }
 
     return success;
+}
+
+/**
+ * Save configuration to file with destination routing
+ * @param destination Destination string ("SD", "USB", etc.)
+ * @param filename Filename (without destination prefix)
+ * @return true if successful
+ */
+bool saveConfigToFile(const char* destination, const char* filename) {
+    // Route based on destination
+    if (strcmp(destination, "SD") == 0) {
+        return saveConfigToSD(filename);
+    }
+
+#ifdef ENABLE_USB_STORAGE
+    else if (strcmp(destination, "USB") == 0) {
+        // Future: USB storage implementation
+        Serial.println(F("ERROR: USB storage not yet implemented"));
+        return false;
+    }
+#endif
+
+#ifdef ENABLE_HTTP_STORAGE
+    else if (strcmp(destination, "HTTP") == 0 || strcmp(destination, "HTTPS") == 0) {
+        // Future: HTTP/HTTPS upload implementation
+        Serial.println(F("ERROR: HTTP storage not yet implemented"));
+        return false;
+    }
+#endif
+
+    else {
+        Serial.print(F("ERROR: Unknown destination '"));
+        Serial.print(destination);
+        Serial.println(F("'"));
+        Serial.println(F("  Supported destinations: SD"));
+#ifdef ENABLE_USB_STORAGE
+        Serial.println(F("  Conditional: USB (if ENABLE_USB_STORAGE defined)"));
+#endif
+        return false;
+    }
+}
+
+/**
+ * Load configuration from file with destination routing
+ * @param destination Destination string ("SD", "USB", etc.)
+ * @param filename Filename (without destination prefix)
+ * @return true if successful
+ */
+bool loadConfigFromFile(const char* destination, const char* filename) {
+    // Route based on destination
+    if (strcmp(destination, "SD") == 0) {
+        return loadConfigFromSD(filename);
+    }
+
+#ifdef ENABLE_USB_STORAGE
+    else if (strcmp(destination, "USB") == 0) {
+        // Future: USB storage implementation
+        Serial.println(F("ERROR: USB storage not yet implemented"));
+        return false;
+    }
+#endif
+
+#ifdef ENABLE_HTTP_STORAGE
+    else if (strcmp(destination, "HTTP") == 0 || strcmp(destination, "HTTPS") == 0) {
+        // Future: HTTP download implementation
+        Serial.println(F("ERROR: HTTP storage not yet implemented"));
+        return false;
+    }
+#endif
+
+    else {
+        Serial.print(F("ERROR: Unknown destination '"));
+        Serial.print(destination);
+        Serial.println(F("'"));
+        Serial.println(F("  Supported destinations: SD"));
+#ifdef ENABLE_USB_STORAGE
+        Serial.println(F("  Conditional: USB (if ENABLE_USB_STORAGE defined)"));
+#endif
+        return false;
+    }
 }
 
 #endif // USE_STATIC_CONFIG
