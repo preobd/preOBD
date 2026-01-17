@@ -5,8 +5,6 @@
 #include "output_base.h"
 #include "../config.h"
 #include "../inputs/input_manager.h"
-#include "../lib/message_router.h"
-#include "../lib/message_api.h"
 
 // Declare external functions from output modules
 extern void initCAN();
@@ -155,26 +153,16 @@ bool setOutputInterval(const char* name, uint16_t interval) {
  * List all outputs with their status
  */
 void listOutputs() {
-    msg.control.println(F("=== Output Modules ==="));
+    Serial.println(F("=== Output Modules ==="));
     for (int i = 0; i < numOutputModules; i++) {
-        msg.control.print(outputModules[i].name);
-        msg.control.print(F(": "));
+        Serial.print(outputModules[i].name);
+        Serial.print(F(": "));
         if (outputModules[i].enabled) {
-            msg.control.print(F("Enabled, Interval: "));
-            msg.control.print(outputModules[i].sendInterval);
-            msg.control.println(F("ms"));
+            Serial.print(F("Enabled, Interval: "));
+            Serial.print(outputModules[i].sendInterval);
+            Serial.println(F("ms"));
         } else {
-            msg.control.println(F("Disabled"));
+            Serial.println(F("Disabled"));
         }
-    }
-}
-
-/**
- * List available output module names
- */
-void listOutputModules() {
-    msg.control.println(F("=== Available Output Modules ==="));
-    for (int i = 0; i < numOutputModules; i++) {
-        msg.control.println(outputModules[i].name);
     }
 }

@@ -3,7 +3,6 @@
  */
 
 #include "message_router.h"
-#include "message_api.h"
 #include "system_config.h"
 #include <string.h>
 
@@ -134,141 +133,76 @@ bool MessageRouter::setTransport(MessagePlane plane, TransportID transportId, bo
     return true;
 }
 
-void MessageRouter::printTransportStatus() {
-    TransportInterface* ctrl = getTransport(PLANE_CONTROL, true);
-    if (!ctrl) return;
-
-    msg.control.println(F("=== Transport Routing ==="));
-
-    const char* planeNames[] = {"CONTROL", "DATA", "DEBUG"};
-    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3", "ESP32_BT"};
-
-    for (int i = 0; i < NUM_PLANES; i++) {
-        msg.control.print(planeNames[i]);
-        msg.control.print(F(" → "));
-
-        uint8_t tid = primaryTransport[i];
-        if (tid < NUM_TRANSPORTS) {
-            msg.control.print(transportNames[tid]);
-        } else {
-            msg.control.print(F("UNKNOWN"));
-        }
-
-        if (secondaryTransport[i] != TRANSPORT_NONE) {
-            msg.control.print(F(" + "));
-            tid = secondaryTransport[i];
-            if (tid < NUM_TRANSPORTS) {
-                msg.control.print(transportNames[tid]);
-            }
-        }
-
-        msg.control.println();
-    }
-}
-
-void MessageRouter::listAvailableTransports() {
-    TransportInterface* ctrl = getTransport(PLANE_CONTROL, true);
-    if (!ctrl) return;
-
-    msg.control.println(F("=== Available Transports ==="));
-
-    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3", "ESP32_BT"};
-
-    for (int i = 1; i < NUM_TRANSPORTS; i++) {
-        if (transports[i] != nullptr) {
-            msg.control.print(F("  "));
-            msg.control.print(transportNames[i]);
-            msg.control.print(F(" - "));
-
-            switch (transports[i]->getState()) {
-                case TRANSPORT_CONNECTED:
-                    msg.control.println(F("Connected"));
-                    break;
-                case TRANSPORT_DISCONNECTED:
-                    msg.control.println(F("Disconnected"));
-                    break;
-                case TRANSPORT_CONNECTING:
-                    msg.control.println(F("Connecting"));
-                    break;
-                case TRANSPORT_ERROR:
-                    msg.control.println(F("Error"));
-                    break;
-            }
-        }
-    }
-}
-
 void MessageRouter::listTransports() {
-
     // This will be implemented after msg.control is available
     // For now, just a placeholder
     TransportInterface* ctrl = getTransport(PLANE_CONTROL, true);
     if (!ctrl) return;
 
-    msg.control.println(F("=== Transport Configuration ==="));
+    ctrl->println(F("=== Transport Configuration ==="));
 
     // Show plane assignments
     const char* planeNames[] = {"CONTROL", "DATA", "DEBUG"};
     const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3", "ESP32_BT"};
 
     for (int i = 0; i < NUM_PLANES; i++) {
-        msg.control.print(planeNames[i]);
-        msg.control.print(F(" → "));
+        ctrl->print(planeNames[i]);
+        ctrl->print(F(" → "));
 
         uint8_t tid = primaryTransport[i];
         if (tid < NUM_TRANSPORTS) {
-            msg.control.print(transportNames[tid]);
+            ctrl->print(transportNames[tid]);
         } else {
-            msg.control.print(F("UNKNOWN"));
+            ctrl->print(F("UNKNOWN"));
         }
 
         if (secondaryTransport[i] != TRANSPORT_NONE) {
-            msg.control.print(F(" + "));
+            ctrl->print(F(" + "));
             tid = secondaryTransport[i];
             if (tid < NUM_TRANSPORTS) {
-                msg.control.print(transportNames[tid]);
+                ctrl->print(transportNames[tid]);
             }
         }
 
-        msg.control.println();
+        ctrl->println();
     }
 
-    msg.control.println();
-    msg.control.println(F("Available transports:"));
+    ctrl->println();
+    ctrl->println(F("Available transports:"));
 
     // List all registered transports
     for (int i = 1; i < NUM_TRANSPORTS; i++) {
         if (transports[i] != nullptr) {
-            msg.control.print(F("  "));
-            msg.control.print(transports[i]->getName());
-            msg.control.print(F(" ("));
+            ctrl->print(F("  "));
+            ctrl->print(transports[i]->getName());
+            ctrl->print(F(" ("));
 
             if (transports[i]->getCapabilities() & CAP_HARDWARE_SERIAL) {
-                msg.control.print(F("Hardware"));
+                ctrl->print(F("Hardware"));
             } else if (transports[i]->getCapabilities() & CAP_VIRTUAL) {
-                msg.control.print(F("Virtual"));
+                ctrl->print(F("Virtual"));
             } else {
-                msg.control.print(F("Unknown"));
+                ctrl->print(F("Unknown"));
             }
 
-            msg.control.print(F(", "));
+            ctrl->print(F(", "));
 
             switch (transports[i]->getState()) {
                 case TRANSPORT_CONNECTED:
-                    msg.control.print(F("Connected"));
+                    ctrl->print(F("Connected"));
                     break;
                 case TRANSPORT_DISCONNECTED:
-                    msg.control.print(F("Disconnected"));
+                    ctrl->print(F("Disconnected"));
                     break;
                 case TRANSPORT_CONNECTING:
-                    msg.control.print(F("Connecting"));
+                    ctrl->print(F("Connecting"));
                     break;
                 case TRANSPORT_ERROR:
-                    msg.control.print(F("Error"));
+                    ctrl->print(F("Error"));
                     break;
             }
 
-            msg.control.println(F(")"));
+            ctrl->println(F(")"));
         }
     }
 }

@@ -29,8 +29,7 @@ void updateOutputs();              // Housekeeping (drain buffers, etc.)
 bool setOutputEnabled(const char* name, bool enabled);
 bool setOutputInterval(const char* name, uint16_t interval);
 OutputModule* getOutputByName(const char* name);
-void listOutputs();          // Show output status (enabled/disabled + intervals)
-void listOutputModules();    // Show available output module names
+void listOutputs();
 
 // ===== OBDII FRAME BUILDING =====
 

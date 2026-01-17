@@ -6,38 +6,9 @@
 
 ## Overview
 
-openEMS is configured via serial commands at 115200 baud using an interactive command-line interface.
-
-**Terminal Mode (Default):**
-- Full-featured CLI with tab completion, command history, and arrow key navigation
-- Requires a terminal emulator (screen, minicom, picocom, PuTTY, etc.)
-- Build environments: `teensy41`, `mega2560`, `esp32dev` (with `ENABLE_TERMINAL_EMULATOR` flag)
-
-**Serial Monitor Mode (Alternative):**
-- Basic CLI compatible with Arduino/PlatformIO serial monitors
-- No tab completion or command history
-- Build environment: `teensy41_serial` (without `ENABLE_TERMINAL_EMULATOR` flag)
+openEMS is configured via serial commands at 115200 baud. Connect to your board's serial port using the Arduino Serial Monitor, PuTTY, or `pio device monitor`.
 
 Commands are case-insensitive. Pin names can be `A0`, `a0`, `6`, etc.
-
-### Quick Connection Guide
-
-**macOS/Linux (Terminal Mode):**
-```bash
-screen /dev/tty.usbmodem* 115200   # macOS
-screen /dev/ttyACM0 115200         # Linux
-# Exit: Ctrl+A then K then Y
-```
-
-**Windows (Terminal Mode):**
-- Use PuTTY, Tera Term, or similar terminal emulator
-- Set to Serial, 115200 baud, with VT100 emulation
-
-**Serial Monitor Mode:**
-```bash
-pio device monitor                  # PlatformIO
-# Or use Arduino IDE Serial Monitor
-```
 
 ---
 
@@ -54,148 +25,19 @@ RUN                              # Start monitoring
 
 ---
 
-## Command Syntax Patterns
-
-openEMS commands follow consistent patterns based on what you're configuring:
-
-### Discovery Commands
-Pattern: `LIST <type>`
-
-```
-LIST INPUTS          # Show all configured inputs
-LIST APPLICATIONS    # Show available application presets
-LIST SENSORS         # Show available sensor types
-LIST OUTPUTS         # Show available output modules
-LIST TRANSPORTS      # Show available transports
-```
-
-### Configuration Commands
-Pattern: `SET <pin> <field> <value>`
-
-```
-SET A0 CHT MAX6675              # Combined syntax (recommended)
-SET A0 APPLICATION CHT          # Set application type
-SET A0 SENSOR MAX6675           # Set sensor type
-SET A0 ALARM 100 900            # Set alarm thresholds
-SET A0 ALARM WARMUP 30000       # Set alarm warmup time
-```
-
-### Control Commands
-Pattern: `<ACTION> <pin>`
-
-```
-ENABLE A0            # Enable input reading
-DISABLE A0           # Disable input (keeps config)
-CLEAR A0             # Remove input configuration
-```
-
-### Query Commands
-Pattern: `INFO <pin> [subcommand]`
-
-```
-INFO A0              # Show complete configuration
-INFO A0 ALARM        # Show alarm status
-INFO A0 CALIBRATION  # Show calibration details
-```
-
-### Output Module Commands
-Pattern: `OUTPUT <name> <action> [parameters]`
-
-```
-OUTPUT STATUS                # Show all outputs
-OUTPUT CAN ENABLE            # Enable CAN output
-OUTPUT CAN INTERVAL 100      # Set interval to 100ms
-```
-
-### System Commands
-Pattern: `SYSTEM <action> [parameters]`
-
-```
-SYSTEM STATUS                      # Show global config
-SYSTEM DUMP                        # Complete dump
-SYSTEM UNITS TEMP F                # Set default units
-SYSTEM INTERVAL SENSOR 100         # Set sensor interval
-SYSTEM REBOOT                      # Restart the device
-```
-
-### Persistence Commands
-
-```
-SAVE                        # Save to EEPROM
-SAVE SD:config.json         # Save to SD card file
-LOAD                        # Load from EEPROM
-LOAD SD:backup.json         # Load from SD card file
-```
-
----
-
-## Understanding Settings Scope
-
-openEMS has three levels of configuration:
-
-### Per-Input Settings (use SET command)
-Apply to individual sensor inputs:
-- Application type, sensor hardware
-- Display names and units override
-- Alarm thresholds, warmup, persistence
-- Custom calibration parameters
-
-**Example:**
-```
-SET A2 COOLANT_TEMP VDO_120C_LOOKUP
-SET A2 ALARM 60 120
-SET A2 ALARM WARMUP 30000
-```
-
-### Global System Settings (use SYSTEM command)
-Apply to all inputs as defaults:
-- Default units (temperature, pressure, elevation, speed)
-- System timing intervals (sensor read, alarm check)
-- Calibration constants (sea level pressure)
-
-**Example:**
-```
-SYSTEM UNITS TEMP F              # All temps default to Fahrenheit
-SYSTEM UNITS PRESSURE PSI        # All pressures default to PSI
-SYSTEM INTERVAL SENSOR 100       # Read sensors every 100ms
-```
-
-### Output Module Settings (use OUTPUT command)
-Control output modules independently:
-- Enable/disable individual outputs
-- Output-specific intervals
-- Output-specific parameters
-
-**Example:**
-```
-OUTPUT CAN ENABLE
-OUTPUT CAN INTERVAL 100          # CAN at 100ms
-OUTPUT RealDash INTERVAL 50      # RealDash at 50ms (faster)
-```
-
-**Note:** Individual inputs can override global defaults:
-```
-SYSTEM UNITS TEMP C              # Global default: Celsius
-SET A2 UNITS F                   # A2 overrides to Fahrenheit
-```
-
----
-
 ## Table of Contents
 
-1. [Command Syntax Patterns](#command-syntax-patterns)
-2. [Understanding Settings Scope](#understanding-settings-scope)
-3. [Input Configuration](#input-configuration)
-4. [Custom Calibration](#custom-calibration)
-5. [Alarm Configuration](#alarm-configuration)
-6. [Output Configuration](#output-configuration)
-7. [Relay Control](#relay-control)
-8. [Display Configuration](#display-configuration)
-9. [System Configuration](#system-configuration)
-10. [Mode Commands](#mode-commands)
-11. [Persistence Commands](#persistence-commands)
-12. [Query Commands](#query-commands)
-13. [Quick Reference Examples](#quick-reference-examples)
+1. [Input Configuration](#input-configuration)
+2. [Custom Calibration](#custom-calibration)
+3. [Alarm Configuration](#alarm-configuration)
+4. [Output Configuration](#output-configuration)
+5. [Relay Control](#relay-control)
+6. [Display Configuration](#display-configuration)
+7. [System Configuration](#system-configuration)
+8. [Mode Commands](#mode-commands)
+9. [Persistence Commands](#persistence-commands)
+10. [Query Commands](#query-commands)
+11. [Quick Reference Examples](#quick-reference-examples)
 
 ---
 
@@ -215,7 +57,6 @@ SET 6 CHT MAX6675                    # CHT with K-type thermocouple
 SET A0 OIL_TEMP VDO_150C_STEINHART   # Oil temp with VDO sensor
 SET A2 COOLANT_TEMP NTC_10K_BETA_3950  # Coolant with generic NTC
 SET A3 OIL_PRESSURE GENERIC_150PSI   # Oil pressure with linear sensor
-SET 2 VEHICLE_SPEED HALL_SPEED       # Vehicle speed with Hall sensor
 SET A6 PRIMARY_BATTERY VOLTAGE_DIVIDER  # Battery voltage
 ```
 
@@ -250,8 +91,6 @@ CLEAR <pin>                      # Remove input configuration completely
 | `KPA` | | Pressure in kilopascals |
 | `VOLTS` | `V` | Voltage |
 | `RPM` | | Revolutions per minute |
-| `KPH` | | Speed in kilometers per hour |
-| `MPH` | | Speed in miles per hour |
 | `PERCENT` | `%` | Percentage |
 | `METERS` | `M` | Altitude in meters |
 | `FEET` | `FT` | Altitude in feet |
@@ -273,11 +112,8 @@ SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>  # Linear pressure
 SET <pin> PRESSURE_POLY <bias> <a> <b> <c>  # Polynomial pressure (VDO)
 SET <pin> RPM <poles> <ratio> <timeout> <min> <max>  # RPM (5 params)
 SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>  # RPM (6 params)
-SET <pin> SPEED <ppr> <tire_circ> <ratio> <timeout> <max>  # Speed (5 params)
-SET <pin> SPEED <ppr> <tire_circ> <ratio> <mult> <timeout> <max>  # Speed (6 params)
+INFO <pin> CALIBRATION           # View active calibration
 ```
-
-Use `INFO <pin> CALIBRATION` to view active calibration parameters (see [INFO Command](#info-command)).
 
 ### Thermistor Calibration Examples
 
@@ -320,24 +156,7 @@ SET 5 RPM 12 3.0 1.02 2000 100 8000
 SAVE
 ```
 
-### Speed Calibration Example
-
-**Hall effect sensor, 100 pulses/rev, 2008mm tire circumference, 3.73 final drive:**
-```
-SET 2 VEHICLE_SPEED HALL_SPEED
-SET 2 SPEED 100 2008 3.73 2000 300
-SAVE
-```
-
-**Parameters:**
-- `ppr` (100) - Pulses per revolution (gear tooth count)
-- `tire_circ` (2008) - Tire rolling circumference in millimeters
-- `ratio` (3.73) - Final drive ratio
-- `mult` (optional) - Calibration multiplier (default: 1.0)
-- `timeout` (2000) - Zero speed timeout in milliseconds
-- `max` (300) - Maximum valid speed in kph
-
-See **[Hall Speed Guide](../guides/sensor-types/HALL_SPEED_GUIDE.md)** and **[Advanced Calibration Guide](../guides/configuration/ADVANCED_CALIBRATION_GUIDE.md)** for detailed calibration instructions.
+See **[Advanced Calibration Guide](../guides/configuration/ADVANCED_CALIBRATION_GUIDE.md)** for detailed calibration instructions.
 
 ---
 
@@ -345,33 +164,17 @@ See **[Hall Speed Guide](../guides/sensor-types/HALL_SPEED_GUIDE.md)** and **[Ad
 
 Configure per-input alarm thresholds and timing.
 
-### Understanding Alarm Timing
-
-**Warmup Time** - Delay after system startup before alarm can trigger
-- **Purpose:** Prevents nuisance alarms during sensor stabilization
-- **Common use case:** Oil pressure during engine start
-- **Range:** 0-300000ms (5 minutes maximum)
-- **Example:** Oil pressure needs 45 seconds to build up after engine starts
-
-**Persistence Time** - How long a threshold violation must persist before triggering
-- **Purpose:** Filters out transient spikes or noise
-- **Common use case:** Temperature spikes from exhaust gas turbulence
-- **Range:** 0-60000ms (60 seconds maximum)
-- **Example:** Ignore brief CHT spikes lasting less than 2 seconds
-
 ### Alarm Commands
 
 ```
-SET <pin> ALARM <min> <max>          # Set alarm thresholds
-SET <pin> ALARM WARMUP <ms>          # Alarm warmup time (0-300000ms)
-SET <pin> ALARM PERSIST <ms>         # Alarm persistence time (0-60000ms)
-SET <pin> ALARM ENABLE               # Enable alarm checking
-SET <pin> ALARM DISABLE              # Disable alarm (keeps thresholds)
+SET <pin> ALARM <min> <max>      # Set alarm thresholds
+SET <pin> ALARM OFF              # Disable alarm for input
+ALARM <pin> WARMUP <ms>          # Override warmup time
+ALARM <pin> PERSIST <ms>         # Override persistence time
+INFO <pin> ALARM                 # Show alarm status
 ```
 
-Use `INFO <pin> ALARM` to view alarm status and configuration (see [INFO Command](#info-command)).
-
-### Output Module Control (Global Alarm Hardware)
+### Output Module Control
 
 ```
 OUTPUT Alarm ENABLE              # Enable alarm hardware (buzzer, LED)
@@ -379,44 +182,20 @@ OUTPUT Alarm DISABLE             # Disable alarm hardware (silent mode)
 OUTPUT Alarm INTERVAL <ms>       # Set alarm check interval (10-10000ms)
 ```
 
-### Practical Examples
+### Examples
 
-**Oil Pressure Alarm (with warmup):**
 ```
-SET A3 OIL_PRESSURE VDO_5BAR
-SET A3 ALARM 10 80                   # Alarm if <10 or >80 PSI
-SET A3 ALARM WARMUP 45000            # Wait 45 seconds after startup
-SET A3 ALARM PERSIST 3000            # Must persist 3 seconds to trigger
-```
-*Why:* Oil pressure needs time to build during startup. Brief drops during gear changes are normal.
+# Set coolant alarm: trigger if <60°C or >120°C
+SET A2 ALARM 60 120
 
-**Coolant Temperature Alarm (with persistence):**
-```
-SET A2 COOLANT_TEMP VDO_120C_LOOKUP
-SET A2 ALARM 60 120                  # Alarm if <60°C or >120°C
-SET A2 ALARM PERSIST 5000            # Must persist 5 seconds
-```
-*Why:* Brief temperature spikes can occur from exhaust gas turbulence. Only trigger if sustained.
+# Custom warmup for oil pressure (45 seconds)
+ALARM A1 WARMUP 45000
 
-**CHT Alarm (critical, fast response):**
-```
-SET 6 CHT MAX6675
-SET 6 ALARM 100 900                  # Alarm if <100°F or >900°F
-SET 6 ALARM PERSIST 1000             # Quick 1 second response
-```
-*Why:* Cylinder head temperature is critical - respond quickly to overtemp.
+# Faster alarm response (1 second persistence)
+ALARM 6 PERSIST 1000
 
-**Disable Alarm Temporarily:**
-```
-SET A3 ALARM DISABLE                 # Turn off oil pressure alarm
-# Later...
-SET A3 ALARM ENABLE                  # Re-enable with same thresholds
-```
-
-**Global Alarm Hardware Control:**
-```
-OUTPUT Alarm DISABLE                 # Silent mode (no buzzer)
-# Alarms still check and log, but buzzer won't sound
+# Check alarm status
+INFO A2 ALARM
 ```
 
 ### Alarm State Machine
@@ -443,10 +222,9 @@ Control output modules at runtime.
 
 Output modules must be compiled into firmware to be available. Standard builds (`teensy41`, `teensy40`, `mega2560`) include all outputs by default.
 
-**Check which outputs are available**:
+**Check which outputs are compiled in**:
 ```
-LIST OUTPUTS           # List available output modules
-OUTPUT STATUS          # Show current configuration (enabled/disabled + intervals)
+OUTPUT LIST    # or LIST OUTPUTS
 ```
 
 **Runtime control** (for compiled-in outputs):
@@ -456,7 +234,7 @@ OUTPUT <name> DISABLE            # Disable output module
 OUTPUT <name> INTERVAL <ms>      # Set send interval (10-60000ms)
 ```
 
-**Note**: If an output is not listed by `LIST OUTPUTS`, it wasn't compiled into your build. See [Build Configuration Guide](../guides/configuration/BUILD_CONFIGURATION_GUIDE.md) to create a custom environment with the outputs you need.
+**Note**: If an output is not listed by `OUTPUT LIST`, it wasn't compiled into your build. See [Build Configuration Guide](../guides/configuration/BUILD_CONFIGURATION_GUIDE.md) to create a custom environment with the outputs you need.
 
 ### Available Outputs
 
@@ -483,13 +261,13 @@ OUTPUT RealDash INTERVAL 50
 OUTPUT SD_Log DISABLE
 
 # Check status
-OUTPUT STATUS
+OUTPUT LIST
 ```
 
 ### Output Status Display
 
 ```
-OUTPUT STATUS
+OUTPUT LIST
 ```
 Shows:
 ```
@@ -517,7 +295,7 @@ RELAY <0-1> STATUS                   # Show specific relay configuration
 RELAY <0-1> PIN <pin>                # Set relay output pin
 RELAY <0-1> INPUT <pin>              # Link relay to sensor input
 RELAY <0-1> THRESHOLD <on> <off>     # Set ON/OFF thresholds with hysteresis
-RELAY <0-1> MODE <mode>              # Set relay mode (see modes below)
+RELAY <0-1> MODE <mode>              # Set relay mode
 RELAY <0-1> DISABLE                  # Disable relay
 ```
 
@@ -527,9 +305,8 @@ RELAY <0-1> DISABLE                  # Disable relay
 |------|-------------|
 | `AUTO_HIGH` | Relay ON when sensor rises above ON threshold, OFF when falls below OFF threshold |
 | `AUTO_LOW` | Relay ON when sensor falls below ON threshold, OFF when rises above OFF threshold |
-| `MANUAL_ON` | Manual override - always ON |
-| `MANUAL_OFF` | Manual override - always OFF |
-| `DISABLED` | Relay disabled (same as `RELAY <0-1> DISABLE` command) |
+| `ON` | Manual override - always ON |
+| `OFF` | Manual override - always OFF |
 
 ### Examples
 
@@ -553,7 +330,7 @@ RELAY 1 MODE AUTO_LOW                # Activate on low pressure
 
 **Manual override**:
 ```
-RELAY 0 MODE MANUAL_ON               # Force fan ON for testing
+RELAY 0 MODE ON                      # Force fan ON for testing
 RELAY 0 MODE AUTO_HIGH               # Resume automatic control
 ```
 
@@ -584,32 +361,20 @@ Relay 1:
 
 ## Display Configuration
 
-Configure display hardware and refresh rate.
-
-**Note:** Unit preferences have moved to `SYSTEM UNITS`.
+Configure display settings.
 
 ### Commands
 
 ```
-DISPLAY STATUS                   # Show display hardware status
+DISPLAY STATUS                   # Show current configuration
 DISPLAY ENABLE                   # Enable display
 DISPLAY DISABLE                  # Disable display
 DISPLAY TYPE <LCD|OLED|NONE>     # Set display type
-DISPLAY ADDRESS <hex>            # Set I2C address (LCD only)
-DISPLAY INTERVAL <ms>            # Set display refresh rate
+DISPLAY LCD ADDRESS <hex>        # Set I2C address (e.g., 0x27, 0x3F)
+DISPLAY UNITS TEMP <C|F>         # Default temperature units
+DISPLAY UNITS PRESSURE <BAR|PSI|KPA>  # Default pressure units
+DISPLAY UNITS ELEVATION <M|FT>   # Default elevation units
 ```
-
-### DISPLAY STATUS Output
-
-```
-=== Display Configuration ===
-Status: Enabled
-Type: LCD
-LCD I2C Address: 0x27
-Update Interval: 1000ms
-```
-
-For unit configuration, use `SYSTEM UNITS` commands.
 
 ### Examples
 
@@ -617,18 +382,15 @@ For unit configuration, use `SYSTEM UNITS` commands.
 # Switch to OLED display
 DISPLAY TYPE OLED
 SAVE
-SYSTEM REBOOT  # Reboot to reinitialize display
+RELOAD  # Reboot to reinitialize display
 
-# Configure display hardware
-DISPLAY TYPE LCD
-DISPLAY ADDRESS 0x27
-DISPLAY INTERVAL 500    # Update display every 500ms
-
-# View configuration
-DISPLAY STATUS
+# Use Fahrenheit and PSI
+DISPLAY UNITS TEMP F
+DISPLAY UNITS PRESSURE PSI
+SAVE
 
 # Change LCD I2C address
-DISPLAY ADDRESS 0x3F
+DISPLAY LCD ADDRESS 0x3F
 SAVE
 ```
 
@@ -636,69 +398,23 @@ SAVE
 
 ## System Configuration
 
-Global configuration affecting all subsystems.
+Advanced system parameters.
 
-### Query System
+### Commands
 
-```bash
-SYSTEM STATUS            # Show all global configuration
-SYSTEM DUMP              # Show complete system dump (all subsystems)
-SYSTEM DUMP JSON         # Export configuration as JSON (copy/paste)
 ```
-
-**SYSTEM STATUS** output:
+SYSTEM STATUS                    # Show all system configuration
+SYSTEM SEA_LEVEL <hPa>           # Sea level pressure (800-1200)
+SYSTEM INTERVAL SENSOR <ms>      # Sensor read interval (10-10000)
+SYSTEM INTERVAL ALARM <ms>       # Alarm check interval (10-10000)
+SYSTEM INTERVAL LCD <ms>         # LCD update interval (10-10000)
 ```
-=== System Configuration ===
-Sea Level Pressure: 1013.25 hPa
-Global Intervals: Sensor=100ms, Alarm=100ms
-Default Units: Temp=°C, Pressure=bar, Elevation=m, Speed=kph
-```
-
-**SYSTEM DUMP** shows complete configuration including all inputs, outputs, display, and system parameters.
-
-**SYSTEM DUMP JSON** exports the complete configuration as JSON to the terminal for easy copy/paste.
-
-### Configure Global Defaults
-
-**Default Units** (inherited by all inputs unless overridden):
-```bash
-SYSTEM UNITS TEMP <C|F>                    # Temperature units
-SYSTEM UNITS PRESSURE <BAR|PSI|KPA|INHG>   # Pressure units
-SYSTEM UNITS ELEVATION <M|FT>              # Elevation units
-SYSTEM UNITS SPEED <KPH|MPH>               # Speed units
-```
-
-**Calibration Constants:**
-```bash
-SYSTEM SEA_LEVEL <hPa>                     # Sea level pressure for altitude calculations
-```
-
-**Timing Intervals:**
-```bash
-SYSTEM INTERVAL <type> <ms>                # Set timing intervals
-```
-
-Interval types:
-- `SENSOR` - How often to read sensor values (default: 100ms)
-- `ALARM` - How often to check alarm thresholds (default: 100ms)
-
-**Note:** Display refresh rate has moved to `DISPLAY INTERVAL`. Per-output intervals are configured with `OUTPUT <name> INTERVAL`.
 
 ### Examples
 
-```bash
-# Set global defaults
-SYSTEM UNITS TEMP F
-SYSTEM UNITS PRESSURE PSI
+```
+# Set sea level pressure for accurate altitude
 SYSTEM SEA_LEVEL 1013.25
-SYSTEM INTERVAL SENSOR 50
-
-# View configuration
-SYSTEM STATUS
-SYSTEM DUMP
-
-# Export for sharing
-SYSTEM DUMP JSON
 
 # Read sensors faster
 SYSTEM INTERVAL SENSOR 50
@@ -706,33 +422,6 @@ SYSTEM INTERVAL SENSOR 50
 # Check alarms more frequently
 SYSTEM INTERVAL ALARM 100
 ```
-
-**System Control:**
-```bash
-SYSTEM REBOOT                                  # Restart the device
-SYSTEM RESET CONFIRM                           # Factory reset (erase config + reboot)
-```
-
-**System Control Examples:**
-```bash
-# Simple reboot
-SYSTEM REBOOT
-
-# Factory reset (requires CONFIRM for safety)
-SYSTEM RESET CONFIRM                           # Erases ALL config and reboots
-
-# Legacy reboot command (still supported)
-RELOAD                                         # Same as SYSTEM REBOOT
-```
-
-**Comparison of Reset Commands:**
-
-| Command | Clears Config? | Reboots? | Use Case |
-|---------|---------------|----------|----------|
-| `SYSTEM REBOOT` | No | Yes | Clean restart |
-| `SYSTEM RESET CONFIRM` | Yes | Yes | Factory reset to defaults |
-| `RESET CONFIRM` | Yes | No | Clear config but stay in session |
-| `RELOAD` | No | Yes | Legacy alias for SYSTEM REBOOT |
 
 ---
 
@@ -745,6 +434,7 @@ Switch between configuration and run modes.
 ```
 CONFIG                           # Enter configuration mode
 RUN                              # Enter run mode
+RELOAD                           # Trigger system reboot
 ```
 
 ### Mode Behavior
@@ -758,97 +448,33 @@ RUN                              # Enter run mode
 
 - `HELP`, `?`
 - `VERSION`
+- `DUMP`
 - `INFO <pin>`
 - `LIST *`
-- `OUTPUT STATUS`
-- `TRANSPORT STATUS`
+- `OUTPUT LIST`
 - `DISPLAY STATUS`
 - `SYSTEM STATUS`
-- `SYSTEM DUMP`
-- `SYSTEM DUMP JSON`
 
 ---
 
 ## Persistence Commands
 
-Save and load configuration to/from EEPROM or file storage.
+Save and load configuration.
 
-### EEPROM Persistence
-
-Internal persistent storage that survives reboots. Limited write cycles (~100,000).
+### Commands
 
 ```
 SAVE                             # Save configuration to EEPROM
-SAVE EEPROM                      # Save configuration to EEPROM (explicit)
 LOAD                             # Load configuration from EEPROM
-LOAD EEPROM                      # Load configuration from EEPROM (explicit)
-RESET CONFIRM                    # Clear all configuration to defaults (no reboot)
+RESET                            # Show reset warning
+RESET CONFIRM                    # Reset all configuration to defaults
 ```
 
-**Note:** `RESET CONFIRM` clears configuration in memory but does NOT reboot. Type `SAVE` to persist the cleared state, or use `SYSTEM REBOOT` to revert to saved configuration.
-
-### File Storage (SD Card, USB, etc.)
-
-The file storage system uses URI-style paths with optional destination prefixes:
+### SD Card Backup/Restore
 
 ```
-SAVE [destination:]filename     # Save to file storage
-LOAD [destination:]filename     # Load from file storage
-```
-
-**Destination Prefixes:**
-- `SD:` - SD card storage (default if no prefix specified)
-- `USB:` - USB drive storage (if `ENABLE_USB_STORAGE` defined)
-- Additional destinations may be added in future releases
-
-**Common File Storage Examples:**
-
-```bash
-# Quick save/load (defaults to SD card)
-SAVE config.json                    # Saves to SD:/config/config.json
-LOAD config.json                    # Loads from SD:/config/config.json
-
-# Named configuration backups
-SAVE SD:backup_20260111.json        # Timestamped backup
-SAVE SD:summer_setup.json           # Summer configuration
-SAVE SD:winter_setup.json           # Winter configuration
-
-# Absolute paths for organization
-SAVE SD:/backups/backup_20260111.json
-LOAD SD:/backups/backup_20260111.json
-
-# USB storage (if available)
-SAVE USB:backup.json
-LOAD USB:restore.json
-```
-
-**Workflow Example - Configuration Backup and Restore:**
-```bash
-# Save current configuration before making changes
-SAVE SD:backup_before_changes.json
-
-# Make configuration changes
-SET A2 ALARM 65 115
-
-# Test the changes
-# If something goes wrong, restore from backup
-LOAD SD:backup_before_changes.json
-SAVE                                # Persist restored config to EEPROM
-```
-
-**Path Handling:**
-- Relative paths (e.g., `config.json`) are auto-prefixed with `/config/`
-- Absolute paths (e.g., `/data/config.json`) are used as-is
-- URI prefix + path: `SD:/path/file.json` uses absolute path
-- Maximum path length: 32 characters (including destination prefix)
-
-**Error Handling:**
-If a file operation fails, you'll see:
-```
-ERROR: Failed to save configuration
-  Check: SD card inserted and formatted
-  Check: Filename length < 32 characters
-  Check: Destination prefix valid (SD, USB)
+CONFIG SAVE [filename]           # Save to SD card (optional filename)
+CONFIG LOAD <filename>           # Load from SD card
 ```
 
 ### What Gets Saved
@@ -856,15 +482,13 @@ ERROR: Failed to save configuration
 - All input configurations (pins, applications, sensors, names, alarms, calibrations)
 - Output module enable/disable states and intervals
 - Display type and unit preferences
-- System parameters (sea level pressure, intervals)
+- System parameters
 
 ### Best Practices
 
 - Save after completing all configuration changes (not after each command)
 - EEPROM has ~100,000 write cycles - avoid excessive saves
-- Use file storage (SD/USB) for archival and sharing configurations
-- Create timestamped backups: `SAVE SD:backup_20260109.json`
-- Test loaded configurations before persisting to EEPROM
+- Use SD card backup for archival
 
 ---
 
@@ -902,51 +526,19 @@ HELP CALIBRATION                # Show calibration commands
 HELP QUICK                      # Show compact reference
 ```
 
-### INFO Command
-
-Query detailed information about configured inputs.
-
-```
-INFO <pin>                       # Show complete input configuration and current value
-INFO <pin> CALIBRATION           # Show calibration parameters and equations
-INFO <pin> ALARM                 # Show alarm configuration and current status
-```
-
-**INFO <pin>** displays:
-- Application type and sensor type
-- Current sensor value (raw and converted)
-- Display name and units
-- Alarm thresholds (if configured)
-- Pin assignment
-
-**INFO <pin> CALIBRATION** displays:
-- Active calibration method (Steinhart-Hart, Beta, lookup table, linear, etc.)
-- Calibration coefficients or table data
-- Conversion equations
-
-**INFO <pin> ALARM** displays:
-- Alarm thresholds (min/max)
-- Current alarm state (OK, LOW, HIGH)
-- Warmup time remaining (if in warmup period)
-- Persistence settings
-
-**Examples:**
-```
-INFO A2                          # Show complete coolant temp sensor info
-INFO A2 CALIBRATION              # Show calibration coefficients
-INFO A2 ALARM                    # Check alarm status
-```
-
 ### Other Query Commands
 
 ```
 VERSION                          # Show firmware version
+DUMP                             # Show complete system state
+DUMP JSON                        # Export configuration as JSON
 LIST INPUTS                      # Show all configured inputs
 LIST APPLICATIONS                # Show available application types
 LIST SENSORS                     # Show available sensor types
+INFO <pin>                       # Show detailed input info
+INFO <pin> CALIBRATION           # Show calibration details
+INFO <pin> ALARM                 # Show alarm status
 ```
-
-**Note:** For complete system dumps, use `SYSTEM DUMP` or `SYSTEM DUMP JSON` (see [System Configuration](#system-configuration)).
 
 ---
 
@@ -965,7 +557,7 @@ SET A2 ALARM 60 120
 SET A3 ALARM 0.5 7.0
 OUTPUT CAN ENABLE
 OUTPUT CAN INTERVAL 100
-SYSTEM UNITS TEMP F
+DISPLAY UNITS TEMP F
 SAVE
 RUN
 ```
@@ -990,17 +582,6 @@ SAVE
 RUN
 ```
 
-### Configure Hall Speed Sensor
-
-```
-CONFIG
-SET 2 VEHICLE_SPEED HALL_SPEED
-SET 2 SPEED 100 2008 3.73 2000 300
-SET 2 NAME SPEED
-SAVE
-RUN
-```
-
 ---
 
 ## Pin Notation
@@ -1020,7 +601,7 @@ If a command fails, you'll see helpful error messages:
 
 ```
 ERROR: Unknown output 'CANBUS'
-  Hint: Use 'LIST OUTPUTS' to see available outputs
+  Hint: Use 'OUTPUT LIST' to see available outputs
 
 ERROR: Configuration locked in RUN mode
   Type CONFIG to enter configuration mode

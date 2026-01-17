@@ -109,7 +109,5 @@ bool saveSystemConfig();         // Save to EEPROM
 bool loadSystemConfig();         // Load from EEPROM
 void resetSystemConfig();        // Reset to defaults
 uint8_t calculateChecksum(SystemConfig* cfg);
-void printSystemStatus();
-
 
 #endif // SYSTEM_CONFIG_H

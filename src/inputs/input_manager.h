@@ -63,8 +63,6 @@ void readAllInputs();                 // Read all enabled inputs
 
 // ===== INFO =====
 void printInputInfo(uint8_t pin);    // Print detailed input information
-void printInputAlarmInfo(uint8_t pin);
-void printInputCalibration(uint8_t pin);
 void listAllInputs();                // List all active inputs
 void listApplicationPresets();       // List available Applications
 void listSensors();                  // List available Sensors
