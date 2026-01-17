@@ -179,6 +179,17 @@ SET 3 ENGINE_RPM W_PHASE_RPM
 
 **⚠️ CRITICAL:** Requires voltage protection circuit for 3.3V boards! See [W_PHASE_RPM_GUIDE.md](../guides/sensor-types/W_PHASE_RPM_GUIDE.md).
 
+### Vehicle Speed (Hall Effect Sensor)
+
+```
+SET 2 VEHICLE_SPEED HALL_SPEED
+SET 2 SPEED 100 2008 3.73 2000 300
+```
+
+**Parameters:** pulses_per_rev (100), tire_circumference_mm (2008), final_drive_ratio (3.73), timeout_ms (2000), max_speed_kph (300)
+
+**⚠️ CRITICAL:** 12V sensors require voltage protection for 3.3V boards! See [HALL_SPEED_GUIDE.md](../guides/sensor-types/HALL_SPEED_GUIDE.md).
+
 ### Environmental (BME280)
 
 ```
@@ -274,7 +285,7 @@ HELP CALIBRATION        # Show calibration commands
 |---------|-------------|
 | `CONFIG` | Enter configuration mode |
 | `RUN` | Enter run mode |
-| `RESET` | Clear all configuration |
+| `RESET CONFIRM` | Clear all configuration (no reboot) |
 | `LOAD` | Reload from EEPROM |
 
 ### Output Commands
@@ -293,8 +304,25 @@ HELP CALIBRATION        # Show calibration commands
 | `DISPLAY STATUS` | Show display config |
 | `DISPLAY ENABLE` | Enable display |
 | `DISPLAY DISABLE` | Disable display |
-| `DISPLAY UNITS TEMP <C\|F>` | Set temperature units |
-| `DISPLAY UNITS PRESSURE <BAR\|PSI\|KPA>` | Set pressure units |
+| `DISPLAY TYPE <LCD\|OLED\|NONE>` | Set display type |
+| `DISPLAY INTERVAL <ms>` | Set display refresh rate |
+
+### System Commands
+
+| Command | Description |
+|---------|-------------|
+| `SYSTEM STATUS` | Show global configuration |
+| `SYSTEM DUMP` | Complete system dump |
+| `SYSTEM DUMP JSON` | Export configuration as JSON |
+| `SYSTEM UNITS TEMP <C\|F>` | Set default temperature units |
+| `SYSTEM UNITS PRESSURE <BAR\|PSI\|KPA\|INHG>` | Set default pressure units |
+| `SYSTEM UNITS ELEVATION <M\|FT>` | Set default elevation units |
+| `SYSTEM UNITS SPEED <KPH\|MPH>` | Set default speed units |
+| `SYSTEM SEA_LEVEL <hPa>` | Set sea level pressure |
+| `SYSTEM INTERVAL SENSOR <ms>` | Set sensor read interval |
+| `SYSTEM INTERVAL ALARM <ms>` | Set alarm check interval |
+| `SYSTEM REBOOT` | Restart the device |
+| `SYSTEM RESET CONFIRM` | Factory reset (erase config + reboot) |
 
 ### Relay Commands (requires ENABLE_RELAY_OUTPUT)
 
@@ -329,6 +357,8 @@ See [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md) for details.
 | `KPA` | Pressure in kilopascals |
 | `VOLTS` or `V` | Voltage |
 | `RPM` | Revolutions per minute |
+| `KPH` | Speed in kilometers per hour |
+| `MPH` | Speed in miles per hour |
 | `PERCENT` or `%` | Percentage |
 | `METERS` or `M` | Altitude in meters |
 | `FEET` or `FT` | Altitude in feet |
@@ -355,6 +385,7 @@ See [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md) for details.
 | `HUMIDITY` | Relative Humidity | BME280_HUMIDITY |
 | `ELEVATION` | Estimated Altitude | BME280_ELEVATION |
 | `ENGINE_RPM` | Engine RPM | W_PHASE_RPM |
+| `VEHICLE_SPEED` | Vehicle Speed | HALL_SPEED |
 
 ---
 
@@ -394,11 +425,14 @@ See [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md) for details.
 ### Other
 - `VOLTAGE_DIVIDER` - 12V battery monitoring
 - `W_PHASE_RPM` - Alternator RPM
+- `HALL_SPEED` - Hall effect speed sensor (VDO, OEM, generic 3-wire)
 - `FLOAT_SWITCH` - Digital level switch
 - `BME280_TEMP`, `BME280_PRESSURE`, `BME280_HUMIDITY`, `BME280_ELEVATION`
 
 ### Custom Calibration Commands
 ```
+SET <pin> RPM <poles> <ratio> [<mult>] <timeout> <min> <max>     # Custom RPM
+SET <pin> SPEED <ppr> <tire_circ> <ratio> [<mult>] <timeout> <max>  # Custom speed
 SET <pin> STEINHART <bias> <a> <b> <c>           # Custom Steinhart-Hart
 SET <pin> BETA <bias> <beta> <r0> <t0>           # Custom Beta equation
 SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>  # Custom linear range
