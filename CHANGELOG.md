@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **OBD-II request/response support** - ELM327 Bluetooth adapters can now query sensor data
+- **Mode 01 PID 00 implementation** - Supported PIDs bitmap automatically generated from active inputs
+- **Hybrid CAN mode** - Simultaneous broadcast (RealDash) and request/response (Torque/scanners)
+- **Functional and physical addressing** - Responds to both 0x7DF (broadcast) and 0x7E0 (ECU 0) requests
+- **Automatic PID lookup table** - Built from active inputs at startup for O(1) PID queries
+- **ISO 14229 negative responses** - Proper error handling for unsupported modes and PIDs
+- **New guide: OBD2_SCANNER_GUIDE.md** - Complete setup guide for ELM327/Torque
+- **New reference: OBD2_PID_REFERENCE.md** - Comprehensive PID catalog with examples
 - **Hierarchical help system** - Organized help by category (LIST, SET, CALIBRATION, CONTROL, OUTPUT, RELAY, DISPLAY, TRANSPORT, SYSTEM, CONFIG)
 - **HELP <category> command** - Detailed help for specific command categories
 - **HELP QUICK command** - Compact command reference for experienced users
@@ -19,8 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Relay EEPROM persistence** - Relay configurations saved to EEPROM
 
 ### Changed
+- **CAN output** - Now supports both broadcast and on-demand request/response modes
+- **updateCAN()** - Processes incoming OBD-II requests on all platforms (FlexCAN, TWAI, MCP2515)
+- **initCAN()** - Configures RX filters for 0x7DF/0x7E0 and builds PID lookup table
 - **HELP command** - Now shows category overview instead of flat 104-line command list
 - **Help organization** - Commands grouped by function for better discoverability
+
+### Documentation
+- Updated README.md to clarify OBD-II request/response capability
+- Updated docs/README.md with OBD-II scanner section and output guides
+- Added Output Guides section to documentation index
+- Created comprehensive OBD-II PID reference with 15+ PIDs documented
 
 ## [0.6.0-beta] - 2025-12-31
 

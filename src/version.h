@@ -7,7 +7,7 @@
 #define VERSION_H
 
 // Firmware version string (semantic versioning)
-#define FIRMWARE_VERSION "v0.6.1-beta"
+#define FIRMWARE_VERSION "v0.6.2-beta"
 
 // EEPROM configuration version
 // Increment when Input struct layout changes (forces reconfiguration)
