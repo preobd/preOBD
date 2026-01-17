@@ -389,4 +389,28 @@ inline void loadUnitsInfo(const UnitsInfo* flashInfo, UnitsInfo* ramCopy) {
 #define READ_UNITS_OFFSET(info) pgm_read_float(&(info)->conversionOffset)
 #define READ_UNITS_MEASUREMENT_TYPE(info) ((MeasurementType)pgm_read_byte(&(info)->measurementType))
 
+/**
+ * Get unit symbol string by index (O(1) direct access)
+ *
+ * Returns the display symbol string for a unit (e.g., "C", "psi", "km/h").
+ * This is a convenience function that wraps getUnitsByIndex() and extracts
+ * only the symbol field.
+ *
+ * @param unitsIndex  Array index (0-12)
+ * @return            Pointer to symbol string in PROGMEM, or empty string if invalid
+ *
+ * Example:
+ *   const char* symbol = getUnitStringByIndex(0);  // Returns "C" (PROGMEM)
+ *   msg.control.print((__FlashStringHelper*)symbol);
+ */
+// Empty string in PROGMEM for invalid unit index
+static const char PSTR_EMPTY_UNIT[] PROGMEM = "";
+
+inline const char* getUnitStringByIndex(uint8_t unitsIndex) {
+    if (unitsIndex >= NUM_UNITS) return PSTR_EMPTY_UNIT;
+
+    const UnitsInfo* info = &UNITS_REGISTRY[unitsIndex];
+    return (const char*)pgm_read_ptr(&info->symbol);
+}
+
 #endif // UNITS_REGISTRY_H

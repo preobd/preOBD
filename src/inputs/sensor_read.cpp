@@ -116,25 +116,6 @@ float convertToBaseUnits(float displayValue, uint8_t unitsIndex) {
     return (displayValue - offset) / factor;
 }
 
-
-// ===== UNIT STRING CONVERSION =====
-
-/**
- * Get unit symbol string from registry (registry-based)
- *
- * Returns pointer to symbol string in PROGMEM. Caller should use
- * in Serial.print(F()) or similar PROGMEM-aware context.
- *
- * @param unitsIndex Index into UNITS_REGISTRY (0-10)
- * @return           Pointer to symbol string in PROGMEM
- */
-const char* getUnitStringByIndex(uint8_t unitsIndex) {
-    if (unitsIndex >= NUM_UNITS) return PSTR("");
-
-    const UnitsInfo* info = &UNITS_REGISTRY[unitsIndex];
-    return (const char*)pgm_read_ptr(&info->symbol);
-}
-
 // ===== OBDII CONVERSION FUNCTIONS =====
 
 float obdConvertTemperature(float celsius) {

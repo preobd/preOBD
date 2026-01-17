@@ -53,7 +53,6 @@ extern void initHallSpeed(Input*);
 // Forward declare unit conversion functions (registry-based)
 extern float convertFromBaseUnits(float baseValue, uint8_t unitsIndex);
 extern float convertToBaseUnits(float displayValue, uint8_t unitsIndex);
-extern const char* getUnitStringByIndex(uint8_t unitsIndex);
 
 // Forward declare OBD conversion functions
 extern float obdConvertTemperature(float value);
@@ -98,46 +97,49 @@ struct SensorInfo {
 // ===== STRING LITERALS IN PROGMEM =====
 static const char PSTR_NONE[] PROGMEM = "NONE";
 static const char PSTR_MAX6675[] PROGMEM = "MAX6675";
-static const char PSTR_MAX6675_LABEL[] PROGMEM = "K-Type Thermocouple (MAX6675)";
+static const char PSTR_MAX6675_LABEL[] PROGMEM = "K-Type Thermocouple (0-1024°C)";
 static const char PSTR_MAX31855[] PROGMEM = "MAX31855";
-static const char PSTR_MAX31855_LABEL[] PROGMEM = "K-Type Thermocouple (MAX31855)";
+static const char PSTR_MAX31855_LABEL[] PROGMEM = "K-Type Thermocouple (-270-1372°C)";
 static const char PSTR_VDO_120C_LOOKUP[] PROGMEM = "VDO_120C_LOOKUP";
-static const char PSTR_VDO_120C_LOOKUP_LABEL[] PROGMEM = "VDO 120C (Lookup)";
+static const char PSTR_VDO_120C_LOOKUP_LABEL[] PROGMEM = "VDO 120C (lookup table)";
 static const char PSTR_VDO_150C_LOOKUP[] PROGMEM = "VDO_150C_LOOKUP";
-static const char PSTR_VDO_150C_LOOKUP_LABEL[] PROGMEM = "VDO 150C (Lookup)";
+static const char PSTR_VDO_150C_LOOKUP_LABEL[] PROGMEM = "VDO 150C (lookup table)";
 static const char PSTR_VDO_120C_STEINHART[] PROGMEM = "VDO_120C_STEINHART";
-static const char PSTR_VDO_120C_STEINHART_LABEL[] PROGMEM = "VDO 120C (Steinhart)";
+static const char PSTR_VDO_120C_STEINHART_LABEL[] PROGMEM = "VDO 120C (Steinhart-Hart)";
 static const char PSTR_VDO_150C_STEINHART[] PROGMEM = "VDO_150C_STEINHART";
-static const char PSTR_VDO_150C_STEINHART_LABEL[] PROGMEM = "VDO 150C (Steinhart)";
+static const char PSTR_VDO_150C_STEINHART_LABEL[] PROGMEM = "VDO 150C (Steinhart-Hart)";
 static const char PSTR_THERMISTOR_LOOKUP[] PROGMEM = "THERMISTOR_LOOKUP";
+static const char PSTR_THERMISTOR_LOOKUP_LABEL[] PROGMEM = "Generic (requires custom calibration)";
 static const char PSTR_THERMISTOR_STEINHART[] PROGMEM = "THERMISTOR_STEINHART";
+static const char PSTR_THERMISTOR_STEINHART_LABEL[] PROGMEM = "Generic (requires custom calibration)";
 static const char PSTR_GENERIC_BOOST[] PROGMEM = "GENERIC_BOOST";
-static const char PSTR_GENERIC_BOOST_LABEL[] PROGMEM = "Generic Boost";
+static const char PSTR_GENERIC_BOOST_LABEL[] PROGMEM = "0.5-4.5V linear (0-5 bar)";
 static const char PSTR_GENERIC_TEMP_LINEAR[] PROGMEM = "GENERIC_TEMP_LINEAR";
-static const char PSTR_GENERIC_TEMP_LINEAR_LABEL[] PROGMEM = "Generic Linear Temperature";
+static const char PSTR_GENERIC_TEMP_LINEAR_LABEL[] PROGMEM = "0.5-4.5V linear (-40 to 150°C)";
 static const char PSTR_GENERIC_PRESSURE_150PSI[] PROGMEM = "GENERIC_PRESSURE_150PSI";
-static const char PSTR_GENERIC_PRESSURE_150PSI_LABEL[] PROGMEM = "Generic 150 PSI Pressure";
+static const char PSTR_GENERIC_PRESSURE_150PSI_LABEL[] PROGMEM = "0.5-4.5V linear (0-150 PSI / 10 bar)";
 static const char PSTR_AEM_30_2130_150[] PROGMEM = "AEM_30_2130_150";
-static const char PSTR_AEM_30_2130_150_LABEL[] PROGMEM = "AEM 150 PSI Pressure";
+static const char PSTR_AEM_30_2130_150_LABEL[] PROGMEM = "AEM 150 PSI (0-150 PSI / 10 bar)";
 static const char PSTR_MPX4250AP[] PROGMEM = "MPX4250AP";
+static const char PSTR_MPX4250AP_LABEL[] PROGMEM = "Freescale/NXP (20-250 kPa)";
 static const char PSTR_VDO_2BAR[] PROGMEM = "VDO_2BAR";
 static const char PSTR_VDO_2BAR_LABEL[] PROGMEM = "VDO 2 Bar";
 static const char PSTR_VDO_5BAR[] PROGMEM = "VDO_5BAR";
 static const char PSTR_VDO_5BAR_LABEL[] PROGMEM = "VDO 5 Bar";
 static const char PSTR_VOLTAGE_DIVIDER[] PROGMEM = "VOLTAGE_DIVIDER";
-static const char PSTR_VOLTAGE_DIVIDER_LABEL[] PROGMEM = "Voltage Divider";
+static const char PSTR_VOLTAGE_DIVIDER_LABEL[] PROGMEM = "Battery voltage (12V divider)";
 static const char PSTR_W_PHASE_RPM[] PROGMEM = "W_PHASE_RPM";
-static const char PSTR_W_PHASE_RPM_LABEL[] PROGMEM = "W-Phase RPM";
+static const char PSTR_W_PHASE_RPM_LABEL[] PROGMEM = "W-phase alternator RPM";
 static const char PSTR_BME280_TEMP[] PROGMEM = "BME280_TEMP";
-static const char PSTR_BME280_TEMP_LABEL[] PROGMEM = "BME280 Temperature";
+static const char PSTR_BME280_TEMP_LABEL[] PROGMEM = "BME280 temperature (I2C)";
 static const char PSTR_BME280_PRESSURE[] PROGMEM = "BME280_PRESSURE";
-static const char PSTR_BME280_PRESSURE_LABEL[] PROGMEM = "BME280 Pressure";
+static const char PSTR_BME280_PRESSURE_LABEL[] PROGMEM = "BME280 barometric pressure (I2C)";
 static const char PSTR_BME280_HUMIDITY[] PROGMEM = "BME280_HUMIDITY";
-static const char PSTR_BME280_HUMIDITY_LABEL[] PROGMEM = "BME280 Humidity";
+static const char PSTR_BME280_HUMIDITY_LABEL[] PROGMEM = "BME280 relative humidity (I2C)";
 static const char PSTR_BME280_ELEVATION[] PROGMEM = "BME280_ELEVATION";
-static const char PSTR_BME280_ELEVATION_LABEL[] PROGMEM = "BME280 Elevation";
+static const char PSTR_BME280_ELEVATION_LABEL[] PROGMEM = "BME280 altitude (I2C)";
 static const char PSTR_FLOAT_SWITCH[] PROGMEM = "FLOAT_SWITCH";
-static const char PSTR_FLOAT_SWITCH_LABEL[] PROGMEM = "Float Switch";
+static const char PSTR_FLOAT_SWITCH_LABEL[] PROGMEM = "Float/level switch (digital)";
 static const char PSTR_HALL_SPEED[] PROGMEM = "HALL_SPEED";
 static const char PSTR_HALL_SPEED_LABEL[] PROGMEM = "Hall Effect Speed Sensor";
 
@@ -282,7 +284,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     {
 
         .name = PSTR_THERMISTOR_LOOKUP,
-        .label = nullptr,
+        .label = PSTR_THERMISTOR_LOOKUP_LABEL,
         .description = nullptr,
         .readFunction = nullptr,
         .initFunction = nullptr,
@@ -299,7 +301,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     {
 
         .name = PSTR_THERMISTOR_STEINHART,
-        .label = nullptr,
+        .label = PSTR_THERMISTOR_STEINHART_LABEL,
         .description = nullptr,
         .readFunction = nullptr,
         .initFunction = nullptr,
@@ -388,7 +390,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     {
 
         .name = PSTR_MPX4250AP,
-        .label = PSTR_MPX4250AP,
+        .label = PSTR_MPX4250AP_LABEL,
         .description = nullptr,
         .readFunction = readLinearSensor,
         .initFunction = nullptr,
@@ -474,8 +476,26 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .pinTypeRequirement = PIN_DIGITAL  // Uses digitalPinToInterrupt
     },
 
+    // ===== SPEED SENSORS =====
+    // Index 18: HALL_SPEED
+    {
+        .name = PSTR_HALL_SPEED,
+        .label = PSTR_HALL_SPEED_LABEL,
+        .description = nullptr,
+        .readFunction = readHallSpeed,
+        .initFunction = initHallSpeed,
+        .measurementType = MEASURE_SPEED,
+        .calibrationType = CAL_SPEED,
+        .defaultCalibration = &hall_speed_sensor_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS,
+        .minValue = 0.0,
+        .maxValue = 300.0,     // 300 km/h maximum
+        .nameHash = 0xB076,    // djb2_hash("HALL_SPEED")
+        .pinTypeRequirement = PIN_DIGITAL  // Uses digitalPinToInterrupt
+    },
+
     // ===== BME280 SENSORS =====
-    // Index 18: BME280_TEMP
+    // Index 19: BME280_TEMP
     {
 
         .name = PSTR_BME280_TEMP,
@@ -492,7 +512,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x72A8,  // djb2_hash("BME280_TEMP")
         .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
-    // Index 19: BME280_PRESSURE
+    // Index 20: BME280_PRESSURE
     {
 
         .name = PSTR_BME280_PRESSURE,
@@ -509,7 +529,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x454B,  // djb2_hash("BME280_PRESSURE")
         .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
-    // Index 20: BME280_HUMIDITY
+    // Index 21: BME280_HUMIDITY
     {
 
         .name = PSTR_BME280_HUMIDITY,
@@ -526,7 +546,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x381F,  // djb2_hash("BME280_HUMIDITY")
         .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
-    // Index 21: BME280_ELEVATION
+    // Index 22: BME280_ELEVATION
     {
 
         .name = PSTR_BME280_ELEVATION,
@@ -545,7 +565,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== DIGITAL SENSORS =====
-    // Index 22: FLOAT_SWITCH
+    // Index 23: FLOAT_SWITCH
     {
 
         .name = PSTR_FLOAT_SWITCH,
@@ -561,24 +581,6 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .maxValue = 1.0,
         .nameHash = 0xF22C,  // djb2_hash("FLOAT_SWITCH")
         .pinTypeRequirement = PIN_DIGITAL  // Uses digitalRead
-    },
-
-    // ===== SPEED SENSORS =====
-    // Index 23: HALL_SPEED
-    {
-        .name = PSTR_HALL_SPEED,
-        .label = PSTR_HALL_SPEED_LABEL,
-        .description = nullptr,
-        .readFunction = readHallSpeed,
-        .initFunction = initHallSpeed,
-        .measurementType = MEASURE_SPEED,
-        .calibrationType = CAL_SPEED,
-        .defaultCalibration = &hall_speed_sensor_cal,
-        .minReadInterval = SENSOR_READ_INTERVAL_MS,
-        .minValue = 0.0,
-        .maxValue = 300.0,     // 300 km/h maximum
-        .nameHash = 0xB076,    // djb2_hash("HALL_SPEED")
-        .pinTypeRequirement = PIN_DIGITAL  // Uses digitalPinToInterrupt
     }
 };
 
