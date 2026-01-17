@@ -28,7 +28,7 @@ void clearPinRegistry() {
     registrySize = 0;
     for (uint8_t i = 0; i < MAX_PIN_REGISTRY; i++) {
         pinRegistry[i].pin = 0xFF;
-        pinRegistry[i].type = PIN_UNUSED;
+        pinRegistry[i].type = PTYPE_UNUSED;
         pinRegistry[i].description = nullptr;
     }
 }
@@ -73,7 +73,7 @@ void unregisterPin(uint8_t pin) {
 
             // Clear the last entry
             pinRegistry[registrySize].pin = 0xFF;
-            pinRegistry[registrySize].type = PIN_UNUSED;
+            pinRegistry[registrySize].type = PTYPE_UNUSED;
             pinRegistry[registrySize].description = nullptr;
 
             return;
@@ -100,7 +100,7 @@ PinUsageType getPinUsage(uint8_t pin) {
             return pinRegistry[i].type;
         }
     }
-    return PIN_UNUSED;
+    return PTYPE_UNUSED;
 }
 
 const char* getPinDescription(uint8_t pin) {
@@ -193,26 +193,26 @@ void dumpPinRegistry() {
 
 const char* getPinUsageTypeName(PinUsageType type) {
     switch (type) {
-        case PIN_UNUSED:         return "Unused";
-        case PIN_MODE_BUTTON:    return "Mode Button";
-        case PIN_BUZZER:         return "Buzzer";
-        case PIN_LED:            return "LED";
-        case PIN_CAN_CS:         return "CAN CS";
-        case PIN_CAN_INT:        return "CAN INT";
-        case PIN_SD_CS:          return "SD CS";
-        case PIN_TEST_MODE:      return "Test Mode";
-        case PIN_ANALOG_INPUT:   return "Analog Input";
-        case PIN_I2C_SDA:        return "I2C SDA";
-        case PIN_I2C_SCL:        return "I2C SCL";
-        case PIN_SPI_MOSI:       return "SPI MOSI";
-        case PIN_SPI_MISO:       return "SPI MISO";
-        case PIN_SPI_SCK:        return "SPI SCK";
-        case PIN_SPI_CS:         return "SPI CS";
-        case PIN_CAN_TX:         return "CAN TX";
-        case PIN_CAN_RX:         return "CAN RX";
-        case PIN_SERIAL_TX:      return "Serial TX";
-        case PIN_SERIAL_RX:      return "Serial RX";
-        case PIN_RELAY_OUTPUT:   return "Relay Output";
+        case PTYPE_UNUSED:       return "Unused";
+        case PTYPE_MODE_BUTTON:  return "Mode Button";
+        case PTYPE_BUZZER:       return "Buzzer";
+        case PTYPE_LED:          return "LED";
+        case PTYPE_CAN_CS:       return "CAN CS";
+        case PTYPE_CAN_INT:      return "CAN INT";
+        case PTYPE_SD_CS:        return "SD CS";
+        case PTYPE_TEST_MODE:    return "Test Mode";
+        case PTYPE_ANALOG_INPUT: return "Analog Input";
+        case PTYPE_I2C_SDA:      return "I2C SDA";
+        case PTYPE_I2C_SCL:      return "I2C SCL";
+        case PTYPE_SPI_MOSI:     return "SPI MOSI";
+        case PTYPE_SPI_MISO:     return "SPI MISO";
+        case PTYPE_SPI_SCK:      return "SPI SCK";
+        case PTYPE_SPI_CS:       return "SPI CS";
+        case PTYPE_CAN_TX:       return "CAN TX";
+        case PTYPE_CAN_RX:       return "CAN RX";
+        case PTYPE_SERIAL_TX:    return "Serial TX";
+        case PTYPE_SERIAL_RX:    return "Serial RX";
+        case PTYPE_RELAY:        return "Relay Output";
         default:                 return "Unknown";
     }
 }

@@ -7,7 +7,7 @@
 #include "bus_defaults.h"
 #include "pin_registry.h"
 #include "system_config.h"
-#include "message_router.h"  // For msg.debug
+#include "message_api.h"  // For msg.debug
 #include <Wire.h>
 #include <SPI.h>
 
@@ -86,12 +86,12 @@ bool initI2CBus(uint8_t bus_id, I2CBusConfig* config) {
 
     // Validate pins are available (only if not using platform defaults)
     if (config->sda_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(sda, PIN_I2C_SDA, "I2C SDA")) {
+        if (!validateNoPinConflict(sda, PTYPE_I2C_SDA, "I2C SDA")) {
             return false;
         }
     }
     if (config->scl_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(scl, PIN_I2C_SCL, "I2C SCL")) {
+        if (!validateNoPinConflict(scl, PTYPE_I2C_SCL, "I2C SCL")) {
             return false;
         }
     }
@@ -186,8 +186,8 @@ bool initI2CBus(uint8_t bus_id, I2CBusConfig* config) {
 
     if (success) {
         // Register pins in pin registry
-        registerPin(sda, PIN_I2C_SDA, getI2CBusName(bus_id));
-        registerPin(scl, PIN_I2C_SCL, getI2CBusName(bus_id));
+        registerPin(sda, PTYPE_I2C_SDA, getI2CBusName(bus_id));
+        registerPin(scl, PTYPE_I2C_SCL, getI2CBusName(bus_id));
 
         msg.debug.print(F("✓ "));
         msg.debug.print(getI2CBusName(bus_id));
@@ -222,13 +222,13 @@ bool initSPIBus(uint8_t bus_id, SPIBusConfig* config) {
 
     // Validate pins are available (only if not using platform defaults)
     if (config->mosi_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(mosi, PIN_SPI_MOSI, "SPI MOSI")) return false;
+        if (!validateNoPinConflict(mosi, PTYPE_SPI_MOSI, "SPI MOSI")) return false;
     }
     if (config->miso_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(miso, PIN_SPI_MISO, "SPI MISO")) return false;
+        if (!validateNoPinConflict(miso, PTYPE_SPI_MISO, "SPI MISO")) return false;
     }
     if (config->sck_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(sck, PIN_SPI_SCK, "SPI SCK")) return false;
+        if (!validateNoPinConflict(sck, PTYPE_SPI_SCK, "SPI SCK")) return false;
     }
 
     // Platform-specific initialization
@@ -297,9 +297,9 @@ bool initSPIBus(uint8_t bus_id, SPIBusConfig* config) {
 
     if (success) {
         // Register pins in pin registry
-        registerPin(mosi, PIN_SPI_MOSI, getSPIBusName(bus_id));
-        registerPin(miso, PIN_SPI_MISO, getSPIBusName(bus_id));
-        registerPin(sck, PIN_SPI_SCK, getSPIBusName(bus_id));
+        registerPin(mosi, PTYPE_SPI_MOSI, getSPIBusName(bus_id));
+        registerPin(miso, PTYPE_SPI_MISO, getSPIBusName(bus_id));
+        registerPin(sck, PTYPE_SPI_SCK, getSPIBusName(bus_id));
 
         msg.debug.print(F("✓ "));
         msg.debug.print(getSPIBusName(bus_id));
@@ -335,10 +335,10 @@ bool initCANBus(uint8_t bus_id, CANBusConfig* config) {
 
     // Validate pins are available (only if not using platform defaults)
     if (config->tx_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(tx, PIN_CAN_TX, "CAN TX")) return false;
+        if (!validateNoPinConflict(tx, PTYPE_CAN_TX, "CAN TX")) return false;
     }
     if (config->rx_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(rx, PIN_CAN_RX, "CAN RX")) return false;
+        if (!validateNoPinConflict(rx, PTYPE_CAN_RX, "CAN RX")) return false;
     }
 
     // CAN initialization is handled in output_can.cpp since it needs FlexCAN_T4 objects
@@ -346,8 +346,8 @@ bool initCANBus(uint8_t bus_id, CANBusConfig* config) {
     can_bus_ready[bus_id] = true;
 
     // Register pins in pin registry
-    if (tx != 0xFF) registerPin(tx, PIN_CAN_TX, getCANBusName(bus_id));
-    if (rx != 0xFF) registerPin(rx, PIN_CAN_RX, getCANBusName(bus_id));
+    if (tx != 0xFF) registerPin(tx, PTYPE_CAN_TX, getCANBusName(bus_id));
+    if (rx != 0xFF) registerPin(rx, PTYPE_CAN_RX, getCANBusName(bus_id));
 
     msg.debug.print(F("✓ "));
     msg.debug.print(getCANBusName(bus_id));

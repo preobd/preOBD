@@ -11,9 +11,9 @@
  * 3. Register pins after successful validation
  *
  * Example:
- *   registerPin(5, PIN_MODE_BUTTON, "Mode Button");
- *   if (validateNoPinConflict(18, PIN_I2C_SDA, "I2C0 SDA")) {
- *       registerPin(18, PIN_I2C_SDA, "I2C0 SDA");
+ *   registerPin(5, PTYPE_MODE_BUTTON, "Mode Button");
+ *   if (validateNoPinConflict(18, PTYPE_I2C_SDA, "I2C0 SDA")) {
+ *       registerPin(18, PTYPE_I2C_SDA, "I2C0 SDA");
  *   }
  */
 
@@ -31,26 +31,26 @@
  * Used to categorize pins and provide meaningful error messages
  */
 enum PinUsageType {
-    PIN_UNUSED = 0,          // Pin not in use
-    PIN_MODE_BUTTON,         // Mode/config button
-    PIN_BUZZER,              // Alarm buzzer
-    PIN_LED,                 // Status LED
-    PIN_CAN_CS,              // CAN controller chip select (MCP2515)
-    PIN_CAN_INT,             // CAN controller interrupt (MCP2515)
-    PIN_SD_CS,               // SD card chip select
-    PIN_TEST_MODE,           // Test mode trigger pin
-    PIN_ANALOG_INPUT,        // Analog sensor input
-    PIN_I2C_SDA,             // I2C data line
-    PIN_I2C_SCL,             // I2C clock line
-    PIN_SPI_MOSI,            // SPI master out, slave in
-    PIN_SPI_MISO,            // SPI master in, slave out
-    PIN_SPI_SCK,             // SPI clock
-    PIN_SPI_CS,              // SPI chip select (sensor-specific)
-    PIN_CAN_TX,              // CAN transmit
-    PIN_CAN_RX,              // CAN receive
-    PIN_SERIAL_TX,           // UART transmit
-    PIN_SERIAL_RX,           // UART receive
-    PIN_RELAY_OUTPUT         // Relay control output
+    PTYPE_UNUSED = 0,        // Pin not in use
+    PTYPE_MODE_BUTTON,       // Mode/config button
+    PTYPE_BUZZER,            // Alarm buzzer
+    PTYPE_LED,               // Status LED
+    PTYPE_CAN_CS,            // CAN controller chip select (MCP2515)
+    PTYPE_CAN_INT,           // CAN controller interrupt (MCP2515)
+    PTYPE_SD_CS,             // SD card chip select
+    PTYPE_TEST_MODE,         // Test mode trigger pin
+    PTYPE_ANALOG_INPUT,      // Analog sensor input
+    PTYPE_I2C_SDA,           // I2C data line
+    PTYPE_I2C_SCL,           // I2C clock line
+    PTYPE_SPI_MOSI,          // SPI master out, slave in
+    PTYPE_SPI_MISO,          // SPI master in, slave out
+    PTYPE_SPI_SCK,           // SPI clock
+    PTYPE_SPI_CS,            // SPI chip select (sensor-specific)
+    PTYPE_CAN_TX,            // CAN transmit
+    PTYPE_CAN_RX,            // CAN receive
+    PTYPE_SERIAL_TX,         // UART transmit
+    PTYPE_SERIAL_RX,         // UART receive
+    PTYPE_RELAY              // Relay control output
 };
 
 // ============================================================================
@@ -109,7 +109,7 @@ bool isPinAvailable(uint8_t pin);
  * Get the usage type of a registered pin
  *
  * @param pin Pin number to query
- * @return PinUsageType of the pin, or PIN_UNUSED if not registered
+ * @return PinUsageType of the pin, or PTYPE_UNUSED if not registered
  */
 PinUsageType getPinUsage(uint8_t pin);
 
