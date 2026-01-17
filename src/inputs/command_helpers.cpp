@@ -187,6 +187,9 @@ static const char PSTR_HELP_CONTROL_DESC[] PROGMEM = "Input commands - ENABLE, D
 static const char PSTR_HELP_OUTPUT[] PROGMEM = "OUTPUT";
 static const char PSTR_HELP_OUTPUT_DESC[] PROGMEM = "Output Modules - Configure CAN, RealDash, Serial, and SD logging";
 
+static const char PSTR_HELP_BUS[] PROGMEM = "BUS";
+static const char PSTR_HELP_BUS_DESC[] PROGMEM = "Bus Config - Configure I2C, SPI, and CAN buses";
+
 #ifdef ENABLE_RELAY_OUTPUT
 static const char PSTR_HELP_RELAY[] PROGMEM = "RELAY";
 static const char PSTR_HELP_RELAY_DESC[] PROGMEM = "Relay Control - Threshold-based relay outputs for cooling fans, alarms, etc.";
@@ -218,6 +221,7 @@ void printHelpSet();
 void printHelpCalibration();
 void printHelpControl();
 void printHelpOutput();
+void printHelpBus();
 #ifdef ENABLE_RELAY_OUTPUT
 void printHelpRelay();
 #endif
@@ -239,6 +243,7 @@ static const HelpCategory HELP_CATEGORIES[] PROGMEM = {
     {PSTR_HELP_CALIBRATION, PSTR_HELP_CALIBRATION_DESC, printHelpCalibration},
     {PSTR_HELP_CONTROL, PSTR_HELP_CONTROL_DESC, printHelpControl},
     {PSTR_HELP_OUTPUT, PSTR_HELP_OUTPUT_DESC, printHelpOutput},
+    {PSTR_HELP_BUS, PSTR_HELP_BUS_DESC, printHelpBus},
 #ifdef ENABLE_RELAY_OUTPUT
     {PSTR_HELP_RELAY, PSTR_HELP_RELAY_DESC, printHelpRelay},
 #endif
@@ -402,6 +407,44 @@ void printHelpOutput() {
     msg.control.println(F("  OUTPUT <name> ENABLE  - Enable output (CAN, RealDash, Serial, SD_Log)"));
     msg.control.println(F("  OUTPUT <name> DISABLE  - Disable output"));
     msg.control.println(F("  OUTPUT <name> INTERVAL <ms>  - Set output interval"));
+    msg.control.println();
+}
+
+void printHelpBus() {
+    msg.control.println();
+    msg.control.println(F("=== BUS Commands ==="));
+    msg.control.println(F("Configure I2C, SPI, and CAN buses for multi-bus sensor support"));
+    msg.control.println();
+    msg.control.println(F("Display Bus Configuration:"));
+    msg.control.println(F("  BUS I2C               - Show all I2C bus status"));
+    msg.control.println(F("  BUS SPI               - Show all SPI bus status"));
+    msg.control.println(F("  BUS CAN               - Show all CAN bus status"));
+    msg.control.println(F("  BUS I2C <0-2>         - Show specific I2C bus"));
+    msg.control.println();
+    msg.control.println(F("I2C Bus Commands:"));
+    msg.control.println(F("  BUS I2C <0-2> ENABLE      - Enable I2C bus (Wire/Wire1/Wire2)"));
+    msg.control.println(F("  BUS I2C <0-2> DISABLE     - Disable I2C bus"));
+    msg.control.println(F("  BUS I2C <0-2> CLOCK <kHz> - Set I2C clock (100, 400, 1000)"));
+    msg.control.println();
+    msg.control.println(F("SPI Bus Commands:"));
+    msg.control.println(F("  BUS SPI <0-2> ENABLE      - Enable SPI bus (SPI/SPI1/SPI2)"));
+    msg.control.println(F("  BUS SPI <0-2> DISABLE     - Disable SPI bus"));
+    msg.control.println(F("  BUS SPI <0-2> CLOCK <Hz>  - Set SPI clock (e.g., 4000000)"));
+    msg.control.println();
+    msg.control.println(F("CAN Bus Commands:"));
+    msg.control.println(F("  BUS CAN <0-2> ENABLE          - Enable CAN bus (CAN1/CAN2/CAN3)"));
+    msg.control.println(F("  BUS CAN <0-2> DISABLE         - Disable CAN bus"));
+    msg.control.println(F("  BUS CAN <0-2> BAUDRATE <bps>  - Set CAN baudrate"));
+    msg.control.println(F("    Valid baudrates: 125000, 250000, 500000, 1000000"));
+    msg.control.println();
+    msg.control.println(F("Assign Sensor to Bus:"));
+    msg.control.println(F("  SET <pin> I2CBUS <0-2>    - Move I2C sensor to different bus"));
+    msg.control.println(F("  SET <pin> SPIBUS <0-2>    - Move SPI sensor to different bus"));
+    msg.control.println();
+    msg.control.println(F("Examples:"));
+    msg.control.println(F("  BUS I2C 1 ENABLE          # Enable Wire1"));
+    msg.control.println(F("  SET I2C:0 I2CBUS 1        # Move first I2C sensor to Wire1"));
+    msg.control.println(F("  BUS CAN 1 BAUDRATE 250000 # Set CAN2 to 250kbps"));
     msg.control.println();
 }
 
@@ -647,11 +690,19 @@ void printHelpQuick() {
     msg.control.println(F("  SET <pin> ALARM WARMUP|PERSIST <ms>"));
     msg.control.println(F("  SET <pin> CALIBRATION PRESET"));
     msg.control.println(F("  SET <pin> RPM|SPEED|PRESSURE_LINEAR|STEINHART|BETA|BIAS|PRESSURE_POLY ..."));
+    msg.control.println(F("  SET <pin> I2CBUS|SPIBUS <0-2>"));
     msg.control.println();
     msg.control.println(F("Outputs:"));
     msg.control.println(F("  OUTPUT STATUS"));
     msg.control.println(F("  OUTPUT <module> ENABLE|DISABLE"));
     msg.control.println(F("  OUTPUT <module> INTERVAL <ms>"));
+    msg.control.println();
+    msg.control.println(F("Bus Configuration:"));
+    msg.control.println(F("  BUS I2C|SPI|CAN"));
+    msg.control.println(F("  BUS <type> <0-2> ENABLE|DISABLE"));
+    msg.control.println(F("  BUS I2C <0-2> CLOCK <100|400|1000>"));
+    msg.control.println(F("  BUS SPI <0-2> CLOCK <Hz>"));
+    msg.control.println(F("  BUS CAN <0-2> BAUDRATE <125000|250000|500000|1000000>"));
 #ifdef ENABLE_RELAY_OUTPUT
     msg.control.println();
     msg.control.println(F("Relays:"));

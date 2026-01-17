@@ -16,6 +16,9 @@
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
 #include "../lib/platform.h"
+#include "../lib/bus_manager.h"
+#include "../lib/bus_defaults.h"
+#include "../lib/pin_registry.h"
 #include "../outputs/output_base.h"
 #include "../lib/display_manager.h"
 #ifdef ENABLE_RELAY_OUTPUT
@@ -52,6 +55,7 @@ static int cmd_config(int argc, const char* const* argv);
 static int cmd_run(int argc, const char* const* argv);
 static int cmd_version(int argc, const char* const* argv);
 static int cmd_reload(int argc, const char* const* argv);
+static int cmd_bus(int argc, const char* const* argv);
 #ifdef ENABLE_RELAY_OUTPUT
 static int cmd_relay(int argc, const char* const* argv);
 #endif
@@ -85,6 +89,7 @@ const Command COMMANDS[] = {
     {"LOAD", cmd_load, "Load configuration", true},
     {"RESET", cmd_reset, "Reset configuration", true},
     {"RELOAD", cmd_reload, "Reboot system", true},
+    {"BUS", cmd_bus, "Configure I2C/SPI/CAN buses", true},
 
 #ifdef ENABLE_RELAY_OUTPUT
     {"RELAY", cmd_relay, "Configure relay outputs", true},
@@ -1176,6 +1181,110 @@ static int cmd_set(int argc, const char* const* argv) {
         return 0;
     }
 
+    // ===== BUS ASSIGNMENT COMMANDS =====
+
+    // SET <pin> I2CBUS <bus_id>
+    // Assigns an I2C sensor input to a specific I2C bus (0-2 for Wire/Wire1/Wire2)
+    if (streq(field, "I2CBUS")) {
+        if (argc < 4) {
+            msg.control.println(F("ERROR: I2CBUS requires a bus ID (0-2)"));
+            msg.control.println(F("  Usage: SET <pin> I2CBUS <0|1|2>"));
+            msg.control.println(F("  Example: SET I2C:0 I2CBUS 1  (move to Wire1)"));
+            return 1;
+        }
+
+        Input* input = getInputByPin(pin);
+        if (!input || !input->flags.isEnabled) {
+            msg.control.println(F("ERROR: Input not configured"));
+            return 1;
+        }
+
+        uint8_t bus_id = atoi(argv[3]);
+        if (bus_id >= NUM_I2C_BUSES) {
+            msg.control.print(F("ERROR: I2C bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" not available (this platform has "));
+            msg.control.print(NUM_I2C_BUSES);
+            msg.control.println(F(" I2C buses: 0-"));
+            msg.control.print(NUM_I2C_BUSES - 1);
+            msg.control.println(F(")"));
+            return 1;
+        }
+
+        // Check if target bus is enabled
+        if (!systemConfig.buses.i2c[bus_id].enabled) {
+            msg.control.print(F("ERROR: I2C bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" ("));
+            msg.control.print(getI2CBusName(bus_id));
+            msg.control.println(F(") is not enabled"));
+            msg.control.println(F("  Use BUS I2C <bus> ENABLE first"));
+            return 1;
+        }
+
+        input->i2c_bus_id = bus_id;
+        msg.control.print(F("Input "));
+        msg.control.print(argv[1]);
+        msg.control.print(F(" assigned to I2C bus "));
+        msg.control.print(bus_id);
+        msg.control.print(F(" ("));
+        msg.control.print(getI2CBusName(bus_id));
+        msg.control.println(F(")"));
+        msg.control.println(F("Note: Sensor will use new bus after reinitialization"));
+        msg.control.println(F("Use SAVE to persist"));
+        return 0;
+    }
+
+    // SET <pin> SPIBUS <bus_id>
+    // Assigns an SPI sensor input to a specific SPI bus (0-2 for SPI/SPI1/SPI2)
+    if (streq(field, "SPIBUS")) {
+        if (argc < 4) {
+            msg.control.println(F("ERROR: SPIBUS requires a bus ID (0-2)"));
+            msg.control.println(F("  Usage: SET <pin> SPIBUS <0|1|2>"));
+            msg.control.println(F("  Example: SET 6 SPIBUS 1  (move to SPI1)"));
+            return 1;
+        }
+
+        Input* input = getInputByPin(pin);
+        if (!input || !input->flags.isEnabled) {
+            msg.control.println(F("ERROR: Input not configured"));
+            return 1;
+        }
+
+        uint8_t bus_id = atoi(argv[3]);
+        if (bus_id >= NUM_SPI_BUSES) {
+            msg.control.print(F("ERROR: SPI bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" not available (this platform has "));
+            msg.control.print(NUM_SPI_BUSES);
+            msg.control.println(F(" SPI buses)"));
+            return 1;
+        }
+
+        // Check if target bus is enabled
+        if (!systemConfig.buses.spi[bus_id].enabled) {
+            msg.control.print(F("ERROR: SPI bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" ("));
+            msg.control.print(getSPIBusName(bus_id));
+            msg.control.println(F(") is not enabled"));
+            msg.control.println(F("  Use BUS SPI <bus> ENABLE first"));
+            return 1;
+        }
+
+        input->spi_bus_id = bus_id;
+        msg.control.print(F("Input "));
+        msg.control.print(argv[1]);
+        msg.control.print(F(" assigned to SPI bus "));
+        msg.control.print(bus_id);
+        msg.control.print(F(" ("));
+        msg.control.print(getSPIBusName(bus_id));
+        msg.control.println(F(")"));
+        msg.control.println(F("Note: Sensor will use new bus after reinitialization"));
+        msg.control.println(F("Use SAVE to persist"));
+        return 0;
+    }
+
     // Unknown field
     msg.control.print(F("ERROR: Unknown SET field '"));
     msg.control.print(field);
@@ -1937,3 +2046,559 @@ static int cmd_test(int argc, const char* const* argv) {
     return 1;
 }
 #endif
+
+//=============================================================================
+// BUS Command - Configure I2C, SPI, and CAN Buses
+//=============================================================================
+
+// Helper function to display I2C bus configuration
+static void displayI2CBuses() {
+    msg.control.println();
+    msg.control.println(F("=== I2C Bus Configuration ==="));
+
+    for (uint8_t i = 0; i < NUM_I2C_BUSES; i++) {
+        msg.control.print(F("I2C Bus "));
+        msg.control.print(i);
+        msg.control.print(F(" ("));
+        msg.control.print(getI2CBusName(i));
+        msg.control.print(F("):  "));
+
+        if (systemConfig.buses.i2c[i].enabled) {
+            msg.control.print(F("ENABLED  - SDA="));
+            uint8_t sda = (systemConfig.buses.i2c[i].sda_pin == BUS_PIN_DEFAULT)
+                          ? getDefaultI2CSDA(i) : systemConfig.buses.i2c[i].sda_pin;
+            msg.control.print(sda);
+            msg.control.print(F(", SCL="));
+            uint8_t scl = (systemConfig.buses.i2c[i].scl_pin == BUS_PIN_DEFAULT)
+                          ? getDefaultI2CSCL(i) : systemConfig.buses.i2c[i].scl_pin;
+            msg.control.print(scl);
+            msg.control.print(F(", "));
+            msg.control.print(systemConfig.buses.i2c[i].clock_speed);
+            msg.control.println(F("kHz"));
+        } else {
+            msg.control.println(F("DISABLED"));
+        }
+    }
+    msg.control.println();
+}
+
+// Helper function to display SPI bus configuration
+static void displaySPIBuses() {
+    msg.control.println();
+    msg.control.println(F("=== SPI Bus Configuration ==="));
+
+    for (uint8_t i = 0; i < NUM_SPI_BUSES; i++) {
+        msg.control.print(F("SPI Bus "));
+        msg.control.print(i);
+        msg.control.print(F(" ("));
+        msg.control.print(getSPIBusName(i));
+        msg.control.print(F("):  "));
+
+        if (systemConfig.buses.spi[i].enabled) {
+            msg.control.print(F("ENABLED  - MOSI="));
+            uint8_t mosi = (systemConfig.buses.spi[i].mosi_pin == BUS_PIN_DEFAULT)
+                           ? getDefaultSPIMOSI(i) : systemConfig.buses.spi[i].mosi_pin;
+            msg.control.print(mosi);
+            msg.control.print(F(", MISO="));
+            uint8_t miso = (systemConfig.buses.spi[i].miso_pin == BUS_PIN_DEFAULT)
+                           ? getDefaultSPIMISO(i) : systemConfig.buses.spi[i].miso_pin;
+            msg.control.print(miso);
+            msg.control.print(F(", SCK="));
+            uint8_t sck = (systemConfig.buses.spi[i].sck_pin == BUS_PIN_DEFAULT)
+                          ? getDefaultSPISCK(i) : systemConfig.buses.spi[i].sck_pin;
+            msg.control.print(sck);
+            msg.control.print(F(", "));
+            msg.control.print(systemConfig.buses.spi[i].clock_speed / 1000000.0, 1);
+            msg.control.println(F("MHz"));
+        } else {
+            msg.control.println(F("DISABLED"));
+        }
+    }
+    msg.control.println();
+}
+
+// Helper function to display CAN bus configuration
+static void displayCANBuses() {
+    msg.control.println();
+    msg.control.println(F("=== CAN Bus Configuration ==="));
+
+#if NUM_CAN_BUSES > 0
+    for (uint8_t i = 0; i < NUM_CAN_BUSES; i++) {
+        msg.control.print(F("CAN Bus "));
+        msg.control.print(i);
+        msg.control.print(F(" ("));
+        msg.control.print(getCANBusName(i));
+        msg.control.print(F("):  "));
+
+        if (systemConfig.buses.can[i].enabled) {
+            msg.control.print(F("ENABLED  - TX="));
+            uint8_t tx = (systemConfig.buses.can[i].tx_pin == BUS_PIN_DEFAULT)
+                         ? getDefaultCANTX(i) : systemConfig.buses.can[i].tx_pin;
+            msg.control.print(tx);
+            msg.control.print(F(", RX="));
+            uint8_t rx = (systemConfig.buses.can[i].rx_pin == BUS_PIN_DEFAULT)
+                         ? getDefaultCANRX(i) : systemConfig.buses.can[i].rx_pin;
+            msg.control.print(rx);
+            msg.control.print(F(", "));
+            msg.control.print(systemConfig.buses.can[i].baudrate / 1000);
+            msg.control.println(F("kbps"));
+        } else {
+            msg.control.println(F("DISABLED"));
+        }
+    }
+#else
+    msg.control.println(F("No CAN buses available on this platform"));
+#endif
+    msg.control.println();
+}
+
+static int cmd_bus(int argc, const char* const* argv) {
+    if (argc < 2) {
+        msg.control.println(F("ERROR: BUS requires a subcommand"));
+        msg.control.println(F("  Usage: BUS I2C|SPI|CAN [subcommand] [args]"));
+        msg.control.println(F("  Examples:"));
+        msg.control.println(F("    BUS I2C               - Show all I2C buses"));
+        msg.control.println(F("    BUS I2C 1 ENABLE      - Enable I2C bus 1 (Wire1)"));
+        msg.control.println(F("    BUS I2C 1 DISABLE     - Disable I2C bus 1"));
+        msg.control.println(F("    BUS I2C 0 CLOCK 100   - Set Wire clock to 100kHz"));
+        msg.control.println(F("    BUS SPI               - Show all SPI buses"));
+        msg.control.println(F("    BUS SPI 1 ENABLE      - Enable SPI bus 1 (SPI1)"));
+        msg.control.println(F("    BUS CAN               - Show all CAN buses"));
+        msg.control.println(F("    BUS CAN 0 BAUDRATE 250000 - Set CAN1 to 250kbps"));
+        return 1;
+    }
+
+    const char* busType = argv[1];
+
+    // -------------------------------------------------------------------------
+    // BUS I2C [bus_id] [ENABLE|DISABLE|CLOCK <kHz>]
+    // -------------------------------------------------------------------------
+    if (streq(busType, "I2C")) {
+        // BUS I2C (no arguments) - display all I2C buses
+        if (argc == 2) {
+            displayI2CBuses();
+            return 0;
+        }
+
+        // Parse bus ID
+        uint8_t bus_id = atoi(argv[2]);
+        if (bus_id >= NUM_I2C_BUSES) {
+            msg.control.print(F("ERROR: I2C bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" not available (this platform has "));
+            msg.control.print(NUM_I2C_BUSES);
+            msg.control.println(F(" I2C buses: 0-"));
+            msg.control.print(NUM_I2C_BUSES - 1);
+            msg.control.println(F(")"));
+            return 1;
+        }
+
+        // BUS I2C <bus_id> (no subcommand) - show single bus
+        if (argc == 3) {
+            msg.control.print(F("I2C Bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" ("));
+            msg.control.print(getI2CBusName(bus_id));
+            msg.control.print(F("): "));
+            if (systemConfig.buses.i2c[bus_id].enabled) {
+                msg.control.print(F("ENABLED, "));
+                msg.control.print(systemConfig.buses.i2c[bus_id].clock_speed);
+                msg.control.println(F("kHz"));
+            } else {
+                msg.control.println(F("DISABLED"));
+            }
+            return 0;
+        }
+
+        const char* subcommand = argv[3];
+
+        // BUS I2C <bus_id> ENABLE
+        if (streq(subcommand, "ENABLE")) {
+            if (systemConfig.buses.i2c[bus_id].enabled) {
+                msg.control.print(F("I2C bus "));
+                msg.control.print(bus_id);
+                msg.control.println(F(" is already enabled"));
+                return 0;
+            }
+
+            systemConfig.buses.i2c[bus_id].enabled = 1;
+
+            // Initialize the bus
+            if (initI2CBus(bus_id, &systemConfig.buses.i2c[bus_id])) {
+                msg.control.print(F("I2C bus "));
+                msg.control.print(bus_id);
+                msg.control.print(F(" ("));
+                msg.control.print(getI2CBusName(bus_id));
+                msg.control.print(F(") enabled on pins SDA="));
+                uint8_t sda = (systemConfig.buses.i2c[bus_id].sda_pin == BUS_PIN_DEFAULT)
+                              ? getDefaultI2CSDA(bus_id) : systemConfig.buses.i2c[bus_id].sda_pin;
+                msg.control.print(sda);
+                msg.control.print(F(", SCL="));
+                uint8_t scl = (systemConfig.buses.i2c[bus_id].scl_pin == BUS_PIN_DEFAULT)
+                              ? getDefaultI2CSCL(bus_id) : systemConfig.buses.i2c[bus_id].scl_pin;
+                msg.control.print(scl);
+                msg.control.print(F(", "));
+                msg.control.print(systemConfig.buses.i2c[bus_id].clock_speed);
+                msg.control.println(F("kHz"));
+                msg.control.println(F("Use SAVE to persist"));
+            } else {
+                systemConfig.buses.i2c[bus_id].enabled = 0;
+                msg.control.print(F("ERROR: Failed to enable I2C bus "));
+                msg.control.println(bus_id);
+                return 1;
+            }
+            return 0;
+        }
+
+        // BUS I2C <bus_id> DISABLE
+        if (streq(subcommand, "DISABLE")) {
+            if (!systemConfig.buses.i2c[bus_id].enabled) {
+                msg.control.print(F("I2C bus "));
+                msg.control.print(bus_id);
+                msg.control.println(F(" is already disabled"));
+                return 0;
+            }
+
+            // Unregister pins
+            uint8_t sda = (systemConfig.buses.i2c[bus_id].sda_pin == BUS_PIN_DEFAULT)
+                          ? getDefaultI2CSDA(bus_id) : systemConfig.buses.i2c[bus_id].sda_pin;
+            uint8_t scl = (systemConfig.buses.i2c[bus_id].scl_pin == BUS_PIN_DEFAULT)
+                          ? getDefaultI2CSCL(bus_id) : systemConfig.buses.i2c[bus_id].scl_pin;
+            unregisterPin(sda);
+            unregisterPin(scl);
+
+            systemConfig.buses.i2c[bus_id].enabled = 0;
+            msg.control.print(F("I2C bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" ("));
+            msg.control.print(getI2CBusName(bus_id));
+            msg.control.println(F(") disabled"));
+            msg.control.println(F("Note: Bus will reinitialize on next reboot if not saved"));
+            msg.control.println(F("Use SAVE to persist"));
+            return 0;
+        }
+
+        // BUS I2C <bus_id> CLOCK <kHz>
+        if (streq(subcommand, "CLOCK")) {
+            if (argc < 5) {
+                msg.control.println(F("ERROR: CLOCK requires a speed in kHz"));
+                msg.control.println(F("  Usage: BUS I2C <bus> CLOCK <100|400|1000>"));
+                return 1;
+            }
+
+            uint16_t clock = atoi(argv[4]);
+            if (clock != 100 && clock != 400 && clock != 1000) {
+                msg.control.println(F("ERROR: I2C clock speed must be 100, 400, or 1000 kHz"));
+                return 1;
+            }
+
+            systemConfig.buses.i2c[bus_id].clock_speed = clock;
+            msg.control.print(F("I2C bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" clock set to "));
+            msg.control.print(clock);
+            msg.control.println(F("kHz"));
+            msg.control.println(F("Note: Takes effect on next reboot or ENABLE"));
+            msg.control.println(F("Use SAVE to persist"));
+            return 0;
+        }
+
+        msg.control.print(F("ERROR: Unknown I2C subcommand '"));
+        msg.control.print(subcommand);
+        msg.control.println(F("'"));
+        msg.control.println(F("  Valid: ENABLE, DISABLE, CLOCK"));
+        return 1;
+    }
+
+    // -------------------------------------------------------------------------
+    // BUS SPI [bus_id] [ENABLE|DISABLE|CLOCK <Hz>]
+    // -------------------------------------------------------------------------
+    if (streq(busType, "SPI")) {
+        // BUS SPI (no arguments) - display all SPI buses
+        if (argc == 2) {
+            displaySPIBuses();
+            return 0;
+        }
+
+        // Parse bus ID
+        uint8_t bus_id = atoi(argv[2]);
+        if (bus_id >= NUM_SPI_BUSES) {
+            msg.control.print(F("ERROR: SPI bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" not available (this platform has "));
+            msg.control.print(NUM_SPI_BUSES);
+            msg.control.println(F(" SPI buses)"));
+            return 1;
+        }
+
+        // BUS SPI <bus_id> (no subcommand) - show single bus
+        if (argc == 3) {
+            msg.control.print(F("SPI Bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" ("));
+            msg.control.print(getSPIBusName(bus_id));
+            msg.control.print(F("): "));
+            if (systemConfig.buses.spi[bus_id].enabled) {
+                msg.control.print(F("ENABLED, "));
+                msg.control.print(systemConfig.buses.spi[bus_id].clock_speed / 1000000.0, 1);
+                msg.control.println(F("MHz"));
+            } else {
+                msg.control.println(F("DISABLED"));
+            }
+            return 0;
+        }
+
+        const char* subcommand = argv[3];
+
+        // BUS SPI <bus_id> ENABLE
+        if (streq(subcommand, "ENABLE")) {
+            if (systemConfig.buses.spi[bus_id].enabled) {
+                msg.control.print(F("SPI bus "));
+                msg.control.print(bus_id);
+                msg.control.println(F(" is already enabled"));
+                return 0;
+            }
+
+            systemConfig.buses.spi[bus_id].enabled = 1;
+
+            if (initSPIBus(bus_id, &systemConfig.buses.spi[bus_id])) {
+                msg.control.print(F("SPI bus "));
+                msg.control.print(bus_id);
+                msg.control.print(F(" ("));
+                msg.control.print(getSPIBusName(bus_id));
+                msg.control.print(F(") enabled on pins MOSI="));
+                uint8_t mosi = (systemConfig.buses.spi[bus_id].mosi_pin == BUS_PIN_DEFAULT)
+                               ? getDefaultSPIMOSI(bus_id) : systemConfig.buses.spi[bus_id].mosi_pin;
+                msg.control.print(mosi);
+                msg.control.print(F(", MISO="));
+                uint8_t miso = (systemConfig.buses.spi[bus_id].miso_pin == BUS_PIN_DEFAULT)
+                               ? getDefaultSPIMISO(bus_id) : systemConfig.buses.spi[bus_id].miso_pin;
+                msg.control.print(miso);
+                msg.control.print(F(", SCK="));
+                uint8_t sck = (systemConfig.buses.spi[bus_id].sck_pin == BUS_PIN_DEFAULT)
+                              ? getDefaultSPISCK(bus_id) : systemConfig.buses.spi[bus_id].sck_pin;
+                msg.control.print(sck);
+                msg.control.print(F(", "));
+                msg.control.print(systemConfig.buses.spi[bus_id].clock_speed / 1000000.0, 1);
+                msg.control.println(F("MHz"));
+                msg.control.println(F("Use SAVE to persist"));
+            } else {
+                systemConfig.buses.spi[bus_id].enabled = 0;
+                msg.control.print(F("ERROR: Failed to enable SPI bus "));
+                msg.control.println(bus_id);
+                return 1;
+            }
+            return 0;
+        }
+
+        // BUS SPI <bus_id> DISABLE
+        if (streq(subcommand, "DISABLE")) {
+            if (!systemConfig.buses.spi[bus_id].enabled) {
+                msg.control.print(F("SPI bus "));
+                msg.control.print(bus_id);
+                msg.control.println(F(" is already disabled"));
+                return 0;
+            }
+
+            // Unregister pins
+            uint8_t mosi = (systemConfig.buses.spi[bus_id].mosi_pin == BUS_PIN_DEFAULT)
+                           ? getDefaultSPIMOSI(bus_id) : systemConfig.buses.spi[bus_id].mosi_pin;
+            uint8_t miso = (systemConfig.buses.spi[bus_id].miso_pin == BUS_PIN_DEFAULT)
+                           ? getDefaultSPIMISO(bus_id) : systemConfig.buses.spi[bus_id].miso_pin;
+            uint8_t sck = (systemConfig.buses.spi[bus_id].sck_pin == BUS_PIN_DEFAULT)
+                          ? getDefaultSPISCK(bus_id) : systemConfig.buses.spi[bus_id].sck_pin;
+            unregisterPin(mosi);
+            unregisterPin(miso);
+            unregisterPin(sck);
+
+            systemConfig.buses.spi[bus_id].enabled = 0;
+            msg.control.print(F("SPI bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" ("));
+            msg.control.print(getSPIBusName(bus_id));
+            msg.control.println(F(") disabled"));
+            msg.control.println(F("Use SAVE to persist"));
+            return 0;
+        }
+
+        // BUS SPI <bus_id> CLOCK <Hz>
+        if (streq(subcommand, "CLOCK")) {
+            if (argc < 5) {
+                msg.control.println(F("ERROR: CLOCK requires a speed in Hz"));
+                msg.control.println(F("  Usage: BUS SPI <bus> CLOCK <Hz>"));
+                msg.control.println(F("  Example: BUS SPI 0 CLOCK 4000000  (4MHz)"));
+                return 1;
+            }
+
+            uint32_t clock = atol(argv[4]);
+            if (clock < 100000 || clock > 50000000) {
+                msg.control.println(F("ERROR: SPI clock must be 100000-50000000 Hz"));
+                return 1;
+            }
+
+            systemConfig.buses.spi[bus_id].clock_speed = clock;
+            msg.control.print(F("SPI bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" clock set to "));
+            msg.control.print(clock / 1000000.0, 1);
+            msg.control.println(F("MHz"));
+            msg.control.println(F("Note: Takes effect on next transaction"));
+            msg.control.println(F("Use SAVE to persist"));
+            return 0;
+        }
+
+        msg.control.print(F("ERROR: Unknown SPI subcommand '"));
+        msg.control.print(subcommand);
+        msg.control.println(F("'"));
+        msg.control.println(F("  Valid: ENABLE, DISABLE, CLOCK"));
+        return 1;
+    }
+
+    // -------------------------------------------------------------------------
+    // BUS CAN [bus_id] [ENABLE|DISABLE|BAUDRATE <bps>]
+    // -------------------------------------------------------------------------
+    if (streq(busType, "CAN")) {
+#if NUM_CAN_BUSES == 0
+        msg.control.println(F("ERROR: No CAN buses available on this platform"));
+        return 1;
+#else
+        // BUS CAN (no arguments) - display all CAN buses
+        if (argc == 2) {
+            displayCANBuses();
+            return 0;
+        }
+
+        // Parse bus ID
+        uint8_t bus_id = atoi(argv[2]);
+        if (bus_id >= NUM_CAN_BUSES) {
+            msg.control.print(F("ERROR: CAN bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" not available (this platform has "));
+            msg.control.print(NUM_CAN_BUSES);
+            msg.control.println(F(" CAN buses)"));
+            return 1;
+        }
+
+        // BUS CAN <bus_id> (no subcommand) - show single bus
+        if (argc == 3) {
+            msg.control.print(F("CAN Bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" ("));
+            msg.control.print(getCANBusName(bus_id));
+            msg.control.print(F("): "));
+            if (systemConfig.buses.can[bus_id].enabled) {
+                msg.control.print(F("ENABLED, "));
+                msg.control.print(systemConfig.buses.can[bus_id].baudrate / 1000);
+                msg.control.println(F("kbps"));
+            } else {
+                msg.control.println(F("DISABLED"));
+            }
+            return 0;
+        }
+
+        const char* subcommand = argv[3];
+
+        // BUS CAN <bus_id> ENABLE
+        if (streq(subcommand, "ENABLE")) {
+            if (systemConfig.buses.can[bus_id].enabled) {
+                msg.control.print(F("CAN bus "));
+                msg.control.print(bus_id);
+                msg.control.println(F(" is already enabled"));
+                return 0;
+            }
+
+            systemConfig.buses.can[bus_id].enabled = 1;
+
+            if (initCANBus(bus_id, &systemConfig.buses.can[bus_id])) {
+                msg.control.print(F("CAN bus "));
+                msg.control.print(bus_id);
+                msg.control.print(F(" ("));
+                msg.control.print(getCANBusName(bus_id));
+                msg.control.print(F(") enabled on pins TX="));
+                uint8_t tx = (systemConfig.buses.can[bus_id].tx_pin == BUS_PIN_DEFAULT)
+                             ? getDefaultCANTX(bus_id) : systemConfig.buses.can[bus_id].tx_pin;
+                msg.control.print(tx);
+                msg.control.print(F(", RX="));
+                uint8_t rx = (systemConfig.buses.can[bus_id].rx_pin == BUS_PIN_DEFAULT)
+                             ? getDefaultCANRX(bus_id) : systemConfig.buses.can[bus_id].rx_pin;
+                msg.control.print(rx);
+                msg.control.print(F(", "));
+                msg.control.print(systemConfig.buses.can[bus_id].baudrate / 1000);
+                msg.control.println(F("kbps"));
+                msg.control.println(F("Use SAVE to persist"));
+            } else {
+                systemConfig.buses.can[bus_id].enabled = 0;
+                msg.control.print(F("ERROR: Failed to enable CAN bus "));
+                msg.control.println(bus_id);
+                return 1;
+            }
+            return 0;
+        }
+
+        // BUS CAN <bus_id> DISABLE
+        if (streq(subcommand, "DISABLE")) {
+            if (!systemConfig.buses.can[bus_id].enabled) {
+                msg.control.print(F("CAN bus "));
+                msg.control.print(bus_id);
+                msg.control.println(F(" is already disabled"));
+                return 0;
+            }
+
+            // Unregister pins
+            uint8_t tx = (systemConfig.buses.can[bus_id].tx_pin == BUS_PIN_DEFAULT)
+                         ? getDefaultCANTX(bus_id) : systemConfig.buses.can[bus_id].tx_pin;
+            uint8_t rx = (systemConfig.buses.can[bus_id].rx_pin == BUS_PIN_DEFAULT)
+                         ? getDefaultCANRX(bus_id) : systemConfig.buses.can[bus_id].rx_pin;
+            unregisterPin(tx);
+            unregisterPin(rx);
+
+            systemConfig.buses.can[bus_id].enabled = 0;
+            msg.control.print(F("CAN bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" ("));
+            msg.control.print(getCANBusName(bus_id));
+            msg.control.println(F(") disabled"));
+            msg.control.println(F("Use SAVE to persist"));
+            return 0;
+        }
+
+        // BUS CAN <bus_id> BAUDRATE <bps>
+        if (streq(subcommand, "BAUDRATE")) {
+            if (argc < 5) {
+                msg.control.println(F("ERROR: BAUDRATE requires a speed in bps"));
+                msg.control.println(F("  Usage: BUS CAN <bus> BAUDRATE <125000|250000|500000|1000000>"));
+                return 1;
+            }
+
+            uint32_t baudrate = atol(argv[4]);
+            if (baudrate != 125000 && baudrate != 250000 && baudrate != 500000 && baudrate != 1000000) {
+                msg.control.println(F("ERROR: CAN baudrate must be 125000, 250000, 500000, or 1000000"));
+                return 1;
+            }
+
+            systemConfig.buses.can[bus_id].baudrate = baudrate;
+            msg.control.print(F("CAN bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" baudrate set to "));
+            msg.control.print(baudrate / 1000);
+            msg.control.println(F("kbps"));
+            msg.control.println(F("Note: Takes effect on next reboot or ENABLE"));
+            msg.control.println(F("Use SAVE to persist"));
+            return 0;
+        }
+
+        msg.control.print(F("ERROR: Unknown CAN subcommand '"));
+        msg.control.print(subcommand);
+        msg.control.println(F("'"));
+        msg.control.println(F("  Valid: ENABLE, DISABLE, BAUDRATE"));
+        return 1;
+#endif
+    }
+
+    // Unknown bus type
+    msg.control.print(F("ERROR: Unknown bus type '"));
+    msg.control.print(busType);
+    msg.control.println(F("'"));
+    msg.control.println(F("  Valid: I2C, SPI, CAN"));
+    return 1;
+}
