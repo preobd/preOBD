@@ -208,60 +208,35 @@ void resetSystemConfig() {
     }
 #endif
 
-    // Bus Configuration defaults (NEW)
+    // Bus Configuration defaults (NEW - simplified)
     // I2C buses: Only Wire (bus 0) enabled by default
     for (int i = 0; i < 3; i++) {
         systemConfig.buses.i2c[i].enabled = (i == 0) ? 1 : 0;
+        systemConfig.buses.i2c[i].clock_speed = 400;  // 400kHz
         systemConfig.buses.i2c[i].sda_pin = BUS_PIN_DEFAULT;  // Use platform default
         systemConfig.buses.i2c[i].scl_pin = BUS_PIN_DEFAULT;
-        systemConfig.buses.i2c[i].clock_speed = 400;  // 400kHz
-        for (int j = 0; j < 4; j++) {
-            systemConfig.buses.i2c[i].reserved[j] = 0;
-        }
     }
 
     // SPI buses: Only SPI (bus 0) enabled by default
     for (int i = 0; i < 3; i++) {
         systemConfig.buses.spi[i].enabled = (i == 0) ? 1 : 0;
+        systemConfig.buses.spi[i].clock_speed = 4000000;  // 4MHz
         systemConfig.buses.spi[i].mosi_pin = BUS_PIN_DEFAULT;
         systemConfig.buses.spi[i].miso_pin = BUS_PIN_DEFAULT;
         systemConfig.buses.spi[i].sck_pin = BUS_PIN_DEFAULT;
-        systemConfig.buses.spi[i].clock_speed = 4000000;  // 4MHz
-        for (int j = 0; j < 4; j++) {
-            systemConfig.buses.spi[i].reserved[j] = 0;
-        }
     }
 
     // CAN buses: Only CAN1 (bus 0) enabled by default
     for (int i = 0; i < 3; i++) {
         systemConfig.buses.can[i].enabled = (i == 0) ? 1 : 0;
+        systemConfig.buses.can[i].baudrate = 500000;  // 500kbps
         systemConfig.buses.can[i].tx_pin = BUS_PIN_DEFAULT;
         systemConfig.buses.can[i].rx_pin = BUS_PIN_DEFAULT;
-
-        #ifdef USE_FLEXCAN_NATIVE
-        systemConfig.buses.can[i].use_external = 0;  // Use native FlexCAN
-        systemConfig.buses.can[i].cs_pin = 0xFF;     // Not used
-        systemConfig.buses.can[i].int_pin = 0xFF;    // Not used
-        #else
-        systemConfig.buses.can[i].use_external = 1;  // Use MCP2515
-        systemConfig.buses.can[i].cs_pin = (i == 0) ? CAN_CS : 0xFF;
-        systemConfig.buses.can[i].int_pin = (i == 0) ? CAN_INT : 0xFF;
-        #endif
-
-        systemConfig.buses.can[i].baudrate = 500000;  // 500kbps
-        systemConfig.buses.can[i].reserved[0] = 0;
-        systemConfig.buses.can[i].reserved[1] = 0;
     }
-
-    // Bus active bitmasks
-    systemConfig.buses.active_i2c_mask = 0b00000001;  // Wire enabled
-    systemConfig.buses.active_spi_mask = 0b00000001;  // SPI enabled
-    systemConfig.buses.active_can_mask = 0b00000001;  // CAN1 enabled
 
     // Reserved bytes
-    for (int i = 0; i < 5; i++) {
-        systemConfig.buses.reserved[i] = 0;
-    }
+    systemConfig.buses.reserved[0] = 0;
+    systemConfig.buses.reserved[1] = 0;
 
     // Calculate checksum
     systemConfig.checksum = calculateChecksum(&systemConfig);

@@ -100,7 +100,7 @@ struct SystemConfig {
     RelayConfig relays[MAX_RELAYS];  // 2 relays × 16 bytes = 32 bytes
 #endif
 
-    // Bus Configuration (104 bytes) - NEW
+    // Bus Configuration (62 bytes) - NEW
     BusConfig buses;
 };
 

@@ -5,15 +5,26 @@
  * when configuring buses, inputs, and outputs. Provides validation
  * before accepting new pin configurations.
  *
+ * Design Philosophy:
+ * Uses a two-tier approach:
+ * 1. Reserved pins: Bus pins and system pins that are fixed/non-configurable
+ * 2. User-configurable pins: Inputs, outputs, buttons, buzzers, chip selects
+ *
+ * We intentionally do NOT track the specific function of bus pins (e.g.,
+ * "I2C_SDA" vs "I2C_SCL"). On Teensy 4.x, these are hardware-fixed anyway.
+ * On ESP32, we just need to know a pin is "reserved by Wire1" - not which
+ * specific line it is.
+ *
  * Usage:
- * 1. Register all system pins during initialization
- * 2. Call validateNoPinConflict() before accepting new pin assignments
- * 3. Register pins after successful validation
+ * 1. Register bus pins as PIN_RESERVED during initialization
+ * 2. Register system pins (button, buzzer) with their specific types
+ * 3. Call validateNoPinConflict() before accepting new pin assignments
  *
  * Example:
- *   registerPin(5, PTYPE_MODE_BUTTON, "Mode Button");
- *   if (validateNoPinConflict(18, PTYPE_I2C_SDA, "I2C0 SDA")) {
- *       registerPin(18, PTYPE_I2C_SDA, "I2C0 SDA");
+ *   registerPin(18, PIN_RESERVED, "Wire SDA");
+ *   registerPin(5, PIN_BUTTON, "Mode Button");
+ *   if (validateNoPinConflict(A0, PIN_INPUT, "Oil Pressure")) {
+ *       registerPin(A0, PIN_INPUT, "Oil Pressure");
  *   }
  */
 
@@ -27,30 +38,23 @@
 // ============================================================================
 
 /**
- * Enumeration of pin usage types
- * Used to categorize pins and provide meaningful error messages
+ * Simplified enumeration of pin usage types
+ *
+ * Two-tier model:
+ * - PIN_RESERVED: Bus pins, boot pins, system pins (non-configurable)
+ * - Others: User-configurable pins
+ *
+ * Note: We do NOT track specific bus functions (I2C_SDA, SPI_MOSI, etc.)
+ * The description field provides details when needed (e.g., "Wire1 SDA")
  */
 enum PinUsageType {
-    PTYPE_UNUSED = 0,        // Pin not in use
-    PTYPE_MODE_BUTTON,       // Mode/config button
-    PTYPE_BUZZER,            // Alarm buzzer
-    PTYPE_LED,               // Status LED
-    PTYPE_CAN_CS,            // CAN controller chip select (MCP2515)
-    PTYPE_CAN_INT,           // CAN controller interrupt (MCP2515)
-    PTYPE_SD_CS,             // SD card chip select
-    PTYPE_TEST_MODE,         // Test mode trigger pin
-    PTYPE_ANALOG_INPUT,      // Analog sensor input
-    PTYPE_I2C_SDA,           // I2C data line
-    PTYPE_I2C_SCL,           // I2C clock line
-    PTYPE_SPI_MOSI,          // SPI master out, slave in
-    PTYPE_SPI_MISO,          // SPI master in, slave out
-    PTYPE_SPI_SCK,           // SPI clock
-    PTYPE_SPI_CS,            // SPI chip select (sensor-specific)
-    PTYPE_CAN_TX,            // CAN transmit
-    PTYPE_CAN_RX,            // CAN receive
-    PTYPE_SERIAL_TX,         // UART transmit
-    PTYPE_SERIAL_RX,         // UART receive
-    PTYPE_RELAY              // Relay control output
+    PIN_UNUSED = 0,     // Pin not in use
+    PIN_RESERVED,       // Bus pins, boot pins, system pins (non-configurable)
+    PIN_INPUT,          // Analog/digital sensor input
+    PIN_OUTPUT,         // Relay, LED, digital output
+    PIN_BUTTON,         // User button (mode switch, etc.)
+    PIN_BUZZER,         // Buzzer/speaker
+    PIN_CS              // Chip select (SPI devices, SD card, MCP2515)
 };
 
 // ============================================================================
@@ -109,7 +113,7 @@ bool isPinAvailable(uint8_t pin);
  * Get the usage type of a registered pin
  *
  * @param pin Pin number to query
- * @return PinUsageType of the pin, or PTYPE_UNUSED if not registered
+ * @return PinUsageType of the pin, or PIN_UNUSED if not registered
  */
 PinUsageType getPinUsage(uint8_t pin);
 

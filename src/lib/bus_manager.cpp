@@ -34,10 +34,9 @@ void initConfiguredBuses() {
     // Initialize I2C buses
     for (uint8_t i = 0; i < NUM_I2C_BUSES; i++) {
         if (systemConfig.buses.i2c[i].enabled) {
-            if (initI2CBus(i, &systemConfig.buses.i2c[i])) {
-                SET_I2C_BUS_ACTIVE(&systemConfig.buses, i);
-            } else {
-                CLEAR_I2C_BUS_ACTIVE(&systemConfig.buses, i);
+            if (!initI2CBus(i, &systemConfig.buses.i2c[i])) {
+                // Mark as disabled if init failed
+                systemConfig.buses.i2c[i].enabled = 0;
             }
         }
     }
@@ -45,10 +44,8 @@ void initConfiguredBuses() {
     // Initialize SPI buses
     for (uint8_t i = 0; i < NUM_SPI_BUSES; i++) {
         if (systemConfig.buses.spi[i].enabled) {
-            if (initSPIBus(i, &systemConfig.buses.spi[i])) {
-                SET_SPI_BUS_ACTIVE(&systemConfig.buses, i);
-            } else {
-                CLEAR_SPI_BUS_ACTIVE(&systemConfig.buses, i);
+            if (!initSPIBus(i, &systemConfig.buses.spi[i])) {
+                systemConfig.buses.spi[i].enabled = 0;
             }
         }
     }
@@ -56,10 +53,8 @@ void initConfiguredBuses() {
     // Initialize CAN buses
     for (uint8_t i = 0; i < NUM_CAN_BUSES; i++) {
         if (systemConfig.buses.can[i].enabled) {
-            if (initCANBus(i, &systemConfig.buses.can[i])) {
-                SET_CAN_BUS_ACTIVE(&systemConfig.buses, i);
-            } else {
-                CLEAR_CAN_BUS_ACTIVE(&systemConfig.buses, i);
+            if (!initCANBus(i, &systemConfig.buses.can[i])) {
+                systemConfig.buses.can[i].enabled = 0;
             }
         }
     }
@@ -86,12 +81,12 @@ bool initI2CBus(uint8_t bus_id, I2CBusConfig* config) {
 
     // Validate pins are available (only if not using platform defaults)
     if (config->sda_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(sda, PTYPE_I2C_SDA, "I2C SDA")) {
+        if (!validateNoPinConflict(sda, PIN_RESERVED, getI2CBusName(bus_id))) {
             return false;
         }
     }
     if (config->scl_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(scl, PTYPE_I2C_SCL, "I2C SCL")) {
+        if (!validateNoPinConflict(scl, PIN_RESERVED, getI2CBusName(bus_id))) {
             return false;
         }
     }
@@ -185,9 +180,12 @@ bool initI2CBus(uint8_t bus_id, I2CBusConfig* config) {
 #endif
 
     if (success) {
-        // Register pins in pin registry
-        registerPin(sda, PTYPE_I2C_SDA, getI2CBusName(bus_id));
-        registerPin(scl, PTYPE_I2C_SCL, getI2CBusName(bus_id));
+        // Register pins as reserved in pin registry
+        // Use static strings for descriptions to avoid memory issues
+        static const char* i2c_sda_desc[] = {"Wire SDA", "Wire1 SDA", "Wire2 SDA"};
+        static const char* i2c_scl_desc[] = {"Wire SCL", "Wire1 SCL", "Wire2 SCL"};
+        registerPin(sda, PIN_RESERVED, i2c_sda_desc[bus_id]);
+        registerPin(scl, PIN_RESERVED, i2c_scl_desc[bus_id]);
 
         msg.debug.print(F("✓ "));
         msg.debug.print(getI2CBusName(bus_id));
@@ -222,13 +220,13 @@ bool initSPIBus(uint8_t bus_id, SPIBusConfig* config) {
 
     // Validate pins are available (only if not using platform defaults)
     if (config->mosi_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(mosi, PTYPE_SPI_MOSI, "SPI MOSI")) return false;
+        if (!validateNoPinConflict(mosi, PIN_RESERVED, getSPIBusName(bus_id))) return false;
     }
     if (config->miso_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(miso, PTYPE_SPI_MISO, "SPI MISO")) return false;
+        if (!validateNoPinConflict(miso, PIN_RESERVED, getSPIBusName(bus_id))) return false;
     }
     if (config->sck_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(sck, PTYPE_SPI_SCK, "SPI SCK")) return false;
+        if (!validateNoPinConflict(sck, PIN_RESERVED, getSPIBusName(bus_id))) return false;
     }
 
     // Platform-specific initialization
@@ -296,10 +294,13 @@ bool initSPIBus(uint8_t bus_id, SPIBusConfig* config) {
 #endif
 
     if (success) {
-        // Register pins in pin registry
-        registerPin(mosi, PTYPE_SPI_MOSI, getSPIBusName(bus_id));
-        registerPin(miso, PTYPE_SPI_MISO, getSPIBusName(bus_id));
-        registerPin(sck, PTYPE_SPI_SCK, getSPIBusName(bus_id));
+        // Register pins as reserved in pin registry
+        static const char* spi_mosi_desc[] = {"SPI MOSI", "SPI1 MOSI", "SPI2 MOSI"};
+        static const char* spi_miso_desc[] = {"SPI MISO", "SPI1 MISO", "SPI2 MISO"};
+        static const char* spi_sck_desc[] = {"SPI SCK", "SPI1 SCK", "SPI2 SCK"};
+        registerPin(mosi, PIN_RESERVED, spi_mosi_desc[bus_id]);
+        registerPin(miso, PIN_RESERVED, spi_miso_desc[bus_id]);
+        registerPin(sck, PIN_RESERVED, spi_sck_desc[bus_id]);
 
         msg.debug.print(F("✓ "));
         msg.debug.print(getSPIBusName(bus_id));
@@ -335,19 +336,21 @@ bool initCANBus(uint8_t bus_id, CANBusConfig* config) {
 
     // Validate pins are available (only if not using platform defaults)
     if (config->tx_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(tx, PTYPE_CAN_TX, "CAN TX")) return false;
+        if (!validateNoPinConflict(tx, PIN_RESERVED, getCANBusName(bus_id))) return false;
     }
     if (config->rx_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(rx, PTYPE_CAN_RX, "CAN RX")) return false;
+        if (!validateNoPinConflict(rx, PIN_RESERVED, getCANBusName(bus_id))) return false;
     }
 
     // CAN initialization is handled in output_can.cpp since it needs FlexCAN_T4 objects
     // Here we just mark the bus as ready and register pins
     can_bus_ready[bus_id] = true;
 
-    // Register pins in pin registry
-    if (tx != 0xFF) registerPin(tx, PTYPE_CAN_TX, getCANBusName(bus_id));
-    if (rx != 0xFF) registerPin(rx, PTYPE_CAN_RX, getCANBusName(bus_id));
+    // Register pins as reserved in pin registry
+    static const char* can_tx_desc[] = {"CAN1 TX", "CAN2 TX", "CAN3 TX"};
+    static const char* can_rx_desc[] = {"CAN1 RX", "CAN2 RX", "CAN3 RX"};
+    if (tx != 0xFF) registerPin(tx, PIN_RESERVED, can_tx_desc[bus_id]);
+    if (rx != 0xFF) registerPin(rx, PIN_RESERVED, can_rx_desc[bus_id]);
 
     msg.debug.print(F("✓ "));
     msg.debug.print(getCANBusName(bus_id));
@@ -357,18 +360,7 @@ bool initCANBus(uint8_t bus_id, CANBusConfig* config) {
     msg.debug.print(rx);
     msg.debug.print(F(", "));
     msg.debug.print(config->baudrate / 1000);
-    msg.debug.print(F("kbps"));
-
-    if (config->use_external) {
-        msg.debug.print(F(" (MCP2515 CS="));
-        msg.debug.print(config->cs_pin);
-        msg.debug.print(F(", INT="));
-        msg.debug.print(config->int_pin);
-        msg.debug.print(F(")"));
-    } else {
-        msg.debug.print(F(" (FlexCAN)"));
-    }
-    msg.debug.println();
+    msg.debug.println(F("kbps"));
 
     return true;
 }

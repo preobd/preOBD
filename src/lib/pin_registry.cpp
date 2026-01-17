@@ -28,7 +28,7 @@ void clearPinRegistry() {
     registrySize = 0;
     for (uint8_t i = 0; i < MAX_PIN_REGISTRY; i++) {
         pinRegistry[i].pin = 0xFF;
-        pinRegistry[i].type = PTYPE_UNUSED;
+        pinRegistry[i].type = PIN_UNUSED;
         pinRegistry[i].description = nullptr;
     }
 }
@@ -73,7 +73,7 @@ void unregisterPin(uint8_t pin) {
 
             // Clear the last entry
             pinRegistry[registrySize].pin = 0xFF;
-            pinRegistry[registrySize].type = PTYPE_UNUSED;
+            pinRegistry[registrySize].type = PIN_UNUSED;
             pinRegistry[registrySize].description = nullptr;
 
             return;
@@ -100,7 +100,7 @@ PinUsageType getPinUsage(uint8_t pin) {
             return pinRegistry[i].type;
         }
     }
-    return PTYPE_UNUSED;
+    return PIN_UNUSED;
 }
 
 const char* getPinDescription(uint8_t pin) {
@@ -193,26 +193,13 @@ void dumpPinRegistry() {
 
 const char* getPinUsageTypeName(PinUsageType type) {
     switch (type) {
-        case PTYPE_UNUSED:       return "Unused";
-        case PTYPE_MODE_BUTTON:  return "Mode Button";
-        case PTYPE_BUZZER:       return "Buzzer";
-        case PTYPE_LED:          return "LED";
-        case PTYPE_CAN_CS:       return "CAN CS";
-        case PTYPE_CAN_INT:      return "CAN INT";
-        case PTYPE_SD_CS:        return "SD CS";
-        case PTYPE_TEST_MODE:    return "Test Mode";
-        case PTYPE_ANALOG_INPUT: return "Analog Input";
-        case PTYPE_I2C_SDA:      return "I2C SDA";
-        case PTYPE_I2C_SCL:      return "I2C SCL";
-        case PTYPE_SPI_MOSI:     return "SPI MOSI";
-        case PTYPE_SPI_MISO:     return "SPI MISO";
-        case PTYPE_SPI_SCK:      return "SPI SCK";
-        case PTYPE_SPI_CS:       return "SPI CS";
-        case PTYPE_CAN_TX:       return "CAN TX";
-        case PTYPE_CAN_RX:       return "CAN RX";
-        case PTYPE_SERIAL_TX:    return "Serial TX";
-        case PTYPE_SERIAL_RX:    return "Serial RX";
-        case PTYPE_RELAY:        return "Relay Output";
-        default:                 return "Unknown";
+        case PIN_UNUSED:    return "Unused";
+        case PIN_RESERVED:  return "Reserved";
+        case PIN_INPUT:     return "Input";
+        case PIN_OUTPUT:    return "Output";
+        case PIN_BUTTON:    return "Button";
+        case PIN_BUZZER:    return "Buzzer";
+        case PIN_CS:        return "Chip Select";
+        default:            return "Unknown";
     }
 }
