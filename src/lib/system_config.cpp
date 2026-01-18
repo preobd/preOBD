@@ -208,33 +208,13 @@ void resetSystemConfig() {
     }
 #endif
 
-    // Bus Configuration defaults (NEW - simplified)
-    // I2C buses: Only Wire (bus 0) enabled by default
-    for (int i = 0; i < 3; i++) {
-        systemConfig.buses.i2c[i].enabled = (i == 0) ? 1 : 0;
-        systemConfig.buses.i2c[i].clock_speed = 400;  // 400kHz
-        systemConfig.buses.i2c[i].sda_pin = BUS_PIN_DEFAULT;  // Use platform default
-        systemConfig.buses.i2c[i].scl_pin = BUS_PIN_DEFAULT;
-    }
-
-    // SPI buses: Only SPI (bus 0) enabled by default
-    for (int i = 0; i < 3; i++) {
-        systemConfig.buses.spi[i].enabled = (i == 0) ? 1 : 0;
-        systemConfig.buses.spi[i].clock_speed = 4000000;  // 4MHz
-        systemConfig.buses.spi[i].mosi_pin = BUS_PIN_DEFAULT;
-        systemConfig.buses.spi[i].miso_pin = BUS_PIN_DEFAULT;
-        systemConfig.buses.spi[i].sck_pin = BUS_PIN_DEFAULT;
-    }
-
-    // CAN buses: Only CAN1 (bus 0) enabled by default
-    for (int i = 0; i < 3; i++) {
-        systemConfig.buses.can[i].enabled = (i == 0) ? 1 : 0;
-        systemConfig.buses.can[i].baudrate = 500000;  // 500kbps
-        systemConfig.buses.can[i].tx_pin = BUS_PIN_DEFAULT;
-        systemConfig.buses.can[i].rx_pin = BUS_PIN_DEFAULT;
-    }
-
-    // Reserved bytes
+    // Bus Configuration defaults (simplified "pick one" model)
+    systemConfig.buses.active_i2c = DEFAULT_I2C_BUS;
+    systemConfig.buses.i2c_clock = DEFAULT_I2C_CLOCK;
+    systemConfig.buses.active_spi = DEFAULT_SPI_BUS;
+    systemConfig.buses.spi_clock = DEFAULT_SPI_CLOCK;
+    systemConfig.buses.active_can = DEFAULT_CAN_BUS;
+    systemConfig.buses.can_baudrate = DEFAULT_CAN_BAUDRATE;
     systemConfig.buses.reserved[0] = 0;
     systemConfig.buses.reserved[1] = 0;
 

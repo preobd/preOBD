@@ -7,6 +7,7 @@
 
 #include "../../../config.h"
 #include "../../../lib/platform.h"
+#include "../../../lib/bus_manager.h"
 #include "../../input.h"
 #include <SPI.h>
 
@@ -26,16 +27,17 @@
  * @note Returns NAN if thermocouple is disconnected
  */
 void readMAX6675(Input *ptr) {
-    SPI.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
+    SPIClass* spi = getActiveSPI();
+    spi->beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
     digitalWrite(ptr->pin, LOW);
     delayMicroseconds(1);
 
-    uint16_t value = SPI.transfer(0x00);
+    uint16_t value = spi->transfer(0x00);
     value <<= 8;
-    value |= SPI.transfer(0x00);
+    value |= spi->transfer(0x00);
 
     digitalWrite(ptr->pin, HIGH);
-    SPI.endTransaction();
+    spi->endTransaction();
 
     if (value & 0x4) {
         ptr->value = NAN;  // No thermocouple attached

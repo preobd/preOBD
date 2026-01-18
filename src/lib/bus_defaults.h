@@ -2,7 +2,7 @@
  * bus_defaults.h - Platform-Specific Bus Pin Defaults
  *
  * Defines default hardware pins for I2C, SPI, and CAN buses across different platforms.
- * These defaults are used when bus configuration specifies 0xFF (BUS_PIN_DEFAULT).
+ * Also defines default bus selections and speeds for the simplified "pick one" model.
  *
  * Platform Support:
  * - Teensy 4.x (IMXRT1062): 3x I2C, 3x SPI, 3x CAN (fixed pins)
@@ -15,6 +15,17 @@
 #define BUS_DEFAULTS_H
 
 #include "platform.h"
+
+// ============================================================================
+// DEFAULT BUS SELECTIONS AND SPEEDS
+// ============================================================================
+
+#define DEFAULT_I2C_BUS        0        // Wire
+#define DEFAULT_I2C_CLOCK      400      // kHz
+#define DEFAULT_SPI_BUS        0        // SPI
+#define DEFAULT_SPI_CLOCK      4000000  // Hz (4MHz)
+#define DEFAULT_CAN_BUS        0        // CAN1
+#define DEFAULT_CAN_BAUDRATE   500000   // bps
 
 // ============================================================================
 // TEENSY 4.x (IMXRT1062) - Teensy 4.0, 4.1

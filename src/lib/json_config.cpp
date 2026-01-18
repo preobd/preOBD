@@ -12,6 +12,7 @@
 
 #include "json_config.h"
 #include "system_config.h"
+#include "bus_defaults.h"
 #include "../inputs/input.h"
 #include "../inputs/input_manager.h"
 #include "units_registry.h"
@@ -257,6 +258,15 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     // Physical constants
     JsonObject constants = systemObj["constants"].to<JsonObject>();
     constants["seaLevelPressure"] = systemConfig.seaLevelPressure;
+
+    // Bus Configuration
+    JsonObject buses = systemObj["buses"].to<JsonObject>();
+    buses["i2c"] = systemConfig.buses.active_i2c;
+    buses["i2cClock"] = systemConfig.buses.i2c_clock;
+    buses["spi"] = systemConfig.buses.active_spi;
+    buses["spiClock"] = systemConfig.buses.spi_clock;
+    buses["can"] = systemConfig.buses.active_can;
+    buses["canBaudrate"] = systemConfig.buses.can_baudrate;
 }
 
 // JSON Schema Version
@@ -507,6 +517,25 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
     if (systemObj["constants"].isNull() == false) {
         JsonObject constants = systemObj["constants"];
         systemConfig.seaLevelPressure = constants["seaLevelPressure"];
+    }
+
+    // Bus Configuration (with backward-compatible defaults)
+    if (systemObj["buses"].isNull() == false) {
+        JsonObject buses = systemObj["buses"];
+        systemConfig.buses.active_i2c = buses["i2c"] | DEFAULT_I2C_BUS;
+        systemConfig.buses.i2c_clock = buses["i2cClock"] | DEFAULT_I2C_CLOCK;
+        systemConfig.buses.active_spi = buses["spi"] | DEFAULT_SPI_BUS;
+        systemConfig.buses.spi_clock = buses["spiClock"] | DEFAULT_SPI_CLOCK;
+        systemConfig.buses.active_can = buses["can"] | DEFAULT_CAN_BUS;
+        systemConfig.buses.can_baudrate = buses["canBaudrate"] | DEFAULT_CAN_BAUDRATE;
+    } else {
+        // No buses object - use defaults (backward compatibility with old configs)
+        systemConfig.buses.active_i2c = DEFAULT_I2C_BUS;
+        systemConfig.buses.i2c_clock = DEFAULT_I2C_CLOCK;
+        systemConfig.buses.active_spi = DEFAULT_SPI_BUS;
+        systemConfig.buses.spi_clock = DEFAULT_SPI_CLOCK;
+        systemConfig.buses.active_can = DEFAULT_CAN_BUS;
+        systemConfig.buses.can_baudrate = DEFAULT_CAN_BAUDRATE;
     }
 
     return true;

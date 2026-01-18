@@ -1,19 +1,18 @@
 /*
- * bus_manager.h - Multi-Bus Initialization Manager
+ * bus_manager.h - Bus Initialization Manager
  *
- * Manages initialization of I2C, SPI, and CAN buses based on SystemConfig.
- * Provides platform-abstracted access to multiple bus instances (Wire/Wire1/Wire2, etc.).
+ * Manages initialization of the active I2C, SPI, and CAN buses.
+ * Uses the simplified "pick one" model - each bus type has one active instance.
  *
  * Key Features:
  * - Platform-specific initialization (Teensy 4.x, 3.6, ESP32, Mega)
  * - Pin conflict validation before bus initialization
- * - Multiple bus instance management (up to 3 of each type)
- * - Accessor functions for sensors to get correct bus instance
+ * - Simple accessor functions for the active bus instance
  *
  * Usage:
  *   1. Call initConfiguredBuses() during setup()
- *   2. Sensors use getI2CInstance(bus_id) to get correct Wire object
- *   3. SPI devices use getSPIInstance(bus_id) to get correct SPI object
+ *   2. Sensors use getActiveI2C() to get the active Wire object
+ *   3. SPI devices use getActiveSPI() to get the active SPI object
  */
 
 #ifndef BUS_MANAGER_H
@@ -23,8 +22,9 @@
 #include <Wire.h>
 #include <SPI.h>
 #include "bus_config.h"
+#include "bus_defaults.h"
 
-// Forward declarations for platform-specific bus classes
+// Forward declarations
 class TwoWire;
 class SPIClass;
 
@@ -36,12 +36,7 @@ class SPIClass;
  * Initialize all configured buses
  *
  * Called once during setup(). Reads SystemConfig.buses and initializes
- * enabled I2C, SPI, and CAN buses with configured or default pins.
- *
- * Validation:
- * - Checks pin conflicts using pin registry
- * - Validates platform supports requested bus count
- * - Falls back to defaults on invalid configuration
+ * the active I2C, SPI, and CAN bus with configured speeds.
  */
 void initConfiguredBuses();
 
@@ -49,99 +44,66 @@ void initConfiguredBuses();
  * Initialize a specific I2C bus
  *
  * @param bus_id Bus number (0-2 for Wire/Wire1/Wire2)
- * @param config Pointer to I2CBusConfig structure
+ * @param clock_khz I2C clock speed in kHz (100, 400, 1000)
  * @return true if successfully initialized, false on error
- *
- * Platform notes:
- * - Teensy 4.x: Fixed hardware pins, config pins ignored
- * - Teensy 3.x: Wire.setSDA/setSCL supported
- * - ESP32: Wire.begin(sda, scl) supported
  */
-bool initI2CBus(uint8_t bus_id, I2CBusConfig* config);
+bool initI2CBus(uint8_t bus_id, uint16_t clock_khz);
 
 /**
  * Initialize a specific SPI bus
  *
  * @param bus_id Bus number (0-2 for SPI/SPI1/SPI2)
- * @param config Pointer to SPIBusConfig structure
+ * @param clock_hz SPI clock speed in Hz
  * @return true if successfully initialized, false on error
- *
- * Platform notes:
- * - Teensy: Multiple SPI instances available (SPI, SPI1, SPI2)
- * - ESP32: Custom pins supported via SPI.begin(sck, miso, mosi)
  */
-bool initSPIBus(uint8_t bus_id, SPIBusConfig* config);
+bool initSPIBus(uint8_t bus_id, uint32_t clock_hz);
 
 /**
  * Initialize a specific CAN bus
  *
  * @param bus_id Bus number (0-2 for CAN1/CAN2/CAN3)
- * @param config Pointer to CANBusConfig structure
+ * @param baudrate CAN baudrate in bps
  * @return true if successfully initialized, false on error
- *
- * Platform notes:
- * - Teensy 4.x: FlexCAN native support (CAN1, CAN2, CAN3)
- * - Teensy 3.6: FlexCAN native support (CAN1, CAN2)
- * - Other: MCP2515 external CAN via SPI
  */
-bool initCANBus(uint8_t bus_id, CANBusConfig* config);
+bool initCANBus(uint8_t bus_id, uint32_t baudrate);
 
 // ============================================================================
-// BUS INSTANCE ACCESS
+// ACTIVE BUS ACCESS
 // ============================================================================
 
 /**
- * Get I2C bus instance for sensor communication
- *
- * @param bus_id Bus number (0-2)
- * @return Pointer to TwoWire object, or nullptr if bus not initialized
- *
- * Example:
- *   TwoWire* wire = getI2CInstance(1);  // Get Wire1
- *   if (wire) {
- *       bme.begin(0x76, wire);
- *   }
+ * Get the currently active I2C bus
+ * @return Pointer to active TwoWire object, or &Wire if not initialized
  */
-TwoWire* getI2CInstance(uint8_t bus_id);
+TwoWire* getActiveI2C();
 
 /**
- * Get SPI bus instance for sensor communication
- *
- * @param bus_id Bus number (0-2)
- * @return Pointer to SPIClass object, or nullptr if bus not initialized
- *
- * Example:
- *   SPIClass* spi = getSPIInstance(1);  // Get SPI1
- *   if (spi) {
- *       spi->beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
- *   }
+ * Get the currently active SPI bus
+ * @return Pointer to active SPIClass object, or &SPI if not initialized
  */
-SPIClass* getSPIInstance(uint8_t bus_id);
+SPIClass* getActiveSPI();
+
+/**
+ * Get the currently active I2C bus ID
+ * @return Bus ID (0-2)
+ */
+uint8_t getActiveI2CId();
+
+/**
+ * Get the currently active SPI bus ID
+ * @return Bus ID (0-2)
+ */
+uint8_t getActiveSPIId();
+
+/**
+ * Get the currently active CAN bus ID
+ * @return Bus ID (0-2)
+ */
+uint8_t getActiveCANId();
 
 // ============================================================================
 // BUS INFORMATION
 // ============================================================================
-
-/**
- * Check if I2C bus is initialized and ready
- * @param bus_id Bus number (0-2)
- * @return true if bus is initialized
- */
-bool isI2CBusReady(uint8_t bus_id);
-
-/**
- * Check if SPI bus is initialized and ready
- * @param bus_id Bus number (0-2)
- * @return true if bus is initialized
- */
-bool isSPIBusReady(uint8_t bus_id);
-
-/**
- * Check if CAN bus is initialized and ready
- * @param bus_id Bus number (0-2)
- * @return true if bus is initialized
- */
-bool isCANBusReady(uint8_t bus_id);
 
 /**
  * Get human-readable name for I2C bus

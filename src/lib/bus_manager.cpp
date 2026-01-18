@@ -1,5 +1,7 @@
 /*
- * bus_manager.cpp - Multi-Bus Initialization Manager Implementation
+ * bus_manager.cpp - Bus Initialization Manager Implementation
+ *
+ * Simplified "pick one" model - each bus type has one active instance.
  */
 
 #include "bus_manager.h"
@@ -7,22 +9,25 @@
 #include "bus_defaults.h"
 #include "pin_registry.h"
 #include "system_config.h"
-#include "message_api.h"  // For msg.debug
+#include "message_api.h"
 #include <Wire.h>
 #include <SPI.h>
 
 // ============================================================================
-// GLOBAL BUS INSTANCE STORAGE
+// GLOBAL STATE
 // ============================================================================
 
-// I2C bus instances (Wire, Wire1, Wire2)
-static TwoWire* i2c_instances[3] = {nullptr, nullptr, nullptr};
+// Active bus instances
+static TwoWire* active_i2c = nullptr;
+static SPIClass* active_spi = nullptr;
 
-// SPI bus instances (SPI, SPI1, SPI2)
-static SPIClass* spi_instances[3] = {nullptr, nullptr, nullptr};
+// Active bus IDs (for reference)
+static uint8_t active_i2c_id = 0;
+static uint8_t active_spi_id = 0;
+static uint8_t active_can_id = 0;
 
-// CAN bus ready flags (actual FlexCAN objects are in output_can.cpp)
-static bool can_bus_ready[3] = {false, false, false};
+// CAN ready flag (actual FlexCAN objects are in output_can.cpp)
+static bool can_ready = false;
 
 // ============================================================================
 // MAIN INITIALIZATION
@@ -31,31 +36,30 @@ static bool can_bus_ready[3] = {false, false, false};
 void initConfiguredBuses() {
     msg.debug.println(F("=== Initializing Configured Buses ==="));
 
-    // Initialize I2C buses
-    for (uint8_t i = 0; i < NUM_I2C_BUSES; i++) {
-        if (systemConfig.buses.i2c[i].enabled) {
-            if (!initI2CBus(i, &systemConfig.buses.i2c[i])) {
-                // Mark as disabled if init failed
-                systemConfig.buses.i2c[i].enabled = 0;
-            }
+    // Initialize the active I2C bus
+    if (!initI2CBus(systemConfig.buses.active_i2c, systemConfig.buses.i2c_clock)) {
+        // Fall back to bus 0 if requested bus fails
+        if (systemConfig.buses.active_i2c != 0) {
+            msg.debug.println(F("  Falling back to Wire (bus 0)"));
+            initI2CBus(0, systemConfig.buses.i2c_clock);
         }
     }
 
-    // Initialize SPI buses
-    for (uint8_t i = 0; i < NUM_SPI_BUSES; i++) {
-        if (systemConfig.buses.spi[i].enabled) {
-            if (!initSPIBus(i, &systemConfig.buses.spi[i])) {
-                systemConfig.buses.spi[i].enabled = 0;
-            }
+    // Initialize the active SPI bus
+    if (!initSPIBus(systemConfig.buses.active_spi, systemConfig.buses.spi_clock)) {
+        // Fall back to bus 0 if requested bus fails
+        if (systemConfig.buses.active_spi != 0) {
+            msg.debug.println(F("  Falling back to SPI (bus 0)"));
+            initSPIBus(0, systemConfig.buses.spi_clock);
         }
     }
 
-    // Initialize CAN buses
-    for (uint8_t i = 0; i < NUM_CAN_BUSES; i++) {
-        if (systemConfig.buses.can[i].enabled) {
-            if (!initCANBus(i, &systemConfig.buses.can[i])) {
-                systemConfig.buses.can[i].enabled = 0;
-            }
+    // Initialize the active CAN bus
+    if (!initCANBus(systemConfig.buses.active_can, systemConfig.buses.can_baudrate)) {
+        // Fall back to bus 0 if requested bus fails
+        if (systemConfig.buses.active_can != 0) {
+            msg.debug.println(F("  Falling back to CAN1 (bus 0)"));
+            initCANBus(0, systemConfig.buses.can_baudrate);
         }
     }
 
@@ -67,29 +71,17 @@ void initConfiguredBuses() {
 // I2C BUS INITIALIZATION
 // ============================================================================
 
-bool initI2CBus(uint8_t bus_id, I2CBusConfig* config) {
+bool initI2CBus(uint8_t bus_id, uint16_t clock_khz) {
     if (bus_id >= NUM_I2C_BUSES) {
-        msg.debug.print(F("✗ I2C bus "));
+        msg.debug.print(F("ERROR: I2C bus "));
         msg.debug.print(bus_id);
         msg.debug.println(F(" not available on this platform"));
         return false;
     }
 
-    // Get default pins if config specifies BUS_PIN_DEFAULT (0xFF)
-    uint8_t sda = (config->sda_pin == BUS_PIN_DEFAULT) ? getDefaultI2CSDA(bus_id) : config->sda_pin;
-    uint8_t scl = (config->scl_pin == BUS_PIN_DEFAULT) ? getDefaultI2CSCL(bus_id) : config->scl_pin;
-
-    // Validate pins are available (only if not using platform defaults)
-    if (config->sda_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(sda, PIN_RESERVED, getI2CBusName(bus_id))) {
-            return false;
-        }
-    }
-    if (config->scl_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(scl, PIN_RESERVED, getI2CBusName(bus_id))) {
-            return false;
-        }
-    }
+    // Get default pins for this bus
+    uint8_t sda = getDefaultI2CSDA(bus_id);
+    uint8_t scl = getDefaultI2CSCL(bus_id);
 
     // Platform-specific initialization
     bool success = false;
@@ -99,71 +91,65 @@ bool initI2CBus(uint8_t bus_id, I2CBusConfig* config) {
     switch (bus_id) {
         case 0:
             Wire.begin();
-            Wire.setClock(config->clock_speed * 1000UL);
-            i2c_instances[0] = &Wire;
+            Wire.setClock(clock_khz * 1000UL);
+            active_i2c = &Wire;
             success = true;
             break;
         case 1:
             Wire1.begin();
-            Wire1.setClock(config->clock_speed * 1000UL);
-            i2c_instances[1] = &Wire1;
+            Wire1.setClock(clock_khz * 1000UL);
+            active_i2c = &Wire1;
             success = true;
             break;
         case 2:
             Wire2.begin();
-            Wire2.setClock(config->clock_speed * 1000UL);
-            i2c_instances[2] = &Wire2;
+            Wire2.setClock(clock_khz * 1000UL);
+            active_i2c = &Wire2;
             success = true;
             break;
     }
 
 #elif defined(__MK66FX1M0__) || defined(__MK64FX512__) || defined(__MK20DX256__)
-    // Teensy 3.x: Remappable I2C pins via setSDA/setSCL
+    // Teensy 3.x: Multiple Wire instances
     switch (bus_id) {
         case 0:
             Wire.begin();
-            if (config->sda_pin != BUS_PIN_DEFAULT) Wire.setSDA(sda);
-            if (config->scl_pin != BUS_PIN_DEFAULT) Wire.setSCL(scl);
-            Wire.setClock(config->clock_speed * 1000UL);
-            i2c_instances[0] = &Wire;
+            Wire.setClock(clock_khz * 1000UL);
+            active_i2c = &Wire;
             success = true;
             break;
 #if NUM_I2C_BUSES >= 2
         case 1:
             Wire1.begin();
-            if (config->sda_pin != BUS_PIN_DEFAULT) Wire1.setSDA(sda);
-            if (config->scl_pin != BUS_PIN_DEFAULT) Wire1.setSCL(scl);
-            Wire1.setClock(config->clock_speed * 1000UL);
-            i2c_instances[1] = &Wire1;
+            Wire1.setClock(clock_khz * 1000UL);
+            active_i2c = &Wire1;
             success = true;
             break;
 #endif
 #if NUM_I2C_BUSES >= 3
         case 2:
             Wire2.begin();
-            if (config->sda_pin != BUS_PIN_DEFAULT) Wire2.setSDA(sda);
-            if (config->scl_pin != BUS_PIN_DEFAULT) Wire2.setSCL(scl);
-            Wire2.setClock(config->clock_speed * 1000UL);
-            i2c_instances[2] = &Wire2;
+            Wire2.setClock(clock_khz * 1000UL);
+            active_i2c = &Wire2;
             success = true;
             break;
 #endif
     }
 
 #elif defined(ESP32)
-    // ESP32: Fully remappable via Wire.begin(sda, scl)
+    // ESP32: Wire.begin() uses default pins
     switch (bus_id) {
         case 0:
-            Wire.begin(sda, scl);
-            Wire.setClock(config->clock_speed * 1000UL);
-            i2c_instances[0] = &Wire;
+            Wire.begin();
+            Wire.setClock(clock_khz * 1000UL);
+            active_i2c = &Wire;
             success = true;
             break;
 #if NUM_I2C_BUSES >= 2
         case 1:
-            Wire1.begin(sda, scl);
-            Wire1.setClock(config->clock_speed * 1000UL);
-            i2c_instances[1] = &Wire1;
+            Wire1.begin();
+            Wire1.setClock(clock_khz * 1000UL);
+            active_i2c = &Wire1;
             success = true;
             break;
 #endif
@@ -173,28 +159,28 @@ bool initI2CBus(uint8_t bus_id, I2CBusConfig* config) {
     // Generic Arduino (Uno, Mega, etc.): Single Wire bus
     if (bus_id == 0) {
         Wire.begin();
-        Wire.setClock(config->clock_speed * 1000UL);
-        i2c_instances[0] = &Wire;
+        Wire.setClock(clock_khz * 1000UL);
+        active_i2c = &Wire;
         success = true;
     }
 #endif
 
     if (success) {
-        // Register pins as reserved in pin registry
-        // Use static strings for descriptions to avoid memory issues
-        static const char* i2c_sda_desc[] = {"Wire SDA", "Wire1 SDA", "Wire2 SDA"};
-        static const char* i2c_scl_desc[] = {"Wire SCL", "Wire1 SCL", "Wire2 SCL"};
-        registerPin(sda, PIN_RESERVED, i2c_sda_desc[bus_id]);
-        registerPin(scl, PIN_RESERVED, i2c_scl_desc[bus_id]);
+        active_i2c_id = bus_id;
 
-        msg.debug.print(F("✓ "));
+        // Register pins as reserved in pin registry
+        static const char* i2c_desc[] = {"Wire", "Wire1", "Wire2"};
+        registerPin(sda, PIN_RESERVED, i2c_desc[bus_id]);
+        registerPin(scl, PIN_RESERVED, i2c_desc[bus_id]);
+
+        msg.debug.print(F("I2C: "));
         msg.debug.print(getI2CBusName(bus_id));
-        msg.debug.print(F(" initialized: SDA="));
+        msg.debug.print(F(" (SDA="));
         msg.debug.print(sda);
         msg.debug.print(F(", SCL="));
         msg.debug.print(scl);
-        msg.debug.print(F(", "));
-        msg.debug.print(config->clock_speed);
+        msg.debug.print(F(") @ "));
+        msg.debug.print(clock_khz);
         msg.debug.println(F("kHz"));
     }
 
@@ -205,29 +191,18 @@ bool initI2CBus(uint8_t bus_id, I2CBusConfig* config) {
 // SPI BUS INITIALIZATION
 // ============================================================================
 
-bool initSPIBus(uint8_t bus_id, SPIBusConfig* config) {
+bool initSPIBus(uint8_t bus_id, uint32_t clock_hz) {
     if (bus_id >= NUM_SPI_BUSES) {
-        msg.debug.print(F("✗ SPI bus "));
+        msg.debug.print(F("ERROR: SPI bus "));
         msg.debug.print(bus_id);
         msg.debug.println(F(" not available on this platform"));
         return false;
     }
 
-    // Get default pins if config specifies BUS_PIN_DEFAULT
-    uint8_t mosi = (config->mosi_pin == BUS_PIN_DEFAULT) ? getDefaultSPIMOSI(bus_id) : config->mosi_pin;
-    uint8_t miso = (config->miso_pin == BUS_PIN_DEFAULT) ? getDefaultSPIMISO(bus_id) : config->miso_pin;
-    uint8_t sck = (config->sck_pin == BUS_PIN_DEFAULT) ? getDefaultSPISCK(bus_id) : config->sck_pin;
-
-    // Validate pins are available (only if not using platform defaults)
-    if (config->mosi_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(mosi, PIN_RESERVED, getSPIBusName(bus_id))) return false;
-    }
-    if (config->miso_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(miso, PIN_RESERVED, getSPIBusName(bus_id))) return false;
-    }
-    if (config->sck_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(sck, PIN_RESERVED, getSPIBusName(bus_id))) return false;
-    }
+    // Get default pins for this bus
+    uint8_t mosi = getDefaultSPIMOSI(bus_id);
+    uint8_t miso = getDefaultSPIMISO(bus_id);
+    uint8_t sck = getDefaultSPISCK(bus_id);
 
     // Platform-specific initialization
     bool success = false;
@@ -237,17 +212,17 @@ bool initSPIBus(uint8_t bus_id, SPIBusConfig* config) {
     switch (bus_id) {
         case 0:
             SPI.begin();
-            spi_instances[0] = &SPI;
+            active_spi = &SPI;
             success = true;
             break;
         case 1:
             SPI1.begin();
-            spi_instances[1] = &SPI1;
+            active_spi = &SPI1;
             success = true;
             break;
         case 2:
             SPI2.begin();
-            spi_instances[2] = &SPI2;
+            active_spi = &SPI2;
             success = true;
             break;
     }
@@ -257,30 +232,23 @@ bool initSPIBus(uint8_t bus_id, SPIBusConfig* config) {
     switch (bus_id) {
         case 0:
             SPI.begin();
-            spi_instances[0] = &SPI;
+            active_spi = &SPI;
             success = true;
             break;
 #if NUM_SPI_BUSES >= 2
         case 1:
             SPI1.begin();
-            spi_instances[1] = &SPI1;
-            success = true;
-            break;
-#endif
-#if NUM_SPI_BUSES >= 3
-        case 2:
-            SPI2.begin();
-            spi_instances[2] = &SPI2;
+            active_spi = &SPI1;
             success = true;
             break;
 #endif
     }
 
 #elif defined(ESP32)
-    // ESP32: Custom pins via SPI.begin(sck, miso, mosi)
+    // ESP32: Single SPI bus with default pins
     if (bus_id == 0) {
-        SPI.begin(sck, miso, mosi);
-        spi_instances[0] = &SPI;
+        SPI.begin();
+        active_spi = &SPI;
         success = true;
     }
 
@@ -288,30 +256,30 @@ bool initSPIBus(uint8_t bus_id, SPIBusConfig* config) {
     // Generic Arduino: Single SPI bus
     if (bus_id == 0) {
         SPI.begin();
-        spi_instances[0] = &SPI;
+        active_spi = &SPI;
         success = true;
     }
 #endif
 
     if (success) {
-        // Register pins as reserved in pin registry
-        static const char* spi_mosi_desc[] = {"SPI MOSI", "SPI1 MOSI", "SPI2 MOSI"};
-        static const char* spi_miso_desc[] = {"SPI MISO", "SPI1 MISO", "SPI2 MISO"};
-        static const char* spi_sck_desc[] = {"SPI SCK", "SPI1 SCK", "SPI2 SCK"};
-        registerPin(mosi, PIN_RESERVED, spi_mosi_desc[bus_id]);
-        registerPin(miso, PIN_RESERVED, spi_miso_desc[bus_id]);
-        registerPin(sck, PIN_RESERVED, spi_sck_desc[bus_id]);
+        active_spi_id = bus_id;
 
-        msg.debug.print(F("✓ "));
+        // Register pins as reserved in pin registry
+        static const char* spi_desc[] = {"SPI", "SPI1", "SPI2"};
+        registerPin(mosi, PIN_RESERVED, spi_desc[bus_id]);
+        registerPin(miso, PIN_RESERVED, spi_desc[bus_id]);
+        registerPin(sck, PIN_RESERVED, spi_desc[bus_id]);
+
+        msg.debug.print(F("SPI: "));
         msg.debug.print(getSPIBusName(bus_id));
-        msg.debug.print(F(" initialized: MOSI="));
+        msg.debug.print(F(" (MOSI="));
         msg.debug.print(mosi);
         msg.debug.print(F(", MISO="));
         msg.debug.print(miso);
         msg.debug.print(F(", SCK="));
         msg.debug.print(sck);
-        msg.debug.print(F(", "));
-        msg.debug.print(config->clock_speed / 1000000.0, 1);
+        msg.debug.print(F(") @ "));
+        msg.debug.print(clock_hz / 1000000.0, 1);
         msg.debug.println(F("MHz"));
     }
 
@@ -322,80 +290,70 @@ bool initSPIBus(uint8_t bus_id, SPIBusConfig* config) {
 // CAN BUS INITIALIZATION
 // ============================================================================
 
-bool initCANBus(uint8_t bus_id, CANBusConfig* config) {
+bool initCANBus(uint8_t bus_id, uint32_t baudrate) {
+#if NUM_CAN_BUSES == 0
+    (void)bus_id;
+    (void)baudrate;
+    msg.debug.println(F("CAN: Not available on this platform"));
+    return false;
+#else
     if (bus_id >= NUM_CAN_BUSES) {
-        msg.debug.print(F("✗ CAN bus "));
+        msg.debug.print(F("ERROR: CAN bus "));
         msg.debug.print(bus_id);
         msg.debug.println(F(" not available on this platform"));
         return false;
     }
 
-    // Get default pins if config specifies BUS_PIN_DEFAULT
-    uint8_t tx = (config->tx_pin == BUS_PIN_DEFAULT) ? getDefaultCANTX(bus_id) : config->tx_pin;
-    uint8_t rx = (config->rx_pin == BUS_PIN_DEFAULT) ? getDefaultCANRX(bus_id) : config->rx_pin;
-
-    // Validate pins are available (only if not using platform defaults)
-    if (config->tx_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(tx, PIN_RESERVED, getCANBusName(bus_id))) return false;
-    }
-    if (config->rx_pin != BUS_PIN_DEFAULT) {
-        if (!validateNoPinConflict(rx, PIN_RESERVED, getCANBusName(bus_id))) return false;
-    }
+    // Get default pins for this bus
+    uint8_t tx = getDefaultCANTX(bus_id);
+    uint8_t rx = getDefaultCANRX(bus_id);
 
     // CAN initialization is handled in output_can.cpp since it needs FlexCAN_T4 objects
     // Here we just mark the bus as ready and register pins
-    can_bus_ready[bus_id] = true;
+    active_can_id = bus_id;
+    can_ready = true;
 
     // Register pins as reserved in pin registry
-    static const char* can_tx_desc[] = {"CAN1 TX", "CAN2 TX", "CAN3 TX"};
-    static const char* can_rx_desc[] = {"CAN1 RX", "CAN2 RX", "CAN3 RX"};
-    if (tx != 0xFF) registerPin(tx, PIN_RESERVED, can_tx_desc[bus_id]);
-    if (rx != 0xFF) registerPin(rx, PIN_RESERVED, can_rx_desc[bus_id]);
+    static const char* can_desc[] = {"CAN1", "CAN2", "CAN3"};
+    if (tx != 0xFF) registerPin(tx, PIN_RESERVED, can_desc[bus_id]);
+    if (rx != 0xFF) registerPin(rx, PIN_RESERVED, can_desc[bus_id]);
 
-    msg.debug.print(F("✓ "));
+    msg.debug.print(F("CAN: "));
     msg.debug.print(getCANBusName(bus_id));
-    msg.debug.print(F(" configured: TX="));
+    msg.debug.print(F(" (TX="));
     msg.debug.print(tx);
     msg.debug.print(F(", RX="));
     msg.debug.print(rx);
-    msg.debug.print(F(", "));
-    msg.debug.print(config->baudrate / 1000);
+    msg.debug.print(F(") @ "));
+    msg.debug.print(baudrate / 1000);
     msg.debug.println(F("kbps"));
 
     return true;
+#endif
 }
 
 // ============================================================================
-// BUS INSTANCE ACCESS
+// ACTIVE BUS ACCESS
 // ============================================================================
 
-TwoWire* getI2CInstance(uint8_t bus_id) {
-    if (bus_id >= NUM_I2C_BUSES) return nullptr;
-    return i2c_instances[bus_id];
+TwoWire* getActiveI2C() {
+    return active_i2c ? active_i2c : &Wire;
 }
 
-SPIClass* getSPIInstance(uint8_t bus_id) {
-    if (bus_id >= NUM_SPI_BUSES) return nullptr;
-    return spi_instances[bus_id];
+SPIClass* getActiveSPI() {
+    return active_spi ? active_spi : &SPI;
 }
 
-// ============================================================================
-// BUS STATUS QUERIES
-// ============================================================================
-
-bool isI2CBusReady(uint8_t bus_id) {
-    if (bus_id >= NUM_I2C_BUSES) return false;
-    return (i2c_instances[bus_id] != nullptr);
+uint8_t getActiveI2CId() {
+    return active_i2c_id;
 }
 
-bool isSPIBusReady(uint8_t bus_id) {
-    if (bus_id >= NUM_SPI_BUSES) return false;
-    return (spi_instances[bus_id] != nullptr);
+uint8_t getActiveSPIId() {
+    return active_spi_id;
 }
 
-bool isCANBusReady(uint8_t bus_id) {
-    if (bus_id >= NUM_CAN_BUSES) return false;
-    return can_bus_ready[bus_id];
+uint8_t getActiveCANId() {
+    return active_can_id;
 }
 
 // ============================================================================
