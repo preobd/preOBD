@@ -16,6 +16,9 @@
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
 #include "../lib/platform.h"
+#include "../lib/bus_manager.h"
+#include "../lib/bus_defaults.h"
+#include "../lib/pin_registry.h"
 #include "../outputs/output_base.h"
 #include "../lib/display_manager.h"
 #ifdef ENABLE_RELAY_OUTPUT
@@ -52,6 +55,7 @@ static int cmd_config(int argc, const char* const* argv);
 static int cmd_run(int argc, const char* const* argv);
 static int cmd_version(int argc, const char* const* argv);
 static int cmd_reload(int argc, const char* const* argv);
+static int cmd_bus(int argc, const char* const* argv);
 #ifdef ENABLE_RELAY_OUTPUT
 static int cmd_relay(int argc, const char* const* argv);
 #endif
@@ -85,6 +89,7 @@ const Command COMMANDS[] = {
     {"LOAD", cmd_load, "Load configuration", true},
     {"RESET", cmd_reset, "Reset configuration", true},
     {"RELOAD", cmd_reload, "Reboot system", true},
+    {"BUS", cmd_bus, "Configure I2C/SPI/CAN buses", true},
 
 #ifdef ENABLE_RELAY_OUTPUT
     {"RELAY", cmd_relay, "Configure relay outputs", true},
@@ -1553,6 +1558,11 @@ static int cmd_system(int argc, const char* const* argv) {
 
         // Show display config
         printDisplayConfig();
+
+        // Show bus config
+        displayI2CStatus();
+        displaySPIStatus();
+        displayCANStatus();
         msg.control.println();
 
         // Show system config
@@ -1937,3 +1947,205 @@ static int cmd_test(int argc, const char* const* argv) {
     return 1;
 }
 #endif
+
+static int cmd_bus(int argc, const char* const* argv) {
+    if (argc < 2) {
+        msg.control.println();
+        msg.control.println(F("Commands:"));
+        msg.control.println(F("  BUS I2C [0|1|2]           - Show or select I2C bus"));
+        msg.control.println(F("  BUS I2C CLOCK <kHz>       - Set I2C clock (100/400/1000)"));
+        msg.control.println(F("  BUS SPI [0|1|2]           - Show or select SPI bus"));
+        msg.control.println(F("  BUS SPI CLOCK <Hz>        - Set SPI clock"));
+        msg.control.println(F("  BUS CAN [0|1|2]           - Show or select CAN bus"));
+        msg.control.println(F("  BUS CAN BAUDRATE <bps>    - Set CAN baudrate"));
+        return 0;
+    }
+
+    const char* busType = argv[1];
+
+    // -------------------------------------------------------------------------
+    // BUS I2C [0|1|2] or BUS I2C CLOCK <kHz>
+    // -------------------------------------------------------------------------
+    if (streq(busType, "I2C")) {
+        // BUS I2C (no arguments) - display I2C status
+        if (argc == 2) {
+            displayI2CStatus();
+            return 0;
+        }
+
+        // BUS I2C CLOCK <kHz>
+        if (streq(argv[2], "CLOCK")) {
+            if (argc < 4) {
+                msg.control.println(F("ERROR: CLOCK requires a speed in kHz"));
+                msg.control.println(F("  Usage: BUS I2C CLOCK <100|400|1000>"));
+                return 1;
+            }
+
+            uint16_t clock = atoi(argv[3]);
+            if (clock != 100 && clock != 400 && clock != 1000) {
+                msg.control.println(F("ERROR: I2C clock must be 100, 400, or 1000 kHz"));
+                return 1;
+            }
+
+            systemConfig.buses.i2c_clock = clock;
+            msg.control.print(F("I2C clock set to "));
+            msg.control.print(clock);
+            msg.control.println(F("kHz"));
+            msg.control.println(F("Note: Takes effect on next reboot"));
+            msg.control.println(F("Use SAVE to persist"));
+            return 0;
+        }
+
+        // BUS I2C <0|1|2> - Select bus
+        uint8_t bus_id = atoi(argv[2]);
+        if (bus_id >= NUM_I2C_BUSES) {
+            msg.control.print(F("ERROR: I2C bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" not available (0-"));
+            msg.control.print(NUM_I2C_BUSES - 1);
+            msg.control.println(F(")"));
+            return 1;
+        }
+
+        systemConfig.buses.active_i2c = bus_id;
+        msg.control.print(F("I2C bus set to "));
+        msg.control.print(getI2CBusName(bus_id));
+        msg.control.print(F(" (SDA="));
+        msg.control.print(getDefaultI2CSDA(bus_id));
+        msg.control.print(F(", SCL="));
+        msg.control.print(getDefaultI2CSCL(bus_id));
+        msg.control.println(F(")"));
+        msg.control.println(F("Note: Takes effect on next reboot"));
+        msg.control.println(F("Use SAVE to persist"));
+        return 0;
+    }
+
+    // -------------------------------------------------------------------------
+    // BUS SPI [0|1|2] or BUS SPI CLOCK <Hz>
+    // -------------------------------------------------------------------------
+    if (streq(busType, "SPI")) {
+        // BUS SPI (no arguments) - display SPI status
+        if (argc == 2) {
+            displaySPIStatus();
+            return 0;
+        }
+
+        // BUS SPI CLOCK <Hz>
+        if (streq(argv[2], "CLOCK")) {
+            if (argc < 4) {
+                msg.control.println(F("ERROR: CLOCK requires a speed in Hz"));
+                msg.control.println(F("  Usage: BUS SPI CLOCK <Hz>"));
+                msg.control.println(F("  Example: BUS SPI CLOCK 4000000  (4MHz)"));
+                return 1;
+            }
+
+            uint32_t clock = atol(argv[3]);
+            if (clock < 100000 || clock > 50000000) {
+                msg.control.println(F("ERROR: SPI clock must be 100000-50000000 Hz"));
+                return 1;
+            }
+
+            systemConfig.buses.spi_clock = clock;
+            msg.control.print(F("SPI clock set to "));
+            msg.control.print(clock / 1000000.0, 1);
+            msg.control.println(F("MHz"));
+            msg.control.println(F("Note: Takes effect on next transaction"));
+            msg.control.println(F("Use SAVE to persist"));
+            return 0;
+        }
+
+        // BUS SPI <0|1|2> - Select bus
+        uint8_t bus_id = atoi(argv[2]);
+        if (bus_id >= NUM_SPI_BUSES) {
+            msg.control.print(F("ERROR: SPI bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" not available (0-"));
+            msg.control.print(NUM_SPI_BUSES - 1);
+            msg.control.println(F(")"));
+            return 1;
+        }
+
+        systemConfig.buses.active_spi = bus_id;
+        msg.control.print(F("SPI bus set to "));
+        msg.control.print(getSPIBusName(bus_id));
+        msg.control.print(F(" (MOSI="));
+        msg.control.print(getDefaultSPIMOSI(bus_id));
+        msg.control.print(F(", MISO="));
+        msg.control.print(getDefaultSPIMISO(bus_id));
+        msg.control.print(F(", SCK="));
+        msg.control.print(getDefaultSPISCK(bus_id));
+        msg.control.println(F(")"));
+        msg.control.println(F("Note: Takes effect on next reboot"));
+        msg.control.println(F("Use SAVE to persist"));
+        return 0;
+    }
+
+    // -------------------------------------------------------------------------
+    // BUS CAN [0|1|2] or BUS CAN BAUDRATE <bps>
+    // -------------------------------------------------------------------------
+    if (streq(busType, "CAN")) {
+#if NUM_CAN_BUSES == 0
+        msg.control.println(F("ERROR: No CAN buses available on this platform"));
+        return 1;
+#else
+        // BUS CAN (no arguments) - display CAN status
+        if (argc == 2) {
+            displayCANStatus();
+            return 0;
+        }
+
+        // BUS CAN BAUDRATE <bps>
+        if (streq(argv[2], "BAUDRATE")) {
+            if (argc < 4) {
+                msg.control.println(F("ERROR: BAUDRATE requires a speed in bps"));
+                msg.control.println(F("  Usage: BUS CAN BAUDRATE <125000|250000|500000|1000000>"));
+                return 1;
+            }
+
+            uint32_t baudrate = atol(argv[3]);
+            if (baudrate != 125000 && baudrate != 250000 && baudrate != 500000 && baudrate != 1000000) {
+                msg.control.println(F("ERROR: CAN baudrate must be 125000, 250000, 500000, or 1000000"));
+                return 1;
+            }
+
+            systemConfig.buses.can_baudrate = baudrate;
+            msg.control.print(F("CAN baudrate set to "));
+            msg.control.print(baudrate / 1000);
+            msg.control.println(F("kbps"));
+            msg.control.println(F("Note: Takes effect on next reboot"));
+            msg.control.println(F("Use SAVE to persist"));
+            return 0;
+        }
+
+        // BUS CAN <0|1|2> - Select bus
+        uint8_t bus_id = atoi(argv[2]);
+        if (bus_id >= NUM_CAN_BUSES) {
+            msg.control.print(F("ERROR: CAN bus "));
+            msg.control.print(bus_id);
+            msg.control.print(F(" not available (0-"));
+            msg.control.print(NUM_CAN_BUSES - 1);
+            msg.control.println(F(")"));
+            return 1;
+        }
+
+        systemConfig.buses.active_can = bus_id;
+        msg.control.print(F("CAN bus set to "));
+        msg.control.print(getCANBusName(bus_id));
+        msg.control.print(F(" (TX="));
+        msg.control.print(getDefaultCANTX(bus_id));
+        msg.control.print(F(", RX="));
+        msg.control.print(getDefaultCANRX(bus_id));
+        msg.control.println(F(")"));
+        msg.control.println(F("Note: Takes effect on next reboot"));
+        msg.control.println(F("Use SAVE to persist"));
+        return 0;
+#endif
+    }
+
+    // Unknown bus type
+    msg.control.print(F("ERROR: Unknown bus type '"));
+    msg.control.print(busType);
+    msg.control.println(F("'"));
+    msg.control.println(F("  Valid: I2C, SPI, CAN"));
+    return 1;
+}

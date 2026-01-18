@@ -8,6 +8,7 @@
 
 #include "../../../config.h"
 #include "../../../lib/platform.h"
+#include "../../../lib/bus_manager.h"
 #include "../../input.h"
 #include <SPI.h>
 
@@ -29,16 +30,17 @@ void readMAX31855(Input *ptr) {
     uint32_t d = 0;
     uint8_t buf[4];
 
-    SPI.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
+    SPIClass* spi = getActiveSPI();
+    spi->beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
     digitalWrite(ptr->pin, LOW);
     delayMicroseconds(1);
 
     for (int i = 0; i < 4; i++) {
-        buf[i] = SPI.transfer(0x00);
+        buf[i] = spi->transfer(0x00);
     }
 
     digitalWrite(ptr->pin, HIGH);
-    SPI.endTransaction();
+    spi->endTransaction();
 
     // Combine bytes
     d = buf[0];

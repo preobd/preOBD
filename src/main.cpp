@@ -14,6 +14,7 @@
 #include "lib/sensor_types.h"
 #include "lib/sensor_library.h"
 #include "lib/system_config.h"
+#include "lib/bus_manager.h"
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
 #ifndef USE_STATIC_CONFIG
@@ -212,20 +213,9 @@ void setup() {
     setupADC();
     msg.debug.println(F("✓ ADC configured"));
 
-    // Initialize SPI BEFORE input manager (needed for thermocouple CS pin setup)
-    SPI.begin();
-    msg.debug.println(F("✓ SPI bus initialized"));
-
-    // Initialize I2C for BME280 and LCD
-    Wire.begin();
-    #if defined(ESP32)
-    // ESP32 may need explicit SDA/SCL pins
-    // Wire.begin(SDA_PIN, SCL_PIN);  // Uncomment and set if needed
-    Wire.setClock(100000);  // 100kHz for stability
-    #else
-    Wire.setClock(400000);  // 400kHz for most platforms
-    #endif
-    msg.debug.println(F("✓ I2C initialized"));
+    // Initialize configured buses (I2C, SPI, CAN) based on SystemConfig
+    // This replaces the old hardcoded Wire.begin() and SPI.begin() calls
+    initConfiguredBuses();
 
     // Initialize input manager (loads from EEPROM or config.h)
 #ifndef USE_STATIC_CONFIG

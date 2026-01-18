@@ -9,6 +9,7 @@
 #define SYSTEM_CONFIG_H
 
 #include <Arduino.h>
+#include "bus_config.h"
 
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
@@ -98,6 +99,9 @@ struct SystemConfig {
     // Relay Configuration (32 bytes) - NEW in v5
     RelayConfig relays[MAX_RELAYS];  // 2 relays × 16 bytes = 32 bytes
 #endif
+
+    // Bus Configuration (16 bytes) - Simplified "pick one" model
+    BusConfig buses;
 };
 
 // Global system config instance

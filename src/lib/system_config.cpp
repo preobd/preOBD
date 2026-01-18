@@ -6,6 +6,7 @@
 #include "../config.h"
 #include "units_registry.h"
 #include "message_router.h"  // For TransportID enum
+#include "bus_defaults.h"
 #include "message_api.h"
 #include <EEPROM.h>
 
@@ -206,6 +207,16 @@ void resetSystemConfig() {
         systemConfig.relays[i].reserved2 = 0;
     }
 #endif
+
+    // Bus Configuration defaults (simplified "pick one" model)
+    systemConfig.buses.active_i2c = DEFAULT_I2C_BUS;
+    systemConfig.buses.i2c_clock = DEFAULT_I2C_CLOCK;
+    systemConfig.buses.active_spi = DEFAULT_SPI_BUS;
+    systemConfig.buses.spi_clock = DEFAULT_SPI_CLOCK;
+    systemConfig.buses.active_can = DEFAULT_CAN_BUS;
+    systemConfig.buses.can_baudrate = DEFAULT_CAN_BAUDRATE;
+    systemConfig.buses.reserved[0] = 0;
+    systemConfig.buses.reserved[1] = 0;
 
     // Calculate checksum
     systemConfig.checksum = calculateChecksum(&systemConfig);

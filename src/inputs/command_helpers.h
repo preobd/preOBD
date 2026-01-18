@@ -51,6 +51,7 @@ void printHelpSet();
 void printHelpCalibration();
 void printHelpControl();
 void printHelpOutput();
+void printHelpBus();
 void printHelpDisplay();
 void printHelpTransport();
 void printHelpSystem();
