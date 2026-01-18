@@ -344,6 +344,27 @@ RELAY 0 MODE AUTO_HIGH      # Activate on high temp
 
 See [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md) for details.
 
+### Bus Commands
+
+| Command | Description |
+|---------|-------------|
+| `BUS` | Show all bus configurations |
+| `BUS I2C [0\|1\|2]` | Show or select I2C bus (Wire/Wire1/Wire2) |
+| `BUS I2C CLOCK <kHz>` | Set I2C clock (100, 400, 1000) |
+| `BUS SPI [0\|1\|2]` | Show or select SPI bus (SPI/SPI1/SPI2) |
+| `BUS SPI CLOCK <Hz>` | Set SPI clock speed |
+| `BUS CAN [0\|1\|2]` | Show or select CAN bus (CAN1/CAN2/CAN3) |
+| `BUS CAN BAUDRATE <bps>` | Set CAN baudrate |
+
+**Example - Switch to Wire1:**
+```
+BUS I2C 1                   # Select Wire1 (pins 17/16 on Teensy 4.x)
+SAVE
+SYSTEM REBOOT               # Reboot to apply
+```
+
+See [Serial Commands Reference](../reference/SERIAL_COMMANDS.md#bus-configuration) for details.
+
 ---
 
 ## Available Units

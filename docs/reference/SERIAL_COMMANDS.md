@@ -190,12 +190,13 @@ SET A2 UNITS F                   # A2 overrides to Fahrenheit
 5. [Alarm Configuration](#alarm-configuration)
 6. [Output Configuration](#output-configuration)
 7. [Relay Control](#relay-control)
-8. [Display Configuration](#display-configuration)
-9. [System Configuration](#system-configuration)
-10. [Mode Commands](#mode-commands)
-11. [Persistence Commands](#persistence-commands)
-12. [Query Commands](#query-commands)
-13. [Quick Reference Examples](#quick-reference-examples)
+8. [Bus Configuration](#bus-configuration)
+9. [Display Configuration](#display-configuration)
+10. [System Configuration](#system-configuration)
+11. [Mode Commands](#mode-commands)
+12. [Persistence Commands](#persistence-commands)
+13. [Query Commands](#query-commands)
+14. [Quick Reference Examples](#quick-reference-examples)
 
 ---
 
@@ -579,6 +580,86 @@ Relay 1:
 ```
 
 **For detailed relay configuration guide, see [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md)**.
+
+---
+
+## Bus Configuration
+
+Select which I2C, SPI, or CAN bus to use for sensors and outputs. This is useful when you want to use alternate bus pins (e.g., Wire1 instead of Wire on Teensy).
+
+### Commands
+
+```
+BUS                              # Show all bus configurations
+BUS I2C                          # Show current I2C bus configuration
+BUS I2C <0|1|2>                  # Select I2C bus (0=Wire, 1=Wire1, 2=Wire2)
+BUS I2C CLOCK <kHz>              # Set I2C clock speed (100, 400, or 1000 kHz)
+BUS SPI                          # Show current SPI bus configuration
+BUS SPI <0|1|2>                  # Select SPI bus (0=SPI, 1=SPI1, 2=SPI2)
+BUS SPI CLOCK <Hz>               # Set SPI clock speed in Hz
+BUS CAN                          # Show current CAN bus configuration
+BUS CAN <0|1|2>                  # Select CAN bus (0=CAN1, 1=CAN2, 2=CAN3)
+BUS CAN BAUDRATE <bps>           # Set CAN baudrate (125000, 250000, 500000, 1000000)
+```
+
+### Platform Availability
+
+| Platform | I2C Buses | SPI Buses | CAN Buses |
+|----------|-----------|-----------|-----------|
+| Teensy 4.1 | Wire, Wire1, Wire2 | SPI, SPI1, SPI2 | CAN1, CAN2, CAN3 |
+| Teensy 4.0 | Wire, Wire1, Wire2 | SPI, SPI1, SPI2 | CAN1, CAN2, CAN3 |
+| Teensy 3.6 | Wire, Wire1, Wire2 | SPI, SPI1 | CAN1, CAN2 |
+| ESP32 | Wire, Wire1 | SPI | CAN1 (TWAI) |
+| Arduino Mega | Wire | SPI | None |
+
+### Examples
+
+**Switch to Wire1 for I2C sensors (Teensy 4.x):**
+```
+BUS I2C 1                        # Select Wire1 (pins 17/16 on Teensy 4.x)
+SAVE                             # Save configuration
+SYSTEM REBOOT                    # Reboot to apply
+```
+
+**Configure CAN bus and baudrate:**
+```
+BUS CAN 0                        # Use CAN1
+BUS CAN BAUDRATE 500000          # 500 kbps
+SAVE
+```
+
+**Set I2C to fast mode:**
+```
+BUS I2C CLOCK 400                # 400 kHz (Fast mode)
+SAVE
+```
+
+### Bus Status Display
+
+```
+BUS
+```
+Shows:
+```
+=== I2C Bus Configuration ===
+Active: Wire (SDA=18, SCL=19) @ 400kHz
+Available buses: 0=Wire, 1=Wire1, 2=Wire2
+
+=== SPI Bus Configuration ===
+Active: SPI (MOSI=11, MISO=12, SCK=13) @ 4.0MHz
+Available buses: 0=SPI, 1=SPI1, 2=SPI2
+
+=== CAN Bus Configuration ===
+Active: CAN1 (TX=22, RX=23) @ 500kbps
+Available buses: 0=CAN1, 1=CAN2, 2=CAN3
+```
+
+### Notes
+
+- Bus changes take effect on next reboot (use `SYSTEM REBOOT` after `SAVE`)
+- All sensors of a type use the selected bus (no per-sensor bus assignment)
+- The system will fall back to bus 0 if the selected bus fails to initialize
+- Bus configuration is saved to EEPROM and included in JSON exports
 
 ---
 
