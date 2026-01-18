@@ -23,7 +23,7 @@ void initButtonHandler() {
     lastDebounceTime = millis();
     pressStartTime = 0;
     pressHandled = false;
-    Serial.println("✓ Button handler initialized");
+    Serial.println(F("✓ Button handler initialized"));
 }
 
 ButtonPress updateButtonHandler() {

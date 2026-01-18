@@ -126,4 +126,23 @@ const char* getSPIBusName(uint8_t bus_id);
  */
 const char* getCANBusName(uint8_t bus_id);
 
+// ============================================================================
+// BUS STATUS DISPLAY
+// ============================================================================
+
+/**
+ * Display I2C bus configuration status
+ */
+void displayI2CStatus();
+
+/**
+ * Display SPI bus configuration status
+ */
+void displaySPIStatus();
+
+/**
+ * Display CAN bus configuration status
+ */
+void displayCANStatus();
+
 #endif // BUS_MANAGER_H

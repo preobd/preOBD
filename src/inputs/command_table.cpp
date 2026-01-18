@@ -1558,6 +1558,11 @@ static int cmd_system(int argc, const char* const* argv) {
 
         // Show display config
         printDisplayConfig();
+
+        // Show bus config
+        displayI2CStatus();
+        displaySPIStatus();
+        displayCANStatus();
         msg.control.println();
 
         // Show system config
@@ -1943,94 +1948,8 @@ static int cmd_test(int argc, const char* const* argv) {
 }
 #endif
 
-//=============================================================================
-// BUS Command - Configure I2C, SPI, and CAN Buses
-//=============================================================================
-
-// Helper function to display I2C bus configuration
-static void displayI2CStatus() {
-    uint8_t bus_id = systemConfig.buses.active_i2c;
-    msg.control.println();
-    msg.control.println(F("=== I2C Bus Configuration ==="));
-    msg.control.print(F("Active: "));
-    msg.control.print(getI2CBusName(bus_id));
-    msg.control.print(F(" (SDA="));
-    msg.control.print(getDefaultI2CSDA(bus_id));
-    msg.control.print(F(", SCL="));
-    msg.control.print(getDefaultI2CSCL(bus_id));
-    msg.control.print(F(") @ "));
-    msg.control.print(systemConfig.buses.i2c_clock);
-    msg.control.println(F("kHz"));
-    msg.control.print(F("Available buses: "));
-    for (uint8_t i = 0; i < NUM_I2C_BUSES; i++) {
-        if (i > 0) msg.control.print(F(", "));
-        msg.control.print(i);
-        msg.control.print(F("="));
-        msg.control.print(getI2CBusName(i));
-    }
-    msg.control.println();
-}
-
-// Helper function to display SPI bus configuration
-static void displaySPIStatus() {
-    uint8_t bus_id = systemConfig.buses.active_spi;
-    msg.control.println();
-    msg.control.println(F("=== SPI Bus Configuration ==="));
-    msg.control.print(F("Active: "));
-    msg.control.print(getSPIBusName(bus_id));
-    msg.control.print(F(" (MOSI="));
-    msg.control.print(getDefaultSPIMOSI(bus_id));
-    msg.control.print(F(", MISO="));
-    msg.control.print(getDefaultSPIMISO(bus_id));
-    msg.control.print(F(", SCK="));
-    msg.control.print(getDefaultSPISCK(bus_id));
-    msg.control.print(F(") @ "));
-    msg.control.print(systemConfig.buses.spi_clock / 1000000.0, 1);
-    msg.control.println(F("MHz"));
-    msg.control.print(F("Available buses: "));
-    for (uint8_t i = 0; i < NUM_SPI_BUSES; i++) {
-        if (i > 0) msg.control.print(F(", "));
-        msg.control.print(i);
-        msg.control.print(F("="));
-        msg.control.print(getSPIBusName(i));
-    }
-    msg.control.println();
-}
-
-// Helper function to display CAN bus configuration
-static void displayCANStatus() {
-    msg.control.println();
-    msg.control.println(F("=== CAN Bus Configuration ==="));
-#if NUM_CAN_BUSES > 0
-    uint8_t bus_id = systemConfig.buses.active_can;
-    msg.control.print(F("Active: "));
-    msg.control.print(getCANBusName(bus_id));
-    msg.control.print(F(" (TX="));
-    msg.control.print(getDefaultCANTX(bus_id));
-    msg.control.print(F(", RX="));
-    msg.control.print(getDefaultCANRX(bus_id));
-    msg.control.print(F(") @ "));
-    msg.control.print(systemConfig.buses.can_baudrate / 1000);
-    msg.control.println(F("kbps"));
-    msg.control.print(F("Available buses: "));
-    for (uint8_t i = 0; i < NUM_CAN_BUSES; i++) {
-        if (i > 0) msg.control.print(F(", "));
-        msg.control.print(i);
-        msg.control.print(F("="));
-        msg.control.print(getCANBusName(i));
-    }
-    msg.control.println();
-#else
-    msg.control.println(F("No CAN buses available on this platform"));
-#endif
-}
-
 static int cmd_bus(int argc, const char* const* argv) {
     if (argc < 2) {
-        msg.control.println(F("=== Bus Configuration ==="));
-        displayI2CStatus();
-        displaySPIStatus();
-        displayCANStatus();
         msg.control.println();
         msg.control.println(F("Commands:"));
         msg.control.println(F("  BUS I2C [0|1|2]           - Show or select I2C bus"));

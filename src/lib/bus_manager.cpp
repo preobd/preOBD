@@ -34,7 +34,6 @@ static bool can_ready = false;
 // ============================================================================
 
 void initConfiguredBuses() {
-    msg.debug.println(F("=== Initializing Configured Buses ==="));
 
     // Initialize the active I2C bus
     if (!initI2CBus(systemConfig.buses.active_i2c, systemConfig.buses.i2c_clock)) {
@@ -62,9 +61,6 @@ void initConfiguredBuses() {
             initCANBus(0, systemConfig.buses.can_baudrate);
         }
     }
-
-    msg.debug.println(F("=== Bus Initialization Complete ==="));
-    msg.debug.println();
 }
 
 // ============================================================================
@@ -173,15 +169,7 @@ bool initI2CBus(uint8_t bus_id, uint16_t clock_khz) {
         registerPin(sda, PIN_RESERVED, i2c_desc[bus_id]);
         registerPin(scl, PIN_RESERVED, i2c_desc[bus_id]);
 
-        msg.debug.print(F("I2C: "));
-        msg.debug.print(getI2CBusName(bus_id));
-        msg.debug.print(F(" (SDA="));
-        msg.debug.print(sda);
-        msg.debug.print(F(", SCL="));
-        msg.debug.print(scl);
-        msg.debug.print(F(") @ "));
-        msg.debug.print(clock_khz);
-        msg.debug.println(F("kHz"));
+        msg.debug.println(F("✓ I2C bus initialized"));
     }
 
     return success;
@@ -270,17 +258,7 @@ bool initSPIBus(uint8_t bus_id, uint32_t clock_hz) {
         registerPin(miso, PIN_RESERVED, spi_desc[bus_id]);
         registerPin(sck, PIN_RESERVED, spi_desc[bus_id]);
 
-        msg.debug.print(F("SPI: "));
-        msg.debug.print(getSPIBusName(bus_id));
-        msg.debug.print(F(" (MOSI="));
-        msg.debug.print(mosi);
-        msg.debug.print(F(", MISO="));
-        msg.debug.print(miso);
-        msg.debug.print(F(", SCK="));
-        msg.debug.print(sck);
-        msg.debug.print(F(") @ "));
-        msg.debug.print(clock_hz / 1000000.0, 1);
-        msg.debug.println(F("MHz"));
+        msg.debug.println(F("✓ SPI bus initialized"));
     }
 
     return success;
@@ -318,15 +296,7 @@ bool initCANBus(uint8_t bus_id, uint32_t baudrate) {
     if (tx != 0xFF) registerPin(tx, PIN_RESERVED, can_desc[bus_id]);
     if (rx != 0xFF) registerPin(rx, PIN_RESERVED, can_desc[bus_id]);
 
-    msg.debug.print(F("CAN: "));
-    msg.debug.print(getCANBusName(bus_id));
-    msg.debug.print(F(" (TX="));
-    msg.debug.print(tx);
-    msg.debug.print(F(", RX="));
-    msg.debug.print(rx);
-    msg.debug.print(F(") @ "));
-    msg.debug.print(baudrate / 1000);
-    msg.debug.println(F("kbps"));
+    msg.debug.println(F("✓ CAN bus initialized"));
 
     return true;
 #endif
@@ -386,3 +356,86 @@ const char* getCANBusName(uint8_t bus_id) {
         default: return "CAN?";
     }
 }
+
+//=============================================================================
+// BUS Command helpers
+//=============================================================================
+
+// Helper function to display I2C bus configuration
+void displayI2CStatus() {
+    uint8_t bus_id = systemConfig.buses.active_i2c;
+    msg.control.println();
+    msg.control.println(F("=== I2C Bus Configuration ==="));
+    msg.control.print(F("Active: "));
+    msg.control.print(getI2CBusName(bus_id));
+    msg.control.print(F(" (SDA="));
+    msg.control.print(getDefaultI2CSDA(bus_id));
+    msg.control.print(F(", SCL="));
+    msg.control.print(getDefaultI2CSCL(bus_id));
+    msg.control.print(F(") @ "));
+    msg.control.print(systemConfig.buses.i2c_clock);
+    msg.control.println(F("kHz"));
+    msg.control.print(F("Available buses: "));
+    for (uint8_t i = 0; i < NUM_I2C_BUSES; i++) {
+        if (i > 0) msg.control.print(F(", "));
+        msg.control.print(i);
+        msg.control.print(F("="));
+        msg.control.print(getI2CBusName(i));
+    }
+    msg.control.println();
+}
+
+// Helper function to display SPI bus configuration
+void displaySPIStatus() {
+    uint8_t bus_id = systemConfig.buses.active_spi;
+    msg.control.println();
+    msg.control.println(F("=== SPI Bus Configuration ==="));
+    msg.control.print(F("Active: "));
+    msg.control.print(getSPIBusName(bus_id));
+    msg.control.print(F(" (MOSI="));
+    msg.control.print(getDefaultSPIMOSI(bus_id));
+    msg.control.print(F(", MISO="));
+    msg.control.print(getDefaultSPIMISO(bus_id));
+    msg.control.print(F(", SCK="));
+    msg.control.print(getDefaultSPISCK(bus_id));
+    msg.control.print(F(") @ "));
+    msg.control.print(systemConfig.buses.spi_clock / 1000000.0, 1);
+    msg.control.println(F("MHz"));
+    msg.control.print(F("Available buses: "));
+    for (uint8_t i = 0; i < NUM_SPI_BUSES; i++) {
+        if (i > 0) msg.control.print(F(", "));
+        msg.control.print(i);
+        msg.control.print(F("="));
+        msg.control.print(getSPIBusName(i));
+    }
+    msg.control.println();
+}
+
+// Helper function to display CAN bus configuration
+void displayCANStatus() {
+    msg.control.println();
+    msg.control.println(F("=== CAN Bus Configuration ==="));
+#if NUM_CAN_BUSES > 0
+    uint8_t bus_id = systemConfig.buses.active_can;
+    msg.control.print(F("Active: "));
+    msg.control.print(getCANBusName(bus_id));
+    msg.control.print(F(" (TX="));
+    msg.control.print(getDefaultCANTX(bus_id));
+    msg.control.print(F(", RX="));
+    msg.control.print(getDefaultCANRX(bus_id));
+    msg.control.print(F(") @ "));
+    msg.control.print(systemConfig.buses.can_baudrate / 1000);
+    msg.control.println(F("kbps"));
+    msg.control.print(F("Available buses: "));
+    for (uint8_t i = 0; i < NUM_CAN_BUSES; i++) {
+        if (i > 0) msg.control.print(F(", "));
+        msg.control.print(i);
+        msg.control.print(F("="));
+        msg.control.print(getCANBusName(i));
+    }
+    msg.control.println();
+#else
+    msg.control.println(F("No CAN buses available on this platform"));
+#endif
+}
+
