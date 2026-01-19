@@ -77,6 +77,30 @@ enum PinTypeRequirement {
     PIN_I2C         // Sensor uses I2C bus (pin field must be "I2C")
 };
 
+// ===== SENSOR CATEGORY ENUMERATION =====
+// Categories group sensors by technology/calibration type for two-layer selection.
+// Derived from calibrationType + measurementType at runtime (no storage overhead).
+enum SensorCategory : uint8_t {
+    CAT_THERMOCOUPLE = 0,      // K-type thermocouple amplifiers (CAL_NONE + TEMP + PIN_DIGITAL)
+    CAT_NTC_THERMISTOR,        // NTC thermistor temperature sensors (CAL_THERMISTOR_*)
+    CAT_LINEAR_TEMP,           // Linear temperature sensors (CAL_LINEAR + TEMP)
+    CAT_LINEAR_PRESSURE,       // Linear pressure sensors (CAL_LINEAR + PRESSURE)
+    CAT_RESISTIVE_PRESSURE,    // Resistive/piezoresistive pressure senders (CAL_PRESSURE_POLYNOMIAL)
+    CAT_VOLTAGE,               // Voltage measurement sensors
+    CAT_RPM,                   // Engine RPM sensors
+    CAT_SPEED,                 // Vehicle speed sensors
+    CAT_I2C,                   // I2C bus sensors (BME280, etc.)
+    CAT_DIGITAL,               // Digital input sensors (float switch, etc.)
+    CAT_COUNT                  // Number of categories
+};
+
+// Sensor category info structure for display and lookup
+struct SensorCategoryInfo {
+    const char* name;          // Primary key: "THERMOCOUPLE", "NTC_THERMISTOR"
+    const char* label;         // Display label: "K-Type Thermocouples"
+    uint16_t nameHash;         // Precomputed hash for fast lookup
+};
+
 // ===== SENSOR INFO STRUCTURE =====
 struct SensorInfo {
     const char* name;                // PRIMARY KEY: "MAX6675", "VDO_120C_LOOKUP"
@@ -108,10 +132,12 @@ static const char PSTR_VDO_120C_STEINHART[] PROGMEM = "VDO_120C_STEINHART";
 static const char PSTR_VDO_120C_STEINHART_LABEL[] PROGMEM = "VDO 120C (Steinhart-Hart)";
 static const char PSTR_VDO_150C_STEINHART[] PROGMEM = "VDO_150C_STEINHART";
 static const char PSTR_VDO_150C_STEINHART_LABEL[] PROGMEM = "VDO 150C (Steinhart-Hart)";
-static const char PSTR_THERMISTOR_LOOKUP[] PROGMEM = "THERMISTOR_LOOKUP";
-static const char PSTR_THERMISTOR_LOOKUP_LABEL[] PROGMEM = "Generic (requires custom calibration)";
-static const char PSTR_THERMISTOR_STEINHART[] PROGMEM = "THERMISTOR_STEINHART";
-static const char PSTR_THERMISTOR_STEINHART_LABEL[] PROGMEM = "Generic (requires custom calibration)";
+static const char PSTR_NTC_LOOKUP[] PROGMEM = "GENERIC_NTC_LOOKUP";
+static const char PSTR_NTC_LOOKUP_LABEL[] PROGMEM = "Generic NTC (custom lookup table)";
+static const char PSTR_NTC_STEINHART[] PROGMEM = "GENERIC_NTC_STEINHART";
+static const char PSTR_NTC_STEINHART_LABEL[] PROGMEM = "Generic NTC (custom Steinhart-Hart)";
+static const char PSTR_NTC_BETA[] PROGMEM = "GENERIC_NTC_BETA";
+static const char PSTR_NTC_BETA_LABEL[] PROGMEM = "Generic NTC (custom Beta equation)";
 static const char PSTR_GENERIC_BOOST[] PROGMEM = "GENERIC_BOOST";
 static const char PSTR_GENERIC_BOOST_LABEL[] PROGMEM = "0.5-4.5V linear (0-5 bar)";
 static const char PSTR_GENERIC_TEMP_LINEAR[] PROGMEM = "GENERIC_TEMP_LINEAR";
@@ -279,12 +305,12 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
 
-    // ===== GENERIC THERMISTORS (PLACEHOLDERS) =====
-    // Index 7: THERMISTOR_LOOKUP (placeholder - not yet implemented)
+    // ===== GENERIC NTC THERMISTORS (PLACEHOLDERS) =====
+    // Index 7: NTC_LOOKUP (placeholder - not yet implemented)
     {
 
-        .name = PSTR_THERMISTOR_LOOKUP,
-        .label = PSTR_THERMISTOR_LOOKUP_LABEL,
+        .name = PSTR_NTC_LOOKUP,
+        .label = PSTR_NTC_LOOKUP_LABEL,
         .description = nullptr,
         .readFunction = nullptr,
         .initFunction = nullptr,
@@ -294,14 +320,14 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = 0,
         .minValue = -40.0,
         .maxValue = 150.0,
-        .nameHash = 0xF00F,  // djb2_hash("THERMISTOR_LOOKUP")
+        .nameHash = 0x7EDF,  // djb2_hash("GENERIC_NTC_LOOKUP")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
-    // Index 8: THERMISTOR_STEINHART (placeholder - not yet implemented)
+    // Index 8: NTC_STEINHART (placeholder - not yet implemented)
     {
 
-        .name = PSTR_THERMISTOR_STEINHART,
-        .label = PSTR_THERMISTOR_STEINHART_LABEL,
+        .name = PSTR_NTC_STEINHART,
+        .label = PSTR_NTC_STEINHART_LABEL,
         .description = nullptr,
         .readFunction = nullptr,
         .initFunction = nullptr,
@@ -311,12 +337,29 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = 0,
         .minValue = -40.0,
         .maxValue = 150.0,
-        .nameHash = 0xC927,  // djb2_hash("THERMISTOR_STEINHART")
+        .nameHash = 0xA5F7,  // djb2_hash("GENERIC_NTC_STEINHART")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
+    },
+    // Index 9: NTC_BETA (placeholder - not yet implemented)
+    {
+
+        .name = PSTR_NTC_BETA,
+        .label = PSTR_NTC_BETA_LABEL,
+        .description = nullptr,
+        .readFunction = nullptr,
+        .initFunction = nullptr,
+        .measurementType = MEASURE_TEMPERATURE,
+        .calibrationType = CAL_THERMISTOR_BETA,
+        .defaultCalibration = nullptr,
+        .minReadInterval = 0,
+        .minValue = -40.0,
+        .maxValue = 150.0,
+        .nameHash = 0x1F61,  // djb2_hash("GENERIC_NTC_BETA")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
 
     // ===== LINEAR TEMPERATURE SENSORS =====
-    // Index 9: GENERIC_TEMP_LINEAR
+    // Index 10: GENERIC_TEMP_LINEAR
     {
 
         .name = PSTR_GENERIC_TEMP_LINEAR,
@@ -335,7 +378,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== PRESSURE SENSORS =====
-    // Index 10: GENERIC_BOOST
+    // Index 11: GENERIC_BOOST
     {
 
         .name = PSTR_GENERIC_BOOST,
@@ -352,7 +395,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x59C8,  // djb2_hash("GENERIC_BOOST")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
-    // Index 11: GENERIC_PRESSURE_150PSI
+    // Index 12: GENERIC_PRESSURE_150PSI
     {
 
         .name = PSTR_GENERIC_PRESSURE_150PSI,
@@ -369,7 +412,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0xA67B,  // djb2_hash("GENERIC_PRESSURE_150PSI")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
-    // Index 12: AEM_30_2130_150
+    // Index 13: AEM_30_2130_150
     {
 
         .name = PSTR_AEM_30_2130_150,
@@ -386,7 +429,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x31B4,  // djb2_hash("AEM_30_2130_150")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
-    // Index 13: MPX4250AP
+    // Index 14: MPX4250AP
     {
 
         .name = PSTR_MPX4250AP,
@@ -403,7 +446,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0xDF76,  // djb2_hash("MPX4250AP")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
-    // Index 14: VDO_2BAR
+    // Index 15: VDO_2BAR
     {
 
         .name = PSTR_VDO_2BAR,
@@ -420,7 +463,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x1ED4,  // djb2_hash("VDO_2BAR")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
-    // Index 15: VDO_5BAR
+    // Index 16: VDO_5BAR
     {
 
         .name = PSTR_VDO_5BAR,
@@ -439,7 +482,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== VOLTAGE SENSORS =====
-    // Index 16: VOLTAGE_DIVIDER
+    // Index 17: VOLTAGE_DIVIDER
     {
 
         .name = PSTR_VOLTAGE_DIVIDER,
@@ -458,7 +501,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== RPM SENSORS =====
-    // Index 17: W_PHASE_RPM
+    // Index 18: W_PHASE_RPM
     {
 
         .name = PSTR_W_PHASE_RPM,
@@ -477,7 +520,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== SPEED SENSORS =====
-    // Index 18: HALL_SPEED
+    // Index 19: HALL_SPEED
     {
         .name = PSTR_HALL_SPEED,
         .label = PSTR_HALL_SPEED_LABEL,
@@ -495,7 +538,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== BME280 SENSORS =====
-    // Index 19: BME280_TEMP
+    // Index 20: BME280_TEMP
     {
 
         .name = PSTR_BME280_TEMP,
@@ -512,7 +555,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x72A8,  // djb2_hash("BME280_TEMP")
         .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
-    // Index 20: BME280_PRESSURE
+    // Index 21: BME280_PRESSURE
     {
 
         .name = PSTR_BME280_PRESSURE,
@@ -529,7 +572,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x454B,  // djb2_hash("BME280_PRESSURE")
         .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
-    // Index 21: BME280_HUMIDITY
+    // Index 22: BME280_HUMIDITY
     {
 
         .name = PSTR_BME280_HUMIDITY,
@@ -546,7 +589,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x381F,  // djb2_hash("BME280_HUMIDITY")
         .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
-    // Index 22: BME280_ELEVATION
+    // Index 23: BME280_ELEVATION
     {
 
         .name = PSTR_BME280_ELEVATION,
@@ -565,7 +608,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== DIGITAL SENSORS =====
-    // Index 23: FLOAT_SWITCH
+    // Index 24: FLOAT_SWITCH
     {
 
         .name = PSTR_FLOAT_SWITCH,
@@ -586,6 +629,43 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
 
 // Automatically calculate the number of sensors
 constexpr uint8_t NUM_SENSORS = sizeof(SENSOR_LIBRARY) / sizeof(SENSOR_LIBRARY[0]);
+
+// ===== SENSOR CATEGORY STRINGS (PROGMEM) =====
+static const char PSTR_CAT_THERMOCOUPLE[] PROGMEM = "THERMOCOUPLE";
+static const char PSTR_CAT_THERMOCOUPLE_LABEL[] PROGMEM = "K-Type Thermocouples";
+static const char PSTR_CAT_NTC_THERMISTOR[] PROGMEM = "NTC_THERMISTOR";
+static const char PSTR_CAT_NTC_THERMISTOR_LABEL[] PROGMEM = "NTC Thermistors";
+static const char PSTR_CAT_LINEAR_TEMP[] PROGMEM = "LINEAR_TEMP";
+static const char PSTR_CAT_LINEAR_TEMP_LABEL[] PROGMEM = "Linear Temperature Sensors";
+static const char PSTR_CAT_LINEAR_PRESSURE[] PROGMEM = "LINEAR_PRESSURE";
+static const char PSTR_CAT_LINEAR_PRESSURE_LABEL[] PROGMEM = "Linear Pressure Sensors";
+static const char PSTR_CAT_RESISTIVE_PRESSURE[] PROGMEM = "RESISTIVE_PRESSURE";
+static const char PSTR_CAT_RESISTIVE_PRESSURE_LABEL[] PROGMEM = "Resistive Pressure Senders";
+static const char PSTR_CAT_VOLTAGE[] PROGMEM = "VOLTAGE";
+static const char PSTR_CAT_VOLTAGE_LABEL[] PROGMEM = "Voltage Sensors";
+static const char PSTR_CAT_RPM[] PROGMEM = "RPM";
+static const char PSTR_CAT_RPM_LABEL[] PROGMEM = "RPM Sensors";
+static const char PSTR_CAT_SPEED[] PROGMEM = "SPEED";
+static const char PSTR_CAT_SPEED_LABEL[] PROGMEM = "Speed Sensors";
+static const char PSTR_CAT_I2C[] PROGMEM = "I2C";
+static const char PSTR_CAT_I2C_LABEL[] PROGMEM = "I2C Bus Sensors";
+static const char PSTR_CAT_DIGITAL[] PROGMEM = "DIGITAL";
+static const char PSTR_CAT_DIGITAL_LABEL[] PROGMEM = "Digital Input Sensors";
+
+// ===== SENSOR CATEGORY REGISTRY (PROGMEM) =====
+// Hash values computed with: python3 -c "h=5381; s='NAME'; [h:=(h<<5)+h+ord(c.upper()) for c in s]; print(f'0x{h&0xFFFF:04X}')"
+static const PROGMEM SensorCategoryInfo SENSOR_CATEGORIES[] = {
+    { PSTR_CAT_THERMOCOUPLE,       PSTR_CAT_THERMOCOUPLE_LABEL,       0xA69C },  // THERMOCOUPLE
+    { PSTR_CAT_NTC_THERMISTOR,     PSTR_CAT_NTC_THERMISTOR_LABEL,     0xC0BA },  // NTC_THERMISTOR
+    { PSTR_CAT_LINEAR_TEMP,        PSTR_CAT_LINEAR_TEMP_LABEL,        0x9095 },  // LINEAR_TEMP
+    { PSTR_CAT_LINEAR_PRESSURE,    PSTR_CAT_LINEAR_PRESSURE_LABEL,    0x91B8 },  // LINEAR_PRESSURE
+    { PSTR_CAT_RESISTIVE_PRESSURE, PSTR_CAT_RESISTIVE_PRESSURE_LABEL, 0xF99B },  // RESISTIVE_PRESSURE
+    { PSTR_CAT_VOLTAGE,            PSTR_CAT_VOLTAGE_LABEL,            0x03F7 },  // VOLTAGE
+    { PSTR_CAT_RPM,                PSTR_CAT_RPM_LABEL,                0x1A54 },  // RPM
+    { PSTR_CAT_SPEED,              PSTR_CAT_SPEED_LABEL,              0xFEF6 },  // SPEED
+    { PSTR_CAT_I2C,                PSTR_CAT_I2C_LABEL,                0xF023 },  // I2C
+    { PSTR_CAT_DIGITAL,            PSTR_CAT_DIGITAL_LABEL,            0x9803 },  // DIGITAL
+};
 
 // ===== HELPER FUNCTIONS =====
 
@@ -650,6 +730,183 @@ inline const char* getSensorNameByIndex(uint8_t index) {
     if (index >= NUM_SENSORS) return nullptr;
     return READ_SENSOR_NAME(&SENSOR_LIBRARY[index]);
 }
+
+// ===== CATEGORY HELPER FUNCTIONS =====
+
+/**
+ * Derive sensor category from existing sensor properties.
+ * Categories are computed at runtime - no extra storage per sensor.
+ *
+ * @param sensorIndex  Index into SENSOR_LIBRARY
+ * @return             SensorCategory enum value
+ */
+inline SensorCategory getSensorCategory(uint8_t sensorIndex) {
+    if (sensorIndex >= NUM_SENSORS) return CAT_THERMOCOUPLE;
+
+    const SensorInfo* sensor = &SENSOR_LIBRARY[sensorIndex];
+    MeasurementType measType = (MeasurementType)pgm_read_byte(&sensor->measurementType);
+    CalibrationType calType = (CalibrationType)pgm_read_byte(&sensor->calibrationType);
+    PinTypeRequirement pinType = (PinTypeRequirement)pgm_read_byte(&sensor->pinTypeRequirement);
+
+    // I2C sensors are their own category
+    if (pinType == PIN_I2C) return CAT_I2C;
+
+    // By measurement type (non-temp/pressure types)
+    if (measType == MEASURE_DIGITAL) return CAT_DIGITAL;
+    if (measType == MEASURE_RPM) return CAT_RPM;
+    if (measType == MEASURE_SPEED) return CAT_SPEED;
+    if (measType == MEASURE_VOLTAGE) return CAT_VOLTAGE;
+    if (measType == MEASURE_HUMIDITY) return CAT_I2C;    // BME280
+    if (measType == MEASURE_ELEVATION) return CAT_I2C;   // BME280
+
+    // Temperature sensors by calibration type
+    if (measType == MEASURE_TEMPERATURE) {
+        if (calType == CAL_THERMISTOR_LOOKUP ||
+            calType == CAL_THERMISTOR_STEINHART ||
+            calType == CAL_THERMISTOR_BETA) {
+            return CAT_NTC_THERMISTOR;
+        }
+        if (calType == CAL_LINEAR) return CAT_LINEAR_TEMP;
+        // CAL_NONE temperature sensors with digital pins are thermocouples
+        if (calType == CAL_NONE && pinType == PIN_DIGITAL) return CAT_THERMOCOUPLE;
+    }
+
+    // Pressure sensors by calibration type
+    if (measType == MEASURE_PRESSURE) {
+        if (calType == CAL_PRESSURE_POLYNOMIAL) return CAT_RESISTIVE_PRESSURE;
+        if (calType == CAL_LINEAR) return CAT_LINEAR_PRESSURE;
+    }
+
+    return CAT_THERMOCOUPLE;  // Default fallback
+}
+
+/**
+ * Get category info by category enum value
+ */
+inline const SensorCategoryInfo* getCategoryInfo(SensorCategory cat) {
+    if (cat >= CAT_COUNT) return nullptr;
+    return &SENSOR_CATEGORIES[cat];
+}
+
+/**
+ * Get category by name or alias (case-insensitive)
+ * Supports aliases: NTC, THERMISTOR -> NTC_THERMISTOR
+ *                   TC -> THERMOCOUPLE
+ *                   RESISTIVE, PIEZO -> RESISTIVE_PRESSURE
+ *
+ * @param name  Category name or alias
+ * @return      SensorCategory enum, or CAT_COUNT if not found
+ */
+inline SensorCategory getCategoryByName(const char* name) {
+    if (!name) return CAT_COUNT;
+
+    uint16_t hash = djb2_hash(name);
+
+    // Check primary names first
+    for (uint8_t i = 0; i < CAT_COUNT; i++) {
+        uint16_t catHash = pgm_read_word(&SENSOR_CATEGORIES[i].nameHash);
+        if (catHash == hash) {
+            return (SensorCategory)i;
+        }
+    }
+
+    // Check aliases
+    // NTC -> NTC_THERMISTOR (hash 0x09CA)
+    if (hash == 0x09CA) return CAT_NTC_THERMISTOR;
+    // THERMISTOR -> NTC_THERMISTOR (hash 0x4556)
+    if (hash == 0x4556) return CAT_NTC_THERMISTOR;
+    // TC -> THERMOCOUPLE (hash 0x755C)
+    if (hash == 0x755C) return CAT_THERMOCOUPLE;
+    // RESISTIVE -> RESISTIVE_PRESSURE (hash 0xA9A3)
+    if (hash == 0xA9A3) return CAT_RESISTIVE_PRESSURE;
+    // PIEZO -> RESISTIVE_PRESSURE (hash 0xE18C)
+    if (hash == 0xE18C) return CAT_RESISTIVE_PRESSURE;
+
+    return CAT_COUNT;  // Not found
+}
+
+/**
+ * Check if a name matches a measurement type filter (virtual category)
+ * Returns the MeasurementType if matched, or -1 if not a measurement filter
+ *
+ * Supports: TEMPERATURE, PRESSURE, VOLTAGE, RPM, SPEED, HUMIDITY, ELEVATION, DIGITAL
+ */
+inline int8_t getMeasurementTypeFilter(const char* name) {
+    if (!name) return -1;
+
+    uint16_t hash = djb2_hash(name);
+
+    // TEMPERATURE (hash 0x0353)
+    if (hash == 0x0353) return MEASURE_TEMPERATURE;
+    // PRESSURE (hash 0x233E)
+    if (hash == 0x233E) return MEASURE_PRESSURE;
+    // Note: VOLTAGE, RPM, SPEED, HUMIDITY, ELEVATION, DIGITAL match category names
+    // so they'll be handled by getCategoryByName() first
+
+    return -1;  // Not a measurement filter
+}
+
+/**
+ * Count sensors in a category
+ */
+inline uint8_t countSensorsInCategory(SensorCategory cat) {
+    uint8_t count = 0;
+    for (uint8_t i = 1; i < NUM_SENSORS; i++) {
+        const SensorInfo* sensor = &SENSOR_LIBRARY[i];
+        if (pgm_read_ptr(&sensor->label) != nullptr) {
+            if (getSensorCategory(i) == cat) count++;
+        }
+    }
+    return count;
+}
+
+/**
+ * Count sensors by measurement type
+ */
+inline uint8_t countSensorsByMeasurementType(MeasurementType measType) {
+    uint8_t count = 0;
+    for (uint8_t i = 1; i < NUM_SENSORS; i++) {
+        const SensorInfo* sensor = &SENSOR_LIBRARY[i];
+        if (pgm_read_ptr(&sensor->label) != nullptr) {
+            MeasurementType sensorMeasType = (MeasurementType)pgm_read_byte(&sensor->measurementType);
+            if (sensorMeasType == measType) count++;
+        }
+    }
+    return count;
+}
+
+/**
+ * Find sensor index by category and preset name
+ * Used for two-layer SET SENSOR <category> <preset> syntax
+ *
+ * @param cat     Category to search within
+ * @param preset  Sensor name (can be partial match within category)
+ * @return        Sensor index, or 0 if not found
+ */
+inline uint8_t getSensorIndexByCategoryAndName(SensorCategory cat, const char* preset) {
+    if (!preset || cat >= CAT_COUNT) return 0;
+
+    uint16_t presetHash = djb2_hash(preset);
+
+    // Search for exact match within category
+    for (uint8_t i = 1; i < NUM_SENSORS; i++) {
+        const SensorInfo* sensor = &SENSOR_LIBRARY[i];
+        if (pgm_read_ptr(&sensor->label) == nullptr) continue;
+
+        if (getSensorCategory(i) == cat) {
+            uint16_t sensorHash = pgm_read_word(&sensor->nameHash);
+            if (sensorHash == presetHash) {
+                return i;
+            }
+        }
+    }
+
+    return 0;  // Not found
+}
+
+// Helper macros for category info
+#define READ_CATEGORY_NAME(info) ((const char*)pgm_read_ptr(&(info)->name))
+#define READ_CATEGORY_LABEL(info) ((const char*)pgm_read_ptr(&(info)->label))
 
 // ===== END HELPER FUNCTIONS =====
 

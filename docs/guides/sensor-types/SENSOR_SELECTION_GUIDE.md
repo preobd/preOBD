@@ -4,22 +4,59 @@
 
 ---
 
-## Quick Start - Just Pick Your Sensor!
+## Quick Start - Two-Layer Selection
 
-The sensor library makes configuration easy. You just need to know what physical sensor you have, then pick the matching ID from the catalog.
+The sensor library is organized into **categories** (sensor types) and **presets** (specific calibrations).
 
+### Browse Categories
 ```
-SET 6 CHT MAX6675
-SET A2 COOLANT_TEMP VDO_120C_LOOKUP
-SET A3 OIL_PRESSURE VDO_5BAR
+LIST SENSORS                    # Show all sensor categories
+LIST SENSORS NTC_THERMISTOR     # Show NTC thermistor presets
+LIST SENSORS TEMPERATURE        # Show ALL temperature sensors
+```
+
+### Configure with Category + Preset
+```
+SET A2 SENSOR NTC_THERMISTOR VDO_120C_LOOKUP   # Two-layer syntax (preferred)
+SET A2 SENSOR VDO_120C_LOOKUP                   # Legacy flat syntax (still works)
+```
+
+### Quick Examples
+```
+SET 6 CHT MAX6675                              # Thermocouple CHT
+SET A2 COOLANT_TEMP NTC VDO_120C_LOOKUP        # NTC coolant sensor
+SET A3 OIL_PRESSURE RESISTIVE_PRESSURE VDO_5BAR  # Resistive oil pressure
 SAVE
 ```
 
 **That's it!** The system automatically handles calibration, conversion functions, and display formatting.
 
+### Category Aliases
+For convenience, these shorter aliases work:
+- `NTC`, `THERMISTOR` → `NTC_THERMISTOR`
+- `TC` → `THERMOCOUPLE`
+- `RESISTIVE`, `PIEZO` → `RESISTIVE_PRESSURE`
+
 ---
 
-## Sensor Catalog
+## Sensor Categories
+
+| Category | Aliases | Description |
+|----------|---------|-------------|
+| `THERMOCOUPLE` | TC | K-Type thermocouple amplifiers |
+| `NTC_THERMISTOR` | NTC, THERMISTOR | NTC thermistor temperature sensors |
+| `LINEAR_TEMP` | - | Linear voltage temperature sensors |
+| `LINEAR_PRESSURE` | - | Linear voltage pressure sensors (0.5-4.5V) |
+| `RESISTIVE_PRESSURE` | RESISTIVE, PIEZO | Resistive pressure senders (VDO, etc.) |
+| `VOLTAGE` | - | Battery/voltage monitoring |
+| `RPM` | - | Engine RPM sensors |
+| `SPEED` | - | Vehicle speed sensors |
+| `I2C` | - | I2C bus sensors (BME280) |
+| `DIGITAL` | - | Digital input sensors |
+
+---
+
+## Sensor Catalog (by Category)
 
 ### Temperature Sensors - Thermocouples
 
@@ -61,14 +98,20 @@ Add pull-down resistor: Analog pin → 1kΩ resistor → GND
 
 See [VDO_SENSOR_GUIDE.md](VDO_SENSOR_GUIDE.md) for detailed setup.
 
-### Temperature Sensors - Generic Thermistors
+### Temperature Sensors - Generic NTC Thermistors
 
 | Sensor ID | Description | Notes |
 |-----------|-------------|-------|
-| `THERMISTOR_LOOKUP` | Generic lookup table thermistor | Requires custom calibration |
-| `THERMISTOR_STEINHART` | Generic Steinhart-Hart thermistor | Requires custom calibration |
+| `NTC_LOOKUP` | Generic NTC (custom lookup table) | Requires custom calibration |
+| `NTC_STEINHART` | Generic NTC (custom Steinhart-Hart) | Requires custom calibration |
 
 **Best for:** Custom NTC thermistors, non-VDO sensors
+
+**Example with custom Steinhart-Hart coefficients:**
+```
+SET A2 COOLANT_TEMP NTC_THERMISTOR NTC_STEINHART
+SET A2 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
+```
 
 See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) for custom calibration.
 

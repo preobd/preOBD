@@ -67,7 +67,7 @@ void printInputAlarmInfo(uint8_t pin);
 void printInputCalibration(uint8_t pin);
 void listAllInputs();                // List all active inputs
 void listApplicationPresets();       // List available Applications
-void listSensors();                  // List available Sensors
+void listSensors(const char* filter = nullptr);  // List sensors (categories, by category, or by measurement type)
 
 #endif // USE_STATIC_CONFIG
 
