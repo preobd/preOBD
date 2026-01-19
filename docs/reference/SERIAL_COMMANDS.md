@@ -62,22 +62,25 @@ openEMS commands follow consistent patterns based on what you're configuring:
 Pattern: `LIST <type>`
 
 ```
-LIST INPUTS          # Show all configured inputs
-LIST APPLICATIONS    # Show available application presets
-LIST SENSORS         # Show available sensor types
-LIST OUTPUTS         # Show available output modules
-LIST TRANSPORTS      # Show available transports
+LIST INPUTS              # Show all configured inputs
+LIST APPLICATIONS        # Show available application presets
+LIST SENSORS             # Show sensor categories
+LIST SENSORS <category>  # Show sensors in category (e.g., NTC_THERMISTOR)
+LIST SENSORS TEMPERATURE # Show all temperature sensors
+LIST OUTPUTS             # Show available output modules
+LIST TRANSPORTS          # Show available transports
 ```
 
 ### Configuration Commands
 Pattern: `SET <pin> <field> <value>`
 
 ```
-SET A0 CHT MAX6675              # Combined syntax (recommended)
-SET A0 APPLICATION CHT          # Set application type
-SET A0 SENSOR MAX6675           # Set sensor type
-SET A0 ALARM 100 900            # Set alarm thresholds
-SET A0 ALARM WARMUP 30000       # Set alarm warmup time
+SET A0 CHT MAX6675                       # Combined syntax (recommended)
+SET A0 APPLICATION CHT                   # Set application type
+SET A0 SENSOR NTC VDO_120C_LOOKUP        # Two-layer: category + preset
+SET A0 SENSOR VDO_120C_LOOKUP            # Legacy: direct sensor name
+SET A0 ALARM 100 900                     # Set alarm thresholds
+SET A0 ALARM WARMUP 30000                # Set alarm warmup time
 ```
 
 ### Control Commands
@@ -1024,7 +1027,9 @@ INFO A2 ALARM                    # Check alarm status
 VERSION                          # Show firmware version
 LIST INPUTS                      # Show all configured inputs
 LIST APPLICATIONS                # Show available application types
-LIST SENSORS                     # Show available sensor types
+LIST SENSORS                     # Show sensor categories
+LIST SENSORS NTC_THERMISTOR      # Show NTC thermistor sensors
+LIST SENSORS TEMPERATURE         # Show all temperature sensors
 ```
 
 **Note:** For complete system dumps, use `SYSTEM DUMP` or `SYSTEM DUMP JSON` (see [System Configuration](#system-configuration)).

@@ -187,7 +187,9 @@ static int cmd_list(int argc, const char* const* argv) {
     } else if (streq(argv[1], "APPLICATIONS")) {
         listApplicationPresets();
     } else if (streq(argv[1], "SENSORS")) {
-        listSensors();
+        // LIST SENSORS [category|filter]
+        const char* filter = (argc >= 3) ? argv[2] : nullptr;
+        listSensors(filter);
     } else if (streq(argv[1], "OUTPUTS")) {
         listOutputModules();
     } else if (streq(argv[1], "TRANSPORTS")) {
@@ -504,26 +506,75 @@ static int cmd_set(int argc, const char* const* argv) {
         return 1;
     }
 
-    // SET <pin> SENSOR <sensor>
+    // SET <pin> SENSOR <category> <preset>  (two-layer syntax)
+    // SET <pin> SENSOR <sensor>             (legacy flat syntax)
     if (streq(field, "SENSOR")) {
         if (argc < 4) {
-            msg.control.println(F("ERROR: SENSOR requires a sensor name"));
-            msg.control.println(F("  Hint: Use 'LIST SENSORS' to see valid options"));
+            msg.control.println(F("ERROR: SENSOR requires arguments"));
+            msg.control.println(F("  Usage: SET <pin> SENSOR <category> <preset>"));
+            msg.control.println(F("     or: SET <pin> SENSOR <sensor_name>"));
+            msg.control.println(F("  Hint: Use 'LIST SENSORS' to see categories"));
             return 1;
         }
-        uint8_t sensorIndex = getSensorIndexByName(argv[3]);
+
+        uint8_t sensorIndex = 0;
+
+        // Try two-layer syntax: SET <pin> SENSOR <category> <preset>
+        if (argc >= 5) {
+            SensorCategory cat = getCategoryByName(argv[3]);
+            if (cat < CAT_COUNT) {
+                sensorIndex = getSensorIndexByCategoryAndName(cat, argv[4]);
+                if (sensorIndex == 0) {
+                    msg.control.print(F("ERROR: Unknown sensor '"));
+                    msg.control.print(argv[4]);
+                    msg.control.print(F("' in category '"));
+                    msg.control.print(argv[3]);
+                    msg.control.println(F("'"));
+                    msg.control.print(F("  Hint: Use 'LIST SENSORS "));
+                    msg.control.print(argv[3]);
+                    msg.control.println(F("' to see valid options"));
+                    return 1;
+                }
+            }
+        }
+
+        // Fall back to legacy flat syntax: SET <pin> SENSOR <sensor>
         if (sensorIndex == 0) {
-            msg.control.print(F("ERROR: Unknown sensor '"));
-            msg.control.print(argv[3]);
-            msg.control.println(F("'"));
-            msg.control.println(F("  Hint: Use 'LIST SENSORS' to see valid options"));
+            sensorIndex = getSensorIndexByName(argv[3]);
+        }
+
+        if (sensorIndex == 0) {
+            // Check if argv[3] is a category name (user forgot preset)
+            SensorCategory cat = getCategoryByName(argv[3]);
+            if (cat < CAT_COUNT) {
+                msg.control.print(F("ERROR: Missing preset. Usage: SET "));
+                msg.control.print(argv[1]);
+                msg.control.print(F(" SENSOR "));
+                msg.control.print(argv[3]);
+                msg.control.println(F(" <preset>"));
+                msg.control.print(F("  Hint: Use 'LIST SENSORS "));
+                msg.control.print(argv[3]);
+                msg.control.println(F("' to see available presets"));
+            } else {
+                msg.control.print(F("ERROR: Unknown sensor or category '"));
+                msg.control.print(argv[3]);
+                msg.control.println(F("'"));
+                msg.control.println(F("  Hint: Use 'LIST SENSORS' to see categories"));
+            }
             return 1;
         }
+
         if (setInputSensor(pin, sensorIndex)) {
             msg.control.print(F("Input "));
             msg.control.print(argv[1]);
             msg.control.print(F(" sensor set to "));
-            msg.control.println(argv[3]);
+            // Print the actual sensor name from library
+            const char* sensorName = getSensorNameByIndex(sensorIndex);
+            if (sensorName) {
+                msg.control.println((__FlashStringHelper*)sensorName);
+            } else {
+                msg.control.println(argv[argc >= 5 ? 4 : 3]);
+            }
             return 0;
         }
         return 1;

@@ -64,7 +64,7 @@ SAVE                                      # Save configuration
 RUN                                       # Start monitoring
 ```
 
-Use `LIST SENSORS` to see all available sensor types.
+Use `LIST SENSORS` to see sensor categories, then `LIST SENSORS <category>` for specific sensors.
 
 ### 3. Operate
 
@@ -111,9 +111,9 @@ Add bias resistor: Pin → 1kΩ → 3.3V/5V
 For non-VDO NTC thermistors (common 10K sensors):
 
 ```
-SET A0 OIL_TEMP NTC_10K_BETA_3950      # Most common generic NTC
-SET A1 COOLANT_TEMP NTC_10K_STEINHART  # Alternative method
-SET A2 COOLANT_TEMP THERMISTOR_STEINHART  # Then set coefficients
+SET A0 OIL_TEMP NTC_10K_BETA_3950       # Most common generic NTC
+SET A1 COOLANT_TEMP NTC_10K_STEINHART   # Alternative method
+SET A2 COOLANT_TEMP NTC_STEINHART       # Then set coefficients
 SET A2 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
 ```
 
@@ -273,7 +273,8 @@ HELP CALIBRATION        # Show calibration commands
 |---------|-------------|
 | `LIST INPUTS` | Show all configured inputs |
 | `LIST APPLICATIONS` | Show available applications |
-| `LIST SENSORS` | Show available sensor types |
+| `LIST SENSORS` | Show sensor categories |
+| `LIST SENSORS <category>` | Show sensors in category |
 | `INFO <pin>` | Show input details |
 | `DUMP` | Show complete configuration |
 | `VERSION` | Show firmware version |
@@ -426,8 +427,8 @@ See [Serial Commands Reference](../reference/SERIAL_COMMANDS.md#bus-configuratio
 - `NTC_10K_BETA_3950` - 10K NTC, β=3950 (most common)
 - `NTC_10K_BETA_3435` - 10K NTC, β=3435
 - `NTC_10K_STEINHART` - 10K NTC, Steinhart-Hart
-- `THERMISTOR_STEINHART` - Generic, set coefficients with `SET <pin> STEINHART`
-- `THERMISTOR_BETA` - Generic, set coefficients with `SET <pin> BETA`
+- `NTC_STEINHART` - Generic, set coefficients with `SET <pin> STEINHART`
+- `NTC_BETA` - Generic, set coefficients with `SET <pin> BETA`
 
 ### Linear Temperature Sensors
 - `LINEAR_TEMP_40_150` - Linear 0.5-4.5V, -40 to 150°C
