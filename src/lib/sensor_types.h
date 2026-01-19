@@ -25,9 +25,10 @@ enum MeasurementType {
 enum CalibrationType {
     CAL_NONE,
     CAL_THERMISTOR_STEINHART,
-    CAL_THERMISTOR_LOOKUP,
+    CAL_THERMISTOR_TABLE,    // Was CAL_THERMISTOR_LOOKUP
     CAL_THERMISTOR_BETA,
     CAL_PRESSURE_POLYNOMIAL,
+    CAL_PRESSURE_TABLE,      // Pressure sensor using lookup table
     CAL_LINEAR,              // Linear sensor (temperature, pressure, etc.)
     CAL_VOLTAGE_DIVIDER,
     CAL_RPM,
@@ -80,6 +81,15 @@ typedef struct {
     float poly_c;          // Polynomial coefficient C
 } PressurePolynomialCalibration;
 typedef PressurePolynomialCalibration PolynomialCalibration;
+
+// Pressure sensor calibration using lookup table interpolation
+// For VDO resistive pressure senders with non-linear R/P curves
+typedef struct {
+    float bias_resistor;           // Pull-down resistor in ohms
+    const float* resistance_table; // Pointer to resistance array (ohms) - ASCENDING order
+    const float* pressure_table;   // Pointer to pressure array (bar)
+    byte table_size;               // Number of entries in tables
+} PressureTableCalibration;
 
 // Voltage divider calibration
 typedef struct {

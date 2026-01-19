@@ -42,7 +42,7 @@ openEMS categorizes pins into three types based on the **hardware interface** re
 
 **Typical sensors:**
 - Thermistors (VDO_120C, VDO_150C, etc.)
-- Analog pressure sensors (MPX4250AP, VDO_2BAR, GENERIC_BOOST)
+- Analog pressure sensors (MPX4250AP, VDO_2BAR_CURVE, GENERIC_BOOST)
 - Voltage dividers (battery voltage monitoring)
 
 **Pin format:**
@@ -114,17 +114,17 @@ This table maps each sensor to its required pin type:
 | MAX6675               | PIN_DIGITAL          | 6           | SPI chip-select pin                  |
 | MAX31855              | PIN_DIGITAL          | 7           | SPI chip-select pin                  |
 | **Thermistors**       |                      |             |                                      |
-| VDO_120C_LOOKUP       | PIN_ANALOG           | A0          | Analog voltage from thermistor       |
-| VDO_150C_LOOKUP       | PIN_ANALOG           | A1          | Analog voltage from thermistor       |
+| VDO_120C_TABLE       | PIN_ANALOG           | A0          | Analog voltage from thermistor       |
+| VDO_150C_TABLE       | PIN_ANALOG           | A1          | Analog voltage from thermistor       |
 | VDO_120C_STEINHART    | PIN_ANALOG           | A2          | Analog voltage from thermistor       |
 | VDO_150C_STEINHART    | PIN_ANALOG           | A3          | Analog voltage from thermistor       |
-| THERMISTOR_LOOKUP     | PIN_ANALOG           | A4          | Custom thermistor (lookup table)     |
+| THERMISTOR_TABLE     | PIN_ANALOG           | A4          | Custom thermistor (table)     |
 | THERMISTOR_STEINHART  | PIN_ANALOG           | A5          | Custom thermistor (Steinhart-Hart)   |
 | **Pressure Sensors**  |                      |             |                                      |
 | GENERIC_BOOST         | PIN_ANALOG           | A6          | Analog boost/vacuum sensor           |
 | MPX4250AP             | PIN_ANALOG           | A7          | Freescale analog pressure sensor     |
-| VDO_2BAR              | PIN_ANALOG           | A8          | VDO 2-bar sender                     |
-| VDO_5BAR              | PIN_ANALOG           | A9          | VDO 5-bar sender                     |
+| VDO_2BAR_CURVE              | PIN_ANALOG           | A8          | VDO 2-bar sender                     |
+| VDO_5BAR_CURVE              | PIN_ANALOG           | A9          | VDO 5-bar sender                     |
 | **Voltage Sensors**   |                      |             |                                      |
 | VOLTAGE_DIVIDER       | PIN_ANALOG           | A10         | Voltage divider circuit              |
 | **RPM Sensors**       |                      |             |                                      |
@@ -266,7 +266,7 @@ The tool ensures sensor pin type requirements match the assigned pin:
 ❌ Sensor MAX6675 requires a digital pin, but A0 is an analog pin
    → Solution: Use digital pin like 6 or 7
 
-❌ Sensor VDO_120C_LOOKUP requires an analog pin, but 6 is a digital pin
+❌ Sensor VDO_120C_TABLE requires an analog pin, but 6 is a digital pin
    → Solution: Use analog pin like A0 or A1
 
 ❌ I2C sensor must use 'I2C' as pin (not 20)
@@ -300,7 +300,7 @@ The tool prevents assigning the same pin to multiple inputs:
 Input 0: Pin 6,  Application CHT,          Sensor MAX6675        (PIN_DIGITAL - SPI CS)
 Input 1: Pin A0, Application OIL_TEMP,     Sensor VDO_150C       (PIN_ANALOG - Thermistor)
 Input 2: Pin A1, Application COOLANT,      Sensor VDO_120C       (PIN_ANALOG - Thermistor)
-Input 3: Pin A2, Application OIL_PRESSURE, Sensor VDO_5BAR       (PIN_ANALOG - Pressure)
+Input 3: Pin A2, Application OIL_PRESSURE, Sensor VDO_5BAR_CURVE       (PIN_ANALOG - Pressure)
 Input 4: Pin 2,  Application ENGINE_RPM,   Sensor W_PHASE_RPM    (PIN_DIGITAL - Interrupt)
 Input 5: Pin I2C, Application AMBIENT,     Sensor BME280_TEMP    (PIN_I2C - Shared bus)
 ```
@@ -351,7 +351,7 @@ Input 3: Pin I2C, Application ELEVATION,      Sensor BME280_ELEVATION
 Input 0: Pin 6,  Application CHT,          Sensor MAX6675        (PIN_DIGITAL)
 Input 1: Pin A0, Application OIL_TEMP,     Sensor VDO_150C       (PIN_ANALOG)
 Input 2: Pin A1, Application COOLANT,      Sensor VDO_120C       (PIN_ANALOG)
-Input 3: Pin A2, Application OIL_PRESSURE, Sensor VDO_5BAR       (PIN_ANALOG)
+Input 3: Pin A2, Application OIL_PRESSURE, Sensor VDO_5BAR_CURVE       (PIN_ANALOG)
 Input 4: Pin 2,  Application ENGINE_RPM,   Sensor W_PHASE_RPM    (PIN_DIGITAL)
 ```
 
@@ -372,10 +372,10 @@ Input 4: Pin 2,  Application ENGINE_RPM,   Sensor W_PHASE_RPM    (PIN_DIGITAL)
 
 **Example:**
 ```
-❌ Input 0: Pin 6, Sensor VDO_120C_LOOKUP
+❌ Input 0: Pin 6, Sensor VDO_120C_TABLE
    Error: Sensor requires an analog pin, but 6 is a digital pin
 
-✅ Input 0: Pin A0, Sensor VDO_120C_LOOKUP
+✅ Input 0: Pin A0, Sensor VDO_120C_TABLE
    Success!
 ```
 
@@ -429,10 +429,10 @@ Input 4: Pin 2,  Application ENGINE_RPM,   Sensor W_PHASE_RPM    (PIN_DIGITAL)
 
 **Example:**
 ```
-❌ Input 0: Pin I2C, Sensor VDO_120C_LOOKUP
+❌ Input 0: Pin I2C, Sensor VDO_120C_TABLE
    Error: Only I2C sensors can use 'I2C' as pin
 
-✅ Input 0: Pin A0, Sensor VDO_120C_LOOKUP
+✅ Input 0: Pin A0, Sensor VDO_120C_TABLE
    Success!
 ```
 

@@ -13,7 +13,7 @@
 #include "../../sensor_types.h"
 #include "../../../config.h"
 
-// ===== VDO 120°C LOOKUP TABLES =====
+// ===== VDO 120°C TABLE DATA =====
 // Source: VDO datasheet and empirical measurements
 // Valid range: 0°C to 150°C (extrapolated beyond 120°C)
 // Resistance vs Temperature lookup table for VDO 120°C sensors
@@ -28,7 +28,7 @@ static const float vdo120_temperature[] PROGMEM = {
     105, 110, 115, 120, 125, 130, 135, 140, 145, 150
 };
 
-// ===== VDO 150°C LOOKUP TABLES =====
+// ===== VDO 150°C TABLE DATA =====
 // Resistance vs Temperature lookup table for VDO 150°C sensors
 static const float vdo150_resistance[] PROGMEM = {
     3240.18, 2473.60, 1905.87, 1486.65, 1168.64, 926.71, 739.98, 594.90, 481.53,
@@ -42,7 +42,7 @@ static const float vdo150_temperature[] PROGMEM = {
     110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180
 };
 
-// ===== THERMISTOR LOOKUP CALIBRATIONS =====
+// ===== THERMISTOR TABLE CALIBRATIONS =====
 
 // VDO 120°C using lookup table
 static const PROGMEM ThermistorLookupCalibration vdo120_lookup_cal = {
@@ -108,6 +108,44 @@ static const PROGMEM PolynomialCalibration vdo2bar_polynomial_cal = {
     .poly_a = -3.1515,
     .poly_b = 93.686,
     .poly_c = 9.6307
+};
+
+// ===== PRESSURE SENSOR TABLE DATA =====
+
+// VDO 2-bar (360 043) table - Resistance in ASCENDING order
+// Source: VDO datasheet
+static const float vdo2bar_resistance[] PROGMEM = {
+    10.0, 55.0, 100.0, 144.0, 168.0, 184.0
+};
+static const float vdo2bar_pressure[] PROGMEM = {
+    0.0, 0.5, 1.0, 1.5, 1.8, 2.0
+};
+
+// VDO 5-bar (360 003) table - Resistance in ASCENDING order
+// Source: VDO datasheet
+static const float vdo5bar_resistance[] PROGMEM = {
+    10.0, 48.0, 82.0, 116.0, 184.0
+};
+static const float vdo5bar_pressure[] PROGMEM = {
+    0.0, 1.0, 2.0, 3.0, 5.0
+};
+
+// ===== PRESSURE TABLE CALIBRATIONS =====
+
+// VDO 2-bar using lookup table
+static const PROGMEM PressureTableCalibration vdo2bar_table_cal = {
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .resistance_table = vdo2bar_resistance,
+    .pressure_table = vdo2bar_pressure,
+    .table_size = 6
+};
+
+// VDO 5-bar using lookup table
+static const PROGMEM PressureTableCalibration vdo5bar_table_cal = {
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .resistance_table = vdo5bar_resistance,
+    .pressure_table = vdo5bar_pressure,
+    .table_size = 5
 };
 
 #endif // VDO_CALIBRATIONS_H

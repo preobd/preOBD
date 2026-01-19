@@ -20,7 +20,7 @@ openEMS uses a **registry-based architecture** where sensors are defined in PROG
 If your sensor is already in the library, configure it via serial commands:
 
 ```
-SET A2 COOLANT_TEMP VDO_120C_LOOKUP
+SET A2 COOLANT_TEMP VDO_120C_TABLE
 SAVE
 ```
 
@@ -41,7 +41,7 @@ openEMS uses **hash-based registries** instead of enums. This provides:
 ### The Three Registries
 
 1. **Sensor Library** (`src/lib/sensor_library.h`)
-   - Defines physical sensors (MAX6675, VDO_120C_LOOKUP, etc.)
+   - Defines physical sensors (MAX6675, VDO_120C_TABLE, etc.)
    - Links sensors to read functions and calibration data
    - ~20 sensors, ~3KB in PROGMEM
 
@@ -123,12 +123,12 @@ static const PROGMEM LookupEntry my_thermistor_lookup[] = {
     {800,  -5.0},
     {900, -20.0},
 };
-#define MY_THERMISTOR_LOOKUP_SIZE 10
+#define MY_THERMISTOR_TABLE_SIZE 10
 
 static const PROGMEM ThermistorLookupCalibration my_thermistor_lookup_cal = {
     .bias_resistor = 1000.0,
     .lookup_table = my_thermistor_lookup,
-    .table_size = MY_THERMISTOR_LOOKUP_SIZE
+    .table_size = MY_THERMISTOR_TABLE_SIZE
 };
 ```
 
@@ -456,7 +456,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
 |------|-----------|----------|
 | `CAL_NONE` | None | Sensors that don't need calibration (thermocouples) |
 | `CAL_THERMISTOR_STEINHART` | `ThermistorSteinhartCalibration` | NTC thermistors with S-H coefficients |
-| `CAL_THERMISTOR_LOOKUP` | `ThermistorLookupCalibration` | Thermistors with lookup tables |
+| `CAL_THERMISTOR_TABLE` | `ThermistorLookupCalibration` | Thermistors with lookup tables |
 | `CAL_PRESSURE_LINEAR` | `PressureLinearCalibration` | Linear voltage-to-pressure sensors |
 | `CAL_PRESSURE_POLYNOMIAL` | `PressurePolynomialCalibration` | VDO-style resistive pressure sensors |
 | `CAL_VOLTAGE_DIVIDER` | `VoltageDividerCalibration` | Voltage divider circuits |

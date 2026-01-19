@@ -1029,13 +1029,13 @@ static int cmd_set(int argc, const char* const* argv) {
 
         // Validate calibration type supports bias resistor
         if (input->calibrationType != CAL_THERMISTOR_STEINHART &&
-            input->calibrationType != CAL_THERMISTOR_LOOKUP &&
+            input->calibrationType != CAL_THERMISTOR_TABLE &&
             input->calibrationType != CAL_THERMISTOR_BETA &&
             input->calibrationType != CAL_PRESSURE_POLYNOMIAL) {
             msg.control.print(F("ERROR: Calibration type "));
             msg.control.print(input->calibrationType);
             msg.control.println(F(" does not use bias resistor"));
-            msg.control.println(F("  BIAS works with: Steinhart-Hart, Beta, Lookup, Pressure Polynomial"));
+            msg.control.println(F("  BIAS works with: Steinhart-Hart, Beta, Table, Pressure Polynomial"));
             return 1;
         }
 
@@ -1056,7 +1056,7 @@ static int cmd_set(int argc, const char* const* argv) {
             input->customCalibration.steinhart.bias_resistor = bias;
         } else if (input->calibrationType == CAL_THERMISTOR_BETA) {
             input->customCalibration.beta.bias_resistor = bias;
-        } else if (input->calibrationType == CAL_THERMISTOR_LOOKUP) {
+        } else if (input->calibrationType == CAL_THERMISTOR_TABLE) {
             input->customCalibration.lookup.bias_resistor = bias;
         } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) {
             input->customCalibration.pressurePolynomial.bias_resistor = bias;

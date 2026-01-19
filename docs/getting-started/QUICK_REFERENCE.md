@@ -57,7 +57,7 @@ pio device monitor               # 115200 baud
 CONFIG                                    # Enter configuration mode
 SET 7 EGT MAX31855                       # Pin 7: EGT with thermocouple
 SET A0 OIL_TEMP VDO_150C_STEINHART        # Pin A0: VDO 150C using Steinhart Calibration
-SET A2 COOLANT_TEMP VDO_120C_LOOKUP      # Pin A2: VDO coolant sensor using Lookup table
+SET A2 COOLANT_TEMP VDO_120C_TABLE      # Pin A2: VDO coolant sensor using Lookup table
 SET A3 OIL_PRESSURE GENERIC_150PSI       # Pin A3: Generic 0.5-4.5V pressure
 SET A6 PRIMARY_BATTERY VOLTAGE_DIVIDER   # Pin A6: Battery voltage
 SAVE                                      # Save configuration
@@ -94,7 +94,7 @@ MAX31855 CS  → Your configured pin
 ### VDO Temperature Sensor
 
 ```
-SET A2 COOLANT_TEMP VDO_120C_LOOKUP   # Coolant (most accurate)
+SET A2 COOLANT_TEMP VDO_120C_TABLE   # Coolant (most accurate)
 SET A4 OIL_TEMP VDO_150C_STEINHART    # Oil temp (faster processing)
 SET A5 TCASE_TEMP VDO_150C_STEINHART  # Transfer case
 ```
@@ -127,8 +127,8 @@ Bias resistor  → Between analog pin and 3.3V/5V
 ### VDO Pressure Sensor
 
 ```
-SET A3 OIL_PRESSURE VDO_5BAR          # Oil pressure
-SET A7 BOOST_PRESSURE VDO_2BAR        # Boost pressure
+SET A3 OIL_PRESSURE VDO_5BAR_CURVE          # Oil pressure
+SET A7 BOOST_PRESSURE VDO_2BAR_CURVE        # Boost pressure
 SET A8 FUEL_PRESSURE VDO_10BAR        # Fuel pressure
 ```
 
@@ -258,7 +258,7 @@ HELP CALIBRATION        # Show calibration commands
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `SET <pin> <app> <sensor>` | Configure input | `SET A2 COOLANT_TEMP VDO_120C_LOOKUP` |
+| `SET <pin> <app> <sensor>` | Configure input | `SET A2 COOLANT_TEMP VDO_120C_TABLE` |
 | `SET <pin> ALARM <min> <max>` | Set alarm thresholds | `SET A2 ALARM 60 120` |
 | `SET <pin> UNITS <unit>` | Set display units | `SET A2 UNITS FAHRENHEIT` |
 | `SET <pin> NAME <n>` | Set short name | `SET A2 NAME CLT` |
@@ -396,9 +396,9 @@ See [Serial Commands Reference](../reference/SERIAL_COMMANDS.md#bus-configuratio
 | `COOLANT_TEMP` | Engine Coolant | VDO_120C_*, NTC_10K_* |
 | `OIL_TEMP` | Engine Oil | VDO_150C_*, NTC_10K_* |
 | `TCASE_TEMP` | Transfer Case | VDO_150C_*, NTC_10K_* |
-| `OIL_PRESSURE` | Engine Oil Pressure | VDO_5BAR, GENERIC_150PSI |
-| `BOOST_PRESSURE` | Boost/Manifold Pressure | GENERIC_BOOST, VDO_2BAR |
-| `FUEL_PRESSURE` | Fuel Pressure | VDO_5BAR, GENERIC_150PSI |
+| `OIL_PRESSURE` | Engine Oil Pressure | VDO_5BAR_CURVE, GENERIC_150PSI |
+| `BOOST_PRESSURE` | Boost/Manifold Pressure | GENERIC_BOOST, VDO_2BAR_CURVE |
+| `FUEL_PRESSURE` | Fuel Pressure | VDO_5BAR_CURVE, GENERIC_150PSI |
 | `PRIMARY_BATTERY` | Main Battery | VOLTAGE_DIVIDER |
 | `AUXILIARY_BATTERY` | Secondary Battery | VOLTAGE_DIVIDER |
 | `COOLANT_LEVEL` | Coolant Level Switch | FLOAT_SWITCH |
@@ -418,9 +418,9 @@ See [Serial Commands Reference](../reference/SERIAL_COMMANDS.md#bus-configuratio
 - `MAX31855` - K-Type thermocouple (high range, -200 to 1350°C)
 
 ### VDO Thermistors
-- `VDO_120C_LOOKUP` - VDO 120°C (lookup table, most accurate)
+- `VDO_120C_TABLE` - VDO 120°C (lookup table, most accurate)
 - `VDO_120C_STEINHART` - VDO 120°C (Steinhart-Hart, faster)
-- `VDO_150C_LOOKUP` - VDO 150°C (lookup table)
+- `VDO_150C_TABLE` - VDO 150°C (table)
 - `VDO_150C_STEINHART` - VDO 150°C (Steinhart-Hart)
 
 ### Generic NTC Thermistors
@@ -434,8 +434,8 @@ See [Serial Commands Reference](../reference/SERIAL_COMMANDS.md#bus-configuratio
 - `LINEAR_TEMP_40_150` - Linear 0.5-4.5V, -40 to 150°C
 
 ### VDO Pressure Sensors (Resistive)
-- `VDO_2BAR` - VDO 0-2 bar
-- `VDO_5BAR` - VDO 0-5 bar
+- `VDO_2BAR_CURVE` - VDO 0-2 bar
+- `VDO_5BAR_CURVE` - VDO 0-5 bar
 - `VDO_10BAR` - VDO 0-10 bar
 
 ### Linear Pressure Sensors (0.5-4.5V)

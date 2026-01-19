@@ -324,7 +324,7 @@ Override application defaults:
 
 ```
 CONFIG
-SET A1 OIL_PRESSURE VDO_5BAR
+SET A1 OIL_PRESSURE VDO_5BAR_CURVE
 ALARM A1 WARMUP 45000      # Custom 45-second warmup
 ALARM A1 PERSIST 3000      # Custom 3-second persistence
 SAVE
@@ -352,7 +352,7 @@ Shows alarm state, warmup, and persistence:
 ======================================
   Input A1 (OIL_PRESSURE)
 ======================================
-Sensor: VDO_5BAR
+Sensor: VDO_5BAR_CURVE
 Value: 2.35 bar
 Alarm Thresholds: 0.50 - 10.00 bar
 Alarm State: READY

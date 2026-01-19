@@ -51,6 +51,7 @@
 
 // Pressure sensors
 #include "sensors/pressure/polynomial.cpp"
+#include "sensors/pressure/table.cpp"
 
 // Voltage sensors
 #include "sensors/voltage/divider.cpp"

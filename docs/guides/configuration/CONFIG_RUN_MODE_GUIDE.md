@@ -241,7 +241,7 @@ Starting with firmware v0.4.0, CONFIG mode now supports comprehensive runtime co
 - Timing intervals (sensor read, alarm check, LCD update)
 
 **Advanced Calibration (NEW):**
-- Custom calibrations for thermistors (Steinhart-Hart, lookup table)
+- Custom calibrations for thermistors (Steinhart-Hart, table)
 - Custom calibrations for pressure sensors (linear, polynomial)
 - Fine-tuned RPM calibration (poles, pulley ratio, multiplier)
 - Per-sensor bias resistor override
@@ -279,7 +279,7 @@ SET A0 OIL_TEMP THERMISTOR_STEINHART
 SET A0 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8  # Custom thermistor
 SET A1 BOOST_PRESSURE GENERIC_BOOST
 SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 3.0              # Custom pressure sensor
-SET A3 OIL_PRESSURE VDO_5BAR
+SET A3 OIL_PRESSURE VDO_5BAR_CURVE
 SET A3 BIAS 2200                                    # Use 2.2kΩ bias for this sensor
 SET 5 ENGINE_RPM W_PHASE_RPM
 SET 5 RPM 12 3.0 1.02 2000 100 8000                # Fine-tuned RPM
@@ -307,7 +307,7 @@ For complete command reference, see [Serial Command Reference](../../reference/S
 2. Configure sensors via serial commands:
    ```
    SET A0 APPLICATION CHT K_TYPE_THERMOCOUPLE_MAX6675
-   SET A1 APPLICATION COOLANT_TEMP VDO_120C_LOOKUP
+   SET A1 APPLICATION COOLANT_TEMP VDO_120C_TABLE
    SET A2 APPLICATION OIL_PRESSURE VDO_5BAR_PRESSURE
    SET A0 ALARM 50 400
    SET A2 ALARM 0.5 5.0

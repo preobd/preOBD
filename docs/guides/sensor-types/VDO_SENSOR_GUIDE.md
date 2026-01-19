@@ -20,7 +20,7 @@ VDO temperature sensors are single-wire NTC (Negative Temperature Coefficient) t
 ### Coolant Temperature
 
 ```
-SET A2 COOLANT_TEMP VDO_120C_LOOKUP
+SET A2 COOLANT_TEMP VDO_120C_TABLE
 SAVE
 ```
 
@@ -39,7 +39,7 @@ SAVE
 
 | Sensor ID | Method | Accuracy | Speed |
 |-----------|--------|----------|-------|
-| `VDO_120C_LOOKUP` | Lookup table | ±0.5°C | Slower |
+| `VDO_120C_TABLE` | Lookup table | ±0.5°C | Slower |
 | `VDO_120C_STEINHART` | Steinhart-Hart | ±1°C | Faster |
 
 **Best for:** Coolant temperature (normal operating range 80-100°C)
@@ -48,14 +48,14 @@ SAVE
 
 | Sensor ID | Method | Accuracy | Speed |
 |-----------|--------|----------|-------|
-| `VDO_150C_LOOKUP` | Lookup table | ±0.5°C | Slower |
+| `VDO_150C_TABLE` | Lookup table | ±0.5°C | Slower |
 | `VDO_150C_STEINHART` | Steinhart-Hart | ±1°C | Faster |
 
 **Best for:** Oil temperature, transfer case (can exceed 120°C)
 
-### Lookup vs. Steinhart-Hart
+### Table vs. Steinhart-Hart
 
-**Lookup Table (`_LOOKUP`):**
+**Lookup Table (`_TABLE`):**
 - Uses manufacturer's exact resistance/temperature data points
 - Interpolates between table values
 - Most accurate method
@@ -67,7 +67,7 @@ SAVE
 - Very good accuracy for most applications
 - Faster computation
 
-**Recommendation:** Use `_LOOKUP` for critical sensors (coolant), `_STEINHART` for others.
+**Recommendation:** Use `_TABLE` for critical sensors (coolant), `_STEINHART` for others.
 
 ---
 
@@ -110,7 +110,7 @@ The default is 1kΩ (set by DEFAULT_BIAS_RESISTOR in config.h).
 
 To use a different resistor:
 ```
-SET A0 OIL_TEMP VDO_150C_LOOKUP
+SET A0 OIL_TEMP VDO_150C_TABLE
 SET A0 BIAS 470
 SAVE
 ```
@@ -122,7 +122,7 @@ SAVE
 ### Example 1: Coolant Temperature with Alarm
 
 ```
-SET A2 COOLANT_TEMP VDO_120C_LOOKUP
+SET A2 COOLANT_TEMP VDO_120C_TABLE
 SET A2 ALARM 60 105
 SAVE
 ```
@@ -140,7 +140,7 @@ SAVE
 ### Example 3: Transfer Case Temperature
 
 ```
-SET A1 TCASE_TEMP VDO_150C_LOOKUP
+SET A1 TCASE_TEMP VDO_150C_TABLE
 SET A1 ALARM 40 120
 SAVE
 ```
@@ -148,7 +148,7 @@ SAVE
 ### Example 4: Multiple Temperature Sensors
 
 ```
-SET A2 COOLANT_TEMP VDO_120C_LOOKUP
+SET A2 COOLANT_TEMP VDO_120C_TABLE
 SET A0 OIL_TEMP VDO_150C_STEINHART
 SET A1 TCASE_TEMP VDO_150C_STEINHART
 SAVE

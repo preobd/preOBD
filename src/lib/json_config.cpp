@@ -76,7 +76,8 @@ static const char* getCalibrationType(const Input* input) {
         case CAL_NONE: return "NONE";
         case CAL_THERMISTOR_STEINHART: return "THERMISTOR_STEINHART";
         case CAL_THERMISTOR_BETA: return "THERMISTOR_BETA";
-        case CAL_THERMISTOR_LOOKUP: return "THERMISTOR_LOOKUP";
+        case CAL_THERMISTOR_TABLE: return "THERMISTOR_TABLE";
+        case CAL_PRESSURE_TABLE: return "PRESSURE_TABLE";
         case CAL_PRESSURE_POLYNOMIAL: return "PRESSURE_POLYNOMIAL";
         case CAL_LINEAR: return "LINEAR";
         case CAL_VOLTAGE_DIVIDER: return "VOLTAGE_DIVIDER";
@@ -112,7 +113,12 @@ static void exportCalibration(JsonObject& calObj, const Input* input) {
             params["t0"] = input->customCalibration.beta.t0;
             break;
 
-        case CAL_THERMISTOR_LOOKUP:
+        case CAL_THERMISTOR_TABLE:
+            params["biasResistor"] = input->customCalibration.lookup.bias_resistor;
+            break;
+
+        case CAL_PRESSURE_TABLE:
+            // Pressure tables use same union member as thermistor lookup (only bias resistor is customizable)
             params["biasResistor"] = input->customCalibration.lookup.bias_resistor;
             break;
 

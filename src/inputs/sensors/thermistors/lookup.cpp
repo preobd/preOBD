@@ -33,8 +33,8 @@ void readThermistorLookup(Input *ptr) {
         return;
     }
 
-    // Get calibration from PROGMEM (REQUIRED for lookup method)
-    if (ptr->calibrationType != CAL_THERMISTOR_LOOKUP || ptr->presetCalibration == nullptr) {
+    // Get calibration from PROGMEM (REQUIRED for table method)
+    if (ptr->calibrationType != CAL_THERMISTOR_TABLE || ptr->presetCalibration == nullptr) {
         ptr->value = NAN;  // Can't do lookup without table
         return;
     }

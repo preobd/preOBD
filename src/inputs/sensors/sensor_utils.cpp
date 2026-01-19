@@ -53,6 +53,46 @@ float interpolate(float value, byte tableSize, const float* xTable, const float*
     return NAN;
 }
 
+/**
+ * Linear interpolation in a PROGMEM lookup table (ascending X order).
+ *
+ * Performs linear interpolation to find a Y value for a given X value in a
+ * pair of lookup tables stored in flash memory (PROGMEM).
+ *
+ * Used for pressure sensors where resistance increases with pressure
+ * (unlike thermistors where resistance decreases with temperature).
+ *
+ * @param value       The X value to look up
+ * @param tableSize   Number of entries in the lookup tables
+ * @param xTable      X values in PROGMEM (must be sorted in ASCENDING order)
+ * @param yTable      Corresponding Y values in PROGMEM
+ * @return Interpolated Y value, or NAN if lookup fails
+ */
+float interpolateAscending(float value, byte tableSize, const float* xTable, const float* yTable) {
+    // Handle edge cases - read from PROGMEM
+    float x0 = READ_FLOAT_PROGMEM(xTable[0]);
+    float xLast = READ_FLOAT_PROGMEM(xTable[tableSize-1]);
+
+    // Clamp to table boundaries
+    if (value <= x0) return READ_FLOAT_PROGMEM(yTable[0]);
+    if (value >= xLast) return READ_FLOAT_PROGMEM(yTable[tableSize-1]);
+
+    // Find the right segment (iterate forward for ascending order)
+    for (int i = 0; i < tableSize - 1; i++) {
+        float xi = READ_FLOAT_PROGMEM(xTable[i]);
+        float xi_next = READ_FLOAT_PROGMEM(xTable[i+1]);
+
+        if (value >= xi && value <= xi_next) {
+            // Linear interpolation: y = y1 + ((x - x1) / (x2 - x1)) * (y2 - y1)
+            float yi = READ_FLOAT_PROGMEM(yTable[i]);
+            float yi_next = READ_FLOAT_PROGMEM(yTable[i+1]);
+
+            return yi + ((value - xi) / (xi_next - xi)) * (yi_next - yi);
+        }
+    }
+    return NAN;
+}
+
 // Readings within this margin of 0 or ADC_MAX are considered "railed"
 // (sensor disconnected, shorted, or out of range)
 #define ADC_RAIL_MARGIN 3

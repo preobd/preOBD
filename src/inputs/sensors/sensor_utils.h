@@ -14,8 +14,11 @@
 #include "../../lib/platform.h"
 #include "../input.h"
 
-// Linear interpolation in PROGMEM lookup tables
+// Linear interpolation in PROGMEM lookup tables (descending X order - thermistors)
 float interpolate(float value, byte tableSize, const float* xTable, const float* yTable);
+
+// Linear interpolation in PROGMEM lookup tables (ascending X order - pressure sensors)
+float interpolateAscending(float value, byte tableSize, const float* xTable, const float* yTable);
 
 // Centralized ADC reading with validation
 int readAnalogPin(int pin, bool* isValid);

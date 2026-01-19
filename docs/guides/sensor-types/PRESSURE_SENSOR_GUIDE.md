@@ -18,14 +18,14 @@ openEMS supports two types of pressure sensors:
 ### VDO 5-Bar Oil Pressure
 
 ```
-SET A3 OIL_PRESSURE VDO_5BAR
+SET A3 OIL_PRESSURE VDO_5BAR_CURVE
 SAVE
 ```
 
 ### VDO 2-Bar Boost Pressure
 
 ```
-SET A4 BOOST_PRESSURE VDO_2BAR
+SET A4 BOOST_PRESSURE VDO_2BAR_CURVE
 SAVE
 ```
 
@@ -40,17 +40,24 @@ SAVE
 
 ## Available Pressure Sensors
 
-### VDO Sensors (Polynomial Calibration)
+### VDO Sensors
 
-| Sensor ID | Range | Notes |
-|-----------|-------|-------|
-| `VDO_5BAR` | 0-5 bar (0-73 PSI) | Oil pressure, fuel pressure |
-| `VDO_2BAR` | 0-2 bar (0-29 PSI) | Boost/intake pressure |
+VDO pressure sensors are available with two calibration methods:
+
+| Sensor ID | Calibration | Range | Notes |
+|-----------|-------------|-------|-------|
+| `VDO_5BAR_CURVE` | Polynomial curve fit | 0-5 bar (0-73 PSI) | Oil pressure, fuel pressure |
+| `VDO_2BAR_CURVE` | Polynomial curve fit | 0-2 bar (0-29 PSI) | Boost/intake pressure |
+| `VDO_5BAR_TABLE` | Lookup table | 0-5 bar (0-73 PSI) | Datasheet points interpolated |
+| `VDO_2BAR_TABLE` | Lookup table | 0-2 bar (0-29 PSI) | Datasheet points interpolated |
+
+**CURVE vs TABLE:**
+- **CURVE** (polynomial): Uses curve-fitted equation, smoother between points
+- **TABLE** (lookup): Uses manufacturer datasheet points with linear interpolation, most accurate at specified points
 
 **Characteristics:**
 - Single-wire resistive sensors
 - Non-linear resistance output
-- Factory calibrated with polynomial equation
 - Very accurate (±1% typical)
 - Common in European vehicles
 
@@ -106,7 +113,7 @@ No external resistors needed!
 ### Example 1: Oil Pressure with Alarm
 
 ```
-SET A3 OIL_PRESSURE VDO_5BAR
+SET A3 OIL_PRESSURE VDO_5BAR_CURVE
 SET A3 ALARM 0.5 6
 SAVE
 ```
@@ -116,7 +123,7 @@ The alarm triggers below 0.5 bar (low oil pressure warning) or above 6 bar.
 ### Example 2: Turbo Boost Pressure
 
 ```
-SET A4 BOOST_PRESSURE VDO_2BAR
+SET A4 BOOST_PRESSURE VDO_2BAR_CURVE
 SET A4 ALARM -1 1.5
 SAVE
 ```
@@ -127,13 +134,13 @@ The alarm triggers if boost exceeds 1.5 bar (-1 means no low alarm).
 
 ```
 # Oil pressure
-SET A3 OIL_PRESSURE VDO_5BAR
+SET A3 OIL_PRESSURE VDO_5BAR_CURVE
 
 # Boost pressure
-SET A4 BOOST_PRESSURE VDO_2BAR
+SET A4 BOOST_PRESSURE VDO_2BAR_CURVE
 
 # Fuel pressure
-SET A5 FUEL_PRESSURE VDO_5BAR
+SET A5 FUEL_PRESSURE VDO_5BAR_CURVE
 
 SAVE
 ```
@@ -147,7 +154,7 @@ SAVE
 If you're using a different bias resistor than the default 1kΩ:
 
 ```
-SET A3 OIL_PRESSURE VDO_5BAR
+SET A3 OIL_PRESSURE VDO_5BAR_CURVE
 SET A3 BIAS 2200
 SAVE
 ```
@@ -169,7 +176,7 @@ Parameters: `voltage_min voltage_max pressure_min pressure_max`
 For VDO-style polynomial calibration with custom coefficients:
 
 ```
-SET A3 OIL_PRESSURE VDO_5BAR
+SET A3 OIL_PRESSURE VDO_5BAR_CURVE
 SET A3 PRESSURE_POLY 1000 -0.3682 36.465 10.648
 SAVE
 ```

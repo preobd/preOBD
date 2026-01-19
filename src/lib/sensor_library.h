@@ -33,6 +33,7 @@ extern void readMAX31855(Input*);
 extern void readThermistorLookup(Input*);
 extern void readThermistorSteinhart(Input*);
 extern void readPressurePolynomial(Input*);
+extern void readPressureTable(Input*);
 extern void readLinearSensor(Input*);
 extern void readVoltageDivider(Input*);
 extern void readWPhaseRPM(Input*);
@@ -124,16 +125,16 @@ static const char PSTR_MAX6675[] PROGMEM = "MAX6675";
 static const char PSTR_MAX6675_LABEL[] PROGMEM = "K-Type Thermocouple (0-1024°C)";
 static const char PSTR_MAX31855[] PROGMEM = "MAX31855";
 static const char PSTR_MAX31855_LABEL[] PROGMEM = "K-Type Thermocouple (-270-1372°C)";
-static const char PSTR_VDO_120C_LOOKUP[] PROGMEM = "VDO_120C_LOOKUP";
-static const char PSTR_VDO_120C_LOOKUP_LABEL[] PROGMEM = "VDO 120C (lookup table)";
-static const char PSTR_VDO_150C_LOOKUP[] PROGMEM = "VDO_150C_LOOKUP";
-static const char PSTR_VDO_150C_LOOKUP_LABEL[] PROGMEM = "VDO 150C (lookup table)";
+static const char PSTR_VDO_120C_TABLE[] PROGMEM = "VDO_120C_TABLE";
+static const char PSTR_VDO_120C_TABLE_LABEL[] PROGMEM = "VDO 120C (table)";
+static const char PSTR_VDO_150C_TABLE[] PROGMEM = "VDO_150C_TABLE";
+static const char PSTR_VDO_150C_TABLE_LABEL[] PROGMEM = "VDO 150C (table)";
 static const char PSTR_VDO_120C_STEINHART[] PROGMEM = "VDO_120C_STEINHART";
 static const char PSTR_VDO_120C_STEINHART_LABEL[] PROGMEM = "VDO 120C (Steinhart-Hart)";
 static const char PSTR_VDO_150C_STEINHART[] PROGMEM = "VDO_150C_STEINHART";
 static const char PSTR_VDO_150C_STEINHART_LABEL[] PROGMEM = "VDO 150C (Steinhart-Hart)";
-static const char PSTR_NTC_LOOKUP[] PROGMEM = "GENERIC_NTC_LOOKUP";
-static const char PSTR_NTC_LOOKUP_LABEL[] PROGMEM = "Generic NTC (custom lookup table)";
+static const char PSTR_NTC_TABLE[] PROGMEM = "GENERIC_NTC_TABLE";
+static const char PSTR_NTC_TABLE_LABEL[] PROGMEM = "Generic NTC (custom table)";
 static const char PSTR_NTC_STEINHART[] PROGMEM = "GENERIC_NTC_STEINHART";
 static const char PSTR_NTC_STEINHART_LABEL[] PROGMEM = "Generic NTC (custom Steinhart-Hart)";
 static const char PSTR_NTC_BETA[] PROGMEM = "GENERIC_NTC_BETA";
@@ -148,10 +149,14 @@ static const char PSTR_AEM_30_2130_150[] PROGMEM = "AEM_30_2130_150";
 static const char PSTR_AEM_30_2130_150_LABEL[] PROGMEM = "AEM 150 PSI (0-150 PSI / 10 bar)";
 static const char PSTR_MPX4250AP[] PROGMEM = "MPX4250AP";
 static const char PSTR_MPX4250AP_LABEL[] PROGMEM = "Freescale/NXP (20-250 kPa)";
-static const char PSTR_VDO_2BAR[] PROGMEM = "VDO_2BAR";
-static const char PSTR_VDO_2BAR_LABEL[] PROGMEM = "VDO 2 Bar";
-static const char PSTR_VDO_5BAR[] PROGMEM = "VDO_5BAR";
-static const char PSTR_VDO_5BAR_LABEL[] PROGMEM = "VDO 5 Bar";
+static const char PSTR_VDO_2BAR_CURVE[] PROGMEM = "VDO_2BAR_CURVE";
+static const char PSTR_VDO_2BAR_CURVE_LABEL[] PROGMEM = "VDO 2 Bar (curve fit)";
+static const char PSTR_VDO_5BAR_CURVE[] PROGMEM = "VDO_5BAR_CURVE";
+static const char PSTR_VDO_5BAR_CURVE_LABEL[] PROGMEM = "VDO 5 Bar (curve fit)";
+static const char PSTR_VDO_2BAR_TABLE[] PROGMEM = "VDO_2BAR_TABLE";
+static const char PSTR_VDO_2BAR_TABLE_LABEL[] PROGMEM = "VDO 2 Bar (table)";
+static const char PSTR_VDO_5BAR_TABLE[] PROGMEM = "VDO_5BAR_TABLE";
+static const char PSTR_VDO_5BAR_TABLE_LABEL[] PROGMEM = "VDO 5 Bar (table)";
 static const char PSTR_VOLTAGE_DIVIDER[] PROGMEM = "VOLTAGE_DIVIDER";
 static const char PSTR_VOLTAGE_DIVIDER_LABEL[] PROGMEM = "Battery voltage (12V divider)";
 static const char PSTR_W_PHASE_RPM[] PROGMEM = "W_PHASE_RPM";
@@ -233,39 +238,39 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .pinTypeRequirement = PIN_DIGITAL  // Uses SPI CS pin (digitalWrite)
     },
 
-    // ===== VDO THERMISTORS - LOOKUP =====
-    // Index 3: VDO_120C_LOOKUP
+    // ===== VDO THERMISTORS - TABLE =====
+    // Index 3: VDO_120C_TABLE
     {
 
-        .name = PSTR_VDO_120C_LOOKUP,
-        .label = PSTR_VDO_120C_LOOKUP_LABEL,
+        .name = PSTR_VDO_120C_TABLE,
+        .label = PSTR_VDO_120C_TABLE_LABEL,
         .description = nullptr,
         .readFunction = readThermistorLookup,
         .initFunction = nullptr,
         .measurementType = MEASURE_TEMPERATURE,
-        .calibrationType = CAL_THERMISTOR_LOOKUP,
+        .calibrationType = CAL_THERMISTOR_TABLE,
         .defaultCalibration = &vdo120_lookup_cal,
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = -40.0,       // VDO sensor minimum
         .maxValue = 150.0,       // VDO 120°C maximum
-        .nameHash = 0xAE3C,  // djb2_hash("VDO_120C_LOOKUP")
+        .nameHash = 0x7FEA,  // djb2_hash("VDO_120C_TABLE")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
-    // Index 4: VDO_150C_LOOKUP
+    // Index 4: VDO_150C_TABLE
     {
 
-        .name = PSTR_VDO_150C_LOOKUP,
-        .label = PSTR_VDO_150C_LOOKUP_LABEL,
+        .name = PSTR_VDO_150C_TABLE,
+        .label = PSTR_VDO_150C_TABLE_LABEL,
         .description = nullptr,
         .readFunction = readThermistorLookup,
         .initFunction = nullptr,
         .measurementType = MEASURE_TEMPERATURE,
-        .calibrationType = CAL_THERMISTOR_LOOKUP,
+        .calibrationType = CAL_THERMISTOR_TABLE,
         .defaultCalibration = &vdo150_lookup_cal,
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = -40.0,       // VDO sensor minimum
         .maxValue = 180.0,       // VDO 150°C maximum
-        .nameHash = 0x619F,  // djb2_hash("VDO_150C_LOOKUP")
+        .nameHash = 0xD2ED,  // djb2_hash("VDO_150C_TABLE")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
 
@@ -306,21 +311,21 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== GENERIC NTC THERMISTORS (PLACEHOLDERS) =====
-    // Index 7: NTC_LOOKUP (placeholder - not yet implemented)
+    // Index 7: NTC_TABLE (placeholder - not yet implemented)
     {
 
-        .name = PSTR_NTC_LOOKUP,
-        .label = PSTR_NTC_LOOKUP_LABEL,
+        .name = PSTR_NTC_TABLE,
+        .label = PSTR_NTC_TABLE_LABEL,
         .description = nullptr,
         .readFunction = nullptr,
         .initFunction = nullptr,
         .measurementType = MEASURE_TEMPERATURE,
-        .calibrationType = CAL_THERMISTOR_LOOKUP,
+        .calibrationType = CAL_THERMISTOR_TABLE,
         .defaultCalibration = nullptr,
         .minReadInterval = 0,
         .minValue = -40.0,
         .maxValue = 150.0,
-        .nameHash = 0x7EDF,  // djb2_hash("GENERIC_NTC_LOOKUP")
+        .nameHash = 0x482D,  // djb2_hash("GENERIC_NTC_TABLE")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
     // Index 8: NTC_STEINHART (placeholder - not yet implemented)
@@ -446,11 +451,11 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0xDF76,  // djb2_hash("MPX4250AP")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
-    // Index 15: VDO_2BAR
+    // Index 15: VDO_2BAR_CURVE
     {
 
-        .name = PSTR_VDO_2BAR,
-        .label = PSTR_VDO_2BAR_LABEL,
+        .name = PSTR_VDO_2BAR_CURVE,
+        .label = PSTR_VDO_2BAR_CURVE_LABEL,
         .description = nullptr,
         .readFunction = readPressurePolynomial,
         .initFunction = nullptr,
@@ -460,14 +465,14 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = 0.0,
         .maxValue = 2.0,
-        .nameHash = 0x1ED4,  // djb2_hash("VDO_2BAR")
+        .nameHash = 0x6FB8,  // djb2_hash("VDO_2BAR_CURVE")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
-    // Index 16: VDO_5BAR
+    // Index 16: VDO_5BAR_CURVE
     {
 
-        .name = PSTR_VDO_5BAR,
-        .label = PSTR_VDO_5BAR_LABEL,
+        .name = PSTR_VDO_5BAR_CURVE,
+        .label = PSTR_VDO_5BAR_CURVE_LABEL,
         .description = nullptr,
         .readFunction = readPressurePolynomial,
         .initFunction = nullptr,
@@ -477,12 +482,46 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = SENSOR_READ_INTERVAL_MS,
         .minValue = 0.0,
         .maxValue = 5.0,
-        .nameHash = 0xC3F7,  // djb2_hash("VDO_5BAR")
+        .nameHash = 0x231B,  // djb2_hash("VDO_5BAR_CURVE")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
+    },
+    // Index 17: VDO_2BAR_TABLE
+    {
+
+        .name = PSTR_VDO_2BAR_TABLE,
+        .label = PSTR_VDO_2BAR_TABLE_LABEL,
+        .description = nullptr,
+        .readFunction = readPressureTable,
+        .initFunction = nullptr,
+        .measurementType = MEASURE_PRESSURE,
+        .calibrationType = CAL_PRESSURE_TABLE,
+        .defaultCalibration = &vdo2bar_table_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS,
+        .minValue = 0.0,
+        .maxValue = 2.0,
+        .nameHash = 0xD35B,  // djb2_hash("VDO_2BAR_TABLE")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
+    },
+    // Index 18: VDO_5BAR_TABLE
+    {
+
+        .name = PSTR_VDO_5BAR_TABLE,
+        .label = PSTR_VDO_5BAR_TABLE_LABEL,
+        .description = nullptr,
+        .readFunction = readPressureTable,
+        .initFunction = nullptr,
+        .measurementType = MEASURE_PRESSURE,
+        .calibrationType = CAL_PRESSURE_TABLE,
+        .defaultCalibration = &vdo5bar_table_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS,
+        .minValue = 0.0,
+        .maxValue = 5.0,
+        .nameHash = 0x86BE,  // djb2_hash("VDO_5BAR_TABLE")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
 
     // ===== VOLTAGE SENSORS =====
-    // Index 17: VOLTAGE_DIVIDER
+    // Index 19: VOLTAGE_DIVIDER
     {
 
         .name = PSTR_VOLTAGE_DIVIDER,
@@ -501,7 +540,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== RPM SENSORS =====
-    // Index 18: W_PHASE_RPM
+    // Index 20: W_PHASE_RPM
     {
 
         .name = PSTR_W_PHASE_RPM,
@@ -520,7 +559,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== SPEED SENSORS =====
-    // Index 19: HALL_SPEED
+    // Index 21: HALL_SPEED
     {
         .name = PSTR_HALL_SPEED,
         .label = PSTR_HALL_SPEED_LABEL,
@@ -538,7 +577,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== BME280 SENSORS =====
-    // Index 20: BME280_TEMP
+    // Index 22: BME280_TEMP
     {
 
         .name = PSTR_BME280_TEMP,
@@ -555,7 +594,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x72A8,  // djb2_hash("BME280_TEMP")
         .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
-    // Index 21: BME280_PRESSURE
+    // Index 23: BME280_PRESSURE
     {
 
         .name = PSTR_BME280_PRESSURE,
@@ -572,7 +611,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x454B,  // djb2_hash("BME280_PRESSURE")
         .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
-    // Index 22: BME280_HUMIDITY
+    // Index 24: BME280_HUMIDITY
     {
 
         .name = PSTR_BME280_HUMIDITY,
@@ -589,7 +628,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x381F,  // djb2_hash("BME280_HUMIDITY")
         .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
-    // Index 23: BME280_ELEVATION
+    // Index 25: BME280_ELEVATION
     {
 
         .name = PSTR_BME280_ELEVATION,
@@ -608,7 +647,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== DIGITAL SENSORS =====
-    // Index 24: FLOAT_SWITCH
+    // Index 26: FLOAT_SWITCH
     {
 
         .name = PSTR_FLOAT_SWITCH,
@@ -761,7 +800,7 @@ inline SensorCategory getSensorCategory(uint8_t sensorIndex) {
 
     // Temperature sensors by calibration type
     if (measType == MEASURE_TEMPERATURE) {
-        if (calType == CAL_THERMISTOR_LOOKUP ||
+        if (calType == CAL_THERMISTOR_TABLE ||
             calType == CAL_THERMISTOR_STEINHART ||
             calType == CAL_THERMISTOR_BETA) {
             return CAT_NTC_THERMISTOR;
@@ -773,7 +812,7 @@ inline SensorCategory getSensorCategory(uint8_t sensorIndex) {
 
     // Pressure sensors by calibration type
     if (measType == MEASURE_PRESSURE) {
-        if (calType == CAL_PRESSURE_POLYNOMIAL) return CAT_RESISTIVE_PRESSURE;
+        if (calType == CAL_PRESSURE_POLYNOMIAL || calType == CAL_PRESSURE_TABLE) return CAT_RESISTIVE_PRESSURE;
         if (calType == CAL_LINEAR) return CAT_LINEAR_PRESSURE;
     }
 

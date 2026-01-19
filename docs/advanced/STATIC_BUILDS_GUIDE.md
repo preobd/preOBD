@@ -177,7 +177,7 @@ The tool saves configurations as JSON files in `tools/saved-configs/`. This allo
       "pin": "A2",
       "application": "COOLANT_TEMP",
       "applicationIndex": 2,
-      "sensor": "VDO_120C_LOOKUP",
+      "sensor": "VDO_120C_TABLE",
       "sensorIndex": 3
     }
   ]
@@ -282,12 +282,12 @@ The tool updates the static configuration block:
 // ----- Input 1: COOLANT_TEMP -----
 #define INPUT_1_PIN           A2
 #define INPUT_1_APPLICATION   2            // COOLANT_TEMP
-#define INPUT_1_SENSOR        3            // VDO_120C_LOOKUP
+#define INPUT_1_SENSOR        3            // VDO_120C_TABLE
 
 // ----- Input 2: OIL_PRESSURE -----
 #define INPUT_2_PIN           A3
 #define INPUT_2_APPLICATION   4            // OIL_PRESSURE
-#define INPUT_2_SENSOR        8            // VDO_5BAR
+#define INPUT_2_SENSOR        8            // VDO_5BAR_CURVE
 
 #endif // USE_STATIC_CONFIG
 ```
@@ -342,7 +342,7 @@ python3 tools/configure.py --platform uno
 # Configure 4 sensors:
 # - Input 0: CHT with MAX6675 on pin 6
 # - Input 1: Coolant with VDO_120C on A2
-# - Input 2: Oil pressure with VDO_5BAR on A3
+# - Input 2: Oil pressure with VDO_5BAR_CURVE on A3
 # - Input 3: Battery voltage on A6
 
 # Save as JSON
