@@ -132,11 +132,11 @@ static const char PSTR_VDO_120C_STEINHART[] PROGMEM = "VDO_120C_STEINHART";
 static const char PSTR_VDO_120C_STEINHART_LABEL[] PROGMEM = "VDO 120C (Steinhart-Hart)";
 static const char PSTR_VDO_150C_STEINHART[] PROGMEM = "VDO_150C_STEINHART";
 static const char PSTR_VDO_150C_STEINHART_LABEL[] PROGMEM = "VDO 150C (Steinhart-Hart)";
-static const char PSTR_NTC_LOOKUP[] PROGMEM = "NTC_LOOKUP";
+static const char PSTR_NTC_LOOKUP[] PROGMEM = "GENERIC_NTC_LOOKUP";
 static const char PSTR_NTC_LOOKUP_LABEL[] PROGMEM = "Generic NTC (custom lookup table)";
-static const char PSTR_NTC_STEINHART[] PROGMEM = "NTC_STEINHART";
+static const char PSTR_NTC_STEINHART[] PROGMEM = "GENERIC_NTC_STEINHART";
 static const char PSTR_NTC_STEINHART_LABEL[] PROGMEM = "Generic NTC (custom Steinhart-Hart)";
-static const char PSTR_NTC_BETA[] PROGMEM = "NTC_BETA";
+static const char PSTR_NTC_BETA[] PROGMEM = "GENERIC_NTC_BETA";
 static const char PSTR_NTC_BETA_LABEL[] PROGMEM = "Generic NTC (custom Beta equation)";
 static const char PSTR_GENERIC_BOOST[] PROGMEM = "GENERIC_BOOST";
 static const char PSTR_GENERIC_BOOST_LABEL[] PROGMEM = "0.5-4.5V linear (0-5 bar)";
@@ -320,7 +320,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = 0,
         .minValue = -40.0,
         .maxValue = 150.0,
-        .nameHash = 0xAA03,  // djb2_hash("NTC_LOOKUP")
+        .nameHash = 0x7EDF,  // djb2_hash("GENERIC_NTC_LOOKUP")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
     // Index 8: NTC_STEINHART (placeholder - not yet implemented)
@@ -337,7 +337,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = 0,
         .minValue = -40.0,
         .maxValue = 150.0,
-        .nameHash = 0xAE9B,  // djb2_hash("NTC_STEINHART")
+        .nameHash = 0xA5F7,  // djb2_hash("GENERIC_NTC_STEINHART")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
     // Index 9: NTC_BETA (placeholder - not yet implemented)
@@ -354,7 +354,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .minReadInterval = 0,
         .minValue = -40.0,
         .maxValue = 150.0,
-        .nameHash = 0x3185,  // djb2_hash("NTC_BETA")
+        .nameHash = 0x1F61,  // djb2_hash("GENERIC_NTC_BETA")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
 
