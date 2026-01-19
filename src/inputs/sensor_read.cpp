@@ -47,7 +47,7 @@
 // Thermistors (NTC resistance-based)
 #include "sensors/thermistors/steinhart.cpp"
 #include "sensors/thermistors/beta.cpp"
-#include "sensors/thermistors/lookup.cpp"
+#include "sensors/thermistors/table.cpp"
 
 // Pressure sensors
 #include "sensors/pressure/polynomial.cpp"

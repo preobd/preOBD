@@ -1,9 +1,9 @@
 /*
- * lookup.cpp - Thermistor Reading (Lookup Table Method)
+ * table.cpp - Thermistor Reading (Lookup Table Method)
  *
  * Implements thermistor temperature reading using PROGMEM lookup tables.
  * Most accurate method when using manufacturer-provided resistance/temperature data.
- * Used by VDO 120C and VDO 150C sensors.
+ * Used by VDO 120C (323 095) and VDO 150C (323 057) sensors.
  */
 
 #include "../../../config.h"
