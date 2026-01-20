@@ -173,6 +173,8 @@ static const char PSTR_FLOAT_SWITCH[] PROGMEM = "FLOAT_SWITCH";
 static const char PSTR_FLOAT_SWITCH_LABEL[] PROGMEM = "Float/level switch (digital)";
 static const char PSTR_HALL_SPEED[] PROGMEM = "HALL_SPEED";
 static const char PSTR_HALL_SPEED_LABEL[] PROGMEM = "Hall Effect Speed Sensor";
+static const char PSTR_MPX5700AP[] PROGMEM = "MPX5700AP";
+static const char PSTR_MPX5700AP_LABEL[] PROGMEM = "Freescale/NXP (15-700 kPa)";
 
 // ===== SENSOR LIBRARY (PROGMEM - Flash Memory) =====
 //
@@ -663,6 +665,24 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .maxValue = 1.0,
         .nameHash = 0xF22C,  // djb2_hash("FLOAT_SWITCH")
         .pinTypeRequirement = PIN_DIGITAL  // Uses digitalRead
+    },
+
+    // ===== PRESSURE SENSORS (ADDITIONAL) =====
+    // Index 27: MPX5700AP
+    {
+        .name = PSTR_MPX5700AP,
+        .label = PSTR_MPX5700AP_LABEL,
+        .description = nullptr,
+        .readFunction = readLinearSensor,
+        .initFunction = nullptr,
+        .measurementType = MEASURE_PRESSURE,
+        .calibrationType = CAL_LINEAR,
+        .defaultCalibration = &mpx5700ap_linear_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS,
+        .minValue = 0.15,        // 15 kPa minimum
+        .maxValue = 7.0,         // 700 kPa maximum
+        .nameHash = 0xC4B7,  // djb2_hash("MPX5700AP")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     }
 };
 

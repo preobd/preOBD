@@ -123,6 +123,7 @@ This table maps each sensor to its required pin type:
 | **Pressure Sensors**  |                      |             |                                      |
 | GENERIC_BOOST         | PIN_ANALOG           | A6          | Analog boost/vacuum sensor           |
 | MPX4250AP             | PIN_ANALOG           | A7          | Freescale analog pressure sensor     |
+| MPX5700AP             | PIN_ANALOG           | A8          | Freescale analog pressure sensor     |
 | VDO_2BAR_CURVE              | PIN_ANALOG           | A8          | VDO 2-bar sender                     |
 | VDO_5BAR_CURVE              | PIN_ANALOG           | A9          | VDO 5-bar sender                     |
 | **Voltage Sensors**   |                      |             |                                      |
