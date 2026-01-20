@@ -205,8 +205,8 @@ void setup() {
     msg.debug.println(F("     /_/                                "));
     msg.debug.println(F("                                        "));
     msg.debug.println(F("openEngine Monitoring System ==========="));
-    msg.debug.print("Firmware version ");
-    msg.debug.println(FIRMWARE_VERSION);
+    msg.debug.print(F("Firmware version "));
+    msg.debug.println(firmwareVersionString());
     msg.debug.println(F("                                        "));
 
     // Configure ADC for this platform

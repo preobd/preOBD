@@ -292,7 +292,13 @@ void dumpConfigToJSON(Print& output) {
 
     // Firmware info
     JsonObject firmware = doc["firmware"].to<JsonObject>();
-    firmware["version"] = FIRMWARE_VERSION;
+    firmware["version"] = firmwareVersionString();
+    firmware["major"] = FW_MAJOR;
+    firmware["minor"] = FW_MINOR;
+    firmware["patch"] = FW_PATCH;
+    firmware["prerelease"] = FW_PRERELEASE;
+    firmware["build"] = firmwareVersion();
+    firmware["gitHash"] = FW_GIT_HASH;
     firmware["platform"] = getPlatformString();
     firmware["timestamp"] = getCurrentTimestamp();
     firmware["maxInputs"] = MAX_INPUTS;
