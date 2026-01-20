@@ -46,8 +46,8 @@ pio device monitor                  # PlatformIO
 ```
 CONFIG                           # Enter configuration mode
 SET 6 CHT MAX6675               # Configure CHT with thermocouple
-SET A2 COOLANT_TEMP VDO_120C_LOOKUP  # Configure coolant sensor
-SET A3 OIL_PRESSURE VDO_5BAR    # Configure oil pressure
+SET A2 COOLANT_TEMP VDO_120C_TABLE  # Configure coolant sensor
+SET A3 OIL_PRESSURE VDO_5BAR_CURVE    # Configure oil pressure
 SAVE                             # Save to EEPROM
 RUN                              # Start monitoring
 ```
@@ -77,8 +77,8 @@ Pattern: `SET <pin> <field> <value>`
 ```
 SET A0 CHT MAX6675                       # Combined syntax (recommended)
 SET A0 APPLICATION CHT                   # Set application type
-SET A0 SENSOR NTC VDO_120C_LOOKUP        # Two-layer: category + preset
-SET A0 SENSOR VDO_120C_LOOKUP            # Legacy: direct sensor name
+SET A0 SENSOR NTC VDO_120C_TABLE        # Two-layer: category + preset
+SET A0 SENSOR VDO_120C_TABLE            # Legacy: direct sensor name
 SET A0 ALARM 100 900                     # Set alarm thresholds
 SET A0 ALARM WARMUP 30000                # Set alarm warmup time
 ```
@@ -145,7 +145,7 @@ Apply to individual sensor inputs:
 
 **Example:**
 ```
-SET A2 COOLANT_TEMP VDO_120C_LOOKUP
+SET A2 COOLANT_TEMP VDO_120C_TABLE
 SET A2 ALARM 60 120
 SET A2 ALARM WARMUP 30000
 ```
@@ -310,7 +310,7 @@ SAVE
 
 **VDO polynomial:**
 ```
-SET A2 OIL_PRESSURE VDO_5BAR
+SET A2 OIL_PRESSURE VDO_5BAR_CURVE
 SET A2 PRESSURE_POLY 1000 -0.3682 36.465 10.648
 SAVE
 ```
@@ -387,7 +387,7 @@ OUTPUT Alarm INTERVAL <ms>       # Set alarm check interval (10-10000ms)
 
 **Oil Pressure Alarm (with warmup):**
 ```
-SET A3 OIL_PRESSURE VDO_5BAR
+SET A3 OIL_PRESSURE VDO_5BAR_CURVE
 SET A3 ALARM 10 80                   # Alarm if <10 or >80 PSI
 SET A3 ALARM WARMUP 45000            # Wait 45 seconds after startup
 SET A3 ALARM PERSIST 3000            # Must persist 3 seconds to trigger
@@ -396,7 +396,7 @@ SET A3 ALARM PERSIST 3000            # Must persist 3 seconds to trigger
 
 **Coolant Temperature Alarm (with persistence):**
 ```
-SET A2 COOLANT_TEMP VDO_120C_LOOKUP
+SET A2 COOLANT_TEMP VDO_120C_TABLE
 SET A2 ALARM 60 120                  # Alarm if <60°C or >120°C
 SET A2 ALARM PERSIST 5000            # Must persist 5 seconds
 ```
@@ -1044,7 +1044,7 @@ LIST SENSORS TEMPERATURE         # Show all temperature sensors
 CONFIG
 SET 6 CHT MAX6675
 SET A0 OIL_TEMP NTC_10K_BETA_3950
-SET A2 COOLANT_TEMP VDO_120C_LOOKUP
+SET A2 COOLANT_TEMP VDO_120C_TABLE
 SET A3 OIL_PRESSURE GENERIC_150PSI
 SET A6 PRIMARY_BATTERY VOLTAGE_DIVIDER
 SET A2 ALARM 60 120

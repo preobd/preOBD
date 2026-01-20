@@ -172,14 +172,14 @@ This directory contains the input-based architecture for sensor configuration.
 **input.h**
 - Defines the Input structure (core of the system)
 - Application presets (CHT, OIL_PRESSURE, etc.)
-- Sensor types (MAX6675, VDO_120C_LOOKUP, etc.)
+- Sensor types (MAX6675, VDO_120C_TABLE, etc.)
 - Calibration override union
 - Alarm context structure
 - **Edit:** NO - Core architecture definition
 
 **Key concepts:**
 - **Application** = What you're measuring (e.g., OIL_PRESSURE)
-- **Sensor** = Hardware device (e.g., VDO_5BAR)
+- **Sensor** = Hardware device (e.g., VDO_5BAR_CURVE)
 - **Input** = Physical pin with assigned application and sensor
 
 **input_manager.cpp / input_manager.h**

@@ -21,8 +21,8 @@
  *   SENSOR (hardware device)
  *       │
  *       ├── MAX6675 (K-type thermocouple amplifier)
- *       ├── VDO_120C_LOOKUP (VDO thermistor, lookup table)
- *       ├── VDO_5BAR (VDO pressure sender)
+ *       ├── VDO_120C_TABLE (VDO thermistor, lookup table)
+ *       ├── VDO_5BAR_CURVE (VDO pressure sender, curve fit)
  *       └── ... (see Sensor Library)
  *
  * When you assign an Application to a pin, it loads defaults from

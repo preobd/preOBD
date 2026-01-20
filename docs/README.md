@@ -166,8 +166,8 @@ SET <pin> <application> <sensor>
 **Examples:**
 ```
 SET 6 CHT MAX6675                    # K-type thermocouple on digital pin 6
-SET A2 COOLANT_TEMP VDO_120C_LOOKUP  # VDO 120°C sensor on analog pin A2
-SET A3 OIL_PRESSURE VDO_5BAR         # VDO 5-bar pressure on analog pin A3
+SET A2 COOLANT_TEMP VDO_120C_TABLE  # VDO 120°C sensor on analog pin A2
+SET A3 OIL_PRESSURE VDO_5BAR_CURVE         # VDO 5-bar pressure on analog pin A3
 SET A4 OIL_TEMP VDO_150C_STEINHART   # VDO 150°C sensor on analog pin A4
 SET A6 PRIMARY_BATTERY VOLTAGE_DIVIDER  # Battery voltage on analog pin A6
 ```
@@ -208,17 +208,17 @@ openEMS includes 30+ pre-calibrated sensor configurations:
 |--------|-------------|-------|
 | `MAX6675` | K-type thermocouple | 0-1024°C |
 | `MAX31855` | K-type thermocouple (high accuracy) | -200 to 1350°C |
-| `VDO_120C_LOOKUP` | VDO 120°C sender | -40 to 120°C |
+| `VDO_120C_TABLE` | VDO 120°C sender | -40 to 120°C |
 | `VDO_120C_STEINHART` | VDO 120°C sender (faster) | -40 to 120°C |
-| `VDO_150C_LOOKUP` | VDO 150°C sender | -40 to 150°C |
+| `VDO_150C_TABLE` | VDO 150°C sender | -40 to 150°C |
 | `VDO_150C_STEINHART` | VDO 150°C sender (faster) | -40 to 150°C |
 
 ### Pressure Sensors
 
 | Sensor | Description | Range |
 |--------|-------------|-------|
-| `VDO_2BAR` | VDO 2-bar sender | 0-2 bar (0-29 PSI) |
-| `VDO_5BAR` | VDO 5-bar sender | 0-5 bar (0-73 PSI) |
+| `VDO_2BAR_CURVE` | VDO 2-bar sender | 0-2 bar (0-29 PSI) |
+| `VDO_5BAR_CURVE` | VDO 5-bar sender | 0-5 bar (0-73 PSI) |
 | `GENERIC_BOOST` | Generic 0.5-4.5V | Configurable |
 | `MPX4250AP` | Freescale MAP sensor | 20-250 kPa |
 
@@ -246,12 +246,12 @@ Each input measures a specific application:
 |-------------|-------------|--------|----------------|
 | `CHT` | Cylinder Head Temperature | 30s | MAX6675 |
 | `EGT` | Exhaust Gas Temperature | 20s | MAX31855 |
-| `COOLANT_TEMP` | Engine Coolant | 60s | VDO_120C_LOOKUP |
+| `COOLANT_TEMP` | Engine Coolant | 60s | VDO_120C_TABLE |
 | `OIL_TEMP` | Engine Oil | 60s | VDO_150C_STEINHART |
 | `TCASE_TEMP` | Transfer Case | 60s | VDO_150C_STEINHART |
-| `OIL_PRESSURE` | Engine Oil Pressure | 60s | VDO_5BAR |
+| `OIL_PRESSURE` | Engine Oil Pressure | 60s | VDO_5BAR_CURVE |
 | `BOOST_PRESSURE` | Boost/MAP | 0s | MPX4250AP |
-| `FUEL_PRESSURE` | Fuel Pressure | 5s | VDO_5BAR |
+| `FUEL_PRESSURE` | Fuel Pressure | 5s | VDO_5BAR_CURVE |
 | `PRIMARY_BATTERY` | Main Battery | 1s | VOLTAGE_DIVIDER |
 | `AUXILIARY_BATTERY` | Secondary Battery | 2s | VOLTAGE_DIVIDER |
 | `ENGINE_RPM` | Engine Speed | 0s | W_PHASE_RPM |
