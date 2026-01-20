@@ -13,10 +13,10 @@
 #include "../../sensor_types.h"
 #include "../../../config.h"
 
-// ===== VDO 120°C TABLE DATA =====
+// ===== VDO 120°C (323 095) TABLE DATA =====
 // Source: VDO datasheet and empirical measurements
 // Valid range: 0°C to 150°C (extrapolated beyond 120°C)
-// Resistance vs Temperature lookup table for VDO 120°C sensors
+// Resistance vs Temperature lookup table for VDO 120°C (323 095) sensors
 static const float vdo120_resistance[] PROGMEM = {
     1743.15, 1364.07, 1075.63, 850.09, 676.95, 543.54, 439.29, 356.64, 291.46,
     239.56, 197.29, 161.46, 134.03, 113.96, 97.05, 82.36, 70.12, 59.73, 51.21,
@@ -28,8 +28,8 @@ static const float vdo120_temperature[] PROGMEM = {
     105, 110, 115, 120, 125, 130, 135, 140, 145, 150
 };
 
-// ===== VDO 150°C TABLE DATA =====
-// Resistance vs Temperature lookup table for VDO 150°C sensors
+// ===== VDO 150°C (323 057) TABLE DATA =====
+// Resistance vs Temperature lookup table for VDO 150°C (323 057) sensors
 static const float vdo150_resistance[] PROGMEM = {
     3240.18, 2473.60, 1905.87, 1486.65, 1168.64, 926.71, 739.98, 594.90, 481.53,
     392.57, 322.17, 266.19, 221.17, 184.72, 155.29, 131.38, 112.08, 96.40, 82.96,
@@ -44,7 +44,7 @@ static const float vdo150_temperature[] PROGMEM = {
 
 // ===== THERMISTOR TABLE CALIBRATIONS =====
 
-// VDO 120°C using lookup table
+// VDO 120°C (323 095) using lookup table
 static const PROGMEM ThermistorLookupCalibration vdo120_lookup_cal = {
     .bias_resistor = DEFAULT_BIAS_RESISTOR,
     .resistance_table = vdo120_resistance,
@@ -52,7 +52,7 @@ static const PROGMEM ThermistorLookupCalibration vdo120_lookup_cal = {
     .table_size = 31
 };
 
-// VDO 150°C using lookup table
+// VDO 150°C (323 057) using lookup table
 static const PROGMEM ThermistorLookupCalibration vdo150_lookup_cal = {
     .bias_resistor = DEFAULT_BIAS_RESISTOR,
     .resistance_table = vdo150_resistance,
@@ -62,7 +62,7 @@ static const PROGMEM ThermistorLookupCalibration vdo150_lookup_cal = {
 
 // ===== THERMISTOR STEINHART-HART CALIBRATIONS =====
 
-// VDO 120°C using Steinhart-Hart (curve-fitted from lookup table)
+// VDO 120°C (323 095) using Steinhart-Hart (curve-fitted from lookup table)
 // Steinhart-Hart coefficients curve-fitted from VDO resistance table
 // Accuracy: ±1°C across 20-120°C range
 // Bias resistor: Set by DEFAULT_BIAS_RESISTOR in config.h
@@ -73,7 +73,7 @@ static const PROGMEM ThermistorSteinhartCalibration vdo120_steinhart_cal = {
     .steinhart_c = 6.773335597401e-08
 };
 
-// VDO 150°C using Steinhart-Hart (curve-fitted from lookup table)
+// VDO 150°C (323 057) using Steinhart-Hart (curve-fitted from lookup table)
 // Steinhart-Hart coefficients curve-fitted from VDO resistance table
 // Accuracy: ±1°C across 20-150°C range
 // Bias resistor: Set by DEFAULT_BIAS_RESISTOR in config.h
@@ -86,7 +86,7 @@ static const PROGMEM ThermistorSteinhartCalibration vdo150_steinhart_cal = {
 
 // ===== PRESSURE SENSOR CALIBRATIONS =====
 
-// VDO 5-bar pressure sensor polynomial calibration
+// VDO 5-bar (360 003) pressure sensor polynomial calibration
 // Source: VDO datasheet curve-fit
 // Polynomial: R = -0.3682*P² + 36.465*P + 10.648
 // Valid range: 0-5 bar
@@ -98,7 +98,7 @@ static const PROGMEM PolynomialCalibration vdo5bar_polynomial_cal = {
     .poly_c = 10.648
 };
 
-// VDO 2-bar pressure sensor polynomial calibration
+// VDO 2-bar (360 043) pressure sensor polynomial calibration
 // Source: VDO datasheet curve-fit
 // Polynomial: R = -3.1515*P² + 93.686*P + 9.6307
 // Valid range: 0-2 bar
@@ -132,7 +132,7 @@ static const float vdo5bar_pressure[] PROGMEM = {
 
 // ===== PRESSURE TABLE CALIBRATIONS =====
 
-// VDO 2-bar using lookup table
+// VDO 2-bar (360 043) using lookup table
 static const PROGMEM PressureTableCalibration vdo2bar_table_cal = {
     .bias_resistor = DEFAULT_BIAS_RESISTOR,
     .resistance_table = vdo2bar_resistance,
@@ -140,7 +140,7 @@ static const PROGMEM PressureTableCalibration vdo2bar_table_cal = {
     .table_size = 6
 };
 
-// VDO 5-bar using lookup table
+// VDO 5-bar (360 003) using lookup table
 static const PROGMEM PressureTableCalibration vdo5bar_table_cal = {
     .bias_resistor = DEFAULT_BIAS_RESISTOR,
     .resistance_table = vdo5bar_resistance,
