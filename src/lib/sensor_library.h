@@ -453,7 +453,23 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0xDF76,  // djb2_hash("MPX4250AP")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
-    // Index 15: VDO_2BAR_CURVE
+    // Index 15: MPX5700AP
+    {
+        .name = PSTR_MPX5700AP,
+        .label = PSTR_MPX5700AP_LABEL,
+        .description = nullptr,
+        .readFunction = readLinearSensor,
+        .initFunction = nullptr,
+        .measurementType = MEASURE_PRESSURE,
+        .calibrationType = CAL_LINEAR,
+        .defaultCalibration = &mpx5700ap_linear_cal,
+        .minReadInterval = SENSOR_READ_INTERVAL_MS,
+        .minValue = 0.15,        // 15 kPa minimum
+        .maxValue = 7.0,         // 700 kPa maximum
+        .nameHash = 0xC4B7,  // djb2_hash("MPX5700AP")
+        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
+    },
+    // Index 16: VDO_2BAR_CURVE
     {
 
         .name = PSTR_VDO_2BAR_CURVE,
@@ -470,7 +486,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x6FB8,  // djb2_hash("VDO_2BAR_CURVE")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
-    // Index 16: VDO_5BAR_CURVE
+    // Index 17: VDO_5BAR_CURVE
     {
 
         .name = PSTR_VDO_5BAR_CURVE,
@@ -487,7 +503,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x231B,  // djb2_hash("VDO_5BAR_CURVE")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
-    // Index 17: VDO_2BAR_TABLE
+    // Index 18: VDO_2BAR_TABLE
     {
 
         .name = PSTR_VDO_2BAR_TABLE,
@@ -504,7 +520,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0xD35B,  // djb2_hash("VDO_2BAR_TABLE")
         .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     },
-    // Index 18: VDO_5BAR_TABLE
+    // Index 19: VDO_5BAR_TABLE
     {
 
         .name = PSTR_VDO_5BAR_TABLE,
@@ -523,7 +539,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== VOLTAGE SENSORS =====
-    // Index 19: VOLTAGE_DIVIDER
+    // Index 20: VOLTAGE_DIVIDER
     {
 
         .name = PSTR_VOLTAGE_DIVIDER,
@@ -542,7 +558,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== RPM SENSORS =====
-    // Index 20: W_PHASE_RPM
+    // Index 21: W_PHASE_RPM
     {
 
         .name = PSTR_W_PHASE_RPM,
@@ -561,7 +577,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== SPEED SENSORS =====
-    // Index 21: HALL_SPEED
+    // Index 22: HALL_SPEED
     {
         .name = PSTR_HALL_SPEED,
         .label = PSTR_HALL_SPEED_LABEL,
@@ -579,7 +595,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== BME280 SENSORS =====
-    // Index 22: BME280_TEMP
+    // Index 23: BME280_TEMP
     {
 
         .name = PSTR_BME280_TEMP,
@@ -596,7 +612,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x72A8,  // djb2_hash("BME280_TEMP")
         .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
-    // Index 23: BME280_PRESSURE
+    // Index 24: BME280_PRESSURE
     {
 
         .name = PSTR_BME280_PRESSURE,
@@ -613,7 +629,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x454B,  // djb2_hash("BME280_PRESSURE")
         .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
-    // Index 24: BME280_HUMIDITY
+    // Index 25: BME280_HUMIDITY
     {
 
         .name = PSTR_BME280_HUMIDITY,
@@ -630,7 +646,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .nameHash = 0x381F,  // djb2_hash("BME280_HUMIDITY")
         .pinTypeRequirement = PIN_I2C  // Uses I2C bus (pin must be "I2C")
     },
-    // Index 25: BME280_ELEVATION
+    // Index 26: BME280_ELEVATION
     {
 
         .name = PSTR_BME280_ELEVATION,
@@ -649,7 +665,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     },
 
     // ===== DIGITAL SENSORS =====
-    // Index 26: FLOAT_SWITCH
+    // Index 27: FLOAT_SWITCH
     {
 
         .name = PSTR_FLOAT_SWITCH,
@@ -665,24 +681,6 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
         .maxValue = 1.0,
         .nameHash = 0xF22C,  // djb2_hash("FLOAT_SWITCH")
         .pinTypeRequirement = PIN_DIGITAL  // Uses digitalRead
-    },
-
-    // ===== PRESSURE SENSORS (ADDITIONAL) =====
-    // Index 27: MPX5700AP
-    {
-        .name = PSTR_MPX5700AP,
-        .label = PSTR_MPX5700AP_LABEL,
-        .description = nullptr,
-        .readFunction = readLinearSensor,
-        .initFunction = nullptr,
-        .measurementType = MEASURE_PRESSURE,
-        .calibrationType = CAL_LINEAR,
-        .defaultCalibration = &mpx5700ap_linear_cal,
-        .minReadInterval = SENSOR_READ_INTERVAL_MS,
-        .minValue = 0.15,        // 15 kPa minimum
-        .maxValue = 7.0,         // 700 kPa maximum
-        .nameHash = 0xC4B7,  // djb2_hash("MPX5700AP")
-        .pinTypeRequirement = PIN_ANALOG  // Uses analogRead
     }
 };
 
