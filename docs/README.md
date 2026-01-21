@@ -221,6 +221,7 @@ openEMS includes 30+ pre-calibrated sensor configurations:
 | `VDO_5BAR_CURVE` | VDO 5-bar sender | 0-5 bar (0-73 PSI) |
 | `GENERIC_BOOST` | Generic 0.5-4.5V | Configurable |
 | `MPX4250AP` | Freescale MAP sensor | 20-250 kPa |
+| `MPX5700AP` | Freescale MAP sensor | 15-700 kPa |
 
 ### Other Sensors
 
@@ -250,7 +251,7 @@ Each input measures a specific application:
 | `OIL_TEMP` | Engine Oil | 60s | VDO_150C_STEINHART |
 | `TCASE_TEMP` | Transfer Case | 60s | VDO_150C_STEINHART |
 | `OIL_PRESSURE` | Engine Oil Pressure | 60s | VDO_5BAR_CURVE |
-| `BOOST_PRESSURE` | Boost/MAP | 0s | MPX4250AP |
+| `BOOST_PRESSURE` | Boost/MAP | 0s | MPX4250AP, MPX5700AP |
 | `FUEL_PRESSURE` | Fuel Pressure | 5s | VDO_5BAR_CURVE |
 | `PRIMARY_BATTERY` | Main Battery | 1s | VOLTAGE_DIVIDER |
 | `AUXILIARY_BATTERY` | Secondary Battery | 2s | VOLTAGE_DIVIDER |

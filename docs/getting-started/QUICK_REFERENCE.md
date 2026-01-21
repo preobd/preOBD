@@ -442,6 +442,7 @@ See [Serial Commands Reference](../reference/SERIAL_COMMANDS.md#bus-configuratio
 - `GENERIC_BOOST` - Generic 0-5 bar boost
 - `GENERIC_150PSI` - Generic 0-150 PSI
 - `MPX4250AP` - Freescale/NXP MAP sensor (20-250 kPa)
+- `MPX5700AP` - Freescale/NXP MAP sensor (15-700 kPa)
 - `GENERIC_LINEAR` - Custom, set range with `SET <pin> PRESSURE_LINEAR`
 
 ### Other
