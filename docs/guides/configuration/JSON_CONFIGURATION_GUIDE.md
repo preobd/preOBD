@@ -770,11 +770,11 @@ Use this checklist when modifying configuration structures:
 - [ ] Test: Export/import custom calibration parameters
 
 ### Adding Registry Entry (Sensor/Application/Unit)
-- [ ] Add entry to appropriate registry (`sensor_library.h`, `application_presets.h`, `units_registry.h`)
-- [ ] Add string literals in PROGMEM
+- [ ] Add sensor to appropriate file in `sensor_library/sensors/*.h` using X-macro pattern
+- [ ] Add PROGMEM string literals in the same file
 - [ ] Compute and add DJB2 hash
 - [ ] Add read function if new sensor
-- [ ] Add calibration data if needed
+- [ ] Add calibration data to `sensor_calibration_data/<manufacturer>/` if needed
 - [ ] Update `docs/CHANGELOG.md`
 - [ ] Test: JSON export uses new registry name
 - [ ] Test: JSON import finds new registry entry

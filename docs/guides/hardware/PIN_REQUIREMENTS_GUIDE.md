@@ -586,7 +586,7 @@ Pin (e.g., A0, 6): 6
 
 ### PinTypeRequirement Enum (C/C++)
 
-Defined in [src/lib/sensor_library.h](../../../src/lib/sensor_library.h):
+Defined in [src/lib/sensor_library/sensor_types.h](../../../src/lib/sensor_library/sensor_types.h):
 
 ```cpp
 enum PinTypeRequirement {
@@ -596,7 +596,7 @@ enum PinTypeRequirement {
 };
 ```
 
-Each sensor in `SENSOR_LIBRARY[]` has a `.pinTypeRequirement` field specifying its required pin type.
+Each sensor entry in `sensor_library/sensors/*.h` specifies its required pin type as the last X_SENSOR parameter.
 
 ### Pin Validation Logic (Python)
 

@@ -4,6 +4,10 @@ openEMS Registry Enum Generator
 
 Automatically generates C++ enum header file from sensor and application registries.
 This provides type-safe, self-documenting constants instead of magic number indices.
+
+Parses the modular sensor library structure:
+  - src/lib/sensor_library.h (orchestrator)
+  - src/lib/sensor_library/sensors/*.h (sensor definitions using X-macro pattern)
 """
 
 import os
@@ -110,7 +114,7 @@ def main():
         print(f"\u2717 Error parsing registries: {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\u2713 Parsed {len(sensors)} sensors from sensor_library.h")
+    print(f"\u2713 Parsed {len(sensors)} sensors from sensor_library.h (+ sensor_library/sensors/)")
     print(f"\u2713 Parsed {len(apps)} applications from application_presets.h")
     print()
 

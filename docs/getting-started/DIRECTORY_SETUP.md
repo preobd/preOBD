@@ -40,7 +40,19 @@ openEMS/
 │   ├── lib/                   # Library components
 │   │   ├── platform.h         # Platform auto-detection
 │   │   ├── sensor_types.h     # Data structures
-│   │   ├── sensor_library.h   # Sensor catalog (30+ sensors)
+│   │   ├── sensor_library.h   # Sensor library orchestrator
+│   │   ├── sensor_library/    # Modular sensor definitions
+│   │   │   ├── sensor_types.h       # SensorInfo struct, enums
+│   │   │   ├── sensor_categories.h  # Category enum, helpers
+│   │   │   ├── sensor_helpers.h     # Lookup functions
+│   │   │   └── sensors/             # Sensor entries by type
+│   │   │       ├── thermocouples.h  # MAX6675, MAX31855
+│   │   │       ├── thermistors.h    # VDO, generic NTC
+│   │   │       ├── pressure.h       # Linear, polynomial, table
+│   │   │       ├── voltage.h        # Voltage divider
+│   │   │       ├── frequency.h      # RPM, speed sensors
+│   │   │       ├── i2c.h            # BME280 sensors
+│   │   │       └── digital.h        # Float switch
 │   │   ├── sensor_calibration_data.h  # Calibration orchestrator
 │   │   ├── sensor_calibration_data/   # Calibration database (by manufacturer)
 │   │   │   ├── vdo/           # VDO thermistors & pressure sensors
@@ -227,11 +239,20 @@ This directory contains the input-based architecture for sensor configuration.
 - Calibration type enums
 - **Edit:** RARELY (when adding new calibration methods)
 
-**sensor_library.h**
-- Catalog of supported sensors
-- Sensor info structures with read functions
-- Default calibration references
-- **Edit:** YES (when adding new sensors)
+**sensor_library.h** (orchestrator)
+- Assembles sensor registry from modular files
+- Uses X-macro pattern for registry assembly
+- **Edit:** RARELY (sensor definitions live in sensor_library/sensors/)
+
+**sensor_library/** (directory)
+- Modular sensor definitions using X-macro pattern
+- **sensor_types.h** - SensorInfo struct, PinTypeRequirement enum
+- **sensor_categories.h** - Category enum and helper functions
+- **sensor_helpers.h** - Lookup functions (getSensorInfo, etc.)
+- **sensors/*.h** - Sensor entries organized by type:
+  - thermocouples.h, thermistors.h, pressure.h, voltage.h
+  - frequency.h (RPM + speed), i2c.h, digital.h
+- **Edit:** YES (add sensors to appropriate type file in sensors/)
 
 **sensor_calibration_data.h**
 - Main orchestrator that includes all manufacturer calibration files
@@ -488,7 +509,7 @@ This directory contains the comprehensive test mode system for testing outputs w
 - User edits only src/config.h and src/advanced_config.h (usually)
 - Core code in inputs/ and lib/ rarely needs modification
 - New sensors added to:
-  - lib/sensor_library.h (sensor definitions)
+  - lib/sensor_library/sensors/<type>.h (sensor entry using X-macro)
   - lib/sensor_calibration_data/<manufacturer>/ (calibration data)
 - New manufacturers: Create new directory under lib/sensor_calibration_data/
 - Output and display modules are self-contained in their directories

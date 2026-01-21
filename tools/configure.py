@@ -4,6 +4,10 @@ openEMS Static Configuration Tool
 
 An interactive CLI to generate static sensor configurations for openEMS,
 reducing the reliance on EEPROM and enabling static build optimizations.
+
+Parses sensor definitions from the modular sensor library structure:
+  - src/lib/sensor_library.h (orchestrator)
+  - src/lib/sensor_library/sensors/*.h (sensor definitions by type)
 """
 import argparse
 import json
@@ -41,14 +45,18 @@ def print_header():
     print()
 
 def load_registries(project_dir: str) -> Optional[Dict[str, List[Dict[str, Any]]]]:
-    """Loads all C registry files."""
+    """Loads all C registry files.
+
+    Parses sensor_library.h which includes modular sensor definitions from
+    sensor_library/sensors/*.h using X-macro pattern.
+    """
     print("Loading registries...")
     try:
         sensors = parse_sensor_library(os.path.join(project_dir, "src/lib/sensor_library.h"))
         apps = parse_application_presets(os.path.join(project_dir, "src/lib/application_presets.h"))
         units = parse_units_registry(os.path.join(project_dir, "src/lib/units_registry.h"))
 
-        print(f"  \u2713 {len(sensors)} sensors from sensor_library.h")
+        print(f"  \u2713 {len(sensors)} sensors from sensor_library.h (+ sensor_library/sensors/)")
         print(f"  \u2713 {len(apps)} applications from application_presets.h")
         print(f"  \u2713 {len(units)} units from units_registry.h")
         print()
