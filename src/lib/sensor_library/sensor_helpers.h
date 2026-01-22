@@ -95,7 +95,7 @@ inline const char* getSensorNameByIndex(uint8_t index) {
 
 /**
  * Derive sensor category from existing sensor properties.
- * Categories are computed at runtime - no extra storage per sensor.
+ * Categories match the sensor definition files in sensors/ directory.
  *
  * @param sensorIndex  Index into SENSOR_LIBRARY
  * @return             SensorCategory enum value
@@ -108,33 +108,30 @@ inline SensorCategory getSensorCategory(uint8_t sensorIndex) {
     CalibrationType calType = (CalibrationType)pgm_read_byte(&sensor->calibrationType);
     PinTypeRequirement pinType = (PinTypeRequirement)pgm_read_byte(&sensor->pinTypeRequirement);
 
-    // I2C sensors are their own category
+    // I2C sensors (i2c.h)
     if (pinType == PIN_I2C) return CAT_I2C;
 
-    // By measurement type (non-temp/pressure types)
+    // Digital input sensors (digital.h)
     if (measType == MEASURE_DIGITAL) return CAT_DIGITAL;
-    if (measType == MEASURE_RPM) return CAT_RPM;
-    if (measType == MEASURE_SPEED) return CAT_SPEED;
+
+    // Frequency-based sensors - RPM and Speed (frequency.h)
+    if (measType == MEASURE_RPM || measType == MEASURE_SPEED) return CAT_FREQUENCY;
+
+    // Voltage sensors (voltage.h)
     if (measType == MEASURE_VOLTAGE) return CAT_VOLTAGE;
-    if (measType == MEASURE_HUMIDITY) return CAT_I2C;    // BME280
-    if (measType == MEASURE_ELEVATION) return CAT_I2C;   // BME280
 
-    // Temperature sensors by calibration type
+    // BME280 humidity/elevation are I2C
+    if (measType == MEASURE_HUMIDITY || measType == MEASURE_ELEVATION) return CAT_I2C;
+
+    // Pressure sensors (pressure.h) - all calibration types
+    if (measType == MEASURE_PRESSURE) return CAT_PRESSURE;
+
+    // Temperature sensors
     if (measType == MEASURE_TEMPERATURE) {
-        if (calType == CAL_THERMISTOR_TABLE ||
-            calType == CAL_THERMISTOR_STEINHART ||
-            calType == CAL_THERMISTOR_BETA) {
-            return CAT_NTC_THERMISTOR;
-        }
-        if (calType == CAL_LINEAR) return CAT_LINEAR_TEMP;
-        // CAL_NONE temperature sensors with digital pins are thermocouples
+        // Thermocouples: CAL_NONE with digital pins (thermocouples.h)
         if (calType == CAL_NONE && pinType == PIN_DIGITAL) return CAT_THERMOCOUPLE;
-    }
-
-    // Pressure sensors by calibration type
-    if (measType == MEASURE_PRESSURE) {
-        if (calType == CAL_PRESSURE_POLYNOMIAL || calType == CAL_PRESSURE_TABLE) return CAT_RESISTIVE_PRESSURE;
-        if (calType == CAL_LINEAR) return CAT_LINEAR_PRESSURE;
+        // All other temp sensors are thermistors (thermistors.h)
+        return CAT_THERMISTOR;
     }
 
     return CAT_THERMOCOUPLE;  // Default fallback
