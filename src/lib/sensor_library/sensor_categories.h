@@ -21,7 +21,7 @@ enum SensorCategory : uint8_t {
     CAT_PRESSURE,              // All pressure sensors - linear and resistive (pressure.h)
     CAT_VOLTAGE,               // Voltage measurement sensors (voltage.h)
     CAT_FREQUENCY,             // RPM and speed sensors (frequency.h)
-    CAT_I2C,                   // I2C bus sensors - BME280, etc. (i2c.h)
+    CAT_ENVIRONMENTAL,         // Environmental sensors (environmental.h)
     CAT_DIGITAL,               // Digital input sensors - float switch, etc. (digital.h)
     CAT_COUNT                  // Number of categories
 };
@@ -45,21 +45,21 @@ static const char PSTR_CAT_VOLTAGE[] PROGMEM = "VOLTAGE";
 static const char PSTR_CAT_VOLTAGE_LABEL[] PROGMEM = "Voltage Sensors";
 static const char PSTR_CAT_FREQUENCY[] PROGMEM = "FREQUENCY";
 static const char PSTR_CAT_FREQUENCY_LABEL[] PROGMEM = "RPM and Speed Sensors";
-static const char PSTR_CAT_I2C[] PROGMEM = "I2C";
-static const char PSTR_CAT_I2C_LABEL[] PROGMEM = "I2C Bus Sensors";
+static const char PSTR_CAT_ENVIRONMENTAL[] PROGMEM = "ENVIRONMENTAL";
+static const char PSTR_CAT_ENVIRONMENTAL_LABEL[] PROGMEM = "Environmental Sensors";
 static const char PSTR_CAT_DIGITAL[] PROGMEM = "DIGITAL";
 static const char PSTR_CAT_DIGITAL_LABEL[] PROGMEM = "Digital Input Sensors";
 
 // ===== SENSOR CATEGORY REGISTRY (PROGMEM) =====
 // Hash values computed with: python3 -c "h=5381; s='NAME'; [h:=(h<<5)+h+ord(c.upper()) for c in s]; print(f'0x{h&0xFFFF:04X}')"
 static const PROGMEM SensorCategoryInfo SENSOR_CATEGORIES[] = {
-    { PSTR_CAT_THERMOCOUPLE, PSTR_CAT_THERMOCOUPLE_LABEL, 0xA69C },  // THERMOCOUPLE
-    { PSTR_CAT_THERMISTOR,   PSTR_CAT_THERMISTOR_LABEL,   0x4556 },  // THERMISTOR
-    { PSTR_CAT_PRESSURE,     PSTR_CAT_PRESSURE_LABEL,     0x233E },  // PRESSURE
-    { PSTR_CAT_VOLTAGE,      PSTR_CAT_VOLTAGE_LABEL,      0x03F7 },  // VOLTAGE
-    { PSTR_CAT_FREQUENCY,    PSTR_CAT_FREQUENCY_LABEL,    0x9B8F },  // FREQUENCY
-    { PSTR_CAT_I2C,          PSTR_CAT_I2C_LABEL,          0xF023 },  // I2C
-    { PSTR_CAT_DIGITAL,      PSTR_CAT_DIGITAL_LABEL,      0x9803 },  // DIGITAL
+    { PSTR_CAT_THERMOCOUPLE,    PSTR_CAT_THERMOCOUPLE_LABEL,    0xA69C },  // THERMOCOUPLE
+    { PSTR_CAT_THERMISTOR,      PSTR_CAT_THERMISTOR_LABEL,      0x4556 },  // THERMISTOR
+    { PSTR_CAT_PRESSURE,        PSTR_CAT_PRESSURE_LABEL,        0x233E },  // PRESSURE
+    { PSTR_CAT_VOLTAGE,         PSTR_CAT_VOLTAGE_LABEL,         0x03F7 },  // VOLTAGE
+    { PSTR_CAT_FREQUENCY,       PSTR_CAT_FREQUENCY_LABEL,       0x9B8F },  // FREQUENCY
+    { PSTR_CAT_ENVIRONMENTAL,   PSTR_CAT_ENVIRONMENTAL_LABEL,   0x0C07 },  // ENVIRONMENTAL
+    { PSTR_CAT_DIGITAL,         PSTR_CAT_DIGITAL_LABEL,         0x9803 },  // DIGITAL
 };
 
 // Helper macros for category info

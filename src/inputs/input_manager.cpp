@@ -1609,7 +1609,7 @@ void listSensors(const char* filter) {
 
         msg.control.println();
         msg.control.println(F("Usage: SET <pin> SENSOR <category> <preset>"));
-        if (cat == CAT_I2C) {
+        if (cat == CAT_ENVIRONMENTAL) {
             msg.control.println(F("Note: Use 'I2C' for pin, e.g., SET I2C AMBIENT_TEMP BME280_TEMP"));
         } else if (cat == CAT_PRESSURE || cat == CAT_THERMISTOR) {
             msg.control.println(F("IMPORTANT: 5V sensors (0.5-4.5V) require voltage dividers for 3.3V systems!"));

@@ -155,7 +155,7 @@ The sensor library is organized by sensor type in `src/lib/sensor_library/sensor
 | `pressure.h` | Linear, polynomial, table-based pressure |
 | `voltage.h` | Voltage divider |
 | `frequency.h` | RPM and speed sensors |
-| `i2c.h` | BME280 and other I2C sensors |
+| `environmental.h` | BME280 and other Environmental sensors |
 | `digital.h` | Float switch and digital inputs |
 
 Choose the file that matches your sensor type.
@@ -343,7 +343,7 @@ Choose the appropriate subdirectory based on sensor type:
 - **linear/** - Generic linear sensors
 - **rpm/** - RPM/frequency sensors
 - **digital/** - Digital inputs
-- **i2c/** - I2C sensors
+- **environmental/** - Environmental sensors
 
 ### Step 2: Create Implementation File
 
@@ -495,7 +495,7 @@ Read functions are organized in `src/inputs/sensors/` by sensor type.
 | `readVoltageDivider` | Analog | V | sensors/voltage/ | Battery voltage divider |
 | `readWPhaseRPM` | Interrupt | RPM | sensors/rpm/ | Alternator W-phase |
 | `readDigitalFloatSwitch` | Digital | 0/1 | sensors/digital/ | Float switches |
-| `readBME280Temp` | I2C | °C | sensors/i2c/ | BME280 environmental |
+| `readBME280Temp` | I2C | °C | sensors/environmental/ | BME280 environmental |
 
 ---
 

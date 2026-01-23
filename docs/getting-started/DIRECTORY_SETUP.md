@@ -31,7 +31,7 @@ openEMS/
 │   │   │   ├── linear/        # Generic linear sensors
 │   │   │   ├── rpm/           # RPM sensors (W-phase)
 │   │   │   ├── digital/       # Digital sensors (float switch)
-│   │   │   ├── i2c/           # I2C sensors (BME280)
+│   │   │   ├── environmental/ # Environmental sensors (BME280)
 │   │   │   └── sensor_utils.* # Shared utility functions
 │   │   ├── serial_config.h    # Serial command interface
 │   │   ├── serial_config.cpp  # Serial command implementation
@@ -51,7 +51,7 @@ openEMS/
 │   │   │       ├── pressure.h       # Linear, polynomial, table
 │   │   │       ├── voltage.h        # Voltage divider
 │   │   │       ├── frequency.h      # RPM, speed sensors
-│   │   │       ├── i2c.h            # BME280 sensors
+│   │   │       ├── environmental.h  # BME280 sensors
 │   │   │       └── digital.h        # Float switch
 │   │   ├── sensor_calibration_data.h  # Calibration orchestrator
 │   │   ├── sensor_calibration_data/   # Calibration database (by manufacturer)
@@ -210,7 +210,7 @@ This directory contains the input-based architecture for sensor configuration.
 - **linear/** - Generic linear sensors
 - **rpm/** - RPM sensing (W-phase alternator)
 - **digital/** - Digital inputs (float switches)
-- **i2c/** - I2C environmental sensors (BME280)
+- **environmental/** - Environmental sensors (BME280)
 - **sensor_utils.*** - Shared utility functions (unit conversions, range validation)
 - **Edit:** YES (add new sensor implementations to appropriate subdirectory)
 
@@ -251,7 +251,7 @@ This directory contains the input-based architecture for sensor configuration.
 - **sensor_helpers.h** - Lookup functions (getSensorInfo, etc.)
 - **sensors/*.h** - Sensor entries organized by type:
   - thermocouples.h, thermistors.h, pressure.h, voltage.h
-  - frequency.h (RPM + speed), i2c.h, digital.h
+  - frequency.h (RPM + speed), environmental.h, digital.h
 - **Edit:** YES (add sensors to appropriate type file in sensors/)
 
 **sensor_calibration_data.h**

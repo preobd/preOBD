@@ -130,7 +130,7 @@ This table maps each sensor to its required pin type:
 | VOLTAGE_DIVIDER       | PIN_ANALOG           | A10         | Voltage divider circuit              |
 | **RPM Sensors**       |                      |             |                                      |
 | W_PHASE_RPM           | PIN_DIGITAL          | 2           | Interrupt-capable pin required       |
-| **I2C Sensors**       |                      |             |                                      |
+| **Environmental Sensors**       |                      |             |                                      |
 | BME280_TEMP           | PIN_I2C              | I2C         | Uses shared I2C bus (SDA/SCL)        |
 | BME280_PRESSURE       | PIN_I2C              | I2C         | Uses shared I2C bus (SDA/SCL)        |
 | BME280_HUMIDITY       | PIN_I2C              | I2C         | Uses shared I2C bus (SDA/SCL)        |

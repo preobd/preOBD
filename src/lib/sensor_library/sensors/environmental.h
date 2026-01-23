@@ -1,11 +1,11 @@
 /*
- * i2c.h - I2C Bus Sensors
+ * environmental.h - Environmental Sensors
  *
  * BME280 environmental sensor (temperature, pressure, humidity, elevation).
  */
 
-#ifndef SENSOR_LIBRARY_SENSORS_I2C_H
-#define SENSOR_LIBRARY_SENSORS_I2C_H
+#ifndef SENSOR_LIBRARY_SENSORS_ENVIRONMENTAL_H
+#define SENSOR_LIBRARY_SENSORS_ENVIRONMENTAL_H
 
 #include <Arduino.h>
 
@@ -21,7 +21,7 @@ static const char PSTR_BME280_ELEVATION_LABEL[] PROGMEM = "BME280 altitude (I2C)
 
 // ===== SENSOR ENTRIES (X-MACRO) =====
 // X_SENSOR(name, label, description, readFunc, initFunc, measType, calType, defaultCal, minInterval, minVal, maxVal, hash, pinType)
-#define I2C_SENSORS \
+#define ENVIRONMENTAL_SENSORS \
     X_SENSOR(PSTR_BME280_TEMP, PSTR_BME280_TEMP_LABEL, nullptr, readBME280Temp, initBME280, \
              MEASURE_TEMPERATURE, CAL_NONE, nullptr, SENSOR_READ_INTERVAL_MS, -40.0, 85.0, 0x72A8, PIN_I2C) \
     X_SENSOR(PSTR_BME280_PRESSURE, PSTR_BME280_PRESSURE_LABEL, nullptr, readBME280Pressure, initBME280, \
@@ -31,4 +31,4 @@ static const char PSTR_BME280_ELEVATION_LABEL[] PROGMEM = "BME280 altitude (I2C)
     X_SENSOR(PSTR_BME280_ELEVATION, PSTR_BME280_ELEVATION_LABEL, nullptr, readBME280Elevation, initBME280, \
              MEASURE_ELEVATION, CAL_NONE, nullptr, SENSOR_READ_INTERVAL_MS, -500.0, 9000.0, 0x2619, PIN_I2C)
 
-#endif // SENSOR_LIBRARY_SENSORS_I2C_H
+#endif // SENSOR_LIBRARY_SENSORS_ENVIRONMENTAL_H

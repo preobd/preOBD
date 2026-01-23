@@ -104,7 +104,7 @@ src/lib/sensor_library/
     ├── pressure.h        # Linear, polynomial, table
     ├── voltage.h         # Voltage divider
     ├── frequency.h       # RPM, speed
-    ├── i2c.h             # BME280
+    ├── environmental.h   # BME280
     └── digital.h         # Float switch
 ```
 

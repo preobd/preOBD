@@ -108,8 +108,8 @@ inline SensorCategory getSensorCategory(uint8_t sensorIndex) {
     CalibrationType calType = (CalibrationType)pgm_read_byte(&sensor->calibrationType);
     PinTypeRequirement pinType = (PinTypeRequirement)pgm_read_byte(&sensor->pinTypeRequirement);
 
-    // I2C sensors (i2c.h)
-    if (pinType == PIN_I2C) return CAT_I2C;
+    // Environmental sensors (environmental.h)
+    if (pinType == PIN_I2C) return CAT_ENVIRONMENTAL;
 
     // Digital input sensors (digital.h)
     if (measType == MEASURE_DIGITAL) return CAT_DIGITAL;
@@ -120,8 +120,8 @@ inline SensorCategory getSensorCategory(uint8_t sensorIndex) {
     // Voltage sensors (voltage.h)
     if (measType == MEASURE_VOLTAGE) return CAT_VOLTAGE;
 
-    // BME280 humidity/elevation are I2C
-    if (measType == MEASURE_HUMIDITY || measType == MEASURE_ELEVATION) return CAT_I2C;
+    // BME280 humidity/elevation are ENVIRONMENTAL
+    if (measType == MEASURE_HUMIDITY || measType == MEASURE_ELEVATION) return CAT_ENVIRONMENTAL;
 
     // Pressure sensors (pressure.h) - all calibration types
     if (measType == MEASURE_PRESSURE) return CAT_PRESSURE;

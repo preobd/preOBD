@@ -41,7 +41,7 @@
 #include "sensor_library/sensors/pressure.h"
 #include "sensor_library/sensors/voltage.h"
 #include "sensor_library/sensors/frequency.h"
-#include "sensor_library/sensors/i2c.h"
+#include "sensor_library/sensors/environmental.h"
 #include "sensor_library/sensors/digital.h"
 
 // ===== SENSOR LIBRARY ASSEMBLY (PROGMEM) =====
@@ -56,7 +56,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     PRESSURE_SENSORS
     VOLTAGE_SENSORS
     FREQUENCY_SENSORS
-    I2C_SENSORS
+    ENVIRONMENTAL_SENSORS
     DIGITAL_SENSORS
 };
 
