@@ -1560,10 +1560,25 @@ static int cmd_transport(int argc, const char* const* argv) {
         msg.control.print(argv[1]);
         msg.control.print(F(" → "));
         msg.control.println(argv[2]);
+
+        // Sync router state to systemConfig (will be persisted on SAVE)
+        router.syncConfig();
+        msg.control.println(F("Use SAVE to persist"));
     } else {
-        msg.control.print(F("ERROR: Failed to set transport for '"));
-        msg.control.print(argv[1]);
-        msg.control.println(F("'"));
+        // Provide specific error for disabled serial ports
+        if (transport >= TRANSPORT_SERIAL1 && transport <= TRANSPORT_SERIAL8) {
+            uint8_t port_id = transport - TRANSPORT_SERIAL1 + 1;
+            msg.control.print(F("ERROR: Serial"));
+            msg.control.print(port_id);
+            msg.control.println(F(" is not enabled"));
+            msg.control.print(F("  Run: BUS SERIAL "));
+            msg.control.print(port_id);
+            msg.control.println(F(" ENABLE"));
+        } else {
+            msg.control.print(F("ERROR: Transport '"));
+            msg.control.print(argv[2]);
+            msg.control.println(F("' not available"));
+        }
         return 1;
     }
 

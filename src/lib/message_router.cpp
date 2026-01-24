@@ -53,16 +53,19 @@ void MessageRouter::loadConfig() {
     secondaryTransport[PLANE_DEBUG] = systemConfig.router.debug_secondary;
 }
 
-void MessageRouter::saveConfig() {
-    // Save to SystemConfig.router
+void MessageRouter::syncConfig() {
+    // Copy router state to SystemConfig.router (does NOT save to EEPROM)
     systemConfig.router.control_primary = primaryTransport[PLANE_CONTROL];
     systemConfig.router.control_secondary = secondaryTransport[PLANE_CONTROL];
     systemConfig.router.data_primary = primaryTransport[PLANE_DATA];
     systemConfig.router.data_secondary = secondaryTransport[PLANE_DATA];
     systemConfig.router.debug_primary = primaryTransport[PLANE_DEBUG];
     systemConfig.router.debug_secondary = secondaryTransport[PLANE_DEBUG];
+}
 
-    // Persist to EEPROM
+void MessageRouter::saveConfig() {
+    // Sync state and persist to EEPROM
+    syncConfig();
     saveSystemConfig();
 }
 
@@ -122,6 +125,14 @@ bool MessageRouter::setTransport(MessagePlane plane, TransportID transportId, bo
     if (transportId != TRANSPORT_NONE) {
         if (transports[transportId] == nullptr) {
             return false;  // Transport not registered
+        }
+
+        // For hardware serial transports, verify the port is enabled
+        if (transportId >= TRANSPORT_SERIAL1 && transportId <= TRANSPORT_SERIAL8) {
+            uint8_t port_id = transportId - TRANSPORT_SERIAL1 + 1;
+            if (!isSerialPortActive(port_id)) {
+                return false;  // Serial port not enabled (use BUS SERIAL <n> ENABLE first)
+            }
         }
     }
 

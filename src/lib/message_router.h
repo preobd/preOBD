@@ -62,6 +62,9 @@ public:
     // Load configuration from EEPROM (called by begin())
     void loadConfig();
 
+    // Sync router state to SystemConfig (without saving to EEPROM)
+    void syncConfig();
+
     // Save configuration to EEPROM
     void saveConfig();
 
