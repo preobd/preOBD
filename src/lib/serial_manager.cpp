@@ -324,8 +324,8 @@ void displaySerialStatus() {
     }
 
     msg.control.println();
-    msg.control.println(F("Use SERIAL ENABLE <port> [baudrate] to enable a port"));
-    msg.control.println(F("Use SERIAL DISABLE <port> to disable a port"));
+    msg.control.println(F("Use BUS SERIAL <port> ENABLE [baudrate] to enable a port"));
+    msg.control.println(F("Use BUS SERIAL <port> DISABLE to disable a port"));
 }
 
 void displaySerialPortStatus(uint8_t port_id) {

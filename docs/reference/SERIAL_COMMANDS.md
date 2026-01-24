@@ -705,8 +705,8 @@ Platform supports Serial1-Serial8
   Serial7: disabled (RX=28, TX=29)
   Serial8: disabled (RX=34, TX=35)
 
-Use SERIAL ENABLE <port> [baudrate] to enable a port
-Use SERIAL DISABLE <port> to disable a port
+Use BUS SERIAL <port> ENABLE [baudrate] to enable a port
+Use BUS SERIAL <port> DISABLE to disable a port
 ```
 
 ### Notes
