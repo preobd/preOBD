@@ -1615,6 +1615,7 @@ static int cmd_system(int argc, const char* const* argv) {
         displayI2CStatus();
         displaySPIStatus();
         displayCANStatus();
+        displaySerialStatus();
         msg.control.println();
 
         // Show system config
