@@ -5,6 +5,7 @@
 #include "message_router.h"
 #include "message_api.h"
 #include "system_config.h"
+#include "serial_manager.h"
 #include <string.h>
 
 // Global router instance
@@ -178,6 +179,12 @@ void MessageRouter::listAvailableTransports() {
 
     for (int i = 1; i < NUM_TRANSPORTS; i++) {
         if (transports[i] != nullptr) {
+            // Skip disabled serial ports (TRANSPORT_SERIAL1=2 maps to port_id=1, etc.)
+            if (i >= TRANSPORT_SERIAL1 && i <= TRANSPORT_SERIAL8) {
+                uint8_t port_id = i - TRANSPORT_SERIAL1 + 1;
+                if (!isSerialPortActive(port_id)) continue;
+            }
+
             msg.control.print(F("  "));
             msg.control.print(transportNames[i]);
             msg.control.print(F(" - "));
@@ -242,6 +249,12 @@ void MessageRouter::listTransports() {
     // List all registered transports
     for (int i = 1; i < NUM_TRANSPORTS; i++) {
         if (transports[i] != nullptr) {
+            // Skip disabled serial ports (TRANSPORT_SERIAL1=2 maps to port_id=1, etc.)
+            if (i >= TRANSPORT_SERIAL1 && i <= TRANSPORT_SERIAL8) {
+                uint8_t port_id = i - TRANSPORT_SERIAL1 + 1;
+                if (!isSerialPortActive(port_id)) continue;
+            }
+
             msg.control.print(F("  "));
             msg.control.print(transports[i]->getName());
             msg.control.print(F(" ("));
