@@ -141,7 +141,8 @@ void MessageRouter::printTransportStatus() {
     msg.control.println(F("=== Transport Routing ==="));
 
     const char* planeNames[] = {"CONTROL", "DATA", "DEBUG"};
-    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3", "ESP32_BT"};
+    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3",
+                                    "SERIAL4", "SERIAL5", "SERIAL6", "SERIAL7", "SERIAL8", "ESP32_BT"};
 
     for (int i = 0; i < NUM_PLANES; i++) {
         msg.control.print(planeNames[i]);
@@ -172,7 +173,8 @@ void MessageRouter::listAvailableTransports() {
 
     msg.control.println(F("=== Available Transports ==="));
 
-    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3", "ESP32_BT"};
+    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3",
+                                    "SERIAL4", "SERIAL5", "SERIAL6", "SERIAL7", "SERIAL8", "ESP32_BT"};
 
     for (int i = 1; i < NUM_TRANSPORTS; i++) {
         if (transports[i] != nullptr) {
@@ -209,7 +211,8 @@ void MessageRouter::listTransports() {
 
     // Show plane assignments
     const char* planeNames[] = {"CONTROL", "DATA", "DEBUG"};
-    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3", "ESP32_BT"};
+    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3",
+                                    "SERIAL4", "SERIAL5", "SERIAL6", "SERIAL7", "SERIAL8", "ESP32_BT"};
 
     for (int i = 0; i < NUM_PLANES; i++) {
         msg.control.print(planeNames[i]);
