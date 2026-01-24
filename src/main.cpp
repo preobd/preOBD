@@ -15,6 +15,7 @@
 #include "lib/sensor_library.h"
 #include "lib/system_config.h"
 #include "lib/bus_manager.h"
+#include "lib/pin_registry.h"
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
 #ifndef USE_STATIC_CONFIG
@@ -212,6 +213,9 @@ void setup() {
     // Configure ADC for this platform
     setupADC();
     msg.debug.println(F("✓ ADC configured"));
+
+    // Initialize pin registry before any pin assignments
+    initPinRegistry();
 
     // Initialize configured buses (I2C, SPI, CAN) based on SystemConfig
     // This replaces the old hardcoded Wire.begin() and SPI.begin() calls
