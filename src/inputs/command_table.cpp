@@ -2252,7 +2252,8 @@ static int cmd_bus(int argc, const char* const* argv) {
 
             // BUS SERIAL <port> ENABLE [baudrate]
             if (streq(argv[3], "ENABLE")) {
-                uint8_t baud_idx = BAUD_115200;  // Default
+                // Use saved baud rate from config, or 115200 if not set
+                uint8_t baud_idx = systemConfig.serial.baudrate_index[port_id - 1];
 
                 if (argc >= 5) {
                     uint32_t baudrate = atol(argv[4]);
