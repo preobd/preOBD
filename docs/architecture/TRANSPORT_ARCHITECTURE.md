@@ -134,8 +134,17 @@ MessageRouter router;
 
 // Register transports
 router.registerTransport(TRANSPORT_USB_SERIAL, &usbSerial);
+
+// Register all available hardware serial transports (Serial1-Serial8)
+// Actual initialization is controlled by BUS SERIAL command configuration
+#if NUM_SERIAL_PORTS >= 1
 router.registerTransport(TRANSPORT_SERIAL1, &hwSerial1);
+#endif
+#if NUM_SERIAL_PORTS >= 2
 router.registerTransport(TRANSPORT_SERIAL2, &hwSerial2);
+#endif
+// ... up to Serial8 on Teensy 4.1
+
 #ifdef ESP32
 router.registerTransport(TRANSPORT_ESP32_BT, &btESP32);
 #endif
@@ -148,15 +157,21 @@ router.begin();  // Initialize all transports
 ```cpp
 enum TransportID {
     TRANSPORT_NONE = 0,
-    TRANSPORT_USB_SERIAL,
-    TRANSPORT_SERIAL1,
-    TRANSPORT_SERIAL2,
-    TRANSPORT_ESP32_BT,
-    TRANSPORT_WIFI,        // Reserved for future use
-    TRANSPORT_ETHERNET,    // Reserved for future use
-    TRANSPORT_MAX
+    TRANSPORT_USB_SERIAL = 1,   // Serial (USB)
+    TRANSPORT_SERIAL1 = 2,      // Hardware Serial1
+    TRANSPORT_SERIAL2 = 3,      // Hardware Serial2
+    TRANSPORT_SERIAL3 = 4,      // Hardware Serial3
+    TRANSPORT_SERIAL4 = 5,      // Hardware Serial4
+    TRANSPORT_SERIAL5 = 6,      // Hardware Serial5
+    TRANSPORT_SERIAL6 = 7,      // Hardware Serial6
+    TRANSPORT_SERIAL7 = 8,      // Hardware Serial7
+    TRANSPORT_SERIAL8 = 9,      // Hardware Serial8 (Teensy 4.1 only)
+    TRANSPORT_ESP32_BT = 10,    // ESP32 built-in Bluetooth Classic
+    NUM_TRANSPORTS = 11
 };
 ```
+
+Serial ports 3-8 availability depends on platform. Use `BUS SERIAL` command to enable/disable ports and configure baud rates.
 
 ### Message APIs
 

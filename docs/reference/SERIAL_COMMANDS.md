@@ -588,7 +588,7 @@ Relay 1:
 
 ## Bus Configuration
 
-Select which I2C, SPI, or CAN bus to use for sensors and outputs. This is useful when you want to use alternate bus pins (e.g., Wire1 instead of Wire on Teensy).
+Select which I2C, SPI, CAN bus, or serial ports to use for sensors and outputs. This is useful when you want to use alternate bus pins (e.g., Wire1 instead of Wire on Teensy) or enable additional serial ports for communication.
 
 ### Commands
 
@@ -603,17 +603,28 @@ BUS SPI CLOCK <Hz>               # Set SPI clock speed in Hz
 BUS CAN                          # Show current CAN bus configuration
 BUS CAN <0|1|2>                  # Select CAN bus (0=CAN1, 1=CAN2, 2=CAN3)
 BUS CAN BAUDRATE <bps>           # Set CAN baudrate (125000, 250000, 500000, 1000000)
+BUS SERIAL                       # Show all serial port status
+BUS SERIAL <1-8>                 # Show specific port status
+BUS SERIAL <1-8> ENABLE [baud]   # Enable serial port with optional baud rate
+BUS SERIAL <1-8> DISABLE         # Disable serial port
+BUS SERIAL <1-8> BAUDRATE <rate> # Set serial port baud rate
 ```
 
 ### Platform Availability
 
-| Platform | I2C Buses | SPI Buses | CAN Buses |
-|----------|-----------|-----------|-----------|
-| Teensy 4.1 | Wire, Wire1, Wire2 | SPI, SPI1, SPI2 | CAN1, CAN2, CAN3 |
-| Teensy 4.0 | Wire, Wire1, Wire2 | SPI, SPI1, SPI2 | CAN1, CAN2, CAN3 |
-| Teensy 3.6 | Wire, Wire1, Wire2 | SPI, SPI1 | CAN1, CAN2 |
-| ESP32 | Wire, Wire1 | SPI | CAN1 (TWAI) |
-| Arduino Mega | Wire | SPI | None |
+| Platform | I2C Buses | SPI Buses | CAN Buses | Serial Ports |
+|----------|-----------|-----------|-----------|--------------|
+| Teensy 4.1 | Wire, Wire1, Wire2 | SPI, SPI1, SPI2 | CAN1, CAN2, CAN3 | Serial1-Serial8 |
+| Teensy 4.0 | Wire, Wire1, Wire2 | SPI, SPI1, SPI2 | CAN1, CAN2, CAN3 | Serial1-Serial7 |
+| Teensy 3.6 | Wire, Wire1, Wire2 | SPI, SPI1 | CAN1, CAN2 | Serial1-Serial6 |
+| Teensy 3.5 | Wire, Wire1, Wire2 | SPI, SPI1 | CAN1 | Serial1-Serial6 |
+| Teensy 3.1/3.2 | Wire, Wire1 | SPI | CAN1 | Serial1-Serial3 |
+| ESP32 | Wire, Wire1 | SPI | CAN1 (TWAI) | Serial1-Serial2 |
+| Arduino Mega | Wire | SPI | None | Serial1-Serial3 |
+
+### Serial Port Baud Rates
+
+Supported baud rates: 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600
 
 ### Examples
 
@@ -637,6 +648,24 @@ BUS I2C CLOCK 400                # 400 kHz (Fast mode)
 SAVE
 ```
 
+**Enable Serial5 for Bluetooth module:**
+```
+BUS SERIAL 5 ENABLE 115200       # Enable Serial5 at 115200 baud
+SAVE
+```
+
+**Change Serial1 baud rate:**
+```
+BUS SERIAL 1 BAUDRATE 9600       # Set Serial1 to 9600 baud (for HC-05 module)
+SAVE
+```
+
+**Disable unused serial port:**
+```
+BUS SERIAL 3 DISABLE             # Disable Serial3 to free pins
+SAVE
+```
+
 ### Bus Status Display
 
 ```
@@ -657,12 +686,37 @@ Active: CAN1 (TX=22, RX=23) @ 500kbps
 Available buses: 0=CAN1, 1=CAN2, 2=CAN3
 ```
 
+### Serial Port Status Display
+
+```
+BUS SERIAL
+```
+Shows:
+```
+=== Serial Port Configuration ===
+Platform supports Serial1-Serial8
+
+  Serial1: ENABLED @ 115200 baud (RX=0, TX=1)
+  Serial2: disabled (RX=7, TX=8)
+  Serial3: disabled (RX=15, TX=14)
+  Serial4: disabled (RX=16, TX=17)
+  Serial5: ENABLED @ 9600 baud (RX=21, TX=20)
+  Serial6: disabled (RX=25, TX=24)
+  Serial7: disabled (RX=28, TX=29)
+  Serial8: disabled (RX=34, TX=35)
+
+Use SERIAL ENABLE <port> [baudrate] to enable a port
+Use SERIAL DISABLE <port> to disable a port
+```
+
 ### Notes
 
 - Bus changes take effect on next reboot (use `SYSTEM REBOOT` after `SAVE`)
 - All sensors of a type use the selected bus (no per-sensor bus assignment)
 - The system will fall back to bus 0 if the selected bus fails to initialize
 - Bus configuration is saved to EEPROM and included in JSON exports
+- Serial ports can be assigned to TRANSPORT for message routing (see `TRANSPORT` command)
+- Enabled serial ports register their pins with the pin registry to prevent conflicts
 
 ---
 
