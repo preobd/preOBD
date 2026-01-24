@@ -1771,6 +1771,7 @@ static int cmd_system(int argc, const char* const* argv) {
             msg.control.println(F("Factory reset: Erasing all configuration..."));
             resetInputConfig();
             resetSystemConfig();
+            saveSystemConfig();
             msg.control.println(F("Configuration reset complete"));
             msg.control.println(F("Rebooting..."));
             delay(100);
