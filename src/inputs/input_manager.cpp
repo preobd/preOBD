@@ -18,6 +18,7 @@
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
 #endif
+#include "../lib/pin_registry.h"
 
 // ===== GLOBAL STATE =====
 Input inputs[MAX_INPUTS];
@@ -799,6 +800,20 @@ static uint8_t findFreeSlot() {
  */
 static bool validateInputConfig(Input* input) {
     if (!input) return false;
+
+    // Check if pin is reserved by a bus (I2C, SPI, CAN)
+    // Skip this check for virtual pins (I2C sensors use 0xF0+)
+    if (input->pin < 0xF0 && !isPinAvailable(input->pin)) {
+        Serial.print(F("ERROR: Pin "));
+        if (input->pin >= A0) {
+            Serial.print(F("A"));
+            Serial.print(input->pin - A0);
+        } else {
+            Serial.print(input->pin);
+        }
+        Serial.println(F(" is reserved by a bus (I2C/SPI/CAN)"));
+        return false;
+    }
 
     // Check for pin conflicts with other enabled inputs
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
