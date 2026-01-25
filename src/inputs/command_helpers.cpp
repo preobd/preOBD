@@ -526,7 +526,6 @@ void printHelpTransport() {
     msg.control.println(F("  TRANSPORT CONTROL <transport>  - Route control messages"));
     msg.control.println(F("  TRANSPORT DATA <transport>  - Route sensor data output"));
     msg.control.println(F("  TRANSPORT DEBUG <transport>  - Route debug messages"));
-    msg.control.println(F("    Transports: USB_SERIAL, SERIAL1, SERIAL2, SERIAL3, ESP32_BT"));
     msg.control.println();
     msg.control.println(F("  (Use LIST TRANSPORTS to see available transports)"));
     msg.control.println();
