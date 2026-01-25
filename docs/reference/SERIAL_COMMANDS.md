@@ -859,8 +859,6 @@ SYSTEM REBOOT
 # Factory reset (requires CONFIRM for safety)
 SYSTEM RESET CONFIRM                           # Erases ALL config and reboots
 
-# Legacy reboot command (still supported)
-RELOAD                                         # Same as SYSTEM REBOOT
 ```
 
 **Comparison of Reset Commands:**
@@ -869,8 +867,6 @@ RELOAD                                         # Same as SYSTEM REBOOT
 |---------|---------------|----------|----------|
 | `SYSTEM REBOOT` | No | Yes | Clean restart |
 | `SYSTEM RESET CONFIRM` | Yes | Yes | Factory reset to defaults |
-| `RESET CONFIRM` | Yes | No | Clear config but stay in session |
-| `RELOAD` | No | Yes | Legacy alias for SYSTEM REBOOT |
 
 ---
 
@@ -920,10 +916,9 @@ SAVE                             # Save configuration to EEPROM
 SAVE EEPROM                      # Save configuration to EEPROM (explicit)
 LOAD                             # Load configuration from EEPROM
 LOAD EEPROM                      # Load configuration from EEPROM (explicit)
-RESET CONFIRM                    # Clear all configuration to defaults (no reboot)
 ```
 
-**Note:** `RESET CONFIRM` clears configuration in memory but does NOT reboot. Type `SAVE` to persist the cleared state, or use `SYSTEM REBOOT` to revert to saved configuration.
+**Note:** Use `SYSTEM RESET CONFIRM` to perform a factory reset (clears all configuration and reboots).
 
 ### File Storage (SD Card, USB, etc.)
 

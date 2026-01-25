@@ -51,11 +51,10 @@ static int cmd_transport(int argc, const char* const* argv);
 static int cmd_system(int argc, const char* const* argv);
 static int cmd_save(int argc, const char* const* argv);
 static int cmd_load(int argc, const char* const* argv);
-static int cmd_reset(int argc, const char* const* argv);
 static int cmd_config(int argc, const char* const* argv);
 static int cmd_run(int argc, const char* const* argv);
 static int cmd_version(int argc, const char* const* argv);
-static int cmd_reload(int argc, const char* const* argv);
+static int cmd_reboot(int argc, const char* const* argv);
 static int cmd_bus(int argc, const char* const* argv);
 #ifdef ENABLE_RELAY_OUTPUT
 static int cmd_relay(int argc, const char* const* argv);
@@ -63,6 +62,23 @@ static int cmd_relay(int argc, const char* const* argv);
 #ifdef ENABLE_TEST_MODE
 static int cmd_test(int argc, const char* const* argv);
 #endif
+
+// Platform-specific reboot helper (shared by REBOOT and SYSTEM REBOOT/RESET)
+static void platformReboot() {
+    delay(100);
+    #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__) || \
+        defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+        wdt_enable(WDTO_15MS);
+        while(1) {}
+    #elif defined(__IMXRT1062__)  // Teensy 4.x
+        SCB_AIRCR = 0x05FA0004;
+        while(1) {}
+    #elif defined(ESP32)
+        ESP.restart();
+    #else
+        msg.control.println(F("ERROR: Reboot not supported on this platform"));
+    #endif
+}
 
 // Command table
 const Command COMMANDS[] = {
@@ -88,8 +104,7 @@ const Command COMMANDS[] = {
     {"SYSTEM", cmd_system, "System configuration", true},
     {"SAVE", cmd_save, "Save configuration", true},
     {"LOAD", cmd_load, "Load configuration", true},
-    {"RESET", cmd_reset, "Reset configuration", true},
-    {"RELOAD", cmd_reload, "Reboot system", true},
+    {"REBOOT", cmd_reboot, "", true},  // Undocumented alias for SYSTEM REBOOT
     {"BUS", cmd_bus, "Configure I2C/SPI/CAN buses", true},
 
 #ifdef ENABLE_RELAY_OUTPUT
@@ -347,46 +362,9 @@ static int cmd_load(int argc, const char* const* argv) {
     return 1;
 }
 
-static int cmd_reset(int argc, const char* const* argv) {
-    if (argc == 2 && streq(argv[1], "CONFIRM")) {
-        msg.control.println(F("Clearing all configuration to defaults..."));
-        resetInputConfig();
-        resetSystemConfig();
-        msg.control.println(F("Configuration cleared (not saved)"));
-        msg.control.println(F("Type SAVE to persist, or use SYSTEM REBOOT to revert"));
-        msg.control.println(F("Note: Use SYSTEM RESET CONFIRM for factory reset + reboot"));
-        return 0;
-    }
-
-    msg.control.println();
-    msg.control.println(F("========================================"));
-    msg.control.println(F("  WARNING: Configuration Reset"));
-    msg.control.println(F("  This will clear ALL configuration"));
-    msg.control.println(F("  (does NOT reboot - see SYSTEM RESET)"));
-    msg.control.println(F("  Type: RESET CONFIRM"));
-    msg.control.println(F("========================================"));
-    msg.control.println();
-    return 0;
-}
-
-static int cmd_reload(int argc, const char* const* argv) {
+static int cmd_reboot(int argc, const char* const* argv) {
     msg.control.println(F("Rebooting system..."));
-    delay(100);
-
-    #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__) || \
-        defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
-        wdt_enable(WDTO_15MS);
-        while(1) {}
-    #elif defined(__IMXRT1062__)  // Teensy 4.x
-        SCB_AIRCR = 0x05FA0004;  // Request system reset
-        while(1) {}
-    #elif defined(ESP32)
-        ESP.restart();
-    #else
-        msg.control.println(F("ERROR: Reboot not supported on this platform"));
-        return 1;
-    #endif
-
+    platformReboot();
     return 0;
 }
 
@@ -1516,17 +1494,13 @@ static int cmd_display(int argc, const char* const* argv) {
 static int cmd_transport(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: TRANSPORT requires a subcommand"));
-        msg.control.println(F("  Usage: TRANSPORT STATUS | LIST | <plane> <transport>"));
+        msg.control.println(F("  Usage: TRANSPORT STATUS | <plane> <transport>"));
+        msg.control.println(F("  (Use LIST TRANSPORTS to see available transports)"));
         return 1;
     }
 
     if (streq(argv[1], "STATUS")) {
         router.printTransportStatus();
-        return 0;
-    }
-
-    if (streq(argv[1], "LIST")) {
-        router.listAvailableTransports();
         return 0;
     }
 
@@ -1588,7 +1562,7 @@ static int cmd_transport(int argc, const char* const* argv) {
 static int cmd_system(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: SYSTEM requires a subcommand"));
-        msg.control.println(F("  Usage: SYSTEM STATUS | DUMP [JSON] | SEA_LEVEL <hPa> | INTERVAL <type> <ms>"));
+        msg.control.println(F("  Usage: SYSTEM STATUS | DUMP | UNITS | SEA_LEVEL | INTERVAL | REBOOT | RESET"));
         return 1;
     }
 
@@ -1762,22 +1736,7 @@ static int cmd_system(int argc, const char* const* argv) {
     // SYSTEM REBOOT - Restart the device
     if (streq(argv[1], "REBOOT")) {
         msg.control.println(F("Rebooting system..."));
-        delay(100);
-
-        #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__) || \
-            defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
-            wdt_enable(WDTO_15MS);
-            while(1) {}
-        #elif defined(__IMXRT1062__)  // Teensy 4.x
-            SCB_AIRCR = 0x05FA0004;  // Request system reset
-            while(1) {}
-        #elif defined(ESP32)
-            ESP.restart();
-        #else
-            msg.control.println(F("ERROR: Reboot not supported on this platform"));
-            return 1;
-        #endif
-
+        platformReboot();
         return 0;
     }
 
@@ -1790,21 +1749,7 @@ static int cmd_system(int argc, const char* const* argv) {
             saveSystemConfig();
             msg.control.println(F("Configuration reset complete"));
             msg.control.println(F("Rebooting..."));
-            delay(100);
-
-            #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__) || \
-                defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
-                wdt_enable(WDTO_15MS);
-                while(1) {}
-            #elif defined(__IMXRT1062__)  // Teensy 4.x
-                SCB_AIRCR = 0x05FA0004;
-                while(1) {}
-            #elif defined(ESP32)
-                ESP.restart();
-            #else
-                msg.control.println(F("ERROR: Reboot not supported - manual power cycle required"));
-            #endif
-
+            platformReboot();
             return 0;
         }
 

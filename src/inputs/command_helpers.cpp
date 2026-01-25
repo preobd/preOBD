@@ -523,11 +523,12 @@ void printHelpTransport() {
     msg.control.println(F("Route control, data, and debug messages"));
     msg.control.println();
     msg.control.println(F("  TRANSPORT STATUS  - Show current transport routing"));
-    msg.control.println(F("  TRANSPORT LIST  - Show available transports"));
     msg.control.println(F("  TRANSPORT CONTROL <transport>  - Route control messages"));
     msg.control.println(F("  TRANSPORT DATA <transport>  - Route sensor data output"));
     msg.control.println(F("  TRANSPORT DEBUG <transport>  - Route debug messages"));
     msg.control.println(F("    Transports: USB_SERIAL, SERIAL1, SERIAL2, SERIAL3, ESP32_BT"));
+    msg.control.println();
+    msg.control.println(F("  (Use LIST TRANSPORTS to see available transports)"));
     msg.control.println();
 }
 
@@ -572,7 +573,6 @@ void printHelpConfig() {
     msg.control.println(F("  SAVE EEPROM             - Save config to EEPROM (explicit)"));
     msg.control.println(F("  LOAD                    - Load config from EEPROM"));
     msg.control.println(F("  LOAD EEPROM             - Load config from EEPROM (explicit)"));
-    msg.control.println(F("  RESET CONFIRM           - Clear config (no reboot)"));
     msg.control.println();
     msg.control.println(F("File Storage (SD Card, USB, etc.):"));
     msg.control.println(F("  SAVE [dest:]file        - Save config to file"));
@@ -590,7 +590,8 @@ void printHelpConfig() {
     msg.control.println(F("Modes:"));
     msg.control.println(F("  CONFIG                  - Enter configuration mode"));
     msg.control.println(F("  RUN                     - Enter run mode"));
-    msg.control.println(F("  RELOAD                  - Reboot device (or use SYSTEM REBOOT)"));
+    msg.control.println(F("  SYSTEM REBOOT           - Restart the device"));
+    msg.control.println(F("  SYSTEM RESET CONFIRM    - Factory reset (erase config + reboot)"));
     msg.control.println();
     msg.control.println(F("Information:"));
     msg.control.println(F("  VERSION                 - Firmware and EEPROM version"));
@@ -710,7 +711,6 @@ void printHelpQuick() {
     msg.control.println(F("  SET <pin> ALARM WARMUP|PERSIST <ms>"));
     msg.control.println(F("  SET <pin> CALIBRATION PRESET"));
     msg.control.println(F("  SET <pin> RPM|SPEED|PRESSURE_LINEAR|STEINHART|BETA|BIAS|PRESSURE_POLY ..."));
-    msg.control.println(F("  SET <pin> I2CBUS|SPIBUS <0-2>"));
     msg.control.println();
     msg.control.println(F("Outputs:"));
     msg.control.println(F("  OUTPUT STATUS"));
