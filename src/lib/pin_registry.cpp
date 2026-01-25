@@ -6,6 +6,7 @@
  */
 
 #include "pin_registry.h"
+#include "message_api.h"
 #include <Arduino.h>
 
 // ============================================================================
@@ -48,7 +49,7 @@ bool registerPin(uint8_t pin, PinUsageType type, const char* description) {
 
     // Check if registry is full
     if (registrySize >= MAX_PIN_REGISTRY) {
-        Serial.println(F("✗ ERROR: Pin registry full"));
+        msg.debug.println(F("✗ ERROR: Pin registry full"));
         return false;
     }
 
@@ -126,27 +127,27 @@ bool validateNoPinConflict(uint8_t pin, PinUsageType newType, const char* newDes
     PinUsageType existingType = getPinUsage(pin);
     const char* existingDesc = getPinDescription(pin);
 
-    Serial.print(F("✗ ERROR: Pin "));
-    Serial.print(pin);
-    Serial.print(F(" already in use\n"));
+    msg.debug.print(F("✗ ERROR: Pin "));
+    msg.debug.print(pin);
+    msg.debug.println(F(" already in use"));
 
-    Serial.print(F("  Current use: "));
-    Serial.print(getPinUsageTypeName(existingType));
+    msg.debug.print(F("  Current use: "));
+    msg.debug.print(getPinUsageTypeName(existingType));
     if (existingDesc) {
-        Serial.print(F(" ("));
-        Serial.print(existingDesc);
-        Serial.print(F(")"));
+        msg.debug.print(F(" ("));
+        msg.debug.print(existingDesc);
+        msg.debug.print(F(")"));
     }
-    Serial.println();
+    msg.debug.println();
 
-    Serial.print(F("  Attempted use: "));
-    Serial.print(getPinUsageTypeName(newType));
+    msg.debug.print(F("  Attempted use: "));
+    msg.debug.print(getPinUsageTypeName(newType));
     if (newDesc) {
-        Serial.print(F(" ("));
-        Serial.print(newDesc);
-        Serial.print(F(")"));
+        msg.debug.print(F(" ("));
+        msg.debug.print(newDesc);
+        msg.debug.print(F(")"));
     }
-    Serial.println();
+    msg.debug.println();
 
     return false;  // Conflict detected
 }
@@ -156,35 +157,35 @@ bool validateNoPinConflict(uint8_t pin, PinUsageType newType, const char* newDes
 // ============================================================================
 
 void dumpPinRegistry() {
-    Serial.println(F("=== Pin Registry ==="));
-    Serial.print(F("Registered pins: "));
-    Serial.print(registrySize);
-    Serial.print(F("/"));
-    Serial.println(MAX_PIN_REGISTRY);
-    Serial.println();
+    msg.control.println(F("=== Pin Registry ==="));
+    msg.control.print(F("Registered pins: "));
+    msg.control.print(registrySize);
+    msg.control.print(F("/"));
+    msg.control.println(MAX_PIN_REGISTRY);
+    msg.control.println();
 
     if (registrySize == 0) {
-        Serial.println(F("  (no pins registered)"));
+        msg.control.println(F("  (no pins registered)"));
         return;
     }
 
     for (uint8_t i = 0; i < registrySize; i++) {
-        Serial.print(F("  Pin "));
-        if (pinRegistry[i].pin < 10) Serial.print(F(" "));
-        Serial.print(pinRegistry[i].pin);
-        Serial.print(F(": "));
+        msg.control.print(F("  Pin "));
+        if (pinRegistry[i].pin < 10) msg.control.print(F(" "));
+        msg.control.print(pinRegistry[i].pin);
+        msg.control.print(F(": "));
 
-        Serial.print(getPinUsageTypeName(pinRegistry[i].type));
+        msg.control.print(getPinUsageTypeName(pinRegistry[i].type));
 
         if (pinRegistry[i].description) {
-            Serial.print(F(" - "));
-            Serial.print(pinRegistry[i].description);
+            msg.control.print(F(" - "));
+            msg.control.print(pinRegistry[i].description);
         }
 
-        Serial.println();
+        msg.control.println();
     }
 
-    Serial.println();
+    msg.control.println();
 }
 
 // ============================================================================

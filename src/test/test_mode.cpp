@@ -14,6 +14,7 @@
 #include "test_mode.h"
 #include "test_scenarios.h"
 #include "../inputs/input_manager.h"
+#include "../lib/message_api.h"
 #include <string.h>
 
 // Forward declaration of test value generator
@@ -110,18 +111,18 @@ void initTestMode() {
         testModeState.originalReadFunctions[i] = nullptr;
     }
 
-    Serial.println(F("✓ Test mode system initialized"));
+    msg.debug.println(F("✓ Test mode system initialized"));
 }
 
 bool startTestScenario(uint8_t scenarioIndex) {
     // Check if scenario index is valid
     uint8_t numScenarios = getNumTestScenarios();
     if (scenarioIndex >= numScenarios) {
-        Serial.print(F("ERROR: Invalid scenario index "));
-        Serial.print(scenarioIndex);
-        Serial.print(F(" (max: "));
-        Serial.print(numScenarios - 1);
-        Serial.println(F(")"));
+        msg.control.print(F("ERROR: Invalid scenario index "));
+        msg.control.print(scenarioIndex);
+        msg.control.print(F(" (max: "));
+        msg.control.print(numScenarios - 1);
+        msg.control.println(F(")"));
         return false;
     }
 
@@ -143,17 +144,17 @@ bool startTestScenario(uint8_t scenarioIndex) {
     strncpy_P(nameBuffer, scenario.name, sizeof(nameBuffer) - 1);
     nameBuffer[sizeof(nameBuffer) - 1] = '\0';
 
-    Serial.println(F("========================================"));
-    Serial.print(F("Starting test scenario "));
-    Serial.print(scenarioIndex);
-    Serial.print(F(": "));
-    Serial.println(nameBuffer);
-    Serial.print(F("Duration: "));
-    Serial.print(scenario.duration_ms / 1000);
-    Serial.println(F(" seconds"));
-    Serial.print(F("Input overrides: "));
-    Serial.println(scenario.numInputOverrides);
-    Serial.println(F("========================================"));
+    msg.control.println(F("========================================"));
+    msg.control.print(F("Starting test scenario "));
+    msg.control.print(scenarioIndex);
+    msg.control.print(F(": "));
+    msg.control.println(nameBuffer);
+    msg.control.print(F("Duration: "));
+    msg.control.print(scenario.duration_ms / 1000);
+    msg.control.println(F(" seconds"));
+    msg.control.print(F("Input overrides: "));
+    msg.control.println(scenario.numInputOverrides);
+    msg.control.println(F("========================================"));
 
     // Backup original read functions and replace with test function
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
@@ -174,9 +175,9 @@ void stopTestMode() {
         return;  // Already stopped
     }
 
-    Serial.println(F("========================================"));
-    Serial.println(F("Stopping test mode"));
-    Serial.println(F("========================================"));
+    msg.control.println(F("========================================"));
+    msg.control.println(F("Stopping test mode"));
+    msg.control.println(F("========================================"));
 
     // Restore original read functions
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
@@ -209,10 +210,10 @@ void updateTestMode() {
 
     if (elapsed >= scenario.duration_ms) {
         // Scenario complete
-        Serial.println(F(""));
-        Serial.println(F("========================================"));
-        Serial.println(F("Test scenario complete"));
-        Serial.println(F("========================================"));
+        msg.control.println(F(""));
+        msg.control.println(F("========================================"));
+        msg.control.println(F("Test scenario complete"));
+        msg.control.println(F("========================================"));
 
         // For now, just stop test mode
         // Future enhancement: could auto-advance to next scenario
@@ -223,9 +224,9 @@ void updateTestMode() {
 void listTestScenarios() {
     uint8_t numScenarios = getNumTestScenarios();
 
-    Serial.println(F("========================================"));
-    Serial.println(F("Available Test Scenarios:"));
-    Serial.println(F("========================================"));
+    msg.control.println(F("========================================"));
+    msg.control.println(F("Available Test Scenarios:"));
+    msg.control.println(F("========================================"));
 
     for (uint8_t i = 0; i < numScenarios; i++) {
         const TestScenario* scenarioPtr = getTestScenario(i);
@@ -236,17 +237,17 @@ void listTestScenarios() {
         strncpy_P(nameBuffer, scenario.name, sizeof(nameBuffer) - 1);
         nameBuffer[sizeof(nameBuffer) - 1] = '\0';
 
-        Serial.print(i);
-        Serial.print(F(". "));
-        Serial.print(nameBuffer);
-        Serial.print(F(" ("));
-        Serial.print(scenario.duration_ms / 1000);
-        Serial.print(F("s, "));
-        Serial.print(scenario.numInputOverrides);
-        Serial.println(F(" inputs)"));
+        msg.control.print(i);
+        msg.control.print(F(". "));
+        msg.control.print(nameBuffer);
+        msg.control.print(F(" ("));
+        msg.control.print(scenario.duration_ms / 1000);
+        msg.control.print(F("s, "));
+        msg.control.print(scenario.numInputOverrides);
+        msg.control.println(F(" inputs)"));
     }
 
-    Serial.println(F("========================================"));
+    msg.control.println(F("========================================"));
 }
 
 uint8_t getNumTestScenarios() {

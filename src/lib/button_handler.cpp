@@ -4,6 +4,7 @@
 
 #include "button_handler.h"
 #include "../config.h"
+#include "message_api.h"
 
 // Button timing constants
 #define DEBOUNCE_MS 50              // Debounce delay (50ms)
@@ -23,7 +24,7 @@ void initButtonHandler() {
     lastDebounceTime = millis();
     pressStartTime = 0;
     pressHandled = false;
-    Serial.println(F("✓ Button handler initialized"));
+    msg.debug.println(F("✓ Button handler initialized"));
 }
 
 ButtonPress updateButtonHandler() {

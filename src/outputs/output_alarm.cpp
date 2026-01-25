@@ -17,6 +17,7 @@
 #include "../config.h"
 #include "../inputs/input_manager.h"
 #include "../lib/pin_registry.h"
+#include "../lib/message_api.h"
 
 // ===== ALARM OUTPUT STATE =====
 static bool alarmSilenced = false;        // Is alarm currently silenced?
@@ -31,7 +32,7 @@ void initAlarmOutput() {
         pinMode(BUZZER, OUTPUT);
         noTone(BUZZER);  // Ensure buzzer is off initially
     } else {
-        Serial.println(F("⚠ Buzzer pin conflict - skipping"));
+        msg.debug.println(F("⚠ Buzzer pin conflict - skipping"));
     }
 
     // Configure silence button with internal pullup
@@ -45,9 +46,9 @@ void initAlarmOutput() {
         pinMode(GREEN_LED, OUTPUT);
         digitalWrite(GREEN_LED, LOW);
     } else {
-        Serial.print(F("⚠ Green LED pin "));
-        Serial.print(GREEN_LED);
-        Serial.println(F(" conflict - skipping"));
+        msg.debug.print(F("⚠ Green LED pin "));
+        msg.debug.print(GREEN_LED);
+        msg.debug.println(F(" conflict - skipping"));
     }
 
     if (validateNoPinConflict(YELLOW_LED, PIN_OUTPUT, "Yellow LED")) {
@@ -55,9 +56,9 @@ void initAlarmOutput() {
         pinMode(YELLOW_LED, OUTPUT);
         digitalWrite(YELLOW_LED, LOW);
     } else {
-        Serial.print(F("⚠ Yellow LED pin "));
-        Serial.print(YELLOW_LED);
-        Serial.println(F(" conflict - skipping"));
+        msg.debug.print(F("⚠ Yellow LED pin "));
+        msg.debug.print(YELLOW_LED);
+        msg.debug.println(F(" conflict - skipping"));
     }
 
     if (validateNoPinConflict(RED_LED, PIN_OUTPUT, "Red LED")) {
@@ -65,14 +66,14 @@ void initAlarmOutput() {
         pinMode(RED_LED, OUTPUT);
         digitalWrite(RED_LED, LOW);
     } else {
-        Serial.print(F("⚠ Red LED pin "));
-        Serial.print(RED_LED);
-        Serial.println(F(" conflict - skipping"));
+        msg.debug.print(F("⚠ Red LED pin "));
+        msg.debug.print(RED_LED);
+        msg.debug.println(F(" conflict - skipping"));
     }
 
-    Serial.println(F("✓ Alarm output initialized (buzzer + LEDs)"));
+    msg.debug.println(F("✓ Alarm output initialized (buzzer + LEDs)"));
 #else
-    Serial.println(F("✓ Alarm output initialized (buzzer)"));
+    msg.debug.println(F("✓ Alarm output initialized (buzzer)"));
 #endif
 }
 

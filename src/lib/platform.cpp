@@ -4,6 +4,7 @@
 
 #include <Arduino.h>
 #include "platform.h"
+#include "message_api.h"
 
 void setupADC() {
     // Configure analog reference based on platform
@@ -37,11 +38,11 @@ void setupADC() {
         // ADC_11db = 0-3.3V (default but less accurate)
         // ADC_6db = 0-2.2V (more accurate, use if voltage divider allows)
         analogSetAttenuation(ADC_11db);
-        Serial.println(F("ADC: Attenuation set to 11db (0-3.3V range)"));
-        Serial.println(F("NOTE: ESP32 ADC is non-linear, consider calibration"));
+        msg.debug.println(F("ADC: Attenuation set to 11db (0-3.3V range)"));
+        msg.debug.println(F("NOTE: ESP32 ADC is non-linear, consider calibration"));
     #else
         // Unknown platform - use default
-        Serial.println(F("WARNING: Unknown platform, using default ADC settings"));
+        msg.debug.println(F("WARNING: Unknown platform, using default ADC settings"));
         #ifdef ADC_RESOLUTION
         analogReadResolution(ADC_RESOLUTION);
         #endif
