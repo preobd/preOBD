@@ -35,9 +35,9 @@
 // ----- LED Status Indicator Pins -----
 // Only active when ENABLE_LEDS is defined in platformio.ini
 #ifdef ENABLE_LEDS
-    #define GREEN_LED 28      // Normal operation indicator
-    #define YELLOW_LED 29     // Warning level indicator
-    #define RED_LED 30       // Alarm level indicator
+    #define GREEN_LED 30      // Normal operation indicator
+    #define YELLOW_LED 31     // Warning level indicator
+    #define RED_LED 32       // Alarm level indicator
 #endif
 
 // ----- CAN Bus Pins -----

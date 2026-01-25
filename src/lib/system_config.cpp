@@ -218,6 +218,16 @@ void resetSystemConfig() {
     systemConfig.buses.reserved[0] = 0;
     systemConfig.buses.reserved[1] = 0;
 
+    // Serial Port Configuration defaults
+    // USB Serial is always available; Serial1 enabled by default, others disabled
+    systemConfig.serial.enabled_mask = 0x01;  // Bit 0 = Serial1 enabled
+    for (int i = 0; i < 8; i++) {
+        systemConfig.serial.baudrate_index[i] = BAUD_115200;  // Default 115200 baud
+    }
+    for (int i = 0; i < 7; i++) {
+        systemConfig.serial.reserved[i] = 0;
+    }
+
     // Calculate checksum
     systemConfig.checksum = calculateChecksum(&systemConfig);
 }

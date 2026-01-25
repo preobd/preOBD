@@ -13,6 +13,7 @@
 #include "json_config.h"
 #include "system_config.h"
 #include "bus_defaults.h"
+#include "serial_manager.h"
 #include "../inputs/input.h"
 #include "../inputs/input_manager.h"
 #include "units_registry.h"
@@ -273,6 +274,18 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     buses["spiClock"] = systemConfig.buses.spi_clock;
     buses["can"] = systemConfig.buses.active_can;
     buses["canBaudrate"] = systemConfig.buses.can_baudrate;
+
+    // Serial Port Configuration
+    JsonObject serial = systemObj["serial"].to<JsonObject>();
+    serial["enabledMask"] = systemConfig.serial.enabled_mask;
+    JsonArray serialPorts = serial["ports"].to<JsonArray>();
+    for (uint8_t i = 0; i < NUM_SERIAL_PORTS; i++) {
+        JsonObject port = serialPorts.add<JsonObject>();
+        uint8_t port_id = i + 1;
+        port["port"] = port_id;
+        port["enabled"] = (bool)(systemConfig.serial.enabled_mask & (1 << i));
+        port["baudrate"] = getBaudRateFromIndex(systemConfig.serial.baudrate_index[i]);
+    }
 }
 
 // JSON Schema Version
