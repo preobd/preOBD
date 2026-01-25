@@ -286,14 +286,13 @@ HELP CALIBRATION        # Show calibration commands
 |---------|-------------|
 | `CONFIG` | Enter configuration mode |
 | `RUN` | Enter run mode |
-| `RESET CONFIRM` | Clear all configuration (no reboot) |
 | `LOAD` | Reload from EEPROM |
 
 ### Output Commands
 
 | Command | Description |
 |---------|-------------|
-| `OUTPUT LIST` | Show all output modules |
+| `LIST OUTPUTS` | Show all output modules |
 | `OUTPUT <n> ENABLE` | Enable output |
 | `OUTPUT <n> DISABLE` | Disable output |
 | `OUTPUT <n> INTERVAL <ms>` | Set update interval |
