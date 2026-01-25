@@ -13,7 +13,7 @@
  * - sensors/pressure/                 - Pressure sensors
  * - sensors/voltage/                  - Voltage measurement
  * - sensors/rpm/                      - RPM sensing
- * - sensors/i2c/                      - I2C sensors (BME280)
+ * - sensors/environmental/            - Environmental sensors (BME280)
  * - sensors/digital/                  - Digital inputs (float switch)
  */
 
@@ -63,8 +63,8 @@
 // Speed sensors
 #include "sensors/speed/hall_speed.cpp"
 
-// I2C sensors (BME280 environmental sensor)
-#include "sensors/i2c/bme280.cpp"
+// Environmental sensors (e.g. BME280)
+#include "sensors/environmental/bme280.cpp"
 
 // Digital sensors
 #include "sensors/digital/float_switch.cpp"

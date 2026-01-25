@@ -86,9 +86,27 @@ struct InputEEPROM {
 openEMS has **three registries**, all stored in PROGMEM (flash):
 
 ### 1. Sensor Library
-**File:** `src/lib/sensor_library.h`
-**Size:** ~20 sensors
+**File:** `src/lib/sensor_library.h` (orchestrator)
+**Modular Files:** `src/lib/sensor_library/sensors/*.h`
+**Size:** ~28 sensors
 **Primary Key:** Sensor name (e.g., "MAX6675", "VDO_120C_TABLE")
+
+**Structure:**
+```
+src/lib/sensor_library/
+├── sensor_types.h        # SensorInfo struct, forward declarations
+├── sensor_categories.h   # Category enum and helpers
+├── sensor_helpers.h      # Lookup functions
+└── sensors/              # Sensor definitions by type
+    ├── none.h            # Placeholder
+    ├── thermocouples.h   # MAX6675, MAX31855
+    ├── thermistors.h     # VDO, generic NTC
+    ├── pressure.h        # Linear, polynomial, table
+    ├── voltage.h         # Voltage divider
+    ├── frequency.h       # RPM, speed
+    ├── environmental.h   # BME280
+    └── digital.h         # Float switch
+```
 
 **Contains:**
 - Read function pointer
@@ -393,7 +411,7 @@ MY_SENSOR_B  →  MY_SENSOR_B_V2
 
 | Registry | Header File | Size | Count |
 |----------|-------------|------|-------|
-| Sensors | `src/lib/sensor_library.h` | ~3KB | ~20 |
+| Sensors | `src/lib/sensor_library.h` + `sensor_library/sensors/*.h` | ~3KB | ~28 |
 | Applications | `src/lib/application_presets.h` | ~2KB | ~16 |
 | Units | `src/lib/units_registry.h` | ~500B | ~11 |
 | Hash Functions | `src/lib/hash.h` | ~2KB | N/A |

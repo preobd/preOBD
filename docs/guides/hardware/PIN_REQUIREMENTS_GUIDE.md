@@ -130,7 +130,7 @@ This table maps each sensor to its required pin type:
 | VOLTAGE_DIVIDER       | PIN_ANALOG           | A10         | Voltage divider circuit              |
 | **RPM Sensors**       |                      |             |                                      |
 | W_PHASE_RPM           | PIN_DIGITAL          | 2           | Interrupt-capable pin required       |
-| **I2C Sensors**       |                      |             |                                      |
+| **Environmental Sensors**       |                      |             |                                      |
 | BME280_TEMP           | PIN_I2C              | I2C         | Uses shared I2C bus (SDA/SCL)        |
 | BME280_PRESSURE       | PIN_I2C              | I2C         | Uses shared I2C bus (SDA/SCL)        |
 | BME280_HUMIDITY       | PIN_I2C              | I2C         | Uses shared I2C bus (SDA/SCL)        |
@@ -586,7 +586,7 @@ Pin (e.g., A0, 6): 6
 
 ### PinTypeRequirement Enum (C/C++)
 
-Defined in [src/lib/sensor_library.h](../../../src/lib/sensor_library.h):
+Defined in [src/lib/sensor_library/sensor_types.h](../../../src/lib/sensor_library/sensor_types.h):
 
 ```cpp
 enum PinTypeRequirement {
@@ -596,7 +596,7 @@ enum PinTypeRequirement {
 };
 ```
 
-Each sensor in `SENSOR_LIBRARY[]` has a `.pinTypeRequirement` field specifying its required pin type.
+Each sensor entry in `sensor_library/sensors/*.h` specifies its required pin type as the last X_SENSOR parameter.
 
 ### Pin Validation Logic (Python)
 

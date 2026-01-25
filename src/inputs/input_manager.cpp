@@ -1571,9 +1571,9 @@ void listSensors(const char* filter) {
         msg.control.println(F("       LIST SENSORS TEMPERATURE   - Show all temperature sensors"));
         msg.control.println(F("       SET <pin> SENSOR <category> <preset>"));
         msg.control.println();
-        msg.control.println(F("Aliases: NTC, THERMISTOR -> NTC_THERMISTOR"));
+        msg.control.println(F("Aliases: NTC -> THERMISTOR"));
         msg.control.println(F("         TC -> THERMOCOUPLE"));
-        msg.control.println(F("         RESISTIVE, PIEZO -> RESISTIVE_PRESSURE"));
+        msg.control.println(F("         RPM, SPEED -> FREQUENCY"));
         return;
     }
 
@@ -1624,9 +1624,9 @@ void listSensors(const char* filter) {
 
         msg.control.println();
         msg.control.println(F("Usage: SET <pin> SENSOR <category> <preset>"));
-        if (cat == CAT_I2C) {
+        if (cat == CAT_ENVIRONMENTAL) {
             msg.control.println(F("Note: Use 'I2C' for pin, e.g., SET I2C AMBIENT_TEMP BME280_TEMP"));
-        } else if (cat == CAT_LINEAR_PRESSURE || cat == CAT_LINEAR_TEMP) {
+        } else if (cat == CAT_PRESSURE || cat == CAT_THERMISTOR) {
             msg.control.println(F("IMPORTANT: 5V sensors (0.5-4.5V) require voltage dividers for 3.3V systems!"));
         }
         return;

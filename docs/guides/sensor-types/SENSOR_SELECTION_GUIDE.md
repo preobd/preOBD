@@ -51,7 +51,7 @@ For convenience, these shorter aliases work:
 | `VOLTAGE` | - | Battery/voltage monitoring |
 | `RPM` | - | Engine RPM sensors |
 | `SPEED` | - | Vehicle speed sensors |
-| `I2C` | - | I2C bus sensors (BME280) |
+| `ENVIRONMENTAL` | - | Environmental sensors (BME280) |
 | `DIGITAL` | - | Digital input sensors |
 
 ---
