@@ -204,3 +204,14 @@ const char* getPinUsageTypeName(PinUsageType type) {
         default:            return "Unknown";
     }
 }
+
+uint8_t getPinRegistrySize() {
+    return registrySize;
+}
+
+const PinUsage* getPinUsageByIndex(uint8_t index) {
+    if (index >= registrySize) {
+        return nullptr;
+    }
+    return &pinRegistry[index];
+}

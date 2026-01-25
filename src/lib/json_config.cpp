@@ -21,6 +21,7 @@
 #include "application_presets.h"
 #include "../version.h"
 #include "message_api.h"
+#include "pin_registry.h"
 
 // Suppress SdFat warning about FS.h conflict with Teensy's File class
 #define DISABLE_FS_H_WARNING
@@ -213,6 +214,22 @@ void exportInputsToJSON(JsonArray& inputsArray) {
     }
 }
 
+// Export pin registry to JSON array
+void exportPinRegistryToJSON(JsonArray& pinsArray) {
+    uint8_t count = getPinRegistrySize();
+    for (uint8_t i = 0; i < count; i++) {
+        const PinUsage* pinUsage = getPinUsageByIndex(i);
+        if (pinUsage && pinUsage->type != PIN_UNUSED) {
+            JsonObject pinObj = pinsArray.add<JsonObject>();
+            pinObj["pin"] = pinUsage->pin;
+            pinObj["type"] = getPinUsageTypeName(pinUsage->type);
+            if (pinUsage->description) {
+                pinObj["description"] = pinUsage->description;
+            }
+        }
+    }
+}
+
 // Export system configuration to JSON
 void exportSystemConfigToJSON(JsonObject& systemObj) {
     // Output modules
@@ -254,14 +271,10 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     timing["sensorRead"] = systemConfig.sensorReadInterval;
     timing["alarmCheck"] = systemConfig.alarmCheckInterval;
 
-    // Hardware pins
-    JsonObject pins = systemObj["pins"].to<JsonObject>();
-    pins["modeButton"] = systemConfig.modeButtonPin;
-    pins["buzzer"] = systemConfig.buzzerPin;
-    pins["canCS"] = systemConfig.canCSPin;
-    pins["canInt"] = systemConfig.canIntPin;
-    pins["sdCS"] = systemConfig.sdCSPin;
-    pins["testMode"] = systemConfig.testModePin;
+    // Export all registered pins from pin registry
+    // This includes system pins (button, buzzer, chip selects), bus pins, and any other registered pins
+    JsonArray pins = systemObj["pins"].to<JsonArray>();
+    exportPinRegistryToJSON(pins);
 
     // Physical constants
     JsonObject constants = systemObj["constants"].to<JsonObject>();
@@ -522,15 +535,30 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
         }
     }
 
-    // Hardware pins
-    if (systemObj["pins"].isNull() == false) {
-        JsonObject pins = systemObj["pins"];
-        systemConfig.modeButtonPin = pins["modeButton"];
-        systemConfig.buzzerPin = pins["buzzer"];
-        systemConfig.canCSPin = pins["canCS"];
-        systemConfig.canIntPin = pins["canInt"];
-        systemConfig.sdCSPin = pins["sdCS"];
-        systemConfig.testModePin = pins["testMode"];
+    // Hardware pins - extract from pin registry array
+    if (systemObj["pins"].isNull() == false && systemObj["pins"].is<JsonArray>()) {
+        JsonArray pins = systemObj["pins"];
+        for (JsonVariant v : pins) {
+            JsonObject pin = v.as<JsonObject>();
+            const char* desc = pin["description"];
+            uint8_t pinNum = pin["pin"];
+
+            if (desc != nullptr) {
+                if (strcmp(desc, "Mode Button") == 0) {
+                    systemConfig.modeButtonPin = pinNum;
+                } else if (strcmp(desc, "Buzzer") == 0) {
+                    systemConfig.buzzerPin = pinNum;
+                } else if (strcmp(desc, "CAN CS") == 0) {
+                    systemConfig.canCSPin = pinNum;
+                } else if (strcmp(desc, "CAN INT") == 0) {
+                    systemConfig.canIntPin = pinNum;
+                } else if (strcmp(desc, "SD CS") == 0) {
+                    systemConfig.sdCSPin = pinNum;
+                } else if (strcmp(desc, "Test Mode Trigger") == 0) {
+                    systemConfig.testModePin = pinNum;
+                }
+            }
+        }
     }
 
     // Physical constants

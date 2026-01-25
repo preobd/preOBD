@@ -8,6 +8,7 @@
 #include "message_router.h"  // For TransportID enum
 #include "bus_defaults.h"
 #include "message_api.h"
+#include "pin_registry.h"
 #include <EEPROM.h>
 
 // Global system config instance
@@ -245,6 +246,42 @@ bool saveSystemConfig() {
 
     msg.control.println(F("✓ System config saved to EEPROM"));
     return true;
+}
+
+/**
+ * Register system pins in the pin registry
+ * This reserves these pins and makes them visible in the registry export
+ */
+void registerSystemPins() {
+    // Mode button
+    if (systemConfig.modeButtonPin != 0xFF) {
+        registerPin(systemConfig.modeButtonPin, PIN_BUTTON, "Mode Button");
+    }
+
+    // Buzzer
+    if (systemConfig.buzzerPin != 0xFF) {
+        registerPin(systemConfig.buzzerPin, PIN_BUZZER, "Buzzer");
+    }
+
+    // CAN chip select (only for external MCP2515)
+    if (systemConfig.canCSPin != 0xFF) {
+        registerPin(systemConfig.canCSPin, PIN_CS, "CAN CS");
+    }
+
+    // CAN interrupt (only for external MCP2515)
+    if (systemConfig.canIntPin != 0xFF) {
+        registerPin(systemConfig.canIntPin, PIN_RESERVED, "CAN INT");
+    }
+
+    // SD card chip select
+    if (systemConfig.sdCSPin != 0xFF) {
+        registerPin(systemConfig.sdCSPin, PIN_CS, "SD CS");
+    }
+
+    // Test mode pin (optional)
+    if (systemConfig.testModePin != 0xFF) {
+        registerPin(systemConfig.testModePin, PIN_BUTTON, "Test Mode Trigger");
+    }
 }
 
 /**
