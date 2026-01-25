@@ -117,6 +117,7 @@ bool loadSystemConfig();         // Load from EEPROM
 void resetSystemConfig();        // Reset to defaults
 uint8_t calculateChecksum(SystemConfig* cfg);
 void printSystemStatus();
+void registerSystemPins();       // Register system pins in pin registry
 
 
 #endif // SYSTEM_CONFIG_H

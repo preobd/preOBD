@@ -200,6 +200,9 @@ void setup() {
     // after serial ports had already registered their pins
     initPinRegistry();
 
+    // Register system pins in the pin registry
+    registerSystemPins();
+
     // Initialize configured serial ports based on SystemConfig.serial
     // This replaces the old hardcoded Serial1.begin() / Serial2.begin() calls
     initConfiguredSerialPorts();

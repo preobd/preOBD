@@ -166,4 +166,19 @@ void dumpPinRegistry();
  */
 const char* getPinUsageTypeName(PinUsageType type);
 
+/**
+ * Get the number of registered pins
+ *
+ * @return Number of pins currently registered
+ */
+uint8_t getPinRegistrySize();
+
+/**
+ * Get pin usage entry by index
+ *
+ * @param index Index in the registry (0 to getPinRegistrySize()-1)
+ * @return Pointer to PinUsage entry, or nullptr if index out of bounds
+ */
+const PinUsage* getPinUsageByIndex(uint8_t index);
+
 #endif // PIN_REGISTRY_H
