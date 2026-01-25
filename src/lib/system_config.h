@@ -43,7 +43,7 @@ enum DisplayType {
 #include "../outputs/output_relay.h"
 #endif
 
-// System configuration structure (96 bytes with relay support - expanded from 64 bytes in v4)
+// System configuration structure
 struct SystemConfig {
     // Header (4 bytes)
     uint16_t magic;              // 0x5343 validation
@@ -102,6 +102,9 @@ struct SystemConfig {
 
     // Bus Configuration (16 bytes) - Simplified "pick one" model
     BusConfig buses;
+
+    // Serial Port Configuration (16 bytes) - Which serial ports are enabled
+    SerialPortConfig serial;
 };
 
 // Global system config instance
@@ -114,6 +117,7 @@ bool loadSystemConfig();         // Load from EEPROM
 void resetSystemConfig();        // Reset to defaults
 uint8_t calculateChecksum(SystemConfig* cfg);
 void printSystemStatus();
+void registerSystemPins();       // Register system pins in pin registry
 
 
 #endif // SYSTEM_CONFIG_H

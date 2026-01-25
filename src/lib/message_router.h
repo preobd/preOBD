@@ -30,8 +30,13 @@ enum TransportID {
     TRANSPORT_SERIAL1 = 2,      // Hardware Serial1
     TRANSPORT_SERIAL2 = 3,      // Hardware Serial2
     TRANSPORT_SERIAL3 = 4,      // Hardware Serial3
-    TRANSPORT_ESP32_BT = 5,     // ESP32 built-in Bluetooth Classic
-    NUM_TRANSPORTS = 6
+    TRANSPORT_SERIAL4 = 5,      // Hardware Serial4
+    TRANSPORT_SERIAL5 = 6,      // Hardware Serial5
+    TRANSPORT_SERIAL6 = 7,      // Hardware Serial6
+    TRANSPORT_SERIAL7 = 8,      // Hardware Serial7
+    TRANSPORT_SERIAL8 = 9,      // Hardware Serial8 (Teensy 4.1 only)
+    TRANSPORT_ESP32_BT = 10,    // ESP32 built-in Bluetooth Classic
+    NUM_TRANSPORTS = 11
 };
 
 // Message router class
@@ -56,6 +61,9 @@ public:
 
     // Load configuration from EEPROM (called by begin())
     void loadConfig();
+
+    // Sync router state to SystemConfig (without saving to EEPROM)
+    void syncConfig();
 
     // Save configuration to EEPROM
     void saveConfig();

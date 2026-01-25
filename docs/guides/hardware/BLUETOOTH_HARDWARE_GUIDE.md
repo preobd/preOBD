@@ -287,12 +287,24 @@ AT+RESET                   // Reset to apply changes
 - Sufficient for RealDash (updates at 10Hz)
 
 **Option 2: Upgrade to 115200 Baud (Better Performance)**
-- Configure module to 115200 baud
-- Change Serial2 initialization in [src/main.cpp](../../../src/main.cpp):
-  ```cpp
-  Serial2.begin(115200);  // Change from 9600 to 115200
+- Configure module to 115200 baud using AT commands
+- Configure openEMS serial port to match:
+  ```
+  BUS SERIAL 2 ENABLE 115200     # Enable Serial2 at 115200 baud
+  SAVE                           # Persist to EEPROM
   ```
 - Faster RealDash updates, more responsive commands
+
+**Using Different Serial Ports (Teensy 4.x)**
+
+Teensy 4.x supports up to 8 serial ports. You can use any available port for Bluetooth:
+```
+BUS SERIAL 5 ENABLE 9600         # Enable Serial5 for Bluetooth
+TRANSPORT DATA SERIAL5           # Route data output to Serial5
+SAVE
+```
+
+See [Serial Commands Reference](../../reference/SERIAL_COMMANDS.md#bus-configuration) for complete serial port configuration.
 
 ## Troubleshooting
 
@@ -342,9 +354,10 @@ AT+RESET                   // Reset to apply changes
    - Then debug Bluetooth separately
 
 4. **Check Serial2 initialization:**
-   - Verify Serial2.begin(9600) is called in setup()
+   - Verify Serial2 is enabled: `BUS SERIAL 2` to check status
+   - Enable if needed: `BUS SERIAL 2 ENABLE 9600`
    - Check that Serial2 is registered as transport
-   - Look for "✓ Serial2 initialized" debug message
+   - Look for "Serial2 initialized @ 9600 baud" debug message
 
 ### Garbled Data / Corrupted Messages
 

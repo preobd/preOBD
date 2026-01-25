@@ -74,9 +74,9 @@ The tool will:
 === openEMS Static Configuration Tool v1.0.0 ===
 
 Loading registries...
-  ✓ 17 sensors from sensor_library.h
-  ✓ 16 applications from application_presets.h
-  ✓ 12 units from units_registry.h
+  ✓ 28 sensors from sensor_library.h (+ sensor_library/sensors/)
+  ✓ 18 applications from application_presets.h
+  ✓ 13 units from units_registry.h
 
 Detected platform: megaatmega2560 (from platformio.ini)
 Board limits: 54 digital pins, 16 analog pins
@@ -320,7 +320,7 @@ For maximum memory savings on Arduino Uno, use thin library generation:
 python3 tools/configure.py --generate-thin-libs
 ```
 
-This creates optimized versions of sensor_library.h and application_presets.h containing only the sensors you're using, significantly reducing flash usage.
+This creates optimized versions of the sensor library and application presets containing only the sensors you're using, significantly reducing flash usage.
 
 **Example savings:**
 ```
@@ -427,7 +427,7 @@ Pin 13: ERROR - Reserved for SPI SCK
 Error: Could not find sensor_library.h
 ```
 
-**Solution:** Ensure you're in the project root and the source files exist.
+**Solution:** Ensure you're in the project root and the source files exist. The sensor library uses a modular structure with `sensor_library.h` as the orchestrator and sensor definitions in `sensor_library/sensors/*.h`.
 
 ### JSON file not loading
 

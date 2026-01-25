@@ -18,6 +18,7 @@
 #include "../lib/platform.h"
 #include "../lib/bus_manager.h"
 #include "../lib/bus_defaults.h"
+#include "../lib/serial_manager.h"
 #include "../lib/pin_registry.h"
 #include "../outputs/output_base.h"
 #include "../lib/display_manager.h"
@@ -50,11 +51,10 @@ static int cmd_transport(int argc, const char* const* argv);
 static int cmd_system(int argc, const char* const* argv);
 static int cmd_save(int argc, const char* const* argv);
 static int cmd_load(int argc, const char* const* argv);
-static int cmd_reset(int argc, const char* const* argv);
 static int cmd_config(int argc, const char* const* argv);
 static int cmd_run(int argc, const char* const* argv);
 static int cmd_version(int argc, const char* const* argv);
-static int cmd_reload(int argc, const char* const* argv);
+static int cmd_reboot(int argc, const char* const* argv);
 static int cmd_bus(int argc, const char* const* argv);
 #ifdef ENABLE_RELAY_OUTPUT
 static int cmd_relay(int argc, const char* const* argv);
@@ -62,6 +62,23 @@ static int cmd_relay(int argc, const char* const* argv);
 #ifdef ENABLE_TEST_MODE
 static int cmd_test(int argc, const char* const* argv);
 #endif
+
+// Platform-specific reboot helper (shared by REBOOT and SYSTEM REBOOT/RESET)
+static void platformReboot() {
+    delay(100);
+    #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__) || \
+        defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+        wdt_enable(WDTO_15MS);
+        while(1) {}
+    #elif defined(__IMXRT1062__)  // Teensy 4.x
+        SCB_AIRCR = 0x05FA0004;
+        while(1) {}
+    #elif defined(ESP32)
+        ESP.restart();
+    #else
+        msg.control.println(F("ERROR: Reboot not supported on this platform"));
+    #endif
+}
 
 // Command table
 const Command COMMANDS[] = {
@@ -87,8 +104,7 @@ const Command COMMANDS[] = {
     {"SYSTEM", cmd_system, "System configuration", true},
     {"SAVE", cmd_save, "Save configuration", true},
     {"LOAD", cmd_load, "Load configuration", true},
-    {"RESET", cmd_reset, "Reset configuration", true},
-    {"RELOAD", cmd_reload, "Reboot system", true},
+    {"REBOOT", cmd_reboot, "", true},  // Undocumented alias for SYSTEM REBOOT
     {"BUS", cmd_bus, "Configure I2C/SPI/CAN buses", true},
 
 #ifdef ENABLE_RELAY_OUTPUT
@@ -350,46 +366,9 @@ static int cmd_load(int argc, const char* const* argv) {
     return 1;
 }
 
-static int cmd_reset(int argc, const char* const* argv) {
-    if (argc == 2 && streq(argv[1], "CONFIRM")) {
-        msg.control.println(F("Clearing all configuration to defaults..."));
-        resetInputConfig();
-        resetSystemConfig();
-        msg.control.println(F("Configuration cleared (not saved)"));
-        msg.control.println(F("Type SAVE to persist, or use SYSTEM REBOOT to revert"));
-        msg.control.println(F("Note: Use SYSTEM RESET CONFIRM for factory reset + reboot"));
-        return 0;
-    }
-
-    msg.control.println();
-    msg.control.println(F("========================================"));
-    msg.control.println(F("  WARNING: Configuration Reset"));
-    msg.control.println(F("  This will clear ALL configuration"));
-    msg.control.println(F("  (does NOT reboot - see SYSTEM RESET)"));
-    msg.control.println(F("  Type: RESET CONFIRM"));
-    msg.control.println(F("========================================"));
-    msg.control.println();
-    return 0;
-}
-
-static int cmd_reload(int argc, const char* const* argv) {
+static int cmd_reboot(int argc, const char* const* argv) {
     msg.control.println(F("Rebooting system..."));
-    delay(100);
-
-    #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__) || \
-        defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
-        wdt_enable(WDTO_15MS);
-        while(1) {}
-    #elif defined(__IMXRT1062__)  // Teensy 4.x
-        SCB_AIRCR = 0x05FA0004;  // Request system reset
-        while(1) {}
-    #elif defined(ESP32)
-        ESP.restart();
-    #else
-        msg.control.println(F("ERROR: Reboot not supported on this platform"));
-        return 1;
-    #endif
-
+    platformReboot();
     return 0;
 }
 
@@ -1519,17 +1498,13 @@ static int cmd_display(int argc, const char* const* argv) {
 static int cmd_transport(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: TRANSPORT requires a subcommand"));
-        msg.control.println(F("  Usage: TRANSPORT STATUS | LIST | <plane> <transport>"));
+        msg.control.println(F("  Usage: TRANSPORT STATUS | <plane> <transport>"));
+        msg.control.println(F("  (Use LIST TRANSPORTS to see available transports)"));
         return 1;
     }
 
     if (streq(argv[1], "STATUS")) {
         router.printTransportStatus();
-        return 0;
-    }
-
-    if (streq(argv[1], "LIST")) {
-        router.listAvailableTransports();
         return 0;
     }
 
@@ -1563,10 +1538,25 @@ static int cmd_transport(int argc, const char* const* argv) {
         msg.control.print(argv[1]);
         msg.control.print(F(" → "));
         msg.control.println(argv[2]);
+
+        // Sync router state to systemConfig (will be persisted on SAVE)
+        router.syncConfig();
+        msg.control.println(F("Use SAVE to persist"));
     } else {
-        msg.control.print(F("ERROR: Failed to set transport for '"));
-        msg.control.print(argv[1]);
-        msg.control.println(F("'"));
+        // Provide specific error for disabled serial ports
+        if (transport >= TRANSPORT_SERIAL1 && transport <= TRANSPORT_SERIAL8) {
+            uint8_t port_id = transport - TRANSPORT_SERIAL1 + 1;
+            msg.control.print(F("ERROR: Serial"));
+            msg.control.print(port_id);
+            msg.control.println(F(" is not enabled"));
+            msg.control.print(F("  Run: BUS SERIAL "));
+            msg.control.print(port_id);
+            msg.control.println(F(" ENABLE"));
+        } else {
+            msg.control.print(F("ERROR: Transport '"));
+            msg.control.print(argv[2]);
+            msg.control.println(F("' not available"));
+        }
         return 1;
     }
 
@@ -1576,7 +1566,7 @@ static int cmd_transport(int argc, const char* const* argv) {
 static int cmd_system(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: SYSTEM requires a subcommand"));
-        msg.control.println(F("  Usage: SYSTEM STATUS | DUMP [JSON] | SEA_LEVEL <hPa> | INTERVAL <type> <ms>"));
+        msg.control.println(F("  Usage: SYSTEM STATUS | DUMP | UNITS | SEA_LEVEL | INTERVAL | REBOOT | RESET"));
         return 1;
     }
 
@@ -1618,6 +1608,7 @@ static int cmd_system(int argc, const char* const* argv) {
         displayI2CStatus();
         displaySPIStatus();
         displayCANStatus();
+        displaySerialStatus();
         msg.control.println();
 
         // Show system config
@@ -1749,22 +1740,7 @@ static int cmd_system(int argc, const char* const* argv) {
     // SYSTEM REBOOT - Restart the device
     if (streq(argv[1], "REBOOT")) {
         msg.control.println(F("Rebooting system..."));
-        delay(100);
-
-        #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__) || \
-            defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
-            wdt_enable(WDTO_15MS);
-            while(1) {}
-        #elif defined(__IMXRT1062__)  // Teensy 4.x
-            SCB_AIRCR = 0x05FA0004;  // Request system reset
-            while(1) {}
-        #elif defined(ESP32)
-            ESP.restart();
-        #else
-            msg.control.println(F("ERROR: Reboot not supported on this platform"));
-            return 1;
-        #endif
-
+        platformReboot();
         return 0;
     }
 
@@ -1774,23 +1750,10 @@ static int cmd_system(int argc, const char* const* argv) {
             msg.control.println(F("Factory reset: Erasing all configuration..."));
             resetInputConfig();
             resetSystemConfig();
+            saveSystemConfig();
             msg.control.println(F("Configuration reset complete"));
             msg.control.println(F("Rebooting..."));
-            delay(100);
-
-            #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__) || \
-                defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
-                wdt_enable(WDTO_15MS);
-                while(1) {}
-            #elif defined(__IMXRT1062__)  // Teensy 4.x
-                SCB_AIRCR = 0x05FA0004;
-                while(1) {}
-            #elif defined(ESP32)
-                ESP.restart();
-            #else
-                msg.control.println(F("ERROR: Reboot not supported - manual power cycle required"));
-            #endif
-
+            platformReboot();
             return 0;
         }
 
@@ -2013,6 +1976,10 @@ static int cmd_bus(int argc, const char* const* argv) {
         msg.control.println(F("  BUS SPI CLOCK <Hz>        - Set SPI clock"));
         msg.control.println(F("  BUS CAN [0|1|2]           - Show or select CAN bus"));
         msg.control.println(F("  BUS CAN BAUDRATE <bps>    - Set CAN baudrate"));
+        msg.control.println(F("  BUS SERIAL                - Show all serial ports"));
+        msg.control.println(F("  BUS SERIAL <1-8> ENABLE [baud] - Enable serial port"));
+        msg.control.println(F("  BUS SERIAL <1-8> DISABLE  - Disable serial port"));
+        msg.control.println(F("  BUS SERIAL <1-8> BAUDRATE <rate> - Set baud rate"));
         return 0;
     }
 
@@ -2197,10 +2164,136 @@ static int cmd_bus(int argc, const char* const* argv) {
 #endif
     }
 
+    // -------------------------------------------------------------------------
+    // BUS SERIAL [1-8] [ENABLE|DISABLE|BAUDRATE <rate>]
+    // -------------------------------------------------------------------------
+    if (streq(busType, "SERIAL")) {
+#if NUM_SERIAL_PORTS == 0
+        msg.control.println(F("ERROR: No serial ports available on this platform"));
+        return 1;
+#else
+        // BUS SERIAL (no arguments) - display all serial port status
+        if (argc == 2) {
+            displaySerialStatus();
+            return 0;
+        }
+
+        // Parse port number
+        uint8_t port_id = atoi(argv[2]);
+
+        // Check if it's a valid port number (1-8)
+        if (port_id >= 1 && port_id <= 8) {
+            // Validate port exists on this platform
+            if (port_id > NUM_SERIAL_PORTS) {
+                msg.control.print(F("ERROR: Serial"));
+                msg.control.print(port_id);
+                msg.control.print(F(" not available (1-"));
+                msg.control.print(NUM_SERIAL_PORTS);
+                msg.control.println(F(")"));
+                return 1;
+            }
+
+            // BUS SERIAL <port> (no subcommand) - show port status
+            if (argc == 3) {
+                displaySerialPortStatus(port_id);
+                return 0;
+            }
+
+            // BUS SERIAL <port> ENABLE [baudrate]
+            if (streq(argv[3], "ENABLE")) {
+                // Use saved baud rate from config, or 115200 if not set
+                uint8_t baud_idx = systemConfig.serial.baudrate_index[port_id - 1];
+
+                if (argc >= 5) {
+                    uint32_t baudrate = atol(argv[4]);
+                    baud_idx = getBaudRateIndex(baudrate);
+                    if (getBaudRateFromIndex(baud_idx) != baudrate) {
+                        msg.control.print(F("WARNING: Baud rate "));
+                        msg.control.print(baudrate);
+                        msg.control.print(F(" not supported, using "));
+                        msg.control.println(getBaudRateFromIndex(baud_idx));
+                    }
+                }
+
+                if (enableSerialPort(port_id, baud_idx)) {
+                    msg.control.print(F("Serial"));
+                    msg.control.print(port_id);
+                    msg.control.print(F(" enabled @ "));
+                    msg.control.print(getBaudRateString(baud_idx));
+                    msg.control.print(F(" baud (RX="));
+                    msg.control.print(getDefaultSerialRX(port_id));
+                    msg.control.print(F(", TX="));
+                    msg.control.print(getDefaultSerialTX(port_id));
+                    msg.control.println(F(")"));
+                    msg.control.println(F("Use SAVE to persist"));
+                } else {
+                    msg.control.print(F("ERROR: Failed to enable Serial"));
+                    msg.control.println(port_id);
+                }
+                return 0;
+            }
+
+            // BUS SERIAL <port> DISABLE
+            if (streq(argv[3], "DISABLE")) {
+                if (disableSerialPort(port_id)) {
+                    msg.control.print(F("Serial"));
+                    msg.control.print(port_id);
+                    msg.control.println(F(" disabled"));
+                    msg.control.println(F("Use SAVE to persist"));
+                }
+                return 0;
+            }
+
+            // BUS SERIAL <port> BAUDRATE <rate>
+            if (streq(argv[3], "BAUDRATE")) {
+                if (argc < 5) {
+                    msg.control.println(F("ERROR: BAUDRATE requires a speed"));
+                    msg.control.println(F("  Usage: BUS SERIAL <port> BAUDRATE <rate>"));
+                    msg.control.println(F("  Valid: 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600"));
+                    return 1;
+                }
+
+                uint32_t baudrate = atol(argv[4]);
+                uint8_t baud_idx = getBaudRateIndex(baudrate);
+
+                if (getBaudRateFromIndex(baud_idx) != baudrate) {
+                    msg.control.print(F("WARNING: Baud rate "));
+                    msg.control.print(baudrate);
+                    msg.control.print(F(" not supported, using "));
+                    msg.control.println(getBaudRateFromIndex(baud_idx));
+                }
+
+                systemConfig.serial.baudrate_index[port_id - 1] = baud_idx;
+                msg.control.print(F("Serial"));
+                msg.control.print(port_id);
+                msg.control.print(F(" baudrate set to "));
+                msg.control.println(getBaudRateString(baud_idx));
+                msg.control.println(F("Note: Takes effect on next reboot"));
+                msg.control.println(F("Use SAVE to persist"));
+                return 0;
+            }
+
+            // Unknown subcommand for port
+            msg.control.print(F("ERROR: Unknown command '"));
+            msg.control.print(argv[3]);
+            msg.control.println(F("'"));
+            msg.control.println(F("  Valid: ENABLE, DISABLE, BAUDRATE"));
+            return 1;
+        }
+
+        // Not a port number - unknown subcommand
+        msg.control.print(F("ERROR: Unknown serial command '"));
+        msg.control.print(argv[2]);
+        msg.control.println(F("'"));
+        msg.control.println(F("  Usage: BUS SERIAL [1-8] [ENABLE|DISABLE|BAUDRATE <rate>]"));
+        return 1;
+#endif
+    }
+
     // Unknown bus type
     msg.control.print(F("ERROR: Unknown bus type '"));
     msg.control.print(busType);
     msg.control.println(F("'"));
-    msg.control.println(F("  Valid: I2C, SPI, CAN"));
+    msg.control.println(F("  Valid: I2C, SPI, CAN, SERIAL"));
     return 1;
 }

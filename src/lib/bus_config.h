@@ -5,7 +5,9 @@
  * Select which bus to use for each type and set its speed.
  * All sensors/outputs of a given type use the selected bus.
  *
- * Total size: 16 bytes (stored in EEPROM as part of SystemConfig)
+ * Also configures hardware serial ports (Serial1-Serial8) for TRANSPORT use.
+ *
+ * Total size: 16 bytes for BusConfig + 16 bytes for SerialPortConfig
  */
 
 #ifndef BUS_CONFIG_H
@@ -34,5 +36,46 @@ struct BusConfig {
 
     uint8_t reserved[2];     // Padding for alignment
 };  // 16 bytes
+
+/**
+ * Serial Port Baud Rate Index
+ *
+ * Maps index values to standard baud rates.
+ * Used by SerialPortConfig.baudrate_index[].
+ */
+enum SerialBaudIndex {
+    BAUD_9600   = 0,   //   9600 bps
+    BAUD_19200  = 1,   //  19200 bps
+    BAUD_38400  = 2,   //  38400 bps
+    BAUD_57600  = 3,   //  57600 bps
+    BAUD_115200 = 4,   // 115200 bps (default)
+    BAUD_230400 = 5,   // 230400 bps
+    BAUD_460800 = 6,   // 460800 bps
+    BAUD_921600 = 7,   // 921600 bps
+    NUM_BAUD_RATES = 8
+};
+
+/**
+ * Serial Port Configuration Structure
+ *
+ * Configures which hardware serial ports (Serial1-Serial8) are enabled
+ * and their baud rates. Multiple ports can be enabled simultaneously
+ * since TRANSPORT can assign different ports to different planes.
+ *
+ * Total size: 16 bytes
+ */
+struct SerialPortConfig {
+    // Enabled port bitmask (1 byte)
+    // Bit 0 = Serial1, Bit 1 = Serial2, ... Bit 7 = Serial8
+    uint8_t enabled_mask;
+
+    // Baud rate index for each port (8 bytes)
+    // Index 0 = Serial1, Index 1 = Serial2, etc.
+    // Values are SerialBaudIndex enum (0-7)
+    uint8_t baudrate_index[8];
+
+    // Reserved for future expansion (7 bytes)
+    uint8_t reserved[7];
+};  // 16 bytes total
 
 #endif // BUS_CONFIG_H

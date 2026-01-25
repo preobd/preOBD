@@ -5,6 +5,7 @@
 #include "system_mode.h"
 #include "../config.h"
 #include "watchdog.h"
+#include "message_api.h"
 
 #ifdef ENABLE_LCD
 extern void showConfigModeMessage();
@@ -32,17 +33,17 @@ void setMode(SystemMode newMode) {
 
     // Handle mode transitions
     if (oldMode != newMode) {
-        Serial.println();
+        msg.control.println();
         if (newMode == MODE_CONFIG) {
             // Disable watchdog when entering CONFIG mode
             watchdogDisable();
 
-            Serial.println(F("========================================"));
-            Serial.println(F("  ENTERED CONFIG MODE"));
-            Serial.println(F("  Sensors paused, configuration unlocked"));
-            Serial.println(F("  Watchdog disabled"));
-            Serial.println(F("  Type RUN to resume normal operation"));
-            Serial.println(F("========================================"));
+            msg.control.println(F("========================================"));
+            msg.control.println(F("  ENTERED CONFIG MODE"));
+            msg.control.println(F("  Sensors paused, configuration unlocked"));
+            msg.control.println(F("  Watchdog disabled"));
+            msg.control.println(F("  Type RUN to resume normal operation"));
+            msg.control.println(F("========================================"));
 
             #ifdef ENABLE_LCD
             // Clear LCD (message will be shown by loop if no sensors)
@@ -53,19 +54,19 @@ void setMode(SystemMode newMode) {
             // Enable watchdog when entering RUN mode
             watchdogEnable(2000);
 
-            Serial.println(F("========================================"));
-            Serial.println(F("  ENTERED RUN MODE"));
-            Serial.println(F("  Sensors active, configuration locked"));
-            Serial.println(F("  Watchdog enabled (2s timeout)"));
-            Serial.println(F("  Type CONFIG to modify configuration"));
-            Serial.println(F("========================================"));
+            msg.control.println(F("========================================"));
+            msg.control.println(F("  ENTERED RUN MODE"));
+            msg.control.println(F("  Sensors active, configuration locked"));
+            msg.control.println(F("  Watchdog enabled (2s timeout)"));
+            msg.control.println(F("  Type CONFIG to modify configuration"));
+            msg.control.println(F("========================================"));
 
             #ifdef ENABLE_LCD
             // Clear LCD when entering RUN mode (sensors will update it)
             clearLCD();
             #endif
         }
-        Serial.println();
+        msg.control.println();
     }
 }
 
@@ -80,28 +81,28 @@ bool isInRunMode() {
 SystemMode detectBootMode(bool eepromValid) {
     // If EEPROM invalid/empty, automatically enter CONFIG mode
     if (!eepromValid) {
-        Serial.println();
-        Serial.println(F("========================================"));
-        Serial.println(F("  NO CONFIGURATION FOUND"));
-        Serial.println(F("  Automatically entering CONFIG mode"));
-        Serial.println(F("========================================"));
-        Serial.println();
+        msg.control.println();
+        msg.control.println(F("========================================"));
+        msg.control.println(F("  NO CONFIGURATION FOUND"));
+        msg.control.println(F("  Automatically entering CONFIG mode"));
+        msg.control.println(F("========================================"));
+        msg.control.println();
         return MODE_CONFIG;
     }
 
     // Check if button held during boot (LOW = active)
     delay(BOOT_DETECT_DELAY_MS);  // Allow pin to stabilize
     if (digitalRead(MODE_BUTTON) == LOW) {
-        Serial.println();
-        Serial.println(F("========================================"));
-        Serial.println(F("  CONFIG BUTTON DETECTED"));
-        Serial.println(F("  Entering CONFIG mode"));
-        Serial.println(F("========================================"));
-        Serial.println();
+        msg.debug.println();
+        msg.debug.println(F("========================================"));
+        msg.debug.println(F("  CONFIG BUTTON DETECTED"));
+        msg.debug.println(F("  Entering CONFIG mode"));
+        msg.debug.println(F("========================================"));
+        msg.debug.println();
         return MODE_CONFIG;
     }
 
     // Default: RUN mode
-    Serial.println(F("Starting in RUN mode (config locked)"));
+    msg.debug.println(F("Starting in RUN mode (config locked)"));
     return MODE_RUN;
 }

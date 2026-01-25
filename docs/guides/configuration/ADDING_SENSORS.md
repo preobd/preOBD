@@ -40,10 +40,11 @@ openEMS uses **hash-based registries** instead of enums. This provides:
 
 ### The Three Registries
 
-1. **Sensor Library** (`src/lib/sensor_library.h`)
+1. **Sensor Library** (`src/lib/sensor_library.h` + `src/lib/sensor_library/`)
    - Defines physical sensors (MAX6675, VDO_120C_TABLE, etc.)
    - Links sensors to read functions and calibration data
-   - ~20 sensors, ~3KB in PROGMEM
+   - Modular structure: sensors organized by type in `sensor_library/sensors/`
+   - ~28 sensors, ~3KB in PROGMEM
 
 2. **Application Presets** (`src/lib/application_presets.h`)
    - Defines what you're measuring (CHT, OIL_PRESSURE, etc.)
@@ -143,44 +144,55 @@ static const PROGMEM PressureLinearCalibration my_pressure_cal = {
 };
 ```
 
-### Step 3: Add PROGMEM Strings
+### Step 3: Find the Appropriate Category File
 
-In `src/lib/sensor_library.h`, add the name and label strings:
+The sensor library is organized by sensor type in `src/lib/sensor_library/sensors/`:
+
+| File | Sensor Types |
+|------|--------------|
+| `thermocouples.h` | MAX6675, MAX31855 |
+| `thermistors.h` | VDO thermistors, generic NTC, linear temperature |
+| `pressure.h` | Linear, polynomial, table-based pressure |
+| `voltage.h` | Voltage divider |
+| `frequency.h` | RPM and speed sensors |
+| `environmental.h` | BME280 and other Environmental sensors |
+| `digital.h` | Float switch and digital inputs |
+
+Choose the file that matches your sensor type.
+
+### Step 4: Add PROGMEM Strings and X_SENSOR Entry
+
+Edit the appropriate category file (e.g., `src/lib/sensor_library/sensors/thermistors.h`):
 
 ```cpp
-// Near the top with other PSTR definitions
+// ===== PROGMEM STRINGS =====
+// Add near other string definitions in the file
 static const char PSTR_MY_NEW_SENSOR[] PROGMEM = "MY_NEW_SENSOR";
 static const char PSTR_MY_NEW_SENSOR_LABEL[] PROGMEM = "My New 10K NTC Sensor";
+
+// ===== SENSOR ENTRIES (X-MACRO) =====
+// Add to the category's macro (e.g., THERMISTOR_SENSORS)
+#define THERMISTOR_SENSORS \
+    /* ... existing sensors ... */ \
+    X_SENSOR(PSTR_MY_NEW_SENSOR, PSTR_MY_NEW_SENSOR_LABEL, nullptr, readThermistorSteinhart, nullptr, \
+             MEASURE_TEMPERATURE, CAL_THERMISTOR_STEINHART, &my_custom_thermistor_cal, \
+             SENSOR_READ_INTERVAL_MS, -40.0, 150.0, 0xABCD, PIN_ANALOG)
 ```
 
-### Step 4: Add to SENSOR_LIBRARY Array
-
-Add a new entry at the **end** of the `SENSOR_LIBRARY[]` array:
-
-```cpp
-static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
-    // ... existing sensors ...
-    
-    // My New Sensor
-    {
-        .name = PSTR_MY_NEW_SENSOR,
-        .label = PSTR_MY_NEW_SENSOR_LABEL,
-        .description = nullptr,
-        .readFunction = readThermistorSteinhart,  // Reuse existing function
-        .initFunction = nullptr,                   // No special init needed
-        .measurementType = MEASURE_TEMPERATURE,
-        .calibrationType = CAL_THERMISTOR_STEINHART,
-        .defaultCalibration = &my_custom_thermistor_cal,
-        .minReadInterval = SENSOR_READ_INTERVAL_MS,  // 50ms default
-        .minValue = -40.0,
-        .maxValue = 150.0,
-        .nameHash = 0xABCD,  // From Step 1
-        .pinTypeRequirement = PIN_ANALOG
-    },
-};
-```
-
-**Important:** Add new sensors at the END of the array. The array position doesn't matter for lookups (hash-based), but keeping additions at the end makes diffs cleaner.
+The X_SENSOR macro parameters are:
+1. `name` - PROGMEM name string
+2. `label` - PROGMEM label string
+3. `description` - PROGMEM description (or nullptr)
+4. `readFunction` - Function to read the sensor
+5. `initFunction` - Init function (or nullptr)
+6. `measurementType` - MEASURE_TEMPERATURE, MEASURE_PRESSURE, etc.
+7. `calibrationType` - CAL_THERMISTOR_STEINHART, CAL_LINEAR, etc.
+8. `defaultCalibration` - Pointer to calibration data
+9. `minReadInterval` - Minimum ms between reads
+10. `minValue` - Sensor's physical minimum
+11. `maxValue` - Sensor's physical maximum
+12. `nameHash` - Precomputed hash from Step 1
+13. `pinTypeRequirement` - PIN_ANALOG, PIN_DIGITAL, or PIN_I2C
 
 ### Step 5: Validate
 
@@ -313,7 +325,7 @@ Edit `src/lib/sensor_calibration_data.h` to include your new manufacturer file:
 
 ### Step 3: Add Sensors to Library
 
-Add your sensors to `src/lib/sensor_library.h` referencing the calibrations from your new manufacturer file.
+Add your sensors to the appropriate category file in `src/lib/sensor_library/sensors/`, referencing the calibrations from your new manufacturer file.
 
 ---
 
@@ -331,7 +343,7 @@ Choose the appropriate subdirectory based on sensor type:
 - **linear/** - Generic linear sensors
 - **rpm/** - RPM/frequency sensors
 - **digital/** - Digital inputs
-- **i2c/** - I2C sensors
+- **environmental/** - Environmental sensors
 
 ### Step 2: Create Implementation File
 
@@ -483,7 +495,7 @@ Read functions are organized in `src/inputs/sensors/` by sensor type.
 | `readVoltageDivider` | Analog | V | sensors/voltage/ | Battery voltage divider |
 | `readWPhaseRPM` | Interrupt | RPM | sensors/rpm/ | Alternator W-phase |
 | `readDigitalFloatSwitch` | Digital | 0/1 | sensors/digital/ | Float switches |
-| `readBME280Temp` | I2C | °C | sensors/i2c/ | BME280 environmental |
+| `readBME280Temp` | I2C | °C | sensors/environmental/ | BME280 environmental |
 
 ---
 

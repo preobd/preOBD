@@ -16,6 +16,8 @@
 #include "output_alarm.h"
 #include "../config.h"
 #include "../inputs/input_manager.h"
+#include "../lib/pin_registry.h"
+#include "../lib/message_api.h"
 
 // ===== ALARM OUTPUT STATE =====
 static bool alarmSilenced = false;        // Is alarm currently silenced?
@@ -24,28 +26,54 @@ static uint32_t silenceStartTime = 0;    // When was silence button pressed?
 // ===== INITIALIZATION =====
 
 void initAlarmOutput() {
-    // Configure buzzer output pin
-    pinMode(BUZZER, OUTPUT);
-    noTone(BUZZER);  // Ensure buzzer is off initially
+    // Configure buzzer output pin (with conflict check)
+    if (validateNoPinConflict(BUZZER, PIN_OUTPUT, "Alarm Buzzer")) {
+        registerPin(BUZZER, PIN_OUTPUT, "Alarm Buzzer");
+        pinMode(BUZZER, OUTPUT);
+        noTone(BUZZER);  // Ensure buzzer is off initially
+    } else {
+        msg.debug.println(F("⚠ Buzzer pin conflict - skipping"));
+    }
 
     // Configure silence button with internal pullup
     // Button is active LOW (pulls pin to GND when pressed)
     pinMode(MODE_BUTTON, INPUT_PULLUP);
 
 #ifdef ENABLE_LEDS
-    // Configure LED output pins
-    pinMode(GREEN_LED, OUTPUT);
-    pinMode(YELLOW_LED, OUTPUT);
-    pinMode(RED_LED, OUTPUT);
+    // Configure LED output pins (with conflict checks)
+    if (validateNoPinConflict(GREEN_LED, PIN_OUTPUT, "Green LED")) {
+        registerPin(GREEN_LED, PIN_OUTPUT, "Green LED");
+        pinMode(GREEN_LED, OUTPUT);
+        digitalWrite(GREEN_LED, LOW);
+    } else {
+        msg.debug.print(F("⚠ Green LED pin "));
+        msg.debug.print(GREEN_LED);
+        msg.debug.println(F(" conflict - skipping"));
+    }
 
-    // Initialize all LEDs to off
-    digitalWrite(GREEN_LED, LOW);
-    digitalWrite(YELLOW_LED, LOW);
-    digitalWrite(RED_LED, LOW);
+    if (validateNoPinConflict(YELLOW_LED, PIN_OUTPUT, "Yellow LED")) {
+        registerPin(YELLOW_LED, PIN_OUTPUT, "Yellow LED");
+        pinMode(YELLOW_LED, OUTPUT);
+        digitalWrite(YELLOW_LED, LOW);
+    } else {
+        msg.debug.print(F("⚠ Yellow LED pin "));
+        msg.debug.print(YELLOW_LED);
+        msg.debug.println(F(" conflict - skipping"));
+    }
 
-    Serial.println(F("✓ Alarm output initialized (buzzer + LEDs)"));
+    if (validateNoPinConflict(RED_LED, PIN_OUTPUT, "Red LED")) {
+        registerPin(RED_LED, PIN_OUTPUT, "Red LED");
+        pinMode(RED_LED, OUTPUT);
+        digitalWrite(RED_LED, LOW);
+    } else {
+        msg.debug.print(F("⚠ Red LED pin "));
+        msg.debug.print(RED_LED);
+        msg.debug.println(F(" conflict - skipping"));
+    }
+
+    msg.debug.println(F("✓ Alarm output initialized (buzzer + LEDs)"));
 #else
-    Serial.println(F("✓ Alarm output initialized (buzzer)"));
+    msg.debug.println(F("✓ Alarm output initialized (buzzer)"));
 #endif
 }
 

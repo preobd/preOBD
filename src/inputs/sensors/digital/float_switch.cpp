@@ -8,6 +8,7 @@
 #include "../../../config.h"
 #include "../../../lib/platform.h"
 #include "../../input.h"
+#include "../../../lib/message_api.h"
 
 // ===== INITIALIZATION =====
 
@@ -21,10 +22,10 @@
  */
 void initFloatSwitch(Input* ptr) {
     pinMode(ptr->pin, INPUT_PULLUP);  // Most float switches need pullup
-    Serial.print(F("✓ Digital input on pin "));
-    Serial.print(ptr->pin);
-    Serial.print(F(" for "));
-    Serial.println(ptr->abbrName);
+    msg.debug.print(F("✓ Digital input on pin "));
+    msg.debug.print(ptr->pin);
+    msg.debug.print(F(" for "));
+    msg.debug.println(ptr->abbrName);
 }
 
 // ===== READING =====

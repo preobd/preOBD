@@ -89,6 +89,26 @@ TransportID parseTransport(const char* str, bool* isValid) {
         if (isValid) *isValid = true;
         return TRANSPORT_SERIAL3;
     }
+    if (streq(str, "SERIAL4")) {
+        if (isValid) *isValid = true;
+        return TRANSPORT_SERIAL4;
+    }
+    if (streq(str, "SERIAL5")) {
+        if (isValid) *isValid = true;
+        return TRANSPORT_SERIAL5;
+    }
+    if (streq(str, "SERIAL6")) {
+        if (isValid) *isValid = true;
+        return TRANSPORT_SERIAL6;
+    }
+    if (streq(str, "SERIAL7")) {
+        if (isValid) *isValid = true;
+        return TRANSPORT_SERIAL7;
+    }
+    if (streq(str, "SERIAL8")) {
+        if (isValid) *isValid = true;
+        return TRANSPORT_SERIAL8;
+    }
     if (streq(str, "ESP32_BT") || streq(str, "ESP32") || streq(str, "ESP32BT")) {
         if (isValid) *isValid = true;
         return TRANSPORT_ESP32_BT;
@@ -413,12 +433,13 @@ void printHelpOutput() {
 void printHelpBus() {
     msg.control.println();
     msg.control.println(F("=== BUS Commands ==="));
-    msg.control.println(F("Configure I2C, SPI, and CAN buses"));
+    msg.control.println(F("Configure I2C, SPI, CAN buses and Serial ports"));
     msg.control.println();
     msg.control.println(F("Display Bus Configuration:"));
     msg.control.println(F("  BUS I2C                   - Show all I2C bus status"));
     msg.control.println(F("  BUS SPI                   - Show all SPI bus status"));
     msg.control.println(F("  BUS CAN                   - Show all CAN bus status"));
+    msg.control.println(F("  BUS SERIAL                - Show all serial port status"));
     msg.control.println();
     msg.control.println(F("I2C Bus Commands:"));
     msg.control.println(F("  BUS I2C [0|1|2]           - Select I2C bus (Wire/Wire1/Wire2)"));
@@ -433,9 +454,17 @@ void printHelpBus() {
     msg.control.println(F("  BUS CAN BAUDRATE <bps>    - Set CAN baudrate"));
     msg.control.println(F("    Valid baudrates: 125000, 250000, 500000, 1000000"));
     msg.control.println();
+    msg.control.println(F("Serial Port Commands:"));
+    msg.control.println(F("  BUS SERIAL <1-8>          - Show specific port status"));
+    msg.control.println(F("  BUS SERIAL <1-8> ENABLE [baud] - Enable port"));
+    msg.control.println(F("  BUS SERIAL <1-8> DISABLE  - Disable port"));
+    msg.control.println(F("  BUS SERIAL <1-8> BAUDRATE <rate> - Set baud rate"));
+    msg.control.println(F("    Valid rates: 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600"));
+    msg.control.println();
     msg.control.println(F("Examples:"));
-    msg.control.println(F("  BUS I2C 1                 # Enable Wire1"));
-    msg.control.println(F("  BUS CAN 1 BAUDRATE 250000 # Set CAN2 to 250kbps"));
+    msg.control.println(F("  BUS I2C 1                 # Select Wire1"));
+    msg.control.println(F("  BUS CAN 0 BAUDRATE 250000 # Set CAN1 to 250kbps"));
+    msg.control.println(F("  BUS SERIAL 5 ENABLE 115200 # Enable Serial5 at 115200"));
     msg.control.println();
 }
 
@@ -494,11 +523,11 @@ void printHelpTransport() {
     msg.control.println(F("Route control, data, and debug messages"));
     msg.control.println();
     msg.control.println(F("  TRANSPORT STATUS  - Show current transport routing"));
-    msg.control.println(F("  TRANSPORT LIST  - Show available transports"));
     msg.control.println(F("  TRANSPORT CONTROL <transport>  - Route control messages"));
     msg.control.println(F("  TRANSPORT DATA <transport>  - Route sensor data output"));
     msg.control.println(F("  TRANSPORT DEBUG <transport>  - Route debug messages"));
-    msg.control.println(F("    Transports: USB_SERIAL, SERIAL1, SERIAL2, SERIAL3, ESP32_BT"));
+    msg.control.println();
+    msg.control.println(F("  (Use LIST TRANSPORTS to see available transports)"));
     msg.control.println();
 }
 
@@ -543,7 +572,6 @@ void printHelpConfig() {
     msg.control.println(F("  SAVE EEPROM             - Save config to EEPROM (explicit)"));
     msg.control.println(F("  LOAD                    - Load config from EEPROM"));
     msg.control.println(F("  LOAD EEPROM             - Load config from EEPROM (explicit)"));
-    msg.control.println(F("  RESET CONFIRM           - Clear config (no reboot)"));
     msg.control.println();
     msg.control.println(F("File Storage (SD Card, USB, etc.):"));
     msg.control.println(F("  SAVE [dest:]file        - Save config to file"));
@@ -561,7 +589,8 @@ void printHelpConfig() {
     msg.control.println(F("Modes:"));
     msg.control.println(F("  CONFIG                  - Enter configuration mode"));
     msg.control.println(F("  RUN                     - Enter run mode"));
-    msg.control.println(F("  RELOAD                  - Reboot device (or use SYSTEM REBOOT)"));
+    msg.control.println(F("  SYSTEM REBOOT           - Restart the device"));
+    msg.control.println(F("  SYSTEM RESET CONFIRM    - Factory reset (erase config + reboot)"));
     msg.control.println();
     msg.control.println(F("Information:"));
     msg.control.println(F("  VERSION                 - Firmware and EEPROM version"));
@@ -681,7 +710,6 @@ void printHelpQuick() {
     msg.control.println(F("  SET <pin> ALARM WARMUP|PERSIST <ms>"));
     msg.control.println(F("  SET <pin> CALIBRATION PRESET"));
     msg.control.println(F("  SET <pin> RPM|SPEED|PRESSURE_LINEAR|STEINHART|BETA|BIAS|PRESSURE_POLY ..."));
-    msg.control.println(F("  SET <pin> I2CBUS|SPIBUS <0-2>"));
     msg.control.println();
     msg.control.println(F("Outputs:"));
     msg.control.println(F("  OUTPUT STATUS"));

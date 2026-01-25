@@ -4,6 +4,10 @@ openEMS Registry Validation Tool
 
 A CI-friendly script to validate the integrity of the C registry files and,
 optionally, the generated static config in config.h.
+
+Parses the modular sensor library structure:
+  - src/lib/sensor_library.h (orchestrator)
+  - src/lib/sensor_library/sensors/*.h (sensor definitions using X-macro pattern)
 """
 
 import argparse
@@ -63,7 +67,7 @@ def main():
 
     # Run validations
     print("\nChecking sensor_library.h...")
-    print(f"  \u2713 {len(sensors)} sensors loaded")
+    print(f"  \u2713 {len(sensors)} sensors loaded (from sensor_library/sensors/*.h)")
 
     print("\nChecking application_presets.h...")
     print(f"  \u2713 {len(apps)} applications loaded")

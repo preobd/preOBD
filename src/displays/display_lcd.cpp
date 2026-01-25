@@ -6,6 +6,7 @@
 #include "../inputs/input.h"
 #include "../lib/sensor_types.h"
 #include "../lib/units_registry.h"
+#include "../lib/message_api.h"
 #ifdef USE_STATIC_CONFIG
 #include "../lib/generated/application_presets_static.h"
 #include "../lib/generated/sensor_library_static.h"
@@ -64,7 +65,7 @@ void initLCD() {
     lcd.createChar(ICON_COOLANT, coolant_icon);
     lcd.createChar(ICON_OIL, oil_icon);
     lcd.clear();
-    Serial.println("✓ LCD initialized");
+    msg.debug.println(F("✓ LCD initialized"));
 }
 
 /**

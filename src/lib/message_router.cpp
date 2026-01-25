@@ -5,6 +5,7 @@
 #include "message_router.h"
 #include "message_api.h"
 #include "system_config.h"
+#include "serial_manager.h"
 #include <string.h>
 
 // Global router instance
@@ -52,16 +53,19 @@ void MessageRouter::loadConfig() {
     secondaryTransport[PLANE_DEBUG] = systemConfig.router.debug_secondary;
 }
 
-void MessageRouter::saveConfig() {
-    // Save to SystemConfig.router
+void MessageRouter::syncConfig() {
+    // Copy router state to SystemConfig.router (does NOT save to EEPROM)
     systemConfig.router.control_primary = primaryTransport[PLANE_CONTROL];
     systemConfig.router.control_secondary = secondaryTransport[PLANE_CONTROL];
     systemConfig.router.data_primary = primaryTransport[PLANE_DATA];
     systemConfig.router.data_secondary = secondaryTransport[PLANE_DATA];
     systemConfig.router.debug_primary = primaryTransport[PLANE_DEBUG];
     systemConfig.router.debug_secondary = secondaryTransport[PLANE_DEBUG];
+}
 
-    // Persist to EEPROM
+void MessageRouter::saveConfig() {
+    // Sync state and persist to EEPROM
+    syncConfig();
     saveSystemConfig();
 }
 
@@ -122,6 +126,14 @@ bool MessageRouter::setTransport(MessagePlane plane, TransportID transportId, bo
         if (transports[transportId] == nullptr) {
             return false;  // Transport not registered
         }
+
+        // For hardware serial transports, verify the port is enabled
+        if (transportId >= TRANSPORT_SERIAL1 && transportId <= TRANSPORT_SERIAL8) {
+            uint8_t port_id = transportId - TRANSPORT_SERIAL1 + 1;
+            if (!isSerialPortActive(port_id)) {
+                return false;  // Serial port not enabled (use BUS SERIAL <n> ENABLE first)
+            }
+        }
     }
 
     // Update mapping
@@ -141,7 +153,8 @@ void MessageRouter::printTransportStatus() {
     msg.control.println(F("=== Transport Routing ==="));
 
     const char* planeNames[] = {"CONTROL", "DATA", "DEBUG"};
-    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3", "ESP32_BT"};
+    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3",
+                                    "SERIAL4", "SERIAL5", "SERIAL6", "SERIAL7", "SERIAL8", "ESP32_BT"};
 
     for (int i = 0; i < NUM_PLANES; i++) {
         msg.control.print(planeNames[i]);
@@ -172,10 +185,17 @@ void MessageRouter::listAvailableTransports() {
 
     msg.control.println(F("=== Available Transports ==="));
 
-    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3", "ESP32_BT"};
+    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3",
+                                    "SERIAL4", "SERIAL5", "SERIAL6", "SERIAL7", "SERIAL8", "ESP32_BT"};
 
     for (int i = 1; i < NUM_TRANSPORTS; i++) {
         if (transports[i] != nullptr) {
+            // Skip disabled serial ports (TRANSPORT_SERIAL1=2 maps to port_id=1, etc.)
+            if (i >= TRANSPORT_SERIAL1 && i <= TRANSPORT_SERIAL8) {
+                uint8_t port_id = i - TRANSPORT_SERIAL1 + 1;
+                if (!isSerialPortActive(port_id)) continue;
+            }
+
             msg.control.print(F("  "));
             msg.control.print(transportNames[i]);
             msg.control.print(F(" - "));
@@ -209,7 +229,8 @@ void MessageRouter::listTransports() {
 
     // Show plane assignments
     const char* planeNames[] = {"CONTROL", "DATA", "DEBUG"};
-    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3", "ESP32_BT"};
+    const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3",
+                                    "SERIAL4", "SERIAL5", "SERIAL6", "SERIAL7", "SERIAL8", "ESP32_BT"};
 
     for (int i = 0; i < NUM_PLANES; i++) {
         msg.control.print(planeNames[i]);
@@ -239,6 +260,12 @@ void MessageRouter::listTransports() {
     // List all registered transports
     for (int i = 1; i < NUM_TRANSPORTS; i++) {
         if (transports[i] != nullptr) {
+            // Skip disabled serial ports (TRANSPORT_SERIAL1=2 maps to port_id=1, etc.)
+            if (i >= TRANSPORT_SERIAL1 && i <= TRANSPORT_SERIAL8) {
+                uint8_t port_id = i - TRANSPORT_SERIAL1 + 1;
+                if (!isSerialPortActive(port_id)) continue;
+            }
+
             msg.control.print(F("  "));
             msg.control.print(transports[i]->getName());
             msg.control.print(F(" ("));

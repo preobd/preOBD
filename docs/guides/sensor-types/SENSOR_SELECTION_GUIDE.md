@@ -51,7 +51,7 @@ For convenience, these shorter aliases work:
 | `VOLTAGE` | - | Battery/voltage monitoring |
 | `RPM` | - | Engine RPM sensors |
 | `SPEED` | - | Vehicle speed sensors |
-| `I2C` | - | I2C bus sensors (BME280) |
+| `ENVIRONMENTAL` | - | Environmental sensors (BME280) |
 | `DIGITAL` | - | Digital input sensors |
 
 ---
@@ -123,6 +123,7 @@ See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.
 | `VDO_5BAR_CURVE` | VDO 0-5 bar pressure sender | 0-73 PSI |
 | `GENERIC_BOOST` | Generic 0.5-4.5V boost sensor | Configurable |
 | `MPX4250AP` | Freescale MAP sensor | 20-250 kPa |
+| `MPX5700AP` | Freescale MAP sensor | 15-700 kPa |
 
 **Best for:** Oil pressure, boost pressure, fuel pressure
 

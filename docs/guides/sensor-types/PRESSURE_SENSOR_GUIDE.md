@@ -67,6 +67,7 @@ VDO pressure sensors are available with two calibration methods:
 |-----------|-------|---------|
 | `GENERIC_BOOST` | 0-5 bar | 0.5-4.5V |
 | `MPX4250AP` | 20-250 kPa | 0.2-4.7V |
+| `MPX5700AP` | 15-700 kPa | 0.2-4.7V |
 
 **Characteristics:**
 - Three-wire voltage output sensors

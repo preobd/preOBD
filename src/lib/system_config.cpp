@@ -8,6 +8,7 @@
 #include "message_router.h"  // For TransportID enum
 #include "bus_defaults.h"
 #include "message_api.h"
+#include "pin_registry.h"
 #include <EEPROM.h>
 
 // Global system config instance
@@ -60,12 +61,12 @@ uint8_t calculateChecksum(SystemConfig* cfg) {
 void initSystemConfig() {
     // Try loading from EEPROM
     if (loadSystemConfig()) {
-        Serial.println(F("✓ System config loaded from EEPROM"));
+        msg.debug.println(F("✓ System config loaded from EEPROM"));
         return;
     }
 
     // Fallback: Use defaults from config.h
-    Serial.println(F("Using default system config"));
+    msg.debug.println(F("Using default system config"));
     resetSystemConfig();
 }
 
@@ -218,6 +219,16 @@ void resetSystemConfig() {
     systemConfig.buses.reserved[0] = 0;
     systemConfig.buses.reserved[1] = 0;
 
+    // Serial Port Configuration defaults
+    // USB Serial is always available; Serial1 enabled by default, others disabled
+    systemConfig.serial.enabled_mask = 0x01;  // Bit 0 = Serial1 enabled
+    for (int i = 0; i < 8; i++) {
+        systemConfig.serial.baudrate_index[i] = BAUD_115200;  // Default 115200 baud
+    }
+    for (int i = 0; i < 7; i++) {
+        systemConfig.serial.reserved[i] = 0;
+    }
+
     // Calculate checksum
     systemConfig.checksum = calculateChecksum(&systemConfig);
 }
@@ -233,8 +244,44 @@ bool saveSystemConfig() {
     // Write to EEPROM
     EEPROM.put(SYSTEM_CONFIG_ADDRESS, systemConfig);
 
-    Serial.println(F("✓ System config saved to EEPROM"));
+    msg.control.println(F("✓ System config saved to EEPROM"));
     return true;
+}
+
+/**
+ * Register system pins in the pin registry
+ * This reserves these pins and makes them visible in the registry export
+ */
+void registerSystemPins() {
+    // Mode button
+    if (systemConfig.modeButtonPin != 0xFF) {
+        registerPin(systemConfig.modeButtonPin, PIN_BUTTON, "Mode Button");
+    }
+
+    // Buzzer
+    if (systemConfig.buzzerPin != 0xFF) {
+        registerPin(systemConfig.buzzerPin, PIN_BUZZER, "Buzzer");
+    }
+
+    // CAN chip select (only for external MCP2515)
+    if (systemConfig.canCSPin != 0xFF) {
+        registerPin(systemConfig.canCSPin, PIN_CS, "CAN CS");
+    }
+
+    // CAN interrupt (only for external MCP2515)
+    if (systemConfig.canIntPin != 0xFF) {
+        registerPin(systemConfig.canIntPin, PIN_RESERVED, "CAN INT");
+    }
+
+    // SD card chip select
+    if (systemConfig.sdCSPin != 0xFF) {
+        registerPin(systemConfig.sdCSPin, PIN_CS, "SD CS");
+    }
+
+    // Test mode pin (optional)
+    if (systemConfig.testModePin != 0xFF) {
+        registerPin(systemConfig.testModePin, PIN_BUTTON, "Test Mode Trigger");
+    }
 }
 
 /**
@@ -253,7 +300,7 @@ bool loadSystemConfig() {
 #ifdef ENABLE_RELAY_OUTPUT
     // Handle migration from v4 to v5 (relay feature added)
     if (temp.version == 4) {
-        Serial.println(F("Migrating system config from v4 to v5"));
+        msg.debug.println(F("Migrating system config from v4 to v5"));
 
         // Load old 64-byte config (v4)
         // Copy first 64 bytes to systemConfig
@@ -277,25 +324,25 @@ bool loadSystemConfig() {
 
         // Save migrated config
         saveSystemConfig();
-        Serial.println(F("✓ Migration complete"));
+        msg.debug.println(F("✓ Migration complete"));
         return true;
     }
 #endif
 
     // Check version
     if (temp.version != SYSTEM_CONFIG_VERSION) {
-        Serial.print(F("System config version mismatch (expected "));
-        Serial.print(SYSTEM_CONFIG_VERSION);
-        Serial.print(F(", got "));
-        Serial.print(temp.version);
-        Serial.println(F(") - ignoring"));
+        msg.debug.print(F("System config version mismatch (expected "));
+        msg.debug.print(SYSTEM_CONFIG_VERSION);
+        msg.debug.print(F(", got "));
+        msg.debug.print(temp.version);
+        msg.debug.println(F(") - ignoring"));
         return false;
     }
 
     // Verify checksum
     uint8_t calculatedChecksum = calculateChecksum(&temp);
     if (temp.checksum != calculatedChecksum) {
-        Serial.println(F("System config checksum failed - ignoring"));
+        msg.debug.println(F("System config checksum failed - ignoring"));
         return false;
     }
 

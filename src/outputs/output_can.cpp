@@ -12,6 +12,7 @@
 #include "output_base.h"
 #include "../inputs/input.h"
 #include "../inputs/input_manager.h"
+#include "../lib/message_api.h"
 
 #ifdef ENABLE_CAN
 
@@ -93,11 +94,11 @@ static void buildPIDLookupTable() {
             for (uint8_t j = 0; j < pidLookupCount; j++) {
                 if (pidLookupTable[j].pid == inputs[i].obd2pid) {
                     isDuplicate = true;
-                    Serial.print(F("⚠ Duplicate PID 0x"));
-                    Serial.print(inputs[i].obd2pid, HEX);
-                    Serial.print(F(" - using first occurrence ("));
-                    Serial.print(pidLookupTable[j].inputPtr->abbrName);
-                    Serial.println(F(")"));
+                    msg.debug.print(F("⚠ Duplicate PID 0x"));
+                    msg.debug.print(inputs[i].obd2pid, HEX);
+                    msg.debug.print(F(" - using first occurrence ("));
+                    msg.debug.print(pidLookupTable[j].inputPtr->abbrName);
+                    msg.debug.println(F(")"));
                     break;
                 }
             }
@@ -110,9 +111,9 @@ static void buildPIDLookupTable() {
         }
     }
 
-    Serial.print(F("✓ Built OBD-II PID lookup table: "));
-    Serial.print(pidLookupCount);
-    Serial.println(F(" PIDs available"));
+    msg.debug.print(F("✓ Built OBD-II PID lookup table: "));
+    msg.debug.print(pidLookupCount);
+    msg.debug.println(F(" PIDs available"));
 }
 
 /**
@@ -182,13 +183,13 @@ static void sendPID00Response() {
     sendCANFrame(0x7E8, frameData, 8);
 
     #ifdef DEBUG
-    Serial.print(F("PID 00 bitmap: "));
+    msg.debug.print(F("PID 00 bitmap: "));
     for (int i = 0; i < 4; i++) {
-        if (bitmap[i] < 0x10) Serial.print('0');
-        Serial.print(bitmap[i], HEX);
-        Serial.print(' ');
+        if (bitmap[i] < 0x10) msg.debug.print('0');
+        msg.debug.print(bitmap[i], HEX);
+        msg.debug.print(' ');
     }
-    Serial.println();
+    msg.debug.println();
     #endif
 }
 
@@ -207,8 +208,8 @@ static void sendNegativeResponse(uint32_t requestId, uint8_t mode, uint8_t nrc) 
     sendCANFrame(0x7E8, frameData, 8);
 
     #ifdef DEBUG
-    Serial.print(F("Sent negative response: NRC 0x"));
-    Serial.println(nrc, HEX);
+    msg.debug.print(F("Sent negative response: NRC 0x"));
+    msg.debug.println(nrc, HEX);
     #endif
 }
 
@@ -220,7 +221,7 @@ static void sendOBD2Response(Input* input) {
     byte frameData[8];
 
     if (!buildOBD2Frame(frameData, input)) {
-        Serial.println(F("⚠ Failed to build OBD2 response"));
+        msg.debug.println(F("⚠ Failed to build OBD2 response"));
         return;
     }
 
@@ -248,10 +249,10 @@ static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
     uint8_t pid = data[2];
 
     #ifdef DEBUG
-    Serial.print(F("OBD-II Request: Mode=0x"));
-    Serial.print(mode, HEX);
-    Serial.print(F(" PID=0x"));
-    Serial.println(pid, HEX);
+    msg.debug.print(F("OBD-II Request: Mode=0x"));
+    msg.debug.print(mode, HEX);
+    msg.debug.print(F(" PID=0x"));
+    msg.debug.println(pid, HEX);
     #endif
 
     // Only handle Mode 01 (Show current data)
@@ -291,8 +292,8 @@ void initCAN() {
         Can0.enableMBInterrupt(MB0);
         Can0.enableMBInterrupt(MB1);
 
-        Serial.println(F("✓ Native FlexCAN initialized (500kbps)"));
-        Serial.println(F("✓ OBD-II RX filters configured (0x7DF, 0x7E0)"));
+        msg.debug.println(F("✓ Native FlexCAN initialized (500kbps)"));
+        msg.debug.println(F("✓ OBD-II RX filters configured (0x7DF, 0x7E0)"));
     #elif defined(USING_ESP32_TWAI)
         // Initialize ESP32 TWAI (CAN)
         // Note: External CAN transceiver required (MCP2551, TJA1050, SN65HVD230, etc.)
@@ -305,21 +306,21 @@ void initCAN() {
         #endif
         ESP32Can.setSpeed(ESP32Can.convertSpeed(500));  // 500 kbps
         if (ESP32Can.begin()) {
-            Serial.println(F("✓ ESP32 TWAI (CAN) initialized (500kbps)"));
-            Serial.println(F("✓ OBD-II request/response enabled"));
+            msg.debug.println(F("✓ ESP32 TWAI (CAN) initialized (500kbps)"));
+            msg.debug.println(F("✓ OBD-II request/response enabled"));
         } else {
-            Serial.println(F("⚠ ESP32 TWAI init failed!"));
+            msg.debug.println(F("⚠ ESP32 TWAI init failed!"));
             return;
         }
     #else
         // Initialize MCP2515 via SPI
         CAN.setPins(CAN_CS, CAN_INT);
         if (!CAN.begin(500E3)) {
-            Serial.println(F("⚠ MCP2515 CAN init failed!"));
+            msg.debug.println(F("⚠ MCP2515 CAN init failed!"));
             return;
         }
-        Serial.println(F("✓ MCP2515 CAN initialized (500kbps)"));
-        Serial.println(F("✓ OBD-II request/response enabled"));
+        msg.debug.println(F("✓ MCP2515 CAN initialized (500kbps)"));
+        msg.debug.println(F("✓ OBD-II request/response enabled"));
 
         // Uncomment for testing
         // CAN.loopback();
