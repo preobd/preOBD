@@ -20,6 +20,7 @@
 #include "sensor_library.h"
 #include "application_presets.h"
 #include "../version.h"
+#include "message_api.h"
 
 // Suppress SdFat warning about FS.h conflict with Teensy's File class
 #define DISABLE_FS_H_WARNING
@@ -569,8 +570,8 @@ bool loadConfigFromJSON(const char* jsonString) {
     DeserializationError error = deserializeJson(doc, jsonString);
 
     if (error) {
-        Serial.print(F("ERROR: JSON parse failed: "));
-        Serial.println(error.c_str());
+        msg.control.print(F("ERROR: JSON parse failed: "));
+        msg.control.println(error.c_str());
         return false;
     }
 
@@ -578,16 +579,16 @@ bool loadConfigFromJSON(const char* jsonString) {
     uint8_t schemaVer = doc["schemaVersion"] | 1;  // Default to v1 if missing (old configs)
 
     if (schemaVer != JSON_SCHEMA_VERSION) {
-        Serial.print(F("ERROR: Only schemaVersion 1 is supported. Got: "));
-        Serial.println(schemaVer);
+        msg.control.print(F("ERROR: Only schemaVersion 1 is supported. Got: "));
+        msg.control.println(schemaVer);
         return false;
     }
 
     // Validate mode field
     const char* mode = doc["mode"] | "runtime";
     if (strcmp(mode, "runtime") != 0) {
-        Serial.print(F("ERROR: Only mode='runtime' configs can be imported. Got: "));
-        Serial.println(mode);
+        msg.control.print(F("ERROR: Only mode='runtime' configs can be imported. Got: "));
+        msg.control.println(mode);
         return false;
     }
 
@@ -595,7 +596,7 @@ bool loadConfigFromJSON(const char* jsonString) {
     if (doc["system"].isNull() == false) {
         JsonObject system = doc["system"];
         if (!importSystemConfigFromJSON(system)) {
-            Serial.println(F("ERROR: Failed to import system config"));
+            msg.control.println(F("ERROR: Failed to import system config"));
             return false;
         }
     }
@@ -604,14 +605,14 @@ bool loadConfigFromJSON(const char* jsonString) {
     if (doc["inputs"].isNull() == false) {
         JsonArray inputsArray = doc["inputs"];
         if (!importInputsFromJSON(inputsArray)) {
-            Serial.println(F("ERROR: Failed to import inputs"));
+            msg.control.println(F("ERROR: Failed to import inputs"));
             return false;
         }
     }
 
-    Serial.print(F("Successfully loaded config (schema v"));
-    Serial.print(schemaVer);
-    Serial.println(F(")"));
+    msg.control.print(F("Successfully loaded config (schema v"));
+    msg.control.print(schemaVer);
+    msg.control.println(F(")"));
 
     return true;
 }
@@ -622,7 +623,7 @@ bool saveConfigToSD(const char* filename) {
     digitalWrite(systemConfig.sdCSPin, LOW);
 
     if (!SD.begin(systemConfig.sdCSPin)) {
-        Serial.println(F("ERROR: SD card initialization failed"));
+        msg.control.println(F("ERROR: SD card initialization failed"));
         return false;
     }
 
@@ -648,8 +649,8 @@ bool saveConfigToSD(const char* filename) {
     // Open file for writing
     FsFile configFile = SD.open(filepath, FILE_WRITE);
     if (!configFile) {
-        Serial.print(F("ERROR: Failed to open file: "));
-        Serial.println(filepath);
+        msg.control.print(F("ERROR: Failed to open file: "));
+        msg.control.println(filepath);
         return false;
     }
 
@@ -660,8 +661,8 @@ bool saveConfigToSD(const char* filename) {
     digitalWrite(systemConfig.sdCSPin, HIGH);
 
 
-    Serial.print(F("Configuration saved to: "));
-    Serial.println(filepath);
+    msg.control.print(F("Configuration saved to: "));
+    msg.control.println(filepath);
 
     return true;
 }
@@ -670,9 +671,9 @@ bool saveConfigToSD(const char* filename) {
 bool loadConfigFromSD(const char* filename) {
     pinMode(systemConfig.sdCSPin, OUTPUT);
     digitalWrite(systemConfig.sdCSPin, LOW);
-    
+
     if (!SD.begin(systemConfig.sdCSPin)) {
-        Serial.println(F("ERROR: SD card initialization failed"));
+        msg.control.println(F("ERROR: SD card initialization failed"));
         return false;
     }
 
@@ -688,8 +689,8 @@ bool loadConfigFromSD(const char* filename) {
     // Open file for reading
     FsFile configFile = SD.open(filepath, FILE_READ);
     if (!configFile) {
-        Serial.print(F("ERROR: Failed to open file: "));
-        Serial.println(filepath);
+        msg.control.print(F("ERROR: Failed to open file: "));
+        msg.control.println(filepath);
         return false;
     }
 
@@ -705,8 +706,8 @@ bool loadConfigFromSD(const char* filename) {
     bool success = loadConfigFromJSON(jsonString.c_str());
 
     if (success) {
-        Serial.print(F("Configuration loaded from: "));
-        Serial.println(filepath);
+        msg.control.print(F("Configuration loaded from: "));
+        msg.control.println(filepath);
     }
 
     return success;
@@ -727,7 +728,7 @@ bool saveConfigToFile(const char* destination, const char* filename) {
 #ifdef ENABLE_USB_STORAGE
     else if (strcmp(destination, "USB") == 0) {
         // Future: USB storage implementation
-        Serial.println(F("ERROR: USB storage not yet implemented"));
+        msg.control.println(F("ERROR: USB storage not yet implemented"));
         return false;
     }
 #endif
@@ -735,18 +736,18 @@ bool saveConfigToFile(const char* destination, const char* filename) {
 #ifdef ENABLE_HTTP_STORAGE
     else if (strcmp(destination, "HTTP") == 0 || strcmp(destination, "HTTPS") == 0) {
         // Future: HTTP/HTTPS upload implementation
-        Serial.println(F("ERROR: HTTP storage not yet implemented"));
+        msg.control.println(F("ERROR: HTTP storage not yet implemented"));
         return false;
     }
 #endif
 
     else {
-        Serial.print(F("ERROR: Unknown destination '"));
-        Serial.print(destination);
-        Serial.println(F("'"));
-        Serial.println(F("  Supported destinations: SD"));
+        msg.control.print(F("ERROR: Unknown destination '"));
+        msg.control.print(destination);
+        msg.control.println(F("'"));
+        msg.control.println(F("  Supported destinations: SD"));
 #ifdef ENABLE_USB_STORAGE
-        Serial.println(F("  Conditional: USB (if ENABLE_USB_STORAGE defined)"));
+        msg.control.println(F("  Conditional: USB (if ENABLE_USB_STORAGE defined)"));
 #endif
         return false;
     }
@@ -767,7 +768,7 @@ bool loadConfigFromFile(const char* destination, const char* filename) {
 #ifdef ENABLE_USB_STORAGE
     else if (strcmp(destination, "USB") == 0) {
         // Future: USB storage implementation
-        Serial.println(F("ERROR: USB storage not yet implemented"));
+        msg.control.println(F("ERROR: USB storage not yet implemented"));
         return false;
     }
 #endif
@@ -775,18 +776,18 @@ bool loadConfigFromFile(const char* destination, const char* filename) {
 #ifdef ENABLE_HTTP_STORAGE
     else if (strcmp(destination, "HTTP") == 0 || strcmp(destination, "HTTPS") == 0) {
         // Future: HTTP download implementation
-        Serial.println(F("ERROR: HTTP storage not yet implemented"));
+        msg.control.println(F("ERROR: HTTP storage not yet implemented"));
         return false;
     }
 #endif
 
     else {
-        Serial.print(F("ERROR: Unknown destination '"));
-        Serial.print(destination);
-        Serial.println(F("'"));
-        Serial.println(F("  Supported destinations: SD"));
+        msg.control.print(F("ERROR: Unknown destination '"));
+        msg.control.print(destination);
+        msg.control.println(F("'"));
+        msg.control.println(F("  Supported destinations: SD"));
 #ifdef ENABLE_USB_STORAGE
-        Serial.println(F("  Conditional: USB (if ENABLE_USB_STORAGE defined)"));
+        msg.control.println(F("  Conditional: USB (if ENABLE_USB_STORAGE defined)"));
 #endif
         return false;
     }

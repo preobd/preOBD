@@ -398,7 +398,7 @@ bool initInputManager() {
     // Configure inputs using the registry-based functions
     // This reuses the same runtime configuration logic
 
-    Serial.println(F("Initializing from static configuration..."));
+    msg.debug.println(F("Initializing from static configuration..."));
 
     #ifdef INPUT_0_PIN
         CONFIGURE_INPUT(0, 0);
@@ -483,9 +483,9 @@ bool initInputManager() {
         }
     }
 
-    Serial.print(F("✓ Loaded "));
-    Serial.print(numActiveInputs);
-    Serial.println(F(" inputs from static config"));
+    msg.debug.print(F("✓ Loaded "));
+    msg.debug.print(numActiveInputs);
+    msg.debug.println(F(" inputs from static config"));
     return true;  // Static config always valid
 
 #else
@@ -493,7 +493,7 @@ bool initInputManager() {
     // Try to load from EEPROM
     bool eepromLoaded = loadInputConfig();
     if (!eepromLoaded) {
-        Serial.println(F("No valid config in EEPROM - starting with blank configuration"));
+        msg.debug.println(F("No valid config in EEPROM - starting with blank configuration"));
     }
     return eepromLoaded;
 #endif
@@ -582,9 +582,9 @@ bool saveInputConfig() {
         }
     }
 
-    Serial.print(F("✓ Saved "));
-    Serial.print(savedCount);
-    Serial.println(F(" inputs to EEPROM (hash-based)"));
+    msg.control.print(F("✓ Saved "));
+    msg.control.print(savedCount);
+    msg.control.println(F(" inputs to EEPROM (hash-based)"));
 
     // Calculate checksum
     uint8_t checksum = calculateConfigChecksum();
@@ -598,8 +598,8 @@ bool saveInputConfig() {
 
     EEPROM.put(0, header);
 
-    Serial.print(F("✓ Checksum: 0x"));
-    Serial.println(checksum, HEX);
+    msg.debug.print(F("✓ Checksum: 0x"));
+    msg.debug.println(checksum, HEX);
 
     return true;
 }
@@ -615,11 +615,11 @@ bool loadInputConfig() {
 
     // Check version
     if (header.version != EEPROM_VERSION) {
-        Serial.print(F("EEPROM version mismatch (found "));
-        Serial.print(header.version);
-        Serial.print(F(", expected "));
-        Serial.print(EEPROM_VERSION);
-        Serial.println(F(") - ignoring"));
+        msg.debug.print(F("EEPROM version mismatch (found "));
+        msg.debug.print(header.version);
+        msg.debug.print(F(", expected "));
+        msg.debug.print(EEPROM_VERSION);
+        msg.debug.println(F(") - ignoring"));
         return false;
     }
 
@@ -693,11 +693,11 @@ bool loadInputConfig() {
     uint8_t calculatedChecksum = calculateConfigChecksum();
 
     if (storedChecksum != calculatedChecksum) {
-        Serial.print(F("ERROR: EEPROM checksum mismatch! Stored: 0x"));
-        Serial.print(storedChecksum, HEX);
-        Serial.print(F(", Calculated: 0x"));
-        Serial.println(calculatedChecksum, HEX);
-        Serial.println(F("Configuration may be corrupted. Please reconfigure."));
+        msg.debug.print(F("ERROR: EEPROM checksum mismatch! Stored: 0x"));
+        msg.debug.print(storedChecksum, HEX);
+        msg.debug.print(F(", Calculated: 0x"));
+        msg.debug.println(calculatedChecksum, HEX);
+        msg.debug.println(F("Configuration may be corrupted. Please reconfigure."));
 
         // Clear corrupted data
         memset(inputs, 0, sizeof(inputs));
@@ -709,12 +709,12 @@ bool loadInputConfig() {
         return false;
     }
 
-    Serial.print(F("✓ Checksum verified: 0x"));
-    Serial.println(storedChecksum, HEX);
+    msg.debug.print(F("✓ Checksum verified: 0x"));
+    msg.debug.println(storedChecksum, HEX);
 
-    Serial.print(F("✓ Loaded "));
-    Serial.print(numActiveInputs);
-    Serial.println(F(" inputs from EEPROM"));
+    msg.debug.print(F("✓ Loaded "));
+    msg.debug.print(numActiveInputs);
+    msg.debug.println(F(" inputs from EEPROM"));
     return true;
 }
 
@@ -730,7 +730,7 @@ void resetInputConfig() {
     }
     numActiveInputs = 0;
 
-    Serial.println(F("Configuration reset"));
+    msg.control.println(F("Configuration reset"));
 }
 
 #endif // USE_STATIC_CONFIG
@@ -804,14 +804,14 @@ static bool validateInputConfig(Input* input) {
     // Check if pin is reserved by a bus (I2C, SPI, CAN)
     // Skip this check for virtual pins (I2C sensors use 0xF0+)
     if (input->pin < 0xF0 && !isPinAvailable(input->pin)) {
-        Serial.print(F("ERROR: Pin "));
+        msg.control.print(F("ERROR: Pin "));
         if (input->pin >= A0) {
-            Serial.print(F("A"));
-            Serial.print(input->pin - A0);
+            msg.control.print(F("A"));
+            msg.control.print(input->pin - A0);
         } else {
-            Serial.print(input->pin);
+            msg.control.print(input->pin);
         }
-        Serial.println(F(" is reserved by a bus (I2C/SPI/CAN)"));
+        msg.control.println(F(" is reserved by a bus (I2C/SPI/CAN)"));
         return false;
     }
 
@@ -826,16 +826,16 @@ static bool validateInputConfig(Input* input) {
 
         // Check if another enabled input uses the same pin
         if (other->flags.isEnabled && other->pin == input->pin) {
-            Serial.print(F("ERROR: Pin "));
+            msg.control.print(F("ERROR: Pin "));
             if (input->pin >= 0xF0) {
-                Serial.print(F("I2C"));
+                msg.control.print(F("I2C"));
             } else if (input->pin >= A0) {
-                Serial.print(F("A"));
-                Serial.print(input->pin - A0);
+                msg.control.print(F("A"));
+                msg.control.print(input->pin - A0);
             } else {
-                Serial.print(input->pin);
+                msg.control.print(input->pin);
             }
-            Serial.println(F(" already in use"));
+            msg.control.println(F(" already in use"));
             return false;
         }
     }
@@ -843,11 +843,11 @@ static bool validateInputConfig(Input* input) {
     // Check alarm threshold sanity (only if alarms enabled)
     if (input->flags.alarm) {
         if (input->minValue >= input->maxValue) {
-            Serial.print(F("ERROR: Invalid alarm range ("));
-            Serial.print(input->minValue);
-            Serial.print(F(" >= "));
-            Serial.print(input->maxValue);
-            Serial.println(F(")"));
+            msg.control.print(F("ERROR: Invalid alarm range ("));
+            msg.control.print(input->minValue);
+            msg.control.print(F(" >= "));
+            msg.control.print(input->maxValue);
+            msg.control.println(F(")"));
             return false;
         }
     }
@@ -864,10 +864,10 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     if (input == nullptr) {
         uint8_t slot = findFreeSlot();
         if (slot == 0xFF) {
-            Serial.print(F("ERROR: No free input slots (max "));
-            Serial.print(MAX_INPUTS);
-            Serial.println(F(" inputs)"));
-            Serial.println(F("  Hint: Use 'CLEAR <pin>' to remove an existing input"));
+            msg.control.print(F("ERROR: No free input slots (max "));
+            msg.control.print(MAX_INPUTS);
+            msg.control.println(F(" inputs)"));
+            msg.control.println(F("  Hint: Use 'CLEAR <pin>' to remove an existing input"));
             return false;
         }
         input = &inputs[slot];
@@ -877,7 +877,7 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     // Get Application preset from flash
     const ApplicationPreset* flashPreset = getApplicationByIndex(appIndex);
     if (flashPreset == nullptr) {
-        Serial.println(F("ERROR: Invalid Type"));
+        msg.control.println(F("ERROR: Invalid Type"));
         return false;
     }
 
@@ -943,14 +943,14 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
 bool setInputSensor(uint8_t pin, uint8_t sensorIndex) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) {
-        Serial.println(F("ERROR: Input not configured"));
+        msg.control.println(F("ERROR: Input not configured"));
         return false;
     }
 
     // Get Sensor info from flash
     const SensorInfo* flashInfo = getSensorByIndex(sensorIndex);
     if (flashInfo == nullptr) {
-        Serial.println(F("ERROR: Invalid Sensor Type"));
+        msg.control.println(F("ERROR: Invalid Sensor Type"));
         return false;
     }
 
@@ -1012,11 +1012,11 @@ bool setInputAlarmRange(uint8_t pin, float minValue, float maxValue) {
 
     // Validate range
     if (minValue >= maxValue) {
-        Serial.print(F("ERROR: Min alarm ("));
-        Serial.print(minValue);
-        Serial.print(F(") must be less than max alarm ("));
-        Serial.print(maxValue);
-        Serial.println(F(")"));
+        msg.control.print(F("ERROR: Min alarm ("));
+        msg.control.print(minValue);
+        msg.control.print(F(") must be less than max alarm ("));
+        msg.control.print(maxValue);
+        msg.control.println(F(")"));
         return false;
     }
 
@@ -1025,20 +1025,20 @@ bool setInputAlarmRange(uint8_t pin, float minValue, float maxValue) {
     if (sensorInfo && input->sensorIndex != 0) {  // Skip validation for SENSOR_NONE
         // Check if alarm range exceeds sensor's physical capabilities
         if (minValue < sensorInfo->minValue || maxValue > sensorInfo->maxValue) {
-            Serial.print(F("WARNING: Alarm range ("));
-            Serial.print(minValue);
-            Serial.print(F(" - "));
-            Serial.print(maxValue);
-            Serial.print(F(") exceeds sensor capability ("));
-            Serial.print(sensorInfo->minValue);
-            Serial.print(F(" - "));
-            Serial.print(sensorInfo->maxValue);
+            msg.control.print(F("WARNING: Alarm range ("));
+            msg.control.print(minValue);
+            msg.control.print(F(" - "));
+            msg.control.print(maxValue);
+            msg.control.print(F(") exceeds sensor capability ("));
+            msg.control.print(sensorInfo->minValue);
+            msg.control.print(F(" - "));
+            msg.control.print(sensorInfo->maxValue);
 
             // Print sensor name for clarity
             char sensorName[32];
             strcpy_P(sensorName, (const char*)sensorInfo->name);
-            Serial.print(F(") for "));
-            Serial.println(sensorName);
+            msg.control.print(F(") for "));
+            msg.control.println(sensorName);
 
             // Don't fail - allow the user to set it, but warn them
             // This is useful for sensors that might be replaced or for edge cases
@@ -1411,35 +1411,35 @@ void printInputCalibration(uint8_t pin) {
 }
 
 void listAllInputs() {
-    Serial.println(F("Active Inputs:"));
+    msg.control.println(F("Active Inputs:"));
     bool found = false;
 
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) {
             found = true;
-            Serial.print(F("  "));
+            msg.control.print(F("  "));
             if (inputs[i].pin >= 0xF0) {
-                Serial.print(F("I2C:"));
-                Serial.print(inputs[i].pin - 0xF0);
+                msg.control.print(F("I2C:"));
+                msg.control.print(inputs[i].pin - 0xF0);
             } else if (inputs[i].pin >= A0) {
-                Serial.print(F("A"));
-                Serial.print(inputs[i].pin - A0);
+                msg.control.print(F("A"));
+                msg.control.print(inputs[i].pin - A0);
             } else {
-                Serial.print(inputs[i].pin);
+                msg.control.print(inputs[i].pin);
             }
-            Serial.print(F(": "));
-            Serial.print(inputs[i].abbrName);
-            Serial.print(F(" ("));
-            Serial.print(inputs[i].displayName);
-            Serial.print(F(") = "));
-            Serial.print(inputs[i].value);
-            Serial.print(F(" "));
-            Serial.println((__FlashStringHelper*)getUnitStringByIndex(inputs[i].unitsIndex));
+            msg.control.print(F(": "));
+            msg.control.print(inputs[i].abbrName);
+            msg.control.print(F(" ("));
+            msg.control.print(inputs[i].displayName);
+            msg.control.print(F(") = "));
+            msg.control.print(inputs[i].value);
+            msg.control.print(F(" "));
+            msg.control.println((__FlashStringHelper*)getUnitStringByIndex(inputs[i].unitsIndex));
         }
     }
 
     if (!found) {
-        Serial.println(F("  (none)"));
+        msg.control.println(F("  (none)"));
     }
 }
 

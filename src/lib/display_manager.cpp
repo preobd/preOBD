@@ -7,6 +7,7 @@
 #ifndef USE_STATIC_CONFIG
 
 #include "system_config.h"
+#include "message_api.h"
 
 // Display control functions from display modules
 extern void enableLCD();
@@ -38,10 +39,10 @@ void toggleDisplayRuntime() {
 
     if (displayRuntimeState) {
         enableLCD();
-        Serial.println(F("✓ Display toggled ON"));
+        msg.debug.println(F("✓ Display toggled ON"));
     } else {
         disableLCD();
-        Serial.println(F("✓ Display toggled OFF"));
+        msg.debug.println(F("✓ Display toggled OFF"));
     }
 }
 

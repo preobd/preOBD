@@ -8,6 +8,7 @@
 #include "../../../config.h"
 #include "../../../lib/platform.h"
 #include "../../input.h"
+#include "../../../lib/message_api.h"
 #include <SPI.h>
 
 /**
@@ -23,8 +24,8 @@
 void initThermocoupleCS(Input* ptr) {
     pinMode(ptr->pin, OUTPUT);
     digitalWrite(ptr->pin, HIGH);  // CS idle state is HIGH
-    Serial.print(F("✓ Thermocouple CS pin "));
-    Serial.print(ptr->pin);
-    Serial.print(F(" for "));
-    Serial.println(ptr->abbrName);
+    msg.debug.print(F("✓ Thermocouple CS pin "));
+    msg.debug.print(ptr->pin);
+    msg.debug.print(F(" for "));
+    msg.debug.println(ptr->abbrName);
 }

@@ -11,6 +11,7 @@
 #include "../../input.h"
 #include "../../../lib/sensor_types.h"
 #include "../../../lib/sensor_library.h"
+#include "../../../lib/message_api.h"
 
 // ===== GLOBAL VARIABLES FOR RPM CALCULATION =====
 // These must be global to be accessed by the ISR
@@ -52,10 +53,10 @@ void rpmPulseISR() {
 void initWPhaseRPM(Input* ptr) {
     pinMode(ptr->pin, INPUT);
     attachInterrupt(digitalPinToInterrupt(ptr->pin), rpmPulseISR, RISING);
-    Serial.print(F("✓ RPM sensing on pin "));
-    Serial.print(ptr->pin);
-    Serial.print(F(" for "));
-    Serial.println(ptr->abbrName);
+    msg.debug.print(F("✓ RPM sensing on pin "));
+    msg.debug.print(ptr->pin);
+    msg.debug.print(F(" for "));
+    msg.debug.println(ptr->abbrName);
 }
 
 // ===== READING =====

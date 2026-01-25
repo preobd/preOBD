@@ -60,12 +60,12 @@ uint8_t calculateChecksum(SystemConfig* cfg) {
 void initSystemConfig() {
     // Try loading from EEPROM
     if (loadSystemConfig()) {
-        Serial.println(F("✓ System config loaded from EEPROM"));
+        msg.debug.println(F("✓ System config loaded from EEPROM"));
         return;
     }
 
     // Fallback: Use defaults from config.h
-    Serial.println(F("Using default system config"));
+    msg.debug.println(F("Using default system config"));
     resetSystemConfig();
 }
 
@@ -243,7 +243,7 @@ bool saveSystemConfig() {
     // Write to EEPROM
     EEPROM.put(SYSTEM_CONFIG_ADDRESS, systemConfig);
 
-    Serial.println(F("✓ System config saved to EEPROM"));
+    msg.control.println(F("✓ System config saved to EEPROM"));
     return true;
 }
 
@@ -263,7 +263,7 @@ bool loadSystemConfig() {
 #ifdef ENABLE_RELAY_OUTPUT
     // Handle migration from v4 to v5 (relay feature added)
     if (temp.version == 4) {
-        Serial.println(F("Migrating system config from v4 to v5"));
+        msg.debug.println(F("Migrating system config from v4 to v5"));
 
         // Load old 64-byte config (v4)
         // Copy first 64 bytes to systemConfig
@@ -287,25 +287,25 @@ bool loadSystemConfig() {
 
         // Save migrated config
         saveSystemConfig();
-        Serial.println(F("✓ Migration complete"));
+        msg.debug.println(F("✓ Migration complete"));
         return true;
     }
 #endif
 
     // Check version
     if (temp.version != SYSTEM_CONFIG_VERSION) {
-        Serial.print(F("System config version mismatch (expected "));
-        Serial.print(SYSTEM_CONFIG_VERSION);
-        Serial.print(F(", got "));
-        Serial.print(temp.version);
-        Serial.println(F(") - ignoring"));
+        msg.debug.print(F("System config version mismatch (expected "));
+        msg.debug.print(SYSTEM_CONFIG_VERSION);
+        msg.debug.print(F(", got "));
+        msg.debug.print(temp.version);
+        msg.debug.println(F(") - ignoring"));
         return false;
     }
 
     // Verify checksum
     uint8_t calculatedChecksum = calculateChecksum(&temp);
     if (temp.checksum != calculatedChecksum) {
-        Serial.println(F("System config checksum failed - ignoring"));
+        msg.debug.println(F("System config checksum failed - ignoring"));
         return false;
     }
 

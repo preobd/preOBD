@@ -7,6 +7,7 @@
 #include "../config.h"
 #include "../lib/sensor_library.h"
 #include "../lib/units_registry.h"
+#include "../lib/message_api.h"
 
 #ifdef ENABLE_SD_LOGGING
 
@@ -22,11 +23,11 @@ const unsigned long LOG_INTERVAL = 1000;  // Log every 1 second
 void initSDLog() {
     
     if (!SD.begin(SD_CS_PIN)) {
-        Serial.println("⚠ SD init failed!");
+        msg.debug.println(F("⚠ SD init failed!"));
         return;
     }
 
-    Serial.print("✓ SD card initialized");
+    msg.debug.println(F("✓ SD card initialized"));
 
     // Create or open log file with timestamp
     char filename[20];
@@ -38,10 +39,10 @@ void initSDLog() {
         // Write CSV header
         logFile.println("Time,Sensor,Value,Units");
         logFile.flush();
-        Serial.print("Logging to: ");
-        Serial.println(filename);
+        msg.debug.print(F("Logging to: "));
+        msg.debug.println(filename);
     } else {
-        Serial.println("Failed to create log file");
+        msg.debug.println(F("Failed to create log file"));
     }
 }
 
@@ -89,7 +90,7 @@ void updateSDLog() {
 void closeSDLog() {
     if (logFile) {
         logFile.close();
-        Serial.println("Log file closed");
+        msg.debug.println(F("Log file closed"));
     }
 }
 
