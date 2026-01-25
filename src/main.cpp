@@ -15,6 +15,7 @@
 #include "lib/sensor_library.h"
 #include "lib/system_config.h"
 #include "lib/bus_manager.h"
+#include "lib/serial_manager.h"
 #include "lib/pin_registry.h"
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
@@ -41,14 +42,32 @@
 
 // Global transport instances
 SerialTransport usbSerial(&Serial, "USB", 115200);
-#if defined(__MK66FX1M0__) || defined(__IMXRT1062__) || defined(__MK64FX512__) || defined(__MK20DX256__)
-// Teensy platforms have hardware Serial1, Serial2, etc.
+
+// Hardware serial transports - created for all available ports
+// Actual initialization happens in initConfiguredSerialPorts() based on config
+#if NUM_SERIAL_PORTS >= 1
 SerialTransport hwSerial1(&Serial1, "SERIAL1", 115200);
-SerialTransport hwSerial2(&Serial2, "SERIAL2", 9600);  // Default 9600 for HC-05/HM-10
-#elif defined(__AVR_ATmega2560__)
-// Arduino Mega has Serial1-3
-SerialTransport hwSerial1(&Serial1, "SERIAL1", 115200);
-SerialTransport hwSerial2(&Serial2, "SERIAL2", 9600);  // Default 9600 for HC-05/HM-10
+#endif
+#if NUM_SERIAL_PORTS >= 2
+SerialTransport hwSerial2(&Serial2, "SERIAL2", 115200);
+#endif
+#if NUM_SERIAL_PORTS >= 3
+SerialTransport hwSerial3(&Serial3, "SERIAL3", 115200);
+#endif
+#if NUM_SERIAL_PORTS >= 4
+SerialTransport hwSerial4(&Serial4, "SERIAL4", 115200);
+#endif
+#if NUM_SERIAL_PORTS >= 5
+SerialTransport hwSerial5(&Serial5, "SERIAL5", 115200);
+#endif
+#if NUM_SERIAL_PORTS >= 6
+SerialTransport hwSerial6(&Serial6, "SERIAL6", 115200);
+#endif
+#if NUM_SERIAL_PORTS >= 7
+SerialTransport hwSerial7(&Serial7, "SERIAL7", 115200);
+#endif
+#if NUM_SERIAL_PORTS >= 8
+SerialTransport hwSerial8(&Serial8, "SERIAL8", 115200);
 #endif
 
 #ifdef ESP32
@@ -170,32 +189,59 @@ void setup() {
     Serial.begin(115200);
     while (!Serial && millis() < 3000) {};  // Wait up to 3 seconds for serial
 
-    // Initialize hardware UARTs for Bluetooth modules (if wired)
-    #if defined(__MK66FX1M0__) || defined(__IMXRT1062__) || defined(__MK64FX512__) || defined(__MK20DX256__) || defined(__AVR_ATmega2560__)
-    Serial1.begin(115200);  // Can be used for data output or control
-    Serial2.begin(9600);    // Default baud for HC-05/HM-10 Bluetooth modules
-    #endif
-
     // Initialize system config (loads from EEPROM or uses defaults from config.h)
     // MUST happen before router.begin() so router can load correct transport mappings
 #ifndef USE_STATIC_CONFIG
     initSystemConfig();
 #endif
 
-    // Initialize transport router
+    // Initialize pin registry FIRST - before any code registers pins
+    // This was previously called later, which caused the registry to be cleared
+    // after serial ports had already registered their pins
+    initPinRegistry();
+
+    // Initialize configured serial ports based on SystemConfig.serial
+    // This replaces the old hardcoded Serial1.begin() / Serial2.begin() calls
+    initConfiguredSerialPorts();
+
+    // Initialize transport router - register USB serial (always available)
     router.registerTransport(TRANSPORT_USB_SERIAL, &usbSerial);
-    #if defined(__MK66FX1M0__) || defined(__IMXRT1062__) || defined(__MK64FX512__) || defined(__MK20DX256__) || defined(__AVR_ATmega2560__)
+
+    // Register all available hardware serial transports
+    // They will only be usable if enabled via BUS SERIAL command
+#if NUM_SERIAL_PORTS >= 1
     router.registerTransport(TRANSPORT_SERIAL1, &hwSerial1);
+#endif
+#if NUM_SERIAL_PORTS >= 2
     router.registerTransport(TRANSPORT_SERIAL2, &hwSerial2);
-    #endif
-    #ifdef ESP32
+#endif
+#if NUM_SERIAL_PORTS >= 3
+    router.registerTransport(TRANSPORT_SERIAL3, &hwSerial3);
+#endif
+#if NUM_SERIAL_PORTS >= 4
+    router.registerTransport(TRANSPORT_SERIAL4, &hwSerial4);
+#endif
+#if NUM_SERIAL_PORTS >= 5
+    router.registerTransport(TRANSPORT_SERIAL5, &hwSerial5);
+#endif
+#if NUM_SERIAL_PORTS >= 6
+    router.registerTransport(TRANSPORT_SERIAL6, &hwSerial6);
+#endif
+#if NUM_SERIAL_PORTS >= 7
+    router.registerTransport(TRANSPORT_SERIAL7, &hwSerial7);
+#endif
+#if NUM_SERIAL_PORTS >= 8
+    router.registerTransport(TRANSPORT_SERIAL8, &hwSerial8);
+#endif
+
+#ifdef ESP32
     if (btESP32.begin()) {
         router.registerTransport(TRANSPORT_ESP32_BT, &btESP32);
         msg.debug.println(F("✓ ESP32 Bluetooth initialized"));
     } else {
         msg.debug.println(F("⚠ ESP32 Bluetooth failed to initialize"));
     }
-    #endif
+#endif
     router.begin();  // Load config from EEPROM
 
     msg.debug.println(F("                                        "));
@@ -213,9 +259,6 @@ void setup() {
     // Configure ADC for this platform
     setupADC();
     msg.debug.println(F("✓ ADC configured"));
-
-    // Initialize pin registry before any pin assignments
-    initPinRegistry();
 
     // Initialize configured buses (I2C, SPI, CAN) based on SystemConfig
     // This replaces the old hardcoded Wire.begin() and SPI.begin() calls

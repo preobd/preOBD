@@ -1,14 +1,15 @@
 /*
  * bus_defaults.h - Platform-Specific Bus Pin Defaults
  *
- * Defines default hardware pins for I2C, SPI, and CAN buses across different platforms.
+ * Defines default hardware pins for I2C, SPI, CAN, and Serial buses across platforms.
  * Also defines default bus selections and speeds for the simplified "pick one" model.
  *
  * Platform Support:
- * - Teensy 4.x (IMXRT1062): 3x I2C, 3x SPI, 3x CAN (fixed pins)
- * - Teensy 3.6 (MK66FX1M0): 3x I2C, 2x SPI, 2x CAN (I2C remappable)
- * - ESP32: 2x I2C, 1x SPI, 1x CAN (fully remappable)
- * - Arduino Mega (ATmega2560): 1x I2C, 1x SPI, 0x CAN
+ * - Teensy 4.1 (IMXRT1062): 3x I2C, 3x SPI, 3x CAN, 8x Serial (fixed pins)
+ * - Teensy 4.0 (IMXRT1062): 3x I2C, 3x SPI, 3x CAN, 7x Serial (fixed pins)
+ * - Teensy 3.6 (MK66FX1M0): 3x I2C, 2x SPI, 2x CAN, 6x Serial (I2C remappable)
+ * - ESP32: 2x I2C, 1x SPI, 1x CAN, 2x Serial (fully remappable)
+ * - Arduino Mega (ATmega2560): 1x I2C, 1x SPI, 0x CAN, 3x Serial
  */
 
 #ifndef BUS_DEFAULTS_H
@@ -26,6 +27,7 @@
 #define DEFAULT_SPI_CLOCK      4000000  // Hz (4MHz)
 #define DEFAULT_CAN_BUS        0        // CAN1
 #define DEFAULT_CAN_BAUDRATE   500000   // bps
+#define DEFAULT_SERIAL_BAUDRATE 115200  // bps
 
 // ============================================================================
 // TEENSY 4.x (IMXRT1062) - Teensy 4.0, 4.1
@@ -62,13 +64,40 @@
 #define DEFAULT_CAN3_TX 30
 #define DEFAULT_CAN3_RX 31
 
+// ----- Serial Port Default Pins -----
+// Source: https://www.pjrc.com/teensy/td_uart.html
+#define DEFAULT_SERIAL1_RX  0
+#define DEFAULT_SERIAL1_TX  1
+#define DEFAULT_SERIAL2_RX  7
+#define DEFAULT_SERIAL2_TX  8
+#define DEFAULT_SERIAL3_RX  15
+#define DEFAULT_SERIAL3_TX  14
+#define DEFAULT_SERIAL4_RX  16
+#define DEFAULT_SERIAL4_TX  17
+#define DEFAULT_SERIAL5_RX  21
+#define DEFAULT_SERIAL5_TX  20
+#define DEFAULT_SERIAL6_RX  25
+#define DEFAULT_SERIAL6_TX  24
+#define DEFAULT_SERIAL7_RX  28
+#define DEFAULT_SERIAL7_TX  29
+#if defined(ARDUINO_TEENSY41)
+#define DEFAULT_SERIAL8_RX  34
+#define DEFAULT_SERIAL8_TX  35
+#endif
+
 // ----- Platform Capabilities -----
 #define NUM_I2C_BUSES 3
 #define NUM_SPI_BUSES 3
 #define NUM_CAN_BUSES 3
+#if defined(ARDUINO_TEENSY41)
+#define NUM_SERIAL_PORTS 8
+#else
+#define NUM_SERIAL_PORTS 7
+#endif
 #define SUPPORTS_WIRE_PIN_REMAP 0  // Teensy 4.x uses fixed hardware pins
 #define SUPPORTS_SPI_PIN_REMAP 0
 #define SUPPORTS_CAN_PIN_REMAP 0
+#define SUPPORTS_SERIAL_PIN_REMAP 0
 
 // ============================================================================
 // TEENSY 3.6 (MK66FX1M0)
@@ -99,13 +128,29 @@
 #define DEFAULT_CAN2_RX 34
 // No CAN3 on Teensy 3.6
 
+// ----- Serial Port Default Pins -----
+#define DEFAULT_SERIAL1_RX  0
+#define DEFAULT_SERIAL1_TX  1
+#define DEFAULT_SERIAL2_RX  9
+#define DEFAULT_SERIAL2_TX  10
+#define DEFAULT_SERIAL3_RX  7
+#define DEFAULT_SERIAL3_TX  8
+#define DEFAULT_SERIAL4_RX  31
+#define DEFAULT_SERIAL4_TX  32
+#define DEFAULT_SERIAL5_RX  34
+#define DEFAULT_SERIAL5_TX  33
+#define DEFAULT_SERIAL6_RX  47
+#define DEFAULT_SERIAL6_TX  48
+
 // ----- Platform Capabilities -----
 #define NUM_I2C_BUSES 3
 #define NUM_SPI_BUSES 2
 #define NUM_CAN_BUSES 2
+#define NUM_SERIAL_PORTS 6
 #define SUPPORTS_WIRE_PIN_REMAP 1  // Teensy 3.x supports I2C pin remapping
 #define SUPPORTS_SPI_PIN_REMAP 0
 #define SUPPORTS_CAN_PIN_REMAP 0
+#define SUPPORTS_SERIAL_PIN_REMAP 0
 
 // ============================================================================
 // TEENSY 3.5 (MK64FX512)
@@ -133,13 +178,29 @@
 #define DEFAULT_CAN1_RX 4
 // Only 1 CAN bus on Teensy 3.5
 
+// ----- Serial Port Default Pins -----
+#define DEFAULT_SERIAL1_RX  0
+#define DEFAULT_SERIAL1_TX  1
+#define DEFAULT_SERIAL2_RX  9
+#define DEFAULT_SERIAL2_TX  10
+#define DEFAULT_SERIAL3_RX  7
+#define DEFAULT_SERIAL3_TX  8
+#define DEFAULT_SERIAL4_RX  31
+#define DEFAULT_SERIAL4_TX  32
+#define DEFAULT_SERIAL5_RX  34
+#define DEFAULT_SERIAL5_TX  33
+#define DEFAULT_SERIAL6_RX  47
+#define DEFAULT_SERIAL6_TX  48
+
 // ----- Platform Capabilities -----
 #define NUM_I2C_BUSES 3
 #define NUM_SPI_BUSES 2
 #define NUM_CAN_BUSES 1
+#define NUM_SERIAL_PORTS 6
 #define SUPPORTS_WIRE_PIN_REMAP 1
 #define SUPPORTS_SPI_PIN_REMAP 0
 #define SUPPORTS_CAN_PIN_REMAP 0
+#define SUPPORTS_SERIAL_PIN_REMAP 0
 
 // ============================================================================
 // TEENSY 3.1/3.2 (MK20DX256)
@@ -163,13 +224,23 @@
 #define DEFAULT_CAN1_TX 3
 #define DEFAULT_CAN1_RX 4
 
+// ----- Serial Port Default Pins -----
+#define DEFAULT_SERIAL1_RX  0
+#define DEFAULT_SERIAL1_TX  1
+#define DEFAULT_SERIAL2_RX  9
+#define DEFAULT_SERIAL2_TX  10
+#define DEFAULT_SERIAL3_RX  7
+#define DEFAULT_SERIAL3_TX  8
+
 // ----- Platform Capabilities -----
 #define NUM_I2C_BUSES 2
 #define NUM_SPI_BUSES 1
 #define NUM_CAN_BUSES 1
+#define NUM_SERIAL_PORTS 3
 #define SUPPORTS_WIRE_PIN_REMAP 1
 #define SUPPORTS_SPI_PIN_REMAP 0
 #define SUPPORTS_CAN_PIN_REMAP 0
+#define SUPPORTS_SERIAL_PIN_REMAP 0
 
 // ============================================================================
 // ESP32
@@ -198,13 +269,21 @@
 #define DEFAULT_CAN1_RX 22
 #endif
 
+// ----- Serial Port Default Pins -----
+#define DEFAULT_SERIAL1_RX  9
+#define DEFAULT_SERIAL1_TX  10
+#define DEFAULT_SERIAL2_RX  16
+#define DEFAULT_SERIAL2_TX  17
+
 // ----- Platform Capabilities -----
 #define NUM_I2C_BUSES 2
 #define NUM_SPI_BUSES 1
 #define NUM_CAN_BUSES 1
+#define NUM_SERIAL_PORTS 2
 #define SUPPORTS_WIRE_PIN_REMAP 1  // ESP32 supports full pin remapping
 #define SUPPORTS_SPI_PIN_REMAP 1
 #define SUPPORTS_CAN_PIN_REMAP 1
+#define SUPPORTS_SERIAL_PIN_REMAP 1
 
 // ============================================================================
 // ARDUINO MEGA 2560 (ATmega2560)
@@ -225,13 +304,23 @@
 // ----- CAN Default Pins -----
 // No native CAN on Arduino Mega (requires external MCP2515)
 
+// ----- Serial Port Default Pins -----
+#define DEFAULT_SERIAL1_RX  19
+#define DEFAULT_SERIAL1_TX  18
+#define DEFAULT_SERIAL2_RX  17
+#define DEFAULT_SERIAL2_TX  16
+#define DEFAULT_SERIAL3_RX  15
+#define DEFAULT_SERIAL3_TX  14
+
 // ----- Platform Capabilities -----
 #define NUM_I2C_BUSES 1
 #define NUM_SPI_BUSES 1
 #define NUM_CAN_BUSES 0
+#define NUM_SERIAL_PORTS 3
 #define SUPPORTS_WIRE_PIN_REMAP 0
 #define SUPPORTS_SPI_PIN_REMAP 0
 #define SUPPORTS_CAN_PIN_REMAP 0
+#define SUPPORTS_SERIAL_PIN_REMAP 0
 
 // ============================================================================
 // ARDUINO UNO (ATmega328P)
@@ -247,13 +336,18 @@
 #define DEFAULT_SPI0_MISO 12
 #define DEFAULT_SPI0_SCK  13
 
+// ----- Serial Port Default Pins -----
+// No additional hardware serial on ATmega328P (Serial0 is USB)
+
 // ----- Platform Capabilities -----
 #define NUM_I2C_BUSES 1
 #define NUM_SPI_BUSES 1
 #define NUM_CAN_BUSES 0
+#define NUM_SERIAL_PORTS 0
 #define SUPPORTS_WIRE_PIN_REMAP 0
 #define SUPPORTS_SPI_PIN_REMAP 0
 #define SUPPORTS_CAN_PIN_REMAP 0
+#define SUPPORTS_SERIAL_PIN_REMAP 0
 
 // ============================================================================
 // UNKNOWN PLATFORM
@@ -273,9 +367,11 @@
 #define NUM_I2C_BUSES 1
 #define NUM_SPI_BUSES 1
 #define NUM_CAN_BUSES 0
+#define NUM_SERIAL_PORTS 0
 #define SUPPORTS_WIRE_PIN_REMAP 0
 #define SUPPORTS_SPI_PIN_REMAP 0
 #define SUPPORTS_CAN_PIN_REMAP 0
+#define SUPPORTS_SERIAL_PIN_REMAP 0
 
 #endif
 
@@ -403,6 +499,104 @@ inline uint8_t getDefaultCANRX(uint8_t bus_id) {
 #endif
         default: return 0xFF;
     }
+}
+
+/**
+ * Get default RX pin for Serial port
+ * @param port_id Serial port number (1-8)
+ * @return Default RX pin, or 0xFF if port not available
+ */
+inline uint8_t getDefaultSerialRX(uint8_t port_id) {
+    switch (port_id) {
+#if NUM_SERIAL_PORTS >= 1
+        case 1: return DEFAULT_SERIAL1_RX;
+#endif
+#if NUM_SERIAL_PORTS >= 2
+        case 2: return DEFAULT_SERIAL2_RX;
+#endif
+#if NUM_SERIAL_PORTS >= 3
+        case 3: return DEFAULT_SERIAL3_RX;
+#endif
+#if NUM_SERIAL_PORTS >= 4
+        case 4: return DEFAULT_SERIAL4_RX;
+#endif
+#if NUM_SERIAL_PORTS >= 5
+        case 5: return DEFAULT_SERIAL5_RX;
+#endif
+#if NUM_SERIAL_PORTS >= 6
+        case 6: return DEFAULT_SERIAL6_RX;
+#endif
+#if NUM_SERIAL_PORTS >= 7
+        case 7: return DEFAULT_SERIAL7_RX;
+#endif
+#if NUM_SERIAL_PORTS >= 8
+        case 8: return DEFAULT_SERIAL8_RX;
+#endif
+        default: return 0xFF;
+    }
+}
+
+/**
+ * Get default TX pin for Serial port
+ * @param port_id Serial port number (1-8)
+ * @return Default TX pin, or 0xFF if port not available
+ */
+inline uint8_t getDefaultSerialTX(uint8_t port_id) {
+    switch (port_id) {
+#if NUM_SERIAL_PORTS >= 1
+        case 1: return DEFAULT_SERIAL1_TX;
+#endif
+#if NUM_SERIAL_PORTS >= 2
+        case 2: return DEFAULT_SERIAL2_TX;
+#endif
+#if NUM_SERIAL_PORTS >= 3
+        case 3: return DEFAULT_SERIAL3_TX;
+#endif
+#if NUM_SERIAL_PORTS >= 4
+        case 4: return DEFAULT_SERIAL4_TX;
+#endif
+#if NUM_SERIAL_PORTS >= 5
+        case 5: return DEFAULT_SERIAL5_TX;
+#endif
+#if NUM_SERIAL_PORTS >= 6
+        case 6: return DEFAULT_SERIAL6_TX;
+#endif
+#if NUM_SERIAL_PORTS >= 7
+        case 7: return DEFAULT_SERIAL7_TX;
+#endif
+#if NUM_SERIAL_PORTS >= 8
+        case 8: return DEFAULT_SERIAL8_TX;
+#endif
+        default: return 0xFF;
+    }
+}
+
+/**
+ * Get serial port name string
+ * @param port_id Serial port number (1-8)
+ * @return Port name string ("Serial1", etc.) or "Unknown"
+ */
+inline const char* getSerialPortName(uint8_t port_id) {
+    switch (port_id) {
+        case 1: return "Serial1";
+        case 2: return "Serial2";
+        case 3: return "Serial3";
+        case 4: return "Serial4";
+        case 5: return "Serial5";
+        case 6: return "Serial6";
+        case 7: return "Serial7";
+        case 8: return "Serial8";
+        default: return "Unknown";
+    }
+}
+
+/**
+ * Check if a serial port is available on this platform
+ * @param port_id Serial port number (1-8)
+ * @return true if available
+ */
+inline bool isSerialPortAvailable(uint8_t port_id) {
+    return (port_id >= 1 && port_id <= NUM_SERIAL_PORTS);
 }
 
 #endif // BUS_DEFAULTS_H
