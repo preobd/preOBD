@@ -195,6 +195,11 @@ void setup() {
     initSystemConfig();
 #endif
 
+    // Initialize pin registry FIRST - before any code registers pins
+    // This was previously called later, which caused the registry to be cleared
+    // after serial ports had already registered their pins
+    initPinRegistry();
+
     // Initialize configured serial ports based on SystemConfig.serial
     // This replaces the old hardcoded Serial1.begin() / Serial2.begin() calls
     initConfiguredSerialPorts();
@@ -254,9 +259,6 @@ void setup() {
     // Configure ADC for this platform
     setupADC();
     msg.debug.println(F("✓ ADC configured"));
-
-    // Initialize pin registry before any pin assignments
-    initPinRegistry();
 
     // Initialize configured buses (I2C, SPI, CAN) based on SystemConfig
     // This replaces the old hardcoded Wire.begin() and SPI.begin() calls
