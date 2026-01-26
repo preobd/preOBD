@@ -6,6 +6,10 @@
  * - JSON config save/load (json_config.cpp)
  */
 
+#include "../config.h"
+
+#if defined(ENABLE_SDLOG) || defined(ENABLE_JSON_CONFIG)
+
 #include "sd_manager.h"
 #include "system_config.h"
 #include "message_api.h"
@@ -74,3 +78,5 @@ void initSD() {
 bool isSDInitialized() {
     return sdInitialized;
 }
+
+#endif // ENABLE_SDLOG || ENABLE_JSON_CONFIG

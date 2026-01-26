@@ -7,6 +7,10 @@
  * Design pattern follows output_alarm.cpp for consistency.
  */
 
+#include "../config.h"
+
+#ifdef ENABLE_RELAY_OUTPUT
+
 #include "output_relay.h"
 #include "../lib/system_config.h"
 #include "../inputs/input_manager.h"
@@ -384,3 +388,5 @@ void printAllRelayStatus() {
         printRelayStatus(i);
     }
 }
+
+#endif // ENABLE_RELAY_OUTPUT
