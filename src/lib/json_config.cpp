@@ -739,18 +739,22 @@ bool loadConfigFromSD(const char* filename) {
         return false;
     }
 
-    // Construct filename (strip paths, use root directory)
+    msg.debug.println(F("[SD_LOAD] SD card is ready"));
+
+    // Generate filename with same logic as save
     char filepath[32];
-    const char* basename = filename;
-    if (filename[0] == '/') {
-        basename = filename + 1;
+    if (filename == nullptr) {
+        msg.control.println(F("ERROR: No filename provided"));
+        msg.debug.println(F("[SD_LOAD] No filename provided"));
+        return false;
+    } else {
+        // Ensure filename is in config directory
+        if (filename[0] == '/') {
+            snprintf(filepath, sizeof(filepath), "/config%s", filename);
+        } else {
+            snprintf(filepath, sizeof(filepath), "/config/%s", filename);
+        }
     }
-    // Skip any directory components
-    const char* slash = strrchr(basename, '/');
-    if (slash) {
-        basename = slash + 1;
-    }
-    strncpy(filepath, basename, sizeof(filepath) - 1);
     filepath[sizeof(filepath) - 1] = '\0';
 
     msg.debug.print(F("[SD_LOAD] Opening file: "));
