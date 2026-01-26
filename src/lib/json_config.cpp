@@ -669,14 +669,13 @@ bool saveConfigToSD(const char* filename) {
     // Generate filename if not provided
     char filepath[32];
     if (filename == nullptr) {
-        snprintf(filepath, sizeof(filepath), "config/backup_%lu.json", getCurrentTimestamp());
+        snprintf(filepath, sizeof(filepath), "/config/backup_%lu.json", getCurrentTimestamp());
     } else {
-        // Ensure filename is in config directory (without leading slash)
+        // Ensure filename is in config directory
         if (filename[0] == '/') {
-            // Remove leading slash
-            snprintf(filepath, sizeof(filepath), "config%s", filename);
+            snprintf(filepath, sizeof(filepath), "/config%s", filename);
         } else {
-            snprintf(filepath, sizeof(filepath), "config/%s", filename);
+            snprintf(filepath, sizeof(filepath), "/config/%s", filename);
         }
     }
     filepath[sizeof(filepath) - 1] = '\0';
