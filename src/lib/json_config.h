@@ -3,7 +3,7 @@
  *
  * Provides JSON serialization and deserialization for system configuration.
  * Used for:
- * - DUMP JSON command (export to serial)
+ * - SYSTEM DUMP JSON command (export to serial)
  * - CONFIG SAVE <filename> (export to SD card)
  * - CONFIG LOAD <filename> (import from SD card)
  *
