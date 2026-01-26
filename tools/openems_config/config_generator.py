@@ -326,7 +326,7 @@ def generate_thin_library_files(
         flags=re.DOTALL
     )
 
-    sensor_structs_str = ",\n".join(
+    sensor_structs_str = "\n".join(
         remove_label_fields_from_struct(s['raw_c_block'])
         for s in sorted(sensors, key=lambda x: x['index'])
         if s['index'] in used_sensor_indices
@@ -362,6 +362,20 @@ def generate_thin_library_files(
     thinned_sensor_content = thinned_sensor_content.replace(
         'if (pgm_read_ptr(&info->label) == nullptr) return nullptr;',
         'if (pgm_read_ptr(&info->name) == nullptr) return nullptr;'
+    )
+
+    # Fix X_SENSOR macro to exclude pinType from struct initialization in static builds
+    # The macro still accepts pinType as a parameter but doesn't use it in the output
+    thinned_sensor_content = re.sub(
+        r'(#define X_SENSOR\(name, label, desc, readFn, initFn, measType, calType, defCal, minInt, minVal, maxVal, hash, pinType\).*?\{ name, label, desc, readFn, initFn, measType, calType, defCal, minInt, minVal, maxVal, hash), pinType(.*?\})',
+        r'\1\2',
+        thinned_sensor_content,
+        flags=re.DOTALL
+    )
+    # Add comment explaining the macro behavior in static builds
+    thinned_sensor_content = thinned_sensor_content.replace(
+        '// Assemble SENSOR_LIBRARY[] from X-macros defined in each category file',
+        '// Assemble SENSOR_LIBRARY[] from X-macros defined in each category file\n// In static builds, pinType is excluded from the struct to save memory'
     )
 
     with open(os.path.join(output_dir, 'sensor_library_static.h'), 'w') as f:

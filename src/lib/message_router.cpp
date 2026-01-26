@@ -6,6 +6,7 @@
 #include "message_api.h"
 #include "system_config.h"
 #include "serial_manager.h"
+#include "../inputs/serial_config.h"
 #include <string.h>
 
 // Global router instance
@@ -313,10 +314,6 @@ void MessageRouter::update() {
 }
 
 void MessageRouter::processIncomingCommands() {
-    // Forward declaration of the handler from serial_config.cpp
-    extern void handleCommandInput(char c);
-    extern void processSerialCommands();
-
     // Poll primary control transport
     TransportInterface* ctrl = getTransport(PLANE_CONTROL, true);
     if (ctrl && ctrl->isConnected() && ctrl->available()) {
@@ -336,9 +333,6 @@ void MessageRouter::processIncomingCommands() {
 }
 
 void MessageRouter::processCommandFromTransport(TransportInterface* transport) {
-    // Forward declaration of the handler from serial_config.cpp
-    extern void handleCommandInput(char c);
-
     // Read and process all available characters
     while (transport->available()) {
         char c = transport->read();
