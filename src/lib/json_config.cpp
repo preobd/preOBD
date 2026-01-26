@@ -364,17 +364,80 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
 
     // Extract values
     uint8_t pin = inputObj["pin"];
+
+    // Support both "app" (runtime) and "application" (static/legacy) field names
     const char* appName = inputObj["app"];
+    if (appName == nullptr) {
+        appName = inputObj["application"];
+    }
+
     const char* sensorName = inputObj["sensor"];
     const char* unitsName = inputObj["units"];
+
+    msg.debug.print(F("[IMPORT] Processing input "));
+    msg.debug.print(index);
+    msg.debug.print(F(" (pin "));
+    msg.debug.print(pin);
+    msg.debug.print(F("): app="));
+    msg.debug.print(appName ? appName : "NULL");
+    msg.debug.print(F(", sensor="));
+    msg.debug.print(sensorName ? sensorName : "NULL");
+    msg.debug.print(F(", units="));
+    msg.debug.println(unitsName ? unitsName : "NULL");
+
+    // Validate required fields are present
+    if (!appName || !sensorName || !unitsName) {
+        msg.control.print(F("ERROR: Failed to import input "));
+        msg.control.print(index);
+        msg.control.print(F(" (pin "));
+        msg.control.print(pin);
+        msg.control.println(F(") - missing required fields"));
+
+        if (!appName) {
+            msg.debug.println(F("[IMPORT] Missing application field"));
+        }
+        if (!sensorName) {
+            msg.debug.println(F("[IMPORT] Missing sensor field"));
+        }
+        if (!unitsName) {
+            msg.debug.println(F("[IMPORT] Missing units field"));
+        }
+
+        return false;
+    }
 
     // Find indices in registries
     uint8_t appIdx = getApplicationIndexByName(appName);
     uint8_t sensorIdx = getSensorIndexByName(sensorName);
     uint8_t unitsIdx = getUnitsIndexByName(unitsName);
 
-    if (appIdx == 0 || sensorIdx == 0 || unitsIdx == 0) {
-        return false;  // Invalid registry entry (0 = NONE)
+    msg.debug.print(F("[IMPORT] Registry indices: app="));
+    msg.debug.print(appIdx);
+    msg.debug.print(F(", sensor="));
+    msg.debug.print(sensorIdx);
+    msg.debug.print(F(", units="));
+    msg.debug.println(unitsIdx);
+
+    // Validate registry lookups (index 0 = NONE for app/sensor, but CELSIUS for units)
+    // Note: Units index 0 is CELSIUS (valid), so we can't use 0 to detect lookup failure
+    // Instead, we rely on the NULL check above to ensure unitsName exists
+    if (appIdx == 0 || sensorIdx == 0) {
+        msg.control.print(F("ERROR: Failed to import input "));
+        msg.control.print(index);
+        msg.control.print(F(" (pin "));
+        msg.control.print(pin);
+        msg.control.println(F(")"));
+
+        if (appIdx == 0) {
+            msg.debug.print(F("[IMPORT] Invalid application: "));
+            msg.debug.println(appName);
+        }
+        if (sensorIdx == 0) {
+            msg.debug.print(F("[IMPORT] Invalid sensor: "));
+            msg.debug.println(sensorName);
+        }
+
+        return false;  // Invalid registry entry (0 = NONE for app/sensor)
     }
 
     // Use input manager functions to properly configure the input
@@ -413,10 +476,10 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         setInputAlarmRange(pin, alarm["min"], alarm["max"]);
     }
 
-    // Set flags
-    enableInput(pin, inputObj["enabled"] | true);
-    enableInputAlarm(pin, inputObj["alarmEnabled"] | true);
-    enableInputDisplay(pin, inputObj["displayEnabled"] | true);
+    // Set flags (use || for default value, not | which is bitwise OR)
+    enableInput(pin, inputObj["enabled"] | true);  // Default to true if missing
+    enableInputAlarm(pin, inputObj["alarmEnabled"] | false);  // Default to false if missing
+    enableInputDisplay(pin, inputObj["displayEnabled"] | true);  // Default to true if missing
 
     // OBD2
     if (inputObj["obd2"].isNull() == false) {
@@ -436,6 +499,11 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
 // Import all inputs from JSON
 bool importInputsFromJSON(JsonArray& inputsArray) {
     uint8_t importedCount = 0;
+    uint8_t totalInputs = inputsArray.size();
+
+    msg.debug.print(F("[IMPORT] Processing "));
+    msg.debug.print(totalInputs);
+    msg.debug.println(F(" inputs from JSON"));
 
     for (JsonVariant v : inputsArray) {
         JsonObject inputObj = v.as<JsonObject>();
@@ -443,8 +511,19 @@ bool importInputsFromJSON(JsonArray& inputsArray) {
 
         if (importInputFromJSON(inputObj, idx)) {
             importedCount++;
+            msg.debug.print(F("[IMPORT] Successfully imported input "));
+            msg.debug.println(idx);
+        } else {
+            msg.debug.print(F("[IMPORT] Failed to import input "));
+            msg.debug.println(idx);
         }
     }
+
+    msg.debug.print(F("[IMPORT] Import complete: "));
+    msg.debug.print(importedCount);
+    msg.debug.print(F(" of "));
+    msg.debug.print(totalInputs);
+    msg.debug.println(F(" inputs imported"));
 
     numActiveInputs = importedCount;
     return importedCount > 0;
