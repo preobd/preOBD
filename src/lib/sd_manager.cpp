@@ -8,7 +8,7 @@
 
 #include "../config.h"
 
-#if defined(ENABLE_SDLOG) || defined(ENABLE_JSON_CONFIG)
+#if defined(ENABLE_SD_LOGGING) || defined(ENABLE_JSON_CONFIG)
 
 #include "sd_manager.h"
 #include "system_config.h"
@@ -79,4 +79,4 @@ bool isSDInitialized() {
     return sdInitialized;
 }
 
-#endif // ENABLE_SDLOG || ENABLE_JSON_CONFIG
+#endif // ENABLE_SD_LOGGING || ENABLE_JSON_CONFIG
