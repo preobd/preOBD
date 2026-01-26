@@ -26,14 +26,10 @@ static uint32_t silenceStartTime = 0;    // When was silence button pressed?
 // ===== INITIALIZATION =====
 
 void initAlarmOutput() {
-    // Configure buzzer output pin (with conflict check)
-    if (validateNoPinConflict(BUZZER, PIN_OUTPUT, "Alarm Buzzer")) {
-        registerPin(BUZZER, PIN_OUTPUT, "Alarm Buzzer");
-        pinMode(BUZZER, OUTPUT);
-        noTone(BUZZER);  // Ensure buzzer is off initially
-    } else {
-        msg.debug.println(F("⚠ Buzzer pin conflict - skipping"));
-    }
+    // Configure buzzer output pin
+    // Note: Pin is already registered in registerSystemPins() as PIN_BUZZER
+    pinMode(BUZZER, OUTPUT);
+    noTone(BUZZER);  // Ensure buzzer is off initially
 
     // Configure silence button with internal pullup
     // Button is active LOW (pulls pin to GND when pressed)
