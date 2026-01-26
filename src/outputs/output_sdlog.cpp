@@ -11,14 +11,13 @@
 
 #ifdef ENABLE_SD_LOGGING
 
-// Suppress SdFat warning about FS.h conflict with Teensy's File class
-#define DISABLE_FS_H_WARNING
-#include <SdFat.h>
+// Use Arduino SD library for consistency across platforms
+#include <SD.h>
+#include "../lib/sd_manager.h"
 
-// Use shared SD object from sd_manager
-extern SdFat SD;
+// SD object is provided globally by SD.h
 
-FsFile logFile;
+File logFile;
 unsigned long lastLogTime = 0;
 const unsigned long LOG_INTERVAL = 1000;  // Log every 1 second
 
@@ -26,7 +25,7 @@ void initSDLog() {
     // SD card is already initialized by initSD() in main setup()
     // Just check if it's available and create log file
 
-    if (SD.card() == nullptr || SD.card()->type() == 0) {
+    if (!isSDInitialized()) {
         msg.debug.println(F("⚠ SD logging failed - SD card not initialized"));
         return;
     }

@@ -24,12 +24,11 @@
 #include "pin_registry.h"
 #include "watchdog.h"
 
-// Suppress SdFat warning about FS.h conflict with Teensy's File class
-#define DISABLE_FS_H_WARNING
-#include <SdFat.h>
+// Use Arduino SD library for consistency across platforms
+#include <SD.h>
+#include "sd_manager.h"
 
-// Use shared SD object from sd_manager
-extern SdFat SD;
+// SD object is provided globally by SD.h
 
 // External references
 extern Input inputs[MAX_INPUTS];
@@ -646,34 +645,20 @@ bool saveConfigToSD(const char* filename) {
     msg.debug.println(F("[SD_SAVE] Starting save operation"));
 
     // Check if SD card is initialized (done in main setup)
-    if (SD.card() == nullptr || SD.card()->type() == 0) {
+    if (!isSDInitialized()) {
         msg.control.println(F("ERROR: SD card not initialized"));
         msg.debug.println(F("[SD_SAVE] SD card not available"));
         return false;
     }
 
-    // Diagnostic: Check SD card status
-    if (SD.card() != nullptr) {
-        msg.debug.print(F("[SD_SAVE] Card type: "));
-        msg.debug.println(SD.card()->type());
-        if (SD.vol() != nullptr) {
-            msg.debug.print(F("[SD_SAVE] Volume type: FAT"));
-            msg.debug.println(SD.vol()->fatType());
-            msg.debug.print(F("[SD_SAVE] Cluster size: "));
-            msg.debug.println(SD.vol()->bytesPerCluster());
-        }
-    }
+    msg.debug.println(F("[SD_SAVE] SD card is ready"));
 
     // Create config directory if it doesn't exist
     msg.debug.println(F("[SD_SAVE] Checking for config directory"));
     if (!SD.exists("config")) {
         msg.debug.println(F("[SD_SAVE] Creating config directory"));
         if (!SD.mkdir("config")) {
-            msg.debug.println(F("[SD_SAVE] mkdir failed, checking errorCode"));
-            msg.debug.print(F("[SD_SAVE] SD error: "));
-            msg.debug.println(SD.sdErrorCode(), HEX);
-            msg.debug.print(F("[SD_SAVE] SD error data: "));
-            msg.debug.println(SD.sdErrorData(), HEX);
+            msg.debug.println(F("[SD_SAVE] Failed to create config directory"));
         } else {
             msg.debug.println(F("[SD_SAVE] config directory created"));
         }
@@ -708,15 +693,9 @@ bool saveConfigToSD(const char* filename) {
     }
 
     // Open file for writing
-    FsFile configFile = SD.open(filepath, FILE_WRITE);
+    File configFile = SD.open(filepath, FILE_WRITE);
     if (!configFile) {
-        msg.debug.println(F("[SD_SAVE] Failed to open, checking error"));
-        msg.debug.print(F("[SD_SAVE] SD error: "));
-        msg.debug.println(SD.sdErrorCode(), HEX);
-        msg.debug.print(F("[SD_SAVE] SD error data: "));
-        msg.debug.println(SD.sdErrorData(), HEX);
-    }
-    if (!configFile) {
+        msg.debug.println(F("[SD_SAVE] Failed to open file for writing"));
         msg.control.print(F("ERROR: Failed to open file: "));
         msg.control.println(filepath);
         msg.debug.println(F("[SD_SAVE] File open FAILED"));
@@ -755,7 +734,7 @@ bool loadConfigFromSD(const char* filename) {
     msg.debug.println(F("[SD_LOAD] Starting load operation"));
 
     // Check if SD card is initialized (done in main setup)
-    if (SD.card() == nullptr || SD.card()->type() == 0) {
+    if (!isSDInitialized()) {
         msg.control.println(F("ERROR: SD card not initialized"));
         msg.debug.println(F("[SD_LOAD] SD card not available"));
         return false;
@@ -779,7 +758,7 @@ bool loadConfigFromSD(const char* filename) {
     msg.debug.println(filepath);
 
     // Open file for reading
-    FsFile configFile = SD.open(filepath, FILE_READ);
+    File configFile = SD.open(filepath, FILE_READ);
     if (!configFile) {
         msg.control.print(F("ERROR: Failed to open file: "));
         msg.control.println(filepath);

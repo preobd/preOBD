@@ -11,18 +11,15 @@
 #include "message_api.h"
 #include "watchdog.h"
 #include <SPI.h>
+#include <SD.h>
 
-// Suppress SdFat warning about FS.h conflict with Teensy's File class
-#define DISABLE_FS_H_WARNING
-#include <SdFat.h>
+// Use Arduino SD library across all platforms for consistency
+// SD object is provided globally by SD.h
 
 // Define BUILTIN_SDCARD if not already defined (for Teensy 4.x)
 #ifndef BUILTIN_SDCARD
     #define BUILTIN_SDCARD 254
 #endif
-
-// Global SD object - shared by all SD card users
-SdFat SD;
 
 // Track if SD has been successfully initialized
 static bool sdInitialized = false;
@@ -34,26 +31,22 @@ static bool sdInitialized = false;
 void initSD() {
     msg.debug.println(F("[SD] Initializing SD card..."));
 
-    // Extend watchdog timeout - SD.begin() can take >2 seconds with some cards
+    // Extend watchdog timeout - multiple SD.begin() attempts can take >10 seconds total
     // Note: Teensy 4.x cannot disable watchdog, only extend timeout
-    watchdogEnable(10000);
+    // With 5 retry attempts, each potentially taking 2-3 seconds, we need at least 15 seconds
+    watchdogEnable(20000);  // 20 second timeout
 
     bool initSuccess = false;
 
     if (systemConfig.sdCSPin == 254) {
-        // Teensy 4.1 built-in SD card uses SPI1
-        msg.debug.println(F("[SD] Using Teensy built-in SD (BUILTIN_SDCARD)"));
-
-#if defined(__IMXRT1062__)  // Teensy 4.x
-        // Initialize SPI1 for built-in SD (SdFat will use it automatically)
-        SPI1.begin();
-        msg.debug.println(F("[SD] SPI1 initialized for built-in SD"));
-#endif
-
+        // Teensy 4.1 built-in SD uses 4-bit SDIO interface
+        // Other platforms may use this as a special pin designation
+        msg.debug.println(F("[SD] Using built-in SD (BUILTIN_SDCARD)"));
+        msg.debug.println(F("[SD] Calling SD.begin(BUILTIN_SDCARD)..."));
         delay(100);  // Let hardware stabilize
         initSuccess = SD.begin(BUILTIN_SDCARD);
     } else {
-        // External SD card uses main SPI bus
+        // External SD card uses SPI with specified CS pin
         pinMode(systemConfig.sdCSPin, OUTPUT);
         msg.debug.print(F("[SD] Using external SD, CS Pin: "));
         msg.debug.println(systemConfig.sdCSPin);
@@ -66,20 +59,11 @@ void initSD() {
 
     if (initSuccess) {
         msg.debug.println(F("[SD] ✓ SD card initialized successfully"));
-
-        // Print card info
-        if (SD.card() != nullptr) {
-            msg.debug.print(F("[SD] Card type: "));
-            msg.debug.println(SD.card()->type());
-            if (SD.vol() != nullptr) {
-                msg.debug.print(F("[SD] Volume: FAT"));
-                msg.debug.println(SD.vol()->fatType());
-            }
-        }
-
+        msg.debug.println(F("[SD] Card detected and ready"));
         sdInitialized = true;
     } else {
         msg.debug.println(F("[SD] ⚠ SD card initialization failed"));
+        msg.debug.println(F("[SD] Check: Is SD card inserted? Is it formatted FAT32?"));
         sdInitialized = false;
     }
 }
