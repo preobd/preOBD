@@ -9,6 +9,8 @@
 #include "sd_manager.h"
 #include "system_config.h"
 #include "message_api.h"
+#include "watchdog.h"
+#include <SPI.h>
 
 // Suppress SdFat warning about FS.h conflict with Teensy's File class
 #define DISABLE_FS_H_WARNING
@@ -32,19 +34,35 @@ static bool sdInitialized = false;
 void initSD() {
     msg.debug.println(F("[SD] Initializing SD card..."));
 
+    // Extend watchdog timeout - SD.begin() can take >2 seconds with some cards
+    // Note: Teensy 4.x cannot disable watchdog, only extend timeout
+    watchdogEnable(10000);
+
     bool initSuccess = false;
 
     if (systemConfig.sdCSPin == 254) {
-        // Teensy 4.1 built-in SD card
+        // Teensy 4.1 built-in SD card uses SPI1
         msg.debug.println(F("[SD] Using Teensy built-in SD (BUILTIN_SDCARD)"));
+
+#if defined(__IMXRT1062__)  // Teensy 4.x
+        // Initialize SPI1 for built-in SD (SdFat will use it automatically)
+        SPI1.begin();
+        msg.debug.println(F("[SD] SPI1 initialized for built-in SD"));
+#endif
+
+        delay(100);  // Let hardware stabilize
         initSuccess = SD.begin(BUILTIN_SDCARD);
     } else {
-        // External SD card
+        // External SD card uses main SPI bus
         pinMode(systemConfig.sdCSPin, OUTPUT);
         msg.debug.print(F("[SD] Using external SD, CS Pin: "));
         msg.debug.println(systemConfig.sdCSPin);
+        delay(100);  // Let hardware stabilize
         initSuccess = SD.begin(systemConfig.sdCSPin);
     }
+
+    // Restore normal watchdog timeout
+    watchdogEnable(2000);
 
     if (initSuccess) {
         msg.debug.println(F("[SD] ✓ SD card initialized successfully"));
