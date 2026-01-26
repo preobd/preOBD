@@ -12,7 +12,11 @@
 #include "lib/watchdog.h"
 
 #include "lib/sensor_types.h"
+#ifdef USE_STATIC_CONFIG
+#include "lib/generated/sensor_library_static.h"
+#else
 #include "lib/sensor_library.h"
+#endif
 #include "lib/system_config.h"
 #include "lib/bus_manager.h"
 #include "lib/serial_manager.h"
