@@ -13,12 +13,6 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// Include SdFat config for BUILTIN_SDCARD definition (Teensy)
-// Only needed when SD logging is enabled
-#ifdef ENABLE_SD_LOGGING
-    #include <SdFatConfig.h>
-#endif
-
 // ============================================================================
 // HARDWARE PIN ASSIGNMENTS
 // ============================================================================

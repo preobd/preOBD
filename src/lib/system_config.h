@@ -119,5 +119,4 @@ uint8_t calculateChecksum(SystemConfig* cfg);
 void printSystemStatus();
 void registerSystemPins();       // Register system pins in pin registry
 
-
 #endif // SYSTEM_CONFIG_H
