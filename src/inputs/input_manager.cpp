@@ -1010,8 +1010,8 @@ bool setInputAlarmRange(uint8_t pin, float minValue, float maxValue) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
 
-    // Validate range
-    if (minValue >= maxValue) {
+    // Validate range (allow both to be 0 for disabled alarms)
+    if (minValue >= maxValue && !(minValue == 0 && maxValue == 0)) {
         msg.control.print(F("ERROR: Min alarm ("));
         msg.control.print(minValue);
         msg.control.print(F(") must be less than max alarm ("));
