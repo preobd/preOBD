@@ -22,18 +22,14 @@
 #include "../version.h"
 #include "message_api.h"
 #include "pin_registry.h"
+#include "watchdog.h"
 
 // Suppress SdFat warning about FS.h conflict with Teensy's File class
 #define DISABLE_FS_H_WARNING
 #include <SdFat.h>
 
-// SD object: Shared with output_sdlog.cpp if SD logging is enabled
-// If SD logging is not enabled, we define it here for JSON config use
-#ifndef ENABLE_SD_LOGGING
-    SdFat SD;
-#else
-    extern SdFat SD;  // Defined in output_sdlog.cpp
-#endif
+// Use shared SD object from sd_manager
+extern SdFat SD;
 
 // External references
 extern Input inputs[MAX_INPUTS];
@@ -647,95 +643,190 @@ bool loadConfigFromJSON(const char* jsonString) {
 
 // Save configuration to SD card
 bool saveConfigToSD(const char* filename) {
-    pinMode(systemConfig.sdCSPin, OUTPUT);
-    digitalWrite(systemConfig.sdCSPin, LOW);
+    msg.debug.println(F("[SD_SAVE] Starting save operation"));
 
-    if (!SD.begin(systemConfig.sdCSPin)) {
-        msg.control.println(F("ERROR: SD card initialization failed"));
+    // Check if SD card is initialized (done in main setup)
+    if (SD.card() == nullptr || SD.card()->type() == 0) {
+        msg.control.println(F("ERROR: SD card not initialized"));
+        msg.debug.println(F("[SD_SAVE] SD card not available"));
         return false;
     }
 
+    // Diagnostic: Check SD card status
+    if (SD.card() != nullptr) {
+        msg.debug.print(F("[SD_SAVE] Card type: "));
+        msg.debug.println(SD.card()->type());
+        if (SD.vol() != nullptr) {
+            msg.debug.print(F("[SD_SAVE] Volume type: FAT"));
+            msg.debug.println(SD.vol()->fatType());
+            msg.debug.print(F("[SD_SAVE] Cluster size: "));
+            msg.debug.println(SD.vol()->bytesPerCluster());
+        }
+    }
+
     // Create config directory if it doesn't exist
-    if (!SD.exists("/config")) {
-        SD.mkdir("/config");
+    msg.debug.println(F("[SD_SAVE] Checking for config directory"));
+    if (!SD.exists("config")) {
+        msg.debug.println(F("[SD_SAVE] Creating config directory"));
+        if (!SD.mkdir("config")) {
+            msg.debug.println(F("[SD_SAVE] mkdir failed, checking errorCode"));
+            msg.debug.print(F("[SD_SAVE] SD error: "));
+            msg.debug.println(SD.sdErrorCode(), HEX);
+            msg.debug.print(F("[SD_SAVE] SD error data: "));
+            msg.debug.println(SD.sdErrorData(), HEX);
+        } else {
+            msg.debug.println(F("[SD_SAVE] config directory created"));
+        }
+    } else {
+        msg.debug.println(F("[SD_SAVE] config directory exists"));
     }
 
     // Generate filename if not provided
     char filepath[32];
     if (filename == nullptr) {
-        snprintf(filepath, sizeof(filepath), "/config/backup_%lu.json", getCurrentTimestamp());
+        snprintf(filepath, sizeof(filepath), "config/backup_%lu.json", getCurrentTimestamp());
     } else {
-        // Ensure filename is in /config directory
+        // Ensure filename is in config directory (without leading slash)
         if (filename[0] == '/') {
-            strncpy(filepath, filename, sizeof(filepath) - 1);
+            // Remove leading slash
+            snprintf(filepath, sizeof(filepath), "config%s", filename);
         } else {
-            snprintf(filepath, sizeof(filepath), "/config/%s", filename);
+            snprintf(filepath, sizeof(filepath), "config/%s", filename);
         }
     }
     filepath[sizeof(filepath) - 1] = '\0';
 
+    msg.debug.print(F("[SD_SAVE] Opening file: "));
+    msg.debug.println(filepath);
+
+    // If file exists, remove it first (FILE_WRITE appends, we want to replace)
+    if (SD.exists(filepath)) {
+        msg.debug.println(F("[SD_SAVE] File exists, removing"));
+        if (!SD.remove(filepath)) {
+            msg.debug.println(F("[SD_SAVE] Failed to remove existing file"));
+        }
+    }
+
     // Open file for writing
     FsFile configFile = SD.open(filepath, FILE_WRITE);
     if (!configFile) {
+        msg.debug.println(F("[SD_SAVE] Failed to open, checking error"));
+        msg.debug.print(F("[SD_SAVE] SD error: "));
+        msg.debug.println(SD.sdErrorCode(), HEX);
+        msg.debug.print(F("[SD_SAVE] SD error data: "));
+        msg.debug.println(SD.sdErrorData(), HEX);
+    }
+    if (!configFile) {
         msg.control.print(F("ERROR: Failed to open file: "));
         msg.control.println(filepath);
+        msg.debug.println(F("[SD_SAVE] File open FAILED"));
+        // Re-enable watchdog before returning
+        watchdogEnable(2000);
+        msg.debug.println(F("[SD_SAVE] Watchdog re-enabled"));
         return false;
     }
+
+    msg.debug.println(F("[SD_SAVE] File opened successfully"));
+
+    msg.debug.println(F("[SD_SAVE] Writing JSON..."));
 
     // Write JSON to file
     dumpConfigToJSON(configFile);
 
-    configFile.close();
-    digitalWrite(systemConfig.sdCSPin, HIGH);
+    msg.debug.println(F("[SD_SAVE] JSON write complete"));
 
+    msg.debug.println(F("[SD_SAVE] Closing file..."));
+    configFile.close();
+    msg.debug.println(F("[SD_SAVE] File closed"));
+
+    // Re-enable watchdog after SD operations complete
+    watchdogEnable(2000);
+    msg.debug.println(F("[SD_SAVE] Watchdog re-enabled"));
 
     msg.control.print(F("Configuration saved to: "));
     msg.control.println(filepath);
+    msg.debug.println(F("[SD_SAVE] Save operation completed successfully"));
 
     return true;
 }
 
 // Load configuration from SD card
 bool loadConfigFromSD(const char* filename) {
-    pinMode(systemConfig.sdCSPin, OUTPUT);
-    digitalWrite(systemConfig.sdCSPin, LOW);
+    msg.debug.println(F("[SD_LOAD] Starting load operation"));
 
-    if (!SD.begin(systemConfig.sdCSPin)) {
-        msg.control.println(F("ERROR: SD card initialization failed"));
+    // Check if SD card is initialized (done in main setup)
+    if (SD.card() == nullptr || SD.card()->type() == 0) {
+        msg.control.println(F("ERROR: SD card not initialized"));
+        msg.debug.println(F("[SD_LOAD] SD card not available"));
         return false;
     }
 
-    // Construct full path
+    // Construct filename (strip paths, use root directory)
     char filepath[32];
+    const char* basename = filename;
     if (filename[0] == '/') {
-        strncpy(filepath, filename, sizeof(filepath) - 1);
-    } else {
-        snprintf(filepath, sizeof(filepath), "/config/%s", filename);
+        basename = filename + 1;
     }
+    // Skip any directory components
+    const char* slash = strrchr(basename, '/');
+    if (slash) {
+        basename = slash + 1;
+    }
+    strncpy(filepath, basename, sizeof(filepath) - 1);
     filepath[sizeof(filepath) - 1] = '\0';
+
+    msg.debug.print(F("[SD_LOAD] Opening file: "));
+    msg.debug.println(filepath);
 
     // Open file for reading
     FsFile configFile = SD.open(filepath, FILE_READ);
     if (!configFile) {
         msg.control.print(F("ERROR: Failed to open file: "));
         msg.control.println(filepath);
+        msg.debug.println(F("[SD_LOAD] File open FAILED"));
+        // Re-enable watchdog before returning
+        watchdogEnable(2000);
+        msg.debug.println(F("[SD_LOAD] Watchdog re-enabled"));
         return false;
     }
 
+    msg.debug.println(F("[SD_LOAD] File opened successfully"));
+
+    msg.debug.println(F("[SD_LOAD] Reading file..."));
+
     // Read entire file into string
     String jsonString;
+    size_t bytesRead = 0;
     while (configFile.available()) {
         jsonString += (char)configFile.read();
+        bytesRead++;
     }
+
+    msg.debug.print(F("[SD_LOAD] Read complete: "));
+    msg.debug.print(bytesRead);
+    msg.debug.println(F(" bytes total"));
+
+    msg.debug.println(F("[SD_LOAD] Closing file..."));
     configFile.close();
-    digitalWrite(systemConfig.sdCSPin, HIGH);
+    msg.debug.println(F("[SD_LOAD] File closed"));
+
+    msg.debug.println(F("[SD_LOAD] Parsing JSON..."));
 
     // Load configuration
     bool success = loadConfigFromJSON(jsonString.c_str());
 
+    msg.debug.println(F("[SD_LOAD] JSON parsing complete"));
+
+    // Re-enable watchdog after SD operations complete
+    watchdogEnable(2000);
+    msg.debug.println(F("[SD_LOAD] Watchdog re-enabled"));
+
     if (success) {
         msg.control.print(F("Configuration loaded from: "));
         msg.control.println(filepath);
+        msg.debug.println(F("[SD_LOAD] Load operation completed successfully"));
+    } else {
+        msg.debug.println(F("[SD_LOAD] Load operation FAILED"));
     }
 
     return success;

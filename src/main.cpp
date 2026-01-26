@@ -17,6 +17,7 @@
 #include "lib/bus_manager.h"
 #include "lib/serial_manager.h"
 #include "lib/pin_registry.h"
+#include "lib/sd_manager.h"
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
 #ifndef USE_STATIC_CONFIG
@@ -266,6 +267,9 @@ void setup() {
     // Initialize configured buses (I2C, SPI, CAN) based on SystemConfig
     // This replaces the old hardcoded Wire.begin() and SPI.begin() calls
     initConfiguredBuses();
+
+    // Initialize SD card (shared by SD logging and JSON config)
+    initSD();
 
     // Initialize input manager (loads from EEPROM or config.h)
 #ifndef USE_STATIC_CONFIG
