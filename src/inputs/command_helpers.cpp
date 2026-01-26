@@ -1,7 +1,13 @@
 /*
  * command_helpers.cpp - Helper functions and help system
  * Extracted from serial_config_old.cpp
+ *
+ * NOTE: Only compiled in EEPROM/runtime configuration mode (not in static mode)
  */
+
+#include "../config.h"
+
+#ifndef USE_STATIC_CONFIG
 
 #include "command_helpers.h"
 #include "../config.h"
@@ -965,3 +971,5 @@ void printHelpCategory(const char* category) {
         msg.control.println();
     }
 }
+
+#endif // USE_STATIC_CONFIG

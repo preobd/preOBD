@@ -1,6 +1,12 @@
 /*
  * command_table.cpp - Table-driven command dispatch implementation
+ *
+ * NOTE: Only compiled in EEPROM/runtime configuration mode (not in static mode)
  */
+
+#include "../config.h"
+
+#ifndef USE_STATIC_CONFIG
 
 #include "command_table.h"
 #include "command_helpers.h"
@@ -204,7 +210,7 @@ static int cmd_list(int argc, const char* const* argv) {
         listApplicationPresets();
     } else if (streq(argv[1], "SENSORS")) {
         // LIST SENSORS [category|filter]
-        const char* filter = (argc >= 3) ? argv[2] : nullptr;
+        const char* filter = (argc >= 3) ? argv[2] : NULL;
         listSensors(filter);
     } else if (streq(argv[1], "OUTPUTS")) {
         listOutputModules();
@@ -2293,3 +2299,5 @@ static int cmd_bus(int argc, const char* const* argv) {
     msg.control.println(F("  Valid: I2C, SPI, CAN, SERIAL"));
     return 1;
 }
+
+#endif // USE_STATIC_CONFIG
