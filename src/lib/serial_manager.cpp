@@ -304,7 +304,7 @@ void displaySerialStatus() {
         bool enabled = isSerialPortEnabled(&systemConfig.serial, port_id);
         uint8_t baud_idx = systemConfig.serial.baudrate_index[port_id - 1];
 
-        msg.control.print(F("  Serial"));
+        msg.control.print(F("Serial"));
         msg.control.print(port_id);
         msg.control.print(F(": "));
 
