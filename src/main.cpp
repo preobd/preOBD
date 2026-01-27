@@ -35,6 +35,7 @@
 // Transport abstraction layer
 #include "lib/message_router.h"
 #include "lib/message_api.h"
+#include "lib/log_tags.h"
 #include "lib/transport_serial.h"
 #ifdef ESP32
 // Include appropriate Bluetooth transport for ESP32 variant
@@ -245,28 +246,28 @@ void setup() {
 #ifdef ESP32
     if (btESP32.begin()) {
         router.registerTransport(TRANSPORT_ESP32_BT, &btESP32);
-        msg.debug.println(F("✓ ESP32 Bluetooth initialized"));
+        msg.debug.info(TAG_BT, "ESP32 Bluetooth initialized");
     } else {
-        msg.debug.println(F("⚠ ESP32 Bluetooth failed to initialize"));
+        msg.debug.warn(TAG_BT, "ESP32 Bluetooth failed to initialize");
     }
 #endif
     router.begin();  // Load config from EEPROM
 
-    msg.debug.println(F("                                        "));
-    msg.debug.println(F("                       ______  _______  "));
-    msg.debug.println(F("   ___  ___  ___ ___  / __/  |/  / __/  "));
-    msg.debug.println(F("  / _ \\/ _ \\/ -_) _ \\/ _// /|_/ /\\ \\    "));
-    msg.debug.println(F("  \\___/ .__/\\__/_//_/___/_/  /_/___/    "));
-    msg.debug.println(F("     /_/                                "));
-    msg.debug.println(F("                                        "));
-    msg.debug.println(F("openEngine Monitoring System ==========="));
-    msg.debug.print("Firmware version ");
-    msg.debug.println(FIRMWARE_VERSION);
-    msg.debug.println(F("                                        "));
+    msg.control.println(F("                                        "));
+    msg.control.println(F("                       ______  _______  "));
+    msg.control.println(F("   ___  ___  ___ ___  / __/  |/  / __/  "));
+    msg.control.println(F("  / _ \\/ _ \\/ -_) _ \\/ _// /|_/ /\\ \\    "));
+    msg.control.println(F("  \\___/ .__/\\__/_//_/___/_/  /_/___/    "));
+    msg.control.println(F("     /_/                                "));
+    msg.control.println(F("                                        "));
+    msg.control.println(F("openEngine Monitoring System ==========="));
+    msg.control.print(F("Firmware version "));
+    msg.control.println(FIRMWARE_VERSION);
+    msg.control.println(F("                                        "));
 
     // Configure ADC for this platform
     setupADC();
-    msg.debug.println(F("✓ ADC configured"));
+    msg.debug.info(TAG_ADC, "ADC configured");
 
     // Initialize configured buses (I2C, SPI, CAN) based on SystemConfig
     // This replaces the old hardcoded Wire.begin() and SPI.begin() calls
@@ -301,7 +302,7 @@ void setup() {
 
     // Wait for sensors to stabilize
     msg.debug.println(F(""));
-    msg.debug.println(F("Waiting for sensors to stabilize..."));
+    msg.debug.info(TAG_SENSOR, "Waiting for sensors to stabilize...");
     delay(1000);  // Increased from 500ms - MAX6675 needs ~220ms for first conversion
 
     // Initialize per-sensor read timers (all start at 0)
@@ -311,22 +312,14 @@ void setup() {
 
     msg.debug.println(F(""));
     msg.debug.println(F("========================================"));
-    msg.debug.println(F("  Initialization complete!"));
+    msg.debug.info(TAG_SYSTEM, "Initialization complete!");
 #ifdef USE_STATIC_CONFIG
-    msg.debug.println(F("  Mode: Compile-Time Config"));
-    msg.debug.print(F("  Active inputs: "));
-    msg.debug.println(numActiveInputs);
-    msg.debug.print(F("  System voltage: "));
-    msg.debug.print(SYSTEM_VOLTAGE);
-    msg.debug.println(F("V"));
-    msg.debug.print(F("  ADC reference: "));
-    msg.debug.print(AREF_VOLTAGE);
-    msg.debug.println(F("V"));
-    msg.debug.print(F("  ADC resolution: "));
-    msg.debug.print(ADC_RESOLUTION);
-    msg.debug.println(F(" bits"));
-    msg.debug.print(F("  ADC max value: "));
-    msg.debug.println(ADC_MAX_VALUE);
+    msg.debug.info(TAG_CONFIG, "Mode: Compile-Time Config");
+    msg.debug.info(TAG_CONFIG, "Active inputs: %d", numActiveInputs);
+    msg.debug.info(TAG_CONFIG, "System voltage: %.1fV", SYSTEM_VOLTAGE);
+    msg.debug.info(TAG_CONFIG, "ADC reference: %.2fV", AREF_VOLTAGE);
+    msg.debug.info(TAG_CONFIG, "ADC resolution: %d bits", ADC_RESOLUTION);
+    msg.debug.info(TAG_CONFIG, "ADC max value: %d", ADC_MAX_VALUE);
     msg.debug.println(F("========================================"));
     msg.debug.println(F(""));
 #else
@@ -345,7 +338,7 @@ void setup() {
     if (digitalRead(TEST_MODE_TRIGGER_PIN) == LOW) {
         msg.debug.println(F(""));
         msg.debug.println(F("========================================"));
-        msg.debug.println(F("  TEST MODE TRIGGER DETECTED!"));
+        msg.debug.info(TAG_SYSTEM, "TEST MODE TRIGGER DETECTED!");
         msg.debug.println(F("========================================"));
         msg.debug.println(F(""));
 
@@ -356,13 +349,11 @@ void setup() {
         #if DEFAULT_TEST_SCENARIO != 0xFF
         startTestScenario(DEFAULT_TEST_SCENARIO);
         #else
-        msg.debug.println(F("Test mode initialized but no default scenario set."));
-        msg.debug.println(F("Use serial commands to start a scenario."));
+        msg.debug.info(TAG_SYSTEM, "Test mode initialized but no default scenario set.");
+        msg.debug.info(TAG_SYSTEM, "Use serial commands to start a scenario.");
         #endif
     } else {
-        msg.debug.print(F("Test mode available (pin "));
-        msg.debug.print(TEST_MODE_TRIGGER_PIN);
-        msg.debug.println(F(" is HIGH, normal operation)"));
+        msg.debug.info(TAG_SYSTEM, "Test mode available (pin %d is HIGH, normal operation)", TEST_MODE_TRIGGER_PIN);
     }
 #endif
 
@@ -378,14 +369,14 @@ void setup() {
     // Only enable watchdog in RUN mode (CONFIG mode doesn't need it)
     if (bootMode == MODE_RUN) {
         watchdogEnable(2000);
-        msg.debug.println(F("Watchdog enabled (2s timeout)"));
+        msg.debug.info(TAG_SYSTEM, "Watchdog enabled (2s timeout)");
     } else {
-        msg.debug.println(F("Watchdog disabled (CONFIG mode)"));
+        msg.debug.info(TAG_SYSTEM, "Watchdog disabled (CONFIG mode)");
     }
 #else
     // Always enable watchdog in static config mode
     watchdogEnable(2000);
-    msg.debug.println(F("Watchdog enabled (2s timeout)"));
+    msg.debug.info(TAG_SYSTEM, "Watchdog enabled (2s timeout)");
 #endif
 }
 

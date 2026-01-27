@@ -18,6 +18,8 @@
 #include "../lib/json_config.h"
 #include "../lib/message_router.h"
 #include "../lib/message_api.h"
+#include "../lib/log_filter.h"
+#include "../lib/log_tags.h"
 #include "../lib/units_registry.h"
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
@@ -62,6 +64,7 @@ static int cmd_run(int argc, const char* const* argv);
 static int cmd_version(int argc, const char* const* argv);
 static int cmd_reboot(int argc, const char* const* argv);
 static int cmd_bus(int argc, const char* const* argv);
+static int cmd_log(int argc, const char* const* argv);
 #ifdef ENABLE_RELAY_OUTPUT
 static int cmd_relay(int argc, const char* const* argv);
 #endif
@@ -112,6 +115,7 @@ const Command COMMANDS[] = {
     {"LOAD", cmd_load, "Load configuration", true},
     {"REBOOT", cmd_reboot, "", true},  // Undocumented alias for SYSTEM REBOOT
     {"BUS", cmd_bus, "Configure I2C/SPI/CAN buses", true},
+    {"LOG", cmd_log, "Configure log levels and tags", false},
 
 #ifdef ENABLE_RELAY_OUTPUT
     {"RELAY", cmd_relay, "Configure relay outputs", true},
@@ -133,6 +137,7 @@ bool isReadOnlyCommand(const char* cmdName) {
            streq(cmdName, "CONFIG") ||
            streq(cmdName, "RUN") ||
            streq(cmdName, "SYSTEM") ||  // Allow SYSTEM STATUS and SYSTEM DUMP in RUN mode
+           streq(cmdName, "LOG") ||     // Allow LOG STATUS, LOG TAGS in RUN mode (LEVEL/TAG require CONFIG)
 #ifdef ENABLE_TEST_MODE
            streq(cmdName, "TEST") ||
 #endif
@@ -2297,6 +2302,226 @@ static int cmd_bus(int argc, const char* const* argv) {
     msg.control.print(busType);
     msg.control.println(F("'"));
     msg.control.println(F("  Valid: I2C, SPI, CAN, SERIAL"));
+    return 1;
+}
+
+// ===== LOG COMMAND =====
+// Configure log filtering (levels and tags)
+// Available in both CONFIG and RUN modes (STATUS/TAGS are read-only, LEVEL/TAG modify config)
+static int cmd_log(int argc, const char* const* argv) {
+    if (argc < 2) {
+        msg.control.println(F("Usage: LOG <subcommand>"));
+        msg.control.println(F("  LOG STATUS              - Show current log configuration"));
+        msg.control.println(F("  LOG TAGS                - List all available tags"));
+        msg.control.println(F("  LOG LEVEL <plane> <lvl> - Set log level for plane"));
+        msg.control.println(F("  LOG TAG <tag> <state>   - Enable/disable a tag"));
+        msg.control.println();
+        msg.control.println(F("Examples:"));
+        msg.control.println(F("  LOG LEVEL DEBUG INFO    - Show INFO and above on debug plane"));
+        msg.control.println(F("  LOG TAG SD DISABLE      - Hide all SD card messages"));
+        msg.control.println(F("  LOG TAG ALL ENABLE      - Enable all tags"));
+        return 1;
+    }
+
+    // Convert subcommand to uppercase
+    char subcmd[16];
+    strncpy(subcmd, argv[1], sizeof(subcmd) - 1);
+    subcmd[sizeof(subcmd) - 1] = '\0';
+    for (char* p = subcmd; *p; p++) *p = toupper(*p);
+
+    // LOG STATUS - show current configuration
+    if (streq(subcmd, "STATUS")) {
+        msg.control.println();
+        msg.control.println(F("========================================"));
+        msg.control.println(F("  Log Filter Status"));
+        msg.control.println(F("========================================"));
+
+        // Show log levels for each plane
+        msg.control.println(F("Log Levels:"));
+        const char* planeNames[] = {"CONTROL", "DATA", "DEBUG"};
+        for (int i = 0; i < 3; i++) {
+            msg.control.print(F("  "));
+            msg.control.print(planeNames[i]);
+            msg.control.print(F(": "));
+            LogLevel level = router.getLogFilter().getLevel(i);
+            msg.control.println(router.getLogFilter().getLevelName(level));
+        }
+
+        msg.control.println();
+        msg.control.println(F("Enabled Tags:"));
+
+        // List enabled tags
+        bool anyEnabled = false;
+        for (uint8_t i = 0; i < NUM_LOG_TAGS; i++) {
+            if (router.getLogFilter().isTagEnabled(i)) {
+                const char* tagName = getTagName(i);
+                if (tagName) {
+                    msg.control.print(F("  "));
+                    msg.control.println(tagName);
+                    anyEnabled = true;
+                }
+            }
+        }
+
+        if (!anyEnabled) {
+            msg.control.println(F("  (none)"));
+        }
+
+        msg.control.println(F("========================================"));
+        msg.control.println();
+        return 0;
+    }
+
+    // LOG TAGS - list all available tags with status
+    if (streq(subcmd, "TAGS")) {
+        msg.control.println();
+        msg.control.println(F("========================================"));
+        msg.control.println(F("  Available Log Tags"));
+        msg.control.println(F("========================================"));
+
+        for (uint8_t i = 0; i < NUM_LOG_TAGS; i++) {
+            const char* tagName = getTagName(i);
+            if (tagName) {
+                bool enabled = router.getLogFilter().isTagEnabled(i);
+                msg.control.print(F("  "));
+                msg.control.print(tagName);
+                msg.control.print(F(": "));
+                msg.control.println(enabled ? F("ENABLED") : F("DISABLED"));
+            }
+        }
+
+        msg.control.println(F("========================================"));
+        msg.control.println();
+        return 0;
+    }
+
+    // LOG LEVEL <plane> <level> - set log level
+    if (streq(subcmd, "LEVEL")) {
+        if (argc < 4) {
+            msg.control.println(F("ERROR: LEVEL requires plane and level"));
+            msg.control.println(F("  Usage: LOG LEVEL <CONTROL|DATA|DEBUG> <NONE|ERROR|WARN|INFO|DEBUG>"));
+            msg.control.println(F("  Examples:"));
+            msg.control.println(F("    LOG LEVEL DEBUG ERROR  - Only show errors on debug plane"));
+            msg.control.println(F("    LOG LEVEL DEBUG INFO   - Show INFO and above (INFO, WARN, ERROR)"));
+            msg.control.println(F("    LOG LEVEL DEBUG DEBUG  - Show all messages (maximum verbosity)"));
+            return 1;
+        }
+
+        // Parse plane name
+        char planeName[16];
+        strncpy(planeName, argv[2], sizeof(planeName) - 1);
+        planeName[sizeof(planeName) - 1] = '\0';
+        for (char* p = planeName; *p; p++) *p = toupper(*p);
+
+        int plane = -1;
+        if (streq(planeName, "CONTROL")) plane = PLANE_CONTROL;
+        else if (streq(planeName, "DATA")) plane = PLANE_DATA;
+        else if (streq(planeName, "DEBUG")) plane = PLANE_DEBUG;
+        else {
+            msg.control.print(F("ERROR: Unknown plane '"));
+            msg.control.print(planeName);
+            msg.control.println(F("'"));
+            msg.control.println(F("  Valid planes: CONTROL, DATA, DEBUG"));
+            return 1;
+        }
+
+        // Parse level name
+        LogLevel level = router.getLogFilter().parseLevelName(argv[3]);
+        if (level == LOG_LEVEL_NONE && !streq(argv[3], "NONE") && !streq(argv[3], "none")) {
+            msg.control.print(F("ERROR: Unknown level '"));
+            msg.control.print(argv[3]);
+            msg.control.println(F("'"));
+            msg.control.println(F("  Valid levels: NONE, ERROR, WARN, INFO, DEBUG"));
+            return 1;
+        }
+
+        // Set the level
+        router.getLogFilter().setLevel(plane, level);
+
+        msg.control.print(F("✓ "));
+        msg.control.print(planeName);
+        msg.control.print(F(" plane log level set to "));
+        msg.control.println(router.getLogFilter().getLevelName(level));
+        msg.control.println(F("  Use SAVE to persist this setting"));
+        return 0;
+    }
+
+    // LOG TAG <tag> <ENABLE|DISABLE> - enable/disable tag
+    if (streq(subcmd, "TAG")) {
+        if (argc < 4) {
+            msg.control.println(F("ERROR: TAG requires tag name and state"));
+            msg.control.println(F("  Usage: LOG TAG <tagname> <ENABLE|DISABLE>"));
+            msg.control.println(F("         LOG TAG ALL <ENABLE|DISABLE>"));
+            msg.control.println(F("  Examples:"));
+            msg.control.println(F("    LOG TAG SD DISABLE     - Hide SD card messages"));
+            msg.control.println(F("    LOG TAG BME280 ENABLE  - Show BME280 sensor messages"));
+            msg.control.println(F("    LOG TAG ALL ENABLE     - Enable all tags"));
+            msg.control.println(F("  Use 'LOG TAGS' to see all available tags"));
+            return 1;
+        }
+
+        // Parse state
+        char stateName[16];
+        strncpy(stateName, argv[3], sizeof(stateName) - 1);
+        stateName[sizeof(stateName) - 1] = '\0';
+        for (char* p = stateName; *p; p++) *p = toupper(*p);
+
+        bool enable;
+        if (streq(stateName, "ENABLE")) enable = true;
+        else if (streq(stateName, "DISABLE")) enable = false;
+        else {
+            msg.control.print(F("ERROR: Unknown state '"));
+            msg.control.print(stateName);
+            msg.control.println(F("'"));
+            msg.control.println(F("  Valid states: ENABLE, DISABLE"));
+            return 1;
+        }
+
+        // Check for ALL keyword
+        char tagName[16];
+        strncpy(tagName, argv[2], sizeof(tagName) - 1);
+        tagName[sizeof(tagName) - 1] = '\0';
+        for (char* p = tagName; *p; p++) *p = toupper(*p);
+
+        if (streq(tagName, "ALL")) {
+            if (enable) {
+                router.getLogFilter().enableAllTags();
+                msg.control.println(F("✓ All tags enabled"));
+            } else {
+                router.getLogFilter().disableAllTags();
+                msg.control.println(F("✓ All tags disabled"));
+            }
+            msg.control.println(F("  Use SAVE to persist this setting"));
+            return 0;
+        }
+
+        // Look up tag ID
+        uint8_t tagId = getTagID(argv[2]);
+        if (tagId >= NUM_LOG_TAGS) {
+            msg.control.print(F("ERROR: Unknown tag '"));
+            msg.control.print(argv[2]);
+            msg.control.println(F("'"));
+            msg.control.println(F("  Use 'LOG TAGS' to see all available tags"));
+            return 1;
+        }
+
+        // Enable/disable the tag
+        router.getLogFilter().enableTag(tagId, enable);
+
+        msg.control.print(F("✓ Tag "));
+        msg.control.print(getTagName(tagId));
+        msg.control.print(F(" "));
+        msg.control.println(enable ? F("enabled") : F("disabled"));
+        msg.control.println(F("  Use SAVE to persist this setting"));
+        return 0;
+    }
+
+    // Unknown subcommand
+    msg.control.print(F("ERROR: Unknown LOG subcommand '"));
+    msg.control.print(subcmd);
+    msg.control.println(F("'"));
+    msg.control.println(F("  Valid: STATUS, TAGS, LEVEL, TAG"));
+    msg.control.println(F("  Use 'LOG' for usage help"));
     return 1;
 }
 
