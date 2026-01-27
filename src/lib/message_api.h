@@ -153,6 +153,24 @@ public:
         return print(n) + println();
     }
 
+    size_t print(unsigned long n, int base) {
+        char buf[20];
+        if (base == HEX) {
+            ultoa(n, buf, 16);
+        } else if (base == BIN) {
+            ultoa(n, buf, 2);
+        } else if (base == OCT) {
+            ultoa(n, buf, 8);
+        } else {
+            ultoa(n, buf, 10);
+        }
+        return print(buf);
+    }
+
+    size_t println(unsigned long n, int base) {
+        return print(n, base) + println();
+    }
+
     // ========== Float Output ==========
 
     size_t print(float f, int digits = 2) {
