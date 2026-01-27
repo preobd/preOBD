@@ -85,7 +85,7 @@ static void cli_on_command(EmbeddedCli* embeddedCli, CliCommand* command) {
     (void)embeddedCli;
 
     // embedded-cli is case-sensitive, but users expect case-insensitive commands
-    // Try to find a matching command by converting to uppercase
+    // Convert command name to uppercase
     char cmdUpper[32];
     strncpy(cmdUpper, command->name, sizeof(cmdUpper) - 1);
     cmdUpper[sizeof(cmdUpper) - 1] = '\0';
@@ -94,17 +94,38 @@ static void cli_on_command(EmbeddedCli* embeddedCli, CliCommand* command) {
     // Build argc/argv for dispatch
     const int MAX_ARGS = 16;
     const char* argv[MAX_ARGS];
+    static char argBuffers[MAX_ARGS - 1][32];  // Static buffers for uppercase args
     int argc = 1;
     argv[0] = cmdUpper;
 
-    // Tokenize args if present
+    // Tokenize args if present and convert to uppercase
     if (command->args != nullptr && *command->args != '\0') {
-        uint16_t tokenCount = embeddedCliGetTokenCount(command->args);
-        for (uint16_t i = 0; i < tokenCount && argc < MAX_ARGS; i++) {
-            const char* token = embeddedCliGetToken(command->args, i + 1);
-            if (token != nullptr) {
-                argv[argc++] = token;
+        // Manually tokenize the args string (space-delimited)
+        char* argsCopy = (char*)command->args;
+        char* saveptr = nullptr;
+
+        // Parse space-separated tokens
+        int bufIdx = 0;
+        for (char* p = argsCopy; *p && argc < MAX_ARGS && bufIdx < (MAX_ARGS - 1); ) {
+            // Skip leading spaces
+            while (*p == ' ' || *p == '\t') p++;
+            if (*p == '\0') break;
+
+            // Find end of token
+            char* tokenStart = p;
+            while (*p && *p != ' ' && *p != '\t') p++;
+
+            // Copy token to buffer and uppercase
+            size_t tokenLen = p - tokenStart;
+            if (tokenLen >= sizeof(argBuffers[bufIdx])) {
+                tokenLen = sizeof(argBuffers[bufIdx]) - 1;
             }
+            strncpy(argBuffers[bufIdx], tokenStart, tokenLen);
+            argBuffers[bufIdx][tokenLen] = '\0';
+            for (char* q = argBuffers[bufIdx]; *q; q++) *q = toupper(*q);
+
+            argv[argc++] = argBuffers[bufIdx];
+            bufIdx++;
         }
     }
 
