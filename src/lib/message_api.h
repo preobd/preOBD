@@ -19,7 +19,10 @@
 #define MESSAGE_API_H
 
 #include "message_router.h"
+#include "log_filter.h"
+#include "log_tags.h"
 #include <Arduino.h>
+#include <stdarg.h>  // For variadic functions
 
 // Print stream wrapper that routes to a specific message plane
 class MessageStream {
@@ -222,6 +225,20 @@ public:
     size_t write(uint8_t c) {
         return write(&c, 1);
     }
+
+    // ========== Level-Based Logging (Printf-style) ==========
+
+    // Printf-style logging methods with log levels and tags
+    // Note: Do NOT use F() macro - format strings must be in RAM for vsnprintf
+    // These methods check the log filter before formatting/outputting
+    size_t error(const char* tag, const char* fmt, ...);
+    size_t warn(const char* tag, const char* fmt, ...);
+    size_t info(const char* tag, const char* fmt, ...);
+    size_t debug(const char* tag, const char* fmt, ...);
+
+private:
+    // Helper method to format and output with level/tag prefix
+    size_t logWithLevel(LogLevel level, const char* tag, const char* msg);
 };
 
 // Stub class for disabled debug messages (all methods compile to no-ops)
@@ -254,6 +271,12 @@ public:
     inline size_t println(const __FlashStringHelper* str) { (void)str; return 0; }
     inline size_t write(const uint8_t* data, size_t len) { (void)data; (void)len; return 0; }
     inline size_t write(uint8_t c) { (void)c; return 0; }
+
+    // Level-based logging stub methods (compile to no-ops)
+    inline size_t error(const char* tag, const char* fmt, ...) { (void)tag; (void)fmt; return 0; }
+    inline size_t warn(const char* tag, const char* fmt, ...) { (void)tag; (void)fmt; return 0; }
+    inline size_t info(const char* tag, const char* fmt, ...) { (void)tag; (void)fmt; return 0; }
+    inline size_t debug(const char* tag, const char* fmt, ...) { (void)tag; (void)fmt; return 0; }
 };
 #endif
 

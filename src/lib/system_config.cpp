@@ -229,6 +229,16 @@ void resetSystemConfig() {
         systemConfig.serial.reserved[i] = 0;
     }
 
+    // Log Filter Configuration defaults
+    // Default to INFO level (show ERROR, WARN, INFO but not DEBUG)
+    systemConfig.logFilter.control_level = 3;  // LOG_LEVEL_INFO
+    systemConfig.logFilter.data_level = 3;     // LOG_LEVEL_INFO
+    systemConfig.logFilter.debug_level = 3;    // LOG_LEVEL_INFO
+    systemConfig.logFilter.enabledTags = 0xFFFFFFFF;  // All tags enabled
+    for (int i = 0; i < 5; i++) {
+        systemConfig.logFilter.reserved[i] = 0;
+    }
+
     // Calculate checksum
     systemConfig.checksum = calculateChecksum(&systemConfig);
 }
