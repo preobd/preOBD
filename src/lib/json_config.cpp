@@ -295,6 +295,17 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
         port["enabled"] = (bool)(systemConfig.serial.enabled_mask & (1 << i));
         port["baudrate"] = getBaudRateFromIndex(systemConfig.serial.baudrate_index[i]);
     }
+
+    // Log Filter Configuration
+    JsonObject logFilter = systemObj["logFilter"].to<JsonObject>();
+    const char* levelNames[] = {"NONE", "ERROR", "WARN", "INFO", "DEBUG"};
+    logFilter["controlLevel"] = systemConfig.logFilter.control_level <= 4 ? levelNames[systemConfig.logFilter.control_level] : "UNKNOWN";
+    logFilter["dataLevel"] = systemConfig.logFilter.data_level <= 4 ? levelNames[systemConfig.logFilter.data_level] : "UNKNOWN";
+    logFilter["debugLevel"] = systemConfig.logFilter.debug_level <= 4 ? levelNames[systemConfig.logFilter.debug_level] : "UNKNOWN";
+
+    char tagsBuf[11];  // "0xFFFFFFFF" + null terminator
+    snprintf(tagsBuf, sizeof(tagsBuf), "0x%08lX", (unsigned long)systemConfig.logFilter.enabledTags);
+    logFilter["enabledTags"] = tagsBuf;
 }
 
 // JSON Schema Version

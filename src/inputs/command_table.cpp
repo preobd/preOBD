@@ -2438,6 +2438,9 @@ static int cmd_log(int argc, const char* const* argv) {
         // Set the level
         router.getLogFilter().setLevel(plane, level);
 
+        // Sync to systemConfig (so SAVE will persist it)
+        router.syncConfig();
+
         msg.control.print(F("✓ "));
         msg.control.print(planeName);
         msg.control.print(F(" plane log level set to "));
@@ -2491,6 +2494,8 @@ static int cmd_log(int argc, const char* const* argv) {
                 router.getLogFilter().disableAllTags();
                 msg.control.println(F("✓ All tags disabled"));
             }
+            // Sync to systemConfig (so SAVE will persist it)
+            router.syncConfig();
             msg.control.println(F("  Use SAVE to persist this setting"));
             return 0;
         }
@@ -2507,6 +2512,9 @@ static int cmd_log(int argc, const char* const* argv) {
 
         // Enable/disable the tag
         router.getLogFilter().enableTag(tagId, enable);
+
+        // Sync to systemConfig (so SAVE will persist it)
+        router.syncConfig();
 
         msg.control.print(F("✓ Tag "));
         msg.control.print(getTagName(tagId));
