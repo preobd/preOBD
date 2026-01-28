@@ -427,6 +427,3 @@ processOBD2Request(0x7DF, testRequest, 8);
 - [Serial Commands](../../reference/SERIAL_COMMANDS.md) - Sensor configuration
 - [CAN Bus Output](../../README.md#can-bus) - General CAN configuration
 
----
-
-**For the classic car community.**

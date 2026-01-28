@@ -489,6 +489,3 @@ When EEPROM version mismatch detected, firmware resets EEPROM to defaults.
 - [Units Registry Header](../../src/lib/units_registry.h) - Units registry source code
 - [Hash Functions Header](../../src/lib/hash.h) - DJB2 hash implementation
 
----
-
-**For the classic car community.**

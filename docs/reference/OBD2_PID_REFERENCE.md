@@ -329,6 +329,3 @@ Byte 4-7: Padding (0x00)
 - [OBD-II Scanner Setup Guide](../guides/outputs/OBD2_SCANNER_GUIDE.md) - Using ELM327 adapters
 - [Application Presets Source](../../src/lib/application_presets.h) - Full PID assignments
 
----
-
-**For the classic car community.**

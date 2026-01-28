@@ -534,9 +534,3 @@ This directory contains the comprehensive test mode system for testing outputs w
 - GitHub Issues
 - Include file versions (git commit hash)
 - State which files you modified
-
----
-
-**Organized structure makes adding sensors and troubleshooting much easier!**
-
-**For the classic car community.**

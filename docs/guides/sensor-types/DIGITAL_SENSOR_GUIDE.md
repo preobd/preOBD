@@ -231,6 +231,3 @@ The display name can be customized to match your application.
 - [SENSOR_SELECTION_GUIDE.md](SENSOR_SELECTION_GUIDE.md) - Complete sensor catalog
 - [PIN_REQUIREMENTS_GUIDE.md](../hardware/PIN_REQUIREMENTS_GUIDE.md) - Pin type requirements
 
----
-
-**For the classic car community.**

@@ -380,6 +380,3 @@ The `1.02` is a calibration multiplier (similar to adjusting a potentiometer on 
 - [SENSOR_SELECTION_GUIDE.md](SENSOR_SELECTION_GUIDE.md) - Complete sensor catalog
 - [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) - Custom calibrations
 
----
-
-**For the classic car community.**

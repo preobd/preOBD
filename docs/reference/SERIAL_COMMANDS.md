@@ -1186,6 +1186,3 @@ See **[Static Builds Guide](../advanced/STATIC_BUILDS_GUIDE.md)** for details.
 - **[Alarm System Guide](../guides/configuration/ALARM_SYSTEM_GUIDE.md)** - Alarm state machine
 - **[CONFIG/RUN Mode Guide](../guides/configuration/CONFIG_RUN_MODE_GUIDE.md)** - Configuration workflow
 
----
-
-**For the classic car community.**

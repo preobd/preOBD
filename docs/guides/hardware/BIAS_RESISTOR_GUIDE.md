@@ -318,6 +318,3 @@ However, going too low (matching 50Ω exactly) causes problems at cold temperatu
 
 **The default 1kΩ is recommended for most users.** It provides 2x the resolution of 2.2kΩ with minimal tradeoffs.
 
----
-
-**For the classic car community.**

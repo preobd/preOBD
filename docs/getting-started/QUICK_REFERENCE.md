@@ -536,6 +536,3 @@ SET <pin> BIAS <resistor>                         # Override bias resistor
 - Your configuration (`DUMP` command)
 - What you expected vs. what happened
 
----
-
-**For the classic car community.**

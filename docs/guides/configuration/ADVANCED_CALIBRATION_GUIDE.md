@@ -374,6 +374,3 @@ SAVE
 - [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) - Bias resistor selection
 - [ADDING_SENSORS.md](ADDING_SENSORS.md) - Adding new sensor types to the library
 
----
-
-**For the classic car community.**

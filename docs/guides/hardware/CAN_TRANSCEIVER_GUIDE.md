@@ -459,6 +459,3 @@ For classic cars or custom installations without OBD-II.
 - [Build Configuration Guide](../configuration/BUILD_CONFIGURATION_GUIDE.md) - Platform selection
 - [PIN_REQUIREMENTS_GUIDE.md](PIN_REQUIREMENTS_GUIDE.md) - Pin capabilities by platform
 
----
-
-**For the classic car community.**

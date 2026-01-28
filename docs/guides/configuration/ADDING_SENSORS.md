@@ -535,6 +535,3 @@ If you've added a useful sensor type, consider contributing it back:
 - **[ADVANCED_CALIBRATION_GUIDE.md](ADVANCED_CALIBRATION_GUIDE.md)** - Custom calibration for existing sensors
 - **[SENSOR_SELECTION_GUIDE.md](../sensor-types/SENSOR_SELECTION_GUIDE.md)** - Available sensors
 
----
-
-**For the classic car community.**

@@ -356,6 +356,3 @@ Use a multimeter to measure resistance between terminals (or terminal and body f
 - [PRESSURE_SENSOR_GUIDE.md](PRESSURE_SENSOR_GUIDE.md) - Pressure sensors
 - [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) - Custom calibrations
 
----
-
-**For the classic car community.**

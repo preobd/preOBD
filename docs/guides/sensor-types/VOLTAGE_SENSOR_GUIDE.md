@@ -206,6 +206,3 @@ Each input needs its own voltage divider circuit.
 - [Sensor Selection Guide](SENSOR_SELECTION_GUIDE.md) - Complete sensor catalog
 - [Pin Requirements](../hardware/PIN_REQUIREMENTS_GUIDE.md) - Analog pin information
 
----
-
-**For the classic car community.**

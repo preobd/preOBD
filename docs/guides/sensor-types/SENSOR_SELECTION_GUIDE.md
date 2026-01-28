@@ -295,6 +295,3 @@ A: Use `LIST APPLICATIONS` command.
 - [BME280_GUIDE.md](BME280_GUIDE.md) - Environmental sensor
 - [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) - Custom calibrations
 
----
-
-**For the classic car community.**

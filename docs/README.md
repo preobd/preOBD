@@ -383,6 +383,3 @@ See [OBD-II Scanner Guide](guides/outputs/OBD2_SCANNER_GUIDE.md) for setup.
 - Include firmware version (`VERSION` command)
 - Include your configuration (`DUMP` command)
 
----
-
-**For the classic car community.**

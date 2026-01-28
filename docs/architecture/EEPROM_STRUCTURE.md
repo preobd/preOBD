@@ -449,6 +449,3 @@ if (temp.magic != SYSTEM_CONFIG_MAGIC ||
 - [Adding Sensors](../guides/configuration/ADDING_SENSORS.md) - Adding new sensor types
 - [Serial Commands](../reference/SERIAL_COMMANDS.md) - SAVE, LOAD, RESET commands
 
----
-
-**For the classic car community.**
