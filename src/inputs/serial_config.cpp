@@ -102,7 +102,6 @@ static void cli_on_command(EmbeddedCli* embeddedCli, CliCommand* command) {
     if (command->args != nullptr && *command->args != '\0') {
         // Manually tokenize the args string (space-delimited)
         char* argsCopy = (char*)command->args;
-        char* saveptr = nullptr;
 
         // Parse space-separated tokens
         int bufIdx = 0;
