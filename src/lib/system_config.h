@@ -13,7 +13,7 @@
 
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
-#define SYSTEM_CONFIG_VERSION 1         // Increment when struct changes
+#define SYSTEM_CONFIG_VERSION 6         // Increment when struct changes (v6: added logFilter)
 #define SYSTEM_CONFIG_ADDRESS 0x03F0    // Address in EEPROM (after inputs)
 #define SYSTEM_CONFIG_SIZE sizeof(SystemConfig)
 
@@ -105,6 +105,15 @@ struct SystemConfig {
 
     // Serial Port Configuration (16 bytes) - Which serial ports are enabled
     SerialPortConfig serial;
+
+    // Log Filter Configuration (12 bytes) - NEW in v6
+    struct {
+        uint8_t control_level;    // LogLevel for CONTROL plane
+        uint8_t data_level;       // LogLevel for DATA plane
+        uint8_t debug_level;      // LogLevel for DEBUG plane (default: INFO)
+        uint32_t enabledTags;     // 32-bit bitmap for tag filtering (all enabled by default)
+        uint8_t reserved[5];      // Future expansion
+    } logFilter;
 };
 
 // Global system config instance
@@ -118,6 +127,5 @@ void resetSystemConfig();        // Reset to defaults
 uint8_t calculateChecksum(SystemConfig* cfg);
 void printSystemStatus();
 void registerSystemPins();       // Register system pins in pin registry
-
 
 #endif // SYSTEM_CONFIG_H

@@ -181,8 +181,8 @@ The router provides three message channels:
 // Control messages (commands, responses, configuration)
 msg.control.println("OK");  // Goes to active command transport
 
-// Debug messages (diagnostic info, warnings, errors)
-msg.debug.println("Sensor initialized");  // Goes to debug transport (usually USB)
+// Debug messages (diagnostic info, warnings, errors) - use tagged logging
+msg.debug.info(TAG_SENSOR, "Sensor initialized");  // Goes to debug transport (usually USB)
 
 // Data messages (sensor values, RealDash frames, CSV output)
 msg.data.write(buffer, size);  // Broadcasts to all connected transports
@@ -273,7 +273,7 @@ router.registerTransport(TRANSPORT_SERIAL2, &hwSerial2);
 BluetoothTransportESP32 btESP32("openEMS");
 if (btESP32.begin()) {
     router.registerTransport(TRANSPORT_ESP32_BT, &btESP32);
-    msg.debug.println(F("✓ ESP32 Bluetooth initialized"));
+    msg.debug.info(TAG_BT, "ESP32 Bluetooth initialized");
 }
 #endif
 ```
@@ -489,7 +489,7 @@ void setup() {
     #ifdef ESP32
     if (wifiTransport.begin()) {
         router.registerTransport(TRANSPORT_WIFI, &wifiTransport);
-        msg.debug.println(F("✓ WiFi transport initialized"));
+        msg.debug.info(TAG_WIFI, "ESP32 WiFi initialized");
     }
     #endif
 }
@@ -538,7 +538,7 @@ public:
 ### For Application Code
 
 1. **Use msg.control for commands/config** - Goes to active control transport
-2. **Use msg.debug for diagnostics** - Goes to debug transport (USB)
+2. **Use msg.debug with tags for diagnostics** - Use `msg.debug.error()`, `msg.debug.warn()`, `msg.debug.info()`, `msg.debug.debug()` with appropriate tags
 3. **Use msg.data for sensor output** - Broadcasts to all transports
 4. **Never call Serial directly** - Always use msg APIs
 
@@ -552,7 +552,7 @@ public:
 ### For Debugging
 
 1. **Check transport state** - Use `LIST TRANSPORTS` command (if implemented)
-2. **Monitor msg.debug** - Connect USB Serial for debug output
+2. **Monitor tagged debug logs** - Connect USB Serial and use appropriate log tags
 3. **Test one transport at a time** - Verify each works independently
 4. **Test simultaneous connections** - Verify broadcasting works
 

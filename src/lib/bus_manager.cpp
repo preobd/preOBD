@@ -10,6 +10,7 @@
 #include "pin_registry.h"
 #include "system_config.h"
 #include "message_api.h"
+#include "log_tags.h"
 #include <Wire.h>
 #include <SPI.h>
 
@@ -39,7 +40,7 @@ void initConfiguredBuses() {
     if (!initI2CBus(systemConfig.buses.active_i2c, systemConfig.buses.i2c_clock)) {
         // Fall back to bus 0 if requested bus fails
         if (systemConfig.buses.active_i2c != 0) {
-            msg.debug.println(F("  Falling back to Wire (bus 0)"));
+            msg.debug.warn(TAG_I2C, "Falling back to Wire (bus 0)");
             initI2CBus(0, systemConfig.buses.i2c_clock);
         }
     }
@@ -48,7 +49,7 @@ void initConfiguredBuses() {
     if (!initSPIBus(systemConfig.buses.active_spi, systemConfig.buses.spi_clock)) {
         // Fall back to bus 0 if requested bus fails
         if (systemConfig.buses.active_spi != 0) {
-            msg.debug.println(F("  Falling back to SPI (bus 0)"));
+            msg.debug.warn(TAG_SPI, "Falling back to SPI (bus 0)");
             initSPIBus(0, systemConfig.buses.spi_clock);
         }
     }
@@ -57,7 +58,7 @@ void initConfiguredBuses() {
     if (!initCANBus(systemConfig.buses.active_can, systemConfig.buses.can_baudrate)) {
         // Fall back to bus 0 if requested bus fails
         if (systemConfig.buses.active_can != 0) {
-            msg.debug.println(F("  Falling back to CAN1 (bus 0)"));
+            msg.debug.warn(TAG_CAN, "Falling back to CAN1 (bus 0)");
             initCANBus(0, systemConfig.buses.can_baudrate);
         }
     }
@@ -69,9 +70,7 @@ void initConfiguredBuses() {
 
 bool initI2CBus(uint8_t bus_id, uint16_t clock_khz) {
     if (bus_id >= NUM_I2C_BUSES) {
-        msg.debug.print(F("ERROR: I2C bus "));
-        msg.debug.print(bus_id);
-        msg.debug.println(F(" not available on this platform"));
+        msg.debug.error(TAG_I2C, "I2C bus %d not available on this platform", bus_id);
         return false;
     }
 
@@ -169,7 +168,7 @@ bool initI2CBus(uint8_t bus_id, uint16_t clock_khz) {
         registerPin(sda, PIN_RESERVED, i2c_desc[bus_id]);
         registerPin(scl, PIN_RESERVED, i2c_desc[bus_id]);
 
-        msg.debug.println(F("✓ I2C bus initialized"));
+        msg.debug.info(TAG_I2C, "I2C bus initialized");
     }
 
     return success;
@@ -181,9 +180,7 @@ bool initI2CBus(uint8_t bus_id, uint16_t clock_khz) {
 
 bool initSPIBus(uint8_t bus_id, uint32_t clock_hz) {
     if (bus_id >= NUM_SPI_BUSES) {
-        msg.debug.print(F("ERROR: SPI bus "));
-        msg.debug.print(bus_id);
-        msg.debug.println(F(" not available on this platform"));
+        msg.debug.error(TAG_SPI, "SPI bus %d not available on this platform", bus_id);
         return false;
     }
 
@@ -258,7 +255,7 @@ bool initSPIBus(uint8_t bus_id, uint32_t clock_hz) {
         registerPin(miso, PIN_RESERVED, spi_desc[bus_id]);
         registerPin(sck, PIN_RESERVED, spi_desc[bus_id]);
 
-        msg.debug.println(F("✓ SPI bus initialized"));
+        msg.debug.info(TAG_SPI, "SPI bus initialized");
     }
 
     return success;
@@ -272,13 +269,11 @@ bool initCANBus(uint8_t bus_id, uint32_t baudrate) {
 #if NUM_CAN_BUSES == 0
     (void)bus_id;
     (void)baudrate;
-    msg.debug.println(F("CAN: Not available on this platform"));
+    msg.debug.warn(TAG_CAN, "CAN not available on this platform");
     return false;
 #else
     if (bus_id >= NUM_CAN_BUSES) {
-        msg.debug.print(F("ERROR: CAN bus "));
-        msg.debug.print(bus_id);
-        msg.debug.println(F(" not available on this platform"));
+        msg.debug.error(TAG_CAN, "CAN bus %d not available on this platform", bus_id);
         return false;
     }
 
@@ -296,7 +291,7 @@ bool initCANBus(uint8_t bus_id, uint32_t baudrate) {
     if (tx != 0xFF) registerPin(tx, PIN_RESERVED, can_desc[bus_id]);
     if (rx != 0xFF) registerPin(rx, PIN_RESERVED, can_desc[bus_id]);
 
-    msg.debug.println(F("✓ CAN bus initialized"));
+    msg.debug.info(TAG_CAN, "CAN bus initialized");
 
     return true;
 #endif

@@ -11,6 +11,7 @@
 #include "../lib/units_registry.h"
 #include "../lib/message_router.h"  // For msg.control
 #include "../lib/message_api.h"
+#include "../lib/log_tags.h"
 #ifdef USE_STATIC_CONFIG
 #include "../lib/generated/application_presets_static.h"
 #include "../lib/generated/sensor_library_static.h"
@@ -398,7 +399,7 @@ bool initInputManager() {
     // Configure inputs using the registry-based functions
     // This reuses the same runtime configuration logic
 
-    msg.debug.println(F("Initializing from static configuration..."));
+    msg.control.println(F("Initializing from static configuration..."));
 
     #ifdef INPUT_0_PIN
         CONFIGURE_INPUT(0, 0);
@@ -483,9 +484,9 @@ bool initInputManager() {
         }
     }
 
-    msg.debug.print(F("✓ Loaded "));
-    msg.debug.print(numActiveInputs);
-    msg.debug.println(F(" inputs from static config"));
+    msg.control.print(F("✓ Loaded "));
+    msg.control.print(numActiveInputs);
+    msg.control.println(F(" inputs from static config"));
     return true;  // Static config always valid
 
 #else
@@ -493,7 +494,7 @@ bool initInputManager() {
     // Try to load from EEPROM
     bool eepromLoaded = loadInputConfig();
     if (!eepromLoaded) {
-        msg.debug.println(F("No valid config in EEPROM - starting with blank configuration"));
+        msg.debug.info(TAG_CONFIG, "No valid config in EEPROM - starting with blank configuration");
     }
     return eepromLoaded;
 #endif
@@ -598,8 +599,7 @@ bool saveInputConfig() {
 
     EEPROM.put(0, header);
 
-    msg.debug.print(F("✓ Checksum: 0x"));
-    msg.debug.println(checksum, HEX);
+    msg.debug.debug(TAG_CONFIG, "Checksum: 0x%02X", checksum);
 
     return true;
 }
@@ -615,11 +615,7 @@ bool loadInputConfig() {
 
     // Check version
     if (header.version != EEPROM_VERSION) {
-        msg.debug.print(F("EEPROM version mismatch (found "));
-        msg.debug.print(header.version);
-        msg.debug.print(F(", expected "));
-        msg.debug.print(EEPROM_VERSION);
-        msg.debug.println(F(") - ignoring"));
+        msg.debug.warn(TAG_CONFIG, "EEPROM version mismatch (found %d, expected %d) - ignoring", header.version, EEPROM_VERSION);
         return false;
     }
 
@@ -693,11 +689,9 @@ bool loadInputConfig() {
     uint8_t calculatedChecksum = calculateConfigChecksum();
 
     if (storedChecksum != calculatedChecksum) {
-        msg.debug.print(F("ERROR: EEPROM checksum mismatch! Stored: 0x"));
-        msg.debug.print(storedChecksum, HEX);
-        msg.debug.print(F(", Calculated: 0x"));
-        msg.debug.println(calculatedChecksum, HEX);
-        msg.debug.println(F("Configuration may be corrupted. Please reconfigure."));
+        msg.control.println(F("ERROR: EEPROM checksum mismatch! Configuration corrupted."));
+        msg.control.println(F("Please reconfigure inputs and run SAVE."));
+        msg.debug.error(TAG_CONFIG, "Checksum mismatch: Stored 0x%02X, Calculated 0x%02X", storedChecksum, calculatedChecksum);
 
         // Clear corrupted data
         memset(inputs, 0, sizeof(inputs));
@@ -709,12 +703,8 @@ bool loadInputConfig() {
         return false;
     }
 
-    msg.debug.print(F("✓ Checksum verified: 0x"));
-    msg.debug.println(storedChecksum, HEX);
-
-    msg.debug.print(F("✓ Loaded "));
-    msg.debug.print(numActiveInputs);
-    msg.debug.println(F(" inputs from EEPROM"));
+    msg.debug.debug(TAG_CONFIG, "Checksum verified: 0x%02X", storedChecksum);
+    msg.debug.info(TAG_CONFIG, "Loaded %d inputs from EEPROM", numActiveInputs);
     return true;
 }
 
@@ -1010,8 +1000,8 @@ bool setInputAlarmRange(uint8_t pin, float minValue, float maxValue) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
 
-    // Validate range
-    if (minValue >= maxValue) {
+    // Validate range (allow both to be 0 for disabled alarms)
+    if (minValue >= maxValue && !(minValue == 0 && maxValue == 0)) {
         msg.control.print(F("ERROR: Min alarm ("));
         msg.control.print(minValue);
         msg.control.print(F(") must be less than max alarm ("));

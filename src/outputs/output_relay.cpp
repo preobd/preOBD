@@ -7,11 +7,16 @@
  * Design pattern follows output_alarm.cpp for consistency.
  */
 
+#include "../config.h"
+
+#ifdef ENABLE_RELAY_OUTPUT
+
 #include "output_relay.h"
 #include "../lib/system_config.h"
 #include "../inputs/input_manager.h"
 #include "../lib/message_api.h"
 #include "../lib/units_registry.h"
+#include "../lib/log_tags.h"
 
 // ===== RUNTIME STATE =====
 static RelayRuntimeState relayStates[MAX_RELAYS];
@@ -120,13 +125,10 @@ void initRelayOutput() {
         // Initialize to OFF state (safe default)
         digitalWrite(cfg->outputPin, LOW);
 
-        msg.debug.print(F("Relay "));
-        msg.debug.print(i);
-        msg.debug.print(F(" initialized on pin "));
-        msg.debug.println(cfg->outputPin);
+        msg.debug.info(TAG_RELAY, "Relay %d initialized on pin %d", i, cfg->outputPin);
     }
 
-    msg.debug.println(F("✓ Relay output initialized"));
+    msg.debug.info(TAG_RELAY, "Relay output initialized");
 }
 
 /**
@@ -182,11 +184,7 @@ void updateRelayOutput() {
             state->lastStateChange = millis();
             state->stateChangeCount++;
 
-            // Debug output for state changes
-            msg.debug.print(F("Relay "));
-            msg.debug.print(i);
-            msg.debug.print(F(" -> "));
-            msg.debug.println(desiredState ? F("ON") : F("OFF"));
+            msg.debug.info(TAG_RELAY, "Relay %d -> %s", i, desiredState ? "ON" : "OFF");
         }
     }
 }
@@ -384,3 +382,5 @@ void printAllRelayStatus() {
         printRelayStatus(i);
     }
 }
+
+#endif // ENABLE_RELAY_OUTPUT

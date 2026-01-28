@@ -4,7 +4,7 @@
   "metadata": {
     "toolVersion": "1.0.0",
     "platform": "uno",
-    "timestamp": 1766953725
+    "timestamp": 1769469163
   },
   "inputs": [
     {
@@ -52,16 +52,16 @@
       "pin": "A3",
       "application": "OIL_PRESSURE",
       "applicationIndex": 7,
-      "sensor": "VDO_5BAR",
-      "sensorIndex": 15
+      "sensor": "VDO_5BAR_CURVE",
+      "sensorIndex": 17
     },
     {
       "idx": 6,
       "pin": "A4",
       "application": "BOOST_PRESSURE",
       "applicationIndex": 8,
-      "sensor": "VDO_2BAR",
-      "sensorIndex": 14
+      "sensor": "VDO_2BAR_CURVE",
+      "sensorIndex": 16
     },
     {
       "idx": 7,
@@ -69,7 +69,7 @@
       "application": "PRIMARY_BATTERY",
       "applicationIndex": 11,
       "sensor": "VOLTAGE_DIVIDER",
-      "sensorIndex": 16
+      "sensorIndex": 20
     }
   ]
 }

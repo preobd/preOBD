@@ -6,6 +6,7 @@
 #include "message_api.h"
 #include "system_config.h"
 #include "serial_manager.h"
+#include "../inputs/serial_config.h"
 #include <string.h>
 
 // Global router instance
@@ -51,6 +52,12 @@ void MessageRouter::loadConfig() {
     secondaryTransport[PLANE_CONTROL] = systemConfig.router.control_secondary;
     secondaryTransport[PLANE_DATA] = systemConfig.router.data_secondary;
     secondaryTransport[PLANE_DEBUG] = systemConfig.router.debug_secondary;
+
+    // Load log filter configuration from SystemConfig.logFilter
+    logFilter.setLevel(PLANE_CONTROL, (LogLevel)systemConfig.logFilter.control_level);
+    logFilter.setLevel(PLANE_DATA, (LogLevel)systemConfig.logFilter.data_level);
+    logFilter.setLevel(PLANE_DEBUG, (LogLevel)systemConfig.logFilter.debug_level);
+    logFilter.setEnabledTags(systemConfig.logFilter.enabledTags);
 }
 
 void MessageRouter::syncConfig() {
@@ -61,6 +68,12 @@ void MessageRouter::syncConfig() {
     systemConfig.router.data_secondary = secondaryTransport[PLANE_DATA];
     systemConfig.router.debug_primary = primaryTransport[PLANE_DEBUG];
     systemConfig.router.debug_secondary = secondaryTransport[PLANE_DEBUG];
+
+    // Copy log filter state to SystemConfig.logFilter
+    systemConfig.logFilter.control_level = logFilter.getLevel(PLANE_CONTROL);
+    systemConfig.logFilter.data_level = logFilter.getLevel(PLANE_DATA);
+    systemConfig.logFilter.debug_level = logFilter.getLevel(PLANE_DEBUG);
+    systemConfig.logFilter.enabledTags = logFilter.getEnabledTags();
 }
 
 void MessageRouter::saveConfig() {
@@ -313,10 +326,6 @@ void MessageRouter::update() {
 }
 
 void MessageRouter::processIncomingCommands() {
-    // Forward declaration of the handler from serial_config.cpp
-    extern void handleCommandInput(char c);
-    extern void processSerialCommands();
-
     // Poll primary control transport
     TransportInterface* ctrl = getTransport(PLANE_CONTROL, true);
     if (ctrl && ctrl->isConnected() && ctrl->available()) {
@@ -336,9 +345,6 @@ void MessageRouter::processIncomingCommands() {
 }
 
 void MessageRouter::processCommandFromTransport(TransportInterface* transport) {
-    // Forward declaration of the handler from serial_config.cpp
-    extern void handleCommandInput(char c);
-
     // Read and process all available characters
     while (transport->available()) {
         char c = transport->read();

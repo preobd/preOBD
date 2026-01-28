@@ -1,7 +1,13 @@
 /*
  * command_helpers.cpp - Helper functions and help system
  * Extracted from serial_config_old.cpp
+ *
+ * NOTE: Only compiled in EEPROM/runtime configuration mode (not in static mode)
  */
+
+#include "../config.h"
+
+#ifndef USE_STATIC_CONFIG
 
 #include "command_helpers.h"
 #include "../config.h"
@@ -305,6 +311,19 @@ void printSystemConfig() {
     msg.control.print(F("ms, LCD="));
     msg.control.print(systemConfig.lcdUpdateInterval);
     msg.control.println(F("ms"));
+
+    // Log Filter Configuration
+    msg.control.println();
+    msg.control.println(F("=== Log Filter Configuration ==="));
+    const char* levelNames[] = {"NONE", "ERROR", "WARN", "INFO", "DEBUG"};
+    msg.control.print(F("Control Level: "));
+    msg.control.println(systemConfig.logFilter.control_level <= 4 ? levelNames[systemConfig.logFilter.control_level] : "UNKNOWN");
+    msg.control.print(F("Data Level: "));
+    msg.control.println(systemConfig.logFilter.data_level <= 4 ? levelNames[systemConfig.logFilter.data_level] : "UNKNOWN");
+    msg.control.print(F("Debug Level: "));
+    msg.control.println(systemConfig.logFilter.debug_level <= 4 ? levelNames[systemConfig.logFilter.debug_level] : "UNKNOWN");
+    msg.control.print(F("Enabled Tags: 0x"));
+    msg.control.println(systemConfig.logFilter.enabledTags, HEX);
 }
 
 void printDisplayConfig() {
@@ -965,3 +984,5 @@ void printHelpCategory(const char* category) {
         msg.control.println();
     }
 }
+
+#endif // USE_STATIC_CONFIG

@@ -6,6 +6,7 @@
 #include "../config.h"
 #include "watchdog.h"
 #include "message_api.h"
+#include "log_tags.h"
 
 #ifdef ENABLE_LCD
 extern void showConfigModeMessage();
@@ -93,16 +94,11 @@ SystemMode detectBootMode(bool eepromValid) {
     // Check if button held during boot (LOW = active)
     delay(BOOT_DETECT_DELAY_MS);  // Allow pin to stabilize
     if (digitalRead(MODE_BUTTON) == LOW) {
-        msg.debug.println();
-        msg.debug.println(F("========================================"));
-        msg.debug.println(F("  CONFIG BUTTON DETECTED"));
-        msg.debug.println(F("  Entering CONFIG mode"));
-        msg.debug.println(F("========================================"));
-        msg.debug.println();
+        msg.debug.info(TAG_SYSTEM, "CONFIG button detected - entering CONFIG mode");
         return MODE_CONFIG;
     }
 
     // Default: RUN mode
-    msg.debug.println(F("Starting in RUN mode (config locked)"));
+    msg.debug.info(TAG_SYSTEM, "Starting in RUN mode (config locked)");
     return MODE_RUN;
 }

@@ -15,6 +15,7 @@
 #include "test_scenarios.h"
 #include "../inputs/input_manager.h"
 #include "../lib/message_api.h"
+#include "../lib/log_tags.h"
 #include <string.h>
 
 // Forward declaration of test value generator
@@ -111,7 +112,7 @@ void initTestMode() {
         testModeState.originalReadFunctions[i] = nullptr;
     }
 
-    msg.debug.println(F("✓ Test mode system initialized"));
+    msg.debug.info(TAG_SYSTEM, "Test mode system initialized");
 }
 
 bool startTestScenario(uint8_t scenarioIndex) {

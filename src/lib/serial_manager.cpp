@@ -8,6 +8,7 @@
 #include "pin_registry.h"
 #include "system_config.h"
 #include "message_api.h"
+#include "log_tags.h"
 
 // ============================================================================
 // SERIAL CONFIG HELPERS
@@ -103,9 +104,7 @@ void initConfiguredSerialPorts() {
 bool initSerialPort(uint8_t port_id, uint32_t baudrate) {
     // Validate port ID
     if (port_id < 1 || port_id > NUM_SERIAL_PORTS) {
-        msg.debug.print(F("ERROR: Serial"));
-        msg.debug.print(port_id);
-        msg.debug.println(F(" not available on this platform"));
+        msg.debug.error(TAG_SERIAL, "Serial%d not available on this platform", port_id);
         return false;
     }
 
@@ -183,11 +182,7 @@ bool initSerialPort(uint8_t port_id, uint32_t baudrate) {
         registerPin(rx, PIN_RESERVED, getSerialPortName(port_id));
         registerPin(tx, PIN_RESERVED, getSerialPortName(port_id));
 
-        msg.debug.print(F("Serial"));
-        msg.debug.print(port_id);
-        msg.debug.print(F(" initialized @ "));
-        msg.debug.print(baudrate);
-        msg.debug.println(F(" baud"));
+        msg.debug.info(TAG_SERIAL, "Serial%d initialized @ %lu baud", port_id, baudrate);
     }
 
     return success;
@@ -222,9 +217,7 @@ bool disableSerialPort(uint8_t port_id) {
 
     // Note: We don't call Serial.end() as it might be in use by transport layer
 
-    msg.debug.print(F("Serial"));
-    msg.debug.print(port_id);
-    msg.debug.println(F(" disabled"));
+    msg.debug.info(TAG_SERIAL, "Serial%d disabled", port_id);
 
     return true;
 }
@@ -304,7 +297,7 @@ void displaySerialStatus() {
         bool enabled = isSerialPortEnabled(&systemConfig.serial, port_id);
         uint8_t baud_idx = systemConfig.serial.baudrate_index[port_id - 1];
 
-        msg.control.print(F("  Serial"));
+        msg.control.print(F("Serial"));
         msg.control.print(port_id);
         msg.control.print(F(": "));
 

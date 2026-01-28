@@ -8,6 +8,7 @@
 #include "message_router.h"  // For TransportID enum
 #include "bus_defaults.h"
 #include "message_api.h"
+#include "log_tags.h"
 #include "pin_registry.h"
 #include <EEPROM.h>
 
@@ -61,12 +62,12 @@ uint8_t calculateChecksum(SystemConfig* cfg) {
 void initSystemConfig() {
     // Try loading from EEPROM
     if (loadSystemConfig()) {
-        msg.debug.println(F("✓ System config loaded from EEPROM"));
+        msg.debug.info(TAG_SYSTEM, "System config loaded from EEPROM");
         return;
     }
 
     // Fallback: Use defaults from config.h
-    msg.debug.println(F("Using default system config"));
+    msg.debug.info(TAG_SYSTEM, "Using default system config");
     resetSystemConfig();
 }
 
@@ -229,6 +230,16 @@ void resetSystemConfig() {
         systemConfig.serial.reserved[i] = 0;
     }
 
+    // Log Filter Configuration defaults
+    // Default to INFO level (show ERROR, WARN, INFO but not DEBUG)
+    systemConfig.logFilter.control_level = 3;  // LOG_LEVEL_INFO
+    systemConfig.logFilter.data_level = 3;     // LOG_LEVEL_INFO
+    systemConfig.logFilter.debug_level = 3;    // LOG_LEVEL_INFO
+    systemConfig.logFilter.enabledTags = 0xFFFFFFFF;  // All tags enabled
+    for (int i = 0; i < 5; i++) {
+        systemConfig.logFilter.reserved[i] = 0;
+    }
+
     // Calculate checksum
     systemConfig.checksum = calculateChecksum(&systemConfig);
 }
@@ -297,52 +308,16 @@ bool loadSystemConfig() {
         return false;
     }
 
-#ifdef ENABLE_RELAY_OUTPUT
-    // Handle migration from v4 to v5 (relay feature added)
-    if (temp.version == 4) {
-        msg.debug.println(F("Migrating system config from v4 to v5"));
-
-        // Load old 64-byte config (v4)
-        // Copy first 64 bytes to systemConfig
-        uint8_t* src = (uint8_t*)&temp;
-        uint8_t* dst = (uint8_t*)&systemConfig;
-        memcpy(dst, src, 64);  // Copy v4 data
-
-        // Initialize new relay fields with defaults
-        for (int i = 0; i < MAX_RELAYS; i++) {
-            systemConfig.relays[i].outputPin = 0xFF;
-            systemConfig.relays[i].inputIndex = 0xFF;
-            systemConfig.relays[i].mode = RELAY_DISABLED;
-            systemConfig.relays[i].reserved = 0;
-            systemConfig.relays[i].thresholdOn = 0.0;
-            systemConfig.relays[i].thresholdOff = 0.0;
-            systemConfig.relays[i].reserved2 = 0;
-        }
-
-        // Update version number
-        systemConfig.version = SYSTEM_CONFIG_VERSION;
-
-        // Save migrated config
-        saveSystemConfig();
-        msg.debug.println(F("✓ Migration complete"));
-        return true;
-    }
-#endif
-
     // Check version
     if (temp.version != SYSTEM_CONFIG_VERSION) {
-        msg.debug.print(F("System config version mismatch (expected "));
-        msg.debug.print(SYSTEM_CONFIG_VERSION);
-        msg.debug.print(F(", got "));
-        msg.debug.print(temp.version);
-        msg.debug.println(F(") - ignoring"));
+        msg.debug.warn(TAG_SYSTEM, "System config version mismatch (expected %d, got %d) - ignoring", SYSTEM_CONFIG_VERSION, temp.version);
         return false;
     }
 
     // Verify checksum
     uint8_t calculatedChecksum = calculateChecksum(&temp);
     if (temp.checksum != calculatedChecksum) {
-        msg.debug.println(F("System config checksum failed - ignoring"));
+        msg.debug.warn(TAG_SYSTEM, "System config checksum failed - ignoring");
         return false;
     }
 
