@@ -235,7 +235,11 @@ static int cmd_version(int argc, const char* const* argv) {
     msg.control.println();
     msg.control.println(F("========================================"));
     msg.control.print(F("  Firmware: "));
-    msg.control.println(FIRMWARE_VERSION);
+    msg.control.println(firmwareVersionString());
+    msg.control.print(F("  Build: "));
+    msg.control.println(firmwareVersion());
+    msg.control.print(F("  Git: "));
+    msg.control.println(FW_GIT_HASH);
     msg.control.print(F("  EEPROM Version: "));
     msg.control.println(EEPROM_VERSION);
     msg.control.print(F("  Active Inputs: "));
