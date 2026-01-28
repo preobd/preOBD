@@ -8,6 +8,7 @@
 #include "../lib/sensor_library.h"
 #include "../lib/units_registry.h"
 #include "../lib/message_api.h"
+#include "../lib/log_tags.h"
 
 #ifdef ENABLE_SD_LOGGING
 
@@ -26,26 +27,25 @@ void initSDLog() {
     // Just check if it's available and create log file
 
     if (!isSDInitialized()) {
-        msg.debug.println(F("⚠ SD logging failed - SD card not initialized"));
+        msg.debug.warn(TAG_SD, "SD logging failed - SD card not initialized");
         return;
     }
 
-    msg.debug.println(F("✓ SD card ready for logging"));
+    msg.debug.info(TAG_SD, "SD card ready for logging");
 
     // Create or open log file with timestamp
     char filename[20];
     snprintf(filename, sizeof(filename), "log_%lu.csv", millis());
-    
+
     logFile = SD.open(filename, FILE_WRITE);
-    
+
     if (logFile) {
         // Write CSV header
         logFile.println("Time,Sensor,Value,Units");
         logFile.flush();
-        msg.debug.print(F("Logging to: "));
-        msg.debug.println(filename);
+        msg.debug.info(TAG_SD, "Logging to: %s", filename);
     } else {
-        msg.debug.println(F("Failed to create log file"));
+        msg.debug.error(TAG_SD, "Failed to create log file");
     }
 }
 
@@ -93,7 +93,7 @@ void updateSDLog() {
 void closeSDLog() {
     if (logFile) {
         logFile.close();
-        msg.debug.println(F("Log file closed"));
+        msg.debug.info(TAG_SD, "Log file closed");
     }
 }
 
