@@ -2,14 +2,29 @@
  * message_api.h - High-Level Messaging API
  *
  * Provides convenient logging interface that routes to appropriate transports:
- * - msg.control - Interactive commands, configuration responses
+ * - msg.control - Interactive commands, configuration responses (user-facing)
  * - msg.data - Sensor data output (CSV, RealDash binary)
- * - msg.debug - Debug/diagnostic messages
+ * - msg.debug - Debug/diagnostic messages with log levels and tags
  *
  * Usage:
- *   msg.control.println(F("Configuration saved"));
+ *   // Control plane - user feedback with F() macro
+ *   msg.control.println(F("✓ Configuration saved"));
+ *
+ *   // Data plane - sensor output
  *   msg.data.print(ptr->abbrName);
- *   msg.debug.println(F("✓ ADC configured"));
+ *
+ *   // Debug plane - structured logging (NO F() macro - printf uses RAM strings)
+ *   msg.debug.error(TAG_SD, "Mount failed");
+ *   msg.debug.warn(TAG_SENSOR, "BME280 not found at 0x%02X", addr);
+ *   msg.debug.info(TAG_ADC, "ADC configured: %d-bit resolution", bits);
+ *   msg.debug.debug(TAG_I2C, "Read %d bytes from device 0x%02X", count, addr);
+ *
+ *   // Or use macro shortcuts
+ *   LOG_ERROR(TAG_SD, "Mount failed");
+ *   LOG_INFO(TAG_ADC, "ADC configured: %d-bit resolution", bits);
+ *
+ *   // Legacy debug API still works (maps to INFO level, no tag)
+ *   msg.debug.println(F("Legacy message"));
  *
  * Build Flags:
  *   -D DISABLE_DEBUG_MESSAGES - Compile out all debug messages (saves flash/RAM)
