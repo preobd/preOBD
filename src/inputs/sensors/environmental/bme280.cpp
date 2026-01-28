@@ -14,6 +14,7 @@
 #include "../../../lib/bus_manager.h"
 #include "../../input.h"
 #include "../../../lib/message_api.h"
+#include "../../../lib/log_tags.h"
 #include <Wire.h>
 
 #ifdef ENABLE_BME280
@@ -60,19 +61,17 @@ void initBME280(Input* ptr) {
     }
 
     if (bme280_initialized) {
-        msg.debug.print(F("✓ BME280 (0x"));
-        msg.debug.print(bme280_i2c_address, HEX);
-        msg.debug.print(F(") "));
         // Show virtual pin number (I2C:0, I2C:1, etc.)
         if (ptr->pin >= 0xF0) {
-            msg.debug.print(F("I2C:"));
-            msg.debug.print(ptr->pin - 0xF0);
-            msg.debug.print(F(" for "));
+            msg.debug.info(TAG_SENSOR, "BME280 (0x%02X) initialized on I2C:%d for %s",
+                          bme280_i2c_address, ptr->pin - 0xF0, ptr->abbrName);
+        } else {
+            msg.debug.info(TAG_SENSOR, "BME280 (0x%02X) initialized for %s",
+                          bme280_i2c_address, ptr->abbrName);
         }
-        msg.debug.println(ptr->abbrName);
     } else {
-        msg.debug.println(F("⚠ BME280 not found at 0x76 or 0x77"));
-        msg.debug.println(F("⚠ BME280 sensors will read NAN"));
+        msg.debug.warn(TAG_SENSOR, "BME280 not found at 0x76 or 0x77");
+        msg.debug.warn(TAG_SENSOR, "BME280 sensors will read NAN");
         delete bme280_ptr;
         bme280_ptr = nullptr;
     }
@@ -143,7 +142,7 @@ void readBME280Elevation(Input *ptr) {
 // ===== STUB IMPLEMENTATIONS (BME280 DISABLED) =====
 
 void initBME280(Input* ptr) {
-    msg.debug.println(F("⚠ BME280 support not compiled in"));
+    msg.debug.warn(TAG_SENSOR, "BME280 support not compiled in");
 }
 
 void readBME280Temp(Input *ptr) { ptr->value = NAN; }
