@@ -399,7 +399,7 @@ bool initInputManager() {
     // Configure inputs using the registry-based functions
     // This reuses the same runtime configuration logic
 
-    Serial.println(F("Initializing from static configuration..."));
+    msg.control.println(F("Initializing from static configuration..."));
 
     #ifdef INPUT_0_PIN
         CONFIGURE_INPUT(0, 0);
@@ -484,9 +484,9 @@ bool initInputManager() {
         }
     }
 
-    Serial.print(F("✓ Loaded "));
-    Serial.print(numActiveInputs);
-    Serial.println(F(" inputs from static config"));
+    msg.control.print(F("✓ Loaded "));
+    msg.control.print(numActiveInputs);
+    msg.control.println(F(" inputs from static config"));
     return true;  // Static config always valid
 
 #else
