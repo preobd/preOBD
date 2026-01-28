@@ -2,14 +2,26 @@
  * message_api.h - High-Level Messaging API
  *
  * Provides convenient logging interface that routes to appropriate transports:
- * - msg.control - Interactive commands, configuration responses
+ * - msg.control - Interactive commands, configuration responses (user-facing)
  * - msg.data - Sensor data output (CSV, RealDash binary)
- * - msg.debug - Debug/diagnostic messages
+ * - msg.debug - Debug/diagnostic messages with log levels and tags
  *
  * Usage:
- *   msg.control.println(F("Configuration saved"));
+ *   // Control plane - user feedback with F() macro
+ *   msg.control.println(F("✓ Configuration saved"));
+ *
+ *   // Data plane - sensor output
  *   msg.data.print(ptr->abbrName);
- *   msg.debug.println(F("✓ ADC configured"));
+ *
+ *   // Debug plane - structured logging (NO F() macro - printf uses RAM strings)
+ *   msg.debug.error(TAG_SD, "Mount failed");
+ *   msg.debug.warn(TAG_SENSOR, "BME280 not found at 0x%02X", addr);
+ *   msg.debug.info(TAG_ADC, "ADC configured: %d-bit resolution", bits);
+ *   msg.debug.debug(TAG_I2C, "Read %d bytes from device 0x%02X", count, addr);
+ *
+ *   // Or use macro shortcuts
+ *   LOG_ERROR(TAG_SD, "Mount failed");
+ *   LOG_INFO(TAG_ADC, "ADC configured: %d-bit resolution", bits);
  *
  * Build Flags:
  *   -D DISABLE_DEBUG_MESSAGES - Compile out all debug messages (saves flash/RAM)
@@ -19,7 +31,10 @@
 #define MESSAGE_API_H
 
 #include "message_router.h"
+#include "log_filter.h"
+#include "log_tags.h"
 #include <Arduino.h>
+#include <stdarg.h>  // For variadic functions
 
 // Print stream wrapper that routes to a specific message plane
 class MessageStream {
@@ -150,6 +165,24 @@ public:
         return print(n) + println();
     }
 
+    size_t print(unsigned long n, int base) {
+        char buf[20];
+        if (base == HEX) {
+            ultoa(n, buf, 16);
+        } else if (base == BIN) {
+            ultoa(n, buf, 2);
+        } else if (base == OCT) {
+            ultoa(n, buf, 8);
+        } else {
+            ultoa(n, buf, 10);
+        }
+        return print(buf);
+    }
+
+    size_t println(unsigned long n, int base) {
+        return print(n, base) + println();
+    }
+
     // ========== Float Output ==========
 
     size_t print(float f, int digits = 2) {
@@ -222,6 +255,20 @@ public:
     size_t write(uint8_t c) {
         return write(&c, 1);
     }
+
+    // ========== Level-Based Logging (Printf-style) ==========
+
+    // Printf-style logging methods with log levels and tags
+    // Note: Do NOT use F() macro - format strings must be in RAM for vsnprintf
+    // These methods check the log filter before formatting/outputting
+    size_t error(const char* tag, const char* fmt, ...);
+    size_t warn(const char* tag, const char* fmt, ...);
+    size_t info(const char* tag, const char* fmt, ...);
+    size_t debug(const char* tag, const char* fmt, ...);
+
+private:
+    // Helper method to format and output with level/tag prefix
+    size_t logWithLevel(LogLevel level, const char* tag, const char* msg);
 };
 
 // Stub class for disabled debug messages (all methods compile to no-ops)
@@ -254,6 +301,12 @@ public:
     inline size_t println(const __FlashStringHelper* str) { (void)str; return 0; }
     inline size_t write(const uint8_t* data, size_t len) { (void)data; (void)len; return 0; }
     inline size_t write(uint8_t c) { (void)c; return 0; }
+
+    // Level-based logging stub methods (compile to no-ops)
+    inline size_t error(const char* tag, const char* fmt, ...) { (void)tag; (void)fmt; return 0; }
+    inline size_t warn(const char* tag, const char* fmt, ...) { (void)tag; (void)fmt; return 0; }
+    inline size_t info(const char* tag, const char* fmt, ...) { (void)tag; (void)fmt; return 0; }
+    inline size_t debug(const char* tag, const char* fmt, ...) { (void)tag; (void)fmt; return 0; }
 };
 #endif
 

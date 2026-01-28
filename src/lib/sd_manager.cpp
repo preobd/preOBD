@@ -13,6 +13,7 @@
 #include "sd_manager.h"
 #include "system_config.h"
 #include "message_api.h"
+#include "log_tags.h"
 #include "watchdog.h"
 #include <SPI.h>
 #include <SD.h>
@@ -33,7 +34,7 @@ static bool sdInitialized = false;
  * Called once during setup(), used by both SD logging and JSON config
  */
 void initSD() {
-    msg.debug.println(F("[SD] Initializing SD card..."));
+    msg.debug.info(TAG_SD, "Initializing SD card...");
 
     // Extend watchdog timeout - multiple SD.begin() attempts can take >10 seconds total
     // Note: Teensy 4.x cannot disable watchdog, only extend timeout
@@ -45,15 +46,14 @@ void initSD() {
     if (systemConfig.sdCSPin == 254) {
         // Teensy 4.1 built-in SD uses 4-bit SDIO interface
         // Other platforms may use this as a special pin designation
-        msg.debug.println(F("[SD] Using built-in SD (BUILTIN_SDCARD)"));
-        msg.debug.println(F("[SD] Calling SD.begin(BUILTIN_SDCARD)..."));
+        msg.debug.info(TAG_SD, "Using built-in SD (BUILTIN_SDCARD)");
+        msg.debug.debug(TAG_SD, "Calling SD.begin(BUILTIN_SDCARD)...");
         delay(100);  // Let hardware stabilize
         initSuccess = SD.begin(BUILTIN_SDCARD);
     } else {
         // External SD card uses SPI with specified CS pin
         pinMode(systemConfig.sdCSPin, OUTPUT);
-        msg.debug.print(F("[SD] Using external SD, CS Pin: "));
-        msg.debug.println(systemConfig.sdCSPin);
+        msg.debug.info(TAG_SD, "Using external SD, CS Pin: %d", systemConfig.sdCSPin);
         delay(100);  // Let hardware stabilize
         initSuccess = SD.begin(systemConfig.sdCSPin);
     }
@@ -62,12 +62,12 @@ void initSD() {
     watchdogEnable(2000);
 
     if (initSuccess) {
-        msg.debug.println(F("[SD] ✓ SD card initialized successfully"));
-        msg.debug.println(F("[SD] Card detected and ready"));
+        msg.debug.info(TAG_SD, "SD card initialized successfully");
+        msg.debug.info(TAG_SD, "Card detected and ready");
         sdInitialized = true;
     } else {
-        msg.debug.println(F("[SD] ⚠ SD card initialization failed"));
-        msg.debug.println(F("[SD] Check: Is SD card inserted? Is it formatted FAT32?"));
+        msg.debug.warn(TAG_SD, "SD card initialization failed");
+        msg.debug.warn(TAG_SD, "Check: Is SD card inserted? Is it formatted FAT32?");
         sdInitialized = false;
     }
 }

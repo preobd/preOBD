@@ -8,6 +8,7 @@
 
 #include "system_config.h"
 #include "message_api.h"
+#include "log_tags.h"
 
 // Display control functions from display modules
 extern void enableLCD();
@@ -39,10 +40,10 @@ void toggleDisplayRuntime() {
 
     if (displayRuntimeState) {
         enableLCD();
-        msg.debug.println(F("✓ Display toggled ON"));
+        msg.debug.info(TAG_DISPLAY, "Display toggled ON");
     } else {
         disableLCD();
-        msg.debug.println(F("✓ Display toggled OFF"));
+        msg.debug.info(TAG_DISPLAY, "Display toggled OFF");
     }
 }
 

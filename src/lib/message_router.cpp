@@ -52,6 +52,12 @@ void MessageRouter::loadConfig() {
     secondaryTransport[PLANE_CONTROL] = systemConfig.router.control_secondary;
     secondaryTransport[PLANE_DATA] = systemConfig.router.data_secondary;
     secondaryTransport[PLANE_DEBUG] = systemConfig.router.debug_secondary;
+
+    // Load log filter configuration from SystemConfig.logFilter
+    logFilter.setLevel(PLANE_CONTROL, (LogLevel)systemConfig.logFilter.control_level);
+    logFilter.setLevel(PLANE_DATA, (LogLevel)systemConfig.logFilter.data_level);
+    logFilter.setLevel(PLANE_DEBUG, (LogLevel)systemConfig.logFilter.debug_level);
+    logFilter.setEnabledTags(systemConfig.logFilter.enabledTags);
 }
 
 void MessageRouter::syncConfig() {
@@ -62,6 +68,12 @@ void MessageRouter::syncConfig() {
     systemConfig.router.data_secondary = secondaryTransport[PLANE_DATA];
     systemConfig.router.debug_primary = primaryTransport[PLANE_DEBUG];
     systemConfig.router.debug_secondary = secondaryTransport[PLANE_DEBUG];
+
+    // Copy log filter state to SystemConfig.logFilter
+    systemConfig.logFilter.control_level = logFilter.getLevel(PLANE_CONTROL);
+    systemConfig.logFilter.data_level = logFilter.getLevel(PLANE_DATA);
+    systemConfig.logFilter.debug_level = logFilter.getLevel(PLANE_DEBUG);
+    systemConfig.logFilter.enabledTags = logFilter.getEnabledTags();
 }
 
 void MessageRouter::saveConfig() {

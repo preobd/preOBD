@@ -13,6 +13,7 @@
 #define MESSAGE_ROUTER_H
 
 #include "transport_interface.h"
+#include "log_filter.h"
 #include <Arduino.h>
 
 // Message plane enumeration
@@ -48,6 +49,9 @@ private:
     // Plane to transport mapping (runtime configurable)
     uint8_t primaryTransport[NUM_PLANES];
     uint8_t secondaryTransport[NUM_PLANES];  // For multi-cast
+
+    // Log filtering (runtime configurable)
+    LogFilter logFilter;
 
 public:
     MessageRouter();
@@ -87,6 +91,13 @@ public:
     // Get the active control transport
     TransportInterface* getActiveControlTransport() {
         return activeControlTransport;
+    }
+
+    // ========== Log Filtering ==========
+
+    // Get the log filter instance
+    LogFilter& getLogFilter() {
+        return logFilter;
     }
 
     // ========== Configuration ==========

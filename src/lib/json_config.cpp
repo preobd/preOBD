@@ -21,6 +21,7 @@
 #include "application_presets.h"
 #include "../version.h"
 #include "message_api.h"
+#include "log_tags.h"
 #include "pin_registry.h"
 #include "watchdog.h"
 
@@ -295,6 +296,17 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
         port["enabled"] = (bool)(systemConfig.serial.enabled_mask & (1 << i));
         port["baudrate"] = getBaudRateFromIndex(systemConfig.serial.baudrate_index[i]);
     }
+
+    // Log Filter Configuration
+    JsonObject logFilter = systemObj["logFilter"].to<JsonObject>();
+    const char* levelNames[] = {"NONE", "ERROR", "WARN", "INFO", "DEBUG"};
+    logFilter["controlLevel"] = systemConfig.logFilter.control_level <= 4 ? levelNames[systemConfig.logFilter.control_level] : "UNKNOWN";
+    logFilter["dataLevel"] = systemConfig.logFilter.data_level <= 4 ? levelNames[systemConfig.logFilter.data_level] : "UNKNOWN";
+    logFilter["debugLevel"] = systemConfig.logFilter.debug_level <= 4 ? levelNames[systemConfig.logFilter.debug_level] : "UNKNOWN";
+
+    char tagsBuf[11];  // "0xFFFFFFFF" + null terminator
+    snprintf(tagsBuf, sizeof(tagsBuf), "0x%08lX", (unsigned long)systemConfig.logFilter.enabledTags);
+    logFilter["enabledTags"] = tagsBuf;
 }
 
 // JSON Schema Version
@@ -374,16 +386,11 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     const char* sensorName = inputObj["sensor"];
     const char* unitsName = inputObj["units"];
 
-    msg.debug.print(F("[IMPORT] Processing input "));
-    msg.debug.print(index);
-    msg.debug.print(F(" (pin "));
-    msg.debug.print(pin);
-    msg.debug.print(F("): app="));
-    msg.debug.print(appName ? appName : "NULL");
-    msg.debug.print(F(", sensor="));
-    msg.debug.print(sensorName ? sensorName : "NULL");
-    msg.debug.print(F(", units="));
-    msg.debug.println(unitsName ? unitsName : "NULL");
+    msg.debug.debug(TAG_JSON, "Processing input %d (pin %d): app=%s, sensor=%s, units=%s",
+                    index, pin,
+                    appName ? appName : "NULL",
+                    sensorName ? sensorName : "NULL",
+                    unitsName ? unitsName : "NULL");
 
     // Validate required fields are present
     if (!appName || !sensorName || !unitsName) {
@@ -394,13 +401,13 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         msg.control.println(F(") - missing required fields"));
 
         if (!appName) {
-            msg.debug.println(F("[IMPORT] Missing application field"));
+            msg.debug.error(TAG_JSON, "Missing application field");
         }
         if (!sensorName) {
-            msg.debug.println(F("[IMPORT] Missing sensor field"));
+            msg.debug.error(TAG_JSON, "Missing sensor field");
         }
         if (!unitsName) {
-            msg.debug.println(F("[IMPORT] Missing units field"));
+            msg.debug.error(TAG_JSON, "Missing units field");
         }
 
         return false;
@@ -411,12 +418,7 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     uint8_t sensorIdx = getSensorIndexByName(sensorName);
     uint8_t unitsIdx = getUnitsIndexByName(unitsName);
 
-    msg.debug.print(F("[IMPORT] Registry indices: app="));
-    msg.debug.print(appIdx);
-    msg.debug.print(F(", sensor="));
-    msg.debug.print(sensorIdx);
-    msg.debug.print(F(", units="));
-    msg.debug.println(unitsIdx);
+    msg.debug.debug(TAG_JSON, "Registry indices: app=%d, sensor=%d, units=%d", appIdx, sensorIdx, unitsIdx);
 
     // Validate registry lookups (index 0 = NONE for app/sensor, but CELSIUS for units)
     // Note: Units index 0 is CELSIUS (valid), so we can't use 0 to detect lookup failure
@@ -429,12 +431,10 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         msg.control.println(F(")"));
 
         if (appIdx == 0) {
-            msg.debug.print(F("[IMPORT] Invalid application: "));
-            msg.debug.println(appName);
+            msg.debug.error(TAG_JSON, "Invalid application: %s", appName);
         }
         if (sensorIdx == 0) {
-            msg.debug.print(F("[IMPORT] Invalid sensor: "));
-            msg.debug.println(sensorName);
+            msg.debug.error(TAG_JSON, "Invalid sensor: %s", sensorName);
         }
 
         return false;  // Invalid registry entry (0 = NONE for app/sensor)
@@ -501,9 +501,7 @@ bool importInputsFromJSON(JsonArray& inputsArray) {
     uint8_t importedCount = 0;
     uint8_t totalInputs = inputsArray.size();
 
-    msg.debug.print(F("[IMPORT] Processing "));
-    msg.debug.print(totalInputs);
-    msg.debug.println(F(" inputs from JSON"));
+    msg.debug.info(TAG_JSON, "Processing %d inputs from JSON", totalInputs);
 
     for (JsonVariant v : inputsArray) {
         JsonObject inputObj = v.as<JsonObject>();
@@ -511,19 +509,13 @@ bool importInputsFromJSON(JsonArray& inputsArray) {
 
         if (importInputFromJSON(inputObj, idx)) {
             importedCount++;
-            msg.debug.print(F("[IMPORT] Successfully imported input "));
-            msg.debug.println(idx);
+            msg.debug.debug(TAG_JSON, "Successfully imported input %d", idx);
         } else {
-            msg.debug.print(F("[IMPORT] Failed to import input "));
-            msg.debug.println(idx);
+            msg.debug.warn(TAG_JSON, "Failed to import input %d", idx);
         }
     }
 
-    msg.debug.print(F("[IMPORT] Import complete: "));
-    msg.debug.print(importedCount);
-    msg.debug.print(F(" of "));
-    msg.debug.print(totalInputs);
-    msg.debug.println(F(" inputs imported"));
+    msg.debug.info(TAG_JSON, "Import complete: %d of %d inputs imported", importedCount, totalInputs);
 
     numActiveInputs = importedCount;
     return importedCount > 0;
@@ -721,28 +713,28 @@ bool loadConfigFromJSON(const char* jsonString) {
 
 // Save configuration to SD card
 bool saveConfigToSD(const char* filename) {
-    msg.debug.println(F("[SD_SAVE] Starting save operation"));
+    msg.debug.info(TAG_SD, "Starting save operation");
 
     // Check if SD card is initialized (done in main setup)
     if (!isSDInitialized()) {
         msg.control.println(F("ERROR: SD card not initialized"));
-        msg.debug.println(F("[SD_SAVE] SD card not available"));
+        msg.debug.warn(TAG_SD, "SD card not available");
         return false;
     }
 
-    msg.debug.println(F("[SD_SAVE] SD card is ready"));
+    msg.debug.debug(TAG_SD, "SD card is ready");
 
     // Create config directory if it doesn't exist
-    msg.debug.println(F("[SD_SAVE] Checking for config directory"));
+    msg.debug.debug(TAG_SD, "Checking for config directory");
     if (!SD.exists("config")) {
-        msg.debug.println(F("[SD_SAVE] Creating config directory"));
+        msg.debug.debug(TAG_SD, "Creating config directory");
         if (!SD.mkdir("config")) {
-            msg.debug.println(F("[SD_SAVE] Failed to create config directory"));
+            msg.debug.error(TAG_SD, "Failed to create config directory");
         } else {
-            msg.debug.println(F("[SD_SAVE] config directory created"));
+            msg.debug.debug(TAG_SD, "config directory created");
         }
     } else {
-        msg.debug.println(F("[SD_SAVE] config directory exists"));
+        msg.debug.debug(TAG_SD, "config directory exists");
     }
 
     // Generate filename if not provided
@@ -759,72 +751,68 @@ bool saveConfigToSD(const char* filename) {
     }
     filepath[sizeof(filepath) - 1] = '\0';
 
-    msg.debug.print(F("[SD_SAVE] Opening file: "));
-    msg.debug.println(filepath);
+    msg.debug.info(TAG_SD, "Opening file: %s", filepath);
 
     // If file exists, remove it first (FILE_WRITE appends, we want to replace)
     if (SD.exists(filepath)) {
-        msg.debug.println(F("[SD_SAVE] File exists, removing"));
+        msg.debug.debug(TAG_SD, "File exists, removing");
         if (!SD.remove(filepath)) {
-            msg.debug.println(F("[SD_SAVE] Failed to remove existing file"));
+            msg.debug.warn(TAG_SD, "Failed to remove existing file");
         }
     }
 
     // Open file for writing
     File configFile = SD.open(filepath, FILE_WRITE);
     if (!configFile) {
-        msg.debug.println(F("[SD_SAVE] Failed to open file for writing"));
+        msg.debug.error(TAG_SD, "Failed to open file for writing");
         msg.control.print(F("ERROR: Failed to open file: "));
         msg.control.println(filepath);
-        msg.debug.println(F("[SD_SAVE] File open FAILED"));
         // Re-enable watchdog before returning
         watchdogEnable(2000);
-        msg.debug.println(F("[SD_SAVE] Watchdog re-enabled"));
+        msg.debug.debug(TAG_SD, "Watchdog re-enabled");
         return false;
     }
 
-    msg.debug.println(F("[SD_SAVE] File opened successfully"));
-
-    msg.debug.println(F("[SD_SAVE] Writing JSON..."));
+    msg.debug.debug(TAG_SD, "File opened successfully");
+    msg.debug.debug(TAG_SD, "Writing JSON...");
 
     // Write JSON to file
     dumpConfigToJSON(configFile);
 
-    msg.debug.println(F("[SD_SAVE] JSON write complete"));
-
-    msg.debug.println(F("[SD_SAVE] Closing file..."));
+    msg.debug.debug(TAG_SD, "JSON write complete");
+    msg.debug.debug(TAG_SD, "Closing file...");
     configFile.close();
-    msg.debug.println(F("[SD_SAVE] File closed"));
+    msg.debug.debug(TAG_SD, "File closed");
 
     // Re-enable watchdog after SD operations complete
     watchdogEnable(2000);
-    msg.debug.println(F("[SD_SAVE] Watchdog re-enabled"));
+    msg.debug.debug(TAG_SD, "Watchdog re-enabled");
 
     msg.control.print(F("Configuration saved to: "));
     msg.control.println(filepath);
-    msg.debug.println(F("[SD_SAVE] Save operation completed successfully"));
+    msg.debug.info(TAG_SD, "Save operation completed successfully");
 
     return true;
 }
 
 // Load configuration from SD card
 bool loadConfigFromSD(const char* filename) {
-    msg.debug.println(F("[SD_LOAD] Starting load operation"));
+    msg.debug.info(TAG_SD, "Starting load operation");
 
     // Check if SD card is initialized (done in main setup)
     if (!isSDInitialized()) {
         msg.control.println(F("ERROR: SD card not initialized"));
-        msg.debug.println(F("[SD_LOAD] SD card not available"));
+        msg.debug.warn(TAG_SD, "SD card not available");
         return false;
     }
 
-    msg.debug.println(F("[SD_LOAD] SD card is ready"));
+    msg.debug.debug(TAG_SD, "SD card is ready");
 
     // Generate filename with same logic as save
     char filepath[32];
     if (filename == nullptr) {
         msg.control.println(F("ERROR: No filename provided"));
-        msg.debug.println(F("[SD_LOAD] No filename provided"));
+        msg.debug.error(TAG_SD, "No filename provided");
         return false;
     } else {
         // Ensure filename is in config directory
@@ -836,24 +824,22 @@ bool loadConfigFromSD(const char* filename) {
     }
     filepath[sizeof(filepath) - 1] = '\0';
 
-    msg.debug.print(F("[SD_LOAD] Opening file: "));
-    msg.debug.println(filepath);
+    msg.debug.info(TAG_SD, "Opening file: %s", filepath);
 
     // Open file for reading
     File configFile = SD.open(filepath, FILE_READ);
     if (!configFile) {
         msg.control.print(F("ERROR: Failed to open file: "));
         msg.control.println(filepath);
-        msg.debug.println(F("[SD_LOAD] File open FAILED"));
+        msg.debug.error(TAG_SD, "File open FAILED");
         // Re-enable watchdog before returning
         watchdogEnable(2000);
-        msg.debug.println(F("[SD_LOAD] Watchdog re-enabled"));
+        msg.debug.debug(TAG_SD, "Watchdog re-enabled");
         return false;
     }
 
-    msg.debug.println(F("[SD_LOAD] File opened successfully"));
-
-    msg.debug.println(F("[SD_LOAD] Reading file..."));
+    msg.debug.debug(TAG_SD, "File opened successfully");
+    msg.debug.debug(TAG_SD, "Reading file...");
 
     // Read entire file into string
     String jsonString;
@@ -863,31 +849,28 @@ bool loadConfigFromSD(const char* filename) {
         bytesRead++;
     }
 
-    msg.debug.print(F("[SD_LOAD] Read complete: "));
-    msg.debug.print(bytesRead);
-    msg.debug.println(F(" bytes total"));
-
-    msg.debug.println(F("[SD_LOAD] Closing file..."));
+    msg.debug.debug(TAG_SD, "Read complete: %u bytes total", bytesRead);
+    msg.debug.debug(TAG_SD, "Closing file...");
     configFile.close();
-    msg.debug.println(F("[SD_LOAD] File closed"));
+    msg.debug.debug(TAG_SD, "File closed");
 
-    msg.debug.println(F("[SD_LOAD] Parsing JSON..."));
+    msg.debug.debug(TAG_SD, "Parsing JSON...");
 
     // Load configuration
     bool success = loadConfigFromJSON(jsonString.c_str());
 
-    msg.debug.println(F("[SD_LOAD] JSON parsing complete"));
+    msg.debug.debug(TAG_SD, "JSON parsing complete");
 
     // Re-enable watchdog after SD operations complete
     watchdogEnable(2000);
-    msg.debug.println(F("[SD_LOAD] Watchdog re-enabled"));
+    msg.debug.debug(TAG_SD, "Watchdog re-enabled");
 
     if (success) {
         msg.control.print(F("Configuration loaded from: "));
         msg.control.println(filepath);
-        msg.debug.println(F("[SD_LOAD] Load operation completed successfully"));
+        msg.debug.info(TAG_SD, "Load operation completed successfully");
     } else {
-        msg.debug.println(F("[SD_LOAD] Load operation FAILED"));
+        msg.debug.error(TAG_SD, "Load operation FAILED");
     }
 
     return success;

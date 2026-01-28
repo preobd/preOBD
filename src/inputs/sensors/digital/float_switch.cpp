@@ -9,6 +9,7 @@
 #include "../../../lib/platform.h"
 #include "../../input.h"
 #include "../../../lib/message_api.h"
+#include "../../../lib/log_tags.h"
 
 // ===== INITIALIZATION =====
 
@@ -22,10 +23,7 @@
  */
 void initFloatSwitch(Input* ptr) {
     pinMode(ptr->pin, INPUT_PULLUP);  // Most float switches need pullup
-    msg.debug.print(F("✓ Digital input on pin "));
-    msg.debug.print(ptr->pin);
-    msg.debug.print(F(" for "));
-    msg.debug.println(ptr->abbrName);
+    msg.debug.info(TAG_SENSOR, "Digital input on pin %d for %s", ptr->pin, ptr->abbrName);
 }
 
 // ===== READING =====

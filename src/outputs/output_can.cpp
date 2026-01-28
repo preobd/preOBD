@@ -13,6 +13,7 @@
 #include "../inputs/input.h"
 #include "../inputs/input_manager.h"
 #include "../lib/message_api.h"
+#include "../lib/log_tags.h"
 
 #ifdef ENABLE_CAN
 
@@ -94,11 +95,8 @@ static void buildPIDLookupTable() {
             for (uint8_t j = 0; j < pidLookupCount; j++) {
                 if (pidLookupTable[j].pid == inputs[i].obd2pid) {
                     isDuplicate = true;
-                    msg.debug.print(F("⚠ Duplicate PID 0x"));
-                    msg.debug.print(inputs[i].obd2pid, HEX);
-                    msg.debug.print(F(" - using first occurrence ("));
-                    msg.debug.print(pidLookupTable[j].inputPtr->abbrName);
-                    msg.debug.println(F(")"));
+                    msg.debug.warn(TAG_CAN, "Duplicate PID 0x%02X - using first occurrence (%s)",
+                                  inputs[i].obd2pid, pidLookupTable[j].inputPtr->abbrName);
                     break;
                 }
             }
@@ -111,9 +109,7 @@ static void buildPIDLookupTable() {
         }
     }
 
-    msg.debug.print(F("✓ Built OBD-II PID lookup table: "));
-    msg.debug.print(pidLookupCount);
-    msg.debug.println(F(" PIDs available"));
+    msg.debug.info(TAG_CAN, "Built OBD-II PID lookup table: %d PIDs available", pidLookupCount);
 }
 
 /**
@@ -183,13 +179,8 @@ static void sendPID00Response() {
     sendCANFrame(0x7E8, frameData, 8);
 
     #ifdef DEBUG
-    msg.debug.print(F("PID 00 bitmap: "));
-    for (int i = 0; i < 4; i++) {
-        if (bitmap[i] < 0x10) msg.debug.print('0');
-        msg.debug.print(bitmap[i], HEX);
-        msg.debug.print(' ');
-    }
-    msg.debug.println();
+    msg.debug.debug(TAG_CAN, "PID 00 bitmap: %02X %02X %02X %02X",
+                   bitmap[0], bitmap[1], bitmap[2], bitmap[3]);
     #endif
 }
 
@@ -208,8 +199,7 @@ static void sendNegativeResponse(uint32_t requestId, uint8_t mode, uint8_t nrc) 
     sendCANFrame(0x7E8, frameData, 8);
 
     #ifdef DEBUG
-    msg.debug.print(F("Sent negative response: NRC 0x"));
-    msg.debug.println(nrc, HEX);
+    msg.debug.debug(TAG_CAN, "Sent negative response: NRC 0x%02X", nrc);
     #endif
 }
 
@@ -221,7 +211,7 @@ static void sendOBD2Response(Input* input) {
     byte frameData[8];
 
     if (!buildOBD2Frame(frameData, input)) {
-        msg.debug.println(F("⚠ Failed to build OBD2 response"));
+        msg.debug.warn(TAG_CAN, "Failed to build OBD2 response");
         return;
     }
 
@@ -249,10 +239,7 @@ static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
     uint8_t pid = data[2];
 
     #ifdef DEBUG
-    msg.debug.print(F("OBD-II Request: Mode=0x"));
-    msg.debug.print(mode, HEX);
-    msg.debug.print(F(" PID=0x"));
-    msg.debug.println(pid, HEX);
+    msg.debug.debug(TAG_CAN, "OBD-II Request: Mode=0x%02X PID=0x%02X", mode, pid);
     #endif
 
     // Only handle Mode 01 (Show current data)
@@ -292,8 +279,8 @@ void initCAN() {
         Can0.enableMBInterrupt(MB0);
         Can0.enableMBInterrupt(MB1);
 
-        msg.debug.println(F("✓ Native FlexCAN initialized (500kbps)"));
-        msg.debug.println(F("✓ OBD-II RX filters configured (0x7DF, 0x7E0)"));
+        msg.debug.info(TAG_CAN, "Native FlexCAN initialized (500kbps)");
+        msg.debug.info(TAG_CAN, "OBD-II RX filters configured (0x7DF, 0x7E0)");
     #elif defined(USING_ESP32_TWAI)
         // Initialize ESP32 TWAI (CAN)
         // Note: External CAN transceiver required (MCP2551, TJA1050, SN65HVD230, etc.)
@@ -306,21 +293,21 @@ void initCAN() {
         #endif
         ESP32Can.setSpeed(ESP32Can.convertSpeed(500));  // 500 kbps
         if (ESP32Can.begin()) {
-            msg.debug.println(F("✓ ESP32 TWAI (CAN) initialized (500kbps)"));
-            msg.debug.println(F("✓ OBD-II request/response enabled"));
+            msg.debug.info(TAG_CAN, "ESP32 TWAI (CAN) initialized (500kbps)");
+            msg.debug.info(TAG_CAN, "OBD-II request/response enabled");
         } else {
-            msg.debug.println(F("⚠ ESP32 TWAI init failed!"));
+            msg.debug.error(TAG_CAN, "ESP32 TWAI init failed!");
             return;
         }
     #else
         // Initialize MCP2515 via SPI
         CAN.setPins(CAN_CS, CAN_INT);
         if (!CAN.begin(500E3)) {
-            msg.debug.println(F("⚠ MCP2515 CAN init failed!"));
+            msg.debug.error(TAG_CAN, "MCP2515 CAN init failed!");
             return;
         }
-        msg.debug.println(F("✓ MCP2515 CAN initialized (500kbps)"));
-        msg.debug.println(F("✓ OBD-II request/response enabled"));
+        msg.debug.info(TAG_CAN, "MCP2515 CAN initialized (500kbps)");
+        msg.debug.info(TAG_CAN, "OBD-II request/response enabled");
 
         // Uncomment for testing
         // CAN.loopback();

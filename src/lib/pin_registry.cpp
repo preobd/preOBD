@@ -7,6 +7,7 @@
 
 #include "pin_registry.h"
 #include "message_api.h"
+#include "log_tags.h"
 #include <Arduino.h>
 
 // ============================================================================
@@ -49,7 +50,7 @@ bool registerPin(uint8_t pin, PinUsageType type, const char* description) {
 
     // Check if registry is full
     if (registrySize >= MAX_PIN_REGISTRY) {
-        msg.debug.println(F("✗ ERROR: Pin registry full"));
+        msg.debug.error(TAG_SYSTEM, "Pin registry full");
         return false;
     }
 
@@ -127,27 +128,15 @@ bool validateNoPinConflict(uint8_t pin, PinUsageType newType, const char* newDes
     PinUsageType existingType = getPinUsage(pin);
     const char* existingDesc = getPinDescription(pin);
 
-    msg.debug.print(F("✗ ERROR: Pin "));
-    msg.debug.print(pin);
-    msg.debug.println(F(" already in use"));
-
-    msg.debug.print(F("  Current use: "));
-    msg.debug.print(getPinUsageTypeName(existingType));
-    if (existingDesc) {
-        msg.debug.print(F(" ("));
-        msg.debug.print(existingDesc);
-        msg.debug.print(F(")"));
-    }
-    msg.debug.println();
-
-    msg.debug.print(F("  Attempted use: "));
-    msg.debug.print(getPinUsageTypeName(newType));
-    if (newDesc) {
-        msg.debug.print(F(" ("));
-        msg.debug.print(newDesc);
-        msg.debug.print(F(")"));
-    }
-    msg.debug.println();
+    msg.debug.error(TAG_SYSTEM, "Pin %d already in use", pin);
+    msg.debug.error(TAG_SYSTEM, "  Current: %s%s%s",
+                   getPinUsageTypeName(existingType),
+                   existingDesc ? " (" : "",
+                   existingDesc ? existingDesc : "");
+    msg.debug.error(TAG_SYSTEM, "  Attempted: %s%s%s",
+                   getPinUsageTypeName(newType),
+                   newDesc ? " (" : "",
+                   newDesc ? newDesc : "");
 
     return false;  // Conflict detected
 }
