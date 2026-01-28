@@ -23,9 +23,6 @@
  *   LOG_ERROR(TAG_SD, "Mount failed");
  *   LOG_INFO(TAG_ADC, "ADC configured: %d-bit resolution", bits);
  *
- *   // Legacy debug API still works (maps to INFO level, no tag)
- *   msg.debug.println(F("Legacy message"));
- *
  * Build Flags:
  *   -D DISABLE_DEBUG_MESSAGES - Compile out all debug messages (saves flash/RAM)
  */

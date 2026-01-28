@@ -301,7 +301,6 @@ void setup() {
     initOutputModules();
 
     // Wait for sensors to stabilize
-    msg.debug.println(F(""));
     msg.debug.info(TAG_SENSOR, "Waiting for sensors to stabilize...");
     delay(1000);  // Increased from 500ms - MAX6675 needs ~220ms for first conversion
 
@@ -310,8 +309,6 @@ void setup() {
         lastInputRead[i] = 0;
     }
 
-    msg.debug.println(F(""));
-    msg.debug.println(F("========================================"));
     msg.debug.info(TAG_SYSTEM, "Initialization complete!");
 #ifdef USE_STATIC_CONFIG
     msg.debug.info(TAG_CONFIG, "Mode: Compile-Time Config");
@@ -320,10 +317,6 @@ void setup() {
     msg.debug.info(TAG_CONFIG, "ADC reference: %.2fV", AREF_VOLTAGE);
     msg.debug.info(TAG_CONFIG, "ADC resolution: %d bits", ADC_RESOLUTION);
     msg.debug.info(TAG_CONFIG, "ADC max value: %d", ADC_MAX_VALUE);
-    msg.debug.println(F("========================================"));
-    msg.debug.println(F(""));
-#else
-    msg.debug.println(F(""));
 #endif
 
     // ===== TEST MODE ACTIVATION =====
@@ -336,11 +329,7 @@ void setup() {
     delay(10);  // Allow pin to stabilize
 
     if (digitalRead(TEST_MODE_TRIGGER_PIN) == LOW) {
-        msg.debug.println(F(""));
-        msg.debug.println(F("========================================"));
         msg.debug.info(TAG_SYSTEM, "TEST MODE TRIGGER DETECTED!");
-        msg.debug.println(F("========================================"));
-        msg.debug.println(F(""));
 
         // List available scenarios
         listTestScenarios();
