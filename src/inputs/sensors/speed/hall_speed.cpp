@@ -12,6 +12,7 @@
 #include "../../../lib/sensor_types.h"
 #include "../../../lib/sensor_library.h"
 #include "../../../lib/message_api.h"
+#include "../../../lib/log_tags.h"
 
 // ===== GLOBAL VARIABLES FOR SPEED CALCULATION =====
 // These must be global to be accessed by the ISR
@@ -55,10 +56,7 @@ void speedPulseISR() {
 void initHallSpeed(Input* ptr) {
     pinMode(ptr->pin, INPUT);
     attachInterrupt(digitalPinToInterrupt(ptr->pin), speedPulseISR, RISING);
-    msg.debug.print(F("✓ Speed sensing on pin "));
-    msg.debug.print(ptr->pin);
-    msg.debug.print(F(" for "));
-    msg.debug.println(ptr->abbrName);
+    msg.debug.info(TAG_SENSOR, "Speed sensing on pin %d for %s", ptr->pin, ptr->abbrName);
 }
 
 // ===== READING =====
