@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **RGB LED status indicator** - Single RGB LED replaces three separate LEDs with PWM effects (blinking, pulsing)
+- **LED indicator priority system** - Alarms override mode indication, extensible for future uses (SD write, pairing status)
+- **Customizable LED colors** - User-configurable colors in rgb_led.h for accessibility and personal preferences
+- **LED indicator effects** - Configurable blinking and pulsing/breathing effects
+- **LED indicator documentation** - Comprehensive guide covering hardware, wiring, configuration, and troubleshooting
+
+### Changed
+- **LED pins moved** - Status indicator moved from pins 30-32 (non-PWM) to 6-8 (PWM-capable)
+- **ENABLE_LEDS renamed** - Now `ENABLE_LED_INDICATOR` for clarity of purpose
+
 ## [0.6.5-beta] - 2025-01-27
 
 ### Added

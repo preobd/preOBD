@@ -218,15 +218,15 @@ openEMS uses modular library dependency groups for clarity:
 ```ini
 [standard_features]
 build_flags =
-    -D ENABLE_CAN           # CAN bus output
-    -D ENABLE_REALDASH      # RealDash protocol output
-    -D ENABLE_SERIAL_OUTPUT # CSV serial output
-    -D ENABLE_SD_LOGGING    # SD card data logging
-    -D ENABLE_LCD           # LCD display
-    -D ENABLE_ALARMS        # Alarm system
-    -D ENABLE_LEDS          # LED indicators
-    -D ENABLE_TEST_MODE     # Test mode for development
-    -D ENABLE_BME280        # BME280 environmental sensor
+    -D ENABLE_CAN            # CAN bus output
+    -D ENABLE_REALDASH       # RealDash protocol output
+    -D ENABLE_SERIAL_OUTPUT  # CSV serial output
+    -D ENABLE_SD_LOGGING     # SD card data logging
+    -D ENABLE_LCD            # LCD display
+    -D ENABLE_ALARMS         # Alarm system
+    -D ENABLE_LED_INDICATOR  # RGB LED status indicator (pins 6-8, PWM required)
+    -D ENABLE_TEST_MODE      # Test mode for development
+    -D ENABLE_BME280         # BME280 environmental sensor
 ```
 
 ### Available Library Groups

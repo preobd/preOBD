@@ -30,6 +30,9 @@
     #include "lib/button_handler.h"     // Multi-function button handler
 #endif
 #include "lib/display_manager.h"        // Display runtime state management
+#ifdef ENABLE_LED_INDICATOR
+    #include "lib/rgb_led.h"
+#endif
 #include "outputs/output_base.h"
 
 // Transport abstraction layer
@@ -297,6 +300,11 @@ void setup() {
     // In static mode, this is a no-op (always returns true for isDisplayActive)
     initDisplayManager();
 
+    // Initialize RGB LED indicator
+    #ifdef ENABLE_LED_INDICATOR
+    initRGBLed();
+    #endif
+
     // Initialize output modules
     initOutputModules();
 
@@ -406,6 +414,11 @@ void loop() {
     sendToOutputs(now);  // Data-driven time-sliced output sending
     updateDisplay(now);
     updateOutputs();     // Housekeeping: drain buffers, handle RX
+
+    // Update RGB LED effects (non-blocking)
+    #ifdef ENABLE_LED_INDICATOR
+    updateRGBLed();
+    #endif
 
     // Update test mode if active
     updateTestMode_Wrapper();
