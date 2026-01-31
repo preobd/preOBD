@@ -132,6 +132,18 @@ union CalibrationOverride {
         byte padding[3];
     } speed;
 
+    // CAN sensor (16 bytes)
+    struct {
+        uint16_t source_can_id;     // CAN ID to listen for
+        uint8_t source_pid;         // PID within CAN frame
+        uint8_t data_offset;        // Byte offset in frame
+        uint8_t data_length;        // 1-4 bytes
+        bool is_big_endian;         // Byte order
+        float scale_factor;         // Multiplier
+        float offset;               // Additive offset
+        byte padding[3];
+    } can;
+
     // Raw bytes for memset/EEPROM operations
     byte raw[16];
 };
