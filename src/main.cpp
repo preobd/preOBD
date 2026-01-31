@@ -34,6 +34,12 @@
     #include "lib/rgb_led.h"
 #endif
 #include "outputs/output_base.h"
+#ifdef ENABLE_CAN
+    #include "inputs/input_can.h"
+    #ifndef USE_STATIC_CONFIG
+        #include "inputs/sensors/can/can_scan.h"
+    #endif
+#endif
 
 // Transport abstraction layer
 #include "lib/message_router.h"
@@ -403,6 +409,9 @@ void loop() {
 
     // If in CONFIG mode, skip sensor reading and outputs
     if (isInConfigMode()) {
+        #ifdef ENABLE_CAN
+        updateCANScan();  // Update CAN scan state machine if active
+        #endif
         updateConfigModeDisplay(now);
         return;  // Early return - don't read sensors or send outputs
     }

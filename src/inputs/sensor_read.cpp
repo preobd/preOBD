@@ -72,6 +72,7 @@
 // CAN sensors (CAN bus imported sensors)
 #include "sensors/can/can_frame_cache.cpp"
 #include "sensors/can/can_read.cpp"
+#include "sensors/can/can_scan.cpp"
 
 // Note: thermistors/linear.cpp and pressure/linear.cpp are wrapper files
 // that point to linear/linear_sensor.cpp (already included above)
