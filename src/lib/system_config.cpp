@@ -215,8 +215,13 @@ void resetSystemConfig() {
     systemConfig.buses.i2c_clock = DEFAULT_I2C_CLOCK;
     systemConfig.buses.active_spi = DEFAULT_SPI_BUS;
     systemConfig.buses.spi_clock = DEFAULT_SPI_CLOCK;
-    systemConfig.buses.active_can = DEFAULT_CAN_BUS;
+
+    // CAN configuration - output enabled by default for backward compatibility
+    systemConfig.buses.input_can_bus = 0xFF;  // Disabled by default
+    systemConfig.buses.output_can_bus = DEFAULT_CAN_BUS;
     systemConfig.buses.can_baudrate = DEFAULT_CAN_BAUDRATE;
+    systemConfig.buses.can_input_enabled = 0;   // Disabled by default
+    systemConfig.buses.can_output_enabled = 1;  // Enabled by default
     systemConfig.buses.reserved[0] = 0;
     systemConfig.buses.reserved[1] = 0;
 

@@ -282,7 +282,10 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     buses["i2cClock"] = systemConfig.buses.i2c_clock;
     buses["spi"] = systemConfig.buses.active_spi;
     buses["spiClock"] = systemConfig.buses.spi_clock;
-    buses["can"] = systemConfig.buses.active_can;
+    buses["canInputBus"] = systemConfig.buses.input_can_bus;
+    buses["canOutputBus"] = systemConfig.buses.output_can_bus;
+    buses["canInputEnabled"] = systemConfig.buses.can_input_enabled;
+    buses["canOutputEnabled"] = systemConfig.buses.can_output_enabled;
     buses["canBaudrate"] = systemConfig.buses.can_baudrate;
 
     // Serial Port Configuration
@@ -646,7 +649,22 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
         systemConfig.buses.i2c_clock = buses["i2cClock"] | DEFAULT_I2C_CLOCK;
         systemConfig.buses.active_spi = buses["spi"] | DEFAULT_SPI_BUS;
         systemConfig.buses.spi_clock = buses["spiClock"] | DEFAULT_SPI_CLOCK;
-        systemConfig.buses.active_can = buses["can"] | DEFAULT_CAN_BUS;
+
+        // CAN configuration - support both old and new format
+        if (buses["can"].isNull() == false) {
+            // Old format - single "can" field (backward compatibility)
+            uint8_t can_bus = buses["can"] | DEFAULT_CAN_BUS;
+            systemConfig.buses.input_can_bus = can_bus;
+            systemConfig.buses.output_can_bus = can_bus;
+            systemConfig.buses.can_input_enabled = 1;
+            systemConfig.buses.can_output_enabled = 1;
+        } else {
+            // New format - separate input/output buses
+            systemConfig.buses.input_can_bus = buses["canInputBus"] | 0xFF;
+            systemConfig.buses.output_can_bus = buses["canOutputBus"] | DEFAULT_CAN_BUS;
+            systemConfig.buses.can_input_enabled = buses["canInputEnabled"] | 0;
+            systemConfig.buses.can_output_enabled = buses["canOutputEnabled"] | 1;
+        }
         systemConfig.buses.can_baudrate = buses["canBaudrate"] | DEFAULT_CAN_BAUDRATE;
     } else {
         // No buses object - use defaults (backward compatibility with old configs)
@@ -654,7 +672,10 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
         systemConfig.buses.i2c_clock = DEFAULT_I2C_CLOCK;
         systemConfig.buses.active_spi = DEFAULT_SPI_BUS;
         systemConfig.buses.spi_clock = DEFAULT_SPI_CLOCK;
-        systemConfig.buses.active_can = DEFAULT_CAN_BUS;
+        systemConfig.buses.input_can_bus = 0xFF;  // Disabled by default
+        systemConfig.buses.output_can_bus = DEFAULT_CAN_BUS;
+        systemConfig.buses.can_input_enabled = 0;
+        systemConfig.buses.can_output_enabled = 1;
         systemConfig.buses.can_baudrate = DEFAULT_CAN_BAUDRATE;
     }
 

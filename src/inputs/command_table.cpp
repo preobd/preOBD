@@ -2161,7 +2161,11 @@ static int cmd_bus(int argc, const char* const* argv) {
             return 1;
         }
 
-        systemConfig.buses.active_can = bus_id;
+        // Set both input and output bus for backward compatibility
+        systemConfig.buses.input_can_bus = bus_id;
+        systemConfig.buses.output_can_bus = bus_id;
+        systemConfig.buses.can_input_enabled = 1;
+        systemConfig.buses.can_output_enabled = 1;
         msg.control.print(F("CAN bus set to "));
         msg.control.print(getCANBusName(bus_id));
         msg.control.print(F(" (TX="));
@@ -2169,6 +2173,7 @@ static int cmd_bus(int argc, const char* const* argv) {
         msg.control.print(F(", RX="));
         msg.control.print(getDefaultCANRX(bus_id));
         msg.control.println(F(")"));
+        msg.control.println(F("CAN input and output ENABLED"));
         msg.control.println(F("Note: Takes effect on next reboot"));
         msg.control.println(F("Use SAVE to persist"));
         return 0;

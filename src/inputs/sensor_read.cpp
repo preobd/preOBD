@@ -69,6 +69,10 @@
 // Digital sensors
 #include "sensors/digital/float_switch.cpp"
 
+// CAN sensors (CAN bus imported sensors)
+#include "sensors/can/can_frame_cache.cpp"
+#include "sensors/can/can_read.cpp"
+
 // Note: thermistors/linear.cpp and pressure/linear.cpp are wrapper files
 // that point to linear/linear_sensor.cpp (already included above)
 
