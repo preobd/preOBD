@@ -2161,22 +2161,12 @@ static int cmd_bus(int argc, const char* const* argv) {
             return 1;
         }
 
-        // Set both input and output bus for backward compatibility
-        systemConfig.buses.input_can_bus = bus_id;
-        systemConfig.buses.output_can_bus = bus_id;
-        systemConfig.buses.can_input_enabled = 1;
-        systemConfig.buses.can_output_enabled = 1;
-        msg.control.print(F("CAN bus set to "));
-        msg.control.print(getCANBusName(bus_id));
-        msg.control.print(F(" (TX="));
-        msg.control.print(getDefaultCANTX(bus_id));
-        msg.control.print(F(", RX="));
-        msg.control.print(getDefaultCANRX(bus_id));
-        msg.control.println(F(")"));
-        msg.control.println(F("CAN input and output ENABLED"));
-        msg.control.println(F("Note: Takes effect on next reboot"));
-        msg.control.println(F("Use SAVE to persist"));
-        return 0;
+        // Note: Old "SET BUS CAN" command is deprecated
+        // Use new commands: SET BUS CAN INPUT/OUTPUT instead
+        msg.control.println(F("ERROR: Command deprecated"));
+        msg.control.println(F("Use: SET BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE>"));
+        msg.control.println(F("Use: SET BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE>"));
+        return 1;
 #endif
     }
 

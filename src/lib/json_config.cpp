@@ -650,21 +650,11 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
         systemConfig.buses.active_spi = buses["spi"] | DEFAULT_SPI_BUS;
         systemConfig.buses.spi_clock = buses["spiClock"] | DEFAULT_SPI_CLOCK;
 
-        // CAN configuration - support both old and new format
-        if (buses["can"].isNull() == false) {
-            // Old format - single "can" field (backward compatibility)
-            uint8_t can_bus = buses["can"] | DEFAULT_CAN_BUS;
-            systemConfig.buses.input_can_bus = can_bus;
-            systemConfig.buses.output_can_bus = can_bus;
-            systemConfig.buses.can_input_enabled = 1;
-            systemConfig.buses.can_output_enabled = 1;
-        } else {
-            // New format - separate input/output buses
-            systemConfig.buses.input_can_bus = buses["canInputBus"] | 0xFF;
-            systemConfig.buses.output_can_bus = buses["canOutputBus"] | DEFAULT_CAN_BUS;
-            systemConfig.buses.can_input_enabled = buses["canInputEnabled"] | 0;
-            systemConfig.buses.can_output_enabled = buses["canOutputEnabled"] | 1;
-        }
+        // CAN configuration - separate input/output buses
+        systemConfig.buses.input_can_bus = buses["canInputBus"] | 0xFF;
+        systemConfig.buses.output_can_bus = buses["canOutputBus"] | DEFAULT_CAN_BUS;
+        systemConfig.buses.can_input_enabled = buses["canInputEnabled"] | 0;
+        systemConfig.buses.can_output_enabled = buses["canOutputEnabled"] | 1;
         systemConfig.buses.can_baudrate = buses["canBaudrate"] | DEFAULT_CAN_BAUDRATE;
     } else {
         // No buses object - use defaults (backward compatibility with old configs)
