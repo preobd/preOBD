@@ -26,12 +26,15 @@
 
 #define BUZZER 3        // Alarm buzzer output pin
 
-// ----- LED Status Indicator Pins -----
-// Only active when ENABLE_LEDS is defined in platformio.ini
-#ifdef ENABLE_LEDS
-    #define GREEN_LED 30      // Normal operation indicator
-    #define YELLOW_LED 31     // Warning level indicator
-    #define RED_LED 32       // Alarm level indicator
+// ----- LED Status Indicator -----
+// Only active when ENABLE_LED_INDICATOR is defined in platformio.ini
+#ifdef ENABLE_LED_INDICATOR
+    #define RGB_PIN_R 6       // Red channel (PWM capable)
+    #define RGB_PIN_G 7       // Green channel (PWM capable)
+    #define RGB_PIN_B 8       // Blue channel (PWM capable)
+
+    #define RGB_COMMON_ANODE false  // false = common cathode (recommended for 3.3V)
+                                     // true = common anode (inverts PWM values)
 #endif
 
 // ----- CAN Bus Pins -----
