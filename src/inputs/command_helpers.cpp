@@ -631,6 +631,11 @@ void printHelpExamples() {
     msg.control.println(F("  SET I2C:0 ALARM 10 50  (modify existing I2C sensor)"));
     msg.control.println(F("  INFO I2C:1  (query I2C sensor)"));
     msg.control.println();
+    msg.control.println(F("CAN sensor import (OBD-II, J1939):"));
+    msg.control.println(F("  SET CAN 0x0C  (import Engine RPM from CAN bus)"));
+    msg.control.println(F("  SET CAN 0x0D  (import Vehicle Speed)"));
+    msg.control.println(F("  SET CAN:0 ALARM 500 6000  (modify CAN sensor)"));
+    msg.control.println();
     msg.control.println(F("Advanced sensor setup:"));
     msg.control.println(F("  SET 2 SPEED 100 2008 3.73 2000 300  (Hall sensor speed)"));
     msg.control.println(F("  SET 3 ENGINE_RPM W_PHASE_RPM  (alternator RPM)"));
@@ -833,6 +838,41 @@ uint8_t parsePin(const char* pinStr, bool* isValid) {
 
         // Convert I2C index to virtual pin number
         uint8_t virtualPin = 0xF0 + i2cIndex;
+        return virtualPin;
+    }
+
+    // Handle "CAN" keyword for CAN-imported sensors (OBD-II, J1939, custom)
+    // Use a virtual pin counter to allow multiple CAN sensors
+    // Virtual pins start at 0xC0 (192) - matches CAN virtual pin allocation
+    if (streq(pinStr, "CAN")) {
+        static uint8_t canVirtualPinCounter = 0xC0;
+
+        // Check if we've exceeded the virtual pin range (0xC0-0xDF = 32 sensors)
+        if (canVirtualPinCounter >= 0xE0) {
+            msg.control.println(F("ERROR: Too many CAN sensors configured (max 32)"));
+            if (isValid) *isValid = false;
+            return 0;
+        }
+
+        return canVirtualPinCounter++;
+    }
+
+    // Handle "CAN:n" format for referencing existing CAN sensors (e.g., "CAN:0", "CAN:1")
+    if (strncmp(pinStr, "CAN:", 4) == 0 || strncmp(pinStr, "can:", 4) == 0) {
+        const char* numStr = pinStr + 4;
+        int canIndex = atoi(numStr);
+
+        // Validate CAN index range (0-31 for 32 total CAN sensors)
+        if (canIndex < 0 || canIndex > 31) {
+            msg.control.print(F("ERROR: CAN index "));
+            msg.control.print(canIndex);
+            msg.control.println(F(" out of range (valid: 0-31)"));
+            if (isValid) *isValid = false;
+            return 0;
+        }
+
+        // Convert CAN index to virtual pin number
+        uint8_t virtualPin = 0xC0 + canIndex;
         return virtualPin;
     }
 

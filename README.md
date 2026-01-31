@@ -16,6 +16,7 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 - Monitors battery voltage
 - Monitors engine RPM (via alternator W-phase)
 - Monitors vehicle speed (via hall effect sensors)
+- **Imports sensors from CAN bus** (OBD-II, J1939) and combines with local sensors
 - Displays data on LCD screen
 - Outputs standard OBD-II PIDs via CAN bus (request/response and broadcast modes)
 - Logs data to serial and SD card
@@ -24,7 +25,6 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 
 **What it doesn't do:**
 - Engine control (monitoring only, relay outputs are auxiliary only)
-- Interface with existing factory ECUs or OBDII systems
 - Provide safety certification or guarantees
 
 ---

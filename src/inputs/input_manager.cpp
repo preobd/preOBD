@@ -792,8 +792,8 @@ static bool validateInputConfig(Input* input) {
     if (!input) return false;
 
     // Check if pin is reserved by a bus (I2C, SPI, CAN)
-    // Skip this check for virtual pins (I2C sensors use 0xF0+)
-    if (input->pin < 0xF0 && !isPinAvailable(input->pin)) {
+    // Skip this check for virtual pins (CAN 0xC0+, I2C 0xF0+)
+    if (input->pin < 0xC0 && !isPinAvailable(input->pin)) {
         msg.control.print(F("ERROR: Pin "));
         if (input->pin >= A0) {
             msg.control.print(F("A"));
@@ -819,6 +819,8 @@ static bool validateInputConfig(Input* input) {
             msg.control.print(F("ERROR: Pin "));
             if (input->pin >= 0xF0) {
                 msg.control.print(F("I2C"));
+            } else if (input->pin >= 0xC0 && input->pin < 0xE0) {
+                msg.control.print(F("CAN"));
             } else if (input->pin >= A0) {
                 msg.control.print(F("A"));
                 msg.control.print(input->pin - A0);
@@ -1194,11 +1196,14 @@ static void printAlarmState(AlarmState state) {
     }
 }
 
-// Helper to print pin name (A0, 1, I2C:0, etc)
+// Helper to print pin name (A0, 1, I2C:0, CAN:0, etc)
 static void printPin(uint8_t pin) {
     if (pin >= 0xF0) {
         msg.control.print(F("I2C:"));
         msg.control.print(pin - 0xF0);
+    } else if (pin >= 0xC0 && pin < 0xE0) {
+        msg.control.print(F("CAN:"));
+        msg.control.print(pin - 0xC0);
     } else if (pin >= A0) {
         msg.control.print(F("A"));
         msg.control.print(pin - A0);
@@ -1411,6 +1416,9 @@ void listAllInputs() {
             if (inputs[i].pin >= 0xF0) {
                 msg.control.print(F("I2C:"));
                 msg.control.print(inputs[i].pin - 0xF0);
+            } else if (inputs[i].pin >= 0xC0 && inputs[i].pin < 0xE0) {
+                msg.control.print(F("CAN:"));
+                msg.control.print(inputs[i].pin - 0xC0);
             } else if (inputs[i].pin >= A0) {
                 msg.control.print(F("A"));
                 msg.control.print(inputs[i].pin - A0);

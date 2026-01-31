@@ -38,6 +38,7 @@
 #endif
 #ifdef ENABLE_CAN
 #include "sensors/can/can_scan.h"
+#include "../lib/can_sensor_library/standard_pids.h"
 #endif
 #include <string.h>
 #include <ctype.h>
@@ -482,6 +483,103 @@ static int cmd_set(int argc, const char* const* argv) {
                 return 1;
             }
         }
+    }
+
+    // SET CAN <pid>  -  Import CAN sensor by PID
+    // Example: SET CAN 0x0C  (imports Engine RPM from OBD-II)
+    // This automatically assigns the next available CAN virtual pin (CAN:0, CAN:1, etc.)
+    if (streq(argv[1], "CAN") && argc >= 3) {
+        // Parse PID (supports hex like 0x0C or decimal like 12)
+        uint8_t pid;
+        if (argv[2][0] == '0' && (argv[2][1] == 'x' || argv[2][1] == 'X')) {
+            pid = (uint8_t)strtoul(argv[2] + 2, nullptr, 16);
+        } else {
+            pid = (uint8_t)atoi(argv[2]);
+        }
+
+        // Allocate next CAN virtual pin
+        bool pinValid = false;
+        uint8_t virtualPin = parsePin("CAN", &pinValid);
+        if (!pinValid) {
+            return 1;  // Error already printed by parsePin
+        }
+
+        // Lookup standard PID info
+        const StandardPIDInfo* pidInfo = lookupStandardPID(pid);
+
+        // Configure as CAN_IMPORT sensor
+        uint8_t canSensorIndex = getSensorIndexByName("CAN_IMPORT");
+        if (canSensorIndex == 0) {
+            msg.control.println(F("ERROR: CAN_IMPORT sensor not found in library"));
+            return 1;
+        }
+
+        // Set sensor first (creates input with default calibration)
+        if (!setInputSensor(virtualPin, canSensorIndex)) {
+            return 1;
+        }
+
+        // Get the newly created input
+        Input* input = getInputByPin(virtualPin);
+        if (!input) {
+            msg.control.println(F("ERROR: Failed to create CAN input"));
+            return 1;
+        }
+
+        // Configure CAN calibration
+        if (pidInfo) {
+            // Use standard PID info for automatic configuration
+            input->customCalibration.can.source_can_id = 0x7E8;  // OBD-II default
+            input->customCalibration.can.source_pid = pid;
+            input->customCalibration.can.data_offset = 0;
+            input->customCalibration.can.data_length = pidInfo->data_length;
+            input->customCalibration.can.is_big_endian = true;
+            input->customCalibration.can.scale_factor = pidInfo->scale_factor;
+            input->customCalibration.can.offset = pidInfo->offset;
+            input->flags.useCustomCalibration = true;
+
+            // Set measurement type from standard PID table
+            input->measurementType = pidInfo->measurementType;
+
+            // Set display name from standard table
+            strncpy_P(input->displayName, pidInfo->name, sizeof(input->displayName) - 1);
+            input->displayName[sizeof(input->displayName) - 1] = '\0';
+            strncpy_P(input->abbrName, pidInfo->abbr, sizeof(input->abbrName) - 1);
+            input->abbrName[sizeof(input->abbrName) - 1] = '\0';
+
+            msg.control.print(F("✓ Imported CAN sensor CAN:"));
+            msg.control.print(virtualPin - 0xC0);
+            msg.control.print(F(" - PID 0x"));
+            if (pid < 0x10) msg.control.print('0');
+            msg.control.print(pid, HEX);
+            msg.control.print(F(" ("));
+            msg.control.print(input->displayName);
+            msg.control.println(F(")"));
+        } else {
+            // Unknown PID - use default calibration
+            input->customCalibration.can.source_can_id = 0x7E8;
+            input->customCalibration.can.source_pid = pid;
+            input->customCalibration.can.data_offset = 0;
+            input->customCalibration.can.data_length = 1;
+            input->customCalibration.can.is_big_endian = true;
+            input->customCalibration.can.scale_factor = 1.0;
+            input->customCalibration.can.offset = 0.0;
+            input->flags.useCustomCalibration = true;
+
+            sprintf(input->displayName, "CAN PID 0x%02X", pid);
+            sprintf(input->abbrName, "C%02X", pid);
+
+            msg.control.print(F("✓ Imported CAN sensor CAN:"));
+            msg.control.print(virtualPin - 0xC0);
+            msg.control.print(F(" - PID 0x"));
+            if (pid < 0x10) msg.control.print('0');
+            msg.control.print(pid, HEX);
+            msg.control.println(F(" (unknown PID - using defaults)"));
+            msg.control.println(F("  Hint: Use 'SET CAN:0 ...' commands to customize"));
+        }
+
+        input->flags.isEnabled = true;
+        return 0;
     }
 
     // SET <pin> APPLICATION <application>

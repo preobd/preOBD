@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CAN sensor import** - Import sensors from CAN bus (OBD-II, J1939, custom protocols) as regular inputs
+  - **SET CAN <pid>** command - Easy import of OBD-II PIDs with automatic configuration
+  - **SCAN CAN** command - Interactive CAN bus scanning to discover available PIDs
+  - **Standard PID database** - ~30 common OBD-II PIDs with automatic name/unit/calibration lookup
+  - **CAN virtual pins** - Virtual pin allocation (CAN:0-CAN:31) for up to 32 CAN-imported sensors
+  - **Dual-bus architecture** - Independent CAN input and output subsystems with separate bus configuration
+  - **BUS CAN INPUT/OUTPUT** commands - Runtime configuration for input/output enable per bus
+  - **Protocol detection** - Automatic detection of OBD-II, J1939, and custom CAN protocols
+  - **CAN frame cache** - Efficient circular buffer (16 entries) with LRU replacement
+  - **EEPROM persistence** - CAN sensor configurations saved/loaded automatically
 - **RGB LED status indicator** - Single RGB LED replaces three separate LEDs with PWM effects (blinking, pulsing)
 - **LED indicator priority system** - Alarms override mode indication, extensible for future uses (SD write, pairing status)
 - **Customizable LED colors** - User-configurable colors in rgb_led.h for accessibility and personal preferences
@@ -17,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **LED pins moved** - Status indicator moved from pins 30-32 (non-PWM) to 6-8 (PWM-capable)
 - **ENABLE_LEDS renamed** - Now `ENABLE_LED_INDICATOR` for clarity of purpose
+- **BusConfig structure** - Extended to support dual-bus CAN (input_can_bus, output_can_bus, enable flags)
+- **CAN output refactored** - Separated from CAN input for independent operation
+
+### Fixed
+- **CAN input/output separation** - CAN input and output can now use different physical buses
 
 ## [0.6.5-beta] - 2025-01-27
 
