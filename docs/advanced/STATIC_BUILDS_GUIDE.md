@@ -397,6 +397,9 @@ When using static builds (`USE_STATIC_CONFIG` defined in platformio.ini):
 | SAVE/LOAD commands | ❌ Disabled | ✅ Available |
 | Runtime sensor changes | ❌ Must reflash | ✅ Via commands |
 | LIST commands | ⚠️ Limited | ✅ Full |
+| CAN sensor import (CAN_IMPORT) | ❌ Not supported | ✅ Available |
+
+**Note on CAN Sensor Import:** The `CAN_IMPORT` sensor type requires runtime configuration and is not supported in static builds. CAN sensors must be configured via serial commands (SCAN CAN, ADD INPUT) and stored in EEPROM, which requires CONFIG/RUN mode. If you need to import CAN/OBD-II sensors from the bus, use the default configuration mode on a board with sufficient RAM (Mega, Teensy, ESP32).
 
 ---
 
