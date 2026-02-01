@@ -182,7 +182,7 @@ static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len) {
         // [3+] = Data bytes
         identifier = data[2];  // PID
         data_offset = 3;
-    } else if (len >= 2 && data[1] == 0x41) {
+    } else if (len >= 3 && data[0] == 0x41) {
         // OBD-II without length prefix (some ECUs)
         // [0] = 0x41 (Mode 01 response)
         // [1] = PID
