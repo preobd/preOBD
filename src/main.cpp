@@ -282,6 +282,13 @@ void setup() {
     // This replaces the old hardcoded Wire.begin() and SPI.begin() calls
     initConfiguredBuses();
 
+    // Initialize CAN input subsystem (if enabled)
+    #ifdef ENABLE_CAN
+    if (initCANInput()) {
+        msg.debug.info(TAG_CAN, "CAN input subsystem initialized");
+    }
+    #endif
+
     // Initialize SD card (shared by SD logging and JSON config)
     initSD();
 
@@ -418,6 +425,9 @@ void loop() {
 #endif
 
     // Read sensors, check alarms, send outputs, update display
+    #ifdef ENABLE_CAN
+    updateCANInput();  // Poll CAN bus and populate frame cache
+    #endif
     updateSensors(now);
     updateAlarms(now);
     sendToOutputs(now);  // Data-driven time-sliced output sending
