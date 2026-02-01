@@ -41,7 +41,7 @@ struct BusConfig {
     uint8_t can_output_enabled; // Enable CAN output (0=disabled, 1=enabled)
 
     uint8_t reserved[2];        // Padding for alignment
-};  // 20 bytes (was 16, increased by 4)
+};  // 24 bytes (was 16, increased by 8 with CAN input/output split)
 
 /**
  * Serial Port Baud Rate Index

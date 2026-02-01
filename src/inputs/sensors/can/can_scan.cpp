@@ -80,8 +80,9 @@ static void displayScanResults() {
         msg.control.println(scanResults[i].sample_count);
     }
 
-    msg.control.println(F("\nUse ADD INPUT command to import a PID as a sensor."));
-    msg.control.println(F("Type 'SCAN CANCEL' to clear results."));
+    msg.control.println(F("\nTo import a PID: SET CAN <pid_hex>"));
+    msg.control.println(F("Example: SET CAN 0x0C (imports Engine RPM)"));
+    msg.control.println(F("\nType 'SCAN CANCEL' to clear results."));
 }
 
 // ============================================================================
@@ -143,7 +144,9 @@ void updateCANScan() {
         if (!found && scanResultCount < MAX_SCAN_RESULTS) {
             scanResults[scanResultCount].can_id = entry.can_id;
             scanResults[scanResultCount].pid = entry.pid;
-            scanResults[scanResultCount].data_length = 8; // Full frame for now
+            // NOTE: Cache doesn't store data_length, so we default to 8
+            // Standard PIDs define actual data_length in standard_pids.h
+            scanResults[scanResultCount].data_length = 8;
             scanResults[scanResultCount].sample_count = 1;
             memcpy(scanResults[scanResultCount].last_data, entry.data, 8);
             scanResultCount++;
