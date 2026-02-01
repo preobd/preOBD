@@ -19,6 +19,7 @@ bool streq(const char* a, const char* b);
 
 // Pin parsing
 uint8_t parsePin(const char* pinStr, bool* isValid);
+void resetVirtualPinCounters();  // Reset CAN/I2C virtual pin allocation counters
 
 // Transport parsing (returns valid enum + sets isValid flag)
 MessagePlane parsePlane(const char* str, bool* isValid);

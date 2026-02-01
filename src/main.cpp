@@ -417,6 +417,10 @@ void loop() {
     // If in CONFIG mode, skip sensor reading and outputs
     if (isInConfigMode()) {
         #ifdef ENABLE_CAN
+        // Update CAN input during scan to populate cache
+        if (getCANScanState() == SCAN_LISTENING) {
+            updateCANInput();  // Populate frame cache during scan
+        }
         updateCANScan();  // Update CAN scan state machine if active
         #endif
         updateConfigModeDisplay(now);
