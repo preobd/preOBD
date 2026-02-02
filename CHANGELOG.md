@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Watchdog implementation** - Refactored to use HAL with platform-specific drivers in `src/hal/platforms/`
 - **CAN bus implementation** - Refactored `output_can.cpp` to use HAL internally (public API unchanged)
 - **LED pins moved** - Status indicator moved from pins 30-32 (non-PWM) to 6-8 (PWM-capable)
-- **ENABLE_LEDS renamed** - Now `ENABLE_LED_INDICATOR` for clarity of purpose
+- **ENABLE_LEDS renamed** - Now `ENABLE_LED` for clarity of purpose
 
 ### Fixed
 - **HAL FlexCAN ODR issue** - Wrapped static canBus instance in detail namespace to prevent potential multiple definition issues if header is included in multiple translation units

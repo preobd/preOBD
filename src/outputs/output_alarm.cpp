@@ -20,7 +20,7 @@
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
 
-#ifdef ENABLE_LED_INDICATOR
+#ifdef ENABLE_LED
 #include "../lib/rgb_led.h"
 #endif
 
@@ -40,7 +40,7 @@ void initAlarmOutput() {
     // Button is active LOW (pulls pin to GND when pressed)
     pinMode(MODE_BUTTON, INPUT_PULLUP);
 
-#ifdef ENABLE_LED_INDICATOR
+#ifdef ENABLE_LED
     // RGB LED is initialized separately in main.cpp
     msg.debug.info(TAG_ALARM, "Alarm output initialized (buzzer + LED indicator)");
 #else
@@ -73,7 +73,7 @@ AlarmSeverity getSystemSeverity() {
     return worstSeverity;
 }
 
-#ifdef ENABLE_LED_INDICATOR
+#ifdef ENABLE_LED
 // Update RGB LED based on system severity
 void updateLEDs(AlarmSeverity severity) {
     switch (severity) {
@@ -123,7 +123,7 @@ void updateAlarmOutput() {
     // Scan all inputs to determine worst-case severity
     AlarmSeverity systemSeverity = getSystemSeverity();
 
-#ifdef ENABLE_LED_INDICATOR
+#ifdef ENABLE_LED
     // ===== LED CONTROL =====
     updateLEDs(systemSeverity);
 #endif

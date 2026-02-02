@@ -93,7 +93,7 @@ This means if you're in CONFIG mode (blue pulsing) and a sensor triggers a warni
 Edit [src/config.h](../../config.h):
 
 ```cpp
-#ifdef ENABLE_LED_INDICATOR
+#ifdef ENABLE_LED
     #define RGB_PIN_R 6       // Red channel (PWM capable)
     #define RGB_PIN_G 7       // Green channel (PWM capable)
     #define RGB_PIN_B 8       // Blue channel (PWM capable)
@@ -160,7 +160,7 @@ Enable the LED indicator in [platformio.ini](../../../platformio.ini):
 ```ini
 [standard_features]
 build_flags =
-    -D ENABLE_LED_INDICATOR  # RGB LED status indicator
+    -D ENABLE_LED  # RGB LED status indicator
 ```
 
 Compile and flash:
@@ -203,7 +203,7 @@ pio run -e teensy41 -t upload
 
 **Verify build flag**:
 ```bash
-pio run -e teensy41 -v | grep ENABLE_LED_INDICATOR
+pio run -e teensy41 -v | grep ENABLE_LED
 ```
 
 **Check loop timing**:
