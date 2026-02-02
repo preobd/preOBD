@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Hardware Abstraction Layer (HAL)** - Clean separation of platform-specific code for watchdog and CAN bus
+- **HAL Watchdog interface** - Unified `hal::watchdogEnable/Reset/Disable()` API across all platforms
+- **HAL CAN interface** - Unified `hal::can::begin/write/read()` API for FlexCAN, TWAI, and MCP2515
+- **Platform-specific HAL drivers** - Modular implementations for AVR, Teensy 3.x, Teensy 4.x, ESP32, and Due
 - **RGB LED status indicator** - Single RGB LED replaces three separate LEDs with PWM effects (blinking, pulsing)
 - **LED indicator priority system** - Alarms override mode indication, extensible for future uses (SD write, pairing status)
 - **Customizable LED colors** - User-configurable colors in rgb_led.h for accessibility and personal preferences
@@ -15,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **LED indicator documentation** - Comprehensive guide covering hardware, wiring, configuration, and troubleshooting
 
 ### Changed
+- **Watchdog implementation** - Refactored to use HAL with platform-specific drivers in `src/hal/platforms/`
+- **CAN bus implementation** - Refactored `output_can.cpp` to use HAL internally (public API unchanged)
 - **LED pins moved** - Status indicator moved from pins 30-32 (non-PWM) to 6-8 (PWM-capable)
 - **ENABLE_LEDS renamed** - Now `ENABLE_LED_INDICATOR` for clarity of purpose
 
