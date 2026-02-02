@@ -59,10 +59,6 @@ inline bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended) {
     return false;
 }
 
-inline bool available() {
-    return false;
-}
-
 inline void setFilters(uint32_t filter1, uint32_t filter2) {
     (void)filter1; (void)filter2;
 }

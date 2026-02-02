@@ -48,11 +48,6 @@ inline bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended) {
     return false;
 }
 
-inline bool available() {
-    // TWAI doesn't have simple available() - check via read()
-    return true;
-}
-
 inline void setFilters(uint32_t filter1, uint32_t filter2) {
     // ESP32 TWAI filtering is more complex - software filtering recommended
     // Hardware acceptance filter can be configured via ESP32Can if needed

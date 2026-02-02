@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **LED pins moved** - Status indicator moved from pins 30-32 (non-PWM) to 6-8 (PWM-capable)
 - **ENABLE_LEDS renamed** - Now `ENABLE_LED_INDICATOR` for clarity of purpose
 
+### Fixed
+- **HAL FlexCAN ODR issue** - Wrapped static canBus instance in detail namespace to prevent potential multiple definition issues if header is included in multiple translation units
+- **Dead code removal** - Removed unused `available()` functions from HAL CAN implementations (not called anywhere)
+- **CLAUDE.md tracking** - Removed from .gitignore since it contains project-wide AI assistant instructions that should be version-controlled for consistency across development sessions
+
 ## [0.6.5-beta] - 2025-01-27
 
 ### Added

@@ -41,10 +41,6 @@ inline bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended) {
     return false;
 }
 
-inline bool available() {
-    return CAN.parsePacket() > 0;
-}
-
 inline void setFilters(uint32_t filter1, uint32_t filter2) {
     // MCP2515 filtering via arduino-CAN library
     // Note: Library doesn't expose filter configuration directly
