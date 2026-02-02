@@ -6,7 +6,7 @@
 
 #include "rgb_led.h"
 
-#ifdef ENABLE_LED_INDICATOR
+#ifdef ENABLE_LED
 
 #include "pin_registry.h"
 #include "message_api.h"
@@ -307,4 +307,4 @@ void updateRGBLed() {
     }
 }
 
-#endif // ENABLE_LED_INDICATOR
+#endif // ENABLE_LED

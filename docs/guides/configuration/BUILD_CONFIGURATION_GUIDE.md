@@ -224,7 +224,7 @@ build_flags =
     -D ENABLE_SD_LOGGING     # SD card data logging
     -D ENABLE_LCD            # LCD display
     -D ENABLE_ALARMS         # Alarm system
-    -D ENABLE_LED_INDICATOR  # RGB LED status indicator (pins 6-8, PWM required)
+    -D ENABLE_LED  # RGB LED status indicator (pins 6-8, PWM required)
     -D ENABLE_TEST_MODE      # Test mode for development
     -D ENABLE_BME280         # BME280 environmental sensor
 ```

@@ -27,8 +27,8 @@
 #define BUZZER 3        // Alarm buzzer output pin
 
 // ----- LED Status Indicator -----
-// Only active when ENABLE_LED_INDICATOR is defined in platformio.ini
-#ifdef ENABLE_LED_INDICATOR
+// Only active when ENABLE_LED is defined in platformio.ini
+#ifdef ENABLE_LED
     #define RGB_PIN_R 6       // Red channel (PWM capable)
     #define RGB_PIN_G 7       // Green channel (PWM capable)
     #define RGB_PIN_B 8       // Blue channel (PWM capable)

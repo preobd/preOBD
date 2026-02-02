@@ -13,7 +13,7 @@ extern void showConfigModeMessage();
 extern void clearLCD();
 #endif
 
-#ifdef ENABLE_LED_INDICATOR
+#ifdef ENABLE_LED
 #include "rgb_led.h"
 #endif
 
@@ -56,7 +56,7 @@ void setMode(SystemMode newMode) {
             clearLCD();
             #endif
 
-            #ifdef ENABLE_LED_INDICATOR
+            #ifdef ENABLE_LED
             // Set LED to CONFIG mode color (pulse or solid)
 #if RGB_CONFIG_USE_PULSE
             rgbLedPulse(RGB_COLOR_CONFIG, RGB_PULSE_PERIOD_MS, PRIORITY_MODE);
@@ -80,7 +80,7 @@ void setMode(SystemMode newMode) {
             clearLCD();
             #endif
 
-            #ifdef ENABLE_LED_INDICATOR
+            #ifdef ENABLE_LED
             // Release CONFIG mode LED control, allow alarm system to take over
             rgbLedRelease(PRIORITY_MODE);
             #endif

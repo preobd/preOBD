@@ -30,7 +30,7 @@
     #include "lib/button_handler.h"     // Multi-function button handler
 #endif
 #include "lib/display_manager.h"        // Display runtime state management
-#ifdef ENABLE_LED_INDICATOR
+#ifdef ENABLE_LED
     #include "lib/rgb_led.h"
 #endif
 #include "outputs/output_base.h"
@@ -314,7 +314,7 @@ void setup() {
     initDisplayManager();
 
     // Initialize RGB LED indicator
-    #ifdef ENABLE_LED_INDICATOR
+    #ifdef ENABLE_LED
     initRGBLed();
     #endif
 
@@ -439,7 +439,7 @@ void loop() {
     updateOutputs();     // Housekeeping: drain buffers, handle RX
 
     // Update RGB LED effects (non-blocking)
-    #ifdef ENABLE_LED_INDICATOR
+    #ifdef ENABLE_LED
     updateRGBLed();
     #endif
 
