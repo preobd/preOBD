@@ -4,6 +4,9 @@
  * Separate CAN input subsystem - independent from CAN output.
  * Receives frames from configured input CAN bus and populates frame cache.
  * Supports OBD-II, J1939, and custom CAN protocols.
+ *
+ * Uses HAL for platform abstraction (FlexCAN, TWAI, MCP2515).
+ * Supports dual-bus on Teensy (input on different bus than output).
  */
 
 #include <Arduino.h>
@@ -13,46 +16,14 @@
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
 #include "sensors/can/can_frame_cache.h"
-
-// Platform-specific CAN library includes
-#if defined(TEENSY_40) || defined(TEENSY_41) || defined(TEENSY_36)
-    #define USING_FLEXCAN
-    #include <FlexCAN_T4.h>
-
-    // FlexCAN_T4 instances (defined in output_can.cpp)
-    extern FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16> Can0;
-    #if defined(CAN2)
-        extern FlexCAN_T4<CAN2, RX_SIZE_256, TX_SIZE_16> Can1;
-    #endif
-    #if defined(CAN3)
-        extern FlexCAN_T4<CAN3, RX_SIZE_256, TX_SIZE_16> Can2;
-    #endif
-
-#elif defined(ESP32)
-    #define USING_ESP32_TWAI
-    #include <ESP32-TWAI-CAN.hpp>
-
-    // ESP32-TWAI instance (defined in output_can.cpp)
-    extern ESP32Can Can0;
-
-#else
-    // MCP2515 via SPI (Arduino Mega, Uno, etc.)
-    #define USING_MCP2515
-    #include <CAN.h>
-    // CAN library uses global CAN object
-#endif
+#include "../hal/hal_can.h"
 
 // ============================================================================
 // INTERNAL STATE
 // ============================================================================
 
 static bool canInputInitialized = false;
-
-// ============================================================================
-// BUS ABSTRACTION HELPER
-// ============================================================================
-
-// No helper needed - use switch statements to avoid base class pointer issues
+static uint8_t canInputBus = 0;  // Which bus we're reading from
 
 // ============================================================================
 // INITIALIZATION
@@ -61,6 +32,7 @@ static bool canInputInitialized = false;
 /**
  * Initialize CAN input subsystem
  * Sets up input CAN bus based on systemConfig.buses.input_can_bus
+ * Uses HAL for platform abstraction.
  *
  * @return true if initialized successfully, false otherwise
  */
@@ -79,70 +51,15 @@ bool initCANInput() {
 
     uint32_t baudrate = systemConfig.buses.can_baudrate;
 
-    #ifdef USING_FLEXCAN
-        // Initialize specific bus (template instances don't share base class methods)
-        switch (bus) {
-            case 0:
-                Can0.begin();
-                Can0.setBaudRate(baudrate);
-                Can0.setMaxMB(16);
-                for (int i = 0; i < 8; i++) {
-                    Can0.setMB((FLEXCAN_MAILBOX)i, RX, STD);
-                }
-                break;
-            #if defined(CAN2)
-            case 1:
-                Can1.begin();
-                Can1.setBaudRate(baudrate);
-                Can1.setMaxMB(16);
-                for (int i = 0; i < 8; i++) {
-                    Can1.setMB((FLEXCAN_MAILBOX)i, RX, STD);
-                }
-                break;
-            #endif
-            #if defined(CAN3)
-            case 2:
-                Can2.begin();
-                Can2.setBaudRate(baudrate);
-                Can2.setMaxMB(16);
-                for (int i = 0; i < 8; i++) {
-                    Can2.setMB((FLEXCAN_MAILBOX)i, RX, STD);
-                }
-                break;
-            #endif
-            default:
-                canInputInitialized = false;
-                return false;
-        }
+    // Initialize via HAL (handles all platforms)
+    if (!hal::can::begin(baudrate, bus)) {
+        msg.debug.error(TAG_CAN, "CAN input init failed on bus %d", bus);
+        canInputInitialized = false;
+        return false;
+    }
 
-        msg.debug.info(TAG_CAN, "CAN input initialized on CAN%d (%lu bps)", bus + 1, baudrate);
-
-    #elif defined(USING_ESP32_TWAI)
-        // ESP32 uses single CAN bus (Can0)
-        if (bus != 0) {
-            canInputInitialized = false;
-            return false;
-        }
-
-        // Initialize if not already done
-        if (!Can0.begin(baudrate, GPIO_NUM_21, GPIO_NUM_22)) {
-            canInputInitialized = false;
-            return false;
-        }
-
-    #else  // MCP2515
-        // MCP2515 uses single CAN bus via SPI
-        if (bus != 0) {
-            canInputInitialized = false;
-            return false;
-        }
-
-        // Initialize if not already done
-        if (!CAN.begin(baudrate)) {
-            canInputInitialized = false;
-            return false;
-        }
-    #endif
+    canInputBus = bus;
+    msg.debug.info(TAG_CAN, "CAN input initialized on bus %d (%lu bps)", bus, baudrate);
 
     // Initialize CAN frame cache
     initCANFrameCache();
@@ -203,6 +120,7 @@ static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len) {
 /**
  * Update CAN input - poll for incoming frames and populate cache
  * Called from main loop - non-blocking
+ * Uses HAL for platform abstraction.
  *
  * Supports:
  * - OBD-II responses (Mode 0x41) - extracts PID from byte[2]
@@ -215,57 +133,13 @@ void updateCANInput() {
         return;
     }
 
-    uint8_t bus = systemConfig.buses.input_can_bus;
-    if (bus == 0xFF) return;
+    // Poll for frames via HAL (handles all platforms)
+    uint32_t id;
+    uint8_t data[8];
+    uint8_t len;
+    bool extended;
 
-    #ifdef USING_FLEXCAN
-        CAN_message_t msg;
-
-        // Poll specific bus for frames
-        switch (bus) {
-            case 0:
-                while (Can0.read(msg)) {
-                    processCANFrame(msg.id, msg.buf, msg.len);
-                }
-                break;
-            #if defined(CAN2)
-            case 1:
-                while (Can1.read(msg)) {
-                    processCANFrame(msg.id, msg.buf, msg.len);
-                }
-                break;
-            #endif
-            #if defined(CAN3)
-            case 2:
-                while (Can2.read(msg)) {
-                    processCANFrame(msg.id, msg.buf, msg.len);
-                }
-                break;
-            #endif
-        }
-
-    #elif defined(USING_ESP32_TWAI)
-        if (bus != 0) return;  // ESP32 only has one CAN bus
-
-        CanFrame frame;
-        while (Can0.readFrame(frame, 0)) {  // Non-blocking read
-            processCANFrame(frame.identifier, frame.data, frame.data_length_code);
-        }
-
-    #else  // MCP2515
-        if (bus != 0) return;  // MCP2515 only has one CAN bus
-
-        int packetSize = CAN.parsePacket();
-        if (packetSize > 0) {
-            uint32_t can_id = CAN.packetId();
-            uint8_t buf[8];
-            uint8_t len = 0;
-
-            while (CAN.available() && len < 8) {
-                buf[len++] = CAN.read();
-            }
-
-            processCANFrame(can_id, buf, len);
-        }
-    #endif
+    while (hal::can::read(id, data, len, extended, canInputBus)) {
+        processCANFrame(id, data, len);
+    }
 }
