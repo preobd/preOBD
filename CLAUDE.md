@@ -130,12 +130,13 @@ When creating implementation plans for NEW work, always include these phases:
 2. **Implementation** - The actual code changes
 3. **Build Verification** - Run `pio run` for affected platforms
 4. **Documentation Updates** - Update relevant documentation:
-   - `CHANGELOG.md` - Add entry under appropriate section (Added/Changed/Fixed)
    - `README.md` - If user-facing features change
    - Code comments - For non-obvious implementation details
 5. **Commit/PR** - Commit with descriptive message, create PR if requested
 
-### CHANGELOG.md Format
+### CHANGELOG.md Policy
+
+**Update CHANGELOG.md only once per branch** with a short summary of the branch's purpose before merging to `main`. DO NOT update the changelog for every individual commit.
 
 Follow [Keep a Changelog](https://keepachangelog.com/) format:
 - **Added** - New features

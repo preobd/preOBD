@@ -80,7 +80,47 @@ public:
         return println("");
     }
 
+    // ========== Character Output ==========
+
+    size_t print(char c) {
+        TransportInterface* t = router.getTransport(plane, true);
+        if (!t || !t->isConnected()) return 0;
+        size_t written = t->print(c);
+
+        // Multi-cast to secondary if configured
+        TransportInterface* t2 = router.getTransport(plane, false);
+        if (t2 && t2->isConnected()) {
+            t2->print(c);
+        }
+
+        return written;
+    }
+
+    size_t println(char c) {
+        TransportInterface* t = router.getTransport(plane, true);
+        if (!t || !t->isConnected()) return 0;
+        size_t written = t->println(c);
+
+        // Multi-cast to secondary if configured
+        TransportInterface* t2 = router.getTransport(plane, false);
+        if (t2 && t2->isConnected()) {
+            t2->println(c);
+        }
+
+        return written;
+    }
+
     // ========== Numeric Output ==========
+
+    // Note: uint8_t is typedef'd to unsigned char, so we need explicit overloads
+    // to prevent uint8_t values from matching print(char) instead of print(int)
+    size_t print(unsigned char n) {
+        return print((int)n);
+    }
+
+    size_t println(unsigned char n) {
+        return println((int)n);
+    }
 
     size_t print(int n) {
         TransportInterface* t = router.getTransport(plane, true);
@@ -281,6 +321,10 @@ public:
     inline size_t print(const char* str) { (void)str; return 0; }
     inline size_t println(const char* str) { (void)str; return 0; }
     inline size_t println() { return 0; }
+    inline size_t print(char c) { (void)c; return 0; }
+    inline size_t println(char c) { (void)c; return 0; }
+    inline size_t print(unsigned char n) { (void)n; return 0; }
+    inline size_t println(unsigned char n) { (void)n; return 0; }
     inline size_t print(int n) { (void)n; return 0; }
     inline size_t println(int n) { (void)n; return 0; }
     inline size_t print(unsigned int n) { (void)n; return 0; }

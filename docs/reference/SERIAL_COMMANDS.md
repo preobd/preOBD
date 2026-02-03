@@ -116,6 +116,8 @@ Pattern: `SYSTEM <action> [parameters]`
 ```
 SYSTEM STATUS                      # Show global config
 SYSTEM DUMP                        # Complete dump
+SYSTEM PINS                        # Show pin allocations
+SYSTEM PINS A0                     # Query specific pin
 SYSTEM UNITS TEMP F                # Set default units
 SYSTEM INTERVAL SENSOR 100         # Set sensor interval
 SYSTEM REBOOT                      # Restart the device
@@ -782,6 +784,8 @@ Global configuration affecting all subsystems.
 SYSTEM STATUS            # Show all global configuration
 SYSTEM DUMP              # Show complete system dump (all subsystems)
 SYSTEM DUMP JSON         # Export configuration as JSON (copy/paste)
+SYSTEM PINS              # Show all pin allocations (diagnostic)
+SYSTEM PINS <pin>        # Query specific pin status (e.g., A0, CAN:0)
 ```
 
 **SYSTEM STATUS** output:
@@ -795,6 +799,50 @@ Default Units: Temp=°C, Pressure=bar, Elevation=m, Speed=kph
 **SYSTEM DUMP** shows complete configuration including all inputs, outputs, display, and system parameters.
 
 **SYSTEM DUMP JSON** exports the complete configuration as JSON to the terminal for easy copy/paste.
+
+**SYSTEM PINS** displays pin allocation status organized by category:
+```
+=== Pin Allocation Status ===
+Registry: 8 | Inputs: 4 | Relays: 2
+
+System Pins:
+  Pin  5: Button      - Mode Button
+  Pin  3: Buzzer      - Buzzer
+
+Bus Pins:
+  Pin 18: Reserved    - Wire SDA
+  Pin 19: Reserved    - Wire SCL
+
+Input Pins:
+  Pin A0: Input       - Oil Pressure (OIL)
+  Pin A1: Input       - Coolant Temp (CLT)
+  CAN:0:  Input       - Engine RPM (RPM)
+
+Relay Pins:
+  Pin 22: Output      - Relay 0
+```
+
+**SYSTEM PINS <pin>** queries a specific pin to check if it's allocated:
+```bash
+SYSTEM PINS A0        # Check if pin A0 is in use
+SYSTEM PINS CAN:0     # Check CAN virtual pin 0
+SYSTEM PINS 22        # Check digital pin 22
+```
+
+Example output:
+```
+Pin A0: Input     - Oil Pressure (OIL)
+```
+or if available:
+```
+Pin 13: Available
+```
+
+**Use cases:**
+- Debugging pin conflicts before adding new inputs
+- Understanding current pin usage across all subsystems
+- Planning hardware wiring by checking available pins
+- Troubleshooting configuration errors
 
 ### Configure Global Defaults
 
@@ -837,6 +885,11 @@ SYSTEM DUMP
 
 # Export for sharing
 SYSTEM DUMP JSON
+
+# Check pin allocations
+SYSTEM PINS                # Show all pins
+SYSTEM PINS A0             # Check if A0 is available
+SYSTEM PINS CAN:0          # Check CAN virtual pin
 
 # Read sensors faster
 SYSTEM INTERVAL SENSOR 50
@@ -900,6 +953,8 @@ RUN                              # Enter run mode
 - `SYSTEM STATUS`
 - `SYSTEM DUMP`
 - `SYSTEM DUMP JSON`
+- `SYSTEM PINS`
+- `SYSTEM PINS <pin>`
 
 ---
 

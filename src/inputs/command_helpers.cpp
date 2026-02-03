@@ -564,6 +564,11 @@ void printHelpSystem() {
     msg.control.println(F("  SYSTEM DUMP JSON        - Export configuration as JSON"));
     msg.control.println();
 
+    msg.control.println(F("Pin Status:"));
+    msg.control.println(F("  SYSTEM PINS             - Show all pin allocations"));
+    msg.control.println(F("  SYSTEM PINS <pin>       - Query specific pin"));
+    msg.control.println();
+
     msg.control.println(F("Global Defaults:"));
     msg.control.println(F("  SYSTEM UNITS TEMP <C|F>"));
     msg.control.println(F("  SYSTEM UNITS PRESSURE <BAR|PSI|KPA|INHG>"));
@@ -815,8 +820,8 @@ uint8_t parsePin(const char* pinStr, bool* isValid) {
         static uint8_t i2cVirtualPinCounter = 0xF0;
 
         // Check if we've exceeded the virtual pin range
-        if (i2cVirtualPinCounter >= 0xFE) {
-            msg.control.println(F("ERROR: Too many I2C sensors configured (max 14)"));
+        if (i2cVirtualPinCounter >= 0xFD) {
+            msg.control.println(F("ERROR: Too many I2C sensors configured (max 13)"));
             if (isValid) *isValid = false;
             return 0;
         }

@@ -1685,13 +1685,30 @@ static int cmd_transport(int argc, const char* const* argv) {
 static int cmd_system(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: SYSTEM requires a subcommand"));
-        msg.control.println(F("  Usage: SYSTEM STATUS | DUMP | UNITS | SEA_LEVEL | INTERVAL | REBOOT | RESET"));
+        msg.control.println(F("  Usage: SYSTEM STATUS | DUMP | PINS | UNITS | SEA_LEVEL | INTERVAL | REBOOT | RESET"));
         return 1;
     }
 
     if (streq(argv[1], "STATUS")) {
         printSystemStatus();
         return 0;
+    }
+
+    // SYSTEM PINS [<pin>]
+    if (streq(argv[1], "PINS")) {
+        if (argc == 2) {
+            printPinStatus();
+            return 0;
+        }
+        // Specific pin query
+        bool valid = false;
+        uint8_t pin = parsePin(argv[2], &valid);
+        if (valid) {
+            printPinStatus(pin);
+            return 0;
+        }
+        msg.control.println(F("ERROR: Invalid subcommand or pin"));
+        return 1;
     }
 
     // SYSTEM DUMP [JSON]
