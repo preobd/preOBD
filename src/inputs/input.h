@@ -190,7 +190,7 @@ struct AlarmContext {
 // Size: ~100 bytes per input
 struct Input {
     // === Hardware (1 byte) ===
-    uint8_t pin;                    // Physical pin (A0-A15, or digital, or 0xF0-0xFE for I2C virtual)
+    uint8_t pin;                    // Physical pin (A0-A15, or digital, or 0xF0-0xFD for I2C virtual)
     // Note: Bus selection is global via SystemConfig.buses (not per-input)
 
     // === User Configuration ===

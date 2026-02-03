@@ -821,8 +821,8 @@ uint8_t parsePin(const char* pinStr, bool* isValid) {
         static uint8_t i2cVirtualPinCounter = 0xF0;
 
         // Check if we've exceeded the virtual pin range
-        if (i2cVirtualPinCounter >= 0xFE) {
-            msg.control.println(F("ERROR: Too many I2C sensors configured (max 14)"));
+        if (i2cVirtualPinCounter >= 0xFD) {
+            msg.control.println(F("ERROR: Too many I2C sensors configured (max 13)"));
             if (isValid) *isValid = false;
             return 0;
         }
