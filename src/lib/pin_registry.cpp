@@ -241,7 +241,6 @@ static void printPinPadded(uint8_t pin) {
         // Analog pins like "A0" - pad to 2 chars
         msg.control.print(F("A"));
         uint8_t analogNum = pin - A0;
-        if (analogNum < 10) msg.control.print(' ');
         msg.control.print(analogNum);
     } else {
         // Digital pins - pad to 2 chars
