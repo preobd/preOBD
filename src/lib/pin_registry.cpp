@@ -131,14 +131,16 @@ bool validateNoPinConflict(uint8_t pin, PinUsageType newType, const char* newDes
     const char* existingDesc = getPinDescription(pin);
 
     msg.debug.error(TAG_SYSTEM, "Pin %d already in use", pin);
-    msg.debug.error(TAG_SYSTEM, "  Current: %s%s%s",
+    msg.debug.error(TAG_SYSTEM, "  Current: %s%s%s%s",
                    getPinUsageTypeName(existingType),
                    existingDesc ? " (" : "",
-                   existingDesc ? existingDesc : "");
-    msg.debug.error(TAG_SYSTEM, "  Attempted: %s%s%s",
+                   existingDesc ? existingDesc : "",
+                   existingDesc ? ")" : "");
+    msg.debug.error(TAG_SYSTEM, "  Attempted: %s%s%s%s",
                    getPinUsageTypeName(newType),
                    newDesc ? " (" : "",
-                   newDesc ? newDesc : "");
+                   newDesc ? newDesc : "",
+                   newDesc ? ")" : "");
 
     return false;  // Conflict detected
 }
