@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **SYSTEM PINS command** - Comprehensive pin allocation status reporting for debugging and configuration
+  - **SYSTEM PINS** - Show all pin allocations organized by category (system, bus, input, relay)
+  - **SYSTEM PINS <pin>** - Query specific pin (supports A0, CAN:0, I2C:0 formats)
+  - **SYSTEM PINS AVAILABLE** - List unallocated physical pins (placeholder for future implementation)
+  - Virtual pin formatting (CAN:0-31, I2C:0-15) for better readability
+  - Available in both CONFIG and RUN modes as a read-only diagnostic command
 - **CAN sensor import** - Import sensors from CAN bus (OBD-II, J1939, custom protocols) as regular inputs
   - **SET CAN <pid>** command - Easy import of OBD-II PIDs with automatic configuration
   - **SCAN CAN** command - Interactive CAN bus scanning to discover available PIDs

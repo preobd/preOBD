@@ -564,6 +564,12 @@ void printHelpSystem() {
     msg.control.println(F("  SYSTEM DUMP JSON        - Export configuration as JSON"));
     msg.control.println();
 
+    msg.control.println(F("Pin Status:"));
+    msg.control.println(F("  SYSTEM PINS             - Show all pin allocations"));
+    msg.control.println(F("  SYSTEM PINS AVAILABLE   - Show unallocated pins"));
+    msg.control.println(F("  SYSTEM PINS <pin>       - Query specific pin"));
+    msg.control.println();
+
     msg.control.println(F("Global Defaults:"));
     msg.control.println(F("  SYSTEM UNITS TEMP <C|F>"));
     msg.control.println(F("  SYSTEM UNITS PRESSURE <BAR|PSI|KPA|INHG>"));
