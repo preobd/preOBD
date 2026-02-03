@@ -39,9 +39,19 @@
 
 // ----- CAN Bus Pins -----
 // Only needed if using external MCP2515 chip (not needed for Teensy native FlexCAN)
+// Supports up to 2 MCP2515 controllers for dual CAN bus operation
 #ifndef USE_FLEXCAN_NATIVE
-    #define CAN_CS 9        // MCP2515 chip select
-    #define CAN_INT 2       // MCP2515 interrupt pin
+    // MCP2515 Bus 0 (primary)
+    #define CAN_CS_0 9       // MCP2515 #0 chip select
+    #define CAN_INT_0 2      // MCP2515 #0 interrupt pin
+
+    // MCP2515 Bus 1 (secondary) - set to 0xFF to disable
+    #define CAN_CS_1 10      // MCP2515 #1 chip select
+    #define CAN_INT_1 3      // MCP2515 #1 interrupt pin
+
+    // Legacy compatibility aliases
+    #define CAN_CS CAN_CS_0
+    #define CAN_INT CAN_INT_0
 #endif
 
 // ----- SD Card Pins -----

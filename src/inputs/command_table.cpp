@@ -36,6 +36,10 @@
 #ifdef ENABLE_TEST_MODE
 #include "../test/test_mode.h"
 #endif
+#ifdef ENABLE_CAN
+#include "sensors/can/can_scan.h"
+#include "../lib/can_sensor_library/standard_pids.h"
+#endif
 #include <string.h>
 #include <ctype.h>
 
@@ -70,6 +74,9 @@ static int cmd_relay(int argc, const char* const* argv);
 #endif
 #ifdef ENABLE_TEST_MODE
 static int cmd_test(int argc, const char* const* argv);
+#endif
+#ifdef ENABLE_CAN
+static int cmd_scan(int argc, const char* const* argv);
 #endif
 
 // Platform-specific reboot helper (shared by REBOOT and SYSTEM REBOOT/RESET)
@@ -122,6 +129,9 @@ const Command COMMANDS[] = {
 #endif
 #ifdef ENABLE_TEST_MODE
     {"TEST", cmd_test, "Test mode control", false},
+#endif
+#ifdef ENABLE_CAN
+    {"SCAN", cmd_scan, "Scan CAN bus for PIDs", true},
 #endif
 };
 
@@ -473,6 +483,104 @@ static int cmd_set(int argc, const char* const* argv) {
                 return 1;
             }
         }
+    }
+
+    // SET CAN <pid>  -  Import CAN sensor by PID
+    // Example: SET CAN 0x0C  (imports Engine RPM from OBD-II)
+    // This automatically assigns the next available CAN virtual pin (CAN:0, CAN:1, etc.)
+    if (streq(argv[1], "CAN") && argc >= 3) {
+        // Parse PID (supports hex like 0x0C or decimal like 12)
+        uint8_t pid;
+        if (argv[2][0] == '0' && (argv[2][1] == 'x' || argv[2][1] == 'X')) {
+            pid = (uint8_t)strtoul(argv[2] + 2, nullptr, 16);
+        } else {
+            pid = (uint8_t)atoi(argv[2]);
+        }
+
+        // Allocate next CAN virtual pin
+        bool pinValid = false;
+        uint8_t virtualPin = parsePin("CAN", &pinValid);
+        if (!pinValid) {
+            return 1;  // Error already printed by parsePin
+        }
+
+        // Lookup standard PID info
+        const StandardPIDInfo* pidInfo = lookupStandardPID(pid);
+
+        // Configure as CAN_IMPORT sensor
+        uint8_t canSensorIndex = getSensorIndexByName("CAN_IMPORT");
+        if (canSensorIndex == 0) {
+            msg.control.println(F("ERROR: CAN_IMPORT sensor not found in library"));
+            return 1;
+        }
+
+        // Set sensor first (creates input with default calibration)
+        if (!setInputSensor(virtualPin, canSensorIndex)) {
+            msg.control.println(F("ERROR: Failed to configure CAN sensor"));
+            return 1;
+        }
+
+        // Get the newly created input
+        Input* input = getInputByPin(virtualPin);
+        if (!input) {
+            msg.control.println(F("ERROR: Failed to create CAN input"));
+            return 1;
+        }
+
+        // Configure CAN calibration
+        if (pidInfo) {
+            // Use standard PID info for automatic configuration
+            input->customCalibration.can.source_can_id = 0x7E8;  // OBD-II default
+            input->customCalibration.can.source_pid = pid;
+            input->customCalibration.can.data_offset = 0;
+            input->customCalibration.can.data_length = pidInfo->data_length;
+            input->customCalibration.can.is_big_endian = true;
+            input->customCalibration.can.scale_factor = pidInfo->scale_factor;
+            input->customCalibration.can.offset = pidInfo->offset;
+            input->flags.useCustomCalibration = true;
+
+            // Set measurement type from standard PID table
+            input->measurementType = pidInfo->measurementType;
+
+            // Set display name from standard table
+            strncpy_P(input->displayName, pidInfo->name, sizeof(input->displayName) - 1);
+            input->displayName[sizeof(input->displayName) - 1] = '\0';
+            strncpy_P(input->abbrName, pidInfo->abbr, sizeof(input->abbrName) - 1);
+            input->abbrName[sizeof(input->abbrName) - 1] = '\0';
+
+            msg.control.print(F("✓ Imported CAN sensor CAN:"));
+            msg.control.print(virtualPin - 0xC0);
+            msg.control.print(F(" - PID 0x"));
+            if (pid < 0x10) msg.control.print('0');
+            msg.control.print(pid, HEX);
+            msg.control.print(F(" ("));
+            msg.control.print(input->displayName);
+            msg.control.println(F(")"));
+        } else {
+            // Unknown PID - use default calibration
+            input->customCalibration.can.source_can_id = 0x7E8;
+            input->customCalibration.can.source_pid = pid;
+            input->customCalibration.can.data_offset = 0;
+            input->customCalibration.can.data_length = 1;
+            input->customCalibration.can.is_big_endian = true;
+            input->customCalibration.can.scale_factor = 1.0;
+            input->customCalibration.can.offset = 0.0;
+            input->flags.useCustomCalibration = true;
+
+            sprintf(input->displayName, "CAN PID 0x%02X", pid);
+            sprintf(input->abbrName, "C%02X", pid);
+
+            msg.control.print(F("✓ Imported CAN sensor CAN:"));
+            msg.control.print(virtualPin - 0xC0);
+            msg.control.print(F(" - PID 0x"));
+            if (pid < 0x10) msg.control.print('0');
+            msg.control.print(pid, HEX);
+            msg.control.println(F(" (unknown PID - using defaults)"));
+            msg.control.println(F("  Hint: Use 'SET CAN:0 ...' commands to customize"));
+        }
+
+        input->flags.isEnabled = true;
+        return 0;
     }
 
     // SET <pin> APPLICATION <application>
@@ -1985,8 +2093,10 @@ static int cmd_bus(int argc, const char* const* argv) {
         msg.control.println(F("  BUS I2C CLOCK <kHz>       - Set I2C clock (100/400/1000)"));
         msg.control.println(F("  BUS SPI [0|1|2]           - Show or select SPI bus"));
         msg.control.println(F("  BUS SPI CLOCK <Hz>        - Set SPI clock"));
-        msg.control.println(F("  BUS CAN [0|1|2]           - Show or select CAN bus"));
+        msg.control.println(F("  BUS CAN                   - Show CAN status"));
         msg.control.println(F("  BUS CAN BAUDRATE <bps>    - Set CAN baudrate"));
+        msg.control.println(F("  BUS CAN INPUT <bus> <EN|DIS>  - Configure CAN input"));
+        msg.control.println(F("  BUS CAN OUTPUT <bus> <EN|DIS> - Configure CAN output"));
         msg.control.println(F("  BUS SERIAL                - Show all serial ports"));
         msg.control.println(F("  BUS SERIAL <1-8> ENABLE [baud] - Enable serial port"));
         msg.control.println(F("  BUS SERIAL <1-8> DISABLE  - Disable serial port"));
@@ -2150,28 +2260,115 @@ static int cmd_bus(int argc, const char* const* argv) {
             return 0;
         }
 
-        // BUS CAN <0|1|2> - Select bus
-        uint8_t bus_id = atoi(argv[2]);
-        if (bus_id >= NUM_CAN_BUSES) {
-            msg.control.print(F("ERROR: CAN bus "));
-            msg.control.print(bus_id);
-            msg.control.print(F(" not available (0-"));
-            msg.control.print(NUM_CAN_BUSES - 1);
-            msg.control.println(F(")"));
-            return 1;
+        // BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE>
+        if (streq(argv[2], "INPUT")) {
+            if (argc < 5) {
+                msg.control.println(F("ERROR: Usage: BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE>"));
+                return 1;
+            }
+
+            // Parse bus number (CAN1=0, CAN2=1, CAN3=2)
+            uint8_t bus_id = 0xFF;
+            if (streq(argv[3], "CAN1")) bus_id = 0;
+            else if (streq(argv[3], "CAN2")) bus_id = 1;
+            else if (streq(argv[3], "CAN3")) bus_id = 2;
+            else if (streq(argv[3], "NONE") || streq(argv[3], "DISABLE")) bus_id = 0xFF;
+            else {
+                msg.control.println(F("ERROR: Bus must be CAN1, CAN2, CAN3, or NONE"));
+                return 1;
+            }
+
+            // Check bus availability
+            if (bus_id != 0xFF && bus_id >= NUM_CAN_BUSES) {
+                msg.control.print(F("ERROR: "));
+                msg.control.print(argv[3]);
+                msg.control.println(F(" not available on this platform"));
+                return 1;
+            }
+
+            // Parse enable/disable
+            bool enable = false;
+            if (streq(argv[4], "ENABLE")) enable = true;
+            else if (streq(argv[4], "DISABLE")) enable = false;
+            else {
+                msg.control.println(F("ERROR: Must be ENABLE or DISABLE"));
+                return 1;
+            }
+
+            // Apply configuration
+            if (enable) {
+                systemConfig.buses.input_can_bus = bus_id;
+                systemConfig.buses.can_input_enabled = 1;
+                msg.control.print(F("CAN input enabled on "));
+                msg.control.println(argv[3]);
+            } else {
+                systemConfig.buses.can_input_enabled = 0;
+                msg.control.println(F("CAN input disabled"));
+            }
+
+            msg.control.println(F("Note: Takes effect on next reboot"));
+            msg.control.println(F("Use SAVE to persist"));
+            return 0;
         }
 
-        systemConfig.buses.active_can = bus_id;
-        msg.control.print(F("CAN bus set to "));
-        msg.control.print(getCANBusName(bus_id));
-        msg.control.print(F(" (TX="));
-        msg.control.print(getDefaultCANTX(bus_id));
-        msg.control.print(F(", RX="));
-        msg.control.print(getDefaultCANRX(bus_id));
-        msg.control.println(F(")"));
-        msg.control.println(F("Note: Takes effect on next reboot"));
-        msg.control.println(F("Use SAVE to persist"));
-        return 0;
+        // BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE>
+        if (streq(argv[2], "OUTPUT")) {
+            if (argc < 5) {
+                msg.control.println(F("ERROR: Usage: BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE>"));
+                return 1;
+            }
+
+            // Parse bus number (CAN1=0, CAN2=1, CAN3=2)
+            uint8_t bus_id = 0xFF;
+            if (streq(argv[3], "CAN1")) bus_id = 0;
+            else if (streq(argv[3], "CAN2")) bus_id = 1;
+            else if (streq(argv[3], "CAN3")) bus_id = 2;
+            else if (streq(argv[3], "NONE") || streq(argv[3], "DISABLE")) bus_id = 0xFF;
+            else {
+                msg.control.println(F("ERROR: Bus must be CAN1, CAN2, CAN3, or NONE"));
+                return 1;
+            }
+
+            // Check bus availability
+            if (bus_id != 0xFF && bus_id >= NUM_CAN_BUSES) {
+                msg.control.print(F("ERROR: "));
+                msg.control.print(argv[3]);
+                msg.control.println(F(" not available on this platform"));
+                return 1;
+            }
+
+            // Parse enable/disable
+            bool enable = false;
+            if (streq(argv[4], "ENABLE")) enable = true;
+            else if (streq(argv[4], "DISABLE")) enable = false;
+            else {
+                msg.control.println(F("ERROR: Must be ENABLE or DISABLE"));
+                return 1;
+            }
+
+            // Apply configuration
+            if (enable) {
+                systemConfig.buses.output_can_bus = bus_id;
+                systemConfig.buses.can_output_enabled = 1;
+                msg.control.print(F("CAN output enabled on "));
+                msg.control.println(argv[3]);
+            } else {
+                systemConfig.buses.can_output_enabled = 0;
+                msg.control.println(F("CAN output disabled"));
+            }
+
+            msg.control.println(F("Note: Takes effect on next reboot"));
+            msg.control.println(F("Use SAVE to persist"));
+            return 0;
+        }
+
+        // Unknown CAN subcommand
+        msg.control.println(F("ERROR: Unknown CAN subcommand"));
+        msg.control.println(F("Valid: BAUDRATE, INPUT, OUTPUT"));
+        msg.control.println(F("  BUS CAN BAUDRATE <bps>"));
+        msg.control.println(F("  BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE>"));
+        msg.control.println(F("  BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE>"));
+        return 1;
 #endif
     }
 
@@ -2536,5 +2733,71 @@ static int cmd_log(int argc, const char* const* argv) {
     msg.control.println(F("  Use 'LOG' for usage help"));
     return 1;
 }
+
+// ============================================================================
+// SCAN COMMAND - CAN bus scanning
+// ============================================================================
+
+#ifdef ENABLE_CAN
+static int cmd_scan(int argc, const char* const* argv) {
+    // Usage: SCAN CAN [duration_ms]
+    //        SCAN CANCEL
+
+    if (argc < 2) {
+        msg.control.println(F("SCAN - Scan CAN bus for active PIDs"));
+        msg.control.println(F(""));
+        msg.control.println(F("Usage:"));
+        msg.control.println(F("  SCAN CAN [duration]  - Scan CAN bus (default 10000ms)"));
+        msg.control.println(F("  SCAN CANCEL          - Cancel/clear scan results"));
+        msg.control.println(F(""));
+        msg.control.println(F("Examples:"));
+        msg.control.println(F("  SCAN CAN             - Scan for 10 seconds"));
+        msg.control.println(F("  SCAN CAN 15000       - Scan for 15 seconds"));
+        msg.control.println(F("  SCAN CANCEL          - Clear results"));
+        return 0;
+    }
+
+    const char* subcmd = argv[1];
+
+    if (streq(subcmd, "CAN")) {
+        // Get duration (default 10 seconds)
+        uint16_t duration = 10000;
+        if (argc >= 3) {
+            duration = atoi(argv[2]);
+            if (duration < 1000) {
+                msg.control.println(F("ERROR: Duration must be at least 1000ms"));
+                return 1;
+            }
+            if (duration > 60000) {
+                msg.control.println(F("ERROR: Duration must be at most 60000ms"));
+                return 1;
+            }
+        }
+
+        // Check if CAN input is enabled
+        if (!systemConfig.buses.can_input_enabled) {
+            msg.control.println(F("ERROR: CAN input not enabled"));
+            msg.control.println(F("  Use 'SET BUS CAN INPUT CAN1 ENABLE' first"));
+            return 1;
+        }
+
+        // Start scan
+        startCANScan(duration);
+        return 0;
+    }
+
+    if (streq(subcmd, "CANCEL")) {
+        cancelCANScan();
+        return 0;
+    }
+
+    // Unknown subcommand
+    msg.control.print(F("ERROR: Unknown SCAN subcommand '"));
+    msg.control.print(subcmd);
+    msg.control.println(F("'"));
+    msg.control.println(F("  Valid: CAN, CANCEL"));
+    return 1;
+}
+#endif // ENABLE_CAN
 
 #endif // USE_STATIC_CONFIG

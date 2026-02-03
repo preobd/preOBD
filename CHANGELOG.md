@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CAN sensor import** - Import sensors from CAN bus (OBD-II, J1939, custom protocols) as regular inputs
+  - **SET CAN <pid>** command - Easy import of OBD-II PIDs with automatic configuration
+  - **SCAN CAN** command - Interactive CAN bus scanning to discover available PIDs
+  - **Standard PID database** - ~30 common OBD-II PIDs with automatic name/unit/calibration lookup
+  - **CAN virtual pins** - Virtual pin allocation (CAN:0-CAN:31) for up to 32 CAN-imported sensors
+  - **Dual-bus architecture** - Independent CAN input and output subsystems with separate bus configuration
+  - **BUS CAN INPUT/OUTPUT** commands - Runtime configuration for input/output enable per bus
+  - **Protocol detection** - Automatic detection of OBD-II, J1939, and custom CAN protocols
+  - **CAN frame cache** - Efficient circular buffer (16 entries) with LRU replacement
+  - **EEPROM persistence** - CAN sensor configurations saved/loaded automatically
 - **Hardware Abstraction Layer (HAL)** - Clean separation of platform-specific code for watchdog and CAN bus
 - **HAL Watchdog interface** - Unified `hal::watchdogEnable/Reset/Disable()` API across all platforms
 - **HAL CAN interface** - Unified `hal::can::begin/write/read()` API for FlexCAN, TWAI, and MCP2515
@@ -28,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **HAL FlexCAN ODR issue** - Wrapped static canBus instance in detail namespace to prevent potential multiple definition issues if header is included in multiple translation units
 - **Dead code removal** - Removed unused `available()` functions from HAL CAN implementations (not called anywhere)
 - **CLAUDE.md tracking** - Removed from .gitignore since it contains project-wide AI assistant instructions that should be version-controlled for consistency across development sessions
+- **BusConfig structure** - Extended to support dual-bus CAN (input_can_bus, output_can_bus, enable flags)
+- **CAN output refactored** - Separated from CAN input for independent operation
+
+### Fixed
+- **CAN input/output separation** - CAN input and output can now use different physical buses
 
 ## [0.6.5-beta] - 2025-01-27
 

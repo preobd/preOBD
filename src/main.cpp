@@ -34,6 +34,12 @@
     #include "lib/rgb_led.h"
 #endif
 #include "outputs/output_base.h"
+#ifdef ENABLE_CAN
+    #include "inputs/input_can.h"
+    #ifndef USE_STATIC_CONFIG
+        #include "inputs/sensors/can/can_scan.h"
+    #endif
+#endif
 
 // Transport abstraction layer
 #include "lib/message_router.h"
@@ -276,6 +282,13 @@ void setup() {
     // This replaces the old hardcoded Wire.begin() and SPI.begin() calls
     initConfiguredBuses();
 
+    // Initialize CAN input subsystem (if enabled)
+    #ifdef ENABLE_CAN
+    if (initCANInput()) {
+        msg.debug.info(TAG_CAN, "CAN input subsystem initialized");
+    }
+    #endif
+
     // Initialize SD card (shared by SD logging and JSON config)
     initSD();
 
@@ -403,12 +416,22 @@ void loop() {
 
     // If in CONFIG mode, skip sensor reading and outputs
     if (isInConfigMode()) {
+        #ifdef ENABLE_CAN
+        // Update CAN input during scan to populate cache
+        if (getCANScanState() == SCAN_LISTENING) {
+            updateCANInput();  // Populate frame cache during scan
+        }
+        updateCANScan();  // Update CAN scan state machine if active
+        #endif
         updateConfigModeDisplay(now);
         return;  // Early return - don't read sensors or send outputs
     }
 #endif
 
     // Read sensors, check alarms, send outputs, update display
+    #ifdef ENABLE_CAN
+    updateCANInput();  // Poll CAN bus and populate frame cache
+    #endif
     updateSensors(now);
     updateAlarms(now);
     sendToOutputs(now);  // Data-driven time-sliced output sending

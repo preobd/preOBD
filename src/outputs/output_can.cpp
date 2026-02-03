@@ -6,6 +6,7 @@
  * - Broadcast mode: Periodic transmission of all sensor PIDs (for RealDash)
  * - Request/Response mode: OBD-II Mode 01 queries (for ELM327/Torque)
  * - Hybrid mode: Both modes work simultaneously
+ * - Configurable output bus (supports dual-bus on Teensy)
  */
 
 #include "../config.h"
@@ -14,10 +15,14 @@
 #include "../inputs/input_manager.h"
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
+#include "../lib/system_config.h"
 
 #ifdef ENABLE_CAN
 
 #include "../hal/hal_can.h"
+
+// Which bus we're outputting on (set during init)
+static uint8_t canOutputBus = 0;
 
 // ===== OBD-II REQUEST/RESPONSE SUPPORT =====
 
@@ -41,7 +46,7 @@ static uint8_t pidLookupCount = 0;
  * @param len Data length (usually 8)
  */
 static void sendCANFrame(uint32_t canId, const byte* data, uint8_t len) {
-    hal::can::write(canId, data, len, false);  // Standard 11-bit ID
+    hal::can::write(canId, data, len, false, canOutputBus);  // Standard 11-bit ID
 }
 
 // ===== PID LOOKUP TABLE =====
@@ -237,16 +242,28 @@ static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
 }
 
 void initCAN() {
-    // Initialize CAN bus via HAL (500 kbps standard OBD-II rate)
-    if (!hal::can::begin(500000)) {
-        msg.debug.error(TAG_CAN, "CAN bus init failed!");
+    // Check if output is enabled
+    if (!systemConfig.buses.can_output_enabled) {
+        return;
+    }
+
+    canOutputBus = systemConfig.buses.output_can_bus;
+    if (canOutputBus == 0xFF) {
+        return;  // No output bus configured
+    }
+
+    uint32_t baudrate = systemConfig.buses.can_baudrate;
+
+    // Initialize CAN bus via HAL
+    if (!hal::can::begin(baudrate, canOutputBus)) {
+        msg.debug.error(TAG_CAN, "CAN output init failed on bus %d!", canOutputBus);
         return;
     }
 
     // Configure RX filters for OBD-II requests
-    hal::can::setFilters(0x7DF, 0x7E0);  // Functional and physical addressing
+    hal::can::setFilters(0x7DF, 0x7E0, canOutputBus);  // Functional and physical addressing
 
-    msg.debug.info(TAG_CAN, "CAN bus initialized (500kbps)");
+    msg.debug.info(TAG_CAN, "CAN output initialized on bus %d (%lu bps)", canOutputBus, baudrate);
     msg.debug.info(TAG_CAN, "OBD-II request/response enabled");
 
     // Build PID lookup table for request/response
@@ -254,6 +271,10 @@ void initCAN() {
 }
 
 void sendCAN(Input *ptr) {
+    if (!systemConfig.buses.can_output_enabled || canOutputBus == 0xFF) {
+        return;  // Output not configured
+    }
+
     if (isnan(ptr->value)) {
         return;  // Don't send invalid data
     }
@@ -266,17 +287,21 @@ void sendCAN(Input *ptr) {
     }
 
     // Send on standard OBDII ECU response ID
-    hal::can::write(0x7E8, frameData, 8, false);  // Standard 11-bit ID
+    hal::can::write(0x7E8, frameData, 8, false, canOutputBus);
 }
 
 void updateCAN() {
+    if (!systemConfig.buses.can_output_enabled || canOutputBus == 0xFF) {
+        return;  // Output not configured
+    }
+
     // Process incoming OBD-II requests (request/response mode)
     uint32_t id;
     uint8_t data[8];
     uint8_t len;
     bool extended;
 
-    while (hal::can::read(id, data, len, extended)) {
+    while (hal::can::read(id, data, len, extended, canOutputBus)) {
         // Check if this is an OBD-II request
         if (id == 0x7DF || id == 0x7E0) {
             processOBD2Request(id, data, len);

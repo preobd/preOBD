@@ -25,17 +25,23 @@
  * Example: active_i2c=1 means all I2C sensors use Wire1
  */
 struct BusConfig {
-    uint8_t active_i2c;      // 0=Wire, 1=Wire1, 2=Wire2
-    uint16_t i2c_clock;      // kHz (100, 400, 1000)
+    uint8_t active_i2c;         // 0=Wire, 1=Wire1, 2=Wire2
+    uint16_t i2c_clock;         // kHz (100, 400, 1000)
 
-    uint8_t active_spi;      // 0=SPI, 1=SPI1, 2=SPI2
-    uint32_t spi_clock;      // Hz (e.g., 4000000 = 4MHz)
+    uint8_t active_spi;         // 0=SPI, 1=SPI1, 2=SPI2
+    uint32_t spi_clock;         // Hz (e.g., 4000000 = 4MHz)
 
-    uint8_t active_can;      // 0=CAN1, 1=CAN2, 2=CAN3
-    uint32_t can_baudrate;   // bps (125000, 250000, 500000, 1000000)
+    // CAN configuration - MODIFIED to support input/output separation
+    uint8_t input_can_bus;      // 0=CAN1, 1=CAN2, 2=CAN3, 0xFF=NONE (disabled)
+    uint8_t output_can_bus;     // 0=CAN1, 1=CAN2, 2=CAN3, 0xFF=NONE (disabled)
+    uint32_t can_baudrate;      // bps (125000, 250000, 500000, 1000000) - shared for all buses
 
-    uint8_t reserved[2];     // Padding for alignment
-};  // 16 bytes
+    // Runtime enable flags
+    uint8_t can_input_enabled;  // Enable CAN input (0=disabled, 1=enabled)
+    uint8_t can_output_enabled; // Enable CAN output (0=disabled, 1=enabled)
+
+    uint8_t reserved[2];        // Padding for alignment
+};  // 24 bytes (was 16, increased by 8 with CAN input/output split)
 
 /**
  * Serial Port Baud Rate Index
