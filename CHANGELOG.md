@@ -37,21 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Watchdog implementation** - Refactored to use HAL with platform-specific drivers in `src/hal/platforms/`
 - **CAN bus implementation** - Refactored `output_can.cpp` to use HAL internally (public API unchanged)
-- **LED pins moved** - Status indicator moved from pins 30-32 (non-PWM) to 6-8 (PWM-capable)
-- **ENABLE_LEDS renamed** - Now `ENABLE_LED` for clarity of purpose
 
 ### Fixed
-- **HAL FlexCAN ODR issue** - Wrapped static canBus instance in detail namespace to prevent potential multiple definition issues if header is included in multiple translation units
-- **Dead code removal** - Removed unused `available()` functions from HAL CAN implementations (not called anywhere)
-- **CLAUDE.md tracking** - Removed from .gitignore since it contains project-wide AI assistant instructions that should be version-controlled for consistency across development sessions
 - **BusConfig structure** - Extended to support dual-bus CAN (input_can_bus, output_can_bus, enable flags)
 - **CAN output refactored** - Separated from CAN input for independent operation
-
-### Fixed
-- **MessageStream uint8_t printing** - Added `print(unsigned char)` and `println(unsigned char)` overloads to fix uint8_t values being printed incorrectly due to ambiguous overload resolution between char and int
-- **MessageStream character printing** - Added `print(char)` and `println(char)` overloads to fix character literals being printed as ASCII values (e.g., space ' ' printed as 32)
-- **TransportInterface char/uint8_t printing** - Added explicit overloads for char and unsigned char to ensure correct printing behavior
-- **CAN input/output separation** - CAN input and output can now use different physical buses
 
 ## [0.6.5-beta] - 2025-01-27
 
