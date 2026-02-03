@@ -258,7 +258,7 @@ static void printPinPadded(uint8_t pin) {
     msg.control.print(F(": "));
 }
 
-void printPinStatus(bool showAvailableOnly, uint8_t specificPin) {
+void printPinStatus(uint8_t specificPin) {
     // Query specific pin mode
     if (specificPin != 0xFF) {
         // Check if pin is in registry
@@ -340,13 +340,6 @@ void printPinStatus(bool showAvailableOnly, uint8_t specificPin) {
 
     msg.control.println();
     msg.control.println();
-
-    if (showAvailableOnly) {
-        // Not implemented for simplicity - would need to enumerate all valid pins
-        msg.control.println(F("ERROR: AVAILABLE filter not yet implemented"));
-        msg.control.println(F("  Use 'SYSTEM PINS <pin>' to query specific pins"));
-        return;
-    }
 
     // System Pins (buttons, buzzers, chip selects)
     bool hasSystemPins = false;

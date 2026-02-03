@@ -566,7 +566,6 @@ void printHelpSystem() {
 
     msg.control.println(F("Pin Status:"));
     msg.control.println(F("  SYSTEM PINS             - Show all pin allocations"));
-    msg.control.println(F("  SYSTEM PINS AVAILABLE   - Show unallocated pins"));
     msg.control.println(F("  SYSTEM PINS <pin>       - Query specific pin"));
     msg.control.println();
 

@@ -1694,21 +1694,17 @@ static int cmd_system(int argc, const char* const* argv) {
         return 0;
     }
 
-    // SYSTEM PINS [AVAILABLE|<pin>]
+    // SYSTEM PINS [<pin>]
     if (streq(argv[1], "PINS")) {
         if (argc == 2) {
             printPinStatus();
-            return 0;
-        }
-        if (streq(argv[2], "AVAILABLE")) {
-            printPinStatus(true);
             return 0;
         }
         // Specific pin query
         bool valid = false;
         uint8_t pin = parsePin(argv[2], &valid);
         if (valid) {
-            printPinStatus(false, pin);
+            printPinStatus(pin);
             return 0;
         }
         msg.control.println(F("ERROR: Invalid subcommand or pin"));

@@ -786,7 +786,6 @@ SYSTEM DUMP              # Show complete system dump (all subsystems)
 SYSTEM DUMP JSON         # Export configuration as JSON (copy/paste)
 SYSTEM PINS              # Show all pin allocations (diagnostic)
 SYSTEM PINS <pin>        # Query specific pin status (e.g., A0, CAN:0)
-SYSTEM PINS AVAILABLE    # Show unallocated pins (placeholder)
 ```
 
 **SYSTEM STATUS** output:
