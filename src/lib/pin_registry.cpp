@@ -317,14 +317,9 @@ void printPinStatus(uint8_t specificPin) {
     msg.control.print(registrySize);
     msg.control.print(F(" | Inputs: "));
 
-    // Count active inputs
-    uint8_t inputCount = 0;
-    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].applicationIndex != 0xFF) {
-            inputCount++;
-        }
-    }
-    msg.control.print(inputCount);
+    // Use global count of active inputs (pin != 0xFF && isEnabled)
+    extern uint8_t numActiveInputs;
+    msg.control.print(numActiveInputs);
 
     #ifdef ENABLE_RELAY_OUTPUT
     // Count active relays
