@@ -384,7 +384,8 @@ void printPinStatus(bool showAvailableOnly, uint8_t specificPin) {
     // Input Pins (sensor inputs)
     bool hasInputs = false;
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].applicationIndex != 0xFF) {
+        // Only show inputs that have both an application AND a valid pin assigned
+        if (inputs[i].applicationIndex != 0xFF && inputs[i].pin != 0xFF) {
             if (!hasInputs) {
                 msg.control.println(F("Input Pins:"));
                 hasInputs = true;
