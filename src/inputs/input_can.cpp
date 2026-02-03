@@ -70,7 +70,15 @@ bool initCANInput() {
 
 /**
  * Shutdown CAN input subsystem
- * Does NOT disable the CAN bus hardware (output may still be using it)
+ *
+ * NOTE: This does NOT disable the CAN bus hardware peripheral for two reasons:
+ * 1. Output subsystem may still be using the same physical bus
+ * 2. HAL doesn't provide a bus-safe shutdown API (multiple subsystems per bus)
+ *
+ * This is intentional behavior - CAN hardware stays active but frame processing stops.
+ * Power consumption: ~5-10mA (MCP2515) or ~2-3mA (FlexCAN standby mode).
+ *
+ * For true power-down, disable ENABLE_CAN at compile time or power-cycle the board.
  */
 void shutdownCANInput() {
     canInputInitialized = false;
@@ -87,6 +95,14 @@ void shutdownCANInput() {
  * @param len       Frame data length
  */
 static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len) {
+    // Validate frame has minimum data
+    if (len == 0) {
+        #ifdef DEBUG
+        msg.debug.warn(TAG_CAN, "Empty CAN frame (ID 0x%03X)", can_id);
+        #endif
+        return;
+    }
+
     // Detect protocol format and extract identifier
     uint8_t identifier;
     uint8_t data_offset;
@@ -106,6 +122,14 @@ static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len) {
         // [2+] = Data bytes
         identifier = data[1];  // PID
         data_offset = 2;
+    } else if (len >= 2 && data[0] == 0x41) {
+        // Malformed OBD-II frame (too short for proper extraction)
+        // Fall back to custom protocol handling
+        #ifdef DEBUG
+        msg.debug.warn(TAG_CAN, "Short OBD-II frame (ID 0x%03X, len=%d)", can_id, len);
+        #endif
+        identifier = data[0];
+        data_offset = 0;
     } else {
         // Custom protocol or J1939 - use first byte as identifier
         identifier = data[0];
@@ -114,6 +138,13 @@ static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len) {
 
     // Update cache with extracted data
     uint8_t data_length = (len > data_offset) ? (len - data_offset) : 0;
+    if (data_length == 0) {
+        #ifdef DEBUG
+        msg.debug.warn(TAG_CAN, "No data after protocol parsing (ID 0x%03X)", can_id);
+        #endif
+        return;
+    }
+
     updateCANCache(can_id, identifier, &data[data_offset], data_length);
 }
 

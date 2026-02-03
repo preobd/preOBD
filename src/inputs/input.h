@@ -6,6 +6,17 @@
  * and Sensor (hardware device) at runtime via serial commands or EEPROM.
  *
  * ============================================================================
+ * PIN ALLOCATION
+ * ============================================================================
+ *
+ * Physical pins:     0x00-0x7F (0-127)   - Hardware GPIO pins, analog inputs
+ * CAN virtual pins:  0xC0-0xDF (192-223) - CAN:0 to CAN:31 (32 sensors max)
+ * I2C virtual pins:  0xF0-0xFF (240-255) - I2C:0 to I2C:15 (reserved for future)
+ *
+ * Virtual pins don't correspond to physical GPIO - they represent data sources
+ * from bus protocols (CAN frames, I2C sensors with addresses, etc.)
+ *
+ * ============================================================================
  * ARCHITECTURE OVERVIEW
  * ============================================================================
  *

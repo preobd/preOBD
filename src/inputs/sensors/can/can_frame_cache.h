@@ -8,7 +8,13 @@
  * - Fixed-size cache (16 entries) with hash-based indexing
  * - LRU (Least Recently Used) replacement on collision
  * - Timeout detection for stale data (2000ms default)
- * - Thread-safe for single-threaded Arduino environment
+ *
+ * THREAD SAFETY:
+ * - NOT interrupt-safe - updates are non-atomic
+ * - updateCANCache() MUST be called from main loop only, never from ISR
+ * - readCANSensor() can be called from main loop only
+ * - Safe for single-threaded Arduino environment (no concurrent access)
+ * - If ISR usage required, add noInterrupts()/interrupts() guards
  */
 
 #ifndef CAN_FRAME_CACHE_H
@@ -19,6 +25,11 @@
 // ===== CONFIGURATION =====
 #define CAN_CACHE_SIZE 16           // Must be power of 2 for efficient modulo
 #define CAN_DEFAULT_TIMEOUT_MS 2000 // Default stale timeout
+
+// TODO: Make timeout configurable per sensor for different update rates
+// - High-frequency PIDs (RPM, speed): 100-500ms timeout
+// - Low-frequency PIDs (coolant temp): 2000-5000ms timeout
+// Current implementation uses fixed 2000ms for all sensors
 
 // ===== DATA STRUCTURES =====
 

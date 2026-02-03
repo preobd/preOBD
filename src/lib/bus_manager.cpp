@@ -65,13 +65,24 @@ void initConfiguredBuses() {
         }
     }
 
-    // Initialize CAN input bus if enabled and different from output bus
+    // Initialize CAN input bus if enabled
+    // Supports two modes:
+    // 1. SHARED BUS: input_can_bus == output_can_bus (same physical bus)
+    //    - Both input and output use same CAN peripheral (e.g., both on CAN1)
+    //    - Common on single-bus platforms (AVR with MCP2515, ESP32 with TWAI)
+    //    - HAL handles concurrent access safely (non-blocking reads, queued writes)
+    // 2. DUAL BUS: input_can_bus != output_can_bus (separate physical buses)
+    //    - Input on CAN1, output on CAN2 (Teensy 3.6/4.x only)
+    //    - Allows isolation of sensor import from OBD-II output traffic
     if (systemConfig.buses.can_input_enabled && systemConfig.buses.input_can_bus != 0xFF) {
-        // Only initialize if different bus than output (avoid double init)
+        // Only initialize if different bus than output (avoid double-init in shared mode)
         if (systemConfig.buses.input_can_bus != systemConfig.buses.output_can_bus) {
             if (!initCANBus(systemConfig.buses.input_can_bus, systemConfig.buses.can_baudrate)) {
                 msg.debug.warn(TAG_CAN, "CAN input: Failed to initialize bus %d", systemConfig.buses.input_can_bus);
             }
+        } else {
+            // Shared bus mode - already initialized by output, just log status
+            msg.debug.info(TAG_CAN, "CAN input sharing bus with output (bus %d)", systemConfig.buses.input_can_bus);
         }
     }
 }

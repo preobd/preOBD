@@ -1,5 +1,9 @@
 /*
  * can_frame_cache.cpp - CAN Frame Cache Implementation
+ *
+ * IMPORTANT: All cache operations assume single-threaded access from main loop.
+ * Do NOT call updateCANCache() from interrupt handlers without adding
+ * interrupt guards (noInterrupts()/interrupts()).
  */
 
 #include "can_frame_cache.h"
@@ -55,16 +59,20 @@ void initCANFrameCache() {
 }
 
 void updateCANCache(uint16_t can_id, uint8_t pid, const uint8_t* data, uint8_t len) {
-    if (!data || len == 0) return;
+    // Validate input parameters
+    // NOTE: Caller MUST ensure 'data' buffer has at least 'len' bytes available
+    // Current callers (updateCANInput, CAN scan) always provide 8-byte buffers
+    if (!data || len == 0 || len > 8) return;
 
     uint8_t index = hashCANFrame(can_id, pid);
+    uint8_t copy_len = min(len, (uint8_t)8);
 
     // Check if entry already exists at hash index
     if (canFrameCache[index].valid &&
         canFrameCache[index].can_id == can_id &&
         canFrameCache[index].pid == pid) {
         // Update existing entry
-        memcpy(canFrameCache[index].data, data, min(len, (uint8_t)8));
+        memcpy(canFrameCache[index].data, data, copy_len);
         canFrameCache[index].timestamp_ms = millis();
         return;
     }
@@ -75,7 +83,7 @@ void updateCANCache(uint16_t can_id, uint8_t pid, const uint8_t* data, uint8_t l
             canFrameCache[i].can_id == can_id &&
             canFrameCache[i].pid == pid) {
             // Found existing entry, update it
-            memcpy(canFrameCache[i].data, data, min(len, (uint8_t)8));
+            memcpy(canFrameCache[i].data, data, copy_len);
             canFrameCache[i].timestamp_ms = millis();
             return;
         }
@@ -89,7 +97,7 @@ void updateCANCache(uint16_t can_id, uint8_t pid, const uint8_t* data, uint8_t l
     // Store new entry
     canFrameCache[index].can_id = can_id;
     canFrameCache[index].pid = pid;
-    memcpy(canFrameCache[index].data, data, min(len, (uint8_t)8));
+    memcpy(canFrameCache[index].data, data, copy_len);
     canFrameCache[index].timestamp_ms = millis();
     canFrameCache[index].valid = true;
 }

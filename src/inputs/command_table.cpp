@@ -516,6 +516,7 @@ static int cmd_set(int argc, const char* const* argv) {
 
         // Set sensor first (creates input with default calibration)
         if (!setInputSensor(virtualPin, canSensorIndex)) {
+            msg.control.println(F("ERROR: Failed to configure CAN sensor"));
             return 1;
         }
 
