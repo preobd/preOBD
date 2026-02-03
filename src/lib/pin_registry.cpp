@@ -391,8 +391,8 @@ void printPinStatus(bool showAvailableOnly, uint8_t specificPin) {
     bool hasInputs = false;
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         // Only show inputs that have both an application AND a valid pin assigned
-        // Exclude 0xFF (invalid) and 0xFE (Teensy built-in SDIO)
-        if (inputs[i].applicationIndex != 0xFF && inputs[i].pin != 0xFF && inputs[i].pin != 0xFE) {
+        // Exclude 0xFF (invalid/unassigned pin marker)
+        if (inputs[i].applicationIndex != 0xFF && inputs[i].pin != 0xFF) {
             if (!hasInputs) {
                 msg.control.println(F("Input Pins:"));
                 hasInputs = true;
