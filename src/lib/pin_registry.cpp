@@ -215,7 +215,11 @@ const PinUsage* getPinUsageByIndex(uint8_t index) {
 
 // Helper to print pin name (A0, CAN:0, I2C:0, or numeric)
 static void printPinName(uint8_t pin) {
-    if (pin >= 0xF0) {
+    // Check for special Teensy pins first before virtual pin ranges
+    if (pin == 254) {
+        // Teensy built-in SDIO pin
+        msg.control.print(F("SDIO"));
+    } else if (pin >= 0xF0) {
         msg.control.print(F("I2C:"));
         msg.control.print(pin - 0xF0);
     } else if (pin >= 0xC0 && pin < 0xE0) {
@@ -234,7 +238,10 @@ static void printPinPadded(uint8_t pin) {
     msg.control.print(F("  Pin "));
 
     // Determine width needed for pin number
-    if (pin >= 0xF0 || (pin >= 0xC0 && pin < 0xE0)) {
+    if (pin == 254) {
+        // Teensy built-in SDIO pin - special case
+        printPinName(pin);
+    } else if (pin >= 0xF0 || (pin >= 0xC0 && pin < 0xE0)) {
         // Virtual pins like "CAN:0" or "I2C:15" - already at least 5 chars
         printPinName(pin);
     } else if (pin >= A0) {
