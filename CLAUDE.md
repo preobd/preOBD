@@ -104,11 +104,16 @@ Dual-bus architecture with separate input/output buses:
 
 ### Branching Strategy
 
-**Always create a feature branch before implementing changes.** When planning work:
+**Create a feature branch only when starting NEW work.** When planning work:
 
 1. Create a branch from `main` with a descriptive name: `feature/`, `fix/`, `refactor/`, etc.
 2. All implementation work happens on the feature branch
 3. Merge back to `main` via pull request
+
+**DO NOT create a new branch if:**
+- Already working on an existing feature/fix branch
+- Continuing work on the current branch
+- Making additional commits to ongoing work
 
 Example:
 ```bash
@@ -119,9 +124,9 @@ git checkout -b refactor/sensor-registry
 
 ### Implementation Plans Must Include
 
-When creating implementation plans, always include these phases:
+When creating implementation plans for NEW work, always include these phases:
 
-1. **Branch Creation** - Create feature branch before any code changes
+1. **Branch Creation** - Create feature branch ONLY if starting new work from `main`
 2. **Implementation** - The actual code changes
 3. **Build Verification** - Run `pio run` for affected platforms
 4. **Documentation Updates** - Update relevant documentation:
