@@ -48,7 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CAN output refactored** - Separated from CAN input for independent operation
 
 ### Fixed
+- **MessageStream uint8_t printing** - Added `print(unsigned char)` and `println(unsigned char)` overloads to fix uint8_t values being printed incorrectly due to ambiguous overload resolution between char and int
 - **MessageStream character printing** - Added `print(char)` and `println(char)` overloads to fix character literals being printed as ASCII values (e.g., space ' ' printed as 32)
+- **TransportInterface char/uint8_t printing** - Added explicit overloads for char and unsigned char to ensure correct printing behavior
 - **CAN input/output separation** - CAN input and output can now use different physical buses
 
 ## [0.6.5-beta] - 2025-01-27

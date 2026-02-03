@@ -123,6 +123,27 @@ public:
         return n;
     }
 
+    size_t print(char c) {
+        return write((uint8_t)c);
+    }
+
+    size_t println(char c) {
+        size_t n = print(c);
+        n += write('\r');
+        n += write('\n');
+        return n;
+    }
+
+    // uint8_t is typedef'd to unsigned char - provide explicit overloads
+    // to ensure numeric printing (not character printing)
+    size_t print(unsigned char n) {
+        return print((int)n);
+    }
+
+    size_t println(unsigned char n) {
+        return println((int)n);
+    }
+
     size_t print(int n) {
         char buf[12];
         itoa(n, buf, 10);
