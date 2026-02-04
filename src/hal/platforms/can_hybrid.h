@@ -18,7 +18,26 @@
 #define HAL_CAN_HYBRID_H
 
 #include <stdint.h>
+#include "../platform_caps.h"
 #include "../../lib/can_controller_types.h"
+
+// ============================================================================
+// Compile-Time Validation
+// ============================================================================
+
+// Hybrid mode requires at least CAN_BUS_0_TYPE to be defined
+#if !defined(CAN_BUS_0_TYPE)
+    #error "Hybrid mode (ENABLE_CAN_HYBRID) requires CAN_BUS_0_TYPE to be defined in platformio.ini"
+#endif
+
+// Warn if hybrid mode is enabled but only one bus is configured
+#if !defined(CAN_BUS_1_TYPE) && !defined(CAN_BUS_2_TYPE) && !defined(CAN_BUS_3_TYPE)
+    #warning "Hybrid mode enabled but only one bus configured - consider using single-controller mode instead"
+#endif
+
+// ============================================================================
+// Driver Includes
+// ============================================================================
 
 // Include all potentially used drivers
 // Each driver wraps its functions in a namespace (flexcan, twai, mcp2515)
@@ -50,6 +69,9 @@ namespace hal { namespace can {
 // ============================================================================
 
 inline bool begin(uint32_t baudrate, uint8_t bus = 0) {
+    // Validate bus number is within platform limits
+    if (bus >= PLATFORM_EFFECTIVE_CAN_BUSES) return false;
+
     CanControllerType ctrl = getBusControllerType(bus);
 
     switch (ctrl) {
@@ -85,6 +107,9 @@ inline bool begin(uint32_t baudrate, uint8_t bus = 0) {
 }
 
 inline bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t bus = 0) {
+    // Validate bus number is within platform limits
+    if (bus >= PLATFORM_EFFECTIVE_CAN_BUSES) return false;
+
     CanControllerType ctrl = getBusControllerType(bus);
 
     switch (ctrl) {
@@ -119,6 +144,9 @@ inline bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, 
 }
 
 inline bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint8_t bus = 0) {
+    // Validate bus number is within platform limits
+    if (bus >= PLATFORM_EFFECTIVE_CAN_BUSES) return false;
+
     CanControllerType ctrl = getBusControllerType(bus);
 
     switch (ctrl) {

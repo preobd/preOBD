@@ -42,6 +42,10 @@
 // Only defined for platforms without native CAN peripherals OR in hybrid mode
 // Native CAN platforms: Teensy 3.x/4.x (FlexCAN), ESP32 (TWAI), STM32 (bxCAN)
 // Supports multiple SPI CAN controllers: MCP2515, MCP25625, SJA1000, etc.
+//
+// IMPORTANT: platform_caps.h must be included HERE (before pin definitions) to
+// ensure PLATFORM_NEEDS_SPI_CAN is defined before being used in the conditional
+// below. This header provides compile-time detection of CAN hardware capabilities.
 #include "hal/platform_caps.h"
 
 #if PLATFORM_NEEDS_SPI_CAN || defined(ENABLE_CAN_HYBRID)
