@@ -26,7 +26,11 @@
 #ifdef ENABLE_CAN
 
 // Platform detection and include appropriate implementation
-#if defined(USE_FLEXCAN_NATIVE) && (defined(__MK20DX256__) || defined(__MK64FX512__) || \
+#if defined(ENABLE_CAN_HYBRID)
+    // Hybrid mode: Multiple controller types on different buses
+    #include "platforms/can_hybrid.h"
+
+#elif defined(USE_FLEXCAN_NATIVE) && (defined(__MK20DX256__) || defined(__MK64FX512__) || \
     defined(__MK66FX1M0__) || defined(__IMXRT1062__))
     // Teensy 3.x/4.x with native FlexCAN
     #include "platforms/can_flexcan.h"

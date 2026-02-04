@@ -78,6 +78,55 @@ Hash-based lookup system for string→sensor/application mapping. Enables EEPROM
 1. **Runtime Mode** (default): Configured via serial commands, persisted to EEPROM
 2. **Static Mode** (`USE_STATIC_CONFIG`): Compile-time only, no EEPROM overhead
 
+### CAN Controller Abstraction
+
+The CAN bus system uses a Hardware Abstraction Layer (HAL) to support multiple controller types:
+
+**Controller Types:**
+- **FlexCAN** (Teensy 3.6/4.0/4.1 native) - 2-3 CAN buses, high performance
+- **TWAI** (ESP32/ESP32-S3 native) - 1 CAN bus, requires external transceiver
+- **SPI** (External SPI-based controllers) - 1-2 buses, works on any platform with SPI
+  - Currently supported: MCP2515
+  - Future: MCP25625 (integrated transceiver), SJA1000
+- **bxCAN** (STM32 native, planned) - 1-2 buses depending on variant
+
+**Platform Capabilities:**
+Controller selection happens at compile time via [src/hal/platform_caps.h](src/hal/platform_caps.h):
+- `PLATFORM_CAN_CONTROLLER` - String identifier ("FlexCAN", "TWAI", "SPI", "bxCAN")
+- `PLATFORM_HAS_NATIVE_CAN` - Boolean flag (1 = integrated peripheral, 0 = external)
+- `PLATFORM_NEEDS_SPI_CAN` - Boolean flag (1 = requires SPI CAN pins in config.h)
+- `PLATFORM_SUPPORTS_HYBRID` - Boolean flag (1 = hybrid mode enabled)
+
+**Build Flags:**
+- `USE_FLEXCAN_NATIVE` - Enables Teensy FlexCAN support (set in platformio.ini)
+- ESP32: Automatically detected via `ESP32` processor define
+- STM32: Auto-detect via `STM32F4xx` / `STM32F1xx` defines (future)
+- SPI CAN: Default fallback for platforms without native CAN (auto-selected)
+
+**Hybrid Mode:**
+Hybrid mode allows mixing controller types on different buses (e.g., ESP32 TWAI + MCP2515):
+```ini
+[env:esp32s3_hybrid]
+build_flags =
+    -D ENABLE_CAN_HYBRID
+    -D CAN_BUS_0_TYPE=CanControllerType::TWAI
+    -D CAN_BUS_1_TYPE=CanControllerType::MCP2515
+```
+
+Pin configuration for SPI CAN controllers is in [src/config.h](src/config.h), not platformio.ini.
+
+**HAL Interface** ([src/hal/hal_can.h](src/hal/hal_can.h)):
+```cpp
+namespace hal { namespace can {
+    bool begin(uint32_t baudrate, uint8_t bus = 0);
+    bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t bus);
+    bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint8_t bus);
+    void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus);
+}}
+```
+
+All CAN operations (input, output, bus manager) use this unified API regardless of controller type.
+
 ## Test Mode
 
 Not unit tests - embedded sensor simulation for testing outputs without hardware:

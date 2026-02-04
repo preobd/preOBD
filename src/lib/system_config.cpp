@@ -157,12 +157,12 @@ void resetSystemConfig() {
     systemConfig.modeButtonPin = MODE_BUTTON;
     systemConfig.buzzerPin = BUZZER;
 
-    #ifndef USE_FLEXCAN_NATIVE
+    #if PLATFORM_NEEDS_SPI_CAN || defined(ENABLE_CAN_HYBRID)
     systemConfig.canCSPin = CAN_CS;
     systemConfig.canIntPin = CAN_INT;
     #else
-    systemConfig.canCSPin = 0xFF;  // Not used with native FlexCAN
-    systemConfig.canIntPin = 0xFF; // Not used with native FlexCAN
+    systemConfig.canCSPin = 0xFF;  // Not used with native CAN (FlexCAN, TWAI, bxCAN)
+    systemConfig.canIntPin = 0xFF; // Not used with native CAN (FlexCAN, TWAI, bxCAN)
     #endif
 
     systemConfig.sdCSPin = SD_CS_PIN;

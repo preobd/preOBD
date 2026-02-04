@@ -12,10 +12,20 @@
 #define HAL_CAN_MCP2515_H
 
 #include <SPI.h>
+// MCP2515 library defines DEFAULT_SPI_CLOCK which conflicts with bus_defaults.h
+// Temporarily undef it before including the library
+#ifdef DEFAULT_SPI_CLOCK
+    #undef DEFAULT_SPI_CLOCK
+#endif
 #include <mcp2515.h>
 #include "../../config.h"  // For CAN_CS_x, CAN_INT_x pin definitions
 
 namespace hal { namespace can {
+
+#ifdef ENABLE_CAN_HYBRID
+// In hybrid mode, wrap in mcp2515 namespace for dispatcher
+namespace mcp2515 {
+#endif
 
 namespace detail {
     // Static MCP2515 instances
@@ -168,6 +178,10 @@ inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
     (void)filter2;
     (void)bus;
 }
+
+#ifdef ENABLE_CAN_HYBRID
+} // namespace mcp2515
+#endif
 
 }} // namespace hal::can
 

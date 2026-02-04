@@ -38,18 +38,22 @@
 #endif
 
 // ----- CAN Bus Pins -----
-// Only needed if using external MCP2515 chip (not needed for Teensy native FlexCAN)
-// Supports up to 2 MCP2515 controllers for dual CAN bus operation
-#ifndef USE_FLEXCAN_NATIVE
-    // MCP2515 Bus 0 (primary)
-    #define CAN_CS_0 9       // MCP2515 #0 chip select
-    #define CAN_INT_0 2      // MCP2515 #0 interrupt pin
+// External SPI CAN Controller Pins
+// Only defined for platforms without native CAN peripherals OR in hybrid mode
+// Native CAN platforms: Teensy 3.x/4.x (FlexCAN), ESP32 (TWAI), STM32 (bxCAN)
+// Supports multiple SPI CAN controllers: MCP2515, MCP25625, SJA1000, etc.
+#include "hal/platform_caps.h"
 
-    // MCP2515 Bus 1 (secondary) - set to 0xFF to disable
-    #define CAN_CS_1 10      // MCP2515 #1 chip select
-    #define CAN_INT_1 3      // MCP2515 #1 interrupt pin
+#if PLATFORM_NEEDS_SPI_CAN || defined(ENABLE_CAN_HYBRID)
+    // SPI CAN Controller Bus 0 (primary)
+    #define CAN_CS_0 9       // Chip select for SPI CAN controller #0
+    #define CAN_INT_0 2      // Interrupt pin for SPI CAN controller #0
 
-    // Legacy compatibility aliases
+    // SPI CAN Controller Bus 1 (secondary) - set to 0xFF to disable
+    #define CAN_CS_1 10      // Chip select for SPI CAN controller #1
+    #define CAN_INT_1 3      // Interrupt pin for SPI CAN controller #1
+
+    // Legacy compatibility aliases (for existing MCP2515 code)
     #define CAN_CS CAN_CS_0
     #define CAN_INT CAN_INT_0
 #endif

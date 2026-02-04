@@ -15,6 +15,11 @@
 
 namespace hal { namespace can {
 
+#ifdef ENABLE_CAN_HYBRID
+// In hybrid mode, wrap in flexcan namespace for dispatcher
+namespace flexcan {
+#endif
+
 namespace detail {
     // Static instances in detail namespace to avoid ODR issues
     static FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16> canBus0;
@@ -140,6 +145,10 @@ inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
         #endif
     }
 }
+
+#ifdef ENABLE_CAN_HYBRID
+} // namespace flexcan
+#endif
 
 }} // namespace hal::can
 
