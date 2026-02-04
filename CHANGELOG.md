@@ -33,10 +33,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Customizable LED colors** - User-configurable colors in rgb_led.h for accessibility and personal preferences
 - **LED indicator effects** - Configurable blinking and pulsing/breathing effects
 - **LED indicator documentation** - Comprehensive guide covering hardware, wiring, configuration, and troubleshooting
+- **CAN controller abstraction** - Platform capability detection system for CAN hardware
+  - **Platform capabilities** - Compile-time flags (PLATFORM_HAS_NATIVE_CAN, PLATFORM_NEEDS_SPI_CAN)
+  - **Hybrid controller mode** - Mix different CAN controller types on different buses (e.g., ESP32 TWAI + MCP2515)
+  - **New hybrid environments** - esp32s3_hybrid, teensy41_hybrid for dual-controller setups
+  - **Controller type system** - Explicit enum for FlexCAN, TWAI, MCP2515, bxCAN (future)
+  - **Runtime dispatcher** - Automatic routing to correct driver based on bus configuration
 
 ### Changed
 - **Watchdog implementation** - Refactored to use HAL with platform-specific drivers in `src/hal/platforms/`
 - **CAN bus implementation** - Refactored `output_can.cpp` to use HAL internally (public API unchanged)
+- **CAN pin definitions** - SPI CAN pins (CAN_CS, CAN_INT) now only defined on platforms that need them
+- **Teensy 3.6 CAN controller** - Migrated from external MCP2515 to native FlexCAN (binary size reduction, dual-bus support)
+- **HAL CAN drivers** - Added internal namespaces (flexcan, twai, mcp2515) for hybrid mode coexistence
 
 ### Fixed
 - **BusConfig structure** - Extended to support dual-bus CAN (input_can_bus, output_can_bus, enable flags)

@@ -17,6 +17,23 @@ The physical CAN bus uses **differential signaling**:
 
 **The transceiver bridges these incompatible voltage domains.** Without it, your microcontroller cannot communicate on the CAN bus.
 
+### CAN Controller Abstraction
+
+openEMS uses a Hardware Abstraction Layer (HAL) that supports multiple CAN controller types:
+
+- **FlexCAN** (Teensy 3.6/4.0/4.1 native) - 2-3 CAN buses, high performance
+- **TWAI** (ESP32/ESP32-S3 native) - 1 CAN bus, requires external transceiver
+- **SPI** (External SPI-based controllers) - 1-2 buses, works on any platform with SPI
+  - Currently supported: MCP2515
+  - Future: MCP25625 (integrated transceiver), SJA1000
+- **bxCAN** (STM32 native, planned) - 1-2 buses depending on variant
+
+**Hybrid Mode** allows mixing controller types on different buses. For example:
+- ESP32 TWAI (bus 0) + MCP2515 (bus 1) for dual-bus operation
+- Teensy 4.1 with 3 FlexCAN buses + MCP2515 (bus 3) for a 4th bus
+
+See [Build Configuration Guide](../configuration/BUILD_CONFIGURATION_GUIDE.md#hybrid-can-controller-mode) for hybrid mode setup.
+
 ### When Do You Need This?
 
 You need a CAN transceiver for **any** CAN output use case:
@@ -189,6 +206,62 @@ GND         →   GND
 - Same wiring as Mega
 - **Limited features** due to 2KB RAM - use compile-time configuration only
 - See [STATIC_BUILDS_GUIDE.md](../../advanced/STATIC_BUILDS_GUIDE.md)
+
+### Multi-Bus and Hybrid Mode
+
+**Multi-bus configurations** allow openEMS to communicate on multiple CAN buses simultaneously. This is useful for:
+- Separating input (reading sensors via CAN) from output (sending data to displays)
+- Interfacing with multiple vehicle networks (e.g., powertrain CAN + body CAN)
+- Testing and development with isolated CAN buses
+
+**Teensy 4.1 Dual FlexCAN Example:**
+```
+Teensy 4.1      SN65HVD230 #1  SN65HVD230 #2
+-----------     -------------  -------------
+Pin 22 (TX1) →  CTX (bus 0)
+Pin 23 (RX1) ←  CRX (bus 0)
+Pin 0 (TX2)  →                 CTX (bus 1)
+Pin 1 (RX2)  ←                 CRX (bus 1)
+3.3V         →  VCC            VCC
+GND          →  GND            GND
+                CANH/CANL →    Vehicle CAN Bus 0
+                               CANH/CANL → Vehicle CAN Bus 1
+```
+
+**ESP32-S3 Hybrid Mode Example (TWAI + MCP2515):**
+```
+ESP32-S3        SN65HVD230     MCP2515        MCP2551
+-----------     -------------  --------       --------
+GPIO20 (TX) →   CTX (bus 0)
+GPIO21 (RX) ←   CRX (bus 0)
+GPIO10 (CS) →                  CS
+GPIO11 (SCK)→                  SCK
+GPIO12 (MISO)←                 SO
+GPIO13 (MOSI)→                 SI
+3.3V        →   VCC            VCC
+GND         →   GND            GND
+                CANH/CANL →    Vehicle CAN Bus 0
+                               TX         →   TXD
+                               RX         ←   RXD
+                                              VCC (5V or 3.3V)
+                                              GND
+                                              CANH/CANL → Vehicle CAN Bus 1
+```
+
+**Configuration:**
+- Pin assignments for SPI CAN controllers are in `src/config.h`
+- Hybrid mode requires build flags in `platformio.ini`:
+  ```ini
+  -D ENABLE_CAN_HYBRID
+  -D CAN_BUS_0_TYPE=CanControllerType::TWAI
+  -D CAN_BUS_1_TYPE=CanControllerType::MCP2515
+  ```
+- Use pre-configured environments: `esp32s3_hybrid` or `teensy41_hybrid`
+
+**Notes:**
+- Each bus requires its own CAN transceiver
+- Each bus should have 120Ω termination at both ends (if openEMS is at an end)
+- Baud rates are configured per-bus via serial commands
 
 ---
 
