@@ -257,9 +257,39 @@ CAN support varies by platform:
 
 | Platform | CAN Implementation | Library | Notes |
 |----------|-------------------|---------|-------|
-| **Teensy 4.x/3.x** | Native FlexCAN | FlexCAN_T4 | Built-in CAN controller, no external chip needed |
-| **ESP32** | Native TWAI | ESP32-TWAI-CAN | Built-in CAN controller, **external transceiver required** |
-| **Mega/Uno/Due** | External MCP2515 | sandeepmistry/CAN | Requires MCP2515 CAN controller via SPI |
+| **Teensy 4.x/3.x** | Native FlexCAN | FlexCAN_T4 | Built-in CAN controller, no external chip needed, supports 2-3 buses |
+| **ESP32** | Native TWAI | ESP32-TWAI-CAN | Built-in CAN controller, **external transceiver required**, 1 bus |
+| **Mega/Uno/Due** | External MCP2515 | autowp-mcp2515 | Requires MCP2515 CAN controller via SPI |
+| **STM32** | Native bxCAN | TBD | Planned support, 1-2 buses depending on variant |
+
+### Hybrid CAN Controller Mode
+
+openEMS supports mixing different CAN controller types on different buses. This allows platforms to use both native and external controllers simultaneously.
+
+**Example use cases:**
+- ESP32 with native TWAI (bus 0) + external MCP2515 (bus 1) for dual-bus operation
+- Teensy 4.1 with 3 native FlexCAN buses + external MCP2515 (bus 3) for a 4th bus
+
+**Build flags for hybrid mode:**
+```ini
+build_flags =
+    -D ENABLE_CAN_HYBRID                        # Enable hybrid controller support
+    -D CAN_BUS_0_TYPE=CanControllerType::TWAI   # Explicitly set bus 0 controller
+    -D CAN_BUS_1_TYPE=CanControllerType::MCP2515 # Explicitly set bus 1 controller
+```
+
+**Available controller types:**
+- `CanControllerType::FLEXCAN` - Teensy native FlexCAN
+- `CanControllerType::TWAI` - ESP32 native TWAI
+- `CanControllerType::MCP2515` - External SPI CAN controller
+- `CanControllerType::BXCAN` - STM32 native bxCAN (planned)
+- `CanControllerType::NONE` - No controller / disabled
+
+**Pre-configured hybrid environments:**
+```bash
+pio run -e esp32s3_hybrid    # ESP32-S3: TWAI + MCP2515
+pio run -e teensy41_hybrid   # Teensy 4.1: 3x FlexCAN + MCP2515
+```
 
 **Example - ESP32 with native CAN:**
 ```ini
@@ -309,6 +339,26 @@ lib_deps =
     ${sd_libs.lib_deps}
     ${sensor_libs.lib_deps}
     ${eeprom_libs.lib_deps}
+```
+
+**Example - ESP32 with Hybrid Mode (TWAI + MCP2515):**
+```ini
+[env:esp32s3_hybrid]
+platform = espressif32
+board = esp32-s3-devkitm-1
+build_flags =
+    ${standard_features.build_flags}
+    -D ENABLE_CAN_HYBRID
+    -D CAN_BUS_0_TYPE=CanControllerType::TWAI
+    -D CAN_BUS_1_TYPE=CanControllerType::MCP2515
+lib_deps =
+    ${core_libs.lib_deps}
+    ${display_libs.lib_deps}
+    ${sd_libs.lib_deps}
+    ${sensor_libs.lib_deps}
+    ${eeprom_libs.lib_deps}
+    https://github.com/handmade0ctopus/ESP32-TWAI-CAN.git  # Native TWAI for bus 0
+    autowp/autowp-mcp2515@^1.0.3  # External SPI for bus 1
 ```
 
 ### Platform-Specific Bluetooth Support

@@ -576,11 +576,63 @@ public:
 - **LoRa** - Long-range wireless for remote monitoring
 - **WebSocket** - Web-based dashboard
 
+## CAN Controller Abstraction
+
+While the transport system handles serial communication channels (USB, Bluetooth, UART), CAN bus communication uses a separate Hardware Abstraction Layer (HAL).
+
+### CAN HAL Architecture
+
+The CAN HAL provides a unified API regardless of the underlying controller:
+
+```cpp
+namespace hal { namespace can {
+    bool begin(uint32_t baudrate, uint8_t bus = 0);
+    bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t bus);
+    bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint8_t bus);
+    void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus);
+}}
+```
+
+**Supported Controllers:**
+- **FlexCAN** (Teensy 3.6/4.0/4.1 native) - 2-3 buses
+- **TWAI** (ESP32/ESP32-S3 native) - 1 bus
+- **MCP2515** (External SPI) - 1-2 buses
+- **bxCAN** (STM32 native, planned) - 1-2 buses
+
+### Hybrid Controller Support
+
+Hybrid mode allows mixing different controller types on different buses:
+
+```ini
+# ESP32-S3 with native TWAI + external MCP2515
+-D ENABLE_CAN_HYBRID
+-D CAN_BUS_0_TYPE=CanControllerType::TWAI
+-D CAN_BUS_1_TYPE=CanControllerType::MCP2515
+```
+
+Platform capabilities are detected at compile-time via `src/hal/platform_caps.h`:
+- `PLATFORM_CAN_CONTROLLER` - String identifier ("FlexCAN", "TWAI", "SPI", "bxCAN")
+- `PLATFORM_HAS_NATIVE_CAN` - Boolean flag (1 = integrated peripheral, 0 = external)
+- `PLATFORM_NEEDS_SPI_CAN` - Boolean flag (1 = requires SPI CAN pins in config.h)
+- `PLATFORM_SUPPORTS_HYBRID` - Boolean flag (1 = hybrid mode enabled)
+
+### Relationship to Transport System
+
+The transport system and CAN HAL are independent:
+- **Transport system** - Serial communication for commands and RealDash frames
+- **CAN HAL** - CAN bus communication for vehicle networks and CAN sensor import
+
+CAN output modules use the CAN HAL to send OBD-II frames and broadcast data, while the transport system handles serial-based communication.
+
 ## References
 
 - [TransportInterface API](../../src/lib/transports/transport_interface.h)
 - [MessageRouter Implementation](../../src/lib/transports/message_router.h)
 - [Serial Transport Wrapper](../../src/lib/transports/serial_transport_wrapper.h)
 - [ESP32 Bluetooth Transport](../../src/lib/transports/transport_bluetooth_esp32.h)
+- [CAN HAL Interface](../../src/hal/hal_can.h)
+- [Platform Capabilities](../../src/hal/platform_caps.h)
+- [CAN Controller Types](../../src/lib/can_controller_types.h)
 - [Build Configuration Guide](../guides/configuration/BUILD_CONFIGURATION_GUIDE.md)
+- [CAN Transceiver Hardware Guide](../guides/hardware/CAN_TRANSCEIVER_GUIDE.md)
 - [RealDash Setup Guide](../guides/outputs/REALDASH_SETUP_GUIDE.md)
