@@ -36,29 +36,45 @@
 #endif
 
 // ============================================================================
+// Controller Detection Helper Macros
+// ============================================================================
+// These macros simplify the conditional compilation logic for including drivers
+// Note: We check the actual controller assignments rather than using enum comparisons
+// since preprocessor directives can't evaluate C++ enum class values
+
+// Check if any bus uses FlexCAN
+#if defined(USE_FLEXCAN_NATIVE)
+    #define HYBRID_HAS_FLEXCAN 1
+#else
+    #define HYBRID_HAS_FLEXCAN 0
+#endif
+
+// Check if any bus uses TWAI (ESP32 native CAN)
+#if defined(ESP32)
+    #define HYBRID_HAS_TWAI 1
+#else
+    #define HYBRID_HAS_TWAI 0
+#endif
+
+// Check if any bus uses MCP2515 (always included for now since we can't check enum at preprocessor time)
+// In hybrid mode, at least one bus might be MCP2515 if it's not the native controller
+#define HYBRID_HAS_MCP2515 1
+
+// ============================================================================
 // Driver Includes
 // ============================================================================
 
 // Include all potentially used drivers
 // Each driver wraps its functions in a namespace (flexcan, twai, mcp2515)
-#if defined(USE_FLEXCAN_NATIVE) || (CAN_CONTROLLER_BUS_0 == CanControllerType::FLEXCAN) || \
-    (CAN_CONTROLLER_BUS_1 == CanControllerType::FLEXCAN) || \
-    (CAN_CONTROLLER_BUS_2 == CanControllerType::FLEXCAN) || \
-    (CAN_CONTROLLER_BUS_3 == CanControllerType::FLEXCAN)
+#if HYBRID_HAS_FLEXCAN
     #include "can_flexcan.h"
 #endif
 
-#if defined(ESP32) || (CAN_CONTROLLER_BUS_0 == CanControllerType::TWAI) || \
-    (CAN_CONTROLLER_BUS_1 == CanControllerType::TWAI) || \
-    (CAN_CONTROLLER_BUS_2 == CanControllerType::TWAI) || \
-    (CAN_CONTROLLER_BUS_3 == CanControllerType::TWAI)
+#if HYBRID_HAS_TWAI
     #include "can_twai.h"
 #endif
 
-#if (CAN_CONTROLLER_BUS_0 == CanControllerType::MCP2515) || \
-    (CAN_CONTROLLER_BUS_1 == CanControllerType::MCP2515) || \
-    (CAN_CONTROLLER_BUS_2 == CanControllerType::MCP2515) || \
-    (CAN_CONTROLLER_BUS_3 == CanControllerType::MCP2515)
+#if HYBRID_HAS_MCP2515
     #include "can_mcp2515.h"
 #endif
 
@@ -75,27 +91,18 @@ inline bool begin(uint32_t baudrate, uint8_t bus = 0) {
     CanControllerType ctrl = getBusControllerType(bus);
 
     switch (ctrl) {
-        #if defined(USE_FLEXCAN_NATIVE) || (CAN_CONTROLLER_BUS_0 == CanControllerType::FLEXCAN) || \
-            (CAN_CONTROLLER_BUS_1 == CanControllerType::FLEXCAN) || \
-            (CAN_CONTROLLER_BUS_2 == CanControllerType::FLEXCAN) || \
-            (CAN_CONTROLLER_BUS_3 == CanControllerType::FLEXCAN)
+        #if HYBRID_HAS_FLEXCAN
         case CanControllerType::FLEXCAN:
             return flexcan::begin(baudrate, bus);
         #endif
 
-        #if defined(ESP32) || (CAN_CONTROLLER_BUS_0 == CanControllerType::TWAI) || \
-            (CAN_CONTROLLER_BUS_1 == CanControllerType::TWAI) || \
-            (CAN_CONTROLLER_BUS_2 == CanControllerType::TWAI) || \
-            (CAN_CONTROLLER_BUS_3 == CanControllerType::TWAI)
+        #if HYBRID_HAS_TWAI
         case CanControllerType::TWAI:
             // TWAI only supports bus 0
             return (bus == 0) ? twai::begin(baudrate, 0) : false;
         #endif
 
-        #if (CAN_CONTROLLER_BUS_0 == CanControllerType::MCP2515) || \
-            (CAN_CONTROLLER_BUS_1 == CanControllerType::MCP2515) || \
-            (CAN_CONTROLLER_BUS_2 == CanControllerType::MCP2515) || \
-            (CAN_CONTROLLER_BUS_3 == CanControllerType::MCP2515)
+        #if HYBRID_HAS_MCP2515
         case CanControllerType::MCP2515:
             return mcp2515::begin(baudrate, bus);
         #endif
@@ -113,26 +120,17 @@ inline bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, 
     CanControllerType ctrl = getBusControllerType(bus);
 
     switch (ctrl) {
-        #if defined(USE_FLEXCAN_NATIVE) || (CAN_CONTROLLER_BUS_0 == CanControllerType::FLEXCAN) || \
-            (CAN_CONTROLLER_BUS_1 == CanControllerType::FLEXCAN) || \
-            (CAN_CONTROLLER_BUS_2 == CanControllerType::FLEXCAN) || \
-            (CAN_CONTROLLER_BUS_3 == CanControllerType::FLEXCAN)
+        #if HYBRID_HAS_FLEXCAN
         case CanControllerType::FLEXCAN:
             return flexcan::write(id, data, len, extended, bus);
         #endif
 
-        #if defined(ESP32) || (CAN_CONTROLLER_BUS_0 == CanControllerType::TWAI) || \
-            (CAN_CONTROLLER_BUS_1 == CanControllerType::TWAI) || \
-            (CAN_CONTROLLER_BUS_2 == CanControllerType::TWAI) || \
-            (CAN_CONTROLLER_BUS_3 == CanControllerType::TWAI)
+        #if HYBRID_HAS_TWAI
         case CanControllerType::TWAI:
             return (bus == 0) ? twai::write(id, data, len, extended, 0) : false;
         #endif
 
-        #if (CAN_CONTROLLER_BUS_0 == CanControllerType::MCP2515) || \
-            (CAN_CONTROLLER_BUS_1 == CanControllerType::MCP2515) || \
-            (CAN_CONTROLLER_BUS_2 == CanControllerType::MCP2515) || \
-            (CAN_CONTROLLER_BUS_3 == CanControllerType::MCP2515)
+        #if HYBRID_HAS_MCP2515
         case CanControllerType::MCP2515:
             return mcp2515::write(id, data, len, extended, bus);
         #endif
@@ -150,26 +148,17 @@ inline bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint
     CanControllerType ctrl = getBusControllerType(bus);
 
     switch (ctrl) {
-        #if defined(USE_FLEXCAN_NATIVE) || (CAN_CONTROLLER_BUS_0 == CanControllerType::FLEXCAN) || \
-            (CAN_CONTROLLER_BUS_1 == CanControllerType::FLEXCAN) || \
-            (CAN_CONTROLLER_BUS_2 == CanControllerType::FLEXCAN) || \
-            (CAN_CONTROLLER_BUS_3 == CanControllerType::FLEXCAN)
+        #if HYBRID_HAS_FLEXCAN
         case CanControllerType::FLEXCAN:
             return flexcan::read(id, data, len, extended, bus);
         #endif
 
-        #if defined(ESP32) || (CAN_CONTROLLER_BUS_0 == CanControllerType::TWAI) || \
-            (CAN_CONTROLLER_BUS_1 == CanControllerType::TWAI) || \
-            (CAN_CONTROLLER_BUS_2 == CanControllerType::TWAI) || \
-            (CAN_CONTROLLER_BUS_3 == CanControllerType::TWAI)
+        #if HYBRID_HAS_TWAI
         case CanControllerType::TWAI:
             return (bus == 0) ? twai::read(id, data, len, extended, 0) : false;
         #endif
 
-        #if (CAN_CONTROLLER_BUS_0 == CanControllerType::MCP2515) || \
-            (CAN_CONTROLLER_BUS_1 == CanControllerType::MCP2515) || \
-            (CAN_CONTROLLER_BUS_2 == CanControllerType::MCP2515) || \
-            (CAN_CONTROLLER_BUS_3 == CanControllerType::MCP2515)
+        #if HYBRID_HAS_MCP2515
         case CanControllerType::MCP2515:
             return mcp2515::read(id, data, len, extended, bus);
         #endif
@@ -184,28 +173,19 @@ inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
     CanControllerType ctrl = getBusControllerType(bus);
 
     switch (ctrl) {
-        #if defined(USE_FLEXCAN_NATIVE) || (CAN_CONTROLLER_BUS_0 == CanControllerType::FLEXCAN) || \
-            (CAN_CONTROLLER_BUS_1 == CanControllerType::FLEXCAN) || \
-            (CAN_CONTROLLER_BUS_2 == CanControllerType::FLEXCAN) || \
-            (CAN_CONTROLLER_BUS_3 == CanControllerType::FLEXCAN)
+        #if HYBRID_HAS_FLEXCAN
         case CanControllerType::FLEXCAN:
             flexcan::setFilters(filter1, filter2, bus);
             break;
         #endif
 
-        #if defined(ESP32) || (CAN_CONTROLLER_BUS_0 == CanControllerType::TWAI) || \
-            (CAN_CONTROLLER_BUS_1 == CanControllerType::TWAI) || \
-            (CAN_CONTROLLER_BUS_2 == CanControllerType::TWAI) || \
-            (CAN_CONTROLLER_BUS_3 == CanControllerType::TWAI)
+        #if HYBRID_HAS_TWAI
         case CanControllerType::TWAI:
             if (bus == 0) twai::setFilters(filter1, filter2, 0);
             break;
         #endif
 
-        #if (CAN_CONTROLLER_BUS_0 == CanControllerType::MCP2515) || \
-            (CAN_CONTROLLER_BUS_1 == CanControllerType::MCP2515) || \
-            (CAN_CONTROLLER_BUS_2 == CanControllerType::MCP2515) || \
-            (CAN_CONTROLLER_BUS_3 == CanControllerType::MCP2515)
+        #if HYBRID_HAS_MCP2515
         case CanControllerType::MCP2515:
             mcp2515::setFilters(filter1, filter2, bus);
             break;
