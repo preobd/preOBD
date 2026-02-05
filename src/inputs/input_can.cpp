@@ -37,8 +37,9 @@ static uint8_t canInputBus = 0;  // Which bus we're reading from
  * @return true if initialized successfully, false otherwise
  */
 bool initCANInput() {
-    // Check if input is enabled
-    if (!systemConfig.buses.can_input_enabled) {
+    // Check if input is enabled (NORMAL or LISTEN mode)
+    uint8_t mode = systemConfig.buses.can_input_mode;
+    if (mode == CAN_INPUT_OFF) {
         canInputInitialized = false;
         return false;
     }
@@ -50,16 +51,18 @@ bool initCANInput() {
     }
 
     uint32_t baudrate = systemConfig.buses.can_input_baudrate;
+    bool listenOnly = (mode == CAN_INPUT_LISTEN);
 
     // Initialize via HAL (handles all platforms)
-    if (!hal::can::begin(baudrate, bus)) {
+    if (!hal::can::begin(baudrate, bus, listenOnly)) {
         msg.debug.error(TAG_CAN, "CAN input init failed on bus %d", bus);
         canInputInitialized = false;
         return false;
     }
 
     canInputBus = bus;
-    msg.debug.info(TAG_CAN, "CAN input initialized on bus %d (%lu bps)", bus, baudrate);
+    const char* modeStr = listenOnly ? "listen-only" : "normal";
+    msg.debug.info(TAG_CAN, "CAN input initialized on bus %d (%lu bps, %s)", bus, baudrate, modeStr);
 
     // Initialize CAN frame cache
     initCANFrameCache();
@@ -160,7 +163,7 @@ static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len) {
  */
 void updateCANInput() {
     // Check if input is enabled and initialized
-    if (!canInputInitialized || !systemConfig.buses.can_input_enabled) {
+    if (!canInputInitialized || systemConfig.buses.can_input_mode == CAN_INPUT_OFF) {
         return;
     }
 

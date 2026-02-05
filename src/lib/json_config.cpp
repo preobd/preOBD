@@ -284,7 +284,7 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     buses["spiClock"] = systemConfig.buses.spi_clock;
     buses["canInputBus"] = systemConfig.buses.input_can_bus;
     buses["canOutputBus"] = systemConfig.buses.output_can_bus;
-    buses["canInputEnabled"] = systemConfig.buses.can_input_enabled;
+    buses["canInputMode"] = systemConfig.buses.can_input_mode;
     buses["canOutputEnabled"] = systemConfig.buses.can_output_enabled;
     buses["canInputBaudrate"] = systemConfig.buses.can_input_baudrate;
     buses["canOutputBaudrate"] = systemConfig.buses.can_output_baudrate;
@@ -654,7 +654,13 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
         // CAN configuration - separate input/output buses
         systemConfig.buses.input_can_bus = buses["canInputBus"] | 0xFF;
         systemConfig.buses.output_can_bus = buses["canOutputBus"] | DEFAULT_CAN_BUS;
-        systemConfig.buses.can_input_enabled = buses["canInputEnabled"] | 0;
+        // Backward compatibility: canInputEnabled (bool) -> canInputMode (enum)
+        if (buses["canInputMode"].is<uint8_t>()) {
+            systemConfig.buses.can_input_mode = buses["canInputMode"] | CAN_INPUT_OFF;
+        } else {
+            // Old format: canInputEnabled=1 maps to NORMAL mode
+            systemConfig.buses.can_input_mode = (buses["canInputEnabled"] | 0) ? CAN_INPUT_NORMAL : CAN_INPUT_OFF;
+        }
         systemConfig.buses.can_output_enabled = buses["canOutputEnabled"] | 1;
 
         // Backward compatibility: if old canBaudrate exists but new ones don't, use it for both
@@ -674,7 +680,7 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
         systemConfig.buses.spi_clock = DEFAULT_SPI_CLOCK;
         systemConfig.buses.input_can_bus = 0xFF;  // Disabled by default
         systemConfig.buses.output_can_bus = DEFAULT_CAN_BUS;
-        systemConfig.buses.can_input_enabled = 0;
+        systemConfig.buses.can_input_mode = CAN_INPUT_OFF;
         systemConfig.buses.can_output_enabled = 1;
         systemConfig.buses.can_input_baudrate = DEFAULT_CAN_BAUDRATE;
         systemConfig.buses.can_output_baudrate = DEFAULT_CAN_BAUDRATE;

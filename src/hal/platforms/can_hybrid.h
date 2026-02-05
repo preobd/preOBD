@@ -84,7 +84,7 @@ namespace hal { namespace can {
 // Hybrid Dispatcher Functions
 // ============================================================================
 
-inline bool begin(uint32_t baudrate, uint8_t bus = 0) {
+inline bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
     // Validate bus number is within platform limits
     if (bus >= PLATFORM_EFFECTIVE_CAN_BUSES) return false;
 
@@ -93,18 +93,18 @@ inline bool begin(uint32_t baudrate, uint8_t bus = 0) {
     switch (ctrl) {
         #if HYBRID_HAS_FLEXCAN
         case CanControllerType::FLEXCAN:
-            return flexcan::begin(baudrate, bus);
+            return flexcan::begin(baudrate, bus, listenOnly);
         #endif
 
         #if HYBRID_HAS_TWAI
         case CanControllerType::TWAI:
             // TWAI only supports bus 0
-            return (bus == 0) ? twai::begin(baudrate, 0) : false;
+            return (bus == 0) ? twai::begin(baudrate, 0, listenOnly) : false;
         #endif
 
         #if HYBRID_HAS_MCP2515
         case CanControllerType::MCP2515:
-            return mcp2515::begin(baudrate, bus);
+            return mcp2515::begin(baudrate, bus, listenOnly);
         #endif
 
         case CanControllerType::NONE:

@@ -2112,9 +2112,9 @@ static int cmd_bus(int argc, const char* const* argv) {
         msg.control.println(F("  BUS SPI CLOCK <Hz>        - Set SPI clock"));
         msg.control.println(F("  BUS CAN                   - Show CAN status"));
         msg.control.println(F("  BUS CAN BAUDRATE <bps>    - Set CAN baudrate (both buses)"));
-        msg.control.println(F("  BUS CAN INPUT <bus> <EN|DIS> [bps] - Configure CAN input"));
+        msg.control.println(F("  BUS CAN INPUT <bus> <ENABLE|LISTEN|DISABLE> [bps]"));
         msg.control.println(F("  BUS CAN INPUT BAUDRATE <bps> - Set CAN input baudrate"));
-        msg.control.println(F("  BUS CAN OUTPUT <bus> <EN|DIS> [bps] - Configure CAN output"));
+        msg.control.println(F("  BUS CAN OUTPUT <bus> <ENABLE|DISABLE> [bps]"));
         msg.control.println(F("  BUS CAN OUTPUT BAUDRATE <bps> - Set CAN output baudrate"));
         msg.control.println(F("  BUS SERIAL                - Show all serial ports"));
         msg.control.println(F("  BUS SERIAL <1-8> ENABLE [baud] - Enable serial port"));
@@ -2313,9 +2313,9 @@ static int cmd_bus(int argc, const char* const* argv) {
                 return 0;
             }
 
-            // BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [baudrate]
+            // BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|LISTEN|DISABLE> [baudrate]
             if (argc < 5) {
-                msg.control.println(F("ERROR: Usage: BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [baudrate]"));
+                msg.control.println(F("ERROR: Usage: BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|LISTEN|DISABLE> [baudrate]"));
                 return 1;
             }
 
@@ -2338,21 +2338,33 @@ static int cmd_bus(int argc, const char* const* argv) {
                 return 1;
             }
 
-            // Parse enable/disable
-            bool enable = false;
-            if (streq(argv[4], "ENABLE")) enable = true;
-            else if (streq(argv[4], "DISABLE")) enable = false;
-            else {
-                msg.control.println(F("ERROR: Must be ENABLE or DISABLE"));
+            // Parse mode: ENABLE (normal with ACK), LISTEN (listen-only), DISABLE
+            uint8_t mode = CAN_INPUT_OFF;
+            if (streq(argv[4], "ENABLE") || streq(argv[4], "NORMAL")) {
+                mode = CAN_INPUT_NORMAL;
+            } else if (streq(argv[4], "LISTEN")) {
+                mode = CAN_INPUT_LISTEN;
+            } else if (streq(argv[4], "DISABLE")) {
+                mode = CAN_INPUT_OFF;
+            } else {
+                msg.control.println(F("ERROR: Must be ENABLE, LISTEN, or DISABLE"));
+                msg.control.println(F("  ENABLE  - Active input with ACK (for CAN sensor devices)"));
+                msg.control.println(F("  LISTEN  - Listen-only, no ACK/TX (for sniffing ECU bus)"));
+                msg.control.println(F("  DISABLE - Turn off CAN input"));
                 return 1;
             }
 
             // Apply configuration
-            if (enable) {
+            if (mode != CAN_INPUT_OFF) {
                 systemConfig.buses.input_can_bus = bus_id;
-                systemConfig.buses.can_input_enabled = 1;
-                msg.control.print(F("CAN input enabled on "));
+                systemConfig.buses.can_input_mode = mode;
+                msg.control.print(F("CAN input "));
+                msg.control.print(mode == CAN_INPUT_LISTEN ? F("listen-only") : F("normal"));
+                msg.control.print(F(" on "));
                 msg.control.println(argv[3]);
+                if (mode == CAN_INPUT_LISTEN) {
+                    msg.control.println(F("  No ACK/TX - safe for passive bus monitoring"));
+                }
 
                 // Optional baudrate parameter
                 if (argc >= 6) {
@@ -2376,7 +2388,7 @@ static int cmd_bus(int argc, const char* const* argv) {
                     msg.control.println(F("kbps"));
                 }
             } else {
-                systemConfig.buses.can_input_enabled = 0;
+                systemConfig.buses.can_input_mode = CAN_INPUT_OFF;
                 msg.control.println(F("CAN input disabled"));
             }
 
@@ -2494,9 +2506,9 @@ static int cmd_bus(int argc, const char* const* argv) {
         msg.control.println(F("ERROR: Unknown CAN subcommand"));
         msg.control.println(F("Valid: BAUDRATE, INPUT, OUTPUT"));
         msg.control.println(F("  BUS CAN BAUDRATE <bps>"));
-        msg.control.println(F("  BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [baudrate]"));
+        msg.control.println(F("  BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|LISTEN|DISABLE> [bps]"));
         msg.control.println(F("  BUS CAN INPUT BAUDRATE <bps>"));
-        msg.control.println(F("  BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [baudrate]"));
+        msg.control.println(F("  BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [bps]"));
         msg.control.println(F("  BUS CAN OUTPUT BAUDRATE <bps>"));
         return 1;
 #endif
@@ -2905,9 +2917,9 @@ static int cmd_scan(int argc, const char* const* argv) {
         }
 
         // Check if CAN input is enabled
-        if (!systemConfig.buses.can_input_enabled) {
+        if (systemConfig.buses.can_input_mode == CAN_INPUT_OFF) {
             msg.control.println(F("ERROR: CAN input not enabled"));
-            msg.control.println(F("  Use 'SET BUS CAN INPUT CAN1 ENABLE' first"));
+            msg.control.println(F("  Use 'BUS CAN INPUT CAN1 ENABLE' or 'BUS CAN INPUT CAN1 LISTEN' first"));
             return 1;
         }
 

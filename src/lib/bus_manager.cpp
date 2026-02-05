@@ -74,7 +74,7 @@ void initConfiguredBuses() {
     // 2. DUAL BUS: input_can_bus != output_can_bus (separate physical buses)
     //    - Input on CAN1, output on CAN2 (Teensy 3.6/4.x only)
     //    - Allows isolation of sensor import from OBD-II output traffic
-    if (systemConfig.buses.can_input_enabled && systemConfig.buses.input_can_bus != 0xFF) {
+    if (systemConfig.buses.can_input_mode != CAN_INPUT_OFF && systemConfig.buses.input_can_bus != 0xFF) {
         // Only initialize if different bus than output (avoid double-init in shared mode)
         if (systemConfig.buses.input_can_bus != systemConfig.buses.output_can_bus) {
             if (!initCANBus(systemConfig.buses.input_can_bus, systemConfig.buses.can_input_baudrate)) {
@@ -436,9 +436,13 @@ void displayCANStatus() {
 #if NUM_CAN_BUSES > 0
     // Display input bus
     msg.control.print(F("Input:  "));
-    if (systemConfig.buses.input_can_bus != 0xFF && systemConfig.buses.can_input_enabled) {
+    if (systemConfig.buses.input_can_bus != 0xFF && systemConfig.buses.can_input_mode != CAN_INPUT_OFF) {
         msg.control.print(getCANBusName(systemConfig.buses.input_can_bus));
-        msg.control.print(F(" (ENABLED) @ "));
+        if (systemConfig.buses.can_input_mode == CAN_INPUT_LISTEN) {
+            msg.control.print(F(" (LISTEN) @ "));
+        } else {
+            msg.control.print(F(" (NORMAL) @ "));
+        }
         msg.control.print(systemConfig.buses.can_input_baudrate / 1000);
         msg.control.print(F("kbps"));
     } else {

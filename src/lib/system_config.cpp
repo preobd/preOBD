@@ -221,7 +221,7 @@ void resetSystemConfig() {
     systemConfig.buses.output_can_bus = DEFAULT_CAN_BUS;
     systemConfig.buses.can_input_baudrate = DEFAULT_CAN_BAUDRATE;
     systemConfig.buses.can_output_baudrate = DEFAULT_CAN_BAUDRATE;
-    systemConfig.buses.can_input_enabled = 0;   // Disabled by default
+    systemConfig.buses.can_input_mode = CAN_INPUT_OFF;  // Disabled by default
     systemConfig.buses.can_output_enabled = 1;  // Enabled by default
 
     // Serial Port Configuration defaults

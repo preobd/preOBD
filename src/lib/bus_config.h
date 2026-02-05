@@ -16,6 +16,24 @@
 #include <stdint.h>
 
 /**
+ * CAN Input Mode
+ *
+ * Controls how the CAN input bus operates:
+ * - OFF:     Input disabled, bus not initialized
+ * - NORMAL:  Active input with ACK. Use when communicating with CAN sensor
+ *            devices that expect acknowledgment (e.g., external CAN sensors).
+ * - LISTEN:  Listen-only / passive monitoring. No ACK bits, no error frames,
+ *            no TX of any kind. Use when sniffing an existing CAN bus
+ *            (e.g., reading from a car's OBD-II/ECU network) to avoid
+ *            disrupting communication between other nodes.
+ */
+enum CanInputMode : uint8_t {
+    CAN_INPUT_OFF    = 0,   // Disabled
+    CAN_INPUT_NORMAL = 1,   // Active input with ACK
+    CAN_INPUT_LISTEN = 2    // Listen-only (passive, no ACK/TX)
+};
+
+/**
  * Bus Configuration Structure
  *
  * For each bus type, stores:
@@ -31,16 +49,16 @@ struct BusConfig {
     uint8_t active_spi;         // 0=SPI, 1=SPI1, 2=SPI2
     uint32_t spi_clock;         // Hz (e.g., 4000000 = 4MHz)
 
-    // CAN configuration - MODIFIED to support input/output separation
+    // CAN configuration - supports input/output separation with per-bus baud rates
     uint8_t input_can_bus;      // 0=CAN1, 1=CAN2, 2=CAN3, 0xFF=NONE (disabled)
     uint8_t output_can_bus;     // 0=CAN1, 1=CAN2, 2=CAN3, 0xFF=NONE (disabled)
     uint32_t can_input_baudrate;  // bps - input bus baud rate (125000, 250000, 500000, 1000000)
     uint32_t can_output_baudrate; // bps - output bus baud rate (125000, 250000, 500000, 1000000)
 
-    // Runtime enable flags
-    uint8_t can_input_enabled;  // Enable CAN input (0=disabled, 1=enabled)
+    // Runtime mode/enable flags
+    uint8_t can_input_mode;     // CanInputMode: OFF(0), NORMAL(1), LISTEN(2)
     uint8_t can_output_enabled; // Enable CAN output (0=disabled, 1=enabled)
-};  // 26 bytes (was 24, increased by 2 with per-bus CAN baud rates)
+};  // 26 bytes
 
 /**
  * Serial Port Baud Rate Index

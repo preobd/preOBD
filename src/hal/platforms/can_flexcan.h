@@ -32,9 +32,9 @@ namespace detail {
 
     // Helper to initialize a specific bus instance
     template<typename T>
-    inline void initBus(T& bus, uint32_t baudrate) {
+    inline void initBus(T& bus, uint32_t baudrate, bool listenOnly = false) {
         bus.begin();
-        bus.setBaudRate(baudrate);
+        bus.setBaudRate(baudrate, listenOnly ? LISTEN_ONLY : TX);
         bus.setMaxMB(16);
         // Configure first 8 mailboxes for RX
         for (int i = 0; i < 8; i++) {
@@ -43,19 +43,19 @@ namespace detail {
     }
 }
 
-inline bool begin(uint32_t baudrate, uint8_t bus = 0) {
+inline bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
     switch (bus) {
         case 0:
-            detail::initBus(detail::canBus0, baudrate);
+            detail::initBus(detail::canBus0, baudrate, listenOnly);
             return true;
         #if defined(CAN2)
         case 1:
-            detail::initBus(detail::canBus1, baudrate);
+            detail::initBus(detail::canBus1, baudrate, listenOnly);
             return true;
         #endif
         #if defined(CAN3)
         case 2:
-            detail::initBus(detail::canBus2, baudrate);
+            detail::initBus(detail::canBus2, baudrate, listenOnly);
             return true;
         #endif
         default:
