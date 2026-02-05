@@ -39,6 +39,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **New hybrid environments** - esp32s3_hybrid, teensy41_hybrid for dual-controller setups
   - **Controller type system** - Explicit enum for FlexCAN, TWAI, MCP2515, bxCAN (future)
   - **Runtime dispatcher** - Automatic routing to correct driver based on bus configuration
+- **Per-bus CAN baud rate configuration** - Input and output CAN buses can now operate at different speeds
+  - **Separate baud rates** - `can_input_baudrate` and `can_output_baudrate` replace shared `can_baudrate`
+  - **BUS CAN INPUT/OUTPUT BAUDRATE** commands - Set baud rates independently for each role
+  - **Backward compatibility** - Old `BUS CAN BAUDRATE` command sets both rates simultaneously
+  - **Optional baudrate in enable commands** - `BUS CAN INPUT/OUTPUT <bus> ENABLE [baudrate]` syntax
+  - **Shared-bus validation** - Automatic synchronization when input/output share the same physical bus
+  - **JSON import/export** - Backward-compatible with old single-baudrate configs
+  - **EEPROM version bump** - SystemConfig v8 for per-bus CAN baud rates
 
 ### Changed
 - **Watchdog implementation** - Refactored to use HAL with platform-specific drivers in `src/hal/platforms/`

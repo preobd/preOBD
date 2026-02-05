@@ -2111,9 +2111,11 @@ static int cmd_bus(int argc, const char* const* argv) {
         msg.control.println(F("  BUS SPI [0|1|2]           - Show or select SPI bus"));
         msg.control.println(F("  BUS SPI CLOCK <Hz>        - Set SPI clock"));
         msg.control.println(F("  BUS CAN                   - Show CAN status"));
-        msg.control.println(F("  BUS CAN BAUDRATE <bps>    - Set CAN baudrate"));
-        msg.control.println(F("  BUS CAN INPUT <bus> <EN|DIS>  - Configure CAN input"));
-        msg.control.println(F("  BUS CAN OUTPUT <bus> <EN|DIS> - Configure CAN output"));
+        msg.control.println(F("  BUS CAN BAUDRATE <bps>    - Set CAN baudrate (both buses)"));
+        msg.control.println(F("  BUS CAN INPUT <bus> <EN|DIS> [bps] - Configure CAN input"));
+        msg.control.println(F("  BUS CAN INPUT BAUDRATE <bps> - Set CAN input baudrate"));
+        msg.control.println(F("  BUS CAN OUTPUT <bus> <EN|DIS> [bps] - Configure CAN output"));
+        msg.control.println(F("  BUS CAN OUTPUT BAUDRATE <bps> - Set CAN output baudrate"));
         msg.control.println(F("  BUS SERIAL                - Show all serial ports"));
         msg.control.println(F("  BUS SERIAL <1-8> ENABLE [baud] - Enable serial port"));
         msg.control.println(F("  BUS SERIAL <1-8> DISABLE  - Disable serial port"));
@@ -2254,7 +2256,7 @@ static int cmd_bus(int argc, const char* const* argv) {
             return 0;
         }
 
-        // BUS CAN BAUDRATE <bps>
+        // BUS CAN BAUDRATE <bps> - Set both input and output (backward compatibility)
         if (streq(argv[2], "BAUDRATE")) {
             if (argc < 4) {
                 msg.control.println(F("ERROR: BAUDRATE requires a speed in bps"));
@@ -2268,19 +2270,52 @@ static int cmd_bus(int argc, const char* const* argv) {
                 return 1;
             }
 
-            systemConfig.buses.can_baudrate = baudrate;
+            systemConfig.buses.can_input_baudrate = baudrate;
+            systemConfig.buses.can_output_baudrate = baudrate;
             msg.control.print(F("CAN baudrate set to "));
             msg.control.print(baudrate / 1000);
-            msg.control.println(F("kbps"));
+            msg.control.println(F("kbps (both input and output)"));
             msg.control.println(F("Note: Takes effect on next reboot"));
             msg.control.println(F("Use SAVE to persist"));
             return 0;
         }
 
-        // BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE>
+        // BUS CAN INPUT BAUDRATE <bps> or BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [bps]
         if (streq(argv[2], "INPUT")) {
+            // BUS CAN INPUT BAUDRATE <bps>
+            if (argc >= 4 && streq(argv[3], "BAUDRATE")) {
+                if (argc < 5) {
+                    msg.control.println(F("ERROR: BAUDRATE requires a speed in bps"));
+                    msg.control.println(F("  Usage: BUS CAN INPUT BAUDRATE <125000|250000|500000|1000000>"));
+                    return 1;
+                }
+
+                uint32_t baudrate = atol(argv[4]);
+                if (baudrate != 125000 && baudrate != 250000 && baudrate != 500000 && baudrate != 1000000) {
+                    msg.control.println(F("ERROR: CAN baudrate must be 125000, 250000, 500000, or 1000000"));
+                    return 1;
+                }
+
+                systemConfig.buses.can_input_baudrate = baudrate;
+
+                // Shared-bus validation
+                if (systemConfig.buses.input_can_bus == systemConfig.buses.output_can_bus &&
+                    systemConfig.buses.input_can_bus != 0xFF) {
+                    systemConfig.buses.can_output_baudrate = baudrate;
+                    msg.control.println(F("WARNING: Input and output share same bus - output baudrate also set to match"));
+                }
+
+                msg.control.print(F("CAN input baudrate set to "));
+                msg.control.print(baudrate / 1000);
+                msg.control.println(F("kbps"));
+                msg.control.println(F("Note: Takes effect on next reboot"));
+                msg.control.println(F("Use SAVE to persist"));
+                return 0;
+            }
+
+            // BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [baudrate]
             if (argc < 5) {
-                msg.control.println(F("ERROR: Usage: BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE>"));
+                msg.control.println(F("ERROR: Usage: BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [baudrate]"));
                 return 1;
             }
 
@@ -2318,6 +2353,28 @@ static int cmd_bus(int argc, const char* const* argv) {
                 systemConfig.buses.can_input_enabled = 1;
                 msg.control.print(F("CAN input enabled on "));
                 msg.control.println(argv[3]);
+
+                // Optional baudrate parameter
+                if (argc >= 6) {
+                    uint32_t baudrate = atol(argv[5]);
+                    if (baudrate != 125000 && baudrate != 250000 && baudrate != 500000 && baudrate != 1000000) {
+                        msg.control.println(F("ERROR: CAN baudrate must be 125000, 250000, 500000, or 1000000"));
+                        return 1;
+                    }
+
+                    systemConfig.buses.can_input_baudrate = baudrate;
+
+                    // Shared-bus validation
+                    if (systemConfig.buses.input_can_bus == systemConfig.buses.output_can_bus &&
+                        systemConfig.buses.input_can_bus != 0xFF) {
+                        systemConfig.buses.can_output_baudrate = baudrate;
+                        msg.control.println(F("WARNING: Input and output share same bus - output baudrate also set to match"));
+                    }
+
+                    msg.control.print(F("CAN input baudrate set to "));
+                    msg.control.print(baudrate / 1000);
+                    msg.control.println(F("kbps"));
+                }
             } else {
                 systemConfig.buses.can_input_enabled = 0;
                 msg.control.println(F("CAN input disabled"));
@@ -2328,10 +2385,42 @@ static int cmd_bus(int argc, const char* const* argv) {
             return 0;
         }
 
-        // BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE>
+        // BUS CAN OUTPUT BAUDRATE <bps> or BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [bps]
         if (streq(argv[2], "OUTPUT")) {
+            // BUS CAN OUTPUT BAUDRATE <bps>
+            if (argc >= 4 && streq(argv[3], "BAUDRATE")) {
+                if (argc < 5) {
+                    msg.control.println(F("ERROR: BAUDRATE requires a speed in bps"));
+                    msg.control.println(F("  Usage: BUS CAN OUTPUT BAUDRATE <125000|250000|500000|1000000>"));
+                    return 1;
+                }
+
+                uint32_t baudrate = atol(argv[4]);
+                if (baudrate != 125000 && baudrate != 250000 && baudrate != 500000 && baudrate != 1000000) {
+                    msg.control.println(F("ERROR: CAN baudrate must be 125000, 250000, 500000, or 1000000"));
+                    return 1;
+                }
+
+                systemConfig.buses.can_output_baudrate = baudrate;
+
+                // Shared-bus validation
+                if (systemConfig.buses.input_can_bus == systemConfig.buses.output_can_bus &&
+                    systemConfig.buses.output_can_bus != 0xFF) {
+                    systemConfig.buses.can_input_baudrate = baudrate;
+                    msg.control.println(F("WARNING: Input and output share same bus - input baudrate also set to match"));
+                }
+
+                msg.control.print(F("CAN output baudrate set to "));
+                msg.control.print(baudrate / 1000);
+                msg.control.println(F("kbps"));
+                msg.control.println(F("Note: Takes effect on next reboot"));
+                msg.control.println(F("Use SAVE to persist"));
+                return 0;
+            }
+
+            // BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [baudrate]
             if (argc < 5) {
-                msg.control.println(F("ERROR: Usage: BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE>"));
+                msg.control.println(F("ERROR: Usage: BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [baudrate]"));
                 return 1;
             }
 
@@ -2369,6 +2458,28 @@ static int cmd_bus(int argc, const char* const* argv) {
                 systemConfig.buses.can_output_enabled = 1;
                 msg.control.print(F("CAN output enabled on "));
                 msg.control.println(argv[3]);
+
+                // Optional baudrate parameter
+                if (argc >= 6) {
+                    uint32_t baudrate = atol(argv[5]);
+                    if (baudrate != 125000 && baudrate != 250000 && baudrate != 500000 && baudrate != 1000000) {
+                        msg.control.println(F("ERROR: CAN baudrate must be 125000, 250000, 500000, or 1000000"));
+                        return 1;
+                    }
+
+                    systemConfig.buses.can_output_baudrate = baudrate;
+
+                    // Shared-bus validation
+                    if (systemConfig.buses.input_can_bus == systemConfig.buses.output_can_bus &&
+                        systemConfig.buses.output_can_bus != 0xFF) {
+                        systemConfig.buses.can_input_baudrate = baudrate;
+                        msg.control.println(F("WARNING: Input and output share same bus - input baudrate also set to match"));
+                    }
+
+                    msg.control.print(F("CAN output baudrate set to "));
+                    msg.control.print(baudrate / 1000);
+                    msg.control.println(F("kbps"));
+                }
             } else {
                 systemConfig.buses.can_output_enabled = 0;
                 msg.control.println(F("CAN output disabled"));
@@ -2383,8 +2494,10 @@ static int cmd_bus(int argc, const char* const* argv) {
         msg.control.println(F("ERROR: Unknown CAN subcommand"));
         msg.control.println(F("Valid: BAUDRATE, INPUT, OUTPUT"));
         msg.control.println(F("  BUS CAN BAUDRATE <bps>"));
-        msg.control.println(F("  BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE>"));
-        msg.control.println(F("  BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE>"));
+        msg.control.println(F("  BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [baudrate]"));
+        msg.control.println(F("  BUS CAN INPUT BAUDRATE <bps>"));
+        msg.control.println(F("  BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [baudrate]"));
+        msg.control.println(F("  BUS CAN OUTPUT BAUDRATE <bps>"));
         return 1;
 #endif
     }

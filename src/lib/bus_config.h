@@ -34,14 +34,13 @@ struct BusConfig {
     // CAN configuration - MODIFIED to support input/output separation
     uint8_t input_can_bus;      // 0=CAN1, 1=CAN2, 2=CAN3, 0xFF=NONE (disabled)
     uint8_t output_can_bus;     // 0=CAN1, 1=CAN2, 2=CAN3, 0xFF=NONE (disabled)
-    uint32_t can_baudrate;      // bps (125000, 250000, 500000, 1000000) - shared for all buses
+    uint32_t can_input_baudrate;  // bps - input bus baud rate (125000, 250000, 500000, 1000000)
+    uint32_t can_output_baudrate; // bps - output bus baud rate (125000, 250000, 500000, 1000000)
 
     // Runtime enable flags
     uint8_t can_input_enabled;  // Enable CAN input (0=disabled, 1=enabled)
     uint8_t can_output_enabled; // Enable CAN output (0=disabled, 1=enabled)
-
-    uint8_t reserved[2];        // Padding for alignment
-};  // 24 bytes (was 16, increased by 8 with CAN input/output split)
+};  // 26 bytes (was 24, increased by 2 with per-bus CAN baud rates)
 
 /**
  * Serial Port Baud Rate Index

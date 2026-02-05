@@ -13,7 +13,7 @@
 
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
-#define SYSTEM_CONFIG_VERSION 7         // Increment when struct changes (v7: CAN input/output separation)
+#define SYSTEM_CONFIG_VERSION 8         // Increment when struct changes (v8: per-bus CAN baud rates)
 #define SYSTEM_CONFIG_ADDRESS 0x03F0    // Address in EEPROM (after inputs)
 #define SYSTEM_CONFIG_SIZE sizeof(SystemConfig)
 

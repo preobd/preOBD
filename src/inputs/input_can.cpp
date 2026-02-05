@@ -49,7 +49,7 @@ bool initCANInput() {
         return false;  // No input bus configured
     }
 
-    uint32_t baudrate = systemConfig.buses.can_baudrate;
+    uint32_t baudrate = systemConfig.buses.can_input_baudrate;
 
     // Initialize via HAL (handles all platforms)
     if (!hal::can::begin(baudrate, bus)) {

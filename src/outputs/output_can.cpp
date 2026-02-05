@@ -252,7 +252,7 @@ void initCAN() {
         return;  // No output bus configured
     }
 
-    uint32_t baudrate = systemConfig.buses.can_baudrate;
+    uint32_t baudrate = systemConfig.buses.can_output_baudrate;
 
     // Initialize CAN bus via HAL
     if (!hal::can::begin(baudrate, canOutputBus)) {

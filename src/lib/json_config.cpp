@@ -286,7 +286,8 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     buses["canOutputBus"] = systemConfig.buses.output_can_bus;
     buses["canInputEnabled"] = systemConfig.buses.can_input_enabled;
     buses["canOutputEnabled"] = systemConfig.buses.can_output_enabled;
-    buses["canBaudrate"] = systemConfig.buses.can_baudrate;
+    buses["canInputBaudrate"] = systemConfig.buses.can_input_baudrate;
+    buses["canOutputBaudrate"] = systemConfig.buses.can_output_baudrate;
 
     // Serial Port Configuration
     JsonObject serial = systemObj["serial"].to<JsonObject>();
@@ -655,7 +656,16 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
         systemConfig.buses.output_can_bus = buses["canOutputBus"] | DEFAULT_CAN_BUS;
         systemConfig.buses.can_input_enabled = buses["canInputEnabled"] | 0;
         systemConfig.buses.can_output_enabled = buses["canOutputEnabled"] | 1;
-        systemConfig.buses.can_baudrate = buses["canBaudrate"] | DEFAULT_CAN_BAUDRATE;
+
+        // Backward compatibility: if old canBaudrate exists but new ones don't, use it for both
+        if (buses["canBaudrate"].is<uint32_t>() && !buses["canInputBaudrate"].is<uint32_t>()) {
+            uint32_t baudrate = buses["canBaudrate"] | DEFAULT_CAN_BAUDRATE;
+            systemConfig.buses.can_input_baudrate = baudrate;
+            systemConfig.buses.can_output_baudrate = baudrate;
+        } else {
+            systemConfig.buses.can_input_baudrate = buses["canInputBaudrate"] | DEFAULT_CAN_BAUDRATE;
+            systemConfig.buses.can_output_baudrate = buses["canOutputBaudrate"] | DEFAULT_CAN_BAUDRATE;
+        }
     } else {
         // No buses object - use defaults (backward compatibility with old configs)
         systemConfig.buses.active_i2c = DEFAULT_I2C_BUS;
@@ -666,7 +676,8 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
         systemConfig.buses.output_can_bus = DEFAULT_CAN_BUS;
         systemConfig.buses.can_input_enabled = 0;
         systemConfig.buses.can_output_enabled = 1;
-        systemConfig.buses.can_baudrate = DEFAULT_CAN_BAUDRATE;
+        systemConfig.buses.can_input_baudrate = DEFAULT_CAN_BAUDRATE;
+        systemConfig.buses.can_output_baudrate = DEFAULT_CAN_BAUDRATE;
     }
 
     return true;
