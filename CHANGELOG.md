@@ -47,6 +47,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Shared-bus validation** - Automatic synchronization when input/output share the same physical bus
   - **JSON import/export** - Backward-compatible with old single-baudrate configs
   - **EEPROM version bump** - SystemConfig v8 for per-bus CAN baud rates
+- **CAN input listen-only mode** - Passive bus monitoring without transmitting ACK or error frames
+  - **3-mode CAN input system** - OFF/NORMAL/LISTEN replaces previous boolean enable/disable
+  - **CanInputMode enum** - Explicit mode selection (OFF=0, NORMAL=1, LISTEN=2)
+  - **LISTEN command** - `BUS CAN INPUT <bus> LISTEN [baudrate]` enables passive monitoring
+  - **HAL support** - listenOnly parameter added to `hal::can::begin()` across all platforms
+  - **FlexCAN implementation** - Uses LISTEN_ONLY RXTX mode enum
+  - **TWAI implementation** - Uses TWAI_MODE_LISTEN_ONLY with custom config
+  - **MCP2515 implementation** - Uses setListenOnlyMode() vs setNormalMode()
+  - **Safe vehicle ECU monitoring** - Prevents disrupting OBD-II/J1939 communication between vehicle nodes
 
 ### Changed
 - **Watchdog implementation** - Refactored to use HAL with platform-specific drivers in `src/hal/platforms/`
@@ -54,6 +63,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CAN pin definitions** - SPI CAN pins (CAN_CS, CAN_INT) now only defined on platforms that need them
 - **Teensy 3.6 CAN controller** - Migrated from external MCP2515 to native FlexCAN (binary size reduction, dual-bus support)
 - **HAL CAN drivers** - Added internal namespaces (flexcan, twai, mcp2515) for hybrid mode coexistence
+- **CAN documentation** - Updated for per-bus baud rates and listen-only mode
+  - **SERIAL_COMMANDS.md** - Added BUS CAN INPUT/OUTPUT BAUDRATE commands and 3-mode input system
+  - **CAN_SENSOR_IMPORT_GUIDE.md** - Updated examples for mixed protocols and passive monitoring
+  - **CAN_HAL_ARCHITECTURE.md** - Documented listenOnly parameter and per-bus best practices
+  - **Removed limitations** - "Single baud rate" limitation removed from CAN sensor import guide
 
 ### Fixed
 - **BusConfig structure** - Extended to support dual-bus CAN (input_can_bus, output_can_bus, enable flags)
