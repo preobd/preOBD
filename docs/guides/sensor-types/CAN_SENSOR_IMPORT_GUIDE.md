@@ -79,7 +79,7 @@ Import PIDs 0x0C, 0x0D, 0x05          Broadcast all sensors
 **Why dual-bus?**
 - Read from vehicle ECU on CAN1 (500 kbps)
 - Broadcast all sensors (ECU + local) to dashboard on CAN2 (500 kbps)
-- Prevents bus conflicts and allows different baud rates (future enhancement)
+- Prevents bus conflicts and allows different baud rates per bus
 
 ---
 
@@ -300,10 +300,9 @@ SET <pin> CAN FORMAT <bytes> <BIGENDIAN|LITTLEENDIAN> SCALE <factor> OFFSET <off
 # Enter configuration mode
 CONFIG
 
-# Configure CAN buses
-BUS CAN INPUT CAN1 ENABLE     # Read from vehicle ECU on CAN1
-BUS CAN OUTPUT CAN2 ENABLE    # Broadcast to RealDash on CAN2
-BUS CAN BAUDRATE 500000       # Set baudrate (both buses)
+# Configure CAN buses with listen-only mode for vehicle ECU monitoring
+BUS CAN INPUT CAN1 LISTEN 500000   # Passive read from vehicle ECU (no ACK/TX)
+BUS CAN OUTPUT CAN2 ENABLE 500000  # Broadcast to RealDash on CAN2
 
 # Import CAN sensors from vehicle ECU
 SET CAN 0x0C    # Engine RPM → CAN:0
@@ -364,15 +363,21 @@ Ensure CAN input is enabled and bus is active.
 
 3. **Check baud rate:**
    ```bash
-   BUS CAN BAUDRATE 500000   # Most vehicles use 500 kbps
-   BUS CAN BAUDRATE 250000   # Some older vehicles use 250 kbps
+   BUS CAN INPUT BAUDRATE 500000   # Most vehicles use 500 kbps
+   BUS CAN INPUT BAUDRATE 250000   # Some older vehicles (J1939) use 250 kbps
    ```
 
-4. **Verify vehicle ECU is active:**
+4. **Use listen-only mode for vehicle ECU buses:**
+   ```bash
+   BUS CAN INPUT CAN1 LISTEN 500000   # Passive monitoring (recommended for vehicles)
+   # Listen mode prevents disrupting vehicle ECU communication
+   ```
+
+5. **Verify vehicle ECU is active:**
    - Engine running or ignition ON
    - Some vehicles only broadcast with engine running
 
-5. **Check for OBD-II activity:**
+6. **Check for OBD-II activity:**
    - Try connecting an OBD-II scanner first
    - Verify vehicle has OBD-II (post-1996 for US vehicles)
 
@@ -514,18 +519,23 @@ SAVE
 RUN
 ```
 
-### Example 3: Dual-Bus with Separate Baud Rates
-
-*Note: Future enhancement - current version uses same baud rate for all buses*
+### Example 3: Dual-Bus with Separate Baud Rates (Mixed Protocols)
 
 ```bash
-# Configure input bus (vehicle ECU at 500 kbps)
-BUS CAN INPUT CAN1 ENABLE
-BUS CAN BAUDRATE 500000
+CONFIG
 
-# Configure output bus (dashboard at 500 kbps)
-BUS CAN OUTPUT CAN2 ENABLE
-# Both buses currently share same baudrate
+# Configure input bus (J1939 vehicle ECU at 250 kbps, listen-only)
+BUS CAN INPUT CAN1 LISTEN 250000    # Passive monitoring of J1939 bus
+
+# Configure output bus (OBD-II/RealDash at 500 kbps)
+BUS CAN OUTPUT CAN2 ENABLE 500000   # Active broadcast to dashboard
+
+# Import J1939 sensors from vehicle
+SET CAN:0 ENGINE_RPM                 # Map CAN:0 to engine RPM
+SET CAN:1 COOLANT_TEMP               # Map CAN:1 to coolant temp
+
+SAVE
+RUN
 ```
 
 ---
@@ -534,11 +544,10 @@ BUS CAN OUTPUT CAN2 ENABLE
 
 ### Current Version (v0.7.0-beta)
 
-1. **Single baud rate** - All CAN buses use the same baudrate (future: per-bus configuration)
-2. **OBD-II focus** - Standard PID table only includes OBD-II Mode 01 PIDs
-3. **No multi-frame support** - Only single-frame PIDs (no ISO-TP reassembly for Mode 09, etc.)
-4. **Basic J1939** - No PGN table or automatic J1939 configuration
-5. **Static config not supported** - CAN sensor import requires CONFIG/RUN mode with EEPROM
+1. **OBD-II focus** - Standard PID table only includes OBD-II Mode 01 PIDs
+2. **No multi-frame support** - Only single-frame PIDs (no ISO-TP reassembly for Mode 09, etc.)
+3. **Basic J1939** - No PGN table or automatic J1939 configuration
+4. **Static config not supported** - CAN sensor import requires CONFIG/RUN mode with EEPROM
 
 ### Platform Limitations
 
@@ -564,7 +573,6 @@ BUS CAN OUTPUT CAN2 ENABLE
 
 Planned for future releases:
 
-- **Per-bus baud rate** - Different baud rates for input and output buses
 - **ISO-TP support** - Multi-frame PID reassembly (Mode 09, Mode 22)
 - **J1939 PGN table** - Automatic configuration for J1939 sensors
 - **Interactive import** - Select PIDs from SCAN results directly
