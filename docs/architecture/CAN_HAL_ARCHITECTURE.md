@@ -239,7 +239,8 @@ All controller implementations provide the same interface:
 namespace hal { namespace can {
 
 // Initialize CAN controller for a given bus
-bool begin(uint32_t baudrate, uint8_t bus = 0);
+// listenOnly: Enable passive monitoring mode (no ACK, no TX)
+bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false);
 
 // Shutdown CAN controller
 void end(uint8_t bus = 0);
@@ -423,8 +424,9 @@ lib_deps =
 
 1. **Explicit configuration** - Always use build flags to specify controller types
 2. **Pin conflicts** - Ensure SPI pins don't overlap with other peripherals
-3. **Baud rate consistency** - Use the same baud rate on all buses unless required otherwise
-4. **Test independently** - Verify each bus works before enabling hybrid mode
+3. **Per-bus baud rates** - Input and output buses can use different baud rates for mixed protocols
+4. **Listen-only mode** - Use passive monitoring for vehicle ECU buses to avoid disrupting communication
+5. **Test independently** - Verify each bus works before enabling hybrid mode
 
 ## Future Enhancements
 
