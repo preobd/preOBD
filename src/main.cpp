@@ -261,18 +261,17 @@ void setup() {
     }
 #endif
     router.begin();  // Load config from EEPROM
-
-    msg.control.println(F("                                        "));
-    msg.control.println(F("                       ______  _______  "));
-    msg.control.println(F("   ___  ___  ___ ___  / __/  |/  / __/  "));
-    msg.control.println(F("  / _ \\/ _ \\/ -_) _ \\/ _// /|_/ /\\ \\    "));
-    msg.control.println(F("  \\___/ .__/\\__/_//_/___/_/  /_/___/    "));
-    msg.control.println(F("     /_/                                "));
-    msg.control.println(F("                                        "));
-    msg.control.println(F("openEngine Monitoring System ==========="));
+    msg.control.println();
+    msg.control.println(F("                 ____  ___  ___  "));
+    msg.control.println(F("   ___  _______ / __ \\/ _ )/ _ \\ "));
+    msg.control.println(F("  / _ \\/ __/ -_) /_/ / _  / // / "));
+    msg.control.println(F(" / .__/_/  \\__/\\____/____/____/  "));
+    msg.control.println(F("/_/                              "));
+    msg.control.println();    
+    msg.control.println(F("Open Vehicle Monitoring ==============="));
     msg.control.print(F("Firmware version "));
     msg.control.println(firmwareVersionString());
-    msg.control.println(F("                                        "));
+    msg.control.println();
 
     // Configure ADC for this platform
     setupADC();
