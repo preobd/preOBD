@@ -43,8 +43,9 @@
 // EEPROM configuration version
 // Increment when Input struct layout changes (forces reconfiguration)
 // Version 2: Changed from storing enum indices to storing name hashes (Phase 5)
+// Version 3: Added per-input output routing mask (outputMask)
 // =============================================================================
-#define EEPROM_VERSION 2
+#define EEPROM_VERSION 3
 
 // =============================================================================
 // Helper functions (defined in version.cpp)

@@ -823,6 +823,86 @@ static int cmd_set(int argc, const char* const* argv) {
         return 1;
     }
 
+    // ===== OUTPUT ROUTING COMMANDS =====
+    // SET <pin> OUTPUT <target> ENABLE|DISABLE
+    // SET <pin> OUTPUT ALL ENABLE|DISABLE
+    // SET <pin> OUTPUT STATUS
+    if (streq(field, "OUTPUT")) {
+        if (argc < 4) {
+            msg.control.println(F("ERROR: OUTPUT requires a target"));
+            msg.control.println(F("  Usage: SET <pin> OUTPUT <CAN|RealDash|Serial|SD_Log|ALL> <ENABLE|DISABLE>"));
+            msg.control.println(F("         SET <pin> OUTPUT STATUS"));
+            return 1;
+        }
+
+        // SET <pin> OUTPUT STATUS
+        if (streq(argv[3], "STATUS")) {
+            printInputOutputInfo(pin);
+            return 0;
+        }
+
+        // All other subcommands need ENABLE/DISABLE
+        if (argc < 5) {
+            msg.control.println(F("ERROR: OUTPUT requires ENABLE or DISABLE"));
+            return 1;
+        }
+
+        bool enable;
+        if (streq(argv[4], "ENABLE")) {
+            enable = true;
+        } else if (streq(argv[4], "DISABLE")) {
+            enable = false;
+        } else {
+            msg.control.println(F("ERROR: Expected ENABLE or DISABLE"));
+            return 1;
+        }
+
+        // SET <pin> OUTPUT ALL ENABLE|DISABLE
+        if (streq(argv[3], "ALL")) {
+            Input* input = getInputByPin(pin);
+            if (!input) {
+                msg.control.println(F("ERROR: Input not configured"));
+                return 1;
+            }
+            input->outputMask = enable ? OUTPUT_MASK_ALL_DATA : 0x00;
+            msg.control.print(F("Input "));
+            msg.control.print(argv[1]);
+            msg.control.print(F(" all data outputs "));
+            msg.control.println(enable ? F("enabled") : F("disabled"));
+            return 0;
+        }
+
+        // SET <pin> OUTPUT <target> ENABLE|DISABLE
+        // Map target name to OutputID
+        uint8_t outputId;
+        if (streq(argv[3], "CAN")) {
+            outputId = OUTPUT_CAN;
+        } else if (streq(argv[3], "REALDASH") || streq(argv[3], "RealDash")) {
+            outputId = OUTPUT_REALDASH;
+        } else if (streq(argv[3], "SERIAL") || streq(argv[3], "Serial")) {
+            outputId = OUTPUT_SERIAL;
+        } else if (streq(argv[3], "SD_LOG") || streq(argv[3], "SD_Log") || streq(argv[3], "SD")) {
+            outputId = OUTPUT_SD;
+        } else {
+            msg.control.print(F("ERROR: Unknown output '"));
+            msg.control.print(argv[3]);
+            msg.control.println(F("'"));
+            msg.control.println(F("  Valid outputs: CAN, RealDash, Serial, SD_Log, ALL"));
+            return 1;
+        }
+
+        if (setInputOutputMask(pin, outputId, enable)) {
+            msg.control.print(F("Input "));
+            msg.control.print(argv[1]);
+            msg.control.print(F(" output "));
+            msg.control.print(argv[3]);
+            msg.control.print(F(" "));
+            msg.control.println(enable ? F("enabled") : F("disabled"));
+            return 0;
+        }
+        return 1;
+    }
+
     // ===== CALIBRATION COMMANDS =====
 
     // SET <pin> CALIBRATION PRESET
@@ -1399,7 +1479,7 @@ static int cmd_clear(int argc, const char* const* argv) {
 static int cmd_info(int argc, const char* const* argv) {
         if (argc < 2) {
         msg.control.println(F("ERROR: INFO requires a pin"));
-        msg.control.println(F("  Usage: INFO <pin> [ALARM|CALIBRATION]"));
+        msg.control.println(F("  Usage: INFO <pin> [ALARM|OUTPUT|CALIBRATION]"));
         return 1;
     }
 
@@ -1407,10 +1487,12 @@ static int cmd_info(int argc, const char* const* argv) {
     uint8_t pin = parsePin(argv[1], &valid);
     if (!valid) return 1;
 
-    // Check for subcommands (ALARM, CALIBRATION)
+    // Check for subcommands (ALARM, CALIBRATION, OUTPUT)
     if (argc == 3) {
         if (streq(argv[2], "ALARM")) {
             printInputAlarmInfo(pin);
+        } else if (streq(argv[2], "OUTPUT")) {
+            printInputOutputInfo(pin);
         } else if (streq(argv[2], "CALIBRATION")) {
             printInputCalibration(pin);
         } else {

@@ -17,6 +17,9 @@
 #define SYSTEM_CONFIG_ADDRESS 0x03F0    // Address in EEPROM (after inputs)
 #define SYSTEM_CONFIG_SIZE sizeof(SystemConfig)
 
+// Per-input output mask: all 4 data outputs enabled by default
+#define OUTPUT_MASK_ALL_DATA 0x0F
+
 // Output module IDs
 enum OutputID {
     OUTPUT_CAN = 0,
