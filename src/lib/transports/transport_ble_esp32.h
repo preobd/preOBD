@@ -5,7 +5,7 @@
  * Provides BLE UART service for ESP32-S3 and other BLE-only variants.
  *
  * Usage:
- *   BLETransportESP32 ble("openEMS");
+ *   BLETransportESP32 ble("preOBD");
  *   router.registerTransport(TRANSPORT_ESP32_BT, &ble);
  *
  * Note: Only available on ESP32-S3, ESP32-C3 (BLE-only chips)

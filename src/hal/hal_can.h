@@ -1,6 +1,6 @@
 /*
  * hal_can.h - Hardware Abstraction Layer for CAN Bus
- * Part of the openEMS Hardware Abstraction Layer
+ * Part of the preOBD Hardware Abstraction Layer
  *
  * Provides a unified CAN interface across all supported platforms:
  * - Teensy 3.x/4.x: Native FlexCAN (supports multiple buses: CAN1, CAN2, CAN3)

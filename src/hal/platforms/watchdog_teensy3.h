@@ -1,6 +1,6 @@
 /*
  * watchdog_teensy3.h - Teensy 3.x (Kinetis K20/K66) watchdog implementation
- * Part of the openEMS Hardware Abstraction Layer
+ * Part of the preOBD Hardware Abstraction Layer
  */
 
 #ifndef HAL_WATCHDOG_TEENSY3_H

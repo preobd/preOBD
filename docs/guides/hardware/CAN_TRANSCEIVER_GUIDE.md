@@ -1,8 +1,8 @@
-# CAN Transceiver Hardware Guide for openEMS
+# CAN Transceiver Hardware Guide for preOBD
 
 ## Overview
 
-**Critical requirement**: All CAN functionality in openEMS requires an external **CAN transceiver** to convert between logic-level signals (3.3V or 5V) and the differential CAN bus signals (CAN-H and CAN-L).
+**Critical requirement**: All CAN functionality in preOBD requires an external **CAN transceiver** to convert between logic-level signals (3.3V or 5V) and the differential CAN bus signals (CAN-H and CAN-L).
 
 ### Why You Need a Transceiver
 
@@ -19,7 +19,7 @@ The physical CAN bus uses **differential signaling**:
 
 ### CAN Controller Abstraction
 
-openEMS uses a Hardware Abstraction Layer (HAL) that supports multiple CAN controller types:
+preOBD uses a Hardware Abstraction Layer (HAL) that supports multiple CAN controller types:
 
 - **FlexCAN** (Teensy 3.6/4.0/4.1 native) - 2-3 CAN buses, high performance
 - **TWAI** (ESP32/ESP32-S3 native) - 1 CAN bus, requires external transceiver
@@ -63,7 +63,7 @@ You need a CAN transceiver for **any** CAN output use case:
 |------|---------|---------|--------------|-------|
 | **SN65HVD230** | 3.3V | 1Mbps | Common, $2-3 | **Recommended** - TI automotive grade |
 | **MCP2562** | 3.3V/5V | 1Mbps | Common, $2-4 | Dual voltage, more expensive |
-| **TJA1042** | 3.3V/5V | 5Mbps | Less common | High-speed, overkill for openEMS |
+| **TJA1042** | 3.3V/5V | 5Mbps | Less common | High-speed, overkill for preOBD |
 
 **Recommended module**: Waveshare SN65HVD230 CAN Board (~$3-5)
 
@@ -209,7 +209,7 @@ GND         →   GND
 
 ### Multi-Bus and Hybrid Mode
 
-**Multi-bus configurations** allow openEMS to communicate on multiple CAN buses simultaneously. This is useful for:
+**Multi-bus configurations** allow preOBD to communicate on multiple CAN buses simultaneously. This is useful for:
 - Separating input (reading sensors via CAN) from output (sending data to displays)
 - Interfacing with multiple vehicle networks (e.g., powertrain CAN + body CAN)
 - Testing and development with isolated CAN buses
@@ -260,7 +260,7 @@ GND         →   GND            GND
 
 **Notes:**
 - Each bus requires its own CAN transceiver
-- Each bus should have 120Ω termination at both ends (if openEMS is at an end)
+- Each bus should have 120Ω termination at both ends (if preOBD is at an end)
 - Baud rates are configured per-bus via serial commands
 
 ---
@@ -291,7 +291,7 @@ Transceiver GND   → OBD-II Pin 5 (Signal GND)
 ```
 
 **Notes**:
-- OBD-II CAN runs at **500 kbps** (openEMS default)
+- OBD-II CAN runs at **500 kbps** (preOBD default)
 - Built-in 120Ω termination in vehicle ECU
 - **Be careful**: Don't disrupt factory ECU communication!
 - Use a Y-splitter if you have an existing OBD-II device plugged in
@@ -306,8 +306,8 @@ For classic cars or custom installations without OBD-II.
 
 **Termination resistors**:
 - CAN bus requires **120Ω resistors** at **both ends** of the bus
-- openEMS is typically a node in the middle (no termination)
-- If openEMS is at the end of the bus, add 120Ω between CAN-H and CAN-L
+- preOBD is typically a node in the middle (no termination)
+- If preOBD is at the end of the bus, add 120Ω between CAN-H and CAN-L
 
 **Verifying termination**:
 1. Disconnect all devices from bus
@@ -341,8 +341,8 @@ For classic cars or custom installations without OBD-II.
 
 **Termination jumper**:
 - Bridges 120Ω resistor between CANH/CANL
-- **Remove jumper** for mid-bus nodes (default for openEMS)
-- **Install jumper** only if openEMS is at the end of the bus
+- **Remove jumper** for mid-bus nodes (default for preOBD)
+- **Install jumper** only if preOBD is at the end of the bus
 
 ### Generic MCP2551 Breakout Board
 
@@ -366,7 +366,7 @@ For classic cars or custom installations without OBD-II.
 **Notes**:
 - Some modules have built-in 120Ω termination (check schematic)
 - Older chip, slower than SN65HVD230
-- Works fine for openEMS (500kbps standard)
+- Works fine for preOBD (500kbps standard)
 
 ### MCP2515 + MCP2551 Combo Module
 
@@ -428,7 +428,7 @@ For classic cars or custom installations without OBD-II.
 
 **Possible causes**:
 1. **Missing termination resistors** - Bus needs 120Ω at both ends
-2. **Wrong baud rate** - openEMS uses 500 kbps (standard)
+2. **Wrong baud rate** - preOBD uses 500 kbps (standard)
 3. **CAN-H/CAN-L swapped** - Try reversing wires
 4. **Bus off state** - Too many errors, CAN controller shut down
 5. **No transceiver power** - Check VCC on transceiver module
@@ -437,7 +437,7 @@ For classic cars or custom installations without OBD-II.
 - Measure resistance between CAN-H and CAN-L (~60Ω when properly terminated)
 - Verify 500 kbps baud rate in receiving device (ELM327, RealDash, etc.)
 - Swap CAN-H and CAN-L wires (polarity matters!)
-- Power cycle openEMS to reset CAN controller
+- Power cycle preOBD to reset CAN controller
 - Use multimeter to verify 3.3V or 5V on transceiver VCC pin
 
 ### Intermittent Communication / Random Errors
@@ -511,7 +511,7 @@ For classic cars or custom installations without OBD-II.
 
 **Platform**: Teensy 4.0
 **Transceiver**: Waveshare SN65HVD230 module
-**Use case**: Full-featured openEMS with native CAN
+**Use case**: Full-featured preOBD with native CAN
 **Pros**: Fast, reliable, 3.3V safe, automotive grade
 **Cons**: Slightly more expensive
 

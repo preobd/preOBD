@@ -1,6 +1,6 @@
 /*
  * watchdog_avr.h - AVR watchdog implementation (Arduino Uno/Mega)
- * Part of the openEMS Hardware Abstraction Layer
+ * Part of the preOBD Hardware Abstraction Layer
  */
 
 #ifndef HAL_WATCHDOG_AVR_H

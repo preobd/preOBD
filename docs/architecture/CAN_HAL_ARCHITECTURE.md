@@ -1,6 +1,6 @@
 # CAN Hardware Abstraction Layer (HAL) Architecture
 
-This document describes the CAN controller abstraction layer that enables openEMS to support multiple CAN controller types across different platforms.
+This document describes the CAN controller abstraction layer that enables preOBD to support multiple CAN controller types across different platforms.
 
 ## Table of Contents
 

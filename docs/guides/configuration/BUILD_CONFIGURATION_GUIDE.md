@@ -1,6 +1,6 @@
 # Build Configuration Guide
 
-This guide explains how openEMS separates compile-time feature selection from runtime configuration, and how to customize builds for your specific needs.
+This guide explains how preOBD separates compile-time feature selection from runtime configuration, and how to customize builds for your specific needs.
 
 ## Quick Reference
 
@@ -20,7 +20,7 @@ This guide explains how openEMS separates compile-time feature selection from ru
 
 ## Understanding the Two-Tier System
 
-openEMS uses a clear separation between compile-time and runtime configuration:
+preOBD uses a clear separation between compile-time and runtime configuration:
 
 ### Compile-Time Configuration (platformio.ini)
 
@@ -65,7 +65,7 @@ build_flags =
 
 ## Output Module Availability: Compile-time vs Runtime
 
-openEMS uses a two-tier system for output modules:
+preOBD uses a two-tier system for output modules:
 
 ### Compile-time Control (platformio.ini)
 
@@ -211,7 +211,7 @@ lib_deps =
 
 ## Library Dependencies
 
-openEMS uses modular library dependency groups for clarity:
+preOBD uses modular library dependency groups for clarity:
 
 ### Standard Feature Set
 
@@ -264,7 +264,7 @@ CAN support varies by platform:
 
 ### Hybrid CAN Controller Mode
 
-openEMS supports mixing different CAN controller types on different buses. This allows platforms to use both native and external controllers simultaneously.
+preOBD supports mixing different CAN controller types on different buses. This allows platforms to use both native and external controllers simultaneously.
 
 **Example use cases:**
 - ESP32 with native TWAI (bus 0) + external MCP2515 (bus 1) for dual-bus operation
@@ -384,7 +384,7 @@ build_flags =
     ${standard_features.build_flags}
 ```
 
-At runtime, ESP32 will initialize Bluetooth Classic with device name "openEMS" and register it as a transport for RealDash and serial commands.
+At runtime, ESP32 will initialize Bluetooth Classic with device name "preOBD" and register it as a transport for RealDash and serial commands.
 
 **Example - Teensy with HC-05 Bluetooth module:**
 No special configuration needed - just wire HC-05 TX/RX to Serial2 (pins 7/8 on Teensy 4.1). The transport system automatically makes Serial2 available for commands and RealDash output.

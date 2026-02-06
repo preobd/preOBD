@@ -6,12 +6,12 @@
 
 ## Overview
 
-openEMS supports several types of temperature sensors for automotive monitoring:
+preOBD supports several types of temperature sensors for automotive monitoring:
 
 1. **NTC Thermistors** - Resistive sensors with built-in or custom calibrations
 2. **Linear Temperature Sensors** - 0.5-4.5V voltage output sensors
 
-For NTC thermistors, openEMS provides three calibration methods:
+For NTC thermistors, preOBD provides three calibration methods:
 - **Lookup Table** - Most accurate, uses manufacturer data points
 - **Steinhart-Hart** - Mathematical equation with 3 coefficients
 - **Beta Equation** - Simplified equation, common in datasheets

@@ -1,5 +1,5 @@
 /*
- * config.h - openEMS User Configuration
+ * config.h - preOBD User Configuration
  *
  * IMPORTANT: Feature compilation (ENABLE_*) is controlled in platformio.ini
  * This file contains only runtime configuration values.

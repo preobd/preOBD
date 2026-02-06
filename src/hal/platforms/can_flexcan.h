@@ -1,6 +1,6 @@
 /*
  * can_flexcan.h - FlexCAN driver for Teensy 3.x/4.x
- * Part of the openEMS Hardware Abstraction Layer
+ * Part of the preOBD Hardware Abstraction Layer
  *
  * Supports multiple CAN buses:
  * - Bus 0: CAN1 (available on all Teensy 3.x/4.x)

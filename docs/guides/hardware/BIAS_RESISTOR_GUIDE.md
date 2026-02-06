@@ -12,7 +12,7 @@
 | **Maximum accuracy** | 470Ω | Best for data logging, slightly higher current |
 | **Low power** | 2.2kΩ | Works, but wastes ADC range |
 
-The default in openEMS is **1kΩ**. You can change this in `config.h`:
+The default in preOBD is **1kΩ**. You can change this in `config.h`:
 
 ```cpp
 #define DEFAULT_BIAS_RESISTOR 1000.0    // Default: 1kΩ

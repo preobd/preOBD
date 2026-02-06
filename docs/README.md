@@ -1,4 +1,4 @@
-# openEMS Documentation
+# preOBD Documentation
 
 **Open Source Engine Monitoring System for Classic Cars**
 
@@ -22,7 +22,7 @@ See [DISCLAIMER](../DISCLAIMER.md) for safety information and software limitatio
 
 ## Introduction
 
-openEMS provides comprehensive engine monitoring for vehicles that lack modern electronic systems. It's designed for classic cars that typically have minimal instrumentation.
+preOBD provides comprehensive engine monitoring for vehicles that lack modern electronic systems. It's designed for classic cars that typically have minimal instrumentation.
 
 **Key Features:**
 - Multiple sensor type support (temperature, pressure, voltage, RPM, speed)
@@ -39,7 +39,7 @@ This is beta software under active development. Always maintain mechanical backu
 
 ## System Architecture
 
-openEMS uses an **input-based system** where each physical pin (Input) is assigned:
+preOBD uses an **input-based system** where each physical pin (Input) is assigned:
 
 1. **Application** - What you're measuring (CHT, OIL_PRESSURE, etc.)
 2. **Sensor** - Physical hardware device (VDO sensor, thermocouple, etc.)
@@ -200,7 +200,7 @@ For complete command reference, see [Serial Commands](reference/SERIAL_COMMANDS.
 
 ## Sensor Library
 
-openEMS includes 30+ pre-calibrated sensor configurations:
+preOBD includes 30+ pre-calibrated sensor configurations:
 
 ### Temperature Sensors
 

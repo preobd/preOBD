@@ -6,7 +6,7 @@
 
 ## Overview
 
-openEMS can import sensors from the CAN bus and use them alongside local analog/digital sensors. This allows you to:
+preOBD can import sensors from the CAN bus and use them alongside local analog/digital sensors. This allows you to:
 
 - **Monitor vehicle ECU sensors** (engine RPM, coolant temp, vehicle speed) via OBD-II
 - **Combine remote and local sensors** (ECU sensors + your custom oil temp sensor)
@@ -54,7 +54,7 @@ Active Inputs:
 
 ### Dual-Bus Design
 
-openEMS supports **completely independent** CAN input and output:
+preOBD supports **completely independent** CAN input and output:
 
 ```
 Input CAN Bus (CAN1)                Output CAN Bus (CAN2)
@@ -130,7 +130,7 @@ SET CAN 0x0F
 ```
 
 **What happens:**
-1. openEMS allocates the next available CAN virtual pin (CAN:0, CAN:1, etc.)
+1. preOBD allocates the next available CAN virtual pin (CAN:0, CAN:1, etc.)
 2. Looks up PID 0x0C in the standard OBD-II PID table
 3. Configures sensor with correct calibration (scale factor, offset, data length)
 4. Sets display name ("Engine RPM") and units (RPM) from table
@@ -180,7 +180,7 @@ Then import sensors using `SET CAN <pid>` as shown above.
 
 ## Standard OBD-II PIDs
 
-openEMS includes automatic configuration for ~30 common OBD-II PIDs:
+preOBD includes automatic configuration for ~30 common OBD-II PIDs:
 
 | PID  | Name                      | Units   | Data Length |
 |------|---------------------------|---------|-------------|
@@ -196,7 +196,7 @@ openEMS includes automatic configuration for ~30 common OBD-II PIDs:
 | 0x5C | Engine Oil Temperature    | °C      | 1 byte      |
 
 **Unknown PIDs:**
-If you import a PID not in the table (e.g., manufacturer-specific), openEMS uses default calibration:
+If you import a PID not in the table (e.g., manufacturer-specific), preOBD uses default calibration:
 ```bash
 > SET CAN 0x99
 ✓ Imported CAN sensor CAN:0 - PID 0x99 (unknown PID - using defaults)
@@ -463,7 +463,7 @@ SET CAN:0 NAME "CUSTOM"
 
 ### Frame Cache Details
 
-openEMS uses a circular buffer to cache CAN frames:
+preOBD uses a circular buffer to cache CAN frames:
 
 - **Size:** 16 entries (200 bytes RAM)
 - **Replacement:** LRU (Least Recently Used)

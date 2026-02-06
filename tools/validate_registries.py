@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-openEMS Registry Validation Tool
+preOBD Registry Validation Tool
 
 A CI-friendly script to validate the integrity of the C registry files and,
 optionally, the generated static config in config.h.
@@ -15,15 +15,15 @@ import os
 import sys
 from typing import List, Dict, Any
 
-# Ensure the script can find the openems_config package
+# Ensure the script can find the preobd_config package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
 
-from openems_config.registry_parser import (
+from preobd_config.registry_parser import (
     parse_sensor_library,
     parse_application_presets,
     parse_units_registry,
 )
-from openems_config.validators import (
+from preobd_config.validators import (
     validate_hash_collisions,
     validate_index_references,
     validate_measurement_types,
@@ -33,11 +33,11 @@ from openems_config.validators import (
 
 def main():
     """Main execution function."""
-    parser = argparse.ArgumentParser(description="openEMS Registry Validation Tool")
+    parser = argparse.ArgumentParser(description="preOBD Registry Validation Tool")
     parser.add_argument(
         "--project-dir",
         default=".",
-        help="Path to the openEMS project root directory.",
+        help="Path to the preOBD project root directory.",
     )
     parser.add_argument(
         "--check-config",
@@ -51,7 +51,7 @@ def main():
     )
     args = parser.parse_args()
 
-    print("=== openEMS Registry Validation ===")
+    print("=== preOBD Registry Validation ===")
 
     # Load registries
     try:

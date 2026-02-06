@@ -1,6 +1,6 @@
 /*
  * can_mcp2515.h - MCP2515 SPI CAN controller driver
- * Part of the openEMS Hardware Abstraction Layer
+ * Part of the preOBD Hardware Abstraction Layer
  * Uses autowp-mcp2515 library (supports multiple instances)
  *
  * Supports up to 2 MCP2515 controllers for dual CAN bus operation:

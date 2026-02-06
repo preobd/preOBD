@@ -666,7 +666,7 @@ void printHelpExamples() {
 
 void printHelpOverview() {
     msg.control.println();
-    msg.control.println(F("=== openEMS Command Reference ==="));
+    msg.control.println(F("=== preOBD Command Reference ==="));
     msg.control.println();
     msg.control.println(F("Available help categories (use HELP <category>):"));
     msg.control.println();

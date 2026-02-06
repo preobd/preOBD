@@ -1,6 +1,6 @@
 # Bluetooth Hardware Setup Guide
 
-This guide covers hardware setup for Bluetooth modules used with openEMS, including voltage level considerations, wiring diagrams, and configuration.
+This guide covers hardware setup for Bluetooth modules used with preOBD, including voltage level considerations, wiring diagrams, and configuration.
 
 ## Table of Contents
 
@@ -14,7 +14,7 @@ This guide covers hardware setup for Bluetooth modules used with openEMS, includ
 
 ## Overview
 
-openEMS supports two types of Bluetooth connectivity:
+preOBD supports two types of Bluetooth connectivity:
 
 1. **ESP32 Native Bluetooth Classic** - Built-in, no external hardware
 2. **UART Bluetooth Modules** - HC-05, HM-10, or similar for Teensy/Mega/AVR
@@ -222,9 +222,9 @@ Teensy 4.1                             HM-10 Module
 
 ### Default Settings (Usually Work As-Is)
 
-Most HC-05/HC-06/HM-10 modules come pre-configured with settings that work with openEMS:
+Most HC-05/HC-06/HM-10 modules come pre-configured with settings that work with preOBD:
 
-- **Baud Rate**: 9600 (matches Serial2 default in openEMS)
+- **Baud Rate**: 9600 (matches Serial2 default in preOBD)
 - **Device Name**: "HC-05" or "HM-10" or similar
 - **PIN/Password**: "1234" or "0000"
 
@@ -250,7 +250,7 @@ If you need to change baud rate or device name, use AT commands.
 
 ```
 AT                          // Test connection, returns "OK"
-AT+NAME=openEMS            // Change device name
+AT+NAME=preOBD            // Change device name
 AT+UART=115200,0,0         // Change baud to 115200
 AT+PSWD=1234               // Change PIN
 AT+ROLE=0                  // Set as slave (default)
@@ -264,7 +264,7 @@ HM-10 doesn't need special mode - just send AT commands at default 9600 baud:
 
 ```
 AT                          // Test connection, returns "OK"
-AT+NAME=openEMS            // Change device name (max 12 chars)
+AT+NAME=preOBD            // Change device name (max 12 chars)
 AT+BAUD=4                  // Set baud to 115200 (4 = 115200)
 AT+PASS=123456             // Change PIN (6 digits)
 AT+RESET                   // Reset to apply changes
@@ -279,16 +279,16 @@ AT+RESET                   // Reset to apply changes
 - 5 = 4800
 - 6 = 2400
 
-### Recommended Settings for openEMS
+### Recommended Settings for preOBD
 
 **Option 1: Keep Default 9600 Baud (Easiest)**
 - No configuration needed
-- Works with openEMS Serial2 default (9600 baud)
+- Works with preOBD Serial2 default (9600 baud)
 - Sufficient for RealDash (updates at 10Hz)
 
 **Option 2: Upgrade to 115200 Baud (Better Performance)**
 - Configure module to 115200 baud using AT commands
-- Configure openEMS serial port to match:
+- Configure preOBD serial port to match:
   ```
   BUS SERIAL 2 ENABLE 115200     # Enable Serial2 at 115200 baud
   SAVE                           # Persist to EEPROM
@@ -350,7 +350,7 @@ See [Serial Commands Reference](../../reference/SERIAL_COMMANDS.md#bus-configura
 
 3. **Test with USB first:**
    - Verify RealDash works over USB
-   - Confirms openEMS is sending data correctly
+   - Confirms preOBD is sending data correctly
    - Then debug Bluetooth separately
 
 4. **Check Serial2 initialization:**

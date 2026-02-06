@@ -1,4 +1,4 @@
-# Directory Setup Guide - openEMS
+# Directory Setup Guide - preOBD
 
 **Understanding the project structure and where everything lives**
 
@@ -7,7 +7,7 @@
 ## Complete Directory Structure
 
 ```
-openEMS/
+preOBD/
 ├── platformio.ini              # PlatformIO build configuration
 ├── README.md                   # Project overview, quick start
 ├── LICENSE                     # MIT + NonCommercial License

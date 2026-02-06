@@ -1,6 +1,6 @@
 # Transport Architecture
 
-This document describes openEMS's multi-transport communication architecture, which enables serial commands and data output across multiple communication channels simultaneously.
+This document describes preOBD's multi-transport communication architecture, which enables serial commands and data output across multiple communication channels simultaneously.
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ This document describes openEMS's multi-transport communication architecture, wh
 
 ### What is the Transport System?
 
-The transport system is an abstraction layer that allows openEMS to communicate over multiple serial channels simultaneously. Instead of being tied to USB Serial only, openEMS can now:
+The transport system is an abstraction layer that allows preOBD to communicate over multiple serial channels simultaneously. Instead of being tied to USB Serial only, preOBD can now:
 
 - Accept commands from **any** connected transport (USB, Bluetooth, UART)
 - Send output to **all** connected transports simultaneously
@@ -41,7 +41,7 @@ The transport system is an abstraction layer that allows openEMS to communicate 
 
 ### Key Benefits
 
-1. **Wireless configuration** - Configure openEMS via Bluetooth without USB cable
+1. **Wireless configuration** - Configure preOBD via Bluetooth without USB cable
 2. **Multi-device output** - View RealDash on phone via Bluetooth while logging to PC via USB
 3. **Platform flexibility** - ESP32 gets native Bluetooth, Teensy uses UART modules
 4. **Future-proof** - Easy to add WiFi, Ethernet, BLE, or other transports
@@ -258,7 +258,7 @@ router.registerTransport(TRANSPORT_SERIAL2, &hwSerial2);
 
 - **Implementation**: `BluetoothTransportESP32` wrapping `BluetoothSerial`
 - **Platform**: ESP32 only
-- **Device Name**: "openEMS"
+- **Device Name**: "preOBD"
 - **Use Case**: Wireless RealDash, wireless configuration, wireless logging
 
 **Features:**
@@ -270,7 +270,7 @@ router.registerTransport(TRANSPORT_SERIAL2, &hwSerial2);
 **Initialization:**
 ```cpp
 #ifdef ESP32
-BluetoothTransportESP32 btESP32("openEMS");
+BluetoothTransportESP32 btESP32("preOBD");
 if (btESP32.begin()) {
     router.registerTransport(TRANSPORT_ESP32_BT, &btESP32);
     msg.debug.info(TAG_BT, "ESP32 Bluetooth initialized");
@@ -280,7 +280,7 @@ if (btESP32.begin()) {
 
 **Connection:**
 1. Power on ESP32
-2. Pair with "openEMS" from phone/tablet Bluetooth settings
+2. Pair with "preOBD" from phone/tablet Bluetooth settings
 3. Connect from RealDash or serial terminal app
 
 ## Command Routing

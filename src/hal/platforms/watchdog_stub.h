@@ -1,6 +1,6 @@
 /*
  * watchdog_stub.h - Stub watchdog implementation for unknown platforms
- * Part of the openEMS Hardware Abstraction Layer
+ * Part of the preOBD Hardware Abstraction Layer
  * Provides no-op implementations when platform watchdog is unavailable
  */
 

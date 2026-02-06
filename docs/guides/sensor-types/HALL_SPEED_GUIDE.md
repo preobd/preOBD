@@ -148,7 +148,7 @@ You must determine these parameters for your specific vehicle:
 
 3. **Fine-Tune Calibration:**
    - Drive at steady highway speed (e.g., 100 km/h GPS-verified)
-   - Compare openEMS reading to GPS
+   - Compare preOBD reading to GPS
    - Adjust `calibration_mult`:
      - If reading is 95 km/h but GPS shows 100 km/h: `calibration_mult = 1.05` (100/95)
      - If reading is 105 km/h but GPS shows 100 km/h: `calibration_mult = 0.95` (100/105)

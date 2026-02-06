@@ -1,5 +1,5 @@
 /*
- * test_mode.h - Test Mode System for openEMS
+ * test_mode.h - Test Mode System for preOBD
  *
  * Provides a comprehensive testing framework that simulates sensor inputs
  * without requiring physical sensors. Uses function pointer substitution

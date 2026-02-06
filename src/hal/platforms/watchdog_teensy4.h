@@ -1,6 +1,6 @@
 /*
  * watchdog_teensy4.h - Teensy 4.x (IMXRT1062) watchdog implementation
- * Part of the openEMS Hardware Abstraction Layer
+ * Part of the preOBD Hardware Abstraction Layer
  * Uses WDT_T4 library for IMXRT watchdog
  */
 

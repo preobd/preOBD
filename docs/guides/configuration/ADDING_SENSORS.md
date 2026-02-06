@@ -1,4 +1,4 @@
-# Adding Sensors to openEMS
+# Adding Sensors to preOBD
 
 **Developer guide for adding new sensor types to the sensor library**
 
@@ -6,12 +6,12 @@
 
 ## Overview
 
-This guide is for **developers and contributors** who want to add new sensor types to the openEMS sensor library. If you just want to configure an existing sensor or use custom calibration values, see:
+This guide is for **developers and contributors** who want to add new sensor types to the preOBD sensor library. If you just want to configure an existing sensor or use custom calibration values, see:
 
 - **[QUICK_REFERENCE.md](../../getting-started/QUICK_REFERENCE.md)** - Configure existing sensors
 - **[ADVANCED_CALIBRATION_GUIDE.md](ADVANCED_CALIBRATION_GUIDE.md)** - Custom calibration for existing sensor types
 
-openEMS uses a **registry-based architecture** where sensors are defined in PROGMEM arrays with hash-based lookups. This allows adding new sensors without breaking existing EEPROM configurations.
+preOBD uses a **registry-based architecture** where sensors are defined in PROGMEM arrays with hash-based lookups. This allows adding new sensors without breaking existing EEPROM configurations.
 
 ---
 
@@ -32,7 +32,7 @@ Or for static builds, use `tools/configure.py` to generate the configuration.
 
 ### Registry-Based System
 
-openEMS uses **hash-based registries** instead of enums. This provides:
+preOBD uses **hash-based registries** instead of enums. This provides:
 
 - **EEPROM portability** - Sensor names are stored as hashes, not array indices
 - **Runtime flexibility** - New sensors don't break existing configurations
@@ -66,7 +66,7 @@ Physical Sensor → Read Function → Calibration → Engineering Units
 
 ### Time-Sliced Architecture
 
-openEMS uses a **non-blocking time-sliced loop** where each sensor reads at its own optimal interval:
+preOBD uses a **non-blocking time-sliced loop** where each sensor reads at its own optimal interval:
 
 - **MAX6675 thermocouple:** 250ms (respects ~220ms conversion time)
 - **MAX31855 thermocouple:** 100ms (faster chip)

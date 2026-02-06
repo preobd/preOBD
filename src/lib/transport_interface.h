@@ -5,7 +5,7 @@
  * communication backends. Enables runtime switching between transports and
  * supports multiple transport types (USB Serial, hardware UARTs, BT/BLE).
  *
- * Part of the Transport Abstraction Layer (TAL) for openEMS.
+ * Part of the Transport Abstraction Layer (TAL) for preOBD.
  */
 
 #ifndef TRANSPORT_INTERFACE_H

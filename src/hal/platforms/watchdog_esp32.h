@@ -1,6 +1,6 @@
 /*
  * watchdog_esp32.h - ESP32 watchdog implementation
- * Part of the openEMS Hardware Abstraction Layer
+ * Part of the preOBD Hardware Abstraction Layer
  * Uses ESP-IDF task watchdog API
  */
 

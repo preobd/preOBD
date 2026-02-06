@@ -1,6 +1,6 @@
 /*
  * can_hybrid.h - Hybrid CAN Controller Dispatcher
- * Part of the openEMS Hardware Abstraction Layer
+ * Part of the preOBD Hardware Abstraction Layer
  *
  * Enables mixing different CAN controller types on different buses.
  * Example: ESP32 TWAI on bus 0 + MCP2515 on bus 1 for dual-bus operation.

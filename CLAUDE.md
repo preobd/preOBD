@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-openEMS is an embedded engine monitoring system for classic cars without modern ECUs. It monitors temperature, pressure, voltage, RPM, and speed sensors, outputting data via LCD, CAN bus (OBD-II compatible), serial, and SD logging. Written in C++ for Arduino/PlatformIO.
+preOBD is an embedded engine monitoring system for classic cars without modern ECUs. It monitors temperature, pressure, voltage, RPM, and speed sensors, outputting data via LCD, CAN bus (OBD-II compatible), serial, and SD logging. Written in C++ for Arduino/PlatformIO.
 
 ## Build Commands
 

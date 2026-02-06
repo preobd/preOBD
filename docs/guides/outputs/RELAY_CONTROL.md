@@ -16,7 +16,7 @@ The relay output module enables automatic control of 12V electrical relays based
 
 ## Overview
 
-The relay control feature allows openEMS to automatically switch 12V relays ON/OFF based on sensor readings. This is useful for controlling:
+The relay control feature allows preOBD to automatically switch 12V relays ON/OFF based on sensor readings. This is useful for controlling:
 - Electric cooling fans (turn on when temperature exceeds threshold)
 - Water pumps (activate based on temperature or pressure)
 - Warning lights or indicators
@@ -104,7 +104,7 @@ Relay turns **ON** when sensor value falls below threshold, **OFF** when it rise
 **Components needed:**
 - 12V electric cooling fan
 - 5V relay module (with optocoupler isolation)
-- openEMS running on Teensy/Arduino
+- preOBD running on Teensy/Arduino
 
 **Wiring:**
 1. **Relay module power**: VCC → 5V, GND → GND
@@ -761,4 +761,4 @@ RELAY 0 STATUS
 
 ---
 
-**Questions or issues?** Report at https://github.com/preobd/openEMS/issues
+**Questions or issues?** Report at https://github.com/preobd/preOBD/issues

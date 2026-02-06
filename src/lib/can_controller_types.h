@@ -1,6 +1,6 @@
 /*
  * can_controller_types.h - CAN Controller Type Definitions
- * Part of the openEMS Hardware Abstraction Layer
+ * Part of the preOBD Hardware Abstraction Layer
  *
  * Defines the CAN controller type enum and compile-time bus-to-controller mapping.
  * Used by the hybrid dispatcher to route CAN operations to the correct driver.

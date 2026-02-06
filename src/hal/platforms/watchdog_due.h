@@ -1,6 +1,6 @@
 /*
  * watchdog_due.h - Arduino Due (SAM3X) watchdog implementation
- * Part of the openEMS Hardware Abstraction Layer
+ * Part of the preOBD Hardware Abstraction Layer
  */
 
 #ifndef HAL_WATCHDOG_DUE_H

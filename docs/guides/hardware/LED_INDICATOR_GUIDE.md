@@ -4,7 +4,7 @@ The RGB LED status indicator provides visual feedback about system state using a
 
 ## Overview
 
-Starting with version 0.7.0, openEMS uses a single RGB LED for status indication instead of three separate LEDs. This provides:
+Starting with version 0.7.0, preOBD uses a single RGB LED for status indication instead of three separate LEDs. This provides:
 
 - **Color-coded states**: Green (normal), Yellow (warning), Red (alarm), Blue (CONFIG mode)
 - **Visual effects**: Solid colors, blinking, and breathing/pulsing
@@ -178,7 +178,7 @@ pio run -e teensy41 -t upload
 - Correct pin assignments in config.h
 
 **Check pin conflicts**:
-- At startup, openEMS validates pins don't conflict
+- At startup, preOBD validates pins don't conflict
 - Check serial output for "RGB LED Red pin X conflict" warnings
 
 **Verify PWM capability**:

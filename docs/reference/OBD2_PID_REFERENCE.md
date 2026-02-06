@@ -1,12 +1,12 @@
-# OBD-II PID Reference for openEMS
+# OBD-II PID Reference for preOBD
 
 ## Overview
 
-This document provides a complete reference of OBD-II Parameter IDs (PIDs) used by openEMS for SAE J1979 Mode 01 (Show current data) communication.
+This document provides a complete reference of OBD-II Parameter IDs (PIDs) used by preOBD for SAE J1979 Mode 01 (Show current data) communication.
 
 ### What is an OBD-II PID?
 
-A **Parameter ID (PID)** is a standardized code used to request specific sensor data from a vehicle's ECU. openEMS implements Mode 01 PIDs to allow standard OBD-II scanner tools (like Torque) to read sensor data.
+A **Parameter ID (PID)** is a standardized code used to request specific sensor data from a vehicle's ECU. preOBD implements Mode 01 PIDs to allow standard OBD-II scanner tools (like Torque) to read sensor data.
 
 ### PID Format
 
@@ -28,11 +28,11 @@ A **Parameter ID (PID)** is a standardized code used to request specific sensor 
 
 ## Standard SAE J1979 PIDs
 
-openEMS uses standard PIDs where applicable for maximum compatibility with scanner tools.
+preOBD uses standard PIDs where applicable for maximum compatibility with scanner tools.
 
 ### Temperature PIDs
 
-| PID | Name | openEMS Application | Data Bytes | Formula | Range | Units |
+| PID | Name | preOBD Application | Data Bytes | Formula | Range | Units |
 |-----|------|---------------------|------------|---------|-------|-------|
 | `0x05` | Engine Coolant Temperature | `COOLANT_TEMP` | 1 | A - 40 | -40 to 215°C | °C |
 | `0x0F` | Intake Air Temperature | `AMBIENT_TEMP` | 1 | A - 40 | -40 to 215°C | °C |
@@ -41,7 +41,7 @@ openEMS uses standard PIDs where applicable for maximum compatibility with scann
 
 ### Pressure PIDs
 
-| PID | Name | openEMS Application | Data Bytes | Formula | Range | Units |
+| PID | Name | preOBD Application | Data Bytes | Formula | Range | Units |
 |-----|------|---------------------|------------|---------|-------|-------|
 | `0x0A` | Fuel Pressure | `FUEL_PRESSURE` | 1 | A * 3 | 0 to 765 kPa | kPa |
 | `0x23` | Fuel Rail Pressure | `FUEL_PRESSURE` | 2 | ((A*256)+B) * 10 | 0 to 655,350 kPa | kPa |
@@ -49,14 +49,14 @@ openEMS uses standard PIDs where applicable for maximum compatibility with scann
 
 ### RPM and Speed PIDs
 
-| PID | Name | openEMS Application | Data Bytes | Formula | Range | Units |
+| PID | Name | preOBD Application | Data Bytes | Formula | Range | Units |
 |-----|------|---------------------|------------|---------|-------|-------|
 | `0x0C` | Engine RPM | `ENGINE_RPM` | 2 | ((A*256)+B)/4 | 0 to 16,383 rpm | rpm |
 | `0x0D` | Vehicle Speed | `VEHICLE_SPEED` | 1 | A | 0 to 255 km/h | km/h |
 
 ### Voltage PIDs
 
-| PID | Name | openEMS Application | Data Bytes | Formula | Range | Units |
+| PID | Name | preOBD Application | Data Bytes | Formula | Range | Units |
 |-----|------|---------------------|------------|---------|-------|-------|
 | `0x42` | Control Module Voltage | `PRIMARY_BATTERY` | 2 | ((A*256)+B)/1000 | 0 to 65.535 V | V |
 
@@ -69,13 +69,13 @@ openEMS uses standard PIDs where applicable for maximum compatibility with scann
 
 ---
 
-## Manufacturer-Specific PIDs (openEMS Extended)
+## Manufacturer-Specific PIDs (preOBD Extended)
 
-PIDs 0x40 and above are manufacturer-specific. openEMS uses these for sensors not covered by standard PIDs.
+PIDs 0x40 and above are manufacturer-specific. preOBD uses these for sensors not covered by standard PIDs.
 
 ### Extended Temperature PIDs
 
-| PID | Name | openEMS Application | Data Bytes | Formula | Range | Units |
+| PID | Name | preOBD Application | Data Bytes | Formula | Range | Units |
 |-----|------|---------------------|------------|---------|-------|-------|
 | `0x78` | Exhaust Gas Temperature | `EGT` | 2 | ((A*256)+B) - 40 | -40 to 655°C | °C |
 | `0xC8` | Cylinder Head Temperature | `CHT` | 1 | A - 40 | -40 to 215°C | °C |
@@ -83,21 +83,21 @@ PIDs 0x40 and above are manufacturer-specific. openEMS uses these for sensors no
 
 ### Extended Pressure PIDs
 
-| PID | Name | openEMS Application | Data Bytes | Formula | Range | Units |
+| PID | Name | preOBD Application | Data Bytes | Formula | Range | Units |
 |-----|------|---------------------|------------|---------|-------|-------|
 | `0x6F` | Turbo Boost Pressure | `BOOST_PRESSURE` | 2 | ((A*256)+B) / 100 | 0 to 655.35 bar | bar |
 | `0xCA` | Oil Pressure | `OIL_PRESSURE` | 1 | A / 20 | 0 to 12.75 bar | bar |
 
 ### Extended Voltage PIDs
 
-| PID | Name | openEMS Application | Data Bytes | Formula | Range | Units |
+| PID | Name | preOBD Application | Data Bytes | Formula | Range | Units |
 |-----|------|---------------------|------------|---------|-------|-------|
 | `0xCB` | Primary Battery Voltage | `PRIMARY_BATTERY` | 2 | ((A*256)+B) / 1000 | 0 to 65.535 V | V |
 | `0xCC` | Auxiliary Battery Voltage | `AUXILIARY_BATTERY` | 2 | ((A*256)+B) / 1000 | 0 to 65.535 V | V |
 
 ### Humidity and Altitude
 
-| PID | Name | openEMS Application | Data Bytes | Formula | Range | Units |
+| PID | Name | preOBD Application | Data Bytes | Formula | Range | Units |
 |-----|------|---------------------|------------|---------|-------|-------|
 | `0xA1` | Relative Humidity | `HUMIDITY` (BME280) | 1 | A / 2.55 | 0 to 100 % | % |
 | `0xA2` | Altitude | `ELEVATION` (BME280) | 2 | ((A*256)+B) - 500 | -500 to 65,035 m | m |
@@ -190,7 +190,7 @@ Bitmap = [0x20, 0x18, 0x00, 0x00]
 
 ## OBD Conversion Functions
 
-openEMS uses type-specific conversion functions to encode sensor values in OBD-II format. These are defined in `src/inputs/sensor_read.cpp`.
+preOBD uses type-specific conversion functions to encode sensor values in OBD-II format. These are defined in `src/inputs/sensor_read.cpp`.
 
 ### Temperature Conversion
 
@@ -314,10 +314,10 @@ Byte 4-7: Padding (0x00)
 
 **Request IDs:**
 - `0x7DF` - Functional addressing (broadcast to all ECUs)
-- `0x7E0` - Physical addressing (ECU 0, openEMS)
+- `0x7E0` - Physical addressing (ECU 0, preOBD)
 
 **Response ID:**
-- `0x7E8` - ECU 0 response (openEMS)
+- `0x7E8` - ECU 0 response (preOBD)
 
 ---
 

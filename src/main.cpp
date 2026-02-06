@@ -1,5 +1,5 @@
 /*
- * main.cpp - openEMS (Open Engine Monitoring System)
+ * main.cpp - preOBD (Open Engine Monitoring System)
  * Main program loop
  */
 
@@ -88,9 +88,9 @@ SerialTransport hwSerial8(&Serial8, "SERIAL8", 115200);
 #ifdef ESP32
 // ESP32 Bluetooth transport (Classic or BLE depending on chip)
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
-    BLETransportESP32 btESP32("openEMS");
+    BLETransportESP32 btESP32("preOBD");
 #else
-    BluetoothTransportESP32 btESP32("openEMS");
+    BluetoothTransportESP32 btESP32("preOBD");
 #endif
 #endif
 

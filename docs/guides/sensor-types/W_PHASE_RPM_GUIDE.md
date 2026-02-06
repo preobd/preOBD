@@ -281,7 +281,7 @@ The `1.02` is a calibration multiplier (similar to adjusting a potentiometer on 
 
 **Calibration workflow:**
 1. Set poles and pulley ratio
-2. Compare openEMS RPM to external tachometer
+2. Compare preOBD RPM to external tachometer
 3. Calculate: `mult = Actual_RPM / Displayed_RPM`
 4. Update with multiplier
 
@@ -371,7 +371,7 @@ The `1.02` is a calibration multiplier (similar to adjusting a potentiometer on 
 ⚠️ **Over-Rev Protection:**
 - Set appropriate max RPM alarm
 - Consider adding warning LED
-- Don't rely solely on openEMS - maintain mechanical backup
+- Don't rely solely on preOBD - maintain mechanical backup
 
 ---
 

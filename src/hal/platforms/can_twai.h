@@ -1,6 +1,6 @@
 /*
  * can_twai.h - ESP32 TWAI (CAN) driver
- * Part of the openEMS Hardware Abstraction Layer
+ * Part of the preOBD Hardware Abstraction Layer
  * Note: External CAN transceiver required (MCP2551, TJA1050, SN65HVD230, etc.)
  *
  * ESP32 supports only a single CAN bus (bus 0).

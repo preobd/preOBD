@@ -1,12 +1,12 @@
 # Serial Commands Reference
 
-**Complete reference for openEMS serial configuration commands**
+**Complete reference for preOBD serial configuration commands**
 
 ---
 
 ## Overview
 
-openEMS is configured via serial commands at 115200 baud using an interactive command-line interface.
+preOBD is configured via serial commands at 115200 baud using an interactive command-line interface.
 
 **Terminal Mode (Default):**
 - Full-featured CLI with tab completion, command history, and arrow key navigation
@@ -56,7 +56,7 @@ RUN                              # Start monitoring
 
 ## Command Syntax Patterns
 
-openEMS commands follow consistent patterns based on what you're configuring:
+preOBD commands follow consistent patterns based on what you're configuring:
 
 ### Discovery Commands
 Pattern: `LIST <type>`
@@ -136,7 +136,7 @@ LOAD SD:backup.json         # Load from SD card file
 
 ## Understanding Settings Scope
 
-openEMS has three levels of configuration:
+preOBD has three levels of configuration:
 
 ### Per-Input Settings (use SET command)
 Apply to individual sensor inputs:

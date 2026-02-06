@@ -1,18 +1,18 @@
-# openEMS Disclaimer and Safety Information
+# preOBD Disclaimer and Safety Information
 
 ## Software Status
 
-openEMS is **beta software** under active development. It may contain bugs, incomplete features, and undiscovered issues.
+preOBD is **beta software** under active development. It may contain bugs, incomplete features, and undiscovered issues.
 
 ## Intended Use
 
-openEMS is designed for:
+preOBD is designed for:
 - Classic cars and vehicles without factory engine management systems
 - Supplemental monitoring alongside existing mechanical gauges
 - Enthusiast and experimental use
 - Educational purposes
 
-openEMS is **NOT** designed for:
+preOBD is **NOT** designed for:
 - Safety-critical applications
 - Primary engine monitoring (use mechanical gauges as primary)
 - Modern vehicles with existing ECUs or OBDII systems
@@ -21,7 +21,7 @@ openEMS is **NOT** designed for:
 
 ## User Responsibilities
 
-By using openEMS, you acknowledge and accept:
+By using preOBD, you acknowledge and accept:
 
 1. **This software is provided "as is" without warranty of any kind**
 2. **You are responsible for monitoring your engine** and preventing damage
@@ -122,10 +122,10 @@ Community support is provided on a best-effort basis through GitHub:
 
 ## Contact
 
-- **Issues:** https://github.com/preobd/openEMS/issues
-- **Discussions:** https://github.com/preobd/openEMS/discussions
+- **Issues:** https://github.com/preobd/preOBD/issues
+- **Discussions:** https://github.com/preobd/preOBD/discussions
 - **Documentation:** See docs/ folder
 
 ---
 
-**Bottom line: Use openEMS responsibly, maintain backups, test thoroughly, and accept that you are responsible for your engine's safety.**
+**Bottom line: Use preOBD responsibly, maintain backups, test thoroughly, and accept that you are responsible for your engine's safety.**

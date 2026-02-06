@@ -1,8 +1,8 @@
-# OBD-II Scanner Setup Guide for openEMS
+# OBD-II Scanner Setup Guide for preOBD
 
 ## Overview
 
-openEMS now supports standard OBD-II request/response protocol (SAE J1979), allowing you to use inexpensive Bluetooth OBD-II adapters ($15-25) and mobile apps like **Torque** to view your sensor data in real-time.
+preOBD now supports standard OBD-II request/response protocol (SAE J1979), allowing you to use inexpensive Bluetooth OBD-II adapters ($15-25) and mobile apps like **Torque** to view your sensor data in real-time.
 
 ###What This Means
 
@@ -23,7 +23,7 @@ openEMS now supports standard OBD-II request/response protocol (SAE J1979), allo
 | **Cost** | ELM327 adapter: $15-25 | Same |
 | **Setup complexity** | Plug-and-play | Requires XML configuration |
 
-**Best of both worlds**: You can use **both simultaneously**! openEMS runs in hybrid mode, broadcasting for RealDash while responding to scanner queries.
+**Best of both worlds**: You can use **both simultaneously**! preOBD runs in hybrid mode, broadcasting for RealDash while responding to scanner queries.
 
 ---
 
@@ -31,7 +31,7 @@ openEMS now supports standard OBD-II request/response protocol (SAE J1979), allo
 
 ### 1. CAN Transceiver
 
-openEMS CAN pins operate at logic level (3.3V or 5V) and need a transceiver to communicate on the CAN bus.
+preOBD CAN pins operate at logic level (3.3V or 5V) and need a transceiver to communicate on the CAN bus.
 
 **⚠️ Critical requirement**: You must use a CAN transceiver that matches your platform's voltage:
 - **3.3V platforms** (Teensy, ESP32, Due): Use **SN65HVD230** or MCP2562
@@ -57,7 +57,7 @@ openEMS CAN pins operate at logic level (3.3V or 5V) and need a transceiver to c
 
 ### 3. OBD-II Port Connection
 
-You'll need to wire openEMS CAN bus to an OBD-II connector.
+You'll need to wire preOBD CAN bus to an OBD-II connector.
 
 **OBD-II pinout (focusing on CAN):**
 ```
@@ -140,7 +140,7 @@ GND         →   GND
 
 ## Software Setup
 
-### Step 1: Enable CAN Output in openEMS
+### Step 1: Enable CAN Output in preOBD
 
 CAN output must be enabled in your build configuration:
 
@@ -244,7 +244,7 @@ On boot, you should see:
 
 ## Available OBD-II PIDs
 
-openEMS automatically maps your configured sensors to standard OBD-II PIDs based on the application type.
+preOBD automatically maps your configured sensors to standard OBD-II PIDs based on the application type.
 
 ### Common PIDs
 
@@ -269,7 +269,7 @@ LIST SENSORS     # Shows all configured sensors with their PIDs
 **Custom PIDs:**
 - PIDs 0x21-0xFF are manufacturer-specific
 - You can assign custom PIDs in `application_presets.h`
-- openEMS uses standard PIDs where possible
+- preOBD uses standard PIDs where possible
 
 For a complete PID reference, see [OBD2_PID_REFERENCE.md](../../reference/OBD2_PID_REFERENCE.md).
 
@@ -284,7 +284,7 @@ For a complete PID reference, see [OBD2_PID_REFERENCE.md](../../reference/OBD2_P
 2. **Wrong adapter selected** - Verify adapter name in app settings
 3. **CAN bus not initialized** - Check serial output for CAN init messages
 4. **Wiring issue** - Verify CAN-H/CAN-L connections
-5. **Baud rate mismatch** - openEMS uses 500 kbps (standard)
+5. **Baud rate mismatch** - preOBD uses 500 kbps (standard)
 
 **Debugging:**
 ```
@@ -323,7 +323,7 @@ For a complete PID reference, see [OBD2_PID_REFERENCE.md](../../reference/OBD2_P
 **Normal behavior**:
 - Scanner apps query PIDs sequentially (~1-10 Hz per PID)
 - More PIDs = slower update rate per gauge
-- This is a limitation of OBD-II protocol, not openEMS
+- This is a limitation of OBD-II protocol, not preOBD
 
 **Optimization:**
 - Limit number of displayed gauges in app
@@ -376,14 +376,14 @@ Both modes use CAN ID 0x7E8 for responses, so they coexist peacefully.
 
 ### Multi-ECU Setups
 
-openEMS responds as **ECU 0** (physical address 0x7E0, response 0x7E8).
+preOBD responds as **ECU 0** (physical address 0x7E0, response 0x7E8).
 
 If you have multiple ECUs on the bus:
-- openEMS: ECU 0 (0x7E0 → 0x7E8)
+- preOBD: ECU 0 (0x7E0 → 0x7E8)
 - Factory ECU: ECU 1 (0x7E1 → 0x7E9)
 - Transmission: ECU 2 (0x7E2 → 0x7EA)
 
-Scanner apps can query specific ECUs. Select "ECU 0" for openEMS data.
+Scanner apps can query specific ECUs. Select "ECU 0" for preOBD data.
 
 ### Testing Without Hardware
 
@@ -411,7 +411,7 @@ processOBD2Request(0x7DF, testRequest, 8);
 | Permanent in-car display | **RealDash** (broadcast) |
 | Data logging for analysis | **Torque** or **RealDash** |
 | Custom gauge layouts | **RealDash** |
-| Checking codes/warnings | **Torque** (limited - openEMS doesn't store DTCs yet) |
+| Checking codes/warnings | **Torque** (limited - preOBD doesn't store DTCs yet) |
 | Multi-sensor overview | **RealDash** dashboards |
 | Single-gauge focus | **Torque** |
 

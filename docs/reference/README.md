@@ -1,6 +1,6 @@
 # Reference Documentation
 
-This directory contains reference materials for openEMS.
+This directory contains reference materials for preOBD.
 
 ## Planned Content
 

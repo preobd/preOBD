@@ -1,6 +1,6 @@
 /*
  * hal_watchdog.h - Hardware Abstraction Layer for Watchdog Timer
- * Part of the openEMS Hardware Abstraction Layer
+ * Part of the preOBD Hardware Abstraction Layer
  *
  * Provides a unified watchdog interface across all supported platforms:
  * - AVR (Arduino Uno, Mega)

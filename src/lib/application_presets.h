@@ -17,14 +17,14 @@
  * - Voltage: volts
  *
  * OBD-II PID RELATIONSHIP (EXPORT vs IMPORT):
- * This file defines PIDs for EXPORTING openEMS sensor data over CAN bus.
+ * This file defines PIDs for EXPORTING preOBD sensor data over CAN bus.
  * Related file: can_sensor_library/standard_pids.h defines PIDs for IMPORTING
  * data from external ECUs.
  *
- * - EXPORT (this file): Broadcast openEMS sensors as OBD-II PIDs for consumption
+ * - EXPORT (this file): Broadcast preOBD sensors as OBD-II PIDs for consumption
  *   by tools like Torque, RealDash, etc. Values stored in .obd2pid/.obd2length
  * - IMPORT (standard_pids.h): Decode PIDs from external ECUs to create virtual
- *   sensors in openEMS
+ *   sensors in preOBD
  *
  * Where semantic overlap exists (e.g., COOLANT_TEMP, ENGINE_RPM), PID values
  * MUST match standard_pids.h to maintain consistency. Standard PIDs use SAE J1979

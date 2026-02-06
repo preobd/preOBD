@@ -1,6 +1,6 @@
 # JSON Configuration Quick Reference
 
-A cheat sheet for maintaining JSON backward compatibility in openEMS.
+A cheat sheet for maintaining JSON backward compatibility in preOBD.
 
 ## When Do I Need to Update JSON Code?
 

@@ -1,6 +1,6 @@
 # EEPROM Structure and Versioning
 
-**Technical guide to openEMS EEPROM layout and version management**
+**Technical guide to preOBD EEPROM layout and version management**
 
 ---
 
@@ -20,7 +20,7 @@
 
 ## Overview
 
-openEMS uses EEPROM (Electrically Erasable Programmable Read-Only Memory) to persist configuration across power cycles. The EEPROM structure uses **hash-based storage** for portability across firmware versions.
+preOBD uses EEPROM (Electrically Erasable Programmable Read-Only Memory) to persist configuration across power cycles. The EEPROM structure uses **hash-based storage** for portability across firmware versions.
 
 **Key Concepts:**
 - **Versioned storage:** Each EEPROM write includes version number
@@ -385,7 +385,7 @@ if (temp.magic != SYSTEM_CONFIG_MAGIC ||
 - User issues `SAVE` command (manual)
 - Firmware update (version bump resets anyway)
 
-**openEMS does NOT:**
+**preOBD does NOT:**
 - Auto-save on every change
 - Write sensor readings to EEPROM
 - Use EEPROM for data logging

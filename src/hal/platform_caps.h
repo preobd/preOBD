@@ -1,6 +1,6 @@
 /*
  * platform_caps.h - Platform Capability Detection
- * Part of the openEMS Hardware Abstraction Layer
+ * Part of the preOBD Hardware Abstraction Layer
  *
  * Provides compile-time platform capability detection for CAN controllers.
  * This header exposes boolean flags and string identifiers that describe
