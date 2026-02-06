@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Per-input output routing** - Route individual inputs to specific data outputs (CAN, RealDash, Serial, SD_Log) via `SET <pin> OUTPUT` commands
 - **SYSTEM PINS command** - Comprehensive pin allocation status reporting for debugging and configuration
   - **SYSTEM PINS** - Show all pin allocations organized by category (system, bus, input, relay)
   - **SYSTEM PINS <pin>** - Query specific pin (supports A0, CAN:0, I2C:0 formats)
