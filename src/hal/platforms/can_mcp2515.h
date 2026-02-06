@@ -74,7 +74,7 @@ namespace detail {
     }
 }
 
-inline bool begin(uint32_t baudrate, uint8_t bus = 0) {
+inline bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
     CAN_SPEED speed = detail::baudrateToSpeed(baudrate);
     CAN_CLOCK clock = detail::getClockSpeed();
 
@@ -84,8 +84,10 @@ inline bool begin(uint32_t baudrate, uint8_t bus = 0) {
             if (detail::canBus0.setBitrate(speed, clock) != MCP2515::ERROR_OK) {
                 return false;
             }
-            if (detail::canBus0.setNormalMode() != MCP2515::ERROR_OK) {
-                return false;
+            if (listenOnly) {
+                if (detail::canBus0.setListenOnlyMode() != MCP2515::ERROR_OK) return false;
+            } else {
+                if (detail::canBus0.setNormalMode() != MCP2515::ERROR_OK) return false;
             }
             detail::bus0Initialized = true;
             return true;
@@ -96,8 +98,10 @@ inline bool begin(uint32_t baudrate, uint8_t bus = 0) {
                 if (detail::canBus1.setBitrate(speed, clock) != MCP2515::ERROR_OK) {
                     return false;
                 }
-                if (detail::canBus1.setNormalMode() != MCP2515::ERROR_OK) {
-                    return false;
+                if (listenOnly) {
+                    if (detail::canBus1.setListenOnlyMode() != MCP2515::ERROR_OK) return false;
+                } else {
+                    if (detail::canBus1.setNormalMode() != MCP2515::ERROR_OK) return false;
                 }
                 detail::bus1Initialized = true;
                 return true;

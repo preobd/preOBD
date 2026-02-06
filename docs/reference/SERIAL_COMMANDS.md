@@ -602,9 +602,12 @@ BUS I2C CLOCK <kHz>              # Set I2C clock speed (100, 400, or 1000 kHz)
 BUS SPI                          # Show current SPI bus configuration
 BUS SPI <0|1|2>                  # Select SPI bus (0=SPI, 1=SPI1, 2=SPI2)
 BUS SPI CLOCK <Hz>               # Set SPI clock speed in Hz
-BUS CAN                          # Show current CAN bus configuration
-BUS CAN <0|1|2>                  # Select CAN bus (0=CAN1, 1=CAN2, 2=CAN3)
-BUS CAN BAUDRATE <bps>           # Set CAN baudrate (125000, 250000, 500000, 1000000)
+BUS CAN                                               # Show current CAN bus configuration
+BUS CAN BAUDRATE <bps>                                # Set CAN baudrate for both input/output (125000, 250000, 500000, 1000000)
+BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|LISTEN|DISABLE> [bps]  # Configure CAN input bus with mode and optional baudrate
+BUS CAN INPUT BAUDRATE <bps>                          # Set CAN input baudrate only
+BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [bps]  # Configure CAN output bus with optional baudrate
+BUS CAN OUTPUT BAUDRATE <bps>                         # Set CAN output baudrate only
 BUS SERIAL                       # Show all serial port status
 BUS SERIAL <1-8>                 # Show specific port status
 BUS SERIAL <1-8> ENABLE [baud]   # Enable serial port with optional baud rate
@@ -624,6 +627,19 @@ BUS SERIAL <1-8> BAUDRATE <rate> # Set serial port baud rate
 | ESP32 | Wire, Wire1 | SPI | CAN1 (TWAI) | Serial1-Serial2 |
 | Arduino Mega | Wire | SPI | None | Serial1-Serial3 |
 
+### CAN Input Modes
+
+CAN input supports three operating modes:
+- **DISABLE** - Input disabled, bus not initialized
+- **ENABLE** (Normal) - Active input with ACK. Use when communicating with CAN sensor devices that expect acknowledgment
+- **LISTEN** (Passive) - Listen-only monitoring. No ACK bits, no error frames, no TX of any kind. Use when sniffing an existing CAN bus (e.g., reading from a car's OBD-II/ECU network) to avoid disrupting communication between other nodes
+
+### CAN Baud Rates
+
+Supported CAN baud rates: 125000, 250000, 500000, 1000000 (bps)
+
+Input and output buses can operate at different speeds to support mixed protocols (e.g., J1939 input at 250kbps, OBD-II output at 500kbps).
+
 ### Serial Port Baud Rates
 
 Supported baud rates: 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600
@@ -637,10 +653,30 @@ SAVE                             # Save configuration
 SYSTEM REBOOT                    # Reboot to apply
 ```
 
-**Configure CAN bus and baudrate:**
+**Configure dual CAN buses with different baud rates:**
 ```
-BUS CAN 0                        # Use CAN1
-BUS CAN BAUDRATE 500000          # 500 kbps
+BUS CAN OUTPUT CAN1 ENABLE 500000   # OBD-II output on CAN1 at 500kbps
+BUS CAN INPUT CAN2 ENABLE 250000    # J1939 input on CAN2 at 250kbps (active mode)
+SAVE
+```
+
+**Enable listen-only mode for passive vehicle bus monitoring:**
+```
+BUS CAN OUTPUT CAN1 ENABLE 500000   # OBD-II output on CAN1
+BUS CAN INPUT CAN2 LISTEN 250000    # Passive monitoring of J1939 on CAN2 (no ACK/TX)
+SAVE
+```
+
+**Configure CAN with same baud rate (backward compatible):**
+```
+BUS CAN OUTPUT CAN1 ENABLE       # Enable CAN output on CAN1
+BUS CAN BAUDRATE 500000          # Set both input/output to 500kbps
+SAVE
+```
+
+**Update just the input baud rate:**
+```
+BUS CAN INPUT BAUDRATE 250000    # Change input to 250kbps for J1939
 SAVE
 ```
 
@@ -684,7 +720,8 @@ Active: SPI (MOSI=11, MISO=12, SCK=13) @ 4.0MHz
 Available buses: 0=SPI, 1=SPI1, 2=SPI2
 
 === CAN Bus Configuration ===
-Active: CAN1 (TX=22, RX=23) @ 500kbps
+Input:  CAN2 (LISTEN) @ 250kbps
+Output: CAN1 (ENABLED) @ 500kbps
 Available buses: 0=CAN1, 1=CAN2, 2=CAN3
 ```
 

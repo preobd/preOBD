@@ -50,8 +50,8 @@
 // Stub implementation when CAN is disabled
 namespace hal { namespace can {
 
-inline bool begin(uint32_t baudrate, uint8_t bus = 0) {
-    (void)baudrate; (void)bus;
+inline bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
+    (void)baudrate; (void)bus; (void)listenOnly;
     return false;
 }
 

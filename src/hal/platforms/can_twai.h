@@ -18,21 +18,41 @@ namespace hal { namespace can {
 namespace twai {
 #endif
 
-inline bool begin(uint32_t baudrate, uint8_t bus = 0) {
+inline bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
     // ESP32 only supports a single CAN bus
     if (bus != 0) return false;
 
     // Select pins based on ESP32 variant
+    int8_t txPin, rxPin;
     #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
-        // ESP32-S3/C3 pins: GPIO20 (TX), GPIO21 (RX)
-        ESP32Can.setPins(GPIO_NUM_20, GPIO_NUM_21);
+        txPin = GPIO_NUM_20; rxPin = GPIO_NUM_21;
     #else
-        // Original ESP32 pins: GPIO21 (TX), GPIO22 (RX)
-        ESP32Can.setPins(GPIO_NUM_21, GPIO_NUM_22);
+        txPin = GPIO_NUM_21; rxPin = GPIO_NUM_22;
     #endif
+    ESP32Can.setPins(txPin, rxPin);
 
     // Convert baudrate to TWAI speed setting (library expects kbps)
-    ESP32Can.setSpeed(ESP32Can.convertSpeed(baudrate / 1000));
+    TwaiSpeed speed = ESP32Can.convertSpeed(baudrate / 1000);
+    ESP32Can.setSpeed(speed);
+
+    if (listenOnly) {
+        // Pass custom general config with listen-only mode to begin()
+        // No ACK bits, no error frames, no TX of any kind
+        twai_general_config_t g_config = {
+            .mode           = TWAI_MODE_LISTEN_ONLY,
+            .tx_io          = (gpio_num_t)txPin,
+            .rx_io          = (gpio_num_t)rxPin,
+            .clkout_io      = TWAI_IO_UNUSED,
+            .bus_off_io     = TWAI_IO_UNUSED,
+            .tx_queue_len   = 0,        // No TX in listen-only
+            .rx_queue_len   = 5,
+            .alerts_enabled = TWAI_ALERT_NONE,
+            .clkout_divider = 0,
+            .intr_flags     = ESP_INTR_FLAG_LEVEL1
+        };
+        return ESP32Can.begin(speed, -1, -1, 0xFFFF, 0xFFFF,
+                              nullptr, &g_config, nullptr);
+    }
 
     return ESP32Can.begin();
 }

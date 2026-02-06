@@ -20,7 +20,7 @@
  * Initialize CAN input subsystem
  *
  * Uses systemConfig.buses.input_can_bus to determine which CAN bus to initialize.
- * Only initializes if can_input_enabled is true.
+ * Only initializes if can_input_mode is NORMAL or LISTEN (not OFF).
  *
  * @return true if initialization successful or disabled, false on error
  */

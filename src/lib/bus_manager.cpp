@@ -56,11 +56,11 @@ void initConfiguredBuses() {
 
     // Initialize CAN output bus if enabled
     if (systemConfig.buses.can_output_enabled && systemConfig.buses.output_can_bus != 0xFF) {
-        if (!initCANBus(systemConfig.buses.output_can_bus, systemConfig.buses.can_baudrate)) {
+        if (!initCANBus(systemConfig.buses.output_can_bus, systemConfig.buses.can_output_baudrate)) {
             // Fall back to bus 0 if requested bus fails
             if (systemConfig.buses.output_can_bus != 0) {
                 msg.debug.warn(TAG_CAN, "CAN output: Falling back to CAN1 (bus 0)");
-                initCANBus(0, systemConfig.buses.can_baudrate);
+                initCANBus(0, systemConfig.buses.can_output_baudrate);
             }
         }
     }
@@ -74,10 +74,10 @@ void initConfiguredBuses() {
     // 2. DUAL BUS: input_can_bus != output_can_bus (separate physical buses)
     //    - Input on CAN1, output on CAN2 (Teensy 3.6/4.x only)
     //    - Allows isolation of sensor import from OBD-II output traffic
-    if (systemConfig.buses.can_input_enabled && systemConfig.buses.input_can_bus != 0xFF) {
+    if (systemConfig.buses.can_input_mode != CAN_INPUT_OFF && systemConfig.buses.input_can_bus != 0xFF) {
         // Only initialize if different bus than output (avoid double-init in shared mode)
         if (systemConfig.buses.input_can_bus != systemConfig.buses.output_can_bus) {
-            if (!initCANBus(systemConfig.buses.input_can_bus, systemConfig.buses.can_baudrate)) {
+            if (!initCANBus(systemConfig.buses.input_can_bus, systemConfig.buses.can_input_baudrate)) {
                 msg.debug.warn(TAG_CAN, "CAN input: Failed to initialize bus %d", systemConfig.buses.input_can_bus);
             }
         } else {
@@ -436,9 +436,15 @@ void displayCANStatus() {
 #if NUM_CAN_BUSES > 0
     // Display input bus
     msg.control.print(F("Input:  "));
-    if (systemConfig.buses.input_can_bus != 0xFF && systemConfig.buses.can_input_enabled) {
+    if (systemConfig.buses.input_can_bus != 0xFF && systemConfig.buses.can_input_mode != CAN_INPUT_OFF) {
         msg.control.print(getCANBusName(systemConfig.buses.input_can_bus));
-        msg.control.print(F(" (ENABLED)"));
+        if (systemConfig.buses.can_input_mode == CAN_INPUT_LISTEN) {
+            msg.control.print(F(" (LISTEN) @ "));
+        } else {
+            msg.control.print(F(" (NORMAL) @ "));
+        }
+        msg.control.print(systemConfig.buses.can_input_baudrate / 1000);
+        msg.control.print(F("kbps"));
     } else {
         msg.control.print(F("DISABLED"));
     }
@@ -448,15 +454,13 @@ void displayCANStatus() {
     msg.control.print(F("Output: "));
     if (systemConfig.buses.output_can_bus != 0xFF && systemConfig.buses.can_output_enabled) {
         msg.control.print(getCANBusName(systemConfig.buses.output_can_bus));
-        msg.control.print(F(" (ENABLED)"));
+        msg.control.print(F(" (ENABLED) @ "));
+        msg.control.print(systemConfig.buses.can_output_baudrate / 1000);
+        msg.control.print(F("kbps"));
     } else {
         msg.control.print(F("DISABLED"));
     }
     msg.control.println();
-
-    msg.control.print(F("Baudrate: "));
-    msg.control.print(systemConfig.buses.can_baudrate / 1000);
-    msg.control.println(F("kbps"));
     msg.control.print(F("Available buses: "));
     for (uint8_t i = 0; i < NUM_CAN_BUSES; i++) {
         if (i > 0) msg.control.print(F(", "));

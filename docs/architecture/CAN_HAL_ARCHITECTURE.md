@@ -239,7 +239,8 @@ All controller implementations provide the same interface:
 namespace hal { namespace can {
 
 // Initialize CAN controller for a given bus
-bool begin(uint32_t baudrate, uint8_t bus = 0);
+// listenOnly: Enable passive monitoring mode (no ACK, no TX)
+bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false);
 
 // Shutdown CAN controller
 void end(uint8_t bus = 0);
@@ -273,14 +274,15 @@ namespace hal { namespace can { namespace flexcan {
 FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16> can0;
 FlexCAN_T4<CAN2, RX_SIZE_256, TX_SIZE_16> can1;
 
-bool begin(uint32_t baudrate, uint8_t bus) {
+bool begin(uint32_t baudrate, uint8_t bus, bool listenOnly = false) {
+    FLEXCAN_RXQUEUE_TABLE mode = listenOnly ? LISTEN_ONLY : TX;
     if (bus == 0) {
         can0.begin();
-        can0.setBaudRate(baudrate);
+        can0.setBaudRate(baudrate, mode);
         return true;
     } else if (bus == 1) {
         can1.begin();
-        can1.setBaudRate(baudrate);
+        can1.setBaudRate(baudrate, mode);
         return true;
     }
     return false;
@@ -300,6 +302,8 @@ bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t
 
 }}} // namespace hal::can::flexcan
 ```
+
+**Note on FlexCAN listen-only mode:** The FlexCAN_T4 library's `setBaudRate()` accepts an optional second parameter for operating mode (`TX`, `LISTEN_ONLY`, etc.). This allows setting baudrate and mode in a single call, which is used to support the `listenOnly` parameter in `hal::can::begin()`.
 
 ### Memory Footprint
 
@@ -423,8 +427,9 @@ lib_deps =
 
 1. **Explicit configuration** - Always use build flags to specify controller types
 2. **Pin conflicts** - Ensure SPI pins don't overlap with other peripherals
-3. **Baud rate consistency** - Use the same baud rate on all buses unless required otherwise
-4. **Test independently** - Verify each bus works before enabling hybrid mode
+3. **Per-bus baud rates** - Input and output buses can use different baud rates for mixed protocols
+4. **Listen-only mode** - Use passive monitoring for vehicle ECU buses to avoid disrupting communication
+5. **Test independently** - Verify each bus works before enabling hybrid mode
 
 ## Future Enhancements
 
