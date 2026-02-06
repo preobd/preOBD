@@ -7,7 +7,7 @@
  *
  * Also configures hardware serial ports (Serial1-Serial8) for TRANSPORT use.
  *
- * Total size: 16 bytes for BusConfig + 16 bytes for SerialPortConfig
+ * Total size: 26-28 bytes for BusConfig (platform dependent) + 16 bytes for SerialPortConfig
  */
 
 #ifndef BUS_CONFIG_H
@@ -58,7 +58,7 @@ struct BusConfig {
     // Runtime mode/enable flags
     uint8_t can_input_mode;     // CanInputMode: OFF(0), NORMAL(1), LISTEN(2)
     uint8_t can_output_enabled; // Enable CAN output (0=disabled, 1=enabled)
-};  // 26 bytes
+};  // 26 bytes nominal (28 with ARM padding)
 
 /**
  * Serial Port Baud Rate Index

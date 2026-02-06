@@ -32,7 +32,8 @@ inline bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
     ESP32Can.setPins(txPin, rxPin);
 
     // Convert baudrate to TWAI speed setting (library expects kbps)
-    ESP32Can.setSpeed(ESP32Can.convertSpeed(baudrate / 1000));
+    TwaiSpeed speed = ESP32Can.convertSpeed(baudrate / 1000);
+    ESP32Can.setSpeed(speed);
 
     if (listenOnly) {
         // Pass custom general config with listen-only mode to begin()
@@ -49,7 +50,7 @@ inline bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
             .clkout_divider = 0,
             .intr_flags     = ESP_INTR_FLAG_LEVEL1
         };
-        return ESP32Can.begin(TWAI_SPEED_SIZE, -1, -1, 0xFFFF, 0xFFFF,
+        return ESP32Can.begin(speed, -1, -1, 0xFFFF, 0xFFFF,
                               nullptr, &g_config, nullptr);
     }
 
