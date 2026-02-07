@@ -185,7 +185,9 @@ When creating implementation plans for NEW work, always include these phases:
 
 ### CHANGELOG.md Policy
 
-**Update CHANGELOG.md only once per branch** with a short summary of the branch's purpose before merging to `main`. DO NOT update the changelog for every individual commit.
+**Update CHANGELOG.md only once per branch** with a single one-line summary of the branch's purpose before merging to `main`. DO NOT update the changelog for every individual commit.
+
+Each entry must be a **single line** describing the feature or fix at a high level. No sub-bullets, no implementation details, no command syntax — that's what commit messages and documentation are for.
 
 Follow [Keep a Changelog](https://keepachangelog.com/) format:
 - **Added** - New features
