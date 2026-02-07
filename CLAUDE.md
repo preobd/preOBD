@@ -195,3 +195,41 @@ Follow [Keep a Changelog](https://keepachangelog.com/) format:
 - **Fixed** - Bug fixes
 - **Removed** - Removed features
 - **Deprecated** - Features to be removed in future
+
+### Public Release Process
+
+Two repos with separate git histories (no common ancestor):
+- `origin` (`preOBD-private`) — all development, busy commits, feature branches
+- `public` (`preOBD`) — clean squashed releases, one commit per version
+
+**Release steps:**
+
+1. **Prepare the release on `origin/main`:**
+   - Bump firmware version in `src/version.h`
+   - Move `[Unreleased]` → `[x.y.z] - YYYY-MM-DD` in CHANGELOG.md
+   - Add empty `[Unreleased]` section for next cycle
+   - Build verify: `pio run -e teensy41`
+   - Commit: `"release: preOBD vX.Y.Z"`
+
+2. **Squash merge to public:**
+   ```bash
+   git checkout -b release-prep public/main
+   git merge --squash origin/main --allow-unrelated-histories
+   git rm -f CLAUDE.md
+   git commit -m "preOBD vX.Y.Z"
+   git push public release-prep:main
+   ```
+
+3. **Tag the release on both remotes:**
+   ```bash
+   git tag vX.Y.Z
+   git push public vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+   Tagging origin marks which private commit corresponds to each public release.
+
+4. **Clean up:**
+   ```bash
+   git checkout main
+   git branch -d release-prep
+   ```
