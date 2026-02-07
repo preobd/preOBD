@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0-beta] - 2026-02-07
+
 ### Added
 - Per-input output routing to selectively route inputs to CAN, RealDash, Serial, or SD
 - Pin allocation status reporting via SYSTEM PINS command
@@ -109,7 +111,8 @@ Previous development releases. See git history for details.
 
 ---
 
-[Unreleased]: https://github.com/preobd/preOBD/compare/v0.6.5-beta...HEAD
+[Unreleased]: https://github.com/preobd/preOBD/compare/v0.7.0-beta...HEAD
+[0.7.0-beta]: https://github.com/preobd/preOBD/compare/v0.6.5-beta...v0.7.0-beta
 [0.6.5-beta]: https://github.com/preobd/preOBD/compare/v0.6.0-beta...v0.6.5-beta
 [0.6.0-beta]: https://github.com/preobd/preOBD/compare/v0.5.0-alpha...v0.6.0-beta
 [0.5.0-alpha]: https://github.com/preobd/preOBD/compare/v0.4.0-alpha...v0.5.0-alpha
