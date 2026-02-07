@@ -869,19 +869,21 @@ static int cmd_set(int argc, const char* const* argv) {
             msg.control.print(argv[1]);
             msg.control.print(F(" all data outputs "));
             msg.control.println(enable ? F("enabled") : F("disabled"));
+            msg.control.println(F("  (use SAVE to persist)"));
             return 0;
         }
 
         // SET <pin> OUTPUT <target> ENABLE|DISABLE
         // Map target name to OutputID
+        // streq() is case-insensitive, so "realdash", "RealDash", etc. all match
         uint8_t outputId;
         if (streq(argv[3], "CAN")) {
             outputId = OUTPUT_CAN;
-        } else if (streq(argv[3], "REALDASH") || streq(argv[3], "RealDash")) {
+        } else if (streq(argv[3], "REALDASH")) {
             outputId = OUTPUT_REALDASH;
-        } else if (streq(argv[3], "SERIAL") || streq(argv[3], "Serial")) {
+        } else if (streq(argv[3], "SERIAL")) {
             outputId = OUTPUT_SERIAL;
-        } else if (streq(argv[3], "SD_LOG") || streq(argv[3], "SD_Log") || streq(argv[3], "SD")) {
+        } else if (streq(argv[3], "SD_LOG") || streq(argv[3], "SD")) {
             outputId = OUTPUT_SD;
         } else {
             msg.control.print(F("ERROR: Unknown output '"));
@@ -898,8 +900,10 @@ static int cmd_set(int argc, const char* const* argv) {
             msg.control.print(argv[3]);
             msg.control.print(F(" "));
             msg.control.println(enable ? F("enabled") : F("disabled"));
+            msg.control.println(F("  (use SAVE to persist)"));
             return 0;
         }
+        msg.control.println(F("ERROR: Input not configured"));
         return 1;
     }
 
