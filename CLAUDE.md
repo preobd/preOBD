@@ -211,10 +211,11 @@ Two repos with separate git histories (no common ancestor):
    - Build verify: `pio run -e teensy41`
    - Commit: `"release: preOBD vX.Y.Z"`
 
-2. **Squash merge to public:**
+2. **Snapshot to public** (repos have unrelated histories, so use tree replacement):
    ```bash
    git checkout -b release-prep public/main
-   git merge --squash origin/main --allow-unrelated-histories
+   git rm -rf .
+   git checkout origin/main -- .
    git rm -f CLAUDE.md
    git commit -m "preOBD vX.Y.Z"
    git push public release-prep:main
