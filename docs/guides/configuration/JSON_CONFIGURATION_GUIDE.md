@@ -3,7 +3,7 @@
 **Version:** 0.5.0-alpha (Unreleased)
 **Last Updated:** 2025-12-19
 
-This guide covers JSON configuration in openEMS: creating configurations with `configure.py`, importing/exporting JSON, SD card backup/restore, custom calibrations, and maintaining backward compatibility when evolving firmware.
+This guide covers JSON configuration in preOBD: creating configurations with `configure.py`, importing/exporting JSON, SD card backup/restore, custom calibrations, and maintaining backward compatibility when evolving firmware.
 
 ## Table of Contents
 - [Overview](#overview)
@@ -21,7 +21,7 @@ This guide covers JSON configuration in openEMS: creating configurations with `c
 
 ## Overview
 
-The JSON configuration system in openEMS serves multiple purposes:
+The JSON configuration system in preOBD serves multiple purposes:
 
 1. **Static Configuration** - Generate compile-time configs with `configure.py` (saves EEPROM wear, enables optimizations)
 2. **Runtime Backup/Restore** - Save and load complete system state to/from SD card
@@ -114,7 +114,7 @@ The `configure.py` tool generates static configurations and optionally saves the
 
 ```bash
 # Navigate to project root
-cd /path/to/openEMS
+cd /path/to/preOBD
 
 # Run configuration tool
 python3 tools/configure.py
@@ -159,7 +159,7 @@ python3 tools/configure.py --load tools/saved-configs/dual_cht_config.json
 
 ## SD Card Backup and Restore
 
-openEMS supports runtime backup and restore of the complete system configuration via SD card. This includes:
+preOBD supports runtime backup and restore of the complete system configuration via SD card. This includes:
 - All input configurations (pin, application, sensor, calibration)
 - System settings (output modules, display, timing, pins)
 - Alarm thresholds and warmup times
@@ -256,7 +256,7 @@ Configuration saved to: production_config.json
 
 ## Custom Calibrations in JSON
 
-openEMS supports **four types** of custom calibrations that can be specified in JSON configs. These override sensor defaults with user-specific parameters.
+preOBD supports **four types** of custom calibrations that can be specified in JSON configs. These override sensor defaults with user-specific parameters.
 
 ### Calibration Type 1: THERMISTOR_STEINHART
 

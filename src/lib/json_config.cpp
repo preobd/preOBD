@@ -282,8 +282,12 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     buses["i2cClock"] = systemConfig.buses.i2c_clock;
     buses["spi"] = systemConfig.buses.active_spi;
     buses["spiClock"] = systemConfig.buses.spi_clock;
-    buses["can"] = systemConfig.buses.active_can;
-    buses["canBaudrate"] = systemConfig.buses.can_baudrate;
+    buses["canInputBus"] = systemConfig.buses.input_can_bus;
+    buses["canOutputBus"] = systemConfig.buses.output_can_bus;
+    buses["canInputMode"] = systemConfig.buses.can_input_mode;
+    buses["canOutputEnabled"] = systemConfig.buses.can_output_enabled;
+    buses["canInputBaudrate"] = systemConfig.buses.can_input_baudrate;
+    buses["canOutputBaudrate"] = systemConfig.buses.can_output_baudrate;
 
     // Serial Port Configuration
     JsonObject serial = systemObj["serial"].to<JsonObject>();
@@ -646,16 +650,40 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
         systemConfig.buses.i2c_clock = buses["i2cClock"] | DEFAULT_I2C_CLOCK;
         systemConfig.buses.active_spi = buses["spi"] | DEFAULT_SPI_BUS;
         systemConfig.buses.spi_clock = buses["spiClock"] | DEFAULT_SPI_CLOCK;
-        systemConfig.buses.active_can = buses["can"] | DEFAULT_CAN_BUS;
-        systemConfig.buses.can_baudrate = buses["canBaudrate"] | DEFAULT_CAN_BAUDRATE;
+
+        // CAN configuration - separate input/output buses
+        systemConfig.buses.input_can_bus = buses["canInputBus"] | 0xFF;
+        systemConfig.buses.output_can_bus = buses["canOutputBus"] | DEFAULT_CAN_BUS;
+        // Backward compatibility: canInputEnabled (bool) -> canInputMode (enum)
+        if (buses["canInputMode"].is<uint8_t>()) {
+            systemConfig.buses.can_input_mode = buses["canInputMode"] | CAN_INPUT_OFF;
+        } else {
+            // Old format: canInputEnabled=1 maps to NORMAL mode
+            systemConfig.buses.can_input_mode = (buses["canInputEnabled"] | 0) ? CAN_INPUT_NORMAL : CAN_INPUT_OFF;
+        }
+        systemConfig.buses.can_output_enabled = buses["canOutputEnabled"] | 1;
+
+        // Backward compatibility: if old canBaudrate exists but new ones don't, use it for both
+        if (buses["canBaudrate"].is<uint32_t>() && !buses["canInputBaudrate"].is<uint32_t>()) {
+            uint32_t baudrate = buses["canBaudrate"] | DEFAULT_CAN_BAUDRATE;
+            systemConfig.buses.can_input_baudrate = baudrate;
+            systemConfig.buses.can_output_baudrate = baudrate;
+        } else {
+            systemConfig.buses.can_input_baudrate = buses["canInputBaudrate"] | DEFAULT_CAN_BAUDRATE;
+            systemConfig.buses.can_output_baudrate = buses["canOutputBaudrate"] | DEFAULT_CAN_BAUDRATE;
+        }
     } else {
         // No buses object - use defaults (backward compatibility with old configs)
         systemConfig.buses.active_i2c = DEFAULT_I2C_BUS;
         systemConfig.buses.i2c_clock = DEFAULT_I2C_CLOCK;
         systemConfig.buses.active_spi = DEFAULT_SPI_BUS;
         systemConfig.buses.spi_clock = DEFAULT_SPI_CLOCK;
-        systemConfig.buses.active_can = DEFAULT_CAN_BUS;
-        systemConfig.buses.can_baudrate = DEFAULT_CAN_BAUDRATE;
+        systemConfig.buses.input_can_bus = 0xFF;  // Disabled by default
+        systemConfig.buses.output_can_bus = DEFAULT_CAN_BUS;
+        systemConfig.buses.can_input_mode = CAN_INPUT_OFF;
+        systemConfig.buses.can_output_enabled = 1;
+        systemConfig.buses.can_input_baudrate = DEFAULT_CAN_BAUDRATE;
+        systemConfig.buses.can_output_baudrate = DEFAULT_CAN_BAUDRATE;
     }
 
     return true;

@@ -6,6 +6,17 @@
  * and Sensor (hardware device) at runtime via serial commands or EEPROM.
  *
  * ============================================================================
+ * PIN ALLOCATION
+ * ============================================================================
+ *
+ * Physical pins:     0x00-0x7F (0-127)   - Hardware GPIO pins, analog inputs
+ * CAN virtual pins:  0xC0-0xDF (192-223) - CAN:0 to CAN:31 (32 sensors max)
+ * I2C virtual pins:  0xF0-0xFF (240-255) - I2C:0 to I2C:15 (reserved for future)
+ *
+ * Virtual pins don't correspond to physical GPIO - they represent data sources
+ * from bus protocols (CAN frames, I2C sensors with addresses, etc.)
+ *
+ * ============================================================================
  * ARCHITECTURE OVERVIEW
  * ============================================================================
  *
@@ -132,6 +143,18 @@ union CalibrationOverride {
         byte padding[3];
     } speed;
 
+    // CAN sensor (16 bytes)
+    struct {
+        uint16_t source_can_id;     // CAN ID to listen for
+        uint8_t source_pid;         // PID within CAN frame
+        uint8_t data_offset;        // Byte offset in frame
+        uint8_t data_length;        // 1-4 bytes
+        bool is_big_endian;         // Byte order
+        float scale_factor;         // Multiplier
+        float offset;               // Additive offset
+        byte padding[3];
+    } can;
+
     // Raw bytes for memset/EEPROM operations
     byte raw[16];
 };
@@ -167,7 +190,7 @@ struct AlarmContext {
 // Size: ~100 bytes per input
 struct Input {
     // === Hardware (1 byte) ===
-    uint8_t pin;                    // Physical pin (A0-A15, or digital, or 0xF0-0xFE for I2C virtual)
+    uint8_t pin;                    // Physical pin (A0-A15, or digital, or 0xF0-0xFD for I2C virtual)
     // Note: Bus selection is global via SystemConfig.buses (not per-input)
 
     // === User Configuration ===
@@ -187,6 +210,9 @@ struct Input {
     // === OBDII ===
     uint8_t obd2pid;               // OBD-II PID
     uint8_t obd2length;            // OBD-II response length
+
+    // === Output Routing ===
+    uint8_t outputMask;            // Per-input output routing (bits 0-3: CAN, RealDash, Serial, SD)
 
     // === Runtime Data ===
     float value;                    // Current sensor reading

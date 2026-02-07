@@ -1,6 +1,6 @@
 # Alarm System Guide
 
-**Comprehensive guide to the openEMS alarm state machine**
+**Comprehensive guide to the preOBD alarm state machine**
 
 ---
 
@@ -20,7 +20,7 @@
 
 ## Overview
 
-The openEMS alarm system uses a **state-machine architecture** to provide robust, false-alarm-resistant monitoring. This system addresses common problems with simple threshold alarms:
+The preOBD alarm system uses a **state-machine architecture** to provide robust, false-alarm-resistant monitoring. This system addresses common problems with simple threshold alarms:
 
 **Problems Solved:**
 - False alarms during cold start (oil pressure, coolant temp rising)

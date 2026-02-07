@@ -8,6 +8,8 @@
 #include "pin_registry.h"
 #include "message_api.h"
 #include "log_tags.h"
+#include "system_config.h"
+#include "../inputs/input_manager.h"
 #include <Arduino.h>
 
 // ============================================================================
@@ -129,14 +131,16 @@ bool validateNoPinConflict(uint8_t pin, PinUsageType newType, const char* newDes
     const char* existingDesc = getPinDescription(pin);
 
     msg.debug.error(TAG_SYSTEM, "Pin %d already in use", pin);
-    msg.debug.error(TAG_SYSTEM, "  Current: %s%s%s",
+    msg.debug.error(TAG_SYSTEM, "  Current: %s%s%s%s",
                    getPinUsageTypeName(existingType),
                    existingDesc ? " (" : "",
-                   existingDesc ? existingDesc : "");
-    msg.debug.error(TAG_SYSTEM, "  Attempted: %s%s%s",
+                   existingDesc ? existingDesc : "",
+                   existingDesc ? ")" : "");
+    msg.debug.error(TAG_SYSTEM, "  Attempted: %s%s%s%s",
                    getPinUsageTypeName(newType),
                    newDesc ? " (" : "",
-                   newDesc ? newDesc : "");
+                   newDesc ? newDesc : "",
+                   newDesc ? ")" : "");
 
     return false;  // Conflict detected
 }
@@ -203,4 +207,211 @@ const PinUsage* getPinUsageByIndex(uint8_t index) {
         return nullptr;
     }
     return &pinRegistry[index];
+}
+
+// ============================================================================
+// PIN STATUS DISPLAY
+// ============================================================================
+
+// Helper to print pin name (A0, CAN:0, I2C:0, or numeric)
+static void printPinName(uint8_t pin) {
+    // Check for special Teensy pins first before virtual pin ranges
+    if (pin == 254) {
+        // Teensy built-in SDIO pin
+        msg.control.print(F("SDIO"));
+    } else if (pin >= 0xF0) {
+        msg.control.print(F("I2C:"));
+        msg.control.print(pin - 0xF0);
+    } else if (pin >= 0xC0 && pin < 0xE0) {
+        msg.control.print(F("CAN:"));
+        msg.control.print(pin - 0xC0);
+    } else if (pin >= A0) {
+        msg.control.print(F("A"));
+        msg.control.print(pin - A0);
+    } else {
+        msg.control.print(pin);
+    }
+}
+
+// Helper to print pin with padding for alignment
+static void printPinPadded(uint8_t pin) {
+    msg.control.print(F("  Pin "));
+
+    // Determine width needed for pin number
+    if (pin == 254) {
+        // Teensy built-in SDIO pin - special case
+        printPinName(pin);
+    } else if (pin >= 0xF0 || (pin >= 0xC0 && pin < 0xE0)) {
+        // Virtual pins like "CAN:0" or "I2C:15" - already at least 5 chars
+        printPinName(pin);
+    } else if (pin >= A0) {
+        // Analog pins like "A0" - pad to 2 chars
+        msg.control.print(F("A"));
+        uint8_t analogNum = pin - A0;
+        msg.control.print(analogNum);
+    } else {
+        // Digital pins - pad to 2 chars
+        if (pin < 10) msg.control.print(' ');
+        msg.control.print(pin);
+    }
+
+    msg.control.print(F(": "));
+}
+
+void printPinStatus(uint8_t specificPin) {
+    // Query specific pin mode
+    if (specificPin != 0xFF) {
+        // Check if pin is in registry
+        PinUsageType usage = getPinUsage(specificPin);
+        const char* desc = getPinDescription(specificPin);
+
+        if (usage != PIN_UNUSED) {
+            printPinPadded(specificPin);
+            msg.control.print(getPinUsageTypeName(usage));
+            if (desc) {
+                msg.control.print(F("  - "));
+                msg.control.print(desc);
+            }
+            msg.control.println();
+            return;
+        }
+
+        // Check inputs array
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].pin == specificPin && inputs[i].applicationIndex != 0xFF) {
+                printPinPadded(specificPin);
+                msg.control.print(F("Input     - "));
+                msg.control.print(inputs[i].displayName);
+                if (inputs[i].abbrName[0] != '\0') {
+                    msg.control.print(F(" ("));
+                    msg.control.print(inputs[i].abbrName);
+                    msg.control.print(F(")"));
+                }
+                msg.control.println();
+                return;
+            }
+        }
+
+        #ifdef ENABLE_RELAY_OUTPUT
+        // Check relays
+        for (uint8_t i = 0; i < MAX_RELAYS; i++) {
+            if (systemConfig.relays[i].outputPin == specificPin &&
+                systemConfig.relays[i].outputPin != 0xFF) {
+                printPinPadded(specificPin);
+                msg.control.print(F("Output    - Relay "));
+                msg.control.println(i);
+                return;
+            }
+        }
+        #endif
+
+        // Pin not found
+        printPinPadded(specificPin);
+        msg.control.println(F("Available"));
+        return;
+    }
+
+    // Full listing mode
+    msg.control.println(F("=== Pin Allocation Status ==="));
+    msg.control.print(F("Registry: "));
+    msg.control.print(registrySize);
+    msg.control.print(F(" | Inputs: "));
+
+    // Use global count of active inputs (pin != 0xFF && isEnabled)
+    extern uint8_t numActiveInputs;
+    msg.control.print(numActiveInputs);
+
+    #ifdef ENABLE_RELAY_OUTPUT
+    // Count active relays
+    uint8_t relayCount = 0;
+    for (uint8_t i = 0; i < MAX_RELAYS; i++) {
+        if (systemConfig.relays[i].outputPin != 0xFF) {
+            relayCount++;
+        }
+    }
+    msg.control.print(F(" | Relays: "));
+    msg.control.print(relayCount);
+    #endif
+
+    msg.control.println();
+    msg.control.println();
+
+    // System Pins (buttons, buzzers, chip selects)
+    bool hasSystemPins = false;
+    for (uint8_t i = 0; i < registrySize; i++) {
+        if (pinRegistry[i].type == PIN_BUTTON ||
+            pinRegistry[i].type == PIN_BUZZER ||
+            pinRegistry[i].type == PIN_CS) {
+            if (!hasSystemPins) {
+                msg.control.println(F("System Pins:"));
+                hasSystemPins = true;
+            }
+            printPinPadded(pinRegistry[i].pin);
+            msg.control.print(getPinUsageTypeName(pinRegistry[i].type));
+            if (pinRegistry[i].description) {
+                msg.control.print(F("  - "));
+                msg.control.print(pinRegistry[i].description);
+            }
+            msg.control.println();
+        }
+    }
+    if (hasSystemPins) msg.control.println();
+
+    // Bus Pins (reserved for I2C, SPI, CAN hardware)
+    bool hasBusPins = false;
+    for (uint8_t i = 0; i < registrySize; i++) {
+        if (pinRegistry[i].type == PIN_RESERVED) {
+            if (!hasBusPins) {
+                msg.control.println(F("Bus Pins:"));
+                hasBusPins = true;
+            }
+            printPinPadded(pinRegistry[i].pin);
+            msg.control.print(F("Reserved  - "));
+            if (pinRegistry[i].description) {
+                msg.control.print(pinRegistry[i].description);
+            }
+            msg.control.println();
+        }
+    }
+    if (hasBusPins) msg.control.println();
+
+    // Input Pins (sensor inputs)
+    bool hasInputs = false;
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        // Only show inputs that have both an application AND a valid pin assigned
+        // Exclude 0xFF (invalid/unassigned pin marker)
+        if (inputs[i].applicationIndex != 0xFF && inputs[i].pin != 0xFF) {
+            if (!hasInputs) {
+                msg.control.println(F("Input Pins:"));
+                hasInputs = true;
+            }
+            printPinPadded(inputs[i].pin);
+            msg.control.print(F("Input     - "));
+            msg.control.print(inputs[i].displayName);
+            if (inputs[i].abbrName[0] != '\0') {
+                msg.control.print(F(" ("));
+                msg.control.print(inputs[i].abbrName);
+                msg.control.print(F(")"));
+            }
+            msg.control.println();
+        }
+    }
+    if (hasInputs) msg.control.println();
+
+    #ifdef ENABLE_RELAY_OUTPUT
+    // Relay Pins (output relays)
+    bool hasRelays = false;
+    for (uint8_t i = 0; i < MAX_RELAYS; i++) {
+        if (systemConfig.relays[i].outputPin != 0xFF) {
+            if (!hasRelays) {
+                msg.control.println(F("Relay Pins:"));
+                hasRelays = true;
+            }
+            printPinPadded(systemConfig.relays[i].outputPin);
+            msg.control.print(F("Output    - Relay "));
+            msg.control.println(i);
+        }
+    }
+    if (hasRelays) msg.control.println();
+    #endif
 }

@@ -7,13 +7,31 @@
  *
  * Also configures hardware serial ports (Serial1-Serial8) for TRANSPORT use.
  *
- * Total size: 16 bytes for BusConfig + 16 bytes for SerialPortConfig
+ * Total size: 26-28 bytes for BusConfig (platform dependent) + 16 bytes for SerialPortConfig
  */
 
 #ifndef BUS_CONFIG_H
 #define BUS_CONFIG_H
 
 #include <stdint.h>
+
+/**
+ * CAN Input Mode
+ *
+ * Controls how the CAN input bus operates:
+ * - OFF:     Input disabled, bus not initialized
+ * - NORMAL:  Active input with ACK. Use when communicating with CAN sensor
+ *            devices that expect acknowledgment (e.g., external CAN sensors).
+ * - LISTEN:  Listen-only / passive monitoring. No ACK bits, no error frames,
+ *            no TX of any kind. Use when sniffing an existing CAN bus
+ *            (e.g., reading from a car's OBD-II/ECU network) to avoid
+ *            disrupting communication between other nodes.
+ */
+enum CanInputMode : uint8_t {
+    CAN_INPUT_OFF    = 0,   // Disabled
+    CAN_INPUT_NORMAL = 1,   // Active input with ACK
+    CAN_INPUT_LISTEN = 2    // Listen-only (passive, no ACK/TX)
+};
 
 /**
  * Bus Configuration Structure
@@ -25,17 +43,22 @@
  * Example: active_i2c=1 means all I2C sensors use Wire1
  */
 struct BusConfig {
-    uint8_t active_i2c;      // 0=Wire, 1=Wire1, 2=Wire2
-    uint16_t i2c_clock;      // kHz (100, 400, 1000)
+    uint8_t active_i2c;         // 0=Wire, 1=Wire1, 2=Wire2
+    uint16_t i2c_clock;         // kHz (100, 400, 1000)
 
-    uint8_t active_spi;      // 0=SPI, 1=SPI1, 2=SPI2
-    uint32_t spi_clock;      // Hz (e.g., 4000000 = 4MHz)
+    uint8_t active_spi;         // 0=SPI, 1=SPI1, 2=SPI2
+    uint32_t spi_clock;         // Hz (e.g., 4000000 = 4MHz)
 
-    uint8_t active_can;      // 0=CAN1, 1=CAN2, 2=CAN3
-    uint32_t can_baudrate;   // bps (125000, 250000, 500000, 1000000)
+    // CAN configuration - supports input/output separation with per-bus baud rates
+    uint8_t input_can_bus;      // 0=CAN1, 1=CAN2, 2=CAN3, 0xFF=NONE (disabled)
+    uint8_t output_can_bus;     // 0=CAN1, 1=CAN2, 2=CAN3, 0xFF=NONE (disabled)
+    uint32_t can_input_baudrate;  // bps - input bus baud rate (125000, 250000, 500000, 1000000)
+    uint32_t can_output_baudrate; // bps - output bus baud rate (125000, 250000, 500000, 1000000)
 
-    uint8_t reserved[2];     // Padding for alignment
-};  // 16 bytes
+    // Runtime mode/enable flags
+    uint8_t can_input_mode;     // CanInputMode: OFF(0), NORMAL(1), LISTEN(2)
+    uint8_t can_output_enabled; // Enable CAN output (0=disabled, 1=enabled)
+};  // 26 bytes nominal (28 with ARM padding)
 
 /**
  * Serial Port Baud Rate Index

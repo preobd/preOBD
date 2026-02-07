@@ -1,4 +1,4 @@
-# openEMS Quick Reference
+# preOBD Quick Reference
 
 **Fast lookup guide for common tasks and configurations**
 
@@ -45,8 +45,8 @@ See [Build Configuration Guide](../guides/configuration/BUILD_CONFIGURATION_GUID
 ### 1. Connect and Build
 
 ```bash
-git clone https://github.com/preobd/openEMS.git
-cd openEMS
+git clone https://github.com/preobd/preOBD.git
+cd preOBD
 pio run -e teensy41 -t upload    # Build and upload for Teensy 4.1
 pio device monitor               # 115200 baud
 ```

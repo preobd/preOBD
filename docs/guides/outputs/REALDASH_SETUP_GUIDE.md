@@ -1,8 +1,8 @@
-# RealDash Setup Guide for openEMS
+# RealDash Setup Guide for preOBD
 
 ## What is RealDash?
 
-RealDash is a customizable digital dashboard application for iOS and Android that connects to your vehicle's sensors and displays real-time data. With openEMS and RealDash, you can create professional-looking gauges, graphs, and warning displays on your tablet or phone.
+RealDash is a customizable digital dashboard application for iOS and Android that connects to your vehicle's sensors and displays real-time data. With preOBD and RealDash, you can create professional-looking gauges, graphs, and warning displays on your tablet or phone.
 
 **Key Features:**
 - Fully customizable dashboard layouts
@@ -13,11 +13,11 @@ RealDash is a customizable digital dashboard application for iOS and Android tha
 
 ## Hardware Requirements
 
-To connect openEMS to RealDash, you need one of the following:
+To connect preOBD to RealDash, you need one of the following:
 
 ### Option 1: Bluetooth Serial Adapter (Recommended)
 - **Hardware**: HC-05 or HM-10 Bluetooth module
-- **Connection**: Connect to openEMS serial TX/RX pins
+- **Connection**: Connect to preOBD serial TX/RX pins
 - **Pros**: Wireless, easy to use, works while driving
 - **Cons**: Requires additional hardware (~$5-10)
 
@@ -34,14 +34,14 @@ To connect openEMS to RealDash, you need one of the following:
    - Free version supports 1 dashboard with basic features
    - Premium version unlocks unlimited dashboards and advanced features
 
-2. **openEMS Firmware**
+2. **preOBD Firmware**
    - RealDash output must be enabled in `config.h`
    - Verify `#define ENABLE_REALDASH` is uncommented
    - Upload firmware to Teensy
 
 ## Installation Steps
 
-### Step 1: Enable RealDash Output in openEMS
+### Step 1: Enable RealDash Output in preOBD
 
 Edit `/src/config.h`:
 
@@ -52,12 +52,12 @@ Edit `/src/config.h`:
 
 Compile and upload the firmware to your Teensy.
 
-### Step 2: Install openEMS XML Channel Description
+### Step 2: Install preOBD XML Channel Description
 
-The XML file tells RealDash how to decode openEMS sensor data.
+The XML file tells RealDash how to decode preOBD sensor data.
 
 **On Computer:**
-1. Locate the XML file at: `/docs/realdash/openEMS.xml`
+1. Locate the XML file at: `/docs/realdash/preOBD.xml`
 2. Transfer it to your mobile device using:
    - Email attachment
    - Cloud storage (Google Drive, Dropbox, iCloud)
@@ -65,7 +65,7 @@ The XML file tells RealDash how to decode openEMS sensor data.
    - AirDrop (iOS) or Nearby Share (Android)
 
 **On Mobile Device:**
-1. Save the `openEMS.xml` file to a known location (Downloads folder works fine)
+1. Save the `preOBD.xml` file to a known location (Downloads folder works fine)
 
 ### Step 3: Configure RealDash Connection
 
@@ -84,7 +84,7 @@ The XML file tells RealDash how to decode openEMS sensor data.
 7. Set **Baud Rate**: `115200`
 8. Select **Protocol**: `RealDash CAN`
 9. Tap **Custom Channel Description File**
-10. Navigate to and select `openEMS.xml`
+10. Navigate to and select `preOBD.xml`
 11. Tap **Done**
 
 **For USB Serial:**
@@ -93,7 +93,7 @@ The XML file tells RealDash how to decode openEMS sensor data.
 7. Set **Baud Rate**: `115200`
 8. Select **Protocol**: `RealDash CAN`
 9. Tap **Custom Channel Description File**
-10. Navigate to and select `openEMS.xml`
+10. Navigate to and select `preOBD.xml`
 11. Tap **Done**
 
 ### Step 4: Connect and Verify
@@ -110,7 +110,7 @@ The XML file tells RealDash how to decode openEMS sensor data.
 
 ## Available Sensors
 
-openEMS provides the following sensors to RealDash:
+preOBD provides the following sensors to RealDash:
 
 | Sensor Name | RealDash Input Name | Units |
 |-------------|---------------------|-------|
@@ -152,9 +152,9 @@ Repeat for all sensors you want to display.
 ### Problem: "No data" or sensors show "---"
 
 **Possible causes:**
-1. **openEMS not sending data**
+1. **preOBD not sending data**
    - Verify `ENABLE_REALDASH` is defined in config.h
-   - Check sensors are enabled and configured in openEMS
+   - Check sensors are enabled and configured in preOBD
    - Use Arduino Serial Monitor to verify data is being sent (you should see binary data at 115200 baud)
 
 2. **Connection issues**
@@ -163,12 +163,12 @@ Repeat for all sensors you want to display.
    - Try disconnecting and reconnecting
 
 3. **Wrong baud rate**
-   - Must be 115200 in both openEMS and RealDash
+   - Must be 115200 in both preOBD and RealDash
    - Double-check connection settings
 
 4. **XML not loaded**
    - Go to RealDash connection settings
-   - Verify "Custom Channel Description File" shows `openEMS.xml`
+   - Verify "Custom Channel Description File" shows `preOBD.xml`
    - Try re-importing the XML file
 
 ### Problem: Gauges show incorrect values
@@ -176,12 +176,12 @@ Repeat for all sensors you want to display.
 **Possible causes:**
 1. **Unit conversion mismatch**
    - RealDash displays show wrong units (check RealDash settings)
-   - Sensor calibration in openEMS is incorrect
+   - Sensor calibration in preOBD is incorrect
    - Check gauge configuration → Input scaling
 
 2. **Sensor not reading correctly**
-   - Compare RealDash values to openEMS LCD display
-   - If LCD is also wrong, problem is with sensor/calibration in openEMS
+   - Compare RealDash values to preOBD LCD display
+   - If LCD is also wrong, problem is with sensor/calibration in preOBD
    - If LCD is correct but RealDash is wrong, check XML conversion formulas
 
 ### Problem: Connection keeps dropping
@@ -244,7 +244,7 @@ You can apply additional math to sensor values:
 
 ### Frame Format
 
-openEMS sends RealDash-CAN Type 44 frames:
+preOBD sends RealDash-CAN Type 44 frames:
 
 ```
 Bytes 0-3:   [0x44, 0x33, 0x22, 0x11]  Preamble
@@ -280,9 +280,9 @@ RealDash checks byte 2 of each frame and applies the matching definition.
 ## Support
 
 For issues with:
-- **openEMS firmware**: See main openEMS documentation
+- **preOBD firmware**: See main preOBD documentation
 - **RealDash app**: Visit [RealDash Forum](https://forum.realdash.net/)
-- **This integration**: Open an issue on the openEMS GitHub repository
+- **This integration**: Open an issue on the preOBD GitHub repository
 
 ## Additional Resources
 

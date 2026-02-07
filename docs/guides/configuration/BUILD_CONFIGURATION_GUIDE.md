@@ -1,6 +1,6 @@
 # Build Configuration Guide
 
-This guide explains how openEMS separates compile-time feature selection from runtime configuration, and how to customize builds for your specific needs.
+This guide explains how preOBD separates compile-time feature selection from runtime configuration, and how to customize builds for your specific needs.
 
 ## Quick Reference
 
@@ -20,7 +20,7 @@ This guide explains how openEMS separates compile-time feature selection from ru
 
 ## Understanding the Two-Tier System
 
-openEMS uses a clear separation between compile-time and runtime configuration:
+preOBD uses a clear separation between compile-time and runtime configuration:
 
 ### Compile-Time Configuration (platformio.ini)
 
@@ -65,7 +65,7 @@ build_flags =
 
 ## Output Module Availability: Compile-time vs Runtime
 
-openEMS uses a two-tier system for output modules:
+preOBD uses a two-tier system for output modules:
 
 ### Compile-time Control (platformio.ini)
 
@@ -211,22 +211,22 @@ lib_deps =
 
 ## Library Dependencies
 
-openEMS uses modular library dependency groups for clarity:
+preOBD uses modular library dependency groups for clarity:
 
 ### Standard Feature Set
 
 ```ini
 [standard_features]
 build_flags =
-    -D ENABLE_CAN           # CAN bus output
-    -D ENABLE_REALDASH      # RealDash protocol output
-    -D ENABLE_SERIAL_OUTPUT # CSV serial output
-    -D ENABLE_SD_LOGGING    # SD card data logging
-    -D ENABLE_LCD           # LCD display
-    -D ENABLE_ALARMS        # Alarm system
-    -D ENABLE_LEDS          # LED indicators
-    -D ENABLE_TEST_MODE     # Test mode for development
-    -D ENABLE_BME280        # BME280 environmental sensor
+    -D ENABLE_CAN            # CAN bus output
+    -D ENABLE_REALDASH       # RealDash protocol output
+    -D ENABLE_SERIAL_OUTPUT  # CSV serial output
+    -D ENABLE_SD_LOGGING     # SD card data logging
+    -D ENABLE_LCD            # LCD display
+    -D ENABLE_ALARMS         # Alarm system
+    -D ENABLE_LED  # RGB LED status indicator (pins 6-8, PWM required)
+    -D ENABLE_TEST_MODE      # Test mode for development
+    -D ENABLE_BME280         # BME280 environmental sensor
 ```
 
 ### Available Library Groups
@@ -257,9 +257,39 @@ CAN support varies by platform:
 
 | Platform | CAN Implementation | Library | Notes |
 |----------|-------------------|---------|-------|
-| **Teensy 4.x/3.x** | Native FlexCAN | FlexCAN_T4 | Built-in CAN controller, no external chip needed |
-| **ESP32** | Native TWAI | ESP32-TWAI-CAN | Built-in CAN controller, **external transceiver required** |
-| **Mega/Uno/Due** | External MCP2515 | sandeepmistry/CAN | Requires MCP2515 CAN controller via SPI |
+| **Teensy 4.x/3.x** | Native FlexCAN | FlexCAN_T4 | Built-in CAN controller, no external chip needed, supports 2-3 buses |
+| **ESP32** | Native TWAI | ESP32-TWAI-CAN | Built-in CAN controller, **external transceiver required**, 1 bus |
+| **Mega/Uno/Due** | External MCP2515 | autowp-mcp2515 | Requires MCP2515 CAN controller via SPI |
+| **STM32** | Native bxCAN | TBD | Planned support, 1-2 buses depending on variant |
+
+### Hybrid CAN Controller Mode
+
+preOBD supports mixing different CAN controller types on different buses. This allows platforms to use both native and external controllers simultaneously.
+
+**Example use cases:**
+- ESP32 with native TWAI (bus 0) + external MCP2515 (bus 1) for dual-bus operation
+- Teensy 4.1 with 3 native FlexCAN buses + external MCP2515 (bus 3) for a 4th bus
+
+**Build flags for hybrid mode:**
+```ini
+build_flags =
+    -D ENABLE_CAN_HYBRID                        # Enable hybrid controller support
+    -D CAN_BUS_0_TYPE=CanControllerType::TWAI   # Explicitly set bus 0 controller
+    -D CAN_BUS_1_TYPE=CanControllerType::MCP2515 # Explicitly set bus 1 controller
+```
+
+**Available controller types:**
+- `CanControllerType::FLEXCAN` - Teensy native FlexCAN
+- `CanControllerType::TWAI` - ESP32 native TWAI
+- `CanControllerType::MCP2515` - External SPI CAN controller
+- `CanControllerType::BXCAN` - STM32 native bxCAN (planned)
+- `CanControllerType::NONE` - No controller / disabled
+
+**Pre-configured hybrid environments:**
+```bash
+pio run -e esp32s3_hybrid    # ESP32-S3: TWAI + MCP2515
+pio run -e teensy41_hybrid   # Teensy 4.1: 3x FlexCAN + MCP2515
+```
 
 **Example - ESP32 with native CAN:**
 ```ini
@@ -311,6 +341,26 @@ lib_deps =
     ${eeprom_libs.lib_deps}
 ```
 
+**Example - ESP32 with Hybrid Mode (TWAI + MCP2515):**
+```ini
+[env:esp32s3_hybrid]
+platform = espressif32
+board = esp32-s3-devkitm-1
+build_flags =
+    ${standard_features.build_flags}
+    -D ENABLE_CAN_HYBRID
+    -D CAN_BUS_0_TYPE=CanControllerType::TWAI
+    -D CAN_BUS_1_TYPE=CanControllerType::MCP2515
+lib_deps =
+    ${core_libs.lib_deps}
+    ${display_libs.lib_deps}
+    ${sd_libs.lib_deps}
+    ${sensor_libs.lib_deps}
+    ${eeprom_libs.lib_deps}
+    https://github.com/handmade0ctopus/ESP32-TWAI-CAN.git  # Native TWAI for bus 0
+    autowp/autowp-mcp2515@^1.0.3  # External SPI for bus 1
+```
+
 ### Platform-Specific Bluetooth Support
 
 Bluetooth support is platform-dependent and requires no build flags:
@@ -334,7 +384,7 @@ build_flags =
     ${standard_features.build_flags}
 ```
 
-At runtime, ESP32 will initialize Bluetooth Classic with device name "openEMS" and register it as a transport for RealDash and serial commands.
+At runtime, ESP32 will initialize Bluetooth Classic with device name "preOBD" and register it as a transport for RealDash and serial commands.
 
 **Example - Teensy with HC-05 Bluetooth module:**
 No special configuration needed - just wire HC-05 TX/RX to Serial2 (pins 7/8 on Teensy 4.1). The transport system automatically makes Serial2 available for commands and RealDash output.

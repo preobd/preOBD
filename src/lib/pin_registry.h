@@ -181,4 +181,19 @@ uint8_t getPinRegistrySize();
  */
 const PinUsage* getPinUsageByIndex(uint8_t index);
 
+/**
+ * Print comprehensive pin allocation status
+ *
+ * Shows all pin allocations organized by category: system pins, bus pins,
+ * input pins, and relay output pins. Handles virtual pins (CAN:0-31, I2C:0-15)
+ * and analog pins (A0-A15) with proper formatting.
+ *
+ * @param specificPin Pin number to query (0xFF = show all pins)
+ *
+ * Usage:
+ *   printPinStatus();           // Show all pin allocations
+ *   printPinStatus(false, A0);  // Query specific pin
+ */
+void printPinStatus(uint8_t specificPin = 0xFF);
+
 #endif // PIN_REGISTRY_H

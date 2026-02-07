@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  openEMS RealDash CAN Channel Description
+  preOBD RealDash CAN Channel Description
   Version: 1.0
 
-  This file describes how to decode openEMS sensor data transmitted via
+  This file describes how to decode preOBD sensor data transmitted via
   RealDash-CAN protocol (Type 44 frames).
 
   INSTALLATION INSTRUCTIONS:

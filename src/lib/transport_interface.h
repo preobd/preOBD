@@ -5,7 +5,7 @@
  * communication backends. Enables runtime switching between transports and
  * supports multiple transport types (USB Serial, hardware UARTs, BT/BLE).
  *
- * Part of the Transport Abstraction Layer (TAL) for openEMS.
+ * Part of the Transport Abstraction Layer (TAL) for preOBD.
  */
 
 #ifndef TRANSPORT_INTERFACE_H
@@ -121,6 +121,27 @@ public:
         size_t n = write('\r');
         n += write('\n');
         return n;
+    }
+
+    size_t print(char c) {
+        return write((uint8_t)c);
+    }
+
+    size_t println(char c) {
+        size_t n = print(c);
+        n += write('\r');
+        n += write('\n');
+        return n;
+    }
+
+    // uint8_t is typedef'd to unsigned char - provide explicit overloads
+    // to ensure numeric printing (not character printing)
+    size_t print(unsigned char n) {
+        return print((int)n);
+    }
+
+    size_t println(unsigned char n) {
+        return println((int)n);
     }
 
     size_t print(int n) {

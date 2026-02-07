@@ -1,6 +1,6 @@
-# Test Mode for openEMS
+# Test Mode for preOBD
 
-Test mode allows comprehensive testing of all openEMS outputs (LCD, CAN bus, alarms, SD logging, RealDash, Serial) **without requiring physical sensors**. It uses function pointer substitution to inject simulated sensor values while preserving all existing sensor reading code.
+Test mode allows comprehensive testing of all preOBD outputs (LCD, CAN bus, alarms, SD logging, RealDash, Serial) **without requiring physical sensors**. It uses function pointer substitution to inject simulated sensor values while preserving all existing sensor reading code.
 
 ## Features
 

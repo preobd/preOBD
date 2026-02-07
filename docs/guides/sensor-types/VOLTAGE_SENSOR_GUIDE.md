@@ -6,7 +6,7 @@
 
 ## Overview
 
-The `VOLTAGE_DIVIDER` sensor type monitors battery voltage using a resistor divider network. openEMS auto-configures the correct divider ratio based on your board's voltage level.
+The `VOLTAGE_DIVIDER` sensor type monitors battery voltage using a resistor divider network. preOBD auto-configures the correct divider ratio based on your board's voltage level.
 
 ---
 
@@ -104,7 +104,7 @@ SAVE
 
 ### Auto-Configuration
 
-openEMS automatically detects your board voltage and configures the divider ratio. For most setups, no calibration is needed.
+preOBD automatically detects your board voltage and configures the divider ratio. For most setups, no calibration is needed.
 
 ### Custom Divider Values
 

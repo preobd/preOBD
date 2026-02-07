@@ -6,7 +6,7 @@
 
 ## Overview
 
-Thermocouples are ideal for high-temperature measurements like Cylinder Head Temperature (CHT) and Exhaust Gas Temperature (EGT). openEMS supports K-type thermocouples with two amplifier chips:
+Thermocouples are ideal for high-temperature measurements like Cylinder Head Temperature (CHT) and Exhaust Gas Temperature (EGT). preOBD supports K-type thermocouples with two amplifier chips:
 
 | Sensor | Temperature Range | Resolution | Notes |
 |--------|------------------|------------|-------|
@@ -267,9 +267,9 @@ SAVE
 
 ## Read Timing
 
-openEMS automatically handles thermocouple read timing:
+preOBD automatically handles thermocouple read timing:
 
-| Sensor | Min Read Interval | openEMS Default |
+| Sensor | Min Read Interval | preOBD Default |
 |--------|------------------|-----------------|
 | MAX6675 | 220ms | 250ms |
 | MAX31855 | 100ms | 100ms |

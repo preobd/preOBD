@@ -20,6 +20,10 @@
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
 
+#ifdef ENABLE_LED
+#include "../lib/rgb_led.h"
+#endif
+
 // ===== ALARM OUTPUT STATE =====
 static bool alarmSilenced = false;        // Is alarm currently silenced?
 static uint32_t silenceStartTime = 0;    // When was silence button pressed?
@@ -36,33 +40,9 @@ void initAlarmOutput() {
     // Button is active LOW (pulls pin to GND when pressed)
     pinMode(MODE_BUTTON, INPUT_PULLUP);
 
-#ifdef ENABLE_LEDS
-    // Configure LED output pins (with conflict checks)
-    if (validateNoPinConflict(GREEN_LED, PIN_OUTPUT, "Green LED")) {
-        registerPin(GREEN_LED, PIN_OUTPUT, "Green LED");
-        pinMode(GREEN_LED, OUTPUT);
-        digitalWrite(GREEN_LED, LOW);
-    } else {
-        msg.debug.warn(TAG_ALARM, "Green LED pin %d conflict - skipping", GREEN_LED);
-    }
-
-    if (validateNoPinConflict(YELLOW_LED, PIN_OUTPUT, "Yellow LED")) {
-        registerPin(YELLOW_LED, PIN_OUTPUT, "Yellow LED");
-        pinMode(YELLOW_LED, OUTPUT);
-        digitalWrite(YELLOW_LED, LOW);
-    } else {
-        msg.debug.warn(TAG_ALARM, "Yellow LED pin %d conflict - skipping", YELLOW_LED);
-    }
-
-    if (validateNoPinConflict(RED_LED, PIN_OUTPUT, "Red LED")) {
-        registerPin(RED_LED, PIN_OUTPUT, "Red LED");
-        pinMode(RED_LED, OUTPUT);
-        digitalWrite(RED_LED, LOW);
-    } else {
-        msg.debug.warn(TAG_ALARM, "Red LED pin %d conflict - skipping", RED_LED);
-    }
-
-    msg.debug.info(TAG_ALARM, "Alarm output initialized (buzzer + LEDs)");
+#ifdef ENABLE_LED
+    // RGB LED is initialized separately in main.cpp
+    msg.debug.info(TAG_ALARM, "Alarm output initialized (buzzer + LED indicator)");
 #else
     msg.debug.info(TAG_ALARM, "Alarm output initialized (buzzer)");
 #endif
@@ -93,13 +73,33 @@ AlarmSeverity getSystemSeverity() {
     return worstSeverity;
 }
 
-#ifdef ENABLE_LEDS
-// Update LED states based on system severity
+#ifdef ENABLE_LED
+// Update RGB LED based on system severity
 void updateLEDs(AlarmSeverity severity) {
-    // Mutually exclusive LED control
-    digitalWrite(GREEN_LED, (severity == SEVERITY_NORMAL) ? HIGH : LOW);
-    digitalWrite(YELLOW_LED, (severity == SEVERITY_WARNING) ? HIGH : LOW);
-    digitalWrite(RED_LED, (severity == SEVERITY_ALARM) ? HIGH : LOW);
+    switch (severity) {
+        case SEVERITY_NORMAL:
+            // Normal operation - solid green
+            rgbLedSolid(RGB_COLOR_NORMAL, PRIORITY_WARNING);
+            break;
+
+        case SEVERITY_WARNING:
+            // Warning - blink yellow (or solid if disabled)
+#if RGB_ALARM_USE_BLINK
+            rgbLedBlink(RGB_COLOR_WARNING, RGB_BLINK_PERIOD_MS, PRIORITY_WARNING);
+#else
+            rgbLedSolid(RGB_COLOR_WARNING, PRIORITY_WARNING);
+#endif
+            break;
+
+        case SEVERITY_ALARM:
+            // Critical alarm - fast blink red (or solid if disabled)
+#if RGB_ALARM_USE_BLINK
+            rgbLedBlink(RGB_COLOR_ALARM, RGB_FAST_BLINK_MS, PRIORITY_ALARM);
+#else
+            rgbLedSolid(RGB_COLOR_ALARM, PRIORITY_ALARM);
+#endif
+            break;
+    }
 }
 #endif
 
@@ -123,7 +123,7 @@ void updateAlarmOutput() {
     // Scan all inputs to determine worst-case severity
     AlarmSeverity systemSeverity = getSystemSeverity();
 
-#ifdef ENABLE_LEDS
+#ifdef ENABLE_LED
     // ===== LED CONTROL =====
     updateLEDs(systemSeverity);
 #endif

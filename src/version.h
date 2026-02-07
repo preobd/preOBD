@@ -17,8 +17,8 @@
 // API / Feature Version (user-visible, changes rarely)
 // =============================================================================
 #define FW_MAJOR  0
-#define FW_MINOR  6
-#define FW_PATCH  5
+#define FW_MINOR  7
+#define FW_PATCH  0
 
 // Prerelease tag: "alpha", "beta", "rc1", or "" for release
 #define FW_PRERELEASE "beta"
@@ -43,8 +43,9 @@
 // EEPROM configuration version
 // Increment when Input struct layout changes (forces reconfiguration)
 // Version 2: Changed from storing enum indices to storing name hashes (Phase 5)
+// Version 3: Added per-input output routing mask (outputMask)
 // =============================================================================
-#define EEPROM_VERSION 2
+#define EEPROM_VERSION 3
 
 // =============================================================================
 // Helper functions (defined in version.cpp)

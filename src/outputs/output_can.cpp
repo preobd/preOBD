@@ -1,11 +1,12 @@
 /*
  * output_can.cpp - CAN bus output module
- * Supports both native FlexCAN (Teensy 3.x/4.x) and MCP2515 (all boards)
+ * Supports FlexCAN (Teensy), TWAI (ESP32), and MCP2515 (AVR) via HAL
  *
  * Features:
  * - Broadcast mode: Periodic transmission of all sensor PIDs (for RealDash)
  * - Request/Response mode: OBD-II Mode 01 queries (for ELM327/Torque)
  * - Hybrid mode: Both modes work simultaneously
+ * - Configurable output bus (supports dual-bus on Teensy)
  */
 
 #include "../config.h"
@@ -14,24 +15,14 @@
 #include "../inputs/input_manager.h"
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
+#include "../lib/system_config.h"
 
 #ifdef ENABLE_CAN
 
-// Select CAN library based on platform and configuration
-#if defined(USE_FLEXCAN_NATIVE) && (defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__) || defined(__IMXRT1062__))
-    // Use native FlexCAN on Teensy 3.x/4.x
-    #include <FlexCAN_T4.h>
-    FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16> Can0;
-    #define USING_FLEXCAN
-#elif defined(ESP32)
-    // Use native TWAI (CAN) on ESP32
-    #include <ESP32-TWAI-CAN.hpp>
-    #define USING_ESP32_TWAI
-#else
-    // Use MCP2515 via SPI (all other boards or when FlexCAN not selected)
-    #include <CAN.h>
-    #define USING_MCP2515
-#endif
+#include "../hal/hal_can.h"
+
+// Which bus we're outputting on (set during init)
+static uint8_t canOutputBus = 0;
 
 // ===== OBD-II REQUEST/RESPONSE SUPPORT =====
 
@@ -55,26 +46,7 @@ static uint8_t pidLookupCount = 0;
  * @param len Data length (usually 8)
  */
 static void sendCANFrame(uint32_t canId, const byte* data, uint8_t len) {
-    #ifdef USING_FLEXCAN
-        CAN_message_t msg;
-        msg.id = canId;
-        msg.len = len;
-        msg.flags.extended = 0;
-        msg.flags.remote = 0;
-        memcpy(msg.buf, data, len);
-        Can0.write(msg);
-    #elif defined(USING_ESP32_TWAI)
-        CanFrame frame;
-        frame.identifier = canId;
-        frame.extd = 0;
-        frame.data_length_code = len;
-        memcpy(frame.data, data, len);
-        ESP32Can.writeFrame(frame);
-    #else
-        CAN.beginPacket(canId, len);
-        CAN.write(data, len);
-        CAN.endPacket();
-    #endif
+    hal::can::write(canId, data, len, false, canOutputBus);  // Standard 11-bit ID
 }
 
 // ===== PID LOOKUP TABLE =====
@@ -199,6 +171,7 @@ static void sendNegativeResponse(uint32_t requestId, uint8_t mode, uint8_t nrc) 
     sendCANFrame(0x7E8, frameData, 8);
 
     #ifdef DEBUG
+    (void)requestId;  // Used only for debug logging
     msg.debug.debug(TAG_CAN, "Sent negative response: NRC 0x%02X", nrc);
     #endif
 }
@@ -228,7 +201,9 @@ static void sendOBD2Response(Input* input) {
  *   [2] = PID
  *   [3-7] = Unused (padding)
  *
- * @param msg Received CAN message
+ * @param canId CAN ID of received request
+ * @param data Received frame data
+ * @param len Frame data length
  */
 static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
     // Validate minimum frame structure
@@ -267,57 +242,39 @@ static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
 }
 
 void initCAN() {
-    #ifdef USING_FLEXCAN
-        // Initialize native FlexCAN
-        Can0.begin();
-        Can0.setBaudRate(500000);  // 500 kbps
-        Can0.setMaxMB(16);
+    // Check if output is enabled
+    if (!systemConfig.buses.can_output_enabled) {
+        return;
+    }
 
-        // Configure RX filters for OBD-II requests
-        Can0.setMBFilter(MB0, 0x7DF);  // Functional addressing (broadcast)
-        Can0.setMBFilter(MB1, 0x7E0);  // Physical addressing (ECU 0)
-        Can0.enableMBInterrupt(MB0);
-        Can0.enableMBInterrupt(MB1);
+    canOutputBus = systemConfig.buses.output_can_bus;
+    if (canOutputBus == 0xFF) {
+        return;  // No output bus configured
+    }
 
-        msg.debug.info(TAG_CAN, "Native FlexCAN initialized (500kbps)");
-        msg.debug.info(TAG_CAN, "OBD-II RX filters configured (0x7DF, 0x7E0)");
-    #elif defined(USING_ESP32_TWAI)
-        // Initialize ESP32 TWAI (CAN)
-        // Note: External CAN transceiver required (MCP2551, TJA1050, SN65HVD230, etc.)
-        #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
-            // ESP32-S3/C3 pins: GPIO20 (TX), GPIO21 (RX) - GPIO22 doesn't exist on S3
-            ESP32Can.setPins(GPIO_NUM_20, GPIO_NUM_21);  // TX, RX
-        #else
-            // Original ESP32 pins: GPIO21 (TX), GPIO22 (RX)
-            ESP32Can.setPins(GPIO_NUM_21, GPIO_NUM_22);  // TX, RX
-        #endif
-        ESP32Can.setSpeed(ESP32Can.convertSpeed(500));  // 500 kbps
-        if (ESP32Can.begin()) {
-            msg.debug.info(TAG_CAN, "ESP32 TWAI (CAN) initialized (500kbps)");
-            msg.debug.info(TAG_CAN, "OBD-II request/response enabled");
-        } else {
-            msg.debug.error(TAG_CAN, "ESP32 TWAI init failed!");
-            return;
-        }
-    #else
-        // Initialize MCP2515 via SPI
-        CAN.setPins(CAN_CS, CAN_INT);
-        if (!CAN.begin(500E3)) {
-            msg.debug.error(TAG_CAN, "MCP2515 CAN init failed!");
-            return;
-        }
-        msg.debug.info(TAG_CAN, "MCP2515 CAN initialized (500kbps)");
-        msg.debug.info(TAG_CAN, "OBD-II request/response enabled");
+    uint32_t baudrate = systemConfig.buses.can_output_baudrate;
 
-        // Uncomment for testing
-        // CAN.loopback();
-    #endif
+    // Initialize CAN bus via HAL
+    if (!hal::can::begin(baudrate, canOutputBus)) {
+        msg.debug.error(TAG_CAN, "CAN output init failed on bus %d!", canOutputBus);
+        return;
+    }
+
+    // Configure RX filters for OBD-II requests
+    hal::can::setFilters(0x7DF, 0x7E0, canOutputBus);  // Functional and physical addressing
+
+    msg.debug.info(TAG_CAN, "CAN output initialized on bus %d (%lu bps)", canOutputBus, baudrate);
+    msg.debug.info(TAG_CAN, "OBD-II request/response enabled");
 
     // Build PID lookup table for request/response
     buildPIDLookupTable();
 }
 
 void sendCAN(Input *ptr) {
+    if (!systemConfig.buses.can_output_enabled || canOutputBus == 0xFF) {
+        return;  // Output not configured
+    }
+
     if (isnan(ptr->value)) {
         return;  // Don't send invalid data
     }
@@ -330,75 +287,33 @@ void sendCAN(Input *ptr) {
     }
 
     // Send on standard OBDII ECU response ID
-    #ifdef USING_FLEXCAN
-        // Send using FlexCAN
-        CAN_message_t msg;
-        msg.id = 0x7E8;
-        msg.len = 8;
-        msg.flags.extended = 0;  // Standard 11-bit ID
-        msg.flags.remote = 0;
-        for (int i = 0; i < 8; i++) {
-            msg.buf[i] = frameData[i];
-        }
-        Can0.write(msg);
-    #elif defined(USING_ESP32_TWAI)
-        // Send using ESP32 TWAI
-        CanFrame frame;
-        frame.identifier = 0x7E8;
-        frame.extd = 0;  // Standard 11-bit ID
-        frame.data_length_code = 8;
-        for (int i = 0; i < 8; i++) {
-            frame.data[i] = frameData[i];
-        }
-        ESP32Can.writeFrame(frame);
-    #else
-        // Send using MCP2515
-        CAN.beginPacket(0x7E8, 8);
-        CAN.write(frameData, 8);
-        CAN.endPacket();
-    #endif
+    hal::can::write(0x7E8, frameData, 8, false, canOutputBus);
 }
 
 void updateCAN() {
+    if (!systemConfig.buses.can_output_enabled || canOutputBus == 0xFF) {
+        return;  // Output not configured
+    }
+
     // Process incoming OBD-II requests (request/response mode)
-    #ifdef USING_FLEXCAN
-        CAN_message_t msg;
-        while (Can0.read(msg)) {
-            // Check if this is an OBD-II request
-            if (msg.id == 0x7DF || msg.id == 0x7E0) {
-                processOBD2Request(msg.id, msg.buf, msg.len);
-            }
+    uint32_t id;
+    uint8_t data[8];
+    uint8_t len;
+    bool extended;
+
+    while (hal::can::read(id, data, len, extended, canOutputBus)) {
+        // Check if this is an OBD-II request
+        if (id == 0x7DF || id == 0x7E0) {
+            processOBD2Request(id, data, len);
         }
-    #elif defined(USING_ESP32_TWAI)
-        CanFrame frame;
-        while (ESP32Can.readFrame(frame, 0)) {  // Non-blocking read
-            // Check if this is an OBD-II request
-            if (frame.identifier == 0x7DF || frame.identifier == 0x7E0) {
-                processOBD2Request(frame.identifier, frame.data, frame.data_length_code);
-            }
-        }
-    #else
-        // MCP2515: Check for incoming packets
-        int packetSize = CAN.parsePacket();
-        if (packetSize > 0) {
-            uint32_t id = CAN.packetId();
-            if (id == 0x7DF || id == 0x7E0) {
-                byte data[8];
-                uint8_t len = 0;
-                while (CAN.available() && len < 8) {
-                    data[len++] = CAN.read();
-                }
-                processOBD2Request(id, data, len);
-            }
-        }
-    #endif
+    }
 }
 
 #else
 
 // Dummy functions if CAN is disabled
 void initCAN() {}
-void sendCAN(Input *ptr) {}
+void sendCAN(Input *ptr) { (void)ptr; }
 void updateCAN() {}
 
 #endif

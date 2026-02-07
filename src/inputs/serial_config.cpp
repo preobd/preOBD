@@ -143,7 +143,7 @@ void initSerialConfig() {
     config->cmdBufferSize = CLI_CMD_BUFFER_SIZE;
     config->historyBufferSize = CLI_HISTORY_BUFFER_SIZE;
     config->maxBindingCount = CLI_MAX_BINDINGS;
-    config->invitation = "openEMS> ";
+    config->invitation = "preOBD> ";
     config->enableAutoComplete = false;  // Disable live autocomplete (too noisy)
 
     // Check required size
@@ -203,7 +203,7 @@ void initSerialConfig() {
     // Print startup banner
     msg.control.println();
     msg.control.println(F("========================================"));
-    msg.control.println(F("  openEMS Serial Configuration"));
+    msg.control.println(F("  preOBD Serial Configuration"));
     msg.control.println(F("  Type 'HELP' for commands"));
     msg.control.println(F("========================================"));
     msg.control.println();

@@ -1,5 +1,5 @@
 /*
- * main.cpp - openEMS (Open Engine Monitoring System)
+ * main.cpp - preOBD (Open Engine Monitoring System)
  * Main program loop
  */
 
@@ -30,7 +30,16 @@
     #include "lib/button_handler.h"     // Multi-function button handler
 #endif
 #include "lib/display_manager.h"        // Display runtime state management
+#ifdef ENABLE_LED
+    #include "lib/rgb_led.h"
+#endif
 #include "outputs/output_base.h"
+#ifdef ENABLE_CAN
+    #include "inputs/input_can.h"
+    #ifndef USE_STATIC_CONFIG
+        #include "inputs/sensors/can/can_scan.h"
+    #endif
+#endif
 
 // Transport abstraction layer
 #include "lib/message_router.h"
@@ -79,9 +88,9 @@ SerialTransport hwSerial8(&Serial8, "SERIAL8", 115200);
 #ifdef ESP32
 // ESP32 Bluetooth transport (Classic or BLE depending on chip)
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
-    BLETransportESP32 btESP32("openEMS");
+    BLETransportESP32 btESP32("preOBD");
 #else
-    BluetoothTransportESP32 btESP32("openEMS");
+    BluetoothTransportESP32 btESP32("preOBD");
 #endif
 #endif
 
@@ -252,18 +261,17 @@ void setup() {
     }
 #endif
     router.begin();  // Load config from EEPROM
-
-    msg.control.println(F("                                        "));
-    msg.control.println(F("                       ______  _______  "));
-    msg.control.println(F("   ___  ___  ___ ___  / __/  |/  / __/  "));
-    msg.control.println(F("  / _ \\/ _ \\/ -_) _ \\/ _// /|_/ /\\ \\    "));
-    msg.control.println(F("  \\___/ .__/\\__/_//_/___/_/  /_/___/    "));
-    msg.control.println(F("     /_/                                "));
-    msg.control.println(F("                                        "));
-    msg.control.println(F("openEngine Monitoring System ==========="));
+    msg.control.println();
+    msg.control.println(F("                 ____  ___  ___  "));
+    msg.control.println(F("   ___  _______ / __ \\/ _ )/ _ \\ "));
+    msg.control.println(F("  / _ \\/ __/ -_) /_/ / _  / // / "));
+    msg.control.println(F(" / .__/_/  \\__/\\____/____/____/  "));
+    msg.control.println(F("/_/                              "));
+    msg.control.println();    
+    msg.control.println(F("Open Vehicle Monitoring ==============="));
     msg.control.print(F("Firmware version "));
     msg.control.println(firmwareVersionString());
-    msg.control.println(F("                                        "));
+    msg.control.println();
 
     // Configure ADC for this platform
     setupADC();
@@ -272,6 +280,13 @@ void setup() {
     // Initialize configured buses (I2C, SPI, CAN) based on SystemConfig
     // This replaces the old hardcoded Wire.begin() and SPI.begin() calls
     initConfiguredBuses();
+
+    // Initialize CAN input subsystem (if enabled)
+    #ifdef ENABLE_CAN
+    if (initCANInput()) {
+        msg.debug.info(TAG_CAN, "CAN input subsystem initialized");
+    }
+    #endif
 
     // Initialize SD card (shared by SD logging and JSON config)
     initSD();
@@ -296,6 +311,11 @@ void setup() {
     // Initialize display manager (works in both static and EEPROM modes)
     // In static mode, this is a no-op (always returns true for isDisplayActive)
     initDisplayManager();
+
+    // Initialize RGB LED indicator
+    #ifdef ENABLE_LED
+    initRGBLed();
+    #endif
 
     // Initialize output modules
     initOutputModules();
@@ -395,17 +415,32 @@ void loop() {
 
     // If in CONFIG mode, skip sensor reading and outputs
     if (isInConfigMode()) {
+        #ifdef ENABLE_CAN
+        // Update CAN input during scan to populate cache
+        if (getCANScanState() == SCAN_LISTENING) {
+            updateCANInput();  // Populate frame cache during scan
+        }
+        updateCANScan();  // Update CAN scan state machine if active
+        #endif
         updateConfigModeDisplay(now);
         return;  // Early return - don't read sensors or send outputs
     }
 #endif
 
     // Read sensors, check alarms, send outputs, update display
+    #ifdef ENABLE_CAN
+    updateCANInput();  // Poll CAN bus and populate frame cache
+    #endif
     updateSensors(now);
     updateAlarms(now);
     sendToOutputs(now);  // Data-driven time-sliced output sending
     updateDisplay(now);
     updateOutputs();     // Housekeeping: drain buffers, handle RX
+
+    // Update RGB LED effects (non-blocking)
+    #ifdef ENABLE_LED
+    updateRGBLed();
+    #endif
 
     // Update test mode if active
     updateTestMode_Wrapper();

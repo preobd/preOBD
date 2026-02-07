@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-openEMS Static Configuration Tool
+preOBD Static Configuration Tool
 
-An interactive CLI to generate static sensor configurations for openEMS,
+An interactive CLI to generate static sensor configurations for preOBD,
 reducing the reliance on EEPROM and enabling static build optimizations.
 
 Parses sensor definitions from the modular sensor library structure:
@@ -16,20 +16,20 @@ import sys
 import time
 from typing import List, Dict, Any, Optional
 
-# Ensure the script can find the openems_config package
+# Ensure the script can find the preobd_config package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
 
-from openems_config.registry_parser import (
+from preobd_config.registry_parser import (
     parse_sensor_library,
     parse_application_presets,
     parse_units_registry,
 )
-from openems_config.platform import (
+from preobd_config.platform import (
     detect_platform,
     get_platform_limits,
     validate_pin,
 )
-from openems_config.config_generator import (
+from preobd_config.config_generator import (
     generate_config_block,
     update_config_h,
     generate_thin_library_files,
@@ -41,7 +41,7 @@ TOOL_VERSION = "1.0.0"
 
 def print_header():
     """Prints the tool's header."""
-    print(f"=== openEMS Static Configuration Tool v{TOOL_VERSION} ===")
+    print(f"=== preOBD Static Configuration Tool v{TOOL_VERSION} ===")
     print()
 
 def load_registries(project_dir: str) -> Optional[Dict[str, List[Dict[str, Any]]]]:
@@ -255,9 +255,9 @@ def edit_input(inp: Dict[str, Any], platform: str, used_pins: List[str], registr
     return inp
 
 def main():
-    parser = argparse.ArgumentParser(description="openEMS Static Configuration Tool")
+    parser = argparse.ArgumentParser(description="preOBD Static Configuration Tool")
     parser.add_argument("--load", metavar="FILE", help="Load configuration from a JSON file for editing.")
-    parser.add_argument("--project-dir", default=".", help="Path to the openEMS project root directory.")
+    parser.add_argument("--project-dir", default=".", help="Path to the preOBD project root directory.")
     parser.add_argument("--generate-thin-libs", action="store_true", help="Generate thinned sensor and application libraries.")
     parser.add_argument("--platform", help="Specify the target platform (e.g., uno, megaatmega2560). Overrides auto-detection.")
     args = parser.parse_args()
@@ -294,7 +294,7 @@ def main():
                 sys.exit(1)
 
             # Validate pin type compatibility
-            from openems_config.validators import validate_pin_type_compatibility
+            from preobd_config.validators import validate_pin_type_compatibility
             pin_errors = validate_pin_type_compatibility(
                 config_data.get("inputs", []),
                 registries['sensors'],

@@ -13,6 +13,10 @@ extern void showConfigModeMessage();
 extern void clearLCD();
 #endif
 
+#ifdef ENABLE_LED
+#include "rgb_led.h"
+#endif
+
 // Current system mode
 static SystemMode currentMode = MODE_RUN;
 
@@ -51,6 +55,15 @@ void setMode(SystemMode newMode) {
             extern void clearLCD();
             clearLCD();
             #endif
+
+            #ifdef ENABLE_LED
+            // Set LED to CONFIG mode color (pulse or solid)
+#if RGB_CONFIG_USE_PULSE
+            rgbLedPulse(RGB_COLOR_CONFIG, RGB_PULSE_PERIOD_MS, PRIORITY_MODE);
+#else
+            rgbLedSolid(RGB_COLOR_CONFIG, PRIORITY_MODE);
+#endif
+            #endif
         } else {
             // Enable watchdog when entering RUN mode
             watchdogEnable(2000);
@@ -65,6 +78,11 @@ void setMode(SystemMode newMode) {
             #ifdef ENABLE_LCD
             // Clear LCD when entering RUN mode (sensors will update it)
             clearLCD();
+            #endif
+
+            #ifdef ENABLE_LED
+            // Release CONFIG mode LED control, allow alarm system to take over
+            rgbLedRelease(PRIORITY_MODE);
             #endif
         }
         msg.control.println();

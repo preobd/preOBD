@@ -1,4 +1,4 @@
-# openEMS Configuration Toolchain
+# preOBD Configuration Toolchain
 
 **Python-based tools for static configuration generation and validation**
 
@@ -21,7 +21,7 @@
 
 ## Overview
 
-The openEMS toolchain provides Python scripts for generating compile-time configurations (`USE_STATIC_CONFIG` mode). These tools replace the old `setup.sh` script with more robust validation, platform awareness, and JSON-based configuration management.
+The preOBD toolchain provides Python scripts for generating compile-time configurations (`USE_STATIC_CONFIG` mode). These tools replace the old `setup.sh` script with more robust validation, platform awareness, and JSON-based configuration management.
 
 **Key Tools:**
 - **configure.py** - Interactive configuration generator
@@ -97,7 +97,7 @@ python3 tools/configure.py
 **Interactive prompts:**
 ```
 ========================================
-  openEMS Configuration Generator
+  preOBD Configuration Generator
 ========================================
 
 Detected platform: megaatmega2560 (from platformio.ini)
@@ -869,7 +869,7 @@ ERROR: Could not find platformio.ini
 **Solution:**
 Run from project root:
 ```bash
-cd /path/to/openEMS
+cd /path/to/preOBD
 python3 tools/configure.py
 ```
 
@@ -914,4 +914,4 @@ python3 tools/configure.py --load tools/saved-configs/my_config.json
 
 **Last Updated:** 2025-01-28
 **Tool Version:** 1.0.0
-**Supports:** openEMS v0.5.0-alpha+
+**Supports:** preOBD v0.5.0-alpha+

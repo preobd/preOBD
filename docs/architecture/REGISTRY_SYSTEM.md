@@ -1,6 +1,6 @@
 # Registry Architecture
 
-**Technical guide to openEMS's hash-based registry system**
+**Technical guide to preOBD's hash-based registry system**
 
 ---
 
@@ -20,7 +20,7 @@
 
 ## Overview
 
-The openEMS registry system provides a **flexible, memory-efficient** way to manage sensors, applications, and units. Instead of fixed enum values, the system uses **hash-based string lookups** with all data stored in flash memory (PROGMEM).
+The preOBD registry system provides a **flexible, memory-efficient** way to manage sensors, applications, and units. Instead of fixed enum values, the system uses **hash-based string lookups** with all data stored in flash memory (PROGMEM).
 
 **Key Architecture Decision:**
 Replaced enum-based system with registry architecture to enable:
@@ -83,7 +83,7 @@ struct InputEEPROM {
 
 ## Registry Components
 
-openEMS has **three registries**, all stored in PROGMEM (flash):
+preOBD has **three registries**, all stored in PROGMEM (flash):
 
 ### 1. Sensor Library
 **File:** `src/lib/sensor_library.h` (orchestrator)
@@ -146,7 +146,7 @@ src/lib/sensor_library/
 
 ### The DJB2 Algorithm
 
-openEMS uses the **djb2 hash algorithm** (Daniel J. Bernstein):
+preOBD uses the **djb2 hash algorithm** (Daniel J. Bernstein):
 
 ```cpp
 uint16_t djb2_hash(const char* str) {

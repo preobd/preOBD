@@ -13,9 +13,12 @@
 
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
-#define SYSTEM_CONFIG_VERSION 6         // Increment when struct changes (v6: added logFilter)
+#define SYSTEM_CONFIG_VERSION 8         // Increment when struct changes (v8: per-bus CAN baud rates)
 #define SYSTEM_CONFIG_ADDRESS 0x03F0    // Address in EEPROM (after inputs)
 #define SYSTEM_CONFIG_SIZE sizeof(SystemConfig)
+
+// Per-input output mask: all 4 data outputs enabled by default
+#define OUTPUT_MASK_ALL_DATA 0x0F
 
 // Output module IDs
 enum OutputID {

@@ -8,6 +8,11 @@
 #include "../lib/message_router.h"
 #include "../lib/message_api.h"
 
+// Output mask filtering relies on OutputID enum values matching outputModules[] indices
+static_assert(OUTPUT_CAN == 0 && OUTPUT_REALDASH == 1 &&
+              OUTPUT_SERIAL == 2 && OUTPUT_SD == 3,
+              "OutputID data output enum values must be 0-3 for per-input mask filtering");
+
 // Declare external functions from output modules
 extern void initCAN();
 extern void sendCAN(Input*);
@@ -79,6 +84,8 @@ void sendToOutputs(uint32_t now) {
             // Send all enabled inputs to this output
             for (uint8_t j = 0; j < MAX_INPUTS; j++) {
                 if (inputs[j].flags.isEnabled && !isnan(inputs[j].value)) {
+                    // For data outputs (CAN/RealDash/Serial/SD), check per-input mask
+                    if (i <= OUTPUT_SD && !(inputs[j].outputMask & (1 << i))) continue;
                     outputModules[i].send(&inputs[j]);
                 }
             }

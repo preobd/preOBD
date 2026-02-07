@@ -1,5 +1,5 @@
 /*
- * config.h - openEMS User Configuration
+ * config.h - preOBD User Configuration
  *
  * IMPORTANT: Feature compilation (ENABLE_*) is controlled in platformio.ini
  * This file contains only runtime configuration values.
@@ -26,19 +26,40 @@
 
 #define BUZZER 3        // Alarm buzzer output pin
 
-// ----- LED Status Indicator Pins -----
-// Only active when ENABLE_LEDS is defined in platformio.ini
-#ifdef ENABLE_LEDS
-    #define GREEN_LED 30      // Normal operation indicator
-    #define YELLOW_LED 31     // Warning level indicator
-    #define RED_LED 32       // Alarm level indicator
+// ----- LED Status Indicator -----
+// Only active when ENABLE_LED is defined in platformio.ini
+#ifdef ENABLE_LED
+    #define RGB_PIN_R 6       // Red channel (PWM capable)
+    #define RGB_PIN_G 7       // Green channel (PWM capable)
+    #define RGB_PIN_B 8       // Blue channel (PWM capable)
+
+    #define RGB_COMMON_ANODE false  // false = common cathode (recommended for 3.3V)
+                                     // true = common anode (inverts PWM values)
 #endif
 
 // ----- CAN Bus Pins -----
-// Only needed if using external MCP2515 chip (not needed for Teensy native FlexCAN)
-#ifndef USE_FLEXCAN_NATIVE
-    #define CAN_CS 9        // MCP2515 chip select
-    #define CAN_INT 2       // MCP2515 interrupt pin
+// External SPI CAN Controller Pins
+// Only defined for platforms without native CAN peripherals OR in hybrid mode
+// Native CAN platforms: Teensy 3.x/4.x (FlexCAN), ESP32 (TWAI), STM32 (bxCAN)
+// Supports multiple SPI CAN controllers: MCP2515, MCP25625, SJA1000, etc.
+//
+// IMPORTANT: platform_caps.h must be included HERE (before pin definitions) to
+// ensure PLATFORM_NEEDS_SPI_CAN is defined before being used in the conditional
+// below. This header provides compile-time detection of CAN hardware capabilities.
+#include "hal/platform_caps.h"
+
+#if PLATFORM_NEEDS_SPI_CAN || defined(ENABLE_CAN_HYBRID)
+    // SPI CAN Controller Bus 0 (primary)
+    #define CAN_CS_0 9       // Chip select for SPI CAN controller #0
+    #define CAN_INT_0 2      // Interrupt pin for SPI CAN controller #0
+
+    // SPI CAN Controller Bus 1 (secondary) - set to 0xFF to disable
+    #define CAN_CS_1 10      // Chip select for SPI CAN controller #1
+    #define CAN_INT_1 3      // Interrupt pin for SPI CAN controller #1
+
+    // Legacy compatibility aliases (for existing MCP2515 code)
+    #define CAN_CS CAN_CS_0
+    #define CAN_INT CAN_INT_0
 #endif
 
 // ----- SD Card Pins -----

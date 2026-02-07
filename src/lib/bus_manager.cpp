@@ -54,12 +54,35 @@ void initConfiguredBuses() {
         }
     }
 
-    // Initialize the active CAN bus
-    if (!initCANBus(systemConfig.buses.active_can, systemConfig.buses.can_baudrate)) {
-        // Fall back to bus 0 if requested bus fails
-        if (systemConfig.buses.active_can != 0) {
-            msg.debug.warn(TAG_CAN, "Falling back to CAN1 (bus 0)");
-            initCANBus(0, systemConfig.buses.can_baudrate);
+    // Initialize CAN output bus if enabled
+    if (systemConfig.buses.can_output_enabled && systemConfig.buses.output_can_bus != 0xFF) {
+        if (!initCANBus(systemConfig.buses.output_can_bus, systemConfig.buses.can_output_baudrate)) {
+            // Fall back to bus 0 if requested bus fails
+            if (systemConfig.buses.output_can_bus != 0) {
+                msg.debug.warn(TAG_CAN, "CAN output: Falling back to CAN1 (bus 0)");
+                initCANBus(0, systemConfig.buses.can_output_baudrate);
+            }
+        }
+    }
+
+    // Initialize CAN input bus if enabled
+    // Supports two modes:
+    // 1. SHARED BUS: input_can_bus == output_can_bus (same physical bus)
+    //    - Both input and output use same CAN peripheral (e.g., both on CAN1)
+    //    - Common on single-bus platforms (AVR with MCP2515, ESP32 with TWAI)
+    //    - HAL handles concurrent access safely (non-blocking reads, queued writes)
+    // 2. DUAL BUS: input_can_bus != output_can_bus (separate physical buses)
+    //    - Input on CAN1, output on CAN2 (Teensy 3.6/4.x only)
+    //    - Allows isolation of sensor import from OBD-II output traffic
+    if (systemConfig.buses.can_input_mode != CAN_INPUT_OFF && systemConfig.buses.input_can_bus != 0xFF) {
+        // Only initialize if different bus than output (avoid double-init in shared mode)
+        if (systemConfig.buses.input_can_bus != systemConfig.buses.output_can_bus) {
+            if (!initCANBus(systemConfig.buses.input_can_bus, systemConfig.buses.can_input_baudrate)) {
+                msg.debug.warn(TAG_CAN, "CAN input: Failed to initialize bus %d", systemConfig.buses.input_can_bus);
+            }
+        } else {
+            // Shared bus mode - already initialized by output, just log status
+            msg.debug.info(TAG_CAN, "CAN input sharing bus with output (bus %d)", systemConfig.buses.input_can_bus);
         }
     }
 }
@@ -411,16 +434,33 @@ void displayCANStatus() {
     msg.control.println();
     msg.control.println(F("=== CAN Bus Configuration ==="));
 #if NUM_CAN_BUSES > 0
-    uint8_t bus_id = systemConfig.buses.active_can;
-    msg.control.print(F("Active: "));
-    msg.control.print(getCANBusName(bus_id));
-    msg.control.print(F(" (TX="));
-    msg.control.print(getDefaultCANTX(bus_id));
-    msg.control.print(F(", RX="));
-    msg.control.print(getDefaultCANRX(bus_id));
-    msg.control.print(F(") @ "));
-    msg.control.print(systemConfig.buses.can_baudrate / 1000);
-    msg.control.println(F("kbps"));
+    // Display input bus
+    msg.control.print(F("Input:  "));
+    if (systemConfig.buses.input_can_bus != 0xFF && systemConfig.buses.can_input_mode != CAN_INPUT_OFF) {
+        msg.control.print(getCANBusName(systemConfig.buses.input_can_bus));
+        if (systemConfig.buses.can_input_mode == CAN_INPUT_LISTEN) {
+            msg.control.print(F(" (LISTEN) @ "));
+        } else {
+            msg.control.print(F(" (NORMAL) @ "));
+        }
+        msg.control.print(systemConfig.buses.can_input_baudrate / 1000);
+        msg.control.print(F("kbps"));
+    } else {
+        msg.control.print(F("DISABLED"));
+    }
+    msg.control.println();
+
+    // Display output bus
+    msg.control.print(F("Output: "));
+    if (systemConfig.buses.output_can_bus != 0xFF && systemConfig.buses.can_output_enabled) {
+        msg.control.print(getCANBusName(systemConfig.buses.output_can_bus));
+        msg.control.print(F(" (ENABLED) @ "));
+        msg.control.print(systemConfig.buses.can_output_baudrate / 1000);
+        msg.control.print(F("kbps"));
+    } else {
+        msg.control.print(F("DISABLED"));
+    }
+    msg.control.println();
     msg.control.print(F("Available buses: "));
     for (uint8_t i = 0; i < NUM_CAN_BUSES; i++) {
         if (i > 0) msg.control.print(F(", "));

@@ -7,7 +7,7 @@
 
 ## Overview
 
-Different sensors in openEMS require different **pin types** based on their hardware interface. This guide explains the pin type system, validation rules, platform-specific constraints, and common troubleshooting scenarios.
+Different sensors in preOBD require different **pin types** based on their hardware interface. This guide explains the pin type system, validation rules, platform-specific constraints, and common troubleshooting scenarios.
 
 Understanding pin types is critical for:
 - **Hardware design** - Choosing correct pins during PCB layout
@@ -31,7 +31,7 @@ Understanding pin types is critical for:
 
 ## Pin Type Categories
 
-openEMS categorizes pins into three types based on the **hardware interface** required by the sensor:
+preOBD categorizes pins into three types based on the **hardware interface** required by the sensor:
 
 ### PIN_ANALOG
 
@@ -100,7 +100,7 @@ openEMS categorizes pins into three types based on the **hardware interface** re
 **Important notes:**
 - Only one "I2C" pin assignment needed per I2C sensor
 - Multiple I2C sensors share the same physical pins (SDA/SCL)
-- openEMS handles I2C bus initialization automatically
+- preOBD handles I2C bus initialization automatically
 
 ---
 
@@ -155,7 +155,7 @@ I2C pins:     SDA=20, SCL=21
 
 **Key characteristics:**
 - Large pin count suitable for complex installations
-- Default platform for openEMS
+- Default platform for preOBD
 - Supports up to 16 analog inputs
 
 ---
@@ -600,7 +600,7 @@ Each sensor entry in `sensor_library/sensors/*.h` specifies its required pin typ
 
 ### Pin Validation Logic (Python)
 
-Implemented in [tools/openems_config/platform.py](../../../tools/openems_config/platform.py):
+Implemented in [tools/preobd_config/platform.py](../../../tools/preobd_config/platform.py):
 
 ```python
 def validate_pin(pin_str: str, platform: str, used_pins: List[str], sensor_pin_requirement: Optional[str] = None) -> Optional[str]:

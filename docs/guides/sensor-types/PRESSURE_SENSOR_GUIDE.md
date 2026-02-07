@@ -1,12 +1,12 @@
 # Pressure Sensor Guide
 
-**Complete guide to pressure sensor setup in openEMS**
+**Complete guide to pressure sensor setup in preOBD**
 
 ---
 
 ## Overview
 
-openEMS supports two types of pressure sensors:
+preOBD supports two types of pressure sensors:
 
 1. **VDO Resistive Sensors** - VDO brand sensors with non-linear characteristics
 2. **Linear Voltage Sensors** - Generic 0.5-4.5V output sensors

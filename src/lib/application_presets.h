@@ -16,10 +16,25 @@
  * - Pressure: bar
  * - Voltage: volts
  *
+ * OBD-II PID RELATIONSHIP (EXPORT vs IMPORT):
+ * This file defines PIDs for EXPORTING preOBD sensor data over CAN bus.
+ * Related file: can_sensor_library/standard_pids.h defines PIDs for IMPORTING
+ * data from external ECUs.
+ *
+ * - EXPORT (this file): Broadcast preOBD sensors as OBD-II PIDs for consumption
+ *   by tools like Torque, RealDash, etc. Values stored in .obd2pid/.obd2length
+ * - IMPORT (standard_pids.h): Decode PIDs from external ECUs to create virtual
+ *   sensors in preOBD
+ *
+ * Where semantic overlap exists (e.g., COOLANT_TEMP, ENGINE_RPM), PID values
+ * MUST match standard_pids.h to maintain consistency. Standard PIDs use SAE J1979
+ * Mode 01 definitions. Custom PIDs use manufacturer-specific range (0xC0-0xFF).
+ *
  * HOW TO ADD A NEW APPLICATION:
  * 1. Add PROGMEM strings for name and label
  * 2. Add ApplicationPreset entry to APPLICATION_PRESETS[] below with unique name
  * 3. Compute hash: python3 -c "h=5381; s='YOUR_NAME'; [h:=(h<<5)+h+ord(c.upper()) for c in s]; print(f'0x{h&0xFFFF:04X}')"
+ * 4. For obd2pid, use standard PID from standard_pids.h if available, or custom (0xC0+)
  */
 
 #ifndef APPLICATION_PRESETS_H
@@ -322,7 +337,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .persistTime_ms = 500  // 0.5 seconds persistence
     },
 
-    // Index 9: FUEL_PRESSURE (placeholder - not yet implemented)
+    // Index 9: FUEL_PRESSURE
     {
 
         .name = PSTR_FUEL_PRESSURE,
@@ -333,8 +348,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .defaultUnits = 2,
         .defaultMinValue = 0.0,
         .defaultMaxValue = 0.0,
-        .obd2pid = 0,
-        .obd2length = 0,
+        .obd2pid = 0x0A,  // Standard PID: Fuel Pressure (gauge) (matches standard_pids.h:112)
+        .obd2length = 1,  // 1 byte (scale: 3.0 kPa, range: 0-765 kPa)
         .defaultAlarmEnabled = false,
         .defaultDisplayEnabled = false,
         .expectedMeasurementType = MEASURE_PRESSURE,
@@ -473,7 +488,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     },
 
     // ===== RPM APPLICATIONS =====
-    // Index 16: ENGINE_RPM (placeholder - not yet implemented)
+    // Index 16: ENGINE_RPM
     {
 
         .name = PSTR_ENGINE_RPM,
@@ -484,8 +499,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .defaultUnits = 7,
         .defaultMinValue = 0.0,
         .defaultMaxValue = 0.0,
-        .obd2pid = 0,
-        .obd2length = 0,
+        .obd2pid = 0x0C,  // Standard PID: Engine RPM (matches standard_pids.h:118)
+        .obd2length = 2,  // 2 bytes (scale: 0.25, range: 0-16,383.75 RPM)
         .defaultAlarmEnabled = false,
         .defaultDisplayEnabled = false,
         .expectedMeasurementType = MEASURE_RPM,

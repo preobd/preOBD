@@ -1,4 +1,4 @@
-# openEMS - Open Source Engine Monitoring System
+# preOBD - Open Source Engine Monitoring System
 
 **⚠️ BETA SOFTWARE** - See [DISCLAIMER](DISCLAIMER.md) for important safety information.
 
@@ -6,9 +6,9 @@ Open-source, modular engine monitoring system for classic cars and vehicles with
 
 ---
 
-## What is openEMS?
+## What is preOBD?
 
-openEMS provides comprehensive engine monitoring for vehicles that lack modern electronic systems. It monitors temperature, pressure, voltage, and RPM sensors, providing data via LCD display, CAN bus (OBDII compatible), serial output, and data logging.
+preOBD provides comprehensive engine monitoring for vehicles that lack modern electronic systems. It monitors temperature, pressure, voltage, and RPM sensors, providing data via LCD display, CAN bus (OBDII compatible), serial output, and data logging.
 
 **What it does:**
 - Monitors multiple temperature sensors (thermocouples, thermistors)
@@ -16,6 +16,7 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 - Monitors battery voltage
 - Monitors engine RPM (via alternator W-phase)
 - Monitors vehicle speed (via hall effect sensors)
+- **Imports sensors from CAN bus** (OBD-II, J1939) and combines with local sensors
 - Displays data on LCD screen
 - Outputs standard OBD-II PIDs via CAN bus (request/response and broadcast modes)
 - Logs data to serial and SD card
@@ -24,7 +25,6 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 
 **What it doesn't do:**
 - Engine control (monitoring only, relay outputs are auxiliary only)
-- Interface with existing factory ECUs or OBDII systems
 - Provide safety certification or guarantees
 
 ---
@@ -74,8 +74,8 @@ openEMS provides comprehensive engine monitoring for vehicles that lack modern e
 
 ```bash
 # Clone the repository
-git clone https://github.com/preobd/openEMS.git
-cd openEMS
+git clone https://github.com/preobd/preOBD.git
+cd preOBD
 
 # Build for your platform
 pio run -e teensy41      # Teensy 4.1 with built-in SD (recommended)
@@ -201,7 +201,7 @@ DISPLAY STATUS            # Show display configuration
 ## Project Structure
 
 ```
-openEMS/
+preOBD/
 ├── platformio.ini          # Build configuration
 ├── README.md               # This file
 ├── DISCLAIMER.md           # Safety information
@@ -253,7 +253,7 @@ Contributions welcome:
 5. What you've already tried
 
 ## License
-openEMS is licensed under a custom **MIT + NonCommercial License**.
+preOBD is licensed under a custom **MIT + NonCommercial License**.
 
 ### What You Can Do (Personal / Noncommercial Use)
 - Use the software for personal projects
@@ -275,4 +275,4 @@ See [LICENSE](LICENSE) file for complete terms.
 
 ---
 
-**openEMS is beta software. See [DISCLAIMER](DISCLAIMER.md) for important safety information and limitations.**
+**preOBD is beta software. See [DISCLAIMER](DISCLAIMER.md) for important safety information and limitations.**

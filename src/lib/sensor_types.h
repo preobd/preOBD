@@ -32,7 +32,8 @@ enum CalibrationType {
     CAL_LINEAR,              // Linear sensor (temperature, pressure, etc.)
     CAL_VOLTAGE_DIVIDER,
     CAL_RPM,
-    CAL_SPEED                // Speed sensor calibration
+    CAL_SPEED,               // Speed sensor calibration
+    CAL_CAN_IMPORT           // CAN bus imported sensor
 };
 
 // ===== CALIBRATION STRUCTURES =====
@@ -118,5 +119,17 @@ typedef struct {
     uint16_t timeout_ms;         // Timeout for zero speed (ms, default 2000)
     uint16_t max_speed_kph;      // Maximum valid speed in km/h (safety check, default 300)
 } SpeedCalibration;
+
+// ===== CAN SENSOR CALIBRATION STRUCTURE =====
+// For sensors imported from CAN bus (OBD-II, J1939, custom protocols)
+typedef struct {
+    uint16_t source_can_id;      // CAN ID to listen for (0x7E8 for OBD-II, 0x400+ for J1939)
+    uint8_t source_pid;          // PID or identifier byte within CAN frame
+    uint8_t data_offset;         // Byte offset within CAN frame data (0-7)
+    uint8_t data_length;         // Number of bytes to extract (1-4)
+    bool is_big_endian;          // Byte order: true for big-endian (OBD-II), false for little-endian
+    float scale_factor;          // Conversion multiplier (e.g., 0.25 for RPM)
+    float offset;                // Conversion offset (e.g., -40 for temperature)
+} CANSensorCalibration;
 
 #endif

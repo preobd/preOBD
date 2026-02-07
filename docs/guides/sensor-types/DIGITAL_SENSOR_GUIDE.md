@@ -1,12 +1,12 @@
 # Digital Sensor Guide
 
-**Float switches, level sensors, and digital inputs for openEMS**
+**Float switches, level sensors, and digital inputs for preOBD**
 
 ---
 
 ## Overview
 
-openEMS supports digital (on/off) sensors for monitoring fluid levels, door switches, and other binary states. The most common application is coolant level monitoring using a float switch.
+preOBD supports digital (on/off) sensors for monitoring fluid levels, door switches, and other binary states. The most common application is coolant level monitoring using a float switch.
 
 ---
 

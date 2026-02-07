@@ -1,6 +1,6 @@
 # Sensor Selection Guide
 
-**How to choose and configure sensors for openEMS**
+**How to choose and configure sensors for preOBD**
 
 ---
 

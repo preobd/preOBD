@@ -8,6 +8,7 @@
 #include "../version.h"
 #include "input_manager.h"
 #include "alarm_logic.h"
+#include "../lib/system_config.h"
 #include "../lib/units_registry.h"
 #include "../lib/message_router.h"  // For msg.control
 #include "../lib/message_api.h"
@@ -68,6 +69,9 @@ struct InputEEPROM {
 
     // === Flags ===
     uint8_t flagsByte;              // Packed flags
+
+    // === Output Routing ===
+    uint8_t outputMask;             // Per-input output routing (bits 0-3: CAN, RealDash, Serial, SD)
 
     // === Calibration ===
     uint8_t calibrationType;
@@ -560,6 +564,9 @@ bool saveInputConfig() {
                 (inputs[i].flags.display ? 0x04 : 0) |
                 (inputs[i].flags.useCustomCalibration ? 0x08 : 0);
 
+            // Output routing mask
+            eepromInput.outputMask = inputs[i].outputMask;
+
             // Convert indices to hashes by looking up names in registries
             const ApplicationPreset* appPreset = getApplicationByIndex(inputs[i].applicationIndex);
             if (appPreset) {
@@ -656,6 +663,9 @@ bool loadInputConfig() {
         inputs[i].flags.alarm = (eepromInput.flagsByte & 0x02) != 0;
         inputs[i].flags.display = (eepromInput.flagsByte & 0x04) != 0;
         inputs[i].flags.useCustomCalibration = (eepromInput.flagsByte & 0x08) != 0;
+
+        // Output routing mask
+        inputs[i].outputMask = eepromInput.outputMask;
 
         // Resolve hashes to current indices
         inputs[i].applicationIndex = getApplicationIndexByHash(eepromInput.applicationHash);
@@ -792,8 +802,8 @@ static bool validateInputConfig(Input* input) {
     if (!input) return false;
 
     // Check if pin is reserved by a bus (I2C, SPI, CAN)
-    // Skip this check for virtual pins (I2C sensors use 0xF0+)
-    if (input->pin < 0xF0 && !isPinAvailable(input->pin)) {
+    // Skip this check for virtual pins (CAN 0xC0+, I2C 0xF0+)
+    if (input->pin < 0xC0 && !isPinAvailable(input->pin)) {
         msg.control.print(F("ERROR: Pin "));
         if (input->pin >= A0) {
             msg.control.print(F("A"));
@@ -819,6 +829,8 @@ static bool validateInputConfig(Input* input) {
             msg.control.print(F("ERROR: Pin "));
             if (input->pin >= 0xF0) {
                 msg.control.print(F("I2C"));
+            } else if (input->pin >= 0xC0 && input->pin < 0xE0) {
+                msg.control.print(F("CAN"));
             } else if (input->pin >= A0) {
                 msg.control.print(F("A"));
                 msg.control.print(input->pin - A0);
@@ -906,6 +918,7 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     input->flags.display = preset.defaultDisplayEnabled;
     input->flags.isEnabled = true;
     input->flags.useCustomCalibration = false;  // Use preset calibration
+    input->outputMask = OUTPUT_MASK_ALL_DATA;   // All data outputs enabled by default
 
     // Initialize alarm context from preset
     initInputAlarmContext(input, millis(), preset.warmupTime_ms, preset.persistTime_ms);
@@ -1090,6 +1103,20 @@ bool setInputAlarmPersist(uint8_t pin, uint16_t persistTime_ms) {
     return true;
 }
 
+bool setInputOutputMask(uint8_t pin, uint8_t outputId, bool enable) {
+    Input* input = getInputByPin(pin);
+    if (input == nullptr) return false;
+
+    if (outputId > OUTPUT_SD) return false;  // Only data outputs (0-3)
+
+    if (enable) {
+        input->outputMask |= (1 << outputId);
+    } else {
+        input->outputMask &= ~(1 << outputId);
+    }
+    return true;
+}
+
 bool clearInput(uint8_t pin) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
@@ -1194,11 +1221,14 @@ static void printAlarmState(AlarmState state) {
     }
 }
 
-// Helper to print pin name (A0, 1, I2C:0, etc)
+// Helper to print pin name (A0, 1, I2C:0, CAN:0, etc)
 static void printPin(uint8_t pin) {
     if (pin >= 0xF0) {
         msg.control.print(F("I2C:"));
         msg.control.print(pin - 0xF0);
+    } else if (pin >= 0xC0 && pin < 0xE0) {
+        msg.control.print(F("CAN:"));
+        msg.control.print(pin - 0xC0);
     } else if (pin >= A0) {
         msg.control.print(F("A"));
         msg.control.print(pin - A0);
@@ -1246,14 +1276,19 @@ void printInputInfo(uint8_t pin) {
     printAlarmState(input->alarmContext.state);
     msg.control.println();
 
+    msg.control.print(F("  Output Mask: 0x"));
+    if (input->outputMask < 0x10) msg.control.print('0');
+    msg.control.println(input->outputMask, HEX);
+
     msg.control.print(F("  Current Value: "));
     msg.control.print(input->value, 2);
     msg.control.print(F(" "));
     msg.control.println(getUnitStringByIndex(input->unitsIndex));
 
     msg.control.println();
-    msg.control.println(F("To see alarm config: INFO <pin> ALARM"));
-    msg.control.println(F("To see calibration:  INFO <pin> CALIBRATION"));
+    msg.control.println(F("To see alarm config:  INFO <pin> ALARM"));
+    msg.control.println(F("To see calibration:   INFO <pin> CALIBRATION"));
+    msg.control.println(F("To see output routing: INFO <pin> OUTPUT"));
     msg.control.println();
 }
 
@@ -1296,6 +1331,33 @@ void printInputAlarmInfo(uint8_t pin) {
     extern unsigned long millis(void);
     msg.control.print(millis() - input->alarmContext.stateEntryTime);
     msg.control.println(F(" ms"));
+
+    msg.control.println();
+}
+
+void printInputOutputInfo(uint8_t pin) {
+    Input* input = getInputByPin(pin);
+    if (!input) {
+        msg.control.print(F("ERROR: Input for pin "));
+        printPin(pin);
+        msg.control.println(F(" not found"));
+        return;
+    }
+
+    msg.control.println();
+    msg.control.print(F("===== Output Routing ["));
+    printPin(pin);
+    msg.control.print(F("] ====="));
+    msg.control.println();
+
+    msg.control.print(F("  CAN:      "));
+    msg.control.println((input->outputMask & (1 << OUTPUT_CAN)) ? F("ENABLED") : F("DISABLED"));
+    msg.control.print(F("  RealDash: "));
+    msg.control.println((input->outputMask & (1 << OUTPUT_REALDASH)) ? F("ENABLED") : F("DISABLED"));
+    msg.control.print(F("  Serial:   "));
+    msg.control.println((input->outputMask & (1 << OUTPUT_SERIAL)) ? F("ENABLED") : F("DISABLED"));
+    msg.control.print(F("  SD_Log:   "));
+    msg.control.println((input->outputMask & (1 << OUTPUT_SD)) ? F("ENABLED") : F("DISABLED"));
 
     msg.control.println();
 }
@@ -1411,6 +1473,9 @@ void listAllInputs() {
             if (inputs[i].pin >= 0xF0) {
                 msg.control.print(F("I2C:"));
                 msg.control.print(inputs[i].pin - 0xF0);
+            } else if (inputs[i].pin >= 0xC0 && inputs[i].pin < 0xE0) {
+                msg.control.print(F("CAN:"));
+                msg.control.print(inputs[i].pin - 0xC0);
             } else if (inputs[i].pin >= A0) {
                 msg.control.print(F("A"));
                 msg.control.print(inputs[i].pin - A0);

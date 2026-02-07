@@ -82,7 +82,7 @@ The BME280 can have two I2C addresses:
 - **0x76** - SDO pin connected to GND (most common)
 - **0x77** - SDO pin connected to VCC
 
-openEMS auto-detects the address at startup.
+preOBD auto-detects the address at startup.
 
 ---
 

@@ -157,12 +157,12 @@ void resetSystemConfig() {
     systemConfig.modeButtonPin = MODE_BUTTON;
     systemConfig.buzzerPin = BUZZER;
 
-    #ifndef USE_FLEXCAN_NATIVE
+    #if PLATFORM_NEEDS_SPI_CAN || defined(ENABLE_CAN_HYBRID)
     systemConfig.canCSPin = CAN_CS;
     systemConfig.canIntPin = CAN_INT;
     #else
-    systemConfig.canCSPin = 0xFF;  // Not used with native FlexCAN
-    systemConfig.canIntPin = 0xFF; // Not used with native FlexCAN
+    systemConfig.canCSPin = 0xFF;  // Not used with native CAN (FlexCAN, TWAI, bxCAN)
+    systemConfig.canIntPin = 0xFF; // Not used with native CAN (FlexCAN, TWAI, bxCAN)
     #endif
 
     systemConfig.sdCSPin = SD_CS_PIN;
@@ -215,10 +215,14 @@ void resetSystemConfig() {
     systemConfig.buses.i2c_clock = DEFAULT_I2C_CLOCK;
     systemConfig.buses.active_spi = DEFAULT_SPI_BUS;
     systemConfig.buses.spi_clock = DEFAULT_SPI_CLOCK;
-    systemConfig.buses.active_can = DEFAULT_CAN_BUS;
-    systemConfig.buses.can_baudrate = DEFAULT_CAN_BAUDRATE;
-    systemConfig.buses.reserved[0] = 0;
-    systemConfig.buses.reserved[1] = 0;
+
+    // CAN configuration - output enabled by default for backward compatibility
+    systemConfig.buses.input_can_bus = 0xFF;  // Disabled by default
+    systemConfig.buses.output_can_bus = DEFAULT_CAN_BUS;
+    systemConfig.buses.can_input_baudrate = DEFAULT_CAN_BAUDRATE;
+    systemConfig.buses.can_output_baudrate = DEFAULT_CAN_BAUDRATE;
+    systemConfig.buses.can_input_mode = CAN_INPUT_OFF;  // Disabled by default
+    systemConfig.buses.can_output_enabled = 1;  // Enabled by default
 
     // Serial Port Configuration defaults
     // USB Serial is always available; Serial1 enabled by default, others disabled
