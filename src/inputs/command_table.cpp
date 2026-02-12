@@ -488,6 +488,7 @@ static int cmd_set(int argc, const char* const* argv) {
     // SET CAN <pid>  -  Import CAN sensor by PID
     // Example: SET CAN 0x0C  (imports Engine RPM from OBD-II)
     // This automatically assigns the next available CAN virtual pin (CAN:0, CAN:1, etc.)
+#ifdef ENABLE_CAN
     if (streq(argv[1], "CAN") && argc >= 3) {
         // Parse PID (supports hex like 0x0C or decimal like 12)
         uint8_t pid;
@@ -582,6 +583,7 @@ static int cmd_set(int argc, const char* const* argv) {
         input->flags.isEnabled = true;
         return 0;
     }
+#endif // ENABLE_CAN
 
     // SET <pin> APPLICATION <application>
     if (streq(field, "APPLICATION")) {

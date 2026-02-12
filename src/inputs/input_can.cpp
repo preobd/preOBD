@@ -9,6 +9,8 @@
  * Supports dual-bus on Teensy (input on different bus than output).
  */
 
+#ifdef ENABLE_CAN
+
 #include <Arduino.h>
 #include "input_can.h"
 #include "../lib/system_config.h"
@@ -192,3 +194,5 @@ void updateCANInput() {
         processCANFrame(id, data, len);
     }
 }
+
+#endif // ENABLE_CAN

@@ -28,12 +28,14 @@
 // Configuration parameters
 #define CLI_RX_BUFFER_SIZE 128
 #define CLI_CMD_BUFFER_SIZE 128
-#define CLI_HISTORY_BUFFER_SIZE 256
+#define CLI_HISTORY_BUFFER_SIZE 64
 #define CLI_MAX_BINDINGS 32  // Enough for all commands + some headroom
 
 // Static buffer for CLI (avoids dynamic allocation)
-// Size calculated to fit the configuration above
-#define CLI_BUFFER_SIZE 4096
+// embeddedCliRequiredSize() validates this at runtime; increase if CLI init fails.
+// Formula: EmbeddedCli + EmbeddedCliImpl + rxBuf + cmdBuf + histBuf + bindings*(sizeof+1)
+// With above config on AVR: ~850 bytes needed; 1024 gives comfortable headroom.
+#define CLI_BUFFER_SIZE 1024
 static CLI_UINT cli_buffer[BYTES_TO_CLI_UINTS(CLI_BUFFER_SIZE)];
 static EmbeddedCli* cli = nullptr;
 
