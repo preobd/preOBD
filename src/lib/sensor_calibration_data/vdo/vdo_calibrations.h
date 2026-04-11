@@ -148,4 +148,157 @@ static const PROGMEM PressureTableCalibration vdo5bar_table_cal = {
     .table_size = 5
 };
 
+// ===== VDO 200°C (Cylinder Temperature) TABLE DATA =====
+// Source: VDO SingleViu manual curve 5.1
+// Valid range: 60°C to 200°C
+// Resistance in DESCENDING order (high resistance = low temperature)
+static const float vdo200_resistance[] PROGMEM = {
+    483.0, 265.0, 151.0, 85.0, 53.0, 32.0, 21.0, 14.0
+};
+static const float vdo200_temperature[] PROGMEM = {
+    60.0, 80.0, 100.0, 120.0, 140.0, 160.0, 180.0, 200.0
+};
+
+static const PROGMEM ThermistorLookupCalibration vdo200_lookup_cal = {
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .resistance_table = vdo200_resistance,
+    .temperature_table = vdo200_temperature,
+    .table_size = 8
+};
+
+// ===== VDO 10-BAR PRESSURE (360 series) TABLE DATA =====
+// Source: VDO SingleViu manual curve 3.2
+// Valid range: 0-10 bar, 10-184Ω
+// Resistance in ASCENDING order
+static const float vdo10bar_resistance[] PROGMEM = {
+    10.0, 31.0, 52.0, 71.0, 90.0, 107.0, 124.0, 140.0, 156.0, 170.0, 184.0
+};
+static const float vdo10bar_pressure[] PROGMEM = {
+    0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0
+};
+
+static const PROGMEM PressureTableCalibration vdo10bar_table_cal = {
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .resistance_table = vdo10bar_resistance,
+    .pressure_table = vdo10bar_pressure,
+    .table_size = 11
+};
+
+// VDO 10-bar polynomial calibration
+// Source: least-squares fit of R = A*P² + B*P + C to SingleViu curve 3.2 data
+// Polynomial: R = -0.412587*P² + 21.489510*P + 10.174825
+// Accuracy: ±0.50Ω across 0-10 bar
+static const PROGMEM PolynomialCalibration vdo10bar_polynomial_cal = {
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .poly_a = -0.412587,
+    .poly_b = 21.489510,
+    .poly_c = 10.174825
+};
+
+// ===== VDO 25-BAR GEAR OIL PRESSURE TABLE DATA =====
+// Source: VDO SingleViu manual curve 3.5
+// Valid range: 0-25 bar, 10-184Ω
+// Resistance in ASCENDING order
+static const float vdo25bar_resistance[] PROGMEM = {
+    10.0, 32.0, 53.0, 73.0, 91.0, 109.0, 125.0, 141.0, 156.0, 170.0, 184.0
+};
+static const float vdo25bar_pressure[] PROGMEM = {
+    0.0, 2.5, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 22.5, 25.0
+};
+
+static const PROGMEM PressureTableCalibration vdo25bar_table_cal = {
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .resistance_table = vdo25bar_resistance,
+    .pressure_table = vdo25bar_pressure,
+    .table_size = 11
+};
+
+// ===== VDO 80 PSI OIL PRESSURE (US MARKET) TABLE DATA =====
+// Source: VDO SingleViu manual curve 5.12
+// Valid range: 0-80 PSI, 240-34Ω (DESCENDING resistance)
+// Stored in DESCENDING resistance order (high R = low pressure)
+// Pressure values stored as bar (1 PSI = 0.0689476 bar)
+static const float vdo80psi_resistance[] PROGMEM = {
+    240.0, 198.0, 177.0, 148.0, 120.0, 104.0, 82.0, 63.0, 34.0
+};
+static const float vdo80psi_pressure[] PROGMEM = {
+    0.0, 0.6895, 1.3790, 1.7237, 2.0684, 2.4132, 2.7579, 4.1369, 5.5158
+};
+
+static const PROGMEM PressureTableCalibration vdo80psi_table_cal = {
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .resistance_table = vdo80psi_resistance,
+    .pressure_table = vdo80psi_pressure,
+    .table_size = 9
+};
+
+// ===== VDO FUEL LEVEL SENSOR TABLE DATA =====
+// Level values: 0.0 = Empty, 100.0 = Full
+
+// Curve 2.1: 3-180Ω ascending (European standard)
+static const float vdo_fuel180_resistance[] PROGMEM = {
+    3.0, 21.0, 45.0, 65.0, 85.0, 112.0, 138.0, 159.0, 180.0
+};
+static const float vdo_fuel180_level[] PROGMEM = {
+    0.0, 12.5, 25.0, 37.5, 50.0, 62.5, 75.0, 87.5, 100.0
+};
+
+static const PROGMEM LevelTableCalibration vdo_fuel180_table_cal = {
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .resistance_table = vdo_fuel180_resistance,
+    .level_table = vdo_fuel180_level,
+    .table_size = 9,
+    .ascending = true
+};
+
+// Curve 2.2: 240-34Ω descending (European standard, reverse direction)
+// Stored descending so interpolate() (descending) can be used directly
+static const float vdo_fuel240_resistance[] PROGMEM = {
+    240.0, 197.0, 153.0, 128.0, 103.0, 85.0, 68.0, 51.0, 34.0
+};
+static const float vdo_fuel240_level[] PROGMEM = {
+    0.0, 12.5, 25.0, 37.5, 50.0, 62.5, 75.0, 87.5, 100.0
+};
+
+static const PROGMEM LevelTableCalibration vdo_fuel240_table_cal = {
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .resistance_table = vdo_fuel240_resistance,
+    .level_table = vdo_fuel240_level,
+    .table_size = 9,
+    .ascending = false
+};
+
+// Curve 2.3: 75-3Ω descending (tubular sensor)
+// Stored descending so interpolate() (descending) can be used directly
+static const float vdo_fuel75_resistance[] PROGMEM = {
+    75.0, 66.0, 57.0, 48.0, 39.0, 30.0, 21.0, 12.0, 3.0
+};
+static const float vdo_fuel75_level[] PROGMEM = {
+    0.0, 12.5, 25.0, 37.5, 50.0, 62.5, 75.0, 87.5, 100.0
+};
+
+static const PROGMEM LevelTableCalibration vdo_fuel75_table_cal = {
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .resistance_table = vdo_fuel75_resistance,
+    .level_table = vdo_fuel75_level,
+    .table_size = 9,
+    .ascending = false
+};
+
+// Curve 2.4: 0-90Ω ascending (US standard)
+static const float vdo_fuel90_resistance[] PROGMEM = {
+    0.0, 11.0, 23.0, 34.0, 45.0, 56.0, 68.0, 79.0, 90.0
+};
+static const float vdo_fuel90_level[] PROGMEM = {
+    0.0, 12.5, 25.0, 37.5, 50.0, 62.5, 75.0, 87.5, 100.0
+};
+
+static const PROGMEM LevelTableCalibration vdo_fuel90_table_cal = {
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .resistance_table = vdo_fuel90_resistance,
+    .level_table = vdo_fuel90_level,
+    .table_size = 9,
+    .ascending = true
+};
+
 #endif // VDO_CALIBRATIONS_H

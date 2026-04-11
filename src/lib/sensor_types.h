@@ -18,7 +18,8 @@ enum MeasurementType {
     MEASURE_HUMIDITY,     // Percent
     MEASURE_ELEVATION,    // Meters -> feet/meters
     MEASURE_DIGITAL,      // Digital on/off (float switch)
-    MEASURE_SPEED         // Vehicle speed in km/h
+    MEASURE_SPEED,        // Vehicle speed in km/h
+    MEASURE_LEVEL         // Fluid level (percentage, 0-100%)
 };
 
 // Calibration type enumeration (for type safety)
@@ -33,7 +34,8 @@ enum CalibrationType {
     CAL_VOLTAGE_DIVIDER,
     CAL_RPM,
     CAL_SPEED,               // Speed sensor calibration
-    CAL_CAN_IMPORT           // CAN bus imported sensor
+    CAL_CAN_IMPORT,          // CAN bus imported sensor
+    CAL_LEVEL_TABLE          // Fluid level sensor using lookup table
 };
 
 // ===== CALIBRATION STRUCTURES =====
@@ -91,6 +93,18 @@ typedef struct {
     const float* pressure_table;   // Pointer to pressure array (bar)
     byte table_size;               // Number of entries in tables
 } PressureTableCalibration;
+
+// Fluid level sensor calibration using lookup table interpolation
+// Resistance→percentage tables for VDO fuel level senders
+// For ascending sensors (3-180Ω, 0-90Ω): store resistance ascending, level 0→100
+// For descending sensors (240-33Ω, 75-3Ω): store resistance descending, level 0→100
+typedef struct {
+    float bias_resistor;           // Pull-down resistor in ohms
+    const float* resistance_table; // Pointer to resistance array (ohms)
+    const float* level_table;      // Pointer to level array (%, 0-100)
+    byte table_size;               // Number of entries in tables
+    bool ascending;                // true = resistance increases with level (use interpolateAscending)
+} LevelTableCalibration;
 
 // Voltage divider calibration
 typedef struct {

@@ -15,6 +15,8 @@ static const char PSTR_VDO_120C_TABLE[] PROGMEM = "VDO_120C_TABLE";
 static const char PSTR_VDO_120C_TABLE_LABEL[] PROGMEM = "VDO 120C (table)";
 static const char PSTR_VDO_150C_TABLE[] PROGMEM = "VDO_150C_TABLE";
 static const char PSTR_VDO_150C_TABLE_LABEL[] PROGMEM = "VDO 150C (table)";
+static const char PSTR_VDO_200C_TABLE[] PROGMEM = "VDO_200C_TABLE";
+static const char PSTR_VDO_200C_TABLE_LABEL[] PROGMEM = "VDO 200C Cylinder Temp (table)";
 
 // VDO Steinhart-Hart
 static const char PSTR_VDO_120C_STEINHART[] PROGMEM = "VDO_120C_STEINHART";
@@ -50,6 +52,8 @@ static const char PSTR_GENERIC_TEMP_LINEAR_LABEL[] PROGMEM = "0.5-4.5V linear (-
              MEASURE_TEMPERATURE, CAL_THERMISTOR_TABLE, &vdo120_lookup_cal, SENSOR_READ_INTERVAL_MS, -40.0, 150.0, 0x7FEA, PIN_ANALOG) \
     X_SENSOR(PSTR_VDO_150C_TABLE, PSTR_VDO_150C_TABLE_LABEL, nullptr, readThermistorLookup, nullptr, \
              MEASURE_TEMPERATURE, CAL_THERMISTOR_TABLE, &vdo150_lookup_cal, SENSOR_READ_INTERVAL_MS, -40.0, 180.0, 0xD2ED, PIN_ANALOG) \
+    X_SENSOR(PSTR_VDO_200C_TABLE, PSTR_VDO_200C_TABLE_LABEL, nullptr, readThermistorLookup, nullptr, \
+             MEASURE_TEMPERATURE, CAL_THERMISTOR_TABLE, &vdo200_lookup_cal, SENSOR_READ_INTERVAL_MS, 60.0, 200.0, 0x2F09, PIN_ANALOG) \
     /* VDO Steinhart-Hart */ \
     X_SENSOR(PSTR_VDO_120C_STEINHART, PSTR_VDO_120C_STEINHART_LABEL, nullptr, readThermistorSteinhart, nullptr, \
              MEASURE_TEMPERATURE, CAL_THERMISTOR_STEINHART, &vdo120_steinhart_cal, SENSOR_READ_INTERVAL_MS, -40.0, 150.0, 0x7434, PIN_ANALOG) \

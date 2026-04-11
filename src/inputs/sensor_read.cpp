@@ -69,6 +69,9 @@
 // Digital sensors
 #include "sensors/digital/float_switch.cpp"
 
+// Level sensors
+#include "sensors/level/table.cpp"
+
 // CAN sensors (CAN bus imported sensors)
 #ifdef ENABLE_CAN
 #include "sensors/can/can_frame_cache.cpp"
@@ -177,6 +180,7 @@ ObdConvertFunc getObdConvertFunc(MeasurementType type) {
         case MEASURE_ELEVATION: return obdConvertElevation;
         case MEASURE_DIGITAL: return obdConvertFloatSwitch;
         case MEASURE_SPEED: return obdConvertSpeed;
+        case MEASURE_LEVEL: return obdConvertHumidity;  // 0-100% same encoding as humidity
         default: return obdConvertVoltage;
     }
 }

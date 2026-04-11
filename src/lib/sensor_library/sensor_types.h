@@ -55,6 +55,7 @@ extern void readThermistorLookup(Input*);
 extern void readThermistorSteinhart(Input*);
 extern void readPressurePolynomial(Input*);
 extern void readPressureTable(Input*);
+extern void readPressureTableDescending(Input*);
 extern void readLinearSensor(Input*);
 extern void readVoltageDivider(Input*);
 extern void readWPhaseRPM(Input*);
@@ -64,6 +65,7 @@ extern void readBME280Humidity(Input*);
 extern void readBME280Elevation(Input*);
 extern void readDigitalFloatSwitch(Input*);
 extern void readHallSpeed(Input*);
+extern void readLevelTable(Input*);
 
 // ===== FORWARD DECLARATIONS: INIT FUNCTIONS =====
 extern void initThermocoupleCS(Input*);

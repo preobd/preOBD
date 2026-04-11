@@ -43,6 +43,7 @@
 #include "sensor_library/sensors/frequency.h"
 #include "sensor_library/sensors/environmental.h"
 #include "sensor_library/sensors/digital.h"
+#include "sensor_library/sensors/level.h"
 #ifdef ENABLE_CAN
 #include "sensor_library/sensors/can.h"
 #else
@@ -63,6 +64,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     FREQUENCY_SENSORS
     ENVIRONMENTAL_SENSORS
     DIGITAL_SENSORS
+    LEVEL_SENSORS
     CAN_SENSORS
 };
 
