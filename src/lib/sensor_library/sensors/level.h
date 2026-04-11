@@ -20,6 +20,10 @@ static const char PSTR_VDO_FUEL_LEVEL_75_LABEL[] PROGMEM = "VDO Fuel Level 75-3\
 static const char PSTR_VDO_FUEL_LEVEL_90[] PROGMEM = "VDO_FUEL_LEVEL_90";
 static const char PSTR_VDO_FUEL_LEVEL_90_LABEL[] PROGMEM = "VDO Fuel Level 0-90\xCE\xA9 (US standard, ascending)";
 
+// Jeep/AMC
+static const char PSTR_JEEP_CJ_FUEL_LEVEL[] PROGMEM = "JEEP_CJ_FUEL_LEVEL";
+static const char PSTR_JEEP_CJ_FUEL_LEVEL_LABEL[] PROGMEM = "Jeep CJ Fuel Level Sender (0-100%, 10-73\xCE\xA9)";
+
 // ===== SENSOR ENTRIES (X-MACRO) =====
 // X_SENSOR(name, label, description, readFunc, initFunc, measType, calType, defaultCal, minInterval, minVal, maxVal, hash, pinType)
 #define LEVEL_SENSORS \
@@ -30,6 +34,9 @@ static const char PSTR_VDO_FUEL_LEVEL_90_LABEL[] PROGMEM = "VDO Fuel Level 0-90\
     X_SENSOR(PSTR_VDO_FUEL_LEVEL_75, PSTR_VDO_FUEL_LEVEL_75_LABEL, nullptr, readLevelTable, nullptr, \
              MEASURE_LEVEL, CAL_LEVEL_TABLE, &vdo_fuel75_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x331B, PIN_ANALOG) \
     X_SENSOR(PSTR_VDO_FUEL_LEVEL_90, PSTR_VDO_FUEL_LEVEL_90_LABEL, nullptr, readLevelTable, nullptr, \
-             MEASURE_LEVEL, CAL_LEVEL_TABLE, &vdo_fuel90_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x3358, PIN_ANALOG)
+             MEASURE_LEVEL, CAL_LEVEL_TABLE, &vdo_fuel90_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x3358, PIN_ANALOG) \
+    /* Jeep/AMC */ \
+    X_SENSOR(PSTR_JEEP_CJ_FUEL_LEVEL, PSTR_JEEP_CJ_FUEL_LEVEL_LABEL, nullptr, readLevelTable, nullptr, \
+             MEASURE_LEVEL, CAL_LEVEL_TABLE, &jeep_cj_fuel_level_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x0437, PIN_ANALOG)
 
 #endif // SENSOR_LIBRARY_SENSORS_LEVEL_H
