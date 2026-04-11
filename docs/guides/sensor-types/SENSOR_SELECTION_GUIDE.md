@@ -299,7 +299,11 @@ A: Yes! Each input is independent. You can have multiple VDO_120C sensors on dif
 A: Same physical sensor, different math. Lookup is more accurate (±0.5°C), Steinhart is faster (±1°C).
 
 **Q: Do I need to specify the bias resistor value?**
-A: No. The presets use the default 1kΩ bias resistor (defined by DEFAULT_BIAS_RESISTOR).
+A: For most presets, no — they default to the 1kΩ bias resistor. **Exception: Jeep sensors use
+sensor-specific defaults baked into the preset** (2.49kΩ for XJ temp/Renix CTS; 100Ω for all oil
+senders and CJ temp). These defaults match the required PCB bias position and take effect
+automatically when you assign the sensor — no `SET <pin> BIAS` command needed unless you've
+wired a non-standard value.
 
 **Q: What if I used a different bias resistor?**
 A: Use `SET <pin> BIAS <ohms>` command. Example: `SET A0 BIAS 2200`
