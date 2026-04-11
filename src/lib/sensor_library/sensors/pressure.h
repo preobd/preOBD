@@ -29,6 +29,14 @@ static const char PSTR_VDO_2BAR_CURVE_LABEL[] PROGMEM = "VDO 2 Bar (curve fit)";
 static const char PSTR_VDO_5BAR_CURVE[] PROGMEM = "VDO_5BAR_CURVE";
 static const char PSTR_VDO_5BAR_CURVE_LABEL[] PROGMEM = "VDO 5 Bar (curve fit)";
 
+// Jeep/AMC
+static const char PSTR_JEEP_4_0_OIL_GAUGE[] PROGMEM = "JEEP_4_0_OIL_GAUGE";
+static const char PSTR_JEEP_4_0_OIL_GAUGE_LABEL[] PROGMEM = "Jeep 4.0L Oil Pressure Sender (Gauge) (0-80 PSI)";
+static const char PSTR_JEEP_CJ_OIL_THIN[] PROGMEM = "JEEP_CJ_OIL_THIN";
+static const char PSTR_JEEP_CJ_OIL_THIN_LABEL[] PROGMEM = "Jeep CJ Oil Pressure Sender, 1\" Thin Gauge (0-80 PSI)";
+static const char PSTR_JEEP_CJ_OIL_DEEP[] PROGMEM = "JEEP_CJ_OIL_DEEP";
+static const char PSTR_JEEP_CJ_OIL_DEEP_LABEL[] PROGMEM = "Jeep CJ Oil Pressure Sender, 2\" Deep Gauge (0-80 PSI)";
+
 // VDO table-based
 static const char PSTR_VDO_2BAR_TABLE[] PROGMEM = "VDO_2BAR_TABLE";
 static const char PSTR_VDO_2BAR_TABLE_LABEL[] PROGMEM = "VDO 2 Bar (table)";
@@ -58,6 +66,13 @@ static const char PSTR_VDO_5BAR_TABLE_LABEL[] PROGMEM = "VDO 5 Bar (table)";
     X_SENSOR(PSTR_VDO_2BAR_TABLE, PSTR_VDO_2BAR_TABLE_LABEL, nullptr, readPressureTable, nullptr, \
              MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo2bar_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 2.0, 0xD35B, PIN_ANALOG) \
     X_SENSOR(PSTR_VDO_5BAR_TABLE, PSTR_VDO_5BAR_TABLE_LABEL, nullptr, readPressureTable, nullptr, \
-             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo5bar_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.0, 0x86BE, PIN_ANALOG)
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo5bar_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.0, 0x86BE, PIN_ANALOG) \
+    /* Jeep/AMC */ \
+    X_SENSOR(PSTR_JEEP_4_0_OIL_GAUGE, PSTR_JEEP_4_0_OIL_GAUGE_LABEL, nullptr, readPressureTable, nullptr, \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &jeep40_oil_gauge_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x0156, PIN_ANALOG) \
+    X_SENSOR(PSTR_JEEP_CJ_OIL_THIN, PSTR_JEEP_CJ_OIL_THIN_LABEL, nullptr, readPressureTable, nullptr, \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &jeep_cj_oil_thin_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0xF9AA, PIN_ANALOG) \
+    X_SENSOR(PSTR_JEEP_CJ_OIL_DEEP, PSTR_JEEP_CJ_OIL_DEEP_LABEL, nullptr, readPressureTable, nullptr, \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &jeep_cj_oil_deep_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x2655, PIN_ANALOG)
 
 #endif // SENSOR_LIBRARY_SENSORS_PRESSURE_H

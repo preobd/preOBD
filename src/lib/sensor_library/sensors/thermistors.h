@@ -30,6 +30,14 @@ static const char PSTR_NTC_STEINHART_LABEL[] PROGMEM = "Generic NTC (custom Stei
 static const char PSTR_NTC_BETA[] PROGMEM = "GENERIC_NTC_BETA";
 static const char PSTR_NTC_BETA_LABEL[] PROGMEM = "Generic NTC (custom Beta equation)";
 
+// Jeep/AMC
+static const char PSTR_JEEP_4_0_TEMP_GAUGE[] PROGMEM = "JEEP_4_0_TEMP_GAUGE";
+static const char PSTR_JEEP_4_0_TEMP_GAUGE_LABEL[] PROGMEM = "Jeep 4.0L Coolant Temp Sender (Gauge) (0-120" "\xC2\xB0" "C)";
+static const char PSTR_JEEP_RENIX_CTS[] PROGMEM = "JEEP_RENIX_CTS";
+static const char PSTR_JEEP_RENIX_CTS_LABEL[] PROGMEM = "Jeep Renix ECU Coolant Temp Sensor (-20-180" "\xC2\xB0" "C)";
+static const char PSTR_JEEP_CJ_TEMP_GAUGE[] PROGMEM = "JEEP_CJ_TEMP_GAUGE";
+static const char PSTR_JEEP_CJ_TEMP_GAUGE_LABEL[] PROGMEM = "Jeep CJ Coolant Temp Sender (Gauge) (49-127" "\xC2\xB0" "C, approx)";
+
 // Linear temperature
 static const char PSTR_GENERIC_TEMP_LINEAR[] PROGMEM = "GENERIC_TEMP_LINEAR";
 static const char PSTR_GENERIC_TEMP_LINEAR_LABEL[] PROGMEM = "0.5-4.5V linear (-40 to 150" "\xC2\xB0" "C)";
@@ -54,6 +62,13 @@ static const char PSTR_GENERIC_TEMP_LINEAR_LABEL[] PROGMEM = "0.5-4.5V linear (-
              MEASURE_TEMPERATURE, CAL_THERMISTOR_STEINHART, nullptr, 0, -40.0, 150.0, 0xA5F7, PIN_ANALOG) \
     X_SENSOR(PSTR_NTC_BETA, PSTR_NTC_BETA_LABEL, nullptr, nullptr, nullptr, \
              MEASURE_TEMPERATURE, CAL_THERMISTOR_BETA, nullptr, 0, -40.0, 150.0, 0x1F61, PIN_ANALOG) \
+    /* Jeep/AMC */ \
+    X_SENSOR(PSTR_JEEP_4_0_TEMP_GAUGE, PSTR_JEEP_4_0_TEMP_GAUGE_LABEL, nullptr, readThermistorLookup, nullptr, \
+             MEASURE_TEMPERATURE, CAL_THERMISTOR_TABLE, &jeep40_temp_gauge_cal, SENSOR_READ_INTERVAL_MS, 0.0, 120.0, 0x29E8, PIN_ANALOG) \
+    X_SENSOR(PSTR_JEEP_RENIX_CTS, PSTR_JEEP_RENIX_CTS_LABEL, nullptr, readThermistorLookup, nullptr, \
+             MEASURE_TEMPERATURE, CAL_THERMISTOR_TABLE, &renix_cts_cal, SENSOR_READ_INTERVAL_MS, -20.0, 180.0, 0x34F7, PIN_ANALOG) \
+    X_SENSOR(PSTR_JEEP_CJ_TEMP_GAUGE, PSTR_JEEP_CJ_TEMP_GAUGE_LABEL, nullptr, readThermistorLookup, nullptr, \
+             MEASURE_TEMPERATURE, CAL_THERMISTOR_TABLE, &jeep_cj_temp_gauge_cal, SENSOR_READ_INTERVAL_MS, 49.0, 127.0, 0xCDF2, PIN_ANALOG) \
     /* Linear temperature */ \
     X_SENSOR(PSTR_GENERIC_TEMP_LINEAR, PSTR_GENERIC_TEMP_LINEAR_LABEL, nullptr, readLinearSensor, nullptr, \
              MEASURE_TEMPERATURE, CAL_LINEAR, &generic_temp_linear_cal, SENSOR_READ_INTERVAL_MS, -40.0, 150.0, 0xDF11, PIN_ANALOG)

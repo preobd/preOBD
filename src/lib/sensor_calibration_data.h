@@ -10,6 +10,7 @@
  * - sensor_calibration_data/nxp/        - NXP/Freescale integrated sensors
  * - sensor_calibration_data/generic/    - Generic/aftermarket sensors
  * - sensor_calibration_data/system/     - System default calibrations
+ * - sensor_calibration_data/jeep/       - Jeep/AMC sensors (CJ/SJ/XJ 4.0L)
  */
 
 #ifndef SENSOR_CALIBRATION_DATA_H
@@ -27,5 +28,6 @@
 #include "sensor_calibration_data/nxp/nxp_calibrations.h"
 #include "sensor_calibration_data/generic/generic_calibrations.h"
 #include "sensor_calibration_data/system/system_calibrations.h"
+#include "sensor_calibration_data/jeep/jeep_calibrations.h"
 
 #endif // SENSOR_CALIBRATION_DATA_H
