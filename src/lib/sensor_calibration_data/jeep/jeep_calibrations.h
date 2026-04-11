@@ -24,6 +24,10 @@
 // Aliases: SMP TS158, Wells TU108, NTK EF0008
 // Electrical: single-wire NTC, body-grounded, drives analog gauge (NOT ECU)
 // Valid range: 0-120°C in 5°C steps (25 points)
+// NOTE: Despite being a "gauge sender," the 56027012 is a high-impedance NTC
+// (135Ω @ 120°C to 7800Ω @ 0°C). It requires the 2.49kΩ bias position on
+// the preOBD custom PCB, NOT the 100Ω VDO/low-impedance position.
+// On Arduino/Teensy builds, recommended bias resistor: 2.2kΩ–2.49kΩ.
 static const float jeep40_temp_resistance[] PROGMEM = {
     7800, 6200, 5000, 4000, 3200, 2600, 2100, 1700, 1400,
     1150,  950,  800,  680,  580,  500,  430,  370,  320,  280,
@@ -47,6 +51,7 @@ static const PROGMEM ThermistorLookupCalibration jeep40_temp_gauge_cal = {
 // Aliases: SMP TX18, Renix-era Mopar variants
 // Electrical: 2-wire NTC, 5V pull-up in ECU; higher cold resistance than gauge sender
 // Valid range: -20-180°C (11 points)
+// Bias: 2.49kΩ position on preOBD custom PCB (high-impedance NTC, 200–9400Ω)
 static const float renix_cts_resistance[] PROGMEM = {
     9400, 5800, 3700, 2400, 1600, 1100, 750, 520, 370, 270, 200
 };
@@ -68,6 +73,7 @@ static const PROGMEM ThermistorLookupCalibration renix_cts_cal = {
 // Resistance stored ASCENDING (2→90Ω) with pressure DESCENDING (80→0 psi)
 // to satisfy readPressureTable()'s interpolateAscending() requirement.
 // Valid range: 0-80 psi (17 points)
+// Bias: 100Ω position on preOBD custom PCB (low-impedance sender, 2–90Ω)
 static const float jeep40_oil_resistance[] PROGMEM = {
      2,  5, 10, 15, 20, 25, 30, 36, 42,
     48, 54, 60, 66, 72, 78, 84, 90
@@ -82,6 +88,71 @@ static const PROGMEM PressureTableCalibration jeep40_oil_gauge_cal = {
     .resistance_table = jeep40_oil_resistance,
     .pressure_table = jeep40_oil_pressure,
     .table_size = 17
+};
+
+// ===== JEEP CJ COOLANT TEMP GAUGE SENDER (1972-1986) =====
+// AMC-era single-wire NTC, body-grounded gauge sender
+// OE part: varies by year (Crown J3212002 and equivalents)
+// Electrical: 9-73Ω low-resistance NTC, drives analog gauge via pulsed voltage regulator
+// Source: AMC FSM resistance specs + community temperature correlation
+// WARNING: Temperature mapping is approximate — FSM only documents gauge positions,
+// not precise R-vs-T data. Accuracy estimated ±5°C.
+// Bias: 100Ω position on preOBD custom PCB (low-impedance sender, 9–73Ω)
+static const float jeep_cj_temp_resistance[] PROGMEM = {
+    73.0, 36.0, 20.0, 13.0, 9.0
+};
+static const float jeep_cj_temp_temperature[] PROGMEM = {
+    49.0, 82.0, 99.0, 116.0, 127.0
+};
+
+static const PROGMEM ThermistorLookupCalibration jeep_cj_temp_gauge_cal = {
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .resistance_table = jeep_cj_temp_resistance,
+    .temperature_table = jeep_cj_temp_temperature,
+    .table_size = 5
+};
+
+// ===== JEEP CJ OIL PRESSURE SENDER — 1" THIN GAUGE (~1982-1986) =====
+// Crown #3212004 and equivalents
+// Electrical: 9-70Ω, resistance decreases with pressure
+// Source: Bench-tested Crown #3212004 (JeepForum), confirmed against FSM spec ranges
+// Resistance stored ASCENDING (9→70Ω) with pressure DESCENDING (80→0 psi)
+// to satisfy readPressureTable()'s interpolateAscending() requirement.
+// Bias: 100Ω position on preOBD custom PCB (low-impedance sender, 9–70Ω)
+static const float jeep_cj_oil_thin_resistance[] PROGMEM = {
+     9.0, 14.0, 23.0, 33.0, 70.0
+};
+static const float jeep_cj_oil_thin_pressure[] PROGMEM = {
+    80.0, 60.0, 40.0, 20.0,  0.0
+};
+
+static const PROGMEM PressureTableCalibration jeep_cj_oil_thin_cal = {
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .resistance_table = jeep_cj_oil_thin_resistance,
+    .pressure_table = jeep_cj_oil_thin_pressure,
+    .table_size = 5
+};
+
+// ===== JEEP CJ OIL PRESSURE SENDER — 2" DEEP GAUGE (1976-~1982) =====
+// OE sender for 2" deep oil pressure gauge
+// Electrical: 33-240Ω, resistance decreases with pressure
+// Source: 1979 Jeep CJ Factory Service Manual (FSM spec midpoints)
+// Resistance stored ASCENDING (33.5→240Ω) with pressure DESCENDING (80→0 psi)
+// to satisfy readPressureTable()'s interpolateAscending() requirement.
+// Bias: 100Ω position on preOBD custom PCB (sender max 240Ω; at 0 psi:
+//   V = 5 × 100/340 = 1.47V → 1202 counts on 10-bit ADC, adequate resolution)
+static const float jeep_cj_oil_deep_resistance[] PROGMEM = {
+     33.5,  67.0, 103.0, 153.0, 240.0
+};
+static const float jeep_cj_oil_deep_pressure[] PROGMEM = {
+    80.0, 60.0, 40.0, 20.0,  0.0
+};
+
+static const PROGMEM PressureTableCalibration jeep_cj_oil_deep_cal = {
+    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .resistance_table = jeep_cj_oil_deep_resistance,
+    .pressure_table = jeep_cj_oil_deep_pressure,
+    .table_size = 5
 };
 
 #endif // JEEP_CALIBRATIONS_H

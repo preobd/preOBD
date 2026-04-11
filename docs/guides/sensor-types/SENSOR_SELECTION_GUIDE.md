@@ -98,6 +98,24 @@ Add pull-down resistor: Analog pin → 1kΩ resistor → GND
 
 See [VDO_SENSOR_GUIDE.md](VDO_SENSOR_GUIDE.md) for detailed setup.
 
+### Temperature Sensors - Jeep/AMC
+
+| Sensor ID | Description | Range | Era | Bias Position |
+|-----------|-------------|-------|-----|---------------|
+| `JEEP_4_0_TEMP_GAUGE` | XJ Cherokee 4.0L coolant gauge sender (Mopar 56027012) | 0–120°C | 1984–1996 | **2.49kΩ** |
+| `JEEP_RENIX_CTS` | XJ Cherokee 4.0L Renix ECU coolant temp sensor | -20–180°C | 1987–1990 | **2.49kΩ** |
+| `JEEP_CJ_TEMP_GAUGE` | Jeep CJ coolant gauge sender (Crown J3212002) | 49–127°C (approx) | 1972–1986 | 100Ω |
+
+**Important — XJ vs CJ distinction:**
+- The XJ 4.0L gauge sender (56027012, 135–7800Ω) is **not** the same family as the CJ-era sender (9–73Ω). They require different bias positions.
+- `JEEP_CJ_TEMP_GAUGE` temperature calibration is community-derived (AMC FSM documents gauge positions, not R-vs-T). Accuracy ±5°C.
+
+**Bias:**
+```
+JEEP_4_0_TEMP_GAUGE / JEEP_RENIX_CTS: use 2.2kΩ–2.49kΩ bias resistor
+JEEP_CJ_TEMP_GAUGE: use 100Ω bias resistor (or preOBD PCB 100Ω position)
+```
+
 ### Temperature Sensors - Generic NTC Thermistors
 
 | Sensor ID | Description | Notes |
@@ -124,8 +142,16 @@ See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.
 | `GENERIC_BOOST` | Generic 0.5-4.5V boost sensor | Configurable |
 | `MPX4250AP` | Freescale MAP sensor | 20-250 kPa |
 | `MPX5700AP` | Freescale MAP sensor | 15-700 kPa |
+| `JEEP_4_0_OIL_GAUGE` | XJ Cherokee 4.0L oil pressure sender (Mopar 56026779) | 0–80 PSI |
+| `JEEP_CJ_OIL_THIN` | Jeep CJ oil pressure sender, 1" thin gauge (Crown #3212004) | 0–80 PSI |
+| `JEEP_CJ_OIL_DEEP` | Jeep CJ oil pressure sender, 2" deep gauge (1976–~1982) | 0–80 PSI |
 
 **Best for:** Oil pressure, boost pressure, fuel pressure
+
+**Jeep oil sender selection:**
+- **XJ Cherokee (1984–1996):** use `JEEP_4_0_OIL_GAUGE` (2–90Ω, 100Ω bias)
+- **Jeep CJ with 1" thin gauge (~1982–1986):** use `JEEP_CJ_OIL_THIN` (9–70Ω, 100Ω bias)
+- **Jeep CJ with 2" deep gauge (1976–~1982):** use `JEEP_CJ_OIL_DEEP` (33–240Ω, 100Ω bias)
 
 **VDO Pressure Wiring:**
 ```
