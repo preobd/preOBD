@@ -223,6 +223,7 @@ void resetSystemConfig() {
     systemConfig.buses.can_output_baudrate = DEFAULT_CAN_BAUDRATE;
     systemConfig.buses.can_input_mode = CAN_INPUT_OFF;  // Disabled by default
     systemConfig.buses.can_output_enabled = 1;  // Enabled by default
+    systemConfig.buses.elm327_serial_port = 0xFF;  // Disabled by default
 
     // Serial Port Configuration defaults
     // USB Serial is always available; Serial1 enabled by default, others disabled

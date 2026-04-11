@@ -34,6 +34,7 @@
     #include "lib/rgb_led.h"
 #endif
 #include "outputs/output_base.h"
+#include "lib/obd_query.h"
 #ifdef ENABLE_CAN
     #include "inputs/input_can.h"
     #ifndef USE_STATIC_CONFIG
@@ -319,6 +320,10 @@ void setup() {
 
     // Initialize output modules
     initOutputModules();
+
+    // Build OBD-II PID lookup table (shared by CAN and ELM327 output paths).
+    // Called unconditionally so it works even when CAN output is not enabled.
+    obdQuery_buildLookupTable();
 
     // Wait for sensors to stabilize
     msg.debug.info(TAG_SENSOR, "Waiting for sensors to stabilize...");

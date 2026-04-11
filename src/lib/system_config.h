@@ -13,7 +13,7 @@
 
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
-#define SYSTEM_CONFIG_VERSION 8         // Increment when struct changes (v8: per-bus CAN baud rates)
+#define SYSTEM_CONFIG_VERSION 9         // Increment when struct changes (v9: elm327_serial_port in BusConfig)
 #define SYSTEM_CONFIG_ADDRESS 0x03F0    // Address in EEPROM (after inputs)
 #define SYSTEM_CONFIG_SIZE sizeof(SystemConfig)
 
@@ -21,18 +21,17 @@
 #define OUTPUT_MASK_ALL_DATA 0x0F
 
 // Output module IDs
+// Always define all IDs so EEPROM layout (outputEnabled[], outputInterval[])
+// is stable regardless of compile flags. Unused slots are harmless zeros.
 enum OutputID {
-    OUTPUT_CAN = 0,
+    OUTPUT_CAN      = 0,
     OUTPUT_REALDASH = 1,
-    OUTPUT_SERIAL = 2,
-    OUTPUT_SD = 3,
-    OUTPUT_ALARM = 4,
-#ifdef ENABLE_RELAY_OUTPUT
-    OUTPUT_RELAY = 5,
-    NUM_OUTPUTS = 6
-#else
-    NUM_OUTPUTS = 5
-#endif
+    OUTPUT_SERIAL   = 2,
+    OUTPUT_SD       = 3,
+    OUTPUT_ALARM    = 4,
+    OUTPUT_RELAY    = 5,
+    OUTPUT_ELM327   = 6,
+    NUM_OUTPUTS     = 7
 };
 
 // Display types
@@ -44,6 +43,9 @@ enum DisplayType {
 
 #ifdef ENABLE_RELAY_OUTPUT
 #include "../outputs/output_relay.h"
+#endif
+#ifdef ENABLE_ELM327_OUTPUT
+#include "../outputs/output_elm327.h"
 #endif
 
 // System configuration structure
