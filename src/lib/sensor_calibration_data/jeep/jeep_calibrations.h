@@ -161,4 +161,28 @@ static const PROGMEM PressureTableCalibration jeep_cj_oil_deep_cal = {
     .table_size = 5
 };
 
+// ===== JEEP CJ FUEL LEVEL SENDER (1972-1986) =====
+// AMC-era fuel tank float sender (potentiometer-type)
+// Electrical: 10-73Ω, resistance decreases as fuel level rises (Full = low R)
+// Source: AMC Factory Service Manual (3 confirmed points: Empty/Half/Full)
+// Quarter-tank points (25%, 75%) are linearly interpolated — float sender
+// resistance is approximately linear with float arm position.
+// Bias: 100Ω position on preOBD custom PCB (low-impedance sender, 10–73Ω)
+// Stored DESCENDING (73→10Ω) with level ASCENDING (0→100%) per LevelTableCalibration
+// convention for descending senders (ascending = false).
+static const float jeep_cj_fuel_resistance[] PROGMEM = {
+    73.0, 48.0, 23.0, 16.5, 10.0
+};
+static const float jeep_cj_fuel_level[] PROGMEM = {
+     0.0, 25.0, 50.0, 75.0, 100.0
+};
+
+static const PROGMEM LevelTableCalibration jeep_cj_fuel_level_cal = {
+    .bias_resistor = JEEP_LOW_Z_BIAS,
+    .resistance_table = jeep_cj_fuel_resistance,
+    .level_table = jeep_cj_fuel_level,
+    .table_size = 5,
+    .ascending = false
+};
+
 #endif // JEEP_CALIBRATIONS_H

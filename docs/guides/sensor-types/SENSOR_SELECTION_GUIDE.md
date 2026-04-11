@@ -162,6 +162,29 @@ Add pull-down resistor: Analog pin → 1kΩ resistor → GND
 
 See [PRESSURE_SENSOR_GUIDE.md](PRESSURE_SENSOR_GUIDE.md) for detailed setup.
 
+### Fluid Level Sensors
+
+| Sensor ID | Description | Range | Bias Position |
+|-----------|-------------|-------|---------------|
+| `VDO_FUEL_LEVEL_180` | VDO 3–180Ω (European, ascending) | 0–100% | 1kΩ |
+| `VDO_FUEL_LEVEL_240` | VDO 240–34Ω (European, descending) | 0–100% | 1kΩ |
+| `VDO_FUEL_LEVEL_75` | VDO 75–3Ω (tubular, descending) | 0–100% | 1kΩ |
+| `VDO_FUEL_LEVEL_90` | VDO 0–90Ω (US standard, ascending) | 0–100% | 1kΩ |
+| `JEEP_CJ_FUEL_LEVEL` | Jeep CJ fuel tank sender (1972–1986) | 0–100% | **100Ω** |
+
+**Application:** `FUEL_LEVEL`
+
+**Jeep CJ fuel sender notes:**
+- Resistance range 10–73Ω (Full→Empty) — use 100Ω bias position on preOBD PCB
+- Calibration based on 3 AMC FSM data points (Empty/Half/Full); quarter-tank values are linearly interpolated. Accuracy sufficient for gauge use.
+
+**Wiring:**
+```
+Sender signal wire → Analog pin
+Sender body / ground wire → Chassis ground
+Bias resistor → see Bias Position column above
+```
+
 ### Voltage Sensors
 
 | Sensor ID | Description | Notes |

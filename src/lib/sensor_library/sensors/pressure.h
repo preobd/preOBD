@@ -42,6 +42,14 @@ static const char PSTR_VDO_2BAR_TABLE[] PROGMEM = "VDO_2BAR_TABLE";
 static const char PSTR_VDO_2BAR_TABLE_LABEL[] PROGMEM = "VDO 2 Bar (table)";
 static const char PSTR_VDO_5BAR_TABLE[] PROGMEM = "VDO_5BAR_TABLE";
 static const char PSTR_VDO_5BAR_TABLE_LABEL[] PROGMEM = "VDO 5 Bar (table)";
+static const char PSTR_VDO_10BAR_TABLE[] PROGMEM = "VDO_10BAR_TABLE";
+static const char PSTR_VDO_10BAR_TABLE_LABEL[] PROGMEM = "VDO 10 Bar (table)";
+static const char PSTR_VDO_10BAR_CURVE[] PROGMEM = "VDO_10BAR_CURVE";
+static const char PSTR_VDO_10BAR_CURVE_LABEL[] PROGMEM = "VDO 10 Bar (curve fit)";
+static const char PSTR_VDO_25BAR_TABLE[] PROGMEM = "VDO_25BAR_TABLE";
+static const char PSTR_VDO_25BAR_TABLE_LABEL[] PROGMEM = "VDO 25 Bar Gear Oil (table)";
+static const char PSTR_VDO_80PSI_TABLE[] PROGMEM = "VDO_80PSI_TABLE";
+static const char PSTR_VDO_80PSI_TABLE_LABEL[] PROGMEM = "VDO 80 PSI Oil (US, descending, table)";
 
 // ===== SENSOR ENTRIES (X-MACRO) =====
 // X_SENSOR(name, label, description, readFunc, initFunc, measType, calType, defaultCal, minInterval, minVal, maxVal, hash, pinType)
@@ -67,6 +75,16 @@ static const char PSTR_VDO_5BAR_TABLE_LABEL[] PROGMEM = "VDO 5 Bar (table)";
              MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo2bar_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 2.0, 0xD35B, PIN_ANALOG) \
     X_SENSOR(PSTR_VDO_5BAR_TABLE, PSTR_VDO_5BAR_TABLE_LABEL, nullptr, readPressureTable, nullptr, \
              MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo5bar_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.0, 0x86BE, PIN_ANALOG) \
+    /* VDO extended range table-based */ \
+    X_SENSOR(PSTR_VDO_10BAR_TABLE, PSTR_VDO_10BAR_TABLE_LABEL, nullptr, readPressureTable, nullptr, \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo10bar_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 10.0, 0x682A, PIN_ANALOG) \
+    X_SENSOR(PSTR_VDO_10BAR_CURVE, PSTR_VDO_10BAR_CURVE_LABEL, nullptr, readPressurePolynomial, nullptr, \
+             MEASURE_PRESSURE, CAL_PRESSURE_POLYNOMIAL, &vdo10bar_polynomial_cal, SENSOR_READ_INTERVAL_MS, 0.0, 10.0, 0x0487, PIN_ANALOG) \
+    X_SENSOR(PSTR_VDO_25BAR_TABLE, PSTR_VDO_25BAR_TABLE_LABEL, nullptr, readPressureTable, nullptr, \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo25bar_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 25.0, 0xF310, PIN_ANALOG) \
+    /* VDO US-market descending pressure */ \
+    X_SENSOR(PSTR_VDO_80PSI_TABLE, PSTR_VDO_80PSI_TABLE_LABEL, nullptr, readPressureTableDescending, nullptr, \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo80psi_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x6008, PIN_ANALOG) \
     /* Jeep/AMC */ \
     X_SENSOR(PSTR_JEEP_4_0_OIL_GAUGE, PSTR_JEEP_4_0_OIL_GAUGE_LABEL, nullptr, readPressureTable, nullptr, \
              MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &jeep40_oil_gauge_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x0156, PIN_ANALOG) \

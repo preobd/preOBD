@@ -225,6 +225,7 @@ void displaySensor(Input *ptr, byte line) {
             switch (measType) {
                 case MEASURE_TEMPERATURE:
                 case MEASURE_HUMIDITY:
+                case MEASURE_LEVEL:
                 case MEASURE_ELEVATION:
                 case MEASURE_RPM:
                 case MEASURE_SPEED:

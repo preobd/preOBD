@@ -136,6 +136,18 @@ static const char PSTR_VEHICLE_SPEED[] PROGMEM = "VEHICLE_SPEED";
 static const char PSTR_VEHICLE_SPEED_ABBR[] PROGMEM = "SPD";
 static const char PSTR_VEHICLE_SPEED_LABEL[] PROGMEM = "Vehicle Speed";
 
+static const char PSTR_FUEL_LEVEL[] PROGMEM = "FUEL_LEVEL";
+static const char PSTR_FUEL_LEVEL_ABBR[] PROGMEM = "FUEL";
+static const char PSTR_FUEL_LEVEL_LABEL[] PROGMEM = "Fuel Level";
+
+static const char PSTR_HYDRAULIC_PRESSURE[] PROGMEM = "HYDRAULIC_PRESSURE";
+static const char PSTR_HYDRAULIC_PRESSURE_ABBR[] PROGMEM = " HP";
+static const char PSTR_HYDRAULIC_PRESSURE_LABEL[] PROGMEM = "Hydraulic Pressure";
+
+static const char PSTR_BRAKE_PRESSURE[] PROGMEM = "BRAKE_PRESSURE";
+static const char PSTR_BRAKE_PRESSURE_ABBR[] PROGMEM = " BP";
+static const char PSTR_BRAKE_PRESSURE_LABEL[] PROGMEM = "Brake Pressure";
+
 // ===== APPLICATION PRESETS (PROGMEM - Flash Memory) =====
 //
 // To add a new application:
@@ -509,8 +521,70 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .persistTime_ms = 0  // No persistence needed
     },
 
+    // ===== PRESSURE APPLICATIONS (EXTENDED) =====
+    // Index 18: HYDRAULIC_PRESSURE - Hydraulic System Pressure (0-10 bar)
+    {
+        .name = PSTR_HYDRAULIC_PRESSURE,
+        .abbreviation = PSTR_HYDRAULIC_PRESSURE_ABBR,
+        .label = PSTR_HYDRAULIC_PRESSURE_LABEL,
+        .description = nullptr,
+        .defaultSensor = SENSOR_VDO_10BAR_TABLE,
+        .defaultUnits = 2,
+        .defaultMinValue = 0.0,
+        .defaultMaxValue = 10.0,
+        .obd2pid = 0xCD,
+        .obd2length = 1,
+        .defaultAlarmEnabled = false,
+        .defaultDisplayEnabled = true,
+        .expectedMeasurementType = MEASURE_PRESSURE,
+        .nameHash = 0xADC2,  // djb2_hash("HYDRAULIC_PRESSURE")
+        .warmupTime_ms = 2000,
+        .persistTime_ms = 1000
+    },
+
+    // Index 19: BRAKE_PRESSURE - Brake System Pressure (0-10 bar)
+    {
+        .name = PSTR_BRAKE_PRESSURE,
+        .abbreviation = PSTR_BRAKE_PRESSURE_ABBR,
+        .label = PSTR_BRAKE_PRESSURE_LABEL,
+        .description = nullptr,
+        .defaultSensor = SENSOR_VDO_10BAR_TABLE,
+        .defaultUnits = 2,
+        .defaultMinValue = 0.0,
+        .defaultMaxValue = 10.0,
+        .obd2pid = 0xCE,
+        .obd2length = 1,
+        .defaultAlarmEnabled = false,
+        .defaultDisplayEnabled = true,
+        .expectedMeasurementType = MEASURE_PRESSURE,
+        .nameHash = 0x96C2,  // djb2_hash("BRAKE_PRESSURE")
+        .warmupTime_ms = 1000,
+        .persistTime_ms = 500
+    },
+
+    // ===== LEVEL APPLICATIONS =====
+    // Index 20: FUEL_LEVEL - Fuel Tank Level (0-100%)
+    {
+        .name = PSTR_FUEL_LEVEL,
+        .abbreviation = PSTR_FUEL_LEVEL_ABBR,
+        .label = PSTR_FUEL_LEVEL_LABEL,
+        .description = nullptr,
+        .defaultSensor = SENSOR_VDO_FUEL_LEVEL_180,
+        .defaultUnits = 8,  // PERCENT
+        .defaultMinValue = 10.0,   // Warn below 10% (low fuel)
+        .defaultMaxValue = 100.0,
+        .obd2pid = 0x2F,   // SAE J1979 PID 0x2F: Fuel Tank Level Input
+        .obd2length = 1,
+        .defaultAlarmEnabled = true,
+        .defaultDisplayEnabled = true,
+        .expectedMeasurementType = MEASURE_LEVEL,
+        .nameHash = 0x24C8,  // djb2_hash("FUEL_LEVEL")
+        .warmupTime_ms = 2000,
+        .persistTime_ms = 5000
+    },
+
     // ===== SPEED APPLICATIONS =====
-    // Index 17: VEHICLE_SPEED
+    // Index 21: VEHICLE_SPEED
     {
         .name = PSTR_VEHICLE_SPEED,
         .abbreviation = PSTR_VEHICLE_SPEED_ABBR,

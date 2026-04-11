@@ -141,6 +141,9 @@ inline SensorCategory getSensorCategory(uint8_t sensorIndex) {
         return CAT_THERMISTOR;
     }
 
+    // Fluid level sensors (level.h)
+    if (measType == MEASURE_LEVEL) return CAT_LEVEL;
+
     return CAT_THERMOCOUPLE;  // Default fallback
 }
 

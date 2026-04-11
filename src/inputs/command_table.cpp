@@ -446,6 +446,7 @@ static int cmd_set(int argc, const char* const* argv) {
                         case MEASURE_HUMIDITY: msg.control.print(F("HUMIDITY")); break;
                         case MEASURE_ELEVATION: msg.control.print(F("ELEVATION")); break;
                         case MEASURE_DIGITAL: msg.control.print(F("DIGITAL")); break;
+                        case MEASURE_LEVEL: msg.control.print(F("LEVEL")); break;
                     }
                     msg.control.print(F(" but "));
                     msg.control.print(field);
@@ -459,6 +460,7 @@ static int cmd_set(int argc, const char* const* argv) {
                         case MEASURE_HUMIDITY: msg.control.print(F("HUMIDITY")); break;
                         case MEASURE_ELEVATION: msg.control.print(F("ELEVATION")); break;
                         case MEASURE_DIGITAL: msg.control.print(F("DIGITAL")); break;
+                        case MEASURE_LEVEL: msg.control.print(F("LEVEL")); break;
                     }
                     msg.control.println();
                     return 1;
