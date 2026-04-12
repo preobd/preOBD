@@ -56,9 +56,13 @@ struct BusConfig {
     uint32_t can_output_baudrate; // bps - output bus baud rate (125000, 250000, 500000, 1000000)
 
     // Runtime mode/enable flags
-    uint8_t can_input_mode;     // CanInputMode: OFF(0), NORMAL(1), LISTEN(2)
-    uint8_t can_output_enabled; // Enable CAN output (0=disabled, 1=enabled)
-};  // 26 bytes nominal (28 with ARM padding)
+    uint8_t can_input_mode;       // CanInputMode: OFF(0), NORMAL(1), LISTEN(2)
+    uint8_t can_output_enabled;   // Enable CAN output (0=disabled, 1=enabled)
+
+    // ELM327 serial output — port assigned as OBD-II ASCII emulator
+    // 0xFF = disabled; 1-8 = Serial1-Serial8 (exclusive to ELM327 when assigned)
+    uint8_t elm327_serial_port;
+};  // 27 bytes nominal (28 with ARM padding)
 
 /**
  * Serial Port Baud Rate Index

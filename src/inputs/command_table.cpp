@@ -29,9 +29,13 @@
 #include "../lib/serial_manager.h"
 #include "../lib/pin_registry.h"
 #include "../outputs/output_base.h"
+#include "../lib/obd_query.h"
 #include "../lib/display_manager.h"
 #ifdef ENABLE_RELAY_OUTPUT
 #include "../outputs/output_relay.h"
+#endif
+#ifdef ENABLE_ELM327
+#include "../outputs/output_elm327.h"
 #endif
 #ifdef ENABLE_TEST_MODE
 #include "../test/test_mode.h"
@@ -280,6 +284,7 @@ static int cmd_save(int argc, const char* const* argv) {
         msg.control.println(F("Saving configuration to EEPROM..."));
         saveInputConfig();
         saveSystemConfig();
+        obdQuery_buildLookupTable();  // Rebuild PID table — inputs may have changed
         msg.control.println(F("Configuration saved"));
         return 0;
     }
@@ -289,6 +294,7 @@ static int cmd_save(int argc, const char* const* argv) {
         msg.control.println(F("Saving configuration to EEPROM..."));
         saveInputConfig();
         saveSystemConfig();
+        obdQuery_buildLookupTable();  // Rebuild PID table — inputs may have changed
         msg.control.println(F("Configuration saved"));
         return 0;
     }
@@ -1742,6 +1748,22 @@ static int cmd_transport(int argc, const char* const* argv) {
         return 1;
     }
 
+    // Conflict: refuse to assign a serial port that is owned by ELM327
+#ifdef ENABLE_ELM327
+    if (transport >= TRANSPORT_SERIAL1 && transport <= TRANSPORT_SERIAL8) {
+        uint8_t port_id = transport - TRANSPORT_SERIAL1 + 1;
+        if (systemConfig.buses.elm327_serial_port == port_id) {
+            msg.control.print(F("ERROR: Serial"));
+            msg.control.print(port_id);
+            msg.control.println(F(" is owned by ELM327"));
+            msg.control.print(F("  Run: BUS SERIAL "));
+            msg.control.print(port_id);
+            msg.control.println(F(" ELM327 DISABLE first"));
+            return 1;
+        }
+    }
+#endif
+
     if (router.setTransport(plane, transport)) {
         msg.control.print(F("Set "));
         msg.control.print(argv[1]);
@@ -2731,11 +2753,98 @@ static int cmd_bus(int argc, const char* const* argv) {
                 return 0;
             }
 
+            // BUS SERIAL <port> ELM327 ENABLE|DISABLE
+#ifdef ENABLE_ELM327
+            if (streq(argv[3], "ELM327")) {
+                if (argc < 5) {
+                    msg.control.println(F("ERROR: ELM327 requires ENABLE or DISABLE"));
+                    msg.control.println(F("  Usage: BUS SERIAL <port> ELM327 ENABLE|DISABLE"));
+                    return 1;
+                }
+
+                if (streq(argv[4], "ENABLE")) {
+                    if (!isSerialPortActive(port_id)) {
+                        msg.control.print(F("ERROR: Serial"));
+                        msg.control.print(port_id);
+                        msg.control.println(F(" is not enabled"));
+                        msg.control.print(F("  Run: BUS SERIAL "));
+                        msg.control.print(port_id);
+                        msg.control.println(F(" ENABLE <baud> first"));
+                        return 1;
+                    }
+
+                    // Conflict: refuse if this port is used by the message router
+                    uint8_t routerTransportId = TRANSPORT_SERIAL1 + (port_id - 1);
+                    const char* conflictPlane = nullptr;
+                    if (systemConfig.router.control_primary == routerTransportId ||
+                        systemConfig.router.control_secondary == routerTransportId)
+                        conflictPlane = "CONTROL";
+                    else if (systemConfig.router.data_primary == routerTransportId ||
+                             systemConfig.router.data_secondary == routerTransportId)
+                        conflictPlane = "DATA";
+                    else if (systemConfig.router.debug_primary == routerTransportId ||
+                             systemConfig.router.debug_secondary == routerTransportId)
+                        conflictPlane = "DEBUG";
+
+                    if (conflictPlane) {
+                        msg.control.print(F("ERROR: Serial"));
+                        msg.control.print(port_id);
+                        msg.control.print(F(" is in use by the router ("));
+                        msg.control.print(conflictPlane);
+                        msg.control.println(F(" plane) — reassign first"));
+                        return 1;
+                    }
+
+                    // Conflict: refuse if another port is already the ELM327 port
+                    if (systemConfig.buses.elm327_serial_port != 0xFF &&
+                        systemConfig.buses.elm327_serial_port != port_id) {
+                        msg.control.print(F("ERROR: Serial"));
+                        msg.control.print(systemConfig.buses.elm327_serial_port);
+                        msg.control.println(F(" is already the ELM327 port"));
+                        msg.control.print(F("  Run: BUS SERIAL "));
+                        msg.control.print(systemConfig.buses.elm327_serial_port);
+                        msg.control.println(F(" ELM327 DISABLE first"));
+                        return 1;
+                    }
+
+                    Stream* ser = getSerialPort(port_id);
+                    elm327Output.setSerial(ser);
+                    elm327Output.begin();
+                    systemConfig.buses.elm327_serial_port = port_id;
+                    systemConfig.outputEnabled[OUTPUT_ELM327] = 1;
+
+                    msg.control.print(F("ELM327 emulator assigned to Serial"));
+                    msg.control.println(port_id);
+                    msg.control.println(F("Use SAVE to persist"));
+                    return 0;
+                }
+
+                if (streq(argv[4], "DISABLE")) {
+                    elm327Output.end();
+                    elm327Output.setSerial(nullptr);
+                    systemConfig.buses.elm327_serial_port = 0xFF;
+                    systemConfig.outputEnabled[OUTPUT_ELM327] = 0;
+
+                    msg.control.print(F("ELM327 disabled on Serial"));
+                    msg.control.println(port_id);
+                    msg.control.println(F("Use SAVE to persist"));
+                    return 0;
+                }
+
+                msg.control.println(F("ERROR: ELM327 requires ENABLE or DISABLE"));
+                return 1;
+            }
+#endif  // ENABLE_ELM327
+
             // Unknown subcommand for port
             msg.control.print(F("ERROR: Unknown command '"));
             msg.control.print(argv[3]);
             msg.control.println(F("'"));
+#ifdef ENABLE_ELM327
+            msg.control.println(F("  Valid: ENABLE, DISABLE, BAUDRATE, ELM327"));
+#else
             msg.control.println(F("  Valid: ENABLE, DISABLE, BAUDRATE"));
+#endif
             return 1;
         }
 

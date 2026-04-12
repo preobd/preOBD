@@ -31,8 +31,9 @@ enum LogTag {
     TAG_ID_I2C = 10,
     TAG_ID_SPI = 11,
     TAG_ID_JSON = 12,
-    TAG_ID_RELAY = 13,
+    TAG_ID_RELAY  = 13,
     TAG_ID_SYSTEM = 14,
+    TAG_ID_ELM327 = 15,
     // Add more tags as needed (max 32 total for uint32_t bitmap)
 
     NUM_LOG_TAGS  // Must be last - count of tags
@@ -54,6 +55,7 @@ enum LogTag {
 #define TAG_JSON      "JSON"
 #define TAG_RELAY     "RELAY"
 #define TAG_SYSTEM    "SYSTEM"
+#define TAG_ELM327    "ELM327"
 
 // Tag name array (stored in PROGMEM to save RAM)
 const char TAG_NAME_SD[]      PROGMEM = "SD";
@@ -71,6 +73,7 @@ const char TAG_NAME_SPI[]     PROGMEM = "SPI";
 const char TAG_NAME_JSON[]    PROGMEM = "JSON";
 const char TAG_NAME_RELAY[]   PROGMEM = "RELAY";
 const char TAG_NAME_SYSTEM[]  PROGMEM = "SYSTEM";
+const char TAG_NAME_ELM327[]  PROGMEM = "ELM327";
 
 // Array of tag name pointers (in PROGMEM)
 const char* const LOG_TAG_NAMES[] PROGMEM = {
@@ -88,7 +91,8 @@ const char* const LOG_TAG_NAMES[] PROGMEM = {
     TAG_NAME_SPI,
     TAG_NAME_JSON,
     TAG_NAME_RELAY,
-    TAG_NAME_SYSTEM
+    TAG_NAME_SYSTEM,
+    TAG_NAME_ELM327
 };
 
 // Helper function to get tag ID from string name

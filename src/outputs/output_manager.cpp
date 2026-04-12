@@ -8,7 +8,8 @@
 #include "../lib/message_router.h"
 #include "../lib/message_api.h"
 
-// Output mask filtering relies on OutputID enum values matching outputModules[] indices
+// Output mask filtering relies on OUTPUT_CAN..OUTPUT_SD being 0-3.
+// NUM_OUTPUTS is now unconditionally 7 (stable enum), so this assert is always safe.
 static_assert(OUTPUT_CAN == 0 && OUTPUT_REALDASH == 1 &&
               OUTPUT_SERIAL == 2 && OUTPUT_SD == 3,
               "OutputID data output enum values must be 0-3 for per-input mask filtering");
@@ -40,23 +41,36 @@ extern void sendRelayOutput(Input*);
 extern void updateRelayOutput();
 #endif
 
+#ifdef ENABLE_ELM327
+extern void initELM327();
+extern void sendELM327(Input*);
+extern void updateELM327();
+#endif
+
 // Define output modules array - always compiled, controlled by runtime flags
 OutputModule outputModules[] = {
-    {"CAN", false, initCAN, sendCAN, updateCAN, 100},
-    {"RealDash", false, initRealdash, sendRealdash, updateRealdash, 100},
-    {"Serial", false, initSerialOutput, sendSerialOutput, updateSerialOutput, 1000},
-    {"SD_Log", false, initSDLog, sendSDLog, updateSDLog, 5000},
-    {"Alarm", true, initAlarmOutput, sendAlarmOutput, updateAlarmOutput, 100},
+    {"CAN",     false, initCAN,           sendCAN,           updateCAN,           100},
+    {"RealDash",false, initRealdash,      sendRealdash,      updateRealdash,      100},
+    {"Serial",  false, initSerialOutput,  sendSerialOutput,  updateSerialOutput,  1000},
+    {"SD_Log",  false, initSDLog,         sendSDLog,         updateSDLog,         5000},
+    {"Alarm",   true,  initAlarmOutput,   sendAlarmOutput,   updateAlarmOutput,   100},
 #ifdef ENABLE_RELAY_OUTPUT
-    {"Relay", true, initRelayOutput, sendRelayOutput, updateRelayOutput, 100},
+    {"Relay",   true,  initRelayOutput,   sendRelayOutput,   updateRelayOutput,   100},
+#else
+    {nullptr,   false, nullptr,           nullptr,           nullptr,             0},
+#endif
+#ifdef ENABLE_ELM327
+    // sendInterval = UINT16_MAX: ELM327 is pull-based, send() is a no-op.
+    // Setting interval to max prevents sendToOutputs() from iterating all
+    // inputs every loop just to call the no-op.
+    {"ELM327",  false, initELM327,        sendELM327,        updateELM327,        UINT16_MAX},
+#else
+    {nullptr,   false, nullptr,           nullptr,           nullptr,             0},
 #endif
 };
 
-#ifdef ENABLE_RELAY_OUTPUT
-const int numOutputModules = 6;
-#else
-const int numOutputModules = 5;
-#endif
+// Always 7 entries — matches NUM_OUTPUTS enum (stable regardless of compile flags)
+const int numOutputModules = 7;
 
 // Track last send time for each output module
 static uint32_t lastOutputSend[sizeof(outputModules) / sizeof(outputModules[0])];
@@ -64,6 +78,8 @@ static uint32_t lastOutputSend[sizeof(outputModules) / sizeof(outputModules[0])]
 void initOutputModules() {
     // Apply runtime configuration from system config
     for (int i = 0; i < numOutputModules; i++) {
+        if (outputModules[i].name == nullptr) continue;  // Placeholder slot
+
         outputModules[i].enabled = systemConfig.outputEnabled[i];
         outputModules[i].sendInterval = systemConfig.outputInterval[i];
 
@@ -77,6 +93,7 @@ void initOutputModules() {
 // Send data to all outputs at their configured intervals
 void sendToOutputs(uint32_t now) {
     for (int i = 0; i < numOutputModules; i++) {
+        if (outputModules[i].name == nullptr) continue;  // Placeholder slot
         if (!outputModules[i].enabled) continue;
 
         // Check if enough time has elapsed for this output
@@ -97,6 +114,7 @@ void sendToOutputs(uint32_t now) {
 // Housekeeping - called every loop (drain buffers, handle RX, etc.)
 void updateOutputs() {
     for (int i = 0; i < numOutputModules; i++) {
+        if (outputModules[i].name == nullptr) continue;  // Placeholder slot
         if (outputModules[i].enabled && outputModules[i].update != nullptr) {
             outputModules[i].update();
         }
@@ -112,6 +130,7 @@ void updateOutputs() {
  */
 OutputModule* getOutputByName(const char* name) {
     for (int i = 0; i < numOutputModules; i++) {
+        if (outputModules[i].name == nullptr) continue;
         if (strcasecmp(outputModules[i].name, name) == 0) {
             return &outputModules[i];
         }
@@ -164,6 +183,7 @@ bool setOutputInterval(const char* name, uint16_t interval) {
 void listOutputs() {
     msg.control.println(F("=== Output Modules ==="));
     for (int i = 0; i < numOutputModules; i++) {
+        if (outputModules[i].name == nullptr) continue;
         msg.control.print(outputModules[i].name);
         msg.control.print(F(": "));
         if (outputModules[i].enabled) {
@@ -182,6 +202,7 @@ void listOutputs() {
 void listOutputModules() {
     msg.control.println(F("=== Available Output Modules ==="));
     for (int i = 0; i < numOutputModules; i++) {
+        if (outputModules[i].name == nullptr) continue;
         msg.control.println(outputModules[i].name);
     }
 }

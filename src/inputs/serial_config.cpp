@@ -34,8 +34,8 @@
 // Static buffer for CLI (avoids dynamic allocation)
 // embeddedCliRequiredSize() validates this at runtime; increase if CLI init fails.
 // Formula: EmbeddedCli + EmbeddedCliImpl + rxBuf + cmdBuf + histBuf + bindings*(sizeof+1)
-// With above config on AVR: ~850 bytes needed; 1024 gives comfortable headroom.
-#define CLI_BUFFER_SIZE 1024
+// With above config on AVR: ~850 bytes needed; 1280 gives comfortable headroom.
+#define CLI_BUFFER_SIZE 1280
 static CLI_UINT cli_buffer[BYTES_TO_CLI_UINTS(CLI_BUFFER_SIZE)];
 static EmbeddedCli* cli = nullptr;
 
