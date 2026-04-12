@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- ELM327 AT command emulator output module for direct BLE OBD-II app connectivity without hardware adapter
 - Added Jeep 4.0L sensor family (gauge temp sender, Renix ECU CTS, oil pressure sender)
 
 ## [0.7.0-beta] - 2026-02-07
