@@ -163,6 +163,7 @@ void ELM327Output::_processLine(const char* line) {
         if (_echoOn) {
             _serial->print(line);
             _serial->print('\r');
+            if (_linefeedsOn) _serial->print('\n');
         }
 
         _handleATCommand(cmd);
@@ -184,6 +185,7 @@ void ELM327Output::_processLine(const char* line) {
         if (_echoOn) {
             _serial->print(line);
             _serial->print('\r');
+            if (_linefeedsOn) _serial->print('\n');
         }
 
         _handleOBDQuery(upper);
