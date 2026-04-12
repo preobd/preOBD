@@ -41,7 +41,7 @@ extern void sendRelayOutput(Input*);
 extern void updateRelayOutput();
 #endif
 
-#ifdef ENABLE_ELM327_OUTPUT
+#ifdef ENABLE_ELM327
 extern void initELM327();
 extern void sendELM327(Input*);
 extern void updateELM327();
@@ -59,7 +59,7 @@ OutputModule outputModules[] = {
 #else
     {nullptr,   false, nullptr,           nullptr,           nullptr,             0},
 #endif
-#ifdef ENABLE_ELM327_OUTPUT
+#ifdef ENABLE_ELM327
     // sendInterval = UINT16_MAX: ELM327 is pull-based, send() is a no-op.
     // Setting interval to max prevents sendToOutputs() from iterating all
     // inputs every loop just to call the no-op.

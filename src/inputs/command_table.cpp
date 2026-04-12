@@ -34,7 +34,7 @@
 #ifdef ENABLE_RELAY_OUTPUT
 #include "../outputs/output_relay.h"
 #endif
-#ifdef ENABLE_ELM327_OUTPUT
+#ifdef ENABLE_ELM327
 #include "../outputs/output_elm327.h"
 #endif
 #ifdef ENABLE_TEST_MODE
@@ -1749,7 +1749,7 @@ static int cmd_transport(int argc, const char* const* argv) {
     }
 
     // Conflict: refuse to assign a serial port that is owned by ELM327
-#ifdef ENABLE_ELM327_OUTPUT
+#ifdef ENABLE_ELM327
     if (transport >= TRANSPORT_SERIAL1 && transport <= TRANSPORT_SERIAL8) {
         uint8_t port_id = transport - TRANSPORT_SERIAL1 + 1;
         if (systemConfig.buses.elm327_serial_port == port_id) {
@@ -2754,7 +2754,7 @@ static int cmd_bus(int argc, const char* const* argv) {
             }
 
             // BUS SERIAL <port> ELM327 ENABLE|DISABLE
-#ifdef ENABLE_ELM327_OUTPUT
+#ifdef ENABLE_ELM327
             if (streq(argv[3], "ELM327")) {
                 if (argc < 5) {
                     msg.control.println(F("ERROR: ELM327 requires ENABLE or DISABLE"));
@@ -2834,13 +2834,13 @@ static int cmd_bus(int argc, const char* const* argv) {
                 msg.control.println(F("ERROR: ELM327 requires ENABLE or DISABLE"));
                 return 1;
             }
-#endif  // ENABLE_ELM327_OUTPUT
+#endif  // ENABLE_ELM327
 
             // Unknown subcommand for port
             msg.control.print(F("ERROR: Unknown command '"));
             msg.control.print(argv[3]);
             msg.control.println(F("'"));
-#ifdef ENABLE_ELM327_OUTPUT
+#ifdef ENABLE_ELM327
             msg.control.println(F("  Valid: ENABLE, DISABLE, BAUDRATE, ELM327"));
 #else
             msg.control.println(F("  Valid: ENABLE, DISABLE, BAUDRATE"));

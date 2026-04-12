@@ -44,7 +44,7 @@ enum DisplayType {
 #ifdef ENABLE_RELAY_OUTPUT
 #include "../outputs/output_relay.h"
 #endif
-#ifdef ENABLE_ELM327_OUTPUT
+#ifdef ENABLE_ELM327
 #include "../outputs/output_elm327.h"
 #endif
 

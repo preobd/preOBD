@@ -6,7 +6,7 @@
 
 #include "../config.h"
 
-#ifdef ENABLE_ELM327_OUTPUT
+#ifdef ENABLE_ELM327
 
 #include "output_elm327.h"
 #include "../lib/obd_query.h"
@@ -368,4 +368,4 @@ void ELM327Output::_sendPrompt() {
     _sendString(">");
 }
 
-#endif // ENABLE_ELM327_OUTPUT
+#endif // ENABLE_ELM327

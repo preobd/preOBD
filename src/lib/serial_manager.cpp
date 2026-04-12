@@ -309,7 +309,7 @@ void displaySerialStatus() {
             msg.control.print(F("disabled"));
         }
 
-#ifdef ENABLE_ELM327_OUTPUT
+#ifdef ENABLE_ELM327
         if (systemConfig.buses.elm327_serial_port == port_id) {
             msg.control.print(F(" [ELM327]"));
         }
@@ -341,7 +341,7 @@ void displaySerialPortStatus(uint8_t port_id) {
     msg.control.println(F(":"));
     msg.control.print(F("  Status: "));
     msg.control.print(enabled ? F("ENABLED") : F("disabled"));
-#ifdef ENABLE_ELM327_OUTPUT
+#ifdef ENABLE_ELM327
     if (systemConfig.buses.elm327_serial_port == port_id) {
         msg.control.print(F(" [ELM327]"));
     }
