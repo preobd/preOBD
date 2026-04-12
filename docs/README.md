@@ -97,7 +97,7 @@ VDO Sensor:
   Signal wire → Analog pin (e.g., A2)
   Ground → Chassis ground (sensor body)
 
-Required: Pull-down resistor (DEFAULT_BIAS_RESISTOR in config.h) from pin → resistor → GND
+Required: 100Ω pull-down resistor from pin → GND (see BIAS_RESISTOR_GUIDE.md)
 ```
 
 **VDO Pressure Sensors:**
@@ -106,7 +106,7 @@ VDO Sensor:
   Signal wire → Analog pin (e.g., A3)
   Ground → Chassis ground (sensor body)
 
-Required: Pull-down resistor (DEFAULT_BIAS_RESISTOR in config.h) from pin → resistor → GND
+Required: 100Ω pull-down resistor from pin → GND (see BIAS_RESISTOR_GUIDE.md)
 ```
 
 **Voltage Monitoring:**
@@ -384,4 +384,3 @@ See [OBD-II Scanner Guide](guides/outputs/OBD2_SCANNER_GUIDE.md) for setup.
 - GitHub Issues
 - Include firmware version (`VERSION` command)
 - Include your configuration (`DUMP` command)
-

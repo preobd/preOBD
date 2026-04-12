@@ -89,10 +89,10 @@ VDO Sensor:
   Ground → Chassis ground (sensor body grounds through engine block)
 
 Required: Pull-down resistor from analog pin to GND
-  Analog pin → 1kΩ resistor → GND
+  Analog pin → 100Ω resistor → GND
 ```
 
-**Note:** The pull-down resistor value is set by DEFAULT_BIAS_RESISTOR in config.h (default 1kΩ). You can override per-sensor with the `SET <pin> BIAS <ohms>` command.
+**Note:** VDO pressure sensors are low-resistance gauge senders (10–184Ω). Use a 100Ω bias resistor for best ADC resolution. See [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) for full details. You can override per-sensor with the `SET <pin> BIAS <ohms>` command.
 
 ### Generic 3-Wire Voltage Sensors
 
@@ -152,11 +152,11 @@ SAVE
 
 ### Adjust Bias Resistor
 
-If you're using a different bias resistor than the default 1kΩ:
+VDO pressure sensors use a 100Ω bias resistor by default. If you have a different resistor installed, override it per-channel to match:
 
 ```
 SET A3 OIL_PRESSURE VDO_5BAR_CURVE
-SET A3 BIAS 2200
+SET A3 BIAS 100
 SAVE
 ```
 
@@ -277,4 +277,3 @@ Where:
 - [SENSOR_SELECTION_GUIDE.md](SENSOR_SELECTION_GUIDE.md) - Complete sensor catalog
 - [VDO_SENSOR_GUIDE.md](VDO_SENSOR_GUIDE.md) - VDO temperature sensors
 - [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) - Custom calibrations
-

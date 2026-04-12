@@ -118,7 +118,7 @@ NTC thermistors are single-wire resistive sensors. Automotive sensors typically 
     |
     +-----> Analog Pin (e.g., A0)
     |
-[1k Resistor] <-- Pull-down resistor
+[100Ω Resistor] <-- Pull-down resistor (for VDO/gauge senders)
     |
    GND
 ```
@@ -139,19 +139,20 @@ GND ---------> Sensor GND
 
 ### Pull-Down Resistor Value (NTC Only)
 
-The default is 1k (set by DEFAULT_BIAS_RESISTOR in config.h).
+The bias resistor value depends on your sensor family — see [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) for full details. The short answer:
 
-| Resistor | ADC Resolution | Best For |
-|----------|---------------|----------|
-| 1k | Good balance | General use (recommended) |
-| 470 | Better at high temps | Data logging, precision |
-| 2.2k | Better at low temps | Cold climate, ambient |
-| 10k | For 10k thermistors | Generic NTC sensors |
+- **VDO and other gauge senders (low-resistance family):** 100Ω
+- **GM/Jeep EFI NTC thermistors (high-impedance family):** 2.49kΩ
 
-To use a different resistor:
+| Resistor | Best For |
+|----------|----------|
+| 100Ω | VDO SingleViu, Smiths, Stewart Warner, pre-EFI Ford/GM, Jeep CJ, Mopar oil pressure — all low-resistance gauge senders |
+| 2.49kΩ | GM EFI ECT, Bosch NTC M12, Jeep XJ/Mopar 56027012 temp, Renix CTS — all high-impedance NTC sensors |
+
+To override the default for a specific channel:
 ```
 SET A0 OIL_TEMP VDO_150C_TABLE
-SET A0 BIAS 470
+SET A0 BIAS 100
 SAVE
 ```
 
@@ -355,4 +356,3 @@ Use a multimeter to measure resistance between terminals (or terminal and body f
 - [THERMOCOUPLE_GUIDE.md](THERMOCOUPLE_GUIDE.md) - Thermocouple temperature sensors
 - [PRESSURE_SENSOR_GUIDE.md](PRESSURE_SENSOR_GUIDE.md) - Pressure sensors
 - [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) - Custom calibrations
-
