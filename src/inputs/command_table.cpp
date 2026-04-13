@@ -1752,7 +1752,13 @@ static int cmd_transport(int argc, const char* const* argv) {
     // Sets this as the secondary (listen-on + multicast-to) transport for the plane,
     // leaving the primary unchanged. Both primary and secondary are polled for input
     // and receive all output, enabling simultaneous control from two ports.
-    bool isSecondary = (argc >= 4 && streq(argv[3], "SECONDARY"));
+    if (argc >= 4 && !streq(argv[3], "SECONDARY")) {
+        msg.control.print(F("ERROR: Unknown option '"));
+        msg.control.print(argv[3]);
+        msg.control.println(F("' (did you mean SECONDARY?)"));
+        return 1;
+    }
+    bool isSecondary = (argc >= 4);
 
     // Conflict: refuse to assign a serial port that is owned by ELM327
 #ifdef ENABLE_ELM327
