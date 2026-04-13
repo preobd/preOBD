@@ -613,6 +613,8 @@ BUS SERIAL <1-8>                 # Show specific port status
 BUS SERIAL <1-8> ENABLE [baud]   # Enable serial port with optional baud rate
 BUS SERIAL <1-8> DISABLE         # Disable serial port
 BUS SERIAL <1-8> BAUDRATE <rate> # Set serial port baud rate
+BUS SERIAL <1-8> ELM327 ENABLE   # Assign ELM327 emulator to serial port (requires ENABLE_ELM327 build flag)
+BUS SERIAL <1-8> ELM327 DISABLE  # Remove ELM327 emulator from serial port
 ```
 
 ### Platform Availability
@@ -704,6 +706,19 @@ BUS SERIAL 3 DISABLE             # Disable Serial3 to free pins
 SAVE
 ```
 
+**Enable ELM327 emulator on Serial2 (e.g., HM-10 BLE module):**
+```
+BUS SERIAL 2 ENABLE 115200       # Enable Serial2 at 115200 baud
+BUS SERIAL 2 ELM327 ENABLE       # Assign ELM327 emulator to Serial2
+SAVE
+```
+
+**Disable ELM327 on Serial2:**
+```
+BUS SERIAL 2 ELM327 DISABLE      # Remove ELM327 from Serial2 (port stays enabled)
+SAVE
+```
+
 ### Bus Status Display
 
 ```
@@ -735,7 +750,7 @@ Shows:
 === Serial Port Configuration ===
 Platform supports Serial1-Serial8
 
-  Serial1: ENABLED @ 115200 baud (RX=0, TX=1)
+  Serial1: ENABLED @ 115200 baud [ELM327] (RX=0, TX=1)
   Serial2: disabled (RX=7, TX=8)
   Serial3: disabled (RX=15, TX=14)
   Serial4: disabled (RX=16, TX=17)
@@ -746,6 +761,7 @@ Platform supports Serial1-Serial8
 
 Use BUS SERIAL <port> ENABLE [baudrate] to enable a port
 Use BUS SERIAL <port> DISABLE to disable a port
+Use BUS SERIAL <port> ELM327 ENABLE to assign ELM327 emulator to a port
 ```
 
 ### Notes
@@ -756,6 +772,19 @@ Use BUS SERIAL <port> DISABLE to disable a port
 - Bus configuration is saved to EEPROM and included in JSON exports
 - Serial ports can be assigned to TRANSPORT for message routing (see `TRANSPORT` command)
 - Enabled serial ports register their pins with the pin registry to prevent conflicts
+
+### ELM327 Serial Emulator
+
+Requires the `ENABLE_ELM327` build flag (set in `platformio.ini`).
+
+- The port must be enabled first: `BUS SERIAL <n> ENABLE <baud>` before running `ELM327 ENABLE`
+- Only one serial port may act as the ELM327 port at a time
+- A port assigned to ELM327 cannot simultaneously carry CONTROL/DATA/DEBUG router traffic; remove the transport assignment first
+- `ELM327 DISABLE` removes the emulator role but leaves the port enabled
+- Changes take effect immediately; use `SAVE` to persist across reboots
+
+For full setup instructions (HM-10 wiring, phone app configuration), see
+[`docs/guides/outputs/DIRECT_BLE_OBD_GUIDE.md`](../guides/outputs/DIRECT_BLE_OBD_GUIDE.md).
 
 ---
 

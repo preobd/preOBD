@@ -2865,7 +2865,11 @@ static int cmd_bus(int argc, const char* const* argv) {
         msg.control.print(F("ERROR: Unknown serial command '"));
         msg.control.print(argv[2]);
         msg.control.println(F("'"));
+#ifdef ENABLE_ELM327
+        msg.control.println(F("  Usage: BUS SERIAL [1-8] [ENABLE|DISABLE|BAUDRATE <rate>|ELM327 <ENABLE|DISABLE>]"));
+#else
         msg.control.println(F("  Usage: BUS SERIAL [1-8] [ENABLE|DISABLE|BAUDRATE <rate>]"));
+#endif
         return 1;
 #endif
     }
