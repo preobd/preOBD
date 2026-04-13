@@ -544,11 +544,22 @@ void printHelpTransport() {
     msg.control.println(F("Route control, data, and debug messages"));
     msg.control.println();
     msg.control.println(F("  TRANSPORT STATUS  - Show current transport routing"));
-    msg.control.println(F("  TRANSPORT CONTROL <transport>  - Route control messages"));
-    msg.control.println(F("  TRANSPORT DATA <transport>  - Route sensor data output"));
-    msg.control.println(F("  TRANSPORT DEBUG <transport>  - Route debug messages"));
+    msg.control.println(F("  TRANSPORT <plane> <transport>  - Set primary transport"));
+    msg.control.println(F("  TRANSPORT <plane> <transport> SECONDARY  - Set secondary"));
     msg.control.println();
+    msg.control.println(F("  Planes: CONTROL, DATA, DEBUG"));
     msg.control.println(F("  (Use LIST TRANSPORTS to see available transports)"));
+    msg.control.println();
+    msg.control.println(F("  Both primary and secondary are polled for input and"));
+    msg.control.println(F("  receive all output, enabling simultaneous control from"));
+    msg.control.println(F("  two ports (e.g. USB + Bluetooth HM-10)."));
+    msg.control.println();
+    msg.control.println(F("  Example:"));
+    msg.control.println(F("    TRANSPORT CONTROL SERIAL7"));
+    msg.control.println(F("    TRANSPORT CONTROL USB_SERIAL SECONDARY"));
+    msg.control.println(F("    SAVE"));
+    msg.control.println();
+    msg.control.println(F("  Clear secondary: TRANSPORT CONTROL NONE SECONDARY"));
     msg.control.println();
 }
 

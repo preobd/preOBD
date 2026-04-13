@@ -1713,7 +1713,7 @@ static int cmd_display(int argc, const char* const* argv) {
 static int cmd_transport(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: TRANSPORT requires a subcommand"));
-        msg.control.println(F("  Usage: TRANSPORT STATUS | <plane> <transport>"));
+        msg.control.println(F("  Usage: TRANSPORT STATUS | <plane> <transport> [SECONDARY]"));
         msg.control.println(F("  (Use LIST TRANSPORTS to see available transports)"));
         return 1;
     }
@@ -1726,7 +1726,7 @@ static int cmd_transport(int argc, const char* const* argv) {
     // All other subcommands require a plane and transport
     if (argc < 3) {
         msg.control.println(F("ERROR: Subcommand requires a plane and transport"));
-        msg.control.println(F("  Usage: TRANSPORT <plane> <transport>"));
+        msg.control.println(F("  Usage: TRANSPORT <plane> <transport> [SECONDARY]"));
         return 1;
     }
 
@@ -1748,6 +1748,12 @@ static int cmd_transport(int argc, const char* const* argv) {
         return 1;
     }
 
+    // Optional SECONDARY keyword: TRANSPORT <plane> <transport> SECONDARY
+    // Sets this as the secondary (listen-on + multicast-to) transport for the plane,
+    // leaving the primary unchanged. Both primary and secondary are polled for input
+    // and receive all output, enabling simultaneous control from two ports.
+    bool isSecondary = (argc >= 4 && streq(argv[3], "SECONDARY"));
+
     // Conflict: refuse to assign a serial port that is owned by ELM327
 #ifdef ENABLE_ELM327
     if (transport >= TRANSPORT_SERIAL1 && transport <= TRANSPORT_SERIAL8) {
@@ -1764,9 +1770,10 @@ static int cmd_transport(int argc, const char* const* argv) {
     }
 #endif
 
-    if (router.setTransport(plane, transport)) {
+    if (router.setTransport(plane, transport, isSecondary)) {
         msg.control.print(F("Set "));
         msg.control.print(argv[1]);
+        if (isSecondary) msg.control.print(F(" secondary"));
         msg.control.print(F(" → "));
         msg.control.println(argv[2]);
 

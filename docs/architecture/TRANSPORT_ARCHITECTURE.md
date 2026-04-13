@@ -287,62 +287,61 @@ if (btESP32.begin()) {
 
 ### How Commands Are Processed
 
-1. **Polling** - `router.pollForCommands()` checks all transports
-2. **Detection** - First transport with `available() > 0` is selected
-3. **Activation** - Selected transport becomes "active control transport"
-4. **Processing** - Commands are read and processed from active transport
-5. **Response** - Responses go back to the transport that sent the command
+Each message plane has a **primary** and an optional **secondary** transport. The router polls both each loop iteration:
 
-**Example:**
+1. **Polling** - `processIncomingCommands()` checks primary, then secondary control transport
+2. **Detection** - Any transport with `available() > 0` is read
+3. **Processing** - Characters feed into the shared embedded-cli buffer
+4. **Response** - `msg.control` multicasts to **both** primary and secondary
+
 ```cpp
-void loop() {
-    // Poll all transports for commands
-    if (router.pollForCommands()) {
-        // A command is ready from some transport
-        String cmd = router.readCommand();
-
-        // Process command
-        processCommand(cmd);
-
-        // Response automatically goes to the transport that sent the command
-        msg.control.println("OK");
+void MessageRouter::processIncomingCommands() {
+    TransportInterface* ctrl = getTransport(PLANE_CONTROL, true);   // primary
+    if (ctrl && ctrl->isConnected() && ctrl->available()) {
+        setActiveControlTransport(ctrl);
+        processCommandFromTransport(ctrl);
     }
+    TransportInterface* ctrl2 = getTransport(PLANE_CONTROL, false); // secondary
+    if (ctrl2 && ctrl2->isConnected() && ctrl2->available()) {
+        setActiveControlTransport(ctrl2);
+        processCommandFromTransport(ctrl2);
+    }
+    processSerialCommands();
 }
 ```
 
+### Multi-Port Simultaneous Control
+
+Setting a secondary transport on the CONTROL plane allows two ports to share control without either losing connectivity. All `msg.control` output (responses, prompts, CLI echo) goes to both primary and secondary automatically.
+
+**User command (runtime configurable):**
+```
+TRANSPORT CONTROL SERIAL7                 # HM-10 Bluetooth as primary
+TRANSPORT CONTROL USB_SERIAL SECONDARY    # Laptop USB stays active too
+SAVE
+```
+
+**Clear secondary:**
+```
+TRANSPORT CONTROL NONE SECONDARY
+SAVE
+```
+
+Both ports accept commands independently. Since responses always go to both, there is no exclusive ownership — any port that sends a command will receive the response.
+
 ### Active Control Transport
 
-Only one transport can be the "active control transport" at a time. This ensures:
-- Commands don't get mixed between transports
-- Responses go to the correct requester
-- Priority is respected (USB beats Bluetooth)
-
-**Switching Control:**
-```cpp
-// User sends command via Bluetooth
-router.pollForCommands();  // Detects Bluetooth has data
-// Bluetooth becomes active control transport
-
-msg.control.println("OK");  // Goes to Bluetooth
-
-// User sends command via USB
-router.pollForCommands();  // Detects USB has data (higher priority)
-// USB becomes active control transport
-
-msg.control.println("OK");  // Goes to USB
-```
+`activeControlTransport` tracks whichever port most recently sent a character. This is informational state; it does not affect output routing (which always multicasts to primary + secondary).
 
 ## Output Broadcasting
 
-### Broadcast vs. Unicast
+### Broadcast vs. Multicast
 
-- **Unicast (Control)** - Goes to active control transport only
-- **Broadcast (Data)** - Goes to all connected transports
+All `msg.control`, `msg.data`, and `msg.debug` calls route to the **primary transport** for that plane and, if configured, the **secondary transport** simultaneously:
 
-**Unicast Example:**
 ```cpp
 msg.control.println("SET RPM completed");
-// Only goes to the transport that sent the SET RPM command
+// Goes to primary control transport AND secondary (if set)
 ```
 
 **Broadcast Example:**
