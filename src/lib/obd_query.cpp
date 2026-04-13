@@ -55,14 +55,30 @@ Input* obdQuery_findByPID(uint8_t pid) {
     return nullptr;
 }
 
-void obdQuery_getSupportedPIDBitmap(uint8_t* bitmap) {
+void obdQuery_getSupportedPIDBitmap(uint8_t* bitmap, uint8_t baseRange) {
     memset(bitmap, 0, 4);
+    uint16_t rangeStart = (uint16_t)baseRange + 1;
+    uint16_t rangeEnd   = (uint16_t)baseRange + 0x20;
+
     for (uint8_t i = 0; i < pidLookupCount; i++) {
-        uint8_t pid = pidLookupTable[i].pid;
-        if (pid >= 0x01 && pid <= 0x20) {
-            uint8_t byteIdx = (pid - 1) / 8;
-            uint8_t bitIdx  = 7 - ((pid - 1) % 8);
+        uint16_t pid = pidLookupTable[i].pid;
+        if (pid >= rangeStart && pid <= rangeEnd) {
+            uint8_t offset  = (uint8_t)(pid - rangeStart);  // 0–31
+            uint8_t byteIdx = offset / 8;
+            uint8_t bitIdx  = 7 - (offset % 8);
             bitmap[byteIdx] |= (1 << bitIdx);
+        }
+    }
+
+    // Set continuation bit (LSB of bitmap[3], representing PID baseRange+0x20)
+    // if any PIDs exist anywhere beyond this range, so the scanner chains through
+    // even if the immediately next 32-PID window is empty.
+    if (baseRange < 0xE0) {
+        for (uint8_t i = 0; i < pidLookupCount; i++) {
+            if ((uint16_t)pidLookupTable[i].pid > rangeEnd) {
+                bitmap[3] |= 0x01;
+                break;
+            }
         }
     }
 }
@@ -70,10 +86,11 @@ void obdQuery_getSupportedPIDBitmap(uint8_t* bitmap) {
 bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen) {
     if (mode != 0x01) return false;
 
-    if (pid == 0x00) {
+    // Discovery PIDs are 0x00, 0x20, 0x40 … 0xE0 (multiples of 32)
+    if ((pid & 0x1F) == 0x00) {
         uint8_t bitmap[4];
-        obdQuery_getSupportedPIDBitmap(bitmap);
-        out[0] = 0x41; out[1] = 0x00;
+        obdQuery_getSupportedPIDBitmap(bitmap, pid);
+        out[0] = 0x41; out[1] = pid;
         out[2] = bitmap[0]; out[3] = bitmap[1];
         out[4] = bitmap[2]; out[5] = bitmap[3];
         *outLen = 6;

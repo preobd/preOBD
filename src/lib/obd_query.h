@@ -22,8 +22,10 @@ void obdQuery_buildLookupTable();
 // Resolve a PID to an Input pointer. Returns nullptr if not found.
 Input* obdQuery_findByPID(uint8_t pid);
 
-// Fill a 4-byte bitmap of supported PIDs 0x01–0x20.
-void obdQuery_getSupportedPIDBitmap(uint8_t* bitmap4);
+// Fill a 4-byte bitmap of supported PIDs for the given base range.
+// baseRange 0x00 → PIDs 0x01–0x20, 0x20 → 0x21–0x40, etc.
+// The LSB of bitmap4[3] (continuation bit) is set if any PIDs exist in the next range.
+void obdQuery_getSupportedPIDBitmap(uint8_t* bitmap4, uint8_t baseRange);
 
 // Resolve a Mode 01 OBD-II query to a response payload.
 // Handles mode check, PID 00 special case, lookup, and frame encoding.

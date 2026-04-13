@@ -38,31 +38,31 @@ static void sendCANFrame(uint32_t canId, const byte* data, uint8_t len) {
 }
 
 /**
- * Send Mode 01 PID 00 response (Supported PIDs)
- * Single frame format: [06 41 00 XX XX XX XX 00]
+ * Send a supported-PIDs discovery response for the given base PID.
+ * Handles the full chain: 0x00, 0x20, 0x40, 0x60, …
+ * Single frame format: [06 41 <pid> XX XX XX XX 00]
  * Length=6: mode (1) + PID (1) + bitmap (4)
  */
-static void sendPID00Response() {
+static void sendSupportedPIDsResponse(uint8_t basePID) {
     uint8_t bitmap[4];
-    obdQuery_getSupportedPIDBitmap(bitmap);
+    obdQuery_getSupportedPIDBitmap(bitmap, basePID);
 
-    // Single frame response (fits in 8 bytes)
     byte frameData[8] = {
         0x06,         // Length: 6 bytes (mode + PID + 4 bitmap bytes)
         0x41,         // Mode 01 response
-        0x00,         // PID 00
-        bitmap[0],    // PIDs 0x01-0x08
-        bitmap[1],    // PIDs 0x09-0x10
-        bitmap[2],    // PIDs 0x11-0x18
-        bitmap[3],    // PIDs 0x19-0x20
+        basePID,
+        bitmap[0],
+        bitmap[1],
+        bitmap[2],
+        bitmap[3],
         0x00          // Padding
     };
 
     sendCANFrame(0x7E8, frameData, 8);
 
     #ifdef DEBUG
-    msg.debug.debug(TAG_CAN, "PID 00 bitmap: %02X %02X %02X %02X",
-                   bitmap[0], bitmap[1], bitmap[2], bitmap[3]);
+    msg.debug.debug(TAG_CAN, "PID 0x%02X bitmap: %02X %02X %02X %02X",
+                   basePID, bitmap[0], bitmap[1], bitmap[2], bitmap[3]);
     #endif
 }
 
@@ -133,9 +133,9 @@ static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
         return;
     }
 
-    // Special case: PID 00 (Supported PIDs 0x01-0x20)
-    if (pid == 0x00) {
-        sendPID00Response();
+    // Discovery PIDs: 0x00, 0x20, 0x40 … 0xE0 (supported-PIDs chain)
+    if ((pid & 0x1F) == 0x00) {
+        sendSupportedPIDsResponse(pid);
         return;
     }
 

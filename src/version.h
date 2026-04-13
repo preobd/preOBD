@@ -18,7 +18,7 @@
 // =============================================================================
 #define FW_MAJOR  0
 #define FW_MINOR  7
-#define FW_PATCH  1
+#define FW_PATCH  2
 
 // Prerelease tag: "alpha", "beta", "rc1", or "" for release
 #define FW_PRERELEASE "beta"
