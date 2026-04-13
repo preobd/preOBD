@@ -304,7 +304,20 @@ TRANSPORT DATA SERIAL5           # Route data output to Serial5
 SAVE
 ```
 
-See [Serial Commands Reference](../../reference/SERIAL_COMMANDS.md#bus-configuration) for complete serial port configuration.
+**Keeping USB Active Alongside Bluetooth (Simultaneous Control)**
+
+By default, switching the CONTROL plane to Bluetooth drops USB. Use the `SECONDARY` keyword to keep both ports active — both accept commands and receive all responses:
+
+```
+BUS SERIAL 7 ENABLE 9600                  # Enable Serial7 for HM-10
+TRANSPORT CONTROL SERIAL7                 # HM-10 as primary control port
+TRANSPORT CONTROL USB_SERIAL SECONDARY    # Laptop USB stays active too
+SAVE
+```
+
+To revert to USB-only: `TRANSPORT CONTROL NONE SECONDARY` then `SAVE`.
+
+See [Transport Configuration](../../reference/SERIAL_COMMANDS.md#transport-configuration) for the full TRANSPORT command reference.
 
 ## Troubleshooting
 

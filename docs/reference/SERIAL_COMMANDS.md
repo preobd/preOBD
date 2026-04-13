@@ -759,6 +759,53 @@ Use BUS SERIAL <port> DISABLE to disable a port
 
 ---
 
+## Transport Configuration
+
+Route control commands, sensor data output, and debug messages to different serial ports. Each message plane (CONTROL/DATA/DEBUG) has a **primary** and an optional **secondary** transport — both receive all output and both are polled for incoming commands.
+
+### Commands
+
+```
+TRANSPORT STATUS                          # Show current transport routing
+TRANSPORT <plane> <transport>             # Set primary transport for plane
+TRANSPORT <plane> <transport> SECONDARY   # Set secondary transport for plane
+TRANSPORT <plane> NONE SECONDARY          # Clear secondary transport
+```
+
+**Planes:** `CONTROL`, `DATA`, `DEBUG`
+
+**Transports:** `USB_SERIAL`, `SERIAL1`–`SERIAL8`, `ESP32_BT`, `NONE`
+
+Use `LIST TRANSPORTS` to see registered transports and their connection state.
+
+### Simultaneous Multi-Port Control
+
+Setting a secondary transport on the CONTROL plane lets two ports share control of the device — useful for keeping a laptop USB session open while also accepting commands from a Bluetooth module or other serial device.
+
+```
+BUS SERIAL 7 ENABLE 9600                  # Enable Serial7 (e.g. HM-10 at 9600 baud)
+TRANSPORT CONTROL SERIAL7                 # HM-10 as primary control port
+TRANSPORT CONTROL USB_SERIAL SECONDARY    # Laptop USB stays active alongside it
+SAVE
+```
+
+After this, both ports accept commands and receive all responses. Responses always go to **both** primary and secondary — there is no exclusive ownership.
+
+To revert to USB-only control:
+```
+TRANSPORT CONTROL USB_SERIAL              # Restore USB as primary
+TRANSPORT CONTROL NONE SECONDARY          # Clear secondary
+SAVE
+```
+
+### Notes
+
+- Hardware serial ports must be enabled first (`BUS SERIAL <n> ENABLE <baud>`) before they can be assigned as a transport
+- A serial port owned by ELM327 cannot be assigned as a transport; use `BUS SERIAL <n> ELM327 DISABLE` first
+- Transport routing is persisted to EEPROM on `SAVE` and restored on boot
+
+---
+
 ## Display Configuration
 
 Configure display hardware and refresh rate.
