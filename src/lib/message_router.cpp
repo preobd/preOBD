@@ -326,22 +326,28 @@ void MessageRouter::update() {
 }
 
 void MessageRouter::processIncomingCommands() {
-    // Poll primary control transport
+    // Drain each control transport independently: set the active transport,
+    // feed bytes into the CLI buffer, then dispatch before moving to the next
+    // port.  This ensures responses always go to the sender even when both
+    // ports have bytes ready in the same loop tick.
     TransportInterface* ctrl = getTransport(PLANE_CONTROL, true);
     if (ctrl && ctrl->isConnected() && ctrl->available()) {
         setActiveControlTransport(ctrl);
         processCommandFromTransport(ctrl);
+        processSerialCommands();
     }
 
-    // Poll secondary control transport (if configured)
     TransportInterface* ctrl2 = getTransport(PLANE_CONTROL, false);
     if (ctrl2 && ctrl2->isConnected() && ctrl2->available()) {
         setActiveControlTransport(ctrl2);
         processCommandFromTransport(ctrl2);
+        processSerialCommands();
     }
 
-    // Process received characters (embedded-cli needs this after receiving chars)
-    processSerialCommands();
+    // Clear after dispatch so unsolicited msg.control output (alarms, background
+    // notifications) falls back to normal primary + secondary multi-cast instead
+    // of sticking to whoever sent the last command.
+    setActiveControlTransport(nullptr);
 }
 
 void MessageRouter::processCommandFromTransport(TransportInterface* transport) {

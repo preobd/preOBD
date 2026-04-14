@@ -40,20 +40,43 @@
 class MessageStream {
 private:
     MessagePlane plane;
+    // When true (used by msg.control): during command dispatch, route to the
+    // transport that sent the command (activeControlTransport) so responses
+    // return to the sender.  When activeControlTransport is nullptr (between
+    // dispatches), falls back to the configured primary transport so unsolicited
+    // output (alarms, boot banners, etc.) still reaches all configured ports.
+    bool routeToActive;
+
+    // Single source of truth for primary write target.
+    TransportInterface* primaryTransport() {
+        if (routeToActive) {
+            TransportInterface* a = router.getActiveControlTransport();
+            if (a) return a;
+        }
+        return router.getTransport(plane, true);
+    }
+
+    // Secondary multi-cast target.  Suppressed during active dispatch so the
+    // response goes only to the sender (not also to the other control port).
+    TransportInterface* secondaryTransport() {
+        if (routeToActive && router.getActiveControlTransport()) return nullptr;
+        return router.getTransport(plane, false);
+    }
 
 public:
-    MessageStream(MessagePlane p) : plane(p) {}
+    MessageStream(MessagePlane p, bool useActive = false)
+        : plane(p), routeToActive(useActive) {}
 
     // ========== Text Output ==========
 
     size_t print(const char* str) {
         if (!str) return 0;
-        TransportInterface* t = router.getTransport(plane, true);
+        TransportInterface* t = primaryTransport();
         if (!t || !t->isConnected()) return 0;
         size_t n = t->print(str);
 
         // Multi-cast to secondary if configured
-        TransportInterface* t2 = router.getTransport(plane, false);
+        TransportInterface* t2 = secondaryTransport();
         if (t2 && t2->isConnected()) {
             t2->print(str);
         }
@@ -63,12 +86,12 @@ public:
 
     size_t println(const char* str) {
         if (!str) return 0;
-        TransportInterface* t = router.getTransport(plane, true);
+        TransportInterface* t = primaryTransport();
         if (!t || !t->isConnected()) return 0;
         size_t n = t->println(str);
 
         // Multi-cast to secondary if configured
-        TransportInterface* t2 = router.getTransport(plane, false);
+        TransportInterface* t2 = secondaryTransport();
         if (t2 && t2->isConnected()) {
             t2->println(str);
         }
@@ -83,12 +106,12 @@ public:
     // ========== Character Output ==========
 
     size_t print(char c) {
-        TransportInterface* t = router.getTransport(plane, true);
+        TransportInterface* t = primaryTransport();
         if (!t || !t->isConnected()) return 0;
         size_t written = t->print(c);
 
         // Multi-cast to secondary if configured
-        TransportInterface* t2 = router.getTransport(plane, false);
+        TransportInterface* t2 = secondaryTransport();
         if (t2 && t2->isConnected()) {
             t2->print(c);
         }
@@ -97,12 +120,12 @@ public:
     }
 
     size_t println(char c) {
-        TransportInterface* t = router.getTransport(plane, true);
+        TransportInterface* t = primaryTransport();
         if (!t || !t->isConnected()) return 0;
         size_t written = t->println(c);
 
         // Multi-cast to secondary if configured
-        TransportInterface* t2 = router.getTransport(plane, false);
+        TransportInterface* t2 = secondaryTransport();
         if (t2 && t2->isConnected()) {
             t2->println(c);
         }
@@ -123,12 +146,12 @@ public:
     }
 
     size_t print(int n) {
-        TransportInterface* t = router.getTransport(plane, true);
+        TransportInterface* t = primaryTransport();
         if (!t || !t->isConnected()) return 0;
         size_t written = t->print(n);
 
         // Multi-cast to secondary if configured
-        TransportInterface* t2 = router.getTransport(plane, false);
+        TransportInterface* t2 = secondaryTransport();
         if (t2 && t2->isConnected()) {
             t2->print(n);
         }
@@ -137,12 +160,12 @@ public:
     }
 
     size_t println(int n) {
-        TransportInterface* t = router.getTransport(plane, true);
+        TransportInterface* t = primaryTransport();
         if (!t || !t->isConnected()) return 0;
         size_t written = t->println(n);
 
         // Multi-cast to secondary if configured
-        TransportInterface* t2 = router.getTransport(plane, false);
+        TransportInterface* t2 = secondaryTransport();
         if (t2 && t2->isConnected()) {
             t2->println(n);
         }
@@ -226,12 +249,12 @@ public:
     // ========== Float Output ==========
 
     size_t print(float f, int digits = 2) {
-        TransportInterface* t = router.getTransport(plane, true);
+        TransportInterface* t = primaryTransport();
         if (!t || !t->isConnected()) return 0;
         size_t written = t->print(f, digits);
 
         // Multi-cast to secondary if configured
-        TransportInterface* t2 = router.getTransport(plane, false);
+        TransportInterface* t2 = secondaryTransport();
         if (t2 && t2->isConnected()) {
             t2->print(f, digits);
         }
@@ -255,12 +278,12 @@ public:
 
     size_t print(const __FlashStringHelper* str) {
         if (!str) return 0;
-        TransportInterface* t = router.getTransport(plane, true);
+        TransportInterface* t = primaryTransport();
         if (!t || !t->isConnected()) return 0;
         size_t written = t->print(str);
 
         // Multi-cast to secondary if configured
-        TransportInterface* t2 = router.getTransport(plane, false);
+        TransportInterface* t2 = secondaryTransport();
         if (t2 && t2->isConnected()) {
             t2->print(str);
         }
@@ -279,12 +302,12 @@ public:
     size_t write(const uint8_t* data, size_t len) {
         if (!data || len == 0) return 0;
 
-        TransportInterface* t = router.getTransport(plane, true);
+        TransportInterface* t = primaryTransport();
         if (!t || !t->isConnected()) return 0;
         size_t written = t->write(data, len);
 
         // Multi-cast to secondary if configured
-        TransportInterface* t2 = router.getTransport(plane, false);
+        TransportInterface* t2 = secondaryTransport();
         if (t2 && t2->isConnected()) {
             t2->write(data, len);
         }
@@ -315,7 +338,7 @@ private:
 #ifdef DISABLE_DEBUG_MESSAGES
 class MessageStreamStub {
 public:
-    MessageStreamStub(MessagePlane p) { (void)p; }  // Suppress unused parameter warning
+    MessageStreamStub(MessagePlane p, bool useActive = false) { (void)p; (void)useActive; }
 
     // All methods are inline no-ops that the optimizer will eliminate
     inline size_t print(const char* str) { (void)str; return 0; }
@@ -365,7 +388,7 @@ struct MessageAPI {
     MessageStream debug;      // Full version
 #endif
 
-    MessageAPI() : control(PLANE_CONTROL), data(PLANE_DATA), debug(PLANE_DEBUG) {}
+    MessageAPI() : control(PLANE_CONTROL, /*routeToActive=*/true), data(PLANE_DATA), debug(PLANE_DEBUG) {}
 };
 
 extern MessageAPI msg;
