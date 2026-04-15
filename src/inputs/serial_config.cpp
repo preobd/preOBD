@@ -16,6 +16,7 @@
 #include "../lib/message_api.h"
 #include "../lib/json_config.h"
 #include <string.h>
+#include <stdlib.h>
 #include <ctype.h>
 
 // embedded-cli requires EMBEDDED_CLI_IMPL in exactly one compilation unit
@@ -43,11 +44,22 @@ static EmbeddedCli* cli = nullptr;
 #if SUPPORTS_JSON_IMPORT_STREAM
 //=============================================================================
 // JSON import streaming state
+// Buffer is malloc'd on demand (serialConfig_beginJsonImport) and freed after
+// dispatch, so 16 KB is only resident during an active import.
 //=============================================================================
 static bool   jsonImportActive = false;
-static char   jsonImportBuffer[JSON_IMPORT_MAX_BYTES];
+static char*  jsonImportBuffer = nullptr;
 static size_t jsonImportLen = 0;
 static size_t jsonImportLastLineStart = 0;
+
+static void resetJsonImport() {
+    free(jsonImportBuffer);
+    jsonImportBuffer = nullptr;
+    jsonImportActive = false;
+    jsonImportLen = 0;
+    jsonImportLastLineStart = 0;
+    if (cli != nullptr) embeddedCliProcess(cli);
+}
 #endif
 
 //=============================================================================
@@ -232,7 +244,8 @@ void initSerialConfig() {
 void handleCommandInput(char c) {
 #if SUPPORTS_JSON_IMPORT_STREAM
     if (jsonImportActive) {
-        // Echo char back to match embedded-cli's echo behavior
+        // Echo char back; emit \r before \n so terminals return cursor to column 0
+        if (c == '\n') msg.control.print('\r');
         msg.control.print(c);
 
         // Check for buffer overflow before appending
@@ -241,27 +254,22 @@ void handleCommandInput(char c) {
             msg.control.print(F("  Max: "));
             msg.control.print(JSON_IMPORT_MAX_BYTES);
             msg.control.println(F(" bytes"));
-            jsonImportActive = false;
-            jsonImportLen = 0;
-            jsonImportLastLineStart = 0;
-            if (cli != nullptr) embeddedCliProcess(cli);
+            resetJsonImport();
             return;
         }
 
         jsonImportBuffer[jsonImportLen++] = c;
 
         if (c == '\n') {
-            // Check if the just-completed line equals "END JSON" (trim \r\n)
+            // Check if the just-completed line equals "END JSON" (trim \r\n, case-insensitive)
             const char* line = jsonImportBuffer + jsonImportLastLineStart;
             size_t tlen = jsonImportLen - jsonImportLastLineStart;
             while (tlen > 0 && (line[tlen - 1] == '\r' || line[tlen - 1] == '\n')) tlen--;
 
-            const char* sentinel = "END JSON";
             const size_t slen = 8;  // strlen("END JSON")
-            if (tlen == slen && memcmp(line, sentinel, slen) == 0) {
-                // Null-terminate the buffer at the sentinel's start
+            if (tlen == slen && strncasecmp(line, "END JSON", slen) == 0) {
+                // Null-terminate the buffer at the sentinel's start, then dispatch
                 jsonImportBuffer[jsonImportLastLineStart] = '\0';
-                jsonImportActive = false;
 
                 bool ok = loadConfigFromJSON(jsonImportBuffer);
                 if (ok) {
@@ -270,9 +278,7 @@ void handleCommandInput(char c) {
                     msg.control.println(F("ERROR: Failed to apply JSON configuration"));
                 }
 
-                jsonImportLen = 0;
-                jsonImportLastLineStart = 0;
-                if (cli != nullptr) embeddedCliProcess(cli);
+                resetJsonImport();
             } else {
                 jsonImportLastLineStart = jsonImportLen;
             }
@@ -302,6 +308,11 @@ void processSerialCommands() {
  */
 bool serialConfig_beginJsonImport() {
     if (jsonImportActive) return false;
+    jsonImportBuffer = (char*)malloc(JSON_IMPORT_MAX_BYTES);
+    if (jsonImportBuffer == nullptr) {
+        msg.control.println(F("ERROR: Not enough heap for JSON import buffer"));
+        return false;
+    }
     jsonImportActive = true;
     jsonImportLen = 0;
     jsonImportLastLineStart = 0;
