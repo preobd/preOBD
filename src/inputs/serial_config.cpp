@@ -18,6 +18,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#if SUPPORTS_JSON_IMPORT_STREAM
+#include <strings.h>  // strncasecmp (POSIX); not available on AVR toolchain
+#endif
 
 // embedded-cli requires EMBEDDED_CLI_IMPL in exactly one compilation unit
 #define EMBEDDED_CLI_IMPL
