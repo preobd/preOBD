@@ -95,6 +95,18 @@
     #define MAX_INPUTS 8        // Default/Unknown platform
 #endif
 
+// ===== JSON IMPORT CAPABILITY =====
+// Platforms with enough RAM + flash for streamed JSON import over serial
+#if defined(__IMXRT1062__) || defined(__MK66FX1M0__) || defined(__MK64FX512__) \
+    || defined(__MK20DX256__) || defined(ESP32)
+  #define SUPPORTS_JSON_IMPORT_STREAM 1
+  #ifndef JSON_IMPORT_MAX_BYTES
+    #define JSON_IMPORT_MAX_BYTES 16384
+  #endif
+#else
+  #define SUPPORTS_JSON_IMPORT_STREAM 0
+#endif
+
 // ===== VOLTAGE DIVIDER CONFIGURATION =====
 // Automatically configured based on system voltage
 #if SYSTEM_VOLTAGE_MV == 3300
