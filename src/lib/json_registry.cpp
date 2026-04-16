@@ -24,39 +24,53 @@
 #include "system_config.h"
 #include "../version.h"
 
-// ===== ENUM STRING HELPERS =====
+// ===== ENUM STRING TABLES =====
+// Single source of truth — used both for name→string lookup and for JSON array export.
+
+struct MeasTypeEntry  { MeasurementType id; const char* name; };
+struct CalTypeEntry   { CalibrationType id; const char* name; };
+
+static const MeasTypeEntry MEAS_TYPE_TABLE[] = {
+    {MEASURE_TEMPERATURE, "TEMPERATURE"},
+    {MEASURE_PRESSURE,    "PRESSURE"},
+    {MEASURE_VOLTAGE,     "VOLTAGE"},
+    {MEASURE_RPM,         "RPM"},
+    {MEASURE_HUMIDITY,    "HUMIDITY"},
+    {MEASURE_ELEVATION,   "ELEVATION"},
+    {MEASURE_DIGITAL,     "DIGITAL"},
+    {MEASURE_SPEED,       "SPEED"},
+    {MEASURE_LEVEL,       "LEVEL"},
+};
+static const uint8_t MEAS_TYPE_COUNT = sizeof(MEAS_TYPE_TABLE) / sizeof(MEAS_TYPE_TABLE[0]);
+
+static const CalTypeEntry CAL_TYPE_TABLE[] = {
+    {CAL_NONE,                 "CAL_NONE"},
+    {CAL_THERMISTOR_STEINHART, "CAL_THERMISTOR_STEINHART"},
+    {CAL_THERMISTOR_TABLE,     "CAL_THERMISTOR_TABLE"},
+    {CAL_THERMISTOR_BETA,      "CAL_THERMISTOR_BETA"},
+    {CAL_PRESSURE_POLYNOMIAL,  "CAL_PRESSURE_POLYNOMIAL"},
+    {CAL_PRESSURE_TABLE,       "CAL_PRESSURE_TABLE"},
+    {CAL_LINEAR,               "CAL_LINEAR"},
+    {CAL_VOLTAGE_DIVIDER,      "CAL_VOLTAGE_DIVIDER"},
+    {CAL_RPM,                  "CAL_RPM"},
+    {CAL_SPEED,                "CAL_SPEED"},
+    {CAL_CAN_IMPORT,           "CAL_CAN_IMPORT"},
+    {CAL_LEVEL_TABLE,          "CAL_LEVEL_TABLE"},
+};
+static const uint8_t CAL_TYPE_COUNT = sizeof(CAL_TYPE_TABLE) / sizeof(CAL_TYPE_TABLE[0]);
 
 static const char* measurementTypeName(MeasurementType t) {
-    switch (t) {
-        case MEASURE_TEMPERATURE: return "TEMPERATURE";
-        case MEASURE_PRESSURE:    return "PRESSURE";
-        case MEASURE_VOLTAGE:     return "VOLTAGE";
-        case MEASURE_RPM:         return "RPM";
-        case MEASURE_HUMIDITY:    return "HUMIDITY";
-        case MEASURE_ELEVATION:   return "ELEVATION";
-        case MEASURE_DIGITAL:     return "DIGITAL";
-        case MEASURE_SPEED:       return "SPEED";
-        case MEASURE_LEVEL:       return "LEVEL";
-        default:                  return "UNKNOWN";
+    for (uint8_t i = 0; i < MEAS_TYPE_COUNT; i++) {
+        if (MEAS_TYPE_TABLE[i].id == t) return MEAS_TYPE_TABLE[i].name;
     }
+    return "UNKNOWN";
 }
 
 static const char* calibrationTypeName(CalibrationType t) {
-    switch (t) {
-        case CAL_NONE:                  return "CAL_NONE";
-        case CAL_THERMISTOR_STEINHART:  return "CAL_THERMISTOR_STEINHART";
-        case CAL_THERMISTOR_TABLE:      return "CAL_THERMISTOR_TABLE";
-        case CAL_THERMISTOR_BETA:       return "CAL_THERMISTOR_BETA";
-        case CAL_PRESSURE_POLYNOMIAL:   return "CAL_PRESSURE_POLYNOMIAL";
-        case CAL_PRESSURE_TABLE:        return "CAL_PRESSURE_TABLE";
-        case CAL_LINEAR:                return "CAL_LINEAR";
-        case CAL_VOLTAGE_DIVIDER:       return "CAL_VOLTAGE_DIVIDER";
-        case CAL_RPM:                   return "CAL_RPM";
-        case CAL_SPEED:                 return "CAL_SPEED";
-        case CAL_CAN_IMPORT:            return "CAL_CAN_IMPORT";
-        case CAL_LEVEL_TABLE:           return "CAL_LEVEL_TABLE";
-        default:                        return "UNKNOWN";
+    for (uint8_t i = 0; i < CAL_TYPE_COUNT; i++) {
+        if (CAL_TYPE_TABLE[i].id == t) return CAL_TYPE_TABLE[i].name;
     }
+    return "UNKNOWN";
 }
 
 static const char* pinTypeName(PinTypeRequirement p) {
@@ -93,22 +107,10 @@ static const char* getPlatformStr() {
 void writeMeasurementTypesJson(Print& out) {
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
-    struct Entry { MeasurementType id; const char* name; };
-    static const Entry entries[] = {
-        {MEASURE_TEMPERATURE, "TEMPERATURE"},
-        {MEASURE_PRESSURE,    "PRESSURE"},
-        {MEASURE_VOLTAGE,     "VOLTAGE"},
-        {MEASURE_RPM,         "RPM"},
-        {MEASURE_HUMIDITY,    "HUMIDITY"},
-        {MEASURE_ELEVATION,   "ELEVATION"},
-        {MEASURE_DIGITAL,     "DIGITAL"},
-        {MEASURE_SPEED,       "SPEED"},
-        {MEASURE_LEVEL,       "LEVEL"},
-    };
-    for (const auto& e : entries) {
+    for (uint8_t i = 0; i < MEAS_TYPE_COUNT; i++) {
         JsonObject obj = arr.add<JsonObject>();
-        obj["id"] = (int)e.id;
-        obj["name"] = e.name;
+        obj["id"]   = (int)MEAS_TYPE_TABLE[i].id;
+        obj["name"] = MEAS_TYPE_TABLE[i].name;
     }
     serializeJson(doc, out);
 }
@@ -116,25 +118,10 @@ void writeMeasurementTypesJson(Print& out) {
 void writeCalibrationTypesJson(Print& out) {
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
-    struct Entry { CalibrationType id; const char* name; };
-    static const Entry entries[] = {
-        {CAL_NONE,                 "CAL_NONE"},
-        {CAL_THERMISTOR_STEINHART, "CAL_THERMISTOR_STEINHART"},
-        {CAL_THERMISTOR_TABLE,     "CAL_THERMISTOR_TABLE"},
-        {CAL_THERMISTOR_BETA,      "CAL_THERMISTOR_BETA"},
-        {CAL_PRESSURE_POLYNOMIAL,  "CAL_PRESSURE_POLYNOMIAL"},
-        {CAL_PRESSURE_TABLE,       "CAL_PRESSURE_TABLE"},
-        {CAL_LINEAR,               "CAL_LINEAR"},
-        {CAL_VOLTAGE_DIVIDER,      "CAL_VOLTAGE_DIVIDER"},
-        {CAL_RPM,                  "CAL_RPM"},
-        {CAL_SPEED,                "CAL_SPEED"},
-        {CAL_CAN_IMPORT,           "CAL_CAN_IMPORT"},
-        {CAL_LEVEL_TABLE,          "CAL_LEVEL_TABLE"},
-    };
-    for (const auto& e : entries) {
+    for (uint8_t i = 0; i < CAL_TYPE_COUNT; i++) {
         JsonObject obj = arr.add<JsonObject>();
-        obj["id"] = (int)e.id;
-        obj["name"] = e.name;
+        obj["id"]   = (int)CAL_TYPE_TABLE[i].id;
+        obj["name"] = CAL_TYPE_TABLE[i].name;
     }
     serializeJson(doc, out);
 }
@@ -171,28 +158,38 @@ void writeCategoriesJson(Print& out) {
     serializeJson(doc, out);
 }
 
-void writeSensorsJson(Print& out) {
+// filter: optional category name string (e.g. "THERMOCOUPLE"); nullptr = all sensors
+void writeSensorsJson(Print& out, const char* filter) {
+    // Resolve filter to a category enum up-front; CAT_COUNT means "no filter"
+    SensorCategory filterCat = CAT_COUNT;
+    if (filter) {
+        SensorCategory c = getCategoryByName(filter);
+        if (c < CAT_COUNT) filterCat = c;
+        // Unknown filter name: return empty array rather than silently dumping all
+    }
+
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
     for (uint8_t i = 1; i < NUM_SENSORS; i++) {  // skip index 0 (SENSOR_NONE)
         SensorInfo s;
         memcpy_P(&s, &SENSOR_LIBRARY[i], sizeof(s));
         if (s.label == nullptr) continue;  // skip unimplemented slots
+        if (filterCat < CAT_COUNT && getSensorCategory(i) != filterCat) continue;
         JsonObject obj = arr.add<JsonObject>();
-        obj["name"]  = (const __FlashStringHelper*)s.name;
-        obj["label"] = (const __FlashStringHelper*)s.label;
+        obj["name"]     = (const __FlashStringHelper*)s.name;
+        obj["label"]    = (const __FlashStringHelper*)s.label;
+        obj["nameHash"] = s.nameHash;
         if (s.description) {
             obj["description"] = (const __FlashStringHelper*)s.description;
         } else {
             obj["description"] = nullptr;
         }
-        obj["measurementType"]  = measurementTypeName(s.measurementType);
-        obj["calibrationType"]  = calibrationTypeName(s.calibrationType);
-        obj["minReadInterval"]  = s.minReadInterval;
-        obj["minValue"]         = s.minValue;
-        obj["maxValue"]         = s.maxValue;
-        obj["pinType"]          = pinTypeName(s.pinTypeRequirement);
-        // Category derived from sensor characteristics
+        obj["measurementType"] = measurementTypeName(s.measurementType);
+        obj["calibrationType"] = calibrationTypeName(s.calibrationType);
+        obj["minReadInterval"] = s.minReadInterval;
+        obj["minValue"]        = s.minValue;
+        obj["maxValue"]        = s.maxValue;
+        obj["pinType"]         = pinTypeName(s.pinTypeRequirement);
         SensorCategory cat = getSensorCategory(i);
         const SensorCategoryInfo* catInfo = getCategoryInfo(cat);
         obj["category"] = (const __FlashStringHelper*)READ_CATEGORY_NAME(catInfo);
@@ -209,6 +206,7 @@ void writeApplicationsJson(Print& out) {
         if (p.label == nullptr) continue;  // skip unimplemented slots
         JsonObject obj = arr.add<JsonObject>();
         obj["name"]         = (const __FlashStringHelper*)p.name;
+        obj["nameHash"]     = p.nameHash;
         obj["abbreviation"] = (const __FlashStringHelper*)p.abbreviation;
         obj["label"]        = (const __FlashStringHelper*)p.label;
         if (p.description) {
@@ -306,15 +304,15 @@ static void writeFirmwareJson(Print& out) {
 
 void dumpRegistryToJson(Print& out) {
     out.print(F("{\"schemaVersion\":1,\"kind\":\"registry\","));
-    out.print(F("\"firmware\":"));       writeFirmwareJson(out);
+    out.print(F("\"firmware\":"));          writeFirmwareJson(out);
     out.print(F(",\"measurementTypes\":")); writeMeasurementTypesJson(out);
     out.print(F(",\"calibrationTypes\":")); writeCalibrationTypesJson(out);
-    out.print(F(",\"units\":"));         writeUnitsJson(out);
-    out.print(F(",\"categories\":"));    writeCategoriesJson(out);
-    out.print(F(",\"sensors\":"));       writeSensorsJson(out);
-    out.print(F(",\"applications\":")); writeApplicationsJson(out);
-    out.print(F(",\"outputs\":"));       writeOutputsJson(out);
-    out.print(F(",\"standardPids\":")); writePidsJson(out);
+    out.print(F(",\"units\":"));            writeUnitsJson(out);
+    out.print(F(",\"categories\":"));       writeCategoriesJson(out);
+    out.print(F(",\"sensors\":"));          writeSensorsJson(out);
+    out.print(F(",\"applications\":"));     writeApplicationsJson(out);
+    out.print(F(",\"outputs\":"));          writeOutputsJson(out);
+    out.print(F(",\"standardPids\":"));     writePidsJson(out);
     out.println('}');
 }
 

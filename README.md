@@ -179,7 +179,7 @@ HELP <category>           # Show detailed help (LIST, SET, CALIBRATION, etc.)
 HELP QUICK                # Show compact command reference
 LIST INPUTS               # Show all configured sensors
 LIST APPLICATIONS         # Show available application types
-LIST SENSORS              # Show available sensor types
+LIST SENSORS [category]   # Show available sensor types (optionally filtered)
 INFO <pin>                # Show details for one input
 DUMP                      # Show complete system state
 VERSION                   # Show firmware version

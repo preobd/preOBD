@@ -24,7 +24,7 @@
 // Each function writes a bare JSON array (or object for firmware) to out.
 
 void writeApplicationsJson(Print& out);
-void writeSensorsJson(Print& out);
+void writeSensorsJson(Print& out, const char* filter = nullptr);  // filter: category name or nullptr
 void writeUnitsJson(Print& out);
 void writeCategoriesJson(Print& out);
 void writeOutputsJson(Print& out);

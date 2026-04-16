@@ -71,6 +71,23 @@ LIST OUTPUTS             # Show available output modules
 LIST TRANSPORTS          # Show available transports
 ```
 
+**JSON catalog export** (Teensy 3.x/4.x and ESP32 only):
+
+```
+LIST APPLICATIONS JSON         # Export application catalog as JSON
+LIST SENSORS JSON              # Export full sensor catalog as JSON
+LIST SENSORS <category> JSON   # Export sensors in one category as JSON
+LIST OUTPUTS JSON              # Export output module list as JSON
+LIST UNITS JSON                # Export units registry as JSON
+LIST CATEGORIES JSON           # Export sensor categories as JSON
+LIST PIDS JSON                 # Export standard OBD-II PID table as JSON
+LIST MEASUREMENT_TYPES JSON    # Export measurement type enum as JSON
+LIST CALIBRATION_TYPES JSON    # Export calibration type enum as JSON
+SYSTEM DUMP REGISTRY JSON      # Export all catalogs in one JSON object
+```
+
+These commands export the firmware's compile-time registries for use by external tooling (e.g., a web UI populating dropdowns). This is distinct from `SYSTEM DUMP JSON`, which exports the user's active configuration.
+
 ### Configuration Commands
 Pattern: `SET <pin> <field> <value>`
 
@@ -896,7 +913,8 @@ Global configuration affecting all subsystems.
 ```bash
 SYSTEM STATUS            # Show all global configuration
 SYSTEM DUMP              # Show complete system dump (all subsystems)
-SYSTEM DUMP JSON         # Export configuration as JSON (copy/paste)
+SYSTEM DUMP JSON         # Export active configuration as JSON (copy/paste)
+SYSTEM DUMP REGISTRY JSON  # Export firmware catalogs as JSON (Teensy/ESP32 only)
 SYSTEM PINS              # Show all pin allocations (diagnostic)
 SYSTEM PINS <pin>        # Query specific pin status (e.g., A0, CAN:0)
 ```
@@ -911,7 +929,9 @@ Default Units: Temp=°C, Pressure=bar, Elevation=m, Speed=kph
 
 **SYSTEM DUMP** shows complete configuration including all inputs, outputs, display, and system parameters.
 
-**SYSTEM DUMP JSON** exports the complete configuration as JSON to the terminal for easy copy/paste.
+**SYSTEM DUMP JSON** exports the active user configuration as JSON (inputs, system settings) for backup/restore.
+
+**SYSTEM DUMP REGISTRY JSON** exports the firmware's compile-time catalogs (available applications, sensors, units, etc.) as a single JSON object. Equivalent to calling all `LIST … JSON` commands in one round-trip.
 
 **SYSTEM PINS** displays pin allocation status organized by category:
 ```
