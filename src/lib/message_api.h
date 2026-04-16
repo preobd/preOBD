@@ -36,8 +36,11 @@
 #include <Arduino.h>
 #include <stdarg.h>  // For variadic functions
 
-// Print stream wrapper that routes to a specific message plane
-class MessageStream {
+// Print stream wrapper that routes to a specific message plane.
+// Inherits from Print so MessageStream can be passed as Print& to ArduinoJson
+// and similar libraries. write(uint8_t) / write(const uint8_t*, size_t) already
+// handle multicast, so all Print-based callers get correct routing for free.
+class MessageStream : public Print {
 private:
     MessagePlane plane;
     // When true (used by msg.control): during command dispatch, route to the

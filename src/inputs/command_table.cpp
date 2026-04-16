@@ -242,7 +242,7 @@ static int cmd_list(int argc, const char* const* argv) {
         if (asJson) {
 #if SUPPORTS_JSON_EXPORT
             msg.control.println();
-            writeApplicationsJson(Serial);
+            writeApplicationsJson(msg.control);
             msg.control.println();
 #else
             msg.control.println(F("ERROR: JSON export not supported on this platform"));
@@ -255,7 +255,7 @@ static int cmd_list(int argc, const char* const* argv) {
         if (asJson) {
 #if SUPPORTS_JSON_EXPORT
             msg.control.println();
-            writeSensorsJson(Serial);
+            writeSensorsJson(msg.control);
             msg.control.println();
 #else
             msg.control.println(F("ERROR: JSON export not supported on this platform"));
@@ -270,7 +270,7 @@ static int cmd_list(int argc, const char* const* argv) {
         if (asJson) {
 #if SUPPORTS_JSON_EXPORT
             msg.control.println();
-            writeOutputsJson(Serial);
+            writeOutputsJson(msg.control);
             msg.control.println();
 #else
             msg.control.println(F("ERROR: JSON export not supported on this platform"));
@@ -283,7 +283,7 @@ static int cmd_list(int argc, const char* const* argv) {
         if (asJson) {
 #if SUPPORTS_JSON_EXPORT
             msg.control.println();
-            writeUnitsJson(Serial);
+            writeUnitsJson(msg.control);
             msg.control.println();
 #else
             msg.control.println(F("ERROR: JSON export not supported on this platform"));
@@ -296,7 +296,7 @@ static int cmd_list(int argc, const char* const* argv) {
         if (asJson) {
 #if SUPPORTS_JSON_EXPORT
             msg.control.println();
-            writeCategoriesJson(Serial);
+            writeCategoriesJson(msg.control);
             msg.control.println();
 #else
             msg.control.println(F("ERROR: JSON export not supported on this platform"));
@@ -309,7 +309,7 @@ static int cmd_list(int argc, const char* const* argv) {
         if (asJson) {
 #if SUPPORTS_JSON_EXPORT
             msg.control.println();
-            writePidsJson(Serial);
+            writePidsJson(msg.control);
             msg.control.println();
 #else
             msg.control.println(F("ERROR: JSON export not supported on this platform"));
@@ -1943,7 +1943,7 @@ static int cmd_system(int argc, const char* const* argv) {
         if (argc == 4 && streq(argv[2], "REGISTRY") && streq(argv[3], "JSON")) {
 #if SUPPORTS_JSON_EXPORT
             msg.control.println();
-            dumpRegistryToJson(Serial);
+            dumpRegistryToJson(msg.control);
             msg.control.println();
 #else
             msg.control.println(F("ERROR: JSON export not supported on this platform"));
@@ -1954,7 +1954,7 @@ static int cmd_system(int argc, const char* const* argv) {
         // SYSTEM DUMP JSON — export active user configuration
         if (argc == 3 && streq(argv[2], "JSON")) {
             msg.control.println();
-            dumpConfigToJSON(Serial);
+            dumpConfigToJSON(msg.control);
             msg.control.println();
             return 0;
         }
