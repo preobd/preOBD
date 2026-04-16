@@ -291,6 +291,7 @@ static int cmd_list(int argc, const char* const* argv) {
     }
     return 0;
 }
+#undef EMIT_JSON
 
 static int cmd_version(int argc, const char* const* argv) {
     msg.control.println();
