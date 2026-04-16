@@ -14,8 +14,13 @@
 #include "command_helpers.h"
 #include "../lib/message_router.h"
 #include "../lib/message_api.h"
+#include "../lib/json_config.h"
 #include <string.h>
+#include <stdlib.h>
 #include <ctype.h>
+#if SUPPORTS_JSON_IMPORT_STREAM
+#include <strings.h>  // strncasecmp (POSIX); not available on AVR toolchain
+#endif
 
 // embedded-cli requires EMBEDDED_CLI_IMPL in exactly one compilation unit
 #define EMBEDDED_CLI_IMPL
@@ -38,6 +43,27 @@
 #define CLI_BUFFER_SIZE 1280
 static CLI_UINT cli_buffer[BYTES_TO_CLI_UINTS(CLI_BUFFER_SIZE)];
 static EmbeddedCli* cli = nullptr;
+
+#if SUPPORTS_JSON_IMPORT_STREAM
+//=============================================================================
+// JSON import streaming state
+// Buffer is malloc'd on demand (serialConfig_beginJsonImport) and freed after
+// dispatch, so 16 KB is only resident during an active import.
+//=============================================================================
+static bool   jsonImportActive = false;
+static char*  jsonImportBuffer = nullptr;
+static size_t jsonImportLen = 0;
+static size_t jsonImportLastLineStart = 0;
+
+static void resetJsonImport() {
+    free(jsonImportBuffer);
+    jsonImportBuffer = nullptr;
+    jsonImportActive = false;
+    jsonImportLen = 0;
+    jsonImportLastLineStart = 0;
+    if (cli != nullptr) embeddedCliProcess(cli);
+}
+#endif
 
 //=============================================================================
 // Callbacks
@@ -219,6 +245,50 @@ void initSerialConfig() {
  * This function is called character-by-character from router.update()
  */
 void handleCommandInput(char c) {
+#if SUPPORTS_JSON_IMPORT_STREAM
+    if (jsonImportActive) {
+        // Echo char back; emit \r before \n so terminals return cursor to column 0
+        if (c == '\n') msg.control.print('\r');
+        msg.control.print(c);
+
+        // Check for buffer overflow before appending
+        if (jsonImportLen >= JSON_IMPORT_MAX_BYTES - 1) {
+            msg.control.println(F("\r\nERROR: JSON exceeds buffer limit"));
+            msg.control.print(F("  Max: "));
+            msg.control.print(JSON_IMPORT_MAX_BYTES);
+            msg.control.println(F(" bytes"));
+            resetJsonImport();
+            return;
+        }
+
+        jsonImportBuffer[jsonImportLen++] = c;
+
+        if (c == '\n') {
+            // Check if the just-completed line equals "END JSON" (trim \r\n, case-insensitive)
+            const char* line = jsonImportBuffer + jsonImportLastLineStart;
+            size_t tlen = jsonImportLen - jsonImportLastLineStart;
+            while (tlen > 0 && (line[tlen - 1] == '\r' || line[tlen - 1] == '\n')) tlen--;
+
+            const size_t slen = 8;  // strlen("END JSON")
+            if (tlen == slen && strncasecmp(line, "END JSON", slen) == 0) {
+                // Null-terminate the buffer at the sentinel's start, then dispatch
+                jsonImportBuffer[jsonImportLastLineStart] = '\0';
+
+                bool ok = loadConfigFromJSON(jsonImportBuffer);
+                if (ok) {
+                    msg.control.println(F("Applied. Type SAVE to persist to EEPROM"));
+                } else {
+                    msg.control.println(F("ERROR: Failed to apply JSON configuration"));
+                }
+
+                resetJsonImport();
+            } else {
+                jsonImportLastLineStart = jsonImportLen;
+            }
+        }
+        return;
+    }
+#endif
     if (cli != nullptr) {
         embeddedCliReceiveChar(cli, c);
     }
@@ -233,6 +303,30 @@ void processSerialCommands() {
         embeddedCliProcess(cli);
     }
 }
+
+#if SUPPORTS_JSON_IMPORT_STREAM
+/**
+ * Begin JSON import streaming mode.
+ * Returns false if already active; caller should surface an error.
+ */
+bool serialConfig_beginJsonImport() {
+    if (jsonImportActive) return false;
+    jsonImportBuffer = (char*)malloc(JSON_IMPORT_MAX_BYTES);
+    if (jsonImportBuffer == nullptr) {
+        msg.control.println(F("ERROR: Not enough heap for JSON import buffer"));
+        return false;
+    }
+    jsonImportActive = true;
+    jsonImportLen = 0;
+    jsonImportLastLineStart = 0;
+    msg.control.println(F("Paste JSON, then type 'END JSON' on its own line:"));
+    return true;
+}
+
+bool serialConfig_isJsonImportActive() {
+    return jsonImportActive;
+}
+#endif
 
 /**
  * Legacy function for backward compatibility

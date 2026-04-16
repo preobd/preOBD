@@ -10,6 +10,7 @@
 
 #include "command_table.h"
 #include "command_helpers.h"
+#include "serial_config.h"
 #include "input_manager.h"
 #include "../config.h"
 #include "../version.h"
@@ -82,6 +83,9 @@ static int cmd_test(int argc, const char* const* argv);
 #ifdef ENABLE_CAN
 static int cmd_scan(int argc, const char* const* argv);
 #endif
+#if SUPPORTS_JSON_IMPORT_STREAM
+static int cmd_json(int argc, const char* const* argv);
+#endif
 
 // Platform-specific reboot helper (shared by REBOOT and SYSTEM REBOOT/RESET)
 static void platformReboot() {
@@ -124,6 +128,9 @@ const Command COMMANDS[] = {
     {"SYSTEM", cmd_system, "System configuration", true},
     {"SAVE", cmd_save, "Save configuration", true},
     {"LOAD", cmd_load, "Load configuration", true},
+#if SUPPORTS_JSON_IMPORT_STREAM
+    {"JSON", cmd_json, "Import JSON configuration over serial", true},
+#endif
     {"REBOOT", cmd_reboot, "", true},  // Undocumented alias for SYSTEM REBOOT
     {"BUS", cmd_bus, "Configure I2C/SPI/CAN buses", true},
     {"LOG", cmd_log, "Configure log levels and tags", false},
@@ -392,6 +399,21 @@ static int cmd_load(int argc, const char* const* argv) {
     msg.control.println(F("    LOAD SD:backup.json     # Load from SD card (explicit)"));
     return 1;
 }
+
+#if SUPPORTS_JSON_IMPORT_STREAM
+static int cmd_json(int argc, const char* const* argv) {
+    if (argc < 2 || !streq(argv[1], "IMPORT")) {
+        msg.control.println(F("Usage: JSON IMPORT"));
+        msg.control.println(F("  Paste JSON, then type 'END JSON' on its own line"));
+        return 1;
+    }
+    if (!serialConfig_beginJsonImport()) {
+        msg.control.println(F("ERROR: JSON import already in progress"));
+        return 1;
+    }
+    return 0;
+}
+#endif
 
 static int cmd_reboot(int argc, const char* const* argv) {
     msg.control.println(F("Rebooting system..."));

@@ -10,6 +10,7 @@
 #define SERIAL_CONFIG_H
 
 #include "../config.h"
+#include "../lib/platform.h"
 
 #ifndef USE_STATIC_CONFIG
 
@@ -26,6 +27,12 @@ void handleSerialCommand(char* cmd);
 
 // Handle incoming character input (called by MessageRouter)
 void handleCommandInput(char c);
+
+#if SUPPORTS_JSON_IMPORT_STREAM
+// Begin JSON import streaming mode (returns false if already active)
+bool serialConfig_beginJsonImport();
+bool serialConfig_isJsonImportActive();
+#endif
 
 #else // USE_STATIC_CONFIG defined
 
