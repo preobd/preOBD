@@ -107,6 +107,9 @@
   #define SUPPORTS_JSON_IMPORT_STREAM 0
 #endif
 
+// JSON export of static catalogs (same platform set as JSON import)
+#define SUPPORTS_JSON_EXPORT SUPPORTS_JSON_IMPORT_STREAM
+
 // ===== VOLTAGE DIVIDER CONFIGURATION =====
 // Automatically configured based on system voltage
 #if SYSTEM_VOLTAGE_MV == 3300
