@@ -25,6 +25,7 @@
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
 #include "../lib/platform.h"
+#include "../lib/json_registry.h"
 #include "../lib/bus_manager.h"
 #include "../lib/bus_defaults.h"
 #include "../lib/serial_manager.h"
@@ -226,31 +227,71 @@ static int cmd_help(int argc, const char* const* argv) {
 static int cmd_list(int argc, const char* const* argv) {
     if (argc == 1) {
         msg.control.println(F("ERROR: LIST requires a subcommand"));
-        msg.control.println(F("  Usage: LIST INPUTS | APPLICATIONS | SENSORS | OUTPUTS | TRANSPORTS"));
+        msg.control.println(F("  Usage: LIST INPUTS | APPLICATIONS | SENSORS [category] | OUTPUTS | TRANSPORTS"));
+        msg.control.println(F("         LIST APPLICATIONS JSON | SENSORS [category] JSON | OUTPUTS JSON"));
+        msg.control.println(F("         LIST UNITS JSON | CATEGORIES JSON | PIDS JSON"));
+        msg.control.println(F("         LIST MEASUREMENT_TYPES JSON | CALIBRATION_TYPES JSON"));
         return 1;
     }
+
+    // Trailing JSON token check: "LIST <sub> JSON" or "LIST SENSORS <cat> JSON"
+    bool asJson = (argc >= 3 && streq(argv[argc - 1], "JSON"));
+
+// EMIT_JSON(call): on supporting platforms, wraps call with blank-line padding.
+// On non-supporting platforms, emits an error and returns — and the call expression
+// is absent from the macro expansion so the symbols are never referenced.
+#if SUPPORTS_JSON_EXPORT
+#define EMIT_JSON(call) do { msg.control.println(); call; msg.control.println(); } while(0)
+#else
+#define EMIT_JSON(call) do { msg.control.println(F("ERROR: JSON export not supported on this platform")); return 1; } while(0)
+#endif
 
     if (streq(argv[1], "INPUTS")) {
         listAllInputs();
     } else if (streq(argv[1], "APPLICATIONS")) {
-        listApplicationPresets();
+        if (asJson) { EMIT_JSON(writeApplicationsJson(msg.control)); }
+        else { listApplicationPresets(); }
     } else if (streq(argv[1], "SENSORS")) {
-        // LIST SENSORS [category|filter]
-        const char* filter = (argc >= 3) ? argv[2] : NULL;
-        listSensors(filter);
+        if (asJson) {
+            // LIST SENSORS JSON  or  LIST SENSORS <category> JSON
+            const char* filter = (argc == 4) ? argv[2] : nullptr;
+            EMIT_JSON(writeSensorsJson(msg.control, filter));
+        } else {
+            // LIST SENSORS [category|filter]
+            const char* filter = (argc >= 3) ? argv[2] : NULL;
+            listSensors(filter);
+        }
     } else if (streq(argv[1], "OUTPUTS")) {
-        listOutputModules();
+        if (asJson) { EMIT_JSON(writeOutputsJson(msg.control)); }
+        else { listOutputModules(); }
+    } else if (streq(argv[1], "UNITS")) {
+        if (asJson) { EMIT_JSON(writeUnitsJson(msg.control)); }
+        else { msg.control.println(F("JSON-only subcommand. Usage: LIST UNITS JSON")); }
+    } else if (streq(argv[1], "CATEGORIES")) {
+        if (asJson) { EMIT_JSON(writeCategoriesJson(msg.control)); }
+        else { msg.control.println(F("JSON-only subcommand. Usage: LIST CATEGORIES JSON")); }
+    } else if (streq(argv[1], "PIDS")) {
+        if (asJson) { EMIT_JSON(writePidsJson(msg.control)); }
+        else { msg.control.println(F("JSON-only subcommand. Usage: LIST PIDS JSON")); }
+    } else if (streq(argv[1], "MEASUREMENT_TYPES")) {
+        if (asJson) { EMIT_JSON(writeMeasurementTypesJson(msg.control)); }
+        else { msg.control.println(F("JSON-only subcommand. Usage: LIST MEASUREMENT_TYPES JSON")); }
+    } else if (streq(argv[1], "CALIBRATION_TYPES")) {
+        if (asJson) { EMIT_JSON(writeCalibrationTypesJson(msg.control)); }
+        else { msg.control.println(F("JSON-only subcommand. Usage: LIST CALIBRATION_TYPES JSON")); }
     } else if (streq(argv[1], "TRANSPORTS")) {
         router.listAvailableTransports();
     } else {
         msg.control.print(F("ERROR: Unknown LIST subcommand '"));
         msg.control.print(argv[1]);
         msg.control.println(F("'"));
-        msg.control.println(F("  Valid: INPUTS, APPLICATIONS, SENSORS, OUTPUTS, TRANSPORTS"));
+        msg.control.println(F("  Valid: INPUTS, APPLICATIONS, SENSORS, OUTPUTS, TRANSPORTS,"));
+        msg.control.println(F("         UNITS, CATEGORIES, PIDS, MEASUREMENT_TYPES, CALIBRATION_TYPES"));
         return 1;
     }
     return 0;
 }
+#undef EMIT_JSON
 
 static int cmd_version(int argc, const char* const* argv) {
     msg.control.println();
@@ -1858,12 +1899,24 @@ static int cmd_system(int argc, const char* const* argv) {
         return 1;
     }
 
-    // SYSTEM DUMP [JSON]
+    // SYSTEM DUMP [REGISTRY] [JSON]
     if (streq(argv[1], "DUMP")) {
-        // Check for "SYSTEM DUMP JSON" variant
+        // SYSTEM DUMP REGISTRY JSON — export static firmware catalogs
+        if (argc == 4 && streq(argv[2], "REGISTRY") && streq(argv[3], "JSON")) {
+#if SUPPORTS_JSON_EXPORT
+            msg.control.println();
+            dumpRegistryToJson(msg.control);
+            msg.control.println();
+#else
+            msg.control.println(F("ERROR: JSON export not supported on this platform"));
+#endif
+            return 0;
+        }
+
+        // SYSTEM DUMP JSON — export active user configuration
         if (argc == 3 && streq(argv[2], "JSON")) {
             msg.control.println();
-            dumpConfigToJSON(Serial);
+            dumpConfigToJSON(msg.control);
             msg.control.println();
             return 0;
         }

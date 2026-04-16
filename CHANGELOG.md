@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4-beta] - 2026-04-16
+
 ### Added
 - JSON IMPORT command for streaming bulk sensor configuration over serial CLI
+- JSON export of firmware static catalogs via `LIST ... JSON` and `SYSTEM DUMP REGISTRY JSON`
 
 ### Fixed
 - Control-plane responses now return to the transport that sent the command; unsolicited messages (alarms, etc.) still multi-cast to all configured transports
