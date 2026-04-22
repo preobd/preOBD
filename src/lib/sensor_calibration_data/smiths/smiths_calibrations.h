@@ -63,24 +63,24 @@ static const PROGMEM ThermistorLookupCalibration smiths_tt4201_temp_cal = {
 // ===== SMITHS GTR104 COOLANT TEMP SENDER (GENERIC BRITISH GAUGE) =====
 // Smiths GTR104: generic gauge sender used across many British classics
 // Electrical: single-wire NTC, body-grounded, drives Smiths/Jaeger temperature gauge
-// Valid range: 20–100°C (3 points — limited data; accuracy estimated ±8°C)
-// Source: Community bench measurements; only 3 reliable data points available
-// WARNING: 3-point curve — accuracy is approximate between measured points.
-//          For precision applications use TT6811 or TT4201 if those match your gauge.
+// Valid range: 20–100°C
+// Source: Community bench measurements — 3 data points (675Ω@20°C, 165Ω@60°C, 47.5Ω@100°C)
+// Calibration type: CAL_THERMISTOR_BETA — β-equation fit to the 3 measured points.
+//   Pair-wise β from the 3 points: 3440K (20→60°C), 3870K (60→100°C), 3629K (20→100°C).
+//   Average β = 3646K used here. The pair-wise spread (~12%) suggests the real
+//   sensor doesn't follow a perfect β curve, so accuracy is limited regardless.
+// Accuracy: estimated ±5°C across 20–100°C. Linear interpolation between the 3
+//   measured points would be worse (±8°C at 40°C midpoint).
+// WARNING: Limited source data — only 3 community-measured points. For precision
+//   applications use TT6811 or TT4201 if those match your gauge. A full bench-
+//   verified R-vs-T table would improve accuracy significantly (see issue #141).
 // Bias: SENSOR_BIAS_LOW_Z (100Ω) — sender range 47.5–675Ω (cold end readable on 100Ω:
 //   V = 5 × 100/775 = 0.65V → ~530 counts on 10-bit ADC, adequate resolution)
-static const float smiths_gtr104_resistance[] PROGMEM = {
-    675.0, 165.0,  47.5
-};
-static const float smiths_gtr104_temperature[] PROGMEM = {
-     20.0,  60.0, 100.0
-};
-
-static const PROGMEM ThermistorLookupCalibration smiths_gtr104_temp_cal = {
+static const PROGMEM BetaCalibration smiths_gtr104_temp_cal = {
     .bias_resistor = SENSOR_BIAS_LOW_Z,
-    .resistance_table = smiths_gtr104_resistance,
-    .temperature_table = smiths_gtr104_temperature,
-    .table_size = 3
+    .beta = 3646.0f,   // Average β from 3 community-measured points (spread: 3440–3870K)
+    .r0 = 675.0f,      // Reference resistance at T0 (Ω)
+    .t0 = 20.0f        // Reference temperature (°C)
 };
 
 // ===== SMITHS BP/ACP OIL PRESSURE SENDER =====
