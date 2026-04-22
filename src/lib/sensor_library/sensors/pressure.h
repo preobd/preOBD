@@ -29,6 +29,16 @@ static const char PSTR_VDO_2BAR_CURVE_LABEL[] PROGMEM = "VDO 2 Bar (curve fit)";
 static const char PSTR_VDO_5BAR_CURVE[] PROGMEM = "VDO_5BAR_CURVE";
 static const char PSTR_VDO_5BAR_CURVE_LABEL[] PROGMEM = "VDO 5 Bar (curve fit)";
 
+// Smiths (British classics)
+static const char PSTR_SMITHS_OIL_PRESSURE_BP[] PROGMEM = "SMITHS_OIL_PRESSURE_BP";
+static const char PSTR_SMITHS_OIL_PRESSURE_BP_LABEL[] PROGMEM = "Smiths BP/ACP Oil Pressure Sender (0-80 PSI)";
+static const char PSTR_SMITHS_OIL_PRESSURE_BP_DESC[] PROGMEM = "Smiths BP/ACP oil sender (MG/Triumph). Endpoints only; linear interp, \xC2\xB1""10% FS accuracy.";
+
+// Stewart-Warner
+static const char PSTR_SW_OIL_PRESSURE[] PROGMEM = "SW_OIL_PRESSURE";
+static const char PSTR_SW_OIL_PRESSURE_LABEL[] PROGMEM = "Stewart-Warner Oil Pressure Sender (0-80 PSI)";
+static const char PSTR_SW_OIL_PRESSURE_DESC[] PROGMEM = "Stewart-Warner oil pressure sender, 33.5-240\xCE\xA9. Endpoints only; linear interp, \xC2\xB1""10% FS.";
+
 // Jeep/AMC
 static const char PSTR_JEEP_4_0_OIL_GAUGE[] PROGMEM = "JEEP_4_0_OIL_GAUGE";
 static const char PSTR_JEEP_4_0_OIL_GAUGE_LABEL[] PROGMEM = "Jeep 4.0L Oil Pressure Sender (Gauge) (0-80 PSI)";
@@ -85,6 +95,12 @@ static const char PSTR_VDO_80PSI_TABLE_LABEL[] PROGMEM = "VDO 80 PSI Oil (US, de
     /* VDO US-market descending pressure */ \
     X_SENSOR(PSTR_VDO_80PSI_TABLE, PSTR_VDO_80PSI_TABLE_LABEL, nullptr, readPressureTableDescending, nullptr, \
              MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo80psi_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x6008, PIN_ANALOG) \
+    /* Smiths (British classics) */ \
+    X_SENSOR(PSTR_SMITHS_OIL_PRESSURE_BP, PSTR_SMITHS_OIL_PRESSURE_BP_LABEL, PSTR_SMITHS_OIL_PRESSURE_BP_DESC, readPressureTable, nullptr, \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &smiths_oil_bp_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x0D29, PIN_ANALOG) \
+    /* Stewart-Warner */ \
+    X_SENSOR(PSTR_SW_OIL_PRESSURE, PSTR_SW_OIL_PRESSURE_LABEL, PSTR_SW_OIL_PRESSURE_DESC, readPressureTable, nullptr, \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &sw_oil_pressure_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x436A, PIN_ANALOG) \
     /* Jeep/AMC */ \
     X_SENSOR(PSTR_JEEP_4_0_OIL_GAUGE, PSTR_JEEP_4_0_OIL_GAUGE_LABEL, nullptr, readPressureTable, nullptr, \
              MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &jeep40_oil_gauge_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x0156, PIN_ANALOG) \

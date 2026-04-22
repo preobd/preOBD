@@ -53,6 +53,7 @@ extern void readMAX6675(Input*);
 extern void readMAX31855(Input*);
 extern void readThermistorLookup(Input*);
 extern void readThermistorSteinhart(Input*);
+extern void readThermistorBeta(Input*);
 extern void readPressurePolynomial(Input*);
 extern void readPressureTable(Input*);
 extern void readPressureTableDescending(Input*);
