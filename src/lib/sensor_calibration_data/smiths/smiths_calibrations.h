@@ -85,16 +85,18 @@ static const PROGMEM ThermistorLookupCalibration smiths_gtr104_temp_cal = {
 
 // ===== SMITHS BP/ACP OIL PRESSURE SENDER =====
 // Smiths oil pressure sender for BP and ACP gauges (MG, Triumph, many others)
-// Electrical: variable-resistance sender, 240Ω @ 0 psi, decreasing to ~20Ω at full scale
+// Electrical: variable-resistance sender, 240Ω @ 0 psi, decreasing to 20Ω @ 80 psi
 // Full-scale pressure varies by application: 60–100 PSI depending on gauge
-// Source: Published Smiths specification (2 confirmed endpoints); midpoints interpolated
-// NOTE: Endpoints are well-established; interpolated midpoints assume linear behaviour
-//       which is typical for Smiths oil senders but not guaranteed.
+// Source: Published Smiths endpoint specifications (2 points confirmed)
+// WARNING: Only endpoints are from the Smiths spec. Intermediate points below
+//   are true linear R-vs-P interpolation — Smiths oil senders are typically
+//   approximately linear but this is not guaranteed. Accuracy estimated ±10%
+//   full scale between endpoints. Bench-verified points welcome (issue #141).
 // Resistance stored ASCENDING (20→240Ω) with pressure DESCENDING (80→0 psi)
 // to satisfy readPressureTable()'s interpolateAscending() requirement.
 // Bias: BIAS_LOW_Z (100Ω) — sender range 20–240Ω
 static const float smiths_oil_bp_resistance[] PROGMEM = {
-     20.0,  57.5,  95.0, 132.5, 170.0, 207.5, 240.0
+     20.0,  56.6,  93.4, 130.0, 166.6, 203.4, 240.0
 };
 static const float smiths_oil_bp_pressure[] PROGMEM = {
      80.0,  66.7,  53.3,  40.0,  26.7,  13.3,   0.0

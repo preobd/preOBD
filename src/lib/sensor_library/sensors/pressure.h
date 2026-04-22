@@ -32,12 +32,12 @@ static const char PSTR_VDO_5BAR_CURVE_LABEL[] PROGMEM = "VDO 5 Bar (curve fit)";
 // Smiths (British classics)
 static const char PSTR_SMITHS_OIL_PRESSURE_BP[] PROGMEM = "SMITHS_OIL_PRESSURE_BP";
 static const char PSTR_SMITHS_OIL_PRESSURE_BP_LABEL[] PROGMEM = "Smiths BP/ACP Oil Pressure Sender (0-80 PSI)";
-static const char PSTR_SMITHS_OIL_PRESSURE_BP_DESC[] PROGMEM = "Smiths BP/ACP oil sender (MG/Triumph). Endpoints confirmed, midpoints interpolated.";
+static const char PSTR_SMITHS_OIL_PRESSURE_BP_DESC[] PROGMEM = "Smiths BP/ACP oil sender (MG/Triumph). Endpoints only; linear interp, \xC2\xB1""10% FS accuracy.";
 
 // Stewart-Warner
 static const char PSTR_SW_OIL_PRESSURE[] PROGMEM = "SW_OIL_PRESSURE";
 static const char PSTR_SW_OIL_PRESSURE_LABEL[] PROGMEM = "Stewart-Warner Oil Pressure Sender (0-80 PSI)";
-static const char PSTR_SW_OIL_PRESSURE_DESC[] PROGMEM = "Stewart-Warner oil pressure sender. Published spec, 33.5-240\xCE\xA9. 100\xCE\xA9 bias.";
+static const char PSTR_SW_OIL_PRESSURE_DESC[] PROGMEM = "Stewart-Warner oil pressure sender, 33.5-240\xCE\xA9. Endpoints only; linear interp, \xC2\xB1""10% FS.";
 
 // Jeep/AMC
 static const char PSTR_JEEP_4_0_OIL_GAUGE[] PROGMEM = "JEEP_4_0_OIL_GAUGE";
