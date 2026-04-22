@@ -41,7 +41,7 @@ static const char PSTR_SMITHS_TT4201_TEMP_LABEL[] PROGMEM = "Smiths TT4201 Coola
 static const char PSTR_SMITHS_TT4201_TEMP_DESC[] PROGMEM = "Smiths TT4201 gauge sender. 6 data points, 30-110\xC2\xB0""C. 100\xCE\xA9 bias.";
 static const char PSTR_SMITHS_GTR104_TEMP[] PROGMEM = "SMITHS_GTR104_TEMP";
 static const char PSTR_SMITHS_GTR104_TEMP_LABEL[] PROGMEM = "Smiths GTR104 Coolant Temp (generic British gauge, approx)";
-static const char PSTR_SMITHS_GTR104_TEMP_DESC[] PROGMEM = "Smiths GTR104 gauge sender. \xCE\xB2-fit to 3 community points, \xC2\xB1""5\xC2\xB0""C approx. 100\xCE\xA9 bias.";
+static const char PSTR_SMITHS_GTR104_TEMP_DESC[] PROGMEM = "Smiths GTR104 gauge sender. Steinhart-Hart exact at 3 community anchors, \xC2\xB1""2-3\xC2\xB0""C between. 100\xCE\xA9 bias.";
 
 // AC Delco / GM OEM
 static const char PSTR_ACDELCO_TEMP_PRE79[] PROGMEM = "ACDELCO_TEMP_PRE79";
@@ -95,8 +95,8 @@ static const char PSTR_GENERIC_TEMP_LINEAR_LABEL[] PROGMEM = "0.5-4.5V linear (-
              MEASURE_TEMPERATURE, CAL_THERMISTOR_TABLE, &smiths_tt6811_temp_cal, SENSOR_READ_INTERVAL_MS, 70.0, 120.0, 0x5FA9, PIN_ANALOG) \
     X_SENSOR(PSTR_SMITHS_TT4201_TEMP, PSTR_SMITHS_TT4201_TEMP_LABEL, PSTR_SMITHS_TT4201_TEMP_DESC, readThermistorLookup, nullptr, \
              MEASURE_TEMPERATURE, CAL_THERMISTOR_TABLE, &smiths_tt4201_temp_cal, SENSOR_READ_INTERVAL_MS, 30.0, 110.0, 0x43A0, PIN_ANALOG) \
-    X_SENSOR(PSTR_SMITHS_GTR104_TEMP, PSTR_SMITHS_GTR104_TEMP_LABEL, PSTR_SMITHS_GTR104_TEMP_DESC, readThermistorBeta, nullptr, \
-             MEASURE_TEMPERATURE, CAL_THERMISTOR_BETA, &smiths_gtr104_temp_cal, SENSOR_READ_INTERVAL_MS, 20.0, 100.0, 0xF273, PIN_ANALOG) \
+    X_SENSOR(PSTR_SMITHS_GTR104_TEMP, PSTR_SMITHS_GTR104_TEMP_LABEL, PSTR_SMITHS_GTR104_TEMP_DESC, readThermistorSteinhart, nullptr, \
+             MEASURE_TEMPERATURE, CAL_THERMISTOR_STEINHART, &smiths_gtr104_temp_cal, SENSOR_READ_INTERVAL_MS, 20.0, 100.0, 0xF273, PIN_ANALOG) \
     /* AC Delco / GM OEM */ \
     X_SENSOR(PSTR_ACDELCO_TEMP_PRE79, PSTR_ACDELCO_TEMP_PRE79_LABEL, PSTR_ACDELCO_TEMP_PRE79_DESC, readThermistorLookup, nullptr, \
              MEASURE_TEMPERATURE, CAL_THERMISTOR_TABLE, &acdelco_pre79_temp_cal, SENSOR_READ_INTERVAL_MS, 40.0, 120.0, 0x6E5B, PIN_ANALOG) \

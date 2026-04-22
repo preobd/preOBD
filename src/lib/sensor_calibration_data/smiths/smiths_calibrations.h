@@ -65,22 +65,25 @@ static const PROGMEM ThermistorLookupCalibration smiths_tt4201_temp_cal = {
 // Electrical: single-wire NTC, body-grounded, drives Smiths/Jaeger temperature gauge
 // Valid range: 20–100°C
 // Source: Community bench measurements — 3 data points (675Ω@20°C, 165Ω@60°C, 47.5Ω@100°C)
-// Calibration type: CAL_THERMISTOR_BETA — β-equation fit to the 3 measured points.
-//   Pair-wise β from the 3 points: 3440K (20→60°C), 3870K (60→100°C), 3629K (20→100°C).
-//   Average β = 3646K used here. The pair-wise spread (~12%) suggests the real
-//   sensor doesn't follow a perfect β curve, so accuracy is limited regardless.
-// Accuracy: estimated ±5°C across 20–100°C. Linear interpolation between the 3
-//   measured points would be worse (±8°C at 40°C midpoint).
+// Calibration type: CAL_THERMISTOR_STEINHART — Steinhart-Hart coefficients derived
+//   to pass exactly through all 3 measured points (3 parameters, 3 anchors = exact fit).
+//   Pair-wise β across the 3 points varies 3440–3870K, so no single β can fit them
+//   — Steinhart-Hart's 3-parameter cubic-log form is the appropriate model.
+// Accuracy: exact at 20/60/100°C anchors. Between-anchor interpolation error
+//   estimated ±2–3°C, limited mostly by the sparseness of source data itself.
+//   Extrapolation below 20°C or above 100°C is not recommended.
 // WARNING: Limited source data — only 3 community-measured points. For precision
 //   applications use TT6811 or TT4201 if those match your gauge. A full bench-
-//   verified R-vs-T table would improve accuracy significantly (see issue #141).
+//   verified R-vs-T table would improve accuracy further (see issue #141).
 // Bias: SENSOR_BIAS_LOW_Z (100Ω) — sender range 47.5–675Ω (cold end readable on 100Ω:
 //   V = 5 × 100/775 = 0.65V → ~530 counts on 10-bit ADC, adequate resolution)
-static const PROGMEM BetaCalibration smiths_gtr104_temp_cal = {
+// Coefficients: solved from the 3x3 system
+//   [1, ln(R_i), ln(R_i)^3] · [A,B,C]^T = 1/T_i(K) for i ∈ {20°C, 60°C, 100°C}
+static const PROGMEM ThermistorSteinhartCalibration smiths_gtr104_temp_cal = {
     .bias_resistor = SENSOR_BIAS_LOW_Z,
-    .beta = 3646.0f,   // Average β from 3 community-measured points (spread: 3440–3870K)
-    .r0 = 675.0f,      // Reference resistance at T0 (Ω)
-    .t0 = 20.0f        // Reference temperature (°C)
+    .steinhart_a = 1.821363e-03f,
+    .steinhart_b = 2.106448e-04f,
+    .steinhart_c = 7.868854e-07f
 };
 
 // ===== SMITHS BP/ACP OIL PRESSURE SENDER =====
