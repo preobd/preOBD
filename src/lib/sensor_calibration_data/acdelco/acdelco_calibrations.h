@@ -5,10 +5,10 @@
  * Two distinct families exist based on era:
  *
  * Pre-1979 GM gauge sender (1967–1978): Low-impedance, 46–350Ω, compatible with
- *   BIAS_LOW_Z (100Ω position) — same family as VDO and pre-EFI Ford senders.
+ *   SENSOR_BIAS_LOW_Z (100Ω position) — same family as VDO and pre-EFI Ford senders.
  *
  * 1979+ GM gauge sender (1979–1990): Higher-impedance, 240–1600Ω, requires
- *   BIAS_HIGH_Z (2.49kΩ position) — NOT compatible with the 100Ω VDO position.
+ *   SENSOR_BIAS_HIGH_Z (2.49kΩ position) — NOT compatible with the 100Ω VDO position.
  *
  * Data source: GM FSM resistance ranges and community bench measurements (GM Square Body
  * forums). These curves are community-derived, not factory precision data.
@@ -30,7 +30,7 @@
 // Source: GM FSM resistance ranges + GM Square Body community measurements
 // WARNING: Limited community data — table uses FSM endpoints and interpolated midpoints.
 //          Accuracy estimated ±8°C. Full bench-verified table pending.
-// Bias: BIAS_LOW_Z (100Ω) — sender range 46–350Ω
+// Bias: SENSOR_BIAS_LOW_Z (100Ω) — sender range 46–350Ω
 static const float acdelco_pre79_resistance[] PROGMEM = {
     350.0, 230.0, 150.0,  95.0,  68.0,  46.0
 };
@@ -39,7 +39,7 @@ static const float acdelco_pre79_temperature[] PROGMEM = {
 };
 
 static const PROGMEM ThermistorLookupCalibration acdelco_pre79_temp_cal = {
-    .bias_resistor = BIAS_LOW_Z,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = acdelco_pre79_resistance,
     .temperature_table = acdelco_pre79_temperature,
     .table_size = 6
@@ -52,11 +52,11 @@ static const PROGMEM ThermistorLookupCalibration acdelco_pre79_temp_cal = {
 // Valid range: approx 20–120°C
 // Source: GM FSM resistance ranges + GM Square Body community measurements
 // NOTE: The 1979+ sender is HIGHER impedance than its predecessor. It requires
-//       BIAS_HIGH_Z (2.49kΩ), NOT the 100Ω VDO/low-impedance position.
+//       SENSOR_BIAS_HIGH_Z (2.49kΩ), NOT the 100Ω VDO/low-impedance position.
 //       Wiring it to the 100Ω bias position will give severely compressed readings.
 // WARNING: Limited community data — table uses FSM endpoints and interpolated midpoints.
 //          Accuracy estimated ±8°C. Full bench-verified table pending.
-// Bias: BIAS_HIGH_Z (2.49kΩ) — sender range 240–1600Ω
+// Bias: SENSOR_BIAS_HIGH_Z (2.49kΩ) — sender range 240–1600Ω
 static const float acdelco_post79_resistance[] PROGMEM = {
     1600.0, 1100.0,  720.0,  480.0,  330.0,  240.0
 };
@@ -65,7 +65,7 @@ static const float acdelco_post79_temperature[] PROGMEM = {
 };
 
 static const PROGMEM ThermistorLookupCalibration acdelco_post79_temp_cal = {
-    .bias_resistor = BIAS_HIGH_Z,
+    .bias_resistor = SENSOR_BIAS_HIGH_Z,
     .resistance_table = acdelco_post79_resistance,
     .temperature_table = acdelco_post79_temperature,
     .table_size = 6

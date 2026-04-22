@@ -9,7 +9,7 @@
  * gauge movement — insufficient R-vs-T data exists to add reliably. Use a generic
  * NTC sensor type if retrofitting SW temp gauges with preOBD.
  *
- * All SW senders are low-impedance (10–240Ω) — use BIAS_LOW_Z (100Ω position).
+ * All SW senders are low-impedance (10–240Ω) — use SENSOR_BIAS_LOW_Z (100Ω position).
  */
 
 #ifndef SW_CALIBRATIONS_H
@@ -29,7 +29,7 @@
 //   Bench-verified intermediate points would improve this (see issue #141).
 // Resistance stored ASCENDING (33.5→240Ω) with pressure DESCENDING (80→0 psi)
 // to satisfy readPressureTable()'s interpolateAscending() requirement.
-// Bias: BIAS_LOW_Z (100Ω) — sender range 33.5–240Ω
+// Bias: SENSOR_BIAS_LOW_Z (100Ω) — sender range 33.5–240Ω
 static const float sw_oil_pressure_resistance[] PROGMEM = {
      33.5,  85.1, 136.8, 188.4, 214.2, 240.0
 };
@@ -38,7 +38,7 @@ static const float sw_oil_pressure_pressure[] PROGMEM = {
 };
 
 static const PROGMEM PressureTableCalibration sw_oil_pressure_cal = {
-    .bias_resistor = BIAS_LOW_Z,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = sw_oil_pressure_resistance,
     .pressure_table = sw_oil_pressure_pressure,
     .table_size = 6
@@ -54,7 +54,7 @@ static const PROGMEM PressureTableCalibration sw_oil_pressure_cal = {
 //   Accuracy estimated ±10% fuel level between endpoints.
 // Stored DESCENDING (240→33Ω) with level ASCENDING (0→100%) per LevelTableCalibration
 // convention for descending senders (ascending = false).
-// Bias: BIAS_LOW_Z (100Ω) — sender range 33–240Ω
+// Bias: SENSOR_BIAS_LOW_Z (100Ω) — sender range 33–240Ω
 static const float sw_fuel_level_240_resistance[] PROGMEM = {
     240.0, 198.6, 157.2, 115.8,  74.4,  33.0
 };
@@ -63,7 +63,7 @@ static const float sw_fuel_level_240_level[] PROGMEM = {
 };
 
 static const PROGMEM LevelTableCalibration sw_fuel_level_240_cal = {
-    .bias_resistor = BIAS_LOW_Z,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = sw_fuel_level_240_resistance,
     .level_table = sw_fuel_level_240_level,
     .table_size = 6,
@@ -79,7 +79,7 @@ static const PROGMEM LevelTableCalibration sw_fuel_level_240_cal = {
 //   true linear R-vs-level interpolation. Accuracy estimated ±10% fuel level.
 // Stored DESCENDING (73→10Ω) with level ASCENDING (0→100%) per LevelTableCalibration
 // convention for descending senders (ascending = false).
-// Bias: BIAS_LOW_Z (100Ω) — sender range 10–73Ω
+// Bias: SENSOR_BIAS_LOW_Z (100Ω) — sender range 10–73Ω
 static const float sw_ford_fuel_level_resistance[] PROGMEM = {
      73.0,  60.4,  47.8,  35.2,  22.6,  10.0
 };
@@ -88,7 +88,7 @@ static const float sw_ford_fuel_level_level[] PROGMEM = {
 };
 
 static const PROGMEM LevelTableCalibration sw_ford_fuel_level_cal = {
-    .bias_resistor = BIAS_LOW_Z,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = sw_ford_fuel_level_resistance,
     .level_table = sw_ford_fuel_level_level,
     .table_size = 6,

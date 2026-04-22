@@ -19,7 +19,7 @@
 #include "../../sensor_types.h"
 #include "../../../config.h"
 
-// Jeep sensors deviate from DEFAULT_BIAS_RESISTOR (1kΩ). BIAS_LOW_Z and BIAS_HIGH_Z
+// Jeep sensors deviate from DEFAULT_BIAS_RESISTOR (1kΩ). SENSOR_BIAS_LOW_Z and SENSOR_BIAS_HIGH_Z
 // are defined globally in sensor_calibration_data.h — they map to the fixed hardware
 // positions on the preOBD PCB (100Ω and 2.49kΩ respectively).
 
@@ -44,7 +44,7 @@ static const float jeep40_temp_temperature[] PROGMEM = {
 };
 
 static const PROGMEM ThermistorLookupCalibration jeep40_temp_gauge_cal = {
-    .bias_resistor = BIAS_HIGH_Z,
+    .bias_resistor = SENSOR_BIAS_HIGH_Z,
     .resistance_table = jeep40_temp_resistance,
     .temperature_table = jeep40_temp_temperature,
     .table_size = 25
@@ -64,7 +64,7 @@ static const float renix_cts_temperature[] PROGMEM = {
 };
 
 static const PROGMEM ThermistorLookupCalibration renix_cts_cal = {
-    .bias_resistor = BIAS_HIGH_Z,
+    .bias_resistor = SENSOR_BIAS_HIGH_Z,
     .resistance_table = renix_cts_resistance,
     .temperature_table = renix_cts_temperature,
     .table_size = 11
@@ -88,7 +88,7 @@ static const float jeep40_oil_pressure[] PROGMEM = {
 };
 
 static const PROGMEM PressureTableCalibration jeep40_oil_gauge_cal = {
-    .bias_resistor = BIAS_LOW_Z,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = jeep40_oil_resistance,
     .pressure_table = jeep40_oil_pressure,
     .table_size = 17
@@ -110,7 +110,7 @@ static const float jeep_cj_temp_temperature[] PROGMEM = {
 };
 
 static const PROGMEM ThermistorLookupCalibration jeep_cj_temp_gauge_cal = {
-    .bias_resistor = BIAS_LOW_Z,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = jeep_cj_temp_resistance,
     .temperature_table = jeep_cj_temp_temperature,
     .table_size = 5
@@ -131,7 +131,7 @@ static const float jeep_cj_oil_thin_pressure[] PROGMEM = {
 };
 
 static const PROGMEM PressureTableCalibration jeep_cj_oil_thin_cal = {
-    .bias_resistor = BIAS_LOW_Z,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = jeep_cj_oil_thin_resistance,
     .pressure_table = jeep_cj_oil_thin_pressure,
     .table_size = 5
@@ -153,7 +153,7 @@ static const float jeep_cj_oil_deep_pressure[] PROGMEM = {
 };
 
 static const PROGMEM PressureTableCalibration jeep_cj_oil_deep_cal = {
-    .bias_resistor = BIAS_LOW_Z,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = jeep_cj_oil_deep_resistance,
     .pressure_table = jeep_cj_oil_deep_pressure,
     .table_size = 5
@@ -176,7 +176,7 @@ static const float jeep_cj_fuel_level[] PROGMEM = {
 };
 
 static const PROGMEM LevelTableCalibration jeep_cj_fuel_level_cal = {
-    .bias_resistor = BIAS_LOW_Z,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = jeep_cj_fuel_resistance,
     .level_table = jeep_cj_fuel_level,
     .table_size = 5,

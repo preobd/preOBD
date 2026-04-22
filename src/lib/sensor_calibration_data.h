@@ -27,8 +27,8 @@
 // ===== STANDARD BIAS RESISTOR POSITIONS =====
 // Fixed hardware positions on the preOBD PCB. Use these instead of raw values
 // so the intent is clear and a single change updates all calibration structs.
-#define BIAS_LOW_Z    100.0f   // Low-impedance senders (VDO, Smiths, SW, pre-EFI Ford/GM): 10–500Ω
-#define BIAS_HIGH_Z  2490.0f   // High-impedance NTC senders (Jeep XJ, GM EFI, Bosch NTC): 135–9400Ω
+#define SENSOR_BIAS_LOW_Z    100.0f   // Low-impedance senders (VDO, Smiths, SW, pre-EFI Ford/GM): 10–500Ω
+#define SENSOR_BIAS_HIGH_Z  2490.0f   // High-impedance NTC senders (Jeep XJ, GM EFI, Bosch NTC): 135–9400Ω
 
 // ===== CALIBRATION DATA BY MANUFACTURER =====
 // Include modular calibration files organized by manufacturer
