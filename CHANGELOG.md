@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added Smiths, Stewart-Warner, AC Delco, and Bosch NTC sensors to the sensor library
+
 ## [0.7.4-beta] - 2026-04-16
 
 ### Added
