@@ -22,8 +22,10 @@
 #ifndef JSON_CONFIG_H
 #define JSON_CONFIG_H
 
-// JSON features only available in EEPROM mode (not static config)
-#ifndef USE_STATIC_CONFIG
+#include "platform.h"
+
+// JSON features only available on platforms with enough RAM (not Mega/Uno) and in runtime config mode
+#if SUPPORTS_JSON_CONFIG
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -52,5 +54,5 @@ bool loadConfigFromSD(const char* filename);
 bool saveConfigToFile(const char* destination, const char* filename);
 bool loadConfigFromFile(const char* destination, const char* filename);
 
-#endif // USE_STATIC_CONFIG
+#endif // SUPPORTS_JSON_CONFIG
 #endif // JSON_CONFIG_H

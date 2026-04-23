@@ -23,7 +23,11 @@
 #include <Arduino.h>
 
 // ===== CONFIGURATION =====
-#define CAN_CACHE_SIZE 16           // Must be power of 2 for efficient modulo
+#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+  #define CAN_CACHE_SIZE 8            // Reduced for AVR RAM budget; must be power of 2
+#else
+  #define CAN_CACHE_SIZE 16           // Must be power of 2 for efficient modulo
+#endif
 #define CAN_DEFAULT_TIMEOUT_MS 2000 // Default stale timeout
 
 // TODO: Make timeout configurable per sensor for different update rates

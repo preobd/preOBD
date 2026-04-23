@@ -13,7 +13,12 @@
 #include "log_tags.h"
 
 // PID Lookup Table — Maps PIDs to Input pointers for fast lookup
-#define MAX_PID_ENTRIES 64
+// On AVR cap to MAX_INPUTS since you can't have more PIDs than inputs
+#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+  #define MAX_PID_ENTRIES MAX_INPUTS
+#else
+  #define MAX_PID_ENTRIES 64
+#endif
 
 struct PIDMapping {
     uint8_t pid;

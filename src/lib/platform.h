@@ -26,7 +26,7 @@
     #define AREF_VOLTAGE 5.0
     #define ADC_RESOLUTION 10
     #define ADC_MAX_VALUE 1023
-    #define MAX_INPUTS 16       // Arduino Mega analog inputs
+    #define MAX_INPUTS 8        // Arduino Mega: reduced for RAM budget
 #elif defined(__MK20DX256__) || defined(__MK20DX128__)
     // Teensy 3.x - 3.3V system with 1.2V internal reference
     #define PLATFORM_NAME "Teensy 3.x"
@@ -109,6 +109,13 @@
 
 // JSON export of static catalogs (same platform set as JSON import)
 #define SUPPORTS_JSON_EXPORT SUPPORTS_JSON_IMPORT_STREAM
+
+// Full JSON config (import/export + SD backup): requires SUPPORTS_JSON_EXPORT and runtime config
+#if SUPPORTS_JSON_EXPORT && !defined(USE_STATIC_CONFIG)
+  #define SUPPORTS_JSON_CONFIG 1
+#else
+  #define SUPPORTS_JSON_CONFIG 0
+#endif
 
 // ===== VOLTAGE DIVIDER CONFIGURATION =====
 // Automatically configured based on system voltage

@@ -24,7 +24,11 @@ enum CANScanState {
 // SCAN RESULT STRUCTURE
 // ============================================================================
 
-#define MAX_SCAN_RESULTS 32
+#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+  #define MAX_SCAN_RESULTS 4
+#else
+  #define MAX_SCAN_RESULTS 32
+#endif
 
 struct CANScanResult {
     uint16_t can_id;        // CAN identifier
