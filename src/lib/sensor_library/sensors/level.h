@@ -1,8 +1,9 @@
 /*
- * level.h - Fluid Level Sensors
+ * level.h - Level / Position Sensors (0-100% normalized analog inputs)
  *
- * Table-based resistive fuel level senders (VDO).
- * Outputs percentage: 0% = Empty, 100% = Full.
+ * Table-based resistive fuel level senders (VDO, Stewart-Warner, Jeep)
+ * and generic linear position sensors (e.g. throttle position).
+ * Outputs percentage: 0% = Empty/closed, 100% = Full/open.
  */
 
 #ifndef SENSOR_LIBRARY_SENSORS_LEVEL_H
@@ -11,6 +12,11 @@
 #include <Arduino.h>
 
 // ===== PROGMEM STRINGS =====
+// Position sensors (linear analog)
+static const char PSTR_GENERIC_TPS[] PROGMEM = "GENERIC_TPS";
+static const char PSTR_GENERIC_TPS_LABEL[] PROGMEM = "0.5-4.5V linear (0-100% throttle)";
+
+// Fuel level senders (resistive, table-based)
 static const char PSTR_VDO_FUEL_LEVEL_180[] PROGMEM = "VDO_FUEL_LEVEL_180";
 static const char PSTR_VDO_FUEL_LEVEL_180_LABEL[] PROGMEM = "VDO Fuel Level 3-180\xCE\xA9 (European, ascending)";
 static const char PSTR_VDO_FUEL_LEVEL_240[] PROGMEM = "VDO_FUEL_LEVEL_240";
@@ -35,6 +41,10 @@ static const char PSTR_JEEP_CJ_FUEL_LEVEL_LABEL[] PROGMEM = "Jeep CJ Fuel Level 
 // ===== SENSOR ENTRIES (X-MACRO) =====
 // X_SENSOR(name, label, description, readFunc, initFunc, measType, calType, defaultCal, minInterval, minVal, maxVal, hash, pinType)
 #define LEVEL_SENSORS \
+    /* Position sensors (linear analog) */ \
+    X_SENSOR(PSTR_GENERIC_TPS, PSTR_GENERIC_TPS_LABEL, nullptr, readLinearSensor, nullptr, \
+             MEASURE_LEVEL, CAL_LINEAR, &generic_tps_linear_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0xF738, PIN_ANALOG) \
+    /* Fuel level senders (resistive, table-based) */ \
     X_SENSOR(PSTR_VDO_FUEL_LEVEL_180, PSTR_VDO_FUEL_LEVEL_180_LABEL, nullptr, readLevelTable, nullptr, \
              MEASURE_LEVEL, CAL_LEVEL_TABLE, &vdo_fuel180_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x7D88, PIN_ANALOG) \
     X_SENSOR(PSTR_VDO_FUEL_LEVEL_240, PSTR_VDO_FUEL_LEVEL_240_LABEL, nullptr, readLevelTable, nullptr, \
