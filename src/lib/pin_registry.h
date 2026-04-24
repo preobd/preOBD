@@ -75,13 +75,7 @@ struct PinUsage {
 // CONFIGURATION
 // ============================================================================
 
-// Maximum number of pins that can be tracked
-// Teensy 4.1: 54 digital + 14 analog = 58; Mega: 70 digital + 16 analog but fewer used
-#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
-  #define MAX_PIN_REGISTRY 24
-#else
-  #define MAX_PIN_REGISTRY 64
-#endif
+// Maximum number of pins that can be tracked; set per env in src/profiles/.
 
 // ============================================================================
 // PUBLIC API
