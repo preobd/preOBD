@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.6-beta] - 2026-04-24
+
 ### Changed
 - Replaced scattered per-platform `#ifdef` sizing constants with per-env profile headers (`src/profiles/`)
 
