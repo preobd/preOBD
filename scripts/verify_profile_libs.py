@@ -6,10 +6,10 @@ are present in lib_deps. Prints a warning (does not abort) if a mismatch is
 found so developers notice drift before it becomes a link error.
 
 Rules checked:
-  - ENABLE_CAN on a non-native-CAN platform → needs autowp-mcp2515
-  - ENABLE_BME280                            → needs Adafruit BME280
-  - ENABLE_LCD                               → needs LiquidCrystal_I2C
-  - ENABLE_ELM327 on ESP32                  → needs ESP32_BleSerial
+  - ENABLE_CAN + PROFILE_HAS_NATIVE_CAN=0 → needs autowp-mcp2515
+  - ENABLE_BME280                          → needs Adafruit BME280
+  - ENABLE_LCD                             → needs LiquidCrystal_I2C
+  - ENABLE_ELM327 on ESP32                → needs ESP32_BleSerial
 """
 
 # pylint: disable=undefined-variable
@@ -19,43 +19,50 @@ Import("env")  # type: ignore
 import os
 import re
 
-def _profile_defines(env_name: str) -> set:
-    """Return the set of macro names #define'd in the env's profile header."""
+
+def _parse_profile(env_name: str):
+    """Return (set_of_defined_macros, dict_of_macro_values) for the env's profile."""
     profile_path = os.path.join(
         env.subst("$PROJECT_DIR"), "src", "profiles", f"profile_{env_name}.h"
     )
     if not os.path.isfile(profile_path):
-        return set()
+        return set(), {}
     defines = set()
+    values = {}
     with open(profile_path) as f:
         for line in f:
-            m = re.match(r"^\s*#define\s+(\w+)", line)
+            m = re.match(r"^\s*#define\s+(\w+)(?:\s+(\S+))?", line)
             if m:
-                defines.add(m.group(1))
-    return defines
+                name, val = m.group(1), m.group(2)
+                defines.add(name)
+                if val is not None:
+                    values[name] = val
+    return defines, values
 
 
 def _lib_deps_str(env) -> str:
-    """Return a single string of all lib_deps for pattern matching."""
-    return " ".join(env.GetProjectOption("lib_deps", []))
+    return " ".join(env.GetProjectOption("lib_deps", [])).lower()
 
 
 def check(env):
     env_name = env.subst("$PIOENV")
-    defines = _profile_defines(env_name)
+    defines, values = _parse_profile(env_name)
     if not defines:
         print(f"verify_profile_libs: no profile found for env '{env_name}', skipping check")
         return
 
-    libs = _lib_deps_str(env).lower()
+    libs = _lib_deps_str(env)
     warnings = []
 
-    # ENABLE_CAN without native CAN support → MCP2515 driver needed
-    native_can_envs = {"teensy41", "teensy40", "teensy36", "esp32s3dev",
-                       "esp32s3_hybrid", "teensy41_hybrid", "debug"}
-    if "ENABLE_CAN" in defines and env_name not in native_can_envs:
-        if "mcp2515" not in libs:
-            warnings.append("ENABLE_CAN is set but autowp-mcp2515 not found in lib_deps")
+    # ENABLE_CAN on a non-native-CAN board → MCP2515 driver needed.
+    # PROFILE_HAS_NATIVE_CAN=0 means SPI controller; if the flag is absent we
+    # assume native to avoid false positives on future envs.
+    if "ENABLE_CAN" in defines:
+        native = values.get("PROFILE_HAS_NATIVE_CAN", "1")
+        if native == "0" and "mcp2515" not in libs:
+            warnings.append(
+                "ENABLE_CAN with PROFILE_HAS_NATIVE_CAN=0 but autowp-mcp2515 not in lib_deps"
+            )
 
     if "ENABLE_BME280" in defines and "bme280" not in libs:
         warnings.append("ENABLE_BME280 is set but Adafruit BME280 not found in lib_deps")

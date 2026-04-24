@@ -19,6 +19,10 @@
 
 #pragma message "Building with profile: profile_mega2560"
 
+// ===== CAN CONTROLLER =====
+// MCP2515 via SPI — no native CAN peripheral on AVR.
+#define PROFILE_HAS_NATIVE_CAN 0
+
 // ===== FEATURE FLAGS =====
 #define ENABLE_CAN
 #define ENABLE_SERIAL_OUTPUT
@@ -50,7 +54,7 @@
 #define CLI_MAX_ARG_LEN         20
 
 // ===== JSON CAPABILITY =====
-// AVR has insufficient RAM for streamed JSON import.
-#define SUPPORTS_JSON_IMPORT_STREAM 0
-#define SUPPORTS_JSON_EXPORT        0
+// AVR has insufficient RAM for JSON config, import, or export.
 #define SUPPORTS_JSON_CONFIG        0
+#define SUPPORTS_JSON_IMPORT_STREAM SUPPORTS_JSON_CONFIG
+#define SUPPORTS_JSON_EXPORT        SUPPORTS_JSON_CONFIG

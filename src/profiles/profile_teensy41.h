@@ -44,8 +44,15 @@
 #define CLI_MAX_ARGS            16
 #define CLI_MAX_ARG_LEN         32
 
+// ===== CAN CONTROLLER =====
+// PROFILE_HAS_NATIVE_CAN=1 → integrated peripheral; scripts/verify_profile_libs.py
+// uses this to skip the MCP2515 lib_deps check.
+#define PROFILE_HAS_NATIVE_CAN 1
+
 // ===== JSON CAPABILITY =====
-#define SUPPORTS_JSON_IMPORT_STREAM 1
-#define JSON_IMPORT_MAX_BYTES       16384
-#define SUPPORTS_JSON_EXPORT        1
+// SUPPORTS_JSON_CONFIG is the single source; the two sub-capabilities are always
+// equal to it in practice and are derived here to prevent drift.
 #define SUPPORTS_JSON_CONFIG        1
+#define SUPPORTS_JSON_IMPORT_STREAM SUPPORTS_JSON_CONFIG
+#define SUPPORTS_JSON_EXPORT        SUPPORTS_JSON_CONFIG
+#define JSON_IMPORT_MAX_BYTES       16384

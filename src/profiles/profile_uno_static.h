@@ -33,18 +33,10 @@
 #define CAN_CACHE_SIZE          4
 #define MAX_SCAN_RESULTS        4
 
-// ===== CLI BUFFER SIZES =====
-// serial_config.cpp is excluded when USE_STATIC_CONFIG is set; these are defined
-// for completeness but are never compiled.
-#define CLI_RX_BUFFER_SIZE      64
-#define CLI_CMD_BUFFER_SIZE     64
-#define CLI_HISTORY_BUFFER_SIZE 32
-#define CLI_MAX_BINDINGS        16
-#define CLI_BUFFER_SIZE         512
-#define CLI_MAX_ARGS            6
-#define CLI_MAX_ARG_LEN         16
+// ===== CLI =====
+// serial_config.cpp is excluded when USE_STATIC_CONFIG is set; no CLI on this build.
 
 // ===== JSON CAPABILITY =====
-#define SUPPORTS_JSON_IMPORT_STREAM 0
-#define SUPPORTS_JSON_EXPORT        0
 #define SUPPORTS_JSON_CONFIG        0
+#define SUPPORTS_JSON_IMPORT_STREAM SUPPORTS_JSON_CONFIG
+#define SUPPORTS_JSON_EXPORT        SUPPORTS_JSON_CONFIG
