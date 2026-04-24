@@ -148,6 +148,38 @@ static const char PSTR_BRAKE_PRESSURE[] PROGMEM = "BRAKE_PRESSURE";
 static const char PSTR_BRAKE_PRESSURE_ABBR[] PROGMEM = " BP";
 static const char PSTR_BRAKE_PRESSURE_LABEL[] PROGMEM = "Brake Pressure";
 
+static const char PSTR_TRANS_TEMP[] PROGMEM = "TRANS_TEMP";
+static const char PSTR_TRANS_TEMP_ABBR[] PROGMEM = "TRN";
+static const char PSTR_TRANS_TEMP_LABEL[] PROGMEM = "Transmission Temperature";
+
+static const char PSTR_INTAKE_AIR_TEMP[] PROGMEM = "INTAKE_AIR_TEMP";
+static const char PSTR_INTAKE_AIR_TEMP_ABBR[] PROGMEM = "IAT";
+static const char PSTR_INTAKE_AIR_TEMP_LABEL[] PROGMEM = "Intake Air Temperature";
+
+static const char PSTR_MAP_PRESSURE[] PROGMEM = "MAP_PRESSURE";
+static const char PSTR_MAP_PRESSURE_ABBR[] PROGMEM = "MAP";
+static const char PSTR_MAP_PRESSURE_LABEL[] PROGMEM = "Manifold Absolute Pressure";
+
+static const char PSTR_THROTTLE_POSITION[] PROGMEM = "THROTTLE_POSITION";
+static const char PSTR_THROTTLE_POSITION_ABBR[] PROGMEM = " TPS";
+static const char PSTR_THROTTLE_POSITION_LABEL[] PROGMEM = "Throttle Position";
+
+static const char PSTR_DIFF_TEMP[] PROGMEM = "DIFF_TEMP";
+static const char PSTR_DIFF_TEMP_ABBR[] PROGMEM = "DIFF";
+static const char PSTR_DIFF_TEMP_LABEL[] PROGMEM = "Differential Temperature";
+
+static const char PSTR_GEAR_OIL_TEMP[] PROGMEM = "GEAR_OIL_TEMP";
+static const char PSTR_GEAR_OIL_TEMP_ABBR[] PROGMEM = " GBX";
+static const char PSTR_GEAR_OIL_TEMP_LABEL[] PROGMEM = "Gear Oil Temperature";
+
+static const char PSTR_OIL_LEVEL[] PROGMEM = "OIL_LEVEL";
+static const char PSTR_OIL_LEVEL_ABBR[] PROGMEM = " OLV";
+static const char PSTR_OIL_LEVEL_LABEL[] PROGMEM = "Oil Level";
+
+static const char PSTR_INTERCOOLER_TEMP[] PROGMEM = "INTERCOOLER_TEMP";
+static const char PSTR_INTERCOOLER_TEMP_ABBR[] PROGMEM = " INT";
+static const char PSTR_INTERCOOLER_TEMP_LABEL[] PROGMEM = "Intercooler Temperature";
+
 // ===== APPLICATION PRESETS (PROGMEM - Flash Memory) =====
 //
 // To add a new application:
@@ -602,6 +634,172 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .nameHash = 0x46F5,  // djb2_hash("VEHICLE_SPEED")
         .warmupTime_ms = 0,  // No warmup needed
         .persistTime_ms = 0  // No persistence needed
+    },
+
+    // ===== TEMPERATURE APPLICATIONS (EXTENDED) =====
+    // Index 22: TRANS_TEMP - Automatic Transmission Temperature
+    {
+        .name = PSTR_TRANS_TEMP,
+        .abbreviation = PSTR_TRANS_TEMP_ABBR,
+        .label = PSTR_TRANS_TEMP_LABEL,
+        .description = nullptr,
+        .defaultSensor = SENSOR_VDO_150C_STEINHART,
+        .defaultUnits = 0,
+        .defaultMinValue = -1.0,
+        .defaultMaxValue = 130.0,
+        .obd2pid = 0xA4,  // SAE J1979: Transmission Temperature (matches standard_pids.h)
+        .obd2length = 1,
+        .defaultAlarmEnabled = true,
+        .defaultDisplayEnabled = true,
+        .expectedMeasurementType = MEASURE_TEMPERATURE,
+        .nameHash = 0xC402,  // djb2_hash("TRANS_TEMP")
+        .warmupTime_ms = 60000,
+        .persistTime_ms = 5000
+    },
+
+    // Index 23: INTAKE_AIR_TEMP - Intake Air Temperature (IAT)
+    {
+        .name = PSTR_INTAKE_AIR_TEMP,
+        .abbreviation = PSTR_INTAKE_AIR_TEMP_ABBR,
+        .label = PSTR_INTAKE_AIR_TEMP_LABEL,
+        .description = nullptr,
+        .defaultSensor = SENSOR_VDO_120C_STEINHART,
+        .defaultUnits = 0,
+        .defaultMinValue = -1.0,
+        .defaultMaxValue = 60.0,
+        .obd2pid = 0x0F,  // SAE J1979: Intake Air Temperature (matches standard_pids.h)
+        .obd2length = 1,
+        .defaultAlarmEnabled = false,
+        .defaultDisplayEnabled = true,
+        .expectedMeasurementType = MEASURE_TEMPERATURE,
+        .nameHash = 0xC3F1,  // djb2_hash("INTAKE_AIR_TEMP")
+        .warmupTime_ms = 10000,
+        .persistTime_ms = 5000
+    },
+
+    // ===== PRESSURE APPLICATIONS (EXTENDED) =====
+    // Index 24: MAP_PRESSURE - Manifold Absolute Pressure
+    {
+        .name = PSTR_MAP_PRESSURE,
+        .abbreviation = PSTR_MAP_PRESSURE_ABBR,
+        .label = PSTR_MAP_PRESSURE_LABEL,
+        .description = nullptr,
+        .defaultSensor = SENSOR_MPX4250AP,
+        .defaultUnits = 2,
+        .defaultMinValue = 0.0,
+        .defaultMaxValue = 0.0,
+        .obd2pid = 0x0B,  // SAE J1979: Intake Manifold Absolute Pressure (matches standard_pids.h)
+        .obd2length = 1,
+        .defaultAlarmEnabled = false,
+        .defaultDisplayEnabled = true,
+        .expectedMeasurementType = MEASURE_PRESSURE,
+        .nameHash = 0x031B,  // djb2_hash("MAP_PRESSURE")
+        .warmupTime_ms = 1000,
+        .persistTime_ms = 500
+    },
+
+    // ===== LEVEL/POSITION APPLICATIONS =====
+    // Index 25: THROTTLE_POSITION - Throttle Position Sensor (TPS)
+    {
+        .name = PSTR_THROTTLE_POSITION,
+        .abbreviation = PSTR_THROTTLE_POSITION_ABBR,
+        .label = PSTR_THROTTLE_POSITION_LABEL,
+        .description = nullptr,
+        .defaultSensor = SENSOR_GENERIC_TPS,
+        .defaultUnits = 8,  // PERCENT
+        .defaultMinValue = 0.0,
+        .defaultMaxValue = 100.0,
+        .obd2pid = 0x11,  // SAE J1979: Throttle Position (matches standard_pids.h)
+        .obd2length = 1,
+        .defaultAlarmEnabled = false,
+        .defaultDisplayEnabled = true,
+        .expectedMeasurementType = MEASURE_LEVEL,
+        .nameHash = 0x7E2F,  // djb2_hash("THROTTLE_POSITION")
+        .warmupTime_ms = 0,
+        .persistTime_ms = 0
+    },
+
+    // ===== TEMPERATURE APPLICATIONS (DRIVETRAIN) =====
+    // Index 26: DIFF_TEMP - Differential Temperature
+    {
+        .name = PSTR_DIFF_TEMP,
+        .abbreviation = PSTR_DIFF_TEMP_ABBR,
+        .label = PSTR_DIFF_TEMP_LABEL,
+        .description = nullptr,
+        .defaultSensor = SENSOR_VDO_150C_STEINHART,
+        .defaultUnits = 0,
+        .defaultMinValue = -1.0,
+        .defaultMaxValue = 120.0,
+        .obd2pid = 0xCF,
+        .obd2length = 1,
+        .defaultAlarmEnabled = true,
+        .defaultDisplayEnabled = true,
+        .expectedMeasurementType = MEASURE_TEMPERATURE,
+        .nameHash = 0x5353,  // djb2_hash("DIFF_TEMP")
+        .warmupTime_ms = 60000,
+        .persistTime_ms = 5000
+    },
+
+    // Index 27: GEAR_OIL_TEMP - Gear Oil Temperature (manual transmission / gearbox)
+    {
+        .name = PSTR_GEAR_OIL_TEMP,
+        .abbreviation = PSTR_GEAR_OIL_TEMP_ABBR,
+        .label = PSTR_GEAR_OIL_TEMP_LABEL,
+        .description = nullptr,
+        .defaultSensor = SENSOR_VDO_150C_STEINHART,
+        .defaultUnits = 0,
+        .defaultMinValue = -1.0,
+        .defaultMaxValue = 120.0,
+        .obd2pid = 0xD0,
+        .obd2length = 1,
+        .defaultAlarmEnabled = true,
+        .defaultDisplayEnabled = true,
+        .expectedMeasurementType = MEASURE_TEMPERATURE,
+        .nameHash = 0x003C,  // djb2_hash("GEAR_OIL_TEMP")
+        .warmupTime_ms = 60000,
+        .persistTime_ms = 5000
+    },
+
+    // ===== DIGITAL APPLICATIONS (EXTENDED) =====
+    // Index 28: OIL_LEVEL - Engine Oil Level (float switch)
+    {
+        .name = PSTR_OIL_LEVEL,
+        .abbreviation = PSTR_OIL_LEVEL_ABBR,
+        .label = PSTR_OIL_LEVEL_LABEL,
+        .description = nullptr,
+        .defaultSensor = SENSOR_FLOAT_SWITCH,
+        .defaultUnits = 8,
+        .defaultMinValue = 0.0,
+        .defaultMaxValue = 1.0,
+        .obd2pid = 0xD1,
+        .obd2length = 1,
+        .defaultAlarmEnabled = true,
+        .defaultDisplayEnabled = true,
+        .expectedMeasurementType = MEASURE_DIGITAL,
+        .nameHash = 0xCEA0,  // djb2_hash("OIL_LEVEL")
+        .warmupTime_ms = 10000,
+        .persistTime_ms = 3000
+    },
+
+    // ===== TEMPERATURE APPLICATIONS (FORCED INDUCTION) =====
+    // Index 29: INTERCOOLER_TEMP - Intercooler / Charge Air Temperature
+    {
+        .name = PSTR_INTERCOOLER_TEMP,
+        .abbreviation = PSTR_INTERCOOLER_TEMP_ABBR,
+        .label = PSTR_INTERCOOLER_TEMP_LABEL,
+        .description = nullptr,
+        .defaultSensor = SENSOR_GENERIC_TEMP_LINEAR,
+        .defaultUnits = 0,
+        .defaultMinValue = -1.0,
+        .defaultMaxValue = 60.0,
+        .obd2pid = 0xD2,
+        .obd2length = 1,
+        .defaultAlarmEnabled = false,
+        .defaultDisplayEnabled = true,
+        .expectedMeasurementType = MEASURE_TEMPERATURE,
+        .nameHash = 0x2500,  // djb2_hash("INTERCOOLER_TEMP")
+        .warmupTime_ms = 10000,
+        .persistTime_ms = 5000
     }
 };
 

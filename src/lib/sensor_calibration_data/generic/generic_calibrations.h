@@ -49,6 +49,18 @@ static const PROGMEM LinearCalibration generic_temp_linear_cal = {
     .output_max = 150.0
 };
 
+// ===== THROTTLE POSITION SENSOR CALIBRATIONS =====
+
+// Generic 0.5-4.5V Throttle Position Sensor (0-100%)
+// Standard aftermarket TPS specification (Holley Sniper, TBI conversions, many OEM sensors)
+// WARNING: Designed for 5V systems. For 3.3V systems, use voltage divider.
+static const PROGMEM LinearCalibration generic_tps_linear_cal = {
+    .voltage_min = 0.5,
+    .voltage_max = 4.5,
+    .output_min = 0.0,    // 0% throttle (closed)
+    .output_max = 100.0   // 100% throttle (wide open)
+};
+
 // ===== SPEED SENSOR CALIBRATION =====
 
 // Generic Hall Effect Speed Sensor calibration

@@ -11,6 +11,9 @@
 #include <Arduino.h>
 
 // ===== PROGMEM STRINGS =====
+// Generic linear sensors (pressure and other analog outputs)
+static const char PSTR_GENERIC_TPS[] PROGMEM = "GENERIC_TPS";
+static const char PSTR_GENERIC_TPS_LABEL[] PROGMEM = "0.5-4.5V linear (0-100% throttle)";
 // Linear pressure sensors
 static const char PSTR_GENERIC_BOOST[] PROGMEM = "GENERIC_BOOST";
 static const char PSTR_GENERIC_BOOST_LABEL[] PROGMEM = "0.5-4.5V linear (0-5 bar)";
@@ -69,6 +72,8 @@ static const char PSTR_VDO_80PSI_TABLE_LABEL[] PROGMEM = "VDO 80 PSI Oil (US, de
              MEASURE_PRESSURE, CAL_LINEAR, &generic_boost_linear_cal, SENSOR_READ_INTERVAL_MS, -1.0, 3.0, 0x59C8, PIN_ANALOG) \
     X_SENSOR(PSTR_GENERIC_PRESSURE_150PSI, PSTR_GENERIC_PRESSURE_150PSI_LABEL, nullptr, readLinearSensor, nullptr, \
              MEASURE_PRESSURE, CAL_LINEAR, &generic_pressure_150psi_cal, SENSOR_READ_INTERVAL_MS, 0.0, 10.34, 0xA67B, PIN_ANALOG) \
+    X_SENSOR(PSTR_GENERIC_TPS, PSTR_GENERIC_TPS_LABEL, nullptr, readLinearSensor, nullptr, \
+             MEASURE_LEVEL, CAL_LINEAR, &generic_tps_linear_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0xF738, PIN_ANALOG) \
     X_SENSOR(PSTR_AEM_30_2130_150, PSTR_AEM_30_2130_150_LABEL, nullptr, readLinearSensor, nullptr, \
              MEASURE_PRESSURE, CAL_LINEAR, &aem_30_2130_150_cal, SENSOR_READ_INTERVAL_MS, 0.0, 10.34, 0x31B4, PIN_ANALOG) \
     X_SENSOR(PSTR_MPX4250AP, PSTR_MPX4250AP_LABEL, nullptr, readLinearSensor, nullptr, \
