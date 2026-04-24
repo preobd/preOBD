@@ -23,8 +23,8 @@
 #include <Arduino.h>
 
 // ===== CONFIGURATION =====
-#define CAN_CACHE_SIZE 16           // Must be power of 2 for efficient modulo
-#define CAN_DEFAULT_TIMEOUT_MS 2000 // Default stale timeout
+// CAN_CACHE_SIZE must be a power of 2; set per env in src/profiles/.
+#define CAN_DEFAULT_TIMEOUT_MS 2000
 
 // TODO: Make timeout configurable per sensor for different update rates
 // - High-frequency PIDs (RPM, speed): 100-500ms timeout

@@ -239,7 +239,7 @@ void ELM327Output::_handleATCommand(const char* cmd) {
 
     // Supply voltage — live from PRIMARY_BATTERY input if available, else fixed
     if (strcmp(a, "RV") == 0) {
-        char vbuf[16];
+        char vbuf[24];
         bool found = false;
         for (uint8_t i = 0; i < MAX_INPUTS && !found; i++) {
             if (inputs[i].flags.isEnabled &&
@@ -251,6 +251,8 @@ void ELM327Output::_handleATCommand(const char* cmd) {
                 int whole = (int)inputs[i].value;
                 int frac  = (int)((inputs[i].value - whole) * 10 + 0.5f);
                 if (frac >= 10) { whole++; frac = 0; }
+                if (whole < 0)  { whole = 0; frac = 0; }
+                if (whole > 99) { whole = 99; frac = 9; }
                 snprintf(vbuf, sizeof(vbuf), "%d.%dV\r\r>", whole, frac);
                 found = true;
             }

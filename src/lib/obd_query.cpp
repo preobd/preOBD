@@ -13,8 +13,6 @@
 #include "log_tags.h"
 
 // PID Lookup Table — Maps PIDs to Input pointers for fast lookup
-#define MAX_PID_ENTRIES 64
-
 struct PIDMapping {
     uint8_t pid;
     Input*  inputPtr;

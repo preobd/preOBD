@@ -75,9 +75,7 @@ struct PinUsage {
 // CONFIGURATION
 // ============================================================================
 
-// Maximum number of pins that can be tracked
-// Set to 64 to accommodate Teensy 4.1 (54 digital + 14 analog = 58 total)
-#define MAX_PIN_REGISTRY 64
+// Maximum number of pins that can be tracked; set per env in src/profiles/.
 
 // ============================================================================
 // PUBLIC API

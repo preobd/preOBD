@@ -1,6 +1,6 @@
 /*
- * platform.h - Automatic platform detection and configuration
- * DO NOT EDIT - This file automatically detects your hardware
+ * platform.h - Hardware-derived platform constants (ADC, voltage, divider).
+ * Feature flags and sizing live in src/profiles/ — one header per PlatformIO env.
  */
 
 #ifndef PLATFORM_H
@@ -16,7 +16,6 @@
     #define AREF_VOLTAGE 5.0    // Using VCC as reference
     #define ADC_RESOLUTION 10   // 10-bit ADC (0-1023)
     #define ADC_MAX_VALUE 1023
-    #define MAX_INPUTS 6        // Arduino Uno analog inputs
 #elif defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
     // Arduino Mega - 5V system with 1.1V internal reference
     #define PLATFORM_NAME "Arduino Mega 2560"
@@ -26,7 +25,6 @@
     #define AREF_VOLTAGE 5.0
     #define ADC_RESOLUTION 10
     #define ADC_MAX_VALUE 1023
-    #define MAX_INPUTS 16       // Arduino Mega analog inputs
 #elif defined(__MK20DX256__) || defined(__MK20DX128__)
     // Teensy 3.x - 3.3V system with 1.2V internal reference
     #define PLATFORM_NAME "Teensy 3.x"
@@ -36,7 +34,6 @@
     #define AREF_VOLTAGE 3.3    // Using VCC as reference
     #define ADC_RESOLUTION 12   // 12-bit ADC (0-4095)
     #define ADC_MAX_VALUE 4095
-    #define MAX_INPUTS 24       // Teensy 3.x analog inputs
 #elif defined(__MK64FX512__) || defined(__MK66FX1M0__)
     // Teensy 3.5/3.6 - can be 3.3V or 5V tolerant
     #define PLATFORM_NAME "Teensy 3.5/3.6"
@@ -46,7 +43,6 @@
     #define AREF_VOLTAGE 3.3    // Using VCC as reference
     #define ADC_RESOLUTION 12   // 12-bit ADC (0-4095)
     #define ADC_MAX_VALUE 4095
-    #define MAX_INPUTS 32       // Teensy 3.5/3.6 analog inputs
 #elif defined(__IMXRT1062__)
     // Teensy 4.x - can be 3.3V or 5V tolerant
     #if defined(ARDUINO_TEENSY41)
@@ -62,7 +58,6 @@
     #define AREF_VOLTAGE 3.3    // Using VCC as reference
     #define ADC_RESOLUTION 12   // 12-bit ADC (0-4095)
     #define ADC_MAX_VALUE 4095
-    #define MAX_INPUTS 40       // Teensy 4.x analog inputs
 #elif defined(ARDUINO_SAM_DUE)
     // Arduino Due
     #define PLATFORM_NAME "Arduino Due"
@@ -72,7 +67,6 @@
     #define AREF_VOLTAGE 3.3
     #define ADC_RESOLUTION 12
     #define ADC_MAX_VALUE 4095
-    #define MAX_INPUTS 12       // Arduino Due analog inputs
 #elif defined(ESP32)
     // ESP32
     #define PLATFORM_NAME "ESP32"
@@ -82,7 +76,6 @@
     #define AREF_VOLTAGE 3.3
     #define ADC_RESOLUTION 12
     #define ADC_MAX_VALUE 4095
-    #define MAX_INPUTS 32       // ESP32 analog inputs
 #else
     // Default safe values for unknown platforms
     #define PLATFORM_NAME "Unknown"
@@ -92,23 +85,7 @@
     #define AREF_VOLTAGE 3.3
     #define ADC_RESOLUTION 10
     #define ADC_MAX_VALUE 1023
-    #define MAX_INPUTS 8        // Default/Unknown platform
 #endif
-
-// ===== JSON IMPORT CAPABILITY =====
-// Platforms with enough RAM + flash for streamed JSON import over serial
-#if defined(__IMXRT1062__) || defined(__MK66FX1M0__) || defined(__MK64FX512__) \
-    || defined(__MK20DX256__) || defined(ESP32)
-  #define SUPPORTS_JSON_IMPORT_STREAM 1
-  #ifndef JSON_IMPORT_MAX_BYTES
-    #define JSON_IMPORT_MAX_BYTES 16384
-  #endif
-#else
-  #define SUPPORTS_JSON_IMPORT_STREAM 0
-#endif
-
-// JSON export of static catalogs (same platform set as JSON import)
-#define SUPPORTS_JSON_EXPORT SUPPORTS_JSON_IMPORT_STREAM
 
 // ===== VOLTAGE DIVIDER CONFIGURATION =====
 // Automatically configured based on system voltage

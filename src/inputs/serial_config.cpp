@@ -30,17 +30,9 @@
 // CLI instance and configuration
 //=============================================================================
 
-// Configuration parameters
-#define CLI_RX_BUFFER_SIZE 128
-#define CLI_CMD_BUFFER_SIZE 128
-#define CLI_HISTORY_BUFFER_SIZE 64
-#define CLI_MAX_BINDINGS 32  // Enough for all commands + some headroom
-
-// Static buffer for CLI (avoids dynamic allocation)
-// embeddedCliRequiredSize() validates this at runtime; increase if CLI init fails.
-// Formula: EmbeddedCli + EmbeddedCliImpl + rxBuf + cmdBuf + histBuf + bindings*(sizeof+1)
-// With above config on AVR: ~850 bytes needed; 1280 gives comfortable headroom.
-#define CLI_BUFFER_SIZE 1280
+// Configuration parameters sourced from per-env profile (src/profiles/).
+// embeddedCliRequiredSize() validates CLI_BUFFER_SIZE at runtime; increase in
+// the profile if CLI init fails.
 static CLI_UINT cli_buffer[BYTES_TO_CLI_UINTS(CLI_BUFFER_SIZE)];
 static EmbeddedCli* cli = nullptr;
 
@@ -85,8 +77,7 @@ static void cli_command_handler(EmbeddedCli* embeddedCli, char* args, void* cont
 
     // Parse args into argc/argv format for dispatchCommand
     // embedded-cli can tokenize for us, but we need to build argv array
-    const int MAX_ARGS = 16;
-    const char* argv[MAX_ARGS];
+    const char* argv[CLI_MAX_ARGS];
     int argc = 1;
 
     // First arg is always the command name
@@ -96,7 +87,7 @@ static void cli_command_handler(EmbeddedCli* embeddedCli, char* args, void* cont
     if (args != nullptr && *args != '\0') {
         // Use embedded-cli's tokenization
         uint16_t tokenCount = embeddedCliGetTokenCount(args);
-        for (uint16_t i = 0; i < tokenCount && argc < MAX_ARGS; i++) {
+        for (uint16_t i = 0; i < tokenCount && argc < CLI_MAX_ARGS; i++) {
             const char* token = embeddedCliGetToken(args, i + 1);  // 1-indexed
             if (token != nullptr) {
                 argv[argc++] = token;
@@ -119,10 +110,9 @@ static void cli_on_command(EmbeddedCli* embeddedCli, CliCommand* command) {
     cmdUpper[sizeof(cmdUpper) - 1] = '\0';
     for (char* p = cmdUpper; *p; p++) *p = toupper(*p);
 
-    // Build argc/argv for dispatch
-    const int MAX_ARGS = 16;
-    const char* argv[MAX_ARGS];
-    static char argBuffers[MAX_ARGS - 1][32];  // Static buffers for uppercase args
+    // Build argc/argv for dispatch; limits sourced from per-env profile.
+    const char* argv[CLI_MAX_ARGS];
+    static char argBuffers[CLI_MAX_ARGS - 1][CLI_MAX_ARG_LEN];
     int argc = 1;
     argv[0] = cmdUpper;
 
@@ -133,7 +123,7 @@ static void cli_on_command(EmbeddedCli* embeddedCli, CliCommand* command) {
 
         // Parse space-separated tokens
         int bufIdx = 0;
-        for (char* p = argsCopy; *p && argc < MAX_ARGS && bufIdx < (MAX_ARGS - 1); ) {
+        for (char* p = argsCopy; *p && argc < CLI_MAX_ARGS && bufIdx < (CLI_MAX_ARGS - 1); ) {
             // Skip leading spaces
             while (*p == ' ' || *p == '\t') p++;
             if (*p == '\0') break;
@@ -144,8 +134,8 @@ static void cli_on_command(EmbeddedCli* embeddedCli, CliCommand* command) {
 
             // Copy token to buffer and uppercase
             size_t tokenLen = p - tokenStart;
-            if (tokenLen >= sizeof(argBuffers[bufIdx])) {
-                tokenLen = sizeof(argBuffers[bufIdx]) - 1;
+            if (tokenLen >= (size_t)CLI_MAX_ARG_LEN) {
+                tokenLen = CLI_MAX_ARG_LEN - 1;
             }
             strncpy(argBuffers[bufIdx], tokenStart, tokenLen);
             argBuffers[bufIdx][tokenLen] = '\0';
