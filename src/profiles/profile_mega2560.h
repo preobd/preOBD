@@ -38,6 +38,9 @@
 #define MAX_SCAN_RESULTS        4
 
 // ===== CLI BUFFER SIZES =====
+// Framework ring-buffer sizes are -D flags in platformio.ini (not here) because
+// -include does not reach framework core TUs. Authoritative values for this env:
+//   SERIAL_TX_BUFFER_SIZE=16, SERIAL_RX_BUFFER_SIZE=32, BUFFER_LENGTH=16
 #define CLI_RX_BUFFER_SIZE      128
 #define CLI_CMD_BUFFER_SIZE     128
 #define CLI_HISTORY_BUFFER_SIZE 64
