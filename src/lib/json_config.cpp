@@ -7,10 +7,9 @@
 
 #include "../config.h"
 
-// Only compile JSON features for EEPROM mode (not static config)
-#ifndef USE_STATIC_CONFIG
-
+// Only compile JSON features on platforms with enough RAM and in runtime config mode
 #include "json_config.h"
+#if SUPPORTS_JSON_CONFIG
 #include "system_config.h"
 #include "bus_defaults.h"
 #include "serial_manager.h"
@@ -990,4 +989,4 @@ bool loadConfigFromFile(const char* destination, const char* filename) {
     }
 }
 
-#endif // USE_STATIC_CONFIG
+#endif // SUPPORTS_JSON_CONFIG

@@ -349,6 +349,7 @@ static int cmd_save(int argc, const char* const* argv) {
 
     // Case 3: SAVE [destination:]filename (file path - anything that's not "EEPROM")
     if (argc >= 2) {
+#if SUPPORTS_JSON_CONFIG
         // Parse file path
         FilePathComponents path = parseFilePath(argv[1]);
         if (!path.isValid) {
@@ -371,6 +372,10 @@ static int cmd_save(int argc, const char* const* argv) {
         }
         msg.control.println();
         return 0;
+#else
+        msg.control.println(F("ERROR: File save not supported on this platform"));
+        return 1;
+#endif
     }
 
     // Should never reach here, but provide helpful error message
@@ -405,6 +410,7 @@ static int cmd_load(int argc, const char* const* argv) {
 
     // Case 3: LOAD [destination:]filename (file path - anything that's not "EEPROM")
     if (argc >= 2) {
+#if SUPPORTS_JSON_CONFIG
         // Parse file path
         FilePathComponents path = parseFilePath(argv[1]);
         if (!path.isValid) {
@@ -428,6 +434,10 @@ static int cmd_load(int argc, const char* const* argv) {
         }
         msg.control.println();
         return 0;
+#else
+        msg.control.println(F("ERROR: File load not supported on this platform"));
+        return 1;
+#endif
     }
 
     // Should never reach here, but provide helpful error message
@@ -1915,9 +1925,13 @@ static int cmd_system(int argc, const char* const* argv) {
 
         // SYSTEM DUMP JSON — export active user configuration
         if (argc == 3 && streq(argv[2], "JSON")) {
+#if SUPPORTS_JSON_CONFIG
             msg.control.println();
             dumpConfigToJSON(msg.control);
             msg.control.println();
+#else
+            msg.control.println(F("ERROR: JSON export not supported on this platform"));
+#endif
             return 0;
         }
 

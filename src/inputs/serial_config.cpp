@@ -40,7 +40,12 @@
 // embeddedCliRequiredSize() validates this at runtime; increase if CLI init fails.
 // Formula: EmbeddedCli + EmbeddedCliImpl + rxBuf + cmdBuf + histBuf + bindings*(sizeof+1)
 // With above config on AVR: ~850 bytes needed; 1280 gives comfortable headroom.
-#define CLI_BUFFER_SIZE 1280
+// On AVR Mega use a tighter budget to conserve RAM.
+#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+  #define CLI_BUFFER_SIZE 820
+#else
+  #define CLI_BUFFER_SIZE 1280
+#endif
 static CLI_UINT cli_buffer[BYTES_TO_CLI_UINTS(CLI_BUFFER_SIZE)];
 static EmbeddedCli* cli = nullptr;
 
@@ -120,9 +125,15 @@ static void cli_on_command(EmbeddedCli* embeddedCli, CliCommand* command) {
     for (char* p = cmdUpper; *p; p++) *p = toupper(*p);
 
     // Build argc/argv for dispatch
+#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+    const int MAX_ARGS = 6;
+    const int MAX_ARG_LEN = 20;
+#else
     const int MAX_ARGS = 16;
+    const int MAX_ARG_LEN = 32;
+#endif
     const char* argv[MAX_ARGS];
-    static char argBuffers[MAX_ARGS - 1][32];  // Static buffers for uppercase args
+    static char argBuffers[MAX_ARGS - 1][MAX_ARG_LEN];  // Static buffers for uppercase args
     int argc = 1;
     argv[0] = cmdUpper;
 
@@ -144,8 +155,8 @@ static void cli_on_command(EmbeddedCli* embeddedCli, CliCommand* command) {
 
             // Copy token to buffer and uppercase
             size_t tokenLen = p - tokenStart;
-            if (tokenLen >= sizeof(argBuffers[bufIdx])) {
-                tokenLen = sizeof(argBuffers[bufIdx]) - 1;
+            if (tokenLen >= (size_t)MAX_ARG_LEN) {
+                tokenLen = MAX_ARG_LEN - 1;
             }
             strncpy(argBuffers[bufIdx], tokenStart, tokenLen);
             argBuffers[bufIdx][tokenLen] = '\0';
