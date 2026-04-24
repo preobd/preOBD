@@ -10,7 +10,7 @@
 #include <Arduino.h>
 #include "../config.h"
 
-#if defined(ENABLE_SD_LOGGING) || defined(ENABLE_JSON_CONFIG)
+#if defined(ENABLE_SD_LOGGING) || SUPPORTS_JSON_CONFIG
 
 // Initialize SD card (called once during setup)
 void initSD();
