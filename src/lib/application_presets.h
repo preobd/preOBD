@@ -554,7 +554,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     },
 
     // ===== PRESSURE APPLICATIONS (EXTENDED) =====
-    // Index 18: HYDRAULIC_PRESSURE - Hydraulic System Pressure (0-10 bar)
+    // Index 17: HYDRAULIC_PRESSURE - Hydraulic System Pressure (0-10 bar)
     {
         .name = PSTR_HYDRAULIC_PRESSURE,
         .abbreviation = PSTR_HYDRAULIC_PRESSURE_ABBR,
@@ -574,7 +574,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .persistTime_ms = 1000
     },
 
-    // Index 19: BRAKE_PRESSURE - Brake System Pressure (0-10 bar)
+    // Index 18: BRAKE_PRESSURE - Brake System Pressure (0-10 bar)
     {
         .name = PSTR_BRAKE_PRESSURE,
         .abbreviation = PSTR_BRAKE_PRESSURE_ABBR,
@@ -595,7 +595,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     },
 
     // ===== LEVEL APPLICATIONS =====
-    // Index 20: FUEL_LEVEL - Fuel Tank Level (0-100%)
+    // Index 19: FUEL_LEVEL - Fuel Tank Level (0-100%)
     {
         .name = PSTR_FUEL_LEVEL,
         .abbreviation = PSTR_FUEL_LEVEL_ABBR,
@@ -616,7 +616,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     },
 
     // ===== SPEED APPLICATIONS =====
-    // Index 21: VEHICLE_SPEED
+    // Index 20: VEHICLE_SPEED
     {
         .name = PSTR_VEHICLE_SPEED,
         .abbreviation = PSTR_VEHICLE_SPEED_ABBR,
@@ -637,7 +637,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     },
 
     // ===== TEMPERATURE APPLICATIONS (EXTENDED) =====
-    // Index 22: TRANS_TEMP - Automatic Transmission Temperature
+    // Index 21: TRANS_TEMP - Automatic Transmission Temperature
     {
         .name = PSTR_TRANS_TEMP,
         .abbreviation = PSTR_TRANS_TEMP_ABBR,
@@ -657,7 +657,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .persistTime_ms = 5000
     },
 
-    // Index 23: INTAKE_AIR_TEMP - Intake Air Temperature (IAT)
+    // Index 22: INTAKE_AIR_TEMP - Intake Air Temperature (IAT)
     {
         .name = PSTR_INTAKE_AIR_TEMP,
         .abbreviation = PSTR_INTAKE_AIR_TEMP_ABBR,
@@ -678,7 +678,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     },
 
     // ===== PRESSURE APPLICATIONS (EXTENDED) =====
-    // Index 24: MAP_PRESSURE - Manifold Absolute Pressure
+    // Index 23: MAP_PRESSURE - Manifold Absolute Pressure
     {
         .name = PSTR_MAP_PRESSURE,
         .abbreviation = PSTR_MAP_PRESSURE_ABBR,
@@ -687,7 +687,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .defaultSensor = SENSOR_MPX4250AP,
         .defaultUnits = 2,
         .defaultMinValue = 0.0,
-        .defaultMaxValue = 0.0,
+        .defaultMaxValue = 2.5,
         .obd2pid = 0x0B,  // SAE J1979: Intake Manifold Absolute Pressure (matches standard_pids.h)
         .obd2length = 1,
         .defaultAlarmEnabled = false,
@@ -699,7 +699,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     },
 
     // ===== LEVEL/POSITION APPLICATIONS =====
-    // Index 25: THROTTLE_POSITION - Throttle Position Sensor (TPS)
+    // Index 24: THROTTLE_POSITION - Throttle Position Sensor (TPS)
     {
         .name = PSTR_THROTTLE_POSITION,
         .abbreviation = PSTR_THROTTLE_POSITION_ABBR,
@@ -720,7 +720,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     },
 
     // ===== TEMPERATURE APPLICATIONS (DRIVETRAIN) =====
-    // Index 26: DIFF_TEMP - Differential Temperature
+    // Index 25: DIFF_TEMP - Differential Temperature
     {
         .name = PSTR_DIFF_TEMP,
         .abbreviation = PSTR_DIFF_TEMP_ABBR,
@@ -740,7 +740,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .persistTime_ms = 5000
     },
 
-    // Index 27: GEAR_OIL_TEMP - Gear Oil Temperature (manual transmission / gearbox)
+    // Index 26: GEAR_OIL_TEMP - Gear Oil Temperature (manual transmission / gearbox)
     {
         .name = PSTR_GEAR_OIL_TEMP,
         .abbreviation = PSTR_GEAR_OIL_TEMP_ABBR,
@@ -761,7 +761,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     },
 
     // ===== DIGITAL APPLICATIONS (EXTENDED) =====
-    // Index 28: OIL_LEVEL - Engine Oil Level (float switch)
+    // Index 27: OIL_LEVEL - Engine Oil Level (float switch)
     {
         .name = PSTR_OIL_LEVEL,
         .abbreviation = PSTR_OIL_LEVEL_ABBR,
@@ -782,7 +782,7 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
     },
 
     // ===== TEMPERATURE APPLICATIONS (FORCED INDUCTION) =====
-    // Index 29: INTERCOOLER_TEMP - Intercooler / Charge Air Temperature
+    // Index 28: INTERCOOLER_TEMP - Intercooler / Charge Air Temperature
     {
         .name = PSTR_INTERCOOLER_TEMP,
         .abbreviation = PSTR_INTERCOOLER_TEMP_ABBR,
