@@ -6,7 +6,6 @@
  * CAN bus type assignment stays here so platformio.ini stays clean.
  */
 
-#pragma message "Building with profile: profile_esp32s3_hybrid"
 
 // ===== FEATURE FLAGS =====
 #define ENABLE_CAN

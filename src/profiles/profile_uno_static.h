@@ -19,7 +19,6 @@
  *   ENABLE_LED         — saves flash; LED pin can be driven directly
  */
 
-#pragma message "Building with profile: profile_uno_static"
 
 // ===== FEATURE FLAGS =====
 #define ENABLE_LCD

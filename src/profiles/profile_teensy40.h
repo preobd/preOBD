@@ -6,7 +6,6 @@
  * RAM budget same as Teensy 4.1 (512 KB).
  */
 
-#pragma message "Building with profile: profile_teensy40"
 
 // ===== FEATURE FLAGS =====
 #define ENABLE_CAN

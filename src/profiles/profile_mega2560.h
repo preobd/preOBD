@@ -17,7 +17,6 @@
  *   ENABLE_TEST_MODE     — saves ~4 KB flash; not needed in production Mega builds
  */
 
-#pragma message "Building with profile: profile_mega2560"
 
 // ===== CAN CONTROLLER =====
 // MCP2515 via SPI — no native CAN peripheral on AVR.

@@ -10,7 +10,6 @@
  *   Remaining    : >500 KB — ample headroom
  */
 
-#pragma message "Building with profile: profile_teensy41"
 
 // ===== FEATURE FLAGS =====
 #define ENABLE_CAN

@@ -5,7 +5,6 @@
  * Same feature set as profile_teensy41 with ENABLE_CAN_HYBRID added.
  */
 
-#pragma message "Building with profile: profile_teensy41_hybrid"
 
 // ===== FEATURE FLAGS =====
 #define ENABLE_CAN

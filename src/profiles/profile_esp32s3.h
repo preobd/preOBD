@@ -7,7 +7,6 @@
  *   Remaining    : >310 KB — comfortable headroom
  */
 
-#pragma message "Building with profile: profile_esp32s3"
 
 // ===== FEATURE FLAGS =====
 #define ENABLE_CAN
