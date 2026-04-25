@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `esp32s3_hybrid` and `teensy41_hybrid` build envs now compile cleanly (#146)
+
 ## [0.7.6-beta] - 2026-04-24
 
 ### Changed
