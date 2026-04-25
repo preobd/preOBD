@@ -16,7 +16,6 @@ preOBD/
 ├── src/                        # All source code
 │   ├── main.cpp               # Main program loop
 │   ├── config.h               # ⭐ HARDWARE CONFIGURATION FILE
-│   ├── advanced_config.h      # Advanced features configuration
 │   ├── alarm.cpp              # Alarm system
 │   │
 │   ├── inputs/                # Input and sensor management
@@ -104,11 +103,9 @@ preOBD/
     ├── reference/
     │   ├── SERIAL_COMMANDS.md
     │   └── README.md
-    ├── architecture/                   # Developer documentation
-    │   ├── REGISTRY_SYSTEM.md
-    │   └── EEPROM_STRUCTURE.md
-    └── advanced/
-        └── STATIC_BUILDS_GUIDE.md      # Compile-time configuration
+    └── architecture/                   # Developer documentation
+        ├── REGISTRY_SYSTEM.md
+        └── EEPROM_STRUCTURE.md
 ```
 
 ---
@@ -168,12 +165,6 @@ preOBD/
 #define ENABLE_CAN
 #define ENABLE_SERIAL_OUTPUT
 ```
-
-**advanced_config.h**
-- Advanced settings and customizations
-- Custom calibration overrides (for static builds)
-- Test mode configuration
-- **Edit:** SOMETIMES (for custom calibrations)
 
 ---
 
@@ -440,14 +431,6 @@ This directory contains the comprehensive test mode system for testing outputs w
 - Custom pressure curves
 - **Edit:** WHEN ADDING CALIBRATION METHODS
 
-### Advanced
-
-**docs/advanced/STATIC_BUILDS_GUIDE.md**
-- Compile-time configuration for Arduino Uno
-- Memory optimization
-- When to use static builds
-- **Edit:** WHEN STATIC BUILD SYSTEM CHANGES
-
 ---
 
 ## Memory Management
@@ -506,7 +489,7 @@ This directory contains the comprehensive test mode system for testing outputs w
 - **docs/** - All user and developer documentation
 
 **Best practices:**
-- User edits only src/config.h and src/advanced_config.h (usually)
+- User edits only src/config.h (usually)
 - Core code in inputs/ and lib/ rarely needs modification
 - New sensors added to:
   - lib/sensor_library/sensors/<type>.h (sensor entry using X-macro)

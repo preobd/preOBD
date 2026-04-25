@@ -111,7 +111,6 @@ Settings persist across power cycles in EEPROM.
 | teensy40 | Teensy 4.0 | 2MB | All | External SD module needed |
 | teensy36 | Teensy 3.6 | 1MB | All | Older platform |
 | mega2560 | Arduino Mega | 256KB | All | Good for prototyping |
-| uno_static | Arduino Uno | 32KB | LCD + Serial + Alarms only | Memory-constrained |
 | debug | Teensy 4.1 | 8MB | All + Debug | Debug symbols enabled |
 
 ### Build Commands
@@ -247,7 +246,7 @@ lib_deps = greiman/SdFat
 [sensor_libs]      # BME280 sensor
 lib_deps = adafruit/Adafruit BME280 Library
 
-[eeprom_libs]      # JSON configuration (not for static builds)
+[eeprom_libs]      # JSON configuration
 lib_deps = bblanchon/ArduinoJson
 ```
 
@@ -400,33 +399,10 @@ lib_deps =
     ${can_libs.lib_deps}       # If ENABLE_CAN + external MCP2515 (Mega/Uno/Due)
     ${sd_libs.lib_deps}        # If ENABLE_SD_LOGGING defined
     ${sensor_libs.lib_deps}    # Always (BME280)
-    ${eeprom_libs.lib_deps}    # If NOT USE_STATIC_CONFIG
+    ${eeprom_libs.lib_deps}    # JSON configuration
 ```
 
 ## Memory Optimization
-
-### For Memory-Constrained Boards (Arduino Uno)
-
-1. **Use static configuration** (`USE_STATIC_CONFIG`) - Excludes JSON library (~4-8KB)
-2. **Disable unused outputs** - Only enable LCD + Serial + Alarms
-3. **Exclude SD and CAN** - Saves ~30KB combined
-4. **Disable test mode** - Saves ~4KB
-
-**Example**:
-```ini
-[env:uno_static]
-build_flags =
-    -D USE_STATIC_CONFIG
-    -D ENABLE_LCD
-    -D ENABLE_SERIAL_OUTPUT
-    -D ENABLE_ALARMS
-    # No CAN, SD, or RealDash
-lib_deps =
-    ${core_libs.lib_deps}
-    ${display_libs.lib_deps}
-    ${sensor_libs.lib_deps}
-    # NO eeprom_libs - saves 4-8KB
-```
 
 ### Flash Savings by Feature
 
@@ -451,12 +427,6 @@ lib_deps =
 undefined reference to `CAN.begin()'
 ```
 Add `${can_libs.lib_deps}` to your environment.
-
-### Problem: Build too large for Arduino Uno
-
-**Cause**: Too many features enabled
-
-**Fix**: Use `uno_static` environment with minimal features
 
 ### Problem: CAN not working
 

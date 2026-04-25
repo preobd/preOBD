@@ -21,11 +21,7 @@
 #include "../lib/platform.h"
 #include "input.h"
 #include "../lib/sensor_types.h"
-#ifdef USE_STATIC_CONFIG
-#include "../lib/generated/sensor_library_static.h"
-#else
 #include "../lib/sensor_library.h"
-#endif
 #include "../lib/units_registry.h"
 #include <SPI.h>
 #include <Wire.h>

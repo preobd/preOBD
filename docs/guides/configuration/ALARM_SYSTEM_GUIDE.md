@@ -287,7 +287,7 @@ Time 0.1s:  Fault timer RESETS to 0 → NO ALARM
 Set alarm thresholds in `config.h`:
 
 ```cpp
-// Alarm enable (applies to all inputs in static config mode)
+// Alarm enable (applies to all inputs)
 #define ENABLE_ALARMS
 
 // Alarm silence duration (MODE_BUTTON press in RUN mode)
@@ -642,27 +642,6 @@ SET <pin> ALARM <min> <max>
 SAVE
 RUN
 ```
-
----
-
-### Problem: Can't configure warmup/persistence times
-
-**Symptom:**
-```
-ALARM <pin> WARMUP 30000
-ERROR: Unknown command
-```
-
-**Diagnosis:**
-You're in compile-time configuration mode (`USE_STATIC_CONFIG` is defined).
-
-**Solution:**
-Custom warmup/persistence is only available in runtime mode. To use runtime mode:
-
-1. Edit `src/config.h`
-2. Comment out: `// #define USE_STATIC_CONFIG`
-3. Recompile and upload
-4. Configure via serial commands
 
 ---
 

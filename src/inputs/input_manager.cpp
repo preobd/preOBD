@@ -13,13 +13,8 @@
 #include "../lib/message_router.h"  // For msg.control
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
-#ifdef USE_STATIC_CONFIG
-#include "../lib/generated/application_presets_static.h"
-#include "../lib/generated/sensor_library_static.h"
-#else
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
-#endif
 #include "../lib/pin_registry.h"
 
 // ===== GLOBAL STATE =====
@@ -78,313 +73,6 @@ struct InputEEPROM {
     CalibrationOverride customCalibration;  // 16 bytes
 };
 
-// ===== STATIC CONFIG (Compile-Time) =====
-#ifdef USE_STATIC_CONFIG
-
-// Include custom calibrations for static builds
-#include "../advanced_config.h"
-
-/*
- * ============================================================================
- * Static Config Helper Macros
- * ============================================================================
- *
- * These simple macros use token pasting (##) to read INPUT_N_PIN,
- * INPUT_N_APPLICATION, and INPUT_N_SENSOR from config.h at compile time.
- *
- * The actual configuration logic is handled by the same setInputApplication()
- * and setInputSensor() functions used at runtime - no code duplication!
- *
- * Optional per-input overrides (units, custom calibration) are applied after
- * the main configuration.
- * ============================================================================
- */
-
-// Simple macro to configure an input using the registry-based functions
-#define CONFIGURE_INPUT(N, idx) \
-    do { \
-        uint8_t pin = INPUT_##N##_PIN; \
-        setInputApplication(pin, INPUT_##N##_APPLICATION); \
-        setInputSensor(pin, INPUT_##N##_SENSOR); \
-    } while(0)
-
-// Macro to apply optional unit override if INPUT_N_UNITS is defined
-#define APPLY_UNITS_OVERRIDE(N) \
-    APPLY_UNITS_OVERRIDE_##N()
-
-// Default: no-op (will be redefined if INPUT_N_UNITS exists)
-#define APPLY_UNITS_OVERRIDE_0()
-#define APPLY_UNITS_OVERRIDE_1()
-#define APPLY_UNITS_OVERRIDE_2()
-#define APPLY_UNITS_OVERRIDE_3()
-#define APPLY_UNITS_OVERRIDE_4()
-#define APPLY_UNITS_OVERRIDE_5()
-#define APPLY_UNITS_OVERRIDE_6()
-#define APPLY_UNITS_OVERRIDE_7()
-#define APPLY_UNITS_OVERRIDE_8()
-#define APPLY_UNITS_OVERRIDE_9()
-
-// Redefine for inputs that have unit overrides
-#ifdef INPUT_0_UNITS
-#undef APPLY_UNITS_OVERRIDE_0
-#define APPLY_UNITS_OVERRIDE_0() setInputUnits(INPUT_0_PIN, INPUT_0_UNITS)
-#endif
-#ifdef INPUT_1_UNITS
-#undef APPLY_UNITS_OVERRIDE_1
-#define APPLY_UNITS_OVERRIDE_1() setInputUnits(INPUT_1_PIN, INPUT_1_UNITS)
-#endif
-#ifdef INPUT_2_UNITS
-#undef APPLY_UNITS_OVERRIDE_2
-#define APPLY_UNITS_OVERRIDE_2() setInputUnits(INPUT_2_PIN, INPUT_2_UNITS)
-#endif
-#ifdef INPUT_3_UNITS
-#undef APPLY_UNITS_OVERRIDE_3
-#define APPLY_UNITS_OVERRIDE_3() setInputUnits(INPUT_3_PIN, INPUT_3_UNITS)
-#endif
-#ifdef INPUT_4_UNITS
-#undef APPLY_UNITS_OVERRIDE_4
-#define APPLY_UNITS_OVERRIDE_4() setInputUnits(INPUT_4_PIN, INPUT_4_UNITS)
-#endif
-#ifdef INPUT_5_UNITS
-#undef APPLY_UNITS_OVERRIDE_5
-#define APPLY_UNITS_OVERRIDE_5() setInputUnits(INPUT_5_PIN, INPUT_5_UNITS)
-#endif
-#ifdef INPUT_6_UNITS
-#undef APPLY_UNITS_OVERRIDE_6
-#define APPLY_UNITS_OVERRIDE_6() setInputUnits(INPUT_6_PIN, INPUT_6_UNITS)
-#endif
-#ifdef INPUT_7_UNITS
-#undef APPLY_UNITS_OVERRIDE_7
-#define APPLY_UNITS_OVERRIDE_7() setInputUnits(INPUT_7_PIN, INPUT_7_UNITS)
-#endif
-#ifdef INPUT_8_UNITS
-#undef APPLY_UNITS_OVERRIDE_8
-#define APPLY_UNITS_OVERRIDE_8() setInputUnits(INPUT_8_PIN, INPUT_8_UNITS)
-#endif
-#ifdef INPUT_9_UNITS
-#undef APPLY_UNITS_OVERRIDE_9
-#define APPLY_UNITS_OVERRIDE_9() setInputUnits(INPUT_9_PIN, INPUT_9_UNITS)
-#endif
-
-// Macro to apply optional custom calibration if INPUT_N_CUSTOM_CALIBRATION is defined
-#define APPLY_CUSTOM_CAL(N) \
-    APPLY_CUSTOM_CAL_##N()
-
-// Default: no-op (will be redefined if INPUT_N_CUSTOM_CALIBRATION exists)
-#define APPLY_CUSTOM_CAL_0()
-#define APPLY_CUSTOM_CAL_1()
-#define APPLY_CUSTOM_CAL_2()
-#define APPLY_CUSTOM_CAL_3()
-#define APPLY_CUSTOM_CAL_4()
-#define APPLY_CUSTOM_CAL_5()
-#define APPLY_CUSTOM_CAL_6()
-#define APPLY_CUSTOM_CAL_7()
-#define APPLY_CUSTOM_CAL_8()
-#define APPLY_CUSTOM_CAL_9()
-
-// Redefine for inputs that have custom calibrations
-#ifdef INPUT_0_CUSTOM_CALIBRATION
-#undef APPLY_CUSTOM_CAL_0
-#define APPLY_CUSTOM_CAL_0() \
-    do { \
-        Input* input = getInputByPin(INPUT_0_PIN); \
-        if (input) { \
-            input->flags.useCustomCalibration = true; \
-            if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
-                memcpy(&input->customCalibration.steinhart, &input_0_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_0_custom_cal, sizeof(LinearCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
-                memcpy(&input->customCalibration.pressurePolynomial, &input_0_custom_cal, sizeof(PressurePolynomialCalibration)); \
-            } else if (input->calibrationType == CAL_RPM) { \
-                memcpy(&input->customCalibration.rpm, &input_0_custom_cal, sizeof(RPMCalibration)); \
-            } \
-        } \
-    } while(0)
-#endif
-
-#ifdef INPUT_1_CUSTOM_CALIBRATION
-#undef APPLY_CUSTOM_CAL_1
-#define APPLY_CUSTOM_CAL_1() \
-    do { \
-        Input* input = getInputByPin(INPUT_1_PIN); \
-        if (input) { \
-            input->flags.useCustomCalibration = true; \
-            if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
-                memcpy(&input->customCalibration.steinhart, &input_1_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_1_custom_cal, sizeof(LinearCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
-                memcpy(&input->customCalibration.pressurePolynomial, &input_1_custom_cal, sizeof(PressurePolynomialCalibration)); \
-            } else if (input->calibrationType == CAL_RPM) { \
-                memcpy(&input->customCalibration.rpm, &input_1_custom_cal, sizeof(RPMCalibration)); \
-            } \
-        } \
-    } while(0)
-#endif
-
-#ifdef INPUT_2_CUSTOM_CALIBRATION
-#undef APPLY_CUSTOM_CAL_2
-#define APPLY_CUSTOM_CAL_2() \
-    do { \
-        Input* input = getInputByPin(INPUT_2_PIN); \
-        if (input) { \
-            input->flags.useCustomCalibration = true; \
-            if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
-                memcpy(&input->customCalibration.steinhart, &input_2_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_2_custom_cal, sizeof(LinearCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
-                memcpy(&input->customCalibration.pressurePolynomial, &input_2_custom_cal, sizeof(PressurePolynomialCalibration)); \
-            } else if (input->calibrationType == CAL_RPM) { \
-                memcpy(&input->customCalibration.rpm, &input_2_custom_cal, sizeof(RPMCalibration)); \
-            } \
-        } \
-    } while(0)
-#endif
-
-#ifdef INPUT_3_CUSTOM_CALIBRATION
-#undef APPLY_CUSTOM_CAL_3
-#define APPLY_CUSTOM_CAL_3() \
-    do { \
-        Input* input = getInputByPin(INPUT_3_PIN); \
-        if (input) { \
-            input->flags.useCustomCalibration = true; \
-            if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
-                memcpy(&input->customCalibration.steinhart, &input_3_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_3_custom_cal, sizeof(LinearCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
-                memcpy(&input->customCalibration.pressurePolynomial, &input_3_custom_cal, sizeof(PressurePolynomialCalibration)); \
-            } else if (input->calibrationType == CAL_RPM) { \
-                memcpy(&input->customCalibration.rpm, &input_3_custom_cal, sizeof(RPMCalibration)); \
-            } \
-        } \
-    } while(0)
-#endif
-
-#ifdef INPUT_4_CUSTOM_CALIBRATION
-#undef APPLY_CUSTOM_CAL_4
-#define APPLY_CUSTOM_CAL_4() \
-    do { \
-        Input* input = getInputByPin(INPUT_4_PIN); \
-        if (input) { \
-            input->flags.useCustomCalibration = true; \
-            if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
-                memcpy(&input->customCalibration.steinhart, &input_4_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_4_custom_cal, sizeof(LinearCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
-                memcpy(&input->customCalibration.pressurePolynomial, &input_4_custom_cal, sizeof(PressurePolynomialCalibration)); \
-            } else if (input->calibrationType == CAL_RPM) { \
-                memcpy(&input->customCalibration.rpm, &input_4_custom_cal, sizeof(RPMCalibration)); \
-            } \
-        } \
-    } while(0)
-#endif
-
-#ifdef INPUT_5_CUSTOM_CALIBRATION
-#undef APPLY_CUSTOM_CAL_5
-#define APPLY_CUSTOM_CAL_5() \
-    do { \
-        Input* input = getInputByPin(INPUT_5_PIN); \
-        if (input) { \
-            input->flags.useCustomCalibration = true; \
-            if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
-                memcpy(&input->customCalibration.steinhart, &input_5_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_5_custom_cal, sizeof(LinearCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
-                memcpy(&input->customCalibration.pressurePolynomial, &input_5_custom_cal, sizeof(PressurePolynomialCalibration)); \
-            } else if (input->calibrationType == CAL_RPM) { \
-                memcpy(&input->customCalibration.rpm, &input_5_custom_cal, sizeof(RPMCalibration)); \
-            } \
-        } \
-    } while(0)
-#endif
-
-#ifdef INPUT_6_CUSTOM_CALIBRATION
-#undef APPLY_CUSTOM_CAL_6
-#define APPLY_CUSTOM_CAL_6() \
-    do { \
-        Input* input = getInputByPin(INPUT_6_PIN); \
-        if (input) { \
-            input->flags.useCustomCalibration = true; \
-            if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
-                memcpy(&input->customCalibration.steinhart, &input_6_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_6_custom_cal, sizeof(LinearCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
-                memcpy(&input->customCalibration.pressurePolynomial, &input_6_custom_cal, sizeof(PressurePolynomialCalibration)); \
-            } else if (input->calibrationType == CAL_RPM) { \
-                memcpy(&input->customCalibration.rpm, &input_6_custom_cal, sizeof(RPMCalibration)); \
-            } \
-        } \
-    } while(0)
-#endif
-
-#ifdef INPUT_7_CUSTOM_CALIBRATION
-#undef APPLY_CUSTOM_CAL_7
-#define APPLY_CUSTOM_CAL_7() \
-    do { \
-        Input* input = getInputByPin(INPUT_7_PIN); \
-        if (input) { \
-            input->flags.useCustomCalibration = true; \
-            if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
-                memcpy(&input->customCalibration.steinhart, &input_7_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_7_custom_cal, sizeof(LinearCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
-                memcpy(&input->customCalibration.pressurePolynomial, &input_7_custom_cal, sizeof(PressurePolynomialCalibration)); \
-            } else if (input->calibrationType == CAL_RPM) { \
-                memcpy(&input->customCalibration.rpm, &input_7_custom_cal, sizeof(RPMCalibration)); \
-            } \
-        } \
-    } while(0)
-#endif
-
-#ifdef INPUT_8_CUSTOM_CALIBRATION
-#undef APPLY_CUSTOM_CAL_8
-#define APPLY_CUSTOM_CAL_8() \
-    do { \
-        Input* input = getInputByPin(INPUT_8_PIN); \
-        if (input) { \
-            input->flags.useCustomCalibration = true; \
-            if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
-                memcpy(&input->customCalibration.steinhart, &input_8_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_8_custom_cal, sizeof(LinearCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
-                memcpy(&input->customCalibration.pressurePolynomial, &input_8_custom_cal, sizeof(PressurePolynomialCalibration)); \
-            } else if (input->calibrationType == CAL_RPM) { \
-                memcpy(&input->customCalibration.rpm, &input_8_custom_cal, sizeof(RPMCalibration)); \
-            } \
-        } \
-    } while(0)
-#endif
-
-#ifdef INPUT_9_CUSTOM_CALIBRATION
-#undef APPLY_CUSTOM_CAL_9
-#define APPLY_CUSTOM_CAL_9() \
-    do { \
-        Input* input = getInputByPin(INPUT_9_PIN); \
-        if (input) { \
-            input->flags.useCustomCalibration = true; \
-            if (input->calibrationType == CAL_THERMISTOR_STEINHART) { \
-                memcpy(&input->customCalibration.steinhart, &input_9_custom_cal, sizeof(ThermistorSteinhartCalibration)); \
-            } else if (input->calibrationType == CAL_LINEAR) { \
-                memcpy(&input->customCalibration.pressureLinear, &input_9_custom_cal, sizeof(LinearCalibration)); \
-            } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) { \
-                memcpy(&input->customCalibration.pressurePolynomial, &input_9_custom_cal, sizeof(PressurePolynomialCalibration)); \
-            } else if (input->calibrationType == CAL_RPM) { \
-                memcpy(&input->customCalibration.rpm, &input_9_custom_cal, sizeof(RPMCalibration)); \
-            } \
-        } \
-    } while(0)
-#endif
-
-#endif // USE_STATIC_CONFIG
-
 // ===== INITIALIZATION =====
 bool initInputManager() {
     // Clear all inputs
@@ -398,115 +86,15 @@ bool initInputManager() {
         inputs[i].sensorIndex = 0;       // 0 = NONE
     }
 
-#ifdef USE_STATIC_CONFIG
-    // ===== COMPILE-TIME CONFIGURATION MODE =====
-    // Configure inputs using the registry-based functions
-    // This reuses the same runtime configuration logic
-
-    msg.control.println(F("Initializing from static configuration..."));
-
-    #ifdef INPUT_0_PIN
-        CONFIGURE_INPUT(0, 0);
-        APPLY_UNITS_OVERRIDE(0);
-        APPLY_CUSTOM_CAL(0);
-    #endif
-    #ifdef INPUT_1_PIN
-        CONFIGURE_INPUT(1, 1);
-        APPLY_UNITS_OVERRIDE(1);
-        APPLY_CUSTOM_CAL(1);
-    #endif
-    #ifdef INPUT_2_PIN
-        CONFIGURE_INPUT(2, 2);
-        APPLY_UNITS_OVERRIDE(2);
-        APPLY_CUSTOM_CAL(2);
-    #endif
-    #ifdef INPUT_3_PIN
-        CONFIGURE_INPUT(3, 3);
-        APPLY_UNITS_OVERRIDE(3);
-        APPLY_CUSTOM_CAL(3);
-    #endif
-    #ifdef INPUT_4_PIN
-        CONFIGURE_INPUT(4, 4);
-        APPLY_UNITS_OVERRIDE(4);
-        APPLY_CUSTOM_CAL(4);
-    #endif
-    #ifdef INPUT_5_PIN
-        CONFIGURE_INPUT(5, 5);
-        APPLY_UNITS_OVERRIDE(5);
-        APPLY_CUSTOM_CAL(5);
-    #endif
-    #ifdef INPUT_6_PIN
-        CONFIGURE_INPUT(6, 6);
-        APPLY_UNITS_OVERRIDE(6);
-        APPLY_CUSTOM_CAL(6);
-    #endif
-    #ifdef INPUT_7_PIN
-        CONFIGURE_INPUT(7, 7);
-        APPLY_UNITS_OVERRIDE(7);
-        APPLY_CUSTOM_CAL(7);
-    #endif
-    #ifdef INPUT_8_PIN
-        CONFIGURE_INPUT(8, 8);
-        APPLY_UNITS_OVERRIDE(8);
-        APPLY_CUSTOM_CAL(8);
-    #endif
-    #ifdef INPUT_9_PIN
-        CONFIGURE_INPUT(9, 9);
-        APPLY_UNITS_OVERRIDE(9);
-        APPLY_CUSTOM_CAL(9);
-    #endif
-    // Add more if needed (up to MAX_INPUTS)
-
-    // Count active inputs and initialize sensors
-    numActiveInputs = 0;
-    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) {
-            numActiveInputs++;
-
-            // Call sensor-specific initialization function if it exists
-            const SensorInfo* flashInfo = getSensorByIndex(inputs[i].sensorIndex);
-            if (flashInfo) {
-                SensorInfo info;
-                loadSensorInfo(flashInfo, &info);
-                if (info.initFunction) {
-                    info.initFunction(&inputs[i]);
-                }
-            }
-        }
-    }
-
-    // Initialize alarm contexts from application presets
-    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) {
-            // Get preset to load warmup/persist times
-            const ApplicationPreset* flashPreset = getApplicationByIndex(inputs[i].applicationIndex);
-            if (flashPreset) {
-                ApplicationPreset preset;
-                loadApplicationPreset(flashPreset, &preset);
-                initInputAlarmContext(&inputs[i], millis(), preset.warmupTime_ms, preset.persistTime_ms);
-            }
-        }
-    }
-
-    msg.control.print(F("✓ Loaded "));
-    msg.control.print(numActiveInputs);
-    msg.control.println(F(" inputs from static config"));
-    return true;  // Static config always valid
-
-#else
-    // ===== RUNTIME EEPROM CONFIGURATION MODE =====
     // Try to load from EEPROM
     bool eepromLoaded = loadInputConfig();
     if (!eepromLoaded) {
         msg.debug.info(TAG_CONFIG, "No valid config in EEPROM - starting with blank configuration");
     }
     return eepromLoaded;
-#endif
 }
 
 // ===== EEPROM PERSISTENCE =====
-
-#ifndef USE_STATIC_CONFIG
 
 /**
  * Calculate XOR checksum of all active inputs
@@ -732,8 +320,6 @@ void resetInputConfig() {
 
     msg.control.println(F("Configuration reset"));
 }
-
-#endif // USE_STATIC_CONFIG
 
 // ===== HELPER FUNCTIONS =====
 
@@ -1196,8 +782,6 @@ bool clearInputCalibration(uint8_t pin) {
 }
 
 // ===== RUNTIME =====
-
-#ifndef USE_STATIC_CONFIG
 
 void readAllInputs() {
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
@@ -1693,5 +1277,3 @@ void listSensors(const char* filter) {
     msg.control.println(F("'"));
     msg.control.println(F("Use: LIST SENSORS to see available categories"));
 }
-
-#endif // USE_STATIC_CONFIG

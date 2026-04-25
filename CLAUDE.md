@@ -14,17 +14,15 @@ pio run -e teensy41 -t upload    # Build and upload
 pio device monitor               # Serial monitor (115200 baud)
 pio run -e debug                 # Build with debug symbols (-Og -g)
 pio run -e mega2560              # Build for Arduino Mega
-pio run -e uno_static            # Build for Arduino Uno (static config only)
 ```
 
-Build environments: `teensy41`, `teensy40`, `teensy36`, `esp32s3dev`, `mega2560`, `uno_static`, `debug`
+Build environments: `teensy41`, `teensy40`, `teensy36`, `esp32s3dev`, `mega2560`, `debug`
 
 ## Build Configuration
 
 Feature flags are defined in `platformio.ini` (not in source code):
 - `ENABLE_CAN`, `ENABLE_LCD`, `ENABLE_SD_LOGGING`, `ENABLE_SERIAL_OUTPUT`
 - `ENABLE_ALARMS`, `ENABLE_RELAY_OUTPUT`, `ENABLE_BME280`, `ENABLE_TEST_MODE`
-- `USE_STATIC_CONFIG` - Compile-time config for memory-constrained boards (Uno)
 
 Hardware pins and timing are configured in `src/config.h`.
 
@@ -69,14 +67,10 @@ Hash-based lookup system for string→sensor/application mapping. Enables EEPROM
 ### Memory Considerations
 
 - All sensor calibration data stored in PROGMEM (flash), not RAM
-- Arduino Uno: 2KB RAM limits to ~10 inputs, requires `USE_STATIC_CONFIG`
 - Teensy 4.1: 8MB flash, can support 20+ inputs
 - Platform voltage differences: 3.3V (Teensy, ESP32) vs 5V (Mega, Uno)
 
-### Configuration Modes
-
-1. **Runtime Mode** (default): Configured via serial commands, persisted to EEPROM
-2. **Static Mode** (`USE_STATIC_CONFIG`): Compile-time only, no EEPROM overhead
+Configuration is done at runtime via serial commands and persisted to EEPROM.
 
 ### CAN Controller Abstraction
 

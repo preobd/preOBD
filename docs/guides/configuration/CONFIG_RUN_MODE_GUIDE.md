@@ -1,8 +1,5 @@
 # Config/Run Mode Guide
 
-**Applies to:** Runtime configuration mode only (EEPROM-based configuration)
-**Not applicable to:** Compile-time configuration mode (USE_STATIC_CONFIG)
-
 ---
 
 ## Overview

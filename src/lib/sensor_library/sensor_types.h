@@ -14,20 +14,11 @@
 
 // ===== PIN TYPE REQUIREMENT ENUMERATION =====
 // Defines what type of pin a sensor requires for operation
-// Not needed in static builds where pins are hardcoded
-#ifndef USE_STATIC_CONFIG
 enum PinTypeRequirement {
     PIN_ANALOG,     // Sensor requires analog pin (uses analogRead)
     PIN_DIGITAL,    // Sensor requires digital pin (uses digitalWrite, digitalRead, interrupts)
     PIN_I2C         // Sensor uses I2C bus (pin field must be "I2C")
 };
-#else
-// Define dummy values for static builds so X_SENSOR macro compiles
-// These are accepted as macro parameters but discarded in the expansion
-#define PIN_ANALOG   0
-#define PIN_DIGITAL  0
-#define PIN_I2C      0
-#endif
 
 // ===== SENSOR INFO STRUCTURE =====
 struct SensorInfo {
@@ -43,9 +34,7 @@ struct SensorInfo {
     float minValue;                  // Sensor's physical minimum (in standard units)
     float maxValue;                  // Sensor's physical maximum (in standard units)
     uint16_t nameHash;               // Precomputed djb2_hash(name) for fast lookup
-#ifndef USE_STATIC_CONFIG
     PinTypeRequirement pinTypeRequirement;  // What type of pin this sensor requires
-#endif
 };
 
 // ===== FORWARD DECLARATIONS: READ FUNCTIONS =====

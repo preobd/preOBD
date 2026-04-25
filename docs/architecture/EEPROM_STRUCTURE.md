@@ -439,7 +439,6 @@ if (temp.magic != SYSTEM_CONFIG_MAGIC ||
 
 **If issues occur:**
 - Reduce MAX_INPUTS in config.h
-- Use static builds (no EEPROM needed)
 
 ---
 

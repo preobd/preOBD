@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Replaced scattered per-platform `#ifdef` sizing constants with per-env profile headers (`src/profiles/`)
 
+### Removed
+- Dropped `USE_STATIC_CONFIG` build flag, `uno_static` env, and `tools/configure.py` (#148)
+
 ## [0.7.5-beta] - 2026-04-22
 
 ### Added

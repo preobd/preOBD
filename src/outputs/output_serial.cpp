@@ -10,21 +10,17 @@
 
 #ifdef ENABLE_SERIAL_OUTPUT
 
-#ifndef USE_STATIC_CONFIG
-    #include "../lib/system_mode.h"
-#endif
+#include "../lib/system_mode.h"
 
 void initSerialOutput() {
     msg.data.println("✓ Serial output initialized");
 }
 
 void sendSerialOutput(Input *ptr) {
-    #ifndef USE_STATIC_CONFIG
-        // In CONFIG mode, suppress serial output
-        if (isInConfigMode()) {
-            return;
-        }
-    #endif
+    // In CONFIG mode, suppress serial output
+    if (isInConfigMode()) {
+        return;
+    }
 
     msg.data.print(ptr->abbrName);
     msg.data.print(",");

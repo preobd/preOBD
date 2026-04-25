@@ -254,25 +254,6 @@ See [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) for detailed an
 
 ---
 
-## Static Builds
-
-For static builds (`USE_STATIC_CONFIG`), use `tools/configure.py` which will prompt for custom calibrations:
-
-```bash
-python3 tools/configure.py
-```
-
-When adding sensors, it will ask:
-```
-Add custom calibration? [y/N]: y
-```
-
-Then guide you through the calibration parameters. The tool generates the appropriate `advanced_config.h` entries automatically.
-
-See `tools/README_ADVANCED_CONFIG.md` for detailed static build calibration documentation.
-
----
-
 ## Examples
 
 ### Example 1: Generic 10kΩ NTC Thermistor

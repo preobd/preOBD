@@ -106,12 +106,10 @@ inline SensorCategory getSensorCategory(uint8_t sensorIndex) {
     const SensorInfo* sensor = &SENSOR_LIBRARY[sensorIndex];
     MeasurementType measType = (MeasurementType)pgm_read_byte(&sensor->measurementType);
     CalibrationType calType = (CalibrationType)pgm_read_byte(&sensor->calibrationType);
-#ifndef USE_STATIC_CONFIG
     PinTypeRequirement pinType = (PinTypeRequirement)pgm_read_byte(&sensor->pinTypeRequirement);
 
     // Environmental sensors (environmental.h)
     if (pinType == PIN_I2C) return CAT_ENVIRONMENTAL;
-#endif
 
     // Digital input sensors (digital.h)
     if (measType == MEASURE_DIGITAL) return CAT_DIGITAL;
@@ -130,13 +128,8 @@ inline SensorCategory getSensorCategory(uint8_t sensorIndex) {
 
     // Temperature sensors
     if (measType == MEASURE_TEMPERATURE) {
-#ifndef USE_STATIC_CONFIG
         // Thermocouples: CAL_NONE with digital pins (thermocouples.h)
         if (calType == CAL_NONE && pinType == PIN_DIGITAL) return CAT_THERMOCOUPLE;
-#else
-        // In static builds, use calibration type to distinguish thermocouples
-        if (calType == CAL_NONE) return CAT_THERMOCOUPLE;
-#endif
         // All other temp sensors are thermistors (thermistors.h)
         return CAT_THERMISTOR;
     }

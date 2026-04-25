@@ -3,12 +3,11 @@
 **Version:** 0.5.0-alpha (Unreleased)
 **Last Updated:** 2025-12-19
 
-This guide covers JSON configuration in preOBD: creating configurations with `configure.py`, importing/exporting JSON, SD card backup/restore, custom calibrations, and maintaining backward compatibility when evolving firmware.
+This guide covers JSON configuration in preOBD: importing/exporting JSON, SD card backup/restore, custom calibrations, and maintaining backward compatibility when evolving firmware.
 
 ## Table of Contents
 - [Overview](#overview)
 - [JSON Schema Format](#json-schema-format)
-- [Creating Configurations with configure.py](#creating-configurations-with-configurepy)
 - [SD Card Backup and Restore](#sd-card-backup-and-restore)
 - [Custom Calibrations in JSON](#custom-calibrations-in-json)
 - [Schema Versioning](#schema-versioning)
@@ -23,10 +22,9 @@ This guide covers JSON configuration in preOBD: creating configurations with `co
 
 The JSON configuration system in preOBD serves multiple purposes:
 
-1. **Static Configuration** - Generate compile-time configs with `configure.py` (saves EEPROM wear, enables optimizations)
-2. **Runtime Backup/Restore** - Save and load complete system state to/from SD card
-3. **Configuration Transfer** - Share configs between devices or archive proven setups
-4. **Development** - Maintain backward compatibility as firmware evolves
+1. **Runtime Backup/Restore** - Save and load complete system state to/from SD card
+2. **Configuration Transfer** - Share configs between devices or archive proven setups
+3. **Development** - Maintain backward compatibility as firmware evolves
 
 ### Key Principles
 
@@ -39,11 +37,11 @@ The JSON configuration system in preOBD serves multiple purposes:
 
 | Use Case | Tool | Workflow |
 |----------|------|----------|
-| **Initial Setup** | `configure.py` | Generate static config from scratch |
+| **Initial Setup** | Serial commands | `SET <pin> <app> <sensor>` then `SAVE` |
 | **Backup Configuration** | Serial commands | `CONFIG SAVE backup.json` to SD card |
 | **Restore Configuration** | Serial commands | `CONFIG LOAD backup.json` from SD card |
-| **Share Configurations** | Both | Export JSON, edit, import on another device |
-| **Custom Calibrations** | `configure.py` | Interactive prompts for calibration parameters |
+| **Share Configurations** | Serial commands | Export JSON, edit, import on another device |
+| **Custom Calibrations** | Serial commands | `SET <pin> CAL <params>` |
 
 ---
 
@@ -94,7 +92,7 @@ The JSON configuration system in preOBD serves multiple purposes:
 |-------|------|----------|-------------|
 | `schemaVersion` | number | Yes | JSON schema version (currently 1) |
 | `mode` | string | Yes | Configuration mode: "static" or "runtime" |
-| `metadata.toolVersion` | string | No | Version of configure.py that generated this |
+| `metadata.toolVersion` | string | No | Version of the tool that generated this file (informational) |
 | `metadata.platform` | string | Yes | Target platform (e.g., "megaatmega2560") |
 | `metadata.timestamp` | number | No | Unix timestamp of generation |
 | `inputs` | array | Yes | Array of input configurations (0-10 elements) |
@@ -103,57 +101,6 @@ The JSON configuration system in preOBD serves multiple purposes:
 | `inputs[].application` | string | Yes | Application name (e.g., "CHT", "OIL_TEMP") |
 | `inputs[].sensor` | string | Yes | Sensor name (e.g., "MAX6675", "VDO_150C") |
 | `inputs[].calibration` | object/null | No | Custom calibration (null = use sensor default) |
-
----
-
-## Creating Configurations with configure.py
-
-The `configure.py` tool generates static configurations and optionally saves them as JSON files. This is the recommended way to create new configurations.
-
-### Basic Workflow
-
-```bash
-# Navigate to project root
-cd /path/to/preOBD
-
-# Run configuration tool
-python3 tools/configure.py
-
-# Follow interactive prompts:
-# 1. Select application (CHT, OIL_TEMP, etc.)
-# 2. Select sensor (MAX6675, VDO_150C, etc.)
-# 3. Enter pin assignment (6, A0, I2C, etc.)
-# 4. Configure custom calibration (if needed)
-# 5. Repeat for additional inputs
-```
-
-### JSON Output Options
-
-`configure.py` can save configurations as JSON files:
-
-```bash
-# Generate config and save JSON to tools/saved-configs/
-python3 tools/configure.py
-
-# At the end, you'll be prompted:
-Save this configuration to JSON? (y/n): y
-Enter filename (e.g., my_config.json): dual_cht_config.json
-
-# File saved to: tools/saved-configs/dual_cht_config.json
-```
-
-### Loading Saved Configurations
-
-```bash
-# Load a previously saved JSON configuration
-python3 tools/configure.py --load tools/saved-configs/dual_cht_config.json
-
-# Review and edit the configuration
-# Save changes back to JSON or generate new config.h
-```
-
-### For detailed configure.py documentation, see:
-- **[tools/README.md](../../../tools/README.md)** - Complete configure.py usage guide
 
 ---
 
@@ -287,19 +234,6 @@ preOBD supports **four types** of custom calibrations that can be specified in J
 }
 ```
 
-**configure.py prompts:**
-```bash
-Sensor: THERMISTOR_STEINHART
-Use default calibration? (y/n): n
-
-Enter custom Steinhart-Hart calibration:
-  Coefficient A: 0.00112764
-  Coefficient B: 0.000234282
-  Coefficient C: 8.52635e-08
-  R25 (Ω): 796.4
-  Series resistor (Ω): 1000.0
-```
-
 ### Calibration Type 2: PRESSURE_LINEAR
 
 **For:** Linear pressure sensors (e.g., 0.5V = 0 bar, 4.5V = 5 bar)
@@ -329,18 +263,6 @@ Enter custom Steinhart-Hart calibration:
 }
 ```
 
-**configure.py prompts:**
-```bash
-Sensor: GENERIC_PRESSURE
-Use default calibration? (y/n): n
-
-Enter linear pressure calibration:
-  Voltage at min pressure (V): 0.5
-  Voltage at max pressure (V): 4.5
-  Minimum pressure (bar): 0.0
-  Maximum pressure (bar): 10.0
-```
-
 ### Calibration Type 3: PRESSURE_POLY
 
 **For:** Non-linear pressure sensors requiring polynomial correction
@@ -367,18 +289,6 @@ Enter linear pressure calibration:
 }
 ```
 
-**configure.py prompts:**
-```bash
-Sensor: GENERIC_BOOST
-Use default calibration? (y/n): n
-
-Enter polynomial pressure calibration (pressure = c0 + c1*V + c2*V² + c3*V³):
-  Coefficient c0: -1.2
-  Coefficient c1: 2.5
-  Coefficient c2: -0.15
-  Coefficient c3: 0.005
-```
-
 ### Calibration Type 4: RPM
 
 **For:** Custom RPM sensors with non-standard pulses per revolution
@@ -402,41 +312,15 @@ Enter polynomial pressure calibration (pressure = c0 + c1*V + c2*V² + c3*V³):
 }
 ```
 
-**configure.py prompts:**
-```bash
-Sensor: W_PHASE_RPM
-Use default calibration? (y/n): n
-
-Enter RPM calibration:
-  Pulses per revolution: 3.0
-```
-
 ### Using Custom Calibrations
 
-**In configure.py:**
-```bash
-# During sensor configuration, you'll be prompted:
-Use default calibration for VDO_150C_STEINHART? (y/n): n
+Custom calibrations are set via serial commands at runtime, e.g.
+`SET A0 CAL STEINHART <bias> <a> <b> <c>`, then `SAVE` to persist them to
+EEPROM. The JSON file produced by `CONFIG SAVE` includes any custom
+calibration parameters that have been set.
 
-# Then answer prompts for the specific calibration type
-# The JSON file will include the calibration parameters
-```
-
-**Manual JSON editing:**
-```bash
-# 1. Generate base config
-python3 tools/configure.py
-
-# 2. Save to JSON
-Save this configuration to JSON? y
-Filename: my_config.json
-
-# 3. Edit JSON file to add/modify calibration
-nano tools/saved-configs/my_config.json
-
-# 4. Reload and regenerate
-python3 tools/configure.py --load tools/saved-configs/my_config.json
-```
+To apply a calibration from a JSON file, edit the file on the SD card and
+run `CONFIG LOAD <filename>`.
 
 ---
 
@@ -1015,7 +899,6 @@ For complex migrations, consider writing a Python script to transform old JSON t
 
 ## See Also
 
-- **[tools/README.md](../../../tools/README.md)** - Complete configure.py documentation
 - **[JSON_QUICK_REFERENCE.md](JSON_QUICK_REFERENCE.md)** - Quick cheat sheet for JSON changes
 - **[SERIAL_COMMANDS.md](../../reference/SERIAL_COMMANDS.md)** - CONFIG SAVE/LOAD commands
 - **[EEPROM_STRUCTURE.md](../../architecture/EEPROM_STRUCTURE.md)** - How configurations are stored
@@ -1027,7 +910,6 @@ For complex migrations, consider writing a Python script to transform old JSON t
 - Check `docs/CHANGELOG.md` for version-specific changes
 - Review this guide for structural changes
 - Test with `DUMP JSON → CONFIG SAVE → CONFIG LOAD → DUMP JSON` cycle
-- For custom calibrations, see configure.py documentation in tools/README.md
 
 ---
 

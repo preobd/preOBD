@@ -2,8 +2,6 @@
  * serial_config.h - Serial Command Interface
  *
  * Provides serial command interface for runtime configuration of inputs.
- *
- * NOTE: Only compiled in EEPROM/runtime configuration mode (not in static mode)
  */
 
 #ifndef SERIAL_CONFIG_H
@@ -11,8 +9,6 @@
 
 #include "../config.h"
 #include "../lib/platform.h"
-
-#ifndef USE_STATIC_CONFIG
 
 #include <Arduino.h>
 
@@ -33,13 +29,5 @@ void handleCommandInput(char c);
 bool serialConfig_beginJsonImport();
 bool serialConfig_isJsonImportActive();
 #endif
-
-#else // USE_STATIC_CONFIG defined
-
-// Stub functions for static builds (no runtime configuration)
-inline void processSerialCommands() {}
-inline void handleCommandInput(char) {}
-
-#endif // USE_STATIC_CONFIG
 
 #endif // SERIAL_CONFIG_H

@@ -1354,19 +1354,6 @@ ERROR: Pin A20 out of range
 
 ---
 
-## Static Builds
-
-These serial commands are available by default. For memory-constrained boards (Arduino Uno), you may use static builds where configuration is done at compile time via `tools/configure.py`.
-
-In static builds:
-- Serial configuration commands are disabled
-- CONFIG/RUN mode switching is disabled
-- Configuration is defined at compile time
-
-See **[Static Builds Guide](../advanced/STATIC_BUILDS_GUIDE.md)** for details.
-
----
-
 ## See Also
 
 - **[Quick Reference](../getting-started/QUICK_REFERENCE.md)** - Command cheat sheet

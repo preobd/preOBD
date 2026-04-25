@@ -6,8 +6,6 @@
 
 #include "../config.h"
 
-#ifndef USE_STATIC_CONFIG
-
 #include "json_registry.h"
 #include "platform.h"
 
@@ -317,4 +315,3 @@ void dumpRegistryToJson(Print& out) {
 }
 
 #endif // SUPPORTS_JSON_EXPORT
-#endif // !USE_STATIC_CONFIG

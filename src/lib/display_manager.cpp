@@ -4,8 +4,6 @@
 
 #include "display_manager.h"
 
-#ifndef USE_STATIC_CONFIG
-
 #include "system_config.h"
 #include "message_api.h"
 #include "log_tags.h"
@@ -58,5 +56,3 @@ void setDisplayRuntime(bool enabled) {
         disableLCD();
     }
 }
-
-#endif // USE_STATIC_CONFIG

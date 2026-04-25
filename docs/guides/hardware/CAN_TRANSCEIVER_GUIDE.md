@@ -204,8 +204,7 @@ GND         →   GND
 
 **Notes**:
 - Same wiring as Mega
-- **Limited features** due to 2KB RAM - use compile-time configuration only
-- See [STATIC_BUILDS_GUIDE.md](../../advanced/STATIC_BUILDS_GUIDE.md)
+- **Not supported** — 2KB RAM is insufficient for the runtime CLI
 
 ### Multi-Bus and Hybrid Mode
 

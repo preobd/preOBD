@@ -248,7 +248,6 @@ git commit -m "feat: Add display brightness control"
 - Check examples in configuration guide
 - Review recent commits for patterns
 - Test with `DUMP JSON` → `CONFIG LOAD` cycle
-- For configure.py usage: `tools/README.md`
 
 ---
 

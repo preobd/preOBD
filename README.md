@@ -36,7 +36,6 @@ preOBD provides comprehensive engine monitoring for vehicles that lack modern el
 - Teensy 4.0 (2MB flash, native CAN, excellent ADC)
 - Arduino Mega 2560 (256KB flash, 8KB RAM, full features)
 - Arduino Due, ESP32 (12-bit ADC)
-- Arduino Uno (32KB flash, 2KB RAM, limited - see [Static Builds](docs/advanced/STATIC_BUILDS_GUIDE.md))
 
 **Sensors:**
 
@@ -81,7 +80,6 @@ cd preOBD
 pio run -e teensy41      # Teensy 4.1 with built-in SD (recommended)
 pio run -e teensy40      # Teensy 4.0
 pio run -e mega2560      # Arduino Mega 2560
-pio run -e uno_static    # Arduino Uno (static config)
 
 # Upload to your board
 pio run -e teensy41 -t upload
@@ -151,7 +149,6 @@ VERSION                  # Show firmware version
 - **[Advanced Calibration](docs/guides/configuration/ADVANCED_CALIBRATION_GUIDE.md)** - Custom sensor calibrations
 
 ### Advanced Topics
-- **[Static Builds Guide](docs/advanced/STATIC_BUILDS_GUIDE.md)** - Compile-time configuration for Uno/constrained boards
 - **[Complete Documentation](docs/README.md)** - Full documentation index
 
 ---
@@ -208,7 +205,6 @@ preOBD/
 ├── src/                    # Source code
 │   ├── main.cpp            # Main program loop
 │   ├── config.h            # Hardware configuration
-│   ├── advanced_config.h   # Advanced features
 │   ├── inputs/             # Input and sensor management
 │   ├── lib/                # Sensor library and calibrations
 │   ├── outputs/            # Output modules (CAN, Serial, SD)
