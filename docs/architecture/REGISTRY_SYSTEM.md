@@ -189,7 +189,6 @@ uint16_t djb2_hash(const char* str) {
 ### Why PROGMEM?
 
 **RAM is scarce on embedded systems:**
-- Arduino Uno: 2KB RAM
 - Arduino Mega: 8KB RAM
 - Teensy 4.0: 1MB RAM (but still good practice)
 
@@ -197,7 +196,7 @@ uint16_t djb2_hash(const char* str) {
 - Sensor library: ~3KB
 - Application presets: ~2KB
 - Units registry: ~500 bytes
-- **Total: ~5.5KB** (would consume most of Uno's RAM!)
+- **Total: ~5.5KB** (would consume most of Mega's RAM if held in SRAM)
 
 **Solution:** Store in flash (32KB-1MB available)
 

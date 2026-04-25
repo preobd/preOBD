@@ -48,7 +48,6 @@ preOBD uses EEPROM (Electrically Erasable Programmable Read-Only Memory) to pers
 ```
 
 **Platform EEPROM Sizes:**
-- Arduino Uno: 1024 bytes (full support)
 - Arduino Mega: 4096 bytes (full support)
 - Teensy 4.0/4.1: 1080 bytes (full support)
 - ESP32: Emulated (512-4096 bytes configurable)
@@ -428,17 +427,6 @@ if (temp.magic != SYSTEM_CONFIG_MAGIC ||
 **Solution:**
 1. Always run `SAVE` after configuring
 2. Verify with `DUMP` command before power-off
-
-### Arduino Uno Memory Constraints
-
-**Uno has 1024 bytes EEPROM:**
-- Header: 8 bytes
-- 10 inputs × ~70 bytes = 700 bytes
-- SystemConfig: 48 bytes @ 0x03F0
-- **Total:** ~760 bytes (fits!)
-
-**If issues occur:**
-- Reduce MAX_INPUTS in config.h
 
 ---
 

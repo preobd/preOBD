@@ -90,7 +90,7 @@ Settings persist across power cycles in EEPROM.
 
 ### Why Two Tiers?
 
-- **Flash optimization**: Don't compile unused features (critical for Arduino Uno)
+- **Flash optimization**: Don't compile unused features
 - **Runtime flexibility**: Toggle features without reflashing (Teensy/Mega)
 - **Default builds**: Modern boards include all features, users disable what they don't need
 
@@ -133,7 +133,6 @@ pio run -e debug
 | Teensy 4.0 | 144KB | 7.0% | 1.9MB |
 | Teensy 3.6 | ~140KB | 14% | ~860KB |
 | Mega 2560 | 132KB | 52% | 122KB |
-| Uno (minimal) | N/A | ~77% | ~8KB |
 
 **Conclusion**: Teensy 4.x and Mega 2560 have plenty of resources. No need for minimal builds.
 
@@ -464,6 +463,5 @@ Add `${can_libs.lib_deps}` to your environment.
 - **config.h** controls runtime settings (pins, timing, units)
 - All standard builds include all features (modern boards have plenty of flash)
 - Use serial commands to enable/disable outputs at runtime
-- Only Arduino Uno needs special minimal build due to 32KB flash limit
 
 For most users: **Just use teensy41 environment and configure sensors via serial commands.**

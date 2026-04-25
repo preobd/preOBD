@@ -31,7 +31,6 @@ pio run -e mega2560      # Arduino Mega 2560
 | Teensy 4.0 | 2MB | 512KB | All | External SD module |
 | Teensy 3.6 | 1MB | 256KB | All | Older platform |
 | Mega 2560 | 256KB | 8KB | All | Good for prototyping |
-| Uno | 32KB | 2KB | Minimal | Static config only |
 
 **Recommended**: Teensy 4.1 provides best value with built-in SD card, ample resources, and native CAN support.
 

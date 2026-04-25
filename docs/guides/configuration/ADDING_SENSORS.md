@@ -506,7 +506,6 @@ Read functions are organized in `src/inputs/sensors/` by sensor type.
 - [ ] Readings respond to changes
 - [ ] Min/max values are enforced
 - [ ] NaN returned for invalid readings
-- [ ] No RAM increase on Arduino Uno (calibration in PROGMEM)
 - [ ] `validate_registries.py` passes (no hash collisions)
 - [ ] EEPROM save/load works correctly
 

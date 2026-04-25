@@ -117,7 +117,7 @@
 // TEST MODE CONFIGURATION
 // ============================================================================
 // Test mode allows testing outputs without physical sensors
-// WARNING: Adds ~4KB flash - do NOT enable for Arduino Uno builds
+// WARNING: Adds ~4KB flash
 
 #ifdef ENABLE_TEST_MODE
     #define TEST_MODE_TRIGGER_PIN 8      // Hold LOW during boot to activate

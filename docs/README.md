@@ -63,7 +63,6 @@ VDO Oil Pressure Sensor → Pin A3 → 512 (raw ADC) → 2.5 bar → LCD: "OIL:2
 | Teensy 4.0/4.1 | 12-bit | 3.3V | 16 | Native | Best performance, modern features |
 | Arduino Mega | 10-bit | 5V | 16 | MCP2515 | General purpose |
 | Arduino Due | 12-bit | 3.3V | 16 | Native | High resolution ADC |
-| Arduino Uno | 10-bit | 5V | 8 | MCP2515 | Simple setups, compile-time only |
 | ESP32 | 12-bit | 3.3V | 16 | Native | WiFi capability |
 
 ### Critical: Voltage Compatibility
@@ -74,7 +73,7 @@ VDO Oil Pressure Sensor → Pin A3 → 512 (raw ADC) → 2.5 bar → LCD: "OIL:2
 - Use 3.3V sensors or voltage dividers
 - Platform auto-configures 3.3V voltage dividers
 
-**5V Boards (Arduino Mega, Uno):**
+**5V Boards (Arduino Mega):**
 - Use 5V sensors or appropriate level shifting
 - VDO sensors work directly (resistive)
 - Platform auto-configures 5V voltage dividers
