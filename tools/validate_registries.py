@@ -28,7 +28,6 @@ from preobd_config.validators import (
     validate_index_references,
     validate_measurement_types,
     validate_hash_algorithm,
-    validate_config_h,
 )
 
 def main():
@@ -38,11 +37,6 @@ def main():
         "--project-dir",
         default=".",
         help="Path to the preOBD project root directory.",
-    )
-    parser.add_argument(
-        "--check-config",
-        action="store_true",
-        help="Also validate the generated static config in src/config.h",
     )
     parser.add_argument(
         "--ci",
@@ -109,16 +103,6 @@ def main():
         for err in type_errors: print(f"  \u2717 {err}")
     else:
         print("  \u2713 All measurement types are consistent")
-
-    if args.check_config:
-        print("\nChecking config.h...")
-        config_h_path = os.path.join(args.project_dir, 'src', 'config.h')
-        config_errors = validate_config_h(config_h_path, sensors, apps)
-        if config_errors:
-            all_errors.extend(config_errors)
-            for err in config_errors: print(f"  \u2717 {err}")
-        else:
-            print("  \u2713 config.h is valid")
 
     # Final summary
     print("\n=== Summary ===")

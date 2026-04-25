@@ -365,9 +365,6 @@ See [OBD-II Scanner Guide](guides/outputs/OBD2_SCANNER_GUIDE.md) for setup.
 - [TRANSPORT_ARCHITECTURE.md](architecture/TRANSPORT_ARCHITECTURE.md) - Multi-transport serial communication
 - [CAN_HAL_ARCHITECTURE.md](architecture/CAN_HAL_ARCHITECTURE.md) - CAN controller abstraction and hybrid mode
 
-### Advanced Topics
-- [STATIC_BUILDS_GUIDE.md](advanced/STATIC_BUILDS_GUIDE.md) - Compile-time configuration for Uno
-
 ---
 
 ## Getting Help

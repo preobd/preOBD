@@ -24,8 +24,6 @@ SET A2 COOLANT_TEMP VDO_120C_TABLE
 SAVE
 ```
 
-Or for static builds, use `tools/configure.py` to generate the configuration.
-
 ---
 
 ## Architecture Overview

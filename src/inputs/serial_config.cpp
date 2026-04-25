@@ -1,13 +1,9 @@
 /*
  * serial_config.cpp - embedded-cli based Serial Command Interface
  * Uses embedded-cli library for command line interface with history and autocompletion
- *
- * NOTE: Only compiled in EEPROM/runtime configuration mode (not in static mode)
  */
 
 #include "../config.h"
-
-#ifndef USE_STATIC_CONFIG
 
 #include "serial_config.h"
 #include "command_table.h"
@@ -328,5 +324,3 @@ void handleSerialCommand(char* cmd) {
     // Kept for backward compatibility, but does nothing
     (void)cmd;
 }
-
-#endif // USE_STATIC_CONFIG

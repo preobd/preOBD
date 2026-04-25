@@ -8,13 +8,8 @@
 #include "../lib/units_registry.h"
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
-#ifdef USE_STATIC_CONFIG
-#include "../lib/generated/application_presets_static.h"
-#include "../lib/generated/sensor_library_static.h"
-#else
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
-#endif
 
 #ifdef ENABLE_LCD
 

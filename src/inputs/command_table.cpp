@@ -1,12 +1,8 @@
 /*
  * command_table.cpp - Table-driven command dispatch implementation
- *
- * NOTE: Only compiled in EEPROM/runtime configuration mode (not in static mode)
  */
 
 #include "../config.h"
-
-#ifndef USE_STATIC_CONFIG
 
 #include "command_table.h"
 #include "command_helpers.h"
@@ -3264,5 +3260,3 @@ static int cmd_scan(int argc, const char* const* argv) {
     return 1;
 }
 #endif // ENABLE_CAN
-
-#endif // USE_STATIC_CONFIG

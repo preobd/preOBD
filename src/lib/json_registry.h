@@ -18,7 +18,7 @@
 #include <Arduino.h>
 #include "platform.h"
 
-#if SUPPORTS_JSON_EXPORT && !defined(USE_STATIC_CONFIG)
+#if SUPPORTS_JSON_EXPORT
 
 // ===== GRANULAR EXPORTS =====
 // Each function writes a bare JSON array (or object for firmware) to out.
@@ -36,5 +36,5 @@ void writeCalibrationTypesJson(Print& out);
 // Writes one top-level JSON object containing all catalogs plus firmware info.
 void dumpRegistryToJson(Print& out);
 
-#endif // SUPPORTS_JSON_EXPORT && !USE_STATIC_CONFIG
+#endif // SUPPORTS_JSON_EXPORT
 #endif // JSON_REGISTRY_H

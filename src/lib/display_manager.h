@@ -9,18 +9,9 @@
 #include <Arduino.h>
 #include "../config.h"
 
-#ifndef USE_STATIC_CONFIG
-    // Full display manager (EEPROM mode with runtime toggle)
-    void initDisplayManager();
-    bool isDisplayActive();
-    void toggleDisplayRuntime();
-    void setDisplayRuntime(bool enabled);
-#else
-    // Static config mode - display is always on (simplified)
-    inline void initDisplayManager() {}
-    inline bool isDisplayActive() { return true; }
-    inline void toggleDisplayRuntime() {}
-    inline void setDisplayRuntime(bool enabled) {}
-#endif
+void initDisplayManager();
+bool isDisplayActive();
+void toggleDisplayRuntime();
+void setDisplayRuntime(bool enabled);
 
 #endif // DISPLAY_MANAGER_H
