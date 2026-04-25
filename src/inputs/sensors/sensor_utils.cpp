@@ -36,18 +36,19 @@ float interpolate(float value, byte tableSize, const float* xTable, const float*
     if (value <= xLast) return READ_FLOAT_PROGMEM(yTable[tableSize-1]);
 
     // Find the right segment
-    // Iterate backwards since tables are typically in descending order
-    for (int i = tableSize-1; i >= 0; i--) {
+    // Iterate backwards since tables are typically in descending order.
+    // Loop stops at i=1 so xTable[i-1] is always in-bounds.
+    for (int i = tableSize-1; i >= 1; i--) {
         float xi = READ_FLOAT_PROGMEM(xTable[i]);
         float xi_prev = READ_FLOAT_PROGMEM(xTable[i-1]);
 
         if (value >= xi && value <= xi_prev) {
-            // Linear interpolation: y = y1 + ((x – x1) / (x2 – x1)) * (y2 – y1)
             float yi = READ_FLOAT_PROGMEM(yTable[i]);
-            float xi_next = READ_FLOAT_PROGMEM(xTable[i+1]);
-            float yi_next = READ_FLOAT_PROGMEM(yTable[i+1]);
+            float yi_prev = READ_FLOAT_PROGMEM(yTable[i-1]);
 
-            return yi + ((value - xi) / (xi_next - xi)) * (yi_next - yi);
+            if (xi_prev == xi) return yi;  // guard against malformed tables with duplicate X
+            // Linear interpolation: y = y1 + ((x - x1) / (x2 - x1)) * (y2 - y1)
+            return yi + ((value - xi) / (xi_prev - xi)) * (yi_prev - yi);
         }
     }
     return NAN;
@@ -83,10 +84,11 @@ float interpolateAscending(float value, byte tableSize, const float* xTable, con
         float xi_next = READ_FLOAT_PROGMEM(xTable[i+1]);
 
         if (value >= xi && value <= xi_next) {
-            // Linear interpolation: y = y1 + ((x - x1) / (x2 - x1)) * (y2 - y1)
             float yi = READ_FLOAT_PROGMEM(yTable[i]);
             float yi_next = READ_FLOAT_PROGMEM(yTable[i+1]);
 
+            if (xi_next == xi) return yi;  // guard against malformed tables with duplicate X
+            // Linear interpolation: y = y1 + ((x - x1) / (x2 - x1)) * (y2 - y1)
             return yi + ((value - xi) / (xi_next - xi)) * (yi_next - yi);
         }
     }
@@ -136,5 +138,12 @@ float calculateResistance(int reading, float biasResistor) {
     if (reading >= ADC_MAX_VALUE) {
         return NAN;  // Avoid division by zero
     }
-    return reading * biasResistor / (ADC_MAX_VALUE - reading);
+    float r = reading * biasResistor / (ADC_MAX_VALUE - reading);
+    // Cap implausibly high resistance: a near-rail reading on a disconnected/open
+    // sensor produces values orders of magnitude past anything a real automotive
+    // temp/pressure sender will read above 0 °C. 50x bias is a comfortable margin.
+    if (r > 50.0f * biasResistor) {
+        return NAN;
+    }
+    return r;
 }

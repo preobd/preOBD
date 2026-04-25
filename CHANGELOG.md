@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - `esp32s3_hybrid` and `teensy41_hybrid` build envs now compile cleanly (#146)
+- Correctness and safety fixes in sensor interpolation and resistance calculation (#110, #113, #114)
 
 ## [0.7.6-beta] - 2026-04-24
 
