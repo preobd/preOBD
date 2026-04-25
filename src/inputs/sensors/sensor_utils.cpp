@@ -135,10 +135,15 @@ int readAnalogPin(int pin, bool* isValid) {
  * Formula: R_sensor = reading * R_bias / (ADC_MAX - reading)
  */
 float calculateResistance(int reading, float biasResistor) {
-    // Reject near-rail readings: a bare ADC_MAX check leaves denominators as small as 1,
-    // producing wildly inflated resistances on a disconnected/open sensor.
-    if (reading >= (ADC_MAX_VALUE - ADC_RAIL_MARGIN)) {
+    if (reading >= ADC_MAX_VALUE) {
+        return NAN;  // Avoid division by zero
+    }
+    float r = reading * biasResistor / (ADC_MAX_VALUE - reading);
+    // Cap implausibly high resistance: a near-rail reading on a disconnected/open
+    // sensor produces values orders of magnitude past anything a real automotive
+    // temp/pressure sender will read above 0 °C. 50x bias is a comfortable margin.
+    if (r > 50.0f * biasResistor) {
         return NAN;
     }
-    return reading * biasResistor / (ADC_MAX_VALUE - reading);
+    return r;
 }
