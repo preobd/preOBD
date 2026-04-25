@@ -73,6 +73,10 @@ typedef struct {
     float voltage_max;      // Maximum sensor voltage (V)
     float output_min;       // Output value at V_min (units depend on measurementType)
     float output_max;       // Output value at V_max (units depend on measurementType)
+    // Enable internal pin pull-up for disconnect detection. Only safe for low
+    // output-impedance sensors with integrated signal conditioning (MPX series,
+    // AEM, etc.). Pull-up will skew readings on high-Z signals like raw pot TPS.
+    bool enable_pullup;
 } LinearCalibration;
 
 // Pressure sensor calibration - Polynomial (VDO sensors)
