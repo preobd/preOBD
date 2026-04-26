@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Correctness and safety fixes in sensor interpolation and resistance calculation (#110, #113, #114)
 
 ### Added
-- Disconnect detection for linear sensors: out-of-range voltages return NAN, optional pin pull-up for low-Z signal-conditioned sensors (#155)
+- Disconnect detection for linear sensors: out-of-range voltages return NAN, optional pin pull-up for low-Z signal-conditioned sensors, and `divider_ratio` field for running 5V sensors on 3.3V ADCs through a voltage divider (#155, #157)
 
 ## [0.7.6-beta] - 2026-04-24
 

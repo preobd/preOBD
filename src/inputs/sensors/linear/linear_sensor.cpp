@@ -38,6 +38,7 @@ void readLinearSensor(Input *ptr) {
     // Get calibration values (from custom RAM or PROGMEM preset)
     float V_min, V_max, output_min, output_max;
     bool enable_pullup = false;
+    float divider_ratio = 1.0f;
     if (ptr->flags.useCustomCalibration && ptr->calibrationType == CAL_LINEAR) {
         // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
         V_min = ptr->customCalibration.pressureLinear.voltage_min;
@@ -52,6 +53,8 @@ void readLinearSensor(Input *ptr) {
         output_min = pgm_read_float(&cal->output_min);
         output_max = pgm_read_float(&cal->output_max);
         enable_pullup = pgm_read_byte(&cal->enable_pullup);
+        float r = pgm_read_float(&cal->divider_ratio);
+        if (r > 0.0f) divider_ratio = r;  // Treat unset (0) as no divider
     } else {
         // Default: 0.5V-4.5V → 0-5 bar (common automotive pressure sensor)
         V_min = 0.5;
@@ -72,8 +75,9 @@ void readLinearSensor(Input *ptr) {
         return;
     }
 
-    // Convert ADC reading to voltage
-    float voltage = reading * (AREF_VOLTAGE / (float)ADC_MAX_VALUE);
+    // Convert ADC reading to voltage at the pin, then unscale through any
+    // divider so `voltage` represents the raw sensor output (matches cal units).
+    float voltage = reading * (AREF_VOLTAGE / (float)ADC_MAX_VALUE) / divider_ratio;
 
     // Out-of-range = sensor fault (open circuit, dead sensor, wrong supply).
     // Sensors with integrated signal conditioning physically cannot produce
