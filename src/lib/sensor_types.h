@@ -77,10 +77,6 @@ typedef struct {
     // output-impedance sensors with integrated signal conditioning (MPX series,
     // AEM, etc.). Pull-up will skew readings on high-Z signals like raw pot TPS.
     bool enable_pullup;
-    // Voltage divider ratio = V_at_pin / V_at_sensor. Set to <1.0 when a divider
-    // scales a 5V sensor down for a 3.3V ADC (e.g. 0.6 for a 2.2k/3.3k divider).
-    // 0 is treated as 1.0 (no divider) so existing/custom cals keep working.
-    float divider_ratio;
 } LinearCalibration;
 
 // Pressure sensor calibration - Polynomial (VDO sensors)

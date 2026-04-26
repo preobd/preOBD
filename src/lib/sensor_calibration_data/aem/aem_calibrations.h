@@ -24,8 +24,7 @@ static const PROGMEM LinearCalibration aem_30_2130_150_cal = {
     .voltage_max = 4.5,
     .output_min = 0.0,
     .output_max = 10.34,    // 150 PSI = 10.34 bar (base unit)
-    .enable_pullup = true,
-    .divider_ratio = 1.0
+    .enable_pullup = true
 };
 
 #endif // AEM_CALIBRATIONS_H

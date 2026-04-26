@@ -239,6 +239,13 @@ struct Input {
     CalibrationType calibrationType;
     const void* presetCalibration;       // Pointer to PROGMEM preset
     CalibrationOverride customCalibration; // Custom calibration (16 bytes)
+
+    // === Hardware Signal Conditioning ===
+    // Voltage divider ratio = V_at_pin / V_at_sensor. 1.0 = no divider.
+    // Set when a divider scales a 5V sensor down for a 3.3V ADC (e.g. 0.6
+    // for a 2.2k/3.3k divider). 0 is treated as 1.0 for backwards compat
+    // with EEPROM data written before this field existed.
+    float divider_ratio;
 };
 
 #endif // INPUT_H

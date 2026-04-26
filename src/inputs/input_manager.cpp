@@ -71,6 +71,9 @@ struct InputEEPROM {
     // === Calibration ===
     uint8_t calibrationType;
     CalibrationOverride customCalibration;  // 16 bytes
+
+    // === Hardware Signal Conditioning ===
+    float divider_ratio;                    // Voltage divider ratio (1.0 = none)
 };
 
 // ===== INITIALIZATION =====
@@ -154,6 +157,9 @@ bool saveInputConfig() {
 
             // Output routing mask
             eepromInput.outputMask = inputs[i].outputMask;
+
+            // Hardware signal conditioning
+            eepromInput.divider_ratio = inputs[i].divider_ratio;
 
             // Convert indices to hashes by looking up names in registries
             const ApplicationPreset* appPreset = getApplicationByIndex(inputs[i].applicationIndex);
@@ -254,6 +260,9 @@ bool loadInputConfig() {
 
         // Output routing mask
         inputs[i].outputMask = eepromInput.outputMask;
+
+        // Hardware signal conditioning (0 from older EEPROMs treated as 1.0 by reader)
+        inputs[i].divider_ratio = eepromInput.divider_ratio;
 
         // Resolve hashes to current indices
         inputs[i].applicationIndex = getApplicationIndexByHash(eepromInput.applicationHash);
@@ -505,6 +514,7 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     input->flags.isEnabled = true;
     input->flags.useCustomCalibration = false;  // Use preset calibration
     input->outputMask = OUTPUT_MASK_ALL_DATA;   // All data outputs enabled by default
+    input->divider_ratio = 1.0f;                // Default to no divider
 
     // Initialize alarm context from preset
     initInputAlarmContext(input, millis(), preset.warmupTime_ms, preset.persistTime_ms);
