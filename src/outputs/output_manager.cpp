@@ -83,13 +83,6 @@ void initOutputModules() {
         outputModules[i].enabled = systemConfig.outputEnabled[i];
         outputModules[i].sendInterval = systemConfig.outputInterval[i];
 
-        msg.control.print(F("  output["));
-        msg.control.print(i);
-        msg.control.print(F("] "));
-        msg.control.print(outputModules[i].name);
-        msg.control.print(F(" enabled="));
-        msg.control.println(outputModules[i].enabled);
-
         if (outputModules[i].enabled && outputModules[i].init != nullptr) {
             outputModules[i].init();
         }

@@ -254,14 +254,6 @@ void resetSystemConfig() {
  * @return true if successful
  */
 bool saveSystemConfig() {
-    // Diagnostic: dump outputEnabled at save time
-    msg.control.print(F("  outputEnabled at save: "));
-    for (int i = 0; i < NUM_OUTPUTS; i++) {
-        msg.control.print(systemConfig.outputEnabled[i]);
-        msg.control.print(' ');
-    }
-    msg.control.println();
-
     // Update checksum before saving
     systemConfig.checksum = calculateChecksum(&systemConfig);
 
@@ -270,7 +262,7 @@ bool saveSystemConfig() {
 
     msg.control.print(F("✓ System config saved (addr=0x"));
     char buf[8];
-    snprintf(buf, sizeof(buf), "%04X", SYSTEM_CONFIG_ADDRESS);
+    snprintf(buf, sizeof(buf), "%04X", (unsigned)SYSTEM_CONFIG_ADDRESS);
     msg.control.print(buf);
     msg.control.print(F(", v"));
     msg.control.print(systemConfig.version);
@@ -353,24 +345,6 @@ bool loadSystemConfig() {
         msg.control.println(F("), using defaults"));
         return false;
     }
-
-    // Diagnostic: dump what was loaded
-    msg.control.print(F("  load addr=0x"));
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%04X", SYSTEM_CONFIG_ADDRESS);
-    msg.control.print(buf);
-    msg.control.print(F(" cksum_stored=0x"));
-    snprintf(buf, sizeof(buf), "%02X", temp.checksum);
-    msg.control.print(buf);
-    msg.control.print(F(" cksum_calc=0x"));
-    snprintf(buf, sizeof(buf), "%02X", calculatedChecksum);
-    msg.control.print(buf);
-    msg.control.print(F(" outputEnabled: "));
-    for (int i = 0; i < NUM_OUTPUTS; i++) {
-        msg.control.print(temp.outputEnabled[i]);
-        msg.control.print(' ');
-    }
-    msg.control.println();
 
     // Valid config - copy to global
     memcpy(&systemConfig, &temp, sizeof(SystemConfig));

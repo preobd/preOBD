@@ -9,13 +9,20 @@
 #define SYSTEM_CONFIG_H
 
 #include <Arduino.h>
+#include <EEPROM.h>
 #include "bus_config.h"
 
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
-#define SYSTEM_CONFIG_VERSION 9         // Increment when struct changes (v9: elm327_serial_port in BusConfig)
-#define SYSTEM_CONFIG_ADDRESS 0x0E00    // Address in EEPROM (after input block; static_assert in input_manager.cpp enforces no overlap)
+#define SYSTEM_CONFIG_VERSION 10        // Increment when struct changes (v10: layout shift — SystemConfig now anchored at end of EEPROM)
 #define SYSTEM_CONFIG_SIZE sizeof(SystemConfig)
+
+// Total EEPROM bytes available on this platform.
+// E2END is the last valid byte index (defined by EEPROM.h on AVR and Teensy 3.x/4.x).
+// If a future platform doesn't define E2END, override EEPROM_TOTAL_BYTES in its profile header.
+#ifndef EEPROM_TOTAL_BYTES
+#define EEPROM_TOTAL_BYTES (E2END + 1)
+#endif
 
 // Per-input output mask: all 4 data outputs enabled by default
 #define OUTPUT_MASK_ALL_DATA 0x0F
@@ -120,6 +127,13 @@ struct SystemConfig {
         uint8_t reserved[5];      // Future expansion
     } logFilter;
 };
+
+// SystemConfig is anchored at the end of EEPROM so its address adapts to the
+// platform automatically. The input block grows from address 0; a static_assert
+// in input_manager.cpp keeps the two from overlapping.
+constexpr size_t SYSTEM_CONFIG_ADDRESS = EEPROM_TOTAL_BYTES - sizeof(SystemConfig);
+static_assert(EEPROM_TOTAL_BYTES >= sizeof(SystemConfig) + 16,
+              "EEPROM too small to hold SystemConfig");
 
 // Global system config instance
 extern SystemConfig systemConfig;

@@ -22,6 +22,9 @@
 #define ENABLE_ELM327
 
 // ===== SIZING =====
+// MAX_INPUTS is the RAM cap. Teensy 4.0 has only 1080 bytes of EEPROM, so the
+// EEPROM-persistence cap (MAX_EEPROM_INPUTS, derived in input_manager.cpp) is
+// roughly 10 inputs — extras stay in RAM but won't survive a reboot.
 #define MAX_INPUTS              40
 #define MAX_PID_ENTRIES         64
 #define MAX_PIN_REGISTRY        64
