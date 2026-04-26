@@ -31,7 +31,7 @@ uint8_t numActiveInputs = 0;
 
 #define EEPROM_MAGIC 0x4F454D53            // "OEMS" in ASCII - validates EEPROM has our data
 #define EEPROM_HEADER_SIZE sizeof(EEPROMHeader)  // Header size
-#define EEPROM_INPUT_SIZE sizeof(InputEEPROM)    // ~84 bytes per input (with alignment padding)
+#define EEPROM_INPUT_SIZE sizeof(InputEEPROM)    // size varies by platform alignment (AVR vs ARM)
 
 struct EEPROMHeader {
     uint32_t magic;
