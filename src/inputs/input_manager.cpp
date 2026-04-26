@@ -31,7 +31,7 @@ uint8_t numActiveInputs = 0;
 
 #define EEPROM_MAGIC 0x4F454D53            // "OEMS" in ASCII - validates EEPROM has our data
 #define EEPROM_HEADER_SIZE sizeof(EEPROMHeader)  // Header size
-#define EEPROM_INPUT_SIZE sizeof(InputEEPROM)    // ~70 bytes per input (smaller than Input!)
+#define EEPROM_INPUT_SIZE sizeof(InputEEPROM)    // size varies by platform alignment (AVR vs ARM)
 
 struct EEPROMHeader {
     uint32_t magic;
@@ -75,6 +75,10 @@ struct InputEEPROM {
     // === Hardware Signal Conditioning ===
     float divider_ratio;                    // Voltage divider ratio (1.0 = none)
 };
+
+// Guard: input block must not overlap systemConfig. If this fires, bump SYSTEM_CONFIG_ADDRESS.
+static_assert(sizeof(EEPROMHeader) + MAX_INPUTS * sizeof(InputEEPROM) <= SYSTEM_CONFIG_ADDRESS,
+              "InputEEPROM block overlaps SYSTEM_CONFIG_ADDRESS — bump SYSTEM_CONFIG_ADDRESS in system_config.h");
 
 // ===== INITIALIZATION =====
 bool initInputManager() {

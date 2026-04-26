@@ -14,7 +14,7 @@
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
 #define SYSTEM_CONFIG_VERSION 9         // Increment when struct changes (v9: elm327_serial_port in BusConfig)
-#define SYSTEM_CONFIG_ADDRESS 0x03F0    // Address in EEPROM (after inputs)
+#define SYSTEM_CONFIG_ADDRESS 0x0D40    // Address in EEPROM (after input block; static_assert in input_manager.cpp enforces no overlap)
 #define SYSTEM_CONFIG_SIZE sizeof(SystemConfig)
 
 // Per-input output mask: all 4 data outputs enabled by default
