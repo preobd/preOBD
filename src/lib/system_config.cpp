@@ -354,6 +354,24 @@ bool loadSystemConfig() {
         return false;
     }
 
+    // Diagnostic: dump what was loaded
+    msg.control.print(F("  load addr=0x"));
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%04X", SYSTEM_CONFIG_ADDRESS);
+    msg.control.print(buf);
+    msg.control.print(F(" cksum_stored=0x"));
+    snprintf(buf, sizeof(buf), "%02X", temp.checksum);
+    msg.control.print(buf);
+    msg.control.print(F(" cksum_calc=0x"));
+    snprintf(buf, sizeof(buf), "%02X", calculatedChecksum);
+    msg.control.print(buf);
+    msg.control.print(F(" outputEnabled: "));
+    for (int i = 0; i < NUM_OUTPUTS; i++) {
+        msg.control.print(temp.outputEnabled[i]);
+        msg.control.print(' ');
+    }
+    msg.control.println();
+
     // Valid config - copy to global
     memcpy(&systemConfig, &temp, sizeof(SystemConfig));
     return true;
