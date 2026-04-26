@@ -260,7 +260,15 @@ bool saveSystemConfig() {
     // Write to EEPROM
     EEPROM.put(SYSTEM_CONFIG_ADDRESS, systemConfig);
 
-    msg.control.println(F("✓ System config saved to EEPROM"));
+    msg.control.print(F("✓ System config saved (addr=0x"));
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%04X", SYSTEM_CONFIG_ADDRESS);
+    msg.control.print(buf);
+    msg.control.print(F(", v"));
+    msg.control.print(systemConfig.version);
+    msg.control.print(F(", cksum=0x"));
+    snprintf(buf, sizeof(buf), "%02X", systemConfig.checksum);
+    msg.control.println(buf);
     return true;
 }
 
@@ -310,19 +318,31 @@ bool loadSystemConfig() {
 
     // Validate magic number
     if (temp.magic != SYSTEM_CONFIG_MAGIC) {
+        msg.control.println(F("System config: bad magic, using defaults"));
         return false;
     }
 
     // Check version
     if (temp.version != SYSTEM_CONFIG_VERSION) {
-        msg.debug.warn(TAG_SYSTEM, "System config version mismatch (expected %d, got %d) - ignoring", SYSTEM_CONFIG_VERSION, temp.version);
+        msg.control.print(F("System config: version mismatch (got "));
+        msg.control.print(temp.version);
+        msg.control.print(F(", need "));
+        msg.control.print(SYSTEM_CONFIG_VERSION);
+        msg.control.println(F("), using defaults"));
         return false;
     }
 
     // Verify checksum
     uint8_t calculatedChecksum = calculateChecksum(&temp);
     if (temp.checksum != calculatedChecksum) {
-        msg.debug.warn(TAG_SYSTEM, "System config checksum failed - ignoring");
+        msg.control.print(F("System config: checksum failed (got 0x"));
+        char buf[8];
+        snprintf(buf, sizeof(buf), "%02X", temp.checksum);
+        msg.control.print(buf);
+        msg.control.print(F(", calc 0x"));
+        snprintf(buf, sizeof(buf), "%02X", calculatedChecksum);
+        msg.control.print(buf);
+        msg.control.println(F("), using defaults"));
         return false;
     }
 
