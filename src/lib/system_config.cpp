@@ -254,6 +254,14 @@ void resetSystemConfig() {
  * @return true if successful
  */
 bool saveSystemConfig() {
+    // Diagnostic: dump outputEnabled at save time
+    msg.control.print(F("  outputEnabled at save: "));
+    for (int i = 0; i < NUM_OUTPUTS; i++) {
+        msg.control.print(systemConfig.outputEnabled[i]);
+        msg.control.print(' ');
+    }
+    msg.control.println();
+
     // Update checksum before saving
     systemConfig.checksum = calculateChecksum(&systemConfig);
 
