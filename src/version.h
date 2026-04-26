@@ -44,8 +44,9 @@
 // Increment when Input struct layout changes (forces reconfiguration)
 // Version 2: Changed from storing enum indices to storing name hashes (Phase 5)
 // Version 3: Added per-input output routing mask (outputMask)
+// Version 4: Added per-input divider_ratio for hardware voltage dividers
 // =============================================================================
-#define EEPROM_VERSION 3
+#define EEPROM_VERSION 4
 
 // =============================================================================
 // Helper functions (defined in version.cpp)

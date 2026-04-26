@@ -902,6 +902,34 @@ static int cmd_set(int argc, const char* const* argv) {
         return 1;
     }
 
+    // SET <pin> DIVIDER <ratio>
+    // Voltage divider ratio at the ADC pin (V_at_pin / V_at_sensor).
+    // Use when a hardware divider scales a 5V sensor down for a 3.3V ADC
+    // (e.g. 0.6 for a 2.2k/3.3k divider). 1.0 = no divider.
+    if (streq(field, "DIVIDER")) {
+        if (argc < 4) {
+            msg.control.println(F("ERROR: DIVIDER requires a ratio (e.g. 0.6 for 2.2k/3.3k)"));
+            return 1;
+        }
+        float ratio = atof(argv[3]);
+        if (ratio <= 0.0f || ratio > 1.0f) {
+            msg.control.println(F("ERROR: Divider ratio must be > 0.0 and <= 1.0"));
+            return 1;
+        }
+        Input* input = getInputByPin(pin);
+        if (!input) {
+            msg.control.println(F("ERROR: Input not configured"));
+            return 1;
+        }
+        input->divider_ratio = ratio;
+        msg.control.print(F("Input "));
+        msg.control.print(argv[1]);
+        msg.control.print(F(" divider ratio set to "));
+        msg.control.println(ratio, 3);
+        msg.control.println(F("  (use SAVE to persist)"));
+        return 0;
+    }
+
     // ===== OUTPUT ROUTING COMMANDS =====
     // SET <pin> OUTPUT <target> ENABLE|DISABLE
     // SET <pin> OUTPUT ALL ENABLE|DISABLE
@@ -1617,6 +1645,7 @@ static int cmd_output(int argc, const char* const* argv) {
         if (setOutputEnabled(outputName, true)) {
             msg.control.print(outputName);
             msg.control.println(F(" enabled"));
+            msg.control.println(F("  (use SAVE to persist)"));
         } else {
             msg.control.print(F("ERROR: Unknown output '"));
             msg.control.print(outputName);
@@ -1627,6 +1656,7 @@ static int cmd_output(int argc, const char* const* argv) {
         if (setOutputEnabled(outputName, false)) {
             msg.control.print(outputName);
             msg.control.println(F(" disabled"));
+            msg.control.println(F("  (use SAVE to persist)"));
         } else {
             msg.control.print(F("ERROR: Unknown output '"));
             msg.control.print(outputName);
@@ -1644,6 +1674,7 @@ static int cmd_output(int argc, const char* const* argv) {
             msg.control.print(F(" interval set to "));
             msg.control.print(interval);
             msg.control.println(F("ms"));
+            msg.control.println(F("  (use SAVE to persist)"));
         } else {
             msg.control.print(F("ERROR: Unknown output '"));
             msg.control.print(outputName);

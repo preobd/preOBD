@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `esp32s3_hybrid` and `teensy41_hybrid` build envs now compile cleanly (#146)
 - Correctness and safety fixes in sensor interpolation and resistance calculation (#110, #113, #114)
 
+### Added
+- Disconnect detection for linear sensors: out-of-range voltages return NAN, optional pin pull-up for low-Z signal-conditioned sensors, and per-input `divider_ratio` (set via `SET <pin> DIVIDER <ratio>`) for running 5V sensors on 3.3V ADCs through a voltage divider (#155, #157)
+
 ## [0.7.6-beta] - 2026-04-24
 
 ### Changed

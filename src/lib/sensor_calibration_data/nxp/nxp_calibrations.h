@@ -23,7 +23,8 @@ static const PROGMEM LinearCalibration mpx4250ap_linear_cal = {
     .voltage_min = 0.2,
     .voltage_max = 4.7,
     .output_min = 0.2,    // 20 kPa = 0.2 bar
-    .output_max = 2.5     // 250 kPa = 2.5 bar
+    .output_max = 2.5,    // 250 kPa = 2.5 bar
+    .enable_pullup = true
 };
 
 // Freescale (NXP) MPX5700AP (15-700 kPa, 0.2V-4.7V)
@@ -35,7 +36,8 @@ static const PROGMEM LinearCalibration mpx5700ap_linear_cal = {
     .voltage_min = 0.2,
     .voltage_max = 4.7,
     .output_min = 0.15,   // 15 kPa = 0.15 bar
-    .output_max = 7.0     // 700 kPa = 7.0 bar
+    .output_max = 7.0,    // 700 kPa = 7.0 bar
+    .enable_pullup = true
 };
 
 #endif // NXP_CALIBRATIONS_H
