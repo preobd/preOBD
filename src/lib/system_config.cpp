@@ -262,7 +262,7 @@ bool saveSystemConfig() {
 
     msg.control.print(F("✓ System config saved (addr=0x"));
     char buf[8];
-    snprintf(buf, sizeof(buf), "%04X", SYSTEM_CONFIG_ADDRESS);
+    snprintf(buf, sizeof(buf), "%04X", (unsigned)SYSTEM_CONFIG_ADDRESS);
     msg.control.print(buf);
     msg.control.print(F(", v"));
     msg.control.print(systemConfig.version);

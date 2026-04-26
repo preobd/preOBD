@@ -76,9 +76,15 @@ struct InputEEPROM {
     float divider_ratio;                    // Voltage divider ratio (1.0 = none)
 };
 
-// Guard: input block must not overlap systemConfig. If this fires, bump SYSTEM_CONFIG_ADDRESS.
-static_assert(sizeof(EEPROMHeader) + MAX_INPUTS * sizeof(InputEEPROM) <= SYSTEM_CONFIG_ADDRESS,
-              "InputEEPROM block overlaps SYSTEM_CONFIG_ADDRESS — bump SYSTEM_CONFIG_ADDRESS in system_config.h");
+// MAX_EEPROM_INPUTS is the maximum number of inputs that fit in EEPROM between
+// the header and the SystemConfig block. This is independent of MAX_INPUTS
+// (a RAM limit) — on small-EEPROM platforms (e.g. Teensy 4.0) the user can
+// configure more inputs in RAM than will persist. saveInputConfig() truncates
+// loudly when this happens.
+constexpr size_t MAX_EEPROM_INPUTS =
+    (SYSTEM_CONFIG_ADDRESS - sizeof(EEPROMHeader)) / sizeof(InputEEPROM);
+static_assert(MAX_EEPROM_INPUTS >= 1,
+              "EEPROM too small to persist even one input — check EEPROM_TOTAL_BYTES vs sizeof(SystemConfig)");
 
 // ===== INITIALIZATION =====
 bool initInputManager() {
@@ -107,13 +113,13 @@ bool initInputManager() {
  * Calculate XOR checksum of all active inputs
  * Used to detect EEPROM corruption
  */
-static uint8_t calculateConfigChecksum() {
+static uint8_t calculateConfigChecksum(uint8_t count) {
     uint8_t checksum = 0;
 
     // Read InputEEPROM structs from EEPROM and checksum them
     // This ensures we're checksumming what was actually saved, not runtime data
     uint16_t addr = EEPROM_HEADER_SIZE;
-    for (uint8_t i = 0; i < numActiveInputs; i++) {
+    for (uint8_t i = 0; i < count; i++) {
         InputEEPROM eepromInput;
         EEPROM.get(addr, eepromInput);
 
@@ -133,8 +139,18 @@ bool saveInputConfig() {
     // Convert Input structs to InputEEPROM structs (indices → hashes)
     uint16_t addr = EEPROM_HEADER_SIZE;
     uint8_t savedCount = 0;
+    const uint8_t persistLimit =
+        (numActiveInputs <= MAX_EEPROM_INPUTS) ? numActiveInputs : (uint8_t)MAX_EEPROM_INPUTS;
 
-    for (uint8_t i = 0; i < MAX_INPUTS && savedCount < numActiveInputs; i++) {
+    if (numActiveInputs > MAX_EEPROM_INPUTS) {
+        msg.control.print(F("⚠ EEPROM holds "));
+        msg.control.print((unsigned)MAX_EEPROM_INPUTS);
+        msg.control.print(F(" inputs; truncating "));
+        msg.control.print(numActiveInputs);
+        msg.control.println(F(" — extras will not persist across reboot"));
+    }
+
+    for (uint8_t i = 0; i < MAX_INPUTS && savedCount < persistLimit; i++) {
         if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) {
             InputEEPROM eepromInput;
             memset(&eepromInput, 0, sizeof(InputEEPROM));
@@ -192,14 +208,14 @@ bool saveInputConfig() {
     msg.control.print(savedCount);
     msg.control.println(F(" inputs to EEPROM (hash-based)"));
 
-    // Calculate checksum
-    uint8_t checksum = calculateConfigChecksum();
+    // Calculate checksum over what was actually persisted
+    uint8_t checksum = calculateConfigChecksum(savedCount);
 
     // Write header with checksum
     EEPROMHeader header;
     header.magic = EEPROM_MAGIC;
     header.version = EEPROM_VERSION;
-    header.numInputs = numActiveInputs;
+    header.numInputs = savedCount;
     header.reserved = checksum;  // Store checksum in reserved field
 
     EEPROM.put(0, header);
@@ -236,6 +252,9 @@ bool loadInputConfig() {
 
     if (numActiveInputs > MAX_INPUTS) {
         numActiveInputs = MAX_INPUTS;
+    }
+    if (numActiveInputs > MAX_EEPROM_INPUTS) {
+        numActiveInputs = MAX_EEPROM_INPUTS;
     }
 
     for (uint8_t i = 0; i < numActiveInputs; i++) {
@@ -297,7 +316,7 @@ bool loadInputConfig() {
 
     // Verify checksum
     uint8_t storedChecksum = header.reserved;
-    uint8_t calculatedChecksum = calculateConfigChecksum();
+    uint8_t calculatedChecksum = calculateConfigChecksum(numActiveInputs);
 
     if (storedChecksum != calculatedChecksum) {
         msg.control.println(F("ERROR: EEPROM checksum mismatch! Configuration corrupted."));
