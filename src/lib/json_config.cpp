@@ -182,6 +182,7 @@ void exportInputToJSON(JsonObject& inputObj, const Input* input) {
     inputObj["enabled"] = input->flags.isEnabled;
     inputObj["alarmEnabled"] = input->flags.alarm;
     inputObj["displayEnabled"] = input->flags.display;
+    inputObj["outputMask"] = input->outputMask;
 
     // OBD2 (if applicable)
     if (input->obd2pid != 0) {
@@ -349,8 +350,11 @@ void dumpConfigToJSON(Print& output) {
     JsonArray inputsArray = doc["inputs"].to<JsonArray>();
     exportInputsToJSON(inputsArray);
 
-    // Serialize to output
-    serializeJsonPretty(doc, output);
+    // Serialize - feed watchdog every 32 bytes to survive slow transports
+    // (e.g. HM-10 BLE bridge at 9600 baud blocks in write() long enough to
+    //  trip a 2-second watchdog that can't be disabled at runtime)
+    WatchdogKickingPrint wdOut(output);
+    serializeJsonPretty(doc, wdOut);
     output.println();
 }
 
@@ -489,6 +493,7 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     enableInput(pin, inputObj["enabled"] | true);  // Default to true if missing
     enableInputAlarm(pin, inputObj["alarmEnabled"] | false);  // Default to false if missing
     enableInputDisplay(pin, inputObj["displayEnabled"] | true);  // Default to true if missing
+    input->outputMask = inputObj["outputMask"] | OUTPUT_MASK_ALL_DATA;  // Default to all enabled for old configs
 
     // OBD2
     if (inputObj["obd2"].isNull() == false) {

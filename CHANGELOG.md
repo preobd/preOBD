@@ -7,13 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Web Bluetooth webapp for browser-based device configuration and diagnostics, installable as a PWA via GitHub Pages
+- BLE GATT profile specification (Tier 1 text command service + Tier 2 binary protocol spec) with shared UUID definitions for firmware and clients
+- HM-10 BLE module support in webapp with auto-detection alongside preOBD GATT and Nordic UART services
+- `AT <port> <command>` serial command for sending raw AT commands to attached BLE/serial modules
+- 8 new classic-car monitoring application presets
+- Disconnect detection for linear sensors: out-of-range voltages return NAN, optional pin pull-up for low-Z signal-conditioned sensors, and per-input `divider_ratio` (set via `SET <pin> DIVIDER <ratio>`) for running 5V sensors on 3.3V ADCs through a voltage divider (#155, #157)
+
+### Changed
+- Watchdog kick batched across `WatchdogKickingPrint` writes and kick interval raised; watchdog now fed during JSON serialization to survive slow BLE UART bridges
+
 ### Fixed
 - `esp32s3_hybrid` and `teensy41_hybrid` build envs now compile cleanly (#146)
 - Correctness and safety fixes in sensor interpolation and resistance calculation (#110, #113, #114)
 - SystemConfig persistence on platforms with small EEPROM (Teensy 4.0): config address is now derived per-platform and decoupled from MAX_INPUTS
-
-### Added
-- Disconnect detection for linear sensors: out-of-range voltages return NAN, optional pin pull-up for low-Z signal-conditioned sensors, and per-input `divider_ratio` (set via `SET <pin> DIVIDER <ratio>`) for running 5V sensors on 3.3V ADCs through a voltage divider (#155, #157)
 
 ## [0.7.6-beta] - 2026-04-24
 

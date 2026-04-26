@@ -21,6 +21,19 @@ preOBD supports two types of Bluetooth connectivity:
 
 This guide focuses on **UART Bluetooth modules** for platforms that don't have built-in Bluetooth.
 
+### Running the webapp and ELM327 emulator concurrently
+
+Each UART Bluetooth module consumes one hardware serial port, and a port assigned to the ELM327 emulator (`BUS SERIAL <n> ELM327 ENABLE`) cannot simultaneously carry preOBD CONTROL/DATA/DEBUG traffic. This means **you cannot share a single BLE module between the preOBD webapp and an ELM327 scanner app** — the port is exclusive to one role.
+
+To use both at the same time, wire two separate modules to two different UARTs:
+
+| Role | Module | Example Port | Notes |
+|------|--------|--------------|-------|
+| preOBD webapp (config/monitoring) | HM-10 (BLE, webapp uses Web Bluetooth) | Serial1 | Carries CONTROL/DATA traffic |
+| ELM327 emulator (OBD Fusion, Torque, Car Scanner) | HM-10 or HC-05 | Serial2 | `BUS SERIAL 2 ELM327 ENABLE` |
+
+The webapp does not require a specific baud rate beyond what the BLE module is configured for; the ELM327 port's baud must match its module. See [DIRECT_BLE_OBD_GUIDE.md](../outputs/DIRECT_BLE_OBD_GUIDE.md) for ELM327 setup details.
+
 ## Bluetooth Module Options
 
 ### HC-05 (Bluetooth Classic / SPP)
@@ -281,19 +294,40 @@ AT+RESET                   // Reset to apply changes
 
 ### Recommended Settings for preOBD
 
-**Option 1: Keep Default 9600 Baud (Easiest)**
-- No configuration needed
-- Works with preOBD Serial2 default (9600 baud)
-- Sufficient for RealDash (updates at 10Hz)
+The right baud rate depends on which module you have, because the two module families have very different real-world throughput:
 
-**Option 2: Upgrade to 115200 Baud (Better Performance)**
-- Configure module to 115200 baud using AT commands
-- Configure preOBD serial port to match:
-  ```
-  BUS SERIAL 2 ENABLE 115200     # Enable Serial2 at 115200 baud
-  SAVE                           # Persist to EEPROM
-  ```
-- Faster RealDash updates, more responsive commands
+| Module | Bluetooth protocol | Practical throughput | Is 115200 UART useful? |
+|--------|--------------------|----------------------|------------------------|
+| HC-05 / HC-06 | Bluetooth Classic (SPP) | ~80–100 KB/s | ✅ Yes — UART is the bottleneck |
+| HM-10          | BLE 4.0 (GATT)          | ~1–2 KB/s      | ❌ No — BLE radio is the bottleneck |
+
+#### HC-05 / HC-06 (Bluetooth Classic)
+
+SPP throughput comfortably exceeds UART at 115200, so raising the UART baud genuinely speeds up end-to-end traffic.
+
+**Recommended: 115200 baud** for RealDash and ELM327 emulation.
+
+```
+BUS SERIAL 2 ENABLE 115200     # Enable Serial2 at 115200 baud
+SAVE                           # Persist to EEPROM
+```
+
+9600 also works (and is the ship-from-factory default) — use it if you don't want to change the module settings. It's sufficient for RealDash at 10 Hz but leaves performance on the table for faster dashboards or ELM327 scan tools.
+
+#### HM-10 (Bluetooth Low Energy)
+
+The HM-10's BLE radio only moves ~1–2 KB/s regardless of UART baud. Running the UART faster than that doesn't speed up data — it just means the Teensy hands bytes to the HM-10 faster than the radio can forward them. The HM-10 has a small internal buffer and **silently drops overflow bytes** (no hardware flow control).
+
+**Recommended: 9600 baud** (the module's factory default). 19200 also works safely.
+
+Avoid 115200 on the HM-10 UART for normal operation. At 115200 the Teensy feeds the HM-10 at ~11.5 KB/s while the radio drains at ~1.5 KB/s — roughly an 8:1 overrun. Short messages still get through, but large payloads lose bytes. In particular, `SYSTEM DUMP JSON` (used by the webapp to load the configuration UI) will hang or truncate at 115200 because the closing prompt gets dropped, and the webapp waits for it indefinitely.
+
+115200 is fine when you're only sending AT commands *to the HM-10 itself* (replies like `OK+Get:4` are tiny and can't overflow the buffer). That's why the AT configuration session works at 115200 even though data streaming doesn't.
+
+```
+BUS SERIAL 2 ENABLE 9600       # Enable Serial2 at 9600 baud for HM-10
+SAVE                           # Persist to EEPROM
+```
 
 **Using Different Serial Ports (Teensy 4.x)**
 
@@ -381,7 +415,8 @@ See [Transport Configuration](../../reference/SERIAL_COMMANDS.md#transport-confi
 **Solutions:**
 1. **Baud rate mismatch:**
    - Module baud and Serial2.begin() baud must match exactly
-   - Try common rates: 9600, 19200, 38400, 115200
+   - For HC-05 / HC-06, any common rate is fine: 9600, 19200, 38400, 115200
+   - For HM-10, stick to 9600 or 19200. Higher rates will appear to work for short messages but silently drop bytes on large payloads (see [Recommended Settings](#recommended-settings-for-preobd))
 
 2. **Weak voltage divider signal:**
    - If using voltage divider, check resistor values

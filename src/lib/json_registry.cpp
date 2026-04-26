@@ -12,6 +12,7 @@
 #if SUPPORTS_JSON_EXPORT
 
 #include <ArduinoJson.h>
+#include "watchdog.h"
 #include "sensor_library.h"
 #include "application_presets.h"
 #include "units_registry.h"
@@ -110,7 +111,8 @@ void writeMeasurementTypesJson(Print& out) {
         obj["id"]   = (int)MEAS_TYPE_TABLE[i].id;
         obj["name"] = MEAS_TYPE_TABLE[i].name;
     }
-    serializeJson(doc, out);
+    WatchdogKickingPrint wdOut(out);
+    serializeJson(doc, wdOut);
 }
 
 void writeCalibrationTypesJson(Print& out) {
@@ -121,7 +123,8 @@ void writeCalibrationTypesJson(Print& out) {
         obj["id"]   = (int)CAL_TYPE_TABLE[i].id;
         obj["name"] = CAL_TYPE_TABLE[i].name;
     }
-    serializeJson(doc, out);
+    WatchdogKickingPrint wdOut(out);
+    serializeJson(doc, wdOut);
 }
 
 // ===== REGISTRY EXPORTS =====
@@ -140,7 +143,8 @@ void writeUnitsJson(Print& out) {
         obj["factor"]          = u.conversionFactor;
         obj["offset"]          = u.conversionOffset;
     }
-    serializeJson(doc, out);
+    WatchdogKickingPrint wdOut(out);
+    serializeJson(doc, wdOut);
 }
 
 void writeCategoriesJson(Print& out) {
@@ -153,7 +157,8 @@ void writeCategoriesJson(Print& out) {
         obj["name"]  = (const __FlashStringHelper*)c.name;
         obj["label"] = (const __FlashStringHelper*)c.label;
     }
-    serializeJson(doc, out);
+    WatchdogKickingPrint wdOut(out);
+    serializeJson(doc, wdOut);
 }
 
 // filter: optional category name string (e.g. "THERMOCOUPLE"); nullptr = all sensors
@@ -192,7 +197,8 @@ void writeSensorsJson(Print& out, const char* filter) {
         const SensorCategoryInfo* catInfo = getCategoryInfo(cat);
         obj["category"] = (const __FlashStringHelper*)READ_CATEGORY_NAME(catInfo);
     }
-    serializeJson(doc, out);
+    WatchdogKickingPrint wdOut(out);
+    serializeJson(doc, wdOut);
 }
 
 void writeApplicationsJson(Print& out) {
@@ -234,7 +240,8 @@ void writeApplicationsJson(Print& out) {
         obj["warmupMs"]        = p.warmupTime_ms;
         obj["persistMs"]       = p.persistTime_ms;
     }
-    serializeJson(doc, out);
+    WatchdogKickingPrint wdOut(out);
+    serializeJson(doc, wdOut);
 }
 
 void writeOutputsJson(Print& out) {
@@ -248,7 +255,8 @@ void writeOutputsJson(Print& out) {
         obj["enabled"]    = outputModules[i].enabled;
         obj["intervalMs"] = outputModules[i].sendInterval;
     }
-    serializeJson(doc, out);
+    WatchdogKickingPrint wdOut(out);
+    serializeJson(doc, wdOut);
 }
 
 void writePidsJson(Print& out) {
@@ -268,7 +276,8 @@ void writePidsJson(Print& out) {
         obj["offset"]          = pid.offset;
         obj["units"]           = (const __FlashStringHelper*)pid.units;
     }
-    serializeJson(doc, out);
+    WatchdogKickingPrint wdOut(out);
+    serializeJson(doc, wdOut);
 }
 
 // ===== BUNDLED EXPORT =====
@@ -297,7 +306,8 @@ static void writeFirmwareJson(Print& out) {
 #ifdef ENABLE_LCD
     caps.add("lcd");
 #endif
-    serializeJson(doc, out);
+    WatchdogKickingPrint wdOut(out);
+    serializeJson(doc, wdOut);
 }
 
 void dumpRegistryToJson(Print& out) {

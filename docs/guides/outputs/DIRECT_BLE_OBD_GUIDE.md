@@ -39,6 +39,16 @@ AT+NAMEpreOBD    → rename BLE device (phone will see "preOBD")
 AT+RESET         → apply and reboot
 ```
 
+> **If this HM-10 is also used by the preOBD webapp:** use 9600 (`AT+BAUD0`) or
+> 19200 (`AT+BAUD1`) instead, and adjust the `BUS SERIAL` baud below to match.
+> 115200 is safe for ELM327 scan-tool traffic (short PID request/response pairs)
+> but will cause the webapp's `SYSTEM DUMP JSON` to hang, because the HM-10's
+> BLE radio drains slower than the UART feeds and overflow bytes are silently
+> dropped. See [BLUETOOTH_HARDWARE_GUIDE.md — Recommended Settings](../hardware/BLUETOOTH_HARDWARE_GUIDE.md#recommended-settings-for-preobd)
+> for the full explanation. The two-module setup described under
+> [Port exclusivity](#port-exclusivity) below avoids this entirely — the
+> ELM327 HM-10 can stay at 115200 while the webapp HM-10 runs at 9600/19200.
+
 After setup, wire the HM-10 to a preOBD serial port (e.g. Serial2):
 
 | HM-10 | preOBD |
@@ -82,7 +92,10 @@ SAVE
 ### Port exclusivity
 
 A port assigned to ELM327 cannot simultaneously carry preOBD CONTROL/DATA/DEBUG
-traffic. If you need both RealDash and ELM327, use two separate serial ports.
+traffic. If you need both the preOBD webapp (CONTROL/DATA traffic over BLE UART)
+and ELM327, use two separate serial ports — typically one BLE module (e.g. HM-10
+on Serial1) for the webapp and a second module (e.g. HM-10 or HC-05 on Serial2)
+dedicated to ELM327 for the scanner app.
 
 ---
 

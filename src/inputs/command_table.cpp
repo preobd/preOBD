@@ -71,6 +71,7 @@ static int cmd_version(int argc, const char* const* argv);
 static int cmd_reboot(int argc, const char* const* argv);
 static int cmd_bus(int argc, const char* const* argv);
 static int cmd_log(int argc, const char* const* argv);
+static int cmd_at(int argc, const char* const* argv);
 #ifdef ENABLE_RELAY_OUTPUT
 static int cmd_relay(int argc, const char* const* argv);
 #endif
@@ -131,6 +132,7 @@ const Command COMMANDS[] = {
     {"REBOOT", cmd_reboot, "", true},  // Undocumented alias for SYSTEM REBOOT
     {"BUS", cmd_bus, "Configure I2C/SPI/CAN buses", true},
     {"LOG", cmd_log, "Configure log levels and tags", false},
+    {"AT", cmd_at, "Send raw AT command to a serial port", false},
 
 #ifdef ENABLE_RELAY_OUTPUT
     {"RELAY", cmd_relay, "Configure relay outputs", true},
@@ -3291,3 +3293,67 @@ static int cmd_scan(int argc, const char* const* argv) {
     return 1;
 }
 #endif // ENABLE_CAN
+
+// ============================================================================
+// AT - Send raw AT command to a hardware serial port (no line ending)
+// Usage: AT <port#> <command>
+// Example: AT 1 AT+BAUD4
+//          AT 1 AT+NAMEpreOBD
+// ============================================================================
+static int cmd_at(int argc, const char* const* argv) {
+    if (argc < 3) {
+        msg.control.println(F("Usage: AT <port> <command>"));
+        msg.control.println(F("  Sends raw bytes to a serial port with no line ending."));
+        msg.control.println(F("  Example: AT 1 AT+BAUD4"));
+        msg.control.println(F("           AT 1 AT+NAMEpreOBD"));
+        return 1;
+    }
+
+    uint8_t port_id = atoi(argv[1]);
+    if (port_id < 1 || port_id > NUM_SERIAL_PORTS) {
+        msg.control.print(F("ERROR: Invalid port (1-"));
+        msg.control.print(NUM_SERIAL_PORTS);
+        msg.control.println(F(")"));
+        return 1;
+    }
+
+    if (!isSerialPortActive(port_id)) {
+        msg.control.print(F("ERROR: Serial"));
+        msg.control.print(port_id);
+        msg.control.println(F(" is not active. Enable it first with BUS SERIAL <port> ENABLE"));
+        return 1;
+    }
+
+    Stream* port = getSerialPort(port_id);
+    if (!port) {
+        msg.control.println(F("ERROR: Could not get serial port"));
+        return 1;
+    }
+
+    // Drain any stale bytes before sending so we don't mix old data into the response
+    while (port->available()) port->read();
+
+    // Write the AT command raw (no CR/LF) — required by HM-10 and most BT modules
+    port->print(argv[2]);
+    port->flush();
+
+    // Read response for up to 500ms and print it here, before router.update() can
+    // grab it and misinterpret it as a command.
+    msg.control.print(F("Serial"));
+    msg.control.print(port_id);
+    msg.control.print(F(" response: "));
+    unsigned long deadline = millis() + 500;
+    bool got_response = false;
+    while (millis() < deadline) {
+        while (port->available()) {
+            msg.control.write((char)port->read());
+            got_response = true;
+            deadline = millis() + 100;  // extend deadline while data is arriving
+        }
+    }
+    if (!got_response) {
+        msg.control.print(F("(no response)"));
+    }
+    msg.control.println();
+    return 0;
+}
