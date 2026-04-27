@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Watchdog kick batched across `WatchdogKickingPrint` writes and kick interval raised; watchdog now fed during JSON serialization to survive slow BLE UART bridges
+- Documentation accuracy pass: fixed broken intra-doc links, refreshed README and docs index to cover BLE, ESP32-S3, and recently-added guides
 
 ### Fixed
 - `esp32s3_hybrid` and `teensy41_hybrid` build envs now compile cleanly (#146)

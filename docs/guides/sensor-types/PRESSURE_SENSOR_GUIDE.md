@@ -295,5 +295,5 @@ Where:
 ## See Also
 
 - [SENSOR_SELECTION_GUIDE.md](SENSOR_SELECTION_GUIDE.md) - Complete sensor catalog
-- [VDO_SENSOR_GUIDE.md](VDO_SENSOR_GUIDE.md) - VDO temperature sensors
+- [THERMISTOR_GUIDE.md](THERMISTOR_GUIDE.md) - Resistive temperature sensors (NTC, VDO senders)
 - [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) - Custom calibrations

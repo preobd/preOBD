@@ -96,7 +96,7 @@ VDO Sensor Ground → Chassis ground (sensor body grounds through engine block)
 Add pull-down resistor: Analog pin → 1kΩ resistor → GND
 ```
 
-See [VDO_SENSOR_GUIDE.md](VDO_SENSOR_GUIDE.md) for detailed setup.
+See [THERMISTOR_GUIDE.md](THERMISTOR_GUIDE.md) for detailed setup.
 
 ### Temperature Sensors - Jeep/AMC
 
@@ -342,7 +342,7 @@ A: Use `LIST APPLICATIONS` command.
 ## See Also
 
 - [THERMOCOUPLE_GUIDE.md](THERMOCOUPLE_GUIDE.md) - MAX6675/MAX31855 setup
-- [VDO_SENSOR_GUIDE.md](VDO_SENSOR_GUIDE.md) - VDO temperature sensors
+- [THERMISTOR_GUIDE.md](THERMISTOR_GUIDE.md) - Resistive temperature sensors (NTC, VDO senders)
 - [PRESSURE_SENSOR_GUIDE.md](PRESSURE_SENSOR_GUIDE.md) - Pressure sensor setup
 - [W_PHASE_RPM_GUIDE.md](W_PHASE_RPM_GUIDE.md) - RPM from alternator
 - [BME280_GUIDE.md](BME280_GUIDE.md) - Environmental sensor
