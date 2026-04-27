@@ -32,10 +32,10 @@ preOBD provides comprehensive engine monitoring for vehicles that lack modern el
 ## Supported Hardware
 
 **Platforms:**
-- **Teensy 4.1** (recommended - 8MB flash, built-in SD, native CAN, excellent ADC)
-- Teensy 4.0 (2MB flash, native CAN, excellent ADC)
-- Arduino Mega 2560 (256KB flash, 8KB RAM, full features)
-- Arduino Due, ESP32 (12-bit ADC)
+- **Teensy 4.1** (recommended - 8MB flash, built-in SD, native FlexCAN, excellent ADC)
+- Teensy 4.0 / Teensy 3.6 (native FlexCAN, excellent ADC)
+- ESP32-S3 (native TWAI CAN, BLE / WiFi capable)
+- Arduino Mega 2560 (256KB flash, 8KB RAM, MCP2515 SPI CAN)
 
 **Sensors:**
 
@@ -62,6 +62,7 @@ preOBD provides comprehensive engine monitoring for vehicles that lack modern el
 - 20x4 I2C LCD display
 - CAN bus with OBD-II request/response (works with ELM327 adapters and Torque app)
 - RealDash mobile dashboard (CAN broadcast mode)
+- Bluetooth LE — GATT profile for the Web Bluetooth webapp, plus support for HM-10 and direct-BLE OBD adapters
 - Serial CSV output
 - SD card data logging
 
@@ -212,9 +213,9 @@ preOBD/
 │   └── test/               # Test mode system
 └── docs/                   # Documentation
     ├── getting-started/    # Quick start guides
-    ├── guides/             # User guides
-    ├── reference/          # Command reference
-    └── advanced/           # Advanced topics
+    ├── guides/             # User guides (configuration, hardware, sensors, outputs)
+    ├── reference/          # Command and PID reference
+    └── architecture/       # Contributor-facing architecture docs
 ```
 
 ---

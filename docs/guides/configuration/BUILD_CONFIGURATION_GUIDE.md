@@ -51,7 +51,7 @@ build_flags =
 - Hardware pin assignments (`MODE_BUTTON`, `CAN_CS`, `SD_CS_PIN`)
 - Timing intervals (`SENSOR_READ_INTERVAL_MS`, `LCD_UPDATE_INTERVAL_MS`)
 - Default units (`DEFAULT_TEMPERATURE_UNITS`, `DEFAULT_PRESSURE_UNITS`)
-- Physical constants (`DEFAULT_BIAS_RESISTOR`, `SEA_LEVEL_PRESSURE_HPA`) — see [BIAS_RESISTOR_GUIDE.md](guides/hardware/BIAS_RESISTOR_GUIDE.md) for correct values by sensor type
+- Physical constants (`DEFAULT_BIAS_RESISTOR`, `SEA_LEVEL_PRESSURE_HPA`) — see [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) for correct values by sensor type
 
 **Why**: Most users are comfortable editing .h files with clear comments, and these settings don't affect code compilation.
 
