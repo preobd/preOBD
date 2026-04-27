@@ -124,6 +124,31 @@ SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 3.0
 SAVE
 ```
 
+**Disconnect detection:** Linear sensors return `NaN` when the ADC voltage falls more than ~0.05V outside `vmin`/`vmax` — disconnected, unpowered, or shorted sensors no longer produce a plausible mid-range reading. Built-in linear presets enable an internal pull-up so a disconnected pin rails high; **custom calibrations do not**, because the EEPROM-backed override layout is fixed. Wire an external pull-down (e.g. 100kΩ to GND) if you want disconnect detection on a custom-calibrated linear sensor.
+
+**Voltage dividers:** When a 5V linear sensor is wired through a hardware divider for a 3.3V ADC, leave `vmin`/`vmax` at the sensor-side voltages (typically 0.5/4.5V) and apply the divider with `SET <pin> DIVIDER <ratio>` (see [DIVIDER](#divider--voltage-divider-ratio-linear-sensors-only) below). Custom calibrations don't carry a `divider_ratio` field of their own — `CalibrationOverride` is fixed at 16 bytes, so the divider lives on the input. Alternately, you can specify post-divider voltages directly in `PRESSURE_LINEAR` and skip `DIVIDER`.
+
+### DIVIDER - Voltage Divider Ratio (linear sensors only)
+
+```
+SET <pin> DIVIDER <ratio>
+```
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `ratio` | `V_at_pin / V_at_sensor`, in `(0.0, 1.0]` | 0.6 |
+
+Use when a linear sensor's output is scaled by a hardware voltage divider before reaching the ADC (typically a 5V sensor on a 3.3V board). The cal stays expressed in raw sensor terms; `readLinearSensor()` unscales the ADC voltage through this ratio before comparing to `vmin`/`vmax`.
+
+This is a per-input property (different inputs can have different dividers) and is persisted to EEPROM on `SAVE`. Default is 1.0 (no divider). Only linear-calibration sensors honor the field — VDO polynomial, thermistor, and `VOLTAGE_DIVIDER` battery inputs ignore it.
+
+**Example:** MPX4250 on a Teensy 4.1 behind a 2.2kΩ/3.3kΩ divider:
+```
+SET A1 BOOST_PRESSURE MPX4250AP
+SET A1 DIVIDER 0.6
+SAVE
+```
+
 ### PRESSURE_POLY - Polynomial Pressure Sensor
 
 ```
@@ -345,6 +370,8 @@ SAVE
 - Check wiring (sensor to analog pin, bias resistor to ground)
 - Verify bias resistor is installed
 - Check for loose connections
+- For linear sensors: a persistent `NaN` is the disconnect-detection signal — the ADC voltage is more than ~0.05V outside the calibrated `vmin`/`vmax` window. Verify sensor power, signal continuity, and (for custom calibrations) that an external pull-down is present so a disconnected pin rails predictably.
+- If a linear sensor sits behind a hardware voltage divider, confirm `SET <pin> DIVIDER <ratio>` matches the actual divider — otherwise the unscaled voltage will fall outside `vmin`/`vmax` and read NaN.
 
 ---
 

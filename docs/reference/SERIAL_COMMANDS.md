@@ -294,6 +294,7 @@ SET <pin> STEINHART <bias> <a> <b> <c>  # Steinhart-Hart thermistor
 SET <pin> BETA <bias> <beta> <r0> <t0>  # Beta equation thermistor
 SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>  # Linear pressure
 SET <pin> PRESSURE_POLY <bias> <a> <b> <c>  # Polynomial pressure (VDO)
+SET <pin> DIVIDER <ratio>        # Voltage divider ratio for linear sensors (0 < ratio ≤ 1.0)
 SET <pin> RPM <poles> <ratio> <timeout> <min> <max>  # RPM (5 params)
 SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>  # RPM (6 params)
 SET <pin> SPEED <ppr> <tire_circ> <ratio> <timeout> <max>  # Speed (5 params)
@@ -317,6 +318,26 @@ SET A0 OIL_TEMP THERMISTOR_BETA
 SET A0 BETA 10000 3950 10000 25
 SAVE
 ```
+
+### Voltage Divider Ratio (5V sensors on 3.3V ADCs)
+
+Linear sensors (pressure, MAP, generic 0.5–4.5V) wired through a hardware
+voltage divider need a ratio applied so the calibration can stay expressed
+in raw sensor terms. The ratio is `V_at_pin / V_at_sensor`.
+
+```
+SET A1 BOOST_PRESSURE GENERIC_BOOST
+SET A1 DIVIDER 0.6                   # 2.2k/3.3k divider, ratio = 3.3/(2.2+3.3) = 0.6
+SAVE
+```
+
+- `1.0` = no divider (default)
+- Range: `(0.0, 1.0]`
+- Per-input setting (different inputs can have different dividers)
+- Persisted to EEPROM on `SAVE`
+- Only applies to linear-calibration sensor types; auto-configured
+  `VOLTAGE_DIVIDER` battery inputs and resistive (VDO/thermistor) sensors
+  ignore this field.
 
 ### Pressure Calibration Examples
 

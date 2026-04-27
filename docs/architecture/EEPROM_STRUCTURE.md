@@ -33,37 +33,92 @@ preOBD uses EEPROM (Electrically Erasable Programmable Read-Only Memory) to pers
 
 ## EEPROM Layout
 
-### Complete Memory Map
+### Two-Block Model
+
+preOBD splits EEPROM into two blocks that grow toward each other:
+
+- **Input block** grows up from address 0 (header + N × `InputEEPROM`)
+- **SystemConfig** is anchored at the **end** of EEPROM, so its address adapts to the platform automatically
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│ Address Range    │ Content                │ Size         │
-├──────────────────┼────────────────────────┼──────────────┤
-│ 0x0000 - 0x0007  │ EEPROM Header          │ 8 bytes      │
-│ 0x0008 - 0x02C7  │ Input Configs (10)     │ ~700 bytes   │
-│ 0x03F0 - 0x041F  │ System Config          │ 48 bytes     │
-├──────────────────┼────────────────────────┼──────────────┤
-│ Total Used                                │ ~760 bytes   │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ 0x0000          EEPROM Header (8 bytes)                      │
+│ 0x0008 …        InputEEPROM[0]                               │
+│                 InputEEPROM[1]                               │
+│                 …                                            │
+│                 InputEEPROM[MAX_EEPROM_INPUTS - 1]           │
+│                 (free space)                                 │
+│ END − sizeof(SystemConfig)                                   │
+│                 SystemConfig (~140 bytes, grows with schema) │
+│ E2END                                                        │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-**Platform EEPROM Sizes:**
-- Arduino Mega: 4096 bytes (full support)
-- Teensy 4.0/4.1: 1080 bytes (full support)
-- ESP32: Emulated (512-4096 bytes configurable)
+```cpp
+constexpr size_t SYSTEM_CONFIG_ADDRESS =
+    EEPROM_TOTAL_BYTES - sizeof(SystemConfig);
+
+constexpr size_t MAX_EEPROM_INPUTS =
+    (SYSTEM_CONFIG_ADDRESS - sizeof(EEPROMHeader)) / sizeof(InputEEPROM);
+```
+
+A compile-time `static_assert` prevents the two regions from overlapping.
+
+**Why anchored at the end?** Earlier firmware used a hardcoded `SYSTEM_CONFIG_ADDRESS`. On platforms with smaller EEPROM than expected (Teensy 4.0, 1080 bytes) the hardcoded address fell past `E2END` and writes silently failed. Anchoring SystemConfig at the end makes the layout self-adjust per platform.
+
+### Platform Capacity
+
+`MAX_INPUTS` is a **RAM** limit (number of `Input` structs allocated). `MAX_EEPROM_INPUTS` is a **persistence** limit derived from EEPROM size. They can differ:
+
+| Platform | EEPROM | `MAX_INPUTS` (RAM) | `MAX_EEPROM_INPUTS` (persists) |
+|----------|--------|--------------------|--------------------------------|
+| Teensy 4.1 | 4284 bytes | 40 | ~40 (full RAM set persists) |
+| Teensy 4.0 | 1080 bytes | 40 | ~10 (extras truncated on save) |
+| Arduino Mega | 4096 bytes | 40 | ~40 |
+| ESP32 | Emulated, configurable | 40 | depends on partition |
+
+When `numActiveInputs > MAX_EEPROM_INPUTS`, `saveInputConfig()` writes the first `MAX_EEPROM_INPUTS` inputs and prints a warning to the control plane:
+
+```
+⚠ EEPROM holds 10 inputs; truncating 14 — extras will not persist across reboot
+```
+
+The extra inputs continue to function until reboot — they're configured in RAM, just not written to EEPROM.
 
 ---
 
 ## Version History
 
-### Version Progression
+There are two independent version numbers:
 
-| Version | Firmware | Key Changes | EEPROM Changes |
-|---------|----------|-------------|----------------|
-| **v1** | v0.3.x | Enum-based system | Stored sensor/app indices |
-| **v2** | v0.4.0+ | Registry architecture | Switched to hash-based storage |
+- **`EEPROM_VERSION`** (currently `4`) — input block schema (`EEPROMHeader` + `InputEEPROM[]`).
+- **`SYSTEM_CONFIG_VERSION`** (currently `10`) — `SystemConfig` schema. Bumped whenever the struct's layout or address changes.
 
-### Version 1 (v0.3.x - Deprecated)
+A version mismatch on either block is non-fatal: the affected block resets to defaults on next boot, the user re-saves, and operation continues. The two blocks version independently — bumping `SYSTEM_CONFIG_VERSION` does not invalidate input configs and vice versa.
+
+### Input Block Version Progression
+
+| Version | Firmware | Key Changes |
+|---------|----------|-------------|
+| **v1** | v0.3.x | Enum-based system; stored sensor/app indices |
+| **v2** | v0.4.0+ | Registry architecture; switched to hash-based storage |
+| **v3** | — | Internal layout iterations |
+| **v4** | current | Added `divider_ratio` to the per-input record |
+
+### SystemConfig Version Progression
+
+| Version | Key Changes |
+|---------|-------------|
+| **v3** | Earlier baseline (output enables, display, units, intervals, pins, sea-level) |
+| **v4** | Added transport router config |
+| **v5** | Added relay config (`ENABLE_RELAY_OUTPUT` builds) |
+| **v6** | Added log filter config |
+| **…**  | Bus config, serial port config |
+| **v10** | Layout shift — `SystemConfig` now anchored at the end of EEPROM (per-platform address) |
+
+> **Note:** v9→v10 is a pure address change, not a struct change. T4.1 users who upgrade past v10 will see SystemConfig reset to defaults on first boot (output enables, transport routing, etc.) and need to re-`SAVE`. Input configs are unaffected.
+
+### Detail: Version 1 (v0.3.x - Deprecated)
 
 **Characteristics:**
 - Sensor and application stored as **enum indices**
@@ -108,8 +163,8 @@ All saved configurations became invalid.
 ```cpp
 struct EEPROMHeader {
     uint32_t magic;       // 0x4F454D53 ("OEMS" in ASCII)
-    uint16_t version;     // EEPROM_VERSION (currently 2)
-    uint8_t numInputs;    // 0-10 (MAX_INPUTS)
+    uint16_t version;     // EEPROM_VERSION (currently 4)
+    uint8_t numInputs;    // 0–MAX_EEPROM_INPUTS (platform-dependent)
     uint8_t reserved;     // Stores XOR checksum
 };
 ```
@@ -120,7 +175,7 @@ struct EEPROMHeader {
 - **numInputs:** How many InputEEPROM structs follow
 - **reserved:** Stores checksum for corruption detection
 
-### InputEEPROM Structure (~70 bytes each)
+### InputEEPROM Structure (~84 bytes each, depends on alignment)
 
 ```cpp
 struct InputEEPROM {
@@ -151,18 +206,19 @@ struct InputEEPROM {
 };
 ```
 
-**Size:** ~70 bytes per input
+**Size:** ~84 bytes per input on Teensy (ARM alignment); slightly less on AVR. Use `sizeof(InputEEPROM)` at runtime — the layout is alignment-sensitive.
 
 ### Input Slots Layout
 
+Slots are packed back-to-back starting at `EEPROM_HEADER_SIZE` (0x0008). The number of slots that fit is `MAX_EEPROM_INPUTS`, computed at compile time from the gap between the header and `SYSTEM_CONFIG_ADDRESS` (see [Two-Block Model](#two-block-model)).
+
 ```
-Address  | Content
----------|---------------------------
-0x0008   | InputEEPROM[0]
-0x0052   | InputEEPROM[1]
-0x009C   | InputEEPROM[2]
-...      | ...
-0x02C7   | InputEEPROM[9] (last slot)
+Address                                  | Content
+-----------------------------------------|---------------------------
+0x0008                                   | InputEEPROM[0]
+0x0008 + 1·sizeof(InputEEPROM)           | InputEEPROM[1]
+…                                        | …
+0x0008 + (MAX_EEPROM_INPUTS-1)·sizeof()  | last persisted slot
 ```
 
 ### Flags Byte Packing
@@ -193,51 +249,40 @@ union CalibrationOverride {
 
 ## System Configuration Storage
 
-### SystemConfig Structure (48 bytes @ 0x03F0)
+### SystemConfig Structure (~140 bytes, anchored at end of EEPROM)
 
 ```cpp
 struct SystemConfig {
     // Header (4 bytes)
     uint16_t magic;              // 0x5343 ("SC")
-    uint8_t version;             // SYSTEM_CONFIG_VERSION (currently 3)
+    uint8_t version;             // SYSTEM_CONFIG_VERSION (currently 10)
     uint8_t checksum;            // XOR checksum
 
-    // Output Modules (15 bytes)
-    uint8_t outputEnabled[5];    // CAN, RealDash, Serial, SD, Alarm
-    uint16_t outputInterval[5];  // Intervals in ms
+    // Output Modules (NUM_OUTPUTS = 7: CAN, RealDash, Serial, SD, Alarm, Relay, ELM327)
+    uint8_t outputEnabled[NUM_OUTPUTS];
+    uint16_t outputInterval[NUM_OUTPUTS];
 
-    // Display Settings (7 bytes)
-    uint8_t displayEnabled;
-    uint8_t displayType;         // LCD/OLED/None
-    uint8_t lcdI2CAddress;       // Default 0x27
-    uint8_t defaultTempUnits;    // Unit index
-    uint8_t defaultPressUnits;
-    uint8_t defaultElevUnits;
-    uint8_t defaultSpeedUnits;
+    // Display, units, intervals, hardware pins, sea-level pressure
+    // (see src/lib/system_config.h for the full layout)
 
-    // Timing Intervals (8 bytes)
-    uint16_t sensorReadInterval;
-    uint16_t alarmCheckInterval;
-    uint16_t lcdUpdateInterval;
-    uint16_t reserved1;
+    // Transport router (v4+) — control/data/debug primary+secondary, BT
+    struct { /* ... */ } router;
 
-    // Hardware Pins (8 bytes)
-    uint8_t modeButtonPin;
-    uint8_t buzzerPin;
-    uint8_t canCSPin;
-    uint8_t canIntPin;
-    uint8_t sdCSPin;
-    uint8_t testModePin;
-    uint16_t reserved2;
+    // Relays (v5+, ENABLE_RELAY_OUTPUT only)
+    RelayConfig relays[MAX_RELAYS];
 
-    // Physical Constants (4 bytes)
-    float seaLevelPressure;      // hPa
+    // Bus + serial port config — which I2C/SPI/CAN bus, which serial ports
+    BusConfig buses;
+    SerialPortConfig serial;
 
-    uint8_t reserved[6];         // Future expansion
+    // Log filter (v6+) — per-plane log levels and tag bitmap
+    struct { /* ... */ } logFilter;
 };
 ```
 
-**Location:** 0x03F0 (well after input slots)
+The struct above is a sketch — `SystemConfig` has grown across versions and may grow again. Treat [`src/lib/system_config.h`](../../src/lib/system_config.h) as authoritative.
+
+**Location:** `EEPROM_TOTAL_BYTES − sizeof(SystemConfig)` (per platform). On Teensy 4.1 (4284-byte EEPROM) this is roughly `0x1080`; on Teensy 4.0 (1080-byte EEPROM) it's roughly `0x03B0`. The exact address is computed at compile time from `E2END`.
 
 **Default Values:**
 Set from `config.h` compile-time defines:
@@ -423,10 +468,24 @@ if (temp.magic != SYSTEM_CONFIG_MAGIC ||
 1. Forgot to run `SAVE` command
 2. Power lost during `SAVE`
 3. EEPROM wear (rare)
+4. Firmware upgrade bumped `EEPROM_VERSION` or `SYSTEM_CONFIG_VERSION` — affected block resets to defaults; re-`SAVE` once.
+5. **Small-EEPROM platform truncation** — on Teensy 4.0 only the first `MAX_EEPROM_INPUTS` (~10) inputs persist. If `SAVE` printed `⚠ EEPROM holds N inputs; truncating M`, inputs past slot N are not written and disappear on reboot.
 
 **Solution:**
 1. Always run `SAVE` after configuring
 2. Verify with `DUMP` command before power-off
+3. On T4.0, keep input count ≤ `MAX_EEPROM_INPUTS` or accept that extras are RAM-only
+
+### Output enable flags reset to defaults each boot
+
+Symptom: `OUTPUT SERIAL ENABLE` + `SAVE` works for the session, but the output reverts to its default state on reboot.
+
+This was a real bug fixed in `SYSTEM_CONFIG_VERSION` 9 and 10:
+
+- **v9** (PR #159): hardcoded `SYSTEM_CONFIG_ADDRESS` overlapped the input block once ≥12 inputs were configured; saving inputs corrupted SystemConfig's magic number, and load fell back to defaults every boot.
+- **v10** (PR #160): on Teensy 4.0 the hardcoded address was past `E2END` entirely, so SystemConfig writes silently failed. Anchoring at the end of EEPROM fixed both.
+
+If you're seeing this on current firmware, run `SAVE` once after upgrade to migrate SystemConfig to its new (per-platform) address.
 
 ---
 

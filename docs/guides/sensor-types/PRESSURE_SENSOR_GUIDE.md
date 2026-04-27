@@ -107,6 +107,16 @@ No external resistors needed!
 
 **⚠️ Warning for 3.3V boards:** Many 0.5-4.5V sensors output up to 4.5V which can damage 3.3V boards (Teensy, Due, ESP32). Use a voltage divider or level shifter, or choose a 3.3V-compatible sensor.
 
+**Using a divider on 3.3V boards:** If you wire a 5V sensor through a resistor divider (e.g. 2.2kΩ/3.3kΩ to scale 5V down to 3.3V), tell preOBD the ratio so the built-in calibration still works:
+
+```
+SET A5 BOOST_PRESSURE GENERIC_BOOST
+SET A5 DIVIDER 0.6                   # V_at_pin / V_at_sensor = 3.3/(2.2+3.3)
+SAVE
+```
+
+This is a per-input setting (`SET <pin> DIVIDER <ratio>`), so the same MPX4250 preset works on a Mega (no divider, ratio 1.0) and a Teensy (with divider) without recompiling. Default is 1.0.
+
 ---
 
 ## Configuration Examples
@@ -188,6 +198,16 @@ See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.
 
 ---
 
+## Disconnect Detection
+
+Linear pressure sensors report **NaN** when the ADC voltage falls more than ~0.05V outside the calibrated `voltage_min`/`voltage_max` window. A NaN reading is preOBD's signal that the sensor is disconnected, unpowered, or shorted — distinct from a real low/high reading at the rails.
+
+For this to work reliably, a disconnected pin must rail rather than float to mid-scale. Built-in presets that ship with integrated signal conditioning (MPX4250, MPX5700, AEM 150 PSI, generic boost, generic 150 PSI) enable an internal pull-up automatically. Sensors with high output impedance (TPS, generic temp) leave it disabled to avoid skewing the reading.
+
+**Custom calibrations (`SET <pin> PRESSURE_LINEAR ...`) do not enable the internal pull-up.** Wire an external pull-down (e.g. 100kΩ from the analog pin to GND) if you want disconnect detection on a custom-calibrated linear sensor.
+
+---
+
 ## Troubleshooting
 
 ### Sensor reads 0 or maximum constantly
@@ -202,7 +222,7 @@ See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.
 ```
 INFO A3
 ```
-This shows the raw ADC value and calculated pressure.
+This shows the raw ADC value and calculated pressure. A reading of `NaN` indicates the ADC voltage is outside the calibrated window — typically a disconnected, unpowered, or shorted sensor (see [Disconnect Detection](#disconnect-detection)).
 
 ### Readings are unstable/noisy
 
