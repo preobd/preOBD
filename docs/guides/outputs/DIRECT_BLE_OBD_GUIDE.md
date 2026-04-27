@@ -29,25 +29,22 @@ AT command protocol over a UART directly connected to a BLE module.
 
 ## Hardware: HM-10 BLE module
 
-The HM-10 is a common, inexpensive BLE UART module. One-time setup via AT
-commands (connect TX/RX/VCC/GND, open a terminal at the HM-10's default 9600
-baud before wiring to preOBD):
+The HM-10 is a common, inexpensive BLE UART module. Out of the box it comes up
+at 9600 baud, which is what preOBD uses for all HM-10 traffic — the HM-10's
+BLE 4.0 radio only sustains ~1–2 KB/s, so a higher UART baud just lets bytes
+pile up faster than the radio can drain them, causing silent overflow drops
+(see [BLUETOOTH_HARDWARE_GUIDE.md — Recommended Settings](../hardware/BLUETOOTH_HARDWARE_GUIDE.md#recommended-settings-for-preobd)).
+
+One-time setup via AT commands (connect TX/RX/VCC/GND, open a terminal at the
+HM-10's default 9600 baud before wiring to preOBD):
 
 ```
-AT+BAUD4         → set baud to 115200 (matches preOBD default)
 AT+NAMEpreOBD    → rename BLE device (phone will see "preOBD")
 AT+RESET         → apply and reboot
 ```
 
-> **If this HM-10 is also used by the preOBD webapp:** use 9600 (`AT+BAUD0`) or
-> 19200 (`AT+BAUD1`) instead, and adjust the `BUS SERIAL` baud below to match.
-> 115200 is safe for ELM327 scan-tool traffic (short PID request/response pairs)
-> but will cause the webapp's `SYSTEM DUMP JSON` to hang, because the HM-10's
-> BLE radio drains slower than the UART feeds and overflow bytes are silently
-> dropped. See [BLUETOOTH_HARDWARE_GUIDE.md — Recommended Settings](../hardware/BLUETOOTH_HARDWARE_GUIDE.md#recommended-settings-for-preobd)
-> for the full explanation. The two-module setup described under
-> [Port exclusivity](#port-exclusivity) below avoids this entirely — the
-> ELM327 HM-10 can stay at 115200 while the webapp HM-10 runs at 9600/19200.
+> The HM-10's default baud (9600, `AT+BAUD0`) is correct as-shipped — don't
+> change it. If a previous user set it higher, restore with `AT+BAUD0`.
 
 After setup, wire the HM-10 to a preOBD serial port (e.g. Serial2):
 
@@ -68,7 +65,7 @@ After setup, wire the HM-10 to a preOBD serial port (e.g. Serial2):
 Connect to preOBD via USB Serial and run:
 
 ```
-BUS SERIAL 2 ENABLE 115200     # bring up Serial2 at 115200 baud
+BUS SERIAL 2 ENABLE 9600       # bring up Serial2 at 9600 baud (HM-10 default)
 BUS SERIAL 2 ELM327 ENABLE     # assign ELM327 role to Serial2 (exclusive)
 SAVE
 SYSTEM REBOOT
@@ -80,7 +77,7 @@ Verify the assignment:
 BUS SERIAL 2
 ```
 
-Expected output includes `ENABLED @ 115200 baud [ELM327]`.
+Expected output includes `ENABLED @ 9600 baud [ELM327]`.
 
 To disable later:
 

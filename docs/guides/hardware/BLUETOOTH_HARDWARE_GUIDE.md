@@ -278,10 +278,12 @@ HM-10 doesn't need special mode - just send AT commands at default 9600 baud:
 ```
 AT                          // Test connection, returns "OK"
 AT+NAME=preOBD            // Change device name (max 12 chars)
-AT+BAUD=4                  // Set baud to 115200 (4 = 115200)
+AT+BAUD=0                  // Set baud to 9600 (BLE-friendly — see Recommended Settings below)
 AT+PASS=123456             // Change PIN (6 digits)
 AT+RESET                   // Reset to apply changes
 ```
+
+**Configuring through preOBD:** if the HM-10 is already wired to a serial port on the MCU, you can send these AT commands without unwiring it. Enable the port (`BUS SERIAL <n> ENABLE 9600`), then use the `AT <port> <command>` serial command from preOBD's console — see [`SERIAL_COMMANDS.md`](../../reference/SERIAL_COMMANDS.md#at-command-passthrough).
 
 **HM-10 Baud Rate Codes:**
 - 0 = 9600
@@ -318,11 +320,9 @@ SAVE                           # Persist to EEPROM
 
 The HM-10's BLE radio only moves ~1–2 KB/s regardless of UART baud. Running the UART faster than that doesn't speed up data — it just means the Teensy hands bytes to the HM-10 faster than the radio can forward them. The HM-10 has a small internal buffer and **silently drops overflow bytes** (no hardware flow control).
 
-**Recommended: 9600 baud** (the module's factory default). 19200 also works safely.
+**Use 9600 baud** (the module's factory default) for both the UART side and the HM-10's `AT+BAUD0`. Don't raise it.
 
-Avoid 115200 on the HM-10 UART for normal operation. At 115200 the Teensy feeds the HM-10 at ~11.5 KB/s while the radio drains at ~1.5 KB/s — roughly an 8:1 overrun. Short messages still get through, but large payloads lose bytes. In particular, `SYSTEM DUMP JSON` (used by the webapp to load the configuration UI) will hang or truncate at 115200 because the closing prompt gets dropped, and the webapp waits for it indefinitely.
-
-115200 is fine when you're only sending AT commands *to the HM-10 itself* (replies like `OK+Get:4` are tiny and can't overflow the buffer). That's why the AT configuration session works at 115200 even though data streaming doesn't.
+At higher rates the MCU feeds the HM-10 faster than the BLE radio can drain its internal buffer (e.g. 115200 = ~11.5 KB/s in vs. ~1.5 KB/s out — roughly 8:1 overrun). Short messages still get through, but large payloads lose bytes silently. In particular, `SYSTEM DUMP JSON` (used by the webapp to load the configuration UI) hangs or truncates above 9600 because the closing prompt gets dropped and the webapp waits for it indefinitely.
 
 ```
 BUS SERIAL 2 ENABLE 9600       # Enable Serial2 at 9600 baud for HM-10
@@ -416,7 +416,7 @@ See [Transport Configuration](../../reference/SERIAL_COMMANDS.md#transport-confi
 1. **Baud rate mismatch:**
    - Module baud and Serial2.begin() baud must match exactly
    - For HC-05 / HC-06, any common rate is fine: 9600, 19200, 38400, 115200
-   - For HM-10, stick to 9600 or 19200. Higher rates will appear to work for short messages but silently drop bytes on large payloads (see [Recommended Settings](#recommended-settings-for-preobd))
+   - For HM-10, use 9600. Higher rates will appear to work for short messages but silently drop bytes on large payloads (see [Recommended Settings](#recommended-settings-for-preobd))
 
 2. **Weak voltage divider signal:**
    - If using voltage divider, check resistor values

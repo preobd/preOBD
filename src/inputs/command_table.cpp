@@ -3297,15 +3297,15 @@ static int cmd_scan(int argc, const char* const* argv) {
 // ============================================================================
 // AT - Send raw AT command to a hardware serial port (no line ending)
 // Usage: AT <port#> <command>
-// Example: AT 1 AT+BAUD4
-//          AT 1 AT+NAMEpreOBD
+// Example: AT 1 AT+NAMEpreOBD
+//          AT 1 AT+BAUD0
 // ============================================================================
 static int cmd_at(int argc, const char* const* argv) {
     if (argc < 3) {
         msg.control.println(F("Usage: AT <port> <command>"));
         msg.control.println(F("  Sends raw bytes to a serial port with no line ending."));
-        msg.control.println(F("  Example: AT 1 AT+BAUD4"));
-        msg.control.println(F("           AT 1 AT+NAMEpreOBD"));
+        msg.control.println(F("  Example: AT 1 AT+NAMEpreOBD"));
+        msg.control.println(F("           AT 1 AT+BAUD0       (9600, BLE-friendly)"));
         return 1;
     }
 

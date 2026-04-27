@@ -826,6 +826,41 @@ For full setup instructions (HM-10 wiring, phone app configuration), see
 
 ---
 
+## AT Command Passthrough
+
+Send a raw AT command to an attached serial module (HM-10, HC-05, ELM327 chip, etc.) and capture its reply, without rewiring the module to a USB-serial adapter.
+
+### Syntax
+
+```
+AT <port> <command>
+```
+
+- `<port>` — serial port number (1–N, must already be enabled via `BUS SERIAL <port> ENABLE`)
+- `<command>` — the AT string to send. Sent **raw with no CR/LF appended** (HM-10 and most BLE modules require this)
+
+The command waits up to ~500 ms for a response, extending the window while bytes are still arriving, then prints what was received.
+
+### Examples
+
+```
+BUS SERIAL 5 ENABLE 9600        # Bring up Serial5 at the module's baud rate first
+AT 5 AT                         # Probe — HM-10 should answer "OK"
+AT 5 AT+NAMEpreOBD              # Set BLE advertised name
+AT 5 AT+BAUD0                   # Set HM-10 baud to 9600 (the BLE-friendly rate)
+AT 5 AT+RESET                   # Reset module
+```
+
+### Notes
+
+- The port must be active (`BUS SERIAL <port> ENABLE`) — `AT` will not auto-enable it
+- HM-10 modules accept AT commands without line endings; HC-05 modules in AT mode require `\r\n` (which `AT` does not append — use a USB-serial adapter for HC-05 configuration)
+- Stale bytes in the RX buffer are drained before the command is sent, so responses are not mixed with leftover module output
+
+See [`BLUETOOTH_HARDWARE_GUIDE.md`](../guides/hardware/BLUETOOTH_HARDWARE_GUIDE.md) for module-specific AT command references.
+
+---
+
 ## Transport Configuration
 
 Route control commands, sensor data output, and debug messages to different serial ports. Each message plane (CONTROL/DATA/DEBUG) has a **primary** and an optional **secondary** transport — both receive all output and both are polled for incoming commands.

@@ -135,7 +135,9 @@ Linear temperature sensors have 3 wires: power, ground, and signal.
 GND ---------> Sensor GND
 ```
 
-**Warning:** Most linear sensors require 5V power. For 3.3V systems, use a voltage divider on the signal or choose 3.3V-compatible sensors.
+**Warning:** Most linear sensors require 5V power. For 3.3V systems, use a voltage divider on the signal (configurable per-input via `SET <pin> DIVIDER <ratio>` — see [ADVANCED_CALIBRATION_GUIDE.md → DIVIDER](../configuration/ADVANCED_CALIBRATION_GUIDE.md#divider--voltage-divider-ratio-linear-sensors-only)) or choose 3.3V-compatible sensors.
+
+**Disconnect detection:** linear temp sensors return `NaN` when the ADC voltage falls more than ~0.05 V outside the calibrated `voltage_min`/`voltage_max` window — preOBD's signal that the sensor is disconnected, unpowered, or shorted. For this to work, the pin must rail rather than float to mid-scale: built-in linear-temp presets (e.g. `GENERIC_TEMP_LINEAR`) enable an internal pull-up automatically. Custom calibrations (`SET <pin> TEMP_LINEAR ...`) do **not** enable the pull-up — wire an external pull-down (e.g. 100 kΩ to GND) if you want disconnect detection on a custom-calibrated linear temp sensor. See [PRESSURE_SENSOR_GUIDE.md → Disconnect Detection](PRESSURE_SENSOR_GUIDE.md#disconnect-detection) for the full mechanism.
 
 ### Pull-Down Resistor Value (NTC Only)
 
