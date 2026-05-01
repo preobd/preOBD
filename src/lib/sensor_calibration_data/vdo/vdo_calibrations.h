@@ -46,7 +46,7 @@ static const float vdo150_temperature[] PROGMEM = {
 
 // VDO 120°C (323 095) using lookup table
 static const PROGMEM ThermistorLookupCalibration vdo120_lookup_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = vdo120_resistance,
     .temperature_table = vdo120_temperature,
     .table_size = 31
@@ -54,7 +54,7 @@ static const PROGMEM ThermistorLookupCalibration vdo120_lookup_cal = {
 
 // VDO 150°C (323 057) using lookup table
 static const PROGMEM ThermistorLookupCalibration vdo150_lookup_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = vdo150_resistance,
     .temperature_table = vdo150_temperature,
     .table_size = 37
@@ -65,9 +65,9 @@ static const PROGMEM ThermistorLookupCalibration vdo150_lookup_cal = {
 // VDO 120°C (323 095) using Steinhart-Hart (curve-fitted from lookup table)
 // Steinhart-Hart coefficients curve-fitted from VDO resistance table
 // Accuracy: ±1°C across 20-120°C range
-// Bias resistor: Set by DEFAULT_BIAS_RESISTOR in config.h
+// Bias: SENSOR_BIAS_LOW_Z (100Ω)
 static const PROGMEM ThermistorSteinhartCalibration vdo120_steinhart_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .steinhart_a = 1.764445997570e-03,
     .steinhart_b = 2.499534389889e-04,
     .steinhart_c = 6.773335597401e-08
@@ -76,9 +76,9 @@ static const PROGMEM ThermistorSteinhartCalibration vdo120_steinhart_cal = {
 // VDO 150°C (323 057) using Steinhart-Hart (curve-fitted from lookup table)
 // Steinhart-Hart coefficients curve-fitted from VDO resistance table
 // Accuracy: ±1°C across 20-150°C range
-// Bias resistor: Set by DEFAULT_BIAS_RESISTOR in config.h
+// Bias: SENSOR_BIAS_LOW_Z (100Ω)
 static const PROGMEM ThermistorSteinhartCalibration vdo150_steinhart_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .steinhart_a = 1.591623373219e-03,
     .steinhart_b = 2.659356969556e-04,
     .steinhart_c = -1.610552525653e-07
@@ -90,9 +90,9 @@ static const PROGMEM ThermistorSteinhartCalibration vdo150_steinhart_cal = {
 // Source: VDO datasheet curve-fit
 // Polynomial: R = -0.3682*P² + 36.465*P + 10.648
 // Valid range: 0-5 bar
-// Bias resistor: Set by DEFAULT_BIAS_RESISTOR in config.h
+// Bias: SENSOR_BIAS_LOW_Z (100Ω)
 static const PROGMEM PolynomialCalibration vdo5bar_polynomial_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .poly_a = -0.3682,
     .poly_b = 36.465,
     .poly_c = 10.648
@@ -102,9 +102,9 @@ static const PROGMEM PolynomialCalibration vdo5bar_polynomial_cal = {
 // Source: VDO datasheet curve-fit
 // Polynomial: R = -3.1515*P² + 93.686*P + 9.6307
 // Valid range: 0-2 bar
-// Bias resistor: Set by DEFAULT_BIAS_RESISTOR in config.h
+// Bias: SENSOR_BIAS_LOW_Z (100Ω)
 static const PROGMEM PolynomialCalibration vdo2bar_polynomial_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .poly_a = -3.1515,
     .poly_b = 93.686,
     .poly_c = 9.6307
@@ -134,7 +134,7 @@ static const float vdo5bar_pressure[] PROGMEM = {
 
 // VDO 2-bar (360 043) using lookup table
 static const PROGMEM PressureTableCalibration vdo2bar_table_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = vdo2bar_resistance,
     .pressure_table = vdo2bar_pressure,
     .table_size = 6
@@ -142,7 +142,7 @@ static const PROGMEM PressureTableCalibration vdo2bar_table_cal = {
 
 // VDO 5-bar (360 003) using lookup table
 static const PROGMEM PressureTableCalibration vdo5bar_table_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = vdo5bar_resistance,
     .pressure_table = vdo5bar_pressure,
     .table_size = 5
@@ -160,7 +160,7 @@ static const float vdo200_temperature[] PROGMEM = {
 };
 
 static const PROGMEM ThermistorLookupCalibration vdo200_lookup_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = vdo200_resistance,
     .temperature_table = vdo200_temperature,
     .table_size = 8
@@ -178,7 +178,7 @@ static const float vdo10bar_pressure[] PROGMEM = {
 };
 
 static const PROGMEM PressureTableCalibration vdo10bar_table_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = vdo10bar_resistance,
     .pressure_table = vdo10bar_pressure,
     .table_size = 11
@@ -189,7 +189,7 @@ static const PROGMEM PressureTableCalibration vdo10bar_table_cal = {
 // Polynomial: R = -0.412587*P² + 21.489510*P + 10.174825
 // Accuracy: ±0.50Ω across 0-10 bar
 static const PROGMEM PolynomialCalibration vdo10bar_polynomial_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .poly_a = -0.412587,
     .poly_b = 21.489510,
     .poly_c = 10.174825
@@ -207,7 +207,7 @@ static const float vdo25bar_pressure[] PROGMEM = {
 };
 
 static const PROGMEM PressureTableCalibration vdo25bar_table_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = vdo25bar_resistance,
     .pressure_table = vdo25bar_pressure,
     .table_size = 11
@@ -226,7 +226,7 @@ static const float vdo80psi_pressure[] PROGMEM = {
 };
 
 static const PROGMEM PressureTableCalibration vdo80psi_table_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = vdo80psi_resistance,
     .pressure_table = vdo80psi_pressure,
     .table_size = 9
@@ -244,7 +244,7 @@ static const float vdo_fuel180_level[] PROGMEM = {
 };
 
 static const PROGMEM LevelTableCalibration vdo_fuel180_table_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = vdo_fuel180_resistance,
     .level_table = vdo_fuel180_level,
     .table_size = 9,
@@ -261,7 +261,7 @@ static const float vdo_fuel240_level[] PROGMEM = {
 };
 
 static const PROGMEM LevelTableCalibration vdo_fuel240_table_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = vdo_fuel240_resistance,
     .level_table = vdo_fuel240_level,
     .table_size = 9,
@@ -278,7 +278,7 @@ static const float vdo_fuel75_level[] PROGMEM = {
 };
 
 static const PROGMEM LevelTableCalibration vdo_fuel75_table_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = vdo_fuel75_resistance,
     .level_table = vdo_fuel75_level,
     .table_size = 9,
@@ -294,7 +294,7 @@ static const float vdo_fuel90_level[] PROGMEM = {
 };
 
 static const PROGMEM LevelTableCalibration vdo_fuel90_table_cal = {
-    .bias_resistor = DEFAULT_BIAS_RESISTOR,
+    .bias_resistor = SENSOR_BIAS_LOW_Z,
     .resistance_table = vdo_fuel90_resistance,
     .level_table = vdo_fuel90_level,
     .table_size = 9,

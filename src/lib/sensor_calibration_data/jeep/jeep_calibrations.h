@@ -19,9 +19,9 @@
 #include "../../sensor_types.h"
 #include "../../../config.h"
 
-// Jeep sensors deviate from DEFAULT_BIAS_RESISTOR (1kΩ). SENSOR_BIAS_LOW_Z and SENSOR_BIAS_HIGH_Z
-// are defined globally in sensor_calibration_data.h — they map to the fixed hardware
-// positions on the preOBD PCB (100Ω and 2.49kΩ respectively).
+// Jeep sensors use SENSOR_BIAS_LOW_Z (100Ω) or SENSOR_BIAS_HIGH_Z (2.49kΩ) depending on the
+// sender family. Both are defined in sensor_calibration_data.h and map to fixed hardware
+// positions on the preOBD PCB.
 
 // ===== JEEP 4.0L COOLANT TEMP GAUGE SENDER =====
 // Mopar 56027012 family: gauge sender for 1984-1996 XJ Cherokee 4.0L

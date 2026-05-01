@@ -38,8 +38,6 @@
 // CALIBRATION CONSTANTS
 // ============================================================================
 
-#define DEFAULT_BIAS_RESISTOR 1000.0    // Default pull-down/up resistor (Ω)
-                                         // for thermistor and polynomial sensors
 #define SEA_LEVEL_PRESSURE_HPA 1013.25  // Sea level pressure for altitude calculations
 
 // ============================================================================
