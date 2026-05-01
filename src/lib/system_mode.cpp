@@ -8,12 +8,12 @@
 #include "message_api.h"
 #include "log_tags.h"
 
-#ifdef ENABLE_LCD
+#if ENABLE_LCD
 extern void showConfigModeMessage();
 extern void clearLCD();
 #endif
 
-#ifdef ENABLE_LED
+#if ENABLE_LED
 #include "rgb_led.h"
 #endif
 
@@ -24,7 +24,9 @@ static SystemMode currentMode = MODE_RUN;
 #define BOOT_DETECT_DELAY_MS 10  // Stabilization delay for boot detection
 
 void initSystemMode() {
-    pinMode(MODE_BUTTON, INPUT_PULLUP);  // Internal pullup - button pulls to GND when pressed
+#if ENABLE_MODE_BUTTON
+    pinMode(MODE_BUTTON_PIN, INPUT_PULLUP);
+#endif
     currentMode = MODE_RUN;  // Default to RUN mode for safety
 }
 
@@ -50,13 +52,13 @@ void setMode(SystemMode newMode) {
             msg.control.println(F("  Type RUN to resume normal operation"));
             msg.control.println(F("========================================"));
 
-            #ifdef ENABLE_LCD
+            #if ENABLE_LCD
             // Clear LCD (message will be shown by loop if no sensors)
             extern void clearLCD();
             clearLCD();
             #endif
 
-            #ifdef ENABLE_LED
+            #if ENABLE_LED
             // Set LED to CONFIG mode color (pulse or solid)
 #if RGB_CONFIG_USE_PULSE
             rgbLedPulse(RGB_COLOR_CONFIG, RGB_PULSE_PERIOD_MS, PRIORITY_MODE);
@@ -75,12 +77,12 @@ void setMode(SystemMode newMode) {
             msg.control.println(F("  Type CONFIG to modify configuration"));
             msg.control.println(F("========================================"));
 
-            #ifdef ENABLE_LCD
+            #if ENABLE_LCD
             // Clear LCD when entering RUN mode (sensors will update it)
             clearLCD();
             #endif
 
-            #ifdef ENABLE_LED
+            #if ENABLE_LED
             // Release CONFIG mode LED control, allow alarm system to take over
             rgbLedRelease(PRIORITY_MODE);
             #endif
@@ -110,11 +112,13 @@ SystemMode detectBootMode(bool eepromValid) {
     }
 
     // Check if button held during boot (LOW = active)
-    delay(BOOT_DETECT_DELAY_MS);  // Allow pin to stabilize
-    if (digitalRead(MODE_BUTTON) == LOW) {
+#if ENABLE_MODE_BUTTON
+    delay(BOOT_DETECT_DELAY_MS);
+    if (digitalRead(MODE_BUTTON_PIN) == LOW) {
         msg.debug.info(TAG_SYSTEM, "CONFIG button detected - entering CONFIG mode");
         return MODE_CONFIG;
     }
+#endif
 
     // Default: RUN mode
     msg.debug.info(TAG_SYSTEM, "Starting in RUN mode (config locked)");

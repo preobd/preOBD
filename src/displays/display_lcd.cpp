@@ -11,7 +11,7 @@
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
 
-#ifdef ENABLE_LCD
+#if ENABLE_LCD
 
 #include <LiquidCrystal_I2C.h>
 

@@ -21,7 +21,7 @@
 #ifndef OUTPUT_ELM327_H
 #define OUTPUT_ELM327_H
 
-#ifdef ENABLE_ELM327
+#if ENABLE_ELM327
 
 #include <Arduino.h>
 #include "../inputs/input.h"

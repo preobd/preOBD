@@ -9,7 +9,7 @@
  * Supports dual-bus on Teensy (input on different bus than output).
  */
 
-#ifdef ENABLE_CAN
+#if ENABLE_CAN
 
 #include <Arduino.h>
 #include "input_can.h"

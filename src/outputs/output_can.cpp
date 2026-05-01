@@ -18,7 +18,7 @@
 #include "../lib/system_config.h"
 #include "../lib/obd_query.h"
 
-#ifdef ENABLE_CAN
+#if ENABLE_CAN
 
 #include "../hal/hal_can.h"
 

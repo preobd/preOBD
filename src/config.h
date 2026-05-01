@@ -1,79 +1,22 @@
 /*
- * config.h - preOBD User Configuration
+ * config.h - preOBD Application Constants
  *
- * IMPORTANT: Feature compilation (ENABLE_*) is controlled in platformio.ini
- * This file contains only runtime configuration values.
+ * This file contains ONLY application-level constants: timing, thresholds,
+ * calibration defaults, and protocol configuration.
  *
- * QUICK START CHECKLIST:
- * □ Set hardware pins for your wiring
- * □ Adjust timing intervals if needed
- * □ Configure default units (Celsius/Fahrenheit, PSI/Bar, etc.)
+ * Hardware pin assignments live in the board profile (src/profiles/profile_*.h),
+ * which is included first via -include in platformio.ini. The profile is the
+ * single source of truth for what hardware is wired and where.
  */
 
 #ifndef CONFIG_H
 #define CONFIG_H
 
 // ============================================================================
-// HARDWARE PIN ASSIGNMENTS
-// ============================================================================
-// Customize these for your specific wiring
-
-// ----- System Control Pins -----
-#define MODE_BUTTON 5   // Multi-function button:
-                        //   Hold during boot → CONFIG mode
-                        //   Press in RUN mode → Silence alarm
-                        //   Hold in RUN mode → Toggle display
-
-#define BUZZER 3        // Alarm buzzer output pin
-
-// ----- LED Status Indicator -----
-// Only active when ENABLE_LED is defined in platformio.ini
-#ifdef ENABLE_LED
-    #define RGB_PIN_R 6       // Red channel (PWM capable)
-    #define RGB_PIN_G 7       // Green channel (PWM capable)
-    #define RGB_PIN_B 8       // Blue channel (PWM capable)
-
-    #define RGB_COMMON_ANODE false  // false = common cathode (recommended for 3.3V)
-                                     // true = common anode (inverts PWM values)
-#endif
-
-// ----- CAN Bus Pins -----
-// External SPI CAN Controller Pins
-// Only defined for platforms without native CAN peripherals OR in hybrid mode
-// Native CAN platforms: Teensy 3.x/4.x (FlexCAN), ESP32 (TWAI), STM32 (bxCAN)
-// Supports multiple SPI CAN controllers: MCP2515, MCP25625, SJA1000, etc.
-//
-// IMPORTANT: platform_caps.h must be included HERE (before pin definitions) to
-// ensure PLATFORM_NEEDS_SPI_CAN is defined before being used in the conditional
-// below. This header provides compile-time detection of CAN hardware capabilities.
-#include "hal/platform_caps.h"
-
-#if PLATFORM_NEEDS_SPI_CAN || defined(ENABLE_CAN_HYBRID)
-    // SPI CAN Controller Bus 0 (primary)
-    #define CAN_CS_0 9       // Chip select for SPI CAN controller #0
-    #define CAN_INT_0 2      // Interrupt pin for SPI CAN controller #0
-
-    // SPI CAN Controller Bus 1 (secondary) - set to 0xFF to disable
-    #define CAN_CS_1 10      // Chip select for SPI CAN controller #1
-    #define CAN_INT_1 3      // Interrupt pin for SPI CAN controller #1
-
-    // Legacy compatibility aliases (for existing MCP2515 code)
-    #define CAN_CS CAN_CS_0
-    #define CAN_INT CAN_INT_0
-#endif
-
-// ----- SD Card Pins -----
-// Can be overridden in platformio.ini with -D SD_CS_PIN=x
-// Teensy 4.1 uses SD_CS_PIN=254 for built-in SD card (set in platformio.ini)
-#ifndef SD_CS_PIN
-    #define SD_CS_PIN 4     // Default SD card chip select for external modules
-#endif
-
-// ============================================================================
 // DEFAULT UNITS
 // ============================================================================
-// Set your preferred display units
-// Individual sensors can override these defaults
+// Set your preferred display units.
+// Individual sensors can override these defaults.
 
 #define DEFAULT_TEMPERATURE_UNITS  "CELSIUS"     // or "FAHRENHEIT"
 #define DEFAULT_PRESSURE_UNITS     "BAR"         // or "PSI", "KPA"
@@ -88,7 +31,7 @@
 // ALARM CONFIGURATION
 // ============================================================================
 
-#define SILENCE_DURATION 30000       // ms (how long MODE_BUTTON mutes alarm)
+#define SILENCE_DURATION 30000       // ms (how long MODE_BUTTON_PIN mutes alarm)
 #define WARNING_THRESHOLD_PERCENT 90 // Warning triggers at 90% of alarm threshold
 
 // ============================================================================
@@ -102,8 +45,8 @@
 // ============================================================================
 // TIMING / PERFORMANCE TUNING
 // ============================================================================
-// Controls update frequency for different system components
-// Lower values = more frequent updates = higher CPU usage
+// Controls update frequency for different system components.
+// Lower values = more frequent updates = higher CPU usage.
 
 #define SENSOR_READ_INTERVAL_MS 50       // Fast sensors (20Hz) - responsive alarms
 #define ALARM_CHECK_INTERVAL_MS 50       // Alarm checks (20Hz) - safety critical
@@ -116,26 +59,23 @@
 // ============================================================================
 // TEST MODE CONFIGURATION
 // ============================================================================
-// Test mode allows testing outputs without physical sensors
-// WARNING: Adds ~4KB flash
+// Test mode allows testing outputs without physical sensors.
+// WARNING: Adds ~4KB flash.
+// TEST_MODE_PIN (the trigger pin) is defined in the board profile.
 
-#ifdef ENABLE_TEST_MODE
-    #define TEST_MODE_TRIGGER_PIN 8      // Hold LOW during boot to activate
-    #define DEFAULT_TEST_SCENARIO 0      // 0=Normal, 1=Alarms, 2=Faults, 3=Startup, 4=Driving
+#if ENABLE_TEST_MODE
+    #define DEFAULT_TEST_SCENARIO 0  // 0=Normal, 1=Alarms, 2=Faults, 3=Startup, 4=Driving
 #endif
 
 // ============================================================================
 // OBD-II CONFIGURATION
 // ============================================================================
-// OBD-II request/response support for ELM327 Bluetooth adapters and apps like Torque
-// Works in hybrid mode: simultaneous broadcast (RealDash) and request/response (scanners)
+// OBD-II request/response support for ELM327 adapters and apps like Torque.
+// Works in hybrid mode: simultaneous broadcast (RealDash) and request/response.
 
-#ifdef ENABLE_CAN
-    // Request/response mode is always enabled when CAN is enabled
-    // No additional configuration needed - auto-responds to 0x7DF and 0x7E0 requests
-
-    // Optional: Minimum interval between OBD-II requests (ms) to prevent bus flooding
-    // Most scanners query sequentially at ~1-10 Hz, so this is rarely needed
+#if ENABLE_CAN
+    // Optional: Minimum interval between OBD-II requests (ms) to prevent bus flooding.
+    // Most scanners query sequentially at ~1-10 Hz, so this is rarely needed.
     // #define OBD2_MIN_REQUEST_INTERVAL_MS 10  // Uncomment to enable rate limiting
 #endif
 

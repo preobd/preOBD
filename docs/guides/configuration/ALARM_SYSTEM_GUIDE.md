@@ -200,9 +200,9 @@ When alarm becomes ACTIVE:
 - SD log records alarm state
 
 **Alarm Silencing:**
-- Press MODE_BUTTON in RUN mode → Silences alarm for 30 seconds
+- Press mode button in RUN mode → Silences alarm for 30 seconds (requires `ENABLE_MODE_BUTTON` and `MODE_BUTTON_PIN` defined in board profile)
 - Alarm automatically reactivates if violation persists after silence period
-- Silence duration configurable in `config.h`
+- Silence duration configurable via `SILENCE_DURATION` in `config.h`
 
 ---
 
@@ -284,14 +284,25 @@ Time 0.1s:  Fault timer RESETS to 0 → NO ALARM
 
 ### Compile-Time Configuration
 
-Set alarm thresholds in `config.h`:
+Enable alarms and set the buzzer pin in your board profile (`src/profiles/profile_*.h`):
 
 ```cpp
-// Alarm enable (applies to all inputs)
-#define ENABLE_ALARMS
+// Enable alarm feature (software alarms always active when defined)
+#define ENABLE_ALARMS   1
 
-// Alarm silence duration (MODE_BUTTON press in RUN mode)
-#define ALARM_SILENCE_DURATION 30000  // 30 seconds
+// Buzzer pin — omit if no buzzer is wired on this board
+#define ALARMS_PIN      3
+
+// Mode button for alarm silence — omit if no button is wired
+#define ENABLE_MODE_BUTTON  1
+#define MODE_BUTTON_PIN     5
+```
+
+Set timing constants in `config.h`:
+
+```cpp
+// Alarm silence duration (mode button press in RUN mode)
+#define SILENCE_DURATION 30000  // 30 seconds
 
 // Per-input alarm thresholds (in STANDARD UNITS)
 // Temperature: Celsius, Pressure: bar, Voltage: volts

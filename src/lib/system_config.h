@@ -14,7 +14,7 @@
 
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
-#define SYSTEM_CONFIG_VERSION 10        // Increment when struct changes (v10: layout shift — SystemConfig now anchored at end of EEPROM)
+#define SYSTEM_CONFIG_VERSION 11        // Increment when struct changes (v11: remove system pin fields — pins are compile-time, not runtime state)
 #define SYSTEM_CONFIG_SIZE sizeof(SystemConfig)
 
 // Total EEPROM bytes available on this platform.
@@ -48,10 +48,10 @@ enum DisplayType {
     DISPLAY_OLED = 2
 };
 
-#ifdef ENABLE_RELAY_OUTPUT
+#if ENABLE_RELAY_OUTPUT
 #include "../outputs/output_relay.h"
 #endif
-#ifdef ENABLE_ELM327
+#if ENABLE_ELM327
 #include "../outputs/output_elm327.h"
 #endif
 
@@ -81,15 +81,6 @@ struct SystemConfig {
     uint16_t lcdUpdateInterval;
     uint16_t reserved1;
 
-    // Hardware Pins (8 bytes)
-    uint8_t modeButtonPin;
-    uint8_t buzzerPin;
-    uint8_t canCSPin;
-    uint8_t canIntPin;
-    uint8_t sdCSPin;
-    uint8_t testModePin;
-    uint16_t reserved2;
-
     // Physical Constants (4 bytes)
     float seaLevelPressure;      // hPa for altitude
 
@@ -107,7 +98,7 @@ struct SystemConfig {
         uint8_t reserved_router[6];  // Future expansion
     } router;
 
-#ifdef ENABLE_RELAY_OUTPUT
+#if ENABLE_RELAY_OUTPUT
     // Relay Configuration (32 bytes) - NEW in v5
     RelayConfig relays[MAX_RELAYS];  // 2 relays × 16 bytes = 32 bytes
 #endif
@@ -140,7 +131,8 @@ extern SystemConfig systemConfig;
 
 // Initialization and persistence
 void initSystemConfig();         // Load from EEPROM or set defaults
-bool saveSystemConfig();         // Save to EEPROM
+void flushSystemConfigBootDiagnostics();  // Emit buffered boot messages (call after router.begin())
+bool saveSystemConfig(bool verbose = true);  // Save to EEPROM (verbose=false for background saves)
 bool loadSystemConfig();         // Load from EEPROM
 void resetSystemConfig();        // Reset to defaults
 uint8_t calculateChecksum(SystemConfig* cfg);

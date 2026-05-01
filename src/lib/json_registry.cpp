@@ -297,13 +297,13 @@ static void writeFirmwareJson(Print& out) {
     caps.add("json_import");
 #endif
     caps.add("json_export");
-#ifdef ENABLE_CAN
+#if ENABLE_CAN
     caps.add("can");
 #endif
-#ifdef ENABLE_SD_LOGGING
+#if ENABLE_SD_LOGGING
     caps.add("sd");
 #endif
-#ifdef ENABLE_LCD
+#if ENABLE_LCD
     caps.add("lcd");
 #endif
     WatchdogKickingPrint wdOut(out);

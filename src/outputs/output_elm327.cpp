@@ -6,7 +6,7 @@
 
 #include "../config.h"
 
-#ifdef ENABLE_ELM327
+#if ENABLE_ELM327
 
 #include "output_elm327.h"
 #include "../lib/obd_query.h"

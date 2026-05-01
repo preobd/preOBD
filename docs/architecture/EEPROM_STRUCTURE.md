@@ -115,8 +115,11 @@ A version mismatch on either block is non-fatal: the affected block resets to de
 | **v6** | Added log filter config |
 | **…**  | Bus config, serial port config |
 | **v10** | Layout shift — `SystemConfig` now anchored at the end of EEPROM (per-platform address) |
+| **v11** | Removed system pin fields (`modeButtonPin`, `buzzerPin`, `canCSPin`, `canIntPin`, `sdCSPin`, `testModePin`) — pins are compile-time constants in the board profile, not runtime state |
 
-> **Note:** v9→v10 is a pure address change, not a struct change. T4.1 users who upgrade past v10 will see SystemConfig reset to defaults on first boot (output enables, transport routing, etc.) and need to re-`SAVE`. Input configs are unaffected.
+> **Note:** v9→v10 is a pure address change, not a struct change. T4.1 users who upgrade past v10 will see SystemConfig reset to defaults on first boot and need to re-`SAVE`. Input configs are unaffected.
+>
+> **v10→v11:** Struct change (pin fields removed). SystemConfig resets to defaults on first boot. Re-`SAVE` to persist transport routing and output settings. Input configs are unaffected.
 
 ### Detail: Version 1 (v0.3.x - Deprecated)
 
@@ -262,8 +265,10 @@ struct SystemConfig {
     uint8_t outputEnabled[NUM_OUTPUTS];
     uint16_t outputInterval[NUM_OUTPUTS];
 
-    // Display, units, intervals, hardware pins, sea-level pressure
+    // Display, units, intervals, sea-level pressure
     // (see src/lib/system_config.h for the full layout)
+    // Note: hardware pin assignments are NOT stored here — they are compile-time
+    // constants defined in the board profile (src/profiles/profile_*.h)
 
     // Transport router (v4+) — control/data/debug primary+secondary, BT
     struct { /* ... */ } router;
@@ -285,10 +290,10 @@ The struct above is a sketch — `SystemConfig` has grown across versions and ma
 **Location:** `EEPROM_TOTAL_BYTES − sizeof(SystemConfig)` (per platform). On Teensy 4.1 (4284-byte EEPROM) this is roughly `0x1080`; on Teensy 4.0 (1080-byte EEPROM) it's roughly `0x03B0`. The exact address is computed at compile time from `E2END`.
 
 **Default Values:**
-Set from `config.h` compile-time defines:
-- `ENABLE_CAN`, `ENABLE_SERIAL_OUTPUT`, etc.
-- `DEFAULT_TEMPERATURE_UNITS`, `DEFAULT_PRESSURE_UNITS`
-- Pin assignments from `config.h`
+Set from board profile and `config.h` at first boot:
+- Feature flags (`ENABLE_CAN`, etc.) determine which output slots default ON/OFF
+- `DEFAULT_TEMPERATURE_UNITS`, `DEFAULT_PRESSURE_UNITS` etc. from `config.h`
+- Hardware pin assignments are NOT stored — they are always read directly from the board profile at compile time
 
 ---
 

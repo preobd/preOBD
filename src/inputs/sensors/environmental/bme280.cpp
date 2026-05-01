@@ -17,7 +17,7 @@
 #include "../../../lib/log_tags.h"
 #include <Wire.h>
 
-#ifdef ENABLE_BME280
+#if ENABLE_BME280
 #include <Adafruit_BME280.h>
 
 // Shared BME280 object and state (lazy initialization)

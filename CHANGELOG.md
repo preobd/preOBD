@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Disconnect detection for linear sensors: out-of-range voltages return NAN, optional pin pull-up for low-Z signal-conditioned sensors, and per-input `divider_ratio` (set via `SET <pin> DIVIDER <ratio>`) for running 5V sensors on 3.3V ADCs through a voltage divider (#155, #157)
 
 ### Changed
+- Board profiles (`src/profiles/`) now own all feature flags and hardware pin assignments; `config.h` is application constants only; system pin fields removed from SystemConfig/EEPROM; JSON config decoupled from SD logging via new `SUPPORTS_SD` hardware capability flag (#163, #165, #166)
 - Watchdog kick batched across `WatchdogKickingPrint` writes and kick interval raised; watchdog now fed during JSON serialization to survive slow BLE UART bridges
 - Documentation accuracy pass: fixed broken intra-doc links, refreshed README and docs index to cover BLE, ESP32-S3, and recently-added guides
 

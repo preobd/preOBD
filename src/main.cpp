@@ -8,6 +8,11 @@
 #include <Wire.h>
 #include "config.h"
 #include "version.h"
+
+// Board profile pin validation
+#if ENABLE_TEST_MODE && !defined(TEST_MODE_PIN)
+#error "TEST_MODE_PIN must be defined in the board profile when ENABLE_TEST_MODE is set"
+#endif
 #include "lib/platform.h"
 #include "lib/watchdog.h"
 
@@ -22,14 +27,16 @@
 #include "inputs/input_manager.h"
 #include "inputs/serial_config.h"
 #include "lib/system_mode.h"        // System mode (CONFIG/RUN)
-#include "lib/button_handler.h"     // Multi-function button handler
+#if ENABLE_MODE_BUTTON
+#include "lib/button_handler.h"
+#endif
 #include "lib/display_manager.h"        // Display runtime state management
-#ifdef ENABLE_LED
+#if ENABLE_LED
     #include "lib/rgb_led.h"
 #endif
 #include "outputs/output_base.h"
 #include "lib/obd_query.h"
-#ifdef ENABLE_CAN
+#if ENABLE_CAN
     #include "inputs/input_can.h"
     #include "inputs/sensors/can/can_scan.h"
 #endif
@@ -100,17 +107,17 @@ extern void updateLCD(Input**, int);
 #include "inputs/alarm_logic.h"
 
 // Test mode (if enabled)
-#ifdef ENABLE_TEST_MODE
+#if ENABLE_TEST_MODE
 #include "test/test_mode.h"
 #endif
 
 // ===== TIME-SLICING STATE =====
 // Tracks last execution time for each time-sliced operation
 static uint32_t lastInputRead[MAX_INPUTS];  // Per-sensor read timing
-#ifdef ENABLE_ALARMS
+#if ENABLE_ALARMS
 static uint32_t lastAlarmCheck = 0;
 #endif
-#ifdef ENABLE_LCD
+#if ENABLE_LCD
 static uint32_t lastLCDUpdate = 0;
 #endif
 
@@ -119,7 +126,7 @@ static uint32_t lastLCDUpdate = 0;
 
 // Update LCD display in CONFIG mode
 static void updateConfigModeDisplay(uint32_t now) {
-    #ifdef ENABLE_LCD
+    #if ENABLE_LCD
     if (isDisplayActive() && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
@@ -154,7 +161,7 @@ static void updateSensors(uint32_t now) {
 
 // Check alarms for all enabled inputs
 static void updateAlarms(uint32_t now) {
-    #ifdef ENABLE_ALARMS
+    #if ENABLE_ALARMS
     if (now - lastAlarmCheck >= ALARM_CHECK_INTERVAL_MS) {
         updateAllInputAlarms(now);  // Update alarm state for all inputs
         lastAlarmCheck = now;
@@ -165,7 +172,7 @@ static void updateAlarms(uint32_t now) {
 
 // Update LCD display in RUN mode
 static void updateDisplay(uint32_t now) {
-    #ifdef ENABLE_LCD
+    #if ENABLE_LCD
     if (isDisplayActive() && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
@@ -182,7 +189,7 @@ static void updateDisplay(uint32_t now) {
 
 // Update test mode (wrapper for conditional compilation)
 static void updateTestMode_Wrapper() {
-    #ifdef ENABLE_TEST_MODE
+    #if ENABLE_TEST_MODE
     if (isTestModeActive()) {
         updateTestMode();
     }
@@ -250,6 +257,7 @@ void setup() {
     }
 #endif
     router.begin();  // Load config from EEPROM
+    flushSystemConfigBootDiagnostics();
     msg.control.println();
     msg.control.println(F("                 ____  ___  ___  "));
     msg.control.println(F("   ___  _______ / __ \\/ _ )/ _ \\ "));
@@ -271,7 +279,7 @@ void setup() {
     initConfiguredBuses();
 
     // Initialize CAN input subsystem (if enabled)
-    #ifdef ENABLE_CAN
+    #if ENABLE_CAN
     if (initCANInput()) {
         msg.debug.info(TAG_CAN, "CAN input subsystem initialized");
     }
@@ -284,16 +292,18 @@ void setup() {
     bool eepromConfigLoaded = initInputManager();
 
     // Initialize display
-    #ifdef ENABLE_LCD
+    #if ENABLE_LCD
     initLCD();
     #endif
 
+#if ENABLE_MODE_BUTTON
     initButtonHandler();
+#endif
 
     initDisplayManager();
 
     // Initialize RGB LED indicator
-    #ifdef ENABLE_LED
+    #if ENABLE_LED
     initRGBLed();
     #endif
 
@@ -316,15 +326,15 @@ void setup() {
     msg.debug.info(TAG_SYSTEM, "Initialization complete!");
 
     // ===== TEST MODE ACTIVATION =====
-#ifdef ENABLE_TEST_MODE
+#if ENABLE_TEST_MODE
     // Initialize test mode system
     initTestMode();
 
     // Check if test mode trigger pin is pulled LOW
-    pinMode(TEST_MODE_TRIGGER_PIN, INPUT_PULLUP);
+    pinMode(TEST_MODE_PIN, INPUT_PULLUP);
     delay(10);  // Allow pin to stabilize
 
-    if (digitalRead(TEST_MODE_TRIGGER_PIN) == LOW) {
+    if (digitalRead(TEST_MODE_PIN) == LOW) {
         msg.debug.info(TAG_SYSTEM, "TEST MODE TRIGGER DETECTED!");
 
         // List available scenarios
@@ -338,7 +348,7 @@ void setup() {
         msg.debug.info(TAG_SYSTEM, "Use serial commands to start a scenario.");
         #endif
     } else {
-        msg.debug.info(TAG_SYSTEM, "Test mode available (pin %d is HIGH, normal operation)", TEST_MODE_TRIGGER_PIN);
+        msg.debug.info(TAG_SYSTEM, "Test mode available (pin %d is HIGH, normal operation)", TEST_MODE_PIN);
     }
 #endif
 
@@ -369,18 +379,16 @@ void loop() {
     router.update();  // Now handles command input from ALL transports
 
     // Process button events (short press = silence alarm, long press = toggle display)
+#if ENABLE_MODE_BUTTON
     ButtonPress buttonEvent = updateButtonHandler();
-    if (buttonEvent == BUTTON_SHORT_PRESS) {
-        // Short press handled by alarm system (already reads the button)
-        // No action needed here
-    } else if (buttonEvent == BUTTON_LONG_PRESS) {
-        // Long press toggles display
+    if (buttonEvent == BUTTON_LONG_PRESS) {
         toggleDisplayRuntime();
     }
+#endif
 
     // If in CONFIG mode, skip sensor reading and outputs
     if (isInConfigMode()) {
-        #ifdef ENABLE_CAN
+        #if ENABLE_CAN
         // Update CAN input during scan to populate cache
         if (getCANScanState() == SCAN_LISTENING) {
             updateCANInput();  // Populate frame cache during scan
@@ -392,7 +400,7 @@ void loop() {
     }
 
     // Read sensors, check alarms, send outputs, update display
-    #ifdef ENABLE_CAN
+    #if ENABLE_CAN
     updateCANInput();  // Poll CAN bus and populate frame cache
     #endif
     updateSensors(now);
@@ -402,7 +410,7 @@ void loop() {
     updateOutputs();     // Housekeeping: drain buffers, handle RX
 
     // Update RGB LED effects (non-blocking)
-    #ifdef ENABLE_LED
+    #if ENABLE_LED
     updateRGBLed();
     #endif
 

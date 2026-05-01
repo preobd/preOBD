@@ -24,11 +24,10 @@
 #include "pin_registry.h"
 #include "watchdog.h"
 
-// Use Arduino SD library for consistency across platforms
+#if SUPPORTS_SD
 #include <SD.h>
-#include "sd_manager.h"
-
 // SD object is provided globally by SD.h
+#endif
 
 // External references
 extern Input inputs[MAX_INPUTS];
@@ -267,8 +266,7 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     timing["sensorRead"] = systemConfig.sensorReadInterval;
     timing["alarmCheck"] = systemConfig.alarmCheckInterval;
 
-    // Export all registered pins from pin registry
-    // This includes system pins (button, buzzer, chip selects), bus pins, and any other registered pins
+    // Export all registered pins from pin registry (read-only diagnostic — pins are compile-time constants from the board profile)
     JsonArray pins = systemObj["pins"].to<JsonArray>();
     exportPinRegistryToJSON(pins);
 
@@ -615,32 +613,6 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
         }
     }
 
-    // Hardware pins - extract from pin registry array
-    if (systemObj["pins"].isNull() == false && systemObj["pins"].is<JsonArray>()) {
-        JsonArray pins = systemObj["pins"];
-        for (JsonVariant v : pins) {
-            JsonObject pin = v.as<JsonObject>();
-            const char* desc = pin["description"];
-            uint8_t pinNum = pin["pin"];
-
-            if (desc != nullptr) {
-                if (strcmp(desc, "Mode Button") == 0) {
-                    systemConfig.modeButtonPin = pinNum;
-                } else if (strcmp(desc, "Buzzer") == 0) {
-                    systemConfig.buzzerPin = pinNum;
-                } else if (strcmp(desc, "CAN CS") == 0) {
-                    systemConfig.canCSPin = pinNum;
-                } else if (strcmp(desc, "CAN INT") == 0) {
-                    systemConfig.canIntPin = pinNum;
-                } else if (strcmp(desc, "SD CS") == 0) {
-                    systemConfig.sdCSPin = pinNum;
-                } else if (strcmp(desc, "Test Mode Trigger") == 0) {
-                    systemConfig.testModePin = pinNum;
-                }
-            }
-        }
-    }
-
     // Physical constants
     if (systemObj["constants"].isNull() == false) {
         JsonObject constants = systemObj["constants"];
@@ -748,6 +720,8 @@ bool loadConfigFromJSON(const char* jsonString) {
 
     return true;
 }
+
+#if SUPPORTS_SD
 
 // Save configuration to SD card
 bool saveConfigToSD(const char* filename) {
@@ -993,5 +967,7 @@ bool loadConfigFromFile(const char* destination, const char* filename) {
         return false;
     }
 }
+
+#endif // SUPPORTS_SD
 
 #endif // SUPPORTS_JSON_CONFIG

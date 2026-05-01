@@ -7,13 +7,14 @@
 #include "../lib/sensor_library.h"
 #include "../lib/units_registry.h"
 #include "../lib/message_api.h"
+#include "../lib/log_tags.h"
 
-#ifdef ENABLE_SERIAL_OUTPUT
+#if ENABLE_SERIAL_OUTPUT
 
 #include "../lib/system_mode.h"
 
 void initSerialOutput() {
-    msg.data.println("✓ Serial output initialized");
+    msg.debug.info(TAG_SERIAL, "Serial output initialized");
 }
 
 void sendSerialOutput(Input *ptr) {

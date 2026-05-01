@@ -10,7 +10,7 @@
 #include <Arduino.h>
 #include "../config.h"
 
-#if defined(ENABLE_SD_LOGGING) || SUPPORTS_JSON_CONFIG
+#if SUPPORTS_SD
 
 // Initialize SD card (called once during setup)
 void initSD();
@@ -20,7 +20,7 @@ bool isSDInitialized();
 
 #else
 
-// Stub functions when SD features are disabled
+// Stub functions when SD is not available on this board
 inline void initSD() {}
 inline bool isSDInitialized() { return false; }
 

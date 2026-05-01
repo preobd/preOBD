@@ -35,13 +35,13 @@ extern void initAlarmOutput();
 extern void sendAlarmOutput(Input*);
 extern void updateAlarmOutput();
 
-#ifdef ENABLE_RELAY_OUTPUT
+#if ENABLE_RELAY_OUTPUT
 extern void initRelayOutput();
 extern void sendRelayOutput(Input*);
 extern void updateRelayOutput();
 #endif
 
-#ifdef ENABLE_ELM327
+#if ENABLE_ELM327
 extern void initELM327();
 extern void sendELM327(Input*);
 extern void updateELM327();
@@ -52,14 +52,18 @@ OutputModule outputModules[] = {
     {"CAN",     false, initCAN,           sendCAN,           updateCAN,           100},
     {"RealDash",false, initRealdash,      sendRealdash,      updateRealdash,      100},
     {"Serial",  false, initSerialOutput,  sendSerialOutput,  updateSerialOutput,  1000},
+#if ENABLE_SD_LOGGING
     {"SD_Log",  false, initSDLog,         sendSDLog,         updateSDLog,         5000},
+#else
+    {nullptr,   false, nullptr,           nullptr,           nullptr,             0},
+#endif
     {"Alarm",   true,  initAlarmOutput,   sendAlarmOutput,   updateAlarmOutput,   100},
-#ifdef ENABLE_RELAY_OUTPUT
+#if ENABLE_RELAY_OUTPUT
     {"Relay",   true,  initRelayOutput,   sendRelayOutput,   updateRelayOutput,   100},
 #else
     {nullptr,   false, nullptr,           nullptr,           nullptr,             0},
 #endif
-#ifdef ENABLE_ELM327
+#if ENABLE_ELM327
     // sendInterval = UINT16_MAX: ELM327 is pull-based, send() is a no-op.
     // Setting interval to max prevents sendToOutputs() from iterating all
     // inputs every loop just to call the no-op.

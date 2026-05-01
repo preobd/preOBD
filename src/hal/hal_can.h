@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include "../config.h"
 
-#ifdef ENABLE_CAN
+#if ENABLE_CAN
 
 // Platform detection and include appropriate implementation
 #if defined(ENABLE_CAN_HYBRID)

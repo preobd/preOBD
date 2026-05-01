@@ -29,16 +29,16 @@
 #include "../outputs/output_base.h"
 #include "../lib/obd_query.h"
 #include "../lib/display_manager.h"
-#ifdef ENABLE_RELAY_OUTPUT
+#if ENABLE_RELAY_OUTPUT
 #include "../outputs/output_relay.h"
 #endif
-#ifdef ENABLE_ELM327
+#if ENABLE_ELM327
 #include "../outputs/output_elm327.h"
 #endif
-#ifdef ENABLE_TEST_MODE
+#if ENABLE_TEST_MODE
 #include "../test/test_mode.h"
 #endif
-#ifdef ENABLE_CAN
+#if ENABLE_CAN
 #include "sensors/can/can_scan.h"
 #include "../lib/can_sensor_library/standard_pids.h"
 #endif
@@ -72,13 +72,13 @@ static int cmd_reboot(int argc, const char* const* argv);
 static int cmd_bus(int argc, const char* const* argv);
 static int cmd_log(int argc, const char* const* argv);
 static int cmd_at(int argc, const char* const* argv);
-#ifdef ENABLE_RELAY_OUTPUT
+#if ENABLE_RELAY_OUTPUT
 static int cmd_relay(int argc, const char* const* argv);
 #endif
-#ifdef ENABLE_TEST_MODE
+#if ENABLE_TEST_MODE
 static int cmd_test(int argc, const char* const* argv);
 #endif
-#ifdef ENABLE_CAN
+#if ENABLE_CAN
 static int cmd_scan(int argc, const char* const* argv);
 #endif
 #if SUPPORTS_JSON_IMPORT_STREAM
@@ -134,13 +134,13 @@ const Command COMMANDS[] = {
     {"LOG", cmd_log, "Configure log levels and tags", false},
     {"AT", cmd_at, "Send raw AT command to a serial port", false},
 
-#ifdef ENABLE_RELAY_OUTPUT
+#if ENABLE_RELAY_OUTPUT
     {"RELAY", cmd_relay, "Configure relay outputs", true},
 #endif
-#ifdef ENABLE_TEST_MODE
+#if ENABLE_TEST_MODE
     {"TEST", cmd_test, "Test mode control", false},
 #endif
-#ifdef ENABLE_CAN
+#if ENABLE_CAN
     {"SCAN", cmd_scan, "Scan CAN bus for PIDs", true},
 #endif
 };
@@ -158,7 +158,7 @@ bool isReadOnlyCommand(const char* cmdName) {
            streq(cmdName, "RUN") ||
            streq(cmdName, "SYSTEM") ||  // Allow SYSTEM STATUS and SYSTEM DUMP in RUN mode
            streq(cmdName, "LOG") ||     // Allow LOG STATUS, LOG TAGS in RUN mode (LEVEL/TAG require CONFIG)
-#ifdef ENABLE_TEST_MODE
+#if ENABLE_TEST_MODE
            streq(cmdName, "TEST") ||
 #endif
            false;
@@ -302,6 +302,8 @@ static int cmd_version(int argc, const char* const* argv) {
     msg.control.println(FW_GIT_HASH);
     msg.control.print(F("  EEPROM Version: "));
     msg.control.println(EEPROM_VERSION);
+    msg.control.print(F("  System Config Version: "));
+    msg.control.println(systemConfig.version);
     msg.control.print(F("  Active Inputs: "));
     extern uint8_t numActiveInputs;
     msg.control.print(numActiveInputs);
@@ -347,7 +349,7 @@ static int cmd_save(int argc, const char* const* argv) {
 
     // Case 3: SAVE [destination:]filename (file path - anything that's not "EEPROM")
     if (argc >= 2) {
-#if SUPPORTS_JSON_CONFIG
+#if SUPPORTS_JSON_CONFIG && SUPPORTS_SD
         // Parse file path
         FilePathComponents path = parseFilePath(argv[1]);
         if (!path.isValid) {
@@ -408,7 +410,7 @@ static int cmd_load(int argc, const char* const* argv) {
 
     // Case 3: LOAD [destination:]filename (file path - anything that's not "EEPROM")
     if (argc >= 2) {
-#if SUPPORTS_JSON_CONFIG
+#if SUPPORTS_JSON_CONFIG && SUPPORTS_SD
         // Parse file path
         FilePathComponents path = parseFilePath(argv[1]);
         if (!path.isValid) {
@@ -567,7 +569,7 @@ static int cmd_set(int argc, const char* const* argv) {
     // SET CAN <pid>  -  Import CAN sensor by PID
     // Example: SET CAN 0x0C  (imports Engine RPM from OBD-II)
     // This automatically assigns the next available CAN virtual pin (CAN:0, CAN:1, etc.)
-#ifdef ENABLE_CAN
+#if ENABLE_CAN
     if (streq(argv[1], "CAN") && argc >= 3) {
         // Parse PID (supports hex like 0x0C or decimal like 12)
         uint8_t pid;
@@ -1863,7 +1865,7 @@ static int cmd_transport(int argc, const char* const* argv) {
     bool isSecondary = (argc >= 4);
 
     // Conflict: refuse to assign a serial port that is owned by ELM327
-#ifdef ENABLE_ELM327
+#if ENABLE_ELM327
     if (transport >= TRANSPORT_SERIAL1 && transport <= TRANSPORT_SERIAL8) {
         uint8_t port_id = transport - TRANSPORT_SERIAL1 + 1;
         if (systemConfig.buses.elm327_serial_port == port_id) {
@@ -2154,7 +2156,7 @@ static int cmd_system(int argc, const char* const* argv) {
     return 1;
 }
 
-#ifdef ENABLE_RELAY_OUTPUT
+#if ENABLE_RELAY_OUTPUT
 static int cmd_relay(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: RELAY requires a subcommand"));
@@ -2265,7 +2267,7 @@ static int cmd_relay(int argc, const char* const* argv) {
 }
 #endif
 
-#ifdef ENABLE_TEST_MODE
+#if ENABLE_TEST_MODE
 static int cmd_test(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: TEST requires a subcommand"));
@@ -2885,7 +2887,7 @@ static int cmd_bus(int argc, const char* const* argv) {
             }
 
             // BUS SERIAL <port> ELM327 ENABLE|DISABLE
-#ifdef ENABLE_ELM327
+#if ENABLE_ELM327
             if (streq(argv[3], "ELM327")) {
                 if (argc < 5) {
                     msg.control.println(F("ERROR: ELM327 requires ENABLE or DISABLE"));
@@ -2971,7 +2973,7 @@ static int cmd_bus(int argc, const char* const* argv) {
             msg.control.print(F("ERROR: Unknown command '"));
             msg.control.print(argv[3]);
             msg.control.println(F("'"));
-#ifdef ENABLE_ELM327
+#if ENABLE_ELM327
             msg.control.println(F("  Valid: ENABLE, DISABLE, BAUDRATE, ELM327"));
 #else
             msg.control.println(F("  Valid: ENABLE, DISABLE, BAUDRATE"));
@@ -2983,7 +2985,7 @@ static int cmd_bus(int argc, const char* const* argv) {
         msg.control.print(F("ERROR: Unknown serial command '"));
         msg.control.print(argv[2]);
         msg.control.println(F("'"));
-#ifdef ENABLE_ELM327
+#if ENABLE_ELM327
         msg.control.println(F("  Usage: BUS SERIAL [1-8] [ENABLE|DISABLE|BAUDRATE <rate>|ELM327 <ENABLE|DISABLE>]"));
 #else
         msg.control.println(F("  Usage: BUS SERIAL [1-8] [ENABLE|DISABLE|BAUDRATE <rate>]"));
@@ -3232,7 +3234,7 @@ static int cmd_log(int argc, const char* const* argv) {
 // SCAN COMMAND - CAN bus scanning
 // ============================================================================
 
-#ifdef ENABLE_CAN
+#if ENABLE_CAN
 static int cmd_scan(int argc, const char* const* argv) {
     // Usage: SCAN CAN [duration_ms]
     //        SCAN CANCEL

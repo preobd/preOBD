@@ -20,7 +20,7 @@
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
 
-#ifdef ENABLE_LED
+#if ENABLE_LED
 #include "../lib/rgb_led.h"
 #endif
 
@@ -31,20 +31,19 @@ static uint32_t silenceStartTime = 0;    // When was silence button pressed?
 // ===== INITIALIZATION =====
 
 void initAlarmOutput() {
-    // Configure buzzer output pin
-    // Note: Pin is already registered in registerSystemPins() as PIN_BUZZER
-    pinMode(BUZZER, OUTPUT);
-    noTone(BUZZER);  // Ensure buzzer is off initially
+#if ENABLE_ALARMS && defined(ALARMS_PIN)
+    pinMode(ALARMS_PIN, OUTPUT);
+    noTone(ALARMS_PIN);
+#endif
 
-    // Configure silence button with internal pullup
-    // Button is active LOW (pulls pin to GND when pressed)
-    pinMode(MODE_BUTTON, INPUT_PULLUP);
+#if ENABLE_MODE_BUTTON
+    pinMode(MODE_BUTTON_PIN, INPUT_PULLUP);
+#endif
 
-#ifdef ENABLE_LED
-    // RGB LED is initialized separately in main.cpp
+#if ENABLE_LED
     msg.debug.info(TAG_ALARM, "Alarm output initialized (buzzer + LED indicator)");
 #else
-    msg.debug.info(TAG_ALARM, "Alarm output initialized (buzzer)");
+    msg.debug.info(TAG_ALARM, "Alarm output initialized");
 #endif
 }
 
@@ -73,7 +72,7 @@ AlarmSeverity getSystemSeverity() {
     return worstSeverity;
 }
 
-#ifdef ENABLE_LED
+#if ENABLE_LED
 // Update RGB LED based on system severity
 void updateLEDs(AlarmSeverity severity) {
     switch (severity) {
@@ -105,14 +104,14 @@ void updateLEDs(AlarmSeverity severity) {
 
 void updateAlarmOutput() {
     // ===== SILENCE BUTTON HANDLING =====
-    // Check silence button (active LOW with pullup)
-    // Only record first press (don't re-trigger on held button)
-    if (digitalRead(MODE_BUTTON) == LOW) {
-        if (!alarmSilenced) {  // Only update on first press
+#if ENABLE_MODE_BUTTON
+    if (digitalRead(MODE_BUTTON_PIN) == LOW) {
+        if (!alarmSilenced) {
             alarmSilenced = true;
             silenceStartTime = millis();
         }
     }
+#endif
 
     // Check if silence duration expired
     if (alarmSilenced && (millis() - silenceStartTime >= SILENCE_DURATION)) {
@@ -120,21 +119,23 @@ void updateAlarmOutput() {
     }
 
     // ===== ALARM STATE SCANNING =====
-    // Scan all inputs to determine worst-case severity
+#if ENABLE_LED || (ENABLE_ALARMS && defined(ALARMS_PIN))
     AlarmSeverity systemSeverity = getSystemSeverity();
+#endif
 
-#ifdef ENABLE_LED
+#if ENABLE_LED
     // ===== LED CONTROL =====
     updateLEDs(systemSeverity);
 #endif
 
     // ===== BUZZER CONTROL =====
-    // Sound alarm only on RED (SEVERITY_ALARM), not on YELLOW (SEVERITY_WARNING)
+#if ENABLE_ALARMS && defined(ALARMS_PIN)
     if (systemSeverity == SEVERITY_ALARM && !alarmSilenced) {
-        tone(BUZZER, 700);  // 700 Hz alarm tone
+        tone(ALARMS_PIN, 700);
     } else {
-        noTone(BUZZER);     // Turn off buzzer
+        noTone(ALARMS_PIN);
     }
+#endif
 }
 
 // ===== QUERY FUNCTIONS =====

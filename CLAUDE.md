@@ -20,11 +20,17 @@ Build environments: `teensy41`, `teensy40`, `teensy36`, `esp32s3dev`, `mega2560`
 
 ## Build Configuration
 
-Feature flags are defined in `platformio.ini` (not in source code):
-- `ENABLE_CAN`, `ENABLE_LCD`, `ENABLE_SD_LOGGING`, `ENABLE_SERIAL_OUTPUT`
-- `ENABLE_ALARMS`, `ENABLE_RELAY_OUTPUT`, `ENABLE_BME280`, `ENABLE_TEST_MODE`
+**Three configuration layers:**
 
-Hardware pins and timing are configured in `src/config.h`.
+- **`src/profiles/profile_*.h`** — Board definitions. Each profile owns all feature flags (`ENABLE_CAN 1`, `ENABLE_ALARMS 1`, etc.) AND all hardware pin assignments (`ALARMS_PIN`, `MODE_BUTTON_PIN`, `SD_PIN`, `RGB_PIN_R/G/B`, SPI CAN pins). Included first via `-include` in `platformio.ini`.
+- **`src/config.h`** — Application constants only: timing intervals, alarm thresholds, calibration defaults, default units. No hardware pins.
+- **`platformio.ini`** — Build environments: which profile to `-include`, platform flags, library deps. No feature flags or pin assignments.
+
+Pin-bearing features use a boolean flag + sibling pin macro:
+```cpp
+#define ENABLE_ALARMS  1      // feature enabled
+#define ALARMS_PIN     3      // buzzer on pin 3 (omit if not wired)
+```
 
 ## Architecture
 

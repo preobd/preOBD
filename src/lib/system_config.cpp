@@ -15,6 +15,45 @@
 // Global system config instance
 SystemConfig systemConfig;
 
+// Boot diagnostics buffer — loadSystemConfig() runs before the message router is
+// up, so msg.* calls would be silently dropped. Store the events here and flush
+// them via flushSystemConfigBootDiagnostics() once router.begin() has been called.
+static struct {
+    enum : uint8_t {
+        DIAG_NONE             = 0x00,
+        DIAG_LOADED_OK        = 0x01,
+        DIAG_USED_DEFAULTS    = 0x02,
+        DIAG_BAD_MAGIC        = 0x04,
+        DIAG_VERSION_MISMATCH = 0x08,
+        DIAG_CHECKSUM_FAILED  = 0x10,
+    };
+    uint8_t flags            = 0;
+    uint8_t loadedVersion    = 0;
+    uint8_t storedChecksum   = 0;
+    uint8_t calcChecksum     = 0;
+} bootDiag;
+
+void flushSystemConfigBootDiagnostics() {
+    if (bootDiag.flags & bootDiag.DIAG_BAD_MAGIC) {
+        msg.debug.warn(TAG_SYSTEM, "System config: bad magic, used defaults");
+    }
+    if (bootDiag.flags & bootDiag.DIAG_VERSION_MISMATCH) {
+        msg.debug.warn(TAG_SYSTEM, "System config: version mismatch (got %u, need %u), used defaults",
+                       bootDiag.loadedVersion, SYSTEM_CONFIG_VERSION);
+    }
+    if (bootDiag.flags & bootDiag.DIAG_CHECKSUM_FAILED) {
+        msg.debug.warn(TAG_SYSTEM, "System config: checksum failed (got 0x%02X, calc 0x%02X), used defaults",
+                       bootDiag.storedChecksum, bootDiag.calcChecksum);
+    }
+    if (bootDiag.flags & bootDiag.DIAG_LOADED_OK) {
+        msg.debug.info(TAG_SYSTEM, "System config loaded from EEPROM (v%u)", systemConfig.version);
+    }
+    if (bootDiag.flags & bootDiag.DIAG_USED_DEFAULTS) {
+        msg.debug.info(TAG_SYSTEM, "Using default system config");
+    }
+    bootDiag.flags = 0;
+}
+
 void printSystemStatus() {
     msg.control.println(F("=== System Configuration ==="));
 
@@ -60,14 +99,11 @@ uint8_t calculateChecksum(SystemConfig* cfg) {
  * Try loading from EEPROM, fallback to defaults
  */
 void initSystemConfig() {
-    // Try loading from EEPROM
     if (loadSystemConfig()) {
-        msg.debug.info(TAG_SYSTEM, "System config loaded from EEPROM");
+        bootDiag.flags |= bootDiag.DIAG_LOADED_OK;
         return;
     }
-
-    // Fallback: Use defaults from config.h
-    msg.debug.info(TAG_SYSTEM, "Using default system config");
+    bootDiag.flags |= bootDiag.DIAG_USED_DEFAULTS;
     resetSystemConfig();
 }
 
@@ -82,7 +118,7 @@ void resetSystemConfig() {
     // Data outputs default OFF to keep USB clean - user must explicitly enable
     // Safety outputs default ON when compiled in
 
-    #ifdef ENABLE_CAN
+    #if ENABLE_CAN
     systemConfig.outputEnabled[OUTPUT_CAN] = 0;  // OFF - data plane output
     systemConfig.outputInterval[OUTPUT_CAN] = CAN_OUTPUT_INTERVAL_MS;
     #else
@@ -90,7 +126,7 @@ void resetSystemConfig() {
     systemConfig.outputInterval[OUTPUT_CAN] = 100;
     #endif
 
-    #ifdef ENABLE_REALDASH
+    #if ENABLE_REALDASH
     systemConfig.outputEnabled[OUTPUT_REALDASH] = 0;  // OFF - data plane output
     systemConfig.outputInterval[OUTPUT_REALDASH] = REALDASH_INTERVAL_MS;
     #else
@@ -98,7 +134,7 @@ void resetSystemConfig() {
     systemConfig.outputInterval[OUTPUT_REALDASH] = 100;
     #endif
 
-    #ifdef ENABLE_SERIAL_OUTPUT
+    #if ENABLE_SERIAL_OUTPUT
     systemConfig.outputEnabled[OUTPUT_SERIAL] = 0;  // OFF - clogs USB serial
     systemConfig.outputInterval[OUTPUT_SERIAL] = SERIAL_CSV_INTERVAL_MS;
     #else
@@ -106,7 +142,7 @@ void resetSystemConfig() {
     systemConfig.outputInterval[OUTPUT_SERIAL] = 1000;
     #endif
 
-    #ifdef ENABLE_SD_LOGGING
+    #if ENABLE_SD_LOGGING
     systemConfig.outputEnabled[OUTPUT_SD] = 0;  // OFF - requires SD card hardware
     systemConfig.outputInterval[OUTPUT_SD] = SD_LOG_INTERVAL_MS;
     #else
@@ -114,7 +150,7 @@ void resetSystemConfig() {
     systemConfig.outputInterval[OUTPUT_SD] = 5000;
     #endif
 
-    #ifdef ENABLE_ALARMS
+    #if ENABLE_ALARMS
     systemConfig.outputEnabled[OUTPUT_ALARM] = 1;  // ON - safety critical
     systemConfig.outputInterval[OUTPUT_ALARM] = 100;  // 10Hz check rate
     #else
@@ -122,7 +158,7 @@ void resetSystemConfig() {
     systemConfig.outputInterval[OUTPUT_ALARM] = 100;
     #endif
 
-    #ifdef ENABLE_RELAY_OUTPUT
+    #if ENABLE_RELAY_OUTPUT
     systemConfig.outputEnabled[OUTPUT_RELAY] = 1;  // ON - user-configured relay control
     systemConfig.outputInterval[OUTPUT_RELAY] = 100;  // 10Hz check rate
     #endif
@@ -153,28 +189,6 @@ void resetSystemConfig() {
     systemConfig.lcdUpdateInterval = LCD_UPDATE_INTERVAL_MS;
     systemConfig.reserved1 = 0;
 
-    // Hardware pins
-    systemConfig.modeButtonPin = MODE_BUTTON;
-    systemConfig.buzzerPin = BUZZER;
-
-    #if PLATFORM_NEEDS_SPI_CAN || defined(ENABLE_CAN_HYBRID)
-    systemConfig.canCSPin = CAN_CS;
-    systemConfig.canIntPin = CAN_INT;
-    #else
-    systemConfig.canCSPin = 0xFF;  // Not used with native CAN (FlexCAN, TWAI, bxCAN)
-    systemConfig.canIntPin = 0xFF; // Not used with native CAN (FlexCAN, TWAI, bxCAN)
-    #endif
-
-    systemConfig.sdCSPin = SD_CS_PIN;
-
-    #ifdef TEST_MODE_TRIGGER_PIN
-    systemConfig.testModePin = TEST_MODE_TRIGGER_PIN;
-    #else
-    systemConfig.testModePin = 0xFF;  // Disabled
-    #endif
-
-    systemConfig.reserved2 = 0;
-
     // Physical constants
     systemConfig.seaLevelPressure = SEA_LEVEL_PRESSURE_HPA;
 
@@ -197,7 +211,7 @@ void resetSystemConfig() {
         systemConfig.router.reserved_router[i] = 0;
     }
 
-#ifdef ENABLE_RELAY_OUTPUT
+#if ENABLE_RELAY_OUTPUT
     // Relay defaults (NEW in v5)
     for (int i = 0; i < MAX_RELAYS; i++) {
         systemConfig.relays[i].outputPin = 0xFF;       // Unconfigured
@@ -253,22 +267,27 @@ void resetSystemConfig() {
  * Save system configuration to EEPROM
  * @return true if successful
  */
-bool saveSystemConfig() {
+bool saveSystemConfig(bool verbose) {
     // Update checksum before saving
     systemConfig.checksum = calculateChecksum(&systemConfig);
 
     // Write to EEPROM
     EEPROM.put(SYSTEM_CONFIG_ADDRESS, systemConfig);
 
-    msg.control.print(F("✓ System config saved (addr=0x"));
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%04X", (unsigned)SYSTEM_CONFIG_ADDRESS);
-    msg.control.print(buf);
-    msg.control.print(F(", v"));
-    msg.control.print(systemConfig.version);
-    msg.control.print(F(", cksum=0x"));
-    snprintf(buf, sizeof(buf), "%02X", systemConfig.checksum);
-    msg.control.println(buf);
+    if (verbose) {
+        msg.control.print(F("✓ System config saved (addr=0x"));
+        char buf[8];
+        snprintf(buf, sizeof(buf), "%04X", (unsigned)SYSTEM_CONFIG_ADDRESS);
+        msg.control.print(buf);
+        msg.control.print(F(", v"));
+        msg.control.print(systemConfig.version);
+        msg.control.print(F(", cksum=0x"));
+        snprintf(buf, sizeof(buf), "%02X", systemConfig.checksum);
+        msg.control.println(buf);
+    } else {
+        msg.debug.info(TAG_SYSTEM, "Config saved (addr=0x%04X, v%u, cksum=0x%02X)",
+                       (unsigned)SYSTEM_CONFIG_ADDRESS, systemConfig.version, systemConfig.checksum);
+    }
     return true;
 }
 
@@ -277,35 +296,39 @@ bool saveSystemConfig() {
  * This reserves these pins and makes them visible in the registry export
  */
 void registerSystemPins() {
-    // Mode button
-    if (systemConfig.modeButtonPin != 0xFF) {
-        registerPin(systemConfig.modeButtonPin, PIN_BUTTON, "Mode Button");
-    }
+#if ENABLE_MODE_BUTTON
+    registerPin(MODE_BUTTON_PIN, PIN_BUTTON, "Mode Button");
+#endif
 
-    // Buzzer
-    if (systemConfig.buzzerPin != 0xFF) {
-        registerPin(systemConfig.buzzerPin, PIN_BUZZER, "Buzzer");
-    }
+#if ENABLE_ALARMS
+    #ifdef ALARMS_PIN
+    registerPin(ALARMS_PIN, PIN_BUZZER, "Buzzer");
+    #endif
+#endif
 
-    // CAN chip select (only for external MCP2515)
-    if (systemConfig.canCSPin != 0xFF) {
-        registerPin(systemConfig.canCSPin, PIN_CS, "CAN CS");
-    }
+#if ENABLE_CAN_HYBRID || !PROFILE_HAS_NATIVE_CAN
+    #if defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)
+    registerPin(CAN_CS_0, PIN_CS, "CAN CS");
+    #endif
+    #if defined(CAN_INT_0) && (CAN_INT_0 != 0xFF)
+    registerPin(CAN_INT_0, PIN_RESERVED, "CAN INT");
+    #endif
+#endif
 
-    // CAN interrupt (only for external MCP2515)
-    if (systemConfig.canIntPin != 0xFF) {
-        registerPin(systemConfig.canIntPin, PIN_RESERVED, "CAN INT");
-    }
+#if SUPPORTS_SD
+    #ifndef BUILTIN_SDCARD
+        #define BUILTIN_SDCARD 254
+    #endif
+    #if SD_PIN != BUILTIN_SDCARD
+    registerPin(SD_PIN, PIN_CS, "SD CS");
+    #endif
+#endif
 
-    // SD card chip select
-    if (systemConfig.sdCSPin != 0xFF) {
-        registerPin(systemConfig.sdCSPin, PIN_CS, "SD CS");
-    }
-
-    // Test mode pin (optional)
-    if (systemConfig.testModePin != 0xFF) {
-        registerPin(systemConfig.testModePin, PIN_BUTTON, "Test Mode Trigger");
-    }
+#if ENABLE_TEST_MODE
+    #ifdef TEST_MODE_PIN
+    registerPin(TEST_MODE_PIN, PIN_BUTTON, "Test Mode Trigger");
+    #endif
+#endif
 }
 
 /**
@@ -318,31 +341,23 @@ bool loadSystemConfig() {
 
     // Validate magic number
     if (temp.magic != SYSTEM_CONFIG_MAGIC) {
-        msg.control.println(F("System config: bad magic, using defaults"));
+        bootDiag.flags |= bootDiag.DIAG_BAD_MAGIC;
         return false;
     }
 
     // Check version
     if (temp.version != SYSTEM_CONFIG_VERSION) {
-        msg.control.print(F("System config: version mismatch (got "));
-        msg.control.print(temp.version);
-        msg.control.print(F(", need "));
-        msg.control.print(SYSTEM_CONFIG_VERSION);
-        msg.control.println(F("), using defaults"));
+        bootDiag.flags |= bootDiag.DIAG_VERSION_MISMATCH;
+        bootDiag.loadedVersion = temp.version;
         return false;
     }
 
     // Verify checksum
     uint8_t calculatedChecksum = calculateChecksum(&temp);
     if (temp.checksum != calculatedChecksum) {
-        msg.control.print(F("System config: checksum failed (got 0x"));
-        char buf[8];
-        snprintf(buf, sizeof(buf), "%02X", temp.checksum);
-        msg.control.print(buf);
-        msg.control.print(F(", calc 0x"));
-        snprintf(buf, sizeof(buf), "%02X", calculatedChecksum);
-        msg.control.print(buf);
-        msg.control.println(F("), using defaults"));
+        bootDiag.flags |= bootDiag.DIAG_CHECKSUM_FAILED;
+        bootDiag.storedChecksum = temp.checksum;
+        bootDiag.calcChecksum   = calculatedChecksum;
         return false;
     }
 

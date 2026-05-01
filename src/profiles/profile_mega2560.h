@@ -1,6 +1,15 @@
 /*
  * profile_mega2560.h — Build profile for Arduino Mega 2560
  *
+ * This file is the authoritative board definition for the Mega 2560.
+ * It owns all feature flags AND all hardware pin assignments.
+ * config.h contains only application-level constants (timing, thresholds, etc.).
+ *
+ * Pin convention:
+ *   ENABLE_X = 1          feature enabled (boolean; no hardware pin)
+ *   ENABLE_X = 1 + X_PIN  feature enabled with a physical pin
+ *   ENABLE_X not defined   feature disabled
+ *
  * RAM budget (8 KB hard limit, target ≤99%):
  *   Input array  :  8 × ~100 B = ~800 B
  *   CLI buffers  : CLI_BUFFER_SIZE(820) + RX(128) + CMD(128) + HIST(64) = ~1140 B
@@ -23,17 +32,45 @@
 #define PROFILE_HAS_NATIVE_CAN 0
 
 // ===== FEATURE FLAGS =====
-#define ENABLE_CAN
-#define ENABLE_SERIAL_OUTPUT
-#define ENABLE_LCD
-#define ENABLE_ALARMS
-#define ENABLE_LED
-#define ENABLE_BME280
+#define ENABLE_CAN             1
+#define ENABLE_SERIAL_OUTPUT   1
+#define ENABLE_LCD             1
+#define ENABLE_ALARMS          1
+#define ENABLE_LED             1
+#define ENABLE_BME280          1
+
+// ===== HARDWARE PIN ASSIGNMENTS =====
+// Customize these to match your physical wiring.
+
+// Mode button — hold during boot for CONFIG mode, press to silence alarm
+#define ENABLE_MODE_BUTTON     1
+#define MODE_BUTTON_PIN        5
+
+// Alarm buzzer output
+#define ALARMS_PIN             3
+
+// RGB LED status indicator (PWM-capable pins required)
+#define RGB_PIN_R              11
+#define RGB_PIN_G              12
+#define RGB_PIN_B              13
+// #define RGB_COMMON_ANODE       // uncomment for common-anode LED wiring
+
+// SPI CAN controller (MCP2515) — bus 0 (primary)
+#define CAN_CS_0               9
+#define CAN_INT_0              2
+
+// SPI CAN controller — bus 1 (secondary); set CAN_CS_1 to 0xFF to disable
+#define CAN_CS_1               0xFF   // disabled — single MCP2515 on Mega
+#define CAN_INT_1              0xFF
+
+// Legacy aliases used by HAL and system code
+#define CAN_CS                 CAN_CS_0
+#define CAN_INT                CAN_INT_0
+
 
 // ===== SIZING =====
 // All values tuned to keep firmware within the 8 KB RAM budget.
 // CLI_MAX_ARGS=9: enough for the longest command (set <name> rpm 4 <4 pairs> <max>).
-// Previous value of 6 silently truncated 9-argument RPM/SPEED calibration commands.
 #define MAX_INPUTS              8
 #define MAX_PID_ENTRIES         8
 #define MAX_PIN_REGISTRY        24
