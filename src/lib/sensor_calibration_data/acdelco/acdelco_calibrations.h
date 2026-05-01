@@ -20,7 +20,7 @@
 
 #include <Arduino.h>
 #include "../../sensor_types.h"
-#include "../../../config.h"
+#include "../../sensor_calibration_data.h"
 
 // ===== AC DELCO PRE-1979 GM TEMP GAUGE SENDER (1967–1978) =====
 // OE gauge sender for 1967–1978 GM trucks and cars (Chevy/GMC C/K, Blazer, etc.)

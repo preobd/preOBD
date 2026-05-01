@@ -17,7 +17,7 @@
 
 #include <Arduino.h>
 #include "../../sensor_types.h"
-#include "../../../config.h"
+#include "../../sensor_calibration_data.h"
 
 // Jeep sensors use SENSOR_BIAS_LOW_Z (100Ω) or SENSOR_BIAS_HIGH_Z (2.49kΩ) depending on the
 // sender family. Both are defined in sensor_calibration_data.h and map to fixed hardware

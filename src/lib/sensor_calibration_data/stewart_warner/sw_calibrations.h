@@ -17,7 +17,7 @@
 
 #include <Arduino.h>
 #include "../../sensor_types.h"
-#include "../../../config.h"
+#include "../../sensor_calibration_data.h"
 
 // ===== STEWART-WARNER OIL PRESSURE SENDER =====
 // SW oil pressure sender: 240Ω @ 0 psi, 33.5Ω @ 80 psi

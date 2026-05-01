@@ -20,7 +20,7 @@
 
 #include <Arduino.h>
 #include "../../sensor_types.h"
-#include "../../../config.h"
+#include "../../sensor_calibration_data.h"
 
 // ===== BOSCH NTC M12 TEMPERATURE SENSOR =====
 // Bosch NTC M12 (0 280 130 026 and related part numbers)

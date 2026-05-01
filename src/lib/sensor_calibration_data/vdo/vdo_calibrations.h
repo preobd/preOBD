@@ -11,7 +11,7 @@
 
 #include <Arduino.h>
 #include "../../sensor_types.h"
-#include "../../../config.h"
+#include "../../sensor_calibration_data.h"
 
 // ===== VDO 120°C (323 095) TABLE DATA =====
 // Source: VDO datasheet and empirical measurements

@@ -16,7 +16,7 @@
 
 #include <Arduino.h>
 #include "../../sensor_types.h"
-#include "../../../config.h"
+#include "../../sensor_calibration_data.h"
 
 // ===== SMITHS TT6811 COOLANT TEMP SENDER =====
 // Smiths TT6811: gauge sender for MG, Triumph TR4/TR6, Austin-Healey, Mini
