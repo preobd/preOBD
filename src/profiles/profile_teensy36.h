@@ -41,9 +41,9 @@
 // Alarm buzzer output
 #define ALARMS_PIN             3
 
-// SD card — external module (Teensy 3.6 has a built-in slot; use 254 for BUILTIN_SDCARD)
+// SD card — 254 = Teensy 3.6 built-in SD slot (BUILTIN_SDCARD)
 #define SUPPORTS_SD            1
-#define SD_PIN                 4
+#define SD_PIN                 254
 
 // RGB LED status indicator (PWM-capable pins required)
 #define RGB_PIN_R              11

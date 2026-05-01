@@ -64,6 +64,10 @@ The profile is the authoritative definition of a specific hardware board. It is 
 // ENABLE_MODE_BUTTON not defined — no button
 ```
 
+**SD hardware capability vs SD logging:**
+
+`SUPPORTS_SD` and `ENABLE_SD_LOGGING` are independent. `SUPPORTS_SD` declares that the board physically has an SD slot and gates the SD driver itself; `ENABLE_SD_LOGGING` gates the logging feature that writes sensor CSV to that SD. JSON config file save/load (`SAVE FILE`, `LOAD FILE`) is gated on `SUPPORTS_SD` only — no logging feature required. A board with `SUPPORTS_SD` but no `ENABLE_SD_LOGGING` can still save and load JSON config files via SD.
+
 ### Layer 2 — Application Constants (`src/config.h`)
 
 Contains values that are logic-level, not hardware-level: things that describe *how* the firmware behaves, not *what is wired where*.
@@ -113,8 +117,8 @@ SAVE                         # Persist to EEPROM
 | Profile | Platform | SD | Notes |
 |---|---|---|---|
 | `profile_teensy41.h` | Teensy 4.1 | Built-in (pin 254) | Full-featured reference profile |
-| `profile_teensy40.h` | Teensy 4.0 | External (pin 4) | No built-in SD |
-| `profile_teensy36.h` | Teensy 3.6 | External (pin 4) | Older platform |
+| `profile_teensy40.h` | Teensy 4.0 | None (optional pin 4) | No SD in default profile; add `SUPPORTS_SD`+`SD_PIN` to enable |
+| `profile_teensy36.h` | Teensy 3.6 | Built-in (pin 254) | Older platform |
 | `profile_esp32s3.h` | ESP32-S3 | External (pin 4) | Native TWAI CAN |
 | `profile_mega2560.h` | Arduino Mega 2560 | Disabled | SPI CAN (MCP2515), RAM-constrained |
 | `profile_teensy41_hybrid.h` | Teensy 4.1 | Built-in (pin 254) | 3× FlexCAN + 1× MCP2515 |
