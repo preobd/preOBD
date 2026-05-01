@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0-beta] - 2026-04-30
+
 ### Added
 - Web Bluetooth webapp for browser-based device configuration and diagnostics, installable as a PWA via GitHub Pages
 - BLE GATT profile specification (Tier 1 text command service + Tier 2 binary protocol spec) with shared UUID definitions for firmware and clients
@@ -159,7 +161,12 @@ Previous development releases. See git history for details.
 
 ---
 
-[Unreleased]: https://github.com/preobd/preOBD/compare/v0.7.0-beta...HEAD
+[Unreleased]: https://github.com/preobd/preOBD/compare/v0.8.0-beta...HEAD
+[0.8.0-beta]: https://github.com/preobd/preOBD/compare/v0.7.6-beta...v0.8.0-beta
+[0.7.6-beta]: https://github.com/preobd/preOBD/compare/v0.7.5-beta...v0.7.6-beta
+[0.7.5-beta]: https://github.com/preobd/preOBD/compare/v0.7.4-beta...v0.7.5-beta
+[0.7.4-beta]: https://github.com/preobd/preOBD/compare/v0.7.3-beta...v0.7.4-beta
+[0.7.3-beta]: https://github.com/preobd/preOBD/compare/v0.7.0-beta...v0.7.3-beta
 [0.7.0-beta]: https://github.com/preobd/preOBD/compare/v0.6.5-beta...v0.7.0-beta
 [0.6.5-beta]: https://github.com/preobd/preOBD/compare/v0.6.0-beta...v0.6.5-beta
 [0.6.0-beta]: https://github.com/preobd/preOBD/compare/v0.5.0-alpha...v0.6.0-beta
