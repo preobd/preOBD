@@ -1,320 +1,211 @@
 # Bias Resistor Selection Guide
 
-**Optimizing ADC resolution for VDO temperature and pressure sensors**
+This guide covers bias resistor selection for resistive sensor inputs on DIY preOBD builds using discrete components on Arduino, Teensy, or any 3.3V/5V microcontroller platform.
 
 ---
 
-## Quick Answer
+## How the Circuit Works
 
-| Your Priority | Recommended Resistor | Notes |
-|--------------|---------------------|-------|
-| **Default / Most users** | 1kΩ | Good balance of resolution and simplicity |
-| **Maximum accuracy** | 470Ω | Best for data logging, slightly higher current |
-| **Low power** | 2.2kΩ | Works, but wastes ADC range |
-
-The default in preOBD is **1kΩ**. You can change this in `config.h`:
-
-```cpp
-#define DEFAULT_BIAS_RESISTOR 1000.0    // Default: 1kΩ
-// #define DEFAULT_BIAS_RESISTOR 470.0  // Maximum resolution
-// #define DEFAULT_BIAS_RESISTOR 2200.0 // Low power
-```
-
----
-
-## Why This Matters
-
-VDO sensors are **variable resistors** — their resistance changes with temperature or pressure. To read them with a microcontroller, we create a voltage divider with a fixed "bias" resistor:
+Resistive sensors (temperature and pressure senders) are not powered sources — they are variable resistors. The voltage divider circuit converts the sensor's changing resistance into a voltage the ADC can read:
 
 ```
 VCC (5V or 3.3V)
     │
-    ─┤├─  VDO Sensor (variable resistance)
+    R_sensor (variable — changes with temperature or pressure)
     │
-    ├────► ADC Input (measured voltage)
+    ├─────► ADC Input
     │
-    ─┤├─  Bias Resistor (fixed)
-    │
-   GND
-```
-
-The ADC measures the voltage at the junction. From this voltage and the known bias resistor value, we calculate the sensor's resistance, then convert to temperature or pressure.
-
-**The problem:** VDO sensors have very low resistance at operating temperatures (30-100Ω), which produces very small voltage changes with a 2.2kΩ bias resistor. A lower bias resistor produces larger voltage swings, giving better ADC resolution where it matters most.
-
----
-
-## VDO Sensor Resistance Ranges
-
-### Temperature Sensors
-
-| Sensor | Cold (0°C) | Warm (50°C) | Hot (100°C) | Very Hot (120°C) |
-|--------|-----------|-------------|-------------|------------------|
-| VDO 120°C | 1,743Ω | 197Ω | 38Ω | 11Ω |
-| VDO 150°C | 3,240Ω | 322Ω | 54Ω | 29Ω |
-
-### Pressure Sensors
-
-| Sensor | 0 bar | 2.5 bar | 5 bar |
-|--------|-------|---------|-------|
-| VDO 5-bar | ~11Ω | ~100Ω | ~180Ω |
-| VDO 2-bar | ~10Ω | ~100Ω | ~180Ω |
-
-Notice that at **operating temperatures** (where accuracy matters most), sensor resistance is very low — typically 30-100Ω.
-
----
-
-## Resolution Comparison
-
-### 5V Platforms (Arduino Uno/Mega) — 10-bit ADC
-
-**Temperature sensor across operating range (50-120°C):**
-
-| Bias Resistor | ADC Counts Used | Resolution |
-|---------------|-----------------|------------|
-| 2.2kΩ | 79 counts | ~0.9°C per count |
-| 1kΩ | 157 counts | ~0.4°C per count |
-| 470Ω | 280 counts | ~0.25°C per count |
-
-**Pressure sensor across full range (0-5 bar):**
-
-| Bias Resistor | ADC Counts Used | Resolution |
-|---------------|-----------------|------------|
-| 2.2kΩ | 72 counts | ~0.07 bar per count |
-| 1kΩ | 145 counts | ~0.03 bar per count |
-| 470Ω | 260 counts | ~0.02 bar per count |
-
-### 3.3V Platforms (Teensy/Due/ESP32) — 12-bit ADC
-
-**Temperature sensor across operating range (50-120°C):**
-
-| Bias Resistor | ADC Counts Used | Resolution |
-|---------------|-----------------|------------|
-| 2.2kΩ | 316 counts | ~0.22°C per count |
-| 1kΩ | 623 counts | ~0.11°C per count |
-| 470Ω | 1,119 counts | ~0.06°C per count |
-
-**Pressure sensor across full range (0-5 bar):**
-
-| Bias Resistor | ADC Counts Used | Resolution |
-|---------------|-----------------|------------|
-| 2.2kΩ | 289 counts | ~0.017 bar per count |
-| 1kΩ | 580 counts | ~0.009 bar per count |
-| 470Ω | 1,038 counts | ~0.005 bar per count |
-
----
-
-## ADC Range Utilization
-
-This shows how much of the ADC range is actually used at **operating temperatures**:
-
-```
-                    Temperature Sensor (50-120°C)
-                    
-Bias R     5V/10-bit                    3.3V/12-bit
-           ├──────────────────┤         ├──────────────────┤
-2.2kΩ      ██░░░░░░░░░░░░░░░░  8%       ██░░░░░░░░░░░░░░░░  8%
-1kΩ        ████░░░░░░░░░░░░░░ 15%       ████░░░░░░░░░░░░░░ 15%
-470Ω       ██████░░░░░░░░░░░░ 27%       ███████░░░░░░░░░░░ 27%
-           0%              100%         0%              100%
-```
-
-With a 2.2kΩ resistor, you're only using about **8%** of the ADC's capability at the temperatures you actually care about.
-
----
-
-## Tradeoffs
-
-### Current Draw
-
-Lower resistance = higher current through the voltage divider:
-
-| Bias Resistor | Current at 50Ω sensor (5V) | Current at 50Ω sensor (3.3V) |
-|---------------|---------------------------|------------------------------|
-| 2.2kΩ | 2.2 mA | 1.5 mA |
-| 1kΩ | 4.8 mA | 3.1 mA |
-| 470Ω | 9.6 mA | 6.3 mA |
-
-For most applications, even 10mA per sensor is negligible. With 4 sensors at 470Ω, you'd draw ~40mA total — well within any Arduino or Teensy's capability.
-
-**When current matters:**
-- Battery-powered installations with no charging
-- Solar-only power systems
-- Many sensors (8+) on a single board
-
-### Cold Temperature Range
-
-Lower bias resistors compress the cold end of the range. However:
-- Cold readings are typically only at **startup**
-- Once the engine warms up, you're in the optimal range
-- The resolution improvement at operating temps far outweighs any cold-end compression
-
-### Self-Heating
-
-Higher current through the sensor causes slight self-heating. With 10mA through a VDO sensor, the self-heating is typically less than 0.5°C — negligible compared to the resolution improvement.
-
----
-
-## Recommendations by Use Case
-
-### Dashboard Display Only
-**Use: 1kΩ (default) or 2.2kΩ**
-
-If you're just showing temps on an LCD and don't need precise logging, even 2.2kΩ works fine. The display shows whole numbers anyway.
-
-### Data Logging / CAN Output
-**Use: 1kΩ (default) or 470Ω**
-
-When you're logging data or sending to OBDII apps, the extra resolution helps identify trends and spot problems early.
-
-### Racing / Performance Monitoring
-**Use: 470Ω**
-
-Maximum resolution means you can detect smaller temperature changes faster. Worth the slightly higher current draw.
-
-### Battery-Powered / Solar
-**Use: 2.2kΩ**
-
-When every milliamp counts, the higher resistance reduces current draw. You'll still get usable readings.
-
-### Mixed Sensors
-**Use: 1kΩ (default)**
-
-Works well for both temperature and pressure sensors. Good compromise across all sensor types.
-
----
-
-## Configuration
-
-### Setting the Bias Resistor Value
-
-In `config.h`, set your chosen value:
-
-```cpp
-// Bias resistor for VDO temperature and pressure sensors
-// Options: 470.0 (max resolution), 1000.0 (balanced), 2200.0 (low power)
-#define DEFAULT_BIAS_RESISTOR 1000.0
-```
-
-This value is used by the calibration system to correctly calculate resistance from ADC readings.
-
-### Hardware Wiring
-
-Use the **same physical resistor value** as configured in software:
-
-```
-VCC (5V or 3.3V)
-    │
-    VDO Sensor
-    │
-    ├────► Analog Pin (e.g., A2)
-    │
-    1kΩ Resistor (or your chosen value)
+    R_bias (fixed resistor you choose and install)
     │
    GND
 ```
-
-**Important:** The software value must match your physical resistor. If you have 2.2kΩ resistors installed but set `DEFAULT_BIAS_RESISTOR` to 1000.0, your readings will be incorrect.
-
-### Resistor Specifications
-
-- **Tolerance:** 1% metal film recommended (5% works but less accurate)
-- **Power rating:** 1/4W is sufficient
-- **Type:** Metal film preferred for temperature stability
-
----
-
-## Troubleshooting
-
-### Readings seem wrong after changing resistor
-
-- Verify `DEFAULT_BIAS_RESISTOR` in config.h matches physical resistor
-- Check resistor is installed correctly (between analog pin and GND)
-- Measure actual resistor value with multimeter (1% tolerance matters)
-
-### Readings are stuck at maximum or minimum
-
-- Check for open circuit (broken wire, bad connection)
-- Check for short circuit (sensor wire touching ground)
-- Verify sensor is actually a VDO type (resistance should change with temp)
-
-### Noisy or unstable readings
-
-- Add 100nF ceramic capacitor between analog pin and GND
-- Check for loose connections
-- Ensure good ground connection
-- Try increasing `LOOP_DELAY_MS` in config.h
-
-### Resolution still seems poor
-
-- Verify you're using 12-bit ADC platform (Teensy, Due, ESP32) for best results
-- 10-bit platforms (Uno, Mega) have inherently lower resolution
-- Consider 470Ω for maximum resolution if using 10-bit ADC
-
----
-
-## Technical Details
-
-### Voltage Divider Formula
 
 The voltage at the ADC input is:
 
 ```
-V_adc = VCC × (R_bias / (R_sensor + R_bias))
+V_ADC = VCC × (R_bias / (R_sensor + R_bias))
 ```
 
-From the ADC reading, we calculate sensor resistance:
+The firmware inverts this to compute resistance from the ADC reading, then looks up the resistance in a calibration table.
 
-```
-R_sensor = R_bias × (VCC / V_adc - 1)
-```
-
-Or in terms of ADC counts:
-
-```
-R_sensor = R_bias × ((ADC_MAX - reading) / reading)
-```
-
-### Where Did 2.2kΩ Come From?
-
-There's no official "industry standard" for VDO sensor bias resistors with microcontrollers. VDO sensors were originally designed for analog gauge movements (coil-based meters), not voltage dividers.
-
-The 2.2kΩ value became common in hobbyist projects because:
-
-1. It roughly matches the sensor resistance at 25°C (~500-1000Ω)
-2. It provides usable readings across the full temperature range
-3. It follows the generic thermistor rule of thumb: "match the bias to nominal resistance"
-4. It's a common resistor value
-
-However, this approach optimizes for **room temperature accuracy**, not operating temperature accuracy. For engine monitoring where we care most about 80-120°C readings, a lower bias resistor makes more sense.
-
-### Runtime Calibration Override
-
-In runtime configuration mode, you can override the bias resistor for individual sensors without recompiling:
-
-```
-SET A0 BIAS 2200    # Use 2.2kΩ for this specific sensor
-```
-
-This allows you to use different bias resistor values for different sensors, or adjust calibration without changing `DEFAULT_BIAS_RESISTOR` in config.h. The runtime bias setting applies to Steinhart-Hart, Lookup Table, and Pressure Polynomial calibrations.
-
-See [SERIAL_COMMANDS.md](../../reference/SERIAL_COMMANDS.md) for details on runtime calibration commands.
-
-### Optimal Bias Resistor Theory
-
-For maximum sensitivity, the bias resistor should equal the sensor resistance at your most critical measurement point. For engine monitoring, that's typically around 80-100°C (coolant) or 100-120°C (oil), where sensor resistance is 30-70Ω.
-
-However, going too low (matching 50Ω exactly) causes problems at cold temperatures. The 470Ω-1kΩ range provides a good compromise: significantly better than 2.2kΩ at operating temps, while still giving usable readings when cold.
+**Key principle:** For best ADC resolution across the sensor's operating range, the bias resistor value should be in the same order of magnitude as the sensor's resistance at the temperatures/pressures you care about. Too high and you waste ADC range; too low and the signal is compressed near the rail.
 
 ---
 
-## Summary
+## The Two Sensor Families
 
-| Resistor | Resolution | Current | Best For |
-|----------|------------|---------|----------|
-| **470Ω** | Excellent | ~10mA | Racing, data logging, maximum accuracy |
-| **1kΩ** | Good | ~5mA | **Default choice**, balanced performance |
-| **2.2kΩ** | Fair | ~2mA | Low power, battery-only systems |
+Extensive research across the major sender families used in classic and vintage vehicles reveals that resistive sensors fall cleanly into two resistance families. Your bias resistor choice depends entirely on which family your sensor belongs to.
 
-**The default 1kΩ is recommended for most users.** It provides 2x the resolution of 2.2kΩ with minimal tradeoffs.
+### Family 1 — Low-Resistance Gauge Senders (2–330Ω)
+
+These are mechanical gauge senders designed to drive a D'Arsonval or air-core gauge movement directly. They use a low-resistance wiper on a resistive element, and their resistance range tops out below ~330Ω in normal operating conditions.
+
+**Validated sensors in this family:**
+
+| Manufacturer | Type | Cold/Zero | Hot/Full | Notes |
+|---|---|---|---|---|
+| VDO SingleViu | Coolant temp (120°C range) | ~1,743Ω below range; **22Ω at 120°C** | — | High resistance only far outside operating range |
+| VDO SingleViu | Coolant temp (150°C range) | — | ~10Ω | |
+| VDO SingleViu | Oil pressure (0–5 bar) | 10Ω at 0 bar | 184Ω at 5 bar | |
+| VDO SingleViu | Oil pressure (0–10 bar) | 10Ω at 0 bar | 184Ω at 10 bar | |
+| VDO SingleViu | Fuel level | ~10Ω | ~180Ω | |
+| Smiths | Coolant / oil temp | ~10–300Ω operating range | | Classic British vehicles |
+| Stewart Warner | Temp / pressure senders | ~10–300Ω operating range | | Pre-EFI American vehicles |
+| Pre-EFI Ford | Gauge temp sender | ~10–78Ω | | Pre-1980s classic Ford |
+| Classic GM | Gauge temp sender (1967–1978) | ~46–350Ω | | Pre-EFI trucks and cars |
+| Jeep CJ (AMC era, 1972–1986) | Coolant temp | 73Ω cold | 9Ω hot | |
+| Mopar 56026779 | Jeep 4.0 oil pressure | 90Ω at 0 psi | 2Ω at 80 psi | Near-rail at max pressure with 100Ω bias |
+| Marine gauge senders | Various | ~10–300Ω | | |
+
+**Recommended bias resistor: 100Ω**
+
+> **Why not lower?** The geometric mean of VDO's operating resistance range is ~47–57Ω. However, 100Ω is preferred because it is a standard value, keeps the ADC voltage well within range at the cold end, and avoids rail-saturation risk on very-low-resistance senders like the Mopar oil pressure sender (2Ω at full scale). 47Ω would give slightly better mid-range resolution but risks clipping.
+
+> **Why not 470Ω or 1kΩ?** At 470Ω bias, the VDO coolant sender at 90°C (about 38Ω) produces only 30–40 ADC counts of swing across a 20°C span — noticeably degraded resolution. At 1kΩ the situation is worse. These values were studied and rejected.
+
+**ADC utilization with 100Ω bias (5V reference, 12-bit ADC):**
+
+| Condition | Sensor R | ADC counts |
+|---|---|---|
+| VDO coolant, 50°C | ~197Ω | ~2,700 |
+| VDO coolant, 90°C | ~38Ω | ~3,720 |
+| VDO coolant, 120°C | ~22Ω | ~3,900 |
+| VDO pressure, 0 bar | 10Ω | ~4,010 |
+| VDO pressure, 5 bar | 184Ω | ~2,600 |
+| Jeep oil, 0 psi | 90Ω | ~2,150 |
+| Jeep oil, 80 psi | 2Ω | ~4,090 (near rail) |
+
+The Mopar oil pressure sender at maximum pressure (2Ω) approaches the ADC rail. This is inherent to the sensor's design and not a problem with the bias resistor choice — it is within firmware's `ADC_RAIL_MARGIN` guard and readings at that point have inherently lower precision.
+
+---
+
+### Family 2 — High-Impedance NTC Thermistors (100Ω–10kΩ+)
+
+These are negative-temperature-coefficient thermistors used in EFI systems as ECT (engine coolant temperature) and IAT sensors. They have much higher resistance at low temperatures and are not interchangeable with gauge senders. Their resistance at normal operating temperatures is in the hundreds to thousands of ohms.
+
+**Validated sensors in this family:**
+
+| Manufacturer / Application | Type | Cold end | Hot end | Notes |
+|---|---|---|---|---|
+| GM TBI/TPI (1979–1995) | ECT sensor | ~9,420Ω at 0°C | ~177Ω at high temp | Used in EFI retrofit builds |
+| AC Delco (GM 1979+) | ECT / CLT | Same GM curve | | |
+| Bosch NTC M12 | Coolant temp | ~2,500–9,000Ω cold | ~100–300Ω hot | Common Euro EFI |
+| Jeep XJ / Mopar 56027012 | Coolant temp gauge sender | 7,800Ω at 0°C | 135Ω at 120°C | Misleadingly looks like a gauge sender but is high-impedance NTC |
+| Jeep Renix CTS (1987–1990) | ECT (ECU sensor) | ~9,400Ω at −20°C | ~200Ω at 180°C | Renault-designed Jeep 4.0 EFI |
+| Haltech / aftermarket EFI | CLT/IAT | Varies, typically GM-curve | | |
+
+**Recommended bias resistor: 2.49kΩ** (use 2.4kΩ or 2.5kΩ standard values — 2.49kΩ is the E96 standard value and matches MegaSquirt calibration tables)
+
+> **Why 2.49kΩ?** The operating resistance range for these sensors spans roughly 200Ω to 9,000Ω. The geometric mean of that range is ~1,300Ω. A 2.49kΩ bias resistor is close to optimal for the hot end (where resolution matters most) while still giving usable readings at cold-soak temperatures. It is also the standard value used by MegaSquirt.
+
+> **Note on the Mopar 56027012:** This XJ-era Jeep sender (1984–2001) reads as a high-impedance NTC despite its externally similar appearance to a classic low-resistance sender. The part number spans the Renix and Chrysler-EFI era Jeep XJ. It belongs on the 2.49kΩ position — do not confuse it with older CJ-era AMC gauge senders.
+
+**ADC utilization with 2.49kΩ bias (5V reference, 12-bit ADC):**
+
+| Condition | Sensor R | ADC counts |
+|---|---|---|
+| GM ECT, −20°C | ~9,420Ω | ~857 |
+| GM ECT, 20°C | ~3,500Ω | ~1,690 |
+| GM ECT, 80°C | ~470Ω | ~3,280 |
+| GM ECT, 120°C | ~177Ω | ~3,820 |
+| Mopar 56027012, 0°C | 7,800Ω | ~989 |
+| Mopar 56027012, 80°C | ~370Ω | ~3,559 |
+| Mopar 56027012, 120°C | 135Ω | ~3,879 |
+
+---
+
+## Quick Reference
+
+| Sensor type | Resistance range | Use this bias |
+|---|---|---|
+| VDO SingleViu temperature | 10–330Ω (operating) | **100Ω** |
+| VDO SingleViu pressure | 10–184Ω | **100Ω** |
+| Smiths / Stewart Warner | 10–300Ω | **100Ω** |
+| Pre-EFI Ford gauge senders | 10–78Ω | **100Ω** |
+| Pre-EFI GM gauge senders (pre-1979) | 46–350Ω | **100Ω** |
+| Jeep CJ / AMC (1972–1986) | 9–73Ω | **100Ω** |
+| Mopar 56026779 Jeep oil pressure | 2–90Ω | **100Ω** |
+| Marine senders | 10–300Ω | **100Ω** |
+| GM EFI ECT (1979+) | 177–9,420Ω | **2.49kΩ** |
+| Bosch NTC M12 | 100–9,000Ω | **2.49kΩ** |
+| Mopar 56027012 / Jeep XJ temp | 135–7,800Ω | **2.49kΩ** |
+| Jeep Renix CTS | 200–9,400Ω | **2.49kΩ** |
+| Haltech CLT/IAT (GM-curve) | 177–9,420Ω | **2.49kΩ** |
+
+---
+
+## Platform Differences: 5V vs. 3.3V
+
+The bias resistor values above (100Ω and 2.49kΩ) are correct for both 5V and 3.3V platforms **when VCC is used as the ADC reference voltage.** The voltage divider ratio is what matters for resistance calculation, not the absolute voltage.
+
+If you are using an internal bandgap reference (1.1V on AVR, 1.2V on Teensy 3.x), the math still works but your ADC range is compressed — using VCC as reference is generally preferred for these sensors.
+
+**3.3V platform notes:**
+
+On 3.3V systems (Teensy 4.x, STM32, RP2040, ESP32 at 3.3V), the full ADC counts are reached at 3.3V. All sensors listed in this guide produce analog output voltages well below 3.3V with the recommended bias resistors, so there is no clipping risk. The 12-bit ADC resolution on most 3.3V platforms (4096 counts) more than compensates for the lower Vref.
+
+The only case where you would use a different bias resistor on 3.3V vs. 5V is if you were previously using a very high bias value (2.2kΩ or higher) tuned to an internal bandgap reference — that approach is not recommended.
+
+**Summary:**
+
+| Platform | Ref voltage | Low-resistance bias | High-impedance bias |
+|---|---|---|---|
+| Arduino Mega (5V) | 5V | 100Ω | 2.49kΩ |
+| Arduino Uno (5V) | 5V | 100Ω | 2.49kΩ |
+| Teensy 4.x (3.3V) | 3.3V | 100Ω | 2.49kΩ |
+| ESP32 (3.3V) | 3.3V | 100Ω | 2.49kΩ |
+| STM32 (3.3V) | 3.3V | 100Ω | 2.49kΩ |
+
+---
+
+## Sensors Outside the Two-Family Model
+
+A small number of sensors do not fit either family and require special handling:
+
+**Ford EFI ECT (1983–1995 Fox body and some EEC-IV vehicles):** Resistance range is approximately 2,800–58,750Ω. This is much higher impedance than the GM NTC family. Optimal bias would be ~10kΩ–47kΩ. These sensors are not supported by the standard two-bias-position design and have been explicitly excluded from the validated sensor set. If you are using preOBD to monitor a Fox body Ford with its factory EFI ECT sensor, you will need a custom bias resistor and a custom calibration table.
+
+**Linear voltage output sensors (MAP, MAF, wideband O2):** These produce a 0–5V analog output and do not use a bias resistor at all. They connect directly to the ADC input. See the linear sensor documentation.
+
+---
+
+## Hardware Wiring
+
+```
+VCC (5V or 3.3V)
+    │
+    Sensor wire from vehicle
+    │
+    ├─────► Analog input pin (ADC)
+    │
+   [R_bias]  ← install this resistor here
+    │
+   GND
+```
+
+**Resistor specifications:**
+- Tolerance: 1% metal film strongly recommended (5% acceptable for low-resolution platforms)
+- Power rating: 1/4W is sufficient
+- Temperature stability: Metal film preferred over carbon composition
+
+The bias resistor should be installed as close to the ADC pin as practical. Add a 100nF ceramic decoupling capacitor from the ADC pin to GND to filter ignition noise — classic vehicle electrical systems are very noisy.
+
+**Important:** The value in `config.h` (`BIAS_RESISTOR_LOW` / `BIAS_RESISTOR_HIGH` or `DEFAULT_BIAS_RESISTOR` depending on your build) must exactly match the physical resistor you installed. A mismatch here causes systematic error in every reading.
+
+---
+
+## Why Not 1kΩ?
+
+Earlier versions of this guide recommended 1kΩ as a default "compromise" value. This was based on early analysis of VDO sensors before the full sensor landscape was validated.
+
+1kΩ was never actually optimal for anything:
+- For low-resistance gauge senders (10–330Ω), it provides poor resolution — the ADC swing across the sensor's operating range is compressed significantly compared to 100Ω
+- For high-impedance NTC sensors (GM, Jeep, Bosch), the cold-end compression is worse than 2.49kΩ and there is no compensating benefit at the hot end
+
+1kΩ has no constituency in the validated sensor set. Do not use it.
+
+## Why Not 2.2kΩ?
+
+2.2kΩ was the original "industry standard" value — it predates digital data acquisition and was optimized for powering analog gauge movements, where current draw and cold-end behavior were the primary concerns. It is not optimized for ADC resolution.
+
+For high-impedance NTC sensors, 2.2kΩ provides similar (slightly worse) resolution to 2.49kΩ and is less compatible with MegaSquirt calibration tables. For low-resistance gauge senders, 2.2kΩ is a poor fit and significantly wastes ADC range.
 

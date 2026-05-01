@@ -71,6 +71,23 @@ LIST OUTPUTS             # Show available output modules
 LIST TRANSPORTS          # Show available transports
 ```
 
+**JSON catalog export** (Teensy 3.x/4.x and ESP32 only):
+
+```
+LIST APPLICATIONS JSON         # Export application catalog as JSON
+LIST SENSORS JSON              # Export full sensor catalog as JSON
+LIST SENSORS <category> JSON   # Export sensors in one category as JSON
+LIST OUTPUTS JSON              # Export output module list as JSON
+LIST UNITS JSON                # Export units registry as JSON
+LIST CATEGORIES JSON           # Export sensor categories as JSON
+LIST PIDS JSON                 # Export standard OBD-II PID table as JSON
+LIST MEASUREMENT_TYPES JSON    # Export measurement type enum as JSON
+LIST CALIBRATION_TYPES JSON    # Export calibration type enum as JSON
+SYSTEM DUMP REGISTRY JSON      # Export all catalogs in one JSON object
+```
+
+These commands export the firmware's compile-time registries for use by external tooling (e.g., a web UI populating dropdowns). This is distinct from `SYSTEM DUMP JSON`, which exports the user's active configuration.
+
 ### Configuration Commands
 Pattern: `SET <pin> <field> <value>`
 
@@ -277,6 +294,7 @@ SET <pin> STEINHART <bias> <a> <b> <c>  # Steinhart-Hart thermistor
 SET <pin> BETA <bias> <beta> <r0> <t0>  # Beta equation thermistor
 SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>  # Linear pressure
 SET <pin> PRESSURE_POLY <bias> <a> <b> <c>  # Polynomial pressure (VDO)
+SET <pin> DIVIDER <ratio>        # Voltage divider ratio for linear sensors (0 < ratio ≤ 1.0)
 SET <pin> RPM <poles> <ratio> <timeout> <min> <max>  # RPM (5 params)
 SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>  # RPM (6 params)
 SET <pin> SPEED <ppr> <tire_circ> <ratio> <timeout> <max>  # Speed (5 params)
@@ -300,6 +318,26 @@ SET A0 OIL_TEMP THERMISTOR_BETA
 SET A0 BETA 10000 3950 10000 25
 SAVE
 ```
+
+### Voltage Divider Ratio (5V sensors on 3.3V ADCs)
+
+Linear sensors (pressure, MAP, generic 0.5–4.5V) wired through a hardware
+voltage divider need a ratio applied so the calibration can stay expressed
+in raw sensor terms. The ratio is `V_at_pin / V_at_sensor`.
+
+```
+SET A1 BOOST_PRESSURE GENERIC_BOOST
+SET A1 DIVIDER 0.6                   # 2.2k/3.3k divider, ratio = 3.3/(2.2+3.3) = 0.6
+SAVE
+```
+
+- `1.0` = no divider (default)
+- Range: `(0.0, 1.0]`
+- Per-input setting (different inputs can have different dividers)
+- Persisted to EEPROM on `SAVE`
+- Only applies to linear-calibration sensor types; auto-configured
+  `VOLTAGE_DIVIDER` battery inputs and resistive (VDO/thermistor) sensors
+  ignore this field.
 
 ### Pressure Calibration Examples
 
@@ -613,6 +651,8 @@ BUS SERIAL <1-8>                 # Show specific port status
 BUS SERIAL <1-8> ENABLE [baud]   # Enable serial port with optional baud rate
 BUS SERIAL <1-8> DISABLE         # Disable serial port
 BUS SERIAL <1-8> BAUDRATE <rate> # Set serial port baud rate
+BUS SERIAL <1-8> ELM327 ENABLE   # Assign ELM327 emulator to serial port (requires ENABLE_ELM327 build flag)
+BUS SERIAL <1-8> ELM327 DISABLE  # Remove ELM327 emulator from serial port
 ```
 
 ### Platform Availability
@@ -704,6 +744,19 @@ BUS SERIAL 3 DISABLE             # Disable Serial3 to free pins
 SAVE
 ```
 
+**Enable ELM327 emulator on Serial2 (e.g., HM-10 BLE module):**
+```
+BUS SERIAL 2 ENABLE 115200       # Enable Serial2 at 115200 baud
+BUS SERIAL 2 ELM327 ENABLE       # Assign ELM327 emulator to Serial2
+SAVE
+```
+
+**Disable ELM327 on Serial2:**
+```
+BUS SERIAL 2 ELM327 DISABLE      # Remove ELM327 from Serial2 (port stays enabled)
+SAVE
+```
+
 ### Bus Status Display
 
 ```
@@ -735,7 +788,7 @@ Shows:
 === Serial Port Configuration ===
 Platform supports Serial1-Serial8
 
-  Serial1: ENABLED @ 115200 baud (RX=0, TX=1)
+  Serial1: ENABLED @ 115200 baud [ELM327] (RX=0, TX=1)
   Serial2: disabled (RX=7, TX=8)
   Serial3: disabled (RX=15, TX=14)
   Serial4: disabled (RX=16, TX=17)
@@ -746,6 +799,7 @@ Platform supports Serial1-Serial8
 
 Use BUS SERIAL <port> ENABLE [baudrate] to enable a port
 Use BUS SERIAL <port> DISABLE to disable a port
+Use BUS SERIAL <port> ELM327 ENABLE to assign ELM327 emulator to a port
 ```
 
 ### Notes
@@ -756,6 +810,101 @@ Use BUS SERIAL <port> DISABLE to disable a port
 - Bus configuration is saved to EEPROM and included in JSON exports
 - Serial ports can be assigned to TRANSPORT for message routing (see `TRANSPORT` command)
 - Enabled serial ports register their pins with the pin registry to prevent conflicts
+
+### ELM327 Serial Emulator
+
+Requires the `ENABLE_ELM327` build flag (set in `platformio.ini`).
+
+- The port must be enabled first: `BUS SERIAL <n> ENABLE <baud>` before running `ELM327 ENABLE`
+- Only one serial port may act as the ELM327 port at a time
+- A port assigned to ELM327 cannot simultaneously carry CONTROL/DATA/DEBUG router traffic; remove the transport assignment first
+- `ELM327 DISABLE` removes the emulator role but leaves the port enabled
+- Changes take effect immediately; use `SAVE` to persist across reboots
+
+For full setup instructions (HM-10 wiring, phone app configuration), see
+[`docs/guides/outputs/DIRECT_BLE_OBD_GUIDE.md`](../guides/outputs/DIRECT_BLE_OBD_GUIDE.md).
+
+---
+
+## AT Command Passthrough
+
+Send a raw AT command to an attached serial module (HM-10, HC-05, ELM327 chip, etc.) and capture its reply, without rewiring the module to a USB-serial adapter.
+
+### Syntax
+
+```
+AT <port> <command>
+```
+
+- `<port>` — serial port number (1–N, must already be enabled via `BUS SERIAL <port> ENABLE`)
+- `<command>` — the AT string to send. Sent **raw with no CR/LF appended** (HM-10 and most BLE modules require this)
+
+The command waits up to ~500 ms for a response, extending the window while bytes are still arriving, then prints what was received.
+
+### Examples
+
+```
+BUS SERIAL 5 ENABLE 9600        # Bring up Serial5 at the module's baud rate first
+AT 5 AT                         # Probe — HM-10 should answer "OK"
+AT 5 AT+NAMEpreOBD              # Set BLE advertised name
+AT 5 AT+BAUD0                   # Set HM-10 baud to 9600 (the BLE-friendly rate)
+AT 5 AT+RESET                   # Reset module
+```
+
+### Notes
+
+- The port must be active (`BUS SERIAL <port> ENABLE`) — `AT` will not auto-enable it
+- HM-10 modules accept AT commands without line endings; HC-05 modules in AT mode require `\r\n` (which `AT` does not append — use a USB-serial adapter for HC-05 configuration)
+- Stale bytes in the RX buffer are drained before the command is sent, so responses are not mixed with leftover module output
+
+See [`BLUETOOTH_HARDWARE_GUIDE.md`](../guides/hardware/BLUETOOTH_HARDWARE_GUIDE.md) for module-specific AT command references.
+
+---
+
+## Transport Configuration
+
+Route control commands, sensor data output, and debug messages to different serial ports. Each message plane (CONTROL/DATA/DEBUG) has a **primary** and an optional **secondary** transport — both receive all output and both are polled for incoming commands.
+
+### Commands
+
+```
+TRANSPORT STATUS                          # Show current transport routing
+TRANSPORT <plane> <transport>             # Set primary transport for plane
+TRANSPORT <plane> <transport> SECONDARY   # Set secondary transport for plane
+TRANSPORT <plane> NONE SECONDARY          # Clear secondary transport
+```
+
+**Planes:** `CONTROL`, `DATA`, `DEBUG`
+
+**Transports:** `USB_SERIAL`, `SERIAL1`–`SERIAL8`, `ESP32_BT`, `NONE`
+
+Use `LIST TRANSPORTS` to see registered transports and their connection state.
+
+### Simultaneous Multi-Port Control
+
+Setting a secondary transport on the CONTROL plane lets two ports share control of the device — useful for keeping a laptop USB session open while also accepting commands from a Bluetooth module or other serial device.
+
+```
+BUS SERIAL 7 ENABLE 9600                  # Enable Serial7 (e.g. HM-10 at 9600 baud)
+TRANSPORT CONTROL SERIAL7                 # HM-10 as primary control port
+TRANSPORT CONTROL USB_SERIAL SECONDARY    # Laptop USB stays active alongside it
+SAVE
+```
+
+After this, both ports accept commands and receive all responses. Responses always go to **both** primary and secondary — there is no exclusive ownership.
+
+To revert to USB-only control:
+```
+TRANSPORT CONTROL USB_SERIAL              # Restore USB as primary
+TRANSPORT CONTROL NONE SECONDARY          # Clear secondary
+SAVE
+```
+
+### Notes
+
+- Hardware serial ports must be enabled first (`BUS SERIAL <n> ENABLE <baud>`) before they can be assigned as a transport
+- A serial port owned by ELM327 cannot be assigned as a transport; use `BUS SERIAL <n> ELM327 DISABLE` first
+- Transport routing is persisted to EEPROM on `SAVE` and restored on boot
 
 ---
 
@@ -820,7 +969,8 @@ Global configuration affecting all subsystems.
 ```bash
 SYSTEM STATUS            # Show all global configuration
 SYSTEM DUMP              # Show complete system dump (all subsystems)
-SYSTEM DUMP JSON         # Export configuration as JSON (copy/paste)
+SYSTEM DUMP JSON         # Export active configuration as JSON (copy/paste)
+SYSTEM DUMP REGISTRY JSON  # Export firmware catalogs as JSON (Teensy/ESP32 only)
 SYSTEM PINS              # Show all pin allocations (diagnostic)
 SYSTEM PINS <pin>        # Query specific pin status (e.g., A0, CAN:0)
 ```
@@ -835,7 +985,9 @@ Default Units: Temp=°C, Pressure=bar, Elevation=m, Speed=kph
 
 **SYSTEM DUMP** shows complete configuration including all inputs, outputs, display, and system parameters.
 
-**SYSTEM DUMP JSON** exports the complete configuration as JSON to the terminal for easy copy/paste.
+**SYSTEM DUMP JSON** exports the active user configuration as JSON (inputs, system settings) for backup/restore.
+
+**SYSTEM DUMP REGISTRY JSON** exports the firmware's compile-time catalogs (available applications, sensors, units, etc.) as a single JSON object. Equivalent to calling all `LIST … JSON` commands in one round-trip.
 
 **SYSTEM PINS** displays pin allocation status organized by category:
 ```
@@ -1255,19 +1407,6 @@ ERROR: Configuration locked in RUN mode
 ERROR: Pin A20 out of range
   Hint: Valid pins: 0-53, A0-A15
 ```
-
----
-
-## Static Builds
-
-These serial commands are available by default. For memory-constrained boards (Arduino Uno), you may use static builds where configuration is done at compile time via `tools/configure.py`.
-
-In static builds:
-- Serial configuration commands are disabled
-- CONFIG/RUN mode switching is disabled
-- Configuration is defined at compile time
-
-See **[Static Builds Guide](../advanced/STATIC_BUILDS_GUIDE.md)** for details.
 
 ---
 

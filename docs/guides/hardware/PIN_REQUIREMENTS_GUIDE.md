@@ -203,7 +203,6 @@ Certain pins are **reserved** for critical system functions and cannot be used f
 | 50-53  | SPI (MISO/MOSI/SCK/SS) | SPI bus for SD card, CAN, thermocouples     |
 
 **Important notes:**
-- These pins are automatically excluded by `configure.py`
 - Attempting to assign a reserved pin will result in validation error
 - I2C sensors (BME280) use `"I2C"` as pin identifier, not "20" or "21"
 
@@ -211,7 +210,7 @@ Certain pins are **reserved** for critical system functions and cannot be used f
 
 ## Pin Validation Rules
 
-The configuration tool (`configure.py`) validates pins against these rules:
+The runtime CLI validates pins against these rules:
 
 ### 1. Pin Format Validation
 
@@ -555,26 +554,8 @@ static InputConfig inputConfigs[MAX_INPUTS] = {
 
 **Hardware note:** You must physically move the sensor's CS wire from pin A0 to pin 6 (or another available digital pin).
 
-### Using configure.py
-
-The configuration tool (`configure.py`) now enforces pin type validation:
-
-```bash
-$ python3 tools/configure.py
-
-Select sensor: MAX6675
-Pin (e.g., A0, 6): A0
-❌ Invalid pin: Sensor requires a digital pin, but A0 is an analog pin
-
-Pin (e.g., A0, 6): 6
-✅ Valid pin assignment!
-```
-
----
-
 ## See Also
 
-- **[configure.py Documentation](../../../tools/README.md)** - Detailed usage of the configuration tool
 - **[Sensor Selection Guide](../sensor-types/SENSOR_SELECTION_GUIDE.md)** - Choosing the right sensor for your application
 - **[Adding Sensors Guide](../configuration/ADDING_SENSORS.md)** - Step-by-step sensor integration
 - **[EEPROM Structure Documentation](../../architecture/EEPROM_STRUCTURE.md)** - How pin configurations are stored

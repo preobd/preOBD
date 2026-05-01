@@ -94,15 +94,15 @@ enum class CanControllerType : uint8_t {
 // Helper Functions
 // ============================================================================
 
-// Get the controller type for a given bus (compile-time)
+// Get the controller type for a given bus (compile-time).
+// Written as a single return expression for C++11 constexpr compatibility
+// (ESP32 Arduino framework defaults to gnu++11).
 inline constexpr CanControllerType getBusControllerType(uint8_t bus) {
-    switch (bus) {
-        case 0: return CAN_CONTROLLER_BUS_0;
-        case 1: return CAN_CONTROLLER_BUS_1;
-        case 2: return CAN_CONTROLLER_BUS_2;
-        case 3: return CAN_CONTROLLER_BUS_3;
-        default: return CanControllerType::NONE;
-    }
+    return (bus == 0) ? CAN_CONTROLLER_BUS_0 :
+           (bus == 1) ? CAN_CONTROLLER_BUS_1 :
+           (bus == 2) ? CAN_CONTROLLER_BUS_2 :
+           (bus == 3) ? CAN_CONTROLLER_BUS_3 :
+                        CanControllerType::NONE;
 }
 
 // Check if a bus has a controller assigned

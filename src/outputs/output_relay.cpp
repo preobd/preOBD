@@ -9,7 +9,7 @@
 
 #include "../config.h"
 
-#ifdef ENABLE_RELAY_OUTPUT
+#if ENABLE_RELAY_OUTPUT
 
 #include "output_relay.h"
 #include "../lib/system_config.h"

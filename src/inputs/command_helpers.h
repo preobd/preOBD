@@ -59,11 +59,11 @@ void printHelpSystem();
 void printHelpConfig();
 void printHelpExamples();
 
-#ifdef ENABLE_RELAY_OUTPUT
+#if ENABLE_RELAY_OUTPUT
 void printHelpRelay();
 #endif
 
-#ifdef ENABLE_TEST_MODE
+#if ENABLE_TEST_MODE
 void printHelpTest();
 #endif
 

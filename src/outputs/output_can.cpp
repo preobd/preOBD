@@ -16,26 +16,14 @@
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
 #include "../lib/system_config.h"
+#include "../lib/obd_query.h"
 
-#ifdef ENABLE_CAN
+#if ENABLE_CAN
 
 #include "../hal/hal_can.h"
 
 // Which bus we're outputting on (set during init)
 static uint8_t canOutputBus = 0;
-
-// ===== OBD-II REQUEST/RESPONSE SUPPORT =====
-
-// PID Lookup Table - Maps PIDs to Input pointers for fast lookup
-#define MAX_PID_ENTRIES 64
-
-struct PIDMapping {
-    uint8_t pid;
-    Input* inputPtr;
-};
-
-static PIDMapping pidLookupTable[MAX_PID_ENTRIES];
-static uint8_t pidLookupCount = 0;
 
 // ===== PLATFORM ABSTRACTION =====
 
@@ -49,110 +37,32 @@ static void sendCANFrame(uint32_t canId, const byte* data, uint8_t len) {
     hal::can::write(canId, data, len, false, canOutputBus);  // Standard 11-bit ID
 }
 
-// ===== PID LOOKUP TABLE =====
-
 /**
- * Build PID lookup table from active inputs
- * Called during initCAN() after inputs are configured
- */
-static void buildPIDLookupTable() {
-    pidLookupCount = 0;
-
-    for (uint8_t i = 0; i < MAX_INPUTS && pidLookupCount < MAX_PID_ENTRIES; i++) {
-        if (inputs[i].flags.isEnabled &&
-            inputs[i].obd2pid != 0x00) {  // Skip invalid PIDs
-
-            // Check for duplicate PIDs
-            bool isDuplicate = false;
-            for (uint8_t j = 0; j < pidLookupCount; j++) {
-                if (pidLookupTable[j].pid == inputs[i].obd2pid) {
-                    isDuplicate = true;
-                    msg.debug.warn(TAG_CAN, "Duplicate PID 0x%02X - using first occurrence (%s)",
-                                  inputs[i].obd2pid, pidLookupTable[j].inputPtr->abbrName);
-                    break;
-                }
-            }
-
-            if (!isDuplicate) {
-                pidLookupTable[pidLookupCount].pid = inputs[i].obd2pid;
-                pidLookupTable[pidLookupCount].inputPtr = &inputs[i];
-                pidLookupCount++;
-            }
-        }
-    }
-
-    msg.debug.info(TAG_CAN, "Built OBD-II PID lookup table: %d PIDs available", pidLookupCount);
-}
-
-/**
- * Find Input by PID
- * @param pid OBD-II PID to lookup
- * @return Pointer to Input, or nullptr if not found
- */
-static Input* findInputByPID(uint8_t pid) {
-    for (uint8_t i = 0; i < pidLookupCount; i++) {
-        if (pidLookupTable[i].pid == pid) {
-            return pidLookupTable[i].inputPtr;
-        }
-    }
-    return nullptr;
-}
-
-// ===== PID 00 (SUPPORTED PIDS BITMAP) =====
-
-/**
- * Generate PID 00 bitmap (Supported PIDs 0x01-0x20)
- * Sets bit for each PID present in pidLookupTable
- *
- * Bitmap encoding (ISO 15765-4):
- *   Byte A, Bit 7 = PID 0x01 supported
- *   Byte A, Bit 6 = PID 0x02 supported
- *   ...
- *   Byte D, Bit 0 = PID 0x20 supported
- *
- * @param bitmap 4-byte buffer to fill
- */
-static void generatePID00Bitmap(uint8_t* bitmap) {
-    memset(bitmap, 0, 4);
-
-    for (uint8_t i = 0; i < pidLookupCount; i++) {
-        uint8_t pid = pidLookupTable[i].pid;
-
-        // Only PIDs 0x01-0x20 go in PID 00 bitmap
-        if (pid >= 0x01 && pid <= 0x20) {
-            uint8_t byteIndex = (pid - 1) / 8;     // Which byte (0-3)
-            uint8_t bitIndex = 7 - ((pid - 1) % 8); // Which bit (7-0, MSB first)
-            bitmap[byteIndex] |= (1 << bitIndex);
-        }
-    }
-}
-
-/**
- * Send Mode 01 PID 00 response (Supported PIDs)
- * Single frame format: [06 41 00 XX XX XX XX 00]
+ * Send a supported-PIDs discovery response for the given base PID.
+ * Handles the full chain: 0x00, 0x20, 0x40, 0x60, …
+ * Single frame format: [06 41 <pid> XX XX XX XX 00]
  * Length=6: mode (1) + PID (1) + bitmap (4)
  */
-static void sendPID00Response() {
+static void sendSupportedPIDsResponse(uint8_t basePID) {
     uint8_t bitmap[4];
-    generatePID00Bitmap(bitmap);
+    obdQuery_getSupportedPIDBitmap(bitmap, basePID);
 
-    // Single frame response (fits in 8 bytes)
     byte frameData[8] = {
         0x06,         // Length: 6 bytes (mode + PID + 4 bitmap bytes)
         0x41,         // Mode 01 response
-        0x00,         // PID 00
-        bitmap[0],    // PIDs 0x01-0x08
-        bitmap[1],    // PIDs 0x09-0x10
-        bitmap[2],    // PIDs 0x11-0x18
-        bitmap[3],    // PIDs 0x19-0x20
+        basePID,
+        bitmap[0],
+        bitmap[1],
+        bitmap[2],
+        bitmap[3],
         0x00          // Padding
     };
 
     sendCANFrame(0x7E8, frameData, 8);
 
     #ifdef DEBUG
-    msg.debug.debug(TAG_CAN, "PID 00 bitmap: %02X %02X %02X %02X",
-                   bitmap[0], bitmap[1], bitmap[2], bitmap[3]);
+    msg.debug.debug(TAG_CAN, "PID 0x%02X bitmap: %02X %02X %02X %02X",
+                   basePID, bitmap[0], bitmap[1], bitmap[2], bitmap[3]);
     #endif
 }
 
@@ -223,14 +133,14 @@ static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
         return;
     }
 
-    // Special case: PID 00 (Supported PIDs 0x01-0x20)
-    if (pid == 0x00) {
-        sendPID00Response();
+    // Discovery PIDs: 0x00, 0x20, 0x40 … 0xE0 (supported-PIDs chain)
+    if ((pid & 0x1F) == 0x00) {
+        sendSupportedPIDsResponse(pid);
         return;
     }
 
     // Lookup PID in active inputs
-    Input* input = findInputByPID(pid);
+    Input* input = obdQuery_findByPID(pid);
     if (input == nullptr || isnan(input->value)) {
         // PID not supported or no valid data
         sendNegativeResponse(canId, mode, 0x31);  // Request out of range
@@ -265,9 +175,7 @@ void initCAN() {
 
     msg.debug.info(TAG_CAN, "CAN output initialized on bus %d (%lu bps)", canOutputBus, baudrate);
     msg.debug.info(TAG_CAN, "OBD-II request/response enabled");
-
-    // Build PID lookup table for request/response
-    buildPIDLookupTable();
+    // PID lookup table built in main.cpp after initOutputModules()
 }
 
 void sendCAN(Input *ptr) {

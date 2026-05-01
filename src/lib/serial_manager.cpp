@@ -309,6 +309,12 @@ void displaySerialStatus() {
             msg.control.print(F("disabled"));
         }
 
+#if ENABLE_ELM327
+        if (systemConfig.buses.elm327_serial_port == port_id) {
+            msg.control.print(F(" [ELM327]"));
+        }
+#endif
+
         msg.control.print(F(" (RX="));
         msg.control.print(getDefaultSerialRX(port_id));
         msg.control.print(F(", TX="));
@@ -334,7 +340,13 @@ void displaySerialPortStatus(uint8_t port_id) {
     msg.control.print(port_id);
     msg.control.println(F(":"));
     msg.control.print(F("  Status: "));
-    msg.control.println(enabled ? F("ENABLED") : F("disabled"));
+    msg.control.print(enabled ? F("ENABLED") : F("disabled"));
+#if ENABLE_ELM327
+    if (systemConfig.buses.elm327_serial_port == port_id) {
+        msg.control.print(F(" [ELM327]"));
+    }
+#endif
+    msg.control.println();
     msg.control.print(F("  Baud:   "));
     msg.control.print(getBaudRateString(baud_idx));
     msg.control.println(F(" bps"));

@@ -21,11 +21,7 @@
 #include "../lib/platform.h"
 #include "input.h"
 #include "../lib/sensor_types.h"
-#ifdef USE_STATIC_CONFIG
-#include "../lib/generated/sensor_library_static.h"
-#else
 #include "../lib/sensor_library.h"
-#endif
 #include "../lib/units_registry.h"
 #include <SPI.h>
 #include <Wire.h>
@@ -69,10 +65,15 @@
 // Digital sensors
 #include "sensors/digital/float_switch.cpp"
 
+// Level sensors
+#include "sensors/level/table.cpp"
+
 // CAN sensors (CAN bus imported sensors)
+#if ENABLE_CAN
 #include "sensors/can/can_frame_cache.cpp"
 #include "sensors/can/can_read.cpp"
 #include "sensors/can/can_scan.cpp"
+#endif
 
 // Note: thermistors/linear.cpp and pressure/linear.cpp are wrapper files
 // that point to linear/linear_sensor.cpp (already included above)
@@ -175,6 +176,7 @@ ObdConvertFunc getObdConvertFunc(MeasurementType type) {
         case MEASURE_ELEVATION: return obdConvertElevation;
         case MEASURE_DIGITAL: return obdConvertFloatSwitch;
         case MEASURE_SPEED: return obdConvertSpeed;
+        case MEASURE_LEVEL: return obdConvertHumidity;  // 0-100% same encoding as humidity
         default: return obdConvertVoltage;
     }
 }

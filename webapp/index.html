@@ -1,0 +1,1538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>preOBD — Web Bluetooth</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1E351E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="preOBD">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Roboto:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand: #2B4A2B;
+    --brand-light: #3D6B3D;
+    --brand-dark: #1E351E;
+    --bg: #F0E8D8;
+    --surface: #F5EDE0;
+    --surface-raised: #FAF4EA;
+    --border: #C8B896;
+    --border-light: #DDD0B8;
+    --text: #2B4A2B;
+    --text-light: #5A7A5A;
+    --dim: #8A7A66;
+    --dim-light: #B0A090;
+    --green: #3D6B3D;
+    --yellow: #B8860B;
+    --red: #A03030;
+    --terminal-bg: #141E14;
+    --terminal-text: #C8BC9A;
+    --mono: 'DM Mono', 'Courier New', monospace;
+    --sans: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+    --shadow-sm: 0 1px 3px rgba(27,48,27,0.08), 0 1px 2px rgba(27,48,27,0.06);
+    --shadow-md: 0 4px 12px rgba(27,48,27,0.10), 0 2px 4px rgba(27,48,27,0.06);
+    --shadow-inset: inset 0 1px 3px rgba(27,48,27,0.12);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    font-weight: 400;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    /* Subtle noise texture via SVG data URI */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  }
+
+  /* ── Header ───────────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    height: 56px;
+    background: var(--brand-dark);
+    border-bottom: 1px solid rgba(0,0,0,0.25);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+  }
+
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .header-logo {
+    height: 30px;
+    width: auto;
+    /* Render the green-on-beige logo naturally on the dark header via a beige backing */
+    background: #EDE0C8;
+    border-radius: 6px;
+    padding: 3px 6px;
+  }
+
+  .header-divider {
+    width: 1px;
+    height: 22px;
+    background: rgba(255,255,255,0.15);
+  }
+
+  header h1 {
+    font-size: 16px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.92);
+    letter-spacing: 0.01em;
+    /* "pre" is light, "OBD" is bold — mirroring the logo wordmark */
+  }
+  header h1 .wordmark-pre {
+    font-weight: 300;
+    color: rgba(255,255,255,0.65);
+  }
+  header h1 .wordmark-obd {
+    font-weight: 700;
+    color: rgba(255,255,255,0.95);
+    letter-spacing: 0.04em;
+  }
+
+  .connection-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .status-dot.connected {
+    background: #5CC95C;
+    box-shadow: 0 0 0 2px rgba(92,201,92,0.25), 0 0 8px rgba(92,201,92,0.5);
+    animation: pulse-led 2.5s ease-in-out infinite;
+  }
+  @keyframes pulse-led {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(92,201,92,0.25), 0 0 8px rgba(92,201,92,0.5); }
+    50%       { box-shadow: 0 0 0 3px rgba(92,201,92,0.15), 0 0 14px rgba(92,201,92,0.7); }
+  }
+
+  .status-text { font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.6); letter-spacing: 0.02em; }
+  .status-text.connected { color: rgba(255,255,255,0.85); }
+
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+
+  /* ── Buttons ──────────────────────────────────────────────── */
+  .btn {
+    padding: 7px 16px;
+    border-radius: 5px;
+    font-family: var(--sans);
+    font-weight: 500;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.03em;
+    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .btn:disabled { opacity: 0.38; cursor: not-allowed; pointer-events: none; }
+
+  .btn.primary {
+    background: var(--brand-light);
+    border-color: var(--brand);
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(27,48,27,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+  }
+  .btn.primary:hover { background: #487048; border-color: #3D6B3D; box-shadow: 0 2px 6px rgba(27,48,27,0.35), inset 0 1px 0 rgba(255,255,255,0.12); }
+
+  .btn.secondary {
+    background: var(--surface-raised);
+    border-color: var(--border);
+    color: var(--text);
+    box-shadow: var(--shadow-sm);
+  }
+  .btn.secondary:hover { background: #fff; border-color: var(--brand-light); }
+
+  .btn.ghost {
+    background: transparent;
+    border-color: rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.8);
+  }
+  .btn.ghost:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.35); }
+
+  .btn.danger {
+    background: transparent;
+    border-color: rgba(160,48,48,0.5);
+    color: var(--red);
+  }
+  .btn.danger:hover { background: rgba(160,48,48,0.08); border-color: var(--red); }
+
+  .btn.disconnect { /* alias */ background: transparent; border-color: rgba(160,48,48,0.5); color: #d07070; }
+  .btn.disconnect:hover { background: rgba(160,48,48,0.1); border-color: #d07070; }
+
+  .hidden { display: none !important; }
+
+  /* ── Main Layout ──────────────────────────────────────────── */
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    max-width: 960px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 20px 16px;
+    gap: 14px;
+  }
+
+  /* ── Panel ────────────────────────────────────────────────── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border-light);
+    background: linear-gradient(180deg, var(--surface-raised) 0%, var(--surface) 100%);
+  }
+
+  .panel-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--dim);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-title::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 12px;
+    background: var(--brand-light);
+    border-radius: 2px;
+  }
+
+  .panel-body { padding: 16px; }
+
+  /* ── System Status ────────────────────────────────────────── */
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 1px;
+    background: var(--border-light);
+    border: 1px solid var(--border-light);
+    border-radius: 7px;
+    overflow: hidden;
+  }
+
+  .status-item {
+    background: var(--surface-raised);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: background 0.15s;
+  }
+  .status-item:hover { background: #fff; }
+
+  .status-item label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--dim-light);
+  }
+
+  .status-item span {
+    font-size: 17px;
+    font-family: var(--mono);
+    font-weight: 500;
+    color: var(--brand);
+    line-height: 1.2;
+  }
+
+  /* ── Quick Actions ────────────────────────────────────────── */
+  .quick-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .quick-actions .btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 6px 12px;
+    background: var(--surface-raised);
+    border-color: var(--border);
+    color: var(--text-light);
+    border-radius: 4px;
+    letter-spacing: 0.06em;
+  }
+  .quick-actions .btn:hover:not(:disabled) { background: #fff; border-color: var(--brand-light); color: var(--brand); }
+
+  /* ── Terminal ─────────────────────────────────────────────── */
+  #terminal { flex: 1; min-height: 300px; }
+  #terminal.collapsed { min-height: 0; flex: none; }
+  #terminal.collapsed .panel-body { display: none; }
+  .panel-collapse-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--dim-light);
+    padding: 2px 6px;
+    line-height: 1;
+    border-radius: 3px;
+    transition: color 0.15s;
+  }
+  .panel-collapse-btn:hover { color: var(--dim); }
+
+  #output {
+    min-height: 220px;
+    max-height: 55vh;
+    overflow-y: auto;
+    background: var(--terminal-bg);
+    border-radius: 6px;
+    padding: 14px 16px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--terminal-text);
+    margin-bottom: 10px;
+    /* Scanline effect */
+    background-image:
+      repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.07) 2px,
+        rgba(0,0,0,0.07) 4px
+      );
+    /* CRT inner glow */
+    box-shadow:
+      inset 0 0 30px rgba(0,0,0,0.4),
+      inset 0 0 0 1px rgba(61,107,61,0.15);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(61,107,61,0.4) transparent;
+  }
+  #output::-webkit-scrollbar { width: 5px; }
+  #output::-webkit-scrollbar-track { background: transparent; }
+  #output::-webkit-scrollbar-thumb { background: rgba(61,107,61,0.4); border-radius: 3px; }
+
+  #output .cmd  { color: #7CC87C; font-weight: 500; }
+  #output .err  { color: #C87070; }
+  #output .info { color: #6A7A5A; font-style: italic; }
+
+  .input-row { display: flex; gap: 8px; }
+
+  #cmdInput {
+    flex: 1;
+    padding: 10px 14px;
+    background: var(--terminal-bg);
+    border: 1px solid rgba(61,107,61,0.35);
+    border-radius: 6px;
+    color: var(--terminal-text);
+    font-family: var(--mono);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+    box-shadow: var(--shadow-inset);
+  }
+  #cmdInput:focus { border-color: rgba(61,107,61,0.7); box-shadow: inset 0 1px 3px rgba(0,0,0,0.2), 0 0 0 2px rgba(61,107,61,0.12); }
+  #cmdInput::placeholder { color: rgba(140,130,100,0.4); }
+  #cmdInput:disabled { opacity: 0.35; }
+
+  /* ── Config / Inputs Panel ────────────────────────────────── */
+  .inputs-header { display: flex; align-items: center; gap: 10px; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+  .badge-warning { background: rgba(184,134,11,0.12); color: #8a6000; border: 1px solid rgba(184,134,11,0.35); }
+  .badge-applied { background: rgba(61,107,61,0.10); color: var(--brand-light); border: 1px solid rgba(61,107,61,0.25); }
+
+  /* Table */
+  #inputsTable { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+
+  #inputsTable thead th {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--dim-light);
+    padding: 8px 10px;
+    border-bottom: 2px solid var(--border-light);
+    text-align: left;
+    white-space: nowrap;
+    background: var(--surface-raised);
+  }
+
+  #inputsTable tbody tr {
+    border-bottom: 1px solid var(--border-light);
+    transition: background 0.12s;
+  }
+  #inputsTable tbody tr:last-child { border-bottom: none; }
+  #inputsTable tbody tr:hover { background: rgba(255,255,255,0.6); }
+
+  #inputsTable td {
+    padding: 9px 10px;
+    vertical-align: middle;
+    color: var(--text);
+  }
+
+  #inputsTable td.pin-cell {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--brand);
+    background: rgba(27,48,27,0.04);
+  }
+
+  .empty-row td { text-align: center; color: var(--dim); font-style: italic; padding: 28px; font-size: 13px; }
+
+  /* Config action bar */
+  .config-actions {
+    display: flex;
+    gap: 7px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border-light);
+    background: var(--surface);
+  }
+  .config-actions .btn { font-size: 12px; padding: 6px 13px; }
+  .config-actions label.btn { line-height: 1.4; cursor: pointer; }
+
+  /* Row action buttons */
+  .row-btn {
+    font-size: 10.5px;
+    padding: 3px 9px;
+    border-radius: 4px;
+  }
+
+  /* Input editor */
+  #inputEditor {
+    margin: 0;
+    padding: 16px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.5) 0%, var(--surface-raised) 100%);
+    border-top: 1px solid var(--border-light);
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  .editor-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--dim);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .editor-title::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 11px;
+    background: var(--yellow);
+    border-radius: 2px;
+  }
+
+  .editor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px 14px; }
+
+  .editor-field label {
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 5px;
+  }
+
+  .editor-field input[type="text"],
+  .editor-field input[type="number"],
+  .editor-field select {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: #fff;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    appearance: auto;
+    box-shadow: var(--shadow-inset);
+  }
+  .editor-field input:focus,
+  .editor-field select:focus {
+    border-color: var(--brand-light);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.06), 0 0 0 2px rgba(61,107,61,0.12);
+  }
+  .editor-field input:disabled,
+  .editor-field select:disabled { opacity: 0.5; background: var(--surface); }
+
+  .editor-field.checkbox-field {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding-top: 20px;
+  }
+  .editor-field.checkbox-field label {
+    margin-bottom: 0;
+    text-transform: none;
+    font-size: 12.5px;
+    font-family: var(--sans);
+    letter-spacing: 0;
+  }
+  .editor-field.checkbox-field input { width: auto; }
+
+  .editor-actions { display: flex; gap: 8px; margin-top: 14px; }
+
+  /* Overflow scroll wrapper for table */
+  .table-scroll { overflow-x: auto; }
+
+  /* ── Responsive ───────────────────────────────────────────── */
+  @media (max-width: 600px) {
+    .status-grid { grid-template-columns: repeat(2, 1fr); }
+    main { padding: 12px 10px; }
+    header h1 { display: none; }
+    .header-divider { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <img src="logo.png" alt="preOBD" class="header-logo">
+    <div class="header-divider"></div>
+    <h1><span class="wordmark-pre">pre</span><span class="wordmark-obd">OBD</span></h1>
+    <div class="connection-badge">
+      <span class="status-dot" id="statusDot"></span>
+      <span class="status-text" id="statusText">Disconnected</span>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button class="btn ghost primary" id="btnConnect">Connect</button>
+    <button class="btn disconnect hidden" id="btnDisconnect">Disconnect</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- System Status -->
+  <div class="panel" id="statusPanel">
+    <div class="panel-header">
+      <span class="panel-title">System Status</span>
+    </div>
+    <div class="panel-body" style="padding:12px">
+      <div class="status-grid">
+        <div class="status-item"><label>Firmware</label><span id="valFirmware">--</span></div>
+        <div class="status-item"><label>Mode</label><span id="valMode">--</span></div>
+        <div class="status-item"><label>Inputs</label><span id="valInputs">--</span></div>
+        <div class="status-item"><label>Relays</label><span id="valRelays">--</span></div>
+        <div class="status-item"><label>Uptime</label><span id="valUptime">--</span></div>
+        <div class="status-item"><label>Device</label><span id="valDevice">--</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inputs Config -->
+  <div class="panel" id="inputsPanel" style="display:none">
+    <div class="panel-header">
+      <div class="inputs-header">
+        <span class="panel-title">Inputs</span>
+        <span class="badge badge-warning" id="unsavedBadge" style="display:none">Unsaved</span>
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table id="inputsTable">
+        <thead>
+          <tr>
+            <th>Pin</th><th>Application</th><th>Sensor</th>
+            <th>Units</th><th>Alm Min</th><th>Alm Max</th>
+            <th>Enabled</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="inputsTbody"></tbody>
+      </table>
+    </div>
+    <div id="inputEditor" style="display:none"></div>
+    <div class="config-actions">
+      <button class="btn secondary" id="btnAddInput">+ Add Input</button>
+      <button class="btn primary" id="btnApply">Apply</button>
+      <button class="btn primary" id="btnSaveEEPROM">Save to EEPROM</button>
+      <button class="btn secondary" id="btnRevert">Revert</button>
+      <button class="btn secondary" id="btnExportJSON">Export JSON</button>
+      <label class="btn secondary" for="importFile">Import JSON</label>
+      <input type="file" id="importFile" accept=".json" style="display:none">
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Quick Actions</span>
+    </div>
+    <div class="panel-body">
+      <div class="quick-actions">
+        <button class="btn" data-cmd="VERSION" disabled>VERSION</button>
+        <button class="btn" data-cmd="LIST INPUTS" disabled>LIST INPUTS</button>
+        <button class="btn" data-cmd="LIST OUTPUTS" disabled>LIST OUTPUTS</button>
+        <button class="btn" data-cmd="RELAY LIST" disabled>RELAY LIST</button>
+        <button class="btn" data-cmd="CONFIG" disabled>CONFIG</button>
+        <button class="btn" data-cmd="RUN" disabled>RUN</button>
+        <button class="btn" data-cmd="HELP" disabled>HELP</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal -->
+  <div class="panel" id="terminal">
+    <div class="panel-header" style="cursor:pointer" id="terminalHeader">
+      <span class="panel-title">Terminal</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-family:var(--mono);font-size:10px;color:var(--dim-light);letter-spacing:0.04em">9600 BAUD · BLE</span>
+        <button class="panel-collapse-btn" id="btnTerminalToggle" title="Collapse terminal">▲</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="output"><span class="info">Connect to a preOBD device to begin.</span>
+</div>
+      <div class="input-row">
+        <input type="text" id="cmdInput" placeholder="Type a command…" disabled autocomplete="off" spellcheck="false">
+        <button class="btn primary" id="btnSend" disabled>Send</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// preOBD BLE GATT UUIDs (from ble_gatt_defs.h)
+const PREOBD_SERVICE     = '4f424400-7072-6542-4244-000000000001';
+const PREOBD_CMD_TX      = '4f424400-7072-6542-4244-000000000010';
+const PREOBD_CMD_RX      = '4f424400-7072-6542-4244-000000000011';
+const PREOBD_STATUS      = '4f424400-7072-6542-4244-000000000020';
+const NUS_SERVICE        = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+const NUS_RX             = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+const NUS_TX             = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+// HM-10 / CC2541 BLE modules use a single characteristic for RX and TX
+const HM10_SERVICE       = '0000ffe0-0000-1000-8000-00805f9b34fb';
+const HM10_CHAR          = '0000ffe1-0000-1000-8000-00805f9b34fb';
+const DIS_SERVICE        = 0x180A;
+
+const PROMPT = 'preOBD> ';
+const ENCODER = new TextEncoder();
+const DECODER = new TextDecoder();
+
+// State
+let device = null;
+let server = null;
+let mode = null;       // 'preobd', 'nus', or 'hm10'
+let txChar = null;     // characteristic to write commands to
+let rxChar = null;     // characteristic that notifies responses
+let statusChar = null; // system status characteristic (preobd mode only)
+let cmdHistory = [];
+let historyIdx = -1;
+
+// Command queue
+let cmdQueue = [];
+let cmdPending = false;
+let pendingResolve = null;
+let pendingReject = null;
+let suppressOutput = false;
+
+// Config UI state
+let originalConfig = null;
+let localConfig = null;
+let catalog = { applications: [], sensors: [], units: [] };
+let inputState = new Map();
+let editingPin = null;  // null = add mode, string pin = edit mode
+
+// DOM refs
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+const btnConnect = document.getElementById('btnConnect');
+const btnDisconnect = document.getElementById('btnDisconnect');
+const statusPanel = document.getElementById('statusPanel');
+const output = document.getElementById('output');
+const cmdInput = document.getElementById('cmdInput');
+const btnSend = document.getElementById('btnSend');
+const quickBtns = document.querySelectorAll('[data-cmd]');
+
+// --- Connection ---
+
+btnConnect.addEventListener('click', connect);
+btnDisconnect.addEventListener('click', disconnect);
+btnSend.addEventListener('click', sendCommand);
+cmdInput.addEventListener('keydown', handleInputKey);
+quickBtns.forEach(btn => btn.addEventListener('click', () => sendText(btn.dataset.cmd)));
+
+async function connect() {
+  if (!navigator.bluetooth) {
+    appendInfo('Web Bluetooth is not supported in this browser. Use Chrome or Edge.');
+    return;
+  }
+  output.innerHTML = '';
+  try {
+    appendInfo('Scanning for BLE devices...');
+    // Show both preOBD and NUS devices in a single scan dialog.
+    // After connecting, we detect which services are available.
+    device = await navigator.bluetooth.requestDevice({
+      filters: [
+        { services: [PREOBD_SERVICE] },
+        { services: [NUS_SERVICE] },
+        { services: [HM10_SERVICE] }
+      ],
+      optionalServices: [PREOBD_SERVICE, NUS_SERVICE, HM10_SERVICE, DIS_SERVICE]
+    });
+
+    device.addEventListener('gattserverdisconnected', onDisconnected);
+    appendInfo('Connecting to ' + device.name + '...');
+
+    server = await device.gatt.connect();
+
+    // Try preOBD service first
+    try {
+      const svc = await server.getPrimaryService(PREOBD_SERVICE);
+      txChar = await svc.getCharacteristic(PREOBD_CMD_TX);
+      rxChar = await svc.getCharacteristic(PREOBD_CMD_RX);
+      try { statusChar = await svc.getCharacteristic(PREOBD_STATUS); } catch(e) { statusChar = null; }
+      mode = 'preobd';
+      appendInfo('Connected (preOBD GATT mode)');
+    } catch (e) {
+      // Fall back to NUS
+      try {
+        const svc = await server.getPrimaryService(NUS_SERVICE);
+        txChar = await svc.getCharacteristic(NUS_RX);  // NUS RX = we write to it
+        rxChar = await svc.getCharacteristic(NUS_TX);   // NUS TX = we read from it
+        statusChar = null;
+        mode = 'nus';
+        appendInfo('Connected (NUS terminal mode)');
+      } catch (e2) {
+        // Fall back to HM-10 (single characteristic for both RX and TX)
+        const svc = await server.getPrimaryService(HM10_SERVICE);
+        const char = await svc.getCharacteristic(HM10_CHAR);
+        txChar = char;
+        rxChar = char;
+        statusChar = null;
+        mode = 'hm10';
+        appendInfo('Connected (HM-10 terminal mode)');
+      }
+    }
+
+    // Subscribe to notifications
+    await rxChar.startNotifications();
+    rxChar.addEventListener('characteristicvaluechanged', onRxData);
+
+    setConnected(true);
+
+    // Read system status if available
+    if (statusChar) {
+      readSystemStatus();
+    } else {
+      statusPanel.classList.add('hidden');
+    }
+
+    fetchInitialState();
+
+  } catch (err) {
+    if (err.name !== 'NotFoundError') {  // User cancelled scan
+      appendErr('Connection failed: ' + err.message);
+    }
+  }
+}
+
+function disconnect() {
+  if (device && device.gatt.connected) {
+    device.gatt.disconnect();
+  }
+}
+
+function onDisconnected() {
+  setConnected(false);
+  appendInfo('Disconnected.');
+  txChar = null;
+  rxChar = null;
+  statusChar = null;
+  mode = null;
+  // Reject any in-flight or queued commands so awaiting frames throw
+  if (pendingReject) {
+    const rej = pendingReject;
+    pendingResolve = null;
+    pendingReject = null;
+    rej(new Error('Disconnected'));
+  }
+  for (const { reject } of cmdQueue) reject(new Error('Disconnected'));
+  cmdQueue = [];
+  cmdPending = false;
+  suppressOutput = false;
+  // Reset config UI
+  originalConfig = null;
+  localConfig = null;
+  inputState.clear();
+  document.getElementById('inputsPanel').style.display = 'none';
+}
+
+function setConnected(connected) {
+  statusDot.classList.toggle('connected', connected);
+  statusText.textContent = connected ? (device.name || 'Connected') : 'Disconnected';
+  statusText.classList.toggle('connected', connected);
+  btnConnect.classList.toggle('hidden', connected);
+  btnDisconnect.classList.toggle('hidden', !connected);
+  cmdInput.disabled = !connected;
+  btnSend.disabled = !connected;
+  quickBtns.forEach(btn => btn.disabled = !connected);
+}
+
+// --- Data Handling ---
+
+let rxBuffer = '';
+
+function onRxData(event) {
+  const chunk = DECODER.decode(event.target.value);
+  rxBuffer += chunk;
+
+  const promptIdx = rxBuffer.indexOf(PROMPT);
+  if (promptIdx !== -1) {
+    const response = rxBuffer.substring(0, promptIdx);
+    rxBuffer = rxBuffer.substring(promptIdx + PROMPT.length);
+    if (response.trim() && !suppressOutput) {
+      appendOutput(response);
+    }
+    if (pendingResolve) {
+      const res = pendingResolve;
+      pendingResolve = null;
+      pendingReject = null;
+      cmdPending = false;
+      res(response);
+    } else {
+      cmdPending = false;
+    }
+    drainQueue();
+  }
+}
+
+async function sendText(cmd) {
+  if (!txChar) return;
+  const text = cmd + '\n';
+  appendCmd(cmd);
+
+  // Split into chunks if needed (BLE write limit)
+  const data = ENCODER.encode(text);
+  const chunkSize = 200;  // Conservative; most MTUs allow 247+
+  for (let i = 0; i < data.length; i += chunkSize) {
+    const chunk = data.slice(i, i + chunkSize);
+    try {
+      await txChar.writeValueWithoutResponse(chunk);
+    } catch (e) {
+      try {
+        await txChar.writeValue(chunk);
+      } catch (e2) {
+        appendErr('Write failed: ' + e2.message);
+        return;
+      }
+    }
+  }
+}
+
+function sendCommand() {
+  const cmd = cmdInput.value.trim();
+  if (!cmd) return;
+  cmdHistory.unshift(cmd);
+  if (cmdHistory.length > 50) cmdHistory.pop();
+  historyIdx = -1;
+  cmdInput.value = '';
+  sendText(cmd);
+}
+
+function handleInputKey(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    sendCommand();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (historyIdx < cmdHistory.length - 1) {
+      historyIdx++;
+      cmdInput.value = cmdHistory[historyIdx];
+    }
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (historyIdx > 0) {
+      historyIdx--;
+      cmdInput.value = cmdHistory[historyIdx];
+    } else {
+      historyIdx = -1;
+      cmdInput.value = '';
+    }
+  }
+}
+
+// --- System Status ---
+
+async function readSystemStatus() {
+  if (!statusChar) return;
+  try {
+    const val = await statusChar.readValue();
+    if (val.byteLength < 32) return;
+
+    const magic = val.getUint32(0, true);
+    if (magic !== 0x704F4244) return;  // "pOBD"
+
+    const sysMode = val.getUint8(5);
+    const inputs = val.getUint8(6);
+    const relays = val.getUint8(7);
+    const uptime = val.getUint32(8, true);
+    const major = val.getUint8(12);
+    const minor = val.getUint8(13);
+    const patch = val.getUint8(14);
+
+    // Device name: bytes 16-31, null-terminated
+    const nameBytes = new Uint8Array(val.buffer, val.byteOffset + 16, 16);
+    const nullIdx = nameBytes.indexOf(0);
+    const name = DECODER.decode(nameBytes.slice(0, nullIdx === -1 ? 16 : nullIdx));
+
+    document.getElementById('valFirmware').textContent = major + '.' + minor + '.' + patch;
+    document.getElementById('valMode').textContent = sysMode === 0 ? 'CONFIG' : 'RUN';
+    document.getElementById('valMode').style.color = sysMode === 0 ? 'var(--yellow)' : 'var(--brand)';
+    document.getElementById('valInputs').textContent = inputs;
+    document.getElementById('valRelays').textContent = relays;
+    document.getElementById('valUptime').textContent = formatUptime(uptime);
+    document.getElementById('valDevice').textContent = name || '--';
+
+    statusPanel.classList.remove('hidden');
+  } catch (e) {
+    statusPanel.classList.add('hidden');
+  }
+}
+
+function formatUptime(seconds) {
+  if (seconds < 60) return seconds + 's';
+  if (seconds < 3600) return Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return h + 'h ' + m + 'm';
+}
+
+// --- Terminal Output ---
+
+function appendCmd(text) {
+  const el = document.createElement('div');
+  el.className = 'cmd';
+  el.textContent = '> ' + text;
+  output.appendChild(el);
+  scrollToBottom();
+}
+
+function appendOutput(text) {
+  const el = document.createElement('div');
+  // Highlight error lines
+  if (text.includes('ERROR:')) {
+    el.className = 'err';
+  }
+  el.textContent = text;
+  output.appendChild(el);
+  scrollToBottom();
+}
+
+function appendInfo(text) {
+  const el = document.createElement('div');
+  el.className = 'info';
+  el.textContent = text;
+  output.appendChild(el);
+  scrollToBottom();
+}
+
+function appendErr(text) {
+  const el = document.createElement('div');
+  el.className = 'err';
+  el.textContent = text;
+  output.appendChild(el);
+  scrollToBottom();
+}
+
+function scrollToBottom() {
+  output.scrollTop = output.scrollHeight;
+}
+
+// --- Command Queue ---
+
+function sendQueued(cmd) {
+  return new Promise((resolve, reject) => {
+    cmdQueue.push({ cmd, resolve, reject });
+    drainQueue();
+  });
+}
+
+function drainQueue() {
+  if (cmdPending || !cmdQueue.length || !txChar) return;
+  const { cmd, resolve, reject } = cmdQueue.shift();
+  cmdPending = true;
+  pendingResolve = resolve;
+  pendingReject = reject;
+  sendText(cmd);
+}
+
+async function sendRaw(text) {
+  if (!txChar) return;
+  const data = ENCODER.encode(text);
+  const chunkSize = 200;
+  for (let i = 0; i < data.length; i += chunkSize) {
+    const chunk = data.slice(i, i + chunkSize);
+    try {
+      await txChar.writeValueWithoutResponse(chunk);
+    } catch(e) {
+      try {
+        await txChar.writeValue(chunk);
+      } catch(e2) {
+        throw new Error('BLE write failed at byte ' + i + ': ' + e2.message);
+      }
+    }
+  }
+}
+
+// --- Config UI Helpers ---
+
+function parseJsonResponse(raw) {
+  const s = raw.trim();
+  // Extract the outermost JSON object or array, skipping any stray log lines
+  const objIdx = s.indexOf('{');
+  const arrIdx = s.indexOf('[');
+  const start = (objIdx === -1) ? arrIdx
+              : (arrIdx === -1) ? objIdx
+              : Math.min(objIdx, arrIdx);
+  if (start === -1) throw new Error('No JSON found in response');
+  const closer = s[start] === '{' ? '}' : ']';
+  const end = s.lastIndexOf(closer);
+  if (end <= start) throw new Error('Malformed JSON in response');
+  return JSON.parse(s.slice(start, end + 1));
+}
+
+function pinNumToStr(pin) {
+  if (pin >= 0xF0 && pin <= 0xFD) return 'I2C:' + (pin - 0xF0);
+  if (pin >= 0xC0 && pin <= 0xDF) return 'CAN:' + (pin - 0xC0);
+  return String(pin);
+}
+
+// Normalise unit display against the loaded catalog so casing is always canonical.
+function normalizeUnitDisplay(units) {
+  if (!units) return '—';
+  const found = catalog.units.find(u => u.name.toLowerCase() === units.toLowerCase());
+  return found ? found.name : units;
+}
+
+// --- Initial State Fetch ---
+
+async function fetchInitialState() {
+  const panel = document.getElementById('inputsPanel');
+  const tbody = document.getElementById('inputsTbody');
+  panel.style.display = '';
+  tbody.innerHTML = '<tr><td colspan="9" class="empty-row" style="color:var(--brand)">Loading configuration…</td></tr>';
+  try {
+    await sendQueued('CONFIG');
+    const dumpResp = await sendQueued('SYSTEM DUMP JSON');
+    originalConfig = parseJsonResponse(dumpResp);
+    localConfig = JSON.parse(JSON.stringify(originalConfig));
+    const appResp = await sendQueued('LIST APPLICATIONS JSON');
+    catalog.applications = parseJsonResponse(appResp);
+    const sensResp = await sendQueued('LIST SENSORS JSON');
+    catalog.sensors = parseJsonResponse(sensResp);
+    const unitResp = await sendQueued('LIST UNITS JSON');
+    catalog.units = parseJsonResponse(unitResp);
+    renderInputsPanel();
+    appendInfo('Configuration loaded.');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-row" style="color:var(--red)">Failed to load: ' + escHtml(e.message) + '</td></tr>';
+    if (e.message !== 'Disconnected') appendErr('Failed to load configuration: ' + e.message);
+  }
+}
+
+// --- Inputs Table ---
+
+function renderInputsPanel() {
+  const tbody = document.getElementById('inputsTbody');
+  tbody.innerHTML = '';
+  const inputs = localConfig?.inputs || [];
+  if (!inputs.length) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="9" class="empty-row">No inputs configured. Click "+ Add Input" to add one.</td>';
+    tbody.appendChild(tr);
+  } else {
+    for (const inp of inputs) {
+      const pinStr = pinNumToStr(inp.pin);
+      const state = inputState.get(pinStr);
+      const alarmMin = inp.alarm?.min != null ? inp.alarm.min : '—';
+      const alarmMax = inp.alarm?.max != null ? inp.alarm.max : '—';
+      const badge = state === 'applied'
+        ? '<span class="badge badge-applied">Applied</span>'
+        : (state === 'dirty' ? '<span style="color:var(--dim);font-style:italic;font-size:11px">Pending</span>' : '—');
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        `<td class="pin-cell">${escHtml(pinStr)}</td>` +
+        `<td>${escHtml(inp.app || '—')}</td>` +
+        `<td>${escHtml(inp.sensor || '—')}</td>` +
+        `<td>${escHtml(normalizeUnitDisplay(inp.units))}</td>` +
+        `<td>${alarmMin}</td>` +
+        `<td>${alarmMax}</td>` +
+        `<td><input type="checkbox" ${inp.enabled ? 'checked' : ''} disabled></td>` +
+        `<td>${badge}</td>` +
+        `<td style="white-space:nowrap">` +
+          `<button class="btn secondary row-btn" data-action="edit" data-pin="${escHtml(pinStr)}">Edit</button> ` +
+          `<button class="btn row-btn" style="color:var(--red);border-color:rgba(160,48,48,0.4)" data-action="remove" data-pin="${escHtml(pinStr)}">Remove</button>` +
+        `</td>`;
+      tbody.appendChild(tr);
+    }
+  }
+  const anyApplied = [...inputState.values()].some(s => s === 'applied');
+  document.getElementById('unsavedBadge').style.display = anyApplied ? '' : 'none';
+}
+
+// Event delegation for table Edit / Remove buttons (avoids inline handlers with user data)
+document.getElementById('inputsTbody').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const pin = btn.dataset.pin;
+  if (btn.dataset.action === 'edit') openEditor(pin);
+  else if (btn.dataset.action === 'remove') removeInput(pin);
+});
+
+// --- Input Editor ---
+
+function buildEditorHTML(pinStr, inp, isAdd) {
+  // Group applications by measurementType
+  const groups = {};
+  for (const app of catalog.applications) {
+    const g = app.measurementType || 'OTHER';
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(app);
+  }
+  let appOptions = '';
+  for (const [g, apps] of Object.entries(groups).sort()) {
+    appOptions += `<optgroup label="${g}">`;
+    for (const app of apps) {
+      const sel = inp && inp.app === app.name ? 'selected' : '';
+      appOptions += `<option value="${escHtml(app.name)}" ${sel}>${escHtml(app.label || app.name)} (${escHtml(app.abbreviation || '')})</option>`;
+    }
+    appOptions += '</optgroup>';
+  }
+
+  const selectedApp = catalog.applications.find(a => inp && a.name === inp.app);
+  const measType = selectedApp?.measurementType;
+  const filtSensors = measType ? catalog.sensors.filter(s => s.measurementType === measType) : catalog.sensors;
+  let sensOptions = '';
+  for (const s of filtSensors) {
+    const sel = inp && inp.sensor === s.name ? 'selected' : '';
+    sensOptions += `<option value="${escHtml(s.name)}" ${sel}>${escHtml(s.label || s.name)}</option>`;
+  }
+
+  const filtUnits = measType ? catalog.units.filter(u => u.measurementType === measType) : catalog.units;
+  let unitOptions = '';
+  for (const u of filtUnits) {
+    const sel = inp && inp.units === u.name ? 'selected' : '';
+    const sym = u.symbol || u.alias || '';
+    unitOptions += `<option value="${escHtml(u.name)}" ${sel}>${escHtml(u.name)}${sym ? ' (' + escHtml(sym) + ')' : ''}</option>`;
+  }
+
+  const alarmMin = inp?.alarm?.min != null ? inp.alarm.min : '';
+  const alarmMax = inp?.alarm?.max != null ? inp.alarm.max : '';
+  const enabled = inp ? inp.enabled !== false : true;
+  const mask = inp?.outputMask ?? 0x0F;
+
+  return `<div class="editor-title">${isAdd ? 'Add Input' : 'Edit Input: ' + escHtml(pinStr)}</div>
+<div class="editor-grid">
+  <div class="editor-field">
+    <label>Pin</label>
+    <input type="text" id="edPin" value="${escHtml(pinStr)}" ${isAdd ? '' : 'disabled'} placeholder="e.g. A0, 14, I2C:0">
+  </div>
+  <div class="editor-field">
+    <label>Application</label>
+    <select id="edApp" onchange="updateEditorDropdowns()">${appOptions}</select>
+  </div>
+  <div class="editor-field">
+    <label>Sensor</label>
+    <select id="edSensor">${sensOptions}</select>
+  </div>
+  <div class="editor-field">
+    <label>Units</label>
+    <select id="edUnits">${unitOptions}</select>
+  </div>
+  <div class="editor-field">
+    <label>Alarm Min</label>
+    <input type="number" id="edAlarmMin" value="${alarmMin}" placeholder="optional">
+  </div>
+  <div class="editor-field">
+    <label>Alarm Max</label>
+    <input type="number" id="edAlarmMax" value="${alarmMax}" placeholder="optional">
+  </div>
+  <div class="editor-field checkbox-field">
+    <input type="checkbox" id="edEnabled" ${enabled ? 'checked' : ''}>
+    <label for="edEnabled">Enabled</label>
+  </div>
+  <div class="editor-field" style="grid-column: 1 / -1;">
+    <label>Outputs</label>
+    <div style="display:flex;gap:1.2rem;align-items:center;flex-wrap:wrap;padding-top:4px">
+      <label><input type="checkbox" id="edOutCAN"      ${mask & 1 ? 'checked' : ''}> CAN</label>
+      <label><input type="checkbox" id="edOutRealDash" ${mask & 2 ? 'checked' : ''}> RealDash</label>
+      <label><input type="checkbox" id="edOutSerial"   ${mask & 4 ? 'checked' : ''}> Serial</label>
+      <label><input type="checkbox" id="edOutSD"       ${mask & 8 ? 'checked' : ''}> SD Log</label>
+    </div>
+  </div>
+</div>
+<div class="editor-actions">
+  <button class="btn primary" onclick="saveEditorLocal()">Save</button>
+  <button class="btn secondary" onclick="closeEditor()">Cancel</button>
+</div>`;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function openEditor(pinStr) {
+  editingPin = pinStr;
+  const inp = localConfig.inputs.find(i => pinNumToStr(i.pin) === pinStr);
+  const editor = document.getElementById('inputEditor');
+  editor.innerHTML = buildEditorHTML(pinStr, inp, false);
+  updateEditorDropdowns();
+  editor.style.display = '';
+  editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function openAddEditor() {
+  editingPin = null;
+  const editor = document.getElementById('inputEditor');
+  editor.innerHTML = buildEditorHTML('', null, true);
+  updateEditorDropdowns();
+  editor.style.display = '';
+  editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeEditor() {
+  document.getElementById('inputEditor').style.display = 'none';
+  editingPin = null;
+}
+
+function updateEditorDropdowns() {
+  const appName = document.getElementById('edApp').value;
+  const appObj = catalog.applications.find(a => a.name === appName);
+  const measType = appObj?.measurementType;
+
+  const filtSensors = measType ? catalog.sensors.filter(s => s.measurementType === measType) : catalog.sensors;
+  const sensEl = document.getElementById('edSensor');
+  const curSens = sensEl.value;
+  sensEl.innerHTML = '';
+  for (const s of filtSensors) {
+    const opt = document.createElement('option');
+    opt.value = s.name;
+    opt.textContent = s.label || s.name;
+    if (s.name === curSens) opt.selected = true;
+    sensEl.appendChild(opt);
+  }
+  if (appObj?.defaultSensor && !filtSensors.find(s => s.name === sensEl.value)) {
+    sensEl.value = appObj.defaultSensor;
+  }
+
+  const filtUnits = measType ? catalog.units.filter(u => u.measurementType === measType) : catalog.units;
+  const unitEl = document.getElementById('edUnits');
+  const curUnit = unitEl.value;
+  unitEl.innerHTML = '';
+  for (const u of filtUnits) {
+    const opt = document.createElement('option');
+    opt.value = u.name;
+    opt.textContent = u.name + (u.symbol ? ' (' + u.symbol + ')' : '');
+    if (u.name === curUnit) opt.selected = true;
+    unitEl.appendChild(opt);
+  }
+  if (appObj?.defaultUnits && !filtUnits.find(u => u.name === unitEl.value)) {
+    unitEl.value = appObj.defaultUnits;
+  }
+}
+
+function saveEditorLocal() {
+  const isAdd = editingPin === null;
+  const newPin = document.getElementById('edPin').value.trim();
+  if (!newPin) { alert('Pin is required.'); return; }
+  if (!/^[A-Za-z0-9:]+$/.test(newPin)) { alert('Invalid pin format. Use A0, 14, I2C:0, CAN:0, etc.'); return; }
+
+  const alarmMinRaw = document.getElementById('edAlarmMin').value;
+  const alarmMaxRaw = document.getElementById('edAlarmMax').value;
+  const hasMin = alarmMinRaw !== '';
+  const hasMax = alarmMaxRaw !== '';
+  if (hasMin !== hasMax) { alert('Set both Alarm Min and Max, or leave both empty.'); return; }
+
+  const changes = {
+    app: document.getElementById('edApp').value,
+    sensor: document.getElementById('edSensor').value,
+    units: document.getElementById('edUnits').value,
+    alarm: {
+      min: hasMin ? Number(alarmMinRaw) : null,
+      max: hasMax ? Number(alarmMaxRaw) : null,
+    },
+    enabled: document.getElementById('edEnabled').checked,
+    outputMask:
+      (document.getElementById('edOutCAN').checked      ? 1 : 0) |
+      (document.getElementById('edOutRealDash').checked ? 2 : 0) |
+      (document.getElementById('edOutSerial').checked   ? 4 : 0) |
+      (document.getElementById('edOutSD').checked       ? 8 : 0),
+  };
+
+  if (isAdd) {
+    if (localConfig.inputs.some(i => pinNumToStr(i.pin) === newPin || i.pin === newPin)) {
+      alert('Pin ' + newPin + ' is already configured. Edit the existing row instead.');
+      return;
+    }
+    localConfig.inputs.push({ pin: newPin, ...changes });
+    inputState.set(newPin, 'dirty');
+  } else {
+    const inp = localConfig.inputs.find(i => pinNumToStr(i.pin) === editingPin);
+    if (inp) Object.assign(inp, changes);  // preserve inp.pin (numeric)
+    inputState.set(editingPin, 'dirty');
+  }
+  renderInputsPanel();
+  closeEditor();
+}
+
+// --- Apply / Save / Revert ---
+
+async function sendChecked(cmd) {
+  const resp = await sendQueued(cmd);
+  if (/(^|\n)ERROR:/.test(resp)) throw new Error(resp.trim());
+  return resp;
+}
+
+async function applyInput(pinStr) {
+  const cur = localConfig.inputs.find(i => pinNumToStr(i.pin) === pinStr || i.pin === pinStr);
+  const orig = originalConfig?.inputs?.find(i => pinNumToStr(i.pin) === pinStr || i.pin === pinStr);
+  if (!cur) return false;
+  try {
+    if (!orig || cur.app !== orig.app)
+      await sendChecked('SET ' + pinStr + ' APPLICATION ' + cur.app);
+    if (!orig || cur.sensor !== orig.sensor)
+      await sendChecked('SET ' + pinStr + ' SENSOR ' + cur.sensor);
+    if (!orig || cur.units !== orig.units)
+      await sendChecked('SET ' + pinStr + ' UNITS ' + cur.units);
+
+    const alarmChanged = !orig ||
+      cur.alarm?.min !== orig.alarm?.min ||
+      cur.alarm?.max !== orig.alarm?.max;
+    if (alarmChanged) {
+      if (cur.alarm?.min != null && cur.alarm?.max != null)
+        await sendChecked('SET ' + pinStr + ' ALARM ' + cur.alarm.min + ' ' + cur.alarm.max);
+      else if (cur.alarm?.min == null && cur.alarm?.max == null)
+        await sendChecked('SET ' + pinStr + ' ALARM DISABLE');
+    }
+
+    if (!orig || cur.enabled !== orig.enabled)
+      await sendChecked(cur.enabled ? 'ENABLE ' + pinStr : 'DISABLE ' + pinStr);
+
+    const OUTPUT_TARGETS = ['CAN', 'REALDASH', 'SERIAL', 'SD_LOG'];
+    const curMask  = cur.outputMask  ?? 0x0F;
+    const origMask = orig?.outputMask ?? 0x0F;
+    if (curMask !== origMask) {
+      for (let bit = 0; bit < 4; bit++) {
+        if (((curMask >> bit) & 1) !== ((origMask >> bit) & 1)) {
+          await sendChecked(`SET ${pinStr} OUTPUT ${OUTPUT_TARGETS[bit]} ${(curMask >> bit) & 1 ? 'ENABLE' : 'DISABLE'}`);
+        }
+      }
+    }
+
+    // Mirror applied state into originalConfig so subsequent diffs are accurate
+    if (orig) {
+      Object.assign(orig, { app: cur.app, sensor: cur.sensor, units: cur.units,
+        alarm: { min: cur.alarm?.min ?? null, max: cur.alarm?.max ?? null },
+        enabled: cur.enabled, outputMask: curMask });
+    } else if (originalConfig?.inputs) {
+      originalConfig.inputs.push(JSON.parse(JSON.stringify(cur)));
+    }
+    inputState.set(pinStr, 'applied');
+    return true;
+  } catch(e) {
+    appendErr('Apply failed for pin ' + pinStr + ': ' + e.message);
+    return false;
+  }
+}
+
+// Disable action buttons while an async operation is running to prevent double-fire
+const CONFIG_ACTION_IDS = ['btnApply', 'btnSaveEEPROM', 'btnRevert', 'btnExportJSON'];
+function setConfigBusy(busy) {
+  CONFIG_ACTION_IDS.forEach(id => { document.getElementById(id).disabled = busy; });
+  document.getElementById('importFile').disabled = busy;
+}
+
+document.getElementById('btnApply').addEventListener('click', async () => {
+  const dirty = [...inputState.entries()].filter(([,s]) => s === 'dirty').map(([p]) => p);
+  if (!dirty.length) { appendInfo('No pending changes to apply.'); return; }
+  setConfigBusy(true);
+  try {
+    let allOk = true;
+    for (const pin of dirty) { if (!await applyInput(pin)) allOk = false; }
+    renderInputsPanel();
+    if (allOk) appendInfo('Changes applied to device RAM. Click "Save to EEPROM" to persist.');
+    else appendErr('Some inputs failed to apply — check terminal for details.');
+  } finally {
+    setConfigBusy(false);
+  }
+});
+
+document.getElementById('btnSaveEEPROM').addEventListener('click', async () => {
+  const dirty = [...inputState.values()].filter(s => s === 'dirty');
+  if (dirty.length && !confirm('You have unapplied edits. Apply them now before saving?')) return;
+  setConfigBusy(true);
+  try {
+    if (dirty.length) {
+      const pins = [...inputState.entries()].filter(([,s]) => s === 'dirty').map(([p]) => p);
+      let allOk = true;
+      for (const pin of pins) { if (!await applyInput(pin)) allOk = false; }
+      if (!allOk) { appendErr('Save aborted: some inputs failed to apply.'); renderInputsPanel(); return; }
+    }
+    await sendChecked('SAVE');
+    originalConfig = JSON.parse(JSON.stringify(localConfig));
+    inputState.clear();
+    renderInputsPanel();
+    appendInfo('Configuration saved to EEPROM.');
+  } catch(e) {
+    appendErr('Save failed: ' + e.message);
+  } finally {
+    setConfigBusy(false);
+  }
+});
+
+document.getElementById('btnRevert').addEventListener('click', async () => {
+  const anyApplied = [...inputState.values()].some(s => s === 'applied');
+  if (anyApplied && !confirm('Reload from EEPROM? This will discard applied-but-unsaved changes.')) return;
+  setConfigBusy(true);
+  try {
+    await sendChecked('LOAD EEPROM');
+    inputState.clear();
+    await fetchInitialState();
+  } catch(e) {
+    appendErr('Revert failed: ' + e.message);
+  } finally {
+    setConfigBusy(false);
+  }
+});
+
+// --- Export / Import ---
+
+document.getElementById('btnExportJSON').addEventListener('click', async () => {
+  setConfigBusy(true);
+  try {
+    const resp = await sendQueued('SYSTEM DUMP JSON');
+    const blob = new Blob([resp.trim()], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'preobd-config-' + new Date().toISOString().slice(0,19).replace(/:/g,'-') + '.json';
+    a.click();
+  } catch(e) {
+    appendErr('Export failed: ' + e.message);
+  } finally {
+    setConfigBusy(false);
+  }
+});
+
+document.getElementById('importFile').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  setConfigBusy(true);
+  try {
+    const text = await file.text();
+    let parsed;
+    try { parsed = JSON.parse(text); } catch { appendErr('Invalid JSON file.'); return; }
+    if (!parsed.schemaVersion) { appendErr('Not a preOBD config file (missing schemaVersion).'); return; }
+    if (!confirm('Import will overwrite current device RAM config. Continue?')) return;
+
+    await sendChecked('JSON IMPORT');
+    suppressOutput = true;
+    appendInfo('Streaming ' + text.length + ' bytes…');
+    await sendRaw(text);
+    const result = await sendQueued('END JSON');
+    suppressOutput = false;
+    if (result.trim()) appendOutput(result.trim());
+    if (/(^|\n)ERROR:/.test(result)) throw new Error(result.trim());
+
+    if (confirm('Import complete. Save to EEPROM now?')) {
+      await sendChecked('SAVE');
+    }
+    await fetchInitialState();
+  } catch(e) {
+    suppressOutput = false;
+    appendErr('Import failed: ' + e.message);
+  } finally {
+    setConfigBusy(false);
+    e.target.value = '';
+  }
+});
+
+// --- Terminal collapse ---
+
+document.getElementById('terminalHeader').addEventListener('click', () => {
+  const terminal = document.getElementById('terminal');
+  const btn = document.getElementById('btnTerminalToggle');
+  const collapsed = terminal.classList.toggle('collapsed');
+  btn.textContent = collapsed ? '▼' : '▲';
+  btn.title = collapsed ? 'Expand terminal' : 'Collapse terminal';
+});
+
+// --- Add / Remove ---
+
+document.getElementById('btnAddInput').addEventListener('click', openAddEditor);
+
+async function removeInput(pinStr) {
+  if (!confirm('Remove input on pin ' + pinStr + '?')) return;
+  try {
+    await sendChecked('CLEAR ' + pinStr);
+  } catch(e) {
+    appendErr('Remove failed: ' + e.message);
+    return;
+  }
+  localConfig.inputs = localConfig.inputs.filter(i => pinNumToStr(i.pin) !== pinStr && i.pin !== pinStr);
+  if (originalConfig?.inputs)
+    originalConfig.inputs = originalConfig.inputs.filter(i => pinNumToStr(i.pin) !== pinStr && i.pin !== pinStr);
+  inputState.delete(pinStr);
+  renderInputsPanel();
+}
+</script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('[SW] Registered, scope:', reg.scope))
+        .catch(err => console.warn('[SW] Registration failed:', err));
+    });
+  }
+</script>
+</body>
+</html>

@@ -60,3 +60,43 @@ void readPressureTable(Input *ptr) {
     ptr->value = interpolateAscending(R_sensor, table_size,
                                       resistance_table, pressure_table);
 }
+
+/**
+ * Read pressure sensor using descending lookup table interpolation
+ *
+ * Same as readPressureTable() but for sensors where resistance DECREASES with
+ * increasing pressure (e.g. VDO 80 PSI US-market sender: 240Ω@0psi → 34Ω@80psi).
+ *
+ * @param ptr  Pointer to Input structure to store pressure reading
+ */
+void readPressureTableDescending(Input *ptr) {
+    bool isValid;
+    int reading = readAnalogPin(ptr->pin, &isValid);
+
+    if (!isValid) {
+        ptr->value = NAN;
+        return;
+    }
+
+    if (ptr->calibrationType != CAL_PRESSURE_TABLE || ptr->presetCalibration == nullptr) {
+        ptr->value = NAN;
+        return;
+    }
+
+    const PressureTableCalibration* cal = (const PressureTableCalibration*)ptr->presetCalibration;
+
+    float R_bias = pgm_read_float(&cal->bias_resistor);
+    float R_sensor = calculateResistance(reading, R_bias);
+
+    if (isnan(R_sensor) || R_sensor <= 0) {
+        ptr->value = NAN;
+        return;
+    }
+
+    byte table_size = pgm_read_byte(&cal->table_size);
+    const float* resistance_table = (const float*)pgm_read_ptr(&cal->resistance_table);
+    const float* pressure_table = (const float*)pgm_read_ptr(&cal->pressure_table);
+
+    // Use descending interpolation (resistance decreases with pressure)
+    ptr->value = interpolate(R_sensor, table_size, resistance_table, pressure_table);
+}

@@ -21,6 +21,19 @@ preOBD supports two types of Bluetooth connectivity:
 
 This guide focuses on **UART Bluetooth modules** for platforms that don't have built-in Bluetooth.
 
+### Running the webapp and ELM327 emulator concurrently
+
+Each UART Bluetooth module consumes one hardware serial port, and a port assigned to the ELM327 emulator (`BUS SERIAL <n> ELM327 ENABLE`) cannot simultaneously carry preOBD CONTROL/DATA/DEBUG traffic. This means **you cannot share a single BLE module between the preOBD webapp and an ELM327 scanner app** — the port is exclusive to one role.
+
+To use both at the same time, wire two separate modules to two different UARTs:
+
+| Role | Module | Example Port | Notes |
+|------|--------|--------------|-------|
+| preOBD webapp (config/monitoring) | HM-10 (BLE, webapp uses Web Bluetooth) | Serial1 | Carries CONTROL/DATA traffic |
+| ELM327 emulator (OBD Fusion, Torque, Car Scanner) | HM-10 or HC-05 | Serial2 | `BUS SERIAL 2 ELM327 ENABLE` |
+
+The webapp does not require a specific baud rate beyond what the BLE module is configured for; the ELM327 port's baud must match its module. See [DIRECT_BLE_OBD_GUIDE.md](../outputs/DIRECT_BLE_OBD_GUIDE.md) for ELM327 setup details.
+
 ## Bluetooth Module Options
 
 ### HC-05 (Bluetooth Classic / SPP)
@@ -265,10 +278,12 @@ HM-10 doesn't need special mode - just send AT commands at default 9600 baud:
 ```
 AT                          // Test connection, returns "OK"
 AT+NAME=preOBD            // Change device name (max 12 chars)
-AT+BAUD=4                  // Set baud to 115200 (4 = 115200)
+AT+BAUD=0                  // Set baud to 9600 (BLE-friendly — see Recommended Settings below)
 AT+PASS=123456             // Change PIN (6 digits)
 AT+RESET                   // Reset to apply changes
 ```
+
+**Configuring through preOBD:** if the HM-10 is already wired to a serial port on the MCU, you can send these AT commands without unwiring it. Enable the port (`BUS SERIAL <n> ENABLE 9600`), then use the `AT <port> <command>` serial command from preOBD's console — see [`SERIAL_COMMANDS.md`](../../reference/SERIAL_COMMANDS.md#at-command-passthrough).
 
 **HM-10 Baud Rate Codes:**
 - 0 = 9600
@@ -281,19 +296,38 @@ AT+RESET                   // Reset to apply changes
 
 ### Recommended Settings for preOBD
 
-**Option 1: Keep Default 9600 Baud (Easiest)**
-- No configuration needed
-- Works with preOBD Serial2 default (9600 baud)
-- Sufficient for RealDash (updates at 10Hz)
+The right baud rate depends on which module you have, because the two module families have very different real-world throughput:
 
-**Option 2: Upgrade to 115200 Baud (Better Performance)**
-- Configure module to 115200 baud using AT commands
-- Configure preOBD serial port to match:
-  ```
-  BUS SERIAL 2 ENABLE 115200     # Enable Serial2 at 115200 baud
-  SAVE                           # Persist to EEPROM
-  ```
-- Faster RealDash updates, more responsive commands
+| Module | Bluetooth protocol | Practical throughput | Is 115200 UART useful? |
+|--------|--------------------|----------------------|------------------------|
+| HC-05 / HC-06 | Bluetooth Classic (SPP) | ~80–100 KB/s | ✅ Yes — UART is the bottleneck |
+| HM-10          | BLE 4.0 (GATT)          | ~1–2 KB/s      | ❌ No — BLE radio is the bottleneck |
+
+#### HC-05 / HC-06 (Bluetooth Classic)
+
+SPP throughput comfortably exceeds UART at 115200, so raising the UART baud genuinely speeds up end-to-end traffic.
+
+**Recommended: 115200 baud** for RealDash and ELM327 emulation.
+
+```
+BUS SERIAL 2 ENABLE 115200     # Enable Serial2 at 115200 baud
+SAVE                           # Persist to EEPROM
+```
+
+9600 also works (and is the ship-from-factory default) — use it if you don't want to change the module settings. It's sufficient for RealDash at 10 Hz but leaves performance on the table for faster dashboards or ELM327 scan tools.
+
+#### HM-10 (Bluetooth Low Energy)
+
+The HM-10's BLE radio only moves ~1–2 KB/s regardless of UART baud. Running the UART faster than that doesn't speed up data — it just means the Teensy hands bytes to the HM-10 faster than the radio can forward them. The HM-10 has a small internal buffer and **silently drops overflow bytes** (no hardware flow control).
+
+**Use 9600 baud** (the module's factory default) for both the UART side and the HM-10's `AT+BAUD0`. Don't raise it.
+
+At higher rates the MCU feeds the HM-10 faster than the BLE radio can drain its internal buffer (e.g. 115200 = ~11.5 KB/s in vs. ~1.5 KB/s out — roughly 8:1 overrun). Short messages still get through, but large payloads lose bytes silently. In particular, `SYSTEM DUMP JSON` (used by the webapp to load the configuration UI) hangs or truncates above 9600 because the closing prompt gets dropped and the webapp waits for it indefinitely.
+
+```
+BUS SERIAL 2 ENABLE 9600       # Enable Serial2 at 9600 baud for HM-10
+SAVE                           # Persist to EEPROM
+```
 
 **Using Different Serial Ports (Teensy 4.x)**
 
@@ -304,7 +338,20 @@ TRANSPORT DATA SERIAL5           # Route data output to Serial5
 SAVE
 ```
 
-See [Serial Commands Reference](../../reference/SERIAL_COMMANDS.md#bus-configuration) for complete serial port configuration.
+**Keeping USB Active Alongside Bluetooth (Simultaneous Control)**
+
+By default, switching the CONTROL plane to Bluetooth drops USB. Use the `SECONDARY` keyword to keep both ports active — both accept commands and receive all responses:
+
+```
+BUS SERIAL 7 ENABLE 9600                  # Enable Serial7 for HM-10
+TRANSPORT CONTROL SERIAL7                 # HM-10 as primary control port
+TRANSPORT CONTROL USB_SERIAL SECONDARY    # Laptop USB stays active too
+SAVE
+```
+
+To revert to USB-only: `TRANSPORT CONTROL NONE SECONDARY` then `SAVE`.
+
+See [Transport Configuration](../../reference/SERIAL_COMMANDS.md#transport-configuration) for the full TRANSPORT command reference.
 
 ## Troubleshooting
 
@@ -368,7 +415,8 @@ See [Serial Commands Reference](../../reference/SERIAL_COMMANDS.md#bus-configura
 **Solutions:**
 1. **Baud rate mismatch:**
    - Module baud and Serial2.begin() baud must match exactly
-   - Try common rates: 9600, 19200, 38400, 115200
+   - For HC-05 / HC-06, any common rate is fine: 9600, 19200, 38400, 115200
+   - For HM-10, use 9600. Higher rates will appear to work for short messages but silently drop bytes on large payloads (see [Recommended Settings](#recommended-settings-for-preobd))
 
 2. **Weak voltage divider signal:**
    - If using voltage divider, check resistor values

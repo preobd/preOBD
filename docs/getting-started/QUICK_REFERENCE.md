@@ -21,7 +21,6 @@
 pio run -e teensy41      # Teensy 4.1 with built-in SD (recommended)
 pio run -e teensy40      # Teensy 4.0
 pio run -e mega2560      # Arduino Mega 2560
-pio run -e uno_static    # Arduino Uno (static config)
 ```
 
 ### Platform Comparison
@@ -32,7 +31,6 @@ pio run -e uno_static    # Arduino Uno (static config)
 | Teensy 4.0 | 2MB | 512KB | All | External SD module |
 | Teensy 3.6 | 1MB | 256KB | All | Older platform |
 | Mega 2560 | 256KB | 8KB | All | Good for prototyping |
-| Uno | 32KB | 2KB | Minimal | Static config only |
 
 **Recommended**: Teensy 4.1 provides best value with built-in SD card, ample resources, and native CAN support.
 
@@ -471,7 +469,7 @@ SET <pin> BIAS <resistor>                         # Override bias resistor
 | Arduino Mega | 10-bit | 5V | 16 | Good all-rounder |
 | Arduino Due | 12-bit | 3.3V | 16 | High resolution ADC |
 | ESP32 | 12-bit | 3.3V | 16 | WiFi capable |
-| Arduino Uno | 10-bit | 5V | 8 | Limited RAM, use [static builds](../advanced/STATIC_BUILDS_GUIDE.md) |
+| Arduino Uno | 10-bit | 5V | 8 | Not supported — too little RAM for runtime CLI |
 
 ---
 

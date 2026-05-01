@@ -292,7 +292,7 @@ void printPinStatus(uint8_t specificPin) {
             }
         }
 
-        #ifdef ENABLE_RELAY_OUTPUT
+        #if ENABLE_RELAY_OUTPUT
         // Check relays
         for (uint8_t i = 0; i < MAX_RELAYS; i++) {
             if (systemConfig.relays[i].outputPin == specificPin &&
@@ -321,7 +321,7 @@ void printPinStatus(uint8_t specificPin) {
     extern uint8_t numActiveInputs;
     msg.control.print(numActiveInputs);
 
-    #ifdef ENABLE_RELAY_OUTPUT
+    #if ENABLE_RELAY_OUTPUT
     // Count active relays
     uint8_t relayCount = 0;
     for (uint8_t i = 0; i < MAX_RELAYS; i++) {
@@ -398,7 +398,7 @@ void printPinStatus(uint8_t specificPin) {
     }
     if (hasInputs) msg.control.println();
 
-    #ifdef ENABLE_RELAY_OUTPUT
+    #if ENABLE_RELAY_OUTPUT
     // Relay Pins (output relays)
     bool hasRelays = false;
     for (uint8_t i = 0; i < MAX_RELAYS; i++) {

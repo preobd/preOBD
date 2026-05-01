@@ -1,80 +1,183 @@
 # Build Configuration Guide
 
-This guide explains how preOBD separates compile-time feature selection from runtime configuration, and how to customize builds for your specific needs.
+This guide explains how preOBD separates compile-time configuration from runtime configuration, and how to customize builds for your hardware.
 
 ## Quick Reference
 
-**TL;DR**:
-- **platformio.ini** = What features compile into firmware (ENABLE_CAN, ENABLE_SD_LOGGING, etc.)
-- **src/config.h** = Hardware pins, timing intervals, default units (easy user customization)
+**Three layers, clear ownership:**
+- **`src/profiles/profile_*.h`** = Board definition: which features are enabled AND which pins are used
+- **`src/config.h`** = Application constants: timing, thresholds, calibration defaults
+- **`platformio.ini`** = Build environments: which profile to use, compiler flags, libraries
+- **EEPROM** = Runtime user config: sensor inputs, output settings, unit preferences
 
 ## Table of Contents
 
-1. [Understanding the Two-Tier System](#understanding-the-two-tier-system)
-2. [Output Module Availability](#output-module-availability-compile-time-vs-runtime)
-3. [Choosing a Build Environment](#choosing-a-build-environment)
-4. [Creating Custom Environments](#creating-custom-environments)
-5. [Library Dependencies](#library-dependencies)
-6. [Memory Optimization](#memory-optimization)
-7. [Troubleshooting](#troubleshooting)
+1. [Understanding the Configuration Layers](#understanding-the-configuration-layers)
+2. [Board Profiles](#board-profiles)
+3. [Application Constants](#application-constants)
+4. [Output Module Availability](#output-module-availability-compile-time-vs-runtime)
+5. [Choosing a Build Environment](#choosing-a-build-environment)
+6. [Creating Custom Environments](#creating-custom-environments)
+7. [Library Dependencies](#library-dependencies)
+8. [Memory Optimization](#memory-optimization)
+9. [Troubleshooting](#troubleshooting)
 
-## Understanding the Two-Tier System
+## Understanding the Configuration Layers
 
-preOBD uses a clear separation between compile-time and runtime configuration:
+### Layer 1 — Board Profile (`src/profiles/profile_*.h`)
 
-### Compile-Time Configuration (platformio.ini)
+The profile is the authoritative definition of a specific hardware board. It is included at the top of every translation unit via `-include` in `platformio.ini`, so its definitions take effect before any source file is compiled.
 
-**Purpose**: Controls which code modules get compiled into the firmware
+**What goes in the profile:**
+- Feature flags (`ENABLE_CAN 1`, `ENABLE_SD_LOGGING 1`, etc.)
+- Hardware pin assignments (`MODE_BUTTON_PIN`, `ALARMS_PIN`, `SD_PIN`, `RGB_PIN_R/G/B`, SPI CAN pins)
+- Board-specific sizing (`MAX_INPUTS`, `MAX_PID_ENTRIES`, `CLI_BUFFER_SIZE`)
+- CAN controller type (`PROFILE_HAS_NATIVE_CAN`, `CAN_BUS_N_TYPE`)
 
-**What goes here**:
-- Feature compilation flags (`ENABLE_CAN`, `ENABLE_SD_LOGGING`, etc.)
-- Platform-specific flags (`USE_FLEXCAN_NATIVE`, `TEENSY_41`)
-- Library dependencies (conditional per feature)
-- Build optimization settings (`-O2`, `-Wall`)
+**Pin convention in profiles:**
 
-**Why**: If you disable a feature at compile-time, the code and libraries are completely excluded, saving flash/RAM.
+| Value | Meaning |
+|---|---|
+| `ENABLE_X` not defined | Feature disabled |
+| `#define ENABLE_X 1` | Feature enabled (no hardware pin) |
+| `#define X_PIN N` | Feature uses physical pin N |
+| `X_PIN` not defined | Feature enabled but pin not wired on this board |
 
-**Example**:
-```ini
-[env:teensy41]
-build_flags =
-    -D ENABLE_CAN          # CAN code compiles in
-    -D ENABLE_SD_LOGGING   # SD logging compiles in
-    # ENABLE_REALDASH not defined → RealDash code excluded
+**Example:**
+```cpp
+// profile_teensy41.h
+#define ENABLE_ALARMS       1
+#define ALARMS_PIN          3    // buzzer wired on pin 3
+
+#define SUPPORTS_SD         1
+#define SD_PIN              254  // Teensy 4.1 built-in SD
+#define ENABLE_SD_LOGGING   1
+
+#define ENABLE_MODE_BUTTON  1
+#define MODE_BUTTON_PIN     5
 ```
 
-### Runtime Configuration (src/config.h)
-
-**Purpose**: Easy user customization without understanding build systems
-
-**What goes here**:
-- Hardware pin assignments (`MODE_BUTTON`, `CAN_CS`, `SD_CS_PIN`)
-- Timing intervals (`SENSOR_READ_INTERVAL_MS`, `LCD_UPDATE_INTERVAL_MS`)
-- Default units (`DEFAULT_TEMPERATURE_UNITS`, `DEFAULT_PRESSURE_UNITS`)
-- Physical constants (`DEFAULT_BIAS_RESISTOR`, `SEA_LEVEL_PRESSURE_HPA`)
-
-**Why**: Most users are comfortable editing .h files with clear comments, and these settings don't affect code compilation.
-
-**Example**:
 ```cpp
-// config.h
-#define MODE_BUTTON 5
-#define BUZZER 3
+// profile_teensy40.h — no button, no buzzer wired on this board
+#define ENABLE_ALARMS       1    // software alarms still active (CAN/LCD)
+// ALARMS_PIN not defined — no buzzer
+// ENABLE_MODE_BUTTON not defined — no button
+```
+
+**SD hardware capability vs SD logging:**
+
+`SUPPORTS_SD` and `ENABLE_SD_LOGGING` are independent. `SUPPORTS_SD` declares that the board physically has an SD slot and gates the SD driver itself; `ENABLE_SD_LOGGING` gates the logging feature that writes sensor CSV to that SD. JSON config file save/load (`SAVE FILE`, `LOAD FILE`) is gated on `SUPPORTS_SD` only — no logging feature required. A board with `SUPPORTS_SD` but no `ENABLE_SD_LOGGING` can still save and load JSON config files via SD.
+
+### Layer 2 — Application Constants (`src/config.h`)
+
+Contains values that are logic-level, not hardware-level: things that describe *how* the firmware behaves, not *what is wired where*.
+
+**What goes in config.h:**
+- Timing intervals (`SENSOR_READ_INTERVAL_MS`, `LCD_UPDATE_INTERVAL_MS`)
+- Alarm behavior (`SILENCE_DURATION`, `WARNING_THRESHOLD_PERCENT`)
+- Calibration defaults (`DEFAULT_BIAS_RESISTOR`, `SEA_LEVEL_PRESSURE_HPA`)
+- Default display units (`DEFAULT_TEMPERATURE_UNITS`, etc.)
+- Protocol constants (OBD-II rate limiting)
+
+**What does NOT go in config.h:** hardware pin assignments. Those belong exclusively in board profiles.
+
+### Layer 3 — Build Environments (`platformio.ini`)
+
+Environments specify the build target. They `-include` the correct board profile, set platform flags, and list library dependencies. They do not contain feature flags or pin assignments — those live in the profile.
+
+```ini
+[env:teensy41]
+platform = teensy
+board = teensy41
+build_flags =
+    -include src/profiles/profile_teensy41.h  ; includes all feature flags and pins
+    -D TEENSY_41
+    -D USE_FLEXCAN_NATIVE
+    -O2
+    -Wall
+lib_deps = ...
+```
+
+### Layer 4 — EEPROM (Runtime)
+
+User-configurable state that survives reboots without reflashing: sensor inputs, output enable/disable, timing overrides, unit preferences. Managed via serial commands and persisted to EEPROM.
+
+```
+SET OUTPUT CAN ENABLED       # Enable CAN output
+SET OUTPUT CAN INTERVAL 100  # Change update rate
+SAVE                         # Persist to EEPROM
+```
+
+---
+
+## Board Profiles
+
+### Profiles Shipped with preOBD
+
+| Profile | Platform | SD | Notes |
+|---|---|---|---|
+| `profile_teensy41.h` | Teensy 4.1 | Built-in (pin 254) | Full-featured reference profile |
+| `profile_teensy40.h` | Teensy 4.0 | None (optional pin 4) | No SD in default profile; add `SUPPORTS_SD`+`SD_PIN` to enable |
+| `profile_teensy36.h` | Teensy 3.6 | Built-in (pin 254) | Older platform |
+| `profile_esp32s3.h` | ESP32-S3 | External (pin 4) | Native TWAI CAN |
+| `profile_mega2560.h` | Arduino Mega 2560 | Disabled | SPI CAN (MCP2515), RAM-constrained |
+| `profile_teensy41_hybrid.h` | Teensy 4.1 | Built-in (pin 254) | 3× FlexCAN + 1× MCP2515 |
+| `profile_esp32s3_hybrid.h` | ESP32-S3 | External (pin 4) | TWAI + MCP2515 |
+
+### Customizing a Profile
+
+To adapt a profile to your wiring, edit the `HARDWARE PIN ASSIGNMENTS` section at the top of the profile file:
+
+```cpp
+// Change the buzzer pin
+#define ALARMS_PIN     6    // was 3
+
+// Disable mode button (no button wired)
+// #define ENABLE_MODE_BUTTON  1
+// #define MODE_BUTTON_PIN     5
+
+// Use external SD on a custom CS pin
+#define SD_PIN 10   // was 4
+```
+
+### Disabling a Feature in a Profile
+
+Comment out the `ENABLE_X` define:
+
+```cpp
+//#define ENABLE_SD_LOGGING    // no SD hardware on this board
+//#define ENABLE_TEST_MODE     // not needed
+```
+
+If the feature has a dedicated pin, the pin definition can be omitted — the compiler will enforce this with a `#error` if a pin is required but missing.
+
+---
+
+## Application Constants
+
+`src/config.h` controls behavior that is the same regardless of which board you're using:
+
+```cpp
+#define SENSOR_READ_INTERVAL_MS  50     // 20Hz sensor reads
+#define ALARM_CHECK_INTERVAL_MS  50     // 20Hz alarm checks
+#define SILENCE_DURATION         30000  // 30s alarm silence
 #define DEFAULT_TEMPERATURE_UNITS "CELSIUS"
 ```
 
+These rarely need changing. If you do change them, they affect all board profiles equally.
+
+---
+
 ## Output Module Availability: Compile-time vs Runtime
 
-preOBD uses a two-tier system for output modules:
+### Compile-time Control (Board Profile)
 
-### Compile-time Control (platformio.ini)
+Feature flags in the profile control whether output code is included at all:
 
-Build flags like `-D ENABLE_CAN` control whether output code is included:
+- `ENABLE_CAN 1` in profile → CAN implementation compiles in, CAN library linked
+- `ENABLE_CAN` not defined → CAN code excluded → ~20KB flash saved
 
-- **If ENABLE_CAN is defined** → CAN implementation compiles → CAN library linked
-- **If ENABLE_CAN is NOT defined** → CAN code excluded → ~20KB flash saved
-
-**Check what's compiled in**: Use `LIST OUTPUTS` serial command
+**Check what's compiled in**: Use `LIST OUTPUTS` serial command.
 
 ### Runtime Control (EEPROM)
 
@@ -84,43 +187,35 @@ Once compiled in, outputs can be enabled/disabled without reflashing:
 SET OUTPUT CAN ENABLED       # Enable CAN output
 SET OUTPUT CAN DISABLED      # Disable CAN output
 SET OUTPUT CAN INTERVAL 100  # Change update rate
+SAVE                         # Persist to EEPROM
 ```
-
-Settings persist across power cycles in EEPROM.
 
 ### Why Two Tiers?
 
-- **Flash optimization**: Don't compile unused features (critical for Arduino Uno)
-- **Runtime flexibility**: Toggle features without reflashing (Teensy/Mega)
-- **Default builds**: Modern boards include all features, users disable what they don't need
+- **Flash optimization**: Don't compile unused features
+- **Runtime flexibility**: Toggle features without reflashing
+- **Default builds**: Profiles include all features appropriate for a platform; users disable at runtime what they don't need
 
-### Example Workflow
-
-1. Build with `-D ENABLE_CAN` in platformio.ini
-2. Flash to Teensy 4.1
-3. Use `SET OUTPUT CAN DISABLED` to temporarily disable CAN
-4. Later, use `SET OUTPUT CAN ENABLED` to re-enable (no reflashing needed)
+---
 
 ## Choosing a Build Environment
 
 ### Pre-configured Environments
 
-| Environment | Platform | Flash | Features | Notes |
-|-------------|----------|-------|----------|-------|
-| **teensy41** | Teensy 4.1 | 8MB | All | **Recommended** - Built-in SD card |
-| teensy40 | Teensy 4.0 | 2MB | All | External SD module needed |
-| teensy36 | Teensy 3.6 | 1MB | All | Older platform |
-| mega2560 | Arduino Mega | 256KB | All | Good for prototyping |
-| uno_static | Arduino Uno | 32KB | LCD + Serial + Alarms only | Memory-constrained |
-| debug | Teensy 4.1 | 8MB | All + Debug | Debug symbols enabled |
+| Environment | Platform | Flash | Notes |
+|---|---|---|---|
+| **teensy41** | Teensy 4.1 | 8MB | **Recommended** — full-featured, built-in SD |
+| teensy40 | Teensy 4.0 | 2MB | No built-in SD; no button/buzzer in default profile |
+| teensy36 | Teensy 3.6 | 1MB | Older platform |
+| mega2560 | Arduino Mega | 256KB | Good for prototyping; RAM-constrained |
+| debug | Teensy 4.1 | 8MB | Debug symbols, `-Og` optimization |
+| teensy41\_hybrid | Teensy 4.1 | 8MB | 3× FlexCAN + MCP2515 |
+| esp32s3dev | ESP32-S3 | 3.3MB | Native TWAI CAN |
 
 ### Build Commands
 
 ```bash
-# Recommended platform
 pio run -e teensy41
-
-# Other platforms
 pio run -e teensy40
 pio run -e mega2560
 pio run -e debug
@@ -129,371 +224,152 @@ pio run -e debug
 ### Flash Usage Estimates
 
 | Platform | Full Build | % Used | Remaining |
-|----------|------------|--------|-----------|
-| Teensy 4.1 | 145KB | 1.8% | 7.9MB |
-| Teensy 4.0 | 144KB | 7.0% | 1.9MB |
-| Teensy 3.6 | ~140KB | 14% | ~860KB |
-| Mega 2560 | 132KB | 52% | 122KB |
-| Uno (minimal) | N/A | ~77% | ~8KB |
+|---|---|---|---|
+| Teensy 4.1 | ~340KB | 4.2% | 7.7MB |
+| Teensy 4.0 | ~324KB | 15.8% | 1.7MB |
+| Teensy 3.6 | ~487KB | 46.4% | 561KB |
+| Mega 2560 | ~172KB | 67.6% | 82KB |
 
-**Conclusion**: Teensy 4.x and Mega 2560 have plenty of resources. No need for minimal builds.
+---
 
 ## Creating Custom Environments
 
-### Example: CAN-Only Build
+### Adding a New Board Variant
 
-If you only need CAN output (no SD logging, no RealDash):
+1. Copy the closest existing profile to a new file:
 
-```ini
-[custom_can_features]
-build_flags =
-    -D ENABLE_CAN
-    -D ENABLE_LCD
-    -D ENABLE_SERIAL_OUTPUT
-    -D ENABLE_ALARMS
-
-[env:teensy41_can_only]
-platform = teensy
-board = teensy41
-build_flags =
-    -D TEENSY_41
-    -D USE_FLEXCAN_NATIVE
-    -D SD_CS_PIN=254
-    ${custom_can_features.build_flags}
-    -O2
-    -Wall
-lib_deps =
-    ${core_libs.lib_deps}
-    ${display_libs.lib_deps}
-    ${can_libs.lib_deps}
-    ${sensor_libs.lib_deps}
-    ${eeprom_libs.lib_deps}
-    https://github.com/tonton81/FlexCAN_T4.git
-    https://github.com/tonton81/WDT_T4.git
-```
-
-**Build**:
 ```bash
-pio run -e teensy41_can_only
+cp src/profiles/profile_teensy41.h src/profiles/profile_my_board.h
 ```
 
-### Example: OLED Display Instead of LCD
+2. Edit pin assignments and feature flags in the new profile.
+
+3. Add an environment in `platformio.ini`:
 
 ```ini
-[oled_features]
-build_flags =
-    -D ENABLE_CAN
-    -D ENABLE_SERIAL_OUTPUT
-    -D ENABLE_SD_LOGGING
-    -D ENABLE_OLED           # Use OLED instead of LCD
-    -D ENABLE_ALARMS
-
-[env:teensy41_oled]
+[env:my_board]
 platform = teensy
 board = teensy41
 build_flags =
+    -include src/profiles/profile_my_board.h
     -D TEENSY_41
     -D USE_FLEXCAN_NATIVE
-    -D SD_CS_PIN=254
-    ${oled_features.build_flags}
     -O2
     -Wall
 lib_deps =
-    ${core_libs.lib_deps}
-    # Add OLED library here instead of LCD
-    ${can_libs.lib_deps}
-    ${sd_libs.lib_deps}
+    ${display_libs.lib_deps}
     ${sensor_libs.lib_deps}
     ${eeprom_libs.lib_deps}
+    ${cli_libs.lib_deps}
     https://github.com/tonton81/FlexCAN_T4.git
     https://github.com/tonton81/WDT_T4.git
 ```
 
-## Library Dependencies
+### Hybrid CAN Mode
 
-preOBD uses modular library dependency groups for clarity:
+Hybrid mode mixes native and external CAN controllers. The bus type assignments live in the profile:
 
-### Standard Feature Set
+```cpp
+// profile_teensy41_hybrid.h
+#define ENABLE_CAN_HYBRID      1
+#define CAN_BUS_0_TYPE CanControllerType::FLEXCAN
+#define CAN_BUS_3_TYPE CanControllerType::MCP2515
 
-```ini
-[standard_features]
-build_flags =
-    -D ENABLE_CAN            # CAN bus output
-    -D ENABLE_REALDASH       # RealDash protocol output
-    -D ENABLE_SERIAL_OUTPUT  # CSV serial output
-    -D ENABLE_SD_LOGGING     # SD card data logging
-    -D ENABLE_LCD            # LCD display
-    -D ENABLE_ALARMS         # Alarm system
-    -D ENABLE_LED  # RGB LED status indicator (pins 6-8, PWM required)
-    -D ENABLE_TEST_MODE      # Test mode for development
-    -D ENABLE_BME280         # BME280 environmental sensor
+// SPI pins for the MCP2515 bus
+#define CAN_CS_0               9
+#define CAN_INT_0              2
 ```
-
-### Available Library Groups
-
-```ini
-[core_libs]        # Always needed
-lib_deps = adafruit/Adafruit Unified Sensor
-
-[display_libs]     # LCD display
-lib_deps = marcoschwartz/LiquidCrystal_I2C
-
-[can_libs]         # MCP2515 CAN (external chip for Mega/Uno/Due)
-lib_deps = sandeepmistry/CAN
-
-[sd_libs]          # SD card logging
-lib_deps = greiman/SdFat
-
-[sensor_libs]      # BME280 sensor
-lib_deps = adafruit/Adafruit BME280 Library
-
-[eeprom_libs]      # JSON configuration (not for static builds)
-lib_deps = bblanchon/ArduinoJson
-```
-
-### Platform-Specific CAN Libraries
-
-CAN support varies by platform:
-
-| Platform | CAN Implementation | Library | Notes |
-|----------|-------------------|---------|-------|
-| **Teensy 4.x/3.x** | Native FlexCAN | FlexCAN_T4 | Built-in CAN controller, no external chip needed, supports 2-3 buses |
-| **ESP32** | Native TWAI | ESP32-TWAI-CAN | Built-in CAN controller, **external transceiver required**, 1 bus |
-| **Mega/Uno/Due** | External MCP2515 | autowp-mcp2515 | Requires MCP2515 CAN controller via SPI |
-| **STM32** | Native bxCAN | TBD | Planned support, 1-2 buses depending on variant |
-
-### Hybrid CAN Controller Mode
-
-preOBD supports mixing different CAN controller types on different buses. This allows platforms to use both native and external controllers simultaneously.
-
-**Example use cases:**
-- ESP32 with native TWAI (bus 0) + external MCP2515 (bus 1) for dual-bus operation
-- Teensy 4.1 with 3 native FlexCAN buses + external MCP2515 (bus 3) for a 4th bus
-
-**Build flags for hybrid mode:**
-```ini
-build_flags =
-    -D ENABLE_CAN_HYBRID                        # Enable hybrid controller support
-    -D CAN_BUS_0_TYPE=CanControllerType::TWAI   # Explicitly set bus 0 controller
-    -D CAN_BUS_1_TYPE=CanControllerType::MCP2515 # Explicitly set bus 1 controller
-```
-
-**Available controller types:**
-- `CanControllerType::FLEXCAN` - Teensy native FlexCAN
-- `CanControllerType::TWAI` - ESP32 native TWAI
-- `CanControllerType::MCP2515` - External SPI CAN controller
-- `CanControllerType::BXCAN` - STM32 native bxCAN (planned)
-- `CanControllerType::NONE` - No controller / disabled
 
 **Pre-configured hybrid environments:**
 ```bash
 pio run -e esp32s3_hybrid    # ESP32-S3: TWAI + MCP2515
-pio run -e teensy41_hybrid   # Teensy 4.1: 3x FlexCAN + MCP2515
+pio run -e teensy41_hybrid   # Teensy 4.1: 3× FlexCAN + MCP2515
 ```
 
-**Example - ESP32 with native CAN:**
-```ini
-[env:esp32dev]
-platform = espressif32
-board = esp32dev
-build_flags =
-    ${standard_features.build_flags}  # Includes ENABLE_CAN
-lib_deps =
-    ${core_libs.lib_deps}
-    ${display_libs.lib_deps}
-    ${sd_libs.lib_deps}
-    ${sensor_libs.lib_deps}
-    ${eeprom_libs.lib_deps}
-    https://github.com/handmade0octopus/ESP32-TWAI-CAN.git  # ESP32 native CAN
-```
+---
 
-**Example - Teensy 4.1 with native CAN:**
-```ini
-[env:teensy41]
-platform = teensy
-board = teensy41
-build_flags =
-    -D TEENSY_41
-    -D USE_FLEXCAN_NATIVE  # Enable native FlexCAN
-    ${standard_features.build_flags}
-lib_deps =
-    ${core_libs.lib_deps}
-    ${display_libs.lib_deps}
-    ${sd_libs.lib_deps}
-    ${sensor_libs.lib_deps}
-    ${eeprom_libs.lib_deps}
-    https://github.com/tonton81/FlexCAN_T4.git  # Teensy native CAN
-```
+## Library Dependencies
 
-**Example - Arduino Mega with MCP2515:**
-```ini
-[env:mega2560]
-platform = atmelavr
-board = megaatmega2560
-build_flags =
-    ${standard_features.build_flags}
-lib_deps =
-    ${core_libs.lib_deps}
-    ${display_libs.lib_deps}
-    ${can_libs.lib_deps}  # MCP2515 via SPI
-    ${sd_libs.lib_deps}
-    ${sensor_libs.lib_deps}
-    ${eeprom_libs.lib_deps}
-```
-
-**Example - ESP32 with Hybrid Mode (TWAI + MCP2515):**
-```ini
-[env:esp32s3_hybrid]
-platform = espressif32
-board = esp32-s3-devkitm-1
-build_flags =
-    ${standard_features.build_flags}
-    -D ENABLE_CAN_HYBRID
-    -D CAN_BUS_0_TYPE=CanControllerType::TWAI
-    -D CAN_BUS_1_TYPE=CanControllerType::MCP2515
-lib_deps =
-    ${core_libs.lib_deps}
-    ${display_libs.lib_deps}
-    ${sd_libs.lib_deps}
-    ${sensor_libs.lib_deps}
-    ${eeprom_libs.lib_deps}
-    https://github.com/handmade0ctopus/ESP32-TWAI-CAN.git  # Native TWAI for bus 0
-    autowp/autowp-mcp2515@^1.0.3  # External SPI for bus 1
-```
-
-### Platform-Specific Bluetooth Support
-
-Bluetooth support is platform-dependent and requires no build flags:
-
-| Platform | Bluetooth Support | Implementation | Library Required |
-|----------|------------------|----------------|------------------|
-| **ESP32** | Bluetooth Classic | Native ESP32 BluetoothSerial | Built-in (no external library) |
-| **Teensy/Mega/AVR** | Via UART module | HC-05, HM-10, or similar | No library (uses Serial1/Serial2) |
-
-**ESP32 Bluetooth Classic** is automatically detected and enabled at runtime if the platform is ESP32. No build flags needed.
-
-**UART Bluetooth modules** (HC-05, HM-10) can be connected to any hardware serial port (Serial1, Serial2) on Teensy, Mega, or AVR platforms. These are transparent serial bridges - no special code or libraries required.
-
-**Example - ESP32 with native Bluetooth:**
-```ini
-[env:esp32dev]
-platform = espressif32
-board = esp32dev
-build_flags =
-    -D ESP32  # Automatically enables Bluetooth Classic support
-    ${standard_features.build_flags}
-```
-
-At runtime, ESP32 will initialize Bluetooth Classic with device name "preOBD" and register it as a transport for RealDash and serial commands.
-
-**Example - Teensy with HC-05 Bluetooth module:**
-No special configuration needed - just wire HC-05 TX/RX to Serial2 (pins 7/8 on Teensy 4.1). The transport system automatically makes Serial2 available for commands and RealDash output.
-
-### Conditional Dependencies
-
-Only include libraries your build needs:
+preOBD uses modular library groups in `platformio.ini`:
 
 ```ini
-lib_deps =
-    ${core_libs.lib_deps}      # Always
-    ${display_libs.lib_deps}   # If ENABLE_LCD defined
-    ${can_libs.lib_deps}       # If ENABLE_CAN + external MCP2515 (Mega/Uno/Due)
-    ${sd_libs.lib_deps}        # If ENABLE_SD_LOGGING defined
-    ${sensor_libs.lib_deps}    # Always (BME280)
-    ${eeprom_libs.lib_deps}    # If NOT USE_STATIC_CONFIG
+[display_libs]   lib_deps = marcoschwartz/LiquidCrystal_I2C
+[can_libs]       lib_deps = autowp/autowp-mcp2515@^1.0.3
+[sd_libs]        lib_deps = greiman/SdFat
+[sensor_libs]    lib_deps = adafruit/Adafruit BME280 Library
+[eeprom_libs]    lib_deps = bblanchon/ArduinoJson
 ```
+
+### Platform-Specific CAN Libraries
+
+| Platform | CAN | Library | Notes |
+|---|---|---|---|
+| Teensy 4.x/3.x | Native FlexCAN | FlexCAN_T4 | Built-in, supports 2–3 buses |
+| ESP32 | Native TWAI | ESP32-TWAI-CAN | External transceiver required |
+| Mega/Uno | External MCP2515 | autowp-mcp2515 | SPI, pins set in profile |
+
+---
 
 ## Memory Optimization
 
-### For Memory-Constrained Boards (Arduino Uno)
-
-1. **Use static configuration** (`USE_STATIC_CONFIG`) - Excludes JSON library (~4-8KB)
-2. **Disable unused outputs** - Only enable LCD + Serial + Alarms
-3. **Exclude SD and CAN** - Saves ~30KB combined
-4. **Disable test mode** - Saves ~4KB
-
-**Example**:
-```ini
-[env:uno_static]
-build_flags =
-    -D USE_STATIC_CONFIG
-    -D ENABLE_LCD
-    -D ENABLE_SERIAL_OUTPUT
-    -D ENABLE_ALARMS
-    # No CAN, SD, or RealDash
-lib_deps =
-    ${core_libs.lib_deps}
-    ${display_libs.lib_deps}
-    ${sensor_libs.lib_deps}
-    # NO eeprom_libs - saves 4-8KB
-```
-
 ### Flash Savings by Feature
 
-| Feature Disabled | Flash Saved |
-|------------------|-------------|
-| ArduinoJson | 4-8KB |
-| SD Logging | ~15KB |
+| Feature Disabled (in profile) | Flash Saved |
+|---|---|
+| ArduinoJson / SD Logging | 15–20KB |
 | CAN Output | ~15KB |
 | RealDash | ~8KB |
 | Test Mode | ~4KB |
+
+To disable a feature, comment out its `ENABLE_X` line in the board profile.
+
+---
 
 ## Troubleshooting
 
 ### Problem: "undefined reference to..." errors
 
-**Cause**: Library not included in `lib_deps`
+**Cause**: Library not in `lib_deps`.
 
-**Fix**: Add appropriate library group to environment
+**Fix**: Add the appropriate library group to the environment.
 
-**Example**:
+### Problem: Feature not available (`LIST OUTPUTS` doesn't show it)
+
+**Cause**: `ENABLE_X` not defined in the board profile.
+
+**Fix**: Uncomment or add `#define ENABLE_X 1` in the profile. Rebuild and flash.
+
+### Problem: `#error "X_PIN must be defined..."`
+
+**Cause**: A feature is enabled in the profile but its pin macro is missing.
+
+**Fix**: Add the pin definition to the profile:
+```cpp
+#define ENABLE_TEST_MODE  1
+#define TEST_MODE_PIN     8   // ← add this
 ```
-undefined reference to `CAN.begin()'
-```
-Add `${can_libs.lib_deps}` to your environment.
 
-### Problem: Build too large for Arduino Uno
+### Problem: Wrong pins for my board
 
-**Cause**: Too many features enabled
+**Cause**: Pin assignments in the profile don't match your wiring.
 
-**Fix**: Use `uno_static` environment with minimal features
+**Fix**: Edit the `HARDWARE PIN ASSIGNMENTS` section of your board's profile file. No other files need changing.
 
-### Problem: CAN not working
-
-**Cause**: `ENABLE_CAN` not defined in build_flags
-
-**Fix**: Use `teensy41` or another environment with full features, or create custom environment with `-D ENABLE_CAN`
-
-### Problem: Output doesn't appear in LIST OUTPUTS
-
-**Cause**: Output wasn't compiled into firmware
-
-**Fix**: Check platformio.ini build_flags. If the output's ENABLE_* flag isn't defined, it won't be available.
-
-**Solution**: Use an environment that includes the output, or create a custom environment.
-
-### Problem: Pin assignments not working
-
-**Cause**: Pin may be overridden in platformio.ini
-
-**Check**: Look for `-D PIN_NAME=value` in platformio.ini build_flags
-
-**Example**: Teensy 4.1 overrides SD_CS_PIN to 254 for built-in SD card
+---
 
 ## Best Practices
 
-1. **Start with standard environments** - Use teensy41, teensy40, or mega2560 as-is
-2. **Only create custom environments if needed** - Modern boards have plenty of resources
-3. **Use runtime configuration** - Toggle outputs with serial commands, not reflashing
-4. **Keep pins in config.h** - Easier for users to customize
-5. **Document custom environments** - Add comments explaining what they're for
+1. **Start with a standard profile** — copy the closest match, edit pin assignments
+2. **All hardware config in the profile** — don't scatter pin assignments across multiple files
+3. **Use runtime configuration for toggles** — use serial commands to enable/disable outputs, not reflashing
+4. **Document your profile** — add comments explaining what is wired and where
+5. **One profile per hardware variant** — if two boards differ in wiring, they get separate profiles
 
 ## Summary
 
-- **platformio.ini** controls what compiles (features, libraries, optimization)
-- **config.h** controls runtime settings (pins, timing, units)
-- All standard builds include all features (modern boards have plenty of flash)
-- Use serial commands to enable/disable outputs at runtime
-- Only Arduino Uno needs special minimal build due to 32KB flash limit
+- **Board profile** = what features exist AND where hardware is wired (one file per board)
+- **config.h** = application behavior constants (timing, thresholds)
+- **platformio.ini** = build environments (which profile, which libraries)
+- **EEPROM** = runtime user settings (sensors, outputs, units)
 
-For most users: **Just use teensy41 environment and configure sensors via serial commands.**
+For most users: **pick the right profile for your board, edit the pin assignments, build and flash.**

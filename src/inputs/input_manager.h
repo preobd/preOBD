@@ -52,8 +52,6 @@ Input* getInputByPin(uint8_t pin);   // Find input by pin number
 Input* getInputByIndex(uint8_t index); // Get input by array index
 uint8_t getInputIndex(uint8_t pin);  // Get array index for pin
 
-#ifndef USE_STATIC_CONFIG
-
 // ===== PERSISTENCE =====
 bool saveInputConfig();               // Save all inputs to EEPROM
 bool loadInputConfig();               // Load all inputs from EEPROM
@@ -70,7 +68,5 @@ void printInputCalibration(uint8_t pin);
 void listAllInputs();                // List all active inputs
 void listApplicationPresets();       // List available Applications
 void listSensors(const char* filter = nullptr);  // List sensors (categories, by category, or by measurement type)
-
-#endif // USE_STATIC_CONFIG
 
 #endif // INPUT_MANAGER_H

@@ -1,21 +1,22 @@
 /*
  * serial_config.cpp - embedded-cli based Serial Command Interface
  * Uses embedded-cli library for command line interface with history and autocompletion
- *
- * NOTE: Only compiled in EEPROM/runtime configuration mode (not in static mode)
  */
 
 #include "../config.h"
-
-#ifndef USE_STATIC_CONFIG
 
 #include "serial_config.h"
 #include "command_table.h"
 #include "command_helpers.h"
 #include "../lib/message_router.h"
 #include "../lib/message_api.h"
+#include "../lib/json_config.h"
 #include <string.h>
+#include <stdlib.h>
 #include <ctype.h>
+#if SUPPORTS_JSON_IMPORT_STREAM
+#include <strings.h>  // strncasecmp (POSIX); not available on AVR toolchain
+#endif
 
 // embedded-cli requires EMBEDDED_CLI_IMPL in exactly one compilation unit
 #define EMBEDDED_CLI_IMPL
@@ -25,17 +26,32 @@
 // CLI instance and configuration
 //=============================================================================
 
-// Configuration parameters
-#define CLI_RX_BUFFER_SIZE 128
-#define CLI_CMD_BUFFER_SIZE 128
-#define CLI_HISTORY_BUFFER_SIZE 256
-#define CLI_MAX_BINDINGS 32  // Enough for all commands + some headroom
-
-// Static buffer for CLI (avoids dynamic allocation)
-// Size calculated to fit the configuration above
-#define CLI_BUFFER_SIZE 4096
+// Configuration parameters sourced from per-env profile (src/profiles/).
+// embeddedCliRequiredSize() validates CLI_BUFFER_SIZE at runtime; increase in
+// the profile if CLI init fails.
 static CLI_UINT cli_buffer[BYTES_TO_CLI_UINTS(CLI_BUFFER_SIZE)];
 static EmbeddedCli* cli = nullptr;
+
+#if SUPPORTS_JSON_IMPORT_STREAM
+//=============================================================================
+// JSON import streaming state
+// Buffer is malloc'd on demand (serialConfig_beginJsonImport) and freed after
+// dispatch, so 16 KB is only resident during an active import.
+//=============================================================================
+static bool   jsonImportActive = false;
+static char*  jsonImportBuffer = nullptr;
+static size_t jsonImportLen = 0;
+static size_t jsonImportLastLineStart = 0;
+
+static void resetJsonImport() {
+    free(jsonImportBuffer);
+    jsonImportBuffer = nullptr;
+    jsonImportActive = false;
+    jsonImportLen = 0;
+    jsonImportLastLineStart = 0;
+    if (cli != nullptr) embeddedCliProcess(cli);
+}
+#endif
 
 //=============================================================================
 // Callbacks
@@ -57,8 +73,7 @@ static void cli_command_handler(EmbeddedCli* embeddedCli, char* args, void* cont
 
     // Parse args into argc/argv format for dispatchCommand
     // embedded-cli can tokenize for us, but we need to build argv array
-    const int MAX_ARGS = 16;
-    const char* argv[MAX_ARGS];
+    const char* argv[CLI_MAX_ARGS];
     int argc = 1;
 
     // First arg is always the command name
@@ -68,7 +83,7 @@ static void cli_command_handler(EmbeddedCli* embeddedCli, char* args, void* cont
     if (args != nullptr && *args != '\0') {
         // Use embedded-cli's tokenization
         uint16_t tokenCount = embeddedCliGetTokenCount(args);
-        for (uint16_t i = 0; i < tokenCount && argc < MAX_ARGS; i++) {
+        for (uint16_t i = 0; i < tokenCount && argc < CLI_MAX_ARGS; i++) {
             const char* token = embeddedCliGetToken(args, i + 1);  // 1-indexed
             if (token != nullptr) {
                 argv[argc++] = token;
@@ -91,10 +106,9 @@ static void cli_on_command(EmbeddedCli* embeddedCli, CliCommand* command) {
     cmdUpper[sizeof(cmdUpper) - 1] = '\0';
     for (char* p = cmdUpper; *p; p++) *p = toupper(*p);
 
-    // Build argc/argv for dispatch
-    const int MAX_ARGS = 16;
-    const char* argv[MAX_ARGS];
-    static char argBuffers[MAX_ARGS - 1][32];  // Static buffers for uppercase args
+    // Build argc/argv for dispatch; limits sourced from per-env profile.
+    const char* argv[CLI_MAX_ARGS];
+    static char argBuffers[CLI_MAX_ARGS - 1][CLI_MAX_ARG_LEN];
     int argc = 1;
     argv[0] = cmdUpper;
 
@@ -105,7 +119,7 @@ static void cli_on_command(EmbeddedCli* embeddedCli, CliCommand* command) {
 
         // Parse space-separated tokens
         int bufIdx = 0;
-        for (char* p = argsCopy; *p && argc < MAX_ARGS && bufIdx < (MAX_ARGS - 1); ) {
+        for (char* p = argsCopy; *p && argc < CLI_MAX_ARGS && bufIdx < (CLI_MAX_ARGS - 1); ) {
             // Skip leading spaces
             while (*p == ' ' || *p == '\t') p++;
             if (*p == '\0') break;
@@ -116,8 +130,8 @@ static void cli_on_command(EmbeddedCli* embeddedCli, CliCommand* command) {
 
             // Copy token to buffer and uppercase
             size_t tokenLen = p - tokenStart;
-            if (tokenLen >= sizeof(argBuffers[bufIdx])) {
-                tokenLen = sizeof(argBuffers[bufIdx]) - 1;
+            if (tokenLen >= (size_t)CLI_MAX_ARG_LEN) {
+                tokenLen = CLI_MAX_ARG_LEN - 1;
             }
             strncpy(argBuffers[bufIdx], tokenStart, tokenLen);
             argBuffers[bufIdx][tokenLen] = '\0';
@@ -217,6 +231,50 @@ void initSerialConfig() {
  * This function is called character-by-character from router.update()
  */
 void handleCommandInput(char c) {
+#if SUPPORTS_JSON_IMPORT_STREAM
+    if (jsonImportActive) {
+        // Echo char back; emit \r before \n so terminals return cursor to column 0
+        if (c == '\n') msg.control.print('\r');
+        msg.control.print(c);
+
+        // Check for buffer overflow before appending
+        if (jsonImportLen >= JSON_IMPORT_MAX_BYTES - 1) {
+            msg.control.println(F("\r\nERROR: JSON exceeds buffer limit"));
+            msg.control.print(F("  Max: "));
+            msg.control.print(JSON_IMPORT_MAX_BYTES);
+            msg.control.println(F(" bytes"));
+            resetJsonImport();
+            return;
+        }
+
+        jsonImportBuffer[jsonImportLen++] = c;
+
+        if (c == '\n') {
+            // Check if the just-completed line equals "END JSON" (trim \r\n, case-insensitive)
+            const char* line = jsonImportBuffer + jsonImportLastLineStart;
+            size_t tlen = jsonImportLen - jsonImportLastLineStart;
+            while (tlen > 0 && (line[tlen - 1] == '\r' || line[tlen - 1] == '\n')) tlen--;
+
+            const size_t slen = 8;  // strlen("END JSON")
+            if (tlen == slen && strncasecmp(line, "END JSON", slen) == 0) {
+                // Null-terminate the buffer at the sentinel's start, then dispatch
+                jsonImportBuffer[jsonImportLastLineStart] = '\0';
+
+                bool ok = loadConfigFromJSON(jsonImportBuffer);
+                if (ok) {
+                    msg.control.println(F("Applied. Type SAVE to persist to EEPROM"));
+                } else {
+                    msg.control.println(F("ERROR: Failed to apply JSON configuration"));
+                }
+
+                resetJsonImport();
+            } else {
+                jsonImportLastLineStart = jsonImportLen;
+            }
+        }
+        return;
+    }
+#endif
     if (cli != nullptr) {
         embeddedCliReceiveChar(cli, c);
     }
@@ -232,6 +290,30 @@ void processSerialCommands() {
     }
 }
 
+#if SUPPORTS_JSON_IMPORT_STREAM
+/**
+ * Begin JSON import streaming mode.
+ * Returns false if already active; caller should surface an error.
+ */
+bool serialConfig_beginJsonImport() {
+    if (jsonImportActive) return false;
+    jsonImportBuffer = (char*)malloc(JSON_IMPORT_MAX_BYTES);
+    if (jsonImportBuffer == nullptr) {
+        msg.control.println(F("ERROR: Not enough heap for JSON import buffer"));
+        return false;
+    }
+    jsonImportActive = true;
+    jsonImportLen = 0;
+    jsonImportLastLineStart = 0;
+    msg.control.println(F("Paste JSON, then type 'END JSON' on its own line:"));
+    return true;
+}
+
+bool serialConfig_isJsonImportActive() {
+    return jsonImportActive;
+}
+#endif
+
 /**
  * Legacy function for backward compatibility
  * Commands are now dispatched through embedded-cli bindings
@@ -242,5 +324,3 @@ void handleSerialCommand(char* cmd) {
     // Kept for backward compatibility, but does nothing
     (void)cmd;
 }
-
-#endif // USE_STATIC_CONFIG

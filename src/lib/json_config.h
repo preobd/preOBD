@@ -22,11 +22,14 @@
 #ifndef JSON_CONFIG_H
 #define JSON_CONFIG_H
 
-// JSON features only available in EEPROM mode (not static config)
-#ifndef USE_STATIC_CONFIG
+#include "platform.h"
+
+// JSON features only available on platforms with enough RAM (not Mega/Uno) and in runtime config mode
+#if SUPPORTS_JSON_CONFIG
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include "sd_manager.h"
 
 // Forward declarations
 struct Input;
@@ -44,13 +47,15 @@ bool importSystemConfigFromJSON(JsonObject& systemObj);
 bool importInputsFromJSON(JsonArray& inputsArray);
 bool importInputFromJSON(JsonObject& inputObj, uint8_t index);
 
-// SD card backup/restore (always available, independent of ENABLE_SD_LOGGING)
+#if SUPPORTS_SD
+// SD card backup/restore (requires SUPPORTS_SD in board profile)
 bool saveConfigToSD(const char* filename = nullptr);
 bool loadConfigFromSD(const char* filename);
 
 // URI-style file path dispatchers
 bool saveConfigToFile(const char* destination, const char* filename);
 bool loadConfigFromFile(const char* destination, const char* filename);
+#endif // SUPPORTS_SD
 
-#endif // USE_STATIC_CONFIG
+#endif // SUPPORTS_JSON_CONFIG
 #endif // JSON_CONFIG_H

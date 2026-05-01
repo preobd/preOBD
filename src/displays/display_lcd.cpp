@@ -8,15 +8,10 @@
 #include "../lib/units_registry.h"
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
-#ifdef USE_STATIC_CONFIG
-#include "../lib/generated/application_presets_static.h"
-#include "../lib/generated/sensor_library_static.h"
-#else
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
-#endif
 
-#ifdef ENABLE_LCD
+#if ENABLE_LCD
 
 #include <LiquidCrystal_I2C.h>
 
@@ -225,6 +220,7 @@ void displaySensor(Input *ptr, byte line) {
             switch (measType) {
                 case MEASURE_TEMPERATURE:
                 case MEASURE_HUMIDITY:
+                case MEASURE_LEVEL:
                 case MEASURE_ELEVATION:
                 case MEASURE_RPM:
                 case MEASURE_SPEED:

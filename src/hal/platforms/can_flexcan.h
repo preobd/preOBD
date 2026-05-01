@@ -15,7 +15,7 @@
 
 namespace hal { namespace can {
 
-#ifdef ENABLE_CAN_HYBRID
+#if ENABLE_CAN_HYBRID
 // In hybrid mode, wrap in flexcan namespace for dispatcher
 namespace flexcan {
 #endif
@@ -146,7 +146,7 @@ inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
     }
 }
 
-#ifdef ENABLE_CAN_HYBRID
+#if ENABLE_CAN_HYBRID
 } // namespace flexcan
 #endif
 

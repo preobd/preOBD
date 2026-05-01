@@ -1,6 +1,6 @@
 /*
  * button_handler.h - Multi-function button handler
- * Handles MODE_BUTTON with debouncing and long-press detection
+ * Only compiled when ENABLE_MODE_BUTTON is defined in the board profile.
  */
 
 #ifndef BUTTON_HANDLER_H

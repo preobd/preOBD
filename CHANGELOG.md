@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0-beta] - 2026-04-30
+
+### Added
+- Web Bluetooth webapp for browser-based device configuration and diagnostics, installable as a PWA via GitHub Pages
+- BLE GATT profile specification (Tier 1 text command service + Tier 2 binary protocol spec) with shared UUID definitions for firmware and clients
+- HM-10 BLE module support in webapp with auto-detection alongside preOBD GATT and Nordic UART services
+- `AT <port> <command>` serial command for sending raw AT commands to attached BLE/serial modules
+- 8 new classic-car monitoring application presets
+- Disconnect detection for linear sensors: out-of-range voltages return NAN, optional pin pull-up for low-Z signal-conditioned sensors, and per-input `divider_ratio` (set via `SET <pin> DIVIDER <ratio>`) for running 5V sensors on 3.3V ADCs through a voltage divider (#155, #157)
+
+### Changed
+- Board profiles (`src/profiles/`) now own all feature flags and hardware pin assignments; `config.h` is application constants only; system pin fields removed from SystemConfig/EEPROM; JSON config decoupled from SD logging via new `SUPPORTS_SD` hardware capability flag (#163, #165, #166)
+- Watchdog kick batched across `WatchdogKickingPrint` writes and kick interval raised; watchdog now fed during JSON serialization to survive slow BLE UART bridges
+- Documentation accuracy pass: fixed broken intra-doc links, refreshed README and docs index to cover BLE, ESP32-S3, and recently-added guides
+
+### Fixed
+- `esp32s3_hybrid` and `teensy41_hybrid` build envs now compile cleanly (#146)
+- Correctness and safety fixes in sensor interpolation and resistance calculation (#110, #113, #114)
+- SystemConfig persistence on platforms with small EEPROM (Teensy 4.0): config address is now derived per-platform and decoupled from MAX_INPUTS
+
+## [0.7.6-beta] - 2026-04-24
+
+### Changed
+- Replaced scattered per-platform `#ifdef` sizing constants with per-env profile headers (`src/profiles/`)
+
+### Removed
+- Dropped `USE_STATIC_CONFIG` build flag, `uno_static` env, and `tools/configure.py` (#148)
+
+## [0.7.5-beta] - 2026-04-22
+
+### Added
+- Added Smiths, Stewart-Warner, AC Delco, and Bosch NTC sensors to the sensor library
+
+## [0.7.4-beta] - 2026-04-16
+
+### Added
+- JSON IMPORT command for streaming bulk sensor configuration over serial CLI
+- JSON export of firmware static catalogs via `LIST ... JSON` and `SYSTEM DUMP REGISTRY JSON`
+
+### Fixed
+- Control-plane responses now return to the transport that sent the command; unsolicited messages (alarms, etc.) still multi-cast to all configured transports
+
+## [0.7.3-beta] - 2026-04-13
+
+### Added
+- ELM327 AT command emulator output module for direct BLE OBD-II app connectivity without hardware adapter
+- Added Jeep 4.0L sensor family (gauge temp sender, Renix ECU CTS, oil pressure sender)
+- Extended OBD-II PID discovery chain (0x00→0x20→0x40…) so apps find all configured PIDs automatically
+- TRANSPORT command SECONDARY keyword for simultaneous multi-port control (e.g. USB + Bluetooth)
+
 ## [0.7.0-beta] - 2026-02-07
 
 ### Added
@@ -111,7 +161,12 @@ Previous development releases. See git history for details.
 
 ---
 
-[Unreleased]: https://github.com/preobd/preOBD/compare/v0.7.0-beta...HEAD
+[Unreleased]: https://github.com/preobd/preOBD/compare/v0.8.0-beta...HEAD
+[0.8.0-beta]: https://github.com/preobd/preOBD/compare/v0.7.6-beta...v0.8.0-beta
+[0.7.6-beta]: https://github.com/preobd/preOBD/compare/v0.7.5-beta...v0.7.6-beta
+[0.7.5-beta]: https://github.com/preobd/preOBD/compare/v0.7.4-beta...v0.7.5-beta
+[0.7.4-beta]: https://github.com/preobd/preOBD/compare/v0.7.3-beta...v0.7.4-beta
+[0.7.3-beta]: https://github.com/preobd/preOBD/compare/v0.7.0-beta...v0.7.3-beta
 [0.7.0-beta]: https://github.com/preobd/preOBD/compare/v0.6.5-beta...v0.7.0-beta
 [0.6.5-beta]: https://github.com/preobd/preOBD/compare/v0.6.0-beta...v0.6.5-beta
 [0.6.0-beta]: https://github.com/preobd/preOBD/compare/v0.5.0-alpha...v0.6.0-beta

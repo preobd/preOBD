@@ -43,7 +43,12 @@
 #include "sensor_library/sensors/frequency.h"
 #include "sensor_library/sensors/environmental.h"
 #include "sensor_library/sensors/digital.h"
+#include "sensor_library/sensors/level.h"
+#if ENABLE_CAN
 #include "sensor_library/sensors/can.h"
+#else
+#define CAN_SENSORS
+#endif
 
 // ===== SENSOR LIBRARY ASSEMBLY (PROGMEM) =====
 // Assemble SENSOR_LIBRARY[] from X-macros defined in each category file
@@ -59,6 +64,7 @@ static const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     FREQUENCY_SENSORS
     ENVIRONMENTAL_SENSORS
     DIGITAL_SENSORS
+    LEVEL_SENSORS
     CAN_SENSORS
 };
 

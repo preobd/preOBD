@@ -6,7 +6,7 @@
 
 #include "rgb_led.h"
 
-#ifdef ENABLE_LED
+#if ENABLE_LED
 
 #include "pin_registry.h"
 #include "message_api.h"

@@ -10,7 +10,7 @@
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
 
-#ifdef ENABLE_SD_LOGGING
+#if ENABLE_SD_LOGGING
 
 // Use Arduino SD library for consistency across platforms
 #include <SD.h>

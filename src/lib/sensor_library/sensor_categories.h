@@ -23,6 +23,7 @@ enum SensorCategory : uint8_t {
     CAT_FREQUENCY,             // RPM and speed sensors (frequency.h)
     CAT_ENVIRONMENTAL,         // Environmental sensors (environmental.h)
     CAT_DIGITAL,               // Digital input sensors - float switch, etc. (digital.h)
+    CAT_LEVEL,                 // Fluid level sensors - fuel level senders (level.h)
     CAT_COUNT                  // Number of categories
 };
 
@@ -49,6 +50,8 @@ static const char PSTR_CAT_ENVIRONMENTAL[] PROGMEM = "ENVIRONMENTAL";
 static const char PSTR_CAT_ENVIRONMENTAL_LABEL[] PROGMEM = "Environmental Sensors";
 static const char PSTR_CAT_DIGITAL[] PROGMEM = "DIGITAL";
 static const char PSTR_CAT_DIGITAL_LABEL[] PROGMEM = "Digital Input Sensors";
+static const char PSTR_CAT_LEVEL[] PROGMEM = "LEVEL";
+static const char PSTR_CAT_LEVEL_LABEL[] PROGMEM = "Fluid Level Sensors";
 
 // ===== SENSOR CATEGORY REGISTRY (PROGMEM) =====
 // Hash values computed with: python3 -c "h=5381; s='NAME'; [h:=(h<<5)+h+ord(c.upper()) for c in s]; print(f'0x{h&0xFFFF:04X}')"
@@ -60,6 +63,7 @@ static const PROGMEM SensorCategoryInfo SENSOR_CATEGORIES[] = {
     { PSTR_CAT_FREQUENCY,       PSTR_CAT_FREQUENCY_LABEL,       0x9B8F },  // FREQUENCY
     { PSTR_CAT_ENVIRONMENTAL,   PSTR_CAT_ENVIRONMENTAL_LABEL,   0x0C07 },  // ENVIRONMENTAL
     { PSTR_CAT_DIGITAL,         PSTR_CAT_DIGITAL_LABEL,         0x9803 },  // DIGITAL
+    { PSTR_CAT_LEVEL,           PSTR_CAT_LEVEL_LABEL,           0x939D },  // LEVEL (djb2("LEVEL"))
 };
 
 // Helper macros for category info

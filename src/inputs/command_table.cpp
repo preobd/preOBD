@@ -1,15 +1,12 @@
 /*
  * command_table.cpp - Table-driven command dispatch implementation
- *
- * NOTE: Only compiled in EEPROM/runtime configuration mode (not in static mode)
  */
 
 #include "../config.h"
 
-#ifndef USE_STATIC_CONFIG
-
 #include "command_table.h"
 #include "command_helpers.h"
+#include "serial_config.h"
 #include "input_manager.h"
 #include "../config.h"
 #include "../version.h"
@@ -24,19 +21,24 @@
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
 #include "../lib/platform.h"
+#include "../lib/json_registry.h"
 #include "../lib/bus_manager.h"
 #include "../lib/bus_defaults.h"
 #include "../lib/serial_manager.h"
 #include "../lib/pin_registry.h"
 #include "../outputs/output_base.h"
+#include "../lib/obd_query.h"
 #include "../lib/display_manager.h"
-#ifdef ENABLE_RELAY_OUTPUT
+#if ENABLE_RELAY_OUTPUT
 #include "../outputs/output_relay.h"
 #endif
-#ifdef ENABLE_TEST_MODE
+#if ENABLE_ELM327
+#include "../outputs/output_elm327.h"
+#endif
+#if ENABLE_TEST_MODE
 #include "../test/test_mode.h"
 #endif
-#ifdef ENABLE_CAN
+#if ENABLE_CAN
 #include "sensors/can/can_scan.h"
 #include "../lib/can_sensor_library/standard_pids.h"
 #endif
@@ -69,14 +71,18 @@ static int cmd_version(int argc, const char* const* argv);
 static int cmd_reboot(int argc, const char* const* argv);
 static int cmd_bus(int argc, const char* const* argv);
 static int cmd_log(int argc, const char* const* argv);
-#ifdef ENABLE_RELAY_OUTPUT
+static int cmd_at(int argc, const char* const* argv);
+#if ENABLE_RELAY_OUTPUT
 static int cmd_relay(int argc, const char* const* argv);
 #endif
-#ifdef ENABLE_TEST_MODE
+#if ENABLE_TEST_MODE
 static int cmd_test(int argc, const char* const* argv);
 #endif
-#ifdef ENABLE_CAN
+#if ENABLE_CAN
 static int cmd_scan(int argc, const char* const* argv);
+#endif
+#if SUPPORTS_JSON_IMPORT_STREAM
+static int cmd_json(int argc, const char* const* argv);
 #endif
 
 // Platform-specific reboot helper (shared by REBOOT and SYSTEM REBOOT/RESET)
@@ -120,17 +126,21 @@ const Command COMMANDS[] = {
     {"SYSTEM", cmd_system, "System configuration", true},
     {"SAVE", cmd_save, "Save configuration", true},
     {"LOAD", cmd_load, "Load configuration", true},
+#if SUPPORTS_JSON_IMPORT_STREAM
+    {"JSON", cmd_json, "Import JSON configuration over serial", true},
+#endif
     {"REBOOT", cmd_reboot, "", true},  // Undocumented alias for SYSTEM REBOOT
     {"BUS", cmd_bus, "Configure I2C/SPI/CAN buses", true},
     {"LOG", cmd_log, "Configure log levels and tags", false},
+    {"AT", cmd_at, "Send raw AT command to a serial port", false},
 
-#ifdef ENABLE_RELAY_OUTPUT
+#if ENABLE_RELAY_OUTPUT
     {"RELAY", cmd_relay, "Configure relay outputs", true},
 #endif
-#ifdef ENABLE_TEST_MODE
+#if ENABLE_TEST_MODE
     {"TEST", cmd_test, "Test mode control", false},
 #endif
-#ifdef ENABLE_CAN
+#if ENABLE_CAN
     {"SCAN", cmd_scan, "Scan CAN bus for PIDs", true},
 #endif
 };
@@ -148,7 +158,7 @@ bool isReadOnlyCommand(const char* cmdName) {
            streq(cmdName, "RUN") ||
            streq(cmdName, "SYSTEM") ||  // Allow SYSTEM STATUS and SYSTEM DUMP in RUN mode
            streq(cmdName, "LOG") ||     // Allow LOG STATUS, LOG TAGS in RUN mode (LEVEL/TAG require CONFIG)
-#ifdef ENABLE_TEST_MODE
+#if ENABLE_TEST_MODE
            streq(cmdName, "TEST") ||
 #endif
            false;
@@ -215,31 +225,71 @@ static int cmd_help(int argc, const char* const* argv) {
 static int cmd_list(int argc, const char* const* argv) {
     if (argc == 1) {
         msg.control.println(F("ERROR: LIST requires a subcommand"));
-        msg.control.println(F("  Usage: LIST INPUTS | APPLICATIONS | SENSORS | OUTPUTS | TRANSPORTS"));
+        msg.control.println(F("  Usage: LIST INPUTS | APPLICATIONS | SENSORS [category] | OUTPUTS | TRANSPORTS"));
+        msg.control.println(F("         LIST APPLICATIONS JSON | SENSORS [category] JSON | OUTPUTS JSON"));
+        msg.control.println(F("         LIST UNITS JSON | CATEGORIES JSON | PIDS JSON"));
+        msg.control.println(F("         LIST MEASUREMENT_TYPES JSON | CALIBRATION_TYPES JSON"));
         return 1;
     }
+
+    // Trailing JSON token check: "LIST <sub> JSON" or "LIST SENSORS <cat> JSON"
+    bool asJson = (argc >= 3 && streq(argv[argc - 1], "JSON"));
+
+// EMIT_JSON(call): on supporting platforms, wraps call with blank-line padding.
+// On non-supporting platforms, emits an error and returns — and the call expression
+// is absent from the macro expansion so the symbols are never referenced.
+#if SUPPORTS_JSON_EXPORT
+#define EMIT_JSON(call) do { msg.control.println(); call; msg.control.println(); } while(0)
+#else
+#define EMIT_JSON(call) do { msg.control.println(F("ERROR: JSON export not supported on this platform")); return 1; } while(0)
+#endif
 
     if (streq(argv[1], "INPUTS")) {
         listAllInputs();
     } else if (streq(argv[1], "APPLICATIONS")) {
-        listApplicationPresets();
+        if (asJson) { EMIT_JSON(writeApplicationsJson(msg.control)); }
+        else { listApplicationPresets(); }
     } else if (streq(argv[1], "SENSORS")) {
-        // LIST SENSORS [category|filter]
-        const char* filter = (argc >= 3) ? argv[2] : NULL;
-        listSensors(filter);
+        if (asJson) {
+            // LIST SENSORS JSON  or  LIST SENSORS <category> JSON
+            const char* filter = (argc == 4) ? argv[2] : nullptr;
+            EMIT_JSON(writeSensorsJson(msg.control, filter));
+        } else {
+            // LIST SENSORS [category|filter]
+            const char* filter = (argc >= 3) ? argv[2] : NULL;
+            listSensors(filter);
+        }
     } else if (streq(argv[1], "OUTPUTS")) {
-        listOutputModules();
+        if (asJson) { EMIT_JSON(writeOutputsJson(msg.control)); }
+        else { listOutputModules(); }
+    } else if (streq(argv[1], "UNITS")) {
+        if (asJson) { EMIT_JSON(writeUnitsJson(msg.control)); }
+        else { msg.control.println(F("JSON-only subcommand. Usage: LIST UNITS JSON")); }
+    } else if (streq(argv[1], "CATEGORIES")) {
+        if (asJson) { EMIT_JSON(writeCategoriesJson(msg.control)); }
+        else { msg.control.println(F("JSON-only subcommand. Usage: LIST CATEGORIES JSON")); }
+    } else if (streq(argv[1], "PIDS")) {
+        if (asJson) { EMIT_JSON(writePidsJson(msg.control)); }
+        else { msg.control.println(F("JSON-only subcommand. Usage: LIST PIDS JSON")); }
+    } else if (streq(argv[1], "MEASUREMENT_TYPES")) {
+        if (asJson) { EMIT_JSON(writeMeasurementTypesJson(msg.control)); }
+        else { msg.control.println(F("JSON-only subcommand. Usage: LIST MEASUREMENT_TYPES JSON")); }
+    } else if (streq(argv[1], "CALIBRATION_TYPES")) {
+        if (asJson) { EMIT_JSON(writeCalibrationTypesJson(msg.control)); }
+        else { msg.control.println(F("JSON-only subcommand. Usage: LIST CALIBRATION_TYPES JSON")); }
     } else if (streq(argv[1], "TRANSPORTS")) {
         router.listAvailableTransports();
     } else {
         msg.control.print(F("ERROR: Unknown LIST subcommand '"));
         msg.control.print(argv[1]);
         msg.control.println(F("'"));
-        msg.control.println(F("  Valid: INPUTS, APPLICATIONS, SENSORS, OUTPUTS, TRANSPORTS"));
+        msg.control.println(F("  Valid: INPUTS, APPLICATIONS, SENSORS, OUTPUTS, TRANSPORTS,"));
+        msg.control.println(F("         UNITS, CATEGORIES, PIDS, MEASUREMENT_TYPES, CALIBRATION_TYPES"));
         return 1;
     }
     return 0;
 }
+#undef EMIT_JSON
 
 static int cmd_version(int argc, const char* const* argv) {
     msg.control.println();
@@ -252,6 +302,8 @@ static int cmd_version(int argc, const char* const* argv) {
     msg.control.println(FW_GIT_HASH);
     msg.control.print(F("  EEPROM Version: "));
     msg.control.println(EEPROM_VERSION);
+    msg.control.print(F("  System Config Version: "));
+    msg.control.println(systemConfig.version);
     msg.control.print(F("  Active Inputs: "));
     extern uint8_t numActiveInputs;
     msg.control.print(numActiveInputs);
@@ -280,6 +332,7 @@ static int cmd_save(int argc, const char* const* argv) {
         msg.control.println(F("Saving configuration to EEPROM..."));
         saveInputConfig();
         saveSystemConfig();
+        obdQuery_buildLookupTable();  // Rebuild PID table — inputs may have changed
         msg.control.println(F("Configuration saved"));
         return 0;
     }
@@ -289,12 +342,14 @@ static int cmd_save(int argc, const char* const* argv) {
         msg.control.println(F("Saving configuration to EEPROM..."));
         saveInputConfig();
         saveSystemConfig();
+        obdQuery_buildLookupTable();  // Rebuild PID table — inputs may have changed
         msg.control.println(F("Configuration saved"));
         return 0;
     }
 
     // Case 3: SAVE [destination:]filename (file path - anything that's not "EEPROM")
     if (argc >= 2) {
+#if SUPPORTS_JSON_CONFIG && SUPPORTS_SD
         // Parse file path
         FilePathComponents path = parseFilePath(argv[1]);
         if (!path.isValid) {
@@ -317,6 +372,10 @@ static int cmd_save(int argc, const char* const* argv) {
         }
         msg.control.println();
         return 0;
+#else
+        msg.control.println(F("ERROR: File save not supported on this platform"));
+        return 1;
+#endif
     }
 
     // Should never reach here, but provide helpful error message
@@ -351,6 +410,7 @@ static int cmd_load(int argc, const char* const* argv) {
 
     // Case 3: LOAD [destination:]filename (file path - anything that's not "EEPROM")
     if (argc >= 2) {
+#if SUPPORTS_JSON_CONFIG && SUPPORTS_SD
         // Parse file path
         FilePathComponents path = parseFilePath(argv[1]);
         if (!path.isValid) {
@@ -374,6 +434,10 @@ static int cmd_load(int argc, const char* const* argv) {
         }
         msg.control.println();
         return 0;
+#else
+        msg.control.println(F("ERROR: File load not supported on this platform"));
+        return 1;
+#endif
     }
 
     // Should never reach here, but provide helpful error message
@@ -386,6 +450,21 @@ static int cmd_load(int argc, const char* const* argv) {
     msg.control.println(F("    LOAD SD:backup.json     # Load from SD card (explicit)"));
     return 1;
 }
+
+#if SUPPORTS_JSON_IMPORT_STREAM
+static int cmd_json(int argc, const char* const* argv) {
+    if (argc < 2 || !streq(argv[1], "IMPORT")) {
+        msg.control.println(F("Usage: JSON IMPORT"));
+        msg.control.println(F("  Paste JSON, then type 'END JSON' on its own line"));
+        return 1;
+    }
+    if (!serialConfig_beginJsonImport()) {
+        msg.control.println(F("ERROR: JSON import already in progress"));
+        return 1;
+    }
+    return 0;
+}
+#endif
 
 static int cmd_reboot(int argc, const char* const* argv) {
     msg.control.println(F("Rebooting system..."));
@@ -446,6 +525,7 @@ static int cmd_set(int argc, const char* const* argv) {
                         case MEASURE_HUMIDITY: msg.control.print(F("HUMIDITY")); break;
                         case MEASURE_ELEVATION: msg.control.print(F("ELEVATION")); break;
                         case MEASURE_DIGITAL: msg.control.print(F("DIGITAL")); break;
+                        case MEASURE_LEVEL: msg.control.print(F("LEVEL")); break;
                     }
                     msg.control.print(F(" but "));
                     msg.control.print(field);
@@ -459,6 +539,7 @@ static int cmd_set(int argc, const char* const* argv) {
                         case MEASURE_HUMIDITY: msg.control.print(F("HUMIDITY")); break;
                         case MEASURE_ELEVATION: msg.control.print(F("ELEVATION")); break;
                         case MEASURE_DIGITAL: msg.control.print(F("DIGITAL")); break;
+                        case MEASURE_LEVEL: msg.control.print(F("LEVEL")); break;
                     }
                     msg.control.println();
                     return 1;
@@ -488,6 +569,7 @@ static int cmd_set(int argc, const char* const* argv) {
     // SET CAN <pid>  -  Import CAN sensor by PID
     // Example: SET CAN 0x0C  (imports Engine RPM from OBD-II)
     // This automatically assigns the next available CAN virtual pin (CAN:0, CAN:1, etc.)
+#if ENABLE_CAN
     if (streq(argv[1], "CAN") && argc >= 3) {
         // Parse PID (supports hex like 0x0C or decimal like 12)
         uint8_t pid;
@@ -582,6 +664,7 @@ static int cmd_set(int argc, const char* const* argv) {
         input->flags.isEnabled = true;
         return 0;
     }
+#endif // ENABLE_CAN
 
     // SET <pin> APPLICATION <application>
     if (streq(field, "APPLICATION")) {
@@ -821,6 +904,34 @@ static int cmd_set(int argc, const char* const* argv) {
             return 0;
         }
         return 1;
+    }
+
+    // SET <pin> DIVIDER <ratio>
+    // Voltage divider ratio at the ADC pin (V_at_pin / V_at_sensor).
+    // Use when a hardware divider scales a 5V sensor down for a 3.3V ADC
+    // (e.g. 0.6 for a 2.2k/3.3k divider). 1.0 = no divider.
+    if (streq(field, "DIVIDER")) {
+        if (argc < 4) {
+            msg.control.println(F("ERROR: DIVIDER requires a ratio (e.g. 0.6 for 2.2k/3.3k)"));
+            return 1;
+        }
+        float ratio = atof(argv[3]);
+        if (ratio <= 0.0f || ratio > 1.0f) {
+            msg.control.println(F("ERROR: Divider ratio must be > 0.0 and <= 1.0"));
+            return 1;
+        }
+        Input* input = getInputByPin(pin);
+        if (!input) {
+            msg.control.println(F("ERROR: Input not configured"));
+            return 1;
+        }
+        input->divider_ratio = ratio;
+        msg.control.print(F("Input "));
+        msg.control.print(argv[1]);
+        msg.control.print(F(" divider ratio set to "));
+        msg.control.println(ratio, 3);
+        msg.control.println(F("  (use SAVE to persist)"));
+        return 0;
     }
 
     // ===== OUTPUT ROUTING COMMANDS =====
@@ -1538,6 +1649,7 @@ static int cmd_output(int argc, const char* const* argv) {
         if (setOutputEnabled(outputName, true)) {
             msg.control.print(outputName);
             msg.control.println(F(" enabled"));
+            msg.control.println(F("  (use SAVE to persist)"));
         } else {
             msg.control.print(F("ERROR: Unknown output '"));
             msg.control.print(outputName);
@@ -1548,6 +1660,7 @@ static int cmd_output(int argc, const char* const* argv) {
         if (setOutputEnabled(outputName, false)) {
             msg.control.print(outputName);
             msg.control.println(F(" disabled"));
+            msg.control.println(F("  (use SAVE to persist)"));
         } else {
             msg.control.print(F("ERROR: Unknown output '"));
             msg.control.print(outputName);
@@ -1565,6 +1678,7 @@ static int cmd_output(int argc, const char* const* argv) {
             msg.control.print(F(" interval set to "));
             msg.control.print(interval);
             msg.control.println(F("ms"));
+            msg.control.println(F("  (use SAVE to persist)"));
         } else {
             msg.control.print(F("ERROR: Unknown output '"));
             msg.control.print(outputName);
@@ -1703,7 +1817,7 @@ static int cmd_display(int argc, const char* const* argv) {
 static int cmd_transport(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: TRANSPORT requires a subcommand"));
-        msg.control.println(F("  Usage: TRANSPORT STATUS | <plane> <transport>"));
+        msg.control.println(F("  Usage: TRANSPORT STATUS | <plane> <transport> [SECONDARY]"));
         msg.control.println(F("  (Use LIST TRANSPORTS to see available transports)"));
         return 1;
     }
@@ -1716,7 +1830,7 @@ static int cmd_transport(int argc, const char* const* argv) {
     // All other subcommands require a plane and transport
     if (argc < 3) {
         msg.control.println(F("ERROR: Subcommand requires a plane and transport"));
-        msg.control.println(F("  Usage: TRANSPORT <plane> <transport>"));
+        msg.control.println(F("  Usage: TRANSPORT <plane> <transport> [SECONDARY]"));
         return 1;
     }
 
@@ -1738,9 +1852,38 @@ static int cmd_transport(int argc, const char* const* argv) {
         return 1;
     }
 
-    if (router.setTransport(plane, transport)) {
+    // Optional SECONDARY keyword: TRANSPORT <plane> <transport> SECONDARY
+    // Sets this as the secondary (listen-on + multicast-to) transport for the plane,
+    // leaving the primary unchanged. Both primary and secondary are polled for input
+    // and receive all output, enabling simultaneous control from two ports.
+    if (argc >= 4 && !streq(argv[3], "SECONDARY")) {
+        msg.control.print(F("ERROR: Unknown option '"));
+        msg.control.print(argv[3]);
+        msg.control.println(F("' (did you mean SECONDARY?)"));
+        return 1;
+    }
+    bool isSecondary = (argc >= 4);
+
+    // Conflict: refuse to assign a serial port that is owned by ELM327
+#if ENABLE_ELM327
+    if (transport >= TRANSPORT_SERIAL1 && transport <= TRANSPORT_SERIAL8) {
+        uint8_t port_id = transport - TRANSPORT_SERIAL1 + 1;
+        if (systemConfig.buses.elm327_serial_port == port_id) {
+            msg.control.print(F("ERROR: Serial"));
+            msg.control.print(port_id);
+            msg.control.println(F(" is owned by ELM327"));
+            msg.control.print(F("  Run: BUS SERIAL "));
+            msg.control.print(port_id);
+            msg.control.println(F(" ELM327 DISABLE first"));
+            return 1;
+        }
+    }
+#endif
+
+    if (router.setTransport(plane, transport, isSecondary)) {
         msg.control.print(F("Set "));
         msg.control.print(argv[1]);
+        if (isSecondary) msg.control.print(F(" secondary"));
         msg.control.print(F(" → "));
         msg.control.println(argv[2]);
 
@@ -1797,13 +1940,29 @@ static int cmd_system(int argc, const char* const* argv) {
         return 1;
     }
 
-    // SYSTEM DUMP [JSON]
+    // SYSTEM DUMP [REGISTRY] [JSON]
     if (streq(argv[1], "DUMP")) {
-        // Check for "SYSTEM DUMP JSON" variant
+        // SYSTEM DUMP REGISTRY JSON — export static firmware catalogs
+        if (argc == 4 && streq(argv[2], "REGISTRY") && streq(argv[3], "JSON")) {
+#if SUPPORTS_JSON_EXPORT
+            msg.control.println();
+            dumpRegistryToJson(msg.control);
+            msg.control.println();
+#else
+            msg.control.println(F("ERROR: JSON export not supported on this platform"));
+#endif
+            return 0;
+        }
+
+        // SYSTEM DUMP JSON — export active user configuration
         if (argc == 3 && streq(argv[2], "JSON")) {
+#if SUPPORTS_JSON_CONFIG
             msg.control.println();
-            dumpConfigToJSON(Serial);
+            dumpConfigToJSON(msg.control);
             msg.control.println();
+#else
+            msg.control.println(F("ERROR: JSON export not supported on this platform"));
+#endif
             return 0;
         }
 
@@ -1997,7 +2156,7 @@ static int cmd_system(int argc, const char* const* argv) {
     return 1;
 }
 
-#ifdef ENABLE_RELAY_OUTPUT
+#if ENABLE_RELAY_OUTPUT
 static int cmd_relay(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: RELAY requires a subcommand"));
@@ -2108,7 +2267,7 @@ static int cmd_relay(int argc, const char* const* argv) {
 }
 #endif
 
-#ifdef ENABLE_TEST_MODE
+#if ENABLE_TEST_MODE
 static int cmd_test(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: TEST requires a subcommand"));
@@ -2727,11 +2886,98 @@ static int cmd_bus(int argc, const char* const* argv) {
                 return 0;
             }
 
+            // BUS SERIAL <port> ELM327 ENABLE|DISABLE
+#if ENABLE_ELM327
+            if (streq(argv[3], "ELM327")) {
+                if (argc < 5) {
+                    msg.control.println(F("ERROR: ELM327 requires ENABLE or DISABLE"));
+                    msg.control.println(F("  Usage: BUS SERIAL <port> ELM327 ENABLE|DISABLE"));
+                    return 1;
+                }
+
+                if (streq(argv[4], "ENABLE")) {
+                    if (!isSerialPortActive(port_id)) {
+                        msg.control.print(F("ERROR: Serial"));
+                        msg.control.print(port_id);
+                        msg.control.println(F(" is not enabled"));
+                        msg.control.print(F("  Run: BUS SERIAL "));
+                        msg.control.print(port_id);
+                        msg.control.println(F(" ENABLE <baud> first"));
+                        return 1;
+                    }
+
+                    // Conflict: refuse if this port is used by the message router
+                    uint8_t routerTransportId = TRANSPORT_SERIAL1 + (port_id - 1);
+                    const char* conflictPlane = nullptr;
+                    if (systemConfig.router.control_primary == routerTransportId ||
+                        systemConfig.router.control_secondary == routerTransportId)
+                        conflictPlane = "CONTROL";
+                    else if (systemConfig.router.data_primary == routerTransportId ||
+                             systemConfig.router.data_secondary == routerTransportId)
+                        conflictPlane = "DATA";
+                    else if (systemConfig.router.debug_primary == routerTransportId ||
+                             systemConfig.router.debug_secondary == routerTransportId)
+                        conflictPlane = "DEBUG";
+
+                    if (conflictPlane) {
+                        msg.control.print(F("ERROR: Serial"));
+                        msg.control.print(port_id);
+                        msg.control.print(F(" is in use by the router ("));
+                        msg.control.print(conflictPlane);
+                        msg.control.println(F(" plane) — reassign first"));
+                        return 1;
+                    }
+
+                    // Conflict: refuse if another port is already the ELM327 port
+                    if (systemConfig.buses.elm327_serial_port != 0xFF &&
+                        systemConfig.buses.elm327_serial_port != port_id) {
+                        msg.control.print(F("ERROR: Serial"));
+                        msg.control.print(systemConfig.buses.elm327_serial_port);
+                        msg.control.println(F(" is already the ELM327 port"));
+                        msg.control.print(F("  Run: BUS SERIAL "));
+                        msg.control.print(systemConfig.buses.elm327_serial_port);
+                        msg.control.println(F(" ELM327 DISABLE first"));
+                        return 1;
+                    }
+
+                    Stream* ser = getSerialPort(port_id);
+                    elm327Output.setSerial(ser);
+                    elm327Output.begin();
+                    systemConfig.buses.elm327_serial_port = port_id;
+                    systemConfig.outputEnabled[OUTPUT_ELM327] = 1;
+
+                    msg.control.print(F("ELM327 emulator assigned to Serial"));
+                    msg.control.println(port_id);
+                    msg.control.println(F("Use SAVE to persist"));
+                    return 0;
+                }
+
+                if (streq(argv[4], "DISABLE")) {
+                    elm327Output.end();
+                    elm327Output.setSerial(nullptr);
+                    systemConfig.buses.elm327_serial_port = 0xFF;
+                    systemConfig.outputEnabled[OUTPUT_ELM327] = 0;
+
+                    msg.control.print(F("ELM327 disabled on Serial"));
+                    msg.control.println(port_id);
+                    msg.control.println(F("Use SAVE to persist"));
+                    return 0;
+                }
+
+                msg.control.println(F("ERROR: ELM327 requires ENABLE or DISABLE"));
+                return 1;
+            }
+#endif  // ENABLE_ELM327
+
             // Unknown subcommand for port
             msg.control.print(F("ERROR: Unknown command '"));
             msg.control.print(argv[3]);
             msg.control.println(F("'"));
+#if ENABLE_ELM327
+            msg.control.println(F("  Valid: ENABLE, DISABLE, BAUDRATE, ELM327"));
+#else
             msg.control.println(F("  Valid: ENABLE, DISABLE, BAUDRATE"));
+#endif
             return 1;
         }
 
@@ -2739,7 +2985,11 @@ static int cmd_bus(int argc, const char* const* argv) {
         msg.control.print(F("ERROR: Unknown serial command '"));
         msg.control.print(argv[2]);
         msg.control.println(F("'"));
+#if ENABLE_ELM327
+        msg.control.println(F("  Usage: BUS SERIAL [1-8] [ENABLE|DISABLE|BAUDRATE <rate>|ELM327 <ENABLE|DISABLE>]"));
+#else
         msg.control.println(F("  Usage: BUS SERIAL [1-8] [ENABLE|DISABLE|BAUDRATE <rate>]"));
+#endif
         return 1;
 #endif
     }
@@ -2984,7 +3234,7 @@ static int cmd_log(int argc, const char* const* argv) {
 // SCAN COMMAND - CAN bus scanning
 // ============================================================================
 
-#ifdef ENABLE_CAN
+#if ENABLE_CAN
 static int cmd_scan(int argc, const char* const* argv) {
     // Usage: SCAN CAN [duration_ms]
     //        SCAN CANCEL
@@ -3046,4 +3296,66 @@ static int cmd_scan(int argc, const char* const* argv) {
 }
 #endif // ENABLE_CAN
 
-#endif // USE_STATIC_CONFIG
+// ============================================================================
+// AT - Send raw AT command to a hardware serial port (no line ending)
+// Usage: AT <port#> <command>
+// Example: AT 1 AT+NAMEpreOBD
+//          AT 1 AT+BAUD0
+// ============================================================================
+static int cmd_at(int argc, const char* const* argv) {
+    if (argc < 3) {
+        msg.control.println(F("Usage: AT <port> <command>"));
+        msg.control.println(F("  Sends raw bytes to a serial port with no line ending."));
+        msg.control.println(F("  Example: AT 1 AT+NAMEpreOBD"));
+        msg.control.println(F("           AT 1 AT+BAUD0       (9600, BLE-friendly)"));
+        return 1;
+    }
+
+    uint8_t port_id = atoi(argv[1]);
+    if (port_id < 1 || port_id > NUM_SERIAL_PORTS) {
+        msg.control.print(F("ERROR: Invalid port (1-"));
+        msg.control.print(NUM_SERIAL_PORTS);
+        msg.control.println(F(")"));
+        return 1;
+    }
+
+    if (!isSerialPortActive(port_id)) {
+        msg.control.print(F("ERROR: Serial"));
+        msg.control.print(port_id);
+        msg.control.println(F(" is not active. Enable it first with BUS SERIAL <port> ENABLE"));
+        return 1;
+    }
+
+    Stream* port = getSerialPort(port_id);
+    if (!port) {
+        msg.control.println(F("ERROR: Could not get serial port"));
+        return 1;
+    }
+
+    // Drain any stale bytes before sending so we don't mix old data into the response
+    while (port->available()) port->read();
+
+    // Write the AT command raw (no CR/LF) — required by HM-10 and most BT modules
+    port->print(argv[2]);
+    port->flush();
+
+    // Read response for up to 500ms and print it here, before router.update() can
+    // grab it and misinterpret it as a command.
+    msg.control.print(F("Serial"));
+    msg.control.print(port_id);
+    msg.control.print(F(" response: "));
+    unsigned long deadline = millis() + 500;
+    bool got_response = false;
+    while (millis() < deadline) {
+        while (port->available()) {
+            msg.control.write((char)port->read());
+            got_response = true;
+            deadline = millis() + 100;  // extend deadline while data is arriving
+        }
+    }
+    if (!got_response) {
+        msg.control.print(F("(no response)"));
+    }
+    msg.control.println();
+    return 0;
+}

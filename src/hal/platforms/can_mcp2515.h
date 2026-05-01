@@ -18,11 +18,11 @@
     #undef DEFAULT_SPI_CLOCK
 #endif
 #include <mcp2515.h>
-#include "../../config.h"  // For CAN_CS_x, CAN_INT_x pin definitions
+#include "../../config.h"  // CAN_CS_x, CAN_INT_x now defined in board profile via -include
 
 namespace hal { namespace can {
 
-#ifdef ENABLE_CAN_HYBRID
+#if ENABLE_CAN_HYBRID
 // In hybrid mode, wrap in mcp2515 namespace for dispatcher
 namespace mcp2515 {
 #endif
@@ -183,7 +183,7 @@ inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
     (void)bus;
 }
 
-#ifdef ENABLE_CAN_HYBRID
+#if ENABLE_CAN_HYBRID
 } // namespace mcp2515
 #endif
 

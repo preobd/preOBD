@@ -754,10 +754,10 @@ RELAY 0 STATUS
 
 ## Additional Resources
 
-- **Main documentation**: [README.md](../README.md)
+- **Main documentation**: [README.md](../../README.md)
 - **Command reference**: Type `HELP` in serial console
 - **Examples**: Type `HELP` and see Examples section
-- **Source code**: [src/outputs/output_relay.cpp](../src/outputs/output_relay.cpp)
+- **Source code**: [src/outputs/output_relay.cpp](../../../src/outputs/output_relay.cpp)
 
 ---
 

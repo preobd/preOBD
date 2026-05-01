@@ -8,7 +8,14 @@
 
 #include "../config.h"
 
-#if defined(ENABLE_SD_LOGGING) || defined(ENABLE_JSON_CONFIG)
+#if SUPPORTS_SD && !defined(SD_PIN)
+#error "SD_PIN must be defined in the board profile when SUPPORTS_SD is set"
+#endif
+#if ENABLE_SD_LOGGING && !SUPPORTS_SD
+#error "ENABLE_SD_LOGGING requires SUPPORTS_SD=1 in the board profile"
+#endif
+
+#if SUPPORTS_SD
 
 #include "sd_manager.h"
 #include "system_config.h"
@@ -43,20 +50,17 @@ void initSD() {
 
     bool initSuccess = false;
 
-    if (systemConfig.sdCSPin == 254) {
-        // Teensy 4.1 built-in SD uses 4-bit SDIO interface
-        // Other platforms may use this as a special pin designation
+#if SD_PIN == 254
         msg.debug.info(TAG_SD, "Using built-in SD (BUILTIN_SDCARD)");
         msg.debug.debug(TAG_SD, "Calling SD.begin(BUILTIN_SDCARD)...");
-        delay(100);  // Let hardware stabilize
+        delay(100);
         initSuccess = SD.begin(BUILTIN_SDCARD);
-    } else {
-        // External SD card uses SPI with specified CS pin
-        pinMode(systemConfig.sdCSPin, OUTPUT);
-        msg.debug.info(TAG_SD, "Using external SD, CS Pin: %d", systemConfig.sdCSPin);
-        delay(100);  // Let hardware stabilize
-        initSuccess = SD.begin(systemConfig.sdCSPin);
-    }
+#else
+        pinMode(SD_PIN, OUTPUT);
+        msg.debug.info(TAG_SD, "Using external SD, CS pin: %d", SD_PIN);
+        delay(100);
+        initSuccess = SD.begin(SD_PIN);
+#endif
 
     // Restore normal watchdog timeout
     watchdogEnable(2000);
@@ -79,4 +83,4 @@ bool isSDInitialized() {
     return sdInitialized;
 }
 
-#endif // ENABLE_SD_LOGGING || ENABLE_JSON_CONFIG
+#endif // SUPPORTS_SD

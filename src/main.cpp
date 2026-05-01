@@ -8,15 +8,16 @@
 #include <Wire.h>
 #include "config.h"
 #include "version.h"
+
+// Board profile pin validation
+#if ENABLE_TEST_MODE && !defined(TEST_MODE_PIN)
+#error "TEST_MODE_PIN must be defined in the board profile when ENABLE_TEST_MODE is set"
+#endif
 #include "lib/platform.h"
 #include "lib/watchdog.h"
 
 #include "lib/sensor_types.h"
-#ifdef USE_STATIC_CONFIG
-#include "lib/generated/sensor_library_static.h"
-#else
 #include "lib/sensor_library.h"
-#endif
 #include "lib/system_config.h"
 #include "lib/bus_manager.h"
 #include "lib/serial_manager.h"
@@ -24,21 +25,20 @@
 #include "lib/sd_manager.h"
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
-#ifndef USE_STATIC_CONFIG
-    #include "inputs/serial_config.h"   // Only needed for EEPROM/serial config mode
-    #include "lib/system_mode.h"        // System mode (CONFIG/RUN)
-    #include "lib/button_handler.h"     // Multi-function button handler
+#include "inputs/serial_config.h"
+#include "lib/system_mode.h"        // System mode (CONFIG/RUN)
+#if ENABLE_MODE_BUTTON
+#include "lib/button_handler.h"
 #endif
 #include "lib/display_manager.h"        // Display runtime state management
-#ifdef ENABLE_LED
+#if ENABLE_LED
     #include "lib/rgb_led.h"
 #endif
 #include "outputs/output_base.h"
-#ifdef ENABLE_CAN
+#include "lib/obd_query.h"
+#if ENABLE_CAN
     #include "inputs/input_can.h"
-    #ifndef USE_STATIC_CONFIG
-        #include "inputs/sensors/can/can_scan.h"
-    #endif
+    #include "inputs/sensors/can/can_scan.h"
 #endif
 
 // Transport abstraction layer
@@ -107,27 +107,26 @@ extern void updateLCD(Input**, int);
 #include "inputs/alarm_logic.h"
 
 // Test mode (if enabled)
-#ifdef ENABLE_TEST_MODE
+#if ENABLE_TEST_MODE
 #include "test/test_mode.h"
 #endif
 
 // ===== TIME-SLICING STATE =====
 // Tracks last execution time for each time-sliced operation
 static uint32_t lastInputRead[MAX_INPUTS];  // Per-sensor read timing
-#ifdef ENABLE_ALARMS
+#if ENABLE_ALARMS
 static uint32_t lastAlarmCheck = 0;
 #endif
-#ifdef ENABLE_LCD
+#if ENABLE_LCD
 static uint32_t lastLCDUpdate = 0;
 #endif
 
 // ===== TIME-SLICED OPERATION FUNCTIONS =====
 // Extract repetitive time-slice checks into named functions for clarity
 
-#ifndef USE_STATIC_CONFIG
 // Update LCD display in CONFIG mode
 static void updateConfigModeDisplay(uint32_t now) {
-    #ifdef ENABLE_LCD
+    #if ENABLE_LCD
     if (isDisplayActive() && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
@@ -142,7 +141,6 @@ static void updateConfigModeDisplay(uint32_t now) {
     }
     #endif
 }
-#endif
 
 // Read sensors at their individual configured intervals
 static void updateSensors(uint32_t now) {
@@ -163,7 +161,7 @@ static void updateSensors(uint32_t now) {
 
 // Check alarms for all enabled inputs
 static void updateAlarms(uint32_t now) {
-    #ifdef ENABLE_ALARMS
+    #if ENABLE_ALARMS
     if (now - lastAlarmCheck >= ALARM_CHECK_INTERVAL_MS) {
         updateAllInputAlarms(now);  // Update alarm state for all inputs
         lastAlarmCheck = now;
@@ -174,7 +172,7 @@ static void updateAlarms(uint32_t now) {
 
 // Update LCD display in RUN mode
 static void updateDisplay(uint32_t now) {
-    #ifdef ENABLE_LCD
+    #if ENABLE_LCD
     if (isDisplayActive() && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
@@ -191,7 +189,7 @@ static void updateDisplay(uint32_t now) {
 
 // Update test mode (wrapper for conditional compilation)
 static void updateTestMode_Wrapper() {
-    #ifdef ENABLE_TEST_MODE
+    #if ENABLE_TEST_MODE
     if (isTestModeActive()) {
         updateTestMode();
     }
@@ -206,9 +204,7 @@ void setup() {
 
     // Initialize system config (loads from EEPROM or uses defaults from config.h)
     // MUST happen before router.begin() so router can load correct transport mappings
-#ifndef USE_STATIC_CONFIG
     initSystemConfig();
-#endif
 
     // Initialize pin registry FIRST - before any code registers pins
     // This was previously called later, which caused the registry to be cleared
@@ -261,6 +257,7 @@ void setup() {
     }
 #endif
     router.begin();  // Load config from EEPROM
+    flushSystemConfigBootDiagnostics();
     msg.control.println();
     msg.control.println(F("                 ____  ___  ___  "));
     msg.control.println(F("   ___  _______ / __ \\/ _ )/ _ \\ "));
@@ -282,7 +279,7 @@ void setup() {
     initConfiguredBuses();
 
     // Initialize CAN input subsystem (if enabled)
-    #ifdef ENABLE_CAN
+    #if ENABLE_CAN
     if (initCANInput()) {
         msg.debug.info(TAG_CAN, "CAN input subsystem initialized");
     }
@@ -292,33 +289,30 @@ void setup() {
     initSD();
 
     // Initialize input manager (loads from EEPROM or config.h)
-#ifndef USE_STATIC_CONFIG
     bool eepromConfigLoaded = initInputManager();
-#else
-    initInputManager();
-#endif
 
     // Initialize display
-    #ifdef ENABLE_LCD
+    #if ENABLE_LCD
     initLCD();
     #endif
 
-#ifndef USE_STATIC_CONFIG
-    // Initialize button handler (only in EEPROM mode)
+#if ENABLE_MODE_BUTTON
     initButtonHandler();
 #endif
 
-    // Initialize display manager (works in both static and EEPROM modes)
-    // In static mode, this is a no-op (always returns true for isDisplayActive)
     initDisplayManager();
 
     // Initialize RGB LED indicator
-    #ifdef ENABLE_LED
+    #if ENABLE_LED
     initRGBLed();
     #endif
 
     // Initialize output modules
     initOutputModules();
+
+    // Build OBD-II PID lookup table (shared by CAN and ELM327 output paths).
+    // Called unconditionally so it works even when CAN output is not enabled.
+    obdQuery_buildLookupTable();
 
     // Wait for sensors to stabilize
     msg.debug.info(TAG_SENSOR, "Waiting for sensors to stabilize...");
@@ -330,25 +324,17 @@ void setup() {
     }
 
     msg.debug.info(TAG_SYSTEM, "Initialization complete!");
-#ifdef USE_STATIC_CONFIG
-    msg.debug.info(TAG_CONFIG, "Mode: Compile-Time Config");
-    msg.debug.info(TAG_CONFIG, "Active inputs: %d", numActiveInputs);
-    msg.debug.info(TAG_CONFIG, "System voltage: %.1fV", SYSTEM_VOLTAGE);
-    msg.debug.info(TAG_CONFIG, "ADC reference: %.2fV", AREF_VOLTAGE);
-    msg.debug.info(TAG_CONFIG, "ADC resolution: %d bits", ADC_RESOLUTION);
-    msg.debug.info(TAG_CONFIG, "ADC max value: %d", ADC_MAX_VALUE);
-#endif
 
     // ===== TEST MODE ACTIVATION =====
-#ifdef ENABLE_TEST_MODE
+#if ENABLE_TEST_MODE
     // Initialize test mode system
     initTestMode();
 
     // Check if test mode trigger pin is pulled LOW
-    pinMode(TEST_MODE_TRIGGER_PIN, INPUT_PULLUP);
+    pinMode(TEST_MODE_PIN, INPUT_PULLUP);
     delay(10);  // Allow pin to stabilize
 
-    if (digitalRead(TEST_MODE_TRIGGER_PIN) == LOW) {
+    if (digitalRead(TEST_MODE_PIN) == LOW) {
         msg.debug.info(TAG_SYSTEM, "TEST MODE TRIGGER DETECTED!");
 
         // List available scenarios
@@ -362,12 +348,10 @@ void setup() {
         msg.debug.info(TAG_SYSTEM, "Use serial commands to start a scenario.");
         #endif
     } else {
-        msg.debug.info(TAG_SYSTEM, "Test mode available (pin %d is HIGH, normal operation)", TEST_MODE_TRIGGER_PIN);
+        msg.debug.info(TAG_SYSTEM, "Test mode available (pin %d is HIGH, normal operation)", TEST_MODE_PIN);
     }
 #endif
 
-#ifndef USE_STATIC_CONFIG
-    // Initialize serial configuration interface (only in EEPROM mode)
     initSerialConfig();
 
     // Initialize system mode and detect boot mode
@@ -382,11 +366,6 @@ void setup() {
     } else {
         msg.debug.info(TAG_SYSTEM, "Watchdog disabled (CONFIG mode)");
     }
-#else
-    // Always enable watchdog in static config mode
-    watchdogEnable(2000);
-    msg.debug.info(TAG_SYSTEM, "Watchdog enabled (2s timeout)");
-#endif
 }
 
 void loop() {
@@ -399,23 +378,17 @@ void loop() {
     // Update transport router (poll transports, handle housekeeping, process commands)
     router.update();  // Now handles command input from ALL transports
 
-#ifndef USE_STATIC_CONFIG
-    // NOTE: processSerialCommands() is now deprecated - router.update() handles it
-    // Kept for reference but does nothing (see serial_config.cpp)
-
     // Process button events (short press = silence alarm, long press = toggle display)
+#if ENABLE_MODE_BUTTON
     ButtonPress buttonEvent = updateButtonHandler();
-    if (buttonEvent == BUTTON_SHORT_PRESS) {
-        // Short press handled by alarm system (already reads the button)
-        // No action needed here
-    } else if (buttonEvent == BUTTON_LONG_PRESS) {
-        // Long press toggles display
+    if (buttonEvent == BUTTON_LONG_PRESS) {
         toggleDisplayRuntime();
     }
+#endif
 
     // If in CONFIG mode, skip sensor reading and outputs
     if (isInConfigMode()) {
-        #ifdef ENABLE_CAN
+        #if ENABLE_CAN
         // Update CAN input during scan to populate cache
         if (getCANScanState() == SCAN_LISTENING) {
             updateCANInput();  // Populate frame cache during scan
@@ -425,10 +398,9 @@ void loop() {
         updateConfigModeDisplay(now);
         return;  // Early return - don't read sensors or send outputs
     }
-#endif
 
     // Read sensors, check alarms, send outputs, update display
-    #ifdef ENABLE_CAN
+    #if ENABLE_CAN
     updateCANInput();  // Poll CAN bus and populate frame cache
     #endif
     updateSensors(now);
@@ -438,7 +410,7 @@ void loop() {
     updateOutputs();     // Housekeeping: drain buffers, handle RX
 
     // Update RGB LED effects (non-blocking)
-    #ifdef ENABLE_LED
+    #if ENABLE_LED
     updateRGBLed();
     #endif
 

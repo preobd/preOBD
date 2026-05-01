@@ -23,7 +23,8 @@ static const PROGMEM LinearCalibration generic_boost_linear_cal = {
     .voltage_min = 0.5,
     .voltage_max = 4.5,
     .output_min = 0.0,
-    .output_max = 5.0
+    .output_max = 5.0,
+    .enable_pullup = true
 };
 
 // Generic 0-150 PSI (0-10.34 bar) linear pressure sensor (0.5V-4.5V)
@@ -33,7 +34,8 @@ static const PROGMEM LinearCalibration generic_pressure_150psi_cal = {
     .voltage_min = 0.5,
     .voltage_max = 4.5,
     .output_min = 0.0,
-    .output_max = 10.34     // 150 PSI = 10.34 bar (base unit)
+    .output_max = 10.34,    // 150 PSI = 10.34 bar (base unit)
+    .enable_pullup = true
 };
 
 // ===== LINEAR TEMPERATURE SENSOR CALIBRATIONS =====
@@ -47,6 +49,18 @@ static const PROGMEM LinearCalibration generic_temp_linear_cal = {
     .voltage_max = 4.5,
     .output_min = -40.0,    // Temperature in °C (base unit)
     .output_max = 150.0
+};
+
+// ===== THROTTLE POSITION SENSOR CALIBRATIONS =====
+
+// Generic 0.5-4.5V Throttle Position Sensor (0-100%)
+// Standard aftermarket TPS specification (Holley Sniper, TBI conversions, many OEM sensors)
+// WARNING: Designed for 5V systems. For 3.3V systems, use voltage divider.
+static const PROGMEM LinearCalibration generic_tps_linear_cal = {
+    .voltage_min = 0.5,
+    .voltage_max = 4.5,
+    .output_min = 0.0,    // 0% throttle (closed)
+    .output_max = 100.0   // 100% throttle (wide open)
 };
 
 // ===== SPEED SENSOR CALIBRATION =====

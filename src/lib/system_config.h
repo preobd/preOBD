@@ -9,30 +9,36 @@
 #define SYSTEM_CONFIG_H
 
 #include <Arduino.h>
+#include <EEPROM.h>
 #include "bus_config.h"
 
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
-#define SYSTEM_CONFIG_VERSION 8         // Increment when struct changes (v8: per-bus CAN baud rates)
-#define SYSTEM_CONFIG_ADDRESS 0x03F0    // Address in EEPROM (after inputs)
+#define SYSTEM_CONFIG_VERSION 11        // Increment when struct changes (v11: remove system pin fields — pins are compile-time, not runtime state)
 #define SYSTEM_CONFIG_SIZE sizeof(SystemConfig)
+
+// Total EEPROM bytes available on this platform.
+// E2END is the last valid byte index (defined by EEPROM.h on AVR and Teensy 3.x/4.x).
+// If a future platform doesn't define E2END, override EEPROM_TOTAL_BYTES in its profile header.
+#ifndef EEPROM_TOTAL_BYTES
+#define EEPROM_TOTAL_BYTES (E2END + 1)
+#endif
 
 // Per-input output mask: all 4 data outputs enabled by default
 #define OUTPUT_MASK_ALL_DATA 0x0F
 
 // Output module IDs
+// Always define all IDs so EEPROM layout (outputEnabled[], outputInterval[])
+// is stable regardless of compile flags. Unused slots are harmless zeros.
 enum OutputID {
-    OUTPUT_CAN = 0,
+    OUTPUT_CAN      = 0,
     OUTPUT_REALDASH = 1,
-    OUTPUT_SERIAL = 2,
-    OUTPUT_SD = 3,
-    OUTPUT_ALARM = 4,
-#ifdef ENABLE_RELAY_OUTPUT
-    OUTPUT_RELAY = 5,
-    NUM_OUTPUTS = 6
-#else
-    NUM_OUTPUTS = 5
-#endif
+    OUTPUT_SERIAL   = 2,
+    OUTPUT_SD       = 3,
+    OUTPUT_ALARM    = 4,
+    OUTPUT_RELAY    = 5,
+    OUTPUT_ELM327   = 6,
+    NUM_OUTPUTS     = 7
 };
 
 // Display types
@@ -42,8 +48,11 @@ enum DisplayType {
     DISPLAY_OLED = 2
 };
 
-#ifdef ENABLE_RELAY_OUTPUT
+#if ENABLE_RELAY_OUTPUT
 #include "../outputs/output_relay.h"
+#endif
+#if ENABLE_ELM327
+#include "../outputs/output_elm327.h"
 #endif
 
 // System configuration structure
@@ -72,15 +81,6 @@ struct SystemConfig {
     uint16_t lcdUpdateInterval;
     uint16_t reserved1;
 
-    // Hardware Pins (8 bytes)
-    uint8_t modeButtonPin;
-    uint8_t buzzerPin;
-    uint8_t canCSPin;
-    uint8_t canIntPin;
-    uint8_t sdCSPin;
-    uint8_t testModePin;
-    uint16_t reserved2;
-
     // Physical Constants (4 bytes)
     float seaLevelPressure;      // hPa for altitude
 
@@ -98,7 +98,7 @@ struct SystemConfig {
         uint8_t reserved_router[6];  // Future expansion
     } router;
 
-#ifdef ENABLE_RELAY_OUTPUT
+#if ENABLE_RELAY_OUTPUT
     // Relay Configuration (32 bytes) - NEW in v5
     RelayConfig relays[MAX_RELAYS];  // 2 relays × 16 bytes = 32 bytes
 #endif
@@ -119,12 +119,20 @@ struct SystemConfig {
     } logFilter;
 };
 
+// SystemConfig is anchored at the end of EEPROM so its address adapts to the
+// platform automatically. The input block grows from address 0; a static_assert
+// in input_manager.cpp keeps the two from overlapping.
+constexpr size_t SYSTEM_CONFIG_ADDRESS = EEPROM_TOTAL_BYTES - sizeof(SystemConfig);
+static_assert(EEPROM_TOTAL_BYTES >= sizeof(SystemConfig) + 16,
+              "EEPROM too small to hold SystemConfig");
+
 // Global system config instance
 extern SystemConfig systemConfig;
 
 // Initialization and persistence
 void initSystemConfig();         // Load from EEPROM or set defaults
-bool saveSystemConfig();         // Save to EEPROM
+void flushSystemConfigBootDiagnostics();  // Emit buffered boot messages (call after router.begin())
+bool saveSystemConfig(bool verbose = true);  // Save to EEPROM (verbose=false for background saves)
 bool loadSystemConfig();         // Load from EEPROM
 void resetSystemConfig();        // Reset to defaults
 uint8_t calculateChecksum(SystemConfig* cfg);

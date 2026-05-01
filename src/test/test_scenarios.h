@@ -16,7 +16,7 @@
 
 #include "../config.h"
 
-#ifdef ENABLE_TEST_MODE
+#if ENABLE_TEST_MODE
 
 #include "test_mode.h"
 

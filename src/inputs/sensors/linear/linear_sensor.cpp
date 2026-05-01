@@ -29,17 +29,15 @@
  * 2. Preset calibration (PROGMEM) - from sensor library
  * 3. Default fallback - 0.5V-4.5V → 0-5 bar (common automotive pressure sensor)
  */
+// Tolerance band beyond [V_min, V_max] before flagging an out-of-range reading
+// as a fault. Absorbs ADC reference / divider drift while still catching open
+// circuits and dead sensors.
+#define LINEAR_VOLTAGE_TOL 0.05f
+
 void readLinearSensor(Input *ptr) {
-    bool isValid;
-    int reading = readAnalogPin(ptr->pin, &isValid);
-
-    if (!isValid) {
-        ptr->value = NAN;
-        return;
-    }
-
     // Get calibration values (from custom RAM or PROGMEM preset)
     float V_min, V_max, output_min, output_max;
+    bool enable_pullup = false;
     if (ptr->flags.useCustomCalibration && ptr->calibrationType == CAL_LINEAR) {
         // Read from custom calibration (RAM) - only available in EEPROM/serial config mode
         V_min = ptr->customCalibration.pressureLinear.voltage_min;
@@ -53,6 +51,7 @@ void readLinearSensor(Input *ptr) {
         V_max = pgm_read_float(&cal->voltage_max);
         output_min = pgm_read_float(&cal->output_min);
         output_max = pgm_read_float(&cal->output_max);
+        enable_pullup = pgm_read_byte(&cal->enable_pullup);
     } else {
         // Default: 0.5V-4.5V → 0-5 bar (common automotive pressure sensor)
         V_min = 0.5;
@@ -61,10 +60,35 @@ void readLinearSensor(Input *ptr) {
         output_max = 5.0;
     }
 
-    // Convert ADC reading to voltage
-    float voltage = reading * (AREF_VOLTAGE / (float)ADC_MAX_VALUE);
+    // Per-input voltage divider for level-shifting 5V sensors to 3.3V ADCs.
+    // 0 (uninitialized / older EEPROM data) is treated as 1.0 = no divider.
+    float divider_ratio = (ptr->divider_ratio > 0.0f) ? ptr->divider_ratio : 1.0f;
 
-    // Clamp voltage to valid range
+    // Apply pin mode based on cal flag. Internal pull-up forces a disconnected
+    // pin to rail high so the out-of-range check below catches it as NAN.
+    pinMode(ptr->pin, enable_pullup ? INPUT_PULLUP : INPUT);
+
+    bool isValid;
+    int reading = readAnalogPin(ptr->pin, &isValid);
+
+    if (!isValid) {
+        ptr->value = NAN;
+        return;
+    }
+
+    // Convert ADC reading to voltage at the pin, then unscale through any
+    // divider so `voltage` represents the raw sensor output (matches cal units).
+    float voltage = reading * (AREF_VOLTAGE / (float)ADC_MAX_VALUE) / divider_ratio;
+
+    // Out-of-range = sensor fault (open circuit, dead sensor, wrong supply).
+    // Sensors with integrated signal conditioning physically cannot produce
+    // voltages outside their spec range.
+    if (voltage < V_min - LINEAR_VOLTAGE_TOL || voltage > V_max + LINEAR_VOLTAGE_TOL) {
+        ptr->value = NAN;
+        return;
+    }
+
+    // Inside tolerance band but slightly outside spec: clamp to range.
     if (voltage < V_min) voltage = V_min;
     if (voltage > V_max) voltage = V_max;
 

@@ -7,10 +7,9 @@
 
 #include "../config.h"
 
-// Only compile JSON features for EEPROM mode (not static config)
-#ifndef USE_STATIC_CONFIG
-
+// Only compile JSON features on platforms with enough RAM and in runtime config mode
 #include "json_config.h"
+#if SUPPORTS_JSON_CONFIG
 #include "system_config.h"
 #include "bus_defaults.h"
 #include "serial_manager.h"
@@ -25,11 +24,10 @@
 #include "pin_registry.h"
 #include "watchdog.h"
 
-// Use Arduino SD library for consistency across platforms
+#if SUPPORTS_SD
 #include <SD.h>
-#include "sd_manager.h"
-
 // SD object is provided globally by SD.h
+#endif
 
 // External references
 extern Input inputs[MAX_INPUTS];
@@ -183,6 +181,7 @@ void exportInputToJSON(JsonObject& inputObj, const Input* input) {
     inputObj["enabled"] = input->flags.isEnabled;
     inputObj["alarmEnabled"] = input->flags.alarm;
     inputObj["displayEnabled"] = input->flags.display;
+    inputObj["outputMask"] = input->outputMask;
 
     // OBD2 (if applicable)
     if (input->obd2pid != 0) {
@@ -231,7 +230,7 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     // Output modules
     JsonObject outputs = systemObj["outputs"].to<JsonObject>();
 
-    const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm", "relay"};
+    const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm", "relay", "elm327"};
     for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
         JsonObject output = outputs[outputNames[i]].to<JsonObject>();
         output["enabled"] = (bool)systemConfig.outputEnabled[i];
@@ -267,8 +266,7 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     timing["sensorRead"] = systemConfig.sensorReadInterval;
     timing["alarmCheck"] = systemConfig.alarmCheckInterval;
 
-    // Export all registered pins from pin registry
-    // This includes system pins (button, buzzer, chip selects), bus pins, and any other registered pins
+    // Export all registered pins from pin registry (read-only diagnostic — pins are compile-time constants from the board profile)
     JsonArray pins = systemObj["pins"].to<JsonArray>();
     exportPinRegistryToJSON(pins);
 
@@ -350,8 +348,11 @@ void dumpConfigToJSON(Print& output) {
     JsonArray inputsArray = doc["inputs"].to<JsonArray>();
     exportInputsToJSON(inputsArray);
 
-    // Serialize to output
-    serializeJsonPretty(doc, output);
+    // Serialize - feed watchdog every 32 bytes to survive slow transports
+    // (e.g. HM-10 BLE bridge at 9600 baud blocks in write() long enough to
+    //  trip a 2-second watchdog that can't be disabled at runtime)
+    WatchdogKickingPrint wdOut(output);
+    serializeJsonPretty(doc, wdOut);
     output.println();
 }
 
@@ -490,6 +491,7 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     enableInput(pin, inputObj["enabled"] | true);  // Default to true if missing
     enableInputAlarm(pin, inputObj["alarmEnabled"] | false);  // Default to false if missing
     enableInputDisplay(pin, inputObj["displayEnabled"] | true);  // Default to true if missing
+    input->outputMask = inputObj["outputMask"] | OUTPUT_MASK_ALL_DATA;  // Default to all enabled for old configs
 
     // OBD2
     if (inputObj["obd2"].isNull() == false) {
@@ -536,7 +538,7 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
     // Output modules
     if (systemObj["outputs"].isNull() == false) {
         JsonObject outputs = systemObj["outputs"];
-        const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm", "relay"};
+        const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm", "relay", "elm327"};
 
         for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
             if (outputs[outputNames[i]].isNull() == false) {
@@ -608,32 +610,6 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
         // Backward compatibility: check for lcdUpdate in timing section (old location)
         if (timing["lcdUpdate"].isNull() == false) {
             systemConfig.lcdUpdateInterval = timing["lcdUpdate"];
-        }
-    }
-
-    // Hardware pins - extract from pin registry array
-    if (systemObj["pins"].isNull() == false && systemObj["pins"].is<JsonArray>()) {
-        JsonArray pins = systemObj["pins"];
-        for (JsonVariant v : pins) {
-            JsonObject pin = v.as<JsonObject>();
-            const char* desc = pin["description"];
-            uint8_t pinNum = pin["pin"];
-
-            if (desc != nullptr) {
-                if (strcmp(desc, "Mode Button") == 0) {
-                    systemConfig.modeButtonPin = pinNum;
-                } else if (strcmp(desc, "Buzzer") == 0) {
-                    systemConfig.buzzerPin = pinNum;
-                } else if (strcmp(desc, "CAN CS") == 0) {
-                    systemConfig.canCSPin = pinNum;
-                } else if (strcmp(desc, "CAN INT") == 0) {
-                    systemConfig.canIntPin = pinNum;
-                } else if (strcmp(desc, "SD CS") == 0) {
-                    systemConfig.sdCSPin = pinNum;
-                } else if (strcmp(desc, "Test Mode Trigger") == 0) {
-                    systemConfig.testModePin = pinNum;
-                }
-            }
         }
     }
 
@@ -744,6 +720,8 @@ bool loadConfigFromJSON(const char* jsonString) {
 
     return true;
 }
+
+#if SUPPORTS_SD
 
 // Save configuration to SD card
 bool saveConfigToSD(const char* filename) {
@@ -990,4 +968,6 @@ bool loadConfigFromFile(const char* destination, const char* filename) {
     }
 }
 
-#endif // USE_STATIC_CONFIG
+#endif // SUPPORTS_SD
+
+#endif // SUPPORTS_JSON_CONFIG
