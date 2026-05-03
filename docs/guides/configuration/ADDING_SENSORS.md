@@ -275,37 +275,37 @@ If you're adding sensors from a new manufacturer not currently in the calibratio
 ### Step 1: Create Directory and Header
 
 ```bash
-mkdir -p src/lib/sensor_calibration_data/bosch/
+mkdir -p src/lib/sensor_calibration_data/acme/
 ```
 
-Create `src/lib/sensor_calibration_data/bosch/bosch_calibrations.h`:
+Create `src/lib/sensor_calibration_data/acme/acme_calibrations.h`:
 
 ```cpp
 /*
- * bosch_calibrations.h - Bosch Sensor Calibration Data
+ * acme_calibrations.h - Acme Sensor Calibration Data
  *
- * Contains calibrations for Bosch sensors.
+ * Contains calibrations for Acme sensors.
  * Add description of sensor types covered.
  */
 
-#ifndef BOSCH_CALIBRATIONS_H
-#define BOSCH_CALIBRATIONS_H
+#ifndef ACME_CALIBRATIONS_H
+#define ACME_CALIBRATIONS_H
 
 #include <Arduino.h>
 #include "../../sensor_types.h"
 #include "../../../config.h"
 
-// ===== BOSCH SENSOR CALIBRATIONS =====
+// ===== ACME SENSOR CALIBRATIONS =====
 
 // Add your calibrations here
-static const PROGMEM LinearCalibration bosch_example_cal = {
+static const PROGMEM LinearCalibration acme_example_cal = {
     .voltage_min = 0.5,
     .voltage_max = 4.5,
     .output_min = 0.0,
     .output_max = 5.0
 };
 
-#endif // BOSCH_CALIBRATIONS_H
+#endif // ACME_CALIBRATIONS_H
 ```
 
 ### Step 2: Register the Manufacturer
@@ -313,12 +313,8 @@ static const PROGMEM LinearCalibration bosch_example_cal = {
 Edit `src/lib/sensor_calibration_data.h` to include your new manufacturer file:
 
 ```cpp
-#include "sensor_calibration_data/vdo/vdo_calibrations.h"
-#include "sensor_calibration_data/aem/aem_calibrations.h"
-#include "sensor_calibration_data/nxp/nxp_calibrations.h"
-#include "sensor_calibration_data/generic/generic_calibrations.h"
-#include "sensor_calibration_data/system/system_calibrations.h"
-#include "sensor_calibration_data/bosch/bosch_calibrations.h"  // Add this line
+// ... existing includes ...
+#include "sensor_calibration_data/acme/acme_calibrations.h"  // Add this line
 ```
 
 ### Step 3: Add Sensors to Library

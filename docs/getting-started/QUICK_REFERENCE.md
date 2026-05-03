@@ -20,7 +20,9 @@
 ```bash
 pio run -e teensy41      # Teensy 4.1 with built-in SD (recommended)
 pio run -e teensy40      # Teensy 4.0
+pio run -e teensy36      # Teensy 3.6
 pio run -e mega2560      # Arduino Mega 2560
+pio run -e esp32s3dev    # ESP32-S3
 ```
 
 ### Platform Comparison
@@ -29,8 +31,9 @@ pio run -e mega2560      # Arduino Mega 2560
 |----------|-------|-----|----------|-------|
 | **Teensy 4.1** | 8MB | 512KB | All | **Recommended** - Built-in SD |
 | Teensy 4.0 | 2MB | 512KB | All | External SD module |
-| Teensy 3.6 | 1MB | 256KB | All | Older platform |
-| Mega 2560 | 256KB | 8KB | All | Good for prototyping |
+| Teensy 3.6 | 1MB | 256KB | All | Older platform, 3.3V |
+| Mega 2560 | 256KB | 8KB | Most | 5V, no native CAN |
+| ESP32-S3 | 4MB | 512KB | Most | WiFi/BT capable, 3.3V |
 
 **Recommended**: Teensy 4.1 provides best value with built-in SD card, ample resources, and native CAN support.
 
@@ -101,7 +104,7 @@ SET A5 TCASE_TEMP VDO_150C_STEINHART  # Transfer case
 ```
 VDO Sensor Signal → Analog pin (A2)
 VDO Sensor Ground → Chassis ground
-Add bias resistor: Pin → 1kΩ → 3.3V/5V
+Add bias resistor: Pin → 100Ω → 3.3V/5V
 ```
 
 ### Generic NTC Thermistor
@@ -119,7 +122,7 @@ SET A2 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
 ```
 NTC Thermistor → Between analog pin and GND
 Bias resistor  → Between analog pin and 3.3V/5V
-(Typically 10kΩ bias for 10K NTC)
+(Recommended: 2.49kΩ bias for high-impedance NTC sensors)
 ```
 
 ### VDO Pressure Sensor
@@ -130,7 +133,7 @@ SET A7 BOOST_PRESSURE VDO_2BAR_CURVE        # Boost pressure
 SET A8 FUEL_PRESSURE VDO_10BAR        # Fuel pressure
 ```
 
-**Wiring:** Same as temperature sensor (signal + ground + 1kΩ bias)
+**Wiring:** Same as temperature sensor (signal + ground + 100Ω bias)
 
 ### Generic Linear Pressure Sensor (0.5-4.5V)
 
@@ -148,11 +151,31 @@ SET A3 OIL_PRESSURE GENERIC_LINEAR
 SET A3 PRESSURE_LINEAR 0.5 4.5 0.0 7.0   # 0.5-4.5V maps to 0-7 bar
 ```
 
-**Wiring:**
+**Wiring (5V boards — Mega):**
 ```
 Sensor VCC    → 5V regulated
 Sensor GND    → GND
 Sensor Signal → Analog pin
+```
+
+**Wiring (3.3V boards — Teensy, ESP32):**
+
+⚠️ These sensors output up to 4.5V. A voltage divider is required to protect the ADC.
+
+```
+Sensor VCC    → 5V regulated
+Sensor GND    → GND
+Sensor Signal → 18kΩ → Analog pin
+                         │
+                        33kΩ
+                         │
+                        GND
+```
+
+This scales 0.5–4.5V to ~0.32–2.91V — safely within the 3.3V ADC range.
+Update the calibration to match the divided voltage range:
+```
+SET A3 PRESSURE_LINEAR 0.32 2.91 0.0 7.0   # example: 0-7 bar sensor
 ```
 
 ### Battery Voltage
@@ -466,9 +489,9 @@ SET <pin> BIAS <resistor>                         # Override bias resistor
 | Board | ADC | Voltage | Max Inputs | Notes |
 |-------|-----|---------|------------|-------|
 | Teensy 4.0/4.1 | 12-bit | 3.3V | 16 | Best performance, native CAN |
+| Teensy 3.6 | 12-bit | 3.3V | 16 | Older platform, native CAN |
 | Arduino Mega | 10-bit | 5V | 16 | Good all-rounder |
-| Arduino Due | 12-bit | 3.3V | 16 | High resolution ADC |
-| ESP32 | 12-bit | 3.3V | 16 | WiFi capable |
+| ESP32-S3 | 12-bit | 3.3V | 16 | WiFi/BT capable |
 | Arduino Uno | 10-bit | 5V | 8 | Not supported — too little RAM for runtime CLI |
 
 ---
@@ -476,7 +499,7 @@ SET <pin> BIAS <resistor>                         # Override bias resistor
 ## Common Mistakes
 
 1. **Wrong sensor type** - VDO 120C vs 150C makes huge difference
-2. **Missing pull-down resistor** - VDO thermistors need pull-down (typically 1kΩ)
+2. **Wrong bias resistor** - VDO/low-impedance senders need 100Ω; high-impedance NTC (10K) sensors need 2.49kΩ. See [Bias Resistor Guide](../guides/hardware/BIAS_RESISTOR_GUIDE.md).
 3. **Wrong I2C address** - Try both 0x27 and 0x3F for LCD
 4. **5V to 3.3V board** - Will destroy Teensy/ESP32!
 5. **No CAN termination** - CAN bus needs 120Ω resistors at each end
@@ -511,7 +534,7 @@ SET <pin> BIAS <resistor>                         # Override bias resistor
 
 ### CAN not working
 
-- Verify CAN_CS and CAN_INT pins in config.h
+- Verify CAN pin assignments in your board profile (`src/profiles/profile_<board>.h`)
 - Check 120Ω termination resistors
 - Ensure baud rate matches receiver
 

@@ -155,7 +155,7 @@ I2C pins:     SDA=20, SCL=21
 
 **Key characteristics:**
 - Large pin count suitable for complex installations
-- Default platform for preOBD
+- Supported platform (Teensy 4.1 is recommended for new builds)
 - Supports up to 16 analog inputs
 
 ---
@@ -189,6 +189,7 @@ I2C pins:     SDA=A4, SCL=A5
 - Similar to Uno but with 2 additional analog pins (A6/A7)
 - Compact form factor
 - Note: A6/A7 are analog-input-only on Nano
+- **No preOBD build environment exists for this platform** — RAM is insufficient for the runtime CLI
 
 ---
 
@@ -534,23 +535,12 @@ MAX6675 and MAX31855 are **SPI thermocouple chips** that use the assigned pin as
 
 ### Migration Path
 
-If you have an existing configuration using `A0` or `A1` for CHT with MAX6675/MAX31855:
+If you have an existing EEPROM configuration using `A0` or `A1` for CHT with MAX6675/MAX31855:
 
-**Old configuration (incorrect):**
-```cpp
-// config.h (v0.3.x)
-static InputConfig inputConfigs[MAX_INPUTS] = {
-    {A0, APP_CHT, SENSOR_MAX6675},  // ❌ Incorrect: analog pin for digital sensor
-};
-```
-
-**New configuration (correct):**
-```cpp
-// config.h (v0.4.0+)
-static InputConfig inputConfigs[MAX_INPUTS] = {
-    {6, APP_CHT, SENSOR_MAX6675},  // ✅ Correct: digital pin for SPI CS
-};
-```
+1. Enter CONFIG mode
+2. Clear the old assignment: `CLEAR A0`
+3. Re-assign to a digital pin: `SET 6 CHT MAX6675`
+4. Save: `SAVE`
 
 **Hardware note:** You must physically move the sensor's CS wire from pin A0 to pin 6 (or another available digital pin).
 

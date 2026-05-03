@@ -206,7 +206,7 @@ SAVE
 SET <pin> BIAS <ohms>
 ```
 
-**Example:** Use 2.2kΩ instead of default 1kΩ:
+**Example:** Override bias for a sensor wired with a non-standard resistor:
 ```
 SET A0 BIAS 2200
 SAVE
@@ -264,16 +264,14 @@ If you have resistance measurements at three known temperatures:
 
 ## Bias Resistor Selection
 
-The bias (pull-down) resistor affects measurement resolution. Default is 1kΩ.
+The correct bias resistor depends on the sensor's resistance family, not a single universal default.
 
-| Resistor | Best Resolution At | Use Case |
-|----------|-------------------|----------|
-| 470Ω | High temperatures | Oil temp, EGT monitoring |
-| 1kΩ | Mid-range (default) | General purpose |
-| 2.2kΩ | Low temperatures | Ambient, intake air |
-| 10kΩ | Very low temps | Cold climate |
+| Sensor Family | Resistance Range | Recommended Bias |
+|---------------|-----------------|-----------------|
+| VDO, Smiths, Stewart Warner, pre-EFI Ford/GM, Jeep CJ | 2–330Ω (low-impedance) | **100Ω** |
+| GM EFI NTC, Bosch NTC M12, Jeep XJ/Renix CTS | 135–9400Ω (high-impedance) | **2.49kΩ** |
 
-**Rule of thumb:** Match the bias resistor to the thermistor's resistance at your most critical temperature range.
+**Rule of thumb:** Match the bias resistor to the sensor's resistance family. The built-in presets already encode the correct value — only use `SET <pin> BIAS` if your physical resistor differs from the preset default.
 
 See [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) for detailed analysis.
 

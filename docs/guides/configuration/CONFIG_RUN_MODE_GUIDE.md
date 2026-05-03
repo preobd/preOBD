@@ -13,9 +13,9 @@ This prevents race conditions when modifying configuration during runtime and en
 
 ---
 
-## MODE_BUTTON (Pin 4)
+## MODE_BUTTON
 
-Pin 4 serves as a multi-function button:
+The mode button pin is defined by `MODE_BUTTON_PIN` in your board profile (`src/profiles/profile_*.h`). On the standard Teensy 4.1 profile this is **pin 5**. Check your profile to confirm the pin for your board.
 
 | Context | Behavior |
 |---------|----------|
@@ -24,7 +24,7 @@ Pin 4 serves as a multi-function button:
 | **CONFIG mode** | No effect (alarm silence only works in RUN mode) |
 
 **Wiring:**
-- Connect momentary push button between Pin 4 and GND
+- Connect momentary push button between `MODE_BUTTON_PIN` and GND
 - External pull-up resistor required (e.g., 10kΩ to VCC)
 - Button press = LOW signal
 - Button released = HIGH signal
@@ -86,7 +86,7 @@ Pin 4 serves as a multi-function button:
 ### Method 1: Boot-Time Button (Hardware)
 
 1. Power off the system
-2. Press and hold MODE_BUTTON (Pin 4)
+2. Press and hold MODE_BUTTON (`MODE_BUTTON_PIN`)
 3. Power on the system
 4. Wait for boot message: "CONFIG BUTTON DETECTED"
 5. Release button after 1 second
@@ -469,8 +469,8 @@ RUN
 ### Problem: Can't enter CONFIG mode at boot
 
 **Check wiring:**
-- MODE_BUTTON on Pin 4
-- Button connects Pin 4 to GND when pressed
+- MODE_BUTTON on `MODE_BUTTON_PIN` (pin 5 on Teensy 4.1 — check your board profile)
+- Button connects that pin to GND when pressed
 - External pull-up resistor (10kΩ) to VCC
 - Button must be held during entire boot sequence
 
@@ -487,7 +487,7 @@ CONFIG
 - In CONFIG mode, alarms are inactive
 
 **Check wiring:**
-- Verify button connected to Pin 4
+- Verify button connected to `MODE_BUTTON_PIN` (see your board profile)
 - Test with multimeter: LOW when pressed, HIGH when released
 
 ---
@@ -606,7 +606,7 @@ RUN
 - Configuration locked
 - Use for driving/monitoring
 
-**MODE_BUTTON (Pin 4):**
+**MODE_BUTTON (`MODE_BUTTON_PIN`, typically pin 5):**
 - Boot: Hold to enter CONFIG
 - RUN: Press to silence alarm
 - CONFIG: No effect

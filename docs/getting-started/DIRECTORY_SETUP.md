@@ -15,25 +15,48 @@ preOBD/
 │
 ├── src/                        # All source code
 │   ├── main.cpp               # Main program loop
-│   ├── config.h               # ⭐ HARDWARE CONFIGURATION FILE
-│   ├── alarm.cpp              # Alarm system
+│   ├── config.h               # ⭐ APPLICATION CONSTANTS (timing, thresholds, units)
+│   ├── version.h              # Firmware version
+│   │
+│   ├── profiles/              # ⭐ BOARD DEFINITIONS (feature flags + pin assignments)
+│   │   ├── profile_teensy41.h       # Teensy 4.1 (recommended)
+│   │   ├── profile_teensy40.h       # Teensy 4.0
+│   │   ├── profile_teensy36.h       # Teensy 3.6
+│   │   ├── profile_mega2560.h       # Arduino Mega 2560
+│   │   ├── profile_esp32s3.h        # ESP32-S3
+│   │   ├── profile_teensy41_hybrid.h  # Teensy 4.1 + SPI CAN hybrid
+│   │   └── profile_esp32s3_hybrid.h   # ESP32-S3 TWAI + MCP2515 hybrid
+│   │
+│   ├── hal/                   # Hardware abstraction layer
+│   │   ├── hal_can.h          # CAN bus HAL interface
+│   │   ├── hal_watchdog.h     # Watchdog HAL interface
+│   │   ├── platform_caps.h    # Platform capability flags
+│   │   └── platforms/         # Platform-specific HAL implementations
 │   │
 │   ├── inputs/                # Input and sensor management
 │   │   ├── input.h            # Input structure definitions
 │   │   ├── input_manager.cpp  # Input configuration management
 │   │   ├── input_manager.h    # Input manager exports
+│   │   ├── input_can.cpp      # CAN sensor input handling
+│   │   ├── sensor_read.cpp    # Central sensor reading dispatcher
 │   │   ├── sensors/           # Modular sensor reading implementations
-│   │   │   ├── thermistors/   # Thermistor sensors (lookup, Steinhart, beta)
+│   │   │   ├── thermistors/   # Thermistor sensors (lookup, Steinhart, beta, linear)
 │   │   │   ├── thermocouples/ # Thermocouple sensors (MAX6675, MAX31855)
-│   │   │   ├── pressure/      # Pressure sensors (linear, polynomial)
+│   │   │   ├── pressure/      # Pressure sensors (linear, polynomial, table)
 │   │   │   ├── voltage/       # Voltage sensors (direct, divider)
 │   │   │   ├── linear/        # Generic linear sensors
 │   │   │   ├── rpm/           # RPM sensors (W-phase)
+│   │   │   ├── speed/         # Speed sensors (Hall effect)
 │   │   │   ├── digital/       # Digital sensors (float switch)
+│   │   │   ├── level/         # Level sensors (table-based)
 │   │   │   ├── environmental/ # Environmental sensors (BME280)
+│   │   │   ├── can/           # CAN sensor reading (frame cache, scan)
 │   │   │   └── sensor_utils.* # Shared utility functions
+│   │   ├── command_table.cpp  # Serial command processor (large file)
+│   │   ├── command_table.h    # Command table exports
+│   │   ├── command_helpers.cpp # Command helper functions
 │   │   ├── serial_config.h    # Serial command interface
-│   │   ├── serial_config.cpp  # Serial command implementation
+│   │   ├── serial_config.cpp  # Serial input handling
 │   │   └── alarm_logic.cpp    # Alarm state machine
 │   │
 │   ├── lib/                   # Library components
@@ -51,23 +74,36 @@ preOBD/
 │   │   │       ├── voltage.h        # Voltage divider
 │   │   │       ├── frequency.h      # RPM, speed sensors
 │   │   │       ├── environmental.h  # BME280 sensors
-│   │   │       └── digital.h        # Float switch
+│   │   │       ├── digital.h        # Float switch
+│   │   │       ├── level.h          # Level sensors
+│   │   │       ├── can.h            # CAN sensors
+│   │   │       └── none.h           # Unassigned/placeholder
 │   │   ├── sensor_calibration_data.h  # Calibration orchestrator
 │   │   ├── sensor_calibration_data/   # Calibration database (by manufacturer)
-│   │   │   ├── vdo/           # VDO thermistors & pressure sensors
-│   │   │   ├── aem/           # AEM performance sensors
-│   │   │   ├── nxp/           # NXP/Freescale sensors
-│   │   │   ├── generic/       # Generic/aftermarket sensors
-│   │   │   └── system/        # System default calibrations
-│   │   └── application_presets.h      # Application configurations
+│   │   │   ├── vdo/                 # VDO thermistors & pressure sensors
+│   │   │   ├── aem/                 # AEM performance sensors
+│   │   │   ├── nxp/                 # NXP/Freescale sensors
+│   │   │   ├── bosch/               # Bosch sensors
+│   │   │   ├── acdelco/             # AC Delco sensors
+│   │   │   ├── smiths/              # Smiths sensors
+│   │   │   ├── stewart_warner/      # Stewart Warner sensors
+│   │   │   ├── jeep/                # Jeep OEM sensors
+│   │   │   ├── generic/             # Generic/aftermarket sensors
+│   │   │   └── system/              # System default calibrations
+│   │   ├── system_config.h        # System-wide EEPROM config struct
+│   │   ├── bus_manager.cpp        # CAN bus management (dual-bus)
+│   │   ├── generated/             # Auto-generated files (registry enums)
+│   │   └── application_presets.h  # Application configurations
 │   │
 │   ├── outputs/               # Output module directory
 │   │   ├── output_base.h      # Output interface
 │   │   ├── output_manager.cpp # Output coordinator
 │   │   ├── output_can.cpp     # CAN bus (OBDII)
+│   │   ├── output_elm327.cpp  # ELM327 emulation
 │   │   ├── output_realdash.cpp # RealDash protocol
 │   │   ├── output_serial.cpp  # Serial CSV output
 │   │   ├── output_sdlog.cpp   # SD card logging
+│   │   ├── output_relay.cpp   # Relay output control
 │   │   └── output_alarm.cpp   # Alarm hardware control
 │   │
 │   ├── displays/              # Display module directory
@@ -91,21 +127,41 @@ preOBD/
     │   │   ├── PRESSURE_SENSOR_GUIDE.md
     │   │   ├── VOLTAGE_SENSOR_GUIDE.md
     │   │   ├── DIGITAL_SENSOR_GUIDE.md
-    │   │   └── W_PHASE_RPM_GUIDE.md
+    │   │   ├── W_PHASE_RPM_GUIDE.md
+    │   │   ├── HALL_SPEED_GUIDE.md
+    │   │   ├── THERMISTOR_GUIDE.md
+    │   │   ├── THERMOCOUPLE_GUIDE.md
+    │   │   ├── BME280_GUIDE.md
+    │   │   └── CAN_SENSOR_IMPORT_GUIDE.md
     │   ├── configuration/              # Configuration guides
     │   │   ├── CONFIG_RUN_MODE_GUIDE.md
+    │   │   ├── BUILD_CONFIGURATION_GUIDE.md
     │   │   ├── ADDING_SENSORS.md
     │   │   ├── ADVANCED_CALIBRATION_GUIDE.md
-    │   │   └── ALARM_SYSTEM_GUIDE.md
-    │   └── hardware/
-    │       ├── BIAS_RESISTOR_GUIDE.md
-    │       └── PIN_REQUIREMENTS_GUIDE.md
+    │   │   ├── ALARM_SYSTEM_GUIDE.md
+    │   │   ├── JSON_CONFIGURATION_GUIDE.md
+    │   │   └── JSON_QUICK_REFERENCE.md
+    │   ├── hardware/
+    │   │   ├── BIAS_RESISTOR_GUIDE.md
+    │   │   ├── PIN_REQUIREMENTS_GUIDE.md
+    │   │   ├── CAN_TRANSCEIVER_GUIDE.md
+    │   │   ├── LED_INDICATOR_GUIDE.md
+    │   │   └── BLUETOOTH_HARDWARE_GUIDE.md
+    │   └── outputs/
+    │       ├── OBD2_SCANNER_GUIDE.md
+    │       ├── REALDASH_SETUP_GUIDE.md
+    │       ├── RELAY_CONTROL.md
+    │       └── DIRECT_BLE_OBD_GUIDE.md
     ├── reference/
     │   ├── SERIAL_COMMANDS.md
+    │   ├── OBD2_PID_REFERENCE.md
     │   └── README.md
     └── architecture/                   # Developer documentation
         ├── REGISTRY_SYSTEM.md
-        └── EEPROM_STRUCTURE.md
+        ├── EEPROM_STRUCTURE.md
+        ├── CAN_HAL_ARCHITECTURE.md
+        ├── TRANSPORT_ARCHITECTURE.md
+        └── BLE_GATT_PROFILE.md
 ```
 
 ---
@@ -146,24 +202,27 @@ preOBD/
 - Calls input reading, output sending, alarm checking
 - **Edit:** RARELY (only for major system changes)
 
-**config.h** ⭐
-- Hardware configuration file
-- Pin assignments (MODE_BUTTON, BUZZER, CAN_CS, etc.)
-- Output module enables (LCD, CAN, Serial, SD)
-- Optional: Static build configuration
-- **Edit:** YES - This is where you configure your hardware
+**config.h**
+- Application constants: timing intervals, alarm thresholds, calibration defaults, default units
+- Does **not** contain pin assignments or feature flags — those live in the board profile
+- **Edit:** RARELY (only to change global timing or threshold defaults)
+
+**src/profiles/profile_*.h** ⭐
+- Board definitions: feature flags AND hardware pin assignments for a specific board
+- One profile per board, selected via `-include` in `platformio.ini`
+- **Edit:** YES - This is where you configure your hardware pins and enabled features
 
 ```cpp
-// Hardware Pin Assignments
-#define MODE_BUTTON 5   // Multi-function button
-#define BUZZER 3        // Alarm buzzer output
-#define CAN_CS 9        // MCP2515 chip select
-#define CAN_INT 2       // MCP2515 interrupt
+// Feature flags
+#define ENABLE_CAN             1
+#define ENABLE_LCD             1
+#define ENABLE_ALARMS          1
 
-// Output Module Enables
-#define ENABLE_LCD
-#define ENABLE_CAN
-#define ENABLE_SERIAL_OUTPUT
+// Hardware Pin Assignments
+#define MODE_BUTTON_PIN        5    // Multi-function button
+#define ALARMS_PIN             3    // Alarm buzzer
+#define CAN_CS_PIN             9    // MCP2515 chip select
+#define CAN_INT_PIN            2    // MCP2515 interrupt
 ```
 
 ---
@@ -205,10 +264,17 @@ This directory contains the input-based architecture for sensor configuration.
 - **sensor_utils.*** - Shared utility functions (unit conversions, range validation)
 - **Edit:** YES (add new sensor implementations to appropriate subdirectory)
 
-**serial_config.h / serial_config.cpp**
-- Serial command interface
-- Parses and handles all serial commands
+**command_table.cpp / command_table.h**
+- Serial command processor — the main implementation of all CLI commands
 - **Edit:** RARELY (when adding new commands)
+
+**command_helpers.cpp / command_helpers.h**
+- Shared helper functions used by the command processor
+- **Edit:** RARELY
+
+**serial_config.h / serial_config.cpp**
+- Serial input buffering and dispatch (feeds input to the command processor)
+- **Edit:** RARELY
 
 **alarm_logic.cpp**
 - Alarm state machine implementation
@@ -255,6 +321,11 @@ This directory contains the input-based architecture for sensor configuration.
 - **vdo/** - VDO thermistors (lookup tables, Steinhart-Hart) & pressure sensors
 - **aem/** - AEM performance sensors
 - **nxp/** - NXP/Freescale sensors (MPX series)
+- **bosch/** - Bosch sensors
+- **acdelco/** - AC Delco sensors
+- **smiths/** - Smiths sensors
+- **stewart_warner/** - Stewart Warner sensors
+- **jeep/** - Jeep OEM sensors
 - **generic/** - Generic/aftermarket sensors
 - **system/** - System defaults (RPM calibrations, voltage dividers)
 - **Edit:** YES (add calibrations to appropriate manufacturer file)
@@ -285,8 +356,16 @@ This directory contains the input-based architecture for sensor configuration.
 - MCP2515 or FlexCAN support
 - **Edit:** RARELY
 
+**output_elm327.cpp**
+- ELM327 protocol emulation (for Bluetooth OBD adapters)
+- **Edit:** RARELY
+
 **output_realdash.cpp**
 - RealDash mobile app protocol
+- **Edit:** RARELY
+
+**output_relay.cpp**
+- Relay output control (e.g., cooling fan based on coolant temp)
 - **Edit:** RARELY
 
 **output_serial.cpp**
@@ -480,7 +559,7 @@ This directory contains the comprehensive test mode system for testing outputs w
 6. **Testable** - Dedicated test/ directory for testing without hardware
 
 **Directory purposes:**
-- **src/** - Main program files (main.cpp, config.h, alarm.cpp)
+- **src/** - Main program files (main.cpp, config.h, version.h)
 - **src/inputs/** - All input and sensor reading functionality
 - **src/lib/** - Reusable library components and sensor definitions
 - **src/outputs/** - Output module implementations (CAN, serial, SD, etc.)
@@ -489,7 +568,8 @@ This directory contains the comprehensive test mode system for testing outputs w
 - **docs/** - All user and developer documentation
 
 **Best practices:**
-- User edits only src/config.h (usually)
+- User edits their board profile `src/profiles/profile_<board>.h` for pin assignments and feature flags
+- User edits `src/config.h` only for application-level constants (timing, thresholds, units)
 - Core code in inputs/ and lib/ rarely needs modification
 - New sensors added to:
   - lib/sensor_library/sensors/<type>.h (sensor entry using X-macro)

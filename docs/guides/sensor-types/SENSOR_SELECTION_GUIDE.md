@@ -93,7 +93,7 @@ See [THERMOCOUPLE_GUIDE.md](THERMOCOUPLE_GUIDE.md) for detailed setup.
 ```
 VDO Sensor Signal wire → Analog pin
 VDO Sensor Ground → Chassis ground (sensor body grounds through engine block)
-Add pull-down resistor: Analog pin → 1kΩ resistor → GND
+Add pull-down resistor: Analog pin → 100Ω resistor → GND
 ```
 
 See [THERMISTOR_GUIDE.md](THERMISTOR_GUIDE.md) for detailed setup.
@@ -157,7 +157,7 @@ See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.
 ```
 VDO Sensor Signal wire → Analog pin
 VDO Sensor Ground → Chassis ground (sensor body)
-Add pull-down resistor: Analog pin → 1kΩ resistor → GND
+Add pull-down resistor: Analog pin → 100Ω resistor → GND
 ```
 
 See [PRESSURE_SENSOR_GUIDE.md](PRESSURE_SENSOR_GUIDE.md) for detailed setup.
@@ -166,10 +166,10 @@ See [PRESSURE_SENSOR_GUIDE.md](PRESSURE_SENSOR_GUIDE.md) for detailed setup.
 
 | Sensor ID | Description | Range | Bias Position |
 |-----------|-------------|-------|---------------|
-| `VDO_FUEL_LEVEL_180` | VDO 3–180Ω (European, ascending) | 0–100% | 1kΩ |
-| `VDO_FUEL_LEVEL_240` | VDO 240–34Ω (European, descending) | 0–100% | 1kΩ |
-| `VDO_FUEL_LEVEL_75` | VDO 75–3Ω (tubular, descending) | 0–100% | 1kΩ |
-| `VDO_FUEL_LEVEL_90` | VDO 0–90Ω (US standard, ascending) | 0–100% | 1kΩ |
+| `VDO_FUEL_LEVEL_180` | VDO 3–180Ω (European, ascending) | 0–100% | 100Ω |
+| `VDO_FUEL_LEVEL_240` | VDO 240–34Ω (European, descending) | 0–100% | 100Ω |
+| `VDO_FUEL_LEVEL_75` | VDO 75–3Ω (tubular, descending) | 0–100% | 100Ω |
+| `VDO_FUEL_LEVEL_90` | VDO 0–90Ω (US standard, ascending) | 0–100% | 100Ω |
 | `JEEP_CJ_FUEL_LEVEL` | Jeep CJ fuel tank sender (1972–1986) | 0–100% | **100Ω** |
 
 **Application:** `FUEL_LEVEL`
@@ -322,11 +322,11 @@ A: Yes! Each input is independent. You can have multiple VDO_120C sensors on dif
 A: Same physical sensor, different math. Lookup is more accurate (±0.5°C), Steinhart is faster (±1°C).
 
 **Q: Do I need to specify the bias resistor value?**
-A: For most presets, no — they default to the 1kΩ bias resistor. **Exception: Jeep sensors use
-sensor-specific defaults baked into the preset** (2.49kΩ for XJ temp/Renix CTS; 100Ω for all oil
-senders and CJ temp). These defaults match the required PCB bias position and take effect
-automatically when you assign the sensor — no `SET <pin> BIAS` command needed unless you've
-wired a non-standard value.
+A: For most presets, no — each preset has its correct default baked in. **VDO and other
+low-impedance gauge senders default to 100Ω**; **high-impedance NTC sensors (Jeep XJ temp,
+Renix CTS) default to 2.49kΩ**. These defaults match the required PCB bias position and take
+effect automatically when you assign the sensor — no `SET <pin> BIAS` command needed unless
+you've wired a non-standard value. See [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md).
 
 **Q: What if I used a different bias resistor?**
 A: Use `SET <pin> BIAS <ohms>` command. Example: `SET A0 BIAS 2200`
