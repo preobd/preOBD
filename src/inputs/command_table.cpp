@@ -579,12 +579,8 @@ static int cmd_set(int argc, const char* const* argv) {
             pid = (uint8_t)atoi(argv[2]);
         }
 
-        // Allocate next CAN virtual pin
-        bool pinValid = false;
-        uint8_t virtualPin = parsePin("CAN", &pinValid);
-        if (!pinValid) {
-            return 1;  // Error already printed by parsePin
-        }
+        // pin was already allocated by parsePin("CAN") at the top of cmd_set
+        uint8_t virtualPin = pin;
 
         // Lookup standard PID info
         const StandardPIDInfo* pidInfo = lookupStandardPID(pid);
@@ -596,13 +592,16 @@ static int cmd_set(int argc, const char* const* argv) {
             return 1;
         }
 
-        // Set sensor first (creates input with default calibration)
+        // Create the input slot before setInputSensor (which requires the slot to exist)
+        if (!allocateInputSlot(virtualPin)) {
+            return 1;
+        }
+
         if (!setInputSensor(virtualPin, canSensorIndex)) {
             msg.control.println(F("ERROR: Failed to configure CAN sensor"));
             return 1;
         }
 
-        // Get the newly created input
         Input* input = getInputByPin(virtualPin);
         if (!input) {
             msg.control.println(F("ERROR: Failed to create CAN input"));
@@ -619,6 +618,7 @@ static int cmd_set(int argc, const char* const* argv) {
             input->customCalibration.can.is_big_endian = true;
             input->customCalibration.can.scale_factor = pidInfo->scale_factor;
             input->customCalibration.can.offset = pidInfo->offset;
+            input->customCalibration.can.timeout_ms = CAN_DEFAULT_TIMEOUT_MS;
             input->flags.useCustomCalibration = true;
 
             // Set measurement type from standard PID table
@@ -647,6 +647,7 @@ static int cmd_set(int argc, const char* const* argv) {
             input->customCalibration.can.is_big_endian = true;
             input->customCalibration.can.scale_factor = 1.0;
             input->customCalibration.can.offset = 0.0;
+            input->customCalibration.can.timeout_ms = CAN_DEFAULT_TIMEOUT_MS;
             input->flags.useCustomCalibration = true;
 
             sprintf(input->displayName, "CAN PID 0x%02X", pid);
@@ -1244,6 +1245,50 @@ static int cmd_set(int argc, const char* const* argv) {
         msg.control.println(F(" km/h"));
         return 0;
     }
+
+    // SET <pin> CAN_TIMEOUT <ms>
+    // Example: SET CAN:0 CAN_TIMEOUT 500
+#if ENABLE_CAN
+    if (streq(field, "CAN_TIMEOUT")) {
+        if (argc < 4) {
+            msg.control.println(F("ERROR: CAN_TIMEOUT requires 1 parameter"));
+            msg.control.println(F("  Usage: SET <pin> CAN_TIMEOUT <ms>"));
+            msg.control.println(F("  Example: SET CAN:0 CAN_TIMEOUT 500"));
+            msg.control.println(F("  Range: 100-30000 ms (default 2000)"));
+            return 1;
+        }
+
+        Input* input = getInputByPin(pin);
+        if (!input || !input->flags.isEnabled) {
+            msg.control.println(F("ERROR: Input not configured"));
+            return 1;
+        }
+        if (input->calibrationType != CAL_CAN_IMPORT) {
+            msg.control.println(F("ERROR: CAN_TIMEOUT only applies to CAN-imported sensors"));
+            return 1;
+        }
+
+        uint16_t timeout_ms = (uint16_t)atoi(argv[3]);
+        if (timeout_ms < 100 || timeout_ms > 30000) {
+            msg.control.println(F("ERROR: Timeout must be between 100 and 30000 ms"));
+            return 1;
+        }
+
+        if (!input->flags.useCustomCalibration) {
+            // Promote preset into custom slot so the rest of the calibration is preserved
+            memcpy_P(&input->customCalibration.can, input->presetCalibration, sizeof(input->customCalibration.can));
+            input->flags.useCustomCalibration = true;
+        }
+        input->customCalibration.can.timeout_ms = timeout_ms;
+
+        msg.control.print(F("CAN timeout set for pin "));
+        msg.control.print(argv[1]);
+        msg.control.print(F(": "));
+        msg.control.print(timeout_ms);
+        msg.control.println(F(" ms"));
+        return 0;
+    }
+#endif // ENABLE_CAN
 
     // SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>
     if (streq(field, "PRESSURE_LINEAR")) {

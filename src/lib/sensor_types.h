@@ -140,6 +140,7 @@ typedef struct {
 
 // ===== CAN SENSOR CALIBRATION STRUCTURE =====
 // For sensors imported from CAN bus (OBD-II, J1939, custom protocols)
+#define CAN_DEFAULT_TIMEOUT_MS 2000  // ms before cached CAN data is considered stale
 typedef struct {
     uint16_t source_can_id;      // CAN ID to listen for (0x7E8 for OBD-II, 0x400+ for J1939)
     uint8_t source_pid;          // PID or identifier byte within CAN frame
@@ -148,6 +149,7 @@ typedef struct {
     bool is_big_endian;          // Byte order: true for big-endian (OBD-II), false for little-endian
     float scale_factor;          // Conversion multiplier (e.g., 0.25 for RPM)
     float offset;                // Conversion offset (e.g., -40 for temperature)
+    uint16_t timeout_ms;         // Stale-data timeout (ms); 0 treated as CAN_DEFAULT_TIMEOUT_MS
 } CANSensorCalibration;
 
 #endif

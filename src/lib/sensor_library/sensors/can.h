@@ -28,7 +28,8 @@ static const PROGMEM CANSensorCalibration default_can_cal = {
     .data_length = 1,            // Single byte default
     .is_big_endian = true,       // OBD-II uses big-endian
     .scale_factor = 1.0,         // No scaling by default
-    .offset = 0.0                // No offset by default
+    .offset = 0.0,               // No offset by default
+    .timeout_ms = CAN_DEFAULT_TIMEOUT_MS
 };
 
 // ===== SENSOR ENTRIES (X-MACRO) =====

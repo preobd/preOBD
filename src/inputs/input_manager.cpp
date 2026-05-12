@@ -476,6 +476,22 @@ static bool validateInputConfig(Input* input) {
 }
 
 // ===== CONFIGURATION FUNCTIONS =====
+
+bool allocateInputSlot(uint8_t pin) {
+    if (getInputByPin(pin) != nullptr) return true;  // already exists
+    uint8_t slot = findFreeSlot();
+    if (slot == 0xFF) {
+        msg.control.print(F("ERROR: No free input slots (max "));
+        msg.control.print(MAX_INPUTS);
+        msg.control.println(F(" inputs)"));
+        msg.control.println(F("  Hint: Use 'CLEAR <pin>' to remove an existing input"));
+        return false;
+    }
+    inputs[slot].pin = pin;
+    numActiveInputs++;
+    return true;
+}
+
 bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     // Find or create input
     Input* input = getInputByPin(pin);
@@ -1075,6 +1091,34 @@ void printInputCalibration(uint8_t pin) {
         msg.control.print(F("  Max Speed: "));
         msg.control.print(input->customCalibration.speed.max_speed_kph);
         msg.control.println(F(" km/h"));
+    } else if (input->calibrationType == CAL_CAN_IMPORT) {
+        CANSensorCalibration cal;
+        if (input->flags.useCustomCalibration) {
+            memcpy(&cal, &input->customCalibration.can, sizeof(cal));
+        } else {
+            memcpy_P(&cal, input->presetCalibration, sizeof(cal));
+        }
+        uint16_t resolved_timeout = cal.timeout_ms;
+        if (resolved_timeout < 100 || resolved_timeout > 30000) resolved_timeout = CAN_DEFAULT_TIMEOUT_MS;
+
+        msg.control.println(input->flags.useCustomCalibration ? F("CAN Import Custom") : F("CAN Import Preset"));
+        msg.control.print(F("  CAN ID: 0x"));
+        msg.control.println(cal.source_can_id, HEX);
+        msg.control.print(F("  PID: 0x"));
+        if (cal.source_pid < 0x10) msg.control.print('0');
+        msg.control.println(cal.source_pid, HEX);
+        msg.control.print(F("  Offset/Length: "));
+        msg.control.print(cal.data_offset);
+        msg.control.print(F("/"));
+        msg.control.print(cal.data_length);
+        msg.control.println(cal.is_big_endian ? F(" bytes (big-endian)") : F(" bytes (little-endian)"));
+        msg.control.print(F("  Scale: "));
+        msg.control.println(cal.scale_factor, 4);
+        msg.control.print(F("  Offset: "));
+        msg.control.println(cal.offset, 4);
+        msg.control.print(F("  Timeout: "));
+        msg.control.print(resolved_timeout);
+        msg.control.println(F(" ms"));
     }
     msg.control.println();
 }

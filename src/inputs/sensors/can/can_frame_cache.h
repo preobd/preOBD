@@ -21,15 +21,11 @@
 #define CAN_FRAME_CACHE_H
 
 #include <Arduino.h>
+#include "../../../lib/sensor_types.h"
 
 // ===== CONFIGURATION =====
 // CAN_CACHE_SIZE must be a power of 2; set per env in src/profiles/.
-#define CAN_DEFAULT_TIMEOUT_MS 2000
-
-// TODO: Make timeout configurable per sensor for different update rates
-// - High-frequency PIDs (RPM, speed): 100-500ms timeout
-// - Low-frequency PIDs (coolant temp): 2000-5000ms timeout
-// Current implementation uses fixed 2000ms for all sensors
+// CAN_DEFAULT_TIMEOUT_MS is defined in sensor_types.h
 
 // ===== DATA STRUCTURES =====
 

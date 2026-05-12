@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SPI and I2C buses now default to NONE and only initialize when explicitly selected via `BUS SPI/I2C <N>`; fixes spurious pin reservation conflicts at boot (e.g. RGB LED blocked by unconfigured SPI0) (#168)
 - CAN HAL `write()` clamps `len` to 8 before `memcpy` to prevent buffer overflow in frame construction (#112)
 - RPM ISR reads on AVR are now atomic, and timeout check uses `micros()` consistently with the ISR (#111, #116)
+- CAN-imported sensors now support a configurable per-sensor stale-data timeout via `SET <pin> CAN_TIMEOUT <ms>` (100–30000ms), replacing a hardcoded 2000ms for all sensors (#173)
 
 ## [0.8.0-beta] - 2026-04-30
 

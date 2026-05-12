@@ -152,7 +152,7 @@ union CalibrationOverride {
         bool is_big_endian;         // Byte order
         float scale_factor;         // Multiplier
         float offset;               // Additive offset
-        byte padding[3];
+        uint16_t timeout_ms;        // Stale-data timeout; 0 treated as CAN_DEFAULT_TIMEOUT_MS
     } can;
 
     // Raw bytes for memset/EEPROM operations

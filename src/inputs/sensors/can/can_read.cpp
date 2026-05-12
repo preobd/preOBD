@@ -35,8 +35,9 @@ void readCANSensor(Input* ptr) {
     // Lookup cached CAN frame
     CANFrameEntry* entry = getCANCacheEntry(cal->source_can_id, cal->source_pid);
 
-    // Check validity and timeout (2000ms default)
-    if (!entry || !entry->valid || isCANDataStale(entry, 2000)) {
+    uint32_t timeout = cal->timeout_ms;
+    if (timeout < 100 || timeout > 30000) timeout = CAN_DEFAULT_TIMEOUT_MS;
+    if (!entry || !entry->valid || isCANDataStale(entry, timeout)) {
         ptr->value = NAN;
         return;
     }
