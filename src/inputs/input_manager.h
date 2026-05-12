@@ -26,6 +26,7 @@ bool initInputManager();              // Initialize and load from EEPROM (return
 
 // ===== CONFIGURATION =====
 bool allocateInputSlot(uint8_t pin);  // Create an empty input slot (required before setInputSensor on a new pin)
+void freeInputSlot(uint8_t pin);      // Release a slot allocated by allocateInputSlot on failure
 bool setInputApplication(uint8_t pin, uint8_t appIndex);
 bool setInputSensor(uint8_t pin, uint8_t sensorIndex);
 bool setInputName(uint8_t pin, const char* name);

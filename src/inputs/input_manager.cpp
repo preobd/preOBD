@@ -493,6 +493,13 @@ bool allocateInputSlot(uint8_t pin) {
     return true;
 }
 
+void freeInputSlot(uint8_t pin) {
+    Input* input = getInputByPin(pin);
+    if (input == nullptr) return;
+    input->pin = 0xFF;
+    numActiveInputs--;
+}
+
 bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     // Find or create input
     Input* input = getInputByPin(pin);
@@ -576,7 +583,11 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
 
     // Set up sensor (function pointers + calibration)
     // This also sets input->sensorIndex
-    return setInputSensor(pin, defaultSensor);
+    if (!setInputSensor(pin, defaultSensor)) {
+        if (isNewInput) freeInputSlot(pin);
+        return false;
+    }
+    return true;
 }
 
 bool setInputSensor(uint8_t pin, uint8_t sensorIndex) {

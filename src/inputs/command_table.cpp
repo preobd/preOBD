@@ -599,6 +599,7 @@ static int cmd_set(int argc, const char* const* argv) {
 
         if (!setInputSensor(virtualPin, canSensorIndex)) {
             msg.control.println(F("ERROR: Failed to configure CAN sensor"));
+            freeInputSlot(virtualPin);
             return 1;
         }
 
