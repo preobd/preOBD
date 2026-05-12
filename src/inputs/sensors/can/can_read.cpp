@@ -22,7 +22,7 @@ void readCANSensor(Input* ptr) {
     // Get calibration (custom or preset)
     const CANSensorCalibration* cal;
     if (ptr->flags.useCustomCalibration) {
-        cal = (const CANSensorCalibration*)&ptr->customCalibration.can;
+        cal = &ptr->customCalibration.can;
     } else {
         cal = (const CANSensorCalibration*)ptr->presetCalibration;
     }

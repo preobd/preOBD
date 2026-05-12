@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `CalibrationOverride` union members `rpm`, `speed`, and `can` now use `RPMCalibration`, `SpeedCalibration`, and `CANSensorCalibration` typedefs directly, eliminating duplicate field definitions and padding drift risk; EEPROM version bumped to 5 to invalidate stale AVR layouts (#175, #72)
+
 ### Fixed
 - Missing trailing newline added to `src/lib/sensor_types.h` (#178)
 - `allocateInputSlot` now zeroes the slot before use, eliminating stale flags, calibration data, and alarm thresholds from previously-cleared inputs (#180)

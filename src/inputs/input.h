@@ -71,7 +71,6 @@
 struct Input;
 
 // ===== CALIBRATION OVERRIDE UNION =====
-// Custom calibration storage (16 bytes)
 // Used when useCustomCalibration == true
 union CalibrationOverride {
     // Thermistor Steinhart-Hart (16 bytes)
@@ -121,43 +120,18 @@ union CalibrationOverride {
         float offset;
     } voltageDivider;
     
-    // RPM sensor (15 bytes + padding)
-    struct {
-        byte poles;
-        float pulley_ratio;
-        float calibration_mult;
-        uint16_t timeout_ms;
-        uint16_t min_rpm;
-        uint16_t max_rpm;
-        byte padding[1];
-    } rpm;
-
-    // Speed sensor (16 bytes)
-    struct {
-        uint8_t pulses_per_rev;
-        uint16_t tire_circumference_mm;
-        float final_drive_ratio;
-        float calibration_mult;
-        uint16_t timeout_ms;
-        uint16_t max_speed_kph;
-        byte padding[3];
-    } speed;
-
-    // CAN sensor (16 bytes)
-    struct {
-        uint16_t source_can_id;     // CAN ID to listen for
-        uint8_t source_pid;         // PID within CAN frame
-        uint8_t data_offset;        // Byte offset in frame
-        uint8_t data_length;        // 1-4 bytes
-        bool is_big_endian;         // Byte order
-        float scale_factor;         // Multiplier
-        float offset;               // Additive offset
-        uint16_t timeout_ms;        // Stale-data timeout; 0 treated as CAN_DEFAULT_TIMEOUT_MS
-    } can;
+    RPMCalibration    rpm;
+    SpeedCalibration  speed;
+    CANSensorCalibration can;
 
     // Raw bytes for memset/EEPROM operations
     byte raw[16];
 };
+#if defined(__AVR__)
+static_assert(sizeof(CalibrationOverride) == 16, "CalibrationOverride size changed on AVR — bump EEPROM_VERSION");
+#else
+static_assert(sizeof(CalibrationOverride) == 20, "CalibrationOverride size changed on ARM — bump EEPROM_VERSION");
+#endif
 
 // ===== ALARM STATE MACHINE =====
 // Alarm state machine states

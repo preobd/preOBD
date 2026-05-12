@@ -45,8 +45,9 @@
 // Version 2: Changed from storing enum indices to storing name hashes (Phase 5)
 // Version 3: Added per-input output routing mask (outputMask)
 // Version 4: Added per-input divider_ratio for hardware voltage dividers
+// Version 5: CalibrationOverride uses typedefs directly; AVR union size corrected 18→16 bytes
 // =============================================================================
-#define EEPROM_VERSION 4
+#define EEPROM_VERSION 5
 
 // =============================================================================
 // Helper functions (defined in version.cpp)
