@@ -195,7 +195,7 @@ void resetSystemConfig() {
     // Transport Router Configuration (NEW in v4)
     // Default: All planes → USB Serial
     systemConfig.router.control_primary = TRANSPORT_USB_SERIAL;
-    systemConfig.router.control_secondary = TRANSPORT_NONE;
+    systemConfig.router.control_secondary = TRANSPORT_SERIAL1;
     systemConfig.router.data_primary = TRANSPORT_USB_SERIAL;
     systemConfig.router.data_secondary = TRANSPORT_NONE;
     systemConfig.router.debug_primary = TRANSPORT_USB_SERIAL;
