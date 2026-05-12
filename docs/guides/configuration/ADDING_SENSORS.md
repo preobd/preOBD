@@ -275,37 +275,37 @@ If you're adding sensors from a new manufacturer not currently in the calibratio
 ### Step 1: Create Directory and Header
 
 ```bash
-mkdir -p src/lib/sensor_calibration_data/acme/
+mkdir -p src/lib/sensor_calibration_data/autometer/
 ```
 
-Create `src/lib/sensor_calibration_data/acme/acme_calibrations.h`:
+Create `src/lib/sensor_calibration_data/autometer/autometer_calibrations.h`:
 
 ```cpp
 /*
- * acme_calibrations.h - Acme Sensor Calibration Data
+ * autometer_calibrations.h - AutoMeter Sensor Calibration Data
  *
- * Contains calibrations for Acme sensors.
+ * Contains calibrations for AutoMeter sensors.
  * Add description of sensor types covered.
  */
 
-#ifndef ACME_CALIBRATIONS_H
-#define ACME_CALIBRATIONS_H
+#ifndef AUTOMETER_CALIBRATIONS_H
+#define AUTOMETER_CALIBRATIONS_H
 
 #include <Arduino.h>
 #include "../../sensor_types.h"
 #include "../../../config.h"
 
-// ===== ACME SENSOR CALIBRATIONS =====
+// ===== AUTOMETER SENSOR CALIBRATIONS =====
 
 // Add your calibrations here
-static const PROGMEM LinearCalibration acme_example_cal = {
+static const PROGMEM LinearCalibration autometer_example_cal = {
     .voltage_min = 0.5,
     .voltage_max = 4.5,
     .output_min = 0.0,
     .output_max = 5.0
 };
 
-#endif // ACME_CALIBRATIONS_H
+#endif // AUTOMETER_CALIBRATIONS_H
 ```
 
 ### Step 2: Register the Manufacturer
@@ -314,7 +314,7 @@ Edit `src/lib/sensor_calibration_data.h` to include your new manufacturer file:
 
 ```cpp
 // ... existing includes ...
-#include "sensor_calibration_data/acme/acme_calibrations.h"  // Add this line
+#include "sensor_calibration_data/autometer/autometer_calibrations.h"  // Add this line
 ```
 
 ### Step 3: Add Sensors to Library
