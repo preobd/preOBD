@@ -34,18 +34,18 @@ struct StandardPIDInfo {
 
 // Temperature
 static const char PSTR_PID_CELSIUS[] PROGMEM = "CELSIUS";
-static const char PSTR_PID_COOLANT_TEMP[] PROGMEM = "Coolant Temperature";
-static const char PSTR_PID_CLT[] PROGMEM = "CLT";
+static const char PSTR_PID_COOLANT_TEMP[] PROGMEM = "Engine Coolant Temperature";
+static const char PSTR_PID_CLT[] PROGMEM = "ECT";
 static const char PSTR_PID_INTAKE_TEMP[] PROGMEM = "Intake Air Temperature";
 static const char PSTR_PID_IAT[] PROGMEM = "IAT";
-static const char PSTR_PID_OIL_TEMP[] PROGMEM = "Oil Temperature";
-static const char PSTR_PID_OIL[] PROGMEM = "OIL";
+static const char PSTR_PID_OIL_TEMP[] PROGMEM = "Engine Oil Temperature";
+static const char PSTR_PID_OIL[] PROGMEM = "EOT";
 static const char PSTR_PID_AMBIENT_TEMP[] PROGMEM = "Ambient Air Temperature";
-static const char PSTR_PID_AMB[] PROGMEM = "AMB";
+static const char PSTR_PID_AMB[] PROGMEM = "AAT";
 static const char PSTR_PID_CAT_TEMP_B1S1[] PROGMEM = "Catalyst Temp (B1S1)";
 static const char PSTR_PID_CAT_B1S1[] PROGMEM = "CT11";
-static const char PSTR_PID_TRANSMISSION_TEMP[] PROGMEM = "Transmission Temperature";
-static const char PSTR_PID_TRANS[] PROGMEM = "TRAN";
+static const char PSTR_PID_TRANSMISSION_TEMP[] PROGMEM = "Transmission Fluid Temperature";
+static const char PSTR_PID_TRANS[] PROGMEM = "TFT";
 
 // RPM / Speed
 static const char PSTR_PID_RPM_UNITS[] PROGMEM = "RPM";
@@ -58,7 +58,7 @@ static const char PSTR_PID_VSS[] PROGMEM = "VSS";
 // Pressure
 static const char PSTR_PID_KPA[] PROGMEM = "KPA";
 static const char PSTR_PID_FUEL_PRESSURE[] PROGMEM = "Fuel Pressure";
-static const char PSTR_PID_FUEL_P[] PROGMEM = " FP";
+static const char PSTR_PID_FUEL_P[] PROGMEM = "FPR";
 static const char PSTR_PID_INTAKE_MAP[] PROGMEM = "Intake Manifold Pressure";
 static const char PSTR_PID_MAP[] PROGMEM = "MAP";
 static const char PSTR_PID_BAROMETRIC[] PROGMEM = "Barometric Pressure";
@@ -103,7 +103,7 @@ static const char PSTR_PID_DIST_MIL[] PROGMEM = "DMIL";
 
 static const PROGMEM StandardPIDInfo STANDARD_PID_TABLE[] = {
     // 0x04: Engine Load
-    {0x04, PSTR_PID_ENGINE_LOAD, PSTR_PID_LOAD, 1, MEASURE_DIGITAL, 0.392157, 0.0, PSTR_PID_PERCENT},
+    {0x04, PSTR_PID_ENGINE_LOAD, PSTR_PID_LOAD, 1, MEASURE_LEVEL, 0.392157, 0.0, PSTR_PID_PERCENT},
 
     // 0x05: Coolant Temperature
     {0x05, PSTR_PID_COOLANT_TEMP, PSTR_PID_CLT, 1, MEASURE_TEMPERATURE, 1.0, -40.0, PSTR_PID_CELSIUS},
@@ -127,7 +127,7 @@ static const PROGMEM StandardPIDInfo STANDARD_PID_TABLE[] = {
     {0x10, PSTR_PID_MAF, PSTR_PID_MAF_ABBR, 2, MEASURE_DIGITAL, 0.01, 0.0, PSTR_PID_GPH},
 
     // 0x11: Throttle Position
-    {0x11, PSTR_PID_THROTTLE_POS, PSTR_PID_TPS, 1, MEASURE_DIGITAL, 0.392157, 0.0, PSTR_PID_PERCENT},
+    {0x11, PSTR_PID_THROTTLE_POS, PSTR_PID_TPS, 1, MEASURE_LEVEL, 0.392157, 0.0, PSTR_PID_PERCENT},
 
     // 0x1F: Engine Run Time
     {0x1F, PSTR_PID_RUNTIME, PSTR_PID_RUN_TIME, 2, MEASURE_DIGITAL, 1.0, 0.0, PSTR_PID_SECONDS},
@@ -139,7 +139,7 @@ static const PROGMEM StandardPIDInfo STANDARD_PID_TABLE[] = {
     {0x23, PSTR_PID_FUEL_RAIL_P, PSTR_PID_FRP, 2, MEASURE_PRESSURE, 10.0, 0.0, PSTR_PID_KPA},
 
     // 0x2F: Fuel Tank Level
-    {0x2F, PSTR_PID_FUEL_LEVEL, PSTR_PID_FUEL_LVL, 1, MEASURE_DIGITAL, 0.392157, 0.0, PSTR_PID_PERCENT},
+    {0x2F, PSTR_PID_FUEL_LEVEL, PSTR_PID_FUEL_LVL, 1, MEASURE_LEVEL, 0.392157, 0.0, PSTR_PID_PERCENT},
 
     // 0x33: Barometric Pressure
     {0x33, PSTR_PID_BAROMETRIC, PSTR_PID_BARO, 1, MEASURE_PRESSURE, 1.0, 0.0, PSTR_PID_KPA},
@@ -148,13 +148,13 @@ static const PROGMEM StandardPIDInfo STANDARD_PID_TABLE[] = {
     {0x42, PSTR_PID_CONTROL_VOLTAGE, PSTR_PID_ECU_V, 2, MEASURE_VOLTAGE, 0.001, 0.0, PSTR_PID_VOLTS},
 
     // 0x45: Relative Throttle Position
-    {0x45, PSTR_PID_THROTTLE_POS, PSTR_PID_TPS, 1, MEASURE_DIGITAL, 0.392157, 0.0, PSTR_PID_PERCENT},
+    {0x45, PSTR_PID_THROTTLE_POS, PSTR_PID_TPS, 1, MEASURE_LEVEL, 0.392157, 0.0, PSTR_PID_PERCENT},
 
     // 0x46: Ambient Air Temperature
     {0x46, PSTR_PID_AMBIENT_TEMP, PSTR_PID_AMB, 1, MEASURE_TEMPERATURE, 1.0, -40.0, PSTR_PID_CELSIUS},
 
     // 0x5A: Accelerator Pedal Position
-    {0x5A, PSTR_PID_THROTTLE_POS, PSTR_PID_TPS, 1, MEASURE_DIGITAL, 0.392157, 0.0, PSTR_PID_PERCENT},
+    {0x5A, PSTR_PID_THROTTLE_POS, PSTR_PID_TPS, 1, MEASURE_LEVEL, 0.392157, 0.0, PSTR_PID_PERCENT},
 
     // 0x5C: Oil Temperature
     {0x5C, PSTR_PID_OIL_TEMP, PSTR_PID_OIL, 1, MEASURE_TEMPERATURE, 1.0, -40.0, PSTR_PID_CELSIUS},
@@ -187,7 +187,7 @@ static const PROGMEM StandardPIDInfo STANDARD_PID_TABLE[] = {
     {0xA6, PSTR_PID_DISTANCE_MIL, PSTR_PID_DIST_MIL, 4, MEASURE_DIGITAL, 0.1, 0.0, PSTR_PID_KM},
 
     // 0xAA: Hybrid Battery Pack Remaining Life
-    {0xAA, PSTR_PID_FUEL_LEVEL, PSTR_PID_FUEL_LVL, 1, MEASURE_DIGITAL, 0.392157, 0.0, PSTR_PID_PERCENT},
+    {0xAA, PSTR_PID_FUEL_LEVEL, PSTR_PID_FUEL_LVL, 1, MEASURE_LEVEL, 0.392157, 0.0, PSTR_PID_PERCENT},
 
     // 0xC3: Fuel Injection Timing
     {0xC3, PSTR_PID_RUNTIME, PSTR_PID_RUN_TIME, 2, MEASURE_DIGITAL, 0.01, -210.0, PSTR_PID_SECONDS},

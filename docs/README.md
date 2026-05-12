@@ -52,7 +52,7 @@ This separates "what you want to measure" from "hardware you're using."
 
 **Example data flow:**
 ```
-VDO Oil Pressure Sensor → Pin A3 → 512 (raw ADC) → 2.5 bar → LCD: "OIL:2.5 BAR"
+VDO Oil Pressure Sensor → Pin A3 → 512 (raw ADC) → 2.5 bar → LCD: "EOP:2.5 BAR"
 ```
 
 ---

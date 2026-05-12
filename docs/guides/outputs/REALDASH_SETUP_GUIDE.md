@@ -116,17 +116,17 @@ preOBD provides the following sensors to RealDash:
 |-------------|---------------------|-------|
 | Cylinder Head Temp (CHT) | CHT: Cylinder Head Temp | °C / °F |
 | Exhaust Gas Temp (EGT) | EGT1 | °C / °F |
-| Coolant Temperature | Coolant Temperature | °C / °F |
+| Engine Coolant Temperature | Engine Coolant Temperature | °C / °F |
 | Engine Oil Temperature | Engine Oil Temperature | °C / °F |
 | Transfer Case Temperature | Oil Temperature (Transmission) | °C / °F |
 | Engine Oil Pressure | Engine Oil Pressure | bar / psi |
 | Boost Pressure | Manifold Absolute Pressure | kPa / psi |
-| Primary Battery | Battery | Volts |
-| Auxiliary Battery | Auxiliary Battery | Volts |
+| Primary Battery Voltage | Battery | Volts |
+| Auxiliary Battery Voltage | Auxiliary Battery | Volts |
 | Ambient Temperature | Ambient Temperature | °C / °F |
 | Barometric Pressure | Barometric Pressure | kPa / psi |
 | Elevation | Elevation | meters / feet |
-| Coolant Level | Coolant Level | % |
+| Engine Coolant Level | Engine Coolant Level | % |
 
 **Note**: RealDash automatically handles unit conversions. You can switch between metric/imperial in RealDash settings.
 
