@@ -115,7 +115,7 @@ For non-VDO NTC thermistors (common 10K sensors):
 SET A0 OIL_TEMP NTC_10K_BETA_3950       # Most common generic NTC
 SET A1 COOLANT_TEMP NTC_10K_STEINHART   # Alternative method
 SET A2 COOLANT_TEMP NTC_STEINHART       # Then set coefficients
-SET A2 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
+SET A2 CAL STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
 ```
 
 **Wiring:**
@@ -148,7 +148,7 @@ SET A5 BOOST_PRESSURE MPX4250AP       # Freescale MAP sensor
 **Custom range (any 0.5-4.5V sensor):**
 ```
 SET A3 OIL_PRESSURE GENERIC_LINEAR
-SET A3 PRESSURE_LINEAR 0.5 4.5 0.0 7.0   # 0.5-4.5V maps to 0-7 bar
+SET A3 CAL PRESSURE_LINEAR 0.5 4.5 0.0 7.0   # 0.5-4.5V maps to 0-7 bar
 ```
 
 **Wiring (5V boards — Mega):**
@@ -175,7 +175,7 @@ Sensor Signal → 18kΩ → Analog pin
 This scales 0.5–4.5V to ~0.32–2.91V — safely within the 3.3V ADC range.
 Update the calibration to match the divided voltage range:
 ```
-SET A3 PRESSURE_LINEAR 0.32 2.91 0.0 7.0   # example: 0-7 bar sensor
+SET A3 CAL PRESSURE_LINEAR 0.32 2.91 0.0 7.0   # example: 0-7 bar sensor
 ```
 
 ### Battery Voltage
@@ -204,7 +204,7 @@ SET 3 ENGINE_RPM W_PHASE_RPM
 
 ```
 SET 2 VEHICLE_SPEED HALL_SPEED
-SET 2 SPEED 100 2008 3.73 2000 300
+SET 2 CAL SPEED 100 2008 3.73 2000 300
 ```
 
 **Parameters:** pulses_per_rev (100), tire_circumference_mm (2008), final_drive_ratio (3.73), timeout_ms (2000), max_speed_kph (300)
@@ -474,12 +474,12 @@ See [Serial Commands Reference](../reference/SERIAL_COMMANDS.md#bus-configuratio
 
 ### Custom Calibration Commands
 ```
-SET <pin> RPM <poles> <ratio> [<mult>] <timeout> <min> <max>     # Custom RPM
-SET <pin> SPEED <ppr> <tire_circ> <ratio> [<mult>] <timeout> <max>  # Custom speed
-SET <pin> STEINHART <bias> <a> <b> <c>           # Custom Steinhart-Hart
-SET <pin> BETA <bias> <beta> <r0> <t0>           # Custom Beta equation
-SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>  # Custom linear range
-SET <pin> BIAS <resistor>                         # Override bias resistor
+SET <pin> CAL RPM <poles> <ratio> [<mult>] <timeout> <min> <max>     # Custom RPM
+SET <pin> CAL SPEED <ppr> <tire_circ> <ratio> [<mult>] <timeout> <max>  # Custom speed
+SET <pin> CAL STEINHART <bias> <a> <b> <c>           # Custom Steinhart-Hart
+SET <pin> CAL BETA <bias> <beta> <r0> <t0>           # Custom Beta equation
+SET <pin> CAL PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>  # Custom linear range
+SET <pin> CAL BIAS <resistor>                         # Override bias resistor
 ```
 
 ---

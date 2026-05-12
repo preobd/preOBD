@@ -86,8 +86,6 @@ const Command COMMANDS[] = {
 
     // Configuration commands (CONFIG mode only)
     {"SET", cmd_set, "Configure input", true},
-    {"ENABLE", cmd_enable, "Enable input", true},
-    {"DISABLE", cmd_disable, "Disable input", true},
     {"CLEAR", cmd_clear, "Clear input", true},
     {"OUTPUT", cmd_output, "Configure outputs", true},
     {"DISPLAY", cmd_display, "Configure display", true},
@@ -525,52 +523,30 @@ int cmd_reboot(int argc, const char* const* argv) {
 // These will be filled in next
 
 
-int cmd_enable(int argc, const char* const* argv) {
-    if (argc < 2) {
-        msg.control.println(F("ERROR: ENABLE requires a pin"));
-        msg.control.println(F("  Usage: ENABLE <pin>"));
-        return 1;
-    }
-
-    bool valid;
-    uint8_t pin = parsePin(argv[1], &valid);
-    if (!valid) return 1;
-
-    enableInput(pin, true);
-    msg.control.print(F("Input "));
-    msg.control.print(argv[1]);
-    msg.control.println(F(" enabled"));
-    return 0;
-}
-
-int cmd_disable(int argc, const char* const* argv) {
-    if (argc < 2) {
-        msg.control.println(F("ERROR: DISABLE requires a pin"));
-        msg.control.println(F("  Usage: DISABLE <pin>"));
-        return 1;
-    }
-
-    bool valid;
-    uint8_t pin = parsePin(argv[1], &valid);
-    if (!valid) return 1;
-
-    enableInput(pin, false);
-    msg.control.print(F("Input "));
-    msg.control.print(argv[1]);
-    msg.control.println(F(" disabled"));
-    return 0;
-}
-
 int cmd_clear(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: CLEAR requires a pin"));
         msg.control.println(F("  Usage: CLEAR <pin>"));
+        msg.control.println(F("         CLEAR <pin> CALIBRATION"));
         return 1;
     }
 
     bool valid;
     uint8_t pin = parsePin(argv[1], &valid);
     if (!valid) return 1;
+
+    // CLEAR <pin> CALIBRATION — drop custom calibration only.
+    if (argc >= 3 && streq_P(argv[2], PSTR("CALIBRATION"))) {
+        if (!clearInputCalibration(pin)) {
+            msg.control.println(F("ERROR: Input not configured"));
+            return 1;
+        }
+        msg.control.print(F("Cleared custom calibration for pin "));
+        msg.control.println(argv[1]);
+        msg.control.println(F("Using preset calibration from sensor library"));
+        printSaveReminder();
+        return 0;
+    }
 
     clearInput(pin);
     msg.control.print(F("Input "));

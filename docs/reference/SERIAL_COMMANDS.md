@@ -104,8 +104,8 @@ SET A0 ALARM WARMUP 30000                # Set alarm warmup time
 Pattern: `<ACTION> <pin>`
 
 ```
-ENABLE A0            # Enable input reading
-DISABLE A0           # Disable input (keeps config)
+SET A0 INPUT ENABLE            # Enable input reading
+SET A0 INPUT DISABLE           # Disable input (keeps config)
 CLEAR A0             # Remove input configuration
 ```
 
@@ -134,7 +134,7 @@ Pattern: `SYSTEM <action> [parameters]`
 SYSTEM STATUS                      # Show global config
 SYSTEM DUMP                        # Complete dump
 SYSTEM PINS                        # Show pin allocations
-SYSTEM PINS A0                     # Query specific pin
+INFO A0                     # Query specific pin
 SYSTEM UNITS TEMP F                # Set default units
 SYSTEM INTERVAL SENSOR 100         # Set sensor interval
 SYSTEM REBOOT                      # Restart the device
@@ -248,7 +248,8 @@ SET A6 PRIMARY_BATTERY VOLTAGE_DIVIDER  # Battery voltage
 SET <pin> APPLICATION <app>      # Set measurement type
 SET <pin> SENSOR <sensor>        # Set hardware sensor
 SET <pin> NAME <name>            # Set short display name (8 chars max)
-SET <pin> DISPLAY_NAME <name>    # Set full display name (32 chars max)
+SET <pin> NAME <full_name>      # Set full display label (32 chars max)
+SET <pin> ABBR <abbreviation>    # Set full display name (32 chars max)
 SET <pin> UNITS <units>          # Override display units
 SET <pin> ALARM <min> <max>      # Set alarm thresholds
 SET <pin> ALARM OFF              # Disable alarm
@@ -288,17 +289,17 @@ Override sensor preset calibration with custom values.
 ### Calibration Commands
 
 ```
-SET <pin> CALIBRATION PRESET     # Revert to preset calibration
-SET <pin> BIAS <resistor>        # Set bias resistor (Ω)
-SET <pin> STEINHART <bias> <a> <b> <c>  # Steinhart-Hart thermistor
-SET <pin> BETA <bias> <beta> <r0> <t0>  # Beta equation thermistor
-SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>  # Linear pressure
-SET <pin> PRESSURE_POLY <bias> <a> <b> <c>  # Polynomial pressure (VDO)
+CLEAR <pin> CALIBRATION            # Revert to preset calibration
+SET <pin> CAL BIAS <resistor>        # Set bias resistor (Ω)
+SET <pin> CAL STEINHART <bias> <a> <b> <c>  # Steinhart-Hart thermistor
+SET <pin> CAL BETA <bias> <beta> <r0> <t0>  # Beta equation thermistor
+SET <pin> CAL PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>  # Linear pressure
+SET <pin> CAL PRESSURE_POLY <bias> <a> <b> <c>  # Polynomial pressure (VDO)
 SET <pin> DIVIDER <ratio>        # Voltage divider ratio for linear sensors (0 < ratio ≤ 1.0)
-SET <pin> RPM <poles> <ratio> <timeout> <min> <max>  # RPM (5 params)
-SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>  # RPM (6 params)
-SET <pin> SPEED <ppr> <tire_circ> <ratio> <timeout> <max>  # Speed (5 params)
-SET <pin> SPEED <ppr> <tire_circ> <ratio> <mult> <timeout> <max>  # Speed (6 params)
+SET <pin> CAL RPM <poles> <ratio> <timeout> <min> <max>  # RPM (5 params)
+SET <pin> CAL RPM <poles> <ratio> <mult> <timeout> <min> <max>  # RPM (6 params)
+SET <pin> CAL SPEED <ppr> <tire_circ> <ratio> <timeout> <max>  # Speed (5 params)
+SET <pin> CAL SPEED <ppr> <tire_circ> <ratio> <mult> <timeout> <max>  # Speed (6 params)
 ```
 
 Use `INFO <pin> CALIBRATION` to view active calibration parameters (see [INFO Command](#info-command)).
@@ -308,14 +309,14 @@ Use `INFO <pin> CALIBRATION` to view active calibration parameters (see [INFO Co
 **Steinhart-Hart (when you have A, B, C coefficients):**
 ```
 SET A0 OIL_TEMP THERMISTOR_STEINHART
-SET A0 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
+SET A0 CAL STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
 SAVE
 ```
 
 **Beta equation (when you have β value from datasheet):**
 ```
 SET A0 OIL_TEMP THERMISTOR_BETA
-SET A0 BETA 10000 3950 10000 25
+SET A0 CAL BETA 10000 3950 10000 25
 SAVE
 ```
 
@@ -344,14 +345,14 @@ SAVE
 **Linear 0.5-4.5V sensor, 0-7 bar:**
 ```
 SET A1 BOOST_PRESSURE GENERIC_LINEAR
-SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 7.0
+SET A1 CAL PRESSURE_LINEAR 0.5 4.5 0.0 7.0
 SAVE
 ```
 
 **VDO polynomial:**
 ```
 SET A2 OIL_PRESSURE VDO_5BAR_CURVE
-SET A2 PRESSURE_POLY 1000 -0.3682 36.465 10.648
+SET A2 CAL PRESSURE_POLY 1000 -0.3682 36.465 10.648
 SAVE
 ```
 
@@ -360,7 +361,7 @@ SAVE
 **12-pole alternator, 3:1 pulley ratio, fine-tuned +2%:**
 ```
 SET 5 ENGINE_RPM W_PHASE_RPM
-SET 5 RPM 12 3.0 1.02 2000 100 8000
+SET 5 CAL RPM 12 3.0 1.02 2000 100 8000
 SAVE
 ```
 
@@ -369,7 +370,7 @@ SAVE
 **Hall effect sensor, 100 pulses/rev, 2008mm tire circumference, 3.73 final drive:**
 ```
 SET 2 VEHICLE_SPEED HALL_SPEED
-SET 2 SPEED 100 2008 3.73 2000 300
+SET 2 CAL SPEED 100 2008 3.73 2000 300
 SAVE
 ```
 
@@ -1013,8 +1014,8 @@ Relay Pins:
 
 **SYSTEM PINS <pin>** queries a specific pin to check if it's allocated:
 ```bash
-SYSTEM PINS A0        # Check if pin A0 is in use
-SYSTEM PINS CAN:0     # Check CAN virtual pin 0
+INFO A0        # Check if pin A0 is in use
+INFO CAN:0     # Check CAN virtual pin 0
 SYSTEM PINS 22        # Check digital pin 22
 ```
 
@@ -1077,8 +1078,8 @@ SYSTEM DUMP JSON
 
 # Check pin allocations
 SYSTEM PINS                # Show all pins
-SYSTEM PINS A0             # Check if A0 is available
-SYSTEM PINS CAN:0          # Check CAN virtual pin
+INFO A0             # Check if A0 is available
+INFO CAN:0          # Check CAN virtual pin
 
 # Read sensors faster
 SYSTEM INTERVAL SENSOR 50
@@ -1400,7 +1401,7 @@ RUN
 ```
 CONFIG
 SET A0 OIL_TEMP THERMISTOR_STEINHART
-SET A0 STEINHART 4700 1.129e-3 2.341e-4 8.775e-8
+SET A0 CAL STEINHART 4700 1.129e-3 2.341e-4 8.775e-8
 SAVE
 RUN
 ```
@@ -1410,7 +1411,7 @@ RUN
 ```
 CONFIG
 SET 2 VEHICLE_SPEED HALL_SPEED
-SET 2 SPEED 100 2008 3.73 2000 300
+SET 2 CAL SPEED 100 2008 3.73 2000 300
 SET 2 NAME SPEED
 SAVE
 RUN

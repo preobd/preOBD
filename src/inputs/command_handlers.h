@@ -17,8 +17,6 @@
 int cmd_help(int argc, const char* const* argv);
 int cmd_list(int argc, const char* const* argv);
 int cmd_set(int argc, const char* const* argv);
-int cmd_enable(int argc, const char* const* argv);
-int cmd_disable(int argc, const char* const* argv);
 int cmd_clear(int argc, const char* const* argv);
 int cmd_info(int argc, const char* const* argv);
 int cmd_output(int argc, const char* const* argv);

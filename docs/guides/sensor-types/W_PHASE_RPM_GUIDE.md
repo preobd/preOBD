@@ -47,7 +47,7 @@ SAVE
 With custom calibration (14-pole alternator, 2.5:1 ratio):
 ```
 SET 5 ENGINE_RPM W_PHASE_RPM
-SET 5 RPM 14 2.5 2000 100 8000
+SET 5 CAL RPM 14 2.5 2000 100 8000
 SAVE
 ```
 
@@ -246,7 +246,7 @@ The alarm triggers below 500 RPM (stall warning) or above 6500 RPM (over-rev).
 
 ```
 SET 5 ENGINE_RPM W_PHASE_RPM
-SET 5 RPM <poles> <ratio> <timeout> <min> <max>
+SET 5 CAL RPM <poles> <ratio> <timeout> <min> <max>
 SAVE
 ```
 
@@ -260,13 +260,13 @@ SAVE
 **Examples:**
 ```
 # 12-pole, 3:1 ratio (default)
-SET 5 RPM 12 3.0 2000 100 8000
+SET 5 CAL RPM 12 3.0 2000 100 8000
 
 # 14-pole alternator, 2.5:1 ratio
-SET 5 RPM 14 2.5 2000 100 8000
+SET 5 CAL RPM 14 2.5 2000 100 8000
 
 # High-revving engine
-SET 5 RPM 12 3.0 2000 500 10000
+SET 5 CAL RPM 12 3.0 2000 500 10000
 ```
 
 ### Fine-Tuning with Calibration Multiplier
@@ -274,7 +274,7 @@ SET 5 RPM 12 3.0 2000 500 10000
 If readings are close but not exact:
 
 ```
-SET 5 RPM 12 3.0 1.02 2000 100 8000
+SET 5 CAL RPM 12 3.0 1.02 2000 100 8000
 ```
 
 The `1.02` is a calibration multiplier (similar to adjusting a potentiometer on an aftermarket tachometer).

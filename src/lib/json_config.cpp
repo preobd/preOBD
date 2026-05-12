@@ -456,7 +456,7 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     extern bool setInputApplication(uint8_t pin, uint8_t appIndex);
     extern bool setInputSensor(uint8_t pin, uint8_t sensorIndex);
     extern bool setInputUnits(uint8_t pin, uint8_t unitsIndex);
-    extern bool setInputName(uint8_t pin, const char* name);
+    extern bool setInputAbbr(uint8_t pin, const char* abbr);
     extern bool setInputDisplayName(uint8_t pin, const char* displayName);
     extern bool setInputAlarmRange(uint8_t pin, float minValue, float maxValue);
     extern bool enableInput(uint8_t pin, bool enable);
@@ -475,7 +475,7 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
 
     // Set names
     if (inputObj["abbr"].isNull() == false) {
-        setInputName(pin, inputObj["abbr"]);
+        setInputAbbr(pin, inputObj["abbr"]);
     }
     if (inputObj["name"].isNull() == false) {
         setInputDisplayName(pin, inputObj["name"]);

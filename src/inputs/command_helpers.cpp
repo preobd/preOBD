@@ -24,6 +24,7 @@ Input* requireInput(uint8_t pin) {
     Input* input = getInputByPin(pin);
     if (!input) {
         msg.control.println(F("ERROR: Input not configured"));
+        msg.control.println(F("  Hint: INFO <pin> to inspect, or SET <pin> SENSOR <name> to configure"));
     }
     return input;
 }
@@ -322,11 +323,8 @@ static const char PSTR_HELP_LIST_DESC[] PROGMEM = "Discovery - Show available in
 static const char PSTR_HELP_SET[] PROGMEM = "SET";
 static const char PSTR_HELP_SET_DESC[] PROGMEM = "Configuration - Configure input pins (application, sensor, names, units, alarms)";
 
-static const char PSTR_HELP_CALIBRATION[] PROGMEM = "CALIBRATION";
-static const char PSTR_HELP_CALIBRATION_DESC[] PROGMEM = "Advanced SET options - Custom sensor calibration (RPM, speed, pressure, temperature)";
-
 static const char PSTR_HELP_CONTROL[] PROGMEM = "CONTROL";
-static const char PSTR_HELP_CONTROL_DESC[] PROGMEM = "Input commands - ENABLE, DISABLE, CLEAR, INFO";
+static const char PSTR_HELP_CONTROL_DESC[] PROGMEM = "Input commands - CLEAR, INFO (use SET <pin> INPUT for ENABLE/DISABLE)";
 
 static const char PSTR_HELP_OUTPUT[] PROGMEM = "OUTPUT";
 static const char PSTR_HELP_OUTPUT_DESC[] PROGMEM = "Output Modules - Configure CAN, RealDash, Serial, and SD logging";
@@ -362,7 +360,6 @@ static const char PSTR_HELP_EXAMPLES_DESC[] PROGMEM = "Usage Examples - Common c
 // Forward declarations for help printing functions
 void printHelpList();
 void printHelpSet();
-void printHelpCalibration();
 void printHelpControl();
 void printHelpOutput();
 void printHelpBus();
@@ -384,7 +381,6 @@ void printHelpQuick();
 static const HelpCategory HELP_CATEGORIES[] PROGMEM = {
     {PSTR_HELP_LIST, PSTR_HELP_LIST_DESC, printHelpList},
     {PSTR_HELP_SET, PSTR_HELP_SET_DESC, printHelpSet},
-    {PSTR_HELP_CALIBRATION, PSTR_HELP_CALIBRATION_DESC, printHelpCalibration},
     {PSTR_HELP_CONTROL, PSTR_HELP_CONTROL_DESC, printHelpControl},
     {PSTR_HELP_OUTPUT, PSTR_HELP_OUTPUT_DESC, printHelpOutput},
     {PSTR_HELP_BUS, PSTR_HELP_BUS_DESC, printHelpBus},
@@ -500,38 +496,18 @@ void printHelpList() {
 
 // printHelpSet() — defined in cmd_set.cpp where SET_FIELDS lives.
 
-// HELP CALIBRATION currently aggregates verbs that live alongside identity
-// fields in SET_FIELDS (STEINHART, BETA, RPM, ...). Once #189 phase 3 moves
-// these under a SET <pin> CAL <profile> grammar, this printer can be deleted
-// and CALIBRATION help will fall out of HELP SET automatically.
-void printHelpCalibration() {
-    msg.control.println();
-    msg.control.println(F("=== CALIBRATION Commands ==="));
-    msg.control.println(F("Advanced sensor calibration (RPM, speed, pressure, temperature)"));
-    msg.control.println();
-    msg.control.println(F("  SET <pin> CALIBRATION PRESET  - Clear custom, use preset"));
-    msg.control.println(F("  SET <pin> RPM <poles> <ratio> [<mult>] <timeout> <min> <max>"));
-    msg.control.println(F("  SET <pin> SPEED <ppr> <tire_circ> <ratio> [<mult>] <timeout> <max>"));
-    msg.control.println(F("  SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>"));
-    msg.control.println(F("  SET <pin> BIAS <resistor>  - Set bias resistor (Ohms)"));
-    msg.control.println(F("  SET <pin> STEINHART <bias> <a> <b> <c>  - Steinhart-Hart"));
-    msg.control.println(F("  SET <pin> BETA <bias> <beta> <r0> <t0>  - Beta equation"));
-    msg.control.println(F("  SET <pin> PRESSURE_POLY <bias> <a> <b> <c>  - VDO polynomial"));
-    msg.control.println(F("  INFO <pin> CALIBRATION  - Show calibration details"));
-    msg.control.println();
-}
-
 void printHelpControl() {
     msg.control.println();
     msg.control.println(F("=== CONTROL Commands ==="));
-    msg.control.println(F("Enable, disable, clear, and query input status"));
+    msg.control.println(F("Inspect, clear, and query input status"));
     msg.control.println();
-    msg.control.println(F("  ENABLE <pin>  - Enable input reading"));
-    msg.control.println(F("  DISABLE <pin>  - Disable input reading"));
-    msg.control.println(F("  CLEAR <pin>  - Reset input to unconfigured"));
-    msg.control.println(F("  INFO <pin>  - Show detailed pin info"));
-    msg.control.println(F("  INFO <pin> ALARM  - Show alarm status and configuration"));
-    msg.control.println(F("  INFO <pin> CALIBRATION  - Show calibration details"));
+    msg.control.println(F("  SET <pin> INPUT ENABLE   - Enable input reading"));
+    msg.control.println(F("  SET <pin> INPUT DISABLE  - Disable input reading"));
+    msg.control.println(F("  CLEAR <pin>              - Reset input to unconfigured"));
+    msg.control.println(F("  CLEAR <pin> CALIBRATION  - Clear custom calibration only"));
+    msg.control.println(F("  INFO <pin>               - Show detailed pin info"));
+    msg.control.println(F("  INFO <pin> ALARM         - Show alarm status and configuration"));
+    msg.control.println(F("  INFO <pin> CALIBRATION   - Show calibration details"));
     msg.control.println();
 }
 
@@ -681,10 +657,10 @@ void printHelpExamples() {
     msg.control.println(F("  SET CAN:0 ALARM 500 6000  (modify CAN sensor)"));
     msg.control.println();
     msg.control.println(F("Advanced sensor setup:"));
-    msg.control.println(F("  SET 2 SPEED 100 2008 3.73 2000 300  (Hall sensor speed)"));
+    msg.control.println(F("  SET 2 CAL SPEED 100 2008 3.73 2000 300  (Hall sensor speed)"));
     msg.control.println(F("  SET 3 ENGINE_RPM W_PHASE_RPM  (alternator RPM)"));
-    msg.control.println(F("  SET A1 PRESSURE_LINEAR 0.5 4.5 0 7  (custom pressure)"));
-    msg.control.println(F("  SET A0 BIAS 4700  (change bias resistor)"));
+    msg.control.println(F("  SET A1 CAL PRESSURE_LINEAR 0.5 4.5 0 7  (custom pressure)"));
+    msg.control.println(F("  SET A0 CAL BIAS 4700  (change bias resistor)"));
     msg.control.println(F("  SET A2 ALARM WARMUP 30000  (30 second warmup)"));
     msg.control.println(F("  SET A2 ALARM PERSIST 2000  (2 second persistence)"));
     msg.control.println();
@@ -694,7 +670,7 @@ void printHelpExamples() {
     msg.control.println(F("  INFO A2 ALARM  (show alarm status)"));
     msg.control.println();
     msg.control.println(F("Output and control:"));
-    msg.control.println(F("  ENABLE A2"));
+    msg.control.println(F("  SET A2 INPUT ENABLE"));
     msg.control.println(F("  OUTPUT CAN ENABLE"));
     msg.control.println(F("  OUTPUT CAN INTERVAL 100"));
     msg.control.println(F("  SAVE"));
@@ -746,8 +722,8 @@ void printHelpOverview() {
     msg.control.println(F("  SYSTEM DUMP     - Show full configuration"));
     msg.control.println();
     msg.control.println(F("Examples:"));
-    msg.control.println(F("  HELP SET        - Show all SET commands"));
-    msg.control.println(F("  HELP CALIBRATION - Show calibration commands"));
+    msg.control.println(F("  HELP SET        - Show all SET commands (including CAL profiles)"));
+    msg.control.println(F("  HELP CONTROL    - Show input enable/disable/clear commands"));
     msg.control.println();
 }
 
@@ -761,23 +737,23 @@ void printHelpQuick() {
     msg.control.println(F("  LIST INPUTS|APPLICATIONS|SENSORS|OUTPUTS|TRANSPORTS"));
     msg.control.println();
     msg.control.println(F("Input Control:"));
-    msg.control.println(F("  ENABLE <pin>"));
-    msg.control.println(F("  DISABLE <pin>"));
+    msg.control.println(F("  SET <pin> INPUT ENABLE|DISABLE"));
     msg.control.println(F("  CLEAR <pin>"));
+    msg.control.println(F("  CLEAR <pin> CALIBRATION"));
     msg.control.println(F("  INFO [<pin>] [ALARM|CALIBRATION]"));
     msg.control.println();
     msg.control.println(F("Input Configuration:"));
     msg.control.println(F("  SET <pin> <app> <sensor>"));
     msg.control.println(F("  SET <pin> APPLICATION <app>"));
     msg.control.println(F("  SET <pin> SENSOR <sensor>"));
-    msg.control.println(F("  SET <pin> NAME <name>"));
-    msg.control.println(F("  SET <pin> DISPLAY_NAME <name>"));
+    msg.control.println(F("  SET <pin> NAME <full_label>"));
+    msg.control.println(F("  SET <pin> ABBR <abbreviation>"));
     msg.control.println(F("  SET <pin> UNITS <units>"));
     msg.control.println(F("  SET <pin> ALARM <min> <max>"));
     msg.control.println(F("  SET <pin> ALARM ENABLE|DISABLE"));
     msg.control.println(F("  SET <pin> ALARM WARMUP|PERSIST <ms>"));
-    msg.control.println(F("  SET <pin> CALIBRATION PRESET"));
-    msg.control.println(F("  SET <pin> RPM|SPEED|PRESSURE_LINEAR|STEINHART|BETA|BIAS|PRESSURE_POLY ..."));
+    msg.control.println(F("  SET <pin> CAL PRESET"));
+    msg.control.println(F("  SET <pin> CAL <STEINHART|BETA|RPM|SPEED|PRESSURE_LINEAR|PRESSURE_POLY|BIAS> ..."));
     msg.control.println();
     msg.control.println(F("Outputs:"));
     msg.control.println(F("  OUTPUT STATUS"));

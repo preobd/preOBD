@@ -1,5 +1,5 @@
 // Bump CACHE_VERSION whenever local assets change to force cache refresh.
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `preobd-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [

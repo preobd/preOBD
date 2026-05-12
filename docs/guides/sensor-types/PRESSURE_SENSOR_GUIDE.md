@@ -92,7 +92,7 @@ Required: Pull-down resistor from analog pin to GND
   Analog pin → 100Ω resistor → GND
 ```
 
-**Note:** VDO pressure sensors are low-resistance gauge senders (10–184Ω). Use a 100Ω bias resistor for best ADC resolution. See [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) for full details. You can override per-sensor with the `SET <pin> BIAS <ohms>` command.
+**Note:** VDO pressure sensors are low-resistance gauge senders (10–184Ω). Use a 100Ω bias resistor for best ADC resolution. See [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) for full details. You can override per-sensor with the `SET <pin> CAL BIAS <ohms>` command.
 
 ### Generic 3-Wire Voltage Sensors
 
@@ -166,7 +166,7 @@ VDO pressure sensors use a 100Ω bias resistor by default. If you have a differe
 
 ```
 SET A3 OIL_PRESSURE VDO_5BAR_CURVE
-SET A3 BIAS 100
+SET A3 CAL BIAS 100
 SAVE
 ```
 
@@ -176,7 +176,7 @@ For a linear 0.5-4.5V sensor with a different range:
 
 ```
 SET A5 BOOST_PRESSURE GENERIC_BOOST
-SET A5 PRESSURE_LINEAR 0.5 4.5 0.0 3.0
+SET A5 CAL PRESSURE_LINEAR 0.5 4.5 0.0 3.0
 SAVE
 ```
 
@@ -188,7 +188,7 @@ For VDO-style polynomial calibration with custom coefficients:
 
 ```
 SET A3 OIL_PRESSURE VDO_5BAR_CURVE
-SET A3 PRESSURE_POLY 1000 -0.3682 36.465 10.648
+SET A3 CAL PRESSURE_POLY 1000 -0.3682 36.465 10.648
 SAVE
 ```
 
@@ -204,7 +204,7 @@ Linear pressure sensors report **NaN** when the ADC voltage falls more than ~0.0
 
 For this to work reliably, a disconnected pin must rail rather than float to mid-scale. Built-in presets that ship with integrated signal conditioning (MPX4250, MPX5700, AEM 150 PSI, generic boost, generic 150 PSI) enable an internal pull-up automatically. Sensors with high output impedance (TPS, generic temp) leave it disabled to avoid skewing the reading.
 
-**Custom calibrations (`SET <pin> PRESSURE_LINEAR ...`) do not enable the internal pull-up.** Wire an external pull-down (e.g. 100kΩ from the analog pin to GND) if you want disconnect detection on a custom-calibrated linear sensor.
+**Custom calibrations (`SET <pin> CAL PRESSURE_LINEAR ...`) do not enable the internal pull-up.** Wire an external pull-down (e.g. 100kΩ from the analog pin to GND) if you want disconnect detection on a custom-calibrated linear sensor.
 
 ---
 

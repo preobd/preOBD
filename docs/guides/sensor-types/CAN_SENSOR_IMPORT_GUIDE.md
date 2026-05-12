@@ -243,7 +243,7 @@ Once imported, CAN sensors support all standard SET commands:
 ```bash
 # Change display name
 SET CAN:0 NAME "ERPM"
-SET CAN:0 DISPLAY_NAME "Engine RPM"
+SET CAN:0 NAME "Engine RPM"
 
 # Set alarm thresholds
 SET CAN:0 ALARM 500 6000     # Min 500, Max 6000 RPM

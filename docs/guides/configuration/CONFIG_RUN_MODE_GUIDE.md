@@ -188,16 +188,16 @@ For commands like `SYSTEM` and `LOG` that mix read-only verbs with destructive o
 | `SET <pin> APPLICATION <app> <sensor>` | Configure sensor |
 | `SET <pin> SENSOR <sensor>` | Change sensor type |
 | `SET <pin> NAME <name>` | Set abbreviated name |
-| `SET <pin> DISPLAY_NAME <name>` | Set display name |
+| `SET <pin> NAME name>` | Set display name |
 | `SET <pin> UNITS <units>` | Override display units |
 | `SET <pin> ALARM <min> <max>` | Set alarm thresholds |
-| `SET <pin> BIAS <resistor>` | Set bias resistor (Ω) |
-| `SET <pin> STEINHART <bias> <a> <b> <c>` | Steinhart-Hart calibration |
-| `SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>` | Linear pressure calibration |
-| `SET <pin> PRESSURE_POLY <bias> <a> <b> <c>` | Polynomial pressure calibration |
-| `SET <pin> RPM <poles> <ratio> <timeout> <min> <max>` | RPM calibration |
-| `SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>` | RPM with fine-tuning |
-| `SET <pin> CALIBRATION PRESET` | Revert to preset calibration |
+| `SET <pin> CAL BIAS <resistor>` | Set bias resistor (Ω) |
+| `SET <pin> CAL STEINHART <bias> <a> <b> <c>` | Steinhart-Hart calibration |
+| `SET <pin> CAL PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>` | Linear pressure calibration |
+| `SET <pin> CAL PRESSURE_POLY <bias> <a> <b> <c>` | Polynomial pressure calibration |
+| `SET <pin> CAL RPM <poles> <ratio> <timeout> <min> <max>` | RPM calibration |
+| `SET <pin> CAL RPM <poles> <ratio> <mult> <timeout> <min> <max>` | RPM with fine-tuning |
+| `CLEAR <pin> CALIBRATION` | Revert to preset calibration |
 | `ENABLE <pin>` | Enable sensor |
 | `DISABLE <pin>` | Disable sensor |
 | `CLEAR <pin>` | Remove sensor |
@@ -290,13 +290,13 @@ RUN
 ```
 CONFIG
 SET A0 OIL_TEMP THERMISTOR_STEINHART
-SET A0 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8  # Custom thermistor
+SET A0 CAL STEINHART 10000 1.129e-3 2.341e-4 8.775e-8  # Custom thermistor
 SET A1 BOOST_PRESSURE GENERIC_BOOST
-SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 3.0              # Custom pressure sensor
+SET A1 CAL PRESSURE_LINEAR 0.5 4.5 0.0 3.0              # Custom pressure sensor
 SET A3 OIL_PRESSURE VDO_5BAR_CURVE
-SET A3 BIAS 2200                                    # Use 2.2kΩ bias for this sensor
+SET A3 CAL BIAS 2200                                    # Use 2.2kΩ bias for this sensor
 SET 5 ENGINE_RPM W_PHASE_RPM
-SET 5 RPM 12 3.0 1.02 2000 100 8000                # Fine-tuned RPM
+SET 5 CAL RPM 12 3.0 1.02 2000 100 8000                # Fine-tuned RPM
 SAVE
 RUN
 ```

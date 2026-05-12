@@ -214,6 +214,17 @@ void initSerialConfig() {
     };
     embeddedCliAddBinding(cli, helpBinding);
 
+    // `H` shortcut — common CLI convention. Case-insensitive `cli_on_command`
+    // fallback handles `h` lowercase, so a single uppercase binding covers both.
+    CliCommandBinding hBinding = {
+        .name = "H",
+        .help = nullptr,
+        .tokenizeArgs = true,
+        .context = (void*)HELP_NAME,
+        .binding = cli_command_handler
+    };
+    embeddedCliAddBinding(cli, hBinding);
+
     // Print startup banner
     msg.control.println();
     msg.control.println(F("========================================"));

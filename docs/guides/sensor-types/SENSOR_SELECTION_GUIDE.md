@@ -128,7 +128,7 @@ JEEP_CJ_TEMP_GAUGE: use 100Ω bias resistor (or preOBD PCB 100Ω position)
 **Example with custom Steinhart-Hart coefficients:**
 ```
 SET A2 COOLANT_TEMP NTC_THERMISTOR NTC_STEINHART
-SET A2 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
+SET A2 CAL STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
 ```
 
 See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.md) for custom calibration.
@@ -329,7 +329,7 @@ effect automatically when you assign the sensor — no `SET <pin> BIAS` command 
 you've wired a non-standard value. See [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md).
 
 **Q: What if I used a different bias resistor?**
-A: Use `SET <pin> BIAS <ohms>` command. Example: `SET A0 BIAS 2200`
+A: Use `SET <pin> CAL BIAS <ohms>` command. Example: `SET A0 CAL BIAS 2200`
 
 **Q: How do I see what sensors are available?**
 A: Use `LIST SENSORS` command.

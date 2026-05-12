@@ -52,21 +52,18 @@ static int system_status(int argc, const char* const* argv, int /*tokenIndex*/) 
     return 0;
 }
 
-// SYSTEM PINS subcommand handler
+// SYSTEM PINS subcommand handler — global pin map only.
+// Per-pin detail lives at `INFO <pin>`; the old `SYSTEM PINS <pin>` shape
+// duplicated INFO and was retired in the grammar redesign (#189).
 static int system_pins(int argc, const char* const* argv, int /*tokenIndex*/) {
-    if (argc == 2) {
-        printPinStatus();
-        return 0;
+    (void)argv;
+    if (argc != 2) {
+        msg.control.println(F("ERROR: SYSTEM PINS takes no arguments"));
+        msg.control.println(F("  Use 'INFO <pin>' for per-pin detail"));
+        return 1;
     }
-    // Specific pin query
-    bool valid = false;
-    uint8_t pin = parsePin(argv[2], &valid);
-    if (valid) {
-        printPinStatus(pin);
-        return 0;
-    }
-    msg.control.println(F("ERROR: Invalid subcommand or pin"));
-    return 1;
+    printPinStatus();
+    return 0;
 }
 
 // SYSTEM DUMP subcommand handler
@@ -296,8 +293,7 @@ static const char PSTR_SYS_RESET[] PROGMEM = "RESET";
 static const char PSTR_HELP_SYS_STATUS[] PROGMEM =
     "  SYSTEM STATUS                 Show all global configuration";
 static const char PSTR_HELP_SYS_PINS[] PROGMEM =
-    "  SYSTEM PINS                   Show all pin allocations\n"
-    "  SYSTEM PINS <pin>             Query a specific pin";
+    "  SYSTEM PINS                   Show all pin allocations (use INFO <pin> for per-pin detail)";
 static const char PSTR_HELP_SYS_DUMP[] PROGMEM =
     "  SYSTEM DUMP                   Complete configuration dump (human-readable)\n"
     "  SYSTEM DUMP JSON              Export active configuration as JSON\n"

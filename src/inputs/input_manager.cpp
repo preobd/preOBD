@@ -628,11 +628,11 @@ bool setInputSensor(uint8_t pin, uint8_t sensorIndex) {
     return true;
 }
 
-bool setInputName(uint8_t pin, const char* name) {
+bool setInputAbbr(uint8_t pin, const char* abbr) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
 
-    strncpy(input->abbrName, name, sizeof(input->abbrName) - 1);
+    strncpy(input->abbrName, abbr, sizeof(input->abbrName) - 1);
     input->abbrName[sizeof(input->abbrName) - 1] = '\0';
     return true;
 }

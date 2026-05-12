@@ -21,7 +21,7 @@ Most users won't need this guide. The preset sensor library covers common automo
 - VDO 120°C or 150°C temperature sensors (use presets)
 - VDO 2-bar or 5-bar pressure sensors (use presets)
 - MAX6675 or MAX31855 thermocouples (no calibration needed)
-- Changing just the bias resistor value (use `SET <pin> BIAS <ohms>`)
+- Changing just the bias resistor value (use `SET <pin> CAL BIAS <ohms>`)
 
 ---
 
@@ -31,7 +31,7 @@ Most users won't need this guide. The preset sensor library covers common automo
 
 ```
 SET A0 OIL_TEMP THERMISTOR_STEINHART
-SET A0 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
+SET A0 CAL STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
 SAVE
 ```
 
@@ -39,7 +39,7 @@ SAVE
 
 ```
 SET A0 OIL_TEMP THERMISTOR_STEINHART
-SET A0 BETA 10000 3950 10000 25
+SET A0 CAL BETA 10000 3950 10000 25
 SAVE
 ```
 
@@ -47,14 +47,14 @@ SAVE
 
 ```
 SET A1 BOOST_PRESSURE GENERIC_BOOST
-SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 3.0
+SET A1 CAL PRESSURE_LINEAR 0.5 4.5 0.0 3.0
 SAVE
 ```
 
 ### Adjust Bias Resistor Only
 
 ```
-SET A0 BIAS 2200
+SET A0 CAL BIAS 2200
 SAVE
 ```
 
@@ -65,7 +65,7 @@ SAVE
 ### STEINHART - Steinhart-Hart Thermistor
 
 ```
-SET <pin> STEINHART <bias> <a> <b> <c>
+SET <pin> CAL STEINHART <bias> <a> <b> <c>
 ```
 
 | Parameter | Description | Example |
@@ -78,14 +78,14 @@ SET <pin> STEINHART <bias> <a> <b> <c>
 **Example:** 10kΩ NTC thermistor with known coefficients:
 ```
 SET A0 OIL_TEMP THERMISTOR_STEINHART
-SET A0 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
+SET A0 CAL STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
 SAVE
 ```
 
 ### BETA - Beta Equation Thermistor
 
 ```
-SET <pin> BETA <bias> <beta> <r0> <t0>
+SET <pin> CAL BETA <bias> <beta> <r0> <t0>
 ```
 
 | Parameter | Description | Example |
@@ -98,7 +98,7 @@ SET <pin> BETA <bias> <beta> <r0> <t0>
 **Example:** Generic 10kΩ NTC with β=3950:
 ```
 SET A0 OIL_TEMP THERMISTOR_STEINHART
-SET A0 BETA 10000 3950 10000 25
+SET A0 CAL BETA 10000 3950 10000 25
 SAVE
 ```
 
@@ -107,7 +107,7 @@ The Beta equation is simpler than Steinhart-Hart when you know the Beta value (o
 ### PRESSURE_LINEAR - Linear Voltage Sensor
 
 ```
-SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>
+SET <pin> CAL PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>
 ```
 
 | Parameter | Description | Example |
@@ -120,7 +120,7 @@ SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>
 **Example:** 0.5-4.5V sensor, 0-3 bar range:
 ```
 SET A1 BOOST_PRESSURE GENERIC_BOOST
-SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 3.0
+SET A1 CAL PRESSURE_LINEAR 0.5 4.5 0.0 3.0
 SAVE
 ```
 
@@ -152,7 +152,7 @@ SAVE
 ### PRESSURE_POLY - Polynomial Pressure Sensor
 
 ```
-SET <pin> PRESSURE_POLY <bias> <a> <b> <c>
+SET <pin> CAL PRESSURE_POLY <bias> <a> <b> <c>
 ```
 
 | Parameter | Description | Example |
@@ -167,15 +167,15 @@ The polynomial relates resistance to pressure: `R = a×P² + b×P + c`
 **Example:** Custom VDO-style sensor:
 ```
 SET A3 OIL_PRESSURE VDO_5BAR_CURVE
-SET A3 PRESSURE_POLY 1000 -0.3682 36.465 10.648
+SET A3 CAL PRESSURE_POLY 1000 -0.3682 36.465 10.648
 SAVE
 ```
 
 ### RPM - Alternator RPM Calibration
 
 ```
-SET <pin> RPM <poles> <ratio> <timeout> <min> <max>
-SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>
+SET <pin> CAL RPM <poles> <ratio> <timeout> <min> <max>
+SET <pin> CAL RPM <poles> <ratio> <mult> <timeout> <min> <max>
 ```
 
 | Parameter | Description | Example |
@@ -190,25 +190,25 @@ SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>
 **Example:** 14-pole alternator, 2.5:1 ratio:
 ```
 SET 5 ENGINE_RPM W_PHASE_RPM
-SET 5 RPM 14 2.5 2000 100 8000
+SET 5 CAL RPM 14 2.5 2000 100 8000
 SAVE
 ```
 
 **Example:** Fine-tuned after testing:
 ```
-SET 5 RPM 12 3.0 1.02 2000 100 8000
+SET 5 CAL RPM 12 3.0 1.02 2000 100 8000
 SAVE
 ```
 
 ### BIAS - Change Bias Resistor Only
 
 ```
-SET <pin> BIAS <ohms>
+SET <pin> CAL BIAS <ohms>
 ```
 
 **Example:** Override bias for a sensor wired with a non-standard resistor:
 ```
-SET A0 BIAS 2200
+SET A0 CAL BIAS 2200
 SAVE
 ```
 
@@ -221,7 +221,7 @@ INFO <pin> CALIBRATION
 ### Revert to Preset
 
 ```
-SET <pin> CALIBRATION PRESET
+CLEAR <pin> CALIBRATION
 SAVE
 ```
 
@@ -238,7 +238,7 @@ Some manufacturers provide A, B, C coefficients directly. Look for "Steinhart-Ha
 Most cheap NTC thermistors specify a β (Beta) value. Use the `BETA` command directly:
 
 ```
-SET A0 BETA 10000 3950 10000 25
+SET A0 CAL BETA 10000 3950 10000 25
 ```
 
 Or convert to Steinhart-Hart approximately:
@@ -285,7 +285,7 @@ You have a cheap 10kΩ NTC thermistor with β=3950.
 
 ```
 SET A0 OIL_TEMP THERMISTOR_STEINHART
-SET A0 BETA 10000 3950 10000 25
+SET A0 CAL BETA 10000 3950 10000 25
 SET A0 ALARM 60 130
 SAVE
 ```
@@ -296,7 +296,7 @@ You have a Bosch temperature sender with known coefficients.
 
 ```
 SET A1 COOLANT_TEMP THERMISTOR_STEINHART
-SET A1 STEINHART 1000 1.46e-3 2.38e-4 1.01e-7
+SET A1 CAL STEINHART 1000 1.46e-3 2.38e-4 1.01e-7
 SET A1 ALARM 60 105
 SAVE
 ```
@@ -307,7 +307,7 @@ You have a generic 0.5-4.5V MAP sensor rated 0-3 bar.
 
 ```
 SET A2 BOOST_PRESSURE GENERIC_BOOST
-SET A2 PRESSURE_LINEAR 0.5 4.5 0.0 3.0
+SET A2 CAL PRESSURE_LINEAR 0.5 4.5 0.0 3.0
 SET A2 ALARM -1 2.0
 SAVE
 ```
@@ -322,7 +322,7 @@ INFO A0 CALIBRATION
 
 # Apply 3% correction by adjusting bias resistor
 # If readings are low, try a slightly lower bias
-SET A0 BIAS 970
+SET A0 CAL BIAS 970
 SAVE
 ```
 
@@ -332,11 +332,11 @@ You have a 16-pole alternator with a 2.8:1 pulley ratio.
 
 ```
 SET 5 ENGINE_RPM W_PHASE_RPM
-SET 5 RPM 16 2.8 2000 100 8000
+SET 5 CAL RPM 16 2.8 2000 100 8000
 SAVE
 
 # After testing, readings are 1.5% high
-SET 5 RPM 16 2.8 0.985 2000 100 8000
+SET 5 CAL RPM 16 2.8 0.985 2000 100 8000
 SAVE
 ```
 
@@ -361,7 +361,7 @@ SAVE
 
 - Ensure you ran `SAVE` after setting calibration
 - Check `INFO <pin>` to verify custom calibration is active
-- Try `SET <pin> CALIBRATION PRESET` then re-enter your calibration
+- Try `CLEAR <pin> CALIBRATION` then re-enter your calibration
 
 ### NaN or erratic readings
 

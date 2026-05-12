@@ -81,6 +81,19 @@ struct SetField {
     const char* help;          // PROGMEM-resident one-line help; nullptr to hide
 };
 
+// Calibration-profile leaf signature. Reached via `SET <pin> CAL <profile>` so
+// the leaf needs to know where its own arguments start in argv (argStart=4
+// for the canonical shape: argv[0]=SET, argv[1]=<pin>, argv[2]=CAL,
+// argv[3]=<profile>, argv[4..]=profile args). Centralising this offset means
+// the leaf bodies stay free of magic indices.
+typedef int (*CalProfileHandler)(uint8_t pin, int argc, const char* const* argv,
+                                  int argStart);
+struct CalProfile {
+    const char* token;          // PROGMEM-resident profile keyword
+    CalProfileHandler handler;
+    const char* help;           // PROGMEM-resident multi-line help (nullptr ok)
+};
+
 // SET <pin> APPLICATION <application>
 static int set_application(uint8_t pin, int argc, const char* const* argv) {
     if (argc < 4) {
@@ -177,30 +190,52 @@ static int set_sensor(uint8_t pin, int argc, const char* const* argv) {
     return 1;
 }
 
-// SET <pin> NAME <name>
+// SET <pin> NAME <full_name>
+// 32-char display label. Routes through requireInput so an unconfigured pin
+// produces the standard error (resolves #205 — silent failure on unknown pin).
 static int set_name(uint8_t pin, int argc, const char* const* argv) {
     if (argc < 4) {
         msg.control.println(F("ERROR: NAME requires a name string"));
         return 1;
     }
-    if (setInputName(pin, argv[3])) {
-        printInputFieldSet(argv[1], F("name"), argv[3]);
-        return 0;
-    }
-    return 1;
+    if (!requireInput(pin)) return 1;
+    setInputDisplayName(pin, argv[3]);
+    printInputFieldSet(argv[1], F("name"), argv[3]);
+    return 0;
 }
 
-// SET <pin> DISPLAY_NAME <name>
-static int set_display_name(uint8_t pin, int argc, const char* const* argv) {
+// SET <pin> ABBR <abbreviation>
+// 8-char display abbreviation. Routes through requireInput (#205).
+static int set_abbr(uint8_t pin, int argc, const char* const* argv) {
     if (argc < 4) {
-        msg.control.println(F("ERROR: DISPLAY_NAME requires a name string"));
+        msg.control.println(F("ERROR: ABBR requires an abbreviation string"));
         return 1;
     }
-    if (setInputDisplayName(pin, argv[3])) {
-        printInputFieldSet(argv[1], F("display name"), argv[3]);
-        return 0;
+    if (!requireInput(pin)) return 1;
+    setInputAbbr(pin, argv[3]);
+    printInputFieldSet(argv[1], F("abbreviation"), argv[3]);
+    return 0;
+}
+
+// SET <pin> INPUT ENABLE|DISABLE
+static int set_input(uint8_t pin, int argc, const char* const* argv) {
+    if (argc < 4) {
+        msg.control.println(F("ERROR: INPUT requires ENABLE or DISABLE"));
+        return 1;
     }
-    return 1;
+    bool enable;
+    if (streq_P(argv[3], PSTR("ENABLE"))) {
+        enable = true;
+    } else if (streq_P(argv[3], PSTR("DISABLE"))) {
+        enable = false;
+    } else {
+        msg.control.println(F("ERROR: INPUT requires ENABLE or DISABLE"));
+        return 1;
+    }
+    if (!requireInput(pin)) return 1;
+    enableInput(pin, enable);
+    printInputFlag(argv[1], F("input"), enable);
+    return 0;
 }
 
 // SET <pin> DISPLAY ENABLE|DISABLE
@@ -414,24 +449,15 @@ static int set_output(uint8_t pin, int argc, const char* const* argv) {
     return 1;
 }
 
-// SET <pin> CALIBRATION PRESET — clear custom calibration
-static int set_calibration(uint8_t pin, int argc, const char* const* argv) {
-    if (argc < 4) {
-        msg.control.println(F("ERROR: CALIBRATION requires PRESET"));
+// SET <pin> CAL PRESET — clear custom calibration, restore preset.
+// Same backend as `CLEAR <pin> CALIBRATION`.
+static int set_cal_preset(uint8_t pin, int argc, const char* const* argv,
+                          int argStart) {
+    (void)argc; (void)argStart;
+    if (!clearInputCalibration(pin)) {
+        msg.control.println(F("ERROR: Input not configured"));
         return 1;
     }
-    if (!streq_P(argv[3], PSTR("PRESET"))) {
-        msg.control.println(F("ERROR: Unknown CALIBRATION subcommand"));
-        msg.control.println(F("  Use: SET <pin> CALIBRATION PRESET"));
-        return 1;
-    }
-
-    Input* input = requireInput(pin);
-    if (!input) return 1;
-
-    input->flags.useCustomCalibration = false;
-    memset(&input->customCalibration, 0, sizeof(CalibrationOverride));
-
     msg.control.print(F("Cleared custom calibration for pin "));
     msg.control.println(argv[1]);
     msg.control.println(F("Using preset calibration from sensor library"));
@@ -439,15 +465,16 @@ static int set_calibration(uint8_t pin, int argc, const char* const* argv) {
     return 0;
 }
 
-// SET <pin> RPM <poles> <ratio> [<mult>] <timeout> <min> <max>
-static int set_rpm(uint8_t pin, int argc, const char* const* argv) {
-    // 5 params -> argc==8 (cmd + pin + field + 5 values); 6 params -> argc==9.
-    if (argc != 8 && argc != 9) {
+// SET <pin> CAL RPM <poles> <ratio> [<mult>] <timeout> <min> <max>
+static int set_cal_rpm(uint8_t pin, int argc, const char* const* argv,
+                       int argStart) {
+    // 5 params -> argc == argStart+5; 6 params (with custom mult) -> argStart+6.
+    if (argc != argStart + 5 && argc != argStart + 6) {
         msg.control.println(F("ERROR: RPM requires 5 or 6 parameters"));
-        msg.control.println(F("  Usage: SET <pin> RPM <poles> <ratio> <timeout> <min> <max>"));
-        msg.control.println(F("     or: SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>"));
-        msg.control.println(F("  Example: SET 5 RPM 12 3.0 2000 100 8000"));
-        msg.control.println(F("       or: SET 5 RPM 12 3.0 1.02 2000 100 8000"));
+        msg.control.println(F("  Usage: SET <pin> CAL RPM <poles> <ratio> <timeout> <min> <max>"));
+        msg.control.println(F("     or: SET <pin> CAL RPM <poles> <ratio> <mult> <timeout> <min> <max>"));
+        msg.control.println(F("  Example: SET 5 CAL RPM 12 3.0 2000 100 8000"));
+        msg.control.println(F("       or: SET 5 CAL RPM 12 3.0 1.02 2000 100 8000"));
         return 1;
     }
 
@@ -461,8 +488,8 @@ static int set_rpm(uint8_t pin, int argc, const char* const* argv) {
     uint16_t min_rpm;
     uint16_t max_rpm;
 
-    int paramStart = 3;
-    bool hasCustomMult = (argc == 9);
+    int paramStart = argStart;
+    bool hasCustomMult = (argc == argStart + 6);
 
     poles = (byte)atoi(argv[paramStart]);
     pulley_ratio = atof(argv[paramStart + 1]);
@@ -533,15 +560,16 @@ static int set_rpm(uint8_t pin, int argc, const char* const* argv) {
     return 0;
 }
 
-// SET <pin> SPEED <ppr> <tire_circ_mm> <ratio> [<mult>] <timeout> <max_speed>
-static int set_speed(uint8_t pin, int argc, const char* const* argv) {
-    // 5 params -> argc==8 (cmd + pin + field + 5 values); 6 params -> argc==9.
-    if (argc != 8 && argc != 9) {
+// SET <pin> CAL SPEED <ppr> <tire_circ_mm> <ratio> [<mult>] <timeout> <max_speed>
+static int set_cal_speed(uint8_t pin, int argc, const char* const* argv,
+                         int argStart) {
+    // 5 params -> argc == argStart+5; 6 params (with custom mult) -> argStart+6.
+    if (argc != argStart + 5 && argc != argStart + 6) {
         msg.control.println(F("ERROR: SPEED requires 5 or 6 parameters"));
-        msg.control.println(F("  Usage: SET <pin> SPEED <ppr> <tire_circ> <ratio> <timeout> <max_speed>"));
-        msg.control.println(F("     or: SET <pin> SPEED <ppr> <tire_circ> <ratio> <mult> <timeout> <max_speed>"));
-        msg.control.println(F("  Example: SET 2 SPEED 100 2008 3.73 2000 300"));
-        msg.control.println(F("       or: SET 2 SPEED 100 2008 3.73 1.05 2000 300"));
+        msg.control.println(F("  Usage: SET <pin> CAL SPEED <ppr> <tire_circ> <ratio> <timeout> <max_speed>"));
+        msg.control.println(F("     or: SET <pin> CAL SPEED <ppr> <tire_circ> <ratio> <mult> <timeout> <max_speed>"));
+        msg.control.println(F("  Example: SET 2 CAL SPEED 100 2008 3.73 2000 300"));
+        msg.control.println(F("       or: SET 2 CAL SPEED 100 2008 3.73 1.05 2000 300"));
         return 1;
     }
 
@@ -555,8 +583,8 @@ static int set_speed(uint8_t pin, int argc, const char* const* argv) {
     uint16_t timeout_ms;
     uint16_t max_speed_kph;
 
-    int paramStart = 3;
-    bool hasCustomMult = (argc == 9);
+    int paramStart = argStart;
+    bool hasCustomMult = (argc == argStart + 6);
 
     pulses_per_rev = (uint8_t)atoi(argv[paramStart]);
     tire_circumference_mm = (uint16_t)atoi(argv[paramStart + 1]);
@@ -670,12 +698,13 @@ static int set_can_timeout(uint8_t pin, int argc, const char* const* argv) {
 }
 #endif // ENABLE_CAN
 
-// SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>
-static int set_pressure_linear(uint8_t pin, int argc, const char* const* argv) {
-    if (argc < 7) {
+// SET <pin> CAL PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>
+static int set_cal_pressure_linear(uint8_t pin, int argc, const char* const* argv,
+                                   int argStart) {
+    if (argc < argStart + 4) {
         msg.control.println(F("ERROR: PRESSURE_LINEAR requires 4 parameters"));
-        msg.control.println(F("  Usage: SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>"));
-        msg.control.println(F("  Example: SET A1 PRESSURE_LINEAR 0.5 4.5 0.0 7.0"));
+        msg.control.println(F("  Usage: SET <pin> CAL PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>"));
+        msg.control.println(F("  Example: SET A1 CAL PRESSURE_LINEAR 0.5 4.5 0.0 7.0"));
         return 1;
     }
 
@@ -685,10 +714,10 @@ static int set_pressure_linear(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
 
-    float vmin = atof(argv[3]);
-    float vmax = atof(argv[4]);
-    float pmin = atof(argv[5]);
-    float pmax = atof(argv[6]);
+    float vmin = atof(argv[argStart]);
+    float vmax = atof(argv[argStart + 1]);
+    float pmin = atof(argv[argStart + 2]);
+    float pmax = atof(argv[argStart + 3]);
 
     if (vmin >= vmax) {
         msg.control.println(F("ERROR: vmin must be less than vmax"));
@@ -732,10 +761,11 @@ static int set_pressure_linear(uint8_t pin, int argc, const char* const* argv) {
     return 0;
 }
 
-// SET <pin> BIAS <resistor>
+// SET <pin> CAL BIAS <resistor>
 // Generic bias resistor — works with Steinhart-Hart, Lookup, Beta, Pressure Polynomial
-static int set_bias(uint8_t pin, int argc, const char* const* argv) {
-    if (argc < 4) {
+static int set_cal_bias(uint8_t pin, int argc, const char* const* argv,
+                        int argStart) {
+    if (argc < argStart + 1) {
         msg.control.println(F("ERROR: BIAS requires a resistor value"));
         return 1;
     }
@@ -746,7 +776,7 @@ static int set_bias(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
 
-    float bias = atof(argv[3]);
+    float bias = atof(argv[argStart]);
 
     if (input->calibrationType != CAL_THERMISTOR_STEINHART &&
         input->calibrationType != CAL_THERMISTOR_TABLE &&
@@ -788,12 +818,13 @@ static int set_bias(uint8_t pin, int argc, const char* const* argv) {
     return 0;
 }
 
-// SET <pin> STEINHART <bias_r> <a> <b> <c>
-static int set_steinhart(uint8_t pin, int argc, const char* const* argv) {
-    if (argc < 7) {
+// SET <pin> CAL STEINHART <bias_r> <a> <b> <c>
+static int set_cal_steinhart(uint8_t pin, int argc, const char* const* argv,
+                             int argStart) {
+    if (argc < argStart + 4) {
         msg.control.println(F("ERROR: STEINHART requires 4 parameters"));
-        msg.control.println(F("  Usage: SET <pin> STEINHART <bias_r> <a> <b> <c>"));
-        msg.control.println(F("  Example: SET A0 STEINHART 10000 0.001129 0.0002341 0.00000008775"));
+        msg.control.println(F("  Usage: SET <pin> CAL STEINHART <bias_r> <a> <b> <c>"));
+        msg.control.println(F("  Example: SET A0 CAL STEINHART 10000 0.001129 0.0002341 0.00000008775"));
         return 1;
     }
 
@@ -803,10 +834,10 @@ static int set_steinhart(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
 
-    float bias_r = atof(argv[3]);
-    float a = atof(argv[4]);
-    float b = atof(argv[5]);
-    float c = atof(argv[6]);
+    float bias_r = atof(argv[argStart]);
+    float a = atof(argv[argStart + 1]);
+    float b = atof(argv[argStart + 2]);
+    float c = atof(argv[argStart + 3]);
 
     if (bias_r <= 0) {
         msg.control.println(F("ERROR: bias_r must be > 0"));
@@ -838,12 +869,13 @@ static int set_steinhart(uint8_t pin, int argc, const char* const* argv) {
     return 0;
 }
 
-// SET <pin> BETA <bias_r> <beta> <r0> <t0>
-static int set_beta(uint8_t pin, int argc, const char* const* argv) {
-    if (argc < 7) {
+// SET <pin> CAL BETA <bias_r> <beta> <r0> <t0>
+static int set_cal_beta(uint8_t pin, int argc, const char* const* argv,
+                        int argStart) {
+    if (argc < argStart + 4) {
         msg.control.println(F("ERROR: BETA requires 4 parameters"));
-        msg.control.println(F("  Usage: SET <pin> BETA <bias_r> <beta> <r0> <t0>"));
-        msg.control.println(F("  Example: SET A0 BETA 10000 3950 10000 25"));
+        msg.control.println(F("  Usage: SET <pin> CAL BETA <bias_r> <beta> <r0> <t0>"));
+        msg.control.println(F("  Example: SET A0 CAL BETA 10000 3950 10000 25"));
         msg.control.println(F("  Where: bias_r=bias resistor (Ω), beta=β coefficient (K),"));
         msg.control.println(F("         r0=ref resistance (Ω), t0=ref temp (°C, typically 25)"));
         return 1;
@@ -855,10 +887,10 @@ static int set_beta(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
 
-    float bias_r = atof(argv[3]);
-    float beta = atof(argv[4]);
-    float r0 = atof(argv[5]);
-    float t0 = atof(argv[6]);
+    float bias_r = atof(argv[argStart]);
+    float beta = atof(argv[argStart + 1]);
+    float r0 = atof(argv[argStart + 2]);
+    float t0 = atof(argv[argStart + 3]);
 
     if (bias_r <= 0) {
         msg.control.println(F("ERROR: bias_r must be > 0"));
@@ -900,12 +932,13 @@ static int set_beta(uint8_t pin, int argc, const char* const* argv) {
     return 0;
 }
 
-// SET <pin> PRESSURE_POLY <bias_r> <a> <b> <c>
-static int set_pressure_poly(uint8_t pin, int argc, const char* const* argv) {
-    if (argc < 7) {
+// SET <pin> CAL PRESSURE_POLY <bias_r> <a> <b> <c>
+static int set_cal_pressure_poly(uint8_t pin, int argc, const char* const* argv,
+                                 int argStart) {
+    if (argc < argStart + 4) {
         msg.control.println(F("ERROR: PRESSURE_POLY requires 4 parameters"));
-        msg.control.println(F("  Usage: SET <pin> PRESSURE_POLY <bias_r> <a> <b> <c>"));
-        msg.control.println(F("  Example: SET A1 PRESSURE_POLY 184 -6.75e-4 2.54e-6 1.87e-9"));
+        msg.control.println(F("  Usage: SET <pin> CAL PRESSURE_POLY <bias_r> <a> <b> <c>"));
+        msg.control.println(F("  Example: SET A1 CAL PRESSURE_POLY 184 -6.75e-4 2.54e-6 1.87e-9"));
         return 1;
     }
 
@@ -915,10 +948,10 @@ static int set_pressure_poly(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
 
-    float bias_r = atof(argv[3]);
-    float a = atof(argv[4]);
-    float b = atof(argv[5]);
-    float c = atof(argv[6]);
+    float bias_r = atof(argv[argStart]);
+    float a = atof(argv[argStart + 1]);
+    float b = atof(argv[argStart + 2]);
+    float c = atof(argv[argStart + 3]);
 
     if (bias_r <= 0) {
         msg.control.println(F("ERROR: bias_r must be > 0"));
@@ -947,40 +980,104 @@ static int set_pressure_poly(uint8_t pin, int argc, const char* const* argv) {
     return 0;
 }
 
+//=============================================================================
+// CAL profiles — sub-table reached via SET <pin> CAL <profile> ...
+//=============================================================================
+
+static const char PSTR_CAL_STEINHART[]       PROGMEM = "STEINHART";
+static const char PSTR_CAL_BETA[]            PROGMEM = "BETA";
+static const char PSTR_CAL_PRESSURE_LINEAR[] PROGMEM = "PRESSURE_LINEAR";
+static const char PSTR_CAL_PRESSURE_POLY[]   PROGMEM = "PRESSURE_POLY";
+static const char PSTR_CAL_RPM[]             PROGMEM = "RPM";
+static const char PSTR_CAL_SPEED[]           PROGMEM = "SPEED";
+static const char PSTR_CAL_BIAS[]            PROGMEM = "BIAS";
+static const char PSTR_CAL_PRESET[]          PROGMEM = "PRESET";
+
+static const char PSTR_HELP_CAL_STEINHART[] PROGMEM =
+    "  SET <pin> CAL STEINHART <bias> <a> <b> <c>      Steinhart-Hart thermistor";
+static const char PSTR_HELP_CAL_BETA[] PROGMEM =
+    "  SET <pin> CAL BETA <bias> <beta> <r0> <t0>      Beta-equation thermistor";
+static const char PSTR_HELP_CAL_PRESSURE_LINEAR[] PROGMEM =
+    "  SET <pin> CAL PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>";
+static const char PSTR_HELP_CAL_PRESSURE_POLY[] PROGMEM =
+    "  SET <pin> CAL PRESSURE_POLY <bias> <a> <b> <c>  VDO polynomial pressure";
+static const char PSTR_HELP_CAL_RPM[] PROGMEM =
+    "  SET <pin> CAL RPM <poles> <ratio> [<mult>] <timeout> <min> <max>";
+static const char PSTR_HELP_CAL_SPEED[] PROGMEM =
+    "  SET <pin> CAL SPEED <ppr> <tire_circ> <ratio> [<mult>] <timeout> <max>";
+static const char PSTR_HELP_CAL_BIAS[] PROGMEM =
+    "  SET <pin> CAL BIAS <resistor>                   Bias resistor (Ω)";
+static const char PSTR_HELP_CAL_PRESET[] PROGMEM =
+    "  SET <pin> CAL PRESET                            Clear custom, restore preset";
+
+static const CalProfile CAL_PROFILES[] PROGMEM = {
+    { PSTR_CAL_STEINHART,       set_cal_steinhart,       PSTR_HELP_CAL_STEINHART       },
+    { PSTR_CAL_BETA,            set_cal_beta,            PSTR_HELP_CAL_BETA            },
+    { PSTR_CAL_PRESSURE_LINEAR, set_cal_pressure_linear, PSTR_HELP_CAL_PRESSURE_LINEAR },
+    { PSTR_CAL_PRESSURE_POLY,   set_cal_pressure_poly,   PSTR_HELP_CAL_PRESSURE_POLY   },
+    { PSTR_CAL_RPM,             set_cal_rpm,             PSTR_HELP_CAL_RPM             },
+    { PSTR_CAL_SPEED,           set_cal_speed,           PSTR_HELP_CAL_SPEED           },
+    { PSTR_CAL_BIAS,            set_cal_bias,            PSTR_HELP_CAL_BIAS            },
+    { PSTR_CAL_PRESET,          set_cal_preset,          PSTR_HELP_CAL_PRESET          },
+};
+static const uint8_t NUM_CAL_PROFILES = sizeof(CAL_PROFILES) / sizeof(CalProfile);
+
+// SET <pin> CAL <profile> [<args>]
+// Top-level dispatcher into CAL_PROFILES. Reads token at argv[3], calls the
+// matched leaf with argStart=4 so the leaf's args land at argv[4..].
+static int set_cal(uint8_t pin, int argc, const char* const* argv) {
+    if (argc < 4) {
+        msg.control.println(F("ERROR: CAL requires a profile keyword"));
+        msg.control.println(F("  Usage: SET <pin> CAL <profile> [<args>]"));
+        msg.control.println(F("  Profiles: STEINHART, BETA, PRESSURE_LINEAR, PRESSURE_POLY,"));
+        msg.control.println(F("            RPM, SPEED, BIAS, PRESET"));
+        return 1;
+    }
+    const char* profile = argv[3];
+    for (uint8_t i = 0; i < NUM_CAL_PROFILES; i++) {
+        const char* token = (const char*)pgm_read_ptr(&CAL_PROFILES[i].token);
+        if (streq_P(profile, token)) {
+            CalProfileHandler h = (CalProfileHandler)pgm_read_ptr(&CAL_PROFILES[i].handler);
+            return h(pin, argc, argv, 4);
+        }
+    }
+    msg.control.print(F("ERROR: Unknown CAL profile '"));
+    msg.control.print(profile);
+    msg.control.println(F("'"));
+    msg.control.println(F("  Type 'HELP SET' to see CAL profiles"));
+    return 1;
+}
+
 // SET field tokens — PROGMEM string literals so the dispatch table itself
 // can live in flash on AVR (saves ~70 bytes RAM on mega2560).
 static const char PSTR_SET_APPLICATION[]     PROGMEM = "APPLICATION";
 static const char PSTR_SET_SENSOR[]          PROGMEM = "SENSOR";
 static const char PSTR_SET_NAME[]            PROGMEM = "NAME";
-static const char PSTR_SET_DISPLAY_NAME[]    PROGMEM = "DISPLAY_NAME";
+static const char PSTR_SET_ABBR[]            PROGMEM = "ABBR";
+static const char PSTR_SET_INPUT[]           PROGMEM = "INPUT";
 static const char PSTR_SET_DISPLAY[]         PROGMEM = "DISPLAY";
 static const char PSTR_SET_UNITS[]           PROGMEM = "UNITS";
 static const char PSTR_SET_ALARM[]           PROGMEM = "ALARM";
 static const char PSTR_SET_DIVIDER[]         PROGMEM = "DIVIDER";
 static const char PSTR_SET_OUTPUT[]          PROGMEM = "OUTPUT";
-static const char PSTR_SET_CALIBRATION[]     PROGMEM = "CALIBRATION";
-static const char PSTR_SET_RPM[]             PROGMEM = "RPM";
-static const char PSTR_SET_SPEED[]           PROGMEM = "SPEED";
+static const char PSTR_SET_CAL[]             PROGMEM = "CAL";
 #if ENABLE_CAN
 static const char PSTR_SET_CAN_TIMEOUT[]     PROGMEM = "CAN_TIMEOUT";
 #endif
-static const char PSTR_SET_PRESSURE_LINEAR[] PROGMEM = "PRESSURE_LINEAR";
-static const char PSTR_SET_BIAS[]            PROGMEM = "BIAS";
-static const char PSTR_SET_STEINHART[]       PROGMEM = "STEINHART";
-static const char PSTR_SET_BETA[]            PROGMEM = "BETA";
-static const char PSTR_SET_PRESSURE_POLY[]   PROGMEM = "PRESSURE_POLY";
 
 // Each help block is printed verbatim by printHelpSet: it bakes in the
 // "SET <pin> <field>" prefix and may span multiple lines so leaves with
-// sub-forms (ALARM, OUTPUT) can document every supported shape.
+// sub-forms (ALARM, OUTPUT, CAL) can document every supported shape.
 static const char PSTR_HELP_SET_APPLICATION[] PROGMEM =
     "  SET <pin> APPLICATION <app>   Set measurement type (CHT, OIL_PRESSURE, ...)";
 static const char PSTR_HELP_SET_SENSOR[] PROGMEM =
     "  SET <pin> SENSOR <sensor>     Set hardware sensor (e.g. MAX6675, VDO_120C)";
 static const char PSTR_HELP_SET_NAME[] PROGMEM =
-    "  SET <pin> NAME <name>         Set abbreviated name (8 chars)";
-static const char PSTR_HELP_SET_DISPLAY_NAME[] PROGMEM =
-    "  SET <pin> DISPLAY_NAME <name> Set full name (32 chars)";
+    "  SET <pin> NAME <name>         Set full display label (32 chars)";
+static const char PSTR_HELP_SET_ABBR[] PROGMEM =
+    "  SET <pin> ABBR <abbr>         Set abbreviated label (8 chars)";
+static const char PSTR_HELP_SET_INPUT[] PROGMEM =
+    "  SET <pin> INPUT ENABLE|DISABLE  Enable or disable this input";
 static const char PSTR_HELP_SET_DISPLAY[] PROGMEM =
     "  SET <pin> DISPLAY ENABLE|DISABLE  Toggle LCD display for this input";
 static const char PSTR_HELP_SET_UNITS[] PROGMEM =
@@ -997,56 +1094,41 @@ static const char PSTR_HELP_SET_OUTPUT[] PROGMEM =
     "  SET <pin> OUTPUT STATUS       Show this input's output mask\n"
     "  SET <pin> OUTPUT <tgt> ENABLE|DISABLE  tgt = CAN, RealDash, Serial, SD_Log\n"
     "  SET <pin> OUTPUT ALL ENABLE|DISABLE";
-static const char PSTR_HELP_SET_CALIBRATION[] PROGMEM =
-    "  SET <pin> CALIBRATION PRESET  Clear custom, restore preset calibration";
-static const char PSTR_HELP_SET_RPM[] PROGMEM =
-    "  SET <pin> RPM <poles> <ratio> [<mult>] <timeout> <min> <max>";
-static const char PSTR_HELP_SET_SPEED[] PROGMEM =
-    "  SET <pin> SPEED <ppr> <tire_circ> <ratio> [<mult>] <timeout> <max>";
+// SET <pin> CAL — the help block lists every profile so HELP SET stays a
+// single source of truth. PROGMEM-resident multi-line string built from the
+// per-profile help fields would require runtime concat; since the profile
+// list is stable, it's cheaper and clearer to enumerate here. printHelpSet
+// also walks CAL_PROFILES below so this stays in sync.
+static const char PSTR_HELP_SET_CAL[] PROGMEM =
+    "  SET <pin> CAL <profile> [<args>]  Custom calibration (see profiles below)";
 #if ENABLE_CAN
 static const char PSTR_HELP_SET_CAN_TIMEOUT[] PROGMEM =
     "  SET <pin> CAN_TIMEOUT <ms>    CAN-imported sensor timeout (100-30000)";
 #endif
-static const char PSTR_HELP_SET_PRESSURE_LINEAR[] PROGMEM =
-    "  SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>";
-static const char PSTR_HELP_SET_BIAS[] PROGMEM =
-    "  SET <pin> BIAS <resistor>     Set thermistor/pressure bias resistor (Ω)";
-static const char PSTR_HELP_SET_STEINHART[] PROGMEM =
-    "  SET <pin> STEINHART <bias> <a> <b> <c>      Steinhart-Hart thermistor";
-static const char PSTR_HELP_SET_BETA[] PROGMEM =
-    "  SET <pin> BETA <bias> <beta> <r0> <t0>      Beta-equation thermistor";
-static const char PSTR_HELP_SET_PRESSURE_POLY[] PROGMEM =
-    "  SET <pin> PRESSURE_POLY <bias> <a> <b> <c>  VDO polynomial pressure";
 
 // SET field dispatch table — PROGMEM-resident on AVR; access via pgm_read_ptr.
 static const SetField SET_FIELDS[] PROGMEM = {
     { PSTR_SET_APPLICATION,     set_application,     PSTR_HELP_SET_APPLICATION     },
     { PSTR_SET_SENSOR,          set_sensor,          PSTR_HELP_SET_SENSOR          },
     { PSTR_SET_NAME,            set_name,            PSTR_HELP_SET_NAME            },
-    { PSTR_SET_DISPLAY_NAME,    set_display_name,    PSTR_HELP_SET_DISPLAY_NAME    },
+    { PSTR_SET_ABBR,            set_abbr,            PSTR_HELP_SET_ABBR            },
+    { PSTR_SET_INPUT,           set_input,           PSTR_HELP_SET_INPUT           },
     { PSTR_SET_DISPLAY,         set_display,         PSTR_HELP_SET_DISPLAY         },
     { PSTR_SET_UNITS,           set_units,           PSTR_HELP_SET_UNITS           },
     { PSTR_SET_ALARM,           set_alarm,           PSTR_HELP_SET_ALARM           },
     { PSTR_SET_DIVIDER,         set_divider,         PSTR_HELP_SET_DIVIDER         },
     { PSTR_SET_OUTPUT,          set_output,          PSTR_HELP_SET_OUTPUT          },
-    { PSTR_SET_CALIBRATION,     set_calibration,     PSTR_HELP_SET_CALIBRATION     },
-    { PSTR_SET_RPM,             set_rpm,             PSTR_HELP_SET_RPM             },
-    { PSTR_SET_SPEED,           set_speed,           PSTR_HELP_SET_SPEED           },
+    { PSTR_SET_CAL,             set_cal,             PSTR_HELP_SET_CAL             },
 #if ENABLE_CAN
     { PSTR_SET_CAN_TIMEOUT,     set_can_timeout,     PSTR_HELP_SET_CAN_TIMEOUT     },
 #endif
-    { PSTR_SET_PRESSURE_LINEAR, set_pressure_linear, PSTR_HELP_SET_PRESSURE_LINEAR },
-    { PSTR_SET_BIAS,            set_bias,            PSTR_HELP_SET_BIAS            },
-    { PSTR_SET_STEINHART,       set_steinhart,       PSTR_HELP_SET_STEINHART       },
-    { PSTR_SET_BETA,            set_beta,            PSTR_HELP_SET_BETA            },
-    { PSTR_SET_PRESSURE_POLY,   set_pressure_poly,   PSTR_HELP_SET_PRESSURE_POLY   },
 };
 static const uint8_t NUM_SET_FIELDS = sizeof(SET_FIELDS) / sizeof(SetField);
 
 void printHelpSet() {
     msg.control.println();
     msg.control.println(F("=== SET Commands ==="));
-    msg.control.println(F("Configure input pins (application, sensor, names, units, alarms)"));
+    msg.control.println(F("Configure input pins (application, sensor, names, units, alarms, calibration)"));
     msg.control.println();
     msg.control.println(F("  SET <pin> <app> <sensor>      Combined config (e.g. SET 6 CHT MAX6675)"));
     // Each entry's help string is printed verbatim — bakes in the "SET <pin>
@@ -1056,8 +1138,14 @@ void printHelpSet() {
         if (!help) continue;
         msg.control.println((const __FlashStringHelper*)help);
     }
-    msg.control.println();
-    msg.control.println(F("See also: HELP CALIBRATION for advanced sensor calibration"));
+    // Enumerate the CAL sub-table so HELP SET shows every calibration profile
+    // without forcing the user into a separate HELP step.
+    msg.control.println(F("CAL profiles:"));
+    for (uint8_t i = 0; i < NUM_CAL_PROFILES; i++) {
+        const char* help = (const char*)pgm_read_ptr(&CAL_PROFILES[i].help);
+        if (!help) continue;
+        msg.control.println((const __FlashStringHelper*)help);
+    }
     msg.control.println();
 }
 
@@ -1267,15 +1355,20 @@ int cmd_set(int argc, const char* const* argv) {
 }
 
 #if ENABLE_SELFTEST
-// Validate every SET_FIELDS entry. Reads through pgm_read_ptr — the same path
-// cmd_set's dispatch loop takes — so a regression that breaks PROGMEM access
-// fails this check immediately.
+// Validate every SET_FIELDS entry, then every CAL_PROFILES entry. Reads through
+// pgm_read_ptr — the same path the dispatcher takes — so a regression that
+// breaks PROGMEM access fails this check immediately.
 int selftestSetTable() {
     int failures = 0;
     for (uint8_t i = 0; i < NUM_SET_FIELDS; i++) {
         const char*     tok = (const char*)pgm_read_ptr(&SET_FIELDS[i].token);
         SetFieldHandler h   = (SetFieldHandler)pgm_read_ptr(&SET_FIELDS[i].handler);
         failures += validateDispatchEntry(F("SET"), i, tok, (const void*)h, true);
+    }
+    for (uint8_t i = 0; i < NUM_CAL_PROFILES; i++) {
+        const char*       tok = (const char*)pgm_read_ptr(&CAL_PROFILES[i].token);
+        CalProfileHandler h   = (CalProfileHandler)pgm_read_ptr(&CAL_PROFILES[i].handler);
+        failures += validateDispatchEntry(F("SET CAL"), i, tok, (const void*)h, true);
     }
     return failures;
 }

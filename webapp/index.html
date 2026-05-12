@@ -1356,7 +1356,7 @@ async function applyInput(pinStr) {
     }
 
     if (!orig || cur.enabled !== orig.enabled)
-      await sendChecked(cur.enabled ? 'ENABLE ' + pinStr : 'DISABLE ' + pinStr);
+      await sendChecked('SET ' + pinStr + ' INPUT ' + (cur.enabled ? 'ENABLE' : 'DISABLE'));
 
     const OUTPUT_TARGETS = ['CAN', 'REALDASH', 'SERIAL', 'SD_LOG'];
     const curMask  = cur.outputMask  ?? 0x0F;

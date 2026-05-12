@@ -107,7 +107,6 @@ void printHelpCategory(const char* category);
 // Individual help printer functions
 void printHelpList();
 void printHelpSet();
-void printHelpCalibration();
 void printHelpControl();
 void printHelpOutput();
 void printHelpBus();
