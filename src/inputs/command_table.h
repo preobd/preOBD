@@ -30,9 +30,6 @@ extern const uint8_t NUM_COMMANDS;
 // Called by microrl execute callback
 int dispatchCommand(int argc, const char* const* argv);
 
-// Helper: Check if command is read-only (allowed in RUN mode)
-bool isReadOnlyCommand(const char* cmdName);
-
 //-----------------------------------------------------------------------------
 // Subcommand dispatch (used by handlers like SET / BUS / SYSTEM that themselves
 // dispatch on a second token, e.g. "SET <pin> APPLICATION ..." or "BUS LIST").
@@ -67,6 +64,8 @@ typedef int (*SubcommandHandler)(int argc, const char* const* argv, int tokenInd
 struct Subcommand {
     const char* token;          // PROGMEM-resident subcommand keyword (uppercase)
     SubcommandHandler handler;  // Leaf handler
+    bool runModeAllowed;        // true = also runnable in RUN mode (read-only verbs);
+                                // false = CONFIG-only (mutates state or reboots)
 };
 
 // Look up `token` (case-insensitive) in `table` and call its handler.

@@ -291,15 +291,18 @@ static const char PSTR_SYS_INTERVAL[] PROGMEM = "INTERVAL";
 static const char PSTR_SYS_REBOOT[] PROGMEM = "REBOOT";
 static const char PSTR_SYS_RESET[] PROGMEM = "RESET";
 
+// runModeAllowed: STATUS / PINS / DUMP are read-only and useful in RUN mode.
+// SEA_LEVEL / UNITS / INTERVAL mutate persistent config; REBOOT / RESET are
+// destructive. All four belong in CONFIG mode only.
 static const Subcommand SYSTEM_SUBCOMMANDS[] PROGMEM = {
-    { PSTR_SYS_STATUS, system_status },
-    { PSTR_SYS_PINS, system_pins },
-    { PSTR_SYS_DUMP, system_dump },
-    { PSTR_SYS_SEA_LEVEL, system_sea_level },
-    { PSTR_SYS_UNITS, system_units },
-    { PSTR_SYS_INTERVAL, system_interval },
-    { PSTR_SYS_REBOOT, system_reboot },
-    { PSTR_SYS_RESET, system_reset },
+    { PSTR_SYS_STATUS,    system_status,    true  },
+    { PSTR_SYS_PINS,      system_pins,      true  },
+    { PSTR_SYS_DUMP,      system_dump,      true  },
+    { PSTR_SYS_SEA_LEVEL, system_sea_level, false },
+    { PSTR_SYS_UNITS,     system_units,     false },
+    { PSTR_SYS_INTERVAL,  system_interval,  false },
+    { PSTR_SYS_REBOOT,    system_reboot,    false },
+    { PSTR_SYS_RESET,     system_reset,     false },
 };
 static const uint8_t NUM_SYSTEM_SUBCOMMANDS = sizeof(SYSTEM_SUBCOMMANDS) / sizeof(Subcommand);
 

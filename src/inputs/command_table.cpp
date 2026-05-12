@@ -92,7 +92,11 @@ const Command COMMANDS[] = {
     {"OUTPUT", cmd_output, "Configure outputs", true},
     {"DISPLAY", cmd_display, "Configure display", true},
     {"TRANSPORT", cmd_transport, "Configure message routing", true},
-    {"SYSTEM", cmd_system, "System configuration", true},
+    // SYSTEM: configModeOnly=false; per-subcommand runModeAllowed flags in
+    // SYSTEM_SUBCOMMANDS (cmd_system.cpp) gate the destructive verbs (RESET,
+    // REBOOT, SEA_LEVEL, UNITS, INTERVAL) while leaving STATUS / PINS / DUMP
+    // available in RUN mode.
+    {"SYSTEM", cmd_system, "System configuration", false},
     {"SAVE", cmd_save, "Save configuration", true},
     {"LOAD", cmd_load, "Load configuration", true},
 #if SUPPORTS_JSON_IMPORT_STREAM
@@ -119,23 +123,6 @@ const Command COMMANDS[] = {
 
 const uint8_t NUM_COMMANDS = sizeof(COMMANDS) / sizeof(Command);
 
-// Check if command is read-only (allowed in RUN mode)
-bool isReadOnlyCommand(const char* cmdName) {
-    return streq(cmdName, "HELP") ||
-           streq(cmdName, "?") ||
-           streq(cmdName, "VERSION") ||
-           streq(cmdName, "INFO") ||
-           streq(cmdName, "LIST") ||
-           streq(cmdName, "CONFIG") ||
-           streq(cmdName, "RUN") ||
-           streq(cmdName, "SYSTEM") ||  // Allow SYSTEM STATUS and SYSTEM DUMP in RUN mode
-           streq(cmdName, "LOG") ||     // Allow LOG STATUS, LOG TAGS in RUN mode (LEVEL/TAG require CONFIG)
-#if ENABLE_TEST_MODE
-           streq(cmdName, "TEST") ||
-#endif
-           false;
-}
-
 // Subcommand dispatcher (see command_table.h).
 //
 // Subcommand tables are declared PROGMEM by callers (BUS_SUBCOMMANDS,
@@ -150,6 +137,21 @@ int dispatchSubcommand(const Subcommand* table, uint8_t tableLen,
     for (uint8_t i = 0; i < tableLen; i++) {
         const char* entryToken = (const char*)pgm_read_ptr(&table[i].token);
         if (streq_P(token, entryToken)) {
+            // RUN-mode gate: per-subcommand. Top-level commands like SYSTEM and
+            // LOG are reachable in RUN mode (configModeOnly=false) so users can
+            // run read-only verbs (SYSTEM STATUS, LOG TAGS); the destructive
+            // siblings (SYSTEM RESET, SYSTEM REBOOT, etc.) carry
+            // runModeAllowed=false and are blocked here.
+            bool runOk = (bool)pgm_read_byte(&table[i].runModeAllowed);
+            if (!runOk && isInRunMode()) {
+                msg.control.print(F("ERROR: "));
+                msg.control.print(commandName);
+                msg.control.print(' ');
+                msg.control.print(token);
+                msg.control.println(F(" requires CONFIG mode"));
+                msg.control.println(F("  Type CONFIG to enter configuration mode"));
+                return 1;
+            }
             SubcommandHandler h = (SubcommandHandler)pgm_read_ptr(&table[i].handler);
             return h(argc, argv, tokenIndex);
         }
@@ -162,7 +164,19 @@ int dispatchSubcommand(const Subcommand* table, uint8_t tableLen,
     return 1;
 }
 
-// Main command dispatcher
+// Main command dispatcher.
+//
+// Mode gating is now table-driven: COMMANDS[i].configModeOnly is the single
+// source of truth. Commands that are wholly read-only (HELP, INFO, LIST, ...)
+// or wholly mode-switching (CONFIG, RUN) carry configModeOnly=false. Commands
+// that mutate state carry configModeOnly=true and are rejected in RUN mode.
+//
+// For commands that are *partly* mutating (SYSTEM, LOG), configModeOnly=false
+// at this level lets the dispatcher reach the handler; the handler's own
+// subcommand table — or, for cmd_log, inline isInRunMode() checks — gates the
+// destructive verbs. This is what fixes the SYSTEM RESET CONFIRM safety bug:
+// previously the wholesale "SYSTEM" allowlist let *any* SYSTEM subcommand run
+// in RUN mode.
 int dispatchCommand(int argc, const char* const* argv) {
     if (argc == 0) return 0;
 
@@ -172,20 +186,20 @@ int dispatchCommand(int argc, const char* const* argv) {
     cmdUpper[sizeof(cmdUpper) - 1] = '\0';
     for (char* p = cmdUpper; *p; p++) *p = toupper(*p);
 
-    // Mode gating check (except for mode-switching commands)
-    if (isInRunMode() && !isReadOnlyCommand(cmdUpper)) {
-        msg.control.println();
-        msg.control.println(F("========================================"));
-        msg.control.println(F("  ERROR: Configuration locked in RUN mode"));
-        msg.control.println(F("  Type CONFIG to enter configuration mode"));
-        msg.control.println(F("========================================"));
-        msg.control.println();
-        return 1;
-    }
-
-    // Look up command in table and dispatch
+    // Look up command in table; gate before dispatch.
     for (uint8_t i = 0; i < NUM_COMMANDS; i++) {
         if (streq(cmdUpper, COMMANDS[i].name)) {
+            if (COMMANDS[i].configModeOnly && isInRunMode()) {
+                msg.control.println();
+                msg.control.println(F("========================================"));
+                msg.control.print  (F("  ERROR: "));
+                msg.control.print  (cmdUpper);
+                msg.control.println(F(" requires CONFIG mode"));
+                msg.control.println(F("  Type CONFIG to enter configuration mode"));
+                msg.control.println(F("========================================"));
+                msg.control.println();
+                return 1;
+            }
             return COMMANDS[i].handler(argc, argv);
         }
     }
@@ -1167,6 +1181,10 @@ int cmd_log(int argc, const char* const* argv) {
 
     // LOG LEVEL <plane> <level> - set log level
     if (streq(subcmd, "LEVEL")) {
+        if (isInRunMode()) {
+            msg.control.println(F("ERROR: LOG LEVEL requires CONFIG mode (mutates log filter)"));
+            return 1;
+        }
         if (argc < 4) {
             msg.control.println(F("ERROR: LEVEL requires plane and level"));
             msg.control.println(F("  Usage: LOG LEVEL <CONTROL|DATA|DEBUG> <NONE|ERROR|WARN|INFO|DEBUG>"));
@@ -1221,6 +1239,10 @@ int cmd_log(int argc, const char* const* argv) {
 
     // LOG TAG <tag> <ENABLE|DISABLE> - enable/disable tag
     if (streq(subcmd, "TAG")) {
+        if (isInRunMode()) {
+            msg.control.println(F("ERROR: LOG TAG requires CONFIG mode (mutates log filter)"));
+            return 1;
+        }
         if (argc < 4) {
             msg.control.println(F("ERROR: TAG requires tag name and state"));
             msg.control.println(F("  Usage: LOG TAG <tagname> <ENABLE|DISABLE>"));

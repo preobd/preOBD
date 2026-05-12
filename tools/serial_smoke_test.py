@@ -145,7 +145,98 @@ def test_selftest_after(s: Session) -> Result:
     return check("SELFTEST after tests", out, must_contain=["SELFTEST: PASS"])
 
 
+# --- RUN-mode gating tests (#194) ---
+#
+# These first switch the device into RUN mode, run their assertion, and the
+# group ends with a CONFIG flip back so subsequent tests are unaffected. We
+# deliberately DO NOT test the destructive-in-CONFIG path (SYSTEM RESET CONFIRM
+# in CONFIG mode would wipe state) — only the *rejection* path in RUN mode.
+
+def test_run_mode_allows_system_status(s: Session) -> Result:
+    """SYSTEM STATUS is runModeAllowed=true; should still work in RUN mode."""
+    s.send("RUN", wait=0.4)
+    out = s.send("SYSTEM STATUS", wait=1.5)
+    return check("RUN: SYSTEM STATUS still works", out,
+                 must_not_contain=["requires CONFIG mode"])
+
+
+def test_run_mode_blocks_system_reset(s: Session) -> Result:
+    """SYSTEM RESET in RUN mode is the headline safety bug — must be blocked."""
+    s.send("RUN", wait=0.4)
+    out = s.send("SYSTEM RESET CONFIRM", wait=1.0)
+    return check("RUN: SYSTEM RESET CONFIRM blocked", out,
+                 must_contain=["SYSTEM RESET requires CONFIG mode"],
+                 must_not_contain=["Erasing all configuration",
+                                   "Configuration reset complete",
+                                   "Rebooting"])
+
+
+def test_run_mode_blocks_system_reboot(s: Session) -> Result:
+    """SYSTEM REBOOT in RUN mode would silently reboot the device."""
+    s.send("RUN", wait=0.4)
+    out = s.send("SYSTEM REBOOT", wait=1.0)
+    return check("RUN: SYSTEM REBOOT blocked", out,
+                 must_contain=["SYSTEM REBOOT requires CONFIG mode"],
+                 must_not_contain=["Rebooting system"])
+
+
+def test_run_mode_blocks_system_sea_level(s: Session) -> Result:
+    s.send("RUN", wait=0.4)
+    out = s.send("SYSTEM SEA_LEVEL 1013", wait=0.6)
+    return check("RUN: SYSTEM SEA_LEVEL blocked", out,
+                 must_contain=["SYSTEM SEA_LEVEL requires CONFIG mode"])
+
+
+def test_run_mode_allows_log_status(s: Session) -> Result:
+    s.send("RUN", wait=0.4)
+    out = s.send("LOG STATUS", wait=1.0)
+    return check("RUN: LOG STATUS still works", out,
+                 must_not_contain=["requires CONFIG mode"])
+
+
+def test_run_mode_blocks_log_level(s: Session) -> Result:
+    s.send("RUN", wait=0.4)
+    out = s.send("LOG LEVEL DEBUG INFO", wait=0.6)
+    return check("RUN: LOG LEVEL blocked", out,
+                 must_contain=["LOG LEVEL requires CONFIG mode"])
+
+
+def test_run_mode_blocks_bus_i2c(s: Session) -> Result:
+    """BUS is configModeOnly=true at the parent level — gate fires in dispatchCommand."""
+    s.send("RUN", wait=0.4)
+    out = s.send("BUS I2C", wait=0.6)
+    return check("RUN: BUS I2C blocked", out,
+                 must_contain=["BUS requires CONFIG mode"])
+
+
+def test_run_mode_blocks_set(s: Session) -> Result:
+    """SET is configModeOnly=true; gate fires before reaching SET dispatch."""
+    s.send("RUN", wait=0.4)
+    out = s.send("SET A0 APPLICATION CHT", wait=0.6)
+    return check("RUN: SET blocked", out,
+                 must_contain=["SET requires CONFIG mode"])
+
+
+def test_run_mode_unknown_command(s: Session) -> Result:
+    """Sanity: unknown commands in RUN mode now get 'Unknown command' (the
+    pre-fix code produced 'Configuration locked in RUN mode' for any unknown
+    input, which was misleading)."""
+    s.send("RUN", wait=0.4)
+    out = s.send("DEFINITELYNOTACOMMAND", wait=0.6)
+    return check("RUN: unknown command says 'Unknown'", out,
+                 must_contain=["Unknown command"],
+                 must_not_contain=["requires CONFIG mode"])
+
+
+def test_back_to_config(s: Session) -> Result:
+    """Cleanup: leave the device in CONFIG mode for any further work."""
+    out = s.send("CONFIG", wait=0.4)
+    # No specific assertion — just want the side effect.
+    return check("Back to CONFIG mode", out, must_not_contain=[])
+
+
 TESTS: List[Callable[[Session], Result]] = [
+    # Existing PR #197 (cmd_set bugs) — all in CONFIG mode
     test_selftest_baseline,
     test_rpm_arity_rejects_excess_args,
     test_speed_arity_rejects_excess_args,
@@ -153,6 +244,17 @@ TESTS: List[Callable[[Session], Result]] = [
     test_can_typo_creates_no_slot,
     test_legit_can_import,
     test_selftest_after,
+    # PR #198 (RUN-mode gating, #194)
+    test_run_mode_allows_system_status,
+    test_run_mode_blocks_system_reset,
+    test_run_mode_blocks_system_reboot,
+    test_run_mode_blocks_system_sea_level,
+    test_run_mode_allows_log_status,
+    test_run_mode_blocks_log_level,
+    test_run_mode_blocks_bus_i2c,
+    test_run_mode_blocks_set,
+    test_run_mode_unknown_command,
+    test_back_to_config,
 ]
 
 

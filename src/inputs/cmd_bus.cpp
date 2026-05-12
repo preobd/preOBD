@@ -687,11 +687,16 @@ static const char PSTR_BUS_SPI[]    PROGMEM = "SPI";
 static const char PSTR_BUS_CAN[]    PROGMEM = "CAN";
 static const char PSTR_BUS_SERIAL[] PROGMEM = "SERIAL";
 
+// runModeAllowed=false across the board: BUS itself is configModeOnly=true at
+// the COMMANDS[] level, so these flags are defensive-only — the parent gate
+// rejects in RUN mode before this table is ever consulted. Keeping them
+// uniformly false documents intent and protects against an accidental flip
+// of the parent flag.
 static const Subcommand BUS_SUBCOMMANDS[] PROGMEM = {
-    { PSTR_BUS_I2C,    bus_i2c },
-    { PSTR_BUS_SPI,    bus_spi },
-    { PSTR_BUS_CAN,    bus_can },
-    { PSTR_BUS_SERIAL, bus_serial },
+    { PSTR_BUS_I2C,    bus_i2c,    false },
+    { PSTR_BUS_SPI,    bus_spi,    false },
+    { PSTR_BUS_CAN,    bus_can,    false },
+    { PSTR_BUS_SERIAL, bus_serial, false },
 };
 static const uint8_t NUM_BUS_SUBCOMMANDS = sizeof(BUS_SUBCOMMANDS) / sizeof(Subcommand);
 

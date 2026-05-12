@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Pre-existing bugs in `cmd_set` surfaced during the command_table refactor: RPM/SPEED arity check no longer accepts arbitrary excess parameters; `SET CAN <pid>` rejects non-numeric arguments instead of allocating phantom CAN sensors; BIAS bounds inlined to avoid file-scope macro leak (#187, #188, #190)
+- RUN-mode safety: destructive `SYSTEM` and `LOG` subcommands (RESET, REBOOT, SEA_LEVEL, UNITS, INTERVAL, LEVEL, TAG) are now blocked in RUN mode while read-only verbs (STATUS, PINS, DUMP, TAGS) remain available; mode gating now lives entirely in `COMMANDS[].configModeOnly` and per-`Subcommand` `runModeAllowed` flags rather than a hardcoded allowlist (#194)
 - Missing trailing newline added to `src/lib/sensor_types.h` (#178)
 - `allocateInputSlot` now zeroes the slot before use, eliminating stale flags, calibration data, and alarm thresholds from previously-cleared inputs (#180)
 - Input slots are now freed on partial-failure during configuration (e.g. `setInputSensor` failure after slot allocation), preventing orphaned slots (#179)
