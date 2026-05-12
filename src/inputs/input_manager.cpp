@@ -487,6 +487,7 @@ bool allocateInputSlot(uint8_t pin) {
         msg.control.println(F("  Hint: Use 'CLEAR <pin>' to remove an existing input"));
         return false;
     }
+    memset(&inputs[slot], 0, sizeof(Input));
     inputs[slot].pin = pin;
     numActiveInputs++;
     return true;

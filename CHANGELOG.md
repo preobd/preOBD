@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- `allocateInputSlot` now zeroes the slot before use, eliminating stale flags, calibration data, and alarm thresholds from previously-cleared inputs (#180)
 - SPI and I2C buses now default to NONE and only initialize when explicitly selected via `BUS SPI/I2C <N>`; fixes spurious pin reservation conflicts at boot (e.g. RGB LED blocked by unconfigured SPI0) (#168)
 - CAN HAL `write()` clamps `len` to 8 before `memcpy` to prevent buffer overflow in frame construction (#112)
 - RPM ISR reads on AVR are now atomic, and timeout check uses `micros()` consistently with the ISR (#111, #116)
