@@ -121,20 +121,26 @@ void readWPhaseRPM(Input *ptr) {
     // Accounts for both alternator pulses and pulley ratio
     float calibration_factor = pulses_per_rev * pulley_ratio;
 
-    // Calculate time since last pulse
-    unsigned long now = millis();
-    unsigned long time_since_pulse = now - (rpm_last_time / 1000);
+    // Atomic snapshot — 32-bit reads are not atomic on AVR; ARM is fine without guards
+    #ifdef __AVR__
+    noInterrupts();
+    #endif
+    unsigned long interval = rpm_pulse_interval;
+    unsigned long lastTime = rpm_last_time;
+    #ifdef __AVR__
+    interrupts();
+    #endif
 
-    // Check for timeout (engine stopped)
-    if (time_since_pulse > timeout_ms) {
+    // Timeout check using micros() consistently with the ISR
+    if (micros() - lastTime > (unsigned long)timeout_ms * 1000UL) {
         ptr->value = 0;
         return;
     }
 
     // Calculate ENGINE RPM from pulse interval
     // Formula: Engine_RPM = (60,000,000 / (interval × pulses_per_rev × pulley_ratio)) × calibration_mult
-    if (rpm_pulse_interval > 0) {
-        float engine_rpm = (60000000.0 / (rpm_pulse_interval * calibration_factor)) * calibration_mult;
+    if (interval > 0) {
+        float engine_rpm = (60000000.0 / (interval * calibration_factor)) * calibration_mult;
 
         // Validate range
         if (engine_rpm >= min_rpm && engine_rpm <= max_rpm) {
