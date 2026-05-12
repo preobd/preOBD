@@ -19,6 +19,60 @@
 #include <string.h>
 #include <ctype.h>
 
+int validateDispatchEntry(const __FlashStringHelper* group, uint8_t index,
+                          const char* token, const void* handler,
+                          bool tokenInProgmem) {
+    auto fail = [&](const __FlashStringHelper* reason) {
+        msg.control.print(F("  FAIL "));
+        msg.control.print(group);
+        msg.control.print('[');
+        msg.control.print(index);
+        msg.control.print(F("]: "));
+        msg.control.println(reason);
+        return 1;
+    };
+
+    if (!token)   return fail(F("null token"));
+    if (!handler) return fail(F("null handler"));
+
+    size_t len = tokenInProgmem ? strlen_P(token) : strlen(token);
+    if (len < 1 || len > 24) return fail(F("bad token length"));
+
+    for (size_t k = 0; k < len; k++) {
+        char c = tokenInProgmem ? (char)pgm_read_byte(token + k) : token[k];
+        bool ok = (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '?';
+        if (!ok) return fail(F("non-uppercase token (PROGMEM access broken?)"));
+    }
+    return 0;
+}
+
+bool streq_P(const char* a, const char* b_P) {
+    if (!a || !b_P) return false;
+    while (*a) {
+        char bc = (char)pgm_read_byte(b_P);
+        if (bc == '\0') return false;
+        if (toupper(*a) != toupper(bc)) return false;
+        a++;
+        b_P++;
+    }
+    return pgm_read_byte(b_P) == '\0';
+}
+
+const __FlashStringHelper* measurementTypeName(MeasurementType type) {
+    switch (type) {
+        case MEASURE_TEMPERATURE: return F("TEMPERATURE");
+        case MEASURE_PRESSURE:    return F("PRESSURE");
+        case MEASURE_VOLTAGE:     return F("VOLTAGE");
+        case MEASURE_RPM:         return F("RPM");
+        case MEASURE_SPEED:       return F("SPEED");
+        case MEASURE_HUMIDITY:    return F("HUMIDITY");
+        case MEASURE_ELEVATION:   return F("ELEVATION");
+        case MEASURE_DIGITAL:     return F("DIGITAL");
+        case MEASURE_LEVEL:       return F("LEVEL");
+    }
+    return nullptr;
+}
+
 // Helper: trim whitespace in-place
 void trim(char* str) {
     if (!str || *str == '\0') return;

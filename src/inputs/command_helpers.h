@@ -6,16 +6,38 @@
 #define _COMMAND_HELPERS_H_
 
 #include <stdint.h>
+#include <Arduino.h>  // for __FlashStringHelper
 #include "../lib/message_router.h"
+#include "../lib/sensor_types.h"  // for MeasurementType
 
 // Forward declarations for enums
 enum MessagePlane;
 enum TransportID;
 
+// MeasurementType -> printable PROGMEM name (e.g. "TEMPERATURE", "PRESSURE").
+// Returns nullptr for unknown values; callers should null-check or print a
+// fallback when displaying user-facing errors.
+const __FlashStringHelper* measurementTypeName(MeasurementType type);
+
+// Validate one dispatch-table entry. Caller has already read `token_P` and
+// `handler` via pgm_read_ptr (the same path the production dispatcher uses)
+// — so a regression that breaks PROGMEM access surfaces here as bad-char
+// failures. Returns 1 if invalid (and prints diagnostic), 0 if OK.
+//
+// `token_P` may be either RAM-resident (Command::name) or PROGMEM-resident
+// (Subcommand::token, SetField::token); pass `tokenInProgmem` accordingly.
+int validateDispatchEntry(const __FlashStringHelper* group, uint8_t index,
+                          const char* token_P, const void* handler,
+                          bool tokenInProgmem);
+
 // Helper functions (from old serial_config.cpp)
 void trim(char* str);
 void toUpper(char* str);
 bool streq(const char* a, const char* b);
+
+// Case-insensitive compare: RAM string `a` vs PROGMEM string `b_P`.
+// Used for matching user input against PROGMEM-resident keyword tables on AVR.
+bool streq_P(const char* a, const char* b_P);
 
 // Pin parsing
 uint8_t parsePin(const char* pinStr, bool* isValid);

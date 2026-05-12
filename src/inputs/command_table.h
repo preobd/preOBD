@@ -33,4 +33,48 @@ int dispatchCommand(int argc, const char* const* argv);
 // Helper: Check if command is read-only (allowed in RUN mode)
 bool isReadOnlyCommand(const char* cmdName);
 
+//-----------------------------------------------------------------------------
+// Subcommand dispatch (used by handlers like SET / BUS / SYSTEM that themselves
+// dispatch on a second token, e.g. "SET <pin> APPLICATION ..." or "BUS LIST").
+//
+// Leaf handler signature:
+//   - argc/argv are forwarded verbatim from the top-level command (i.e. argv[0]
+//     is still the top-level command name); the leaf decides what slice it
+//     wants. `tokenIndex` tells the leaf which argv slot held the matched
+//     subcommand token, so it can validate and reach into argv with no
+//     bookkeeping at the call site.
+//
+// AVR / PROGMEM contract — read carefully:
+//   - Subcommand tables MUST be declared `PROGMEM`. They live in flash on AVR;
+//     mega2560 has very little RAM and a per-table cost of ~4 bytes/entry adds
+//     up fast.
+//   - Token strings (`Subcommand::token`) MUST also be PROGMEM-resident — i.e.
+//     declared as `static const char PSTR_FOO[] PROGMEM = "FOO";` and stored in
+//     the table as `PSTR_FOO`, not as a bare `"FOO"` literal. Bare literals end
+//     up in `.data` (RAM-initialized from flash) and defeat the point.
+//   - Always dispatch through `dispatchSubcommand()`. Do NOT open-code the
+//     lookup loop — direct `table[i].token` / `table[i].handler` reads compile
+//     fine but pull flash addresses through the RAM bus on AVR, silently
+//     failing every match at runtime. The dispatcher uses `pgm_read_ptr` and
+//     `streq_P` (case-insensitive RAM-vs-PROGMEM compare) to do this safely.
+//   - On Teensy / ESP32, PROGMEM is a no-op and `pgm_read_ptr` is a plain
+//     dereference, so the same code is portable.
+//
+// See SET_FIELDS / BUS_SUBCOMMANDS / SYSTEM_SUBCOMMANDS for canonical examples.
+//-----------------------------------------------------------------------------
+typedef int (*SubcommandHandler)(int argc, const char* const* argv, int tokenIndex);
+
+struct Subcommand {
+    const char* token;          // PROGMEM-resident subcommand keyword (uppercase)
+    SubcommandHandler handler;  // Leaf handler
+};
+
+// Look up `token` (case-insensitive) in `table` and call its handler.
+// Returns the handler's return value, or 1 (and prints an error) if no match.
+// `commandName` is used in the unknown-token error message (e.g. "SET", "BUS").
+// `table` is expected to be PROGMEM-resident — see contract above.
+int dispatchSubcommand(const Subcommand* table, uint8_t tableLen,
+                       const char* token, const char* commandName,
+                       int argc, const char* const* argv, int tokenIndex);
+
 #endif // _COMMAND_TABLE_H_
