@@ -1128,22 +1128,37 @@ RUN                              # Enter run mode
 | Mode | Description |
 |------|-------------|
 | **CONFIG** | All commands enabled. Sensors continue reading but outputs may be paused. Use for setup. |
-| **RUN** | Configuration locked. Normal operation. Only read-only commands work. |
+| **RUN** | Read-only and diagnostic commands work. Commands that mutate persistent state, reboot, or factory-reset are blocked. |
 
-### Read-Only Commands (work in RUN mode)
+### Available in RUN Mode
+
+Whole commands (no gating):
 
 - `HELP`, `?`
 - `VERSION`
+- `CONFIG`, `RUN` (mode switching)
 - `INFO <pin>`
 - `LIST *`
-- `OUTPUT STATUS`
-- `TRANSPORT STATUS`
-- `DISPLAY STATUS`
-- `SYSTEM STATUS`
-- `SYSTEM DUMP`
-- `SYSTEM DUMP JSON`
-- `SYSTEM PINS`
-- `SYSTEM PINS <pin>`
+- `AT *` (raw serial passthrough — diagnostic)
+- `SELFTEST` (validate dispatch tables)
+
+Specific subcommands of mixed parents (read-only verbs only — destructive siblings are blocked):
+
+- `SYSTEM STATUS`, `SYSTEM PINS [<pin>]`, `SYSTEM DUMP [JSON | REGISTRY JSON]`
+- `LOG STATUS`, `LOG TAGS`
+
+### Blocked in RUN Mode
+
+Anything that writes EEPROM, mutates active config, factory-resets, or reboots:
+
+- All `SET *` / `ENABLE` / `DISABLE` / `CLEAR`
+- `OUTPUT *`, `DISPLAY *`, `TRANSPORT *`, `BUS *`
+- `SAVE`, `LOAD`, `JSON`, `REBOOT`
+- `SYSTEM RESET`, `SYSTEM REBOOT`, `SYSTEM SEA_LEVEL`, `SYSTEM UNITS`, `SYSTEM INTERVAL`
+- `LOG LEVEL`, `LOG TAG`
+- `RELAY *`, `SCAN`, `TEST` (when applicable to the build)
+
+Type `CONFIG` to switch to configuration mode and re-enable these.
 
 ---
 
@@ -1329,6 +1344,27 @@ LIST SENSORS TEMPERATURE         # Show all temperature sensors
 
 ---
 
+## Diagnostics
+
+### SELFTEST
+
+Walks every internal dispatch table (`COMMANDS[]`, `SET_FIELDS[]`, `BUS_SUBCOMMANDS[]`, `SYSTEM_SUBCOMMANDS[]`) and validates entry invariants — non-null pointers, valid token length, uppercase ASCII tokens. Catches PROGMEM-access regressions on AVR (where a missing `pgm_read_ptr` returns garbage) the moment a user runs the command after flashing.
+
+```
+SELFTEST
+```
+
+Expected output:
+
+```
+Running dispatch-table selftest...
+SELFTEST: PASS
+```
+
+A `FAIL` result indicates a firmware bug — file an issue with the offending table name and entry index from the diagnostic output. Available in both CONFIG and RUN modes. Compiled out when `ENABLE_SELFTEST=0` (saves ~700 B flash, ~40 B RAM).
+
+---
+
 ## Quick Reference Examples
 
 ### Complete Setup Workflow
@@ -1401,7 +1437,7 @@ If a command fails, you'll see helpful error messages:
 ERROR: Unknown output 'CANBUS'
   Hint: Use 'LIST OUTPUTS' to see available outputs
 
-ERROR: Configuration locked in RUN mode
+ERROR: SYSTEM RESET requires CONFIG mode
   Type CONFIG to enter configuration mode
 
 ERROR: Pin A20 out of range

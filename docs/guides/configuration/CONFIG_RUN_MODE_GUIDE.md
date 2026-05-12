@@ -160,19 +160,24 @@ RUN
 
 ### Commands Available in BOTH Modes
 
-These commands are **always available** to prevent system deadlock:
+These commands are **always available** — read-only inspection, mode switching, and diagnostics:
 
 | Command | Purpose |
 |---------|---------|
-| `CONFIG` | Switch to CONFIG mode |
-| `RUN` | Switch to RUN mode |
-| `HELP` or `?` | Show command list |
+| `CONFIG`, `RUN` | Switch modes |
+| `HELP`, `?` | Show command list |
 | `VERSION` | Show firmware version |
-| `DUMP` | Dump current configuration |
 | `INFO <pin>` | Show detailed sensor info |
-| `LIST INPUTS` | List active inputs |
-| `LIST APPLICATIONS` | List application presets |
-| `LIST SENSORS` | List sensor types |
+| `LIST *` | List inputs, applications, sensors, units, etc. |
+| `SYSTEM STATUS` | System status snapshot |
+| `SYSTEM PINS [<pin>]` | Pin allocation map |
+| `SYSTEM DUMP [JSON \| REGISTRY JSON]` | Dump configuration |
+| `LOG STATUS` | Show log filter configuration |
+| `LOG TAGS` | List available log tags |
+| `AT *` | Raw serial passthrough (HM-10, etc.) |
+| `SELFTEST` | Validate dispatch tables |
+
+For commands like `SYSTEM` and `LOG` that mix read-only verbs with destructive ones, the read-only verbs above remain available in RUN mode while their destructive siblings (`SYSTEM RESET`, `SYSTEM REBOOT`, `LOG LEVEL`, `LOG TAG`, etc.) require CONFIG mode.
 
 ### Commands Available ONLY in CONFIG Mode
 
@@ -202,12 +207,24 @@ These commands are **always available** to prevent system deadlock:
 | `RESET` | Clear all configuration |
 
 **Attempting write commands in RUN mode:**
+
+The error names the specific command being blocked, so you can tell at a glance whether the rejection came from the top-level gate (e.g. `SET`) or a per-subcommand gate (e.g. `SYSTEM RESET`).
+
 ```
 ========================================
-  ERROR: Configuration locked in RUN mode
+  ERROR: SET requires CONFIG mode
   Type CONFIG to enter configuration mode
 ========================================
 ```
+
+For commands like `SYSTEM` and `LOG` that mix read-only verbs with destructive ones, the gate fires per-subcommand:
+
+```
+ERROR: SYSTEM RESET requires CONFIG mode
+  Type CONFIG to enter configuration mode
+```
+
+The read-only siblings (`SYSTEM STATUS`, `SYSTEM PINS`, `SYSTEM DUMP`, `LOG STATUS`, `LOG TAGS`) remain available in RUN mode.
 
 ---
 
