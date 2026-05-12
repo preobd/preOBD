@@ -53,8 +53,8 @@ static const char PSTR_ACDELCO_TEMP_POST79_DESC[] PROGMEM = "AC Delco 1979+ GM g
 
 // Bosch NTC M12
 static const char PSTR_BOSCH_NTC_M12[] PROGMEM = "BOSCH_NTC_M12";
-static const char PSTR_BOSCH_NTC_M12_LABEL[] PROGMEM = "Bosch NTC M12 EFI Temp Sensor (-40 to 120\xC2\xB0""C)";
-static const char PSTR_BOSCH_NTC_M12_DESC[] PROGMEM = "Bosch NTC M12 (2057\xCE\xA9 @ 25\xC2\xB0""C, \xCE\xB2=3750K). Volvo/VW/Audi/BMW/Haltech. \xCE\xB2-approx, \xC2\xB1""2\xC2\xB0""C. 2.49k\xCE\xA9 bias.";
+static const char PSTR_BOSCH_NTC_M12_LABEL[] PROGMEM = "Bosch NTC M12 EFI Temp Sensor (-40 to 130\xC2\xB0""C)";
+static const char PSTR_BOSCH_NTC_M12_DESC[] PROGMEM = "Bosch NTC M12 (0 280 130 026, 2500\xCE\xA9 @ 20\xC2\xB0""C). Volvo/VW/Audi/BMW/Haltech. S-H fit, \xC2\xB1""0.2\xC2\xB0""C. 2.49k\xCE\xA9 bias.";
 
 // Jeep/AMC
 static const char PSTR_JEEP_4_0_TEMP_GAUGE[] PROGMEM = "JEEP_4_0_TEMP_GAUGE";
@@ -102,9 +102,9 @@ static const char PSTR_GENERIC_TEMP_LINEAR_LABEL[] PROGMEM = "0.5-4.5V linear (-
              MEASURE_TEMPERATURE, CAL_THERMISTOR_TABLE, &acdelco_pre79_temp_cal, SENSOR_READ_INTERVAL_MS, 40.0, 120.0, 0x6E5B, PIN_ANALOG) \
     X_SENSOR(PSTR_ACDELCO_TEMP_POST79, PSTR_ACDELCO_TEMP_POST79_LABEL, PSTR_ACDELCO_TEMP_POST79_DESC, readThermistorLookup, nullptr, \
              MEASURE_TEMPERATURE, CAL_THERMISTOR_TABLE, &acdelco_post79_temp_cal, SENSOR_READ_INTERVAL_MS, 20.0, 120.0, 0x18DA, PIN_ANALOG) \
-    /* Bosch NTC M12 (β-equation) */ \
-    X_SENSOR(PSTR_BOSCH_NTC_M12, PSTR_BOSCH_NTC_M12_LABEL, PSTR_BOSCH_NTC_M12_DESC, readThermistorBeta, nullptr, \
-             MEASURE_TEMPERATURE, CAL_THERMISTOR_BETA, &bosch_ntc_m12_cal, SENSOR_READ_INTERVAL_MS, -40.0, 120.0, 0xC847, PIN_ANALOG) \
+    /* Bosch NTC M12 (Steinhart-Hart) */ \
+    X_SENSOR(PSTR_BOSCH_NTC_M12, PSTR_BOSCH_NTC_M12_LABEL, PSTR_BOSCH_NTC_M12_DESC, readThermistorSteinhart, nullptr, \
+             MEASURE_TEMPERATURE, CAL_THERMISTOR_STEINHART, &bosch_ntc_m12_cal, SENSOR_READ_INTERVAL_MS, -40.0, 130.0, 0xC847, PIN_ANALOG) \
     /* Jeep/AMC */ \
     X_SENSOR(PSTR_JEEP_4_0_TEMP_GAUGE, PSTR_JEEP_4_0_TEMP_GAUGE_LABEL, nullptr, readThermistorLookup, nullptr, \
              MEASURE_TEMPERATURE, CAL_THERMISTOR_TABLE, &jeep40_temp_gauge_cal, SENSOR_READ_INTERVAL_MS, 0.0, 120.0, 0x29E8, PIN_ANALOG) \

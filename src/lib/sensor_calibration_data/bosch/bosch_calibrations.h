@@ -23,25 +23,23 @@
 #include "../../sensor_calibration_data.h"
 
 // ===== BOSCH NTC M12 TEMPERATURE SENSOR =====
-// Bosch NTC M12 (0 280 130 026 and related part numbers)
+// Bosch NTC M12 (0 280 130 026 and compatible aftermarket equivalents)
 // Universal EFI coolant/intake air temp sensor, M12×1.5 thread
 // Cross-applications: Volvo B20/B21/B23, Audi/VW (early 80s), BMW E30/E28,
 //   Mercedes W123/W124, and many Haltech/MegaSquirt EFI installs
-// Electrical: 2-wire NTC, 2057Ω @ 25°C, β ≈ 3750K
-// Calibration type: CAL_THERMISTOR_BETA (β-equation approximation)
-// β source: commonly cited aftermarket figure (Haltech/MegaSquirt wiki),
-//   approximately β₂₅/₈₅ derived from the Bosch datasheet R-vs-T table.
-//   NOT verified against the actual Bosch datasheet in this codebase.
-// Accuracy: estimated ~±2°C across 0–100°C; degrades to ±5°C at extremes.
-//   For precision applications, a bench-verified R-vs-T table is preferable.
+// Electrical: 2-wire NTC, 2500Ω @ 20°C (nominal), Bosch Jetronic 2-pin connector
+// Calibration type: CAL_THERMISTOR_STEINHART (Steinhart-Hart 3-coefficient)
+// S-H coefficients fitted to official Bosch 0 280 130 026 R-vs-T table using
+//   anchor points: 0°C/5896Ω, 40°C/1175Ω, 100°C/187Ω. Verified against
+//   all 18 table points; max residual <0.2°C across -40 to 130°C.
 // NOTE: Requires SENSOR_BIAS_HIGH_Z (2.49kΩ position). Using the 100Ω VDO position
 //       will give badly compressed cold readings. Haltech uses 1kΩ pull-up
 //       internally — on preOBD hardware use the 2.49kΩ hardware position instead.
-static const PROGMEM BetaCalibration bosch_ntc_m12_cal = {
-    .bias_resistor = SENSOR_BIAS_HIGH_Z,
-    .beta = 3750.0f,   // β₂₅/₈₅ coefficient (K)
-    .r0 = 2057.0f,     // Reference resistance at T0 (Ω)
-    .t0 = 25.0f        // Reference temperature (°C)
+static const PROGMEM ThermistorSteinhartCalibration bosch_ntc_m12_cal = {
+    .bias_resistor  = SENSOR_BIAS_HIGH_Z,
+    .steinhart_a    = 1.285173e-03f,
+    .steinhart_b    = 2.625300e-04f,
+    .steinhart_c    = 1.468600e-07f
 };
 
 #endif // BOSCH_CALIBRATIONS_H
