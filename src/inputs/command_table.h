@@ -66,6 +66,9 @@ struct Subcommand {
     SubcommandHandler handler;  // Leaf handler
     bool runModeAllowed;        // true = also runnable in RUN mode (read-only verbs);
                                 // false = CONFIG-only (mutates state or reboots)
+    const char* help;           // PROGMEM-resident one-line help string. May be
+                                // nullptr for hidden/unlisted entries; the
+                                // table-driven HELP printer skips those.
 };
 
 // Look up `token` (case-insensitive) in `table` and call its handler.

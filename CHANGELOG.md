@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - `CalibrationOverride` union members `rpm`, `speed`, and `can` now use `RPMCalibration`, `SpeedCalibration`, and `CANSensorCalibration` typedefs directly, eliminating duplicate field definitions and padding drift risk; EEPROM version bumped to 5 to invalidate stale AVR layouts (#175, #72)
 - Restructured `command_table.cpp` (3,453 → 1,419 lines) around a generic subcommand dispatch primitive; `cmd_set`, `cmd_bus`, `cmd_system` split into focused per-command files with PROGMEM-resident dispatch tables; adds `SELFTEST` command for runtime dispatch-table validation (#118, #186, #191)
+- CLI plumbing pass: shared `requireInput`/`printInputFieldSet`/`printSaveReminder` helpers eliminate ~45 lines of leaf boilerplate, unify five different SAVE-reminder wordings, and ensure every config-mutating leaf prints the reminder; `HELP SET`/`BUS`/`SYSTEM` now generated from the dispatch tables, closing the BUS/SERIAL ELM327 help drift (#189)
 
 ### Fixed
 - Pre-existing bugs in `cmd_set` surfaced during the command_table refactor: RPM/SPEED arity check no longer accepts arbitrary excess parameters; `SET CAN <pid>` rejects non-numeric arguments instead of allocating phantom CAN sensors; BIAS bounds inlined to avoid file-scope macro leak (#187, #188, #190)

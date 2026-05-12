@@ -73,7 +73,7 @@ static int bus_i2c(int argc, const char* const* argv, int /*tokenIndex*/) {
         msg.control.print(clock);
         msg.control.println(F("kHz"));
         msg.control.println(F("Note: Takes effect on next reboot"));
-        msg.control.println(F("Use SAVE to persist"));
+        printSaveReminder();
         return 0;
     }
 
@@ -82,7 +82,7 @@ static int bus_i2c(int argc, const char* const* argv, int /*tokenIndex*/) {
         systemConfig.buses.active_i2c = 0xFF;
         msg.control.println(F("I2C bus set to NONE"));
         msg.control.println(F("I2C pins will be free on next reboot"));
-        msg.control.println(F("Use SAVE to persist"));
+        printSaveReminder();
         return 0;
     }
 
@@ -106,7 +106,7 @@ static int bus_i2c(int argc, const char* const* argv, int /*tokenIndex*/) {
     msg.control.print(getDefaultI2CSCL(bus_id));
     msg.control.println(F(")"));
     msg.control.println(F("Note: Takes effect on next reboot"));
-    msg.control.println(F("Use SAVE to persist"));
+    printSaveReminder();
     return 0;
 }
 
@@ -138,7 +138,7 @@ static int bus_spi(int argc, const char* const* argv, int /*tokenIndex*/) {
         msg.control.print(clock / 1000000.0, 1);
         msg.control.println(F("MHz"));
         msg.control.println(F("Note: Takes effect on next transaction"));
-        msg.control.println(F("Use SAVE to persist"));
+        printSaveReminder();
         return 0;
     }
 
@@ -147,7 +147,7 @@ static int bus_spi(int argc, const char* const* argv, int /*tokenIndex*/) {
         systemConfig.buses.active_spi = 0xFF;
         msg.control.println(F("SPI bus set to NONE"));
         msg.control.println(F("SPI pins will be free on next reboot"));
-        msg.control.println(F("Use SAVE to persist"));
+        printSaveReminder();
         return 0;
     }
 
@@ -173,7 +173,7 @@ static int bus_spi(int argc, const char* const* argv, int /*tokenIndex*/) {
     msg.control.print(getDefaultSPISCK(bus_id));
     msg.control.println(F(")"));
     msg.control.println(F("Note: Takes effect on next reboot"));
-    msg.control.println(F("Use SAVE to persist"));
+    printSaveReminder();
     return 0;
 }
 
@@ -209,7 +209,7 @@ static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
         msg.control.print(baudrate / 1000);
         msg.control.println(F("kbps (both input and output)"));
         msg.control.println(F("Note: Takes effect on next reboot"));
-        msg.control.println(F("Use SAVE to persist"));
+        printSaveReminder();
         return 0;
     }
 
@@ -242,7 +242,7 @@ static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
             msg.control.print(baudrate / 1000);
             msg.control.println(F("kbps"));
             msg.control.println(F("Note: Takes effect on next reboot"));
-            msg.control.println(F("Use SAVE to persist"));
+            printSaveReminder();
             return 0;
         }
 
@@ -343,7 +343,7 @@ static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
         }
 
         msg.control.println(F("Note: Takes effect on next reboot"));
-        msg.control.println(F("Use SAVE to persist"));
+        printSaveReminder();
         return 0;
     }
 
@@ -376,7 +376,7 @@ static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
             msg.control.print(baudrate / 1000);
             msg.control.println(F("kbps"));
             msg.control.println(F("Note: Takes effect on next reboot"));
-            msg.control.println(F("Use SAVE to persist"));
+            printSaveReminder();
             return 0;
         }
 
@@ -449,7 +449,7 @@ static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
         }
 
         msg.control.println(F("Note: Takes effect on next reboot"));
-        msg.control.println(F("Use SAVE to persist"));
+        printSaveReminder();
         return 0;
     }
 
@@ -524,7 +524,7 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
                 msg.control.print(F(", TX="));
                 msg.control.print(getDefaultSerialTX(port_id));
                 msg.control.println(F(")"));
-                msg.control.println(F("Use SAVE to persist"));
+                printSaveReminder();
             } else {
                 msg.control.print(F("ERROR: Failed to enable Serial"));
                 msg.control.println(port_id);
@@ -538,7 +538,7 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
                 msg.control.print(F("Serial"));
                 msg.control.print(port_id);
                 msg.control.println(F(" disabled"));
-                msg.control.println(F("Use SAVE to persist"));
+                printSaveReminder();
             }
             return 0;
         }
@@ -568,7 +568,7 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
             msg.control.print(F(" baudrate set to "));
             msg.control.println(getBaudRateString(baud_idx));
             msg.control.println(F("Note: Takes effect on next reboot"));
-            msg.control.println(F("Use SAVE to persist"));
+            printSaveReminder();
             return 0;
         }
 
@@ -634,7 +634,7 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
 
                 msg.control.print(F("ELM327 emulator assigned to Serial"));
                 msg.control.println(port_id);
-                msg.control.println(F("Use SAVE to persist"));
+                printSaveReminder();
                 return 0;
             }
 
@@ -646,7 +646,7 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
 
                 msg.control.print(F("ELM327 disabled on Serial"));
                 msg.control.println(port_id);
-                msg.control.println(F("Use SAVE to persist"));
+                printSaveReminder();
                 return 0;
             }
 
@@ -692,32 +692,60 @@ static const char PSTR_BUS_SERIAL[] PROGMEM = "SERIAL";
 // rejects in RUN mode before this table is ever consulted. Keeping them
 // uniformly false documents intent and protects against an accidental flip
 // of the parent flag.
+// Each help block is printed verbatim by printSubcommandTable, so it bakes in
+// the "BUS <leaf>" prefix and lists every supported sub-form. Adding a new
+// sub-form is a one-string edit and HELP BUS / bare BUS stay structurally in
+// sync (issue #189).
+static const char PSTR_HELP_BUS_I2C[] PROGMEM =
+    "  BUS I2C                       Show all I2C bus status\n"
+    "  BUS I2C [0|1|2]               Select I2C bus (Wire/Wire1/Wire2)\n"
+    "  BUS I2C NONE                  Disable I2C bus (frees pins on next reboot)\n"
+    "  BUS I2C CLOCK <kHz>           Set I2C clock (100, 400, 1000)";
+static const char PSTR_HELP_BUS_SPI[] PROGMEM =
+    "  BUS SPI                       Show all SPI bus status\n"
+    "  BUS SPI [0|1|2]               Select SPI bus (SPI/SPI1/SPI2)\n"
+    "  BUS SPI NONE                  Disable SPI bus (frees pins on next reboot)\n"
+    "  BUS SPI CLOCK <Hz>            Set SPI clock (e.g. 4000000)";
+static const char PSTR_HELP_BUS_CAN[] PROGMEM =
+    "  BUS CAN                       Show CAN bus status\n"
+    "  BUS CAN BAUDRATE <bps>        Set CAN baudrate (both buses)\n"
+    "  BUS CAN INPUT <bus> <ENABLE|LISTEN|DISABLE> [bps]\n"
+    "  BUS CAN INPUT BAUDRATE <bps>  Set CAN input baudrate\n"
+    "  BUS CAN OUTPUT <bus> <ENABLE|DISABLE> [bps]\n"
+    "  BUS CAN OUTPUT BAUDRATE <bps> Set CAN output baudrate";
+static const char PSTR_HELP_BUS_SERIAL[] PROGMEM =
+    "  BUS SERIAL                    Show all serial port status\n"
+    "  BUS SERIAL <1-8>              Show specific port status\n"
+    "  BUS SERIAL <1-8> ENABLE [baud]   Enable serial port\n"
+    "  BUS SERIAL <1-8> DISABLE      Disable serial port\n"
+    "  BUS SERIAL <1-8> BAUDRATE <rate> Set baud rate"
+#if ENABLE_ELM327
+    "\n  BUS SERIAL <1-8> ELM327 <ENABLE|DISABLE>"
+#endif
+    ;
+
 static const Subcommand BUS_SUBCOMMANDS[] PROGMEM = {
-    { PSTR_BUS_I2C,    bus_i2c,    false },
-    { PSTR_BUS_SPI,    bus_spi,    false },
-    { PSTR_BUS_CAN,    bus_can,    false },
-    { PSTR_BUS_SERIAL, bus_serial, false },
+    { PSTR_BUS_I2C,    bus_i2c,    false, PSTR_HELP_BUS_I2C    },
+    { PSTR_BUS_SPI,    bus_spi,    false, PSTR_HELP_BUS_SPI    },
+    { PSTR_BUS_CAN,    bus_can,    false, PSTR_HELP_BUS_CAN    },
+    { PSTR_BUS_SERIAL, bus_serial, false, PSTR_HELP_BUS_SERIAL },
 };
 static const uint8_t NUM_BUS_SUBCOMMANDS = sizeof(BUS_SUBCOMMANDS) / sizeof(Subcommand);
 
+void printHelpBus() {
+    msg.control.println();
+    msg.control.println(F("=== BUS Commands ==="));
+    msg.control.println(F("Configure I2C, SPI, CAN buses and Serial ports"));
+    msg.control.println();
+    printSubcommandTable(BUS_SUBCOMMANDS, NUM_BUS_SUBCOMMANDS);
+    msg.control.println();
+}
+
 int cmd_bus(int argc, const char* const* argv) {
     if (argc < 2) {
-        msg.control.println();
-        msg.control.println(F("Commands:"));
-        msg.control.println(F("  BUS I2C [0|1|2|NONE]      - Show or select I2C bus (NONE frees pins)"));
-        msg.control.println(F("  BUS I2C CLOCK <kHz>       - Set I2C clock (100/400/1000)"));
-        msg.control.println(F("  BUS SPI [0|1|2|NONE]      - Show or select SPI bus (NONE frees pins)"));
-        msg.control.println(F("  BUS SPI CLOCK <Hz>        - Set SPI clock"));
-        msg.control.println(F("  BUS CAN                   - Show CAN status"));
-        msg.control.println(F("  BUS CAN BAUDRATE <bps>    - Set CAN baudrate (both buses)"));
-        msg.control.println(F("  BUS CAN INPUT <bus> <ENABLE|LISTEN|DISABLE> [bps]"));
-        msg.control.println(F("  BUS CAN INPUT BAUDRATE <bps> - Set CAN input baudrate"));
-        msg.control.println(F("  BUS CAN OUTPUT <bus> <ENABLE|DISABLE> [bps]"));
-        msg.control.println(F("  BUS CAN OUTPUT BAUDRATE <bps> - Set CAN output baudrate"));
-        msg.control.println(F("  BUS SERIAL                - Show all serial ports"));
-        msg.control.println(F("  BUS SERIAL <1-8> ENABLE [baud] - Enable serial port"));
-        msg.control.println(F("  BUS SERIAL <1-8> DISABLE  - Disable serial port"));
-        msg.control.println(F("  BUS SERIAL <1-8> BAUDRATE <rate> - Set baud rate"));
+        // Bare "BUS" — delegate to the same printer HELP BUS uses, so the
+        // two stay structurally in sync (issue #189: BUS help drift).
+        printHelpBus();
         return 0;
     }
 

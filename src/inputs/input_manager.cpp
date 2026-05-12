@@ -7,6 +7,7 @@
  #include "../config.h"
 #include "../version.h"
 #include "input_manager.h"
+#include "command_helpers.h"
 #include "alarm_logic.h"
 #include "../lib/system_config.h"
 #include "../lib/units_registry.h"
@@ -591,11 +592,8 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
 }
 
 bool setInputSensor(uint8_t pin, uint8_t sensorIndex) {
-    Input* input = getInputByPin(pin);
-    if (input == nullptr) {
-        msg.control.println(F("ERROR: Input not configured"));
-        return false;
-    }
+    Input* input = requireInput(pin);
+    if (!input) return false;
 
     // Get Sensor info from flash
     const SensorInfo* flashInfo = getSensorByIndex(sensorIndex);

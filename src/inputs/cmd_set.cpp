@@ -78,6 +78,7 @@ typedef int (*SetFieldHandler)(uint8_t pin, int argc, const char* const* argv);
 struct SetField {
     const char* token;
     SetFieldHandler handler;
+    const char* help;          // PROGMEM-resident one-line help; nullptr to hide
 };
 
 // SET <pin> APPLICATION <application>
@@ -96,10 +97,7 @@ static int set_application(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
     if (setInputApplication(pin, appIndex)) {
-        msg.control.print(F("Input "));
-        msg.control.print(argv[1]);
-        msg.control.print(F(" configured as "));
-        msg.control.println(argv[3]);
+        printInputFieldSet(argv[1], F("application"), argv[3]);
         return 0;
     }
     return 1;
@@ -164,14 +162,15 @@ static int set_sensor(uint8_t pin, int argc, const char* const* argv) {
     }
 
     if (setInputSensor(pin, sensorIndex)) {
-        msg.control.print(F("Input "));
-        msg.control.print(argv[1]);
-        msg.control.print(F(" sensor set to "));
+        // getSensorNameByIndex returns a PROGMEM-resident string (see
+        // sensor_helpers.h: READ_SENSOR_NAME does pgm_read_ptr on a flash
+        // pointer), so the __FlashStringHelper* cast prints correctly on AVR.
         const char* sensorName = getSensorNameByIndex(sensorIndex);
         if (sensorName) {
-            msg.control.println((__FlashStringHelper*)sensorName);
+            printInputFieldSet(argv[1], F("sensor"),
+                               (const __FlashStringHelper*)sensorName);
         } else {
-            msg.control.println(argv[argc >= 5 ? 4 : 3]);
+            printInputFieldSet(argv[1], F("sensor"), argv[argc >= 5 ? 4 : 3]);
         }
         return 0;
     }
@@ -185,10 +184,7 @@ static int set_name(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
     if (setInputName(pin, argv[3])) {
-        msg.control.print(F("Input "));
-        msg.control.print(argv[1]);
-        msg.control.print(F(" name set to "));
-        msg.control.println(argv[3]);
+        printInputFieldSet(argv[1], F("name"), argv[3]);
         return 0;
     }
     return 1;
@@ -201,10 +197,7 @@ static int set_display_name(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
     if (setInputDisplayName(pin, argv[3])) {
-        msg.control.print(F("Input "));
-        msg.control.print(argv[1]);
-        msg.control.print(F(" display name set to "));
-        msg.control.println(argv[3]);
+        printInputFieldSet(argv[1], F("display name"), argv[3]);
         return 0;
     }
     return 1;
@@ -218,18 +211,14 @@ static int set_display(uint8_t pin, int argc, const char* const* argv) {
     }
     if (streq_P(argv[3], PSTR("ENABLE"))) {
         if (enableInputDisplay(pin, true)) {
-            msg.control.print(F("Input "));
-            msg.control.print(argv[1]);
-            msg.control.println(F(" display enabled"));
+            printInputFlag(argv[1], F("display"), true);
             return 0;
         }
         return 1;
     }
     if (streq_P(argv[3], PSTR("DISABLE"))) {
         if (enableInputDisplay(pin, false)) {
-            msg.control.print(F("Input "));
-            msg.control.print(argv[1]);
-            msg.control.println(F(" display disabled"));
+            printInputFlag(argv[1], F("display"), false);
             return 0;
         }
         return 1;
@@ -246,10 +235,7 @@ static int set_units(uint8_t pin, int argc, const char* const* argv) {
     }
     uint8_t unitsIndex = getUnitsIndexByName(argv[3]);
     if (setInputUnits(pin, unitsIndex)) {
-        msg.control.print(F("Input "));
-        msg.control.print(argv[1]);
-        msg.control.print(F(" units set to "));
-        msg.control.println(argv[3]);
+        printInputFieldSet(argv[1], F("units"), argv[3]);
         return 0;
     }
     return 1;
@@ -264,9 +250,7 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
 
     if (streq_P(argv[3], PSTR("ENABLE"))) {
         if (enableInputAlarm(pin, true)) {
-            msg.control.print(F("Input "));
-            msg.control.print(argv[1]);
-            msg.control.println(F(" alarm enabled"));
+            printInputFlag(argv[1], F("alarm"), true);
             return 0;
         }
         return 1;
@@ -274,9 +258,7 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
 
     if (streq_P(argv[3], PSTR("DISABLE"))) {
         if (enableInputAlarm(pin, false)) {
-            msg.control.print(F("Input "));
-            msg.control.print(argv[1]);
-            msg.control.println(F(" alarm disabled"));
+            printInputFlag(argv[1], F("alarm"), false);
             return 0;
         }
         return 1;
@@ -298,6 +280,7 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
             msg.control.print(F(" alarm warmup set to "));
             msg.control.print(value);
             msg.control.println(F("ms"));
+            printSaveReminder();
             return 0;
         }
         return 1;
@@ -319,6 +302,7 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
             msg.control.print(F(" alarm persistence set to "));
             msg.control.print(value);
             msg.control.println(F("ms"));
+            printSaveReminder();
             return 0;
         }
         return 1;
@@ -338,6 +322,7 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
         msg.control.print(minVal);
         msg.control.print(F(" - "));
         msg.control.println(maxVal);
+        printSaveReminder();
         return 0;
     }
     return 1;
@@ -355,17 +340,10 @@ static int set_divider(uint8_t pin, int argc, const char* const* argv) {
         msg.control.println(F("ERROR: Divider ratio must be > 0.0 and <= 1.0"));
         return 1;
     }
-    Input* input = getInputByPin(pin);
-    if (!input) {
-        msg.control.println(F("ERROR: Input not configured"));
-        return 1;
-    }
+    Input* input = requireInput(pin);
+    if (!input) return 1;
     input->divider_ratio = ratio;
-    msg.control.print(F("Input "));
-    msg.control.print(argv[1]);
-    msg.control.print(F(" divider ratio set to "));
-    msg.control.println(ratio, 3);
-    msg.control.println(F("  (use SAVE to persist)"));
+    printInputFieldSet(argv[1], F("divider ratio"), ratio, 3);
     return 0;
 }
 
@@ -399,17 +377,10 @@ static int set_output(uint8_t pin, int argc, const char* const* argv) {
     }
 
     if (streq_P(argv[3], PSTR("ALL"))) {
-        Input* input = getInputByPin(pin);
-        if (!input) {
-            msg.control.println(F("ERROR: Input not configured"));
-            return 1;
-        }
+        Input* input = requireInput(pin);
+        if (!input) return 1;
         input->outputMask = enable ? OUTPUT_MASK_ALL_DATA : 0x00;
-        msg.control.print(F("Input "));
-        msg.control.print(argv[1]);
-        msg.control.print(F(" all data outputs "));
-        msg.control.println(enable ? F("enabled") : F("disabled"));
-        msg.control.println(F("  (use SAVE to persist)"));
+        printInputFlag(argv[1], F("all data outputs"), enable);
         return 0;
     }
 
@@ -435,9 +406,8 @@ static int set_output(uint8_t pin, int argc, const char* const* argv) {
         msg.control.print(argv[1]);
         msg.control.print(F(" output "));
         msg.control.print(argv[3]);
-        msg.control.print(F(" "));
-        msg.control.println(enable ? F("enabled") : F("disabled"));
-        msg.control.println(F("  (use SAVE to persist)"));
+        msg.control.println(enable ? F(" enabled") : F(" disabled"));
+        printSaveReminder();
         return 0;
     }
     msg.control.println(F("ERROR: Input not configured"));
@@ -456,11 +426,8 @@ static int set_calibration(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
 
-    Input* input = getInputByPin(pin);
-    if (!input) {
-        msg.control.println(F("ERROR: Input not configured"));
-        return 1;
-    }
+    Input* input = requireInput(pin);
+    if (!input) return 1;
 
     input->flags.useCustomCalibration = false;
     memset(&input->customCalibration, 0, sizeof(CalibrationOverride));
@@ -468,6 +435,7 @@ static int set_calibration(uint8_t pin, int argc, const char* const* argv) {
     msg.control.print(F("Cleared custom calibration for pin "));
     msg.control.println(argv[1]);
     msg.control.println(F("Using preset calibration from sensor library"));
+    printSaveReminder();
     return 0;
 }
 
@@ -483,11 +451,8 @@ static int set_rpm(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
 
-    Input* input = getInputByPin(pin);
-    if (!input) {
-        msg.control.println(F("ERROR: Input not configured"));
-        return 1;
-    }
+    Input* input = requireInput(pin);
+    if (!input) return 1;
 
     byte poles;
     float pulley_ratio;
@@ -564,6 +529,7 @@ static int set_rpm(uint8_t pin, int argc, const char* const* argv) {
     msg.control.print(F("  Effective: "));
     msg.control.print(effective_ppr, 2);
     msg.control.println(F(" pulses/engine-rev"));
+    printSaveReminder();
     return 0;
 }
 
@@ -579,11 +545,8 @@ static int set_speed(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
 
-    Input* input = getInputByPin(pin);
-    if (!input) {
-        msg.control.println(F("ERROR: Input not configured"));
-        return 1;
-    }
+    Input* input = requireInput(pin);
+    if (!input) return 1;
 
     uint8_t pulses_per_rev;
     uint16_t tire_circumference_mm;
@@ -660,6 +623,7 @@ static int set_speed(uint8_t pin, int argc, const char* const* argv) {
     msg.control.print(F("  Max Speed: "));
     msg.control.print(max_speed_kph);
     msg.control.println(F(" km/h"));
+    printSaveReminder();
     return 0;
 }
 
@@ -701,6 +665,7 @@ static int set_can_timeout(uint8_t pin, int argc, const char* const* argv) {
     msg.control.print(F(": "));
     msg.control.print(timeout_ms);
     msg.control.println(F(" ms"));
+    printSaveReminder();
     return 0;
 }
 #endif // ENABLE_CAN
@@ -763,6 +728,7 @@ static int set_pressure_linear(uint8_t pin, int argc, const char* const* argv) {
     msg.control.print(F("-"));
     msg.control.print(pmax, 2);
     msg.control.println(F(" bar"));
+    printSaveReminder();
     return 0;
 }
 
@@ -818,6 +784,7 @@ static int set_bias(uint8_t pin, int argc, const char* const* argv) {
     msg.control.print(F(": "));
     msg.control.print(bias, 1);
     msg.control.println(F(" Ω"));
+    printSaveReminder();
     return 0;
 }
 
@@ -867,6 +834,7 @@ static int set_steinhart(uint8_t pin, int argc, const char* const* argv) {
     msg.control.println(b, 10);
     msg.control.print(F("  C: "));
     msg.control.println(c, 10);
+    printSaveReminder();
     return 0;
 }
 
@@ -928,6 +896,7 @@ static int set_beta(uint8_t pin, int argc, const char* const* argv) {
     msg.control.print(F("  T0: "));
     msg.control.print(t0, 1);
     msg.control.println(F(" °C"));
+    printSaveReminder();
     return 0;
 }
 
@@ -974,6 +943,7 @@ static int set_pressure_poly(uint8_t pin, int argc, const char* const* argv) {
     msg.control.println(b, 10);
     msg.control.print(F("  C: "));
     msg.control.println(c, 10);
+    printSaveReminder();
     return 0;
 }
 
@@ -1000,30 +970,96 @@ static const char PSTR_SET_STEINHART[]       PROGMEM = "STEINHART";
 static const char PSTR_SET_BETA[]            PROGMEM = "BETA";
 static const char PSTR_SET_PRESSURE_POLY[]   PROGMEM = "PRESSURE_POLY";
 
+// Each help block is printed verbatim by printHelpSet: it bakes in the
+// "SET <pin> <field>" prefix and may span multiple lines so leaves with
+// sub-forms (ALARM, OUTPUT) can document every supported shape.
+static const char PSTR_HELP_SET_APPLICATION[] PROGMEM =
+    "  SET <pin> APPLICATION <app>   Set measurement type (CHT, OIL_PRESSURE, ...)";
+static const char PSTR_HELP_SET_SENSOR[] PROGMEM =
+    "  SET <pin> SENSOR <sensor>     Set hardware sensor (e.g. MAX6675, VDO_120C)";
+static const char PSTR_HELP_SET_NAME[] PROGMEM =
+    "  SET <pin> NAME <name>         Set abbreviated name (8 chars)";
+static const char PSTR_HELP_SET_DISPLAY_NAME[] PROGMEM =
+    "  SET <pin> DISPLAY_NAME <name> Set full name (32 chars)";
+static const char PSTR_HELP_SET_DISPLAY[] PROGMEM =
+    "  SET <pin> DISPLAY ENABLE|DISABLE  Toggle LCD display for this input";
+static const char PSTR_HELP_SET_UNITS[] PROGMEM =
+    "  SET <pin> UNITS <units>       Override display units";
+static const char PSTR_HELP_SET_ALARM[] PROGMEM =
+    "  SET <pin> ALARM <min> <max>   Set alarm thresholds\n"
+    "  SET <pin> ALARM ENABLE        Enable alarm\n"
+    "  SET <pin> ALARM DISABLE       Disable alarm\n"
+    "  SET <pin> ALARM WARMUP <ms>   Warmup time (0-300000ms)\n"
+    "  SET <pin> ALARM PERSIST <ms>  Persistence time (0-60000ms)";
+static const char PSTR_HELP_SET_DIVIDER[] PROGMEM =
+    "  SET <pin> DIVIDER <ratio>     Set voltage divider ratio (0-1)";
+static const char PSTR_HELP_SET_OUTPUT[] PROGMEM =
+    "  SET <pin> OUTPUT STATUS       Show this input's output mask\n"
+    "  SET <pin> OUTPUT <tgt> ENABLE|DISABLE  tgt = CAN, RealDash, Serial, SD_Log\n"
+    "  SET <pin> OUTPUT ALL ENABLE|DISABLE";
+static const char PSTR_HELP_SET_CALIBRATION[] PROGMEM =
+    "  SET <pin> CALIBRATION PRESET  Clear custom, restore preset calibration";
+static const char PSTR_HELP_SET_RPM[] PROGMEM =
+    "  SET <pin> RPM <poles> <ratio> [<mult>] <timeout> <min> <max>";
+static const char PSTR_HELP_SET_SPEED[] PROGMEM =
+    "  SET <pin> SPEED <ppr> <tire_circ> <ratio> [<mult>] <timeout> <max>";
+#if ENABLE_CAN
+static const char PSTR_HELP_SET_CAN_TIMEOUT[] PROGMEM =
+    "  SET <pin> CAN_TIMEOUT <ms>    CAN-imported sensor timeout (100-30000)";
+#endif
+static const char PSTR_HELP_SET_PRESSURE_LINEAR[] PROGMEM =
+    "  SET <pin> PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>";
+static const char PSTR_HELP_SET_BIAS[] PROGMEM =
+    "  SET <pin> BIAS <resistor>     Set thermistor/pressure bias resistor (Ω)";
+static const char PSTR_HELP_SET_STEINHART[] PROGMEM =
+    "  SET <pin> STEINHART <bias> <a> <b> <c>      Steinhart-Hart thermistor";
+static const char PSTR_HELP_SET_BETA[] PROGMEM =
+    "  SET <pin> BETA <bias> <beta> <r0> <t0>      Beta-equation thermistor";
+static const char PSTR_HELP_SET_PRESSURE_POLY[] PROGMEM =
+    "  SET <pin> PRESSURE_POLY <bias> <a> <b> <c>  VDO polynomial pressure";
+
 // SET field dispatch table — PROGMEM-resident on AVR; access via pgm_read_ptr.
 static const SetField SET_FIELDS[] PROGMEM = {
-    { PSTR_SET_APPLICATION,     set_application },
-    { PSTR_SET_SENSOR,          set_sensor },
-    { PSTR_SET_NAME,            set_name },
-    { PSTR_SET_DISPLAY_NAME,    set_display_name },
-    { PSTR_SET_DISPLAY,         set_display },
-    { PSTR_SET_UNITS,           set_units },
-    { PSTR_SET_ALARM,           set_alarm },
-    { PSTR_SET_DIVIDER,         set_divider },
-    { PSTR_SET_OUTPUT,          set_output },
-    { PSTR_SET_CALIBRATION,     set_calibration },
-    { PSTR_SET_RPM,             set_rpm },
-    { PSTR_SET_SPEED,           set_speed },
+    { PSTR_SET_APPLICATION,     set_application,     PSTR_HELP_SET_APPLICATION     },
+    { PSTR_SET_SENSOR,          set_sensor,          PSTR_HELP_SET_SENSOR          },
+    { PSTR_SET_NAME,            set_name,            PSTR_HELP_SET_NAME            },
+    { PSTR_SET_DISPLAY_NAME,    set_display_name,    PSTR_HELP_SET_DISPLAY_NAME    },
+    { PSTR_SET_DISPLAY,         set_display,         PSTR_HELP_SET_DISPLAY         },
+    { PSTR_SET_UNITS,           set_units,           PSTR_HELP_SET_UNITS           },
+    { PSTR_SET_ALARM,           set_alarm,           PSTR_HELP_SET_ALARM           },
+    { PSTR_SET_DIVIDER,         set_divider,         PSTR_HELP_SET_DIVIDER         },
+    { PSTR_SET_OUTPUT,          set_output,          PSTR_HELP_SET_OUTPUT          },
+    { PSTR_SET_CALIBRATION,     set_calibration,     PSTR_HELP_SET_CALIBRATION     },
+    { PSTR_SET_RPM,             set_rpm,             PSTR_HELP_SET_RPM             },
+    { PSTR_SET_SPEED,           set_speed,           PSTR_HELP_SET_SPEED           },
 #if ENABLE_CAN
-    { PSTR_SET_CAN_TIMEOUT,     set_can_timeout },
+    { PSTR_SET_CAN_TIMEOUT,     set_can_timeout,     PSTR_HELP_SET_CAN_TIMEOUT     },
 #endif
-    { PSTR_SET_PRESSURE_LINEAR, set_pressure_linear },
-    { PSTR_SET_BIAS,            set_bias },
-    { PSTR_SET_STEINHART,       set_steinhart },
-    { PSTR_SET_BETA,            set_beta },
-    { PSTR_SET_PRESSURE_POLY,   set_pressure_poly },
+    { PSTR_SET_PRESSURE_LINEAR, set_pressure_linear, PSTR_HELP_SET_PRESSURE_LINEAR },
+    { PSTR_SET_BIAS,            set_bias,            PSTR_HELP_SET_BIAS            },
+    { PSTR_SET_STEINHART,       set_steinhart,       PSTR_HELP_SET_STEINHART       },
+    { PSTR_SET_BETA,            set_beta,            PSTR_HELP_SET_BETA            },
+    { PSTR_SET_PRESSURE_POLY,   set_pressure_poly,   PSTR_HELP_SET_PRESSURE_POLY   },
 };
 static const uint8_t NUM_SET_FIELDS = sizeof(SET_FIELDS) / sizeof(SetField);
+
+void printHelpSet() {
+    msg.control.println();
+    msg.control.println(F("=== SET Commands ==="));
+    msg.control.println(F("Configure input pins (application, sensor, names, units, alarms)"));
+    msg.control.println();
+    msg.control.println(F("  SET <pin> <app> <sensor>      Combined config (e.g. SET 6 CHT MAX6675)"));
+    // Each entry's help string is printed verbatim — bakes in the "SET <pin>
+    // <field>" prefix and may span multiple lines for sub-form leaves.
+    for (uint8_t i = 0; i < NUM_SET_FIELDS; i++) {
+        const char* help = (const char*)pgm_read_ptr(&SET_FIELDS[i].help);
+        if (!help) continue;
+        msg.control.println((const __FlashStringHelper*)help);
+    }
+    msg.control.println();
+    msg.control.println(F("See also: HELP CALIBRATION for advanced sensor calibration"));
+    msg.control.println();
+}
 
 int cmd_set(int argc, const char* const* argv) {
     // SET <pin> <field> <value>
@@ -1087,6 +1123,7 @@ int cmd_set(int argc, const char* const* argv) {
                     msg.control.print(field);
                     msg.control.print(F(" with "));
                     msg.control.println(argv[3]);
+                    printSaveReminder();
                     return 0;
                 }
                 return 1;

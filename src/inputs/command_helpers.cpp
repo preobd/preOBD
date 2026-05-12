@@ -6,6 +6,7 @@
 #include "../config.h"
 
 #include "command_helpers.h"
+#include "command_table.h"  // for Subcommand
 #include "../config.h"
 #include "../lib/message_router.h"
 #include "../lib/message_api.h"
@@ -18,6 +19,71 @@
 #include "input_manager.h"  // For inputs[] array access
 #include <string.h>
 #include <ctype.h>
+
+Input* requireInput(uint8_t pin) {
+    Input* input = getInputByPin(pin);
+    if (!input) {
+        msg.control.println(F("ERROR: Input not configured"));
+    }
+    return input;
+}
+
+void printSaveReminder() {
+    msg.control.println(F("  (use SAVE to persist)"));
+}
+
+void printSubcommandTable(const Subcommand* table, uint8_t n) {
+    // Each entry's help string is a self-contained usage block: it bakes in
+    // the parent prefix and may span multiple lines so leaves with sub-forms
+    // (BUS CAN, BUS SERIAL, SYSTEM DUMP, SYSTEM UNITS, ...) can document
+    // every supported shape. We print it verbatim and let the help author
+    // own the formatting.
+    for (uint8_t i = 0; i < n; i++) {
+        const char* help = (const char*)pgm_read_ptr(&table[i].help);
+        if (!help) continue;
+        msg.control.println((const __FlashStringHelper*)help);
+    }
+}
+
+static void printInputFieldPrefix(const char* pinArg,
+                                  const __FlashStringHelper* field) {
+    msg.control.print(F("Input "));
+    msg.control.print(pinArg);
+    msg.control.print(' ');
+    msg.control.print(field);
+    msg.control.print(F(" set to "));
+}
+
+void printInputFieldSet(const char* pinArg, const __FlashStringHelper* field,
+                        const char* value) {
+    printInputFieldPrefix(pinArg, field);
+    msg.control.println(value);
+    printSaveReminder();
+}
+
+void printInputFieldSet(const char* pinArg, const __FlashStringHelper* field,
+                        const __FlashStringHelper* value) {
+    printInputFieldPrefix(pinArg, field);
+    msg.control.println(value);
+    printSaveReminder();
+}
+
+void printInputFieldSet(const char* pinArg, const __FlashStringHelper* field,
+                        float value, uint8_t decimals) {
+    printInputFieldPrefix(pinArg, field);
+    msg.control.println(value, decimals);
+    printSaveReminder();
+}
+
+void printInputFlag(const char* pinArg, const __FlashStringHelper* facet,
+                    bool enabled) {
+    msg.control.print(F("Input "));
+    msg.control.print(pinArg);
+    msg.control.print(' ');
+    msg.control.print(facet);
+    msg.control.println(enabled ? F(" enabled") : F(" disabled"));
+    printSaveReminder();
+}
 
 int validateDispatchEntry(const __FlashStringHelper* group, uint8_t index,
                           const char* token, const void* handler,
@@ -432,32 +498,12 @@ void printHelpList() {
     msg.control.println();
 }
 
-void printHelpSet() {
-    msg.control.println();
-    msg.control.println(F("=== SET Commands ==="));
-    msg.control.println(F("Configure input pins (application, sensor, names, units, alarms)"));
-    msg.control.println();
-    msg.control.println(F("Basic Configuration:"));
-    msg.control.println(F("  SET <pin> <app> <sensor>  - Combined config (e.g., SET 6 CHT MAX6675)"));
-    msg.control.println(F("  SET <pin> APPLICATION <application>  - Set measurement type"));
-    msg.control.println(F("  SET <pin> SENSOR <sensor>  - Set hardware sensor"));
-    msg.control.println();
-    msg.control.println(F("Naming:"));
-    msg.control.println(F("  SET <pin> NAME <name>  - Set abbreviated name (8 chars)"));
-    msg.control.println(F("  SET <pin> DISPLAY_NAME <name>  - Set full name (32 chars)"));
-    msg.control.println(F("  SET <pin> UNITS <units>  - Override display units"));
-    msg.control.println();
-    msg.control.println(F("Alarms:"));
-    msg.control.println(F("  SET <pin> ALARM <min> <max>  - Set alarm thresholds"));
-    msg.control.println(F("  SET <pin> ALARM ENABLE  - Enable alarm for input"));
-    msg.control.println(F("  SET <pin> ALARM DISABLE  - Disable alarm for input"));
-    msg.control.println(F("  SET <pin> ALARM WARMUP <ms>  - Alarm warmup time (0-300000ms)"));
-    msg.control.println(F("  SET <pin> ALARM PERSIST <ms>  - Alarm persistence time (0-60000ms)"));
-    msg.control.println();
-    msg.control.println(F("See also: HELP CALIBRATION for advanced sensor calibration"));
-    msg.control.println();
-}
+// printHelpSet() — defined in cmd_set.cpp where SET_FIELDS lives.
 
+// HELP CALIBRATION currently aggregates verbs that live alongside identity
+// fields in SET_FIELDS (STEINHART, BETA, RPM, ...). Once #189 phase 3 moves
+// these under a SET <pin> CAL <profile> grammar, this printer can be deleted
+// and CALIBRATION help will fall out of HELP SET automatically.
 void printHelpCalibration() {
     msg.control.println();
     msg.control.println(F("=== CALIBRATION Commands ==="));
@@ -501,43 +547,7 @@ void printHelpOutput() {
     msg.control.println();
 }
 
-void printHelpBus() {
-    msg.control.println();
-    msg.control.println(F("=== BUS Commands ==="));
-    msg.control.println(F("Configure I2C, SPI, CAN buses and Serial ports"));
-    msg.control.println();
-    msg.control.println(F("Display Bus Configuration:"));
-    msg.control.println(F("  BUS I2C                   - Show all I2C bus status"));
-    msg.control.println(F("  BUS SPI                   - Show all SPI bus status"));
-    msg.control.println(F("  BUS CAN                   - Show all CAN bus status"));
-    msg.control.println(F("  BUS SERIAL                - Show all serial port status"));
-    msg.control.println();
-    msg.control.println(F("I2C Bus Commands:"));
-    msg.control.println(F("  BUS I2C [0|1|2]           - Select I2C bus (Wire/Wire1/Wire2)"));
-    msg.control.println(F("  BUS I2C CLOCK <kHz>       - Set I2C clock (100, 400, 1000)"));
-    msg.control.println();
-    msg.control.println(F("SPI Bus Commands:"));
-    msg.control.println(F("  BUS SPI [0|1|2]           - Select SPI bus (SPI/SPI1/SPI2)"));
-    msg.control.println(F("  BUS SPI CLOCK <Hz>        - Set SPI clock (e.g., 4000000)"));
-    msg.control.println();
-    msg.control.println(F("CAN Bus Commands:"));
-    msg.control.println(F("  BUS CAN [0|1|2]           - Select CAN bus (CAN1/CAN2/CAN3)"));
-    msg.control.println(F("  BUS CAN BAUDRATE <bps>    - Set CAN baudrate"));
-    msg.control.println(F("    Valid baudrates: 125000, 250000, 500000, 1000000"));
-    msg.control.println();
-    msg.control.println(F("Serial Port Commands:"));
-    msg.control.println(F("  BUS SERIAL <1-8>          - Show specific port status"));
-    msg.control.println(F("  BUS SERIAL <1-8> ENABLE [baud] - Enable port"));
-    msg.control.println(F("  BUS SERIAL <1-8> DISABLE  - Disable port"));
-    msg.control.println(F("  BUS SERIAL <1-8> BAUDRATE <rate> - Set baud rate"));
-    msg.control.println(F("    Valid rates: 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600"));
-    msg.control.println();
-    msg.control.println(F("Examples:"));
-    msg.control.println(F("  BUS I2C 1                 # Select Wire1"));
-    msg.control.println(F("  BUS CAN 0 BAUDRATE 250000 # Set CAN1 to 250kbps"));
-    msg.control.println(F("  BUS SERIAL 5 ENABLE 115200 # Enable Serial5 at 115200"));
-    msg.control.println();
-}
+// printHelpBus() — defined in cmd_bus.cpp where BUS_SUBCOMMANDS lives.
 
 #if ENABLE_RELAY_OUTPUT
 void printHelpRelay() {
@@ -613,41 +623,7 @@ void printHelpTransport() {
     msg.control.println();
 }
 
-void printHelpSystem() {
-    msg.control.println();
-    msg.control.println(F("=== SYSTEM Commands ==="));
-    msg.control.println(F("Global configuration affecting all subsystems"));
-    msg.control.println();
-
-    msg.control.println(F("Query:"));
-    msg.control.println(F("  SYSTEM STATUS           - Show all global configuration"));
-    msg.control.println(F("  SYSTEM DUMP             - Show complete system dump"));
-    msg.control.println(F("  SYSTEM DUMP JSON        - Export configuration as JSON"));
-    msg.control.println();
-
-    msg.control.println(F("Pin Status:"));
-    msg.control.println(F("  SYSTEM PINS             - Show all pin allocations"));
-    msg.control.println(F("  SYSTEM PINS <pin>       - Query specific pin"));
-    msg.control.println();
-
-    msg.control.println(F("Global Defaults:"));
-    msg.control.println(F("  SYSTEM UNITS TEMP <C|F>"));
-    msg.control.println(F("  SYSTEM UNITS PRESSURE <BAR|PSI|KPA|INHG>"));
-    msg.control.println(F("  SYSTEM UNITS ELEVATION <M|FT>"));
-    msg.control.println(F("  SYSTEM UNITS SPEED <KPH|MPH>"));
-    msg.control.println();
-
-    msg.control.println(F("Calibration & Timing:"));
-    msg.control.println(F("  SYSTEM SEA_LEVEL <hPa>  - For altitude calculations"));
-    msg.control.println(F("  SYSTEM INTERVAL <type> <ms> - Global timing intervals"));
-    msg.control.println(F("    Types: SENSOR, ALARM"));
-    msg.control.println();
-
-    msg.control.println(F("System Control:"));
-    msg.control.println(F("  SYSTEM REBOOT           - Restart the device"));
-    msg.control.println(F("  SYSTEM RESET CONFIRM    - Factory reset (erase config + reboot)"));
-    msg.control.println();
-}
+// printHelpSystem() — defined in cmd_system.cpp where SYSTEM_SUBCOMMANDS lives.
 
 void printHelpConfig() {
     msg.control.println();

@@ -476,7 +476,7 @@ int cmd_load(int argc, const char* const* argv) {
 
         if (loadConfigFromFile(path.destination, path.filename)) {
             msg.control.println(F("Configuration loaded successfully"));
-            msg.control.println(F("Type SAVE to persist to EEPROM"));
+            printSaveReminder();
         } else {
             msg.control.println(F("ERROR: Failed to load configuration"));
             return 1;
@@ -637,7 +637,7 @@ int cmd_output(int argc, const char* const* argv) {
         if (setOutputEnabled(outputName, true)) {
             msg.control.print(outputName);
             msg.control.println(F(" enabled"));
-            msg.control.println(F("  (use SAVE to persist)"));
+            printSaveReminder();
         } else {
             msg.control.print(F("ERROR: Unknown output '"));
             msg.control.print(outputName);
@@ -648,7 +648,7 @@ int cmd_output(int argc, const char* const* argv) {
         if (setOutputEnabled(outputName, false)) {
             msg.control.print(outputName);
             msg.control.println(F(" disabled"));
-            msg.control.println(F("  (use SAVE to persist)"));
+            printSaveReminder();
         } else {
             msg.control.print(F("ERROR: Unknown output '"));
             msg.control.print(outputName);
@@ -666,7 +666,7 @@ int cmd_output(int argc, const char* const* argv) {
             msg.control.print(F(" interval set to "));
             msg.control.print(interval);
             msg.control.println(F("ms"));
-            msg.control.println(F("  (use SAVE to persist)"));
+            printSaveReminder();
         } else {
             msg.control.print(F("ERROR: Unknown output '"));
             msg.control.print(outputName);
@@ -717,7 +717,8 @@ int cmd_display(int argc, const char* const* argv) {
     if (streq_P(subcommand, PSTR("ENABLE"))) {
         systemConfig.displayEnabled = 1;
         setDisplayRuntime(true);
-        msg.control.println(F("Display enabled (use SAVE to persist)"));
+        msg.control.println(F("Display enabled"));
+        printSaveReminder();
         return 0;
     }
 
@@ -725,7 +726,8 @@ int cmd_display(int argc, const char* const* argv) {
     if (streq_P(subcommand, PSTR("DISABLE"))) {
         systemConfig.displayEnabled = 0;
         setDisplayRuntime(false);
-        msg.control.println(F("Display disabled (use SAVE to persist)"));
+        msg.control.println(F("Display disabled"));
+        printSaveReminder();
         return 0;
     }
 
@@ -877,7 +879,7 @@ int cmd_transport(int argc, const char* const* argv) {
 
         // Sync router state to systemConfig (will be persisted on SAVE)
         router.syncConfig();
-        msg.control.println(F("Use SAVE to persist"));
+        printSaveReminder();
     } else {
         // Provide specific error for disabled serial ports
         if (transport >= TRANSPORT_SERIAL1 && transport <= TRANSPORT_SERIAL8) {
@@ -1236,7 +1238,7 @@ int cmd_log(int argc, const char* const* argv) {
         msg.control.print(planeName);
         msg.control.print(F(" plane log level set to "));
         msg.control.println(router.getLogFilter().getLevelName(level));
-        msg.control.println(F("  Use SAVE to persist this setting"));
+        printSaveReminder();
         return 0;
     }
 
@@ -1291,7 +1293,7 @@ int cmd_log(int argc, const char* const* argv) {
             }
             // Sync to systemConfig (so SAVE will persist it)
             router.syncConfig();
-            msg.control.println(F("  Use SAVE to persist this setting"));
+            printSaveReminder();
             return 0;
         }
 
@@ -1315,7 +1317,7 @@ int cmd_log(int argc, const char* const* argv) {
         msg.control.print(getTagName(tagId));
         msg.control.print(F(" "));
         msg.control.println(enable ? F("enabled") : F("disabled"));
-        msg.control.println(F("  Use SAVE to persist this setting"));
+        printSaveReminder();
         return 0;
     }
 

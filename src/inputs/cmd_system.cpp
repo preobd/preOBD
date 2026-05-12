@@ -291,26 +291,62 @@ static const char PSTR_SYS_INTERVAL[] PROGMEM = "INTERVAL";
 static const char PSTR_SYS_REBOOT[] PROGMEM = "REBOOT";
 static const char PSTR_SYS_RESET[] PROGMEM = "RESET";
 
+// Each help block is printed verbatim by printSubcommandTable, so it bakes in
+// the "SYSTEM <leaf>" prefix and lists every supported sub-form.
+static const char PSTR_HELP_SYS_STATUS[] PROGMEM =
+    "  SYSTEM STATUS                 Show all global configuration";
+static const char PSTR_HELP_SYS_PINS[] PROGMEM =
+    "  SYSTEM PINS                   Show all pin allocations\n"
+    "  SYSTEM PINS <pin>             Query a specific pin";
+static const char PSTR_HELP_SYS_DUMP[] PROGMEM =
+    "  SYSTEM DUMP                   Complete configuration dump (human-readable)\n"
+    "  SYSTEM DUMP JSON              Export active configuration as JSON\n"
+    "  SYSTEM DUMP REGISTRY JSON     Export static firmware catalogs as JSON";
+static const char PSTR_HELP_SYS_SEA_LEVEL[] PROGMEM =
+    "  SYSTEM SEA_LEVEL <hPa>        Set sea-level pressure (for altitude calc)";
+static const char PSTR_HELP_SYS_UNITS[] PROGMEM =
+    "  SYSTEM UNITS TEMP <C|F>\n"
+    "  SYSTEM UNITS PRESSURE <BAR|PSI|KPA|INHG>\n"
+    "  SYSTEM UNITS ELEVATION <M|FT>\n"
+    "  SYSTEM UNITS SPEED <KPH|MPH>";
+static const char PSTR_HELP_SYS_INTERVAL[] PROGMEM =
+    "  SYSTEM INTERVAL SENSOR <ms>   Sensor read interval\n"
+    "  SYSTEM INTERVAL ALARM <ms>    Alarm check interval";
+static const char PSTR_HELP_SYS_REBOOT[] PROGMEM =
+    "  SYSTEM REBOOT                 Restart the device";
+static const char PSTR_HELP_SYS_RESET[] PROGMEM =
+    "  SYSTEM RESET CONFIRM          Factory reset (erase config + reboot)";
+
 // runModeAllowed: STATUS / PINS / DUMP are read-only and useful in RUN mode.
 // SEA_LEVEL / UNITS / INTERVAL mutate persistent config; REBOOT / RESET are
 // destructive. All four belong in CONFIG mode only.
 static const Subcommand SYSTEM_SUBCOMMANDS[] PROGMEM = {
-    { PSTR_SYS_STATUS,    system_status,    true  },
-    { PSTR_SYS_PINS,      system_pins,      true  },
-    { PSTR_SYS_DUMP,      system_dump,      true  },
-    { PSTR_SYS_SEA_LEVEL, system_sea_level, false },
-    { PSTR_SYS_UNITS,     system_units,     false },
-    { PSTR_SYS_INTERVAL,  system_interval,  false },
-    { PSTR_SYS_REBOOT,    system_reboot,    false },
-    { PSTR_SYS_RESET,     system_reset,     false },
+    { PSTR_SYS_STATUS,    system_status,    true,  PSTR_HELP_SYS_STATUS    },
+    { PSTR_SYS_PINS,      system_pins,      true,  PSTR_HELP_SYS_PINS      },
+    { PSTR_SYS_DUMP,      system_dump,      true,  PSTR_HELP_SYS_DUMP      },
+    { PSTR_SYS_SEA_LEVEL, system_sea_level, false, PSTR_HELP_SYS_SEA_LEVEL },
+    { PSTR_SYS_UNITS,     system_units,     false, PSTR_HELP_SYS_UNITS     },
+    { PSTR_SYS_INTERVAL,  system_interval,  false, PSTR_HELP_SYS_INTERVAL  },
+    { PSTR_SYS_REBOOT,    system_reboot,    false, PSTR_HELP_SYS_REBOOT    },
+    { PSTR_SYS_RESET,     system_reset,     false, PSTR_HELP_SYS_RESET     },
 };
 static const uint8_t NUM_SYSTEM_SUBCOMMANDS = sizeof(SYSTEM_SUBCOMMANDS) / sizeof(Subcommand);
 
+void printHelpSystem() {
+    msg.control.println();
+    msg.control.println(F("=== SYSTEM Commands ==="));
+    msg.control.println(F("Global configuration affecting all subsystems"));
+    msg.control.println();
+    printSubcommandTable(SYSTEM_SUBCOMMANDS, NUM_SYSTEM_SUBCOMMANDS);
+    msg.control.println();
+}
+
 int cmd_system(int argc, const char* const* argv) {
     if (argc < 2) {
-        msg.control.println(F("ERROR: SYSTEM requires a subcommand"));
-        msg.control.println(F("  Usage: SYSTEM STATUS | DUMP | PINS | UNITS | SEA_LEVEL | INTERVAL | REBOOT | RESET"));
-        return 1;
+        // Bare SYSTEM — same behavior as bare BUS: show full help from the
+        // dispatch table rather than a hand-maintained one-line summary.
+        printHelpSystem();
+        return 0;
     }
 
     return dispatchSubcommand(SYSTEM_SUBCOMMANDS, NUM_SYSTEM_SUBCOMMANDS,

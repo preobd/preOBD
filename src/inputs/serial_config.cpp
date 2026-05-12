@@ -262,7 +262,8 @@ void handleCommandInput(char c) {
 
                 bool ok = loadConfigFromJSON(jsonImportBuffer);
                 if (ok) {
-                    msg.control.println(F("Applied. Type SAVE to persist to EEPROM"));
+                    msg.control.println(F("Applied"));
+                    printSaveReminder();
                 } else {
                     msg.control.println(F("ERROR: Failed to apply JSON configuration"));
                 }

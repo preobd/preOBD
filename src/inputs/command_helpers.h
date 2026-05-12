@@ -14,6 +14,42 @@
 enum MessagePlane;
 enum TransportID;
 
+// Forward declaration to avoid pulling input.h into every command_helpers consumer.
+struct Input;
+
+// Look up an Input by pin; if absent, print the standard
+// "ERROR: Input not configured" message on the control plane and return nullptr.
+// Replaces the recurring getInputByPin + null-check + error-print boilerplate
+// at every pin-scoped command leaf.
+Input* requireInput(uint8_t pin);
+
+// Standard success-message printers for pin-scoped SET / BUS leaves. Each
+// emits "Input <pinArg> <field> set to <value>" (or the enable/disable shape
+// for printInputFlag) followed by the canonical "(use SAVE to persist)"
+// reminder on the control plane. Use these instead of hand-built print
+// sequences so success output and the SAVE reminder stay consistent.
+void printInputFieldSet(const char* pinArg, const __FlashStringHelper* field,
+                        const char* value);
+void printInputFieldSet(const char* pinArg, const __FlashStringHelper* field,
+                        const __FlashStringHelper* value);
+void printInputFieldSet(const char* pinArg, const __FlashStringHelper* field,
+                        float value, uint8_t decimals = 3);
+void printInputFlag(const char* pinArg, const __FlashStringHelper* facet,
+                    bool enabled);
+
+// Standard "(use SAVE to persist)" reminder. Call this at the end of any
+// command leaf that mutates persisted configuration but cannot use the
+// printInputFieldSet/printInputFlag helpers (e.g. multi-line success output).
+void printSaveReminder();
+
+// Walk a PROGMEM-resident Subcommand table and print each entry's help block
+// verbatim. Each help string is expected to be a self-contained usage block
+// (the parent prefix is baked in, sub-forms span multiple lines). Skips
+// entries whose help field is null. Used by HELP BUS / HELP SYSTEM printers
+// so they stay in sync with the dispatch tables automatically.
+struct Subcommand;
+void printSubcommandTable(const Subcommand* table, uint8_t n);
+
 // MeasurementType -> printable PROGMEM name (e.g. "TEMPERATURE", "PRESSURE").
 // Returns nullptr for unknown values; callers should null-check or print a
 // fallback when displaying user-facing errors.
