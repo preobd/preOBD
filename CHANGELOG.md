@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CAN HAL `write()` clamps `len` to 8 before `memcpy` to prevent buffer overflow in frame construction (#112)
 - RPM ISR reads on AVR are now atomic, and timeout check uses `micros()` consistently with the ISR (#111, #116)
 - CAN-imported sensors now support a configurable per-sensor stale-data timeout via `SET <pin> CAN_TIMEOUT <ms>` (100–30000ms), replacing a hardcoded 2000ms for all sensors (#173)
+- `readCANSensor` now copies preset `CANSensorCalibration` out of PROGMEM via `memcpy_P` before access, fixing CAN sensor import on AVR (Mega2560) where direct dereference returned RAM garbage (#177)
 
 ## [0.8.0-beta] - 2026-04-30
 

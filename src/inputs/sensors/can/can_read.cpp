@@ -19,17 +19,20 @@
 void readCANSensor(Input* ptr) {
     if (!ptr) return;
 
-    // Get calibration (custom or preset)
+    // Get calibration (custom or preset). Preset calibrations live in PROGMEM,
+    // so on AVR they must be copied into RAM before any field access — direct
+    // dereference returns garbage. memcpy_P is a no-op-ish copy on Teensy/ESP32.
+    CANSensorCalibration cal_buf;
     const CANSensorCalibration* cal;
     if (ptr->flags.useCustomCalibration) {
         cal = &ptr->customCalibration.can;
     } else {
-        cal = (const CANSensorCalibration*)ptr->presetCalibration;
-    }
-
-    if (!cal) {
-        ptr->value = NAN;
-        return;
+        if (!ptr->presetCalibration) {
+            ptr->value = NAN;
+            return;
+        }
+        memcpy_P(&cal_buf, ptr->presetCalibration, sizeof(cal_buf));
+        cal = &cal_buf;
     }
 
     // Lookup cached CAN frame
