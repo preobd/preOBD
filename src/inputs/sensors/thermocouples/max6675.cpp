@@ -28,6 +28,11 @@
  */
 void readMAX6675(Input *ptr) {
     SPIClass* spi = getActiveSPI();
+    if (!spi) {
+        msg.debug.error(TAG_SENSOR, "SPI not configured — run 'BUS SPI 0' then SAVE and reboot");
+        ptr->value = NAN;
+        return;
+    }
     spi->beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
     digitalWrite(ptr->pin, LOW);
     delayMicroseconds(1);

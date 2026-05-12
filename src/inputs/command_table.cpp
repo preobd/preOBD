@@ -2351,9 +2351,9 @@ static int cmd_bus(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println();
         msg.control.println(F("Commands:"));
-        msg.control.println(F("  BUS I2C [0|1|2]           - Show or select I2C bus"));
+        msg.control.println(F("  BUS I2C [0|1|2|NONE]      - Show or select I2C bus (NONE frees pins)"));
         msg.control.println(F("  BUS I2C CLOCK <kHz>       - Set I2C clock (100/400/1000)"));
-        msg.control.println(F("  BUS SPI [0|1|2]           - Show or select SPI bus"));
+        msg.control.println(F("  BUS SPI [0|1|2|NONE]      - Show or select SPI bus (NONE frees pins)"));
         msg.control.println(F("  BUS SPI CLOCK <Hz>        - Set SPI clock"));
         msg.control.println(F("  BUS CAN                   - Show CAN status"));
         msg.control.println(F("  BUS CAN BAUDRATE <bps>    - Set CAN baudrate (both buses)"));
@@ -2399,6 +2399,15 @@ static int cmd_bus(int argc, const char* const* argv) {
             msg.control.print(clock);
             msg.control.println(F("kHz"));
             msg.control.println(F("Note: Takes effect on next reboot"));
+            msg.control.println(F("Use SAVE to persist"));
+            return 0;
+        }
+
+        // BUS I2C NONE - Disable I2C bus
+        if (streq(argv[2], "NONE")) {
+            systemConfig.buses.active_i2c = 0xFF;
+            msg.control.println(F("I2C bus set to NONE"));
+            msg.control.println(F("I2C pins will be free on next reboot"));
             msg.control.println(F("Use SAVE to persist"));
             return 0;
         }
@@ -2457,6 +2466,15 @@ static int cmd_bus(int argc, const char* const* argv) {
             msg.control.print(clock / 1000000.0, 1);
             msg.control.println(F("MHz"));
             msg.control.println(F("Note: Takes effect on next transaction"));
+            msg.control.println(F("Use SAVE to persist"));
+            return 0;
+        }
+
+        // BUS SPI NONE - Disable SPI bus
+        if (streq(argv[2], "NONE")) {
+            systemConfig.buses.active_spi = 0xFF;
+            msg.control.println(F("SPI bus set to NONE"));
+            msg.control.println(F("SPI pins will be free on next reboot"));
             msg.control.println(F("Use SAVE to persist"));
             return 0;
         }

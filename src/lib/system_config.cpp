@@ -225,9 +225,9 @@ void resetSystemConfig() {
 #endif
 
     // Bus Configuration defaults (simplified "pick one" model)
-    systemConfig.buses.active_i2c = DEFAULT_I2C_BUS;
+    systemConfig.buses.active_i2c = 0xFF;  // NONE — not initialized until explicitly selected
     systemConfig.buses.i2c_clock = DEFAULT_I2C_CLOCK;
-    systemConfig.buses.active_spi = DEFAULT_SPI_BUS;
+    systemConfig.buses.active_spi = 0xFF;  // NONE — not initialized until explicitly selected
     systemConfig.buses.spi_clock = DEFAULT_SPI_CLOCK;
 
     // CAN configuration - output enabled by default for backward compatibility

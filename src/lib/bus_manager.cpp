@@ -36,21 +36,23 @@ static bool can_ready = false;
 
 void initConfiguredBuses() {
 
-    // Initialize the active I2C bus
-    if (!initI2CBus(systemConfig.buses.active_i2c, systemConfig.buses.i2c_clock)) {
-        // Fall back to bus 0 if requested bus fails
-        if (systemConfig.buses.active_i2c != 0) {
-            msg.debug.warn(TAG_I2C, "Falling back to Wire (bus 0)");
-            initI2CBus(0, systemConfig.buses.i2c_clock);
+    // Initialize the active I2C bus (only if explicitly selected)
+    if (systemConfig.buses.active_i2c != 0xFF) {
+        if (!initI2CBus(systemConfig.buses.active_i2c, systemConfig.buses.i2c_clock)) {
+            if (systemConfig.buses.active_i2c != 0) {
+                msg.debug.warn(TAG_I2C, "Falling back to Wire (bus 0)");
+                initI2CBus(0, systemConfig.buses.i2c_clock);
+            }
         }
     }
 
-    // Initialize the active SPI bus
-    if (!initSPIBus(systemConfig.buses.active_spi, systemConfig.buses.spi_clock)) {
-        // Fall back to bus 0 if requested bus fails
-        if (systemConfig.buses.active_spi != 0) {
-            msg.debug.warn(TAG_SPI, "Falling back to SPI (bus 0)");
-            initSPIBus(0, systemConfig.buses.spi_clock);
+    // Initialize the active SPI bus (only if explicitly selected)
+    if (systemConfig.buses.active_spi != 0xFF) {
+        if (!initSPIBus(systemConfig.buses.active_spi, systemConfig.buses.spi_clock)) {
+            if (systemConfig.buses.active_spi != 0) {
+                msg.debug.warn(TAG_SPI, "Falling back to SPI (bus 0)");
+                initSPIBus(0, systemConfig.buses.spi_clock);
+            }
         }
     }
 
@@ -325,11 +327,11 @@ bool initCANBus(uint8_t bus_id, uint32_t baudrate) {
 // ============================================================================
 
 TwoWire* getActiveI2C() {
-    return active_i2c ? active_i2c : &Wire;
+    return active_i2c;
 }
 
 SPIClass* getActiveSPI() {
-    return active_spi ? active_spi : &SPI;
+    return active_spi;
 }
 
 uint8_t getActiveI2CId() {
@@ -385,14 +387,18 @@ void displayI2CStatus() {
     msg.control.println();
     msg.control.println(F("=== I2C Bus Configuration ==="));
     msg.control.print(F("Active: "));
-    msg.control.print(getI2CBusName(bus_id));
-    msg.control.print(F(" (SDA="));
-    msg.control.print(getDefaultI2CSDA(bus_id));
-    msg.control.print(F(", SCL="));
-    msg.control.print(getDefaultI2CSCL(bus_id));
-    msg.control.print(F(") @ "));
-    msg.control.print(systemConfig.buses.i2c_clock);
-    msg.control.println(F("kHz"));
+    if (bus_id == 0xFF) {
+        msg.control.println(F("NONE (not initialized — use 'BUS I2C 0' to enable)"));
+    } else {
+        msg.control.print(getI2CBusName(bus_id));
+        msg.control.print(F(" (SDA="));
+        msg.control.print(getDefaultI2CSDA(bus_id));
+        msg.control.print(F(", SCL="));
+        msg.control.print(getDefaultI2CSCL(bus_id));
+        msg.control.print(F(") @ "));
+        msg.control.print(systemConfig.buses.i2c_clock);
+        msg.control.println(F("kHz"));
+    }
     msg.control.print(F("Available buses: "));
     for (uint8_t i = 0; i < NUM_I2C_BUSES; i++) {
         if (i > 0) msg.control.print(F(", "));
@@ -409,16 +415,20 @@ void displaySPIStatus() {
     msg.control.println();
     msg.control.println(F("=== SPI Bus Configuration ==="));
     msg.control.print(F("Active: "));
-    msg.control.print(getSPIBusName(bus_id));
-    msg.control.print(F(" (MOSI="));
-    msg.control.print(getDefaultSPIMOSI(bus_id));
-    msg.control.print(F(", MISO="));
-    msg.control.print(getDefaultSPIMISO(bus_id));
-    msg.control.print(F(", SCK="));
-    msg.control.print(getDefaultSPISCK(bus_id));
-    msg.control.print(F(") @ "));
-    msg.control.print(systemConfig.buses.spi_clock / 1000000.0, 1);
-    msg.control.println(F("MHz"));
+    if (bus_id == 0xFF) {
+        msg.control.println(F("NONE (not initialized — use 'BUS SPI 0' to enable)"));
+    } else {
+        msg.control.print(getSPIBusName(bus_id));
+        msg.control.print(F(" (MOSI="));
+        msg.control.print(getDefaultSPIMOSI(bus_id));
+        msg.control.print(F(", MISO="));
+        msg.control.print(getDefaultSPIMISO(bus_id));
+        msg.control.print(F(", SCK="));
+        msg.control.print(getDefaultSPISCK(bus_id));
+        msg.control.print(F(") @ "));
+        msg.control.print(systemConfig.buses.spi_clock / 1000000.0, 1);
+        msg.control.println(F("MHz"));
+    }
     msg.control.print(F("Available buses: "));
     for (uint8_t i = 0; i < NUM_SPI_BUSES; i++) {
         if (i > 0) msg.control.print(F(", "));

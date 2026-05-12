@@ -52,6 +52,12 @@ void initBME280(Input* ptr) {
     // Auto-detect I2C address (try 0x76 first, then 0x77)
     // Use the active I2C bus from bus_manager
     TwoWire* i2c = getActiveI2C();
+    if (!i2c) {
+        msg.debug.error(TAG_SENSOR, "I2C not configured — run 'BUS I2C 0' then SAVE and reboot");
+        delete bme280_ptr;
+        bme280_ptr = nullptr;
+        return;
+    }
     if (bme280_ptr->begin(0x76, i2c)) {
         bme280_initialized = true;
         bme280_i2c_address = 0x76;
