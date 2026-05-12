@@ -874,20 +874,29 @@ uint8_t parsePin(const char* pinStr, bool* isValid) {
 
     if (isValid) *isValid = true;
 
-    // Handle "I2C" keyword for I2C sensors (BME280, etc)
-    // Use a virtual pin counter to allow multiple I2C sensors
-    // Virtual pins start at 0xF0 (240) - well above any real pin number
+    // Handle "I2C" keyword for I2C sensors (BME280, etc).
+    // Virtual pins are 0xF0..0xFC (13 slots, well above real pin numbers).
+    //
+    // Source of truth is the inputs[] array, NOT a static counter. A static
+    // counter advances on every parsePin() call regardless of whether the
+    // command went on to allocate a slot — so a typo like
+    // `SET I2C SENSOR DOESNOTEXIST` would burn a virtual pin number, and
+    // 13 such typos would falsely report "too many I2C sensors" until reboot
+    // (#196).
     if (streq(pinStr, "I2C")) {
-        static uint8_t i2cVirtualPinCounter = 0xF0;
-
-        // Check if we've exceeded the virtual pin range
-        if (i2cVirtualPinCounter >= 0xFD) {
+        uint8_t highest = 0xEF;  // start before I2C range
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].pin >= 0xF0 && inputs[i].pin <= 0xFC) {
+                if (inputs[i].pin > highest) highest = inputs[i].pin;
+            }
+        }
+        uint8_t next = highest + 1;
+        if (next > 0xFC) {
             msg.control.println(F("ERROR: Too many I2C sensors configured (max 13)"));
             if (isValid) *isValid = false;
             return 0;
         }
-
-        return i2cVirtualPinCounter++;
+        return next;
     }
 
     // Handle "I2C:n" format for referencing existing I2C sensors (e.g., "I2C:0", "I2C:1")
@@ -909,36 +918,29 @@ uint8_t parsePin(const char* pinStr, bool* isValid) {
         return virtualPin;
     }
 
-    // Handle "CAN" keyword for CAN-imported sensors (OBD-II, J1939, custom)
-    // Use a virtual pin counter to allow multiple CAN sensors
-    // Virtual pins start at 0xC0 (192) - matches CAN virtual pin allocation
+    // Handle "CAN" keyword for CAN-imported sensors (OBD-II, J1939, custom).
+    // Virtual pins are 0xC0..0xDF (32 slots).
+    //
+    // Same approach as the I2C branch above: scan inputs[] for the highest
+    // allocated CAN pin and return the next slot. The previous implementation
+    // kept a static counter that advanced on every parse, which leaked slots
+    // on failed commands (#196) — the rebase loop only fired when at least
+    // one CAN slot was already allocated, so a fresh boot followed by typos
+    // would still burn through the range.
     if (streq(pinStr, "CAN")) {
-        static uint8_t canVirtualPinCounter = 0xC0;
-
-        // Find highest allocated CAN virtual pin and continue from there
-        // This handles EEPROM loads where pins were already allocated
-        uint8_t highestAllocated = 0xBF;  // Start before CAN range
+        uint8_t highest = 0xBF;  // start before CAN range
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
             if (inputs[i].pin >= 0xC0 && inputs[i].pin < 0xE0) {
-                if (inputs[i].pin > highestAllocated) {
-                    highestAllocated = inputs[i].pin;
-                }
+                if (inputs[i].pin > highest) highest = inputs[i].pin;
             }
         }
-
-        // Set counter to next available slot
-        if (highestAllocated >= 0xC0) {
-            canVirtualPinCounter = highestAllocated + 1;
-        }
-
-        // Check if we've exceeded the virtual pin range (0xC0-0xDF = 32 sensors)
-        if (canVirtualPinCounter >= 0xE0) {
+        uint8_t next = highest + 1;
+        if (next >= 0xE0) {
             msg.control.println(F("ERROR: Too many CAN sensors configured (max 32)"));
             if (isValid) *isValid = false;
             return 0;
         }
-
-        return canVirtualPinCounter++;
+        return next;
     }
 
     // Handle "CAN:n" format for referencing existing CAN sensors (e.g., "CAN:0", "CAN:1")
@@ -1061,13 +1063,14 @@ uint8_t parsePin(const char* pinStr, bool* isValid) {
 }
 
 /**
- * Reset virtual pin allocation counters
- * Called when clearing all inputs or loading from EEPROM
+ * Reset virtual pin allocation counters.
+ *
+ * No-op since the static counters were removed in the #196 fix — parsePin()
+ * for CAN/I2C now always scans inputs[] for the highest allocated slot, so
+ * there is no internal state to reset. Kept as an exported symbol in case
+ * callers exist elsewhere; safe to remove if no callers materialize.
  */
 void resetVirtualPinCounters() {
-    // Static counters are reset by re-analyzing the inputs[] array
-    // Next call to parsePin("CAN") or parsePin("I2C") will scan for highest allocated
-    // This function is a placeholder for future explicit reset if needed
 }
 
 // Helper function to print help for a specific category

@@ -235,6 +235,56 @@ def test_back_to_config(s: Session) -> Result:
     return check("Back to CONFIG mode", out, must_not_contain=[])
 
 
+# --- parsePin counter leak (#196) ---
+#
+# Before the fix, parsePin("I2C") and parsePin("CAN") advanced internal static
+# counters on every parse, regardless of whether the command actually went on
+# to allocate a slot. So 14+ failed `SET I2C SENSOR <typo>` invocations would
+# falsely exhaust the I2C pin range and start reporting "Too many I2C sensors"
+# until reboot.
+#
+# After the fix, parsePin scans inputs[] for the highest allocated slot and
+# returns max+1 — no internal state to leak. We send 16 typos (more than the
+# 13-slot range) and assert "Too many" never appears.
+
+def test_i2c_counter_does_not_leak(s: Session) -> Result:
+    s.send("CONFIG", wait=0.3)
+    seen_too_many = False
+    for _ in range(16):
+        out = s.send("SET I2C SENSOR DEFINITELY_NOT_A_SENSOR", wait=0.4)
+        if "Too many I2C sensors" in out:
+            seen_too_many = True
+            break
+    return check("I2C parse counter does not leak on failed commands",
+                 "TOO_MANY_SEEN" if seen_too_many else "ok",
+                 must_not_contain=["TOO_MANY_SEEN"])
+
+
+def test_can_counter_does_not_leak(s: Session) -> Result:
+    """Same shape for CAN — 0xC0..0xDF range, 32 slots. Send 35 typos."""
+    s.send("CONFIG", wait=0.3)
+    seen_too_many = False
+    for _ in range(35):
+        # Use a numeric-looking PID to enter the CAN-import prelude path
+        # specifically (avoids the field-dispatch branch). The PID won't
+        # actually allocate because we'll feed a syntactically-valid but
+        # semantically-rejected one — actually any PID that triggers
+        # parsePin("CAN") and then errors is fine. Use 0xFF (no standard
+        # PID info, so it goes the "unknown PID, use defaults" path which
+        # *does* allocate). That defeats the test.
+        #
+        # Instead: trigger parsePin("CAN") via a syntactically-bad-but-
+        # parsed-first SET command. `SET CAN APPLICATION X` errors before
+        # allocation but after parsePin("CAN") has run.
+        out = s.send("SET CAN APPLICATION X", wait=0.3)
+        if "Too many CAN sensors" in out:
+            seen_too_many = True
+            break
+    return check("CAN parse counter does not leak on failed commands",
+                 "TOO_MANY_SEEN" if seen_too_many else "ok",
+                 must_not_contain=["TOO_MANY_SEEN"])
+
+
 TESTS: List[Callable[[Session], Result]] = [
     # Existing PR #197 (cmd_set bugs) — all in CONFIG mode
     test_selftest_baseline,
@@ -255,6 +305,9 @@ TESTS: List[Callable[[Session], Result]] = [
     test_run_mode_blocks_set,
     test_run_mode_unknown_command,
     test_back_to_config,
+    # PR #200 (parsePin counter leak, #196)
+    test_i2c_counter_does_not_leak,
+    test_can_counter_does_not_leak,
 ]
 
 
