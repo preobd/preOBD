@@ -799,6 +799,34 @@ static int cmd_set(int argc, const char* const* argv) {
         return 1;
     }
 
+    // SET <pin> DISPLAY ENABLE|DISABLE
+    if (streq(field, "DISPLAY")) {
+        if (argc < 4) {
+            msg.control.println(F("ERROR: DISPLAY requires ENABLE or DISABLE"));
+            return 1;
+        }
+        if (streq(argv[3], "ENABLE")) {
+            if (enableInputDisplay(pin, true)) {
+                msg.control.print(F("Input "));
+                msg.control.print(argv[1]);
+                msg.control.println(F(" display enabled"));
+                return 0;
+            }
+            return 1;
+        }
+        if (streq(argv[3], "DISABLE")) {
+            if (enableInputDisplay(pin, false)) {
+                msg.control.print(F("Input "));
+                msg.control.print(argv[1]);
+                msg.control.println(F(" display disabled"));
+                return 0;
+            }
+            return 1;
+        }
+        msg.control.println(F("ERROR: DISPLAY requires ENABLE or DISABLE"));
+        return 1;
+    }
+
     // SET <pin> UNITS <units>
     if (streq(field, "UNITS")) {
         if (argc < 4) {
