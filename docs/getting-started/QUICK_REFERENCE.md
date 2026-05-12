@@ -151,11 +151,31 @@ SET A3 OIL_PRESSURE GENERIC_LINEAR
 SET A3 PRESSURE_LINEAR 0.5 4.5 0.0 7.0   # 0.5-4.5V maps to 0-7 bar
 ```
 
-**Wiring:**
+**Wiring (5V boards — Mega):**
 ```
 Sensor VCC    → 5V regulated
 Sensor GND    → GND
 Sensor Signal → Analog pin
+```
+
+**Wiring (3.3V boards — Teensy, ESP32):**
+
+⚠️ These sensors output up to 4.5V. A voltage divider is required to protect the ADC.
+
+```
+Sensor VCC    → 5V regulated
+Sensor GND    → GND
+Sensor Signal → 18kΩ → Analog pin
+                         │
+                        33kΩ
+                         │
+                        GND
+```
+
+This scales 0.5–4.5V to ~0.32–2.91V — safely within the 3.3V ADC range.
+Update the calibration to match the divided voltage range:
+```
+SET A3 PRESSURE_LINEAR 0.32 2.91 0.0 7.0   # example: 0-7 bar sensor
 ```
 
 ### Battery Voltage
