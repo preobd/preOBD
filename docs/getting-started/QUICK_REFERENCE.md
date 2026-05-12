@@ -104,7 +104,7 @@ SET A5 TCASE_TEMP VDO_150C_STEINHART  # Transfer case
 ```
 VDO Sensor Signal → Analog pin (A2)
 VDO Sensor Ground → Chassis ground
-Add bias resistor: Pin → 1kΩ → 3.3V/5V
+Add bias resistor: Pin → 100Ω → 3.3V/5V
 ```
 
 ### Generic NTC Thermistor
@@ -122,7 +122,7 @@ SET A2 STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
 ```
 NTC Thermistor → Between analog pin and GND
 Bias resistor  → Between analog pin and 3.3V/5V
-(Typically 10kΩ bias for 10K NTC)
+(Recommended: 2.49kΩ bias for high-impedance NTC sensors)
 ```
 
 ### VDO Pressure Sensor
@@ -133,7 +133,7 @@ SET A7 BOOST_PRESSURE VDO_2BAR_CURVE        # Boost pressure
 SET A8 FUEL_PRESSURE VDO_10BAR        # Fuel pressure
 ```
 
-**Wiring:** Same as temperature sensor (signal + ground + 1kΩ bias)
+**Wiring:** Same as temperature sensor (signal + ground + 100Ω bias)
 
 ### Generic Linear Pressure Sensor (0.5-4.5V)
 
@@ -479,7 +479,7 @@ SET <pin> BIAS <resistor>                         # Override bias resistor
 ## Common Mistakes
 
 1. **Wrong sensor type** - VDO 120C vs 150C makes huge difference
-2. **Missing pull-down resistor** - VDO thermistors need pull-down (typically 1kΩ)
+2. **Wrong bias resistor** - VDO/low-impedance senders need 100Ω; high-impedance NTC (10K) sensors need 2.49kΩ. See [Bias Resistor Guide](../guides/hardware/BIAS_RESISTOR_GUIDE.md).
 3. **Wrong I2C address** - Try both 0x27 and 0x3F for LCD
 4. **5V to 3.3V board** - Will destroy Teensy/ESP32!
 5. **No CAN termination** - CAN bus needs 120Ω resistors at each end
