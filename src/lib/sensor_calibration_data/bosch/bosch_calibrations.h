@@ -4,13 +4,9 @@
  * Calibration data for Bosch NTC temperature sensors used as universal EFI
  * coolant/intake air temp sensors across many manufacturers.
  *
- * Data source caveat: Bosch datasheets publish R-vs-T tables per part number,
- * NOT a single β coefficient. The β value used here (3750K) is a commonly
- * cited aftermarket figure (Haltech/MegaSquirt wiki, Volvo enthusiast forums)
- * derived from approximately the 25°C/85°C datasheet points. This has NOT
- * been verified against an actual Bosch datasheet in this codebase — a
- * bench-verified lookup table from the official R-vs-T data would be more
- * accurate, especially at temperature extremes. See issue #141.
+ * Calibration uses Steinhart-Hart coefficients fitted to the official Bosch
+ * 0 280 130 026 R-vs-T table (18 points, -40 to 130°C). Residuals verified
+ * against all table points: <0.2°C across 0–100°C, <0.6°C at extremes.
  *
  * Bosch NTC M12 is high-impedance — use SENSOR_BIAS_HIGH_Z (2.49kΩ position).
  */
@@ -31,7 +27,7 @@
 // Calibration type: CAL_THERMISTOR_STEINHART (Steinhart-Hart 3-coefficient)
 // S-H coefficients fitted to official Bosch 0 280 130 026 R-vs-T table using
 //   anchor points: 0°C/5896Ω, 40°C/1175Ω, 100°C/187Ω. Verified against
-//   all 18 table points; max residual <0.2°C across -40 to 130°C.
+//   all 18 table points; max residual <0.2°C (0–100°C), <0.6°C at extremes.
 // NOTE: Requires SENSOR_BIAS_HIGH_Z (2.49kΩ position). Using the 100Ω VDO position
 //       will give badly compressed cold readings. Haltech uses 1kΩ pull-up
 //       internally — on preOBD hardware use the 2.49kΩ hardware position instead.
