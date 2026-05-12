@@ -216,7 +216,7 @@ static int set_display(uint8_t pin, int argc, const char* const* argv) {
         msg.control.println(F("ERROR: DISPLAY requires ENABLE or DISABLE"));
         return 1;
     }
-    if (streq(argv[3], "ENABLE")) {
+    if (streq_P(argv[3], PSTR("ENABLE"))) {
         if (enableInputDisplay(pin, true)) {
             msg.control.print(F("Input "));
             msg.control.print(argv[1]);
@@ -225,7 +225,7 @@ static int set_display(uint8_t pin, int argc, const char* const* argv) {
         }
         return 1;
     }
-    if (streq(argv[3], "DISABLE")) {
+    if (streq_P(argv[3], PSTR("DISABLE"))) {
         if (enableInputDisplay(pin, false)) {
             msg.control.print(F("Input "));
             msg.control.print(argv[1]);
@@ -262,7 +262,7 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
 
-    if (streq(argv[3], "ENABLE")) {
+    if (streq_P(argv[3], PSTR("ENABLE"))) {
         if (enableInputAlarm(pin, true)) {
             msg.control.print(F("Input "));
             msg.control.print(argv[1]);
@@ -272,7 +272,7 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
 
-    if (streq(argv[3], "DISABLE")) {
+    if (streq_P(argv[3], PSTR("DISABLE"))) {
         if (enableInputAlarm(pin, false)) {
             msg.control.print(F("Input "));
             msg.control.print(argv[1]);
@@ -282,7 +282,7 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
 
-    if (streq(argv[3], "WARMUP")) {
+    if (streq_P(argv[3], PSTR("WARMUP"))) {
         if (argc < 5) {
             msg.control.println(F("ERROR: ALARM WARMUP requires a time value in milliseconds"));
             return 1;
@@ -303,7 +303,7 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
 
-    if (streq(argv[3], "PERSIST")) {
+    if (streq_P(argv[3], PSTR("PERSIST"))) {
         if (argc < 5) {
             msg.control.println(F("ERROR: ALARM PERSIST requires a time value in milliseconds"));
             return 1;
@@ -378,7 +378,7 @@ static int set_output(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
 
-    if (streq(argv[3], "STATUS")) {
+    if (streq_P(argv[3], PSTR("STATUS"))) {
         printInputOutputInfo(pin);
         return 0;
     }
@@ -389,16 +389,16 @@ static int set_output(uint8_t pin, int argc, const char* const* argv) {
     }
 
     bool enable;
-    if (streq(argv[4], "ENABLE")) {
+    if (streq_P(argv[4], PSTR("ENABLE"))) {
         enable = true;
-    } else if (streq(argv[4], "DISABLE")) {
+    } else if (streq_P(argv[4], PSTR("DISABLE"))) {
         enable = false;
     } else {
         msg.control.println(F("ERROR: Expected ENABLE or DISABLE"));
         return 1;
     }
 
-    if (streq(argv[3], "ALL")) {
+    if (streq_P(argv[3], PSTR("ALL"))) {
         Input* input = getInputByPin(pin);
         if (!input) {
             msg.control.println(F("ERROR: Input not configured"));
@@ -414,13 +414,13 @@ static int set_output(uint8_t pin, int argc, const char* const* argv) {
     }
 
     uint8_t outputId;
-    if (streq(argv[3], "CAN")) {
+    if (streq_P(argv[3], PSTR("CAN"))) {
         outputId = OUTPUT_CAN;
-    } else if (streq(argv[3], "REALDASH")) {
+    } else if (streq_P(argv[3], PSTR("REALDASH"))) {
         outputId = OUTPUT_REALDASH;
-    } else if (streq(argv[3], "SERIAL")) {
+    } else if (streq_P(argv[3], PSTR("SERIAL"))) {
         outputId = OUTPUT_SERIAL;
-    } else if (streq(argv[3], "SD_LOG") || streq(argv[3], "SD")) {
+    } else if (streq_P(argv[3], PSTR("SD_LOG")) || streq_P(argv[3], PSTR("SD"))) {
         outputId = OUTPUT_SD;
     } else {
         msg.control.print(F("ERROR: Unknown output '"));
@@ -450,7 +450,7 @@ static int set_calibration(uint8_t pin, int argc, const char* const* argv) {
         msg.control.println(F("ERROR: CALIBRATION requires PRESET"));
         return 1;
     }
-    if (!streq(argv[3], "PRESET")) {
+    if (!streq_P(argv[3], PSTR("PRESET"))) {
         msg.control.println(F("ERROR: Unknown CALIBRATION subcommand"));
         msg.control.println(F("  Use: SET <pin> CALIBRATION PRESET"));
         return 1;
@@ -1107,12 +1107,12 @@ int cmd_set(int argc, const char* const* argv) {
     // different shape).
     //
     // Use SET CAN:N <field> ... to configure an existing CAN sensor.
-    if (streq(argv[1], "CAN") && argc >= 3 && !looksLikePidLiteral(argv[2])) {
+    if (streq_P(argv[1], PSTR("CAN")) && argc >= 3 && !looksLikePidLiteral(argv[2])) {
         msg.control.println(F("ERROR: 'SET CAN <pid>' requires a numeric or 0xNN hex PID"));
         msg.control.println(F("  Use 'SET CAN:N <field> ...' to configure an existing CAN sensor"));
         return 1;
     }
-    if (streq(argv[1], "CAN") && argc >= 3) {
+    if (streq_P(argv[1], PSTR("CAN")) && argc >= 3) {
         // Parse PID (supports hex like 0x0C or decimal like 12)
         uint8_t pid;
         if (argv[2][0] == '0' && (argv[2][1] == 'x' || argv[2][1] == 'X')) {

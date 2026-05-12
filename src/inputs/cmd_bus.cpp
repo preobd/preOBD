@@ -55,7 +55,7 @@ static int bus_i2c(int argc, const char* const* argv, int /*tokenIndex*/) {
     }
 
     // BUS I2C CLOCK <kHz>
-    if (streq(argv[2], "CLOCK")) {
+    if (streq_P(argv[2], PSTR("CLOCK"))) {
         if (argc < 4) {
             msg.control.println(F("ERROR: CLOCK requires a speed in kHz"));
             msg.control.println(F("  Usage: BUS I2C CLOCK <100|400|1000>"));
@@ -78,7 +78,7 @@ static int bus_i2c(int argc, const char* const* argv, int /*tokenIndex*/) {
     }
 
     // BUS I2C NONE - Disable I2C bus
-    if (streq(argv[2], "NONE")) {
+    if (streq_P(argv[2], PSTR("NONE"))) {
         systemConfig.buses.active_i2c = 0xFF;
         msg.control.println(F("I2C bus set to NONE"));
         msg.control.println(F("I2C pins will be free on next reboot"));
@@ -119,7 +119,7 @@ static int bus_spi(int argc, const char* const* argv, int /*tokenIndex*/) {
     }
 
     // BUS SPI CLOCK <Hz>
-    if (streq(argv[2], "CLOCK")) {
+    if (streq_P(argv[2], PSTR("CLOCK"))) {
         if (argc < 4) {
             msg.control.println(F("ERROR: CLOCK requires a speed in Hz"));
             msg.control.println(F("  Usage: BUS SPI CLOCK <Hz>"));
@@ -143,7 +143,7 @@ static int bus_spi(int argc, const char* const* argv, int /*tokenIndex*/) {
     }
 
     // BUS SPI NONE - Disable SPI bus
-    if (streq(argv[2], "NONE")) {
+    if (streq_P(argv[2], PSTR("NONE"))) {
         systemConfig.buses.active_spi = 0xFF;
         msg.control.println(F("SPI bus set to NONE"));
         msg.control.println(F("SPI pins will be free on next reboot"));
@@ -190,7 +190,7 @@ static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
     }
 
     // BUS CAN BAUDRATE <bps> - Set both input and output (backward compatibility)
-    if (streq(argv[2], "BAUDRATE")) {
+    if (streq_P(argv[2], PSTR("BAUDRATE"))) {
         if (argc < 4) {
             msg.control.println(F("ERROR: BAUDRATE requires a speed in bps"));
             msg.control.println(F("  Usage: BUS CAN BAUDRATE <125000|250000|500000|1000000>"));
@@ -214,9 +214,9 @@ static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
     }
 
     // BUS CAN INPUT BAUDRATE <bps> or BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [bps]
-    if (streq(argv[2], "INPUT")) {
+    if (streq_P(argv[2], PSTR("INPUT"))) {
         // BUS CAN INPUT BAUDRATE <bps>
-        if (argc >= 4 && streq(argv[3], "BAUDRATE")) {
+        if (argc >= 4 && streq_P(argv[3], PSTR("BAUDRATE"))) {
             if (argc < 5) {
                 msg.control.println(F("ERROR: BAUDRATE requires a speed in bps"));
                 msg.control.println(F("  Usage: BUS CAN INPUT BAUDRATE <125000|250000|500000|1000000>"));
@@ -254,10 +254,10 @@ static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
 
         // Parse bus number (CAN1=0, CAN2=1, CAN3=2)
         uint8_t bus_id = 0xFF;
-        if (streq(argv[3], "CAN1")) bus_id = 0;
-        else if (streq(argv[3], "CAN2")) bus_id = 1;
-        else if (streq(argv[3], "CAN3")) bus_id = 2;
-        else if (streq(argv[3], "NONE") || streq(argv[3], "DISABLE")) bus_id = 0xFF;
+        if (streq_P(argv[3], PSTR("CAN1"))) bus_id = 0;
+        else if (streq_P(argv[3], PSTR("CAN2"))) bus_id = 1;
+        else if (streq_P(argv[3], PSTR("CAN3"))) bus_id = 2;
+        else if (streq_P(argv[3], PSTR("NONE")) || streq_P(argv[3], PSTR("DISABLE"))) bus_id = 0xFF;
         else {
             msg.control.println(F("ERROR: Bus must be CAN1, CAN2, CAN3, or NONE"));
             return 1;
@@ -273,11 +273,11 @@ static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
 
         // Parse mode: ENABLE (normal with ACK), LISTEN (listen-only), DISABLE
         uint8_t mode = CAN_INPUT_OFF;
-        if (streq(argv[4], "ENABLE") || streq(argv[4], "NORMAL")) {
+        if (streq_P(argv[4], PSTR("ENABLE")) || streq_P(argv[4], PSTR("NORMAL"))) {
             mode = CAN_INPUT_NORMAL;
-        } else if (streq(argv[4], "LISTEN")) {
+        } else if (streq_P(argv[4], PSTR("LISTEN"))) {
             mode = CAN_INPUT_LISTEN;
-        } else if (streq(argv[4], "DISABLE")) {
+        } else if (streq_P(argv[4], PSTR("DISABLE"))) {
             mode = CAN_INPUT_OFF;
         } else {
             msg.control.println(F("ERROR: Must be ENABLE/NORMAL, LISTEN, or DISABLE"));
@@ -348,9 +348,9 @@ static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
     }
 
     // BUS CAN OUTPUT BAUDRATE <bps> or BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [bps]
-    if (streq(argv[2], "OUTPUT")) {
+    if (streq_P(argv[2], PSTR("OUTPUT"))) {
         // BUS CAN OUTPUT BAUDRATE <bps>
-        if (argc >= 4 && streq(argv[3], "BAUDRATE")) {
+        if (argc >= 4 && streq_P(argv[3], PSTR("BAUDRATE"))) {
             if (argc < 5) {
                 msg.control.println(F("ERROR: BAUDRATE requires a speed in bps"));
                 msg.control.println(F("  Usage: BUS CAN OUTPUT BAUDRATE <125000|250000|500000|1000000>"));
@@ -388,10 +388,10 @@ static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
 
         // Parse bus number (CAN1=0, CAN2=1, CAN3=2)
         uint8_t bus_id = 0xFF;
-        if (streq(argv[3], "CAN1")) bus_id = 0;
-        else if (streq(argv[3], "CAN2")) bus_id = 1;
-        else if (streq(argv[3], "CAN3")) bus_id = 2;
-        else if (streq(argv[3], "NONE") || streq(argv[3], "DISABLE")) bus_id = 0xFF;
+        if (streq_P(argv[3], PSTR("CAN1"))) bus_id = 0;
+        else if (streq_P(argv[3], PSTR("CAN2"))) bus_id = 1;
+        else if (streq_P(argv[3], PSTR("CAN3"))) bus_id = 2;
+        else if (streq_P(argv[3], PSTR("NONE")) || streq_P(argv[3], PSTR("DISABLE"))) bus_id = 0xFF;
         else {
             msg.control.println(F("ERROR: Bus must be CAN1, CAN2, CAN3, or NONE"));
             return 1;
@@ -407,8 +407,8 @@ static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
 
         // Parse enable/disable
         bool enable = false;
-        if (streq(argv[4], "ENABLE")) enable = true;
-        else if (streq(argv[4], "DISABLE")) enable = false;
+        if (streq_P(argv[4], PSTR("ENABLE"))) enable = true;
+        else if (streq_P(argv[4], PSTR("DISABLE"))) enable = false;
         else {
             msg.control.println(F("ERROR: Must be ENABLE or DISABLE"));
             return 1;
@@ -499,7 +499,7 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
         }
 
         // BUS SERIAL <port> ENABLE [baudrate]
-        if (streq(argv[3], "ENABLE")) {
+        if (streq_P(argv[3], PSTR("ENABLE"))) {
             // Use saved baud rate from config, or 115200 if not set
             uint8_t baud_idx = systemConfig.serial.baudrate_index[port_id - 1];
 
@@ -533,7 +533,7 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
         }
 
         // BUS SERIAL <port> DISABLE
-        if (streq(argv[3], "DISABLE")) {
+        if (streq_P(argv[3], PSTR("DISABLE"))) {
             if (disableSerialPort(port_id)) {
                 msg.control.print(F("Serial"));
                 msg.control.print(port_id);
@@ -544,7 +544,7 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
         }
 
         // BUS SERIAL <port> BAUDRATE <rate>
-        if (streq(argv[3], "BAUDRATE")) {
+        if (streq_P(argv[3], PSTR("BAUDRATE"))) {
             if (argc < 5) {
                 msg.control.println(F("ERROR: BAUDRATE requires a speed"));
                 msg.control.println(F("  Usage: BUS SERIAL <port> BAUDRATE <rate>"));
@@ -574,14 +574,14 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
 
         // BUS SERIAL <port> ELM327 ENABLE|DISABLE
 #if ENABLE_ELM327
-        if (streq(argv[3], "ELM327")) {
+        if (streq_P(argv[3], PSTR("ELM327"))) {
             if (argc < 5) {
                 msg.control.println(F("ERROR: ELM327 requires ENABLE or DISABLE"));
                 msg.control.println(F("  Usage: BUS SERIAL <port> ELM327 ENABLE|DISABLE"));
                 return 1;
             }
 
-            if (streq(argv[4], "ENABLE")) {
+            if (streq_P(argv[4], PSTR("ENABLE"))) {
                 if (!isSerialPortActive(port_id)) {
                     msg.control.print(F("ERROR: Serial"));
                     msg.control.print(port_id);
@@ -638,7 +638,7 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
                 return 0;
             }
 
-            if (streq(argv[4], "DISABLE")) {
+            if (streq_P(argv[4], PSTR("DISABLE"))) {
                 elm327Output.end();
                 elm327Output.setSerial(nullptr);
                 systemConfig.buses.elm327_serial_port = 0xFF;

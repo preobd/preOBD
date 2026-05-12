@@ -259,7 +259,7 @@ int cmd_help(int argc, const char* const* argv) {
         printHelpOverview();
     } else if (argc == 2) {
         // Category argument provided
-        if (streq(argv[1], "QUICK")) {
+        if (streq_P(argv[1], PSTR("QUICK"))) {
             printHelpQuick();
         } else {
             printHelpCategory(argv[1]);
@@ -282,7 +282,7 @@ int cmd_list(int argc, const char* const* argv) {
     }
 
     // Trailing JSON token check: "LIST <sub> JSON" or "LIST SENSORS <cat> JSON"
-    bool asJson = (argc >= 3 && streq(argv[argc - 1], "JSON"));
+    bool asJson = (argc >= 3 && streq_P(argv[argc - 1], PSTR("JSON")));
 
 // EMIT_JSON(call): on supporting platforms, wraps call with blank-line padding.
 // On non-supporting platforms, emits an error and returns — and the call expression
@@ -293,12 +293,12 @@ int cmd_list(int argc, const char* const* argv) {
 #define EMIT_JSON(call) do { msg.control.println(F("ERROR: JSON export not supported on this platform")); return 1; } while(0)
 #endif
 
-    if (streq(argv[1], "INPUTS")) {
+    if (streq_P(argv[1], PSTR("INPUTS"))) {
         listAllInputs();
-    } else if (streq(argv[1], "APPLICATIONS")) {
+    } else if (streq_P(argv[1], PSTR("APPLICATIONS"))) {
         if (asJson) { EMIT_JSON(writeApplicationsJson(msg.control)); }
         else { listApplicationPresets(); }
-    } else if (streq(argv[1], "SENSORS")) {
+    } else if (streq_P(argv[1], PSTR("SENSORS"))) {
         if (asJson) {
             // LIST SENSORS JSON  or  LIST SENSORS <category> JSON
             const char* filter = (argc == 4) ? argv[2] : nullptr;
@@ -308,25 +308,25 @@ int cmd_list(int argc, const char* const* argv) {
             const char* filter = (argc >= 3) ? argv[2] : NULL;
             listSensors(filter);
         }
-    } else if (streq(argv[1], "OUTPUTS")) {
+    } else if (streq_P(argv[1], PSTR("OUTPUTS"))) {
         if (asJson) { EMIT_JSON(writeOutputsJson(msg.control)); }
         else { listOutputModules(); }
-    } else if (streq(argv[1], "UNITS")) {
+    } else if (streq_P(argv[1], PSTR("UNITS"))) {
         if (asJson) { EMIT_JSON(writeUnitsJson(msg.control)); }
         else { msg.control.println(F("JSON-only subcommand. Usage: LIST UNITS JSON")); }
-    } else if (streq(argv[1], "CATEGORIES")) {
+    } else if (streq_P(argv[1], PSTR("CATEGORIES"))) {
         if (asJson) { EMIT_JSON(writeCategoriesJson(msg.control)); }
         else { msg.control.println(F("JSON-only subcommand. Usage: LIST CATEGORIES JSON")); }
-    } else if (streq(argv[1], "PIDS")) {
+    } else if (streq_P(argv[1], PSTR("PIDS"))) {
         if (asJson) { EMIT_JSON(writePidsJson(msg.control)); }
         else { msg.control.println(F("JSON-only subcommand. Usage: LIST PIDS JSON")); }
-    } else if (streq(argv[1], "MEASUREMENT_TYPES")) {
+    } else if (streq_P(argv[1], PSTR("MEASUREMENT_TYPES"))) {
         if (asJson) { EMIT_JSON(writeMeasurementTypesJson(msg.control)); }
         else { msg.control.println(F("JSON-only subcommand. Usage: LIST MEASUREMENT_TYPES JSON")); }
-    } else if (streq(argv[1], "CALIBRATION_TYPES")) {
+    } else if (streq_P(argv[1], PSTR("CALIBRATION_TYPES"))) {
         if (asJson) { EMIT_JSON(writeCalibrationTypesJson(msg.control)); }
         else { msg.control.println(F("JSON-only subcommand. Usage: LIST CALIBRATION_TYPES JSON")); }
-    } else if (streq(argv[1], "TRANSPORTS")) {
+    } else if (streq_P(argv[1], PSTR("TRANSPORTS"))) {
         router.listAvailableTransports();
     } else {
         msg.control.print(F("ERROR: Unknown LIST subcommand '"));
@@ -387,7 +387,7 @@ int cmd_save(int argc, const char* const* argv) {
     }
 
     // Case 2: SAVE EEPROM (explicit)
-    if (argc == 2 && streq(argv[1], "EEPROM")) {
+    if (argc == 2 && streq_P(argv[1], PSTR("EEPROM"))) {
         msg.control.println(F("Saving configuration to EEPROM..."));
         saveInputConfig();
         saveSystemConfig();
@@ -449,7 +449,7 @@ int cmd_load(int argc, const char* const* argv) {
     }
 
     // Case 2: LOAD EEPROM (explicit)
-    if (argc == 2 && streq(argv[1], "EEPROM")) {
+    if (argc == 2 && streq_P(argv[1], PSTR("EEPROM"))) {
         msg.control.println(F("Loading configuration from EEPROM..."));
         loadInputConfig();
         loadSystemConfig();
@@ -502,7 +502,7 @@ int cmd_load(int argc, const char* const* argv) {
 
 #if SUPPORTS_JSON_IMPORT_STREAM
 int cmd_json(int argc, const char* const* argv) {
-    if (argc < 2 || !streq(argv[1], "IMPORT")) {
+    if (argc < 2 || !streq_P(argv[1], PSTR("IMPORT"))) {
         msg.control.println(F("Usage: JSON IMPORT"));
         msg.control.println(F("  Paste JSON, then type 'END JSON' on its own line"));
         return 1;
@@ -592,11 +592,11 @@ int cmd_info(int argc, const char* const* argv) {
 
     // Check for subcommands (ALARM, CALIBRATION, OUTPUT)
     if (argc == 3) {
-        if (streq(argv[2], "ALARM")) {
+        if (streq_P(argv[2], PSTR("ALARM"))) {
             printInputAlarmInfo(pin);
-        } else if (streq(argv[2], "OUTPUT")) {
+        } else if (streq_P(argv[2], PSTR("OUTPUT"))) {
             printInputOutputInfo(pin);
-        } else if (streq(argv[2], "CALIBRATION")) {
+        } else if (streq_P(argv[2], PSTR("CALIBRATION"))) {
             printInputCalibration(pin);
         } else {
             msg.control.print(F("ERROR: Unknown INFO subcommand '"));
@@ -618,7 +618,7 @@ int cmd_output(int argc, const char* const* argv) {
         return 1;
     }
 
-    if (streq(argv[1], "STATUS")) {
+    if (streq_P(argv[1], PSTR("STATUS"))) {
         listOutputs();
         return 0;
     }
@@ -633,7 +633,7 @@ int cmd_output(int argc, const char* const* argv) {
     const char* outputName = argv[1];
     const char* subcommand = argv[2];
 
-    if (streq(subcommand, "ENABLE")) {
+    if (streq_P(subcommand, PSTR("ENABLE"))) {
         if (setOutputEnabled(outputName, true)) {
             msg.control.print(outputName);
             msg.control.println(F(" enabled"));
@@ -644,7 +644,7 @@ int cmd_output(int argc, const char* const* argv) {
             msg.control.println(F("'"));
             return 1;
         }
-    } else if (streq(subcommand, "DISABLE")) {
+    } else if (streq_P(subcommand, PSTR("DISABLE"))) {
         if (setOutputEnabled(outputName, false)) {
             msg.control.print(outputName);
             msg.control.println(F(" disabled"));
@@ -655,7 +655,7 @@ int cmd_output(int argc, const char* const* argv) {
             msg.control.println(F("'"));
             return 1;
         }
-    } else if (streq(subcommand, "INTERVAL")) {
+    } else if (streq_P(subcommand, PSTR("INTERVAL"))) {
         if (argc < 4) {
             msg.control.println(F("ERROR: INTERVAL requires a time in ms"));
             return 1;
@@ -694,7 +694,7 @@ int cmd_display(int argc, const char* const* argv) {
     const char* subcommand = argv[1];
 
     // DISPLAY STATUS
-    if (streq(subcommand, "STATUS")) {
+    if (streq_P(subcommand, PSTR("STATUS"))) {
         msg.control.println(F("=== Display Configuration ==="));
         msg.control.print(F("Status: "));
         msg.control.println(systemConfig.displayEnabled ? F("Enabled") : F("Disabled"));
@@ -714,7 +714,7 @@ int cmd_display(int argc, const char* const* argv) {
     }
 
     // DISPLAY ENABLE
-    if (streq(subcommand, "ENABLE")) {
+    if (streq_P(subcommand, PSTR("ENABLE"))) {
         systemConfig.displayEnabled = 1;
         setDisplayRuntime(true);
         msg.control.println(F("Display enabled (use SAVE to persist)"));
@@ -722,7 +722,7 @@ int cmd_display(int argc, const char* const* argv) {
     }
 
     // DISPLAY DISABLE
-    if (streq(subcommand, "DISABLE")) {
+    if (streq_P(subcommand, PSTR("DISABLE"))) {
         systemConfig.displayEnabled = 0;
         setDisplayRuntime(false);
         msg.control.println(F("Display disabled (use SAVE to persist)"));
@@ -730,20 +730,20 @@ int cmd_display(int argc, const char* const* argv) {
     }
 
     // DISPLAY TYPE <LCD|OLED|NONE>
-    if (streq(subcommand, "TYPE")) {
+    if (streq_P(subcommand, PSTR("TYPE"))) {
         if (argc < 3) {
             msg.control.println(F("ERROR: TYPE requires a display type"));
             msg.control.println(F("  Valid types: LCD, OLED, NONE"));
             return 1;
         }
         const char* typeStr = argv[2];
-        if (streq(typeStr, "LCD")) {
+        if (streq_P(typeStr, PSTR("LCD"))) {
             systemConfig.displayType = DISPLAY_LCD;
             msg.control.println(F("Display type set to LCD"));
-        } else if (streq(typeStr, "OLED")) {
+        } else if (streq_P(typeStr, PSTR("OLED"))) {
             systemConfig.displayType = DISPLAY_OLED;
             msg.control.println(F("Display type set to OLED"));
-        } else if (streq(typeStr, "NONE")) {
+        } else if (streq_P(typeStr, PSTR("NONE"))) {
             systemConfig.displayType = DISPLAY_NONE;
             msg.control.println(F("Display type set to NONE"));
         } else {
@@ -757,7 +757,7 @@ int cmd_display(int argc, const char* const* argv) {
     }
 
     // DISPLAY ADDRESS <hex>
-    if (streq(subcommand, "ADDRESS")) {
+    if (streq_P(subcommand, PSTR("ADDRESS"))) {
         if (argc < 3) {
             msg.control.println(F("ERROR: ADDRESS requires an I2C address"));
             msg.control.println(F("  Usage: DISPLAY ADDRESS <hex>"));
@@ -780,7 +780,7 @@ int cmd_display(int argc, const char* const* argv) {
     }
 
     // DISPLAY INTERVAL <ms>
-    if (streq(subcommand, "INTERVAL")) {
+    if (streq_P(subcommand, PSTR("INTERVAL"))) {
         if (argc < 3) {
             msg.control.println(F("ERROR: INTERVAL requires a time in ms"));
             msg.control.println(F("  Usage: DISPLAY INTERVAL <ms>"));
@@ -810,7 +810,7 @@ int cmd_transport(int argc, const char* const* argv) {
         return 1;
     }
 
-    if (streq(argv[1], "STATUS")) {
+    if (streq_P(argv[1], PSTR("STATUS"))) {
         router.printTransportStatus();
         return 0;
     }
@@ -844,7 +844,7 @@ int cmd_transport(int argc, const char* const* argv) {
     // Sets this as the secondary (listen-on + multicast-to) transport for the plane,
     // leaving the primary unchanged. Both primary and secondary are polled for input
     // and receive all output, enabling simultaneous control from two ports.
-    if (argc >= 4 && !streq(argv[3], "SECONDARY")) {
+    if (argc >= 4 && !streq_P(argv[3], PSTR("SECONDARY"))) {
         msg.control.print(F("ERROR: Unknown option '"));
         msg.control.print(argv[3]);
         msg.control.println(F("' (did you mean SECONDARY?)"));
@@ -907,7 +907,7 @@ int cmd_relay(int argc, const char* const* argv) {
         return 1;
     }
 
-    if (streq(argv[1], "LIST")) {
+    if (streq_P(argv[1], PSTR("LIST"))) {
         printAllRelayStatus();
         return 0;
     }
@@ -930,9 +930,9 @@ int cmd_relay(int argc, const char* const* argv) {
 
     const char* subcommand = argv[2];
 
-    if (streq(subcommand, "STATUS")) {
+    if (streq_P(subcommand, PSTR("STATUS"))) {
         printRelayStatus(relayIndex);
-    } else if (streq(subcommand, "PIN")) {
+    } else if (streq_P(subcommand, PSTR("PIN"))) {
         if (argc < 4) {
             msg.control.println(F("ERROR: PIN requires a pin number"));
             return 1;
@@ -942,7 +942,7 @@ int cmd_relay(int argc, const char* const* argv) {
         msg.control.print(relayIndex);
         msg.control.print(F(" output pin set to "));
         msg.control.println(argv[3]);
-    } else if (streq(subcommand, "INPUT")) {
+    } else if (streq_P(subcommand, PSTR("INPUT"))) {
         if (argc < 4) {
             msg.control.println(F("ERROR: INPUT requires a pin name"));
             return 1;
@@ -961,7 +961,7 @@ int cmd_relay(int argc, const char* const* argv) {
             msg.control.println(F("'"));
             return 1;
         }
-    } else if (streq(subcommand, "THRESHOLD")) {
+    } else if (streq_P(subcommand, PSTR("THRESHOLD"))) {
         if (argc < 5) {
             msg.control.println(F("ERROR: THRESHOLD requires on and off values"));
             return 1;
@@ -973,18 +973,18 @@ int cmd_relay(int argc, const char* const* argv) {
         msg.control.print(argv[3]);
         msg.control.print(F(", OFF="));
         msg.control.println(argv[4]);
-    } else if (streq(subcommand, "MODE")) {
+    } else if (streq_P(subcommand, PSTR("MODE"))) {
         if (argc < 4) {
             msg.control.println(F("ERROR: MODE requires a mode name"));
             return 1;
         }
         RelayMode mode;
         bool modeValid = false;
-        if (streq(argv[3], "DISABLED")) { mode = RELAY_DISABLED; modeValid = true; }
-        else if (streq(argv[3], "AUTO_HIGH")) { mode = RELAY_AUTO_HIGH; modeValid = true; }
-        else if (streq(argv[3], "AUTO_LOW")) { mode = RELAY_AUTO_LOW; modeValid = true; }
-        else if (streq(argv[3], "MANUAL_ON")) { mode = RELAY_MANUAL_ON; modeValid = true; }
-        else if (streq(argv[3], "MANUAL_OFF")) { mode = RELAY_MANUAL_OFF; modeValid = true; }
+        if (streq_P(argv[3], PSTR("DISABLED"))) { mode = RELAY_DISABLED; modeValid = true; }
+        else if (streq_P(argv[3], PSTR("AUTO_HIGH"))) { mode = RELAY_AUTO_HIGH; modeValid = true; }
+        else if (streq_P(argv[3], PSTR("AUTO_LOW"))) { mode = RELAY_AUTO_LOW; modeValid = true; }
+        else if (streq_P(argv[3], PSTR("MANUAL_ON"))) { mode = RELAY_MANUAL_ON; modeValid = true; }
+        else if (streq_P(argv[3], PSTR("MANUAL_OFF"))) { mode = RELAY_MANUAL_OFF; modeValid = true; }
 
         if (modeValid) {
             setRelayMode(relayIndex, mode);
@@ -1024,13 +1024,13 @@ int cmd_test(int argc, const char* const* argv) {
     const char* subcommand = argv[1];
 
     // TEST LIST
-    if (streq(subcommand, "LIST")) {
+    if (streq_P(subcommand, PSTR("LIST"))) {
         listTestScenarios();
         return 0;
     }
 
     // TEST STOP
-    if (streq(subcommand, "STOP")) {
+    if (streq_P(subcommand, PSTR("STOP"))) {
         if (!isTestModeActive()) {
             msg.control.println(F("No test scenario is currently running"));
         } else {
@@ -1041,7 +1041,7 @@ int cmd_test(int argc, const char* const* argv) {
     }
 
     // TEST STATUS
-    if (streq(subcommand, "STATUS")) {
+    if (streq_P(subcommand, PSTR("STATUS"))) {
         if (!isTestModeActive()) {
             msg.control.println(F("Test mode: INACTIVE"));
         } else {
@@ -1114,7 +1114,7 @@ int cmd_log(int argc, const char* const* argv) {
     for (char* p = subcmd; *p; p++) *p = toupper(*p);
 
     // LOG STATUS - show current configuration
-    if (streq(subcmd, "STATUS")) {
+    if (streq_P(subcmd, PSTR("STATUS"))) {
         msg.control.println();
         msg.control.println(F("========================================"));
         msg.control.println(F("  Log Filter Status"));
@@ -1157,7 +1157,7 @@ int cmd_log(int argc, const char* const* argv) {
     }
 
     // LOG TAGS - list all available tags with status
-    if (streq(subcmd, "TAGS")) {
+    if (streq_P(subcmd, PSTR("TAGS"))) {
         msg.control.println();
         msg.control.println(F("========================================"));
         msg.control.println(F("  Available Log Tags"));
@@ -1180,7 +1180,7 @@ int cmd_log(int argc, const char* const* argv) {
     }
 
     // LOG LEVEL <plane> <level> - set log level
-    if (streq(subcmd, "LEVEL")) {
+    if (streq_P(subcmd, PSTR("LEVEL"))) {
         if (isInRunMode()) {
             msg.control.println(F("ERROR: LOG LEVEL requires CONFIG mode (mutates log filter)"));
             return 1;
@@ -1202,9 +1202,9 @@ int cmd_log(int argc, const char* const* argv) {
         for (char* p = planeName; *p; p++) *p = toupper(*p);
 
         int plane = -1;
-        if (streq(planeName, "CONTROL")) plane = PLANE_CONTROL;
-        else if (streq(planeName, "DATA")) plane = PLANE_DATA;
-        else if (streq(planeName, "DEBUG")) plane = PLANE_DEBUG;
+        if (streq_P(planeName, PSTR("CONTROL"))) plane = PLANE_CONTROL;
+        else if (streq_P(planeName, PSTR("DATA"))) plane = PLANE_DATA;
+        else if (streq_P(planeName, PSTR("DEBUG"))) plane = PLANE_DEBUG;
         else {
             msg.control.print(F("ERROR: Unknown plane '"));
             msg.control.print(planeName);
@@ -1215,7 +1215,10 @@ int cmd_log(int argc, const char* const* argv) {
 
         // Parse level name
         LogLevel level = router.getLogFilter().parseLevelName(argv[3]);
-        if (level == LOG_LEVEL_NONE && !streq(argv[3], "NONE") && !streq(argv[3], "none")) {
+        // streq_P is case-insensitive, so PSTR("NONE") matches "none", "None", etc.
+        // The pre-existing duplicate `!streq(argv[3], "none")` check that used to
+        // sit on this line was redundant (same-case-insensitive compare twice).
+        if (level == LOG_LEVEL_NONE && !streq_P(argv[3], PSTR("NONE"))) {
             msg.control.print(F("ERROR: Unknown level '"));
             msg.control.print(argv[3]);
             msg.control.println(F("'"));
@@ -1238,7 +1241,7 @@ int cmd_log(int argc, const char* const* argv) {
     }
 
     // LOG TAG <tag> <ENABLE|DISABLE> - enable/disable tag
-    if (streq(subcmd, "TAG")) {
+    if (streq_P(subcmd, PSTR("TAG"))) {
         if (isInRunMode()) {
             msg.control.println(F("ERROR: LOG TAG requires CONFIG mode (mutates log filter)"));
             return 1;
@@ -1262,8 +1265,8 @@ int cmd_log(int argc, const char* const* argv) {
         for (char* p = stateName; *p; p++) *p = toupper(*p);
 
         bool enable;
-        if (streq(stateName, "ENABLE")) enable = true;
-        else if (streq(stateName, "DISABLE")) enable = false;
+        if (streq_P(stateName, PSTR("ENABLE"))) enable = true;
+        else if (streq_P(stateName, PSTR("DISABLE"))) enable = false;
         else {
             msg.control.print(F("ERROR: Unknown state '"));
             msg.control.print(stateName);
@@ -1278,7 +1281,7 @@ int cmd_log(int argc, const char* const* argv) {
         tagName[sizeof(tagName) - 1] = '\0';
         for (char* p = tagName; *p; p++) *p = toupper(*p);
 
-        if (streq(tagName, "ALL")) {
+        if (streq_P(tagName, PSTR("ALL"))) {
             if (enable) {
                 router.getLogFilter().enableAllTags();
                 msg.control.println(F("✓ All tags enabled"));
@@ -1350,7 +1353,7 @@ int cmd_scan(int argc, const char* const* argv) {
 
     const char* subcmd = argv[1];
 
-    if (streq(subcmd, "CAN")) {
+    if (streq_P(subcmd, PSTR("CAN"))) {
         // Get duration (default 10 seconds)
         uint16_t duration = 10000;
         if (argc >= 3) {
@@ -1377,7 +1380,7 @@ int cmd_scan(int argc, const char* const* argv) {
         return 0;
     }
 
-    if (streq(subcmd, "CANCEL")) {
+    if (streq_P(subcmd, PSTR("CANCEL"))) {
         cancelCANScan();
         return 0;
     }

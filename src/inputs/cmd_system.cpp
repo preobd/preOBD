@@ -72,7 +72,7 @@ static int system_pins(int argc, const char* const* argv, int /*tokenIndex*/) {
 // SYSTEM DUMP subcommand handler
 static int system_dump(int argc, const char* const* argv, int /*tokenIndex*/) {
     // SYSTEM DUMP REGISTRY JSON — export static firmware catalogs
-    if (argc == 4 && streq(argv[2], "REGISTRY") && streq(argv[3], "JSON")) {
+    if (argc == 4 && streq_P(argv[2], PSTR("REGISTRY")) && streq_P(argv[3], PSTR("JSON"))) {
 #if SUPPORTS_JSON_EXPORT
         msg.control.println();
         dumpRegistryToJson(msg.control);
@@ -84,7 +84,7 @@ static int system_dump(int argc, const char* const* argv, int /*tokenIndex*/) {
     }
 
     // SYSTEM DUMP JSON — export active user configuration
-    if (argc == 3 && streq(argv[2], "JSON")) {
+    if (argc == 3 && streq_P(argv[2], PSTR("JSON"))) {
 #if SUPPORTS_JSON_CONFIG
         msg.control.println();
         dumpConfigToJSON(msg.control);
@@ -167,7 +167,7 @@ static int system_units(int argc, const char* const* argv, int /*tokenIndex*/) {
 
     MeasurementType measurementType = (MeasurementType)pgm_read_byte(&info->measurementType);
 
-    if (streq(unitType, "TEMP")) {
+    if (streq_P(unitType, PSTR("TEMP"))) {
         if (measurementType != MEASURE_TEMPERATURE) {
             msg.control.print(F("ERROR: '"));
             msg.control.print(unitStr);
@@ -178,7 +178,7 @@ static int system_units(int argc, const char* const* argv, int /*tokenIndex*/) {
         systemConfig.defaultTempUnits = index;
         msg.control.print(F("Default temperature units set to "));
         msg.control.println((__FlashStringHelper*)getUnitStringByIndex(index));
-    } else if (streq(unitType, "PRESSURE")) {
+    } else if (streq_P(unitType, PSTR("PRESSURE"))) {
         if (measurementType != MEASURE_PRESSURE) {
             msg.control.print(F("ERROR: '"));
             msg.control.print(unitStr);
@@ -189,7 +189,7 @@ static int system_units(int argc, const char* const* argv, int /*tokenIndex*/) {
         systemConfig.defaultPressUnits = index;
         msg.control.print(F("Default pressure units set to "));
         msg.control.println((__FlashStringHelper*)getUnitStringByIndex(index));
-    } else if (streq(unitType, "ELEVATION")) {
+    } else if (streq_P(unitType, PSTR("ELEVATION"))) {
         if (measurementType != MEASURE_ELEVATION) {
             msg.control.print(F("ERROR: '"));
             msg.control.print(unitStr);
@@ -200,7 +200,7 @@ static int system_units(int argc, const char* const* argv, int /*tokenIndex*/) {
         systemConfig.defaultElevUnits = index;
         msg.control.print(F("Default elevation units set to "));
         msg.control.println((__FlashStringHelper*)getUnitStringByIndex(index));
-    } else if (streq(unitType, "SPEED")) {
+    } else if (streq_P(unitType, PSTR("SPEED"))) {
         if (measurementType != MEASURE_SPEED) {
             msg.control.print(F("ERROR: '"));
             msg.control.print(unitStr);
@@ -229,12 +229,12 @@ static int system_interval(int argc, const char* const* argv, int /*tokenIndex*/
         return 1;
     }
     uint16_t interval = atoi(argv[3]);
-    if (streq(argv[2], "SENSOR")) {
+    if (streq_P(argv[2], PSTR("SENSOR"))) {
         systemConfig.sensorReadInterval = interval;
         msg.control.print(F("Sensor read interval set to "));
         msg.control.print(interval);
         msg.control.println(F(" ms"));
-    } else if (streq(argv[2], "ALARM")) {
+    } else if (streq_P(argv[2], PSTR("ALARM"))) {
         systemConfig.alarmCheckInterval = interval;
         msg.control.print(F("Alarm check interval set to "));
         msg.control.print(interval);
@@ -258,7 +258,7 @@ static int system_reboot(int argc, const char* const* argv, int /*tokenIndex*/) 
 
 // SYSTEM RESET subcommand handler
 static int system_reset(int argc, const char* const* argv, int /*tokenIndex*/) {
-    if (argc == 3 && streq(argv[2], "CONFIRM")) {
+    if (argc == 3 && streq_P(argv[2], PSTR("CONFIRM"))) {
         msg.control.println(F("Factory reset: Erasing all configuration..."));
         resetInputConfig();
         resetSystemConfig();
