@@ -64,6 +64,7 @@ inline bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, 
     CanFrame frame;
     frame.identifier = id;
     frame.extd = extended ? 1 : 0;
+    if (len > 8) len = 8;
     frame.data_length_code = len;
     memcpy(frame.data, data, len);
     return ESP32Can.writeFrame(frame);

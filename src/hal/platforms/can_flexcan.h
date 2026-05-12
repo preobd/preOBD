@@ -65,6 +65,7 @@ inline bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
 
 inline bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t bus = 0) {
     CAN_message_t msg;
+    if (len > 8) len = 8;
     msg.id = id;
     msg.len = len;
     msg.flags.extended = extended ? 1 : 0;

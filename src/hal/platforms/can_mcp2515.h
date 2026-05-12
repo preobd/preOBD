@@ -120,6 +120,7 @@ inline bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, 
     if (extended) {
         frame.can_id |= CAN_EFF_FLAG;
     }
+    if (len > 8) len = 8;
     frame.can_dlc = len;
     memcpy(frame.data, data, len);
 
