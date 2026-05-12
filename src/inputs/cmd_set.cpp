@@ -55,6 +55,25 @@
 // idempotent — the leaves cannot safely re-parse it.
 //=============================================================================
 
+// True iff `s` looks like a numeric PID literal — decimal digits, or hex
+// prefixed with 0x / 0X. Used to gate the `SET CAN <pid>` prelude so that
+// typos like `SET CAN APPLICATION CHT` fall through to field dispatch
+// instead of allocating a phantom CAN slot with PID 0.
+static bool looksLikePidLiteral(const char* s) {
+    if (!s || !*s) return false;
+    if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
+        if (!s[2]) return false;
+        for (const char* p = s + 2; *p; p++) {
+            if (!isxdigit((unsigned char)*p)) return false;
+        }
+        return true;
+    }
+    for (const char* p = s; *p; p++) {
+        if (!isdigit((unsigned char)*p)) return false;
+    }
+    return true;
+}
+
 typedef int (*SetFieldHandler)(uint8_t pin, int argc, const char* const* argv);
 struct SetField {
     const char* token;
@@ -454,7 +473,8 @@ static int set_calibration(uint8_t pin, int argc, const char* const* argv) {
 
 // SET <pin> RPM <poles> <ratio> [<mult>] <timeout> <min> <max>
 static int set_rpm(uint8_t pin, int argc, const char* const* argv) {
-    if (argc < 8 && argc < 9) {
+    // 5 params -> argc==8 (cmd + pin + field + 5 values); 6 params -> argc==9.
+    if (argc != 8 && argc != 9) {
         msg.control.println(F("ERROR: RPM requires 5 or 6 parameters"));
         msg.control.println(F("  Usage: SET <pin> RPM <poles> <ratio> <timeout> <min> <max>"));
         msg.control.println(F("     or: SET <pin> RPM <poles> <ratio> <mult> <timeout> <min> <max>"));
@@ -549,7 +569,8 @@ static int set_rpm(uint8_t pin, int argc, const char* const* argv) {
 
 // SET <pin> SPEED <ppr> <tire_circ_mm> <ratio> [<mult>] <timeout> <max_speed>
 static int set_speed(uint8_t pin, int argc, const char* const* argv) {
-    if (argc < 8 && argc < 9) {
+    // 5 params -> argc==8 (cmd + pin + field + 5 values); 6 params -> argc==9.
+    if (argc != 8 && argc != 9) {
         msg.control.println(F("ERROR: SPEED requires 5 or 6 parameters"));
         msg.control.println(F("  Usage: SET <pin> SPEED <ppr> <tire_circ> <ratio> <timeout> <max_speed>"));
         msg.control.println(F("     or: SET <pin> SPEED <ppr> <tire_circ> <ratio> <mult> <timeout> <max_speed>"));
@@ -772,9 +793,8 @@ static int set_bias(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
 
-    #define BIAS_R_MIN 10.0
-    #define BIAS_R_MAX 10000000.0
-    if (bias < BIAS_R_MIN || bias > BIAS_R_MAX) {
+    // 10Ω to 10MΩ covers all practical thermistor / pressure sensor bias resistors.
+    if (bias < 10.0f || bias > 10000000.0f) {
         msg.control.print(F("ERROR: Bias resistor ("));
         msg.control.print(bias, 1);
         msg.control.println(F("Ω) must be between 10Ω and 10MΩ"));
@@ -1078,6 +1098,20 @@ int cmd_set(int argc, const char* const* argv) {
     // Example: SET CAN 0x0C  (imports Engine RPM from OBD-II)
     // This automatically assigns the next available CAN virtual pin (CAN:0, CAN:1, etc.)
 #if ENABLE_CAN
+    // Bare "CAN" (no :N suffix) is *only* valid as the import prelude — there's
+    // no other operation that takes a freshly-allocated virtual pin and a
+    // non-PID arg. So if argv[2] isn't a PID literal, this is a typo and we
+    // error here rather than falling through to field dispatch (which would
+    // run set_application/set_sensor/etc. against the freshly-allocated CAN
+    // pin and produce a different phantom — the original issue, but with a
+    // different shape).
+    //
+    // Use SET CAN:N <field> ... to configure an existing CAN sensor.
+    if (streq(argv[1], "CAN") && argc >= 3 && !looksLikePidLiteral(argv[2])) {
+        msg.control.println(F("ERROR: 'SET CAN <pid>' requires a numeric or 0xNN hex PID"));
+        msg.control.println(F("  Use 'SET CAN:N <field> ...' to configure an existing CAN sensor"));
+        return 1;
+    }
     if (streq(argv[1], "CAN") && argc >= 3) {
         // Parse PID (supports hex like 0x0C or decimal like 12)
         uint8_t pid;

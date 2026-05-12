@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Restructured `command_table.cpp` (3,453 → 1,419 lines) around a generic subcommand dispatch primitive; `cmd_set`, `cmd_bus`, `cmd_system` split into focused per-command files with PROGMEM-resident dispatch tables; adds `SELFTEST` command for runtime dispatch-table validation (#118, #186, #191)
 
 ### Fixed
+- Pre-existing bugs in `cmd_set` surfaced during the command_table refactor: RPM/SPEED arity check no longer accepts arbitrary excess parameters; `SET CAN <pid>` rejects non-numeric arguments instead of allocating phantom CAN sensors; BIAS bounds inlined to avoid file-scope macro leak (#187, #188, #190)
 - Missing trailing newline added to `src/lib/sensor_types.h` (#178)
 - `allocateInputSlot` now zeroes the slot before use, eliminating stale flags, calibration data, and alarm thresholds from previously-cleared inputs (#180)
 - Input slots are now freed on partial-failure during configuration (e.g. `setInputSensor` failure after slot allocation), preventing orphaned slots (#179)
