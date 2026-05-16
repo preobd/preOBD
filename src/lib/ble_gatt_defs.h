@@ -28,49 +28,49 @@
 // =============================================================================
 // preOBD GATT UUIDs
 //
-// Base UUID: 4f424400-7072-6542-4244-000000000000
-//            "OBD"    "pr" "eB" "BD"
+// Base UUID: 4f424400-7072-654f-4244-000000000000
+//            "OBD"    "pr" "eO" "BD"
 //
 // All preOBD-specific UUIDs share this base with the last 4 bytes varying.
 // =============================================================================
 
 // --- Tier 1: preOBD Control Service (text command interface) -----------------
 
-// Service UUID: 4f424400-7072-6542-4244-000000000001
-#define PREOBD_SERVICE_UUID           "4f424400-7072-6542-4244-000000000001"
+// Service UUID: 4f424400-7072-654f-4244-000000000001
+#define PREOBD_SERVICE_UUID           "4f424400-7072-654f-4244-000000000001"
 
 // Command TX (Write / Write Without Response)
 // Client writes text commands here (e.g., "LIST INPUTS\n")
-// UUID: 4f424400-7072-6542-4244-000000000010
-#define PREOBD_CHAR_CMD_TX_UUID       "4f424400-7072-6542-4244-000000000010"
+// UUID: 4f424400-7072-654f-4244-000000000010
+#define PREOBD_CHAR_CMD_TX_UUID       "4f424400-7072-654f-4244-000000000010"
 
 // Command RX (Notify / Read)
 // Device sends text command responses here
 // Client buffers until "preOBD> " prompt to detect end-of-response
-// UUID: 4f424400-7072-6542-4244-000000000011
-#define PREOBD_CHAR_CMD_RX_UUID       "4f424400-7072-6542-4244-000000000011"
+// UUID: 4f424400-7072-654f-4244-000000000011
+#define PREOBD_CHAR_CMD_RX_UUID       "4f424400-7072-654f-4244-000000000011"
 
 // System Status (Read / Notify)
 // 32-byte binary struct with device info (see PreobdSystemStatus below)
-// UUID: 4f424400-7072-6542-4244-000000000020
-#define PREOBD_CHAR_STATUS_UUID       "4f424400-7072-6542-4244-000000000020"
+// UUID: 4f424400-7072-654f-4244-000000000020
+#define PREOBD_CHAR_STATUS_UUID       "4f424400-7072-654f-4244-000000000020"
 
 // --- Tier 2: preOBD Extended Service (binary, OTA — spec only) ---------------
 
-// Service UUID: 4f424400-7072-6542-4244-000000000002
-#define PREOBD_EXT_SERVICE_UUID       "4f424400-7072-6542-4244-000000000002"
+// Service UUID: 4f424400-7072-654f-4244-000000000002
+#define PREOBD_EXT_SERVICE_UUID       "4f424400-7072-654f-4244-000000000002"
 
 // Alarm Notify (Notify) — push alarm events to client
-#define PREOBD_CHAR_ALARM_UUID        "4f424400-7072-6542-4244-000000000030"
+#define PREOBD_CHAR_ALARM_UUID        "4f424400-7072-654f-4244-000000000030"
 
 // Relay Control (Read / Write / Notify) — binary relay state
-#define PREOBD_CHAR_RELAY_UUID        "4f424400-7072-6542-4244-000000000031"
+#define PREOBD_CHAR_RELAY_UUID        "4f424400-7072-654f-4244-000000000031"
 
 // OTA Control (Write / Notify) — OTA coordination commands
-#define PREOBD_CHAR_OTA_CTRL_UUID     "4f424400-7072-6542-4244-000000000040"
+#define PREOBD_CHAR_OTA_CTRL_UUID     "4f424400-7072-654f-4244-000000000040"
 
 // OTA Data (Write Without Response) — OTA firmware transfer
-#define PREOBD_CHAR_OTA_DATA_UUID     "4f424400-7072-6542-4244-000000000041"
+#define PREOBD_CHAR_OTA_DATA_UUID     "4f424400-7072-654f-4244-000000000041"
 
 // --- Standard Services -------------------------------------------------------
 
