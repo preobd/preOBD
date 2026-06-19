@@ -70,3 +70,6 @@ tmp/
 MAINTAINING.md
 TESTING_PLAN.md
 CLAUDE.md
+
+# nRF firmware: auto-generated GATT defs (synced from src/lib/ble_gatt_defs.h)
+nrf_firmware/include/ble_gatt_defs.h

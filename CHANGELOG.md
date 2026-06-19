@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- nRF52840 firmware (Phase 1): BLE↔UART transparent bridge on Adafruit ItsyBitsy nRF52840, enabling phone-based control of the host MCU's serial CLI over BLE; includes Nordic Secure DFU for nRF self-update
+
 ### Changed
 - Renamed `MEASURE_LEVEL` measurement type to `MEASURE_PERCENT` to reflect its actual usage covering normalized 0–100% values (TPS, fuel level, engine load, accelerator pedal) rather than fluid levels (#209)
 
