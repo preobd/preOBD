@@ -34,6 +34,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history so the webapp-scoped version query
+          # (git rev-list --count / git log -- webapp/) sees every commit.
+          fetch-depth: 0
+      - name: Stamp webapp build version
+        run: python3 tools/inject_webapp_version.py
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact

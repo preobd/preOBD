@@ -358,6 +358,20 @@
     color: var(--dim);
     letter-spacing: 0.05em;
   }
+  /* Local working copy marker — only shown when WEBAPP_VERSION is the
+     un-injected 'dev' sentinel, so a deployed build never wears it. */
+  .app-footer .dev-tag {
+    display: inline-block;
+    font-weight: 700;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    color: var(--yellow);
+    border: 1px solid var(--yellow);
+    border-radius: 3px;
+    padding: 1px 5px;
+    margin-right: 6px;
+    vertical-align: 1px;
+  }
 
   /* ── Mode badge (header) ──────────────────────────────────── */
   .mode-badge {
@@ -927,18 +941,26 @@
 </main>
 
 <script>
-// Stamp the build footer with the file's last-modified timestamp. The
-// browser sets document.lastModified to the HTTP Last-Modified header (or
-// the OS file mtime for file:// loads), so this is "when this index.html
-// was last written" -- accurate enough to tell whether you're looking at
-// the latest commit's webapp. A proper git-SHA injection is tracked as a
-// follow-up; see the linked issue.
+// Build identity for the footer. WEBAPP_VERSION is the deploy stamp:
+// tools/inject_webapp_version.py rewrites it in CI (right before the Pages
+// upload) to a webapp-scoped git id like "b237 @abc1234". The committed repo
+// value stays the 'dev' sentinel, so a local working copy is always visually
+// distinct from a real deploy. In the dev case we fall back to
+// document.lastModified, which ticks on every save and doubles as a
+// "did my latest edit actually load?" signal.
+const WEBAPP_VERSION = 'dev';
 (function stampBuildFooter() {
   const el = document.getElementById('webappBuild');
   if (!el) return;
+  if (WEBAPP_VERSION && WEBAPP_VERSION !== 'dev') {
+    el.textContent = 'build: ' + WEBAPP_VERSION;
+    el.title = 'Deployed build — webapp-scoped git commit identity';
+    return;
+  }
   const lm = document.lastModified || '';
-  el.textContent = lm ? ('build: ' + lm) : 'build: --';
-  el.title = 'document.lastModified — proper git SHA injection is a planned follow-up';
+  el.innerHTML = '<span class="dev-tag">DEV</span>local · ' + (lm || 'uncommitted');
+  el.title = 'Local working copy (not a CI deploy). Timestamp is the file ' +
+             'last-modified time, which updates on every save.';
 })();
 
 // preOBD BLE GATT UUIDs (from ble_gatt_defs.h)

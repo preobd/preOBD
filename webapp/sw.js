@@ -1,5 +1,8 @@
-// Bump CACHE_VERSION whenever local assets change to force cache refresh.
-const CACHE_VERSION = 'v2';
+// CACHE_VERSION is rewritten by tools/inject_webapp_version.py in CI to the
+// webapp-scoped build number (e.g. 'b237'), so every deploy that changes a
+// webapp asset auto-busts the cache. The committed 'dev' sentinel keeps a
+// stable cache name for local development.
+const CACHE_VERSION = 'dev';
 const CACHE_NAME = `preobd-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
