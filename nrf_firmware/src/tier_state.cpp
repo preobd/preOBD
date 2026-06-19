@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 #include "frame_codec.h"
+#include "uart_bridge.h"
 
 namespace {
 
@@ -32,7 +33,7 @@ void tierStateInit() {
 }
 
 void tierStateOnConnect() {
-    frameDecoderReset();
+    uartBridgeDecoderReset();
     g_mode = MODE_PINGING;
     g_pingStartMs = millis();
     sendPing();
@@ -40,7 +41,7 @@ void tierStateOnConnect() {
 
 void tierStateOnDisconnect() {
     g_mode = MODE_DISCONNECTED;
-    frameDecoderReset();
+    uartBridgeDecoderReset();
 }
 
 void tierStateOnPingFrame() {

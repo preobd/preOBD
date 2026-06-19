@@ -45,6 +45,7 @@
 #include "lib/message_router.h"
 #include "lib/message_api.h"
 #include "lib/log_tags.h"
+#include "lib/transport_mux.h"
 #include "lib/transport_serial.h"
 #ifdef ESP32
 // Include appropriate Bluetooth transport for ESP32 variant
@@ -61,14 +62,16 @@ SerialTransport usbSerial(&Serial, "USB", 115200);
 // Hardware serial transports - created for all available ports
 // Actual initialization happens in initConfiguredSerialPorts() based on config
 #if NUM_SERIAL_PORTS >= 1
-// Phase 3: nRF coprocessor link uses software-paced flow control on Teensy
-// 4.x (no HW CTS on Serial1). When HOST_NRF_CTS_PIN is defined the
-// SerialTransport polls that pin and yields before write -- see
-// transport_serial.h and serial_manager.cpp.
+// Serial1 hosts the nRF52840 coprocessor link. MuxTransport handles two
+// modes selected at boot from systemConfig.serial.framed_enabled_mask:
+//   - transparent (default): byte-for-byte passthrough, compatible with
+//     any BLE module (HM-10, stock Bluefruit, pre-framed nRF firmware)
+//   - framed: nRF coprocessor binary protocol (ARCHITECTURE.md §3)
+// Phase 3 software flow control (HOST_NRF_CTS_PIN) wraps both modes.
 #if defined(HOST_NRF_CTS_PIN)
-SerialTransport hwSerial1(&Serial1, "SERIAL1", 115200, HOST_NRF_CTS_PIN);
+MuxTransport hwSerial1(&Serial1, "SERIAL1", 115200, HOST_NRF_CTS_PIN);
 #else
-SerialTransport hwSerial1(&Serial1, "SERIAL1", 115200);
+MuxTransport hwSerial1(&Serial1, "SERIAL1", 115200);
 #endif
 #endif
 #if NUM_SERIAL_PORTS >= 2
@@ -225,6 +228,14 @@ void setup() {
     // Initialize configured serial ports based on SystemConfig.serial
     // This replaces the old hardcoded Serial1.begin() / Serial2.begin() calls
     initConfiguredSerialPorts();
+
+    // Apply framed-mode setting for the nRF coprocessor link. Default zero
+    // = transparent passthrough (backwards-compatible with HM-10/stock
+    // Bluefruit/pre-framed nRF firmware). Set via the CLI:
+    //   BUS SERIAL <port> FRAMED ENABLE
+#if NUM_SERIAL_PORTS >= 1
+    hwSerial1.setFramedEnabled(systemConfig.serial.framed_enabled_mask & (1 << 0));
+#endif
 
     // Initialize transport router - register USB serial (always available)
     router.registerTransport(TRANSPORT_USB_SERIAL, &usbSerial);

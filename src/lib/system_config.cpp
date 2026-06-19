@@ -245,7 +245,8 @@ void resetSystemConfig() {
     for (int i = 0; i < 8; i++) {
         systemConfig.serial.baudrate_index[i] = BAUD_115200;  // Default 115200 baud
     }
-    for (int i = 0; i < 7; i++) {
+    systemConfig.serial.framed_enabled_mask = 0;  // transparent mode default
+    for (size_t i = 0; i < sizeof(systemConfig.serial.reserved); i++) {
         systemConfig.serial.reserved[i] = 0;
     }
 

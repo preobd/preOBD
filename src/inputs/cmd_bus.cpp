@@ -572,6 +572,39 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
             return 0;
         }
 
+        // BUS SERIAL <port> FRAMED ENABLE|DISABLE
+        if (streq_P(argv[3], PSTR("FRAMED"))) {
+            if (argc < 5) {
+                msg.control.println(F("ERROR: FRAMED requires ENABLE or DISABLE"));
+                msg.control.println(F("  Usage: BUS SERIAL <port> FRAMED ENABLE|DISABLE"));
+                msg.control.println(F("  Enables the binary framing protocol for the nRF52840"));
+                msg.control.println(F("  coprocessor link. Leave disabled for HM-10 / stock"));
+                msg.control.println(F("  Bluefruit / any non-preOBD-firmware BLE module."));
+                return 1;
+            }
+            const uint8_t port_bit = (1 << (port_id - 1));
+            if (streq_P(argv[4], PSTR("ENABLE"))) {
+                systemConfig.serial.framed_enabled_mask |= port_bit;
+                msg.control.print(F("Serial"));
+                msg.control.print(port_id);
+                msg.control.println(F(" framed mode ENABLED"));
+                msg.control.println(F("Note: Takes effect on next reboot"));
+                printSaveReminder();
+                return 0;
+            }
+            if (streq_P(argv[4], PSTR("DISABLE"))) {
+                systemConfig.serial.framed_enabled_mask &= ~port_bit;
+                msg.control.print(F("Serial"));
+                msg.control.print(port_id);
+                msg.control.println(F(" framed mode DISABLED"));
+                msg.control.println(F("Note: Takes effect on next reboot"));
+                printSaveReminder();
+                return 0;
+            }
+            msg.control.println(F("ERROR: expected ENABLE or DISABLE"));
+            return 1;
+        }
+
         // BUS SERIAL <port> ELM327 ENABLE|DISABLE
 #if ENABLE_ELM327
         if (streq_P(argv[3], PSTR("ELM327"))) {

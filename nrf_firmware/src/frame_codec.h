@@ -6,7 +6,7 @@
 // CRC8 covers TYPE + LEN + PAYLOAD. Variant: Dallas/Maxim
 //   poly 0x31, reflected (== 0x8C in lookup-table form)
 //   init 0x00, no final xor.
-// Locked here and must match the Teensy-side MuxTransport implementation.
+// Locked here and must match the nRF firmware's frame_codec.
 
 #ifndef FRAME_CODEC_H
 #define FRAME_CODEC_H
@@ -19,8 +19,8 @@ constexpr size_t   FRAME_MAX_PAYLOAD   = 512;
 constexpr size_t   FRAME_HEADER_BYTES  = 4;   // SYNC + TYPE + LEN(2)
 constexpr size_t   FRAME_MAX_BYTES     = FRAME_HEADER_BYTES + FRAME_MAX_PAYLOAD + 1;
 
-// Type codes per ARCHITECTURE.md §3.4. Today's framer only handles
-// 0x01/0x02/0xFF end-to-end; the rest are listed for documentation.
+// Type codes per ARCHITECTURE.md §3.4. MVP handles 0x01/0x02/0xFF end to
+// end; the rest are listed for documentation.
 constexpr uint8_t  FRAME_TYPE_TEXT_CMD  = 0x01;
 constexpr uint8_t  FRAME_TYPE_TEXT_RESP = 0x02;
 constexpr uint8_t  FRAME_TYPE_STATUS    = 0x03;
@@ -32,13 +32,12 @@ constexpr uint8_t  FRAME_TYPE_OTA_ACK   = 0x21;
 constexpr uint8_t  FRAME_TYPE_ELM327    = 0x30;
 constexpr uint8_t  FRAME_TYPE_PING      = 0xFF;
 
-// CRC8 Dallas/Maxim across `len` bytes. Exposed for tests; the encoder /
-// decoder use it internally.
+// CRC8 Dallas/Maxim across `len` bytes. Pure helper.
 uint8_t frameCrc8(const uint8_t* data, size_t len);
 
 // Encode a frame into `out`. Caller must provide at least
 // FRAME_HEADER_BYTES + len + 1 bytes. Returns total bytes written, or 0 if
-// len > FRAME_MAX_PAYLOAD.
+// len > FRAME_MAX_PAYLOAD. Pure -- no state.
 size_t frameEncode(uint8_t type, const uint8_t* payload, uint16_t len,
                    uint8_t* out);
 
@@ -55,12 +54,25 @@ struct Frame {
     uint8_t  payload[FRAME_MAX_PAYLOAD];
 };
 
-// Feed one byte into the streaming decoder. When FRAME_READY is returned,
-// `out` holds a valid frame and the decoder resets for the next.
-FrameFeedResult frameFeedByte(uint8_t b, Frame& out);
+// Per-decoder state. Default-constructed equals the post-reset state, so
+// declaring one as a member is sufficient -- no explicit init needed.
+// Keep one instance per logical input stream (e.g. per MuxTransport);
+// sharing one across streams will trample partial-frame state.
+struct FrameDecoderState {
+    uint8_t  phase = 0;        // opaque, internal enum -- treat as scratch
+    uint8_t  type = 0;
+    uint16_t len = 0;
+    uint16_t payloadIdx = 0;
+    uint8_t  runningCrc = 0;
+    uint8_t  payload[FRAME_MAX_PAYLOAD] = {};
+};
 
-// Reset the decoder to its initial state. Called on BLE disconnect so stale
-// partial frames don't leak into the next session.
-void frameDecoderReset();
+// Feed one byte into the streaming decoder. When FRAME_READY is returned,
+// `out` holds a valid frame and `state` resets for the next.
+FrameFeedResult frameFeedByte(FrameDecoderState& state, uint8_t b, Frame& out);
+
+// Reset the decoder to its initial state. Called on disconnect / mode
+// transition so a partial frame can't leak into the next session.
+void frameDecoderReset(FrameDecoderState& state);
 
 #endif // FRAME_CODEC_H

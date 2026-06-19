@@ -66,8 +66,21 @@ uint8_t  g_tx[kTxRingSize];
 volatile size_t g_txHead = 0;
 volatile size_t g_txTail = 0;
 
-// --- Tier 2 receive scratch ---
+// --- Framed-mode receive scratch + per-instance decoder state ---
+// Per-instance (not file-scope global) so the codec stays reentrant; only
+// one instance is needed since uart_bridge is the sole inbound feeder.
 Frame g_frame;
+FrameDecoderState g_decoder;
+
+// --- Framed-mode pending-notify stash for back-pressure ---
+// When a type 0x02 text-response frame arrives, its payload is chunked into
+// 20-byte BLE notifies. If notify back-pressures partway through, we stash
+// the remaining payload here and stop reading Serial1 -- letting the RX
+// ring fill so Phase 3 flow control asserts RTS to the host. Without this,
+// over-fast inbound frames would be silently truncated at the BLE layer.
+uint8_t  g_pendingNotifyPayload[FRAME_MAX_PAYLOAD];
+uint16_t g_pendingNotifyLen    = 0;
+uint16_t g_pendingNotifyOffset = 0;
 
 // --- CMD_TX bytes queued during PINGING, replayed post-resolution ---
 // Sized to match the TX ring so a single PINGING-window burst can fit in
@@ -180,32 +193,59 @@ size_t enqueueAsTextFrames(const uint8_t* data, size_t len) {
     return offset;
 }
 
-void notifyCmdRxChunked(const uint8_t* data, uint16_t len) {
-    // Tier 2 path -- no host speaks Tier 2 in Phase 2 so this is effectively
-    // dead code at runtime. If/when it goes live and the TX queue is tight,
-    // we'll need a per-frame retry stash similar to the transparent-mode
-    // path; for now, swallow the failure and rely on host-side retry/ACK
-    // logic that the upcoming Teensy-side MuxTransport will bring.
-    size_t offset = 0;
-    while (offset < len) {
-        const size_t chunk = ((len - offset) > kBleNotifyChunk)
-                                 ? kBleNotifyChunk : (len - offset);
-        if (!bleServicesNotifyCmdRx(data + offset, chunk)) return;
-        offset += chunk;
+// Drain the pending-notify stash to CMD_RX in 20-byte chunks. Returns true
+// if the stash was fully drained (or was empty); returns false if BLE
+// notify back-pressured (returned false within its own 100ms timeout) --
+// caller must stop reading new Serial1 bytes until the next poll iteration
+// retries, so the RX ring fills and Phase 3 flow control can assert RTS.
+//
+// Bluefruit's notify() blocks each call for ~one BLE connection interval
+// (15-30ms) waiting for an HVN packet slot, so a full multi-chunk drain
+// spends most of its time blocked there. We re-evaluate RTS between
+// chunks so the LED tracks reality and the host gets throttled during
+// the drain, not just at the top of the next uartBridgePoll iteration.
+bool drainPendingNotify() {
+    while (g_pendingNotifyOffset < g_pendingNotifyLen) {
+        const uint16_t remaining = g_pendingNotifyLen - g_pendingNotifyOffset;
+        const uint16_t chunk = (remaining > kBleNotifyChunk)
+                                   ? kBleNotifyChunk : remaining;
+        if (!bleServicesNotifyCmdRx(g_pendingNotifyPayload + g_pendingNotifyOffset,
+                                    chunk)) {
+            return false;
+        }
+        g_pendingNotifyOffset += chunk;
+#if defined(PIN_NRF_RTS_OUT) && defined(PIN_NRF_CTS_IN)
+        // Each notify call blocked ~15-30ms in BLE wait; Serial1 has been
+        // receiving the whole time. Re-check fill so RTS asserts mid-drain
+        // when needed.
+        updateInboundRts();
+#endif
     }
+    g_pendingNotifyLen = 0;
+    g_pendingNotifyOffset = 0;
+    return true;
 }
 
-void handleFrame(const Frame& f) {
+// Returns true if the caller may continue reading Serial1 (frame fully
+// dispatched or no notify needed); false if a pending notify is stuck
+// and inbound polling must back off.
+bool handleFrame(const Frame& f) {
     switch (f.type) {
     case FRAME_TYPE_PING:
         tierStateOnPingFrame();
-        break;
+        return true;
     case FRAME_TYPE_TEXT_RESP:
-        notifyCmdRxChunked(f.payload, f.len);
-        break;
+        // Stash the payload and try to drain immediately. If notify back-
+        // pressures, the caller breaks out of the Serial1 read loop and
+        // we retry on the next uartBridgePoll iteration.
+        if (f.len > FRAME_MAX_PAYLOAD) return true;  // defensive; shouldn't happen
+        memcpy(g_pendingNotifyPayload, f.payload, f.len);
+        g_pendingNotifyLen = f.len;
+        g_pendingNotifyOffset = 0;
+        return drainPendingNotify();
     default:
-        // Status/Alarm/Relay/OTA/etc deferred past Phase 2.
-        break;
+        // Status/Alarm/Relay/OTA/etc deferred past MVP scope.
+        return true;
     }
 }
 
@@ -265,6 +305,17 @@ void uartBridgePoll() {
         }
     }
 
+    // Framed-mode equivalent: a prior poll may have left a partially-notified
+    // text-response payload stashed. Drain it before reading more from
+    // Serial1; bail out if still back-pressured so the RX ring fills and
+    // Phase 3 flow control asserts RTS to the host.
+    if (framed && g_pendingNotifyLen > 0) {
+        if (!drainPendingNotify()) {
+            drainTx();
+            return;
+        }
+    }
+
     while (Serial1.available()) {
         const int b = Serial1.read();
         if (b < 0) break;
@@ -273,13 +324,17 @@ void uartBridgePoll() {
 
         if (framed || pinging) {
             const FrameFeedResult r = frameFeedByte(
-                static_cast<uint8_t>(b), g_frame);
+                g_decoder, static_cast<uint8_t>(b), g_frame);
             if (r == FRAME_READY) {
-                handleFrame(g_frame);
+                if (!handleFrame(g_frame)) {
+                    // BLE notify back-pressured mid-frame; the rest is in
+                    // the pending stash. Stop reading so Serial1 fills and
+                    // Phase 3 flow control asserts RTS to throttle the host.
+                    break;
+                }
             }
-            // NEED_MORE / RESYNCING: continue silently. Bytes outside a frame
-            // boundary in Tier 2 mode are protocol noise and intentionally
-            // dropped.
+            // NEED_MORE / RESYNCING: continue silently. Bytes outside a
+            // frame boundary are protocol noise and intentionally dropped.
             continue;
         }
 
@@ -335,6 +390,12 @@ void uartBridgeResetRx() {
     noInterrupts();
     g_rxLen = 0;
     g_pendingTxLen = 0;
+    g_pendingNotifyLen = 0;
+    g_pendingNotifyOffset = 0;
     interrupts();
-    frameDecoderReset();
+    frameDecoderReset(g_decoder);
+}
+
+void uartBridgeDecoderReset() {
+    frameDecoderReset(g_decoder);
 }

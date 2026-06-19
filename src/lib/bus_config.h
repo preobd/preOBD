@@ -101,8 +101,17 @@ struct SerialPortConfig {
     // Values are SerialBaudIndex enum (0-7)
     uint8_t baudrate_index[8];
 
-    // Reserved for future expansion (7 bytes)
-    uint8_t reserved[7];
+    // Per-port framed-mode bitmask (1 byte). Bit N (N=0..7) = Serial(N+1).
+    // When set, MuxTransport on that port runs in framed mode (the host-MCU
+    // end of the nRF52840 coprocessor link's binary framing protocol);
+    // otherwise it acts as transparent passthrough. Toggle at runtime via
+    // `BUS SERIAL <port> FRAMED ENABLE|DISABLE`. Default (zero) is
+    // backwards-compatible with HM-10, stock Bluefruit, and pre-framed
+    // nRF firmware.
+    uint8_t framed_enabled_mask;
+
+    // Reserved for future expansion (6 bytes, was 7 before framed_enabled_mask)
+    uint8_t reserved[6];
 };  // 16 bytes total
 
 #endif // BUS_CONFIG_H

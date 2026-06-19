@@ -4,7 +4,7 @@
 
 namespace {
 
-// Decoder phases.
+// Decoder phases stored opaquely in FrameDecoderState::phase (uint8_t).
 enum Phase : uint8_t {
     PHASE_SYNC = 0,
     PHASE_TYPE,
@@ -13,13 +13,6 @@ enum Phase : uint8_t {
     PHASE_PAYLOAD,
     PHASE_CRC,
 };
-
-Phase    g_phase      = PHASE_SYNC;
-uint8_t  g_type       = 0;
-uint16_t g_len        = 0;
-uint16_t g_payloadIdx = 0;
-uint8_t  g_runningCrc = 0;
-uint8_t  g_payload[FRAME_MAX_PAYLOAD];
 
 inline uint8_t crc8Step(uint8_t crc, uint8_t b) {
     // Dallas/Maxim: poly 0x31, reflected -> 0x8C in lookup form.
@@ -31,12 +24,12 @@ inline uint8_t crc8Step(uint8_t crc, uint8_t b) {
     return crc;
 }
 
-void resetDecoder() {
-    g_phase      = PHASE_SYNC;
-    g_type       = 0;
-    g_len        = 0;
-    g_payloadIdx = 0;
-    g_runningCrc = 0;
+inline void clearState(FrameDecoderState& s) {
+    s.phase      = PHASE_SYNC;
+    s.type       = 0;
+    s.len        = 0;
+    s.payloadIdx = 0;
+    s.runningCrc = 0;
 }
 
 } // namespace
@@ -70,64 +63,64 @@ size_t frameEncode(uint8_t type, const uint8_t* payload, uint16_t len,
     return i;
 }
 
-FrameFeedResult frameFeedByte(uint8_t b, Frame& out) {
-    switch (g_phase) {
+FrameFeedResult frameFeedByte(FrameDecoderState& s, uint8_t b, Frame& out) {
+    switch (s.phase) {
     case PHASE_SYNC:
         if (b == FRAME_SYNC) {
-            g_phase = PHASE_TYPE;
-            g_runningCrc = 0;
+            s.phase = PHASE_TYPE;
+            s.runningCrc = 0;
             return FRAME_NEED_MORE;
         }
         return FRAME_RESYNCING;
 
     case PHASE_TYPE:
-        g_type = b;
-        g_runningCrc = crc8Step(g_runningCrc, b);
-        g_phase = PHASE_LEN_LO;
+        s.type = b;
+        s.runningCrc = crc8Step(s.runningCrc, b);
+        s.phase = PHASE_LEN_LO;
         return FRAME_NEED_MORE;
 
     case PHASE_LEN_LO:
-        g_len = b;
-        g_runningCrc = crc8Step(g_runningCrc, b);
-        g_phase = PHASE_LEN_HI;
+        s.len = b;
+        s.runningCrc = crc8Step(s.runningCrc, b);
+        s.phase = PHASE_LEN_HI;
         return FRAME_NEED_MORE;
 
     case PHASE_LEN_HI:
-        g_len |= static_cast<uint16_t>(b) << 8;
-        g_runningCrc = crc8Step(g_runningCrc, b);
-        if (g_len > FRAME_MAX_PAYLOAD) {
-            resetDecoder();
+        s.len |= static_cast<uint16_t>(b) << 8;
+        s.runningCrc = crc8Step(s.runningCrc, b);
+        if (s.len > FRAME_MAX_PAYLOAD) {
+            clearState(s);
             return FRAME_RESYNCING;
         }
-        g_payloadIdx = 0;
-        g_phase = (g_len == 0) ? PHASE_CRC : PHASE_PAYLOAD;
+        s.payloadIdx = 0;
+        s.phase = (s.len == 0) ? PHASE_CRC : PHASE_PAYLOAD;
         return FRAME_NEED_MORE;
 
     case PHASE_PAYLOAD:
-        g_payload[g_payloadIdx++] = b;
-        g_runningCrc = crc8Step(g_runningCrc, b);
-        if (g_payloadIdx >= g_len) {
-            g_phase = PHASE_CRC;
+        s.payload[s.payloadIdx++] = b;
+        s.runningCrc = crc8Step(s.runningCrc, b);
+        if (s.payloadIdx >= s.len) {
+            s.phase = PHASE_CRC;
         }
         return FRAME_NEED_MORE;
 
     case PHASE_CRC:
-        if (b == g_runningCrc) {
-            out.type = g_type;
-            out.len  = g_len;
-            if (g_len > 0) {
-                memcpy(out.payload, g_payload, g_len);
+        if (b == s.runningCrc) {
+            out.type = s.type;
+            out.len  = s.len;
+            if (s.len > 0) {
+                memcpy(out.payload, s.payload, s.len);
             }
-            resetDecoder();
+            clearState(s);
             return FRAME_READY;
         }
-        resetDecoder();
+        clearState(s);
         return FRAME_RESYNCING;
     }
-    resetDecoder();
+    clearState(s);
     return FRAME_RESYNCING;
 }
 
-void frameDecoderReset() {
-    resetDecoder();
+void frameDecoderReset(FrameDecoderState& s) {
+    clearState(s);
 }

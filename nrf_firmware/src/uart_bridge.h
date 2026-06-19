@@ -24,4 +24,10 @@ size_t uartBridgeWrite(const uint8_t* data, size_t len);
 // leak into the next session.
 void uartBridgeResetRx();
 
+// Reset the framed-mode decoder state owned by this module. tier_state
+// calls this on connect (before sending the ping) and on disconnect so a
+// partial frame can't leak across sessions. Lives here because uart_bridge
+// is the sole producer that feeds bytes into the decoder.
+void uartBridgeDecoderReset();
+
 #endif // UART_BRIDGE_H
