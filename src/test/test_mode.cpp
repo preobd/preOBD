@@ -98,9 +98,64 @@ void readTestInput(Input* ptr) {
     }
 }
 
+// ===== TEST INJECT — per-input value hold =====
+// A lightweight, scenario-independent value hold: swaps an input's read
+// function for one that re-asserts a fixed value each loop, so DIAG/alarms/
+// outputs all see the injected value. Mutually exclusive with scenarios (the
+// scenario start/stop path clears injections to avoid double-swapping).
+static void (*injectOrigRead[MAX_INPUTS])(Input*) = { nullptr };
+static float injectValue[MAX_INPUTS];
+static bool  injectActive[MAX_INPUTS];
+
+static void readInjectedInput(Input* ptr) {
+    // inputs[] is contiguous and this function is only ever installed on one of
+    // its elements, so recover the index in O(1) via pointer arithmetic.
+    ptrdiff_t idx = ptr - inputs;
+    if (idx >= 0 && idx < MAX_INPUTS) ptr->value = injectValue[idx];
+    else                             ptr->value = NAN;
+}
+
+bool injectInputValue(uint8_t inputIndex, float value) {
+    if (inputIndex >= MAX_INPUTS) return false;
+    if (!inputs[inputIndex].flags.isEnabled) return false;
+    // Back up the live read function only on the first inject for this input,
+    // so re-injecting just updates the held value (never backs up our own
+    // readInjectedInput).
+    if (!injectActive[inputIndex]) {
+        injectOrigRead[inputIndex] = inputs[inputIndex].readFunction;
+        injectActive[inputIndex] = true;
+    }
+    injectValue[inputIndex] = value;
+    inputs[inputIndex].readFunction = readInjectedInput;
+    inputs[inputIndex].value = value;
+    return true;
+}
+
+void clearInjectedInputs() {
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        if (injectActive[i]) {
+            inputs[i].readFunction = injectOrigRead[i];
+            injectOrigRead[i] = nullptr;
+            injectActive[i] = false;
+        }
+    }
+}
+
+bool anyInjectedInputs() {
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        if (injectActive[i]) return true;
+    }
+    return false;
+}
+
 // ===== PUBLIC API IMPLEMENTATION =====
 
 void initTestMode() {
+    // Restore any live read functions before wiping the injection bookkeeping
+    // below — guards against trapping an input at readInjectedInput if this is
+    // ever called mid-session with active injections (no-op at boot).
+    clearInjectedInputs();
+
     // Initialize test mode state
     testModeState.isActive = false;
     testModeState.currentScenario = nullptr;
@@ -110,6 +165,8 @@ void initTestMode() {
     // Clear original function pointer backup
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         testModeState.originalReadFunctions[i] = nullptr;
+        injectActive[i] = false;
+        injectOrigRead[i] = nullptr;
     }
 
     msg.debug.info(TAG_SYSTEM, "Test mode system initialized");
@@ -131,6 +188,9 @@ bool startTestScenario(uint8_t scenarioIndex) {
     if (testModeState.isActive) {
         stopTestMode();
     }
+    // Drop any per-input injections so the scenario's read-function backup
+    // captures the live functions, not readInjectedInput.
+    clearInjectedInputs();
 
     // Get pointer to scenario in PROGMEM
     testModeState.currentScenario = getTestScenario(scenarioIndex);

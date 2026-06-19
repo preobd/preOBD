@@ -988,6 +988,8 @@ int cmd_test(int argc, const char* const* argv) {
         msg.control.println(F("  Usage: TEST <0-N>"));
         msg.control.println(F("  Usage: TEST STOP"));
         msg.control.println(F("  Usage: TEST STATUS"));
+        msg.control.println(F("  Usage: TEST INJECT <pin> <value>"));
+        msg.control.println(F("  Usage: TEST CLEAR"));
         return 1;
     }
 
@@ -1017,6 +1019,53 @@ int cmd_test(int argc, const char* const* argv) {
         } else {
             msg.control.println(F("Test mode: ACTIVE"));
             msg.control.println(F("  Use TEST LIST to see all scenarios"));
+        }
+        return 0;
+    }
+
+    // TEST INJECT <pin> <value> — hold one input at a fixed value (deterministic
+    // bench testing, e.g. drive an input past its alarm threshold).
+    if (streq_P(subcommand, PSTR("INJECT"))) {
+        if (isTestModeActive()) {
+            msg.control.println(F("ERROR: a scenario is running; TEST STOP first"));
+            return 1;
+        }
+        if (argc < 4) {
+            msg.control.println(F("ERROR: usage: TEST INJECT <pin> <value>"));
+            return 1;
+        }
+        bool pinOk = false;
+        uint8_t pin = parsePin(argv[2], &pinOk);
+        if (!pinOk) {
+            msg.control.print(F("ERROR: invalid pin '"));
+            msg.control.print(argv[2]);
+            msg.control.println(F("'"));
+            return 1;
+        }
+        Input* in = requireInput(pin);   // prints standard error if unconfigured
+        if (!in) return 1;
+        float v = atof(argv[3]);
+        if (!injectInputValue(getInputIndex(pin), v)) {
+            msg.control.println(F("ERROR: could not inject (input not enabled?)"));
+            return 1;
+        }
+        msg.control.print(F("Injecting "));
+        msg.control.print(in->abbrName);
+        msg.control.print(F(" (pin "));
+        msg.control.print(pin);
+        msg.control.print(F(") = "));
+        msg.control.println(v, 2);
+        msg.control.println(F("  (use TEST CLEAR to restore live readings)"));
+        return 0;
+    }
+
+    // TEST CLEAR — restore all injected inputs to their live readings
+    if (streq_P(subcommand, PSTR("CLEAR"))) {
+        if (!anyInjectedInputs()) {
+            msg.control.println(F("No inputs are currently injected"));
+        } else {
+            clearInjectedInputs();
+            msg.control.println(F("Cleared injected inputs; live readings restored"));
         }
         return 0;
     }

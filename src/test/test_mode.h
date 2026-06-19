@@ -90,4 +90,17 @@ uint8_t getNumTestScenarios();
 // Get name of a specific scenario
 const char* getTestScenarioName(uint8_t index);
 
+// ===== TEST INJECT — per-input value hold =====
+// Independent of the scenario system: pin one input at a fixed value for
+// deterministic bench testing (e.g. drive an input past its alarm threshold).
+// Swaps the input's read function so the main loop keeps reporting `value`.
+// Returns false if the index is out of range or the input isn't enabled.
+bool injectInputValue(uint8_t inputIndex, float value);
+
+// Restore every injected input to its live read function (TEST CLEAR).
+void clearInjectedInputs();
+
+// True if at least one input is currently held by injectInputValue().
+bool anyInjectedInputs();
+
 #endif // TEST_MODE_H
