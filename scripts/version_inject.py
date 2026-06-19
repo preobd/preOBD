@@ -1,8 +1,9 @@
 """
 version_inject.py - PlatformIO pre-build script for version injection
 
-Injects FW_BUILD_NUMBER (git commit count) and FW_GIT_HASH (short commit hash)
-as compiler flags before each build.
+Injects FW_BUILD_NUMBER (git commit count), FW_GIT_HASH (short commit hash),
+and PIO_BUILD_ENV (PlatformIO environment name, e.g. "teensy41") as compiler
+flags before each build.
 """
 
 # pylint: disable=undefined-variable
@@ -47,11 +48,13 @@ def get_git_info():
 
 # Get version info
 build_number, git_hash = get_git_info()
+pio_env = env.subst("$PIOENV")
 
 # Inject as compiler flags
 env.Append(CPPDEFINES=[
     ("FW_BUILD_NUMBER", build_number),
-    ("FW_GIT_HASH", f'\\"{git_hash}\\"')
+    ("FW_GIT_HASH", f'\\"{git_hash}\\"'),
+    ("PIO_BUILD_ENV", f'\\"{pio_env}\\"'),
 ])
 
-print(f"Version injection: build={build_number}, hash={git_hash}")
+print(f"Version injection: build={build_number}, hash={git_hash}, env={pio_env}")

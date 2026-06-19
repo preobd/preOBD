@@ -22,10 +22,13 @@ void bleServicesInit();
 // connected. Caller guarantees `len` <= 20 (conservative BLE 4.2 payload).
 bool bleServicesNotifyCmdRx(const uint8_t* data, size_t len);
 
-// Update the System Status characteristic and notify subscribers.
-// Phase 1 just publishes a static snapshot at boot; future phases will
-// repopulate this from host-MCU state.
-void bleServicesPublishStatus();
+// Update the System Status characteristic with a fresh 32-byte snapshot
+// pushed by the host MCU via framed transport (type 0x03). Writes the cache
+// (so subsequent GATT reads return the latest value) and pushes a notify
+// to any subscribed centrals. Caller guarantees `len == PREOBD_STATUS_SIZE`.
+// No-op (silent) when no client is connected — the write still updates the
+// cache so a future connect's first read returns current data.
+void bleServicesUpdateStatus(const uint8_t* payload, uint16_t len);
 
 // Reference to the primary service object so main.cpp can hand it to the
 // advertiser.

@@ -29,24 +29,6 @@ void cmdTxWriteCallback(uint16_t /*conn_handle*/, BLECharacteristic* chr,
     }
 }
 
-PreobdSystemStatus buildStatusSnapshot() {
-    PreobdSystemStatus s = {};
-    s.magic = PREOBD_STATUS_MAGIC;
-    s.protocolVersion = PREOBD_BLE_PROTOCOL_VERSION;
-    s.systemMode = PREOBD_MODE_CONFIG;
-    s.activeInputCount = 0;
-    s.relayCount = 0;
-    s.uptimeSeconds = millis() / 1000UL;
-    // Firmware version: not yet sourced from a version header; zero is fine
-    // for Phase 1, host MCU will push real values via UART/Tier 2 later.
-    s.versionMajor = 0;
-    s.versionMinor = 0;
-    s.versionPatch = 0;
-    s.versionBuild = 0;
-    strncpy(s.deviceName, "preOBD", sizeof(s.deviceName) - 1);
-    return s;
-}
-
 } // namespace
 
 void bleServicesInit() {
@@ -90,7 +72,11 @@ void bleServicesInit() {
     g_status.setFixedLen(PREOBD_STATUS_SIZE);
     g_status.begin();
 
-    bleServicesPublishStatus();
+    // Initialize the cache to 32 zero bytes so reads before the host's first
+    // push return a well-defined payload. Clients detect "no data yet" via
+    // magic != PREOBD_STATUS_MAGIC.
+    uint8_t zeros[PREOBD_STATUS_SIZE] = {};
+    g_status.write(zeros, sizeof(zeros));
 }
 
 bool bleServicesNotifyCmdRx(const uint8_t* data, size_t len) {
@@ -98,11 +84,11 @@ bool bleServicesNotifyCmdRx(const uint8_t* data, size_t len) {
     return g_cmdRx.notify(data, len);
 }
 
-void bleServicesPublishStatus() {
-    PreobdSystemStatus snap = buildStatusSnapshot();
-    g_status.write(reinterpret_cast<uint8_t*>(&snap), sizeof(snap));
+void bleServicesUpdateStatus(const uint8_t* payload, uint16_t len) {
+    if (len != PREOBD_STATUS_SIZE) return;
+    g_status.write(payload, len);
     if (Bluefruit.connected()) {
-        g_status.notify(reinterpret_cast<uint8_t*>(&snap), sizeof(snap));
+        g_status.notify(payload, len);
     }
 }
 

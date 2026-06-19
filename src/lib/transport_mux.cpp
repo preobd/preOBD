@@ -129,6 +129,27 @@ void MuxTransport::flushTxAcc() {
     txAccLen = 0;
 }
 
+bool MuxTransport::sendFrame(uint8_t type, const uint8_t* payload, uint16_t len) {
+    if (!framedEnabled) return false;
+    if (len > FRAME_MAX_PAYLOAD) return false;
+
+    uint8_t frame[FRAME_MAX_BYTES];
+    const size_t n = frameEncode(type, payload, len, frame);
+    if (n == 0) return false;
+
+    // Atomic check: enough TX buffer space AND flow-control gate open.
+    // Refuse rather than block — caller retries on next tick.
+    if (static_cast<size_t>(serial->availableForWrite()) < n) return false;
+    if (flowInPin >= 0 && digitalRead(flowInPin) == HIGH) return false;
+
+    // Capacity verified — commit. Bypass writeSerialChunked's awaitFlowClear
+    // loop (the gate was just confirmed open) to keep the call truly non-
+    // blocking; if the peer asserts mid-write, the bytes are already queued
+    // in Serial's TX buffer and the hardware handles draining at its pace.
+    serial->write(frame, n);
+    return true;
+}
+
 void MuxTransport::writeSerialChunked(const uint8_t* data, size_t len) {
     if (flowInPin < 0) {
         serial->write(data, len);

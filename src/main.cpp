@@ -47,6 +47,7 @@
 #include "lib/log_tags.h"
 #include "lib/transport_mux.h"
 #include "lib/transport_serial.h"
+#include "lib/status_broadcaster.h"
 #ifdef ESP32
 // Include appropriate Bluetooth transport for ESP32 variant
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
@@ -277,6 +278,7 @@ void setup() {
 #endif
     router.begin();  // Load config from EEPROM
     flushSystemConfigBootDiagnostics();
+    StatusBroadcaster::init();
     msg.control.println();
     msg.control.println(F("                 ____  ___  ___  "));
     msg.control.println(F("   ___  _______ / __ \\/ _ )/ _ \\ "));
@@ -396,6 +398,11 @@ void loop() {
 
     // Update transport router (poll transports, handle housekeeping, process commands)
     router.update();  // Now handles command input from ALL transports
+
+    // Push system status to framed peers (nRF coprocessor). Cheap no-op when
+    // the transport is in transparent mode; placed before the CONFIG-mode
+    // early return so heartbeats fire in both modes.
+    StatusBroadcaster::tick();
 
     // Process button events (short press = silence alarm, long press = toggle display)
 #if ENABLE_MODE_BUTTON

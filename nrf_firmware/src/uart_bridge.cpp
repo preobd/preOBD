@@ -30,6 +30,7 @@
 #include <string.h>
 
 #include "ble_bridge.h"
+#include "ble_gatt_defs.h"
 #include "ble_services.h"
 #include "board_pins.h"
 #include "frame_codec.h"
@@ -243,8 +244,16 @@ bool handleFrame(const Frame& f) {
         g_pendingNotifyLen = f.len;
         g_pendingNotifyOffset = 0;
         return drainPendingNotify();
+    case FRAME_TYPE_STATUS:
+        // Host MCU pushed a fresh 32-byte PreobdSystemStatus snapshot. Cache
+        // it into the GATT characteristic and notify subscribers. Drop any
+        // wrong-sized payload defensively.
+        if (f.len == PREOBD_STATUS_SIZE) {
+            bleServicesUpdateStatus(f.payload, f.len);
+        }
+        return true;
     default:
-        // Status/Alarm/Relay/OTA/etc deferred past MVP scope.
+        // Alarm/Relay/OTA/etc deferred past MVP scope.
         return true;
     }
 }

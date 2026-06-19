@@ -116,6 +116,14 @@ public:
     void setFramedEnabled(bool enabled);
     bool isFramedEnabled() const { return framedEnabled; }
 
+    // Send a complete framed packet of arbitrary type. Non-blocking and
+    // atomic: returns false immediately if the transport isn't in framed
+    // mode, if `len` exceeds FRAME_MAX_PAYLOAD, or if the underlying Serial
+    // TX buffer can't absorb the entire encoded frame right now (or
+    // Phase 3 flow control is asserted). Never writes a partial frame.
+    // Callers that need delivery guarantees should retry on false.
+    bool sendFrame(uint8_t type, const uint8_t* payload, uint16_t len);
+
     // ========== TransportInterface Implementation ==========
 
     size_t write(uint8_t c) override;
