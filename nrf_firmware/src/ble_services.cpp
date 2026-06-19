@@ -84,6 +84,27 @@ bool bleServicesNotifyCmdRx(const uint8_t* data, size_t len) {
     return g_cmdRx.notify(data, len);
 }
 
+size_t bleServicesMaxNotifyChunk() {
+    // A notify's data payload is the negotiated ATT MTU minus the 3-byte ATT
+    // header (opcode + attribute handle). On a default 23-byte MTU link that
+    // floors at 20; after BANDWIDTH_MAX negotiation it's 247 - 3 = 244.
+    // Clamp to the CMD_RX characteristic's 244-byte max len either way.
+    constexpr size_t kAttHeaderBytes = 3;
+    constexpr size_t kDefaultChunk   = BLE_GATT_ATT_MTU_DEFAULT - kAttHeaderBytes; // 20
+    constexpr size_t kMaxChunk       = 244;  // matches g_cmdRx.setMaxLen(244)
+
+    BLEConnection* conn = Bluefruit.Connection(Bluefruit.connHandle());
+    if (!conn) return kDefaultChunk;
+
+    const uint16_t mtu = conn->getMtu();
+    if (mtu <= kAttHeaderBytes) return kDefaultChunk;
+
+    size_t payload = mtu - kAttHeaderBytes;
+    if (payload < kDefaultChunk) payload = kDefaultChunk;
+    if (payload > kMaxChunk)     payload = kMaxChunk;
+    return payload;
+}
+
 void bleServicesUpdateStatus(const uint8_t* payload, uint16_t len) {
     if (len != PREOBD_STATUS_SIZE) return;
     g_status.write(payload, len);

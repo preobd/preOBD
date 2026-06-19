@@ -43,7 +43,6 @@ namespace {
 constexpr size_t kRxFlushBytes  = 20;       // BLE 4.2 minimum payload
 constexpr uint32_t kRxStallMs   = 50;
 constexpr size_t kTxRingSize    = 1024;
-constexpr size_t kBleNotifyChunk = 20;      // chunk Tier 2 text resp to 20B
 
 #if defined(PIN_NRF_RTS_OUT) && defined(PIN_NRF_CTS_IN)
 // Hysteresis thresholds on Serial1.available(). Sized so the worst-case
@@ -208,10 +207,14 @@ size_t enqueueAsTextFrames(const uint8_t* data, size_t len) {
 // chunks so the LED tracks reality and the host gets throttled during
 // the drain, not just at the top of the next uartBridgePoll iteration.
 bool drainPendingNotify() {
+    // Size chunks to the negotiated link MTU (up to 244B) instead of the old
+    // fixed 20B -- on a BANDWIDTH_MAX link that's ~12x fewer notify calls,
+    // each blocking ~one connection interval, for a bulk text response.
+    // Queried once per drain: the MTU is stable for the connection's life.
+    const uint16_t maxChunk = static_cast<uint16_t>(bleServicesMaxNotifyChunk());
     while (g_pendingNotifyOffset < g_pendingNotifyLen) {
         const uint16_t remaining = g_pendingNotifyLen - g_pendingNotifyOffset;
-        const uint16_t chunk = (remaining > kBleNotifyChunk)
-                                   ? kBleNotifyChunk : remaining;
+        const uint16_t chunk = (remaining > maxChunk) ? maxChunk : remaining;
         if (!bleServicesNotifyCmdRx(g_pendingNotifyPayload + g_pendingNotifyOffset,
                                     chunk)) {
             return false;

@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SYSTEM DIAG INPUTS` now classifies each input's electrical state from a raw, un-clamped read (OPEN / SHORTED / OUT OF RANGE / NEAR LIMIT / IN RANGE), with `SYSTEM DIAG INPUTS VERBOSE` showing the raw ADC → resistance → value evidence chain — distinguishing a disconnected sensor from a believable value the display path would otherwise clamp (#238)
 
 ### Changed
+- nRF CMD_RX notifications now chunk to the negotiated ATT MTU (up to 244 bytes) instead of a fixed 20, cutting notify calls ~12× on bulk text responses like `SYSTEM DUMP JSON`
 - `RELAY MODE MANUAL_ON|MANUAL_OFF` now actuates the pin immediately (instead of only on the next RUN-mode loop) and is usable in RUN mode as a live operator override, alongside `RELAY STATUS`/`LIST`; the configuration subcommands (`PIN`/`INPUT`/`THRESHOLD`, `MODE AUTO_*`/`DISABLED`) remain CONFIG-only (#250)
 - `TEST_MODE_PIN` is now optional: a profile can enable `ENABLE_TEST_MODE` for CLI-driven injection (`TEST INJECT`/`CLEAR`/etc.) without dedicating a GPIO to the boot-time hardware trigger (#249)
 - `BUS SERIAL` list view now tags framed-mode ports with `[FRAMED]` (mirroring the existing `[ELM327]` tag), so the multi-port summary matches the per-port detail view

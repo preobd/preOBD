@@ -19,8 +19,15 @@ void bleServicesInit();
 // false when the SoftDevice's HVN TX queue is full (caller must retry the
 // same bytes on a later poll rather than discard them, or notifications
 // will be silently dropped). No-op (returns true) when no client is
-// connected. Caller guarantees `len` <= 20 (conservative BLE 4.2 payload).
+// connected. Caller guarantees `len` <= bleServicesMaxNotifyChunk().
 bool bleServicesNotifyCmdRx(const uint8_t* data, size_t len);
+
+// Largest CMD_RX notify payload the current link can carry in a single ATT
+// packet: negotiated ATT MTU minus the 3-byte ATT header, floored at 20
+// (default-MTU link) and capped at 244 (the characteristic's max len).
+// Re-query per drain rather than caching -- the MTU is renegotiated on each
+// reconnect and may differ between centrals.
+size_t bleServicesMaxNotifyChunk();
 
 // Update the System Status characteristic with a fresh 32-byte snapshot
 // pushed by the host MCU via framed transport (type 0x03). Writes the cache
