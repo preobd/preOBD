@@ -50,15 +50,23 @@ PreobdSystemStatus buildStatusSnapshot() {
 } // namespace
 
 void bleServicesInit() {
-    uint8_t uuid[16];
+    // Bluefruit's BLEUuid stores a pointer to the 16-byte UUID buffer, not a
+    // copy (see BLEUuid.h: `uint8_t const* _uuid128`). Each service /
+    // characteristic needs its own persistent backing array -- a single
+    // stack-local buffer reused across calls leaves dangling pointers once
+    // the function returns, and advertising emits garbage UUIDs.
+    static uint8_t kServiceUuid[16];
+    static uint8_t kCmdTxUuid[16];
+    static uint8_t kCmdRxUuid[16];
+    static uint8_t kStatusUuid[16];
 
-    if (parseUuid128(PREOBD_SERVICE_UUID, uuid)) {
-        g_controlService = BLEService(uuid);
+    if (parseUuid128(PREOBD_SERVICE_UUID, kServiceUuid)) {
+        g_controlService = BLEService(kServiceUuid);
     }
     g_controlService.begin();
 
-    if (parseUuid128(PREOBD_CHAR_CMD_TX_UUID, uuid)) {
-        g_cmdTx = BLECharacteristic(uuid);
+    if (parseUuid128(PREOBD_CHAR_CMD_TX_UUID, kCmdTxUuid)) {
+        g_cmdTx = BLECharacteristic(kCmdTxUuid);
     }
     g_cmdTx.setProperties(CHR_PROPS_WRITE | CHR_PROPS_WRITE_WO_RESP);
     g_cmdTx.setPermission(SECMODE_OPEN, SECMODE_OPEN);
@@ -66,16 +74,16 @@ void bleServicesInit() {
     g_cmdTx.setWriteCallback(cmdTxWriteCallback);
     g_cmdTx.begin();
 
-    if (parseUuid128(PREOBD_CHAR_CMD_RX_UUID, uuid)) {
-        g_cmdRx = BLECharacteristic(uuid);
+    if (parseUuid128(PREOBD_CHAR_CMD_RX_UUID, kCmdRxUuid)) {
+        g_cmdRx = BLECharacteristic(kCmdRxUuid);
     }
     g_cmdRx.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ);
     g_cmdRx.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
     g_cmdRx.setMaxLen(244);
     g_cmdRx.begin();
 
-    if (parseUuid128(PREOBD_CHAR_STATUS_UUID, uuid)) {
-        g_status = BLECharacteristic(uuid);
+    if (parseUuid128(PREOBD_CHAR_STATUS_UUID, kStatusUuid)) {
+        g_status = BLECharacteristic(kStatusUuid);
     }
     g_status.setProperties(CHR_PROPS_READ | CHR_PROPS_NOTIFY);
     g_status.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
@@ -85,9 +93,9 @@ void bleServicesInit() {
     bleServicesPublishStatus();
 }
 
-void bleServicesNotifyCmdRx(const uint8_t* data, size_t len) {
-    if (!Bluefruit.connected()) return;
-    g_cmdRx.notify(data, len);
+bool bleServicesNotifyCmdRx(const uint8_t* data, size_t len) {
+    if (!Bluefruit.connected()) return true;
+    return g_cmdRx.notify(data, len);
 }
 
 void bleServicesPublishStatus() {

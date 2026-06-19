@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - nRF52840 firmware (Phase 1): BLE↔UART transparent bridge on Adafruit ItsyBitsy nRF52840, enabling phone-based control of the host MCU's serial CLI over BLE; includes Nordic Secure DFU for nRF self-update
+- nRF52840 firmware (Phase 2): Tier 2 framed UART protocol with auto-detect on BLE connect, falling back to Tier 1 transparent passthrough if the host doesn't speak the framing — keeps current Teensy behavior unchanged while enabling future multi-channel transports
 
 ### Changed
 - Renamed `MEASURE_LEVEL` measurement type to `MEASURE_PERCENT` to reflect its actual usage covering normalized 0–100% values (TPS, fuel level, engine load, accelerator pedal) rather than fluid levels (#209)

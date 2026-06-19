@@ -69,15 +69,19 @@ void otaDataWrite(uint16_t /*conn*/, BLECharacteristic* /*chr*/,
 } // namespace
 
 void otaHandlerInit() {
-    uint8_t uuid[16];
+    // BLEUuid stores a pointer, not a copy -- give each UUID its own
+    // persistent backing buffer. See ble_services.cpp for the full story.
+    static uint8_t kExtServiceUuid[16];
+    static uint8_t kOtaCtrlUuid[16];
+    static uint8_t kOtaDataUuid[16];
 
-    if (parseUuid128(PREOBD_EXT_SERVICE_UUID, uuid)) {
-        g_extService = BLEService(uuid);
+    if (parseUuid128(PREOBD_EXT_SERVICE_UUID, kExtServiceUuid)) {
+        g_extService = BLEService(kExtServiceUuid);
     }
     g_extService.begin();
 
-    if (parseUuid128(PREOBD_CHAR_OTA_CTRL_UUID, uuid)) {
-        g_otaCtrl = BLECharacteristic(uuid);
+    if (parseUuid128(PREOBD_CHAR_OTA_CTRL_UUID, kOtaCtrlUuid)) {
+        g_otaCtrl = BLECharacteristic(kOtaCtrlUuid);
     }
     g_otaCtrl.setProperties(CHR_PROPS_WRITE | CHR_PROPS_NOTIFY);
     g_otaCtrl.setPermission(SECMODE_OPEN, SECMODE_OPEN);
@@ -85,8 +89,8 @@ void otaHandlerInit() {
     g_otaCtrl.setWriteCallback(otaCtrlWrite);
     g_otaCtrl.begin();
 
-    if (parseUuid128(PREOBD_CHAR_OTA_DATA_UUID, uuid)) {
-        g_otaData = BLECharacteristic(uuid);
+    if (parseUuid128(PREOBD_CHAR_OTA_DATA_UUID, kOtaDataUuid)) {
+        g_otaData = BLECharacteristic(kOtaDataUuid);
     }
     g_otaData.setProperties(CHR_PROPS_WRITE_WO_RESP);
     g_otaData.setPermission(SECMODE_OPEN, SECMODE_OPEN);

@@ -10,6 +10,7 @@
 #include <bluefruit.h>
 
 #include "board_pins.h"
+#include "tier_state.h"
 #include "uart_bridge.h"
 
 namespace {
@@ -24,12 +25,14 @@ void setIrqLine(bool high) {
 void onConnect(uint16_t /*conn_handle*/) {
     g_connected = true;
     setIrqLine(true);
+    tierStateOnConnect();
 }
 
 void onDisconnect(uint16_t /*conn_handle*/, uint8_t /*reason*/) {
     g_connected = false;
     setIrqLine(false);
     uartBridgeResetRx();
+    tierStateOnDisconnect();
     // Bluefruit auto-restarts advertising by default; nothing to do here.
 }
 

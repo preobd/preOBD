@@ -10,6 +10,7 @@
 #include "ble_services.h"
 #include "dfu_trigger.h"
 #include "ota_handler.h"
+#include "tier_state.h"
 #include "uart_bridge.h"
 
 namespace {
@@ -39,6 +40,7 @@ void setup() {
 #endif
 
     uartBridgeInit();
+    tierStateInit();
 
     Bluefruit.begin();
     Bluefruit.setName("preOBD");
@@ -54,6 +56,7 @@ void setup() {
 }
 
 void loop() {
+    tierStatePoll();
     uartBridgePoll();
     dfuTriggerPoll();
 }

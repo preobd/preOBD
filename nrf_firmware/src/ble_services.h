@@ -15,9 +15,12 @@
 
 void bleServicesInit();
 
-// Push UART bytes out as a CMD_RX notify. Caller guarantees `len` <= 20
-// (the conservative BLE 4.2 payload). No-op when no client is connected.
-void bleServicesNotifyCmdRx(const uint8_t* data, size_t len);
+// Push UART bytes out as a CMD_RX notify. Returns true on success; returns
+// false when the SoftDevice's HVN TX queue is full (caller must retry the
+// same bytes on a later poll rather than discard them, or notifications
+// will be silently dropped). No-op (returns true) when no client is
+// connected. Caller guarantees `len` <= 20 (conservative BLE 4.2 payload).
+bool bleServicesNotifyCmdRx(const uint8_t* data, size_t len);
 
 // Update the System Status characteristic and notify subscribers.
 // Phase 1 just publishes a static snapshot at boot; future phases will
