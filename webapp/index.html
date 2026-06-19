@@ -690,6 +690,33 @@
     background: rgba(27,48,27,0.04);
   }
 
+  /* OBD-II PID chip — small mono tag, ×N badge for multi-byte responses */
+  .pid-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--brand-light);
+    background: rgba(61,107,61,0.10);
+    border: 1px solid rgba(61,107,61,0.22);
+    border-radius: 4px;
+    padding: 2px 6px;
+  }
+  .pid-cell-empty {
+    color: var(--dim-light);
+    background: transparent;
+    border-color: var(--border-light);
+    font-style: italic;
+  }
+  .pid-len {
+    font-size: 9px;
+    color: var(--dim);
+    font-weight: 400;
+  }
+
   .empty-row td { text-align: center; color: var(--dim); font-style: italic; padding: 28px; font-size: 13px; }
 
   /* Config action bar */
@@ -791,6 +818,43 @@
   }
   .editor-field.checkbox-field input { width: auto; }
 
+  /* Paired fields (Alarm Min/Max, OBD PID/Length) that should sit on their
+     own row regardless of how the outer grid wraps. */
+  .editor-group {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 220px));
+    gap: 10px 14px;
+  }
+
+  /* Status row: input-enable toggle + per-output checkboxes, visually
+     separated from the field grid above by a divider. */
+  .editor-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+    flex-wrap: wrap;
+    padding-top: 4px;
+  }
+  .editor-toggle-row label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12.5px;
+    font-family: var(--sans);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .editor-toggle-row input[type="checkbox"] { width: auto; accent-color: var(--brand-light); }
+  .editor-toggle-divider {
+    width: 1px;
+    height: 18px;
+    background: var(--border);
+  }
+
   .editor-actions { display: flex; gap: 8px; margin-top: 14px; }
 
   /* Overflow scroll wrapper for table */
@@ -877,6 +941,7 @@
           <tr>
             <th>Pin</th><th>Application</th><th>Sensor</th>
             <th>Units</th><th>Alm Min</th><th>Alm Max</th>
+            <th>OBD PID</th>
             <th>Enabled</th><th>Status</th><th></th>
           </tr>
         </thead>
@@ -1929,13 +1994,22 @@ function normalizeUnitDisplay(units) {
   return found ? found.name : units;
 }
 
+// Render an input's OBD-II PID assignment as a hex chip, or a dim dash when unset.
+function formatPidCell(obd2) {
+  const pid = obd2?.pid;
+  if (!pid) return '<span class="pid-cell pid-cell-empty">—</span>';
+  const hex = '0x' + pid.toString(16).toUpperCase().padStart(2, '0');
+  const len = obd2.length || 1;
+  return `<span class="pid-cell" title="${len} response byte${len === 1 ? '' : 's'}">${hex}<span class="pid-len">×${len}</span></span>`;
+}
+
 // --- Initial State Fetch ---
 
 async function fetchInitialState() {
   const panel = document.getElementById('inputsPanel');
   const tbody = document.getElementById('inputsTbody');
   panel.style.display = '';
-  tbody.innerHTML = '<tr><td colspan="9" class="empty-row" style="color:var(--brand)">Loading configuration…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="10" class="empty-row" style="color:var(--brand)">Loading configuration…</td></tr>';
   try {
     // No CONFIG here: SYSTEM DUMP / LIST are RUN-legal, so the device stays
     // live while we load. CONFIG is entered only by withConfigMode() for the
@@ -1952,7 +2026,7 @@ async function fetchInitialState() {
     renderInputsPanel();
     appendInfo('Configuration loaded.');
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="9" class="empty-row" style="color:var(--red)">Failed to load: ' + escHtml(e.message) + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty-row" style="color:var(--red)">Failed to load: ' + escHtml(e.message) + '</td></tr>';
     if (e.message !== 'Disconnected') appendErr('Failed to load configuration: ' + e.message);
   }
 }
@@ -1965,7 +2039,7 @@ function renderInputsPanel() {
   const inputs = localConfig?.inputs || [];
   if (!inputs.length) {
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="9" class="empty-row">No inputs configured. Click "+ Add Input" to add one.</td>';
+    tr.innerHTML = '<td colspan="10" class="empty-row">No inputs configured. Click "+ Add Input" to add one.</td>';
     tbody.appendChild(tr);
   } else {
     for (const inp of inputs) {
@@ -1984,6 +2058,7 @@ function renderInputsPanel() {
         `<td>${escHtml(normalizeUnitDisplay(inp.units))}</td>` +
         `<td>${alarmMin}</td>` +
         `<td>${alarmMax}</td>` +
+        `<td>${formatPidCell(inp.obd2)}</td>` +
         `<td><input type="checkbox" ${inp.enabled ? 'checked' : ''} disabled></td>` +
         `<td>${badge}</td>` +
         `<td style="white-space:nowrap">` +
@@ -2047,13 +2122,15 @@ function buildEditorHTML(pinStr, inp, isAdd) {
   const alarmMax = inp?.alarm?.max != null ? inp.alarm.max : '';
   const enabled = inp ? inp.enabled !== false : true;
   const mask = inp?.outputMask ?? 0x0F;
+  const obdPid = inp?.obd2?.pid ? '0x' + inp.obd2.pid.toString(16).toUpperCase().padStart(2, '0') : '';
+  const obdLength = inp?.obd2?.length || 1;
 
   return `<div class="editor-title">${isAdd ? 'Add Input' : 'Edit Input: ' + escHtml(pinStr)}</div>
 <div class="editor-grid">
-  <div class="editor-field">
+  ${isAdd ? `<div class="editor-field">
     <label>Pin</label>
-    <input type="text" id="edPin" value="${escHtml(pinStr)}" ${isAdd ? '' : 'disabled'} placeholder="e.g. A0, 14, I2C:0">
-  </div>
+    <input type="text" id="edPin" value="${escHtml(pinStr)}" placeholder="e.g. A0, 14, I2C:0">
+  </div>` : `<input type="hidden" id="edPin" value="${escHtml(pinStr)}">`}
   <div class="editor-field">
     <label>Application</label>
     <select id="edApp" onchange="updateEditorDropdowns()">${appOptions}</select>
@@ -2066,21 +2143,31 @@ function buildEditorHTML(pinStr, inp, isAdd) {
     <label>Units</label>
     <select id="edUnits">${unitOptions}</select>
   </div>
-  <div class="editor-field">
-    <label>Alarm Min</label>
-    <input type="number" id="edAlarmMin" value="${alarmMin}" placeholder="optional">
+  <div class="editor-group">
+    <div class="editor-field">
+      <label>Alarm Min</label>
+      <input type="number" id="edAlarmMin" value="${alarmMin}" placeholder="optional">
+    </div>
+    <div class="editor-field">
+      <label>Alarm Max</label>
+      <input type="number" id="edAlarmMax" value="${alarmMax}" placeholder="optional">
+    </div>
   </div>
-  <div class="editor-field">
-    <label>Alarm Max</label>
-    <input type="number" id="edAlarmMax" value="${alarmMax}" placeholder="optional">
-  </div>
-  <div class="editor-field checkbox-field">
-    <input type="checkbox" id="edEnabled" ${enabled ? 'checked' : ''}>
-    <label for="edEnabled">Enabled</label>
+  <div class="editor-group">
+    <div class="editor-field">
+      <label>OBD-II PID</label>
+      <input type="text" id="edObdPid" value="${escHtml(obdPid)}" placeholder="0x00 (none)" pattern="^(0[xX][0-9a-fA-F]{1,2}|[0-9]{1,3})?$" oninput="document.getElementById('edObdLength').disabled = !this.value.trim()">
+    </div>
+    <div class="editor-field">
+      <label>OBD Response Bytes</label>
+      <input type="number" id="edObdLength" value="${obdLength}" min="1" max="5" ${obdPid ? '' : 'disabled'}>
+    </div>
   </div>
   <div class="editor-field" style="grid-column: 1 / -1;">
-    <label>Outputs</label>
-    <div style="display:flex;gap:1.2rem;align-items:center;flex-wrap:wrap;padding-top:4px">
+    <label>Status &amp; Outputs</label>
+    <div class="editor-toggle-row">
+      <label><input type="checkbox" id="edEnabled" ${enabled ? 'checked' : ''}> Input Enabled</label>
+      <span class="editor-toggle-divider"></span>
       <label><input type="checkbox" id="edOutCAN"      ${mask & 1 ? 'checked' : ''}> CAN</label>
       <label><input type="checkbox" id="edOutRealDash" ${mask & 2 ? 'checked' : ''}> RealDash</label>
       <label><input type="checkbox" id="edOutSerial"   ${mask & 4 ? 'checked' : ''}> Serial</label>
@@ -2170,6 +2257,17 @@ function saveEditorLocal() {
   const hasMax = alarmMaxRaw !== '';
   if (hasMin !== hasMax) { alert('Set both Alarm Min and Max, or leave both empty.'); return; }
 
+  const obdPidRaw = document.getElementById('edObdPid').value.trim();
+  let obdPid = 0;
+  if (obdPidRaw) {
+    obdPid = /^0[xX]/.test(obdPidRaw) ? parseInt(obdPidRaw, 16) : parseInt(obdPidRaw, 10);
+    if (!Number.isInteger(obdPid) || obdPid < 0 || obdPid > 0xFF) {
+      alert('OBD-II PID must be 0x00–0xFF (or 0–255).');
+      return;
+    }
+  }
+  const obdLength = Math.min(5, Math.max(1, Number(document.getElementById('edObdLength').value) || 1));
+
   const changes = {
     app: document.getElementById('edApp').value,
     sensor: document.getElementById('edSensor').value,
@@ -2184,6 +2282,7 @@ function saveEditorLocal() {
       (document.getElementById('edOutRealDash').checked ? 2 : 0) |
       (document.getElementById('edOutSerial').checked   ? 4 : 0) |
       (document.getElementById('edOutSD').checked       ? 8 : 0),
+    obd2: obdPid ? { pid: obdPid, length: obdLength } : { pid: 0, length: 0 },
   };
 
   if (isAdd) {
@@ -2290,11 +2389,22 @@ async function applyInput(pinStr) {
       }
     }
 
+    // OBD-II PID / response length — PID first, since clearing it (0x00) makes
+    // length irrelevant, and setting a fresh PID is what makes length apply.
+    const curObd  = cur.obd2  || { pid: 0, length: 0 };
+    const origObd = orig?.obd2 || { pid: 0, length: 0 };
+    if (curObd.pid !== origObd.pid) {
+      await sendChecked(`SET ${pinStr} OBD_PID 0x${curObd.pid.toString(16).toUpperCase().padStart(2, '0')}`);
+    }
+    if (curObd.pid !== 0 && curObd.length !== origObd.length) {
+      await sendChecked(`SET ${pinStr} OBD_LENGTH ${curObd.length}`);
+    }
+
     // Mirror applied state into originalConfig so subsequent diffs are accurate
     if (orig) {
       Object.assign(orig, { app: cur.app, sensor: cur.sensor, units: cur.units,
         alarm: { min: cur.alarm?.min ?? null, max: cur.alarm?.max ?? null },
-        enabled: cur.enabled, outputMask: curMask });
+        enabled: cur.enabled, outputMask: curMask, obd2: { ...curObd } });
     } else if (originalConfig?.inputs) {
       originalConfig.inputs.push(JSON.parse(JSON.stringify(cur)));
     }
