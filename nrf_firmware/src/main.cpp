@@ -10,6 +10,7 @@
 #include "ble_bridge.h"
 #include "ble_services.h"
 #include "dfu_trigger.h"
+#include "dis_handler.h"
 #include "ota_handler.h"
 #include "relay_handler.h"
 #include "tier_state.h"
@@ -63,6 +64,7 @@ void setup() {
     otaHandlerInit();
     alarmHandlerInit();
     relayHandlerInit();
+    disHandlerInit();
     dfuTriggerInit();
 
     startAdvertising();
