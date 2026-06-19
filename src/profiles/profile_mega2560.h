@@ -24,6 +24,10 @@
  *   ENABLE_ELM327        — BLE serial stack too large for AVR RAM
  *   ENABLE_RELAY_OUTPUT  — saves ~200 B RAM; relay pins can be wired directly
  *   ENABLE_TEST_MODE     — saves ~4 KB flash; not needed in production Mega builds
+ *   ENABLE_FRAMED_TRANSPORT — saves ~1.6 KB RAM. No nRF52840 coprocessor on the
+ *                          Mega, so Serial1 uses a plain SerialTransport
+ *                          (transparent HM-10/Bluefruit passthrough) instead of
+ *                          MuxTransport's 512 B frame buffers + broadcasters.
  */
 
 

@@ -15,7 +15,9 @@
 //     thresholdOn, thresholdOff); other fields are ignored. Invalidates the
 //     per-relay cache so tick() emits a fresh confirmation notify.
 //   - The broadcaster targets hwSerial1 directly.
-//   - Entire module compiles to nothing when ENABLE_RELAY_OUTPUT is 0.
+//   - Entire module compiles to empty stubs unless both ENABLE_RELAY_OUTPUT
+//     and ENABLE_FRAMED_TRANSPORT are set (the framed transport is the channel
+//     these frames go out on).
 
 #ifndef RELAY_BROADCASTER_H
 #define RELAY_BROADCASTER_H

@@ -2,7 +2,9 @@
 
 #include "../config.h"
 
-#if ENABLE_RELAY_OUTPUT
+// Relay broadcasting needs both the relay subsystem and the framed transport
+// it pushes notifies over. Either off → empty stubs below.
+#if ENABLE_RELAY_OUTPUT && ENABLE_FRAMED_TRANSPORT
 
 #include <Arduino.h>
 #include <string.h>
@@ -102,7 +104,7 @@ void handleInbound(const uint8_t* payload, uint16_t len) {
 
 } // namespace RelayBroadcaster
 
-#else // !ENABLE_RELAY_OUTPUT
+#else // !(ENABLE_RELAY_OUTPUT && ENABLE_FRAMED_TRANSPORT)
 
 namespace RelayBroadcaster {
 void init() {}
@@ -110,4 +112,4 @@ void tick() {}
 void handleInbound(const uint8_t*, uint16_t) {}
 }
 
-#endif // ENABLE_RELAY_OUTPUT
+#endif // ENABLE_RELAY_OUTPUT && ENABLE_FRAMED_TRANSPORT

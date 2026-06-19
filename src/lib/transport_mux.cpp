@@ -1,5 +1,9 @@
 #include "transport_mux.h"
 
+#include "../config.h"
+
+#if ENABLE_FRAMED_TRANSPORT
+
 #include <string.h>
 
 #include "relay_broadcaster.h"
@@ -178,3 +182,5 @@ void MuxTransport::writeSerialChunked(const uint8_t* data, size_t len) {
         written += w;
     }
 }
+
+#endif // ENABLE_FRAMED_TRANSPORT

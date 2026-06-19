@@ -1,5 +1,9 @@
 #include "alarm_broadcaster.h"
 
+#include "../config.h"
+
+#if ENABLE_FRAMED_TRANSPORT
+
 #include <Arduino.h>
 #include <math.h>
 #include <string.h>
@@ -102,3 +106,12 @@ void tick() {
 }
 
 } // namespace AlarmBroadcaster
+
+#else // !ENABLE_FRAMED_TRANSPORT
+
+namespace AlarmBroadcaster {
+void init() {}
+void tick() {}
+}
+
+#endif // ENABLE_FRAMED_TRANSPORT

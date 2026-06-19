@@ -71,10 +71,21 @@ SerialTransport usbSerial(&Serial, "USB", 115200);
 //     any BLE module (HM-10, stock Bluefruit, pre-framed nRF firmware)
 //   - framed: nRF coprocessor binary protocol (ARCHITECTURE.md §3)
 // Phase 3 software flow control (HOST_NRF_CTS_PIN) wraps both modes.
-#if defined(HOST_NRF_CTS_PIN)
+#if ENABLE_FRAMED_TRANSPORT
+#  if defined(HOST_NRF_CTS_PIN)
 MuxTransport hwSerial1(&Serial1, "SERIAL1", 115200, HOST_NRF_CTS_PIN);
-#else
+#  else
 MuxTransport hwSerial1(&Serial1, "SERIAL1", 115200);
+#  endif
+#else
+// No nRF coprocessor on this build — Serial1 is a plain transparent transport
+// (byte-for-byte equivalent to MuxTransport's transparent mode), saving the
+// ~1.6 KB of framed RX/TX/decoder buffers. See profile ENABLE_FRAMED_TRANSPORT.
+#  if defined(HOST_NRF_CTS_PIN)
+SerialTransport hwSerial1(&Serial1, "SERIAL1", 115200, HOST_NRF_CTS_PIN);
+#  else
+SerialTransport hwSerial1(&Serial1, "SERIAL1", 115200);
+#  endif
 #endif
 #endif
 #if NUM_SERIAL_PORTS >= 2
@@ -236,7 +247,7 @@ void setup() {
     // = transparent passthrough (backwards-compatible with HM-10/stock
     // Bluefruit/pre-framed nRF firmware). Set via the CLI:
     //   BUS SERIAL <port> FRAMED ENABLE
-#if NUM_SERIAL_PORTS >= 1
+#if ENABLE_FRAMED_TRANSPORT && NUM_SERIAL_PORTS >= 1
     hwSerial1.setFramedEnabled(systemConfig.serial.framed_enabled_mask & (1 << 0));
 #endif
 

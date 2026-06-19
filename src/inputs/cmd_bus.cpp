@@ -574,6 +574,10 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
 
         // BUS SERIAL <port> FRAMED ENABLE|DISABLE
         if (streq_P(argv[3], PSTR("FRAMED"))) {
+#if !ENABLE_FRAMED_TRANSPORT
+            msg.control.println(F("ERROR: framed mode not supported on this build"));
+            return 1;
+#else
             if (argc < 5) {
                 msg.control.println(F("ERROR: FRAMED requires ENABLE or DISABLE"));
                 msg.control.println(F("  Usage: BUS SERIAL <port> FRAMED ENABLE|DISABLE"));
@@ -603,6 +607,7 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
             }
             msg.control.println(F("ERROR: expected ENABLE or DISABLE"));
             return 1;
+#endif // ENABLE_FRAMED_TRANSPORT
         }
 
         // BUS SERIAL <port> ELM327 ENABLE|DISABLE

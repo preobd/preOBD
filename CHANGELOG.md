@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Renamed `MEASURE_LEVEL` measurement type to `MEASURE_PERCENT` to reflect its actual usage covering normalized 0–100% values (TPS, fuel level, engine load, accelerator pedal) rather than fluid levels (#209)
 
+### Fixed
+- Gate the nRF framed-transport subsystem (MuxTransport + Status/Alarm/Relay broadcasters) behind `ENABLE_FRAMED_TRANSPORT`; the Mega2560 omits it and runs a plain transparent `Serial1`, recovering ~1.6 KB SRAM to fit the 8 KB budget
+
 ## [0.8.1-beta] - 2026-05-11
 
 ### Added

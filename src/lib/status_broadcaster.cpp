@@ -1,5 +1,9 @@
 #include "status_broadcaster.h"
 
+#include "../config.h"
+
+#if ENABLE_FRAMED_TRANSPORT
+
 #include <Arduino.h>
 #include <string.h>
 
@@ -103,3 +107,12 @@ void tick() {
 }
 
 } // namespace StatusBroadcaster
+
+#else // !ENABLE_FRAMED_TRANSPORT
+
+namespace StatusBroadcaster {
+void init() {}
+void tick() {}
+}
+
+#endif // ENABLE_FRAMED_TRANSPORT

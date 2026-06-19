@@ -404,10 +404,12 @@ void displaySerialPortStatus(uint8_t port_id) {
     msg.control.println(getDefaultSerialRX(port_id));
     msg.control.print(F("  TX pin: "));
     msg.control.println(getDefaultSerialTX(port_id));
+#if ENABLE_FRAMED_TRANSPORT
     // Framed-mode is persisted per port in serial.framed_enabled_mask and
     // applied at boot to the MuxTransport instance bound to that port.
     msg.control.print(F("  Framed: "));
     const uint8_t framed_bit = 1u << (port_id - 1);
     msg.control.println((systemConfig.serial.framed_enabled_mask & framed_bit)
                             ? F("ENABLED") : F("disabled"));
+#endif
 }

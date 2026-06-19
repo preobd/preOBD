@@ -27,6 +27,7 @@
 #define ENABLE_CAN             1
 #define ENABLE_REALDASH        1
 #define ENABLE_SERIAL_OUTPUT   1
+#define ENABLE_FRAMED_TRANSPORT 1  // nRF52840 coprocessor framed link + status/alarm/relay broadcasters
 //#define ENABLE_SD_LOGGING    // no SD hardware on this board
 #define ENABLE_LCD             1
 #define ENABLE_ALARMS          1    // software alarms active; no buzzer wired (ALARMS_PIN absent)

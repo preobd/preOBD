@@ -20,6 +20,7 @@
 #define ENABLE_CAN_HYBRID      1
 #define ENABLE_REALDASH        1
 #define ENABLE_SERIAL_OUTPUT   1
+#define ENABLE_FRAMED_TRANSPORT 1  // nRF52840 coprocessor framed link + status/alarm/relay broadcasters
 #define ENABLE_SD_LOGGING      1
 #define ENABLE_LCD             1
 #define ENABLE_ALARMS          1
