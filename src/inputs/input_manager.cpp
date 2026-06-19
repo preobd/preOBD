@@ -56,6 +56,10 @@ struct InputEEPROM {
     uint16_t unitsHash;             // djb2_hash of units name
 
     // === Alarm Thresholds (in STANDARD UNITS) ===
+    // NOTE: alarm warmup/persist timings are NOT persisted here — they are
+    // re-seeded from the application preset on load (loadInputConfig), so any
+    // runtime SET ALARM WARMUP/PERSIST override is lost across reboot. Expanding
+    // this would require an EEPROM version bump.
     float minValue;
     float maxValue;
 
@@ -736,6 +740,15 @@ bool enableInput(uint8_t pin, bool enable) {
 bool enableInputAlarm(uint8_t pin, bool enable) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
+
+    // Idempotent: only (re)arm on an actual flag transition. Re-initializing on
+    // every call would reset an already-armed alarm back to ALARM_INIT/warmup
+    // and clear faultStartTime/isInAlarm — so a periodic config re-sync that
+    // re-issues SET <pin> ALARM ENABLE could keep an alarm perpetually in
+    // warmup and prevent it from ever firing (and would silently suppress a
+    // live alarm). The EEPROM load path already arms the context on boot, so
+    // there is no "flag true but DISABLED" state to recover here.
+    if (input->flags.alarm == enable) return true;
 
     input->flags.alarm = enable;
     // Arm (or disarm) the state machine immediately. Without this the context
