@@ -21,11 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TEST INJECT <pin> <value>` / `TEST CLEAR` — hold an input at a fixed value for deterministic bench testing (e.g. driving an input past its alarm threshold), then restore live readings; independent of the time-based TEST scenarios
 - `TEST OUTPUT` — pulse each output (RGB LED, buzzer, configured relays) in turn for wiring verification (scan-tool "output test" pattern); CONFIG-mode only, feeds the watchdog through its blocking sequence
 - Native dispatch-routing tests (`test/test_dispatch`): command/subcommand routing logic extracted into `command_dispatch.cpp` and exercised on the host against a synthetic table — covers case-folding, the configModeOnly/runModeAllowed mode gates, unknown-token handling, and argc/argv/tokenIndex forwarding (#192)
+- `SYSTEM DIAG INPUTS` now classifies each input's electrical state from a raw, un-clamped read (OPEN / SHORTED / OUT OF RANGE / NEAR LIMIT / IN RANGE), with `SYSTEM DIAG INPUTS VERBOSE` showing the raw ADC → resistance → value evidence chain — distinguishing a disconnected sensor from a believable value the display path would otherwise clamp (#238)
 
 ### Changed
 - Renamed `MEASURE_LEVEL` measurement type to `MEASURE_PERCENT` to reflect its actual usage covering normalized 0–100% values (TPS, fuel level, engine load, accelerator pedal) rather than fluid levels (#209)
 
 ### Fixed
+- `SET CAL BIAS` on a preset Steinhart/Beta/Polynomial sensor no longer zeroes the curve coefficients (which made the reading return INF); the lookup-table read now also honors a custom bias override (#247)
 - Feed the watchdog in the `AT` command's serial response-drain loop (a chatty peer could extend it past the 2s timeout and reset the MCU) (#243)
 - `SYSTEM DUMP JSON` now emits per-port `framed` and `elm327` fields, completing round-trip config visibility for framed-mode and ELM327 port binding (#230)
 - Gate the nRF framed-transport subsystem (MuxTransport + Status/Alarm/Relay broadcasters) behind `ENABLE_FRAMED_TRANSPORT`; the Mega2560 omits it and runs a plain transparent `Serial1`, recovering ~1.6 KB SRAM to fit the 8 KB budget

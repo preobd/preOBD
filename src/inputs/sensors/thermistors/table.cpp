@@ -41,8 +41,12 @@ void readThermistorLookup(Input *ptr) {
 
     const ThermistorLookupCalibration* cal = (const ThermistorLookupCalibration*)ptr->presetCalibration;
 
-    // Read calibration values from PROGMEM
-    float R_bias = pgm_read_float(&cal->bias_resistor);
+    // Lookup arrays always live in PROGMEM, but the bias resistor is overridable
+    // via SET CAL BIAS (custom override). Honor the custom value when present;
+    // otherwise fall back to the preset's PROGMEM bias.
+    float R_bias = (ptr->flags.useCustomCalibration)
+        ? ptr->customCalibration.lookup.bias_resistor
+        : pgm_read_float(&cal->bias_resistor);
     float R_thermistor = calculateResistance(reading, R_bias);
 
     if (isnan(R_thermistor) || R_thermistor <= 0) {

@@ -797,6 +797,32 @@ static int set_cal_bias(uint8_t pin, int argc, const char* const* argv,
         return 1;
     }
 
+    // Seed the custom override from the preset before diverging, so overriding
+    // only the bias preserves the rest of the curve. Steinhart/Beta/Polynomial
+    // read every coefficient from the custom struct once useCustomCalibration is
+    // set; without seeding, A/B/C (etc.) stay zero and the equation degenerates
+    // to 1/T = 0 -> INF. Table keeps its lookup arrays in PROGMEM, so only its
+    // bias lives in the override — nothing to seed. (Skip if already custom: the
+    // user may have tuned coefficients we must not clobber.)
+    if (!input->flags.useCustomCalibration && input->presetCalibration != nullptr) {
+        switch (input->calibrationType) {
+            case CAL_THERMISTOR_STEINHART:
+                memcpy_P(&input->customCalibration.steinhart, input->presetCalibration,
+                         sizeof(ThermistorSteinhartCalibration));
+                break;
+            case CAL_THERMISTOR_BETA:
+                memcpy_P(&input->customCalibration.beta, input->presetCalibration,
+                         sizeof(BetaCalibration));
+                break;
+            case CAL_PRESSURE_POLYNOMIAL:
+                memcpy_P(&input->customCalibration.pressurePolynomial, input->presetCalibration,
+                         sizeof(PressurePolynomialCalibration));
+                break;
+            default:
+                break;  // Table: only bias is overridable; nothing to seed.
+        }
+    }
+
     input->flags.useCustomCalibration = true;
 
     if (input->calibrationType == CAL_THERMISTOR_STEINHART) {
