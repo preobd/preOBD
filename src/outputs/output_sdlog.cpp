@@ -9,6 +9,7 @@
 #include "../lib/units_registry.h"
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
+#include "../lib/system_mode.h"
 
 #if ENABLE_SD_LOGGING
 
@@ -53,7 +54,17 @@ void sendSDLog(Input *ptr) {
     if (!logFile) {
         return;  // File not open
     }
-    
+
+    // Don't record in CONFIG (#268/#273): CONFIG is setup, not operation, so
+    // any rows logged then aren't operational data (often junk from
+    // disconnected/test sensors) and would persist in the drive log. SD is a
+    // recorder, not a live consumer, so gating it doesn't affect the
+    // live-values-in-CONFIG goal -- to capture readings deliberately, use RUN.
+    // Mirrors output_serial.cpp's CONFIG self-guard.
+    if (isInConfigMode()) {
+        return;
+    }
+
     // Throttle logging to avoid SD wear
     if (millis() - lastLogTime < LOG_INTERVAL) {
         return;

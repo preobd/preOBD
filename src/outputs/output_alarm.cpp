@@ -19,6 +19,7 @@
 #include "../lib/pin_registry.h"
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
+#include "../lib/system_mode.h"
 
 #if ENABLE_LED
 #include "../lib/rgb_led.h"
@@ -129,8 +130,13 @@ void updateAlarmOutput() {
 #endif
 
     // ===== BUZZER CONTROL =====
+    // Buzzer actuation is gated in CONFIG (#268): the engine and LED indicator
+    // keep running so alarm state stays current, but the buzzer stays silent
+    // while configuring on the bench (disconnected/test sensors would
+    // otherwise sound spurious alarms). The LED above is informative, not
+    // physical actuation, so it is left running in both modes.
 #if ENABLE_ALARMS && defined(ALARMS_PIN)
-    if (systemSeverity == SEVERITY_ALARM && !alarmSilenced) {
+    if (systemSeverity == SEVERITY_ALARM && !alarmSilenced && !isInConfigMode()) {
         tone(ALARMS_PIN, 700);
     } else {
         noTone(ALARMS_PIN);

@@ -17,6 +17,7 @@
 #include "../lib/message_api.h"
 #include "../lib/units_registry.h"
 #include "../lib/log_tags.h"
+#include "../lib/system_mode.h"
 
 // ===== RUNTIME STATE =====
 static RelayRuntimeState relayStates[MAX_RELAYS];
@@ -146,6 +147,13 @@ void sendRelayOutput(Input* input) {
  * Evaluates rules and controls relay GPIO pins
  */
 void updateRelayOutput() {
+    // Actuation gated in CONFIG (#268): no automatic threshold-driven relay
+    // flips while configuring on the bench, where disconnected/test sensors
+    // read garbage. Explicit RELAY MODE MANUAL_* still actuates immediately
+    // via setRelayMode() (#250) — that's a deliberate operator action, not
+    // automatic evaluation.
+    if (isInConfigMode()) return;
+
     for (uint8_t i = 0; i < MAX_RELAYS; i++) {
         RelayConfig* cfg = &systemConfig.relays[i];
         RelayRuntimeState* state = &relayStates[i];

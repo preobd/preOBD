@@ -442,27 +442,29 @@ void loop() {
     }
 #endif
 
-    // If in CONFIG mode, skip sensor reading and outputs
-    if (isInConfigMode()) {
-        #if ENABLE_CAN
-        // Update CAN input during scan to populate cache
-        if (getCANScanState() == SCAN_LISTENING) {
-            updateCANInput();  // Populate frame cache during scan
-        }
-        updateCANScan();  // Update CAN scan state machine if active
-        #endif
-        updateConfigModeDisplay(now);
-        return;  // Early return - don't read sensors or send outputs
-    }
-
-    // Read sensors, check alarms, send outputs, update display
+    // CONFIG mode is a write-gate, NOT a stop-the-world freeze (#268). The
+    // engine keeps running in both modes so live consumers — OBD/ELM, CAN
+    // broadcast, RealDash, and the webapp's live values — stay fresh even
+    // while a config client is connected. (Previously a CONFIG early-return
+    // froze updateSensors(), which is why a connected webapp stalled Torque's
+    // readings — see #266.) Gated in CONFIG: physical actuation
+    // (updateRelayOutput() + the alarm buzzer self-suppress so disconnected/
+    // test sensors on the bench can't flip relays or sound the buzzer), and
+    // the recording/serial outputs — serial CSV (shared-terminal usability)
+    // and SD logging (CONFIG is setup, not operation; don't persist bench
+    // junk into the drive log) both self-silence in CONFIG.
     #if ENABLE_CAN
     updateCANInput();  // Poll CAN bus and populate frame cache
+    updateCANScan();   // No-op unless a CONFIG-mode SCAN is active
     #endif
     updateSensors(now);
     updateAlarms(now);
     sendToOutputs(now);  // Data-driven time-sliced output sending
-    updateDisplay(now);
+    if (isInConfigMode()) {
+        updateConfigModeDisplay(now);
+    } else {
+        updateDisplay(now);
+    }
     updateOutputs();     // Housekeeping: drain buffers, handle RX
 
     // Update RGB LED effects (non-blocking)
