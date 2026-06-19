@@ -92,14 +92,38 @@ constexpr size_t kPendingTxSize = 1024;
 uint8_t  g_pendingTx[kPendingTxSize];
 size_t   g_pendingTxLen = 0;
 
+// Sibling buffer for ELM327 (HM-10 FFE1) bytes queued during PINGING. Kept
+// separate from g_pendingTx because on resolution the two replay as different
+// frame types (text 0x01 vs ELM327 0x30). OBD apps rarely write inside the 2s
+// ping window, but a stray "ATZ" mustn't be misframed as a CLI command.
+uint8_t  g_pendingElm[kPendingTxSize];
+size_t   g_pendingElmLen = 0;
+
+// Destination for the currently-stashed inbound notify (set per frame in
+// handleFrame). DEST_TEXT -> CMD_RX + NUS TX; DEST_ELM -> HM-10 FFE1.
+enum NotifyDest : uint8_t { DEST_TEXT = 0, DEST_ELM };
+NotifyDest g_pendingNotifyDest = DEST_TEXT;
+
+// Per-chunk fan-out progress masks (see bleServicesNotify* contract): record
+// which notify targets have accepted the chunk currently being sent so a retry
+// after a partial back-pressure doesn't re-deliver to a char that already took
+// it. Reset to 0 whenever we advance to a fresh chunk.
+uint8_t g_pendingNotifyMask = 0;   // for the framed-response stash drain
+uint8_t g_rxNotifyMask      = 0;   // for the transparent g_rx flush
+
 // Returns true if the buffer was successfully flushed (or was already
 // empty). Returns false if BLE notify is back-pressuring; caller MUST hold
 // off reading more Serial1 bytes until a subsequent retry succeeds, or
 // notifications will be silently dropped on the floor.
 bool flushRx() {
     if (g_rxLen == 0) return true;
-    if (!bleServicesNotifyCmdRx(g_rx, g_rxLen)) return false;
+    // Transparent mode is a single-client raw bridge: fan the response out to
+    // every subscribed serial-notify char (CMD_RX / NUS TX / FFE1) so whichever
+    // channel the lone client is using receives it. g_rxNotifyMask persists the
+    // fan-out progress across retries of this same g_rx content.
+    if (!bleServicesNotifyTransparent(g_rx, g_rxLen, g_rxNotifyMask)) return false;
     g_rxLen = 0;
+    g_rxNotifyMask = 0;
     return true;
 }
 
@@ -174,17 +198,18 @@ void drainTx() {
     }
 }
 
-// Wrap `data`/`len` as type 0x01 frames and push into the TX ring. Frames
-// are queued atomically -- if a frame doesn't fit, we stop and report how
-// many caller bytes were successfully framed.
-size_t enqueueAsTextFrames(const uint8_t* data, size_t len) {
+// Wrap `data`/`len` as frames of the given type and push into the TX ring.
+// Frames are queued atomically -- if a frame doesn't fit, we stop and report
+// how many caller bytes were successfully framed. Used for both text (0x01)
+// and ELM327 (0x30) outbound channels.
+size_t enqueueAsFrames(uint8_t type, const uint8_t* data, size_t len) {
     constexpr size_t kFrameChunkPayload = 256;
     uint8_t frame[FRAME_HEADER_BYTES + kFrameChunkPayload + 1];
     size_t offset = 0;
     while (offset < len) {
         const size_t chunk = ((len - offset) > kFrameChunkPayload)
                                  ? kFrameChunkPayload : (len - offset);
-        const size_t n = frameEncode(FRAME_TYPE_TEXT_CMD,
+        const size_t n = frameEncode(type,
                                      data + offset,
                                      static_cast<uint16_t>(chunk),
                                      frame);
@@ -215,11 +240,19 @@ bool drainPendingNotify() {
     while (g_pendingNotifyOffset < g_pendingNotifyLen) {
         const uint16_t remaining = g_pendingNotifyLen - g_pendingNotifyOffset;
         const uint16_t chunk = (remaining > maxChunk) ? maxChunk : remaining;
-        if (!bleServicesNotifyCmdRx(g_pendingNotifyPayload + g_pendingNotifyOffset,
-                                    chunk)) {
+        const uint8_t* p = g_pendingNotifyPayload + g_pendingNotifyOffset;
+        // Route to the channel matching the stashed frame's type: text
+        // responses (0x02) -> CMD_RX + NUS TX; ELM327 responses (0x30) -> FFE1.
+        // g_pendingNotifyMask carries this chunk's fan-out progress so a
+        // back-pressure retry doesn't double-send to an already-served char.
+        const bool sent = (g_pendingNotifyDest == DEST_ELM)
+                              ? bleServicesNotifyHm10(p, chunk, g_pendingNotifyMask)
+                              : bleServicesNotifyText(p, chunk, g_pendingNotifyMask);
+        if (!sent) {
             return false;
         }
         g_pendingNotifyOffset += chunk;
+        g_pendingNotifyMask = 0;   // next chunk starts with a fresh fan-out
 #if defined(PIN_NRF_RTS_OUT) && defined(PIN_NRF_CTS_IN)
         // Each notify call blocked ~15-30ms in BLE wait; Serial1 has been
         // receiving the whole time. Re-check fill so RTS asserts mid-drain
@@ -248,6 +281,21 @@ bool handleFrame(const Frame& f) {
         memcpy(g_pendingNotifyPayload, f.payload, f.len);
         g_pendingNotifyLen = f.len;
         g_pendingNotifyOffset = 0;
+        g_pendingNotifyMask = 0;
+        g_pendingNotifyDest = DEST_TEXT;   // -> CMD_RX + NUS TX
+        return drainPendingNotify();
+    case FRAME_TYPE_ELM327:
+        // ELM327 response from the host's parser -> notify the HM-10 FFE1
+        // channel the OBD app is listening on. Same stash + back-pressure
+        // path as text; only the notify destination differs. Exactly one
+        // frame's payload is stashed at a time and fully drained before the
+        // next byte is read, so the shared stash needs no per-type buffer.
+        if (f.len > FRAME_MAX_PAYLOAD) return true;
+        memcpy(g_pendingNotifyPayload, f.payload, f.len);
+        g_pendingNotifyLen = f.len;
+        g_pendingNotifyOffset = 0;
+        g_pendingNotifyMask = 0;
+        g_pendingNotifyDest = DEST_ELM;    // -> FFE1
         return drainPendingNotify();
     case FRAME_TYPE_STATUS:
         // Host MCU pushed a fresh 32-byte PreobdSystemStatus snapshot. Cache
@@ -272,20 +320,27 @@ bool handleFrame(const Frame& f) {
     }
 }
 
-// Try to push pending CMD_TX bytes into the TX ring in the resolved tier.
-// Any residual that didn't fit is compacted to the front of the buffer and
-// will be retried on the next poll.
-void flushPendingTx() {
-    if (g_pendingTxLen == 0) return;
+// Try to push one pending buffer's bytes into the TX ring in the resolved
+// tier: framed wraps them in `frameType` frames, transparent passes raw. Any
+// residual that didn't fit is compacted to the front and retried next poll.
+void flushPendingBuf(uint8_t* buf, size_t& len, uint8_t frameType) {
+    if (len == 0) return;
     const size_t consumed = tierStateIsFramed()
-        ? enqueueAsTextFrames(g_pendingTx, g_pendingTxLen)
-        : enqueueTx(g_pendingTx, g_pendingTxLen);
+        ? enqueueAsFrames(frameType, buf, len)
+        : enqueueTx(buf, len);
     if (consumed == 0) return;
-    const size_t remaining = g_pendingTxLen - consumed;
+    const size_t remaining = len - consumed;
     if (remaining > 0) {
-        memmove(g_pendingTx, g_pendingTx + consumed, remaining);
+        memmove(buf, buf + consumed, remaining);
     }
-    g_pendingTxLen = remaining;
+    len = remaining;
+}
+
+// Flush both PINGING-era buffers (CMD_TX/NUS text and HM-10 ELM327) once the
+// tier resolves, each in its own frame type.
+void flushPendingTx() {
+    flushPendingBuf(g_pendingTx, g_pendingTxLen, FRAME_TYPE_TEXT_CMD);
+    flushPendingBuf(g_pendingElm, g_pendingElmLen, FRAME_TYPE_ELM327);
 }
 
 } // namespace
@@ -314,7 +369,7 @@ void uartBridgePoll() {
     // Once tier is resolved, drain any CMD_TX bytes that were buffered during
     // PINGING. Retried every poll because the TX ring may have been tight
     // and a previous flush could have left a residual.
-    if (!pinging && g_pendingTxLen > 0) {
+    if (!pinging && (g_pendingTxLen > 0 || g_pendingElmLen > 0)) {
         flushPendingTx();
     }
 
@@ -404,7 +459,28 @@ size_t uartBridgeWrite(const uint8_t* data, size_t len) {
         return n;
     }
     if (tierStateIsFramed()) {
-        return enqueueAsTextFrames(data, len);
+        return enqueueAsFrames(FRAME_TYPE_TEXT_CMD, data, len);
+    }
+    return enqueueTx(data, len);
+}
+
+size_t uartBridgeWriteElm(const uint8_t* data, size_t len) {
+    // HM-10 FFE1 callback path. Mirrors uartBridgeWrite but for the ELM327
+    // channel:
+    //   PINGING:     buffer in g_pendingElm; replayed as 0x30 on resolution.
+    //   FRAMED:      wrap in 0x30 frames so the host runs the ELM327 parser.
+    //   TRANSPARENT: pass raw (single-client bridge; the host's ELM327 port
+    //                binding decides meaning).
+    if (tierStateIsPinging()) {
+        const size_t room = kPendingTxSize - g_pendingElmLen;
+        const size_t n = (len < room) ? len : room;
+        for (size_t i = 0; i < n; ++i) {
+            g_pendingElm[g_pendingElmLen++] = data[i];
+        }
+        return n;
+    }
+    if (tierStateIsFramed()) {
+        return enqueueAsFrames(FRAME_TYPE_ELM327, data, len);
     }
     return enqueueTx(data, len);
 }
@@ -429,9 +505,12 @@ bool uartBridgeSendFrame(uint8_t type, const uint8_t* payload, uint16_t len) {
 void uartBridgeResetRx() {
     noInterrupts();
     g_rxLen = 0;
+    g_rxNotifyMask = 0;
     g_pendingTxLen = 0;
+    g_pendingElmLen = 0;
     g_pendingNotifyLen = 0;
     g_pendingNotifyOffset = 0;
+    g_pendingNotifyMask = 0;
     interrupts();
     frameDecoderReset(g_decoder);
 }

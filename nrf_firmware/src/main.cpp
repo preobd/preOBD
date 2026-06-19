@@ -27,6 +27,14 @@ void startAdvertising() {
     Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
     Bluefruit.Advertising.addTxPower();
     Bluefruit.Advertising.addService(bleServicesControlService());
+    // The 128-bit Control Service UUID already fills the 31-byte advertising
+    // packet, so the HM-10 (FFE0) service goes in the separate scan-response
+    // budget. It's a 16-bit UUID (4 bytes) -- cheap, and it lets phone OBD apps
+    // that filter on FFE0 in scan data recognize us as an ELM327 adapter. NUS
+    // is left to post-connect discovery (generic terminal apps connect then
+    // enumerate services, and a second 128-bit UUID wouldn't leave room for
+    // the name). The name stays in the scan response for human-readable scans.
+    Bluefruit.ScanResponse.addService(bleServicesHm10Service());
     Bluefruit.ScanResponse.addName();
 
     Bluefruit.Advertising.restartOnDisconnect(true);

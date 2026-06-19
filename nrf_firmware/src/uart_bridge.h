@@ -20,6 +20,13 @@ void uartBridgePoll();
 // accepted into the queue (0 if full).
 size_t uartBridgeWrite(const uint8_t* data, size_t len);
 
+// As uartBridgeWrite, but for the ELM327 channel (HM-10 FFE1). In framed mode
+// the bytes are wrapped in type 0x30 frames so the host routes them to the
+// ELM327 parser; in transparent mode they pass raw (single-client bridge);
+// during PINGING they are buffered and replayed once the tier resolves.
+// Returns bytes accepted.
+size_t uartBridgeWriteElm(const uint8_t* data, size_t len);
+
 // Encode `payload` as a framed packet of the given type and queue it for
 // transmission to the host MCU. Atomic: either the whole frame fits in the
 // TX ring (returns true) or nothing is enqueued (returns false). Caller

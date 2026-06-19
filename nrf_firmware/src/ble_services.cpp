@@ -21,12 +21,67 @@ BLECharacteristic g_cmdTx;
 BLECharacteristic g_cmdRx;
 BLECharacteristic g_status;
 
+// NUS (text terminal channel) + HM-10 (ELM327 / OBD-app channel). HM-10 uses
+// the 16-bit 0xFFE0/0xFFE1 UUIDs real adapters expose, which OBD apps probe
+// for; Bluefruit's uint16_t ctors register them directly.
+BLEService    g_nusService(g_zeroUuid);
+BLECharacteristic g_nusRx;
+BLECharacteristic g_nusTx;
+BLEService    g_hm10Service(static_cast<uint16_t>(0xFFE0));
+BLECharacteristic g_hm10Char(static_cast<uint16_t>(0xFFE1));
+
 void cmdTxWriteCallback(uint16_t /*conn_handle*/, BLECharacteristic* chr,
                         uint8_t* data, uint16_t len) {
     (void)chr;
     if (data && len > 0) {
+        uartBridgeWrite(data, len);   // text CLI -> framed type 0x01
+    }
+}
+
+// NUS RX shares the text-command path with CMD_TX: both are CLI channels, so
+// both wrap to framed type 0x01 (or pass raw in transparent mode).
+void nusRxWriteCallback(uint16_t /*conn_handle*/, BLECharacteristic* /*chr*/,
+                        uint8_t* data, uint16_t len) {
+    if (data && len > 0) {
         uartBridgeWrite(data, len);
     }
+}
+
+// HM-10 FFE1 is the ELM327 channel: client writes (ATxx / OBD hex) wrap to
+// framed type 0x30 so the host runs them through the ELM327 parser.
+void hm10WriteCallback(uint16_t /*conn_handle*/, BLECharacteristic* /*chr*/,
+                       uint8_t* data, uint16_t len) {
+    if (data && len > 0) {
+        uartBridgeWriteElm(data, len);
+    }
+}
+
+// Notify one chunk to each characteristic in `chrs[0..n)` that a client has
+// subscribed to. Skips unsubscribed chars so a multi-target fan-out to a
+// single connected client doesn't report a phantom back-pressure. `doneMask`
+// carries per-target progress across retries: bit i is set once char i has
+// accepted this chunk (or is unsubscribed), so a retry after a partial
+// back-pressure re-sends only to the still-pending targets -- never delivering
+// the same chunk twice to a char that already took it. Returns true once every
+// target's bit is set (chunk fully delivered); false while a subscribed char's
+// HVN queue is still full (caller retries the same chunk + mask).
+bool notifyFanout(BLECharacteristic* const chrs[], size_t n,
+                  const uint8_t* data, size_t len, uint8_t& doneMask) {
+    if (!Bluefruit.connected()) return true;
+    for (size_t i = 0; i < n; ++i) {
+        const uint8_t bit = static_cast<uint8_t>(1u << i);
+        if (doneMask & bit) continue;            // already delivered on a prior pass
+        if (!chrs[i]->notifyEnabled()) {         // nobody listening on this char
+            doneMask |= bit;
+            continue;
+        }
+        if (chrs[i]->notify(data, len)) {
+            doneMask |= bit;                     // accepted
+        }
+        // else: leave the bit clear so the next pass retries only this char.
+    }
+    const uint8_t full = static_cast<uint8_t>((1u << n) - 1);
+    return (doneMask & full) == full;
 }
 
 } // namespace
@@ -77,11 +132,63 @@ void bleServicesInit() {
     // magic != PREOBD_STATUS_MAGIC.
     uint8_t zeros[PREOBD_STATUS_SIZE] = {};
     g_status.write(zeros, sizeof(zeros));
+
+    // --- NUS: generic BLE terminal channel (text CLI, framed type 0x01) ---
+    // Self-contained service.begin() -> char.begin() block; Bluefruit attaches
+    // each characteristic to the most-recently-begun service, so this must not
+    // be interleaved with another service's begin (see main.cpp ordering note).
+    static uint8_t kNusServiceUuid[16];
+    static uint8_t kNusRxUuid[16];
+    static uint8_t kNusTxUuid[16];
+
+    if (parseUuid128(NUS_SERVICE_UUID, kNusServiceUuid)) {
+        g_nusService = BLEService(kNusServiceUuid);
+    }
+    g_nusService.begin();
+
+    if (parseUuid128(NUS_CHAR_RX_UUID, kNusRxUuid)) {
+        g_nusRx = BLECharacteristic(kNusRxUuid);
+    }
+    g_nusRx.setProperties(CHR_PROPS_WRITE | CHR_PROPS_WRITE_WO_RESP);
+    g_nusRx.setPermission(SECMODE_OPEN, SECMODE_OPEN);
+    g_nusRx.setMaxLen(244);
+    g_nusRx.setWriteCallback(nusRxWriteCallback);
+    g_nusRx.begin();
+
+    if (parseUuid128(NUS_CHAR_TX_UUID, kNusTxUuid)) {
+        g_nusTx = BLECharacteristic(kNusTxUuid);
+    }
+    g_nusTx.setProperties(CHR_PROPS_NOTIFY);
+    g_nusTx.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
+    g_nusTx.setMaxLen(244);
+    g_nusTx.begin();
+
+    // --- HM-10 FFE0/FFE1: ELM327 channel for phone OBD apps (framed 0x30) ---
+    // Single FFE1 characteristic (Write + Notify), the HM-10 clone convention
+    // that OBD apps expect. 16-bit UUIDs set via the global ctors above.
+    g_hm10Service.begin();
+    g_hm10Char.setProperties(CHR_PROPS_WRITE | CHR_PROPS_WRITE_WO_RESP |
+                             CHR_PROPS_NOTIFY);
+    g_hm10Char.setPermission(SECMODE_OPEN, SECMODE_OPEN);
+    g_hm10Char.setMaxLen(244);
+    g_hm10Char.setWriteCallback(hm10WriteCallback);
+    g_hm10Char.begin();
 }
 
-bool bleServicesNotifyCmdRx(const uint8_t* data, size_t len) {
-    if (!Bluefruit.connected()) return true;
-    return g_cmdRx.notify(data, len);
+bool bleServicesNotifyText(const uint8_t* data, size_t len, uint8_t& doneMask) {
+    BLECharacteristic* const chrs[] = { &g_cmdRx, &g_nusTx };
+    return notifyFanout(chrs, 2, data, len, doneMask);
+}
+
+bool bleServicesNotifyHm10(const uint8_t* data, size_t len, uint8_t& doneMask) {
+    BLECharacteristic* const chrs[] = { &g_hm10Char };
+    return notifyFanout(chrs, 1, data, len, doneMask);
+}
+
+bool bleServicesNotifyTransparent(const uint8_t* data, size_t len,
+                                  uint8_t& doneMask) {
+    BLECharacteristic* const chrs[] = { &g_cmdRx, &g_nusTx, &g_hm10Char };
+    return notifyFanout(chrs, 3, data, len, doneMask);
 }
 
 size_t bleServicesMaxNotifyChunk() {
@@ -115,4 +222,12 @@ void bleServicesUpdateStatus(const uint8_t* payload, uint16_t len) {
 
 BLEService& bleServicesControlService() {
     return g_controlService;
+}
+
+BLEService& bleServicesNusService() {
+    return g_nusService;
+}
+
+BLEService& bleServicesHm10Service() {
+    return g_hm10Service;
 }
