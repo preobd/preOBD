@@ -313,6 +313,23 @@ bool loadInputConfig() {
                 info.initFunction(&inputs[i]);
             }
         }
+
+        // Arm the alarm state machine from the restored flag. The EEPROM record
+        // does not persist warmup/persist timings, so seed them from the
+        // application preset (mirrors configureInput()). Without this, a saved
+        // enabled alarm loads with state=DISABLED and never arms.
+        {
+            const ApplicationPreset* flashPreset =
+                getApplicationByIndex(inputs[i].applicationIndex);
+            uint16_t warmup = 0, persist = 0;
+            if (flashPreset) {
+                ApplicationPreset preset;
+                loadApplicationPreset(flashPreset, &preset);
+                warmup = preset.warmupTime_ms;
+                persist = preset.persistTime_ms;
+            }
+            initInputAlarmContext(&inputs[i], millis(), warmup, persist);
+        }
     }
 
     // Verify checksum
@@ -721,6 +738,14 @@ bool enableInputAlarm(uint8_t pin, bool enable) {
     if (input == nullptr) return false;
 
     input->flags.alarm = enable;
+    // Arm (or disarm) the state machine immediately. Without this the context
+    // keeps its prior state — DISABLED after boot — and updateInputAlarmState()
+    // never climbs out of DISABLED on its own, so the alarm would not actually
+    // arm until the next SET <pin> APPLICATION. Preserve the warmup/persist
+    // timings already held in the context.
+    initInputAlarmContext(input, millis(),
+                          input->alarmContext.warmupTime_ms,
+                          input->alarmContext.persistTime_ms);
     return true;
 }
 
