@@ -189,6 +189,21 @@ static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
         return 0;
     }
 
+    // BUS CAN NONE - Disable CAN entirely (both input and output).
+    // CAN pins are only reserved when a direction is active (see initCANBus in
+    // bus_manager.cpp), so clearing both the enable/mode flags AND the bus IDs
+    // frees the CAN pins on next reboot and makes the status display read NONE.
+    if (streq_P(argv[2], PSTR("NONE"))) {
+        systemConfig.buses.can_output_enabled = 0;
+        systemConfig.buses.output_can_bus     = 0xFF;
+        systemConfig.buses.can_input_mode     = CAN_INPUT_OFF;
+        systemConfig.buses.input_can_bus      = 0xFF;
+        msg.control.println(F("CAN bus set to NONE"));
+        msg.control.println(F("CAN pins will be free on next reboot"));
+        printSaveReminder();
+        return 0;
+    }
+
     // BUS CAN BAUDRATE <bps> - Set both input and output (backward compatibility)
     if (streq_P(argv[2], PSTR("BAUDRATE"))) {
         if (argc < 4) {
@@ -455,7 +470,8 @@ static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
 
     // Unknown CAN subcommand
     msg.control.println(F("ERROR: Unknown CAN subcommand"));
-    msg.control.println(F("Valid: BAUDRATE, INPUT, OUTPUT"));
+    msg.control.println(F("Valid: NONE, BAUDRATE, INPUT, OUTPUT"));
+    msg.control.println(F("  BUS CAN NONE"));
     msg.control.println(F("  BUS CAN BAUDRATE <bps>"));
     msg.control.println(F("  BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|LISTEN|DISABLE> [bps]"));
     msg.control.println(F("  BUS CAN INPUT BAUDRATE <bps>"));
@@ -746,6 +762,7 @@ static const char PSTR_HELP_BUS_SPI[] PROGMEM =
     "  BUS SPI CLOCK <Hz>            Set SPI clock (e.g. 4000000)";
 static const char PSTR_HELP_BUS_CAN[] PROGMEM =
     "  BUS CAN                       Show CAN bus status\n"
+    "  BUS CAN NONE                  Disable CAN bus (frees pins on next reboot)\n"
     "  BUS CAN BAUDRATE <bps>        Set CAN baudrate (both buses)\n"
     "  BUS CAN INPUT <bus> <ENABLE|LISTEN|DISABLE> [bps]\n"
     "  BUS CAN INPUT BAUDRATE <bps>  Set CAN input baudrate\n"
