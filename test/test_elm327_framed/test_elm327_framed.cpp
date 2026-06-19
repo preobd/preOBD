@@ -150,6 +150,20 @@ static void test_backpressure_retries(void) {
     TEST_ASSERT_TRUE(capContains("ELM327 v1.5"));
 }
 
+// poll() drains a back-pressured response without waiting for the client's
+// next request (#263: the request may have been pumped mid-frame during a
+// bulk text response, with emission deferred to the next frame boundary).
+static void test_poll_drains_backpressured_response(void) {
+    g_sendOk = false;
+    feed("ATI\r");                       // response generated but cannot send
+    TEST_ASSERT_EQUAL_INT(0, g_frameCnt);
+    g_sendOk = true;
+    Elm327Framed::poll(g_out);           // no inbound traffic needed
+    TEST_ASSERT_TRUE(g_frameCnt >= 1);
+    TEST_ASSERT_EQUAL_HEX8(FRAME_TYPE_ELM327, g_lastType);
+    TEST_ASSERT_TRUE(capContains("ELM327 v1.5"));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_atz_returns_version);
@@ -159,5 +173,6 @@ int main(int, char**) {
     RUN_TEST(test_unsupported_pid_no_data);
     RUN_TEST(test_command_split_across_frames);
     RUN_TEST(test_backpressure_retries);
+    RUN_TEST(test_poll_drains_backpressured_response);
     return UNITY_END();
 }

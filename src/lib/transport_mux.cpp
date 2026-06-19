@@ -80,7 +80,11 @@ void MuxTransport::flush() {
 
 void MuxTransport::update() {
     if (!framedEnabled) return;
-    pumpInbound();
+    // Full boundary service, not just a pump: also flushes a pong deferred
+    // by a mid-frame pump and drains queued ELM327 response bytes. Without
+    // the pong check here, a PING pumped during another pong's own write
+    // would strand until the next text response (review finding on #263).
+    serviceFrameBoundary();
     // Stall flush so a partial outbound chunk doesn't sit forever waiting
     // for a newline that never comes (e.g. a prompt with no trailing \n).
     if (txAccLen > 0 && (millis() - txLastByteMs) >= kTxStallMs) {
@@ -89,6 +93,10 @@ void MuxTransport::update() {
 }
 
 void MuxTransport::pumpInbound() {
+    // Guard: no-op when nested inside another pump (see header note) or in
+    // transparent mode (awaitFlowClear is shared with the transparent path).
+    if (pumping || !framedEnabled) return;
+    pumping = true;
     while (serial->available()) {
         const int b = serial->read();
         if (b < 0) break;
@@ -100,6 +108,7 @@ void MuxTransport::pumpInbound() {
         // are protocol noise and intentionally dropped (the framer hunts
         // for the next 0xAA).
     }
+    pumping = false;
 }
 
 void MuxTransport::handleFrame(const Frame& f) {
@@ -111,7 +120,14 @@ void MuxTransport::handleFrame(const Frame& f) {
         }
         break;
     case FRAME_TYPE_PING: {
-        // Echo immediately so the nRF's auto-detect upgrades the link.
+        // Echo immediately so the nRF's auto-detect upgrades the link. If
+        // this PING was pumped from inside a partially-written frame, defer
+        // the echo to the next frame boundary -- injecting it mid-frame
+        // would corrupt both frames at the nRF's decoder.
+        if (writingFrame) {
+            pongPending = true;
+            break;
+        }
         uint8_t pong[FRAME_HEADER_BYTES + 1];
         const size_t n = frameEncode(FRAME_TYPE_PING, nullptr, 0, pong);
         if (n > 0) writeSerialChunked(pong, n);
@@ -147,6 +163,27 @@ void MuxTransport::flushTxAcc() {
         writeSerialChunked(frame, n);
     }
     txAccLen = 0;
+    // Frame boundary: during a bulk response this is the interleave point
+    // where a concurrent ELM327 client's traffic gets onto the wire between
+    // our text frames (#263).
+    serviceFrameBoundary();
+}
+
+void MuxTransport::serviceFrameBoundary() {
+    // Nothing to defer to (or pump from) outside framed mode; also skip when
+    // reached from inside a pump (flushTxAcc isn't called there today, but
+    // keep the invariant cheap and explicit).
+    if (!framedEnabled || pumping || writingFrame) return;
+    if (pongPending) {
+        pongPending = false;
+        uint8_t pong[FRAME_HEADER_BYTES + 1];
+        const size_t n = frameEncode(FRAME_TYPE_PING, nullptr, 0, pong);
+        if (n > 0) writeSerialChunked(pong, n);
+    }
+    // Emit any ELM327 response bytes a mid-frame pump had to queue, then
+    // parse whatever arrived while the last frame was being written.
+    Elm327Framed::poll(*this);
+    pumpInbound();
 }
 
 bool MuxTransport::sendFrame(uint8_t type, const uint8_t* payload, uint16_t len) {
@@ -156,6 +193,11 @@ bool MuxTransport::sendFrame(uint8_t type, const uint8_t* payload, uint16_t len)
     uint8_t frame[FRAME_MAX_BYTES];
     const size_t n = frameEncode(type, payload, len, frame);
     if (n == 0) return false;
+
+    // Refuse while another frame is partially on the wire (a pump from
+    // inside writeSerialChunked can land here): a frame injected mid-frame
+    // corrupts both. Caller retries at the next frame boundary.
+    if (writingFrame) return false;
 
     // Atomic check: enough TX buffer space AND flow-control gate open.
     // Refuse rather than block — caller retries on next tick.
@@ -177,9 +219,20 @@ void MuxTransport::writeSerialChunked(const uint8_t* data, size_t len) {
     }
     // Phase 3 flow control: break into small chunks, re-check the gate
     // between each so a peer can throttle us partway through a long
-    // response.
+    // response. writingFrame marks the whole span so anything a mid-write
+    // pump tries to emit (sendFrame, PING pong) is deferred to the next
+    // frame boundary instead of being injected into this frame's bytes.
+    // Save/restore (rather than set/clear) so a nested call can't clear an
+    // outer frame's in-progress marker.
+    const bool outerFrame = writingFrame;
+    writingFrame = true;
     size_t written = 0;
     while (written < len) {
+        // Service inbound between chunks even when the gate stays open: a
+        // long dump otherwise monopolizes the loop and a concurrent ELM327
+        // client's requests sit unparsed until it finishes (#263). Guarded
+        // no-op when this write is itself happening inside a pump.
+        pumpInbound();
         awaitFlowClear();
         const size_t remaining = len - written;
         const size_t chunk = remaining < kFlowChunkBytes
@@ -188,6 +241,7 @@ void MuxTransport::writeSerialChunked(const uint8_t* data, size_t len) {
         if (w == 0) break;
         written += w;
     }
+    writingFrame = outerFrame;
 }
 
 #endif // ENABLE_FRAMED_TRANSPORT

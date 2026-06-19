@@ -6,6 +6,7 @@
 
 #include <Arduino.h>
 #include <bluefruit.h>
+#include <string.h>
 
 #include "ble_gatt_defs.h"
 #include "ble_services.h"
@@ -14,6 +15,16 @@
 namespace {
 
 BLECharacteristic g_alarm;
+
+// Latest event + retry state. Alarm notifies are edge-triggered (the host
+// only re-pushes on the next state transition), so unlike Status/Relay a
+// dropped notify here is genuinely missed by that central. We keep the most
+// recent event and retry until every subscribed central accepts it; a newer
+// event supersedes a still-pending one -- the latest event is the only one
+// worth delivering.
+uint8_t g_event[PREOBD_ALARM_EVENT_SIZE];
+uint8_t g_doneMask = 0;
+bool    g_pending  = false;
 
 } // namespace
 
@@ -34,6 +45,17 @@ void alarmHandlerInit() {
 
 bool alarmHandlerPush(const uint8_t* payload, uint16_t len) {
     if (!payload || len != PREOBD_ALARM_EVENT_SIZE) return false;
-    bleServicesNotifyAll(g_alarm, payload, len);
+    memcpy(g_event, payload, PREOBD_ALARM_EVENT_SIZE);
+    g_doneMask = 0;
+    g_pending  = true;
+    alarmHandlerPoll();   // first attempt immediately; leftovers retry in loop()
     return true;
+}
+
+void alarmHandlerPoll() {
+    if (!g_pending) return;
+    if (bleServicesNotifyRetry(g_alarm, g_event, PREOBD_ALARM_EVENT_SIZE,
+                               g_doneMask)) {
+        g_pending = false;
+    }
 }

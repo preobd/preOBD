@@ -129,7 +129,9 @@ void setup() {
 
 void loop() {
     bleBridgePoll();   // re-converge IRQ/tier/advertising to ground-truth conn count
+    bleServicesPollSlots();  // track per-slot connection generations (before drains)
     tierStatePoll();
     uartBridgePoll();
+    alarmHandlerPoll();  // retry any alarm notify a full HVN queue deferred
     dfuTriggerPoll();
 }

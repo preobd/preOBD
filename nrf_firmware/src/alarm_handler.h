@@ -18,9 +18,15 @@
 void alarmHandlerInit();
 
 // Push an 18-byte PreobdAlarmEvent out as a GATT notify on the Alarm
-// characteristic. Returns false if `len` is wrong; otherwise returns true
-// (best-effort -- a dropped notify is acceptable since the next state
-// transition emits a fresh event with the latest sequence).
+// characteristic. Returns false if `len` is wrong; otherwise returns true.
+// Delivery is retried (via alarmHandlerPoll) until every subscribed central
+// accepts it -- alarms are edge-triggered, so a silently dropped notify
+// would be missed until the next state transition (#263). A newer event
+// supersedes a still-pending one.
 bool alarmHandlerPush(const uint8_t* payload, uint16_t len);
+
+// Retry a pending alarm notify to any (char, central) pairs whose HVN queue
+// was full on a prior attempt. Call from loop(); cheap no-op when idle.
+void alarmHandlerPoll();
 
 #endif // ALARM_HANDLER_H

@@ -73,6 +73,14 @@ private:
         if (flowInPin < 0) return;
         while (digitalRead(flowInPin) == HIGH) {
             watchdogReset();
+            // Service inbound frames while stalled (#263): the nRF asserts
+            // RTS precisely when a bulk text response is slow-draining over
+            // BLE, and that can outlast an OBD app's request timeout. Pumping
+            // here lets a concurrent ELM327 (0x30) request be parsed now and
+            // its response go out at the next frame boundary, instead of
+            // waiting for the whole dump to clear. No-op in transparent mode
+            // and when called from inside a pump.
+            pumpInbound();
             yield();
         }
     }
@@ -102,10 +110,25 @@ private:
     }
 
     // --- Framed-mode pump helpers ---
+    // pumpInbound is re-entrancy-guarded: it can be (and is) called from
+    // inside blocking write paths (awaitFlowClear / writeSerialChunked), and
+    // a handled frame may itself write (PING pong, ELM327 response). The
+    // guard makes any nested pump a no-op, bounding the recursion at one
+    // frame-handling level.
+    bool pumping = false;
+    // True while writeSerialChunked has a frame partially on the wire. Any
+    // emission triggered from a pump in that window (sendFrame, PING pong)
+    // must be deferred to the next frame boundary -- injecting a frame into
+    // the middle of another would corrupt both at the nRF's decoder.
+    bool writingFrame = false;
+    bool pongPending = false;   // PING arrived mid-frame; echo at boundary
     void pumpInbound();
     void handleFrame(const Frame& f);
     void flushTxAcc();
     void writeSerialChunked(const uint8_t* data, size_t len);
+    // Frame-boundary service: emit anything a mid-frame pump had to defer
+    // (pong, queued ELM327 response bytes), then parse newly arrived input.
+    void serviceFrameBoundary();
 
 public:
     MuxTransport(Stream* serialPort, const char* transportName,

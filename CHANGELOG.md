@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed `MEASURE_LEVEL` measurement type to `MEASURE_PERCENT` to reflect its actual usage covering normalized 0–100% values (TPS, fuel level, engine load, accelerator pedal) rather than fluid levels (#209)
 
 ### Fixed
+- Two-central bulk-traffic fairness: a webapp bulk burst (e.g. `SYSTEM DUMP JSON`) no longer starves a concurrently streaming OBD app's ELM327 round-trips until it disconnects — the nRF drains text and ELM327 notifies from separate stashes and the host services ELM327 requests during long framed writes (#263)
 - Alarms now arm when enabled at runtime (`SET <pin> ALARM ENABLE`) and when restored from EEPROM at boot, instead of staying stuck at state `DISABLED` until the input's application was re-applied; re-issuing the enable on an already-armed alarm is idempotent (no longer resets its warmup/active state)
 - `SET CAL BIAS` on a preset Steinhart/Beta/Polynomial sensor no longer zeroes the curve coefficients (which made the reading return INF); the lookup-table read now also honors a custom bias override (#247)
 - Feed the watchdog in the `AT` command's serial response-drain loop (a chatty peer could extend it past the 2s timeout and reset the MCU) (#243)

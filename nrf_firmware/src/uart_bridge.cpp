@@ -74,15 +74,58 @@ volatile size_t g_txTail = 0;
 Frame g_frame;
 FrameDecoderState g_decoder;
 
-// --- Framed-mode pending-notify stash for back-pressure ---
-// When a type 0x02 text-response frame arrives, its payload is chunked into
-// 20-byte BLE notifies. If notify back-pressures partway through, we stash
-// the remaining payload here and stop reading Serial1 -- letting the RX
-// ring fill so Phase 3 flow control asserts RTS to the host. Without this,
-// over-fast inbound frames would be silently truncated at the BLE layer.
-uint8_t  g_pendingNotifyPayload[FRAME_MAX_PAYLOAD];
-uint16_t g_pendingNotifyLen    = 0;
-uint16_t g_pendingNotifyOffset = 0;
+// --- Framed-mode pending-notify stashes for back-pressure ---
+// When a type 0x02 (text) or 0x30 (ELM327) response frame arrives, its
+// payload is chunked into MTU-sized BLE notifies. If notify back-pressures
+// partway through, the remainder stays stashed and is drained cooperatively
+// on later polls. One stash per destination (#263): the two channels notify
+// different characteristics on independent HVN queues, so a slow webapp text
+// drain must not block an ELM327 round-trip to a streaming OBD app (or vice
+// versa). Each stash holds exactly one frame's payload.
+struct NotifyStash {
+    uint8_t  payload[FRAME_MAX_PAYLOAD];
+    uint16_t len    = 0;
+    uint16_t offset = 0;
+    // Per-chunk fan-out progress mask (see bleServicesNotify* contract):
+    // records which (char, central) pairs accepted the chunk currently in
+    // flight so a retry after a partial back-pressure doesn't re-deliver.
+    // Re-seeded from targetSeed (not 0) at each fresh chunk.
+    uint8_t  mask = 0;
+    // Chunk size frozen for the duration of a partially-acked chunk: 0 means
+    // "recompute at the next chunk boundary". A chunk some links already
+    // accepted must keep its size so the offset advances by exactly what
+    // those links received -- see drainStash.
+    uint16_t chunk = 0;
+    // Eligibility snapshot taken when the payload was stashed: bits pre-set
+    // for (char, central) pairs that were absent/unsubscribed at stash time.
+    // A central that connects and subscribes mid-drain is therefore excluded
+    // until the next clean payload instead of receiving a late, possibly
+    // fragmented tail (#262 review follow-up).
+    uint8_t  targetSeed = 0;
+    // Per-slot connection generations at stash time. The seed alone can't
+    // catch a same-handle disconnect + reconnect mid-drain (the eligibility
+    // probes key on the handle, and the newcomer looks identical to the
+    // snapshotted central); a generation mismatch marks the slot stale so
+    // drainStash retires it from this payload's target set.
+    uint8_t  slotGen[BLE_SERVICES_MAX_CONN_SLOTS] = {};
+
+    bool empty() const { return len == 0; }
+    void clear() {
+        len = 0; offset = 0; mask = 0; chunk = 0; targetSeed = 0;
+    }
+};
+NotifyStash g_textStash;   // 0x02 -> CMD_RX + NUS TX
+NotifyStash g_elmStash;    // 0x30 -> HM-10 FFE1
+
+// Held frame: a decoded frame whose destination stash was still occupied
+// after one drain attempt. One slot suffices -- while a frame is held the
+// Serial1 read loop stops entirely (RX ring fills, Phase 3 flow control
+// asserts RTS to the host), and the hold is promoted into its stash at the
+// top of a later poll once that stash frees.
+bool     g_holdValid = false;
+uint8_t  g_holdType  = 0;
+uint16_t g_holdLen   = 0;
+uint8_t  g_holdPayload[FRAME_MAX_PAYLOAD];
 
 // --- CMD_TX bytes queued during PINGING, replayed post-resolution ---
 // Sized to match the TX ring so a single PINGING-window burst can fit in
@@ -99,23 +142,13 @@ size_t   g_pendingTxLen = 0;
 uint8_t  g_pendingElm[kPendingTxSize];
 size_t   g_pendingElmLen = 0;
 
-// Destination for the currently-stashed inbound notify (set per frame in
-// handleFrame). DEST_TEXT -> CMD_RX + NUS TX; DEST_ELM -> HM-10 FFE1.
+// Notify destination selector for drainStash: DEST_TEXT -> CMD_RX + NUS TX;
+// DEST_ELM -> HM-10 FFE1.
 enum NotifyDest : uint8_t { DEST_TEXT = 0, DEST_ELM };
-NotifyDest g_pendingNotifyDest = DEST_TEXT;
 
-// Per-chunk fan-out progress masks (see bleServicesNotify* contract): record
-// which notify targets have accepted the chunk currently being sent so a retry
-// after a partial back-pressure doesn't re-deliver to a char that already took
-// it. Reset to 0 whenever we advance to a fresh chunk.
-uint8_t g_pendingNotifyMask = 0;   // for the framed-response stash drain
-uint8_t g_rxNotifyMask      = 0;   // for the transparent g_rx flush
-
-// Chunk size frozen for the duration of a partially-acked chunk. The min-MTU
-// across connected links can change mid-drain (a 2nd central joins/drops), but
-// a chunk that some links already accepted must keep its size so the offset
-// advances by exactly what those links received -- see drainPendingNotify.
-uint16_t g_pendingNotifyChunk = 0;
+// Per-chunk fan-out progress mask for the transparent g_rx flush (see
+// bleServicesNotify* contract). Framed-mode equivalents live in NotifyStash.
+uint8_t g_rxNotifyMask = 0;
 
 // Returns true if the buffer was successfully flushed (or was already
 // empty). Returns false if BLE notify is back-pressuring; caller MUST hold
@@ -226,55 +259,66 @@ size_t enqueueAsFrames(uint8_t type, const uint8_t* data, size_t len) {
     return offset;
 }
 
-// Drain the pending-notify stash to CMD_RX in 20-byte chunks. Returns true
-// if the stash was fully drained (or was empty); returns false if BLE
-// notify back-pressured (returned false within its own 100ms timeout) --
-// caller must stop reading new Serial1 bytes until the next poll iteration
-// retries, so the RX ring fills and Phase 3 flow control can assert RTS.
+// Drain one stash to its destination characteristics in MTU-sized chunks
+// (up to 244B on a BANDWIDTH_MAX link). Returns true if the stash was fully
+// drained (or was empty); returns false if BLE notify back-pressured
+// (returned false within its own 100ms timeout) -- the remainder stays
+// stashed and is retried on a later poll.
 //
 // Bluefruit's notify() blocks each call for ~one BLE connection interval
 // (15-30ms) waiting for an HVN packet slot, so a full multi-chunk drain
 // spends most of its time blocked there. We re-evaluate RTS between
 // chunks so the LED tracks reality and the host gets throttled during
 // the drain, not just at the top of the next uartBridgePoll iteration.
-bool drainPendingNotify() {
-    // Size chunks to the negotiated link MTU (up to 244B) instead of the old
-    // fixed 20B -- on a BANDWIDTH_MAX link that's ~12x fewer notify calls,
-    // each blocking ~one connection interval, for a bulk text response.
-    while (g_pendingNotifyOffset < g_pendingNotifyLen) {
-        // Recompute the chunk size only at a clean chunk boundary (mask == 0).
-        // With two centrals the min-MTU can change mid-drain (one joins/drops);
-        // freezing the size while a chunk is partially acked (mask != 0) keeps
-        // the offset advancing by exactly what the already-served links got --
-        // otherwise the bulk stream to an acked central duplicates or drops
-        // bytes when the next poll retries the same offset at a new size.
-        // Residual edge (deferred to #263): a central that connects AND
-        // subscribes within one chunk's partial-ack window becomes a target
-        // mid-stream and receives the frozen chunk (a late, possibly fragmented
-        // fragment). It is bounded -- a stalled link self-resolves at the
-        // supervision timeout -- and the proper fix (snapshot the target set per
-        // payload so late joiners are excluded) belongs to the #263 notify
-        // rework, not this size-freeze.
-        if (g_pendingNotifyMask == 0) {
-            g_pendingNotifyChunk =
-                static_cast<uint16_t>(bleServicesMaxNotifyChunk());
+// All (char, slot) mask bits belonging to one connection slot for a given
+// destination's fan-out set. Bit layout matches notifyFanout: bit =
+// charIndex * BLE_SERVICES_MAX_CONN_SLOTS + h. Text fans out to two chars
+// (CMD_RX, NUS TX); ELM to one (FFE1).
+uint8_t slotBits(NotifyDest dest, uint16_t h) {
+    const uint8_t first = static_cast<uint8_t>(1u << h);
+    if (dest == DEST_ELM) return first;
+    return static_cast<uint8_t>(
+        first | (1u << (BLE_SERVICES_MAX_CONN_SLOTS + h)));
+}
+
+bool drainStash(NotifyStash& s, NotifyDest dest) {
+    while (s.offset < s.len) {
+        // Retire any slot whose connection generation moved since stash time:
+        // that handle now belongs to a different central (same-handle
+        // reconnect mid-drain), which must not receive this payload's tail.
+        // Checked every pass -- notifyFanout probes eligibility live, so a
+        // back-pressured chunk's retry would otherwise pick the newcomer up.
+        for (uint16_t h = 0; h < BLE_SERVICES_MAX_CONN_SLOTS; ++h) {
+            if (bleServicesSlotGeneration(h) != s.slotGen[h]) {
+                s.targetSeed |= slotBits(dest, h);
+            }
         }
-        const uint16_t maxChunk = g_pendingNotifyChunk;
-        const uint16_t remaining = g_pendingNotifyLen - g_pendingNotifyOffset;
-        const uint16_t chunk = (remaining > maxChunk) ? maxChunk : remaining;
-        const uint8_t* p = g_pendingNotifyPayload + g_pendingNotifyOffset;
-        // Route to the channel matching the stashed frame's type: text
-        // responses (0x02) -> CMD_RX + NUS TX; ELM327 responses (0x30) -> FFE1.
-        // g_pendingNotifyMask carries this chunk's fan-out progress so a
-        // back-pressure retry doesn't double-send to an already-served char.
-        const bool sent = (g_pendingNotifyDest == DEST_ELM)
-                              ? bleServicesNotifyHm10(p, chunk, g_pendingNotifyMask)
-                              : bleServicesNotifyText(p, chunk, g_pendingNotifyMask);
+        s.mask |= s.targetSeed;
+        // Recompute the chunk size only at a clean chunk boundary (chunk == 0).
+        // Freezing the size while a chunk is partially acked keeps the offset
+        // advancing by exactly what the already-served links got -- otherwise
+        // the stream to an acked central duplicates or drops bytes when the
+        // next poll retries the same offset at a new size. The target set
+        // can't grow mid-payload (targetSeed excludes late joiners), so a
+        // frozen chunk can never exceed a *new* link's MTU; at worst it stays
+        // smaller than necessary after the limiting link drops.
+        if (s.chunk == 0) {
+            s.chunk = static_cast<uint16_t>(bleServicesMaxNotifyChunk());
+        }
+        const uint16_t remaining = s.len - s.offset;
+        const uint16_t chunk = (remaining > s.chunk) ? s.chunk : remaining;
+        const uint8_t* p = s.payload + s.offset;
+        // s.mask carries this chunk's fan-out progress so a back-pressure
+        // retry doesn't double-send to an already-served (char, central) pair.
+        const bool sent = (dest == DEST_ELM)
+                              ? bleServicesNotifyHm10(p, chunk, s.mask)
+                              : bleServicesNotifyText(p, chunk, s.mask);
         if (!sent) {
             return false;
         }
-        g_pendingNotifyOffset += chunk;
-        g_pendingNotifyMask = 0;   // next chunk starts with a fresh fan-out
+        s.offset += chunk;
+        s.mask  = s.targetSeed;  // fresh fan-out, same per-payload target set
+        s.chunk = 0;             // re-size at the next chunk boundary
 #if defined(PIN_NRF_RTS_OUT) && defined(PIN_NRF_CTS_IN)
         // Each notify call blocked ~15-30ms in BLE wait; Serial1 has been
         // receiving the whole time. Re-check fill so RTS asserts mid-drain
@@ -282,43 +326,64 @@ bool drainPendingNotify() {
         updateInboundRts();
 #endif
     }
-    g_pendingNotifyLen = 0;
-    g_pendingNotifyOffset = 0;
+    s.clear();
     return true;
 }
 
-// Returns true if the caller may continue reading Serial1 (frame fully
-// dispatched or no notify needed); false if a pending notify is stuck
-// and inbound polling must back off.
+// Load one frame's payload into a stash and snapshot the eligible notify
+// targets. Caller guarantees the stash is empty and len <= FRAME_MAX_PAYLOAD.
+void stashPayload(NotifyStash& s, NotifyDest dest,
+                  const uint8_t* payload, uint16_t len) {
+    memcpy(s.payload, payload, len);
+    s.len    = len;
+    s.offset = 0;
+    s.chunk  = 0;
+    s.targetSeed = (dest == DEST_ELM) ? bleServicesHm10TargetSeed()
+                                      : bleServicesTextTargetSeed();
+    s.mask = s.targetSeed;
+    for (uint16_t h = 0; h < BLE_SERVICES_MAX_CONN_SLOTS; ++h) {
+        s.slotGen[h] = bleServicesSlotGeneration(h);
+    }
+}
+
+// Returns true if the caller may continue reading Serial1; false if this
+// frame had to be parked in the hold slot (destination stash still draining)
+// and inbound polling must stop until the hold is promoted.
+//
+// Note a *partially* drained fresh stash returns true: back-pressure on one
+// destination must not stop the read loop, or a slow webapp text drain
+// starves ELM327 round-trips again (#263). Reading only stops when a frame
+// collides with its own destination's occupied stash.
 bool handleFrame(const Frame& f) {
     switch (f.type) {
     case FRAME_TYPE_PING:
         tierStateOnPingFrame();
         return true;
     case FRAME_TYPE_TEXT_RESP:
-        // Stash the payload and try to drain immediately. If notify back-
-        // pressures, the caller breaks out of the Serial1 read loop and
-        // we retry on the next uartBridgePoll iteration.
+    case FRAME_TYPE_ELM327: {
+        // Text responses (0x02) -> CMD_RX + NUS TX; ELM327 responses (0x30)
+        // -> HM-10 FFE1. Same stash + back-pressure path, per-type stash.
         if (f.len > FRAME_MAX_PAYLOAD) return true;  // defensive; shouldn't happen
-        memcpy(g_pendingNotifyPayload, f.payload, f.len);
-        g_pendingNotifyLen = f.len;
-        g_pendingNotifyOffset = 0;
-        g_pendingNotifyMask = 0;
-        g_pendingNotifyDest = DEST_TEXT;   // -> CMD_RX + NUS TX
-        return drainPendingNotify();
-    case FRAME_TYPE_ELM327:
-        // ELM327 response from the host's parser -> notify the HM-10 FFE1
-        // channel the OBD app is listening on. Same stash + back-pressure
-        // path as text; only the notify destination differs. Exactly one
-        // frame's payload is stashed at a time and fully drained before the
-        // next byte is read, so the shared stash needs no per-type buffer.
-        if (f.len > FRAME_MAX_PAYLOAD) return true;
-        memcpy(g_pendingNotifyPayload, f.payload, f.len);
-        g_pendingNotifyLen = f.len;
-        g_pendingNotifyOffset = 0;
-        g_pendingNotifyMask = 0;
-        g_pendingNotifyDest = DEST_ELM;    // -> FFE1
-        return drainPendingNotify();
+        const bool isElm = (f.type == FRAME_TYPE_ELM327);
+        NotifyStash& s = isElm ? g_elmStash : g_textStash;
+        const NotifyDest dest = isElm ? DEST_ELM : DEST_TEXT;
+        if (!s.empty()) {
+            // Destination still draining a prior payload. Try once to finish
+            // it; if still back-pressured, park this frame in the hold slot
+            // and stop reading Serial1 (RX ring fills, RTS throttles the
+            // host) until the stash frees.
+            if (!drainStash(s, dest)) {
+                memcpy(g_holdPayload, f.payload, f.len);
+                g_holdType  = f.type;
+                g_holdLen   = f.len;
+                g_holdValid = true;
+                return false;
+            }
+        }
+        stashPayload(s, dest, f.payload, f.len);
+        drainStash(s, dest);  // best-effort; leftover drains on later polls
+        return true;
+    }
     case FRAME_TYPE_STATUS:
         // Host MCU pushed a fresh 32-byte PreobdSystemStatus snapshot. Cache
         // it into the GATT characteristic and notify subscribers. Drop any
@@ -405,14 +470,30 @@ void uartBridgePoll() {
         }
     }
 
-    // Framed-mode equivalent: a prior poll may have left a partially-notified
-    // text-response payload stashed. Drain it before reading more from
-    // Serial1; bail out if still back-pressured so the RX ring fills and
-    // Phase 3 flow control asserts RTS to the host.
-    if (framed && g_pendingNotifyLen > 0) {
-        if (!drainPendingNotify()) {
-            drainTx();
-            return;
+    // Framed-mode equivalent: cooperatively drain both notify stashes left
+    // from prior polls. ELM first -- its payloads are small and latency-
+    // sensitive (a streaming OBD app times out if round-trips stall), while
+    // text payloads can be bulk dumps that take many polls to clear. Back-
+    // pressure on one stash no longer bails the whole poll (#263); reading
+    // only stops while a frame is parked in the hold slot.
+    if (framed) {
+        if (!g_elmStash.empty())  drainStash(g_elmStash, DEST_ELM);
+        if (!g_textStash.empty()) drainStash(g_textStash, DEST_TEXT);
+
+        if (g_holdValid) {
+            // Promote the held frame once its destination stash has freed;
+            // until then keep the read loop stopped so the RX ring fills and
+            // Phase 3 flow control asserts RTS to the host.
+            const bool isElm = (g_holdType == FRAME_TYPE_ELM327);
+            NotifyStash& s = isElm ? g_elmStash : g_textStash;
+            if (!s.empty()) {
+                drainTx();
+                return;
+            }
+            const NotifyDest dest = isElm ? DEST_ELM : DEST_TEXT;
+            stashPayload(s, dest, g_holdPayload, g_holdLen);
+            g_holdValid = false;
+            drainStash(s, dest);  // best-effort; leftover drains next poll
         }
     }
 
@@ -427,9 +508,10 @@ void uartBridgePoll() {
                 g_decoder, static_cast<uint8_t>(b), g_frame);
             if (r == FRAME_READY) {
                 if (!handleFrame(g_frame)) {
-                    // BLE notify back-pressured mid-frame; the rest is in
-                    // the pending stash. Stop reading so Serial1 fills and
-                    // Phase 3 flow control asserts RTS to throttle the host.
+                    // Frame parked in the hold slot (its destination stash
+                    // is still draining). Stop reading so Serial1 fills and
+                    // Phase 3 flow control asserts RTS to throttle the host;
+                    // the hold is promoted at the top of a later poll.
                     break;
                 }
             }
@@ -530,9 +612,9 @@ void uartBridgeResetRx() {
     g_rxNotifyMask = 0;
     g_pendingTxLen = 0;
     g_pendingElmLen = 0;
-    g_pendingNotifyLen = 0;
-    g_pendingNotifyOffset = 0;
-    g_pendingNotifyMask = 0;
+    g_textStash.clear();
+    g_elmStash.clear();
+    g_holdValid = false;
     interrupts();
     frameDecoderReset(g_decoder);
 }

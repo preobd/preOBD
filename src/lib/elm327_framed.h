@@ -37,8 +37,15 @@ void init();
 // Called by MuxTransport::handleFrame() when a type 0x30 frame arrives. Runs
 // the ELM327 parser synchronously on the payload and emits the response as
 // one or more 0x30 frames back on `out`. Non-blocking: if `out.sendFrame`
-// back-pressures, the unsent remainder is retried on the next 0x30 frame.
+// back-pressures, the unsent remainder is retried on the next 0x30 frame or
+// by poll().
 void handleInbound(const uint8_t* payload, uint16_t len, MuxTransport& out);
+
+// Retry any response bytes a back-pressured sendFrame left queued (e.g. the
+// request was pumped from inside a partially-written text frame, when
+// emission defers to the next frame boundary -- see MuxTransport). Called
+// from MuxTransport's frame-boundary and update paths; no-op when idle.
+void poll(MuxTransport& out);
 
 } // namespace Elm327Framed
 

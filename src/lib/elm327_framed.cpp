@@ -29,10 +29,12 @@ namespace {
 //             are fed in successive chunks (the parser accumulates across reads
 //             until it sees a CR, so splitting mid-command is safe).
 //   outbound: linear FIFO holding the response. Drained as 0x30 frame(s) by
-//             handleInbound. outSent tracks how much has been sent so a
-//             back-pressured send leaves the remainder for the next call.
-//             Overflow drops bytes (only reachable under sustained TX back-
-//             pressure, which BLE request/response traffic doesn't generate).
+//             handleInbound and poll(). outSent tracks how much has been sent
+//             so a back-pressured send leaves the remainder for a later call.
+//             Overflow drops bytes -- requests pumped during a bulk text
+//             response queue here until the next frame boundary, but OBD
+//             request/response traffic (one outstanding query, ~tens of
+//             bytes per reply) stays far under the 256B cap.
 class FramedElmStream : public Stream {
 public:
     // kInCap is only the per-feed transfer size between a frame and the parser;
@@ -124,6 +126,10 @@ void handleInbound(const uint8_t* payload, uint16_t len, MuxTransport& out) {
     } while (i < len);
 }
 
+void poll(MuxTransport& out) {
+    drainOut(out);
+}
+
 } // namespace Elm327Framed
 
 #else  // ENABLE_FRAMED_TRANSPORT && ENABLE_ELM327
@@ -131,6 +137,7 @@ void handleInbound(const uint8_t* payload, uint16_t len, MuxTransport& out) {
 namespace Elm327Framed {
 void init() {}
 void handleInbound(const uint8_t*, uint16_t, MuxTransport&) {}
+void poll(MuxTransport&) {}
 }  // namespace Elm327Framed
 
 #endif

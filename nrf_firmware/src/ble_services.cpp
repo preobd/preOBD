@@ -60,7 +60,12 @@ void hm10WriteCallback(uint16_t /*conn_handle*/, BLECharacteristic* /*chr*/,
 // main.cpp. With two peripheral connections the SoftDevice assigns the low
 // handle indices [0, kMaxConnSlots), so we use the connection handle directly
 // as a compact slot index for the fan-out retry mask below.
-constexpr uint16_t kMaxConnSlots = 2;
+constexpr uint16_t kMaxConnSlots = BLE_SERVICES_MAX_CONN_SLOTS;
+
+// Slot-generation tracking (see header): loop-context only, no atomics
+// needed -- bumped and read solely from the main loop's poll chain.
+uint8_t g_slotGen[kMaxConnSlots] = {};
+bool    g_slotConnected[kMaxConnSlots] = {};
 
 // Notify one chunk to every (characteristic, connected-central) pair where the
 // central has subscribed to that characteristic.
@@ -104,6 +109,26 @@ bool notifyFanout(BLECharacteristic* const chrs[], size_t n,
         }
     }
     return allDone;
+}
+
+// Snapshot which (char, central) pairs are currently INELIGIBLE (slot empty
+// or not subscribed) as a pre-seeded doneMask for notifyFanout: pre-set bits
+// are skipped, so a payload drained with this seed never targets a central
+// that joined after the payload was stashed -- it gets the next clean payload
+// instead of a late, possibly fragmented tail. Same bit layout as
+// notifyFanout (bit i*kMaxConnSlots + h).
+uint8_t targetSeed(BLECharacteristic* const chrs[], size_t n) {
+    uint8_t seed = 0;
+    for (size_t i = 0; i < n; ++i) {
+        for (uint16_t h = 0; h < kMaxConnSlots; ++h) {
+            const uint8_t bit = static_cast<uint8_t>(1u << (i * kMaxConnSlots + h));
+            BLEConnection* conn = Bluefruit.Connection(h);
+            if (!conn || !conn->connected() || !chrs[i]->notifyEnabled(h)) {
+                seed |= bit;
+            }
+        }
+    }
+    return seed;
 }
 
 } // namespace
@@ -213,6 +238,37 @@ bool bleServicesNotifyTransparent(const uint8_t* data, size_t len,
     return notifyFanout(chrs, 3, data, len, doneMask);
 }
 
+uint8_t bleServicesTextTargetSeed() {
+    BLECharacteristic* const chrs[] = { &g_cmdRx, &g_nusTx };
+    return targetSeed(chrs, 2);
+}
+
+uint8_t bleServicesHm10TargetSeed() {
+    BLECharacteristic* const chrs[] = { &g_hm10Char };
+    return targetSeed(chrs, 1);
+}
+
+bool bleServicesNotifyRetry(BLECharacteristic& chr, const uint8_t* data,
+                            uint16_t len, uint8_t& doneMask) {
+    BLECharacteristic* const chrs[] = { &chr };
+    return notifyFanout(chrs, 1, data, len, doneMask);
+}
+
+void bleServicesPollSlots() {
+    for (uint16_t h = 0; h < kMaxConnSlots; ++h) {
+        BLEConnection* conn = Bluefruit.Connection(h);
+        const bool connected = (conn != nullptr) && conn->connected();
+        if (connected && !g_slotConnected[h]) {
+            ++g_slotGen[h];   // a (possibly different) central took this slot
+        }
+        g_slotConnected[h] = connected;
+    }
+}
+
+uint8_t bleServicesSlotGeneration(uint16_t connHandle) {
+    return (connHandle < kMaxConnSlots) ? g_slotGen[connHandle] : 0;
+}
+
 size_t bleServicesMaxNotifyChunk() {
     // A notify's data payload is the negotiated ATT MTU minus the 3-byte ATT
     // header (opcode + attribute handle). On a default 23-byte MTU link that
@@ -248,8 +304,10 @@ void bleServicesNotifyAll(BLECharacteristic& chr, const uint8_t* data,
     // Best-effort fan-out of one fixed-size notify to every connected central
     // subscribed to `chr`. Same per-handle reason as notifyFanout: a plain
     // chr.notify(data,len) would only reach the most-recently connected central.
-    // Drops silently if a link's HVN queue is full -- the binary snapshot
-    // characteristics (Status/Alarm/Relay/OTA) re-push on the next change.
+    // Drops silently if a link's HVN queue is full -- acceptable for Status
+    // (5s heartbeat re-pushes) and Relay/OTA (re-push on the next change).
+    // Alarm events are edge-triggered with no re-push, so alarm_handler uses
+    // bleServicesNotifyRetry instead (#263).
     for (uint16_t h = 0; h < kMaxConnSlots; ++h) {
         BLEConnection* conn = Bluefruit.Connection(h);
         if (!conn || !conn->connected()) continue;
