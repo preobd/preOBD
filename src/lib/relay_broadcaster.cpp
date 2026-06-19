@@ -21,9 +21,16 @@ namespace RelayBroadcaster {
 
 namespace {
 
+// Resend every relay this often regardless of change, so a client that
+// connects (or subscribes to notifications) some time after boot gets the
+// full relay state instead of just the one stale snapshot cached in the nRF's
+// single shared relay characteristic. Mirrors StatusBroadcaster's heartbeat.
+constexpr uint32_t kHeartbeatMs = 5000;
+
 PreobdRelayState g_lastSent[MAX_RELAYS];
 bool             g_haveLast[MAX_RELAYS];
 uint16_t         g_sequence = 0;
+uint32_t         g_lastSendMs = 0;
 
 void packState(uint8_t i, PreobdRelayState& s) {
     const RelayConfig& cfg = systemConfig.relays[i];
@@ -58,14 +65,21 @@ void init() {
     memset(g_lastSent, 0, sizeof(g_lastSent));
     memset(g_haveLast, 0, sizeof(g_haveLast));
     g_sequence = 0;
+    g_lastSendMs = 0;
 }
 
 void tick() {
+    const uint32_t now = millis();
+    const bool heartbeatDue = (now - g_lastSendMs) >= kHeartbeatMs;
+    bool allSent = true;
+
     for (uint8_t i = 0; i < MAX_RELAYS; ++i) {
         PreobdRelayState snap;
         packState(i, snap);
 
-        if (g_haveLast[i] && sameIgnoringSequence(snap, g_lastSent[i])) continue;
+        const bool changed = !g_haveLast[i] ||
+                             !sameIgnoringSequence(snap, g_lastSent[i]);
+        if (!changed && !heartbeatDue) continue;
 
         snap.sequence = g_sequence;
 
@@ -75,9 +89,16 @@ void tick() {
             g_lastSent[i] = snap;
             g_haveLast[i] = true;
             ++g_sequence;
+        } else {
+            // On failure: leave cache alone; retry next tick.
+            allSent = false;
         }
-        // On failure: leave cache alone; retry next tick.
     }
+
+    // Advance the heartbeat clock only once the whole sweep has gone out, so a
+    // backpressured tick re-attempts the full resend next loop rather than
+    // dropping a slot for another kHeartbeatMs.
+    if (heartbeatDue && allSent) g_lastSendMs = now;
 }
 
 void handleInbound(const uint8_t* payload, uint16_t len) {
@@ -102,6 +123,13 @@ void handleInbound(const uint8_t* payload, uint16_t len) {
     g_haveLast[req.relayIndex] = false;
 }
 
+void resync() {
+    // Drop every per-relay cache entry so the next tick() re-emits all slots.
+    // Wired to the connect-time FRAME_TYPE_PING so a freshly connected client
+    // gets the full relay state without waiting for the heartbeat.
+    memset(g_haveLast, 0, sizeof(g_haveLast));
+}
+
 } // namespace RelayBroadcaster
 
 #else // !(ENABLE_RELAY_OUTPUT && ENABLE_FRAMED_TRANSPORT)
@@ -110,6 +138,7 @@ namespace RelayBroadcaster {
 void init() {}
 void tick() {}
 void handleInbound(const uint8_t*, uint16_t) {}
+void resync() {}
 }
 
 #endif // ENABLE_RELAY_OUTPUT && ENABLE_FRAMED_TRANSPORT

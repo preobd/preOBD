@@ -120,6 +120,11 @@ void MuxTransport::handleFrame(const Frame& f) {
         }
         break;
     case FRAME_TYPE_PING: {
+        // A ping marks a (re)connection: invalidate the relay cache so the
+        // next tick re-emits all slots, populating a late client's panel
+        // without waiting on the heartbeat. Cache-only, safe mid-frame; no-op
+        // stub when relays are off.
+        RelayBroadcaster::resync();
         // Echo immediately so the nRF's auto-detect upgrades the link. If
         // this PING was pumped from inside a partially-written frame, defer
         // the echo to the next frame boundary -- injecting it mid-frame

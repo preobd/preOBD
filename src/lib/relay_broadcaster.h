@@ -33,6 +33,11 @@ void tick();
 // Validates the payload and applies writable fields to the targeted relay.
 void handleInbound(const uint8_t* payload, uint16_t len);
 
+// Called when a client (re)connects (FRAME_TYPE_PING) to force a full relay
+// re-broadcast on the next tick(). Belt-and-suspenders alongside the heartbeat
+// for the already-subscribed reconnect case.
+void resync();
+
 } // namespace RelayBroadcaster
 
 #endif // RELAY_BROADCASTER_H

@@ -62,6 +62,7 @@ static const PreobdRelayState& frameState(int i) {
 
 void setUp(void) {
     g_frameCount = 0;
+    g_test_now = 0;   // tick() now reads millis(); start each test at t=0
     memset(g_frames, 0, sizeof(g_frames));
     memset(&systemConfig, 0, sizeof(systemConfig));
     memset(g_relayState, 0, sizeof(g_relayState));
@@ -182,6 +183,36 @@ static void test_handle_inbound_rejects_bad_index(void) {
     TEST_ASSERT_EQUAL_INT(0, g_setModeCalls);
 }
 
+// #271: with no field change, the broadcaster stays quiet until the heartbeat
+// elapses, then re-emits every slot so a late-connecting client populates.
+static void test_heartbeat_resends_all_relays(void) {
+    configureRelay(0, RELAY_AUTO_HIGH, 3, 9, 100.0f, 95.0f);
+    RelayBroadcaster::tick();              // snapshot at t=0
+    g_frameCount = 0;
+
+    RelayBroadcaster::tick();              // still t=0, no change → quiet
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+
+    g_test_now = 5000;                     // kHeartbeatMs elapsed
+    RelayBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(MAX_RELAYS, g_frameCount);  // full resend
+}
+
+// #271: resync() (wired to the connect-time ping) drops the cache so the next
+// tick re-emits every slot immediately, without waiting for the heartbeat.
+static void test_resync_forces_full_resend(void) {
+    configureRelay(0, RELAY_AUTO_HIGH, 3, 9, 100.0f, 95.0f);
+    RelayBroadcaster::tick();              // snapshot
+    g_frameCount = 0;
+
+    RelayBroadcaster::tick();              // no change → quiet
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+
+    RelayBroadcaster::resync();            // a client (re)connected
+    RelayBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(MAX_RELAYS, g_frameCount);  // full resend, same t
+}
+
 // An out-of-enum mode is not forwarded to setRelayMode (but thresholds still apply).
 static void test_handle_inbound_clamps_invalid_mode(void) {
     PreobdRelayState req;
@@ -201,6 +232,8 @@ int main(int, char**) {
     RUN_TEST(test_handle_inbound_applies_and_confirms);
     RUN_TEST(test_handle_inbound_rejects_bad_length);
     RUN_TEST(test_handle_inbound_rejects_bad_index);
+    RUN_TEST(test_heartbeat_resends_all_relays);
+    RUN_TEST(test_resync_forces_full_resend);
     RUN_TEST(test_handle_inbound_clamps_invalid_mode);
     return UNITY_END();
 }
