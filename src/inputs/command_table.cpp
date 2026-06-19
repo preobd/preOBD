@@ -5,6 +5,7 @@
 #include "../config.h"
 
 #include "command_table.h"
+#include "command_dispatch.h"
 #include "command_helpers.h"
 #include "serial_config.h"
 #include "input_manager.h"
@@ -124,93 +125,44 @@ const Command COMMANDS[] = {
 
 const uint8_t NUM_COMMANDS = sizeof(COMMANDS) / sizeof(Command);
 
-// Subcommand dispatcher (see command_table.h).
-//
-// Subcommand tables are declared PROGMEM by callers (BUS_SUBCOMMANDS,
-// SYSTEM_SUBCOMMANDS) so they live in flash on AVR. On AVR a direct
-// `table[i].token` read returns a flash address dereferenced as RAM —
-// garbage. Read both fields via pgm_read_ptr; on Teensy/ESP32 PROGMEM is
-// a no-op and pgm_read_ptr is a plain dereference. Token strings are
-// likewise PROGMEM-resident, so compare with streq_P.
-int dispatchSubcommand(const Subcommand* table, uint8_t tableLen,
-                       const char* token, const char* commandName,
-                       int argc, const char* const* argv, int tokenIndex) {
-    for (uint8_t i = 0; i < tableLen; i++) {
-        const char* entryToken = (const char*)pgm_read_ptr(&table[i].token);
-        if (streq_P(token, entryToken)) {
-            // RUN-mode gate: per-subcommand. Top-level commands like SYSTEM and
-            // LOG are reachable in RUN mode (configModeOnly=false) so users can
-            // run read-only verbs (SYSTEM STATUS, LOG TAGS); the destructive
-            // siblings (SYSTEM RESET, SYSTEM REBOOT, etc.) carry
-            // runModeAllowed=false and are blocked here.
-            bool runOk = (bool)pgm_read_byte(&table[i].runModeAllowed);
-            if (!runOk && isInRunMode()) {
-                msg.control.print(F("ERROR: "));
-                msg.control.print(commandName);
-                msg.control.print(' ');
-                msg.control.print(token);
-                msg.control.println(F(" requires CONFIG mode"));
-                msg.control.println(F("  Type CONFIG to enter configuration mode"));
-                return 1;
-            }
-            SubcommandHandler h = (SubcommandHandler)pgm_read_ptr(&table[i].handler);
-            return h(argc, argv, tokenIndex);
-        }
-    }
+// Dispatch routing (dispatchCommand / dispatchSubcommand) lives in
+// command_dispatch.cpp so the routing mechanism is unit-testable on the host
+// without the heavy message subsystem. That TU reaches user-facing error
+// output through the command_dispatch.h reporter seam, defined here:
+
+void dispatchReportUnknownCommand(const char* name) {
+    msg.control.print(F("ERROR: Unknown command '"));
+    msg.control.print(name);
+    msg.control.println(F("'"));
+    msg.control.println(F("  Type HELP for available commands"));
+}
+
+void dispatchReportConfigRequired(const char* cmdUpper) {
+    msg.control.println();
+    msg.control.println(F("========================================"));
+    msg.control.print  (F("  ERROR: "));
+    msg.control.print  (cmdUpper);
+    msg.control.println(F(" requires CONFIG mode"));
+    msg.control.println(F("  Type CONFIG to enter configuration mode"));
+    msg.control.println(F("========================================"));
+    msg.control.println();
+}
+
+void dispatchReportUnknownSubcommand(const char* commandName, const char* token) {
     msg.control.print(F("ERROR: Unknown "));
     msg.control.print(commandName);
     msg.control.print(F(" subcommand '"));
     msg.control.print(token);
     msg.control.println(F("'"));
-    return 1;
 }
 
-// Main command dispatcher.
-//
-// Mode gating is now table-driven: COMMANDS[i].configModeOnly is the single
-// source of truth. Commands that are wholly read-only (HELP, INFO, LIST, ...)
-// or wholly mode-switching (CONFIG, RUN) carry configModeOnly=false. Commands
-// that mutate state carry configModeOnly=true and are rejected in RUN mode.
-//
-// For commands that are *partly* mutating (SYSTEM, LOG), configModeOnly=false
-// at this level lets the dispatcher reach the handler; the handler's own
-// subcommand table — or, for cmd_log, inline isInRunMode() checks — gates the
-// destructive verbs. This is what fixes the SYSTEM RESET CONFIRM safety bug:
-// previously the wholesale "SYSTEM" allowlist let *any* SYSTEM subcommand run
-// in RUN mode.
-int dispatchCommand(int argc, const char* const* argv) {
-    if (argc == 0) return 0;
-
-    // Convert command name to uppercase for comparison
-    char cmdUpper[32];
-    strncpy(cmdUpper, argv[0], sizeof(cmdUpper) - 1);
-    cmdUpper[sizeof(cmdUpper) - 1] = '\0';
-    for (char* p = cmdUpper; *p; p++) *p = toupper(*p);
-
-    // Look up command in table; gate before dispatch.
-    for (uint8_t i = 0; i < NUM_COMMANDS; i++) {
-        if (streq(cmdUpper, COMMANDS[i].name)) {
-            if (COMMANDS[i].configModeOnly && isInRunMode()) {
-                msg.control.println();
-                msg.control.println(F("========================================"));
-                msg.control.print  (F("  ERROR: "));
-                msg.control.print  (cmdUpper);
-                msg.control.println(F(" requires CONFIG mode"));
-                msg.control.println(F("  Type CONFIG to enter configuration mode"));
-                msg.control.println(F("========================================"));
-                msg.control.println();
-                return 1;
-            }
-            return COMMANDS[i].handler(argc, argv);
-        }
-    }
-
-    // Command not found
-    msg.control.print(F("ERROR: Unknown command '"));
-    msg.control.print(argv[0]);
-    msg.control.println(F("'"));
-    msg.control.println(F("  Type HELP for available commands"));
-    return 1;
+void dispatchReportSubcmdConfigRequired(const char* commandName, const char* token) {
+    msg.control.print(F("ERROR: "));
+    msg.control.print(commandName);
+    msg.control.print(' ');
+    msg.control.print(token);
+    msg.control.println(F(" requires CONFIG mode"));
+    msg.control.println(F("  Type CONFIG to enter configuration mode"));
 }
 
 #if ENABLE_SELFTEST

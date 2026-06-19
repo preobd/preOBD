@@ -35,7 +35,10 @@ typedef bool    boolean;
 #define pgm_read_word(addr)  (*reinterpret_cast<const uint16_t*>(addr))
 #define pgm_read_dword(addr) (*reinterpret_cast<const uint32_t*>(addr))
 #define pgm_read_float(addr) (*reinterpret_cast<const float*>(addr))
-#define pgm_read_ptr(addr)   (*reinterpret_cast<void* const*>(addr))
+// const-preserving: real tables (Subcommand::token, ::handler) are read from
+// `const`-qualified members, so the pointee const must survive the cast.
+// Callers C-cast the const void* to the concrete pointer type they need.
+#define pgm_read_ptr(addr)   (*reinterpret_cast<const void* const*>(addr))
 
 // _P string ops map straight to their RAM equivalents on the host.
 #define strlen_P     strlen
