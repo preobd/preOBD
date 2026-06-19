@@ -135,7 +135,7 @@ const __FlashStringHelper* measurementTypeName(MeasurementType type) {
         case MEASURE_HUMIDITY:    return F("HUMIDITY");
         case MEASURE_ELEVATION:   return F("ELEVATION");
         case MEASURE_DIGITAL:     return F("DIGITAL");
-        case MEASURE_LEVEL:       return F("LEVEL");
+        case MEASURE_PERCENT:     return F("PERCENT");
     }
     return nullptr;
 }

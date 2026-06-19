@@ -176,7 +176,7 @@ ObdConvertFunc getObdConvertFunc(MeasurementType type) {
         case MEASURE_ELEVATION: return obdConvertElevation;
         case MEASURE_DIGITAL: return obdConvertFloatSwitch;
         case MEASURE_SPEED: return obdConvertSpeed;
-        case MEASURE_LEVEL: return obdConvertHumidity;  // 0-100% same encoding as humidity
+        case MEASURE_PERCENT: return obdConvertHumidity;  // 0-100% same encoding as humidity
         default: return obdConvertVoltage;
     }
 }

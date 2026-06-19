@@ -43,23 +43,23 @@ static const char PSTR_JEEP_CJ_FUEL_LEVEL_LABEL[] PROGMEM = "Jeep CJ Fuel Level 
 #define LEVEL_SENSORS \
     /* Position sensors (linear analog) */ \
     X_SENSOR(PSTR_GENERIC_TPS, PSTR_GENERIC_TPS_LABEL, nullptr, readLinearSensor, nullptr, \
-             MEASURE_LEVEL, CAL_LINEAR, &generic_tps_linear_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0xF738, PIN_ANALOG) \
+             MEASURE_PERCENT, CAL_LINEAR, &generic_tps_linear_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0xF738, PIN_ANALOG) \
     /* Fuel level senders (resistive, table-based) */ \
     X_SENSOR(PSTR_VDO_FUEL_LEVEL_180, PSTR_VDO_FUEL_LEVEL_180_LABEL, nullptr, readLevelTable, nullptr, \
-             MEASURE_LEVEL, CAL_LEVEL_TABLE, &vdo_fuel180_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x7D88, PIN_ANALOG) \
+             MEASURE_PERCENT, CAL_LEVEL_TABLE, &vdo_fuel180_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x7D88, PIN_ANALOG) \
     X_SENSOR(PSTR_VDO_FUEL_LEVEL_240, PSTR_VDO_FUEL_LEVEL_240_LABEL, nullptr, readLevelTable, nullptr, \
-             MEASURE_LEVEL, CAL_LEVEL_TABLE, &vdo_fuel240_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x8145, PIN_ANALOG) \
+             MEASURE_PERCENT, CAL_LEVEL_TABLE, &vdo_fuel240_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x8145, PIN_ANALOG) \
     X_SENSOR(PSTR_VDO_FUEL_LEVEL_75, PSTR_VDO_FUEL_LEVEL_75_LABEL, nullptr, readLevelTable, nullptr, \
-             MEASURE_LEVEL, CAL_LEVEL_TABLE, &vdo_fuel75_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x331B, PIN_ANALOG) \
+             MEASURE_PERCENT, CAL_LEVEL_TABLE, &vdo_fuel75_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x331B, PIN_ANALOG) \
     X_SENSOR(PSTR_VDO_FUEL_LEVEL_90, PSTR_VDO_FUEL_LEVEL_90_LABEL, nullptr, readLevelTable, nullptr, \
-             MEASURE_LEVEL, CAL_LEVEL_TABLE, &vdo_fuel90_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x3358, PIN_ANALOG) \
+             MEASURE_PERCENT, CAL_LEVEL_TABLE, &vdo_fuel90_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x3358, PIN_ANALOG) \
     /* Stewart-Warner */ \
     X_SENSOR(PSTR_SW_FUEL_LEVEL_240, PSTR_SW_FUEL_LEVEL_240_LABEL, PSTR_SW_FUEL_LEVEL_240_DESC, readLevelTable, nullptr, \
-             MEASURE_LEVEL, CAL_LEVEL_TABLE, &sw_fuel_level_240_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x82A6, PIN_ANALOG) \
+             MEASURE_PERCENT, CAL_LEVEL_TABLE, &sw_fuel_level_240_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x82A6, PIN_ANALOG) \
     X_SENSOR(PSTR_SW_FORD_FUEL_LEVEL, PSTR_SW_FORD_FUEL_LEVEL_LABEL, PSTR_SW_FORD_FUEL_LEVEL_DESC, readLevelTable, nullptr, \
-             MEASURE_LEVEL, CAL_LEVEL_TABLE, &sw_ford_fuel_level_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x6EFB, PIN_ANALOG) \
+             MEASURE_PERCENT, CAL_LEVEL_TABLE, &sw_ford_fuel_level_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x6EFB, PIN_ANALOG) \
     /* Jeep/AMC */ \
     X_SENSOR(PSTR_JEEP_CJ_FUEL_LEVEL, PSTR_JEEP_CJ_FUEL_LEVEL_LABEL, nullptr, readLevelTable, nullptr, \
-             MEASURE_LEVEL, CAL_LEVEL_TABLE, &jeep_cj_fuel_level_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x0437, PIN_ANALOG)
+             MEASURE_PERCENT, CAL_LEVEL_TABLE, &jeep_cj_fuel_level_cal, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x0437, PIN_ANALOG)
 
 #endif // SENSOR_LIBRARY_SENSORS_LEVEL_H

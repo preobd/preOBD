@@ -135,7 +135,7 @@ inline SensorCategory getSensorCategory(uint8_t sensorIndex) {
     }
 
     // Fluid level sensors (level.h)
-    if (measType == MEASURE_LEVEL) return CAT_LEVEL;
+    if (measType == MEASURE_PERCENT) return CAT_LEVEL;
 
     return CAT_THERMOCOUPLE;  // Default fallback
 }

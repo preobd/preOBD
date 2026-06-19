@@ -19,7 +19,7 @@ enum MeasurementType {
     MEASURE_ELEVATION,    // Meters -> feet/meters
     MEASURE_DIGITAL,      // Digital on/off (float switch)
     MEASURE_SPEED,        // Vehicle speed in km/h
-    MEASURE_LEVEL         // Fluid level (percentage, 0-100%)
+    MEASURE_PERCENT       // Normalized 0-100% (TPS, fuel level, engine load, etc.)
 };
 
 // Calibration type enumeration (for type safety)

@@ -38,7 +38,7 @@ static const MeasTypeEntry MEAS_TYPE_TABLE[] = {
     {MEASURE_ELEVATION,   "ELEVATION"},
     {MEASURE_DIGITAL,     "DIGITAL"},
     {MEASURE_SPEED,       "SPEED"},
-    {MEASURE_LEVEL,       "LEVEL"},
+    {MEASURE_PERCENT,     "PERCENT"},
 };
 static const uint8_t MEAS_TYPE_COUNT = sizeof(MEAS_TYPE_TABLE) / sizeof(MEAS_TYPE_TABLE[0]);
 
