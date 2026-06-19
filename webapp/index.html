@@ -1937,7 +1937,9 @@ async function fetchInitialState() {
   panel.style.display = '';
   tbody.innerHTML = '<tr><td colspan="9" class="empty-row" style="color:var(--brand)">Loading configuration…</td></tr>';
   try {
-    await sendQueued('CONFIG');
+    // No CONFIG here: SYSTEM DUMP / LIST are RUN-legal, so the device stays
+    // live while we load. CONFIG is entered only by withConfigMode() for the
+    // actual write batches (Apply / Save / Revert / Import / Remove).
     const dumpResp = await sendQueued('SYSTEM DUMP JSON');
     originalConfig = parseJsonResponse(dumpResp);
     localConfig = JSON.parse(JSON.stringify(originalConfig));
@@ -2208,6 +2210,50 @@ async function sendChecked(cmd) {
   return resp;
 }
 
+// Read the device's current mode from the cached System Status characteristic.
+// Returns 'CONFIG', 'RUN', or null when status isn't available (transparent
+// NUS/HM-10 link, or the status char is absent). A direct read of the 32-byte
+// cache, so it reflects the device's actual mode now — no dependence on the
+// last async status notify, which would race a just-pressed mode button.
+async function readDeviceMode() {
+  if (!statusChar) return null;
+  try {
+    const val = await statusChar.readValue();
+    if (val.byteLength < 32) return null;
+    if (val.getUint32(0, true) !== 0x704F4244) return null;  // "pOBD" magic
+    return val.getUint8(5) === 0 ? 'CONFIG' : 'RUN';
+  } catch (_) { return null; }
+}
+
+// Run a batch of config-gated writes inside a CONFIG-mode window, then restore
+// whatever mode the device was in beforehand — "leave it alone". A write
+// requires CONFIG, but entering it is an implicit means to an end, not a user
+// choice: only the manual CONFIG/RUN buttons set the resting mode. So if the
+// device was already in CONFIG (the user picked it, or a serial-only rig
+// booted that way) we leave it there; if it was in RUN we return to RUN.
+//
+// RUN is still the webapp's default resting state — it never enters CONFIG on
+// connect or while idle (fetchInitialState reads in RUN; SYSTEM DUMP / LIST
+// are RUN-legal). This restore only governs what happens *after* a write
+// batch, and never overrides an explicit manual mode choice. Defaults to RUN
+// when the prior mode can't be read. Firmware-side dissolution of the
+// CONFIG-mode global freeze (so writes don't stop the world at all) is tracked
+// separately — see #268.
+async function withConfigMode(fn) {
+  const priorMode = await readDeviceMode();   // capture before we touch it
+  await sendChecked('CONFIG');                 // idempotent if already CONFIG
+  try {
+    return await fn();
+  } finally {
+    // Restore the prior mode rather than forcing RUN, so we don't yank the
+    // user out of a CONFIG they explicitly chose. Only skip the RUN restore
+    // when we know we started in CONFIG; unknown prior mode defaults to RUN.
+    if (priorMode !== 'CONFIG') {
+      try { await sendChecked('RUN'); } catch (_) { /* best-effort */ }
+    }
+  }
+}
+
 async function applyInput(pinStr) {
   const cur = localConfig.inputs.find(i => pinNumToStr(i.pin) === pinStr || i.pin === pinStr);
   const orig = originalConfig?.inputs?.find(i => pinNumToStr(i.pin) === pinStr || i.pin === pinStr);
@@ -2273,10 +2319,14 @@ document.getElementById('btnApply').addEventListener('click', async () => {
   setConfigBusy(true);
   try {
     let allOk = true;
-    for (const pin of dirty) { if (!await applyInput(pin)) allOk = false; }
+    await withConfigMode(async () => {
+      for (const pin of dirty) { if (!await applyInput(pin)) allOk = false; }
+    });
     renderInputsPanel();
     if (allOk) appendInfo('Changes applied to device RAM. Click "Save to EEPROM" to persist.');
     else appendErr('Some inputs failed to apply — check terminal for details.');
+  } catch(e) {
+    appendErr('Apply failed: ' + e.message);
   } finally {
     setConfigBusy(false);
   }
@@ -2287,17 +2337,19 @@ document.getElementById('btnSaveEEPROM').addEventListener('click', async () => {
   if (dirty.length && !confirm('You have unapplied edits. Apply them now before saving?')) return;
   setConfigBusy(true);
   try {
-    if (dirty.length) {
-      const pins = [...inputState.entries()].filter(([,s]) => s === 'dirty').map(([p]) => p);
-      let allOk = true;
-      for (const pin of pins) { if (!await applyInput(pin)) allOk = false; }
-      if (!allOk) { appendErr('Save aborted: some inputs failed to apply.'); renderInputsPanel(); return; }
-    }
-    await sendChecked('SAVE');
-    originalConfig = JSON.parse(JSON.stringify(localConfig));
-    inputState.clear();
-    renderInputsPanel();
-    appendInfo('Configuration saved to EEPROM.');
+    await withConfigMode(async () => {
+      if (dirty.length) {
+        const pins = [...inputState.entries()].filter(([,s]) => s === 'dirty').map(([p]) => p);
+        let allOk = true;
+        for (const pin of pins) { if (!await applyInput(pin)) allOk = false; }
+        if (!allOk) { appendErr('Save aborted: some inputs failed to apply.'); renderInputsPanel(); return; }
+      }
+      await sendChecked('SAVE');
+      originalConfig = JSON.parse(JSON.stringify(localConfig));
+      inputState.clear();
+      renderInputsPanel();
+      appendInfo('Configuration saved to EEPROM.');
+    });
   } catch(e) {
     appendErr('Save failed: ' + e.message);
   } finally {
@@ -2310,9 +2362,9 @@ document.getElementById('btnRevert').addEventListener('click', async () => {
   if (anyApplied && !confirm('Reload from EEPROM? This will discard applied-but-unsaved changes.')) return;
   setConfigBusy(true);
   try {
-    await sendChecked('LOAD EEPROM');
+    await withConfigMode(() => sendChecked('LOAD EEPROM'));
     inputState.clear();
-    await fetchInitialState();
+    await fetchInitialState();   // reload in RUN (reads are RUN-legal)
   } catch(e) {
     appendErr('Revert failed: ' + e.message);
   } finally {
@@ -2349,19 +2401,21 @@ document.getElementById('importFile').addEventListener('change', async e => {
     if (!parsed.schemaVersion) { appendErr('Not a preOBD config file (missing schemaVersion).'); return; }
     if (!confirm('Import will overwrite current device RAM config. Continue?')) return;
 
-    await sendChecked('JSON IMPORT');
-    suppressOutput = true;
-    appendInfo('Streaming ' + text.length + ' bytes…');
-    await sendRaw(text);
-    const result = await sendQueued('END JSON');
-    suppressOutput = false;
-    if (result.trim()) appendOutput(result.trim());
-    if (/(^|\n)ERROR:/.test(result)) throw new Error(result.trim());
+    await withConfigMode(async () => {
+      await sendChecked('JSON IMPORT');
+      suppressOutput = true;
+      appendInfo('Streaming ' + text.length + ' bytes…');
+      await sendRaw(text);
+      const result = await sendQueued('END JSON');
+      suppressOutput = false;
+      if (result.trim()) appendOutput(result.trim());
+      if (/(^|\n)ERROR:/.test(result)) throw new Error(result.trim());
 
-    if (confirm('Import complete. Save to EEPROM now?')) {
-      await sendChecked('SAVE');
-    }
-    await fetchInitialState();
+      if (confirm('Import complete. Save to EEPROM now?')) {
+        await sendChecked('SAVE');
+      }
+    });
+    await fetchInitialState();   // reload in RUN (reads are RUN-legal)
   } catch(e) {
     suppressOutput = false;
     appendErr('Import failed: ' + e.message);
@@ -2405,7 +2459,7 @@ document.getElementById('btnAddInput').addEventListener('click', openAddEditor);
 async function removeInput(pinStr) {
   if (!confirm('Remove input on pin ' + pinStr + '?')) return;
   try {
-    await sendChecked('CLEAR ' + pinStr);
+    await withConfigMode(() => sendChecked('CLEAR ' + pinStr));
   } catch(e) {
     appendErr('Remove failed: ' + e.message);
     return;
