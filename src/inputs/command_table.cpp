@@ -111,7 +111,7 @@ const Command COMMANDS[] = {
     {"AT", cmd_at, "Send raw AT command to a serial port", false},
 
 #if ENABLE_RELAY_OUTPUT
-    {"RELAY", cmd_relay, "Configure relay outputs", true},
+    {"RELAY", cmd_relay, "Configure relay outputs", false},  // gated per-subcommand: RUN allows STATUS/LIST/MODE MANUAL_* (#250)
 #endif
 #if ENABLE_TEST_MODE
     {"TEST", cmd_test, "Test mode control", false},
@@ -855,6 +855,29 @@ int cmd_relay(int argc, const char* const* argv) {
     }
 
     const char* subcommand = argv[2];
+
+    // RUN-mode gate (#250): STATUS/LIST are read-only and MODE MANUAL_ON/OFF is
+    // a live operator override (updateRelayOutput / setRelayMode actuate the pin
+    // immediately) — all allowed in RUN. PIN/INPUT/THRESHOLD and MODE with an
+    // AUTO_*/DISABLED target are configuration and remain CONFIG-only. (LIST is
+    // already handled above before we get here.)
+    if (isInRunMode()) {
+        bool configOnly = streq_P(subcommand, PSTR("PIN")) ||
+                          streq_P(subcommand, PSTR("INPUT")) ||
+                          streq_P(subcommand, PSTR("THRESHOLD"));
+        if (streq_P(subcommand, PSTR("MODE"))) {
+            // MODE is config-only unless it's a manual override.
+            configOnly = !(argc >= 4 && (streq_P(argv[3], PSTR("MANUAL_ON")) ||
+                                         streq_P(argv[3], PSTR("MANUAL_OFF"))));
+        }
+        if (configOnly) {
+            msg.control.print(F("ERROR: RELAY "));
+            msg.control.print(subcommand);
+            msg.control.println(F(" is config-only; enter CONFIG mode first"));
+            msg.control.println(F("  RUN allows: STATUS, LIST, MODE MANUAL_ON|MANUAL_OFF"));
+            return 1;
+        }
+    }
 
     if (streq_P(subcommand, PSTR("STATUS"))) {
         printRelayStatus(relayIndex);

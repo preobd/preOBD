@@ -278,7 +278,27 @@ bool setRelayMode(uint8_t relayIndex, RelayMode mode) {
         return false;
     }
 
-    systemConfig.relays[relayIndex].mode = mode;
+    RelayConfig* cfg = &systemConfig.relays[relayIndex];
+    cfg->mode = mode;
+
+    // Manual modes are an explicit, immediate command — drive the pin now
+    // instead of waiting for updateRelayOutput(), which only runs in RUN mode.
+    // Without this, a MANUAL_ON/OFF set in CONFIG (the only mode the RELAY CLI
+    // historically allowed) wouldn't take effect until the user entered RUN.
+    // AUTO_HIGH/AUTO_LOW/DISABLED stay rule-driven and are left to
+    // updateRelayOutput(). (#250)
+    if ((mode == RELAY_MANUAL_ON || mode == RELAY_MANUAL_OFF) && cfg->outputPin != 0xFF) {
+        const bool desiredState = (mode == RELAY_MANUAL_ON);
+        RelayRuntimeState* state = &relayStates[relayIndex];
+        if (desiredState != state->currentState) {
+            digitalWrite(cfg->outputPin, desiredState ? HIGH : LOW);
+            state->currentState = desiredState;
+            state->lastStateChange = millis();
+            state->stateChangeCount++;
+            msg.debug.info(TAG_RELAY, "Relay %d -> %s (manual)", relayIndex,
+                           desiredState ? "ON" : "OFF");
+        }
+    }
     return true;
 }
 
