@@ -400,6 +400,8 @@ void setup() {
         watchdogEnable(2000);
         msg.debug.info(TAG_SYSTEM, "Watchdog enabled (2s timeout)");
     } else {
+        // On Teensy 4.x the watchdog simply was never enabled here (vs. actively
+        // disabled) — it can't be disabled once armed. See #243.
         msg.debug.info(TAG_SYSTEM, "Watchdog disabled (CONFIG mode)");
     }
 }

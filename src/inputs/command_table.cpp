@@ -1506,7 +1506,7 @@ int cmd_at(int argc, const char* const* argv) {
     }
 
     // Drain any stale bytes before sending so we don't mix old data into the response
-    while (port->available()) port->read();
+    while (port->available()) { port->read(); watchdogReset(); }
 
     // Write the AT command raw (no CR/LF) — required by HM-10 and most BT modules
     port->print(argv[2]);
@@ -1520,6 +1520,10 @@ int cmd_at(int argc, const char* const* argv) {
     unsigned long deadline = millis() + 500;
     bool got_response = false;
     while (millis() < deadline) {
+        // A chatty peer keeps pushing `deadline` out (+100ms/byte); feed the WDT
+        // so a long response can't trip the 2s watchdog (it can't be disabled on
+        // Teensy 4.x, and AT runs in RUN mode where it's armed). See #243.
+        watchdogReset();
         while (port->available()) {
             msg.control.write((char)port->read());
             got_response = true;
