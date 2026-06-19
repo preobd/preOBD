@@ -11,6 +11,7 @@
 #include "ble_services.h"
 #include "dfu_trigger.h"
 #include "dis_handler.h"
+#include "extended_service.h"
 #include "ota_handler.h"
 #include "relay_handler.h"
 #include "tier_state.h"
@@ -61,6 +62,12 @@ void setup() {
 
     bleBridgeInit();
     bleServicesInit();
+    // Begin the Extended Service ONCE before its tenants register their
+    // characteristics; Bluefruit attaches each characteristic.begin() to
+    // the most-recently-begun service. Order-sensitive: any service.begin()
+    // call between here and the last handler init below would orphan the
+    // remaining characteristics.
+    extendedServiceInit();
     otaHandlerInit();
     alarmHandlerInit();
     relayHandlerInit();

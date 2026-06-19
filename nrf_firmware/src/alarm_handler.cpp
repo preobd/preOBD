@@ -12,23 +12,15 @@
 
 namespace {
 
-uint8_t g_zeroUuid[16] = {};
-
-BLEService        g_extService(g_zeroUuid);
 BLECharacteristic g_alarm;
 
 } // namespace
 
 void alarmHandlerInit() {
-    // BLEUuid stores a pointer, not a copy -- each service/characteristic
-    // needs its own persistent backing array. See ble_services.cpp.
-    static uint8_t kExtServiceUuid[16];
+    // The Extended Service is owned by extended_service.cpp and must have
+    // been .begin()-ed before this call so the characteristic attaches to
+    // the right parent. See main.cpp for the ordering contract.
     static uint8_t kAlarmUuid[16];
-
-    if (parseUuid128(PREOBD_EXT_SERVICE_UUID, kExtServiceUuid)) {
-        g_extService = BLEService(kExtServiceUuid);
-    }
-    g_extService.begin();
 
     if (parseUuid128(PREOBD_CHAR_ALARM_UUID, kAlarmUuid)) {
         g_alarm = BLECharacteristic(kAlarmUuid);

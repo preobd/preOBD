@@ -16,11 +16,6 @@
 
 namespace {
 
-// Seed BLEService with a valid 16-byte buffer; the real UUID is parsed in
-// otaHandlerInit() and copy-assigned.
-uint8_t g_zeroUuid[16] = {};
-
-BLEService    g_extService(g_zeroUuid);
 BLECharacteristic g_otaCtrl;
 BLECharacteristic g_otaData;
 
@@ -69,16 +64,11 @@ void otaDataWrite(uint16_t /*conn*/, BLECharacteristic* /*chr*/,
 } // namespace
 
 void otaHandlerInit() {
+    // Extended Service is owned by extended_service.cpp; see main.cpp.
     // BLEUuid stores a pointer, not a copy -- give each UUID its own
     // persistent backing buffer. See ble_services.cpp for the full story.
-    static uint8_t kExtServiceUuid[16];
     static uint8_t kOtaCtrlUuid[16];
     static uint8_t kOtaDataUuid[16];
-
-    if (parseUuid128(PREOBD_EXT_SERVICE_UUID, kExtServiceUuid)) {
-        g_extService = BLEService(kExtServiceUuid);
-    }
-    g_extService.begin();
 
     if (parseUuid128(PREOBD_CHAR_OTA_CTRL_UUID, kOtaCtrlUuid)) {
         g_otaCtrl = BLECharacteristic(kOtaCtrlUuid);

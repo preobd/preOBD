@@ -18,9 +18,6 @@
 
 namespace {
 
-uint8_t g_zeroUuid[16] = {};
-
-BLEService        g_extService(g_zeroUuid);
 BLECharacteristic g_relay;
 
 void relayWriteCallback(uint16_t /*conn*/, BLECharacteristic* /*chr*/,
@@ -35,13 +32,8 @@ void relayWriteCallback(uint16_t /*conn*/, BLECharacteristic* /*chr*/,
 } // namespace
 
 void relayHandlerInit() {
-    static uint8_t kExtServiceUuid[16];
+    // Extended Service is owned by extended_service.cpp; see main.cpp.
     static uint8_t kRelayUuid[16];
-
-    if (parseUuid128(PREOBD_EXT_SERVICE_UUID, kExtServiceUuid)) {
-        g_extService = BLEService(kExtServiceUuid);
-    }
-    g_extService.begin();
 
     if (parseUuid128(PREOBD_CHAR_RELAY_UUID, kRelayUuid)) {
         g_relay = BLECharacteristic(kRelayUuid);
