@@ -46,6 +46,25 @@ void setup() {
     uartBridgeInit();
     tierStateInit();
 
+    // Negotiate up the ATT MTU so the 32-byte PreobdSystemStatus notify fits
+    // in a single ATT packet. BLE's default ATT MTU is 23 (20-byte payload),
+    // which truncated the status struct mid-frame -- the webapp's initial
+    // GATT Read worked (Read Blob fragments across multiple packets) so the
+    // panel populated once and then never updated, because every notify
+    // arrived 20 bytes long and applySystemStatus() rejected it. Alarm (18B)
+    // and Relay (16B) notifies happened to fit in the default and were
+    // unaffected, but raising the ceiling matters for any future binary
+    // payloads (and for chunking efficiency on the CMD_RX text path).
+    // BANDWIDTH_MAX sets ATT MTU to 247 and sizes the SoftDevice's event
+    // buffers to match; Chrome auto-negotiates up on connect.
+    //
+    // MUST be called BEFORE Bluefruit.begin() -- begin() consumes the
+    // bandwidth config to allocate SoftDevice event buffers. Calling after
+    // begin() either no-ops or half-reconfigures the live GATT stack, which
+    // is what made the GATT connection drop mid-discovery on the first
+    // build attempting this fix.
+    Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
+
     Bluefruit.begin();
     Bluefruit.setName("preOBD");
     Bluefruit.setTxPower(0);                      // 0 dBm for bench bring-up
