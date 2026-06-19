@@ -364,6 +364,11 @@ void displaySerialStatus() {
             msg.control.print(F(" [ELM327]"));
         }
 #endif
+#if ENABLE_FRAMED_TRANSPORT
+        if (systemConfig.serial.framed_enabled_mask & (1u << (port_id - 1))) {
+            msg.control.print(F(" [FRAMED]"));
+        }
+#endif
 
         msg.control.print(F(" (RX="));
         msg.control.print(getDefaultSerialRX(port_id));

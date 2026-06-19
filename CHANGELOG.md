@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SYSTEM DIAG INPUTS` now classifies each input's electrical state from a raw, un-clamped read (OPEN / SHORTED / OUT OF RANGE / NEAR LIMIT / IN RANGE), with `SYSTEM DIAG INPUTS VERBOSE` showing the raw ADC → resistance → value evidence chain — distinguishing a disconnected sensor from a believable value the display path would otherwise clamp (#238)
 
 ### Changed
+- `BUS SERIAL` list view now tags framed-mode ports with `[FRAMED]` (mirroring the existing `[ELM327]` tag), so the multi-port summary matches the per-port detail view
 - Renamed `MEASURE_LEVEL` measurement type to `MEASURE_PERCENT` to reflect its actual usage covering normalized 0–100% values (TPS, fuel level, engine load, accelerator pedal) rather than fluid levels (#209)
 
 ### Fixed
