@@ -73,3 +73,6 @@ CLAUDE.md
 
 # nRF firmware: auto-generated GATT defs (synced from src/lib/ble_gatt_defs.h)
 nrf_firmware/include/ble_gatt_defs.h
+
+# Bench-specific PlatformIO overrides (see platformio_local.ini.example)
+platformio_local.ini

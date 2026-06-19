@@ -1,0 +1,24 @@
+; platformio_local.ini -- bench-specific overrides (gitignored).
+;
+; Copy this file to `platformio_local.ini` (without the `.example` suffix)
+; and uncomment / edit the values that match your bench wiring.
+;
+; Sections defined here override the [bench_local] defaults in
+; platformio.ini via PlatformIO's `extra_configs` mechanism. Build flags
+; that interpolate `${bench_local.*}` will pick up these values.
+
+[bench_local]
+; ----------------------------------------------------------------------------
+; Phase 3 software-paced flow control between Teensy and nRF52840.
+;
+; Wire the Teensy's HOST_NRF_CTS_PIN to the nRF's PIN_NRF_RTS_OUT, and the
+; Teensy's HOST_NRF_RTS_PIN to the nRF's PIN_NRF_CTS_IN. Both pins must be
+; defined together or neither -- a missing pin yields a no-op build with no
+; flow control. Pin numbers are Teensy digital pin indices.
+;
+; Typical Teensy 4.0 + ItsyBitsy nRF52840 bench:
+;   host_flow_control =
+;       -D HOST_NRF_CTS_PIN=3
+;       -D HOST_NRF_RTS_PIN=2
+; ----------------------------------------------------------------------------
+host_flow_control =

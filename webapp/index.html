@@ -7,6 +7,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1E351E">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="preOBD">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -275,6 +276,189 @@
     line-height: 1.2;
   }
 
+  /* ── Footer / build stamp ─────────────────────────────────── */
+  .app-footer {
+    padding: 10px 16px 18px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.05em;
+  }
+
+  /* ── Mode badge (header) ──────────────────────────────────── */
+  .mode-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-left: 8px;
+  }
+  .mode-badge.mode-live {
+    background: rgba(61,107,61,0.22);
+    color: #B8DCB8;
+    border: 1px solid rgba(92,201,92,0.5);
+  }
+  .mode-badge.mode-awaiting {
+    background: rgba(184,134,11,0.20);
+    color: #E8C880;
+    border: 1px solid rgba(184,134,11,0.5);
+  }
+  .mode-badge.mode-basic {
+    background: rgba(176,160,144,0.15);
+    color: var(--dim-light);
+    border: 1px solid rgba(176,160,144,0.3);
+  }
+
+  /* ── Alarm panel ──────────────────────────────────────────── */
+  @keyframes alarmFlash {
+    0%, 100% { background: rgba(160,48,48,0.06); }
+    50%      { background: rgba(160,48,48,0.14); }
+  }
+  @keyframes blinkDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .firing-banner {
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1.5px solid var(--red);
+    margin-bottom: 12px;
+    animation: alarmFlash 1.6s ease-in-out infinite;
+  }
+  .firing-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 4px 0;
+  }
+  .firing-row + .firing-row {
+    border-top: 1px solid rgba(160,48,48,0.2);
+    padding-top: 10px;
+    margin-top: 6px;
+  }
+  .firing-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--red);
+    box-shadow: 0 0 0 4px rgba(160,48,48,0.18);
+    animation: blinkDot 0.9s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  .firing-text { flex: 1; font-size: 13px; color: var(--red); font-weight: 500; }
+  .firing-text .meta {
+    display: block; font-size: 11px; opacity: 0.7; margin-top: 2px; font-weight: 400;
+  }
+
+  .alarm-log {
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .alarm-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    font-size: 12.5px;
+  }
+  .alarm-row + .alarm-row { border-top: 1px solid var(--border-light); }
+  .alarm-row .tone-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .alarm-row .msg { flex: 1; color: var(--text); line-height: 1.3; }
+  .alarm-row .ts {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .tone-bad  .tone-dot { background: var(--red); }
+  .tone-warn .tone-dot { background: var(--yellow); }
+  .tone-ok   .tone-dot { background: var(--green); }
+
+  .empty-row {
+    padding: 16px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--dim);
+    font-style: italic;
+  }
+
+  /* ── Relay panel ──────────────────────────────────────────── */
+  .relay-list { display: flex; flex-direction: column; gap: 10px; }
+  .relay-card {
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: var(--surface);
+    padding: 12px 14px;
+  }
+  .relay-head {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 10px;
+  }
+  .relay-title {
+    font-size: 13.5px; font-weight: 600; color: var(--text);
+  }
+  .relay-context {
+    flex: 1; font-size: 11px; color: var(--dim); margin-left: 4px;
+  }
+  .relay-pill {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    padding: 3px 9px;
+    border-radius: 10px;
+  }
+  .relay-pill.on  { background: rgba(61,107,61,0.15); color: var(--green); border: 1px solid rgba(61,107,61,0.35); }
+  .relay-pill.off { background: rgba(138,122,102,0.10); color: var(--dim); border: 1px solid rgba(138,122,102,0.25); }
+
+  .relay-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 8px;
+    align-items: end;
+  }
+  .relay-controls label {
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--dim);
+    margin-bottom: 3px;
+  }
+  .relay-controls select, .relay-controls input {
+    width: 100%;
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface-raised);
+    color: var(--text);
+  }
+  .relay-controls input:disabled, .relay-controls select:disabled {
+    opacity: 0.5; cursor: not-allowed;
+  }
+  .relay-apply {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 7px 14px;
+    border-radius: 4px;
+    border: 1px solid var(--brand);
+    background: var(--brand);
+    color: var(--surface);
+    cursor: pointer;
+    letter-spacing: 0.06em;
+  }
+  .relay-apply:disabled {
+    background: var(--surface-raised); color: var(--dim);
+    border-color: var(--border); cursor: not-allowed;
+  }
+  .relay-apply.dirty {
+    background: var(--yellow); border-color: var(--yellow); color: #fff;
+  }
+
   /* ── Quick Actions ────────────────────────────────────────── */
   .quick-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 
@@ -295,6 +479,8 @@
   #terminal { flex: 1; min-height: 300px; }
   #terminal.collapsed { min-height: 0; flex: none; }
   #terminal.collapsed .panel-body { display: none; }
+  .panel.collapsed .panel-body { display: none; }
+  .panel.collapsed .panel-header { border-bottom: 0; }
   .panel-collapse-btn {
     background: none;
     border: none;
@@ -542,6 +728,7 @@
     <div class="connection-badge">
       <span class="status-dot" id="statusDot"></span>
       <span class="status-text" id="statusText">Disconnected</span>
+      <span class="mode-badge" id="modeBadge" style="display:none"></span>
     </div>
   </div>
   <div class="header-actions">
@@ -559,13 +746,26 @@
     </div>
     <div class="panel-body" style="padding:12px">
       <div class="status-grid">
-        <div class="status-item"><label>Firmware</label><span id="valFirmware">--</span></div>
+        <div class="status-item"><label>Host FW</label><span id="valFirmware">--</span></div>
+        <div class="status-item"><label>nRF FW</label><span id="valNrfFw">--</span></div>
         <div class="status-item"><label>Mode</label><span id="valMode">--</span></div>
         <div class="status-item"><label>Inputs</label><span id="valInputs">--</span></div>
         <div class="status-item"><label>Relays</label><span id="valRelays">--</span></div>
         <div class="status-item"><label>Uptime</label><span id="valUptime">--</span></div>
         <div class="status-item"><label>Device</label><span id="valDevice">--</span></div>
       </div>
+    </div>
+  </div>
+
+  <!-- Alarms (framed mode only) -->
+  <div class="panel" id="alarmPanel" style="display:none">
+    <div class="panel-header" style="cursor:pointer" id="alarmPanelHeader">
+      <span class="panel-title">Alarms</span>
+      <button class="panel-collapse-btn" id="btnAlarmToggle" title="Collapse alarms">▲</button>
+    </div>
+    <div class="panel-body" style="padding:12px">
+      <div id="firingBanner" style="display:none"></div>
+      <div id="alarmLog"></div>
     </div>
   </div>
 
@@ -598,6 +798,17 @@
       <button class="btn secondary" id="btnExportJSON">Export JSON</button>
       <label class="btn secondary" for="importFile">Import JSON</label>
       <input type="file" id="importFile" accept=".json" style="display:none">
+    </div>
+  </div>
+
+  <!-- Relays (framed mode only) -->
+  <div class="panel" id="relayPanel" style="display:none">
+    <div class="panel-header" style="cursor:pointer" id="relayPanelHeader">
+      <span class="panel-title">Relays</span>
+      <button class="panel-collapse-btn" id="btnRelayToggle" title="Collapse relays">▲</button>
+    </div>
+    <div class="panel-body" style="padding:12px">
+      <div id="relayList" class="relay-list"></div>
     </div>
   </div>
 
@@ -638,14 +849,35 @@
     </div>
   </div>
 
+  <footer class="app-footer">
+    <span id="webappBuild">build: --</span>
+  </footer>
+
 </main>
 
 <script>
+// Stamp the build footer with the file's last-modified timestamp. The
+// browser sets document.lastModified to the HTTP Last-Modified header (or
+// the OS file mtime for file:// loads), so this is "when this index.html
+// was last written" -- accurate enough to tell whether you're looking at
+// the latest commit's webapp. A proper git-SHA injection is tracked as a
+// follow-up; see the linked issue.
+(function stampBuildFooter() {
+  const el = document.getElementById('webappBuild');
+  if (!el) return;
+  const lm = document.lastModified || '';
+  el.textContent = lm ? ('build: ' + lm) : 'build: --';
+  el.title = 'document.lastModified — proper git SHA injection is a planned follow-up';
+})();
+
 // preOBD BLE GATT UUIDs (from ble_gatt_defs.h)
 const PREOBD_SERVICE     = '4f424400-7072-654f-4244-000000000001';
 const PREOBD_CMD_TX      = '4f424400-7072-654f-4244-000000000010';
 const PREOBD_CMD_RX      = '4f424400-7072-654f-4244-000000000011';
 const PREOBD_STATUS      = '4f424400-7072-654f-4244-000000000020';
+const PREOBD_EXT_SERVICE = '4f424400-7072-654f-4244-000000000002';
+const PREOBD_CHAR_ALARM  = '4f424400-7072-654f-4244-000000000030';
+const PREOBD_CHAR_RELAY  = '4f424400-7072-654f-4244-000000000031';
 const NUS_SERVICE        = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 const NUS_RX             = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
 const NUS_TX             = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
@@ -653,6 +885,12 @@ const NUS_TX             = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 const HM10_SERVICE       = '0000ffe0-0000-1000-8000-00805f9b34fb';
 const HM10_CHAR          = '0000ffe1-0000-1000-8000-00805f9b34fb';
 const DIS_SERVICE        = 0x180A;
+
+// Severity / kind constants mirror ble_gatt_defs.h
+const SEV_NORMAL = 0, SEV_WARNING = 1, SEV_ALARM = 2;
+const KIND_CLEAR = 0, KIND_HIGH = 1, KIND_LOW = 2;
+const RELAY_MODE_DISABLED = 0, RELAY_MODE_AUTO_HIGH = 1, RELAY_MODE_AUTO_LOW = 2;
+const RELAY_MODE_MANUAL_ON = 3, RELAY_MODE_MANUAL_OFF = 4;
 
 const PROMPT = 'preOBD> ';
 const ENCODER = new TextEncoder();
@@ -665,8 +903,20 @@ let mode = null;       // 'preobd', 'nus', or 'hm10'
 let txChar = null;     // characteristic to write commands to
 let rxChar = null;     // characteristic that notifies responses
 let statusChar = null; // system status characteristic (preobd mode only)
+let alarmChar = null;  // alarm notify characteristic (enhanced mode only)
+let relayChar = null;  // relay control read/write/notify (enhanced mode only)
+let framedMode = false; // true when Extended Service is present
+let lastStatusNotifyMs = 0; // ms timestamp of most recent Status notify; 0 = none
+const LIVE_FRESHNESS_MS = 15000; // status notify within this window → Live badge
 let cmdHistory = [];
 let historyIdx = -1;
+
+// Alarm + relay UI state (populated by notifications)
+const alarmLog = [];           // newest-first, capped at MAX_ALARM_LOG
+const MAX_ALARM_LOG = 50;
+const firingState = new Map(); // inputIndex -> { severity, kind, value, threshold, since }
+const relayState  = new Map(); // relayIndex -> last-seen PreobdRelayState fields
+const relayEditDirty = new Set(); // relayIndex set of rows with unsaved edits
 
 // Command queue
 let cmdQueue = [];
@@ -717,7 +967,7 @@ async function connect() {
         { services: [NUS_SERVICE] },
         { services: [HM10_SERVICE] }
       ],
-      optionalServices: [PREOBD_SERVICE, NUS_SERVICE, HM10_SERVICE, DIS_SERVICE]
+      optionalServices: [PREOBD_SERVICE, PREOBD_EXT_SERVICE, NUS_SERVICE, HM10_SERVICE, DIS_SERVICE]
     });
 
     device.addEventListener('gattserverdisconnected', onDisconnected);
@@ -732,7 +982,20 @@ async function connect() {
       rxChar = await svc.getCharacteristic(PREOBD_CMD_RX);
       try { statusChar = await svc.getCharacteristic(PREOBD_STATUS); } catch(e) { statusChar = null; }
       mode = 'preobd';
-      appendInfo('Connected (preOBD GATT mode)');
+
+      // Extended Service (framed mode only). Optional — its absence is
+      // expected on HM-10, stock Bluefruit, and framed-disabled nRF setups.
+      try {
+        const ext = await server.getPrimaryService(PREOBD_EXT_SERVICE);
+        try { alarmChar = await ext.getCharacteristic(PREOBD_CHAR_ALARM); } catch(e) { alarmChar = null; }
+        try { relayChar = await ext.getCharacteristic(PREOBD_CHAR_RELAY); } catch(e) { relayChar = null; }
+        framedMode = !!(alarmChar || relayChar);
+      } catch(e) {
+        framedMode = false;
+      }
+
+      appendInfo(framedMode ? 'Connected (preOBD, enhanced features available)'
+                            : 'Connected (preOBD, basic mode)');
     } catch (e) {
       // Fall back to NUS
       try {
@@ -759,13 +1022,56 @@ async function connect() {
     rxChar.addEventListener('characteristicvaluechanged', onRxData);
 
     setConnected(true);
+    updateFramedBadge();
 
-    // Read system status if available
+    // Read the standard Device Information Service (0x180A) if exposed.
+    // The nRF firmware registers this so clients can verify which build
+    // is flashed; absence is fine (HM-10 / older nRF firmware don't have it).
+    try {
+      const dis = await server.getPrimaryService(DIS_SERVICE);
+      const fwChar = await dis.getCharacteristic(0x2A26); // Firmware Revision
+      const val = await fwChar.readValue();
+      document.getElementById('valNrfFw').textContent = DECODER.decode(val) || '--';
+    } catch (e) {
+      document.getElementById('valNrfFw').textContent = '--';
+    }
+
+    // Read system status if available; subscribe to push updates in framed mode.
     if (statusChar) {
-      readSystemStatus();
+      try {
+        const initial = await statusChar.readValue();
+        applySystemStatus(initial);
+      } catch(e) { /* fall back to notify-driven population */ }
+      if (framedMode) {
+        try {
+          await statusChar.startNotifications();
+          statusChar.addEventListener('characteristicvaluechanged', onStatusNotify);
+        } catch(e) { appendErr('Failed to subscribe to Status notifications: ' + e.message); }
+      }
     } else {
       statusPanel.classList.add('hidden');
     }
+
+    // Subscribe to Alarm + Relay notifications + seed the relay panel.
+    if (alarmChar) {
+      try {
+        await alarmChar.startNotifications();
+        alarmChar.addEventListener('characteristicvaluechanged', onAlarmNotify);
+      } catch(e) { appendErr('Failed to subscribe to Alarm notifications: ' + e.message); }
+    }
+    if (relayChar) {
+      try {
+        await relayChar.startNotifications();
+        relayChar.addEventListener('characteristicvaluechanged', onRelayNotify);
+        // Initial read so the panel populates before any state changes.
+        try {
+          const r = await relayChar.readValue();
+          applyRelayState(r);
+        } catch(e) { /* notify will populate eventually */ }
+      } catch(e) { appendErr('Failed to subscribe to Relay notifications: ' + e.message); }
+    }
+    renderAlarmPanel();
+    renderRelayPanel();
 
     fetchInitialState();
 
@@ -788,6 +1094,18 @@ function onDisconnected() {
   txChar = null;
   rxChar = null;
   statusChar = null;
+  alarmChar = null;
+  relayChar = null;
+  framedMode = false;
+  lastStatusNotifyMs = 0;
+  document.getElementById('valNrfFw').textContent = '--';
+  updateFramedBadge();
+  alarmLog.length = 0;
+  firingState.clear();
+  relayState.clear();
+  relayEditDirty.clear();
+  renderAlarmPanel();
+  renderRelayPanel();
   mode = null;
   // Reject any in-flight or queued commands so awaiting frames throw
   if (pendingReject) {
@@ -903,41 +1221,465 @@ function handleInputKey(e) {
 
 // --- System Status ---
 
-async function readSystemStatus() {
-  if (!statusChar) return;
-  try {
-    const val = await statusChar.readValue();
-    if (val.byteLength < 32) return;
+function applySystemStatus(val) {
+  if (!val || val.byteLength < 32) return false;
 
-    const magic = val.getUint32(0, true);
-    if (magic !== 0x704F4244) return;  // "pOBD"
+  const magic = val.getUint32(0, true);
+  if (magic !== 0x704F4244) return false;  // "pOBD"
 
-    const sysMode = val.getUint8(5);
-    const inputs = val.getUint8(6);
-    const relays = val.getUint8(7);
-    const uptime = val.getUint32(8, true);
-    const major = val.getUint8(12);
-    const minor = val.getUint8(13);
-    const patch = val.getUint8(14);
+  const sysMode = val.getUint8(5);
+  const inputs = val.getUint8(6);
+  const relays = val.getUint8(7);
+  const uptime = val.getUint32(8, true);
+  const major = val.getUint8(12);
+  const minor = val.getUint8(13);
+  const patch = val.getUint8(14);
 
-    // Device name: bytes 16-31, null-terminated
-    const nameBytes = new Uint8Array(val.buffer, val.byteOffset + 16, 16);
-    const nullIdx = nameBytes.indexOf(0);
-    const name = DECODER.decode(nameBytes.slice(0, nullIdx === -1 ? 16 : nullIdx));
+  // Device name: bytes 16-31, null-terminated
+  const nameBytes = new Uint8Array(val.buffer, val.byteOffset + 16, 16);
+  const nullIdx = nameBytes.indexOf(0);
+  const name = DECODER.decode(nameBytes.slice(0, nullIdx === -1 ? 16 : nullIdx));
 
-    document.getElementById('valFirmware').textContent = major + '.' + minor + '.' + patch;
-    document.getElementById('valMode').textContent = sysMode === 0 ? 'CONFIG' : 'RUN';
-    document.getElementById('valMode').style.color = sysMode === 0 ? 'var(--yellow)' : 'var(--brand)';
-    document.getElementById('valInputs').textContent = inputs;
-    document.getElementById('valRelays').textContent = relays;
-    document.getElementById('valUptime').textContent = formatUptime(uptime);
-    document.getElementById('valDevice').textContent = name || '--';
+  document.getElementById('valFirmware').textContent = major + '.' + minor + '.' + patch;
+  document.getElementById('valMode').textContent = sysMode === 0 ? 'CONFIG' : 'RUN';
+  document.getElementById('valMode').style.color = sysMode === 0 ? 'var(--yellow)' : 'var(--brand)';
+  document.getElementById('valInputs').textContent = inputs;
+  document.getElementById('valRelays').textContent = relays;
+  document.getElementById('valUptime').textContent = formatUptime(uptime);
+  document.getElementById('valDevice').textContent = name || '--';
 
-    statusPanel.classList.remove('hidden');
-  } catch (e) {
-    statusPanel.classList.add('hidden');
+  statusPanel.classList.remove('hidden');
+  return true;
+}
+
+function onStatusNotify(event) {
+  if (applySystemStatus(event.target.value)) {
+    lastStatusNotifyMs = Date.now();
+    updateFramedBadge();
   }
 }
+
+// --- Alarms ---
+
+function onAlarmNotify(event) {
+  const v = event.target.value;
+  if (!v || v.byteLength < 18) return;
+
+  const inputIndex = v.getUint8(1);
+  const severity   = v.getUint8(2);
+  const kind       = v.getUint8(3);
+  const sequence   = v.getUint16(4, true);
+  const value      = v.getFloat32(6, true);
+  const threshold  = v.getFloat32(10, true);
+  // timestampMs at offset 14 is device-side millis(); we use client-side
+  // wall-clock for relative-time rendering so it stays correct after page
+  // refresh / reconnect.
+  const now = Date.now();
+
+  // Maintain the firing-state cache. CLEAR transitions remove the entry.
+  if (severity === SEV_NORMAL && kind === KIND_CLEAR) {
+    firingState.delete(inputIndex);
+  } else {
+    const prior = firingState.get(inputIndex);
+    firingState.set(inputIndex, {
+      severity, kind, value, threshold,
+      since: (prior && prior.severity === severity && prior.kind === kind)
+                ? prior.since : now,
+    });
+  }
+
+  // Push to the log (newest first).
+  alarmLog.unshift({ inputIndex, severity, kind, value, threshold, sequence, at: now });
+  if (alarmLog.length > MAX_ALARM_LOG) alarmLog.length = MAX_ALARM_LOG;
+
+  renderAlarmPanel();
+}
+
+function inputLabel(idx) {
+  // Cross-reference against the catalog if it's been fetched. Falls back to
+  // a raw "#N" label so the UI still works during the first few seconds
+  // after connect, before SYSTEM DUMP JSON completes.
+  const inps = (localConfig && localConfig.inputs) || [];
+  const inp = inps[idx];
+  if (!inp) return '#' + idx;
+  const abbr = (inp.abbr || inp.abbrName || '').trim();
+  const name = (inp.name || inp.displayName || '').trim();
+  if (abbr && name) return abbr + ' (' + name + ')';
+  return abbr || name || '#' + idx;
+}
+
+function formatRelativeTime(ms) {
+  const secs = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (secs < 5)    return 'now';
+  if (secs < 60)   return secs + 's ago';
+  if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+  if (secs < 86400) {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    return h + 'h ' + (m ? m + 'm' : '') + ' ago';
+  }
+  return Math.floor(secs / 86400) + 'd ago';
+}
+
+function formatFiringDuration(ms) {
+  const secs = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (secs < 60) return secs + 's';
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  if (m < 60) return m + 'm ' + s + 's';
+  const h = Math.floor(m / 60);
+  return h + 'h ' + (m % 60) + 'm';
+}
+
+function severityTone(severity, kind) {
+  if (kind === KIND_CLEAR) return 'ok';
+  if (severity === SEV_ALARM)   return 'bad';
+  if (severity === SEV_WARNING) return 'warn';
+  return 'ok';
+}
+
+function alarmMessage(ev) {
+  const label = inputLabel(ev.inputIndex);
+  const val = Number.isFinite(ev.value) ? ev.value.toFixed(1) : '--';
+  if (ev.kind === KIND_CLEAR) return label + ' · cleared (' + val + ')';
+  const thr = Number.isFinite(ev.threshold) ? ev.threshold.toFixed(1) : '--';
+  const verb = ev.severity === SEV_WARNING ? 'approaching' : 'exceeded';
+  const dir  = ev.kind === KIND_LOW ? 'below' : '';
+  return label + ' · ' + val + ' ' + (dir ? dir + ' ' : '') + verb + ' ' + thr;
+}
+
+function renderAlarmPanel() {
+  const panel = document.getElementById('alarmPanel');
+  if (!panel) return;
+  // The panel stays visible whenever the device exposes the enhanced
+  // feature set, even if the alarm characteristic specifically failed to
+  // subscribe or no events have arrived yet. The empty state reads better
+  // than a vanishing panel and gives the user a hook to diagnose.
+  if (!framedMode) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = '';
+
+  const banner = document.getElementById('firingBanner');
+  if (firingState.size === 0) {
+    banner.style.display = 'none';
+    banner.innerHTML = '';
+  } else {
+    banner.style.display = '';
+    banner.className = 'firing-banner';
+    let html = '';
+    for (const [idx, st] of firingState) {
+      const label = inputLabel(idx);
+      const val = Number.isFinite(st.value) ? st.value.toFixed(1) : '--';
+      const thr = Number.isFinite(st.threshold) ? st.threshold.toFixed(1) : '--';
+      const verb = st.kind === KIND_LOW ? 'below' : 'exceeded';
+      html += '<div class="firing-row"><span class="firing-dot"></span>' +
+              '<div class="firing-text">' +
+              escHtml(label) + ' · ' + escHtml(val) + ' ' + verb + ' ' + escHtml(thr) +
+              '<span class="meta">Firing for ' + escHtml(formatFiringDuration(st.since)) + '</span>' +
+              '</div></div>';
+    }
+    banner.innerHTML = html;
+  }
+
+  const log = document.getElementById('alarmLog');
+  if (!alarmChar) {
+    log.innerHTML = '<div class="alarm-log"><div class="empty-row">' +
+                    'Alarm channel not available on this device.</div></div>';
+    return;
+  }
+  if (alarmLog.length === 0) {
+    log.innerHTML = '<div class="alarm-log"><div class="empty-row">No alarm events yet.</div></div>';
+    return;
+  }
+  let html = '<div class="alarm-log">';
+  for (const ev of alarmLog) {
+    const tone = severityTone(ev.severity, ev.kind);
+    html += '<div class="alarm-row tone-' + tone + '">' +
+            '<span class="tone-dot"></span>' +
+            '<div class="msg">' + escHtml(alarmMessage(ev)) + '</div>' +
+            '<div class="ts">' + escHtml(formatRelativeTime(ev.at)) + '</div>' +
+            '</div>';
+  }
+  html += '</div>';
+  log.innerHTML = html;
+}
+
+// Periodically re-render so relative timestamps + firing durations tick.
+setInterval(() => {
+  if (alarmChar && (alarmLog.length || firingState.size)) renderAlarmPanel();
+}, 1000);
+
+// --- Relays ---
+
+function applyRelayState(val) {
+  if (!val || val.byteLength < 16) return;
+  const relayIndex   = val.getUint8(1);
+  const mode         = val.getUint8(2);
+  const state        = val.getUint8(3);
+  const inputIndex   = val.getUint8(4);
+  const outputPin    = val.getUint8(5);
+  const sequence     = val.getUint16(6, true);
+  const thresholdOn  = val.getFloat32(8, true);
+  const thresholdOff = val.getFloat32(12, true);
+
+  // Skip unconfigured/disabled slots. The broadcaster walks all MAX_RELAYS
+  // positions so we filter here rather than there. `outputPin === 0xFF` is
+  // the EEPROM "unassigned" sentinel; on fresh boards it may instead be 0,
+  // so we also hide rows whose mode is DISABLED — those are no-ops on the
+  // host's relay loop either way.
+  const unconfigured = (outputPin === 0xFF) || (mode === RELAY_MODE_DISABLED);
+  if (unconfigured) {
+    relayState.delete(relayIndex);
+  } else {
+    relayState.set(relayIndex, { mode, state, inputIndex, outputPin, thresholdOn, thresholdOff });
+  }
+  renderRelayPanel();
+}
+
+function onRelayNotify(event) {
+  applyRelayState(event.target.value);
+}
+
+function modeLabel(m) {
+  switch (m) {
+    case RELAY_MODE_DISABLED:   return 'DISABLED';
+    case RELAY_MODE_AUTO_HIGH:  return 'AUTO_HIGH';
+    case RELAY_MODE_AUTO_LOW:   return 'AUTO_LOW';
+    case RELAY_MODE_MANUAL_ON:  return 'MANUAL_ON';
+    case RELAY_MODE_MANUAL_OFF: return 'MANUAL_OFF';
+    default: return 'MODE_' + m;
+  }
+}
+
+function renderRelayPanel() {
+  const panel = document.getElementById('relayPanel');
+  if (!panel) return;
+  // Stay visible whenever the device exposes the enhanced feature set.
+  // Relays are a standard feature; render an empty state when none are
+  // configured rather than hiding the panel.
+  if (!framedMode) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = '';
+  const list = document.getElementById('relayList');
+
+  if (!relayChar) {
+    list.innerHTML = '<div class="empty-row">Relay channel not available on this device.</div>';
+    return;
+  }
+  if (relayState.size === 0) {
+    list.innerHTML = '<div class="empty-row">No relays configured. ' +
+                     'Use the <code>RELAY</code> CLI command to assign a pin.</div>';
+    return;
+  }
+
+  // Snapshot in-progress user edits BEFORE we blow away the DOM. Any row
+  // that is either dirty (Apply pending) or currently focused must have its
+  // control values + focus restored after the re-render, otherwise an
+  // inbound confirmation notify would clobber a second edit the user
+  // started before the round-trip completed.
+  const liveEdits = new Map();
+  for (const card of list.querySelectorAll('.relay-card')) {
+    const idx = parseInt(card.dataset.relay, 10);
+    const focusedEl = card.contains(document.activeElement) ? document.activeElement : null;
+    if (!relayEditDirty.has(idx) && !focusedEl) continue;
+    const modeSel = card.querySelector('.relay-mode');
+    const onIn    = card.querySelector('.relay-thr-on');
+    const offIn   = card.querySelector('.relay-thr-off');
+    liveEdits.set(idx, {
+      mode: modeSel ? modeSel.value : null,
+      thrOn: onIn ? onIn.value : null,
+      thrOff: offIn ? offIn.value : null,
+      focusClass: focusedEl
+          ? (focusedEl.classList.contains('relay-mode')   ? 'relay-mode'
+            : focusedEl.classList.contains('relay-thr-on')  ? 'relay-thr-on'
+            : focusedEl.classList.contains('relay-thr-off') ? 'relay-thr-off'
+            : null)
+          : null,
+      caret: (focusedEl && typeof focusedEl.selectionStart === 'number')
+          ? [focusedEl.selectionStart, focusedEl.selectionEnd] : null,
+    });
+    // Focused-without-dirty (user is mid-edit but hasn't tripped an
+    // input event yet) still counts as in-progress; mark dirty so the
+    // Apply button rebuilds in the enabled state.
+    if (focusedEl) relayEditDirty.add(idx);
+  }
+
+  // Sort by relay index for stable ordering.
+  const entries = [...relayState.entries()].sort((a, b) => a[0] - b[0]);
+  let html = '';
+  for (const [idx, r] of entries) {
+    const onState = r.state === 1;
+    const isAuto = r.mode === RELAY_MODE_AUTO_HIGH || r.mode === RELAY_MODE_AUTO_LOW;
+    const dirty = relayEditDirty.has(idx);
+    const ctx = (r.inputIndex !== 0xFF)
+        ? 'bound to ' + escHtml(inputLabel(r.inputIndex))
+        : 'unbound · pin ' + r.outputPin;
+    html +=
+      '<div class="relay-card" data-relay="' + idx + '">' +
+        '<div class="relay-head">' +
+          '<span class="relay-title">Relay ' + idx + '</span>' +
+          '<span class="relay-context">' + ctx + '</span>' +
+          '<span class="relay-pill ' + (onState ? 'on' : 'off') + '">' +
+            (onState ? '● ON' : '○ OFF') +
+          '</span>' +
+        '</div>' +
+        '<div class="relay-controls">' +
+          '<div>' +
+            '<label>Mode</label>' +
+            '<select class="relay-mode">' +
+              [0,1,2,3,4].map(m =>
+                '<option value="' + m + '"' + (m === r.mode ? ' selected' : '') + '>' +
+                modeLabel(m) + '</option>'
+              ).join('') +
+            '</select>' +
+          '</div>' +
+          '<div>' +
+            '<label>Threshold ON</label>' +
+            '<input type="number" step="0.1" class="relay-thr-on" ' +
+              'value="' + (Number.isFinite(r.thresholdOn) ? r.thresholdOn : 0) + '" ' +
+              (isAuto ? '' : 'disabled') + '>' +
+          '</div>' +
+          '<div>' +
+            '<label>Threshold OFF</label>' +
+            '<input type="number" step="0.1" class="relay-thr-off" ' +
+              'value="' + (Number.isFinite(r.thresholdOff) ? r.thresholdOff : 0) + '" ' +
+              (isAuto ? '' : 'disabled') + '>' +
+          '</div>' +
+          '<button class="relay-apply' + (dirty ? ' dirty' : '') + '"' +
+            (dirty ? '' : ' disabled') + '>Apply</button>' +
+        '</div>' +
+      '</div>';
+  }
+  list.innerHTML = html;
+
+  // Restore in-progress edits + focus + caret position before wiring events.
+  for (const [idx, ed] of liveEdits) {
+    const card = list.querySelector('.relay-card[data-relay="' + idx + '"]');
+    if (!card) continue;
+    const modeSel = card.querySelector('.relay-mode');
+    const onIn    = card.querySelector('.relay-thr-on');
+    const offIn   = card.querySelector('.relay-thr-off');
+    if (modeSel && ed.mode !== null)  modeSel.value = ed.mode;
+    if (onIn    && ed.thrOn !== null) onIn.value    = ed.thrOn;
+    if (offIn   && ed.thrOff !== null) offIn.value  = ed.thrOff;
+    // Thresholds follow current mode, not the inbound notify's mode.
+    const newIsAuto = modeSel && (
+        parseInt(modeSel.value, 10) === RELAY_MODE_AUTO_HIGH ||
+        parseInt(modeSel.value, 10) === RELAY_MODE_AUTO_LOW);
+    if (onIn)  onIn.disabled  = !newIsAuto;
+    if (offIn) offIn.disabled = !newIsAuto;
+    const apply = card.querySelector('.relay-apply');
+    if (apply) {
+      apply.classList.add('dirty');
+      apply.disabled = false;
+    }
+    if (ed.focusClass) {
+      const target = card.querySelector('.' + ed.focusClass);
+      if (target) {
+        target.focus();
+        if (ed.caret && typeof target.setSelectionRange === 'function') {
+          try { target.setSelectionRange(ed.caret[0], ed.caret[1]); } catch (e) {}
+        }
+      }
+    }
+  }
+
+  // Wire per-row events. Doing it after insertion keeps the template literal
+  // free of inline handlers (easier to escape correctly).
+  for (const card of list.querySelectorAll('.relay-card')) {
+    const idx = parseInt(card.dataset.relay, 10);
+    const modeSel = card.querySelector('.relay-mode');
+    const onIn    = card.querySelector('.relay-thr-on');
+    const offIn   = card.querySelector('.relay-thr-off');
+    const apply   = card.querySelector('.relay-apply');
+    const markDirty = () => {
+      relayEditDirty.add(idx);
+      apply.classList.add('dirty');
+      apply.disabled = false;
+      // Toggle threshold enable state based on the new mode selection.
+      const newIsAuto = parseInt(modeSel.value, 10) === RELAY_MODE_AUTO_HIGH ||
+                        parseInt(modeSel.value, 10) === RELAY_MODE_AUTO_LOW;
+      onIn.disabled = !newIsAuto;
+      offIn.disabled = !newIsAuto;
+    };
+    modeSel.addEventListener('change', markDirty);
+    onIn.addEventListener('input', markDirty);
+    offIn.addEventListener('input', markDirty);
+    apply.addEventListener('click', async () => {
+      apply.disabled = true;
+      try {
+        const buf = new ArrayBuffer(16);
+        const dv = new DataView(buf);
+        dv.setUint8(0, 1);                              // protocolVersion
+        dv.setUint8(1, idx);                            // relayIndex
+        dv.setUint8(2, parseInt(modeSel.value, 10));    // mode
+        dv.setUint8(3, 0);                              // state (read-only)
+        dv.setUint8(4, 0xFF);                           // inputIndex (read-only via this path)
+        dv.setUint8(5, 0xFF);                           // outputPin (read-only)
+        dv.setUint16(6, 0, true);                       // sequence
+        dv.setFloat32(8, parseFloat(onIn.value) || 0, true);
+        dv.setFloat32(12, parseFloat(offIn.value) || 0, true);
+        await relayChar.writeValueWithResponse(buf);
+        relayEditDirty.delete(idx);
+        apply.classList.remove('dirty');
+        // Wait for the confirmation notify to redraw with the truth.
+      } catch (e) {
+        appendErr('Relay write failed: ' + e.message);
+        apply.disabled = false;
+      }
+    });
+  }
+}
+
+// Three-state badge:
+//   "Live"     — Extended Service present AND a Status notify arrived
+//                within LIVE_FRESHNESS_MS. Link is actually pushing data.
+//   "Awaiting…" — Extended Service present but no recent status notify.
+//                Most common cause: nRF advertises the binary chars but
+//                host MCU is still in basic mode (no FRAMED ENABLE).
+//   "Basic"    — No Extended Service (HM-10 / stock Bluefruit /
+//                framed-disabled nRF). Text CLI only.
+function updateFramedBadge() {
+  const badge = document.getElementById('modeBadge');
+  if (!badge) return;
+  if (!device || !device.gatt || !device.gatt.connected) {
+    badge.style.display = 'none';
+    return;
+  }
+  badge.style.display = '';
+  if (!framedMode) {
+    badge.textContent = 'Basic';
+    badge.className = 'mode-badge mode-basic';
+    badge.title = 'Text command interface only. The connected device does not expose the enhanced binary characteristics.';
+    return;
+  }
+  const fresh = lastStatusNotifyMs > 0 &&
+                (Date.now() - lastStatusNotifyMs) < LIVE_FRESHNESS_MS;
+  if (fresh) {
+    badge.textContent = 'Live';
+    badge.className = 'mode-badge mode-live';
+    badge.title = 'Receiving real-time push updates from the device.';
+  } else {
+    badge.textContent = 'Awaiting…';
+    badge.className = 'mode-badge mode-awaiting';
+    badge.title = 'Enhanced characteristics are present but no live updates have arrived yet. ' +
+                  'If this persists, the host MCU may still be in basic mode — try ' +
+                  '`BUS SERIAL <port> FRAMED ENABLE` + SAVE + SYSTEM REBOOT in the terminal.';
+  }
+}
+
+// Re-evaluate the badge once per second so a Live → Awaiting downgrade
+// fires without waiting for another notify (which by definition won't
+// arrive if the link has stalled).
+setInterval(() => {
+  if (device && device.gatt && device.gatt.connected && framedMode) {
+    updateFramedBadge();
+  }
+}, 1000);
 
 function formatUptime(seconds) {
   if (seconds < 60) return seconds + 's';
@@ -1505,6 +2247,23 @@ document.getElementById('terminalHeader').addEventListener('click', () => {
   btn.textContent = collapsed ? '▼' : '▲';
   btn.title = collapsed ? 'Expand terminal' : 'Collapse terminal';
 });
+
+// Collapse handlers for alarm + relay panels — same pattern as terminal.
+function wirePanelCollapse(headerId, panelId, btnId, label) {
+  const header = document.getElementById(headerId);
+  if (!header) return;
+  header.addEventListener('click', (e) => {
+    // Ignore clicks on interactive children so dropdowns/inputs still work.
+    if (e.target.closest('button, select, input, a, label')) return;
+    const panel = document.getElementById(panelId);
+    const btn = document.getElementById(btnId);
+    const collapsed = panel.classList.toggle('collapsed');
+    btn.textContent = collapsed ? '▼' : '▲';
+    btn.title = (collapsed ? 'Expand ' : 'Collapse ') + label;
+  });
+}
+wirePanelCollapse('alarmPanelHeader', 'alarmPanel', 'btnAlarmToggle', 'alarms');
+wirePanelCollapse('relayPanelHeader', 'relayPanel', 'btnRelayToggle', 'relays');
 
 // --- Add / Remove ---
 

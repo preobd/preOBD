@@ -1,0 +1,21 @@
+; nrf_firmware/platformio_local.ini -- bench-specific overrides (gitignored).
+;
+; Copy this file to `platformio_local.ini` (without the `.example` suffix)
+; and uncomment / edit the values that match your bench wiring.
+
+[bench_local]
+; ----------------------------------------------------------------------------
+; Phase 3 software-paced flow control on the host-MCU UART link.
+;
+;   PIN_NRF_RTS_OUT: nRF drives, host reads as CTS-in
+;   PIN_NRF_CTS_IN : nRF reads, host drives as RTS-out
+;
+; Both pins must be defined together or neither. Pin numbers are nRF GPIOs
+; (digital pin index).
+;
+; Typical Adafruit ItsyBitsy nRF52840 bench:
+;   nrf_flow_control =
+;       -D PIN_NRF_RTS_OUT=12
+;       -D PIN_NRF_CTS_IN=13
+; ----------------------------------------------------------------------------
+nrf_flow_control =
