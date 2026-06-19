@@ -1879,6 +1879,33 @@ setInterval(() => {
   }
 }, 1000);
 
+// Liveness keepalive (#266). When this tab freezes (OS sleep / Page Lifecycle
+// 'frozen'), timers stop, so this write stops — letting the nRF evict our
+// zombie link and free the slot for another device after its timeout (~2 min).
+// While we're alive (even backgrounded/throttled) this keeps firing, so we're
+// never wrongly evicted. Writes a single sentinel byte the nRF records as
+// activity and swallows (never reaches the host CLI) — bypasses sendText so it
+// doesn't echo to the terminal. Control Service only (framedMode + txChar =
+// CMD_TX), matching the nRF's Status-subscriber eviction scope.
+//
+// Deliberately NOT gated on cmdPending/suppressOutput: a long command or a
+// >2-min JSON import would otherwise stop the keepalive and let the nRF evict
+// a live tab (review finding — Codex + Gemini, High). Firing during an
+// in-flight op is safe: BLE writes are ordered, and the nRF swallows the
+// 1-byte 0x00 before framing, so it can't split or corrupt a command or the
+// import byte stream (whose own chunk writes also keep the link alive). The
+// only residual stall is a blocking confirm() modal freezing the JS event
+// loop; that's rare and fails safe — the post-modal write just rejects.
+const KEEPALIVE_MS = 20000;
+setInterval(() => {
+  if (device && device.gatt && device.gatt.connected && framedMode && txChar) {
+    txChar.writeValueWithoutResponse(new Uint8Array([0x00])).catch(() => {
+      /* a failed keepalive is harmless: the next tick retries, and a truly
+         dead link surfaces via gattserverdisconnected anyway */
+    });
+  }
+}, KEEPALIVE_MS);
+
 function formatUptime(seconds) {
   if (seconds < 60) return seconds + 's';
   if (seconds < 3600) return Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's';

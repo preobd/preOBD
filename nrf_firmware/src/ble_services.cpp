@@ -30,9 +30,32 @@ BLECharacteristic g_nusTx;
 BLEService    g_hm10Service(static_cast<uint16_t>(0xFFE0));
 BLECharacteristic g_hm10Char(static_cast<uint16_t>(0xFFE1));
 
-void cmdTxWriteCallback(uint16_t /*conn_handle*/, BLECharacteristic* chr,
+// Liveness keepalive sentinel (#266). A sleeping host keeps its BLE link alive
+// (the OS BT controller acks at the link layer) but the frozen tab stops
+// consuming and stops writing -- indistinguishable from a live-idle client
+// without an app-level signal. The webapp writes this single byte to CMD_TX on
+// a timer; the nRF records it as activity but does NOT forward it to the host
+// (it's liveness only, never a CLI command). 0x00 is safe: real CLI traffic is
+// printable ASCII + newline.
+constexpr uint8_t kKeepaliveByte = 0x00;
+
+// Last inbound-write time per peripheral slot, for zombie eviction (#266).
+// Written from the BLE event-task write callbacks, read from the loop poll;
+// loop-context tolerant (a stale read at worst delays an eviction one poll).
+uint32_t g_lastActivityMs[BLE_SERVICES_MAX_CONN_SLOTS] = {};
+
+inline void recordActivity(uint16_t conn_handle) {
+    if (conn_handle < BLE_SERVICES_MAX_CONN_SLOTS) {
+        g_lastActivityMs[conn_handle] = millis();
+    }
+}
+
+void cmdTxWriteCallback(uint16_t conn_handle, BLECharacteristic* chr,
                         uint8_t* data, uint16_t len) {
     (void)chr;
+    recordActivity(conn_handle);   // any write proves the central is alive
+    // Swallow the keepalive sentinel: liveness only, never a host command.
+    if (len == 1 && data && data[0] == kKeepaliveByte) return;
     if (data && len > 0) {
         uartBridgeWrite(data, len);   // text CLI -> framed type 0x01
     }
@@ -66,6 +89,11 @@ constexpr uint16_t kMaxConnSlots = BLE_SERVICES_MAX_CONN_SLOTS;
 // needed -- bumped and read solely from the main loop's poll chain.
 uint8_t g_slotGen[kMaxConnSlots] = {};
 bool    g_slotConnected[kMaxConnSlots] = {};
+// Single-shot eviction guard: conn->disconnect() is async, so the slot stays
+// connected() for the ~tens of ms the LL teardown takes. Without this, every
+// poll in that window re-issues disconnect() (harmless no-ops, but spammy).
+// Set when we request eviction, cleared when a fresh central takes the slot.
+bool    g_evictRequested[kMaxConnSlots] = {};
 
 // Notify one chunk to every (characteristic, connected-central) pair where the
 // central has subscribed to that characteristic.
@@ -254,14 +282,43 @@ bool bleServicesNotifyRetry(BLECharacteristic& chr, const uint8_t* data,
     return notifyFanout(chrs, 1, data, len, doneMask);
 }
 
+// Evict a zombie control central that hasn't written in this long (#266). A
+// frozen/slept tab stops its keepalive timer, so it crosses this threshold; a
+// throttled-but-alive backgrounded tab (timers still fire, <=60s) does not.
+constexpr uint32_t kZombieTimeoutMs = 120000;  // 2 min
+
 void bleServicesPollSlots() {
+    const uint32_t now = millis();
     for (uint16_t h = 0; h < kMaxConnSlots; ++h) {
         BLEConnection* conn = Bluefruit.Connection(h);
         const bool connected = (conn != nullptr) && conn->connected();
         if (connected && !g_slotConnected[h]) {
-            ++g_slotGen[h];   // a (possibly different) central took this slot
+            ++g_slotGen[h];          // a (possibly different) central took this slot
+            g_lastActivityMs[h] = now;  // full grace before eviction can fire
+            g_evictRequested[h] = false;  // fresh connection, arm eviction again
         }
         g_slotConnected[h] = connected;
+
+        // Zombie eviction: only control clients subscribed to Status (the
+        // webapp) are in scope -- OBD apps on FFE1 and generic NUS terminals
+        // don't subscribe to Status and keep today's behavior (no eviction).
+        // The webapp sends a keepalive on a timer, so a Status-subscribed link
+        // silent past the timeout is a frozen/slept tab squatting a slot.
+        // Disconnecting frees it; bleBridgePoll() then re-arms advertising.
+        //
+        // Signed elapsed (NOT `now - last > timeout`): g_lastActivityMs[h] is
+        // written by cmdTxWriteCallback on the SoftDevice event task, which can
+        // stamp a millis() value one tick LATER than the `now` this loop cached
+        // a moment earlier. The unsigned difference would then underflow to
+        // ~UINT32_MAX and trip an instant spurious eviction (bench: idle showed
+        // 4294967295ms). Casting to int32_t makes a just-in-the-future stamp a
+        // small negative -> not idle; it also handles millis() rollover.
+        const int32_t idleMs = (int32_t)(now - g_lastActivityMs[h]);
+        if (connected && !g_evictRequested[h] && g_status.notifyEnabled(h) &&
+            idleMs > (int32_t)kZombieTimeoutMs) {
+            conn->disconnect();
+            g_evictRequested[h] = true;   // fire once; don't spam during teardown
+        }
     }
 }
 
