@@ -133,4 +133,89 @@ static_assert(sizeof(PreobdSystemStatus) == PREOBD_STATUS_SIZE,
 #define PREOBD_MODE_CONFIG  0
 #define PREOBD_MODE_RUN     1
 
+// =============================================================================
+// Alarm Notify Characteristic — Binary Format (18 bytes)
+//
+// Pushed via framed transport (type 0x04) on every per-input alarm-severity
+// transition, including return-to-normal (severity = NORMAL, kind = CLEAR).
+// =============================================================================
+
+#define PREOBD_ALARM_EVENT_SIZE 18
+
+#define PREOBD_ALARM_SEVERITY_NORMAL  0
+#define PREOBD_ALARM_SEVERITY_WARNING 1
+#define PREOBD_ALARM_SEVERITY_ALARM   2
+
+#define PREOBD_ALARM_KIND_CLEAR 0
+#define PREOBD_ALARM_KIND_HIGH  1   // value at/above maxValue threshold
+#define PREOBD_ALARM_KIND_LOW   2   // value at/below minValue threshold
+
+#ifdef __cplusplus
+
+#pragma pack(push, 1)
+
+struct PreobdAlarmEvent {
+    uint8_t  protocolVersion;  // Byte 0:      PREOBD_BLE_PROTOCOL_VERSION
+    uint8_t  inputIndex;       // Byte 1:      Index into inputs[] (0..MAX_INPUTS-1)
+    uint8_t  severity;         // Byte 2:      PREOBD_ALARM_SEVERITY_*
+    uint8_t  kind;             // Byte 3:      PREOBD_ALARM_KIND_*
+    uint16_t sequence;         // Bytes 4-5:   Monotonic event counter, wraps at 65535
+    float    value;            // Bytes 6-9:   Current sensor value (standard units)
+    float    threshold;        // Bytes 10-13: Threshold that was violated (0 on CLEAR)
+    uint32_t timestampMs;      // Bytes 14-17: millis() at emit time
+};
+
+#pragma pack(pop)
+
+static_assert(sizeof(PreobdAlarmEvent) == PREOBD_ALARM_EVENT_SIZE,
+              "PreobdAlarmEvent must be exactly 18 bytes");
+
+#endif // __cplusplus
+
+// =============================================================================
+// Relay Control Characteristic — Binary Format (16 bytes)
+//
+// Symmetric layout: same struct is pushed (frame type 0x05, notify) when any
+// relay's mode/state/threshold changes, and written by clients (Write, then
+// re-framed as type 0x05 to the host MCU) to request a new mode + thresholds.
+//
+// Writable fields:  mode, thresholdOn, thresholdOff. (relayIndex selects the
+// target.) All other fields are informational read-only.
+// =============================================================================
+
+#define PREOBD_RELAY_STATE_SIZE 16
+
+// Mode values match RelayMode enum in src/outputs/output_relay.h
+#define PREOBD_RELAY_MODE_DISABLED   0
+#define PREOBD_RELAY_MODE_AUTO_HIGH  1
+#define PREOBD_RELAY_MODE_AUTO_LOW   2
+#define PREOBD_RELAY_MODE_MANUAL_ON  3
+#define PREOBD_RELAY_MODE_MANUAL_OFF 4
+
+#define PREOBD_RELAY_STATE_OFF 0
+#define PREOBD_RELAY_STATE_ON  1
+
+#ifdef __cplusplus
+
+#pragma pack(push, 1)
+
+struct PreobdRelayState {
+    uint8_t  protocolVersion;  // Byte 0:      PREOBD_BLE_PROTOCOL_VERSION
+    uint8_t  relayIndex;       // Byte 1:      Index into relays[] (0..MAX_RELAYS-1)
+    uint8_t  mode;             // Byte 2:      PREOBD_RELAY_MODE_* (writable)
+    uint8_t  state;            // Byte 3:      PREOBD_RELAY_STATE_* (read-only)
+    uint8_t  inputIndex;       // Byte 4:      Bound input index, 0xFF if unassigned (read-only)
+    uint8_t  outputPin;        // Byte 5:      Physical pin, 0xFF if unconfigured (read-only)
+    uint16_t sequence;         // Bytes 6-7:   Monotonic event counter, wraps at 65535
+    float    thresholdOn;      // Bytes 8-11:  Activation threshold (writable)
+    float    thresholdOff;     // Bytes 12-15: Deactivation threshold (writable)
+};
+
+#pragma pack(pop)
+
+static_assert(sizeof(PreobdRelayState) == PREOBD_RELAY_STATE_SIZE,
+              "PreobdRelayState must be exactly 16 bytes");
+
+#endif // __cplusplus
+
 #endif // BLE_GATT_DEFS_H

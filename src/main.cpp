@@ -48,6 +48,8 @@
 #include "lib/transport_mux.h"
 #include "lib/transport_serial.h"
 #include "lib/status_broadcaster.h"
+#include "lib/alarm_broadcaster.h"
+#include "lib/relay_broadcaster.h"
 #ifdef ESP32
 // Include appropriate Bluetooth transport for ESP32 variant
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
@@ -279,6 +281,8 @@ void setup() {
     router.begin();  // Load config from EEPROM
     flushSystemConfigBootDiagnostics();
     StatusBroadcaster::init();
+    AlarmBroadcaster::init();
+    RelayBroadcaster::init();
     msg.control.println();
     msg.control.println(F("                 ____  ___  ___  "));
     msg.control.println(F("   ___  _______ / __ \\/ _ )/ _ \\ "));
@@ -403,6 +407,8 @@ void loop() {
     // the transport is in transparent mode; placed before the CONFIG-mode
     // early return so heartbeats fire in both modes.
     StatusBroadcaster::tick();
+    AlarmBroadcaster::tick();
+    RelayBroadcaster::tick();
 
     // Process button events (short press = silence alarm, long press = toggle display)
 #if ENABLE_MODE_BUTTON

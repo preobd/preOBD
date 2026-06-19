@@ -6,10 +6,12 @@
 #include <Arduino.h>
 #include <bluefruit.h>
 
+#include "alarm_handler.h"
 #include "ble_bridge.h"
 #include "ble_services.h"
 #include "dfu_trigger.h"
 #include "ota_handler.h"
+#include "relay_handler.h"
 #include "tier_state.h"
 #include "uart_bridge.h"
 
@@ -59,6 +61,8 @@ void setup() {
     bleBridgeInit();
     bleServicesInit();
     otaHandlerInit();
+    alarmHandlerInit();
+    relayHandlerInit();
     dfuTriggerInit();
 
     startAdvertising();

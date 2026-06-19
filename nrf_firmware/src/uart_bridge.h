@@ -20,6 +20,13 @@ void uartBridgePoll();
 // accepted into the queue (0 if full).
 size_t uartBridgeWrite(const uint8_t* data, size_t len);
 
+// Encode `payload` as a framed packet of the given type and queue it for
+// transmission to the host MCU. Atomic: either the whole frame fits in the
+// TX ring (returns true) or nothing is enqueued (returns false). Caller
+// must retry on false. Intended for BLE-originated binary writes (e.g.
+// relay control) where partial-frame transmission would corrupt the wire.
+bool uartBridgeSendFrame(uint8_t type, const uint8_t* payload, uint16_t len);
+
 // Drop any accumulated RX. Called on BLE disconnect so a stale tail doesn't
 // leak into the next session.
 void uartBridgeResetRx();

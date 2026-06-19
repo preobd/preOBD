@@ -29,11 +29,13 @@
 #include <Arduino.h>
 #include <string.h>
 
+#include "alarm_handler.h"
 #include "ble_bridge.h"
 #include "ble_gatt_defs.h"
 #include "ble_services.h"
 #include "board_pins.h"
 #include "frame_codec.h"
+#include "relay_handler.h"
 #include "tier_state.h"
 
 namespace {
@@ -252,8 +254,17 @@ bool handleFrame(const Frame& f) {
             bleServicesUpdateStatus(f.payload, f.len);
         }
         return true;
+    case FRAME_TYPE_ALARM:
+        // Host MCU pushed an 18-byte PreobdAlarmEvent. Best-effort notify;
+        // wrong-sized payloads are dropped silently.
+        alarmHandlerPush(f.payload, f.len);
+        return true;
+    case FRAME_TYPE_RELAY:
+        // Host MCU pushed a 16-byte PreobdRelayState snapshot. Cache + notify.
+        relayHandlerPush(f.payload, f.len);
+        return true;
     default:
-        // Alarm/Relay/OTA/etc deferred past MVP scope.
+        // OTA/etc deferred past MVP scope.
         return true;
     }
 }
@@ -393,6 +404,23 @@ size_t uartBridgeWrite(const uint8_t* data, size_t len) {
         return enqueueAsTextFrames(data, len);
     }
     return enqueueTx(data, len);
+}
+
+bool uartBridgeSendFrame(uint8_t type, const uint8_t* payload, uint16_t len) {
+    if (len > FRAME_MAX_PAYLOAD) return false;
+    // Only meaningful once framed mode has resolved; queueing a binary
+    // frame during PINGING or in transparent mode would put protocol
+    // garbage on the wire.
+    if (!tierStateIsFramed()) return false;
+    // Static scratch buffer rather than ~517 bytes of stack on the BLE
+    // event-task context. Safe because all callers are serialized on the
+    // single SoftDevice event task (BLE write callbacks don't preempt each
+    // other), and the encoded frame is fully consumed by enqueueTxAtomic
+    // before this function returns.
+    static uint8_t s_frameBuf[FRAME_HEADER_BYTES + FRAME_MAX_PAYLOAD + 1];
+    const size_t n = frameEncode(type, payload, len, s_frameBuf);
+    if (n == 0) return false;
+    return enqueueTxAtomic(s_frameBuf, n);
 }
 
 void uartBridgeResetRx() {

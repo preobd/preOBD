@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#include "relay_broadcaster.h"
+
 void MuxTransport::setFramedEnabled(bool enabled) {
     if (enabled == framedEnabled) return;
     framedEnabled = enabled;
@@ -110,8 +112,15 @@ void MuxTransport::handleFrame(const Frame& f) {
         if (n > 0) writeSerialChunked(pong, n);
         break;
     }
+    case FRAME_TYPE_RELAY:
+        // Webapp-initiated relay write: forward to the broadcaster which
+        // applies writable fields and emits a confirmation notify on the
+        // next tick. RelayBroadcaster compiles to a no-op when relays are
+        // disabled on this profile, so the unconditional call is safe.
+        RelayBroadcaster::handleInbound(f.payload, f.len);
+        break;
     default:
-        // Status/Alarm/Relay/OTA/etc deferred past MVP scope.
+        // Status/Alarm/OTA/etc are MCU-originated; clients don't send them.
         break;
     }
 }
