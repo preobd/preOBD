@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0-beta] - 2026-06-18
+
 ### Added
 - Webapp: OBD-II PID assigned to each input is now always shown in the inputs table, and the input editor lets you set/clear `OBD_PID` and `OBD_LENGTH` directly
 - `SET <pin> OBD_PID <0xNN>` / `SET <pin> OBD_LENGTH <1-5>` to assign or clear the OBD-II Mode 01 PID an input reports as, with the assignment now shown in `LIST INPUTS` / `SYSTEM DUMP`
