@@ -655,6 +655,89 @@ static int set_cal_speed(uint8_t pin, int argc, const char* const* argv,
     return 0;
 }
 
+// SET <pin> OBD_PID <0xNN|N>
+static int set_obd_pid(uint8_t pin, int argc, const char* const* argv) {
+    if (argc < 4) {
+        msg.control.println(F("ERROR: OBD_PID requires 1 parameter"));
+        msg.control.println(F("  Usage: SET <pin> OBD_PID <0xNN|N>"));
+        msg.control.println(F("  0x00 removes this input from the OBD-II output table"));
+        return 1;
+    }
+
+    Input* input = getInputByPin(pin);
+    if (!input || !input->flags.isEnabled) {
+        msg.control.println(F("ERROR: Input not configured"));
+        return 1;
+    }
+
+    bool isHex = (argv[3][0] == '0' && (argv[3][1] == 'x' || argv[3][1] == 'X'));
+    if (isHex && !looksLikePidLiteral(argv[3])) {
+        msg.control.println(F("ERROR: OBD_PID requires a numeric or 0xNN hex PID"));
+        return 1;
+    }
+
+    uint16_t pidVal;
+    if (isHex) {
+        pidVal = (uint16_t)strtoul(argv[3] + 2, nullptr, 16);
+    } else {
+        pidVal = (uint16_t)atoi(argv[3]);
+    }
+    if (pidVal > 0xFF) {
+        msg.control.println(F("ERROR: PID must be between 0x00 and 0xFF"));
+        return 1;
+    }
+    uint8_t pid = (uint8_t)pidVal;
+
+    // Default length to 1 if this input has never had an OBD length configured,
+    // so buildOBD2Frame's dataBytes==0 check doesn't silently drop it.
+    uint8_t length = input->obd2length;
+    if (pid != 0 && length == 0) length = 1;
+
+    setInputOBD(pin, pid, length);
+    obdQuery_buildLookupTable();
+
+    msg.control.print(F("OBD PID set for pin "));
+    msg.control.print(argv[1]);
+    msg.control.print(F(": 0x"));
+    if (pid < 0x10) msg.control.print('0');
+    msg.control.print(pid, HEX);
+    msg.control.print(F(", length "));
+    msg.control.println(length);
+    printSaveReminder();
+    return 0;
+}
+
+// SET <pin> OBD_LENGTH <1-5>
+static int set_obd_length(uint8_t pin, int argc, const char* const* argv) {
+    if (argc < 4) {
+        msg.control.println(F("ERROR: OBD_LENGTH requires 1 parameter"));
+        msg.control.println(F("  Usage: SET <pin> OBD_LENGTH <1-5>"));
+        return 1;
+    }
+
+    Input* input = getInputByPin(pin);
+    if (!input || !input->flags.isEnabled) {
+        msg.control.println(F("ERROR: Input not configured"));
+        return 1;
+    }
+
+    int length = atoi(argv[3]);
+    if (length < 1 || length > 5) {
+        msg.control.println(F("ERROR: OBD_LENGTH must be between 1 and 5"));
+        return 1;
+    }
+
+    setInputOBD(pin, input->obd2pid, (uint8_t)length);
+    obdQuery_buildLookupTable();
+
+    msg.control.print(F("OBD response length set for pin "));
+    msg.control.print(argv[1]);
+    msg.control.print(F(": "));
+    msg.control.println(length);
+    printSaveReminder();
+    return 0;
+}
+
 #if ENABLE_CAN
 // SET <pin> CAN_TIMEOUT <ms>
 static int set_can_timeout(uint8_t pin, int argc, const char* const* argv) {
@@ -1087,6 +1170,8 @@ static const char PSTR_SET_ALARM[]           PROGMEM = "ALARM";
 static const char PSTR_SET_DIVIDER[]         PROGMEM = "DIVIDER";
 static const char PSTR_SET_OUTPUT[]          PROGMEM = "OUTPUT";
 static const char PSTR_SET_CAL[]             PROGMEM = "CAL";
+static const char PSTR_SET_OBD_PID[]         PROGMEM = "OBD_PID";
+static const char PSTR_SET_OBD_LENGTH[]      PROGMEM = "OBD_LENGTH";
 #if ENABLE_CAN
 static const char PSTR_SET_CAN_TIMEOUT[]     PROGMEM = "CAN_TIMEOUT";
 #endif
@@ -1127,6 +1212,10 @@ static const char PSTR_HELP_SET_OUTPUT[] PROGMEM =
 // also walks CAL_PROFILES below so this stays in sync.
 static const char PSTR_HELP_SET_CAL[] PROGMEM =
     "  SET <pin> CAL <profile> [<args>]  Custom calibration (see profiles below)";
+static const char PSTR_HELP_SET_OBD_PID[] PROGMEM =
+    "  SET <pin> OBD_PID <0xNN>      OBD-II Mode 01 PID this input reports as (0x00 = none)";
+static const char PSTR_HELP_SET_OBD_LENGTH[] PROGMEM =
+    "  SET <pin> OBD_LENGTH <1-5>    OBD-II response data length in bytes";
 #if ENABLE_CAN
 static const char PSTR_HELP_SET_CAN_TIMEOUT[] PROGMEM =
     "  SET <pin> CAN_TIMEOUT <ms>    CAN-imported sensor timeout (100-30000)";
@@ -1145,6 +1234,8 @@ static const SetField SET_FIELDS[] PROGMEM = {
     { PSTR_SET_DIVIDER,         set_divider,         PSTR_HELP_SET_DIVIDER         },
     { PSTR_SET_OUTPUT,          set_output,          PSTR_HELP_SET_OUTPUT          },
     { PSTR_SET_CAL,             set_cal,             PSTR_HELP_SET_CAL             },
+    { PSTR_SET_OBD_PID,         set_obd_pid,         PSTR_HELP_SET_OBD_PID         },
+    { PSTR_SET_OBD_LENGTH,      set_obd_length,      PSTR_HELP_SET_OBD_LENGTH      },
 #if ENABLE_CAN
     { PSTR_SET_CAN_TIMEOUT,     set_can_timeout,     PSTR_HELP_SET_CAN_TIMEOUT     },
 #endif

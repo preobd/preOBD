@@ -1198,7 +1198,16 @@ void listAllInputs() {
             msg.control.print(F(") = "));
             msg.control.print(inputs[i].value);
             msg.control.print(F(" "));
-            msg.control.println((__FlashStringHelper*)getUnitStringByIndex(inputs[i].unitsIndex));
+            msg.control.print((__FlashStringHelper*)getUnitStringByIndex(inputs[i].unitsIndex));
+            if (inputs[i].obd2pid != 0) {
+                msg.control.print(F(" [OBD PID 0x"));
+                if (inputs[i].obd2pid < 0x10) msg.control.print('0');
+                msg.control.print(inputs[i].obd2pid, HEX);
+                msg.control.print(F(" len "));
+                msg.control.print(inputs[i].obd2length);
+                msg.control.print(F("]"));
+            }
+            msg.control.println();
         }
     }
 
