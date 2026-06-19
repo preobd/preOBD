@@ -241,8 +241,8 @@
 
   /* ── System Status ────────────────────────────────────────── */
   .status-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    display: flex;
+    flex-wrap: nowrap;
     gap: 1px;
     background: var(--border-light);
     border: 1px solid var(--border-light);
@@ -251,6 +251,8 @@
   }
 
   .status-item {
+    flex: 1 1 0;
+    min-width: 0;             /* allow cells to shrink so all fit one row */
     background: var(--surface-raised);
     padding: 12px 14px;
     display: flex;
@@ -275,6 +277,77 @@
     color: var(--brand);
     line-height: 1.2;
   }
+
+  /* Firmware tile — host version primary, nRF build string secondary.
+     Host stays clean (M.m.p); nRF keeps its full -beta+hash string here. */
+  .status-item.status-fw { flex: 2 1 0; }   /* double width for the nRF build string */
+  .status-item .status-sub {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--dim);
+    line-height: 1.3;
+    margin-top: 2px;
+    word-break: break-all;
+  }
+
+  /* Health headline — alarm summary, mirrors the mobile overview banner */
+  .status-health {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 11px 13px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+  }
+  .status-health.ok {
+    background: rgba(61,107,61,0.10);
+    border: 1px solid rgba(61,107,61,0.35);
+  }
+  .status-health.firing {
+    border: 1.5px solid var(--red);
+    animation: alarmFlash 1.6s ease-in-out infinite;
+  }
+  .status-health .health-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .status-health.ok .health-dot {
+    background: var(--brand-light);
+    box-shadow: 0 0 0 3px rgba(61,107,61,0.18);
+    animation: blinkDot 2.4s ease-in-out infinite;
+  }
+  .status-health.firing .health-dot {
+    background: var(--red);
+    box-shadow: 0 0 0 4px rgba(160,48,48,0.18);
+    animation: blinkDot 0.9s ease-in-out infinite;
+  }
+  .status-health .health-text { flex: 1; min-width: 0; }
+  .status-health.ok .health-text {
+    font-size: 14px; font-weight: 500; color: var(--text);
+  }
+  .status-health.firing .health-title {
+    font-size: 14px; font-weight: 600; color: var(--red);
+  }
+  .status-health.firing .health-meta {
+    font-size: 11.5px; color: var(--red); opacity: 0.78; margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .status-health .health-review {
+    flex-shrink: 0;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--surface-raised);
+    background: var(--red);
+    border: 1px solid var(--red);
+    border-radius: 5px;
+    padding: 5px 11px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .status-health .health-review:hover { background: #862828; }
 
   /* ── Footer / build stamp ─────────────────────────────────── */
   .app-footer {
@@ -459,8 +532,8 @@
     background: var(--yellow); border-color: var(--yellow); color: #fff;
   }
 
-  /* ── Quick Actions ────────────────────────────────────────── */
-  .quick-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  /* ── Quick Actions (command shortcuts inside the terminal) ──── */
+  .quick-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 
   .quick-actions .btn {
     font-family: var(--mono);
@@ -711,7 +784,8 @@
 
   /* ── Responsive ───────────────────────────────────────────── */
   @media (max-width: 600px) {
-    .status-grid { grid-template-columns: repeat(2, 1fr); }
+    .status-grid { display: grid; grid-template-columns: repeat(2, 1fr); }
+    .status-item.status-fw { grid-column: span 2; }   /* firmware full-width on mobile */
     main { padding: 12px 10px; }
     header h1 { display: none; }
     .header-divider { display: none; }
@@ -745,13 +819,19 @@
       <span class="panel-title">System Status</span>
     </div>
     <div class="panel-body" style="padding:12px">
+      <!-- Health headline — alarm summary (framed mode only) -->
+      <div class="status-health" id="statusHealth" style="display:none"></div>
+
       <div class="status-grid">
-        <div class="status-item"><label>Host FW</label><span id="valFirmware">--</span></div>
-        <div class="status-item"><label>nRF FW</label><span id="valNrfFw">--</span></div>
+        <div class="status-item status-fw">
+          <label>Firmware</label>
+          <span id="valFirmware">--</span>
+          <span class="status-sub" id="valNrfFw">nRF --</span>
+        </div>
         <div class="status-item"><label>Mode</label><span id="valMode">--</span></div>
+        <div class="status-item"><label>Uptime</label><span id="valUptime">--</span></div>
         <div class="status-item"><label>Inputs</label><span id="valInputs">--</span></div>
         <div class="status-item"><label>Relays</label><span id="valRelays">--</span></div>
-        <div class="status-item"><label>Uptime</label><span id="valUptime">--</span></div>
         <div class="status-item"><label>Device</label><span id="valDevice">--</span></div>
       </div>
     </div>
@@ -812,13 +892,19 @@
     </div>
   </div>
 
-  <!-- Quick Actions -->
-  <div class="panel">
-    <div class="panel-header">
-      <span class="panel-title">Quick Actions</span>
+  <!-- Terminal -->
+  <div class="panel" id="terminal">
+    <div class="panel-header" style="cursor:pointer" id="terminalHeader">
+      <span class="panel-title">Terminal</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-family:var(--mono);font-size:10px;color:var(--dim-light);letter-spacing:0.04em">BLE</span>
+        <button class="panel-collapse-btn" id="btnTerminalToggle" title="Collapse terminal">▲</button>
+      </div>
     </div>
     <div class="panel-body">
-      <div class="quick-actions">
+      <div id="output"><span class="info">Connect to a preOBD device to begin.</span>
+</div>
+      <div class="quick-actions" id="quickActions">
         <button class="btn" data-cmd="VERSION" disabled>VERSION</button>
         <button class="btn" data-cmd="LIST INPUTS" disabled>LIST INPUTS</button>
         <button class="btn" data-cmd="LIST OUTPUTS" disabled>LIST OUTPUTS</button>
@@ -827,21 +913,6 @@
         <button class="btn" data-cmd="RUN" disabled>RUN</button>
         <button class="btn" data-cmd="HELP" disabled>HELP</button>
       </div>
-    </div>
-  </div>
-
-  <!-- Terminal -->
-  <div class="panel" id="terminal">
-    <div class="panel-header" style="cursor:pointer" id="terminalHeader">
-      <span class="panel-title">Terminal</span>
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-family:var(--mono);font-size:10px;color:var(--dim-light);letter-spacing:0.04em">9600 BAUD · BLE</span>
-        <button class="panel-collapse-btn" id="btnTerminalToggle" title="Collapse terminal">▲</button>
-      </div>
-    </div>
-    <div class="panel-body">
-      <div id="output"><span class="info">Connect to a preOBD device to begin.</span>
-</div>
       <div class="input-row">
         <input type="text" id="cmdInput" placeholder="Type a command…" disabled autocomplete="off" spellcheck="false">
         <button class="btn primary" id="btnSend" disabled>Send</button>
@@ -1031,9 +1102,9 @@ async function connect() {
       const dis = await server.getPrimaryService(DIS_SERVICE);
       const fwChar = await dis.getCharacteristic(0x2A26); // Firmware Revision
       const val = await fwChar.readValue();
-      document.getElementById('valNrfFw').textContent = DECODER.decode(val) || '--';
+      document.getElementById('valNrfFw').textContent = 'nRF ' + (DECODER.decode(val) || '--');
     } catch (e) {
-      document.getElementById('valNrfFw').textContent = '--';
+      document.getElementById('valNrfFw').textContent = 'nRF --';
     }
 
     // Read system status if available; subscribe to push updates in framed mode.
@@ -1098,7 +1169,7 @@ function onDisconnected() {
   relayChar = null;
   framedMode = false;
   lastStatusNotifyMs = 0;
-  document.getElementById('valNrfFw').textContent = '--';
+  document.getElementById('valNrfFw').textContent = 'nRF --';
   updateFramedBadge();
   alarmLog.length = 0;
   firingState.clear();
@@ -1348,9 +1419,49 @@ function alarmMessage(ev) {
   return label + ' · ' + val + ' ' + (dir ? dir + ' ' : '') + verb + ' ' + thr;
 }
 
+// Health headline at the top of System Status — a single-glance summary of
+// alarm state that mirrors the mobile overview banner. Only meaningful when
+// the device exposes the alarm channel (framed mode); otherwise hidden.
+function updateStatusHealth() {
+  const el = document.getElementById('statusHealth');
+  if (!el) return;
+  if (!framedMode || !alarmChar) { el.style.display = 'none'; return; }
+  el.style.display = '';
+
+  const n = firingState.size;
+  if (n === 0) {
+    el.className = 'status-health ok';
+    el.innerHTML = '<span class="health-dot"></span>' +
+                   '<span class="health-text">All systems normal</span>';
+    return;
+  }
+
+  // Lead with the first firing input; summarise the rest as "+N more".
+  const [idx, st] = firingState.entries().next().value;
+  const label = inputLabel(idx);
+  const val = Number.isFinite(st.value) ? st.value.toFixed(1) : '--';
+  const thr = Number.isFinite(st.threshold) ? st.threshold.toFixed(1) : '--';
+  const verb = st.kind === KIND_LOW ? 'below' : 'exceeded';
+  const more = n > 1 ? ' · +' + (n - 1) + ' more' : '';
+
+  el.className = 'status-health firing';
+  el.innerHTML =
+    '<span class="health-dot"></span>' +
+    '<div class="health-text">' +
+      '<div class="health-title">' + n + ' alarm' + (n === 1 ? '' : 's') + ' firing</div>' +
+      '<div class="health-meta">' + escHtml(label) + ' · ' + escHtml(val) + ' ' +
+        verb + ' ' + escHtml(thr) + escHtml(more) + '</div>' +
+    '</div>' +
+    '<button class="health-review" id="healthReview">Review</button>';
+  const btn = document.getElementById('healthReview');
+  if (btn) btn.onclick = () =>
+    document.getElementById('alarmPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function renderAlarmPanel() {
   const panel = document.getElementById('alarmPanel');
   if (!panel) return;
+  updateStatusHealth();
   // The panel stays visible whenever the device exposes the enhanced
   // feature set, even if the alarm characteristic specifically failed to
   // subscribe or no events have arrived yet. The empty state reads better
