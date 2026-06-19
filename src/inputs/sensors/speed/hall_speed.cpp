@@ -119,20 +119,34 @@ void readHallSpeed(Input *ptr) {
         }
     }
 
-    // Calculate time since last pulse
-    unsigned long now = millis();
-    unsigned long time_since_pulse = now - (speed_last_time / 1000);
+    // Atomic snapshot — 32-bit reads are not atomic on AVR; ARM is fine without guards
+    #ifdef __AVR__
+    noInterrupts();
+    #endif
+    unsigned long interval = speed_pulse_interval;
+    unsigned long lastTime = speed_last_time;
+    #ifdef __AVR__
+    interrupts();
+    #endif
 
-    // Check for timeout (vehicle stopped)
-    if (time_since_pulse > timeout_ms) {
+    // Timeout check using micros() consistently with the ISR (#275). The ISR
+    // stamps speed_last_time on the SAME micros() timebase, so compare in micros
+    // and snapshot lastTime BEFORE reading the clock: micros() is then always
+    // >= lastTime, so the unsigned diff can't underflow and is rollover-safe.
+    // (The old code cached millis() first, then read the ISR-written micros()
+    // value /1000 -- a just-fired ISR could make the subtrahend exceed `now`,
+    // underflowing to ~UINT32_MAX and forcing a spurious vehicle-stopped read;
+    // mixing the millis/micros timebases also glitched at the ~71-min micros
+    // rollover.)
+    if (micros() - lastTime > (unsigned long)timeout_ms * 1000UL) {
         ptr->value = 0.0;
         return;
     }
 
     // Calculate vehicle speed from pulse interval
-    if (speed_pulse_interval > 0) {
+    if (interval > 0) {
         // Convert pulse interval (µs) to frequency (Hz)
-        float freq_hz = 1000000.0 / speed_pulse_interval;
+        float freq_hz = 1000000.0 / interval;
 
         // Calculate wheel revolutions per second
         float revolutions_per_second = freq_hz / pulses_per_rev;
