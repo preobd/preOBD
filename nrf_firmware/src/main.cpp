@@ -47,6 +47,15 @@ void setup() {
     Bluefruit.setTxPower(0);                      // 0 dBm for bench bring-up
     Bluefruit.autoConnLed(false);                 // we drive PIN_STATUS_LED
 
+    // Request a tight connection interval (15-30ms, units of 1.25ms). Chrome
+    // on macOS will otherwise stretch the interval to ~1s when "idle",
+    // dropping the effective BLE drain rate to ~100 B/s during the dump --
+    // at which point our flow control plumbing can't drain the nRF Serial1
+    // RX ring fast enough to keep up with bursts. 15-30ms keeps the link
+    // around 7-9 KB/s, comfortably above the throughput we need for
+    // SYSTEM DUMP JSON and similar bulk responses.
+    Bluefruit.Periph.setConnInterval(12, 24);
+
     bleBridgeInit();
     bleServicesInit();
     otaHandlerInit();

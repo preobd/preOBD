@@ -16,7 +16,13 @@
 //     mode-appropriate form.
 //
 // TX path is still a ring drained from loop() so BLE callbacks never block
-// on Serial1. No flow control in Phase 2; CTS/RTS deferred to Phase 3.
+// on Serial1. Phase 3 adds opt-in software-paced flow control via two GPIOs
+// (PIN_NRF_RTS_OUT / PIN_NRF_CTS_IN, see board_pins.h):
+//   - Inbound: assert PIN_NRF_RTS_OUT when Serial1.available() crosses a
+//     high watermark; deassert at a low watermark. Hysteresis avoids
+//     toggle storms.
+//   - Outbound: yield in drainTx while PIN_NRF_CTS_IN is HIGH (~100ms
+//     timeout failsafe so a stuck line can't hang the loop).
 
 #include "uart_bridge.h"
 
@@ -25,6 +31,7 @@
 
 #include "ble_bridge.h"
 #include "ble_services.h"
+#include "board_pins.h"
 #include "tier2_framer.h"
 #include "tier_state.h"
 
@@ -34,6 +41,20 @@ constexpr size_t kRxFlushBytes  = 20;       // BLE 4.2 minimum payload
 constexpr uint32_t kRxStallMs   = 50;
 constexpr size_t kTxRingSize    = 1024;
 constexpr size_t kBleNotifyChunk = 20;      // chunk Tier 2 text resp to 20B
+
+#if defined(PIN_NRF_RTS_OUT) && defined(PIN_NRF_CTS_IN)
+// Hysteresis thresholds on Serial1.available(). Sized so the worst-case
+// BLE notify stall (Bluefruit's getHvnPacket blocks up to 100ms on the
+// HVN semaphore = ~1440 bytes inflight at 115200 baud) plus the host's
+// chunked reaction window (~32 bytes) leaves comfortable headroom in the
+// SERIAL_BUFFER_SIZE RX ring before any drops. At the current 8192-byte
+// buffer, high-water=256 leaves ~6464 bytes of margin even during the
+// worst case -- well over-engineered, but cheap.
+constexpr size_t kInboundHighWaterBytes = 256;
+constexpr size_t kInboundLowWaterBytes  = 64;
+constexpr uint32_t kOutboundStallMs     = 100;
+static bool g_rtsAsserted = false;
+#endif
 
 // --- Tier 1 RX accumulator ---
 uint8_t  g_rx[kRxFlushBytes];
@@ -96,8 +117,42 @@ bool enqueueTxAtomic(const uint8_t* data, size_t len) {
     return true;
 }
 
+#if defined(PIN_NRF_RTS_OUT) && defined(PIN_NRF_CTS_IN)
+// Returns true once the host's RTS line (our CTS_IN) is clear. Returns
+// false if the line is still asserted after kOutboundStallMs -- caller
+// must abort the drain and retry on the next poll iteration. A naive
+// per-byte timeout (block, advance, repeat) would multiply the stall by
+// the drain length: at 100ms each, a full 1KB TX ring would stall the
+// task for up to 100 seconds on a stuck line, starving everything else.
+bool awaitOutboundClear() {
+    if (digitalRead(PIN_NRF_CTS_IN) == LOW) return true;
+    const uint32_t start = millis();
+    while (digitalRead(PIN_NRF_CTS_IN) == HIGH) {
+        if (millis() - start >= kOutboundStallMs) return false;
+        yield();
+    }
+    return true;
+}
+
+// Drive our RTS line based on Serial1 RX ring fill with hysteresis. Called
+// from uartBridgePoll on every iteration.
+void updateInboundRts() {
+    const int avail = Serial1.available();
+    if (!g_rtsAsserted && avail >= static_cast<int>(kInboundHighWaterBytes)) {
+        g_rtsAsserted = true;
+        digitalWrite(PIN_NRF_RTS_OUT, HIGH);
+    } else if (g_rtsAsserted && avail <= static_cast<int>(kInboundLowWaterBytes)) {
+        g_rtsAsserted = false;
+        digitalWrite(PIN_NRF_RTS_OUT, LOW);
+    }
+}
+#endif
+
 void drainTx() {
     while (g_txTail != g_txHead) {
+#if defined(PIN_NRF_RTS_OUT) && defined(PIN_NRF_CTS_IN)
+        if (!awaitOutboundClear()) break;   // bail whole drain; retry next poll
+#endif
         const int wrote = Serial1.write(g_tx[g_txTail]);
         if (wrote <= 0) break;
         g_txTail = (g_txTail + 1) % kTxRingSize;
@@ -175,12 +230,23 @@ void flushPendingTx() {
 void uartBridgeInit() {
     // 115200 fixed by contract with the host MCU; same as Phase 1.
     Serial1.begin(115200);
+#if defined(PIN_NRF_RTS_OUT) && defined(PIN_NRF_CTS_IN)
+    pinMode(PIN_NRF_RTS_OUT, OUTPUT);
+    digitalWrite(PIN_NRF_RTS_OUT, LOW);     // start deasserted (clear-to-send)
+    pinMode(PIN_NRF_CTS_IN, INPUT_PULLDOWN); // unconnected = LOW = always-OK
+    g_rtsAsserted = false;
+#endif
 }
 
 void uartBridgePoll() {
     const bool connected = bleBridgeConnected();
     const bool pinging = tierStateIsPinging();
     const bool framed  = tierStateIsFramed();
+
+#if defined(PIN_NRF_RTS_OUT) && defined(PIN_NRF_CTS_IN)
+    // Inbound flow control: drive our RTS based on Serial1 RX ring fill.
+    updateInboundRts();
+#endif
 
     // Once tier is resolved, drain any CMD_TX bytes that were buffered during
     // PINGING. Retried every poll because the TX ring may have been tight
@@ -227,6 +293,14 @@ void uartBridgePoll() {
                 // next poll cycle will retry the notify.
                 break;
             }
+#if defined(PIN_NRF_RTS_OUT) && defined(PIN_NRF_CTS_IN)
+            // Re-evaluate the RX ring fill after each flush. Without this
+            // call, a fast-arriving stream can keep Serial1.available()
+            // non-zero indefinitely, never letting us return to the top of
+            // uartBridgePoll to assert RTS -- the buffer would fill until
+            // the BSP RingBuffer drops bytes.
+            updateInboundRts();
+#endif
         }
     }
 

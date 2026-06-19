@@ -25,6 +25,16 @@
 #define PIN_NRF_DFU_IN    5
 #define PIN_STATUS_LED    LED_BUILTIN
 
+// Phase 3 -- software-paced flow control on the host-MCU UART link.
+//   PIN_NRF_RTS_OUT: nRF drives, host reads as its CTS-in.
+//                    HIGH = "pause your TX, my buffer is filling up".
+//   PIN_NRF_CTS_IN:  host drives, nRF reads. HIGH = "pause your TX".
+//                    Configured as INPUT_PULLDOWN so an unconnected line
+//                    reads LOW (always-OK to send).
+// Both are opt-in via build flags in platformio.ini -- uncomment and fill
+// in the GPIOs you wired. Leave both undefined for a no-op build identical
+// to Phase 2.
+
 #else
 #error "board_pins.h: no board defined. Add -DBOARD_ITSYBITSY (or future BOARD_MDBT50Q)."
 #endif
