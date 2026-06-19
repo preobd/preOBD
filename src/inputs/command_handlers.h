@@ -50,13 +50,16 @@ int cmd_json(int argc, const char* const* argv);
 void platformReboot();
 
 #if ENABLE_SELFTEST
-// SELFTEST command — validates all dispatch tables.
-int cmd_selftest(int argc, const char* const* argv);
+// Dispatch-table integrity check — surfaced to users as `SYSTEM DIAG INTEGRITY`
+// (this was the standalone SELFTEST command before the DIAG consolidation).
+// Walks every dispatch table and returns the total number of failing entries
+// (0 = all good); each failure prints its own diagnostic line.
+int runDiagIntegrity();      // command_table.cpp
 
 // Per-TU table validators. Each returns the number of failing entries.
 // Implementations live next to the tables so they read via the same
 // pgm_read_ptr / streq_P path the dispatcher uses — a regression in that
-// access pattern fails selftest immediately.
+// access pattern fails the integrity check immediately.
 int selftestSetTable();      // cmd_set.cpp
 int selftestBusTable();      // cmd_bus.cpp
 int selftestSystemTable();   // cmd_system.cpp

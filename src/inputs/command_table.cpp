@@ -114,9 +114,8 @@ const Command COMMANDS[] = {
 #if ENABLE_CAN
     {"SCAN", cmd_scan, "Scan CAN bus for PIDs", true},
 #endif
-#if ENABLE_SELFTEST
-    {"SELFTEST", cmd_selftest, "Validate dispatch tables", false},
-#endif
+    // NOTE: the former top-level SELFTEST command is retired; its dispatch-table
+    // validation is now `SYSTEM DIAG INTEGRITY` (see runDiagIntegrity / cmd_system.cpp).
 };
 
 const uint8_t NUM_COMMANDS = sizeof(COMMANDS) / sizeof(Command);
@@ -224,26 +223,19 @@ static int selftestCommandsTable() {
     return failures;
 }
 
-// SELFTEST — walk every dispatch table and assert invariants. Catches
-// PROGMEM-access regressions on AVR (where a missing pgm_read_ptr returns
-// garbage) the moment a user runs this command after flashing.
-int cmd_selftest(int /*argc*/, const char* const* /*argv*/) {
-    msg.control.println(F("Running dispatch-table selftest..."));
+// Dispatch-table integrity check, surfaced as `SYSTEM DIAG INTEGRITY`. Walks
+// every dispatch table and asserts invariants — catches PROGMEM-access
+// regressions on AVR (where a missing pgm_read_ptr returns garbage) the moment
+// it's run after flashing. Returns the total failing-entry count; each failure
+// prints its own diagnostic line via validateDispatchEntry. The DIAG handler
+// (cmd_system.cpp) prints the section header and pass/fail verdict.
+int runDiagIntegrity() {
     int failures = 0;
     failures += selftestCommandsTable();
     failures += selftestSetTable();
     failures += selftestBusTable();
     failures += selftestSystemTable();
-
-    msg.control.print(F("SELFTEST: "));
-    if (failures == 0) {
-        msg.control.println(F("PASS"));
-        return 0;
-    }
-    msg.control.print(F("FAIL ("));
-    msg.control.print(failures);
-    msg.control.println(F(" issue(s))"));
-    return 1;
+    return failures;
 }
 #endif // ENABLE_SELFTEST
 

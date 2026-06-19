@@ -66,12 +66,13 @@
 #endif
 
 // ============================================================================
-// SELFTEST COMMAND
+// DIAG INTEGRITY CHECK  (gate kept named ENABLE_SELFTEST for profile compat)
 // ============================================================================
-// Walks every dispatch table and validates invariants (token strings non-null,
-// uppercase, in-bounds; handlers non-null). Catches PROGMEM-access regressions
-// the moment a user runs `SELFTEST` after flashing. Adds ~50 bytes RAM and
-// ~700 bytes flash; disable on RAM-tight builds.
+// Backs the `SYSTEM DIAG INTEGRITY` sub-command: walks every dispatch table and
+// validates invariants (token strings non-null, uppercase, in-bounds; handlers
+// non-null). Catches PROGMEM-access regressions the moment it's run after
+// flashing. Adds ~50 bytes RAM and ~700 bytes flash; disable on RAM-tight
+// builds (DIAG INTEGRITY then reports "disabled in this build").
 #ifndef ENABLE_SELFTEST
     #define ENABLE_SELFTEST 1
 #endif

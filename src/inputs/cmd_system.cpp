@@ -25,6 +25,7 @@
 #include "../lib/json_registry.h"
 #include "../lib/bus_manager.h"
 #include "../lib/bus_defaults.h"
+#include "../lib/sd_manager.h"
 #include "../lib/serial_manager.h"
 #include "../lib/pin_registry.h"
 #include "../outputs/output_base.h"
@@ -278,10 +279,142 @@ static int system_reset(int argc, const char* const* argv, int /*tokenIndex*/) {
 }
 
 
+// ===== SYSTEM DIAG — observe family (read-only, RUN-safe) =====
+// Three sections, each printing its OWN verdict line so the two kinds of
+// failure stay distinct: an INTEGRITY fail means a bad firmware build, a
+// HARDWARE fail means the rig isn't wired the way it's configured.
+//   INTEGRITY  dispatch-table self-consistency (was the SELFTEST command)
+//   HW         presence/health of detectable peripherals
+//   INPUTS     per-input reading sanity (range / rail)
+
+static void diagSectionIntegrity() {
+#if ENABLE_SELFTEST
+    int failures = runDiagIntegrity();   // prints per-entry failures inline
+    msg.control.print(F("[integrity]   dispatch tables ...... "));
+    if (failures == 0) {
+        msg.control.println(F("OK"));
+    } else {
+        msg.control.print(F("FAIL ("));
+        msg.control.print(failures);
+        msg.control.println(F(" issue(s))"));
+    }
+#else
+    msg.control.println(F("[integrity]   (disabled in this build)"));
+#endif
+}
+
+// I2C presence probe on the active I2C bus.
+// Returns 1 = device ACKed, 0 = bus present but no ACK (FAIL), -1 = no I2C bus.
+// getActiveI2C() is nullptr until a bus is actually initialized, so this never
+// touches an un-begun Wire.
+static int i2cProbe(uint8_t addr) {
+    TwoWire* wire = getActiveI2C();
+    if (!wire) return -1;
+    wire->beginTransmission(addr);
+    return (wire->endTransmission() == 0) ? 1 : 0;
+}
+
+// Hardware presence/POST. Only peripherals compiled into this build appear; a
+// FAIL means "configured but not responding" (the actionable case). CAN-bus and
+// nRF/BLE-link probes are a deferred follow-up — CAN presence needs a loopback
+// to assert honestly, and the nRF link is host/coprocessor-specific.
+static void diagSectionHw() {
+    bool any = false;
+    (void)any;
+
+#if ENABLE_LCD
+    any = true;
+    msg.control.print(F("[hardware]    LCD (I2C 0x27) ....... "));
+    switch (i2cProbe(0x27)) {
+        case 1:  msg.control.println(F("OK")); break;
+        case 0:  msg.control.println(F("FAIL (no ACK)")); break;
+        default: msg.control.println(F("off (no I2C bus)")); break;
+    }
+#endif
+
+#if ENABLE_BME280
+    any = true;
+    msg.control.print(F("[hardware]    BME280 (I2C) ......... "));
+    {
+        int r = i2cProbe(0x76);
+        if (r == 0) r = i2cProbe(0x77);   // common alternate address
+        switch (r) {
+            case 1:  msg.control.println(F("OK")); break;
+            case 0:  msg.control.println(F("FAIL (no ACK @0x76/0x77)")); break;
+            default: msg.control.println(F("off (no I2C bus)")); break;
+        }
+    }
+#endif
+
+#if SUPPORTS_SD
+    any = true;
+    msg.control.print(F("[hardware]    SD card .............. "));
+    msg.control.println(isSDInitialized() ? F("OK") : F("FAIL (not mounted)"));
+#endif
+
+    if (!any) {
+        msg.control.println(F("[hardware]    (no probeable peripherals in this build)"));
+    }
+}
+
+// Per-input reading sanity. Takes a fresh reading via the input's own read
+// function (the same call the main loop makes — safe in any mode, mutates no
+// config) and reports it. A NaN result is the rail/open/out-of-range signal:
+// the calibration path (calculateResistance, MAX6675 open-circuit bit, ADC
+// rail margin) already collapses implausible raw readings to NaN, so that's
+// our v1 "check wiring" verdict. The active pull-up float probe (for sensors
+// that float mid-scale rather than pegging) is a deferred follow-up.
+static void diagSectionInputs() {
+    bool any = false;
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        Input* in = &inputs[i];
+        if (!in->flags.isEnabled) continue;
+        any = true;
+
+        if (in->readFunction) in->readFunction(in);  // fresh reading
+
+        msg.control.print(F("[inputs]      "));
+        msg.control.print(in->abbrName);
+        msg.control.print(F(" (pin "));
+        msg.control.print(in->pin);
+        msg.control.print(F(") "));
+        if (isnan(in->value)) {
+            msg.control.println(F("... no reading (open / disconnected / out-of-range)"));
+        } else {
+            msg.control.print(F("... "));
+            msg.control.print(in->value, 1);
+            msg.control.println(F(" (plausible)"));
+        }
+    }
+    if (!any) {
+        msg.control.println(F("[inputs]      (no inputs configured)"));
+    }
+}
+
+// SYSTEM DIAG [INTEGRITY|HW|INPUTS] — bare form runs all three.
+static int system_diag(int argc, const char* const* argv, int /*tokenIndex*/) {
+    if (argc >= 3) {
+        if (streq_P(argv[2], PSTR("INTEGRITY"))) { diagSectionIntegrity(); return 0; }
+        if (streq_P(argv[2], PSTR("HW")))        { diagSectionHw();        return 0; }
+        if (streq_P(argv[2], PSTR("INPUTS")))    { diagSectionInputs();    return 0; }
+        msg.control.print(F("ERROR: Unknown DIAG scope '"));
+        msg.control.print(argv[2]);
+        msg.control.println(F("'"));
+        msg.control.println(F("  Valid: INTEGRITY, HW, INPUTS (or bare DIAG for all)"));
+        return 1;
+    }
+    msg.control.println(F("=== SYSTEM DIAG ==="));
+    diagSectionIntegrity();
+    diagSectionHw();
+    diagSectionInputs();
+    return 0;
+}
+
 // SYSTEM subcommand tokens (PROGMEM)
 static const char PSTR_SYS_STATUS[] PROGMEM = "STATUS";
 static const char PSTR_SYS_PINS[] PROGMEM = "PINS";
 static const char PSTR_SYS_DUMP[] PROGMEM = "DUMP";
+static const char PSTR_SYS_DIAG[] PROGMEM = "DIAG";
 static const char PSTR_SYS_SEA_LEVEL[] PROGMEM = "SEA_LEVEL";
 static const char PSTR_SYS_UNITS[] PROGMEM = "UNITS";
 static const char PSTR_SYS_INTERVAL[] PROGMEM = "INTERVAL";
@@ -298,6 +431,11 @@ static const char PSTR_HELP_SYS_DUMP[] PROGMEM =
     "  SYSTEM DUMP                   Complete configuration dump (human-readable)\n"
     "  SYSTEM DUMP JSON              Export active configuration as JSON\n"
     "  SYSTEM DUMP REGISTRY JSON     Export static firmware catalogs as JSON";
+static const char PSTR_HELP_SYS_DIAG[] PROGMEM =
+    "  SYSTEM DIAG                   Run all diagnostics (integrity + hardware + inputs)\n"
+    "  SYSTEM DIAG INTEGRITY         Validate dispatch-table self-consistency\n"
+    "  SYSTEM DIAG HW                Probe presence/health of configured peripherals\n"
+    "  SYSTEM DIAG INPUTS            Per-input reading sanity (range / rail)";
 static const char PSTR_HELP_SYS_SEA_LEVEL[] PROGMEM =
     "  SYSTEM SEA_LEVEL <hPa>        Set sea-level pressure (for altitude calc)";
 static const char PSTR_HELP_SYS_UNITS[] PROGMEM =
@@ -320,6 +458,7 @@ static const Subcommand SYSTEM_SUBCOMMANDS[] PROGMEM = {
     { PSTR_SYS_STATUS,    system_status,    true,  PSTR_HELP_SYS_STATUS    },
     { PSTR_SYS_PINS,      system_pins,      true,  PSTR_HELP_SYS_PINS      },
     { PSTR_SYS_DUMP,      system_dump,      true,  PSTR_HELP_SYS_DUMP      },
+    { PSTR_SYS_DIAG,      system_diag,      true,  PSTR_HELP_SYS_DIAG      },
     { PSTR_SYS_SEA_LEVEL, system_sea_level, false, PSTR_HELP_SYS_SEA_LEVEL },
     { PSTR_SYS_UNITS,     system_units,     false, PSTR_HELP_SYS_UNITS     },
     { PSTR_SYS_INTERVAL,  system_interval,  false, PSTR_HELP_SYS_INTERVAL  },
