@@ -1,14 +1,15 @@
-// tier_state.h -- Tier 1 / Tier 2 mode + auto-detection.
+// tier_state.h -- transparent / framed mode + auto-detection on the
+// host-MCU UART link. (Historically called "Tier 1 / Tier 2.")
 //
 // State machine (ARCHITECTURE.md §3.5):
 //   DISCONNECTED -> (BLE connect)    -> PINGING (emit 0xFF frame, 2s timer)
-//   PINGING      -> (0xFF frame in)  -> TIER2
-//   PINGING      -> (timeout)        -> TIER1
-//   TIER1|TIER2  -> (BLE disconnect) -> DISCONNECTED
+//   PINGING      -> (0xFF frame in)  -> FRAMED
+//   PINGING      -> (timeout)        -> TRANSPARENT
+//   TRANSPARENT|FRAMED -> (disconnect) -> DISCONNECTED
 //
 // While PINGING, behavior toward the host is intentionally inert (no text
-// pumped to Serial1) so a Tier 1 host doesn't see a stray 0xFF byte sequence
-// and an active Tier 2 host either responds or we drop back.
+// pumped to Serial1) so a transparent-only host doesn't see a stray 0xFF
+// byte sequence and a framed-capable host either responds or we drop back.
 
 #ifndef TIER_STATE_H
 #define TIER_STATE_H

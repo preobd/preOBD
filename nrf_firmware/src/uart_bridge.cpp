@@ -1,19 +1,19 @@
-// uart_bridge.cpp -- Tier 1 transparent relay + Tier 2 framed dispatch.
+// uart_bridge.cpp -- transparent relay + framed dispatch.
 //
 // Mode is owned by tier_state. This module just routes bytes based on the
-// current tier:
+// current mode:
 //
-//   TIER1 (Phase 1 behavior): raw passthrough both directions. RX flush on
-//     newline, 20-byte fill, or 50ms idle.
-//   TIER2: inbound Serial1 bytes feed the streaming framer; complete frames
-//     are dispatched by type. Outbound BLE writes are wrapped in type 0x01
-//     frames before they hit the wire.
+//   TRANSPARENT (Phase 1 behavior): raw passthrough both directions. RX
+//     flush on newline, 20-byte fill, or 50ms idle.
+//   FRAMED: inbound Serial1 bytes feed the streaming framer; complete
+//     frames are dispatched by type. Outbound BLE writes are wrapped in
+//     type 0x01 frames before they hit the wire.
 //   PINGING: feed inbound bytes to the framer only (to catch a 0xFF echo);
-//     any non-framed Tier 1 chatter the host emits during the 2s window is
+//     any non-framed chatter the host emits during the 2s window is
 //     dropped. Outbound BLE writes are buffered raw -- forwarding either
-//     framed or unframed before we know the tier risks corrupting the
-//     handshake on a Tier 2 host. After resolution they're flushed in the
-//     mode-appropriate form.
+//     framed or unframed before we know the mode risks corrupting the
+//     handshake on a framed-capable host. After resolution they're flushed
+//     in the mode-appropriate form.
 //
 // TX path is still a ring drained from loop() so BLE callbacks never block
 // on Serial1. Phase 3 adds opt-in software-paced flow control via two GPIOs
@@ -32,7 +32,7 @@
 #include "ble_bridge.h"
 #include "ble_services.h"
 #include "board_pins.h"
-#include "tier2_framer.h"
+#include "frame_codec.h"
 #include "tier_state.h"
 
 namespace {
@@ -67,7 +67,7 @@ volatile size_t g_txHead = 0;
 volatile size_t g_txTail = 0;
 
 // --- Tier 2 receive scratch ---
-Tier2Frame g_frame;
+Frame g_frame;
 
 // --- CMD_TX bytes queued during PINGING, replayed post-resolution ---
 // Sized to match the TX ring so a single PINGING-window burst can fit in
@@ -164,12 +164,12 @@ void drainTx() {
 // many caller bytes were successfully framed.
 size_t enqueueAsTextFrames(const uint8_t* data, size_t len) {
     constexpr size_t kFrameChunkPayload = 256;
-    uint8_t frame[TIER2_HEADER_BYTES + kFrameChunkPayload + 1];
+    uint8_t frame[FRAME_HEADER_BYTES + kFrameChunkPayload + 1];
     size_t offset = 0;
     while (offset < len) {
         const size_t chunk = ((len - offset) > kFrameChunkPayload)
                                  ? kFrameChunkPayload : (len - offset);
-        const size_t n = tier2Encode(TIER2_TYPE_TEXT_CMD,
+        const size_t n = frameEncode(FRAME_TYPE_TEXT_CMD,
                                      data + offset,
                                      static_cast<uint16_t>(chunk),
                                      frame);
@@ -183,9 +183,9 @@ size_t enqueueAsTextFrames(const uint8_t* data, size_t len) {
 void notifyCmdRxChunked(const uint8_t* data, uint16_t len) {
     // Tier 2 path -- no host speaks Tier 2 in Phase 2 so this is effectively
     // dead code at runtime. If/when it goes live and the TX queue is tight,
-    // we'll need a per-frame retry stash similar to the Tier 1 path; for
-    // now, swallow the failure and rely on the host-side retry/ACK logic
-    // that PHASE3_TIER2_TRANSPORT_PLAN.md will bring.
+    // we'll need a per-frame retry stash similar to the transparent-mode
+    // path; for now, swallow the failure and rely on host-side retry/ACK
+    // logic that the upcoming Teensy-side MuxTransport will bring.
     size_t offset = 0;
     while (offset < len) {
         const size_t chunk = ((len - offset) > kBleNotifyChunk)
@@ -195,12 +195,12 @@ void notifyCmdRxChunked(const uint8_t* data, uint16_t len) {
     }
 }
 
-void handleFrame(const Tier2Frame& f) {
+void handleFrame(const Frame& f) {
     switch (f.type) {
-    case TIER2_TYPE_PING:
+    case FRAME_TYPE_PING:
         tierStateOnPingFrame();
         break;
-    case TIER2_TYPE_TEXT_RESP:
+    case FRAME_TYPE_TEXT_RESP:
         notifyCmdRxChunked(f.payload, f.len);
         break;
     default:
@@ -272,9 +272,9 @@ void uartBridgePoll() {
         if (!connected) continue;
 
         if (framed || pinging) {
-            const Tier2FeedResult r = tier2FeedByte(
+            const FrameFeedResult r = frameFeedByte(
                 static_cast<uint8_t>(b), g_frame);
-            if (r == TIER2_FRAME_READY) {
+            if (r == FRAME_READY) {
                 handleFrame(g_frame);
             }
             // NEED_MORE / RESYNCING: continue silently. Bytes outside a frame
@@ -314,9 +314,9 @@ void uartBridgePoll() {
 
 size_t uartBridgeWrite(const uint8_t* data, size_t len) {
     // CMD_TX callback path. Mode-dependent:
-    //   PINGING: buffer; flushed on tier resolution.
-    //   TIER2:   wrap in 0x01 frames.
-    //   TIER1:   pass raw.
+    //   PINGING:     buffer; flushed on mode resolution.
+    //   FRAMED:      wrap in 0x01 frames.
+    //   TRANSPARENT: pass raw.
     if (tierStateIsPinging()) {
         const size_t room = kPendingTxSize - g_pendingTxLen;
         const size_t n = (len < room) ? len : room;
@@ -336,5 +336,5 @@ void uartBridgeResetRx() {
     g_rxLen = 0;
     g_pendingTxLen = 0;
     interrupts();
-    tier2DecoderReset();
+    frameDecoderReset();
 }
