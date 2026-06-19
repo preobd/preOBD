@@ -32,6 +32,10 @@
 #if ENABLE_RELAY_OUTPUT
 #include "../outputs/output_relay.h"
 #endif
+#if ENABLE_LED
+#include "../lib/rgb_led.h"   // TEST OUTPUT actuator
+#endif
+#include "../lib/watchdog.h"  // TEST OUTPUT feeds the WDT during its blocking sequence
 #if ENABLE_ELM327
 #include "../outputs/output_elm327.h"
 #endif
@@ -990,6 +994,7 @@ int cmd_test(int argc, const char* const* argv) {
         msg.control.println(F("  Usage: TEST STATUS"));
         msg.control.println(F("  Usage: TEST INJECT <pin> <value>"));
         msg.control.println(F("  Usage: TEST CLEAR"));
+        msg.control.println(F("  Usage: TEST OUTPUT (CONFIG mode)"));
         return 1;
     }
 
@@ -1067,6 +1072,57 @@ int cmd_test(int argc, const char* const* argv) {
             clearInjectedInputs();
             msg.control.println(F("Cleared injected inputs; live readings restored"));
         }
+        return 0;
+    }
+
+    // TEST OUTPUT — pulse each output in turn so an operator can confirm wiring
+    // (the scan-tool "output test" pattern). CONFIG mode only.
+    //
+    // Feeds the watchdog between steps: on Teensy 4.x the WDT cannot actually be
+    // disabled (CONFIG mode only nominally "disables" it), so a multi-second
+    // blocking sequence that never feeds it trips the 2s timeout and resets the
+    // MCU. That was #239 — the fault was the un-fed watchdog, not tone().
+    if (streq_P(subcommand, PSTR("OUTPUT"))) {
+        if (isInRunMode()) {
+            msg.control.println(F("ERROR: TEST OUTPUT requires CONFIG mode"));
+            msg.control.println(F("  Type CONFIG first (actuating outputs in RUN could interfere)"));
+            return 1;
+        }
+        msg.control.println(F("=== Output actuation test (watch / listen to confirm) ==="));
+        bool any = false;
+        (void)any;
+#if ENABLE_LED
+        any = true;
+        msg.control.println(F("RGB LED -> RED"));
+        rgbLedSolid(RGB_RED, PRIORITY_ALARM);   updateRGBLed(); watchdogReset(); delay(600);
+        msg.control.println(F("RGB LED -> GREEN"));
+        rgbLedSolid(RGB_GREEN, PRIORITY_ALARM); updateRGBLed(); watchdogReset(); delay(600);
+        msg.control.println(F("RGB LED -> BLUE"));
+        rgbLedSolid(RGB_BLUE, PRIORITY_ALARM);  updateRGBLed(); watchdogReset(); delay(600);
+        rgbLedRelease(PRIORITY_ALARM);          updateRGBLed();
+#endif
+#if ENABLE_ALARMS && defined(ALARMS_PIN)
+        any = true;
+        msg.control.println(F("Buzzer -> chirp"));
+        tone(ALARMS_PIN, 700); watchdogReset(); delay(250); noTone(ALARMS_PIN);
+#endif
+#if ENABLE_RELAY_OUTPUT
+        for (uint8_t i = 0; i < MAX_RELAYS; i++) {
+            uint8_t pin = systemConfig.relays[i].outputPin;
+            if (pin == 0xFF) continue;            // unconfigured relay slot
+            any = true;
+            msg.control.print(F("Relay ")); msg.control.print(i);
+            msg.control.print(F(" (pin ")); msg.control.print(pin);
+            msg.control.println(F(") -> ON"));
+            pinMode(pin, OUTPUT);
+            digitalWrite(pin, HIGH); watchdogReset(); delay(700);
+            msg.control.print(F("Relay ")); msg.control.print(i);
+            msg.control.println(F(" -> OFF"));
+            digitalWrite(pin, LOW);
+        }
+#endif
+        if (!any) msg.control.println(F("(no actuable outputs in this build)"));
+        else      msg.control.println(F("Output test complete"));
         return 0;
     }
 

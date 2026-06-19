@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Native `pio test -e native` unit-test harness (host toolchain + Arduino stub layer) covering the framed-mode wire codec, the per-input alarm state machine, DJB2 registry hashing, and the Alarm/Relay broadcaster payloads (emit + inbound relay writes) — automating the protocol-correctness half of #221 without hardware
 - `SYSTEM DIAG` command — on-device diagnostics in three sections: `INTEGRITY` (dispatch-table self-check; replaces the standalone `SELFTEST` command), `HW` (peripheral presence probes — LCD/BME280 I²C ACK, SD mount), and `INPUTS` (per-input live reading sanity); bare `SYSTEM DIAG` runs all three, each with its own pass/fail verdict
 - `TEST INJECT <pin> <value>` / `TEST CLEAR` — hold an input at a fixed value for deterministic bench testing (e.g. driving an input past its alarm threshold), then restore live readings; independent of the time-based TEST scenarios
+- `TEST OUTPUT` — pulse each output (RGB LED, buzzer, configured relays) in turn for wiring verification (scan-tool "output test" pattern); CONFIG-mode only, feeds the watchdog through its blocking sequence
 
 ### Changed
 - Renamed `MEASURE_LEVEL` measurement type to `MEASURE_PERCENT` to reflect its actual usage covering normalized 0–100% values (TPS, fuel level, engine load, accelerator pedal) rather than fluid levels (#209)
