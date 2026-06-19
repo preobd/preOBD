@@ -9,10 +9,9 @@
 #include "config.h"
 #include "version.h"
 
-// Board profile pin validation
-#if ENABLE_TEST_MODE && !defined(TEST_MODE_PIN)
-#error "TEST_MODE_PIN must be defined in the board profile when ENABLE_TEST_MODE is set"
-#endif
+// TEST_MODE_PIN is optional: when defined it provides a boot-time hardware
+// trigger for scenario auto-activation; when omitted, the TEST CLI commands
+// (INJECT/CLEAR/STOP/STATUS/<n>) remain fully available without burning a GPIO.
 #include "lib/platform.h"
 #include "lib/watchdog.h"
 
@@ -366,6 +365,9 @@ void setup() {
     // Initialize test mode system
     initTestMode();
 
+    // Boot-time hardware trigger is optional — only when a profile defines
+    // TEST_MODE_PIN. CLI-driven injection works regardless.
+    #ifdef TEST_MODE_PIN
     // Check if test mode trigger pin is pulled LOW
     pinMode(TEST_MODE_PIN, INPUT_PULLUP);
     delay(10);  // Allow pin to stabilize
@@ -386,6 +388,9 @@ void setup() {
     } else {
         msg.debug.info(TAG_SYSTEM, "Test mode available (pin %d is HIGH, normal operation)", TEST_MODE_PIN);
     }
+    #else
+    msg.debug.info(TAG_SYSTEM, "Test mode available (CLI injection; no hardware trigger pin)");
+    #endif
 #endif
 
     initSerialConfig();
