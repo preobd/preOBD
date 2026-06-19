@@ -88,8 +88,8 @@ Tier 2 adds a framing layer on the UART link so commands, OTA data, status updat
 All preOBD-specific UUIDs use a common 128-bit base:
 
 ```
-Base: 4f424400-7072-6542-4244-00000000XXXX
-      "OBD"    "pr" "eB" "BD"          ^^^^-- varies per characteristic
+Base: 4f424400-7072-654f-4244-00000000XXXX
+      "OBD"    "pr" "eO" "BD"          ^^^^-- varies per characteristic
 ```
 
 Defined in `src/lib/ble_gatt_defs.h`.
@@ -98,8 +98,8 @@ Defined in `src/lib/ble_gatt_defs.h`.
 
 | Service | UUID | Tier | Purpose |
 |---------|------|------|---------|
-| preOBD Control | `4f424400-7072-6542-4244-000000000001` | 1 | Text command interface + system status |
-| preOBD Extended | `4f424400-7072-6542-4244-000000000002` | 2 | OTA, alarms, binary relay control |
+| preOBD Control | `4f424400-7072-654f-4244-000000000001` | 1 | Text command interface + system status |
+| preOBD Extended | `4f424400-7072-654f-4244-000000000002` | 2 | OTA, alarms, binary relay control |
 | Nordic UART (NUS) | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` | 1 | Backward compat with BLE terminal apps |
 | Device Information | `0x180A` | 1 | Standard BLE SIG device info |
 
@@ -403,12 +403,12 @@ The webapp requests devices advertising the preOBD Control Service UUID:
 ```javascript
 const device = await navigator.bluetooth.requestDevice({
     filters: [
-        { services: ['4f424400-7072-6542-4244-000000000001'] },  // preOBD
+        { services: ['4f424400-7072-654f-4244-000000000001'] },  // preOBD
         { services: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e'] },  // NUS
         { services: ['0000ffe0-0000-1000-8000-00805f9b34fb'] }    // HM-10
     ],
     optionalServices: [
-        '4f424400-7072-6542-4244-000000000001',
+        '4f424400-7072-654f-4244-000000000001',
         '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
         '0000ffe0-0000-1000-8000-00805f9b34fb',
         0x180A
@@ -505,15 +505,15 @@ The HM-10 and similar transparent BLE UART modules cannot support custom GATT se
 
 | Name | UUID |
 |------|------|
-| preOBD Control Service | `4f424400-7072-6542-4244-000000000001` |
-| Command TX | `4f424400-7072-6542-4244-000000000010` |
-| Command RX | `4f424400-7072-6542-4244-000000000011` |
-| System Status | `4f424400-7072-6542-4244-000000000020` |
-| preOBD Extended Service | `4f424400-7072-6542-4244-000000000002` |
-| Alarm Notify | `4f424400-7072-6542-4244-000000000030` |
-| Relay Control | `4f424400-7072-6542-4244-000000000031` |
-| OTA Control | `4f424400-7072-6542-4244-000000000040` |
-| OTA Data | `4f424400-7072-6542-4244-000000000041` |
+| preOBD Control Service | `4f424400-7072-654f-4244-000000000001` |
+| Command TX | `4f424400-7072-654f-4244-000000000010` |
+| Command RX | `4f424400-7072-654f-4244-000000000011` |
+| System Status | `4f424400-7072-654f-4244-000000000020` |
+| preOBD Extended Service | `4f424400-7072-654f-4244-000000000002` |
+| Alarm Notify | `4f424400-7072-654f-4244-000000000030` |
+| Relay Control | `4f424400-7072-654f-4244-000000000031` |
+| OTA Control | `4f424400-7072-654f-4244-000000000040` |
+| OTA Data | `4f424400-7072-654f-4244-000000000041` |
 | NUS Service | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` |
 | NUS RX | `6e400002-b5a3-f393-e0a9-e50e24dcca9e` |
 | NUS TX | `6e400003-b5a3-f393-e0a9-e50e24dcca9e` |
