@@ -6,6 +6,7 @@
 
 #include <string.h>
 
+#include "elm327_framed.h"
 #include "relay_broadcaster.h"
 
 void MuxTransport::setFramedEnabled(bool enabled) {
@@ -122,6 +123,12 @@ void MuxTransport::handleFrame(const Frame& f) {
         // next tick. RelayBroadcaster compiles to a no-op when relays are
         // disabled on this profile, so the unconditional call is safe.
         RelayBroadcaster::handleInbound(f.payload, f.len);
+        break;
+    case FRAME_TYPE_ELM327:
+        // ELM327 client traffic (e.g. Torque over a concurrent BLE central):
+        // run the AT/OBD parser and emit the response as 0x30 frame(s) on this
+        // same transport. No-op stub when ENABLE_ELM327 is off on this profile.
+        Elm327Framed::handleInbound(f.payload, f.len, *this);
         break;
     default:
         // Status/Alarm/OTA/etc are MCU-originated; clients don't send them.

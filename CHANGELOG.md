@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Host-side ELM327 routing over the framed transport (type `0x30`): the main MCU answers ELM327 AT/OBD queries arriving as `0x30` frames using the existing emulator, so a future concurrent BLE client (Torque/OBD Fusion) can stream alongside the webapp's text channel
 - nRF52840 firmware (Phase 1): BLE↔UART transparent bridge on Adafruit ItsyBitsy nRF52840, enabling phone-based control of the host MCU's serial CLI over BLE; includes Nordic Secure DFU for nRF self-update
 - nRF52840 firmware (Phase 2): Tier 2 framed UART protocol with auto-detect on BLE connect, falling back to Tier 1 transparent passthrough if the host doesn't speak the framing — keeps current Teensy behavior unchanged while enabling future multi-channel transports
 - nRF52840 firmware (Phase 3): software-paced flow control on the host-MCU UART link via two GPIOs (`PIN_NRF_RTS_OUT` / `PIN_NRF_CTS_IN` in platformio.ini build flags); the nRF asserts its RTS when its Serial1 RX ring fills past a high-water mark so the host stops transmitting, unblocking reliable multi-KB bulk responses like `SYSTEM DUMP JSON` at 115200 baud. Both nRF and host must opt in for the throttle to engage; users who haven't wired CTS/RTS can instead drop the link baud below the BLE drain ceiling via `BUS SERIAL <port> BAUDRATE 9600` (also 19200/38400 work) to avoid overflow.

@@ -17,6 +17,7 @@
 #define ENABLE_ALARMS           1
 #define ENABLE_FRAMED_TRANSPORT 1
 #define ENABLE_RELAY_OUTPUT     1
+#define ENABLE_ELM327           1
 #define ENABLE_SELFTEST         1
 
 #endif // PROFILE_NATIVE_H

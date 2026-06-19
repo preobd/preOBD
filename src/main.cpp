@@ -49,6 +49,7 @@
 #include "lib/status_broadcaster.h"
 #include "lib/alarm_broadcaster.h"
 #include "lib/relay_broadcaster.h"
+#include "lib/elm327_framed.h"
 #ifdef ESP32
 // Include appropriate Bluetooth transport for ESP32 variant
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
@@ -348,6 +349,11 @@ void setup() {
     // Build OBD-II PID lookup table (shared by CAN and ELM327 output paths).
     // Called unconditionally so it works even when CAN output is not enabled.
     obdQuery_buildLookupTable();
+
+    // Bind the framed-transport ELM327 channel (type 0x30) to the parser. Uses
+    // the same OBD lookup table just built; no-op stub unless both
+    // ENABLE_FRAMED_TRANSPORT and ENABLE_ELM327 are set.
+    Elm327Framed::init();
 
     // Wait for sensors to stabilize
     msg.debug.info(TAG_SENSOR, "Waiting for sensors to stabilize...");

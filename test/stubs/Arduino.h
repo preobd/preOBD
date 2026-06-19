@@ -86,10 +86,20 @@ public:
         if (s) while (*s) n += write(static_cast<uint8_t>(*s++));
         return n;
     }
+    size_t print(char c) { return write(static_cast<uint8_t>(c)); }
 };
 
-// ----- Stream (forward decl is enough for pointer members) -----
-class Stream;
+// ----- Stream -----
+// Minimal concrete interface: the three pure virtuals real code reads through.
+// A forward decl suffices for the common `Stream*` member case; the full
+// definition is needed when a test subclasses Stream (e.g. an in-memory bridge
+// feeding the ELM327 parser).
+class Stream : public Print {
+public:
+    virtual int available() = 0;
+    virtual int read() = 0;
+    virtual int peek() = 0;
+};
 
 // ----- Number formatting used by TransportInterface's inline print() helpers.
 // Parsed wherever transport_interface.h is included, so they must exist.
@@ -107,6 +117,46 @@ inline char* dtostrf(double val, signed char /*width*/, unsigned char prec,
     sprintf(s, "%.*f", static_cast<int>(prec), val);
     return s;
 }
+inline char* ltoa(long value, char* str, int base) {
+    if (base == 16)      sprintf(str, "%lx", value);
+    else if (base == 8)  sprintf(str, "%lo", value);
+    else                 sprintf(str, "%ld", value);
+    return str;
+}
+inline char* utoa(unsigned int value, char* str, int base) {
+    if (base == 16)      sprintf(str, "%x", value);
+    else if (base == 8)  sprintf(str, "%o", value);
+    else if (base == 2) {
+        char tmp[33]; int i = 0;
+        if (value == 0) tmp[i++] = '0';
+        while (value) { tmp[i++] = static_cast<char>('0' + (value & 1)); value >>= 1; }
+        int j = 0;
+        while (i) str[j++] = tmp[--i];
+        str[j] = '\0';
+    } else               sprintf(str, "%u", value);
+    return str;
+}
+inline char* ultoa(unsigned long value, char* str, int base) {
+    if (base == 16)      sprintf(str, "%lx", value);
+    else if (base == 8)  sprintf(str, "%lo", value);
+    else if (base == 2) {
+        char tmp[33]; int i = 0;
+        if (value == 0) tmp[i++] = '0';
+        while (value) { tmp[i++] = static_cast<char>('0' + (value & 1)); value >>= 1; }
+        int j = 0;
+        while (i) str[j++] = tmp[--i];
+        str[j] = '\0';
+    } else               sprintf(str, "%lu", value);
+    return str;
+}
 #pragma clang diagnostic pop
+
+// Print-format base selectors (Arduino constants).
+#ifndef HEX
+#define HEX 16
+#define DEC 10
+#define OCT 8
+#define BIN 2
+#endif
 
 #endif // NATIVE_TEST_ARDUINO_H
