@@ -34,16 +34,29 @@ void bleServicesInit();
 //   Hm10: framed type 0x30 ELM327 responses    -> FFE1
 //   Transparent: raw passthrough (single client) -> CMD_RX + NUS TX + FFE1
 //
+// Targets are (characteristic x connected-central) pairs: each chunk fans out
+// to every central subscribed to the characteristic, not just one. (Bluefruit's
+// plain notify() targets only the most-recently connected central, so the
+// explicit per-handle fan-out is what makes two concurrent centrals work.)
+//
 // `doneMask` is per-chunk progress tracked by the caller: it records which
-// fan-out targets have already accepted *this* chunk so that a retry (after a
-// partial back-pressure) only re-sends to the targets that haven't, never
-// duplicating a notify to a char that already took it. The caller seeds it to
-// 0 for each new chunk and passes the same variable back on every retry of
-// that chunk; the helper sets one bit per accepted/absent target.
+// (char, central) pairs have already accepted *this* chunk so that a retry
+// (after a partial back-pressure) only re-sends to the pairs that haven't,
+// never duplicating a notify to a link that already took it. The caller seeds
+// it to 0 for each new chunk and passes the same variable back on every retry
+// of that chunk; the helper sets one bit per accepted/absent/unsubscribed pair.
 bool bleServicesNotifyText(const uint8_t* data, size_t len, uint8_t& doneMask);
 bool bleServicesNotifyHm10(const uint8_t* data, size_t len, uint8_t& doneMask);
 bool bleServicesNotifyTransparent(const uint8_t* data, size_t len,
                                   uint8_t& doneMask);
+
+// Best-effort fan-out of a single fixed-size notify to every connected central
+// subscribed to `chr`. For the binary snapshot characteristics owned by the
+// alarm / relay / OTA handlers, which must reach all centrals -- Bluefruit's
+// plain chr.notify(data,len) only targets the most-recently connected one.
+// Drops silently under back-pressure; callers re-push on the next change.
+void bleServicesNotifyAll(BLECharacteristic& chr, const uint8_t* data,
+                          uint16_t len);
 
 // Largest CMD_RX notify payload the current link can carry in a single ATT
 // packet: negotiated ATT MTU minus the 3-byte ATT header, floored at 20

@@ -71,9 +71,24 @@ void setup() {
     // begin() either no-ops or half-reconfigures the live GATT stack, which
     // is what made the GATT connection drop mid-discovery on the first
     // build attempting this fix.
-    Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
+    // configPrphBandwidth(BANDWIDTH_MAX) expands to configPrphConn(247, 100, 3):
+    // MTU 247, event_length 100 (= 125ms), HVN queue depth 3. That 125ms
+    // per-connection radio reservation is fine for ONE central but two cannot
+    // share it -- the SoftDevice can't interleave two 125ms events at a 15-30ms
+    // connection interval, so the second link starves: choppy PID stream, ~halved
+    // throughput, and enough missed events to trip a supervision-timeout drop
+    // (bench-observed when the webapp got busy while Torque streamed). Keep the
+    // MTU 247 + HVN depth 3 that gave the webapp its bulk-dump throughput (#229),
+    // but cap the event window so BOTH links get serviced every interval.
+    // event_len units are 1.25ms: 6 = 7.5ms, two of which fit a 15ms interval.
+    // (Bonus: smaller event buffers => less SoftDevice RAM than MAX.) This is the
+    // tuning knob if contention persists -- drop event_len toward MIN (2) before
+    // touching MTU. MUST precede begin() (consumed to size SD event buffers).
+    Bluefruit.configPrphConn(247, 6, 3, BLE_GATTC_WRITE_CMD_TX_QUEUE_SIZE_DEFAULT);
 
-    Bluefruit.begin();
+    // Two peripheral connections so a webapp (Control Service) and a phone OBD
+    // app (HM-10 FFE1) can be connected at the same time.
+    Bluefruit.begin(2);
     Bluefruit.setName("preOBD");
     Bluefruit.setTxPower(0);                      // 0 dBm for bench bring-up
     Bluefruit.autoConnLed(false);                 // we drive PIN_STATUS_LED
@@ -86,6 +101,14 @@ void setup() {
     // around 7-9 KB/s, comfortably above the throughput we need for
     // SYSTEM DUMP JSON and similar bulk responses.
     Bluefruit.Periph.setConnInterval(12, 24);
+
+    // Raise the supervision timeout (default 2000ms) so a transient scheduling
+    // stall under two-central contention -- e.g. a burst of webapp notifies
+    // momentarily starving Torque's link -- can't drop the connection. 6s gives
+    // wide margin. Preferred value: the central may negotiate it down, but
+    // Android/Chrome generally honor a larger timeout. (Must exceed
+    // (1+latency)*max_interval*2 = 60ms here, so 6000ms is well clear.)
+    Bluefruit.Periph.setConnSupervisionTimeoutMS(6000);
 
     bleBridgeInit();
     bleServicesInit();
@@ -105,6 +128,7 @@ void setup() {
 }
 
 void loop() {
+    bleBridgePoll();   // re-converge IRQ/tier/advertising to ground-truth conn count
     tierStatePoll();
     uartBridgePoll();
     dfuTriggerPoll();

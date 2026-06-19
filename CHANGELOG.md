@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- nRF52840 firmware: two-central BLE concurrency — a webapp (Control Service) and a phone OBD app (HM-10 `FFE1`) can connect and run at the same time (e.g. live config while Torque streams), with per-connection notify fan-out, connection ref-counted advertising/IRQ/framing lifecycle, and dual-link radio tuning; bench-verified at ~16 PID/s concurrent
 - Webapp build-time version stamp: `tools/inject_webapp_version.py` rewrites a webapp-scoped git id (`b<count> @<sha>`) into the footer and the service-worker cache name during the GitHub Pages deploy, replacing the `document.lastModified` stopgap; local working copies show a `DEV` marker with a live last-modified timestamp (#226)
 - Host-side ELM327 routing over the framed transport (type `0x30`): the main MCU answers ELM327 AT/OBD queries arriving as `0x30` frames using the existing emulator, so a future concurrent BLE client (Torque/OBD Fusion) can stream alongside the webapp's text channel
 - nRF52840 firmware: ELM327-over-BLE for phone OBD apps via an HM-10 (FFE0/FFE1) GATT channel that wraps their traffic into framed type `0x30` and unwraps responses, plus a Nordic UART Service (NUS) terminal channel — OBD apps and the webapp/terminal now ride separate BLE characteristics (single connected central this cycle; concurrent two-central support is a follow-up)

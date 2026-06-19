@@ -12,6 +12,7 @@
 #include <bluefruit.h>
 
 #include "ble_gatt_defs.h"
+#include "ble_services.h"
 #include "uuid_util.h"
 
 namespace {
@@ -30,9 +31,7 @@ constexpr uint8_t kOtaCmdComplete = 0x03;
 
 void notifyComplete(bool crcOk) {
     uint8_t pkt[2] = { kOtaCmdComplete, static_cast<uint8_t>(crcOk ? 1 : 0) };
-    if (Bluefruit.connected()) {
-        g_otaCtrl.notify(pkt, sizeof(pkt));
-    }
+    bleServicesNotifyAll(g_otaCtrl, pkt, sizeof(pkt));
 }
 
 void otaCtrlWrite(uint16_t /*conn*/, BLECharacteristic* /*chr*/,

@@ -12,6 +12,7 @@
 #include <bluefruit.h>
 
 #include "ble_gatt_defs.h"
+#include "ble_services.h"
 #include "frame_codec.h"
 #include "uart_bridge.h"
 #include "uuid_util.h"
@@ -53,8 +54,6 @@ void relayHandlerInit() {
 bool relayHandlerPush(const uint8_t* payload, uint16_t len) {
     if (!payload || len != PREOBD_RELAY_STATE_SIZE) return false;
     g_relay.write(payload, len);
-    if (Bluefruit.connected()) {
-        g_relay.notify(payload, len);
-    }
+    bleServicesNotifyAll(g_relay, payload, len);
     return true;
 }

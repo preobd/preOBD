@@ -56,32 +56,54 @@ void hm10WriteCallback(uint16_t /*conn_handle*/, BLECharacteristic* /*chr*/,
     }
 }
 
-// Notify one chunk to each characteristic in `chrs[0..n)` that a client has
-// subscribed to. Skips unsubscribed chars so a multi-target fan-out to a
-// single connected client doesn't report a phantom back-pressure. `doneMask`
-// carries per-target progress across retries: bit i is set once char i has
-// accepted this chunk (or is unsubscribed), so a retry after a partial
-// back-pressure re-sends only to the still-pending targets -- never delivering
-// the same chunk twice to a char that already took it. Returns true once every
-// target's bit is set (chunk fully delivered); false while a subscribed char's
-// HVN queue is still full (caller retries the same chunk + mask).
+// Maximum simultaneous peripheral links -- must match Bluefruit.begin(2) in
+// main.cpp. With two peripheral connections the SoftDevice assigns the low
+// handle indices [0, kMaxConnSlots), so we use the connection handle directly
+// as a compact slot index for the fan-out retry mask below.
+constexpr uint16_t kMaxConnSlots = 2;
+
+// Notify one chunk to every (characteristic, connected-central) pair where the
+// central has subscribed to that characteristic.
+//
+// Per-connection on purpose: Bluefruit's plain notify(data,len) and
+// notifyEnabled() default to Bluefruit.connHandle() -- the *most-recently*
+// connected central only -- so a naive fan-out silently stops reaching the
+// first central the instant a second one connects (the bug that froze the
+// webapp when an OBD app joined). We therefore notify each handle explicitly.
+//
+// `doneMask` carries per-(char,slot) progress across retries: bit
+// (i*kMaxConnSlots + h) is set once char i has been accepted by, or is
+// absent/unsubscribed on, the central at handle h. A retry after a partial
+// back-pressure re-sends only to the still-pending pairs -- never duplicating a
+// chunk to a link that already took it. Caller seeds doneMask to 0 per chunk and
+// passes the same variable back on each retry. Bit budget: n<=3 chars *
+// kMaxConnSlots(2) = 6 bits, fits the uint8_t mask. Returns true once the chunk
+// is fully delivered (every pair settled); false while a subscribed link's HVN
+// queue is still full (caller retries the same chunk + mask).
 bool notifyFanout(BLECharacteristic* const chrs[], size_t n,
                   const uint8_t* data, size_t len, uint8_t& doneMask) {
-    if (!Bluefruit.connected()) return true;
+    bool allDone = true;
     for (size_t i = 0; i < n; ++i) {
-        const uint8_t bit = static_cast<uint8_t>(1u << i);
-        if (doneMask & bit) continue;            // already delivered on a prior pass
-        if (!chrs[i]->notifyEnabled()) {         // nobody listening on this char
-            doneMask |= bit;
-            continue;
+        for (uint16_t h = 0; h < kMaxConnSlots; ++h) {
+            const uint8_t bit = static_cast<uint8_t>(1u << (i * kMaxConnSlots + h));
+            if (doneMask & bit) continue;            // already settled on a prior pass
+            BLEConnection* conn = Bluefruit.Connection(h);
+            if (!conn || !conn->connected()) {       // slot empty
+                doneMask |= bit;
+                continue;
+            }
+            if (!chrs[i]->notifyEnabled(h)) {        // this central not subscribed
+                doneMask |= bit;
+                continue;
+            }
+            if (chrs[i]->notify(h, data, len)) {
+                doneMask |= bit;                     // accepted
+            } else {
+                allDone = false;                     // HVN full; retry this pair next pass
+            }
         }
-        if (chrs[i]->notify(data, len)) {
-            doneMask |= bit;                     // accepted
-        }
-        // else: leave the bit clear so the next pass retries only this char.
     }
-    const uint8_t full = static_cast<uint8_t>((1u << n) - 1);
-    return (doneMask & full) == full;
+    return allDone;
 }
 
 } // namespace
@@ -200,24 +222,45 @@ size_t bleServicesMaxNotifyChunk() {
     constexpr size_t kDefaultChunk   = BLE_GATT_ATT_MTU_DEFAULT - kAttHeaderBytes; // 20
     constexpr size_t kMaxChunk       = 244;  // matches g_cmdRx.setMaxLen(244)
 
-    BLEConnection* conn = Bluefruit.Connection(Bluefruit.connHandle());
-    if (!conn) return kDefaultChunk;
+    // With two centrals the negotiated MTUs can differ. A notify is fanned out
+    // to every subscriber, so size the chunk to the SMALLEST active link --
+    // a chunk sized for the larger MTU would be rejected on the smaller one.
+    // Scan the SAME handle range the fan-out uses (kMaxConnSlots, the begin(2)
+    // peripheral handles 0/1) so the chunk floor and the notify targets stay
+    // consistent -- never shrink everyone's chunk for a link we don't notify.
+    uint16_t minMtu = 0;
+    for (uint16_t h = 0; h < kMaxConnSlots; ++h) {
+        BLEConnection* conn = Bluefruit.Connection(h);
+        if (!conn || !conn->connected()) continue;
+        const uint16_t mtu = conn->getMtu();
+        if (minMtu == 0 || mtu < minMtu) minMtu = mtu;
+    }
+    if (minMtu <= kAttHeaderBytes) return kDefaultChunk;  // none connected / tiny
 
-    const uint16_t mtu = conn->getMtu();
-    if (mtu <= kAttHeaderBytes) return kDefaultChunk;
-
-    size_t payload = mtu - kAttHeaderBytes;
+    size_t payload = minMtu - kAttHeaderBytes;
     if (payload < kDefaultChunk) payload = kDefaultChunk;
     if (payload > kMaxChunk)     payload = kMaxChunk;
     return payload;
 }
 
+void bleServicesNotifyAll(BLECharacteristic& chr, const uint8_t* data,
+                          uint16_t len) {
+    // Best-effort fan-out of one fixed-size notify to every connected central
+    // subscribed to `chr`. Same per-handle reason as notifyFanout: a plain
+    // chr.notify(data,len) would only reach the most-recently connected central.
+    // Drops silently if a link's HVN queue is full -- the binary snapshot
+    // characteristics (Status/Alarm/Relay/OTA) re-push on the next change.
+    for (uint16_t h = 0; h < kMaxConnSlots; ++h) {
+        BLEConnection* conn = Bluefruit.Connection(h);
+        if (!conn || !conn->connected()) continue;
+        if (chr.notifyEnabled(h)) chr.notify(h, data, len);
+    }
+}
+
 void bleServicesUpdateStatus(const uint8_t* payload, uint16_t len) {
     if (len != PREOBD_STATUS_SIZE) return;
     g_status.write(payload, len);
-    if (Bluefruit.connected()) {
-        g_status.notify(payload, len);
-    }
+    bleServicesNotifyAll(g_status, payload, len);
 }
 
 BLEService& bleServicesControlService() {

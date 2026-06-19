@@ -18,7 +18,11 @@
 
 void tierStateInit();
 
-// Called from the BLE connect/disconnect callbacks.
+// Called from the BLE connect/disconnect callbacks. With two-central
+// concurrency these fire only on the 0<->1 connection edges (see
+// ble_bridge.cpp): negotiation runs once on the *first* connect and framing
+// is torn down only on the *last* disconnect, so a second central joining or
+// leaving mid-session leaves the established tier untouched.
 void tierStateOnConnect();
 void tierStateOnDisconnect();
 

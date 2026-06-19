@@ -111,6 +111,12 @@ NotifyDest g_pendingNotifyDest = DEST_TEXT;
 uint8_t g_pendingNotifyMask = 0;   // for the framed-response stash drain
 uint8_t g_rxNotifyMask      = 0;   // for the transparent g_rx flush
 
+// Chunk size frozen for the duration of a partially-acked chunk. The min-MTU
+// across connected links can change mid-drain (a 2nd central joins/drops), but
+// a chunk that some links already accepted must keep its size so the offset
+// advances by exactly what those links received -- see drainPendingNotify.
+uint16_t g_pendingNotifyChunk = 0;
+
 // Returns true if the buffer was successfully flushed (or was already
 // empty). Returns false if BLE notify is back-pressuring; caller MUST hold
 // off reading more Serial1 bytes until a subsequent retry succeeds, or
@@ -235,9 +241,25 @@ bool drainPendingNotify() {
     // Size chunks to the negotiated link MTU (up to 244B) instead of the old
     // fixed 20B -- on a BANDWIDTH_MAX link that's ~12x fewer notify calls,
     // each blocking ~one connection interval, for a bulk text response.
-    // Queried once per drain: the MTU is stable for the connection's life.
-    const uint16_t maxChunk = static_cast<uint16_t>(bleServicesMaxNotifyChunk());
     while (g_pendingNotifyOffset < g_pendingNotifyLen) {
+        // Recompute the chunk size only at a clean chunk boundary (mask == 0).
+        // With two centrals the min-MTU can change mid-drain (one joins/drops);
+        // freezing the size while a chunk is partially acked (mask != 0) keeps
+        // the offset advancing by exactly what the already-served links got --
+        // otherwise the bulk stream to an acked central duplicates or drops
+        // bytes when the next poll retries the same offset at a new size.
+        // Residual edge (deferred to #263): a central that connects AND
+        // subscribes within one chunk's partial-ack window becomes a target
+        // mid-stream and receives the frozen chunk (a late, possibly fragmented
+        // fragment). It is bounded -- a stalled link self-resolves at the
+        // supervision timeout -- and the proper fix (snapshot the target set per
+        // payload so late joiners are excluded) belongs to the #263 notify
+        // rework, not this size-freeze.
+        if (g_pendingNotifyMask == 0) {
+            g_pendingNotifyChunk =
+                static_cast<uint16_t>(bleServicesMaxNotifyChunk());
+        }
+        const uint16_t maxChunk = g_pendingNotifyChunk;
         const uint16_t remaining = g_pendingNotifyLen - g_pendingNotifyOffset;
         const uint16_t chunk = (remaining > maxChunk) ? maxChunk : remaining;
         const uint8_t* p = g_pendingNotifyPayload + g_pendingNotifyOffset;

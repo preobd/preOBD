@@ -8,6 +8,7 @@
 #include <bluefruit.h>
 
 #include "ble_gatt_defs.h"
+#include "ble_services.h"
 #include "uuid_util.h"
 
 namespace {
@@ -33,7 +34,6 @@ void alarmHandlerInit() {
 
 bool alarmHandlerPush(const uint8_t* payload, uint16_t len) {
     if (!payload || len != PREOBD_ALARM_EVENT_SIZE) return false;
-    if (!Bluefruit.connected()) return true;
-    g_alarm.notify(payload, len);
+    bleServicesNotifyAll(g_alarm, payload, len);
     return true;
 }
