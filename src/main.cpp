@@ -61,7 +61,15 @@ SerialTransport usbSerial(&Serial, "USB", 115200);
 // Hardware serial transports - created for all available ports
 // Actual initialization happens in initConfiguredSerialPorts() based on config
 #if NUM_SERIAL_PORTS >= 1
+// Phase 3: nRF coprocessor link uses software-paced flow control on Teensy
+// 4.x (no HW CTS on Serial1). When HOST_NRF_CTS_PIN is defined the
+// SerialTransport polls that pin and yields before write -- see
+// transport_serial.h and serial_manager.cpp.
+#if defined(HOST_NRF_CTS_PIN)
+SerialTransport hwSerial1(&Serial1, "SERIAL1", 115200, HOST_NRF_CTS_PIN);
+#else
 SerialTransport hwSerial1(&Serial1, "SERIAL1", 115200);
+#endif
 #endif
 #if NUM_SERIAL_PORTS >= 2
 SerialTransport hwSerial2(&Serial2, "SERIAL2", 115200);

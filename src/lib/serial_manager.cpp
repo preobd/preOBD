@@ -119,6 +119,21 @@ bool initSerialPort(uint8_t port_id, uint32_t baudrate) {
     if (!validateNoPinConflict(tx, PIN_RESERVED, getSerialPortName(port_id))) {
         return false;
     }
+#if defined(HOST_NRF_CTS_PIN) && defined(HOST_NRF_RTS_PIN)
+    // Phase 3 nRF coprocessor link: CTS/RTS GPIOs participate in pin
+    // allocation too, otherwise a later button/output assignment could
+    // silently reuse them and break the UART.
+    if (port_id == 1) {
+        if (!validateNoPinConflict(HOST_NRF_CTS_PIN, PIN_RESERVED,
+                                   getSerialPortName(port_id))) {
+            return false;
+        }
+        if (!validateNoPinConflict(HOST_NRF_RTS_PIN, PIN_RESERVED,
+                                   getSerialPortName(port_id))) {
+            return false;
+        }
+    }
+#endif
 
     // Platform-specific initialization
     bool success = false;
@@ -126,7 +141,28 @@ bool initSerialPort(uint8_t port_id, uint32_t baudrate) {
 #if defined(__IMXRT1062__)
     // Teensy 4.x: Serial1-Serial7 (or Serial8 on 4.1)
     switch (port_id) {
-        case 1: Serial1.begin(baudrate); success = true; break;
+        case 1:
+            Serial1.begin(baudrate);
+#if defined(HOST_NRF_CTS_PIN) && defined(HOST_NRF_RTS_PIN)
+            // Phase 3 nRF coprocessor link -- software-paced flow control.
+            // Teensy 4.x Serial1 (LPUART6) has no hardware CTS pin, so we
+            // GPIO-pace instead: the nRF drives HOST_NRF_CTS_PIN HIGH when
+            // its RX buffer is filling up; SerialTransport throttles
+            // Serial1.write while that line is asserted (see
+            // transport_serial.h). HOST_NRF_RTS_PIN is the Teensy's
+            // outbound throttle to the nRF -- driven LOW (always-ready)
+            // for now since nRF -> Teensy is the lower-bandwidth direction.
+            // INPUT_PULLDOWN so a disconnected nRF (line floating near the
+            // CMOS switching threshold) reads LOW = always-clear-to-send,
+            // not an indeterminate HIGH that would deadlock awaitFlowClear's
+            // indefinite wait. Matches the nRF side which uses
+            // INPUT_PULLDOWN on its own CTS_IN.
+            pinMode(HOST_NRF_CTS_PIN, INPUT_PULLDOWN);
+            pinMode(HOST_NRF_RTS_PIN, OUTPUT);
+            digitalWrite(HOST_NRF_RTS_PIN, LOW);
+#endif
+            success = true;
+            break;
         case 2: Serial2.begin(baudrate); success = true; break;
         case 3: Serial3.begin(baudrate); success = true; break;
         case 4: Serial4.begin(baudrate); success = true; break;
@@ -181,6 +217,12 @@ bool initSerialPort(uint8_t port_id, uint32_t baudrate) {
         // Register pins
         registerPin(rx, PIN_RESERVED, getSerialPortName(port_id));
         registerPin(tx, PIN_RESERVED, getSerialPortName(port_id));
+#if defined(HOST_NRF_CTS_PIN) && defined(HOST_NRF_RTS_PIN)
+        if (port_id == 1) {
+            registerPin(HOST_NRF_CTS_PIN, PIN_RESERVED, getSerialPortName(port_id));
+            registerPin(HOST_NRF_RTS_PIN, PIN_RESERVED, getSerialPortName(port_id));
+        }
+#endif
 
         msg.debug.info(TAG_SERIAL, "Serial%d initialized @ %lu baud", port_id, baudrate);
     }
@@ -214,6 +256,14 @@ bool disableSerialPort(uint8_t port_id) {
     uint8_t tx = getDefaultSerialTX(port_id);
     unregisterPin(rx);
     unregisterPin(tx);
+#if defined(HOST_NRF_CTS_PIN) && defined(HOST_NRF_RTS_PIN)
+    // Release the Phase 3 flow-control pins so they're available for
+    // reassignment if Serial1 is reconfigured or repurposed.
+    if (port_id == 1) {
+        unregisterPin(HOST_NRF_CTS_PIN);
+        unregisterPin(HOST_NRF_RTS_PIN);
+    }
+#endif
 
     // Note: We don't call Serial.end() as it might be in use by transport layer
 
