@@ -297,6 +297,8 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
         port["port"] = port_id;
         port["enabled"] = (bool)(systemConfig.serial.enabled_mask & (1 << i));
         port["baudrate"] = getBaudRateFromIndex(systemConfig.serial.baudrate_index[i]);
+        port["framed"] = (bool)(systemConfig.serial.framed_enabled_mask & (1 << i));
+        port["elm327"] = (systemConfig.buses.elm327_serial_port == port_id);
     }
 
     // Log Filter Configuration
