@@ -2754,6 +2754,7 @@ function openAddEditor() {
   // defaults, mirroring the Rule the firmware auto-seeds on SET APPLICATION.
   // (Existing inputs keep their actual band, read back from the Rule.)
   applyAppDefaultsToAlarm();
+  applyAppDefaultsToObd();
   editor.style.display = '';
   editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -2806,6 +2807,7 @@ function updateEditorDropdowns() {
 function onEditorAppChange() {
   updateEditorDropdowns();
   applyAppDefaultsToAlarm();
+  applyAppDefaultsToObd();
 }
 
 // The application's default alarm band, or null when it doesn't default to one.
@@ -2851,6 +2853,30 @@ function applyAppDefaultsToAlarm() {
     chkEl.checked = false;
   }
   syncAlarmFieldsToCheckbox();
+}
+
+// Re-seed the OBD-II PID/length from the selected application's defaults on a
+// fresh add or an app change — mirrors applyAppDefaultsToAlarm and the firmware's
+// own SET APPLICATION seeding (LIST APPLICATIONS exposes obd2pid/obd2length). Set
+// unconditionally (like the alarm band) so switching applications updates the PID
+// to the new app's default rather than sticking on the first one; an app with no
+// default PID clears the field. Only fires on add / app-change — editing an
+// existing input keeps its stored PID (openEditor doesn't call this). Without it
+// the app's assigned PID stayed invisible until a full config re-read.
+function applyAppDefaultsToObd() {
+  const pidEl = document.getElementById('edObdPid');
+  const lenEl = document.getElementById('edObdLength');
+  if (!pidEl || !lenEl) return;
+  const app = catalog.applications.find(a => a.name === document.getElementById('edApp').value);
+  const pid = app?.obd2pid || 0;
+  if (pid) {
+    pidEl.value = '0x' + pid.toString(16).toUpperCase().padStart(2, '0');
+    lenEl.value = app.obd2length || 1;
+    lenEl.disabled = false;
+  } else {
+    pidEl.value = '';
+    lenEl.disabled = true;
+  }
 }
 
 // User toggled "Alarm enabled". Enabling an empty band seeds it from the app
