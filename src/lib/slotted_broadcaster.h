@@ -57,7 +57,6 @@ public:
     void tick(uint32_t now, uint32_t heartbeatMs,
               PackFn pack, EqualFn equal, SendFn send) {
         const bool heartbeatDue = heartbeatMs && (now - lastSendMs_) >= heartbeatMs;
-        bool allSent = true;
         for (int i = 0; i < N; ++i) {
             Key k = pack(i);
             const bool changed = !have_[i] || !equal(k, last_[i]);
@@ -66,11 +65,18 @@ public:
                 last_[i] = k;
                 have_[i] = true;
                 ++sequence_;
-            } else {
-                allSent = false;  // backpressure: retry next tick, keep cache
             }
+            // Backpressure (send == false): leave have_/last_ untouched so a
+            // *changed* slot retries on the next tick via the change check.
         }
-        if (heartbeatDue && allSent) lastSendMs_ = now;
+        // Advance the heartbeat timer whenever a heartbeat fired, regardless of
+        // whether every send succeeded. Gating this on "all sends succeeded" was
+        // a flood bug: one transient TX-buffer-full during the heartbeat burst
+        // left lastSendMs_ frozen, so heartbeatDue stayed true forever and every
+        // slot re-emitted on *every* tick (empty Action slots saturated the BLE
+        // link and starved the text channel). Backpressured slots still recover
+        // via the change check above (changed) or the next heartbeat.
+        if (heartbeatDue) lastSendMs_ = now;
     }
 
 private:
