@@ -26,9 +26,9 @@
 // CLI instance and configuration
 //=============================================================================
 
-// Configuration parameters sourced from per-env profile (src/profiles/).
+// Configuration parameters sourced from per-board header (boards/<board>/board.h).
 // embeddedCliRequiredSize() validates CLI_BUFFER_SIZE at runtime; increase in
-// the profile if CLI init fails.
+// board.h if CLI init fails.
 static CLI_UINT cli_buffer[BYTES_TO_CLI_UINTS(CLI_BUFFER_SIZE)];
 static EmbeddedCli* cli = nullptr;
 

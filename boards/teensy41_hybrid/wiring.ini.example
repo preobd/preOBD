@@ -1,0 +1,9 @@
+; boards/teensy41_hybrid/wiring.ini — YOUR wiring (gitignored). Copy to wiring.ini.
+[teensy41_hybrid]
+wiring =
+;    -D RGB_PIN_R=11
+;    -D RGB_PIN_G=12
+;    -D RGB_PIN_B=13
+;    -D BUZZER_PIN=3
+;    -D MODE_BUTTON_PIN=5
+;    -D TEST_MODE_PIN=8

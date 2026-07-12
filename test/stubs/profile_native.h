@@ -1,7 +1,8 @@
 // profile_native.h — synthetic board profile for the native (host) test build.
 //
-// Real firmware builds inject a src/profiles/profile_*.h via `-include`; the
-// native test env does the same with this file (see [env:native] build_flags).
+// Real firmware builds inject boards/<board>/board.h (+ boards/resolve.h) via
+// `-include`; the native test env does the same with this file (see
+// [env:native] build_flags).
 // It supplies the sizing + feature flags the compiled-in modules expect.
 // Values mirror a Teensy-class build; MAX_INPUTS is kept small to keep test
 // arrays cheap.

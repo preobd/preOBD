@@ -24,7 +24,7 @@ enum CANScanState {
 // SCAN RESULT STRUCTURE
 // ============================================================================
 
-// MAX_SCAN_RESULTS set per env in src/profiles/.
+// MAX_SCAN_RESULTS set per board in boards/<board>/board.h.
 
 struct CANScanResult {
     uint16_t can_id;        // CAN identifier

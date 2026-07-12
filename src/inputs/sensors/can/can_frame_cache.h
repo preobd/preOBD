@@ -24,7 +24,7 @@
 #include "../../../lib/sensor_types.h"
 
 // ===== CONFIGURATION =====
-// CAN_CACHE_SIZE must be a power of 2; set per env in src/profiles/.
+// CAN_CACHE_SIZE must be a power of 2; set per board in boards/<board>/board.h.
 // CAN_DEFAULT_TIMEOUT_MS is defined in sensor_types.h
 
 // ===== DATA STRUCTURES =====

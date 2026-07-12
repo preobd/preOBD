@@ -1,6 +1,6 @@
 /*
  * platform.h - Hardware-derived platform constants (ADC, voltage, divider).
- * Feature flags and sizing live in src/profiles/ — one header per PlatformIO env.
+ * Feature flags and sizing live in boards/<board>/board.h — one per board.
  */
 
 #ifndef PLATFORM_H

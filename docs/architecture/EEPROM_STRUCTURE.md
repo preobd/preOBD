@@ -268,7 +268,7 @@ struct SystemConfig {
     // Display, units, intervals, sea-level pressure
     // (see src/lib/system_config.h for the full layout)
     // Note: hardware pin assignments are NOT stored here — they are compile-time
-    // constants defined in the board profile (src/profiles/profile_*.h)
+    // constants defined in the board definition (boards/<board>/board.h)
 
     // Transport router (v4+) — control/data/debug primary+secondary, BT
     struct { /* ... */ } router;

@@ -539,7 +539,7 @@ SET <pin> CAL BIAS <resistor>                         # Override bias resistor
 
 ### CAN not working
 
-- Verify CAN pin assignments in your board profile (`src/profiles/profile_<board>.h`)
+- Verify CAN pin assignments in your board definition (`boards/<board>/board.h` — SPI-CAN `CAN_CS_*`/`CAN_INT_*`)
 - Check 120Ω termination resistors
 - Ensure baud rate matches receiver
 

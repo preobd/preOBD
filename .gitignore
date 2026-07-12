@@ -76,3 +76,8 @@ nrf_firmware/include/ble_gatt_defs.h
 
 # Bench-specific PlatformIO overrides (see platformio_local.ini.example)
 platformio_local.ini
+
+# Per-board wiring overlays (boards/ migration, #283) — gitignored; the
+# committed boards/<board>/wiring.ini.example templates are kept.
+boards/*/wiring.ini
+!boards/*/wiring.ini.example

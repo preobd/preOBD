@@ -1,0 +1,14 @@
+; boards/mega2560/wiring.ini — YOUR Mega 2560 wiring (gitignored).
+;
+; Copy to `wiring.ini` (drop `.example`) and uncomment the pins you wired.
+; These -D flags feed boards/resolve.h. Omit a pin → that peripheral is off.
+; (SD logging is vetoed on this board by board.h — the 8 KB RAM budget — so
+; SD_PIN has no effect here.)
+
+[mega2560]
+wiring =
+;    -D RGB_PIN_R=11       ; RGB status LED (PWM-capable pins)
+;    -D RGB_PIN_G=12
+;    -D RGB_PIN_B=13
+;    -D BUZZER_PIN=3       ; alarm buzzer (tone output)
+;    -D MODE_BUTTON_PIN=5  ; CONFIG-on-boot / silence button

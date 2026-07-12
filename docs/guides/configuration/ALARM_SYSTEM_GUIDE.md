@@ -297,18 +297,18 @@ Time 0.1s:  Fault timer RESETS to 0 → NO ALARM
 
 ### Compile-Time Configuration
 
-Enable alarms and set the buzzer pin in your board profile (`src/profiles/profile_*.h`):
+`ENABLE_ALARMS` is a CHOICE flag in your board definition (`boards/<board>/board.h`); the buzzer and silence-button pins are wiring, set in your gitignored overlay (`boards/<board>/wiring.ini`). Wiring a pin turns that peripheral on:
 
 ```cpp
-// Enable alarm feature (software alarms always active when defined)
+// boards/<board>/board.h — software alarm/annunciator feature
 #define ENABLE_ALARMS   1
-
-// Buzzer pin — omit if no buzzer is wired on this board
-#define ALARMS_PIN      3
-
-// Mode button for alarm silence — omit if no button is wired
-#define ENABLE_MODE_BUTTON  1
-#define MODE_BUTTON_PIN     5
+```
+```ini
+; boards/<board>/wiring.ini — omit a pin and that peripheral is simply off
+[<board>]
+wiring =
+    -D BUZZER_PIN=3       ; alarm buzzer
+    -D MODE_BUTTON_PIN=5  ; silence button (its presence enables ENABLE_MODE_BUTTON)
 ```
 
 Set timing constants in `config.h`:

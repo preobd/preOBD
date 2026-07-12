@@ -15,7 +15,7 @@ This prevents race conditions when modifying configuration during runtime and en
 
 ## MODE_BUTTON
 
-The mode button pin is defined by `MODE_BUTTON_PIN` in your board profile (`src/profiles/profile_*.h`). On the standard Teensy 4.1 profile this is **pin 5**. Check your profile to confirm the pin for your board.
+The mode button pin is `MODE_BUTTON_PIN`, set in your board's wiring overlay (`boards/<board>/wiring.ini`; copy `wiring.ini.example`). The reference Teensy 4.1 wiring uses **pin 2**. With no button wired (the pin unset), the feature is simply off.
 
 | Context | Behavior |
 |---------|----------|

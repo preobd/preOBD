@@ -41,9 +41,9 @@ static uint32_t silenceStartTime = 0;    // When was silence button pressed?
 // ===== INITIALIZATION =====
 
 void initAlarmOutput() {
-#if ENABLE_ALARMS && defined(ALARMS_PIN)
-    pinMode(ALARMS_PIN, OUTPUT);
-    noTone(ALARMS_PIN);
+#if ENABLE_ALARMS && defined(BUZZER_PIN)
+    pinMode(BUZZER_PIN, OUTPUT);
+    noTone(BUZZER_PIN);
 #endif
 
 #if ENABLE_MODE_BUTTON
@@ -134,7 +134,7 @@ void updateAlarmOutput() {
     }
 
     // ===== ALARM STATE SCANNING =====
-#if ENABLE_LED || (ENABLE_ALARMS && defined(ALARMS_PIN))
+#if ENABLE_LED || (ENABLE_ALARMS && defined(BUZZER_PIN))
     AlarmSeverity systemSeverity = getSystemSeverity();
 #endif
 
@@ -149,11 +149,11 @@ void updateAlarmOutput() {
     // while configuring on the bench (disconnected/test sensors would
     // otherwise sound spurious alarms). The LED above is informative, not
     // physical actuation, so it is left running in both modes.
-#if ENABLE_ALARMS && defined(ALARMS_PIN)
+#if ENABLE_ALARMS && defined(BUZZER_PIN)
     if (systemSeverity == SEVERITY_ALARM && !alarmSilenced && !isInConfigMode()) {
-        tone(ALARMS_PIN, 700);
+        tone(BUZZER_PIN, 700);
     } else {
-        noTone(ALARMS_PIN);
+        noTone(BUZZER_PIN);
     }
 #endif
 }

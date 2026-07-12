@@ -1,0 +1,14 @@
+; boards/esp32s3/wiring.ini — YOUR ESP32-S3 wiring (gitignored).
+; Copy to `wiring.ini` (drop `.example`) and uncomment the pins you wired.
+; ESP32-S3 GPIO numbering — verify PWM capability for the LED pins.
+; SD is an external module: set SD_PIN to enable logging.
+
+[esp32s3dev]
+wiring =
+;    -D RGB_PIN_R=11       ; RGB status LED (PWM-capable GPIO)
+;    -D RGB_PIN_G=12
+;    -D RGB_PIN_B=13
+;    -D BUZZER_PIN=3       ; alarm buzzer (tone output)
+;    -D MODE_BUTTON_PIN=5  ; CONFIG-on-boot / silence button
+;    -D TEST_MODE_PIN=8    ; hold LOW at boot to enter test mode (optional)
+;    -D SD_PIN=4           ; external SD card CS pin (enables SD logging)

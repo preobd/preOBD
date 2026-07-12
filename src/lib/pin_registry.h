@@ -75,7 +75,7 @@ struct PinUsage {
 // CONFIGURATION
 // ============================================================================
 
-// Maximum number of pins that can be tracked; set per env in src/profiles/.
+// Maximum number of pins that can be tracked; set per board in boards/<board>/board.h.
 
 // ============================================================================
 // PUBLIC API

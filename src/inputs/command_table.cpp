@@ -956,10 +956,10 @@ int cmd_test(int argc, const char* const* argv) {
         rgbLedSolid(RGB_BLUE, PRIORITY_ALARM);  updateRGBLed(); watchdogReset(); delay(600);
         rgbLedRelease(PRIORITY_ALARM);          updateRGBLed();
 #endif
-#if ENABLE_ALARMS && defined(ALARMS_PIN)
+#if ENABLE_ALARMS && defined(BUZZER_PIN)
         any = true;
         msg.control.println(F("Buzzer -> chirp"));
-        tone(ALARMS_PIN, 700); watchdogReset(); delay(250); noTone(ALARMS_PIN);
+        tone(BUZZER_PIN, 700); watchdogReset(); delay(250); noTone(BUZZER_PIN);
 #endif
 #if ENABLE_CONTROL_ENGINE
         for (int i = 0; i < MAX_ACTIONS; i++) {

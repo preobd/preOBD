@@ -4,13 +4,22 @@
  * This file contains ONLY application-level constants: timing, thresholds,
  * calibration defaults, and protocol configuration.
  *
- * Hardware pin assignments live in the board profile (src/profiles/profile_*.h),
- * which is included first via -include in platformio.ini. The profile is the
- * single source of truth for what hardware is wired and where.
+ * Hardware pin assignments live in your board's wiring overlay
+ * (boards/<board>/wiring.ini), with board facts/feature flags in
+ * boards/<board>/board.h — both included first via -include in platformio.ini.
+ * See boards/README.md for the model.
  */
 
 #ifndef CONFIG_H
 #define CONFIG_H
+
+// Migrated boards (boards/<board>/board.h, #283) define PREOBD_BOARD_DEFINED and
+// rely on boards/resolve.h to derive their wired ENABLE_* flags. Catch an env
+// that -includes the board but forgot the resolver (or got the order wrong).
+// Legacy src/profiles/*.h boards don't set PREOBD_BOARD_DEFINED → guard skipped.
+#if defined(PREOBD_BOARD_DEFINED) && !defined(PREOBD_RESOLVED)
+#  error "board.h was -included without boards/resolve.h — check this env's build_flags order in platformio.ini"
+#endif
 
 // ============================================================================
 // DEFAULT UNITS

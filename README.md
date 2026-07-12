@@ -96,10 +96,11 @@ pio run -e teensy41 -t upload
 pio device monitor
 ```
 
-**Build configuration** uses a three-layer system:
-- **`src/profiles/profile_*.h`** — board definitions: all feature flags and hardware pin assignments
+**Build configuration** is organized per board under `boards/<board>/`:
+- **`boards/<board>/board.h`** — board definition: capabilities, ceilings, sizing, and CHOICE feature flags (no wired pins)
+- **`boards/<board>/wiring.ini`** — your physical pin assignments as `-D` flags (gitignored; copy `wiring.ini.example`)
+- **`boards/<board>/board.ini`** — the PlatformIO `[env:<board>]` fragment; `boards/resolve.h` derives wired feature flags from your pins
 - **`src/config.h`** — application constants: timing intervals, alarm thresholds, calibration defaults
-- **`platformio.ini`** — selects which profile to build, library deps
 
 See [Build Configuration Guide](docs/guides/configuration/BUILD_CONFIGURATION_GUIDE.md) for details.
 

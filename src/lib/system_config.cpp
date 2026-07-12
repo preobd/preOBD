@@ -300,8 +300,8 @@ void registerSystemPins() {
 #endif
 
 #if ENABLE_ALARMS
-    #ifdef ALARMS_PIN
-    registerPin(ALARMS_PIN, PIN_BUZZER, "Buzzer");
+    #ifdef BUZZER_PIN
+    registerPin(BUZZER_PIN, PIN_BUZZER, "Buzzer");
     #endif
 #endif
 

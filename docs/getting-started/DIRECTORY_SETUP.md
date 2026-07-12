@@ -18,14 +18,7 @@ preOBD/
 │   ├── config.h               # ⭐ APPLICATION CONSTANTS (timing, thresholds, units)
 │   ├── version.h              # Firmware version
 │   │
-│   ├── profiles/              # ⭐ BOARD DEFINITIONS (feature flags + pin assignments)
-│   │   ├── profile_teensy41.h       # Teensy 4.1 (recommended)
-│   │   ├── profile_teensy40.h       # Teensy 4.0
-│   │   ├── profile_teensy36.h       # Teensy 3.6
-│   │   ├── profile_mega2560.h       # Arduino Mega 2560
-│   │   ├── profile_esp32s3.h        # ESP32-S3
-│   │   ├── profile_teensy41_hybrid.h  # Teensy 4.1 + SPI CAN hybrid
-│   │   └── profile_esp32s3_hybrid.h   # ESP32-S3 TWAI + MCP2515 hybrid
+│   │                         # board definitions live in top-level boards/ (see below)
 │   │
 │   ├── hal/                   # Hardware abstraction layer
 │   │   ├── hal_can.h          # CAN bus HAL interface
@@ -204,25 +197,29 @@ preOBD/
 
 **config.h**
 - Application constants: timing intervals, alarm thresholds, calibration defaults, default units
-- Does **not** contain pin assignments or feature flags — those live in the board profile
+- Does **not** contain pin assignments or feature flags — those live in `boards/<board>/`
 - **Edit:** RARELY (only to change global timing or threshold defaults)
 
-**src/profiles/profile_*.h** ⭐
-- Board definitions: feature flags AND hardware pin assignments for a specific board
-- One profile per board, selected via `-include` in `platformio.ini`
-- **Edit:** YES - This is where you configure your hardware pins and enabled features
+**boards/<board>/** ⭐ (top-level, one folder per board — see `boards/README.md`)
+- `board.h` — board definition: capabilities, ceilings, sizing, and CHOICE feature flags (no wired pins)
+- `wiring.ini` — YOUR physical pin assignments as `-D` flags (gitignored; copy `wiring.ini.example`)
+- `board.ini` — the PlatformIO `[env:<board>]` fragment
+- `boards/resolve.h` — shared; derives wired feature flags from your pins
+- **Edit:** `wiring.ini` for your pins (the common case); `board.h` to toggle a software feature
 
 ```cpp
-// Feature flags
+// boards/<board>/board.h — features (no wired pins here)
 #define ENABLE_CAN             1
 #define ENABLE_LCD             1
 #define ENABLE_ALARMS          1
-
-// Hardware Pin Assignments
-#define MODE_BUTTON_PIN        5    // Multi-function button
-#define ALARMS_PIN             3    // Alarm buzzer
-#define CAN_CS_PIN             9    // MCP2515 chip select
-#define CAN_INT_PIN            2    // MCP2515 interrupt
+#define CAN_CS_0               9    // intrinsic SPI-CAN pins (MCP2515 boards) stay here
+```
+```ini
+; boards/<board>/wiring.ini — your wiring
+[<board>]
+wiring =
+    -D MODE_BUTTON_PIN=5
+    -D BUZZER_PIN=3
 ```
 
 ---
@@ -568,7 +565,7 @@ This directory contains the comprehensive test mode system for testing outputs w
 - **docs/** - All user and developer documentation
 
 **Best practices:**
-- User edits their board profile `src/profiles/profile_<board>.h` for pin assignments and feature flags
+- User edits `boards/<board>/wiring.ini` for pin assignments, and `boards/<board>/board.h` for feature flags
 - User edits `src/config.h` only for application-level constants (timing, thresholds, units)
 - Core code in inputs/ and lib/ rarely needs modification
 - New sensors added to:

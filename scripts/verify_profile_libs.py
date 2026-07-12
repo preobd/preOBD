@@ -23,23 +23,24 @@ import re
 def _profile_path_from_flags(env) -> str:
     """Extract the -include profile path from the env's build_flags.
 
-    Reads the actual -include flag rather than assuming profile_<env>.h so that
-    envs pointing at a shared profile (e.g. [env:debug] → profile_teensy41.h)
-    are checked against the correct defines.
+    Reads the actual -include flag rather than assuming a path, so that envs
+    pointing at a shared board definition (e.g. [env:debug] → teensy41/board.h)
+    are checked against the correct defines. Matches the boards/<board>/board.h
+    layout (#283) and legacy src/profiles/profile_*.h, but never boards/resolve.h.
     """
     project_dir = env.subst("$PROJECT_DIR")
     try:
         flags = env.GetProjectOption("build_flags", [])
         flags_str = " ".join(flags) if isinstance(flags, list) else str(flags)
-        m = re.search(r"-include\s+\"?([\w./]+profile_\w+\.h)\"?", flags_str)
+        m = re.search(r"-include\s+\"?([\w./]+(?:profile_\w+|/board)\.h)\"?", flags_str)
         if m:
             path = m.group(1)
             return path if os.path.isabs(path) else os.path.join(project_dir, path)
     except Exception:
         pass
-    # Convention fallback: profile_<env>.h
+    # Convention fallback: boards/<env>/board.h
     env_name = env.subst("$PIOENV")
-    return os.path.join(project_dir, "src", "profiles", f"profile_{env_name}.h")
+    return os.path.join(project_dir, "boards", env_name, "board.h")
 
 
 def _parse_profile(profile_path: str, _depth: int = 0):

@@ -1,0 +1,18 @@
+; boards/teensy41/wiring.ini — YOUR Teensy 4.1 wiring (gitignored).
+;
+; Copy to `wiring.ini` (drop `.example`) and uncomment the pins you actually
+; wired. These -D flags feed boards/resolve.h, which turns the matching feature
+; on (e.g. wiring RGB_PIN_R/G/B enables the status LED). Omit a pin and that
+; peripheral is simply off. The values below are the reference bench wiring.
+
+[teensy41]
+wiring =
+;    -D RGB_PIN_R=6        ; RGB status LED (PWM-capable pins)
+;    -D RGB_PIN_G=5
+;    -D RGB_PIN_B=4
+;    -D RGB_COMMON_ANODE   ; uncomment for common-anode LED wiring
+;    -D BUZZER_PIN=3       ; alarm buzzer (tone output)
+;    -D MODE_BUTTON_PIN=2  ; CONFIG-on-boot / silence button
+;    -D TEST_MODE_PIN=8    ; hold LOW at boot to enter test mode (optional)
+;    -D HOST_NRF_CTS_PIN=3 ; nRF52840 software flow control — define BOTH or neither
+;    -D HOST_NRF_RTS_PIN=2 ;   (Teensy reads CTS, drives RTS; no-op if either omitted)

@@ -27,7 +27,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # (the one platform where the 8 KB RAM budget makes costs decision-relevant).
 ENVS = {
     "mega2560": {
-        "profile": "src/profiles/profile_mega2560.h",
+        # The board definition holds the CHOICE/CEILING flags + sizing knobs this
+        # tool toggles. WIRED features (LED/button/buzzer) now live in the board's
+        # wiring.ini overlay, so they're measured by adding their pins there, not
+        # here — their costs are already recorded in docs/feature_costs.md.
+        "profile": "boards/mega2560/board.h",
         "size_tool": "~/.platformio/packages/toolchain-atmelavr/bin/avr-size",
         "ram_total": 8192,
         # currently-off features to try enabling (with the siblings they need)
