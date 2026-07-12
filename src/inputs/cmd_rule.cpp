@@ -105,6 +105,40 @@ static FLASHMEM void printRuleRow(int i) {
     msg.control.println();
 }
 
+static FLASHMEM const char* actionTypeName(uint8_t t) {
+    switch (t) {
+        case ACT_RELAY:   return "RELAY";
+        case ACT_BEEPER:  return "BEEPER";
+        case ACT_LED:     return "LED";
+        case ACT_DISPLAY: return "DISPLAY";
+        default:          return "?";
+    }
+}
+
+// Reverse lookup: which Action(s) (if any) are linked to rule id `ruleId`.
+static FLASHMEM void printLinkedActions(uint8_t ruleId) {
+    bool any = false;
+    for (int i = 0; i < MAX_ACTIONS; i++) {
+        const Action& a = actions[i];
+        if (a.id == CONTROL_ID_NONE || a.ruleRef != ruleId) continue;
+        if (!any) {
+            msg.control.println(F("  Linked actions:"));
+            any = true;
+        }
+        msg.control.print(F("    #"));
+        msg.control.print(a.id);
+        msg.control.print(F("  "));
+        msg.control.print(actionTypeName(a.type));
+        msg.control.print(F(" pin"));
+        msg.control.print(a.target);
+        msg.control.print(F("  -> "));
+        msg.control.println(controlActionState(i) ? F("ON") : F("OFF"));
+    }
+    if (!any) {
+        msg.control.println(F("  Linked actions: (none)"));
+    }
+}
+
 static FLASHMEM void printAllRules() {
     uint8_t n = controlRuleCount();
     msg.control.print(F("Rules ("));
@@ -313,13 +347,15 @@ FLASHMEM int cmd_rule(int argc, const char* const* argv) {
     }
 
     // RULE <id> — show one rule's detail.
-    int slot = controlRuleSlot((uint8_t)atoi(argv[1]));
+    uint8_t ruleId = (uint8_t)atoi(argv[1]);
+    int slot = controlRuleSlot(ruleId);
     if (slot < 0) {
         msg.control.print(F("ERROR: unknown rule id or subcommand: "));
         msg.control.println(argv[1]);
         return 1;
     }
     printRuleRow(slot);
+    printLinkedActions(ruleId);
     return 0;
 }
 
