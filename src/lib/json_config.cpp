@@ -176,10 +176,24 @@ void exportInputToJSON(JsonObject& inputObj, const Input* input) {
     inputObj["sensorIndex"] = input->sensorIndex;
     inputObj["units"] = reinterpret_cast<const char*>(getUnitStringByIndex(input->unitsIndex));
 
-    // Alarm thresholds
+    // Alarm thresholds — read back from the input's control-engine alarm Rule
+    // (the live source of truth), NOT the legacy input->min/maxValue, which
+    // nothing evaluates. No Rule → null, which the webapp renders as "no alarm
+    // set" rather than a stale preset default (#295).
     JsonObject alarm = inputObj["alarm"].to<JsonObject>();
+#if ENABLE_CONTROL_ENGINE
+    int alarmSlot = controlAlarmRuleSlotForInput(input->pin);
+    if (alarmSlot >= 0) {
+        alarm["min"] = systemConfig.rules[alarmSlot].limitLo;
+        alarm["max"] = systemConfig.rules[alarmSlot].limitHi;
+    } else {
+        alarm["min"] = nullptr;
+        alarm["max"] = nullptr;
+    }
+#else
     alarm["min"] = input->minValue;
     alarm["max"] = input->maxValue;
+#endif
 
     // Flags
     inputObj["enabled"] = input->flags.isEnabled;

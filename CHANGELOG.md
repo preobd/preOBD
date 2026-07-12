@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Control engine Rule + Action tables are now included in `SYSTEM DUMP JSON` and the SD/`CONFIG` save-load round-trip (top-level `rules`/`actions` arrays), so they survive a config backup-restore (#281 follow-up)
 - Control engine: Action target pins now participate in pin-conflict detection — `ACTION ADD` rejects a target already claimed by a bus, system pin, RGB output, configured input, or another action, and the pin shows up in `SYSTEM PINS` (#281 follow-up)
 
+### Fixed
+- Per-input alarm Min/Max now drives the control-engine alarm Rule end to end — `SET <pin> ALARM <min> <max>` / `DISABLE` upserts (or removes) the input's annunciator Rule in place (without re-arming an already-warmed rule), the config dump reads the band back from that Rule, the input editor gains an explicit "Alarm enabled" toggle pre-filled from the application defaults, and the webapp's alarm banners now distinguish a WARNING (approaching, yellow) from a fired ALARM (exceeded, red) instead of labelling every event an exceeded alarm — replacing the deprecated `SET ALARM` no-op the webapp was silently writing to (#295)
+
 ### Changed
 - Webapp: the Relays panel is now an **Actions** panel that reads the control-engine `PreobdActionState` wire format (type / target pin / source Rule / failsafe / driven state) with a manual ON/OFF toggle for manual Actions; Rule-driven Actions show as read-only status, and the System Status tile now reports the Action count (#281 follow-up)
 - Build configuration restructured into per-board folders (`boards/<board>/` with `board.h`, `board.ini`, and a gitignored `wiring.ini` overlay) plus a shared `resolve.h`: hardware pins now live in your own wiring overlay rather than a tracked profile, wired feature flags are derived from capability + pin presence, and the buzzer pin macro `ALARMS_PIN` is renamed `BUZZER_PIN` (#283)

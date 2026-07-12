@@ -181,6 +181,85 @@ bool controlRuleReset(uint8_t id, uint32_t now) {
     return true;
 }
 
+// --- per-input "alarm Rule" facade (SET <pin> ALARM ...) --------------------
+
+int controlAlarmRuleSlotForInput(uint8_t pin) {
+    // The one canonical alarm Rule for an input is OUTSIDE_BAND / ALARM (what
+    // SET APPLICATION seeds). One-sided ABOVE/BELOW Rules a user adds via RULE
+    // ADD are deliberately NOT this facade's business — the per-input min/max
+    // model can't represent them, so they're left untouched.
+    for (int i = 0; i < MAX_RULES; i++) {
+        const Rule& r = systemConfig.rules[i];
+        if (r.id != CONTROL_ID_NONE && r.sourceInput == pin &&
+            r.condition == RULE_OUTSIDE_BAND && r.severity == RULE_SEV_ALARM) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+uint8_t controlSetAlarmBandForInput(uint8_t pin, float lo, float hi, uint32_t now) {
+    int slot = controlAlarmRuleSlotForInput(pin);
+    if (slot >= 0) {
+        // Edit in place: preserve id, source, warmup/debounce, AND the live
+        // runtime state. A band tweak must NOT re-arm the Rule — re-arming drags
+        // an already-warmed rule back through INIT→WARMUP, silencing the alarm
+        // (and any Action it drives) for warmupMs on every apply. On the temp
+        // presets that's 20–60 s of dead air after each edit (#295). Limits are
+        // read live from the Rule each tick, so the engine re-qualifies against
+        // the new band next cycle with no re-init needed.
+        Rule& r = systemConfig.rules[slot];
+        r.condition = RULE_OUTSIDE_BAND;
+        r.severity  = RULE_SEV_ALARM;
+        r.flags    |= RULE_FLAG_ENABLED;
+        r.limitLo   = lo;
+        r.limitHi   = hi;
+        // A hysteresis carried over from a wider band could exceed the new
+        // band's half-width and wedge the Rule permanently asserted (the clear
+        // insets would cross). Drop it rather than refuse the edit — the facade
+        // doesn't surface hysteresis anyway.
+        if (r.hysteresis * 2.0f >= (hi - lo)) r.hysteresis = 0.0f;
+        // Arm only if it isn't already (e.g. previously flag-disabled); a live
+        // READY/ACTIVE rule keeps its state and just re-qualifies.
+        if (g_ruleContexts[slot].state == RULE_DISABLED) {
+            controlRuleInit(g_ruleContexts[slot], r, now);
+        }
+        return r.id;
+    }
+    // None yet — allocate a fresh Rule. Inherit the application's warmup/debounce
+    // (like the auto-seed) so a webapp-set alarm behaves identically to a seeded
+    // one; fall back to the hand-entry defaults when the app has no template.
+    int free = controlRuleFreeSlot();
+    uint8_t id = controlRuleAllocId();
+    if (free < 0 || id == CONTROL_ID_NONE) return CONTROL_ID_NONE;  // table full
+    Input* in = getInputByPin(pin);
+    Rule appTmpl{};
+    const bool haveAppTmpl = in && buildRuleConfigFromApplication(in->applicationIndex, appTmpl);
+    Rule& r = systemConfig.rules[free];
+    r.id          = id;
+    r.sourceInput = pin;
+    r.condition   = RULE_OUTSIDE_BAND;
+    r.severity    = RULE_SEV_ALARM;
+    r.flags       = RULE_FLAG_ENABLED;
+    r.limitLo     = lo;
+    r.limitHi     = hi;
+    r.hysteresis  = 0.0f;
+    r.warmupMs    = haveAppTmpl ? appTmpl.warmupMs   : RULE_DEFAULT_WARMUP_MS;
+    r.debounceMs  = haveAppTmpl ? appTmpl.debounceMs : RULE_DEFAULT_DEBOUNCE_MS;
+    controlRuleInit(g_ruleContexts[free], r, now);
+    return id;
+}
+
+bool controlRemoveAlarmRuleForInput(uint8_t pin) {
+    int slot = controlAlarmRuleSlotForInput(pin);
+    if (slot < 0) return false;
+    uint8_t id = systemConfig.rules[slot].id;
+    systemConfig.rules[slot].id = CONTROL_ID_NONE;
+    g_ruleContexts[slot].state = RULE_DISABLED;
+    controlClearActionsForRule(id);  // referential integrity (mirrors RULE DEL)
+    return true;
+}
+
 uint8_t controlReseedRulesForInput(uint8_t pin, uint32_t now) {
     Input* in = getInputByPin(pin);
     if (!in) return 0;

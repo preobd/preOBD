@@ -307,16 +307,62 @@ static int set_units(uint8_t pin, int argc, const char* const* argv) {
     return 1;
 }
 
-// SET <pin> ALARM ENABLE|DISABLE|WARMUP|PERSIST|<min> <max>
-// SET <pin> ALARM ... is deprecated: alarms are control-engine Rules (§11).
+// SET <pin> ALARM <min> <max> | DISABLE
+// Facade over the input's canonical alarm Rule (OUTSIDE_BAND / ALARM, §11.5):
+// upserts the band on one input-keyed Rule, preserving its id and any Action
+// links. This is the per-input min/max surface the webapp and CLI expose; the
+// general engine is still reachable via RULE ADD for one-sided / WARNING Rules.
 static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
+#if !ENABLE_CONTROL_ENGINE
     (void)pin; (void)argc; (void)argv;
-    msg.control.println(F("SET ALARM is deprecated - alarms are control-engine Rules."));
-    msg.control.println(F("  Create: RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARNING|ALARM]"));
-    msg.control.println(F("          RULE ADD <pin> OUTSIDE <lo> <hi> [WARNING|ALARM]"));
-    msg.control.println(F("  Or just SET <pin> APPLICATION <app> to seed the default Rule."));
-    msg.control.println(F("  Status: RULE LIST"));
+    msg.control.println(F("ERROR: alarms require the control engine (not built into this firmware)"));
     return 1;
+#else
+    if (argc < 4) {
+        msg.control.println(F("ERROR: usage: SET <pin> ALARM <min> <max>   (or DISABLE)"));
+        return 1;
+    }
+    if (getInputByPin(pin) == nullptr) {
+        msg.control.println(F("ERROR: no input configured on that pin (SET its APPLICATION first)"));
+        return 1;
+    }
+
+    // SET <pin> ALARM DISABLE|OFF — remove the input's alarm Rule.
+    if (streq_P(argv[3], PSTR("DISABLE")) || streq_P(argv[3], PSTR("OFF"))) {
+        if (controlRemoveAlarmRuleForInput(pin)) {
+            msg.control.println(F("Alarm removed (Rule deleted). SAVE to persist."));
+        } else {
+            msg.control.println(F("No alarm Rule on that input - nothing to remove."));
+        }
+        return 0;
+    }
+
+    // SET <pin> ALARM <min> <max> — upsert the band.
+    if (argc < 5) {
+        msg.control.println(F("ERROR: ALARM needs <min> <max> (or DISABLE)"));
+        return 1;
+    }
+    float lo = atof(argv[3]);
+    float hi = atof(argv[4]);
+    if (!(lo < hi)) {
+        msg.control.println(F("ERROR: ALARM requires min < max"));
+        return 1;
+    }
+
+    bool created = (controlAlarmRuleSlotForInput(pin) < 0);
+    uint8_t id = controlSetAlarmBandForInput(pin, lo, hi, millis());
+    if (id == CONTROL_ID_NONE) {
+        msg.control.print(F("ERROR: rule table full ("));
+        msg.control.print(MAX_RULES);
+        msg.control.println(F(") - free a Rule (RULE LIST / RULE DEL) and retry"));
+        return 1;
+    }
+    msg.control.print(F("Alarm Rule #"));
+    msg.control.print(id);
+    msg.control.println(created ? F(" created. SAVE to persist.")
+                                : F(" updated. SAVE to persist."));
+    return 0;
+#endif
 }
 
 // SET <pin> DIVIDER <ratio>
@@ -1150,11 +1196,9 @@ static const char PSTR_HELP_SET_DISPLAY[] PROGMEM =
 static const char PSTR_HELP_SET_UNITS[] PROGMEM =
     "  SET <pin> UNITS <units>       Override display units";
 static const char PSTR_HELP_SET_ALARM[] PROGMEM =
-    "  SET <pin> ALARM <min> <max>   Set alarm thresholds\n"
-    "  SET <pin> ALARM ENABLE        Enable alarm\n"
-    "  SET <pin> ALARM DISABLE       Disable alarm\n"
-    "  SET <pin> ALARM WARMUP <ms>   Warmup time (0-300000ms)\n"
-    "  SET <pin> ALARM PERSIST <ms>  Persistence time (0-60000ms)";
+    "  SET <pin> ALARM <min> <max>   Set the input's alarm band (control-engine Rule)\n"
+    "  SET <pin> ALARM DISABLE       Remove the input's alarm Rule\n"
+    "  (one-sided / WARNING alarms: RULE ADD <pin> ABOVE|BELOW ... ; status: RULE LIST)";
 static const char PSTR_HELP_SET_DIVIDER[] PROGMEM =
     "  SET <pin> DIVIDER <ratio>     Set voltage divider ratio (0-1)";
 static const char PSTR_HELP_SET_OUTPUT[] PROGMEM =

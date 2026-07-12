@@ -234,6 +234,10 @@ void writeApplicationsJson(Print& out) {
         }
         obj["defaultMinValue"] = p.defaultMinValue;
         obj["defaultMaxValue"] = p.defaultMaxValue;
+        // Gates whether SET APPLICATION auto-seeds an alarm Rule (control_manager
+        // buildRuleConfigFromApplication). The editor mirrors this to pre-fill
+        // the alarm band only when the app actually defaults to an alarm (#295).
+        obj["defaultAlarmEnabled"] = p.defaultAlarmEnabled;
         obj["obd2pid"]         = p.obd2pid;
         obj["obd2length"]      = p.obd2length;
         obj["measurementType"] = measurementTypeName(p.expectedMeasurementType);

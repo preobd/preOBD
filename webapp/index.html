@@ -348,6 +348,23 @@
     transition: background 0.15s;
   }
   .status-health .health-review:hover { background: #862828; }
+  /* Warning-only headline: yellow, not the red alarm treatment (#295). */
+  .status-health.warning {
+    border: 1.5px solid var(--yellow);
+    animation: warnFlash 1.6s ease-in-out infinite;
+  }
+  .status-health.warning .health-dot {
+    background: var(--yellow);
+    box-shadow: 0 0 0 4px rgba(184,134,11,0.18);
+    animation: blinkDot 1.4s ease-in-out infinite;
+  }
+  .status-health.warning .health-title { font-size: 14px; font-weight: 600; color: var(--yellow); }
+  .status-health.warning .health-meta {
+    font-size: 11.5px; color: var(--yellow); opacity: 0.85; margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .status-health.warning .health-review { background: var(--yellow); border-color: var(--yellow); }
+  .status-health.warning .health-review:hover { background: #9c7209; }
 
   /* ── Footer / build stamp ─────────────────────────────────── */
   .app-footer {
@@ -406,6 +423,10 @@
     50%      { background: rgba(160,48,48,0.14); }
   }
   @keyframes blinkDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  @keyframes warnFlash {
+    0%, 100% { background: rgba(184,134,11,0.06); }
+    50%      { background: rgba(184,134,11,0.14); }
+  }
 
   .firing-banner {
     padding: 12px 14px;
@@ -434,6 +455,10 @@
   .firing-text .meta {
     display: block; font-size: 11px; opacity: 0.7; margin-top: 2px; font-weight: 400;
   }
+  /* Warning rows / warning-only banner: yellow instead of the red alarm tone. */
+  .firing-banner.warning { border-color: var(--yellow); animation: warnFlash 1.6s ease-in-out infinite; }
+  .firing-row.warn .firing-dot { background: var(--yellow); box-shadow: 0 0 0 4px rgba(184,134,11,0.18); }
+  .firing-row.warn .firing-text { color: var(--yellow); }
 
   .alarm-log {
     border: 1px solid var(--border-light);
@@ -1487,14 +1512,33 @@ function severityTone(severity, kind) {
   return 'ok';
 }
 
+// Severity/kind-aware description of one firing/cleared event ("225.0 approaching
+// 250.0"). A WARNING (the 90% band) is "approaching"; only a true ALARM is
+// "exceeded"/"below". Shared by the log row, firing banner, and health headline
+// so a warning is never dressed up as an exceeded alarm (#295).
+function firingDescription(st) {
+  const val = Number.isFinite(st.value) ? st.value.toFixed(1) : '--';
+  if (st.kind === KIND_CLEAR) return 'cleared (' + val + ')';
+  const thr = Number.isFinite(st.threshold) ? st.threshold.toFixed(1) : '--';
+  const verb = st.severity === SEV_WARNING ? 'approaching'
+             : (st.kind === KIND_LOW ? 'below' : 'exceeded');
+  return val + ' ' + verb + ' ' + thr;
+}
+
+// Tier counts across the currently-firing inputs, plus the most-severe entry to
+// lead summaries with. anyAlarm distinguishes a real alarm from warnings-only.
+function firingSummary() {
+  let alarms = 0, warnings = 0, lead = null, leadIdx = -1;
+  for (const [idx, st] of firingState) {
+    if (st.severity === SEV_ALARM) alarms++;
+    else if (st.severity === SEV_WARNING) warnings++;
+    if (!lead || st.severity > lead.severity) { lead = st; leadIdx = idx; }
+  }
+  return { alarms, warnings, total: firingState.size, anyAlarm: alarms > 0, lead, leadIdx };
+}
+
 function alarmMessage(ev) {
-  const label = inputLabel(ev.inputIndex);
-  const val = Number.isFinite(ev.value) ? ev.value.toFixed(1) : '--';
-  if (ev.kind === KIND_CLEAR) return label + ' · cleared (' + val + ')';
-  const thr = Number.isFinite(ev.threshold) ? ev.threshold.toFixed(1) : '--';
-  const verb = ev.severity === SEV_WARNING ? 'approaching' : 'exceeded';
-  const dir  = ev.kind === KIND_LOW ? 'below' : '';
-  return label + ' · ' + val + ' ' + (dir ? dir + ' ' : '') + verb + ' ' + thr;
+  return inputLabel(ev.inputIndex) + ' · ' + firingDescription(ev);
 }
 
 // Health headline at the top of System Status — a single-glance summary of
@@ -1514,21 +1558,23 @@ function updateStatusHealth() {
     return;
   }
 
-  // Lead with the first firing input; summarise the rest as "+N more".
-  const [idx, st] = firingState.entries().next().value;
-  const label = inputLabel(idx);
-  const val = Number.isFinite(st.value) ? st.value.toFixed(1) : '--';
-  const thr = Number.isFinite(st.threshold) ? st.threshold.toFixed(1) : '--';
-  const verb = st.kind === KIND_LOW ? 'below' : 'exceeded';
+  // Lead with the most-severe firing input; summarise the rest as "+N more".
+  // Tier drives the wording AND the color — a warning must not read or flash as
+  // a firing alarm (#295).
+  const sum = firingSummary();
+  const label = inputLabel(sum.leadIdx);
   const more = n > 1 ? ' · +' + (n - 1) + ' more' : '';
+  const count = sum.anyAlarm ? sum.alarms : sum.warnings;
+  const noun = (sum.anyAlarm ? 'alarm' : 'warning') + (count === 1 ? '' : 's');
+  const title = sum.anyAlarm ? (count + ' ' + noun + ' firing') : (count + ' ' + noun);
 
-  el.className = 'status-health firing';
+  el.className = 'status-health ' + (sum.anyAlarm ? 'firing' : 'warning');
   el.innerHTML =
     '<span class="health-dot"></span>' +
     '<div class="health-text">' +
-      '<div class="health-title">' + n + ' alarm' + (n === 1 ? '' : 's') + ' firing</div>' +
-      '<div class="health-meta">' + escHtml(label) + ' · ' + escHtml(val) + ' ' +
-        verb + ' ' + escHtml(thr) + escHtml(more) + '</div>' +
+      '<div class="health-title">' + escHtml(title) + '</div>' +
+      '<div class="health-meta">' + escHtml(label) + ' · ' +
+        escHtml(firingDescription(sum.lead)) + escHtml(more) + '</div>' +
     '</div>' +
     '<button class="health-review" id="healthReview">Review</button>';
   const btn = document.getElementById('healthReview');
@@ -1561,17 +1607,17 @@ function renderAlarmPanel() {
     banner.innerHTML = '';
   } else {
     banner.style.display = '';
-    banner.className = 'firing-banner';
+    banner.className = 'firing-banner' + (firingSummary().anyAlarm ? '' : ' warning');
     let html = '';
     for (const [idx, st] of firingState) {
+      const warn = st.severity === SEV_WARNING;
       const label = inputLabel(idx);
-      const val = Number.isFinite(st.value) ? st.value.toFixed(1) : '--';
-      const thr = Number.isFinite(st.threshold) ? st.threshold.toFixed(1) : '--';
-      const verb = st.kind === KIND_LOW ? 'below' : 'exceeded';
-      html += '<div class="firing-row"><span class="firing-dot"></span>' +
+      html += '<div class="firing-row ' + (warn ? 'warn' : 'alarm') + '">' +
+              '<span class="firing-dot"></span>' +
               '<div class="firing-text">' +
-              escHtml(label) + ' · ' + escHtml(val) + ' ' + verb + ' ' + escHtml(thr) +
-              '<span class="meta">Firing for ' + escHtml(formatFiringDuration(st.since)) + '</span>' +
+              escHtml(label) + ' · ' + escHtml(firingDescription(st)) +
+              '<span class="meta">' + (warn ? 'Warning' : 'Firing') + ' for ' +
+              escHtml(formatFiringDuration(st.since)) + '</span>' +
               '</div></div>';
     }
     banner.innerHTML = html;
@@ -2070,6 +2116,10 @@ function buildEditorHTML(pinStr, inp, isAdd) {
 
   const alarmMin = inp?.alarm?.min != null ? inp.alarm.min : '';
   const alarmMax = inp?.alarm?.max != null ? inp.alarm.max : '';
+  // "Alarm enabled" reflects whether the input has a band Rule. For an existing
+  // input that's "a band came back from the dump"; for a new add the fields
+  // start blank (openAddEditor then pre-fills from the app defaults).
+  const alarmEnabled = alarmMin !== '' || alarmMax !== '';
   const enabled = inp ? inp.enabled !== false : true;
   const mask = inp?.outputMask ?? 0x0F;
   const obdPid = inp?.obd2?.pid ? '0x' + inp.obd2.pid.toString(16).toUpperCase().padStart(2, '0') : '';
@@ -2083,7 +2133,7 @@ function buildEditorHTML(pinStr, inp, isAdd) {
   </div>` : `<input type="hidden" id="edPin" value="${escHtml(pinStr)}">`}
   <div class="editor-field">
     <label>Application</label>
-    <select id="edApp" onchange="updateEditorDropdowns()">${appOptions}</select>
+    <select id="edApp" onchange="onEditorAppChange()">${appOptions}</select>
   </div>
   <div class="editor-field">
     <label>Sensor</label>
@@ -2093,14 +2143,17 @@ function buildEditorHTML(pinStr, inp, isAdd) {
     <label>Units</label>
     <select id="edUnits">${unitOptions}</select>
   </div>
+  <div class="editor-field" style="grid-column: 1 / -1;">
+    <label><input type="checkbox" id="edAlarmEnabled" ${alarmEnabled ? 'checked' : ''} onchange="onAlarmEnabledToggle()"> Alarm enabled</label>
+  </div>
   <div class="editor-group">
     <div class="editor-field">
       <label>Alarm Min</label>
-      <input type="number" id="edAlarmMin" value="${alarmMin}" placeholder="optional">
+      <input type="number" id="edAlarmMin" value="${alarmMin}" placeholder="optional" ${alarmEnabled ? '' : 'disabled'}>
     </div>
     <div class="editor-field">
       <label>Alarm Max</label>
-      <input type="number" id="edAlarmMax" value="${alarmMax}" placeholder="optional">
+      <input type="number" id="edAlarmMax" value="${alarmMax}" placeholder="optional" ${alarmEnabled ? '' : 'disabled'}>
     </div>
   </div>
   <div class="editor-group">
@@ -2150,6 +2203,10 @@ function openAddEditor() {
   const editor = document.getElementById('inputEditor');
   editor.innerHTML = buildEditorHTML('', null, true);
   updateEditorDropdowns();
+  // Fresh input: pre-fill the alarm band from the initially-selected app's
+  // defaults, mirroring the Rule the firmware auto-seeds on SET APPLICATION.
+  // (Existing inputs keep their actual band, read back from the Rule.)
+  applyAppDefaultsToAlarm();
   editor.style.display = '';
   editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -2195,17 +2252,95 @@ function updateEditorDropdowns() {
   }
 }
 
+// Application changed in the editor: refresh the dependent dropdowns AND re-fill
+// the alarm band from the new app's defaults. Changing the measurement type
+// invalidates the old band, exactly as SET APPLICATION re-seeds the Rule on the
+// device — keeping the editor and firmware in lockstep (#295).
+function onEditorAppChange() {
+  updateEditorDropdowns();
+  applyAppDefaultsToAlarm();
+}
+
+// The application's default alarm band, or null when it doesn't default to one.
+// Mirrors the firmware's auto-seed gate exactly (defaultAlarmEnabled + min<max,
+// control_manager buildRuleConfigFromApplication).
+function appDefaultBand(appName) {
+  const a = catalog.applications.find(x => x.name === appName);
+  if (a && a.defaultAlarmEnabled &&
+      a.defaultMinValue != null && a.defaultMaxValue != null &&
+      a.defaultMinValue < a.defaultMaxValue) {
+    return { min: a.defaultMinValue, max: a.defaultMaxValue };
+  }
+  return null;
+}
+
+// Grey out / enable the Min/Max inputs to match the "Alarm enabled" checkbox.
+// Disabled fields keep their values visible so re-enabling restores them.
+function syncAlarmFieldsToCheckbox() {
+  const on = document.getElementById('edAlarmEnabled')?.checked;
+  const minEl = document.getElementById('edAlarmMin');
+  const maxEl = document.getElementById('edAlarmMax');
+  if (minEl) minEl.disabled = !on;
+  if (maxEl) maxEl.disabled = !on;
+}
+
+// App-driven refill (new add / app change): set the band, and the checkbox, from
+// the selected app's defaults. An app with no default alarm clears + unchecks
+// (blank = no alarm Rule); changing the measurement type resets the band, just
+// as SET APPLICATION re-seeds the Rule on the device.
+function applyAppDefaultsToAlarm() {
+  const minEl = document.getElementById('edAlarmMin');
+  const maxEl = document.getElementById('edAlarmMax');
+  const chkEl = document.getElementById('edAlarmEnabled');
+  if (!minEl || !maxEl || !chkEl) return;
+  const band = appDefaultBand(document.getElementById('edApp').value);
+  if (band) {
+    minEl.value = band.min;
+    maxEl.value = band.max;
+    chkEl.checked = true;
+  } else {
+    minEl.value = '';
+    maxEl.value = '';
+    chkEl.checked = false;
+  }
+  syncAlarmFieldsToCheckbox();
+}
+
+// User toggled "Alarm enabled". Enabling an empty band seeds it from the app
+// defaults (if the app has any) so there's a sensible starting point; an app
+// with no default leaves the fields blank for manual entry. Disabling just greys
+// the fields — the values stay for an easy re-enable, and apply sends DISABLE.
+function onAlarmEnabledToggle() {
+  const minEl = document.getElementById('edAlarmMin');
+  const maxEl = document.getElementById('edAlarmMax');
+  if (document.getElementById('edAlarmEnabled').checked &&
+      minEl.value === '' && maxEl.value === '') {
+    const band = appDefaultBand(document.getElementById('edApp').value);
+    if (band) { minEl.value = band.min; maxEl.value = band.max; }
+  }
+  syncAlarmFieldsToCheckbox();
+}
+
 function saveEditorLocal() {
   const isAdd = editingPin === null;
   const newPin = document.getElementById('edPin').value.trim();
   if (!newPin) { alert('Pin is required.'); return; }
   if (!/^[A-Za-z0-9:]+$/.test(newPin)) { alert('Invalid pin format. Use A0, 14, I2C:0, CAN:0, etc.'); return; }
 
-  const alarmMinRaw = document.getElementById('edAlarmMin').value;
-  const alarmMaxRaw = document.getElementById('edAlarmMax').value;
-  const hasMin = alarmMinRaw !== '';
-  const hasMax = alarmMaxRaw !== '';
-  if (hasMin !== hasMax) { alert('Set both Alarm Min and Max, or leave both empty.'); return; }
+  // Alarm: the "Alarm enabled" checkbox is the source of truth. Off → no band
+  // (apply sends SET ALARM DISABLE); on → both values required, min < max.
+  const alarmOn = document.getElementById('edAlarmEnabled').checked;
+  let alarmMin = null, alarmMax = null;
+  if (alarmOn) {
+    const alarmMinRaw = document.getElementById('edAlarmMin').value;
+    const alarmMaxRaw = document.getElementById('edAlarmMax').value;
+    if (alarmMinRaw === '' || alarmMaxRaw === '') {
+      alert('Enter both Alarm Min and Max, or turn off "Alarm enabled".'); return;
+    }
+    alarmMin = Number(alarmMinRaw);
+    alarmMax = Number(alarmMaxRaw);
+    if (!(alarmMin < alarmMax)) { alert('Alarm Min must be less than Alarm Max.'); return; }
+  }
 
   const obdPidRaw = document.getElementById('edObdPid').value.trim();
   let obdPid = 0;
@@ -2222,10 +2357,7 @@ function saveEditorLocal() {
     app: document.getElementById('edApp').value,
     sensor: document.getElementById('edSensor').value,
     units: document.getElementById('edUnits').value,
-    alarm: {
-      min: hasMin ? Number(alarmMinRaw) : null,
-      max: hasMax ? Number(alarmMaxRaw) : null,
-    },
+    alarm: { min: alarmMin, max: alarmMax },
     enabled: document.getElementById('edEnabled').checked,
     outputMask:
       (document.getElementById('edOutCAN').checked      ? 1 : 0) |
