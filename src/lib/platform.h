@@ -6,6 +6,8 @@
 #ifndef PLATFORM_H
 #define PLATFORM_H
 
+#include <stdint.h>
+
 // ===== AUTOMATIC PLATFORM DETECTION =====
 #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
     // Arduino Uno - 5V system with 1.1V internal reference
@@ -104,6 +106,21 @@
 #endif
 
 #define VOLTAGE_DIVIDER_RATIO ((VOLTAGE_DIVIDER_R1 + VOLTAGE_DIVIDER_R2) / VOLTAGE_DIVIDER_R2)
+
+// ===== ANALOG PIN PROBE TABLE =====
+// Ordered list of analog-capable pins for diagnostic sweeps (SYSTEM DIAG PINS).
+// Index i corresponds to the label "A<i>"; the value is the digital pin number.
+//
+// Defined with the Arduino core's own A0..An constants so the index->pin mapping
+// is correct on every platform — notably on Teensy where A-names are NOT
+// contiguous (Teensy 4.1 A14..A17 are pins 38..41, not A0+14; Teensy 3.6 is
+// wildly non-contiguous). Do NOT reconstruct pins as `A0 + i`.
+//
+// This is a PROBE list (which pins are safe/useful to sweep), not a
+// SET-validation source — e.g. ESP32-S3 deliberately lists only ADC1 here.
+// Stored in PROGMEM on AVR; read with pgm_read_byte().
+extern const uint8_t ANALOG_PINS[];
+extern const uint8_t ANALOG_PIN_COUNT;
 
 // ===== PLATFORM INITIALIZATION FUNCTIONS =====
 void setupADC();  // Configure ADC settings for the current platform

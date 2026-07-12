@@ -766,8 +766,125 @@ static FLASHMEM void diagSectionInputs(bool verbose) {
     }
 }
 
-// SYSTEM DIAG [INTEGRITY|HW|INPUTS] — bare form runs all three.
-static int system_diag(int argc, const char* const* argv, int /*tokenIndex*/) {
+// Analog-pin discovery sweep (#280).
+//
+// DIAG INPUTS only walks configured inputs[], so it can't answer the bench
+// question "which analog pin did I wire this sensor to?". This sweeps every
+// analog-capable pin (ANALOG_PINS[], platform.cpp) and reports its live state,
+// whether or not an Input is configured on it. A floating (unconnected) pin
+// jitters; a wired sensor/divider holds a steady value — that contrast is the
+// discovery signal.
+
+// Jitter above this many ADC counts reads as "floating" (high-Z, unconnected).
+// Platform-dependent: Teensy averages 4 samples in setupADC() so its noise floor
+// is low; ESP32's unaveraged ADC is noisy; AVR sits between. Bench-tunable.
+#if defined(__IMXRT1062__) || defined(__MK64FX512__) || defined(__MK66FX1M0__) || \
+    defined(__MK20DX256__) || defined(__MK20DX128__)
+static const int JITTER_FLOATING_COUNTS = (int)(ADC_MAX_VALUE * 0.015f);  // Teensy (averaged)
+#elif defined(ESP32)
+static const int JITTER_FLOATING_COUNTS = (int)(ADC_MAX_VALUE * 0.05f);   // ESP32 (noisy)
+#else
+static const int JITTER_FLOATING_COUNTS = (int)(ADC_MAX_VALUE * 0.03f);   // AVR / unknown
+#endif
+
+static FLASHMEM void diagPrintAnalogLabel(uint8_t analogIndex, uint8_t pin) {
+    msg.control.print(F("[pins]        A"));
+    msg.control.print(analogIndex);
+    msg.control.print(F("   pin "));
+    msg.control.print(pin);
+    msg.control.print(F("   "));
+}
+
+static FLASHMEM void diagSectionPins() {
+    msg.control.println(F("=== ANALOG PIN SWEEP ==="));
+    for (uint8_t i = 0; i < ANALOG_PIN_COUNT; i++) {
+        uint8_t pin = pgm_read_byte(&ANALOG_PINS[i]);
+
+        // 1) Configured analog Input on this pin? Reuse diagProbe so DIAG PINS and
+        //    DIAG INPUTS never disagree about the same pin.
+        Input* owner = nullptr;
+        for (uint8_t k = 0; k < MAX_INPUTS; k++) {
+            if (inputs[k].flags.isEnabled && inputs[k].pin == pin) {
+                owner = &inputs[k];
+                break;
+            }
+        }
+        if (owner) {
+            InputProbe p;
+            diagProbe(owner, &p);
+            diagPrintAnalogLabel(i, pin);
+            msg.control.print(diagVerdictLabel(p.verdict));
+            msg.control.print(F("   -> "));
+            msg.control.print(owner->abbrName);
+            msg.control.print(F(" ("));
+            diagPrintDetail(owner, &p);
+            msg.control.println(F(")"));
+            continue;
+        }
+
+        // 2) Pin claimed for any non-input function (button, buzzer, output, bus,
+        //    chip-select) — don't disturb it with a read (on ESP32 analogRead
+        //    reconfigures the pad, dropping e.g. a button's INPUT_PULLUP). An
+        //    enabled analog Input is already handled above and self-tracks rather
+        //    than registering, so a non-UNUSED entry here is always something else.
+        //    Deny-list by exclusion so future PinUsageType values are safe too.
+        PinUsageType usage = getPinUsage(pin);
+        if (usage != PIN_UNUSED) {
+            diagPrintAnalogLabel(i, pin);
+            msg.control.print(F("in use - "));
+            msg.control.println(getPinUsageTypeName(usage));
+            continue;
+        }
+
+        // 3) Discovery candidate — sample the raw pin. Two throwaway reads with a
+        //    settle defuse sequential-mux ghosting (a floating high-Z pin can
+        //    otherwise hold a neighbour's charge and masquerade as driven).
+        analogRead(pin);
+        delayMicroseconds(20);
+        analogRead(pin);
+        int rawMin = (int)ADC_MAX_VALUE + 1, rawMax = -1, last = 0;
+        for (uint8_t s = 0; s < 8; s++) {
+            int r = analogRead(pin);
+            last = r;
+            if (r < rawMin) rawMin = r;
+            if (r > rawMax) rawMax = r;
+            delayMicroseconds(20);
+        }
+        int jitter = rawMax - rawMin;
+        float pctFS   = 100.0f * last / (float)ADC_MAX_VALUE;
+        float voltage = (float)last * AREF_VOLTAGE / (float)ADC_MAX_VALUE;
+        const int railLo = (int)(ADC_MAX_VALUE * 0.02f);
+        const int railHi = (int)(ADC_MAX_VALUE * 0.98f);
+
+        const __FlashStringHelper* verdict;
+        if      (jitter > JITTER_FLOATING_COUNTS) verdict = F("floating?");
+        else if (last <= railLo)                  verdict = F("pulled low");
+        else if (last >= railHi)                  verdict = F("pulled high");
+        else                                      verdict = F("driven");
+
+        diagPrintAnalogLabel(i, pin);
+        msg.control.print(verdict);
+        msg.control.print(F("   ("));
+        msg.control.print(last);
+        msg.control.print('/');
+        msg.control.print((int)ADC_MAX_VALUE);
+        msg.control.print(F("  "));
+        msg.control.print(pctFS, 1);
+        msg.control.print(F("% FS  "));
+        msg.control.print(voltage, 2);
+        msg.control.print(F(" V"));
+        if (jitter > JITTER_FLOATING_COUNTS) {
+            msg.control.print(F("  jitter "));
+            msg.control.print(jitter);
+        }
+        msg.control.println(F(")"));
+    }
+}
+
+// SYSTEM DIAG [INTEGRITY|HW|INPUTS|PINS] — bare form runs integrity+hw+inputs.
+// FLASHMEM: diagnostics are serial-driven (never hot path) and this keeps the
+// inlined diagSectionPins sweep out of scarce ITCM (RAM1) on Teensy 4.x.
+static FLASHMEM int system_diag(int argc, const char* const* argv, int /*tokenIndex*/) {
     if (argc >= 3) {
         if (streq_P(argv[2], PSTR("INTEGRITY"))) { diagSectionIntegrity(); return 0; }
         if (streq_P(argv[2], PSTR("HW")))        { diagSectionHw();        return 0; }
@@ -787,10 +904,11 @@ static int system_diag(int argc, const char* const* argv, int /*tokenIndex*/) {
             diagSectionInputs(verbose);
             return 0;
         }
+        if (streq_P(argv[2], PSTR("PINS")))      { diagSectionPins();      return 0; }
         msg.control.print(F("ERROR: Unknown DIAG scope '"));
         msg.control.print(argv[2]);
         msg.control.println(F("'"));
-        msg.control.println(F("  Valid: INTEGRITY, HW, INPUTS (or bare DIAG for all)"));
+        msg.control.println(F("  Valid: INTEGRITY, HW, INPUTS, PINS (or bare DIAG for all)"));
         return 1;
     }
     msg.control.println(F("=== SYSTEM DIAG ==="));
@@ -826,7 +944,8 @@ static const char PSTR_HELP_SYS_DIAG[] PROGMEM =
     "  SYSTEM DIAG INTEGRITY         Validate dispatch-table self-consistency\n"
     "  SYSTEM DIAG HW                Probe presence/health of configured peripherals\n"
     "  SYSTEM DIAG INPUTS            Per-input fault detection (open/short/range)\n"
-    "  SYSTEM DIAG INPUTS VERBOSE    Per-input fault detection with raw evidence chain";
+    "  SYSTEM DIAG INPUTS VERBOSE    Per-input fault detection with raw evidence chain\n"
+    "  SYSTEM DIAG PINS              Sweep all analog pins (live raw/voltage; find wiring)";
 static const char PSTR_HELP_SYS_SEA_LEVEL[] PROGMEM =
     "  SYSTEM SEA_LEVEL <hPa>        Set sea-level pressure (for altitude calc)";
 static const char PSTR_HELP_SYS_UNITS[] PROGMEM =
