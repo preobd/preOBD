@@ -9,6 +9,7 @@
 #include "message_api.h"
 #include "log_tags.h"
 #include "system_config.h"
+#include "analog_pins.h"
 #include "../inputs/input_manager.h"
 #include <Arduino.h>
 
@@ -225,17 +226,27 @@ static void printPinName(uint8_t pin) {
     } else if (pin >= 0xC0 && pin < 0xE0) {
         msg.control.print(F("CAN:"));
         msg.control.print(pin - 0xC0);
-    } else if (pin >= A0) {
-        msg.control.print(F("A"));
-        msg.control.print(pin - A0);
     } else {
-        msg.control.print(pin);
+        int8_t analogNum = analogIndexForPin(pin);
+        if (analogNum >= 0) {
+            msg.control.print(F("A"));
+            msg.control.print(analogNum);
+        } else {
+            msg.control.print(pin);
+        }
     }
 }
 
-// Helper to print pin with padding for alignment
-static void printPinPadded(uint8_t pin) {
+// Helper to print pin with padding for alignment.
+//
+// analogLabel: show an analog-capable pin by its A-name (e.g. "A8"). Only true
+// where the pin is meaningful as an analog *input* — bus/system/output sections
+// pass false so a dual-purpose pin (e.g. Teensy CAN1 on pins 22/23, which are
+// also A8/A9) prints by its physical number in that role, not "A8/A9".
+static void printPinPadded(uint8_t pin, bool analogLabel = false) {
     msg.control.print(F("  Pin "));
+
+    int8_t analogNum = analogLabel ? analogIndexForPin(pin) : -1;
 
     // Determine width needed for pin number
     if (pin == 254) {
@@ -244,10 +255,9 @@ static void printPinPadded(uint8_t pin) {
     } else if (pin >= 0xF0 || (pin >= 0xC0 && pin < 0xE0)) {
         // Virtual pins like "CAN:0" or "I2C:15" - already at least 5 chars
         printPinName(pin);
-    } else if (pin >= A0) {
-        // Analog pins like "A0" - pad to 2 chars
+    } else if (analogNum >= 0) {
+        // Analog pins like "A0"
         msg.control.print(F("A"));
-        uint8_t analogNum = pin - A0;
         msg.control.print(analogNum);
     } else {
         // Digital pins - pad to 2 chars
@@ -279,7 +289,7 @@ void printPinStatus(uint8_t specificPin) {
         // Check inputs array (inputs aren't in the registry; they self-track).
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
             if (inputs[i].pin == specificPin && inputs[i].applicationIndex != 0xFF) {
-                printPinPadded(specificPin);
+                printPinPadded(specificPin, /*analogLabel=*/true);
                 msg.control.print(F("Input     - "));
                 msg.control.print(inputs[i].displayName);
                 if (inputs[i].abbrName[0] != '\0') {
@@ -307,8 +317,9 @@ void printPinStatus(uint8_t specificPin) {
             return;
         }
 
-        // Pin not found
-        printPinPadded(specificPin);
+        // Pin not found — an unclaimed analog-capable pin shows its A-name so
+        // an `INFO A5`-style query echoes the analog identity the user asked for.
+        printPinPadded(specificPin, /*analogLabel=*/true);
         msg.control.println(F("Available"));
         return;
     }
@@ -388,7 +399,7 @@ void printPinStatus(uint8_t specificPin) {
                 msg.control.println(F("Input Pins:"));
                 hasInputs = true;
             }
-            printPinPadded(inputs[i].pin);
+            printPinPadded(inputs[i].pin, /*analogLabel=*/true);
             msg.control.print(F("Input     - "));
             msg.control.print(inputs[i].displayName);
             if (inputs[i].abbrName[0] != '\0') {

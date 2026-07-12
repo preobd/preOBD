@@ -13,11 +13,10 @@
  * intentionally logic-free and dependency-light so it compiles standalone; the
  * evaluation engine, EEPROM wiring, and CLI land in later commits.
  *
- * Authoritative design: ARCHITECTURE.md §11. Concrete v1 plan + decisions:
- * CONTROL_ENGINE_PLAN.md. Key locked decisions reflected here:
+ * Authoritative design: ARCHITECTURE.md §11. Key locked decisions reflected here:
  *   - v1 is N:1 (an Action is triggered by ≤1 Rule; a Rule fans out to many).
  *   - Records are managed by a stable `id`, NOT array slot and NOT a name —
- *     there is deliberately no name field (CONTROL_ENGINE_PLAN §1.1 / §11.8).
+ *     there is deliberately no name field (ARCHITECTURE §11.8).
  *   - Rule.sourceInput is the input PIN (the existing stable input identity),
  *     not an inputs[] slot (§8 Q9 axis A).
  *   - RuleState / RuleContext are the lift-and-rename target of the existing

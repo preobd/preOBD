@@ -9,6 +9,7 @@
 #include "input_manager.h"
 #include "command_helpers.h"
 #include "../lib/system_config.h"
+#include "../lib/analog_pins.h"
 #include "../lib/units_registry.h"
 #include "../lib/message_router.h"  // For msg.control
 #include "../lib/message_api.h"
@@ -530,9 +531,10 @@ static bool validateInputConfig(Input* input) {
     // Skip this check for virtual pins (CAN 0xC0+, I2C 0xF0+)
     if (input->pin < 0xC0 && !isPinAvailable(input->pin)) {
         msg.control.print(F("ERROR: Pin "));
-        if (input->pin >= A0) {
+        int8_t analogNum = analogIndexForPin(input->pin);
+        if (analogNum >= 0) {
             msg.control.print(F("A"));
-            msg.control.print(input->pin - A0);
+            msg.control.print(analogNum);
         } else {
             msg.control.print(input->pin);
         }
@@ -556,11 +558,14 @@ static bool validateInputConfig(Input* input) {
                 msg.control.print(F("I2C"));
             } else if (input->pin >= 0xC0 && input->pin < 0xE0) {
                 msg.control.print(F("CAN"));
-            } else if (input->pin >= A0) {
-                msg.control.print(F("A"));
-                msg.control.print(input->pin - A0);
             } else {
-                msg.control.print(input->pin);
+                int8_t analogNum = analogIndexForPin(input->pin);
+                if (analogNum >= 0) {
+                    msg.control.print(F("A"));
+                    msg.control.print(analogNum);
+                } else {
+                    msg.control.print(input->pin);
+                }
             }
             msg.control.println(F(" already in use"));
             return false;
@@ -994,11 +999,14 @@ static void printPin(uint8_t pin) {
     } else if (pin >= 0xC0 && pin < 0xE0) {
         msg.control.print(F("CAN:"));
         msg.control.print(pin - 0xC0);
-    } else if (pin >= A0) {
-        msg.control.print(F("A"));
-        msg.control.print(pin - A0);
     } else {
-        msg.control.print(pin);
+        int8_t analogNum = analogIndexForPin(pin);
+        if (analogNum >= 0) {
+            msg.control.print(F("A"));
+            msg.control.print(analogNum);
+        } else {
+            msg.control.print(pin);
+        }
     }
 }
 
@@ -1267,11 +1275,14 @@ void listAllInputs() {
             } else if (inputs[i].pin >= 0xC0 && inputs[i].pin < 0xE0) {
                 msg.control.print(F("CAN:"));
                 msg.control.print(inputs[i].pin - 0xC0);
-            } else if (inputs[i].pin >= A0) {
-                msg.control.print(F("A"));
-                msg.control.print(inputs[i].pin - A0);
             } else {
-                msg.control.print(inputs[i].pin);
+                int8_t analogNum = analogIndexForPin(inputs[i].pin);
+                if (analogNum >= 0) {
+                    msg.control.print(F("A"));
+                    msg.control.print(analogNum);
+                } else {
+                    msg.control.print(inputs[i].pin);
+                }
             }
             msg.control.print(F(": "));
             msg.control.print(inputs[i].abbrName);

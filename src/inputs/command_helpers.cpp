@@ -12,6 +12,7 @@
 #include "../lib/message_api.h"
 #include "../lib/system_config.h"
 #include "../lib/platform.h"
+#include "../lib/analog_pins.h"
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
 #include "../lib/units_registry.h"
@@ -914,58 +915,22 @@ uint8_t parsePin(const char* pinStr, bool* isValid) {
         return virtualPin;
     }
 
-    // Analog pins
+    // Analog pins. A<n> -> physical pin via the shared analog map, which
+    // resolves through the core A* constants so non-contiguous Teensy A-names
+    // (4.1 A14..A17 = pins 38..41, not A0+14; 3.x worse) land on the right pin
+    // instead of `A0 + n` (#302).
     if (toupper(pinStr[0]) == 'A') {
         int analogNum = atoi(pinStr + 1);
-        uint8_t pin = A0 + analogNum;
-
-        // Validate against platform capabilities
-        #if defined(__IMXRT1062__)  // Teensy 4.x
-            #if defined(ARDUINO_TEENSY41)
-                if (analogNum < 0 || analogNum > 17) {
-                    if (isValid) *isValid = false;
-                    msg.control.print(F("ERROR: Pin A"));
-                    msg.control.print(analogNum);
-                    msg.control.println(F(" not available (Teensy 4.1 supports A0-A17)"));
-                    return 0;
-                }
-            #else  // Teensy 4.0
-                if (analogNum < 0 || analogNum > 13) {
-                    if (isValid) *isValid = false;
-                    msg.control.print(F("ERROR: Pin A"));
-                    msg.control.print(analogNum);
-                    msg.control.println(F(" not available (Teensy 4.0 supports A0-A13)"));
-                    return 0;
-                }
-            #endif
-        #elif defined(__AVR_ATmega2560__)  // Arduino Mega
-            if (analogNum < 0 || analogNum > 15) {
-                if (isValid) *isValid = false;
-                msg.control.print(F("ERROR: Pin A"));
-                msg.control.print(analogNum);
-                msg.control.println(F(" not available (Arduino Mega supports A0-A15)"));
-                return 0;
-            }
-        #elif defined(__AVR_ATmega328P__)  // Arduino Uno
-            if (analogNum < 0 || analogNum > 5) {
-                if (isValid) *isValid = false;
-                msg.control.print(F("ERROR: Pin A"));
-                msg.control.print(analogNum);
-                msg.control.println(F(" not available (Arduino Uno supports A0-A5)"));
-                return 0;
-            }
-        #else
-            // Generic validation using MAX_INPUTS from platform.h
-            if (analogNum < 0 || analogNum >= MAX_INPUTS) {
-                if (isValid) *isValid = false;
-                msg.control.print(F("ERROR: Pin A"));
-                msg.control.print(analogNum);
-                msg.control.println(F(" not available on this platform"));
-                return 0;
-            }
-        #endif
-
-        return pin;
+        if (analogNum < 0 || analogNum >= (int)analogPinCount()) {
+            if (isValid) *isValid = false;
+            msg.control.print(F("ERROR: Pin A"));
+            msg.control.print(analogNum);
+            msg.control.print(F(" not available (this board supports A0-A"));
+            msg.control.print(analogPinCount() - 1);
+            msg.control.println(F(")"));
+            return 0;
+        }
+        return analogPinForIndex((uint8_t)analogNum);
     }
 
     // Digital pins
