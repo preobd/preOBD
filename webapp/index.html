@@ -792,6 +792,10 @@
     letter-spacing: 0.1em;
     margin-bottom: 5px;
   }
+  .editor-hint {
+    margin: 0; font-size: 11px; line-height: 1.4; color: var(--dim);
+  }
+  .editor-hint b { color: var(--text); font-weight: 600; }
 
   .editor-field input[type="text"],
   .editor-field input[type="number"],
@@ -882,11 +886,6 @@
     background: transparent; color: var(--dim);
   }
   .ctl-tab.active { font-weight: 600; background: var(--brand-light); color: #fff; }
-  .ctl-add-btn {
-    padding: 6px 13px; border-radius: 5px; font-weight: 500; font-size: 12px;
-    background: var(--brand-light); border: 1px solid var(--brand-light); color: #fff; cursor: pointer;
-  }
-  .ctl-add-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .ctl-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
   .ctl-table thead th {
@@ -900,6 +899,10 @@
   .ctl-table td { padding: 9px 10px; color: var(--text); vertical-align: middle; }
   .ctl-table td.mono { font-family: var(--mono); }
   .ctl-table td.dim { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .fires-builtin {
+    font-family: var(--sans); font-size: 10.5px; font-weight: 600;
+    font-style: italic; color: var(--dim); letter-spacing: 0.02em;
+  }
   .ctl-actions-cell { white-space: nowrap; text-align: right; }
   .ctl-actions-cell .btn { font-size: 10.5px; padding: 3px 9px; margin-left: 4px; }
   .btn.ctl-on  { background: var(--green); border-color: var(--green); color: #fff; }
@@ -1054,19 +1057,17 @@
         <button class="ctl-tab" id="ctlTabRules" data-tab="rules">Rules</button>
         <button class="ctl-tab" id="ctlTabActions" data-tab="actions">Actions</button>
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <button class="ctl-add-btn" id="ctlAddBtn">+ Add Rule</button>
-        <button class="panel-collapse-btn" id="btnControlToggle" title="Collapse">▲</button>
-      </div>
+      <button class="panel-collapse-btn" id="btnControlToggle" title="Collapse">▲</button>
     </div>
     <div class="panel-body" style="padding:0">
       <div id="ctlForm" style="display:none"></div>
       <div class="table-scroll"><div id="ctlTableWrap"></div></div>
       <div id="ctlLegend"></div>
       <div class="config-actions" id="ctlFooter" style="display:none">
-        <span class="badge badge-warning" id="ctlUnsavedBadge" style="display:none">Unsaved</span>
+        <button class="btn secondary" id="ctlAddBtn">+ Add Rule</button>
         <button class="btn primary" id="ctlSaveEeprom">Save to EEPROM</button>
         <button class="btn secondary" id="ctlRevert">Revert</button>
+        <span class="badge badge-warning" id="ctlUnsavedBadge" style="display:none;margin-left:auto;align-self:center">Unsaved</span>
       </div>
     </div>
   </div>
@@ -1887,7 +1888,15 @@ function renderRulesTab() {
   let rows = '';
   for (const r of rules) {
     const driven = actions.find(a => a.rule === r.id);
-    const fires = driven ? escHtml(driven.name || ('Action #' + driven.id)) : '—';
+    // Fires: a linked custom Action wins; otherwise a rule with a real severity
+    // still fires the firmware's built-in notification (LED/buzzer/log per tier),
+    // which is what the auto-seeded default alarm rules do. A NONE rule with no
+    // Action fires nothing.
+    let fires;
+    if (driven) fires = escHtml(driven.name || ('Action #' + driven.id));
+    else if ((r.severity || 'NONE') !== 'NONE')
+      fires = '<span class="fires-builtin" title="Fires the firmware\'s built-in notification (LED / buzzer / log per severity) — no custom Action linked">Built-in</span>';
+    else fires = '—';
     const sev = (r.severity || 'NONE').toLowerCase();
     rows +=
       '<tr>' +
@@ -2711,12 +2720,15 @@ function buildEditorHTML(pinStr, inp, isAdd) {
   <div class="editor-group">
     <div class="editor-field">
       <label>Alarm Min</label>
-      <input type="number" id="edAlarmMin" value="${alarmMin}" placeholder="optional" ${alarmEnabled ? '' : 'disabled'}>
+      <input type="number" id="edAlarmMin" value="${alarmMin}" placeholder="e.g. 250" ${alarmEnabled ? '' : 'disabled'}>
     </div>
     <div class="editor-field">
       <label>Alarm Max</label>
-      <input type="number" id="edAlarmMax" value="${alarmMax}" placeholder="optional" ${alarmEnabled ? '' : 'disabled'}>
+      <input type="number" id="edAlarmMax" value="${alarmMax}" placeholder="e.g. 260" ${alarmEnabled ? '' : 'disabled'}>
     </div>
+  </div>
+  <div class="editor-field" style="grid-column: 1 / -1;">
+    <p class="editor-hint">The alarm band needs <b>both</b> Min and Max. For a one-sided alarm (only a floor or only a ceiling), add an <b>ABOVE</b> / <b>BELOW</b> rule in the Rules panel.</p>
   </div>
   <div class="editor-group">
     <div class="editor-field">
@@ -2923,7 +2935,8 @@ function saveEditorLocal() {
     const alarmMinRaw = document.getElementById('edAlarmMin').value;
     const alarmMaxRaw = document.getElementById('edAlarmMax').value;
     if (alarmMinRaw === '' || alarmMaxRaw === '') {
-      alert('Enter both Alarm Min and Max, or turn off "Alarm enabled".'); return;
+      alert('The alarm band needs both Min and Max. Enter both, turn off "Alarm enabled", '
+        + 'or add a one-sided ABOVE/BELOW rule in the Rules panel.'); return;
     }
     alarmMin = Number(alarmMinRaw);
     alarmMax = Number(alarmMaxRaw);
