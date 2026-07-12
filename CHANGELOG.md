@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `docs/feature_costs.md` + `tools/measure_feature_costs.py`: a per-flag flash/RAM cost matrix for the memory-constrained mega2560 build, so a configuration can be sized before compiling (#145)
 - Control engine: a unified Rules → Actions + built-in Annunciator pipeline replacing the separate per-input alarm and relay subsystems — define threshold Rules (`RULE`: ABOVE/BELOW/OUTSIDE-band with hysteresis, debounce, warmup, and a derived two-tier warning/alarm severity), drive relay/GPIO outputs with sensor-loss failsafe and manual override (`ACTION`), and let applications seed a default Rule on `SET <pin> APPLICATION`; alarms and relays are now Rules/Actions, so `SET ALARM` and `RELAY` are deprecated and the BLE relay panel is replaced by an Action broadcaster (`PreobdActionState`). Clean EEPROM break (SystemConfig v12).
 
 ## [0.9.0-beta] - 2026-06-18
