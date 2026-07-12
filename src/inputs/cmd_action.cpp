@@ -196,14 +196,22 @@ static FLASHMEM int actionManual(uint8_t id, bool on) {
         msg.control.println(id);
         return 1;
     }
+    // Manual ON/OFF only applies to a manual-only (unlinked) action. A rule-driven
+    // action follows its Rule, so reject the command WITHOUT mutating manual state
+    // (#294): the old code set the manual flag and printed a soft note, leaving a
+    // stale flag that would snap the pin on the moment the rule was later unlinked.
+    if (systemConfig.actions[slot].ruleRef != CONTROL_ID_NONE) {
+        msg.control.print(F("ERROR: action #"));
+        msg.control.print(id);
+        msg.control.println(F(" is rule-driven; ON/OFF applies only to manual actions"));
+        msg.control.println(F("  (unlink first: ACTION <id> RULE NONE)"));
+        return 1;
+    }
     controlActionSetManual(id, on);
     msg.control.print(F("Action #"));
     msg.control.print(id);
     msg.control.print(F(" manual "));
     msg.control.println(on ? F("ON") : F("OFF"));
-    if (systemConfig.actions[slot].ruleRef != CONTROL_ID_NONE) {
-        msg.control.println(F("  (note: action is rule-driven; ON/OFF applies only when manual — ACTION <id> RULE NONE to unlink)"));
-    }
     return 0;
 }
 
@@ -214,12 +222,28 @@ static FLASHMEM int actionDel(uint8_t id) {
         msg.control.println(id);
         return 1;
     }
+    // Capture the resolved physical level the pin is left at so the operator
+    // isn't surprised by an inverted (active-low) relay sitting HIGH after clear
+    // (#293): de-asserted/OFF respects INVERT, so OFF == HIGH for an active-low
+    // relay (its safe, de-energized state) — not a stuck-on bug.
+    const Action& a = systemConfig.actions[slot];
+    const bool relay = (a.type == ACT_RELAY);
+    const bool offHigh = relay && (a.behavior & ACT_BEHAVIOR_INVERT);  // OFF level for inverted = HIGH
+    const uint8_t target = a.target;
+
     controlActionConfigurePin(slot);  // de-assert the pin before freeing
     systemConfig.actions[slot].id = CONTROL_ID_NONE;
     controlSyncActionPins();          // release the freed target pin in the registry
     msg.control.print(F("Action #"));
     msg.control.print(id);
     msg.control.println(F(" deleted. SAVE to persist."));
+    if (relay) {
+        msg.control.print(F("  pin "));
+        msg.control.print(target);
+        msg.control.print(F(" left de-energized (OFF = "));
+        msg.control.print(offHigh ? F("HIGH, inverted") : F("LOW"));
+        msg.control.println(F(")"));
+    }
     return 0;
 }
 

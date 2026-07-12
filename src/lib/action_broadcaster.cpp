@@ -92,6 +92,12 @@ void handleInbound(const uint8_t* payload, uint16_t len) {
     int slot = controlActionSlot(req.actionId);
     if (slot < 0) return;
 
+    // Manual ON/OFF only applies to a manual-only (unlinked) action. A rule-driven
+    // action follows its Rule — reject the command at the wire boundary (no state
+    // change, no confirmation notify) rather than relying on controlActionDesired()
+    // to silently no-op it (#294 / enforce the manual-only contract).
+    if (systemConfig.actions[slot].ruleRef != CONTROL_ID_NONE) return;
+
     switch (req.command) {
         case PREOBD_ACTION_CMD_MANUAL_ON:
             controlActionSetManual(req.actionId, true);

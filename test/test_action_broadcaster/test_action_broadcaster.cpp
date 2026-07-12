@@ -155,6 +155,21 @@ static void test_handle_inbound_manual_on(void) {
     TEST_ASSERT_TRUE(g_setManualVal);
 }
 
+// A manual command targeting a RULE-DRIVEN action is rejected at the wire
+// boundary (no manual-state mutation): the action follows its Rule, and a
+// stale manual flag could otherwise snap the pin on once the rule is unlinked
+// (#294 — enforce the manual-only contract).
+static void test_handle_inbound_rejects_manual_on_rule_driven(void) {
+    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, /*ruleRef*/5, 0, 0);
+    PreobdActionState req;
+    memset(&req, 0, sizeof(req));
+    req.protocolVersion = PREOBD_BLE_PROTOCOL_VERSION;
+    req.actionId = 7;
+    req.command  = PREOBD_ACTION_CMD_MANUAL_ON;
+    ActionBroadcaster::handleInbound(reinterpret_cast<const uint8_t*>(&req), sizeof(req));
+    TEST_ASSERT_EQUAL_INT(0, g_setManualCalls);
+}
+
 // A NONE (status-only) command performs no toggle.
 static void test_handle_inbound_none_is_noop(void) {
     configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, CONTROL_ID_NONE, 0, 0);
@@ -202,6 +217,7 @@ int main(int, char**) {
     RUN_TEST(test_idempotent_after_snapshot);
     RUN_TEST(test_state_change_emits_one_frame);
     RUN_TEST(test_handle_inbound_manual_on);
+    RUN_TEST(test_handle_inbound_rejects_manual_on_rule_driven);
     RUN_TEST(test_handle_inbound_none_is_noop);
     RUN_TEST(test_handle_inbound_unknown_id);
     RUN_TEST(test_handle_inbound_rejects_bad_length);
