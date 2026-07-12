@@ -30,9 +30,7 @@
 #include "../outputs/output_base.h"
 #include "../lib/obd_query.h"
 #include "../lib/display_manager.h"
-#if ENABLE_RELAY_OUTPUT
-#include "../outputs/output_relay.h"
-#endif
+#include "../control/control_manager.h"   // §11.5 seed default Rule from application
 #if ENABLE_ELM327
 #include "../outputs/output_elm327.h"
 #endif
@@ -109,8 +107,41 @@ static int set_application(uint8_t pin, int argc, const char* const* argv) {
         msg.control.println(F("  Hint: Use 'LIST APPLICATIONS' to see valid options"));
         return 1;
     }
+#if ENABLE_CONTROL_ENGINE
+    // Capture the prior application so we can tell a fresh assignment from a
+    // CHANGE — re-applying the SAME app preserves a customized Rule (§11.5), but
+    // changing the measurement type invalidates the old thresholds.
+    Input* prev = getInputByPin(pin);
+    const uint8_t oldApp = prev ? prev->applicationIndex : 0;
+#endif
     if (setInputApplication(pin, appIndex)) {
         printInputFieldSet(argv[1], F("application"), argv[3]);
+#if ENABLE_CONTROL_ENGINE
+        if (!controlRuleExistsForInput(pin)) {
+            // Fresh input: seed a canonical default Rule from the app template (§11.5).
+            uint8_t ruleId = controlSeedRuleForInput(pin, appIndex, millis());
+            if (ruleId != CONTROL_ID_NONE) {
+                msg.control.print(F("  Seeded Rule #"));
+                msg.control.print(ruleId);
+                msg.control.println(F(" from application defaults (RULE LIST to view)"));
+            }
+        } else if (appIndex != oldApp) {
+            // App CHANGED under existing Rule(s): their thresholds are now stale.
+            // Re-seed them from the new application's defaults, or warn if the new
+            // app has none (the old thresholds would otherwise silently mis-alarm).
+            uint8_t n = controlReseedRulesForInput(pin, millis());
+            if (n > 0) {
+                msg.control.print(F("  Application changed - re-seeded "));
+                msg.control.print(n);
+                msg.control.println(F(" Rule(s) from new defaults (RULE LIST to view)"));
+            } else {
+                msg.control.println(F("  WARNING: existing Rule(s) on this input keep their old"));
+                msg.control.println(F("  thresholds (new application has no default band) - review"));
+                msg.control.println(F("  with RULE LIST, then RULE RESET / RULE DEL as needed"));
+            }
+        }
+        // else: same app re-applied — preserve existing Rule (§11.5).
+#endif
         return 0;
     }
     return 1;
@@ -277,89 +308,14 @@ static int set_units(uint8_t pin, int argc, const char* const* argv) {
 }
 
 // SET <pin> ALARM ENABLE|DISABLE|WARMUP|PERSIST|<min> <max>
+// SET <pin> ALARM ... is deprecated: alarms are control-engine Rules (§11).
 static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
-    if (argc < 4) {
-        msg.control.println(F("ERROR: ALARM requires ENABLE, DISABLE, WARMUP, PERSIST, or <min> <max>"));
-        return 1;
-    }
-
-    if (streq_P(argv[3], PSTR("ENABLE"))) {
-        if (enableInputAlarm(pin, true)) {
-            printInputFlag(argv[1], F("alarm"), true);
-            return 0;
-        }
-        return 1;
-    }
-
-    if (streq_P(argv[3], PSTR("DISABLE"))) {
-        if (enableInputAlarm(pin, false)) {
-            printInputFlag(argv[1], F("alarm"), false);
-            return 0;
-        }
-        return 1;
-    }
-
-    if (streq_P(argv[3], PSTR("WARMUP"))) {
-        if (argc < 5) {
-            msg.control.println(F("ERROR: ALARM WARMUP requires a time value in milliseconds"));
-            return 1;
-        }
-        uint16_t value = atoi(argv[4]);
-        if (value > 300000) {
-            msg.control.println(F("ERROR: Alarm warmup time must be 0-300000ms"));
-            return 1;
-        }
-        if (setInputAlarmWarmup(pin, value)) {
-            msg.control.print(F("Input "));
-            msg.control.print(argv[1]);
-            msg.control.print(F(" alarm warmup set to "));
-            msg.control.print(value);
-            msg.control.println(F("ms"));
-            printSaveReminder();
-            return 0;
-        }
-        return 1;
-    }
-
-    if (streq_P(argv[3], PSTR("PERSIST"))) {
-        if (argc < 5) {
-            msg.control.println(F("ERROR: ALARM PERSIST requires a time value in milliseconds"));
-            return 1;
-        }
-        uint16_t value = atoi(argv[4]);
-        if (value > 60000) {
-            msg.control.println(F("ERROR: Alarm persistence time must be 0-60000ms"));
-            return 1;
-        }
-        if (setInputAlarmPersist(pin, value)) {
-            msg.control.print(F("Input "));
-            msg.control.print(argv[1]);
-            msg.control.print(F(" alarm persistence set to "));
-            msg.control.print(value);
-            msg.control.println(F("ms"));
-            printSaveReminder();
-            return 0;
-        }
-        return 1;
-    }
-
-    // SET <pin> ALARM <min> <max>
-    if (argc < 5) {
-        msg.control.println(F("ERROR: ALARM requires min and max values"));
-        return 1;
-    }
-    float minVal = atof(argv[3]);
-    float maxVal = atof(argv[4]);
-    if (setInputAlarmRange(pin, minVal, maxVal)) {
-        msg.control.print(F("Input "));
-        msg.control.print(argv[1]);
-        msg.control.print(F(" alarm range set to "));
-        msg.control.print(minVal);
-        msg.control.print(F(" - "));
-        msg.control.println(maxVal);
-        printSaveReminder();
-        return 0;
-    }
+    (void)pin; (void)argc; (void)argv;
+    msg.control.println(F("SET ALARM is deprecated - alarms are control-engine Rules."));
+    msg.control.println(F("  Create: RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARNING|ALARM]"));
+    msg.control.println(F("          RULE ADD <pin> OUTSIDE <lo> <hi> [WARNING|ALARM]"));
+    msg.control.println(F("  Or just SET <pin> APPLICATION <app> to seed the default Rule."));
+    msg.control.println(F("  Status: RULE LIST"));
     return 1;
 }
 

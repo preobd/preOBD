@@ -92,8 +92,10 @@ void readTestInput(Input* ptr) {
     unsigned long elapsed = millis() - testModeState.scenarioStartTime;
     ptr->value = generateTestValue(config, elapsed);
 
-    // Force alarm if requested (override to exceed threshold)
-    if (config->forceAlarm && ptr->flags.alarm) {
+    // Force alarm if requested: drive the value above the (preset-derived)
+    // max so any OUTSIDE_BAND/ABOVE Rule on this input trips. (flags.alarm is a
+    // dead legacy field now — alarms are Rules — so we no longer gate on it.)
+    if (config->forceAlarm) {
         ptr->value = ptr->maxValue + 10.0f;
     }
 }

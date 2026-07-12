@@ -40,7 +40,7 @@
 
 // Mode button — hold during boot for CONFIG mode, press to silence alarm
 #define ENABLE_MODE_BUTTON     1
-#define MODE_BUTTON_PIN        5
+#define MODE_BUTTON_PIN        2
 
 // Alarm buzzer output
 #define ALARMS_PIN             3
@@ -50,9 +50,9 @@
 #define SD_PIN                 254
 
 // RGB LED status indicator (PWM-capable pins required)
-#define RGB_PIN_R              11
-#define RGB_PIN_G              12
-#define RGB_PIN_B              13
+#define RGB_PIN_R              6
+#define RGB_PIN_G              5
+#define RGB_PIN_B              4
 // #define RGB_COMMON_ANODE       // uncomment for common-anode LED wiring
 
 // Test mode trigger — hold LOW during boot to activate

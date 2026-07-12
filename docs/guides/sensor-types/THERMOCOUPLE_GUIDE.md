@@ -148,7 +148,7 @@ K-type thermocouples use chromel-alumel alloy and are the most common type for a
 
 ```
 SET 6 CHT MAX6675
-SET 6 ALARM 50 260
+RULE ADD 6 OUTSIDE 50 260
 SAVE
 ```
 
@@ -171,8 +171,8 @@ SAVE
 ```
 SET 6 CHT MAX6675
 SET 7 EGT MAX31855
-SET 6 ALARM 50 260
-SET 7 ALARM 200 850
+RULE ADD 6 OUTSIDE 50 260
+RULE ADD 7 OUTSIDE 200 850
 SAVE
 ```
 

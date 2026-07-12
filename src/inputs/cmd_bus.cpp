@@ -31,7 +31,6 @@
 #include "../lib/obd_query.h"
 #include "../lib/display_manager.h"
 #if ENABLE_RELAY_OUTPUT
-#include "../outputs/output_relay.h"
 #endif
 #if ENABLE_ELM327
 #include "../outputs/output_elm327.h"

@@ -1,5 +1,23 @@
 # Relay Output Control
 
+> **⚠️ Superseded by the Control Engine (Rules + Actions).** A relay is no longer a
+> separate subsystem — it is an **Action of type `RELAY`** driven by a **Rule**. The
+> legacy `RELAY ...` command is **deprecated** (it prints a pointer to the new
+> commands). Configure relay control with:
+>
+> - `RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>]` — the threshold + hysteresis
+> - `ACTION ADD RELAY <outpin> [FAILSAFE ON|OFF] [INVERT]` — the output
+> - `ACTION <id> RULE <ruleId>` to link; `ACTION <id> ON|OFF` for manual override
+> - `ACTION LIST` for status
+>
+> Actions add a sensor-loss **failsafe** the old relay engine lacked. Over BLE,
+> relay state is now the `PreobdActionState` payload (Action broadcaster) rather
+> than `PreobdRelayState`. See `ARCHITECTURE.md` §11.
+>
+> **The configuration examples below show the legacy `RELAY` commands and are kept
+> for reference only** — translate `RELAY <n> PIN/INPUT/THRESHOLD/MODE` to the
+> `RULE` + `ACTION` form above. (Hardware wiring sections remain accurate.)
+
 The relay output module enables automatic control of 12V electrical relays based on sensor thresholds with hysteresis and manual override capability.
 
 ## Table of Contents

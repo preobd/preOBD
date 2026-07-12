@@ -273,8 +273,11 @@ struct SystemConfig {
     // Transport router (v4+) — control/data/debug primary+secondary, BT
     struct { /* ... */ } router;
 
-    // Relays (v5+, ENABLE_RELAY_OUTPUT only)
-    RelayConfig relays[MAX_RELAYS];
+    // Control engine (v12+) — Rule/Action tables replace the former
+    // RelayConfig relays[] (a relay is now an Action of type RELAY); alarm
+    // thresholds are Rules too. Clean break from v11. See ARCHITECTURE §11.
+    Rule   rules[MAX_RULES];
+    Action actions[MAX_ACTIONS];
 
     // Bus + serial port config — which I2C/SPI/CAN bus, which serial ports
     BusConfig buses;

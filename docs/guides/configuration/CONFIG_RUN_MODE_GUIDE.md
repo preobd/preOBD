@@ -323,8 +323,8 @@ For complete command reference, see [Serial Command Reference](../../reference/S
    SET A0 APPLICATION CHT K_TYPE_THERMOCOUPLE_MAX6675
    SET A1 APPLICATION COOLANT_TEMP VDO_120C_TABLE
    SET A2 APPLICATION OIL_PRESSURE VDO_5BAR_PRESSURE
-   SET A0 ALARM 50 400
-   SET A2 ALARM 0.5 5.0
+   RULE ADD A0 OUTSIDE 50 400
+   RULE ADD A2 OUTSIDE 0.5 5.0
    SAVE
    ```
 3. Verify configuration:
@@ -349,7 +349,7 @@ For complete command reference, see [Serial Command Reference](../../reference/S
 3. Make changes:
    ```
    SET A3 APPLICATION BOOST_PRESSURE GENERIC_BOOST_LINEAR
-   SET A3 ALARM -0.5 2.0
+   RULE ADD A3 OUTSIDE -0.5 2.0
    SAVE
    ```
 4. Return to RUN mode:

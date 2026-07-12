@@ -42,6 +42,10 @@
 #define ENABLE_ALARMS          1
 #define ENABLE_LED             1
 #define ENABLE_BME280          1
+// Control engine caps — SRAM/EEPROM-bound on AVR (ARCHITECTURE §11.9).
+// Mega mirrors MAX_RELAYS=2; Teensy/STM32 default to 8/8 in control_types.h.
+#define MAX_RULES              2
+#define MAX_ACTIONS            2
 
 // ===== HARDWARE PIN ASSIGNMENTS =====
 // Customize these to match your physical wiring.

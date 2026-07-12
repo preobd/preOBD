@@ -236,7 +236,7 @@ Uses default: 12 poles, 3:1 pulley ratio
 
 ```
 SET 5 ENGINE_RPM W_PHASE_RPM
-SET 5 ALARM 500 6500
+RULE ADD 5 OUTSIDE 500 6500
 SAVE
 ```
 

@@ -211,16 +211,14 @@ void resetSystemConfig() {
         systemConfig.router.reserved_router[i] = 0;
     }
 
-#if ENABLE_RELAY_OUTPUT
-    // Relay defaults (NEW in v5)
-    for (int i = 0; i < MAX_RELAYS; i++) {
-        systemConfig.relays[i].outputPin = 0xFF;       // Unconfigured
-        systemConfig.relays[i].inputIndex = 0xFF;      // Unassigned
-        systemConfig.relays[i].mode = RELAY_DISABLED;
-        systemConfig.relays[i].reserved = 0;
-        systemConfig.relays[i].thresholdOn = 0.0;
-        systemConfig.relays[i].thresholdOff = 0.0;
-        systemConfig.relays[i].reserved2 = 0;
+#if ENABLE_CONTROL_ENGINE
+    // Control engine defaults (NEW in v12): all slots empty. An empty slot is
+    // marked by id == CONTROL_ID_NONE; the rest of the record is don't-care.
+    for (int i = 0; i < MAX_RULES; i++) {
+        systemConfig.rules[i].id = CONTROL_ID_NONE;
+    }
+    for (int i = 0; i < MAX_ACTIONS; i++) {
+        systemConfig.actions[i].id = CONTROL_ID_NONE;
     }
 #endif
 

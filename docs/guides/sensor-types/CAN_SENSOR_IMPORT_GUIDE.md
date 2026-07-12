@@ -220,7 +220,7 @@ CAN sensors use virtual pins `CAN:0` through `CAN:31`:
 ✓ Imported CAN sensor CAN:1 - PID 0x0D (Vehicle Speed)
 
 # Reference CAN sensors by index in other commands
-> SET CAN:0 ALARM 500 6000
+> RULE ADD CAN:0 OUTSIDE 500 6000
 > SET CAN:1 NAME "SPEED"
 > INFO CAN:0
 > ENABLE CAN:1
@@ -246,7 +246,7 @@ SET CAN:0 NAME "ERPM"
 SET CAN:0 NAME "Engine RPM"
 
 # Set alarm thresholds
-SET CAN:0 ALARM 500 6000     # Min 500, Max 6000 RPM
+RULE ADD CAN:0 OUTSIDE 500 6000     # Min 500, Max 6000 RPM
 SET CAN:0 ALARM ENABLE
 
 # Change units
@@ -314,9 +314,9 @@ SET A0 OIL_TEMP VDO_150C_STEINHART    # Oil temp → A0
 SET A1 OIL_PRESSURE VDO_5BAR_CURVE    # Oil pressure → A1
 
 # Set alarms
-SET CAN:0 ALARM 500 6000              # RPM alarm
-SET A0 ALARM 50 130                   # Oil temp alarm
-SET A1 ALARM 1.0 6.0                  # Oil pressure alarm
+RULE ADD CAN:0 OUTSIDE 500 6000              # RPM alarm
+RULE ADD A0 OUTSIDE 50 130                   # Oil temp alarm
+RULE ADD A1 OUTSIDE 1.0 6.0                  # Oil pressure alarm
 
 # Enable outputs
 OUTPUT CAN ENABLE

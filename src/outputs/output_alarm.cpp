@@ -20,6 +20,15 @@
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
 #include "../lib/system_mode.h"
+#include "../control/control_manager.h"   // annunciator: fold Rule severity into the rollup
+
+#if ENABLE_CONTROL_ENGINE
+// The annunciator maps Rule severity to the same buzzer/LED effects as legacy
+// alarms, so RuleSeverity and AlarmSeverity must share numeric values.
+static_assert((int)RULE_SEV_NONE    == (int)SEVERITY_NORMAL,  "severity enum drift");
+static_assert((int)RULE_SEV_WARNING == (int)SEVERITY_WARNING, "severity enum drift");
+static_assert((int)RULE_SEV_ALARM   == (int)SEVERITY_ALARM,   "severity enum drift");
+#endif
 
 #if ENABLE_LED
 #include "../lib/rgb_led.h"
@@ -58,19 +67,19 @@ void sendAlarmOutput(Input* input) {
 
 // ===== HELPER FUNCTIONS =====
 
-// Scan all inputs and return worst-case severity
+// Annunciator severity rollup: worst-case over legacy per-input alarms AND
+// control-engine Rules. This is the single source the LED + buzzer follow, so
+// a triggered Rule (severity >= WARNING) annunciates exactly like an alarm
+// (ARCHITECTURE §11.4). Legacy alarm config (preserved across the v12 bump in
+// the input region) keeps working; Rules are additive.
 AlarmSeverity getSystemSeverity() {
-    AlarmSeverity worstSeverity = SEVERITY_NORMAL;
-
-    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        if (inputs[i].flags.isEnabled) {
-            if (inputs[i].currentSeverity > worstSeverity) {
-                worstSeverity = inputs[i].currentSeverity;
-            }
-        }
-    }
-
-    return worstSeverity;
+    // The legacy per-input alarm engine is retired — alarms are control-engine
+    // Rules (§11). System severity is the max over active Rules.
+#if ENABLE_CONTROL_ENGINE
+    return (AlarmSeverity)controlSystemSeverity();
+#else
+    return SEVERITY_NORMAL;
+#endif
 }
 
 #if ENABLE_LED
@@ -78,12 +87,17 @@ AlarmSeverity getSystemSeverity() {
 void updateLEDs(AlarmSeverity severity) {
     switch (severity) {
         case SEVERITY_NORMAL:
-            // Normal operation - solid green
+            // Normal operation - solid green. Release any latched alarm request
+            // first so the LED de-escalates (the alarm color sits at the higher
+            // PRIORITY_ALARM and would otherwise stick on after the alarm clears).
+            rgbLedRelease(PRIORITY_ALARM);
             rgbLedSolid(RGB_COLOR_NORMAL, PRIORITY_WARNING);
             break;
 
         case SEVERITY_WARNING:
-            // Warning - blink yellow (or solid if disabled)
+            // Warning - blink yellow (or solid if disabled). De-escalate from a
+            // prior alarm by releasing the higher PRIORITY_ALARM request.
+            rgbLedRelease(PRIORITY_ALARM);
 #if RGB_ALARM_USE_BLINK
             rgbLedBlink(RGB_COLOR_WARNING, RGB_BLINK_PERIOD_MS, PRIORITY_WARNING);
 #else

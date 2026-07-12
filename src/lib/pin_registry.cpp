@@ -292,14 +292,14 @@ void printPinStatus(uint8_t specificPin) {
             }
         }
 
-        #if ENABLE_RELAY_OUTPUT
-        // Check relays
-        for (uint8_t i = 0; i < MAX_RELAYS; i++) {
-            if (systemConfig.relays[i].outputPin == specificPin &&
-                systemConfig.relays[i].outputPin != 0xFF) {
+        #if ENABLE_CONTROL_ENGINE
+        // Check control-engine RELAY Action targets
+        for (int i = 0; i < MAX_ACTIONS; i++) {
+            const Action& a = systemConfig.actions[i];
+            if (a.id != CONTROL_ID_NONE && a.type == ACT_RELAY && a.target == specificPin) {
                 printPinPadded(specificPin);
-                msg.control.print(F("Output    - Relay "));
-                msg.control.println(i);
+                msg.control.print(F("Output    - Action #"));
+                msg.control.println(a.id);
                 return;
             }
         }
@@ -321,16 +321,17 @@ void printPinStatus(uint8_t specificPin) {
     extern uint8_t numActiveInputs;
     msg.control.print(numActiveInputs);
 
-    #if ENABLE_RELAY_OUTPUT
-    // Count active relays
-    uint8_t relayCount = 0;
-    for (uint8_t i = 0; i < MAX_RELAYS; i++) {
-        if (systemConfig.relays[i].outputPin != 0xFF) {
-            relayCount++;
+    #if ENABLE_CONTROL_ENGINE
+    // Count control-engine RELAY Actions
+    uint8_t actionCount = 0;
+    for (int i = 0; i < MAX_ACTIONS; i++) {
+        if (systemConfig.actions[i].id != CONTROL_ID_NONE &&
+            systemConfig.actions[i].type == ACT_RELAY) {
+            actionCount++;
         }
     }
-    msg.control.print(F(" | Relays: "));
-    msg.control.print(relayCount);
+    msg.control.print(F(" | Actions: "));
+    msg.control.print(actionCount);
     #endif
 
     msg.control.println();
@@ -398,20 +399,21 @@ void printPinStatus(uint8_t specificPin) {
     }
     if (hasInputs) msg.control.println();
 
-    #if ENABLE_RELAY_OUTPUT
-    // Relay Pins (output relays)
-    bool hasRelays = false;
-    for (uint8_t i = 0; i < MAX_RELAYS; i++) {
-        if (systemConfig.relays[i].outputPin != 0xFF) {
-            if (!hasRelays) {
-                msg.control.println(F("Relay Pins:"));
-                hasRelays = true;
+    #if ENABLE_CONTROL_ENGINE
+    // Action Pins (control-engine RELAY actuators)
+    bool hasActions = false;
+    for (int i = 0; i < MAX_ACTIONS; i++) {
+        const Action& a = systemConfig.actions[i];
+        if (a.id != CONTROL_ID_NONE && a.type == ACT_RELAY) {
+            if (!hasActions) {
+                msg.control.println(F("Action Pins:"));
+                hasActions = true;
             }
-            printPinPadded(systemConfig.relays[i].outputPin);
-            msg.control.print(F("Output    - Relay "));
-            msg.control.println(i);
+            printPinPadded(a.target);
+            msg.control.print(F("Output    - Action #"));
+            msg.control.println(a.id);
         }
     }
-    if (hasRelays) msg.control.println();
+    if (hasActions) msg.control.println();
     #endif
 }

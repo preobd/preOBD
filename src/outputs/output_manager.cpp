@@ -35,11 +35,10 @@ extern void initAlarmOutput();
 extern void sendAlarmOutput(Input*);
 extern void updateAlarmOutput();
 
-#if ENABLE_RELAY_OUTPUT
-extern void initRelayOutput();
-extern void sendRelayOutput(Input*);
-extern void updateRelayOutput();
-#endif
+// Relay output module removed: a relay is now a control-engine Action of type
+// RELAY, driven by controlActionsUpdate() in the main loop (not an output
+// module). The OUTPUT_RELAY slot below stays nullptr for EEPROM index
+// stability (OutputID enum / outputEnabled[]).
 
 #if ENABLE_ELM327
 extern void initELM327();
@@ -58,11 +57,7 @@ OutputModule outputModules[] = {
     {nullptr,   false, nullptr,           nullptr,           nullptr,             0},
 #endif
     {"Alarm",   true,  initAlarmOutput,   sendAlarmOutput,   updateAlarmOutput,   100},
-#if ENABLE_RELAY_OUTPUT
-    {"Relay",   true,  initRelayOutput,   sendRelayOutput,   updateRelayOutput,   100},
-#else
-    {nullptr,   false, nullptr,           nullptr,           nullptr,             0},
-#endif
+    {nullptr,   false, nullptr,           nullptr,           nullptr,             0},  // OUTPUT_RELAY slot retired (control-engine Actions)
 #if ENABLE_ELM327
     // sendInterval = UINT16_MAX: ELM327 is pull-based, send() is a no-op.
     // Setting interval to max prevents sendToOutputs() from iterating all

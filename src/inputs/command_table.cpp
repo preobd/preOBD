@@ -30,9 +30,6 @@
 #include "../outputs/output_base.h"
 #include "../lib/obd_query.h"
 #include "../lib/display_manager.h"
-#if ENABLE_RELAY_OUTPUT
-#include "../outputs/output_relay.h"
-#endif
 #if ENABLE_LED
 #include "../lib/rgb_led.h"   // TEST OUTPUT actuator
 #endif
@@ -111,7 +108,11 @@ const Command COMMANDS[] = {
     {"AT", cmd_at, "Send raw AT command to a serial port", false},
 
 #if ENABLE_RELAY_OUTPUT
-    {"RELAY", cmd_relay, "Configure relay outputs", false},  // gated per-subcommand: RUN allows STATUS/LIST/MODE MANUAL_* (#250)
+    {"RELAY", cmd_relay, "Deprecated - use RULE / ACTION", false},  // prints a migration pointer; relays are now control-engine Actions
+#endif
+#if ENABLE_CONTROL_ENGINE
+    {"RULE", cmd_rule, "Configure control-engine rules", false},  // gated per-subcommand: RUN allows LIST/<id>; ADD/DEL/RESET config-only
+    {"ACTION", cmd_action, "Configure control-engine actions", false},  // gated per-subcommand: RUN allows LIST/<id>/ON/OFF; ADD/DEL/RULE config-only
 #endif
 #if ENABLE_TEST_MODE
     {"TEST", cmd_test, "Test mode control", false},
@@ -827,135 +828,14 @@ int cmd_transport(int argc, const char* const* argv) {
 
 #if ENABLE_RELAY_OUTPUT
 int cmd_relay(int argc, const char* const* argv) {
-    if (argc < 2) {
-        msg.control.println(F("ERROR: RELAY requires a subcommand"));
-        msg.control.println(F("  Usage: RELAY LIST | <index> <subcommand> <args>"));
-        return 1;
-    }
-
-    if (streq_P(argv[1], PSTR("LIST"))) {
-        printAllRelayStatus();
-        return 0;
-    }
-
-    // All other subcommands require a relay index
-    if (argc < 3) {
-        msg.control.println(F("ERROR: Subcommand requires a relay index"));
-        return 1;
-    }
-
-    uint8_t relayIndex = atoi(argv[1]);
-
-    // Validate relay index
-    if (relayIndex >= MAX_RELAYS) {
-        msg.control.print(F("ERROR: Invalid relay index (0-"));
-        msg.control.print(MAX_RELAYS - 1);
-        msg.control.println(F(")"));
-        return 1;
-    }
-
-    const char* subcommand = argv[2];
-
-    // RUN-mode gate (#250): STATUS/LIST are read-only and MODE MANUAL_ON/OFF is
-    // a live operator override (updateRelayOutput / setRelayMode actuate the pin
-    // immediately) — all allowed in RUN. PIN/INPUT/THRESHOLD and MODE with an
-    // AUTO_*/DISABLED target are configuration and remain CONFIG-only. (LIST is
-    // already handled above before we get here.)
-    if (isInRunMode()) {
-        bool configOnly = streq_P(subcommand, PSTR("PIN")) ||
-                          streq_P(subcommand, PSTR("INPUT")) ||
-                          streq_P(subcommand, PSTR("THRESHOLD"));
-        if (streq_P(subcommand, PSTR("MODE"))) {
-            // MODE is config-only unless it's a manual override.
-            configOnly = !(argc >= 4 && (streq_P(argv[3], PSTR("MANUAL_ON")) ||
-                                         streq_P(argv[3], PSTR("MANUAL_OFF"))));
-        }
-        if (configOnly) {
-            msg.control.print(F("ERROR: RELAY "));
-            msg.control.print(subcommand);
-            msg.control.println(F(" is config-only; enter CONFIG mode first"));
-            msg.control.println(F("  RUN allows: STATUS, LIST, MODE MANUAL_ON|MANUAL_OFF"));
-            return 1;
-        }
-    }
-
-    if (streq_P(subcommand, PSTR("STATUS"))) {
-        printRelayStatus(relayIndex);
-    } else if (streq_P(subcommand, PSTR("PIN"))) {
-        if (argc < 4) {
-            msg.control.println(F("ERROR: PIN requires a pin number"));
-            return 1;
-        }
-        setRelayPin(relayIndex, atoi(argv[3]));
-        msg.control.print(F("Relay "));
-        msg.control.print(relayIndex);
-        msg.control.print(F(" output pin set to "));
-        msg.control.println(argv[3]);
-    } else if (streq_P(subcommand, PSTR("INPUT"))) {
-        if (argc < 4) {
-            msg.control.println(F("ERROR: INPUT requires a pin name"));
-            return 1;
-        }
-        bool valid = false;
-        uint8_t pin = parsePin(argv[3], &valid);
-        if (valid) {
-            setRelayInput(relayIndex, pin);
-            msg.control.print(F("Relay "));
-            msg.control.print(relayIndex);
-            msg.control.print(F(" monitoring input "));
-            msg.control.println(argv[3]);
-        } else {
-            msg.control.print(F("ERROR: Invalid pin '"));
-            msg.control.print(argv[3]);
-            msg.control.println(F("'"));
-            return 1;
-        }
-    } else if (streq_P(subcommand, PSTR("THRESHOLD"))) {
-        if (argc < 5) {
-            msg.control.println(F("ERROR: THRESHOLD requires on and off values"));
-            return 1;
-        }
-        setRelayThresholds(relayIndex, atof(argv[3]), atof(argv[4]));
-        msg.control.print(F("Relay "));
-        msg.control.print(relayIndex);
-        msg.control.print(F(" thresholds: ON="));
-        msg.control.print(argv[3]);
-        msg.control.print(F(", OFF="));
-        msg.control.println(argv[4]);
-    } else if (streq_P(subcommand, PSTR("MODE"))) {
-        if (argc < 4) {
-            msg.control.println(F("ERROR: MODE requires a mode name"));
-            return 1;
-        }
-        RelayMode mode;
-        bool modeValid = false;
-        if (streq_P(argv[3], PSTR("DISABLED"))) { mode = RELAY_DISABLED; modeValid = true; }
-        else if (streq_P(argv[3], PSTR("AUTO_HIGH"))) { mode = RELAY_AUTO_HIGH; modeValid = true; }
-        else if (streq_P(argv[3], PSTR("AUTO_LOW"))) { mode = RELAY_AUTO_LOW; modeValid = true; }
-        else if (streq_P(argv[3], PSTR("MANUAL_ON"))) { mode = RELAY_MANUAL_ON; modeValid = true; }
-        else if (streq_P(argv[3], PSTR("MANUAL_OFF"))) { mode = RELAY_MANUAL_OFF; modeValid = true; }
-
-        if (modeValid) {
-            setRelayMode(relayIndex, mode);
-            msg.control.print(F("Relay "));
-            msg.control.print(relayIndex);
-            msg.control.print(F(" mode set to "));
-            msg.control.println(argv[3]);
-        } else {
-            msg.control.print(F("ERROR: Unknown mode '"));
-            msg.control.print(argv[3]);
-            msg.control.println(F("'"));
-            msg.control.println(F("  Valid modes: DISABLED, AUTO_HIGH, AUTO_LOW, MANUAL_ON, MANUAL_OFF"));
-            return 1;
-        }
-    } else {
-        msg.control.print(F("ERROR: Unknown subcommand '"));
-        msg.control.print(subcommand);
-        msg.control.println(F("'"));
-        msg.control.println(F("Valid commands: LIST, STATUS, PIN, INPUT, THRESHOLD, MODE"));
-        return 1;
-    }
-    return 0;
+    // RELAY is deprecated: a relay is now a control-engine Action of type RELAY.
+    (void)argc; (void)argv;
+    msg.control.println(F("RELAY is deprecated - relays are now control-engine Actions."));
+    msg.control.println(F("  Threshold:  RULE ADD <input> ABOVE|BELOW <limit> [HYST <w>]"));
+    msg.control.println(F("  Output:     ACTION ADD RELAY <pin> [FAILSAFE ON|OFF] [INVERT]"));
+    msg.control.println(F("  Link/drive: ACTION <id> RULE <ruleId> ;  ACTION <id> ON|OFF"));
+    msg.control.println(F("  Status:     RULE LIST ;  ACTION LIST"));
+    return 1;
 }
 #endif
 
@@ -1081,19 +961,19 @@ int cmd_test(int argc, const char* const* argv) {
         msg.control.println(F("Buzzer -> chirp"));
         tone(ALARMS_PIN, 700); watchdogReset(); delay(250); noTone(ALARMS_PIN);
 #endif
-#if ENABLE_RELAY_OUTPUT
-        for (uint8_t i = 0; i < MAX_RELAYS; i++) {
-            uint8_t pin = systemConfig.relays[i].outputPin;
-            if (pin == 0xFF) continue;            // unconfigured relay slot
+#if ENABLE_CONTROL_ENGINE
+        for (int i = 0; i < MAX_ACTIONS; i++) {
+            const Action& a = systemConfig.actions[i];
+            if (a.id == CONTROL_ID_NONE || a.type != ACT_RELAY) continue;
             any = true;
-            msg.control.print(F("Relay ")); msg.control.print(i);
-            msg.control.print(F(" (pin ")); msg.control.print(pin);
+            msg.control.print(F("Action #")); msg.control.print(a.id);
+            msg.control.print(F(" (pin ")); msg.control.print(a.target);
             msg.control.println(F(") -> ON"));
-            pinMode(pin, OUTPUT);
-            digitalWrite(pin, HIGH); watchdogReset(); delay(700);
-            msg.control.print(F("Relay ")); msg.control.print(i);
+            pinMode(a.target, OUTPUT);
+            digitalWrite(a.target, HIGH); watchdogReset(); delay(700);
+            msg.control.print(F("Action #")); msg.control.print(a.id);
             msg.control.println(F(" -> OFF"));
-            digitalWrite(pin, LOW);
+            digitalWrite(a.target, LOW);
         }
 #endif
         if (!any) msg.control.println(F("(no actuable outputs in this build)"));

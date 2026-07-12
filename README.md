@@ -177,8 +177,7 @@ VERSION                  # Show firmware version
 ### Configuration (in CONFIG mode)
 
 ```
-SET <pin> <app> <sensor>         # Configure a sensor
-SET <pin> ALARM <min> <max>      # Set alarm thresholds
+SET <pin> <app> <sensor>         # Configure a sensor (also seeds a default alarm Rule)
 SET <pin> UNITS <unit>           # Set display units (CELSIUS, FAHRENHEIT, PSI, BAR, etc.)
 SET <pin> NAME <name>            # Set short display name
 SET <pin> DIVIDER <ratio>        # Set voltage divider ratio for 5V sensors on 3.3V ADC
@@ -187,6 +186,25 @@ ENABLE <pin>                     # Enable a disabled sensor
 DISABLE <pin>                    # Disable a sensor
 SAVE                             # Save configuration to EEPROM
 ```
+
+### Alarms & outputs — the control engine (Rules + Actions)
+
+Alarms and relays are unified into one condition→effect pipeline: a **Rule**
+watches an input and (with a severity) annunciates and/or triggers **Actions**.
+`SET <pin> APPLICATION` seeds a sensible default alarm Rule automatically.
+
+```
+RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARNING|ALARM]   # threshold Rule
+RULE ADD <pin> OUTSIDE <lo> <hi> [WARNING|ALARM]                # both-sided band
+RULE LIST | RULE <id> | RULE DEL <id> | RULE RESET <id>         # RESET = app defaults
+ACTION ADD RELAY <outpin> [FAILSAFE ON|OFF] [INVERT]           # an actuator (relay/GPIO)
+ACTION <id> RULE <ruleId>                                       # drive it from a Rule
+ACTION <id> ON|OFF                                             # manual override (RUN-ok)
+ACTION LIST | ACTION DEL <id>
+```
+
+`WARNING`-severity Rules light the indicator; `ALARM` adds the buzzer. (The old
+`SET <pin> ALARM` and `RELAY` commands are deprecated and point here.)
 
 ### Query (any mode)
 

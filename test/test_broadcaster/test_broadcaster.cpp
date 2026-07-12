@@ -1,36 +1,37 @@
 // Native unit test: AlarmBroadcaster wire payload (src/lib/alarm_broadcaster.cpp).
 //
-// This is the automatable half of issue #221: instead of subscribing to the
-// BLE characteristic from nRF Connect, we capture the exact bytes the
-// broadcaster hands to the transport and assert the PreobdAlarmEvent layout
-// and values. The transport boundary (MuxTransport::sendFrame) is the only
-// thing we fake — its real definition lives in transport_mux.cpp, which we do
-// NOT compile, so our capturing definition below satisfies the linker.
+// Alarms are now control-engine Rules (§11): the broadcaster scans
+// systemConfig.rules[] and emits a PreobdAlarmEvent on each alarm-Rule
+// severity transition. We capture the bytes handed to the transport and assert
+// the PreobdAlarmEvent layout/values. Transport + control manager are faked.
 #include <unity.h>
 #include <Arduino.h>
 #include <string.h>
 
 #include "../../src/lib/alarm_broadcaster.cpp"
+#include "../../src/control/control_engine.cpp"   // real annunciator-severity logic
 
 // ---- Globals the broadcaster TU expects from the rest of the firmware ----
-Input inputs[MAX_INPUTS];
-uint8_t numActiveInputs = 0;
+SystemConfig  systemConfig;
+RuleContext   g_ruleContexts[MAX_RULES];
+
+// One synthetic source input; getInputByPin returns it, getInputIndex is fixed.
+static Input g_srcInput;
+Input*  getInputByPin(uint8_t)  { return &g_srcInput; }
+uint8_t getInputIndex(uint8_t)  { return 3; }  // arbitrary stable index
 
 // ---- Capturing transport ----
-// One slot is enough; tests assert on the most-recent frame plus a count.
 static int      g_frameCount = 0;
 static uint8_t  g_frameType  = 0;
 static uint16_t g_frameLen   = 0;
 static uint8_t  g_framePayload[64];
 
-// Minimal out-of-line virtuals so MuxTransport is a concrete, vtable-complete
-// type we can instantiate. Only sendFrame does anything.
 bool MuxTransport::sendFrame(uint8_t type, const uint8_t* payload, uint16_t len) {
     g_frameType = type;
     g_frameLen  = len;
     if (len <= sizeof(g_framePayload)) memcpy(g_framePayload, payload, len);
     ++g_frameCount;
-    return true;  // pretend framed mode is up and the TX buffer accepted it
+    return true;
 }
 size_t MuxTransport::write(uint8_t) { return 0; }
 size_t MuxTransport::write(const uint8_t*, size_t) { return 0; }
@@ -39,8 +40,6 @@ int    MuxTransport::read() { return -1; }
 int    MuxTransport::peek() { return -1; }
 void   MuxTransport::flush() {}
 void   MuxTransport::update() {}
-
-// The broadcaster references this exact symbol via `extern MuxTransport hwSerial1;`
 MuxTransport hwSerial1(nullptr, "SERIAL1", 115200);
 
 static const PreobdAlarmEvent& lastEvent() {
@@ -48,115 +47,108 @@ static const PreobdAlarmEvent& lastEvent() {
 }
 
 void setUp(void) {
-    g_frameCount = 0;
-    g_frameType  = 0;
-    g_frameLen   = 0;
+    g_frameCount = 0; g_frameType = 0; g_frameLen = 0;
     memset(g_framePayload, 0, sizeof(g_framePayload));
-    memset(inputs, 0, sizeof(inputs));
-    numActiveInputs = 0;
-    AlarmBroadcaster::init();  // reset severity/kind cache + sequence
+    memset(&systemConfig, 0, sizeof(systemConfig));
+    memset(g_ruleContexts, 0, sizeof(g_ruleContexts));
+    memset(&g_srcInput, 0, sizeof(g_srcInput));
+    for (int i = 0; i < MAX_RULES; ++i) systemConfig.rules[i].id = CONTROL_ID_NONE;
+    AlarmBroadcaster::init();
 }
 void tearDown(void) {}
 
-// Arm input 0 with a high-side threshold; severity is set directly so this
-// suite is decoupled from the alarm state machine (covered by test_alarm).
-static void armHighInput(uint8_t idx, float maxV, float value, AlarmSeverity sev) {
-    inputs[idx].flags.isEnabled = 1;
-    inputs[idx].maxValue = maxV;
-    inputs[idx].minValue = -999.0f;  // low side disabled
-    inputs[idx].value = value;
-    inputs[idx].currentSeverity = sev;
-    if (idx + 1 > numActiveInputs) numActiveInputs = idx + 1;
+// Configure rule slot 0 as an OUTSIDE_BAND alarm and set its runtime active state.
+static void configRule(uint8_t severity, float lo, float hi, float value, bool active) {
+    Rule& r = systemConfig.rules[0];
+    r.id = 1; r.sourceInput = 21; r.condition = RULE_OUTSIDE_BAND;
+    r.severity = severity; r.flags = RULE_FLAG_ENABLED;
+    r.limitLo = lo; r.limitHi = hi;
+    g_srcInput.value = value;
+    g_ruleContexts[0].state = active ? RULE_ACTIVE : RULE_READY;
 }
 
-// Severity unchanged from the post-init NORMAL baseline => nothing on the wire.
-static void test_normal_input_emits_nothing(void) {
-    armHighInput(0, 100.0f, 50.0f, SEVERITY_NORMAL);
+static void test_inactive_rule_emits_nothing(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 50.0f, /*active*/false);
     AlarmBroadcaster::tick();
     TEST_ASSERT_EQUAL_INT(0, g_frameCount);
 }
 
-// A high-side alarm produces one type-0x04 frame with the full 18-byte event.
-static void test_alarm_emits_correct_payload(void) {
-    armHighInput(0, 100.0f, 105.0f, SEVERITY_ALARM);
+static void test_active_alarm_high_payload(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 120.0f, /*active*/true);
     AlarmBroadcaster::tick();
-
     TEST_ASSERT_EQUAL_INT(1, g_frameCount);
     TEST_ASSERT_EQUAL_HEX8(FRAME_TYPE_ALARM, g_frameType);
-    TEST_ASSERT_EQUAL_UINT16(PREOBD_ALARM_EVENT_SIZE, g_frameLen);  // 18
-
-    const PreobdAlarmEvent& ev = lastEvent();
-    TEST_ASSERT_EQUAL_UINT8(PREOBD_BLE_PROTOCOL_VERSION, ev.protocolVersion);
-    TEST_ASSERT_EQUAL_UINT8(0, ev.inputIndex);
-    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_ALARM, ev.severity);
-    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_HIGH, ev.kind);
-    TEST_ASSERT_EQUAL_UINT16(0, ev.sequence);          // first event
-    TEST_ASSERT_EQUAL_FLOAT(105.0f, ev.value);
-    TEST_ASSERT_EQUAL_FLOAT(100.0f, ev.threshold);     // the maxValue violated
+    TEST_ASSERT_EQUAL_UINT16(PREOBD_ALARM_EVENT_SIZE, g_frameLen);
+    const PreobdAlarmEvent& e = lastEvent();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_ALARM, e.severity);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_HIGH, e.kind);
+    TEST_ASSERT_EQUAL_UINT8(3, e.inputIndex);          // getInputIndex stub
+    TEST_ASSERT_EQUAL_FLOAT(120.0f, e.value);
+    TEST_ASSERT_EQUAL_FLOAT(100.0f, e.threshold);      // limitHi
 }
 
-// Dropping back to NORMAL emits a return-to-normal (CLEAR) event, sequence++.
+static void test_low_side_kind_and_threshold(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, -5.0f, /*active*/true);
+    AlarmBroadcaster::tick();
+    const PreobdAlarmEvent& e = lastEvent();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_LOW, e.kind);
+    TEST_ASSERT_EQUAL_FLOAT(-1.0f, e.threshold);       // limitLo
+}
+
+static void test_warning_severity(void) {
+    configRule(RULE_SEV_WARNING, -1.0f, 100.0f, 120.0f, /*active*/true);
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_WARNING, lastEvent().severity);
+}
+
+// Derived WARNING tier (§11.2): an armed (READY, not active) ALARM rule whose
+// value is in the warning band emits a WARNING event before it trips.
+static void test_derived_warning_band(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 95.0f, /*active*/false);  // 95 >= 90% of 100
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    const PreobdAlarmEvent& e = lastEvent();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_WARNING, e.severity);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_HIGH, e.kind);
+}
+
+static void test_none_severity_rule_is_silent(void) {
+    // A control Rule (severity NONE) is not an alarm — never broadcasts.
+    configRule(RULE_SEV_NONE, -1.0f, 100.0f, 120.0f, /*active*/true);
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+}
+
 static void test_return_to_normal_emits_clear(void) {
-    armHighInput(0, 100.0f, 105.0f, SEVERITY_ALARM);
-    AlarmBroadcaster::tick();                            // ALARM, seq 0
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 120.0f, /*active*/true);
+    AlarmBroadcaster::tick();                 // ALARM
+    g_frameCount = 0;
+    g_ruleContexts[0].state = RULE_READY;     // rule clears
+    g_srcInput.value = 50.0f;
+    AlarmBroadcaster::tick();                 // CLEAR
     TEST_ASSERT_EQUAL_INT(1, g_frameCount);
-
-    inputs[0].value = 50.0f;
-    inputs[0].currentSeverity = SEVERITY_NORMAL;
-    AlarmBroadcaster::tick();                            // CLEAR, seq 1
-
-    TEST_ASSERT_EQUAL_INT(2, g_frameCount);
-    const PreobdAlarmEvent& ev = lastEvent();
-    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_NORMAL, ev.severity);
-    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_CLEAR, ev.kind);
-    TEST_ASSERT_EQUAL_UINT16(1, ev.sequence);
-    TEST_ASSERT_EQUAL_FLOAT(0.0f, ev.threshold);        // 0 on CLEAR
+    const PreobdAlarmEvent& e = lastEvent();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_NORMAL, e.severity);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_CLEAR, e.kind);
 }
 
-// No state change across ticks => no duplicate frames (cache works).
 static void test_idempotent_tick(void) {
-    armHighInput(0, 100.0f, 105.0f, SEVERITY_ALARM);
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 120.0f, /*active*/true);
     AlarmBroadcaster::tick();
-    AlarmBroadcaster::tick();
-    AlarmBroadcaster::tick();
-    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
-}
-
-// Low-side alarm reports KIND_LOW and the minValue threshold.
-static void test_low_side_alarm_kind_and_threshold(void) {
-    inputs[0].flags.isEnabled = 1;
-    inputs[0].maxValue = 999.0f;   // high side disabled
-    inputs[0].minValue = 10.0f;
-    inputs[0].value = 5.0f;
-    inputs[0].currentSeverity = SEVERITY_ALARM;
-    numActiveInputs = 1;
-
-    AlarmBroadcaster::tick();
-    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
-    const PreobdAlarmEvent& ev = lastEvent();
-    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_LOW, ev.kind);
-    TEST_ASSERT_EQUAL_FLOAT(10.0f, ev.threshold);
-}
-
-// Two inputs tripping in one tick get strictly increasing sequence numbers.
-static void test_sequence_monotonic_across_inputs(void) {
-    armHighInput(0, 100.0f, 105.0f, SEVERITY_ALARM);
-    armHighInput(1, 100.0f, 95.0f,  SEVERITY_WARNING);
-    AlarmBroadcaster::tick();
-    TEST_ASSERT_EQUAL_INT(2, g_frameCount);
-    // Last frame is input 1; it must carry the higher sequence number.
-    const PreobdAlarmEvent& ev = lastEvent();
-    TEST_ASSERT_EQUAL_UINT8(1, ev.inputIndex);
-    TEST_ASSERT_EQUAL_UINT16(1, ev.sequence);
+    g_frameCount = 0;
+    AlarmBroadcaster::tick();                 // no transition
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
 }
 
 int main(int, char**) {
     UNITY_BEGIN();
-    RUN_TEST(test_normal_input_emits_nothing);
-    RUN_TEST(test_alarm_emits_correct_payload);
+    RUN_TEST(test_inactive_rule_emits_nothing);
+    RUN_TEST(test_active_alarm_high_payload);
+    RUN_TEST(test_low_side_kind_and_threshold);
+    RUN_TEST(test_warning_severity);
+    RUN_TEST(test_derived_warning_band);
+    RUN_TEST(test_none_severity_rule_is_silent);
     RUN_TEST(test_return_to_normal_emits_clear);
     RUN_TEST(test_idempotent_tick);
-    RUN_TEST(test_low_side_alarm_kind_and_threshold);
-    RUN_TEST(test_sequence_monotonic_across_inputs);
     return UNITY_END();
 }

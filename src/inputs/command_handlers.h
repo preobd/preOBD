@@ -13,6 +13,7 @@
 #define _COMMAND_HANDLERS_H_
 
 #include "../config.h"
+#include "../control/control_types.h"  // defines ENABLE_CONTROL_ENGINE (order-independent)
 
 int cmd_help(int argc, const char* const* argv);
 int cmd_list(int argc, const char* const* argv);
@@ -35,6 +36,10 @@ int cmd_at(int argc, const char* const* argv);
 
 #if ENABLE_RELAY_OUTPUT
 int cmd_relay(int argc, const char* const* argv);
+#endif
+#if ENABLE_CONTROL_ENGINE
+int cmd_rule(int argc, const char* const* argv);
+int cmd_action(int argc, const char* const* argv);
 #endif
 #if ENABLE_TEST_MODE
 int cmd_test(int argc, const char* const* argv);

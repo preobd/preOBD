@@ -269,6 +269,12 @@ Total:  18 bytes
 
 ### Relay Control
 
+> **⚠️ Superseded by the Action Control payload.** With the control engine, a
+> relay is an Action of type `RELAY`. The `...0031` characteristic / frame `0x05`
+> now carries **`PreobdActionState`** (id, type, target, triggering rule, on/off,
+> failsafe) instead of `PreobdRelayState`, with a writable `command` field for
+> manual toggle. See `ARCHITECTURE.md` §4.2 / §11. The layout below is historical.
+
 **Characteristic:** Relay Control (`...0031`), Read / Write / Notify
 
 **Read format (per relay, concatenated):**

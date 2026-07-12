@@ -279,8 +279,7 @@ HELP CALIBRATION        # Show calibration commands
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `SET <pin> <app> <sensor>` | Configure input | `SET A2 COOLANT_TEMP VDO_120C_TABLE` |
-| `SET <pin> ALARM <min> <max>` | Set alarm thresholds | `SET A2 ALARM 60 120` |
+| `SET <pin> <app> <sensor>` | Configure input (also seeds a default alarm Rule) | `SET A2 COOLANT_TEMP VDO_120C_TABLE` |
 | `SET <pin> UNITS <unit>` | Set display units | `SET A2 UNITS FAHRENHEIT` |
 | `SET <pin> NAME <n>` | Set short name | `SET A2 NAME CLT` |
 | `CLEAR <pin>` | Remove input | `CLEAR A2` |
@@ -345,25 +344,31 @@ HELP CALIBRATION        # Show calibration commands
 | `SYSTEM REBOOT` | Restart the device |
 | `SYSTEM RESET CONFIRM` | Factory reset (erase config + reboot) |
 
-### Relay Commands (requires ENABLE_RELAY_OUTPUT)
+### Rules & Actions (control engine)
+
+Alarms and relays are unified Rules → Actions. (`SET ALARM` and `RELAY` are
+deprecated; they print pointers here.)
 
 | Command | Description |
 |---------|-------------|
-| `RELAY LIST` | Show all relay status |
-| `RELAY <0-1> PIN <pin>` | Set relay output pin |
-| `RELAY <0-1> INPUT <pin>` | Link to sensor input |
-| `RELAY <0-1> THRESHOLD <on> <off>` | Set ON/OFF thresholds |
-| `RELAY <0-1> MODE <mode>` | AUTO_HIGH, AUTO_LOW, ON, OFF |
+| `RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARNING|ALARM]` | Threshold Rule |
+| `RULE ADD <pin> OUTSIDE <lo> <hi> [WARNING|ALARM]` | Both-sided band Rule |
+| `RULE LIST` / `RULE <id>` / `RULE DEL <id>` | View / inspect / delete |
+| `RULE RESET <id>` | Restore the application's default Rule config |
+| `ACTION ADD RELAY <pin> [FAILSAFE ON|OFF] [INVERT]` | Define an actuator |
+| `ACTION <id> RULE <ruleId>` | Drive the Action from a Rule |
+| `ACTION <id> ON|OFF` | Manual override (RUN-mode allowed) |
+| `ACTION LIST` / `ACTION DEL <id>` | View / delete |
 
-**Example - Cooling fan:**
+**Example - Cooling fan (coolant > 90°C, 5° hysteresis):**
 ```
-RELAY 0 PIN 23              # Relay on pin 23
-RELAY 0 INPUT A2            # Monitor coolant temp
-RELAY 0 THRESHOLD 90 85     # ON at 90°C, OFF at 85°C
-RELAY 0 MODE AUTO_HIGH      # Activate on high temp
+RULE ADD A2 ABOVE 90 HYST 5 NONE     # control Rule (no annunciation), id e.g. 0
+ACTION ADD RELAY 23                   # relay on pin 23, id e.g. 0
+ACTION 0 RULE 0                       # fan follows the Rule
 ```
 
-See [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md) for details.
+See [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md) and
+[Alarm System Guide](../guides/configuration/ALARM_SYSTEM_GUIDE.md) for details.
 
 ### Bus Commands
 

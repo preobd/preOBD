@@ -25,6 +25,7 @@
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
 #include "inputs/serial_config.h"
+#include "control/control_manager.h"   // Control engine runtime (Rules)
 #include "lib/system_mode.h"        // System mode (CONFIG/RUN)
 #if ENABLE_MODE_BUTTON
 #include "lib/button_handler.h"
@@ -48,7 +49,7 @@
 #include "lib/transport_serial.h"
 #include "lib/status_broadcaster.h"
 #include "lib/alarm_broadcaster.h"
-#include "lib/relay_broadcaster.h"
+#include "lib/action_broadcaster.h"
 #include "lib/elm327_framed.h"
 #ifdef ESP32
 // Include appropriate Bluetooth transport for ESP32 variant
@@ -129,7 +130,6 @@ extern void initLCD();
 extern void updateLCD(Input**, int);
 
 // Alarm logic module
-#include "inputs/alarm_logic.h"
 
 // Test mode (if enabled)
 #if ENABLE_TEST_MODE
@@ -140,7 +140,6 @@ extern void updateLCD(Input**, int);
 // Tracks last execution time for each time-sliced operation
 static uint32_t lastInputRead[MAX_INPUTS];  // Per-sensor read timing
 #if ENABLE_ALARMS
-static uint32_t lastAlarmCheck = 0;
 #endif
 #if ENABLE_LCD
 static uint32_t lastLCDUpdate = 0;
@@ -184,12 +183,19 @@ static void updateSensors(uint32_t now) {
     }
 }
 
-// Check alarms for all enabled inputs
-static void updateAlarms(uint32_t now) {
-    #if ENABLE_ALARMS
-    if (now - lastAlarmCheck >= ALARM_CHECK_INTERVAL_MS) {
-        updateAllInputAlarms(now);  // Update alarm state for all inputs
-        lastAlarmCheck = now;
+// (Legacy per-input alarm engine retired — alarms are control-engine Rules,
+// evaluated in updateControlEngine() below.)
+
+// Evaluate control-engine Rules against live inputs (independent of ENABLE_ALARMS
+// — the engine is also active when only relays are compiled in). Drives nothing
+// yet: state is observable via the RULE CLI until the annunciator/actions land.
+static void updateControlEngine(uint32_t now) {
+    #if ENABLE_CONTROL_ENGINE
+    static uint32_t lastControlUpdate = 0;
+    if (now - lastControlUpdate >= ALARM_CHECK_INTERVAL_MS) {
+        controlManagerUpdate(now);
+        controlActionsUpdate(isInConfigMode());  // drive actions; suppressed in CONFIG
+        lastControlUpdate = now;
     }
     #endif
 }
@@ -293,7 +299,7 @@ void setup() {
     flushSystemConfigBootDiagnostics();
     StatusBroadcaster::init();
     AlarmBroadcaster::init();
-    RelayBroadcaster::init();
+    ActionBroadcaster::init();
     msg.control.println();
     msg.control.println(F("                 ____  ___  ___  "));
     msg.control.println(F("   ___  _______ / __ \\/ _ )/ _ \\ "));
@@ -326,6 +332,12 @@ void setup() {
 
     // Initialize input manager (loads from EEPROM or config.h)
     bool eepromConfigLoaded = initInputManager();
+
+#if ENABLE_CONTROL_ENGINE
+    // Arm Rules from EEPROM now that SystemConfig + inputs are loaded (boot-load).
+    controlManagerInit(millis());
+    controlActionsInit();   // configure action target pins as outputs
+#endif
 
     // Initialize display
     #if ENABLE_LCD
@@ -432,7 +444,7 @@ void loop() {
     // early return so heartbeats fire in both modes.
     StatusBroadcaster::tick();
     AlarmBroadcaster::tick();
-    RelayBroadcaster::tick();
+    ActionBroadcaster::tick();
 
     // Process button events (short press = silence alarm, long press = toggle display)
 #if ENABLE_MODE_BUTTON
@@ -448,8 +460,9 @@ void loop() {
     // while a config client is connected. (Previously a CONFIG early-return
     // froze updateSensors(), which is why a connected webapp stalled Torque's
     // readings — see #266.) Gated in CONFIG: physical actuation
-    // (updateRelayOutput() + the alarm buzzer self-suppress so disconnected/
-    // test sensors on the bench can't flip relays or sound the buzzer), and
+    // (control-engine Actions via controlActionsUpdate() + the alarm buzzer
+    // self-suppress so disconnected/test sensors on the bench can't flip
+    // relays or sound the buzzer), and
     // the recording/serial outputs — serial CSV (shared-terminal usability)
     // and SD logging (CONFIG is setup, not operation; don't persist bench
     // junk into the drive log) both self-silence in CONFIG.
@@ -458,7 +471,7 @@ void loop() {
     updateCANScan();   // No-op unless a CONFIG-mode SCAN is active
     #endif
     updateSensors(now);
-    updateAlarms(now);
+    updateControlEngine(now);
     sendToOutputs(now);  // Data-driven time-sliced output sending
     if (isInConfigMode()) {
         updateConfigModeDisplay(now);

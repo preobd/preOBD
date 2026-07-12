@@ -125,7 +125,7 @@ This is a per-input setting (`SET <pin> DIVIDER <ratio>`), so the same MPX4250 p
 
 ```
 SET A3 OIL_PRESSURE VDO_5BAR_CURVE
-SET A3 ALARM 0.5 6
+RULE ADD A3 OUTSIDE 0.5 6
 SAVE
 ```
 
@@ -135,7 +135,7 @@ The alarm triggers below 0.5 bar (low oil pressure warning) or above 6 bar.
 
 ```
 SET A4 BOOST_PRESSURE VDO_2BAR_CURVE
-SET A4 ALARM -1 1.5
+RULE ADD A4 OUTSIDE -1 1.5
 SAVE
 ```
 

@@ -63,7 +63,10 @@
 // Alarm Notify (Notify) — push alarm events to client
 #define PREOBD_CHAR_ALARM_UUID        "4f424400-7072-654f-4244-000000000030"
 
-// Relay Control (Read / Write / Notify) — binary relay state
+// Action Control (Read / Write / Notify) — binary Action state (PreobdActionState).
+// UUID macro name kept for compatibility; payload is now PreobdActionState (a
+// relay is an Action of type RELAY, §11). The legacy PreobdRelayState struct
+// below is retained, deprecated, only until the nRF/webapp are confirmed clear.
 #define PREOBD_CHAR_RELAY_UUID        "4f424400-7072-654f-4244-000000000031"
 
 // OTA Control (Write / Notify) — OTA coordination commands
@@ -215,6 +218,63 @@ struct PreobdRelayState {
 
 static_assert(sizeof(PreobdRelayState) == PREOBD_RELAY_STATE_SIZE,
               "PreobdRelayState must be exactly 16 bytes");
+
+#endif // __cplusplus
+
+// =============================================================================
+// Action Control Characteristic — Binary Format (16 bytes)
+//
+// Supersedes PreobdRelayState (a relay is now an Action of type RELAY, §11).
+// Pushed via framed transport (type 0x05, notify) on every Action state/config
+// change, and written by clients to toggle a manual Action.
+//
+// Read-only fields: actionId, type, state, target, ruleRef, behavior, failsafe.
+// Writable: command (PREOBD_ACTION_CMD_*) — actionId selects the target Action;
+// a manual-toggle is only honored for manual (ruleRef == NONE) Actions.
+// =============================================================================
+
+#define PREOBD_ACTION_STATE_SIZE 16
+#define PREOBD_ACTION_ID_NONE    0xFF   // unconfigured slot / no triggering rule
+
+// type — matches ActionType in src/control/control_types.h
+#define PREOBD_ACTION_TYPE_RELAY   0
+#define PREOBD_ACTION_TYPE_BEEPER  1
+#define PREOBD_ACTION_TYPE_LED     2
+#define PREOBD_ACTION_TYPE_DISPLAY 3
+
+#define PREOBD_ACTION_STATE_OFF 0
+#define PREOBD_ACTION_STATE_ON  1
+
+#define PREOBD_ACTION_FAILSAFE_OFF 0
+#define PREOBD_ACTION_FAILSAFE_ON  1
+
+// Inbound write command (in the `command` field; reads back as NONE)
+#define PREOBD_ACTION_CMD_NONE       0
+#define PREOBD_ACTION_CMD_MANUAL_ON  1
+#define PREOBD_ACTION_CMD_MANUAL_OFF 2
+
+#ifdef __cplusplus
+
+#pragma pack(push, 1)
+
+struct PreobdActionState {
+    uint8_t  protocolVersion;  // Byte 0:      PREOBD_BLE_PROTOCOL_VERSION
+    uint8_t  actionId;         // Byte 1:      stable Action id (0xFF = unconfigured)
+    uint8_t  type;             // Byte 2:      PREOBD_ACTION_TYPE_* (read-only)
+    uint8_t  state;            // Byte 3:      PREOBD_ACTION_STATE_* current driven (read-only)
+    uint8_t  target;           // Byte 4:      pin / channel (read-only)
+    uint8_t  ruleRef;          // Byte 5:      triggering Rule id, 0xFF = manual (read-only)
+    uint16_t sequence;         // Bytes 6-7:   Monotonic event counter, wraps at 65535
+    uint8_t  behavior;         // Byte 8:      bit0 = invert/active-low (read-only)
+    uint8_t  failsafe;         // Byte 9:      PREOBD_ACTION_FAILSAFE_* (RELAY only, read-only)
+    uint8_t  command;          // Byte 10:     PREOBD_ACTION_CMD_* (writable; reads back NONE)
+    uint8_t  reserved[5];      // Bytes 11-15: future use
+};
+
+#pragma pack(pop)
+
+static_assert(sizeof(PreobdActionState) == PREOBD_ACTION_STATE_SIZE,
+              "PreobdActionState must be exactly 16 bytes");
 
 #endif // __cplusplus
 

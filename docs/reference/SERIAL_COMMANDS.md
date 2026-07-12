@@ -96,8 +96,7 @@ SET A0 CHT MAX6675                       # Combined syntax (recommended)
 SET A0 APPLICATION CHT                   # Set application type
 SET A0 SENSOR NTC VDO_120C_TABLE        # Two-layer: category + preset
 SET A0 SENSOR VDO_120C_TABLE            # Legacy: direct sensor name
-SET A0 ALARM 100 900                     # Set alarm thresholds
-SET A0 ALARM WARMUP 30000                # Set alarm warmup time
+RULE ADD A0 OUTSIDE 100 900             # Add an alarm Rule (both-sided band)
 ```
 
 ### Control Commands
@@ -165,8 +164,7 @@ Apply to individual sensor inputs:
 **Example:**
 ```
 SET A2 COOLANT_TEMP VDO_120C_TABLE
-SET A2 ALARM 60 120
-SET A2 ALARM WARMUP 30000
+RULE ADD A2 OUTSIDE 60 120
 ```
 
 ### Global System Settings (use SYSTEM command)
@@ -388,6 +386,13 @@ See **[Hall Speed Guide](../guides/sensor-types/HALL_SPEED_GUIDE.md)** and **[Ad
 
 ## Alarm Configuration
 
+> **⚠️ Deprecated — alarms are now control-engine Rules.** `SET <pin> ALARM ...`
+> prints a pointer to the new commands and no longer configures an alarm. Use
+> `SET <pin> APPLICATION <app>` (seeds a default alarm Rule) or `RULE ADD <pin>
+> OUTSIDE <lo> <hi>` / `ABOVE|BELOW <limit>`; see the **Rules & Actions** section
+> below and `ARCHITECTURE.md` §11. The thresholds/timing/state-machine concepts
+> here still apply — they now live on the Rule.
+
 Configure per-input alarm thresholds and timing.
 
 ### Understanding Alarm Timing
@@ -429,7 +434,7 @@ OUTPUT Alarm INTERVAL <ms>       # Set alarm check interval (10-10000ms)
 **Oil Pressure Alarm (with warmup):**
 ```
 SET A3 OIL_PRESSURE VDO_5BAR_CURVE
-SET A3 ALARM 10 80                   # Alarm if <10 or >80 PSI
+RULE ADD A3 OUTSIDE 10 80                   # Alarm if <10 or >80 PSI
 SET A3 ALARM WARMUP 45000            # Wait 45 seconds after startup
 SET A3 ALARM PERSIST 3000            # Must persist 3 seconds to trigger
 ```
@@ -438,7 +443,7 @@ SET A3 ALARM PERSIST 3000            # Must persist 3 seconds to trigger
 **Coolant Temperature Alarm (with persistence):**
 ```
 SET A2 COOLANT_TEMP VDO_120C_TABLE
-SET A2 ALARM 60 120                  # Alarm if <60°C or >120°C
+RULE ADD A2 OUTSIDE 60 120                  # Alarm if <60°C or >120°C
 SET A2 ALARM PERSIST 5000            # Must persist 5 seconds
 ```
 *Why:* Brief temperature spikes can occur from exhaust gas turbulence. Only trigger if sustained.
@@ -446,7 +451,7 @@ SET A2 ALARM PERSIST 5000            # Must persist 5 seconds
 **CHT Alarm (critical, fast response):**
 ```
 SET 6 CHT MAX6675
-SET 6 ALARM 100 900                  # Alarm if <100°F or >900°F
+RULE ADD 6 OUTSIDE 100 900                  # Alarm if <100°F or >900°F
 SET 6 ALARM PERSIST 1000             # Quick 1 second response
 ```
 *Why:* Cylinder head temperature is critical - respond quickly to overtemp.
@@ -548,7 +553,38 @@ Alarm: Enabled, Interval: 500ms
 
 ---
 
+## Rules & Actions (control engine)
+
+The control engine unifies alarms and relays into one condition→effect pipeline:
+a **Rule** watches an input (threshold + hysteresis + debounce + warmup + severity)
+and triggers **Actions** (relay/GPIO outputs) and/or the built-in Annunciator
+(LED/buzzer/BLE). `SET <pin> APPLICATION <app>` seeds a default alarm Rule.
+
+```
+RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARNING|ALARM|NONE]   # one-sided
+RULE ADD <pin> OUTSIDE <lo> <hi> [HYST <w>] [WARNING|ALARM|NONE]     # both-sided band
+RULE LIST                         # all Rules + live state (READY/ACTIVE) + severity
+RULE <id>                         # one Rule's detail
+RULE DEL <id>                     # delete (referring Actions revert to manual)
+RULE RESET <id>                   # restore config from the application default + re-arm
+
+ACTION ADD RELAY <pin> [FAILSAFE ON|OFF] [INVERT]   # actuator (failsafe on sensor loss)
+ACTION <id> RULE <ruleId|NONE>    # link to a Rule (NONE = manual-only)
+ACTION <id> ON|OFF                # manual override (RUN-mode allowed)
+ACTION LIST | ACTION <id> | ACTION DEL <id>
+```
+
+Severity: `NONE` = control-only (drives Actions, no annunciation); `WARNING` =
+indicator + log + BLE, no buzzer; `ALARM` = + buzzer. An ALARM Rule also raises a
+derived WARNING as its value approaches the limit. Structural edits (`ADD`/`DEL`/
+`RULE`/`RESET`) are CONFIG-only; `LIST`/`<id>`/manual `ON|OFF` are RUN-allowed.
+
 ## Relay Control
+
+> **⚠️ Deprecated — relays are now control-engine Actions of type `RELAY`.** The
+> `RELAY ...` command prints a pointer to `RULE` / `ACTION` (see the section above)
+> and no longer configures a relay. The section below is retained for historical
+> reference.
 
 **Note**: Relay functionality requires `ENABLE_RELAY_OUTPUT` to be defined in `config.h`.
 
@@ -1221,7 +1257,7 @@ LOAD USB:restore.json
 SAVE SD:backup_before_changes.json
 
 # Make configuration changes
-SET A2 ALARM 65 115
+RULE ADD A2 OUTSIDE 65 115
 
 # Test the changes
 # If something goes wrong, restore from backup
@@ -1377,8 +1413,8 @@ SET A0 OIL_TEMP NTC_10K_BETA_3950
 SET A2 COOLANT_TEMP VDO_120C_TABLE
 SET A3 OIL_PRESSURE GENERIC_150PSI
 SET A6 PRIMARY_BATTERY VOLTAGE_DIVIDER
-SET A2 ALARM 60 120
-SET A3 ALARM 0.5 7.0
+RULE ADD A2 OUTSIDE 60 120
+RULE ADD A3 OUTSIDE 0.5 7.0
 OUTPUT CAN ENABLE
 OUTPUT CAN INTERVAL 100
 SYSTEM UNITS TEMP F

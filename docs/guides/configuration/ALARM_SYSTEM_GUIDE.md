@@ -2,6 +2,19 @@
 
 **Comprehensive guide to the preOBD alarm state machine**
 
+> **⚠️ Superseded by the Control Engine (Rules).** Alarms are no longer a separate
+> subsystem — an alarm is a **Rule** with `severity = WARNING|ALARM`. The legacy
+> `SET <pin> ALARM <min> <max>` command is **deprecated** (it now prints a pointer
+> to the new commands). Configure alarms with:
+>
+> - `SET <pin> APPLICATION <app>` — seeds the application's default alarm Rule, or
+> - `RULE ADD <pin> ABOVE|BELOW <limit>` / `RULE ADD <pin> OUTSIDE <lo> <hi> [WARNING|ALARM]`
+> - `RULE LIST` to view live state; `RULE RESET <id>` to restore application defaults
+>
+> The state machine (INIT → WARMUP → READY → ACTIVE), warmup/debounce timing, and
+> the derived warning tier described below still apply — they now live on the Rule.
+> See `ARCHITECTURE.md` §11.
+
 ---
 
 ## Table of Contents
@@ -322,9 +335,9 @@ Set alarm thresholds via serial commands (CONFIG mode):
 
 ```
 CONFIG
-SET A0 ALARM 50 400        # CHT: 50-400°C
-SET A1 ALARM 0.5 10        # Oil pressure: 0.5-10 bar
-SET A2 ALARM -40 150       # Coolant: -40-150°C
+RULE ADD A0 OUTSIDE 50 400        # CHT: 50-400°C
+RULE ADD A1 OUTSIDE 0.5 10        # Oil pressure: 0.5-10 bar
+RULE ADD A2 OUTSIDE -40 150       # Coolant: -40-150°C
 SAVE
 RUN
 ```
@@ -496,7 +509,7 @@ INFO A2
 
 # Add alarm thresholds
 CONFIG
-SET A2 ALARM 60 120       # Coolant: 60-120°C
+RULE ADD A2 OUTSIDE 60 120       # Coolant: 60-120°C
 SAVE
 
 # Check alarm state

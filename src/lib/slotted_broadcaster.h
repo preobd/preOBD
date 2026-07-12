@@ -1,0 +1,83 @@
+/*
+ * slotted_broadcaster.h - Per-slot transition-cache broadcast machinery.
+ *
+ * The control-engine broadcasters (Alarm, Action) all follow the same shape:
+ * walk a fixed table of slots, decide per slot whether anything changed since
+ * the last frame we sent, and emit a stamped frame on change — plus an optional
+ * periodic re-send (heartbeat) so a late subscriber catches up, with
+ * backpressure (a failed send keeps the cache so the next tick retries). This
+ * template single-sources that bookkeeping: the monotonic sequence counter, the
+ * per-slot "last sent" cache, and the heartbeat timer. Each subsystem supplies
+ * its own change-key, equality, and frame-send via callbacks.
+ *
+ * `Key` is the per-slot value compared to decide "changed since last sent" — the
+ * full payload for Actions, or a compact (severity,kind) tuple for Alarms (so
+ * alarm frames fire on transitions, not on every value wiggle). Keep it small;
+ * it is stored N times.
+ */
+
+#ifndef SLOTTED_BROADCASTER_H
+#define SLOTTED_BROADCASTER_H
+
+#include <Arduino.h>
+
+template <typename Key, int N>
+class SlottedBroadcaster {
+public:
+    // Cold start: nothing cached, so the first tick emits every slot.
+    void reset() {
+        for (int i = 0; i < N; ++i) have_[i] = false;
+        sequence_ = 0;
+        lastSendMs_ = 0;
+    }
+
+    // Seed every slot's cached key (have = true) so the first tick emits only on
+    // a real transition away from `k` (e.g. Alarms prime to NORMAL/CLEAR and
+    // stay quiet until something actually trips).
+    void prime(const Key& k) {
+        for (int i = 0; i < N; ++i) { last_[i] = k; have_[i] = true; }
+        sequence_ = 0;
+        lastSendMs_ = 0;
+    }
+
+    // Force slot(s) to re-emit on the next tick (e.g. a manual command's
+    // confirmation, or a fresh subscriber resync).
+    void invalidate(int slot) { if (slot >= 0 && slot < N) have_[slot] = false; }
+    void invalidateAll()      { for (int i = 0; i < N; ++i) have_[i] = false; }
+
+    uint16_t sequence() const { return sequence_; }
+
+    // Drive one broadcast pass.
+    //   pack(i)        -> Key for slot i (the change-detection value)
+    //   equal(a, b)    -> true when slot i has NOT changed (suppress send)
+    //   send(i, seq)   -> build + emit slot i's frame stamped with `seq`;
+    //                     return true on success, false on backpressure
+    // heartbeatMs == 0 disables the periodic full re-send.
+    template <typename PackFn, typename EqualFn, typename SendFn>
+    void tick(uint32_t now, uint32_t heartbeatMs,
+              PackFn pack, EqualFn equal, SendFn send) {
+        const bool heartbeatDue = heartbeatMs && (now - lastSendMs_) >= heartbeatMs;
+        bool allSent = true;
+        for (int i = 0; i < N; ++i) {
+            Key k = pack(i);
+            const bool changed = !have_[i] || !equal(k, last_[i]);
+            if (!changed && !heartbeatDue) continue;
+            if (send(i, sequence_)) {
+                last_[i] = k;
+                have_[i] = true;
+                ++sequence_;
+            } else {
+                allSent = false;  // backpressure: retry next tick, keep cache
+            }
+        }
+        if (heartbeatDue && allSent) lastSendMs_ = now;
+    }
+
+private:
+    Key      last_[N];
+    bool     have_[N];
+    uint16_t sequence_ = 0;
+    uint32_t lastSendMs_ = 0;
+};
+
+#endif // SLOTTED_BROADCASTER_H

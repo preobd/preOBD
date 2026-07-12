@@ -180,8 +180,8 @@ SET A6 PRIMARY_BATTERY VOLTAGE_DIVIDER  # Battery voltage on analog pin A6
 ### Alarm Thresholds
 
 ```
-SET A2 ALARM 60 120                  # Coolant: alarm if <60°C or >120°C
-SET A3 ALARM 0.5 6.0                 # Oil pressure: alarm if <0.5 bar or >6.0 bar
+RULE ADD A2 OUTSIDE 60 120                  # Coolant: alarm if <60°C or >120°C
+RULE ADD A3 OUTSIDE 0.5 6.0                 # Oil pressure: alarm if <0.5 bar or >6.0 bar
 ```
 
 ### Display Units

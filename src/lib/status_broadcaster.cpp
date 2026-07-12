@@ -13,11 +13,9 @@
 #include "system_mode.h"
 #include "transport_mux.h"
 #include "../inputs/input_manager.h"
+#include "../control/control_manager.h"
 #include "../version.h"
 
-#if ENABLE_RELAY_OUTPUT
-#include "../outputs/output_relay.h"
-#endif
 
 // Declared in main.cpp; the single MuxTransport instance bound to Serial1.
 extern MuxTransport hwSerial1;
@@ -41,13 +39,14 @@ void packStatus(PreobdSystemStatus& s) {
                        : PREOBD_MODE_CONFIG;
     s.activeInputCount = numActiveInputs;
 
-    uint8_t relayCount = 0;
-#if ENABLE_RELAY_OUTPUT
-    for (uint8_t i = 0; i < MAX_RELAYS; ++i) {
-        if (systemConfig.relays[i].outputPin != 0xFF) ++relayCount;
-    }
+    // relayCount byte now reports configured control-engine Actions
+    // (a relay is an Action of type RELAY — §11). Field name kept for
+    // wire compatibility with PreobdSystemStatus.
+    uint8_t actionCount = 0;
+#if ENABLE_CONTROL_ENGINE
+    actionCount = controlActionCount();
 #endif
-    s.relayCount = relayCount;
+    s.relayCount = actionCount;
 
     s.uptimeSeconds = static_cast<uint32_t>(millis() / 1000UL);
     s.versionMajor  = FW_MAJOR;

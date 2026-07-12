@@ -7,7 +7,7 @@
 #include <string.h>
 
 #include "elm327_framed.h"
-#include "relay_broadcaster.h"
+#include "action_broadcaster.h"
 
 void MuxTransport::setFramedEnabled(bool enabled) {
     if (enabled == framedEnabled) return;
@@ -120,11 +120,11 @@ void MuxTransport::handleFrame(const Frame& f) {
         }
         break;
     case FRAME_TYPE_PING: {
-        // A ping marks a (re)connection: invalidate the relay cache so the
+        // A ping marks a (re)connection: invalidate the action cache so the
         // next tick re-emits all slots, populating a late client's panel
         // without waiting on the heartbeat. Cache-only, safe mid-frame; no-op
-        // stub when relays are off.
-        RelayBroadcaster::resync();
+        // stub when the control engine / framed transport are off.
+        ActionBroadcaster::resync();
         // Echo immediately so the nRF's auto-detect upgrades the link. If
         // this PING was pumped from inside a partially-written frame, defer
         // the echo to the next frame boundary -- injecting it mid-frame
@@ -139,11 +139,12 @@ void MuxTransport::handleFrame(const Frame& f) {
         break;
     }
     case FRAME_TYPE_RELAY:
-        // Webapp-initiated relay write: forward to the broadcaster which
-        // applies writable fields and emits a confirmation notify on the
-        // next tick. RelayBroadcaster compiles to a no-op when relays are
-        // disabled on this profile, so the unconditional call is safe.
-        RelayBroadcaster::handleInbound(f.payload, f.len);
+        // Webapp-initiated Action write (frame value 0x05; legacy name):
+        // forward to the broadcaster which applies the manual-toggle command
+        // and emits a confirmation notify on the next tick. ActionBroadcaster
+        // compiles to a no-op when the control engine is disabled, so the
+        // unconditional call is safe.
+        ActionBroadcaster::handleInbound(f.payload, f.len);
         break;
     case FRAME_TYPE_ELM327:
         // ELM327 client traffic (e.g. Torque over a concurrent BLE central):

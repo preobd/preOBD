@@ -1,0 +1,90 @@
+/*
+ * control_manager.h - Runtime owner of the control engine's Rule contexts.
+ *
+ * Bridges the persisted rule table (systemConfig.rules[]) to live input values:
+ * holds the parallel RuleContext[] runtime state, evaluates every configured
+ * rule each cycle against its source input, and rolls up system severity.
+ *
+ * Also exposes the rule-table helpers the RULE CLI uses (lookup / allocate by
+ * stable id). Glue layer — not host-unit-tested (the pure engine is); see
+ * control_engine.{h,cpp} for the tested logic.
+ */
+
+#ifndef CONTROL_MANAGER_H
+#define CONTROL_MANAGER_H
+
+#include "control_types.h"
+#include "control_engine.h"
+
+#if ENABLE_CONTROL_ENGINE
+
+// Runtime contexts, indexed 1:1 with systemConfig.rules[].
+extern RuleContext g_ruleContexts[MAX_RULES];
+
+// Arm every configured rule from EEPROM (the boot-load path, §11.5). Call once
+// after SystemConfig + inputs are loaded.
+void controlManagerInit(uint32_t now);
+
+// Evaluate every configured rule against its live source input value. Call on
+// the alarm-check cadence from the main loop.
+void controlManagerUpdate(uint32_t now);
+
+// Max configured severity over all rules currently ACTIVE (annunciator rollup).
+RuleSeverity controlSystemSeverity();
+
+// --- rule table helpers (operate on systemConfig.rules[]) ---
+int     controlRuleSlot(uint8_t id);    // slot index for a rule id, or -1
+int     controlRuleFreeSlot();          // first empty slot, or -1 if full
+uint8_t controlRuleAllocId();           // smallest unused id, or CONTROL_ID_NONE if exhausted
+uint8_t controlRuleCount();             // number of configured rules
+
+// Clear any Action.ruleRef pointing at `ruleId` (referential integrity on rule
+// delete — those actions revert to manual-only). Called from RULE DEL.
+void    controlClearActionsForRule(uint8_t ruleId);
+
+// --- application default-Rule template (§11.5) ---
+
+// True if any Rule already references this input pin.
+bool    controlRuleExistsForInput(uint8_t pin);
+
+// Create-from-template: seed one canonical default Rule for `pin` from its
+// application's template, IF no Rule already references `pin` (implicit
+// re-apply preserves). Returns the new rule id, or CONTROL_ID_NONE if nothing
+// was created (rule already exists / app has no default alarm / table full).
+uint8_t controlSeedRuleForInput(uint8_t pin, uint8_t appIndex, uint32_t now);
+
+// RULE RESET: rewrite rule <id>'s config from its source input's application
+// template and re-arm (explicit reset clobbers, §11.5). Returns false if the
+// rule is unknown, its input is gone, or the application has no default rule.
+bool    controlRuleReset(uint8_t id, uint32_t now);
+
+// Application changed under existing rules: rewrite every Rule sourced from
+// `pin` to the input's (now-updated) application template and re-arm, keeping
+// each rule's id. Returns the number of rules rewritten (0 if none reference
+// the pin or the new application has no usable default band — the old, now
+// stale, thresholds are then left in place for the caller to warn about).
+uint8_t controlReseedRulesForInput(uint8_t pin, uint32_t now);
+
+// === Actions ===
+// Configure all action target pins as outputs and set their initial state
+// (boot-load). Call once after SystemConfig is loaded.
+void controlActionsInit();
+
+// Evaluate every configured action and drive its target. Call each cycle after
+// controlManagerUpdate(). Actuation is suppressed in CONFIG mode (bench safety,
+// mirrors the relay/buzzer gate in #268).
+void controlActionsUpdate(bool configMode);
+
+// Current driven (logical, pre-invert) state of the action in `slot`, for LIST.
+bool controlActionState(int slot);
+
+// --- action table helpers (operate on systemConfig.actions[]) ---
+int     controlActionSlot(uint8_t id);
+int     controlActionFreeSlot();
+uint8_t controlActionAllocId();
+uint8_t controlActionCount();
+void    controlActionConfigurePin(int slot);   // pinMode target OUTPUT + de-assert
+bool    controlActionSetManual(uint8_t id, bool on);  // ACTION <id> ON|OFF
+
+#endif // ENABLE_CONTROL_ENGINE
+#endif // CONTROL_MANAGER_H

@@ -8,7 +8,6 @@
 #include "../version.h"
 #include "input_manager.h"
 #include "command_helpers.h"
-#include "alarm_logic.h"
 #include "../lib/system_config.h"
 #include "../lib/units_registry.h"
 #include "../lib/message_router.h"  // For msg.control
@@ -318,22 +317,10 @@ bool loadInputConfig() {
             }
         }
 
-        // Arm the alarm state machine from the restored flag. The EEPROM record
-        // does not persist warmup/persist timings, so seed them from the
-        // application preset (mirrors configureInput()). Without this, a saved
-        // enabled alarm loads with state=DISABLED and never arms.
-        {
-            const ApplicationPreset* flashPreset =
-                getApplicationByIndex(inputs[i].applicationIndex);
-            uint16_t warmup = 0, persist = 0;
-            if (flashPreset) {
-                ApplicationPreset preset;
-                loadApplicationPreset(flashPreset, &preset);
-                warmup = preset.warmupTime_ms;
-                persist = preset.persistTime_ms;
-            }
-            initInputAlarmContext(&inputs[i], millis(), warmup, persist);
-        }
+        // (Legacy per-input alarm arming removed — alarms are control-engine
+        // Rules, armed from systemConfig.rules[] by controlManagerInit(). The
+        // EEPROM flagsByte alarm bit / min/max are retained as dead fields for
+        // layout stability, not evaluated.)
     }
 
     // Verify checksum
@@ -578,15 +565,22 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
 
     input->obd2pid = preset.obd2pid;
     input->obd2length = preset.obd2length;
+#if ENABLE_CONTROL_ENGINE
+    // App-seeded alarms are now control-engine Rules (§11.5): the caller
+    // (set_application) seeds a default Rule from the template. Don't also arm
+    // the legacy per-input alarm, or the threshold would be enforced twice.
+    input->flags.alarm = false;
+#else
     input->flags.alarm = preset.defaultAlarmEnabled;
+#endif
     input->flags.display = preset.defaultDisplayEnabled;
     input->flags.isEnabled = true;
     input->flags.useCustomCalibration = false;  // Use preset calibration
     input->outputMask = OUTPUT_MASK_ALL_DATA;   // All data outputs enabled by default
     input->divider_ratio = 1.0f;                // Default to no divider
 
-    // Initialize alarm context from preset
-    initInputAlarmContext(input, millis(), preset.warmupTime_ms, preset.persistTime_ms);
+    // (Legacy alarm context removed — set_application seeds a control-engine
+    // Rule from the template instead, §11.5.)
 
     // Increment count if this is a new input
     if (isNewInput) {
@@ -750,15 +744,7 @@ bool enableInputAlarm(uint8_t pin, bool enable) {
     // there is no "flag true but DISABLED" state to recover here.
     if (input->flags.alarm == enable) return true;
 
-    input->flags.alarm = enable;
-    // Arm (or disarm) the state machine immediately. Without this the context
-    // keeps its prior state — DISABLED after boot — and updateInputAlarmState()
-    // never climbs out of DISABLED on its own, so the alarm would not actually
-    // arm until the next SET <pin> APPLICATION. Preserve the warmup/persist
-    // timings already held in the context.
-    initInputAlarmContext(input, millis(),
-                          input->alarmContext.warmupTime_ms,
-                          input->alarmContext.persistTime_ms);
+    input->flags.alarm = enable;  // dead field (alarms are Rules); retained for json compat
     return true;
 }
 
@@ -953,9 +939,7 @@ void printInputInfo(uint8_t pin) {
     msg.control.print(F("  Units: "));
     msg.control.println(getUnitStringByIndex(input->unitsIndex));
 
-    msg.control.print(F("  Alarm Status: "));
-    printAlarmState(input->alarmContext.state);
-    msg.control.println();
+    msg.control.println(F("  Alarms: managed by Rules — see RULE LIST"));
 
     msg.control.print(F("  Output Mask: 0x"));
     if (input->outputMask < 0x10) msg.control.print('0');
