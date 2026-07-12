@@ -67,8 +67,22 @@ uint8_t controlReseedRulesForInput(uint8_t pin, uint32_t now);
 
 // === Actions ===
 // Configure all action target pins as outputs and set their initial state
-// (boot-load). Call once after SystemConfig is loaded.
+// (boot-load). Call once after SystemConfig is loaded. Does NOT touch the pin
+// registry — call controlSyncActionPins() separately (see below).
 void controlActionsInit();
+
+// Re-sync the pin registry with the configured Action targets: drop any entries
+// this engine previously added, then register each current target as
+// PIN_OUTPUT (conflict-checked). Idempotent — safe at boot and after a runtime
+// config reload (the registry is not otherwise cleared mid-run). Returns the
+// number of conflicts detected (each also logged).
+//
+// ORDERING: action pins must register LAST, so they are validated against — and
+// never override — the hardware-fixed bus / serial / system / RGB pins. Call it
+// once near the end of boot (after those subsystems init) and again whenever the
+// action table changes at runtime (ADD / DEL / config import), when the registry
+// is already fully populated.
+uint8_t controlSyncActionPins();
 
 // Evaluate every configured action and drive its target. Call each cycle after
 // controlManagerUpdate(). Actuation is suppressed in CONFIG mode (bench safety,

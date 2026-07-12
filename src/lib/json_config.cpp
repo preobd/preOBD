@@ -829,6 +829,7 @@ bool loadConfigFromJSON(const char* jsonString) {
         }
         controlManagerInit(millis());
         controlActionsInit();
+        controlSyncActionPins();  // re-claim imported action pins (registry already populated)
     }
 #endif
 

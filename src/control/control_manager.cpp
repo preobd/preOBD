@@ -10,6 +10,15 @@
 #include "../lib/system_config.h"
 #include "../inputs/input_manager.h"
 #include "../lib/application_presets.h"
+#include "../lib/pin_registry.h"
+#include "../lib/message_api.h"
+#include "../lib/log_tags.h"
+
+// Shared, stable description pointer for every Action-owned pin registry entry.
+// registerPin() stores the pointer (no copy), and controlSyncActionPins()
+// identifies its own prior entries by pointer equality against this — so it
+// must be a single static string, not a per-call temporary.
+static const char* const ACTION_PIN_DESC = "Action output";
 
 RuleContext g_ruleContexts[MAX_RULES];
 
@@ -227,6 +236,43 @@ void controlActionsInit() {
         g_actionState[i] = false;
         controlActionConfigurePin(i);
     }
+    // NB: the pin-registry sync is deliberately NOT done here. At boot this runs
+    // before the RGB and serial subsystems register their (hardware-fixed) pins,
+    // so syncing now could let a stray action target claim a pin those need and
+    // win the race. The caller invokes controlSyncActionPins() once, late, after
+    // all fixed pins are registered (see main.cpp setup + the JSON import path).
+}
+
+uint8_t controlSyncActionPins() {
+    // 1. Drop registry entries this engine previously added (identified by our
+    //    shared description pointer) so a runtime config reload doesn't leave a
+    //    stale action pin claimed. Collect first, then unregister — unregister
+    //    shifts the array, which would corrupt an in-progress index walk.
+    uint8_t stale[MAX_ACTIONS];
+    uint8_t nStale = 0;
+    uint8_t regSize = getPinRegistrySize();
+    for (uint8_t i = 0; i < regSize && nStale < MAX_ACTIONS; i++) {
+        const PinUsage* u = getPinUsageByIndex(i);
+        if (u && u->description == ACTION_PIN_DESC) stale[nStale++] = u->pin;
+    }
+    for (uint8_t i = 0; i < nStale; i++) unregisterPin(stale[i]);
+
+    // 2. Register each configured action target as PIN_OUTPUT. registerPin()
+    //    rejects a pin already claimed (by a bus, system pin, RGB output, or
+    //    another action), which is exactly the conflict we want to surface.
+    uint8_t conflicts = 0;
+    for (int s = 0; s < MAX_ACTIONS; s++) {
+        const Action& a = systemConfig.actions[s];
+        if (a.id == CONTROL_ID_NONE) continue;
+        if (!registerPin(a.target, PIN_OUTPUT, ACTION_PIN_DESC)) {
+            conflicts++;
+            const char* held = getPinDescription(a.target);
+            msg.debug.warn(TAG_SYSTEM,
+                           "action #%u target pin %u conflicts with %s",
+                           a.id, a.target, held ? held : "another use");
+        }
+    }
+    return conflicts;
 }
 
 void controlActionsUpdate(bool configMode) {

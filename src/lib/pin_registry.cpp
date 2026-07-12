@@ -261,22 +261,22 @@ static void printPinPadded(uint8_t pin) {
 void printPinStatus(uint8_t specificPin) {
     // Query specific pin mode
     if (specificPin != 0xFF) {
-        // Check if pin is in registry
-        PinUsageType usage = getPinUsage(specificPin);
-        const char* desc = getPinDescription(specificPin);
-
-        if (usage != PIN_UNUSED) {
-            printPinPadded(specificPin);
-            msg.control.print(getPinUsageTypeName(usage));
-            if (desc) {
-                msg.control.print(F("  - "));
-                msg.control.print(desc);
+        #if ENABLE_CONTROL_ENGINE
+        // Check control-engine RELAY Action targets FIRST: action pins are also
+        // registered (as PIN_OUTPUT, for conflict detection), but this dedicated
+        // view carries the action id, which the generic registry entry doesn't.
+        for (int i = 0; i < MAX_ACTIONS; i++) {
+            const Action& a = systemConfig.actions[i];
+            if (a.id != CONTROL_ID_NONE && a.type == ACT_RELAY && a.target == specificPin) {
+                printPinPadded(specificPin);
+                msg.control.print(F("Output    - Action #"));
+                msg.control.println(a.id);
+                return;
             }
-            msg.control.println();
-            return;
         }
+        #endif
 
-        // Check inputs array
+        // Check inputs array (inputs aren't in the registry; they self-track).
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
             if (inputs[i].pin == specificPin && inputs[i].applicationIndex != 0xFF) {
                 printPinPadded(specificPin);
@@ -292,18 +292,20 @@ void printPinStatus(uint8_t specificPin) {
             }
         }
 
-        #if ENABLE_CONTROL_ENGINE
-        // Check control-engine RELAY Action targets
-        for (int i = 0; i < MAX_ACTIONS; i++) {
-            const Action& a = systemConfig.actions[i];
-            if (a.id != CONTROL_ID_NONE && a.type == ACT_RELAY && a.target == specificPin) {
-                printPinPadded(specificPin);
-                msg.control.print(F("Output    - Action #"));
-                msg.control.println(a.id);
-                return;
+        // Generic registry entry (buses, system pins, RGB output).
+        PinUsageType usage = getPinUsage(specificPin);
+        const char* desc = getPinDescription(specificPin);
+
+        if (usage != PIN_UNUSED) {
+            printPinPadded(specificPin);
+            msg.control.print(getPinUsageTypeName(usage));
+            if (desc) {
+                msg.control.print(F("  - "));
+                msg.control.print(desc);
             }
+            msg.control.println();
+            return;
         }
-        #endif
 
         // Pin not found
         printPinPadded(specificPin);

@@ -413,6 +413,13 @@ void setup() {
 
     initSerialConfig();
 
+#if ENABLE_CONTROL_ENGINE
+    // Register action target pins LAST — after every hardware-fixed pin (system,
+    // bus, RGB, serial) is in the registry — so a stray action target is flagged
+    // as a conflict rather than silently winning a pin those subsystems need.
+    controlSyncActionPins();
+#endif
+
     // Initialize system mode and detect boot mode
     initSystemMode();
     SystemMode bootMode = detectBootMode(eepromConfigLoaded);

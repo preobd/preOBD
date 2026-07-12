@@ -22,6 +22,7 @@
 #include "../lib/system_mode.h"
 #include "../lib/system_config.h"
 #include "../lib/message_api.h"
+#include "../lib/pin_registry.h"
 #include "../control/control_manager.h"
 
 // CLI handlers are cold — keep them in flash, not Teensy ITCM (RAM1).
@@ -97,6 +98,26 @@ static FLASHMEM int actionAdd(int argc, const char* const* argv) {
         return 1;
     }
 
+    // Pin-conflict check (mirrors input/serial config). The registry catches
+    // buses, system pins, RGB output, and other actions; inputs aren't in the
+    // registry (they self-track), so check inputs[] explicitly.
+    if (!isPinAvailable(target)) {
+        msg.control.print(F("ERROR: pin "));
+        msg.control.print(target);
+        msg.control.print(F(" already in use ("));
+        msg.control.print(getPinUsageTypeName(getPinUsage(target)));
+        const char* held = getPinDescription(target);
+        if (held) { msg.control.print(F(": ")); msg.control.print(held); }
+        msg.control.println(F(")"));
+        return 1;
+    }
+    if (getInputByPin(target) != nullptr) {
+        msg.control.print(F("ERROR: pin "));
+        msg.control.print(target);
+        msg.control.println(F(" is already used by a configured input"));
+        return 1;
+    }
+
     uint8_t behavior = 0;
     uint8_t failsafe = ACT_FAILSAFE_OFF;
     for (int i = 4; i < argc; i++) {
@@ -131,6 +152,7 @@ static FLASHMEM int actionAdd(int argc, const char* const* argv) {
     a.behavior = behavior;
     a.failsafe = failsafe;
     controlActionConfigurePin(slot);   // pinMode OUTPUT + de-assert
+    controlSyncActionPins();           // claim the target pin in the registry
 
     msg.control.print(F("Action #"));
     msg.control.print(id);
@@ -194,6 +216,7 @@ static FLASHMEM int actionDel(uint8_t id) {
     }
     controlActionConfigurePin(slot);  // de-assert the pin before freeing
     systemConfig.actions[slot].id = CONTROL_ID_NONE;
+    controlSyncActionPins();          // release the freed target pin in the registry
     msg.control.print(F("Action #"));
     msg.control.print(id);
     msg.control.println(F(" deleted. SAVE to persist."));
