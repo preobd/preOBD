@@ -20,5 +20,6 @@
 #define ENABLE_RELAY_OUTPUT     1
 #define ENABLE_ELM327           1
 #define ENABLE_SELFTEST         1
+#define SUPPORTS_JSON_CONFIG    1  // host round-trip of control_json leaf converters
 
 #endif // PROFILE_NATIVE_H

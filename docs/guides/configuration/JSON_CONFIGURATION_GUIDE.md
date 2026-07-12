@@ -82,9 +82,37 @@ The JSON configuration system in preOBD serves multiple purposes:
         }
       }
     }
+  ],
+  "rules": [
+    {
+      "id": 0,
+      "input": 14,
+      "condition": "OUTSIDE",
+      "severity": "ALARM",
+      "limitLo": -1.0,
+      "limitHi": 100.0,
+      "hysteresis": 0.0,
+      "warmupMs": 60000,
+      "debounceMs": 5000,
+      "enabled": true
+    }
+  ],
+  "actions": [
+    {
+      "id": 0,
+      "type": "RELAY",
+      "target": 13,
+      "rule": 0,
+      "invert": false,
+      "failsafe": "OFF"
+    }
   ]
 }
 ```
+
+> `rules` and `actions` are emitted only on control-engine builds (anything that
+> enables alarms or relays). They are additive — older configs without them
+> still import, and the arrays are simply absent on boards that omit the engine.
 
 ### Field Descriptions
 
@@ -101,6 +129,24 @@ The JSON configuration system in preOBD serves multiple purposes:
 | `inputs[].application` | string | Yes | Application name (e.g., "CHT", "OIL_TEMP") |
 | `inputs[].sensor` | string | Yes | Sensor name (e.g., "MAX6675", "VDO_150C") |
 | `inputs[].calibration` | object/null | No | Custom calibration (null = use sensor default) |
+| `rules` | array | No | Control-engine Rule table (control-engine builds only) |
+| `rules[].id` | number | Yes | Stable Rule id (referenced by `actions[].rule`) |
+| `rules[].input` | number | Yes | Source input **pin** the Rule watches |
+| `rules[].condition` | string | Yes | `ABOVE`, `BELOW`, `OUTSIDE`, or `INSIDE` |
+| `rules[].severity` | string | No | `NONE`, `WARNING`, or `ALARM` (default `NONE`) |
+| `rules[].limitLo` | number | No | Limit (ABOVE/BELOW) or low band edge (OUTSIDE/INSIDE) |
+| `rules[].limitHi` | number | No | High band edge (band conditions only) |
+| `rules[].hysteresis` | number | No | Clear-band width, inset from each limit |
+| `rules[].warmupMs` | number | No | Settling time before the Rule evaluates |
+| `rules[].debounceMs` | number | No | How long the condition must hold before asserting |
+| `rules[].enabled` | bool | No | Rule enabled (default true) |
+| `actions` | array | No | Control-engine Action table (control-engine builds only) |
+| `actions[].id` | number | Yes | Stable Action id |
+| `actions[].type` | string | Yes | `RELAY`, `BEEPER`, `LED`, or `DISPLAY` (v1 drives `RELAY`) |
+| `actions[].target` | number | Yes | Target pin / channel |
+| `actions[].rule` | number | No | Triggering Rule id; omit for a manual-only Action |
+| `actions[].invert` | bool | No | Active-low / inverted output (default false) |
+| `actions[].failsafe` | string | No | `ON`/`OFF` state on untrustworthy reading (RELAY only) |
 
 ---
 

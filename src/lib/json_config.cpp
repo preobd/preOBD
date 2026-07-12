@@ -23,6 +23,10 @@
 #include "log_tags.h"
 #include "pin_registry.h"
 #include "watchdog.h"
+#if ENABLE_CONTROL_ENGINE
+#include "control_json.h"
+#include "../control/control_manager.h"
+#endif
 
 #if SUPPORTS_SD
 #include <SD.h>
@@ -225,6 +229,26 @@ void exportPinRegistryToJSON(JsonArray& pinsArray) {
     }
 }
 
+#if ENABLE_CONTROL_ENGINE
+// Export the control-engine Rule + Action tables as top-level arrays (siblings
+// of "inputs"). Only configured slots (id != CONTROL_ID_NONE) are emitted.
+void exportRulesToJSON(JsonArray& rulesArray) {
+    for (int i = 0; i < MAX_RULES; i++) {
+        if (systemConfig.rules[i].id == CONTROL_ID_NONE) continue;
+        JsonObject ruleObj = rulesArray.add<JsonObject>();
+        controlExportRule(ruleObj, systemConfig.rules[i]);
+    }
+}
+
+void exportActionsToJSON(JsonArray& actionsArray) {
+    for (int i = 0; i < MAX_ACTIONS; i++) {
+        if (systemConfig.actions[i].id == CONTROL_ID_NONE) continue;
+        JsonObject actionObj = actionsArray.add<JsonObject>();
+        controlExportAction(actionObj, systemConfig.actions[i]);
+    }
+}
+#endif // ENABLE_CONTROL_ENGINE
+
 // Export system configuration to JSON
 void exportSystemConfigToJSON(JsonObject& systemObj) {
     // Output modules
@@ -353,6 +377,16 @@ void dumpConfigToJSON(Print& output) {
     // Inputs
     JsonArray inputsArray = doc["inputs"].to<JsonArray>();
     exportInputsToJSON(inputsArray);
+
+#if ENABLE_CONTROL_ENGINE
+    // Control engine — Rule + Action tables (top-level, additive; omitted when
+    // empty stays empty arrays so the webapp can tell "supported, none" apart
+    // from "not supported").
+    JsonArray rulesArray = doc["rules"].to<JsonArray>();
+    exportRulesToJSON(rulesArray);
+    JsonArray actionsArray = doc["actions"].to<JsonArray>();
+    exportActionsToJSON(actionsArray);
+#endif
 
     // Serialize - feed watchdog every 32 bytes to survive slow transports
     // (e.g. HM-10 BLE bridge at 9600 baud blocks in write() long enough to
@@ -673,6 +707,45 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
     return true;
 }
 
+#if ENABLE_CONTROL_ENGINE
+// Replace the Rule table from a JSON array. Records pack into slots in array
+// order, preserving each record's stable `id` (Actions reference rules by id).
+// Records that fail validation are skipped. Re-arming is the caller's job.
+void importRulesFromJSON(JsonArrayConst rulesArray) {
+    for (int i = 0; i < MAX_RULES; i++) systemConfig.rules[i].id = CONTROL_ID_NONE;
+    int slot = 0;
+    for (JsonObjectConst ruleObj : rulesArray) {
+        if (slot >= MAX_RULES) {
+            msg.debug.warn(TAG_JSON, "rule table full (%d); extra rules dropped", MAX_RULES);
+            break;
+        }
+        Rule r{};
+        if (controlImportRule(ruleObj, r)) {
+            systemConfig.rules[slot++] = r;
+        } else {
+            msg.debug.warn(TAG_JSON, "skipped invalid rule record");
+        }
+    }
+}
+
+void importActionsFromJSON(JsonArrayConst actionsArray) {
+    for (int i = 0; i < MAX_ACTIONS; i++) systemConfig.actions[i].id = CONTROL_ID_NONE;
+    int slot = 0;
+    for (JsonObjectConst actionObj : actionsArray) {
+        if (slot >= MAX_ACTIONS) {
+            msg.debug.warn(TAG_JSON, "action table full (%d); extra actions dropped", MAX_ACTIONS);
+            break;
+        }
+        Action a{};
+        if (controlImportAction(actionObj, a)) {
+            systemConfig.actions[slot++] = a;
+        } else {
+            msg.debug.warn(TAG_JSON, "skipped invalid action record");
+        }
+    }
+}
+#endif // ENABLE_CONTROL_ENGINE
+
 // Load configuration from JSON string
 bool loadConfigFromJSON(const char* jsonString) {
     // Allocate JSON document (same size as export)
@@ -721,6 +794,43 @@ bool loadConfigFromJSON(const char* jsonString) {
             return false;
         }
     }
+
+#if ENABLE_CONTROL_ENGINE
+    // Import Rules + Actions after inputs (rules reference input pins; the
+    // re-arm below evaluates against live inputs). Each table is replaced only
+    // if its array is present, then both are re-armed once — boot-load semantics
+    // (#251): controlManagerInit arms rule contexts, controlActionsInit drives
+    // the target pins to their initial state.
+    bool controlChanged = false;
+    if (doc["rules"].isNull() == false) {
+        importRulesFromJSON(doc["rules"].as<JsonArrayConst>());
+        controlChanged = true;
+    }
+    if (doc["actions"].isNull() == false) {
+        importActionsFromJSON(doc["actions"].as<JsonArrayConst>());
+        controlChanged = true;
+    }
+    if (controlChanged) {
+        // Referential integrity: an Action may now reference a Rule id absent
+        // from the (possibly only partially re-imported) rule table — a
+        // rules-only / actions-only payload, or a hand-edited config. Revert
+        // those to manual-only, mirroring the RULE DEL invariant
+        // (controlClearActionsForRule), before re-arm so the engine never
+        // evaluates a dangling ref.
+        for (int i = 0; i < MAX_ACTIONS; i++) {
+            Action& a = systemConfig.actions[i];
+            if (a.id != CONTROL_ID_NONE && a.ruleRef != CONTROL_ID_NONE &&
+                controlRuleSlot(a.ruleRef) < 0) {
+                msg.debug.warn(TAG_JSON,
+                               "action #%u referenced missing rule #%u; reverted to manual",
+                               a.id, a.ruleRef);
+                a.ruleRef = CONTROL_ID_NONE;
+            }
+        }
+        controlManagerInit(millis());
+        controlActionsInit();
+    }
+#endif
 
     msg.control.print(F("Successfully loaded config (schema v"));
     msg.control.print(schemaVer);
