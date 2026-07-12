@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Control engine: Action target pins now participate in pin-conflict detection — `ACTION ADD` rejects a target already claimed by a bus, system pin, RGB output, configured input, or another action, and the pin shows up in `SYSTEM PINS` (#281 follow-up)
 
 ### Changed
+- Webapp: the Relays panel is now an **Actions** panel that reads the control-engine `PreobdActionState` wire format (type / target pin / source Rule / failsafe / driven state) with a manual ON/OFF toggle for manual Actions; Rule-driven Actions show as read-only status, and the System Status tile now reports the Action count (#281 follow-up)
 - Build configuration restructured into per-board folders (`boards/<board>/` with `board.h`, `board.ini`, and a gitignored `wiring.ini` overlay) plus a shared `resolve.h`: hardware pins now live in your own wiring overlay rather than a tracked profile, wired feature flags are derived from capability + pin presence, and the buzzer pin macro `ALARMS_PIN` is renamed `BUZZER_PIN` (#283)
 
 ## [0.9.0-beta] - 2026-06-18

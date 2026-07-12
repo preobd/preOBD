@@ -438,7 +438,8 @@
   .alarm-log {
     border: 1px solid var(--border-light);
     border-radius: 6px;
-    overflow: hidden;
+    overflow: hidden auto;
+    max-height: 320px;
     background: var(--surface);
   }
   .alarm-row {
@@ -471,25 +472,24 @@
     font-style: italic;
   }
 
-  /* ── Relay panel ──────────────────────────────────────────── */
-  .relay-list { display: flex; flex-direction: column; gap: 10px; }
-  .relay-card {
+  /* ── Action panel ─────────────────────────────────────────── */
+  .action-list { display: flex; flex-direction: column; gap: 10px; }
+  .action-card {
     border: 1px solid var(--border-light);
     border-radius: 8px;
     background: var(--surface);
     padding: 12px 14px;
   }
-  .relay-head {
+  .action-head {
     display: flex; align-items: center; gap: 10px;
-    margin-bottom: 10px;
   }
-  .relay-title {
+  .action-title {
     font-size: 13.5px; font-weight: 600; color: var(--text);
   }
-  .relay-context {
-    flex: 1; font-size: 11px; color: var(--dim); margin-left: 4px;
+  .action-context {
+    flex: 1; font-family: var(--mono); font-size: 11px; color: var(--dim); margin-left: 4px;
   }
-  .relay-pill {
+  .action-pill {
     font-family: var(--mono);
     font-size: 10px;
     font-weight: 500;
@@ -497,53 +497,40 @@
     padding: 3px 9px;
     border-radius: 10px;
   }
-  .relay-pill.on  { background: rgba(61,107,61,0.15); color: var(--green); border: 1px solid rgba(61,107,61,0.35); }
-  .relay-pill.off { background: rgba(138,122,102,0.10); color: var(--dim); border: 1px solid rgba(138,122,102,0.25); }
+  .action-pill.on  { background: rgba(61,107,61,0.15); color: var(--green); border: 1px solid rgba(61,107,61,0.35); }
+  .action-pill.off { background: rgba(138,122,102,0.10); color: var(--dim); border: 1px solid rgba(138,122,102,0.25); }
 
-  .relay-controls {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr auto;
-    gap: 8px;
-    align-items: end;
-  }
-  .relay-controls label {
-    display: block;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--dim);
-    margin-bottom: 3px;
-  }
-  .relay-controls select, .relay-controls input {
-    width: 100%;
-    font-family: var(--mono);
-    font-size: 12px;
-    padding: 6px 8px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--surface-raised);
-    color: var(--text);
-  }
-  .relay-controls input:disabled, .relay-controls select:disabled {
-    opacity: 0.5; cursor: not-allowed;
-  }
-  .relay-apply {
+  .action-meta {
+    margin-top: 8px;
     font-family: var(--mono);
     font-size: 11px;
-    padding: 7px 14px;
+    color: var(--dim);
+    display: flex; flex-wrap: wrap; gap: 14px;
+  }
+  .action-meta .failsafe-on { color: var(--yellow); }
+
+  .action-controls {
+    display: flex; gap: 8px; margin-top: 10px;
+  }
+  .action-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 7px 16px;
     border-radius: 4px;
-    border: 1px solid var(--brand);
-    background: var(--brand);
-    color: var(--surface);
+    border: 1px solid var(--border);
+    background: var(--surface-raised);
+    color: var(--text);
     cursor: pointer;
     letter-spacing: 0.06em;
   }
-  .relay-apply:disabled {
-    background: var(--surface-raised); color: var(--dim);
-    border-color: var(--border); cursor: not-allowed;
-  }
-  .relay-apply.dirty {
-    background: var(--yellow); border-color: var(--yellow); color: #fff;
+  .action-btn:hover:not(:disabled) { border-color: var(--brand-light); }
+  .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .action-btn.active-on  { background: var(--green); border-color: var(--green); color: #fff; }
+  .action-btn.active-off { background: var(--brand); border-color: var(--brand); color: var(--surface); }
+  .action-readonly {
+    margin-top: 10px;
+    font-family: var(--mono); font-size: 11px; color: var(--dim);
+    font-style: italic;
   }
 
   /* ── Quick Actions (command shortcuts inside the terminal) ──── */
@@ -909,21 +896,9 @@
         <div class="status-item"><label>Mode</label><span id="valMode">--</span></div>
         <div class="status-item"><label>Uptime</label><span id="valUptime">--</span></div>
         <div class="status-item"><label>Inputs</label><span id="valInputs">--</span></div>
-        <div class="status-item"><label>Relays</label><span id="valRelays">--</span></div>
+        <div class="status-item"><label>Actions</label><span id="valActions">--</span></div>
         <div class="status-item"><label>Device</label><span id="valDevice">--</span></div>
       </div>
-    </div>
-  </div>
-
-  <!-- Alarms (framed mode only) -->
-  <div class="panel" id="alarmPanel" style="display:none">
-    <div class="panel-header" style="cursor:pointer" id="alarmPanelHeader">
-      <span class="panel-title">Alarms</span>
-      <button class="panel-collapse-btn" id="btnAlarmToggle" title="Collapse alarms">▲</button>
-    </div>
-    <div class="panel-body" style="padding:12px">
-      <div id="firingBanner" style="display:none"></div>
-      <div id="alarmLog"></div>
     </div>
   </div>
 
@@ -960,14 +935,26 @@
     </div>
   </div>
 
-  <!-- Relays (framed mode only) -->
-  <div class="panel" id="relayPanel" style="display:none">
-    <div class="panel-header" style="cursor:pointer" id="relayPanelHeader">
-      <span class="panel-title">Relays</span>
-      <button class="panel-collapse-btn" id="btnRelayToggle" title="Collapse relays">▲</button>
+  <!-- Alarms (framed mode only) -->
+  <div class="panel" id="alarmPanel" style="display:none">
+    <div class="panel-header" style="cursor:pointer" id="alarmPanelHeader">
+      <span class="panel-title">Alarms</span>
+      <button class="panel-collapse-btn" id="btnAlarmToggle" title="Collapse alarms">▲</button>
     </div>
     <div class="panel-body" style="padding:12px">
-      <div id="relayList" class="relay-list"></div>
+      <div id="firingBanner" style="display:none"></div>
+      <div id="alarmLog"></div>
+    </div>
+  </div>
+
+  <!-- Actions (framed mode only) -->
+  <div class="panel" id="actionPanel" style="display:none">
+    <div class="panel-header" style="cursor:pointer" id="actionPanelHeader">
+      <span class="panel-title">Actions</span>
+      <button class="panel-collapse-btn" id="btnActionToggle" title="Collapse actions">▲</button>
+    </div>
+    <div class="panel-body" style="padding:12px">
+      <div id="actionList" class="action-list"></div>
     </div>
   </div>
 
@@ -987,7 +974,7 @@
         <button class="btn" data-cmd="VERSION" disabled>VERSION</button>
         <button class="btn" data-cmd="LIST INPUTS" disabled>LIST INPUTS</button>
         <button class="btn" data-cmd="LIST OUTPUTS" disabled>LIST OUTPUTS</button>
-        <button class="btn" data-cmd="RELAY LIST" disabled>RELAY LIST</button>
+        <button class="btn" data-cmd="ACTION LIST" disabled>ACTION LIST</button>
         <button class="btn" data-cmd="CONFIG" disabled>CONFIG</button>
         <button class="btn" data-cmd="RUN" disabled>RUN</button>
         <button class="btn" data-cmd="HELP" disabled>HELP</button>
@@ -1035,7 +1022,8 @@ const PREOBD_CMD_RX      = '4f424400-7072-654f-4244-000000000011';
 const PREOBD_STATUS      = '4f424400-7072-654f-4244-000000000020';
 const PREOBD_EXT_SERVICE = '4f424400-7072-654f-4244-000000000002';
 const PREOBD_CHAR_ALARM  = '4f424400-7072-654f-4244-000000000030';
-const PREOBD_CHAR_RELAY  = '4f424400-7072-654f-4244-000000000031';
+// Char …0031 carries PreobdActionState now (a relay is an Action of type RELAY, §11).
+const PREOBD_CHAR_ACTION = '4f424400-7072-654f-4244-000000000031';
 const NUS_SERVICE        = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 const NUS_RX             = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
 const NUS_TX             = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
@@ -1047,8 +1035,13 @@ const DIS_SERVICE        = 0x180A;
 // Severity / kind constants mirror ble_gatt_defs.h
 const SEV_NORMAL = 0, SEV_WARNING = 1, SEV_ALARM = 2;
 const KIND_CLEAR = 0, KIND_HIGH = 1, KIND_LOW = 2;
-const RELAY_MODE_DISABLED = 0, RELAY_MODE_AUTO_HIGH = 1, RELAY_MODE_AUTO_LOW = 2;
-const RELAY_MODE_MANUAL_ON = 3, RELAY_MODE_MANUAL_OFF = 4;
+// PreobdActionState enums (ble_gatt_defs.h §11).
+const ACTION_TYPE_RELAY = 0, ACTION_TYPE_BEEPER = 1, ACTION_TYPE_LED = 2, ACTION_TYPE_DISPLAY = 3;
+const ACTION_STATE_OFF = 0, ACTION_STATE_ON = 1;
+const ACTION_FAILSAFE_OFF = 0, ACTION_FAILSAFE_ON = 1;
+const ACTION_ID_NONE = 0xFF;            // unconfigured slot / manual (ruleRef)
+const ACTION_BEHAVIOR_INVERT = 0x01;
+const ACTION_CMD_NONE = 0, ACTION_CMD_MANUAL_ON = 1, ACTION_CMD_MANUAL_OFF = 2;
 
 const PROMPT = 'preOBD> ';
 const ENCODER = new TextEncoder();
@@ -1062,19 +1055,18 @@ let txChar = null;     // characteristic to write commands to
 let rxChar = null;     // characteristic that notifies responses
 let statusChar = null; // system status characteristic (preobd mode only)
 let alarmChar = null;  // alarm notify characteristic (enhanced mode only)
-let relayChar = null;  // relay control read/write/notify (enhanced mode only)
+let actionChar = null; // action control read/write/notify (enhanced mode only)
 let framedMode = false; // true when Extended Service is present
 let lastStatusNotifyMs = 0; // ms timestamp of most recent Status notify; 0 = none
 const LIVE_FRESHNESS_MS = 15000; // status notify within this window → Live badge
 let cmdHistory = [];
 let historyIdx = -1;
 
-// Alarm + relay UI state (populated by notifications)
+// Alarm + action UI state (populated by notifications)
 const alarmLog = [];           // newest-first, capped at MAX_ALARM_LOG
 const MAX_ALARM_LOG = 50;
 const firingState = new Map(); // inputIndex -> { severity, kind, value, threshold, since }
-const relayState  = new Map(); // relayIndex -> last-seen PreobdRelayState fields
-const relayEditDirty = new Set(); // relayIndex set of rows with unsaved edits
+const actionState = new Map(); // actionId -> last-seen PreobdActionState fields
 
 // Command queue
 let cmdQueue = [];
@@ -1146,8 +1138,8 @@ async function connect() {
       try {
         const ext = await server.getPrimaryService(PREOBD_EXT_SERVICE);
         try { alarmChar = await ext.getCharacteristic(PREOBD_CHAR_ALARM); } catch(e) { alarmChar = null; }
-        try { relayChar = await ext.getCharacteristic(PREOBD_CHAR_RELAY); } catch(e) { relayChar = null; }
-        framedMode = !!(alarmChar || relayChar);
+        try { actionChar = await ext.getCharacteristic(PREOBD_CHAR_ACTION); } catch(e) { actionChar = null; }
+        framedMode = !!(alarmChar || actionChar);
       } catch(e) {
         framedMode = false;
       }
@@ -1210,26 +1202,26 @@ async function connect() {
       statusPanel.classList.add('hidden');
     }
 
-    // Subscribe to Alarm + Relay notifications + seed the relay panel.
+    // Subscribe to Alarm + Action notifications + seed the action panel.
     if (alarmChar) {
       try {
         await alarmChar.startNotifications();
         alarmChar.addEventListener('characteristicvaluechanged', onAlarmNotify);
       } catch(e) { appendErr('Failed to subscribe to Alarm notifications: ' + e.message); }
     }
-    if (relayChar) {
+    if (actionChar) {
       try {
-        await relayChar.startNotifications();
-        relayChar.addEventListener('characteristicvaluechanged', onRelayNotify);
+        await actionChar.startNotifications();
+        actionChar.addEventListener('characteristicvaluechanged', onActionNotify);
         // Initial read so the panel populates before any state changes.
         try {
-          const r = await relayChar.readValue();
-          applyRelayState(r);
+          const r = await actionChar.readValue();
+          applyActionState(r);
         } catch(e) { /* notify will populate eventually */ }
-      } catch(e) { appendErr('Failed to subscribe to Relay notifications: ' + e.message); }
+      } catch(e) { appendErr('Failed to subscribe to Action notifications: ' + e.message); }
     }
     renderAlarmPanel();
-    renderRelayPanel();
+    renderActionPanel();
 
     fetchInitialState();
 
@@ -1253,17 +1245,16 @@ function onDisconnected() {
   rxChar = null;
   statusChar = null;
   alarmChar = null;
-  relayChar = null;
+  actionChar = null;
   framedMode = false;
   lastStatusNotifyMs = 0;
   document.getElementById('valNrfFw').textContent = 'nRF --';
   updateFramedBadge();
   alarmLog.length = 0;
   firingState.clear();
-  relayState.clear();
-  relayEditDirty.clear();
+  actionState.clear();
   renderAlarmPanel();
-  renderRelayPanel();
+  renderActionPanel();
   mode = null;
   // Reject any in-flight or queued commands so awaiting frames throw
   if (pendingReject) {
@@ -1387,7 +1378,7 @@ function applySystemStatus(val) {
 
   const sysMode = val.getUint8(5);
   const inputs = val.getUint8(6);
-  const relays = val.getUint8(7);
+  const actions = val.getUint8(7);  // StatusBroadcaster count repointed to Actions (§11)
   const uptime = val.getUint32(8, true);
   const major = val.getUint8(12);
   const minor = val.getUint8(13);
@@ -1402,7 +1393,7 @@ function applySystemStatus(val) {
   document.getElementById('valMode').textContent = sysMode === 0 ? 'CONFIG' : 'RUN';
   document.getElementById('valMode').style.color = sysMode === 0 ? 'var(--yellow)' : 'var(--brand)';
   document.getElementById('valInputs').textContent = inputs;
-  document.getElementById('valRelays').textContent = relays;
+  document.getElementById('valActions').textContent = actions;
   document.getElementById('valUptime').textContent = formatUptime(uptime);
   document.getElementById('valDevice').textContent = name || '--';
 
@@ -1541,8 +1532,13 @@ function updateStatusHealth() {
     '</div>' +
     '<button class="health-review" id="healthReview">Review</button>';
   const btn = document.getElementById('healthReview');
-  if (btn) btn.onclick = () =>
+  if (btn) btn.onclick = () => {
+    // Expand the Alarms panel first — scrolling to a collapsed (header-only)
+    // panel lands the viewport on whatever sits below it, so the user never
+    // sees the alarm log they asked to review.
+    setPanelCollapsed('alarmPanel', 'btnAlarmToggle', 'alarms', false);
     document.getElementById('alarmPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 }
 
 function renderAlarmPanel() {
@@ -1609,227 +1605,154 @@ setInterval(() => {
   if (alarmChar && (alarmLog.length || firingState.size)) renderAlarmPanel();
 }, 1000);
 
-// --- Relays ---
+// --- Actions ---
+// Char …0031 pushes a 16-byte PreobdActionState per Action on every state/config
+// change (a relay is an Action of type RELAY). Actions carry no thresholds — those
+// live on Rules now — so the only writable field is `command` (MANUAL_ON/OFF),
+// honored by the firmware only for manual (ruleRef == NONE) Actions. Rule-driven
+// Actions are read-only status here.
 
-function applyRelayState(val) {
+function applyActionState(val) {
   if (!val || val.byteLength < 16) return;
-  const relayIndex   = val.getUint8(1);
-  const mode         = val.getUint8(2);
-  const state        = val.getUint8(3);
-  const inputIndex   = val.getUint8(4);
-  const outputPin    = val.getUint8(5);
-  const sequence     = val.getUint16(6, true);
-  const thresholdOn  = val.getFloat32(8, true);
-  const thresholdOff = val.getFloat32(12, true);
+  const actionId = val.getUint8(1);
+  const type     = val.getUint8(2);
+  const state    = val.getUint8(3);
+  const target   = val.getUint8(4);
+  const ruleRef  = val.getUint8(5);
+  const behavior = val.getUint8(8);
+  const failsafe = val.getUint8(9);
 
-  // Skip unconfigured/disabled slots. The broadcaster walks all MAX_RELAYS
-  // positions so we filter here rather than there. `outputPin === 0xFF` is
-  // the EEPROM "unassigned" sentinel; on fresh boards it may instead be 0,
-  // so we also hide rows whose mode is DISABLED — those are no-ops on the
-  // host's relay loop either way.
-  const unconfigured = (outputPin === 0xFF) || (mode === RELAY_MODE_DISABLED);
-  if (unconfigured) {
-    relayState.delete(relayIndex);
+  // The broadcaster walks all MAX_ACTIONS slots; an unconfigured slot reports
+  // actionId == 0xFF (ACTION_ID_NONE). Filter those out here.
+  if (actionId === ACTION_ID_NONE) {
+    actionState.delete(actionId);
   } else {
-    relayState.set(relayIndex, { mode, state, inputIndex, outputPin, thresholdOn, thresholdOff });
+    actionState.set(actionId, { type, state, target, ruleRef, behavior, failsafe });
   }
-  renderRelayPanel();
+  renderActionPanel();
 }
 
-function onRelayNotify(event) {
-  applyRelayState(event.target.value);
+function onActionNotify(event) {
+  applyActionState(event.target.value);
 }
 
-function modeLabel(m) {
-  switch (m) {
-    case RELAY_MODE_DISABLED:   return 'DISABLED';
-    case RELAY_MODE_AUTO_HIGH:  return 'AUTO_HIGH';
-    case RELAY_MODE_AUTO_LOW:   return 'AUTO_LOW';
-    case RELAY_MODE_MANUAL_ON:  return 'MANUAL_ON';
-    case RELAY_MODE_MANUAL_OFF: return 'MANUAL_OFF';
-    default: return 'MODE_' + m;
+function actionTypeLabel(t) {
+  switch (t) {
+    case ACTION_TYPE_RELAY:   return 'RELAY';
+    case ACTION_TYPE_BEEPER:  return 'BEEPER';
+    case ACTION_TYPE_LED:     return 'LED';
+    case ACTION_TYPE_DISPLAY: return 'DISPLAY';
+    default: return 'TYPE_' + t;
   }
 }
 
-function renderRelayPanel() {
-  const panel = document.getElementById('relayPanel');
+// Write a manual command (MANUAL_ON / MANUAL_OFF) for one Action. Only the
+// `command` byte is writable; all other fields read back as set by the host.
+async function writeActionCommand(id, cmd) {
+  const buf = new ArrayBuffer(16);
+  const dv = new DataView(buf);
+  dv.setUint8(0, 1);     // protocolVersion
+  dv.setUint8(1, id);    // actionId — selects the target Action
+  dv.setUint8(10, cmd);  // command (the only writable field)
+  await actionChar.writeValueWithResponse(buf);
+  // Wait for the confirmation notify to redraw with the truth.
+}
+
+function renderActionPanel() {
+  const panel = document.getElementById('actionPanel');
   if (!panel) return;
-  // Stay visible whenever the device exposes the enhanced feature set.
-  // Relays are a standard feature; render an empty state when none are
-  // configured rather than hiding the panel.
+  // Stay visible whenever the device exposes the enhanced feature set; render
+  // an empty state rather than hiding when none are configured.
   if (!framedMode) {
     panel.style.display = 'none';
     return;
   }
   panel.style.display = '';
-  const list = document.getElementById('relayList');
+  const list = document.getElementById('actionList');
 
-  if (!relayChar) {
-    list.innerHTML = '<div class="empty-row">Relay channel not available on this device.</div>';
+  if (!actionChar) {
+    list.innerHTML = '<div class="empty-row">Action channel not available on this device.</div>';
     return;
   }
-  if (relayState.size === 0) {
-    list.innerHTML = '<div class="empty-row">No relays configured. ' +
-                     'Use the <code>RELAY</code> CLI command to assign a pin.</div>';
+  if (actionState.size === 0) {
+    list.innerHTML = '<div class="empty-row">No actions configured. ' +
+                     'Use the <code>ACTION</code> CLI command to add one.</div>';
     return;
   }
 
-  // Snapshot in-progress user edits BEFORE we blow away the DOM. Any row
-  // that is either dirty (Apply pending) or currently focused must have its
-  // control values + focus restored after the re-render, otherwise an
-  // inbound confirmation notify would clobber a second edit the user
-  // started before the round-trip completed.
-  const liveEdits = new Map();
-  for (const card of list.querySelectorAll('.relay-card')) {
-    const idx = parseInt(card.dataset.relay, 10);
-    const focusedEl = card.contains(document.activeElement) ? document.activeElement : null;
-    if (!relayEditDirty.has(idx) && !focusedEl) continue;
-    const modeSel = card.querySelector('.relay-mode');
-    const onIn    = card.querySelector('.relay-thr-on');
-    const offIn   = card.querySelector('.relay-thr-off');
-    liveEdits.set(idx, {
-      mode: modeSel ? modeSel.value : null,
-      thrOn: onIn ? onIn.value : null,
-      thrOff: offIn ? offIn.value : null,
-      focusClass: focusedEl
-          ? (focusedEl.classList.contains('relay-mode')   ? 'relay-mode'
-            : focusedEl.classList.contains('relay-thr-on')  ? 'relay-thr-on'
-            : focusedEl.classList.contains('relay-thr-off') ? 'relay-thr-off'
-            : null)
-          : null,
-      caret: (focusedEl && typeof focusedEl.selectionStart === 'number')
-          ? [focusedEl.selectionStart, focusedEl.selectionEnd] : null,
-    });
-    // Focused-without-dirty (user is mid-edit but hasn't tripped an
-    // input event yet) still counts as in-progress; mark dirty so the
-    // Apply button rebuilds in the enabled state.
-    if (focusedEl) relayEditDirty.add(idx);
-  }
-
-  // Sort by relay index for stable ordering.
-  const entries = [...relayState.entries()].sort((a, b) => a[0] - b[0]);
+  // Sort by action id for stable ordering.
+  const entries = [...actionState.entries()].sort((a, b) => a[0] - b[0]);
   let html = '';
-  for (const [idx, r] of entries) {
-    const onState = r.state === 1;
-    const isAuto = r.mode === RELAY_MODE_AUTO_HIGH || r.mode === RELAY_MODE_AUTO_LOW;
-    const dirty = relayEditDirty.has(idx);
-    const ctx = (r.inputIndex !== 0xFF)
-        ? 'bound to ' + escHtml(inputLabel(r.inputIndex))
-        : 'unbound · pin ' + r.outputPin;
+  for (const [id, a] of entries) {
+    const onState = a.state === ACTION_STATE_ON;
+    const manual = a.ruleRef === ACTION_ID_NONE;
+    const inverted = (a.behavior & ACTION_BEHAVIOR_INVERT) !== 0;
+    const isRelay = a.type === ACTION_TYPE_RELAY;
+
+    let ctx = actionTypeLabel(a.type) + ' · pin ' + a.target;
+    if (inverted) ctx += ' · INV';
+
+    let meta = '<span>Source: ' + (manual ? 'manual' : 'Rule #' + a.ruleRef) + '</span>';
+    if (isRelay) {
+      const fsOn = a.failsafe === ACTION_FAILSAFE_ON;
+      meta += '<span' + (fsOn ? ' class="failsafe-on"' : '') +
+              '>Failsafe: ' + (fsOn ? 'ON' : 'OFF') + '</span>';
+    }
+
+    let controls;
+    if (manual) {
+      controls =
+        '<div class="action-controls">' +
+          '<button class="action-btn act-on' + (onState ? ' active-on' : '') + '">Turn ON</button>' +
+          '<button class="action-btn act-off' + (onState ? '' : ' active-off') + '">Turn OFF</button>' +
+        '</div>';
+    } else {
+      controls = '<div class="action-readonly">Driven by Rule #' + a.ruleRef +
+                 ' — unlink with <code>ACTION ' + id +
+                 ' RULE NONE</code> for manual control</div>';
+    }
+
     html +=
-      '<div class="relay-card" data-relay="' + idx + '">' +
-        '<div class="relay-head">' +
-          '<span class="relay-title">Relay ' + idx + '</span>' +
-          '<span class="relay-context">' + ctx + '</span>' +
-          '<span class="relay-pill ' + (onState ? 'on' : 'off') + '">' +
+      '<div class="action-card" data-action="' + id + '">' +
+        '<div class="action-head">' +
+          '<span class="action-title">Action ' + id + '</span>' +
+          '<span class="action-context">' + escHtml(ctx) + '</span>' +
+          '<span class="action-pill ' + (onState ? 'on' : 'off') + '">' +
             (onState ? '● ON' : '○ OFF') +
           '</span>' +
         '</div>' +
-        '<div class="relay-controls">' +
-          '<div>' +
-            '<label>Mode</label>' +
-            '<select class="relay-mode">' +
-              [0,1,2,3,4].map(m =>
-                '<option value="' + m + '"' + (m === r.mode ? ' selected' : '') + '>' +
-                modeLabel(m) + '</option>'
-              ).join('') +
-            '</select>' +
-          '</div>' +
-          '<div>' +
-            '<label>Threshold ON</label>' +
-            '<input type="number" step="0.1" class="relay-thr-on" ' +
-              'value="' + (Number.isFinite(r.thresholdOn) ? r.thresholdOn : 0) + '" ' +
-              (isAuto ? '' : 'disabled') + '>' +
-          '</div>' +
-          '<div>' +
-            '<label>Threshold OFF</label>' +
-            '<input type="number" step="0.1" class="relay-thr-off" ' +
-              'value="' + (Number.isFinite(r.thresholdOff) ? r.thresholdOff : 0) + '" ' +
-              (isAuto ? '' : 'disabled') + '>' +
-          '</div>' +
-          '<button class="relay-apply' + (dirty ? ' dirty' : '') + '"' +
-            (dirty ? '' : ' disabled') + '>Apply</button>' +
-        '</div>' +
+        '<div class="action-meta">' + meta + '</div>' +
+        controls +
       '</div>';
   }
   list.innerHTML = html;
 
-  // Restore in-progress edits + focus + caret position before wiring events.
-  for (const [idx, ed] of liveEdits) {
-    const card = list.querySelector('.relay-card[data-relay="' + idx + '"]');
-    if (!card) continue;
-    const modeSel = card.querySelector('.relay-mode');
-    const onIn    = card.querySelector('.relay-thr-on');
-    const offIn   = card.querySelector('.relay-thr-off');
-    if (modeSel && ed.mode !== null)  modeSel.value = ed.mode;
-    if (onIn    && ed.thrOn !== null) onIn.value    = ed.thrOn;
-    if (offIn   && ed.thrOff !== null) offIn.value  = ed.thrOff;
-    // Thresholds follow current mode, not the inbound notify's mode.
-    const newIsAuto = modeSel && (
-        parseInt(modeSel.value, 10) === RELAY_MODE_AUTO_HIGH ||
-        parseInt(modeSel.value, 10) === RELAY_MODE_AUTO_LOW);
-    if (onIn)  onIn.disabled  = !newIsAuto;
-    if (offIn) offIn.disabled = !newIsAuto;
-    const apply = card.querySelector('.relay-apply');
-    if (apply) {
-      apply.classList.add('dirty');
-      apply.disabled = false;
-    }
-    if (ed.focusClass) {
-      const target = card.querySelector('.' + ed.focusClass);
-      if (target) {
-        target.focus();
-        if (ed.caret && typeof target.setSelectionRange === 'function') {
-          try { target.setSelectionRange(ed.caret[0], ed.caret[1]); } catch (e) {}
-        }
-      }
-    }
-  }
-
-  // Wire per-row events. Doing it after insertion keeps the template literal
-  // free of inline handlers (easier to escape correctly).
-  for (const card of list.querySelectorAll('.relay-card')) {
-    const idx = parseInt(card.dataset.relay, 10);
-    const modeSel = card.querySelector('.relay-mode');
-    const onIn    = card.querySelector('.relay-thr-on');
-    const offIn   = card.querySelector('.relay-thr-off');
-    const apply   = card.querySelector('.relay-apply');
-    const markDirty = () => {
-      relayEditDirty.add(idx);
-      apply.classList.add('dirty');
-      apply.disabled = false;
-      // Toggle threshold enable state based on the new mode selection.
-      const newIsAuto = parseInt(modeSel.value, 10) === RELAY_MODE_AUTO_HIGH ||
-                        parseInt(modeSel.value, 10) === RELAY_MODE_AUTO_LOW;
-      onIn.disabled = !newIsAuto;
-      offIn.disabled = !newIsAuto;
-    };
-    modeSel.addEventListener('change', markDirty);
-    onIn.addEventListener('input', markDirty);
-    offIn.addEventListener('input', markDirty);
-    apply.addEventListener('click', async () => {
-      apply.disabled = true;
+  // Wire manual ON/OFF buttons. Doing it after insertion keeps the template
+  // literal free of inline handlers.
+  for (const card of list.querySelectorAll('.action-card')) {
+    const id = parseInt(card.dataset.action, 10);
+    const onBtn  = card.querySelector('.act-on');
+    const offBtn = card.querySelector('.act-off');
+    if (!onBtn || !offBtn) continue;  // rule-driven card: no buttons
+    const send = async (cmd) => {
+      onBtn.disabled = true;
+      offBtn.disabled = true;
       try {
-        const buf = new ArrayBuffer(16);
-        const dv = new DataView(buf);
-        dv.setUint8(0, 1);                              // protocolVersion
-        dv.setUint8(1, idx);                            // relayIndex
-        dv.setUint8(2, parseInt(modeSel.value, 10));    // mode
-        dv.setUint8(3, 0);                              // state (read-only)
-        dv.setUint8(4, 0xFF);                           // inputIndex (read-only via this path)
-        dv.setUint8(5, 0xFF);                           // outputPin (read-only)
-        dv.setUint16(6, 0, true);                       // sequence
-        dv.setFloat32(8, parseFloat(onIn.value) || 0, true);
-        dv.setFloat32(12, parseFloat(offIn.value) || 0, true);
-        await relayChar.writeValueWithResponse(buf);
-        relayEditDirty.delete(idx);
-        apply.classList.remove('dirty');
-        // Wait for the confirmation notify to redraw with the truth.
+        await writeActionCommand(id, cmd);
+        // The confirmation notify normally redraws this row (replacing these
+        // buttons). If it never lands — a dropped notify or a degraded link —
+        // re-enable after a short fallback so the control isn't stuck disabled.
+        // Once a notify does redraw, these refs are detached, so this is a
+        // harmless no-op in the happy path.
+        setTimeout(() => { onBtn.disabled = false; offBtn.disabled = false; }, 3000);
       } catch (e) {
-        appendErr('Relay write failed: ' + e.message);
-        apply.disabled = false;
+        appendErr('Action write failed: ' + e.message);
+        onBtn.disabled = false;
+        offBtn.disabled = false;
       }
-    });
+    };
+    onBtn.addEventListener('click', () => send(ACTION_CMD_MANUAL_ON));
+    offBtn.addEventListener('click', () => send(ACTION_CMD_MANUAL_OFF));
   }
 }
 
@@ -2572,7 +2495,15 @@ document.getElementById('terminalHeader').addEventListener('click', () => {
   btn.title = collapsed ? 'Expand terminal' : 'Collapse terminal';
 });
 
-// Collapse handlers for alarm + relay panels — same pattern as terminal.
+// Collapse handlers for alarm + action panels — same pattern as terminal.
+function setPanelCollapsed(panelId, btnId, label, collapsed) {
+  const panel = document.getElementById(panelId);
+  const btn = document.getElementById(btnId);
+  if (!panel || !btn) return;
+  panel.classList.toggle('collapsed', collapsed);
+  btn.textContent = collapsed ? '▼' : '▲';
+  btn.title = (collapsed ? 'Expand ' : 'Collapse ') + label;
+}
 function wirePanelCollapse(headerId, panelId, btnId, label) {
   const header = document.getElementById(headerId);
   if (!header) return;
@@ -2580,14 +2511,11 @@ function wirePanelCollapse(headerId, panelId, btnId, label) {
     // Ignore clicks on interactive children so dropdowns/inputs still work.
     if (e.target.closest('button, select, input, a, label')) return;
     const panel = document.getElementById(panelId);
-    const btn = document.getElementById(btnId);
-    const collapsed = panel.classList.toggle('collapsed');
-    btn.textContent = collapsed ? '▼' : '▲';
-    btn.title = (collapsed ? 'Expand ' : 'Collapse ') + label;
+    setPanelCollapsed(panelId, btnId, label, !panel.classList.contains('collapsed'));
   });
 }
 wirePanelCollapse('alarmPanelHeader', 'alarmPanel', 'btnAlarmToggle', 'alarms');
-wirePanelCollapse('relayPanelHeader', 'relayPanel', 'btnRelayToggle', 'relays');
+wirePanelCollapse('actionPanelHeader', 'actionPanel', 'btnActionToggle', 'actions');
 
 // --- Add / Remove ---
 
