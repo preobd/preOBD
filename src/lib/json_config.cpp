@@ -230,8 +230,12 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
     // Output modules
     JsonObject outputs = systemObj["outputs"].to<JsonObject>();
 
-    const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm", "relay", "elm327"};
+    // OUTPUT_RELAY (index 5) is retired — a relay is now a control-engine Action,
+    // not an output module. Its enum/EEPROM slot stays for index stability but is
+    // no longer surfaced in config JSON (nullptr name → skipped below).
+    const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm", nullptr, "elm327"};
     for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
+        if (outputNames[i] == nullptr) continue;  // retired slot (OUTPUT_RELAY)
         JsonObject output = outputs[outputNames[i]].to<JsonObject>();
         output["enabled"] = (bool)systemConfig.outputEnabled[i];
         output["interval"] = systemConfig.outputInterval[i];
@@ -540,9 +544,11 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
     // Output modules
     if (systemObj["outputs"].isNull() == false) {
         JsonObject outputs = systemObj["outputs"];
-        const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm", "relay", "elm327"};
+        // OUTPUT_RELAY (index 5) retired — see exportSystemConfigToJSON.
+        const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm", nullptr, "elm327"};
 
         for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
+            if (outputNames[i] == nullptr) continue;  // retired slot (OUTPUT_RELAY)
             if (outputs[outputNames[i]].isNull() == false) {
                 JsonObject output = outputs[outputNames[i]];
                 systemConfig.outputEnabled[i] = output["enabled"];

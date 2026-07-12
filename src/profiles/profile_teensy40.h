@@ -31,8 +31,8 @@
 //#define ENABLE_SD_LOGGING    // no SD hardware on this board
 #define ENABLE_LCD             1
 #define ENABLE_ALARMS          1    // software alarms active; no buzzer wired (ALARMS_PIN absent)
-//#define ENABLE_LED           // not wired
-//#define ENABLE_TEST_MODE     // not needed
+#define ENABLE_LED             1
+#define ENABLE_TEST_MODE       1
 #define ENABLE_BME280          1
 #define ENABLE_RELAY_OUTPUT    1
 #define MAX_RELAYS             2
@@ -44,7 +44,10 @@
 // SUPPORTS_SD not defined — no SD hardware on this board
 // SD_PIN not defined — saveConfigToSD / loadConfigFromSD are not compiled in
 // RGB_PIN_* not defined — LED disabled
-
+#define ALARMS_PIN             3
+#define RGB_PIN_R              6
+#define RGB_PIN_G              5
+#define RGB_PIN_B              4
 
 // ===== SIZING =====
 #define MAX_INPUTS              40
