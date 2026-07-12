@@ -49,8 +49,10 @@
 // Version 6: shared config-store arena — header now packs inputs + control-engine
 //            Rule/Action tables in one front-growing region (#296). Rule/Action
 //            moved OUT of SystemConfig; clean reset from v5.
+// Version 7: Action record gained a char name[16] operator label (§11.8); struct
+//            size changed, so clean reset from v6.
 // =============================================================================
-#define EEPROM_VERSION 6
+#define EEPROM_VERSION 7
 
 // =============================================================================
 // Helper functions (defined in version.cpp)

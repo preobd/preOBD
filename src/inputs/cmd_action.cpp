@@ -1,12 +1,13 @@
 /*
  * cmd_action.cpp - ACTION command (control engine: actuators driven by Rules)
  *
- * Manages the persisted Action table (actions[]). Actions are
- * managed by stable id — no names (§11.8). v1 implements ACT_RELAY (a generic
+ * Manages the persisted Action table (actions[]). Actions are managed by stable
+ * id, with an optional operator label (§11.8). v1 implements ACT_RELAY (a generic
  * GPIO actuator, the relay successor); other types are reserved.
  *
  *   ACTION ADD RELAY <target> [FAILSAFE ON|OFF] [INVERT]
  *   ACTION <id> RULE <ruleId|NONE>     link to a Rule (or unlink → manual)
+ *   ACTION <id> NAME <text>            set operator label (e.g. "Cooling Fan")
  *   ACTION <id> ON|OFF                 manual override (manual-only actions)
  *   ACTION LIST | ACTION <id> | ACTION DEL <id>
  */
@@ -44,6 +45,11 @@ static FLASHMEM void printActionRow(int i) {
     const Action& a = actions[i];
     msg.control.print(F("  #"));
     msg.control.print(a.id);
+    if (a.name[0] != '\0') {
+        msg.control.print(F(" \""));
+        msg.control.print(a.name);
+        msg.control.print('"');
+    }
     msg.control.print(F("  "));
     msg.control.print(actionTypeName(a.type));
     msg.control.print(F(" pin"));
@@ -151,6 +157,7 @@ static FLASHMEM int actionAdd(int argc, const char* const* argv) {
     a.ruleRef = CONTROL_ID_NONE;   // manual-only until linked
     a.behavior = behavior;
     a.failsafe = failsafe;
+    memset(a.name, 0, sizeof(a.name));  // unnamed; a reused slot may hold a stale label
     controlActionConfigurePin(slot);   // pinMode OUTPUT + de-assert
     controlSyncActionPins();           // claim the target pin in the registry
 
@@ -215,6 +222,20 @@ static FLASHMEM int actionManual(uint8_t id, bool on) {
     return 0;
 }
 
+static FLASHMEM int actionSetName(uint8_t id, const char* name) {
+    if (!controlActionSetName(id, name)) {
+        msg.control.print(F("ERROR: no action #"));
+        msg.control.println(id);
+        return 1;
+    }
+    msg.control.print(F("Action #"));
+    msg.control.print(id);
+    msg.control.print(F(" named \""));
+    msg.control.print(name);
+    msg.control.println(F("\". SAVE to persist."));
+    return 0;
+}
+
 static FLASHMEM int actionDel(uint8_t id) {
     int slot = controlActionSlot(id);
     if (slot < 0) {
@@ -250,7 +271,7 @@ static FLASHMEM int actionDel(uint8_t id) {
 FLASHMEM int cmd_action(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: ACTION requires a subcommand"));
-        msg.control.println(F("  Usage: ACTION LIST | ADD RELAY <target> ... | <id> RULE <ruleId> | <id> ON|OFF | DEL <id>"));
+        msg.control.println(F("  Usage: ACTION LIST | ADD RELAY <target> ... | <id> RULE <ruleId> | <id> NAME <text> | <id> ON|OFF | DEL <id>"));
         return 1;
     }
 
@@ -294,6 +315,14 @@ FLASHMEM int cmd_action(int argc, const char* const* argv) {
         }
         if (argc < 4) { msg.control.println(F("ERROR: usage: ACTION <id> RULE <ruleId|NONE>")); return 1; }
         return actionLink(id, argv[3]);
+    }
+    if (streq_P(argv[2], PSTR("NAME"))) {       // operator label — config-only
+        if (isInRunMode()) {
+            msg.control.println(F("ERROR: ACTION <id> NAME is config-only; enter CONFIG mode first"));
+            return 1;
+        }
+        if (argc < 4) { msg.control.println(F("ERROR: usage: ACTION <id> NAME <text>")); return 1; }
+        return actionSetName(id, argv[3]);
     }
     if (streq_P(argv[2], PSTR("ON")))  return actionManual(id, true);   // RUN-allowed
     if (streq_P(argv[2], PSTR("OFF"))) return actionManual(id, false);  // RUN-allowed

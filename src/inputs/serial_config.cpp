@@ -95,50 +95,39 @@ static void cli_command_handler(EmbeddedCli* embeddedCli, char* args, void* cont
     dispatchCommand(argc, argv);
 }
 
-// Fallback for unrecognized commands - try case-insensitive match
+// Fallback for unrecognized commands (typically a lowercase command name that
+// embedded-cli's case-sensitive binding match missed). We uppercase only the
+// command NAME so dispatchCommand can match it, then tokenize the args exactly
+// like the bound-command path (cli_command_handler): quote-aware and
+// case-PRESERVING. Subcommand keywords still match case-insensitively via
+// streq_P and app/sensor names via case-insensitive hashing, so free-text
+// values (e.g. an Action's NAME, "Cooling Fan") must keep their original case
+// and spaces — the old hand-rolled space-splitter that uppercased every token
+// corrupted them (dropped words at spaces, forced ALL-CAPS).
 static void cli_on_command(EmbeddedCli* embeddedCli, CliCommand* command) {
     (void)embeddedCli;
 
-    // embedded-cli is case-sensitive, but users expect case-insensitive commands
-    // Convert command name to uppercase
+    // embedded-cli is case-sensitive on command names; users expect otherwise.
     char cmdUpper[32];
     strncpy(cmdUpper, command->name, sizeof(cmdUpper) - 1);
     cmdUpper[sizeof(cmdUpper) - 1] = '\0';
     for (char* p = cmdUpper; *p; p++) *p = toupper(*p);
 
-    // Build argc/argv for dispatch; limits sourced from per-env profile.
     const char* argv[CLI_MAX_ARGS];
-    static char argBuffers[CLI_MAX_ARGS - 1][CLI_MAX_ARG_LEN];
     int argc = 1;
     argv[0] = cmdUpper;
 
-    // Tokenize args if present and convert to uppercase
+    // command->args points into embedded-cli's cmdBuffer, which reserves two
+    // trailing NULs — the writable slack embeddedCliTokenizeArgs requires — so
+    // we tokenize in place, identical to the bound-command path (quotes and
+    // escapes honored). Unbound commands arrive here with args NOT yet tokenized.
     if (command->args != nullptr && *command->args != '\0') {
-        // Manually tokenize the args string (space-delimited)
-        char* argsCopy = (char*)command->args;
-
-        // Parse space-separated tokens
-        int bufIdx = 0;
-        for (char* p = argsCopy; *p && argc < CLI_MAX_ARGS && bufIdx < (CLI_MAX_ARGS - 1); ) {
-            // Skip leading spaces
-            while (*p == ' ' || *p == '\t') p++;
-            if (*p == '\0') break;
-
-            // Find end of token
-            char* tokenStart = p;
-            while (*p && *p != ' ' && *p != '\t') p++;
-
-            // Copy token to buffer and uppercase
-            size_t tokenLen = p - tokenStart;
-            if (tokenLen >= (size_t)CLI_MAX_ARG_LEN) {
-                tokenLen = CLI_MAX_ARG_LEN - 1;
-            }
-            strncpy(argBuffers[bufIdx], tokenStart, tokenLen);
-            argBuffers[bufIdx][tokenLen] = '\0';
-            for (char* q = argBuffers[bufIdx]; *q; q++) *q = toupper(*q);
-
-            argv[argc++] = argBuffers[bufIdx];
-            bufIdx++;
+        char* args = (char*)command->args;
+        embeddedCliTokenizeArgs(args);
+        uint16_t tokenCount = embeddedCliGetTokenCount(args);
+        for (uint16_t i = 0; i < tokenCount && argc < CLI_MAX_ARGS; i++) {
+            const char* token = embeddedCliGetToken(args, i + 1);  // 1-indexed
+            if (token != nullptr) argv[argc++] = token;
         }
     }
 

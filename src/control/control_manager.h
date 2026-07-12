@@ -127,6 +127,7 @@ uint8_t controlActionAllocId();
 uint8_t controlActionCount();
 void    controlActionConfigurePin(int slot);   // pinMode target OUTPUT + de-assert
 bool    controlActionSetManual(uint8_t id, bool on);  // ACTION <id> ON|OFF
+bool    controlActionSetName(uint8_t id, const char* name);  // ACTION <id> NAME <text>
 
 #endif // ENABLE_CONTROL_ENGINE
 #endif // CONTROL_MANAGER_H

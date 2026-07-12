@@ -6,6 +6,7 @@
 
 #if ENABLE_CONTROL_ENGINE
 
+#include <string.h>
 #include <math.h>
 #include "../lib/system_config.h"
 #include "../inputs/input_manager.h"
@@ -420,6 +421,15 @@ bool controlActionSetManual(uint8_t id, bool on) {
     int slot = controlActionSlot(id);
     if (slot < 0) return false;
     g_actionManual[slot] = on;
+    return true;
+}
+
+bool controlActionSetName(uint8_t id, const char* name) {
+    int slot = controlActionSlot(id);
+    if (slot < 0) return false;
+    char* dst = actions[slot].name;
+    strncpy(dst, name ? name : "", sizeof(actions[slot].name) - 1);
+    dst[sizeof(actions[slot].name) - 1] = '\0';
     return true;
 }
 

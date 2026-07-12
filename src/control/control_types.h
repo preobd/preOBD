@@ -15,8 +15,8 @@
  *
  * Authoritative design: ARCHITECTURE.md §11. Key locked decisions reflected here:
  *   - v1 is N:1 (an Action is triggered by ≤1 Rule; a Rule fans out to many).
- *   - Records are managed by a stable `id`, NOT array slot and NOT a name —
- *     there is deliberately no name field (ARCHITECTURE §11.8).
+ *   - Records are managed by a stable `id`, NOT array slot. Rules carry no name;
+ *     Actions carry an optional operator label (`name`) — see §11.8.
  *   - Rule.sourceInput is the input PIN (the existing stable input identity),
  *     not an inputs[] slot (§8 Q9 axis A).
  *   - RuleState / RuleContext are the lift-and-rename target of the existing
@@ -141,8 +141,12 @@ enum ActionFailsafe : uint8_t {
 
 // ============================================================================
 // Persisted records (EEPROM-resident; stored in the shared config-store arena,
-// input_manager.cpp). No name fields: managed by stable `id`; LIST renders
-// ground truth from the source input's name + condition + severity (§11.8).
+// input_manager.cpp). Records are managed by a stable `id`, NOT array slot.
+// Rules carry no name — LIST renders ground truth from the source input's name +
+// condition + severity. Actions DO carry an optional human-readable `name` (an
+// actuator like "Cooling Fan" wants a label that travels to every surface: CLI,
+// JSON dump, mobile app), affordable now that the shared arena packs records by
+// used count rather than the old fixed-array-in-SystemConfig layout (§11.8).
 // ============================================================================
 
 // ~21–24 B depending on platform alignment.
@@ -159,7 +163,7 @@ struct Rule {
     uint8_t  flags;         // RULE_FLAG_*
 };
 
-// ~6 B.
+// ~22 B.
 struct Action {
     uint8_t id;         // stable per-record id; CONTROL_ID_NONE = empty slot
     uint8_t type;       // ActionType
@@ -167,6 +171,7 @@ struct Action {
     uint8_t ruleRef;    // Rule.id that triggers it; CONTROL_ID_NONE = manual-only (N:1 in v1)
     uint8_t behavior;   // ACT_BEHAVIOR_*
     uint8_t failsafe;   // ActionFailsafe (RELAY only; ignored by other types in v1)
+    char    name[16];   // optional operator label (e.g. "Cooling Fan"); "" = unnamed
 };
 
 // ============================================================================

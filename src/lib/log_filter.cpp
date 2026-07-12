@@ -122,8 +122,11 @@ uint8_t getTagID(const char* tagName) {
         // Read tag name from PROGMEM
         const char* nameInProgmem = (const char*)pgm_read_ptr(&LOG_TAG_NAMES[i]);
 
-        // Compare strings (case-sensitive for now)
-        if (strcmp_P(tagName, nameInProgmem) == 0) {
+        // Case-insensitive, like every other CLI lookup (LOG LEVEL above,
+        // streq_P subcommands, hashed app/sensor names). Tag matching only
+        // ever worked lowercase because the CLI fallback used to uppercase
+        // args; `LOG TAG sd` on the case-preserving path must match directly.
+        if (strcasecmp_P(tagName, nameInProgmem) == 0) {
             return i;
         }
     }

@@ -105,6 +105,7 @@ void controlExportAction(JsonObject obj, const Action& a) {
     obj["type"]   = nameOf(ACTION_TYPES, a.type);
     obj["target"] = a.target;
     if (a.ruleRef != CONTROL_ID_NONE) obj["rule"] = a.ruleRef;  // omit = manual
+    if (a.name[0] != '\0') obj["name"] = a.name;                // omit = unnamed
     obj["invert"] = (a.behavior & ACT_BEHAVIOR_INVERT) != 0;
     if (a.type == ACT_RELAY)
         obj["failsafe"] = (a.failsafe == ACT_FAILSAFE_ON) ? "ON" : "OFF";
@@ -128,6 +129,9 @@ bool controlImportAction(JsonObjectConst obj, Action& out) {
     out.behavior = (obj["invert"] | false) ? ACT_BEHAVIOR_INVERT : 0;
     const char* fs = obj["failsafe"] | "OFF";
     out.failsafe = (strcasecmp(fs, "ON") == 0) ? ACT_FAILSAFE_ON : ACT_FAILSAFE_OFF;
+    const char* nm = obj["name"] | "";  // missing/null "name" = unnamed
+    strncpy(out.name, nm, sizeof(out.name) - 1);
+    out.name[sizeof(out.name) - 1] = '\0';
     return true;
 }
 
