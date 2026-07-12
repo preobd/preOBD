@@ -14,7 +14,7 @@
 
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
-#define SYSTEM_CONFIG_VERSION 12        // Increment when struct changes (v12: control engine — Rule/Action tables; clean reset from v11, see CONTROL_ENGINE_PLAN §3)
+#define SYSTEM_CONFIG_VERSION 13        // Increment when struct changes (v13: Rule/Action tables moved OUT to the front config-store arena, #296; clean reset from v12)
 #define SYSTEM_CONFIG_SIZE sizeof(SystemConfig)
 
 // Total EEPROM bytes available on this platform.
@@ -96,13 +96,11 @@ struct SystemConfig {
         uint8_t reserved_router[6];  // Future expansion
     } router;
 
-#if ENABLE_CONTROL_ENGINE
-    // Control Engine tables - NEW in v12 (ARCHITECTURE §11, CONTROL_ENGINE_PLAN).
-    // Replace the former RelayConfig relays[] (a relay is now an Action of type
-    // RELAY, §11). Managed by stable id; CONTROL_ID_NONE = empty slot.
-    Rule   rules[MAX_RULES];
-    Action actions[MAX_ACTIONS];
-#endif
+    // NB (v13): the control-engine Rule/Action tables are NO LONGER embedded
+    // here. They are standalone RAM globals (control_manager.cpp) persisted by
+    // the shared config-store arena at the FRONT of EEPROM (input_manager.cpp),
+    // so the table size no longer competes with this back-anchored block and is
+    // bounded by the EEPROM budget rather than an arbitrary MAX_RULES cap (#296).
 
     // Bus Configuration (16 bytes) - Simplified "pick one" model
     BusConfig buses;

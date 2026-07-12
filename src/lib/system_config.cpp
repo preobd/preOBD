@@ -211,16 +211,9 @@ void resetSystemConfig() {
         systemConfig.router.reserved_router[i] = 0;
     }
 
-#if ENABLE_CONTROL_ENGINE
-    // Control engine defaults (NEW in v12): all slots empty. An empty slot is
-    // marked by id == CONTROL_ID_NONE; the rest of the record is don't-care.
-    for (int i = 0; i < MAX_RULES; i++) {
-        systemConfig.rules[i].id = CONTROL_ID_NONE;
-    }
-    for (int i = 0; i < MAX_ACTIONS; i++) {
-        systemConfig.actions[i].id = CONTROL_ID_NONE;
-    }
-#endif
+    // NB (v13): the control-engine Rule/Action tables are no longer part of
+    // SystemConfig — they are reset via controlResetTables() and persisted by the
+    // front config-store arena (input_manager.cpp), independent of this block.
 
     // Bus Configuration defaults (simplified "pick one" model)
     systemConfig.buses.active_i2c = 0xFF;  // NONE — not initialized until explicitly selected

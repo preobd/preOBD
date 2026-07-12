@@ -9,7 +9,7 @@
 // relay-shaped PreobdRelayState.
 //
 // Design notes (mirrors the proven RelayBroadcaster):
-//   - tick() walks systemConfig.actions[0..MAX_ACTIONS) every loop iteration,
+//   - tick() walks actions[0..MAX_ACTIONS) every loop iteration,
 //     packs each slot into a PreobdActionState (empty slots carry
 //     actionId == PREOBD_ACTION_ID_NONE), compares against a per-slot cache,
 //     and emits a frame on any field change. A 5s heartbeat re-sends all slots

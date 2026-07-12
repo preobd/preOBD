@@ -36,8 +36,8 @@
 #define ENABLE_BME280          1
 
 // ===== SIZING (tuned to the 8 KB budget) =====
-#define MAX_RULES               2    // control caps SRAM/EEPROM-bound on AVR (ARCHITECTURE §11.9)
-#define MAX_ACTIONS             2
+#define CONTROL_RAM_RULES_MAX   2    // control caps are a REAL SRAM limit on AVR (ARCHITECTURE §11.9)
+#define CONTROL_RAM_ACTIONS_MAX 2
 #define MAX_INPUTS              8
 #define MAX_PID_ENTRIES         8
 #define MAX_PIN_REGISTRY        24

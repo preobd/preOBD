@@ -10,11 +10,12 @@
 2. [EEPROM Layout](#eeprom-layout)
 3. [Version History](#version-history)
 4. [Input Configuration Storage](#input-configuration-storage)
-5. [System Configuration Storage](#system-configuration-storage)
-6. [Checksum Validation](#checksum-validation)
-7. [Version Migration](#version-migration)
-8. [EEPROM Wear Management](#eeprom-wear-management)
-9. [Troubleshooting](#troubleshooting)
+5. [Control-Engine Tables (Rule / Action)](#control-engine-tables-rule--action)
+6. [System Configuration Storage](#system-configuration-storage)
+7. [Checksum Validation](#checksum-validation)
+8. [Version Migration](#version-migration)
+9. [EEPROM Wear Management](#eeprom-wear-management)
+10. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -27,7 +28,7 @@ preOBD uses EEPROM (Electrically Erasable Programmable Read-Only Memory) to pers
 - **Hash-based:** Sensor/application names stored as hashes, not indices
 - **Checksum validation:** Detects corruption from power loss or wear
 - **Auto-reset:** Incompatible versions trigger clean reset
-- **Dual configuration:** Input configs + System config stored separately
+- **Config-store arena:** inputs + control-engine Rules + Actions share one front-growing region behind a single header; `SystemConfig` is a separate block anchored at the end
 
 ---
 
@@ -37,16 +38,15 @@ preOBD uses EEPROM (Electrically Erasable Programmable Read-Only Memory) to pers
 
 preOBD splits EEPROM into two blocks that grow toward each other:
 
-- **Input block** grows up from address 0 (header + N × `InputEEPROM`)
-- **SystemConfig** is anchored at the **end** of EEPROM, so its address adapts to the platform automatically
+- **Config-store arena** grows up from address 0: one `ConfigStoreHeader` followed by three packed record sections — `InputEEPROM[]`, then control-engine `Rule[]`, then `Action[]` (the latter two present on `ENABLE_CONTROL_ENGINE` builds). All three sections draw from one shared budget.
+- **SystemConfig** is anchored at the **end** of EEPROM, so its address adapts to the platform automatically.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ 0x0000          EEPROM Header (8 bytes)                      │
-│ 0x0008 …        InputEEPROM[0]                               │
-│                 InputEEPROM[1]                               │
-│                 …                                            │
-│                 InputEEPROM[MAX_EEPROM_INPUTS - 1]           │
+│ 0x0000          ConfigStoreHeader (16 bytes)                 │
+│ 0x0010 …        InputEEPROM[0 … numInputs−1]                 │
+│                 Rule[0 … numRules−1]                         │
+│                 Action[0 … numActions−1]                     │
 │                 (free space)                                 │
 │ END − sizeof(SystemConfig)                                   │
 │                 SystemConfig (~140 bytes, grows with schema) │
@@ -58,13 +58,19 @@ preOBD splits EEPROM into two blocks that grow toward each other:
 constexpr size_t SYSTEM_CONFIG_ADDRESS =
     EEPROM_TOTAL_BYTES - sizeof(SystemConfig);
 
+// Worst-case input ceiling (if inputs were the only section). Rules and actions
+// share the same budget, so the live input limit at save time may be lower.
 constexpr size_t MAX_EEPROM_INPUTS =
-    (SYSTEM_CONFIG_ADDRESS - sizeof(EEPROMHeader)) / sizeof(InputEEPROM);
+    (SYSTEM_CONFIG_ADDRESS - sizeof(ConfigStoreHeader)) / sizeof(InputEEPROM);
 ```
 
 A compile-time `static_assert` prevents the two regions from overlapping.
 
+**Shared budget + loud truncation.** Because inputs, rules and actions compete for the same space, `saveInputConfig()` fits the sections in priority order **inputs > rules > actions** (a rule needs its source input to evaluate; an action needs its rule) and warns on the control plane for any section it has to truncate — never a silent drop. This generalizes the original input-only truncation to the whole store (#296).
+
 **Why anchored at the end?** Earlier firmware used a hardcoded `SYSTEM_CONFIG_ADDRESS`. On platforms with smaller EEPROM than expected (Teensy 4.0, 1080 bytes) the hardcoded address fell past `E2END` and writes silently failed. Anchoring SystemConfig at the end makes the layout self-adjust per platform.
+
+> **Why are the Rule/Action tables in the arena rather than in `SystemConfig`?** They used to be fixed-size arrays embedded in `SystemConfig`, sized by an arbitrary `MAX_RULES`/`MAX_ACTIONS` cap. That capped the table far below `MAX_INPUTS` and made auto-seeded alarm Rules fail silently when full (#296). As standalone RAM globals persisted in the shared arena, the persistence limit is the EEPROM budget (loud on overflow), and the RAM cap is decoupled from input count — see [Control-Engine Tables](#control-engine-tables-rule--action).
 
 ### Platform Capacity
 
@@ -91,19 +97,21 @@ The extra inputs continue to function until reboot — they're configured in RAM
 
 There are two independent version numbers:
 
-- **`EEPROM_VERSION`** (currently `4`) — input block schema (`EEPROMHeader` + `InputEEPROM[]`).
-- **`SYSTEM_CONFIG_VERSION`** (currently `10`) — `SystemConfig` schema. Bumped whenever the struct's layout or address changes.
+- **`EEPROM_VERSION`** (currently `6`) — config-store arena schema (`ConfigStoreHeader` + `InputEEPROM[]` + `Rule[]` + `Action[]`).
+- **`SYSTEM_CONFIG_VERSION`** (currently `13`) — `SystemConfig` schema. Bumped whenever the struct's layout or address changes.
 
-A version mismatch on either block is non-fatal: the affected block resets to defaults on next boot, the user re-saves, and operation continues. The two blocks version independently — bumping `SYSTEM_CONFIG_VERSION` does not invalidate input configs and vice versa.
+A version mismatch on either block is non-fatal: the affected block resets to defaults on next boot, the user re-saves, and operation continues. The two blocks version independently — bumping `SYSTEM_CONFIG_VERSION` does not invalidate the arena and vice versa.
 
-### Input Block Version Progression
+### Config-Store (Input Block) Version Progression
 
 | Version | Firmware | Key Changes |
 |---------|----------|-------------|
 | **v1** | v0.3.x | Enum-based system; stored sensor/app indices |
 | **v2** | v0.4.0+ | Registry architecture; switched to hash-based storage |
 | **v3** | — | Internal layout iterations |
-| **v4** | current | Added `divider_ratio` to the per-input record |
+| **v4** | — | Added `divider_ratio` to the per-input record |
+| **v5** | — | `CalibrationOverride` AVR union size corrected (18→16 bytes) |
+| **v6** | current | Header became `ConfigStoreHeader`; the arena now also packs control-engine `Rule[]` + `Action[]` after the inputs (single checksum over all records) — #296 |
 
 ### SystemConfig Version Progression
 
@@ -116,10 +124,14 @@ A version mismatch on either block is non-fatal: the affected block resets to de
 | **…**  | Bus config, serial port config |
 | **v10** | Layout shift — `SystemConfig` now anchored at the end of EEPROM (per-platform address) |
 | **v11** | Removed system pin fields (`modeButtonPin`, `buzzerPin`, `canCSPin`, `canIntPin`, `sdCSPin`, `testModePin`) — pins are compile-time constants in the board profile, not runtime state |
+| **v12** | Control engine — embedded `Rule rules[]` / `Action actions[]` tables (replaced `RelayConfig relays[]`) |
+| **v13** | Removed those tables again — Rule/Action moved OUT to the front config-store arena (#296); `SystemConfig` now holds only scalar settings |
 
 > **Note:** v9→v10 is a pure address change, not a struct change. T4.1 users who upgrade past v10 will see SystemConfig reset to defaults on first boot and need to re-`SAVE`. Input configs are unaffected.
 >
 > **v10→v11:** Struct change (pin fields removed). SystemConfig resets to defaults on first boot. Re-`SAVE` to persist transport routing and output settings. Input configs are unaffected.
+>
+> **v12→v13:** Struct shrank (Rule/Action tables moved to the arena). SystemConfig resets to defaults on first boot; the arena also bumps `EEPROM_VERSION` 5→6 and resets, so configured Rules/Actions need re-creating. Re-`SAVE` once after upgrade.
 
 ### Detail: Version 1 (v0.3.x - Deprecated)
 
@@ -161,22 +173,26 @@ All saved configurations became invalid.
 
 ## Input Configuration Storage
 
-### EEPROM Header (8 bytes @ 0x0000)
+### Config-Store Header (16 bytes @ 0x0000)
 
 ```cpp
-struct EEPROMHeader {
+struct ConfigStoreHeader {
     uint32_t magic;       // 0x4F454D53 ("OEMS" in ASCII)
-    uint16_t version;     // EEPROM_VERSION (currently 4)
-    uint8_t numInputs;    // 0–MAX_EEPROM_INPUTS (platform-dependent)
-    uint8_t reserved;     // Stores XOR checksum
+    uint16_t version;     // EEPROM_VERSION (currently 6)
+    uint8_t  numInputs;   // records persisted in each section…
+    uint8_t  numRules;
+    uint8_t  numActions;
+    uint8_t  checksum;    // XOR over every persisted record byte (all 3 sections)
+    uint8_t  reserved[6]; // future record-type counts; pads the header to exactly 16 bytes
 };
 ```
 
 **Purpose:**
 - **Magic:** Detect uninitialized EEPROM (0xFFFFFFFF on new chips)
 - **Version:** Trigger reset if mismatch
-- **numInputs:** How many InputEEPROM structs follow
-- **reserved:** Stores checksum for corruption detection
+- **numInputs / numRules / numActions:** How many records of each type follow, in that order. These are the *stored* counts — load verifies the checksum over them **before** clamping into the running firmware's RAM caps, so a build with smaller caps still validates a store written by a larger one.
+- **checksum:** Single XOR over all persisted record bytes (was per-input-only in v5).
+- **reserved[6]:** Brings the struct to exactly 16 bytes on every platform (no indeterminate padding) and reserves room for future record-type counts.
 
 ### InputEEPROM Structure (~84 bytes each, depends on alignment)
 
@@ -213,15 +229,15 @@ struct InputEEPROM {
 
 ### Input Slots Layout
 
-Slots are packed back-to-back starting at `EEPROM_HEADER_SIZE` (0x0008). The number of slots that fit is `MAX_EEPROM_INPUTS`, computed at compile time from the gap between the header and `SYSTEM_CONFIG_ADDRESS` (see [Two-Block Model](#two-block-model)).
+Slots are packed back-to-back starting at `EEPROM_HEADER_SIZE` (0x0010). The number that fits is bounded by `MAX_EEPROM_INPUTS` (the gap between the header and `SYSTEM_CONFIG_ADDRESS`, shared with the rule/action sections — see [Two-Block Model](#two-block-model)).
 
 ```
 Address                                  | Content
 -----------------------------------------|---------------------------
-0x0008                                   | InputEEPROM[0]
-0x0008 + 1·sizeof(InputEEPROM)           | InputEEPROM[1]
+0x0010                                   | InputEEPROM[0]
+0x0010 + 1·sizeof(InputEEPROM)           | InputEEPROM[1]
 …                                        | …
-0x0008 + (MAX_EEPROM_INPUTS-1)·sizeof()  | last persisted slot
+(then Rule[0..], then Action[0..])       | control-engine sections
 ```
 
 ### Flags Byte Packing
@@ -250,6 +266,24 @@ union CalibrationOverride {
 
 ---
 
+## Control-Engine Tables (Rule / Action)
+
+On `ENABLE_CONTROL_ENGINE` builds, the `Rule[]` and `Action[]` sections follow the inputs in the same arena. The records are stored **directly** (no hash mirror like inputs): a `Rule` keys off the source input's stable **pin**, and Actions reference Rules by stable **id**, neither of which shifts across firmware versions.
+
+- **Live tables are RAM globals** — `rules[MAX_RULES]` / `actions[MAX_ACTIONS]` in `control_manager.cpp` (mirroring `Input inputs[]`), **not** members of `SystemConfig`.
+- **RAM caps** come from `CONTROL_RAM_{RULES,ACTIONS}_MAX` (`control_types.h`): a uniform **64** on 32-bit boards, overridden **down to 2** on AVR (Mega), with an absolute **254** id-space ceiling (ids are `uint8_t`, `0xFF` = empty-slot sentinel). Decoupled from `MAX_INPUTS`, so the engine is N:N (many rules per input, many actions per rule).
+- **Empty slot = `id == 0xFF`.** The tables are BSS-zeroed, and `id == 0` is a *valid* id, so `controlResetTables()` stamps every slot empty before they're trusted (cold boot, factory reset, any failed load) — otherwise a blank table would look full of phantom record #0.
+- **Persistence is bounded by the EEPROM budget, not the RAM cap.** Only non-empty records are written (compacted), and the arena truncates loudly if rules/actions don't fit after the inputs.
+- On load, a **dangling-`ruleRef` sweep** reverts any Action whose Rule didn't load to manual-only (mirrors the `RULE DEL` invariant and the JSON import path).
+
+`Rule` is ~21 B (AVR) / 24 B (ARM); `Action` is 6 B. As with `InputEEPROM`, use `sizeof()` — layout is alignment-sensitive and each device only ever reads its own EEPROM.
+
+### Validate-before-mutate load
+
+`loadInputConfig()` verifies the header (magic, version, arena bounds, checksum) via a **read-only** scan and only touches RAM (`inputs[]` and the control tables) once the store is confirmed good. A failed runtime `LOAD` (blank / wrong-version / corrupt EEPROM) is therefore a true no-op — it cannot wipe an unsaved in-RAM config or strand a driven output. `cmd_load` gates the control re-arm trio (`controlManagerInit` + `controlActionsInit` + `controlSyncActionPins`) on a successful load and reports honestly rather than always claiming success.
+
+---
+
 ## System Configuration Storage
 
 ### SystemConfig Structure (~140 bytes, anchored at end of EEPROM)
@@ -258,7 +292,7 @@ union CalibrationOverride {
 struct SystemConfig {
     // Header (4 bytes)
     uint16_t magic;              // 0x5343 ("SC")
-    uint8_t version;             // SYSTEM_CONFIG_VERSION (currently 10)
+    uint8_t version;             // SYSTEM_CONFIG_VERSION (currently 13)
     uint8_t checksum;            // XOR checksum
 
     // Output Modules (NUM_OUTPUTS = 7: CAN, RealDash, Serial, SD, Alarm, Relay, ELM327)
@@ -273,11 +307,10 @@ struct SystemConfig {
     // Transport router (v4+) — control/data/debug primary+secondary, BT
     struct { /* ... */ } router;
 
-    // Control engine (v12+) — Rule/Action tables replace the former
-    // RelayConfig relays[] (a relay is now an Action of type RELAY); alarm
-    // thresholds are Rules too. Clean break from v11. See ARCHITECTURE §11.
-    Rule   rules[MAX_RULES];
-    Action actions[MAX_ACTIONS];
+    // NB (v13): the control-engine Rule/Action tables are NO LONGER here —
+    // they live in the front config-store arena (see Control-Engine Tables
+    // above). v12 embedded them; #296 moved them out so the table size is
+    // bounded by the EEPROM budget, not an arbitrary cap.
 
     // Bus + serial port config — which I2C/SPI/CAN bus, which serial ports
     BusConfig buses;
@@ -302,36 +335,23 @@ Set from board profile and `config.h` at first boot:
 
 ## Checksum Validation
 
-### Input Checksum
+### Config-Store Checksum
 
-**Algorithm:** XOR of all InputEEPROM struct bytes
+**Algorithm:** a single XOR over every persisted record byte across all three sections (inputs, then rules, then actions), stored in `ConfigStoreHeader.checksum`. Save XORs the exact RAM image handed to `EEPROM.put`; load XORs the bytes read back via `EEPROM.get` — byte-for-byte symmetric, including struct padding (inputs are zeroed before serialization; rules/actions round-trip as fixed-size PODs).
+
 ```cpp
-uint8_t calculateConfigChecksum() {
-    uint8_t checksum = 0;
-    uint16_t addr = EEPROM_HEADER_SIZE;
-
-    for (uint8_t i = 0; i < numActiveInputs; i++) {
-        InputEEPROM eepromInput;
-        EEPROM.get(addr, eepromInput);
-
-        const uint8_t* data = (const uint8_t*)&eepromInput;
-        for (size_t k = 0; k < sizeof(InputEEPROM); k++) {
-            checksum ^= data[k];
-        }
-        addr += sizeof(InputEEPROM);
-    }
-    return checksum;
-}
+// Save: accumulate as each record is written.
+checksum ^= xorBytes(&rec, sizeof(rec));   // per InputEEPROM / Rule / Action
+// …then header.checksum = checksum; EEPROM.put(0, header);
 ```
 
-**Validation on load:**
-```cpp
-uint8_t storedChecksum = header.reserved;
-uint8_t calculatedChecksum = calculateConfigChecksum();
+**Validation on load** is computed over the header's **stored** counts *before* clamping into this firmware's RAM caps (so a smaller-cap build still accepts a valid store):
 
-if (storedChecksum != calculatedChecksum) {
-    Serial.println("ERROR: EEPROM checksum mismatch!");
-    // Clear corrupted data and reset
+```cpp
+// Walk inputs → rules → actions contiguously, XOR every byte, compare.
+if (computed != header.checksum) {
+    msg.control.println(F("ERROR: EEPROM checksum mismatch! Configuration corrupted."));
+    return false;  // validate-before-mutate: no RAM touched, prior config intact
 }
 ```
 
@@ -373,28 +393,21 @@ uint8_t calculateChecksum(SystemConfig* cfg) {
 3. Compare version to `EEPROM_VERSION` constant
 4. If mismatch → Reset to defaults
 
-**Code Flow:**
+**Code Flow** (validate-before-mutate — no RAM is touched until the header *and* checksum pass):
 ```cpp
-EEPROMHeader header;
+ConfigStoreHeader header;
 EEPROM.get(0, header);
 
-if (header.magic != EEPROM_MAGIC) {
-    Serial.println("EEPROM uninitialized");
-    return false;  // Will use defaults
-}
+if (header.magic != EEPROM_MAGIC) return false;        // uninitialized → defaults
+if (header.version != EEPROM_VERSION) return false;    // mismatch → defaults
+if (storedBytes(header) > SYSTEM_CONFIG_ADDRESS) return false;  // won't fit this arena
+// … read-only checksum walk over header's stored counts …
+if (computed != header.checksum) return false;         // corrupt → prior config kept
 
-if (header.version != EEPROM_VERSION) {
-    Serial.print("EEPROM version mismatch (found ");
-    Serial.print(header.version);
-    Serial.print(", expected ");
-    Serial.print(EEPROM_VERSION);
-    Serial.println(") - ignoring");
-    return false;  // Will use defaults
-}
-
-// Version matches, load config
-loadInputConfig();
+// Validated: NOW commit — blank inputs + controlResetTables(), then load records.
 ```
+
+Cold-boot safety for the BSS-zeroed control tables comes from `controlResetTables()` in `initInputManager()` (not the loader), so a blank/invalid EEPROM still ends with empty — not phantom — Rule/Action tables.
 
 ### SystemConfig Version Check
 

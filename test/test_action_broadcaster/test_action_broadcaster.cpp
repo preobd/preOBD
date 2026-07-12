@@ -1,6 +1,6 @@
 // Native unit test: ActionBroadcaster (src/lib/action_broadcaster.cpp).
 //
-// Two directions exercised on the host: (a) tick() packs systemConfig.actions[]
+// Two directions exercised on the host: (a) tick() packs actions[]
 // into 16-byte PreobdActionState frames and emits on change, and (b)
 // handleInbound() applies a client manual-toggle command via the control
 // manager API. We capture emitted bytes and record the manager calls; the real
@@ -13,6 +13,7 @@
 
 // ---- Globals the broadcaster TU expects from the rest of the firmware ----
 SystemConfig systemConfig;
+Action       actions[MAX_ACTIONS];   // standalone table (was systemConfig.actions[])
 
 // controlActionState() — we own the driven-state truth here.
 static bool g_actionState[MAX_ACTIONS];
@@ -24,7 +25,7 @@ bool controlActionState(int slot) {
 int controlActionSlot(uint8_t id) {
     if (id == CONTROL_ID_NONE) return -1;
     for (int i = 0; i < MAX_ACTIONS; ++i) {
-        if (systemConfig.actions[i].id == id) return i;
+        if (actions[i].id == id) return i;
     }
     return -1;
 }
@@ -70,7 +71,7 @@ void setUp(void) {
     memset(g_frames, 0, sizeof(g_frames));
     memset(&systemConfig, 0, sizeof(systemConfig));
     memset(g_actionState, 0, sizeof(g_actionState));
-    for (int i = 0; i < MAX_ACTIONS; ++i) systemConfig.actions[i].id = CONTROL_ID_NONE;  // all empty
+    for (int i = 0; i < MAX_ACTIONS; ++i) actions[i].id = CONTROL_ID_NONE;  // all empty
     g_setManualCalls = 0;
     ActionBroadcaster::init();
 }
@@ -78,12 +79,12 @@ void tearDown(void) {}
 
 static void configureAction(int i, uint8_t id, uint8_t type, uint8_t target,
                             uint8_t ruleRef, uint8_t behavior, uint8_t failsafe) {
-    systemConfig.actions[i].id       = id;
-    systemConfig.actions[i].type     = type;
-    systemConfig.actions[i].target   = target;
-    systemConfig.actions[i].ruleRef  = ruleRef;
-    systemConfig.actions[i].behavior = behavior;
-    systemConfig.actions[i].failsafe = failsafe;
+    actions[i].id       = id;
+    actions[i].type     = type;
+    actions[i].target   = target;
+    actions[i].ruleRef  = ruleRef;
+    actions[i].behavior = behavior;
+    actions[i].failsafe = failsafe;
 }
 
 // First tick snapshots every slot (cache empty) → MAX_ACTIONS frames.

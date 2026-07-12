@@ -22,9 +22,28 @@ static const char* const ACTION_PIN_DESC = "Action output";
 
 RuleContext g_ruleContexts[MAX_RULES];
 
+// Persisted record tables — standalone RAM globals (mirror Input inputs[]).
+// Declared extern in control_types.h; persisted by the shared config-store arena
+// (input_manager.cpp), NOT by SystemConfig. These live in BSS (zero-init), and
+// id==0 is a VALID record id — so controlResetTables() MUST stamp every slot
+// empty before the tables are trusted (boot / reset / load-failure paths), or a
+// blank EEPROM would arm a table full of phantom id-0 records.
+Rule   rules[MAX_RULES];
+Action actions[MAX_ACTIONS];
+
+void controlResetTables() {
+    for (int i = 0; i < MAX_RULES; i++) {
+        rules[i].id = CONTROL_ID_NONE;
+        g_ruleContexts[i].state = RULE_DISABLED;
+    }
+    for (int i = 0; i < MAX_ACTIONS; i++) {
+        actions[i].id = CONTROL_ID_NONE;
+    }
+}
+
 void controlManagerInit(uint32_t now) {
     for (int i = 0; i < MAX_RULES; i++) {
-        Rule& rule = systemConfig.rules[i];
+        Rule& rule = rules[i];
         if (rule.id == CONTROL_ID_NONE) {
             g_ruleContexts[i].state = RULE_DISABLED;
         } else {
@@ -35,7 +54,7 @@ void controlManagerInit(uint32_t now) {
 
 void controlManagerUpdate(uint32_t now) {
     for (int i = 0; i < MAX_RULES; i++) {
-        Rule& rule = systemConfig.rules[i];
+        Rule& rule = rules[i];
         if (rule.id == CONTROL_ID_NONE) continue;
 
         // Resolve the source input by pin (the stable input identity). A missing
@@ -51,7 +70,7 @@ void controlManagerUpdate(uint32_t now) {
 RuleSeverity controlSystemSeverity() {
     uint8_t maxSev = RULE_SEV_NONE;
     for (int i = 0; i < MAX_RULES; i++) {
-        Rule& rule = systemConfig.rules[i];
+        Rule& rule = rules[i];
         if (rule.id == CONTROL_ID_NONE) continue;
         // Annunciator rollup includes the derived WARNING tier (§11.2), so
         // resolve the source value for each rule.
@@ -101,10 +120,10 @@ static uint8_t recCount(const T* arr, int n) {
 
 // --- rule table helpers -------------------------------------------------
 
-int     controlRuleSlot(uint8_t id) { return recSlot(systemConfig.rules, MAX_RULES, id); }
-int     controlRuleFreeSlot()       { return recFreeSlot(systemConfig.rules, MAX_RULES); }
-uint8_t controlRuleAllocId()        { return recAllocId(systemConfig.rules, MAX_RULES); }
-uint8_t controlRuleCount()          { return recCount(systemConfig.rules, MAX_RULES); }
+int     controlRuleSlot(uint8_t id) { return recSlot(rules, MAX_RULES, id); }
+int     controlRuleFreeSlot()       { return recFreeSlot(rules, MAX_RULES); }
+uint8_t controlRuleAllocId()        { return recAllocId(rules, MAX_RULES); }
+uint8_t controlRuleCount()          { return recCount(rules, MAX_RULES); }
 
 // --- application default-Rule template (§11.5) ------------------------------
 
@@ -133,8 +152,8 @@ static bool buildRuleConfigFromApplication(uint8_t appIndex, Rule& out) {
 
 bool controlRuleExistsForInput(uint8_t pin) {
     for (int i = 0; i < MAX_RULES; i++) {
-        if (systemConfig.rules[i].id != CONTROL_ID_NONE &&
-            systemConfig.rules[i].sourceInput == pin) {
+        if (rules[i].id != CONTROL_ID_NONE &&
+            rules[i].sourceInput == pin) {
             return true;
         }
     }
@@ -150,15 +169,15 @@ uint8_t controlSeedRuleForInput(uint8_t pin, uint8_t appIndex, uint32_t now) {
     if (slot < 0 || id == CONTROL_ID_NONE) return CONTROL_ID_NONE;  // table full
     tmpl.id = id;
     tmpl.sourceInput = pin;
-    systemConfig.rules[slot] = tmpl;
-    controlRuleInit(g_ruleContexts[slot], systemConfig.rules[slot], now);  // create-from-template: arm (#251)
+    rules[slot] = tmpl;
+    controlRuleInit(g_ruleContexts[slot], rules[slot], now);  // create-from-template: arm (#251)
     return id;
 }
 
 // Rewrite a rule slot's CONFIG fields from a template, preserving identity
 // (id + sourceInput), then re-arm its runtime context.
 static void applyRuleTemplate(int slot, const Rule& tmpl, uint32_t now) {
-    Rule& r = systemConfig.rules[slot];
+    Rule& r = rules[slot];
     r.condition  = tmpl.condition;
     r.severity   = tmpl.severity;
     r.flags      = tmpl.flags;
@@ -173,7 +192,7 @@ static void applyRuleTemplate(int slot, const Rule& tmpl, uint32_t now) {
 bool controlRuleReset(uint8_t id, uint32_t now) {
     int slot = controlRuleSlot(id);
     if (slot < 0) return false;
-    Input* in = getInputByPin(systemConfig.rules[slot].sourceInput);
+    Input* in = getInputByPin(rules[slot].sourceInput);
     if (!in) return false;
     Rule tmpl{};
     if (!buildRuleConfigFromApplication(in->applicationIndex, tmpl)) return false;
@@ -189,7 +208,7 @@ int controlAlarmRuleSlotForInput(uint8_t pin) {
     // ADD are deliberately NOT this facade's business — the per-input min/max
     // model can't represent them, so they're left untouched.
     for (int i = 0; i < MAX_RULES; i++) {
-        const Rule& r = systemConfig.rules[i];
+        const Rule& r = rules[i];
         if (r.id != CONTROL_ID_NONE && r.sourceInput == pin &&
             r.condition == RULE_OUTSIDE_BAND && r.severity == RULE_SEV_ALARM) {
             return i;
@@ -208,7 +227,7 @@ uint8_t controlSetAlarmBandForInput(uint8_t pin, float lo, float hi, uint32_t no
         // presets that's 20–60 s of dead air after each edit (#295). Limits are
         // read live from the Rule each tick, so the engine re-qualifies against
         // the new band next cycle with no re-init needed.
-        Rule& r = systemConfig.rules[slot];
+        Rule& r = rules[slot];
         r.condition = RULE_OUTSIDE_BAND;
         r.severity  = RULE_SEV_ALARM;
         r.flags    |= RULE_FLAG_ENABLED;
@@ -235,7 +254,7 @@ uint8_t controlSetAlarmBandForInput(uint8_t pin, float lo, float hi, uint32_t no
     Input* in = getInputByPin(pin);
     Rule appTmpl{};
     const bool haveAppTmpl = in && buildRuleConfigFromApplication(in->applicationIndex, appTmpl);
-    Rule& r = systemConfig.rules[free];
+    Rule& r = rules[free];
     r.id          = id;
     r.sourceInput = pin;
     r.condition   = RULE_OUTSIDE_BAND;
@@ -253,8 +272,8 @@ uint8_t controlSetAlarmBandForInput(uint8_t pin, float lo, float hi, uint32_t no
 bool controlRemoveAlarmRuleForInput(uint8_t pin) {
     int slot = controlAlarmRuleSlotForInput(pin);
     if (slot < 0) return false;
-    uint8_t id = systemConfig.rules[slot].id;
-    systemConfig.rules[slot].id = CONTROL_ID_NONE;
+    uint8_t id = rules[slot].id;
+    rules[slot].id = CONTROL_ID_NONE;
     g_ruleContexts[slot].state = RULE_DISABLED;
     controlClearActionsForRule(id);  // referential integrity (mirrors RULE DEL)
     return true;
@@ -269,7 +288,7 @@ uint8_t controlReseedRulesForInput(uint8_t pin, uint32_t now) {
     if (!buildRuleConfigFromApplication(in->applicationIndex, tmpl)) return 0;
     uint8_t n = 0;
     for (int i = 0; i < MAX_RULES; i++) {
-        Rule& r = systemConfig.rules[i];
+        Rule& r = rules[i];
         if (r.id == CONTROL_ID_NONE || r.sourceInput != pin) continue;
         applyRuleTemplate(i, tmpl, now);  // rewrite to new app's defaults, keep id
         n++;
@@ -280,9 +299,9 @@ uint8_t controlReseedRulesForInput(uint8_t pin, uint32_t now) {
 void controlClearActionsForRule(uint8_t ruleId) {
     if (ruleId == CONTROL_ID_NONE) return;
     for (int i = 0; i < MAX_ACTIONS; i++) {
-        if (systemConfig.actions[i].id != CONTROL_ID_NONE &&
-            systemConfig.actions[i].ruleRef == ruleId) {
-            systemConfig.actions[i].ruleRef = CONTROL_ID_NONE;  // revert to manual-only
+        if (actions[i].id != CONTROL_ID_NONE &&
+            actions[i].ruleRef == ruleId) {
+            actions[i].ruleRef = CONTROL_ID_NONE;  // revert to manual-only
         }
     }
 }
@@ -301,7 +320,7 @@ static void driveAction(const Action& a, bool on) {
 void controlActionConfigurePin(int slot) {
     if (slot < 0 || slot >= MAX_ACTIONS) return;
     g_actionManual[slot] = false;  // a (re)configured slot starts de-asserted (no stale manual)
-    Action& a = systemConfig.actions[slot];
+    Action& a = actions[slot];
     if (a.id == CONTROL_ID_NONE) return;
     if (a.type == ACT_RELAY) {
         pinMode(a.target, OUTPUT);
@@ -341,7 +360,7 @@ uint8_t controlSyncActionPins() {
     //    another action), which is exactly the conflict we want to surface.
     uint8_t conflicts = 0;
     for (int s = 0; s < MAX_ACTIONS; s++) {
-        const Action& a = systemConfig.actions[s];
+        const Action& a = actions[s];
         if (a.id == CONTROL_ID_NONE) continue;
         if (!registerPin(a.target, PIN_OUTPUT, ACTION_PIN_DESC)) {
             conflicts++;
@@ -356,7 +375,7 @@ uint8_t controlSyncActionPins() {
 
 void controlActionsUpdate(bool configMode) {
     for (int i = 0; i < MAX_ACTIONS; i++) {
-        Action& a = systemConfig.actions[i];
+        Action& a = actions[i];
         if (a.id == CONTROL_ID_NONE) continue;
 
         bool ruleActive = false;
@@ -369,7 +388,7 @@ void controlActionsUpdate(bool configMode) {
                 sourceTrustworthy = true;
             } else {
                 ruleActive = controlRuleIsActive(g_ruleContexts[rslot]);
-                Input* in = getInputByPin(systemConfig.rules[rslot].sourceInput);
+                Input* in = getInputByPin(rules[rslot].sourceInput);
                 sourceTrustworthy = (in != nullptr) && !isnan(in->value);
             }
         }
@@ -392,10 +411,10 @@ bool controlActionState(int slot) {
     return (slot >= 0 && slot < MAX_ACTIONS) ? g_actionState[slot] : false;
 }
 
-int     controlActionSlot(uint8_t id) { return recSlot(systemConfig.actions, MAX_ACTIONS, id); }
-int     controlActionFreeSlot()       { return recFreeSlot(systemConfig.actions, MAX_ACTIONS); }
-uint8_t controlActionAllocId()        { return recAllocId(systemConfig.actions, MAX_ACTIONS); }
-uint8_t controlActionCount()          { return recCount(systemConfig.actions, MAX_ACTIONS); }
+int     controlActionSlot(uint8_t id) { return recSlot(actions, MAX_ACTIONS, id); }
+int     controlActionFreeSlot()       { return recFreeSlot(actions, MAX_ACTIONS); }
+uint8_t controlActionAllocId()        { return recAllocId(actions, MAX_ACTIONS); }
+uint8_t controlActionCount()          { return recCount(actions, MAX_ACTIONS); }
 
 bool controlActionSetManual(uint8_t id, bool on) {
     int slot = controlActionSlot(id);

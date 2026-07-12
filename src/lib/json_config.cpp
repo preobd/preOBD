@@ -184,8 +184,8 @@ void exportInputToJSON(JsonObject& inputObj, const Input* input) {
 #if ENABLE_CONTROL_ENGINE
     int alarmSlot = controlAlarmRuleSlotForInput(input->pin);
     if (alarmSlot >= 0) {
-        alarm["min"] = systemConfig.rules[alarmSlot].limitLo;
-        alarm["max"] = systemConfig.rules[alarmSlot].limitHi;
+        alarm["min"] = rules[alarmSlot].limitLo;
+        alarm["max"] = rules[alarmSlot].limitHi;
     } else {
         alarm["min"] = nullptr;
         alarm["max"] = nullptr;
@@ -248,17 +248,17 @@ void exportPinRegistryToJSON(JsonArray& pinsArray) {
 // of "inputs"). Only configured slots (id != CONTROL_ID_NONE) are emitted.
 void exportRulesToJSON(JsonArray& rulesArray) {
     for (int i = 0; i < MAX_RULES; i++) {
-        if (systemConfig.rules[i].id == CONTROL_ID_NONE) continue;
+        if (rules[i].id == CONTROL_ID_NONE) continue;
         JsonObject ruleObj = rulesArray.add<JsonObject>();
-        controlExportRule(ruleObj, systemConfig.rules[i]);
+        controlExportRule(ruleObj, rules[i]);
     }
 }
 
 void exportActionsToJSON(JsonArray& actionsArray) {
     for (int i = 0; i < MAX_ACTIONS; i++) {
-        if (systemConfig.actions[i].id == CONTROL_ID_NONE) continue;
+        if (actions[i].id == CONTROL_ID_NONE) continue;
         JsonObject actionObj = actionsArray.add<JsonObject>();
-        controlExportAction(actionObj, systemConfig.actions[i]);
+        controlExportAction(actionObj, actions[i]);
     }
 }
 #endif // ENABLE_CONTROL_ENGINE
@@ -726,7 +726,7 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
 // order, preserving each record's stable `id` (Actions reference rules by id).
 // Records that fail validation are skipped. Re-arming is the caller's job.
 void importRulesFromJSON(JsonArrayConst rulesArray) {
-    for (int i = 0; i < MAX_RULES; i++) systemConfig.rules[i].id = CONTROL_ID_NONE;
+    for (int i = 0; i < MAX_RULES; i++) rules[i].id = CONTROL_ID_NONE;
     int slot = 0;
     for (JsonObjectConst ruleObj : rulesArray) {
         if (slot >= MAX_RULES) {
@@ -735,7 +735,7 @@ void importRulesFromJSON(JsonArrayConst rulesArray) {
         }
         Rule r{};
         if (controlImportRule(ruleObj, r)) {
-            systemConfig.rules[slot++] = r;
+            rules[slot++] = r;
         } else {
             msg.debug.warn(TAG_JSON, "skipped invalid rule record");
         }
@@ -743,7 +743,7 @@ void importRulesFromJSON(JsonArrayConst rulesArray) {
 }
 
 void importActionsFromJSON(JsonArrayConst actionsArray) {
-    for (int i = 0; i < MAX_ACTIONS; i++) systemConfig.actions[i].id = CONTROL_ID_NONE;
+    for (int i = 0; i < MAX_ACTIONS; i++) actions[i].id = CONTROL_ID_NONE;
     int slot = 0;
     for (JsonObjectConst actionObj : actionsArray) {
         if (slot >= MAX_ACTIONS) {
@@ -752,7 +752,7 @@ void importActionsFromJSON(JsonArrayConst actionsArray) {
         }
         Action a{};
         if (controlImportAction(actionObj, a)) {
-            systemConfig.actions[slot++] = a;
+            actions[slot++] = a;
         } else {
             msg.debug.warn(TAG_JSON, "skipped invalid action record");
         }
@@ -832,7 +832,7 @@ bool loadConfigFromJSON(const char* jsonString) {
         // (controlClearActionsForRule), before re-arm so the engine never
         // evaluates a dangling ref.
         for (int i = 0; i < MAX_ACTIONS; i++) {
-            Action& a = systemConfig.actions[i];
+            Action& a = actions[i];
             if (a.id != CONTROL_ID_NONE && a.ruleRef != CONTROL_ID_NONE &&
                 controlRuleSlot(a.ruleRef) < 0) {
                 msg.debug.warn(TAG_JSON,

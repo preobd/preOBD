@@ -1,7 +1,7 @@
 /*
  * cmd_rule.cpp - RULE command (control engine: create / list / inspect / delete)
  *
- * Manages the persisted Rule table (systemConfig.rules[]) and its runtime
+ * Manages the persisted Rule table (rules[]) and its runtime
  * contexts. Rules are managed by stable id — no names (ARCHITECTURE §11.8);
  * RULE LIST renders ground truth (source input + condition + severity + live
  * state) so the id is the only handle needed.
@@ -68,7 +68,7 @@ static FLASHMEM const char* ruleStateName(uint8_t s) {
 
 // One detail line for the rule in slot `i`.
 static FLASHMEM void printRuleRow(int i) {
-    const Rule& r = systemConfig.rules[i];
+    const Rule& r = rules[i];
     Input* in = getInputByPin(r.sourceInput);
 
     msg.control.print(F("  #"));
@@ -117,7 +117,7 @@ static FLASHMEM void printAllRules() {
         return;
     }
     for (int i = 0; i < MAX_RULES; i++) {
-        if (systemConfig.rules[i].id != CONTROL_ID_NONE) printRuleRow(i);
+        if (rules[i].id != CONTROL_ID_NONE) printRuleRow(i);
     }
     // Annunciator rollup over all rules — this is what drives the buzzer/LED.
     msg.control.print(F("System severity (rules): "));
@@ -221,7 +221,7 @@ static FLASHMEM int ruleAdd(int argc, const char* const* argv) {
         return 1;
     }
 
-    Rule& r = systemConfig.rules[slot];
+    Rule& r = rules[slot];
     r.id = id;
     r.sourceInput = pin;
     r.condition = condition;
@@ -250,7 +250,7 @@ static FLASHMEM int ruleDel(uint8_t id) {
         msg.control.println(id);
         return 1;
     }
-    systemConfig.rules[slot].id = CONTROL_ID_NONE;
+    rules[slot].id = CONTROL_ID_NONE;
     g_ruleContexts[slot].state = RULE_DISABLED;
     controlClearActionsForRule(id);  // referential integrity: referring actions → manual-only
     msg.control.print(F("Rule #"));

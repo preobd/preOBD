@@ -29,7 +29,7 @@ constexpr uint32_t kHeartbeatMs = 5000;
 SlottedBroadcaster<PreobdActionState, MAX_ACTIONS> g_bc;
 
 void packState(int i, PreobdActionState& s) {
-    const Action& a = systemConfig.actions[i];
+    const Action& a = actions[i];
     memset(&s, 0, sizeof(s));
     s.protocolVersion = PREOBD_BLE_PROTOCOL_VERSION;
     if (a.id == CONTROL_ID_NONE) {
@@ -96,7 +96,7 @@ void handleInbound(const uint8_t* payload, uint16_t len) {
     // action follows its Rule — reject the command at the wire boundary (no state
     // change, no confirmation notify) rather than relying on controlActionDesired()
     // to silently no-op it (#294 / enforce the manual-only contract).
-    if (systemConfig.actions[slot].ruleRef != CONTROL_ID_NONE) return;
+    if (actions[slot].ruleRef != CONTROL_ID_NONE) return;
 
     switch (req.command) {
         case PREOBD_ACTION_CMD_MANUAL_ON:

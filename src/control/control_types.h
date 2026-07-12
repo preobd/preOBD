@@ -24,9 +24,9 @@
  *     AlarmState / AlarmContext (input.h); they model the same warmup/debounce
  *     state machine (§11.2).
  *
- * NOTE: not yet referenced by SystemConfig or Input. Wiring the rules[]/
- * actions[] tables into SystemConfig (replacing RelayConfig relays[], with the
- * SYSTEM_CONFIG_VERSION bump) is the next implementation step.
+ * NOTE: the rules[]/actions[] tables are standalone RAM globals (control_manager.cpp),
+ * persisted by the shared config-store arena (input_manager.cpp) — NOT embedded
+ * in SystemConfig. See the extern declarations below.
  */
 
 #ifndef CONTROL_TYPES_H
@@ -49,15 +49,35 @@
 #endif
 
 // ============================================================================
-// Platform caps (per-profile, SRAM/EEPROM-bound — see ARCHITECTURE §11.9)
-// Profiles may override. Defaults: 8/8 on Teensy/STM32; AVR profiles set 2/2.
+// Platform caps (RAM table sizes) — decoupled from MAX_INPUTS so the engine
+// supports N:N (multiple Rules per input, multiple Actions per Rule), without
+// tying the cap to an input-count guess.
+//
+// Default is a uniform 64 across all 32-bit boards: generous (8x the legacy cap
+// and far beyond any realistic config — ~15-20 inputs, a handful of rules each),
+// while deliberately leaving the ~13 KB of RAM1 that a 254-slot table would eat
+// FREE for future features. 64 is a fixed RAM ceiling, NOT the engine's hard
+// limit: record ids are uint8_t with 0xFF reserved, so 254 is the absolute id
+// space — a board with RAM to spare can override CONTROL_RAM_{RULES,ACTIONS}_MAX
+// upward toward 254. Overflow is never silent: the shared EEPROM arena truncates
+// LOUDLY (input_manager.cpp) and auto-seed warns at the CLI (cmd_set.cpp).
+//
+// AVR (Mega, 8 KB SRAM) is a hard physical exception — it overrides DOWN to 2
+// (boards/mega2560/board.h); 64 would blow its budget.
+//
+// This carries NO dependency on SYSTEM_CONFIG_ADDRESS / the EEPROM layout, so the
+// cap stays a pure compile-time constant here (no header cycle).
 // ============================================================================
-#ifndef MAX_RULES
-#define MAX_RULES   8
+#ifndef CONTROL_RAM_RULES_MAX
+#define CONTROL_RAM_RULES_MAX   64    // standard RAM cap; absolute id-space max is 254
 #endif
-#ifndef MAX_ACTIONS
-#define MAX_ACTIONS 8
+#ifndef CONTROL_RAM_ACTIONS_MAX
+#define CONTROL_RAM_ACTIONS_MAX 64
 #endif
+#define MAX_RULES   CONTROL_RAM_RULES_MAX
+#define MAX_ACTIONS CONTROL_RAM_ACTIONS_MAX
+static_assert(MAX_RULES   >= 1 && MAX_RULES   <= 254, "MAX_RULES out of id space [1,254]");
+static_assert(MAX_ACTIONS >= 1 && MAX_ACTIONS <= 254, "MAX_ACTIONS out of id space [1,254]");
 
 // Reserved id sentinel: an unused record, and (as Action.ruleRef) "manual-only".
 #define CONTROL_ID_NONE 0xFF
@@ -121,9 +141,9 @@ enum ActionFailsafe : uint8_t {
 };
 
 // ============================================================================
-// Persisted records (EEPROM-resident; live inside SystemConfig — Option A)
-// No name fields: managed by stable `id`; LIST renders ground truth from the
-// source input's name + condition + severity (§11.8).
+// Persisted records (EEPROM-resident; stored in the shared config-store arena,
+// input_manager.cpp). No name fields: managed by stable `id`; LIST renders
+// ground truth from the source input's name + condition + severity (§11.8).
 // ============================================================================
 
 // ~21–24 B depending on platform alignment.
@@ -149,6 +169,20 @@ struct Action {
     uint8_t behavior;   // ACT_BEHAVIOR_*
     uint8_t failsafe;   // ActionFailsafe (RELAY only; ignored by other types in v1)
 };
+
+// ============================================================================
+// The persisted Rule/Action tables are standalone RAM globals (defined in
+// control_manager.cpp), mirroring Input inputs[] — NOT members of SystemConfig.
+// Persistence is handled by the shared EEPROM config-store arena in
+// input_manager.cpp (saveInputConfig/loadInputConfig), which packs inputs, rules
+// and actions into one front-growing region. Declared here so every translation
+// unit that sees the record types can reach the tables without pulling in
+// control_manager.h (e.g. pin_registry.cpp, which only has system_config.h).
+// ============================================================================
+#if ENABLE_CONTROL_ENGINE
+extern Rule   rules[MAX_RULES];
+extern Action actions[MAX_ACTIONS];
+#endif
 
 // ============================================================================
 // Runtime context (NOT persisted) — lift-and-rename target of AlarmContext.

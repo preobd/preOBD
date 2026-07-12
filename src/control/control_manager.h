@@ -1,7 +1,7 @@
 /*
  * control_manager.h - Runtime owner of the control engine's Rule contexts.
  *
- * Bridges the persisted rule table (systemConfig.rules[]) to live input values:
+ * Bridges the persisted rule table (rules[]) to live input values:
  * holds the parallel RuleContext[] runtime state, evaluates every configured
  * rule each cycle against its source input, and rolls up system severity.
  *
@@ -18,11 +18,18 @@
 
 #if ENABLE_CONTROL_ENGINE
 
-// Runtime contexts, indexed 1:1 with systemConfig.rules[].
+// Runtime contexts, indexed 1:1 with rules[].
 extern RuleContext g_ruleContexts[MAX_RULES];
 
-// Arm every configured rule from EEPROM (the boot-load path, §11.5). Call once
-// after SystemConfig + inputs are loaded.
+// Stamp every Rule/Action slot empty (id = CONTROL_ID_NONE) and disable every
+// rule context. The tables are BSS-zeroed standalone globals where id==0 is a
+// VALID id, so this MUST run before they are trusted on any path that does NOT
+// load a valid store: boot before load, every load-failure/early-return, and
+// factory reset. Mirrors the inputs[] pin=0xFF defense.
+void controlResetTables();
+
+// Arm every configured rule from the table (the boot-load path, §11.5). Call once
+// after the config store + inputs are loaded.
 void controlManagerInit(uint32_t now);
 
 // Evaluate every configured rule against its live source input value. Call on
@@ -32,7 +39,7 @@ void controlManagerUpdate(uint32_t now);
 // Max configured severity over all rules currently ACTIVE (annunciator rollup).
 RuleSeverity controlSystemSeverity();
 
-// --- rule table helpers (operate on systemConfig.rules[]) ---
+// --- rule table helpers (operate on rules[]) ---
 int     controlRuleSlot(uint8_t id);    // slot index for a rule id, or -1
 int     controlRuleFreeSlot();          // first empty slot, or -1 if full
 uint8_t controlRuleAllocId();           // smallest unused id, or CONTROL_ID_NONE if exhausted
@@ -113,7 +120,7 @@ void controlActionsUpdate(bool configMode);
 // Current driven (logical, pre-invert) state of the action in `slot`, for LIST.
 bool controlActionState(int slot);
 
-// --- action table helpers (operate on systemConfig.actions[]) ---
+// --- action table helpers (operate on actions[]) ---
 int     controlActionSlot(uint8_t id);
 int     controlActionFreeSlot();
 uint8_t controlActionAllocId();

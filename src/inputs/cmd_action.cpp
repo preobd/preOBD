@@ -1,7 +1,7 @@
 /*
  * cmd_action.cpp - ACTION command (control engine: actuators driven by Rules)
  *
- * Manages the persisted Action table (systemConfig.actions[]). Actions are
+ * Manages the persisted Action table (actions[]). Actions are
  * managed by stable id — no names (§11.8). v1 implements ACT_RELAY (a generic
  * GPIO actuator, the relay successor); other types are reserved.
  *
@@ -41,7 +41,7 @@ static FLASHMEM const char* actionTypeName(uint8_t t) {
 }
 
 static FLASHMEM void printActionRow(int i) {
-    const Action& a = systemConfig.actions[i];
+    const Action& a = actions[i];
     msg.control.print(F("  #"));
     msg.control.print(a.id);
     msg.control.print(F("  "));
@@ -76,7 +76,7 @@ static FLASHMEM void printAllActions() {
         return;
     }
     for (int i = 0; i < MAX_ACTIONS; i++) {
-        if (systemConfig.actions[i].id != CONTROL_ID_NONE) printActionRow(i);
+        if (actions[i].id != CONTROL_ID_NONE) printActionRow(i);
     }
 }
 
@@ -144,7 +144,7 @@ static FLASHMEM int actionAdd(int argc, const char* const* argv) {
         return 1;
     }
 
-    Action& a = systemConfig.actions[slot];
+    Action& a = actions[slot];
     a.id = id;
     a.type = ACT_RELAY;
     a.target = target;
@@ -168,7 +168,7 @@ static FLASHMEM int actionLink(uint8_t id, const char* ruleArg) {
         return 1;
     }
     if (streq_P(ruleArg, PSTR("NONE"))) {
-        systemConfig.actions[slot].ruleRef = CONTROL_ID_NONE;
+        actions[slot].ruleRef = CONTROL_ID_NONE;
         msg.control.print(F("Action #"));
         msg.control.print(id);
         msg.control.println(F(" unlinked (manual). SAVE to persist."));
@@ -180,7 +180,7 @@ static FLASHMEM int actionLink(uint8_t id, const char* ruleArg) {
         msg.control.println(ruleId);
         return 1;
     }
-    systemConfig.actions[slot].ruleRef = ruleId;
+    actions[slot].ruleRef = ruleId;
     msg.control.print(F("Action #"));
     msg.control.print(id);
     msg.control.print(F(" linked to rule #"));
@@ -200,7 +200,7 @@ static FLASHMEM int actionManual(uint8_t id, bool on) {
     // action follows its Rule, so reject the command WITHOUT mutating manual state
     // (#294): the old code set the manual flag and printed a soft note, leaving a
     // stale flag that would snap the pin on the moment the rule was later unlinked.
-    if (systemConfig.actions[slot].ruleRef != CONTROL_ID_NONE) {
+    if (actions[slot].ruleRef != CONTROL_ID_NONE) {
         msg.control.print(F("ERROR: action #"));
         msg.control.print(id);
         msg.control.println(F(" is rule-driven; ON/OFF applies only to manual actions"));
@@ -226,13 +226,13 @@ static FLASHMEM int actionDel(uint8_t id) {
     // isn't surprised by an inverted (active-low) relay sitting HIGH after clear
     // (#293): de-asserted/OFF respects INVERT, so OFF == HIGH for an active-low
     // relay (its safe, de-energized state) — not a stuck-on bug.
-    const Action& a = systemConfig.actions[slot];
+    const Action& a = actions[slot];
     const bool relay = (a.type == ACT_RELAY);
     const bool offHigh = relay && (a.behavior & ACT_BEHAVIOR_INVERT);  // OFF level for inverted = HIGH
     const uint8_t target = a.target;
 
     controlActionConfigurePin(slot);  // de-assert the pin before freeing
-    systemConfig.actions[slot].id = CONTROL_ID_NONE;
+    actions[slot].id = CONTROL_ID_NONE;
     controlSyncActionPins();          // release the freed target pin in the registry
     msg.control.print(F("Action #"));
     msg.control.print(id);

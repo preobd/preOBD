@@ -124,6 +124,15 @@ static int set_application(uint8_t pin, int argc, const char* const* argv) {
                 msg.control.print(F("  Seeded Rule #"));
                 msg.control.print(ruleId);
                 msg.control.println(F(" from application defaults (RULE LIST to view)"));
+            } else if (controlRuleFreeSlot() < 0 || controlRuleAllocId() == CONTROL_ID_NONE) {
+                // Distinguish the genuine table/id-space-full case from the benign
+                // "this application has no default alarm band" (the other reason
+                // seeding returns NONE). With caps at the 254-id ceiling this is
+                // effectively unreachable, but the original silent-drop bug (#296)
+                // is exactly this path — surface it loudly rather than leave the
+                // input unmonitored without a word.
+                msg.control.println(F("  WARNING: Rule table full — input configured WITHOUT an alarm"));
+                msg.control.println(F("  (free a Rule with RULE DEL, then SET <pin> ALARM <min> <max>)"));
             }
         } else if (appIndex != oldApp) {
             // App CHANGED under existing Rule(s): their thresholds are now stale.

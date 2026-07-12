@@ -1,7 +1,7 @@
 /*
  * control_json.h - Rule/Action <-> JSON leaf converters (control engine).
  *
- * The array-level iteration over systemConfig.rules[]/actions[] plus the
+ * The array-level iteration over rules[]/actions[] plus the
  * re-arming on import live in json_config.cpp. These per-record converters are
  * isolated here, depending only on ArduinoJson + control_types.h, so they link
  * (and round-trip-test) on the native host without dragging json_config.cpp's

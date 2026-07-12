@@ -27,6 +27,7 @@
 #include "../lib/bus_defaults.h"
 #include "../lib/serial_manager.h"
 #include "../lib/pin_registry.h"
+#include "../control/control_manager.h"  // control engine re-arm trio (LOAD path)
 #include "../outputs/output_base.h"
 #include "../lib/obd_query.h"
 #include "../lib/display_manager.h"
@@ -385,23 +386,50 @@ int cmd_save(int argc, const char* const* argv) {
     return 1;
 }
 
+// Shared EEPROM-load path for `LOAD` and `LOAD EEPROM`. Both loaders are
+// validate-before-mutate (a failed load leaves the prior in-RAM config and any
+// driven outputs untouched), so we re-arm the control engine and report success
+// ONLY when the load actually applied — never claim "loaded" on a blank/corrupt
+// EEPROM, and never reset the running engine on a no-op LOAD (review fixes).
+static int loadConfigFromEEPROM() {
+    msg.control.println(F("Loading configuration from EEPROM..."));
+    bool inputsOk = loadInputConfig();
+    bool sysOk    = loadSystemConfig();
+
+#if ENABLE_CONTROL_ENGINE
+    if (inputsOk) {
+        // Re-arm from the freshly-loaded tables: rule contexts, then action pin
+        // states + registry (mirrors the JSON import path, #296 B3). Gated on a
+        // successful input/control load so a failed LOAD can't reset the engine.
+        controlManagerInit(millis());
+        controlActionsInit();
+        controlSyncActionPins();
+    }
+#endif
+
+    if (inputsOk && sysOk) {
+        msg.control.println(F("Configuration loaded"));
+        return 0;
+    }
+    if (!inputsOk && !sysOk) {
+        msg.control.println(F("ERROR: No valid configuration in EEPROM — nothing changed (run SAVE first)"));
+        return 1;
+    }
+    msg.control.print(F("WARNING: partial load — "));
+    msg.control.println(inputsOk ? F("system config missing/corrupt (inputs+rules loaded)")
+                                 : F("input/control config missing/corrupt (system config loaded)"));
+    return 1;
+}
+
 int cmd_load(int argc, const char* const* argv) {
     // Case 1: LOAD (bare) → EEPROM (backward compatible)
     if (argc == 1) {
-        msg.control.println(F("Loading configuration from EEPROM..."));
-        loadInputConfig();
-        loadSystemConfig();
-        msg.control.println(F("Configuration loaded"));
-        return 0;
+        return loadConfigFromEEPROM();
     }
 
     // Case 2: LOAD EEPROM (explicit)
     if (argc == 2 && streq_P(argv[1], PSTR("EEPROM"))) {
-        msg.control.println(F("Loading configuration from EEPROM..."));
-        loadInputConfig();
-        loadSystemConfig();
-        msg.control.println(F("Configuration loaded"));
-        return 0;
+        return loadConfigFromEEPROM();
     }
 
     // Case 3: LOAD [destination:]filename (file path - anything that's not "EEPROM")
@@ -963,7 +991,7 @@ int cmd_test(int argc, const char* const* argv) {
 #endif
 #if ENABLE_CONTROL_ENGINE
         for (int i = 0; i < MAX_ACTIONS; i++) {
-            const Action& a = systemConfig.actions[i];
+            const Action& a = actions[i];
             if (a.id == CONTROL_ID_NONE || a.type != ACT_RELAY) continue;
             any = true;
             msg.control.print(F("Action #")); msg.control.print(a.id);

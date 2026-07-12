@@ -46,8 +46,11 @@
 // Version 3: Added per-input output routing mask (outputMask)
 // Version 4: Added per-input divider_ratio for hardware voltage dividers
 // Version 5: CalibrationOverride uses typedefs directly; AVR union size corrected 18→16 bytes
+// Version 6: shared config-store arena — header now packs inputs + control-engine
+//            Rule/Action tables in one front-growing region (#296). Rule/Action
+//            moved OUT of SystemConfig; clean reset from v5.
 // =============================================================================
-#define EEPROM_VERSION 5
+#define EEPROM_VERSION 6
 
 // =============================================================================
 // Helper functions (defined in version.cpp)

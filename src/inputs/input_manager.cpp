@@ -16,28 +16,45 @@
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
 #include "../lib/pin_registry.h"
+#include "../control/control_manager.h"  // controlResetTables + rule/action table helpers
 
 // ===== GLOBAL STATE =====
 Input inputs[MAX_INPUTS];
 uint8_t numActiveInputs = 0;
 
-// ===== EEPROM LAYOUT =====
-// EEPROM stores configuration persistently for runtime mode.
-// Layout: [Header (8 bytes)] [InputEEPROM 0] [InputEEPROM 1] ... [InputEEPROM N]
+// ===== EEPROM LAYOUT — shared front-growing config-store arena =====
+// One arena holds every persisted record table, packed after a single header at
+// address 0:
+//   [ConfigStoreHeader] [InputEEPROM × numInputs] [Rule × numRules] [Action × numActions]
 //
-// IMPORTANT: We store hashes (not indices) in EEPROM for stability.
-// Registry indices can change when entries are reordered, but hashes remain stable.
-// At boot time, we resolve hashes back to current indices.
+// The SystemConfig block is anchored at the BACK of EEPROM (system_config.h); the
+// arena grows forward toward it. All record tables draw from ONE shared budget —
+// when the arena would collide with SystemConfig, trailing sections truncate
+// LOUDLY in priority order inputs > rules > actions (a rule needs its source
+// input to evaluate; an action needs its rule). This generalizes the original
+// input-only truncation to the whole store (#296).
+//
+// IMPORTANT: inputs store hashes (not registry indices) for stability — registry
+// indices shift when entries are reordered, hashes don't; resolved back at boot.
+// Rule/Action are stored DIRECTLY (no hash mirror): they key off the stable input
+// PIN and stable record ids, not registry indices, so they round-trip as PODs.
 
-#define EEPROM_MAGIC 0x4F454D53            // "OEMS" in ASCII - validates EEPROM has our data
-#define EEPROM_HEADER_SIZE sizeof(EEPROMHeader)  // Header size
+#define EEPROM_MAGIC 0x4F454D53            // "OEMS" in ASCII - validates the arena is ours
+#define EEPROM_HEADER_SIZE sizeof(ConfigStoreHeader)
 #define EEPROM_INPUT_SIZE sizeof(InputEEPROM)    // size varies by platform alignment (AVR vs ARM)
 
-struct EEPROMHeader {
-    uint32_t magic;
-    uint16_t version;
-    uint8_t numInputs;
-    uint8_t reserved;
+struct ConfigStoreHeader {
+    uint32_t magic;        // EEPROM_MAGIC
+    uint16_t version;      // EEPROM_VERSION (store-layout version). NB: does NOT encode
+                           // the ENABLE_CONTROL_ENGINE build flag — a store written with
+                           // rules/actions won't re-checksum on a control-off build (fails
+                           // safe → reject → blank). Academic: a board's control state is fixed.
+    uint8_t  numInputs;    // records actually persisted in each section…
+    uint8_t  numRules;
+    uint8_t  numActions;
+    uint8_t  checksum;     // XOR over every persisted record byte (all sections)
+    uint8_t  reserved[6];  // future record-type counts; fills the struct to exactly 16 bytes
+                           // (4+2+4+6) so there are NO indeterminate pad bytes on any platform
 };
 
 // InputEEPROM - Compact struct for EEPROM storage
@@ -80,13 +97,14 @@ struct InputEEPROM {
     float divider_ratio;                    // Voltage divider ratio (1.0 = none)
 };
 
-// MAX_EEPROM_INPUTS is the maximum number of inputs that fit in EEPROM between
-// the header and the SystemConfig block. This is independent of MAX_INPUTS
+// MAX_EEPROM_INPUTS is the worst-case input ceiling: how many inputs fit between
+// the header and the SystemConfig block if inputs were the ONLY section. Rules
+// and actions share the same budget, so the live input limit at save time may be
+// lower (handled dynamically by fitSection() below). Independent of MAX_INPUTS
 // (a RAM limit) — on small-EEPROM platforms (e.g. Teensy 4.0) the user can
-// configure more inputs in RAM than will persist. saveInputConfig() truncates
-// loudly when this happens.
+// configure more records in RAM than will persist; the store truncates loudly.
 constexpr size_t MAX_EEPROM_INPUTS =
-    (SYSTEM_CONFIG_ADDRESS - sizeof(EEPROMHeader)) / sizeof(InputEEPROM);
+    (SYSTEM_CONFIG_ADDRESS - sizeof(ConfigStoreHeader)) / sizeof(InputEEPROM);
 static_assert(MAX_EEPROM_INPUTS >= 1,
               "EEPROM too small to persist even one input — check EEPROM_TOTAL_BYTES vs sizeof(SystemConfig)");
 
@@ -95,6 +113,14 @@ bool initInputManager() {
     // Clear all inputs
     memset(inputs, 0, sizeof(inputs));
     numActiveInputs = 0;
+#if ENABLE_CONTROL_ENGINE
+    // Empty the BSS-zeroed control tables up front: id==0 is a valid record id, so
+    // an unstamped table looks full of phantom rule/action #0. loadInputConfig()
+    // below is validate-before-mutate (it only touches the tables once a valid
+    // store is confirmed), so cold-boot safety with a blank/invalid EEPROM relies
+    // on this reset, not on the loader (#296 B2).
+    controlResetTables();
+#endif
 
     // Initialize with invalid values
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
@@ -111,245 +137,313 @@ bool initInputManager() {
     return eepromLoaded;
 }
 
-// ===== EEPROM PERSISTENCE =====
+// ===== EEPROM PERSISTENCE (shared config-store arena) =====
 
-/**
- * Calculate XOR checksum of all active inputs
- * Used to detect EEPROM corruption
- */
-static uint8_t calculateConfigChecksum(uint8_t count) {
-    uint8_t checksum = 0;
+// XOR a record's raw bytes into a checksum. Called over the SAME bytes on save
+// (the RAM image handed to EEPROM.put) and load (read back via EEPROM.get), so
+// the two always agree byte-for-byte (padding included).
+static uint8_t xorBytes(const void* p, size_t n) {
+    const uint8_t* b = (const uint8_t*)p;
+    uint8_t c = 0;
+    for (size_t i = 0; i < n; i++) c ^= b[i];
+    return c;
+}
 
-    // Read InputEEPROM structs from EEPROM and checksum them
-    // This ensures we're checksumming what was actually saved, not runtime data
-    uint16_t addr = EEPROM_HEADER_SIZE;
-    for (uint8_t i = 0; i < count; i++) {
-        InputEEPROM eepromInput;
-        EEPROM.get(addr, eepromInput);
+// How many records of one section fit in the remaining arena budget. Warns
+// loudly on truncation (generalizes the legacy input-only message to any
+// section), so a user who overfills the store sees exactly what won't persist.
+static uint8_t fitSection(size_t remaining, uint8_t want, size_t recSize,
+                          const __FlashStringHelper* label) {
+    size_t fits = (recSize > 0) ? (remaining / recSize) : 0;
+    if (fits > 254) fits = 254;            // record-count fields are uint8_t
+    if (want <= fits) return want;
+    msg.control.print(F("⚠ EEPROM holds "));
+    msg.control.print((unsigned)fits);
+    msg.control.print(F(" "));
+    msg.control.print(label);
+    msg.control.print(F("; truncating "));
+    msg.control.print(want);
+    msg.control.println(F(" — extras will not persist across reboot"));
+    return (uint8_t)fits;
+}
 
-        // XOR all bytes of the EEPROM structure
-        const uint8_t* data = (const uint8_t*)&eepromInput;
-        for (size_t k = 0; k < sizeof(InputEEPROM); k++) {
-            checksum ^= data[k];
-        }
+// Serialize one Input → its compact EEPROM record (registry indices → stable hashes).
+static void buildInputRecord(const Input& in, InputEEPROM& out) {
+    memset(&out, 0, sizeof(out));
+    out.pin = in.pin;
+    strncpy(out.abbrName, in.abbrName, sizeof(out.abbrName) - 1);
+    out.abbrName[sizeof(out.abbrName) - 1] = '\0';
+    strncpy(out.displayName, in.displayName, sizeof(out.displayName) - 1);
+    out.displayName[sizeof(out.displayName) - 1] = '\0';
+    out.minValue = in.minValue;
+    out.maxValue = in.maxValue;
+    out.obd2pid = in.obd2pid;
+    out.obd2length = in.obd2length;
+    out.calibrationType = in.calibrationType;
+    memcpy(&out.customCalibration, &in.customCalibration, sizeof(CalibrationOverride));
+    out.flagsByte =
+        (in.flags.isEnabled ? 0x01 : 0) |
+        (in.flags.alarm ? 0x02 : 0) |
+        (in.flags.display ? 0x04 : 0) |
+        (in.flags.useCustomCalibration ? 0x08 : 0);
+    out.outputMask = in.outputMask;
+    out.divider_ratio = in.divider_ratio;
+    const ApplicationPreset* appPreset = getApplicationByIndex(in.applicationIndex);
+    if (appPreset) out.applicationHash = pgm_read_word(&appPreset->nameHash);
+    const SensorInfo* sensorInfo = getSensorByIndex(in.sensorIndex);
+    if (sensorInfo) out.sensorHash = pgm_read_word(&sensorInfo->nameHash);
+    const UnitsInfo* unitsInfo = getUnitsByIndex(in.unitsIndex);
+    if (unitsInfo) out.unitsHash = pgm_read_word(&unitsInfo->nameHash);
+}
 
-        addr += EEPROM_INPUT_SIZE;
+// Deserialize one compact EEPROM record → an Input slot (hashes → indices),
+// restoring function pointers + sensor-specific init (can't persist pointers).
+static void applyInputRecord(const InputEEPROM& rec, Input& in) {
+    in.pin = rec.pin;
+    // memcpy (not strncpy) the fixed-size name buffers then force-terminate: the
+    // stored strings are already null-terminated within their buffers, and src/dst
+    // are equal-sized, so this copies the exact bytes safely. memcpy avoids the
+    // -Wstringop-truncation the ARM toolchain raises for strncpy of a same-sized
+    // source even when the following byte is explicitly nulled.
+    memcpy(in.abbrName, rec.abbrName, sizeof(in.abbrName));
+    in.abbrName[sizeof(in.abbrName) - 1] = '\0';
+    memcpy(in.displayName, rec.displayName, sizeof(in.displayName));
+    in.displayName[sizeof(in.displayName) - 1] = '\0';
+    in.minValue = rec.minValue;
+    in.maxValue = rec.maxValue;
+    in.obd2pid = rec.obd2pid;
+    in.obd2length = rec.obd2length;
+    in.calibrationType = (CalibrationType)rec.calibrationType;
+    memcpy(&in.customCalibration, &rec.customCalibration, sizeof(CalibrationOverride));
+    in.flags.isEnabled = (rec.flagsByte & 0x01) != 0;
+    in.flags.alarm = (rec.flagsByte & 0x02) != 0;
+    in.flags.display = (rec.flagsByte & 0x04) != 0;
+    in.flags.useCustomCalibration = (rec.flagsByte & 0x08) != 0;
+    in.outputMask = rec.outputMask;
+    in.divider_ratio = rec.divider_ratio;  // 0 from older EEPROMs treated as 1.0 by reader
+    in.applicationIndex = getApplicationIndexByHash(rec.applicationHash);
+    in.sensorIndex = getSensorIndexByHash(rec.sensorHash);
+    in.unitsIndex = getUnitsIndexByHash(rec.unitsHash);
+    const SensorInfo* flashInfo = getSensorByIndex(in.sensorIndex);
+    if (flashInfo) {
+        SensorInfo info;
+        loadSensorInfo(flashInfo, &info);
+        in.readFunction = info.readFunction;
+        in.measurementType = info.measurementType;
+        in.calibrationType = info.calibrationType;
+        if (!in.flags.useCustomCalibration) in.presetCalibration = info.defaultCalibration;
+        if (info.initFunction) info.initFunction(&in);
     }
-
-    return checksum;
+    // (Legacy per-input alarm arming removed — alarms are control-engine Rules,
+    // armed from rules[] by controlManagerInit(). The flagsByte alarm bit /
+    // min/max are retained as dead fields for layout stability, not evaluated.)
 }
 
 bool saveInputConfig() {
-    // Convert Input structs to InputEEPROM structs (indices → hashes)
+    const size_t budget = (size_t)SYSTEM_CONFIG_ADDRESS - EEPROM_HEADER_SIZE;
+
+    // What we WANT to persist in each section.
+    uint8_t wantInputs = 0;
+    for (uint8_t i = 0; i < MAX_INPUTS; i++)
+        if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) wantInputs++;
+
+    // Fit each section into the shared budget, priority inputs > rules > actions
+    // (a rule needs its source input to evaluate; an action needs its rule).
+    size_t remaining = budget;
+    uint8_t persistInputs = fitSection(remaining, wantInputs, EEPROM_INPUT_SIZE, F("inputs"));
+    remaining -= (size_t)persistInputs * EEPROM_INPUT_SIZE;
+#if ENABLE_CONTROL_ENGINE
+    uint8_t persistRules = fitSection(remaining, controlRuleCount(), sizeof(Rule), F("rules"));
+    remaining -= (size_t)persistRules * sizeof(Rule);
+    uint8_t persistActions = fitSection(remaining, controlActionCount(), sizeof(Action), F("actions"));
+    remaining -= (size_t)persistActions * sizeof(Action);
+#endif
+
+    // Write records, accumulating a checksum over exactly the bytes stored.
     uint16_t addr = EEPROM_HEADER_SIZE;
-    uint8_t savedCount = 0;
-    const uint8_t persistLimit =
-        (numActiveInputs <= MAX_EEPROM_INPUTS) ? numActiveInputs : (uint8_t)MAX_EEPROM_INPUTS;
+    uint8_t checksum = 0;
 
-    if (numActiveInputs > MAX_EEPROM_INPUTS) {
-        msg.control.print(F("⚠ EEPROM holds "));
-        msg.control.print((unsigned)MAX_EEPROM_INPUTS);
-        msg.control.print(F(" inputs; truncating "));
-        msg.control.print(numActiveInputs);
-        msg.control.println(F(" — extras will not persist across reboot"));
+    uint8_t savedInputs = 0;
+    for (uint8_t i = 0; i < MAX_INPUTS && savedInputs < persistInputs; i++) {
+        if (inputs[i].pin == 0xFF || !inputs[i].flags.isEnabled) continue;
+        InputEEPROM rec;
+        buildInputRecord(inputs[i], rec);
+        EEPROM.put(addr, rec);
+        checksum ^= xorBytes(&rec, sizeof(rec));
+        addr += EEPROM_INPUT_SIZE;
+        savedInputs++;
     }
 
-    for (uint8_t i = 0; i < MAX_INPUTS && savedCount < persistLimit; i++) {
-        if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) {
-            InputEEPROM eepromInput;
-            memset(&eepromInput, 0, sizeof(InputEEPROM));
-
-            // Copy simple fields
-            eepromInput.pin = inputs[i].pin;
-            strncpy(eepromInput.abbrName, inputs[i].abbrName, sizeof(eepromInput.abbrName) - 1);
-            eepromInput.abbrName[sizeof(eepromInput.abbrName) - 1] = '\0';  // Ensure null termination
-            strncpy(eepromInput.displayName, inputs[i].displayName, sizeof(eepromInput.displayName) - 1);
-            eepromInput.displayName[sizeof(eepromInput.displayName) - 1] = '\0';  // Ensure null termination
-            eepromInput.minValue = inputs[i].minValue;
-            eepromInput.maxValue = inputs[i].maxValue;
-            eepromInput.obd2pid = inputs[i].obd2pid;
-            eepromInput.obd2length = inputs[i].obd2length;
-            eepromInput.calibrationType = inputs[i].calibrationType;
-            memcpy(&eepromInput.customCalibration, &inputs[i].customCalibration, sizeof(CalibrationOverride));
-
-            // Pack flags into single byte
-            eepromInput.flagsByte =
-                (inputs[i].flags.isEnabled ? 0x01 : 0) |
-                (inputs[i].flags.alarm ? 0x02 : 0) |
-                (inputs[i].flags.display ? 0x04 : 0) |
-                (inputs[i].flags.useCustomCalibration ? 0x08 : 0);
-
-            // Output routing mask
-            eepromInput.outputMask = inputs[i].outputMask;
-
-            // Hardware signal conditioning
-            eepromInput.divider_ratio = inputs[i].divider_ratio;
-
-            // Convert indices to hashes by looking up names in registries
-            const ApplicationPreset* appPreset = getApplicationByIndex(inputs[i].applicationIndex);
-            if (appPreset) {
-                eepromInput.applicationHash = pgm_read_word(&appPreset->nameHash);
-            }
-
-            const SensorInfo* sensorInfo = getSensorByIndex(inputs[i].sensorIndex);
-            if (sensorInfo) {
-                eepromInput.sensorHash = pgm_read_word(&sensorInfo->nameHash);
-            }
-
-            const UnitsInfo* unitsInfo = getUnitsByIndex(inputs[i].unitsIndex);
-            if (unitsInfo) {
-                eepromInput.unitsHash = pgm_read_word(&unitsInfo->nameHash);
-            }
-
-            // Write to EEPROM
-            EEPROM.put(addr, eepromInput);
-            addr += EEPROM_INPUT_SIZE;
-            savedCount++;
-        }
+    uint8_t savedRules = 0, savedActions = 0;
+#if ENABLE_CONTROL_ENGINE
+    for (int i = 0; i < MAX_RULES && savedRules < persistRules; i++) {
+        if (rules[i].id == CONTROL_ID_NONE) continue;
+        EEPROM.put(addr, rules[i]);
+        checksum ^= xorBytes(&rules[i], sizeof(Rule));
+        addr += sizeof(Rule);
+        savedRules++;
     }
+    for (int i = 0; i < MAX_ACTIONS && savedActions < persistActions; i++) {
+        if (actions[i].id == CONTROL_ID_NONE) continue;
+        EEPROM.put(addr, actions[i]);
+        checksum ^= xorBytes(&actions[i], sizeof(Action));
+        addr += sizeof(Action);
+        savedActions++;
+    }
+#endif
 
-    msg.control.print(F("✓ Saved "));
-    msg.control.print(savedCount);
-    msg.control.println(F(" inputs to EEPROM (hash-based)"));
-
-    // Calculate checksum over what was actually persisted
-    uint8_t checksum = calculateConfigChecksum(savedCount);
-
-    // Write header with checksum
-    EEPROMHeader header;
+    ConfigStoreHeader header;
     header.magic = EEPROM_MAGIC;
     header.version = EEPROM_VERSION;
-    header.numInputs = savedCount;
-    header.reserved = checksum;  // Store checksum in reserved field
-
+    header.numInputs = savedInputs;
+    header.numRules = savedRules;
+    header.numActions = savedActions;
+    header.checksum = checksum;
+    memset(header.reserved, 0, sizeof(header.reserved));
     EEPROM.put(0, header);
 
+    msg.control.print(F("✓ Saved "));
+    msg.control.print(savedInputs);
+    msg.control.print(F(" inputs"));
+#if ENABLE_CONTROL_ENGINE
+    msg.control.print(F(", "));
+    msg.control.print(savedRules);
+    msg.control.print(F(" rules, "));
+    msg.control.print(savedActions);
+    msg.control.print(F(" actions"));
+#endif
+    msg.control.println(F(" to EEPROM"));
     msg.debug.debug(TAG_CONFIG, "Checksum: 0x%02X", checksum);
-
     return true;
 }
 
 bool loadInputConfig() {
-    EEPROMHeader header;
+    // VALIDATE BEFORE MUTATE: read and FULLY verify the header (magic, version,
+    // bounds, checksum) against a read-only scan first; touch RAM (inputs[] / the
+    // control tables) ONLY once the store is confirmed good. So a failed runtime
+    // LOAD — blank, wrong-version, or corrupt EEPROM — is a true no-op: it cannot
+    // wipe an unsaved in-RAM config or strand a previously-driven output
+    // (review: Codex BLOCKER / Opus SHOULD-FIX). Cold-boot safety for the
+    // BSS-zeroed control tables is handled by controlResetTables() in
+    // initInputManager(), not here.
+    ConfigStoreHeader header;
     EEPROM.get(0, header);
 
-    // Validate magic number
-    if (header.magic != EEPROM_MAGIC) {
-        return false;
-    }
-
-    // Check version
+    if (header.magic != EEPROM_MAGIC) return false;
     if (header.version != EEPROM_VERSION) {
-        msg.debug.warn(TAG_CONFIG, "EEPROM version mismatch (found %d, expected %d) - ignoring", header.version, EEPROM_VERSION);
+        // (debug string kept terse — it's RAM-resident on AVR, see message_api.h)
+        msg.debug.warn(TAG_CONFIG, "EEPROM version mismatch (found %d, expected %d)",
+                       header.version, EEPROM_VERSION);
         return false;
     }
 
-    // Clear existing inputs
-    memset(inputs, 0, sizeof(inputs));
-    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        inputs[i].pin = 0xFF;
-    }
+    // Reject a store whose sections wouldn't fit before the SystemConfig block
+    // (e.g. a chip physically moved from a larger-EEPROM board) BEFORE walking it,
+    // so the checksum scan below can't read into the SystemConfig region (review
+    // nit). The reads are bounded + read-only regardless; this just fails fast.
+    // Silent reject — the caller (cmd_load) reports; no RAM-resident log on AVR.
+    size_t storedBytes = EEPROM_HEADER_SIZE
+                       + (size_t)header.numInputs  * EEPROM_INPUT_SIZE
+#if ENABLE_CONTROL_ENGINE
+                       + (size_t)header.numRules   * sizeof(Rule)
+                       + (size_t)header.numActions * sizeof(Action)
+#endif
+                       ;
+    if (storedBytes > SYSTEM_CONFIG_ADDRESS) return false;
 
-    // Read inputs from EEPROM and convert hashes → indices
-    uint16_t addr = EEPROM_HEADER_SIZE;
-    numActiveInputs = header.numInputs;
-
-    if (numActiveInputs > MAX_INPUTS) {
-        numActiveInputs = MAX_INPUTS;
-    }
-    if (numActiveInputs > MAX_EEPROM_INPUTS) {
-        numActiveInputs = MAX_EEPROM_INPUTS;
-    }
-
-    for (uint8_t i = 0; i < numActiveInputs; i++) {
-        InputEEPROM eepromInput;
-        EEPROM.get(addr, eepromInput);
-        addr += EEPROM_INPUT_SIZE;
-
-        // Copy simple fields
-        inputs[i].pin = eepromInput.pin;
-        strncpy(inputs[i].abbrName, eepromInput.abbrName, sizeof(inputs[i].abbrName));
-        inputs[i].abbrName[sizeof(inputs[i].abbrName) - 1] = '\0';  // Ensure null termination
-        strncpy(inputs[i].displayName, eepromInput.displayName, sizeof(inputs[i].displayName));
-        inputs[i].displayName[sizeof(inputs[i].displayName) - 1] = '\0';  // Ensure null termination
-        inputs[i].minValue = eepromInput.minValue;
-        inputs[i].maxValue = eepromInput.maxValue;
-        inputs[i].obd2pid = eepromInput.obd2pid;
-        inputs[i].obd2length = eepromInput.obd2length;
-        inputs[i].calibrationType = (CalibrationType)eepromInput.calibrationType;
-        memcpy(&inputs[i].customCalibration, &eepromInput.customCalibration, sizeof(CalibrationOverride));
-
-        // Unpack flags from single byte
-        inputs[i].flags.isEnabled = (eepromInput.flagsByte & 0x01) != 0;
-        inputs[i].flags.alarm = (eepromInput.flagsByte & 0x02) != 0;
-        inputs[i].flags.display = (eepromInput.flagsByte & 0x04) != 0;
-        inputs[i].flags.useCustomCalibration = (eepromInput.flagsByte & 0x08) != 0;
-
-        // Output routing mask
-        inputs[i].outputMask = eepromInput.outputMask;
-
-        // Hardware signal conditioning (0 from older EEPROMs treated as 1.0 by reader)
-        inputs[i].divider_ratio = eepromInput.divider_ratio;
-
-        // Resolve hashes to current indices
-        inputs[i].applicationIndex = getApplicationIndexByHash(eepromInput.applicationHash);
-        inputs[i].sensorIndex = getSensorIndexByHash(eepromInput.sensorHash);
-        inputs[i].unitsIndex = getUnitsIndexByHash(eepromInput.unitsHash);
-
-        // Re-initialize function pointers and sensor-specific data
-        // (Function pointers can't be reliably stored in EEPROM)
-        const SensorInfo* flashInfo = getSensorByIndex(inputs[i].sensorIndex);
-        if (flashInfo) {
-            SensorInfo info;
-            loadSensorInfo(flashInfo, &info);
-            inputs[i].readFunction = info.readFunction;
-            inputs[i].measurementType = info.measurementType;
-            inputs[i].calibrationType = info.calibrationType;
-
-            // Restore preset calibration pointer if not using custom calibration
-            if (!inputs[i].flags.useCustomCalibration) {
-                inputs[i].presetCalibration = info.defaultCalibration;
-            }
-
-            // Call sensor-specific initialization function if it exists
-            if (info.initFunction) {
-                info.initFunction(&inputs[i]);
-            }
+    // Verify the checksum over the bytes ACTUALLY stored (the header's own counts),
+    // BEFORE clamping into this firmware's RAM caps — a build with smaller caps
+    // must still validate a store written by a larger one (#296 S2). Sections are
+    // contiguous, so a single running address walks all three. Read-only.
+    uint8_t checksum = 0;
+    {
+        uint16_t a = EEPROM_HEADER_SIZE;
+        for (uint8_t i = 0; i < header.numInputs; i++) {
+            InputEEPROM rec; EEPROM.get(a, rec);
+            checksum ^= xorBytes(&rec, sizeof(rec));
+            a += EEPROM_INPUT_SIZE;
         }
-
-        // (Legacy per-input alarm arming removed — alarms are control-engine
-        // Rules, armed from systemConfig.rules[] by controlManagerInit(). The
-        // EEPROM flagsByte alarm bit / min/max are retained as dead fields for
-        // layout stability, not evaluated.)
+#if ENABLE_CONTROL_ENGINE
+        for (uint8_t i = 0; i < header.numRules; i++) {
+            Rule r; EEPROM.get(a, r);
+            checksum ^= xorBytes(&r, sizeof(Rule));
+            a += sizeof(Rule);
+        }
+        for (uint8_t i = 0; i < header.numActions; i++) {
+            Action ac; EEPROM.get(a, ac);
+            checksum ^= xorBytes(&ac, sizeof(Action));
+            a += sizeof(Action);
+        }
+#endif
     }
-
-    // Verify checksum
-    uint8_t storedChecksum = header.reserved;
-    uint8_t calculatedChecksum = calculateConfigChecksum(numActiveInputs);
-
-    if (storedChecksum != calculatedChecksum) {
+    if (checksum != header.checksum) {
         msg.control.println(F("ERROR: EEPROM checksum mismatch! Configuration corrupted."));
-        msg.control.println(F("Please reconfigure inputs and run SAVE."));
-        msg.debug.error(TAG_CONFIG, "Checksum mismatch: Stored 0x%02X, Calculated 0x%02X", storedChecksum, calculatedChecksum);
-
-        // Clear corrupted data
-        memset(inputs, 0, sizeof(inputs));
-        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            inputs[i].pin = 0xFF;
-        }
-        numActiveInputs = 0;
-
-        return false;
+        msg.control.println(F("Please reconfigure and run SAVE."));
+        msg.debug.error(TAG_CONFIG, "Store checksum mismatch: stored 0x%02X, calc 0x%02X",
+                        header.checksum, checksum);
+        return false;  // no RAM mutated — prior in-RAM config left intact
     }
 
-    msg.debug.debug(TAG_CONFIG, "Checksum verified: 0x%02X", storedChecksum);
+    // ===== store validated — COMMIT (the only point past here that mutates RAM) =====
+    memset(inputs, 0, sizeof(inputs));
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) inputs[i].pin = 0xFF;
+    numActiveInputs = 0;
+#if ENABLE_CONTROL_ENGINE
+    controlResetTables();
+#endif
+
+    // --- inputs (hashes → indices) ---
+    uint8_t nInputs = header.numInputs;
+    if (nInputs > MAX_INPUTS) nInputs = MAX_INPUTS;
+    if (nInputs > MAX_EEPROM_INPUTS) nInputs = MAX_EEPROM_INPUTS;
+    for (uint8_t i = 0; i < nInputs; i++) {
+        InputEEPROM rec;
+        EEPROM.get(EEPROM_HEADER_SIZE + (size_t)i * EEPROM_INPUT_SIZE, rec);
+        applyInputRecord(rec, inputs[i]);
+    }
+    numActiveInputs = nInputs;
+
+#if ENABLE_CONTROL_ENGINE
+    // Section bases from the STORED counts (not the RAM-clamped ones) so rules /
+    // actions are located at the offsets they were actually written to.
+    const size_t rulesBase   = EEPROM_HEADER_SIZE + (size_t)header.numInputs * EEPROM_INPUT_SIZE;
+    const size_t actionsBase = rulesBase + (size_t)header.numRules * sizeof(Rule);
+
+    uint8_t nRules = header.numRules;
+    if (nRules > MAX_RULES) nRules = MAX_RULES;
+    for (uint8_t i = 0; i < nRules; i++)
+        EEPROM.get(rulesBase + (size_t)i * sizeof(Rule), rules[i]);
+
+    uint8_t nActions = header.numActions;
+    if (nActions > MAX_ACTIONS) nActions = MAX_ACTIONS;
+    for (uint8_t i = 0; i < nActions; i++)
+        EEPROM.get(actionsBase + (size_t)i * sizeof(Action), actions[i]);
+
+    // Dangling-ref sweep (#296 S3): a truncated or hand-edited store may leave an
+    // Action pointing at a Rule that didn't load — revert it to manual-only,
+    // mirroring the RULE DEL invariant and the JSON import path, so the engine
+    // never evaluates a dangling ref. (Re-arming is the caller's job — boot does
+    // it via controlManagerInit; LOAD via the re-arm trio in cmd_load.)
+    for (int i = 0; i < MAX_ACTIONS; i++) {
+        Action& a = actions[i];
+        if (a.id != CONTROL_ID_NONE && a.ruleRef != CONTROL_ID_NONE &&
+            controlRuleSlot(a.ruleRef) < 0) {
+            msg.debug.warn(TAG_CONFIG, "action #%u referenced missing rule #%u; reverted to manual",
+                           a.id, a.ruleRef);
+            a.ruleRef = CONTROL_ID_NONE;
+        }
+    }
+#endif
+
+    // Terse info string (RAM-resident on AVR); the SAVE confirmation already
+    // reports rule/action counts via flash F() strings.
     msg.debug.info(TAG_CONFIG, "Loaded %d inputs from EEPROM", numActiveInputs);
     return true;
 }
 
 void resetInputConfig() {
-    // Clear EEPROM header
-    EEPROMHeader header = {0};
+    // Clear the store header (magic zeroed → next load reverts to blank config).
+    ConfigStoreHeader header = {};
     EEPROM.put(0, header);
 
     // Clear inputs
@@ -358,6 +452,10 @@ void resetInputConfig() {
         inputs[i].pin = 0xFF;
     }
     numActiveInputs = 0;
+
+#if ENABLE_CONTROL_ENGINE
+    controlResetTables();  // empty Rule/Action tables too (#296 B4)
+#endif
 
     msg.control.println(F("Configuration reset"));
 }

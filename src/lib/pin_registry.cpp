@@ -266,7 +266,7 @@ void printPinStatus(uint8_t specificPin) {
         // registered (as PIN_OUTPUT, for conflict detection), but this dedicated
         // view carries the action id, which the generic registry entry doesn't.
         for (int i = 0; i < MAX_ACTIONS; i++) {
-            const Action& a = systemConfig.actions[i];
+            const Action& a = actions[i];
             if (a.id != CONTROL_ID_NONE && a.type == ACT_RELAY && a.target == specificPin) {
                 printPinPadded(specificPin);
                 msg.control.print(F("Output    - Action #"));
@@ -327,8 +327,8 @@ void printPinStatus(uint8_t specificPin) {
     // Count control-engine RELAY Actions
     uint8_t actionCount = 0;
     for (int i = 0; i < MAX_ACTIONS; i++) {
-        if (systemConfig.actions[i].id != CONTROL_ID_NONE &&
-            systemConfig.actions[i].type == ACT_RELAY) {
+        if (actions[i].id != CONTROL_ID_NONE &&
+            actions[i].type == ACT_RELAY) {
             actionCount++;
         }
     }
@@ -405,7 +405,7 @@ void printPinStatus(uint8_t specificPin) {
     // Action Pins (control-engine RELAY actuators)
     bool hasActions = false;
     for (int i = 0; i < MAX_ACTIONS; i++) {
-        const Action& a = systemConfig.actions[i];
+        const Action& a = actions[i];
         if (a.id != CONTROL_ID_NONE && a.type == ACT_RELAY) {
             if (!hasActions) {
                 msg.control.println(F("Action Pins:"));

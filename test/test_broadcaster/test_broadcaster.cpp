@@ -1,7 +1,7 @@
 // Native unit test: AlarmBroadcaster wire payload (src/lib/alarm_broadcaster.cpp).
 //
 // Alarms are now control-engine Rules (§11): the broadcaster scans
-// systemConfig.rules[] and emits a PreobdAlarmEvent on each alarm-Rule
+// rules[] and emits a PreobdAlarmEvent on each alarm-Rule
 // severity transition. We capture the bytes handed to the transport and assert
 // the PreobdAlarmEvent layout/values. Transport + control manager are faked.
 #include <unity.h>
@@ -13,6 +13,7 @@
 
 // ---- Globals the broadcaster TU expects from the rest of the firmware ----
 SystemConfig  systemConfig;
+Rule          rules[MAX_RULES];      // standalone table (was systemConfig.rules[])
 RuleContext   g_ruleContexts[MAX_RULES];
 
 // One synthetic source input; getInputByPin returns it, getInputIndex is fixed.
@@ -52,14 +53,14 @@ void setUp(void) {
     memset(&systemConfig, 0, sizeof(systemConfig));
     memset(g_ruleContexts, 0, sizeof(g_ruleContexts));
     memset(&g_srcInput, 0, sizeof(g_srcInput));
-    for (int i = 0; i < MAX_RULES; ++i) systemConfig.rules[i].id = CONTROL_ID_NONE;
+    for (int i = 0; i < MAX_RULES; ++i) rules[i].id = CONTROL_ID_NONE;
     AlarmBroadcaster::init();
 }
 void tearDown(void) {}
 
 // Configure rule slot 0 as an OUTSIDE_BAND alarm and set its runtime active state.
 static void configRule(uint8_t severity, float lo, float hi, float value, bool active) {
-    Rule& r = systemConfig.rules[0];
+    Rule& r = rules[0];
     r.id = 1; r.sourceInput = 21; r.condition = RULE_OUTSIDE_BAND;
     r.severity = severity; r.flags = RULE_FLAG_ENABLED;
     r.limitLo = lo; r.limitHi = hi;
