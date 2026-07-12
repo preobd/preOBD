@@ -23,11 +23,17 @@
 #include "../control/control_manager.h"   // annunciator: fold Rule severity into the rollup
 
 #if ENABLE_CONTROL_ENGINE
-// The annunciator maps Rule severity to the same buzzer/LED effects as legacy
-// alarms, so RuleSeverity and AlarmSeverity must share numeric values.
-static_assert((int)RULE_SEV_NONE    == (int)SEVERITY_NORMAL,  "severity enum drift");
-static_assert((int)RULE_SEV_WARNING == (int)SEVERITY_WARNING, "severity enum drift");
-static_assert((int)RULE_SEV_ALARM   == (int)SEVERITY_ALARM,   "severity enum drift");
+// RuleSeverity and AlarmSeverity are DISTINCT ordinal domains: RuleSeverity
+// inserts INFO=1 below WARNING (#308), so they no longer share numeric values.
+// Map explicitly at the annunciator boundary — INFO is a log-only notification
+// tier and annunciates like NORMAL (no LED/buzzer).
+static AlarmSeverity ruleToAlarmSeverity(RuleSeverity s) {
+    switch (s) {
+        case RULE_SEV_WARNING: return SEVERITY_WARNING;
+        case RULE_SEV_ALARM:   return SEVERITY_ALARM;
+        default:               return SEVERITY_NORMAL;  // NONE, INFO → no annunciation
+    }
+}
 #endif
 
 #if ENABLE_LED
@@ -76,7 +82,7 @@ AlarmSeverity getSystemSeverity() {
     // The legacy per-input alarm engine is retired — alarms are control-engine
     // Rules (§11). System severity is the max over active Rules.
 #if ENABLE_CONTROL_ENGINE
-    return (AlarmSeverity)controlSystemSeverity();
+    return ruleToAlarmSeverity(controlSystemSeverity());
 #else
     return SEVERITY_NORMAL;
 #endif

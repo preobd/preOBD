@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Control engine: a new `INFO` Rule severity below `WARNING` — a Rule set `INFO` notifies (webapp log breadcrumb via the alarm channel) and still drives its Actions, but never lights the LED/buzzer or raises the system alarm state; the webapp "Alarms" panel is now "Notifications" (EEPROM clean reset) (#308)
 - Webapp: first-class Rules and Actions management — a new tabbed panel (below Alarms) to create, edit, and delete threshold Rules and relay/GPIO Actions (name, pin, polarity, failsafe, and rule-linking) with live Action on/off and manual override, replacing the read-only Actions card list (#279)
 - Control engine: Actions now carry an optional operator label (`ACTION <id> NAME <text>`, shown in `ACTION LIST` and round-tripped through `SYSTEM DUMP JSON`/`JSON IMPORT`), so a name like "Cooling Fan" set in the webapp travels to the CLI and mobile app instead of showing as a bare id (EEPROM v6→v7, clean reset)
 - `SYSTEM DIAG PINS`: a live analog-pin sweep that reads every analog-capable pin — configured or not — and flags floating vs driven pins, so you can find which input a sensor is wired to during setup (#280)

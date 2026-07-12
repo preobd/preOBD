@@ -23,6 +23,7 @@ const NameMap CONDITIONS[] = {
 };
 const NameMap SEVERITIES[] = {
     {"NONE",    RULE_SEV_NONE},
+    {"INFO",    RULE_SEV_INFO},
     {"WARNING", RULE_SEV_WARNING},
     {"ALARM",   RULE_SEV_ALARM},
 };

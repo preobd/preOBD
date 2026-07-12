@@ -104,10 +104,15 @@ enum RuleCondition : uint8_t {
 // Configured severity of a Rule — drives the built-in Annunciator (§11.4).
 // Distinct from runtime AlarmSeverity ("currently firing?"): this is config
 // ("how loud when it fires"). NONE = pure control Rule (drives Actions only).
+// Ordered by loudness so annunciator/notification gates stay natural `>=`
+// thresholds. NB: this is a DISTINCT ordinal domain from AlarmSeverity
+// (input.h) — INFO=1 has no AlarmSeverity counterpart, so the annunciator
+// boundary maps RuleSeverity→AlarmSeverity explicitly (output_alarm.cpp).
 enum RuleSeverity : uint8_t {
-    RULE_SEV_NONE    = 0,  // no annunciation — control-only (fan, shift light)
-    RULE_SEV_WARNING = 1,  // LCD banner + log + AlarmBroadcaster, no buzzer
-    RULE_SEV_ALARM   = 2   // + buzzer (with silence button)
+    RULE_SEV_NONE    = 0,  // no notification — control-only (fan, shift light)
+    RULE_SEV_INFO    = 1,  // notify only — log timeline breadcrumb, no LED/buzzer
+    RULE_SEV_WARNING = 2,  // + LCD banner + LED + AlarmBroadcaster, no buzzer
+    RULE_SEV_ALARM   = 3   // + buzzer (with silence button)
 };
 
 // Runtime state machine — mirror of AlarmState (input.h), to be unified (§11.2).

@@ -31,6 +31,7 @@
     --green: #3D6B3D;
     --yellow: #B8860B;
     --red: #A03030;
+    --blue: #3A6B8A;
     --terminal-bg: #141E14;
     --terminal-text: #C8BC9A;
     --mono: 'DM Mono', 'Courier New', monospace;
@@ -487,6 +488,7 @@
   }
   .tone-bad  .tone-dot { background: var(--red); }
   .tone-warn .tone-dot { background: var(--yellow); }
+  .tone-info .tone-dot { background: var(--blue); }
   .tone-ok   .tone-dot { background: var(--green); }
 
   .empty-row {
@@ -908,6 +910,7 @@
     letter-spacing: 0.06em; padding: 3px 8px; border-radius: 10px; white-space: nowrap;
   }
   .sev-pill.none    { background: rgba(138,122,102,0.12); color: var(--dim); border: 1px solid rgba(138,122,102,0.3); }
+  .sev-pill.info    { background: rgba(70,130,180,0.15); color: var(--blue); border: 1px solid rgba(70,130,180,0.35); }
   .sev-pill.warning { background: rgba(184,134,11,0.15); color: var(--yellow); border: 1px solid rgba(184,134,11,0.35); }
   .sev-pill.alarm   { background: rgba(160,48,48,0.15); color: var(--red); border: 1px solid rgba(160,48,48,0.35); }
   .type-pill { font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; border-radius: 4px; background: rgba(30,53,30,0.08); color: var(--text-light); }
@@ -1035,8 +1038,8 @@
   <!-- Alarms (framed mode only) -->
   <div class="panel" id="alarmPanel" style="display:none">
     <div class="panel-header" style="cursor:pointer" id="alarmPanelHeader">
-      <span class="panel-title">Alarms</span>
-      <button class="panel-collapse-btn" id="btnAlarmToggle" title="Collapse alarms">▲</button>
+      <span class="panel-title">Notifications</span>
+      <button class="panel-collapse-btn" id="btnAlarmToggle" title="Collapse notifications">▲</button>
     </div>
     <div class="panel-body" style="padding:12px">
       <div id="firingBanner" style="display:none"></div>
@@ -1143,7 +1146,7 @@ const HM10_CHAR          = '0000ffe1-0000-1000-8000-00805f9b34fb';
 const DIS_SERVICE        = 0x180A;
 
 // Severity / kind constants mirror ble_gatt_defs.h
-const SEV_NORMAL = 0, SEV_WARNING = 1, SEV_ALARM = 2;
+const SEV_NORMAL = 0, SEV_WARNING = 1, SEV_ALARM = 2, SEV_INFO = 3;
 const KIND_CLEAR = 0, KIND_HIGH = 1, KIND_LOW = 2;
 // PreobdActionState enums (ble_gatt_defs.h §11).
 const ACTION_TYPE_RELAY = 0, ACTION_TYPE_BEEPER = 1, ACTION_TYPE_LED = 2, ACTION_TYPE_DISPLAY = 3;
@@ -1537,17 +1540,26 @@ function onAlarmNotify(event) {
   // refresh / reconnect.
   const now = Date.now();
 
-  // Maintain the firing-state cache. CLEAR transitions remove the entry.
-  if (severity === SEV_NORMAL && kind === KIND_CLEAR) {
-    firingState.delete(inputIndex);
-  } else {
+  // Maintain the firing-state cache — the set of HELD conditions that drive the
+  // health headline + firing banner. INFO is a log-only breadcrumb (#308): its
+  // edges must NOT touch firingState at all, so it can't disturb "All systems
+  // normal" or the banner. firingState is keyed by inputIndex, and multiple
+  // rules may share one input (e.g. WARNING@105 + INFO@100 on coolant), so an
+  // INFO edge that fell through to delete() would wipe a co-located WARNING/
+  // ALARM that is still held. Only WARNING/ALARM set; only an explicit CLEAR
+  // removes; an INFO edge does neither.
+  if (severity === SEV_WARNING || severity === SEV_ALARM) {
     const prior = firingState.get(inputIndex);
     firingState.set(inputIndex, {
       severity, kind, value, threshold,
       since: (prior && prior.severity === severity && prior.kind === kind)
                 ? prior.since : now,
     });
+  } else if (severity === SEV_NORMAL && kind === KIND_CLEAR) {
+    // A held condition cleared.
+    firingState.delete(inputIndex);
   }
+  // else: an INFO edge — log-only, leaves firingState untouched.
 
   // Push to the log (newest first).
   alarmLog.unshift({ inputIndex, severity, kind, value, threshold, sequence, at: now });
@@ -1596,6 +1608,7 @@ function severityTone(severity, kind) {
   if (kind === KIND_CLEAR) return 'ok';
   if (severity === SEV_ALARM)   return 'bad';
   if (severity === SEV_WARNING) return 'warn';
+  if (severity === SEV_INFO)    return 'info';
   return 'ok';
 }
 
@@ -1608,6 +1621,7 @@ function firingDescription(st) {
   if (st.kind === KIND_CLEAR) return 'cleared (' + val + ')';
   const thr = Number.isFinite(st.threshold) ? st.threshold.toFixed(1) : '--';
   const verb = st.severity === SEV_WARNING ? 'approaching'
+             : st.severity === SEV_INFO ? (st.kind === KIND_LOW ? 'dropped below' : 'reached')
              : (st.kind === KIND_LOW ? 'below' : 'exceeded');
   return val + ' ' + verb + ' ' + thr;
 }
@@ -1713,11 +1727,11 @@ function renderAlarmPanel() {
   const log = document.getElementById('alarmLog');
   if (!alarmChar) {
     log.innerHTML = '<div class="alarm-log"><div class="empty-row">' +
-                    'Alarm channel not available on this device.</div></div>';
+                    'Notification channel not available on this device.</div></div>';
     return;
   }
   if (alarmLog.length === 0) {
-    log.innerHTML = '<div class="alarm-log"><div class="empty-row">No alarm events yet.</div></div>';
+    log.innerHTML = '<div class="alarm-log"><div class="empty-row">No notifications yet.</div></div>';
     return;
   }
   let html = '<div class="alarm-log">';
@@ -1860,6 +1874,7 @@ function renderRulesTab() {
   legend.className = 'ctl-legend';
   legend.innerHTML =
     '<span><b style="color:var(--dim)">NONE</b> — control-only, drives Actions silently</span>' +
+    '<span><b style="color:var(--blue)">INFO</b> — log notification only, no LED or buzzer</span>' +
     '<span><b style="color:var(--yellow)">WARNING</b> — LED + log + BLE, no buzzer</span>' +
     '<span><b style="color:var(--red)">ALARM</b> — adds buzzer, and raises a derived WARNING as the value approaches the limit</span>';
 
@@ -2031,7 +2046,7 @@ async function ctlRevert() {
 function ctlSevSelect(sel) {
   const s = sel || 'ALARM';   // firmware's implicit default when no keyword given
   return '<select id="ruSev">' +
-    [['NONE', 'None'], ['WARNING', 'Warning'], ['ALARM', 'Alarm']]
+    [['NONE', 'None'], ['INFO', 'Info'], ['WARNING', 'Warning'], ['ALARM', 'Alarm']]
       .map(([v, l]) => '<option value="' + v + '"' + (v === s ? ' selected' : '') + '>' + l + '</option>').join('') +
     '</select>';
 }

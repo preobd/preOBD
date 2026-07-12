@@ -148,6 +148,10 @@ static_assert(sizeof(PreobdSystemStatus) == PREOBD_STATUS_SIZE,
 #define PREOBD_ALARM_SEVERITY_NORMAL  0
 #define PREOBD_ALARM_SEVERITY_WARNING 1
 #define PREOBD_ALARM_SEVERITY_ALARM   2
+#define PREOBD_ALARM_SEVERITY_INFO    3   // log-only notification (no LED/buzzer);
+                                          // appended so the wire stays additive —
+                                          // ordering here is independent of the
+                                          // firmware RuleSeverity enum (#308)
 
 #define PREOBD_ALARM_KIND_CLEAR 0
 #define PREOBD_ALARM_KIND_HIGH  1   // value at/above maxValue threshold

@@ -209,6 +209,37 @@ static void test_annun_warning_only_for_alarm_rules(void) {
     TEST_ASSERT_EQUAL(RULE_SEV_NONE, controlRuleAnnunciatorSeverity(r, ctx, 95.0f));
 }
 
+// An active INFO rule reports INFO to the notification path (the BLE broadcaster
+// reads this). The LED/buzzer boundary maps INFO->NORMAL separately, so this
+// value never lights the dash — but it must reach the notification log (#308).
+static void test_annun_active_info_is_info(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    r.severity = RULE_SEV_INFO;
+    RuleContext ctx{};
+    ctx.state = RULE_ACTIVE;
+    TEST_ASSERT_EQUAL(RULE_SEV_INFO, controlRuleAnnunciatorSeverity(r, ctx, 120.0f));
+}
+
+// INFO is not a condition that pre-announces: an INFO rule approaching its limit
+// (READY, in the warning band) must NOT raise a derived WARNING — only ALARM
+// rules do (#308). Guards against INFO leaking onto the annunciator ladder.
+static void test_annun_no_derived_warning_for_info(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);  // warn band at 90
+    r.severity = RULE_SEV_INFO;
+    RuleContext ctx{};
+    ctx.state = RULE_READY;
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, controlRuleAnnunciatorSeverity(r, ctx, 95.0f));
+}
+
+// Ordinal invariant: INFO sits below WARNING/ALARM so the LED rollup's bare
+// `max` can never let an active INFO rule mask a real ALARM (#308, the §6
+// masking bug this reorder eliminates by construction).
+static void test_info_below_warning_and_alarm(void) {
+    TEST_ASSERT_TRUE(RULE_SEV_INFO < RULE_SEV_WARNING);
+    TEST_ASSERT_TRUE(RULE_SEV_INFO < RULE_SEV_ALARM);
+    TEST_ASSERT_TRUE(RULE_SEV_NONE < RULE_SEV_INFO);
+}
+
 static void test_annun_no_warning_during_warmup(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);
     RuleContext ctx{};
@@ -311,6 +342,9 @@ int main(int, char**) {
     RUN_TEST(test_annun_active_alarm_is_alarm);
     RUN_TEST(test_annun_warning_band_below_limit);
     RUN_TEST(test_annun_warning_only_for_alarm_rules);
+    RUN_TEST(test_annun_active_info_is_info);
+    RUN_TEST(test_annun_no_derived_warning_for_info);
+    RUN_TEST(test_info_below_warning_and_alarm);
     RUN_TEST(test_annun_no_warning_during_warmup);
     RUN_TEST(test_annun_outside_band_low_warning);
     RUN_TEST(test_annun_warning_band_negative_above);

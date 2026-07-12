@@ -38,6 +38,7 @@ SlottedBroadcaster<AlarmKey, MAX_RULES> g_bc;
 
 uint8_t toPreobdSeverity(RuleSeverity s) {
     switch (s) {
+    case RULE_SEV_INFO:    return PREOBD_ALARM_SEVERITY_INFO;
     case RULE_SEV_WARNING: return PREOBD_ALARM_SEVERITY_WARNING;
     case RULE_SEV_ALARM:   return PREOBD_ALARM_SEVERITY_ALARM;
     default:               return PREOBD_ALARM_SEVERITY_NORMAL;
@@ -74,10 +75,13 @@ AlarmKey evalSlot(int i, float& value, float& threshold, uint8_t& inputIdx) {
     AlarmKey k{ PREOBD_ALARM_SEVERITY_NORMAL, PREOBD_ALARM_KIND_CLEAR };
     value = 0.0f; threshold = 0.0f; inputIdx = 0xFF;
 
-    const bool isAlarmRule = (r.id != CONTROL_ID_NONE) &&
-                             (r.severity >= RULE_SEV_WARNING) &&
-                             (r.flags & RULE_FLAG_ENABLED);
-    if (isAlarmRule) {
+    // Notification path (not annunciation): includes INFO, which notifies via
+    // the log timeline but never lights the LED/buzzer (#308). INFO<WARNING in
+    // the RuleSeverity ordinal domain, so this gate is `>= RULE_SEV_INFO`.
+    const bool isNotifyRule = (r.id != CONTROL_ID_NONE) &&
+                              (r.severity >= RULE_SEV_INFO) &&
+                              (r.flags & RULE_FLAG_ENABLED);
+    if (isNotifyRule) {
         Input* in = getInputByPin(r.sourceInput);
         value    = in ? in->value : NAN;
         inputIdx = getInputIndex(r.sourceInput);

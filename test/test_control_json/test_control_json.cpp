@@ -119,6 +119,20 @@ static void test_rule_export_enum_strings(void) {
     TEST_ASSERT_TRUE(o["enabled"].as<bool>());
 }
 
+// INFO severity survives export/import as its own token (#308).
+static void test_rule_info_roundtrip(void) {
+    Rule in = makeRule(RULE_ABOVE, 180.0f, 0.0f, RULE_SEV_INFO);
+    bool ok = false;
+    Rule out = roundTripRule(in, &ok);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_UINT8(RULE_SEV_INFO, out.severity);
+
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    controlExportRule(o, in);
+    TEST_ASSERT_EQUAL_STRING("INFO", o["severity"]);
+}
+
 // --- Rule validation / defaults ----------------------------------------
 
 static void test_rule_import_missing_id_rejected(void) {
@@ -283,6 +297,7 @@ int main(int, char**) {
     RUN_TEST(test_rule_above_roundtrip);
     RUN_TEST(test_rule_disabled_flag_roundtrip);
     RUN_TEST(test_rule_export_enum_strings);
+    RUN_TEST(test_rule_info_roundtrip);
     RUN_TEST(test_rule_import_missing_id_rejected);
     RUN_TEST(test_rule_import_missing_condition_rejected);
     RUN_TEST(test_rule_import_bad_condition_rejected);

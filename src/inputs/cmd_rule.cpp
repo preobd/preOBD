@@ -49,6 +49,7 @@ static FLASHMEM const char* conditionName(uint8_t c) {
 static FLASHMEM const char* severityName(uint8_t s) {
     switch (s) {
         case RULE_SEV_NONE:    return "--";
+        case RULE_SEV_INFO:    return "INFO";
         case RULE_SEV_WARNING: return "WARNING";
         case RULE_SEV_ALARM:   return "ALARM";
         default:               return "?";
@@ -161,11 +162,11 @@ static FLASHMEM void printAllRules() {
 // --- RULE ADD -----------------------------------------------------------
 
 static FLASHMEM int ruleAdd(int argc, const char* const* argv) {
-    // RULE ADD <input> ABOVE|BELOW <limit> [HYST <w>] [WARNING|ALARM]
-    // RULE ADD <input> OUTSIDE <lo> <hi>   [HYST <w>] [WARNING|ALARM]
+    // RULE ADD <input> ABOVE|BELOW <limit> [HYST <w>] [INFO|WARNING|ALARM|NONE]
+    // RULE ADD <input> OUTSIDE <lo> <hi>   [HYST <w>] [INFO|WARNING|ALARM|NONE]
     if (argc < 5) {
-        msg.control.println(F("ERROR: usage: RULE ADD <input> ABOVE|BELOW <limit> [HYST <w>] [WARNING|ALARM]"));
-        msg.control.println(F("              RULE ADD <input> OUTSIDE <lo> <hi> [HYST <w>] [WARNING|ALARM]"));
+        msg.control.println(F("ERROR: usage: RULE ADD <input> ABOVE|BELOW <limit> [HYST <w>] [INFO|WARNING|ALARM|NONE]"));
+        msg.control.println(F("              RULE ADD <input> OUTSIDE <lo> <hi> [HYST <w>] [INFO|WARNING|ALARM|NONE]"));
         return 1;
     }
 
@@ -212,6 +213,8 @@ static FLASHMEM int ruleAdd(int argc, const char* const* argv) {
     for (int i = optStart; i < argc; i++) {
         if (streq_P(argv[i], PSTR("HYST")) && (i + 1) < argc) {
             hysteresis = atof(argv[++i]);
+        } else if (streq_P(argv[i], PSTR("INFO"))) {
+            severity = RULE_SEV_INFO;
         } else if (streq_P(argv[i], PSTR("WARNING"))) {
             severity = RULE_SEV_WARNING;
         } else if (streq_P(argv[i], PSTR("ALARM"))) {
