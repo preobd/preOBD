@@ -872,6 +872,78 @@
   /* Overflow scroll wrapper for table */
   .table-scroll { overflow-x: auto; }
 
+  /* ── Rules / Actions (control) panel ──────────────────────── */
+  .ctl-tabs { display: flex; background: #EAE0C8; border: 1px solid var(--border); border-radius: 6px; padding: 2px; }
+  .ctl-tab {
+    font-family: var(--sans); font-size: 11.5px; font-weight: 500;
+    padding: 5px 14px; border-radius: 4px; border: none; cursor: pointer;
+    background: transparent; color: var(--dim);
+  }
+  .ctl-tab.active { font-weight: 600; background: var(--brand-light); color: #fff; }
+  .ctl-add-btn {
+    padding: 6px 13px; border-radius: 5px; font-weight: 500; font-size: 12px;
+    background: var(--brand-light); border: 1px solid var(--brand-light); color: #fff; cursor: pointer;
+  }
+  .ctl-add-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .ctl-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .ctl-table thead th {
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--dim-light); padding: 8px 10px; border-bottom: 2px solid var(--border-light);
+    text-align: left; background: var(--surface-raised); white-space: nowrap;
+  }
+  .ctl-table tbody tr { border-bottom: 1px solid var(--border-light); }
+  .ctl-table tbody tr:last-child { border-bottom: none; }
+  .ctl-table tbody tr:hover { background: rgba(255,255,255,0.6); }
+  .ctl-table td { padding: 9px 10px; color: var(--text); vertical-align: middle; }
+  .ctl-table td.mono { font-family: var(--mono); }
+  .ctl-table td.dim { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .ctl-actions-cell { white-space: nowrap; text-align: right; }
+  .ctl-actions-cell .btn { font-size: 10.5px; padding: 3px 9px; margin-left: 4px; }
+  .btn.ctl-on  { background: var(--green); border-color: var(--green); color: #fff; }
+  .btn.ctl-off { background: var(--brand); border-color: var(--brand); color: var(--surface); }
+
+  .sev-pill, .state-pill, .type-pill {
+    display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 700;
+    letter-spacing: 0.06em; padding: 3px 8px; border-radius: 10px; white-space: nowrap;
+  }
+  .sev-pill.none    { background: rgba(138,122,102,0.12); color: var(--dim); border: 1px solid rgba(138,122,102,0.3); }
+  .sev-pill.warning { background: rgba(184,134,11,0.15); color: var(--yellow); border: 1px solid rgba(184,134,11,0.35); }
+  .sev-pill.alarm   { background: rgba(160,48,48,0.15); color: var(--red); border: 1px solid rgba(160,48,48,0.35); }
+  .type-pill { font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; border-radius: 4px; background: rgba(30,53,30,0.08); color: var(--text-light); }
+  .state-pill { font-weight: 500; border-radius: 10px; }
+  .state-pill.on  { background: rgba(61,107,61,0.15); color: var(--green); border: 1px solid rgba(61,107,61,0.35); }
+  .state-pill.off { background: rgba(138,122,102,0.10); color: var(--dim); border: 1px solid rgba(138,122,102,0.25); }
+  .driven-rule { color: #8A6B0B; }
+  .driven-manual { color: var(--dim-light); font-style: italic; }
+
+  .ctl-legend {
+    display: flex; gap: 14px; flex-wrap: wrap; padding: 10px 12px;
+    font-size: 11px; color: var(--dim); border-top: 1px solid var(--border-light);
+    background: var(--surface-raised);
+  }
+  .ctl-legend b { font-family: var(--mono); font-weight: 700; }
+
+  #ctlForm .ctl-form {
+    padding: 14px 16px; border-bottom: 1px solid var(--border-light);
+    background: linear-gradient(180deg, rgba(255,255,255,0.5) 0%, var(--surface-raised) 100%);
+  }
+  .ctl-form .field-hint { font-size: 10.5px; color: var(--dim-light); margin-top: 4px; }
+  .ctl-subhead {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--dim); margin: 0 0 10px;
+  }
+  .ctl-trigger-toggle {
+    display: flex; background: #EAE0C8; border: 1px solid var(--border);
+    border-radius: 6px; padding: 2px; margin-bottom: 12px; width: fit-content;
+  }
+  .ctl-rule-radio {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+    border: 1px solid var(--border-light); border-radius: 6px; background: var(--surface);
+    cursor: pointer; margin-bottom: 6px;
+  }
+  .ctl-rule-radio input { width: auto; }
+
   /* ── Responsive ───────────────────────────────────────────── */
   @media (max-width: 600px) {
     .status-grid { display: grid; grid-template-columns: repeat(2, 1fr); }
@@ -972,14 +1044,27 @@
     </div>
   </div>
 
-  <!-- Actions (framed mode only) -->
-  <div class="panel" id="actionPanel" style="display:none">
-    <div class="panel-header" style="cursor:pointer" id="actionPanelHeader">
-      <span class="panel-title">Actions</span>
-      <button class="panel-collapse-btn" id="btnActionToggle" title="Collapse actions">▲</button>
+  <!-- Rules / Actions (framed mode only) -->
+  <div class="panel" id="controlPanel" style="display:none">
+    <div class="panel-header" id="controlPanelHeader" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <div class="ctl-tabs">
+        <button class="ctl-tab" id="ctlTabRules" data-tab="rules">Rules</button>
+        <button class="ctl-tab" id="ctlTabActions" data-tab="actions">Actions</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="ctl-add-btn" id="ctlAddBtn">+ Add Rule</button>
+        <button class="panel-collapse-btn" id="btnControlToggle" title="Collapse">▲</button>
+      </div>
     </div>
-    <div class="panel-body" style="padding:12px">
-      <div id="actionList" class="action-list"></div>
+    <div class="panel-body" style="padding:0">
+      <div id="ctlForm" style="display:none"></div>
+      <div class="table-scroll"><div id="ctlTableWrap"></div></div>
+      <div id="ctlLegend"></div>
+      <div class="config-actions" id="ctlFooter" style="display:none">
+        <span class="badge badge-warning" id="ctlUnsavedBadge" style="display:none">Unsaved</span>
+        <button class="btn primary" id="ctlSaveEeprom">Save to EEPROM</button>
+        <button class="btn secondary" id="ctlRevert">Revert</button>
+      </div>
     </div>
   </div>
 
@@ -1246,7 +1331,7 @@ async function connect() {
       } catch(e) { appendErr('Failed to subscribe to Action notifications: ' + e.message); }
     }
     renderAlarmPanel();
-    renderActionPanel();
+    renderControlPanel();
 
     fetchInitialState();
 
@@ -1278,8 +1363,10 @@ function onDisconnected() {
   alarmLog.length = 0;
   firingState.clear();
   actionState.clear();
+  closeCtlForm();   // drop any open Rule/Action edit form so it can't outlive the config it edits
+  ctlDirty = false;
   renderAlarmPanel();
-  renderActionPanel();
+  renderControlPanel();
   mode = null;
   // Reject any in-flight or queued commands so awaiting frames throw
   if (pendingReject) {
@@ -1675,7 +1762,7 @@ function applyActionState(val) {
   } else {
     actionState.set(actionId, { type, state, target, ruleRef, behavior, failsafe });
   }
-  renderActionPanel();
+  renderControlPanel();
 }
 
 function onActionNotify(event) {
@@ -1704,102 +1791,561 @@ async function writeActionCommand(id, cmd) {
   // Wait for the confirmation notify to redraw with the truth.
 }
 
-function renderActionPanel() {
-  const panel = document.getElementById('actionPanel');
+// ── Rules / Actions control panel ───────────────────────────────────────────
+// Config truth (conditions, severity, pins, links, names) comes from
+// localConfig.rules / localConfig.actions (parsed from SYSTEM DUMP JSON in
+// fetchInitialState). Live Action on/off comes from the ActionBroadcaster
+// (…0031) via actionState. Writes go through the RULE / ACTION CLI verbs in
+// CONFIG mode, mirroring applyInput().
+
+let controlTab = 'rules';          // 'rules' | 'actions'
+let ctlFormMode = null;            // null | { kind:'rule'|'action', id:<oldId>|null }
+let ctlActionTrigger = 'manual';   // 'rule' | 'manual' — Add/Edit Action form state
+let ctlDirty = false;              // Rule/Action RAM writes not yet persisted to EEPROM
+
+function renderControlPanel() {
+  const panel = document.getElementById('controlPanel');
   if (!panel) return;
-  // Stay visible whenever the device exposes the enhanced feature set; render
-  // an empty state rather than hiding when none are configured.
-  if (!framedMode) {
-    panel.style.display = 'none';
+  if (!framedMode) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+
+  document.getElementById('ctlTabRules').classList.toggle('active', controlTab === 'rules');
+  document.getElementById('ctlTabActions').classList.toggle('active', controlTab === 'actions');
+  document.getElementById('ctlAddBtn').textContent = controlTab === 'rules' ? '+ Add Rule' : '+ Add Action';
+
+  if (controlTab === 'rules') renderRulesTab();
+  else renderActionsTab();
+
+  document.getElementById('ctlFooter').style.display = '';
+  document.getElementById('ctlUnsavedBadge').style.display = ctlDirty ? '' : 'none';
+}
+
+// Re-read only the control-engine tables from the device (config-only). Skips the
+// static application/sensor/unit catalogs that fetchInitialState also pulls —
+// those never change, so re-fetching them after every Rule/Action edit was pure
+// waste. Inputs staging (localConfig.inputs + inputState) is left untouched.
+async function reloadControlConfig() {
+  const parsed = parseJsonResponse(await sendQueued('SYSTEM DUMP JSON'));
+  if (originalConfig) { originalConfig.rules = parsed.rules; originalConfig.actions = parsed.actions; }
+  if (localConfig)    { localConfig.rules = parsed.rules;    localConfig.actions = parsed.actions; }
+  renderControlPanel();
+}
+
+function fmtVal(n) { return (n == null || Number.isNaN(n)) ? '' : n; }
+
+// A rule's source input shown as "App (pin)" when the input is configured, else
+// just the pin. rule.input is the numeric source pin (Rule.sourceInput).
+function ruleInputLabel(pin) {
+  const inp = (localConfig?.inputs || []).find(i => pinNumToStr(i.pin) === pinNumToStr(pin));
+  const pinStr = escHtml(pinNumToStr(pin));
+  return inp && inp.app
+    ? escHtml(inp.app) + ' <span style="color:var(--dim-light)">(' + pinStr + ')</span>'
+    : pinStr;
+}
+
+function ruleConditionText(r) {
+  const band = r.condition === 'OUTSIDE' || r.condition === 'INSIDE';
+  let s = r.condition + ' ' + fmtVal(r.limitLo);
+  if (band) s += '..' + fmtVal(r.limitHi);
+  if (r.hysteresis) s += ' (H' + fmtVal(r.hysteresis) + ')';
+  return s;
+}
+
+function renderRulesTab() {
+  const rules = localConfig?.rules || [];
+  const actions = localConfig?.actions || [];
+  const wrap = document.getElementById('ctlTableWrap');
+  const legend = document.getElementById('ctlLegend');
+
+  legend.className = 'ctl-legend';
+  legend.innerHTML =
+    '<span><b style="color:var(--dim)">NONE</b> — control-only, drives Actions silently</span>' +
+    '<span><b style="color:var(--yellow)">WARNING</b> — LED + log + BLE, no buzzer</span>' +
+    '<span><b style="color:var(--red)">ALARM</b> — adds buzzer, and raises a derived WARNING as the value approaches the limit</span>';
+
+  if (!localConfig) { wrap.innerHTML = '<div class="empty-row" style="padding:24px;text-align:center">Loading…</div>'; return; }
+  if (!rules.length) {
+    wrap.innerHTML = '<div class="empty-row" style="padding:24px;text-align:center">No rules configured. Click "+ Add Rule" to add one.</div>';
     return;
   }
-  panel.style.display = '';
-  const list = document.getElementById('actionList');
+
+  let rows = '';
+  for (const r of rules) {
+    const driven = actions.find(a => a.rule === r.id);
+    const fires = driven ? escHtml(driven.name || ('Action #' + driven.id)) : '—';
+    const sev = (r.severity || 'NONE').toLowerCase();
+    rows +=
+      '<tr>' +
+        '<td>' + ruleInputLabel(r.input) + '</td>' +
+        '<td class="mono">' + escHtml(ruleConditionText(r)) + '</td>' +
+        '<td><span class="sev-pill ' + sev + '">' + escHtml(r.severity || 'NONE') + '</span></td>' +
+        '<td class="dim">' + fires + '</td>' +
+        '<td class="ctl-actions-cell">' +
+          '<button class="btn secondary" data-ctl="rule-edit" data-id="' + r.id + '">Edit</button>' +
+          '<button class="btn danger" data-ctl="rule-del" data-id="' + r.id + '">Del</button>' +
+        '</td>' +
+      '</tr>';
+  }
+  wrap.innerHTML =
+    '<table class="ctl-table"><thead><tr>' +
+      '<th>Input</th><th>Condition</th><th>Severity</th><th>Fires</th><th></th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+function renderActionsTab() {
+  const wrap = document.getElementById('ctlTableWrap');
+  const legend = document.getElementById('ctlLegend');
+  legend.className = '';
+  legend.innerHTML = '';
 
   if (!actionChar) {
-    list.innerHTML = '<div class="empty-row">Action channel not available on this device.</div>';
-    return;
-  }
-  if (actionState.size === 0) {
-    list.innerHTML = '<div class="empty-row">No actions configured. ' +
-                     'Use the <code>ACTION</code> CLI command to add one.</div>';
+    wrap.innerHTML = '<div class="empty-row" style="padding:24px;text-align:center">Action channel not available on this device.</div>';
     return;
   }
 
-  // Sort by action id for stable ordering.
-  const entries = [...actionState.entries()].sort((a, b) => a[0] - b[0]);
-  let html = '';
-  for (const [id, a] of entries) {
-    const onState = a.state === ACTION_STATE_ON;
-    const manual = a.ruleRef === ACTION_ID_NONE;
-    const inverted = (a.behavior & ACTION_BEHAVIOR_INVERT) !== 0;
-    const isRelay = a.type === ACTION_TYPE_RELAY;
+  const rules = localConfig?.rules || [];
+  const cfg = localConfig?.actions || null;
 
-    let ctx = actionTypeLabel(a.type) + ' · pin ' + a.target;
-    if (inverted) ctx += ' · INV';
-
-    let meta = '<span>Source: ' + (manual ? 'manual' : 'Rule #' + a.ruleRef) + '</span>';
-    if (isRelay) {
-      const fsOn = a.failsafe === ACTION_FAILSAFE_ON;
-      meta += '<span' + (fsOn ? ' class="failsafe-on"' : '') +
-              '>Failsafe: ' + (fsOn ? 'ON' : 'OFF') + '</span>';
-    }
-
-    let controls;
-    if (manual) {
-      controls =
-        '<div class="action-controls">' +
-          '<button class="action-btn act-on' + (onState ? ' active-on' : '') + '">Turn ON</button>' +
-          '<button class="action-btn act-off' + (onState ? '' : ' active-off') + '">Turn OFF</button>' +
-        '</div>';
-    } else {
-      controls = '<div class="action-readonly">Driven by Rule #' + a.ruleRef +
-                 ' — unlink with <code>ACTION ' + id +
-                 ' RULE NONE</code> for manual control</div>';
-    }
-
-    html +=
-      '<div class="action-card" data-action="' + id + '">' +
-        '<div class="action-head">' +
-          '<span class="action-title">Action ' + id + '</span>' +
-          '<span class="action-context">' + escHtml(ctx) + '</span>' +
-          '<span class="action-pill ' + (onState ? 'on' : 'off') + '">' +
-            (onState ? '● ON' : '○ OFF') +
-          '</span>' +
-        '</div>' +
-        '<div class="action-meta">' + meta + '</div>' +
-        controls +
-      '</div>';
+  // Prefer config truth; fall back to the live broadcaster during the brief
+  // window before the JSON dump lands (or on a link that never dumps).
+  let list;
+  if (cfg) {
+    list = cfg.map(a => ({
+      id: a.id, name: a.name || '', type: a.type || 'RELAY', target: a.target,
+      invert: a.invert === true || a.invert === 1,
+      failsafe: (typeof a.failsafe === 'string') ? a.failsafe : (a.failsafe ? 'ON' : 'OFF'),
+      rule: (a.rule == null) ? null : a.rule, live: actionState.get(a.id),
+    }));
+  } else {
+    list = [...actionState.entries()].sort((x, y) => x[0] - y[0]).map(([id, a]) => ({
+      id, name: '', type: actionTypeLabel(a.type), target: a.target,
+      invert: (a.behavior & ACTION_BEHAVIOR_INVERT) !== 0,
+      failsafe: a.failsafe === ACTION_FAILSAFE_ON ? 'ON' : 'OFF',
+      rule: a.ruleRef === ACTION_ID_NONE ? null : a.ruleRef, live: a,
+    }));
   }
-  list.innerHTML = html;
 
-  // Wire manual ON/OFF buttons. Doing it after insertion keeps the template
-  // literal free of inline handlers.
-  for (const card of list.querySelectorAll('.action-card')) {
-    const id = parseInt(card.dataset.action, 10);
-    const onBtn  = card.querySelector('.act-on');
-    const offBtn = card.querySelector('.act-off');
-    if (!onBtn || !offBtn) continue;  // rule-driven card: no buttons
-    const send = async (cmd) => {
-      onBtn.disabled = true;
-      offBtn.disabled = true;
-      try {
-        await writeActionCommand(id, cmd);
-        // The confirmation notify normally redraws this row (replacing these
-        // buttons). If it never lands — a dropped notify or a degraded link —
-        // re-enable after a short fallback so the control isn't stuck disabled.
-        // Once a notify does redraw, these refs are detached, so this is a
-        // harmless no-op in the happy path.
-        setTimeout(() => { onBtn.disabled = false; offBtn.disabled = false; }, 3000);
-      } catch (e) {
-        appendErr('Action write failed: ' + e.message);
-        onBtn.disabled = false;
-        offBtn.disabled = false;
+  if (!list.length) {
+    // Distinguish "still loading" (no config dump yet, no broadcast yet) from a
+    // genuinely empty table so we don't flash "No actions" before data arrives.
+    wrap.innerHTML = (!cfg && actionState.size === 0)
+      ? '<div class="empty-row" style="padding:24px;text-align:center">Loading…</div>'
+      : '<div class="empty-row" style="padding:24px;text-align:center">No actions configured. Click "+ Add Action" to add one.</div>';
+    return;
+  }
+
+  let rows = '';
+  for (const a of list) {
+    const onState = a.live ? a.live.state === ACTION_STATE_ON : false;
+    const manual = a.rule == null;
+    const polShort = a.invert ? 'LOW = ON' : 'HIGH = ON';
+    const polFull = a.invert ? 'Active Low' : 'Active High';
+    let driven;
+    if (manual) driven = '<span class="driven-manual">manual</span>';
+    else {
+      const rr = rules.find(r => r.id === a.rule);
+      const rn = rr ? ' (' + escHtml(pinNumToStr(rr.input)) + ')' : '';
+      driven = '<span class="driven-rule">⚠ Rule #' + a.rule + rn + '</span>';
+    }
+    // Manual ON/OFF only actuate manual actions (firmware honors the command
+    // byte only for ruleRef == NONE). Enabled whenever the action exists —
+    // writing MANUAL_ON/OFF is valid regardless of the currently-displayed state,
+    // so we don't gate the controls on having received a live-state notify yet
+    // (the …0031 state burst can lag connect; the State pill reflects it once in).
+    const btns = manual
+      ? '<button class="btn ctl-on" data-ctl="act-on" data-id="' + a.id + '">ON</button>' +
+        '<button class="btn ctl-off" data-ctl="act-off" data-id="' + a.id + '">OFF</button>'
+      : '';
+    rows +=
+      '<tr>' +
+        '<td style="font-weight:600">' + escHtml(a.name || ('Action #' + a.id)) + '</td>' +
+        '<td><span class="type-pill">' + escHtml(a.type) + '</span></td>' +
+        '<td class="mono">' + escHtml(pinNumToStr(a.target)) + '</td>' +
+        '<td class="dim" title="' + polFull + '">' + polShort + '</td>' +
+        '<td class="dim">' + escHtml(a.failsafe) + '</td>' +
+        '<td style="font-size:11.5px">' + driven + '</td>' +
+        '<td><span class="state-pill ' + (onState ? 'on' : 'off') + '">' + (onState ? '● ON' : '○ OFF') + '</span></td>' +
+        '<td class="ctl-actions-cell">' +
+          '<button class="btn secondary" data-ctl="act-edit" data-id="' + a.id + '">Edit</button>' +
+          btns +
+        '</td>' +
+      '</tr>';
+  }
+  wrap.innerHTML =
+    '<table class="ctl-table"><thead><tr>' +
+      '<th>Name</th><th>Type</th><th>Pin</th><th>Polarity</th><th>Failsafe</th><th>Driven by</th><th>State</th><th></th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+// ── Add / Edit forms ────────────────────────────────────────────────────────
+
+function ctlField(label, inner, wrapId, style) {
+  return '<div class="editor-field"' + (wrapId ? ' id="' + wrapId + '"' : '') +
+         (style ? ' style="' + style + '"' : '') + '>' +
+         '<label>' + label + '</label>' + inner + '</div>';
+}
+
+function closeCtlForm() {
+  const f = document.getElementById('ctlForm');
+  f.style.display = 'none';
+  f.innerHTML = '';
+  ctlFormMode = null;
+}
+
+function setCtlBusy(b) {
+  document.getElementById('ctlAddBtn').disabled = b;
+  document.querySelectorAll('#ctlForm button, #ctlTableWrap button, #ctlFooter button').forEach(x => { x.disabled = b; });
+}
+
+// Rule/Action edits land in device RAM immediately (like the Inputs panel's
+// Apply); persistence is an explicit panel-footer action rather than a per-save
+// popup. SAVE writes all RAM (inputs + control tables) to EEPROM.
+async function ctlSaveEeprom() {
+  setCtlBusy(true);
+  try {
+    await withConfigMode(() => sendChecked('SAVE'));
+    ctlDirty = false;
+    appendInfo('Saved to EEPROM.');
+    renderControlPanel();
+  } catch (e) { appendErr('Save to EEPROM failed: ' + e.message); }
+  finally { setCtlBusy(false); }
+}
+
+// Revert discards RAM changes by reloading EEPROM on the device. LOAD EEPROM
+// affects all config, so this mirrors the Inputs panel's Revert (full re-read +
+// clear input staging) to keep both panels consistent with the device.
+async function ctlRevert() {
+  if (ctlDirty && !confirm('Reload from EEPROM? Unsaved Rule/Action changes will be discarded.')) return;
+  setCtlBusy(true);
+  try {
+    await withConfigMode(() => sendChecked('LOAD EEPROM'));
+    inputState.clear();
+    ctlDirty = false;
+    await fetchInitialState();
+  } catch (e) { appendErr('Revert failed: ' + e.message); }
+  finally { setCtlBusy(false); }
+}
+
+// --- Rule form ---
+
+function ctlSevSelect(sel) {
+  const s = sel || 'ALARM';   // firmware's implicit default when no keyword given
+  return '<select id="ruSev">' +
+    [['NONE', 'None'], ['WARNING', 'Warning'], ['ALARM', 'Alarm']]
+      .map(([v, l]) => '<option value="' + v + '"' + (v === s ? ' selected' : '') + '>' + l + '</option>').join('') +
+    '</select>';
+}
+
+function ctlCondSelect(sel) {
+  return '<select id="ruCond" onchange="onRuleCondChange()">' +
+    [['ABOVE', 'Above'], ['BELOW', 'Below'], ['OUTSIDE', 'Outside range']]
+      .map(([v, l]) => '<option value="' + v + '"' + (v === sel ? ' selected' : '') + '>' + l + '</option>').join('') +
+    '</select>';
+}
+
+function onRuleCondChange() {
+  const band = document.getElementById('ruCond').value === 'OUTSIDE';
+  const hiField = document.getElementById('ruHiField');
+  if (hiField) hiField.style.display = band ? '' : 'none';
+  const loLabel = document.getElementById('ruLoLabel');
+  if (loLabel) loLabel.textContent = band ? 'Lower limit' : 'Threshold';
+}
+
+function ctlInputOptions(selectedPin) {
+  const inputs = localConfig?.inputs || [];
+  if (!inputs.length) return '<option value="">(no inputs configured)</option>';
+  const selStr = selectedPin != null ? pinNumToStr(selectedPin) : null;
+  return inputs.map(inp => {
+    const pinStr = pinNumToStr(inp.pin);
+    const label = (inp.app ? inp.app + ' — ' : '') + pinStr;
+    return '<option value="' + escHtml(pinStr) + '"' + (pinStr === selStr ? ' selected' : '') + '>' + escHtml(label) + '</option>';
+  }).join('');
+}
+
+function openRuleForm(id) {
+  const r = id != null ? (localConfig?.rules || []).find(x => x.id === id) : null;
+  ctlFormMode = { kind: 'rule', id: r ? r.id : null };
+  const band = r && (r.condition === 'OUTSIDE' || r.condition === 'INSIDE');
+  // The RULE ADD CLI can only create ABOVE / BELOW / OUTSIDE. An INSIDE-band rule
+  // (reachable only via JSON import) has no editable CLI form — block Save so the
+  // condition <select> falling back to ABOVE can't silently rewrite it and drop
+  // the upper bound. Displaying it in the table is fine; only edit corrupts.
+  const editable = !r || ['ABOVE', 'BELOW', 'OUTSIDE'].includes(r.condition);
+  const form = document.getElementById('ctlForm');
+  form.innerHTML =
+    '<div class="ctl-form">' +
+    '<div class="editor-title">' + (r ? 'Edit Rule #' + r.id : 'New Rule') + '</div>' +
+    (editable ? '' : '<div class="field-hint" style="margin-bottom:12px;color:var(--red)">This rule uses an INSIDE-band condition the CLI can\'t recreate — delete and re-add it, or edit via JSON import.</div>') +
+    '<div class="editor-grid">' +
+      ctlField('Input', '<select id="ruInput">' + ctlInputOptions(r?.input) + '</select>') +
+      ctlField('Severity', ctlSevSelect(r?.severity)) +
+      ctlField('Condition', ctlCondSelect(r?.condition || 'ABOVE')) +
+      // Threshold label flips to "Lower limit" for an OUTSIDE band (paired with the
+      // revealed "Upper limit") so the two bounds are unambiguous — id'd for the
+      // live relabel in onRuleCondChange().
+      '<div class="editor-field"><label id="ruLoLabel">' + (band ? 'Lower limit' : 'Threshold') + '</label><input type="number" id="ruLo" value="' + (r ? fmtVal(r.limitLo) : '') + '" placeholder="e.g. 250"></div>' +
+      '<div class="editor-field" id="ruHiField" style="' + (band ? '' : 'display:none') + '"><label>Upper limit</label><input type="number" id="ruHi" value="' + (r && band ? fmtVal(r.limitHi) : '') + '" placeholder="e.g. 260"></div>' +
+      ctlField('Hysteresis', '<input type="number" id="ruHyst" value="' + (r ? fmtVal(r.hysteresis) : '') + '" placeholder="e.g. 5"><span class="field-hint">Deadband against on/off chatter near the limit: the rule stays active until the value returns past the limit by this much (e.g. <b>ABOVE 250 HYST 5</b> clears at 245). Blank = none.</span>') +
+    '</div>' +
+    '<div class="editor-actions">' +
+      '<button class="btn primary" onclick="saveRuleForm()"' + (editable ? '' : ' disabled') + '>Save Rule</button>' +
+      '<button class="btn secondary" onclick="closeCtlForm()">Cancel</button>' +
+    '</div></div>';
+  form.style.display = '';
+  form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function saveRuleForm() {
+  const pin = document.getElementById('ruInput').value;
+  if (!pin) { alert('Select an input.'); return; }
+  const sev = document.getElementById('ruSev').value;
+  const cond = document.getElementById('ruCond').value;
+  const lo = document.getElementById('ruLo').value.trim();
+  const hi = document.getElementById('ruHi').value.trim();
+  const hyst = document.getElementById('ruHyst').value.trim();
+  const band = cond === 'OUTSIDE';
+  if (lo === '') { alert('Enter a threshold.'); return; }
+  if (band && hi === '') { alert('Outside range needs both a lower and upper threshold.'); return; }
+
+  let cmd = 'RULE ADD ' + pin + ' ' + cond + ' ' + lo + (band ? ' ' + hi : '');
+  if (hyst !== '') cmd += ' HYST ' + hyst;
+  cmd += ' ' + sev;
+
+  const oldId = ctlFormMode?.id;
+  setCtlBusy(true);
+  let ok = false;
+  try {
+    await withConfigMode(async () => {
+      // No in-place RULE edit exists; replace = ADD + DEL. Order matters: ADD
+      // the replacement FIRST so a validation failure (e.g. HYST too wide) can't
+      // destroy the original — multiple rules per input are allowed, so the pair
+      // coexisting for a moment is fine. Then re-point any Actions the old rule
+      // drove onto the new id, and only then delete the old (RULE DEL would
+      // otherwise revert those Actions to manual).
+      const resp = await sendChecked(cmd);
+      const m = resp.match(/Rule #(\d+)/);
+      const newId = m ? parseInt(m[1], 10) : null;
+      // A missed parse after a successful ADD would silently orphan the edit
+      // (old rule kept, actions never relinked) — treat it as an error so the
+      // finally-block re-baseline surfaces the true device state.
+      if (newId == null) throw new Error('could not read new rule id from response: ' + resp.trim());
+      if (oldId != null) {
+        const relink = (localConfig?.actions || []).filter(a => a.rule === oldId).map(a => a.id);
+        for (const aid of relink) await sendChecked('ACTION ' + aid + ' RULE ' + newId);
+        await sendChecked('RULE DEL ' + oldId);
       }
-    };
-    onBtn.addEventListener('click', () => send(ACTION_CMD_MANUAL_ON));
-    offBtn.addEventListener('click', () => send(ACTION_CMD_MANUAL_OFF));
+    });
+    ok = true;
+    ctlDirty = true;
+    appendInfo('Rule saved to device RAM — Save to EEPROM to persist.');
+  } catch (e) {
+    appendErr('Save rule failed: ' + e.message);
+  } finally {
+    // Re-baseline to device truth whether we succeeded or failed partway — a
+    // half-applied batch must not leave the tables showing the pre-edit state.
+    try { await reloadControlConfig(); } catch (_) { /* offline / disconnected */ }
+    if (ok) closeCtlForm();
+    setCtlBusy(false);
   }
+}
+
+async function delRule(id) {
+  if (!confirm('Delete Rule #' + id + '? Actions it drives will revert to manual.')) return;
+  setCtlBusy(true);
+  try {
+    await withConfigMode(async () => { await sendChecked('RULE DEL ' + id); });
+    ctlDirty = true;
+    appendInfo('Rule #' + id + ' deleted (RAM) — Save to EEPROM to persist.');
+  } catch (e) { appendErr('Delete failed: ' + e.message); }
+  finally { try { await reloadControlConfig(); } catch (_) {} setCtlBusy(false); }
+}
+
+// --- Action form ---
+
+function ctlTypeSelect() {
+  // Only RELAY is functional in firmware today; Relay + Generic GPIO both map to
+  // ACTION ADD RELAY. LED / Buzzer are onboard-hardware types reserved but not
+  // yet implemented — shown disabled + labeled (design intent, staged ahead).
+  return '<select id="acType">' +
+    '<option value="relay">Relay</option>' +
+    '<option value="gpio">Generic GPIO</option>' +
+    '<option value="led" disabled>LED (built-in) — not in firmware yet</option>' +
+    '<option value="buzzer" disabled>Buzzer (built-in) — not in firmware yet</option>' +
+    '</select>';
+}
+
+function ctlPolaritySelect(invert) {
+  return '<select id="acPol">' +
+    '<option value="high"' + (!invert ? ' selected' : '') + '>Active High — HIGH = ON</option>' +
+    '<option value="low"' + (invert ? ' selected' : '') + '>Active Low — LOW = ON</option>' +
+    '</select>';
+}
+
+function ctlFailsafeSelect(fs) {
+  return '<select id="acFailsafe">' +
+    '<option value="OFF"' + (fs === 'OFF' ? ' selected' : '') + '>Force OFF</option>' +
+    '<option value="ON"' + (fs === 'ON' ? ' selected' : '') + '>Force ON</option>' +
+    '<option value="HOLD" disabled>Hold last state — not in firmware yet</option>' +
+    '</select>';
+}
+
+function setActionTrigger(mode) {
+  ctlActionTrigger = mode;
+  document.getElementById('acTrigRule').classList.toggle('active', mode === 'rule');
+  document.getElementById('acTrigManual').classList.toggle('active', mode === 'manual');
+  document.getElementById('acTrigRuleBody').style.display = mode === 'rule' ? '' : 'none';
+  document.getElementById('acTrigManualBody').style.display = mode === 'manual' ? '' : 'none';
+}
+
+function openActionForm(id) {
+  const a = id != null ? (localConfig?.actions || []).find(x => x.id === id) : null;
+  ctlFormMode = { kind: 'action', id: a ? a.id : null };
+  const rules = localConfig?.rules || [];
+  const invert = a ? (a.invert === true || a.invert === 1) : false;
+  const failsafe = a ? ((typeof a.failsafe === 'string') ? a.failsafe : (a.failsafe ? 'ON' : 'OFF')) : 'OFF';
+  const linkedRule = a && a.rule != null ? a.rule : null;
+
+  let ruleRadios = rules.map(r =>
+    '<label class="ctl-rule-radio">' +
+      '<input type="radio" name="ctlLinkedRule" value="' + r.id + '"' + (r.id === linkedRule ? ' checked' : '') + '>' +
+      '<span style="flex:1">' + ruleInputLabel(r.input) + '</span>' +
+      '<span style="font-family:var(--mono);font-size:11px;color:var(--dim)">' + escHtml(ruleConditionText(r)) + '</span>' +
+      '<span class="sev-pill ' + (r.severity || 'NONE').toLowerCase() + '">' + escHtml(r.severity || 'NONE') + '</span>' +
+    '</label>').join('');
+  if (!rules.length) ruleRadios = '<div class="field-hint">No rules yet — add one on the Rules tab first.</div>';
+
+  const form = document.getElementById('ctlForm');
+  form.innerHTML =
+    '<div class="ctl-form">' +
+    '<div class="editor-title">' + (a ? 'Edit Action #' + a.id : 'New Action') + '</div>' +
+    '<div class="editor-grid">' +
+      ctlField('Name', '<input type="text" id="acName" value="' + (a ? escHtml(a.name || '') : '') + '" placeholder="e.g. Cooling Fan">') +
+      ctlField('Type', ctlTypeSelect()) +
+      ctlField('Pin', '<input type="text" id="acPin" value="' + (a ? escHtml(pinNumToStr(a.target)) : '') + '" placeholder="e.g. 5">') +
+      ctlField('Polarity', ctlPolaritySelect(invert) + '<span class="field-hint">Most relay boards are Active Low.</span>') +
+      ctlField('Failsafe (on disconnect/fault)', ctlFailsafeSelect(failsafe)) +
+    '</div>' +
+    '<div style="border-top:1px solid var(--border-light);margin:14px -16px 0;padding:14px 16px 0">' +
+      '<div class="ctl-subhead">What triggers this Action</div>' +
+      '<div class="ctl-trigger-toggle">' +
+        '<button type="button" class="ctl-tab" id="acTrigRule" onclick="setActionTrigger(\'rule\')">Linked Rule</button>' +
+        '<button type="button" class="ctl-tab" id="acTrigManual" onclick="setActionTrigger(\'manual\')">Manual only</button>' +
+      '</div>' +
+      '<div id="acTrigRuleBody">' + ruleRadios + '</div>' +
+      '<div id="acTrigManualBody" style="display:none"><div class="field-hint" style="font-style:italic">No Rule linked — this Action only responds to the manual ON/OFF controls.</div></div>' +
+    '</div>' +
+    '<div class="editor-actions">' +
+      '<button class="btn primary" onclick="saveActionForm()">Save Action</button>' +
+      '<button class="btn secondary" onclick="closeCtlForm()">Cancel</button>' +
+      (a ? '<button class="btn danger" style="margin-left:auto" onclick="delAction(' + a.id + ')">Delete</button>' : '') +
+    '</div></div>';
+  form.style.display = '';
+  setActionTrigger(linkedRule != null ? 'rule' : 'manual');
+  form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function ctlQuoteArg(s) { return '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'; }
+
+// Best-effort re-create of an action after a failed structural edit. The DEL that
+// preceded the failed ADD freed the pin, so this ADD should now succeed; restore
+// the original pin/polarity/failsafe + name + rule link so the edit is not lossy.
+async function ctlRestoreAction(old) {
+  try {
+    const inv = old.invert === true || old.invert === 1;
+    const fs = (typeof old.failsafe === 'string') ? old.failsafe : (old.failsafe ? 'ON' : 'OFF');
+    const resp = await sendChecked('ACTION ADD RELAY ' + pinNumToStr(old.target) + ' FAILSAFE ' + fs + (inv ? ' INVERT' : ''));
+    const m = resp.match(/Action #(\d+)/);
+    const rid = m ? parseInt(m[1], 10) : null;
+    if (rid != null) {
+      if (old.name) await sendChecked('ACTION ' + rid + ' NAME ' + ctlQuoteArg(old.name));
+      if (old.rule != null) await sendChecked('ACTION ' + rid + ' RULE ' + old.rule);
+    }
+  } catch (_) { /* best-effort; the original failure is what surfaces to the user */ }
+}
+
+async function saveActionForm() {
+  const name = document.getElementById('acName').value.trim();
+  const pin = document.getElementById('acPin').value.trim();
+  if (!pin) { alert('Enter a pin.'); return; }
+  // Validate the free-text pin before touching the device: catches typos client-
+  // side (fewer failed ADDs → fewer destructive edits) and blocks token injection
+  // into the CLI string (e.g. "5 INVERT"). Same shape the input editor accepts.
+  if (!/^[A-Za-z0-9:]+$/.test(pin)) { alert('Invalid pin format. Use 5, A0, I2C:0, CAN:0, etc.'); return; }
+  const invert = document.getElementById('acPol').value === 'low';
+  const failsafe = document.getElementById('acFailsafe').value;   // OFF | ON
+  let linkedRule = null;
+  if (ctlActionTrigger === 'rule') {
+    const sel = document.querySelector('input[name="ctlLinkedRule"]:checked');
+    if (!sel) { alert('Pick a rule to link, or choose "Manual only".'); return; }
+    linkedRule = parseInt(sel.value, 10);
+  }
+
+  const oldId = ctlFormMode?.id;
+  const old = oldId != null ? (localConfig?.actions || []).find(x => x.id === oldId) : null;
+  // Name and rule-link have in-place CLI verbs; pin/polarity/failsafe do not. When
+  // only the in-place fields changed, edit granularly with NO destructive delete.
+  const oldInvert = old ? (old.invert === true || old.invert === 1) : null;
+  const oldFailsafe = old ? ((typeof old.failsafe === 'string') ? old.failsafe : (old.failsafe ? 'ON' : 'OFF')) : null;
+  const structural = !old || pin !== pinNumToStr(old.target) || invert !== oldInvert || failsafe !== oldFailsafe;
+
+  setCtlBusy(true);
+  let ok = false;
+  try {
+    await withConfigMode(async () => {
+      if (old && !structural) {
+        // In-place: only name / rule-link changed.
+        if (name !== (old.name || '')) await sendChecked('ACTION ' + oldId + ' NAME ' + (name ? ctlQuoteArg(name) : '""'));
+        const newRuleArg = linkedRule != null ? String(linkedRule) : 'NONE';
+        const oldRuleArg = old.rule != null ? String(old.rule) : 'NONE';
+        if (newRuleArg !== oldRuleArg) await sendChecked('ACTION ' + oldId + ' RULE ' + newRuleArg);
+      } else {
+        // New action, or a structural change with no in-place verb → recreate.
+        // ACTION ADD rejects a pin already claimed by another action, so a same-
+        // pin edit must DEL first; capture the old config to roll back if the ADD
+        // then fails (a bad pin would otherwise leave the action destroyed).
+        const addCmd = 'ACTION ADD RELAY ' + pin + ' FAILSAFE ' + failsafe + (invert ? ' INVERT' : '');
+        if (old) await sendChecked('ACTION DEL ' + oldId);
+        let resp;
+        try {
+          resp = await sendChecked(addCmd);
+        } catch (addErr) {
+          if (old) await ctlRestoreAction(old);
+          throw addErr;
+        }
+        const m = resp.match(/Action #(\d+)/);
+        const newId = m ? parseInt(m[1], 10) : null;
+        if (newId == null) throw new Error('could not read new action id from response: ' + resp.trim());
+        if (name) await sendChecked('ACTION ' + newId + ' NAME ' + ctlQuoteArg(name));
+        if (linkedRule != null) await sendChecked('ACTION ' + newId + ' RULE ' + linkedRule);
+      }
+    });
+    ok = true;
+    ctlDirty = true;
+    appendInfo('Action saved to device RAM — Save to EEPROM to persist.');
+  } catch (e) {
+    appendErr('Save action failed: ' + e.message);
+  } finally {
+    try { await reloadControlConfig(); } catch (_) { /* offline / disconnected */ }
+    if (ok) closeCtlForm();
+    setCtlBusy(false);
+  }
+}
+
+async function delAction(id) {
+  if (!confirm('Delete Action #' + id + '?')) return;
+  setCtlBusy(true);
+  try {
+    await withConfigMode(async () => { await sendChecked('ACTION DEL ' + id); });
+    ctlDirty = true;
+    appendInfo('Action #' + id + ' deleted (RAM) — Save to EEPROM to persist.');
+  } catch (e) { appendErr('Delete failed: ' + e.message); }
+  finally { try { await reloadControlConfig(); } catch (_) {} setCtlBusy(false); }
+}
+
+// Manual ON/OFF toggle for a manual Action (writes the command byte on …0031).
+async function ctlActionManual(id, cmd) {
+  try { await writeActionCommand(id, cmd); }
+  catch (e) { appendErr('Action write failed: ' + e.message); }
 }
 
 // Three-state badge:
@@ -2020,6 +2566,7 @@ async function fetchInitialState() {
     const unitResp = await sendQueued('LIST UNITS JSON');
     catalog.units = parseJsonResponse(unitResp);
     renderInputsPanel();
+    renderControlPanel();   // Rules/Actions tables now have localConfig to render
     appendInfo('Configuration loaded.');
   } catch(e) {
     tbody.innerHTML = '<tr><td colspan="10" class="empty-row" style="color:var(--red)">Failed to load: ' + escHtml(e.message) + '</td></tr>';
@@ -2647,7 +3194,39 @@ function wirePanelCollapse(headerId, panelId, btnId, label) {
   });
 }
 wirePanelCollapse('alarmPanelHeader', 'alarmPanel', 'btnAlarmToggle', 'alarms');
-wirePanelCollapse('actionPanelHeader', 'actionPanel', 'btnActionToggle', 'actions');
+wirePanelCollapse('controlPanelHeader', 'controlPanel', 'btnControlToggle', 'rules & actions');
+// The shared header handler ignores clicks on buttons (so the tabs/Add work), which
+// also makes the ▲ inert; give it its own handler so the chevron itself collapses.
+document.getElementById('btnControlToggle').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const panel = document.getElementById('controlPanel');
+  setPanelCollapsed('controlPanel', 'btnControlToggle', 'rules & actions', !panel.classList.contains('collapsed'));
+});
+
+// --- Rules / Actions panel wiring ---
+document.getElementById('ctlTabRules').addEventListener('click', () => {
+  controlTab = 'rules'; closeCtlForm(); renderControlPanel();
+});
+document.getElementById('ctlTabActions').addEventListener('click', () => {
+  controlTab = 'actions'; closeCtlForm(); renderControlPanel();
+});
+document.getElementById('ctlAddBtn').addEventListener('click', () => {
+  if (controlTab === 'rules') openRuleForm(null); else openActionForm(null);
+});
+document.getElementById('ctlSaveEeprom').addEventListener('click', ctlSaveEeprom);
+document.getElementById('ctlRevert').addEventListener('click', ctlRevert);
+document.getElementById('ctlTableWrap').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-ctl]');
+  if (!btn) return;
+  const id = parseInt(btn.dataset.id, 10);
+  switch (btn.dataset.ctl) {
+    case 'rule-edit': openRuleForm(id); break;
+    case 'rule-del':  delRule(id); break;
+    case 'act-edit':  openActionForm(id); break;
+    case 'act-on':    ctlActionManual(id, ACTION_CMD_MANUAL_ON); break;
+    case 'act-off':   ctlActionManual(id, ACTION_CMD_MANUAL_OFF); break;
+  }
+});
 
 // --- Add / Remove ---
 

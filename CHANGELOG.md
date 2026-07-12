@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Webapp: first-class Rules and Actions management — a new tabbed panel (below Alarms) to create, edit, and delete threshold Rules and relay/GPIO Actions (name, pin, polarity, failsafe, and rule-linking) with live Action on/off and manual override, replacing the read-only Actions card list (#279)
 - Control engine: Actions now carry an optional operator label (`ACTION <id> NAME <text>`, shown in `ACTION LIST` and round-tripped through `SYSTEM DUMP JSON`/`JSON IMPORT`), so a name like "Cooling Fan" set in the webapp travels to the CLI and mobile app instead of showing as a bare id (EEPROM v6→v7, clean reset)
 - `SYSTEM DIAG PINS`: a live analog-pin sweep that reads every analog-capable pin — configured or not — and flags floating vs driven pins, so you can find which input a sensor is wired to during setup (#280)
 - `docs/feature_costs.md` + `tools/measure_feature_costs.py`: a per-flag flash/RAM cost matrix for the memory-constrained mega2560 build, so a configuration can be sized before compiling (#145)
