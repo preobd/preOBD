@@ -45,6 +45,21 @@
 #include "hash.h"
 #include "generated/registry_enums.h"
 
+// ===== APPLICATION CAR-AREA GROUPS =====
+// Coarse vehicle-area grouping for client UIs (mobile app add-input wizard,
+// webapp). Exported by name in LIST APPLICATIONS JSON ("group"); clients must
+// bucket unknown names under OTHER so this enum can grow. OTHER = 0 keeps a
+// preset that omits .group safely bucketed.
+enum AppGroup : uint8_t {
+    APP_GROUP_OTHER = 0,
+    APP_GROUP_ENGINE,
+    APP_GROUP_DRIVETRAIN,
+    APP_GROUP_INDUCTION,
+    APP_GROUP_EXHAUST,
+    APP_GROUP_ELECTRICAL,
+    APP_GROUP_ENVIRONMENT,
+};
+
 // ===== APPLICATION PRESET STRUCTURE =====
 struct ApplicationPreset {
     const char* name;              // PRIMARY KEY: "CHT", "OIL_TEMP", "BOOST_PRESSURE"
@@ -63,6 +78,8 @@ struct ApplicationPreset {
     uint16_t nameHash;            // Precomputed djb2_hash(name) for fast lookup
     uint16_t warmupTime_ms;       // Alarm warmup time (milliseconds, 0 = instant)
     uint16_t persistTime_ms;      // Fault persistence time (milliseconds)
+    AppGroup group;               // Car-area group for client UIs (LAST member —
+                                  // designated initializers must stay in order)
 };
 
 // ===== STRING LITERALS IN PROGMEM =====
@@ -208,7 +225,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_TEMPERATURE,
         .nameHash = 0x2F75,  // djb2_hash("NONE")
         .warmupTime_ms = 0,
-        .persistTime_ms = 0
+        .persistTime_ms = 0,
+        .group = APP_GROUP_OTHER
     },
 
     // ===== TEMPERATURE APPLICATIONS =====
@@ -230,7 +248,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_TEMPERATURE,
         .nameHash = 0xD984,  // djb2_hash("CHT")
         .warmupTime_ms = 30000,  // 30 seconds warmup
-        .persistTime_ms = 2000  // 2 seconds persistence
+        .persistTime_ms = 2000,  // 2 seconds persistence
+        .group = APP_GROUP_ENGINE
     },
 
     // Index 2: EGT - Exhaust Gas Temperature
@@ -251,7 +270,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_TEMPERATURE,
         .nameHash = 0xE1E5,  // djb2_hash("EGT")
         .warmupTime_ms = 20000,  // 20 seconds warmup
-        .persistTime_ms = 2000  // 2 seconds persistence
+        .persistTime_ms = 2000,  // 2 seconds persistence
+        .group = APP_GROUP_EXHAUST
     },
 
     // Index 3: COOLANT_TEMP - Engine Coolant Temperature
@@ -272,7 +292,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_TEMPERATURE,
         .nameHash = 0xB5AA,  // djb2_hash("COOLANT_TEMP")
         .warmupTime_ms = 60000,  // 60 seconds warmup
-        .persistTime_ms = 5000  // 5 seconds persistence
+        .persistTime_ms = 5000,  // 5 seconds persistence
+        .group = APP_GROUP_ENGINE
     },
 
     // Index 4: OIL_TEMP - Engine Oil Temperature
@@ -293,7 +314,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_TEMPERATURE,
         .nameHash = 0xB5BE,  // djb2_hash("OIL_TEMP")
         .warmupTime_ms = 60000,  // 60 seconds warmup
-        .persistTime_ms = 5000  // 5 seconds persistence
+        .persistTime_ms = 5000,  // 5 seconds persistence
+        .group = APP_GROUP_ENGINE
     },
 
     // Index 5: TCASE_TEMP - Transfer Case Temperature
@@ -314,7 +336,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_TEMPERATURE,
         .nameHash = 0x1BEA,  // djb2_hash("TCASE_TEMP")
         .warmupTime_ms = 60000,  // 60 seconds warmup
-        .persistTime_ms = 5000  // 5 seconds persistence
+        .persistTime_ms = 5000,  // 5 seconds persistence
+        .group = APP_GROUP_DRIVETRAIN
     },
 
     // Index 6: AMBIENT_TEMP - Ambient Air Temperature (BME280)
@@ -335,7 +358,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_TEMPERATURE,
         .nameHash = 0x323A,  // djb2_hash("AMBIENT_TEMP")
         .warmupTime_ms = 0,  // No warmup needed
-        .persistTime_ms = 5000  // 5 seconds persistence
+        .persistTime_ms = 5000,  // 5 seconds persistence
+        .group = APP_GROUP_ENVIRONMENT
     },
 
     // ===== PRESSURE APPLICATIONS =====
@@ -357,7 +381,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_PRESSURE,
         .nameHash = 0x2361,  // djb2_hash("OIL_PRESSURE")
         .warmupTime_ms = 5000,  // 5 seconds warmup
-        .persistTime_ms = 1000  // 1 second persistence
+        .persistTime_ms = 1000,  // 1 second persistence
+        .group = APP_GROUP_ENGINE
     },
 
     // Index 8: BOOST_PRESSURE - Boost/Intake Pressure
@@ -378,7 +403,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_PRESSURE,
         .nameHash = 0xC084,  // djb2_hash("BOOST_PRESSURE")
         .warmupTime_ms = 1000,  // 1 second warmup
-        .persistTime_ms = 500  // 0.5 seconds persistence
+        .persistTime_ms = 500,  // 0.5 seconds persistence
+        .group = APP_GROUP_INDUCTION
     },
 
     // Index 9: FUEL_PRESSURE
@@ -399,7 +425,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_PRESSURE,
         .nameHash = 0xA889,  // djb2_hash("FUEL_PRESSURE")
         .warmupTime_ms = 2000,  // 2 seconds warmup
-        .persistTime_ms = 1000  // 1 second persistence
+        .persistTime_ms = 1000,  // 1 second persistence
+        .group = APP_GROUP_ENGINE
     },
 
     // Index 10: BAROMETRIC_PRESSURE - Barometric Pressure (BME280)
@@ -420,7 +447,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_PRESSURE,
         .nameHash = 0xFF65,  // djb2_hash("BAROMETRIC_PRESSURE")
         .warmupTime_ms = 0,  // No warmup needed
-        .persistTime_ms = 5000  // 5 seconds persistence
+        .persistTime_ms = 5000,  // 5 seconds persistence
+        .group = APP_GROUP_ENVIRONMENT
     },
 
     // ===== VOLTAGE APPLICATIONS =====
@@ -442,7 +470,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_VOLTAGE,
         .nameHash = 0xD063,  // djb2_hash("PRIMARY_BATTERY")
         .warmupTime_ms = 0,  // No warmup needed
-        .persistTime_ms = 1000  // 1 second persistence
+        .persistTime_ms = 1000,  // 1 second persistence
+        .group = APP_GROUP_ELECTRICAL
     },
 
     // Index 12: AUXILIARY_BATTERY - Auxiliary Battery Voltage
@@ -463,7 +492,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_VOLTAGE,
         .nameHash = 0x01F7,  // djb2_hash("AUXILIARY_BATTERY")
         .warmupTime_ms = 0,  // No warmup needed
-        .persistTime_ms = 1000  // 1 second persistence
+        .persistTime_ms = 1000,  // 1 second persistence
+        .group = APP_GROUP_ELECTRICAL
     },
 
     // ===== DIGITAL APPLICATIONS =====
@@ -485,7 +515,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_DIGITAL,
         .nameHash = 0xCC0C,  // djb2_hash("COOLANT_LEVEL")
         .warmupTime_ms = 5000,  // 5 seconds warmup
-        .persistTime_ms = 2000  // 2 seconds persistence
+        .persistTime_ms = 2000,  // 2 seconds persistence
+        .group = APP_GROUP_ENGINE
     },
 
     // ===== ENVIRONMENTAL APPLICATIONS =====
@@ -507,7 +538,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_HUMIDITY,
         .nameHash = 0x1612,  // djb2_hash("HUMIDITY")
         .warmupTime_ms = 0,  // No warmup needed
-        .persistTime_ms = 5000  // 5 seconds persistence
+        .persistTime_ms = 5000,  // 5 seconds persistence
+        .group = APP_GROUP_ENVIRONMENT
     },
 
     // Index 15: ELEVATION - Elevation (BME280)
@@ -528,7 +560,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_ELEVATION,
         .nameHash = 0xC26C,  // djb2_hash("ELEVATION")
         .warmupTime_ms = 0,  // No warmup needed
-        .persistTime_ms = 5000  // 5 seconds persistence
+        .persistTime_ms = 5000,  // 5 seconds persistence
+        .group = APP_GROUP_ENVIRONMENT
     },
 
     // ===== RPM APPLICATIONS =====
@@ -550,7 +583,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_RPM,
         .nameHash = 0x4429,  // djb2_hash("ENGINE_RPM")
         .warmupTime_ms = 2000,  // 2 seconds warmup
-        .persistTime_ms = 0  // No persistence needed
+        .persistTime_ms = 0,  // No persistence needed
+        .group = APP_GROUP_ENGINE
     },
 
     // ===== PRESSURE APPLICATIONS (EXTENDED) =====
@@ -571,7 +605,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_PRESSURE,
         .nameHash = 0xADC2,  // djb2_hash("HYDRAULIC_PRESSURE")
         .warmupTime_ms = 2000,
-        .persistTime_ms = 1000
+        .persistTime_ms = 1000,
+        .group = APP_GROUP_OTHER
     },
 
     // Index 18: BRAKE_PRESSURE - Brake System Pressure (0-10 bar)
@@ -591,7 +626,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_PRESSURE,
         .nameHash = 0x96C2,  // djb2_hash("BRAKE_PRESSURE")
         .warmupTime_ms = 1000,
-        .persistTime_ms = 500
+        .persistTime_ms = 500,
+        .group = APP_GROUP_OTHER
     },
 
     // ===== LEVEL APPLICATIONS =====
@@ -612,7 +648,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_PERCENT,
         .nameHash = 0x24C8,  // djb2_hash("FUEL_LEVEL")
         .warmupTime_ms = 2000,
-        .persistTime_ms = 5000
+        .persistTime_ms = 5000,
+        .group = APP_GROUP_ENGINE
     },
 
     // ===== SPEED APPLICATIONS =====
@@ -633,7 +670,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_SPEED,
         .nameHash = 0x46F5,  // djb2_hash("VEHICLE_SPEED")
         .warmupTime_ms = 0,  // No warmup needed
-        .persistTime_ms = 0  // No persistence needed
+        .persistTime_ms = 0,  // No persistence needed
+        .group = APP_GROUP_DRIVETRAIN
     },
 
     // ===== TEMPERATURE APPLICATIONS (EXTENDED) =====
@@ -654,7 +692,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_TEMPERATURE,
         .nameHash = 0xC402,  // djb2_hash("TRANS_TEMP")
         .warmupTime_ms = 60000,
-        .persistTime_ms = 5000
+        .persistTime_ms = 5000,
+        .group = APP_GROUP_DRIVETRAIN
     },
 
     // Index 22: INTAKE_AIR_TEMP - Intake Air Temperature (IAT)
@@ -674,7 +713,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_TEMPERATURE,
         .nameHash = 0xC3F1,  // djb2_hash("INTAKE_AIR_TEMP")
         .warmupTime_ms = 10000,
-        .persistTime_ms = 5000
+        .persistTime_ms = 5000,
+        .group = APP_GROUP_INDUCTION
     },
 
     // ===== PRESSURE APPLICATIONS (EXTENDED) =====
@@ -695,7 +735,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_PRESSURE,
         .nameHash = 0x031B,  // djb2_hash("MAP_PRESSURE")
         .warmupTime_ms = 1000,
-        .persistTime_ms = 500
+        .persistTime_ms = 500,
+        .group = APP_GROUP_INDUCTION
     },
 
     // ===== LEVEL/POSITION APPLICATIONS =====
@@ -716,7 +757,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_PERCENT,
         .nameHash = 0x7E2F,  // djb2_hash("THROTTLE_POSITION")
         .warmupTime_ms = 0,
-        .persistTime_ms = 0
+        .persistTime_ms = 0,
+        .group = APP_GROUP_ENGINE
     },
 
     // ===== TEMPERATURE APPLICATIONS (DRIVETRAIN) =====
@@ -737,7 +779,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_TEMPERATURE,
         .nameHash = 0x5353,  // djb2_hash("DIFF_TEMP")
         .warmupTime_ms = 60000,
-        .persistTime_ms = 5000
+        .persistTime_ms = 5000,
+        .group = APP_GROUP_DRIVETRAIN
     },
 
     // Index 26: GEAR_OIL_TEMP - Gear Oil Temperature (manual transmission / gearbox)
@@ -757,7 +800,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_TEMPERATURE,
         .nameHash = 0x003C,  // djb2_hash("GEAR_OIL_TEMP")
         .warmupTime_ms = 60000,
-        .persistTime_ms = 5000
+        .persistTime_ms = 5000,
+        .group = APP_GROUP_DRIVETRAIN
     },
 
     // ===== DIGITAL APPLICATIONS (EXTENDED) =====
@@ -778,7 +822,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_DIGITAL,
         .nameHash = 0xCEA0,  // djb2_hash("OIL_LEVEL")
         .warmupTime_ms = 10000,
-        .persistTime_ms = 3000
+        .persistTime_ms = 3000,
+        .group = APP_GROUP_ENGINE
     },
 
     // ===== TEMPERATURE APPLICATIONS (FORCED INDUCTION) =====
@@ -799,7 +844,8 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_TEMPERATURE,
         .nameHash = 0x2500,  // djb2_hash("INTERCOOLER_TEMP")
         .warmupTime_ms = 10000,
-        .persistTime_ms = 5000
+        .persistTime_ms = 5000,
+        .group = APP_GROUP_INDUCTION
     }
 };
 

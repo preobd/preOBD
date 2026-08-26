@@ -13,6 +13,13 @@
 
 #include <ArduinoJson.h>
 #include "watchdog.h"
+
+// Serial-driven exports, never a hot path. Teensy 4.x places code in fast
+// ITCM (RAM1, scarce) by default; keep these writers in FLASH instead.
+// FLASHMEM is a Teensy core macro — no-op elsewhere.
+#ifndef FLASHMEM
+#define FLASHMEM
+#endif
 #include "sensor_library.h"
 #include "application_presets.h"
 #include "units_registry.h"
@@ -58,21 +65,21 @@ static const CalTypeEntry CAL_TYPE_TABLE[] = {
 };
 static const uint8_t CAL_TYPE_COUNT = sizeof(CAL_TYPE_TABLE) / sizeof(CAL_TYPE_TABLE[0]);
 
-static const char* measurementTypeName(MeasurementType t) {
+static FLASHMEM const char* measurementTypeName(MeasurementType t) {
     for (uint8_t i = 0; i < MEAS_TYPE_COUNT; i++) {
         if (MEAS_TYPE_TABLE[i].id == t) return MEAS_TYPE_TABLE[i].name;
     }
     return "UNKNOWN";
 }
 
-static const char* calibrationTypeName(CalibrationType t) {
+static FLASHMEM const char* calibrationTypeName(CalibrationType t) {
     for (uint8_t i = 0; i < CAL_TYPE_COUNT; i++) {
         if (CAL_TYPE_TABLE[i].id == t) return CAL_TYPE_TABLE[i].name;
     }
     return "UNKNOWN";
 }
 
-static const char* pinTypeName(PinTypeRequirement p) {
+static FLASHMEM const char* pinTypeName(PinTypeRequirement p) {
     switch (p) {
         case PIN_ANALOG:  return "ANALOG";
         case PIN_DIGITAL: return "DIGITAL";
@@ -81,7 +88,7 @@ static const char* pinTypeName(PinTypeRequirement p) {
     }
 }
 
-static const char* getPlatformStr() {
+static FLASHMEM const char* getPlatformStr() {
 #if defined(TEENSY_41)
     return "TEENSY41";
 #elif defined(TEENSY_40)
@@ -103,7 +110,7 @@ static const char* getPlatformStr() {
 
 // ===== ENUM REGISTRY EXPORTS =====
 
-void writeMeasurementTypesJson(Print& out) {
+FLASHMEM void writeMeasurementTypesJson(Print& out) {
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
     for (uint8_t i = 0; i < MEAS_TYPE_COUNT; i++) {
@@ -115,7 +122,7 @@ void writeMeasurementTypesJson(Print& out) {
     serializeJson(doc, wdOut);
 }
 
-void writeCalibrationTypesJson(Print& out) {
+FLASHMEM void writeCalibrationTypesJson(Print& out) {
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
     for (uint8_t i = 0; i < CAL_TYPE_COUNT; i++) {
@@ -129,7 +136,7 @@ void writeCalibrationTypesJson(Print& out) {
 
 // ===== REGISTRY EXPORTS =====
 
-void writeUnitsJson(Print& out) {
+FLASHMEM void writeUnitsJson(Print& out) {
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
     for (uint8_t i = 0; i < NUM_UNITS; i++) {
@@ -147,7 +154,7 @@ void writeUnitsJson(Print& out) {
     serializeJson(doc, wdOut);
 }
 
-void writeCategoriesJson(Print& out) {
+FLASHMEM void writeCategoriesJson(Print& out) {
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
     for (uint8_t i = 0; i < CAT_COUNT; i++) {
@@ -162,7 +169,7 @@ void writeCategoriesJson(Print& out) {
 }
 
 // filter: optional category name string (e.g. "THERMOCOUPLE"); nullptr = all sensors
-void writeSensorsJson(Print& out, const char* filter) {
+FLASHMEM void writeSensorsJson(Print& out, const char* filter) {
     // Resolve filter to a category enum up-front; CAT_COUNT means "no filter"
     SensorCategory filterCat = CAT_COUNT;
     if (filter) {
@@ -201,7 +208,21 @@ void writeSensorsJson(Print& out, const char* filter) {
     serializeJson(doc, wdOut);
 }
 
-void writeApplicationsJson(Print& out) {
+// Car-area group names for the "group" export field. Clients bucket unknown
+// names under OTHER, so growing AppGroup only requires extending this switch.
+static FLASHMEM const char* appGroupName(AppGroup g) {
+    switch (g) {
+        case APP_GROUP_ENGINE:      return "ENGINE";
+        case APP_GROUP_DRIVETRAIN:  return "DRIVETRAIN";
+        case APP_GROUP_INDUCTION:   return "INDUCTION";
+        case APP_GROUP_EXHAUST:     return "EXHAUST";
+        case APP_GROUP_ELECTRICAL:  return "ELECTRICAL";
+        case APP_GROUP_ENVIRONMENT: return "ENVIRONMENT";
+        default:                    return "OTHER";
+    }
+}
+
+FLASHMEM void writeApplicationsJson(Print& out) {
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
     for (uint8_t i = 1; i < NUM_APPLICATION_PRESETS; i++) {  // skip index 0 (APP_NONE)
@@ -213,6 +234,7 @@ void writeApplicationsJson(Print& out) {
         obj["nameHash"]     = p.nameHash;
         obj["abbreviation"] = (const __FlashStringHelper*)p.abbreviation;
         obj["label"]        = (const __FlashStringHelper*)p.label;
+        obj["group"]        = appGroupName(p.group);
         if (p.description) {
             obj["description"] = (const __FlashStringHelper*)p.description;
         } else {
@@ -248,7 +270,7 @@ void writeApplicationsJson(Print& out) {
     serializeJson(doc, wdOut);
 }
 
-void writeOutputsJson(Print& out) {
+FLASHMEM void writeOutputsJson(Print& out) {
     extern OutputModule outputModules[];
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
@@ -263,7 +285,7 @@ void writeOutputsJson(Print& out) {
     serializeJson(doc, wdOut);
 }
 
-void writePidsJson(Print& out) {
+FLASHMEM void writePidsJson(Print& out) {
     const uint8_t count = sizeof(STANDARD_PID_TABLE) / sizeof(STANDARD_PID_TABLE[0]);
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
@@ -286,7 +308,7 @@ void writePidsJson(Print& out) {
 
 // ===== BUNDLED EXPORT =====
 
-static void writeFirmwareJson(Print& out) {
+static FLASHMEM void writeFirmwareJson(Print& out) {
     JsonDocument doc;
     JsonObject obj = doc.to<JsonObject>();
     obj["version"]    = firmwareVersionString();
@@ -314,7 +336,7 @@ static void writeFirmwareJson(Print& out) {
     serializeJson(doc, wdOut);
 }
 
-void dumpRegistryToJson(Print& out) {
+FLASHMEM void dumpRegistryToJson(Print& out) {
     out.print(F("{\"schemaVersion\":1,\"kind\":\"registry\","));
     out.print(F("\"firmware\":"));          writeFirmwareJson(out);
     out.print(F(",\"measurementTypes\":")); writeMeasurementTypesJson(out);

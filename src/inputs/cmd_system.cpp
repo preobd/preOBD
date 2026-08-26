@@ -45,6 +45,10 @@
 #endif
 #include <string.h>
 #include <ctype.h>
+#if SUPPORTS_JSON_EXPORT
+#include <ArduinoJson.h>
+#include "../lib/watchdog.h"  // WatchdogKickingPrint for the DIAG PINS JSON serialize
+#endif
 
 // SYSTEM STATUS subcommand handler
 static int system_status(int argc, const char* const* argv, int /*tokenIndex*/) {
@@ -795,6 +799,47 @@ static FLASHMEM void diagPrintAnalogLabel(uint8_t analogIndex, uint8_t pin) {
     msg.control.print(F("   "));
 }
 
+// Three-way pin classification shared by the text sweep and its JSON twin
+// (SYSTEM DIAG PINS [JSON]) so the two can never disagree about a pin.
+enum PinDiscovery : uint8_t { PD_FLOATING, PD_PULLED_LOW, PD_PULLED_HIGH, PD_DRIVEN };
+
+// The enabled Input configured on this pin, if any. Enabled analog Inputs
+// self-track rather than registering in the pin registry, so this lookup and
+// getPinUsage() are disjoint by construction.
+static FLASHMEM Input* diagInputOnPin(uint8_t pin) {
+    for (uint8_t k = 0; k < MAX_INPUTS; k++) {
+        if (inputs[k].flags.isEnabled && inputs[k].pin == pin) {
+            return &inputs[k];
+        }
+    }
+    return nullptr;
+}
+
+// Discovery-candidate sampler. Two throwaway reads with a settle defuse
+// sequential-mux ghosting (a floating high-Z pin can otherwise hold a
+// neighbour's charge and masquerade as driven).
+static FLASHMEM PinDiscovery diagSamplePin(uint8_t pin, int& last, int& jitter) {
+    analogRead(pin);
+    delayMicroseconds(20);
+    analogRead(pin);
+    int rawMin = (int)ADC_MAX_VALUE + 1, rawMax = -1;
+    last = 0;
+    for (uint8_t s = 0; s < 8; s++) {
+        int r = analogRead(pin);
+        last = r;
+        if (r < rawMin) rawMin = r;
+        if (r > rawMax) rawMax = r;
+        delayMicroseconds(20);
+    }
+    jitter = rawMax - rawMin;
+    const int railLo = (int)(ADC_MAX_VALUE * 0.02f);
+    const int railHi = (int)(ADC_MAX_VALUE * 0.98f);
+    if (jitter > JITTER_FLOATING_COUNTS) return PD_FLOATING;
+    if (last <= railLo)                  return PD_PULLED_LOW;
+    if (last >= railHi)                  return PD_PULLED_HIGH;
+    return PD_DRIVEN;
+}
+
 static FLASHMEM void diagSectionPins() {
     msg.control.println(F("=== ANALOG PIN SWEEP ==="));
     for (uint8_t i = 0; i < ANALOG_PIN_COUNT; i++) {
@@ -802,13 +847,7 @@ static FLASHMEM void diagSectionPins() {
 
         // 1) Configured analog Input on this pin? Reuse diagProbe so DIAG PINS and
         //    DIAG INPUTS never disagree about the same pin.
-        Input* owner = nullptr;
-        for (uint8_t k = 0; k < MAX_INPUTS; k++) {
-            if (inputs[k].flags.isEnabled && inputs[k].pin == pin) {
-                owner = &inputs[k];
-                break;
-            }
-        }
+        Input* owner = diagInputOnPin(pin);
         if (owner) {
             InputProbe p;
             diagProbe(owner, &p);
@@ -836,31 +875,19 @@ static FLASHMEM void diagSectionPins() {
             continue;
         }
 
-        // 3) Discovery candidate — sample the raw pin. Two throwaway reads with a
-        //    settle defuse sequential-mux ghosting (a floating high-Z pin can
-        //    otherwise hold a neighbour's charge and masquerade as driven).
-        analogRead(pin);
-        delayMicroseconds(20);
-        analogRead(pin);
-        int rawMin = (int)ADC_MAX_VALUE + 1, rawMax = -1, last = 0;
-        for (uint8_t s = 0; s < 8; s++) {
-            int r = analogRead(pin);
-            last = r;
-            if (r < rawMin) rawMin = r;
-            if (r > rawMax) rawMax = r;
-            delayMicroseconds(20);
-        }
-        int jitter = rawMax - rawMin;
+        // 3) Discovery candidate — sample the raw pin.
+        int last, jitter;
+        PinDiscovery d = diagSamplePin(pin, last, jitter);
         float pctFS   = 100.0f * last / (float)ADC_MAX_VALUE;
         float voltage = (float)last * AREF_VOLTAGE / (float)ADC_MAX_VALUE;
-        const int railLo = (int)(ADC_MAX_VALUE * 0.02f);
-        const int railHi = (int)(ADC_MAX_VALUE * 0.98f);
 
         const __FlashStringHelper* verdict;
-        if      (jitter > JITTER_FLOATING_COUNTS) verdict = F("floating?");
-        else if (last <= railLo)                  verdict = F("pulled low");
-        else if (last >= railHi)                  verdict = F("pulled high");
-        else                                      verdict = F("driven");
+        switch (d) {
+            case PD_PULLED_LOW:  verdict = F("pulled low");  break;
+            case PD_PULLED_HIGH: verdict = F("pulled high"); break;
+            case PD_DRIVEN:      verdict = F("driven");      break;
+            default:             verdict = F("floating?");   break;
+        }
 
         diagPrintAnalogLabel(i, pin);
         msg.control.print(verdict);
@@ -873,13 +900,59 @@ static FLASHMEM void diagSectionPins() {
         msg.control.print(F("% FS  "));
         msg.control.print(voltage, 2);
         msg.control.print(F(" V"));
-        if (jitter > JITTER_FLOATING_COUNTS) {
+        if (d == PD_FLOATING) {
             msg.control.print(F("  jitter "));
             msg.control.print(jitter);
         }
         msg.control.println(F(")"));
     }
 }
+
+#if SUPPORTS_JSON_EXPORT
+// JSON twin of diagSectionPins for machine consumers (mobile app pin picker).
+// Same three-way classification: {"label":"A3","pin":17,"state":"input","owner":"EOP"}
+// | {"state":"in_use","usage":"Reserved"} | {"state":"floating|pulled_low|
+// pulled_high|driven","raw":…,"voltage":…,"jitter":…}. Clients treat any
+// discovery state as an open-pin candidate.
+static FLASHMEM void diagSectionPinsJson(Print& out) {
+    JsonDocument doc;
+    JsonArray arr = doc.to<JsonArray>();
+    for (uint8_t i = 0; i < ANALOG_PIN_COUNT; i++) {
+        uint8_t pin = pgm_read_byte(&ANALOG_PINS[i]);
+        JsonObject obj = arr.add<JsonObject>();
+        char label[6];
+        snprintf(label, sizeof(label), "A%u", (unsigned)i);
+        obj["label"] = label;  // non-const char* → copied into the document
+        obj["pin"]   = pin;
+
+        Input* owner = diagInputOnPin(pin);
+        if (owner) {
+            obj["state"] = "input";
+            obj["owner"] = owner->abbrName;
+            continue;
+        }
+        PinUsageType usage = getPinUsage(pin);
+        if (usage != PIN_UNUSED) {
+            obj["state"] = "in_use";
+            obj["usage"] = getPinUsageTypeName(usage);
+            continue;
+        }
+        int last, jitter;
+        PinDiscovery d = diagSamplePin(pin, last, jitter);
+        switch (d) {
+            case PD_PULLED_LOW:  obj["state"] = "pulled_low";  break;
+            case PD_PULLED_HIGH: obj["state"] = "pulled_high"; break;
+            case PD_DRIVEN:      obj["state"] = "driven";      break;
+            default:             obj["state"] = "floating";    break;
+        }
+        obj["raw"]     = last;
+        obj["voltage"] = (float)last * AREF_VOLTAGE / (float)ADC_MAX_VALUE;
+        obj["jitter"]  = jitter;
+    }
+    WatchdogKickingPrint wdOut(out);
+    serializeJson(doc, wdOut);
+}
+#endif // SUPPORTS_JSON_EXPORT
 
 // SYSTEM DIAG [INTEGRITY|HW|INPUTS|PINS] — bare form runs integrity+hw+inputs.
 // FLASHMEM: diagnostics are serial-driven (never hot path) and this keeps the
@@ -904,7 +977,31 @@ static FLASHMEM int system_diag(int argc, const char* const* argv, int /*tokenIn
             diagSectionInputs(verbose);
             return 0;
         }
-        if (streq_P(argv[2], PSTR("PINS")))      { diagSectionPins();      return 0; }
+        if (streq_P(argv[2], PSTR("PINS"))) {
+            if (argc >= 4) {
+                if (!streq_P(argv[3], PSTR("JSON")) || argc != 4) {
+                    // Reject unknown options and trailing junk alike (mirrors
+                    // the DIAG INPUTS option validation). The offending token
+                    // is argv[3] unless it was a valid JSON with junk after.
+                    msg.control.print(F("ERROR: Unknown DIAG PINS option '"));
+                    msg.control.print(argv[streq_P(argv[3], PSTR("JSON")) ? 4 : 3]);
+                    msg.control.println(F("'"));
+                    msg.control.println(F("  Valid: JSON, or bare PINS for the text sweep"));
+                    return 1;
+                }
+#if SUPPORTS_JSON_EXPORT
+                msg.control.println();
+                diagSectionPinsJson(msg.control);
+                msg.control.println();
+                return 0;
+#else
+                msg.control.println(F("ERROR: JSON export not supported on this platform"));
+                return 1;
+#endif
+            }
+            diagSectionPins();
+            return 0;
+        }
         msg.control.print(F("ERROR: Unknown DIAG scope '"));
         msg.control.print(argv[2]);
         msg.control.println(F("'"));
@@ -945,7 +1042,8 @@ static const char PSTR_HELP_SYS_DIAG[] PROGMEM =
     "  SYSTEM DIAG HW                Probe presence/health of configured peripherals\n"
     "  SYSTEM DIAG INPUTS            Per-input fault detection (open/short/range)\n"
     "  SYSTEM DIAG INPUTS VERBOSE    Per-input fault detection with raw evidence chain\n"
-    "  SYSTEM DIAG PINS              Sweep all analog pins (live raw/voltage; find wiring)";
+    "  SYSTEM DIAG PINS              Sweep all analog pins (live raw/voltage; find wiring)\n"
+    "  SYSTEM DIAG PINS JSON         Same sweep as JSON (mobile app pin picker)";
 static const char PSTR_HELP_SYS_SEA_LEVEL[] PROGMEM =
     "  SYSTEM SEA_LEVEL <hPa>        Set sea-level pressure (for altitude calc)";
 static const char PSTR_HELP_SYS_UNITS[] PROGMEM =
