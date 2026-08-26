@@ -223,7 +223,7 @@ The System Status characteristic provides a compact 32-byte binary snapshot of t
 Offset  Size  Type       Field
 ------  ----  --------   -----
 0       4     uint32_le  Magic: 0x704F4244 ("pOBD")
-4       1     uint8      Protocol version (1)
+4       1     uint8      Protocol version (PREOBD_BLE_PROTOCOL_VERSION = 2)
 5       1     uint8      System mode: 0=CONFIG, 1=RUN
 6       1     uint8      Active input count
 7       1     uint8      Configured relay count
@@ -253,18 +253,26 @@ Tier 2 adds features that require a real BLE stack and cannot be done through si
 
 **Characteristic:** Alarm Notify (`...0030`), Notify
 
-When an alarm triggers (e.g., CHT exceeds threshold), the nRF coprocessor sends a notification:
+On every per-**rule** severity/kind transition — including return-to-normal
+(`severity = NORMAL`, `kind = CLEAR`) — the nRF coprocessor sends a
+`PreobdAlarmEvent` notification. The broadcaster emits one frame per firing rule;
+`ruleId` (the source of truth is `src/lib/ble_gatt_defs.h`) lets a client tell
+apart two rules that share one source input.
 
 ```
 Offset  Size  Type       Field
 ------  ----  --------   -----
-0       1     uint8      Input index
-1       1     uint8      Severity: 0=NORMAL, 1=WARNING, 2=ALARM
-2       4     float32_le Current value
-6       4     float32_le Threshold value
-10      8     char[8]    Input abbreviation (null-terminated, e.g., "CHT")
+0       1     uint8      protocolVersion (PREOBD_BLE_PROTOCOL_VERSION = 2)
+1       1     uint8      inputIndex   (source input, 0..MAX_INPUTS-1)
+2       1     uint8      severity     0=NORMAL, 1=WARNING, 2=ALARM, 3=INFO
+3       1     uint8      kind         0=CLEAR, 1=HIGH, 2=LOW
+4       2     uint16_le  sequence     (monotonic, wraps at 65535)
+6       4     float32_le value        (current sensor value)
+10      4     float32_le threshold    (violated threshold; 0 on CLEAR)
+14      4     uint32_le  timestampMs  (device millis() at emit)
+18      1     uint8      ruleId       (Rule.id; 0xFF = none) — protocol v2, #310
 ------  ----
-Total:  18 bytes
+Total:  19 bytes
 ```
 
 ### Relay Control

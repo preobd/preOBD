@@ -393,7 +393,7 @@ bool handleFrame(const Frame& f) {
         }
         return true;
     case FRAME_TYPE_ALARM:
-        // Host MCU pushed an 18-byte PreobdAlarmEvent. Best-effort notify;
+        // Host MCU pushed a 19-byte PreobdAlarmEvent. Best-effort notify;
         // wrong-sized payloads are dropped silently.
         alarmHandlerPush(f.payload, f.len);
         return true;

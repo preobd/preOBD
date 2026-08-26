@@ -26,11 +26,15 @@ static int      g_frameCount = 0;
 static uint8_t  g_frameType  = 0;
 static uint16_t g_frameLen   = 0;
 static uint8_t  g_framePayload[64];
+static uint8_t  g_ruleIds[MAX_RULES];  // ruleId of each frame, in emit order
 
 bool MuxTransport::sendFrame(uint8_t type, const uint8_t* payload, uint16_t len) {
     g_frameType = type;
     g_frameLen  = len;
     if (len <= sizeof(g_framePayload)) memcpy(g_framePayload, payload, len);
+    if (g_frameCount < (int)MAX_RULES && len == PREOBD_ALARM_EVENT_SIZE)
+        g_ruleIds[g_frameCount] =
+            reinterpret_cast<const PreobdAlarmEvent*>(payload)->ruleId;
     ++g_frameCount;
     return true;
 }
@@ -50,6 +54,7 @@ static const PreobdAlarmEvent& lastEvent() {
 void setUp(void) {
     g_frameCount = 0; g_frameType = 0; g_frameLen = 0;
     memset(g_framePayload, 0, sizeof(g_framePayload));
+    memset(g_ruleIds, 0, sizeof(g_ruleIds));
     memset(&systemConfig, 0, sizeof(systemConfig));
     memset(g_ruleContexts, 0, sizeof(g_ruleContexts));
     memset(&g_srcInput, 0, sizeof(g_srcInput));
@@ -84,8 +89,29 @@ static void test_active_alarm_high_payload(void) {
     TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_ALARM, e.severity);
     TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_HIGH, e.kind);
     TEST_ASSERT_EQUAL_UINT8(3, e.inputIndex);          // getInputIndex stub
+    TEST_ASSERT_EQUAL_UINT8(1, e.ruleId);              // Rule.id set by configRule
     TEST_ASSERT_EQUAL_FLOAT(120.0f, e.value);
     TEST_ASSERT_EQUAL_FLOAT(100.0f, e.threshold);      // limitHi
+}
+
+// #310: two rules on the SAME source input must be distinguishable on the wire
+// by ruleId — inputIndex alone is identical for both, so keying firing state by
+// inputIndex let one rule's CLEAR wipe the other. Both rules fire on one tick;
+// assert the two frames carry distinct ruleIds.
+static void test_two_rules_one_input_distinct_ruleid(void) {
+    // Slot 0 (id 1) via configRule, plus slot 1 (id 2) on the same source input.
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 120.0f, /*active*/true);
+    Rule& r2 = rules[1];
+    r2.id = 2; r2.sourceInput = 21;  // same input as slot 0
+    r2.condition = RULE_OUTSIDE_BAND; r2.severity = RULE_SEV_WARNING;
+    r2.flags = RULE_FLAG_ENABLED; r2.limitLo = -1.0f; r2.limitHi = 100.0f;
+    g_ruleContexts[1].state = RULE_ACTIVE;
+
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(2, g_frameCount);            // one frame per rule
+    TEST_ASSERT_EQUAL_UINT8(1, g_ruleIds[0]);
+    TEST_ASSERT_EQUAL_UINT8(2, g_ruleIds[1]);
+    TEST_ASSERT_NOT_EQUAL(g_ruleIds[0], g_ruleIds[1]); // distinguishable on the wire
 }
 
 static void test_low_side_kind_and_threshold(void) {
@@ -145,6 +171,7 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_inactive_rule_emits_nothing);
     RUN_TEST(test_active_alarm_high_payload);
+    RUN_TEST(test_two_rules_one_input_distinct_ruleid);
     RUN_TEST(test_low_side_kind_and_threshold);
     RUN_TEST(test_warning_severity);
     RUN_TEST(test_derived_warning_band);

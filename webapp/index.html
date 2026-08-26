@@ -1178,7 +1178,7 @@ let historyIdx = -1;
 // Alarm + action UI state (populated by notifications)
 const alarmLog = [];           // newest-first, capped at MAX_ALARM_LOG
 const MAX_ALARM_LOG = 50;
-const firingState = new Map(); // inputIndex -> { severity, kind, value, threshold, since }
+const firingState = new Map(); // ruleId -> { inputIndex, severity, kind, value, threshold, since }
 const actionState = new Map(); // actionId -> last-seen PreobdActionState fields
 
 // Command queue
@@ -1538,31 +1538,36 @@ function onAlarmNotify(event) {
   // timestampMs at offset 14 is device-side millis(); we use client-side
   // wall-clock for relative-time rendering so it stays correct after page
   // refresh / reconnect.
+  // ruleId at offset 18 (protocol v2, #310) is the stable per-rule identity we
+  // key firingState by. A legacy 18-byte frame from an older device has no
+  // ruleId — fall back to inputIndex as the key so an outdated pairing still
+  // works (it just can't disambiguate two rules on one input, the old bug).
+  const ruleId = v.byteLength >= 19 ? v.getUint8(18) : inputIndex;
   const now = Date.now();
 
   // Maintain the firing-state cache — the set of HELD conditions that drive the
   // health headline + firing banner. INFO is a log-only breadcrumb (#308): its
   // edges must NOT touch firingState at all, so it can't disturb "All systems
-  // normal" or the banner. firingState is keyed by inputIndex, and multiple
-  // rules may share one input (e.g. WARNING@105 + INFO@100 on coolant), so an
-  // INFO edge that fell through to delete() would wipe a co-located WARNING/
-  // ALARM that is still held. Only WARNING/ALARM set; only an explicit CLEAR
-  // removes; an INFO edge does neither.
+  // normal" or the banner. firingState is keyed by RULE (ruleId), so multiple
+  // rules on one input (e.g. WARNING@105 + ALARM@115 on coolant) are tracked
+  // independently — a CLEAR from one no longer wipes a co-located rule still
+  // held (#310). The inputIndex is stored in the entry for labeling. Only
+  // WARNING/ALARM set; only an explicit CLEAR removes; an INFO edge does neither.
   if (severity === SEV_WARNING || severity === SEV_ALARM) {
-    const prior = firingState.get(inputIndex);
-    firingState.set(inputIndex, {
-      severity, kind, value, threshold,
+    const prior = firingState.get(ruleId);
+    firingState.set(ruleId, {
+      inputIndex, severity, kind, value, threshold,
       since: (prior && prior.severity === severity && prior.kind === kind)
                 ? prior.since : now,
     });
   } else if (severity === SEV_NORMAL && kind === KIND_CLEAR) {
     // A held condition cleared.
-    firingState.delete(inputIndex);
+    firingState.delete(ruleId);
   }
   // else: an INFO edge — log-only, leaves firingState untouched.
 
   // Push to the log (newest first).
-  alarmLog.unshift({ inputIndex, severity, kind, value, threshold, sequence, at: now });
+  alarmLog.unshift({ inputIndex, ruleId, severity, kind, value, threshold, sequence, at: now });
   if (alarmLog.length > MAX_ALARM_LOG) alarmLog.length = MAX_ALARM_LOG;
 
   renderAlarmPanel();
@@ -1630,10 +1635,11 @@ function firingDescription(st) {
 // lead summaries with. anyAlarm distinguishes a real alarm from warnings-only.
 function firingSummary() {
   let alarms = 0, warnings = 0, lead = null, leadIdx = -1;
-  for (const [idx, st] of firingState) {
+  for (const st of firingState.values()) {
     if (st.severity === SEV_ALARM) alarms++;
     else if (st.severity === SEV_WARNING) warnings++;
-    if (!lead || st.severity > lead.severity) { lead = st; leadIdx = idx; }
+    // leadIdx is an INPUT index (for inputLabel), not the ruleId map key.
+    if (!lead || st.severity > lead.severity) { lead = st; leadIdx = st.inputIndex; }
   }
   return { alarms, warnings, total: firingState.size, anyAlarm: alarms > 0, lead, leadIdx };
 }
@@ -1710,9 +1716,9 @@ function renderAlarmPanel() {
     banner.style.display = '';
     banner.className = 'firing-banner' + (firingSummary().anyAlarm ? '' : ' warning');
     let html = '';
-    for (const [idx, st] of firingState) {
+    for (const st of firingState.values()) {
       const warn = st.severity === SEV_WARNING;
-      const label = inputLabel(idx);
+      const label = inputLabel(st.inputIndex);
       html += '<div class="firing-row ' + (warn ? 'warn' : 'alarm') + '">' +
               '<span class="firing-dot"></span>' +
               '<div class="firing-text">' +
@@ -1798,7 +1804,8 @@ function actionTypeLabel(t) {
 async function writeActionCommand(id, cmd) {
   const buf = new ArrayBuffer(16);
   const dv = new DataView(buf);
-  dv.setUint8(0, 1);     // protocolVersion
+  dv.setUint8(0, 2);     // protocolVersion (PREOBD_BLE_PROTOCOL_VERSION; the
+                         // host action-write gate rejects a mismatch)
   dv.setUint8(1, id);    // actionId — selects the target Action
   dv.setUint8(10, cmd);  // command (the only writable field)
   await actionChar.writeValueWithResponse(buf);

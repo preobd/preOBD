@@ -1,6 +1,6 @@
 // alarm_handler.h -- Alarm Notify characteristic on the Extended Service.
 //
-// Receives 18-byte PreobdAlarmEvent payloads via framed transport type 0x04
+// Receives 19-byte PreobdAlarmEvent payloads via framed transport type 0x04
 // (dispatched from uart_bridge.cpp) and pushes them out as GATT notifies on
 // PREOBD_CHAR_ALARM_UUID (`...0030`). Notify-only -- the characteristic is
 // not readable (alarm events are stateless transitions, not cached state).
@@ -17,7 +17,7 @@
 
 void alarmHandlerInit();
 
-// Push an 18-byte PreobdAlarmEvent out as a GATT notify on the Alarm
+// Push a 19-byte PreobdAlarmEvent out as a GATT notify on the Alarm
 // characteristic. Returns false if `len` is wrong; otherwise returns true.
 // Delivery is retried (via alarmHandlerPoll) until every subscribed central
 // accepts it -- alarms are edge-triggered, so a silently dropped notify

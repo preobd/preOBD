@@ -1,4 +1,4 @@
-// alarm_broadcaster.h -- Pushes 18-byte PreobdAlarmEvent frames over the
+// alarm_broadcaster.h -- Pushes 19-byte PreobdAlarmEvent frames over the
 // framed transport (type 0x04) whenever a configured input's alarm
 // (severity, kind) tuple changes.
 //

@@ -125,6 +125,10 @@ void tick() {
             ev.value           = value;
             ev.threshold       = threshold;
             ev.timestampMs     = millis();
+            ev.ruleId          = rules[i].id;  // stable rule identity (#310):
+                                               // lets a client tell apart two
+                                               // rules sharing one sourceInput
+                                               // (inputIndex alone can't)
             return hwSerial1.sendFrame(FRAME_TYPE_ALARM,
                                        reinterpret_cast<const uint8_t*>(&ev),
                                        sizeof(ev));

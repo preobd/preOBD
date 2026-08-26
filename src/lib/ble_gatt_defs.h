@@ -23,7 +23,7 @@
 // Protocol Version
 // =============================================================================
 
-#define PREOBD_BLE_PROTOCOL_VERSION  1
+#define PREOBD_BLE_PROTOCOL_VERSION  2
 
 // =============================================================================
 // preOBD GATT UUIDs
@@ -137,13 +137,13 @@ static_assert(sizeof(PreobdSystemStatus) == PREOBD_STATUS_SIZE,
 #define PREOBD_MODE_RUN     1
 
 // =============================================================================
-// Alarm Notify Characteristic — Binary Format (18 bytes)
+// Alarm Notify Characteristic — Binary Format (19 bytes)
 //
 // Pushed via framed transport (type 0x04) on every per-input alarm-severity
 // transition, including return-to-normal (severity = NORMAL, kind = CLEAR).
 // =============================================================================
 
-#define PREOBD_ALARM_EVENT_SIZE 18
+#define PREOBD_ALARM_EVENT_SIZE 19
 
 #define PREOBD_ALARM_SEVERITY_NORMAL  0
 #define PREOBD_ALARM_SEVERITY_WARNING 1
@@ -170,12 +170,18 @@ struct PreobdAlarmEvent {
     float    value;            // Bytes 6-9:   Current sensor value (standard units)
     float    threshold;        // Bytes 10-13: Threshold that was violated (0 on CLEAR)
     uint32_t timestampMs;      // Bytes 14-17: millis() at emit time
+    uint8_t  ruleId;           // Byte 18:     Rule.id of the firing rule
+                               //              (stable per-record id, not a slot;
+                               //              CONTROL_ID_NONE=0xFF if none). Lets
+                               //              a client key firing state by rule
+                               //              so multiple rules on one input are
+                               //              distinguishable (#310).
 };
 
 #pragma pack(pop)
 
 static_assert(sizeof(PreobdAlarmEvent) == PREOBD_ALARM_EVENT_SIZE,
-              "PreobdAlarmEvent must be exactly 18 bytes");
+              "PreobdAlarmEvent must be exactly 19 bytes");
 
 #endif // __cplusplus
 

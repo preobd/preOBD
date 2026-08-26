@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Control engine: the per-input alarm facade (`SET <pin> ALARM`, webapp Inputs panel) now supports one-sided alarms — a Min-only floor (`SET <pin> ALARM MIN <v>`) or Max-only ceiling (`SET <pin> ALARM MAX <v>`), not just a Min+Max band — and one-sided alarms round-trip through `SYSTEM DUMP JSON` (#312)
 
+### Fixed
+- BLE alarm notifications now carry a rule id (`PreobdAlarmEvent` 18→19 bytes, protocol version 2), so the webapp keys firing state by rule and a CLEAR on one rule no longer wipes a still-firing rule on the same input (#310)
+
 ## [0.10.0-beta] - 2026-07-12
 
 ### Added
