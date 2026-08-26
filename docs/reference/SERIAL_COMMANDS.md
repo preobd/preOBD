@@ -249,7 +249,9 @@ SET <pin> NAME <name>            # Set short display name (8 chars max)
 SET <pin> NAME <full_name>      # Set full display label (32 chars max)
 SET <pin> ABBR <abbreviation>    # Set full display name (32 chars max)
 SET <pin> UNITS <units>          # Override display units
-SET <pin> ALARM <min> <max>      # Set alarm thresholds
+SET <pin> ALARM <min> <max>      # Alarm outside a Min..Max band
+SET <pin> ALARM MIN <v>          # One-sided: alarm below <v> (floor)
+SET <pin> ALARM MAX <v>          # One-sided: alarm above <v> (ceiling)
 SET <pin> ALARM OFF              # Disable alarm
 ```
 
@@ -386,40 +388,41 @@ See **[Hall Speed Guide](../guides/sensor-types/HALL_SPEED_GUIDE.md)** and **[Ad
 
 ## Alarm Configuration
 
-> **⚠️ Deprecated — alarms are now control-engine Rules.** `SET <pin> ALARM ...`
-> prints a pointer to the new commands and no longer configures an alarm. Use
-> `SET <pin> APPLICATION <app>` (seeds a default alarm Rule) or `RULE ADD <pin>
-> OUTSIDE <lo> <hi>` / `ABOVE|BELOW <limit>`; see the **Rules & Actions** section
-> below and `ARCHITECTURE.md` §11. The thresholds/timing/state-machine concepts
-> here still apply — they now live on the Rule.
+> **Per-input alarm facade.** `SET <pin> ALARM ...` is the quick way to set an
+> input's alarm — it creates or edits **one** `ALARM`-severity Rule keyed to that
+> input. Under the hood alarms are control-engine Rules; for warning/info tiers,
+> control-only thresholds, hysteresis, or more than one Rule per input, use
+> `RULE ADD` directly (see the **Rules & Actions** section below and
+> `ARCHITECTURE.md` §11). Timing (warmup/debounce) is seeded from the
+> application's default template on `SET <pin> APPLICATION <app>` and lives on the
+> Rule; tune it with `RULE`.
 
-Configure per-input alarm thresholds and timing.
+Configure an input's alarm as a two-sided band or a one-sided floor/ceiling.
 
 ### Understanding Alarm Timing
 
-**Warmup Time** - Delay after system startup before alarm can trigger
-- **Purpose:** Prevents nuisance alarms during sensor stabilization
-- **Common use case:** Oil pressure during engine start
-- **Range:** 0-300000ms (5 minutes maximum)
-- **Example:** Oil pressure needs 45 seconds to build up after engine starts
+Alarm timing is a property of the Rule, seeded from the application default when
+the application is assigned (`SET <pin> APPLICATION <app>`):
 
-**Persistence Time** - How long a threshold violation must persist before triggering
+**Warmup Time** - Delay after system startup before the alarm can trigger
+- **Purpose:** Prevents nuisance alarms during sensor stabilization
+- **Common use case:** Oil pressure during engine start (needs seconds to build)
+
+**Debounce/Persistence Time** - How long a threshold violation must persist before triggering
 - **Purpose:** Filters out transient spikes or noise
 - **Common use case:** Temperature spikes from exhaust gas turbulence
-- **Range:** 0-60000ms (60 seconds maximum)
-- **Example:** Ignore brief CHT spikes lasting less than 2 seconds
 
 ### Alarm Commands
 
 ```
-SET <pin> ALARM <min> <max>          # Set alarm thresholds
-SET <pin> ALARM WARMUP <ms>          # Alarm warmup time (0-300000ms)
-SET <pin> ALARM PERSIST <ms>         # Alarm persistence time (0-60000ms)
-SET <pin> ALARM ENABLE               # Enable alarm checking
-SET <pin> ALARM DISABLE              # Disable alarm (keeps thresholds)
+SET <pin> ALARM <min> <max>          # Alarm outside a Min..Max band (min < max)
+SET <pin> ALARM MIN <v>              # One-sided floor: alarm when value < v
+SET <pin> ALARM MAX <v>              # One-sided ceiling: alarm when value > v
+SET <pin> ALARM DISABLE              # Remove the input's alarm Rule
 ```
 
-Use `INFO <pin> ALARM` to view alarm status and configuration (see [INFO Command](#info-command)).
+Use `RULE LIST` (or `RULE <id>`) to view an input's live alarm Rule — condition,
+limits, severity, and firing state (see the **Rules & Actions** section).
 
 ### Output Module Control (Global Alarm Hardware)
 
@@ -431,36 +434,33 @@ OUTPUT Alarm INTERVAL <ms>       # Set alarm check interval (10-10000ms)
 
 ### Practical Examples
 
-**Oil Pressure Alarm (with warmup):**
+**Oil Pressure Alarm (one-sided floor):**
 ```
 SET A3 OIL_PRESSURE VDO_5BAR_CURVE
-RULE ADD A3 OUTSIDE 10 80                   # Alarm if <10 or >80 PSI
-SET A3 ALARM WARMUP 45000            # Wait 45 seconds after startup
-SET A3 ALARM PERSIST 3000            # Must persist 3 seconds to trigger
+SET A3 ALARM MIN 10                  # Alarm only if pressure drops below 10 PSI
 ```
-*Why:* Oil pressure needs time to build during startup. Brief drops during gear changes are normal.
+*Why:* You care about a **loss** of oil pressure, not a ceiling — a one-sided floor
+is exactly right. Warmup/debounce come from the application default (oil pressure
+needs time to build during startup; brief drops during gear changes are normal).
 
-**Coolant Temperature Alarm (with persistence):**
+**Coolant Temperature Alarm (band):**
 ```
 SET A2 COOLANT_TEMP VDO_120C_TABLE
-RULE ADD A2 OUTSIDE 60 120                  # Alarm if <60°C or >120°C
-SET A2 ALARM PERSIST 5000            # Must persist 5 seconds
+SET A2 ALARM 60 120                  # Alarm if <60°C or >120°C
 ```
-*Why:* Brief temperature spikes can occur from exhaust gas turbulence. Only trigger if sustained.
+*Why:* Both a too-cold (not warmed up) and too-hot (overheating) reading matter, so
+a two-sided band catches both ends with one Rule.
 
-**CHT Alarm (critical, fast response):**
+**CHT Alarm (one-sided ceiling):**
 ```
 SET 6 CHT MAX6675
-RULE ADD 6 OUTSIDE 100 900                  # Alarm if <100°F or >900°F
-SET 6 ALARM PERSIST 1000             # Quick 1 second response
+SET 6 ALARM MAX 900                  # Alarm only on overtemp above 900°F
 ```
-*Why:* Cylinder head temperature is critical - respond quickly to overtemp.
+*Why:* Cylinder head overtemp is the danger; a low CHT isn't an alarm condition.
 
-**Disable Alarm Temporarily:**
+**Disable Alarm:**
 ```
-SET A3 ALARM DISABLE                 # Turn off oil pressure alarm
-# Later...
-SET A3 ALARM ENABLE                  # Re-enable with same thresholds
+SET A3 ALARM DISABLE                 # Remove the input's alarm Rule
 ```
 
 **Global Alarm Hardware Control:**

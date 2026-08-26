@@ -245,9 +245,8 @@ Once imported, CAN sensors support all standard SET commands:
 SET CAN:0 NAME "ERPM"
 SET CAN:0 NAME "Engine RPM"
 
-# Set alarm thresholds
-RULE ADD CAN:0 OUTSIDE 500 6000     # Min 500, Max 6000 RPM
-SET CAN:0 ALARM ENABLE
+# Set alarm thresholds (band; setting it arms the alarm Rule)
+SET CAN:0 ALARM 500 6000            # Alarm if <500 or >6000 RPM
 
 # Change units
 SET CAN:1 UNITS MPH          # Change speed from km/h to MPH

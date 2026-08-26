@@ -899,10 +899,9 @@
   .ctl-table td { padding: 9px 10px; color: var(--text); vertical-align: middle; }
   .ctl-table td.mono { font-family: var(--mono); }
   .ctl-table td.dim { font-family: var(--mono); font-size: 11px; color: var(--dim); }
-  .fires-builtin {
-    font-family: var(--sans); font-size: 10.5px; font-weight: 600;
-    font-style: italic; color: var(--dim); letter-spacing: 0.02em;
-  }
+  /* Same look as the rest of the Fires column (dim mono); the class exists only
+     to carry the explanatory tooltip. */
+  .fires-builtin { color: var(--dim); }
   .ctl-actions-cell { white-space: nowrap; text-align: right; }
   .ctl-actions-cell .btn { font-size: 10.5px; padding: 3px 9px; margin-left: 4px; }
   .btn.ctl-on  { background: var(--green); border-color: var(--green); color: #fff; }
@@ -1817,6 +1816,9 @@ let controlTab = 'rules';          // 'rules' | 'actions'
 let ctlFormMode = null;            // null | { kind:'rule'|'action', id:<oldId>|null }
 let ctlActionTrigger = 'manual';   // 'rule' | 'manual' — Add/Edit Action form state
 let ctlDirty = false;              // Rule/Action RAM writes not yet persisted to EEPROM
+let ctlTablesStale = false;        // an input alarm was applied (SET ALARM), so the
+                                   // Rule/Action tables changed under localConfig — the
+                                   // Rules pane needs a reloadControlConfig() to catch up
 
 function renderControlPanel() {
   const panel = document.getElementById('controlPanel');
@@ -2719,16 +2721,16 @@ function buildEditorHTML(pinStr, inp, isAdd) {
   </div>
   <div class="editor-group">
     <div class="editor-field">
-      <label>Alarm Min</label>
-      <input type="number" id="edAlarmMin" value="${alarmMin}" placeholder="e.g. 250" ${alarmEnabled ? '' : 'disabled'}>
+      <label>Alarm Min (floor)</label>
+      <input type="number" id="edAlarmMin" value="${alarmMin}" placeholder="leave blank for none" ${alarmEnabled ? '' : 'disabled'}>
     </div>
     <div class="editor-field">
-      <label>Alarm Max</label>
-      <input type="number" id="edAlarmMax" value="${alarmMax}" placeholder="e.g. 260" ${alarmEnabled ? '' : 'disabled'}>
+      <label>Alarm Max (ceiling)</label>
+      <input type="number" id="edAlarmMax" value="${alarmMax}" placeholder="leave blank for none" ${alarmEnabled ? '' : 'disabled'}>
     </div>
   </div>
   <div class="editor-field" style="grid-column: 1 / -1;">
-    <p class="editor-hint">The alarm band needs <b>both</b> Min and Max. For a one-sided alarm (only a floor or only a ceiling), add an <b>ABOVE</b> / <b>BELOW</b> rule in the Rules panel.</p>
+    <p class="editor-hint">Set <b>Min</b>, <b>Max</b>, or <b>both</b>. Leave one blank for a one-sided alarm — Min only alarms below the floor, Max only alarms above the ceiling; with both, it alarms outside the band. For warning-level or control-only thresholds, use the Rules panel.</p>
   </div>
   <div class="editor-group">
     <div class="editor-field">
@@ -2927,20 +2929,24 @@ function saveEditorLocal() {
   if (!newPin) { alert('Pin is required.'); return; }
   if (!/^[A-Za-z0-9:]+$/.test(newPin)) { alert('Invalid pin format. Use A0, 14, I2C:0, CAN:0, etc.'); return; }
 
-  // Alarm: the "Alarm enabled" checkbox is the source of truth. Off → no band
-  // (apply sends SET ALARM DISABLE); on → both values required, min < max.
+  // Alarm: the "Alarm enabled" checkbox is the source of truth. Off → no alarm
+  // (apply sends SET ALARM DISABLE). On → Min, Max, or both (#312): a lone Min is
+  // a floor, a lone Max is a ceiling, both is a band (min < max). At least one
+  // side is required when enabled.
   const alarmOn = document.getElementById('edAlarmEnabled').checked;
   let alarmMin = null, alarmMax = null;
   if (alarmOn) {
     const alarmMinRaw = document.getElementById('edAlarmMin').value;
     const alarmMaxRaw = document.getElementById('edAlarmMax').value;
-    if (alarmMinRaw === '' || alarmMaxRaw === '') {
-      alert('The alarm band needs both Min and Max. Enter both, turn off "Alarm enabled", '
-        + 'or add a one-sided ABOVE/BELOW rule in the Rules panel.'); return;
+    if (alarmMinRaw === '' && alarmMaxRaw === '') {
+      alert('Enter an alarm Min (floor), Max (ceiling), or both — or turn off "Alarm enabled".');
+      return;
     }
-    alarmMin = Number(alarmMinRaw);
-    alarmMax = Number(alarmMaxRaw);
-    if (!(alarmMin < alarmMax)) { alert('Alarm Min must be less than Alarm Max.'); return; }
+    if (alarmMinRaw !== '') alarmMin = Number(alarmMinRaw);
+    if (alarmMaxRaw !== '') alarmMax = Number(alarmMaxRaw);
+    if (alarmMin != null && alarmMax != null && !(alarmMin < alarmMax)) {
+      alert('For a Min+Max band, Alarm Min must be less than Alarm Max.'); return;
+    }
   }
 
   const obdPidRaw = document.getElementById('edObdPid').value.trim();
@@ -3052,10 +3058,19 @@ async function applyInput(pinStr) {
       cur.alarm?.min !== orig.alarm?.min ||
       cur.alarm?.max !== orig.alarm?.max;
     if (alarmChanged) {
-      if (cur.alarm?.min != null && cur.alarm?.max != null)
+      const hasMin = cur.alarm?.min != null, hasMax = cur.alarm?.max != null;
+      if (hasMin && hasMax)         // band → OUTSIDE_BAND
         await sendChecked('SET ' + pinStr + ' ALARM ' + cur.alarm.min + ' ' + cur.alarm.max);
-      else if (cur.alarm?.min == null && cur.alarm?.max == null)
+      else if (hasMin)              // floor only → BELOW
+        await sendChecked('SET ' + pinStr + ' ALARM MIN ' + cur.alarm.min);
+      else if (hasMax)              // ceiling only → ABOVE
+        await sendChecked('SET ' + pinStr + ' ALARM MAX ' + cur.alarm.max);
+      else                          // both cleared → remove
         await sendChecked('SET ' + pinStr + ' ALARM DISABLE');
+      // SET ALARM created/edited/removed the input's alarm Rule (and DISABLE can
+      // unlink Actions), so the control-engine tables the Rules pane renders are
+      // now stale — flag a reload for the caller once we're back in RUN.
+      ctlTablesStale = true;
     }
 
     if (!orig || cur.enabled !== orig.enabled)
@@ -3116,6 +3131,9 @@ document.getElementById('btnApply').addEventListener('click', async () => {
       for (const pin of dirty) { if (!await applyInput(pin)) allOk = false; }
     });
     renderInputsPanel();
+    // If an alarm edit touched the Rule/Action tables, re-read them so the Rules
+    // pane reflects the new/edited/removed built-in alarm Rule without a page reload.
+    if (ctlTablesStale) { ctlTablesStale = false; await reloadControlConfig(); }
     if (allOk) appendInfo('Changes applied to device RAM. Click "Save to EEPROM" to persist.');
     else appendErr('Some inputs failed to apply — check terminal for details.');
   } catch(e) {
@@ -3138,6 +3156,10 @@ document.getElementById('btnSaveEEPROM').addEventListener('click', async () => {
         if (!allOk) { appendErr('Save aborted: some inputs failed to apply.'); renderInputsPanel(); return; }
       }
       await sendChecked('SAVE');
+      // An applied alarm edit changed the Rule/Action tables — refresh localConfig
+      // from the device before we snapshot it as the new baseline, so the Rules
+      // pane and originalConfig both reflect the persisted built-in alarm Rule.
+      if (ctlTablesStale) { ctlTablesStale = false; await reloadControlConfig(); }
       originalConfig = JSON.parse(JSON.stringify(localConfig));
       inputState.clear();
       renderInputsPanel();

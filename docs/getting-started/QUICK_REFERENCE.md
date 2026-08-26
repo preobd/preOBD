@@ -346,11 +346,15 @@ HELP CALIBRATION        # Show calibration commands
 
 ### Rules & Actions (control engine)
 
-Alarms and relays are unified Rules → Actions. (`SET ALARM` and `RELAY` are
-deprecated; they print pointers here.)
+Alarms and relays are unified Rules → Actions. `SET <pin> ALARM` is a shortcut
+facade for a single per-input alarm Rule (band or one-sided); `RULE`/`ACTION` are
+the full surface. (`RELAY` is deprecated and prints a pointer here.)
 
 | Command | Description |
 |---------|-------------|
+| `SET <pin> ALARM <min> <max>` | Per-input alarm: band (alarm outside Min..Max) |
+| `SET <pin> ALARM MIN <v>` / `MAX <v>` | Per-input alarm: one-sided floor / ceiling |
+| `SET <pin> ALARM DISABLE` | Remove the input's alarm Rule |
 | `RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARNING|ALARM]` | Threshold Rule |
 | `RULE ADD <pin> OUTSIDE <lo> <hi> [WARNING|ALARM]` | Both-sided band Rule |
 | `RULE LIST` / `RULE <id>` / `RULE DEL <id>` | View / inspect / delete |

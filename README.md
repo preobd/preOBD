@@ -195,6 +195,8 @@ watches an input and (with a severity) annunciates and/or triggers **Actions**.
 `SET <pin> APPLICATION` seeds a sensible default alarm Rule automatically.
 
 ```
+SET <pin> ALARM <min> <max>                                    # per-input alarm: band
+SET <pin> ALARM MIN <v> | MAX <v>                              #   or one-sided floor/ceiling
 RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARNING|ALARM]   # threshold Rule
 RULE ADD <pin> OUTSIDE <lo> <hi> [WARNING|ALARM]                # both-sided band
 RULE LIST | RULE <id> | RULE DEL <id> | RULE RESET <id>         # RESET = app defaults
@@ -204,8 +206,10 @@ ACTION <id> ON|OFF                                             # manual override
 ACTION LIST | ACTION DEL <id>
 ```
 
-`WARNING`-severity Rules light the indicator; `ALARM` adds the buzzer. (The old
-`SET <pin> ALARM` and `RELAY` commands are deprecated and point here.)
+`WARNING`-severity Rules light the indicator; `ALARM` adds the buzzer.
+`SET <pin> ALARM` is a shortcut facade for a single per-input alarm Rule (band or
+one-sided); `RULE`/`ACTION` are the full surface. (The old `RELAY` command is
+deprecated and points here.)
 
 ### Query (any mode)
 

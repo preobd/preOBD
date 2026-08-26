@@ -204,41 +204,69 @@ bool controlRuleReset(uint8_t id, uint32_t now) {
 // --- per-input "alarm Rule" facade (SET <pin> ALARM ...) --------------------
 
 int controlAlarmRuleSlotForInput(uint8_t pin) {
-    // The one canonical alarm Rule for an input is OUTSIDE_BAND / ALARM (what
-    // SET APPLICATION seeds). One-sided ABOVE/BELOW Rules a user adds via RULE
-    // ADD are deliberately NOT this facade's business — the per-input min/max
-    // model can't represent them, so they're left untouched.
+    // The one canonical alarm Rule for an input is any ALARM-severity Rule whose
+    // condition the per-input facade can represent: OUTSIDE_BAND (a Min+Max band,
+    // what SET APPLICATION seeds), BELOW (a Min-only floor), or ABOVE (a Max-only
+    // ceiling) — §11.5, #312. Non-ALARM (control/WARNING/INFO) Rules and the
+    // deferred INSIDE_BAND stay out of the facade — those remain RULE-only.
+    //
+    // The facade models exactly ONE alarm per input, so if an input somehow holds
+    // more than one facade-eligible ALARM Rule (only reachable by mixing the SET
+    // ALARM facade with hand-added RULE ADD, since RULE ADD defaults to ALARM), a
+    // BAND wins over a one-sided Rule. That keeps the pre-#312 behaviour byte-for-
+    // byte — the facade matched only OUTSIDE_BAND before, so any config with a band
+    // resolves to the exact same slot it always did — and only falls back to a
+    // one-sided Rule when no band exists (the genuinely new case).
+    int firstOneSided = -1;
     for (int i = 0; i < MAX_RULES; i++) {
         const Rule& r = rules[i];
-        if (r.id != CONTROL_ID_NONE && r.sourceInput == pin &&
-            r.condition == RULE_OUTSIDE_BAND && r.severity == RULE_SEV_ALARM) {
-            return i;
+        if (r.id == CONTROL_ID_NONE || r.sourceInput != pin ||
+            r.severity != RULE_SEV_ALARM) {
+            continue;
+        }
+        if (r.condition == RULE_OUTSIDE_BAND) return i;   // band is canonical; prefer it
+        if ((r.condition == RULE_BELOW || r.condition == RULE_ABOVE) && firstOneSided < 0) {
+            firstOneSided = i;
         }
     }
-    return -1;
+    return firstOneSided;
 }
 
-uint8_t controlSetAlarmBandForInput(uint8_t pin, float lo, float hi, uint32_t now) {
+// Write the facade alarm's condition + limits into `r`, clamping any carried-over
+// hysteresis the new shape can't support (mirrors the RULE ADD guards). The facade
+// doesn't surface hysteresis, so a value that would wedge the Rule is dropped
+// rather than the edit refused.
+static void applyAlarmShape(Rule& r, uint8_t condition, float lo, float hi) {
+    r.condition = condition;
+    if (condition == RULE_OUTSIDE_BAND) {
+        r.limitLo = lo;
+        r.limitHi = hi;
+        // Hysteresis wider than the band half-width would cross the clear insets
+        // and wedge the Rule permanently asserted.
+        if (r.hysteresis * 2.0f >= (hi - lo)) r.hysteresis = 0.0f;
+    } else {  // RULE_BELOW / RULE_ABOVE — a single limit lives in limitLo.
+        r.limitLo = lo;
+        r.limitHi = 0.0f;  // unused for one-sided; keep deterministic for the dump
+        // Hysteresis at/above the limit magnitude could invert the clear inset.
+        if (r.hysteresis >= fabsf(lo)) r.hysteresis = 0.0f;
+    }
+}
+
+uint8_t controlSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, float hi, uint32_t now) {
     int slot = controlAlarmRuleSlotForInput(pin);
     if (slot >= 0) {
         // Edit in place: preserve id, source, warmup/debounce, AND the live
-        // runtime state. A band tweak must NOT re-arm the Rule — re-arming drags
+        // runtime state. An alarm tweak must NOT re-arm the Rule — re-arming drags
         // an already-warmed rule back through INIT→WARMUP, silencing the alarm
         // (and any Action it drives) for warmupMs on every apply. On the temp
-        // presets that's 20–60 s of dead air after each edit (#295). Limits are
-        // read live from the Rule each tick, so the engine re-qualifies against
-        // the new band next cycle with no re-init needed.
+        // presets that's 20–60 s of dead air after each edit (#295). Limits and
+        // condition are read live from the Rule each tick, so the engine
+        // re-qualifies against the new shape next cycle with no re-init needed —
+        // this holds even when the condition changes (band↔one-sided, #312).
         Rule& r = rules[slot];
-        r.condition = RULE_OUTSIDE_BAND;
         r.severity  = RULE_SEV_ALARM;
         r.flags    |= RULE_FLAG_ENABLED;
-        r.limitLo   = lo;
-        r.limitHi   = hi;
-        // A hysteresis carried over from a wider band could exceed the new
-        // band's half-width and wedge the Rule permanently asserted (the clear
-        // insets would cross). Drop it rather than refuse the edit — the facade
-        // doesn't surface hysteresis anyway.
-        if (r.hysteresis * 2.0f >= (hi - lo)) r.hysteresis = 0.0f;
+        applyAlarmShape(r, condition, lo, hi);
         // Arm only if it isn't already (e.g. previously flag-disabled); a live
         // READY/ACTIVE rule keeps its state and just re-qualifies.
         if (g_ruleContexts[slot].state == RULE_DISABLED) {
@@ -258,12 +286,10 @@ uint8_t controlSetAlarmBandForInput(uint8_t pin, float lo, float hi, uint32_t no
     Rule& r = rules[free];
     r.id          = id;
     r.sourceInput = pin;
-    r.condition   = RULE_OUTSIDE_BAND;
     r.severity    = RULE_SEV_ALARM;
     r.flags       = RULE_FLAG_ENABLED;
-    r.limitLo     = lo;
-    r.limitHi     = hi;
     r.hysteresis  = 0.0f;
+    applyAlarmShape(r, condition, lo, hi);
     r.warmupMs    = haveAppTmpl ? appTmpl.warmupMs   : RULE_DEFAULT_WARMUP_MS;
     r.debounceMs  = haveAppTmpl ? appTmpl.debounceMs : RULE_DEFAULT_DEBOUNCE_MS;
     controlRuleInit(g_ruleContexts[free], r, now);

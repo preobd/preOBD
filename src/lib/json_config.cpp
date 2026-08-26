@@ -178,14 +178,29 @@ void exportInputToJSON(JsonObject& inputObj, const Input* input) {
 
     // Alarm thresholds — read back from the input's control-engine alarm Rule
     // (the live source of truth), NOT the legacy input->min/maxValue, which
-    // nothing evaluates. No Rule → null, which the webapp renders as "no alarm
-    // set" rather than a stale preset default (#295).
+    // nothing evaluates. No Rule → both null, which the webapp renders as "no
+    // alarm set" rather than a stale preset default (#295). A one-sided alarm
+    // (BELOW = Min-only floor, ABOVE = Max-only ceiling) emits null on the unused
+    // side, which the webapp already tolerates (#312).
     JsonObject alarm = inputObj["alarm"].to<JsonObject>();
 #if ENABLE_CONTROL_ENGINE
     int alarmSlot = controlAlarmRuleSlotForInput(input->pin);
     if (alarmSlot >= 0) {
-        alarm["min"] = rules[alarmSlot].limitLo;
-        alarm["max"] = rules[alarmSlot].limitHi;
+        const Rule& ar = rules[alarmSlot];
+        switch (ar.condition) {
+            case RULE_BELOW:   // Min-only floor
+                alarm["min"] = ar.limitLo;
+                alarm["max"] = nullptr;
+                break;
+            case RULE_ABOVE:   // Max-only ceiling
+                alarm["min"] = nullptr;
+                alarm["max"] = ar.limitLo;
+                break;
+            default:           // RULE_OUTSIDE_BAND — Min+Max band
+                alarm["min"] = ar.limitLo;
+                alarm["max"] = ar.limitHi;
+                break;
+        }
     } else {
         alarm["min"] = nullptr;
         alarm["max"] = nullptr;
@@ -535,10 +550,18 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         setInputDisplayName(pin, inputObj["name"]);
     }
 
-    // Set alarm thresholds
+    // Set alarm thresholds. This writes only the legacy input->min/maxValue
+    // fields (dead — nothing evaluates them); the live alarm Rule is restored
+    // from the top-level "rules" array via importRulesFromJSON, which already
+    // handles one-sided ABOVE/BELOW. Only apply when BOTH sides are present: a
+    // one-sided alarm carries a null side, and ArduinoJson would coerce that null
+    // to 0.0 and trip setInputAlarmRange's "min < max" check with a spurious
+    // error (#312). Skipping is loss-free since these fields are dead.
     if (inputObj["alarm"].isNull() == false) {
         JsonObject alarm = inputObj["alarm"];
-        setInputAlarmRange(pin, alarm["min"], alarm["max"]);
+        if (!alarm["min"].isNull() && !alarm["max"].isNull()) {
+            setInputAlarmRange(pin, alarm["min"], alarm["max"]);
+        }
     }
 
     // Set flags (use || for default value, not | which is bitwise OR)

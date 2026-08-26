@@ -2,15 +2,19 @@
 
 **Comprehensive guide to the preOBD alarm state machine**
 
-> **⚠️ Superseded by the Control Engine (Rules).** Alarms are no longer a separate
-> subsystem — an alarm is a **Rule** with `severity = WARNING|ALARM`. The legacy
-> `SET <pin> ALARM <min> <max>` command is **deprecated** (it now prints a pointer
-> to the new commands). Configure alarms with:
+> **Now part of the Control Engine (Rules).** Alarms are no longer a separate
+> subsystem — an alarm is a **Rule** with `severity = WARNING|ALARM`. The
+> `SET <pin> ALARM ...` command is still supported as a **per-input facade** over
+> a single `ALARM`-severity Rule, in three shapes:
 >
-> - `SET <pin> APPLICATION <app>` — seeds the application's default alarm Rule, or
-> - `RULE ADD <pin> ABOVE|BELOW <limit>` / `RULE ADD <pin> OUTSIDE <lo> <hi> [WARNING|ALARM]`
-> - `RULE LIST` to view live state; `RULE RESET <id>` to restore application defaults
+> - `SET <pin> ALARM <min> <max>` — two-sided band (alarm outside Min..Max)
+> - `SET <pin> ALARM MIN <v>` — one-sided floor (alarm below `<v>`)
+> - `SET <pin> ALARM MAX <v>` — one-sided ceiling (alarm above `<v>`)
+> - `SET <pin> ALARM DISABLE` — remove the input's alarm Rule
 >
+> For warning/info tiers, control-only thresholds, hysteresis, or multiple Rules
+> per input, use `RULE ADD <pin> ABOVE|BELOW <limit>` / `OUTSIDE <lo> <hi>` directly
+> (and `SET <pin> APPLICATION <app>` seeds the application's default alarm Rule).
 > The state machine (INIT → WARMUP → READY → ACTIVE), warmup/debounce timing, and
 > the derived warning tier described below still apply — they now live on the Rule.
 > See `ARCHITECTURE.md` §11.

@@ -99,6 +99,30 @@ static void test_rule_above_roundtrip(void) {
     TEST_ASSERT_EQUAL_FLOAT(240.0f, out.limitLo);
 }
 
+// A one-sided per-input alarm (Min-only floor → BELOW, Max-only ceiling → ABOVE)
+// at ALARM severity is exactly what the SET <pin> ALARM MIN|MAX facade now
+// persists (#312). Guard that this shape survives the save/restore round-trip:
+// condition + limitLo preserved, limitHi irrelevant (single limit lives in Lo).
+static void test_rule_one_sided_alarm_roundtrip(void) {
+    // Ceiling (SET <pin> ALARM MAX 250 → ABOVE / ALARM)
+    Rule ceil = makeRule(RULE_ABOVE, 250.0f, 0.0f, RULE_SEV_ALARM);
+    bool ok = false;
+    Rule out = roundTripRule(ceil, &ok);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_UINT8(RULE_ABOVE, out.condition);
+    TEST_ASSERT_EQUAL_UINT8(RULE_SEV_ALARM, out.severity);
+    TEST_ASSERT_EQUAL_FLOAT(250.0f, out.limitLo);
+
+    // Floor (SET <pin> ALARM MIN 0.5 → BELOW / ALARM)
+    Rule floor = makeRule(RULE_BELOW, 0.5f, 0.0f, RULE_SEV_ALARM);
+    ok = false;
+    out = roundTripRule(floor, &ok);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_UINT8(RULE_BELOW, out.condition);
+    TEST_ASSERT_EQUAL_UINT8(RULE_SEV_ALARM, out.severity);
+    TEST_ASSERT_EQUAL_FLOAT(0.5f, out.limitLo);
+}
+
 static void test_rule_disabled_flag_roundtrip(void) {
     Rule in = makeRule(RULE_BELOW, 5.0f, 0.0f, RULE_SEV_NONE);
     in.flags = 0;  // disabled
@@ -295,6 +319,7 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_rule_outside_band_roundtrip);
     RUN_TEST(test_rule_above_roundtrip);
+    RUN_TEST(test_rule_one_sided_alarm_roundtrip);
     RUN_TEST(test_rule_disabled_flag_roundtrip);
     RUN_TEST(test_rule_export_enum_strings);
     RUN_TEST(test_rule_info_roundtrip);

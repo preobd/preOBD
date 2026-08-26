@@ -691,9 +691,8 @@ RELAY 0 THRESHOLD 190 180    # °F, not °C
 You can use both alarms and relays:
 
 ```bash
-# Alarm at critical temperature
+# Alarm at critical temperature (setting the band arms the alarm Rule)
 SET A2 ALARM 50 110
-SET A2 ALARM ENABLE
 
 # Relay activates earlier for cooling
 RELAY 0 INPUT A2

@@ -317,10 +317,13 @@ static int set_units(uint8_t pin, int argc, const char* const* argv) {
 }
 
 // SET <pin> ALARM <min> <max> | DISABLE
-// Facade over the input's canonical alarm Rule (OUTSIDE_BAND / ALARM, §11.5):
-// upserts the band on one input-keyed Rule, preserving its id and any Action
-// links. This is the per-input min/max surface the webapp and CLI expose; the
-// general engine is still reachable via RULE ADD for one-sided / WARNING Rules.
+// Facade over the input's canonical alarm Rule (severity ALARM, §11.5): upserts
+// one input-keyed Rule, preserving its id and any Action links. This is the
+// per-input alarm surface the webapp and CLI expose, in three shapes (#312):
+//   SET <pin> ALARM <min> <max>   band    → OUTSIDE_BAND
+//   SET <pin> ALARM MIN <v>       floor   → BELOW  (alarm when value < v)
+//   SET <pin> ALARM MAX <v>       ceiling → ABOVE  (alarm when value > v)
+// The general engine is still reachable via RULE ADD for WARNING/INFO/NONE Rules.
 static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
 #if !ENABLE_CONTROL_ENGINE
     (void)pin; (void)argc; (void)argv;
@@ -328,7 +331,7 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
     return 1;
 #else
     if (argc < 4) {
-        msg.control.println(F("ERROR: usage: SET <pin> ALARM <min> <max>   (or DISABLE)"));
+        msg.control.println(F("ERROR: usage: SET <pin> ALARM <min> <max> | MIN <v> | MAX <v> | DISABLE"));
         return 1;
     }
     if (getInputByPin(pin) == nullptr) {
@@ -346,20 +349,36 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
         return 0;
     }
 
-    // SET <pin> ALARM <min> <max> — upsert the band.
-    if (argc < 5) {
-        msg.control.println(F("ERROR: ALARM needs <min> <max> (or DISABLE)"));
-        return 1;
-    }
-    float lo = atof(argv[3]);
-    float hi = atof(argv[4]);
-    if (!(lo < hi)) {
-        msg.control.println(F("ERROR: ALARM requires min < max"));
-        return 1;
+    // Resolve the shape: one-sided MIN/MAX keyword, or a two-number band.
+    uint8_t condition;
+    float lo, hi = 0.0f;
+    const bool isMin = streq_P(argv[3], PSTR("MIN"));
+    const bool isMax = streq_P(argv[3], PSTR("MAX"));
+    if (isMin || isMax) {
+        // SET <pin> ALARM MIN|MAX <v> — one-sided floor/ceiling.
+        if (argc < 5) {
+            msg.control.println(F("ERROR: ALARM MIN|MAX needs a value"));
+            return 1;
+        }
+        condition = isMin ? RULE_BELOW : RULE_ABOVE;  // floor→BELOW, ceiling→ABOVE
+        lo = atof(argv[4]);
+    } else {
+        // SET <pin> ALARM <min> <max> — two-sided band.
+        if (argc < 5) {
+            msg.control.println(F("ERROR: ALARM needs <min> <max> (or MIN <v> | MAX <v> | DISABLE)"));
+            return 1;
+        }
+        condition = RULE_OUTSIDE_BAND;
+        lo = atof(argv[3]);
+        hi = atof(argv[4]);
+        if (!(lo < hi)) {
+            msg.control.println(F("ERROR: ALARM band requires min < max (use MIN/MAX for one-sided)"));
+            return 1;
+        }
     }
 
     bool created = (controlAlarmRuleSlotForInput(pin) < 0);
-    uint8_t id = controlSetAlarmBandForInput(pin, lo, hi, millis());
+    uint8_t id = controlSetAlarmRuleForInput(pin, condition, lo, hi, millis());
     if (id == CONTROL_ID_NONE) {
         msg.control.print(F("ERROR: rule table full ("));
         msg.control.print(MAX_RULES);

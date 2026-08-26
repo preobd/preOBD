@@ -66,21 +66,28 @@ uint8_t controlSeedRuleForInput(uint8_t pin, uint8_t appIndex, uint32_t now);
 bool    controlRuleReset(uint8_t id, uint32_t now);
 
 // --- per-input "alarm Rule" facade (SET <pin> ALARM ...) --------------------
-// The webapp / CLI expose a single per-input min/max alarm band. That band maps
-// to exactly one canonical Rule on the input: condition OUTSIDE_BAND, severity
-// ALARM (what SET APPLICATION seeds, §11.5). These helpers let SET ALARM and the
-// JSON dump address that one Rule by input pin without juggling its id (#295).
+// The webapp / CLI expose a single per-input alarm on an input. That alarm maps
+// to exactly one canonical Rule on the input at severity ALARM, whose condition
+// is one of: OUTSIDE_BAND (a Min+Max band, what SET APPLICATION seeds), BELOW (a
+// Min-only floor), or ABOVE (a Max-only ceiling) — §11.5, #312. These helpers let
+// SET ALARM and the JSON dump address that one Rule by input pin without juggling
+// its id (#295).
 
-// Slot of the input's canonical alarm Rule (OUTSIDE_BAND / ALARM sourced from
-// `pin`), or -1 if none. Read-back and the upsert both key off this.
+// Slot of the input's canonical alarm Rule (severity ALARM, condition one of
+// {OUTSIDE_BAND, BELOW, ABOVE}, sourced from `pin`), or -1 if none. Read-back and
+// the upsert both key off this.
 int     controlAlarmRuleSlotForInput(uint8_t pin);
 
-// Create-or-replace the input's alarm Rule as an OUTSIDE_BAND/ALARM band
-// [lo,hi], re-arming it. An existing Rule is edited in place — id, source, and
-// any Action links are preserved (no DEL+ADD churn). Caller must pass lo < hi.
+// Create-or-replace the input's alarm Rule at severity ALARM, re-arming it. An
+// existing alarm Rule is edited in place — id, source, and any Action links are
+// preserved (no DEL+ADD churn), even when `condition` changes (band↔one-sided).
+// `condition` selects the shape:
+//   RULE_OUTSIDE_BAND — band, uses [lo, hi] (caller must pass lo < hi)
+//   RULE_BELOW        — Min-only floor, uses `lo` as the limit (hi ignored)
+//   RULE_ABOVE        — Max-only ceiling, uses `lo` as the limit (hi ignored)
 // Returns the Rule id, or CONTROL_ID_NONE only when a *new* Rule was needed and
 // the table is full.
-uint8_t controlSetAlarmBandForInput(uint8_t pin, float lo, float hi, uint32_t now);
+uint8_t controlSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, float hi, uint32_t now);
 
 // Remove the input's alarm Rule (frees the pool slot; referring Actions revert
 // to manual-only). Returns true if one was removed.
