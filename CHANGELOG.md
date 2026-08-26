@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `JSON IMPORT` gains a byte-counted form (`JSON IMPORT <byte-count>`) for programmatic senders that already know their payload length, alongside the existing paste-and-`END JSON` sentinel form for interactive use; `SYSTEM DUMP JSON`'s `firmware` object gains `capabilities[]`
 
 ### Fixed
+- `RULE LIST` now shows alarm limits and hysteresis converted to the source input's display units with a unit suffix instead of a bare base-unit number, and a faulted/disconnected sensor shows `ERROR` instead of a raw NaN token in `RULE LIST`, `LIST INPUTS`, and `INFO <pin>` (#324, #325)
 - Disabled inputs now survive an EEPROM save/reboot, `LIST INPUTS`/`INFO <pin>` show the value converted to its display units instead of raw base units, and the webapp's error-detection regex now catches indented `ERROR:` banners (#317, #318, #319)
 - BLE alarm notifications now carry a rule id (`PreobdAlarmEvent` 18→19 bytes, protocol version 2), so the webapp keys firing state by rule and a CLEAR on one rule no longer wipes a still-firing rule on the same input (#310)
 - `JSON IMPORT` now emits its completion prompt — previously nothing ever printed `preOBD> ` after an import finished, silently hanging every client waiting on it (the reference webapp's file-import feature included); a sentinel-mode buffer overflow no longer lets the rest of an in-flight payload spill into the next CLI command, and an abandoned import now times out instead of holding its buffer forever

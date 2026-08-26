@@ -3,6 +3,7 @@
  */
 
 #include <EEPROM.h>
+#include <math.h>  // isnan
 #include <string.h>
  #include "../config.h"
 #include "../version.h"
@@ -1057,7 +1058,11 @@ void printInputInfo(uint8_t pin) {
     msg.control.println(input->outputMask, HEX);
 
     msg.control.print(F("  Current Value: "));
-    msg.control.print(convertFromBaseUnits(input->value, input->unitsIndex), 2);
+    if (isnan(input->value)) {
+        msg.control.print(F("ERROR"));
+    } else {
+        msg.control.print(convertFromBaseUnits(input->value, input->unitsIndex), 2);
+    }
     msg.control.print(F(" "));
     msg.control.println(getUnitStringByIndex(input->unitsIndex));
 
@@ -1304,7 +1309,11 @@ void listAllInputs() {
             msg.control.print(F(" ("));
             msg.control.print(inputs[i].displayName);
             msg.control.print(F(") = "));
-            msg.control.print(convertFromBaseUnits(inputs[i].value, inputs[i].unitsIndex));
+            if (isnan(inputs[i].value)) {
+                msg.control.print(F("ERROR"));
+            } else {
+                msg.control.print(convertFromBaseUnits(inputs[i].value, inputs[i].unitsIndex));
+            }
             msg.control.print(F(" "));
             msg.control.print((__FlashStringHelper*)getUnitStringByIndex(inputs[i].unitsIndex));
             if (inputs[i].obd2pid != 0) {

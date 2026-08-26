@@ -16,7 +16,7 @@
 
 #if ENABLE_CONTROL_ENGINE
 
-#include <math.h>  // fabsf — hysteresis sanity check
+#include <math.h>  // fabsf, isnan — hysteresis sanity check + faulted-value display
 
 #include "command_handlers.h"
 #include "command_helpers.h"
@@ -25,6 +25,8 @@
 #include "../lib/system_mode.h"
 #include "../lib/system_config.h"
 #include "../lib/message_api.h"
+#include "../lib/units_registry.h"    // getUnitStringByIndex
+#include "../lib/sensor_library.h"    // convertFromBaseUnits
 #include "../control/control_manager.h"
 #include "../control/control_engine.h"
 
@@ -85,14 +87,34 @@ static FLASHMEM void printRuleRow(int i) {
     msg.control.print(F("  "));
     msg.control.print(conditionName(r.condition));
     msg.control.print(' ');
-    msg.control.print(r.limitLo);
-    if (r.condition == RULE_OUTSIDE_BAND || r.condition == RULE_INSIDE_BAND) {
-        msg.control.print(F(".."));
-        msg.control.print(r.limitHi);
-    }
-    if (r.hysteresis != 0.0f) {
-        msg.control.print(F(" hyst "));
-        msg.control.print(r.hysteresis);
+    // r.limitLo/limitHi/hysteresis persist in base units (like in->value); convert
+    // to the source input's display units so this row reads consistently with
+    // LIST INPUTS / INFO instead of showing an unlabeled base-unit number (#324).
+    // hysteresis is a delta, not an absolute reading, so it only scales — adding
+    // the display-unit offset (e.g. °F's +32) would be wrong for a width.
+    if (in) {
+        const uint8_t unitsIdx = in->unitsIndex;
+        msg.control.print(convertFromBaseUnits(r.limitLo, unitsIdx));
+        if (r.condition == RULE_OUTSIDE_BAND || r.condition == RULE_INSIDE_BAND) {
+            msg.control.print(F(".."));
+            msg.control.print(convertFromBaseUnits(r.limitHi, unitsIdx));
+        }
+        msg.control.print(' ');
+        msg.control.print((__FlashStringHelper*)getUnitStringByIndex(unitsIdx));
+        if (r.hysteresis != 0.0f) {
+            msg.control.print(F(" hyst "));
+            msg.control.print(convertFromBaseUnits(r.hysteresis, unitsIdx) - convertFromBaseUnits(0.0f, unitsIdx));
+        }
+    } else {
+        msg.control.print(r.limitLo);
+        if (r.condition == RULE_OUTSIDE_BAND || r.condition == RULE_INSIDE_BAND) {
+            msg.control.print(F(".."));
+            msg.control.print(r.limitHi);
+        }
+        if (r.hysteresis != 0.0f) {
+            msg.control.print(F(" hyst "));
+            msg.control.print(r.hysteresis);
+        }
     }
     msg.control.print(F("  ["));
     msg.control.print(severityName(r.severity));
@@ -101,7 +123,11 @@ static FLASHMEM void printRuleRow(int i) {
     // live value for context
     if (in) {
         msg.control.print(F("  val="));
-        msg.control.print(in->value);
+        if (isnan(in->value)) {
+            msg.control.print(F("ERROR"));
+        } else {
+            msg.control.print(convertFromBaseUnits(in->value, in->unitsIndex));
+        }
     }
     msg.control.println();
 }
