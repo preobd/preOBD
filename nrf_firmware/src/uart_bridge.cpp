@@ -35,6 +35,7 @@
 #include "ble_services.h"
 #include "board_pins.h"
 #include "frame_codec.h"
+#include "live_handler.h"
 #include "relay_handler.h"
 #include "tier_state.h"
 
@@ -400,6 +401,11 @@ bool handleFrame(const Frame& f) {
     case FRAME_TYPE_RELAY:
         // Host MCU pushed a 16-byte PreobdRelayState snapshot. Cache + notify.
         relayHandlerPush(f.payload, f.len);
+        return true;
+    case FRAME_TYPE_LIVE:
+        // Host MCU pushed a 16-byte PreobdLiveValue. Cache + best-effort
+        // notify; a dropped notify is refreshed by the host's 5s heartbeat.
+        liveHandlerPush(f.payload, f.len);
         return true;
     default:
         // OTA/etc deferred past MVP scope.

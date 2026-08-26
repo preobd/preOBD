@@ -8,6 +8,7 @@
 
 #include "elm327_framed.h"
 #include "action_broadcaster.h"
+#include "live_value_broadcaster.h"
 
 void MuxTransport::setFramedEnabled(bool enabled) {
     if (enabled == framedEnabled) return;
@@ -120,11 +121,12 @@ void MuxTransport::handleFrame(const Frame& f) {
         }
         break;
     case FRAME_TYPE_PING: {
-        // A ping marks a (re)connection: invalidate the action cache so the
-        // next tick re-emits all slots, populating a late client's panel
-        // without waiting on the heartbeat. Cache-only, safe mid-frame; no-op
-        // stub when the control engine / framed transport are off.
+        // A ping marks a (re)connection: invalidate the action + live-value
+        // caches so the next tick re-emits all slots, populating a late
+        // client's panel without waiting on the heartbeat. Cache-only, safe
+        // mid-frame; no-op stubs when the respective features are off.
         ActionBroadcaster::resync();
+        LiveValueBroadcaster::resync();
         // Echo immediately so the nRF's auto-detect upgrades the link. If
         // this PING was pumped from inside a partially-written frame, defer
         // the echo to the next frame boundary -- injecting it mid-frame

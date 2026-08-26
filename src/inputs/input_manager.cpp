@@ -1261,6 +1261,28 @@ void printInputCalibration(uint8_t pin) {
     msg.control.println();
 }
 
+#ifndef FLASHMEM
+#define FLASHMEM
+#endif
+
+FLASHMEM void formatPinLabel(uint8_t pin, char* buf, size_t bufLen) {
+    // snprintf_P + PSTR: the format strings stay in flash on AVR (plain
+    // string literals there are RAM-resident and count against the 8 KB
+    // budget); both are passthroughs on ARM.
+    if (pin >= 0xF0) {
+        snprintf_P(buf, bufLen, PSTR("I2C:%u"), (unsigned)(pin - 0xF0));
+    } else if (pin >= 0xC0 && pin < 0xE0) {
+        snprintf_P(buf, bufLen, PSTR("CAN:%u"), (unsigned)(pin - 0xC0));
+    } else {
+        int8_t analogNum = analogIndexForPin(pin);
+        if (analogNum >= 0) {
+            snprintf_P(buf, bufLen, PSTR("A%d"), analogNum);
+        } else {
+            snprintf_P(buf, bufLen, PSTR("%u"), (unsigned)pin);
+        }
+    }
+}
+
 void listAllInputs() {
     msg.control.println(F("Active Inputs:"));
     bool found = false;
@@ -1268,22 +1290,10 @@ void listAllInputs() {
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) {
             found = true;
+            char pinLabel[8];
+            formatPinLabel(inputs[i].pin, pinLabel, sizeof(pinLabel));
             msg.control.print(F("  "));
-            if (inputs[i].pin >= 0xF0) {
-                msg.control.print(F("I2C:"));
-                msg.control.print(inputs[i].pin - 0xF0);
-            } else if (inputs[i].pin >= 0xC0 && inputs[i].pin < 0xE0) {
-                msg.control.print(F("CAN:"));
-                msg.control.print(inputs[i].pin - 0xC0);
-            } else {
-                int8_t analogNum = analogIndexForPin(inputs[i].pin);
-                if (analogNum >= 0) {
-                    msg.control.print(F("A"));
-                    msg.control.print(analogNum);
-                } else {
-                    msg.control.print(inputs[i].pin);
-                }
-            }
+            msg.control.print(pinLabel);
             msg.control.print(F(": "));
             msg.control.print(inputs[i].abbrName);
             msg.control.print(F(" ("));

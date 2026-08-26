@@ -20,13 +20,15 @@ constexpr size_t   FRAME_HEADER_BYTES  = 4;   // SYNC + TYPE + LEN(2)
 constexpr size_t   FRAME_MAX_BYTES     = FRAME_HEADER_BYTES + FRAME_MAX_PAYLOAD + 1;
 
 // Type codes per ARCHITECTURE.md §3.4. The host MCU handles 0x01/0x02/0xFF
-// (text + ping), 0x03/0x04/0x05 (status/alarm/relay broadcasters), and 0x30
-// (ELM327, via elm327_framed.cpp). 0x10/0x20/0x21 (conn/OTA) are reserved.
+// (text + ping), 0x03/0x04/0x05/0x06 (status/alarm/relay/live broadcasters),
+// and 0x30 (ELM327, via elm327_framed.cpp). 0x10/0x20/0x21 (conn/OTA) are
+// reserved.
 constexpr uint8_t  FRAME_TYPE_TEXT_CMD  = 0x01;
 constexpr uint8_t  FRAME_TYPE_TEXT_RESP = 0x02;
 constexpr uint8_t  FRAME_TYPE_STATUS    = 0x03;
 constexpr uint8_t  FRAME_TYPE_ALARM     = 0x04;
 constexpr uint8_t  FRAME_TYPE_RELAY     = 0x05;
+constexpr uint8_t  FRAME_TYPE_LIVE      = 0x06;
 constexpr uint8_t  FRAME_TYPE_CONN_EVT  = 0x10;
 constexpr uint8_t  FRAME_TYPE_OTA_DATA  = 0x20;
 constexpr uint8_t  FRAME_TYPE_OTA_ACK   = 0x21;

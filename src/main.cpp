@@ -50,6 +50,7 @@
 #include "lib/status_broadcaster.h"
 #include "lib/alarm_broadcaster.h"
 #include "lib/action_broadcaster.h"
+#include "lib/live_value_broadcaster.h"
 #include "lib/elm327_framed.h"
 #ifdef ESP32
 // Include appropriate Bluetooth transport for ESP32 variant
@@ -300,6 +301,7 @@ void setup() {
     StatusBroadcaster::init();
     AlarmBroadcaster::init();
     ActionBroadcaster::init();
+    LiveValueBroadcaster::init();
     msg.control.println();
     msg.control.println(F("                 ____  ___  ___  "));
     msg.control.println(F("   ___  _______ / __ \\/ _ )/ _ \\ "));
@@ -452,6 +454,7 @@ void loop() {
     StatusBroadcaster::tick();
     AlarmBroadcaster::tick();
     ActionBroadcaster::tick();
+    LiveValueBroadcaster::tick();
 
     // Process button events (short press = silence alarm, long press = toggle display)
 #if ENABLE_MODE_BUTTON

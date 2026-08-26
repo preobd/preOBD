@@ -12,6 +12,7 @@
 #include "dfu_trigger.h"
 #include "dis_handler.h"
 #include "extended_service.h"
+#include "live_handler.h"
 #include "ota_handler.h"
 #include "relay_handler.h"
 #include "tier_state.h"
@@ -86,6 +87,20 @@ void setup() {
     // touching MTU. MUST precede begin() (consumed to size SD event buffers).
     Bluefruit.configPrphConn(247, 6, 3, BLE_GATTC_WRITE_CMD_TX_QUEUE_SIZE_DEFAULT);
 
+    // Raise the SoftDevice vendor-specific (128-bit) UUID table. The default
+    // BLE_UUID_VS_COUNT_DEFAULT is 10, and each distinct 128-bit UUID base
+    // consumes one slot. Our preOBD UUIDs vary in their low byte (…0030,
+    // …0032, …), not in the 16-bit field the SoftDevice uses for base-sharing,
+    // so every one is a separate base: Control svc+3 chars (0x0001/10/11/20) +
+    // Extended svc+chars (0x0002/30/31/40/41) = 10, plus the NUS base = 11.
+    // (HM-10, DIS, GAP/GATT use 16-bit SIG UUIDs and need no VS slot.) The
+    // Live Values char (0x0032) is the 11th, so with the default of 10 its
+    // sd_ble_uuid_vs_add() returned NRF_ERROR_NO_MEM and the characteristic
+    // silently failed to register -- it never appeared in GATT discovery while
+    // every earlier 128-bit char did. 20 leaves comfortable headroom (each
+    // slot is 16 bytes of SoftDevice RAM). MUST precede Bluefruit.begin().
+    Bluefruit.configUuid128Count(20);
+
     // Two peripheral connections so a webapp (Control Service) and a phone OBD
     // app (HM-10 FFE1) can be connected at the same time.
     Bluefruit.begin(2);
@@ -121,6 +136,7 @@ void setup() {
     otaHandlerInit();
     alarmHandlerInit();
     relayHandlerInit();
+    liveHandlerInit();
     disHandlerInit();
     dfuTriggerInit();
 

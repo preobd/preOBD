@@ -63,6 +63,9 @@ void resetInputConfig();              // Clear all inputs and EEPROM
 void readAllInputs();                 // Read all enabled inputs
 
 // ===== INFO =====
+// Format a pin's display label ("A0", "I2C:0", "CAN:3", or the raw number)
+// into buf. Single source for LIST INPUTS and the JSON dump's "pinLabel".
+void formatPinLabel(uint8_t pin, char* buf, size_t bufLen);
 void printInputInfo(uint8_t pin);    // Print detailed input information
 void printInputAlarmInfo(uint8_t pin);
 void printInputOutputInfo(uint8_t pin);

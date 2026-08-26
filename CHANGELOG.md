@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- BLE: live per-input sensor values are now pushed over a new Extended Service characteristic (16-byte `PreobdLiveValue`, frame 0x06, display units, 500 ms change scan + 5 s heartbeat), and `SYSTEM DUMP JSON` gains per-input `pinLabel` and `unitsFactor`/`unitsOffset` and now includes disabled inputs — the data feed for the mobile app's live gauge tiles
 - Control engine: the per-input alarm facade (`SET <pin> ALARM`, webapp Inputs panel) now supports one-sided alarms — a Min-only floor (`SET <pin> ALARM MIN <v>`) or Max-only ceiling (`SET <pin> ALARM MAX <v>`), not just a Min+Max band — and one-sided alarms round-trip through `SYSTEM DUMP JSON` (#312)
 
 ### Fixed

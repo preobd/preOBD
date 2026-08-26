@@ -160,12 +160,19 @@ static void exportCalibration(JsonObject& calObj, const Input* input) {
 
 // Export single input to JSON
 void exportInputToJSON(JsonObject& inputObj, const Input* input) {
-    if (!input || !input->flags.isEnabled) {
+    if (!input) {
         return;
     }
 
     // Basic info
     inputObj["pin"] = input->pin;
+    {
+        // Display label ("A0", "I2C:0", ...) — clients can't derive it from
+        // the raw pin number without knowing the board's analog mapping.
+        char pinLabel[8];
+        formatPinLabel(input->pin, pinLabel, sizeof(pinLabel));
+        inputObj["pinLabel"] = pinLabel;
+    }
     inputObj["abbr"] = input->abbrName;
     inputObj["name"] = input->displayName;
 
@@ -175,6 +182,14 @@ void exportInputToJSON(JsonObject& inputObj, const Input* input) {
     inputObj["sensor"] = reinterpret_cast<const char*>(getSensorNameByIndex(input->sensorIndex));
     inputObj["sensorIndex"] = input->sensorIndex;
     inputObj["units"] = reinterpret_cast<const char*>(getUnitStringByIndex(input->unitsIndex));
+    // Base→display conversion coefficients (display = base * factor + offset),
+    // so a client can convert base-unit values (alarm thresholds below, alarm
+    // frame value/threshold) to display units without duplicating the registry.
+    if (input->unitsIndex < NUM_UNITS) {
+        const UnitsInfo* uinfo = &UNITS_REGISTRY[input->unitsIndex];
+        inputObj["unitsFactor"] = pgm_read_float(&uinfo->conversionFactor);
+        inputObj["unitsOffset"] = pgm_read_float(&uinfo->conversionOffset);
+    }
 
     // Alarm thresholds — read back from the input's control-engine alarm Rule
     // (the live source of truth), NOT the legacy input->min/maxValue, which
@@ -230,11 +245,15 @@ void exportInputToJSON(JsonObject& inputObj, const Input* input) {
     }
 }
 
-// Export all inputs to JSON array
+// Export all inputs to JSON array. Walk every slot keyed on occupancy
+// (pin != 0xFF): inputs[] is a sparse table and numActiveInputs is an
+// enabled-count, not a bound — bounding by it dropped any input sitting
+// past a freed hole. Disabled inputs export too ("enabled": false), so a
+// client can render the full configured set.
 void exportInputsToJSON(JsonArray& inputsArray) {
-    for (uint8_t i = 0; i < numActiveInputs; i++) {
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         Input* input = &inputs[i];
-        if (input->flags.isEnabled) {
+        if (input->pin != 0xFF) {
             JsonObject inputObj = inputsArray.add<JsonObject>();
             inputObj["idx"] = i;
             exportInputToJSON(inputObj, input);
@@ -606,7 +625,14 @@ bool importInputsFromJSON(JsonArray& inputsArray) {
 
     msg.debug.info(TAG_JSON, "Import complete: %d of %d inputs imported", importedCount, totalInputs);
 
-    numActiveInputs = importedCount;
+    // Recount by the enabled rule (matching input_manager): the import set
+    // may include disabled inputs, which don't count as active.
+    numActiveInputs = 0;
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) {
+            numActiveInputs++;
+        }
+    }
     return importedCount > 0;
 }
 

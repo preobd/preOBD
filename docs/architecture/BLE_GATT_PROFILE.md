@@ -117,6 +117,7 @@ Defined in `src/lib/ble_gatt_defs.h`.
 |---------------|---------------------|------------|-------------|
 | Alarm Notify | `...0030` | Notify | Push alarm events to client |
 | Relay Control | `...0031` | Read, Write, Notify | Binary relay state and control |
+| Live Values | `...0032` | Read, Notify | Per-input live readings (16-byte `PreobdLiveValue`; display units) |
 | OTA Control | `...0040` | Write, Notify | OTA session coordination |
 | OTA Data | `...0041` | Write Without Response | OTA firmware data transfer |
 
@@ -317,6 +318,35 @@ Total:  12 bytes
 
 **Notify:** Sent when relay state changes (ON↔OFF) or after a write.
 
+### Live Values
+
+**Characteristic:** Live Values (`...0032`), Read / Notify
+
+Per-input live sensor readings for gauge/tile clients (frame type `0x06`). The
+host scans `inputs[]` every 500 ms and notifies one `PreobdLiveValue` per input
+whose value/flags/units changed, plus a full re-send every 5 s (heartbeat) so a
+mid-session subscriber catches up within one heartbeat. Read returns the most
+recent frame. `value` is in **display units** (already converted device-side —
+contrast the Alarm Notify payload, which is base units); render it against the
+input's `units` string from `SYSTEM DUMP JSON`, joining on the dump's per-input
+`idx` key (= `inputIndex` here).
+
+```
+Offset  Size  Type       Field
+------  ----  --------   -----
+0       1     uint8      protocolVersion (PREOBD_BLE_PROTOCOL_VERSION = 2)
+1       1     uint8      inputIndex   (inputs[] slot; == DUMP JSON "idx")
+2       1     uint8      flags        bit0 ENABLED (slot occupied + enabled),
+                                      bit1 VALID (0 = sensor fault / non-finite)
+3       1     uint8      unitsIndex   (units registry index at emit)
+4       2     uint16_le  sequence     (monotonic, wraps at 65535)
+6       2     uint16_le  reserved     (0)
+8       4     float32_le value        (display units; 0.0 when !VALID)
+12      4     uint32_le  timestampMs  (device millis() at emit)
+------  ----
+Total:  16 bytes
+```
+
 ### OTA Firmware Updates
 
 **Characteristics:** OTA Control (`...0040`) + OTA Data (`...0041`)
@@ -381,6 +411,7 @@ Last byte:  CRC8 of bytes 1 through end of payload
 | `0x03` | MCU → nRF | System status update |
 | `0x04` | MCU → nRF | Alarm event |
 | `0x05` | MCU → nRF | Relay state change |
+| `0x06` | MCU → nRF | Live input value (16-byte binary per input) |
 | `0x10` | nRF → MCU | Connection event (connect/disconnect) |
 | `0x20` | nRF → MCU | OTA data for main MCU |
 | `0x21` | MCU → nRF | OTA ACK/progress |
@@ -526,6 +557,7 @@ The HM-10 and similar transparent BLE UART modules cannot support custom GATT se
 | preOBD Extended Service | `4f424400-7072-654f-4244-000000000002` |
 | Alarm Notify | `4f424400-7072-654f-4244-000000000030` |
 | Relay Control | `4f424400-7072-654f-4244-000000000031` |
+| Live Values | `4f424400-7072-654f-4244-000000000032` |
 | OTA Control | `4f424400-7072-654f-4244-000000000040` |
 | OTA Data | `4f424400-7072-654f-4244-000000000041` |
 | NUS Service | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` |

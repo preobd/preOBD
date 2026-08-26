@@ -69,6 +69,10 @@
 // below is retained, deprecated, only until the nRF/webapp are confirmed clear.
 #define PREOBD_CHAR_RELAY_UUID        "4f424400-7072-654f-4244-000000000031"
 
+// Live Values (Read / Notify) — per-input live sensor readings
+// (PreobdLiveValue, framed type 0x06). Read returns the most recent frame.
+#define PREOBD_CHAR_LIVE_UUID         "4f424400-7072-654f-4244-000000000032"
+
 // OTA Control (Write / Notify) — OTA coordination commands
 #define PREOBD_CHAR_OTA_CTRL_UUID     "4f424400-7072-654f-4244-000000000040"
 
@@ -285,6 +289,47 @@ struct PreobdActionState {
 
 static_assert(sizeof(PreobdActionState) == PREOBD_ACTION_STATE_SIZE,
               "PreobdActionState must be exactly 16 bytes");
+
+#endif // __cplusplus
+
+// =============================================================================
+// Live Values Characteristic — Binary Format (16 bytes)
+//
+// One frame per inputs[] slot, pushed via framed transport (type 0x06) on
+// value/flags/units change (500 ms scan) plus a 5 s heartbeat re-send of all
+// slots for late subscribers. A client that subscribes mid-session waits at
+// most one heartbeat; the characteristic Read returns the most recent frame.
+//
+// `value` is in DISPLAY units (already through convertFromBaseUnits()), so a
+// client renders it verbatim against the input's units string from
+// SYSTEM DUMP JSON. Contrast PreobdAlarmEvent value/threshold: BASE units.
+// `inputIndex` joins to the dump's per-input "idx" key.
+// =============================================================================
+
+#define PREOBD_LIVE_VALUE_SIZE 16
+
+#define PREOBD_LIVE_FLAG_ENABLED 0x01  // slot occupied and input enabled
+#define PREOBD_LIVE_FLAG_VALID   0x02  // reading valid (0 = sensor fault / non-finite)
+
+#ifdef __cplusplus
+
+#pragma pack(push, 1)
+
+struct PreobdLiveValue {
+    uint8_t  protocolVersion;  // Byte 0:      PREOBD_BLE_PROTOCOL_VERSION
+    uint8_t  inputIndex;       // Byte 1:      inputs[] slot (== DUMP JSON "idx")
+    uint8_t  flags;            // Byte 2:      PREOBD_LIVE_FLAG_*
+    uint8_t  unitsIndex;       // Byte 3:      UNITS_REGISTRY index at emit time
+    uint16_t sequence;         // Bytes 4-5:   Monotonic event counter, wraps at 65535
+    uint16_t reserved;         // Bytes 6-7:   0 (future use)
+    float    value;            // Bytes 8-11:  DISPLAY units; 0.0f when !VALID
+    uint32_t timestampMs;      // Bytes 12-15: millis() at emit time
+};
+
+#pragma pack(pop)
+
+static_assert(sizeof(PreobdLiveValue) == PREOBD_LIVE_VALUE_SIZE,
+              "PreobdLiveValue must be exactly 16 bytes");
 
 #endif // __cplusplus
 
