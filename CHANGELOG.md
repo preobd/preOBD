@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0-beta] - 2026-08-25
+
 ### Added
 - Control engine: `RULE <id> ENABLE|DISABLE` parks or re-arms a Rule without deleting it — the enabled flag was previously reachable only through `JSON IMPORT`, so from a terminal the only choices were "delete it" or "leave it armed"; a parked Rule keeps its Action memberships, shows as `PARKED` in `RULE LIST`, and can neither fire nor force an Action's failsafe (#346)
 - Control engine: an Action can now be driven by several Rules and runs while any of them is active (`ACTION <id> RULE ADD|REMOVE <ruleId>`), so one cooling fan can be demanded by coolant temp, trans temp and an A/C request at once — a live Rule's demand outranks a faulted sibling sensor, and existing configs load unchanged (#343)
@@ -19,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `OUTPUT SD_Log FORMAT LONG|WIDE` selects the SD log layout — `WIDE` (default) is one row per sample with a column per input, `LONG` is the original one-row-per-reading `Time,Sensor,Value,Units` layout, kept so existing log-parsing scripts keep working; the setting persists and round-trips through `SYSTEM DUMP JSON` as `outputs.sd.format`
 
 ### Changed
+- **Breaking: EEPROM configuration is reset on upgrade.** The stored config layout changed (`EEPROM_VERSION` 5 → 6) to carry the control-engine Rule/Action arena and the per-input flag fixes below; the firmware detects the old version and starts from defaults. Back up your setup with `SYSTEM DUMP JSON` before flashing and restore it afterwards with `JSON IMPORT`.
 - SD logging now writes one CSV row per sample with a column per input (`millis,CLT_C,OILP_PSI,…`) to sequentially numbered `LOG####.CSV` files, honours `OUTPUT SD_Log INTERVAL`, records faulted sensors as `ERROR`, and reports whether rows are actually landing via `SYSTEM DIAG HW` — replacing a row-per-reading format that could silently log nothing after a filename collision, a full card, or a removed card
 
 ### Fixed
@@ -284,7 +287,11 @@ Previous development releases. See git history for details.
 
 ---
 
-[Unreleased]: https://github.com/preobd/preOBD/compare/v0.8.0-beta...HEAD
+[Unreleased]: https://github.com/preobd/preOBD/compare/v0.11.0-beta...HEAD
+[0.11.0-beta]: https://github.com/preobd/preOBD/compare/v0.10.0-beta...v0.11.0-beta
+[0.10.0-beta]: https://github.com/preobd/preOBD/compare/v0.9.0-beta...v0.10.0-beta
+[0.9.0-beta]: https://github.com/preobd/preOBD/compare/v0.8.1-beta...v0.9.0-beta
+[0.8.1-beta]: https://github.com/preobd/preOBD/compare/v0.8.0-beta...v0.8.1-beta
 [0.8.0-beta]: https://github.com/preobd/preOBD/compare/v0.7.6-beta...v0.8.0-beta
 [0.7.6-beta]: https://github.com/preobd/preOBD/compare/v0.7.5-beta...v0.7.6-beta
 [0.7.5-beta]: https://github.com/preobd/preOBD/compare/v0.7.4-beta...v0.7.5-beta
