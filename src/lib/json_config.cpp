@@ -225,10 +225,15 @@ void exportInputToJSON(JsonObject& inputObj, const Input* input) {
     alarm["max"] = input->maxValue;
 #endif
 
-    // Flags
-    inputObj["enabled"] = input->flags.isEnabled;
-    inputObj["alarmEnabled"] = input->flags.alarm;
-    inputObj["displayEnabled"] = input->flags.display;
+    // Flags — cast the 1-bit bitfields to bool explicitly. Assigned raw, ArduinoJson
+    // serializes a `uint8_t : 1` as a JSON integer (0/1, matching its promoted type),
+    // not a boolean; the import side's `variant | default` idiom only returns the
+    // stored value when `is<bool>()` is true, so an integer 0/1 silently fell through
+    // to the hardcoded default on every import, discarding whatever was actually
+    // captured (a disabled input always came back enabled).
+    inputObj["enabled"] = (bool)input->flags.isEnabled;
+    inputObj["alarmEnabled"] = (bool)input->flags.alarm;
+    inputObj["displayEnabled"] = (bool)input->flags.display;
     inputObj["outputMask"] = input->outputMask;
 
     // OBD2 (if applicable)

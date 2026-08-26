@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - nRF BLE firmware now advertises a unique per-device name (`preOBD-XXXX`, suffixed with the last two octets of the device's BLE MAC) instead of a fixed `preOBD`, so multiple units are distinguishable in a scan
 
 ### Fixed
+- `SYSTEM DUMP JSON`/`JSON IMPORT` round-trips per-input `enabled`/`alarmEnabled`/`displayEnabled` correctly — the flags were exported as raw integers (0/1) instead of JSON booleans, so `JSON IMPORT` silently discarded the actual value and reset every input to its hardcoded default (e.g. a disabled input always came back enabled) on both the mobile app's profile Load and a manual paste
 - `RULE LIST` now shows alarm limits and hysteresis converted to the source input's display units with a unit suffix instead of a bare base-unit number, and a faulted/disconnected sensor shows `ERROR` instead of a raw NaN token in `RULE LIST`, `LIST INPUTS`, and `INFO <pin>` (#324, #325)
 - Disabled inputs now survive an EEPROM save/reboot, `LIST INPUTS`/`INFO <pin>` show the value converted to its display units instead of raw base units, and the webapp's error-detection regex now catches indented `ERROR:` banners (#317, #318, #319)
 - BLE alarm notifications now carry a rule id (`PreobdAlarmEvent` 18→19 bytes, protocol version 2), so the webapp keys firing state by rule and a CLEAR on one rule no longer wipes a still-firing rule on the same input (#310)
