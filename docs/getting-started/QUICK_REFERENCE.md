@@ -282,7 +282,7 @@ HELP CALIBRATION        # Show calibration commands
 | `SET <pin> <app> <sensor>` | Configure input (also seeds a default alarm Rule) | `SET A2 COOLANT_TEMP VDO_120C_TABLE` |
 | `SET <pin> UNITS <unit>` | Set display units | `SET A2 UNITS FAHRENHEIT` |
 | `SET <pin> NAME <n>` | Set short name | `SET A2 NAME CLT` |
-| `CLEAR <pin>` | Remove input | `CLEAR A2` |
+| `CLEAR <pin>` | Remove input (and its Rules) | `CLEAR A2` |
 | `ENABLE <pin>` | Enable input | `ENABLE A2` |
 | `DISABLE <pin>` | Disable input | `DISABLE A2` |
 | `SAVE` | Save to EEPROM | `SAVE` |
@@ -359,10 +359,12 @@ the full surface. (`RELAY` is deprecated and prints a pointer here.)
 | `RULE ADD <pin> OUTSIDE <lo> <hi> [WARNING|ALARM]` | Both-sided band Rule |
 | `RULE LIST` / `RULE <id>` / `RULE DEL <id>` | View / inspect / delete |
 | `RULE RESET <id>` | Restore the application's default Rule config |
+| `RULE <id> ENABLE|DISABLE` | Re-arm / park a Rule without deleting it (`PARKED` never fires) |
 | `ACTION ADD RELAY <pin> [FAILSAFE ON|OFF] [INVERT]` | Define an actuator |
 | `ACTION <id> RULE <ruleId>` | Drive the Action from a Rule (replaces its membership) |
 | `ACTION <id> RULE ADD|REMOVE <ruleId>` | Add / drop one member Rule — the Action is OR-driven |
 | `ACTION <id> ON|OFF` | Manual override (RUN-mode allowed) |
+| `ACTION <id> NAME [text]` | Set the operator label; no text clears it |
 | `ACTION LIST` / `ACTION DEL <id>` | View / delete |
 
 **Example - Cooling fan (coolant > 90°C, 5° hysteresis):**

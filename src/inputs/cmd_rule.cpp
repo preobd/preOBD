@@ -77,12 +77,16 @@ static FLASHMEM void printRuleRow(int i) {
     msg.control.print(F("  #"));
     msg.control.print(r.id);
     msg.control.print(F("  "));
-    // source input: prefer the input's abbreviation, fall back to the pin
+    // source input: prefer the input's abbreviation, fall back to the pin.
+    // No input at all on that pin is an ORPHAN (e.g. left behind by a pre-#345
+    // CLEAR) — say so, or the row reads like an ordinary rule that just hasn't
+    // warmed up yet. An orphan can never assert and never forces a failsafe.
     if (in && in->abbrName[0]) {
         msg.control.print(in->abbrName);
     } else {
         msg.control.print(F("pin"));
         msg.control.print(r.sourceInput);
+        if (!in) msg.control.print(F(" (no input)"));
     }
     msg.control.print(F("  "));
     msg.control.print(conditionName(r.condition));
@@ -119,7 +123,14 @@ static FLASHMEM void printRuleRow(int i) {
     msg.control.print(F("  ["));
     msg.control.print(severityName(r.severity));
     msg.control.print(F("]  "));
-    msg.control.print(ruleStateName(g_ruleContexts[i].state));
+    // Distinguish "parked by the operator" (flag cleared — RULE <id> ENABLE
+    // re-arms it) from the transient unarmed context state, which also renders
+    // as RULE_DISABLED (#346).
+    if (!(r.flags & RULE_FLAG_ENABLED)) {
+        msg.control.print(F("PARKED"));
+    } else {
+        msg.control.print(ruleStateName(g_ruleContexts[i].state));
+    }
     // live value for context
     if (in) {
         msg.control.print(F("  val="));
@@ -340,12 +351,84 @@ static FLASHMEM int ruleDel(uint8_t id) {
     return 0;
 }
 
+// --- RULE <id> ENABLE|DISABLE (#346) ------------------------------------
+
+// Park / re-arm a Rule without deleting it. Idempotent on purpose: re-enabling an
+// already-armed Rule must NOT re-init it, or the operator drags a live, warmed
+// rule back through INIT->WARMUP and silences it (and any Action it drives) for
+// warmupMs — the #254 lesson, same as the SET ALARM in-place edit.
+static FLASHMEM int ruleSetEnabled(uint8_t id, bool enable) {
+    int slot = controlRuleSlot(id);
+    if (slot < 0) {
+        msg.control.print(F("ERROR: no rule #"));
+        msg.control.println(id);
+        return 1;
+    }
+    const bool released = controlRuleSetEnabled(id, enable, millis());
+    msg.control.print(F("Rule #"));
+    msg.control.print(id);
+    if (!released) {
+        msg.control.println(enable ? F(" already enabled") : F(" already disabled"));
+        return 0;
+    }
+    msg.control.println(enable ? F(" enabled (re-armed). SAVE to persist.")
+                               : F(" disabled (parked; it can no longer assert). SAVE to persist."));
+    printLinkedActions(id);
+    return 0;
+}
+
+// --- INFO <pin> ALARM (#338) --------------------------------------------
+
+// The per-input alarm view. Renders the input's canonical alarm Rule — the same
+// record `SET <pin> ALARM` writes — instead of the retired legacy Input alarm
+// fields, which the control engine stopped evaluating and which therefore always
+// read "Enabled: NO / Min 0 / Max 0" even with a live, firing alarm (#338).
+FLASHMEM void printInputAlarmInfo(uint8_t pin) {
+    char label[12];
+    formatPinLabel(pin, label, sizeof(label));
+
+    if (getInputByPin(pin) == nullptr) {
+        msg.control.print(F("ERROR: Input for pin "));
+        msg.control.print(label);
+        msg.control.println(F(" not found"));
+        return;
+    }
+
+    msg.control.println();
+    msg.control.print(F("===== Alarm Info ["));
+    msg.control.print(label);
+    msg.control.println(F("] ====="));
+
+    const int slot = controlAlarmRuleSlotForInput(pin);
+    if (slot < 0) {
+        msg.control.println(F("  No alarm Rule on this input."));
+        msg.control.println(F("  Set one with: SET <pin> ALARM <min> <max> | ALARM MIN <v> | ALARM MAX <v>"));
+        msg.control.println();
+        return;
+    }
+
+    const Rule& r = rules[slot];
+    printRuleRow(slot);
+    msg.control.print(F("  Warmup: "));
+    msg.control.print(r.warmupMs);
+    msg.control.print(F(" ms   Debounce: "));
+    msg.control.print(r.debounceMs);
+    msg.control.print(F(" ms   Time in state: "));
+    msg.control.print(millis() - g_ruleContexts[slot].stateEntryTime);
+    msg.control.println(F(" ms"));
+    printLinkedActions(r.id);
+    // Other Rules can watch the same input (warnings, control-only fan rules);
+    // this view only ever shows the canonical alarm one, so point at the rest.
+    msg.control.println(F("  (all rules on this input: RULE LIST)"));
+    msg.control.println();
+}
+
 // --- dispatch -----------------------------------------------------------
 
 FLASHMEM int cmd_rule(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: RULE requires a subcommand"));
-        msg.control.println(F("  Usage: RULE LIST | ADD ... | <id> | DEL <id>"));
+        msg.control.println(F("  Usage: RULE LIST | ADD ... | <id> | <id> ENABLE|DISABLE | DEL <id> | RESET <id>"));
         return 1;
     }
 
@@ -401,6 +484,25 @@ FLASHMEM int cmd_rule(int argc, const char* const* argv) {
         msg.control.println(argv[1]);
         return 1;
     }
+    if (argc >= 3) {
+        const bool enable  = streq_P(argv[2], PSTR("ENABLE"));
+        const bool disable = streq_P(argv[2], PSTR("DISABLE"));
+        if (enable || disable) {
+            // Structural, like ADD/DEL/RESET: parking a rule changes what the
+            // engine can assert, so it belongs in CONFIG (#346).
+            if (isInRunMode()) {
+                msg.control.print(F("ERROR: RULE <id> "));
+                msg.control.print(argv[2]);
+                msg.control.println(F(" is config-only; enter CONFIG mode first"));
+                return 1;
+            }
+            return ruleSetEnabled(ruleId, enable);
+        }
+        msg.control.print(F("ERROR: unknown RULE verb: "));
+        msg.control.println(argv[2]);
+        return 1;
+    }
+
     printRuleRow(slot);
     printLinkedActions(ruleId);
     return 0;

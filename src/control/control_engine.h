@@ -70,7 +70,7 @@ struct ActionDrive {
                           //   member whose Rule record is missing (dangling ref),
                           //   so losing a rule can never fall back to the latch.
     bool    anyActive;    // OR over members whose source is trustworthy AND active
-    bool    anyFaulted;   // any member's source is missing / NaN (§11.3)
+    bool    anyFaulted;   // any member's CONFIGURED source reads NaN (§11.3; #345)
 };
 
 /**

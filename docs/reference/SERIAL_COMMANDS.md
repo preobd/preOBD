@@ -260,8 +260,13 @@ SET <pin> ALARM OFF              # Disable alarm
 ```
 ENABLE <pin>                     # Enable input reading
 DISABLE <pin>                    # Disable input (keeps config)
-CLEAR <pin>                      # Remove input configuration completely
+CLEAR <pin>                      # Remove input configuration completely (and its Rules)
 ```
+
+`CLEAR <pin>` also deletes every Rule sourced from that pin, reporting what it
+removed and any Action it released — a Rule left behind on a pin with no input
+can never fire, and used to hold a `FAILSAFE ON` Action energized indefinitely
+(#345). Use `SAVE` to persist the removal.
 
 ### Available Units
 
@@ -421,8 +426,9 @@ SET <pin> ALARM MAX <v>              # One-sided ceiling: alarm when value > v
 SET <pin> ALARM DISABLE              # Remove the input's alarm Rule
 ```
 
-Use `RULE LIST` (or `RULE <id>`) to view an input's live alarm Rule — condition,
-limits, severity, and firing state (see the **Rules & Actions** section).
+Use `INFO <pin> ALARM` (or `RULE LIST` / `RULE <id>`) to view an input's live
+alarm Rule — condition, limits, severity, and firing state (see the
+**Rules & Actions** section).
 
 ### Output Module Control (Global Alarm Hardware)
 
@@ -565,6 +571,7 @@ RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARNING|ALARM|NONE]   # one-sided
 RULE ADD <pin> OUTSIDE <lo> <hi> [HYST <w>] [WARNING|ALARM|NONE]     # both-sided band
 RULE LIST                         # all Rules + live state (READY/ACTIVE) + severity
 RULE <id>                         # one Rule's detail
+RULE <id> ENABLE | DISABLE        # re-arm / park a Rule without deleting it
 RULE DEL <id>                     # delete (drops it from every Action's membership)
 RULE RESET <id>                   # restore config from the application default + re-arm
 
@@ -573,6 +580,7 @@ ACTION <id> RULE <ruleId|NONE>    # membership := exactly that Rule (NONE = manu
 ACTION <id> RULE ADD <ruleId>     # add a member Rule (the Action is OR-driven)
 ACTION <id> RULE REMOVE <ruleId>  # drop one member Rule
 ACTION <id> NAME <text>           # operator label, e.g. "Cooling Fan"
+ACTION <id> NAME                  # clear the label (back to unnamed)
 ACTION <id> ON|OFF                # manual override (RUN-mode allowed)
 ACTION <id> AUTO                  # release an operator override
 ACTION LIST | ACTION <id> | ACTION DEL <id>
@@ -583,6 +591,12 @@ member Rule is active, so one cooling fan can be demanded by coolant temp, trans
 temp and an A/C request at once. `ACTION <id> RULE <ruleId>` *replaces* the whole
 membership; use `RULE ADD` to keep the existing members. Every membership change
 releases the Action to AUTO and starts it OFF.
+
+A **parked** Rule (`RULE <id> DISABLE`) stays in the table and keeps its Action
+memberships, but sits in `PARKED`: it never asserts, never annunciates, and
+cannot force an Action's failsafe. `RULE <id> ENABLE` re-arms it (through
+`WARMUP`); both verbs are CONFIG-only and idempotent — enabling an already-armed
+Rule does nothing rather than silencing a live alarm for its warmup.
 
 With several sources, a **live member's demand outranks a faulted sibling**: if one
 sensor dies while another is legitimately calling for the output, the output stays
@@ -1367,11 +1381,16 @@ INFO <pin> ALARM                 # Show alarm configuration and current status
 - Calibration coefficients or table data
 - Conversion equations
 
-**INFO <pin> ALARM** displays:
-- Alarm thresholds (min/max)
-- Current alarm state (OK, LOW, HIGH)
-- Warmup time remaining (if in warmup period)
-- Persistence settings
+**INFO <pin> ALARM** displays the input's canonical alarm **Rule** — the same
+record `SET <pin> ALARM` writes — in the `RULE LIST` row format:
+- Condition and thresholds, in the input's display units
+- Severity and live rule state (`WARMUP` / `READY` / `ACTIVE` / `PARKED`)
+- Warmup and debounce times, plus time in the current state
+- Any Actions the alarm Rule drives
+
+If the input has no alarm Rule, it says so and points at `SET <pin> ALARM`. Other
+Rules watching the same input (warnings, control-only rules) are listed by
+`RULE LIST`.
 
 **Examples:**
 ```

@@ -53,6 +53,28 @@ void controlManagerInit(uint32_t now) {
             g_ruleContexts[i].state = RULE_DISABLED;
         } else {
             controlRuleInit(g_ruleContexts[i], rule, now);  // boot-load: arm (#251)
+            // An orphan (source pin carries no input) is INERT by design (#345),
+            // and inert is exactly the state that can hide: the rule never fires
+            // and never faults, so nothing else would ever mention it. Say so
+            // once at load — a store that arrived with more rules than inputs (a
+            // truncated save, a smaller-cap build, a hand-edited config) is a
+            // real config error, not just a stale rule.
+            if (getInputByPin(rule.sourceInput) == nullptr) {
+                // CONTROL plane, not debug, for two reasons. (1) This path also
+                // runs on JSON IMPORT — the other orphan producer, which accepts
+                // a rule whose input pin never loaded — and the app/webapp scan
+                // the *import response* for `WARNING:` lines, so a debug-plane
+                // notice would be invisible to exactly the client that caused it.
+                // (2) F() strings live in flash; msg.debug's printf strings are
+                // RAM-resident on AVR (message_api.h) and mega2560 has ~200 B of
+                // static headroom left.
+                msg.control.print(F("WARNING: rule #"));
+                msg.control.print(rule.id);
+                msg.control.print(F(" sources pin "));
+                msg.control.print(rule.sourceInput);
+                msg.control.println(F(" which has no input: inert (cannot fire, "
+                                      "cannot force a failsafe)"));
+            }
         }
     }
 }
@@ -308,6 +330,47 @@ bool controlRemoveAlarmRuleForInput(uint8_t pin, uint8_t* releasedOut) {
     g_ruleContexts[slot].state = RULE_DISABLED;
     uint8_t released = controlClearActionsForRule(id);  // referential integrity (mirrors RULE DEL)
     if (releasedOut) *releasedOut = released;
+    return true;
+}
+
+uint8_t controlRemoveRulesForInput(uint8_t pin, uint8_t* releasedOut) {
+    // `released` sums per-rule counts (each <= MAX_ACTIONS), so it is widened and
+    // saturated rather than wrapped: an under-report here would understate how
+    // many relays a CLEAR just de-energized.
+    uint8_t removed = 0;
+    uint16_t released = 0;
+    for (int i = 0; i < MAX_RULES; i++) {
+        Rule& r = rules[i];
+        if (r.id == CONTROL_ID_NONE || r.sourceInput != pin) continue;
+        const uint8_t id = r.id;
+        r.id = CONTROL_ID_NONE;
+        g_ruleContexts[i].state = RULE_DISABLED;
+        released += controlClearActionsForRule(id);  // mirrors RULE DEL
+        removed++;
+    }
+    if (releasedOut) *releasedOut = (uint8_t)((released > 255) ? 255 : released);
+    return removed;
+}
+
+bool controlRuleSetEnabled(uint8_t id, bool enable, uint32_t now) {
+    int slot = controlRuleSlot(id);
+    if (slot < 0) return false;
+    Rule& r = rules[slot];
+    const bool wasEnabled = (r.flags & RULE_FLAG_ENABLED) != 0;
+    if (wasEnabled == enable) return false;   // idempotent: touch nothing (#254)
+    if (enable) {
+        r.flags |= RULE_FLAG_ENABLED;
+        controlRuleInit(g_ruleContexts[slot], r, now);   // re-arm: INIT -> WARMUP -> READY
+    } else {
+        r.flags &= (uint8_t)~RULE_FLAG_ENABLED;
+        g_ruleContexts[slot].state = RULE_DISABLED;
+        // Parking IS a state entry: `INFO <pin> ALARM` prints time-in-state, and
+        // leaving the old stamp would report "PARKED, time in state: 1 h" for a
+        // rule parked one second ago (the enable branch re-stamps via
+        // controlRuleInit).
+        g_ruleContexts[slot].stateEntryTime = now;
+        g_ruleContexts[slot].faultStartTime = 0;
+    }
     return true;
 }
 
@@ -630,7 +693,16 @@ static bool sourceFaultedForRuleSlot(int rslot) {
     // natural way to park a member) would not remove its influence.
     if (!(rules[rslot].flags & RULE_FLAG_ENABLED)) return false;
     Input* in = getInputByPin(rules[rslot].sourceInput);
-    return (in == nullptr) || isnan(in->value);
+    // No input configured on the source pin at all (an ORPHAN rule — CLEAR <pin>
+    // used to leave these behind) is INERT, not faulted: it can never assert, so
+    // by the same argument that settled the disabled-member case above it must
+    // not be able to force a failsafe either. Otherwise one forgotten orphan
+    // holds every FAILSAFE ON relay it is a member of energized forever, with
+    // nothing in ACTION LIST naming the culprit (#345).
+    if (in == nullptr) return false;
+    // A CONFIGURED input reading NaN is the real sensor-loss case — open/shorted
+    // probe, dead bus — and that is exactly what the failsafe exists for.
+    return isnan(in->value);
 }
 
 bool controlActionSourceFaulted(int slot) {

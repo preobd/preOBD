@@ -53,6 +53,23 @@ uint8_t controlRuleCount();             // number of configured rules
 // de-energizing a relay. Called from RULE DEL / SET <pin> ALARM OFF.
 uint8_t controlClearActionsForRule(uint8_t ruleId);
 
+// Delete every Rule sourced from input `pin`, through the same referential-
+// integrity path as RULE DEL (each rule's id is dropped from every Action's
+// membership). Called by CLEAR <pin>, which would otherwise leave the Rules
+// orphaned on a pin with no input (#345). Returns the number of Rules removed;
+// optional `releasedOut` accumulates how many Actions were actively driven at
+// the time, so the caller can report the relays it just de-energized (saturating
+// at 255 rather than wrapping — an under-report would understate the change).
+uint8_t controlRemoveRulesForInput(uint8_t pin, uint8_t* releasedOut = nullptr);
+
+// RULE <id> ENABLE|DISABLE (#346): park a Rule without deleting it, or re-arm a
+// parked one. A disabled Rule sits in RULE_DISABLED, never asserts, and (since
+// #343) cannot contribute a failsafe. Returns true if the flag actually changed;
+// false means it was already in the requested state and NOTHING was touched —
+// re-enabling an already-armed Rule must not re-init it and drag a live rule
+// back through INIT->WARMUP (#254).
+bool    controlRuleSetEnabled(uint8_t id, bool enable, uint32_t now);
+
 // --- application default-Rule template (§11.5) ---
 
 // True if any Rule already references this input pin.
@@ -134,9 +151,11 @@ void controlActionsUpdate(bool configMode);
 bool controlActionState(int slot);
 
 // True when the action in `slot` is rule-driven and ANY member rule's source
-// input is untrustworthy (missing or NaN). Shared by the evaluation loop and by
-// the CLI / BLE reporting paths so an override held against a dead sensor is
-// never silent (#329). Manual-only and dangling-ref actions report false.
+// input is untrustworthy — i.e. a CONFIGURED input reading NaN. Shared by the
+// evaluation loop and by the CLI / BLE reporting paths so an override held
+// against a dead sensor is never silent (#329). Manual-only, dangling-ref,
+// disabled-rule and orphan-rule (no input on the source pin, #345) members all
+// report false: none of them can assert, so none may force a failsafe.
 bool controlActionSourceFaulted(int slot);
 
 // --- Rule<->Action membership (M:N, §11.6 / #343) ---

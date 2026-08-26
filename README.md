@@ -182,7 +182,7 @@ SET <pin> <app> <sensor>         # Configure a sensor (also seeds a default alar
 SET <pin> UNITS <unit>           # Set display units (CELSIUS, FAHRENHEIT, PSI, BAR, etc.)
 SET <pin> NAME <name>            # Set short display name
 SET <pin> DIVIDER <ratio>        # Set voltage divider ratio for 5V sensors on 3.3V ADC
-CLEAR <pin>                      # Remove a sensor
+CLEAR <pin>                      # Remove a sensor (and any Rules watching it)
 ENABLE <pin>                     # Enable a disabled sensor
 DISABLE <pin>                    # Disable a sensor
 SAVE                             # Save configuration to EEPROM

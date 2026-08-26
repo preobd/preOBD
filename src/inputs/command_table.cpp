@@ -548,6 +548,28 @@ int cmd_clear(int argc, const char* const* argv) {
     msg.control.print(F("Input "));
     msg.control.print(argv[1]);
     msg.control.println(F(" cleared"));
+
+#if ENABLE_CONTROL_ENGINE
+    // Removing the input without its Rules used to leave them orphaned: a Rule
+    // sourced from a pin with no input can never assert, renders as a nameless
+    // `pinN` row, and (pre-#345) counted as a FAULTED source — so one forgotten
+    // orphan could hold a FAILSAFE ON relay energized forever (#345). Take the
+    // Rules with the input, through the same referential-integrity path as
+    // RULE DEL, and say exactly what went.
+    uint8_t releasedActions = 0;
+    const uint8_t removedRules = controlRemoveRulesForInput(pin, &releasedActions);
+    if (removedRules) {
+        msg.control.print(F("  Removed "));
+        msg.control.print(removedRules);
+        msg.control.println(F(" rule(s) sourced from this input"));
+        if (releasedActions) {
+            msg.control.print(F("  NOTE: released "));
+            msg.control.print(releasedActions);
+            msg.control.println(F(" driven action(s) that followed them; they are now OFF"));
+        }
+        printSaveReminder();
+    }
+#endif
     return 0;
 }
 
@@ -565,7 +587,11 @@ int cmd_info(int argc, const char* const* argv) {
     // Check for subcommands (ALARM, CALIBRATION, OUTPUT)
     if (argc == 3) {
         if (streq_P(argv[2], PSTR("ALARM"))) {
+#if ENABLE_CONTROL_ENGINE
             printInputAlarmInfo(pin);
+#else
+            msg.control.println(F("ERROR: alarms are not enabled in this build"));
+#endif
         } else if (streq_P(argv[2], PSTR("OUTPUT"))) {
             printInputOutputInfo(pin);
         } else if (streq_P(argv[2], PSTR("CALIBRATION"))) {

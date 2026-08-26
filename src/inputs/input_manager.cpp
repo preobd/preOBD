@@ -1032,18 +1032,6 @@ void readAllInputs() {
 
 // ===== INFO/LISTING =====
 
-// Helper to print alarm state
-static void printAlarmState(AlarmState state) {
-    switch (state) {
-        case ALARM_DISABLED: msg.control.print(F("DISABLED")); break;
-        case ALARM_INIT: msg.control.print(F("INIT")); break;
-        case ALARM_WARMUP: msg.control.print(F("WARMUP")); break;
-        case ALARM_READY: msg.control.print(F("READY")); break;
-        case ALARM_ACTIVE: msg.control.print(F("ACTIVE")); break;
-        default: msg.control.print(F("UNKNOWN")); break;
-    }
-}
-
 // Helper to print pin name (A0, 1, I2C:0, CAN:0, etc)
 static void printPin(uint8_t pin) {
     if (pin >= 0xF0) {
@@ -1117,49 +1105,6 @@ void printInputInfo(uint8_t pin) {
     msg.control.println(F("To see alarm config:  INFO <pin> ALARM"));
     msg.control.println(F("To see calibration:   INFO <pin> CALIBRATION"));
     msg.control.println(F("To see output routing: INFO <pin> OUTPUT"));
-    msg.control.println();
-}
-
-void printInputAlarmInfo(uint8_t pin) {
-    Input* input = getInputByPin(pin);
-    if (!input) {
-        msg.control.print(F("ERROR: Input for pin "));
-        printPin(pin);
-        msg.control.println(F(" not found"));
-        return;
-    }
-
-    msg.control.println();
-    msg.control.print(F("===== Alarm Info ["));
-    printPin(pin);
-    msg.control.print(F("] ====="));
-    msg.control.println();
-
-    msg.control.print(F("  Enabled: "));
-    msg.control.println(input->flags.alarm ? F("YES") : F("NO"));
-
-    msg.control.print(F("  State: "));
-    printAlarmState(input->alarmContext.state);
-    msg.control.println();
-
-    msg.control.print(F("  Min Threshold: "));
-    msg.control.println(input->minValue, 2);
-    msg.control.print(F("  Max Threshold: "));
-    msg.control.println(input->maxValue, 2);
-
-    msg.control.print(F("  Warmup Time: "));
-    msg.control.print(input->alarmContext.warmupTime_ms);
-    msg.control.println(F(" ms"));
-
-    msg.control.print(F("  Persistence Time: "));
-    msg.control.print(input->alarmContext.persistTime_ms);
-    msg.control.println(F(" ms"));
-
-    msg.control.print(F("  Time in State: "));
-    extern unsigned long millis(void);
-    msg.control.print(millis() - input->alarmContext.stateEntryTime);
-    msg.control.println(F(" ms"));
-
     msg.control.println();
 }
 

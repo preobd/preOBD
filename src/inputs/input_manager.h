@@ -67,7 +67,9 @@ void readAllInputs();                 // Read all enabled inputs
 // into buf. Single source for LIST INPUTS and the JSON dump's "pinLabel".
 void formatPinLabel(uint8_t pin, char* buf, size_t bufLen);
 void printInputInfo(uint8_t pin);    // Print detailed input information
-void printInputAlarmInfo(uint8_t pin);
+// printInputAlarmInfo() lives in cmd_rule.cpp (declared in command_handlers.h):
+// the per-input alarm view renders the input's canonical alarm Rule, not the
+// retired legacy Input alarm fields (#338).
 void printInputOutputInfo(uint8_t pin);
 void printInputCalibration(uint8_t pin);
 void listAllInputs();                // List all active inputs

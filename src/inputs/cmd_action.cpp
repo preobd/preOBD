@@ -9,7 +9,7 @@
  *   ACTION <id> RULE <ruleId|NONE>     membership := exactly that Rule (or none)
  *   ACTION <id> RULE ADD <ruleId>      add a member Rule (OR-driven, #343)
  *   ACTION <id> RULE REMOVE <ruleId>   drop one member Rule
- *   ACTION <id> NAME <text>            set operator label (e.g. "Cooling Fan")
+ *   ACTION <id> NAME [text]            set operator label (e.g. "Cooling Fan"); no text = clear
  *   ACTION <id> ON|OFF                 drive by hand: manual latch on an unlinked
  *                                      action, operator override on a rule-driven
  *                                      one (outranks the rule AND the failsafe)
@@ -366,7 +366,15 @@ static FLASHMEM int actionAuto(uint8_t id) {
     return 0;
 }
 
+// `name == nullptr` / "" clears the label back to unnamed. There is no way to
+// spell an empty string as a CLI token — embedded_cli's tokenizer collapses `""`
+// to no token at all — so the ARGUMENT-LESS form is the clear form (#336).
+// The reference webapp is fixed by this alone (`saveActionForm` already sends
+// `NAME ""`, which arrives here as argc == 3). The mobile app is NOT: it routes
+// a name-clear to DEL+ADD because no clear form existed, so it needs an app-side
+// change to use this — tracked separately in the app repo.
 static FLASHMEM int actionSetName(uint8_t id, const char* name) {
+    const bool clearing = (name == nullptr || name[0] == '\0');
     if (!controlActionSetName(id, name)) {
         msg.control.print(F("ERROR: no action #"));
         msg.control.println(id);
@@ -374,6 +382,10 @@ static FLASHMEM int actionSetName(uint8_t id, const char* name) {
     }
     msg.control.print(F("Action #"));
     msg.control.print(id);
+    if (clearing) {
+        msg.control.println(F(" label cleared. SAVE to persist."));
+        return 0;
+    }
     msg.control.print(F(" named \""));
     msg.control.print(name);
     msg.control.println(F("\". SAVE to persist."));
@@ -416,7 +428,7 @@ static FLASHMEM int actionDel(uint8_t id) {
 FLASHMEM int cmd_action(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: ACTION requires a subcommand"));
-        msg.control.println(F("  Usage: ACTION LIST | ADD RELAY <target> ... | <id> RULE <ruleId|NONE|ADD <r>|REMOVE <r>> | <id> NAME <text> | <id> ON|OFF|AUTO | DEL <id>"));
+        msg.control.println(F("  Usage: ACTION LIST | ADD RELAY <target> ... | <id> RULE <ruleId|NONE|ADD <r>|REMOVE <r>> | <id> NAME [text] | <id> ON|OFF|AUTO | DEL <id>"));
         return 1;
     }
 
@@ -474,8 +486,9 @@ FLASHMEM int cmd_action(int argc, const char* const* argv) {
             msg.control.println(F("ERROR: ACTION <id> NAME is config-only; enter CONFIG mode first"));
             return 1;
         }
-        if (argc < 4) { msg.control.println(F("ERROR: usage: ACTION <id> NAME <text>")); return 1; }
-        return actionSetName(id, argv[3]);
+        // Bare `ACTION <id> NAME` clears the label — the only reachable spelling
+        // of "unnamed", since `""` never survives tokenization (#336).
+        return actionSetName(id, (argc >= 4) ? argv[3] : "");
     }
     if (streq_P(argv[2], PSTR("ON")))   return actionManual(id, true);   // RUN-allowed
     if (streq_P(argv[2], PSTR("OFF")))  return actionManual(id, false);  // RUN-allowed

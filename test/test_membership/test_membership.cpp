@@ -466,6 +466,133 @@ static void test_dangling_members_do_not_fall_back_to_the_latch(void) {
     TEST_ASSERT_FALSE(controlActionState(0));
 }
 
+// --- orphan rules: a source pin with no input (#345) ------------------------
+
+// The #345 case: CLEAR <pin> used to leave the pin's rules behind. An orphan can
+// never assert (the manager feeds it NaN), so it must not be able to force a
+// failsafe either -- same argument as the disabled member above. Before the fix
+// this single orphan pinned a fail-ON relay ON forever.
+static void test_orphan_member_cannot_force_the_failsafe(void) {
+    addInput(11, 50.0f);
+    addRule(0, 10, /*active*/false);         // pin 10: NO input configured -> orphan
+    addRule(1, 11, /*active*/false);
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    controlActionAddRule(0, 0);
+    controlActionAddRule(0, 1);
+
+    controlActionsUpdate(false);
+    TEST_ASSERT_FALSE_MESSAGE(controlActionState(0),
+                              "an orphan member must not latch the failsafe on");
+    TEST_ASSERT_FALSE_MESSAGE(controlActionSourceFaulted(0),
+                              "a missing input is inert, not faulted");
+}
+
+// The distinction the fix rests on: a CONFIGURED input reading NaN is still the
+// real sensor-loss case and MUST keep driving the failsafe.
+static void test_configured_nan_source_still_faults(void) {
+    addInput(10, NAN);
+    addRule(0, 10, false);
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    controlActionAddRule(0, 0);
+
+    controlActionsUpdate(false);
+    TEST_ASSERT_TRUE(controlActionState(0));
+    TEST_ASSERT_TRUE(controlActionSourceFaulted(0));
+}
+
+// CLEAR <pin> takes the pin's rules with it, through the RULE DEL path: every
+// referring action loses that membership (and an action left with none reverts
+// to manual-only), so no orphan is created in the first place.
+static void test_remove_rules_for_input_drops_memberships(void) {
+    addInput(10, 50.0f);
+    addInput(11, 50.0f);
+    addRule(0, 10, /*active*/true);           // two rules on the doomed pin
+    addRule(1, 10, false);
+    addRule(2, 11, false);                    // a bystander on another pin
+    addAction(0, 23);
+    controlActionAddRule(0, 0);
+    controlActionAddRule(0, 2);
+    addAction(1, 24);
+    controlActionAddRule(1, 1);               // only member: reverts to manual-only
+
+    uint8_t released = 0;
+    TEST_ASSERT_EQUAL_UINT8(2, controlRemoveRulesForInput(10, &released));
+    TEST_ASSERT_EQUAL_UINT8(1, controlRuleCount());          // only rule 2 survives
+    TEST_ASSERT_TRUE(controlRuleSlot(2) >= 0);
+    TEST_ASSERT_EQUAL_UINT8(1, controlActionRuleCount(0));   // rule 0 dropped
+    TEST_ASSERT_TRUE(controlActionHasRule(0, 2));
+    TEST_ASSERT_EQUAL_UINT8(0, controlActionRuleCount(1));   // manual-only now
+    assertNoOrphanedLinks();
+
+    controlActionsUpdate(false);
+    TEST_ASSERT_FALSE_MESSAGE(controlActionState(0),
+                              "the deleted rule must stop driving the action");
+}
+
+static void test_remove_rules_for_input_reports_released_drive(void) {
+    addInput(10, 50.0f);
+    addRule(0, 10, false);
+    addAction(0, 23);
+    controlActionAddRule(0, 0);
+    controlActionCommand(0, true);            // operator override held
+
+    uint8_t released = 0;
+    TEST_ASSERT_EQUAL_UINT8(1, controlRemoveRulesForInput(10, &released));
+    TEST_ASSERT_EQUAL_UINT8(1, released);
+    TEST_ASSERT_EQUAL_UINT8(0, controlRemoveRulesForInput(10, nullptr));  // idempotent
+}
+
+// --- RULE <id> ENABLE|DISABLE (#346) ----------------------------------------
+
+static void test_rule_disable_parks_it_and_enable_rearms(void) {
+    addInput(10, 50.0f);
+    addRule(0, 10, /*active*/true);
+
+    TEST_ASSERT_TRUE(controlRuleSetEnabled(0, false, 1000));
+    TEST_ASSERT_EQUAL_UINT8(0, rules[0].flags & RULE_FLAG_ENABLED);
+    TEST_ASSERT_EQUAL(RULE_DISABLED, g_ruleContexts[0].state);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1000, g_ruleContexts[0].stateEntryTime,
+                                     "parking is a state entry: INFO <pin> ALARM "
+                                     "prints time-in-state from this stamp");
+
+    TEST_ASSERT_TRUE(controlRuleSetEnabled(0, true, 2000));
+    TEST_ASSERT_TRUE(rules[0].flags & RULE_FLAG_ENABLED);
+    TEST_ASSERT_EQUAL(RULE_INIT, g_ruleContexts[0].state);   // re-armed, not ACTIVE
+    TEST_ASSERT_EQUAL_UINT32(2000, g_ruleContexts[0].stateEntryTime);
+}
+
+// #254: enabling an already-armed rule must NOT re-init it, or a live ACTIVE
+// alarm is silenced for warmupMs by a no-op command.
+static void test_rule_enable_is_idempotent_and_never_reinits(void) {
+    addInput(10, 50.0f);
+    addRule(0, 10, /*active*/true);
+    g_ruleContexts[0].stateEntryTime = 500;
+
+    TEST_ASSERT_FALSE(controlRuleSetEnabled(0, true, 9000));
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, g_ruleContexts[0].state);
+    TEST_ASSERT_EQUAL_UINT32(500, g_ruleContexts[0].stateEntryTime);
+
+    TEST_ASSERT_TRUE(controlRuleSetEnabled(0, false, 9000));
+    TEST_ASSERT_FALSE(controlRuleSetEnabled(0, false, 9500));  // already parked
+    TEST_ASSERT_FALSE(controlRuleSetEnabled(7, true, 9500));   // unknown id
+}
+
+// A parked rule stops driving its action -- the CLI path #346 adds is what makes
+// the #343 disabled-member behaviour reachable from hardware at all.
+static void test_parked_rule_stops_driving_its_action(void) {
+    addInput(10, 50.0f);
+    addRule(0, 10, /*active*/true);
+    addAction(0, 23);
+    controlActionAddRule(0, 0);
+    controlActionsUpdate(false);
+    TEST_ASSERT_TRUE(controlActionState(0));
+
+    controlRuleSetEnabled(0, false, 1000);
+    controlActionsUpdate(false);
+    TEST_ASSERT_FALSE(controlActionState(0));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_add_first_member_goes_inline);
@@ -489,5 +616,12 @@ int main(int, char**) {
     RUN_TEST(test_drive_failsafe_applies_when_no_member_demands);
     RUN_TEST(test_disabled_member_cannot_force_the_failsafe);
     RUN_TEST(test_dangling_members_do_not_fall_back_to_the_latch);
+    RUN_TEST(test_orphan_member_cannot_force_the_failsafe);
+    RUN_TEST(test_configured_nan_source_still_faults);
+    RUN_TEST(test_remove_rules_for_input_drops_memberships);
+    RUN_TEST(test_remove_rules_for_input_reports_released_drive);
+    RUN_TEST(test_rule_disable_parks_it_and_enable_rearms);
+    RUN_TEST(test_rule_enable_is_idempotent_and_never_reinits);
+    RUN_TEST(test_parked_rule_stops_driving_its_action);
     return UNITY_END();
 }
