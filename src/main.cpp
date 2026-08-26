@@ -371,7 +371,15 @@ void setup() {
 
     // Wait for sensors to stabilize
     msg.debug.info(TAG_SENSOR, "Waiting for sensors to stabilize...");
-    delay(1000);  // Increased from 500ms - MAX6675 needs ~220ms for first conversion
+    // Feed the watchdog across the wait. initSD() arms the WDT at 2 s and
+    // Teensy 4.x cannot disarm it (#243), yet nothing feeds it again until the
+    // end of setup() — so this 1 s sleep plus the surrounding init was running
+    // on ~100 ms of margin, and any growth in setup tipped it into a boot loop.
+    // MAX6675 still gets its full ~1 s (needs ~220 ms for the first conversion).
+    for (uint8_t i = 0; i < 10; i++) {
+        delay(100);
+        watchdogReset();
+    }
 
     // Initialize per-sensor read timers (all start at 0)
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
