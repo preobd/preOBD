@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Control engine: an Action can now be driven by several Rules and runs while any of them is active (`ACTION <id> RULE ADD|REMOVE <ruleId>`), so one cooling fan can be demanded by coolant temp, trans temp and an A/C request at once — a live Rule's demand outranks a faulted sibling sensor, and existing configs load unchanged (#343)
 - Registry: every application preset now declares a car-area group (Engine, Drivetrain, Induction, Exhaust, Electrical, Environment, Other) exported as `"group"` in `LIST APPLICATIONS JSON`, and `SYSTEM DIAG PINS` gains a `JSON` variant — the grouping and live pin-picker data behind the mobile app's add-input wizard
 - BLE: live per-input sensor values are now pushed over a new Extended Service characteristic (16-byte `PreobdLiveValue`, frame 0x06, display units, 500 ms change scan + 5 s heartbeat), and `SYSTEM DUMP JSON` gains per-input `pinLabel` and `unitsFactor`/`unitsOffset` and now includes disabled inputs — the data feed for the mobile app's live gauge tiles
 - Control engine: the per-input alarm facade (`SET <pin> ALARM`, webapp Inputs panel) now supports one-sided alarms — a Min-only floor (`SET <pin> ALARM MIN <v>`) or Max-only ceiling (`SET <pin> ALARM MAX <v>`), not just a Min+Max band — and one-sided alarms round-trip through `SYSTEM DUMP JSON` (#312)

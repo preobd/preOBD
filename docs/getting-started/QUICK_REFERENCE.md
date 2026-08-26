@@ -360,7 +360,8 @@ the full surface. (`RELAY` is deprecated and prints a pointer here.)
 | `RULE LIST` / `RULE <id>` / `RULE DEL <id>` | View / inspect / delete |
 | `RULE RESET <id>` | Restore the application's default Rule config |
 | `ACTION ADD RELAY <pin> [FAILSAFE ON|OFF] [INVERT]` | Define an actuator |
-| `ACTION <id> RULE <ruleId>` | Drive the Action from a Rule |
+| `ACTION <id> RULE <ruleId>` | Drive the Action from a Rule (replaces its membership) |
+| `ACTION <id> RULE ADD|REMOVE <ruleId>` | Add / drop one member Rule — the Action is OR-driven |
 | `ACTION <id> ON|OFF` | Manual override (RUN-mode allowed) |
 | `ACTION LIST` / `ACTION DEL <id>` | View / delete |
 
@@ -369,6 +370,13 @@ the full surface. (`RELAY` is deprecated and prints a pointer here.)
 RULE ADD A2 ABOVE 90 HYST 5 NONE     # control Rule (no annunciation), id e.g. 0
 ACTION ADD RELAY 23                   # relay on pin 23, id e.g. 0
 ACTION 0 RULE 0                       # fan follows the Rule
+```
+
+**...also demanded by trans temp** — an Action runs while **any** member Rule is
+active:
+```
+RULE ADD A3 ABOVE 110 HYST 5 NONE    # second control Rule, id e.g. 1
+ACTION 0 RULE ADD 1                   # fan now follows rule 0 OR rule 1
 ```
 
 See [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md) and

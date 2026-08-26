@@ -66,6 +66,16 @@ ActionOverride controlActionOverride(int slot) {
     return (slot >= 0 && slot < MAX_ACTIONS) ? g_override[slot] : ACT_OVR_AUTO;
 }
 
+// controlActionRuleCount() — membership size (#343). The real manager counts the
+// inline Action.ruleRef plus actionLinks[] rows; here the extra members are just
+// a per-slot number, which is all the frame cares about.
+static uint8_t g_extraMembers[MAX_ACTIONS];
+uint8_t controlActionRuleCount(int slot) {
+    if (slot < 0 || slot >= MAX_ACTIONS) return 0;
+    if (actions[slot].id == CONTROL_ID_NONE || actions[slot].ruleRef == CONTROL_ID_NONE) return 0;
+    return (uint8_t)(1 + g_extraMembers[slot]);
+}
+
 // controlActionSourceFaulted() — we own the fault truth here.
 static bool g_sourceFaulted[MAX_ACTIONS];
 bool controlActionSourceFaulted(int slot) {
@@ -111,6 +121,7 @@ void setUp(void) {
     g_setOverrideCalls = 0;
     memset(g_override, 0, sizeof(g_override));
     memset(g_sourceFaulted, 0, sizeof(g_sourceFaulted));
+    memset(g_extraMembers, 0, sizeof(g_extraMembers));
     ActionBroadcaster::init();
 }
 void tearDown(void) {}
@@ -145,6 +156,7 @@ static void test_first_tick_snapshots_all_slots(void) {
     TEST_ASSERT_EQUAL_UINT8(9, a0.target);
     TEST_ASSERT_EQUAL_UINT8(5, a0.ruleRef);
     TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_FAILSAFE_ON, a0.failsafe);
+    TEST_ASSERT_EQUAL_UINT8(1, a0.ruleCount);   // one member (#343)
     TEST_ASSERT_EQUAL_UINT16(0, a0.sequence);
 }
 
@@ -334,9 +346,37 @@ static void test_heartbeat_resends_all(void) {
     TEST_ASSERT_EQUAL_INT(MAX_ACTIONS, g_frameCount);
 }
 
+
+// A multi-rule Action reports its member count, and ruleRef stays the FIRST
+// member so a client predating the byte still renders a working link (#343).
+static void test_rule_count_reports_members(void) {
+    configureAction(0, 3, PREOBD_ACTION_TYPE_RELAY, 9, /*ruleRef*/5, 0, 0);
+    g_extraMembers[0] = 2;  // rules 5 + two more
+    ActionBroadcaster::tick();
+    const PreobdActionState& a = frameState(0);
+    TEST_ASSERT_EQUAL_UINT8(3, a.ruleCount);
+    TEST_ASSERT_EQUAL_UINT8(5, a.ruleRef);
+}
+
+// A membership edit changes nothing else in the frame, so it only reaches the
+// client if ruleCount is part of the change key.
+static void test_membership_change_pushes(void) {
+    configureAction(0, 3, PREOBD_ACTION_TYPE_RELAY, 9, 5, 0, 0);
+    ActionBroadcaster::tick();
+    g_frameCount = 0;
+
+    g_extraMembers[0] = 1;  // ACTION 3 RULE ADD <other>
+    ActionBroadcaster::tick();
+
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(2, frameState(0).ruleCount);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_first_tick_snapshots_all_slots);
+    RUN_TEST(test_rule_count_reports_members);
+    RUN_TEST(test_membership_change_pushes);
     RUN_TEST(test_empty_slot_emits_none_id);
     RUN_TEST(test_idempotent_after_snapshot);
     RUN_TEST(test_state_change_emits_one_frame);

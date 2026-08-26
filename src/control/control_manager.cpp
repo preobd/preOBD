@@ -29,8 +29,9 @@ RuleContext g_ruleContexts[MAX_RULES];
 // id==0 is a VALID record id — so controlResetTables() MUST stamp every slot
 // empty before the tables are trusted (boot / reset / load-failure paths), or a
 // blank EEPROM would arm a table full of phantom id-0 records.
-Rule   rules[MAX_RULES];
-Action actions[MAX_ACTIONS];
+Rule       rules[MAX_RULES];
+Action     actions[MAX_ACTIONS];
+ActionLink actionLinks[MAX_ACTION_LINKS];   // 2nd+ rule memberships (#343)
 
 void controlResetTables() {
     for (int i = 0; i < MAX_RULES; i++) {
@@ -39,6 +40,9 @@ void controlResetTables() {
     }
     for (int i = 0; i < MAX_ACTIONS; i++) {
         actions[i].id = CONTROL_ID_NONE;
+    }
+    for (int i = 0; i < MAX_ACTION_LINKS; i++) {
+        actionLinks[i].actionId = CONTROL_ID_NONE;
     }
 }
 
@@ -324,30 +328,225 @@ uint8_t controlReseedRulesForInput(uint8_t pin, uint32_t now) {
     return n;
 }
 
-uint8_t controlClearActionsForRule(uint8_t ruleId) {
-    if (ruleId == CONTROL_ID_NONE) return 0;
-    uint8_t released = 0;
-    for (int i = 0; i < MAX_ACTIONS; i++) {
-        if (actions[i].id != CONTROL_ID_NONE &&
-            actions[i].ruleRef == ruleId) {
-            actions[i].ruleRef = CONTROL_ID_NONE;  // revert to manual-only
-            // Losing the rule must also drop whatever was driving the action, or
-            // the pin snaps to a stale state nobody commanded (#294 / #329).
-            if (controlActionReleaseDrive(actions[i].id)) released++;
-        }
-    }
-    return released;
-}
-
 // ===== Actions =====
 
-static bool g_actionManual[MAX_ACTIONS];  // commanded state for manual (ruleRef==NONE) actions
+// --- Rule<->Action membership (M:N, §11.6 / #343) ------------------------
+// An Action's FIRST member rule is stored inline in Action.ruleRef; the 2nd and
+// later live in actionLinks[]. Every consumer goes through these accessors, so
+// the split representation is invisible outside this block — and a store written
+// before #343 (zero link rows) reads back as a one-member action unchanged.
+
+uint8_t controlActionRuleCount(int slot) {
+    if (slot < 0 || slot >= MAX_ACTIONS) return 0;
+    const Action& a = actions[slot];
+    if (a.id == CONTROL_ID_NONE || a.ruleRef == CONTROL_ID_NONE) return 0;
+    uint8_t n = 1;
+    for (int i = 0; i < MAX_ACTION_LINKS; i++)
+        if (actionLinks[i].actionId == a.id) n++;
+    return n;
+}
+
+uint8_t controlActionRuleAt(int slot, uint8_t index) {
+    if (slot < 0 || slot >= MAX_ACTIONS) return CONTROL_ID_NONE;
+    const Action& a = actions[slot];
+    if (a.id == CONTROL_ID_NONE || a.ruleRef == CONTROL_ID_NONE) return CONTROL_ID_NONE;
+    if (index == 0) return a.ruleRef;
+    uint8_t n = 1;
+    for (int i = 0; i < MAX_ACTION_LINKS; i++) {
+        if (actionLinks[i].actionId != a.id) continue;
+        if (n++ == index) return actionLinks[i].ruleId;
+    }
+    return CONTROL_ID_NONE;
+}
+
+bool controlActionHasRule(int slot, uint8_t ruleId) {
+    if (ruleId == CONTROL_ID_NONE) return false;
+    uint8_t n = controlActionRuleCount(slot);
+    for (uint8_t i = 0; i < n; i++)
+        if (controlActionRuleAt(slot, i) == ruleId) return true;
+    return false;
+}
+
+uint8_t controlActionLinkCount() {
+    uint8_t c = 0;
+    for (int i = 0; i < MAX_ACTION_LINKS; i++)
+        if (actionLinks[i].actionId != CONTROL_ID_NONE) c++;
+    return c;
+}
+
+// Drop every link row belonging to `actionId` (the action itself is untouched).
+static void dropLinksForAction(uint8_t actionId) {
+    if (actionId == CONTROL_ID_NONE) return;
+    for (int i = 0; i < MAX_ACTION_LINKS; i++)
+        if (actionLinks[i].actionId == actionId) actionLinks[i].actionId = CONTROL_ID_NONE;
+}
+
+bool controlActionAddRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving) {
+    if (wasDriving) *wasDriving = false;
+    int slot = controlActionSlot(actionId);
+    if (slot < 0 || ruleId == CONTROL_ID_NONE) return false;
+    if (controlActionHasRule(slot, ruleId)) return true;  // idempotent
+    Action& a = actions[slot];
+    if (a.ruleRef == CONTROL_ID_NONE) {
+        a.ruleRef = ruleId;                       // first membership: inline
+    } else {
+        int free = -1;
+        for (int i = 0; i < MAX_ACTION_LINKS && free < 0; i++)
+            if (actionLinks[i].actionId == CONTROL_ID_NONE) free = i;
+        if (free < 0) return false;               // link table full — caller reports
+        actionLinks[free].actionId = actionId;
+        actionLinks[free].ruleId   = ruleId;
+    }
+    // The membership set is what drives this action, so changing it changes the
+    // driver — release override + manual latch, the one invariant that keeps the
+    // #294 stale-latch snap-on unreachable (#329). Deliberately unconditional:
+    // reasoning about which membership a live force "belonged to" is exactly the
+    // ambiguity that produced that bug class. Report it: silently de-energizing a
+    // relay an operator was holding by hand is the hazard #329 added reporting for.
+    const bool released = controlActionReleaseDrive(actionId);
+    if (wasDriving) *wasDriving = released;
+    return true;
+}
+
+bool controlActionRemoveRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving) {
+    if (wasDriving) *wasDriving = false;
+    int slot = controlActionSlot(actionId);
+    if (slot < 0 || ruleId == CONTROL_ID_NONE) return false;
+    if (!controlActionHasRule(slot, ruleId)) return false;
+    Action& a = actions[slot];
+    if (a.ruleRef == ruleId) {
+        // Removing the inline member: PROMOTE the first link row into it, so
+        // "ruleRef == NONE" keeps meaning "no members at all" everywhere.
+        a.ruleRef = CONTROL_ID_NONE;
+        for (int i = 0; i < MAX_ACTION_LINKS; i++) {
+            if (actionLinks[i].actionId != actionId) continue;
+            a.ruleRef = actionLinks[i].ruleId;
+            actionLinks[i].actionId = CONTROL_ID_NONE;
+            break;
+        }
+    } else {
+        for (int i = 0; i < MAX_ACTION_LINKS; i++) {
+            if (actionLinks[i].actionId == actionId && actionLinks[i].ruleId == ruleId) {
+                actionLinks[i].actionId = CONTROL_ID_NONE;
+                break;
+            }
+        }
+    }
+    const bool released = controlActionReleaseDrive(actionId);
+    if (wasDriving) *wasDriving = released;
+    return true;
+}
+
+bool controlActionClearRules(uint8_t actionId) {
+    int slot = controlActionSlot(actionId);
+    if (slot < 0) return false;
+    actions[slot].ruleRef = CONTROL_ID_NONE;
+    dropLinksForAction(actionId);
+    return controlActionReleaseDrive(actionId);
+}
+
+bool controlActionSetRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving) {
+    if (wasDriving) *wasDriving = false;
+    int slot = controlActionSlot(actionId);
+    if (slot < 0 || ruleId == CONTROL_ID_NONE) return false;
+    actions[slot].ruleRef = ruleId;
+    dropLinksForAction(actionId);   // "exactly this one" — drop any extra members
+    const bool released = controlActionReleaseDrive(actionId);
+    if (wasDriving) *wasDriving = released;
+    return true;
+}
+
+void controlActionForgetLinks(uint8_t actionId) {
+    dropLinksForAction(actionId);
+}
+
+uint8_t controlSweepActionRules() {
+    // ORDER MATTERS: prune first, so a link row pointing at a missing rule can't
+    // be promoted into ruleRef below and resurrect the dangling ref we just fixed.
+    uint8_t repairs = controlPruneActionLinks();
+    for (int s = 0; s < MAX_ACTIONS; s++) {
+        Action& a = actions[s];
+        if (a.id == CONTROL_ID_NONE || a.ruleRef == CONTROL_ID_NONE) continue;
+        if (controlRuleSlot(a.ruleRef) >= 0) continue;
+        // The inline member's Rule is gone. PROMOTE a surviving link row rather
+        // than blanking ruleRef: with links present, ruleRef == NONE would read as
+        // "manual-only" everywhere (controlActionRuleCount short-circuits on it)
+        // and silently strand the remaining members — and hand the action back to
+        // its manual latch, the #294 failure mode.
+        msg.debug.warn(TAG_SYSTEM, "action #%u referenced missing rule #%u",
+                       a.id, a.ruleRef);
+        a.ruleRef = CONTROL_ID_NONE;
+        for (int i = 0; i < MAX_ACTION_LINKS; i++) {
+            if (actionLinks[i].actionId != a.id) continue;
+            a.ruleRef = actionLinks[i].ruleId;
+            actionLinks[i].actionId = CONTROL_ID_NONE;
+            break;
+        }
+        // Whatever drove it is no longer what drives it (#294/#329).
+        controlActionReleaseDrive(a.id);
+        repairs++;
+    }
+    return repairs;
+}
+
+uint8_t controlPruneActionLinks() {
+    uint8_t dropped = 0;
+    for (int i = 0; i < MAX_ACTION_LINKS; i++) {
+        ActionLink& l = actionLinks[i];
+        if (l.actionId == CONTROL_ID_NONE) continue;
+        const int aslot = controlActionSlot(l.actionId);
+        // Drop a row whose action or rule is gone, and one that duplicates the
+        // action's inline member (a hand-edited store / partial JSON import can
+        // produce either; both would otherwise inflate the reported member count).
+        bool drop = (aslot < 0 || controlRuleSlot(l.ruleId) < 0 ||
+                     actions[aslot].ruleRef == l.ruleId);
+        // …and one that duplicates an EARLIER surviving row. Membership is a SET:
+        // controlActionAddRule() can't create a repeat (it is idempotent), but this
+        // sweep exists for stores this firmware did not write. Two identical rows
+        // would make controlActionRuleCount() over-report, and RULE REMOVE clears
+        // only one — so the action stays rule-driven after the operator believes
+        // they removed its last membership for that rule.
+        for (int j = 0; j < i && !drop; j++) {
+            drop = (actionLinks[j].actionId == l.actionId &&
+                    actionLinks[j].ruleId   == l.ruleId);
+        }
+        if (drop) {
+            l.actionId = CONTROL_ID_NONE;
+            dropped++;
+        }
+    }
+    // Postcondition — this is what makes prune-BEFORE-promote sufficient rather
+    // than merely tidy: every surviving row for an action is now distinct from the
+    // other rows AND from that action's inline ruleRef, so the promote step in
+    // controlSweepActionRules() cannot install a ruleRef that collides with a row
+    // it left behind. Duplicates can't be re-introduced after this point.
+    return dropped;
+}
+
+static bool g_actionManual[MAX_ACTIONS];  // commanded state for manual (no member rules) actions
 static bool g_actionState[MAX_ACTIONS];   // last driven logical (pre-invert) state, for LIST
 // Operator override of a rule-driven action (#329). Deliberately a DISTINCT field
 // from g_actionManual so unlinking a rule leaves AUTO and falls through to the
 // already-cleared manual latch — never the stale latch #294 removed. RAM-only:
 // nothing here is persisted, so a forced relay reverts to AUTO on reboot.
 static ActionOverride g_actionOverride[MAX_ACTIONS];
+
+uint8_t controlClearActionsForRule(uint8_t ruleId) {
+    if (ruleId == CONTROL_ID_NONE) return 0;
+    uint8_t released = 0;
+    for (int i = 0; i < MAX_ACTIONS; i++) {
+        if (actions[i].id == CONTROL_ID_NONE) continue;
+        if (!controlActionHasRule(i, ruleId)) continue;
+        // Losing a member must also drop whatever was driving the action, or the
+        // pin snaps to a stale state nobody commanded (#294 / #329) — that is
+        // controlActionRemoveRule()'s job; we only need to report it, so sample
+        // the drive state first.
+        const bool wasDriving = (g_actionOverride[i] != ACT_OVR_AUTO) || g_actionManual[i];
+        controlActionRemoveRule(actions[i].id, ruleId);
+        if (wasDriving) released++;
+    }
+    return released;
+}
 
 // Write a resolved logical state to an action's target, applying inversion.
 static void driveAction(const Action& a, bool on) {
@@ -424,15 +623,45 @@ uint8_t controlSyncActionPins() {
 // loop's `sourceTrustworthy = true` branch for that case.
 static bool sourceFaultedForRuleSlot(int rslot) {
     if (rslot < 0) return false;
+    // A DISABLED rule can never assert, so it must not be able to force a
+    // failsafe either — otherwise it is pure downside: with M:N membership (#343)
+    // `anyFaulted` ORs across members, so one parked rule watching an unconfigured
+    // pin would latch a fail-ON relay on forever, and "disable the rule" (the
+    // natural way to park a member) would not remove its influence.
+    if (!(rules[rslot].flags & RULE_FLAG_ENABLED)) return false;
     Input* in = getInputByPin(rules[rslot].sourceInput);
     return (in == nullptr) || isnan(in->value);
 }
 
 bool controlActionSourceFaulted(int slot) {
     if (slot < 0 || slot >= MAX_ACTIONS) return false;
-    const Action& a = actions[slot];
-    if (a.id == CONTROL_ID_NONE || a.ruleRef == CONTROL_ID_NONE) return false;
-    return sourceFaultedForRuleSlot(controlRuleSlot(a.ruleRef));
+    if (actions[slot].id == CONTROL_ID_NONE) return false;
+    // ANY member's source faulted counts (#343): with several sources, one dead
+    // sensor is exactly the condition an operator needs to see before trusting
+    // what the actuator is doing.
+    const uint8_t n = controlActionRuleCount(slot);
+    for (uint8_t i = 0; i < n; i++) {
+        if (sourceFaultedForRuleSlot(controlRuleSlot(controlActionRuleAt(slot, i)))) return true;
+    }
+    return false;
+}
+
+// Resolve an action's Rule membership into the aggregate the pure resolver takes.
+static ActionDrive resolveActionDrive(int slot) {
+    ActionDrive d{};
+    d.memberCount = controlActionRuleCount(slot);
+    for (uint8_t i = 0; i < d.memberCount; i++) {
+        const int rslot = controlRuleSlot(controlActionRuleAt(slot, i));
+        if (rslot < 0) continue;   // dangling ref (cleared on rule delete): inert,
+                                   // and deliberately NOT a fault — mirrors the
+                                   // pre-#343 sourceTrustworthy=true branch.
+        if (sourceFaultedForRuleSlot(rslot)) {
+            d.anyFaulted = true;   // a faulted source can't assert (NaN never does)
+        } else if (controlRuleIsActive(g_ruleContexts[rslot])) {
+            d.anyActive = true;
+        }
+    }
+    return d;
 }
 
 void controlActionsUpdate(bool configMode) {
@@ -440,30 +669,16 @@ void controlActionsUpdate(bool configMode) {
         Action& a = actions[i];
         if (a.id == CONTROL_ID_NONE) continue;
 
-        bool ruleActive = false;
-        bool sourceTrustworthy = true;
-        if (a.ruleRef != CONTROL_ID_NONE) {
-            int rslot = controlRuleSlot(a.ruleRef);
-            if (rslot < 0) {
-                // dangling ref (shouldn't happen — cleared on rule delete): off
-                ruleActive = false;
-                sourceTrustworthy = true;
-            } else {
-                ruleActive = controlRuleIsActive(g_ruleContexts[rslot]);
-                sourceTrustworthy = !sourceFaultedForRuleSlot(rslot);  // rslot already resolved
-            }
-        }
-
-        bool on = controlActionDesired(a, ruleActive, sourceTrustworthy,
-                                       g_actionManual[i], g_actionOverride[i]);
+        const ActionDrive drive = resolveActionDrive(i);
+        bool on = controlActionDesired(a, drive, g_actionManual[i], g_actionOverride[i]);
 
         // Bench safety: suppress RULE-DRIVEN actuation in CONFIG so a settling /
         // garbage sensor reading can't fire a relay (#268). An explicit manual
-        // action (ruleRef == NONE, driven only by ACTION <id> ON|OFF) is a
+        // action (no member rules, driven only by ACTION <id> ON|OFF) is a
         // deliberate operator command and still actuates in CONFIG — mirrors the
         // legacy setRelayMode() MANUAL behavior (#250). An operator override is
         // the same kind of deliberate command, so it actuates in CONFIG too (#329).
-        if (configMode && a.ruleRef != CONTROL_ID_NONE &&
+        if (configMode && drive.memberCount > 0 &&
             g_actionOverride[i] == ACT_OVR_AUTO) on = false;
 
         g_actionState[i] = on;
@@ -518,7 +733,7 @@ bool controlActionCommand(uint8_t id, bool on) {
     if (slot < 0) return false;
     // One router so the CLI and the BLE write can never diverge: an unlinked
     // action's ON/OFF is the manual latch; a rule-driven one's is an override.
-    if (actions[slot].ruleRef == CONTROL_ID_NONE) {
+    if (controlActionRuleCount(slot) == 0) {
         g_actionManual[slot] = on;
     } else {
         g_actionOverride[slot] = on ? ACT_OVR_FORCE_ON : ACT_OVR_FORCE_OFF;

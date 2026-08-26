@@ -11,6 +11,11 @@
 >   (on a rule-linked Action this is an operator override that outranks both the
 >   rule and the failsafe; `ACTION <id> AUTO` releases it). The override is
 >   RAM-only — it reverts to AUTO on reboot.
+> - `ACTION <id> RULE ADD|REMOVE <ruleId>` — an Action can follow **several**
+>   Rules and runs while *any* of them is active, e.g. one cooling fan demanded
+>   by coolant temp OR trans temp. A live Rule's demand outranks a faulted
+>   sibling sensor, so the failsafe only applies when no healthy member is
+>   asking for the output.
 > - `ACTION LIST` for status
 >
 > Actions add a sensor-loss **failsafe** the old relay engine lacked. Over BLE,

@@ -242,8 +242,8 @@ static_assert(sizeof(PreobdRelayState) == PREOBD_RELAY_STATE_SIZE,
 // Pushed via framed transport (type 0x05, notify) on every Action state/config
 // change, and written by clients to toggle a manual Action.
 //
-// Read-only fields: actionId, type, state, target, ruleRef, behavior, failsafe,
-// overrideFlags.
+// Read-only fields: actionId, type, state, target, ruleRef, ruleCount, behavior,
+// failsafe, overrideFlags.
 // Writable: command (PREOBD_ACTION_CMD_*) — actionId selects the target Action.
 // MANUAL_ON/MANUAL_OFF drive an unlinked Action's manual latch; on a rule-driven
 // Action they instead set an operator override that outranks the Rule and the
@@ -278,7 +278,15 @@ static_assert(sizeof(PreobdRelayState) == PREOBD_RELAY_STATE_SIZE,
 #define PREOBD_ACTION_OVR_AUTO           0
 #define PREOBD_ACTION_OVR_FORCE_ON       1
 #define PREOBD_ACTION_OVR_FORCE_OFF      2
-#define PREOBD_ACTION_OVR_SOURCE_FAULTED 0x04  // bit 2: rule source untrustworthy
+#define PREOBD_ACTION_OVR_SOURCE_FAULTED 0x04  // bit 2: a member rule's source untrustworthy
+
+// ruleCount — how many Rules OR-drive this Action (§11.6, #343). Additive into a
+// previously-reserved byte, so the protocol version stays 2. `ruleRef` remains the
+// FIRST member, so a client that predates this byte still shows a valid link; a
+// client that reads it renders "N rules" and asks SYSTEM DUMP JSON for the list
+// (membership is edited on the text/JSON config plane, not through this frame).
+// A pre-#343 device sends 0 here even for a linked Action — treat
+// `ruleCount == 0 && ruleRef != 0xFF` as "one member" for compatibility.
 
 #ifdef __cplusplus
 
@@ -290,13 +298,14 @@ struct PreobdActionState {
     uint8_t  type;             // Byte 2:      PREOBD_ACTION_TYPE_* (read-only)
     uint8_t  state;            // Byte 3:      PREOBD_ACTION_STATE_* current driven (read-only)
     uint8_t  target;           // Byte 4:      pin / channel (read-only)
-    uint8_t  ruleRef;          // Byte 5:      triggering Rule id, 0xFF = manual (read-only)
+    uint8_t  ruleRef;          // Byte 5:      FIRST member Rule id, 0xFF = manual (read-only)
     uint16_t sequence;         // Bytes 6-7:   Monotonic event counter, wraps at 65535
     uint8_t  behavior;         // Byte 8:      bit0 = invert/active-low (read-only)
     uint8_t  failsafe;         // Byte 9:      PREOBD_ACTION_FAILSAFE_* (RELAY only, read-only)
     uint8_t  command;          // Byte 10:     PREOBD_ACTION_CMD_* (writable; reads back NONE)
     uint8_t  overrideFlags;    // Byte 11:     PREOBD_ACTION_OVR_* (read-only, #329)
-    uint8_t  reserved[4];      // Bytes 12-15: future use
+    uint8_t  ruleCount;        // Byte 12:     member Rules (0 = manual, >1 = OR-driven, #343)
+    uint8_t  reserved[3];      // Bytes 13-15: future use
 };
 
 #pragma pack(pop)

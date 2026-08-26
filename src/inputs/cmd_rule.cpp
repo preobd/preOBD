@@ -147,7 +147,9 @@ static FLASHMEM void printLinkedActions(uint8_t ruleId) {
     bool any = false;
     for (int i = 0; i < MAX_ACTIONS; i++) {
         const Action& a = actions[i];
-        if (a.id == CONTROL_ID_NONE || a.ruleRef != ruleId) continue;
+        // Membership, not just the inline first member (#343) — a rule that is
+        // one of several driving an action must still list it here.
+        if (a.id == CONTROL_ID_NONE || !controlActionHasRule(i, ruleId)) continue;
         if (!any) {
             msg.control.println(F("  Linked actions:"));
             any = true;
@@ -158,6 +160,14 @@ static FLASHMEM void printLinkedActions(uint8_t ruleId) {
         msg.control.print(actionTypeName(a.type));
         msg.control.print(F(" pin"));
         msg.control.print(a.target);
+        // Say when this rule is only one of the things that can fire the action,
+        // so deleting the rule doesn't look like it will free the actuator.
+        const uint8_t members = controlActionRuleCount(i);
+        if (members > 1) {
+            msg.control.print(F("  (1 of "));
+            msg.control.print(members);
+            msg.control.print(F(" rules)"));
+        }
         msg.control.print(F("  -> "));
         msg.control.println(controlActionState(i) ? F("ON") : F("OFF"));
     }

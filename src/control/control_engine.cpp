@@ -154,9 +154,8 @@ RuleSeverity controlRuleAnnunciatorSeverity(const Rule& rule, const RuleContext&
     return RULE_SEV_NONE;
 }
 
-bool controlActionDesired(const Action& action, bool ruleActive,
-                          bool sourceTrustworthy, bool manualState,
-                          ActionOverride override) {
+bool controlActionDesired(const Action& action, const ActionDrive& drive,
+                          bool manualState, ActionOverride override) {
     // Operator override outranks everything, including the failsafe (#329): a
     // deliberate FORCE is the tool of last resort when the sensor is exactly what
     // died. The manager reports the held-against-a-faulted-source case loudly on
@@ -164,16 +163,22 @@ bool controlActionDesired(const Action& action, bool ruleActive,
     if (override == ACT_OVR_FORCE_ON)  return true;
     if (override == ACT_OVR_FORCE_OFF) return false;
     // Manual-only: driven solely by explicit ON/OFF.
-    if (action.ruleRef == CONTROL_ID_NONE) {
+    if (drive.memberCount == 0) {
         return manualState;
     }
-    // Untrustworthy source → a RELAY assumes its failsafe state (§11.3); other
-    // action types simply de-assert when their rule can't be evaluated.
-    if (!sourceTrustworthy) {
+    // OR over members (§11.6): any live rule demanding the actuator wins — and it
+    // is evaluated BEFORE the failsafe, so a second, healthy sensor still holds a
+    // cooling fan on when its sibling's sensor dies.
+    if (drive.anyActive) {
+        return true;
+    }
+    // No live demand, and at least one member can't be evaluated → a RELAY assumes
+    // its failsafe state (§11.3); other action types simply de-assert.
+    if (drive.anyFaulted) {
         if (action.type == ACT_RELAY) {
             return action.failsafe == ACT_FAILSAFE_ON;
         }
         return false;
     }
-    return ruleActive;
+    return false;
 }

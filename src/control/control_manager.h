@@ -45,11 +45,12 @@ int     controlRuleFreeSlot();          // first empty slot, or -1 if full
 uint8_t controlRuleAllocId();           // smallest unused id, or CONTROL_ID_NONE if exhausted
 uint8_t controlRuleCount();             // number of configured rules
 
-// Clear any Action.ruleRef pointing at `ruleId` (referential integrity on rule
-// delete — those actions revert to manual-only). Called from RULE DEL.
-// Revert every Action referring to `ruleId` to manual-only and release whatever
-// was driving it. Returns how many were actively driven (override or manual latch)
-// at the time, so the caller can say so rather than silently de-energizing a relay.
+// Referential integrity on rule delete: drop `ruleId` from every Action's Rule
+// membership and release whatever was driving those Actions. An Action that had
+// other member Rules keeps them and keeps following them; one left with none
+// reverts to manual-only. Returns how many were actively driven (override or
+// manual latch) at the time, so the caller can say so rather than silently
+// de-energizing a relay. Called from RULE DEL / SET <pin> ALARM OFF.
 uint8_t controlClearActionsForRule(uint8_t ruleId);
 
 // --- application default-Rule template (§11.5) ---
@@ -132,11 +133,51 @@ void controlActionsUpdate(bool configMode);
 // Current driven (logical, pre-invert) state of the action in `slot`, for LIST.
 bool controlActionState(int slot);
 
-// True when the action in `slot` is rule-driven and its rule's source input is
-// untrustworthy (missing or NaN). Shared by the evaluation loop and by the CLI /
-// BLE reporting paths so an override held against a dead sensor is never silent
-// (#329). Manual-only and dangling-ref actions report false.
+// True when the action in `slot` is rule-driven and ANY member rule's source
+// input is untrustworthy (missing or NaN). Shared by the evaluation loop and by
+// the CLI / BLE reporting paths so an override held against a dead sensor is
+// never silent (#329). Manual-only and dangling-ref actions report false.
 bool controlActionSourceFaulted(int slot);
+
+// --- Rule<->Action membership (M:N, §11.6 / #343) ---
+// An Action is OR-driven by its member Rules: active while ANY member is active.
+// The first member is stored inline in Action.ruleRef and the rest in
+// actionLinks[], but NOTHING outside control_manager.cpp should care — read
+// membership through these accessors, never off Action.ruleRef.
+uint8_t controlActionRuleCount(int slot);              // 0 = manual-only
+uint8_t controlActionRuleAt(int slot, uint8_t index);  // member `index`, or CONTROL_ID_NONE
+bool    controlActionHasRule(int slot, uint8_t ruleId);
+uint8_t controlActionLinkCount();                      // occupied actionLinks[] rows (for SAVE)
+
+// Mutators. Each RELEASES the action's override + manual latch (the driver
+// changed — #294/#329 invariant), so the action starts de-asserted. Optional
+// `wasDriving` receives whether that release actually dropped a live drive, so a
+// caller can report a relay it just de-energized rather than doing it silently
+// (and can avoid claiming a release that never happened). A rejected call
+// (false) mutates nothing and never releases.
+bool    controlActionAddRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving = nullptr);     // false = unknown ids / link table full
+bool    controlActionRemoveRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving = nullptr);  // false = not a member
+bool    controlActionSetRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving = nullptr);     // membership := exactly {ruleId}
+bool    controlActionClearRules(uint8_t actionId);                  // → manual-only; returns "was driving"
+
+// Free an action's link rows WITHOUT touching its drive state — for ACTION DEL,
+// where the record itself is going away (the pin is de-asserted separately).
+void    controlActionForgetLinks(uint8_t actionId);
+
+// Repair Rule membership after a bulk table load (EEPROM store, JSON import),
+// where an Action may reference a Rule that didn't load (truncated store,
+// smaller-cap build, hand-edited config, rules-only import). Drops dangling /
+// duplicate link rows, and promotes a surviving member when the inline one is
+// the casualty — so the engine never evaluates a dangling ref and a multi-member
+// action never silently degrades to manual. Returns the number of repairs (each
+// also logged); call before re-arming. Releases the drive on any action it
+// repairs (#294/#329).
+uint8_t controlSweepActionRules();
+
+// The link-table half of the sweep, exposed for callers that only touch links.
+// Drops rows that are dangling (unknown action/rule) or duplicate an action's
+// inline member. Returns how many were dropped.
+uint8_t controlPruneActionLinks();
 
 // --- action table helpers (operate on actions[]) ---
 int     controlActionSlot(uint8_t id);

@@ -41,7 +41,8 @@ void packState(int i, PreobdActionState& s) {
     s.state    = controlActionState(i) ? PREOBD_ACTION_STATE_ON
                                        : PREOBD_ACTION_STATE_OFF;
     s.target   = a.target;
-    s.ruleRef  = a.ruleRef;   // PREOBD_ACTION_ID_NONE (0xFF) == manual
+    s.ruleRef   = a.ruleRef;   // PREOBD_ACTION_ID_NONE (0xFF) == manual
+    s.ruleCount = controlActionRuleCount(i);  // >1 = OR-driven by several Rules (#343)
     s.behavior = a.behavior;
     s.failsafe = a.failsafe;
     s.command  = PREOBD_ACTION_CMD_NONE;
@@ -62,7 +63,8 @@ bool sameIgnoringSequence(const PreobdActionState& a, const PreobdActionState& b
            a.state == b.state && a.target == b.target &&
            a.ruleRef == b.ruleRef && a.behavior == b.behavior &&
            a.failsafe == b.failsafe &&
-           a.overrideFlags == b.overrideFlags;  // else an override/fault change never pushes
+           a.overrideFlags == b.overrideFlags &&  // else an override/fault change never pushes
+           a.ruleCount == b.ruleCount;           // …or a membership edit (#343)
 }
 
 } // namespace

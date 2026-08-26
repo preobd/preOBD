@@ -315,6 +315,82 @@ static void test_action_failsafe_defaults_off(void) {
     TEST_ASSERT_EQUAL_UINT8(CONTROL_ID_NONE, out.ruleRef);
 }
 
+
+// --- Multi-rule membership (#343) ---------------------------------------
+
+// A multi-member Action exports "rules" AND keeps "rule" = rules[0], so a reader
+// that predates the key still sees a working single link rather than a manual
+// action. Import hands the caller members 2..N to link separately.
+static void test_action_multi_rule_roundtrip(void) {
+    Action in = makeAction(ACT_RELAY, 13, 3);
+    const uint8_t membersIn[] = {3, 7, 11};
+
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    controlExportAction(o, in, membersIn, 3);
+    TEST_ASSERT_EQUAL_UINT8(3, o["rule"].as<uint8_t>());
+    TEST_ASSERT_EQUAL_INT(3, (int)o["rules"].as<JsonArrayConst>().size());
+
+    char buf[512];
+    serializeJson(doc, buf, sizeof(buf));
+    JsonDocument doc2;
+    deserializeJson(doc2, buf);
+
+    Action out{};
+    uint8_t extra[8] = {0};
+    uint8_t nExtra = 0;
+    TEST_ASSERT_TRUE(controlImportAction(doc2.as<JsonObjectConst>(), out, extra, 8, &nExtra));
+    TEST_ASSERT_EQUAL_UINT8(3, out.ruleRef);   // first member stays inline
+    TEST_ASSERT_EQUAL_UINT8(2, nExtra);
+    TEST_ASSERT_EQUAL_UINT8(7, extra[0]);
+    TEST_ASSERT_EQUAL_UINT8(11, extra[1]);
+}
+
+// A single-member Action stays on the old shape — no "rules" key at all.
+static void test_action_single_member_omits_rules_array(void) {
+    Action in = makeAction(ACT_RELAY, 13, 3);
+    const uint8_t membersIn[] = {3};
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    controlExportAction(o, in, membersIn, 1);
+    TEST_ASSERT_TRUE(o["rules"].isNull());
+    TEST_ASSERT_EQUAL_UINT8(3, o["rule"].as<uint8_t>());
+}
+
+// A pre-#343 config (only "rule") still imports as a one-member action.
+static void test_action_legacy_rule_key_still_imports(void) {
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    o["id"] = 4; o["type"] = "RELAY"; o["target"] = 9; o["rule"] = 6;
+    Action out{};
+    uint8_t extra[4] = {0};
+    uint8_t nExtra = 99;
+    TEST_ASSERT_TRUE(controlImportAction(doc.as<JsonObjectConst>(), out, extra, 4, &nExtra));
+    TEST_ASSERT_EQUAL_UINT8(6, out.ruleRef);
+    TEST_ASSERT_EQUAL_UINT8(0, nExtra);
+}
+
+// An empty "rules" array is manual-only, and the 0xFF sentinel is never a member.
+static void test_action_rules_array_edge_cases(void) {
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    o["id"] = 4; o["type"] = "RELAY"; o["target"] = 9;
+    o["rules"].to<JsonArray>();
+    Action out{};
+    TEST_ASSERT_TRUE(controlImportAction(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_EQUAL_UINT8(CONTROL_ID_NONE, out.ruleRef);
+
+    JsonDocument doc2;
+    JsonObject o2 = doc2.to<JsonObject>();
+    o2["id"] = 4; o2["type"] = "RELAY"; o2["target"] = 9;
+    JsonArray arr = o2["rules"].to<JsonArray>();
+    arr.add(CONTROL_ID_NONE);
+    arr.add(2);
+    Action out2{};
+    TEST_ASSERT_TRUE(controlImportAction(doc2.as<JsonObjectConst>(), out2));
+    TEST_ASSERT_EQUAL_UINT8(2, out2.ruleRef);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_rule_outside_band_roundtrip);
@@ -336,5 +412,9 @@ int main(int, char**) {
     RUN_TEST(test_action_import_missing_type_rejected);
     RUN_TEST(test_action_import_bad_type_rejected);
     RUN_TEST(test_action_failsafe_defaults_off);
+    RUN_TEST(test_action_multi_rule_roundtrip);
+    RUN_TEST(test_action_single_member_omits_rules_array);
+    RUN_TEST(test_action_legacy_rule_key_still_imports);
+    RUN_TEST(test_action_rules_array_edge_cases);
     return UNITY_END();
 }

@@ -565,14 +565,28 @@ RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARNING|ALARM|NONE]   # one-sided
 RULE ADD <pin> OUTSIDE <lo> <hi> [HYST <w>] [WARNING|ALARM|NONE]     # both-sided band
 RULE LIST                         # all Rules + live state (READY/ACTIVE) + severity
 RULE <id>                         # one Rule's detail
-RULE DEL <id>                     # delete (referring Actions revert to manual)
+RULE DEL <id>                     # delete (drops it from every Action's membership)
 RULE RESET <id>                   # restore config from the application default + re-arm
 
 ACTION ADD RELAY <pin> [FAILSAFE ON|OFF] [INVERT]   # actuator (failsafe on sensor loss)
-ACTION <id> RULE <ruleId|NONE>    # link to a Rule (NONE = manual-only)
+ACTION <id> RULE <ruleId|NONE>    # membership := exactly that Rule (NONE = manual-only)
+ACTION <id> RULE ADD <ruleId>     # add a member Rule (the Action is OR-driven)
+ACTION <id> RULE REMOVE <ruleId>  # drop one member Rule
+ACTION <id> NAME <text>           # operator label, e.g. "Cooling Fan"
 ACTION <id> ON|OFF                # manual override (RUN-mode allowed)
+ACTION <id> AUTO                  # release an operator override
 ACTION LIST | ACTION <id> | ACTION DEL <id>
 ```
+
+**An Action can follow several Rules** (§11.6): it is asserted while **any**
+member Rule is active, so one cooling fan can be demanded by coolant temp, trans
+temp and an A/C request at once. `ACTION <id> RULE <ruleId>` *replaces* the whole
+membership; use `RULE ADD` to keep the existing members. Every membership change
+releases the Action to AUTO and starts it OFF.
+
+With several sources, a **live member's demand outranks a faulted sibling**: if one
+sensor dies while another is legitimately calling for the output, the output stays
+on. The `FAILSAFE` state applies only when no healthy member is demanding it.
 
 Severity: `NONE` = control-only (drives Actions, no annunciation); `WARNING` =
 indicator + log + BLE, no buzzer; `ALARM` = + buzzer. An ALARM Rule also raises a

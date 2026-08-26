@@ -28,13 +28,21 @@ uint8_t numActiveInputs = 0;
 // One arena holds every persisted record table, packed after a single header at
 // address 0:
 //   [ConfigStoreHeader] [InputEEPROM × numInputs] [Rule × numRules] [Action × numActions]
+//   [ActionLink × numLinks]
 //
 // The SystemConfig block is anchored at the BACK of EEPROM (system_config.h); the
 // arena grows forward toward it. All record tables draw from ONE shared budget —
 // when the arena would collide with SystemConfig, trailing sections truncate
-// LOUDLY in priority order inputs > rules > actions (a rule needs its source
-// input to evaluate; an action needs its rule). This generalizes the original
-// input-only truncation to the whole store (#296).
+// LOUDLY in priority order inputs > rules > actions > links (a rule needs its
+// source input to evaluate; an action needs its rule; a link needs both ends).
+// This generalizes the original input-only truncation to the whole store (#296).
+//
+// The trailing ActionLink section (2nd+ rule memberships, #343) was ADDED without
+// an EEPROM_VERSION bump, and that is safe for exactly two reasons: its count
+// lives in a header byte every prior firmware explicitly zeroed at save, and the
+// checksum covers only record bytes — so a pre-#343 store reads numLinks == 0 and
+// re-checksums identically. Do NOT reuse another reserved byte without re-checking
+// both of those.
 //
 // IMPORTANT: inputs store hashes (not registry indices) for stability — registry
 // indices shift when entries are reordered, hashes don't; resolved back at boot.
@@ -55,8 +63,10 @@ struct ConfigStoreHeader {
     uint8_t  numRules;
     uint8_t  numActions;
     uint8_t  checksum;     // XOR over every persisted record byte (all sections)
-    uint8_t  reserved[6];  // future record-type counts; fills the struct to exactly 16 bytes
-                           // (4+2+4+6) so there are NO indeterminate pad bytes on any platform
+    uint8_t  numLinks;     // ActionLink rows (#343) — a former reserved byte, always
+                           // zeroed by prior firmware, so old stores read 0 (see above)
+    uint8_t  reserved[5];  // future record-type counts; fills the struct to exactly 16 bytes
+                           // (4+2+5+5) so there are NO indeterminate pad bytes on any platform
 };
 
 // InputEEPROM - Compact struct for EEPROM storage
@@ -105,6 +115,11 @@ struct InputEEPROM {
 // lower (handled dynamically by fitSection() below). Independent of MAX_INPUTS
 // (a RAM limit) — on small-EEPROM platforms (e.g. Teensy 4.0) the user can
 // configure more records in RAM than will persist; the store truncates loudly.
+// The header is a fixed 16 bytes on every platform; the #343 numLinks byte came
+// out of `reserved`, so this must NOT have changed (it is what lets a pre-#343
+// store keep its section offsets).
+static_assert(sizeof(ConfigStoreHeader) == 16, "ConfigStoreHeader must stay exactly 16 bytes");
+
 constexpr size_t MAX_EEPROM_INPUTS =
     (SYSTEM_CONFIG_ADDRESS - sizeof(ConfigStoreHeader)) / sizeof(InputEEPROM);
 static_assert(MAX_EEPROM_INPUTS >= 1,
@@ -259,6 +274,8 @@ bool saveInputConfig() {
     remaining -= (size_t)persistRules * sizeof(Rule);
     uint8_t persistActions = fitSection(remaining, controlActionCount(), sizeof(Action), F("actions"));
     remaining -= (size_t)persistActions * sizeof(Action);
+    uint8_t persistLinks = fitSection(remaining, controlActionLinkCount(), sizeof(ActionLink), F("rule links"));
+    remaining -= (size_t)persistLinks * sizeof(ActionLink);
 #endif
 
     // Write records, accumulating a checksum over exactly the bytes stored.
@@ -276,7 +293,7 @@ bool saveInputConfig() {
         savedInputs++;
     }
 
-    uint8_t savedRules = 0, savedActions = 0;
+    uint8_t savedRules = 0, savedActions = 0, savedLinks = 0;
 #if ENABLE_CONTROL_ENGINE
     for (int i = 0; i < MAX_RULES && savedRules < persistRules; i++) {
         if (rules[i].id == CONTROL_ID_NONE) continue;
@@ -292,6 +309,15 @@ bool saveInputConfig() {
         addr += sizeof(Action);
         savedActions++;
     }
+    // Links last: a row whose action didn't fit is dropped by the load-time prune,
+    // so an over-full store degrades to "some memberships lost", never a dangling ref.
+    for (int i = 0; i < MAX_ACTION_LINKS && savedLinks < persistLinks; i++) {
+        if (actionLinks[i].actionId == CONTROL_ID_NONE) continue;
+        EEPROM.put(addr, actionLinks[i]);
+        checksum ^= xorBytes(&actionLinks[i], sizeof(ActionLink));
+        addr += sizeof(ActionLink);
+        savedLinks++;
+    }
 #endif
 
     ConfigStoreHeader header;
@@ -300,6 +326,7 @@ bool saveInputConfig() {
     header.numInputs = savedInputs;
     header.numRules = savedRules;
     header.numActions = savedActions;
+    header.numLinks = savedLinks;
     header.checksum = checksum;
     memset(header.reserved, 0, sizeof(header.reserved));
     EEPROM.put(0, header);
@@ -313,6 +340,11 @@ bool saveInputConfig() {
     msg.control.print(F(" rules, "));
     msg.control.print(savedActions);
     msg.control.print(F(" actions"));
+    if (savedLinks > 0) {
+        msg.control.print(F(", "));
+        msg.control.print(savedLinks);
+        msg.control.print(F(" rule links"));
+    }
 #endif
     msg.control.println(F(" to EEPROM"));
     msg.debug.debug(TAG_CONFIG, "Checksum: 0x%02X", checksum);
@@ -349,6 +381,7 @@ bool loadInputConfig() {
 #if ENABLE_CONTROL_ENGINE
                        + (size_t)header.numRules   * sizeof(Rule)
                        + (size_t)header.numActions * sizeof(Action)
+                       + (size_t)header.numLinks   * sizeof(ActionLink)
 #endif
                        ;
     if (storedBytes > SYSTEM_CONFIG_ADDRESS) return false;
@@ -375,6 +408,12 @@ bool loadInputConfig() {
             Action ac; EEPROM.get(a, ac);
             checksum ^= xorBytes(&ac, sizeof(Action));
             a += sizeof(Action);
+        }
+        // numLinks is 0 in any store written before #343 — see the layout note.
+        for (uint8_t i = 0; i < header.numLinks; i++) {
+            ActionLink l; EEPROM.get(a, l);
+            checksum ^= xorBytes(&l, sizeof(ActionLink));
+            a += sizeof(ActionLink);
         }
 #endif
     }
@@ -426,20 +465,28 @@ bool loadInputConfig() {
     for (uint8_t i = 0; i < nActions; i++)
         EEPROM.get(actionsBase + (size_t)i * sizeof(Action), actions[i]);
 
-    // Dangling-ref sweep (#296 S3): a truncated or hand-edited store may leave an
-    // Action pointing at a Rule that didn't load — revert it to manual-only,
-    // mirroring the RULE DEL invariant and the JSON import path, so the engine
-    // never evaluates a dangling ref. (Re-arming is the caller's job — boot does
-    // it via controlManagerInit; LOAD via the re-arm trio in cmd_load.)
-    for (int i = 0; i < MAX_ACTIONS; i++) {
-        Action& a = actions[i];
-        if (a.id != CONTROL_ID_NONE && a.ruleRef != CONTROL_ID_NONE &&
-            controlRuleSlot(a.ruleRef) < 0) {
-            msg.debug.warn(TAG_CONFIG, "action #%u referenced missing rule #%u; reverted to manual",
-                           a.id, a.ruleRef);
-            a.ruleRef = CONTROL_ID_NONE;
-        }
+    const size_t linksBase = actionsBase + (size_t)header.numActions * sizeof(Action);
+    uint8_t nLinks = header.numLinks;
+    if (nLinks > MAX_ACTION_LINKS) {
+        // A dropped membership is a relay that quietly stops responding to one of
+        // its sensors — worse than a dropped rule, and SAVE warns loudly via
+        // fitSection while LOAD historically said nothing. Say it here (#343).
+        // F()/msg.control, NOT msg.debug: a debug format string is RAM-resident on
+        // AVR (message_api.h) and this one cost mega2560 54 B of an 8 KB budget.
+        msg.control.print(F("⚠ EEPROM holds more rule links than this board can hold ("));
+        msg.control.print((unsigned)MAX_ACTION_LINKS);
+        msg.control.println(F("); extra memberships dropped"));
+        nLinks = MAX_ACTION_LINKS;
     }
+    for (uint8_t i = 0; i < nLinks; i++)
+        EEPROM.get(linksBase + (size_t)i * sizeof(ActionLink), actionLinks[i]);
+
+    // Dangling-ref sweep (#296 S3, extended to link rows by #343): a truncated or
+    // hand-edited store may leave an Action referencing a Rule that didn't load.
+    // controlSweepActionRules() repairs both halves of the membership so the
+    // engine never evaluates a dangling ref. (Re-arming is the caller's job — boot
+    // does it via controlManagerInit; LOAD via the re-arm trio in cmd_load.)
+    controlSweepActionRules();
 #endif
 
     // Terse info string (RAM-resident on AVR); the SAVE confirmation already

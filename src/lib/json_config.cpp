@@ -299,7 +299,15 @@ void exportActionsToJSON(JsonArray& actionsArray) {
     for (int i = 0; i < MAX_ACTIONS; i++) {
         if (actions[i].id == CONTROL_ID_NONE) continue;
         JsonObject actionObj = actionsArray.add<JsonObject>();
-        controlExportAction(actionObj, actions[i]);
+        // Emit the full Rule membership (#343), not just the inline first member.
+        // Size by the real bound on controlActionRuleCount() — one inline member
+        // plus at most MAX_ACTION_LINKS rows. MAX_RULES is a DIFFERENT knob
+        // (mega2560: RULES 2, LINKS 2 → a count of 3 is representable), and
+        // clamping to it would silently truncate the export instead of failing.
+        uint8_t members[MAX_ACTION_LINKS + 1];
+        const uint8_t n = controlActionRuleCount(i);
+        for (uint8_t m = 0; m < n; m++) members[m] = controlActionRuleAt(i, m);
+        controlExportAction(actionObj, actions[i], members, n);
     }
 }
 #endif // ENABLE_CONTROL_ENGINE
@@ -841,6 +849,7 @@ void importRulesFromJSON(JsonArrayConst rulesArray) {
 
 void importActionsFromJSON(JsonArrayConst actionsArray) {
     for (int i = 0; i < MAX_ACTIONS; i++) actions[i].id = CONTROL_ID_NONE;
+    for (int i = 0; i < MAX_ACTION_LINKS; i++) actionLinks[i].actionId = CONTROL_ID_NONE;
     int slot = 0;
     for (JsonObjectConst actionObj : actionsArray) {
         if (slot >= MAX_ACTIONS) {
@@ -848,8 +857,18 @@ void importActionsFromJSON(JsonArrayConst actionsArray) {
             break;
         }
         Action a{};
-        if (controlImportAction(actionObj, a)) {
+        uint8_t extra[MAX_ACTION_LINKS];
+        uint8_t nExtra = 0;
+        if (controlImportAction(actionObj, a, extra, MAX_ACTION_LINKS, &nExtra)) {
             actions[slot++] = a;
+            // 2nd+ memberships need the action in the table first (they are keyed
+            // by its id), so add them after the record lands (#343).
+            for (uint8_t e = 0; e < nExtra; e++) {
+                if (!controlActionAddRule(a.id, extra[e])) {
+                    msg.debug.warn(TAG_JSON, "action #%u: rule link table full; rule #%u dropped",
+                                   a.id, extra[e]);
+                }
+            }
         } else {
             msg.debug.warn(TAG_JSON, "skipped invalid action record");
         }
@@ -924,20 +943,11 @@ bool loadConfigFromJSON(const char* jsonString) {
     if (controlChanged) {
         // Referential integrity: an Action may now reference a Rule id absent
         // from the (possibly only partially re-imported) rule table — a
-        // rules-only / actions-only payload, or a hand-edited config. Revert
-        // those to manual-only, mirroring the RULE DEL invariant
-        // (controlClearActionsForRule), before re-arm so the engine never
-        // evaluates a dangling ref.
-        for (int i = 0; i < MAX_ACTIONS; i++) {
-            Action& a = actions[i];
-            if (a.id != CONTROL_ID_NONE && a.ruleRef != CONTROL_ID_NONE &&
-                controlRuleSlot(a.ruleRef) < 0) {
-                msg.debug.warn(TAG_JSON,
-                               "action #%u referenced missing rule #%u; reverted to manual",
-                               a.id, a.ruleRef);
-                a.ruleRef = CONTROL_ID_NONE;
-            }
-        }
+        // rules-only / actions-only payload, or a hand-edited config. The shared
+        // sweep drops those references (and any dangling link rows, #343),
+        // promoting a surviving member where it can, before re-arm — so the
+        // engine never evaluates a dangling ref.
+        controlSweepActionRules();
         controlManagerInit(millis());
         controlActionsInit();
         controlSyncActionPins();  // re-claim imported action pins (registry already populated)

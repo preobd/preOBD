@@ -202,6 +202,7 @@ RULE ADD <pin> OUTSIDE <lo> <hi> [WARNING|ALARM]                # both-sided ban
 RULE LIST | RULE <id> | RULE DEL <id> | RULE RESET <id>         # RESET = app defaults
 ACTION ADD RELAY <outpin> [FAILSAFE ON|OFF] [INVERT]           # an actuator (relay/GPIO)
 ACTION <id> RULE <ruleId>                                       # drive it from a Rule
+ACTION <id> RULE ADD|REMOVE <ruleId>                            # several Rules can drive one Action
 ACTION <id> ON|OFF                                             # manual override (RUN-ok)
 ACTION LIST | ACTION DEL <id>
 ```

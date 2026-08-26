@@ -289,6 +289,18 @@ static void test_annun_outside_band_negative_low_edge(void) {
 
 // --- Action resolution -------------------------------------------------
 
+// Membership aggregates the manager hands the resolver. `linked()` is the
+// pre-#343 single-member shape: a faulted source can never be anyActive (NaN
+// never asserts), which is what keeps these cases identical to the old
+// (ruleActive, sourceTrustworthy) pair.
+static ActionDrive manualOnly() { return ActionDrive{0, false, false}; }
+static ActionDrive linked(bool ruleActive, bool trustworthy) {
+    return ActionDrive{1, trustworthy && ruleActive, !trustworthy};
+}
+static ActionDrive members(uint8_t n, bool anyActive, bool anyFaulted) {
+    return ActionDrive{n, anyActive, anyFaulted};
+}
+
 static Action makeAction(uint8_t type, uint8_t ruleRef, uint8_t failsafe = ACT_FAILSAFE_OFF) {
     Action a{};
     a.id = 0;
@@ -302,28 +314,28 @@ static Action makeAction(uint8_t type, uint8_t ruleRef, uint8_t failsafe = ACT_F
 
 static void test_action_manual_follows_manual_state(void) {
     Action a = makeAction(ACT_RELAY, CONTROL_ID_NONE);
-    // ruleActive / sourceTrustworthy are ignored for a manual action
-    TEST_ASSERT_TRUE(controlActionDesired(a, false, false, true, ACT_OVR_AUTO));
-    TEST_ASSERT_FALSE(controlActionDesired(a, true, true, false, ACT_OVR_AUTO));
+    // rule state is ignored for a manual action
+    TEST_ASSERT_TRUE(controlActionDesired(a, manualOnly(), true, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(controlActionDesired(a, manualOnly(), false, ACT_OVR_AUTO));
 }
 
 static void test_action_follows_rule_when_trustworthy(void) {
     Action a = makeAction(ACT_RELAY, 5);  // linked to rule id 5
-    TEST_ASSERT_TRUE(controlActionDesired(a, true, true, false, ACT_OVR_AUTO));
-    TEST_ASSERT_FALSE(controlActionDesired(a, false, true, false, ACT_OVR_AUTO));
+    TEST_ASSERT_TRUE(controlActionDesired(a, linked(true, true), false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(controlActionDesired(a, linked(false, true), false, ACT_OVR_AUTO));
 }
 
 static void test_action_relay_failsafe_on_untrustworthy(void) {
     Action aOn  = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
     Action aOff = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_OFF);
     // source untrustworthy: ignore ruleActive, assume failsafe
-    TEST_ASSERT_TRUE(controlActionDesired(aOn,  false, false, false, ACT_OVR_AUTO));
-    TEST_ASSERT_FALSE(controlActionDesired(aOff, true,  false, false, ACT_OVR_AUTO));
+    TEST_ASSERT_TRUE(controlActionDesired(aOn,  linked(false, false), false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(controlActionDesired(aOff, linked(true,  false), false, ACT_OVR_AUTO));
 }
 
 static void test_action_nonrelay_deasserts_on_untrustworthy(void) {
     Action a = makeAction(ACT_LED, 5, ACT_FAILSAFE_ON);  // failsafe ignored for non-RELAY
-    TEST_ASSERT_FALSE(controlActionDesired(a, true, false, false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(controlActionDesired(a, linked(true, false), false, ACT_OVR_AUTO));
 }
 
 // --- Operator override (#329) ------------------------------------------
@@ -331,8 +343,8 @@ static void test_action_nonrelay_deasserts_on_untrustworthy(void) {
 // An override beats the Rule outright, in both directions.
 static void test_action_override_beats_rule(void) {
     Action a = makeAction(ACT_RELAY, 5);
-    TEST_ASSERT_TRUE(controlActionDesired(a, false, true, false, ACT_OVR_FORCE_ON));
-    TEST_ASSERT_FALSE(controlActionDesired(a, true, true, false, ACT_OVR_FORCE_OFF));
+    TEST_ASSERT_TRUE(controlActionDesired(a, linked(false, true), false, ACT_OVR_FORCE_ON));
+    TEST_ASSERT_FALSE(controlActionDesired(a, linked(true, true), false, ACT_OVR_FORCE_OFF));
 }
 
 // THE decision this issue turned on: a forced state also beats the FAILSAFE. If
@@ -340,27 +352,27 @@ static void test_action_override_beats_rule(void) {
 // must not be able to countermand a deliberate force. Both failsafe polarities.
 static void test_action_override_beats_failsafe(void) {
     Action failOff = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_OFF);
-    TEST_ASSERT_TRUE(controlActionDesired(failOff, false, /*trustworthy*/false, false,
+    TEST_ASSERT_TRUE(controlActionDesired(failOff, linked(false, /*trustworthy*/false), false,
                                           ACT_OVR_FORCE_ON));
     Action failOn = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
-    TEST_ASSERT_FALSE(controlActionDesired(failOn, true, /*trustworthy*/false, false,
+    TEST_ASSERT_FALSE(controlActionDesired(failOn, linked(true, /*trustworthy*/false), false,
                                            ACT_OVR_FORCE_OFF));
 }
 
 // AUTO is exactly today's behavior — the override tier must be inert by default.
 static void test_action_override_auto_is_transparent(void) {
     Action a = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
-    TEST_ASSERT_TRUE(controlActionDesired(a, true, true, false, ACT_OVR_AUTO));
-    TEST_ASSERT_FALSE(controlActionDesired(a, false, true, false, ACT_OVR_AUTO));
-    TEST_ASSERT_TRUE(controlActionDesired(a, false, false, false, ACT_OVR_AUTO));  // failsafe
+    TEST_ASSERT_TRUE(controlActionDesired(a, linked(true, true), false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(controlActionDesired(a, linked(false, true), false, ACT_OVR_AUTO));
+    TEST_ASSERT_TRUE(controlActionDesired(a, linked(false, false), false, ACT_OVR_AUTO));  // failsafe
 }
 
 // An override on an unlinked action wins over the manual latch too (the CLI/BLE
 // router never sets one there, but the resolution order must be unambiguous).
 static void test_action_override_beats_manual_latch(void) {
     Action a = makeAction(ACT_RELAY, CONTROL_ID_NONE);
-    TEST_ASSERT_TRUE(controlActionDesired(a, false, true, /*manual*/false, ACT_OVR_FORCE_ON));
-    TEST_ASSERT_FALSE(controlActionDesired(a, false, true, /*manual*/true, ACT_OVR_FORCE_OFF));
+    TEST_ASSERT_TRUE(controlActionDesired(a, manualOnly(), /*manual*/false, ACT_OVR_FORCE_ON));
+    TEST_ASSERT_FALSE(controlActionDesired(a, manualOnly(), /*manual*/true, ACT_OVR_FORCE_OFF));
 }
 
 // #294 regression, at the resolution layer. The manager's controlActionReleaseDrive()
@@ -369,16 +381,63 @@ static void test_action_override_beats_manual_latch(void) {
 // action that is rule-driven ignores the latch entirely, so a latch left armed is
 // invisible until the link goes away -- and then drives the pin with no command.
 static void test_action_stale_manual_latch_would_snap_on_after_unlink(void) {
-    Action linked = makeAction(ACT_RELAY, 5);
+    Action linkedAction = makeAction(ACT_RELAY, 5);
     // While linked, a stale latch is correctly ignored: rule says off, output off.
-    TEST_ASSERT_FALSE(controlActionDesired(linked, false, true, /*manual*/true, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(controlActionDesired(linkedAction, linked(false, true), /*manual*/true, ACT_OVR_AUTO));
     // Unlink it with that latch still set and the pin snaps ON, uncommanded. This
     // is the failure mode; the fix is that no code path may reach here with the
     // latch armed, because every link change releases it.
     Action unlinked = makeAction(ACT_RELAY, CONTROL_ID_NONE);
-    TEST_ASSERT_TRUE(controlActionDesired(unlinked, false, true, /*manual*/true, ACT_OVR_AUTO));
+    TEST_ASSERT_TRUE(controlActionDesired(unlinked, manualOnly(), /*manual*/true, ACT_OVR_AUTO));
     // Released (the invariant controlActionReleaseDrive maintains) -> stays off.
-    TEST_ASSERT_FALSE(controlActionDesired(unlinked, false, true, /*manual*/false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(controlActionDesired(unlinked, manualOnly(), /*manual*/false, ACT_OVR_AUTO));
+}
+
+
+// --- Multi-rule membership (#343) --------------------------------------
+
+// The issue's motivating case: a cooling fan several sensors can demand. Any one
+// active member asserts the output; all quiet -> off.
+static void test_action_or_combines_members(void) {
+    Action fan = makeAction(ACT_RELAY, 5);
+    TEST_ASSERT_TRUE(controlActionDesired(fan, members(3, /*anyActive*/true, false), false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(controlActionDesired(fan, members(3, /*anyActive*/false, false), false, ACT_OVR_AUTO));
+}
+
+// THE multi-source failsafe decision: a live member's demand outranks a dead
+// sibling's unknown. One broken sensor must not cut a fan a healthy sensor is
+// legitimately calling for -- in BOTH failsafe polarities.
+static void test_action_live_member_outranks_faulted_sibling(void) {
+    Action failOff = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_OFF);
+    TEST_ASSERT_TRUE(controlActionDesired(failOff, members(2, /*anyActive*/true, /*anyFaulted*/true),
+                                          false, ACT_OVR_AUTO));
+    Action failOn = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
+    TEST_ASSERT_TRUE(controlActionDesired(failOn, members(2, true, true), false, ACT_OVR_AUTO));
+}
+
+// With no live demand at all, a faulted member still puts a RELAY in its failsafe.
+static void test_action_failsafe_applies_when_no_member_demands(void) {
+    Action failOn  = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
+    Action failOff = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_OFF);
+    TEST_ASSERT_TRUE(controlActionDesired(failOn,  members(2, false, /*anyFaulted*/true), false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(controlActionDesired(failOff, members(2, false, /*anyFaulted*/true), false, ACT_OVR_AUTO));
+}
+
+// A multi-member action still ignores the manual latch, and an override still
+// outranks every member (the #329 tier is unchanged by membership).
+static void test_action_override_beats_all_members(void) {
+    Action fan = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
+    TEST_ASSERT_FALSE(controlActionDesired(fan, members(3, true, true), /*manual*/true, ACT_OVR_FORCE_OFF));
+    TEST_ASSERT_TRUE(controlActionDesired(fan, members(3, false, false), /*manual*/false, ACT_OVR_FORCE_ON));
+    TEST_ASSERT_FALSE(controlActionDesired(fan, members(3, false, false), /*manual*/true, ACT_OVR_AUTO));
+}
+
+// A dangling member (its Rule record is gone) counts toward memberCount but is
+// neither active nor faulted -- the action stays rule-driven and OFF, and must
+// NOT fall back to the manual latch (that is the #294 snap-on route).
+static void test_action_dangling_member_stays_off_not_manual(void) {
+    Action a = makeAction(ACT_RELAY, 5);
+    TEST_ASSERT_FALSE(controlActionDesired(a, members(1, false, false), /*manual*/true, ACT_OVR_AUTO));
 }
 
 int main(int, char**) {
@@ -414,5 +473,10 @@ int main(int, char**) {
     RUN_TEST(test_action_override_auto_is_transparent);
     RUN_TEST(test_action_override_beats_manual_latch);
     RUN_TEST(test_action_stale_manual_latch_would_snap_on_after_unlink);
+    RUN_TEST(test_action_or_combines_members);
+    RUN_TEST(test_action_live_member_outranks_faulted_sibling);
+    RUN_TEST(test_action_failsafe_applies_when_no_member_demands);
+    RUN_TEST(test_action_override_beats_all_members);
+    RUN_TEST(test_action_dangling_member_stays_off_not_manual);
     return UNITY_END();
 }

@@ -60,23 +60,42 @@ RuleSeverity controlRuleSeverity(const Rule& rule, const RuleContext& ctx);
 RuleSeverity controlRuleAnnunciatorSeverity(const Rule& rule, const RuleContext& ctx, float value);
 
 /**
+ * Aggregate of an Action's Rule membership, resolved by the manager (which owns
+ * the rule contexts and the link table) and handed to the pure resolver below.
+ * With M:N membership (#343) an Action can have several member Rules, so "is my
+ * rule active" and "is my source trustworthy" are no longer single booleans.
+ */
+struct ActionDrive {
+    uint8_t memberCount;  // configured member Rules (0 = manual-only). Counts a
+                          //   member whose Rule record is missing (dangling ref),
+                          //   so losing a rule can never fall back to the latch.
+    bool    anyActive;    // OR over members whose source is trustworthy AND active
+    bool    anyFaulted;   // any member's source is missing / NaN (§11.3)
+};
+
+/**
  * Resolve an Action's desired LOGICAL output (true = asserted), pre-invert and
  * pre-config-gate. Pure/testable; the manager applies inversion, the CONFIG
  * actuation gate, and the GPIO write.
  *
  *  - Operator override (`override != ACT_OVR_AUTO`): wins outright — ahead of
- *    the Rule AND ahead of the failsafe (#329). A forced state is the tool of
+ *    the Rules AND ahead of the failsafe (#329). A forced state is the tool of
  *    last resort for the case where the sensor itself is what failed, so the
  *    failsafe must not be able to countermand it. The override is RAM-only and
  *    is surfaced (with a source-faulted flag) on the CLI and the BLE frame.
- *  - Manual action (ruleRef == CONTROL_ID_NONE): follows `manualState`.
- *  - Rule-driven RELAY with an untrustworthy source (`!sourceTrustworthy`):
- *    assumes its `failsafe` state — the wire/sensor is gone, so the reading is
- *    meaningless (§11.3). Only RELAY has a failsafe; other types de-assert.
- *  - Otherwise: follows `ruleActive`.
+ *  - Manual action (`memberCount == 0`): follows `manualState`.
+ *  - Any member Rule active on a trustworthy source: asserted (OR, §11.6).
+ *  - Otherwise, with a faulted member source: a RELAY assumes its `failsafe`
+ *    state — the wire/sensor is gone, so the reading is meaningless (§11.3).
+ *    Only RELAY has a failsafe; other types de-assert.
+ *
+ * ORDER MATTERS with several members: a live member's ACTIVE verdict is checked
+ * BEFORE the failsafe, so a valid demand outranks the unknown from a dead
+ * sibling sensor — one broken sensor must not cut a fan that a healthy one is
+ * legitimately calling for. At one member this is identical to the pre-#343
+ * behavior (a faulted member is never `anyActive`).
  */
-bool controlActionDesired(const Action& action, bool ruleActive,
-                          bool sourceTrustworthy, bool manualState,
-                          ActionOverride override);
+bool controlActionDesired(const Action& action, const ActionDrive& drive,
+                          bool manualState, ActionOverride override);
 
 #endif // CONTROL_ENGINE_H

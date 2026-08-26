@@ -101,19 +101,29 @@ bool controlImportRule(JsonObjectConst obj, Rule& out) {
     return true;
 }
 
-void controlExportAction(JsonObject obj, const Action& a) {
+void controlExportAction(JsonObject obj, const Action& a,
+                         const uint8_t* memberRules, uint8_t memberCount) {
     obj["id"]     = a.id;
     obj["type"]   = nameOf(ACTION_TYPES, a.type);
     obj["target"] = a.target;
     if (a.ruleRef != CONTROL_ID_NONE) obj["rule"] = a.ruleRef;  // omit = manual
+    // Multi-member actions ALSO emit the full list (#343). "rule" stays = rules[0]
+    // so a reader that predates this key still sees a working single link rather
+    // than a manual action.
+    if (memberRules && memberCount > 1) {
+        JsonArray arr = obj["rules"].to<JsonArray>();
+        for (uint8_t i = 0; i < memberCount; i++) arr.add(memberRules[i]);
+    }
     if (a.name[0] != '\0') obj["name"] = a.name;                // omit = unnamed
     obj["invert"] = (a.behavior & ACT_BEHAVIOR_INVERT) != 0;
     if (a.type == ACT_RELAY)
         obj["failsafe"] = (a.failsafe == ACT_FAILSAFE_ON) ? "ON" : "OFF";
 }
 
-bool controlImportAction(JsonObjectConst obj, Action& out) {
-    // Required: id, type, target. A missing/null "rule" means manual-only.
+bool controlImportAction(JsonObjectConst obj, Action& out,
+                         uint8_t* extraRules, uint8_t maxExtra, uint8_t* nExtra) {
+    if (nExtra) *nExtra = 0;
+    // Required: id, type, target. A missing/null "rule"/"rules" means manual-only.
     if (obj["id"].isNull() || obj["target"].isNull()) return false;
 
     // Reject the empty-slot sentinel (see controlImportRule).
@@ -126,7 +136,24 @@ bool controlImportAction(JsonObjectConst obj, Action& out) {
     out.id       = id;
     out.type     = type;
     out.target   = obj["target"];
-    out.ruleRef  = obj["rule"].isNull() ? CONTROL_ID_NONE : (uint8_t)obj["rule"];
+    // "rules" (the full member list) wins over "rule" when both are present —
+    // export writes them consistently, and a hand-edited config that disagrees
+    // meant the list it spelled out in full.
+    out.ruleRef = CONTROL_ID_NONE;
+    JsonArrayConst members = obj["rules"];
+    if (!members.isNull()) {
+        for (JsonVariantConst v : members) {
+            uint8_t rid = v.as<uint8_t>();
+            if (rid == CONTROL_ID_NONE) continue;      // sentinel is never a member
+            if (out.ruleRef == CONTROL_ID_NONE) {
+                out.ruleRef = rid;                     // first member goes inline
+            } else if (extraRules && nExtra && *nExtra < maxExtra) {
+                extraRules[(*nExtra)++] = rid;
+            }
+        }
+    } else if (!obj["rule"].isNull()) {
+        out.ruleRef = (uint8_t)obj["rule"];
+    }
     out.behavior = (obj["invert"] | false) ? ACT_BEHAVIOR_INVERT : 0;
     const char* fs = obj["failsafe"] | "OFF";
     out.failsafe = (strcasecmp(fs, "ON") == 0) ? ACT_FAILSAFE_ON : ACT_FAILSAFE_OFF;

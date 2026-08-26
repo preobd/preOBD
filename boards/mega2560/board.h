@@ -38,6 +38,7 @@
 // ===== SIZING (tuned to the 8 KB budget) =====
 #define CONTROL_RAM_RULES_MAX   2    // control caps are a REAL SRAM limit on AVR (ARCHITECTURE §11.9)
 #define CONTROL_RAM_ACTIONS_MAX 2
+#define CONTROL_RAM_LINKS_MAX   2    // 2 B/row; enough for one 2-rule action at cap 2 (#343)
 #define MAX_INPUTS              8
 #define MAX_PID_ENTRIES         8
 #define MAX_PIN_REGISTRY        24

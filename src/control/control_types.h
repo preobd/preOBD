@@ -73,10 +73,19 @@
 #ifndef CONTROL_RAM_ACTIONS_MAX
 #define CONTROL_RAM_ACTIONS_MAX 64
 #endif
-#define MAX_RULES   CONTROL_RAM_RULES_MAX
-#define MAX_ACTIONS CONTROL_RAM_ACTIONS_MAX
+// Extra Rule->Action memberships beyond each Action's inline first one (#343).
+// An Action's FIRST member rule lives in Action.ruleRef; only the 2nd and later
+// spend a row here, so a config where every Action follows one Rule uses ZERO
+// rows and this table costs nothing but its (2 B/row) RAM reservation.
+#ifndef CONTROL_RAM_LINKS_MAX
+#define CONTROL_RAM_LINKS_MAX 64
+#endif
+#define MAX_RULES        CONTROL_RAM_RULES_MAX
+#define MAX_ACTIONS      CONTROL_RAM_ACTIONS_MAX
+#define MAX_ACTION_LINKS CONTROL_RAM_LINKS_MAX
 static_assert(MAX_RULES   >= 1 && MAX_RULES   <= 254, "MAX_RULES out of id space [1,254]");
 static_assert(MAX_ACTIONS >= 1 && MAX_ACTIONS <= 254, "MAX_ACTIONS out of id space [1,254]");
+static_assert(MAX_ACTION_LINKS >= 1 && MAX_ACTION_LINKS <= 254, "MAX_ACTION_LINKS out of range [1,254]");
 
 // Reserved id sentinel: an unused record, and (as Action.ruleRef) "manual-only".
 #define CONTROL_ID_NONE 0xFF
@@ -185,10 +194,25 @@ struct Action {
     uint8_t id;         // stable per-record id; CONTROL_ID_NONE = empty slot
     uint8_t type;       // ActionType
     uint8_t target;     // pin / relay channel / LED channel
-    uint8_t ruleRef;    // Rule.id that triggers it; CONTROL_ID_NONE = manual-only (N:1 in v1)
+    uint8_t ruleRef;    // FIRST member Rule.id; CONTROL_ID_NONE = manual-only. Additional
+                        //   members live in actionLinks[] — see ActionLink (#343). NEVER
+                        //   read this directly to answer "what drives this action": use
+                        //   controlActionRuleCount()/controlActionRuleAt().
     uint8_t behavior;   // ACT_BEHAVIOR_*
     uint8_t failsafe;   // ActionFailsafe (RELAY only; ignored by other types in v1)
     char    name[16];   // optional operator label (e.g. "Cooling Fan"); "" = unnamed
+};
+
+// Rule<->Action membership, M:N (§11.6, #343). One row = "rule `ruleId` is ALSO
+// a member of action `actionId`". The action's FIRST member stays inline in
+// Action.ruleRef, so this table holds only the 2nd and later memberships: an
+// Action driven by exactly one Rule (the common case) spends no row, and a store
+// written before #343 simply has zero rows. actionId == CONTROL_ID_NONE = empty
+// slot. Order within an action is insertion order and is not otherwise meaningful
+// — membership is a SET, OR-combined by the engine.
+struct ActionLink {
+    uint8_t actionId;
+    uint8_t ruleId;
 };
 
 // ============================================================================
@@ -201,8 +225,9 @@ struct Action {
 // control_manager.h (e.g. pin_registry.cpp, which only has system_config.h).
 // ============================================================================
 #if ENABLE_CONTROL_ENGINE
-extern Rule   rules[MAX_RULES];
-extern Action actions[MAX_ACTIONS];
+extern Rule       rules[MAX_RULES];
+extern Action     actions[MAX_ACTIONS];
+extern ActionLink actionLinks[MAX_ACTION_LINKS];
 #endif
 
 // ============================================================================
