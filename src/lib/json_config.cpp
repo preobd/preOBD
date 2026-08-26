@@ -418,6 +418,27 @@ void dumpConfigToJSON(Print& output) {
     firmware["maxInputs"] = MAX_INPUTS;
     firmware["activeInputs"] = numActiveInputs;
 
+    // Mirrors writeFirmwareJson()'s capability list (json_registry.cpp,
+    // SYSTEM DUMP REGISTRY JSON) — duplicated rather than shared because that
+    // helper lives in a SUPPORTS_JSON_EXPORT-only translation unit and this
+    // one is SUPPORTS_JSON_CONFIG-gated; the two flags are aliased on every
+    // board today but are logically independent knobs. Keep both lists in
+    // sync if a capability is ever added to one.
+    JsonArray caps = firmware["capabilities"].to<JsonArray>();
+#if SUPPORTS_JSON_IMPORT_STREAM
+    caps.add("json_import");
+#endif
+    caps.add("json_export");
+#if ENABLE_CAN
+    caps.add("can");
+#endif
+#if ENABLE_SD_LOGGING
+    caps.add("sd");
+#endif
+#if ENABLE_LCD
+    caps.add("lcd");
+#endif
+
     // System configuration
     JsonObject system = doc["system"].to<JsonObject>();
     exportSystemConfigToJSON(system);

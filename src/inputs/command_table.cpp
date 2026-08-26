@@ -478,9 +478,27 @@ int cmd_load(int argc, const char* const* argv) {
 #if SUPPORTS_JSON_IMPORT_STREAM
 int cmd_json(int argc, const char* const* argv) {
     if (argc < 2 || !streq_P(argv[1], PSTR("IMPORT"))) {
-        msg.control.println(F("Usage: JSON IMPORT"));
-        msg.control.println(F("  Paste JSON, then type 'END JSON' on its own line"));
+        msg.control.println(F("Usage: JSON IMPORT [<byte-count>]"));
+        msg.control.println(F("  No count: paste JSON, then type 'END JSON' on its own line"));
+        msg.control.println(F("  With count: stream exactly <byte-count> raw bytes (no sentinel)"));
         return 1;
+    }
+    if (argc >= 3) {
+        // Byte-counted mode: a programmatic sender (mobile app, scripts) that
+        // already knows its payload length. Validated up front so an
+        // oversized count fails immediately instead of partway through a
+        // multi-second transfer.
+        long n = strtol(argv[2], nullptr, 10);
+        if (n <= 0 || (unsigned long)n > (unsigned long)(JSON_IMPORT_MAX_BYTES - 1)) {
+            msg.control.print(F("ERROR: byte count must be 1-"));
+            msg.control.println(JSON_IMPORT_MAX_BYTES - 1);
+            return 1;
+        }
+        if (!serialConfig_beginJsonImport((size_t)n)) {
+            msg.control.println(F("ERROR: JSON import already in progress"));
+            return 1;
+        }
+        return 0;
     }
     if (!serialConfig_beginJsonImport()) {
         msg.control.println(F("ERROR: JSON import already in progress"));

@@ -37,19 +37,70 @@ static EmbeddedCli* cli = nullptr;
 // JSON import streaming state
 // Buffer is malloc'd on demand (serialConfig_beginJsonImport) and freed after
 // dispatch, so 16 KB is only resident during an active import.
+//
+// Two completion modes share this one buffer: sentinel mode (interactive
+// human at a terminal — can't know a paste's byte count in advance) scans
+// each completed line for the literal text "END JSON"; counted mode
+// (programmatic sender — already holds the full payload, so it knows the
+// byte length for free) just counts up to jsonImportTarget. See
+// dispatchJsonImport() for the shared completion tail.
 //=============================================================================
 static bool   jsonImportActive = false;
+static bool   jsonImportCounted = false;    // true = counted mode, false = sentinel mode
 static char*  jsonImportBuffer = nullptr;
 static size_t jsonImportLen = 0;
-static size_t jsonImportLastLineStart = 0;
+static size_t jsonImportTarget = 0;         // counted mode: exact byte count expected
+static size_t jsonImportLastLineStart = 0;  // sentinel mode only
+// Sentinel mode only: set once the buffer overflows. Overflow used to call
+// resetJsonImport() immediately, but any payload bytes already in flight
+// (the rest of the oversized JSON, plus the sender's trailing "END JSON"
+// line) would then fall through to embeddedCliReceiveChar() on the next
+// call and get parsed as CLI command lines. Now we keep swallowing bytes
+// until the idle timeout below cleans up, so nothing ever spills over.
+static bool   jsonImportOverflowed = false;
+// Updated on every byte received (both modes); serialConfig_checkJsonImportIdle()
+// aborts an abandoned sentinel-mode import (human walked away, or a link
+// dropped uncleanly mid-paste) so the malloc'd buffer isn't held forever.
+static unsigned long jsonImportLastByteMs = 0;
+static const unsigned long JSON_IMPORT_IDLE_TIMEOUT_MS = 45000;
 
 static void resetJsonImport() {
     free(jsonImportBuffer);
     jsonImportBuffer = nullptr;
     jsonImportActive = false;
+    jsonImportCounted = false;
+    jsonImportTarget = 0;
     jsonImportLen = 0;
     jsonImportLastLineStart = 0;
+    jsonImportOverflowed = false;
     if (cli != nullptr) embeddedCliProcess(cli);
+}
+
+// Shared completion tail for both modes: parse, report, reset. Reports via
+// embeddedCliPrint (not msg.control) so the invitation gets reprinted
+// afterward — streaming mode bypasses embeddedCliReceiveChar entirely, so
+// the library's own post-command invitation reprint (onControlInput,
+// embedded_cli.c) never runs for anything received since 'JSON IMPORT' was
+// entered. Without this, no further prompt is EVER printed and every client
+// waiting on one (this app, the reference webapp) hangs until it times out.
+static void dispatchJsonImport() {
+    bool ok = loadConfigFromJSON(jsonImportBuffer);
+    if (ok) {
+        msg.control.println(F("Applied"));
+        printSaveReminder();
+    } else {
+        msg.control.println(F("ERROR: Failed to apply JSON configuration"));
+    }
+    if (cli != nullptr) embeddedCliPrint(cli, "");
+    resetJsonImport();
+}
+
+void serialConfig_checkJsonImportIdle() {
+    if (!jsonImportActive) return;
+    // Signed subtraction: safe across a millis() wraparound (~49 days).
+    if ((int32_t)(millis() - jsonImportLastByteMs) < (int32_t)JSON_IMPORT_IDLE_TIMEOUT_MS) return;
+    if (cli != nullptr) embeddedCliPrint(cli, "ERROR: JSON import timed out (no data received)");
+    resetJsonImport();
 }
 #endif
 
@@ -233,17 +284,44 @@ void initSerialConfig() {
 void handleCommandInput(char c) {
 #if SUPPORTS_JSON_IMPORT_STREAM
     if (jsonImportActive) {
-        // Echo char back; emit \r before \n so terminals return cursor to column 0
-        if (c == '\n') msg.control.print('\r');
-        msg.control.print(c);
+        jsonImportLastByteMs = millis();
 
-        // Check for buffer overflow before appending
+        if (jsonImportOverflowed) {
+            // Draining after a sentinel-mode overflow — swallow everything
+            // until the idle timeout resets cleanly. See the field comment
+            // on jsonImportOverflowed for why an immediate reset here would
+            // let the rest of the oversized payload spill into the CLI.
+            return;
+        }
+
+        // Echo char back for the interactive terminal path (\r before \n so
+        // terminals return cursor to column 0). A counted-mode programmatic
+        // sender discards this, so skip it there — otherwise a 16 KB payload
+        // over transparent BLE would double its own airtime for nothing
+        // (Opus review finding).
+        if (!jsonImportCounted) {
+            if (c == '\n') msg.control.print('\r');
+            msg.control.print(c);
+        }
+
+        if (jsonImportCounted) {
+            jsonImportBuffer[jsonImportLen++] = c;
+            if (jsonImportLen >= jsonImportTarget) {
+                // Capacity always has +1 room to spare: cmd_json only accepts
+                // target <= JSON_IMPORT_MAX_BYTES - 1.
+                jsonImportBuffer[jsonImportLen] = '\0';
+                dispatchJsonImport();
+            }
+            return;
+        }
+
+        // Sentinel mode: check for buffer overflow before appending.
         if (jsonImportLen >= JSON_IMPORT_MAX_BYTES - 1) {
             msg.control.println(F("\r\nERROR: JSON exceeds buffer limit"));
             msg.control.print(F("  Max: "));
             msg.control.print(JSON_IMPORT_MAX_BYTES);
             msg.control.println(F(" bytes"));
-            resetJsonImport();
+            jsonImportOverflowed = true;
             return;
         }
 
@@ -259,16 +337,7 @@ void handleCommandInput(char c) {
             if (tlen == slen && strncasecmp(line, "END JSON", slen) == 0) {
                 // Null-terminate the buffer at the sentinel's start, then dispatch
                 jsonImportBuffer[jsonImportLastLineStart] = '\0';
-
-                bool ok = loadConfigFromJSON(jsonImportBuffer);
-                if (ok) {
-                    msg.control.println(F("Applied"));
-                    printSaveReminder();
-                } else {
-                    msg.control.println(F("ERROR: Failed to apply JSON configuration"));
-                }
-
-                resetJsonImport();
+                dispatchJsonImport();
             } else {
                 jsonImportLastLineStart = jsonImportLen;
             }
@@ -295,8 +364,9 @@ void processSerialCommands() {
 /**
  * Begin JSON import streaming mode.
  * Returns false if already active; caller should surface an error.
+ * target == 0: sentinel mode. target > 0: counted mode, exactly target bytes.
  */
-bool serialConfig_beginJsonImport() {
+bool serialConfig_beginJsonImport(size_t target) {
     if (jsonImportActive) return false;
     jsonImportBuffer = (char*)malloc(JSON_IMPORT_MAX_BYTES);
     if (jsonImportBuffer == nullptr) {
@@ -304,9 +374,19 @@ bool serialConfig_beginJsonImport() {
         return false;
     }
     jsonImportActive = true;
+    jsonImportCounted = (target > 0);
+    jsonImportTarget = target;
     jsonImportLen = 0;
     jsonImportLastLineStart = 0;
-    msg.control.println(F("Paste JSON, then type 'END JSON' on its own line:"));
+    jsonImportOverflowed = false;
+    jsonImportLastByteMs = millis();
+    if (jsonImportCounted) {
+        msg.control.print(F("Ready for "));
+        msg.control.print(target);
+        msg.control.println(F(" bytes"));
+    } else {
+        msg.control.println(F("Paste JSON, then type 'END JSON' on its own line:"));
+    }
     return true;
 }
 

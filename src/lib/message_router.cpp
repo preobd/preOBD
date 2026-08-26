@@ -314,6 +314,14 @@ void MessageRouter::listTransports() {
 }
 
 void MessageRouter::update() {
+#if SUPPORTS_JSON_IMPORT_STREAM
+    // Unconditional every tick — a JSON IMPORT abandoned mid-paste (or an
+    // uncleanly dropped link) would otherwise hold its malloc'd buffer
+    // forever, since processIncomingCommands() below only runs when a
+    // transport actually has bytes available().
+    serialConfig_checkJsonImportIdle();
+#endif
+
     // Poll all transports for housekeeping
     for (int i = 0; i < NUM_TRANSPORTS; i++) {
         if (transports[i] != nullptr) {

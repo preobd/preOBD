@@ -308,6 +308,10 @@ FLASHMEM void writePidsJson(Print& out) {
 
 // ===== BUNDLED EXPORT =====
 
+// This function's capability list is mirrored in json_config.cpp's
+// dumpConfigToJSON() (SYSTEM DUMP JSON's own "firmware" object) — duplicated
+// rather than shared since that file is SUPPORTS_JSON_CONFIG-gated and this
+// one is SUPPORTS_JSON_EXPORT-gated. Keep both lists in sync.
 static FLASHMEM void writeFirmwareJson(Print& out) {
     JsonDocument doc;
     JsonObject obj = doc.to<JsonObject>();
