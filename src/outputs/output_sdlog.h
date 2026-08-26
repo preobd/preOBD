@@ -23,6 +23,7 @@ void closeSDLog();
 // ENABLE_SD_LOGGING is unset.
 bool        sdLogIsActive();      // file open and healthy
 bool        sdLogIsFaulted();     // latched after an unrecoverable write error
+bool        sdLogCardRemoved();   // that fault was a pulled card, not a bad write
 const char* sdLogFileName();      // current 8.3 name, or "(none)"
 uint32_t    sdLogRowsWritten();
 uint16_t    sdLogWriteErrors();

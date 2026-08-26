@@ -353,8 +353,17 @@ static void diagSectionHw() {
 
 #if SUPPORTS_SD
     any = true;
+    // isSDInitialized() is a boot-time latch, so it kept reporting OK for a card
+    // that had since been pulled (#331). Probe the slot where the platform's SD
+    // library can; where it cannot, the boot-time answer is all there is.
     msg.control.print(F("[hardware]    SD card .............. "));
-    msg.control.println(isSDInitialized() ? F("OK") : F("FAIL (not mounted)"));
+    if (!isSDInitialized()) {
+        msg.control.println(F("FAIL (not mounted)"));
+    } else if (!sdMediaPresent()) {
+        msg.control.println(F("FAIL (removed since boot)"));
+    } else {
+        msg.control.println(F("OK"));
+    }
 #endif
 
 #if ENABLE_SD_LOGGING
@@ -362,7 +371,14 @@ static void diagSectionHw() {
     // full card, or one pulled mid-drive, fails every write while the output
     // still reports "Enabled" in OUTPUT STATUS.
     msg.control.print(F("[hardware]    SD logging ........... "));
-    if (sdLogIsFaulted()) {
+    if (sdLogCardRemoved()) {
+        // Detected by the pre-write probe, so no write was ever attempted and
+        // the error count is legitimately zero — say why, rather than printing
+        // "FAULTED after 0 write error(s)" and looking like a lost reason.
+        msg.control.print(F("FAULTED (card removed after "));
+        msg.control.print((unsigned long)sdLogRowsWritten());
+        msg.control.println(F(" rows)"));
+    } else if (sdLogIsFaulted()) {
         msg.control.print(F("FAULTED after "));
         msg.control.print(sdLogWriteErrors());
         msg.control.println(F(" write error(s)"));

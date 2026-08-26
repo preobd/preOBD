@@ -23,6 +23,7 @@
 #include "log_tags.h"
 #include "pin_registry.h"
 #include "watchdog.h"
+#include "sd_manager.h"
 #include "../outputs/output_format.h"   // SdLogFormat / parseSdLogFormat
 #if ENABLE_CONTROL_ENGINE
 #include "control_json.h"
@@ -963,6 +964,20 @@ bool saveConfigToSD(const char* filename) {
         return false;
     }
 
+    // Every SD call below blocks for seconds on a card that has gone away, and
+    // these run from CONFIG mode where the watchdog is meant to be off — the
+    // same trap as #331 in the sibling path. Hold a window across the whole
+    // operation (the four bare watchdogEnable(2000) calls this replaces had no
+    // matching widening at all, and would have narrowed the watchdog out from
+    // under an enclosing window).
+    SdWatchdogWindow window;
+
+    if (!sdMediaPresent()) {
+        msg.control.println(F("ERROR: SD card removed"));
+        msg.debug.warn(TAG_SD, "SD card no longer present");
+        return false;
+    }
+
     msg.debug.debug(TAG_SD, "SD card is ready");
 
     // Create config directory if it doesn't exist
@@ -1008,9 +1023,6 @@ bool saveConfigToSD(const char* filename) {
         msg.debug.error(TAG_SD, "Failed to open file for writing");
         msg.control.print(F("ERROR: Failed to open file: "));
         msg.control.println(filepath);
-        // Re-enable watchdog before returning
-        watchdogEnable(2000);
-        msg.debug.debug(TAG_SD, "Watchdog re-enabled");
         return false;
     }
 
@@ -1025,9 +1037,6 @@ bool saveConfigToSD(const char* filename) {
     configFile.close();
     msg.debug.debug(TAG_SD, "File closed");
 
-    // Re-enable watchdog after SD operations complete
-    watchdogEnable(2000);
-    msg.debug.debug(TAG_SD, "Watchdog re-enabled");
 
     msg.control.print(F("Configuration saved to: "));
     msg.control.println(filepath);
@@ -1044,6 +1053,15 @@ bool loadConfigFromSD(const char* filename) {
     if (!isSDInitialized()) {
         msg.control.println(F("ERROR: SD card not initialized"));
         msg.debug.warn(TAG_SD, "SD card not available");
+        return false;
+    }
+
+    // See saveConfigToSD(): blocking card I/O from CONFIG mode (#331).
+    SdWatchdogWindow window;
+
+    if (!sdMediaPresent()) {
+        msg.control.println(F("ERROR: SD card removed"));
+        msg.debug.warn(TAG_SD, "SD card no longer present");
         return false;
     }
 
@@ -1073,9 +1091,6 @@ bool loadConfigFromSD(const char* filename) {
         msg.control.print(F("ERROR: Failed to open file: "));
         msg.control.println(filepath);
         msg.debug.error(TAG_SD, "File open FAILED");
-        // Re-enable watchdog before returning
-        watchdogEnable(2000);
-        msg.debug.debug(TAG_SD, "Watchdog re-enabled");
         return false;
     }
 
@@ -1087,7 +1102,9 @@ bool loadConfigFromSD(const char* filename) {
     size_t bytesRead = 0;
     while (configFile.available()) {
         jsonString += (char)configFile.read();
-        bytesRead++;
+        // A multi-KB file read one byte at a time into a String is a long
+        // blocking path in its own right, window or not.
+        if ((++bytesRead & 0xFF) == 0) watchdogReset();
     }
 
     msg.debug.debug(TAG_SD, "Read complete: %u bytes total", bytesRead);
@@ -1102,9 +1119,6 @@ bool loadConfigFromSD(const char* filename) {
 
     msg.debug.debug(TAG_SD, "JSON parsing complete");
 
-    // Re-enable watchdog after SD operations complete
-    watchdogEnable(2000);
-    msg.debug.debug(TAG_SD, "Watchdog re-enabled");
 
     if (success) {
         msg.control.print(F("Configuration loaded from: "));

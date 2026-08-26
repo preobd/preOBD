@@ -57,6 +57,7 @@ static uint16_t logFileIndex   = 0;     // last sequence number handed out
 static uint32_t logRowsWritten = 0;
 static uint16_t logWriteErrors = 0;
 static bool     logFaulted     = false; // latched: stop touching the card
+static bool     logCardRemoved = false; // why it latched: card gone, not bad write
 static uint32_t columnSignature = 0;
 static uint8_t  openFileFormat = SDLOG_FORMAT_WIDE;  // layout the open file was written with
 static uint32_t lastRowMs      = 0;
@@ -66,6 +67,7 @@ static uint16_t rowsSinceReopen = 0;
 static bool     wasInConfig    = false;
 
 static void openLogFile();
+static void handleCardRemoved();
 
 /**
  * Does this slot contribute a column?
@@ -107,6 +109,10 @@ static uint32_t computeColumnSignature() {
 
 static void closeLogFile() {
     if (logFile) {
+        // flush()/close() are card I/O and block for seconds on a card that has
+        // gone away — this is a closing path, so it is exactly when the card is
+        // most likely to be missing. Widen the watchdog around it (#331).
+        SdWatchdogWindow window;
         logFile.flush();
         logFile.close();
     }
@@ -128,7 +134,7 @@ static void closeLogFile() {
 static bool claimNextFileName() {
     // A card holding thousands of logs makes this a long run of SD lookups;
     // widen the watchdog for the scan the same way initSD() does for begin().
-    watchdogEnable(20000);
+    SdWatchdogWindow window;
 
     bool found = false;
     for (uint16_t i = logFileIndex + 1; i <= SDLOG_MAX_FILE_INDEX; i++) {
@@ -141,7 +147,6 @@ static bool claimNextFileName() {
         watchdogReset();
     }
 
-    watchdogEnable(2000);
     return found;
 }
 
@@ -178,6 +183,8 @@ static void writeHeader() {
 }
 
 static void openLogFile() {
+    SdWatchdogWindow window;   // open/header/flush are all blocking card I/O
+
     closeLogFile();   // never leak the previous handle over a re-init
 
     if (!isSDInitialized()) {
@@ -228,6 +235,14 @@ static void handleWriteError() {
     logFile.clearWriteError();
     closeLogFile();
 
+    // Tell "card yanked" apart from "write failed on a card that is still
+    // here": a reopen needs a card to reopen onto, and burning a filename scan
+    // on an empty slot is seconds of blocked loop() for nothing.
+    if (!sdMediaPresent()) {
+        handleCardRemoved();
+        return;
+    }
+
     if (reopenUsed) {
         logFaulted = true;
         msg.debug.error(TAG_SD, "SD write failed again (%u errors) - logging halted",
@@ -244,6 +259,36 @@ static void handleWriteError() {
         logFaulted = true;
         msg.debug.error(TAG_SD, "SD reopen failed - logging halted");
     }
+}
+
+/**
+ * The card is no longer in the slot. Stop touching it, permanently.
+ *
+ * Distinct from handleWriteError()'s reopen-then-latch: a reopen needs a card
+ * to reopen onto, and the SD library only ever mounts one at boot, so a removal
+ * mid-drive is terminal for this session. Latching here is also what keeps the
+ * engine running — the alternative is every subsequent tick spending seconds
+ * blocked in the SD library while gauges, alarms and OBD output wait.
+ */
+static void handleCardRemoved() {
+    msg.debug.error(TAG_SD, "SD card removed - logging halted (%s, %lu rows)",
+                    logFileName[0] ? logFileName : "(no file)",
+                    (unsigned long)logRowsWritten);
+
+    // close() rather than closeLogFile(): having just established the card is
+    // gone, the flush() closeLogFile() does first is both redundant (close()
+    // syncs anyway) and the single most dangerous call available — a cache
+    // flush to a dead card is what blocks past even the wide window. What makes
+    // the remaining close() survivable is that maybeFlush() runs at the end of
+    // every row, so the block cache is normally already clean when removal is
+    // detected; that is load-bearing, not incidental.
+    if (logFile) {
+        SdWatchdogWindow window;
+        logFile.close();
+    }
+
+    logFaulted     = true;
+    logCardRemoved = true;
 }
 
 static void writeRow(uint32_t now) {
@@ -295,6 +340,7 @@ static void writeRow(uint32_t now) {
 
 static void maybeFlush(uint32_t now) {
     if (logFile && (now - lastFlushMs >= SDLOG_FLUSH_INTERVAL_MS)) {
+        SdWatchdogWindow window;   // flush() blocks for seconds on a bad card
         logFile.flush();
         lastFlushMs = now;
     }
@@ -304,6 +350,7 @@ void initSDLog() {
     logRowsWritten  = 0;
     logWriteErrors  = 0;
     logFaulted      = false;
+    logCardRemoved  = false;
     reopenUsed      = false;
     rowsSinceReopen = 0;
     lastRowMs       = 0;
@@ -344,6 +391,7 @@ void updateSDLog() {
     if (isInConfigMode()) {
         if (!wasInConfig) {
             if (logFile) {
+                SdWatchdogWindow window;
                 logFile.flush();
                 lastFlushMs = now;
             }
@@ -373,6 +421,27 @@ void updateSDLog() {
             closeLogFile();
             msg.debug.info(TAG_SD, "No inputs routed to SD - stopped logging");
         }
+        return;
+    }
+
+    // Everything below touches the card, so hold one window across the whole
+    // row (the nested ones inside openLogFile/closeLogFile/maybeFlush fold into
+    // it) rather than re-arming the watchdog per operation.
+    SdWatchdogWindow window;
+
+    // Stop before writing to a card that is not there. This probe, not the
+    // widened watchdog, is what actually saves the board: bench-testing a
+    // probe-disabled build showed a pulled card still resets it (#331). The
+    // rows after removal go into the library's block cache and report success
+    // — 24 phantom rows, 0 write errors, DIAG HW still "OK" — until one cache
+    // flush reaches the dead card and blocks past even the 20 s window.
+    //
+    // So getWriteError() is not a backstop for removal, only for a card that
+    // is present and refusing writes (full, worn out). Platforms whose SD
+    // library exposes no probe (SD_HAS_MEDIA_PROBE 0: ESP32 or any non-Teensy
+    // board with an external card wired in) keep the old exposure.
+    if (isSDInitialized() && !sdMediaPresent()) {
+        handleCardRemoved();
         return;
     }
 
@@ -413,6 +482,7 @@ void closeSDLog() {
 
 bool sdLogIsActive()          { return (bool)logFile && !logFaulted; }
 bool sdLogIsFaulted()         { return logFaulted; }
+bool sdLogCardRemoved()       { return logCardRemoved; }
 const char* sdLogFileName()   { return logFileName[0] ? logFileName : "(none)"; }
 uint32_t sdLogRowsWritten()   { return logRowsWritten; }
 uint16_t sdLogWriteErrors()   { return logWriteErrors; }
@@ -426,6 +496,7 @@ void closeSDLog() {}
 
 bool sdLogIsActive()          { return false; }
 bool sdLogIsFaulted()         { return false; }
+bool sdLogCardRemoved()       { return false; }
 const char* sdLogFileName()   { return "(none)"; }
 uint32_t sdLogRowsWritten()   { return 0; }
 uint16_t sdLogWriteErrors()   { return 0; }
