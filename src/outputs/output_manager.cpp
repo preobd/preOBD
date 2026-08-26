@@ -27,9 +27,8 @@ extern void initSerialOutput();
 extern void sendSerialOutput(Input*);
 extern void updateSerialOutput();
 
-extern void initSDLog();
-extern void sendSDLog(Input*);
-extern void updateSDLog();
+#include "output_sdlog.h"   // initSDLog / updateSDLog / closeSDLog
+#include "output_format.h"  // sdLogFormatName for OUTPUT STATUS
 
 extern void initAlarmOutput();
 extern void sendAlarmOutput(Input*);
@@ -52,7 +51,10 @@ OutputModule outputModules[] = {
     {"RealDash",false, initRealdash,      sendRealdash,      updateRealdash,      100},
     {"Serial",  false, initSerialOutput,  sendSerialOutput,  updateSerialOutput,  1000},
 #if ENABLE_SD_LOGGING
-    {"SD_Log",  false, initSDLog,         sendSDLog,         updateSDLog,         5000},
+    // send = nullptr: a wide CSV row needs the whole sample at once, so
+    // updateSDLog() owns the cadence (reading systemConfig.outputInterval
+    // itself) rather than being driven one input at a time by sendToOutputs().
+    {"SD_Log",  false, initSDLog,         nullptr,           updateSDLog,         5000},
 #else
     {nullptr,   false, nullptr,           nullptr,           nullptr,             0},
 #endif
@@ -94,6 +96,7 @@ void sendToOutputs(uint32_t now) {
     for (int i = 0; i < numOutputModules; i++) {
         if (outputModules[i].name == nullptr) continue;  // Placeholder slot
         if (!outputModules[i].enabled) continue;
+        if (outputModules[i].send == nullptr) continue;  // Owns its own cadence
 
         // Check if enough time has elapsed for this output
         if (now - lastOutputSend[i] >= outputModules[i].sendInterval) {
@@ -138,6 +141,19 @@ OutputModule* getOutputByName(const char* name) {
 }
 
 /**
+ * Find an output module's index by name
+ * @param name Output name (case-insensitive)
+ * @return OutputID index, or -1 if not found
+ *
+ * Lets callers outside this TU identify a specific slot (e.g. OUTPUT_SD for the
+ * SD-only FORMAT verb) without the outputModules array having to be extern'd.
+ */
+int getOutputIndexByName(const char* name) {
+    OutputModule* output = getOutputByName(name);
+    return output ? (int)(output - outputModules) : -1;
+}
+
+/**
  * Enable or disable an output module
  * @param name Output name
  * @param enabled true to enable, false to disable
@@ -148,6 +164,7 @@ bool setOutputEnabled(const char* name, bool enabled) {
     if (!output) return false;
 
     int index = output - outputModules;  // Calculate index
+    bool wasEnabled = output->enabled;
     output->enabled = enabled;
     systemConfig.outputEnabled[index] = enabled ? 1 : 0;
 
@@ -155,6 +172,16 @@ bool setOutputEnabled(const char* name, bool enabled) {
     if (enabled && output->init != nullptr) {
         output->init();
     }
+
+#if ENABLE_SD_LOGGING
+    // Close the log file on disable — otherwise it stays open and unflushed for
+    // the rest of the session. Called directly rather than through a per-module
+    // deinit hook: a function pointer on every OutputModule costs 14 bytes of
+    // SRAM on the mega, which has 182 bytes free and cannot do SD logging at all.
+    if (!enabled && wasEnabled && index == OUTPUT_SD) {
+        closeSDLog();
+    }
+#endif
 
     return true;
 }
@@ -188,7 +215,14 @@ void listOutputs() {
         if (outputModules[i].enabled) {
             msg.control.print(F("Enabled, Interval: "));
             msg.control.print(outputModules[i].sendInterval);
-            msg.control.println(F("ms"));
+            msg.control.print(F("ms"));
+#if ENABLE_SD_LOGGING
+            if (i == OUTPUT_SD) {
+                msg.control.print(F(", Format: "));
+                msg.control.print(sdLogFormatName(systemConfig.sdLogFormat));
+            }
+#endif
+            msg.control.println();
         } else {
             msg.control.println(F("Disabled"));
         }

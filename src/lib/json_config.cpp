@@ -23,6 +23,7 @@
 #include "log_tags.h"
 #include "pin_registry.h"
 #include "watchdog.h"
+#include "../outputs/output_format.h"   // SdLogFormat / parseSdLogFormat
 #if ENABLE_CONTROL_ENGINE
 #include "control_json.h"
 #include "../control/control_manager.h"
@@ -316,6 +317,12 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
         JsonObject output = outputs[outputNames[i]].to<JsonObject>();
         output["enabled"] = (bool)systemConfig.outputEnabled[i];
         output["interval"] = systemConfig.outputInterval[i];
+        // SD alone carries a file layout. Additive key, no schema bump (#230).
+#if ENABLE_SD_LOGGING
+        if (i == OUTPUT_SD) {
+            output["format"] = sdLogFormatName(systemConfig.sdLogFormat);
+        }
+#endif
     }
 
     // Display settings
@@ -676,6 +683,20 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
                 JsonObject output = outputs[outputNames[i]];
                 systemConfig.outputEnabled[i] = output["enabled"];
                 systemConfig.outputInterval[i] = output["interval"];
+                // Optional: a dump from an older firmware has no "format" key,
+                // and an unparseable value leaves the current setting alone.
+#if ENABLE_SD_LOGGING
+                if (i == OUTPUT_SD && output["format"].isNull() == false) {
+                    // Named const char* rather than the variant inline: that is
+                    // this file's convention, and it yields nullptr for a
+                    // non-string value, which parseSdLogFormat rejects safely.
+                    const char* formatName = output["format"];
+                    SdLogFormat format;
+                    if (parseSdLogFormat(formatName, format)) {
+                        systemConfig.sdLogFormat = (uint8_t)format;
+                    }
+                }
+#endif
             }
         }
     }

@@ -8,6 +8,7 @@
 #include "../lib/units_registry.h"
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
+#include "output_format.h"
 
 #if ENABLE_SERIAL_OUTPUT
 
@@ -23,19 +24,20 @@ void sendSerialOutput(Input *ptr) {
         return;
     }
 
+    // Shared with the SD logger so the two recording outputs can't drift on how
+    // a reading renders (see output_format.h).
+    char valBuf[VALUE_FIELD_LEN];
+    formatValueField(valBuf, sizeof(valBuf),
+                     convertFromBaseUnits(ptr->value, ptr->unitsIndex));
+
+    char unitBuf[UNIT_FIELD_LEN];
+    formatUnitSymbol(unitBuf, sizeof(unitBuf), getUnitStringByIndex(ptr->unitsIndex));
+
     msg.data.print(ptr->abbrName);
     msg.data.print(",");
-
-    if (isnan(ptr->value)) {
-        msg.data.print("ERROR");
-    } else {
-        // Display in human-readable format
-        float displayValue = convertFromBaseUnits(ptr->value, ptr->unitsIndex);
-        msg.data.print(displayValue, 2);
-    }
-
+    msg.data.print(valBuf);
     msg.data.print(",");
-    msg.data.print((__FlashStringHelper*)getUnitStringByIndex(ptr->unitsIndex));
+    msg.data.print(unitBuf);
     msg.data.println();
 }
 

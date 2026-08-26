@@ -309,7 +309,72 @@ Continuous data logging to SD card.
 
 ```
 OUTPUT SD_Log ENABLE
+OUTPUT SD_Log INTERVAL 1000     # One row per second (default 5000)
+OUTPUT SD_Log FORMAT WIDE       # or LONG — see below (default WIDE)
 ```
+
+Only inputs routed to SD are logged — see `SET <pin> OUTPUT SD_LOG ENABLE|DISABLE`
+(all data outputs are on by default).
+
+**File format.** Two layouts are available.
+
+`WIDE` (default) writes one row per sample with a column per logged input. The
+unit is folded into the column heading, so it drops straight into a spreadsheet
+and graphs without a pivot:
+
+```
+millis,CLT_C,OILP_PSI,EGT_C
+14231,87.50,42.10,610.00
+19231,88.10,41.90,615.50
+24231,88.40,ERROR,617.20
+```
+
+`LONG` writes one row per reading. Every row carries its own sensor name and
+unit, so the layout absorbs a changing input set without needing a new header —
+and it is the layout preOBD wrote before the wide format existed, so scripts
+built on it keep working:
+
+```
+Time,Sensor,Value,Units
+14231,CLT,87.50,C
+14231,OILP,42.10,PSI
+14231,EGT,610.00,C
+```
+
+In both layouts a faulted or disconnected sensor records `ERROR` rather than
+disappearing, so a fault is distinguishable from a gap. (This is the one
+difference from pre-`FORMAT` behaviour, which dropped the reading silently —
+worth knowing if a script converts the value column without guarding.)
+
+`millis`/`Time` is uptime in milliseconds, captured once per sample — every
+reading in a tick shares one timestamp. There is no RTC on any supported board,
+so rows are correlatable within a session but not tied to wall-clock time.
+
+**Files** are written to the card root as `LOG0001.CSV`, `LOG0002.CSV`, … The
+next free number is claimed when logging starts, so a power cycle always begins
+a new file rather than appending to the previous drive's.
+
+In `WIDE`, the column set is fixed when a file is opened. Changing what gets
+logged mid-session — adding or clearing an input, toggling its SD routing,
+changing its units — closes the current file and starts the next one, so a
+header always describes the rows beneath it. `LONG` needs no such roll, since
+each row names its own sensor. Switching `FORMAT` always starts a new file.
+
+**Durability.** Rows are flushed at least once a second, so an abrupt power cut
+loses at most about a second of data. `OUTPUT SD_Log DISABLE` closes the file
+cleanly.
+
+**Checking on it.** A mounted card does not mean rows are landing — a full card,
+or one pulled mid-drive, fails every write. `SYSTEM DIAG HW` reports the live
+state:
+
+```
+[hardware]    SD card .............. OK
+[hardware]    SD logging ........... OK (LOG0007.CSV, WIDE, 412 rows, 0 errors)
+```
+
+`OUTPUT STATUS` also shows the active format, and it round-trips through
+`SYSTEM DUMP JSON` / `JSON IMPORT` as `outputs.sd.format`.
 
 ### Alarm Output
 

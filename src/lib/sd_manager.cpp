@@ -33,6 +33,10 @@
     #define BUILTIN_SDCARD 254
 #endif
 
+// Mount attempts before giving up. Each can take 2-3 s, so this must stay well
+// inside the 20 s watchdog window opened in initSD().
+#define SD_INIT_ATTEMPTS 3
+
 // Track if SD has been successfully initialized
 static bool sdInitialized = false;
 
@@ -43,24 +47,33 @@ static bool sdInitialized = false;
 void initSD() {
     msg.debug.info(TAG_SD, "Initializing SD card...");
 
-    // Extend watchdog timeout - multiple SD.begin() attempts can take >10 seconds total
-    // Note: Teensy 4.x cannot disable watchdog, only extend timeout
-    // With 5 retry attempts, each potentially taking 2-3 seconds, we need at least 15 seconds
+    // Extend watchdog timeout - SD.begin() can take 2-3 seconds per attempt and
+    // we make several. Note: Teensy 4.x cannot disable watchdog, only extend it.
     watchdogEnable(20000);  // 20 second timeout
 
     bool initSuccess = false;
 
 #if SD_PIN == 254
         msg.debug.info(TAG_SD, "Using built-in SD (BUILTIN_SDCARD)");
-        msg.debug.debug(TAG_SD, "Calling SD.begin(BUILTIN_SDCARD)...");
-        delay(100);
-        initSuccess = SD.begin(BUILTIN_SDCARD);
 #else
         pinMode(SD_PIN, OUTPUT);
         msg.debug.info(TAG_SD, "Using external SD, CS pin: %d", SD_PIN);
+#endif
+
+    // Retry: a card that is still powering up, or a slot with marginal contact,
+    // frequently fails the first begin() and succeeds on a later one. The
+    // comment here has always claimed retries; the code only ever made one
+    // attempt, so a cold card came up unmounted for the whole session.
+    for (uint8_t attempt = 1; attempt <= SD_INIT_ATTEMPTS && !initSuccess; attempt++) {
+        msg.debug.debug(TAG_SD, "SD.begin() attempt %u/%u", attempt, SD_INIT_ATTEMPTS);
         delay(100);
+#if SD_PIN == 254
+        initSuccess = SD.begin(BUILTIN_SDCARD);
+#else
         initSuccess = SD.begin(SD_PIN);
 #endif
+        watchdogReset();
+    }
 
     // Restore normal watchdog timeout
     watchdogEnable(2000);

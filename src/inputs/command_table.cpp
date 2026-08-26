@@ -29,6 +29,7 @@
 #include "../lib/pin_registry.h"
 #include "../control/control_manager.h"  // control engine re-arm trio (LOAD path)
 #include "../outputs/output_base.h"
+#include "../outputs/output_format.h"   // SdLogFormat / parseSdLogFormat
 #include "../lib/obd_query.h"
 #include "../lib/display_manager.h"
 #if ENABLE_LED
@@ -582,10 +583,20 @@ int cmd_info(int argc, const char* const* argv) {
     return 0;
 }
 
+// FORMAT is SD-only, so it disappears from the usage text on a board that
+// vetoes SD logging (mega2560) rather than being advertised and then rejected.
+#if ENABLE_SD_LOGGING
+#define OUTPUT_USAGE_FORMAT " | FORMAT <LONG|WIDE>"
+#define OUTPUT_VALID_FORMAT "|FORMAT"
+#else
+#define OUTPUT_USAGE_FORMAT ""
+#define OUTPUT_VALID_FORMAT ""
+#endif
+
 int cmd_output(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: OUTPUT requires a subcommand"));
-        msg.control.println(F("  Usage: OUTPUT STATUS | <name> ENABLE | DISABLE | INTERVAL <ms>"));
+        msg.control.println(F("  Usage: OUTPUT STATUS | <name> ENABLE | DISABLE | INTERVAL <ms>" OUTPUT_USAGE_FORMAT));
         return 1;
     }
 
@@ -597,7 +608,7 @@ int cmd_output(int argc, const char* const* argv) {
     // All other subcommands require a name
     if (argc < 3) {
         msg.control.println(F("ERROR: Subcommand requires an output name"));
-        msg.control.println(F("  Usage: OUTPUT <name> ENABLE | DISABLE | INTERVAL <ms>"));
+        msg.control.println(F("  Usage: OUTPUT <name> ENABLE | DISABLE | INTERVAL <ms>" OUTPUT_USAGE_FORMAT));
         return 1;
     }
 
@@ -626,6 +637,40 @@ int cmd_output(int argc, const char* const* argv) {
             msg.control.println(F("'"));
             return 1;
         }
+#if ENABLE_SD_LOGGING
+    } else if (streq_P(subcommand, PSTR("FORMAT"))) {
+        // SD-only: the other outputs have no file layout to choose.
+        int outputIndex = getOutputIndexByName(outputName);
+        if (outputIndex < 0) {
+            msg.control.print(F("ERROR: Unknown output '"));
+            msg.control.print(outputName);
+            msg.control.println(F("'"));
+            return 1;
+        }
+        if (outputIndex != OUTPUT_SD) {
+            msg.control.print(F("ERROR: FORMAT applies to SD_Log only, not '"));
+            msg.control.print(outputName);
+            msg.control.println(F("'"));
+            return 1;
+        }
+        if (argc < 4) {
+            msg.control.println(F("ERROR: FORMAT requires LONG or WIDE"));
+            msg.control.println(F("  WIDE: one row per sample, a column per input"));
+            msg.control.println(F("  LONG: one row per reading (Time,Sensor,Value,Units)"));
+            return 1;
+        }
+        SdLogFormat format;
+        if (!parseSdLogFormat(argv[3], format)) {
+            msg.control.print(F("ERROR: Unknown format '"));
+            msg.control.print(argv[3]);
+            msg.control.println(F("' (expected LONG or WIDE)"));
+            return 1;
+        }
+        systemConfig.sdLogFormat = (uint8_t)format;
+        msg.control.print(F("SD log format set to "));
+        msg.control.println(sdLogFormatName(systemConfig.sdLogFormat));
+        printSaveReminder();
+#endif
     } else if (streq_P(subcommand, PSTR("INTERVAL"))) {
         if (argc < 4) {
             msg.control.println(F("ERROR: INTERVAL requires a time in ms"));
@@ -648,7 +693,7 @@ int cmd_output(int argc, const char* const* argv) {
         msg.control.print(F("ERROR: Unknown subcommand '"));
         msg.control.print(subcommand);
         msg.control.println(F("'"));
-        msg.control.println(F("Valid commands: STATUS, or <module> ENABLE|DISABLE|INTERVAL"));
+        msg.control.println(F("Valid commands: STATUS, or <module> ENABLE|DISABLE|INTERVAL" OUTPUT_VALID_FORMAT));
         return 1;
     }
 

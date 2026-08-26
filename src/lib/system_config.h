@@ -10,6 +10,7 @@
 
 #include <Arduino.h>
 #include <EEPROM.h>
+#include <stddef.h>   // offsetof, for the layout static_asserts below
 #include "bus_config.h"
 
 // EEPROM memory layout constants
@@ -77,7 +78,14 @@ struct SystemConfig {
     uint16_t sensorReadInterval;
     uint16_t alarmCheckInterval;
     uint16_t lcdUpdateInterval;
-    uint16_t reserved1;
+    // These two bytes were a single `uint16_t reserved1`. Splitting them keeps
+    // the struct's size, field offsets, alignment, and XOR checksum byte-for-byte
+    // identical, so an EEPROM image written before this field existed stays
+    // valid and SYSTEM_CONFIG_VERSION does NOT need a bump (a bump resets the
+    // arena to defaults and would wipe the user's configured inputs).
+    // A legacy image reads back 0 here, which is why SDLOG_FORMAT_WIDE is 0.
+    uint8_t sdLogFormat;         // SdLogFormat enum (output_format.h)
+    uint8_t reserved1;           // Remaining spare byte
 
     // Physical Constants (4 bytes)
     float seaLevelPressure;      // hPa for altitude
@@ -117,6 +125,17 @@ struct SystemConfig {
         uint8_t reserved[5];      // Future expansion
     } logFilter;
 };
+
+// sdLogFormat and reserved1 replaced a single `uint16_t reserved1` in place, so
+// that no SYSTEM_CONFIG_VERSION bump (and therefore no EEPROM reset of the
+// user's configured inputs) was needed to add the field. That only holds while
+// the two stay a contiguous pair at the original 2-aligned offset — separating
+// them, or inserting anything between, shifts every field below and silently
+// invalidates existing images while the version number still claims v13.
+static_assert(offsetof(SystemConfig, reserved1) == offsetof(SystemConfig, sdLogFormat) + 1,
+              "sdLogFormat and reserved1 must stay adjacent (they replace one uint16_t)");
+static_assert(offsetof(SystemConfig, sdLogFormat) % 2 == 0,
+              "sdLogFormat must sit at the replaced uint16_t's aligned offset");
 
 // SystemConfig is anchored at the end of EEPROM so its address adapts to the
 // platform automatically. The input block grows from address 0; a static_assert

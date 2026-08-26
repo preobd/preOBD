@@ -10,6 +10,7 @@
 #include "message_api.h"
 #include "log_tags.h"
 #include "pin_registry.h"
+#include "../outputs/output_format.h"  // SdLogFormat
 #include <EEPROM.h>
 
 // Global system config instance
@@ -187,6 +188,7 @@ void resetSystemConfig() {
     systemConfig.sensorReadInterval = SENSOR_READ_INTERVAL_MS;
     systemConfig.alarmCheckInterval = ALARM_CHECK_INTERVAL_MS;
     systemConfig.lcdUpdateInterval = LCD_UPDATE_INTERVAL_MS;
+    systemConfig.sdLogFormat = SDLOG_FORMAT_WIDE;
     systemConfig.reserved1 = 0;
 
     // Physical constants

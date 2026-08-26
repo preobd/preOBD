@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Control engine: the per-input alarm facade (`SET <pin> ALARM`, webapp Inputs panel) now supports one-sided alarms — a Min-only floor (`SET <pin> ALARM MIN <v>`) or Max-only ceiling (`SET <pin> ALARM MAX <v>`), not just a Min+Max band — and one-sided alarms round-trip through `SYSTEM DUMP JSON` (#312)
 - `JSON IMPORT` gains a byte-counted form (`JSON IMPORT <byte-count>`) for programmatic senders that already know their payload length, alongside the existing paste-and-`END JSON` sentinel form for interactive use; `SYSTEM DUMP JSON`'s `firmware` object gains `capabilities[]`
 - nRF BLE firmware now advertises a unique per-device name (`preOBD-XXXX`, suffixed with the last two octets of the device's BLE MAC) instead of a fixed `preOBD`, so multiple units are distinguishable in a scan
+- `OUTPUT SD_Log FORMAT LONG|WIDE` selects the SD log layout — `WIDE` (default) is one row per sample with a column per input, `LONG` is the original one-row-per-reading `Time,Sensor,Value,Units` layout, kept so existing log-parsing scripts keep working; the setting persists and round-trips through `SYSTEM DUMP JSON` as `outputs.sd.format`
+
+### Changed
+- SD logging now writes one CSV row per sample with a column per input (`millis,CLT_C,OILP_PSI,…`) to sequentially numbered `LOG####.CSV` files, honours `OUTPUT SD_Log INTERVAL`, records faulted sensors as `ERROR`, and reports whether rows are actually landing via `SYSTEM DIAG HW` — replacing a row-per-reading format that could silently log nothing after a filename collision, a full card, or a removed card
 
 ### Fixed
 - Boot: the Teensy no longer risks a watchdog reset loop during startup — `initSD()` arms the 2 s watchdog and Teensy 4.x cannot disarm it, but nothing fed it again until the end of `setup()`, leaving the sensor-stabilise `delay(1000)` and everything around it running on roughly 100 ms of margin

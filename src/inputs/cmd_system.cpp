@@ -29,6 +29,8 @@
 #include "../lib/serial_manager.h"
 #include "../lib/pin_registry.h"
 #include "../outputs/output_base.h"
+#include "../outputs/output_sdlog.h"
+#include "../outputs/output_format.h"   // sdLogFormatName
 #include "../lib/obd_query.h"
 #include "../lib/display_manager.h"
 #if ENABLE_RELAY_OUTPUT
@@ -353,6 +355,31 @@ static void diagSectionHw() {
     any = true;
     msg.control.print(F("[hardware]    SD card .............. "));
     msg.control.println(isSDInitialized() ? F("OK") : F("FAIL (not mounted)"));
+#endif
+
+#if ENABLE_SD_LOGGING
+    // A mounted card says nothing about whether rows are actually landing: a
+    // full card, or one pulled mid-drive, fails every write while the output
+    // still reports "Enabled" in OUTPUT STATUS.
+    msg.control.print(F("[hardware]    SD logging ........... "));
+    if (sdLogIsFaulted()) {
+        msg.control.print(F("FAULTED after "));
+        msg.control.print(sdLogWriteErrors());
+        msg.control.println(F(" write error(s)"));
+    } else if (sdLogIsActive()) {
+        msg.control.print(F("OK ("));
+        msg.control.print(sdLogFileName());
+        msg.control.print(F(", "));
+        msg.control.print(sdLogFormatName(systemConfig.sdLogFormat));
+        msg.control.print(F(", "));
+        msg.control.print((unsigned long)sdLogRowsWritten());
+        msg.control.print(F(" rows, "));
+        msg.control.print(sdLogWriteErrors());
+        msg.control.println(F(" errors)"));
+    } else {
+        msg.control.print(F("off (output disabled or no file open), format "));
+        msg.control.println(sdLogFormatName(systemConfig.sdLogFormat));
+    }
 #endif
 
     if (!any) {

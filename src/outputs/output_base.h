@@ -15,8 +15,9 @@ typedef struct {
     const char* name;
     bool enabled;
     void (*init)(void);
-    void (*send)(Input*);
-    void (*update)(void);  // Called each loop iteration
+    void (*send)(Input*);   // Per-input push; nullptr for outputs that own their
+                            // own cadence (SD log) or are pull-based (ELM327)
+    void (*update)(void);   // Called each loop iteration
     uint16_t sendInterval;  // Milliseconds between sends
 } OutputModule;
 
@@ -29,6 +30,7 @@ void updateOutputs();              // Housekeeping (drain buffers, etc.)
 bool setOutputEnabled(const char* name, bool enabled);
 bool setOutputInterval(const char* name, uint16_t interval);
 OutputModule* getOutputByName(const char* name);
+int getOutputIndexByName(const char* name);  // OutputID index, or -1 if unknown
 void listOutputs();          // Show output status (enabled/disabled + intervals)
 void listOutputModules();    // Show available output module names
 
