@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - BLE: live per-input sensor values are now pushed over a new Extended Service characteristic (16-byte `PreobdLiveValue`, frame 0x06, display units, 500 ms change scan + 5 s heartbeat), and `SYSTEM DUMP JSON` gains per-input `pinLabel` and `unitsFactor`/`unitsOffset` and now includes disabled inputs — the data feed for the mobile app's live gauge tiles
 - Control engine: the per-input alarm facade (`SET <pin> ALARM`, webapp Inputs panel) now supports one-sided alarms — a Min-only floor (`SET <pin> ALARM MIN <v>`) or Max-only ceiling (`SET <pin> ALARM MAX <v>`), not just a Min+Max band — and one-sided alarms round-trip through `SYSTEM DUMP JSON` (#312)
 - `JSON IMPORT` gains a byte-counted form (`JSON IMPORT <byte-count>`) for programmatic senders that already know their payload length, alongside the existing paste-and-`END JSON` sentinel form for interactive use; `SYSTEM DUMP JSON`'s `firmware` object gains `capabilities[]`
+- nRF BLE firmware now advertises a unique per-device name (`preOBD-XXXX`, suffixed with the last two octets of the device's BLE MAC) instead of a fixed `preOBD`, so multiple units are distinguishable in a scan
 
 ### Fixed
 - `RULE LIST` now shows alarm limits and hysteresis converted to the source input's display units with a unit suffix instead of a bare base-unit number, and a faulted/disconnected sensor shows `ERROR` instead of a raw NaN token in `RULE LIST`, `LIST INPUTS`, and `INFO <pin>` (#324, #325)

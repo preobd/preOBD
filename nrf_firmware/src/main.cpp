@@ -104,7 +104,18 @@ void setup() {
     // Two peripheral connections so a webapp (Control Service) and a phone OBD
     // app (HM-10 FFE1) can be connected at the same time.
     Bluefruit.begin(2);
-    Bluefruit.setName("preOBD");
+
+    // Unique per-device name so multiple units are distinguishable in a scan
+    // list: "preOBD-XXXX" where XXXX is the last two octets of the BLE MAC
+    // (mac[1..0], the least-significant/most-varying bytes). getAddr() must
+    // follow begin() -- the SoftDevice assigns the address during begin().
+    {
+        uint8_t mac[6];
+        Bluefruit.getAddr(mac);
+        char name[16];
+        snprintf(name, sizeof(name), "preOBD-%02X%02X", mac[1], mac[0]);
+        Bluefruit.setName(name);
+    }
     Bluefruit.setTxPower(0);                      // 0 dBm for bench bring-up
     Bluefruit.autoConnLed(false);                 // we drive PIN_STATUS_LED
 
