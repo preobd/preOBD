@@ -45,6 +45,13 @@ void packState(int i, PreobdActionState& s) {
     s.behavior = a.behavior;
     s.failsafe = a.failsafe;
     s.command  = PREOBD_ACTION_CMD_NONE;
+    // Operator override + whether it is being held against a faulted source (#329).
+    switch (controlActionOverride(i)) {
+        case ACT_OVR_FORCE_ON:  s.overrideFlags = PREOBD_ACTION_OVR_FORCE_ON;  break;
+        case ACT_OVR_FORCE_OFF: s.overrideFlags = PREOBD_ACTION_OVR_FORCE_OFF; break;
+        default:                s.overrideFlags = PREOBD_ACTION_OVR_AUTO;      break;
+    }
+    if (controlActionSourceFaulted(i)) s.overrideFlags |= PREOBD_ACTION_OVR_SOURCE_FAULTED;
     // sequence stamped at emit time
 }
 
@@ -54,7 +61,8 @@ bool sameIgnoringSequence(const PreobdActionState& a, const PreobdActionState& b
            a.actionId == b.actionId && a.type == b.type &&
            a.state == b.state && a.target == b.target &&
            a.ruleRef == b.ruleRef && a.behavior == b.behavior &&
-           a.failsafe == b.failsafe;
+           a.failsafe == b.failsafe &&
+           a.overrideFlags == b.overrideFlags;  // else an override/fault change never pushes
 }
 
 } // namespace
@@ -92,18 +100,19 @@ void handleInbound(const uint8_t* payload, uint16_t len) {
     int slot = controlActionSlot(req.actionId);
     if (slot < 0) return;
 
-    // Manual ON/OFF only applies to a manual-only (unlinked) action. A rule-driven
-    // action follows its Rule — reject the command at the wire boundary (no state
-    // change, no confirmation notify) rather than relying on controlActionDesired()
-    // to silently no-op it (#294 / enforce the manual-only contract).
-    if (actions[slot].ruleRef != CONTROL_ID_NONE) return;
-
+    // A rule-driven action used to have its write dropped here silently — no state
+    // change and no notify, so a client couldn't even detect the refusal (#329).
+    // controlActionCommand() now routes it: manual latch when unlinked, operator
+    // override when rule-driven. Same router the CLI uses, so the two can't diverge.
     switch (req.command) {
         case PREOBD_ACTION_CMD_MANUAL_ON:
-            controlActionSetManual(req.actionId, true);
+            controlActionCommand(req.actionId, true);
             break;
         case PREOBD_ACTION_CMD_MANUAL_OFF:
-            controlActionSetManual(req.actionId, false);
+            controlActionCommand(req.actionId, false);
+            break;
+        case PREOBD_ACTION_CMD_AUTO:
+            controlActionSetOverride(req.actionId, ACT_OVR_AUTO);
             break;
         default:
             return;  // no-op command: nothing to confirm

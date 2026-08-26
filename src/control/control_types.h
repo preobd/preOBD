@@ -144,6 +144,18 @@ enum ActionFailsafe : uint8_t {
     ACT_FAILSAFE_ON  = 1
 };
 
+// Operator override of a rule-driven Action (#329). RAM-only, never persisted:
+// a forced relay must not silently survive a power cycle. Held separately from
+// the manual ON/OFF latch so that unlinking a Rule leaves AUTO and falls through
+// to the (already-cleared) latch — the separation is what prevents the stale
+// manual latch #294 removed. FORCE_* outranks the Rule *and* the failsafe: if
+// the sensor dies and you need the fan on, you need the fan on (§11.3).
+enum ActionOverride : uint8_t {
+    ACT_OVR_AUTO      = 0,  // follow the Rule (default)
+    ACT_OVR_FORCE_ON  = 1,
+    ACT_OVR_FORCE_OFF = 2
+};
+
 // ============================================================================
 // Persisted records (EEPROM-resident; stored in the shared config-store arena,
 // input_manager.cpp). Records are managed by a stable `id`, NOT array slot.

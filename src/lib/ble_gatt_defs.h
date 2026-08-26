@@ -242,9 +242,13 @@ static_assert(sizeof(PreobdRelayState) == PREOBD_RELAY_STATE_SIZE,
 // Pushed via framed transport (type 0x05, notify) on every Action state/config
 // change, and written by clients to toggle a manual Action.
 //
-// Read-only fields: actionId, type, state, target, ruleRef, behavior, failsafe.
-// Writable: command (PREOBD_ACTION_CMD_*) — actionId selects the target Action;
-// a manual-toggle is only honored for manual (ruleRef == NONE) Actions.
+// Read-only fields: actionId, type, state, target, ruleRef, behavior, failsafe,
+// overrideFlags.
+// Writable: command (PREOBD_ACTION_CMD_*) — actionId selects the target Action.
+// MANUAL_ON/MANUAL_OFF drive an unlinked Action's manual latch; on a rule-driven
+// Action they instead set an operator override that outranks the Rule and the
+// failsafe, released with CMD_AUTO (#329). The override is RAM-only on the
+// device and reverts to AUTO on reboot; it is reported in overrideFlags.
 // =============================================================================
 
 #define PREOBD_ACTION_STATE_SIZE 16
@@ -266,6 +270,15 @@ static_assert(sizeof(PreobdRelayState) == PREOBD_RELAY_STATE_SIZE,
 #define PREOBD_ACTION_CMD_NONE       0
 #define PREOBD_ACTION_CMD_MANUAL_ON  1
 #define PREOBD_ACTION_CMD_MANUAL_OFF 2
+#define PREOBD_ACTION_CMD_AUTO       3   // release an operator override (#329)
+
+// overrideFlags — additive into a previously-reserved byte, so the protocol
+// version stays 2; older clients simply ignore it.
+#define PREOBD_ACTION_OVR_MASK           0x03  // bits 0-1: override state
+#define PREOBD_ACTION_OVR_AUTO           0
+#define PREOBD_ACTION_OVR_FORCE_ON       1
+#define PREOBD_ACTION_OVR_FORCE_OFF      2
+#define PREOBD_ACTION_OVR_SOURCE_FAULTED 0x04  // bit 2: rule source untrustworthy
 
 #ifdef __cplusplus
 
@@ -282,7 +295,8 @@ struct PreobdActionState {
     uint8_t  behavior;         // Byte 8:      bit0 = invert/active-low (read-only)
     uint8_t  failsafe;         // Byte 9:      PREOBD_ACTION_FAILSAFE_* (RELAY only, read-only)
     uint8_t  command;          // Byte 10:     PREOBD_ACTION_CMD_* (writable; reads back NONE)
-    uint8_t  reserved[5];      // Bytes 11-15: future use
+    uint8_t  overrideFlags;    // Byte 11:     PREOBD_ACTION_OVR_* (read-only, #329)
+    uint8_t  reserved[4];      // Bytes 12-15: future use
 };
 
 #pragma pack(pop)

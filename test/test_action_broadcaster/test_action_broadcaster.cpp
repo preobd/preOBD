@@ -38,6 +38,40 @@ bool controlActionSetManual(uint8_t id, bool on) {
     ++g_setManualCalls; g_setManualId = id; g_setManualVal = on; return true;
 }
 
+// controlActionCommand() — the shared ON/OFF router (#329). Mirror the real
+// routing so a rule-driven write lands on the override, not the manual latch.
+static ActionOverride g_override[MAX_ACTIONS];
+static int            g_commandCalls = 0;
+static uint8_t        g_commandId = 0;
+static bool           g_commandVal = false;
+bool controlActionCommand(uint8_t id, bool on) {
+    int slot = controlActionSlot(id);
+    if (slot < 0) return false;
+    ++g_commandCalls; g_commandId = id; g_commandVal = on;
+    if (actions[slot].ruleRef == CONTROL_ID_NONE) {
+        controlActionSetManual(id, on);
+    } else {
+        g_override[slot] = on ? ACT_OVR_FORCE_ON : ACT_OVR_FORCE_OFF;
+    }
+    return true;
+}
+
+static int g_setOverrideCalls = 0;
+bool controlActionSetOverride(uint8_t id, ActionOverride ovr) {
+    int slot = controlActionSlot(id);
+    if (slot < 0) return false;
+    ++g_setOverrideCalls; g_override[slot] = ovr; return true;
+}
+ActionOverride controlActionOverride(int slot) {
+    return (slot >= 0 && slot < MAX_ACTIONS) ? g_override[slot] : ACT_OVR_AUTO;
+}
+
+// controlActionSourceFaulted() — we own the fault truth here.
+static bool g_sourceFaulted[MAX_ACTIONS];
+bool controlActionSourceFaulted(int slot) {
+    return (slot >= 0 && slot < MAX_ACTIONS) ? g_sourceFaulted[slot] : false;
+}
+
 // ---- Capturing transport (records every frame this tick) ----
 struct CapturedFrame { uint8_t type; uint16_t len; uint8_t payload[32]; };
 static CapturedFrame g_frames[8];
@@ -73,6 +107,10 @@ void setUp(void) {
     memset(g_actionState, 0, sizeof(g_actionState));
     for (int i = 0; i < MAX_ACTIONS; ++i) actions[i].id = CONTROL_ID_NONE;  // all empty
     g_setManualCalls = 0;
+    g_commandCalls = 0;
+    g_setOverrideCalls = 0;
+    memset(g_override, 0, sizeof(g_override));
+    memset(g_sourceFaulted, 0, sizeof(g_sourceFaulted));
     ActionBroadcaster::init();
 }
 void tearDown(void) {}
@@ -156,11 +194,12 @@ static void test_handle_inbound_manual_on(void) {
     TEST_ASSERT_TRUE(g_setManualVal);
 }
 
-// A manual command targeting a RULE-DRIVEN action is rejected at the wire
-// boundary (no manual-state mutation): the action follows its Rule, and a
-// stale manual flag could otherwise snap the pin on once the rule is unlinked
-// (#294 — enforce the manual-only contract).
-static void test_handle_inbound_rejects_manual_on_rule_driven(void) {
+// A manual command targeting a RULE-DRIVEN action is now ACCEPTED and routed to
+// an operator override (#329) — it used to be dropped silently at the wire
+// boundary, with no state change and no notify for the client to detect. The
+// manual latch must stay untouched: that separation is what keeps #294's stale
+// latch from coming back when the rule is later unlinked.
+static void test_handle_inbound_manual_on_rule_driven_sets_override(void) {
     configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, /*ruleRef*/5, 0, 0);
     PreobdActionState req;
     memset(&req, 0, sizeof(req));
@@ -168,7 +207,74 @@ static void test_handle_inbound_rejects_manual_on_rule_driven(void) {
     req.actionId = 7;
     req.command  = PREOBD_ACTION_CMD_MANUAL_ON;
     ActionBroadcaster::handleInbound(reinterpret_cast<const uint8_t*>(&req), sizeof(req));
-    TEST_ASSERT_EQUAL_INT(0, g_setManualCalls);
+    TEST_ASSERT_EQUAL_INT(1, g_commandCalls);
+    TEST_ASSERT_EQUAL_INT(0, g_setManualCalls);   // latch untouched
+    TEST_ASSERT_EQUAL_INT(ACT_OVR_FORCE_ON, controlActionOverride(0));
+}
+
+// CMD_AUTO releases an override.
+static void test_handle_inbound_auto_releases_override(void) {
+    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, /*ruleRef*/5, 0, 0);
+    g_override[0] = ACT_OVR_FORCE_ON;
+    PreobdActionState req;
+    memset(&req, 0, sizeof(req));
+    req.protocolVersion = PREOBD_BLE_PROTOCOL_VERSION;
+    req.actionId = 7;
+    req.command  = PREOBD_ACTION_CMD_AUTO;
+    ActionBroadcaster::handleInbound(reinterpret_cast<const uint8_t*>(&req), sizeof(req));
+    TEST_ASSERT_EQUAL_INT(1, g_setOverrideCalls);
+    TEST_ASSERT_EQUAL_INT(ACT_OVR_AUTO, controlActionOverride(0));
+}
+
+// CMD_AUTO on an unlinked action is harmless: it clears an override that was
+// never set, and must not disturb the manual latch that actually drives the pin.
+static void test_handle_inbound_auto_on_manual_action_is_harmless(void) {
+    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, CONTROL_ID_NONE, 0, 0);
+    PreobdActionState req;
+    memset(&req, 0, sizeof(req));
+    req.protocolVersion = PREOBD_BLE_PROTOCOL_VERSION;
+    req.actionId = 7;
+    req.command  = PREOBD_ACTION_CMD_AUTO;
+    ActionBroadcaster::handleInbound(reinterpret_cast<const uint8_t*>(&req), sizeof(req));
+    TEST_ASSERT_EQUAL_INT(ACT_OVR_AUTO, controlActionOverride(0));
+    TEST_ASSERT_EQUAL_INT(0, g_setManualCalls);   // manual latch untouched
+}
+
+// An unknown/garbage command byte must not mutate any state.
+static void test_handle_inbound_unknown_command_is_inert(void) {
+    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, /*ruleRef*/5, 0, 0);
+    g_override[0] = ACT_OVR_FORCE_ON;
+    PreobdActionState req;
+    memset(&req, 0, sizeof(req));
+    req.protocolVersion = PREOBD_BLE_PROTOCOL_VERSION;
+    req.actionId = 7;
+    req.command  = 0x7F;                          // not a defined CMD_*
+    ActionBroadcaster::handleInbound(reinterpret_cast<const uint8_t*>(&req), sizeof(req));
+    TEST_ASSERT_EQUAL_INT(0, g_commandCalls);
+    TEST_ASSERT_EQUAL_INT(0, g_setOverrideCalls);
+    TEST_ASSERT_EQUAL_INT(ACT_OVR_FORCE_ON, controlActionOverride(0));  // force survives
+}
+
+// The override state is reported in byte 11, and a change in it ALONE must push
+// a fresh frame — otherwise the client never learns an override was applied.
+static void test_override_flags_reported_and_push_on_change(void) {
+    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, /*ruleRef*/5, 0, 0);
+    ActionBroadcaster::tick();                       // snapshot everything
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_OVR_AUTO, frameState(0).overrideFlags);
+
+    g_frameCount = 0;
+    g_override[0] = ACT_OVR_FORCE_ON;
+    ActionBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_OVR_FORCE_ON, frameState(0).overrideFlags);
+
+    // ...and so must a source going faulted underneath a held override.
+    g_frameCount = 0;
+    g_sourceFaulted[0] = true;
+    ActionBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_OVR_FORCE_ON | PREOBD_ACTION_OVR_SOURCE_FAULTED,
+                            frameState(0).overrideFlags);
 }
 
 // A NONE (status-only) command performs no toggle.
@@ -176,8 +282,9 @@ static void test_handle_inbound_none_is_noop(void) {
     configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, CONTROL_ID_NONE, 0, 0);
     PreobdActionState req;
     memset(&req, 0, sizeof(req));
-    req.actionId = 7;
-    req.command  = PREOBD_ACTION_CMD_NONE;
+    req.protocolVersion = PREOBD_BLE_PROTOCOL_VERSION;  // else the version gate
+    req.actionId = 7;                                   // rejects it and this test
+    req.command  = PREOBD_ACTION_CMD_NONE;              // passes vacuously
     ActionBroadcaster::handleInbound(reinterpret_cast<const uint8_t*>(&req), sizeof(req));
     TEST_ASSERT_EQUAL_INT(0, g_setManualCalls);
 }
@@ -186,9 +293,25 @@ static void test_handle_inbound_none_is_noop(void) {
 static void test_handle_inbound_unknown_id(void) {
     PreobdActionState req;
     memset(&req, 0, sizeof(req));
-    req.actionId = 99;  // not configured
+    req.protocolVersion = PREOBD_BLE_PROTOCOL_VERSION;  // reach the id check, not
+    req.actionId = 99;  // not configured                  the version gate
     req.command  = PREOBD_ACTION_CMD_MANUAL_ON;
     ActionBroadcaster::handleInbound(reinterpret_cast<const uint8_t*>(&req), sizeof(req));
+    TEST_ASSERT_EQUAL_INT(0, g_setManualCalls);
+    TEST_ASSERT_EQUAL_INT(0, g_commandCalls);
+}
+
+// A mismatched protocolVersion is rejected outright — the 0x05 frame id is shared
+// with the retired 16-byte PreobdRelayState, whose byte 10 is NOT a command field.
+static void test_handle_inbound_rejects_wrong_protocol_version(void) {
+    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, CONTROL_ID_NONE, 0, 0);
+    PreobdActionState req;
+    memset(&req, 0, sizeof(req));
+    req.protocolVersion = PREOBD_BLE_PROTOCOL_VERSION + 1;
+    req.actionId = 7;
+    req.command  = PREOBD_ACTION_CMD_MANUAL_ON;
+    ActionBroadcaster::handleInbound(reinterpret_cast<const uint8_t*>(&req), sizeof(req));
+    TEST_ASSERT_EQUAL_INT(0, g_commandCalls);
     TEST_ASSERT_EQUAL_INT(0, g_setManualCalls);
 }
 
@@ -218,9 +341,14 @@ int main(int, char**) {
     RUN_TEST(test_idempotent_after_snapshot);
     RUN_TEST(test_state_change_emits_one_frame);
     RUN_TEST(test_handle_inbound_manual_on);
-    RUN_TEST(test_handle_inbound_rejects_manual_on_rule_driven);
+    RUN_TEST(test_handle_inbound_manual_on_rule_driven_sets_override);
+    RUN_TEST(test_handle_inbound_auto_releases_override);
+    RUN_TEST(test_handle_inbound_auto_on_manual_action_is_harmless);
+    RUN_TEST(test_handle_inbound_unknown_command_is_inert);
+    RUN_TEST(test_override_flags_reported_and_push_on_change);
     RUN_TEST(test_handle_inbound_none_is_noop);
     RUN_TEST(test_handle_inbound_unknown_id);
+    RUN_TEST(test_handle_inbound_rejects_wrong_protocol_version);
     RUN_TEST(test_handle_inbound_rejects_bad_length);
     RUN_TEST(test_heartbeat_resends_all);
     return UNITY_END();

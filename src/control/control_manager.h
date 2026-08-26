@@ -47,7 +47,10 @@ uint8_t controlRuleCount();             // number of configured rules
 
 // Clear any Action.ruleRef pointing at `ruleId` (referential integrity on rule
 // delete — those actions revert to manual-only). Called from RULE DEL.
-void    controlClearActionsForRule(uint8_t ruleId);
+// Revert every Action referring to `ruleId` to manual-only and release whatever
+// was driving it. Returns how many were actively driven (override or manual latch)
+// at the time, so the caller can say so rather than silently de-energizing a relay.
+uint8_t controlClearActionsForRule(uint8_t ruleId);
 
 // --- application default-Rule template (§11.5) ---
 
@@ -91,7 +94,9 @@ uint8_t controlSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, fl
 
 // Remove the input's alarm Rule (frees the pool slot; referring Actions revert
 // to manual-only). Returns true if one was removed.
-bool    controlRemoveAlarmRuleForInput(uint8_t pin);
+// Optional `releasedOut` receives how many Actions following the removed Rule were
+// actively driven, so the caller can report a relay it just de-energized (#329).
+bool    controlRemoveAlarmRuleForInput(uint8_t pin, uint8_t* releasedOut = nullptr);
 
 // Application changed under existing rules: rewrite every Rule sourced from
 // `pin` to the input's (now-updated) application template and re-arm, keeping
@@ -127,13 +132,32 @@ void controlActionsUpdate(bool configMode);
 // Current driven (logical, pre-invert) state of the action in `slot`, for LIST.
 bool controlActionState(int slot);
 
+// True when the action in `slot` is rule-driven and its rule's source input is
+// untrustworthy (missing or NaN). Shared by the evaluation loop and by the CLI /
+// BLE reporting paths so an override held against a dead sensor is never silent
+// (#329). Manual-only and dangling-ref actions report false.
+bool controlActionSourceFaulted(int slot);
+
 // --- action table helpers (operate on actions[]) ---
 int     controlActionSlot(uint8_t id);
 int     controlActionFreeSlot();
 uint8_t controlActionAllocId();
 uint8_t controlActionCount();
 void    controlActionConfigurePin(int slot);   // pinMode target OUTPUT + de-assert
-bool    controlActionSetManual(uint8_t id, bool on);  // ACTION <id> ON|OFF
+bool    controlActionSetManual(uint8_t id, bool on);  // manual latch (unlinked actions)
+// ACTION <id> ON|OFF from any surface: routes to the manual latch when the action
+// is unlinked, or to a FORCE_ON/FORCE_OFF operator override when it is rule-driven
+// (#329). Use this rather than controlActionSetManual() from command paths.
+bool    controlActionCommand(uint8_t id, bool on);
+// Operator override (RAM-only, reverts to AUTO on reboot). ACTION <id> AUTO
+// releases it; it is also cleared on any rule-link change and on pin reconfigure.
+ActionOverride controlActionOverride(int slot);
+// Clear BOTH the override and the manual latch — the "this action's driver just
+// changed, so it starts de-asserted" invariant. Returns true if either was
+// actually driving. Call on every link change; clearing only one leaves the #294
+// stale-latch snap-on reachable via the other.
+bool    controlActionReleaseDrive(uint8_t id);
+bool    controlActionSetOverride(uint8_t id, ActionOverride ovr);
 bool    controlActionSetName(uint8_t id, const char* name);  // ACTION <id> NAME <text>
 
 #endif // ENABLE_CONTROL_ENGINE

@@ -341,8 +341,16 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
 
     // SET <pin> ALARM DISABLE|OFF — remove the input's alarm Rule.
     if (streq_P(argv[3], PSTR("DISABLE")) || streq_P(argv[3], PSTR("OFF"))) {
-        if (controlRemoveAlarmRuleForInput(pin)) {
+        uint8_t released = 0;
+        if (controlRemoveAlarmRuleForInput(pin, &released)) {
             msg.control.println(F("Alarm removed (Rule deleted). SAVE to persist."));
+            // Clearing an alarm doesn't look like an action command, so say it
+            // out loud when it just dropped a relay someone was holding (#329).
+            if (released) {
+                msg.control.print(F("  NOTE: released "));
+                msg.control.print(released);
+                msg.control.println(F(" driven action(s) that followed it; they are now OFF"));
+            }
         } else {
             msg.control.println(F("No alarm Rule on that input - nothing to remove."));
         }

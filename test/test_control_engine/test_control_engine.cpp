@@ -303,27 +303,82 @@ static Action makeAction(uint8_t type, uint8_t ruleRef, uint8_t failsafe = ACT_F
 static void test_action_manual_follows_manual_state(void) {
     Action a = makeAction(ACT_RELAY, CONTROL_ID_NONE);
     // ruleActive / sourceTrustworthy are ignored for a manual action
-    TEST_ASSERT_TRUE(controlActionDesired(a, false, false, true));
-    TEST_ASSERT_FALSE(controlActionDesired(a, true, true, false));
+    TEST_ASSERT_TRUE(controlActionDesired(a, false, false, true, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(controlActionDesired(a, true, true, false, ACT_OVR_AUTO));
 }
 
 static void test_action_follows_rule_when_trustworthy(void) {
     Action a = makeAction(ACT_RELAY, 5);  // linked to rule id 5
-    TEST_ASSERT_TRUE(controlActionDesired(a, true, true, false));
-    TEST_ASSERT_FALSE(controlActionDesired(a, false, true, false));
+    TEST_ASSERT_TRUE(controlActionDesired(a, true, true, false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(controlActionDesired(a, false, true, false, ACT_OVR_AUTO));
 }
 
 static void test_action_relay_failsafe_on_untrustworthy(void) {
     Action aOn  = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
     Action aOff = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_OFF);
     // source untrustworthy: ignore ruleActive, assume failsafe
-    TEST_ASSERT_TRUE(controlActionDesired(aOn,  false, false, false));
-    TEST_ASSERT_FALSE(controlActionDesired(aOff, true,  false, false));
+    TEST_ASSERT_TRUE(controlActionDesired(aOn,  false, false, false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(controlActionDesired(aOff, true,  false, false, ACT_OVR_AUTO));
 }
 
 static void test_action_nonrelay_deasserts_on_untrustworthy(void) {
     Action a = makeAction(ACT_LED, 5, ACT_FAILSAFE_ON);  // failsafe ignored for non-RELAY
-    TEST_ASSERT_FALSE(controlActionDesired(a, true, false, false));
+    TEST_ASSERT_FALSE(controlActionDesired(a, true, false, false, ACT_OVR_AUTO));
+}
+
+// --- Operator override (#329) ------------------------------------------
+
+// An override beats the Rule outright, in both directions.
+static void test_action_override_beats_rule(void) {
+    Action a = makeAction(ACT_RELAY, 5);
+    TEST_ASSERT_TRUE(controlActionDesired(a, false, true, false, ACT_OVR_FORCE_ON));
+    TEST_ASSERT_FALSE(controlActionDesired(a, true, true, false, ACT_OVR_FORCE_OFF));
+}
+
+// THE decision this issue turned on: a forced state also beats the FAILSAFE. If
+// the sensor is what died, the operator still needs the fan on — so the failsafe
+// must not be able to countermand a deliberate force. Both failsafe polarities.
+static void test_action_override_beats_failsafe(void) {
+    Action failOff = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_OFF);
+    TEST_ASSERT_TRUE(controlActionDesired(failOff, false, /*trustworthy*/false, false,
+                                          ACT_OVR_FORCE_ON));
+    Action failOn = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
+    TEST_ASSERT_FALSE(controlActionDesired(failOn, true, /*trustworthy*/false, false,
+                                           ACT_OVR_FORCE_OFF));
+}
+
+// AUTO is exactly today's behavior — the override tier must be inert by default.
+static void test_action_override_auto_is_transparent(void) {
+    Action a = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
+    TEST_ASSERT_TRUE(controlActionDesired(a, true, true, false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(controlActionDesired(a, false, true, false, ACT_OVR_AUTO));
+    TEST_ASSERT_TRUE(controlActionDesired(a, false, false, false, ACT_OVR_AUTO));  // failsafe
+}
+
+// An override on an unlinked action wins over the manual latch too (the CLI/BLE
+// router never sets one there, but the resolution order must be unambiguous).
+static void test_action_override_beats_manual_latch(void) {
+    Action a = makeAction(ACT_RELAY, CONTROL_ID_NONE);
+    TEST_ASSERT_TRUE(controlActionDesired(a, false, true, /*manual*/false, ACT_OVR_FORCE_ON));
+    TEST_ASSERT_FALSE(controlActionDesired(a, false, true, /*manual*/true, ACT_OVR_FORCE_OFF));
+}
+
+// #294 regression, at the resolution layer. The manager's controlActionReleaseDrive()
+// is what enforces this in the firmware (it clears the manual latch alongside the
+// override on every link change), but the reason it MUST is visible right here: an
+// action that is rule-driven ignores the latch entirely, so a latch left armed is
+// invisible until the link goes away -- and then drives the pin with no command.
+static void test_action_stale_manual_latch_would_snap_on_after_unlink(void) {
+    Action linked = makeAction(ACT_RELAY, 5);
+    // While linked, a stale latch is correctly ignored: rule says off, output off.
+    TEST_ASSERT_FALSE(controlActionDesired(linked, false, true, /*manual*/true, ACT_OVR_AUTO));
+    // Unlink it with that latch still set and the pin snaps ON, uncommanded. This
+    // is the failure mode; the fix is that no code path may reach here with the
+    // latch armed, because every link change releases it.
+    Action unlinked = makeAction(ACT_RELAY, CONTROL_ID_NONE);
+    TEST_ASSERT_TRUE(controlActionDesired(unlinked, false, true, /*manual*/true, ACT_OVR_AUTO));
+    // Released (the invariant controlActionReleaseDrive maintains) -> stays off.
+    TEST_ASSERT_FALSE(controlActionDesired(unlinked, false, true, /*manual*/false, ACT_OVR_AUTO));
 }
 
 int main(int, char**) {
@@ -354,5 +409,10 @@ int main(int, char**) {
     RUN_TEST(test_action_follows_rule_when_trustworthy);
     RUN_TEST(test_action_relay_failsafe_on_untrustworthy);
     RUN_TEST(test_action_nonrelay_deasserts_on_untrustworthy);
+    RUN_TEST(test_action_override_beats_rule);
+    RUN_TEST(test_action_override_beats_failsafe);
+    RUN_TEST(test_action_override_auto_is_transparent);
+    RUN_TEST(test_action_override_beats_manual_latch);
+    RUN_TEST(test_action_stale_manual_latch_would_snap_on_after_unlink);
     return UNITY_END();
 }

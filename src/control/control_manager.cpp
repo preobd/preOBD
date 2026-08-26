@@ -296,13 +296,14 @@ uint8_t controlSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, fl
     return id;
 }
 
-bool controlRemoveAlarmRuleForInput(uint8_t pin) {
+bool controlRemoveAlarmRuleForInput(uint8_t pin, uint8_t* releasedOut) {
     int slot = controlAlarmRuleSlotForInput(pin);
     if (slot < 0) return false;
     uint8_t id = rules[slot].id;
     rules[slot].id = CONTROL_ID_NONE;
     g_ruleContexts[slot].state = RULE_DISABLED;
-    controlClearActionsForRule(id);  // referential integrity (mirrors RULE DEL)
+    uint8_t released = controlClearActionsForRule(id);  // referential integrity (mirrors RULE DEL)
+    if (releasedOut) *releasedOut = released;
     return true;
 }
 
@@ -323,20 +324,30 @@ uint8_t controlReseedRulesForInput(uint8_t pin, uint32_t now) {
     return n;
 }
 
-void controlClearActionsForRule(uint8_t ruleId) {
-    if (ruleId == CONTROL_ID_NONE) return;
+uint8_t controlClearActionsForRule(uint8_t ruleId) {
+    if (ruleId == CONTROL_ID_NONE) return 0;
+    uint8_t released = 0;
     for (int i = 0; i < MAX_ACTIONS; i++) {
         if (actions[i].id != CONTROL_ID_NONE &&
             actions[i].ruleRef == ruleId) {
             actions[i].ruleRef = CONTROL_ID_NONE;  // revert to manual-only
+            // Losing the rule must also drop whatever was driving the action, or
+            // the pin snaps to a stale state nobody commanded (#294 / #329).
+            if (controlActionReleaseDrive(actions[i].id)) released++;
         }
     }
+    return released;
 }
 
 // ===== Actions =====
 
 static bool g_actionManual[MAX_ACTIONS];  // commanded state for manual (ruleRef==NONE) actions
 static bool g_actionState[MAX_ACTIONS];   // last driven logical (pre-invert) state, for LIST
+// Operator override of a rule-driven action (#329). Deliberately a DISTINCT field
+// from g_actionManual so unlinking a rule leaves AUTO and falls through to the
+// already-cleared manual latch — never the stale latch #294 removed. RAM-only:
+// nothing here is persisted, so a forced relay reverts to AUTO on reboot.
+static ActionOverride g_actionOverride[MAX_ACTIONS];
 
 // Write a resolved logical state to an action's target, applying inversion.
 static void driveAction(const Action& a, bool on) {
@@ -346,7 +357,8 @@ static void driveAction(const Action& a, bool on) {
 
 void controlActionConfigurePin(int slot) {
     if (slot < 0 || slot >= MAX_ACTIONS) return;
-    g_actionManual[slot] = false;  // a (re)configured slot starts de-asserted (no stale manual)
+    g_actionManual[slot]   = false;  // a (re)configured slot starts de-asserted (no stale manual)
+    g_actionOverride[slot] = ACT_OVR_AUTO;  // ...and no stale operator force (#329)
     Action& a = actions[slot];
     if (a.id == CONTROL_ID_NONE) return;
     if (a.type == ACT_RELAY) {
@@ -359,6 +371,7 @@ void controlActionsInit() {
     for (int i = 0; i < MAX_ACTIONS; i++) {
         g_actionManual[i] = false;
         g_actionState[i] = false;
+        g_actionOverride[i] = ACT_OVR_AUTO;
         controlActionConfigurePin(i);
     }
     // NB: the pin-registry sync is deliberately NOT done here. At boot this runs
@@ -400,6 +413,28 @@ uint8_t controlSyncActionPins() {
     return conflicts;
 }
 
+// Is this action's rule source untrustworthy? Shared by the evaluation loop and
+// by the CLI/BLE reporting paths, so "source faulted" is computed exactly once
+// (#329). A manual-only or dangling-ref action is never "faulted" — it has no
+// source to fault.
+// The single definition of "this rule's source can't be trusted". Everything else
+// — the evaluation loop, the CLI row, the BLE frame — funnels through here, so the
+// operator can never be shown a fault state that differs from the one that drove
+// the pin. `rslot < 0` (dangling ref) is deliberately NOT a fault: it matches the
+// loop's `sourceTrustworthy = true` branch for that case.
+static bool sourceFaultedForRuleSlot(int rslot) {
+    if (rslot < 0) return false;
+    Input* in = getInputByPin(rules[rslot].sourceInput);
+    return (in == nullptr) || isnan(in->value);
+}
+
+bool controlActionSourceFaulted(int slot) {
+    if (slot < 0 || slot >= MAX_ACTIONS) return false;
+    const Action& a = actions[slot];
+    if (a.id == CONTROL_ID_NONE || a.ruleRef == CONTROL_ID_NONE) return false;
+    return sourceFaultedForRuleSlot(controlRuleSlot(a.ruleRef));
+}
+
 void controlActionsUpdate(bool configMode) {
     for (int i = 0; i < MAX_ACTIONS; i++) {
         Action& a = actions[i];
@@ -415,19 +450,21 @@ void controlActionsUpdate(bool configMode) {
                 sourceTrustworthy = true;
             } else {
                 ruleActive = controlRuleIsActive(g_ruleContexts[rslot]);
-                Input* in = getInputByPin(rules[rslot].sourceInput);
-                sourceTrustworthy = (in != nullptr) && !isnan(in->value);
+                sourceTrustworthy = !sourceFaultedForRuleSlot(rslot);  // rslot already resolved
             }
         }
 
-        bool on = controlActionDesired(a, ruleActive, sourceTrustworthy, g_actionManual[i]);
+        bool on = controlActionDesired(a, ruleActive, sourceTrustworthy,
+                                       g_actionManual[i], g_actionOverride[i]);
 
         // Bench safety: suppress RULE-DRIVEN actuation in CONFIG so a settling /
         // garbage sensor reading can't fire a relay (#268). An explicit manual
         // action (ruleRef == NONE, driven only by ACTION <id> ON|OFF) is a
         // deliberate operator command and still actuates in CONFIG — mirrors the
-        // legacy setRelayMode() MANUAL behavior (#250).
-        if (configMode && a.ruleRef != CONTROL_ID_NONE) on = false;
+        // legacy setRelayMode() MANUAL behavior (#250). An operator override is
+        // the same kind of deliberate command, so it actuates in CONFIG too (#329).
+        if (configMode && a.ruleRef != CONTROL_ID_NONE &&
+            g_actionOverride[i] == ACT_OVR_AUTO) on = false;
 
         g_actionState[i] = on;
         if (a.type == ACT_RELAY) driveAction(a, on);
@@ -447,6 +484,45 @@ bool controlActionSetManual(uint8_t id, bool on) {
     int slot = controlActionSlot(id);
     if (slot < 0) return false;
     g_actionManual[slot] = on;
+    return true;
+}
+
+ActionOverride controlActionOverride(int slot) {
+    return (slot >= 0 && slot < MAX_ACTIONS) ? g_actionOverride[slot] : ACT_OVR_AUTO;
+}
+
+bool controlActionSetOverride(uint8_t id, ActionOverride ovr) {
+    int slot = controlActionSlot(id);
+    if (slot < 0) return false;
+    g_actionOverride[slot] = ovr;
+    return true;
+}
+
+bool controlActionReleaseDrive(uint8_t id) {
+    int slot = controlActionSlot(id);
+    if (slot < 0) return false;
+    // An action whose *driver* changes starts de-asserted — one invariant covering
+    // both the operator override and the manual latch. Clearing only the override
+    // would leave the #294 bug intact by another route: arm the latch while the
+    // action is unlinked, link it to a rule (latch goes dormant, not cleared), then
+    // unlink or delete that rule — and controlActionDesired() falls straight back
+    // through to the stale latch and snaps the pin ON with no operator command.
+    const bool wasDriving = (g_actionOverride[slot] != ACT_OVR_AUTO) || g_actionManual[slot];
+    g_actionOverride[slot] = ACT_OVR_AUTO;
+    g_actionManual[slot]   = false;
+    return wasDriving;
+}
+
+bool controlActionCommand(uint8_t id, bool on) {
+    int slot = controlActionSlot(id);
+    if (slot < 0) return false;
+    // One router so the CLI and the BLE write can never diverge: an unlinked
+    // action's ON/OFF is the manual latch; a rule-driven one's is an override.
+    if (actions[slot].ruleRef == CONTROL_ID_NONE) {
+        g_actionManual[slot] = on;
+    } else {
+        g_actionOverride[slot] = on ? ACT_OVR_FORCE_ON : ACT_OVR_FORCE_OFF;
+    }
     return true;
 }
 

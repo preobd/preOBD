@@ -921,6 +921,7 @@
   .state-pill.off { background: rgba(138,122,102,0.10); color: var(--dim); border: 1px solid rgba(138,122,102,0.25); }
   .driven-rule { color: #8A6B0B; }
   .driven-manual { color: var(--dim-light); font-style: italic; }
+  .driven-override { color: #B3261E; font-weight: 700; }
 
   .ctl-legend {
     display: flex; gap: 14px; flex-wrap: wrap; padding: 10px 12px;
@@ -1155,6 +1156,11 @@ const ACTION_FAILSAFE_OFF = 0, ACTION_FAILSAFE_ON = 1;
 const ACTION_ID_NONE = 0xFF;            // unconfigured slot / manual (ruleRef)
 const ACTION_BEHAVIOR_INVERT = 0x01;
 const ACTION_CMD_NONE = 0, ACTION_CMD_MANUAL_ON = 1, ACTION_CMD_MANUAL_OFF = 2;
+const ACTION_CMD_AUTO = 3;              // release an operator override (#329)
+// overrideFlags (byte 11) — additive, protocol stays 2.
+const ACTION_OVR_MASK = 0x03;
+const ACTION_OVR_AUTO = 0, ACTION_OVR_FORCE_ON = 1, ACTION_OVR_FORCE_OFF = 2;
+const ACTION_OVR_SOURCE_FAULTED = 0x04;
 
 const PROMPT = 'preOBD> ';
 const ENCODER = new TextEncoder();
@@ -1761,9 +1767,11 @@ setInterval(() => {
 // --- Actions ---
 // Char …0031 pushes a 16-byte PreobdActionState per Action on every state/config
 // change (a relay is an Action of type RELAY). Actions carry no thresholds — those
-// live on Rules now — so the only writable field is `command` (MANUAL_ON/OFF),
-// honored by the firmware only for manual (ruleRef == NONE) Actions. Rule-driven
-// Actions are read-only status here.
+// live on Rules now — so the only writable field is `command`. MANUAL_ON/OFF drive
+// an unlinked Action's manual latch; on a rule-driven Action they set an operator
+// override that outranks the Rule AND the failsafe, released with CMD_AUTO (#329).
+// Byte 11 reports the override back, including whether it is being held against a
+// faulted source. The override is RAM-only on the device: it reverts on reboot.
 
 function applyActionState(val) {
   if (!val || val.byteLength < 16) return;
@@ -1774,13 +1782,17 @@ function applyActionState(val) {
   const ruleRef  = val.getUint8(5);
   const behavior = val.getUint8(8);
   const failsafe = val.getUint8(9);
+  const ovrFlags = val.getUint8(11);
+  const override = ovrFlags & ACTION_OVR_MASK;
+  const srcFaulted = (ovrFlags & ACTION_OVR_SOURCE_FAULTED) !== 0;
 
   // The broadcaster walks all MAX_ACTIONS slots; an unconfigured slot reports
   // actionId == 0xFF (ACTION_ID_NONE). Filter those out here.
   if (actionId === ACTION_ID_NONE) {
     actionState.delete(actionId);
   } else {
-    actionState.set(actionId, { type, state, target, ruleRef, behavior, failsafe });
+    actionState.set(actionId, { type, state, target, ruleRef, behavior, failsafe,
+                                override, srcFaulted });
   }
   renderControlPanel();
 }
@@ -1973,6 +1985,8 @@ function renderActionsTab() {
     const manual = a.rule == null;
     const polShort = a.invert ? 'LOW = ON' : 'HIGH = ON';
     const polFull = a.invert ? 'Active Low' : 'Active High';
+    const override = a.live ? (a.live.override || ACTION_OVR_AUTO) : ACTION_OVR_AUTO;
+    const overridden = override !== ACTION_OVR_AUTO;
     let driven;
     if (manual) driven = '<span class="driven-manual">manual</span>';
     else {
@@ -1980,15 +1994,31 @@ function renderActionsTab() {
       const rn = rr ? ' (' + escHtml(pinNumToStr(rr.input)) + ')' : '';
       driven = '<span class="driven-rule">⚠ Rule #' + a.rule + rn + '</span>';
     }
-    // Manual ON/OFF only actuate manual actions (firmware honors the command
-    // byte only for ruleRef == NONE). Enabled whenever the action exists —
-    // writing MANUAL_ON/OFF is valid regardless of the currently-displayed state,
-    // so we don't gate the controls on having received a live-state notify yet
-    // (the …0031 state burst can lag connect; the State pill reflects it once in).
-    const btns = manual
-      ? '<button class="btn ctl-on" data-ctl="act-on" data-id="' + a.id + '">ON</button>' +
-        '<button class="btn ctl-off" data-ctl="act-off" data-id="' + a.id + '">OFF</button>'
-      : '';
+    // An override is never allowed to look ordinary — it outranks the rule and the
+    // failsafe, so say so, and say it louder when the source is also faulted (#329).
+    if (overridden) {
+      const dir = override === ACTION_OVR_FORCE_ON ? 'ON' : 'OFF';
+      const faulted = a.live && a.live.srcFaulted;
+      driven += '<br><span class="driven-override"' +
+        (faulted ? ' title="The rule source is faulted; this force is overriding the failsafe."' : '') +
+        '>OVERRIDE ' + dir + (faulted ? ' — source faulted' : '') + '</span>';
+    }
+    // ON/OFF are valid on EVERY action now: an unlinked one takes the manual latch,
+    // a rule-driven one takes an operator override, and AUTO releases it (#329).
+    // Enabled whenever the action exists — writing is valid regardless of the
+    // currently-displayed state, so we don't gate the controls on having received a
+    // live-state notify yet (the …0031 state burst can lag connect; the State pill
+    // reflects it once in). Nothing here is optimistic: the notify is the redraw.
+    const btns =
+      '<button class="btn ctl-on" data-ctl="act-on" data-id="' + a.id + '">ON</button>' +
+      '<button class="btn ctl-off" data-ctl="act-off" data-id="' + a.id + '">OFF</button>' +
+      // AUTO is rendered unconditionally, NOT gated on `overridden`. The live
+      // state burst can lag connect, so gating it would mean reconnecting to a
+      // device that is holding a force gives you ON/OFF but no way to release it
+      // until the notify lands. CMD_AUTO on an already-AUTO action is a harmless
+      // no-op that still provokes a confirming notify (#329).
+      '<button class="btn secondary" data-ctl="act-auto" data-id="' + a.id +
+      '" title="Release any operator override and return to rule control">AUTO</button>';
     rows +=
       '<tr>' +
         '<td style="font-weight:600">' + escHtml(a.name || ('Action #' + a.id)) + '</td>' +
@@ -2375,7 +2405,9 @@ async function delAction(id) {
   finally { try { await reloadControlConfig(); } catch (_) {} setCtlBusy(false); }
 }
 
-// Manual ON/OFF toggle for a manual Action (writes the command byte on …0031).
+// ON/OFF/AUTO for an Action (writes the command byte on …0031). On an unlinked
+// Action ON/OFF drive the manual latch; on a rule-driven one they set an operator
+// override, which AUTO releases (#329).
 async function ctlActionManual(id, cmd) {
   try { await writeActionCommand(id, cmd); }
   catch (e) { appendErr('Action write failed: ' + e.message); }
@@ -3308,6 +3340,7 @@ document.getElementById('ctlTableWrap').addEventListener('click', e => {
     case 'act-edit':  openActionForm(id); break;
     case 'act-on':    ctlActionManual(id, ACTION_CMD_MANUAL_ON); break;
     case 'act-off':   ctlActionManual(id, ACTION_CMD_MANUAL_OFF); break;
+    case 'act-auto':  ctlActionManual(id, ACTION_CMD_AUTO); break;
   }
 });
 

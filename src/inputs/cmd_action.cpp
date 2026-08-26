@@ -8,7 +8,10 @@
  *   ACTION ADD RELAY <target> [FAILSAFE ON|OFF] [INVERT]
  *   ACTION <id> RULE <ruleId|NONE>     link to a Rule (or unlink → manual)
  *   ACTION <id> NAME <text>            set operator label (e.g. "Cooling Fan")
- *   ACTION <id> ON|OFF                 manual override (manual-only actions)
+ *   ACTION <id> ON|OFF                 drive by hand: manual latch on an unlinked
+ *                                      action, operator override on a rule-driven
+ *                                      one (outranks the rule AND the failsafe)
+ *   ACTION <id> AUTO                   release an operator override
  *   ACTION LIST | ACTION <id> | ACTION DEL <id>
  */
 
@@ -61,6 +64,14 @@ static FLASHMEM void printActionRow(int i) {
     } else {
         msg.control.print(F("rule#"));
         msg.control.print(a.ruleRef);
+        ActionOverride ovr = controlActionOverride(i);
+        if (ovr != ACT_OVR_AUTO) {
+            msg.control.print(F(" (OVERRIDE "));
+            msg.control.print(ovr == ACT_OVR_FORCE_ON ? F("ON") : F("OFF"));
+            // Never let a force held against a dead sensor look ordinary (#329).
+            if (controlActionSourceFaulted(i)) msg.control.print(F(" - source faulted"));
+            msg.control.print(')');
+        }
     }
     if (a.type == ACT_RELAY) {
         msg.control.print(F("  failsafe="));
@@ -174,11 +185,18 @@ static FLASHMEM int actionLink(uint8_t id, const char* ruleArg) {
         msg.control.println(id);
         return 1;
     }
+    // NB: the drive is released only on the paths that actually change the link
+    // (below), never up here. A rejected relink must leave every bit of state
+    // untouched — silently dropping a live operator force on a command that
+    // errored out is its own hazard, and the override is meant to be sticky
+    // until explicitly released (#329).
     if (streq_P(ruleArg, PSTR("NONE"))) {
         actions[slot].ruleRef = CONTROL_ID_NONE;
+        const bool wasDriven = controlActionReleaseDrive(id);
         msg.control.print(F("Action #"));
         msg.control.print(id);
         msg.control.println(F(" unlinked (manual). SAVE to persist."));
+        if (wasDriven) msg.control.println(F("  (released; the action is now OFF until you drive it)"));
         return 0;
     }
     uint8_t ruleId = (uint8_t)atoi(ruleArg);
@@ -188,11 +206,17 @@ static FLASHMEM int actionLink(uint8_t id, const char* ruleArg) {
         return 1;
     }
     actions[slot].ruleRef = ruleId;
+    // A force — or a manual latch armed while this action was still unlinked —
+    // applies to what was driving it before, not to the rule it now follows. Left
+    // in place, the latch goes dormant and snaps the pin ON the next time the link
+    // goes away (#294); releasing both here is what actually closes that (#329).
+    const bool wasDriven = controlActionReleaseDrive(id);
     msg.control.print(F("Action #"));
     msg.control.print(id);
     msg.control.print(F(" linked to rule #"));
     msg.control.print(ruleId);
     msg.control.println(F(". SAVE to persist."));
+    if (wasDriven) msg.control.println(F("  (previous manual/override state released)"));
     return 0;
 }
 
@@ -203,22 +227,51 @@ static FLASHMEM int actionManual(uint8_t id, bool on) {
         msg.control.println(id);
         return 1;
     }
-    // Manual ON/OFF only applies to a manual-only (unlinked) action. A rule-driven
-    // action follows its Rule, so reject the command WITHOUT mutating manual state
-    // (#294): the old code set the manual flag and printed a soft note, leaving a
-    // stale flag that would snap the pin on the moment the rule was later unlinked.
-    if (actions[slot].ruleRef != CONTROL_ID_NONE) {
-        msg.control.print(F("ERROR: action #"));
-        msg.control.print(id);
-        msg.control.println(F(" is rule-driven; ON/OFF applies only to manual actions"));
-        msg.control.println(F("  (unlink first: ACTION <id> RULE NONE)"));
-        return 1;
-    }
-    controlActionSetManual(id, on);
+    // On an unlinked action this is the manual latch; on a rule-driven one it is an
+    // operator override that outranks both the rule and the failsafe (#329). The
+    // override is a DISTINCT field from the manual latch, which is what keeps the
+    // #294 bug class away: unlinking later leaves AUTO, not a stale armed latch.
+    const bool ruleDriven = (actions[slot].ruleRef != CONTROL_ID_NONE);
+    controlActionCommand(id, on);
     msg.control.print(F("Action #"));
     msg.control.print(id);
-    msg.control.print(F(" manual "));
-    msg.control.println(on ? F("ON") : F("OFF"));
+    if (ruleDriven) {
+        msg.control.print(F(" OVERRIDE "));
+        msg.control.print(on ? F("ON") : F("OFF"));
+        msg.control.print(F(" (rule#"));
+        msg.control.print(actions[slot].ruleRef);
+        msg.control.println(F(" held; release with ACTION <id> AUTO)"));
+        if (controlActionSourceFaulted(slot)) {
+            msg.control.println(F("  NOTE: source is faulted - the failsafe is being overridden"));
+        }
+    } else {
+        msg.control.print(F(" manual "));
+        msg.control.println(on ? F("ON") : F("OFF"));
+    }
+    return 0;
+}
+
+static FLASHMEM int actionAuto(uint8_t id) {
+    int slot = controlActionSlot(id);
+    if (slot < 0) {
+        msg.control.print(F("ERROR: no action #"));
+        msg.control.println(id);
+        return 1;
+    }
+    const bool wasOverridden = (controlActionOverride(slot) != ACT_OVR_AUTO);
+    controlActionSetOverride(id, ACT_OVR_AUTO);
+    msg.control.print(F("Action #"));
+    msg.control.print(id);
+    if (!wasOverridden) {
+        msg.control.println(F(" was not overridden (already AUTO)"));
+    } else if (actions[slot].ruleRef == CONTROL_ID_NONE) {
+        // Defensive: nothing sets an override on an unlinked action today (the
+        // router sends those to the manual latch), and a link change releases it.
+        msg.control.println(F(" override released (action is manual)"));
+    } else {
+        msg.control.print(F(" override released; following rule#"));
+        msg.control.println(actions[slot].ruleRef);
+    }
     return 0;
 }
 
@@ -271,7 +324,7 @@ static FLASHMEM int actionDel(uint8_t id) {
 FLASHMEM int cmd_action(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: ACTION requires a subcommand"));
-        msg.control.println(F("  Usage: ACTION LIST | ADD RELAY <target> ... | <id> RULE <ruleId> | <id> NAME <text> | <id> ON|OFF | DEL <id>"));
+        msg.control.println(F("  Usage: ACTION LIST | ADD RELAY <target> ... | <id> RULE <ruleId> | <id> NAME <text> | <id> ON|OFF|AUTO | DEL <id>"));
         return 1;
     }
 
@@ -324,8 +377,9 @@ FLASHMEM int cmd_action(int argc, const char* const* argv) {
         if (argc < 4) { msg.control.println(F("ERROR: usage: ACTION <id> NAME <text>")); return 1; }
         return actionSetName(id, argv[3]);
     }
-    if (streq_P(argv[2], PSTR("ON")))  return actionManual(id, true);   // RUN-allowed
-    if (streq_P(argv[2], PSTR("OFF"))) return actionManual(id, false);  // RUN-allowed
+    if (streq_P(argv[2], PSTR("ON")))   return actionManual(id, true);   // RUN-allowed
+    if (streq_P(argv[2], PSTR("OFF")))  return actionManual(id, false);  // RUN-allowed
+    if (streq_P(argv[2], PSTR("AUTO"))) return actionAuto(id);           // RUN-allowed
 
     msg.control.print(F("ERROR: unknown ACTION verb: "));
     msg.control.println(argv[2]);

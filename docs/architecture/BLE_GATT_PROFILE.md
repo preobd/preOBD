@@ -276,13 +276,64 @@ Offset  Size  Type       Field
 Total:  19 bytes
 ```
 
-### Relay Control
+### Action Control
 
-> **⚠️ Superseded by the Action Control payload.** With the control engine, a
-> relay is an Action of type `RELAY`. The `...0031` characteristic / frame `0x05`
-> now carries **`PreobdActionState`** (id, type, target, triggering rule, on/off,
-> failsafe) instead of `PreobdRelayState`, with a writable `command` field for
-> manual toggle. See `ARCHITECTURE.md` §4.2 / §11. The layout below is historical.
+**Characteristic:** Action Control (`...0031`), Read / Write / Notify
+
+With the control engine, a relay is an Action of type `RELAY`. The broadcaster
+pushes one 16-byte `PreobdActionState` per Action slot on every state/config
+change, plus a 5 s heartbeat so a late subscriber gets the full set. An
+unconfigured slot reports `actionId = 0xFF`. The source of truth is
+`src/lib/ble_gatt_defs.h`.
+
+```
+Offset  Size  Type       Field
+------  ----  --------   -----
+0       1     uint8      protocolVersion (PREOBD_BLE_PROTOCOL_VERSION = 2)
+1       1     uint8      actionId     (Action.id; 0xFF = unconfigured slot)
+2       1     uint8      type         0=RELAY, 1=BEEPER, 2=LED, 3=DISPLAY
+3       1     uint8      state        0=OFF, 1=ON (current driven state)
+4       1     uint8      target       (pin / channel)
+5       1     uint8      ruleRef      (triggering Rule.id; 0xFF = manual)
+6       2     uint16_le  sequence     (monotonic, wraps at 65535)
+8       1     uint8      behavior     bit0 = invert / active-low
+9       1     uint8      failsafe     0=OFF, 1=ON (RELAY only)
+10      1     uint8      command      PREOBD_ACTION_CMD_* (WRITABLE; reads back NONE)
+11      1     uint8      overrideFlags bits0-1 = 0=AUTO, 1=FORCE_ON, 2=FORCE_OFF
+                                       bit2 (0x04) = rule source faulted — #329
+12      4     uint8[4]   reserved
+------  ----
+Total:  16 bytes
+```
+
+**Writable field — `command`** (`actionId` selects the target Action):
+
+| value | name | effect |
+|---|---|---|
+| 0 | `CMD_NONE` | no-op (status only); no confirming notify |
+| 1 | `CMD_MANUAL_ON` | unlinked Action → manual latch ON; rule-driven Action → operator override `FORCE_ON` |
+| 2 | `CMD_MANUAL_OFF` | as above, OFF |
+| 3 | `CMD_AUTO` | release an operator override, returning to rule control (#329) |
+
+A write is confirmed by the notify it provokes — nothing is optimistic. Writes
+are gated on `protocolVersion` matching, so a stale client's differently-laid-out
+`PreobdRelayState` write is not reinterpreted as an Action command.
+
+An **operator override** outranks both the Rule and the failsafe, is RAM-only
+(reverts to `AUTO` on reboot), and is sticky until released. When it is being
+held while the rule's source input is untrustworthy, bit 2 of `overrideFlags` is
+set so a client can flag it rather than showing an ordinary forced state. See
+`ARCHITECTURE.md` §11.3.
+
+`CMD_AUTO` and `overrideFlags` are **additive** into a previously-reserved byte:
+the frame stays 16 bytes and the protocol version stays 2, so older clients
+simply ignore them.
+
+### Relay Control (historical)
+
+> **⚠️ Superseded by the Action Control payload above.** The `...0031`
+> characteristic / frame `0x05` carried `PreobdRelayState` before the control
+> engine. See `ARCHITECTURE.md` §4.2 / §11. The layout below is historical.
 
 **Characteristic:** Relay Control (`...0031`), Read / Write / Notify
 

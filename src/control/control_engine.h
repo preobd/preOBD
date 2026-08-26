@@ -64,6 +64,11 @@ RuleSeverity controlRuleAnnunciatorSeverity(const Rule& rule, const RuleContext&
  * pre-config-gate. Pure/testable; the manager applies inversion, the CONFIG
  * actuation gate, and the GPIO write.
  *
+ *  - Operator override (`override != ACT_OVR_AUTO`): wins outright — ahead of
+ *    the Rule AND ahead of the failsafe (#329). A forced state is the tool of
+ *    last resort for the case where the sensor itself is what failed, so the
+ *    failsafe must not be able to countermand it. The override is RAM-only and
+ *    is surfaced (with a source-faulted flag) on the CLI and the BLE frame.
  *  - Manual action (ruleRef == CONTROL_ID_NONE): follows `manualState`.
  *  - Rule-driven RELAY with an untrustworthy source (`!sourceTrustworthy`):
  *    assumes its `failsafe` state — the wire/sensor is gone, so the reading is
@@ -71,6 +76,7 @@ RuleSeverity controlRuleAnnunciatorSeverity(const Rule& rule, const RuleContext&
  *  - Otherwise: follows `ruleActive`.
  */
 bool controlActionDesired(const Action& action, bool ruleActive,
-                          bool sourceTrustworthy, bool manualState);
+                          bool sourceTrustworthy, bool manualState,
+                          ActionOverride override);
 
 #endif // CONTROL_ENGINE_H

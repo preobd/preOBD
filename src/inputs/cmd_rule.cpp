@@ -315,10 +315,18 @@ static FLASHMEM int ruleDel(uint8_t id) {
     }
     rules[slot].id = CONTROL_ID_NONE;
     g_ruleContexts[slot].state = RULE_DISABLED;
-    controlClearActionsForRule(id);  // referential integrity: referring actions → manual-only
+    // referential integrity: referring actions → manual-only
+    const uint8_t released = controlClearActionsForRule(id);
     msg.control.print(F("Rule #"));
     msg.control.print(id);
     msg.control.println(F(" deleted. SAVE to persist."));
+    // Never de-energize a relay an operator was deliberately holding without
+    // saying so — deleting a rule is not obviously an action command (#329).
+    if (released) {
+        msg.control.print(F("  NOTE: released "));
+        msg.control.print(released);
+        msg.control.println(F(" driven action(s) that followed this rule; they are now OFF"));
+    }
     return 0;
 }
 

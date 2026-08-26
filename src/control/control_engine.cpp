@@ -155,7 +155,14 @@ RuleSeverity controlRuleAnnunciatorSeverity(const Rule& rule, const RuleContext&
 }
 
 bool controlActionDesired(const Action& action, bool ruleActive,
-                          bool sourceTrustworthy, bool manualState) {
+                          bool sourceTrustworthy, bool manualState,
+                          ActionOverride override) {
+    // Operator override outranks everything, including the failsafe (#329): a
+    // deliberate FORCE is the tool of last resort when the sensor is exactly what
+    // died. The manager reports the held-against-a-faulted-source case loudly on
+    // both the CLI and the BLE frame so it is never silent.
+    if (override == ACT_OVR_FORCE_ON)  return true;
+    if (override == ACT_OVR_FORCE_OFF) return false;
     // Manual-only: driven solely by explicit ON/OFF.
     if (action.ruleRef == CONTROL_ID_NONE) {
         return manualState;

@@ -114,7 +114,7 @@ const Command COMMANDS[] = {
 #endif
 #if ENABLE_CONTROL_ENGINE
     {"RULE", cmd_rule, "Configure control-engine rules", false},  // gated per-subcommand: RUN allows LIST/<id>; ADD/DEL/RESET config-only
-    {"ACTION", cmd_action, "Configure control-engine actions", false},  // gated per-subcommand: RUN allows LIST/<id>/ON/OFF; ADD/DEL/RULE config-only
+    {"ACTION", cmd_action, "Configure control-engine actions", false},  // gated per-subcommand: RUN allows LIST/<id>/ON/OFF/AUTO; ADD/DEL/RULE config-only
 #endif
 #if ENABLE_TEST_MODE
     {"TEST", cmd_test, "Test mode control", false},
@@ -924,7 +924,7 @@ int cmd_relay(int argc, const char* const* argv) {
     msg.control.println(F("RELAY is deprecated - relays are now control-engine Actions."));
     msg.control.println(F("  Threshold:  RULE ADD <input> ABOVE|BELOW <limit> [HYST <w>]"));
     msg.control.println(F("  Output:     ACTION ADD RELAY <pin> [FAILSAFE ON|OFF] [INVERT]"));
-    msg.control.println(F("  Link/drive: ACTION <id> RULE <ruleId> ;  ACTION <id> ON|OFF"));
+    msg.control.println(F("  Link/drive: ACTION <id> RULE <ruleId> ;  ACTION <id> ON|OFF|AUTO"));
     msg.control.println(F("  Status:     RULE LIST ;  ACTION LIST"));
     return 1;
 }

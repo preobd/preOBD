@@ -7,7 +7,10 @@
 >
 > - `RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>]` — the threshold + hysteresis
 > - `ACTION ADD RELAY <outpin> [FAILSAFE ON|OFF] [INVERT]` — the output
-> - `ACTION <id> RULE <ruleId>` to link; `ACTION <id> ON|OFF` for manual override
+> - `ACTION <id> RULE <ruleId>` to link; `ACTION <id> ON|OFF` to drive by hand
+>   (on a rule-linked Action this is an operator override that outranks both the
+>   rule and the failsafe; `ACTION <id> AUTO` releases it). The override is
+>   RAM-only — it reverts to AUTO on reboot.
 > - `ACTION LIST` for status
 >
 > Actions add a sensor-loss **failsafe** the old relay engine lacked. Over BLE,

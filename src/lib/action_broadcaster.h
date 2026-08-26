@@ -16,8 +16,10 @@
 //     so a late subscriber gets the full set. Send-failure leaves the cache
 //     untouched so the next tick retries.
 //   - handleInbound(payload, len) honors the writable `command` field
-//     (PREOBD_ACTION_CMD_MANUAL_ON/OFF) for the targeted actionId; manual
-//     toggle only takes effect on manual (ruleRef == NONE) Actions.
+//     (PREOBD_ACTION_CMD_MANUAL_ON/OFF/AUTO) for the targeted actionId.
+//     MANUAL_ON/OFF drive an unlinked Action's manual latch; on a rule-driven
+//     Action they set an operator override that outranks the Rule and the
+//     failsafe, which AUTO releases (#329).
 //   - Compiles to empty stubs unless ENABLE_CONTROL_ENGINE and
 //     ENABLE_FRAMED_TRANSPORT are both set.
 
