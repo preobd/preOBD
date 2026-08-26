@@ -246,7 +246,7 @@ bool saveInputConfig() {
     // What we WANT to persist in each section.
     uint8_t wantInputs = 0;
     for (uint8_t i = 0; i < MAX_INPUTS; i++)
-        if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled) wantInputs++;
+        if (inputs[i].pin != 0xFF) wantInputs++;
 
     // Fit each section into the shared budget, priority inputs > rules > actions
     // (a rule needs its source input to evaluate; an action needs its rule).
@@ -266,7 +266,7 @@ bool saveInputConfig() {
 
     uint8_t savedInputs = 0;
     for (uint8_t i = 0; i < MAX_INPUTS && savedInputs < persistInputs; i++) {
-        if (inputs[i].pin == 0xFF || !inputs[i].flags.isEnabled) continue;
+        if (inputs[i].pin == 0xFF) continue;
         InputEEPROM rec;
         buildInputRecord(inputs[i], rec);
         EEPROM.put(addr, rec);
@@ -402,7 +402,12 @@ bool loadInputConfig() {
         EEPROM.get(EEPROM_HEADER_SIZE + (size_t)i * EEPROM_INPUT_SIZE, rec);
         applyInputRecord(rec, inputs[i]);
     }
-    numActiveInputs = nInputs;
+    // numActiveInputs is an enabled-count, not an occupancy bound (see
+    // exportInputsToJSON) — now that disabled inputs persist too (#317), recount
+    // by the enabled flag rather than trusting the loaded record count.
+    numActiveInputs = 0;
+    for (uint8_t i = 0; i < nInputs; i++)
+        if (inputs[i].flags.isEnabled) numActiveInputs++;
 
 #if ENABLE_CONTROL_ENGINE
     // Section bases from the STORED counts (not the RAM-clamped ones) so rules /
@@ -1052,7 +1057,7 @@ void printInputInfo(uint8_t pin) {
     msg.control.println(input->outputMask, HEX);
 
     msg.control.print(F("  Current Value: "));
-    msg.control.print(input->value, 2);
+    msg.control.print(convertFromBaseUnits(input->value, input->unitsIndex), 2);
     msg.control.print(F(" "));
     msg.control.println(getUnitStringByIndex(input->unitsIndex));
 
@@ -1299,7 +1304,7 @@ void listAllInputs() {
             msg.control.print(F(" ("));
             msg.control.print(inputs[i].displayName);
             msg.control.print(F(") = "));
-            msg.control.print(inputs[i].value);
+            msg.control.print(convertFromBaseUnits(inputs[i].value, inputs[i].unitsIndex));
             msg.control.print(F(" "));
             msg.control.print((__FlashStringHelper*)getUnitStringByIndex(inputs[i].unitsIndex));
             if (inputs[i].obd2pid != 0) {

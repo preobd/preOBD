@@ -3001,7 +3001,7 @@ function saveEditorLocal() {
 
 async function sendChecked(cmd) {
   const resp = await sendQueued(cmd);
-  if (/(^|\n)ERROR:/.test(resp)) throw new Error(resp.trim());
+  if (/^\s*ERROR:/m.test(resp)) throw new Error(resp.trim());
   return resp;
 }
 
@@ -3231,7 +3231,7 @@ document.getElementById('importFile').addEventListener('change', async e => {
       const result = await sendQueued('END JSON');
       suppressOutput = false;
       if (result.trim()) appendOutput(result.trim());
-      if (/(^|\n)ERROR:/.test(result)) throw new Error(result.trim());
+      if (/^\s*ERROR:/m.test(result)) throw new Error(result.trim());
 
       if (confirm('Import complete. Save to EEPROM now?')) {
         await sendChecked('SAVE');
