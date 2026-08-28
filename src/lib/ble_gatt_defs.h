@@ -279,6 +279,15 @@ static_assert(sizeof(PreobdRelayState) == PREOBD_RELAY_STATE_SIZE,
 #define PREOBD_ACTION_OVR_FORCE_ON       1
 #define PREOBD_ACTION_OVR_FORCE_OFF      2
 #define PREOBD_ACTION_OVR_SOURCE_FAULTED 0x04  // bit 2: a member rule's source untrustworthy
+#define PREOBD_ACTION_OVR_RULE_ACTIVE    0x08  // bit 3: a member rule is demanding ON (#348)
+
+// PREOBD_ACTION_OVR_RULE_ACTIVE lets a client tell a force that is COUNTERMANDING
+// a live demand ("FORCE OFF while the fan rule wants the fan on") from an idle
+// one. It reports the automation's demand, NOT the pin: under FORCE_OFF the bit
+// can be set while `state` reads OFF, and that disagreement is the point. A
+// client cannot derive it from the alarm feed, which carries only WARNING/ALARM
+// and so never mentions a RULE_SEV_NONE control-only rule. A pre-#348 device
+// leaves the bit clear.
 
 // ruleCount — how many Rules OR-drive this Action (§11.6, #343). Additive into a
 // previously-reserved byte, so the protocol version stays 2. `ruleRef` remains the
@@ -331,8 +340,18 @@ static_assert(sizeof(PreobdActionState) == PREOBD_ACTION_STATE_SIZE,
 
 #define PREOBD_LIVE_VALUE_SIZE 16
 
-#define PREOBD_LIVE_FLAG_ENABLED 0x01  // slot occupied and input enabled
-#define PREOBD_LIVE_FLAG_VALID   0x02  // reading valid (0 = sensor fault / non-finite)
+#define PREOBD_LIVE_FLAG_ENABLED    0x01  // slot occupied and input enabled
+#define PREOBD_LIVE_FLAG_VALID      0x02  // reading valid (0 = sensor fault / non-finite)
+#define PREOBD_LIVE_FLAG_CONFIGURED 0x04  // an input occupies this slot (#337)
+
+// PREOBD_LIVE_FLAG_CONFIGURED is what makes "drop the tile" implementable. A
+// slot that has been CLEARed and a configured-but-DISABLED input both used to
+// pack flags = 0, so a client had no way to tell "this input is gone" from
+// "this input is switched off": dropping on flags == 0 also dropped every
+// disabled input, and keeping on flags == 0 never dropped a removed one. With
+// this bit, `flags == 0` means gone and `CONFIGURED` alone means disabled.
+// Additive; the frame stays 16 B and the protocol stays 2. A pre-#337 device
+// leaves the bit clear, so a client must mask rather than compare flags whole.
 
 #ifdef __cplusplus
 

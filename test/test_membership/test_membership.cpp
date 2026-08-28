@@ -424,6 +424,95 @@ static void test_drive_live_member_beats_faulted_sibling(void) {
     TEST_ASSERT_TRUE(controlActionSourceFaulted(0));   // ...but it is reported
 }
 
+// #348: the reported "a member rule is demanding this output" bit, through the
+// real tables. It must track the DEMAND, not the pin -- under a held FORCE OFF
+// the output is off while the rule still wants it on, and that disagreement is
+// exactly what the client is being told about.
+static void test_rule_active_tracks_demand_not_the_pin(void) {
+    addInput(11, 50.0f);
+    addRule(0, 11, /*active*/true);
+    addAction(0, 23, ACT_FAILSAFE_OFF);
+    controlActionAddRule(0, 0);
+
+    controlActionsUpdate(false);
+    TEST_ASSERT_TRUE(controlActionState(0));
+    TEST_ASSERT_TRUE(controlActionRuleActive(0));
+
+    controlActionSetOverride(actions[0].id, ACT_OVR_FORCE_OFF);
+    controlActionsUpdate(false);
+    TEST_ASSERT_FALSE_MESSAGE(controlActionState(0), "the force wins the pin");
+    TEST_ASSERT_TRUE_MESSAGE(controlActionRuleActive(0),
+                             "...but the rule is still demanding it");
+
+    g_ruleContexts[controlRuleSlot(0)].state = RULE_READY;   // demand releases
+    controlActionsUpdate(false);
+    TEST_ASSERT_FALSE(controlActionRuleActive(0));
+}
+
+// The exclusions mirror controlActionSourceFaulted(): a member that cannot assert
+// must not be reported as demanding. A faulted (NaN) source is the sharp case --
+// it drives the FAILSAFE, so the pin can be ON with nothing actually demanding it.
+static void test_rule_active_false_for_members_that_cannot_assert(void) {
+    addInput(10, NAN);                       // dead sensor -> faulted, not active
+    addRule(0, 10, /*active*/true);          // ...even though the ctx says active
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    controlActionAddRule(0, 0);
+
+    controlActionsUpdate(false);
+    TEST_ASSERT_TRUE_MESSAGE(controlActionState(0), "failsafe drives the pin on");
+    TEST_ASSERT_TRUE(controlActionSourceFaulted(0));
+    TEST_ASSERT_FALSE_MESSAGE(controlActionRuleActive(0),
+                              "a faulted source never counts as a demand");
+}
+
+// The other two documented exclusions, which hold via the update loop rather than
+// by an explicit check inside the resolver -- so they are worth pinning. A
+// DISABLED member is forced to RULE_DISABLED, and an ORPHAN member (a rule whose
+// source pin has no input, #345) is fed NaN; neither can assert, so neither may
+// be reported as demanding the output.
+static void test_rule_active_false_for_disabled_member(void) {
+    addInput(11, 50.0f);
+    addRule(0, 11, /*active*/true, /*enabled*/false);   // would be demanding, parked
+    addAction(0, 23, ACT_FAILSAFE_OFF);
+    controlActionAddRule(0, 0);
+
+    controlActionsUpdate(false);
+    TEST_ASSERT_FALSE(controlActionState(0));
+    TEST_ASSERT_FALSE(controlActionRuleActive(0));
+}
+
+// An ORPHAN member (a rule whose source pin has no input, #345) is inert because
+// the engine feeds it NaN and its context settles to RULE_READY -- NOT because
+// the resolver special-cases it. So the invariant to pin is the one the design
+// actually promises: the reported demand is whatever drove the pin, never a
+// second opinion about it. Were a stale ACTIVE context to survive, the orphan
+// would be driving the output too, and the frame must say so rather than lie.
+static void test_rule_active_matches_the_drive_for_an_orphan_member(void) {
+    addRule(0, 10, /*active*/false);         // pin 10: NO input configured
+    addAction(0, 23, ACT_FAILSAFE_OFF);
+    controlActionAddRule(0, 0);
+
+    controlActionsUpdate(false);
+    TEST_ASSERT_FALSE(controlActionState(0));
+    TEST_ASSERT_FALSE(controlActionRuleActive(0));
+
+    g_ruleContexts[controlRuleSlot(0)].state = RULE_ACTIVE;   // stale, pre-demotion
+    controlActionsUpdate(false);
+    TEST_ASSERT_TRUE_MESSAGE(controlActionState(0), "a stale ACTIVE ctx drives the pin");
+    TEST_ASSERT_TRUE_MESSAGE(controlActionRuleActive(0),
+                             "...so the frame must report it, not disagree");
+}
+
+// A manual-only action has no membership, so it can never report a demand -- even
+// while its latch is holding the pin on.
+static void test_rule_active_false_for_manual_only_action(void) {
+    addAction(0, 23);
+    controlActionSetManual(actions[0].id, true);
+    controlActionsUpdate(false);
+    TEST_ASSERT_TRUE(controlActionState(0));
+    TEST_ASSERT_FALSE(controlActionRuleActive(0));
+}
+
 static void test_drive_failsafe_applies_when_no_member_demands(void) {
     addInput(10, NAN);
     addInput(11, 50.0f);
@@ -613,6 +702,11 @@ int main(int, char**) {
     RUN_TEST(test_new_action_does_not_inherit_a_dead_actions_links);
     RUN_TEST(test_drive_or_combines_live_members);
     RUN_TEST(test_drive_live_member_beats_faulted_sibling);
+    RUN_TEST(test_rule_active_tracks_demand_not_the_pin);
+    RUN_TEST(test_rule_active_false_for_members_that_cannot_assert);
+    RUN_TEST(test_rule_active_false_for_disabled_member);
+    RUN_TEST(test_rule_active_matches_the_drive_for_an_orphan_member);
+    RUN_TEST(test_rule_active_false_for_manual_only_action);
     RUN_TEST(test_drive_failsafe_applies_when_no_member_demands);
     RUN_TEST(test_disabled_member_cannot_force_the_failsafe);
     RUN_TEST(test_dangling_members_do_not_fall_back_to_the_latch);

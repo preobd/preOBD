@@ -158,6 +158,27 @@ bool controlActionState(int slot);
 // report false: none of them can assert, so none may force a failsafe.
 bool controlActionSourceFaulted(int slot);
 
+// True when the action in `slot` has at least one member rule that is currently
+// ACTIVE with a trustworthy source — i.e. the automation is demanding this
+// output right now. Read this rather than inferring it from the alarm-event
+// feed: that feed carries only WARNING/ALARM, so a RULE_SEV_NONE control-only
+// rule (the cooling-fan / shift-light case the tier exists for) is invisible
+// there, and reconstructing it client-side means duplicating hysteresis,
+// debounce and warmup and risking an opinion that disagrees with what actually
+// drove the pin (#348). Shares resolveActionDrive() with the evaluation loop so
+// the two cannot diverge — this reports what DID drive the output, never a
+// second opinion about it. False for manual-only and dangling-ref members and
+// for a member whose source is faulted (a NaN reading never asserts). Disabled
+// and orphan-rule (#345) members report false too, but via the engine — it
+// parks their contexts at RULE_DISABLED / RULE_READY — not by a check here;
+// deliberately so, since a context that somehow read ACTIVE would be driving
+// the pin and the frame must agree with the pin.
+bool controlActionRuleActive(int slot);
+
+// Both of the above in one membership walk, for callers that want both (the BLE
+// frame does). Zero-valued for an out-of-range or unconfigured slot.
+ActionDrive controlActionDrive(int slot);
+
 // --- Rule<->Action membership (M:N, §11.6 / #343) ---
 // An Action is OR-driven by its member Rules: active while ANY member is active.
 // The first member is stored inline in Action.ruleRef and the rest in

@@ -705,19 +705,6 @@ static bool sourceFaultedForRuleSlot(int rslot) {
     return isnan(in->value);
 }
 
-bool controlActionSourceFaulted(int slot) {
-    if (slot < 0 || slot >= MAX_ACTIONS) return false;
-    if (actions[slot].id == CONTROL_ID_NONE) return false;
-    // ANY member's source faulted counts (#343): with several sources, one dead
-    // sensor is exactly the condition an operator needs to see before trusting
-    // what the actuator is doing.
-    const uint8_t n = controlActionRuleCount(slot);
-    for (uint8_t i = 0; i < n; i++) {
-        if (sourceFaultedForRuleSlot(controlRuleSlot(controlActionRuleAt(slot, i)))) return true;
-    }
-    return false;
-}
-
 // Resolve an action's Rule membership into the aggregate the pure resolver takes.
 static ActionDrive resolveActionDrive(int slot) {
     ActionDrive d{};
@@ -735,6 +722,25 @@ static ActionDrive resolveActionDrive(int slot) {
     }
     return d;
 }
+
+// The reporting paths (CLI, BLE frame) share the evaluation loop's resolver
+// rather than re-walking membership themselves, so what an operator is shown can
+// never be a different computation from what drove the pin. Reporting both bits
+// from ONE call also stops packState() resolving the same membership twice per
+// slot per loop — ActionBroadcaster::tick() has no scan gate.
+ActionDrive controlActionDrive(int slot) {
+    if (slot < 0 || slot >= MAX_ACTIONS || actions[slot].id == CONTROL_ID_NONE) {
+        return ActionDrive{};
+    }
+    return resolveActionDrive(slot);
+}
+
+// ANY member's source faulted counts (#343): with several sources, one dead
+// sensor is exactly the condition an operator needs to see before trusting what
+// the actuator is doing.
+bool controlActionSourceFaulted(int slot) { return controlActionDrive(slot).anyFaulted; }
+
+bool controlActionRuleActive(int slot) { return controlActionDrive(slot).anyActive; }
 
 void controlActionsUpdate(bool configMode) {
     for (int i = 0; i < MAX_ACTIONS; i++) {

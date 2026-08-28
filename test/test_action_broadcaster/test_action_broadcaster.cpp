@@ -76,10 +76,21 @@ uint8_t controlActionRuleCount(int slot) {
     return (uint8_t)(1 + g_extraMembers[slot]);
 }
 
-// controlActionSourceFaulted() — we own the fault truth here.
+// controlActionDrive() — the single membership walk the frame reads both its
+// fault and its demand bit from (#348). The real manager derives it from
+// resolveActionDrive(); here both are set truth, which is all packing cares
+// about. Counting the calls also pins the "one walk per slot" property.
 static bool g_sourceFaulted[MAX_ACTIONS];
-bool controlActionSourceFaulted(int slot) {
-    return (slot >= 0 && slot < MAX_ACTIONS) ? g_sourceFaulted[slot] : false;
+static bool g_ruleActive[MAX_ACTIONS];
+static int  g_driveCalls = 0;
+ActionDrive controlActionDrive(int slot) {
+    ActionDrive d{};
+    if (slot < 0 || slot >= MAX_ACTIONS) return d;
+    ++g_driveCalls;
+    d.memberCount = controlActionRuleCount(slot);
+    d.anyFaulted  = g_sourceFaulted[slot];
+    d.anyActive   = g_ruleActive[slot];
+    return d;
 }
 
 // ---- Capturing transport (records every frame this tick) ----
@@ -121,6 +132,8 @@ void setUp(void) {
     g_setOverrideCalls = 0;
     memset(g_override, 0, sizeof(g_override));
     memset(g_sourceFaulted, 0, sizeof(g_sourceFaulted));
+    memset(g_ruleActive, 0, sizeof(g_ruleActive));
+    g_driveCalls = 0;
     memset(g_extraMembers, 0, sizeof(g_extraMembers));
     ActionBroadcaster::init();
 }
@@ -289,6 +302,56 @@ static void test_override_flags_reported_and_push_on_change(void) {
                             frameState(0).overrideFlags);
 }
 
+// Bit 3 reports the automation's demand independently of what is driving the
+// pin, so a client can tell a FORCE that is countermanding a live rule from an
+// idle one (#348). A rule going active UNDER a held force must push: that is the
+// exact transition the app cannot see any other way.
+static void test_rule_active_bit_reported_under_held_force(void) {
+    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, /*ruleRef*/5, 0, 0);
+    g_override[0] = ACT_OVR_FORCE_OFF;
+    ActionBroadcaster::tick();                       // snapshot everything
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_OVR_FORCE_OFF, frameState(0).overrideFlags);
+
+    g_frameCount = 0;
+    g_ruleActive[0] = true;                          // rule trips beneath the force
+    ActionBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_OVR_FORCE_OFF | PREOBD_ACTION_OVR_RULE_ACTIVE,
+                            frameState(0).overrideFlags);
+    // The pin is still OFF — the demand and the driven state disagree, which is
+    // the whole point of surfacing the bit.
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_STATE_OFF, frameState(0).state);
+
+    g_frameCount = 0;
+    g_ruleActive[0] = false;                         // …and the release pushes too
+    ActionBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_OVR_FORCE_OFF, frameState(0).overrideFlags);
+}
+
+// Both reported bits come from ONE membership walk per slot: packState() used to
+// resolve it twice (once per bit), and ActionBroadcaster::tick() has no scan gate.
+static void test_pack_resolves_membership_once_per_slot(void) {
+    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, /*ruleRef*/5, 0, 0);
+    g_ruleActive[0] = true;
+    g_sourceFaulted[0] = true;
+    g_driveCalls = 0;
+    ActionBroadcaster::tick();
+    // packState() returns early for an unconfigured slot, so only the one
+    // occupied slot resolves: once to pack, once to send -- never twice per pack.
+    TEST_ASSERT_EQUAL_INT(2, g_driveCalls);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_OVR_SOURCE_FAULTED | PREOBD_ACTION_OVR_RULE_ACTIVE,
+                            frameState(0).overrideFlags);
+}
+
+// An unconfigured slot must not grow a demand bit: bytes past actionId stay zero.
+static void test_rule_active_bit_absent_on_empty_slot(void) {
+    g_ruleActive[0] = true;                          // would-be truth for slot 0
+    ActionBroadcaster::tick();                       // slot 0 is empty
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_ID_NONE, frameState(0).actionId);
+    TEST_ASSERT_EQUAL_UINT8(0, frameState(0).overrideFlags);
+}
+
 // A NONE (status-only) command performs no toggle.
 static void test_handle_inbound_none_is_noop(void) {
     configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, CONTROL_ID_NONE, 0, 0);
@@ -386,6 +449,9 @@ int main(int, char**) {
     RUN_TEST(test_handle_inbound_auto_on_manual_action_is_harmless);
     RUN_TEST(test_handle_inbound_unknown_command_is_inert);
     RUN_TEST(test_override_flags_reported_and_push_on_change);
+    RUN_TEST(test_rule_active_bit_reported_under_held_force);
+    RUN_TEST(test_rule_active_bit_absent_on_empty_slot);
+    RUN_TEST(test_pack_resolves_membership_once_per_slot);
     RUN_TEST(test_handle_inbound_none_is_noop);
     RUN_TEST(test_handle_inbound_unknown_id);
     RUN_TEST(test_handle_inbound_rejects_wrong_protocol_version);

@@ -52,7 +52,16 @@ void packState(int i, PreobdActionState& s) {
         case ACT_OVR_FORCE_OFF: s.overrideFlags = PREOBD_ACTION_OVR_FORCE_OFF; break;
         default:                s.overrideFlags = PREOBD_ACTION_OVR_AUTO;      break;
     }
-    if (controlActionSourceFaulted(i)) s.overrideFlags |= PREOBD_ACTION_OVR_SOURCE_FAULTED;
+    // One membership walk for both bits — this runs per slot per loop, and
+    // tick() has no scan gate.
+    const ActionDrive drive = controlActionDrive(i);
+    if (drive.anyFaulted) s.overrideFlags |= PREOBD_ACTION_OVR_SOURCE_FAULTED;
+    // Whether the automation is demanding ON right now, independent of whether an
+    // override is currently winning (#348). sameIgnoringSequence() already covers
+    // this because it compares the whole overrideFlags byte — the omission that
+    // bit 2 (#329) and byte 12 (#343) each had to fix cannot recur for a bit
+    // added to a byte already in the comparison.
+    if (drive.anyActive)  s.overrideFlags |= PREOBD_ACTION_OVR_RULE_ACTIVE;
     // sequence stamped at emit time
 }
 

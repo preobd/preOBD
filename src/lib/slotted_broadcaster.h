@@ -47,6 +47,14 @@ public:
 
     uint16_t sequence() const { return sequence_; }
 
+    // Whether the NEXT tick(now, heartbeatMs) will fire a periodic re-send.
+    // tick() consumes the edge (it advances lastSendMs_), so a caller that needs
+    // to count heartbeats rather than scans must read this first. Same predicate
+    // tick() uses — deliberately not a second copy of the condition.
+    bool heartbeatDue(uint32_t now, uint32_t heartbeatMs) const {
+        return heartbeatMs && (now - lastSendMs_) >= heartbeatMs;
+    }
+
     // Drive one broadcast pass.
     //   pack(i)        -> Key for slot i (the change-detection value)
     //   equal(a, b)    -> true when slot i has NOT changed (suppress send)
@@ -56,11 +64,24 @@ public:
     template <typename PackFn, typename EqualFn, typename SendFn>
     void tick(uint32_t now, uint32_t heartbeatMs,
               PackFn pack, EqualFn equal, SendFn send) {
-        const bool heartbeatDue = heartbeatMs && (now - lastSendMs_) >= heartbeatMs;
+        tick(now, heartbeatMs, pack, equal, send, [](int) { return true; });
+    }
+
+    // As above, plus `heartbeatFor(i)` -> whether slot i takes part in the
+    // PERIODIC re-send. A slot it excludes still emits on a real change, so a
+    // table that is mostly empty stops paying for its empty slots every
+    // heartbeat while a slot going empty still pushes exactly one frame for the
+    // client to clear its tile on (#337). Change detection is deliberately
+    // untouched: excluding a slot from the heartbeat must never make a
+    // transition invisible.
+    template <typename PackFn, typename EqualFn, typename SendFn, typename HeartbeatFn>
+    void tick(uint32_t now, uint32_t heartbeatMs,
+              PackFn pack, EqualFn equal, SendFn send, HeartbeatFn heartbeatFor) {
+        const bool hbDue = heartbeatDue(now, heartbeatMs);
         for (int i = 0; i < N; ++i) {
             Key k = pack(i);
             const bool changed = !have_[i] || !equal(k, last_[i]);
-            if (!changed && !heartbeatDue) continue;
+            if (!changed && !(hbDue && heartbeatFor(i))) continue;
             if (send(i, sequence_)) {
                 last_[i] = k;
                 have_[i] = true;
@@ -76,7 +97,7 @@ public:
         // slot re-emitted on *every* tick (empty Action slots saturated the BLE
         // link and starved the text channel). Backpressured slots still recover
         // via the change check above (changed) or the next heartbeat.
-        if (heartbeatDue) lastSendMs_ = now;
+        if (hbDue) lastSendMs_ = now;
     }
 
 private:

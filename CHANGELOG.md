@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- BLE: the Action state frame now reports whether a member Rule is demanding the output, so a client can tell an operator force that is countermanding a live demand (a fan the rules want on, forced off) from one holding against nothing — previously only Warning/Alarm rules were visible to clients, hiding exactly the notify-free control rules that drive fans and shift lights (#348)
+
+### Changed
+- BLE: live-value catch-up (cold start, reconnect resync, and the 5 s heartbeat) now covers only configured inputs instead of every slot in the table, so the burst scales with how many inputs you have rather than with the board's maximum; clearing an input still pushes frames for a few seconds afterwards so a connected client drops its tile promptly, and live frames now distinguish a removed input from a merely disabled one (#337)
+
 ## [0.11.0-beta] - 2026-08-25
 
 ### Added

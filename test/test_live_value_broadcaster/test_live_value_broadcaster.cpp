@@ -85,26 +85,147 @@ static void configInput(int slot, uint8_t pin, float value, uint8_t unitsIndex, 
     inputs[slot].flags.isEnabled = enabled ? 1 : 0;
 }
 
-// Cold start emits every slot once (full table for the fresh subscriber);
-// assert the configured slot's payload layout and the empty-slot shape.
+// Cold start emits the CONFIGURED slots only — the catch-up burst scales with
+// the input count, not with MAX_INPUTS (#337). Assert the payload layout too.
 static void test_cold_start_payload_layout(void) {
     configInput(2, 21, 42.0f, /*units*/0, /*enabled*/true);
     scanTick();
-    TEST_ASSERT_EQUAL_INT(MAX_INPUTS, g_frameCount);   // every slot, once
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);            // the one occupied slot
     TEST_ASSERT_EQUAL_HEX8(FRAME_TYPE_LIVE, g_frameType);
     TEST_ASSERT_EQUAL_UINT16(PREOBD_LIVE_VALUE_SIZE, g_frameLen);
 
     const PreobdLiveValue& v = g_lastBySlot[2];
     TEST_ASSERT_EQUAL_UINT8(PREOBD_BLE_PROTOCOL_VERSION, v.protocolVersion);
     TEST_ASSERT_EQUAL_UINT8(2, v.inputIndex);
-    TEST_ASSERT_EQUAL_UINT8(PREOBD_LIVE_FLAG_ENABLED | PREOBD_LIVE_FLAG_VALID, v.flags);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_LIVE_FLAG_CONFIGURED | PREOBD_LIVE_FLAG_ENABLED |
+                            PREOBD_LIVE_FLAG_VALID, v.flags);
     TEST_ASSERT_EQUAL_UINT8(0, v.unitsIndex);
     TEST_ASSERT_EQUAL_FLOAT(42.0f, v.value);
 
-    // Empty slot: all-zero except version/index (flags 0 = unoccupied/disabled).
-    const PreobdLiveValue& e = g_lastBySlot[0];
+    TEST_ASSERT_EQUAL_INT(0, g_countBySlot[0]);        // …and nothing for an empty one
+}
+
+// The empty-slot payload shape, kept from the pre-#337 cold-start test: when an
+// empty slot DOES emit (a resync of a freed slot inside its grace window), it is
+// all-zero apart from version/index.
+static void test_empty_slot_payload_shape(void) {
+    configInput(2, 21, 42.0f, 0, true);
+    scanTick();
+    inputs[2].pin = 0xFF;
+    scanTick();
+    const PreobdLiveValue& e = g_lastBySlot[2];
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_BLE_PROTOCOL_VERSION, e.protocolVersion);
+    TEST_ASSERT_EQUAL_UINT8(2, e.inputIndex);
     TEST_ASSERT_EQUAL_UINT8(0, e.flags);
+    TEST_ASSERT_EQUAL_UINT8(0, e.unitsIndex);
     TEST_ASSERT_EQUAL_FLOAT(0.0f, e.value);
+}
+
+// A configured-but-DISABLED input still has a tile, so it keeps its cold-start
+// frame (flags 0 tells the client "disabled", which is not the same as absent).
+static void test_cold_start_includes_disabled_slot(void) {
+    configInput(2, 21, 42.0f, 0, /*enabled*/false);
+    scanTick();
+    TEST_ASSERT_EQUAL_INT(1, g_countBySlot[2]);
+    // CONFIGURED without ENABLED — "switched off", NOT "gone". A client that
+    // dropped its tile on flags == 0 would otherwise drop every disabled input.
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_LIVE_FLAG_CONFIGURED, g_lastBySlot[2].flags);
+    TEST_ASSERT_EQUAL_INT(0, g_countBySlot[0]);   // the truly empty slot stays quiet
+}
+
+// The transition #337 must NOT lose: a slot that goes occupied → freed emits
+// exactly one frame so the client can drop the tile, then falls silent.
+static void test_freed_slot_emits_one_clearing_frame(void) {
+    configInput(2, 21, 42.0f, 0, true);
+    scanTick();
+    resetCapture();
+
+    inputs[2].pin = 0xFF;                    // CLEAR <pin>
+    scanTick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(2, g_lastBySlot[2].inputIndex);
+    TEST_ASSERT_EQUAL_UINT8(0, g_lastBySlot[2].flags);   // 0, not CONFIGURED: gone
+
+    resetCapture();                          // no change → no change-driven frame
+    scanTick();
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+}
+
+// The clearing frame is edge-triggered and the transport has no end-to-end ACK,
+// so one shot is not enough: a client that misses it would show a stale tile
+// forever. The freed slot stays in the heartbeat for a bounded window, then
+// drops out for good — the #337 win without losing the self-healing.
+static void test_freed_slot_clear_repeats_then_stops(void) {
+    configInput(2, 21, 42.0f, 0, true);
+    scanTick();
+    inputs[2].pin = 0xFF;
+    scanTick();                              // the edge-triggered clear
+    resetCapture();
+
+    for (int hb = 0; hb < 3; ++hb) {         // kClearHeartbeats
+        g_test_now += 5000;
+        LiveValueBroadcaster::tick();
+        TEST_ASSERT_EQUAL_INT(1, g_countBySlot[2]);
+        TEST_ASSERT_EQUAL_UINT8(0, g_lastBySlot[2].flags);
+        resetCapture();
+    }
+
+    g_test_now += 5000;                      // window closed: silent for good
+    LiveValueBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+    g_test_now += 5000;
+    LiveValueBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+}
+
+// A slot that was ALREADY disabled when it was cleared must still emit the
+// clear: disabled packs CONFIGURED and freed packs 0, so the transition is
+// visible. This is the case a naive "both are flags 0" key would have lost.
+static void test_disabled_then_freed_still_emits_clear(void) {
+    configInput(2, 21, 42.0f, 0, /*enabled*/false);
+    scanTick();
+    resetCapture();
+
+    inputs[2].pin = 0xFF;
+    scanTick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(0, g_lastBySlot[2].flags);
+}
+
+// Regression (#349 bench, teensy40): the grace window is spent per clearing
+// frame the transport ACCEPTS, never per heartbeat edge. It used to decrement on
+// every heartbeat that came due, so on a link busy enough to refuse the sends —
+// which is the normal case there, the Action broadcaster's 64-slot burst fills
+// the 64-byte TX buffer — the window expired having delivered nothing. The clear
+// went out once as the edge push and the repeats never arrived, so a client that
+// missed it (or was disconnected across the CLEAR) showed a stale tile for good:
+// precisely the self-healing this window exists to provide.
+static void test_starved_heartbeats_do_not_consume_clear_window(void) {
+    configInput(2, 21, 42.0f, 0, true);
+    scanTick();
+    inputs[2].pin = 0xFF;
+    scanTick();                              // the edge-triggered clear
+    resetCapture();
+
+    g_sendResult = false;                    // transport refuses everything
+    for (int hb = 0; hb < 6; ++hb) {         // twice the window, all starved
+        g_test_now += 5000;
+        LiveValueBroadcaster::tick();
+    }
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);  // nothing got out, by construction
+
+    g_sendResult = true;                     // link recovers
+    for (int hb = 0; hb < 3; ++hb) {         // window intact: kClearHeartbeats
+        g_test_now += 5000;
+        LiveValueBroadcaster::tick();
+        TEST_ASSERT_EQUAL_INT(1, g_countBySlot[2]);
+        TEST_ASSERT_EQUAL_UINT8(0, g_lastBySlot[2].flags);
+        resetCapture();
+    }
+
+    g_test_now += 5000;                      // and still closes for good
+    LiveValueBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
 }
 
 static void test_no_reemit_when_unchanged(void) {
@@ -146,7 +267,8 @@ static void test_nan_single_fire(void) {
     inputs[2].value = NAN;
     scanTick();
     TEST_ASSERT_EQUAL_INT(1, g_frameCount);
-    TEST_ASSERT_EQUAL_UINT8(PREOBD_LIVE_FLAG_ENABLED, g_lastBySlot[2].flags);  // VALID cleared
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_LIVE_FLAG_CONFIGURED | PREOBD_LIVE_FLAG_ENABLED,
+                            g_lastBySlot[2].flags);  // VALID cleared
     TEST_ASSERT_EQUAL_FLOAT(0.0f, g_lastBySlot[2].value);
     resetCapture();
     scanTick();
@@ -162,7 +284,8 @@ static void test_inf_clears_valid(void) {
     inputs[2].value = INFINITY;
     scanTick();
     TEST_ASSERT_EQUAL_INT(1, g_frameCount);
-    TEST_ASSERT_EQUAL_UINT8(PREOBD_LIVE_FLAG_ENABLED, g_lastBySlot[2].flags);  // VALID cleared
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_LIVE_FLAG_CONFIGURED | PREOBD_LIVE_FLAG_ENABLED,
+                            g_lastBySlot[2].flags);  // VALID cleared
     TEST_ASSERT_EQUAL_FLOAT(0.0f, g_lastBySlot[2].value);
 }
 
@@ -202,20 +325,24 @@ static void test_disable_emits_one_clear_frame(void) {
     inputs[2].flags.isEnabled = 0;
     scanTick();
     TEST_ASSERT_EQUAL_INT(1, g_frameCount);
-    TEST_ASSERT_EQUAL_UINT8(0, g_lastBySlot[2].flags);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_LIVE_FLAG_CONFIGURED, g_lastBySlot[2].flags);
     resetCapture();
     scanTick();
     TEST_ASSERT_EQUAL_INT(0, g_frameCount);
 }
 
-static void test_heartbeat_reemits_all(void) {
+// The heartbeat re-sends the OCCUPIED slots, not the whole table (#337).
+static void test_heartbeat_reemits_occupied_only(void) {
     configInput(2, 21, 42.0f, 0, true);
+    configInput(5, 22, 7.0f, 0, true);
     scanTick();
     resetCapture();
     g_test_now += 5000;                              // kHeartbeatMs elapsed
     LiveValueBroadcaster::tick();
-    TEST_ASSERT_EQUAL_INT(MAX_INPUTS, g_frameCount); // full re-send
+    TEST_ASSERT_EQUAL_INT(2, g_frameCount);
     TEST_ASSERT_EQUAL_FLOAT(42.0f, g_lastBySlot[2].value);
+    TEST_ASSERT_EQUAL_INT(1, g_countBySlot[5]);
+    TEST_ASSERT_EQUAL_INT(0, g_countBySlot[0]);      // empty slot stays quiet
 }
 
 // Backpressure: a failed send leaves the cache untouched, so the changed slot
@@ -234,19 +361,26 @@ static void test_backpressure_retries_next_scan(void) {
     TEST_ASSERT_EQUAL_FLOAT(55.0f, g_lastBySlot[2].value);
 }
 
-// PING resync: every slot re-emits on the next scan.
-static void test_resync_reemits_all(void) {
+// PING resync: every OCCUPIED slot re-emits on the next scan (#337).
+static void test_resync_reemits_occupied_only(void) {
     configInput(2, 21, 42.0f, 0, true);
     scanTick();
     resetCapture();
     LiveValueBroadcaster::resync();
     scanTick();
-    TEST_ASSERT_EQUAL_INT(MAX_INPUTS, g_frameCount);
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_INT(1, g_countBySlot[2]);
 }
 
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_cold_start_payload_layout);
+    RUN_TEST(test_empty_slot_payload_shape);
+    RUN_TEST(test_cold_start_includes_disabled_slot);
+    RUN_TEST(test_freed_slot_emits_one_clearing_frame);
+    RUN_TEST(test_freed_slot_clear_repeats_then_stops);
+    RUN_TEST(test_starved_heartbeats_do_not_consume_clear_window);
+    RUN_TEST(test_disabled_then_freed_still_emits_clear);
     RUN_TEST(test_no_reemit_when_unchanged);
     RUN_TEST(test_scan_gate_holds_below_interval);
     RUN_TEST(test_change_emits_display_converted);
@@ -255,8 +389,8 @@ int main(int, char**) {
     RUN_TEST(test_units_change_reemits);
     RUN_TEST(test_sequence_increments);
     RUN_TEST(test_disable_emits_one_clear_frame);
-    RUN_TEST(test_heartbeat_reemits_all);
+    RUN_TEST(test_heartbeat_reemits_occupied_only);
     RUN_TEST(test_backpressure_retries_next_scan);
-    RUN_TEST(test_resync_reemits_all);
+    RUN_TEST(test_resync_reemits_occupied_only);
     return UNITY_END();
 }
