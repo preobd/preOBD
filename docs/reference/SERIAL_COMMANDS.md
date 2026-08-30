@@ -758,6 +758,20 @@ SAVE                             # Save configuration
 SYSTEM REBOOT                    # Reboot to apply
 ```
 
+This moves the LCD too — every I2C client shares the one selected bus. The usual
+reason to do it is to free the default bus's SDA/SCL (pins 18/19 = A4/A5 on
+Teensy 4.x) for use as sensor inputs.
+
+Whichever bus is up, its SDA/SCL pins are reserved and `SET <pin>` will refuse
+them. With no display configured (`DISPLAY TYPE NONE`) and no explicit
+`BUS I2C <n>`, no bus is brought up and the pins stay free for inputs.
+`BUS I2C` reports the bus that is actually up, which the display may have
+acquired on demand without an explicit selection.
+
+Note that I2C **sensors** do not bring the bus up themselves — they need an
+explicit `BUS I2C <n>`, saved, followed by a reboot. Only the display acquires a
+bus on demand.
+
 **Configure dual CAN buses with different baud rates:**
 ```
 BUS CAN OUTPUT CAN1 ENABLE 500000   # OBD-II output on CAN1 at 500kbps

@@ -164,15 +164,20 @@ void resetSystemConfig() {
     systemConfig.outputInterval[OUTPUT_RELAY] = 100;  // 10Hz check rate
     #endif
 
-    // Display defaults (only one display type should be defined in platformio.ini)
-    #if defined(ENABLE_LCD)
-        systemConfig.displayEnabled = 1;
-        systemConfig.displayType = DISPLAY_LCD;
-    #elif defined(ENABLE_OLED)
+    // Display defaults.
+    //
+    // ENABLE_LCD is a board CAPABILITY ("this board can drive an I2C LCD"), not a
+    // statement that one is fitted, so it must NOT declare a display by default:
+    // that would make every capable board reserve SDA/SCL (18/19 = A4/A5 on
+    // Teensy 4.x) whether or not a screen exists, denying those pins to inputs.
+    // A display is declared with `DISPLAY TYPE LCD`; only a stored config's
+    // displayType is authoritative. (Superseded once the LCD becomes a WIRED
+    // feature derived from the board overlay — see the follow-up issue.)
+    #if defined(ENABLE_OLED)
         systemConfig.displayEnabled = 1;
         systemConfig.displayType = DISPLAY_OLED;
     #else
-        systemConfig.displayEnabled = 0;
+        systemConfig.displayEnabled = 1;   // on/off toggle; type is what gates bring-up
         systemConfig.displayType = DISPLAY_NONE;
     #endif
 

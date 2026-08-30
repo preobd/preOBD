@@ -10,7 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - BLE: the Action state frame now reports whether a member Rule is demanding the output, so a client can tell an operator force that is countermanding a live demand (a fan the rules want on, forced off) from one holding against nothing — previously only Warning/Alarm rules were visible to clients, hiding exactly the notify-free control rules that drive fans and shift lights (#348)
 
+### Fixed
+- I2C pins are no longer left unreserved when the LCD is fitted: the display used to bring the bus up itself without telling the bus manager, so `SET A5` on a Teensy was accepted for a pin the LCD was clocking and wedged the bus until the watchdog reset the board — configs already saved with such a pin are now dropped on load instead of reset-looping, and `BUS I2C <n>` and `DISPLAY TYPE LCD` now refuse a bus whose SDA/SCL an input already holds instead of silently dropping that input at the next boot (#351, #354)
+
 ### Changed
+- A display is no longer assumed just because the board can drive one: boards with no saved configuration now default to no display and declare one with `DISPLAY TYPE LCD`, so a board without a screen keeps its I2C pins (18/19 = A4/A5 on Teensy 4.x) free for inputs; existing saved configurations are unaffected (#351)
+- The LCD can now live on any I2C bus (`BUS I2C <n>`) instead of being pinned to bus 0, freeing SDA/SCL on the default bus for use as inputs; this replaces the unmaintained `marcoschwartz/LiquidCrystal_I2C` with `mathertel/LiquidCrystal_PCF8574` (#351)
 - BLE: live-value catch-up (cold start, reconnect resync, and the 5 s heartbeat) now covers only configured inputs instead of every slot in the table, so the burst scales with how many inputs you have rather than with the board's maximum; clearing an input still pushes frames for a few seconds afterwards so a connected client drops its tile promptly, and live frames now distinguish a removed input from a merely disabled one (#337)
 
 ## [0.11.0-beta] - 2026-08-25

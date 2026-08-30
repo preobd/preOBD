@@ -73,9 +73,27 @@ bool initCANBus(uint8_t bus_id, uint32_t baudrate);
 
 /**
  * Get the currently active I2C bus
- * @return Pointer to active TwoWire object, or &Wire if not initialized
+ * @return Pointer to the active TwoWire object, or nullptr if no bus is up
+ *
+ * Pure accessor — never brings a bus up. Use acquireI2C() if you need one.
  */
 TwoWire* getActiveI2C();
+
+/**
+ * Acquire the I2C bus on behalf of a client that needs it (LCD, I2C sensors).
+ *
+ * Brings the bus up on first use and registers SDA/SCL as PIN_RESERVED. Pin
+ * reservation is a property of the bus being *up*, so bring-up must happen here
+ * and nowhere else: a client that calls Wire.begin() itself leaves the peripheral
+ * live while the registry still shows SDA/SCL free, which is how an input could be
+ * assigned to SCL and hang the bus (#351).
+ *
+ * Honors an explicit `BUS I2C <n>` selection; falls back to DEFAULT_I2C_BUS when
+ * none has been made, so a client still gets a working bus on a stock config.
+ *
+ * @return the active TwoWire, or nullptr if no bus could be brought up
+ */
+TwoWire* acquireI2C();
 
 /**
  * Get the currently active SPI bus

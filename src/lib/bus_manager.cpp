@@ -188,10 +188,21 @@ bool initI2CBus(uint8_t bus_id, uint16_t clock_khz) {
     if (success) {
         active_i2c_id = bus_id;
 
-        // Register pins as reserved in pin registry
+        // Register pins as reserved in pin registry.
+        //
+        // registerPin() is first-writer-wins and returns false if the pin is
+        // already claimed — which is reachable, because some platforms overlap
+        // I2C with a serial port (Teensy 4.x: I2C1 17/16 vs Serial4 16/17) and
+        // serial ports are registered first. Everything here rests on "bus up
+        // implies pins reserved", so a silent failure must not pass unremarked.
         static const char* i2c_desc[] = {"Wire", "Wire1", "Wire2"};
-        registerPin(sda, PIN_RESERVED, i2c_desc[bus_id]);
-        registerPin(scl, PIN_RESERVED, i2c_desc[bus_id]);
+        if (!registerPin(sda, PIN_RESERVED, i2c_desc[bus_id]) ||
+            !registerPin(scl, PIN_RESERVED, i2c_desc[bus_id])) {
+            msg.control.print(F("⚠ I2C bus "));
+            msg.control.print(getI2CBusName(bus_id));
+            msg.control.println(F(" shares a pin already claimed by another function"));
+            msg.control.println(F("  Both are now driving it — reconfigure one of them."));
+        }
 
         msg.debug.info(TAG_I2C, "I2C bus initialized");
     }
@@ -330,6 +341,25 @@ TwoWire* getActiveI2C() {
     return active_i2c;
 }
 
+TwoWire* acquireI2C() {
+    // Already up — initI2CBus() reserved SDA/SCL when it brought the bus up.
+    if (active_i2c) return active_i2c;
+
+    // 0xFF ("no explicit selection") is not "forbidden": clients such as the LCD
+    // have always had a working bus here, they simply used to Wire.begin() it
+    // themselves and leave the manager none the wiser. Bring up the platform
+    // default on demand so ownership — and pin reservation — stays in one place.
+    uint8_t bus_id = (systemConfig.buses.active_i2c != 0xFF)
+                         ? systemConfig.buses.active_i2c
+                         : (uint8_t)DEFAULT_I2C_BUS;
+
+    if (!initI2CBus(bus_id, systemConfig.buses.i2c_clock)) {
+        msg.debug.error(TAG_I2C, "I2C acquire failed");
+        return nullptr;
+    }
+    return active_i2c;
+}
+
 SPIClass* getActiveSPI() {
     return active_spi;
 }
@@ -383,7 +413,11 @@ const char* getCANBusName(uint8_t bus_id) {
 
 // Helper function to display I2C bus configuration
 void displayI2CStatus() {
-    uint8_t bus_id = systemConfig.buses.active_i2c;
+    // Report the bus that is actually up, not just the stored selection: a client
+    // may have acquired the platform default on demand (#351), and a status line
+    // reading "NONE" while the peripheral is clocking is exactly the confusion
+    // this command exists to resolve.
+    uint8_t bus_id = active_i2c ? active_i2c_id : systemConfig.buses.active_i2c;
     msg.control.println();
     msg.control.println(F("=== I2C Bus Configuration ==="));
     msg.control.print(F("Active: "));
@@ -398,6 +432,9 @@ void displayI2CStatus() {
         msg.control.print(F(") @ "));
         msg.control.print(systemConfig.buses.i2c_clock);
         msg.control.println(F("kHz"));
+        if (active_i2c && systemConfig.buses.active_i2c == 0xFF) {
+            msg.control.println(F("  (acquired on demand — no explicit 'BUS I2C <n>' selection)"));
+        }
     }
     msg.control.print(F("Available buses: "));
     for (uint8_t i = 0; i < NUM_I2C_BUSES; i++) {

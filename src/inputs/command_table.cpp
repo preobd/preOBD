@@ -782,8 +782,18 @@ int cmd_display(int argc, const char* const* argv) {
         }
         const char* typeStr = argv[2];
         if (streq_P(typeStr, PSTR("LCD"))) {
+            // The LCD will acquire an I2C bus at the next boot, which reserves
+            // SDA/SCL. Reject now if another function holds one of those pins,
+            // so the clash surfaces as an error instead of a silently dropped
+            // input at the next reboot.
+            uint8_t bus = (systemConfig.buses.active_i2c != 0xFF)
+                              ? systemConfig.buses.active_i2c
+                              : (uint8_t)DEFAULT_I2C_BUS;
+            if (i2cBusPinsConflict(bus)) return 1;
+
             systemConfig.displayType = DISPLAY_LCD;
             msg.control.println(F("Display type set to LCD"));
+            msg.control.println(F("Note: Takes effect on next reboot"));
         } else if (streq_P(typeStr, PSTR("OLED"))) {
             systemConfig.displayType = DISPLAY_OLED;
             msg.control.println(F("Display type set to OLED"));

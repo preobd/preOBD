@@ -13,15 +13,32 @@
 
 #if ENABLE_LCD
 
-#include <LiquidCrystal_I2C.h>
+#include <LiquidCrystal_PCF8574.h>
+
+#include "../lib/bus_manager.h"
+#include "../lib/system_config.h"
 
 // LCD display configuration
 #define LCD_COLS 20
 #define LCD_ROWS 4
 #define LCD_COLUMNS_PER_SENSOR (LCD_COLS / 2)  // Split display into 2 columns
 
-LiquidCrystal_I2C lcd(0x27, LCD_COLS, LCD_ROWS);
+// NOTE: the PCF8574 address is fixed at construction — the library has no setter,
+// so `DISPLAY ADDRESS` remains cosmetic here exactly as it was with the previous
+// library (which also hardcoded 0x27). Tracked separately, not part of #351.
+#define LCD_I2C_ADDRESS 0x27
+LiquidCrystal_PCF8574 lcd(LCD_I2C_ADDRESS);
 byte currentLine = 0;
+
+// The LCD is a *client* of the I2C bus, not its owner. Until acquireI2C() hands
+// one over, every entry point below must no-op: driving an un-begun TwoWire is
+// what used to leave the bus wedged (#351).
+static bool lcdReady = false;
+
+// PCF8574 backlight is on/off, not a brightness ramp; keep the two named levels
+// in one place so enable/disable can't drift apart.
+static const uint8_t LCD_BACKLIGHT_ON  = 255;
+static const uint8_t LCD_BACKLIGHT_OFF = 0;
 
 // Custom character icon definitions
 enum ICONS{
@@ -50,8 +67,27 @@ void showConfigModeMessage();
 byte getIconForApplication(uint8_t appIndex);
 
 void initLCD() {
-    lcd.init();
-    lcd.backlight();
+    // Ask the bus manager for a bus rather than calling Wire.begin() ourselves.
+    // It picks the bus (honoring `BUS I2C <n>`) and reserves SDA/SCL, so an input
+    // can never be handed a pin the display is clocking.
+    TwoWire* wire = acquireI2C();
+    if (!wire) {
+        msg.debug.error(TAG_DISPLAY, "LCD: no I2C bus");
+        return;
+    }
+
+    lcd.begin(LCD_COLS, LCD_ROWS, *wire);
+
+    // LiquidCrystal_PCF8574::begin() calls _i2cPort->begin() itself, and
+    // TwoWire::begin() re-inits the peripheral at 100 kHz (WireIMXRT.cpp:24 on
+    // Teensy 4.x; twi_init()'s TWI_FREQ on AVR). Restore the configured clock, or
+    // the bus silently runs at 100 kHz while `BUS I2C` reports 400 — the exact
+    // "status disagrees with the peripheral" failure this module was fixed for,
+    // and a slowdown inflicted on every other client sharing the bus.
+    wire->setClock((uint32_t)systemConfig.buses.i2c_clock * 1000UL);
+
+    lcdReady = true;
+    lcd.setBacklight(LCD_BACKLIGHT_ON);
     lcd.createChar(ICON_DEGREE, degree_icon);
     lcd.createChar(ICON_THERMOMETER, thermometer_icon);
     lcd.createChar(ICON_OIL_CAN, oil_can_icon);
@@ -127,6 +163,7 @@ byte getIconForApplication(uint8_t appIndex) {
 }
 
 void displaySensor(Input *ptr, byte line) {
+    if (!lcdReady) return;
     // Calculate column position based on LCD_COLUMNS_PER_SENSOR
     byte col = (line >= LCD_ROWS) ? LCD_COLUMNS_PER_SENSOR : 0;
     byte row = (line >= LCD_ROWS) ? line - LCD_ROWS : line;
@@ -287,6 +324,7 @@ void displaySensor(Input *ptr, byte line) {
 }
 
 void updateLCD(Input** inputs, int numInputs) {
+    if (!lcdReady) return;
     currentLine = 0;
 
     // If no sensors configured, show CONFIG MODE message
@@ -314,10 +352,12 @@ void updateLCD(Input** inputs, int numInputs) {
 }
 
 void clearLCD() {
+    if (!lcdReady) return;
     lcd.clear();
 }
 
 void showConfigModeMessage() {
+    if (!lcdReady) return;
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("CONFIG MODE");
@@ -326,11 +366,13 @@ void showConfigModeMessage() {
 }
 
 void enableLCD() {
-    lcd.backlight();
+    if (!lcdReady) return;
+    lcd.setBacklight(LCD_BACKLIGHT_ON);
 }
 
 void disableLCD() {
-    lcd.noBacklight();
+    if (!lcdReady) return;
+    lcd.setBacklight(LCD_BACKLIGHT_OFF);
     lcd.clear();
 }
 

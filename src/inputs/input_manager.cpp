@@ -440,6 +440,32 @@ bool loadInputConfig() {
     for (uint8_t i = 0; i < nInputs; i++) {
         InputEEPROM rec;
         EEPROM.get(EEPROM_HEADER_SIZE + (size_t)i * EEPROM_INPUT_SIZE, rec);
+
+        // Re-check the pin against the registry on LOAD, not just on SET. A config
+        // saved by firmware that failed to reserve a bus pin (#351: the LCD used to
+        // bring up I2C without telling bus_manager) would otherwise be re-applied
+        // verbatim every boot — driving an input on SCL, wedging the bus and
+        // watchdog-resetting before the user can reach the CLI to fix it. Dropping
+        // the offending record makes such a config self-heal instead of reset-loop.
+        // Virtual pins (CAN 0xC0+, I2C 0xF0+) have no registry entry — skip them.
+        if (rec.pin < 0xC0 && !isPinAvailable(rec.pin)) {
+            msg.control.print(F("⚠ Skipping stored input on pin "));
+            int8_t analogNum = analogIndexForPin(rec.pin);
+            if (analogNum >= 0) {
+                msg.control.print(F("A"));
+                msg.control.print(analogNum);
+            } else {
+                msg.control.print(rec.pin);
+            }
+            msg.control.print(F(" — reserved by "));
+            const char* desc = getPinDescription(rec.pin);
+            // Not a ternary with F(): the literal would land in RAM on AVR.
+            if (desc) msg.control.println(desc);
+            else      msg.control.println(F("a bus"));
+            msg.control.println(F("  Run SAVE to drop it permanently."));
+            continue;  // slot stays pin==0xFF (free)
+        }
+
         applyInputRecord(rec, inputs[i]);
     }
     // numActiveInputs is an enabled-count, not an occupancy bound (see

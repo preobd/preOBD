@@ -8,7 +8,7 @@ found so developers notice drift before it becomes a link error.
 Rules checked:
   - ENABLE_CAN + PROFILE_HAS_NATIVE_CAN=0 → needs autowp-mcp2515
   - ENABLE_BME280                          → needs Adafruit BME280
-  - ENABLE_LCD                             → needs LiquidCrystal_I2C
+  - ENABLE_LCD                             → needs LiquidCrystal_PCF8574
   - ENABLE_ELM327 on ESP32                → needs ESP32_BleSerial
 """
 
@@ -108,7 +108,7 @@ def check(env):
         warnings.append("ENABLE_BME280 is set but Adafruit BME280 not found in lib_deps")
 
     if "ENABLE_LCD" in defines and "liquidcrystal" not in libs:
-        warnings.append("ENABLE_LCD is set but LiquidCrystal_I2C not found in lib_deps")
+        warnings.append("ENABLE_LCD is set but a LiquidCrystal library was not found in lib_deps")
 
     if "ENABLE_ELM327" in defines and "esp32" in env_name and "bleserial" not in libs:
         warnings.append("ENABLE_ELM327 on ESP32 but ESP32_BleSerial not found in lib_deps")

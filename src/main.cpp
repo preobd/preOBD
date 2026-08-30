@@ -322,6 +322,27 @@ void setup() {
     // This replaces the old hardcoded Wire.begin() and SPI.begin() calls
     initConfiguredBuses();
 
+    // Initialize display (before inputs load, so the bus it acquires has already
+    // reserved SDA/SCL by the time loadInputConfig() validates stored pins).
+    //
+    // ENABLE_LCD is a board CAPABILITY ("this board can drive an I2C LCD"), not a
+    // statement that one is fitted. The runtime CONFIGURATION is displayType, so
+    // gate the actual bring-up on that: a board with DISPLAY TYPE NONE must not
+    // acquire the I2C bus, and its SDA/SCL pins stay free for inputs (#351).
+    // displayEnabled remains the on/off toggle, handled by initDisplayManager().
+    #if ENABLE_LCD
+    if (systemConfig.displayType == DISPLAY_LCD) {
+        initLCD();
+    } else {
+        // The board can drive an LCD but none is declared. Say so: a fitted
+        // display would otherwise stay dark with no explanation, and DISPLAY
+        // STATUS reports "Enabled" (the on/off toggle) either way, so nothing
+        // else on the board would tell the user what is wrong.
+        msg.control.println(F("Note: no display configured (DISPLAY TYPE LCD to enable one)"));
+        msg.control.println(F("  I2C pins stay free for inputs until a display is declared."));
+    }
+    #endif
+
     // Initialize CAN input subsystem (if enabled)
     #if ENABLE_CAN
     if (initCANInput()) {
@@ -340,11 +361,6 @@ void setup() {
     controlManagerInit(millis());
     controlActionsInit();   // configure action target pins as outputs
 #endif
-
-    // Initialize display
-    #if ENABLE_LCD
-    initLCD();
-    #endif
 
 #if ENABLE_MODE_BUTTON
     initButtonHandler();

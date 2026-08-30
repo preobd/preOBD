@@ -96,6 +96,11 @@ static int bus_i2c(int argc, const char* const* argv, int /*tokenIndex*/) {
         return 1;
     }
 
+    // Same guard as DISPLAY TYPE LCD: selecting a bus whose SDA/SCL an input or
+    // Action already occupies used to be accepted silently, leaving the clash to
+    // surface as a dropped input at the next boot.
+    if (i2cBusPinsConflict(bus_id)) return 1;
+
     systemConfig.buses.active_i2c = bus_id;
     msg.control.print(F("I2C bus set to "));
     msg.control.print(getI2CBusName(bus_id));
