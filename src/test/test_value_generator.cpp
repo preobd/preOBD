@@ -12,7 +12,7 @@
 
 #include "../config.h"
 
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
 
 #include "test_mode.h"
 #include <Arduino.h>
@@ -129,4 +129,4 @@ float generateTestValue(const InputTestConfig* config, unsigned long elapsedMs) 
     }
 }
 
-#endif // ENABLE_TEST_MODE
+#endif // INCLUDE_TEST_MODE

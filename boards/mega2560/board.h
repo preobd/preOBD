@@ -24,16 +24,25 @@
 
 // ===== CEILINGS (board genuinely can't — RAM/flash; see docs/feature_costs.md) =====
 #define PLATFORM_NO_SD_LOGGING 1     // SD lib + buffers blow the 8 KB budget (and SD.h isn't in lib_deps)
-// Also off by ceiling, simply left undefined (CHOICE flags default off):
-//   ENABLE_ELM327 (+301 B), ENABLE_FRAMED_TRANSPORT (+1689 B), ENABLE_TEST_MODE
-//   (+238 B) — each exceeds the headroom. ENABLE_REALDASH is off by choice (+36 B).
+// The rest are vetoed by simple omission — a capability this board lacks has no
+// line at all, so there is no negative to declare. RAM each WOULD cost if added:
+//   SUPPORTS_ELM327 (+301 B), SUPPORTS_FRAMED_TRANSPORT (+1689 B),
+//   SUPPORTS_TEST_MODE (+238 B) — each exceeds the 8 KB headroom.
+//   SUPPORTS_REALDASH (+36 B) would fit; it is omitted by preference, not ceiling.
 
-// ===== FEATURE CHOICES (enabled) =====
-#define ENABLE_CAN             1
-#define ENABLE_SERIAL_OUTPUT   1
-#define ENABLE_LCD             1
-#define ENABLE_ALARMS          1     // control engine (Rules/Actions/Annunciator)
-#define ENABLE_BME280          1
+// ===== FEATURE CAPABILITY (what this board CAN do) =====
+// Declared by presence: a board that can't simply omits the line. Never 0.
+// boards/resolve.h turns each of these into the INCLUDE_* flag src/ tests.
+// To reclaim a feature's flash/RAM on this board, comment its line out here —
+// measured per-feature costs are in docs/feature_costs.md. (For a one-off local
+// build, put `-D INCLUDE_<X>=0` in your gitignored wiring.ini instead.)
+// Savings shown are what commenting the line out reclaims on THIS board
+// (flash / static RAM, measured — docs/feature_costs.md).
+#define SUPPORTS_CAN             1     // −11,568 B / −691 B — largest RAM consumer
+#define SUPPORTS_SERIAL_OUTPUT   1     //  −3,170 B /  −28 B
+#define SUPPORTS_LCD             1     //  −4,746 B / −236 B
+#define SUPPORTS_ALARMS          1     // −16,426 B / −455 B — gates the whole control engine on AVR
+#define SUPPORTS_BME280          1     //  −7,766 B / −174 B
 
 // ===== SIZING (tuned to the 8 KB budget) =====
 #define CONTROL_RAM_RULES_MAX   2    // control caps are a REAL SRAM limit on AVR (ARCHITECTURE §11.9)
@@ -60,4 +69,4 @@
 #define SUPPORTS_JSON_EXPORT        SUPPORTS_JSON_CONFIG
 
 // WIRED (set in wiring.ini, derived by boards/resolve.h):
-//   RGB_PIN_R/G/B → ENABLE_LED   MODE_BUTTON_PIN → ENABLE_MODE_BUTTON   BUZZER_PIN
+//   RGB_PIN_R/G/B → SUPPORTS_LED   MODE_BUTTON_PIN → SUPPORTS_MODE_BUTTON   BUZZER_PIN

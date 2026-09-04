@@ -2,7 +2,7 @@
 
 #include "../config.h"
 
-#if ENABLE_FRAMED_TRANSPORT
+#if INCLUDE_FRAMED_TRANSPORT
 
 #include <Arduino.h>
 #include <string.h>
@@ -43,7 +43,7 @@ void packStatus(PreobdSystemStatus& s) {
     // (a relay is an Action of type RELAY — §11). Field name kept for
     // wire compatibility with PreobdSystemStatus.
     uint8_t actionCount = 0;
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     actionCount = controlActionCount();
 #endif
     s.relayCount = actionCount;
@@ -107,11 +107,11 @@ void tick() {
 
 } // namespace StatusBroadcaster
 
-#else // !ENABLE_FRAMED_TRANSPORT
+#else // !INCLUDE_FRAMED_TRANSPORT
 
 namespace StatusBroadcaster {
 void init() {}
 void tick() {}
 }
 
-#endif // ENABLE_FRAMED_TRANSPORT
+#endif // INCLUDE_FRAMED_TRANSPORT

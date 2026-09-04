@@ -2,7 +2,7 @@
 
 #include "../config.h"
 
-#if ENABLE_FRAMED_TRANSPORT
+#if INCLUDE_FRAMED_TRANSPORT
 
 #include <string.h>
 
@@ -151,7 +151,7 @@ void MuxTransport::handleFrame(const Frame& f) {
     case FRAME_TYPE_ELM327:
         // ELM327 client traffic (e.g. Torque over a concurrent BLE central):
         // run the AT/OBD parser and emit the response as 0x30 frame(s) on this
-        // same transport. No-op stub when ENABLE_ELM327 is off on this profile.
+        // same transport. No-op stub when INCLUDE_ELM327 is off on this profile.
         Elm327Framed::handleInbound(f.payload, f.len, *this);
         break;
     default:
@@ -252,4 +252,4 @@ void MuxTransport::writeSerialChunked(const uint8_t* data, size_t len) {
     writingFrame = outerFrame;
 }
 
-#endif // ENABLE_FRAMED_TRANSPORT
+#endif // INCLUDE_FRAMED_TRANSPORT

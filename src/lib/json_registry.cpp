@@ -327,13 +327,13 @@ static FLASHMEM void writeFirmwareJson(Print& out) {
     caps.add("json_import");
 #endif
     caps.add("json_export");
-#if ENABLE_CAN
+#if INCLUDE_CAN
     caps.add("can");
 #endif
-#if ENABLE_SD_LOGGING
+#if INCLUDE_SD_LOGGING
     caps.add("sd");
 #endif
-#if ENABLE_LCD
+#if INCLUDE_LCD
     caps.add("lcd");
 #endif
     WatchdogKickingPrint wdOut(out);

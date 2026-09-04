@@ -37,13 +37,13 @@
 // Feature gate. The control engine subsumes alarms + relays, so it is active
 // whenever either was (a profile may still force it explicitly). Profiles own
 // feature flags (CLAUDE.md), but this derivation keeps existing profiles
-// working without edits — define ENABLE_CONTROL_ENGINE in a profile to override.
+// working without edits — define INCLUDE_CONTROL_ENGINE in a profile to override.
 // ============================================================================
-#ifndef ENABLE_CONTROL_ENGINE
-#  if (defined(ENABLE_ALARMS) && ENABLE_ALARMS) || (defined(ENABLE_RELAY_OUTPUT) && ENABLE_RELAY_OUTPUT)
-#    define ENABLE_CONTROL_ENGINE 1
+#ifndef INCLUDE_CONTROL_ENGINE
+#  if (defined(INCLUDE_ALARMS) && INCLUDE_ALARMS) || (defined(INCLUDE_RELAY_OUTPUT) && INCLUDE_RELAY_OUTPUT)
+#    define INCLUDE_CONTROL_ENGINE 1
 #  else
-#    define ENABLE_CONTROL_ENGINE 0
+#    define INCLUDE_CONTROL_ENGINE 0
 #  endif
 #endif
 
@@ -224,7 +224,7 @@ struct ActionLink {
 // unit that sees the record types can reach the tables without pulling in
 // control_manager.h (e.g. pin_registry.cpp, which only has system_config.h).
 // ============================================================================
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
 extern Rule       rules[MAX_RULES];
 extern Action     actions[MAX_ACTIONS];
 extern ActionLink actionLinks[MAX_ACTION_LINKS];

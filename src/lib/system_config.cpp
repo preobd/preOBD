@@ -115,11 +115,12 @@ void resetSystemConfig() {
     systemConfig.magic = SYSTEM_CONFIG_MAGIC;
     systemConfig.version = SYSTEM_CONFIG_VERSION;
 
-    // Output defaults (check config.h for #define ENABLE_*)
+    // Output defaults. INCLUDE_* only says the module is in the image; these
+    // outputEnabled[] values are what actually turns it on at runtime.
     // Data outputs default OFF to keep USB clean - user must explicitly enable
     // Safety outputs default ON when compiled in
 
-    #if ENABLE_CAN
+    #if INCLUDE_CAN
     systemConfig.outputEnabled[OUTPUT_CAN] = 0;  // OFF - data plane output
     systemConfig.outputInterval[OUTPUT_CAN] = CAN_OUTPUT_INTERVAL_MS;
     #else
@@ -127,7 +128,7 @@ void resetSystemConfig() {
     systemConfig.outputInterval[OUTPUT_CAN] = 100;
     #endif
 
-    #if ENABLE_REALDASH
+    #if INCLUDE_REALDASH
     systemConfig.outputEnabled[OUTPUT_REALDASH] = 0;  // OFF - data plane output
     systemConfig.outputInterval[OUTPUT_REALDASH] = REALDASH_INTERVAL_MS;
     #else
@@ -135,7 +136,7 @@ void resetSystemConfig() {
     systemConfig.outputInterval[OUTPUT_REALDASH] = 100;
     #endif
 
-    #if ENABLE_SERIAL_OUTPUT
+    #if INCLUDE_SERIAL_OUTPUT
     systemConfig.outputEnabled[OUTPUT_SERIAL] = 0;  // OFF - clogs USB serial
     systemConfig.outputInterval[OUTPUT_SERIAL] = SERIAL_CSV_INTERVAL_MS;
     #else
@@ -143,7 +144,7 @@ void resetSystemConfig() {
     systemConfig.outputInterval[OUTPUT_SERIAL] = 1000;
     #endif
 
-    #if ENABLE_SD_LOGGING
+    #if INCLUDE_SD_LOGGING
     systemConfig.outputEnabled[OUTPUT_SD] = 0;  // OFF - requires SD card hardware
     systemConfig.outputInterval[OUTPUT_SD] = SD_LOG_INTERVAL_MS;
     #else
@@ -151,7 +152,7 @@ void resetSystemConfig() {
     systemConfig.outputInterval[OUTPUT_SD] = 5000;
     #endif
 
-    #if ENABLE_ALARMS
+    #if INCLUDE_ALARMS
     systemConfig.outputEnabled[OUTPUT_ALARM] = 1;  // ON - safety critical
     systemConfig.outputInterval[OUTPUT_ALARM] = 100;  // 10Hz check rate
     #else
@@ -159,21 +160,22 @@ void resetSystemConfig() {
     systemConfig.outputInterval[OUTPUT_ALARM] = 100;
     #endif
 
-    #if ENABLE_RELAY_OUTPUT
+    #if INCLUDE_RELAY_OUTPUT
     systemConfig.outputEnabled[OUTPUT_RELAY] = 1;  // ON - user-configured relay control
     systemConfig.outputInterval[OUTPUT_RELAY] = 100;  // 10Hz check rate
     #endif
 
     // Display defaults.
     //
-    // ENABLE_LCD is a board CAPABILITY ("this board can drive an I2C LCD"), not a
-    // statement that one is fitted, so it must NOT declare a display by default:
-    // that would make every capable board reserve SDA/SCL (18/19 = A4/A5 on
-    // Teensy 4.x) whether or not a screen exists, denying those pins to inputs.
-    // A display is declared with `DISPLAY TYPE LCD`; only a stored config's
-    // displayType is authoritative. (Superseded once the LCD becomes a WIRED
-    // feature derived from the board overlay — see the follow-up issue.)
-    #if defined(ENABLE_OLED)
+    // INCLUDE_LCD says the driver is in the image; it cannot say whether a
+    // screen is plugged in, and nothing at compile time can. So the default must
+    // be NONE: assuming a display would make every capable board reserve SDA/SCL
+    // (18/19 = A4/A5 on Teensy 4.x) whether or not one exists, denying those pins
+    // to inputs (#351). A display is declared at runtime with `DISPLAY TYPE LCD`,
+    // which is also what lets you attach one to a running unit without a reflash.
+    //
+    // A stored config still wins; this is only the fresh-EEPROM default.
+    #if defined(INCLUDE_OLED)
         systemConfig.displayEnabled = 1;
         systemConfig.displayType = DISPLAY_OLED;
     #else
@@ -295,17 +297,17 @@ bool saveSystemConfig(bool verbose) {
  * This reserves these pins and makes them visible in the registry export
  */
 void registerSystemPins() {
-#if ENABLE_MODE_BUTTON
+#if INCLUDE_MODE_BUTTON
     registerPin(MODE_BUTTON_PIN, PIN_BUTTON, "Mode Button");
 #endif
 
-#if ENABLE_ALARMS
+#if INCLUDE_ALARMS
     #ifdef BUZZER_PIN
     registerPin(BUZZER_PIN, PIN_BUZZER, "Buzzer");
     #endif
 #endif
 
-#if ENABLE_CAN_HYBRID || !PROFILE_HAS_NATIVE_CAN
+#if INCLUDE_CAN_HYBRID || !PROFILE_HAS_NATIVE_CAN
     #if defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)
     registerPin(CAN_CS_0, PIN_CS, "CAN CS");
     #endif
@@ -323,7 +325,7 @@ void registerSystemPins() {
     #endif
 #endif
 
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
     #ifdef TEST_MODE_PIN
     registerPin(TEST_MODE_PIN, PIN_BUTTON, "Test Mode Trigger");
     #endif

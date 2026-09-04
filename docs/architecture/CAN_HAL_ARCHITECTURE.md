@@ -172,7 +172,7 @@ Enable via platformio.ini:
 
 ```ini
 build_flags =
-    -D ENABLE_CAN_HYBRID                        # Enable hybrid support
+    -D SUPPORTS_CAN_HYBRID                        # Enable hybrid support
     -D CAN_BUS_0_TYPE=CanControllerType::TWAI   # Explicit bus 0 controller
     -D CAN_BUS_1_TYPE=CanControllerType::MCP2515 # Explicit bus 1 controller
 ```
@@ -392,7 +392,7 @@ lib_deps =
 
 [env:custom_sja1000]
 build_flags =
-    -D ENABLE_CAN
+    -D SUPPORTS_CAN
     -D CAN_BUS_0_TYPE=CanControllerType::SJA1000
 lib_deps =
     ${sja1000_lib.lib_deps}

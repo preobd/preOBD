@@ -1,15 +1,15 @@
 /*
  * button_handler.cpp - Multi-function button handler implementation
- * Only compiled when ENABLE_MODE_BUTTON is defined in the board profile.
+ * Only compiled when INCLUDE_MODE_BUTTON is defined in the board profile.
  */
 
 #include "button_handler.h"
 #include "../config.h"
 
-#if ENABLE_MODE_BUTTON
+#if INCLUDE_MODE_BUTTON
 
 #if !defined(MODE_BUTTON_PIN)
-#error "MODE_BUTTON_PIN must be defined in the board profile when ENABLE_MODE_BUTTON is set"
+#error "MODE_BUTTON_PIN must be defined in the board profile when INCLUDE_MODE_BUTTON is set"
 #endif
 
 #include "message_api.h"
@@ -83,4 +83,4 @@ bool isButtonPressed() {
     return buttonState;
 }
 
-#endif // ENABLE_MODE_BUTTON
+#endif // INCLUDE_MODE_BUTTON

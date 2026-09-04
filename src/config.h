@@ -14,7 +14,7 @@
 #define CONFIG_H
 
 // Migrated boards (boards/<board>/board.h, #283) define PREOBD_BOARD_DEFINED and
-// rely on boards/resolve.h to derive their wired ENABLE_* flags. Catch an env
+// rely on boards/resolve.h to derive their INCLUDE_* flags. Catch an env
 // that -includes the board but forgot the resolver (or got the order wrong).
 // Legacy src/profiles/*.h boards don't set PREOBD_BOARD_DEFINED → guard skipped.
 #if defined(PREOBD_BOARD_DEFINED) && !defined(PREOBD_RESOLVED)
@@ -70,20 +70,20 @@
 // WARNING: Adds ~4KB flash.
 // TEST_MODE_PIN (the trigger pin) is defined in the board profile.
 
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
     #define DEFAULT_TEST_SCENARIO 0  // 0=Normal, 1=Alarms, 2=Faults, 3=Startup, 4=Driving
 #endif
 
 // ============================================================================
-// DIAG INTEGRITY CHECK  (gate kept named ENABLE_SELFTEST for profile compat)
+// DIAG INTEGRITY CHECK  (gate kept named INCLUDE_SELFTEST for profile compat)
 // ============================================================================
 // Backs the `SYSTEM DIAG INTEGRITY` sub-command: walks every dispatch table and
 // validates invariants (token strings non-null, uppercase, in-bounds; handlers
 // non-null). Catches PROGMEM-access regressions the moment it's run after
 // flashing. Adds ~50 bytes RAM and ~700 bytes flash; disable on RAM-tight
 // builds (DIAG INTEGRITY then reports "disabled in this build").
-#ifndef ENABLE_SELFTEST
-    #define ENABLE_SELFTEST 1
+#ifndef INCLUDE_SELFTEST
+    #define INCLUDE_SELFTEST 1
 #endif
 
 // ============================================================================
@@ -92,7 +92,7 @@
 // OBD-II request/response support for ELM327 adapters and apps like Torque.
 // Works in hybrid mode: simultaneous broadcast (RealDash) and request/response.
 
-#if ENABLE_CAN
+#if INCLUDE_CAN
     // Optional: Minimum interval between OBD-II requests (ms) to prevent bus flooding.
     // Most scanners query sequentially at ~1-10 Hz, so this is rarely needed.
     // #define OBD2_MIN_REQUEST_INTERVAL_MS 10  // Uncomment to enable rate limiting

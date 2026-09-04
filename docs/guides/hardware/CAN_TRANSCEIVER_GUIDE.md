@@ -251,7 +251,7 @@ GND         →   GND            GND
 - Pin assignments for SPI CAN controllers are in `src/config.h`
 - Hybrid mode requires build flags in `platformio.ini`:
   ```ini
-  -D ENABLE_CAN_HYBRID
+  -D SUPPORTS_CAN_HYBRID
   -D CAN_BUS_0_TYPE=CanControllerType::TWAI
   -D CAN_BUS_1_TYPE=CanControllerType::MCP2515
   ```

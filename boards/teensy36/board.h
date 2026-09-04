@@ -12,17 +12,22 @@
 #define PROFILE_HAS_NATIVE_CAN 1     // integrated FlexCAN
 #define HAS_BUILTIN_SD         1     // built-in microSD slot (resolves to SD_PIN=254 BUILTIN_SDCARD)
 
-// ===== FEATURE CHOICES (capable board; on/off is preference) =====
-#define ENABLE_CAN              1
-#define ENABLE_REALDASH         1
-#define ENABLE_SERIAL_OUTPUT    1
-#define ENABLE_FRAMED_TRANSPORT 1    // nRF52840 coprocessor framed link + broadcasters
-#define ENABLE_LCD              1
-#define ENABLE_ALARMS           1    // control engine (Rules/Actions/Annunciator) — NOT the buzzer
-#define ENABLE_BME280           1
-#define ENABLE_RELAY_OUTPUT     1    // deprecated shim (→ control-engine Actions)
-#define ENABLE_ELM327           1
-#define ENABLE_TEST_MODE        1    // CLI test injection (optional trigger pin lives in the overlay)
+// ===== FEATURE CAPABILITY (what this board CAN do) =====
+// Declared by presence: a board that can't simply omits the line. Never 0.
+// boards/resolve.h turns each of these into the INCLUDE_* flag src/ tests.
+// To reclaim a feature's flash/RAM on this board, comment its line out here —
+// measured per-feature costs are in docs/feature_costs.md. (For a one-off local
+// build, put `-D INCLUDE_<X>=0` in your gitignored wiring.ini instead.)
+#define SUPPORTS_CAN              1
+#define SUPPORTS_REALDASH         1
+#define SUPPORTS_SERIAL_OUTPUT    1
+#define SUPPORTS_FRAMED_TRANSPORT 1    // nRF52840 coprocessor framed link + broadcasters
+#define SUPPORTS_LCD              1
+#define SUPPORTS_ALARMS           1    // control engine (Rules/Actions/Annunciator) — NOT the buzzer
+#define SUPPORTS_BME280           1
+#define SUPPORTS_RELAY_OUTPUT     1    // deprecated shim (→ control-engine Actions)
+#define SUPPORTS_ELM327           1
+#define SUPPORTS_TEST_MODE        1    // CLI test injection (optional trigger pin lives in the overlay)
 
 // ===== SIZING (256 KB RAM; fewer inputs than T4.x) =====
 #define MAX_INPUTS              32
@@ -48,5 +53,5 @@
 #define JSON_IMPORT_MAX_BYTES       16384
 
 // WIRED (set in wiring.ini, derived by boards/resolve.h):
-//   RGB_PIN_R/G/B → ENABLE_LED   MODE_BUTTON_PIN → ENABLE_MODE_BUTTON
+//   RGB_PIN_R/G/B → SUPPORTS_LED   MODE_BUTTON_PIN → SUPPORTS_MODE_BUTTON
 //   BUZZER_PIN (buzzer)          TEST_MODE_PIN (optional test-mode trigger)

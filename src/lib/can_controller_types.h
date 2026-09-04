@@ -11,7 +11,7 @@
  *   if (ctrl == CanControllerType::TWAI) { ... }
  *
  * Build flags (platformio.ini) for hybrid mode:
- *   -D ENABLE_CAN_HYBRID
+ *   -D INCLUDE_CAN_HYBRID
  *   -D CAN_BUS_0_TYPE=CanControllerType::TWAI
  *   -D CAN_BUS_1_TYPE=CanControllerType::MCP2515
  */

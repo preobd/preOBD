@@ -20,7 +20,7 @@ void updateSDLog();
 void closeSDLog();
 
 // Status, for SYSTEM DIAG HW. Valid on every build — they report "off" when
-// ENABLE_SD_LOGGING is unset.
+// INCLUDE_SD_LOGGING is unset.
 bool        sdLogIsActive();      // file open and healthy
 bool        sdLogIsFaulted();     // latched after an unrecoverable write error
 bool        sdLogCardRemoved();   // that fault was a pulled card, not a bad write

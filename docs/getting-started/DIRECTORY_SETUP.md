@@ -201,7 +201,7 @@ preOBD/
 - **Edit:** RARELY (only to change global timing or threshold defaults)
 
 **boards/<board>/** ⭐ (top-level, one folder per board — see `boards/README.md`)
-- `board.h` — board definition: capabilities, ceilings, sizing, and CHOICE feature flags (no wired pins)
+- `board.h` — board definition: `SUPPORTS_*` capabilities, ceilings, sizing (no wired pins)
 - `wiring.ini` — YOUR physical pin assignments as `-D` flags (gitignored; copy `wiring.ini.example`)
 - `board.ini` — the PlatformIO `[env:<board>]` fragment
 - `boards/resolve.h` — shared; derives wired feature flags from your pins
@@ -209,9 +209,9 @@ preOBD/
 
 ```cpp
 // boards/<board>/board.h — features (no wired pins here)
-#define ENABLE_CAN             1
-#define ENABLE_LCD             1
-#define ENABLE_ALARMS          1
+#define SUPPORTS_CAN             1
+#define SUPPORTS_LCD             1
+#define SUPPORTS_ALARMS          1
 #define CAN_CS_0               9    // intrinsic SPI-CAN pins (MCP2515 boards) stay here
 ```
 ```ini

@@ -56,7 +56,7 @@ uint8_t numActiveInputs = 0;
 struct ConfigStoreHeader {
     uint32_t magic;        // EEPROM_MAGIC
     uint16_t version;      // EEPROM_VERSION (store-layout version). NB: does NOT encode
-                           // the ENABLE_CONTROL_ENGINE build flag — a store written with
+                           // the INCLUDE_CONTROL_ENGINE build flag — a store written with
                            // rules/actions won't re-checksum on a control-off build (fails
                            // safe → reject → blank). Academic: a board's control state is fixed.
     uint8_t  numInputs;    // records actually persisted in each section…
@@ -130,7 +130,7 @@ bool initInputManager() {
     // Clear all inputs
     memset(inputs, 0, sizeof(inputs));
     numActiveInputs = 0;
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     // Empty the BSS-zeroed control tables up front: id==0 is a valid record id, so
     // an unstamped table looks full of phantom rule/action #0. loadInputConfig()
     // below is validate-before-mutate (it only touches the tables once a valid
@@ -269,7 +269,7 @@ bool saveInputConfig() {
     size_t remaining = budget;
     uint8_t persistInputs = fitSection(remaining, wantInputs, EEPROM_INPUT_SIZE, F("inputs"));
     remaining -= (size_t)persistInputs * EEPROM_INPUT_SIZE;
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     uint8_t persistRules = fitSection(remaining, controlRuleCount(), sizeof(Rule), F("rules"));
     remaining -= (size_t)persistRules * sizeof(Rule);
     uint8_t persistActions = fitSection(remaining, controlActionCount(), sizeof(Action), F("actions"));
@@ -294,7 +294,7 @@ bool saveInputConfig() {
     }
 
     uint8_t savedRules = 0, savedActions = 0, savedLinks = 0;
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     for (int i = 0; i < MAX_RULES && savedRules < persistRules; i++) {
         if (rules[i].id == CONTROL_ID_NONE) continue;
         EEPROM.put(addr, rules[i]);
@@ -334,7 +334,7 @@ bool saveInputConfig() {
     msg.control.print(F("✓ Saved "));
     msg.control.print(savedInputs);
     msg.control.print(F(" inputs"));
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     msg.control.print(F(", "));
     msg.control.print(savedRules);
     msg.control.print(F(" rules, "));
@@ -378,7 +378,7 @@ bool loadInputConfig() {
     // Silent reject — the caller (cmd_load) reports; no RAM-resident log on AVR.
     size_t storedBytes = EEPROM_HEADER_SIZE
                        + (size_t)header.numInputs  * EEPROM_INPUT_SIZE
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
                        + (size_t)header.numRules   * sizeof(Rule)
                        + (size_t)header.numActions * sizeof(Action)
                        + (size_t)header.numLinks   * sizeof(ActionLink)
@@ -398,7 +398,7 @@ bool loadInputConfig() {
             checksum ^= xorBytes(&rec, sizeof(rec));
             a += EEPROM_INPUT_SIZE;
         }
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
         for (uint8_t i = 0; i < header.numRules; i++) {
             Rule r; EEPROM.get(a, r);
             checksum ^= xorBytes(&r, sizeof(Rule));
@@ -429,7 +429,7 @@ bool loadInputConfig() {
     memset(inputs, 0, sizeof(inputs));
     for (uint8_t i = 0; i < MAX_INPUTS; i++) inputs[i].pin = 0xFF;
     numActiveInputs = 0;
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     controlResetTables();
 #endif
 
@@ -475,7 +475,7 @@ bool loadInputConfig() {
     for (uint8_t i = 0; i < nInputs; i++)
         if (inputs[i].flags.isEnabled) numActiveInputs++;
 
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     // Section bases from the STORED counts (not the RAM-clamped ones) so rules /
     // actions are located at the offsets they were actually written to.
     const size_t rulesBase   = EEPROM_HEADER_SIZE + (size_t)header.numInputs * EEPROM_INPUT_SIZE;
@@ -533,7 +533,7 @@ void resetInputConfig() {
     }
     numActiveInputs = 0;
 
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     controlResetTables();  // empty Rule/Action tables too (#296 B4)
 #endif
 
@@ -747,7 +747,7 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
 
     input->obd2pid = preset.obd2pid;
     input->obd2length = preset.obd2length;
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     // App-seeded alarms are now control-engine Rules (§11.5): the caller
     // (set_application) seeds a default Rule from the template. Don't also arm
     // the legacy per-input alarm, or the threshold would be enforced twice.

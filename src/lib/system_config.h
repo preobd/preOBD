@@ -49,10 +49,10 @@ enum DisplayType {
     DISPLAY_OLED = 2
 };
 
-#if ENABLE_ELM327
+#if INCLUDE_ELM327
 #include "../outputs/output_elm327.h"
 #endif
-#include "../control/control_types.h"  // Rule/Action records + ENABLE_CONTROL_ENGINE
+#include "../control/control_types.h"  // Rule/Action records + INCLUDE_CONTROL_ENGINE
 
 // System configuration structure
 struct SystemConfig {

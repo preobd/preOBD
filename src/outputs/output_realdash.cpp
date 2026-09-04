@@ -6,7 +6,7 @@
 #include "../config.h"
 #include "../lib/message_api.h"
 
-#if ENABLE_REALDASH
+#if INCLUDE_REALDASH
 
 void initRealdash() {
     // Serial initialization happens in main.cpp

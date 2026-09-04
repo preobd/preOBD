@@ -70,7 +70,7 @@ inline bool parseSdLogFormat(const char* token, SdLogFormat& out) {
     // Plain RAM literals, not PSTR: Teensy's PSTR macro expands to a static
     // PROGMEM array, which triggers a section type conflict when it appears in
     // an inline function in a header. The cost is confined to boards that
-    // actually log to SD — every caller is behind ENABLE_SD_LOGGING, so the
+    // actually log to SD — every caller is behind INCLUDE_SD_LOGGING, so the
     // SRAM-starved mega drops these entirely.
     if (strcasecmp(token, "WIDE") == 0) { out = SDLOG_FORMAT_WIDE; return true; }
     if (strcasecmp(token, "LONG") == 0) { out = SDLOG_FORMAT_LONG; return true; }

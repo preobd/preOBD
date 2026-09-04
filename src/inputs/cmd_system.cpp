@@ -33,15 +33,15 @@
 #include "../outputs/output_format.h"   // sdLogFormatName
 #include "../lib/obd_query.h"
 #include "../lib/display_manager.h"
-#if ENABLE_RELAY_OUTPUT
+#if INCLUDE_RELAY_OUTPUT
 #endif
-#if ENABLE_ELM327
+#if INCLUDE_ELM327
 #include "../outputs/output_elm327.h"
 #endif
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
 #include "../test/test_mode.h"
 #endif
-#if ENABLE_CAN
+#if INCLUDE_CAN
 #include "sensors/can/can_scan.h"
 #include "../lib/can_sensor_library/standard_pids.h"
 #endif
@@ -293,7 +293,7 @@ static int system_reset(int argc, const char* const* argv, int /*tokenIndex*/) {
 //   INPUTS     per-input reading sanity (range / rail)
 
 static void diagSectionIntegrity() {
-#if ENABLE_SELFTEST
+#if INCLUDE_SELFTEST
     int failures = runDiagIntegrity();   // prints per-entry failures inline
     msg.control.print(F("[integrity]   dispatch tables ...... "));
     if (failures == 0) {
@@ -327,7 +327,7 @@ static void diagSectionHw() {
     bool any = false;
     (void)any;
 
-#if ENABLE_LCD
+#if INCLUDE_LCD
     any = true;
     msg.control.print(F("[hardware]    LCD (I2C 0x27) ....... "));
     switch (i2cProbe(0x27)) {
@@ -337,7 +337,7 @@ static void diagSectionHw() {
     }
 #endif
 
-#if ENABLE_BME280
+#if INCLUDE_BME280
     any = true;
     msg.control.print(F("[hardware]    BME280 (I2C) ......... "));
     {
@@ -366,7 +366,7 @@ static void diagSectionHw() {
     }
 #endif
 
-#if ENABLE_SD_LOGGING
+#if INCLUDE_SD_LOGGING
     // A mounted card says nothing about whether rows are actually landing: a
     // full card, or one pulled mid-drive, fails every write while the output
     // still reports "Enabled" in OUTPUT STATUS.
@@ -1140,7 +1140,7 @@ int cmd_system(int argc, const char* const* argv) {
 }
 
 
-#if ENABLE_SELFTEST
+#if INCLUDE_SELFTEST
 int selftestSystemTable() {
     int failures = 0;
     for (uint8_t i = 0; i < NUM_SYSTEM_SUBCOMMANDS; i++) {

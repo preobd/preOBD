@@ -271,7 +271,7 @@ static void printPinPadded(uint8_t pin, bool analogLabel = false) {
 void printPinStatus(uint8_t specificPin) {
     // Query specific pin mode
     if (specificPin != 0xFF) {
-        #if ENABLE_CONTROL_ENGINE
+        #if INCLUDE_CONTROL_ENGINE
         // Check control-engine RELAY Action targets FIRST: action pins are also
         // registered (as PIN_OUTPUT, for conflict detection), but this dedicated
         // view carries the action id, which the generic registry entry doesn't.
@@ -334,7 +334,7 @@ void printPinStatus(uint8_t specificPin) {
     extern uint8_t numActiveInputs;
     msg.control.print(numActiveInputs);
 
-    #if ENABLE_CONTROL_ENGINE
+    #if INCLUDE_CONTROL_ENGINE
     // Count control-engine RELAY Actions
     uint8_t actionCount = 0;
     for (int i = 0; i < MAX_ACTIONS; i++) {
@@ -412,7 +412,7 @@ void printPinStatus(uint8_t specificPin) {
     }
     if (hasInputs) msg.control.println();
 
-    #if ENABLE_CONTROL_ENGINE
+    #if INCLUDE_CONTROL_ENGINE
     // Action Pins (control-engine RELAY actuators)
     bool hasActions = false;
     for (int i = 0; i < MAX_ACTIONS; i++) {

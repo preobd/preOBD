@@ -13,7 +13,7 @@
 #define _COMMAND_HANDLERS_H_
 
 #include "../config.h"
-#include "../control/control_types.h"  // defines ENABLE_CONTROL_ENGINE (order-independent)
+#include "../control/control_types.h"  // defines INCLUDE_CONTROL_ENGINE (order-independent)
 
 int cmd_help(int argc, const char* const* argv);
 int cmd_list(int argc, const char* const* argv);
@@ -34,10 +34,10 @@ int cmd_bus(int argc, const char* const* argv);
 int cmd_log(int argc, const char* const* argv);
 int cmd_at(int argc, const char* const* argv);
 
-#if ENABLE_RELAY_OUTPUT
+#if INCLUDE_RELAY_OUTPUT
 int cmd_relay(int argc, const char* const* argv);
 #endif
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
 int cmd_rule(int argc, const char* const* argv);
 int cmd_action(int argc, const char* const* argv);
 // INFO <pin> ALARM — the per-input alarm view. Lives with the RULE CLI because
@@ -45,10 +45,10 @@ int cmd_action(int argc, const char* const* argv);
 // renderer as RULE LIST so the two can never disagree.
 void printInputAlarmInfo(uint8_t pin);
 #endif
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
 int cmd_test(int argc, const char* const* argv);
 #endif
-#if ENABLE_CAN
+#if INCLUDE_CAN
 int cmd_scan(int argc, const char* const* argv);
 #endif
 #if SUPPORTS_JSON_IMPORT_STREAM
@@ -58,7 +58,7 @@ int cmd_json(int argc, const char* const* argv);
 // Platform-specific reboot helper (shared by REBOOT and SYSTEM REBOOT/RESET).
 void platformReboot();
 
-#if ENABLE_SELFTEST
+#if INCLUDE_SELFTEST
 // Dispatch-table integrity check — surfaced to users as `SYSTEM DIAG INTEGRITY`
 // (this was the standalone SELFTEST command before the DIAG consolidation).
 // Walks every dispatch table and returns the total number of failing entries

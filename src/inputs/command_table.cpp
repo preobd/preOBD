@@ -32,17 +32,17 @@
 #include "../outputs/output_format.h"   // SdLogFormat / parseSdLogFormat
 #include "../lib/obd_query.h"
 #include "../lib/display_manager.h"
-#if ENABLE_LED
+#if INCLUDE_LED
 #include "../lib/rgb_led.h"   // TEST OUTPUT actuator
 #endif
 #include "../lib/watchdog.h"  // TEST OUTPUT feeds the WDT during its blocking sequence
-#if ENABLE_ELM327
+#if INCLUDE_ELM327
 #include "../outputs/output_elm327.h"
 #endif
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
 #include "../test/test_mode.h"
 #endif
-#if ENABLE_CAN
+#if INCLUDE_CAN
 #include "sensors/can/can_scan.h"
 #include "../lib/can_sensor_library/standard_pids.h"
 #endif
@@ -109,17 +109,17 @@ const Command COMMANDS[] = {
     {"LOG", cmd_log, "Configure log levels and tags", false},
     {"AT", cmd_at, "Send raw AT command to a serial port", false},
 
-#if ENABLE_RELAY_OUTPUT
+#if INCLUDE_RELAY_OUTPUT
     {"RELAY", cmd_relay, "Deprecated - use RULE / ACTION", false},  // prints a migration pointer; relays are now control-engine Actions
 #endif
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     {"RULE", cmd_rule, "Configure control-engine rules", false},  // gated per-subcommand: RUN allows LIST/<id>; ADD/DEL/RESET config-only
     {"ACTION", cmd_action, "Configure control-engine actions", false},  // gated per-subcommand: RUN allows LIST/<id>/ON/OFF/AUTO; ADD/DEL/RULE config-only
 #endif
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
     {"TEST", cmd_test, "Test mode control", false},
 #endif
-#if ENABLE_CAN
+#if INCLUDE_CAN
     {"SCAN", cmd_scan, "Scan CAN bus for PIDs", true},
 #endif
     // NOTE: the former top-level SELFTEST command is retired; its dispatch-table
@@ -168,7 +168,7 @@ void dispatchReportSubcmdConfigRequired(const char* commandName, const char* tok
     msg.control.println(F("  Type CONFIG to enter configuration mode"));
 }
 
-#if ENABLE_SELFTEST
+#if INCLUDE_SELFTEST
 // Validate the top-level COMMANDS[] table. Strings here are RAM-resident
 // (not declared PROGMEM), so pass tokenInProgmem=false.
 static int selftestCommandsTable() {
@@ -196,7 +196,7 @@ int runDiagIntegrity() {
     failures += selftestSystemTable();
     return failures;
 }
-#endif // ENABLE_SELFTEST
+#endif // INCLUDE_SELFTEST
 
 //=============================================================================
 // Command Handler Implementations
@@ -397,7 +397,7 @@ static int loadConfigFromEEPROM() {
     bool inputsOk = loadInputConfig();
     bool sysOk    = loadSystemConfig();
 
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     if (inputsOk) {
         // Re-arm from the freshly-loaded tables: rule contexts, then action pin
         // states + registry (mirrors the JSON import path, #296 B3). Gated on a
@@ -549,7 +549,7 @@ int cmd_clear(int argc, const char* const* argv) {
     msg.control.print(argv[1]);
     msg.control.println(F(" cleared"));
 
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     // Removing the input without its Rules used to leave them orphaned: a Rule
     // sourced from a pin with no input can never assert, renders as a nameless
     // `pinN` row, and (pre-#345) counted as a FAULTED source — so one forgotten
@@ -587,7 +587,7 @@ int cmd_info(int argc, const char* const* argv) {
     // Check for subcommands (ALARM, CALIBRATION, OUTPUT)
     if (argc == 3) {
         if (streq_P(argv[2], PSTR("ALARM"))) {
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
             printInputAlarmInfo(pin);
 #else
             msg.control.println(F("ERROR: alarms are not enabled in this build"));
@@ -611,7 +611,7 @@ int cmd_info(int argc, const char* const* argv) {
 
 // FORMAT is SD-only, so it disappears from the usage text on a board that
 // vetoes SD logging (mega2560) rather than being advertised and then rejected.
-#if ENABLE_SD_LOGGING
+#if INCLUDE_SD_LOGGING
 #define OUTPUT_USAGE_FORMAT " | FORMAT <LONG|WIDE>"
 #define OUTPUT_VALID_FORMAT "|FORMAT"
 #else
@@ -663,7 +663,7 @@ int cmd_output(int argc, const char* const* argv) {
             msg.control.println(F("'"));
             return 1;
         }
-#if ENABLE_SD_LOGGING
+#if INCLUDE_SD_LOGGING
     } else if (streq_P(subcommand, PSTR("FORMAT"))) {
         // SD-only: the other outputs have no file layout to choose.
         int outputIndex = getOutputIndexByName(outputName);
@@ -907,7 +907,7 @@ int cmd_transport(int argc, const char* const* argv) {
     bool isSecondary = (argc >= 4);
 
     // Conflict: refuse to assign a serial port that is owned by ELM327
-#if ENABLE_ELM327
+#if INCLUDE_ELM327
     if (transport >= TRANSPORT_SERIAL1 && transport <= TRANSPORT_SERIAL8) {
         uint8_t port_id = transport - TRANSPORT_SERIAL1 + 1;
         if (systemConfig.buses.elm327_serial_port == port_id) {
@@ -953,7 +953,7 @@ int cmd_transport(int argc, const char* const* argv) {
     return 0;
 }
 
-#if ENABLE_RELAY_OUTPUT
+#if INCLUDE_RELAY_OUTPUT
 int cmd_relay(int argc, const char* const* argv) {
     // RELAY is deprecated: a relay is now a control-engine Action of type RELAY.
     (void)argc; (void)argv;
@@ -966,7 +966,7 @@ int cmd_relay(int argc, const char* const* argv) {
 }
 #endif
 
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
 int cmd_test(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: TEST requires a subcommand"));
@@ -1073,7 +1073,7 @@ int cmd_test(int argc, const char* const* argv) {
         msg.control.println(F("=== Output actuation test (watch / listen to confirm) ==="));
         bool any = false;
         (void)any;
-#if ENABLE_LED
+#if INCLUDE_LED
         any = true;
         msg.control.println(F("RGB LED -> RED"));
         rgbLedSolid(RGB_RED, PRIORITY_ALARM);   updateRGBLed(); watchdogReset(); delay(600);
@@ -1083,12 +1083,12 @@ int cmd_test(int argc, const char* const* argv) {
         rgbLedSolid(RGB_BLUE, PRIORITY_ALARM);  updateRGBLed(); watchdogReset(); delay(600);
         rgbLedRelease(PRIORITY_ALARM);          updateRGBLed();
 #endif
-#if ENABLE_ALARMS && defined(BUZZER_PIN)
+#if INCLUDE_ALARMS && defined(BUZZER_PIN)
         any = true;
         msg.control.println(F("Buzzer -> chirp"));
         tone(BUZZER_PIN, 700); watchdogReset(); delay(250); noTone(BUZZER_PIN);
 #endif
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
         for (int i = 0; i < MAX_ACTIONS; i++) {
             const Action& a = actions[i];
             if (a.id == CONTROL_ID_NONE || a.type != ACT_RELAY) continue;
@@ -1389,7 +1389,7 @@ int cmd_log(int argc, const char* const* argv) {
 // SCAN COMMAND - CAN bus scanning
 // ============================================================================
 
-#if ENABLE_CAN
+#if INCLUDE_CAN
 int cmd_scan(int argc, const char* const* argv) {
     // Usage: SCAN CAN [duration_ms]
     //        SCAN CANCEL
@@ -1449,7 +1449,7 @@ int cmd_scan(int argc, const char* const* argv) {
     msg.control.println(F("  Valid: CAN, CANCEL"));
     return 1;
 }
-#endif // ENABLE_CAN
+#endif // INCLUDE_CAN
 
 // ============================================================================
 // AT - Send raw AT command to a hardware serial port (no line ending)

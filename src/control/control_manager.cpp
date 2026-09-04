@@ -4,7 +4,7 @@
 
 #include "control_manager.h"
 
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
 
 #include <string.h>
 #include <math.h>
@@ -828,4 +828,4 @@ bool controlActionSetName(uint8_t id, const char* name) {
     return true;
 }
 
-#endif // ENABLE_CONTROL_ENGINE
+#endif // INCLUDE_CONTROL_ENGINE

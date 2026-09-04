@@ -15,36 +15,41 @@ the user-facing how-to.
 - **`src/config.h`** = application constants: timing, thresholds, calibration defaults
 - **EEPROM** = runtime user config: sensor inputs, output settings, unit preferences
 
-## The model: three kinds of knob
+## The model: three layers, three prefixes
 
-Every feature is exactly one of these, and that decides where it lives:
+The prefix on a macro tells you which question it answers:
 
-| Kind | Meaning | Lives in |
-|---|---|---|
-| **CEILING** | the board genuinely *can't* (RAM/flash) or has fixed capacity | `board.h` — `PLATFORM_NO_*`, `MAX_*`, `SUPPORTS_JSON_CONFIG=0` |
-| **WIRED** | capable; on *iff* the hardware is wired | a pin in `wiring.ini` → flag derived in `resolve.h` |
-| **CHOICE** | capable; on/off is a preference | `board.h` default |
-
-Resolution rule (`resolve.h`):
+| Prefix | Question | Lives in | How it's set |
+|---|---|---|---|
+| `SUPPORTS_X` | *Can this board do X?* | `board.h` | by **presence** — a board that can't omits the line. Never `0`. |
+| `INCLUDE_X` | *Is X's code in the image?* | `resolve.h` only | derived: capability **and** wiring **and** no veto |
+| — | *Is X on right now?* | EEPROM / runtime | `outputEnabled[]`, `displayType`, an I²C probe — never a macro |
 
 ```
-feature ON  ⟺  (intrinsic OR wired OR chosen)  AND  (board doesn't veto it)
+INCLUDE_X  ⟺  SUPPORTS_X  AND  (wired, if X needs a pin)  AND  (no PLATFORM_NO_X)
 ```
 
-A kind is **per (board, feature)** — `FRAMED_TRANSPORT` is a CHOICE on Teensy
-but a CEILING on the Mega (8 KB RAM). Measured costs are in
-[`docs/feature_costs.md`](../../feature_costs.md).
+`src/` tests only `INCLUDE_*`. It is worth being precise about what that means:
+`#if INCLUDE_REALDASH` says the encoder is **linked in**, while
+`outputEnabled[OUTPUT_REALDASH]` — which defaults to 0 — decides whether frames
+actually go out. A build-time macro cannot answer a runtime question, and
+treating one as if it could is the #351 bug.
+
+**To make a build smaller, comment a `SUPPORTS_*` line out of `board.h`.** That
+is the intended lever, and measured per-feature costs are in
+[`docs/feature_costs.md`](../../feature_costs.md). A board that can't support
+something at all simply has no line for it — there is no negative to declare.
 
 ## Configuration layers
 
 ### `boards/<board>/board.h` — board definition
 
-`-include`d before every translation unit. Holds only board *facts* and feature
-*choices* — **never a wired pin number**:
+`-include`d before every translation unit. Holds only board *facts* —
+**never a wired pin number**:
 
-- Capabilities: `PROFILE_HAS_NATIVE_CAN`, `HAS_BUILTIN_SD`, `EEPROM_TOTAL_BYTES`
+- Capabilities: `SUPPORTS_CAN`, `SUPPORTS_ELM327`, `SUPPORTS_TEST_MODE`, … plus
+  `PROFILE_HAS_NATIVE_CAN`, `HAS_BUILTIN_SD`, `EEPROM_TOTAL_BYTES`
 - Ceilings: `PLATFORM_NO_SD_LOGGING`, `SUPPORTS_JSON_CONFIG=0`, `MAX_INPUTS`, CLI buffer sizes
-- CHOICE feature defaults: `ENABLE_CAN`, `ENABLE_ELM327`, `ENABLE_TEST_MODE`, …
 - Intrinsic pins only: SPI-CAN `CAN_CS_*`/`CAN_INT_*`, hybrid `CAN_BUS_*_TYPE`
 
 ### `boards/<board>/wiring.ini` — your wiring (gitignored)
@@ -72,9 +77,9 @@ builds and boots — just without LED/buzzer/button/external-SD until you wire t
 ### `boards/resolve.h` — the resolver
 
 Derives the wired `ENABLE_*` flags from pin presence + board capability and
-`#error`s on impossible combos (e.g. `ENABLE_LED` without RGB pins, or SD on a
+`#error`s on impossible combos (e.g. `INCLUDE_LED` without RGB pins, or SD on a
 board that vetoes it). `#ifndef`-guarded, so an explicit override still wins
-(`-D ENABLE_LED=0` forces a wired feature off).
+(`-D INCLUDE_LED=0` forces a wired feature off).
 
 ### `src/config.h` — application constants
 
@@ -107,8 +112,8 @@ pio run -e teensy41 -t upload
 ## Customizing for your hardware
 
 - **Your pins:** edit `boards/<board>/wiring.ini` only. Never a tracked file.
-- **Turn a wired feature off** even though its pins are present: `-D ENABLE_LED=0` in `wiring.ini`.
-- **A CHOICE feature** (e.g. RealDash): toggle its `#define ENABLE_X` in `board.h`.
+- **Turn a wired feature off** even though its pins are present: `-D INCLUDE_LED=0` in `wiring.ini`.
+- **A capability feature** (e.g. RealDash): comment its `#define SUPPORTS_X` in/out of `board.h`.
 
 ## Adding a new board
 
@@ -117,7 +122,7 @@ Drop a folder — nothing shared is edited:
 ```bash
 cp -r boards/teensy41 boards/my_board
 ```
-1. Edit `boards/my_board/board.h` — capabilities, ceilings, sizing, CHOICE defaults.
+1. Edit `boards/my_board/board.h` — `SUPPORTS_*` capabilities, ceilings, sizing.
 2. Edit `boards/my_board/board.ini` — rename `[env:teensy41]`→`[env:my_board]`, set platform/board/lib_deps, and update the `${teensy41.wiring}` reference + the `[teensy41] wiring =` default to `my_board`.
 3. Edit `boards/my_board/wiring.ini.example` with the reference wiring.
 
@@ -129,11 +134,11 @@ cp -r boards/teensy41 boards/my_board
 
 ### Hybrid CAN
 
-`ENABLE_CAN_HYBRID` + the `CAN_BUS_*_TYPE` controller map are board facts in
+`INCLUDE_CAN_HYBRID` + the `CAN_BUS_*_TYPE` controller map are board facts in
 `board.h`:
 
 ```cpp
-#define ENABLE_CAN_HYBRID  1
+#define SUPPORTS_CAN_HYBRID  1
 #define CAN_BUS_0_TYPE     CanControllerType::FLEXCAN
 #define CAN_BUS_3_TYPE     CanControllerType::MCP2515
 #define CAN_CS_0           9    // MCP2515 SPI pins (intrinsic — board.h)
@@ -164,7 +169,7 @@ SAVE
 
 - **Wrong pins / a peripheral is off** → set its pin in `boards/<board>/wiring.ini` (not a tracked file).
 - **`#error "boards/resolve.h included without a board definition"`** → the env's `build_flags` must `-include boards/<board>/board.h` *before* `boards/resolve.h`.
-- **`#error "ENABLE_LED set without all of RGB_PIN_R/G/B"`** → set all three RGB pins (or drop the `-D ENABLE_LED`).
+- **`#error "INCLUDE_LED set without all of RGB_PIN_R/G/B"`** → set all three RGB pins (or drop the `-D INCLUDE_LED`).
 - **A size diff after editing a profile shows no change** → PlatformIO doesn't track `-include`d headers as deps; `pio run -e <env> -t clean` first.
 - **`undefined reference`** → library missing from that board's `board.ini` `lib_deps`.
 

@@ -10,7 +10,7 @@
 #include "../lib/log_tags.h"
 #include "output_format.h"
 
-#if ENABLE_SERIAL_OUTPUT
+#if INCLUDE_SERIAL_OUTPUT
 
 #include "../lib/system_mode.h"
 

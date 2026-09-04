@@ -22,7 +22,7 @@
 
 namespace hal { namespace can {
 
-#if ENABLE_CAN_HYBRID
+#if INCLUDE_CAN_HYBRID
 // In hybrid mode, wrap in mcp2515 namespace for dispatcher
 namespace mcp2515 {
 #endif
@@ -184,7 +184,7 @@ inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
     (void)bus;
 }
 
-#if ENABLE_CAN_HYBRID
+#if INCLUDE_CAN_HYBRID
 } // namespace mcp2515
 #endif
 

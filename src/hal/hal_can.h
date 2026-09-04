@@ -14,7 +14,7 @@
  *   hal::can::write(0x7E8, data, 8, false);       // Write to default bus
  *   hal::can::read(id, data, len, ext, 1);        // Read from bus 1
  *
- * Note: CAN is only available when ENABLE_CAN is defined
+ * Note: CAN is only available when INCLUDE_CAN is defined
  */
 
 #ifndef HAL_CAN_H
@@ -23,10 +23,10 @@
 #include <stdint.h>
 #include "../config.h"
 
-#if ENABLE_CAN
+#if INCLUDE_CAN
 
 // Platform detection and include appropriate implementation
-#if defined(ENABLE_CAN_HYBRID)
+#if INCLUDE_CAN_HYBRID
     // Hybrid mode: Multiple controller types on different buses
     #include "platforms/can_hybrid.h"
 
@@ -45,7 +45,7 @@
 
 #endif
 
-#else // !ENABLE_CAN
+#else // !INCLUDE_CAN
 
 // Stub implementation when CAN is disabled
 namespace hal { namespace can {
@@ -71,6 +71,6 @@ inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
 
 }} // namespace hal::can
 
-#endif // ENABLE_CAN
+#endif // INCLUDE_CAN
 
 #endif // HAL_CAN_H

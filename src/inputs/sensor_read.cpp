@@ -69,7 +69,7 @@
 #include "sensors/level/table.cpp"
 
 // CAN sensors (CAN bus imported sensors)
-#if ENABLE_CAN
+#if INCLUDE_CAN
 #include "sensors/can/can_frame_cache.cpp"
 #include "sensors/can/can_read.cpp"
 #include "sensors/can/can_scan.cpp"

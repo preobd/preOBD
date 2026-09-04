@@ -20,8 +20,8 @@
 //     MANUAL_ON/OFF drive an unlinked Action's manual latch; on a rule-driven
 //     Action they set an operator override that outranks the Rule and the
 //     failsafe, which AUTO releases (#329).
-//   - Compiles to empty stubs unless ENABLE_CONTROL_ENGINE and
-//     ENABLE_FRAMED_TRANSPORT are both set.
+//   - Compiles to empty stubs unless INCLUDE_CONTROL_ENGINE and
+//     INCLUDE_FRAMED_TRANSPORT are both set.
 
 #ifndef ACTION_BROADCASTER_H
 #define ACTION_BROADCASTER_H

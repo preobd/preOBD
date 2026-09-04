@@ -25,7 +25,7 @@
 #include "watchdog.h"
 #include "sd_manager.h"
 #include "../outputs/output_format.h"   // SdLogFormat / parseSdLogFormat
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
 #include "control_json.h"
 #include "../control/control_manager.h"
 #endif
@@ -200,7 +200,7 @@ void exportInputToJSON(JsonObject& inputObj, const Input* input) {
     // (BELOW = Min-only floor, ABOVE = Max-only ceiling) emits null on the unused
     // side, which the webapp already tolerates (#312).
     JsonObject alarm = inputObj["alarm"].to<JsonObject>();
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     int alarmSlot = controlAlarmRuleSlotForInput(input->pin);
     if (alarmSlot >= 0) {
         const Rule& ar = rules[alarmSlot];
@@ -284,7 +284,7 @@ void exportPinRegistryToJSON(JsonArray& pinsArray) {
     }
 }
 
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
 // Export the control-engine Rule + Action tables as top-level arrays (siblings
 // of "inputs"). Only configured slots (id != CONTROL_ID_NONE) are emitted.
 void exportRulesToJSON(JsonArray& rulesArray) {
@@ -310,7 +310,7 @@ void exportActionsToJSON(JsonArray& actionsArray) {
         controlExportAction(actionObj, actions[i], members, n);
     }
 }
-#endif // ENABLE_CONTROL_ENGINE
+#endif // INCLUDE_CONTROL_ENGINE
 
 // Export system configuration to JSON
 void exportSystemConfigToJSON(JsonObject& systemObj) {
@@ -327,7 +327,7 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
         output["enabled"] = (bool)systemConfig.outputEnabled[i];
         output["interval"] = systemConfig.outputInterval[i];
         // SD alone carries a file layout. Additive key, no schema bump (#230).
-#if ENABLE_SD_LOGGING
+#if INCLUDE_SD_LOGGING
         if (i == OUTPUT_SD) {
             output["format"] = sdLogFormatName(systemConfig.sdLogFormat);
         }
@@ -450,13 +450,13 @@ void dumpConfigToJSON(Print& output) {
     caps.add("json_import");
 #endif
     caps.add("json_export");
-#if ENABLE_CAN
+#if INCLUDE_CAN
     caps.add("can");
 #endif
-#if ENABLE_SD_LOGGING
+#if INCLUDE_SD_LOGGING
     caps.add("sd");
 #endif
-#if ENABLE_LCD
+#if INCLUDE_LCD
     caps.add("lcd");
 #endif
 
@@ -468,7 +468,7 @@ void dumpConfigToJSON(Print& output) {
     JsonArray inputsArray = doc["inputs"].to<JsonArray>();
     exportInputsToJSON(inputsArray);
 
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     // Control engine — Rule + Action tables (top-level, additive; omitted when
     // empty stays empty arrays so the webapp can tell "supported, none" apart
     // from "not supported").
@@ -694,7 +694,7 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
                 systemConfig.outputInterval[i] = output["interval"];
                 // Optional: a dump from an older firmware has no "format" key,
                 // and an unparseable value leaves the current setting alone.
-#if ENABLE_SD_LOGGING
+#if INCLUDE_SD_LOGGING
                 if (i == OUTPUT_SD && output["format"].isNull() == false) {
                     // Named const char* rather than the variant inline: that is
                     // this file's convention, and it yields nullptr for a
@@ -826,7 +826,7 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
     return true;
 }
 
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
 // Replace the Rule table from a JSON array. Records pack into slots in array
 // order, preserving each record's stable `id` (Actions reference rules by id).
 // Records that fail validation are skipped. Re-arming is the caller's job.
@@ -874,7 +874,7 @@ void importActionsFromJSON(JsonArrayConst actionsArray) {
         }
     }
 }
-#endif // ENABLE_CONTROL_ENGINE
+#endif // INCLUDE_CONTROL_ENGINE
 
 // Load configuration from JSON string
 bool loadConfigFromJSON(const char* jsonString) {
@@ -925,7 +925,7 @@ bool loadConfigFromJSON(const char* jsonString) {
         }
     }
 
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     // Import Rules + Actions after inputs (rules reference input pins; the
     // re-arm below evaluates against live inputs). Each table is replaced only
     // if its array is present, then both are re-armed once — boot-load semantics
@@ -1153,7 +1153,7 @@ bool saveConfigToFile(const char* destination, const char* filename) {
         return saveConfigToSD(filename);
     }
 
-#ifdef ENABLE_USB_STORAGE
+#ifdef INCLUDE_USB_STORAGE
     else if (strcmp(destination, "USB") == 0) {
         // Future: USB storage implementation
         msg.control.println(F("ERROR: USB storage not yet implemented"));
@@ -1161,7 +1161,7 @@ bool saveConfigToFile(const char* destination, const char* filename) {
     }
 #endif
 
-#ifdef ENABLE_HTTP_STORAGE
+#ifdef INCLUDE_HTTP_STORAGE
     else if (strcmp(destination, "HTTP") == 0 || strcmp(destination, "HTTPS") == 0) {
         // Future: HTTP/HTTPS upload implementation
         msg.control.println(F("ERROR: HTTP storage not yet implemented"));
@@ -1174,8 +1174,8 @@ bool saveConfigToFile(const char* destination, const char* filename) {
         msg.control.print(destination);
         msg.control.println(F("'"));
         msg.control.println(F("  Supported destinations: SD"));
-#ifdef ENABLE_USB_STORAGE
-        msg.control.println(F("  Conditional: USB (if ENABLE_USB_STORAGE defined)"));
+#ifdef INCLUDE_USB_STORAGE
+        msg.control.println(F("  Conditional: USB (if INCLUDE_USB_STORAGE defined)"));
 #endif
         return false;
     }
@@ -1193,7 +1193,7 @@ bool loadConfigFromFile(const char* destination, const char* filename) {
         return loadConfigFromSD(filename);
     }
 
-#ifdef ENABLE_USB_STORAGE
+#ifdef INCLUDE_USB_STORAGE
     else if (strcmp(destination, "USB") == 0) {
         // Future: USB storage implementation
         msg.control.println(F("ERROR: USB storage not yet implemented"));
@@ -1201,7 +1201,7 @@ bool loadConfigFromFile(const char* destination, const char* filename) {
     }
 #endif
 
-#ifdef ENABLE_HTTP_STORAGE
+#ifdef INCLUDE_HTTP_STORAGE
     else if (strcmp(destination, "HTTP") == 0 || strcmp(destination, "HTTPS") == 0) {
         // Future: HTTP download implementation
         msg.control.println(F("ERROR: HTTP storage not yet implemented"));
@@ -1214,8 +1214,8 @@ bool loadConfigFromFile(const char* destination, const char* filename) {
         msg.control.print(destination);
         msg.control.println(F("'"));
         msg.control.println(F("  Supported destinations: SD"));
-#ifdef ENABLE_USB_STORAGE
-        msg.control.println(F("  Conditional: USB (if ENABLE_USB_STORAGE defined)"));
+#ifdef INCLUDE_USB_STORAGE
+        msg.control.println(F("  Conditional: USB (if INCLUDE_USB_STORAGE defined)"));
 #endif
         return false;
     }

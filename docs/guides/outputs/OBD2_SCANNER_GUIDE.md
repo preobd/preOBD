@@ -147,7 +147,7 @@ CAN output must be enabled in your build configuration:
 **In `platformio.ini`:**
 ```ini
 build_flags =
-    -D ENABLE_CAN              ; Enable CAN bus output
+    -D SUPPORTS_CAN              ; Enable CAN bus output
 ```
 
 Verify CAN is enabled:

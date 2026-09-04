@@ -16,8 +16,8 @@
 //   - A dedicated parser instance (separate from the serial-bound singleton)
 //     keeps per-channel session state (echo/headers/...) independent of any
 //     serial-port ELM327 binding.
-//   - The whole module compiles to empty stubs unless both ENABLE_FRAMED_TRANSPORT
-//     and ENABLE_ELM327 are set (the framed transport is the channel these
+//   - The whole module compiles to empty stubs unless both INCLUDE_FRAMED_TRANSPORT
+//     and INCLUDE_ELM327 are set (the framed transport is the channel these
 //     frames ride on; the parser is the ELM327 emulator).
 
 #ifndef ELM327_FRAMED_H

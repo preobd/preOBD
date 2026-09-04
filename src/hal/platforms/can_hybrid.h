@@ -5,13 +5,13 @@
  * Enables mixing different CAN controller types on different buses.
  * Example: ESP32 TWAI on bus 0 + MCP2515 on bus 1 for dual-bus operation.
  *
- * This file is only included when ENABLE_CAN_HYBRID is defined.
+ * This file is only included when INCLUDE_CAN_HYBRID is defined.
  * Routes CAN operations to the appropriate driver based on bus controller type.
  *
- * Configuration via platformio.ini:
- *   -D ENABLE_CAN_HYBRID
- *   -D CAN_BUS_0_TYPE=CanControllerType::TWAI
- *   -D CAN_BUS_1_TYPE=CanControllerType::MCP2515
+ * Configured in boards/<board>/board.h (see boards/*_hybrid/), NOT platformio.ini:
+ *   #define SUPPORTS_CAN_HYBRID 1     // resolve.h derives INCLUDE_CAN_HYBRID
+ *   #define CAN_BUS_0_TYPE CanControllerType::TWAI
+ *   #define CAN_BUS_1_TYPE CanControllerType::MCP2515
  */
 
 #ifndef HAL_CAN_HYBRID_H
@@ -27,7 +27,7 @@
 
 // Hybrid mode requires at least CAN_BUS_0_TYPE to be defined
 #if !defined(CAN_BUS_0_TYPE)
-    #error "Hybrid mode (ENABLE_CAN_HYBRID) requires CAN_BUS_0_TYPE to be defined in platformio.ini"
+    #error "Hybrid mode (SUPPORTS_CAN_HYBRID) requires CAN_BUS_0_TYPE — define it in boards/<board>/board.h"
 #endif
 
 // Warn if hybrid mode is enabled but only one bus is configured

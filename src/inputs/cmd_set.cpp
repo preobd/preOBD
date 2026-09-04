@@ -31,13 +31,13 @@
 #include "../lib/obd_query.h"
 #include "../lib/display_manager.h"
 #include "../control/control_manager.h"   // §11.5 seed default Rule from application
-#if ENABLE_ELM327
+#if INCLUDE_ELM327
 #include "../outputs/output_elm327.h"
 #endif
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
 #include "../test/test_mode.h"
 #endif
-#if ENABLE_CAN
+#if INCLUDE_CAN
 #include "sensors/can/can_scan.h"
 #include "../lib/can_sensor_library/standard_pids.h"
 #endif
@@ -107,7 +107,7 @@ static int set_application(uint8_t pin, int argc, const char* const* argv) {
         msg.control.println(F("  Hint: Use 'LIST APPLICATIONS' to see valid options"));
         return 1;
     }
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     // Capture the prior application so we can tell a fresh assignment from a
     // CHANGE — re-applying the SAME app preserves a customized Rule (§11.5), but
     // changing the measurement type invalidates the old thresholds.
@@ -116,7 +116,7 @@ static int set_application(uint8_t pin, int argc, const char* const* argv) {
 #endif
     if (setInputApplication(pin, appIndex)) {
         printInputFieldSet(argv[1], F("application"), argv[3]);
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
         if (!controlRuleExistsForInput(pin)) {
             // Fresh input: seed a canonical default Rule from the app template (§11.5).
             uint8_t ruleId = controlSeedRuleForInput(pin, appIndex, millis());
@@ -325,7 +325,7 @@ static int set_units(uint8_t pin, int argc, const char* const* argv) {
 //   SET <pin> ALARM MAX <v>       ceiling → ABOVE  (alarm when value > v)
 // The general engine is still reachable via RULE ADD for WARNING/INFO/NONE Rules.
 static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
-#if !ENABLE_CONTROL_ENGINE
+#if !INCLUDE_CONTROL_ENGINE
     (void)pin; (void)argc; (void)argv;
     msg.control.println(F("ERROR: alarms require the control engine (not built into this firmware)"));
     return 1;
@@ -776,7 +776,7 @@ static int set_obd_length(uint8_t pin, int argc, const char* const* argv) {
     return 0;
 }
 
-#if ENABLE_CAN
+#if INCLUDE_CAN
 // SET <pin> CAN_TIMEOUT <ms>
 static int set_can_timeout(uint8_t pin, int argc, const char* const* argv) {
     if (argc < 4) {
@@ -817,7 +817,7 @@ static int set_can_timeout(uint8_t pin, int argc, const char* const* argv) {
     printSaveReminder();
     return 0;
 }
-#endif // ENABLE_CAN
+#endif // INCLUDE_CAN
 
 // SET <pin> CAL PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>
 static int set_cal_pressure_linear(uint8_t pin, int argc, const char* const* argv,
@@ -1210,7 +1210,7 @@ static const char PSTR_SET_OUTPUT[]          PROGMEM = "OUTPUT";
 static const char PSTR_SET_CAL[]             PROGMEM = "CAL";
 static const char PSTR_SET_OBD_PID[]         PROGMEM = "OBD_PID";
 static const char PSTR_SET_OBD_LENGTH[]      PROGMEM = "OBD_LENGTH";
-#if ENABLE_CAN
+#if INCLUDE_CAN
 static const char PSTR_SET_CAN_TIMEOUT[]     PROGMEM = "CAN_TIMEOUT";
 #endif
 
@@ -1252,7 +1252,7 @@ static const char PSTR_HELP_SET_OBD_PID[] PROGMEM =
     "  SET <pin> OBD_PID <0xNN>      OBD-II Mode 01 PID this input reports as (0x00 = none)";
 static const char PSTR_HELP_SET_OBD_LENGTH[] PROGMEM =
     "  SET <pin> OBD_LENGTH <1-5>    OBD-II response data length in bytes";
-#if ENABLE_CAN
+#if INCLUDE_CAN
 static const char PSTR_HELP_SET_CAN_TIMEOUT[] PROGMEM =
     "  SET <pin> CAN_TIMEOUT <ms>    CAN-imported sensor timeout (100-30000)";
 #endif
@@ -1272,7 +1272,7 @@ static const SetField SET_FIELDS[] PROGMEM = {
     { PSTR_SET_CAL,             set_cal,             PSTR_HELP_SET_CAL             },
     { PSTR_SET_OBD_PID,         set_obd_pid,         PSTR_HELP_SET_OBD_PID         },
     { PSTR_SET_OBD_LENGTH,      set_obd_length,      PSTR_HELP_SET_OBD_LENGTH      },
-#if ENABLE_CAN
+#if INCLUDE_CAN
     { PSTR_SET_CAN_TIMEOUT,     set_can_timeout,     PSTR_HELP_SET_CAN_TIMEOUT     },
 #endif
 };
@@ -1375,7 +1375,7 @@ int cmd_set(int argc, const char* const* argv) {
     // SET CAN <pid>  -  Import CAN sensor by PID
     // Example: SET CAN 0x0C  (imports Engine RPM from OBD-II)
     // This automatically assigns the next available CAN virtual pin (CAN:0, CAN:1, etc.)
-#if ENABLE_CAN
+#if INCLUDE_CAN
     // Bare "CAN" (no :N suffix) is *only* valid as the import prelude — there's
     // no other operation that takes a freshly-allocated virtual pin and a
     // non-PID arg. So if argv[2] isn't a PID literal, this is a typo and we
@@ -1486,7 +1486,7 @@ int cmd_set(int argc, const char* const* argv) {
         input->flags.isEnabled = true;
         return 0;
     }
-#endif // ENABLE_CAN
+#endif // INCLUDE_CAN
 
     // Field dispatch — try the leaves above. SET_FIELDS lives in PROGMEM on
     // AVR, so read entries via pgm_read_ptr; on Teensy/ESP32 PROGMEM is a no-op
@@ -1507,7 +1507,7 @@ int cmd_set(int argc, const char* const* argv) {
     return 1;
 }
 
-#if ENABLE_SELFTEST
+#if INCLUDE_SELFTEST
 // Validate every SET_FIELDS entry, then every CAL_PROFILES entry. Reads through
 // pgm_read_ptr — the same path the dispatcher takes — so a regression that
 // breaks PROGMEM access fails this check immediately.
@@ -1525,4 +1525,4 @@ int selftestSetTable() {
     }
     return failures;
 }
-#endif // ENABLE_SELFTEST
+#endif // INCLUDE_SELFTEST

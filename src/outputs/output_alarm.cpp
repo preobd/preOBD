@@ -22,7 +22,7 @@
 #include "../lib/system_mode.h"
 #include "../control/control_manager.h"   // annunciator: fold Rule severity into the rollup
 
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
 // RuleSeverity and AlarmSeverity are DISTINCT ordinal domains: RuleSeverity
 // inserts INFO=1 below WARNING (#308), so they no longer share numeric values.
 // Map explicitly at the annunciator boundary — INFO is a log-only notification
@@ -36,7 +36,7 @@ static AlarmSeverity ruleToAlarmSeverity(RuleSeverity s) {
 }
 #endif
 
-#if ENABLE_LED
+#if INCLUDE_LED
 #include "../lib/rgb_led.h"
 #endif
 
@@ -47,16 +47,16 @@ static uint32_t silenceStartTime = 0;    // When was silence button pressed?
 // ===== INITIALIZATION =====
 
 void initAlarmOutput() {
-#if ENABLE_ALARMS && defined(BUZZER_PIN)
+#if INCLUDE_ALARMS && defined(BUZZER_PIN)
     pinMode(BUZZER_PIN, OUTPUT);
     noTone(BUZZER_PIN);
 #endif
 
-#if ENABLE_MODE_BUTTON
+#if INCLUDE_MODE_BUTTON
     pinMode(MODE_BUTTON_PIN, INPUT_PULLUP);
 #endif
 
-#if ENABLE_LED
+#if INCLUDE_LED
     msg.debug.info(TAG_ALARM, "Alarm output initialized (buzzer + LED indicator)");
 #else
     msg.debug.info(TAG_ALARM, "Alarm output initialized");
@@ -81,14 +81,14 @@ void sendAlarmOutput(Input* input) {
 AlarmSeverity getSystemSeverity() {
     // The legacy per-input alarm engine is retired — alarms are control-engine
     // Rules (§11). System severity is the max over active Rules.
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     return ruleToAlarmSeverity(controlSystemSeverity());
 #else
     return SEVERITY_NORMAL;
 #endif
 }
 
-#if ENABLE_LED
+#if INCLUDE_LED
 // Update RGB LED based on system severity
 void updateLEDs(AlarmSeverity severity) {
     switch (severity) {
@@ -125,7 +125,7 @@ void updateLEDs(AlarmSeverity severity) {
 
 void updateAlarmOutput() {
     // ===== SILENCE BUTTON HANDLING =====
-#if ENABLE_MODE_BUTTON
+#if INCLUDE_MODE_BUTTON
     if (digitalRead(MODE_BUTTON_PIN) == LOW) {
         if (!alarmSilenced) {
             alarmSilenced = true;
@@ -140,11 +140,11 @@ void updateAlarmOutput() {
     }
 
     // ===== ALARM STATE SCANNING =====
-#if ENABLE_LED || (ENABLE_ALARMS && defined(BUZZER_PIN))
+#if INCLUDE_LED || (INCLUDE_ALARMS && defined(BUZZER_PIN))
     AlarmSeverity systemSeverity = getSystemSeverity();
 #endif
 
-#if ENABLE_LED
+#if INCLUDE_LED
     // ===== LED CONTROL =====
     updateLEDs(systemSeverity);
 #endif
@@ -155,7 +155,7 @@ void updateAlarmOutput() {
     // while configuring on the bench (disconnected/test sensors would
     // otherwise sound spurious alarms). The LED above is informative, not
     // physical actuation, so it is left running in both modes.
-#if ENABLE_ALARMS && defined(BUZZER_PIN)
+#if INCLUDE_ALARMS && defined(BUZZER_PIN)
     if (systemSeverity == SEVERITY_ALARM && !alarmSilenced && !isInConfigMode()) {
         tone(BUZZER_PIN, 700);
     } else {

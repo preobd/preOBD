@@ -14,7 +14,7 @@
 //     emits one !VALID transition instead of re-firing per scan.
 //   - Value is DISPLAY units via convertFromBaseUnits(), matching the serial
 //     CSV output; alarm frames stay BASE units (see ble_gatt_defs.h).
-//   - Compiles to empty stubs unless ENABLE_FRAMED_TRANSPORT is set.
+//   - Compiles to empty stubs unless INCLUDE_FRAMED_TRANSPORT is set.
 
 #ifndef LIVE_VALUE_BROADCASTER_H
 #define LIVE_VALUE_BROADCASTER_H

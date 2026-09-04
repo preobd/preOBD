@@ -27,22 +27,29 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # (the one platform where the 8 KB RAM budget makes costs decision-relevant).
 ENVS = {
     "mega2560": {
-        # The board definition holds the CHOICE/CEILING flags + sizing knobs this
-        # tool toggles. WIRED features (LED/button/buzzer) now live in the board's
-        # wiring.ini overlay, so they're measured by adding their pins there, not
-        # here — their costs are already recorded in docs/feature_costs.md.
+        # The board definition holds the SUPPORTS_* capability flags + sizing
+        # knobs this tool toggles. WIRED features (LED / button / buzzer) are
+        # gated on their wiring.ini pin, so they're measured by adding those to
+        # the overlay, not here — their costs are already recorded in
+        # docs/feature_costs.md.
         "profile": "boards/mega2560/board.h",
         "size_tool": "~/.platformio/packages/toolchain-atmelavr/bin/avr-size",
         "ram_total": 8192,
-        # currently-off features to try enabling (with the siblings they need)
+        # Currently-off features to try enabling, with the siblings they need.
+        # Values are (lines to append, macros to comment out first) — the second
+        # is for a feature the board actively vetoes, where simply declaring the
+        # capability isn't enough to get it into the image.
         "enable": {
-            "ENABLE_REALDASH":         ["#define ENABLE_REALDASH 1"],
-            "ENABLE_TEST_MODE":        ["#define ENABLE_TEST_MODE 1"],
-            "ENABLE_RELAY_OUTPUT":     ["#define ENABLE_RELAY_OUTPUT 1"],
-            "ENABLE_SD_LOGGING":       ["#define ENABLE_SD_LOGGING 1",
-                                        "#define SUPPORTS_SD 1", "#define SD_PIN 53"],
-            "ENABLE_ELM327":           ["#define ENABLE_ELM327 1"],
-            "ENABLE_FRAMED_TRANSPORT": ["#define ENABLE_FRAMED_TRANSPORT 1"],
+            "SUPPORTS_REALDASH":         (["#define SUPPORTS_REALDASH 1"], []),
+            "SUPPORTS_TEST_MODE":        (["#define SUPPORTS_TEST_MODE 1"], []),
+            "SUPPORTS_RELAY_OUTPUT":     (["#define SUPPORTS_RELAY_OUTPUT 1"], []),
+            # SD is doubly gated: the board vetoes it AND it needs a CS pin. Lift
+            # the veto too, or resolve.h refuses to derive INCLUDE_SD_LOGGING and
+            # the row silently measures 0 instead of the real cost.
+            "SUPPORTS_SD":               (["#define SUPPORTS_SD 1", "#define SD_PIN 53"],
+                                          ["PLATFORM_NO_SD_LOGGING"]),
+            "SUPPORTS_ELM327":           (["#define SUPPORTS_ELM327 1"], []),
+            "SUPPORTS_FRAMED_TRANSPORT": (["#define SUPPORTS_FRAMED_TRANSPORT 1"], []),
         },
         # structural knobs: (label, macro, new value)
         "struct": [
@@ -99,7 +106,10 @@ def main():
     def mut_set(name, val, s):
         return re.sub(rf'(#define\s+{name}\s+)\S+', rf'\g<1>{val}', s, count=1)
 
-    enable_macros = [m for m in re.findall(r'^#define\s+(ENABLE_\w+)', orig, re.M)]
+    # Capability flags declared by this board.h. Commenting one out is exactly
+    # how a user reclaims that feature's flash/RAM, so it is what we measure.
+    enable_macros = [m for m in re.findall(r'^#define\s+(SUPPORTS_\w+)', orig, re.M)
+                     if not m.startswith("SUPPORTS_JSON")]
 
     shutil.copy(profile, bak)
     results = []
@@ -127,8 +137,11 @@ def main():
         for name in enable_macros:
             run("OFF " + name, mut_comment(name, orig))
         print("\n--- ENABLE currently-off features ---")
-        for name, lines in cfg["enable"].items():
-            run("ON " + name, mut_add(lines, orig))
+        for name, (lines, vetoes) in cfg["enable"].items():
+            src = orig
+            for veto in vetoes:
+                src = mut_comment(veto, src)
+            run("ON " + name, mut_add(lines, src))
         print("\n--- structural scaling ---")
         for label, macro, val in cfg["struct"]:
             run(label, mut_set(macro, val, orig))

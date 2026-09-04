@@ -22,9 +22,9 @@
 #ifndef CONTROL_JSON_H
 #define CONTROL_JSON_H
 
-#include "../control/control_types.h"  // Rule/Action + ENABLE_CONTROL_ENGINE
+#include "../control/control_types.h"  // Rule/Action + INCLUDE_CONTROL_ENGINE
 
-#if SUPPORTS_JSON_CONFIG && ENABLE_CONTROL_ENGINE
+#if SUPPORTS_JSON_CONFIG && INCLUDE_CONTROL_ENGINE
 
 #include <ArduinoJson.h>
 
@@ -50,5 +50,5 @@ bool controlImportAction(JsonObjectConst obj, Action& out,
                          uint8_t* extraRules = nullptr, uint8_t maxExtra = 0,
                          uint8_t* nExtra = nullptr);
 
-#endif // SUPPORTS_JSON_CONFIG && ENABLE_CONTROL_ENGINE
+#endif // SUPPORTS_JSON_CONFIG && INCLUDE_CONTROL_ENGINE
 #endif // CONTROL_JSON_H

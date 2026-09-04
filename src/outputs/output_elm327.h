@@ -21,7 +21,7 @@
 #ifndef OUTPUT_ELM327_H
 #define OUTPUT_ELM327_H
 
-#if ENABLE_ELM327
+#if INCLUDE_ELM327
 
 #include <Arduino.h>
 #include "../inputs/input.h"
@@ -74,5 +74,5 @@ private:
 
 extern ELM327Output elm327Output;
 
-#endif // ENABLE_ELM327
+#endif // INCLUDE_ELM327
 #endif // OUTPUT_ELM327_H

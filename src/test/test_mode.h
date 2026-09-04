@@ -8,7 +8,7 @@
  * Features:
  * - Pre-defined test scenarios (normal operation, alarms, faults, etc.)
  * - Dynamic time-based value generation (ramps, waves, random walks)
- * - Zero overhead when ENABLE_TEST_MODE is not defined
+ * - Zero overhead when INCLUDE_TEST_MODE is not defined
  */
 
 #ifndef TEST_MODE_H

@@ -36,7 +36,7 @@ To connect preOBD to RealDash, you need one of the following:
 
 2. **preOBD Firmware**
    - RealDash output must be enabled in `config.h`
-   - Verify `#define ENABLE_REALDASH` is uncommented
+   - Verify `#define SUPPORTS_REALDASH` is uncommented
    - Upload firmware to Teensy
 
 ## Installation Steps
@@ -47,7 +47,7 @@ Edit `/src/config.h`:
 
 ```cpp
 // ===== OUTPUT MODULES =====
-#define ENABLE_REALDASH      // Enable RealDash CAN output
+#define SUPPORTS_REALDASH      // Enable RealDash CAN output
 ```
 
 Compile and upload the firmware to your Teensy.
@@ -153,7 +153,7 @@ Repeat for all sensors you want to display.
 
 **Possible causes:**
 1. **preOBD not sending data**
-   - Verify `ENABLE_REALDASH` is defined in config.h
+   - Verify `INCLUDE_REALDASH` is defined in config.h
    - Check sensors are enabled and configured in preOBD
    - Use Arduino Serial Monitor to verify data is being sent (you should see binary data at 115200 baud)
 

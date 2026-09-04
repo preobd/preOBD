@@ -4,7 +4,7 @@
 
 #include "control_json.h"
 
-#if SUPPORTS_JSON_CONFIG && ENABLE_CONTROL_ENGINE
+#if SUPPORTS_JSON_CONFIG && INCLUDE_CONTROL_ENGINE
 
 #include <string.h>
 
@@ -163,4 +163,4 @@ bool controlImportAction(JsonObjectConst obj, Action& out,
     return true;
 }
 
-#endif // SUPPORTS_JSON_CONFIG && ENABLE_CONTROL_ENGINE
+#endif // SUPPORTS_JSON_CONFIG && INCLUDE_CONTROL_ENGINE

@@ -11,7 +11,7 @@
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
 
-#if ENABLE_LCD
+#if INCLUDE_LCD
 
 #include <LiquidCrystal_PCF8574.h>
 

@@ -392,12 +392,12 @@ static const char PSTR_HELP_OUTPUT_DESC[] PROGMEM = "Output Modules - Configure 
 static const char PSTR_HELP_BUS[] PROGMEM = "BUS";
 static const char PSTR_HELP_BUS_DESC[] PROGMEM = "Bus Config - Configure I2C, SPI, and CAN buses";
 
-#if ENABLE_RELAY_OUTPUT
+#if INCLUDE_RELAY_OUTPUT
 static const char PSTR_HELP_RELAY[] PROGMEM = "RELAY";
 static const char PSTR_HELP_RELAY_DESC[] PROGMEM = "Relay Control - Threshold-based relay outputs for cooling fans, alarms, etc.";
 #endif
 
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
 static const char PSTR_HELP_TEST[] PROGMEM = "TEST";
 static const char PSTR_HELP_TEST_DESC[] PROGMEM = "Test Mode - Simulate sensor inputs with predefined scenarios";
 #endif
@@ -423,10 +423,10 @@ void printHelpSet();
 void printHelpControl();
 void printHelpOutput();
 void printHelpBus();
-#if ENABLE_RELAY_OUTPUT
+#if INCLUDE_RELAY_OUTPUT
 void printHelpRelay();
 #endif
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
 void printHelpTest();
 #endif
 void printHelpDisplay();
@@ -444,10 +444,10 @@ static const HelpCategory HELP_CATEGORIES[] PROGMEM = {
     {PSTR_HELP_CONTROL, PSTR_HELP_CONTROL_DESC, printHelpControl},
     {PSTR_HELP_OUTPUT, PSTR_HELP_OUTPUT_DESC, printHelpOutput},
     {PSTR_HELP_BUS, PSTR_HELP_BUS_DESC, printHelpBus},
-#if ENABLE_RELAY_OUTPUT
+#if INCLUDE_RELAY_OUTPUT
     {PSTR_HELP_RELAY, PSTR_HELP_RELAY_DESC, printHelpRelay},
 #endif
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
     {PSTR_HELP_TEST, PSTR_HELP_TEST_DESC, printHelpTest},
 #endif
     {PSTR_HELP_DISPLAY, PSTR_HELP_DISPLAY_DESC, printHelpDisplay},
@@ -585,7 +585,7 @@ void printHelpOutput() {
 
 // printHelpBus() — defined in cmd_bus.cpp where BUS_SUBCOMMANDS lives.
 
-#if ENABLE_RELAY_OUTPUT
+#if INCLUDE_RELAY_OUTPUT
 void printHelpRelay() {
     msg.control.println();
     msg.control.println(F("=== RELAY Commands ==="));
@@ -601,7 +601,7 @@ void printHelpRelay() {
 }
 #endif
 
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
 void printHelpTest() {
     msg.control.println();
     msg.control.println(F("=== TEST Commands ==="));
@@ -826,7 +826,7 @@ void printHelpQuick() {
     msg.control.println(F("  BUS I2C <0-2> CLOCK <100|400|1000>"));
     msg.control.println(F("  BUS SPI <0-2> CLOCK <Hz>"));
     msg.control.println(F("  BUS CAN <0-2> BAUDRATE <125000|250000|500000|1000000>"));
-#if ENABLE_RELAY_OUTPUT
+#if INCLUDE_RELAY_OUTPUT
     msg.control.println();
     msg.control.println(F("Relays:"));
     msg.control.println(F("  RELAY LIST"));
@@ -835,7 +835,7 @@ void printHelpQuick() {
     msg.control.println(F("  RELAY <0-1> THRESHOLD <on> <off>"));
     msg.control.println(F("  RELAY <0-1> MODE <DISABLED|AUTO_HIGH|AUTO_LOW|MANUAL_ON|MANUAL_OFF>"));
 #endif
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
     msg.control.println();
     msg.control.println(F("Test Mode:"));
     msg.control.println(F("  TEST LIST|STATUS|STOP"));

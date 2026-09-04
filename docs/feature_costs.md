@@ -42,24 +42,29 @@ much (and several would overflow the 90 B RAM headroom — see notes).
 | Knob | ΔFlash | ΔStatic RAM | Note |
 |---|---|---|---|
 | **Currently on** | | | |
-| `ENABLE_CAN` | −11,568 B | **−691 B** | largest RAM consumer (MCP2515 + frame cache) |
-| `ENABLE_ALARMS` | −16,426 B | **−455 B** | **gates the whole control engine on AVR** (see below) |
-| `ENABLE_LED` | −2,206 B | −318 B | RGB status indicator (wiring-derived†) |
-| `ENABLE_LCD` | −4,746 B | −236 B | I²C LCD |
-| `ENABLE_BME280` | −7,766 B | −174 B | Adafruit BME280 |
-| `ENABLE_MODE_BUTTON` | −808 B | −133 B | wiring-derived† |
-| `ENABLE_SERIAL_OUTPUT` | −3,170 B | −28 B | cheap RAM, but a core output |
+| `SUPPORTS_CAN` | −11,568 B | **−691 B** | largest RAM consumer (MCP2515 + frame cache) |
+| `SUPPORTS_ALARMS` | −16,426 B | **−455 B** | **gates the whole control engine on AVR** (see below) |
+| `INCLUDE_LED` | −2,206 B | −318 B | RGB status indicator (wiring-derived†) |
+| `SUPPORTS_LCD` | −4,746 B | −236 B | I²C LCD |
+| `SUPPORTS_BME280` | −7,766 B | −174 B | Adafruit BME280 |
+| `INCLUDE_MODE_BUTTON` | −808 B | −133 B | wiring-derived† |
+| `SUPPORTS_SERIAL_OUTPUT` | −3,170 B | −28 B | cheap RAM, but a core output |
 | **Currently off** | | | |
-| `ENABLE_FRAMED_TRANSPORT` | +5,192 B | **+1,691 B** | would overflow RAM ~19× over; real ceiling (cf. #233) |
-| `ENABLE_ELM327` | +4,202 B | +301 B | would overflow RAM headroom |
-| `ENABLE_TEST_MODE` | +7,568 B | +238 B | would overflow RAM headroom |
-| `ENABLE_RELAY_OUTPUT` | +1,194 B | +32 B | cheap (deprecated → Actions) |
-| `ENABLE_REALDASH` | +222 B | +36 B | **nearly free** — disabled by choice, not a RAM limit |
-| `ENABLE_SD_LOGGING` | — | — | won't build: `SD.h` not in mega `lib_deps` (lib + RAM ceiling) |
+| `SUPPORTS_FRAMED_TRANSPORT` | +5,192 B | **+1,691 B** | would overflow RAM ~19× over; real ceiling (cf. #233) |
+| `SUPPORTS_ELM327` | +4,202 B | +301 B | would overflow RAM headroom |
+| `SUPPORTS_TEST_MODE` | +7,568 B | +238 B | would overflow RAM headroom |
+| `SUPPORTS_RELAY_OUTPUT` | +1,194 B | +32 B | cheap (deprecated → Actions) |
+| `SUPPORTS_REALDASH` | +222 B | +36 B | **nearly free** — disabled by choice, not a RAM limit |
+| `INCLUDE_SD_LOGGING` | — | — | won't build: `SD.h` not in mega `lib_deps` (lib + RAM ceiling) |
 
-> † `ENABLE_LED` / `ENABLE_MODE_BUTTON` are derived from `wiring.ini` pin presence,
+> † `INCLUDE_LED` / `INCLUDE_MODE_BUTTON` are derived from `wiring.ini` pin presence,
 > not `board.h` flags, so the measurement tool (which toggles `board.h`) can't
 > re-measure them — values carried from a prior run.
+
+> **Naming:** these were `ENABLE_*` before #357. `SUPPORTS_*` is the `board.h`
+> capability you comment out to reclaim the memory; `INCLUDE_*` is what
+> `resolve.h` derives and `src/` tests. Neither means the feature is *on* at
+> runtime.
 
 ### Structural knobs
 
@@ -93,8 +98,8 @@ From `avr-nm --size-sort -S -C`:
 
 ## Lessons
 
-- **`ENABLE_ALARMS` is the control-engine switch on AVR, not a buzzer flag.**
-  `ENABLE_CONTROL_ENGINE` is `ENABLE_ALARMS || ENABLE_RELAY_OUTPUT`
+- **`SUPPORTS_ALARMS` is the control-engine switch on AVR, not a buzzer flag.**
+  `INCLUDE_CONTROL_ENGINE` is `INCLUDE_ALARMS || INCLUDE_RELAY_OUTPUT`
   (`control_types.h`), so disabling alarms removes the entire Rules/Actions engine
   (−16.4 KB / −455 B — grew with the standalone arena tables in #296). The physical
   buzzer is a separate pin (`BUZZER_PIN`).

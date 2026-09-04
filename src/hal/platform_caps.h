@@ -67,7 +67,7 @@
 // Hybrid Controller Mode Detection
 // ============================================================================
 
-#if defined(ENABLE_CAN_HYBRID)
+#if INCLUDE_CAN_HYBRID
     #define PLATFORM_CAN_MODE "Hybrid"
     #define PLATFORM_SUPPORTS_HYBRID 1
 #else
@@ -81,7 +81,7 @@
 
 // In hybrid mode, the effective bus count may exceed native bus count
 // (e.g., ESP32 with 1 TWAI + 1 MCP2515 = 2 buses total)
-#if defined(ENABLE_CAN_HYBRID)
+#if INCLUDE_CAN_HYBRID
     // Hybrid mode can expand beyond native buses
     // Actual count depends on CAN_BUS_x_TYPE definitions
     #if defined(CAN_BUS_3_TYPE)

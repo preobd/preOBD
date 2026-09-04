@@ -7,7 +7,7 @@
 
 // Needs both the framed transport (the channel) and the ELM327 emulator (the
 // parser). Either off -> empty stubs at the bottom of the file.
-#if ENABLE_FRAMED_TRANSPORT && ENABLE_ELM327
+#if INCLUDE_FRAMED_TRANSPORT && INCLUDE_ELM327
 
 #include <Arduino.h>
 #include <string.h>
@@ -132,7 +132,7 @@ void poll(MuxTransport& out) {
 
 } // namespace Elm327Framed
 
-#else  // ENABLE_FRAMED_TRANSPORT && ENABLE_ELM327
+#else  // INCLUDE_FRAMED_TRANSPORT && INCLUDE_ELM327
 
 namespace Elm327Framed {
 void init() {}

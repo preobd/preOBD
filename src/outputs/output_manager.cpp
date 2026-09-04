@@ -39,7 +39,7 @@ extern void updateAlarmOutput();
 // module). The OUTPUT_RELAY slot below stays nullptr for EEPROM index
 // stability (OutputID enum / outputEnabled[]).
 
-#if ENABLE_ELM327
+#if INCLUDE_ELM327
 extern void initELM327();
 extern void sendELM327(Input*);
 extern void updateELM327();
@@ -50,7 +50,7 @@ OutputModule outputModules[] = {
     {"CAN",     false, initCAN,           sendCAN,           updateCAN,           100},
     {"RealDash",false, initRealdash,      sendRealdash,      updateRealdash,      100},
     {"Serial",  false, initSerialOutput,  sendSerialOutput,  updateSerialOutput,  1000},
-#if ENABLE_SD_LOGGING
+#if INCLUDE_SD_LOGGING
     // send = nullptr: a wide CSV row needs the whole sample at once, so
     // updateSDLog() owns the cadence (reading systemConfig.outputInterval
     // itself) rather than being driven one input at a time by sendToOutputs().
@@ -60,7 +60,7 @@ OutputModule outputModules[] = {
 #endif
     {"Alarm",   true,  initAlarmOutput,   sendAlarmOutput,   updateAlarmOutput,   100},
     {nullptr,   false, nullptr,           nullptr,           nullptr,             0},  // OUTPUT_RELAY slot retired (control-engine Actions)
-#if ENABLE_ELM327
+#if INCLUDE_ELM327
     // sendInterval = UINT16_MAX: ELM327 is pull-based, send() is a no-op.
     // Setting interval to max prevents sendToOutputs() from iterating all
     // inputs every loop just to call the no-op.
@@ -173,7 +173,7 @@ bool setOutputEnabled(const char* name, bool enabled) {
         output->init();
     }
 
-#if ENABLE_SD_LOGGING
+#if INCLUDE_SD_LOGGING
     // Close the log file on disable — otherwise it stays open and unflushed for
     // the rest of the session. Called directly rather than through a per-module
     // deinit hook: a function pointer on every OutputModule costs 14 bytes of
@@ -216,7 +216,7 @@ void listOutputs() {
             msg.control.print(F("Enabled, Interval: "));
             msg.control.print(outputModules[i].sendInterval);
             msg.control.print(F("ms"));
-#if ENABLE_SD_LOGGING
+#if INCLUDE_SD_LOGGING
             if (i == OUTPUT_SD) {
                 msg.control.print(F(", Format: "));
                 msg.control.print(sdLogFormatName(systemConfig.sdLogFormat));

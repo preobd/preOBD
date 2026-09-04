@@ -2,7 +2,7 @@
 
 #include "../config.h"
 
-#if ENABLE_FRAMED_TRANSPORT
+#if INCLUDE_FRAMED_TRANSPORT
 
 #include <Arduino.h>
 #include <math.h>
@@ -199,7 +199,7 @@ FLASHMEM void resync() {
 
 } // namespace LiveValueBroadcaster
 
-#else // !ENABLE_FRAMED_TRANSPORT
+#else // !INCLUDE_FRAMED_TRANSPORT
 
 namespace LiveValueBroadcaster {
 void init() {}
@@ -207,4 +207,4 @@ void tick() {}
 void resync() {}
 }
 
-#endif // ENABLE_FRAMED_TRANSPORT
+#endif // INCLUDE_FRAMED_TRANSPORT

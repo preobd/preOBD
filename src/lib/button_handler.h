@@ -1,6 +1,6 @@
 /*
  * button_handler.h - Multi-function button handler
- * Only compiled when ENABLE_MODE_BUTTON is defined in the board profile.
+ * Only compiled when INCLUDE_MODE_BUTTON is defined in the board profile.
  */
 
 #ifndef BUTTON_HANDLER_H

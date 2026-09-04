@@ -1,9 +1,9 @@
 #include "alarm_broadcaster.h"
 
 #include "../config.h"
-#include "../control/control_types.h"  // defines ENABLE_CONTROL_ENGINE
+#include "../control/control_types.h"  // defines INCLUDE_CONTROL_ENGINE
 
-#if ENABLE_FRAMED_TRANSPORT && ENABLE_CONTROL_ENGINE
+#if INCLUDE_FRAMED_TRANSPORT && INCLUDE_CONTROL_ENGINE
 
 #include <Arduino.h>
 #include <math.h>
@@ -137,11 +137,11 @@ void tick() {
 
 } // namespace AlarmBroadcaster
 
-#else // !(ENABLE_FRAMED_TRANSPORT && ENABLE_CONTROL_ENGINE)
+#else // !(INCLUDE_FRAMED_TRANSPORT && INCLUDE_CONTROL_ENGINE)
 
 namespace AlarmBroadcaster {
 void init() {}
 void tick() {}
 }
 
-#endif // ENABLE_FRAMED_TRANSPORT && ENABLE_CONTROL_ENGINE
+#endif // INCLUDE_FRAMED_TRANSPORT && INCLUDE_CONTROL_ENGINE

@@ -26,7 +26,7 @@
 #include "../lib/log_tags.h"
 #include "../lib/system_mode.h"
 
-#if ENABLE_SD_LOGGING
+#if INCLUDE_SD_LOGGING
 
 // Use Arduino SD library for consistency across platforms
 #include <SD.h>

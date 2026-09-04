@@ -217,7 +217,7 @@ When alarm becomes ACTIVE:
 - SD log records alarm state
 
 **Alarm Silencing:**
-- Press mode button in RUN mode → Silences alarm for 30 seconds (requires `ENABLE_MODE_BUTTON` and `MODE_BUTTON_PIN` defined in board profile)
+- Press mode button in RUN mode → Silences alarm for 30 seconds (requires `INCLUDE_MODE_BUTTON` and `MODE_BUTTON_PIN` defined in board profile)
 - Alarm automatically reactivates if violation persists after silence period
 - Silence duration configurable via `SILENCE_DURATION` in `config.h`
 
@@ -301,18 +301,18 @@ Time 0.1s:  Fault timer RESETS to 0 → NO ALARM
 
 ### Compile-Time Configuration
 
-`ENABLE_ALARMS` is a CHOICE flag in your board definition (`boards/<board>/board.h`); the buzzer and silence-button pins are wiring, set in your gitignored overlay (`boards/<board>/wiring.ini`). Wiring a pin turns that peripheral on:
+`SUPPORTS_ALARMS` is a capability flag in your board definition (`boards/<board>/board.h`), which `resolve.h` turns into the `INCLUDE_ALARMS` the code tests; the buzzer and silence-button pins are wiring, set in your gitignored overlay (`boards/<board>/wiring.ini`). Wiring a pin turns that peripheral on:
 
 ```cpp
 // boards/<board>/board.h — software alarm/annunciator feature
-#define ENABLE_ALARMS   1
+#define SUPPORTS_ALARMS   1
 ```
 ```ini
 ; boards/<board>/wiring.ini — omit a pin and that peripheral is simply off
 [<board>]
 wiring =
     -D BUZZER_PIN=3       ; alarm buzzer
-    -D MODE_BUTTON_PIN=5  ; silence button (its presence enables ENABLE_MODE_BUTTON)
+    -D MODE_BUTTON_PIN=5  ; silence button (its presence enables INCLUDE_MODE_BUTTON)
 ```
 
 Set timing constants in `config.h`:

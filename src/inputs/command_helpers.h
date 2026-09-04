@@ -120,11 +120,11 @@ void printHelpSystem();
 void printHelpConfig();
 void printHelpExamples();
 
-#if ENABLE_RELAY_OUTPUT
+#if INCLUDE_RELAY_OUTPUT
 void printHelpRelay();
 #endif
 
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
 void printHelpTest();
 #endif
 

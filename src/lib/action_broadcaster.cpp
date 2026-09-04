@@ -1,9 +1,9 @@
 #include "action_broadcaster.h"
 
 #include "../config.h"
-#include "../control/control_types.h"  // defines ENABLE_CONTROL_ENGINE
+#include "../control/control_types.h"  // defines INCLUDE_CONTROL_ENGINE
 
-#if ENABLE_CONTROL_ENGINE && ENABLE_FRAMED_TRANSPORT
+#if INCLUDE_CONTROL_ENGINE && INCLUDE_FRAMED_TRANSPORT
 
 #include <Arduino.h>
 #include <string.h>
@@ -139,7 +139,7 @@ void resync() {
 
 } // namespace ActionBroadcaster
 
-#else // !(ENABLE_CONTROL_ENGINE && ENABLE_FRAMED_TRANSPORT)
+#else // !(INCLUDE_CONTROL_ENGINE && INCLUDE_FRAMED_TRANSPORT)
 
 namespace ActionBroadcaster {
 void init() {}
@@ -148,4 +148,4 @@ void handleInbound(const uint8_t*, uint16_t) {}
 void resync() {}
 }
 
-#endif // ENABLE_CONTROL_ENGINE && ENABLE_FRAMED_TRANSPORT
+#endif // INCLUDE_CONTROL_ENGINE && INCLUDE_FRAMED_TRANSPORT

@@ -6,10 +6,10 @@ are present in lib_deps. Prints a warning (does not abort) if a mismatch is
 found so developers notice drift before it becomes a link error.
 
 Rules checked:
-  - ENABLE_CAN + PROFILE_HAS_NATIVE_CAN=0 → needs autowp-mcp2515
-  - ENABLE_BME280                          → needs Adafruit BME280
-  - ENABLE_LCD                             → needs LiquidCrystal_PCF8574
-  - ENABLE_ELM327 on ESP32                → needs ESP32_BleSerial
+  - SUPPORTS_CAN + PROFILE_HAS_NATIVE_CAN=0 → needs autowp-mcp2515
+  - SUPPORTS_BME280                          → needs Adafruit BME280
+  - SUPPORTS_LCD                             → needs LiquidCrystal_PCF8574
+  - SUPPORTS_ELM327 on ESP32                → needs ESP32_BleSerial
 """
 
 # pylint: disable=undefined-variable
@@ -89,29 +89,29 @@ def check(env):
     libs = _lib_deps_str(env)
     warnings = []
 
-    # ENABLE_CAN on a non-native-CAN board → MCP2515 driver needed.
+    # SUPPORTS_CAN on a non-native-CAN board → MCP2515 driver needed.
     # Default to "0" (assume SPI/external) when the flag is absent — this
     # produces a warning that prompts the developer to annotate the profile
     # rather than silently skipping the check.
-    if "ENABLE_CAN" in defines:
+    if "SUPPORTS_CAN" in defines:
         native = values.get("PROFILE_HAS_NATIVE_CAN", None)
         if native is None:
             print(f"INFO  [verify_profile_libs] {env_name}: PROFILE_HAS_NATIVE_CAN not set, "
                   "assuming non-native (SPI) CAN — add the flag to silence this")
         if (native is None or native == "0") and "mcp2515" not in libs:
             warnings.append(
-                "ENABLE_CAN with PROFILE_HAS_NATIVE_CAN=0 (or unset) "
+                "SUPPORTS_CAN with PROFILE_HAS_NATIVE_CAN=0 (or unset) "
                 "but autowp-mcp2515 not in lib_deps"
             )
 
-    if "ENABLE_BME280" in defines and "bme280" not in libs:
-        warnings.append("ENABLE_BME280 is set but Adafruit BME280 not found in lib_deps")
+    if "SUPPORTS_BME280" in defines and "bme280" not in libs:
+        warnings.append("SUPPORTS_BME280 is set but Adafruit BME280 not found in lib_deps")
 
-    if "ENABLE_LCD" in defines and "liquidcrystal" not in libs:
-        warnings.append("ENABLE_LCD is set but a LiquidCrystal library was not found in lib_deps")
+    if "SUPPORTS_LCD" in defines and "liquidcrystal" not in libs:
+        warnings.append("SUPPORTS_LCD is set but a LiquidCrystal library was not found in lib_deps")
 
-    if "ENABLE_ELM327" in defines and "esp32" in env_name and "bleserial" not in libs:
-        warnings.append("ENABLE_ELM327 on ESP32 but ESP32_BleSerial not found in lib_deps")
+    if "SUPPORTS_ELM327" in defines and "esp32" in env_name and "bleserial" not in libs:
+        warnings.append("SUPPORTS_ELM327 on ESP32 but ESP32_BleSerial not found in lib_deps")
 
     for w in warnings:
         print(f"WARNING [verify_profile_libs] {env_name}: {w}")

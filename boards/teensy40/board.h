@@ -3,7 +3,7 @@
  *
  * Hardware description + feature selection. Discrete WIRING lives in the
  * gitignored boards/teensy40/wiring.ini overlay, not here. `-include`d before
- * boards/resolve.h, which derives the wired ENABLE_* flags. See boards/README.md.
+ * boards/resolve.h, which derives the INCLUDE_* flags src/ tests. See boards/README.md.
  *
  * vs Teensy 4.1: no built-in SD slot (SD logging is off unless you wire an
  * external card and set SD_PIN in the overlay — it's capable, just not built-in).
@@ -17,17 +17,22 @@
 // No HAS_BUILTIN_SD: the 4.0 has no built-in slot. SD logging stays off unless
 // an external card is wired (set SD_PIN in wiring.ini → resolve.h enables it).
 
-// ===== FEATURE CHOICES (capable board; on/off is preference) =====
-#define ENABLE_CAN              1
-#define ENABLE_REALDASH         1
-#define ENABLE_SERIAL_OUTPUT    1
-#define ENABLE_FRAMED_TRANSPORT 1    // nRF52840 coprocessor framed link + broadcasters
-#define ENABLE_LCD              1
-#define ENABLE_ALARMS           1    // control engine (Rules/Actions/Annunciator) — NOT the buzzer
-#define ENABLE_BME280           1
-#define ENABLE_RELAY_OUTPUT     1    // deprecated shim (→ control-engine Actions)
-#define ENABLE_ELM327           1
-#define ENABLE_TEST_MODE        1    // CLI test injection (optional trigger pin lives in the overlay)
+// ===== FEATURE CAPABILITY (what this board CAN do) =====
+// Declared by presence: a board that can't simply omits the line. Never 0.
+// boards/resolve.h turns each of these into the INCLUDE_* flag src/ tests.
+// To reclaim a feature's flash/RAM on this board, comment its line out here —
+// measured per-feature costs are in docs/feature_costs.md. (For a one-off local
+// build, put `-D INCLUDE_<X>=0` in your gitignored wiring.ini instead.)
+#define SUPPORTS_CAN              1
+#define SUPPORTS_REALDASH         1
+#define SUPPORTS_SERIAL_OUTPUT    1
+#define SUPPORTS_FRAMED_TRANSPORT 1    // nRF52840 coprocessor framed link + broadcasters
+#define SUPPORTS_LCD              1
+#define SUPPORTS_ALARMS           1    // control engine (Rules/Actions/Annunciator) — NOT the buzzer
+#define SUPPORTS_BME280           1
+#define SUPPORTS_RELAY_OUTPUT     1    // deprecated shim (→ control-engine Actions)
+#define SUPPORTS_ELM327           1
+#define SUPPORTS_TEST_MODE        1    // CLI test injection (optional trigger pin lives in the overlay)
 
 // ===== SIZING =====
 #define MAX_INPUTS              40
@@ -53,6 +58,6 @@
 #define JSON_IMPORT_MAX_BYTES       16384
 
 // WIRED (set in wiring.ini, derived by boards/resolve.h):
-//   RGB_PIN_R/G/B → ENABLE_LED   BUZZER_PIN (buzzer)   external SD_PIN → ENABLE_SD_LOGGING
-//   MODE_BUTTON_PIN → ENABLE_MODE_BUTTON   TEST_MODE_PIN (trigger)
+//   RGB_PIN_R/G/B → SUPPORTS_LED   BUZZER_PIN (buzzer)   external SD_PIN → SUPPORTS_SD_LOGGING
+//   MODE_BUTTON_PIN → SUPPORTS_MODE_BUTTON   TEST_MODE_PIN (trigger)
 //   HOST_NRF_CTS_PIN + HOST_NRF_RTS_PIN (nRF software flow control)

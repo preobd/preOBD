@@ -9,7 +9,7 @@
  * Supports dual-bus on Teensy (input on different bus than output).
  */
 
-#if ENABLE_CAN
+#if INCLUDE_CAN
 
 #include <Arduino.h>
 #include "input_can.h"
@@ -98,7 +98,7 @@ bool initCANInput() {
  * This is intentional behavior - CAN hardware stays active but frame processing stops.
  * Power consumption: ~5-10mA (MCP2515) or ~2-3mA (FlexCAN standby mode).
  *
- * For true power-down, disable ENABLE_CAN at compile time or power-cycle the board.
+ * For true power-down, disable INCLUDE_CAN at compile time or power-cycle the board.
  */
 void shutdownCANInput() {
     canInputInitialized = false;
@@ -195,4 +195,4 @@ void updateCANInput() {
     }
 }
 
-#endif // ENABLE_CAN
+#endif // INCLUDE_CAN

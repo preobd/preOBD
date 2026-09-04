@@ -11,8 +11,8 @@
 #if SUPPORTS_SD && !defined(SD_PIN)
 #error "SD_PIN must be defined in the board profile when SUPPORTS_SD is set"
 #endif
-#if ENABLE_SD_LOGGING && !SUPPORTS_SD
-#error "ENABLE_SD_LOGGING requires SUPPORTS_SD=1 in the board profile"
+#if INCLUDE_SD_LOGGING && !SUPPORTS_SD
+#error "INCLUDE_SD_LOGGING requires SUPPORTS_SD=1 in the board profile"
 #endif
 
 #if SUPPORTS_SD

@@ -6,7 +6,7 @@
 
 #include "../config.h"
 
-#if ENABLE_ELM327
+#if INCLUDE_ELM327
 
 #include "output_elm327.h"
 #include "../lib/obd_query.h"
@@ -372,4 +372,4 @@ void ELM327Output::_sendPrompt() {
     _sendString(">");
 }
 
-#endif // ENABLE_ELM327
+#endif // INCLUDE_ELM327

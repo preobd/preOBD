@@ -16,7 +16,7 @@
 
 #include "../config.h"
 
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
 
 #include "test_mode.h"
 
@@ -218,6 +218,6 @@ inline const TestScenario* getTestScenario(uint8_t index) {
     return (const TestScenario*)pgm_read_ptr(&TEST_SCENARIOS[index]);
 }
 
-#endif // ENABLE_TEST_MODE
+#endif // INCLUDE_TEST_MODE
 
 #endif // TEST_SCENARIOS_H

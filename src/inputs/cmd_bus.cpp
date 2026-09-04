@@ -30,15 +30,15 @@
 #include "../outputs/output_base.h"
 #include "../lib/obd_query.h"
 #include "../lib/display_manager.h"
-#if ENABLE_RELAY_OUTPUT
+#if INCLUDE_RELAY_OUTPUT
 #endif
-#if ENABLE_ELM327
+#if INCLUDE_ELM327
 #include "../outputs/output_elm327.h"
 #endif
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
 #include "../test/test_mode.h"
 #endif
-#if ENABLE_CAN
+#if INCLUDE_CAN
 #include "sensors/can/can_scan.h"
 #include "../lib/can_sensor_library/standard_pids.h"
 #endif
@@ -594,7 +594,7 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
 
         // BUS SERIAL <port> FRAMED ENABLE|DISABLE
         if (streq_P(argv[3], PSTR("FRAMED"))) {
-#if !ENABLE_FRAMED_TRANSPORT
+#if !INCLUDE_FRAMED_TRANSPORT
             msg.control.println(F("ERROR: framed mode not supported on this build"));
             return 1;
 #else
@@ -627,11 +627,11 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
             }
             msg.control.println(F("ERROR: expected ENABLE or DISABLE"));
             return 1;
-#endif // ENABLE_FRAMED_TRANSPORT
+#endif // INCLUDE_FRAMED_TRANSPORT
         }
 
         // BUS SERIAL <port> ELM327 ENABLE|DISABLE
-#if ENABLE_ELM327
+#if INCLUDE_ELM327
         if (streq_P(argv[3], PSTR("ELM327"))) {
             if (argc < 5) {
                 msg.control.println(F("ERROR: ELM327 requires ENABLE or DISABLE"));
@@ -711,13 +711,13 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
             msg.control.println(F("ERROR: ELM327 requires ENABLE or DISABLE"));
             return 1;
         }
-#endif  // ENABLE_ELM327
+#endif  // INCLUDE_ELM327
 
         // Unknown subcommand for port
         msg.control.print(F("ERROR: Unknown command '"));
         msg.control.print(argv[3]);
         msg.control.println(F("'"));
-#if ENABLE_ELM327
+#if INCLUDE_ELM327
         msg.control.println(F("  Valid: ENABLE, DISABLE, BAUDRATE, ELM327"));
 #else
         msg.control.println(F("  Valid: ENABLE, DISABLE, BAUDRATE"));
@@ -729,7 +729,7 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
     msg.control.print(F("ERROR: Unknown serial command '"));
     msg.control.print(argv[2]);
     msg.control.println(F("'"));
-#if ENABLE_ELM327
+#if INCLUDE_ELM327
     msg.control.println(F("  Usage: BUS SERIAL [1-8] [ENABLE|DISABLE|BAUDRATE <rate>|ELM327 <ENABLE|DISABLE>]"));
 #else
     msg.control.println(F("  Usage: BUS SERIAL [1-8] [ENABLE|DISABLE|BAUDRATE <rate>]"));
@@ -778,7 +778,7 @@ static const char PSTR_HELP_BUS_SERIAL[] PROGMEM =
     "  BUS SERIAL <1-8> ENABLE [baud]   Enable serial port\n"
     "  BUS SERIAL <1-8> DISABLE      Disable serial port\n"
     "  BUS SERIAL <1-8> BAUDRATE <rate> Set baud rate"
-#if ENABLE_ELM327
+#if INCLUDE_ELM327
     "\n  BUS SERIAL <1-8> ELM327 <ENABLE|DISABLE>"
 #endif
     ;
@@ -817,7 +817,7 @@ int cmd_bus(int argc, const char* const* argv) {
 
 // ===== LOG COMMAND =====
 
-#if ENABLE_SELFTEST
+#if INCLUDE_SELFTEST
 int selftestBusTable() {
     int failures = 0;
     for (uint8_t i = 0; i < NUM_BUS_SUBCOMMANDS; i++) {

@@ -18,9 +18,9 @@
  */
 
 #include "../config.h"
-#include "../control/control_types.h"  // defines ENABLE_CONTROL_ENGINE before the guard
+#include "../control/control_types.h"  // defines INCLUDE_CONTROL_ENGINE before the guard
 
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
 
 #include "command_handlers.h"
 #include "command_helpers.h"
@@ -499,4 +499,4 @@ FLASHMEM int cmd_action(int argc, const char* const* argv) {
     return 1;
 }
 
-#endif // ENABLE_CONTROL_ENGINE
+#endif // INCLUDE_CONTROL_ENGINE

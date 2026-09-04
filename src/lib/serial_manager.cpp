@@ -359,12 +359,12 @@ void displaySerialStatus() {
             msg.control.print(F("disabled"));
         }
 
-#if ENABLE_ELM327
+#if INCLUDE_ELM327
         if (systemConfig.buses.elm327_serial_port == port_id) {
             msg.control.print(F(" [ELM327]"));
         }
 #endif
-#if ENABLE_FRAMED_TRANSPORT
+#if INCLUDE_FRAMED_TRANSPORT
         if (systemConfig.serial.framed_enabled_mask & (1u << (port_id - 1))) {
             msg.control.print(F(" [FRAMED]"));
         }
@@ -396,7 +396,7 @@ void displaySerialPortStatus(uint8_t port_id) {
     msg.control.println(F(":"));
     msg.control.print(F("  Status: "));
     msg.control.print(enabled ? F("ENABLED") : F("disabled"));
-#if ENABLE_ELM327
+#if INCLUDE_ELM327
     if (systemConfig.buses.elm327_serial_port == port_id) {
         msg.control.print(F(" [ELM327]"));
     }
@@ -409,7 +409,7 @@ void displaySerialPortStatus(uint8_t port_id) {
     msg.control.println(getDefaultSerialRX(port_id));
     msg.control.print(F("  TX pin: "));
     msg.control.println(getDefaultSerialTX(port_id));
-#if ENABLE_FRAMED_TRANSPORT
+#if INCLUDE_FRAMED_TRANSPORT
     // Framed-mode is persisted per port in serial.framed_enabled_mask and
     // applied at boot to the MuxTransport instance bound to that port.
     msg.control.print(F("  Framed: "));

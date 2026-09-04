@@ -16,7 +16,7 @@
 #include "control_types.h"
 #include "control_engine.h"
 
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
 
 // Runtime contexts, indexed 1:1 with rules[].
 extern RuleContext g_ruleContexts[MAX_RULES];
@@ -241,5 +241,5 @@ bool    controlActionReleaseDrive(uint8_t id);
 bool    controlActionSetOverride(uint8_t id, ActionOverride ovr);
 bool    controlActionSetName(uint8_t id, const char* name);  // ACTION <id> NAME <text>
 
-#endif // ENABLE_CONTROL_ENGINE
+#endif // INCLUDE_CONTROL_ENGINE
 #endif // CONTROL_MANAGER_H

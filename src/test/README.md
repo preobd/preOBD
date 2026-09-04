@@ -8,7 +8,7 @@ Test mode allows comprehensive testing of all preOBD outputs (LCD, CAN bus, alar
 - ✅ **Dynamic Value Generation**: Static, ramps, sine waves, square waves, random walks
 - ✅ **Tests All Outputs**: LCD, CAN, Serial, SD, RealDash, Alarms
 - ✅ **Mode Agnostic**: Works with both EEPROM and compile-time configs
-- ✅ **Zero Overhead**: Completely removed when `ENABLE_TEST_MODE` is not defined
+- ✅ **Zero Overhead**: Completely removed when `INCLUDE_TEST_MODE` is not defined
 - ✅ **Non-invasive**: No changes to existing sensor reading code
 
 ## Memory Footprint
@@ -25,7 +25,7 @@ Test mode allows comprehensive testing of all preOBD outputs (LCD, CAN bus, alar
 Edit `src/config.h`:
 
 ```cpp
-#define ENABLE_TEST_MODE
+#define INCLUDE_TEST_MODE
 ```
 
 ### 2. Compile and Upload
@@ -180,7 +180,7 @@ While test mode is active:
 In `src/config.h`:
 
 ```cpp
-#define ENABLE_TEST_MODE              // Enable/disable test mode
+#define INCLUDE_TEST_MODE              // Enable/disable test mode
 #define TEST_MODE_TRIGGER_PIN 8       // Pin to pull LOW for activation
 #define DEFAULT_TEST_SCENARIO 0       // Scenario to run on trigger (0-4, or 0xFF for none)
 ```
@@ -257,7 +257,7 @@ const TestScenario* const TEST_SCENARIOS[] PROGMEM = {
 
 **Check:**
 - `TEST_MODE_TRIGGER_PIN` is actually connected to GND (use multimeter)
-- `ENABLE_TEST_MODE` is defined in `config.h`
+- `INCLUDE_TEST_MODE` is defined in `config.h`
 - Firmware was recompiled and uploaded after enabling test mode
 - Serial monitor shows "TEST MODE TRIGGER DETECTED"
 
@@ -286,7 +286,7 @@ const TestScenario* const TEST_SCENARIOS[] PROGMEM = {
 ## FAQ
 
 **Q: Can I leave test mode enabled in production?**
-A: Yes! With `TEST_MODE_TRIGGER_PIN` floating HIGH (not pulled LOW), test mode is initialized but not activated. The overhead is minimal (~4.3 KB flash). However, for absolute minimal footprint, comment out `ENABLE_TEST_MODE` for production builds.
+A: Yes! With `TEST_MODE_TRIGGER_PIN` floating HIGH (not pulled LOW), test mode is initialized but not activated. The overhead is minimal (~4.3 KB flash). However, for absolute minimal footprint, comment out `INCLUDE_TEST_MODE` for production builds.
 
 **Q: Can I change scenarios without rebooting?**
 A: Currently no - test mode is activated on boot. Future enhancement could add serial commands to switch scenarios at runtime.

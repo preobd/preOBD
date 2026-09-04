@@ -614,7 +614,7 @@ derived WARNING as its value approaches the limit. Structural edits (`ADD`/`DEL`
 > and no longer configures a relay. The section below is retained for historical
 > reference.
 
-**Note**: Relay functionality requires `ENABLE_RELAY_OUTPUT` to be defined in `config.h`.
+**Note**: Relay functionality requires `INCLUDE_RELAY_OUTPUT` to be defined in `config.h`.
 
 Control automatic relay outputs based on sensor thresholds. Useful for cooling fans, warning lights, pumps, and other switched loads.
 
@@ -716,7 +716,7 @@ BUS SERIAL <1-8>                 # Show specific port status
 BUS SERIAL <1-8> ENABLE [baud]   # Enable serial port with optional baud rate
 BUS SERIAL <1-8> DISABLE         # Disable serial port
 BUS SERIAL <1-8> BAUDRATE <rate> # Set serial port baud rate
-BUS SERIAL <1-8> ELM327 ENABLE   # Assign ELM327 emulator to serial port (requires ENABLE_ELM327 build flag)
+BUS SERIAL <1-8> ELM327 ENABLE   # Assign ELM327 emulator to serial port (requires INCLUDE_ELM327 build flag)
 BUS SERIAL <1-8> ELM327 DISABLE  # Remove ELM327 emulator from serial port
 ```
 
@@ -892,7 +892,7 @@ Use BUS SERIAL <port> ELM327 ENABLE to assign ELM327 emulator to a port
 
 ### ELM327 Serial Emulator
 
-Requires the `ENABLE_ELM327` build flag (set in `platformio.ini`).
+Requires the `INCLUDE_ELM327` build flag (set in `platformio.ini`).
 
 - The port must be enabled first: `BUS SERIAL <n> ENABLE <baud>` before running `ELM327 ENABLE`
 - Only one serial port may act as the ELM327 port at a time
@@ -1269,7 +1269,7 @@ LOAD [destination:]filename     # Load from file storage
 
 **Destination Prefixes:**
 - `SD:` - SD card storage (default if no prefix specified)
-- `USB:` - USB drive storage (if `ENABLE_USB_STORAGE` defined)
+- `USB:` - USB drive storage (if `INCLUDE_USB_STORAGE` defined)
 - Additional destinations may be added in future releases
 
 **Common File Storage Examples:**
@@ -1445,7 +1445,7 @@ Running dispatch-table selftest...
 SELFTEST: PASS
 ```
 
-A `FAIL` result indicates a firmware bug — file an issue with the offending table name and entry index from the diagnostic output. Available in both CONFIG and RUN modes. Compiled out when `ENABLE_SELFTEST=0` (saves ~700 B flash, ~40 B RAM).
+A `FAIL` result indicates a firmware bug — file an issue with the offending table name and entry index from the diagnostic output. Available in both CONFIG and RUN modes. Compiled out when `INCLUDE_SELFTEST=0` (saves ~700 B flash, ~40 B RAM).
 
 ---
 

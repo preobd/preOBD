@@ -38,7 +38,7 @@ preOBD uses EEPROM (Electrically Erasable Programmable Read-Only Memory) to pers
 
 preOBD splits EEPROM into two blocks that grow toward each other:
 
-- **Config-store arena** grows up from address 0: one `ConfigStoreHeader` followed by three packed record sections — `InputEEPROM[]`, then control-engine `Rule[]`, then `Action[]` (the latter two present on `ENABLE_CONTROL_ENGINE` builds). All three sections draw from one shared budget.
+- **Config-store arena** grows up from address 0: one `ConfigStoreHeader` followed by three packed record sections — `InputEEPROM[]`, then control-engine `Rule[]`, then `Action[]` (the latter two present on `INCLUDE_CONTROL_ENGINE` builds). All three sections draw from one shared budget.
 - **SystemConfig** is anchored at the **end** of EEPROM, so its address adapts to the platform automatically.
 
 ```
@@ -119,7 +119,7 @@ A version mismatch on either block is non-fatal: the affected block resets to de
 |---------|-------------|
 | **v3** | Earlier baseline (output enables, display, units, intervals, pins, sea-level) |
 | **v4** | Added transport router config |
-| **v5** | Added relay config (`ENABLE_RELAY_OUTPUT` builds) |
+| **v5** | Added relay config (`INCLUDE_RELAY_OUTPUT` builds) |
 | **v6** | Added log filter config |
 | **…**  | Bus config, serial port config |
 | **v10** | Layout shift — `SystemConfig` now anchored at the end of EEPROM (per-platform address) |
@@ -268,7 +268,7 @@ union CalibrationOverride {
 
 ## Control-Engine Tables (Rule / Action)
 
-On `ENABLE_CONTROL_ENGINE` builds, the `Rule[]` and `Action[]` sections follow the inputs in the same arena. The records are stored **directly** (no hash mirror like inputs): a `Rule` keys off the source input's stable **pin**, and Actions reference Rules by stable **id**, neither of which shifts across firmware versions.
+On `INCLUDE_CONTROL_ENGINE` builds, the `Rule[]` and `Action[]` sections follow the inputs in the same arena. The records are stored **directly** (no hash mirror like inputs): a `Rule` keys off the source input's stable **pin**, and Actions reference Rules by stable **id**, neither of which shifts across firmware versions.
 
 - **Live tables are RAM globals** — `rules[MAX_RULES]` / `actions[MAX_ACTIONS]` in `control_manager.cpp` (mirroring `Input inputs[]`), **not** members of `SystemConfig`.
 - **RAM caps** come from `CONTROL_RAM_{RULES,ACTIONS}_MAX` (`control_types.h`): a uniform **64** on 32-bit boards, overridden **down to 2** on AVR (Mega), with an absolute **254** id-space ceiling (ids are `uint8_t`, `0xFF` = empty-slot sentinel). Decoupled from `MAX_INPUTS`, so the engine is N:N (many rules per input, many actions per rule).
@@ -327,7 +327,7 @@ The struct above is a sketch — `SystemConfig` has grown across versions and ma
 
 **Default Values:**
 Set from board profile and `config.h` at first boot:
-- Feature flags (`ENABLE_CAN`, etc.) determine which output slots default ON/OFF
+- Feature flags (`INCLUDE_CAN`, etc.) determine which output slots default ON/OFF
 - `DEFAULT_TEMPERATURE_UNITS`, `DEFAULT_PRESSURE_UNITS` etc. from `config.h`
 - Hardware pin assignments are NOT stored — they are always read directly from the board profile at compile time
 

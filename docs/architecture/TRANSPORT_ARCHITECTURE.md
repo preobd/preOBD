@@ -604,7 +604,7 @@ Hybrid mode allows mixing different controller types on different buses:
 
 ```ini
 # ESP32-S3 with native TWAI + external MCP2515
--D ENABLE_CAN_HYBRID
+-D SUPPORTS_CAN_HYBRID
 -D CAN_BUS_0_TYPE=CanControllerType::TWAI
 -D CAN_BUS_1_TYPE=CanControllerType::MCP2515
 ```

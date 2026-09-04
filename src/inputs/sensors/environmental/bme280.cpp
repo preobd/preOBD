@@ -17,7 +17,7 @@
 #include "../../../lib/log_tags.h"
 #include <Wire.h>
 
-#if ENABLE_BME280
+#if INCLUDE_BME280
 #include <Adafruit_BME280.h>
 
 // Shared BME280 object and state (lazy initialization)
@@ -156,4 +156,4 @@ void readBME280Pressure(Input *ptr) { ptr->value = NAN; }
 void readBME280Humidity(Input *ptr) { ptr->value = NAN; }
 void readBME280Elevation(Input *ptr) { ptr->value = NAN; }
 
-#endif // ENABLE_BME280
+#endif // INCLUDE_BME280

@@ -27,16 +27,16 @@
 #include "inputs/serial_config.h"
 #include "control/control_manager.h"   // Control engine runtime (Rules)
 #include "lib/system_mode.h"        // System mode (CONFIG/RUN)
-#if ENABLE_MODE_BUTTON
+#if INCLUDE_MODE_BUTTON
 #include "lib/button_handler.h"
 #endif
 #include "lib/display_manager.h"        // Display runtime state management
-#if ENABLE_LED
+#if INCLUDE_LED
     #include "lib/rgb_led.h"
 #endif
 #include "outputs/output_base.h"
 #include "lib/obd_query.h"
-#if ENABLE_CAN
+#if INCLUDE_CAN
     #include "inputs/input_can.h"
     #include "inputs/sensors/can/can_scan.h"
 #endif
@@ -73,7 +73,7 @@ SerialTransport usbSerial(&Serial, "USB", 115200);
 //     any BLE module (HM-10, stock Bluefruit, pre-framed nRF firmware)
 //   - framed: nRF coprocessor binary protocol (ARCHITECTURE.md §3)
 // Phase 3 software flow control (HOST_NRF_CTS_PIN) wraps both modes.
-#if ENABLE_FRAMED_TRANSPORT
+#if INCLUDE_FRAMED_TRANSPORT
 #  if defined(HOST_NRF_CTS_PIN)
 MuxTransport hwSerial1(&Serial1, "SERIAL1", 115200, HOST_NRF_CTS_PIN);
 #  else
@@ -82,7 +82,7 @@ MuxTransport hwSerial1(&Serial1, "SERIAL1", 115200);
 #else
 // No nRF coprocessor on this build — Serial1 is a plain transparent transport
 // (byte-for-byte equivalent to MuxTransport's transparent mode), saving the
-// ~1.6 KB of framed RX/TX/decoder buffers. See profile ENABLE_FRAMED_TRANSPORT.
+// ~1.6 KB of framed RX/TX/decoder buffers. See profile INCLUDE_FRAMED_TRANSPORT.
 #  if defined(HOST_NRF_CTS_PIN)
 SerialTransport hwSerial1(&Serial1, "SERIAL1", 115200, HOST_NRF_CTS_PIN);
 #  else
@@ -133,16 +133,16 @@ extern void updateLCD(Input**, int);
 // Alarm logic module
 
 // Test mode (if enabled)
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
 #include "test/test_mode.h"
 #endif
 
 // ===== TIME-SLICING STATE =====
 // Tracks last execution time for each time-sliced operation
 static uint32_t lastInputRead[MAX_INPUTS];  // Per-sensor read timing
-#if ENABLE_ALARMS
+#if INCLUDE_ALARMS
 #endif
-#if ENABLE_LCD
+#if INCLUDE_LCD
 static uint32_t lastLCDUpdate = 0;
 #endif
 
@@ -151,7 +151,7 @@ static uint32_t lastLCDUpdate = 0;
 
 // Update LCD display in CONFIG mode
 static void updateConfigModeDisplay(uint32_t now) {
-    #if ENABLE_LCD
+    #if INCLUDE_LCD
     if (isDisplayActive() && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
@@ -187,11 +187,11 @@ static void updateSensors(uint32_t now) {
 // (Legacy per-input alarm engine retired — alarms are control-engine Rules,
 // evaluated in updateControlEngine() below.)
 
-// Evaluate control-engine Rules against live inputs (independent of ENABLE_ALARMS
+// Evaluate control-engine Rules against live inputs (independent of INCLUDE_ALARMS
 // — the engine is also active when only relays are compiled in). Drives nothing
 // yet: state is observable via the RULE CLI until the annunciator/actions land.
 static void updateControlEngine(uint32_t now) {
-    #if ENABLE_CONTROL_ENGINE
+    #if INCLUDE_CONTROL_ENGINE
     static uint32_t lastControlUpdate = 0;
     if (now - lastControlUpdate >= ALARM_CHECK_INTERVAL_MS) {
         controlManagerUpdate(now);
@@ -204,7 +204,7 @@ static void updateControlEngine(uint32_t now) {
 
 // Update LCD display in RUN mode
 static void updateDisplay(uint32_t now) {
-    #if ENABLE_LCD
+    #if INCLUDE_LCD
     if (isDisplayActive() && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
@@ -221,7 +221,7 @@ static void updateDisplay(uint32_t now) {
 
 // Update test mode (wrapper for conditional compilation)
 static void updateTestMode_Wrapper() {
-    #if ENABLE_TEST_MODE
+    #if INCLUDE_TEST_MODE
     if (isTestModeActive()) {
         updateTestMode();
     }
@@ -254,7 +254,7 @@ void setup() {
     // = transparent passthrough (backwards-compatible with HM-10/stock
     // Bluefruit/pre-framed nRF firmware). Set via the CLI:
     //   BUS SERIAL <port> FRAMED ENABLE
-#if ENABLE_FRAMED_TRANSPORT && NUM_SERIAL_PORTS >= 1
+#if INCLUDE_FRAMED_TRANSPORT && NUM_SERIAL_PORTS >= 1
     hwSerial1.setFramedEnabled(systemConfig.serial.framed_enabled_mask & (1 << 0));
 #endif
 
@@ -325,12 +325,13 @@ void setup() {
     // Initialize display (before inputs load, so the bus it acquires has already
     // reserved SDA/SCL by the time loadInputConfig() validates stored pins).
     //
-    // ENABLE_LCD is a board CAPABILITY ("this board can drive an I2C LCD"), not a
-    // statement that one is fitted. The runtime CONFIGURATION is displayType, so
-    // gate the actual bring-up on that: a board with DISPLAY TYPE NONE must not
-    // acquire the I2C bus, and its SDA/SCL pins stay free for inputs (#351).
+    // INCLUDE_LCD means the driver is in the image, NOT that a screen is fitted —
+    // nothing at compile time can know that, which is why there is no wiring flag
+    // for it. The runtime CONFIGURATION is displayType, so gate the actual
+    // bring-up on that: a board with DISPLAY TYPE NONE must not acquire the I2C
+    // bus, and its SDA/SCL pins stay free for inputs (#351).
     // displayEnabled remains the on/off toggle, handled by initDisplayManager().
-    #if ENABLE_LCD
+    #if INCLUDE_LCD
     if (systemConfig.displayType == DISPLAY_LCD) {
         initLCD();
     } else {
@@ -344,7 +345,7 @@ void setup() {
     #endif
 
     // Initialize CAN input subsystem (if enabled)
-    #if ENABLE_CAN
+    #if INCLUDE_CAN
     if (initCANInput()) {
         msg.debug.info(TAG_CAN, "CAN input subsystem initialized");
     }
@@ -356,20 +357,20 @@ void setup() {
     // Initialize input manager (loads from EEPROM or config.h)
     bool eepromConfigLoaded = initInputManager();
 
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     // Arm Rules from EEPROM now that SystemConfig + inputs are loaded (boot-load).
     controlManagerInit(millis());
     controlActionsInit();   // configure action target pins as outputs
 #endif
 
-#if ENABLE_MODE_BUTTON
+#if INCLUDE_MODE_BUTTON
     initButtonHandler();
 #endif
 
     initDisplayManager();
 
     // Initialize RGB LED indicator
-    #if ENABLE_LED
+    #if INCLUDE_LED
     initRGBLed();
     #endif
 
@@ -382,7 +383,7 @@ void setup() {
 
     // Bind the framed-transport ELM327 channel (type 0x30) to the parser. Uses
     // the same OBD lookup table just built; no-op stub unless both
-    // ENABLE_FRAMED_TRANSPORT and ENABLE_ELM327 are set.
+    // INCLUDE_FRAMED_TRANSPORT and INCLUDE_ELM327 are set.
     Elm327Framed::init();
 
     // Wait for sensors to stabilize
@@ -405,7 +406,7 @@ void setup() {
     msg.debug.info(TAG_SYSTEM, "Initialization complete!");
 
     // ===== TEST MODE ACTIVATION =====
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
     // Initialize test mode system
     initTestMode();
 
@@ -439,7 +440,7 @@ void setup() {
 
     initSerialConfig();
 
-#if ENABLE_CONTROL_ENGINE
+#if INCLUDE_CONTROL_ENGINE
     // Register action target pins LAST — after every hardware-fixed pin (system,
     // bus, RGB, serial) is in the registry — so a stray action target is flagged
     // as a conflict rather than silently winning a pin those subsystems need.
@@ -481,7 +482,7 @@ void loop() {
     LiveValueBroadcaster::tick();
 
     // Process button events (short press = silence alarm, long press = toggle display)
-#if ENABLE_MODE_BUTTON
+#if INCLUDE_MODE_BUTTON
     ButtonPress buttonEvent = updateButtonHandler();
     if (buttonEvent == BUTTON_LONG_PRESS) {
         toggleDisplayRuntime();
@@ -500,7 +501,7 @@ void loop() {
     // the recording/serial outputs — serial CSV (shared-terminal usability)
     // and SD logging (CONFIG is setup, not operation; don't persist bench
     // junk into the drive log) both self-silence in CONFIG.
-    #if ENABLE_CAN
+    #if INCLUDE_CAN
     updateCANInput();  // Poll CAN bus and populate frame cache
     updateCANScan();   // No-op unless a CONFIG-mode SCAN is active
     #endif
@@ -515,7 +516,7 @@ void loop() {
     updateOutputs();     // Housekeeping: drain buffers, handle RX
 
     // Update RGB LED effects (non-blocking)
-    #if ENABLE_LED
+    #if INCLUDE_LED
     updateRGBLed();
     #endif
 

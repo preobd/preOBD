@@ -44,7 +44,7 @@
 #include "sensor_library/sensors/environmental.h"
 #include "sensor_library/sensors/digital.h"
 #include "sensor_library/sensors/level.h"
-#if ENABLE_CAN
+#if INCLUDE_CAN
 #include "sensor_library/sensors/can.h"
 #else
 #define CAN_SENSORS

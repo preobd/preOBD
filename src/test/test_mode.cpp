@@ -9,7 +9,7 @@
 
 #include "../config.h"
 
-#if ENABLE_TEST_MODE
+#if INCLUDE_TEST_MODE
 
 #include "test_mode.h"
 #include "test_scenarios.h"
@@ -330,4 +330,4 @@ const char* getTestScenarioName(uint8_t index) {
     return scenario.name;
 }
 
-#endif // ENABLE_TEST_MODE
+#endif // INCLUDE_TEST_MODE
