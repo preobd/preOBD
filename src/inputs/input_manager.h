@@ -27,6 +27,25 @@ bool initInputManager();              // Initialize and load from EEPROM (return
 // ===== CONFIGURATION =====
 bool allocateInputSlot(uint8_t pin);  // Create an empty input slot (required before setInputSensor on a new pin)
 void freeInputSlot(uint8_t pin);      // Release a slot allocated by allocateInputSlot on failure
+
+// setInputApplication() — assign an application preset to `pin`, creating the
+// input if it doesn't exist yet.
+//
+// CONTRACT — all-or-nothing. On `false` NOTHING has changed:
+//   * no slot was claimed and numActiveInputs is untouched, so a refused NEW
+//     input leaves no half-built slot behind (an enabled slot with a null
+//     readFunction is the #361/#353 board fault);
+//   * an EXISTING input at `pin` keeps *every* field it had — application,
+//     names, unitsIndex, min/max, obd2pid/length, outputMask, divider_ratio,
+//     flags.display / flags.alarm / flags.useCustomCalibration, and in
+//     particular flags.isEnabled, which a refusal must never flip on (#364).
+// It is guaranteed structurally, by validating the candidate before writing
+// anything — not by a revert. Callers MUST honour the return value: on failure
+// treat the input as still holding its previous configuration and do not
+// continue building it (that omission was #363).
+//
+// On `true` the input exists, is populated from the preset, and has a valid
+// readFunction installed by setInputSensor().
 bool setInputApplication(uint8_t pin, uint8_t appIndex);
 bool setInputSensor(uint8_t pin, uint8_t sensorIndex);
 bool setInputAbbr(uint8_t pin, const char* abbr);

@@ -48,6 +48,8 @@ typedef bool    boolean;
 #define strcpy_P     strcpy
 #define strncpy_P    strncpy
 #define memcpy_P     memcpy
+#define snprintf_P   snprintf
+#define sprintf_P    sprintf
 
 // ----- F()/__FlashStringHelper -----
 class __FlashStringHelper;
@@ -87,6 +89,8 @@ public:
         return n;
     }
     size_t print(char c) { return write(static_cast<uint8_t>(c)); }
+    size_t println(const char* s) { return print(s) + print('\n'); }
+    size_t println() { return print('\n'); }
 };
 
 // ----- Stream -----

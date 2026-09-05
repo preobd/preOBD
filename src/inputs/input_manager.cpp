@@ -597,25 +597,38 @@ static uint8_t findFreeSlot() {
 }
 
 /**
- * Validate input configuration
+ * Validate a CANDIDATE input configuration.
+ *
+ * Takes the fields it judges by value rather than an Input* on purpose: it is
+ * called BEFORE anything is written to the slot, so a refusal costs nothing to
+ * undo. See the setInputApplication() contract in input_manager.h (#361/#364).
+ *
+ * @param pin           pin the candidate wants
+ * @param self          the input already occupying `pin`, or nullptr for a new
+ *                      one — skipped in the conflict scan so an existing input
+ *                      never collides with itself
+ * @param alarmEnabled  candidate flags.alarm
+ * @param minValue      candidate alarm minimum (standard units)
+ * @param maxValue      candidate alarm maximum (standard units)
+ *
  * Checks for:
+ * - Pin reserved by a bus (I2C/SPI/CAN)
  * - Pin conflicts (duplicate pin assignments)
  * - Alarm threshold sanity (min < max)
  * Returns true if valid, false if errors found
  */
-static bool validateInputConfig(Input* input) {
-    if (!input) return false;
-
+static bool validateInputConfig(uint8_t pin, const Input* self,
+                                bool alarmEnabled, float minValue, float maxValue) {
     // Check if pin is reserved by a bus (I2C, SPI, CAN)
     // Skip this check for virtual pins (CAN 0xC0+, I2C 0xF0+)
-    if (input->pin < 0xC0 && !isPinAvailable(input->pin)) {
+    if (pin < 0xC0 && !isPinAvailable(pin)) {
         msg.control.print(F("ERROR: Pin "));
-        int8_t analogNum = analogIndexForPin(input->pin);
+        int8_t analogNum = analogIndexForPin(pin);
         if (analogNum >= 0) {
             msg.control.print(F("A"));
             msg.control.print(analogNum);
         } else {
-            msg.control.print(input->pin);
+            msg.control.print(pin);
         }
         msg.control.println(F(" is reserved by a bus (I2C/SPI/CAN)"));
         return false;
@@ -626,24 +639,24 @@ static bool validateInputConfig(Input* input) {
         Input* other = &inputs[i];
 
         // Skip self-comparison and uninitialized slots
-        if (other == input || other->pin == 0xFF) {
+        if (other == self || other->pin == 0xFF) {
             continue;
         }
 
         // Check if another enabled input uses the same pin
-        if (other->flags.isEnabled && other->pin == input->pin) {
+        if (other->flags.isEnabled && other->pin == pin) {
             msg.control.print(F("ERROR: Pin "));
-            if (input->pin >= 0xF0) {
+            if (pin >= 0xF0) {
                 msg.control.print(F("I2C"));
-            } else if (input->pin >= 0xC0 && input->pin < 0xE0) {
+            } else if (pin >= 0xC0 && pin < 0xE0) {
                 msg.control.print(F("CAN"));
             } else {
-                int8_t analogNum = analogIndexForPin(input->pin);
+                int8_t analogNum = analogIndexForPin(pin);
                 if (analogNum >= 0) {
                     msg.control.print(F("A"));
                     msg.control.print(analogNum);
                 } else {
-                    msg.control.print(input->pin);
+                    msg.control.print(pin);
                 }
             }
             msg.control.println(F(" already in use"));
@@ -652,12 +665,12 @@ static bool validateInputConfig(Input* input) {
     }
 
     // Check alarm threshold sanity (only if alarms enabled)
-    if (input->flags.alarm) {
-        if (input->minValue >= input->maxValue) {
+    if (alarmEnabled) {
+        if (minValue >= maxValue) {
             msg.control.print(F("ERROR: Invalid alarm range ("));
-            msg.control.print(input->minValue);
+            msg.control.print(minValue);
             msg.control.print(F(" >= "));
-            msg.control.print(input->maxValue);
+            msg.control.print(maxValue);
             msg.control.println(F(")"));
             return false;
         }
@@ -703,12 +716,48 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     Input* input = getInputByPin(pin);
     bool isNewInput = (input == nullptr);
 
+    // ---- ADMISSION PHASE ------------------------------------------------
+    // Everything that can say "no" runs here, BEFORE a single byte is written
+    // to the input table. That is what makes the "a refusal changes nothing"
+    // contract in input_manager.h structural rather than a revert each error
+    // path has to remember to perform. Populate-then-validate previously left
+    // a new slot enabled with a null readFunction (#361/#353, faulted the
+    // board) and an existing input half-rewritten with the new application's
+    // units/PID and force-enabled (#364).
+
     // Resolve the preset BEFORE claiming a slot. Claiming first meant this
     // early return either leaked an uncounted slot or, if it released one,
     // decremented a count that isn't incremented until further below.
     const ApplicationPreset* flashPreset = getApplicationByIndex(appIndex);
     if (flashPreset == nullptr) {
         msg.control.println(F("ERROR: Invalid Type"));
+        return false;
+    }
+
+    // Load entire preset into RAM (cleaner than scattered pgm_read_* calls)
+    ApplicationPreset preset;
+    loadApplicationPreset(flashPreset, &preset);
+
+    // The alarm flag the candidate would carry — validateInputConfig only looks
+    // at the min/max band when it's armed, so it has to match what the commit
+    // phase below writes.
+#if INCLUDE_CONTROL_ENGINE
+    const bool candidateAlarm = false;
+#else
+    const bool candidateAlarm = preset.defaultAlarmEnabled;
+#endif
+    if (!validateInputConfig(pin, input, candidateAlarm,
+                             preset.defaultMinValue, preset.defaultMaxValue)) {
+        return false;
+    }
+
+    // Resolve the preset's sensor now as well. setInputSensor() runs AFTER the
+    // commit phase, and an invalid index is its only failure mode once the slot
+    // exists — so checking it here is what lets the commit phase be infallible
+    // (an existing input has no slot to free and nothing to revert to).
+    uint8_t defaultSensor = preset.defaultSensor;
+    if (getSensorByIndex(defaultSensor) == nullptr) {
+        msg.control.println(F("ERROR: Invalid Sensor Type"));
         return false;
     }
 
@@ -726,9 +775,8 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
         input->pin = pin;
     }
 
-    // Load entire preset into RAM (cleaner than scattered pgm_read_* calls)
-    ApplicationPreset preset;
-    loadApplicationPreset(flashPreset, &preset);
+    // ---- COMMIT PHASE ---------------------------------------------------
+    // Past this point nothing may fail; do not add a `return false` below.
 
     // Apply preset to input
     input->applicationIndex = appIndex;
@@ -746,8 +794,8 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     input->displayName[sizeof(input->displayName) - 1] = '\0';
 
     // Don't set sensorIndex yet - let setInputSensor() do it
-    // (This allows sensorChanged check to work correctly)
-    uint8_t defaultSensor = preset.defaultSensor;
+    // (This allows sensorChanged check to work correctly; defaultSensor was
+    // resolved and validated in the admission phase above.)
     input->unitsIndex = preset.defaultUnits;
 
     // CRITICAL: Store min/max in STANDARD UNITS (no conversion!)
@@ -757,14 +805,12 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
 
     input->obd2pid = preset.obd2pid;
     input->obd2length = preset.obd2length;
-#if INCLUDE_CONTROL_ENGINE
     // App-seeded alarms are now control-engine Rules (§11.5): the caller
     // (set_application) seeds a default Rule from the template. Don't also arm
     // the legacy per-input alarm, or the threshold would be enforced twice.
-    input->flags.alarm = false;
-#else
-    input->flags.alarm = preset.defaultAlarmEnabled;
-#endif
+    // (candidateAlarm resolves that build-flag choice once, above, so the
+    // validator and this assignment can never disagree.)
+    input->flags.alarm = candidateAlarm;
     input->flags.display = preset.defaultDisplayEnabled;
     input->flags.isEnabled = true;
     input->flags.useCustomCalibration = false;  // Use preset calibration
@@ -779,21 +825,12 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
         numActiveInputs++;
     }
 
-    // Validate configuration before finalizing
-    if (!validateInputConfig(input)) {
-        // Validation failed - revert changes.
-        // The slot is fully populated by this point (flags.isEnabled included)
-        // but setInputSensor() has NOT run, so readFunction is still null.
-        // Clearing only `pin` left an enabled slot with no read function, which
-        // updateSensors() then called -- faulting the board a watchdog timeout
-        // later. Free the whole slot, exactly as the setInputSensor failure
-        // path below does. See #361 / #353.
-        if (isNewInput) freeInputSlot(pin);
-        return false;
-    }
-
     // Set up sensor (function pointers + calibration)
-    // This also sets input->sensorIndex
+    // This also sets input->sensorIndex. It cannot fail here: the slot exists
+    // and defaultSensor was resolved during admission. The guard stays as a
+    // tripwire in case a future failure mode is added to setInputSensor() --
+    // and it must free the slot, because an enabled slot with a null
+    // readFunction is exactly the #361 fault.
     if (!setInputSensor(pin, defaultSensor)) {
         if (isNewInput) freeInputSlot(pin);
         return false;

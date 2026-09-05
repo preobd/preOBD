@@ -594,12 +594,35 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     extern bool enableInputDisplay(uint8_t pin, bool enable);
     extern bool setInputOBD(uint8_t pin, uint8_t pid, uint8_t length);
 
-    // Get pointer to input struct and set pin
-    Input* input = &inputs[index];
-    input->pin = pin;
+    // Let setInputApplication() own slot creation AND admission (#363).
+    //
+    // This used to do `inputs[index].pin = pin;` first, which made every
+    // imported record look like an *existing* input to setInputApplication() --
+    // so its refusal path never applied -- and then discarded the return value,
+    // letting the setInputSensor() below finish building an input the validator
+    // had just rejected (e.g. one sitting on an I2C/SPI/CAN-reserved pin: #351's
+    // bus wedge, re-entered through LOAD / profile import). Honour the refusal
+    // instead; importInputsFromJSON() already counts a false return as a failed
+    // record for its summary.
+    //
+    // Side benefit of dropping the pre-assignment: the record no longer stomps
+    // whatever unrelated input happened to occupy slot `index`.
+    if (!setInputApplication(pin, appIdx)) {
+        msg.control.print(F("ERROR: Failed to import input "));
+        msg.control.print(index);
+        msg.control.print(F(" (pin "));
+        msg.control.print(pin);
+        msg.control.println(F(") - configuration rejected"));
+        return false;
+    }
+
+    Input* input = getInputByPin(pin);
+    if (input == nullptr) {
+        // Unreachable: setInputApplication() returned true, so the slot exists.
+        return false;
+    }
 
     // Apply configuration using input manager functions
-    setInputApplication(pin, appIdx);
     setInputSensor(pin, sensorIdx);
     setInputUnits(pin, unitsIdx);
 
