@@ -174,10 +174,21 @@ void init() {
     g_bc.prime(empty);
     g_lastScanMs = 0;
     memset(g_clearGrace, 0, sizeof(g_clearGrace));
-    // Seed occupancy from the current table so boot is not read as a wave of
-    // occupied→freed edges (it is called after the config load — main.cpp — but
-    // must be correct either way).
-    for (int i = 0; i < MAX_INPUTS; ++i) g_wasOccupied[i] = slotOccupied(i);
+    // Seed occupancy as "nothing occupied" rather than from inputs[]: init()
+    // runs BEFORE the config load (main.cpp brings the broadcasters up next to
+    // the transports; initInputManager() comes later), so the table is still
+    // BSS-zeroed here and every slot reads pin == 0 — which slotOccupied()
+    // cannot tell from a real input on digital pin 0. Snapshotting that made the
+    // first scan see MAX_INPUTS - n occupied→freed edges and arm the post-free
+    // grace window for every slot that had never held an input, putting them all
+    // in the heartbeat: each then emitted the flags-0 "tile is gone" frame,
+    // dripping out a few slots at a time as the sweep drained (#352).
+    //
+    // Seeding empty is safe in both orders. The first scan records real
+    // occupancy and can only arm on a LATER free, and a slot that is occupied
+    // at this point has nothing to clear anyway — no client can hold a tile for
+    // it before the first loop() pass.
+    memset(g_wasOccupied, 0, sizeof(g_wasOccupied));
 }
 
 void tick() {

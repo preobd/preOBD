@@ -387,6 +387,66 @@ static void test_resync_reemits_occupied_only(void) {
 }
 
 
+// Configure `n` inputs in slots 0..n-1 (defined below with the #350 tests).
+static void configInputs(int n);
+
+// --- #352: init() runs BEFORE the config load ---------------------------
+
+// Simulate the real boot order (main.cpp: LiveValueBroadcaster::init() at 310,
+// initInputManager() at 364). At init() time inputs[] is still BSS-zeroed, so
+// every slot's pin is 0 — NOT the 0xFF sentinel — and the config load fills the
+// table afterwards. Every other test in this file initialises the sentinel
+// first, which is why this never showed up here.
+static void bootAsFirmwareDoes(int configured) {
+    memset(inputs, 0, sizeof(inputs));          // BSS: every pin == 0
+    LiveValueBroadcaster::init();               // …before the table exists
+    for (int i = 0; i < MAX_INPUTS; ++i) inputs[i].pin = 0xFF;   // config load
+    configInputs(configured);
+    resetCapture();
+}
+
+// #352: slots that never held an input emitted a flags-0 "tile is gone" frame.
+// init() snapshotted occupancy from the not-yet-loaded table, read every
+// pin == 0 slot as OCCUPIED, and the first scan then saw MAX_INPUTS - n
+// occupied→freed edges — arming the post-free grace window for every empty
+// slot, which puts them in the heartbeat.
+static void test_boot_order_never_clears_never_configured_slots(void) {
+    bootAsFirmwareDoes(8);
+
+    for (int hb = 0; hb < 12; ++hb) {           // ~1 minute of heartbeats
+        g_test_now += 5000;
+        LiveValueBroadcaster::tick();
+    }
+    for (int i = 8; i < MAX_INPUTS; ++i)
+        TEST_ASSERT_EQUAL_INT(0, g_countBySlot[i]);   // never-configured: silent
+    for (int i = 0; i < 8; ++i)
+        TEST_ASSERT_GREATER_THAN_INT(0, g_countBySlot[i]);  // …the real ones still beat
+}
+
+// The bench sighting was a drip: with a 3-frame TX budget the phantom clears
+// came out a few slots at a time, ascending, over minutes — which is why the
+// report caught slots 31..39 back to back rather than the whole tail at once.
+// Also covers the reconnect path: resync() re-invalidates whatever inHeartbeat()
+// admits, so a wrongly-armed grace window survives a reconnect.
+static void test_boot_order_phantom_clears_survive_backpressure_and_resync(void) {
+    bootAsFirmwareDoes(8);
+
+    for (int hb = 0; hb < 12; ++hb) {
+        g_test_now += 5000;
+        for (int pass = 0; pass < 20; ++pass) { // let each sweep drain at loop rate
+            g_sendBudget = 3;                   // 64-byte TX buffer
+            g_test_now += 1;
+            LiveValueBroadcaster::tick();
+        }
+    }
+    LiveValueBroadcaster::resync();             // a central reconnects
+    for (int pass = 0; pass < 60; ++pass) { g_sendBudget = 3; g_test_now += 1; LiveValueBroadcaster::tick(); }
+    g_sendBudget = -1;
+
+    for (int i = 8; i < MAX_INPUTS; ++i)
+        TEST_ASSERT_EQUAL_INT(0, g_countBySlot[i]);
+}
+
 // --- #350: the 500 ms scan gate vs. a parked heartbeat sweep -----------
 
 // Configure `n` inputs in slots 0..n-1.
@@ -482,6 +542,8 @@ int main(int, char**) {
     RUN_TEST(test_heartbeat_reemits_occupied_only);
     RUN_TEST(test_backpressure_retries_next_scan);
     RUN_TEST(test_resync_reemits_occupied_only);
+    RUN_TEST(test_boot_order_never_clears_never_configured_slots);
+    RUN_TEST(test_boot_order_phantom_clears_survive_backpressure_and_resync);
     RUN_TEST(test_scan_gate_bypassed_while_sweep_drains);
     RUN_TEST(test_scan_gate_reinstated_after_sweep_completes);
     RUN_TEST(test_refusing_transport_does_not_pin_scan_at_loop_rate);
