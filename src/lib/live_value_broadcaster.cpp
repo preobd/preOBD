@@ -182,7 +182,21 @@ void init() {
 
 void tick() {
     const uint32_t now = millis();
-    if (now - g_lastScanMs < kScanIntervalMs) return;
+    // The 500 ms scan gate paces CHANGE detection; it must not also pace a
+    // heartbeat sweep the transport parked mid-table (#350). At 2 Hz and the
+    // ~3 frames a 64-byte TX buffer accepts per pass, a MAX_INPUTS sweep would
+    // take longer than kHeartbeatMs itself — the next heartbeat would restart
+    // it from slot 0 before it ever reached the end, reproducing the very
+    // starvation the resumable sweep exists to fix. While a sweep is DRAINING
+    // we run at loop rate instead, so it finishes as fast as the UART allows.
+    //
+    // sweepDraining(), never sweepPending(): a sweep that owes frames but is
+    // making no progress must not hold the gate open. Framed mode is off by
+    // default (system_config.cpp:248), and with it off every sendFrame() is
+    // refused — so a board with any input configured would open a sweep at the
+    // first heartbeat, fail at the first owed slot, and keep this MAX_INPUTS
+    // scan running every loop iteration for the rest of the boot.
+    if (!g_bc.sweepDraining() && now - g_lastScanMs < kScanIntervalMs) return;
     g_lastScanMs = now;
     scanOnce(now);
 }

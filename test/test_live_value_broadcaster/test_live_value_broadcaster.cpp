@@ -30,7 +30,19 @@ static uint16_t g_frameLen   = 0;
 static PreobdLiveValue g_lastBySlot[MAX_INPUTS];  // last payload per inputIndex
 static int      g_countBySlot[MAX_INPUTS];
 
+// Frames this pass may still accept before the "TX buffer" refuses; -1 = no
+// limit. Models the real 64-byte buffer, which fits exactly three 21-byte
+// frames — the shape of #350.
+static int g_sendBudget = -1;
+// Every call, accepted or refused. Refused sends are invisible to g_frameCount,
+// but they are exactly what a scan running at loop rate produces, so the
+// gate-bypass tests count attempts.
+static int g_sendAttempts = 0;
+
 bool MuxTransport::sendFrame(uint8_t type, const uint8_t* payload, uint16_t len) {
+    ++g_sendAttempts;
+    if (g_sendBudget == 0) return false;
+    if (g_sendBudget > 0) --g_sendBudget;
     if (!g_sendResult) return false;
     g_frameType = type;
     g_frameLen  = len;
@@ -56,6 +68,7 @@ MuxTransport hwSerial1(nullptr, "SERIAL1", 115200);
 
 static void resetCapture(void) {
     g_frameCount = 0;
+    g_sendAttempts = 0;
     g_frameType = 0;
     g_frameLen = 0;
     memset(g_lastBySlot, 0, sizeof(g_lastBySlot));
@@ -71,6 +84,7 @@ static void scanTick(void) {
 void setUp(void) {
     g_test_now = 0;
     g_sendResult = true;
+    g_sendBudget = -1;
     resetCapture();
     memset(inputs, 0, sizeof(inputs));
     for (int i = 0; i < MAX_INPUTS; ++i) inputs[i].pin = 0xFF;  // sparse-table sentinel
@@ -372,6 +386,82 @@ static void test_resync_reemits_occupied_only(void) {
     TEST_ASSERT_EQUAL_INT(1, g_countBySlot[2]);
 }
 
+
+// --- #350: the 500 ms scan gate vs. a parked heartbeat sweep -----------
+
+// Configure `n` inputs in slots 0..n-1.
+static void configInputs(int n) {
+    for (int i = 0; i < n; ++i) configInput(i, 20 + i, 10.0f + i, 0, true);
+}
+
+// A sweep the transport parked mid-table must keep draining at LOOP rate, not
+// at the 500 ms scan cadence. At 2 Hz and three frames per pass, a sweep of a
+// realistic table would take longer than the 5 s heartbeat that started it —
+// the next heartbeat would restart it from slot 0 and it would never reach the
+// end, which is #350 rebuilt one cadence slower.
+static void test_scan_gate_bypassed_while_sweep_drains(void) {
+    configInputs(8);
+    scanTick();                       // cold-start frames for the 8 inputs
+    g_test_now += 5000;               // heartbeat due
+    resetCapture();
+
+    g_sendBudget = 3;                 // 64-byte buffer: three frames fit
+    LiveValueBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(3, g_frameCount);
+
+    // Loop-rate ticks, ALL well inside the 500 ms gate. The sweep must continue
+    // through them; pre-fix the gate held it and nothing more arrived.
+    for (int i = 0; i < 10 && g_frameCount < 8; ++i) {
+        g_test_now += 1;              // ~1 kHz loop
+        g_sendBudget = 3;
+        LiveValueBroadcaster::tick();
+    }
+    TEST_ASSERT_EQUAL_INT(8, g_frameCount);       // whole table, inside 10 ms
+    for (int i = 0; i < 8; ++i) TEST_ASSERT_EQUAL_INT(1, g_countBySlot[i]);
+}
+
+// Once the sweep completes, the gate goes back on: sub-500 ms ticks are silent
+// again, so the bypass cannot become a permanent loop-rate scan.
+static void test_scan_gate_reinstated_after_sweep_completes(void) {
+    configInputs(8);
+    scanTick();
+    g_test_now += 5000;
+    g_sendBudget = 3;
+    LiveValueBroadcaster::tick();
+    for (int i = 0; i < 10; ++i) { g_test_now += 1; g_sendBudget = 3; LiveValueBroadcaster::tick(); }
+
+    resetCapture();
+    g_sendBudget = -1;
+    inputs[4].value = 999.0f;          // a real change, but the gate is closed
+    for (int i = 0; i < 100; ++i) { g_test_now += 1; LiveValueBroadcaster::tick(); }
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+    TEST_ASSERT_EQUAL_INT(0, g_sendAttempts);     // the scan did not even run
+}
+
+// THE FINDING-1 GUARD. Framed mode is off by default, and with it off every
+// sendFrame() is refused. A sweep that owes frames but never advances must not
+// hold the gate open: keying the bypass on "owes frames" latched it true for
+// the rest of the boot, so this MAX_INPUTS scan ran on EVERY loop iteration —
+// on a Teensy 4 that deliberately never sleeps — instead of twice a second.
+static void test_refusing_transport_does_not_pin_scan_at_loop_rate(void) {
+    configInputs(8);
+    scanTick();
+    g_test_now += 5000;               // heartbeat due
+    resetCapture();
+
+    g_sendBudget = 0;                 // transport refuses everything, forever
+    LiveValueBroadcaster::tick();     // opens the sweep, fails at the first slot
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+
+    // 2000 loop iterations = 2 s of a 1 kHz loop. The gate allows four scans in
+    // that window (2 Hz), each attempting one send before the refusal stops the
+    // pass. Pre-fix the latched sweep bought a scan on every iteration: ~2000
+    // attempts, plus 2000 sweeps of the MAX_INPUTS occupancy loop and packKey().
+    resetCapture();
+    for (int i = 0; i < 2000; ++i) { g_test_now += 1; LiveValueBroadcaster::tick(); }
+    TEST_ASSERT_LESS_OR_EQUAL_INT(5, g_sendAttempts);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_cold_start_payload_layout);
@@ -392,5 +482,8 @@ int main(int, char**) {
     RUN_TEST(test_heartbeat_reemits_occupied_only);
     RUN_TEST(test_backpressure_retries_next_scan);
     RUN_TEST(test_resync_reemits_occupied_only);
+    RUN_TEST(test_scan_gate_bypassed_while_sweep_drains);
+    RUN_TEST(test_scan_gate_reinstated_after_sweep_completes);
+    RUN_TEST(test_refusing_transport_does_not_pin_scan_at_loop_rate);
     return UNITY_END();
 }
