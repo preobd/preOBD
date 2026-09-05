@@ -170,7 +170,13 @@ static void updateConfigModeDisplay(uint32_t now) {
 // Read sensors at their individual configured intervals
 static void updateSensors(uint32_t now) {
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        // isEnabled alone is not enough: a slot is only readable once
+        // setInputSensor() has installed readFunction. Match the guard
+        // readAllInputs() already uses (input_manager.cpp) so a
+        // half-initialized slot can never be dispatched into. See #361.
+        if (inputs[i].pin == 0xFF) continue;
         if (!inputs[i].flags.isEnabled) continue;
+        if (inputs[i].readFunction == nullptr) continue;
 
         // Get sensor-specific minimum read interval
         const SensorInfo* sensorInfo = getSensorByIndex(inputs[i].sensorIndex);

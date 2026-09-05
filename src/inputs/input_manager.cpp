@@ -685,10 +685,17 @@ bool allocateInputSlot(uint8_t pin) {
 }
 
 void freeInputSlot(uint8_t pin) {
-    Input* input = getInputByPin(pin);
-    if (input == nullptr) return;
-    input->pin = 0xFF;
-    numActiveInputs--;
+    // Wipe the whole slot, not just the pin: findFreeSlot() recycles on
+    // pin == 0xFF alone, so anything left behind here (notably
+    // flags.isEnabled and a stale readFunction) would be inherited by the
+    // next occupant of the slot. See #361.
+    //
+    // clearInput() is exactly that wipe, and it *recounts* numActiveInputs
+    // rather than decrementing. Recounting is what the count means -- it is
+    // an enabled-count, defined that way by loadInputConfig() and the JSON
+    // import -- and it keeps this helper correct no matter where a caller
+    // fails relative to the increment.
+    clearInput(pin);
 }
 
 bool setInputApplication(uint8_t pin, uint8_t appIndex) {
@@ -696,7 +703,16 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     Input* input = getInputByPin(pin);
     bool isNewInput = (input == nullptr);
 
-    if (input == nullptr) {
+    // Resolve the preset BEFORE claiming a slot. Claiming first meant this
+    // early return either leaked an uncounted slot or, if it released one,
+    // decremented a count that isn't incremented until further below.
+    const ApplicationPreset* flashPreset = getApplicationByIndex(appIndex);
+    if (flashPreset == nullptr) {
+        msg.control.println(F("ERROR: Invalid Type"));
+        return false;
+    }
+
+    if (isNewInput) {
         uint8_t slot = findFreeSlot();
         if (slot == 0xFF) {
             msg.control.print(F("ERROR: No free input slots (max "));
@@ -706,14 +722,8 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
             return false;
         }
         input = &inputs[slot];
+        memset(input, 0, sizeof(Input));
         input->pin = pin;
-    }
-
-    // Get Application preset from flash
-    const ApplicationPreset* flashPreset = getApplicationByIndex(appIndex);
-    if (flashPreset == nullptr) {
-        msg.control.println(F("ERROR: Invalid Type"));
-        return false;
     }
 
     // Load entire preset into RAM (cleaner than scattered pgm_read_* calls)
@@ -771,11 +781,14 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
 
     // Validate configuration before finalizing
     if (!validateInputConfig(input)) {
-        // Validation failed - revert changes
-        if (isNewInput) {
-            input->pin = 0xFF;  // Mark as free
-            numActiveInputs--;
-        }
+        // Validation failed - revert changes.
+        // The slot is fully populated by this point (flags.isEnabled included)
+        // but setInputSensor() has NOT run, so readFunction is still null.
+        // Clearing only `pin` left an enabled slot with no read function, which
+        // updateSensors() then called -- faulting the board a watchdog timeout
+        // later. Free the whole slot, exactly as the setInputSensor failure
+        // path below does. See #361 / #353.
+        if (isNewInput) freeInputSlot(pin);
         return false;
     }
 
