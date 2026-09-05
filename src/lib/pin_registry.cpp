@@ -12,6 +12,7 @@
 #include "analog_pins.h"
 #include "../inputs/input_manager.h"
 #include <Arduino.h>
+#include <string.h>
 
 // ============================================================================
 // GLOBAL STATE
@@ -64,6 +65,58 @@ bool registerPin(uint8_t pin, PinUsageType type, const char* description) {
     registrySize++;
 
     return true;
+}
+
+// Claim a whole group or nothing. See pin_registry.h for the contract.
+//
+// The rollback only ever touches pins THIS call registered (tracked in
+// `claimed`), never a pin that was already reserved to the same owner and
+// never one held by somebody else — freeing either would turn a refused
+// reservation into a second bug.
+bool reservePins(const uint8_t* pins, uint8_t count, const char* description) {
+    if (!pins || count > 8) return false;
+
+    uint8_t claimed = 0;   // bit i set => pins[i] was registered by this call
+
+    for (uint8_t i = 0; i < count; i++) {
+        const uint8_t pin = pins[i];
+        if (pin == 0xFF) continue;   // pin not present on this platform
+
+        // Already ours: re-reserving a bus that is up is not a conflict.
+        const char* held = getPinDescription(pin);
+        if (held && description && getPinUsage(pin) == PIN_RESERVED &&
+            strcmp(held, description) == 0) {
+            continue;
+        }
+
+        if (registerPin(pin, PIN_RESERVED, description)) {
+            claimed |= (uint8_t)(1 << i);
+            continue;
+        }
+
+        // Conflict (or registry full): undo this call's own claims and refuse.
+        for (uint8_t j = 0; j < i; j++) {
+            if (claimed & (uint8_t)(1 << j)) unregisterPin(pins[j]);
+        }
+        return false;
+    }
+
+    return true;
+}
+
+void releasePins(const uint8_t* pins, uint8_t count, const char* description) {
+    if (!pins || !description) return;
+
+    for (uint8_t i = 0; i < count; i++) {
+        const uint8_t pin = pins[i];
+        if (pin == 0xFF) continue;
+
+        const char* held = getPinDescription(pin);
+        if (held && getPinUsage(pin) == PIN_RESERVED &&
+            strcmp(held, description) == 0) {
+            unregisterPin(pin);
+        }
+    }
 }
 
 void unregisterPin(uint8_t pin) {

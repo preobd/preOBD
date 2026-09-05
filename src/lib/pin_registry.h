@@ -100,6 +100,34 @@ void initPinRegistry();
 bool registerPin(uint8_t pin, PinUsageType type, const char* description);
 
 /**
+ * Reserve a group of pins for one owner, all or nothing
+ *
+ * A bus rests on the invariant "bus up implies its pins are reserved" (#359),
+ * so a partial claim is worse than no claim: it leaves the caller believing it
+ * owns copper that another function is already driving. This claims every pin
+ * in the group or none of them — a failure rolls back the pins THIS call
+ * registered, and leaves pins that were already someone else's untouched.
+ *
+ * Pins equal to 0xFF are skipped ("this bus has no such pin on this platform").
+ * A pin already held as PIN_RESERVED by this same description is treated as
+ * already ours, so re-reserving a bus that is already up succeeds.
+ *
+ * @param pins        Array of pin numbers to claim
+ * @param count       Number of entries in pins[] (max 8)
+ * @param description Owner name; stored by pointer, must outlive the reservation
+ * @return true if the whole group is now reserved to `description`
+ */
+bool reservePins(const uint8_t* pins, uint8_t count, const char* description);
+
+/**
+ * Release pins previously reserved by reservePins() for the same owner
+ *
+ * Only entries whose registered description matches `description` are released,
+ * so this can never free another function's pin.
+ */
+void releasePins(const uint8_t* pins, uint8_t count, const char* description);
+
+/**
  * Check if a pin is available (not registered)
  *
  * @param pin Pin number to check

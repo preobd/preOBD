@@ -31,6 +31,35 @@ static uint8_t active_can_id = 0;
 static bool can_ready = false;
 
 // ============================================================================
+// PIN CLAIMING
+// ============================================================================
+
+// A bus rests on "bus up implies its pins are reserved" — that is what stops an
+// input being assigned to a pin a bus is clocking (#351). registerPin() is
+// first-writer-wins, and the overlaps are real on stock hardware (Teensy 4.x
+// I2C1 17/16 vs Serial4 16/17, and serial ports register first), so a caller
+// that ignores the result publishes a bus the registry attributes to someone
+// else. Every bus therefore claims its pins BEFORE bringing the peripheral up,
+// all or nothing, and refuses to start if the claim is denied.
+//
+// One shared format string: msg.debug.* format strings are RAM-resident on AVR,
+// so three per-bus variants would cost real bytes on the 8 KB mega.
+static const char BUS_PINS_BUSY[] = "%s not started: pins already claimed";
+static const char BUS_STARTED[]   = "%s up";
+
+static bool claimBusPins(const uint8_t* pins, uint8_t count,
+                         const char* tag, const char* bus_name) {
+    if (reservePins(pins, count, bus_name)) return true;
+
+    msg.debug.error(tag, BUS_PINS_BUSY, bus_name);
+    msg.control.print(F("ERROR: "));
+    msg.control.print(bus_name);
+    msg.control.println(F(" not started - a pin it needs is already in use"));
+    msg.control.println(F("  SYSTEM PINS shows the owner; reconfigure one of them."));
+    return false;
+}
+
+// ============================================================================
 // MAIN INITIALIZATION
 // ============================================================================
 
@@ -100,8 +129,13 @@ bool initI2CBus(uint8_t bus_id, uint16_t clock_khz) {
     }
 
     // Get default pins for this bus
-    uint8_t sda = getDefaultI2CSDA(bus_id);
-    uint8_t scl = getDefaultI2CSCL(bus_id);
+    const uint8_t i2c_pins[2] = { getDefaultI2CSDA(bus_id), getDefaultI2CSCL(bus_id) };
+    static const char* const i2c_desc[] = {"Wire", "Wire1", "Wire2"};
+
+    // Claim SDA/SCL first: if the copper is already someone else's, the bus must
+    // not come up at all. Refusing here rather than after Wire.begin() also means
+    // there is nothing to un-begin — TwoWire has no portable end().
+    if (!claimBusPins(i2c_pins, 2, TAG_I2C, i2c_desc[bus_id])) return false;
 
     // Platform-specific initialization
     bool success = false;
@@ -187,24 +221,11 @@ bool initI2CBus(uint8_t bus_id, uint16_t clock_khz) {
 
     if (success) {
         active_i2c_id = bus_id;
-
-        // Register pins as reserved in pin registry.
-        //
-        // registerPin() is first-writer-wins and returns false if the pin is
-        // already claimed — which is reachable, because some platforms overlap
-        // I2C with a serial port (Teensy 4.x: I2C1 17/16 vs Serial4 16/17) and
-        // serial ports are registered first. Everything here rests on "bus up
-        // implies pins reserved", so a silent failure must not pass unremarked.
-        static const char* i2c_desc[] = {"Wire", "Wire1", "Wire2"};
-        if (!registerPin(sda, PIN_RESERVED, i2c_desc[bus_id]) ||
-            !registerPin(scl, PIN_RESERVED, i2c_desc[bus_id])) {
-            msg.control.print(F("⚠ I2C bus "));
-            msg.control.print(getI2CBusName(bus_id));
-            msg.control.println(F(" shares a pin already claimed by another function"));
-            msg.control.println(F("  Both are now driving it — reconfigure one of them."));
-        }
-
-        msg.debug.info(TAG_I2C, "I2C bus initialized");
+        msg.debug.info(TAG_I2C, BUS_STARTED, i2c_desc[bus_id]);
+    } else {
+        // Unreachable bus id for this platform: hand the pins back rather than
+        // leaving them reserved to a bus that never started.
+        releasePins(i2c_pins, 2, i2c_desc[bus_id]);
     }
 
     return success;
@@ -221,9 +242,13 @@ bool initSPIBus(uint8_t bus_id, uint32_t clock_hz) {
     }
 
     // Get default pins for this bus
-    uint8_t mosi = getDefaultSPIMOSI(bus_id);
-    uint8_t miso = getDefaultSPIMISO(bus_id);
-    uint8_t sck = getDefaultSPISCK(bus_id);
+    const uint8_t spi_pins[3] = { getDefaultSPIMOSI(bus_id),
+                                  getDefaultSPIMISO(bus_id),
+                                  getDefaultSPISCK(bus_id) };
+    static const char* const spi_desc[] = {"SPI", "SPI1", "SPI2"};
+
+    // Same contract as I2C: claim the bus pins before SPI.begin() drives them.
+    if (!claimBusPins(spi_pins, 3, TAG_SPI, spi_desc[bus_id])) return false;
 
     // Platform-specific initialization
     bool success = false;
@@ -284,14 +309,9 @@ bool initSPIBus(uint8_t bus_id, uint32_t clock_hz) {
 
     if (success) {
         active_spi_id = bus_id;
-
-        // Register pins as reserved in pin registry
-        static const char* spi_desc[] = {"SPI", "SPI1", "SPI2"};
-        registerPin(mosi, PIN_RESERVED, spi_desc[bus_id]);
-        registerPin(miso, PIN_RESERVED, spi_desc[bus_id]);
-        registerPin(sck, PIN_RESERVED, spi_desc[bus_id]);
-
-        msg.debug.info(TAG_SPI, "SPI bus initialized");
+        msg.debug.info(TAG_SPI, BUS_STARTED, spi_desc[bus_id]);
+    } else {
+        releasePins(spi_pins, 3, spi_desc[bus_id]);
     }
 
     return success;
@@ -313,21 +333,22 @@ bool initCANBus(uint8_t bus_id, uint32_t baudrate) {
         return false;
     }
 
-    // Get default pins for this bus
-    uint8_t tx = getDefaultCANTX(bus_id);
-    uint8_t rx = getDefaultCANRX(bus_id);
+    // Get default pins for this bus. 0xFF entries (SPI-attached controllers
+    // have no fixed TX/RX) are skipped by the claim.
+    const uint8_t can_pins[2] = { getDefaultCANTX(bus_id), getDefaultCANRX(bus_id) };
+    static const char* const can_desc[] = {"CAN1", "CAN2", "CAN3"};
+
+    // Claim before declaring the bus ready: can_ready is what the rest of the
+    // firmware reads as "this bus is mine", so it must not be set over pins the
+    // registry attributes to another function.
+    if (!claimBusPins(can_pins, 2, TAG_CAN, can_desc[bus_id])) return false;
 
     // CAN initialization is handled in output_can.cpp since it needs FlexCAN_T4 objects
-    // Here we just mark the bus as ready and register pins
+    // Here we just mark the bus as ready
     active_can_id = bus_id;
     can_ready = true;
 
-    // Register pins as reserved in pin registry
-    static const char* can_desc[] = {"CAN1", "CAN2", "CAN3"};
-    if (tx != 0xFF) registerPin(tx, PIN_RESERVED, can_desc[bus_id]);
-    if (rx != 0xFF) registerPin(rx, PIN_RESERVED, can_desc[bus_id]);
-
-    msg.debug.info(TAG_CAN, "CAN bus initialized");
+    msg.debug.info(TAG_CAN, BUS_STARTED, can_desc[bus_id]);
 
     return true;
 #endif
