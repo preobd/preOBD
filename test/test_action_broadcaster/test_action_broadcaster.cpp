@@ -97,12 +97,33 @@ ActionDrive controlActionDrive(int slot) {
 struct CapturedFrame { uint8_t type; uint16_t len; uint8_t payload[32]; };
 static CapturedFrame g_frames[8];
 static int           g_frameCount = 0;
+// Frames per actionId. Index 0xFF is the empty-slot ("this action is gone")
+// frame — the thing #365 was flooding the link with, and the only handle the
+// wire gives us on an unconfigured slot, since PreobdActionState carries no
+// slot index.
+static int           g_countById[256];
+
+// Frames this pass may still accept before the "TX buffer" refuses; -1 = no
+// limit. Models the real 64-byte buffer, which fits exactly three 21-byte
+// frames — the shape of #350.
+static int g_sendBudget = -1;
+// Every call, accepted or refused. Refused sends are invisible to g_frameCount
+// but are exactly what a busy link produces, which is #349's trap.
+static int g_sendAttempts = 0;
 
 bool MuxTransport::sendFrame(uint8_t type, const uint8_t* payload, uint16_t len) {
+    ++g_sendAttempts;
+    if (g_sendBudget == 0) return false;
+    if (g_sendBudget > 0) --g_sendBudget;
     if (g_frameCount < 8) {
         g_frames[g_frameCount].type = type;
         g_frames[g_frameCount].len  = len;
         if (len <= sizeof(g_frames[0].payload)) memcpy(g_frames[g_frameCount].payload, payload, len);
+    }
+    if (len == PREOBD_ACTION_STATE_SIZE) {
+        PreobdActionState st;
+        memcpy(&st, payload, sizeof(st));
+        ++g_countById[st.actionId];
     }
     ++g_frameCount;
     return true;
@@ -122,7 +143,10 @@ static const PreobdActionState& frameState(int i) {
 
 void setUp(void) {
     g_frameCount = 0;
+    g_sendBudget = -1;
+    g_sendAttempts = 0;
     g_test_now = 0;
+    memset(g_countById, 0, sizeof(g_countById));
     memset(g_frames, 0, sizeof(g_frames));
     memset(&systemConfig, 0, sizeof(systemConfig));
     memset(g_actionState, 0, sizeof(g_actionState));
@@ -149,15 +173,16 @@ static void configureAction(int i, uint8_t id, uint8_t type, uint8_t target,
     actions[i].failsafe = failsafe;
 }
 
-// First tick snapshots every slot (cache empty) → MAX_ACTIONS frames.
-static void test_first_tick_snapshots_all_slots(void) {
+// Cold start emits the CONFIGURED slots only: the catch-up burst scales with the
+// Action count, not with MAX_ACTIONS (#365). Assert the payload layout too.
+static void test_first_tick_snapshots_configured_slots(void) {
     configureAction(0, /*id*/3, PREOBD_ACTION_TYPE_RELAY, /*target*/9,
                     /*ruleRef*/5, /*behavior*/0, PREOBD_ACTION_FAILSAFE_ON);
     g_actionState[0] = true;  // action 0 currently ON
 
     ActionBroadcaster::tick();
 
-    TEST_ASSERT_EQUAL_INT(MAX_ACTIONS, g_frameCount);
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);                      // the one configured slot
     TEST_ASSERT_EQUAL_HEX8(FRAME_TYPE_RELAY, g_frames[0].type);  // frame value 0x05
     TEST_ASSERT_EQUAL_UINT16(PREOBD_ACTION_STATE_SIZE, g_frames[0].len);
 
@@ -173,11 +198,18 @@ static void test_first_tick_snapshots_all_slots(void) {
     TEST_ASSERT_EQUAL_UINT16(0, a0.sequence);
 }
 
-// Empty slots are emitted with actionId == NONE so a client can render the set.
-static void test_empty_slot_emits_none_id(void) {
+// A slot that goes empty is announced with actionId == NONE, so a client can drop
+// its tile. Never-configured slots stay silent (#365) — the frame exists for the
+// TRANSITION, not as a census of the table.
+static void test_deleted_slot_emits_none_id(void) {
     configureAction(0, 3, PREOBD_ACTION_TYPE_RELAY, 9, CONTROL_ID_NONE, 0, 0);
     ActionBroadcaster::tick();
-    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_ID_NONE, frameState(1).actionId);  // slot 1 empty
+    g_frameCount = 0;
+    actions[0].id = CONTROL_ID_NONE;          // ACTION 3 DELETE
+    ActionBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_ID_NONE, frameState(0).actionId);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_BLE_PROTOCOL_VERSION, frameState(0).protocolVersion);
 }
 
 // No field changed → nothing re-emitted.
@@ -344,10 +376,14 @@ static void test_pack_resolves_membership_once_per_slot(void) {
                             frameState(0).overrideFlags);
 }
 
-// An unconfigured slot must not grow a demand bit: bytes past actionId stay zero.
+// An emptied slot must not grow a demand bit: bytes past actionId stay zero.
 static void test_rule_active_bit_absent_on_empty_slot(void) {
+    configureAction(0, 3, PREOBD_ACTION_TYPE_RELAY, 9, /*ruleRef*/5, 0, 0);
+    ActionBroadcaster::tick();
+    g_frameCount = 0;
     g_ruleActive[0] = true;                          // would-be truth for slot 0
-    ActionBroadcaster::tick();                       // slot 0 is empty
+    actions[0].id = CONTROL_ID_NONE;                 // …which is now empty
+    ActionBroadcaster::tick();
     TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_ID_NONE, frameState(0).actionId);
     TEST_ASSERT_EQUAL_UINT8(0, frameState(0).overrideFlags);
 }
@@ -397,8 +433,9 @@ static void test_handle_inbound_rejects_bad_length(void) {
     TEST_ASSERT_EQUAL_INT(0, g_setManualCalls);
 }
 
-// Heartbeat re-sends every slot after the interval with no field change.
-static void test_heartbeat_resends_all(void) {
+// Heartbeat re-sends the CONFIGURED slots after the interval with no field
+// change — and only those (#365).
+static void test_heartbeat_resends_configured_only(void) {
     configureAction(0, 3, PREOBD_ACTION_TYPE_RELAY, 9, 5, 0, 0);
     ActionBroadcaster::tick();      // snapshot at t=0
     g_frameCount = 0;
@@ -406,7 +443,8 @@ static void test_heartbeat_resends_all(void) {
     TEST_ASSERT_EQUAL_INT(0, g_frameCount);
     g_test_now = 5000;              // kHeartbeatMs elapsed
     ActionBroadcaster::tick();
-    TEST_ASSERT_EQUAL_INT(MAX_ACTIONS, g_frameCount);
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(3, frameState(0).actionId);
 }
 
 
@@ -435,12 +473,111 @@ static void test_membership_change_pushes(void) {
     TEST_ASSERT_EQUAL_UINT8(2, frameState(0).ruleCount);
 }
 
+// ---- #365: the heartbeat must not sweep the empty slots -------------------
+
+// Configure `n` actions in slots 0..n-1, ids 1..n, each following a rule.
+static void configureActions(int n) {
+    for (int i = 0; i < n; ++i)
+        configureAction(i, (uint8_t)(i + 1), PREOBD_ACTION_TYPE_RELAY,
+                        (uint8_t)(20 + i), /*ruleRef*/5, 0, 0);
+}
+
+// Reproduce the boot order the firmware uses: init() runs at main.cpp:309,
+// BEFORE initInputManager() (line 364) loads the control tables, so actions[] is
+// still BSS-zeroed and every slot reads id == 0 (#352's twin — seeding
+// occupancy from the table there would arm the grace window for slots that
+// never held an Action, putting all of them back in the heartbeat).
+static void bootAsFirmwareDoes(int configured) {
+    memset(actions, 0, sizeof(actions));          // BSS: every id == 0
+    ActionBroadcaster::init();                    // …before the table exists
+    for (int i = 0; i < MAX_ACTIONS; ++i) actions[i].id = CONTROL_ID_NONE;
+    configureActions(configured);
+    g_frameCount = 0;
+    memset(g_countById, 0, sizeof(g_countById));
+}
+
+// THE BUG. The bench saw 236 actionId == 0xFF frames in 20 s on a 5-action
+// board — MAX_ACTIONS - 5 empty slots, every 5 s — because tick() used the
+// 5-argument SlottedBroadcaster::tick(), i.e. the always-true heartbeat
+// predicate. The configured Actions must still beat.
+static void test_heartbeat_skips_empty_slots(void) {
+    bootAsFirmwareDoes(5);
+
+    for (int hb = 0; hb < 4; ++hb) {              // 20 s of heartbeats
+        g_test_now += 5000;
+        ActionBroadcaster::tick();
+    }
+    TEST_ASSERT_EQUAL_INT(0, g_countById[PREOBD_ACTION_ID_NONE]);
+    for (uint8_t id = 1; id <= 5; ++id) TEST_ASSERT_EQUAL_INT(4, g_countById[id]);
+    TEST_ASSERT_EQUAL_INT(20, g_frameCount);      // 5 actions x 4 heartbeats
+}
+
+// A deleted Action still announces itself gone — but a BOUNDED number of times,
+// not forever and not once. One edge-triggered push plus kClearHeartbeats
+// repeats, then silence.
+static void test_deleted_action_clear_repeats_then_stops(void) {
+    bootAsFirmwareDoes(2);
+    g_test_now += 5000;
+    ActionBroadcaster::tick();                    // one clean heartbeat
+    g_frameCount = 0;
+    memset(g_countById, 0, sizeof(g_countById));
+
+    actions[1].id = CONTROL_ID_NONE;              // ACTION 2 DELETE
+    ActionBroadcaster::tick();                    // the edge-triggered push
+    TEST_ASSERT_EQUAL_INT(1, g_countById[PREOBD_ACTION_ID_NONE]);
+
+    for (int hb = 0; hb < 10; ++hb) {             // 50 s of heartbeats
+        g_test_now += 5000;
+        ActionBroadcaster::tick();
+    }
+    // 1 push + 3 heartbeat repeats, then the slot leaves the heartbeat for good.
+    TEST_ASSERT_EQUAL_INT(4, g_countById[PREOBD_ACTION_ID_NONE]);
+    TEST_ASSERT_EQUAL_INT(10, g_countById[1]);    // the survivor keeps beating
+}
+
+// #349's lesson: the grace window is spent per ACCEPTED frame, never per
+// heartbeat edge. With a 3-frame TX budget the clears are refused for whole
+// passes at a time; counting edges would burn the window down to nothing and
+// the repeats would never arrive.
+static void test_clear_window_survives_backpressure(void) {
+    bootAsFirmwareDoes(8);
+    for (int pass = 0; pass < 20; ++pass) { g_sendBudget = 3; g_test_now += 1; ActionBroadcaster::tick(); }
+    g_frameCount = 0;
+    memset(g_countById, 0, sizeof(g_countById));
+
+    actions[7].id = CONTROL_ID_NONE;              // delete under a busy link
+    for (int hb = 0; hb < 10; ++hb) {
+        g_test_now += 5000;
+        for (int pass = 0; pass < 20; ++pass) {   // let each sweep drain
+            g_sendBudget = 3;                     // 64-byte TX buffer
+            g_test_now += 1;
+            ActionBroadcaster::tick();
+        }
+    }
+    g_sendBudget = -1;
+    TEST_ASSERT_EQUAL_INT(4, g_countById[PREOBD_ACTION_ID_NONE]);
+}
+
+// A reconnecting client resyncs the configured Actions only — an empty slot has
+// no tile to rebuild. Pre-fix, invalidateAll() pushed the whole MAX_ACTIONS
+// table on every connection edge.
+static void test_resync_reemits_configured_only(void) {
+    bootAsFirmwareDoes(3);
+    g_frameCount = 0;
+    memset(g_countById, 0, sizeof(g_countById));
+
+    ActionBroadcaster::resync();                  // a central connects
+    ActionBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(3, g_frameCount);
+    TEST_ASSERT_EQUAL_INT(0, g_countById[PREOBD_ACTION_ID_NONE]);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
-    RUN_TEST(test_first_tick_snapshots_all_slots);
+    RUN_TEST(test_first_tick_snapshots_configured_slots);
     RUN_TEST(test_rule_count_reports_members);
     RUN_TEST(test_membership_change_pushes);
-    RUN_TEST(test_empty_slot_emits_none_id);
+    RUN_TEST(test_deleted_slot_emits_none_id);
     RUN_TEST(test_idempotent_after_snapshot);
     RUN_TEST(test_state_change_emits_one_frame);
     RUN_TEST(test_handle_inbound_manual_on);
@@ -456,6 +593,10 @@ int main(int, char**) {
     RUN_TEST(test_handle_inbound_unknown_id);
     RUN_TEST(test_handle_inbound_rejects_wrong_protocol_version);
     RUN_TEST(test_handle_inbound_rejects_bad_length);
-    RUN_TEST(test_heartbeat_resends_all);
+    RUN_TEST(test_heartbeat_resends_configured_only);
+    RUN_TEST(test_heartbeat_skips_empty_slots);
+    RUN_TEST(test_deleted_action_clear_repeats_then_stops);
+    RUN_TEST(test_clear_window_survives_backpressure);
+    RUN_TEST(test_resync_reemits_configured_only);
     return UNITY_END();
 }
