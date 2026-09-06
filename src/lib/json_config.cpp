@@ -15,6 +15,7 @@
 #include "serial_manager.h"
 #include "../inputs/input.h"
 #include "../inputs/input_manager.h"
+#include "../inputs/calibration_apply.h"
 #include "units_registry.h"
 #include "sensor_library.h"
 #include "application_presets.h"
@@ -89,6 +90,48 @@ static const char* getCalibrationType(const Input* input) {
     }
 }
 
+// Emit one float calibration parameter.
+//
+// ArduinoJson stores a value that fits in a float AS a float (VariantImpl.hpp:
+// setFloat) and prints a 4-byte float with only 6 significant digits
+// (TextFormatter.hpp: `sizeof(T) >= 8 ? 9 : 6`), so a coefficient could not
+// survive DUMP -> IMPORT: a Steinhart B of 0.0002341 came back out as 0.000234,
+// and several other values lost their low bit. Casting to double doesn't help —
+// the library narrows it straight back. So render the number here with the nine
+// significant digits a float needs and hand ArduinoJson finished text
+// (serialized() with a non-const char* copies the buffer).
+//
+// The trade-off is cosmetic: an inexact decimal now dumps as 1.02100003 rather
+// than 1.02. Exactness wins — these are calibration coefficients.
+static void addFloatParam(JsonObject& params, const char* key, float value) {
+    if (!isfinite(value)) {          // JSON has no NaN/Inf spelling
+        params[key] = 0;
+        return;
+    }
+
+    // Nine significant digits: shift the decimal count by the exponent.
+    int decimals = 8;
+    float magnitude = fabsf(value);
+    if (magnitude > 0.0f) {
+        decimals = 8 - (int)floorf(log10f(magnitude));
+        if (decimals < 0) decimals = 0;
+        if (decimals > 30) decimals = 30;
+    }
+
+    char buf[48];
+    dtostrf(value, 0, (unsigned char)decimals, buf);
+
+    // Trim the trailing zeros dtostrf's fixed-notation output leaves behind
+    // ("2200.00000" -> "2200"), keeping the dump readable.
+    char* dot = strchr(buf, '.');
+    if (dot != nullptr) {
+        char* end = buf + strlen(buf) - 1;
+        while (end > dot && *end == '0') *end-- = '\0';
+        if (end == dot) *end = '\0';
+    }
+    params[key] = serialized(buf);
+}
+
 // Export calibration parameters to JSON
 static void exportCalibration(JsonObject& calObj, const Input* input) {
     calObj["type"] = getCalibrationType(input);
@@ -101,55 +144,58 @@ static void exportCalibration(JsonObject& calObj, const Input* input) {
     calObj["source"] = "CUSTOM";
     JsonObject params = calObj["params"].to<JsonObject>();
 
+    // Float params go through addFloatParam() so they survive the trip as text;
+    // integer fields keep printing as integers.
+
     switch (input->calibrationType) {
         case CAL_THERMISTOR_STEINHART:
-            params["biasResistor"] = input->customCalibration.steinhart.bias_resistor;
-            params["steinhartA"] = input->customCalibration.steinhart.steinhart_a;
-            params["steinhartB"] = input->customCalibration.steinhart.steinhart_b;
-            params["steinhartC"] = input->customCalibration.steinhart.steinhart_c;
+            addFloatParam(params, "biasResistor", input->customCalibration.steinhart.bias_resistor);
+            addFloatParam(params, "steinhartA", input->customCalibration.steinhart.steinhart_a);
+            addFloatParam(params, "steinhartB", input->customCalibration.steinhart.steinhart_b);
+            addFloatParam(params, "steinhartC", input->customCalibration.steinhart.steinhart_c);
             break;
 
         case CAL_THERMISTOR_BETA:
-            params["biasResistor"] = input->customCalibration.beta.bias_resistor;
-            params["beta"] = input->customCalibration.beta.beta;
-            params["r0"] = input->customCalibration.beta.r0;
-            params["t0"] = input->customCalibration.beta.t0;
+            addFloatParam(params, "biasResistor", input->customCalibration.beta.bias_resistor);
+            addFloatParam(params, "beta", input->customCalibration.beta.beta);
+            addFloatParam(params, "r0", input->customCalibration.beta.r0);
+            addFloatParam(params, "t0", input->customCalibration.beta.t0);
             break;
 
         case CAL_THERMISTOR_TABLE:
-            params["biasResistor"] = input->customCalibration.lookup.bias_resistor;
+            addFloatParam(params, "biasResistor", input->customCalibration.lookup.bias_resistor);
             break;
 
         case CAL_PRESSURE_TABLE:
             // Pressure tables use same union member as thermistor lookup (only bias resistor is customizable)
-            params["biasResistor"] = input->customCalibration.lookup.bias_resistor;
+            addFloatParam(params, "biasResistor", input->customCalibration.lookup.bias_resistor);
             break;
 
         case CAL_LINEAR:
-            params["voltageMin"] = input->customCalibration.pressureLinear.voltage_min;
-            params["voltageMax"] = input->customCalibration.pressureLinear.voltage_max;
-            params["outputMin"] = input->customCalibration.pressureLinear.output_min;
-            params["outputMax"] = input->customCalibration.pressureLinear.output_max;
+            addFloatParam(params, "voltageMin", input->customCalibration.pressureLinear.voltage_min);
+            addFloatParam(params, "voltageMax", input->customCalibration.pressureLinear.voltage_max);
+            addFloatParam(params, "outputMin", input->customCalibration.pressureLinear.output_min);
+            addFloatParam(params, "outputMax", input->customCalibration.pressureLinear.output_max);
             break;
 
         case CAL_PRESSURE_POLYNOMIAL:
-            params["biasResistor"] = input->customCalibration.pressurePolynomial.bias_resistor;
-            params["polyA"] = input->customCalibration.pressurePolynomial.poly_a;
-            params["polyB"] = input->customCalibration.pressurePolynomial.poly_b;
-            params["polyC"] = input->customCalibration.pressurePolynomial.poly_c;
+            addFloatParam(params, "biasResistor", input->customCalibration.pressurePolynomial.bias_resistor);
+            addFloatParam(params, "polyA", input->customCalibration.pressurePolynomial.poly_a);
+            addFloatParam(params, "polyB", input->customCalibration.pressurePolynomial.poly_b);
+            addFloatParam(params, "polyC", input->customCalibration.pressurePolynomial.poly_c);
             break;
 
         case CAL_VOLTAGE_DIVIDER:
-            params["r1"] = input->customCalibration.voltageDivider.r1;
-            params["r2"] = input->customCalibration.voltageDivider.r2;
-            params["correction"] = input->customCalibration.voltageDivider.correction;
-            params["offset"] = input->customCalibration.voltageDivider.offset;
+            addFloatParam(params, "r1", input->customCalibration.voltageDivider.r1);
+            addFloatParam(params, "r2", input->customCalibration.voltageDivider.r2);
+            addFloatParam(params, "correction", input->customCalibration.voltageDivider.correction);
+            addFloatParam(params, "offset", input->customCalibration.voltageDivider.offset);
             break;
 
         case CAL_RPM:
             params["poles"] = input->customCalibration.rpm.poles;
-            params["pulleyRatio"] = input->customCalibration.rpm.pulley_ratio;
-            params["calibrationMult"] = input->customCalibration.rpm.calibration_mult;
+            addFloatParam(params, "pulleyRatio", input->customCalibration.rpm.pulley_ratio);
+            addFloatParam(params, "calibrationMult", input->customCalibration.rpm.calibration_mult);
             params["timeoutMs"] = input->customCalibration.rpm.timeout_ms;
             params["minRPM"] = input->customCalibration.rpm.min_rpm;
             params["maxRPM"] = input->customCalibration.rpm.max_rpm;
@@ -486,30 +532,131 @@ void dumpConfigToJSON(Print& output) {
     output.println();
 }
 
-// Import calibration from JSON
-static bool importCalibration(const Input* input, JsonObject& calObj, uint8_t index) {
-    (void)input;  // Unused for now
-    (void)index;  // Unused for now
+// Import calibration from JSON (#373).
+//
+// This used to parse nothing and return true, so SYSTEM DUMP JSON -> JSON IMPORT
+// silently dropped every hand-tuned calibration and left the input on its preset.
+// It now applies the exported params through the same validating core the CLI's
+// `SET <pin> CAL ...` leaves use (inputs/calibration_apply.h), so the two paths
+// cannot disagree about what a valid calibration is, and refuses the record when
+// the calibration is malformed or rejected rather than importing a half-record.
+//
+// Covers every type exportCalibration() emits with parameters, with two
+// deliberate exceptions:
+//   - PRESSURE_TABLE: its read path takes the bias resistor from the PROGMEM
+//     preset unconditionally, so a custom bias is inert and the CLI refuses to
+//     set one. A CUSTOM record of this type is refused rather than silently
+//     accepted (it is unreachable from any current firmware export).
+//   - Types export writes as "UNKNOWN" (SPEED, CAN_IMPORT, LEVEL_TABLE) carry no
+//     params, so there is nothing to re-apply; they are refused for the same
+//     "don't pretend it worked" reason.
+//
+// The caller passes a STAGED (scratch) Input, not the live one: the record is
+// judged before anything is committed, so a refusal costs the table nothing.
+// Only the override, its flag and the calibration type are meaningful on the way
+// out - the caller copies those three onto the real input after the commit.
+static bool importCalibration(Input* input, JsonObject& calObj, uint8_t index) {
+    if (input == nullptr) return false;
 
+    // Missing "source" used to reach strcmp(nullptr, ...) and fault the board on
+    // any hand-edited or third-party JSON.
     const char* source = calObj["source"];
-
-    if (strcmp(source, "PRESET") == 0) {
-        // Use preset calibration - clear custom flag
-        // This will be handled by the input configuration
-        return true;
-    }
-
-    if (!calObj["params"].isNull() == false) {
+    if (source == nullptr) {
+        msg.debug.error(TAG_JSON, "Input %d: calibration has no source", index);
         return false;
     }
 
-    // Use existing serial command infrastructure for applying calibrations
-    // This will be implemented in the next phase
-    // For now, just validate the structure
+    if (strcmp(source, "PRESET") == 0) {
+        // Explicitly clear rather than relying on setInputApplication()/
+        // setInputSensor() having cleared it on the way through.
+        input->flags.useCustomCalibration = false;
+        memset(&input->customCalibration, 0, sizeof(CalibrationOverride));
+        return true;
+    }
+
+    if (strcmp(source, "CUSTOM") != 0) {
+        msg.debug.error(TAG_JSON, "Input %d: unknown calibration source", index);
+        return false;
+    }
+
+    JsonVariant paramsVar = calObj["params"];
+    const char* type = calObj["type"];
+    if (type == nullptr || !paramsVar.is<JsonObject>()) {
+        msg.debug.error(TAG_JSON, "Input %d: custom calibration missing type/params", index);
+        return false;
+    }
+    JsonObject p = paramsVar.as<JsonObject>();
+
+    // Start from a clean override so the imported record is byte-deterministic
+    // (and so applyCalBias() still sees "was on the preset" and seeds correctly).
+    input->flags.useCustomCalibration = false;
+    memset(&input->customCalibration, 0, sizeof(CalibrationOverride));
+
+    CalApplyStatus st;
+    if (strcmp(type, "THERMISTOR_STEINHART") == 0) {
+        st = applyCalSteinhart(input,
+                               p["biasResistor"] | 0.0f, p["steinhartA"] | 0.0f,
+                               p["steinhartB"] | 0.0f,   p["steinhartC"] | 0.0f);
+    } else if (strcmp(type, "THERMISTOR_BETA") == 0) {
+        st = applyCalBeta(input,
+                          p["biasResistor"] | 0.0f, p["beta"] | 0.0f,
+                          p["r0"] | 0.0f,           p["t0"] | 0.0f);
+    } else if (strcmp(type, "PRESSURE_POLYNOMIAL") == 0) {
+        st = applyCalPressurePoly(input,
+                                  p["biasResistor"] | 0.0f, p["polyA"] | 0.0f,
+                                  p["polyB"] | 0.0f,        p["polyC"] | 0.0f);
+    } else if (strcmp(type, "LINEAR") == 0) {
+        st = applyCalLinear(input,
+                            p["voltageMin"] | 0.0f, p["voltageMax"] | 0.0f,
+                            p["outputMin"] | 0.0f,  p["outputMax"] | 0.0f);
+    } else if (strcmp(type, "VOLTAGE_DIVIDER") == 0) {
+        st = applyCalVoltageDivider(input,
+                                    p["r1"] | 0.0f,         p["r2"] | 0.0f,
+                                    p["correction"] | 0.0f, p["offset"] | 0.0f);
+    } else if (strcmp(type, "RPM") == 0) {
+        st = applyCalRpm(input,
+                         (uint8_t)(p["poles"] | 0),
+                         p["pulleyRatio"] | 0.0f,
+                         p["calibrationMult"] | 0.0f,
+                         (uint16_t)(p["timeoutMs"] | 0),
+                         (uint16_t)(p["minRPM"] | 0),
+                         (uint16_t)(p["maxRPM"] | 0));
+    } else if (strcmp(type, "THERMISTOR_TABLE") == 0) {
+        // Bias resistor is the only overridable field for a table sensor; the
+        // input keeps the calibration type its sensor gave it.
+        st = applyCalBias(input, p["biasResistor"] | 0.0f);
+    } else {
+        // PRESSURE_TABLE, the "UNKNOWN" types, and anything a future firmware
+        // adds: nothing here can re-apply it, so say so instead of returning
+        // success over a dropped calibration.
+        msg.debug.error(TAG_JSON, "Input %d: calibration type %s cannot be imported",
+                        index, type);
+        return false;
+    }
+
+    if (st != CAL_APPLY_OK) {
+        // Leave nothing half-applied behind.
+        input->flags.useCustomCalibration = false;
+        memset(&input->customCalibration, 0, sizeof(CalibrationOverride));
+        msg.debug.error(TAG_JSON, "Input %d: calibration rejected (type %s, code %d)",
+                        index, type, (int)st);
+        return false;
+    }
     return true;
 }
 
-// Import single input from JSON
+// Import a single input record.
+//
+// CONTRACT - all-or-nothing, the same one setInputApplication() carries (#371).
+// On `false` NOTHING has changed: no slot was claimed, numActiveInputs is
+// untouched, and an input that already existed on `pin` keeps every field it
+// had. It is guaranteed structurally: everything the record could be refused
+// for is judged in an ADMISSION phase, before the first write, and the COMMIT
+// phase that follows cannot fail.
+//
+// This matters because "N of M inputs imported" is a claim about the table: a
+// record that failed on its calibration used to leave an enabled input behind,
+// reading a live sensor, while the summary said it had imported nothing (#373).
 bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     if (index >= MAX_INPUTS) {
         return false;
@@ -581,6 +728,65 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         return false;  // Invalid registry entry (0 = NONE for app/sensor)
     }
 
+    // Resolve the sensor here rather than inside setInputSensor(): an unknown
+    // sensor index is that function's ONLY failure mode, so pre-checking it is
+    // what makes the commit phase below infallible. The resolved SensorInfo also
+    // carries the calibration type the staging step needs.
+    const SensorInfo* flashSensor = getSensorByIndex(sensorIdx);
+    if (flashSensor == nullptr) {
+        msg.control.print(F("ERROR: Failed to import input "));
+        msg.control.print(index);
+        msg.control.print(F(" (pin "));
+        msg.control.print(pin);
+        msg.control.println(F(") - unknown sensor"));
+        msg.debug.error(TAG_JSON, "Unresolvable sensor index %d", sensorIdx);
+        return false;
+    }
+    SensorInfo sensorInfo;
+    loadSensorInfo(flashSensor, &sensorInfo);
+
+    // Stage the calibration on a scratch Input, so a calibration this firmware
+    // refuses fails the record BEFORE anything is written. Applying it to the
+    // real input at the end instead left an enabled, fully configured input
+    // behind on a refusal while the summary reported 0 imported.
+    //
+    // The scratch costs ~100 bytes of stack and no RAM: this whole translation
+    // unit is SUPPORTS_JSON_CONFIG-gated and mega2560/uno set that to 0, so it
+    // never lands on the AVR budget that ruled a snapshot out in #371. Staging
+    // (rather than validating and then re-applying) also means the bytes that
+    // reach the input are exactly the bytes admission approved.
+    bool haveCalibration = false;
+    bool stagedCustom = false;
+    CalibrationType stagedType = sensorInfo.calibrationType;
+    CalibrationOverride stagedOverride;
+    memset(&stagedOverride, 0, sizeof(stagedOverride));
+
+    if (inputObj["calibration"].isNull() == false) {
+        Input staged;
+        memset(&staged, 0, sizeof(staged));
+        staged.pin = pin;
+        // What setInputSensor() would give the real input, so applyCal*() judges
+        // the parameters against the same type and seeds from the same preset.
+        staged.calibrationType = sensorInfo.calibrationType;
+        staged.presetCalibration = sensorInfo.defaultCalibration;
+
+        JsonObject cal = inputObj["calibration"];
+        if (!importCalibration(&staged, cal, index)) {
+            msg.control.print(F("ERROR: Failed to import input "));
+            msg.control.print(index);
+            msg.control.print(F(" (pin "));
+            msg.control.print(pin);
+            msg.control.println(F(") - calibration rejected"));
+            return false;
+        }
+
+        haveCalibration = true;
+        stagedCustom = staged.flags.useCustomCalibration;
+        stagedType = staged.calibrationType;   // a typed profile sets its own
+        stagedOverride = staged.customCalibration;
+    }
+
+    // ===== COMMIT - from here on nothing may fail =====
     // Use input manager functions to properly configure the input
     // This ensures all function pointers and calibration are wired correctly
     extern bool setInputApplication(uint8_t pin, uint8_t appIndex);
@@ -607,6 +813,11 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     //
     // Side benefit of dropping the pre-assignment: the record no longer stomps
     // whatever unrelated input happened to occupy slot `index`.
+    // Needed only by the tripwire below: a record that creates an input must be
+    // able to give the slot back (#362), and one that modifies an existing input
+    // must not free a slot that was not ours.
+    const bool isNewInput = (getInputByPin(pin) == nullptr);
+
     if (!setInputApplication(pin, appIdx)) {
         msg.control.print(F("ERROR: Failed to import input "));
         msg.control.print(index);
@@ -622,9 +833,20 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         return false;
     }
 
-    // Apply configuration using input manager functions
-    setInputSensor(pin, sensorIdx);
-    setInputUnits(pin, unitsIdx);
+    // Apply configuration using input manager functions.
+    //
+    // Neither call can fail here: setInputSensor()'s only failure mode is an
+    // unresolvable sensor index (pre-checked during admission) and both bail
+    // only on a missing slot, which setInputApplication() just created. The
+    // guard stays as a tripwire -- if a future failure mode is added, a new
+    // record must still leave nothing behind rather than a half-built input.
+    if (!setInputSensor(pin, sensorIdx) || !setInputUnits(pin, unitsIdx)) {
+        if (isNewInput) freeInputSlot(pin);
+        msg.control.print(F("ERROR: Failed to import input "));
+        msg.control.print(index);
+        msg.control.println(F(" - configuration failed"));
+        return false;
+    }
 
     // Set names
     if (inputObj["abbr"].isNull() == false) {
@@ -660,10 +882,15 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         setInputOBD(pin, obd2["pid"], obd2["length"]);
     }
 
-    // Calibration (if custom)
-    if (inputObj["calibration"].isNull() == false) {
-        JsonObject cal = inputObj["calibration"];
-        importCalibration(input, cal, index);
+    // Calibration: install the bytes admission already validated. Nothing here
+    // can be refused - the judging happened before the first write, which is
+    // what keeps a rejected calibration from leaving a live input behind.
+    if (haveCalibration) {
+        input->customCalibration = stagedOverride;
+        input->flags.useCustomCalibration = stagedCustom;
+        if (stagedCustom) {
+            input->calibrationType = stagedType;
+        }
     }
 
     return true;

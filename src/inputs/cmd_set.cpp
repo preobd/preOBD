@@ -9,6 +9,7 @@
 #include "command_helpers.h"
 #include "input_manager.h"
 #include "input.h"
+#include "calibration_apply.h"
 #include "serial_config.h"
 #include "../version.h"
 #include "../lib/system_mode.h"
@@ -543,35 +544,27 @@ static int set_cal_rpm(uint8_t pin, int argc, const char* const* argv,
         max_rpm = (uint16_t)atoi(argv[paramStart + 4]);
     }
 
-    if (poles < 2 || poles > 32) {
-        msg.control.println(F("ERROR: Poles must be between 2 and 32"));
-        return 1;
+    CalApplyStatus st = applyCalRpm(input, poles, pulley_ratio, calibration_mult,
+                                    timeout_ms, min_rpm, max_rpm);
+    switch (st) {
+        case CAL_APPLY_OK:
+            break;
+        case CAL_APPLY_ERR_POLES:
+            msg.control.println(F("ERROR: Poles must be between 2 and 32"));
+            return 1;
+        case CAL_APPLY_ERR_PULLEY_RATIO:
+            msg.control.println(F("ERROR: Pulley ratio must be between 0.5 and 10.0"));
+            return 1;
+        case CAL_APPLY_ERR_CAL_MULT:
+            msg.control.println(F("ERROR: Calibration multiplier must be between 0.5 and 2.0"));
+            return 1;
+        case CAL_APPLY_ERR_TIMEOUT:
+            msg.control.println(F("ERROR: Timeout must be between 100 and 10000 ms"));
+            return 1;
+        default:
+            msg.control.println(F("ERROR: min_rpm must be less than max_rpm"));
+            return 1;
     }
-    if (pulley_ratio < 0.5 || pulley_ratio > 10.0) {
-        msg.control.println(F("ERROR: Pulley ratio must be between 0.5 and 10.0"));
-        return 1;
-    }
-    if (calibration_mult < 0.5 || calibration_mult > 2.0) {
-        msg.control.println(F("ERROR: Calibration multiplier must be between 0.5 and 2.0"));
-        return 1;
-    }
-    if (timeout_ms < 100 || timeout_ms > 10000) {
-        msg.control.println(F("ERROR: Timeout must be between 100 and 10000 ms"));
-        return 1;
-    }
-    if (min_rpm >= max_rpm) {
-        msg.control.println(F("ERROR: min_rpm must be less than max_rpm"));
-        return 1;
-    }
-
-    input->flags.useCustomCalibration = true;
-    input->calibrationType = CAL_RPM;
-    input->customCalibration.rpm.poles = poles;
-    input->customCalibration.rpm.pulley_ratio = pulley_ratio;
-    input->customCalibration.rpm.calibration_mult = calibration_mult;
-    input->customCalibration.rpm.timeout_ms = timeout_ms;
-    input->customCalibration.rpm.min_rpm = min_rpm;
-    input->customCalibration.rpm.max_rpm = max_rpm;
 
     msg.control.print(F("RPM calibration set for pin "));
     msg.control.println(argv[1]);
@@ -840,31 +833,25 @@ static int set_cal_pressure_linear(uint8_t pin, int argc, const char* const* arg
     float pmin = atof(argv[argStart + 2]);
     float pmax = atof(argv[argStart + 3]);
 
-    if (vmin >= vmax) {
-        msg.control.println(F("ERROR: vmin must be less than vmax"));
-        return 1;
+    CalApplyStatus st = applyCalLinear(input, vmin, vmax, pmin, pmax);
+    switch (st) {
+        case CAL_APPLY_OK:
+            break;
+        case CAL_APPLY_ERR_VOLTAGE_ORDER:
+            msg.control.println(F("ERROR: vmin must be less than vmax"));
+            return 1;
+        case CAL_APPLY_ERR_VOLTAGE_RANGE:
+            msg.control.print(F("ERROR: Voltage range must be 0.0-"));
+            msg.control.print(SYSTEM_VOLTAGE);
+            msg.control.println(F("V for this platform"));
+            return 1;
+        case CAL_APPLY_ERR_OUTPUT_ORDER:
+            msg.control.println(F("ERROR: pmin must be less than pmax"));
+            return 1;
+        default:
+            msg.control.println(F("ERROR: pmin must be >= 0.0"));
+            return 1;
     }
-    if (vmin < 0.0 || vmax > SYSTEM_VOLTAGE) {
-        msg.control.print(F("ERROR: Voltage range must be 0.0-"));
-        msg.control.print(SYSTEM_VOLTAGE);
-        msg.control.println(F("V for this platform"));
-        return 1;
-    }
-    if (pmin >= pmax) {
-        msg.control.println(F("ERROR: pmin must be less than pmax"));
-        return 1;
-    }
-    if (pmin < 0.0) {
-        msg.control.println(F("ERROR: pmin must be >= 0.0"));
-        return 1;
-    }
-
-    input->flags.useCustomCalibration = true;
-    input->calibrationType = CAL_LINEAR;
-    input->customCalibration.pressureLinear.voltage_min = vmin;
-    input->customCalibration.pressureLinear.voltage_max = vmax;
-    input->customCalibration.pressureLinear.output_min = pmin;
-    input->customCalibration.pressureLinear.output_max = pmax;
 
     msg.control.print(F("Pressure Linear calibration set for pin "));
     msg.control.println(argv[1]);
@@ -899,61 +886,22 @@ static int set_cal_bias(uint8_t pin, int argc, const char* const* argv,
 
     float bias = atof(argv[argStart]);
 
-    if (input->calibrationType != CAL_THERMISTOR_STEINHART &&
-        input->calibrationType != CAL_THERMISTOR_TABLE &&
-        input->calibrationType != CAL_THERMISTOR_BETA &&
-        input->calibrationType != CAL_PRESSURE_POLYNOMIAL) {
-        msg.control.print(F("ERROR: Calibration type "));
-        msg.control.print(input->calibrationType);
-        msg.control.println(F(" does not use bias resistor"));
-        msg.control.println(F("  BIAS works with: Steinhart-Hart, Beta, Table, Pressure Polynomial"));
-        return 1;
-    }
-
-    // 10Ω to 10MΩ covers all practical thermistor / pressure sensor bias resistors.
-    if (bias < 10.0f || bias > 10000000.0f) {
-        msg.control.print(F("ERROR: Bias resistor ("));
-        msg.control.print(bias, 1);
-        msg.control.println(F("Ω) must be between 10Ω and 10MΩ"));
-        return 1;
-    }
-
-    // Seed the custom override from the preset before diverging, so overriding
-    // only the bias preserves the rest of the curve. Steinhart/Beta/Polynomial
-    // read every coefficient from the custom struct once useCustomCalibration is
-    // set; without seeding, A/B/C (etc.) stay zero and the equation degenerates
-    // to 1/T = 0 -> INF. Table keeps its lookup arrays in PROGMEM, so only its
-    // bias lives in the override — nothing to seed. (Skip if already custom: the
-    // user may have tuned coefficients we must not clobber.)
-    if (!input->flags.useCustomCalibration && input->presetCalibration != nullptr) {
-        switch (input->calibrationType) {
-            case CAL_THERMISTOR_STEINHART:
-                memcpy_P(&input->customCalibration.steinhart, input->presetCalibration,
-                         sizeof(ThermistorSteinhartCalibration));
-                break;
-            case CAL_THERMISTOR_BETA:
-                memcpy_P(&input->customCalibration.beta, input->presetCalibration,
-                         sizeof(BetaCalibration));
-                break;
-            case CAL_PRESSURE_POLYNOMIAL:
-                memcpy_P(&input->customCalibration.pressurePolynomial, input->presetCalibration,
-                         sizeof(PressurePolynomialCalibration));
-                break;
-            default:
-                break;  // Table: only bias is overridable; nothing to seed.
-        }
-    }
-
-    input->flags.useCustomCalibration = true;
-
-    if (input->calibrationType == CAL_THERMISTOR_STEINHART) {
-        input->customCalibration.steinhart.bias_resistor = bias;
-    } else if (input->calibrationType == CAL_THERMISTOR_BETA) {
-        input->customCalibration.beta.bias_resistor = bias;
-    } else if (input->calibrationType == CAL_THERMISTOR_TABLE) {
-        input->customCalibration.lookup.bias_resistor = bias;
-    } else if (input->calibrationType == CAL_PRESSURE_POLYNOMIAL) {
-        input->customCalibration.pressurePolynomial.bias_resistor = bias;
+    CalApplyStatus st = applyCalBias(input, bias);
+    switch (st) {
+        case CAL_APPLY_OK:
+            break;
+        case CAL_APPLY_ERR_BIAS_TYPE:
+            msg.control.print(F("ERROR: Calibration type "));
+            msg.control.print(input->calibrationType);
+            msg.control.println(F(" does not use bias resistor"));
+            msg.control.println(F("  BIAS works with: Steinhart-Hart, Beta, Table, Pressure Polynomial"));
+            return 1;
+        default:
+            // 10Ω to 10MΩ covers all practical thermistor / pressure sensor bias resistors.
+            msg.control.print(F("ERROR: Bias resistor ("));
+            msg.control.print(bias, 1);
+            msg.control.println(F("Ω) must be between 10Ω and 10MΩ"));
+            return 1;
     }
 
     msg.control.print(F("Bias resistor set for pin "));
@@ -986,20 +934,14 @@ static int set_cal_steinhart(uint8_t pin, int argc, const char* const* argv,
     float b = atof(argv[argStart + 2]);
     float c = atof(argv[argStart + 3]);
 
-    if (bias_r <= 0) {
-        msg.control.println(F("ERROR: bias_r must be > 0"));
-        return 1;
-    }
     if (a == 0 || b == 0 || c == 0) {
         msg.control.println(F("WARNING: Zero coefficient detected - may indicate error"));
     }
 
-    input->flags.useCustomCalibration = true;
-    input->calibrationType = CAL_THERMISTOR_STEINHART;
-    input->customCalibration.steinhart.bias_resistor = bias_r;
-    input->customCalibration.steinhart.steinhart_a = a;
-    input->customCalibration.steinhart.steinhart_b = b;
-    input->customCalibration.steinhart.steinhart_c = c;
+    if (applyCalSteinhart(input, bias_r, a, b, c) != CAL_APPLY_OK) {
+        msg.control.println(F("ERROR: bias_r must be > 0"));
+        return 1;
+    }
 
     msg.control.print(F("Steinhart-Hart calibration set for pin "));
     msg.control.println(argv[1]);
@@ -1039,27 +981,22 @@ static int set_cal_beta(uint8_t pin, int argc, const char* const* argv,
     float r0 = atof(argv[argStart + 2]);
     float t0 = atof(argv[argStart + 3]);
 
-    if (bias_r <= 0) {
-        msg.control.println(F("ERROR: bias_r must be > 0"));
-        return 1;
-    }
     if (beta < 1000 || beta > 10000) {
         msg.control.println(F("WARNING: Beta typically 2000-6000K. Value may be incorrect."));
-    }
-    if (r0 <= 0) {
-        msg.control.println(F("ERROR: r0 must be > 0"));
-        return 1;
     }
     if (t0 < -40 || t0 > 150) {
         msg.control.println(F("WARNING: t0 typically 25°C. Value may be incorrect."));
     }
 
-    input->flags.useCustomCalibration = true;
-    input->calibrationType = CAL_THERMISTOR_BETA;
-    input->customCalibration.beta.bias_resistor = bias_r;
-    input->customCalibration.beta.beta = beta;
-    input->customCalibration.beta.r0 = r0;
-    input->customCalibration.beta.t0 = t0;
+    CalApplyStatus st = applyCalBeta(input, bias_r, beta, r0, t0);
+    if (st == CAL_APPLY_ERR_BIAS_POSITIVE) {
+        msg.control.println(F("ERROR: bias_r must be > 0"));
+        return 1;
+    }
+    if (st != CAL_APPLY_OK) {
+        msg.control.println(F("ERROR: r0 must be > 0"));
+        return 1;
+    }
 
     msg.control.print(F("Beta calibration set for pin "));
     msg.control.println(argv[1]);
@@ -1100,17 +1037,10 @@ static int set_cal_pressure_poly(uint8_t pin, int argc, const char* const* argv,
     float b = atof(argv[argStart + 2]);
     float c = atof(argv[argStart + 3]);
 
-    if (bias_r <= 0) {
+    if (applyCalPressurePoly(input, bias_r, a, b, c) != CAL_APPLY_OK) {
         msg.control.println(F("ERROR: bias_r must be > 0"));
         return 1;
     }
-
-    input->flags.useCustomCalibration = true;
-    input->calibrationType = CAL_PRESSURE_POLYNOMIAL;
-    input->customCalibration.pressurePolynomial.bias_resistor = bias_r;
-    input->customCalibration.pressurePolynomial.poly_a = a;
-    input->customCalibration.pressurePolynomial.poly_b = b;
-    input->customCalibration.pressurePolynomial.poly_c = c;
 
     msg.control.print(F("Pressure Polynomial calibration set for pin "));
     msg.control.println(argv[1]);
