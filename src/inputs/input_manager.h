@@ -73,6 +73,19 @@ Input* getInputByPin(uint8_t pin);   // Find input by pin number
 Input* getInputByIndex(uint8_t index); // Get input by array index
 uint8_t getInputIndex(uint8_t pin);  // Get array index for pin
 
+// ===== BUS REQUIREMENTS (see lib/bus_needs.h) =====
+// The inputs layer's two contributions to bus ownership, both consumed by the
+// bus layer without it ever including an inputs header:
+//
+//   storedInputBusNeeds() — a read-only pre-scan of the stored records, run at
+//     boot BEFORE loadInputConfig() and initLCD() so the buses those records
+//     need are up (and their pins reserved) before anything is validated (#358).
+//   inputHoldsPin() — registered via setBusPinInputProbe() so every bus's pin
+//     claim can see configured inputs, which deliberately never enter the pin
+//     registry (mega2560 has no RAM for them).
+uint8_t storedInputBusNeeds();
+bool inputHoldsPin(uint8_t pin);
+
 // ===== PERSISTENCE =====
 bool saveInputConfig();               // Save all inputs to EEPROM
 bool loadInputConfig();               // Load all inputs from EEPROM

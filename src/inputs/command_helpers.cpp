@@ -19,14 +19,18 @@
 #include "../lib/bus_manager.h"
 #include "../lib/bus_defaults.h"
 #include "../lib/pin_registry.h"
+#include "../lib/bus_pins.h"
 #include "input.h"  // For Input struct definition
 #include "input_manager.h"  // For inputs[] array access
 #include <string.h>
 #include <ctype.h>
 
 
-// Reject putting a client on an I2C bus whose SDA/SCL another function already
-// holds. Shared by `DISPLAY TYPE LCD` and `BUS I2C <n>` so the two can't drift.
+// Reject putting a client on a bus whose pins another function already holds.
+//
+// These are the CLI's two entry points into the one predicate that also guards
+// every bus bring-up at boot (bus_pins.cpp) — `DISPLAY TYPE LCD` / `BUS I2C <n>`
+// and `BUS SPI <n>` cannot drift from it, nor from each other.
 //
 // This is about the PHYSICAL pins only. Other I2C devices are virtual pins
 // (0xF0+), so sharing a bus — an LCD daisy-chained alongside a BME280 — is the
@@ -39,45 +43,17 @@
 bool i2cBusPinsConflict(uint8_t bus_id) {
     if (bus_id >= NUM_I2C_BUSES) return false;   // caller reports the bad bus id
 
-    const bool busAlreadyUp = (getActiveI2C() != nullptr && getActiveI2CId() == bus_id);
-    const char* busName = getI2CBusName(bus_id);
     const uint8_t pins[2] = { getDefaultI2CSDA(bus_id), getDefaultI2CSCL(bus_id) };
+    return busPinsConflict(pins, 2, getI2CBusName(bus_id));
+}
 
-    for (uint8_t i = 0; i < 2; i++) {
-        const uint8_t pin = pins[i];
+bool spiBusPinsConflict(uint8_t bus_id) {
+    if (bus_id >= NUM_SPI_BUSES) return false;   // caller reports the bad bus id
 
-        // 0xFF is "this bus has no such pin on this platform". getInputByPin()
-        // would match a FREE slot (they carry pin == 0xFF) and report a phantom
-        // conflict, so screen it out before asking anything else.
-        if (pin == 0xFF) continue;
-
-        const bool heldByInput = (getInputByPin(pin) != nullptr);
-
-        // Self-ownership must be keyed to the OWNER, not merely to PIN_RESERVED:
-        // on Teensy 4.x, I2C1 (17/16) overlaps Serial4 (16/17), and serial ports
-        // are registered first. A bare type check would see Serial4's RESERVED
-        // entry, conclude "that's us" and wave the conflict through.
-        const char* held = getPinDescription(pin);
-        if (!heldByInput && busAlreadyUp && getPinUsage(pin) == PIN_RESERVED &&
-            held && busName && strcmp(held, busName) == 0) continue;
-
-        if (!heldByInput && isPinAvailable(pin)) continue;
-
-        msg.control.print(F("ERROR: pin "));
-        msg.control.print(pin);
-        msg.control.print(F(" ("));
-        msg.control.print(getI2CBusName(bus_id));
-        msg.control.print(F(") is in use"));
-        if (heldByInput) {
-            msg.control.println(F(" by a configured input"));
-        } else {
-            if (held) { msg.control.print(F(": ")); msg.control.print(held); }
-            msg.control.println();
-        }
-        msg.control.println(F("  Free that pin first, or choose another bus"));
-        return true;
-    }
-    return false;
+    const uint8_t pins[3] = { getDefaultSPIMOSI(bus_id),
+                              getDefaultSPIMISO(bus_id),
+                              getDefaultSPISCK(bus_id) };
+    return busPinsConflict(pins, 3, getSPIBusName(bus_id));
 }
 
 Input* requireInput(uint8_t pin) {

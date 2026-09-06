@@ -166,6 +166,11 @@ static int bus_spi(int argc, const char* const* argv, int /*tokenIndex*/) {
         return 1;
     }
 
+    // Same guard as BUS I2C: an input or Action already on MOSI/MISO/SCK would
+    // otherwise be accepted silently and surface as a dropped input at the next
+    // boot, now that a stored thermocouple brings SPI up on its own (#358).
+    if (spiBusPinsConflict(bus_id)) return 1;
+
     systemConfig.buses.active_spi = bus_id;
     msg.control.print(F("SPI bus set to "));
     msg.control.print(getSPIBusName(bus_id));

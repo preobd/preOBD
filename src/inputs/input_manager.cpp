@@ -18,6 +18,7 @@
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
 #include "../lib/pin_registry.h"
+#include "../lib/bus_needs.h"
 #include "../control/control_manager.h"  // controlResetTables + rule/action table helpers
 
 // ===== GLOBAL STATE =====
@@ -349,6 +350,41 @@ bool saveInputConfig() {
     msg.control.println(F(" to EEPROM"));
     msg.debug.debug(TAG_CONFIG, "Checksum: 0x%02X", checksum);
     return true;
+}
+
+bool inputHoldsPin(uint8_t pin) {
+    // 0xFF is the free-slot marker in inputs[], so it is never "held" — and it
+    // is also what bus_defaults reports for a pin absent on this platform.
+    if (pin == 0xFF) return false;
+    return getInputByPin(pin) != nullptr;
+}
+
+uint8_t storedInputBusNeeds() {
+    // Read-only pre-scan of the SAME records loadInputConfig() will apply, run
+    // before it (and before initLCD()) so the buses those records need are up —
+    // and their pins reserved — by the time any stored pin is validated (#358).
+    //
+    // Header sanity only, no checksum walk: a store that fails the full
+    // validation is rejected wholesale by loadInputConfig() a moment later, so
+    // the worst case here is bringing up a bus for a config that then does not
+    // load — a spare peripheral, not a wrong pin assignment. The counts are
+    // bounds-checked because they drive this loop.
+    ConfigStoreHeader header;
+    EEPROM.get(0, header);
+    if (header.magic != EEPROM_MAGIC) return BUS_NEED_NONE;
+    if (header.version != EEPROM_VERSION) return BUS_NEED_NONE;
+    if ((size_t)EEPROM_HEADER_SIZE + (size_t)header.numInputs * EEPROM_INPUT_SIZE
+            > (size_t)SYSTEM_CONFIG_ADDRESS) return BUS_NEED_NONE;
+
+    // Every stored record votes, not just the ones that will fit in RAM: a
+    // record this build clamps away still describes hardware wired to the board.
+    uint8_t needs = BUS_NEED_NONE;
+    for (uint8_t i = 0; i < header.numInputs; i++) {
+        InputEEPROM rec;
+        EEPROM.get(EEPROM_HEADER_SIZE + (size_t)i * EEPROM_INPUT_SIZE, rec);
+        needs |= busNeedsForSensorHash(rec.sensorHash);
+    }
+    return needs;
 }
 
 bool loadInputConfig() {

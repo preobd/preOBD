@@ -97,9 +97,35 @@ TwoWire* acquireI2C();
 
 /**
  * Get the currently active SPI bus
- * @return Pointer to active SPIClass object, or &SPI if not initialized
+ * @return Pointer to the active SPIClass object, or nullptr if no bus is up
+ *
+ * Pure accessor — never brings a bus up. Use acquireSPI() if you need one.
  */
 SPIClass* getActiveSPI();
+
+/**
+ * Acquire the SPI bus on behalf of a client that needs it (thermocouples, ...).
+ *
+ * The I2C contract, for SPI: brings the bus up on first use, reserving
+ * MOSI/MISO/SCK, and honors an explicit `BUS SPI <n>` selection, falling back to
+ * DEFAULT_SPI_BUS when none has been made.
+ *
+ * @return the active SPIClass, or nullptr if no bus could be brought up
+ */
+SPIClass* acquireSPI();
+
+/**
+ * Bring up every bus the stored configuration needs, in one pass.
+ *
+ * Called ONCE at boot with the OR of every voter's needs (stored input records
+ * and the display — see bus_needs.h), BEFORE any client initializes: before
+ * initLCD() and before loadInputConfig() validates a single stored pin. Bus
+ * ownership therefore exists before anything can be assigned over it, and no
+ * client's init order can change the outcome (#358).
+ *
+ * A bus that cannot be acquired is reported and skipped; boot always continues.
+ */
+void acquireRequiredBuses(uint8_t needs);
 
 /**
  * Get the currently active I2C bus ID

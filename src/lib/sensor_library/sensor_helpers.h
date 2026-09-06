@@ -12,6 +12,7 @@
 #include "sensor_types.h"
 #include "sensor_categories.h"
 #include "../hash.h"
+#include "../bus_needs.h"   // BUS_NEED_* for busNeedsForSensorIndex()
 
 // Helper macros for reading individual fields from PROGMEM
 #define READ_SENSOR_NAME(info) ((const char*)pgm_read_ptr(&(info)->name))
@@ -138,6 +139,50 @@ inline SensorCategory getSensorCategory(uint8_t sensorIndex) {
     if (measType == MEASURE_PERCENT) return CAT_LEVEL;
 
     return CAT_THERMOCOUPLE;  // Default fallback
+}
+
+/**
+ * Which bus must be up for this sensor to be readable?
+ *
+ * This is the "declared, not discovered" half of #358: bus bring-up at boot is
+ * driven by the stored records' sensors, so an I2C sensor no longer depends on a
+ * display having been configured to bring its bus up first.
+ *
+ * Two facts already in the entry answer it, and neither had to be invented:
+ *
+ *   - pinTypeRequirement == PIN_I2C marks the I2C sensors.
+ *   - The SPI-attached family is CAT_THERMOCOUPLE (MAX6675 / MAX31855) — the
+ *     two sensors whose read path calls getActiveSPI(). MEASURE_DIGITAL parts
+ *     (float switch) are categorized before that branch, so they are not caught.
+ *
+ * There is deliberately no PIN_SPI: pinTypeRequirement answers "what kind of PIN
+ * does this sensor occupy", and a MAX6675 genuinely occupies a digital CS pin.
+ * It is also a wire-format value — json_registry.cpp exports it and the mobile
+ * app switches its pin picker on ANALOG|DIGITAL|I2C — so widening it would be a
+ * cross-repo break for a fact orthogonal to it anyway.
+ *
+ * @return a BUS_NEED_* mask (see lib/bus_needs.h)
+ */
+inline uint8_t busNeedsForSensorIndex(uint8_t sensorIndex) {
+    const SensorInfo* sensor = getSensorByIndex(sensorIndex);
+    if (!sensor) return BUS_NEED_NONE;
+
+    if ((PinTypeRequirement)pgm_read_byte(&sensor->pinTypeRequirement) == PIN_I2C)
+        return BUS_NEED_I2C;
+
+    if (getSensorCategory(sensorIndex) == CAT_THERMOCOUPLE) return BUS_NEED_SPI;
+
+    return BUS_NEED_NONE;
+}
+
+/**
+ * Same, keyed by a stored record's sensorHash.
+ *
+ * An unknown hash resolves to 0 (SENSOR_NONE), which needs no bus — the right
+ * answer for a record this firmware cannot resolve.
+ */
+inline uint8_t busNeedsForSensorHash(uint16_t sensorHash) {
+    return busNeedsForSensorIndex(getSensorIndexByHash(sensorHash));
 }
 
 /**

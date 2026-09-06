@@ -1,0 +1,345 @@
+// Native unit test: bus acquisition is driven by what needs a bus (#358).
+//
+// Two properties, both of which the firmware got wrong before:
+//
+//  1. WHO decides. Bus bring-up used to be a side effect of whichever client
+//     initialized first — in practice only the LCD, because it was the sole
+//     caller of acquireI2C(). An I2C sensor therefore worked only if a display
+//     happened to be configured. The stored CONFIGURATION decides now:
+//     storedInputBusNeeds() pre-scans the records and the display is one more
+//     voter (busNeedsForDisplayType) with no special status.
+//
+//  2. WHO is consulted before a bus claims copper. i2cBusPinsConflict() was the
+//     only check that looked at configured inputs (which never enter the pin
+//     registry — mega2560 has no RAM for them), and it was wired to exactly two
+//     CLI commands: no boot path, and no bus but I2C. busPinsConflict() /
+//     claimBusPins() in bus_pins.cpp is that check's one home now, used by I2C,
+//     SPI and CAN, at boot and at runtime.
+//
+// The peripheral half (Wire/SPI/FlexCAN) is not reachable on the host, so what
+// is tested here is the decision logic — which is where the bug lived.
+#include <unity.h>
+#include <Arduino.h>
+#include <string.h>
+
+#include "../../src/lib/pin_registry.cpp"
+#include "../../src/lib/bus_pins.cpp"
+#include "../../src/lib/bus_needs.cpp"   // display vote; the sensor mapping is
+                                        // inline in sensor_helpers.h
+#include "../../src/inputs/input_manager.cpp"
+
+// ---------------------------------------------------------------------------
+// Firmware symbols the included TUs expect from elsewhere.
+// ---------------------------------------------------------------------------
+MessageRouter router;
+MessageAPI msg;
+SystemConfig systemConfig;
+LogFilter::LogFilter() {}
+MessageRouter::MessageRouter() {}
+TransportInterface* MessageRouter::getTransport(MessagePlane, bool) { return nullptr; }
+size_t MessageStream::error(const char*, const char*, ...) { return 0; }
+size_t MessageStream::debug(const char*, const char*, ...) { return 0; }
+
+int8_t analogIndexForPin(uint8_t) { return -1; }
+Input* requireInput(uint8_t pin) { return getInputByPin(pin); }
+bool i2cBusPinsConflict(uint8_t) { return false; }
+
+// Sensor read/init entry points referenced by SENSOR_LIBRARY[] as data.
+#define STUB_READ(fn) void fn(Input*) {}
+STUB_READ(readMAX6675)          STUB_READ(readMAX31855)
+STUB_READ(readThermistorSteinhart) STUB_READ(readThermistorLookup)
+STUB_READ(readLinearSensor)     STUB_READ(readPressureTable)
+STUB_READ(readPressureTableDescending) STUB_READ(readPressurePolynomial)
+STUB_READ(readVoltageDivider)   STUB_READ(readLevelTable)
+STUB_READ(readDigitalFloatSwitch) STUB_READ(readHallSpeed)
+STUB_READ(readWPhaseRPM)        STUB_READ(readBME280Temp)
+STUB_READ(readBME280Pressure)   STUB_READ(readBME280Humidity)
+STUB_READ(readBME280Elevation)
+STUB_READ(initThermocoupleCS)   STUB_READ(initFloatSwitch)
+STUB_READ(initHallSpeed)        STUB_READ(initWPhaseRPM)
+STUB_READ(initBME280)
+#undef STUB_READ
+
+// ---------------------------------------------------------------------------
+// Fixture
+// ---------------------------------------------------------------------------
+static const char* OWNER_WIRE = "Wire";
+static const char* OWNER_SPI  = "SPI";
+static const char* OWNER_CAN  = "CAN1";
+
+void setUp(void) {
+    initPinRegistry();
+    EEPROM.clear();
+    memset(inputs, 0, sizeof(inputs));
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) inputs[i].pin = 0xFF;
+    numActiveInputs = 0;
+    systemConfig.displayType = DISPLAY_NONE;
+    setBusPinInputProbe(inputHoldsPin);
+}
+void tearDown(void) { setBusPinInputProbe(nullptr); }
+
+// Put a configured input on a physical pin (slot 0 unless taken).
+static void giveInputThePin(uint8_t pin) {
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        if (inputs[i].pin == 0xFF) { inputs[i].pin = pin; return; }
+    }
+    TEST_FAIL_MESSAGE("no free input slot");
+}
+
+static uint16_t hashOfSensor(const char* name) {
+    uint8_t index = getSensorIndexByName(name);
+    TEST_ASSERT_TRUE_MESSAGE(index != 0 || strcmp(name, "NONE") == 0,
+                             "sensor name not in the library");
+    return pgm_read_word(&SENSOR_LIBRARY[index].nameHash);
+}
+
+// Lay down a valid config store holding `n` records with the given sensors.
+// Only the fields storedInputBusNeeds() reads have to be right — it never
+// verifies the checksum (loadInputConfig() does, moments later).
+static void writeStore(const char* const* sensorNames, const uint8_t* pins, uint8_t n) {
+    ConfigStoreHeader header;
+    memset(&header, 0, sizeof(header));
+    header.magic = EEPROM_MAGIC;
+    header.version = EEPROM_VERSION;
+    header.numInputs = n;
+    EEPROM.put(0, header);
+
+    for (uint8_t i = 0; i < n; i++) {
+        InputEEPROM rec;
+        memset(&rec, 0, sizeof(rec));
+        rec.pin = pins[i];
+        rec.sensorHash = hashOfSensor(sensorNames[i]);
+        EEPROM.put(EEPROM_HEADER_SIZE + (size_t)i * EEPROM_INPUT_SIZE, rec);
+    }
+}
+
+// ===========================================================================
+// 1. The predicate: a bus must not claim copper a configured input is on
+// ===========================================================================
+
+// The core of #358's silent-wrong ordering: inputs are invisible to the pin
+// registry, so reservePins() alone would hand this bus the pin and say nothing.
+static void test_i2c_claim_refused_when_an_input_holds_a_bus_pin(void) {
+    giveInputThePin(19);                       // A5 / SCL on Teensy 4.x
+
+    const uint8_t pins[2] = { 18, 19 };
+    TEST_ASSERT_FALSE(claimBusPins(pins, 2, "I2C", OWNER_WIRE));
+
+    // …and the refusal claims nothing at all, not even the free half.
+    TEST_ASSERT_TRUE(isPinAvailable(18));
+    TEST_ASSERT_EQUAL(0, getPinRegistrySize());
+}
+
+// The generalization: the check used to exist for I2C only.
+static void test_spi_claim_refused_when_an_input_holds_a_bus_pin(void) {
+    giveInputThePin(13);                       // SCK
+
+    const uint8_t pins[3] = { 11, 12, 13 };
+    TEST_ASSERT_FALSE(claimBusPins(pins, 3, "SPI", OWNER_SPI));
+    TEST_ASSERT_EQUAL(0, getPinRegistrySize());
+}
+
+static void test_can_claim_refused_when_an_input_holds_a_bus_pin(void) {
+    giveInputThePin(23);
+
+    const uint8_t pins[2] = { 22, 23 };
+    TEST_ASSERT_FALSE(claimBusPins(pins, 2, "CAN", OWNER_CAN));
+    TEST_ASSERT_EQUAL(0, getPinRegistrySize());
+}
+
+// A bus whose pins nobody holds still comes up — the guard must not be a veto
+// on everything.
+static void test_claim_succeeds_when_no_input_is_in_the_way(void) {
+    giveInputThePin(14);
+
+    const uint8_t pins[2] = { 18, 19 };
+    TEST_ASSERT_TRUE(claimBusPins(pins, 2, "I2C", OWNER_WIRE));
+    TEST_ASSERT_EQUAL_STRING(OWNER_WIRE, getPinDescription(18));
+    TEST_ASSERT_EQUAL_STRING(OWNER_WIRE, getPinDescription(19));
+}
+
+// initConfiguredBuses()'s fallback and acquireI2C() can both reach a bus that
+// is already up; re-claiming must be a no-op, not a refusal.
+static void test_reclaim_by_the_same_owner_still_succeeds(void) {
+    const uint8_t pins[2] = { 18, 19 };
+    TEST_ASSERT_TRUE(claimBusPins(pins, 2, "I2C", OWNER_WIRE));
+    TEST_ASSERT_TRUE(claimBusPins(pins, 2, "I2C", OWNER_WIRE));
+    TEST_ASSERT_EQUAL(2, getPinRegistrySize());
+}
+
+// 0xFF means "this bus has no such pin here" — and is also the free-slot marker
+// in inputs[], which is exactly the phantom conflict the probe must not report.
+static void test_absent_pins_are_not_an_input_conflict(void) {
+    const uint8_t pins[2] = { 0xFF, 0xFF };
+    TEST_ASSERT_TRUE(claimBusPins(pins, 2, "CAN", OWNER_CAN));
+    TEST_ASSERT_EQUAL(0, getPinRegistrySize());
+}
+
+// Another system function on the pin is still a conflict — the registry half of
+// the predicate survives.
+static void test_registry_owner_is_still_a_conflict(void) {
+    TEST_ASSERT_TRUE(registerPin(16, PIN_RESERVED, "Serial4"));
+
+    const uint8_t pins[2] = { 17, 16 };
+    TEST_ASSERT_FALSE(claimBusPins(pins, 2, "I2C", "Wire1"));
+    TEST_ASSERT_EQUAL_STRING("Serial4", getPinDescription(16));
+}
+
+// With no probe registered (early boot, before inputs exist) the answer is
+// "no input holds it" — true at that point, and it must not crash.
+static void test_unregistered_probe_falls_back_to_the_registry(void) {
+    setBusPinInputProbe(nullptr);
+    giveInputThePin(19);
+
+    const uint8_t pins[2] = { 18, 19 };
+    TEST_ASSERT_TRUE(claimBusPins(pins, 2, "I2C", OWNER_WIRE));
+}
+
+// ===========================================================================
+// 2. Requirements are declared by the sensor, not discovered at init time
+// ===========================================================================
+
+static void test_i2c_sensor_declares_an_i2c_need(void) {
+    TEST_ASSERT_EQUAL(BUS_NEED_I2C, busNeedsForSensorHash(hashOfSensor("BME280_TEMP")));
+}
+
+static void test_thermocouple_declares_an_spi_need(void) {
+    TEST_ASSERT_EQUAL(BUS_NEED_SPI, busNeedsForSensorHash(hashOfSensor("MAX6675")));
+    TEST_ASSERT_EQUAL(BUS_NEED_SPI, busNeedsForSensorHash(hashOfSensor("MAX31855")));
+}
+
+static void test_analog_and_digital_sensors_need_no_bus(void) {
+    TEST_ASSERT_EQUAL(BUS_NEED_NONE, busNeedsForSensorHash(hashOfSensor("VDO_120C_TABLE")));
+    // A float switch is CAL_NONE on a digital pin like a thermocouple, but it is
+    // MEASURE_DIGITAL — it must not be mistaken for an SPI part.
+    TEST_ASSERT_EQUAL(BUS_NEED_NONE, busNeedsForSensorHash(hashOfSensor("FLOAT_SWITCH")));
+}
+
+static void test_unknown_sensor_hash_needs_no_bus(void) {
+    TEST_ASSERT_EQUAL(BUS_NEED_NONE, busNeedsForSensorHash(0xDEAD));
+}
+
+// The display votes like anything else: it neither wins nor is exempt.
+static void test_display_is_one_more_voter(void) {
+    TEST_ASSERT_EQUAL(BUS_NEED_I2C, busNeedsForDisplayType(DISPLAY_LCD));
+    TEST_ASSERT_EQUAL(BUS_NEED_NONE, busNeedsForDisplayType(DISPLAY_NONE));
+}
+
+// ===========================================================================
+// 3. The boot pre-scan: the stored records are read BEFORE anything loads
+// ===========================================================================
+
+static void test_stored_i2c_sensor_asks_for_the_i2c_bus(void) {
+    const char* sensors[] = { "BME280_TEMP" };
+    const uint8_t pins[]  = { 0xF0 };
+    writeStore(sensors, pins, 1);
+
+    TEST_ASSERT_EQUAL(BUS_NEED_I2C, storedInputBusNeeds());
+}
+
+static void test_stored_thermocouple_asks_for_the_spi_bus(void) {
+    const char* sensors[] = { "MAX6675" };
+    const uint8_t pins[]  = { 10 };
+    writeStore(sensors, pins, 1);
+
+    TEST_ASSERT_EQUAL(BUS_NEED_SPI, storedInputBusNeeds());
+}
+
+// The ordering hazard the issue is about: with acquisition driven by the
+// records rather than by init order, WHERE the bus-needing record sits in the
+// store cannot change the outcome.
+static void test_record_order_does_not_change_the_answer(void) {
+    const char* first[]  = { "BME280_TEMP", "VDO_120C_TABLE", "VDO_120C_TABLE" };
+    const char* last[]   = { "VDO_120C_TABLE", "VDO_120C_TABLE", "BME280_TEMP" };
+    const uint8_t pins[] = { 0xF0, 14, 19 };
+
+    writeStore(first, pins, 3);
+    const uint8_t needsFirst = storedInputBusNeeds();
+
+    EEPROM.clear();
+    writeStore(last, pins, 3);
+    const uint8_t needsLast = storedInputBusNeeds();
+
+    TEST_ASSERT_EQUAL(BUS_NEED_I2C, needsFirst);
+    TEST_ASSERT_EQUAL(needsFirst, needsLast);
+}
+
+static void test_both_buses_can_be_needed_at_once(void) {
+    const char* sensors[] = { "MAX6675", "BME280_PRESSURE" };
+    const uint8_t pins[]  = { 10, 0xF0 };
+    writeStore(sensors, pins, 2);
+
+    TEST_ASSERT_EQUAL(BUS_NEED_I2C | BUS_NEED_SPI, storedInputBusNeeds());
+}
+
+// A board with only analog inputs must keep its SDA/SCL free — bringing a bus
+// up "just in case" is the behaviour break this whole change has to avoid.
+static void test_analog_only_config_asks_for_nothing(void) {
+    const char* sensors[] = { "VDO_120C_TABLE", "VDO_120C_TABLE" };
+    const uint8_t pins[]  = { 18, 19 };
+    writeStore(sensors, pins, 2);
+
+    TEST_ASSERT_EQUAL(BUS_NEED_NONE, storedInputBusNeeds());
+}
+
+static void test_blank_eeprom_asks_for_nothing(void) {
+    TEST_ASSERT_EQUAL(BUS_NEED_NONE, storedInputBusNeeds());
+}
+
+// A store from another firmware version is not walked at all: its records are
+// not this layout, so their bytes must not be read as sensor hashes.
+static void test_foreign_store_version_asks_for_nothing(void) {
+    const char* sensors[] = { "BME280_TEMP" };
+    const uint8_t pins[]  = { 0xF0 };
+    writeStore(sensors, pins, 1);
+
+    ConfigStoreHeader header;
+    EEPROM.get(0, header);
+    header.version = EEPROM_VERSION + 1;
+    EEPROM.put(0, header);
+
+    TEST_ASSERT_EQUAL(BUS_NEED_NONE, storedInputBusNeeds());
+}
+
+// A record count that would run past the SystemConfig block is a corrupt
+// header; the scan must refuse it rather than read into the config region.
+static void test_impossible_record_count_asks_for_nothing(void) {
+    const char* sensors[] = { "BME280_TEMP" };
+    const uint8_t pins[]  = { 0xF0 };
+    writeStore(sensors, pins, 1);
+
+    ConfigStoreHeader header;
+    EEPROM.get(0, header);
+    header.numInputs = 255;
+    EEPROM.put(0, header);
+
+    TEST_ASSERT_EQUAL(BUS_NEED_NONE, storedInputBusNeeds());
+}
+
+int main(int, char**) {
+    UNITY_BEGIN();
+    RUN_TEST(test_i2c_claim_refused_when_an_input_holds_a_bus_pin);
+    RUN_TEST(test_spi_claim_refused_when_an_input_holds_a_bus_pin);
+    RUN_TEST(test_can_claim_refused_when_an_input_holds_a_bus_pin);
+    RUN_TEST(test_claim_succeeds_when_no_input_is_in_the_way);
+    RUN_TEST(test_reclaim_by_the_same_owner_still_succeeds);
+    RUN_TEST(test_absent_pins_are_not_an_input_conflict);
+    RUN_TEST(test_registry_owner_is_still_a_conflict);
+    RUN_TEST(test_unregistered_probe_falls_back_to_the_registry);
+
+    RUN_TEST(test_i2c_sensor_declares_an_i2c_need);
+    RUN_TEST(test_thermocouple_declares_an_spi_need);
+    RUN_TEST(test_analog_and_digital_sensors_need_no_bus);
+    RUN_TEST(test_unknown_sensor_hash_needs_no_bus);
+    RUN_TEST(test_display_is_one_more_voter);
+
+    RUN_TEST(test_stored_i2c_sensor_asks_for_the_i2c_bus);
+    RUN_TEST(test_stored_thermocouple_asks_for_the_spi_bus);
+    RUN_TEST(test_record_order_does_not_change_the_answer);
+    RUN_TEST(test_both_buses_can_be_needed_at_once);
+    RUN_TEST(test_analog_only_config_asks_for_nothing);
+    RUN_TEST(test_blank_eeprom_asks_for_nothing);
+    RUN_TEST(test_foreign_store_version_asks_for_nothing);
+    RUN_TEST(test_impossible_record_count_asks_for_nothing);
+    return UNITY_END();
+}

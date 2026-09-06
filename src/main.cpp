@@ -19,6 +19,8 @@
 #include "lib/sensor_library.h"
 #include "lib/system_config.h"
 #include "lib/bus_manager.h"
+#include "lib/bus_needs.h"
+#include "lib/bus_pins.h"
 #include "lib/serial_manager.h"
 #include "lib/pin_registry.h"
 #include "lib/sd_manager.h"
@@ -252,6 +254,11 @@ void setup() {
     // Register system pins in the pin registry
     registerSystemPins();
 
+    // Configured inputs never enter the pin registry (mega2560 has no RAM for
+    // them), so hand the bus layer a probe it can ask instead. Registered here,
+    // before the first bus claim, so boot and the CLI use the same predicate.
+    setBusPinInputProbe(inputHoldsPin);
+
     // Initialize configured serial ports based on SystemConfig.serial
     // This replaces the old hardcoded Serial1.begin() / Serial2.begin() calls
     initConfiguredSerialPorts();
@@ -324,12 +331,30 @@ void setup() {
     setupADC();
     msg.debug.info(TAG_ADC, "ADC configured");
 
-    // Initialize configured buses (I2C, SPI, CAN) based on SystemConfig
-    // This replaces the old hardcoded Wire.begin() and SPI.begin() calls
+    // ---- Bus ownership is settled HERE, in one pass, before any client ------
+    //
+    // First the explicit selections (`BUS I2C <n>` / `BUS SPI <n>` / CAN), then
+    // every bus the stored CONFIGURATION needs. The voters are the stored input
+    // records — via each sensor's declared requirement — and the display, which
+    // is one more voter with no special status: an add-on LCD must not be what
+    // decides whether this board has an I2C bus (#358).
+    //
+    // Doing both before initLCD() and before loadInputConfig()'s record loop is
+    // the point: SDA/SCL are reserved before any stored pin is validated, so the
+    // outcome cannot depend on which client initializes first, or in what order
+    // the records happen to sit in EEPROM.
     initConfiguredBuses();
+    uint8_t busNeeds = storedInputBusNeeds();
+    #if INCLUDE_LCD
+    // The display votes only where its driver is in the image: a displayType
+    // carried over from another board can't be served by a firmware that has no
+    // LCD code, and must not hold that board's SDA/SCL hostage.
+    busNeeds |= busNeedsForDisplayType(systemConfig.displayType);
+    #endif
+    acquireRequiredBuses(busNeeds);
 
-    // Initialize display (before inputs load, so the bus it acquires has already
-    // reserved SDA/SCL by the time loadInputConfig() validates stored pins).
+    // Initialize display. The bus it needs, if any, is already up and owned by
+    // the pass above; initLCD()'s acquireI2C() is now just a lookup.
     //
     // INCLUDE_LCD means the driver is in the image, NOT that a screen is fitted —
     // nothing at compile time can know that, which is why there is no wiring flag
@@ -346,7 +371,9 @@ void setup() {
         // STATUS reports "Enabled" (the on/off toggle) either way, so nothing
         // else on the board would tell the user what is wrong.
         msg.control.println(F("Note: no display configured (DISPLAY TYPE LCD to enable one)"));
-        msg.control.println(F("  I2C pins stay free for inputs until a display is declared."));
+        // Not "the I2C pins are free": since #358 an I2C SENSOR brings the bus up
+        // on its own, so the display's absence no longer decides that either way.
+        msg.control.println(F("  The display is not holding an I2C bus. BUS I2C shows what is."));
     }
     #endif
 

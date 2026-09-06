@@ -103,6 +103,7 @@ void printDisplayConfig();
 // Shared I2C SDA/SCL conflict check (DISPLAY TYPE LCD, BUS I2C <n>).
 // Prints the error itself; returns true when the bus must not be selected.
 bool i2cBusPinsConflict(uint8_t bus_id);
+bool spiBusPinsConflict(uint8_t bus_id);
 
 void printHelpOverview();
 void printHelpQuick();

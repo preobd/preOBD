@@ -192,6 +192,12 @@ The X_SENSOR macro parameters are:
 12. `nameHash` - Precomputed hash from Step 1
 13. `pinTypeRequirement` - PIN_ANALOG, PIN_DIGITAL, or PIN_I2C
 
+**If your sensor needs a bus**, check `busNeedsForSensorIndex()` in
+`src/lib/sensor_library/sensor_helpers.h`. That is what tells the boot path to
+bring the bus up (and reserve its pins) before your sensor's init runs. `PIN_I2C`
+is recognized automatically; an SPI part is recognized as CAT_THERMOCOUPLE, so a
+new SPI family needs a line there or it will find `getActiveSPI()` empty.
+
 ### Step 5: Validate
 
 Run the validation tool to check for hash collisions:

@@ -8,6 +8,8 @@
 #include "bus_config.h"
 #include "bus_defaults.h"
 #include "pin_registry.h"
+#include "bus_pins.h"
+#include "bus_needs.h"
 #include "system_config.h"
 #include "message_api.h"
 #include "log_tags.h"
@@ -35,29 +37,15 @@ static bool can_ready = false;
 // ============================================================================
 
 // A bus rests on "bus up implies its pins are reserved" — that is what stops an
-// input being assigned to a pin a bus is clocking (#351). registerPin() is
-// first-writer-wins, and the overlaps are real on stock hardware (Teensy 4.x
-// I2C1 17/16 vs Serial4 16/17, and serial ports register first), so a caller
-// that ignores the result publishes a bus the registry attributes to someone
-// else. Every bus therefore claims its pins BEFORE bringing the peripheral up,
-// all or nothing, and refuses to start if the claim is denied.
+// input being assigned to a pin a bus is clocking (#351). The decision itself
+// lives in bus_pins.cpp (claimBusPins), shared with the CLI so the boot path and
+// `BUS I2C <n>` cannot drift apart, and so every bus — not just I2C, and not
+// just at runtime — consults the configured inputs as well as the registry
+// (#358).
 //
 // One shared format string: msg.debug.* format strings are RAM-resident on AVR,
 // so three per-bus variants would cost real bytes on the 8 KB mega.
-static const char BUS_PINS_BUSY[] = "%s not started: pins already claimed";
-static const char BUS_STARTED[]   = "%s up";
-
-static bool claimBusPins(const uint8_t* pins, uint8_t count,
-                         const char* tag, const char* bus_name) {
-    if (reservePins(pins, count, bus_name)) return true;
-
-    msg.debug.error(tag, BUS_PINS_BUSY, bus_name);
-    msg.control.print(F("ERROR: "));
-    msg.control.print(bus_name);
-    msg.control.println(F(" not started - a pin it needs is already in use"));
-    msg.control.println(F("  SYSTEM PINS shows the owner; reconfigure one of them."));
-    return false;
-}
+static const char BUS_STARTED[] = "%s up";
 
 // ============================================================================
 // MAIN INITIALIZATION
@@ -383,6 +371,29 @@ TwoWire* acquireI2C() {
 
 SPIClass* getActiveSPI() {
     return active_spi;
+}
+
+SPIClass* acquireSPI() {
+    if (active_spi) return active_spi;
+
+    uint8_t bus_id = (systemConfig.buses.active_spi != 0xFF)
+                         ? systemConfig.buses.active_spi
+                         : (uint8_t)DEFAULT_SPI_BUS;
+
+    if (!initSPIBus(bus_id, systemConfig.buses.spi_clock)) {
+        msg.debug.error(TAG_SPI, "SPI acquire failed");
+        return nullptr;
+    }
+    return active_spi;
+}
+
+void acquireRequiredBuses(uint8_t needs) {
+    // A refused bus is a degraded board, never a dead one: acquire*() returns
+    // nullptr, the clients that need it report and no-op (display_lcd.cpp,
+    // bme280.cpp, max6675.cpp), and boot continues to the CLI where the user can
+    // fix the conflict. Nothing here may abort or reset.
+    if (needs & BUS_NEED_I2C) acquireI2C();
+    if (needs & BUS_NEED_SPI) acquireSPI();
 }
 
 uint8_t getActiveI2CId() {
