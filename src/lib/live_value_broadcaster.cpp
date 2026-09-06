@@ -57,29 +57,10 @@ inline bool sameKey(const LiveKey& a, const LiveKey& b) {
 SlottedBroadcaster<LiveKey, MAX_INPUTS> g_bc;
 uint32_t g_lastScanMs = 0;
 
-// How many heartbeats a slot keeps taking part in AFTER it is freed. The
-// clearing frame is edge-triggered, and this transport has no end-to-end ACK:
-// sendFrame() reports only LOCAL flow refusal, so a frame dropped further
-// downstream (the nRF's per-destination stash, a notify a central does not
-// accept) is invisible here. Before #337 the heartbeat re-sent the flags-0
-// frame forever and a lost clear healed on its own — live values are the
-// self-healing-heartbeat tier, not the retry-until-accepted tier alarms are in.
-// Excluding a freed slot the instant it frees would have made that one frame
-// the only chance, and a client that missed it would show a stale tile
-// permanently, across reconnects. Repeating it over a bounded window restores
-// the healing without restoring the per-MAX_INPUTS sweep.
-constexpr uint8_t kClearHeartbeats = 3;
-
-// The window is spent per clearing frame the transport ACCEPTS (see sendSlot),
-// not per heartbeat edge, so it survives a busy link: the edge-triggered push
-// costs one, leaving kClearHeartbeats heartbeat repeats. Counting edges instead
-// let refused sends burn the window down to nothing — bench-confirmed on
-// teensy40, where the repeats never arrived and a client disconnected across a
-// CLEAR kept its tile for good.
-constexpr uint8_t kClearFramesTotal = kClearHeartbeats + 1;
-
-bool    g_wasOccupied[MAX_INPUTS];
-uint8_t g_clearGrace[MAX_INPUTS];
+// Heartbeat membership and the post-free grace window that keeps a freed slot
+// in it for a bounded number of ACCEPTED frames (#337, #349, #352) are the
+// template's job — see slotted_broadcaster.h. All this TU owes it is
+// slotOccupied().
 
 FLASHMEM LiveKey packKey(int i) {
     LiveKey k;
@@ -125,41 +106,18 @@ FLASHMEM bool sendSlot(int i, uint16_t seq) {
     v.sequence        = seq;
     v.value           = k.value;
     v.timestampMs     = millis();
-    const bool sent = hwSerial1.sendFrame(FRAME_TYPE_LIVE,
-                                          reinterpret_cast<const uint8_t*>(&v),
-                                          sizeof(v));
-    // Spend the grace window on clearing frames the transport ACCEPTED, never on
-    // heartbeat edges. sendFrame() refuses while the TX buffer is full, and
-    // counting edges burned the whole window on refused sends — on a link busy
-    // enough to starve the heartbeat the window expired having delivered nothing,
-    // which is exactly the self-healing it exists to provide. Bench-confirmed on
-    // teensy40: the freed slot's clear went out once as a change push and the
-    // three repeats never arrived, so a client that missed it (or was
-    // disconnected across the CLEAR) kept a stale tile permanently.
-    if (sent && !slotOccupied(i) && g_clearGrace[i] > 0) --g_clearGrace[i];
-    return sent;
+    return hwSerial1.sendFrame(FRAME_TYPE_LIVE,
+                               reinterpret_cast<const uint8_t*>(&v),
+                               sizeof(v));
 }
-
-// Heartbeat membership (#337): the occupied slots, plus any slot still inside
-// its post-free grace window so the tile-clearing frame gets more than one
-// chance. Change detection never consults this — a slot it excludes still emits
-// the moment its key changes — so nothing here can make a transition invisible.
-FLASHMEM bool inHeartbeat(int i) { return slotOccupied(i) || g_clearGrace[i] > 0; }
 
 // The scan pass (incl. the SlottedBroadcaster::tick instantiation, which
 // inlines here) lives in flash; only the cheap gate in tick() runs per loop.
 FLASHMEM void scanOnce(uint32_t now) {
-    // Arm the grace window on the occupied→freed edge, before the tick that
-    // emits the clearing frame.
-    for (int i = 0; i < MAX_INPUTS; ++i) {
-        const bool occ = slotOccupied(i);
-        if (!occ && g_wasOccupied[i]) g_clearGrace[i] = kClearFramesTotal;
-        g_wasOccupied[i] = occ;
-    }
-
-    // sendSlot() spends the grace window itself, per clearing frame the transport
-    // accepted, so a starved or refused heartbeat costs the slot nothing.
-    g_bc.tick(now, kHeartbeatMs, packKey, sameKey, sendSlot, inHeartbeat);
+    // The broadcaster arms the post-free grace window on the occupied→freed
+    // edge and spends it per clearing frame the transport ACCEPTED, so a starved
+    // or refused heartbeat costs the slot nothing (#349).
+    g_bc.tick(now, kHeartbeatMs, packKey, sameKey, sendSlot, slotOccupied);
 }
 
 void init() {
@@ -171,24 +129,14 @@ void init() {
     // pushes one frame, because its cached key is then the occupied one.
     LiveKey empty;
     memset(&empty, 0, sizeof(empty));
+    // prime() also seeds occupancy as "nothing occupied" and the grace window
+    // closed — which matters here because init() runs BEFORE the config load
+    // (main.cpp brings the broadcasters up next to the transports;
+    // initInputManager() comes later), so inputs[] is still BSS-zeroed and every
+    // slot reads pin == 0, indistinguishable from a real input on digital pin 0.
+    // Snapshotting that was #352; see slotted_broadcaster.h.
     g_bc.prime(empty);
     g_lastScanMs = 0;
-    memset(g_clearGrace, 0, sizeof(g_clearGrace));
-    // Seed occupancy as "nothing occupied" rather than from inputs[]: init()
-    // runs BEFORE the config load (main.cpp brings the broadcasters up next to
-    // the transports; initInputManager() comes later), so the table is still
-    // BSS-zeroed here and every slot reads pin == 0 — which slotOccupied()
-    // cannot tell from a real input on digital pin 0. Snapshotting that made the
-    // first scan see MAX_INPUTS - n occupied→freed edges and arm the post-free
-    // grace window for every slot that had never held an input, putting them all
-    // in the heartbeat: each then emitted the flags-0 "tile is gone" frame,
-    // dripping out a few slots at a time as the sweep drained (#352).
-    //
-    // Seeding empty is safe in both orders. The first scan records real
-    // occupancy and can only arm on a LATER free, and a slot that is occupied
-    // at this point has nothing to clear anyway — no client can hold a tile for
-    // it before the first loop() pass.
-    memset(g_wasOccupied, 0, sizeof(g_wasOccupied));
 }
 
 void tick() {
@@ -217,9 +165,7 @@ FLASHMEM void resync() {
     // resyncing client is rebuilding its tiles from scratch, and a slot with no
     // input has no tile to build (#337). Empty slots keep their cached empty
     // key, so a later occupied→freed transition still emits.
-    for (int i = 0; i < MAX_INPUTS; ++i) {
-        if (inHeartbeat(i)) g_bc.invalidate(i);
-    }
+    g_bc.invalidateActive(slotOccupied);
 }
 
 } // namespace LiveValueBroadcaster

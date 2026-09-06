@@ -323,6 +323,221 @@ static void test_progressing_sweep_reports_draining(void) {
     TEST_ASSERT_FALSE(bc.sweepPending());
 }
 
+// --- occupancy + the post-vacate grace window (#337/#349/#352) ---------
+//
+// These used to be copy-pasted into every subsystem (identical arrays, arm loop
+// and spend, differing only in the occupancy predicate), and each of the four
+// bugs above was fixed one subsystem at a time. The template owns them now, so
+// they are tested once, here, at the level the guarantee lives at.
+
+// Named so the grace-window constant can be used inside a Unity macro (the
+// template's comma would otherwise split the macro's arguments).
+typedef SlottedBroadcaster<int, 8> BC8;
+
+static bool g_occ[8];
+static bool occArr(int i) { return g_occ[i]; }
+
+// Key reflects occupancy: an empty slot packs to 0 (the "tile is gone" frame),
+// an occupied one to a nonzero value that changes when g_packVal does.
+static int packOcc(int i) { return g_occ[i] ? (100 + g_packVal[i]) : 0; }
+
+static int emitCountFor(int slot) {
+    int n = 0;
+    for (int i = 0; i < g_emittedN; ++i) if (g_emitted[i] == slot) ++n;
+    return n;
+}
+
+static void occSetUp(void) {
+    memset(g_occ, 0, sizeof(g_occ));
+    for (int i = 0; i < 8; ++i) g_packVal[i] = 0;
+    g_budget = 100;
+}
+
+// ARM-ON-EDGE + GRACE EXPIRY. A slot that goes empty keeps taking part in the
+// heartbeat for exactly kGraceFrames accepted frames (the edge-triggered change
+// push plus kGraceHeartbeats repeats), then goes quiet for good. Without the
+// window a single lost clear leaves a stale tile forever; without the expiry we
+// are back to sweeping every empty slot every heartbeat (#337/#365).
+static void test_vacated_slot_beats_for_the_grace_window_then_stops(void) {
+    occSetUp();
+    SlottedBroadcaster<int, 8> bc;
+    bc.prime(0);                                    // empty key cached everywhere
+
+    g_occ[0] = true;
+    bc.tick(1, HB, packOcc, eqInt, budgetSend, occArr);   // slot 0 appears
+    TEST_ASSERT_EQUAL_INT(1, emitCountFor(0));
+
+    clearEmitted();
+    g_occ[0] = false;                               // …and is freed
+    bc.tick(2, HB, packOcc, eqInt, budgetSend, occArr);
+    TEST_ASSERT_EQUAL_INT(1, emitCountFor(0));      // the clearing frame
+
+    // Three heartbeat repeats, then silence — and never any other slot.
+    for (int hb = 1; hb <= 6; ++hb) {
+        g_budget = 100;
+        bc.tick(hb * HB, HB, packOcc, eqInt, budgetSend, occArr);
+    }
+    TEST_ASSERT_EQUAL_INT(BC8::kGraceFrames, emitCountFor(0));
+    for (int i = 1; i < 8; ++i) TEST_ASSERT_EQUAL_INT(0, emitCountFor(i));
+}
+
+// #349 AT TEMPLATE LEVEL. The window is spent per frame the transport ACCEPTED,
+// never per heartbeat edge. The subsystem could only infer acceptance — the
+// template is the one thing that sees send()'s return value. Counting edges
+// burned the whole window on refused sends: on a link busy enough to starve the
+// heartbeat, the window expired having delivered nothing at all, which is
+// exactly the self-healing it exists to provide (bench-confirmed on teensy40).
+static void test_grace_window_is_spent_per_accepted_frame_only(void) {
+    occSetUp();
+    SlottedBroadcaster<int, 8> bc;
+    bc.prime(0);
+
+    g_occ[0] = true;
+    bc.tick(1, HB, packOcc, eqInt, budgetSend, occArr);
+    clearEmitted();
+
+    // Freed onto a closed link: the clearing frame and two whole heartbeats are
+    // refused. Nothing was delivered, so nothing may be charged.
+    g_occ[0] = false;
+    g_budget = 0;
+    bc.tick(2, HB, packOcc, eqInt, budgetSend, occArr);
+    for (int hb = 1; hb <= 2; ++hb) {
+        g_budget = 0;
+        bc.tick(hb * HB, HB, packOcc, eqInt, budgetSend, occArr);
+    }
+    TEST_ASSERT_EQUAL_INT(0, emitCountFor(0));
+
+    // The link reopens: the full window is still owed.
+    g_budget = 100;
+    bc.tick(2 * HB + 1, HB, packOcc, eqInt, budgetSend, occArr);   // parked sweep drains
+    for (int hb = 3; hb <= 8; ++hb) {
+        g_budget = 100;
+        bc.tick(hb * HB, HB, packOcc, eqInt, budgetSend, occArr);
+    }
+    TEST_ASSERT_EQUAL_INT(BC8::kGraceFrames, emitCountFor(0));
+}
+
+// #352 AT TEMPLATE LEVEL. The broadcasters are brought up before the config
+// load, so an occupancy snapshot taken at init() reads a BSS-zeroed table —
+// every slot's id/pin is 0, which no occupancy predicate can tell from a real
+// record at 0. prime()/reset() therefore seed "nothing was occupied", which is
+// correct by construction: the first tick records the truth and can only arm on
+// a LATER vacate. Snapshotting instead made the first tick see N - n phantom
+// occupied->vacated edges and drip a "tile is gone" frame out of every slot
+// that had never held anything.
+static void test_seed_empty_never_clears_never_occupied_slots(void) {
+    occSetUp();
+    SlottedBroadcaster<int, 8> bc;
+    bc.prime(0);                       // …at boot, before the table is loaded
+
+    g_occ[0] = true;                   // the config load lands afterwards
+    g_occ[1] = true;
+
+    for (int hb = 1; hb <= 12; ++hb) { // ~a minute of heartbeats
+        g_budget = 100;
+        bc.tick(hb * HB, HB, packOcc, eqInt, budgetSend, occArr);
+    }
+    for (int i = 2; i < 8; ++i)
+        TEST_ASSERT_EQUAL_INT(0, emitCountFor(i));   // never occupied: silent
+    TEST_ASSERT_GREATER_THAN_INT(0, emitCountFor(0));
+    TEST_ASSERT_GREATER_THAN_INT(0, emitCountFor(1));
+}
+
+// reset() carries the same guarantee as prime(): it must not leave occupancy
+// asserted from whatever the object held before.
+static void test_reset_seeds_occupancy_empty(void) {
+    occSetUp();
+    SlottedBroadcaster<int, 8> bc;
+    bc.prime(0);
+    for (int i = 0; i < 8; ++i) g_occ[i] = true;
+    bc.tick(1, HB, packOcc, eqInt, budgetSend, occArr);   // everything occupied
+
+    bc.reset();
+    memset(g_occ, 0, sizeof(g_occ));                     // …and the table empties
+    clearEmitted();
+    // reset() means "nothing cached", so the first tick emits every slot once —
+    // but no slot may be inside a grace window, so the next heartbeats are quiet.
+    bc.tick(2, HB, packOcc, eqInt, budgetSend, occArr);
+    clearEmitted();
+    for (int hb = 1; hb <= 6; ++hb) {
+        g_budget = 100;
+        bc.tick(hb * HB, HB, packOcc, eqInt, budgetSend, occArr);
+    }
+    TEST_ASSERT_EQUAL_INT(0, g_emittedN);
+}
+
+// The heartbeat covers occupied slots only, and change detection is untouched
+// by that: an empty, heartbeat-excluded slot still emits the instant it is
+// filled (#337 — excluding a slot must never make a transition invisible).
+static void test_heartbeat_is_occupied_only_but_change_always_emits(void) {
+    occSetUp();
+    SlottedBroadcaster<int, 8> bc;
+    bc.prime(0);
+    g_occ[3] = true;
+    bc.tick(1, HB, packOcc, eqInt, budgetSend, occArr);
+
+    clearEmitted();
+    for (int hb = 1; hb <= 3; ++hb) {
+        g_budget = 100;
+        bc.tick(hb * HB, HB, packOcc, eqInt, budgetSend, occArr);
+    }
+    TEST_ASSERT_EQUAL_INT(3, emitCountFor(3));           // the occupied one beats
+    TEST_ASSERT_EQUAL_INT(3, g_emittedN);                // …and only it
+
+    clearEmitted();
+    g_occ[6] = true;                                     // a fresh record appears
+    bc.tick(3 * HB + 1, HB, packOcc, eqInt, budgetSend, occArr);
+    TEST_ASSERT_EQUAL_INT(1, emitCountFor(6));
+}
+
+// AlarmBroadcaster's shape: no occupancy predicate, heartbeatMs 0. Every slot
+// counts as permanently occupied, so the grace window never arms and the
+// broadcaster stays purely edge-triggered — identical to its behaviour before
+// the occupancy machinery moved into the template.
+static void test_no_occupancy_predicate_is_edge_only(void) {
+    for (int i = 0; i < 8; ++i) g_packVal[i] = 42;
+    SlottedBroadcaster<int, 8> bc;
+    bc.prime(42);
+    g_budget = 100;
+    for (uint32_t t = 1; t < 4 * HB; t += 137) {
+        g_budget = 100;
+        bc.tick(t, /*heartbeatMs=*/0, packArr, eqInt, budgetSend);
+    }
+    TEST_ASSERT_EQUAL_INT(0, g_emitCount);               // quiet without a transition
+
+    g_packVal[5] = 7;                                    // one transition
+    g_budget = 100;
+    bc.tick(4 * HB, 0, packArr, eqInt, budgetSend);
+    TEST_ASSERT_EQUAL_INT(1, g_emitCount);
+    for (uint32_t t = 4 * HB + 1; t < 8 * HB; t += 137) {
+        g_budget = 100;
+        bc.tick(t, 0, packArr, eqInt, budgetSend);
+    }
+    TEST_ASSERT_EQUAL_INT(1, g_emitCount);               // …and no repeats
+}
+
+// invalidateActive(): a reconnecting client rebuilds the tiles it can have —
+// the occupied slots plus any still owed a clear. A slot that has never held
+// anything has no tile to rebuild and must stay silent (#337/#352).
+static void test_invalidate_active_covers_occupied_and_grace_only(void) {
+    occSetUp();
+    SlottedBroadcaster<int, 8> bc;
+    bc.prime(0);
+    g_occ[0] = true;
+    g_occ[1] = true;
+    bc.tick(1, HB, packOcc, eqInt, budgetSend, occArr);
+    g_occ[1] = false;                                    // slot 1 freed…
+    bc.tick(2, HB, packOcc, eqInt, budgetSend, occArr);  // …clear pushed, grace open
+
+    clearEmitted();
+    bc.invalidateActive(occArr);                         // a central reconnects
+    g_budget = 100;
+    bc.tick(3, HB, packOcc, eqInt, budgetSend, occArr);
+    TEST_ASSERT_EQUAL_INT(1, emitCountFor(0));           // occupied: re-sent
+    TEST_ASSERT_EQUAL_INT(1, emitCountFor(1));           // inside its grace window
+    TEST_ASSERT_EQUAL_INT(2, g_emittedN);                // nothing else
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_cold_start_emits_all);
@@ -338,5 +553,12 @@ int main(int, char**) {
     RUN_TEST(test_busy_low_slots_do_not_livelock_the_sweep);
     RUN_TEST(test_durably_refusing_transport_never_claims_draining);
     RUN_TEST(test_progressing_sweep_reports_draining);
+    RUN_TEST(test_vacated_slot_beats_for_the_grace_window_then_stops);
+    RUN_TEST(test_grace_window_is_spent_per_accepted_frame_only);
+    RUN_TEST(test_seed_empty_never_clears_never_occupied_slots);
+    RUN_TEST(test_reset_seeds_occupancy_empty);
+    RUN_TEST(test_heartbeat_is_occupied_only_but_change_always_emits);
+    RUN_TEST(test_no_occupancy_predicate_is_edge_only);
+    RUN_TEST(test_invalidate_active_covers_occupied_and_grace_only);
     return UNITY_END();
 }

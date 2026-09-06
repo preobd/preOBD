@@ -28,23 +28,10 @@ constexpr uint32_t kHeartbeatMs = 5000;
 // Change key = the full payload; equality ignores the sequence stamp.
 SlottedBroadcaster<PreobdActionState, MAX_ACTIONS> g_bc;
 
-// How many heartbeats a slot keeps taking part in AFTER its Action is deleted.
-// The clearing frame (actionId = NONE) is edge-triggered and this transport has
-// no end-to-end ACK — sendFrame() reports only LOCAL flow refusal, so a frame
-// dropped downstream (the nRF's per-destination stash, a notify a central never
-// accepts) is invisible here. Repeating it over a bounded window keeps the
-// self-healing the unscoped heartbeat used to provide, without paying for
-// MAX_ACTIONS empty slots every 5 s (#365).
-constexpr uint8_t kClearHeartbeats = 3;
-
-// The window is spent per clearing frame the transport ACCEPTS (see sendSlot),
-// never per heartbeat edge: on a busy link, counting edges burned the window on
-// refused sends and the repeats never arrived (#349). The edge-triggered push
-// costs one, leaving kClearHeartbeats heartbeat repeats.
-constexpr uint8_t kClearFramesTotal = kClearHeartbeats + 1;
-
-bool    g_wasOccupied[MAX_ACTIONS];
-uint8_t g_clearGrace[MAX_ACTIONS];
+// Heartbeat membership and the post-delete grace window that keeps a deleted
+// slot in it for a bounded number of ACCEPTED frames (#337, #349, #352, #365)
+// are the template's job — see slotted_broadcaster.h. All this TU owes it is
+// slotOccupied().
 
 // The frame an empty slot packs to. Single-sourced so init()'s prime() key is
 // byte-identical to what packState() produces for an unconfigured slot — if the
@@ -59,12 +46,6 @@ PreobdActionState emptyState() {
 
 // Occupancy: the sentinel packState() already keys the empty frame on.
 bool slotOccupied(int i) { return actions[i].id != CONTROL_ID_NONE; }
-
-// Heartbeat membership: configured slots, plus any slot still inside its
-// post-delete grace window so the clearing frame gets more than one chance.
-// Change detection never consults this — a slot it excludes still emits the
-// moment its key changes — so nothing here can make a transition invisible.
-bool inHeartbeat(int i) { return slotOccupied(i) || g_clearGrace[i] > 0; }
 
 void packState(int i, PreobdActionState& s) {
     const Action& a = actions[i];
@@ -118,13 +99,9 @@ bool sendSlot(int i, uint16_t seq) {
     PreobdActionState snap;
     packState(i, snap);
     snap.sequence = seq;
-    const bool sent = hwSerial1.sendFrame(FRAME_TYPE_RELAY,  // 0x05 (legacy name; carries Action state)
-                                          reinterpret_cast<const uint8_t*>(&snap),
-                                          sizeof(snap));
-    // Spend the grace window on clearing frames the transport ACCEPTED, never on
-    // heartbeat edges — see kClearFramesTotal (#349).
-    if (sent && !slotOccupied(i) && g_clearGrace[i] > 0) --g_clearGrace[i];
-    return sent;
+    return hwSerial1.sendFrame(FRAME_TYPE_RELAY,  // 0x05 (legacy name; carries Action state)
+                               reinterpret_cast<const uint8_t*>(&snap),
+                               sizeof(snap));
 }
 
 } // namespace
@@ -136,46 +113,31 @@ void init() {
     // catch-up burst scales with the Action count instead of MAX_ACTIONS. A slot
     // deleted LATER still pushes its clearing frame, because its cached key is
     // then the occupied one.
+    // prime() also seeds occupancy as "nothing occupied" and the grace window
+    // closed — which matters here because init() runs BEFORE the control tables
+    // load (main.cpp:309 brings the broadcasters up next to the transports;
+    // initInputManager() only runs at line 364), so actions[] is still
+    // BSS-zeroed and every slot reads id == 0, indistinguishable from a real
+    // Action with id 0. Snapshotting that was #352 (the live-value twin of this
+    // bug); see slotted_broadcaster.h.
     g_bc.prime(emptyState());
-    memset(g_clearGrace, 0, sizeof(g_clearGrace));
-    // Seed occupancy as "nothing occupied" rather than from actions[]: init()
-    // runs BEFORE the control tables load (main.cpp:309 brings the broadcasters
-    // up next to the transports; initInputManager() only runs at line 364), so
-    // the table is still BSS-zeroed here and every slot reads id == 0 — which
-    // slotOccupied() cannot tell from a real Action with id 0. Snapshotting that
-    // would make the first tick see MAX_ACTIONS - n occupied->deleted edges and
-    // arm the grace window for every slot that never held an Action, putting all
-    // of them back in the heartbeat (#352, the live-value twin of this bug).
-    //
-    // Seeding empty is safe in both orders: the first tick records real
-    // occupancy and can only arm on a LATER delete, and a slot occupied at this
-    // point has nothing to clear — no client can hold a tile for it before the
-    // first loop() pass.
-    memset(g_wasOccupied, 0, sizeof(g_wasOccupied));
 }
 
 void tick() {
-    // Arm the grace window on the occupied->deleted edge, before the tick that
-    // emits the clearing frame. sendSlot() spends it, per accepted frame, so a
-    // starved or refused heartbeat costs the slot nothing.
-    for (int i = 0; i < MAX_ACTIONS; ++i) {
-        const bool occ = slotOccupied(i);
-        if (!occ && g_wasOccupied[i]) g_clearGrace[i] = kClearFramesTotal;
-        g_wasOccupied[i] = occ;
-    }
-
-    // heartbeatFor = inHeartbeat: the periodic re-send covers the configured
-    // Actions only. Unscoped, it swept all MAX_ACTIONS slots every 5 s — 59
-    // empty frames per cycle on a 5-action board, ~92% of ~1344 B carrying
-    // nothing and competing with live values for the same TX budget (#365).
-    // Invisible until the sweep became resumable (#350): before that the burst
-    // died after three frames and the empty slots were never transmitted.
+    // The broadcaster derives heartbeat membership from slotOccupied(), so the
+    // periodic re-send covers the configured Actions only. Unscoped, it swept
+    // all MAX_ACTIONS slots every 5 s — 59 empty frames per cycle on a 5-action
+    // board, ~92% of ~1344 B carrying nothing and competing with live values for
+    // the same TX budget (#365). Invisible until the sweep became resumable
+    // (#350): before that the burst died after three frames and the empty slots
+    // were never transmitted. It also arms the post-delete grace window on the
+    // occupied->deleted edge and spends it per ACCEPTED frame (#349).
     g_bc.tick(millis(), kHeartbeatMs,
         [](int i) { PreobdActionState s; packState(i, s); return s; },
         [](const PreobdActionState& a, const PreobdActionState& b) {
             return sameIgnoringSequence(a, b);
         },
-        sendSlot, inHeartbeat);
+        sendSlot, slotOccupied);
 }
 
 void handleInbound(const uint8_t* payload, uint16_t len) {
@@ -218,9 +180,7 @@ void resync() {
     // resyncing client is rebuilding its tiles from scratch and an empty slot has
     // no tile to build. Empty slots keep their cached empty key, so a later
     // occupied->deleted transition still emits.
-    for (int i = 0; i < MAX_ACTIONS; ++i) {
-        if (inHeartbeat(i)) g_bc.invalidate(i);
-    }
+    g_bc.invalidateActive(slotOccupied);
 }
 
 } // namespace ActionBroadcaster
