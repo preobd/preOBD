@@ -123,12 +123,16 @@
 #  endif
 #endif
 
-// The LCD is deliberately NOT wiring-gated. There is one active I2C bus
-// system-wide (bus_manager.cpp), selected at runtime by `BUS I2C <n>` and
-// persisted, so "which bus is the display on" is not a compile-time fact; and
-// whether a screen is fitted is systemConfig.displayType, which is what gates
-// bring-up (#351/#355). A compile-time gate would only mean you had to reflash
-// to attach a display. See #356 for why that issue was closed.
+// The LCD is deliberately NOT wiring-gated. Whether a screen is FITTED is
+// systemConfig.displayType, a runtime fact no compile-time flag can know, and
+// that is what gates bring-up (#351/#355) — a compile-time gate would only
+// mean you had to reflash to attach a display. See #356 for why that issue
+// was closed. (This is a claim about the DISPLAY's presence, not about which
+// I2C bus INSTANCE it runs on: that half moved to a build-time fact in #377 —
+// I2C_WIRED_BUS in wiring.ini/board.h — the same WIRED pattern this file uses
+// for LED/mode-button/SD. A declaration only grants permission, though: `BUS
+// I2C <n>` still decides, and remains the one place a display's bus is
+// actually selected.)
 #if SUPPORTS_LCD
 #  ifndef INCLUDE_LCD
 #    define INCLUDE_LCD 1

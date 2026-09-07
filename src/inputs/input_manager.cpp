@@ -19,6 +19,7 @@
 #include "../lib/sensor_library.h"
 #include "../lib/pin_registry.h"
 #include "../lib/bus_needs.h"
+#include "../lib/bus_manager.h"
 #include "../control/control_manager.h"  // controlResetTables + rule/action table helpers
 
 // ===== GLOBAL STATE =====
@@ -907,6 +908,15 @@ bool setInputSensor(uint8_t pin, uint8_t sensorIndex) {
     if (sensorChanged && info.initFunction) {
         info.initFunction(input);
     }
+
+    // The record is legitimate either way — don't fail the assignment — but if
+    // this sensor needs a bus that isn't up (no explicit selection AND no
+    // build-time WIRING declaration, #377), it cannot read yet. Tell the user
+    // what to run. Same guidance as the boot diagnosis (main.cpp), through the
+    // same rate-limited helper, so the two paths cannot drift apart.
+    uint8_t needs = busNeedsForSensorIndex(sensorIndex);
+    if ((needs & BUS_NEED_I2C) && !getActiveI2C()) reportNoI2CBus();
+    if ((needs & BUS_NEED_SPI) && !getActiveSPI()) reportNoSPIBus();
 
     return true;
 }

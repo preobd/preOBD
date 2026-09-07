@@ -12,3 +12,6 @@ wiring =
 ;    -D RGB_PIN_B=13
 ;    -D BUZZER_PIN=3       ; alarm buzzer (tone output)
 ;    -D MODE_BUTTON_PIN=5  ; CONFIG-on-boot / silence button
+;    -D I2C_WIRED_BUS=0    ; this I2C instance is physically wired (only Wire exists)
+;    -D SPI_WIRED_BUS=0    ; this SPI instance is physically wired (only SPI exists)
+;    ; no CAN_WIRED_BUS: this board has no CAN controller (NUM_CAN_BUSES=0)

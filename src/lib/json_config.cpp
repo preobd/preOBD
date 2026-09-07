@@ -12,6 +12,7 @@
 #if SUPPORTS_JSON_CONFIG
 #include "system_config.h"
 #include "bus_defaults.h"
+#include "bus_wiring.h"
 #include "serial_manager.h"
 #include "../inputs/input.h"
 #include "../inputs/input_manager.h"
@@ -1033,14 +1034,24 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
     // Bus Configuration (with backward-compatible defaults)
     if (systemObj["buses"].isNull() == false) {
         JsonObject buses = systemObj["buses"];
-        systemConfig.buses.active_i2c = buses["i2c"] | DEFAULT_I2C_BUS;
+        // An ABSENT key means "this config says nothing about the bus", which is
+        // 0xFF (no selection) — NOT DEFAULT_I2C_BUS. Writing the platform
+        // default here would launder the very guess #377 deletes into a STORED
+        // user statement: every subsequent boot would read active_i2c == 0 as
+        // "the user picked Wire" and claim 18/19 for good. Export writes the
+        // real value (255 included), so a round trip is unaffected; only a
+        // config that never mentioned the bus changes meaning, and it changes to
+        // what a fresh board now does.
+        systemConfig.buses.active_i2c = buses["i2c"] | 0xFF;
         systemConfig.buses.i2c_clock = buses["i2cClock"] | DEFAULT_I2C_CLOCK;
-        systemConfig.buses.active_spi = buses["spi"] | DEFAULT_SPI_BUS;
+        systemConfig.buses.active_spi = buses["spi"] | 0xFF;
         systemConfig.buses.spi_clock = buses["spiClock"] | DEFAULT_SPI_CLOCK;
 
         // CAN configuration - separate input/output buses
         systemConfig.buses.input_can_bus = buses["canInputBus"] | 0xFF;
-        systemConfig.buses.output_can_bus = buses["canOutputBus"] | DEFAULT_CAN_BUS;
+        // Same rule for CAN: absent means unstated, and unstated defers to the
+        // build-time WIRING declaration (0xFF when there is none).
+        systemConfig.buses.output_can_bus = buses["canOutputBus"] | BUS_WIRED_CAN_ID;
         // Backward compatibility: canInputEnabled (bool) -> canInputMode (enum)
         if (buses["canInputMode"].is<uint8_t>()) {
             systemConfig.buses.can_input_mode = buses["canInputMode"] | CAN_INPUT_OFF;
@@ -1048,7 +1059,8 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
             // Old format: canInputEnabled=1 maps to NORMAL mode
             systemConfig.buses.can_input_mode = (buses["canInputEnabled"] | 0) ? CAN_INPUT_NORMAL : CAN_INPUT_OFF;
         }
-        systemConfig.buses.can_output_enabled = buses["canOutputEnabled"] | 1;
+        systemConfig.buses.can_output_enabled =
+            buses["canOutputEnabled"] | (BUS_WIRED_CAN_ID != 0xFF ? 1 : 0);
 
         // Backward compatibility: if old canBaudrate exists but new ones don't, use it for both
         if (buses["canBaudrate"].is<uint32_t>() && !buses["canInputBaudrate"].is<uint32_t>()) {
@@ -1060,15 +1072,18 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
             systemConfig.buses.can_output_baudrate = buses["canOutputBaudrate"] | DEFAULT_CAN_BAUDRATE;
         }
     } else {
-        // No buses object - use defaults (backward compatibility with old configs)
-        systemConfig.buses.active_i2c = DEFAULT_I2C_BUS;
+        // No buses object (an old config). It states no bus selection, so it gets
+        // none — the same answer resetSystemConfig() now gives, for the same
+        // reason (#377): a default is not a user statement, and must not be
+        // written into the config as though it were.
+        systemConfig.buses.active_i2c = 0xFF;
         systemConfig.buses.i2c_clock = DEFAULT_I2C_CLOCK;
-        systemConfig.buses.active_spi = DEFAULT_SPI_BUS;
+        systemConfig.buses.active_spi = 0xFF;
         systemConfig.buses.spi_clock = DEFAULT_SPI_CLOCK;
         systemConfig.buses.input_can_bus = 0xFF;  // Disabled by default
-        systemConfig.buses.output_can_bus = DEFAULT_CAN_BUS;
+        systemConfig.buses.output_can_bus = BUS_WIRED_CAN_ID;
         systemConfig.buses.can_input_mode = CAN_INPUT_OFF;
-        systemConfig.buses.can_output_enabled = 1;
+        systemConfig.buses.can_output_enabled = (BUS_WIRED_CAN_ID != 0xFF) ? 1 : 0;
         systemConfig.buses.can_input_baudrate = DEFAULT_CAN_BAUDRATE;
         systemConfig.buses.can_output_baudrate = DEFAULT_CAN_BAUDRATE;
     }

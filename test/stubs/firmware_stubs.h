@@ -30,6 +30,16 @@ int8_t analogIndexForPin(uint8_t) { return -1; }
 
 Input* requireInput(uint8_t pin) { return getInputByPin(pin); }
 
+// setInputSensor() (#377) checks getActive{I2C,SPI}() and, if a needed bus is
+// down, calls reportNo{I2C,SPI}Bus() to print guidance. Neither test here
+// exercises bus acquisition (see test_bus_wiring for that), so "no bus is ever
+// up, and reporting it is a no-op" is the right stand-in — bus_manager.cpp
+// itself is not part of this test binary.
+TwoWire* getActiveI2C() { return nullptr; }
+SPIClass* getActiveSPI() { return nullptr; }
+bool reportNoI2CBus() { return false; }
+bool reportNoSPIBus() { return false; }
+
 // Control engine: the JSON exporter reads an input's alarm Rule back out of the
 // live table. Empty table + "no rule for this input" keeps that path inert.
 #if INCLUDE_CONTROL_ENGINE

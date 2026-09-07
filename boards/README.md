@@ -92,6 +92,18 @@ keeps personal wiring out of the repo (and stops bench edits colliding with it).
 `resolve.h` derivations are `#ifndef`-guarded, so an explicit override still wins
 (e.g. `-D INCLUDE_LED=0` to force a wired feature off).
 
+**Bus instances are WIRED too, but the rule is "grants, never vetoes" rather
+than "off until wired" (#377).** `-D I2C_WIRED_BUS=<n>` / `SPI_WIRED_BUS=<n>` /
+`CAN_WIRED_BUS=<n>` in `wiring.ini` (or `board.h` for a purpose-built PCB) tell
+the firmware which bus INSTANCE is physically wired on this unit, so it may be
+brought up without an explicit `BUS I2C <n>` selection first. Omit one and
+nothing is guessed — the firmware refuses and tells you what to run, rather
+than falling back to a compiled-in default (the bug this closed: a stock build
+used to silently claim Wire, or CAN1's pins, whether or not anything was
+actually attached). Declaring a bus is a permission, not a lock: an explicit
+`BUS I2C <n>` selection always wins over the declaration, and declaring bus 1
+does not forbid selecting bus 0. See `src/lib/bus_wiring.h` for the resolver.
+
 ## Adding / editing
 
 - **New board:** `cp -r boards/teensy41 boards/<new>`, edit `board.h` (facts) and
@@ -107,5 +119,5 @@ keeps personal wiring out of the repo (and stops bench edits colliding with it).
 PlatformIO does **not** track `-include`d headers as build dependencies, so always
 clean-build when checking sizes (`pio run -e <env> -t clean && pio run -e <env>`).
 `board.h` + `resolve.h` must resolve to the same `INCLUDE_*`/`MAX_*` set as
-before for capability-only features; WIRED features (LED, mode button, SD) are
+before for capability-only features; WIRED features (LED, mode button, SD, bus instances) are
 intentionally gated on their overlay pins.

@@ -14,6 +14,12 @@
  * The masks are OR-ed and handed to acquireRequiredBuses() in ONE pass before
  * any client initializes, so pin reservations are in place before the record
  * loop validates a single stored pin and before initLCD() runs.
+ *
+ * A vote here is a REQUEST, not a compulsion (#377): acquireRequiredBuses()
+ * brings a bus up only if the stored CONFIG names it or a build-time WIRING
+ * declaration does (see bus_wiring.h). A need with neither behind it comes
+ * back unmet — main.cpp's boot diagnosis reports it rather than the old
+ * behavior of silently granting it from a DEFAULT_*_BUS guess.
  */
 
 #ifndef BUS_NEEDS_H

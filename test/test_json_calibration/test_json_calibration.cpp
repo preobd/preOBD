@@ -332,6 +332,52 @@ static void test_custom_without_params_is_refused(void) {
 // path takes the bias resistor from the PROGMEM preset unconditionally, so an
 // override is inert, and the CLI refuses to set one. Refuse loudly rather than
 // accept a value that would do nothing.
+// ---------------------------------------------------------------------------
+// JSON import must not launder a platform default into a stored SELECTION
+// (#377). `buses["i2c"] | DEFAULT_I2C_BUS` used to write bus 0 whenever the key
+// was absent, so importing a profile that says nothing about I2C left
+// active_i2c == 0 — which every later boot reads as "the user picked Wire" and
+// claims 18/19 for good. That is the exact guess #377 deletes, re-entering
+// through the mobile app's profile flow.
+// ---------------------------------------------------------------------------
+
+// MUTANT TARGET: restore `| DEFAULT_I2C_BUS` / `| DEFAULT_SPI_BUS` in either
+// branch of the buses block and these must fail.
+static void test_import_without_buses_object_selects_no_bus(void) {
+    systemConfig.buses.active_i2c = 1;   // stale non-default values, to prove
+    systemConfig.buses.active_spi = 2;   // the import actually writes these
+    JsonDocument doc;
+    JsonObject sys = doc.to<JsonObject>();   // an old config: no "buses" at all
+    importSystemConfigFromJSON(sys);
+    TEST_ASSERT_EQUAL_UINT8(0xFF, systemConfig.buses.active_i2c);
+    TEST_ASSERT_EQUAL_UINT8(0xFF, systemConfig.buses.active_spi);
+}
+
+static void test_import_with_absent_bus_keys_selects_no_bus(void) {
+    systemConfig.buses.active_i2c = 1;
+    systemConfig.buses.active_spi = 2;
+    JsonDocument doc;
+    JsonObject sys = doc.to<JsonObject>();
+    JsonObject buses = sys["buses"].to<JsonObject>();
+    buses["i2cClock"] = 400;             // a "buses" object that names no bus
+    importSystemConfigFromJSON(sys);
+    TEST_ASSERT_EQUAL_UINT8(0xFF, systemConfig.buses.active_i2c);
+    TEST_ASSERT_EQUAL_UINT8(0xFF, systemConfig.buses.active_spi);
+}
+
+// The other half of the contract: a config that DOES state a selection is a
+// user statement and must survive the round trip untouched.
+static void test_import_preserves_an_explicit_bus_selection(void) {
+    JsonDocument doc;
+    JsonObject sys = doc.to<JsonObject>();
+    JsonObject buses = sys["buses"].to<JsonObject>();
+    buses["i2c"] = 2;
+    buses["spi"] = 1;
+    importSystemConfigFromJSON(sys);
+    TEST_ASSERT_EQUAL_UINT8(2, systemConfig.buses.active_i2c);
+    TEST_ASSERT_EQUAL_UINT8(1, systemConfig.buses.active_spi);
+}
+
 static void test_pressure_table_custom_is_refused(void) {
     JsonDocument doc;
     JsonObject o = doc.to<JsonObject>();
@@ -364,5 +410,8 @@ int main(int, char**) {
     RUN_TEST(test_rejected_calibration_leaves_existing_input_untouched);
     RUN_TEST(test_custom_without_params_is_refused);
     RUN_TEST(test_pressure_table_custom_is_refused);
+    RUN_TEST(test_import_without_buses_object_selects_no_bus);
+    RUN_TEST(test_import_with_absent_bus_keys_selects_no_bus);
+    RUN_TEST(test_import_preserves_an_explicit_bus_selection);
     return UNITY_END();
 }

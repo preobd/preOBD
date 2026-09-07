@@ -7,6 +7,7 @@
 #include "units_registry.h"
 #include "message_router.h"  // For TransportID enum
 #include "bus_defaults.h"
+#include "bus_wiring.h"
 #include "message_api.h"
 #include "log_tags.h"
 #include "pin_registry.h"
@@ -230,13 +231,29 @@ void resetSystemConfig() {
     systemConfig.buses.active_spi = 0xFF;  // NONE — not initialized until explicitly selected
     systemConfig.buses.spi_clock = DEFAULT_SPI_CLOCK;
 
-    // CAN configuration - output enabled by default for backward compatibility
+    // CAN configuration.
+    //
+    // Output used to default ON (output_can_bus = DEFAULT_CAN_BUS, bus 0) on
+    // every board unconditionally — an INFERENCE that a transceiver is
+    // attached (#377). On teensy40 that claimed pins 22/23 for CAN1 with
+    // nothing wired there, losing two analog pins to a guess. Now it is earned
+    // by a build-time CAN_WIRED_BUS declaration (boards/<board>/wiring.ini or
+    // board.h for a purpose-built PCB) — same rule as I2C/SPI (bus_wiring.h).
+    // A declaration GRANTS PERMISSION; `BUS CAN <n>` still overrides it either
+    // way. This is a DEFAULTS-only change (no BusConfig layout change), so no
+    // EEPROM version bump: a board with a stored config keeps whatever it has;
+    // only fresh boards and SYSTEM RESET see the new default.
     systemConfig.buses.input_can_bus = 0xFF;  // Disabled by default
-    systemConfig.buses.output_can_bus = DEFAULT_CAN_BUS;
+#if BUS_WIRED_CAN_ID != 0xFF
+    systemConfig.buses.output_can_bus = BUS_WIRED_CAN_ID;
+    systemConfig.buses.can_output_enabled = 1;   // today's behavior, now earned
+#else
+    systemConfig.buses.output_can_bus = 0xFF;
+    systemConfig.buses.can_output_enabled = 0;
+#endif
     systemConfig.buses.can_input_baudrate = DEFAULT_CAN_BAUDRATE;
     systemConfig.buses.can_output_baudrate = DEFAULT_CAN_BAUDRATE;
     systemConfig.buses.can_input_mode = CAN_INPUT_OFF;  // Disabled by default
-    systemConfig.buses.can_output_enabled = 1;  // Enabled by default
     systemConfig.buses.elm327_serial_port = 0xFF;  // Disabled by default
 
     // Serial Port Configuration defaults

@@ -7,12 +7,14 @@
 #include "bus_manager.h"
 #include "bus_config.h"
 #include "bus_defaults.h"
+#include "bus_wiring.h"
 #include "pin_registry.h"
 #include "bus_pins.h"
 #include "bus_needs.h"
 #include "system_config.h"
 #include "message_api.h"
 #include "log_tags.h"
+#include <string.h>
 #include <Wire.h>
 #include <SPI.h>
 
@@ -53,34 +55,35 @@ static const char BUS_STARTED[] = "%s up";
 
 void initConfiguredBuses() {
 
+    // No FALLBACK TO BUS 0 on any of these three (#377).
+    //
+    // Each used to substitute bus 0 when the selected bus failed to start. That
+    // is the same inference this branch deletes, wearing a different hat and in
+    // its worst form: the user named bus 2, the firmware quietly took bus 0
+    // instead, and on Teensy 4.x bus 0 is 18/19 — so a board told to use Wire2
+    // could end up claiming SDA/SCL out from under configured inputs on A4/A5,
+    // for a bus nobody selected. A named bus that cannot start is a fault to
+    // report, never a licence to pick a different one.
+
     // Initialize the active I2C bus (only if explicitly selected)
     if (systemConfig.buses.active_i2c != 0xFF) {
         if (!initI2CBus(systemConfig.buses.active_i2c, systemConfig.buses.i2c_clock)) {
-            if (systemConfig.buses.active_i2c != 0) {
-                msg.debug.warn(TAG_I2C, "Falling back to Wire (bus 0)");
-                initI2CBus(0, systemConfig.buses.i2c_clock);
-            }
+            reportI2CBusUnavailable(systemConfig.buses.active_i2c);
         }
     }
 
     // Initialize the active SPI bus (only if explicitly selected)
     if (systemConfig.buses.active_spi != 0xFF) {
         if (!initSPIBus(systemConfig.buses.active_spi, systemConfig.buses.spi_clock)) {
-            if (systemConfig.buses.active_spi != 0) {
-                msg.debug.warn(TAG_SPI, "Falling back to SPI (bus 0)");
-                initSPIBus(0, systemConfig.buses.spi_clock);
-            }
+            reportSPIBusUnavailable(systemConfig.buses.active_spi);
         }
     }
 
     // Initialize CAN output bus if enabled
     if (systemConfig.buses.can_output_enabled && systemConfig.buses.output_can_bus != 0xFF) {
         if (!initCANBus(systemConfig.buses.output_can_bus, systemConfig.buses.can_output_baudrate)) {
-            // Fall back to bus 0 if requested bus fails
-            if (systemConfig.buses.output_can_bus != 0) {
-                msg.debug.warn(TAG_CAN, "CAN output: Falling back to CAN1 (bus 0)");
-                initCANBus(0, systemConfig.buses.can_output_baudrate);
-            }
+            msg.debug.warn(TAG_CAN, "CAN output: bus %d did not start; no substitute chosen",
+                           systemConfig.buses.output_can_bus);
         }
     }
 
@@ -350,20 +353,111 @@ TwoWire* getActiveI2C() {
     return active_i2c;
 }
 
+// De-duplicate reportNo{I2C,SPI}Bus() WITHIN one episode, per bus type. Boot is
+// one episode: acquireRequiredBuses(), main.cpp's diagnosis and initLCD() can
+// each reach the same refusal, and a board with several stored I2C sensors and
+// no bus must not print the same guidance once per sensor.
+//
+// The latch must NOT survive the episode, though. It is re-armed at the end of
+// setup() (rearmBusDiagnostics), because the CLI is the OTHER place this
+// guidance has to appear: configuring an I2C input at runtime with no bus
+// available must say what to run, and a boot that already printed once would
+// otherwise silence that answer for the rest of the session — exactly when the
+// user is acting on it.
+// One latch per MESSAGE, not per bus: "I refused to guess" and "the bus you
+// named could not start" are different answers, and a shared latch would let
+// whichever fired first suppress the other — making them indistinguishable to a
+// caller and to the tests. They are mutually exclusive per acquire*() call
+// anyway, so two latches cost nothing in practice.
+static bool i2c_no_bus_reported = false;
+static bool spi_no_bus_reported = false;
+static bool i2c_unavailable_reported = false;
+static bool spi_unavailable_reported = false;
+
+void rearmBusDiagnostics() {
+    i2c_no_bus_reported = false;
+    spi_no_bus_reported = false;
+    i2c_unavailable_reported = false;
+    spi_unavailable_reported = false;
+}
+
+// ONE print call site for all four notes, deliberately.
+//
+// Every additional msg.control.print(F(...)) call site inlines a full copy of
+// MessageStream's Flash-string path (primary/secondary transport lookups), and
+// that overload is not cloned/shared by the linker the way print(const char*)
+// is. Four sites cost ~380 B of RAM1 code on Teensy 4.x — enough to push this
+// translation unit across an ITCM page boundary, where the linker answers with
+// 32 KB of padding and the build fails outright ("free for local variables"
+// goes negative). Funnelling them through one noinline body keeps the cost flat
+// no matter how many notes get added later. Not a micro-optimization: teensy41
+// RAM1 padding is measured in tens of bytes, and this is what keeps it linking.
+//
+// The text stays in F() rather than becoming a plain literal because mega2560
+// has ~140 B of RAM free; on AVR a non-F() string is RAM-resident.
+__attribute__((noinline))
+static bool emitBusNote(bool& latch, const __FlashStringHelper* text) {
+    if (latch) return false;
+    latch = true;
+    msg.control.print(text);
+    return true;
+}
+
+bool reportNoI2CBus() {
+    return emitBusNote(i2c_no_bus_reported,
+        F("\r\nNote: no I2C bus declared or selected. Run: BUS I2C <n>\r\n"
+          "  (SAVE + reboot), or add -D I2C_WIRED_BUS=<n> to wiring.ini\r\n"
+          "  if I2C is permanently wired on this unit.\r\n"));
+}
+
+bool reportNoSPIBus() {
+    return emitBusNote(spi_no_bus_reported,
+        F("\r\nNote: no SPI bus declared or selected. Run: BUS SPI <n>\r\n"
+          "  (SAVE + reboot), or add -D SPI_WIRED_BUS=<n> to wiring.ini\r\n"
+          "  if SPI is permanently wired on this unit.\r\n"));
+}
+
+// The OTHER way acquire*() can hand back nullptr. Keeping it distinct from
+// reportNo{I2C,SPI}Bus() is the point: "I refused to guess" and "you told me
+// which bus and it could not start" are opposite problems with opposite fixes,
+// and saying the first when the second happened is the exact misdirection #377
+// exists to remove — it would tell a user their declaration does not exist.
+// The conflict itself has already been named by busPinsConflict() (which pin,
+// which owner); this says what it means and what to do about it.
+bool reportI2CBusUnavailable(uint8_t bus_id) {
+    (void)bus_id;
+    return emitBusNote(i2c_unavailable_reported,
+        F("\r\nNote: the selected/declared I2C bus could not start (see above).\r\n"
+          "  Free the pin it needs, or choose another bus with BUS I2C <n>.\r\n"));
+}
+
+bool reportSPIBusUnavailable(uint8_t bus_id) {
+    (void)bus_id;
+    return emitBusNote(spi_unavailable_reported,
+        F("\r\nNote: the selected/declared SPI bus could not start (see above).\r\n"
+          "  Free the pin it needs, or choose another bus with BUS SPI <n>.\r\n"));
+}
+
 TwoWire* acquireI2C() {
     // Already up — initI2CBus() reserved SDA/SCL when it brought the bus up.
     if (active_i2c) return active_i2c;
 
-    // 0xFF ("no explicit selection") is not "forbidden": clients such as the LCD
-    // have always had a working bus here, they simply used to Wire.begin() it
-    // themselves and leave the manager none the wiser. Bring up the platform
-    // default on demand so ownership — and pin reservation — stays in one place.
-    uint8_t bus_id = (systemConfig.buses.active_i2c != 0xFF)
-                         ? systemConfig.buses.active_i2c
-                         : (uint8_t)DEFAULT_I2C_BUS;
+    // A bus may be brought up ONLY if the stored CONFIG explicitly names it (a
+    // user statement) or WIRING declares it (a build-time user statement, see
+    // bus_wiring.h). Anything else — a compiled-in default standing in for a
+    // choice the user never made — is INFERENCE, and inference is the bug
+    // (#377): DEFAULT_I2C_BUS is what silently claimed Wire (18/19 on Teensy
+    // 4.x) out from under configured inputs on A4/A5. There is deliberately no
+    // fallback to it here.
+    uint8_t bus_id = resolveWiredBusId(systemConfig.buses.active_i2c, BUS_WIRED_I2C_ID);
+    if (bus_id == 0xFF) {
+        reportNoI2CBus();
+        return nullptr;
+    }
 
     if (!initI2CBus(bus_id, systemConfig.buses.i2c_clock)) {
         msg.debug.error(TAG_I2C, "I2C acquire failed");
+        reportI2CBusUnavailable(bus_id);
         return nullptr;
     }
     return active_i2c;
@@ -376,12 +470,16 @@ SPIClass* getActiveSPI() {
 SPIClass* acquireSPI() {
     if (active_spi) return active_spi;
 
-    uint8_t bus_id = (systemConfig.buses.active_spi != 0xFF)
-                         ? systemConfig.buses.active_spi
-                         : (uint8_t)DEFAULT_SPI_BUS;
+    // Same rule as acquireI2C() — see its comment.
+    uint8_t bus_id = resolveWiredBusId(systemConfig.buses.active_spi, BUS_WIRED_SPI_ID);
+    if (bus_id == 0xFF) {
+        reportNoSPIBus();
+        return nullptr;
+    }
 
     if (!initSPIBus(bus_id, systemConfig.buses.spi_clock)) {
         msg.debug.error(TAG_SPI, "SPI acquire failed");
+        reportSPIBusUnavailable(bus_id);
         return nullptr;
     }
     return active_spi;
@@ -443,69 +541,247 @@ const char* getCANBusName(uint8_t bus_id) {
 // BUS Command helpers
 //=============================================================================
 
+// Shared by all three BUS status displays (#377 §6): wiring.ini is gitignored
+// and per-unit, so the build-time declaration is otherwise invisible in the
+// repo — without this line, debugging someone else's board means guessing all
+// over again. One body avoids three copies of the same two strings.
+// `wiredName` is a bus-name literal (e.g. "Wire1") or "none declared" — always
+// a plain const char*, never F(), so every call site here shares print(const
+// char*)'s existing clone rather than inlining another Flash-string path.
+// noinline: this is small enough that the compiler would otherwise duplicate
+// its body at all three call sites (I2C/SPI/CAN status) instead of sharing it.
+// "Selected" is not "started". All three status displays used to print the
+// STORED SELECTION as though it were the live bus (SPI never looked at
+// active_spi at all, CAN never at can_ready), so a bus that failed to start
+// still read as Active — the status-vs-peripheral lie this area exists to
+// remove. It used to be nearly unreachable because a failed selection silently
+// fell back to bus 0, so SOMETHING was always up; now that #377 has deleted
+// that fallback, a named bus can legitimately stay down and the lie is routine.
+//
+// Say the four things a person needs: that nothing is reading, which bus was
+// wanted AND WHO ASKED FOR IT, what is in the way, and what to type. "It could
+// not start" only reports that a problem exists; the registry already knows the
+// rest.
+//
+// Naming the source matters more than it looks. A bus can be wanted because the
+// user typed `BUS I2C 1` or because wiring.ini declares I2C_WIRED_BUS=1 — two
+// different fixes (a CLI command vs. editing wiring.ini and reflashing), so
+// calling a declared bus "selected" points at the wrong tool.
+//
+// The usual cause is not a wire at all. Configuration outlives hardware: a
+// serial port enabled for a module that has since been unplugged still claims
+// its pins every boot, and blocks the bus that IS wired there now. That is why
+// the fix line names the saved setting to turn off, not a wire to move.
+__attribute__((noinline))
+static uint8_t serialPortHoldingPin(uint8_t pin) {
+    // Read the port number out of the REGISTRY DESCRIPTION, which
+    // initSerialPort() sets from getSerialPortName() — i.e. "Serial1".."Serial8"
+    // (serial_manager.cpp:218). Matching the description, not the platform pin
+    // map, is what keeps Wire1 (17/16) and Serial4 (16/17) distinguishable: both
+    // own those pins on paper, only one owns them now.
+    //
+    // Parsed rather than compared against getSerialPortName(): that function is
+    // `inline` and returns string literals, so instantiating it in this
+    // translation unit duplicates all nine into .data on AVR — +56 B of the one
+    // resource mega2560 has none of. strncmp_P keeps the prefix in flash too.
+    const char* d = getPinDescription(pin);
+    if (!d || strncmp_P(d, PSTR("Serial"), 6) != 0) return 0;
+    if (d[6] < '1' || d[6] > '8' || d[7] != '\0') return 0;
+    uint8_t n = (uint8_t)(d[6] - '0');
+    return (n <= NUM_SERIAL_PORTS) ? n : 0;
+}
+
+// One buffer, refilled and printed per line. println(const char*) is the CHEAP
+// overload — the linker shares it — so several calls to it cost almost nothing,
+// where each additional println(F(...)) site inlines a whole MessageStream
+// Flash-string path (~175 B of RAM1 code, and teensy41's ITCM page is finite).
+//
+// The bus KIND arrives as an enum, not as const char* wording. Passing
+// "I2C sensors" / "I2C_WIRED_BUS" / "BUS I2C" as arguments is the obvious
+// interface and costs ~95 B of AVR .data: a plain string literal is RAM-resident
+// on AVR, and only the PSTR format strings stay in flash. Deriving all three
+// words from a 3-character kind copied out of PROGMEM keeps mega2560's RAM flat.
+enum : uint8_t { BK_I2C = 0, BK_SPI = 1, BK_CAN = 2 };
+
+__attribute__((noinline))
+static void printBusNotStarted(uint8_t kind, const char* busName, bool fromWiring,
+                               const uint8_t* pins, uint8_t count) {
+    char buf[88];
+    char k[4];
+    strncpy_P(k, kind == BK_I2C ? PSTR("I2C") : kind == BK_SPI ? PSTR("SPI") : PSTR("CAN"),
+              sizeof(k));
+    k[sizeof(k) - 1] = '\0';
+
+    // Find what is holding a pin, if anything, BEFORE choosing the wording: a
+    // bus that is down is not automatically a fault.
+    uint8_t blockedPin = 0xFF;
+    const char* owner = nullptr;
+    for (uint8_t i = 0; i < count; i++) {
+        if (pins[i] == 0xFF || getPinUsage(pins[i]) == PIN_UNUSED) continue;
+        const char* d = getPinDescription(pins[i]);
+        if (!d) continue;
+        blockedPin = pins[i];
+        owner = d;
+        break;
+    }
+
+    if (!owner) {
+        // Nothing is in the way. Bring-up is NEED-DRIVEN — acquireRequiredBuses()
+        // only starts a bus some stored input or the display actually asks for —
+        // so a declared bus on a board with no I2C device configured is idle, not
+        // broken. Reporting it as a failure would send the user hunting a fault
+        // that does not exist, which is its own kind of lying status line.
+        if (fromWiring) {
+            snprintf_P(buf, sizeof(buf),
+                       PSTR("Active: NONE - %s declared, idle until a device needs it"), busName);
+        } else {
+            snprintf_P(buf, sizeof(buf),
+                       PSTR("Active: NONE - %s selected, idle until a device needs it"), busName);
+        }
+        msg.control.println(buf);
+        return;
+    }
+
+    snprintf_P(buf, sizeof(buf), PSTR("Status:  NOT RUNNING - nothing can use %s"), k);
+    msg.control.println(buf);
+
+    if (fromWiring) {
+        snprintf_P(buf, sizeof(buf),
+                   PSTR("  Wanted:  %s, declared by %s_WIRED_BUS in wiring.ini"), busName, k);
+    } else {
+        snprintf_P(buf, sizeof(buf),
+                   PSTR("  Wanted:  %s, selected with BUS %s"), busName, k);
+    }
+    msg.control.println(buf);
+
+    // The usual cause is a saved setting, not a wire: a serial port enabled for a
+    // module that has since been unplugged still claims its pins every boot. Name
+    // the setting to turn off, since that is what the user actually changes.
+    uint8_t port = serialPortHoldingPin(blockedPin);
+    if (port) {
+        snprintf_P(buf, sizeof(buf),
+                   PSTR("  Blocked: pin %u is held by %s (enabled in saved config)"),
+                   (unsigned)blockedPin, owner);
+        msg.control.println(buf);
+        snprintf_P(buf, sizeof(buf),
+                   PSTR("  Fix:     BUS SERIAL %u DISABLE if that is no longer wired,"),
+                   (unsigned)port);
+        msg.control.println(buf);
+        snprintf_P(buf, sizeof(buf), PSTR("           or move to another bus: BUS %s <n>"), k);
+    } else {
+        snprintf_P(buf, sizeof(buf), PSTR("  Blocked: pin %u is held by %s"),
+                   (unsigned)blockedPin, owner);
+        msg.control.println(buf);
+        snprintf_P(buf, sizeof(buf),
+                   PSTR("  Fix:     free that pin, or choose another bus: BUS %s <n>"), k);
+    }
+    msg.control.println(buf);
+}
+
+// The "Available buses:" line for all three bus types, built in one buffer.
+// Twelve msg.control.print(F(...)) sites collapse to one println(const char*),
+// which is the overload the linker actually shares — that is what buys back the
+// ITCM page room the richer not-started message spends.
+__attribute__((noinline))
+static void printAvailableBuses(uint8_t count, const char* (*nameFn)(uint8_t)) {
+    char b[64];
+    int n = snprintf_P(b, sizeof(b), PSTR("Available buses: "));
+    for (uint8_t i = 0; i < count && n > 0 && (size_t)n < sizeof(b); i++) {
+        if (i) n += snprintf_P(b + n, sizeof(b) - n, PSTR(", "));
+        n += snprintf_P(b + n, sizeof(b) - n, PSTR("%u=%s"), (unsigned)i, nameFn(i));
+    }
+    msg.control.println(b);
+}
+
+__attribute__((noinline))
+static void printWiredBusLine(const char* wiredName) {
+    msg.control.print(F("Wired (build-time): "));
+    msg.control.println(wiredName);
+}
+
 // Helper function to display I2C bus configuration
 void displayI2CStatus() {
     // Report the bus that is actually up, not just the stored selection: a client
     // may have acquired the platform default on demand (#351), and a status line
     // reading "NONE" while the peripheral is clocking is exactly the confusion
     // this command exists to resolve.
-    uint8_t bus_id = active_i2c ? active_i2c_id : systemConfig.buses.active_i2c;
+    // Resolve exactly as acquireI2C() does — selection, else WIRING declaration.
+    // Reading only the stored selection was the bug: a user who declared
+    // I2C_WIRED_BUS=1 and lost a pin fight got "use 'BUS I2C 0' to enable",
+    // which names the wrong bus and never mentions what is actually holding it.
+    uint8_t bus_id = active_i2c ? active_i2c_id
+                                : resolveWiredBusId(systemConfig.buses.active_i2c,
+                                                    BUS_WIRED_I2C_ID);
     msg.control.println();
     msg.control.println(F("=== I2C Bus Configuration ==="));
+    if (!active_i2c && bus_id != 0xFF) {
+        // Wanted but not up. Its own branch: printing "Active: Wire2 (SDA=25,
+        // SCL=24) @ 400kHz" and contradicting it underneath is what made this
+        // unreadable.
+        const uint8_t pins[2] = { getDefaultI2CSDA(bus_id), getDefaultI2CSCL(bus_id) };
+        printBusNotStarted(BK_I2C, getI2CBusName(bus_id),
+                           systemConfig.buses.active_i2c == 0xFF, pins, 2);
+    } else {
     msg.control.print(F("Active: "));
     if (bus_id == 0xFF) {
-        msg.control.println(F("NONE (not initialized — use 'BUS I2C 0' to enable)"));
+        msg.control.println(F("NONE - none selected or declared. Use: BUS I2C <n>"));
     } else {
-        msg.control.print(getI2CBusName(bus_id));
-        msg.control.print(F(" (SDA="));
-        msg.control.print(getDefaultI2CSDA(bus_id));
-        msg.control.print(F(", SCL="));
-        msg.control.print(getDefaultI2CSCL(bus_id));
-        msg.control.print(F(") @ "));
-        msg.control.print(systemConfig.buses.i2c_clock);
-        msg.control.println(F("kHz"));
-        if (active_i2c && systemConfig.buses.active_i2c == 0xFF) {
-            msg.control.println(F("  (acquired on demand — no explicit 'BUS I2C <n>' selection)"));
+        char b[80];
+        snprintf_P(b, sizeof(b), PSTR("%s (SDA=%u, SCL=%u) @ %ukHz"),
+                   getI2CBusName(bus_id), (unsigned)getDefaultI2CSDA(bus_id),
+                   (unsigned)getDefaultI2CSCL(bus_id),
+                   (unsigned)systemConfig.buses.i2c_clock);
+        msg.control.println(b);
+        if (systemConfig.buses.active_i2c == 0xFF) {
+            msg.control.println(F("  (from the wiring declaration, not a BUS I2C selection)"));
         }
     }
-    msg.control.print(F("Available buses: "));
-    for (uint8_t i = 0; i < NUM_I2C_BUSES; i++) {
-        if (i > 0) msg.control.print(F(", "));
-        msg.control.print(i);
-        msg.control.print(F("="));
-        msg.control.print(getI2CBusName(i));
     }
-    msg.control.println();
+#if BUS_WIRED_I2C_ID != 0xFF
+    printWiredBusLine(getI2CBusName(BUS_WIRED_I2C_ID));
+#else
+    printWiredBusLine("none declared");
+#endif
+    printAvailableBuses(NUM_I2C_BUSES, getI2CBusName);
 }
 
 // Helper function to display SPI bus configuration
 void displaySPIStatus() {
-    uint8_t bus_id = systemConfig.buses.active_spi;
+    // Declaration-aware, as in displayI2CStatus() — see the note there.
+    uint8_t bus_id = active_spi ? active_spi_id
+                                : resolveWiredBusId(systemConfig.buses.active_spi,
+                                                    BUS_WIRED_SPI_ID);
     msg.control.println();
     msg.control.println(F("=== SPI Bus Configuration ==="));
+    if (!active_spi && bus_id != 0xFF) {
+        const uint8_t pins[3] = { getDefaultSPIMOSI(bus_id), getDefaultSPIMISO(bus_id),
+                                  getDefaultSPISCK(bus_id) };
+        printBusNotStarted(BK_SPI, getSPIBusName(bus_id),
+                           systemConfig.buses.active_spi == 0xFF, pins, 3);
+    } else {
     msg.control.print(F("Active: "));
     if (bus_id == 0xFF) {
-        msg.control.println(F("NONE (not initialized — use 'BUS SPI 0' to enable)"));
+        msg.control.println(F("NONE - none selected or declared. Use: BUS SPI <n>"));
     } else {
-        msg.control.print(getSPIBusName(bus_id));
-        msg.control.print(F(" (MOSI="));
-        msg.control.print(getDefaultSPIMOSI(bus_id));
-        msg.control.print(F(", MISO="));
-        msg.control.print(getDefaultSPIMISO(bus_id));
-        msg.control.print(F(", SCK="));
-        msg.control.print(getDefaultSPISCK(bus_id));
-        msg.control.print(F(") @ "));
-        msg.control.print(systemConfig.buses.spi_clock / 1000000.0, 1);
-        msg.control.println(F("MHz"));
+        char b[80];
+        // %u.%u rather than %f: AVR's printf is built without float support, so
+        // a %f here would emit "?" on mega2560.
+        // %u not %lu: the quotient fits an unsigned int for any real SPI clock,
+        // and %lu drags AVR's long-printf support in for nothing.
+        snprintf_P(b, sizeof(b), PSTR("%s (MOSI=%u, MISO=%u, SCK=%u) @ %u.%uMHz"),
+                   getSPIBusName(bus_id), (unsigned)getDefaultSPIMOSI(bus_id),
+                   (unsigned)getDefaultSPIMISO(bus_id), (unsigned)getDefaultSPISCK(bus_id),
+                   (unsigned)(systemConfig.buses.spi_clock / 1000000UL),
+                   (unsigned)((systemConfig.buses.spi_clock / 100000UL) % 10UL));
+        msg.control.println(b);
     }
-    msg.control.print(F("Available buses: "));
-    for (uint8_t i = 0; i < NUM_SPI_BUSES; i++) {
-        if (i > 0) msg.control.print(F(", "));
-        msg.control.print(i);
-        msg.control.print(F("="));
-        msg.control.print(getSPIBusName(i));
     }
-    msg.control.println();
+#if BUS_WIRED_SPI_ID != 0xFF
+    printWiredBusLine(getSPIBusName(BUS_WIRED_SPI_ID));
+#else
+    printWiredBusLine("none declared");
+#endif
+    printAvailableBuses(NUM_SPI_BUSES, getSPIBusName);
 }
 
 // Helper function to display CAN bus configuration
@@ -536,18 +812,25 @@ void displayCANStatus() {
         msg.control.print(F(" (ENABLED) @ "));
         msg.control.print(systemConfig.buses.can_output_baudrate / 1000);
         msg.control.print(F("kbps"));
+        msg.control.println();
+        if (!can_ready) {
+            const uint8_t pins[2] = { getDefaultCANTX(systemConfig.buses.output_can_bus),
+                                      getDefaultCANRX(systemConfig.buses.output_can_bus) };
+            // A CAN declaration seeds output_can_bus at defaults time rather than
+            // being consulted at bring-up, so by here it is always a stored value.
+            printBusNotStarted(BK_CAN, getCANBusName(systemConfig.buses.output_can_bus),
+                               false, pins, 2);
+        }
     } else {
         msg.control.print(F("DISABLED"));
+        msg.control.println();
     }
-    msg.control.println();
-    msg.control.print(F("Available buses: "));
-    for (uint8_t i = 0; i < NUM_CAN_BUSES; i++) {
-        if (i > 0) msg.control.print(F(", "));
-        msg.control.print(i);
-        msg.control.print(F("="));
-        msg.control.print(getCANBusName(i));
-    }
-    msg.control.println();
+#if BUS_WIRED_CAN_ID != 0xFF
+    printWiredBusLine(getCANBusName(BUS_WIRED_CAN_ID));
+#else
+    printWiredBusLine("none declared");
+#endif
+    printAvailableBuses(NUM_CAN_BUSES, getCANBusName);
 #else
     msg.control.println(F("No CAN buses available on this platform"));
 #endif

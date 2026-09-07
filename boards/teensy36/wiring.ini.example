@@ -10,3 +10,6 @@ wiring =
 ;    -D BUZZER_PIN=3       ; alarm buzzer (tone output)
 ;    -D MODE_BUTTON_PIN=5  ; CONFIG-on-boot / silence button
 ;    -D TEST_MODE_PIN=8    ; hold LOW at boot to enter test mode (optional)
+;    -D I2C_WIRED_BUS=0    ; this I2C instance is physically wired (0=Wire, 1=Wire1, 2=Wire2)
+;    -D SPI_WIRED_BUS=0    ; this SPI instance is physically wired (0=SPI, 1=SPI1)
+;    -D CAN_WIRED_BUS=0    ; a transceiver is wired to this CAN instance (0=CAN1, 1=CAN2)

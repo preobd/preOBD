@@ -88,12 +88,41 @@ TwoWire* getActiveI2C();
  * live while the registry still shows SDA/SCL free, which is how an input could be
  * assigned to SCL and hang the bus (#351).
  *
- * Honors an explicit `BUS I2C <n>` selection; falls back to DEFAULT_I2C_BUS when
- * none has been made, so a client still gets a working bus on a stock config.
+ * Honors an explicit `BUS I2C <n>` selection; absent one, honors a build-time
+ * `-D I2C_WIRED_BUS=<n>` WIRING declaration (see bus_wiring.h). Absent BOTH,
+ * this REFUSES rather than guessing — no DEFAULT_I2C_BUS fallback (#377: that
+ * fallback is what silently claimed Wire out from under configured inputs on
+ * 18/19). A refusal prints actionable guidance via reportNoI2CBus().
  *
  * @return the active TwoWire, or nullptr if no bus could be brought up
  */
 TwoWire* acquireI2C();
+
+/**
+ * Print the "no I2C bus available" guidance, once per boot.
+ *
+ * Shared by acquireI2C() (called there when it refuses) and by any client that
+ * wants to explain why an I2C-needing operation cannot proceed right now (the
+ * boot diagnosis in main.cpp, the runtime guidance in setInputSensor()) so the
+ * wording cannot drift between them. De-duplicated within one episode, because
+ * several boot-time paths can reach the same refusal and must not print it once
+ * per stored sensor — see rearmBusDiagnostics().
+ *
+ * @return true if the guidance was actually emitted, false if this episode had
+ *         already said it. Callers ignore it; it is what makes the episode rule
+ *         observable to the native tests.
+ */
+bool reportNoI2CBus();
+
+/**
+ * End the current de-duplication episode for reportNo{I2C,SPI}Bus().
+ *
+ * Called once at the end of setup(). Boot is one episode; everything after it is
+ * interactive, and the CLI is precisely where this guidance has to land — a user
+ * configuring an I2C input with no bus available must be told what to run, even
+ * on a board whose boot already said it once.
+ */
+void rearmBusDiagnostics();
 
 /**
  * Get the currently active SPI bus
@@ -107,12 +136,28 @@ SPIClass* getActiveSPI();
  * Acquire the SPI bus on behalf of a client that needs it (thermocouples, ...).
  *
  * The I2C contract, for SPI: brings the bus up on first use, reserving
- * MOSI/MISO/SCK, and honors an explicit `BUS SPI <n>` selection, falling back to
- * DEFAULT_SPI_BUS when none has been made.
+ * MOSI/MISO/SCK, and honors an explicit `BUS SPI <n>` selection; absent one,
+ * honors a build-time `-D SPI_WIRED_BUS=<n>` WIRING declaration. Absent BOTH,
+ * this REFUSES rather than guessing — no DEFAULT_SPI_BUS fallback (#377).
  *
  * @return the active SPIClass, or nullptr if no bus could be brought up
  */
 SPIClass* acquireSPI();
+
+/** SPI counterpart of reportNoI2CBus() — see its doc comment. */
+bool reportNoSPIBus();
+
+/**
+ * The OTHER refusal: a bus WAS named (selected or declared) and could not start.
+ *
+ * Distinct from reportNo{I2C,SPI}Bus() on purpose — opposite problems, opposite
+ * fixes. Reporting "not declared or selected" for a declared bus that lost a pin
+ * fight tells the user their declaration does not exist, which is the exact
+ * misdirection #377 exists to remove. Latched separately from the no-bus
+ * guidance, so neither can suppress the other; returns whether it emitted.
+ */
+bool reportI2CBusUnavailable(uint8_t bus_id);
+bool reportSPIBusUnavailable(uint8_t bus_id);
 
 /**
  * Bring up every bus the stored configuration needs, in one pass.

@@ -7,3 +7,6 @@ wiring =
 ;    -D BUZZER_PIN=3
 ;    -D MODE_BUTTON_PIN=5
 ;    -D TEST_MODE_PIN=8
+;    -D I2C_WIRED_BUS=0    ; this I2C instance is physically wired (0=Wire, 1=Wire1, 2=Wire2)
+;    -D SPI_WIRED_BUS=0    ; this SPI instance is physically wired (0=SPI, 1=SPI1, 2=SPI2)
+;    -D CAN_WIRED_BUS=0    ; a transceiver is wired to this CAN instance (0=CAN1, 1=CAN2, 2=CAN3)

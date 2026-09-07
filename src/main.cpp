@@ -353,6 +353,20 @@ void setup() {
     #endif
     acquireRequiredBuses(busNeeds);
 
+    // storedInputBusNeeds() is not wasted work now that #377 removed the
+    // DEFAULT_*_BUS guess: acquireRequiredBuses() can legitimately come back
+    // empty-handed, so the pre-scan changes verb from "acquire" to "diagnose" —
+    // an unmet need is reported rather than silently leaving a configured sensor
+    // unable to read.
+    //
+    // That reporting belongs INSIDE acquire*(), not here. There are two distinct
+    // ways to come back with no bus — "I refused to guess" and "you named a bus
+    // and it could not start" — and only acquire*() can tell them apart; a test
+    // out here sees the same nullptr for both. Doing it here anyway is what made
+    // a pin conflict on a DECLARED bus report "no I2C bus declared or selected",
+    // telling the user their declaration did not exist. acquireRequiredBuses()
+    // above already covers every bit in busNeeds, so this needs no line of its own.
+
     // Initialize display. The bus it needs, if any, is already up and owned by
     // the pass above; initLCD()'s acquireI2C() is now just a lookup.
     //
@@ -494,6 +508,12 @@ void setup() {
         // disabled) — it can't be disabled once armed. See #243.
         msg.debug.info(TAG_SYSTEM, "Watchdog disabled (CONFIG mode)");
     }
+
+    // Boot is one reporting episode for the no-bus guidance; everything past
+    // this point is interactive. Re-arm so configuring an I2C/SPI input at the
+    // CLI with no bus available says what to run, instead of being silenced by
+    // a boot that already printed it once (#377).
+    rearmBusDiagnostics();
 }
 
 void loop() {

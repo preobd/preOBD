@@ -12,3 +12,6 @@ wiring =
 ;    -D MODE_BUTTON_PIN=5  ; CONFIG-on-boot / silence button
 ;    -D TEST_MODE_PIN=8    ; hold LOW at boot to enter test mode (optional)
 ;    -D SD_PIN=4           ; external SD card CS pin (enables SD logging)
+;    -D I2C_WIRED_BUS=0    ; this I2C instance is physically wired (0=Wire, 1=Wire1)
+;    -D SPI_WIRED_BUS=0    ; this SPI instance is physically wired (only SPI exists)
+;    -D CAN_WIRED_BUS=0    ; a transceiver is wired to CAN (TWAI; only bus 0 exists)
