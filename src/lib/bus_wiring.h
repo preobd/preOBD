@@ -98,4 +98,20 @@ inline uint8_t resolveWiredBusId(uint8_t configuredBusId, uint8_t declaredBusId)
     return (configuredBusId != 0xFF) ? configuredBusId : declaredBusId;
 }
 
+/**
+ * Should registerSystemPins() (system_config.cpp, #379 Tier 1) reserve THIS
+ * wired bus's pins as a build-time physical fact, before serial/CLI can claim
+ * over them? Only when the declaration is the bus actually in effect — i.e.
+ * exactly the case where resolveWiredBusId() above would return
+ * `declaredBusId` rather than `configuredBusId`.
+ *
+ * Kept as a tiny pure predicate, separate from resolveWiredBusId() itself,
+ * so it is unit-testable without pulling system_config.cpp's dependency
+ * chain onto the host: registerSystemPins() calls this instead of repeating
+ * the `configuredBusId == 0xFF && declaredBusId != 0xFF` condition inline.
+ */
+inline bool wiredBusIsInEffect(uint8_t configuredBusId, uint8_t declaredBusId) {
+    return configuredBusId == 0xFF && declaredBusId != 0xFF;
+}
+
 #endif // BUS_WIRING_H

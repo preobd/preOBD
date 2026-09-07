@@ -29,6 +29,7 @@
 #include "../lib/system_config.h"
 #include "../lib/message_api.h"
 #include "../lib/pin_registry.h"
+#include "../lib/pin_owner.h"
 #include "../control/control_manager.h"
 
 // CLI handlers are cold — keep them in flash, not Teensy ITCM (RAM1).
@@ -125,23 +126,10 @@ static FLASHMEM int actionAdd(int argc, const char* const* argv) {
         return 1;
     }
 
-    // Pin-conflict check (mirrors input/serial config). The registry catches
-    // buses, system pins, RGB output, and other actions; inputs aren't in the
-    // registry (they self-track), so check inputs[] explicitly.
-    if (!isPinAvailable(target)) {
-        msg.control.print(F("ERROR: pin "));
-        msg.control.print(target);
-        msg.control.print(F(" already in use ("));
-        msg.control.print(getPinUsageTypeName(getPinUsage(target)));
-        const char* held = getPinDescription(target);
-        if (held) { msg.control.print(F(": ")); msg.control.print(held); }
-        msg.control.println(F(")"));
-        return 1;
-    }
-    if (getInputByPin(target) != nullptr) {
-        msg.control.print(F("ERROR: pin "));
-        msg.control.print(target);
-        msg.control.println(F(" is already used by a configured input"));
+    // Pin-conflict check, routed through the one predicate (#384): it covers
+    // the registry (buses, system pins, RGB output, other actions) AND
+    // configured inputs (which aren't in the registry — they self-track).
+    if (pinsConflict(&target, 1, PIN_RANK_ACTION, "Action output")) {
         return 1;
     }
 

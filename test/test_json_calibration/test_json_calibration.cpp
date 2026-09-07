@@ -39,6 +39,9 @@ static void resetInputs() {
 void setUp(void) {
     memset(g_pinReserved, 0, sizeof(g_pinReserved));
     resetInputs();
+    // See test_input_manager's setUp(): this suite also drives inputs[]
+    // directly, so inputHoldsPin() (#385) needs to be told the table is live.
+    inputsTableIsLive = true;
 }
 void tearDown(void) {}
 

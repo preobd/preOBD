@@ -18,6 +18,7 @@
 #include "../lib/application_presets.h"
 #include "../lib/sensor_library.h"
 #include "../lib/pin_registry.h"
+#include "../lib/pin_owner.h"
 #include "../lib/bus_needs.h"
 #include "../lib/bus_manager.h"
 #include "../control/control_manager.h"  // controlResetTables + rule/action table helpers
@@ -25,6 +26,14 @@
 // ===== GLOBAL STATE =====
 Input inputs[MAX_INPUTS];
 uint8_t numActiveInputs = 0;
+
+// True once inputs[] is the ground truth (sentinel-filled by initInputManager()
+// and then loaded, successfully or not). BSS-zero (false) before that — which
+// is the honest starting state: on cold start inputs[] hasn't been touched yet,
+// so reading it would answer every pin "held" (pin 0) or "not held" (everything
+// else) at random, neither of which is the truth (#385). See inputHoldsPin()
+// below for the dispatch this drives.
+static bool inputsTableIsLive = false;
 
 // ===== EEPROM LAYOUT — shared front-growing config-store arena =====
 // One arena holds every persisted record table, packed after a single header at
@@ -153,6 +162,13 @@ bool initInputManager() {
     if (!eepromLoaded) {
         msg.debug.info(TAG_CONFIG, "No valid config in EEPROM - starting with blank configuration");
     }
+
+    // inputs[] is now the ground truth — sentinel-filled above and either
+    // loaded from a valid store or left blank by a rejected one. Either way
+    // it is the authoritative live answer from here on; inputHoldsPin()
+    // switches off the boot-window EEPROM pre-scan (#385).
+    inputsTableIsLive = true;
+
     return eepromLoaded;
 }
 
@@ -353,11 +369,76 @@ bool saveInputConfig() {
     return true;
 }
 
+// Read-only pre-scan of the SAME stored records inputHoldsPin() will answer
+// from once inputs[] loads, for the WINDOW BEFORE THAT: registerSystemPins()
+// (main.cpp, before serial/buses) and the bus bring-up that follows it both
+// need a true answer, but loadInputConfig() has not populated inputs[] yet at
+// that point in setup() (#385). A direct sibling of storedInputBusNeeds() —
+// same header sanity, same bounded record walk, no checksum verification (a
+// store that fails full validation is rejected wholesale by loadInputConfig()
+// moments later; the worst case here is a false "held" for a config that then
+// doesn't load, never a false "free").
+//
+// One record read into a single stack local, same as storedInputBusNeeds() —
+// no RAM buffer, no cache: mega2560's 97%-full budget cannot pay for one.
+//
+// `excludeRecordIndex` (default 0xFF, "exclude nothing") is loadInputConfig()'s
+// own self-exclusion (see its call site): that function validates record i by
+// asking this SAME store whether the pin is already held, WHILE record i's own
+// bytes are still sitting right there in EEPROM waiting to be applied — with no
+// exclusion, every legitimate record would "conflict" with its own not-yet-
+// applied self, and get dropped on every single boot. Covered by
+// test_loadInputConfig_does_not_self_conflict_its_own_records (test_bus_needs),
+// which needs a properly checksummed store to reach the failure — a stub that
+// skips the checksum never gets far enough into loadInputConfig() to see it.
+// Register/bus bring-up calls before ANY record has been examined pass 0xFF:
+// nothing has a "self" to exclude there.
+static bool storedInputHoldsPin(uint8_t pin, uint8_t excludeRecordIndex = 0xFF) {
+    ConfigStoreHeader header;
+    EEPROM.get(0, header);
+    if (header.magic != EEPROM_MAGIC) return false;
+    if (header.version != EEPROM_VERSION) return false;
+    if ((size_t)EEPROM_HEADER_SIZE + (size_t)header.numInputs * EEPROM_INPUT_SIZE
+            > (size_t)SYSTEM_CONFIG_ADDRESS) return false;
+
+    for (uint8_t i = 0; i < header.numInputs; i++) {
+        if (i == excludeRecordIndex) continue;
+        InputEEPROM rec;
+        EEPROM.get(EEPROM_HEADER_SIZE + (size_t)i * EEPROM_INPUT_SIZE, rec);
+        if (rec.pin == pin) return true;
+    }
+    return false;
+}
+
+// Set by validateInputConfig() immediately before calling pinsConflict(), and
+// cleared immediately after (see its call site). Excludes ONE specific input
+// slot from inputHoldsPin() below, by IDENTITY — not by pin value. A pin-keyed
+// exclusion cannot tell "this pin is only mine" from "this pin is mine AND a
+// squatter's": test_refused_on_pin_conflict_leaves_target_intact re-validates
+// slot 0's pin while a second, different slot (the squatter) sits on that same
+// pin, and that second slot's conflict must still be caught. Only the identity
+// of `self` disambiguates that, so the exclusion has to live here, behind the
+// probe, rather than as a pin value threaded through pin_owner.cpp (see its
+// header comment).
+static const Input* excludedFromProbe = nullptr;
+
+// loadInputConfig()'s counterpart to excludedFromProbe above, for the
+// boot-window (storedInputHoldsPin) path — see that function's comment.
+static uint8_t excludedStoredRecordIndex = 0xFF;
+
 bool inputHoldsPin(uint8_t pin) {
     // 0xFF is the free-slot marker in inputs[], so it is never "held" — and it
     // is also what bus_defaults reports for a pin absent on this platform.
     if (pin == 0xFF) return false;
-    return getInputByPin(pin) != nullptr;
+    // Before inputs[] is live, the STORED configuration is the only truth
+    // available (#385) — see the design principle in ARCHITECTURE.md. After,
+    // inputs[] is a faster, equally-true cache of the same records.
+    if (!inputsTableIsLive) return storedInputHoldsPin(pin, excludedStoredRecordIndex);
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        if (&inputs[i] == excludedFromProbe) continue;
+        if (inputs[i].pin == pin) return true;
+    }
+    return false;
 }
 
 uint8_t storedInputBusNeeds() {
@@ -485,20 +566,23 @@ bool loadInputConfig() {
         // watchdog-resetting before the user can reach the CLI to fix it. Dropping
         // the offending record makes such a config self-heal instead of reset-loop.
         // Virtual pins (CAN 0xC0+, I2C 0xF0+) have no registry entry — skip them.
-        if (rec.pin < 0xC0 && !isPinAvailable(rec.pin)) {
-            msg.control.print(F("⚠ Skipping stored input on pin "));
-            int8_t analogNum = analogIndexForPin(rec.pin);
-            if (analogNum >= 0) {
-                msg.control.print(F("A"));
-                msg.control.print(analogNum);
-            } else {
-                msg.control.print(rec.pin);
-            }
-            msg.control.print(F(" — reserved by "));
-            const char* desc = getPinDescription(rec.pin);
-            // Not a ternary with F(): the literal would land in RAM on AVR.
-            if (desc) msg.control.println(desc);
-            else      msg.control.println(F("a bus"));
+        // Routed through the one door (#384): this now also catches a stored
+        // pin that a PRECEDING record in this same load already claimed, not
+        // just a registry/bus conflict.
+        //
+        // inputs[] is not live yet (#385), so the input-probe half of that
+        // check answers from THIS SAME store via storedInputHoldsPin() — which
+        // means record i's own bytes are sitting right there in EEPROM while
+        // it is being asked "does anything hold this pin". Exclude index i
+        // (this record only, not the whole probe) so it can't self-conflict;
+        // an EARLIER record (index < i) that legitimately wants the same pin
+        // is still caught, exactly as inputs[]-based comparison would once
+        // live.
+        excludedStoredRecordIndex = i;
+        const bool storedConflict = rec.pin < 0xC0 &&
+            pinsConflict(&rec.pin, 1, PIN_RANK_INPUT, "stored input");
+        excludedStoredRecordIndex = 0xFF;
+        if (storedConflict) {
             msg.control.println(F("  Run SAVE to drop it permanently."));
             continue;  // slot stays pin==0xFF (free)
         }
@@ -649,57 +733,25 @@ static uint8_t findFreeSlot() {
  * @param maxValue      candidate alarm maximum (standard units)
  *
  * Checks for:
- * - Pin reserved by a bus (I2C/SPI/CAN)
- * - Pin conflicts (duplicate pin assignments)
+ * - Pin ownership conflicts — registry (bus/system pin/action) AND other
+ *   configured inputs, both via the one predicate (#384/#385)
  * - Alarm threshold sanity (min < max)
  * Returns true if valid, false if errors found
  */
 static bool validateInputConfig(uint8_t pin, const Input* self,
                                 bool alarmEnabled, float minValue, float maxValue) {
-    // Check if pin is reserved by a bus (I2C, SPI, CAN)
-    // Skip this check for virtual pins (CAN 0xC0+, I2C 0xF0+)
-    if (pin < 0xC0 && !isPinAvailable(pin)) {
-        msg.control.print(F("ERROR: Pin "));
-        int8_t analogNum = analogIndexForPin(pin);
-        if (analogNum >= 0) {
-            msg.control.print(F("A"));
-            msg.control.print(analogNum);
-        } else {
-            msg.control.print(pin);
-        }
-        msg.control.println(F(" is reserved by a bus (I2C/SPI/CAN)"));
-        return false;
-    }
-
-    // Check for pin conflicts with other enabled inputs
-    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        Input* other = &inputs[i];
-
-        // Skip self-comparison and uninitialized slots
-        if (other == self || other->pin == 0xFF) {
-            continue;
-        }
-
-        // Check if another enabled input uses the same pin
-        if (other->flags.isEnabled && other->pin == pin) {
-            msg.control.print(F("ERROR: Pin "));
-            if (pin >= 0xF0) {
-                msg.control.print(F("I2C"));
-            } else if (pin >= 0xC0 && pin < 0xE0) {
-                msg.control.print(F("CAN"));
-            } else {
-                int8_t analogNum = analogIndexForPin(pin);
-                if (analogNum >= 0) {
-                    msg.control.print(F("A"));
-                    msg.control.print(analogNum);
-                } else {
-                    msg.control.print(pin);
-                }
-            }
-            msg.control.println(F(" already in use"));
-            return false;
-        }
-    }
+    // One door for pin ownership (#384). This used to be TWO checks here: a
+    // registry-only lookup that deliberately skipped the input probe (no
+    // self-exclusion existed, so a candidate re-validating its OWN unchanged
+    // pin would see itself and misreport a conflict), plus a hand-rolled
+    // other-input scan that duplicated exactly what the probe already knows.
+    // excludedFromProbe closes that gap by identity (see its declaration) —
+    // set immediately before the call, cleared immediately after so the
+    // exclusion never leaks into an unrelated one.
+    excludedFromProbe = self;
+    const bool conflict = pinsConflict(&pin, 1, PIN_RANK_INPUT, "candidate input");
+    excludedFromProbe = nullptr;
+    if (conflict) return false;
 
     // Check alarm threshold sanity (only if alarms enabled)
     if (alarmEnabled) {

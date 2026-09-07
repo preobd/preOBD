@@ -215,6 +215,27 @@ const char* getSPIBusName(uint8_t bus_id);
  */
 const char* getCANBusName(uint8_t bus_id);
 
+/**
+ * The stored-bus-selection PinOwnerBusProbe (pin_owner.h, #379).
+ *
+ * Answers pinsConflict()'s third source: a stored `BUS I2C/SPI/CAN <n>`
+ * selection whose bring-up is deferred to reboot still names pins nobody
+ * should be able to steal in the meantime. Consults systemConfig.buses
+ * directly (I2C, SPI, and both CAN directions) — NOT whether the bus has
+ * actually started, since an already-started bus already appears in the pin
+ * registry and is judged there instead; this probe only covers the gap
+ * between "selected" and "started".
+ *
+ * `excludeOwner`, when it names the very bus a stored selection would also
+ * describe (getI2CBusName()/getSPIBusName()/getCANBusName() — the same
+ * strings initI2CBus()/initSPIBus()/initCANBus() claim under), is treated as
+ * "that's not a conflict, that's the bus's own bring-up asking" — see
+ * pin_owner.h's PinOwnerBusProbe contract.
+ *
+ * Registered via setPinOwnerBusProbe() once systemConfig is loaded (main.cpp).
+ */
+bool storedBusHoldsPin(uint8_t pin, const char* excludeOwner, const char** descOut);
+
 // ============================================================================
 // BUS STATUS DISPLAY
 // ============================================================================

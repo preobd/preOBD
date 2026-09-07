@@ -12,9 +12,10 @@
 //  2. WHO is consulted before a bus claims copper. i2cBusPinsConflict() was the
 //     only check that looked at configured inputs (which never enter the pin
 //     registry — mega2560 has no RAM for them), and it was wired to exactly two
-//     CLI commands: no boot path, and no bus but I2C. busPinsConflict() /
-//     claimBusPins() in bus_pins.cpp is that check's one home now, used by I2C,
-//     SPI and CAN, at boot and at runtime.
+//     CLI commands: no boot path, and no bus but I2C. pinsConflict() /
+//     claimPins() in pin_owner.cpp is that check's one home now, used by every
+//     pin claimant — I2C, SPI, CAN, serial, RGB, system pins, actions — at
+//     boot and at runtime.
 //
 // The peripheral half (Wire/SPI/FlexCAN) is not reachable on the host, so what
 // is tested here is the decision logic — which is where the bug lived.
@@ -23,7 +24,7 @@
 #include <string.h>
 
 #include "../../src/lib/pin_registry.cpp"
-#include "../../src/lib/bus_pins.cpp"
+#include "../../src/lib/pin_owner.cpp"
 #include "../../src/lib/bus_needs.cpp"   // display vote; the sensor mapping is
                                         // inline in sensor_helpers.h
 #include "../../src/inputs/input_manager.cpp"
@@ -38,7 +39,21 @@ LogFilter::LogFilter() {}
 MessageRouter::MessageRouter() {}
 TransportInterface* MessageRouter::getTransport(MessagePlane, bool) { return nullptr; }
 size_t MessageStream::error(const char*, const char*, ...) { return 0; }
+size_t MessageStream::warn(const char*, const char*, ...) { return 0; }
+size_t MessageStream::info(const char*, const char*, ...) { return 0; }
 size_t MessageStream::debug(const char*, const char*, ...) { return 0; }
+
+// initInputManager()/loadInputConfig() (exercised end to end by the #385
+// self-conflict regression tests below) touch the control-engine tables even
+// though nothing here configures any Rule/Action — an empty, inert stand-in
+// for each is enough.
+#if INCLUDE_CONTROL_ENGINE
+Rule rules[MAX_RULES];
+Action actions[MAX_ACTIONS];
+ActionLink actionLinks[MAX_ACTION_LINKS];
+void controlResetTables() {}
+uint8_t controlSweepActionRules() { return 0; }
+#endif
 
 int8_t analogIndexForPin(uint8_t) { return -1; }
 Input* requireInput(uint8_t pin) { return getInputByPin(pin); }
@@ -74,9 +89,14 @@ void setUp(void) {
     for (uint8_t i = 0; i < MAX_INPUTS; i++) inputs[i].pin = 0xFF;
     numActiveInputs = 0;
     systemConfig.displayType = DISPLAY_NONE;
-    setBusPinInputProbe(inputHoldsPin);
+    setPinOwnerInputProbe(inputHoldsPin);
+    // This suite drives inputs[] directly via giveInputThePin() rather than
+    // through initInputManager(), so tell inputHoldsPin() (#385) inputs[] is
+    // the live table. Section 4 below flips this back off to exercise the
+    // boot-window EEPROM path on its own.
+    inputsTableIsLive = true;
 }
-void tearDown(void) { setBusPinInputProbe(nullptr); }
+void tearDown(void) { setPinOwnerInputProbe(nullptr); }
 
 // Put a configured input on a physical pin (slot 0 unless taken).
 static void giveInputThePin(uint8_t pin) {
@@ -113,17 +133,41 @@ static void writeStore(const char* const* sensorNames, const uint8_t* pins, uint
     }
 }
 
+// A FULLY valid store — checksummed, unlike writeStore() above — for exercising
+// loadInputConfig() end to end (initInputManager() calls it). xorBytes() is a
+// static in input_manager.cpp, reachable here because this TU #includes that
+// .cpp directly (line 30).
+static void writeValidStore(const char* const* sensorNames, const uint8_t* pins, uint8_t n) {
+    ConfigStoreHeader header;
+    memset(&header, 0, sizeof(header));
+    header.magic = EEPROM_MAGIC;
+    header.version = EEPROM_VERSION;
+    header.numInputs = n;
+
+    uint8_t checksum = 0;
+    for (uint8_t i = 0; i < n; i++) {
+        InputEEPROM rec;
+        memset(&rec, 0, sizeof(rec));
+        rec.pin = pins[i];
+        rec.sensorHash = hashOfSensor(sensorNames[i]);
+        EEPROM.put(EEPROM_HEADER_SIZE + (size_t)i * EEPROM_INPUT_SIZE, rec);
+        checksum ^= xorBytes(&rec, sizeof(rec));
+    }
+    header.checksum = checksum;
+    EEPROM.put(0, header);
+}
+
 // ===========================================================================
 // 1. The predicate: a bus must not claim copper a configured input is on
 // ===========================================================================
 
 // The core of #358's silent-wrong ordering: inputs are invisible to the pin
-// registry, so reservePins() alone would hand this bus the pin and say nothing.
+// registry, so reservePins_unchecked() alone would hand this bus the pin and say nothing.
 static void test_i2c_claim_refused_when_an_input_holds_a_bus_pin(void) {
     giveInputThePin(19);                       // A5 / SCL on Teensy 4.x
 
     const uint8_t pins[2] = { 18, 19 };
-    TEST_ASSERT_FALSE(claimBusPins(pins, 2, "I2C", OWNER_WIRE));
+    TEST_ASSERT_FALSE(claimPins(pins, 2, PIN_RESERVED, PIN_RANK_BUS, "I2C", OWNER_WIRE));
 
     // …and the refusal claims nothing at all, not even the free half.
     TEST_ASSERT_TRUE(isPinAvailable(18));
@@ -135,7 +179,7 @@ static void test_spi_claim_refused_when_an_input_holds_a_bus_pin(void) {
     giveInputThePin(13);                       // SCK
 
     const uint8_t pins[3] = { 11, 12, 13 };
-    TEST_ASSERT_FALSE(claimBusPins(pins, 3, "SPI", OWNER_SPI));
+    TEST_ASSERT_FALSE(claimPins(pins, 3, PIN_RESERVED, PIN_RANK_BUS, "SPI", OWNER_SPI));
     TEST_ASSERT_EQUAL(0, getPinRegistrySize());
 }
 
@@ -143,7 +187,7 @@ static void test_can_claim_refused_when_an_input_holds_a_bus_pin(void) {
     giveInputThePin(23);
 
     const uint8_t pins[2] = { 22, 23 };
-    TEST_ASSERT_FALSE(claimBusPins(pins, 2, "CAN", OWNER_CAN));
+    TEST_ASSERT_FALSE(claimPins(pins, 2, PIN_RESERVED, PIN_RANK_BUS, "CAN", OWNER_CAN));
     TEST_ASSERT_EQUAL(0, getPinRegistrySize());
 }
 
@@ -153,7 +197,7 @@ static void test_claim_succeeds_when_no_input_is_in_the_way(void) {
     giveInputThePin(14);
 
     const uint8_t pins[2] = { 18, 19 };
-    TEST_ASSERT_TRUE(claimBusPins(pins, 2, "I2C", OWNER_WIRE));
+    TEST_ASSERT_TRUE(claimPins(pins, 2, PIN_RESERVED, PIN_RANK_BUS, "I2C", OWNER_WIRE));
     TEST_ASSERT_EQUAL_STRING(OWNER_WIRE, getPinDescription(18));
     TEST_ASSERT_EQUAL_STRING(OWNER_WIRE, getPinDescription(19));
 }
@@ -162,8 +206,8 @@ static void test_claim_succeeds_when_no_input_is_in_the_way(void) {
 // is already up; re-claiming must be a no-op, not a refusal.
 static void test_reclaim_by_the_same_owner_still_succeeds(void) {
     const uint8_t pins[2] = { 18, 19 };
-    TEST_ASSERT_TRUE(claimBusPins(pins, 2, "I2C", OWNER_WIRE));
-    TEST_ASSERT_TRUE(claimBusPins(pins, 2, "I2C", OWNER_WIRE));
+    TEST_ASSERT_TRUE(claimPins(pins, 2, PIN_RESERVED, PIN_RANK_BUS, "I2C", OWNER_WIRE));
+    TEST_ASSERT_TRUE(claimPins(pins, 2, PIN_RESERVED, PIN_RANK_BUS, "I2C", OWNER_WIRE));
     TEST_ASSERT_EQUAL(2, getPinRegistrySize());
 }
 
@@ -171,28 +215,28 @@ static void test_reclaim_by_the_same_owner_still_succeeds(void) {
 // in inputs[], which is exactly the phantom conflict the probe must not report.
 static void test_absent_pins_are_not_an_input_conflict(void) {
     const uint8_t pins[2] = { 0xFF, 0xFF };
-    TEST_ASSERT_TRUE(claimBusPins(pins, 2, "CAN", OWNER_CAN));
+    TEST_ASSERT_TRUE(claimPins(pins, 2, PIN_RESERVED, PIN_RANK_BUS, "CAN", OWNER_CAN));
     TEST_ASSERT_EQUAL(0, getPinRegistrySize());
 }
 
 // Another system function on the pin is still a conflict — the registry half of
 // the predicate survives.
 static void test_registry_owner_is_still_a_conflict(void) {
-    TEST_ASSERT_TRUE(registerPin(16, PIN_RESERVED, "Serial4"));
+    TEST_ASSERT_TRUE(registerPin_unchecked(16, PIN_RESERVED, "Serial4", PIN_RANK_SERIAL));
 
     const uint8_t pins[2] = { 17, 16 };
-    TEST_ASSERT_FALSE(claimBusPins(pins, 2, "I2C", "Wire1"));
+    TEST_ASSERT_FALSE(claimPins(pins, 2, PIN_RESERVED, PIN_RANK_BUS, "I2C", "Wire1"));
     TEST_ASSERT_EQUAL_STRING("Serial4", getPinDescription(16));
 }
 
 // With no probe registered (early boot, before inputs exist) the answer is
 // "no input holds it" — true at that point, and it must not crash.
 static void test_unregistered_probe_falls_back_to_the_registry(void) {
-    setBusPinInputProbe(nullptr);
+    setPinOwnerInputProbe(nullptr);
     giveInputThePin(19);
 
     const uint8_t pins[2] = { 18, 19 };
-    TEST_ASSERT_TRUE(claimBusPins(pins, 2, "I2C", OWNER_WIRE));
+    TEST_ASSERT_TRUE(claimPins(pins, 2, PIN_RESERVED, PIN_RANK_BUS, "I2C", OWNER_WIRE));
 }
 
 // ===========================================================================
@@ -316,6 +360,106 @@ static void test_impossible_record_count_asks_for_nothing(void) {
     TEST_ASSERT_EQUAL(BUS_NEED_NONE, storedInputBusNeeds());
 }
 
+// ===========================================================================
+// 4. The boot window: inputHoldsPin() before inputs[] is live (#385)
+//
+// registerSystemPins() and the bus bring-up that follows it run BEFORE
+// initInputManager() populates inputs[] — in that window every real slot
+// reads pin==0xFF (BSS-zero), so a probe that only ever looked at inputs[]
+// would answer "not held" for every stored input, and "held" for pin 0 (the
+// 0xFF guard's job). inputHoldsPin() must instead read the SAME stored
+// records loadInputConfig() will apply, exactly like storedInputBusNeeds()
+// does for bus needs.
+// ===========================================================================
+
+static void test_stored_input_is_seen_before_inputs_table_is_live(void) {
+    inputsTableIsLive = false;   // the exact state at the top of setup()
+    const char* sensors[] = { "VDO_120C_TABLE" };
+    const uint8_t pins[]  = { 7 };
+    writeStore(sensors, pins, 1);
+
+    // inputs[] itself is still blank (setUp() cleared it) — the probe cannot
+    // be reading THAT and getting the right answer.
+    TEST_ASSERT_NULL(getInputByPin(7));
+    TEST_ASSERT_TRUE(inputHoldsPin(7));
+    TEST_ASSERT_FALSE(inputHoldsPin(8));   // an unrelated pin is not "held"
+}
+
+// The #351/#358 failure mode restated for boot: a bus claim over a pin a
+// STORED (not-yet-loaded) input occupies must still be refused.
+static void test_bus_claim_refused_against_a_stored_input_before_load(void) {
+    inputsTableIsLive = false;
+    const char* sensors[] = { "VDO_120C_TABLE" };
+    const uint8_t pins[]  = { 19 };
+    writeStore(sensors, pins, 1);
+
+    const uint8_t busPins[2] = { 18, 19 };
+    TEST_ASSERT_FALSE(claimPins(busPins, 2, PIN_RESERVED, PIN_RANK_BUS, "I2C", OWNER_WIRE));
+    TEST_ASSERT_EQUAL(0, getPinRegistrySize());
+}
+
+// pin 0xFF is BOTH "no such pin on this platform" (bus_defaults) and the
+// free-slot sentinel inputs[] uses — the boot-window scan must not confuse
+// "no records reference pin 0xFF" with "pin 0xFF is held".
+static void test_boot_window_probe_does_not_misread_the_free_slot_sentinel(void) {
+    inputsTableIsLive = false;
+    EEPROM.clear();   // no store at all — every slot would read 0x00 if BSS-zero were consulted
+    TEST_ASSERT_FALSE(inputHoldsPin(0));
+    TEST_ASSERT_FALSE(inputHoldsPin(0xFF));
+}
+
+// Regression: loadInputConfig() validates record i by asking
+// the SAME store (via the boot-window probe above) whether the pin is already
+// held — WHILE record i's own bytes are still sitting right there in EEPROM,
+// unapplied. Without self-exclusion by record index, every legitimate single
+// input record "conflicted" with itself and was silently dropped on every
+// boot (#385 follow-up). Reaching it requires a properly checksummed store:
+// a stub that skips the checksum is rejected earlier, before this code runs.
+static void test_loadInputConfig_does_not_self_conflict_its_own_records(void) {
+    // The real boot state (setUp() flips this true for the OTHER tests in
+    // this file, which drive inputs[] directly — undo that here): before
+    // initInputManager() runs, inputs[] is not live yet, which is exactly the
+    // condition that has to hold for this regression to be reachable at all.
+    inputsTableIsLive = false;
+    const char* sensors[] = { "VDO_120C_TABLE" };
+    const uint8_t pins[]  = { 7 };
+    writeValidStore(sensors, pins, 1);
+
+    TEST_ASSERT_TRUE(initInputManager());
+    TEST_ASSERT_NOT_NULL_MESSAGE(getInputByPin(7),
+        "a lone stored record must survive its own load, not self-conflict");
+}
+
+// The same load, with TWO records on DIFFERENT pins — both must survive, not
+// just whichever happens to be checked first.
+static void test_loadInputConfig_does_not_self_conflict_multiple_records(void) {
+    inputsTableIsLive = false;
+    const char* sensors[] = { "VDO_120C_TABLE", "VDO_120C_TABLE" };
+    const uint8_t pins[]  = { 7, 9 };
+    writeValidStore(sensors, pins, 2);
+
+    TEST_ASSERT_TRUE(initInputManager());
+    TEST_ASSERT_NOT_NULL(getInputByPin(7));
+    TEST_ASSERT_NOT_NULL(getInputByPin(9));
+}
+
+// A GENUINE duplicate (two stored records naming the SAME pin) must still be
+// caught — self-exclusion must be scoped to exactly the record being checked,
+// not to "any record sharing this pin".
+static void test_loadInputConfig_still_catches_a_genuine_duplicate_pin(void) {
+    const char* sensors[] = { "VDO_120C_TABLE", "VDO_120C_TABLE" };
+    const uint8_t pins[]  = { 7, 7 };
+    writeValidStore(sensors, pins, 2);
+
+    TEST_ASSERT_TRUE(initInputManager());
+    // Exactly one of the two survives (the first one loaded); the record
+    // count is what proves the second was refused, not silently merged.
+    TEST_ASSERT_NOT_NULL(getInputByPin(7));
+    uint8_t occupied = 0;
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) if (inputs[i].pin != 0xFF) occupied++;
+    TEST_ASSERT_EQUAL_UINT8(1, occupied);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_i2c_claim_refused_when_an_input_holds_a_bus_pin);
@@ -341,5 +485,13 @@ int main(int, char**) {
     RUN_TEST(test_blank_eeprom_asks_for_nothing);
     RUN_TEST(test_foreign_store_version_asks_for_nothing);
     RUN_TEST(test_impossible_record_count_asks_for_nothing);
+
+    RUN_TEST(test_stored_input_is_seen_before_inputs_table_is_live);
+    RUN_TEST(test_bus_claim_refused_against_a_stored_input_before_load);
+    RUN_TEST(test_boot_window_probe_does_not_misread_the_free_slot_sentinel);
+
+    RUN_TEST(test_loadInputConfig_does_not_self_conflict_its_own_records);
+    RUN_TEST(test_loadInputConfig_does_not_self_conflict_multiple_records);
+    RUN_TEST(test_loadInputConfig_still_catches_a_genuine_duplicate_pin);
     return UNITY_END();
 }

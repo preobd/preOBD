@@ -43,6 +43,11 @@ void setUp(void) {
         inputs[i].pin = 0xFF;
     }
     numActiveInputs = 0;
+    // This suite drives inputs[] directly rather than through
+    // initInputManager(), so tell inputHoldsPin() (#385) inputs[] is the live
+    // table — otherwise it would fall back to the (here, blank) EEPROM scan
+    // and every input-vs-input conflict check below would go silently inert.
+    inputsTableIsLive = true;
 }
 void tearDown(void) {}
 

@@ -36,6 +36,7 @@ void clearPinRegistry() {
         pinRegistry[i].pin = 0xFF;
         pinRegistry[i].type = PIN_UNUSED;
         pinRegistry[i].description = nullptr;
+        pinRegistry[i].rank = 0;
     }
 }
 
@@ -43,7 +44,7 @@ void clearPinRegistry() {
 // PIN REGISTRATION
 // ============================================================================
 
-bool registerPin(uint8_t pin, PinUsageType type, const char* description) {
+bool registerPin_unchecked(uint8_t pin, PinUsageType type, const char* description, uint8_t rank) {
     // Check if pin already registered
     for (uint8_t i = 0; i < registrySize; i++) {
         if (pinRegistry[i].pin == pin) {
@@ -62,6 +63,7 @@ bool registerPin(uint8_t pin, PinUsageType type, const char* description) {
     pinRegistry[registrySize].pin = pin;
     pinRegistry[registrySize].type = type;
     pinRegistry[registrySize].description = description;
+    pinRegistry[registrySize].rank = rank;
     registrySize++;
 
     return true;
@@ -73,7 +75,8 @@ bool registerPin(uint8_t pin, PinUsageType type, const char* description) {
 // `claimed`), never a pin that was already reserved to the same owner and
 // never one held by somebody else — freeing either would turn a refused
 // reservation into a second bug.
-bool reservePins(const uint8_t* pins, uint8_t count, const char* description) {
+bool reservePins_unchecked(const uint8_t* pins, uint8_t count, PinUsageType type,
+                           const char* description, uint8_t rank) {
     if (!pins || count > 8) return false;
 
     uint8_t claimed = 0;   // bit i set => pins[i] was registered by this call
@@ -82,14 +85,21 @@ bool reservePins(const uint8_t* pins, uint8_t count, const char* description) {
         const uint8_t pin = pins[i];
         if (pin == 0xFF) continue;   // pin not present on this platform
 
-        // Already ours: re-reserving a bus that is up is not a conflict.
+        // Already ours: re-reserving something that is already up is not a conflict.
+        // Same weakness as pin_owner.cpp's pinsConflict() self-skip: two callers
+        // sharing both `type` and `description` (e.g. two PIN_OUTPUT Actions,
+        // which share ACTION_PIN_DESC) would wrongly match here too. This is
+        // safe ONLY because claimPins() always runs pinsConflict() first and
+        // that check already refused the case with the type-gated PIN_RESERVED
+        // rule — reservePins_unchecked() never sees it. Don't call this
+        // directly from anywhere but pin_owner.cpp (see pin_registry.h).
         const char* held = getPinDescription(pin);
-        if (held && description && getPinUsage(pin) == PIN_RESERVED &&
+        if (held && description && getPinUsage(pin) == type &&
             strcmp(held, description) == 0) {
             continue;
         }
 
-        if (registerPin(pin, PIN_RESERVED, description)) {
+        if (registerPin_unchecked(pin, type, description, rank)) {
             claimed |= (uint8_t)(1 << i);
             continue;
         }
@@ -133,6 +143,7 @@ void unregisterPin(uint8_t pin) {
             pinRegistry[registrySize].pin = 0xFF;
             pinRegistry[registrySize].type = PIN_UNUSED;
             pinRegistry[registrySize].description = nullptr;
+            pinRegistry[registrySize].rank = 0;
 
             return;
         }
@@ -161,6 +172,15 @@ PinUsageType getPinUsage(uint8_t pin) {
     return PIN_UNUSED;
 }
 
+uint8_t getPinRank(uint8_t pin) {
+    for (uint8_t i = 0; i < registrySize; i++) {
+        if (pinRegistry[i].pin == pin) {
+            return pinRegistry[i].rank;
+        }
+    }
+    return 0;
+}
+
 const char* getPinDescription(uint8_t pin) {
     for (uint8_t i = 0; i < registrySize; i++) {
         if (pinRegistry[i].pin == pin) {
@@ -168,35 +188,6 @@ const char* getPinDescription(uint8_t pin) {
         }
     }
     return nullptr;
-}
-
-// ============================================================================
-// PIN VALIDATION
-// ============================================================================
-
-bool validateNoPinConflict(uint8_t pin, PinUsageType newType, const char* newDesc) {
-    // Check if pin is available
-    if (isPinAvailable(pin)) {
-        return true;  // No conflict
-    }
-
-    // Pin is already in use - print detailed error message
-    PinUsageType existingType = getPinUsage(pin);
-    const char* existingDesc = getPinDescription(pin);
-
-    msg.debug.error(TAG_SYSTEM, "Pin %d already in use", pin);
-    msg.debug.error(TAG_SYSTEM, "  Current: %s%s%s%s",
-                   getPinUsageTypeName(existingType),
-                   existingDesc ? " (" : "",
-                   existingDesc ? existingDesc : "",
-                   existingDesc ? ")" : "");
-    msg.debug.error(TAG_SYSTEM, "  Attempted: %s%s%s%s",
-                   getPinUsageTypeName(newType),
-                   newDesc ? " (" : "",
-                   newDesc ? newDesc : "",
-                   newDesc ? ")" : "");
-
-    return false;  // Conflict detected
 }
 
 // ============================================================================

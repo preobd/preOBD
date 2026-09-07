@@ -9,6 +9,7 @@
 #if INCLUDE_LED
 
 #include "pin_registry.h"
+#include "pin_owner.h"
 #include "message_api.h"
 #include "log_tags.h"
 
@@ -146,24 +147,29 @@ static void setRequest(RGBColor color, RGBEffect effect, uint16_t period_ms, RGB
 // ============================================================================
 
 void initRGBLed() {
-    // Validate pins don't conflict
-    if (!validateNoPinConflict(RGB_PIN_R, PIN_OUTPUT, "RGB LED Red")) {
+    // Validate all three before registering any (all-or-nothing): a conflict
+    // on G must not leave R claimed with the LED never actually enabled.
+    // Checked/claimed one channel at a time so a conflict names the specific
+    // pin at fault. RGB pins are wiring.ini physical facts (#288), BUILTIN rank.
+    const uint8_t r = RGB_PIN_R, g = RGB_PIN_G, b = RGB_PIN_B;
+    if (pinsConflict(&r, 1, PIN_RANK_BUILTIN, "RGB LED Red")) {
         msg.debug.warn(TAG_SYSTEM, "RGB LED Red pin %d conflict - LED disabled", RGB_PIN_R);
         return;
     }
-    if (!validateNoPinConflict(RGB_PIN_G, PIN_OUTPUT, "RGB LED Green")) {
+    if (pinsConflict(&g, 1, PIN_RANK_BUILTIN, "RGB LED Green")) {
         msg.debug.warn(TAG_SYSTEM, "RGB LED Green pin %d conflict - LED disabled", RGB_PIN_G);
         return;
     }
-    if (!validateNoPinConflict(RGB_PIN_B, PIN_OUTPUT, "RGB LED Blue")) {
+    if (pinsConflict(&b, 1, PIN_RANK_BUILTIN, "RGB LED Blue")) {
         msg.debug.warn(TAG_SYSTEM, "RGB LED Blue pin %d conflict - LED disabled", RGB_PIN_B);
         return;
     }
 
-    // Register pins
-    registerPin(RGB_PIN_R, PIN_OUTPUT, "RGB LED Red");
-    registerPin(RGB_PIN_G, PIN_OUTPUT, "RGB LED Green");
-    registerPin(RGB_PIN_B, PIN_OUTPUT, "RGB LED Blue");
+    // All clear — claim each channel (re-check is idempotent; nothing else
+    // could have taken the pins between the check above and here).
+    claimPins(&r, 1, PIN_OUTPUT, PIN_RANK_BUILTIN, TAG_SYSTEM, "RGB LED Red");
+    claimPins(&g, 1, PIN_OUTPUT, PIN_RANK_BUILTIN, TAG_SYSTEM, "RGB LED Green");
+    claimPins(&b, 1, PIN_OUTPUT, PIN_RANK_BUILTIN, TAG_SYSTEM, "RGB LED Blue");
 
     // Initialize PWM hardware
     initPWM();

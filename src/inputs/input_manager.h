@@ -80,7 +80,7 @@ uint8_t getInputIndex(uint8_t pin);  // Get array index for pin
 //   storedInputBusNeeds() — a read-only pre-scan of the stored records, run at
 //     boot BEFORE loadInputConfig() and initLCD() so the buses those records
 //     need are up (and their pins reserved) before anything is validated (#358).
-//   inputHoldsPin() — registered via setBusPinInputProbe() so every bus's pin
+//   inputHoldsPin() — registered via setPinOwnerInputProbe() so every pin
 //     claim can see configured inputs, which deliberately never enter the pin
 //     registry (mega2560 has no RAM for them).
 uint8_t storedInputBusNeeds();

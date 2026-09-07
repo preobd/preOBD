@@ -9,6 +9,10 @@
 //     no-op instead of a link error;
 //   - a test-settable isPinAvailable() (g_pinReserved[]) — the lever the
 //     "reserved by a bus" refusal hangs off;
+//   - a matching pinsConflict() stub (pin_owner.h): input_manager.cpp routes
+//     its registry check through the one predicate (#384), but this test
+//     binary doesn't pull in the real pin registry/ranking, so this stand-in
+//     answers off the same g_pinReserved[] lever, ignoring rank;
 //   - no-op bodies for the sensor read/init functions the SENSOR_LIBRARY tables
 //     point at (referenced as data, so -dead_strip can't drop them).
 
@@ -26,6 +30,21 @@ size_t MessageStream::debug(const char*, const char*, ...) { return 0; }
 
 static bool g_pinReserved[256];
 bool isPinAvailable(uint8_t pin) { return !g_pinReserved[pin]; }
+// validateInputConfig() (#385) routes its WHOLE conflict check — registry AND
+// other configured inputs — through pinsConflict(). This stand-in reproduces
+// both halves rather than just the registry one: g_pinReserved[] stands in for
+// the registry/bus half, and inputHoldsPin() is the REAL production probe
+// (input_manager.cpp is fully compiled into this test binary), self-exclusion
+// included — so the squatter tests exercise the actual #385 fix, not a mock of
+// it.
+bool pinsConflict(const uint8_t* pins, uint8_t count, uint8_t /*rank*/, const char* /*owner*/) {
+    for (uint8_t i = 0; i < count; i++) {
+        if (pins[i] == 0xFF) continue;
+        if (inputHoldsPin(pins[i])) return true;
+        if (g_pinReserved[pins[i]]) return true;
+    }
+    return false;
+}
 int8_t analogIndexForPin(uint8_t) { return -1; }
 
 Input* requireInput(uint8_t pin) { return getInputByPin(pin); }

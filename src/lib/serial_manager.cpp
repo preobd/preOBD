@@ -6,6 +6,7 @@
 #include "bus_config.h"
 #include "bus_defaults.h"
 #include "pin_registry.h"
+#include "pin_owner.h"
 #include "system_config.h"
 #include "message_api.h"
 #include "log_tags.h"
@@ -112,28 +113,23 @@ bool initSerialPort(uint8_t port_id, uint32_t baudrate) {
     uint8_t rx = getDefaultSerialRX(port_id);
     uint8_t tx = getDefaultSerialTX(port_id);
 
-    // Check for pin conflicts
-    if (!validateNoPinConflict(rx, PIN_RESERVED, getSerialPortName(port_id))) {
-        return false;
-    }
-    if (!validateNoPinConflict(tx, PIN_RESERVED, getSerialPortName(port_id))) {
-        return false;
-    }
+    // Check for pin conflicts BEFORE .begin() drives anything — the claim
+    // itself (registration) happens below, only once .begin() has succeeded,
+    // to match the platform-specific bring-up between the two.
+    uint8_t check_pins[4] = { rx, tx, 0xFF, 0xFF };
+    uint8_t n_check_pins = 2;
 #if defined(HOST_NRF_CTS_PIN) && defined(HOST_NRF_RTS_PIN)
     // Phase 3 nRF coprocessor link: CTS/RTS GPIOs participate in pin
     // allocation too, otherwise a later button/output assignment could
     // silently reuse them and break the UART.
     if (port_id == 1) {
-        if (!validateNoPinConflict(HOST_NRF_CTS_PIN, PIN_RESERVED,
-                                   getSerialPortName(port_id))) {
-            return false;
-        }
-        if (!validateNoPinConflict(HOST_NRF_RTS_PIN, PIN_RESERVED,
-                                   getSerialPortName(port_id))) {
-            return false;
-        }
+        check_pins[n_check_pins++] = HOST_NRF_CTS_PIN;
+        check_pins[n_check_pins++] = HOST_NRF_RTS_PIN;
     }
 #endif
+    if (pinsConflict(check_pins, n_check_pins, PIN_RANK_SERIAL, getSerialPortName(port_id))) {
+        return false;
+    }
 
     // Platform-specific initialization
     bool success = false;
@@ -214,15 +210,13 @@ bool initSerialPort(uint8_t port_id, uint32_t baudrate) {
         // Mark port as active
         active_ports_mask |= (1 << (port_id - 1));
 
-        // Register pins
-        registerPin(rx, PIN_RESERVED, getSerialPortName(port_id));
-        registerPin(tx, PIN_RESERVED, getSerialPortName(port_id));
-#if defined(HOST_NRF_CTS_PIN) && defined(HOST_NRF_RTS_PIN)
-        if (port_id == 1) {
-            registerPin(HOST_NRF_CTS_PIN, PIN_RESERVED, getSerialPortName(port_id));
-            registerPin(HOST_NRF_RTS_PIN, PIN_RESERVED, getSerialPortName(port_id));
-        }
-#endif
+        // Claim the pins now that .begin() has actually succeeded. The
+        // conflict check already ran above (before .begin() touched anything);
+        // this re-check is idempotent — nothing else can have taken the pins
+        // in between — and folds the registration itself through the same
+        // door (#384).
+        claimPins(check_pins, n_check_pins, PIN_RESERVED, PIN_RANK_SERIAL,
+                 TAG_SERIAL, getSerialPortName(port_id));
 
         msg.debug.info(TAG_SERIAL, "Serial%d initialized @ %lu baud", port_id, baudrate);
     }

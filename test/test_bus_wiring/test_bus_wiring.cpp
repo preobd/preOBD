@@ -33,7 +33,7 @@
 
 #include "../../src/lib/bus_wiring.h"
 #include "../../src/lib/pin_registry.cpp"
-#include "../../src/lib/bus_pins.cpp"
+#include "../../src/lib/pin_owner.cpp"
 #include "../../src/lib/bus_manager.cpp"
 
 // ---------------------------------------------------------------------------
@@ -52,7 +52,7 @@ size_t MessageStream::debug(const char*, const char*, ...) { return 0; }
 
 void setUp(void) {
     initPinRegistry();
-    setBusPinInputProbe(nullptr);
+    setPinOwnerInputProbe(nullptr);
     systemConfig.buses.active_i2c = 0xFF;
     systemConfig.buses.i2c_clock = 400;
     systemConfig.buses.active_spi = 0xFF;
@@ -92,6 +92,30 @@ static void test_neither_selected_nor_declared_refuses(void) {
 static void test_declaration_never_vetoes_a_different_explicit_choice(void) {
     TEST_ASSERT_EQUAL(0, resolveWiredBusId(/*configured=*/0, /*declared=*/1));
     TEST_ASSERT_EQUAL(2, resolveWiredBusId(/*configured=*/2, /*declared=*/1));
+}
+
+// wiredBusIsInEffect() (#379 Tier 1): registerSystemPins() must reserve the
+// WIRED bus's pins as a build-time physical fact ONLY in the exact case where
+// resolveWiredBusId() above would fall through to the declaration — i.e.
+// nothing has explicitly selected a different bus. Getting this backwards
+// (reserving unconditionally) would block copper an explicit `BUS I2C <n>`
+// selection is using for a DIFFERENT bus, for a declaration that only ever
+// granted permission, never a veto.
+static void test_wired_bus_is_in_effect_with_no_explicit_selection(void) {
+    TEST_ASSERT_TRUE(wiredBusIsInEffect(/*configured=*/0xFF, /*declared=*/1));
+}
+
+static void test_wired_bus_is_not_in_effect_with_an_explicit_selection(void) {
+    // Selecting the SAME bus the declaration names does not change the
+    // answer: the selection is what's in effect, the declaration is moot
+    // either way, and initConfiguredBuses() (rank BUS, not rank BUILTIN) is
+    // where that claim belongs — see registerSystemPins()'s comment.
+    TEST_ASSERT_FALSE(wiredBusIsInEffect(/*configured=*/1, /*declared=*/1));
+    TEST_ASSERT_FALSE(wiredBusIsInEffect(/*configured=*/0, /*declared=*/1));
+}
+
+static void test_wired_bus_is_not_in_effect_with_no_declaration(void) {
+    TEST_ASSERT_FALSE(wiredBusIsInEffect(/*configured=*/0xFF, /*declared=*/0xFF));
 }
 
 // ===========================================================================
@@ -174,7 +198,7 @@ static void test_no_bus_guidance_episode_is_per_bus_type(void) {
 // happened tells a user their build-time declaration does not exist — the exact
 // misdirection #377 exists to remove. It is reachable: DEFAULT_I2C1_SDA/SCL are
 // 17/16 on Teensy 4.x and DEFAULT_SERIAL4_RX/TX are 16/17, so declaring
-// I2C_WIRED_BUS=1 with Serial4 enabled makes claimBusPins() refuse.
+// I2C_WIRED_BUS=1 with Serial4 enabled makes claimPins() refuse.
 //
 // MUTANT TARGET: report the no-bus guidance on the bus-failed path (or diagnose
 // from `!getActiveI2C()` outside acquire*(), which cannot tell them apart) and
@@ -183,8 +207,8 @@ static void test_a_named_bus_that_cannot_start_is_not_reported_as_undeclared(voi
     rearmBusDiagnostics();
 
     // Give SDA/SCL to another owner so the bus is named but cannot claim them.
-    registerPin(getDefaultI2CSDA(0), PIN_RESERVED, "Serial4");
-    registerPin(getDefaultI2CSCL(0), PIN_RESERVED, "Serial4");
+    registerPin_unchecked(getDefaultI2CSDA(0), PIN_RESERVED, "Serial4", PIN_RANK_SERIAL);
+    registerPin_unchecked(getDefaultI2CSCL(0), PIN_RESERVED, "Serial4", PIN_RANK_SERIAL);
     systemConfig.buses.active_i2c = 0;          // explicitly NAMED, not guessed
 
     TEST_ASSERT_NULL(acquireI2C());             // still refuses to start it
@@ -227,6 +251,10 @@ int main(int, char**) {
     RUN_TEST(test_declaration_authorizes_when_nothing_is_configured);
     RUN_TEST(test_neither_selected_nor_declared_refuses);
     RUN_TEST(test_declaration_never_vetoes_a_different_explicit_choice);
+
+    RUN_TEST(test_wired_bus_is_in_effect_with_no_explicit_selection);
+    RUN_TEST(test_wired_bus_is_not_in_effect_with_an_explicit_selection);
+    RUN_TEST(test_wired_bus_is_not_in_effect_with_no_declaration);
 
     RUN_TEST(test_acquireI2C_refuses_with_no_selection_and_no_declaration);
     // Before the "honors" test below: that one leaves the bus UP in a static

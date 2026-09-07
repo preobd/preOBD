@@ -8,9 +8,11 @@
 #include "message_router.h"  // For TransportID enum
 #include "bus_defaults.h"
 #include "bus_wiring.h"
+#include "bus_manager.h"   // getI2CBusName()/getSPIBusName() — Tier-1 wired-bus reservation (#379)
 #include "message_api.h"
 #include "log_tags.h"
 #include "pin_registry.h"
+#include "pin_owner.h"
 #include "../outputs/output_format.h"  // SdLogFormat
 #include <EEPROM.h>
 
@@ -309,27 +311,52 @@ bool saveSystemConfig(bool verbose) {
     return true;
 }
 
+// Gap 5 (pin ownership design audit): every claimPins() call below used to
+// discard its return value, so two build-time pins colliding in wiring.ini /
+// board.h (e.g. BUZZER_PIN == MODE_BUTTON_PIN) was accepted in silence — the
+// second claimant simply never existed, with no diagnostic pointing at why.
+// claimPins() already prints the generic pin-ownership refusal; this adds the
+// one thing that's missing — that the SOURCE was a build-time declaration, so
+// the fix is wiring.ini/board.h, not a runtime SET/BUS command.
+// __FlashStringHelper*, not const char*: every call site below passes an F()
+// literal, and a plain const char* parameter would still cost AVR RAM for the
+// literal even though the callee never mutates it — F() only keeps a string
+// in flash when both the literal AND everything that touches it agree to.
+static void reportBuiltinPinCollision(const __FlashStringHelper* what) {
+    msg.control.print(F("ERROR: build-time pin collision reserving "));
+    msg.control.print(what);
+    msg.control.println(F(" — check wiring.ini / board.h for a duplicate pin"));
+}
+
 /**
  * Register system pins in the pin registry
  * This reserves these pins and makes them visible in the registry export
  */
 void registerSystemPins() {
 #if INCLUDE_MODE_BUTTON
-    registerPin(MODE_BUTTON_PIN, PIN_BUTTON, "Mode Button");
+    { const uint8_t p = MODE_BUTTON_PIN;
+      if (!claimPins(&p, 1, PIN_BUTTON, PIN_RANK_BUILTIN, TAG_SYSTEM, "Mode Button"))
+          reportBuiltinPinCollision(F("MODE_BUTTON_PIN")); }
 #endif
 
 #if INCLUDE_ALARMS
     #ifdef BUZZER_PIN
-    registerPin(BUZZER_PIN, PIN_BUZZER, "Buzzer");
+    { const uint8_t p = BUZZER_PIN;
+      if (!claimPins(&p, 1, PIN_BUZZER, PIN_RANK_BUILTIN, TAG_SYSTEM, "Buzzer"))
+          reportBuiltinPinCollision(F("BUZZER_PIN")); }
     #endif
 #endif
 
 #if INCLUDE_CAN_HYBRID || !PROFILE_HAS_NATIVE_CAN
     #if defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)
-    registerPin(CAN_CS_0, PIN_CS, "CAN CS");
+    { const uint8_t p = CAN_CS_0;
+      if (!claimPins(&p, 1, PIN_CS, PIN_RANK_BUILTIN, TAG_SYSTEM, "CAN CS"))
+          reportBuiltinPinCollision(F("CAN_CS_0")); }
     #endif
     #if defined(CAN_INT_0) && (CAN_INT_0 != 0xFF)
-    registerPin(CAN_INT_0, PIN_RESERVED, "CAN INT");
+    { const uint8_t p = CAN_INT_0;
+      if (!claimPins(&p, 1, PIN_RESERVED, PIN_RANK_BUILTIN, TAG_SYSTEM, "CAN INT"))
+          reportBuiltinPinCollision(F("CAN_INT_0")); }
     #endif
 #endif
 
@@ -338,15 +365,65 @@ void registerSystemPins() {
         #define BUILTIN_SDCARD 254
     #endif
     #if SD_PIN != BUILTIN_SDCARD
-    registerPin(SD_PIN, PIN_CS, "SD CS");
+    { const uint8_t p = SD_PIN;
+      if (!claimPins(&p, 1, PIN_CS, PIN_RANK_BUILTIN, TAG_SYSTEM, "SD CS"))
+          reportBuiltinPinCollision(F("SD_PIN")); }
     #endif
 #endif
 
 #if INCLUDE_TEST_MODE
     #ifdef TEST_MODE_PIN
-    registerPin(TEST_MODE_PIN, PIN_BUTTON, "Test Mode Trigger");
+    { const uint8_t p = TEST_MODE_PIN;
+      if (!claimPins(&p, 1, PIN_BUTTON, PIN_RANK_BUILTIN, TAG_SYSTEM, "Test Mode Trigger"))
+          reportBuiltinPinCollision(F("TEST_MODE_PIN")); }
     #endif
 #endif
+
+    // ---- #379 Tier 1: a *_WIRED_BUS declaration, but ONLY when it is the
+    // bus actually in effect --------------------------------------------
+    //
+    // #377's ladder: an explicit stored `BUS I2C/SPI <n>` selection always
+    // wins; a *_WIRED_BUS declaration is a FALLBACK, consulted only when
+    // there is no explicit selection; absent both, refuse. A declaration
+    // GRANTS PERMISSION, it never VETOES an explicit choice (bus_wiring.h).
+    //
+    // So this must NOT reserve unconditionally: if systemConfig.buses.active_i2c
+    // already names a different bus, that selection is the one in effect —
+    // reserving the WIRED bus's pins here too would block copper nothing
+    // uses, for a declaration that granted permission nobody is exercising.
+    // Only when there is NO explicit selection does the wired declaration
+    // become the effective bus, and only then is it a Tier-1 physical fact
+    // worth defending before serial (:264 in main.cpp) can claim over it.
+    // An explicit selection instead stays a rank-BUS claim made later at
+    // initConfiguredBuses(), as before — and is defended against everything
+    // in between by storedBusHoldsPin() (#379's other half, pin_owner.cpp).
+    //
+    // Description strings MUST match what initI2CBus()/initSPIBus() claim
+    // under (bus_manager.cpp) byte for byte: getI2CBusName()/getSPIBusName()
+    // are the single shared source for both call sites, specifically so this
+    // reservation and that later claim can never drift apart — a mismatch
+    // here would make the bus refuse to start against its own reservation.
+#if BUS_WIRED_I2C_ID != 0xFF
+    if (wiredBusIsInEffect(systemConfig.buses.active_i2c, BUS_WIRED_I2C_ID)) {
+        const uint8_t p[2] = { getDefaultI2CSDA(BUS_WIRED_I2C_ID), getDefaultI2CSCL(BUS_WIRED_I2C_ID) };
+        if (!claimPins(p, 2, PIN_RESERVED, PIN_RANK_BUILTIN, TAG_SYSTEM, getI2CBusName(BUS_WIRED_I2C_ID)))
+            reportBuiltinPinCollision(F("I2C_WIRED_BUS"));
+    }
+#endif
+#if BUS_WIRED_SPI_ID != 0xFF
+    if (wiredBusIsInEffect(systemConfig.buses.active_spi, BUS_WIRED_SPI_ID)) {
+        const uint8_t p[3] = { getDefaultSPIMOSI(BUS_WIRED_SPI_ID), getDefaultSPIMISO(BUS_WIRED_SPI_ID),
+                               getDefaultSPISCK(BUS_WIRED_SPI_ID) };
+        if (!claimPins(p, 3, PIN_RESERVED, PIN_RANK_BUILTIN, TAG_SYSTEM, getSPIBusName(BUS_WIRED_SPI_ID)))
+            reportBuiltinPinCollision(F("SPI_WIRED_BUS"));
+    }
+#endif
+    // CAN_WIRED_BUS is deliberately NOT reserved here: unlike I2C/SPI, CAN has
+    // no resolveWiredBusId() fallback bring-up path (acquireI2C()/acquireSPI()
+    // have one, there is no acquireCAN() equivalent) — the declaration is
+    // informational only (BUS CAN STATUS) until something explicitly selects
+    // input_can_bus/output_can_bus. Reserving it here would claim pins for a
+    // permission nothing has a mechanism to exercise.
 }
 
 /**

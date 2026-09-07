@@ -2,8 +2,7 @@
  * pin_registry.h - Pin Conflict Detection System
  *
  * Maintains a global registry of pin assignments to prevent conflicts
- * when configuring buses, inputs, and outputs. Provides validation
- * before accepting new pin configurations.
+ * when configuring buses, inputs, and outputs.
  *
  * Design Philosophy:
  * Uses a two-tier approach:
@@ -15,17 +14,15 @@
  * On ESP32, we just need to know a pin is "reserved by Wire1" - not which
  * specific line it is.
  *
- * Usage:
- * 1. Register bus pins as PIN_RESERVED during initialization
- * 2. Register system pins (button, buzzer) with their specific types
- * 3. Call validateNoPinConflict() before accepting new pin assignments
- *
- * Example:
- *   registerPin(18, PIN_RESERVED, "Wire SDA");
- *   registerPin(5, PIN_BUTTON, "Mode Button");
- *   if (validateNoPinConflict(A0, PIN_INPUT, "Oil Pressure")) {
- *       registerPin(A0, PIN_INPUT, "Oil Pressure");
- *   }
+ * registerPin_unchecked()/reservePins_unchecked() are named "_unchecked" on
+ * purpose: they mutate the registry with NO awareness of configured inputs
+ * (source 2 of pin ownership truth — see pin_owner.h) and no awareness of the
+ * precedence ladder (PinRank). Calling them directly from anywhere but
+ * pin_owner.cpp reopens exactly the class of bug (#351, #354, #358, #359,
+ * #379, #381, #384) this split exists to close. Every other module claims
+ * pins through pin_owner.h's pinsConflict()/claimPins() instead; this header
+ * is otherwise a normal read/release API (isPinAvailable, getPinDescription,
+ * releasePins, unregisterPin, ...).
  */
 
 #ifndef PIN_REGISTRY_H
@@ -69,6 +66,7 @@ struct PinUsage {
     uint8_t pin;                // Pin number
     PinUsageType type;          // Usage type
     const char* description;    // Human-readable description (e.g., "I2C0 SDA", "Oil Pressure Sensor")
+    uint8_t rank;                // Precedence (PinRank in pin_owner.h); lower wins. 0 = not set.
 };
 
 // ============================================================================
@@ -88,19 +86,26 @@ struct PinUsage {
 void initPinRegistry();
 
 /**
- * Register a pin with the registry
+ * Register a pin with the registry — RAW primitive, no cross-checking.
+ *
+ * Only pin_owner.cpp may call this directly (see the header comment above).
+ * Every other module goes through pin_owner.h's claimPins().
  *
  * @param pin Pin number to register
  * @param type Usage type (from PinUsageType enum)
  * @param description Human-readable description (stored as pointer, not copied)
+ * @param rank Precedence (PinRank in pin_owner.h) this claim is made at
  * @return true if registered successfully, false if pin already in use or registry full
  *
  * Note: description string must remain valid for the lifetime of the registration
  */
-bool registerPin(uint8_t pin, PinUsageType type, const char* description);
+bool registerPin_unchecked(uint8_t pin, PinUsageType type, const char* description, uint8_t rank);
 
 /**
- * Reserve a group of pins for one owner, all or nothing
+ * Reserve a group of pins for one owner, all or nothing — RAW primitive.
+ *
+ * Only pin_owner.cpp may call this directly (see the header comment above).
+ * Every other module goes through pin_owner.h's claimPins().
  *
  * A bus rests on the invariant "bus up implies its pins are reserved" (#359),
  * so a partial claim is worse than no claim: it leaves the caller believing it
@@ -109,18 +114,21 @@ bool registerPin(uint8_t pin, PinUsageType type, const char* description);
  * registered, and leaves pins that were already someone else's untouched.
  *
  * Pins equal to 0xFF are skipped ("this bus has no such pin on this platform").
- * A pin already held as PIN_RESERVED by this same description is treated as
- * already ours, so re-reserving a bus that is already up succeeds.
+ * A pin already held with this same type and description is treated as
+ * already ours, so re-reserving something that is already up succeeds.
  *
  * @param pins        Array of pin numbers to claim
  * @param count       Number of entries in pins[] (max 8)
+ * @param type        Usage type to register the pins as
  * @param description Owner name; stored by pointer, must outlive the reservation
+ * @param rank        Precedence (PinRank in pin_owner.h) this claim is made at
  * @return true if the whole group is now reserved to `description`
  */
-bool reservePins(const uint8_t* pins, uint8_t count, const char* description);
+bool reservePins_unchecked(const uint8_t* pins, uint8_t count, PinUsageType type,
+                           const char* description, uint8_t rank);
 
 /**
- * Release pins previously reserved by reservePins() for the same owner
+ * Release pins previously reserved by claimPins() (pin_owner.h) for the same owner
  *
  * Only entries whose registered description matches `description` are released,
  * so this can never free another function's pin.
@@ -152,6 +160,14 @@ PinUsageType getPinUsage(uint8_t pin);
 const char* getPinDescription(uint8_t pin);
 
 /**
+ * Get the precedence rank a registered pin was claimed at
+ *
+ * @param pin Pin number to query
+ * @return PinRank value (see pin_owner.h), or 0 if pin not registered
+ */
+uint8_t getPinRank(uint8_t pin);
+
+/**
  * Unregister a pin (mark as available)
  *
  * @param pin Pin number to unregister
@@ -163,20 +179,6 @@ void unregisterPin(uint8_t pin);
  * Marks all pins as unused
  */
 void clearPinRegistry();
-
-/**
- * Validate that a pin has no conflicts before assignment
- * If conflict exists, prints error message to Serial
- *
- * @param pin Pin number to validate
- * @param newType Proposed usage type
- * @param newDesc Proposed description
- * @return true if no conflict (pin available), false if conflict exists
- *
- * This function is the main entry point for pin conflict detection.
- * It checks if the pin is available and prints descriptive error if not.
- */
-bool validateNoPinConflict(uint8_t pin, PinUsageType newType, const char* newDesc);
 
 /**
  * Dump the entire pin registry to Serial

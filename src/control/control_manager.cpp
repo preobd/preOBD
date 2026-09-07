@@ -12,11 +12,12 @@
 #include "../inputs/input_manager.h"
 #include "../lib/application_presets.h"
 #include "../lib/pin_registry.h"
+#include "../lib/pin_owner.h"
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
 
 // Shared, stable description pointer for every Action-owned pin registry entry.
-// registerPin() stores the pointer (no copy), and controlSyncActionPins()
+// claimPins() stores the pointer (no copy), and controlSyncActionPins()
 // identifies its own prior entries by pointer equality against this — so it
 // must be a single static string, not a per-call temporary.
 static const char* const ACTION_PIN_DESC = "Action output";
@@ -657,14 +658,15 @@ uint8_t controlSyncActionPins() {
     }
     for (uint8_t i = 0; i < nStale; i++) unregisterPin(stale[i]);
 
-    // 2. Register each configured action target as PIN_OUTPUT. registerPin()
-    //    rejects a pin already claimed (by a bus, system pin, RGB output, or
-    //    another action), which is exactly the conflict we want to surface.
+    // 2. Register each configured action target as PIN_OUTPUT. claimPins()
+    //    rejects a pin already claimed (by a bus, system pin, RGB output, a
+    //    configured input, or another action), which is exactly the conflict
+    //    we want to surface.
     uint8_t conflicts = 0;
     for (int s = 0; s < MAX_ACTIONS; s++) {
         const Action& a = actions[s];
         if (a.id == CONTROL_ID_NONE) continue;
-        if (!registerPin(a.target, PIN_OUTPUT, ACTION_PIN_DESC)) {
+        if (!claimPins(&a.target, 1, PIN_OUTPUT, PIN_RANK_ACTION, TAG_SYSTEM, ACTION_PIN_DESC)) {
             conflicts++;
             const char* held = getPinDescription(a.target);
             msg.debug.warn(TAG_SYSTEM,

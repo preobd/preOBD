@@ -9,7 +9,7 @@
 #include "bus_defaults.h"
 #include "bus_wiring.h"
 #include "pin_registry.h"
-#include "bus_pins.h"
+#include "pin_owner.h"
 #include "bus_needs.h"
 #include "system_config.h"
 #include "message_api.h"
@@ -40,10 +40,10 @@ static bool can_ready = false;
 
 // A bus rests on "bus up implies its pins are reserved" — that is what stops an
 // input being assigned to a pin a bus is clocking (#351). The decision itself
-// lives in bus_pins.cpp (claimBusPins), shared with the CLI so the boot path and
-// `BUS I2C <n>` cannot drift apart, and so every bus — not just I2C, and not
-// just at runtime — consults the configured inputs as well as the registry
-// (#358).
+// lives in pin_owner.cpp (claimPins), shared with every other pin claimant and
+// with the CLI so the boot path and `BUS I2C <n>` cannot drift apart, and so
+// every bus — not just I2C, and not just at runtime — consults the configured
+// inputs as well as the registry (#358).
 //
 // One shared format string: msg.debug.* format strings are RAM-resident on AVR,
 // so three per-bus variants would cost real bytes on the 8 KB mega.
@@ -121,12 +121,18 @@ bool initI2CBus(uint8_t bus_id, uint16_t clock_khz) {
 
     // Get default pins for this bus
     const uint8_t i2c_pins[2] = { getDefaultI2CSDA(bus_id), getDefaultI2CSCL(bus_id) };
-    static const char* const i2c_desc[] = {"Wire", "Wire1", "Wire2"};
+    // getI2CBusName() is THE canonical owner description for this bus — also
+    // used by registerSystemPins() (system_config.cpp, #379 Tier-1 wired-bus
+    // reservation) and storedBusHoldsPin() (#379 stored-selection defense).
+    // One source, not three copies of "Wire"/"Wire1"/"Wire2" that could drift:
+    // a mismatch here would make this claim refuse against its OWN earlier
+    // reservation instead of self-skipping through it.
+    const char* i2c_desc = getI2CBusName(bus_id);
 
     // Claim SDA/SCL first: if the copper is already someone else's, the bus must
     // not come up at all. Refusing here rather than after Wire.begin() also means
     // there is nothing to un-begin — TwoWire has no portable end().
-    if (!claimBusPins(i2c_pins, 2, TAG_I2C, i2c_desc[bus_id])) return false;
+    if (!claimPins(i2c_pins, 2, PIN_RESERVED, PIN_RANK_BUS, TAG_I2C, i2c_desc)) return false;
 
     // Platform-specific initialization
     bool success = false;
@@ -212,11 +218,11 @@ bool initI2CBus(uint8_t bus_id, uint16_t clock_khz) {
 
     if (success) {
         active_i2c_id = bus_id;
-        msg.debug.info(TAG_I2C, BUS_STARTED, i2c_desc[bus_id]);
+        msg.debug.info(TAG_I2C, BUS_STARTED, i2c_desc);
     } else {
         // Unreachable bus id for this platform: hand the pins back rather than
         // leaving them reserved to a bus that never started.
-        releasePins(i2c_pins, 2, i2c_desc[bus_id]);
+        releasePins(i2c_pins, 2, i2c_desc);
     }
 
     return success;
@@ -236,10 +242,12 @@ bool initSPIBus(uint8_t bus_id, uint32_t clock_hz) {
     const uint8_t spi_pins[3] = { getDefaultSPIMOSI(bus_id),
                                   getDefaultSPIMISO(bus_id),
                                   getDefaultSPISCK(bus_id) };
-    static const char* const spi_desc[] = {"SPI", "SPI1", "SPI2"};
+    // See initI2CBus()'s comment: one canonical source, shared with
+    // registerSystemPins() and storedBusHoldsPin() (#379).
+    const char* spi_desc = getSPIBusName(bus_id);
 
     // Same contract as I2C: claim the bus pins before SPI.begin() drives them.
-    if (!claimBusPins(spi_pins, 3, TAG_SPI, spi_desc[bus_id])) return false;
+    if (!claimPins(spi_pins, 3, PIN_RESERVED, PIN_RANK_BUS, TAG_SPI, spi_desc)) return false;
 
     // Platform-specific initialization
     bool success = false;
@@ -300,9 +308,9 @@ bool initSPIBus(uint8_t bus_id, uint32_t clock_hz) {
 
     if (success) {
         active_spi_id = bus_id;
-        msg.debug.info(TAG_SPI, BUS_STARTED, spi_desc[bus_id]);
+        msg.debug.info(TAG_SPI, BUS_STARTED, spi_desc);
     } else {
-        releasePins(spi_pins, 3, spi_desc[bus_id]);
+        releasePins(spi_pins, 3, spi_desc);
     }
 
     return success;
@@ -327,19 +335,21 @@ bool initCANBus(uint8_t bus_id, uint32_t baudrate) {
     // Get default pins for this bus. 0xFF entries (SPI-attached controllers
     // have no fixed TX/RX) are skipped by the claim.
     const uint8_t can_pins[2] = { getDefaultCANTX(bus_id), getDefaultCANRX(bus_id) };
-    static const char* const can_desc[] = {"CAN1", "CAN2", "CAN3"};
+    // See initI2CBus()'s comment: one canonical source, shared with
+    // storedBusHoldsPin() (#379).
+    const char* can_desc = getCANBusName(bus_id);
 
     // Claim before declaring the bus ready: can_ready is what the rest of the
     // firmware reads as "this bus is mine", so it must not be set over pins the
     // registry attributes to another function.
-    if (!claimBusPins(can_pins, 2, TAG_CAN, can_desc[bus_id])) return false;
+    if (!claimPins(can_pins, 2, PIN_RESERVED, PIN_RANK_BUS, TAG_CAN, can_desc)) return false;
 
     // CAN initialization is handled in output_can.cpp since it needs FlexCAN_T4 objects
     // Here we just mark the bus as ready
     active_can_id = bus_id;
     can_ready = true;
 
-    msg.debug.info(TAG_CAN, BUS_STARTED, can_desc[bus_id]);
+    msg.debug.info(TAG_CAN, BUS_STARTED, can_desc);
 
     return true;
 #endif
@@ -422,7 +432,7 @@ bool reportNoSPIBus() {
 // which bus and it could not start" are opposite problems with opposite fixes,
 // and saying the first when the second happened is the exact misdirection #377
 // exists to remove — it would tell a user their declaration does not exist.
-// The conflict itself has already been named by busPinsConflict() (which pin,
+// The conflict itself has already been named by pinsConflict() (which pin,
 // which owner); this says what it means and what to do about it.
 bool reportI2CBusUnavailable(uint8_t bus_id) {
     (void)bus_id;
@@ -535,6 +545,68 @@ const char* getCANBusName(uint8_t bus_id) {
         case 2: return "CAN3";
         default: return "CAN?";
     }
+}
+
+// ============================================================================
+// STORED-BUS-SELECTION PROBE (#379) — pinsConflict()'s third source
+// ============================================================================
+
+bool storedBusHoldsPin(uint8_t pin, const char* excludeOwner, const char** descOut) {
+    if (pin == 0xFF) return false;
+
+    if (systemConfig.buses.active_i2c != 0xFF && systemConfig.buses.active_i2c < NUM_I2C_BUSES) {
+        const uint8_t b = systemConfig.buses.active_i2c;
+        if (pin == getDefaultI2CSDA(b) || pin == getDefaultI2CSCL(b)) {
+            const char* d = getI2CBusName(b);
+            if (!excludeOwner || strcmp(d, excludeOwner) != 0) {
+                if (descOut) *descOut = d;
+                return true;
+            }
+        }
+    }
+
+    if (systemConfig.buses.active_spi != 0xFF && systemConfig.buses.active_spi < NUM_SPI_BUSES) {
+        const uint8_t b = systemConfig.buses.active_spi;
+        if (pin == getDefaultSPIMOSI(b) || pin == getDefaultSPIMISO(b) || pin == getDefaultSPISCK(b)) {
+            const char* d = getSPIBusName(b);
+            if (!excludeOwner || strcmp(d, excludeOwner) != 0) {
+                if (descOut) *descOut = d;
+                return true;
+            }
+        }
+    }
+
+#if NUM_CAN_BUSES > 0
+    // CAN has two independent stored selections (input/output can legitimately
+    // be different buses) — check both, each only when its direction is
+    // actually enabled, mirroring initConfiguredBuses()'s own gating.
+    if (systemConfig.buses.can_output_enabled &&
+        systemConfig.buses.output_can_bus != 0xFF &&
+        systemConfig.buses.output_can_bus < NUM_CAN_BUSES) {
+        const uint8_t b = systemConfig.buses.output_can_bus;
+        if (pin == getDefaultCANTX(b) || pin == getDefaultCANRX(b)) {
+            const char* d = getCANBusName(b);
+            if (!excludeOwner || strcmp(d, excludeOwner) != 0) {
+                if (descOut) *descOut = d;
+                return true;
+            }
+        }
+    }
+    if (systemConfig.buses.can_input_mode != CAN_INPUT_OFF &&
+        systemConfig.buses.input_can_bus != 0xFF &&
+        systemConfig.buses.input_can_bus < NUM_CAN_BUSES) {
+        const uint8_t b = systemConfig.buses.input_can_bus;
+        if (pin == getDefaultCANTX(b) || pin == getDefaultCANRX(b)) {
+            const char* d = getCANBusName(b);
+            if (!excludeOwner || strcmp(d, excludeOwner) != 0) {
+                if (descOut) *descOut = d;
+                return true;
+            }
+        }
+    }
+#endif
+
+    return false;
 }
 
 //=============================================================================

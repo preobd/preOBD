@@ -19,7 +19,7 @@
 #include "../lib/bus_manager.h"
 #include "../lib/bus_defaults.h"
 #include "../lib/pin_registry.h"
-#include "../lib/bus_pins.h"
+#include "../lib/pin_owner.h"
 #include "input.h"  // For Input struct definition
 #include "input_manager.h"  // For inputs[] array access
 #include <string.h>
@@ -29,7 +29,7 @@
 // Reject putting a client on a bus whose pins another function already holds.
 //
 // These are the CLI's two entry points into the one predicate that also guards
-// every bus bring-up at boot (bus_pins.cpp) — `DISPLAY TYPE LCD` / `BUS I2C <n>`
+// every bus bring-up at boot (pin_owner.cpp) — `DISPLAY TYPE LCD` / `BUS I2C <n>`
 // and `BUS SPI <n>` cannot drift from it, nor from each other.
 //
 // This is about the PHYSICAL pins only. Other I2C devices are virtual pins
@@ -44,7 +44,7 @@ bool i2cBusPinsConflict(uint8_t bus_id) {
     if (bus_id >= NUM_I2C_BUSES) return false;   // caller reports the bad bus id
 
     const uint8_t pins[2] = { getDefaultI2CSDA(bus_id), getDefaultI2CSCL(bus_id) };
-    return busPinsConflict(pins, 2, getI2CBusName(bus_id));
+    return pinsConflict(pins, 2, PIN_RANK_BUS, getI2CBusName(bus_id));
 }
 
 bool spiBusPinsConflict(uint8_t bus_id) {
@@ -53,7 +53,7 @@ bool spiBusPinsConflict(uint8_t bus_id) {
     const uint8_t pins[3] = { getDefaultSPIMOSI(bus_id),
                               getDefaultSPIMISO(bus_id),
                               getDefaultSPISCK(bus_id) };
-    return busPinsConflict(pins, 3, getSPIBusName(bus_id));
+    return pinsConflict(pins, 3, PIN_RANK_BUS, getSPIBusName(bus_id));
 }
 
 Input* requireInput(uint8_t pin) {

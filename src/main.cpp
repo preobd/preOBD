@@ -20,7 +20,7 @@
 #include "lib/system_config.h"
 #include "lib/bus_manager.h"
 #include "lib/bus_needs.h"
-#include "lib/bus_pins.h"
+#include "lib/pin_owner.h"
 #include "lib/serial_manager.h"
 #include "lib/pin_registry.h"
 #include "lib/sd_manager.h"
@@ -251,13 +251,24 @@ void setup() {
     // after serial ports had already registered their pins
     initPinRegistry();
 
-    // Register system pins in the pin registry
-    registerSystemPins();
-
     // Configured inputs never enter the pin registry (mega2560 has no RAM for
-    // them), so hand the bus layer a probe it can ask instead. Registered here,
-    // before the first bus claim, so boot and the CLI use the same predicate.
-    setBusPinInputProbe(inputHoldsPin);
+    // them), and a stored-but-not-yet-started BUS selection isn't in it either
+    // — hand pin_owner two probes to ask instead (#385, #379). Registered here,
+    // BEFORE registerSystemPins() and every claim after it, so every claimant —
+    // including the wired-bus Tier-1 reservation two lines down — sees the
+    // full truth from the first pin claim of the boot, not from whichever line
+    // used to come after it. inputHoldsPin() is safe to register this early:
+    // it answers off the STORED config until initInputManager() makes inputs[]
+    // the live table (#385's fix), so it never lies for lack of that not having
+    // run yet the way it silently did before.
+    setPinOwnerInputProbe(inputHoldsPin);
+    setPinOwnerBusProbe(storedBusHoldsPin);
+
+    // Register system pins in the pin registry. Includes the Tier-1 wired-bus
+    // reservation (#379) when a *_WIRED_BUS declaration is in effect — see its
+    // comment in system_config.cpp for why that's conditional on there being
+    // no explicit BUS selection.
+    registerSystemPins();
 
     // Initialize configured serial ports based on SystemConfig.serial
     // This replaces the old hardcoded Serial1.begin() / Serial2.begin() calls
@@ -514,6 +525,12 @@ void setup() {
     // CLI with no bus available says what to run, instead of being silenced by
     // a boot that already printed it once (#377).
     rearmBusDiagnostics();
+
+    // Same boundary, for pin ownership: every boot-time claim has now been made,
+    // so a conflict from here on is one the user is creating interactively, not
+    // a stored config that disagrees with the hardware. Switches pinsConflict()
+    // off the rank-based "stale configuration" wording (ARCHITECTURE.md §12.4).
+    pinOwnerBootComplete();
 }
 
 void loop() {
