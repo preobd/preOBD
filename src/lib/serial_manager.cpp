@@ -228,12 +228,22 @@ bool enableSerialPort(uint8_t port_id, uint8_t baud_index) {
     if (port_id < 1 || port_id > NUM_SERIAL_PORTS) return false;
     if (baud_index >= NUM_BAUD_RATES) baud_index = BAUD_115200;
 
-    // Update config
+    // ---- ADMISSION PHASE --------------------------------------------
+    // initSerialPort() is the thing that can refuse (pin conflict). Run it
+    // BEFORE touching systemConfig, so a refusal leaves nothing behind —
+    // same admission/commit split as setInputApplication() (#361/#364).
+    // A later unrelated SAVE must not persist a port the firmware itself
+    // denied (#390).
+    if (!initSerialPort(port_id, getBaudRateFromIndex(baud_index))) {
+        return false;
+    }
+
+    // ---- COMMIT PHASE -------------------------------------------------
+    // Past this point nothing may fail; do not add a `return false` below.
     setSerialPortEnabled(&systemConfig.serial, port_id, true);
     setSerialPortBaudrate(&systemConfig.serial, port_id, baud_index);
 
-    // Initialize the port
-    return initSerialPort(port_id, getBaudRateFromIndex(baud_index));
+    return true;
 }
 
 bool disableSerialPort(uint8_t port_id) {
