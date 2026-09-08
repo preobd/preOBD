@@ -21,6 +21,31 @@
 extern Input inputs[MAX_INPUTS];
 extern uint8_t numActiveInputs;
 
+// True once inputs[] (and the control tables, see initInputManager()) are the
+// live, loaded ground truth rather than raw BSS. Read this — never assume the
+// table is safe to read just because you're past setup() — before any code
+// added outside input_manager.cpp scans inputs[]/rules[]/actions[] directly
+// (#368/#369; see ASSERT_INPUTS_TABLE_LIVE below and the comment at the
+// broadcaster init() block in main.cpp).
+bool inputsTableIsLiveForAssert();
+
+// Debug-build-only guard for a consumer that reads inputs[]/rules[]/actions[]
+// directly (bypassing the accessor functions below). Fires only in the DEBUG
+// build env (-D DEBUG, see boards/teensy41/board.ini) and the native test
+// build (-D NATIVE_TEST); compiles to nothing elsewhere, so it costs zero
+// flash/RAM on shipping firmware — mega2560 sits at 97.7% RAM and cannot
+// afford a RAM-resident guard on every build (see CLAUDE.md AVR debug-string
+// note). Catches the #352 defect class at its source: a broadcaster (or any
+// other pre-config consumer) reading the table before initInputManager() has
+// sentinel-filled and loaded it, instead of silently reading BSS-zero and
+// surfacing minutes later on the wire.
+#if defined(DEBUG) || defined(NATIVE_TEST)
+#include <assert.h>
+#define ASSERT_INPUTS_TABLE_LIVE() assert(inputsTableIsLiveForAssert())
+#else
+#define ASSERT_INPUTS_TABLE_LIVE() ((void)0)
+#endif
+
 // ===== INITIALIZATION =====
 bool initInputManager();              // Initialize and load from EEPROM (returns true if EEPROM config loaded)
 

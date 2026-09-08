@@ -63,6 +63,7 @@ uint32_t g_lastScanMs = 0;
 // slotOccupied().
 
 FLASHMEM LiveKey packKey(int i) {
+    ASSERT_INPUTS_TABLE_LIVE();  // inputs[] isn't ground truth until here (#369)
     LiveKey k;
     memset(&k, 0, sizeof(k));
     const Input& in = inputs[i];
@@ -93,7 +94,10 @@ FLASHMEM LiveKey packKey(int i) {
 // deliberately NOT excluded — the client has a tile for it (it is in
 // SYSTEM DUMP JSON) and a late subscriber must learn it is disabled rather than
 // see nothing at all.
-FLASHMEM bool slotOccupied(int i) { return inputs[i].pin != 0xFF; }
+FLASHMEM bool slotOccupied(int i) {
+    ASSERT_INPUTS_TABLE_LIVE();  // inputs[] isn't ground truth until here (#369)
+    return inputs[i].pin != 0xFF;
+}
 
 FLASHMEM bool sendSlot(int i, uint16_t seq) {
     const LiveKey k = packKey(i);

@@ -71,6 +71,7 @@ float thresholdFor(const Rule& r, uint8_t kind) {
 // fields (value/threshold/inputIdx) needed to build the frame. NORMAL/CLEAR for
 // an empty/non-alarm/quiet rule.
 AlarmKey evalSlot(int i, float& value, float& threshold, uint8_t& inputIdx) {
+    ASSERT_INPUTS_TABLE_LIVE();  // rules[]/inputs[] aren't ground truth until here (#369)
     const Rule& r = rules[i];
     AlarmKey k{ PREOBD_ALARM_SEVERITY_NORMAL, PREOBD_ALARM_KIND_CLEAR };
     value = 0.0f; threshold = 0.0f; inputIdx = 0xFF;

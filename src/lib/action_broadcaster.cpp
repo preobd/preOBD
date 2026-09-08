@@ -14,6 +14,7 @@
 #include "transport_mux.h"
 #include "slotted_broadcaster.h"
 #include "../control/control_manager.h"
+#include "../inputs/input_manager.h"  // ASSERT_INPUTS_TABLE_LIVE (#368/#369)
 
 extern MuxTransport hwSerial1;
 
@@ -45,9 +46,13 @@ PreobdActionState emptyState() {
 }
 
 // Occupancy: the sentinel packState() already keys the empty frame on.
-bool slotOccupied(int i) { return actions[i].id != CONTROL_ID_NONE; }
+bool slotOccupied(int i) {
+    ASSERT_INPUTS_TABLE_LIVE();  // actions[] isn't ground truth until here (#369)
+    return actions[i].id != CONTROL_ID_NONE;
+}
 
 void packState(int i, PreobdActionState& s) {
+    ASSERT_INPUTS_TABLE_LIVE();  // actions[] isn't ground truth until here (#369)
     const Action& a = actions[i];
     if (a.id == CONTROL_ID_NONE) {
         s = emptyState();                     // empty slot: nothing else to say

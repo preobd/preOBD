@@ -35,6 +35,12 @@ uint8_t numActiveInputs = 0;
 // below for the dispatch this drives.
 static bool inputsTableIsLive = false;
 
+// Exposes inputsTableIsLive to ASSERT_INPUTS_TABLE_LIVE() (input_manager.h)
+// for callers outside this TU — the debug/native-test-only guard other
+// pre-config consumers (broadcasters, etc.) call before reading
+// inputs[]/rules[]/actions[] directly (#368/#369).
+bool inputsTableIsLiveForAssert() { return inputsTableIsLive; }
+
 // ===== EEPROM LAYOUT — shared front-growing config-store arena =====
 // One arena holds every persisted record table, packed after a single header at
 // address 0:

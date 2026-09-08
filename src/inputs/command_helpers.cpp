@@ -863,7 +863,9 @@ uint8_t parsePin(const char* pinStr, bool* isValid) {
     if (isValid) *isValid = true;
 
     // Handle "I2C" keyword for I2C sensors (BME280, etc).
-    // Virtual pins are 0xF0..0xFC (13 slots, well above real pin numbers).
+    // Virtual pins are PIN_I2C_BASE..PIN_I2C_MAX (13 slots, well above real
+    // pin numbers) — see the PIN ALLOCATION block in input.h, the single
+    // source of truth for this range (#368).
     //
     // Source of truth is the inputs[] array, NOT a static counter. A static
     // counter advances on every parsePin() call regardless of whether the
@@ -872,14 +874,14 @@ uint8_t parsePin(const char* pinStr, bool* isValid) {
     // 13 such typos would falsely report "too many I2C sensors" until reboot
     // (#196).
     if (streq(pinStr, "I2C")) {
-        uint8_t highest = 0xEF;  // start before I2C range
+        uint8_t highest = PIN_I2C_BASE - 1;  // start before I2C range
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            if (inputs[i].pin >= 0xF0 && inputs[i].pin <= 0xFC) {
+            if (inputs[i].pin >= PIN_I2C_BASE && inputs[i].pin <= PIN_I2C_MAX) {
                 if (inputs[i].pin > highest) highest = inputs[i].pin;
             }
         }
         uint8_t next = highest + 1;
-        if (next > 0xFC) {
+        if (next > PIN_I2C_MAX) {
             msg.control.println(F("ERROR: Too many I2C sensors configured (max 13)"));
             if (isValid) *isValid = false;
             return 0;
@@ -892,17 +894,20 @@ uint8_t parsePin(const char* pinStr, bool* isValid) {
         const char* numStr = pinStr + 4;
         int i2cIndex = atoi(numStr);
 
-        // Validate I2C index range (0-13 for 14 total I2C sensors)
-        if (i2cIndex < 0 || i2cIndex > 13) {
+        // Validate I2C index range (0-12 for 13 total I2C sensors). MUST agree
+        // with the "I2C" allocator branch above (PIN_I2C_BASE..PIN_I2C_MAX) —
+        // a prior mismatch let this branch accept index 13 (pin 0xFD) even
+        // though the allocator could never hand that pin out (#368).
+        if (i2cIndex < 0 || i2cIndex > (PIN_I2C_MAX - PIN_I2C_BASE)) {
             msg.control.print(F("ERROR: I2C index "));
             msg.control.print(i2cIndex);
-            msg.control.println(F(" out of range (valid: 0-13)"));
+            msg.control.println(F(" out of range (valid: 0-12)"));
             if (isValid) *isValid = false;
             return 0;
         }
 
         // Convert I2C index to virtual pin number
-        uint8_t virtualPin = 0xF0 + i2cIndex;
+        uint8_t virtualPin = PIN_I2C_BASE + i2cIndex;
         return virtualPin;
     }
 

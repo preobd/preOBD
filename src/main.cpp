@@ -322,6 +322,24 @@ void setup() {
 #endif
     router.begin();  // Load config from EEPROM
     flushSystemConfigBootDiagnostics();
+    // INVARIANT: every broadcaster's init() below runs BEFORE initInputManager()
+    // (further down this function) sentinel-fills and loads inputs[], and
+    // before the control tables (rules[]/actions[]) are loaded with them.
+    // Nothing in these init()s may read inputs[], rules[], or actions[] —
+    // BSS-zero is indistinguishable from real data (pin==0 looks like a
+    // configured digital-pin-0 input; id==0 looks like a configured
+    // rule/action) — so each one primes its broadcaster with a CONSTANT
+    // instead. Reading the table here was #352 (LiveValueBroadcaster read
+    // occupancy off the not-yet-loaded table and phantom-cleared every unused
+    // slot for a minute after boot); see live_value_broadcaster.cpp:130-138
+    // and action_broadcaster.cpp:117-122 for the per-broadcaster reasoning,
+    // and #369 for why this comment and the boot-order test fixtures
+    // (test/test_broadcaster/, test/test_action_broadcaster/,
+    // test/test_live_value_broadcaster/, boot_order_fixture.h) exist — no
+    // green suite would have caught a regression here otherwise, because
+    // every broadcaster test configured its table BEFORE calling init().
+    // ASSERT_INPUTS_TABLE_LIVE() (input_manager.h) backstops this at each
+    // table-reading function in DEBUG/NATIVE_TEST builds.
     StatusBroadcaster::init();
     AlarmBroadcaster::init();
     ActionBroadcaster::init();

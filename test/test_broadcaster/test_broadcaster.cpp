@@ -8,6 +8,7 @@
 #include <Arduino.h>
 #include <string.h>
 
+#include "boot_order_fixture.h"  // inputsTableIsLiveForAssert() stub (#352, #369)
 #include "../../src/lib/alarm_broadcaster.cpp"
 #include "../../src/control/control_engine.cpp"   // real annunciator-severity logic
 
@@ -59,9 +60,34 @@ void setUp(void) {
     memset(g_ruleContexts, 0, sizeof(g_ruleContexts));
     memset(&g_srcInput, 0, sizeof(g_srcInput));
     for (int i = 0; i < MAX_RULES; ++i) rules[i].id = CONTROL_ID_NONE;
+    setInputsTableLive(true);  // every test but the boot-order one below
     AlarmBroadcaster::init();
 }
 void tearDown(void) {}
+
+// Reproduce the real boot order (main.cpp: AlarmBroadcaster::init() runs
+// alongside the other broadcasters, BEFORE initInputManager() loads rules[]):
+// at init() time rules[] is still BSS-zeroed (every id == 0, a valid record
+// id — CONTROL_ID_NONE is 0xFF) and the config load fills it afterwards
+// (#352's twin for alarms; see boot_order_fixture.h / #369). init() must not
+// read rules[] — it primes NORMAL/CLEAR unconditionally.
+static void bootAsFirmwareDoes(void) {
+    memset(rules, 0, sizeof(rules));             // BSS: every id == 0
+    memset(g_ruleContexts, 0, sizeof(g_ruleContexts));
+    setInputsTableLive(false);                   // table not ground truth yet (#369)
+    AlarmBroadcaster::init();                    // …before the table exists
+    setInputsTableLive(true);                    // initInputManager() flips this
+    for (int i = 0; i < MAX_RULES; ++i) rules[i].id = CONTROL_ID_NONE;
+    g_frameCount = 0;
+}
+
+// The pre-load table (rules[] BSS-zero) must never leak into a broadcast: no
+// frame is due until a real rule transitions after boot completes.
+static void test_boot_order_emits_nothing_before_config_loads(void) {
+    bootAsFirmwareDoes();
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+}
 
 // Configure rule slot 0 as an OUTSIDE_BAND alarm and set its runtime active state.
 static void configRule(uint8_t severity, float lo, float hi, float value, bool active) {
@@ -178,5 +204,6 @@ int main(int, char**) {
     RUN_TEST(test_none_severity_rule_is_silent);
     RUN_TEST(test_return_to_normal_emits_clear);
     RUN_TEST(test_idempotent_tick);
+    RUN_TEST(test_boot_order_emits_nothing_before_config_loads);
     return UNITY_END();
 }

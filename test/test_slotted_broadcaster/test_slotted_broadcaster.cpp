@@ -425,6 +425,14 @@ static void test_grace_window_is_spent_per_accepted_frame_only(void) {
 // a LATER vacate. Snapshotting instead made the first tick see N - n phantom
 // occupied->vacated edges and drip a "tile is gone" frame out of every slot
 // that had never held anything.
+//
+// This is also why prime()/reset() take a Key BY VALUE rather than a
+// "read the table" callback: the signature itself makes the #352 mistake
+// impossible to reintroduce at this layer. The per-broadcaster boot-order
+// fixtures (boot_order_fixture.h; test_broadcaster.cpp,
+// test_action_broadcaster.cpp, test_live_value_broadcaster.cpp) are what
+// verify each concrete init() upholds its half of the contract — this test
+// verifies the template's (#369).
 static void test_seed_empty_never_clears_never_occupied_slots(void) {
     occSetUp();
     SlottedBroadcaster<int, 8> bc;

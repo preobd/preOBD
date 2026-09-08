@@ -9,6 +9,7 @@
 #include <Arduino.h>
 #include <string.h>
 
+#include "boot_order_fixture.h"  // inputsTableIsLiveForAssert() stub (#352, #369)
 #include "../../src/lib/action_broadcaster.cpp"
 
 // ---- Globals the broadcaster TU expects from the rest of the firmware ----
@@ -159,6 +160,7 @@ void setUp(void) {
     memset(g_ruleActive, 0, sizeof(g_ruleActive));
     g_driveCalls = 0;
     memset(g_extraMembers, 0, sizeof(g_extraMembers));
+    setInputsTableLive(true);  // every test but the boot-order one below
     ActionBroadcaster::init();
 }
 void tearDown(void) {}
@@ -489,7 +491,9 @@ static void configureActions(int n) {
 // never held an Action, putting all of them back in the heartbeat).
 static void bootAsFirmwareDoes(int configured) {
     memset(actions, 0, sizeof(actions));          // BSS: every id == 0
+    setInputsTableLive(false);                    // table not ground truth yet (#369)
     ActionBroadcaster::init();                    // …before the table exists
+    setInputsTableLive(true);                     // initInputManager() flips this
     for (int i = 0; i < MAX_ACTIONS; ++i) actions[i].id = CONTROL_ID_NONE;
     configureActions(configured);
     g_frameCount = 0;

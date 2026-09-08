@@ -11,6 +11,7 @@
 #include <string.h>
 #include <math.h>
 
+#include "boot_order_fixture.h"  // inputsTableIsLiveForAssert() stub (#352, #369)
 #include "../../src/lib/live_value_broadcaster.cpp"
 
 // ---- Globals the broadcaster TU expects from the rest of the firmware ----
@@ -88,6 +89,7 @@ void setUp(void) {
     resetCapture();
     memset(inputs, 0, sizeof(inputs));
     for (int i = 0; i < MAX_INPUTS; ++i) inputs[i].pin = 0xFF;  // sparse-table sentinel
+    setInputsTableLive(true);  // every test but the boot-order ones below
     LiveValueBroadcaster::init();
 }
 void tearDown(void) {}
@@ -399,7 +401,9 @@ static void configInputs(int n);
 // first, which is why this never showed up here.
 static void bootAsFirmwareDoes(int configured) {
     memset(inputs, 0, sizeof(inputs));          // BSS: every pin == 0
+    setInputsTableLive(false);                  // table not ground truth yet (#369)
     LiveValueBroadcaster::init();               // …before the table exists
+    setInputsTableLive(true);                   // initInputManager() flips this
     for (int i = 0; i < MAX_INPUTS; ++i) inputs[i].pin = 0xFF;   // config load
     configInputs(configured);
     resetCapture();

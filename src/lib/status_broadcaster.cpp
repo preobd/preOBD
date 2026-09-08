@@ -31,6 +31,7 @@ uint32_t g_lastSendMs = 0;
 bool g_haveSentOnce = false;
 
 void packStatus(PreobdSystemStatus& s) {
+    ASSERT_INPUTS_TABLE_LIVE();  // numActiveInputs isn't ground truth until here (#369)
     memset(&s, 0, sizeof(s));
     s.magic = PREOBD_STATUS_MAGIC;
     s.protocolVersion = PREOBD_BLE_PROTOCOL_VERSION;
