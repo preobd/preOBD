@@ -1,0 +1,46 @@
+/*
+ * measurement_compat.h - Sensor/application measurement-type compatibility (#383)
+ *
+ * The rule ("a sensor that measures pressure cannot be paired with an
+ * application that expects temperature") used to exist exactly once, inline
+ * in cmd_set()'s combined-syntax branch (`SET <pin> <app> <sensor>`), and
+ * nowhere else. Two other writers of the same pair bypassed it entirely:
+ *   - JSON IMPORT calls setInputApplication()/setInputSensor() directly, so
+ *     it never reached the inline check;
+ *   - the CLI's own two-step form (`SET <pin> APPLICATION <x>` then
+ *     `SET <pin> SENSOR <y>`) never ran it either -- set_application() does
+ *     no compatibility check at all, and setInputSensor() only checked that
+ *     the sensor index resolved.
+ *
+ * This predicate is the one place the rule lives now. input_manager.cpp
+ * calls it from the admission phase of both setInputApplication() and
+ * setInputSensor(), so every writer that routes through those two functions
+ * -- both CLI forms and JSON import -- inherits it and cannot disagree.
+ *
+ * Deliberately message-free and Input-free (indices in, bool out) so it is
+ * cheap to call from a messaging call site (cmd_set.cpp, for a specific
+ * "measures X but Y expects Z" error) as well as from the admission phase
+ * that actually enforces it.
+ */
+
+#ifndef MEASUREMENT_COMPAT_H
+#define MEASUREMENT_COMPAT_H
+
+#include <Arduino.h>
+
+// True iff `sensorIndex`'s physical measurement type is a valid match for
+// what `applicationIndex` expects.
+//
+// Two non-obvious cases, deliberately answered DIFFERENTLY:
+//
+//   - SENSOR_NONE (0) / APP_NONE (0)  -> true. Nothing is paired yet, so
+//     there is no constraint to violate. A genuine match.
+//   - an index outside its table      -> FALSE. The answer is unknown, and
+//     this predicate fails closed: an unverifiable pairing is exactly what
+//     it exists to reject. Callers today resolve both indices first (via
+//     getSensorByIndex()/getApplicationByIndex() returning nullptr), so this
+//     branch is unreachable in current code — it is the default the next
+//     caller inherits, and "yes" is the wrong default for a validator.
+bool sensorMatchesApplication(uint8_t sensorIndex, uint8_t applicationIndex);
+
+#endif // MEASUREMENT_COMPAT_H

@@ -10,6 +10,7 @@
 #include "input_manager.h"
 #include "input.h"
 #include "calibration_apply.h"
+#include "measurement_compat.h"
 #include "serial_config.h"
 #include "../version.h"
 #include "../lib/system_mode.h"
@@ -630,39 +631,31 @@ static int set_cal_speed(uint8_t pin, int argc, const char* const* argv,
         max_speed_kph = (uint16_t)atoi(argv[paramStart + 4]);
     }
 
-    if (pulses_per_rev < 1 || pulses_per_rev > 250) {
-        msg.control.println(F("ERROR: Pulses per rev must be between 1 and 250"));
-        return 1;
+    CalApplyStatus st = applyCalSpeed(input, pulses_per_rev, tire_circumference_mm,
+                                      final_drive_ratio, calibration_mult, timeout_ms,
+                                      max_speed_kph);
+    switch (st) {
+        case CAL_APPLY_OK:
+            break;
+        case CAL_APPLY_ERR_SPEED_PPR:
+            msg.control.println(F("ERROR: Pulses per rev must be between 1 and 250"));
+            return 1;
+        case CAL_APPLY_ERR_SPEED_TIRE:
+            msg.control.println(F("ERROR: Tire circumference must be between 500 and 5000 mm"));
+            return 1;
+        case CAL_APPLY_ERR_SPEED_RATIO:
+            msg.control.println(F("ERROR: Drive ratio must be between 0.5 and 10.0"));
+            return 1;
+        case CAL_APPLY_ERR_SPEED_MULT:
+            msg.control.println(F("ERROR: Calibration multiplier must be between 0.5 and 2.0"));
+            return 1;
+        case CAL_APPLY_ERR_SPEED_TIMEOUT:
+            msg.control.println(F("ERROR: Timeout must be between 100 and 10000 ms"));
+            return 1;
+        default:
+            msg.control.println(F("ERROR: Max speed must be between 50 and 500 km/h"));
+            return 1;
     }
-    if (tire_circumference_mm < 500 || tire_circumference_mm > 5000) {
-        msg.control.println(F("ERROR: Tire circumference must be between 500 and 5000 mm"));
-        return 1;
-    }
-    if (final_drive_ratio < 0.5 || final_drive_ratio > 10.0) {
-        msg.control.println(F("ERROR: Drive ratio must be between 0.5 and 10.0"));
-        return 1;
-    }
-    if (calibration_mult < 0.5 || calibration_mult > 2.0) {
-        msg.control.println(F("ERROR: Calibration multiplier must be between 0.5 and 2.0"));
-        return 1;
-    }
-    if (timeout_ms < 100 || timeout_ms > 10000) {
-        msg.control.println(F("ERROR: Timeout must be between 100 and 10000 ms"));
-        return 1;
-    }
-    if (max_speed_kph < 50 || max_speed_kph > 500) {
-        msg.control.println(F("ERROR: Max speed must be between 50 and 500 km/h"));
-        return 1;
-    }
-
-    input->flags.useCustomCalibration = true;
-    input->calibrationType = CAL_SPEED;
-    input->customCalibration.speed.pulses_per_rev = pulses_per_rev;
-    input->customCalibration.speed.tire_circumference_mm = tire_circumference_mm;
-    input->customCalibration.speed.final_drive_ratio = final_drive_ratio;
-    input->customCalibration.speed.calibration_mult = calibration_mult;
-    input->customCalibration.speed.timeout_ms = timeout_ms;
-    input->customCalibration.speed.max_speed_kph = max_speed_kph;
 
     msg.control.print(F("Speed calibration set for pin "));
     msg.control.println(argv[1]);
@@ -1259,46 +1252,60 @@ int cmd_set(int argc, const char* const* argv) {
 
         // If both lookups succeed, treat as combined command
         if (appIndex != 0 && sensorIndex != 0) {
-            // Check sensor/application measurement type compatibility
-            const SensorInfo* sensorInfo = getSensorByIndex(sensorIndex);
-            const ApplicationPreset* appPreset = getApplicationByIndex(appIndex);
+            // Check sensor/application measurement type compatibility. This is
+            // a courtesy message only -- the real gate is inside
+            // setInputApplication()/setInputSensor() below (#383), which is
+            // what also covers the two-step `SET <pin> APPLICATION ...` then
+            // `SET <pin> SENSOR ...` form and JSON import. Route through the
+            // same predicate so this message can never disagree with the
+            // enforcement point.
+            if (!sensorMatchesApplication(sensorIndex, appIndex)) {
+                const SensorInfo* sensorInfo = getSensorByIndex(sensorIndex);
+                const ApplicationPreset* appPreset = getApplicationByIndex(appIndex);
+                MeasurementType sensorMeasType = sensorInfo
+                    ? (MeasurementType)pgm_read_byte(&sensorInfo->measurementType)
+                    : MEASURE_TEMPERATURE;
+                MeasurementType appMeasType = appPreset
+                    ? (MeasurementType)pgm_read_byte(&appPreset->expectedMeasurementType)
+                    : MEASURE_TEMPERATURE;
 
-            if (sensorInfo && appPreset) {
-                MeasurementType sensorMeasType = (MeasurementType)pgm_read_byte(&sensorInfo->measurementType);
-                MeasurementType appMeasType = (MeasurementType)pgm_read_byte(&appPreset->expectedMeasurementType);
-
-                if (sensorMeasType != appMeasType) {
-                    msg.control.print(F("ERROR: Sensor/application type mismatch - "));
-                    msg.control.print(argv[3]);
-                    msg.control.print(F(" measures "));
-                    msg.control.print(measurementTypeName(sensorMeasType));
-                    msg.control.print(F(" but "));
-                    msg.control.print(field);
-                    msg.control.print(F(" expects "));
-                    msg.control.print(measurementTypeName(appMeasType));
-                    msg.control.println();
-                    return 1;
-                }
-
-                // First set application (which also calls setInputSensor with preset sensor)
-                if (setInputApplication(pin, appIndex)) {
-                    // Then override sensor if different from preset
-                    Input* input = getInputByPin(pin);
-                    if (input && input->sensorIndex != sensorIndex) {
-                        setInputSensor(pin, sensorIndex);
-                    }
-
-                    msg.control.print(F("Input "));
-                    msg.control.print(argv[1]);
-                    msg.control.print(F(" configured as "));
-                    msg.control.print(field);
-                    msg.control.print(F(" with "));
-                    msg.control.println(argv[3]);
-                    printSaveReminder();
-                    return 0;
-                }
+                msg.control.print(F("ERROR: Sensor/application type mismatch - "));
+                msg.control.print(argv[3]);
+                msg.control.print(F(" measures "));
+                msg.control.print(measurementTypeName(sensorMeasType));
+                msg.control.print(F(" but "));
+                msg.control.print(field);
+                msg.control.print(F(" expects "));
+                msg.control.print(measurementTypeName(appMeasType));
+                msg.control.println();
                 return 1;
             }
+
+            // First set application (which also calls setInputSensor with preset sensor)
+            if (setInputApplication(pin, appIndex)) {
+                // Then override sensor if different from preset
+                Input* input = getInputByPin(pin);
+                if (input && input->sensorIndex != sensorIndex) {
+                    if (!setInputSensor(pin, sensorIndex)) {
+                        // Should not happen -- sensorMatchesApplication() above
+                        // already confirmed the pair, but setInputSensor() is
+                        // the authoritative check (#383); honour a refusal
+                        // rather than report false success.
+                        msg.control.println(F("ERROR: Failed to set sensor"));
+                        return 1;
+                    }
+                }
+
+                msg.control.print(F("Input "));
+                msg.control.print(argv[1]);
+                msg.control.print(F(" configured as "));
+                msg.control.print(field);
+                msg.control.print(F(" with "));
+                msg.control.println(argv[3]);
+                printSaveReminder();
+                return 0;
+            }
+            return 1;
         }
     }
 

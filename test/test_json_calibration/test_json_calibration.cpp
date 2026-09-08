@@ -18,6 +18,7 @@
 
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/inputs/calibration_apply.cpp"
+#include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/lib/json_config.cpp"
 
 #include "../stubs/firmware_stubs.h"
@@ -46,6 +47,17 @@ void setUp(void) {
 void tearDown(void) {}
 
 static uint8_t appCHT() { return getApplicationIndexByName("CHT"); }
+
+// First application in the registry that expects `want` (#383: setInputSensor()
+// now refuses a sensor whose measurement type doesn't match the input's
+// application, so a calibration round trip has to pick a sensor/application
+// pair that actually agrees rather than hard-coding CHT for everything).
+static uint8_t appForMeasurementType(MeasurementType want) {
+    for (uint8_t i = 1; i < NUM_APPLICATION_PRESETS; i++) {
+        if (getApplicationExpectedMeasurementType(i) == want) return i;
+    }
+    return 0;
+}
 
 static uint8_t occupiedSlots() {
     uint8_t n = 0;
@@ -79,11 +91,17 @@ static uint8_t sensorIndexForCal(CalibrationType wanted) {
 }
 
 // A configured input on TEST_PIN whose sensor uses `type`, with a zeroed
-// override (so a byte-comparison after import is meaningful).
+// override (so a byte-comparison after import is meaningful). The application
+// is picked to match the chosen sensor's measurement type (#383) rather than
+// hard-coded, so setInputSensor()'s new compatibility gate doesn't refuse the
+// very fixture every round-trip test is built on.
 static Input* buildInput(CalibrationType type) {
-    TEST_ASSERT_TRUE(setInputApplication(TEST_PIN, appCHT()));
     uint8_t sensorIdx = sensorIndexForCal(type);
     TEST_ASSERT_NOT_EQUAL_MESSAGE(0, sensorIdx, "no sensor in the library uses this calibration type");
+    MeasurementType measType = getSensorMeasurementType(sensorIdx);
+    uint8_t appIdx = appForMeasurementType(measType);
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(0, appIdx, "no application matches this sensor's measurement type");
+    TEST_ASSERT_TRUE(setInputApplication(TEST_PIN, appIdx));
     TEST_ASSERT_TRUE(setInputSensor(TEST_PIN, sensorIdx));
     Input* in = getInputByPin(TEST_PIN);
     TEST_ASSERT_NOT_NULL(in);
@@ -185,12 +203,69 @@ static void test_roundtrip_rpm(void) {
     assertRoundTrips(in);
 }
 
+// #382: CAL_SPEED used to fall to getCalibrationType()'s "UNKNOWN" default and
+// exportCalibration()'s no-params default, so this round trip lost the input
+// entirely (importCalibration() refused the resulting self-contradictory
+// "source":"CUSTOM","type":"UNKNOWN" record).
+//
+// MUTANT TARGET: reverting either the CAL_SPEED case in getCalibrationType()/
+// exportCalibration() (json_config.cpp) or the SPEED branch in
+// importCalibration() must fail this test.
+static void test_roundtrip_speed(void) {
+    Input* in = buildInput(CAL_SPEED);
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_OK,
+        applyCalSpeed(in, 100, 2008, 3.73f, 1.05f, 2000, 300));
+    assertRoundTrips(in);
+}
+
+// Same bug, CAL_CAN_IMPORT. Built directly (not via buildInput()'s
+// sensorIndexForCal lookup): the CAN_IMPORT sensor library entry is gated by
+// INCLUDE_CAN (sensor_library.h), which the native test profile does not set,
+// so no sensor in this test binary's library carries CAL_CAN_IMPORT as its
+// OWN type. applyCalCanImport() doesn't care what sensor the input started
+// on -- like every other applyCal*(), it sets calibrationType itself -- so
+// any already-admitted input is a fine host for the round trip.
+static void test_roundtrip_can_import(void) {
+    TEST_ASSERT_TRUE(setInputApplication(TEST_PIN, appCHT()));
+    Input* in = getInputByPin(TEST_PIN);
+    memset(&in->customCalibration, 0, sizeof(CalibrationOverride));
+    in->flags.useCustomCalibration = false;
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_OK,
+        applyCalCanImport(in, 0x7E8, 0x0C, 0, 2, true, 0.25f, 0.0f, 2000));
+    assertRoundTrips(in);
+}
+
 // Table sensors keep their curve in flash; the bias resistor is the one
 // overridable field, so that is the whole round trip for this type.
 static void test_roundtrip_thermistor_table_bias(void) {
     Input* in = buildInput(CAL_THERMISTOR_TABLE);
     TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_OK, applyCalBias(in, 1500.0f));
     assertRoundTrips(in);
+}
+
+// #382: CAL_LEVEL_TABLE's bias resistor is inert -- like CAL_PRESSURE_TABLE,
+// its read path (sensors/level/table.cpp) takes the bias from the PROGMEM
+// preset unconditionally, so applyCalBias() refuses to set one (there is no
+// CLI/JSON path that can normally get an input into useCustomCalibration=true
+// on this type). exportCalibration() must still defend against it -- e.g. a
+// legacy/corrupt EEPROM image with the flag set -- by writing "source":
+// "PRESET" rather than a CUSTOM block importCalibration() would refuse anyway
+// (the exact self-contradictory, unimportable record #382 is about).
+//
+// MUTANT TARGET: removing the `calibrationType == CAL_LEVEL_TABLE` early
+// return in exportCalibration() (json_config.cpp) must fail this test.
+static void test_level_table_export_forces_preset_source(void) {
+    Input* in = buildInput(CAL_LEVEL_TABLE);
+    in->flags.useCustomCalibration = true;  // forced: no setter reaches this state
+
+    JsonDocument doc;
+    JsonObject obj = doc.to<JsonObject>();
+    exportInputToJSON(obj, in);
+
+    JsonObject cal = obj["calibration"];
+    TEST_ASSERT_FALSE(cal.isNull());
+    TEST_ASSERT_EQUAL_STRING("PRESET", (const char*)cal["source"]);
+    TEST_ASSERT_TRUE(cal["params"].isNull());
 }
 
 // ---------------------------------------------------------------------------
@@ -381,13 +456,57 @@ static void test_import_preserves_an_explicit_bus_selection(void) {
     TEST_ASSERT_EQUAL_UINT8(1, systemConfig.buses.active_spi);
 }
 
+// ---------------------------------------------------------------------------
+// #382 — importSystemConfigFromJSON()'s admission/commit split.
+//
+// A "display" object present without a "type" key used to make
+// `const char* displayType = display["type"]` come back nullptr, and
+// strcmp(nullptr, "LCD") is undefined behaviour. Guard it and prove the
+// current display type survives instead of being force-coerced.
+//
+// MUTANT TARGET: dropping the `display["type"].isNull() == false` guard
+// (json_config.cpp) must fail this test (and, on a real board, crash).
+static void test_import_display_object_without_type_preserves_current_type(void) {
+    systemConfig.displayType = DISPLAY_OLED;
+    JsonDocument doc;
+    JsonObject sys = doc.to<JsonObject>();
+    JsonObject display = sys["display"].to<JsonObject>();
+    display["enabled"] = true;   // "display" present, but no "type" key
+
+    TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
+    TEST_ASSERT_EQUAL_UINT8(DISPLAY_OLED, systemConfig.displayType);
+    TEST_ASSERT_TRUE(systemConfig.displayEnabled);
+}
+
+// A "timing" object present with only ONE of sensorRead/alarmCheck used to
+// coerce the other, absent key to 0 -- zeroing an interval a config never
+// mentioned, rather than leaving it alone.
+//
+// MUTANT TARGET: reverting either timing field back to an unguarded
+// `staged.X = timing["X"];` must fail this test.
+static void test_import_timing_partial_keys_preserve_the_other(void) {
+    systemConfig.sensorReadInterval = 250;
+    systemConfig.alarmCheckInterval = 500;
+    JsonDocument doc;
+    JsonObject sys = doc.to<JsonObject>();
+    JsonObject timing = sys["timing"].to<JsonObject>();
+    timing["sensorRead"] = 100;   // states sensorRead only
+
+    TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
+    TEST_ASSERT_EQUAL_UINT16(100, systemConfig.sensorReadInterval);
+    TEST_ASSERT_EQUAL_UINT16(500, systemConfig.alarmCheckInterval);  // untouched
+}
+
 static void test_pressure_table_custom_is_refused(void) {
     JsonDocument doc;
     JsonObject o = doc.to<JsonObject>();
     o["pin"] = TEST_PIN;
-    o["app"] = "CHT";
+    // Pressure-measuring application (#383: an app/sensor measurement-type
+    // mismatch would refuse this record for the WRONG reason and mask the
+    // PRESSURE_TABLE-specific refusal this test targets).
+    o["app"] = "OIL_PRESSURE";
     o["sensor"] = (const char*)getSensorNameByIndex(sensorIndexForCal(CAL_PRESSURE_TABLE));
-    o["units"] = "C";
+    o["units"] = "BAR";
     JsonObject cal = o["calibration"].to<JsonObject>();
     cal["type"] = "PRESSURE_TABLE";
     cal["source"] = "CUSTOM";
@@ -406,7 +525,10 @@ int main(int, char**) {
     RUN_TEST(test_roundtrip_linear);
     RUN_TEST(test_roundtrip_voltage_divider);
     RUN_TEST(test_roundtrip_rpm);
+    RUN_TEST(test_roundtrip_speed);
+    RUN_TEST(test_roundtrip_can_import);
     RUN_TEST(test_roundtrip_thermistor_table_bias);
+    RUN_TEST(test_level_table_export_forces_preset_source);
     RUN_TEST(test_preset_source_clears_custom_calibration);
     RUN_TEST(test_missing_source_is_refused_not_dereferenced);
     RUN_TEST(test_rejected_calibration_fails_the_record);
@@ -416,5 +538,7 @@ int main(int, char**) {
     RUN_TEST(test_import_without_buses_object_selects_no_bus);
     RUN_TEST(test_import_with_absent_bus_keys_selects_no_bus);
     RUN_TEST(test_import_preserves_an_explicit_bus_selection);
+    RUN_TEST(test_import_display_object_without_type_preserves_current_type);
+    RUN_TEST(test_import_timing_partial_keys_preserve_the_other);
     return UNITY_END();
 }

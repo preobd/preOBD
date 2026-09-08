@@ -34,6 +34,17 @@
 
 #if SUPPORTS_SD
 #include <SD.h>
+
+// JSON config is a COLD path: it runs only on SYSTEM DUMP JSON / JSON IMPORT,
+// never in the sensor loop. On Teensy 4.x every function lands in ITCM (RAM1) by
+// default, and ITCM is allocated in 32 KB blocks -- crossing a block boundary
+// costs 32 KB of RAM1 that local variables can no longer use, not the few hundred
+// bytes the code actually occupies. FLASHMEM keeps this module in flash where it
+// belongs. Same macro json_registry.cpp already uses; a no-op off Teensy.
+#ifndef FLASHMEM
+#define FLASHMEM
+#endif
+
 // SD object is provided globally by SD.h
 #endif
 
@@ -44,12 +55,12 @@ extern uint8_t numActiveInputs;
 
 // Get current timestamp (seconds since epoch, if available)
 // For now, we'll use millis() / 1000 as a placeholder
-static uint32_t getCurrentTimestamp() {
+static FLASHMEM uint32_t getCurrentTimestamp() {
     return millis() / 1000;
 }
 
 // Get platform string
-static const char* getPlatformString() {
+static FLASHMEM const char* getPlatformString() {
 #if defined(TEENSY_40)
     return "TEENSY40";
 #elif defined(TEENSY_41)
@@ -76,7 +87,15 @@ static const char* getPlatformString() {
 }
 
 // Get calibration type string
-static const char* getCalibrationType(const Input* input) {
+//
+// static_assert next to the switch: a CalibrationType this doesn't name falls
+// to "UNKNOWN" at runtime, which exportCalibration() below cannot pair with a
+// re-importable "source":"CUSTOM" block (#382) -- so a 13th value must fail
+// the BUILD, not silently export an unimportable record.
+static_assert(NUM_CALIBRATION_TYPES == 12,
+              "CalibrationType grew -- add the new value to getCalibrationType() "
+              "and exportCalibration() below, then update this count");
+static FLASHMEM const char* getCalibrationType(const Input* input) {
     switch (input->calibrationType) {
         case CAL_NONE: return "NONE";
         case CAL_THERMISTOR_STEINHART: return "THERMISTOR_STEINHART";
@@ -87,6 +106,9 @@ static const char* getCalibrationType(const Input* input) {
         case CAL_LINEAR: return "LINEAR";
         case CAL_VOLTAGE_DIVIDER: return "VOLTAGE_DIVIDER";
         case CAL_RPM: return "RPM";
+        case CAL_SPEED: return "SPEED";
+        case CAL_CAN_IMPORT: return "CAN_IMPORT";
+        case CAL_LEVEL_TABLE: return "LEVEL_TABLE";
         default: return "UNKNOWN";
     }
 }
@@ -104,7 +126,7 @@ static const char* getCalibrationType(const Input* input) {
 //
 // The trade-off is cosmetic: an inexact decimal now dumps as 1.02100003 rather
 // than 1.02. Exactness wins — these are calibration coefficients.
-static void addFloatParam(JsonObject& params, const char* key, float value) {
+static FLASHMEM void addFloatParam(JsonObject& params, const char* key, float value) {
     if (!isfinite(value)) {          // JSON has no NaN/Inf spelling
         params[key] = 0;
         return;
@@ -134,10 +156,27 @@ static void addFloatParam(JsonObject& params, const char* key, float value) {
 }
 
 // Export calibration parameters to JSON
-static void exportCalibration(JsonObject& calObj, const Input* input) {
+//
+// static_assert next to the switch: see getCalibrationType() above -- a new
+// CalibrationType must be added to BOTH switches or the build fails (#382).
+static_assert(NUM_CALIBRATION_TYPES == 12,
+              "CalibrationType grew -- add the new value to exportCalibration() "
+              "and getCalibrationType() above, then update this count");
+static FLASHMEM void exportCalibration(JsonObject& calObj, const Input* input) {
     calObj["type"] = getCalibrationType(input);
 
     if (!input->flags.useCustomCalibration) {
+        calObj["source"] = "PRESET";
+        return;
+    }
+
+    // CAL_LEVEL_TABLE's bias resistor is inert -- like CAL_PRESSURE_TABLE, its
+    // read path (sensors/level/table.cpp) takes the bias from the PROGMEM
+    // preset unconditionally, so there is nothing genuinely customisable to
+    // round-trip. Say PRESET rather than emit a CUSTOM block importCalibration()
+    // would have to refuse anyway -- that self-contradictory "source":"CUSTOM",
+    // no re-appliable params combination is exactly the #382 bug.
+    if (input->calibrationType == CAL_LEVEL_TABLE) {
         calObj["source"] = "PRESET";
         return;
     }
@@ -202,13 +241,33 @@ static void exportCalibration(JsonObject& calObj, const Input* input) {
             params["maxRPM"] = input->customCalibration.rpm.max_rpm;
             break;
 
+        case CAL_SPEED:
+            params["pulsesPerRev"] = input->customCalibration.speed.pulses_per_rev;
+            params["tireCircumferenceMm"] = input->customCalibration.speed.tire_circumference_mm;
+            addFloatParam(params, "finalDriveRatio", input->customCalibration.speed.final_drive_ratio);
+            addFloatParam(params, "calibrationMult", input->customCalibration.speed.calibration_mult);
+            params["timeoutMs"] = input->customCalibration.speed.timeout_ms;
+            params["maxSpeedKph"] = input->customCalibration.speed.max_speed_kph;
+            break;
+
+        case CAL_CAN_IMPORT:
+            params["sourceCanId"] = input->customCalibration.can.source_can_id;
+            params["sourcePid"] = input->customCalibration.can.source_pid;
+            params["dataOffset"] = input->customCalibration.can.data_offset;
+            params["dataLength"] = input->customCalibration.can.data_length;
+            params["isBigEndian"] = (bool)input->customCalibration.can.is_big_endian;
+            addFloatParam(params, "scaleFactor", input->customCalibration.can.scale_factor);
+            addFloatParam(params, "offset", input->customCalibration.can.offset);
+            params["timeoutMs"] = input->customCalibration.can.timeout_ms;
+            break;
+
         default:
             break;
     }
 }
 
 // Export single input to JSON
-void exportInputToJSON(JsonObject& inputObj, const Input* input) {
+FLASHMEM void exportInputToJSON(JsonObject& inputObj, const Input* input) {
     if (!input) {
         return;
     }
@@ -304,7 +363,7 @@ void exportInputToJSON(JsonObject& inputObj, const Input* input) {
 // enabled-count, not a bound — bounding by it dropped any input sitting
 // past a freed hole. Disabled inputs export too ("enabled": false), so a
 // client can render the full configured set.
-void exportInputsToJSON(JsonArray& inputsArray) {
+FLASHMEM void exportInputsToJSON(JsonArray& inputsArray) {
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         Input* input = &inputs[i];
         if (input->pin != 0xFF) {
@@ -316,7 +375,7 @@ void exportInputsToJSON(JsonArray& inputsArray) {
 }
 
 // Export pin registry to JSON array
-void exportPinRegistryToJSON(JsonArray& pinsArray) {
+FLASHMEM void exportPinRegistryToJSON(JsonArray& pinsArray) {
     uint8_t count = getPinRegistrySize();
     for (uint8_t i = 0; i < count; i++) {
         const PinUsage* pinUsage = getPinUsageByIndex(i);
@@ -334,7 +393,7 @@ void exportPinRegistryToJSON(JsonArray& pinsArray) {
 #if INCLUDE_CONTROL_ENGINE
 // Export the control-engine Rule + Action tables as top-level arrays (siblings
 // of "inputs"). Only configured slots (id != CONTROL_ID_NONE) are emitted.
-void exportRulesToJSON(JsonArray& rulesArray) {
+FLASHMEM void exportRulesToJSON(JsonArray& rulesArray) {
     for (int i = 0; i < MAX_RULES; i++) {
         if (rules[i].id == CONTROL_ID_NONE) continue;
         JsonObject ruleObj = rulesArray.add<JsonObject>();
@@ -342,7 +401,7 @@ void exportRulesToJSON(JsonArray& rulesArray) {
     }
 }
 
-void exportActionsToJSON(JsonArray& actionsArray) {
+FLASHMEM void exportActionsToJSON(JsonArray& actionsArray) {
     for (int i = 0; i < MAX_ACTIONS; i++) {
         if (actions[i].id == CONTROL_ID_NONE) continue;
         JsonObject actionObj = actionsArray.add<JsonObject>();
@@ -360,7 +419,7 @@ void exportActionsToJSON(JsonArray& actionsArray) {
 #endif // INCLUDE_CONTROL_ENGINE
 
 // Export system configuration to JSON
-void exportSystemConfigToJSON(JsonObject& systemObj) {
+FLASHMEM void exportSystemConfigToJSON(JsonObject& systemObj) {
     // Output modules
     JsonObject outputs = systemObj["outputs"].to<JsonObject>();
 
@@ -464,7 +523,7 @@ void exportSystemConfigToJSON(JsonObject& systemObj) {
 #define JSON_SCHEMA_VERSION 1
 
 // Main export function - dump entire config to JSON
-void dumpConfigToJSON(Print& output) {
+FLASHMEM void dumpConfigToJSON(Print& output) {
     // Allocate JSON document (ArduinoJson v7 handles sizing automatically)
     JsonDocument doc;
 
@@ -542,21 +601,23 @@ void dumpConfigToJSON(Print& output) {
 // cannot disagree about what a valid calibration is, and refuses the record when
 // the calibration is malformed or rejected rather than importing a half-record.
 //
-// Covers every type exportCalibration() emits with parameters, with two
-// deliberate exceptions:
+// Covers every type exportCalibration() emits with parameters, with one
+// deliberate exception:
 //   - PRESSURE_TABLE: its read path takes the bias resistor from the PROGMEM
 //     preset unconditionally, so a custom bias is inert and the CLI refuses to
 //     set one. A CUSTOM record of this type is refused rather than silently
 //     accepted (it is unreachable from any current firmware export).
-//   - Types export writes as "UNKNOWN" (SPEED, CAN_IMPORT, LEVEL_TABLE) carry no
-//     params, so there is nothing to re-apply; they are refused for the same
-//     "don't pretend it worked" reason.
+// LEVEL_TABLE is the same "bias is inert" situation but exportCalibration()
+// never emits a CUSTOM block for it (source is forced to PRESET on export,
+// #382), so there is no CUSTOM LEVEL_TABLE record to import in the first
+// place -- it falls to the same "cannot be imported" refusal below as
+// PRESSURE_TABLE if one is hand-written anyway.
 //
 // The caller passes a STAGED (scratch) Input, not the live one: the record is
 // judged before anything is committed, so a refusal costs the table nothing.
 // Only the override, its flag and the calibration type are meaningful on the way
 // out - the caller copies those three onto the real input after the commit.
-static bool importCalibration(Input* input, JsonObject& calObj, uint8_t index) {
+static FLASHMEM bool importCalibration(Input* input, JsonObject& calObj, uint8_t index) {
     if (input == nullptr) return false;
 
     // Missing "source" used to reach strcmp(nullptr, ...) and fault the board on
@@ -626,6 +687,24 @@ static bool importCalibration(Input* input, JsonObject& calObj, uint8_t index) {
         // Bias resistor is the only overridable field for a table sensor; the
         // input keeps the calibration type its sensor gave it.
         st = applyCalBias(input, p["biasResistor"] | 0.0f);
+    } else if (strcmp(type, "SPEED") == 0) {
+        st = applyCalSpeed(input,
+                           (uint8_t)(p["pulsesPerRev"] | 0),
+                           (uint16_t)(p["tireCircumferenceMm"] | 0),
+                           p["finalDriveRatio"] | 0.0f,
+                           p["calibrationMult"] | 0.0f,
+                           (uint16_t)(p["timeoutMs"] | 0),
+                           (uint16_t)(p["maxSpeedKph"] | 0));
+    } else if (strcmp(type, "CAN_IMPORT") == 0) {
+        st = applyCalCanImport(input,
+                               (uint16_t)(p["sourceCanId"] | 0),
+                               (uint8_t)(p["sourcePid"] | 0),
+                               (uint8_t)(p["dataOffset"] | 0),
+                               (uint8_t)(p["dataLength"] | 0),
+                               p["isBigEndian"] | false,
+                               p["scaleFactor"] | 0.0f,
+                               p["offset"] | 0.0f,
+                               (uint16_t)(p["timeoutMs"] | 0));
     } else {
         // PRESSURE_TABLE, the "UNKNOWN" types, and anything a future firmware
         // adds: nothing here can re-apply it, so say so instead of returning
@@ -658,7 +737,7 @@ static bool importCalibration(Input* input, JsonObject& calObj, uint8_t index) {
 // This matters because "N of M inputs imported" is a claim about the table: a
 // record that failed on its calibration used to leave an enabled input behind,
 // reading a live sensor, while the summary said it had imported nothing (#373).
-bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
+FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     if (index >= MAX_INPUTS) {
         return false;
     }
@@ -898,7 +977,7 @@ bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
 }
 
 // Import all inputs from JSON
-bool importInputsFromJSON(JsonArray& inputsArray) {
+FLASHMEM bool importInputsFromJSON(JsonArray& inputsArray) {
     uint8_t importedCount = 0;
     uint8_t totalInputs = inputsArray.size();
 
@@ -929,8 +1008,32 @@ bool importInputsFromJSON(JsonArray& inputsArray) {
     return importedCount > 0;
 }
 
-// Import system configuration from JSON
-bool importSystemConfigFromJSON(JsonObject& systemObj) {
+// Import system configuration from JSON.
+//
+// ADMISSION/COMMIT (#382): the input-record half of import got this structure
+// in #371/#373 -- everything that can be judged is judged before the first
+// write, so a refusal changes nothing. This half used to write straight into
+// the LIVE `systemConfig` global field-by-field with only block-level
+// isNull() guards, which had two concrete failure modes:
+//   - a "display" object present without a "type" key made `const char*
+//     displayType = display["type"]` come back nullptr, and strcmp(nullptr,
+//     "LCD") is undefined behaviour -- a hand-edited or partial config could
+//     fault the board;
+//   - a "timing" object present without "sensorRead"/"alarmCheck" (an old
+//     export, or a hand-edited partial one) coerced the missing JsonVariant
+//     to 0, zeroing the sensor-read/alarm-check interval instead of leaving
+//     the existing value alone -- the same "absent key must not become zero"
+//     shape #377 already fixed for the bus selection below.
+//
+// The fix here is a STAGED copy: every key is applied to `staged` (seeded
+// from the live config, so an absent key naturally means "keep the current
+// value" rather than "coerce to zero/null"), each string field is null-
+// guarded before use, and the live config is only overwritten once, at the
+// very end -- one assignment nothing above this line can fail past.
+FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
+    // ---- ADMISSION PHASE -------------------------------------------------
+    SystemConfig staged = systemConfig;
+
     // Output modules
     if (systemObj["outputs"].isNull() == false) {
         JsonObject outputs = systemObj["outputs"];
@@ -941,8 +1044,12 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
             if (outputNames[i] == nullptr) continue;  // retired slot (OUTPUT_RELAY)
             if (outputs[outputNames[i]].isNull() == false) {
                 JsonObject output = outputs[outputNames[i]];
-                systemConfig.outputEnabled[i] = output["enabled"];
-                systemConfig.outputInterval[i] = output["interval"];
+                if (output["enabled"].isNull() == false) {
+                    staged.outputEnabled[i] = output["enabled"];
+                }
+                if (output["interval"].isNull() == false) {
+                    staged.outputInterval[i] = output["interval"];
+                }
                 // Optional: a dump from an older firmware has no "format" key,
                 // and an unparseable value leaves the current setting alone.
 #if INCLUDE_SD_LOGGING
@@ -953,7 +1060,7 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
                     const char* formatName = output["format"];
                     SdLogFormat format;
                     if (parseSdLogFormat(formatName, format)) {
-                        systemConfig.sdLogFormat = (uint8_t)format;
+                        staged.sdLogFormat = (uint8_t)format;
                     }
                 }
 #endif
@@ -964,30 +1071,41 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
     // Display settings
     if (systemObj["display"].isNull() == false) {
         JsonObject display = systemObj["display"];
-        systemConfig.displayEnabled = display["enabled"];
+        if (display["enabled"].isNull() == false) {
+            staged.displayEnabled = display["enabled"];
+        }
 
-        const char* displayType = display["type"];
-        if (strcmp(displayType, "LCD") == 0) {
-            systemConfig.displayType = DISPLAY_LCD;
-        } else if (strcmp(displayType, "OLED") == 0) {
-            systemConfig.displayType = DISPLAY_OLED;
-        } else {
-            systemConfig.displayType = DISPLAY_NONE;
+        // Null-guarded: an absent/non-string "type" used to reach
+        // strcmp(nullptr, "LCD") and fault the board. Absent now means "keep
+        // the current display type" rather than "silently force NONE".
+        if (display["type"].isNull() == false) {
+            const char* displayType = display["type"];
+            if (displayType != nullptr) {
+                if (strcmp(displayType, "LCD") == 0) {
+                    staged.displayType = DISPLAY_LCD;
+                } else if (strcmp(displayType, "OLED") == 0) {
+                    staged.displayType = DISPLAY_OLED;
+                } else {
+                    staged.displayType = DISPLAY_NONE;
+                }
+            }
         }
 
         // Parse I2C address (hex string like "0x27")
         if (display["address"].isNull() == false) {
             const char* addr = display["address"];
-            if (addr[0] == '0' && (addr[1] == 'x' || addr[1] == 'X')) {
-                systemConfig.lcdI2CAddress = strtol(addr + 2, nullptr, 16);
-            } else {
-                systemConfig.lcdI2CAddress = strtol(addr, nullptr, 16);
+            if (addr != nullptr) {
+                if (addr[0] == '0' && (addr[1] == 'x' || addr[1] == 'X')) {
+                    staged.lcdI2CAddress = strtol(addr + 2, nullptr, 16);
+                } else {
+                    staged.lcdI2CAddress = strtol(addr, nullptr, 16);
+                }
             }
         }
 
         // Display update interval
         if (display["updateInterval"].isNull() == false) {
-            systemConfig.lcdUpdateInterval = display["updateInterval"];
+            staged.lcdUpdateInterval = display["updateInterval"];
         }
 
         // Default units
@@ -996,39 +1114,46 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
 
             if (units["temperature"].isNull() == false) {
                 uint8_t idx = getUnitsIndexByName(units["temperature"]);
-                if (idx != 0) systemConfig.defaultTempUnits = idx;
+                if (idx != 0) staged.defaultTempUnits = idx;
             }
             if (units["pressure"].isNull() == false) {
                 uint8_t idx = getUnitsIndexByName(units["pressure"]);
-                if (idx != 0) systemConfig.defaultPressUnits = idx;
+                if (idx != 0) staged.defaultPressUnits = idx;
             }
             if (units["elevation"].isNull() == false) {
                 uint8_t idx = getUnitsIndexByName(units["elevation"]);
-                if (idx != 0) systemConfig.defaultElevUnits = idx;
+                if (idx != 0) staged.defaultElevUnits = idx;
             }
             if (units["speed"].isNull() == false) {
                 uint8_t idx = getUnitsIndexByName(units["speed"]);
-                if (idx != 0) systemConfig.defaultSpeedUnits = idx;
+                if (idx != 0) staged.defaultSpeedUnits = idx;
             }
         }
     }
 
-    // Timing intervals
+    // Timing intervals — absent key keeps the staged (current) value rather
+    // than coercing to 0, which would zero the sensor-read/alarm-check period.
     if (systemObj["timing"].isNull() == false) {
         JsonObject timing = systemObj["timing"];
-        systemConfig.sensorReadInterval = timing["sensorRead"];
-        systemConfig.alarmCheckInterval = timing["alarmCheck"];
+        if (timing["sensorRead"].isNull() == false) {
+            staged.sensorReadInterval = timing["sensorRead"];
+        }
+        if (timing["alarmCheck"].isNull() == false) {
+            staged.alarmCheckInterval = timing["alarmCheck"];
+        }
 
         // Backward compatibility: check for lcdUpdate in timing section (old location)
         if (timing["lcdUpdate"].isNull() == false) {
-            systemConfig.lcdUpdateInterval = timing["lcdUpdate"];
+            staged.lcdUpdateInterval = timing["lcdUpdate"];
         }
     }
 
     // Physical constants
     if (systemObj["constants"].isNull() == false) {
         JsonObject constants = systemObj["constants"];
-        systemConfig.seaLevelPressure = constants["seaLevelPressure"];
+        if (constants["seaLevelPressure"].isNull() == false) {
+            staged.seaLevelPressure = constants["seaLevelPressure"];
+        }
     }
 
     // Bus Configuration (with backward-compatible defaults)
@@ -1042,52 +1167,55 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
         // real value (255 included), so a round trip is unaffected; only a
         // config that never mentioned the bus changes meaning, and it changes to
         // what a fresh board now does.
-        systemConfig.buses.active_i2c = buses["i2c"] | 0xFF;
-        systemConfig.buses.i2c_clock = buses["i2cClock"] | DEFAULT_I2C_CLOCK;
-        systemConfig.buses.active_spi = buses["spi"] | 0xFF;
-        systemConfig.buses.spi_clock = buses["spiClock"] | DEFAULT_SPI_CLOCK;
+        staged.buses.active_i2c = buses["i2c"] | 0xFF;
+        staged.buses.i2c_clock = buses["i2cClock"] | DEFAULT_I2C_CLOCK;
+        staged.buses.active_spi = buses["spi"] | 0xFF;
+        staged.buses.spi_clock = buses["spiClock"] | DEFAULT_SPI_CLOCK;
 
         // CAN configuration - separate input/output buses
-        systemConfig.buses.input_can_bus = buses["canInputBus"] | 0xFF;
+        staged.buses.input_can_bus = buses["canInputBus"] | 0xFF;
         // Same rule for CAN: absent means unstated, and unstated defers to the
         // build-time WIRING declaration (0xFF when there is none).
-        systemConfig.buses.output_can_bus = buses["canOutputBus"] | BUS_WIRED_CAN_ID;
+        staged.buses.output_can_bus = buses["canOutputBus"] | BUS_WIRED_CAN_ID;
         // Backward compatibility: canInputEnabled (bool) -> canInputMode (enum)
         if (buses["canInputMode"].is<uint8_t>()) {
-            systemConfig.buses.can_input_mode = buses["canInputMode"] | CAN_INPUT_OFF;
+            staged.buses.can_input_mode = buses["canInputMode"] | CAN_INPUT_OFF;
         } else {
             // Old format: canInputEnabled=1 maps to NORMAL mode
-            systemConfig.buses.can_input_mode = (buses["canInputEnabled"] | 0) ? CAN_INPUT_NORMAL : CAN_INPUT_OFF;
+            staged.buses.can_input_mode = (buses["canInputEnabled"] | 0) ? CAN_INPUT_NORMAL : CAN_INPUT_OFF;
         }
-        systemConfig.buses.can_output_enabled =
+        staged.buses.can_output_enabled =
             buses["canOutputEnabled"] | (BUS_WIRED_CAN_ID != 0xFF ? 1 : 0);
 
         // Backward compatibility: if old canBaudrate exists but new ones don't, use it for both
         if (buses["canBaudrate"].is<uint32_t>() && !buses["canInputBaudrate"].is<uint32_t>()) {
             uint32_t baudrate = buses["canBaudrate"] | DEFAULT_CAN_BAUDRATE;
-            systemConfig.buses.can_input_baudrate = baudrate;
-            systemConfig.buses.can_output_baudrate = baudrate;
+            staged.buses.can_input_baudrate = baudrate;
+            staged.buses.can_output_baudrate = baudrate;
         } else {
-            systemConfig.buses.can_input_baudrate = buses["canInputBaudrate"] | DEFAULT_CAN_BAUDRATE;
-            systemConfig.buses.can_output_baudrate = buses["canOutputBaudrate"] | DEFAULT_CAN_BAUDRATE;
+            staged.buses.can_input_baudrate = buses["canInputBaudrate"] | DEFAULT_CAN_BAUDRATE;
+            staged.buses.can_output_baudrate = buses["canOutputBaudrate"] | DEFAULT_CAN_BAUDRATE;
         }
     } else {
         // No buses object (an old config). It states no bus selection, so it gets
         // none — the same answer resetSystemConfig() now gives, for the same
         // reason (#377): a default is not a user statement, and must not be
         // written into the config as though it were.
-        systemConfig.buses.active_i2c = 0xFF;
-        systemConfig.buses.i2c_clock = DEFAULT_I2C_CLOCK;
-        systemConfig.buses.active_spi = 0xFF;
-        systemConfig.buses.spi_clock = DEFAULT_SPI_CLOCK;
-        systemConfig.buses.input_can_bus = 0xFF;  // Disabled by default
-        systemConfig.buses.output_can_bus = BUS_WIRED_CAN_ID;
-        systemConfig.buses.can_input_mode = CAN_INPUT_OFF;
-        systemConfig.buses.can_output_enabled = (BUS_WIRED_CAN_ID != 0xFF) ? 1 : 0;
-        systemConfig.buses.can_input_baudrate = DEFAULT_CAN_BAUDRATE;
-        systemConfig.buses.can_output_baudrate = DEFAULT_CAN_BAUDRATE;
+        staged.buses.active_i2c = 0xFF;
+        staged.buses.i2c_clock = DEFAULT_I2C_CLOCK;
+        staged.buses.active_spi = 0xFF;
+        staged.buses.spi_clock = DEFAULT_SPI_CLOCK;
+        staged.buses.input_can_bus = 0xFF;  // Disabled by default
+        staged.buses.output_can_bus = BUS_WIRED_CAN_ID;
+        staged.buses.can_input_mode = CAN_INPUT_OFF;
+        staged.buses.can_output_enabled = (BUS_WIRED_CAN_ID != 0xFF) ? 1 : 0;
+        staged.buses.can_input_baudrate = DEFAULT_CAN_BAUDRATE;
+        staged.buses.can_output_baudrate = DEFAULT_CAN_BAUDRATE;
     }
 
+    // ---- COMMIT PHASE ----------------------------------------------------
+    // Nothing above this line may fail past this point; one write.
+    systemConfig = staged;
     return true;
 }
 
@@ -1095,7 +1223,7 @@ bool importSystemConfigFromJSON(JsonObject& systemObj) {
 // Replace the Rule table from a JSON array. Records pack into slots in array
 // order, preserving each record's stable `id` (Actions reference rules by id).
 // Records that fail validation are skipped. Re-arming is the caller's job.
-void importRulesFromJSON(JsonArrayConst rulesArray) {
+FLASHMEM void importRulesFromJSON(JsonArrayConst rulesArray) {
     for (int i = 0; i < MAX_RULES; i++) rules[i].id = CONTROL_ID_NONE;
     int slot = 0;
     for (JsonObjectConst ruleObj : rulesArray) {
@@ -1112,7 +1240,7 @@ void importRulesFromJSON(JsonArrayConst rulesArray) {
     }
 }
 
-void importActionsFromJSON(JsonArrayConst actionsArray) {
+FLASHMEM void importActionsFromJSON(JsonArrayConst actionsArray) {
     for (int i = 0; i < MAX_ACTIONS; i++) actions[i].id = CONTROL_ID_NONE;
     for (int i = 0; i < MAX_ACTION_LINKS; i++) actionLinks[i].actionId = CONTROL_ID_NONE;
     int slot = 0;

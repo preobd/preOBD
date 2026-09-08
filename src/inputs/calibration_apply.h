@@ -37,7 +37,16 @@ enum CalApplyStatus : uint8_t {
     CAL_APPLY_ERR_TIMEOUT,           // timeout outside 100..10000 ms
     CAL_APPLY_ERR_RPM_ORDER,         // min_rpm >= max_rpm
     CAL_APPLY_ERR_DIVIDER_R,         // divider resistor out of range
-    CAL_APPLY_ERR_DIVIDER_SCALE      // divider correction/offset out of range
+    CAL_APPLY_ERR_DIVIDER_SCALE,     // divider correction/offset out of range
+    CAL_APPLY_ERR_SPEED_PPR,         // pulses per rev outside 1..250
+    CAL_APPLY_ERR_SPEED_TIRE,        // tire circumference outside 500..5000 mm
+    CAL_APPLY_ERR_SPEED_RATIO,       // final drive ratio outside 0.5..10.0
+    CAL_APPLY_ERR_SPEED_MULT,        // calibration multiplier outside 0.5..2.0
+    CAL_APPLY_ERR_SPEED_TIMEOUT,     // timeout outside 100..10000 ms
+    CAL_APPLY_ERR_SPEED_MAX,         // max speed outside 50..500 km/h
+    CAL_APPLY_ERR_CAN_LENGTH,        // data length outside 1..4 bytes
+    CAL_APPLY_ERR_CAN_OFFSET,        // data offset outside 0..7
+    CAL_APPLY_ERR_CAN_TIMEOUT        // timeout nonzero and outside 100..30000 ms
 };
 
 // Thermistor, Steinhart-Hart. Sets calibrationType = CAL_THERMISTOR_STEINHART.
@@ -70,5 +79,21 @@ CalApplyStatus applyCalRpm(Input* input, uint8_t poles, float pulley_ratio,
 // stored config); JSON import uses it so an exported divider round-trips.
 CalApplyStatus applyCalVoltageDivider(Input* input, float r1, float r2,
                                       float correction, float offset);
+
+// Vehicle speed (pulse sensor). Sets calibrationType = CAL_SPEED. Same ranges
+// `SET <pin> CAL SPEED ...` has always enforced (#382 -- moved out of
+// cmd_set.cpp so JSON import shares them).
+CalApplyStatus applyCalSpeed(Input* input, uint8_t pulses_per_rev,
+                             uint16_t tire_circumference_mm, float final_drive_ratio,
+                             float calibration_mult, uint16_t timeout_ms,
+                             uint16_t max_speed_kph);
+
+// CAN-imported sensor. Sets calibrationType = CAL_CAN_IMPORT. No CLI leaf
+// writes every field of this today (`SET CAN <pid>` builds it from the
+// standard-PID table; `SET <pin> CAN_TIMEOUT` overrides just the timeout) --
+// JSON import uses the full form so an exported CAN import round-trips (#382).
+CalApplyStatus applyCalCanImport(Input* input, uint16_t source_can_id, uint8_t source_pid,
+                                 uint8_t data_offset, uint8_t data_length, bool is_big_endian,
+                                 float scale_factor, float offset, uint16_t timeout_ms);
 
 #endif // CALIBRATION_APPLY_H

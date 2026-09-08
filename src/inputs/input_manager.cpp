@@ -9,6 +9,7 @@
 #include "../version.h"
 #include "input_manager.h"
 #include "command_helpers.h"
+#include "measurement_compat.h"
 #include "../lib/system_config.h"
 #include "../lib/analog_pins.h"
 #include "../lib/units_registry.h"
@@ -856,6 +857,15 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
         return false;
     }
 
+    // Measurement-type compatibility (#383), one predicate shared with
+    // setInputSensor() below. A well-formed preset's own default sensor
+    // always matches its expectedMeasurementType by construction; this is a
+    // tripwire against a future preset table entry that doesn't.
+    if (!sensorMatchesApplication(defaultSensor, appIndex)) {
+        msg.control.println(F("ERROR: Application preset's default sensor does not match its measurement type"));
+        return false;
+    }
+
     if (isNewInput) {
         uint8_t slot = findFreeSlot();
         if (slot == 0xFF) {
@@ -937,6 +947,7 @@ bool setInputSensor(uint8_t pin, uint8_t sensorIndex) {
     Input* input = requireInput(pin);
     if (!input) return false;
 
+    // ---- ADMISSION PHASE ------------------------------------------------
     // Get Sensor info from flash
     const SensorInfo* flashInfo = getSensorByIndex(sensorIndex);
     if (flashInfo == nullptr) {
@@ -944,9 +955,25 @@ bool setInputSensor(uint8_t pin, uint8_t sensorIndex) {
         return false;
     }
 
+    // Measurement-type compatibility (#383): this is the real enforcement
+    // point. An input with an application already assigned (the normal
+    // case -- SENSOR can only target an existing input, see requireInput())
+    // cannot be pointed at a sensor that measures something else. This is
+    // what closes the CLI two-step gap (SET <pin> APPLICATION <x> then
+    // SET <pin> SENSOR <y-of-a-different-type>) and, via
+    // importInputFromJSON()'s setInputApplication()+setInputSensor() pair,
+    // the JSON import gap too -- both call this same function.
+    if (!sensorMatchesApplication(sensorIndex, input->applicationIndex)) {
+        msg.control.println(F("ERROR: Sensor/application measurement type mismatch"));
+        return false;
+    }
+
     // Load entire sensor info into RAM
     SensorInfo info;
     loadSensorInfo(flashInfo, &info);
+
+    // ---- COMMIT PHASE -----------------------------------------------------
+    // Nothing below this point may fail.
 
     // Check if sensor is actually changing (to avoid redundant init)
     bool sensorChanged = (input->sensorIndex != sensorIndex);

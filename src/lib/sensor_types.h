@@ -35,7 +35,14 @@ enum CalibrationType {
     CAL_RPM,
     CAL_SPEED,               // Speed sensor calibration
     CAL_CAN_IMPORT,          // CAN bus imported sensor
-    CAL_LEVEL_TABLE          // Fluid level sensor using lookup table
+    CAL_LEVEL_TABLE,         // Fluid level sensor using lookup table
+
+    NUM_CALIBRATION_TYPES    // Sentinel -- keep LAST. Total count of CalibrationType
+                              // values; a switch over CalibrationType that must stay
+                              // exhaustive (json_config.cpp's getCalibrationType() /
+                              // exportCalibration()) static_asserts against this so a
+                              // new value added above fails the build instead of
+                              // silently emitting an unimportable record (#382).
 };
 
 // ===== CALIBRATION STRUCTURES =====

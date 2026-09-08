@@ -26,6 +26,7 @@
 
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/inputs/calibration_apply.cpp"
+#include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/lib/json_config.cpp"
 
 // Firmware symbols input_manager.cpp / json_config.cpp expect from other TUs
@@ -170,6 +171,48 @@ static void test_successful_reapplication_updates_existing_input(void) {
 }
 
 // ---------------------------------------------------------------------------
+// #383 — sensor/application measurement-type compatibility is enforced from
+// setInputApplication()/setInputSensor()'s admission phase, so every writer
+// that routes through them agrees: the CLI's combined syntax, its two-step
+// form, and JSON import.
+// ---------------------------------------------------------------------------
+
+// The CLI's two-step form: SET <pin> APPLICATION <x> (ok) then
+// SET <pin> SENSOR <y> where y measures something else. Before #383,
+// set_application() ran no compatibility check at all and setInputSensor()
+// only checked that the sensor index resolved -- this combination was
+// silently accepted.
+//
+// MUTANT TARGET: removing the sensorMatchesApplication() call from
+// setInputSensor()'s admission phase (input_manager.cpp) must fail this test.
+static void test_two_step_refuses_measurement_type_mismatch(void) {
+    TEST_ASSERT_TRUE(setInputApplication(4, appCHT()));  // CHT -> MEASURE_TEMPERATURE
+    Input* before = getInputByPin(4);
+    Input snapshot = *before;
+
+    uint8_t pressureSensor = getSensorIndexByName("MPX4250AP");  // MEASURE_PRESSURE
+    TEST_ASSERT_NOT_EQUAL(0, pressureSensor);
+
+    TEST_ASSERT_FALSE(setInputSensor(4, pressureSensor));
+
+    // Refused: the input must be byte-identical to before the attempt (still
+    // on the CHT preset's own sensor), not half-switched to the pressure part.
+    Input* after = getInputByPin(4);
+    TEST_ASSERT_NOT_NULL(after);
+    TEST_ASSERT_EQUAL_INT(0, memcmp(&snapshot, after, sizeof(Input)));
+}
+
+// A matching sensor of the SAME measurement type is still accepted -- the
+// gate must not become "no sensor override ever succeeds".
+static void test_two_step_accepts_matching_measurement_type(void) {
+    TEST_ASSERT_TRUE(setInputApplication(4, appCHT()));
+    uint8_t otherTempSensor = getSensorIndexByName("MAX31855");  // also MEASURE_TEMPERATURE
+    TEST_ASSERT_NOT_EQUAL(0, otherTempSensor);
+    TEST_ASSERT_TRUE(setInputSensor(4, otherTempSensor));
+    TEST_ASSERT_EQUAL_UINT8(otherTempSensor, getInputByPin(4)->sensorIndex);
+}
+
+// ---------------------------------------------------------------------------
 // #363 — importInputFromJSON() must honour the refusal.
 //
 // The import path used to claim the slot itself (`inputs[idx].pin = pin`),
@@ -200,6 +243,30 @@ static void test_json_import_accepts_a_valid_record(void) {
     TEST_ASSERT_NOT_NULL(in->readFunction);
 }
 
+// #383: JSON IMPORT calls setInputApplication()/setInputSensor() directly
+// (json_config.cpp), so it used to pair a pressure sensor with a temperature
+// application without complaint. Both functions now share
+// sensorMatchesApplication(), so the record is refused -- and, per the
+// all-or-nothing import contract, leaves nothing behind.
+//
+// MUTANT TARGET: removing the sensorMatchesApplication() call from either
+// setInputApplication() or setInputSensor()'s admission phase must fail this.
+static void test_json_import_refuses_measurement_type_mismatch(void) {
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    o["idx"] = 0;
+    o["pin"] = 4;
+    o["app"] = "CHT";          // MEASURE_TEMPERATURE
+    o["sensor"] = "MPX4250AP"; // MEASURE_PRESSURE
+    o["units"] = "CELSIUS";
+    o["enabled"] = true;
+
+    TEST_ASSERT_FALSE(importInputFromJSON(o, 0));
+    TEST_ASSERT_NULL(getInputByPin(4));
+    TEST_ASSERT_EQUAL_UINT8(0, occupiedSlots());
+    TEST_ASSERT_EQUAL_UINT8(0, numActiveInputs);
+}
+
 static void test_json_import_refuses_a_bus_reserved_pin(void) {
     g_pinReserved[4] = true;
 
@@ -218,6 +285,31 @@ static void test_json_import_refuses_a_bus_reserved_pin(void) {
 }
 
 // A refused record must not damage the inputs that imported cleanly before it.
+// --- the predicate's own contract -------------------------------------------
+// Everything above exercises sensorMatchesApplication() through a caller.
+// These pin the predicate directly, because its DEFAULT ANSWER is the part a
+// future caller inherits, and "compatible" is the wrong default for a
+// validator. Note getApplicationExpectedMeasurementType() returns
+// MEASURE_TEMPERATURE for an out-of-range index rather than erroring
+// (application_presets.h), so a fail-open here would silently compare against
+// temperature instead of refusing.
+
+// MUTANT TARGET: change either out-of-range `return false` to `return true`.
+static void test_out_of_range_indices_fail_closed(void) {
+    TEST_ASSERT_FALSE(sensorMatchesApplication(NUM_SENSORS, 1));
+    TEST_ASSERT_FALSE(sensorMatchesApplication(1, NUM_APPLICATION_PRESETS));
+    TEST_ASSERT_FALSE(sensorMatchesApplication(0xFF, 0xFF));
+}
+
+// The other half of the contract: "nothing paired yet" is a real match, not an
+// unknown, and must keep passing -- a blanket fail-closed would break every
+// caller that legitimately holds an unset sensor or application.
+static void test_unset_indices_are_compatible(void) {
+    TEST_ASSERT_TRUE(sensorMatchesApplication(0, 1));
+    TEST_ASSERT_TRUE(sensorMatchesApplication(1, 0));
+    TEST_ASSERT_TRUE(sensorMatchesApplication(0, 0));
+}
+
 static void test_json_import_refusal_leaves_earlier_records_intact(void) {
     JsonDocument doc;
     JsonObject good = doc.to<JsonObject>();
@@ -246,8 +338,13 @@ int main(int, char**) {
     RUN_TEST(test_refused_on_pin_conflict_leaves_target_intact);
     RUN_TEST(test_refused_bad_application_claims_no_slot);
     RUN_TEST(test_successful_reapplication_updates_existing_input);
+    RUN_TEST(test_two_step_refuses_measurement_type_mismatch);
+    RUN_TEST(test_two_step_accepts_matching_measurement_type);
     RUN_TEST(test_json_import_accepts_a_valid_record);
+    RUN_TEST(test_json_import_refuses_measurement_type_mismatch);
     RUN_TEST(test_json_import_refuses_a_bus_reserved_pin);
     RUN_TEST(test_json_import_refusal_leaves_earlier_records_intact);
+    RUN_TEST(test_out_of_range_indices_fail_closed);
+    RUN_TEST(test_unset_indices_are_compatible);
     return UNITY_END();
 }

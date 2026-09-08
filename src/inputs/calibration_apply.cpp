@@ -166,3 +166,50 @@ CalApplyStatus applyCalVoltageDivider(Input* input, float r1, float r2,
     input->customCalibration.voltageDivider.offset = offset;
     return CAL_APPLY_OK;
 }
+
+CalApplyStatus applyCalSpeed(Input* input, uint8_t pulses_per_rev,
+                             uint16_t tire_circumference_mm, float final_drive_ratio,
+                             float calibration_mult, uint16_t timeout_ms,
+                             uint16_t max_speed_kph) {
+    if (input == nullptr) return CAL_APPLY_ERR_NO_INPUT;
+    if (pulses_per_rev < 1 || pulses_per_rev > 250) return CAL_APPLY_ERR_SPEED_PPR;
+    if (tire_circumference_mm < 500 || tire_circumference_mm > 5000) return CAL_APPLY_ERR_SPEED_TIRE;
+    if (final_drive_ratio < 0.5f || final_drive_ratio > 10.0f) return CAL_APPLY_ERR_SPEED_RATIO;
+    if (calibration_mult < 0.5f || calibration_mult > 2.0f) return CAL_APPLY_ERR_SPEED_MULT;
+    if (timeout_ms < 100 || timeout_ms > 10000) return CAL_APPLY_ERR_SPEED_TIMEOUT;
+    if (max_speed_kph < 50 || max_speed_kph > 500) return CAL_APPLY_ERR_SPEED_MAX;
+
+    input->flags.useCustomCalibration = true;
+    input->calibrationType = CAL_SPEED;
+    input->customCalibration.speed.pulses_per_rev = pulses_per_rev;
+    input->customCalibration.speed.tire_circumference_mm = tire_circumference_mm;
+    input->customCalibration.speed.final_drive_ratio = final_drive_ratio;
+    input->customCalibration.speed.calibration_mult = calibration_mult;
+    input->customCalibration.speed.timeout_ms = timeout_ms;
+    input->customCalibration.speed.max_speed_kph = max_speed_kph;
+    return CAL_APPLY_OK;
+}
+
+CalApplyStatus applyCalCanImport(Input* input, uint16_t source_can_id, uint8_t source_pid,
+                                 uint8_t data_offset, uint8_t data_length, bool is_big_endian,
+                                 float scale_factor, float offset, uint16_t timeout_ms) {
+    if (input == nullptr) return CAL_APPLY_ERR_NO_INPUT;
+    if (data_length < 1 || data_length > 4) return CAL_APPLY_ERR_CAN_LENGTH;
+    if (data_offset > 7) return CAL_APPLY_ERR_CAN_OFFSET;
+    // 0 is a legitimate value: CANSensorCalibration.timeout_ms treats 0 as
+    // "use CAN_DEFAULT_TIMEOUT_MS" (sensor_types.h). Anything else must fall
+    // in the same range SET <pin> CAN_TIMEOUT has always enforced.
+    if (timeout_ms != 0 && (timeout_ms < 100 || timeout_ms > 30000)) return CAL_APPLY_ERR_CAN_TIMEOUT;
+
+    input->flags.useCustomCalibration = true;
+    input->calibrationType = CAL_CAN_IMPORT;
+    input->customCalibration.can.source_can_id = source_can_id;
+    input->customCalibration.can.source_pid = source_pid;
+    input->customCalibration.can.data_offset = data_offset;
+    input->customCalibration.can.data_length = data_length;
+    input->customCalibration.can.is_big_endian = is_big_endian;
+    input->customCalibration.can.scale_factor = scale_factor;
+    input->customCalibration.can.offset = offset;
+    input->customCalibration.can.timeout_ms = timeout_ms;
+    return CAL_APPLY_OK;
+}
