@@ -79,6 +79,16 @@ void setUp(void)    {
     // pinOwnerBootComplete() is one-way in the firmware (boot happens once);
     // reset it per test so wording tests can pick their phase deliberately.
     bootReconciling = true;
+    // Same for the #396 boot-diagnostics buffer: flushPinOwnerBootDiagnostics()
+    // is one-way in the firmware too (router.begin() runs once). Reset the
+    // module statics directly per test, mirroring bootReconciling above —
+    // this test TU #includes pin_owner.cpp, so they're visible here. Default
+    // to "not buffering" (post-flush/steady-state) so every existing test
+    // that asserts on g_capture immediately keeps working unmodified; the
+    // #396 tests below opt INTO the buffering window explicitly.
+    bootDiagCount = 0;
+    bootDiagOverflow = 0;
+    bootDiagBuffering = false;
 }
 void tearDown(void) {}
 
@@ -320,6 +330,60 @@ static void test_reserved_owner_reclaim_still_self_skips(void) {
     TEST_ASSERT_EQUAL_STRING(OWNER_A, getPinDescription(19));
 }
 
+// ===========================================================================
+// Boot diagnostics buffer (#396): a refusal made before the router has a
+// transport must still reach the user, once it does. Mirrors the real boot
+// order: registerSystemPins()/initConfiguredSerialPorts() claim pins BEFORE
+// router.begin() runs (main.cpp :289/:293 vs ~:334) — g_capture stands in for
+// "the transport router.begin() eventually attaches".
+// ===========================================================================
+
+// --- the actual bug: buffered while transport-less, visible after flush ----
+static void test_boot_refusal_is_buffered_then_visible_after_flush(void) {
+    bootDiagBuffering = true;   // mirrors main.cpp before router.begin()
+    const uint8_t pin = 30;
+    TEST_ASSERT_TRUE(registerPin_unchecked(pin, PIN_RESERVED, OWNER_B, PIN_RANK_BUS));
+
+    TEST_ASSERT_TRUE(pinsConflict(&pin, 1, PIN_RANK_INPUT, "candidate input"));
+    // Nothing printed yet — that IS the bug this buffer exists to fix.
+    TEST_ASSERT_EQUAL(0, g_capture.len);
+
+    flushPinOwnerBootDiagnostics();
+    // Now it's visible, with the same wording pinsConflict() always used.
+    TEST_ASSERT_NOT_NULL(strstr(g_capture.buf, "pin 30"));
+    TEST_ASSERT_NOT_NULL(strstr(g_capture.buf, OWNER_B));
+}
+
+// --- flush is idempotent: a second call emits nothing -----------------------
+static void test_flush_is_idempotent(void) {
+    bootDiagBuffering = true;
+    const uint8_t pin = 31;
+    TEST_ASSERT_TRUE(registerPin_unchecked(pin, PIN_RESERVED, OWNER_B, PIN_RANK_BUS));
+    TEST_ASSERT_TRUE(pinsConflict(&pin, 1, PIN_RANK_INPUT, "candidate input"));
+
+    flushPinOwnerBootDiagnostics();
+    TEST_ASSERT_TRUE(g_capture.len > 0);
+
+    g_capture.reset();
+    flushPinOwnerBootDiagnostics();
+    TEST_ASSERT_EQUAL(0, g_capture.len);
+}
+
+// --- after boot (flush already ran), a refusal prints immediately ----------
+static void test_after_flush_refusal_prints_immediately_not_buffered(void) {
+    bootDiagBuffering = true;         // start buffering, like early boot
+    flushPinOwnerBootDiagnostics();   // router now "has a transport"
+    g_capture.reset();
+
+    const uint8_t pin = 32;
+    TEST_ASSERT_TRUE(registerPin_unchecked(pin, PIN_RESERVED, OWNER_B, PIN_RANK_BUS));
+    TEST_ASSERT_TRUE(pinsConflict(&pin, 1, PIN_RANK_INPUT, "candidate input"));
+
+    // No buffering left to flush — the message must already be there.
+    TEST_ASSERT_NOT_NULL(strstr(g_capture.buf, "pin 32"));
+    TEST_ASSERT_EQUAL(0, bootDiagCount);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_group_claim_reserves_every_pin);
@@ -342,5 +406,9 @@ int main(int, char**) {
 
     RUN_TEST(test_shared_description_non_reserved_claim_still_conflicts);
     RUN_TEST(test_reserved_owner_reclaim_still_self_skips);
+
+    RUN_TEST(test_boot_refusal_is_buffered_then_visible_after_flush);
+    RUN_TEST(test_flush_is_idempotent);
+    RUN_TEST(test_after_flush_refusal_prints_immediately_not_buffered);
     return UNITY_END();
 }

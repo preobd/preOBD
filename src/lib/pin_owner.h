@@ -107,6 +107,37 @@ void pinOwnerBootComplete();
 /** Register the stored-bus-selection probe (see header comment, #379). */
 void setPinOwnerBusProbe(PinOwnerBusProbe probe);
 
+// ---------------------------------------------------------------------------
+// Boot diagnostics buffer (#396).
+//
+// registerSystemPins() and initConfiguredSerialPorts() both claim pins BEFORE
+// router.begin() has registered any transport (main.cpp: pin claims at
+// :289/:293, router.begin() at ~:334) — every pinsConflict()/claimPins()
+// refusal printed in that window goes to msg.control with nowhere to
+// deliver it and is silently discarded. That is exactly the "loser is
+// always reported, never a silent drop" rule (ARCHITECTURE.md §12.4)
+// failing during the one window that most needs it: a stale wiring.ini vs.
+// EEPROM mismatch presents as a feature that just doesn't work.
+//
+// Mirrors systemConfig.cpp's bootDiag buffer for the same reason: no
+// strings are copied, only stable pointers (owner/holder descriptions are
+// always string literals or getI2CBusName()-style flash constants that
+// outlive the call — pin_registry.h documents this for the registry itself)
+// plus a few scalar/enum bytes. Capacity is fixed and board-tunable via
+// PIN_OWNER_BOOT_DIAG_CAPACITY (define in board.h to override the default);
+// overflow past capacity is counted, not dropped silently — the flush says
+// "+N more".
+bool pinOwnerBootDiagBuffering();
+
+/**
+ * Emit every buffered boot-time pin-conflict diagnostic, then stop
+ * buffering — every claim after this point prints immediately, same as
+ * before this feature existed. Call once, right after router.begin()
+ * (main.cpp, beside flushSystemConfigBootDiagnostics()). Idempotent: a
+ * second call finds nothing buffered and emits nothing.
+ */
+void flushPinOwnerBootDiagnostics();
+
 /**
  * Would `owner`, claiming at `rank`, conflict with anything already holding
  * these pins?

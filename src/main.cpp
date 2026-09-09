@@ -340,6 +340,12 @@ void setup() {
 #endif
     router.begin();  // Load config from EEPROM
     flushSystemConfigBootDiagnostics();
+    // Every pin claim made above — registerSystemPins() (:289) and
+    // initConfiguredSerialPorts() (:293) both run before router.begin() has a
+    // transport — buffered its refusal, if any, instead of printing to a
+    // router with nowhere to send it (#396). Replay now that a transport
+    // exists; every claim after this point prints immediately, as before.
+    flushPinOwnerBootDiagnostics();
     // INVARIANT: every broadcaster's init() below runs BEFORE initInputManager()
     // (further down this function) sentinel-fills and loads inputs[], and
     // before the control tables (rules[]/actions[]) are loaded with them.

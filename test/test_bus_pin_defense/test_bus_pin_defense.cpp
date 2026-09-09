@@ -83,6 +83,13 @@ void setUp(void) {
     setPinOwnerInputProbe(nullptr);
     setPinOwnerBusProbe(storedBusHoldsPin);
     g_capture.reset();
+    // #396: this TU #includes pin_owner.cpp directly, so its boot-diagnostics
+    // buffer statics are visible here too. Default to "not buffering" so the
+    // existing g_capture wording assertions below (written pre-#396) keep
+    // seeing output immediately, same as test_pin_reserve.cpp.
+    bootDiagCount = 0;
+    bootDiagOverflow = 0;
+    bootDiagBuffering = false;
     systemConfig.buses.active_i2c = 0xFF;
     systemConfig.buses.i2c_clock = 400;
     systemConfig.buses.active_spi = 0xFF;
