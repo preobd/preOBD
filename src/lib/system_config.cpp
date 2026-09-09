@@ -9,6 +9,7 @@
 #include "bus_defaults.h"
 #include "bus_wiring.h"
 #include "bus_manager.h"   // getI2CBusName()/getSPIBusName() — Tier-1 wired-bus reservation (#379)
+#include "bus_needs.h"     // BUS_NEED_I2C/BUS_NEED_SPI — Tier-1 gated on the stored vote (#394)
 #include "message_api.h"
 #include "log_tags.h"
 #include "pin_registry.h"
@@ -332,7 +333,7 @@ static void reportBuiltinPinCollision(const __FlashStringHelper* what) {
  * Register system pins in the pin registry
  * This reserves these pins and makes them visible in the registry export
  */
-void registerSystemPins() {
+void registerSystemPins(uint8_t busNeeds) {
 #if INCLUDE_MODE_BUTTON
     { const uint8_t p = MODE_BUTTON_PIN;
       if (!claimPins(&p, 1, PIN_BUTTON, PIN_RANK_BUILTIN, TAG_SYSTEM, "Mode Button"))
@@ -379,8 +380,8 @@ void registerSystemPins() {
     #endif
 #endif
 
-    // ---- #379 Tier 1: a *_WIRED_BUS declaration, but ONLY when it is the
-    // bus actually in effect --------------------------------------------
+    // ---- #379/#394 Tier 1: a *_WIRED_BUS declaration, but ONLY when it is
+    // the bus actually in effect AND the stored configuration needs it ------
     //
     // #377's ladder: an explicit stored `BUS I2C/SPI <n>` selection always
     // wins; a *_WIRED_BUS declaration is a FALLBACK, consulted only when
@@ -398,20 +399,31 @@ void registerSystemPins() {
     // initConfiguredBuses(), as before — and is defended against everything
     // in between by storedBusHoldsPin() (#379's other half, pin_owner.cpp).
     //
+    // #394: "in effect" alone is not enough — acquireRequiredBuses() only
+    // STARTS a bus something votes for (a stored input's sensor requirement,
+    // or the display, #358), so a declared-but-in-effect bus that nothing
+    // needs never comes up, and reserving its pins here anyway drops any
+    // stored input sitting on that copper for a bus that never runs. `busNeeds`
+    // is the SAME vote (main.cpp computes it once, before this call, and
+    // reuses it at acquireRequiredBuses() — the two must never disagree), so
+    // the reservation now requires both: declaration in effect AND needed.
+    //
     // Description strings MUST match what initI2CBus()/initSPIBus() claim
     // under (bus_manager.cpp) byte for byte: getI2CBusName()/getSPIBusName()
     // are the single shared source for both call sites, specifically so this
     // reservation and that later claim can never drift apart — a mismatch
     // here would make the bus refuse to start against its own reservation.
 #if BUS_WIRED_I2C_ID != 0xFF
-    if (wiredBusIsInEffect(systemConfig.buses.active_i2c, BUS_WIRED_I2C_ID)) {
+    if ((busNeeds & BUS_NEED_I2C) &&
+        wiredBusIsInEffect(systemConfig.buses.active_i2c, BUS_WIRED_I2C_ID)) {
         const uint8_t p[2] = { getDefaultI2CSDA(BUS_WIRED_I2C_ID), getDefaultI2CSCL(BUS_WIRED_I2C_ID) };
         if (!claimPins(p, 2, PIN_RESERVED, PIN_RANK_BUILTIN, TAG_SYSTEM, getI2CBusName(BUS_WIRED_I2C_ID)))
             reportBuiltinPinCollision(F("I2C_WIRED_BUS"));
     }
 #endif
 #if BUS_WIRED_SPI_ID != 0xFF
-    if (wiredBusIsInEffect(systemConfig.buses.active_spi, BUS_WIRED_SPI_ID)) {
+    if ((busNeeds & BUS_NEED_SPI) &&
+        wiredBusIsInEffect(systemConfig.buses.active_spi, BUS_WIRED_SPI_ID)) {
         const uint8_t p[3] = { getDefaultSPIMOSI(BUS_WIRED_SPI_ID), getDefaultSPIMISO(BUS_WIRED_SPI_ID),
                                getDefaultSPISCK(BUS_WIRED_SPI_ID) };
         if (!claimPins(p, 3, PIN_RESERVED, PIN_RANK_BUILTIN, TAG_SYSTEM, getSPIBusName(BUS_WIRED_SPI_ID)))

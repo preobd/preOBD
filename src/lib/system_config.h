@@ -155,6 +155,10 @@ bool loadSystemConfig();         // Load from EEPROM
 void resetSystemConfig();        // Reset to defaults
 uint8_t calculateChecksum(SystemConfig* cfg);
 void printSystemStatus();
-void registerSystemPins();       // Register system pins in pin registry
+// busNeeds: the stored configuration's bus vote (BUS_NEED_I2C/BUS_NEED_SPI,
+// see bus_needs.h), computed by main.cpp BEFORE this call and reused later at
+// acquireRequiredBuses() — gates the Tier-1 *_WIRED_BUS reservation on the
+// bus actually being needed, not just declared (#394).
+void registerSystemPins(uint8_t busNeeds);   // Register system pins in pin registry
 
 #endif // SYSTEM_CONFIG_H

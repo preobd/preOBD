@@ -264,11 +264,29 @@ void setup() {
     setPinOwnerInputProbe(inputHoldsPin);
     setPinOwnerBusProbe(storedBusHoldsPin);
 
+    // ---- Bus need vote, computed here so registerSystemPins() (next) can
+    // gate its Tier-1 *_WIRED_BUS reservation on it (#394) --------------------
+    //
+    // Both voters are already available this early: storedInputBusNeeds()
+    // reads the EEPROM records directly (it is explicitly written to run
+    // before inputs[] is populated — see its comment in input_manager.cpp),
+    // and systemConfig.displayType was loaded by initSystemConfig() above.
+    // acquireRequiredBuses() at the bottom of this function reuses this same
+    // value rather than recomputing it — the vote must not change between the
+    // two call sites.
+    uint8_t busNeeds = storedInputBusNeeds();
+    #if INCLUDE_LCD
+    // The display votes only where its driver is in the image: a displayType
+    // carried over from another board can't be served by a firmware that has no
+    // LCD code, and must not hold that board's SDA/SCL hostage.
+    busNeeds |= busNeedsForDisplayType(systemConfig.displayType);
+    #endif
+
     // Register system pins in the pin registry. Includes the Tier-1 wired-bus
-    // reservation (#379) when a *_WIRED_BUS declaration is in effect — see its
-    // comment in system_config.cpp for why that's conditional on there being
-    // no explicit BUS selection.
-    registerSystemPins();
+    // reservation (#379) when a *_WIRED_BUS declaration is in effect AND the
+    // stored configuration actually needs that bus (#394) — see the comment
+    // in system_config.cpp for why both conditions are required.
+    registerSystemPins(busNeeds);
 
     // Initialize configured serial ports based on SystemConfig.serial
     // This replaces the old hardcoded Serial1.begin() / Serial2.begin() calls
@@ -372,14 +390,11 @@ void setup() {
     // the point: SDA/SCL are reserved before any stored pin is validated, so the
     // outcome cannot depend on which client initializes first, or in what order
     // the records happen to sit in EEPROM.
+    //
+    // busNeeds was already computed above, before registerSystemPins() (#394) —
+    // reused here rather than recomputed so the two call sites can never see a
+    // different vote.
     initConfiguredBuses();
-    uint8_t busNeeds = storedInputBusNeeds();
-    #if INCLUDE_LCD
-    // The display votes only where its driver is in the image: a displayType
-    // carried over from another board can't be served by a firmware that has no
-    // LCD code, and must not hold that board's SDA/SCL hostage.
-    busNeeds |= busNeedsForDisplayType(systemConfig.displayType);
-    #endif
     acquireRequiredBuses(busNeeds);
 
     // storedInputBusNeeds() is not wasted work now that #377 removed the
