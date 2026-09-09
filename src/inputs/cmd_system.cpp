@@ -12,6 +12,7 @@
 #include "serial_config.h"
 #include "../version.h"
 #include "../lib/system_mode.h"
+#include "../lib/bus_pin_roles.h"   // busPinRole() for the DIAG PINS sweep (#304)
 #include "../lib/system_config.h"
 #include "../lib/json_config.h"
 #include "../lib/message_router.h"
@@ -947,7 +948,20 @@ static FLASHMEM void diagSectionPins() {
             msg.control.print(F("  jitter "));
             msg.control.print(jitter);
         }
-        msg.control.println(F(")"));
+        msg.control.print(F(")"));
+
+        // This pin is PIN_UNUSED by construction (branch 2 above already
+        // returned otherwise), so no bus currently holds it — but it may
+        // still be a platform's hard-wired I2C/SPI/CAN pin that simply has
+        // no active bus right now (never selected, or selected but not yet
+        // started). Say what the pin IS, not why it reads this way: #304.
+        const __FlashStringHelper* role = busPinRole(pin);
+        if (role) {
+            msg.control.print(F("  ["));
+            msg.control.print(role);
+            msg.control.print(F(" - bus not active]"));
+        }
+        msg.control.println();
     }
 }
 
@@ -991,6 +1005,13 @@ static FLASHMEM void diagSectionPinsJson(Print& out) {
         obj["raw"]     = last;
         obj["voltage"] = (float)last * AREF_VOLTAGE / (float)ADC_MAX_VALUE;
         obj["jitter"]  = jitter;
+        // Additive, optional field for clients: this platform's hard-wired
+        // bus role for the pin, if any, regardless of whether that bus is
+        // currently running. Omitted (not null) when there is no role.
+        const __FlashStringHelper* role = busPinRole(pin);
+        if (role) {
+            obj["busRole"] = role;
+        }
     }
     WatchdogKickingPrint wdOut(out);
     serializeJson(doc, wdOut);
