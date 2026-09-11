@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0-beta] - 2026-09-11
+
 ### Added
 - `SYSTEM DIAG PINS` (and its JSON twin) now annotates an unclaimed platform-default I2C/SPI/CAN pin with its hardware role, so e.g. a Teensy's A4/A5 reading "pulled high" with no bus running shows as the I2C SDA/SCL pull-ups instead of a mystery reading (#304)
 - BLE: the Action state frame now reports whether a member Rule is demanding the output, so a client can tell an operator force that is countermanding a live demand (a fan the rules want on, forced off) from one holding against nothing — previously only Warning/Alarm rules were visible to clients, hiding exactly the notify-free control rules that drive fans and shift lights (#348)
