@@ -132,6 +132,41 @@ extern void updateOutputs();
 // Declare display functions
 extern void initLCD();
 extern void updateLCD(Input**, int);
+#if INCLUDE_LCD
+extern void clearLCD();
+#endif
+
+// System-mode observer (registered with setSystemModeObserver() below): the
+// composition root's LCD/LED reaction to a CONFIG/RUN transition. Moved here
+// from core/system_mode.cpp (#411) so core/ stays free of outputs/ and
+// drivers/ dependencies -- core/ only announces the transition.
+void onSystemModeChange(SystemMode oldMode, SystemMode newMode) {
+    if (newMode == MODE_CONFIG) {
+        #if INCLUDE_LCD
+        // Clear LCD (message will be shown by loop if no sensors)
+        clearLCD();
+        #endif
+
+        #if INCLUDE_LED
+        // Set LED to CONFIG mode color (pulse or solid)
+#if RGB_CONFIG_USE_PULSE
+        rgbLedPulse(RGB_COLOR_CONFIG, RGB_PULSE_PERIOD_MS, PRIORITY_MODE);
+#else
+        rgbLedSolid(RGB_COLOR_CONFIG, PRIORITY_MODE);
+#endif
+        #endif
+    } else {
+        #if INCLUDE_LCD
+        // Clear LCD when entering RUN mode (sensors will update it)
+        clearLCD();
+        #endif
+
+        #if INCLUDE_LED
+        // Release CONFIG mode LED control, allow alarm system to take over
+        rgbLedRelease(PRIORITY_MODE);
+        #endif
+    }
+}
 
 // Alarm logic module
 
@@ -545,7 +580,11 @@ void setup() {
     rulesSyncActionPins();
 #endif
 
-    // Initialize system mode and detect boot mode
+    // Initialize system mode and detect boot mode.
+    // setSystemModeObserver() MUST run before the first setMode() call below
+    // (the boot-time transition) -- registering later finds no observer and
+    // silently drops the LCD clear / LED colour for that transition (#411).
+    setSystemModeObserver(onSystemModeChange);
     initSystemMode();
     SystemMode bootMode = detectBootMode(eepromConfigLoaded);
     setMode(bootMode);

@@ -3,22 +3,20 @@
  */
 
 #include "system_mode.h"
-#include "../config.h"
 #include "watchdog.h"
 #include "message_api.h"
 #include "log_tags.h"
 
-#if INCLUDE_LCD
-extern void showConfigModeMessage();
-extern void clearLCD();
-#endif
-
-#if INCLUDE_LED
-#include "../drivers/rgb_led.h"
-#endif
-
 // Current system mode
 static SystemMode currentMode = MODE_RUN;
+
+// Mode-transition observer, registered by the composition root (main.cpp).
+// See system_mode.h for the contract.
+static SystemModeObserver modeObserver = nullptr;
+
+void setSystemModeObserver(SystemModeObserver observer) {
+    modeObserver = observer;
+}
 
 // Timing constants
 #define BOOT_DETECT_DELAY_MS 10  // Stabilization delay for boot detection
@@ -57,21 +55,6 @@ void setMode(SystemMode newMode) {
             msg.control.println(F("  Watchdog disabled"));
             msg.control.println(F("  Type RUN to resume normal operation"));
             msg.control.println(F("========================================"));
-
-            #if INCLUDE_LCD
-            // Clear LCD (message will be shown by loop if no sensors)
-            extern void clearLCD();
-            clearLCD();
-            #endif
-
-            #if INCLUDE_LED
-            // Set LED to CONFIG mode color (pulse or solid)
-#if RGB_CONFIG_USE_PULSE
-            rgbLedPulse(RGB_COLOR_CONFIG, RGB_PULSE_PERIOD_MS, PRIORITY_MODE);
-#else
-            rgbLedSolid(RGB_COLOR_CONFIG, PRIORITY_MODE);
-#endif
-            #endif
         } else {
             // Enable watchdog when entering RUN mode
             watchdogEnable(2000);
@@ -82,17 +65,12 @@ void setMode(SystemMode newMode) {
             msg.control.println(F("  Watchdog enabled (2s timeout)"));
             msg.control.println(F("  Type CONFIG to modify configuration"));
             msg.control.println(F("========================================"));
-
-            #if INCLUDE_LCD
-            // Clear LCD when entering RUN mode (sensors will update it)
-            clearLCD();
-            #endif
-
-            #if INCLUDE_LED
-            // Release CONFIG mode LED control, allow alarm system to take over
-            rgbLedRelease(PRIORITY_MODE);
-            #endif
         }
+
+        if (modeObserver) {
+            modeObserver(oldMode, newMode);
+        }
+
         msg.control.println();
     }
 }

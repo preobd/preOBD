@@ -38,26 +38,24 @@ pinctrl -> inputs   # PERMANENT -- ARCHITECTURE.md §12.2: PinOwnerInputProbe ex
 
 # ---------------------------------------------------------------------------
 # RATCHET TARGETS -- #401's stated property for core/ is "core/ includes
-# nothing but <Arduino.h> and hal/". These four pairs are the measured gap
-# against that property today. Unlike the rest of this file, these are not
-# blessed as fine -- they are the named to-do list for shrinking core/'s
-# footprint. Each is a single, specific site (or extern symbol), not a
-# diffuse coupling, which is what makes it tractable to remove one at a time.
+# nothing but <Arduino.h> and hal/". This pair is the measured gap
+# against that property today. Unlike the rest of this file, it is not
+# blessed as fine -- it is the named to-do list for shrinking core/'s
+# footprint. It is a single, specific site, not a diffuse coupling, which is
+# what makes it tractable to remove.
+#
+# (core -> (root), core -> drivers and core -> outputs were the other three
+# #401 core/ ratchet targets; all three originated in
+# src/core/system_mode.cpp and were removed in #411's first fix: the LCD
+# clear + LED pulse/solid/release moved to main.cpp behind a
+# SystemModeObserver function pointer registered from setup(), and the
+# config.h include was dropped as unneeded once that code left.)
 # ---------------------------------------------------------------------------
 
-core -> (root)  # RATCHET TARGET -- #401, tracked in #411. src/core/system_mode.cpp:6 includes
-                # "../config.h" (application constants, not a hal/ concern).
 core -> comms   # RATCHET TARGET -- #401, tracked in #411. src/core/message_api.h:33 and
                 # src/core/log_filter.cpp:6 both include comms/message_router.h;
                 # the control-plane message API reaches into the transport layer
                 # it should only be consumed by.
-core -> drivers # RATCHET TARGET -- #401, tracked in #411. src/core/system_mode.cpp:17 includes
-                # drivers/rgb_led.h to drive the status LED from a mode transition.
-core -> outputs # RATCHET TARGET -- #401, tracked in #411. Extern-only, invisible to include-graph
-                # analysis: src/core/system_mode.cpp:12-13 declares
-                # `extern void showConfigModeMessage();` / `extern void clearLCD();`,
-                # both defined in src/outputs/display/display_lcd.cpp. This is the
-                # motivating example for why check_layering.py parses externs at all.
 
 # ---------------------------------------------------------------------------
 # Structural -- everything else measured against `main` at 8510ea7. None of

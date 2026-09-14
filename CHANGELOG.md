@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tools/check_layering.py` reports `src/`'s cross-directory `#include` and `extern` dependency edges against a tracked, cited exceptions ratchet (`tools/layering_exceptions.txt`), wired into a now-tracked `.githooks/pre-commit` (#401)
 
 ### Changed
+- `core/system_mode.cpp` no longer drives the LCD or RGB LED directly on a CONFIG/RUN transition; it now notifies a `SystemModeObserver` registered by `main.cpp`, removing the `core/` -> `outputs/`, `core/` -> `drivers/`, and `core/` -> `(root)` dependencies with no behaviour change (#411)
 - `hal/bus_defaults.h` no longer includes `core/platform.h`, removing the `hal/` -> `core/` dependency that ran opposite to `core/watchdog.cpp`'s dependency on `hal/` (#411)
 - Sensor tables, calibration data, and the driver implementations moved from `src/lib/` and `src/inputs/` into a new `src/sensors/` directory (pure move, no behaviour change) (#401)
 - `SENSOR_LIBRARY`/`APPLICATION_PRESETS`/`UNITS_REGISTRY` and their calibration/string data now live in one `.cpp` each instead of being redefined by every including header, recovering ~11 KB of flash on mega2560 and ~76 KB on teensy41 that duplicate PROGMEM copies were wasting (#400)
