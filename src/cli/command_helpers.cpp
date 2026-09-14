@@ -56,15 +56,6 @@ bool spiBusPinsConflict(uint8_t bus_id) {
     return pinsConflict(pins, 3, PIN_RANK_BUS, getSPIBusName(bus_id));
 }
 
-Input* requireInput(uint8_t pin) {
-    Input* input = getInputByPin(pin);
-    if (!input) {
-        msg.control.println(F("ERROR: Input not configured"));
-        msg.control.println(F("  Hint: INFO <pin> to inspect, or SET <pin> SENSOR <name> to configure"));
-    }
-    return input;
-}
-
 void printSaveReminder() {
     msg.control.println(F("  (use SAVE to persist)"));
 }

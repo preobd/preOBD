@@ -64,7 +64,7 @@ uint8_t rulesSweepActionRules() { return 0; }
 #endif
 
 int8_t analogIndexForPin(uint8_t) { return -1; }
-Input* requireInput(uint8_t pin) { return getInputByPin(pin); }
+// requireInput() now comes from the amalgamated input_manager.cpp (#411).
 bool i2cBusPinsConflict(uint8_t) { return false; }
 
 // Sensor read/init entry points referenced by SENSOR_LIBRARY[] as data.

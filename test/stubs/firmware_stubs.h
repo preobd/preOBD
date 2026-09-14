@@ -47,7 +47,9 @@ bool pinsConflict(const uint8_t* pins, uint8_t count, uint8_t /*rank*/, const ch
 }
 int8_t analogIndexForPin(uint8_t) { return -1; }
 
-Input* requireInput(uint8_t pin) { return getInputByPin(pin); }
+// requireInput() is no longer stubbed: it moved into input_manager.cpp (#411),
+// which every TU including this header already amalgamates, so the tests now
+// exercise the real implementation (error prints included).
 
 // setInputSensor() (#377) checks getActive{I2C,SPI}() and, if a needed bus is
 // down, calls reportNo{I2C,SPI}Bus() to print guidance. Neither test here

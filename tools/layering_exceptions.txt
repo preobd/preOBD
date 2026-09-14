@@ -118,9 +118,6 @@ drivers -> storage   # #401 -- bus_manager reads system_config for bus selection
 hal -> (root)        # #401 -- hal_can.h / can_mcp2515.h read config.h (SPI CAN pin
                      # constants, per CLAUDE.md's CAN Controller Abstraction section).
 inputs -> (root)     # #401 -- input_manager reads config.h (MAX_INPUTS etc).
-inputs -> cli        # #401, tracked in #411 -- input_manager.cpp includes a cli/ header (presentation
-                     # reached from the model it presents); worth checking whether
-                     # this is a real inversion or a thin formatting-only include.
 inputs -> comms      # #401 -- input CAN import touches the transport layer.
 inputs -> core       # #401 -- input_manager uses core/message_api and logging.
 inputs -> drivers    # #401 -- input_manager touches bus_manager for sensor buses.

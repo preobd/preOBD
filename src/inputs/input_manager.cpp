@@ -7,7 +7,6 @@
  #include "../config.h"
 #include "input_manager.h"
 #include "../storage/input_store.h"    // inputStoreSetProbeExclusion (#402 step 2)
-#include "../cli/command_helpers.h"
 #include "measurement_compat.h"
 #include "../storage/system_config.h"  // OUTPUT_MASK_ALL_DATA / OutputId enum
 #include "../pinctrl/analog_pins.h"
@@ -97,6 +96,15 @@ Input* getInputByPin(uint8_t pin) {
         }
     }
     return nullptr;
+}
+
+Input* requireInput(uint8_t pin) {
+    Input* input = getInputByPin(pin);
+    if (!input) {
+        msg.control.println(F("ERROR: Input not configured"));
+        msg.control.println(F("  Hint: INFO <pin> to inspect, or SET <pin> SENSOR <name> to configure"));
+    }
+    return input;
 }
 
 /**

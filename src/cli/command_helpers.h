@@ -17,11 +17,9 @@ enum TransportID;
 // Forward declaration to avoid pulling input.h into every command_helpers consumer.
 struct Input;
 
-// Look up an Input by pin; if absent, print the standard
-// "ERROR: Input not configured" message on the control plane and return nullptr.
-// Replaces the recurring getInputByPin + null-check + error-print boilerplate
-// at every pin-scoped command leaf.
-Input* requireInput(uint8_t pin);
+// requireInput() moved to inputs/input_manager.h (#411): the Input model owns
+// "look up by pin, complain if absent", and input_manager.cpp needs it too --
+// declaring it here made inputs/ depend upward on cli/.
 
 // Standard success-message printers for pin-scoped SET / BUS leaves. Each
 // emits "Input <pinArg> <field> set to <value>" (or the enable/disable shape

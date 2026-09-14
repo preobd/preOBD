@@ -100,6 +100,12 @@ bool clearInputCalibration(uint8_t pin);
 
 // ===== HELPER FUNCTIONS =====
 Input* getInputByPin(uint8_t pin);   // Find input by pin number
+
+// Look up an Input by pin; if absent, print the standard "ERROR: Input not
+// configured" message on the control plane and return nullptr. Used by every
+// pin-scoped CLI leaf and by setInputSensor() here, which is why it lives with
+// the Input model rather than in cli/ (#411).
+Input* requireInput(uint8_t pin);
 Input* getInputByIndex(uint8_t index); // Get input by array index
 uint8_t getInputIndex(uint8_t pin);  // Get array index for pin
 
