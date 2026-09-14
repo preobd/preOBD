@@ -29,6 +29,11 @@ extern uint8_t numActiveInputs;
 // broadcaster init() block in main.cpp).
 bool inputsTableIsLiveForAssert();
 
+// Production accessor for the same flag — used by storage/input_store.cpp's
+// inputHoldsPin() (§12.2 source 2), which is a real runtime dispatch, not a
+// debug assert, so it does not go through the guard above (#402 step 2).
+bool inputManagerTableIsLive();
+
 // Debug-build-only guard for a consumer that reads inputs[]/rules[]/actions[]
 // directly (bypassing the accessor functions below). Fires only in the DEBUG
 // build env (-D DEBUG, see boards/teensy41/board.ini) and the native test
@@ -98,23 +103,11 @@ Input* getInputByPin(uint8_t pin);   // Find input by pin number
 Input* getInputByIndex(uint8_t index); // Get input by array index
 uint8_t getInputIndex(uint8_t pin);  // Get array index for pin
 
-// ===== BUS REQUIREMENTS (see lib/bus_needs.h) =====
-// The inputs layer's two contributions to bus ownership, both consumed by the
-// bus layer without it ever including an inputs header:
-//
-//   storedInputBusNeeds() — a read-only pre-scan of the stored records, run at
-//     boot BEFORE loadInputConfig() and initLCD() so the buses those records
-//     need are up (and their pins reserved) before anything is validated (#358).
-//   inputHoldsPin() — registered via setPinOwnerInputProbe() so every pin
-//     claim can see configured inputs, which deliberately never enter the pin
-//     registry (mega2560 has no RAM for them).
-uint8_t storedInputBusNeeds();
-bool inputHoldsPin(uint8_t pin);
-
-// ===== PERSISTENCE =====
-bool saveInputConfig();               // Save all inputs to EEPROM
-bool loadInputConfig();               // Load all inputs from EEPROM
-void resetInputConfig();              // Clear all inputs and EEPROM
+// ===== BUS REQUIREMENTS / PERSISTENCE =====
+// storedInputBusNeeds(), inputHoldsPin(), saveInputConfig(), loadInputConfig()
+// and resetInputConfig() moved to storage/input_store.h in #402 step 2 — the
+// shared EEPROM config-store arena is a storage-format concern, not part of
+// the Input model. Include "../storage/input_store.h" for those.
 
 // ===== RUNTIME =====
 void readAllInputs();                 // Read all enabled inputs

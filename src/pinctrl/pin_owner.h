@@ -79,7 +79,7 @@ void setPinOwnerInputProbe(PinOwnerInputProbe probe);
 // there". The probe implementation is the one place with enough information
 // (which INPUT is `self`, not just which pin) to exclude correctly, so
 // self-exclusion is the input layer's own problem, entirely behind
-// PinOwnerInputProbe — see inputHoldsPin()'s exclusion in input_manager.cpp.
+// PinOwnerInputProbe — see inputHoldsPin()'s exclusion in storage/input_store.cpp.
 // This module stays free of that identity; it only ever asks "is this pin
 // held", by pin.
 

@@ -219,7 +219,7 @@ struct ActionLink {
 // The persisted Rule/Action tables are standalone RAM globals (defined in
 // rules_manager.cpp), mirroring Input inputs[] — NOT members of SystemConfig.
 // Persistence is handled by the shared EEPROM config-store arena in
-// input_manager.cpp (saveInputConfig/loadInputConfig), which packs inputs, rules
+// storage/input_store.cpp (saveInputConfig/loadInputConfig), which packs inputs, rules
 // and actions into one front-growing region. Declared here so every translation
 // unit that sees the record types can reach the tables without pulling in
 // rules_manager.h (e.g. pin_registry.cpp, which only has system_config.h).

@@ -26,6 +26,7 @@
 #include "storage/sd_manager.h"
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
+#include "storage/input_store.h"  // saveInputConfig/loadInputConfig/inputHoldsPin/storedInputBusNeeds (#402 step 2)
 #include "cli/serial_config.h"
 #include "rules/rules_manager.h"   // Control engine runtime (Rules)
 #include "core/system_mode.h"        // System mode (CONFIG/RUN)

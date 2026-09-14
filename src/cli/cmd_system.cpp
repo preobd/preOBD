@@ -8,6 +8,7 @@
 #include "command_table.h"
 #include "command_helpers.h"
 #include "../inputs/input_manager.h"
+#include "../storage/input_store.h"  // resetInputConfig (#402 step 2)
 #include "input_display.h"
 #include "../inputs/input.h"
 #include "serial_config.h"
