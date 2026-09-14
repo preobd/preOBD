@@ -6,7 +6,7 @@
 #include "../core/message_api.h"
 #include "../storage/system_config.h"
 #include "../drivers/serial_manager.h"
-#include "../cli/serial_config.h"
+#include "../cli/serial_config.h"   // processSerialCommands(), handleCommandInput() -- see #418
 #include <string.h>
 
 // Global router instance
@@ -314,13 +314,10 @@ void MessageRouter::listTransports() {
 }
 
 void MessageRouter::update() {
-#if SUPPORTS_JSON_IMPORT_STREAM
-    // Unconditional every tick — a JSON IMPORT abandoned mid-paste (or an
-    // uncleanly dropped link) would otherwise hold its malloc'd buffer
-    // forever, since processIncomingCommands() below only runs when a
-    // transport actually has bytes available().
-    serialConfig_checkJsonImportIdle();
-#endif
+    // NOTE: the JSON-import idle sweep used to run here, first thing every
+    // tick. It is periodic work that needs a heartbeat, not routing -- it
+    // lived here only because the router happens to tick. Moved to loop()
+    // in main.cpp, which owns periodic work (#418).
 
     // Poll all transports for housekeeping
     for (int i = 0; i < NUM_TRANSPORTS; i++) {

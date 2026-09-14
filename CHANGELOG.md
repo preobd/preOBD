@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tools/check_layering.py` reports `src/`'s cross-directory `#include` and `extern` dependency edges against a tracked, cited exceptions ratchet (`tools/layering_exceptions.txt`), wired into a now-tracked `.githooks/pre-commit` (#401)
 
 ### Changed
+- The JSON-import idle sweep runs from the main loop instead of from inside `MessageRouter::update()`, where it was periodic work misfiled as routing (#418)
 - `comms/transport_mux.cpp` no longer includes the BLE action/live-value broadcasters it multiplexes; it now dispatches inbound frames through a registration table wired up by `main.cpp`, with no behaviour change (#411)
 - `requireInput()` moved from `cli/command_helpers` into `inputs/input_manager`, so the Input model no longer depends on the command layer (#411)
 - `core/system_mode.cpp` no longer drives the LCD or RGB LED directly on a CONFIG/RUN transition; it now notifies a `SystemModeObserver` registered by `main.cpp`, removing the `core/` -> `outputs/`, `core/` -> `drivers/`, and `core/` -> `(root)` dependencies with no behaviour change (#411)

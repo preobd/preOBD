@@ -637,6 +637,17 @@ void loop() {
     // Reset watchdog at start of every loop iteration
     watchdogReset();
 
+#if SUPPORTS_JSON_IMPORT_STREAM
+    // Unconditional every tick — a JSON IMPORT abandoned mid-paste (or an
+    // uncleanly dropped link) would otherwise hold its malloc'd buffer
+    // forever, since the router's processIncomingCommands() only runs when a
+    // transport actually has bytes available(). Ran inside MessageRouter::update()
+    // until #418: it needs a heartbeat, not a router, and keeping it there made
+    // comms/ depend upward on cli/. Stays immediately before router.update() so
+    // the tick order is unchanged.
+    serialConfig_checkJsonImportIdle();
+#endif
+
     // Update transport router (poll transports, handle housekeeping, process commands)
     router.update();  // Now handles command input from ALL transports
 
