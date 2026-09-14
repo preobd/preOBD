@@ -7,8 +7,8 @@
 #include "command_handlers.h"
 #include "command_table.h"
 #include "command_helpers.h"
-#include "input_manager.h"
-#include "input.h"
+#include "../inputs/input_manager.h"
+#include "../inputs/input.h"
 #include "serial_config.h"
 #include "../version.h"
 #include "../lib/system_mode.h"
@@ -39,7 +39,7 @@
 #include "../test/test_mode.h"
 #endif
 #if INCLUDE_CAN
-#include "sensors/can/can_scan.h"
+#include "../inputs/sensors/can/can_scan.h"
 #include "../lib/can_sensor_library/standard_pids.h"
 #endif
 #include <string.h>

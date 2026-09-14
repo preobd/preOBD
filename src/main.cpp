@@ -26,7 +26,7 @@
 #include "lib/sd_manager.h"
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
-#include "inputs/serial_config.h"
+#include "cli/serial_config.h"
 #include "control/control_manager.h"   // Control engine runtime (Rules)
 #include "lib/system_mode.h"        // System mode (CONFIG/RUN)
 #if INCLUDE_MODE_BUTTON

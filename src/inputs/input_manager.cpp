@@ -8,7 +8,7 @@
  #include "../config.h"
 #include "../version.h"
 #include "input_manager.h"
-#include "command_helpers.h"
+#include "../cli/command_helpers.h"
 #include "measurement_compat.h"
 #include "../lib/system_config.h"
 #include "../lib/analog_pins.h"

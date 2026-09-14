@@ -453,7 +453,7 @@ if (systemObj["display"].isNull() == false) {
 ```
 
 #### 6. Add Serial Command (Optional)
-**File:** `src/inputs/serial_config.cpp`
+**File:** `src/cli/serial_config.cpp`
 ```cpp
 if (streq(cmd, "DISPLAY") && secondToken) {
     if (streq(secondToken, "BRIGHTNESS")) {

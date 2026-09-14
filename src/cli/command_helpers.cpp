@@ -20,8 +20,8 @@
 #include "../lib/bus_defaults.h"
 #include "../lib/pin_registry.h"
 #include "../lib/pin_owner.h"
-#include "input.h"  // For Input struct definition
-#include "input_manager.h"  // For inputs[] array access
+#include "../inputs/input.h"  // For Input struct definition
+#include "../inputs/input_manager.h"  // For inputs[] array access
 #include <string.h>
 #include <ctype.h>
 

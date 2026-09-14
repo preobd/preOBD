@@ -24,7 +24,7 @@
 
 #include "command_handlers.h"
 #include "command_helpers.h"
-#include "input_manager.h"
+#include "../inputs/input_manager.h"
 #include "../lib/system_mode.h"
 #include "../lib/system_config.h"
 #include "../lib/message_api.h"

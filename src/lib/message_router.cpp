@@ -6,7 +6,7 @@
 #include "message_api.h"
 #include "system_config.h"
 #include "serial_manager.h"
-#include "../inputs/serial_config.h"
+#include "../cli/serial_config.h"
 #include <string.h>
 
 // Global router instance
