@@ -1,0 +1,61 @@
+#!/bin/bash
+# preOBD pre-commit hook -- registry regeneration + src/ layering guard
+#
+# Tracked at .githooks/pre-commit (see #401 slice 5). A fresh clone or
+# worktree needs `git config core.hooksPath .githooks` -- git does not set
+# this automatically; see CLAUDE.md.
+
+# Definitions moved from the headers into these .cpp files in #400 (one copy
+# instead of one per translation unit). Both spellings are watched: the .cpp
+# files now carry the DATA, the headers still carry the extern declarations.
+REGISTRY_FILES="src/sensors/(sensor_library|application_presets|units_registry)\.(h|cpp)"
+GENERATED_ENUM="src/sensors/generated/registry_enums.h"
+
+# Check if registry files changed
+if git diff --cached --name-only | grep -qE "$REGISTRY_FILES"; then
+    echo "📝 Registry files changed, regenerating enums..."
+
+    # Regenerate enum header
+    python3 tools/generate_registry_enums.py
+
+    if [ $? -ne 0 ]; then
+        echo "❌ Enum generation failed!"
+        exit 1
+    fi
+
+    # Add generated file to commit
+    git add "$GENERATED_ENUM"
+    echo "✓ Enums regenerated and staged"
+
+    # Validate registries
+    echo "🔍 Validating registries..."
+    python3 tools/validate_registries.py --project-dir . --ci
+
+    if [ $? -ne 0 ]; then
+        echo ""
+        echo "❌ Registry validation failed!"
+        echo "Please fix the errors above before committing."
+        exit 1
+    fi
+
+    echo "✓ Registry validation passed"
+fi
+
+# Layering guard (#401 slice 5): reports on the src/ dependency structure
+# and fails only on an edge not already recorded in
+# tools/layering_exceptions.txt (a ratchet, not a wall).
+echo "🔍 Checking src/ layering..."
+python3 tools/check_layering.py --quiet
+
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "❌ Layering check failed!"
+    echo "A new cross-directory dependency was introduced that isn't listed"
+    echo "in tools/layering_exceptions.txt. Either fix the dependency, or if"
+    echo "it's a deliberate, reviewed addition, add a cited line to that file."
+    exit 1
+fi
+
+echo "✓ Layering check passed"
+
+exit 0

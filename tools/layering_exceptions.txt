@@ -1,0 +1,203 @@
+# layering_exceptions.txt -- the current cross-directory dependency graph
+# under src/, as measured by tools/check_layering.py on 2026-09-12 (#401
+# slice 5), against `main` at 8510ea7.
+#
+# THIS IS A RATCHET, NOT A WALL. Every line below names a directory-pair
+# edge (FROM -> TO, both top-level names under src/, "(root)" meaning a
+# file directly in src/ such as main.cpp or config.h) that check_layering.py
+# currently finds. The check fails only on an edge NOT listed here.
+#
+# The list may SHRINK as couplings get cleaned up. It must never GROW simply
+# because a change introduced a new cross-directory dependency -- a new
+# edge is either itself a design mistake (fix the code) or it belongs here
+# with its own citation, added deliberately and reviewed, not as a rubber
+# stamp. Removing a line here is how progress on #401's remaining coupling
+# work gets recorded.
+#
+# Every line must cite an issue number or an ARCHITECTURE.md section.
+# Two special annotations:
+#   PERMANENT      -- this edge is a locked design decision, not drift.
+#                      It will never be removed from this file by ratcheting.
+#   RATCHET TARGET -- this edge is explicitly something to remove; it is
+#                      the measured gap against a stated target property
+#                      (see the core/ block below).
+#
+# Format: "FROM -> TO" (component pair), one pair per line, optional
+# trailing "# comment". check_layering.py only reads the "FROM -> TO" part;
+# everything after '#' is documentation for humans.
+
+# ---------------------------------------------------------------------------
+# PERMANENT -- locked by ARCHITECTURE.md, not subject to ratcheting away.
+# ---------------------------------------------------------------------------
+
+pinctrl -> inputs   # PERMANENT -- ARCHITECTURE.md §12.2: PinOwnerInputProbe exists
+                     # precisely because configured inputs deliberately never enter
+                     # the live pin registry (mega2560's MAX_PIN_REGISTRY can't pay
+                     # for it). pin_registry.cpp includes inputs/input_manager.h and
+                     # also reaches `extern uint8_t numActiveInputs;` at pin_registry.cpp:378.
+
+# ---------------------------------------------------------------------------
+# RATCHET TARGETS -- #401's stated property for core/ is "core/ includes
+# nothing but <Arduino.h> and hal/". These four pairs are the measured gap
+# against that property today. Unlike the rest of this file, these are not
+# blessed as fine -- they are the named to-do list for shrinking core/'s
+# footprint. Each is a single, specific site (or extern symbol), not a
+# diffuse coupling, which is what makes it tractable to remove one at a time.
+# ---------------------------------------------------------------------------
+
+core -> (root)  # RATCHET TARGET -- #401, tracked in #411. src/core/system_mode.cpp:6 includes
+                # "../config.h" (application constants, not a hal/ concern).
+core -> comms   # RATCHET TARGET -- #401, tracked in #411. src/core/message_api.h:33 and
+                # src/core/log_filter.cpp:6 both include comms/message_router.h;
+                # the control-plane message API reaches into the transport layer
+                # it should only be consumed by.
+core -> drivers # RATCHET TARGET -- #401, tracked in #411. src/core/system_mode.cpp:17 includes
+                # drivers/rgb_led.h to drive the status LED from a mode transition.
+core -> outputs # RATCHET TARGET -- #401, tracked in #411. Extern-only, invisible to include-graph
+                # analysis: src/core/system_mode.cpp:12-13 declares
+                # `extern void showConfigModeMessage();` / `extern void clearLCD();`,
+                # both defined in src/outputs/display/display_lcd.cpp. This is the
+                # motivating example for why check_layering.py parses externs at all.
+
+# ---------------------------------------------------------------------------
+# Structural -- everything else measured against `main` at 8510ea7. None of
+# these were adjudicated as "correct" by this slice; #401 is explicit that
+# this work makes couplings visible, not fewer. They are recorded here so
+# the check has a baseline to ratchet down from. See the PR / session report
+# for a per-pair discussion of which look like genuine problems worth their
+# own issue vs. which are structurally what the module is for.
+# ---------------------------------------------------------------------------
+
+(root) -> cli        # #401 -- main.cpp (the composition root) wires up the CLI.
+(root) -> comms      # #401 -- main.cpp wires up transports/message_router.
+(root) -> core       # #401 -- main.cpp wires up platform/watchdog/system_mode.
+(root) -> drivers    # #401 -- main.cpp wires up bus/serial/button/RGB drivers.
+(root) -> inputs     # #401 -- main.cpp owns inputs[] / input_manager.
+(root) -> outputs    # #401 -- main.cpp wires up every output module + BLE broadcasters
+                     # (main.cpp:127-133 extern-declares initOutputModules/sendToOutputs/
+                     # updateOutputs/initLCD/updateLCD, all defined in outputs/).
+(root) -> pinctrl    # #401 -- main.cpp owns pin_owner/pin_registry setup.
+(root) -> rules      # #401 -- main.cpp wires up the rules engine.
+(root) -> sensors    # #401 -- main.cpp includes calibration_types/sensor_library.
+(root) -> storage    # #401 -- main.cpp owns system_config/bus_needs/sd_manager.
+(root) -> test       # #401 -- main.cpp wires up test-mode activation.
+
+cli -> (root)        # #401 -- CLI handlers read config.h constants and version.h.
+cli -> comms         # #401 -- BUS SERIAL / transport-facing CLI leaves.
+cli -> core          # #401 -- CLI is the widest consumer of core/message_api and logging.
+cli -> drivers       # #401 -- cmd_bus.cpp drives bus_manager; button/RGB status leaves.
+cli -> hal           # #401 -- platform capability reporting (SYSTEM STATUS/DIAG).
+cli -> inputs        # #401 -- the whole reason #401 exists: cmd_set/cmd_rule etc. are
+                     # CLI surface over the Input model. Includes 2 extern sites
+                     # (command_helpers.cpp:440, command_table.cpp:306 -> numActiveInputs).
+cli -> outputs       # #401 -- SYSTEM STATUS/DUMP leaves report on output modules;
+                     # cmd_system.cpp:114,129 extern-declare listOutputs/printSystemConfig.
+cli -> pinctrl       # #401 -- SYSTEM PINS / pin diagnostics leaves.
+cli -> rules         # #401 -- cmd_rule.cpp / cmd_action.cpp drive the rules engine.
+cli -> sensors       # #401 -- SET SENSOR and sensor-listing leaves.
+cli -> storage       # #401 -- SET / SYSTEM DUMP read and write system_config/json_config.
+cli -> test          # #401 -- TEST command leaves.
+
+comms -> (root)      # #401 -- transport code reads config.h.
+comms -> cli         # #401 -- named by #401 directly: comms initiates CLI-facing framing.
+comms -> core        # #401 -- message_router uses core/message_api and logging.
+comms -> drivers     # #401 -- transport_mux touches serial_manager.
+comms -> outputs     # #401, tracked in #411 -- transport_mux.cpp includes
+                     # action_broadcaster.h -- the multiplexer reaches into the
+                     # broadcasters it multiplexes (flagged in the issue as a real
+                     # coupling worth its own issue -- now #411, not fixed here).
+comms -> storage     # #401 -- framed-protocol code reads system_config.
+
+core -> hal          # #401 -- src/core/watchdog.cpp includes hal/hal_watchdog.h; this
+                     # is the *allowed* direction under the core/ target property.
+
+drivers -> (root)    # #401 -- bus/serial drivers read config.h.
+drivers -> core      # #401 -- drivers use core/message_api and logging.
+drivers -> hal       # #401 -- drivers call the HAL by design (bus_manager -> hal_can, etc).
+drivers -> pinctrl   # #401 -- bus_manager/serial_manager claim pins via pin_owner.
+drivers -> storage   # #401 -- bus_manager reads system_config for bus selection.
+
+hal -> (root)        # #401 -- hal_can.h / can_mcp2515.h read config.h (SPI CAN pin
+                     # constants, per CLAUDE.md's CAN Controller Abstraction section).
+hal -> core          # #401, tracked in #411 -- src/hal/bus_defaults.h:18 includes core/platform.h.
+                     # Worth a look: core/ is supposed to sit above hal/ (see the
+                     # core/ target property above), so a hal -> core edge existing
+                     # alongside core -> hal is a genuine two-way coupling between
+                     # the two lowest layers, not obviously structural like the rest
+                     # of this file. Filed as #411, not fixed here.
+
+inputs -> (root)     # #401 -- input_manager reads config.h (MAX_INPUTS etc).
+inputs -> cli        # #401, tracked in #411 -- input_manager.cpp includes a cli/ header (presentation
+                     # reached from the model it presents); worth checking whether
+                     # this is a real inversion or a thin formatting-only include.
+inputs -> comms      # #401 -- input CAN import touches the transport layer.
+inputs -> core       # #401 -- input_manager uses core/message_api and logging.
+inputs -> drivers    # #401 -- input_manager touches bus_manager for sensor buses.
+inputs -> hal        # #401 -- input_can.h reaches the CAN HAL directly.
+inputs -> pinctrl    # #401 -- inputs claim pins via pin_owner when configured.
+inputs -> rules      # #401 -- input_manager references rules_types for alarm wiring.
+inputs -> sensors    # #401 -- named by #401 directly: sensor drivers take Input*,
+                     # so this pair is bidirectional (see sensors -> inputs below).
+                     # Structural: the Input model exposes calibration/sensor types.
+inputs -> storage    # #401 -- input_manager reads/writes system_config, json_config.
+
+outputs -> (root)    # #401 -- output modules read config.h; 4 BLE broadcasters
+                     # (action/alarm/status/live_value_broadcaster.cpp) extern-declare
+                     # `extern MuxTransport hwSerial1;`, defined in main.cpp:80-91 --
+                     # invisible to include-graph analysis, found only via extern parsing.
+outputs -> comms     # #401 -- ELM327/CAN/BLE outputs use the framed transport layer.
+outputs -> core      # #401 -- output modules are wide consumers of core/message_api.
+outputs -> drivers   # #401 -- display/RGB-adjacent outputs touch drivers.
+outputs -> hal       # #401 -- output_can.cpp calls the CAN HAL.
+outputs -> inputs    # #401 -- every output module takes Input* -- the same shape of
+                     # coupling as sensors -> inputs and inputs -> sensors.
+outputs -> pinctrl   # #401 -- display_lcd checks pin ownership before driving the LCD.
+outputs -> rules     # #401 -- alarm/status outputs read rules-engine state.
+outputs -> sensors   # #401 -- outputs format sensor-calibrated values.
+outputs -> storage   # #401 -- outputs read system_config for enable flags/intervals.
+
+pinctrl -> core      # #401 -- pin_owner/pin_registry use core/message_api and logging.
+pinctrl -> hal       # #401 -- analog_pins.h reads hal platform pin tables.
+pinctrl -> storage   # #401 -- pin_registry reads system_config for wired-bus declarations.
+
+rules -> (root)      # #401 -- rules_manager reads config.h.
+rules -> core        # #401 -- rules_manager uses core/message_api and logging.
+rules -> inputs      # #401 -- named by #401 directly: the rules engine evaluates
+                     # conditions against inputs[].
+rules -> pinctrl     # #401 -- Action targets claim pins via pin_owner.
+rules -> sensors     # #401 -- rules reference sensor/application registries for conditions.
+rules -> storage     # #401 -- named by #401 directly (storage -> rules is the reverse
+                     # edge -- control_json includes rules_types.h): rules persist via
+                     # the shared config-store arena in storage/.
+
+sensors -> (root)    # #401 -- sensor drivers/tables read config.h.
+sensors -> core      # #401 -- sensor drivers are wide consumers of core/message_api
+                     # and logging (23 driver files, largest single -> core pair).
+sensors -> drivers   # #401 -- CAN sensor drivers touch bus_manager.
+sensors -> inputs    # #401 -- named by #401 directly: 23 include sites, sensor
+                     # drivers take Input* as their read-function argument. Structural,
+                     # not drift -- this is the shape #401's own "sensors/" section
+                     # describes (tables, calibration data, drivers/, sensor_read.cpp).
+sensors -> storage   # #401 -- sensor registry lookups read system_config.
+
+storage -> (root)    # #401 -- system_config/json_config read config.h.
+storage -> comms     # #401 -- json_config reaches transport status for reporting.
+storage -> core      # #401 -- storage is a wide consumer of core/message_api/logging.
+storage -> drivers   # #401 -- bus_needs.cpp reads bus_manager state.
+storage -> hal       # #401 -- system_config reads hal platform capability tables.
+storage -> inputs    # #401 -- named by #401 directly: json_config.cpp extern-declares
+                     # `extern Input inputs[MAX_INPUTS];`, `extern SystemConfig
+                     # systemConfig;`, `extern uint8_t numActiveInputs;`, and 10 more
+                     # `extern bool setInput*/enableInput*` functions, all defined in
+                     # inputs/input_manager.cpp -- invisible to include-graph analysis.
+storage -> outputs   # #401 -- named by #401 directly: json_registry.cpp extern-declares
+                     # `extern OutputModule outputModules[];`, defined in
+                     # outputs/output_manager.cpp -- invisible to include-graph analysis.
+storage -> pinctrl   # #401 -- system_config persists wired-bus declarations pin_registry reads.
+storage -> rules     # #401 -- named by #401 directly: control_json.{h,cpp} (now under
+                     # rules/) includes rules_types.h; storage owns its persistence.
+storage -> sensors   # #401 -- json_config/json_registry serialize sensor/application selections.
+
+test -> (root)       # #401 -- test-mode scaffolding reads config.h.
+test -> core         # #401 -- test_mode uses core/message_api and logging.
+test -> inputs       # #401 -- test mode substitutes Input read functions.
