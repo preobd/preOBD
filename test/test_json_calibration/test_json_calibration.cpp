@@ -18,7 +18,9 @@
 
 // SENSOR_LIBRARY / UNITS_REGISTRY / APPLICATION_PRESETS are now defined in
 // their own .cpp (#400), not inline in the header — pull the data in.
+// SENSOR_CATEGORIES too (missed by #400, fixed separately) — pull it in.
 #include "../../src/lib/sensor_library.cpp"
+#include "../../src/lib/sensor_library/sensor_categories.cpp"
 #include "../../src/lib/units_registry.cpp"
 #include "../../src/lib/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"

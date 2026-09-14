@@ -3,6 +3,15 @@
  *
  * Categories group sensors by technology/calibration type for two-layer selection.
  * Categories are derived from calibrationType + measurementType at runtime.
+ *
+ * The PSTR_CAT_* strings and the SENSOR_CATEGORIES[] table itself live in
+ * sensor_categories.cpp, not here. This header used to define them
+ * directly, which meant every translation unit that (transitively) included
+ * this header via sensor_library.h, sensor_helpers.h or json_registry.cpp
+ * got its own PROGMEM copy — the PROGMEM section attribute stops the
+ * linker folding them back together (#400 missed this file). One
+ * definition, extern here, is the same shape as sensor_library.{h,cpp} and
+ * units_registry.{h,cpp}.
  */
 
 #ifndef SENSOR_LIBRARY_CATEGORIES_H
@@ -34,37 +43,12 @@ struct SensorCategoryInfo {
     uint16_t nameHash;         // Precomputed hash for fast lookup
 };
 
-// ===== SENSOR CATEGORY STRINGS (PROGMEM) =====
-// Category names match the sensor definition files in sensors/ directory
-static const char PSTR_CAT_THERMOCOUPLE[] PROGMEM = "THERMOCOUPLE";
-static const char PSTR_CAT_THERMOCOUPLE_LABEL[] PROGMEM = "K-Type Thermocouples";
-static const char PSTR_CAT_THERMISTOR[] PROGMEM = "THERMISTOR";
-static const char PSTR_CAT_THERMISTOR_LABEL[] PROGMEM = "Thermistor Temperature Sensors";
-static const char PSTR_CAT_PRESSURE[] PROGMEM = "PRESSURE";
-static const char PSTR_CAT_PRESSURE_LABEL[] PROGMEM = "Pressure Sensors";
-static const char PSTR_CAT_VOLTAGE[] PROGMEM = "VOLTAGE";
-static const char PSTR_CAT_VOLTAGE_LABEL[] PROGMEM = "Voltage Sensors";
-static const char PSTR_CAT_FREQUENCY[] PROGMEM = "FREQUENCY";
-static const char PSTR_CAT_FREQUENCY_LABEL[] PROGMEM = "RPM and Speed Sensors";
-static const char PSTR_CAT_ENVIRONMENTAL[] PROGMEM = "ENVIRONMENTAL";
-static const char PSTR_CAT_ENVIRONMENTAL_LABEL[] PROGMEM = "Environmental Sensors";
-static const char PSTR_CAT_DIGITAL[] PROGMEM = "DIGITAL";
-static const char PSTR_CAT_DIGITAL_LABEL[] PROGMEM = "Digital Input Sensors";
-static const char PSTR_CAT_LEVEL[] PROGMEM = "LEVEL";
-static const char PSTR_CAT_LEVEL_LABEL[] PROGMEM = "Fluid Level Sensors";
-
-// ===== SENSOR CATEGORY REGISTRY (PROGMEM) =====
-// Hash values computed with: python3 -c "h=5381; s='NAME'; [h:=(h<<5)+h+ord(c.upper()) for c in s]; print(f'0x{h&0xFFFF:04X}')"
-static const PROGMEM SensorCategoryInfo SENSOR_CATEGORIES[] = {
-    { PSTR_CAT_THERMOCOUPLE,    PSTR_CAT_THERMOCOUPLE_LABEL,    0xA69C },  // THERMOCOUPLE
-    { PSTR_CAT_THERMISTOR,      PSTR_CAT_THERMISTOR_LABEL,      0x4556 },  // THERMISTOR
-    { PSTR_CAT_PRESSURE,        PSTR_CAT_PRESSURE_LABEL,        0x233E },  // PRESSURE
-    { PSTR_CAT_VOLTAGE,         PSTR_CAT_VOLTAGE_LABEL,         0x03F7 },  // VOLTAGE
-    { PSTR_CAT_FREQUENCY,       PSTR_CAT_FREQUENCY_LABEL,       0x9B8F },  // FREQUENCY
-    { PSTR_CAT_ENVIRONMENTAL,   PSTR_CAT_ENVIRONMENTAL_LABEL,   0x0C07 },  // ENVIRONMENTAL
-    { PSTR_CAT_DIGITAL,         PSTR_CAT_DIGITAL_LABEL,         0x9803 },  // DIGITAL
-    { PSTR_CAT_LEVEL,           PSTR_CAT_LEVEL_LABEL,           0x939D },  // LEVEL (djb2("LEVEL"))
-};
+// ===== SENSOR CATEGORY STRINGS AND REGISTRY (PROGMEM, defined in sensor_categories.cpp) =====
+// Category names match the sensor definition files in sensors/ directory.
+// CAT_COUNT (enum, above) is the manifest constant for the table's extent;
+// sensor_categories.cpp carries a static_assert tying it to the array's
+// real extent so the two cannot silently drift.
+extern const PROGMEM SensorCategoryInfo SENSOR_CATEGORIES[];
 
 // Helper macros for category info
 #define READ_CATEGORY_NAME(info) ((const char*)pgm_read_ptr(&(info)->name))
