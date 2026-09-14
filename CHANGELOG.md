@@ -7,25 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0-beta] - 2026-09-13
+
 ### Added
-- `tools/check_layering.py` reports `src/`'s cross-directory `#include` and `extern` dependency edges against a tracked, cited exceptions ratchet (`tools/layering_exceptions.txt`), wired into a now-tracked `.githooks/pre-commit` (#401)
+- `SYSTEM DIAG HW` now reports the RGB LED's colour, effect and winning priority, so the LED's state can be read over a serial link instead of only by looking at the board (#419)
+- `tools/check_layering.py` reports `src/`'s cross-directory dependencies against a tracked exceptions list, wired into a tracked `.githooks/pre-commit` (#401)
 
 ### Changed
-- `message_router.{h,cpp}`, `transport_interface.h`, and `transport_serial.h` moved from `src/comms/` into `src/core/` (pure move, no behaviour change), closing the last `core/` ratchet target so `core/` now includes nothing but `<Arduino.h>` and `hal/` (#418)
-- The JSON-import idle sweep runs from the main loop instead of from inside `MessageRouter::update()`, where it was periodic work misfiled as routing (#418)
-- `MessageRouter` no longer includes `storage/system_config.h` or `drivers/serial_manager.h`: its EEPROM marshalling now lives in `storage/system_config.cpp` (same call sites) and its serial-port-active check goes through a `main.cpp`-registered probe, removing the `comms/` -> `storage/` and `comms/` -> `drivers/` dependencies with no behaviour change (#418)
-- `MessageRouter` no longer includes `cli/serial_config.h`: its CLI command-pump calls go through a `main.cpp`-registered control-plane sink, removing the `comms/` -> `cli/` dependency entirely with no behaviour change (#418)
-- `comms/transport_mux.cpp` no longer includes the BLE action/live-value broadcasters it multiplexes; it now dispatches inbound frames through a registration table wired up by `main.cpp`, with no behaviour change (#411)
-- `requireInput()` moved from `cli/command_helpers` into `inputs/input_manager`, so the Input model no longer depends on the command layer (#411)
-- `core/system_mode.cpp` no longer drives the LCD or RGB LED directly on a CONFIG/RUN transition; it now notifies a `SystemModeObserver` registered by `main.cpp`, removing the `core/` -> `outputs/`, `core/` -> `drivers/`, and `core/` -> `(root)` dependencies with no behaviour change (#411)
-- `hal/bus_defaults.h` no longer includes `core/platform.h`, removing the `hal/` -> `core/` dependency that ran opposite to `core/watchdog.cpp`'s dependency on `hal/` (#411)
-- Sensor tables, calibration data, and the driver implementations moved from `src/lib/` and `src/inputs/` into a new `src/sensors/` directory (pure move, no behaviour change) (#401)
-- `SENSOR_LIBRARY`/`APPLICATION_PRESETS`/`UNITS_REGISTRY` and their calibration/string data now live in one `.cpp` each instead of being redefined by every including header, recovering ~11 KB of flash on mega2560 and ~76 KB on teensy41 that duplicate PROGMEM copies were wasting (#400)
-- `SENSOR_CATEGORIES` (the sensor-category name/label table `#400` missed) now lives in one `.cpp` instead of being redefined by every including header
-- `src/lib/` and `src/displays/` dissolved into `src/hal/`, `src/pinctrl/`, `src/drivers/`, `src/core/`, `src/comms/`, `src/storage/`, `src/outputs/ble/`, and `src/outputs/display/` (pure move, no behaviour change) (#401)
-- `src/control/` renamed to `src/rules/`, with every `control*`/`CONTROL_*` identifier renamed to `rules*`/`RULES_*` to match (the `msg.control` control plane and its `controlLevel` JSON key are unrelated and untouched); the CLI now says "rules engine" where it used to say "control engine" (#401)
-- The 490-line presentation band of `src/inputs/input_manager.cpp` moved to `src/cli/input_display.{h,cpp}` (Input-info/output/calibration printers, `listAllInputs`), `src/cli/registry_display.{h,cpp}` (sensor/application registry listers), and `src/pinctrl/pin_label.{h,cpp}` (the pin-encoding decoder), fixing a CLI-in-the-domain-model layering inversion with no behaviour change (#402 step 1)
-- The shared EEPROM config-store arena (records, checksum, save/load/reset, the stored-config pin/bus probes) moved out of `src/inputs/input_manager.cpp` into `src/storage/input_store.{h,cpp}`, completing the #402 split with no behaviour change (#402 step 2)
+- Flash usage drops sharply: the sensor, application and unit registries and their calibration data are now defined once instead of being duplicated into every translation unit that includes them — mega2560 goes from 85.6% to 69.0% of flash (−42 KB), teensy41 −76 KB (#400)
+- The CLI says "rules engine" where it used to say "control engine"; the `RULE` and `ACTION` commands, the BLE protocol and all stored configuration are unchanged (#401)
+- `src/` is reorganised into purpose-named directories (`core/`, `comms/`, `storage/`, `sensors/`, `pinctrl/`, `drivers/`, `rules/`, `cli/`, …) and the catch-all `src/lib/` is gone — no functional change, but anyone building from source or carrying local patches will see a different tree (#401, #402, #411, #418)
+
+### Fixed
+- The CONFIG-mode LED now lights: the normal-state green was claiming a higher priority than the mode indication and had been masking it permanently (#419)
 
 ## [0.12.0-beta] - 2026-09-11
 
@@ -34,7 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - BLE: the Action state frame now reports whether a member Rule is demanding the output, so a client can tell an operator force that is countermanding a live demand (a fan the rules want on, forced off) from one holding against nothing — previously only Warning/Alarm rules were visible to clients, hiding exactly the notify-free control rules that drive fans and shift lights (#348)
 
 ### Fixed
-- The CONFIG-mode LED now shows: the normal-state green moved from `PRIORITY_WARNING` to `PRIORITY_IDLE`, which had been masking it permanently (#419)
 - A pin conflict during boot (a stale `wiring.ini`, a build-time collision, or an unstartable serial port) is no longer silently discarded for lack of a transport to print it to — the refusal is now buffered and replayed once the router comes up, so the reason a feature isn't working is actually visible (#396)
 - A declared `*_WIRED_BUS` no longer reserves its pins when nothing in the stored configuration needs that bus, so a wired-but-idle I2C/SPI declaration no longer holds SDA/SCL or MOSI/MISO/SCK hostage against inputs and Actions that could otherwise use them (#394)
 - `BUS SERIAL <n> ENABLE` no longer persists the port as enabled when the firmware itself refuses it (pin conflict): the config write now happens only after the port actually starts, so a later `SAVE` can't silently reclaim pins from a working Action or bus at the next boot (#390)

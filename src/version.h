@@ -17,7 +17,7 @@
 // API / Feature Version (user-visible, changes rarely)
 // =============================================================================
 #define FW_MAJOR  0
-#define FW_MINOR  12
+#define FW_MINOR  13
 #define FW_PATCH  0
 
 // Prerelease tag: "alpha", "beta", "rc1", or "" for release
