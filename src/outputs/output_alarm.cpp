@@ -93,11 +93,19 @@ AlarmSeverity getSystemSeverity() {
 void updateLEDs(AlarmSeverity severity) {
     switch (severity) {
         case SEVERITY_NORMAL:
-            // Normal operation - solid green. Release any latched alarm request
-            // first so the LED de-escalates (the alarm color sits at the higher
-            // PRIORITY_ALARM and would otherwise stick on after the alarm clears).
+            // Normal operation - solid green at PRIORITY_IDLE (#419). It used to
+            // sit at PRIORITY_WARNING, which outranks PRIORITY_MODE and so masked
+            // the CONFIG-mode indication permanently: "nothing is wrong" is not a
+            // warning, and claiming that slot meant the mode LED lost the
+            // arbitration every time and could never be seen.
+            //
+            // Both higher slots must now be released explicitly. Previously this
+            // branch *overwrote* the WARNING slot with green, which released it as
+            // a side effect; writing to IDLE instead does not, so a cleared warning
+            // would otherwise leave slot 3 active and the LED stuck yellow.
             rgbLedRelease(PRIORITY_ALARM);
-            rgbLedSolid(RGB_COLOR_NORMAL, PRIORITY_WARNING);
+            rgbLedRelease(PRIORITY_WARNING);
+            rgbLedSolid(RGB_COLOR_NORMAL, PRIORITY_IDLE);
             break;
 
         case SEVERITY_WARNING:

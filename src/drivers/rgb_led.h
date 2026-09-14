@@ -182,4 +182,9 @@ RGBPriority rgbLedGetPriority();
  */
 bool rgbLedIsActive();
 
+// Report the winning request: color, effect and priority. False when nothing is
+// driving the LED. Exists so SYSTEM DIAG HW can show what the LED is doing --
+// #419 was only diagnosable by looking at the board, which is no use remotely.
+bool rgbLedGetActive(RGBColor* color, RGBEffect* effect, RGBPriority* priority);
+
 #endif // RGB_LED_H

@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - BLE: the Action state frame now reports whether a member Rule is demanding the output, so a client can tell an operator force that is countermanding a live demand (a fan the rules want on, forced off) from one holding against nothing — previously only Warning/Alarm rules were visible to clients, hiding exactly the notify-free control rules that drive fans and shift lights (#348)
 
 ### Fixed
+- The CONFIG-mode LED now shows: the normal-state green moved from `PRIORITY_WARNING` to `PRIORITY_IDLE`, which had been masking it permanently (#419)
 - A pin conflict during boot (a stale `wiring.ini`, a build-time collision, or an unstartable serial port) is no longer silently discarded for lack of a transport to print it to — the refusal is now buffered and replayed once the router comes up, so the reason a feature isn't working is actually visible (#396)
 - A declared `*_WIRED_BUS` no longer reserves its pins when nothing in the stored configuration needs that bus, so a wired-but-idle I2C/SPI declaration no longer holds SDA/SCL or MOSI/MISO/SCK hostage against inputs and Actions that could otherwise use them (#394)
 - `BUS SERIAL <n> ENABLE` no longer persists the port as enabled when the firmware itself refuses it (pin conflict): the config write now happens only after the port actually starts, so a later `SAVE` can't silently reclaim pins from a working Action or bus at the next boot (#390)

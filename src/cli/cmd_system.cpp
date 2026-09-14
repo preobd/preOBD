@@ -27,6 +27,7 @@
 #include "../core/platform.h"
 #include "../storage/json_registry.h"
 #include "../drivers/bus_manager.h"
+#include "../drivers/rgb_led.h"   // SYSTEM DIAG HW reports the LED (#419)
 #include "../hal/bus_defaults.h"
 #include "../storage/sd_manager.h"
 #include "../drivers/serial_manager.h"
@@ -329,6 +330,44 @@ static int i2cProbe(uint8_t addr) {
 static void diagSectionHw() {
     bool any = false;
     (void)any;
+
+#if INCLUDE_LED
+    // What the LED is doing and which priority won. Without this, #419 --
+    // SEVERITY_NORMAL claiming PRIORITY_WARNING and masking the CONFIG-mode
+    // indication -- was only diagnosable by looking at the board, which is no
+    // use over a serial link. F() here rather than a PROGMEM table: measured,
+    // PROGMEM cost mega2560 88 bytes of RAM for no Teensy gain (the 1 KB RAM1
+    // step this block adds on Teensy 4 is a DTCM allocation granule, not the
+    // strings -- mega2560's byte-accurate RAM figure is unchanged).
+    any = true;
+    msg.control.print(F("[hardware]    RGB LED .............. "));
+    {
+        RGBColor c; RGBEffect e; RGBPriority p;
+        if (!rgbLedGetActive(&c, &e, &p)) {
+            msg.control.println(F("off"));
+        } else {
+            switch (e) {
+                case EFFECT_SOLID: msg.control.print(F("solid")); break;
+                case EFFECT_BLINK: msg.control.print(F("blink")); break;
+                case EFFECT_PULSE: msg.control.print(F("pulse")); break;
+                default:           msg.control.print(F("?")); break;
+            }
+            msg.control.print(F(" rgb("));
+            msg.control.print((int)c.r); msg.control.print(',');
+            msg.control.print((int)c.g); msg.control.print(',');
+            msg.control.print((int)c.b);
+            msg.control.print(F(") @ "));
+            switch (p) {
+                case PRIORITY_IDLE:     msg.control.println(F("IDLE")); break;
+                case PRIORITY_MODE:     msg.control.println(F("MODE")); break;
+                case PRIORITY_ACTIVITY: msg.control.println(F("ACTIVITY")); break;
+                case PRIORITY_WARNING:  msg.control.println(F("WARNING")); break;
+                case PRIORITY_ALARM:    msg.control.println(F("ALARM")); break;
+                default:                msg.control.println(F("?")); break;
+            }
+        }
+    }
+#endif
 
 #if INCLUDE_LCD
     any = true;

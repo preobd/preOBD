@@ -240,6 +240,14 @@ bool rgbLedIsActive() {
     return rgbState.active.effect != EFFECT_OFF;
 }
 
+bool rgbLedGetActive(RGBColor* color, RGBEffect* effect, RGBPriority* priority) {
+    if (!rgbState.initialized || rgbState.active.effect == EFFECT_OFF) return false;
+    if (color)    *color    = rgbState.active.color;
+    if (effect)   *effect   = rgbState.active.effect;
+    if (priority) *priority = rgbState.active.priority;
+    return true;
+}
+
 void updateRGBLed() {
     if (!rgbState.initialized) return;
 
