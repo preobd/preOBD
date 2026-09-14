@@ -4,7 +4,6 @@
 
 #include "message_router.h"
 #include "../core/message_api.h"
-#include "../cli/serial_config.h"   // processSerialCommands(), handleCommandInput() -- see #418
 #include <string.h>
 
 // Global router instance
@@ -22,6 +21,15 @@ void setSerialPortActiveProbe(SerialPortActiveProbe probe) {
 static bool serialTransportPortActive(uint8_t port_id) {
     if (serialPortActiveProbe == nullptr) return true;
     return serialPortActiveProbe(port_id);
+}
+
+// Control-plane command sink (see header comment above setCommandSink()).
+static CommandByteSink commandByteSink = nullptr;
+static CommandDispatchFn commandDispatchFn = nullptr;
+
+void setCommandSink(CommandByteSink byteSink, CommandDispatchFn dispatchFn) {
+    commandByteSink = byteSink;
+    commandDispatchFn = dispatchFn;
 }
 
 MessageRouter::MessageRouter() : activeControlTransport(nullptr) {
@@ -341,14 +349,14 @@ void MessageRouter::processIncomingCommands() {
     if (ctrl && ctrl->isConnected() && ctrl->available()) {
         setActiveControlTransport(ctrl);
         processCommandFromTransport(ctrl);
-        processSerialCommands();
+        if (commandDispatchFn != nullptr) commandDispatchFn();
     }
 
     TransportInterface* ctrl2 = getTransport(PLANE_CONTROL, false);
     if (ctrl2 && ctrl2->isConnected() && ctrl2->available()) {
         setActiveControlTransport(ctrl2);
         processCommandFromTransport(ctrl2);
-        processSerialCommands();
+        if (commandDispatchFn != nullptr) commandDispatchFn();
     }
 
     // Clear after dispatch so unsolicited msg.control output (alarms, background
@@ -358,9 +366,14 @@ void MessageRouter::processIncomingCommands() {
 }
 
 void MessageRouter::processCommandFromTransport(TransportInterface* transport) {
+    // Unregistered sink: don't drain. Bytes stay buffered in the transport
+    // rather than being read and discarded -- see setCommandSink()'s header
+    // comment for why this direction was chosen over the alternative.
+    if (commandByteSink == nullptr) return;
+
     // Read and process all available characters
     while (transport->available()) {
         char c = transport->read();
-        handleCommandInput(c);
+        commandByteSink(c);
     }
 }

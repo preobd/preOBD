@@ -51,6 +51,41 @@ typedef bool (*SerialPortActiveProbe)(uint8_t port_id);
  */
 void setSerialPortActiveProbe(SerialPortActiveProbe probe);
 
+// Registered control-plane consumer: who actually pumps CLI command
+// processing (same shape as PinOwnerInputProbe/pinctrl/pin_owner.h,
+// SystemModeObserver/core/system_mode.h, setMuxFrameHandler/
+// addMuxResyncHandler in comms/transport_mux.h, and
+// setSerialPortActiveProbe() above: the layer that actually knows --
+// cli/serial_config.h -- implements it, main.cpp wires it up, and comms/
+// never includes cli/serial_config.h, #418).
+//
+// byteSink receives one drained byte at a time (handleCommandInput()).
+// dispatchFn is called after a transport's bytes are drained, to run
+// whatever the CLI buffered (processSerialCommands()).
+typedef void (*CommandByteSink)(char c);
+typedef void (*CommandDispatchFn)();
+
+/**
+ * Register the control-plane command sink. MUST be called before loop()'s
+ * first router.update() -- registering anywhere in main.cpp's setup(),
+ * alongside setSerialPortActiveProbe() above, is sufficient. A missed
+ * registration here is the loudest possible failure: the CLI goes dead over
+ * every transport, but the firmware still compiles and still passes the
+ * native suite, so get this one right (#352, #368, #369 are this same class
+ * of boot-order bug for other probes).
+ *
+ * Unregistered, the router does NOT drain control transports: bytes stay
+ * buffered in the transport (the CLI appears dead, but nothing is
+ * destroyed). This is the opposite default from setSerialPortActiveProbe()
+ * above -- that probe answers a yes/no question where "permissive" is
+ * harmless, but this is a data sink, and there is nowhere safe to route a
+ * drained byte with no consumer registered. Draining and discarding would
+ * silently eat commands (and the JSON import stream) with no way to get them
+ * back; leaving them buffered means once registration does happen (or the
+ * transport is re-read) nothing typed has been lost.
+ */
+void setCommandSink(CommandByteSink byteSink, CommandDispatchFn dispatchFn);
+
 // Transport ID enumeration
 enum TransportID {
     TRANSPORT_NONE = 0,

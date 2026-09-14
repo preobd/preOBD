@@ -97,7 +97,6 @@ cli -> storage       # #401 -- SET / SYSTEM DUMP read and write system_config/js
 cli -> test          # #401 -- TEST command leaves.
 
 comms -> (root)      # #401 -- transport code reads config.h.
-comms -> cli         # #401 -- named by #401 directly: comms initiates CLI-facing framing.
 comms -> core        # #401 -- message_router uses core/message_api and logging.
 comms -> outputs     # #401, narrowed by #411 item 4 -- transport_mux no longer
                      # includes the BLE broadcasters it multiplexes (the defect

@@ -308,6 +308,12 @@ void setup() {
     // (#352, #368, #369) so it is wired up as early as the driver exists.
     setSerialPortActiveProbe(isSerialPortActive);
 
+    // Router pumps CLI command processing through this sink instead of
+    // calling cli/serial_config.h directly (#418, item 4). MUST run before
+    // loop() first calls router.update() -- registered here alongside the
+    // probe above, for the same boot-order reasons (#352, #368, #369).
+    setCommandSink(handleCommandInput, processSerialCommands);
+
     // ---- Bus need vote, computed here so registerSystemPins() (next) can
     // gate its Tier-1 *_WIRED_BUS reservation on it (#394) --------------------
     //
