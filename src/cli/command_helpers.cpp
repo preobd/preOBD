@@ -8,7 +8,7 @@
 #include "command_helpers.h"
 #include "command_table.h"  // for Subcommand
 #include "../config.h"
-#include "../comms/message_router.h"
+#include "../core/message_router.h"
 #include "../core/message_api.h"
 #include "../storage/system_config.h"
 #include "../core/platform.h"

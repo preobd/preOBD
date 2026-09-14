@@ -24,7 +24,7 @@
 #include <Arduino.h>
 #include <string.h>
 
-#include "../../src/comms/transport_interface.h"
+#include "../../src/core/transport_interface.h"
 #include "../../src/pinctrl/pin_registry.cpp"
 #include "../../src/pinctrl/pin_owner.cpp"
 

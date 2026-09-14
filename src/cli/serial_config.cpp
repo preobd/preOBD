@@ -8,7 +8,7 @@
 #include "serial_config.h"
 #include "command_table.h"
 #include "command_helpers.h"
-#include "../comms/message_router.h"
+#include "../core/message_router.h"
 #include "../core/message_api.h"
 #include "../storage/json_config.h"
 #include <string.h>

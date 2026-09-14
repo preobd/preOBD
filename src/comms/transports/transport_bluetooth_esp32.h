@@ -14,7 +14,7 @@
 #ifndef TRANSPORT_BLUETOOTH_ESP32_H
 #define TRANSPORT_BLUETOOTH_ESP32_H
 
-#include "../transport_interface.h"
+#include "../../core/transport_interface.h"
 
 // Only compile for original ESP32 with Bluetooth Classic support
 #if defined(CONFIG_IDF_TARGET_ESP32) || (defined(ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(CONFIG_IDF_TARGET_ESP32C3))

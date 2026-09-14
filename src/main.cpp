@@ -45,11 +45,11 @@
 #endif
 
 // Transport abstraction layer
-#include "comms/message_router.h"
+#include "core/message_router.h"
 #include "core/message_api.h"
 #include "core/log_tags.h"
 #include "comms/transport_mux.h"
-#include "comms/transport_serial.h"
+#include "core/transport_serial.h"
 #include "outputs/ble/status_broadcaster.h"
 #include "outputs/ble/alarm_broadcaster.h"
 #include "outputs/ble/action_broadcaster.h"

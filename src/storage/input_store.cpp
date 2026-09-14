@@ -21,7 +21,7 @@
 #include "../inputs/input_manager.h"   // inputs[] / numActiveInputs / Input, inputManagerTableIsLive()
 #include "system_config.h"
 #include "../sensors/units_registry.h"
-#include "../comms/message_router.h"   // For msg.control
+#include "../core/message_router.h"   // For msg.control
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
 #include "../sensors/application_presets.h"

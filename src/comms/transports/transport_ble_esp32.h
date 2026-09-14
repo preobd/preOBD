@@ -14,7 +14,7 @@
 #ifndef TRANSPORT_BLE_ESP32_H
 #define TRANSPORT_BLE_ESP32_H
 
-#include "../transport_interface.h"
+#include "../../core/transport_interface.h"
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
 #include <BleSerial.h>

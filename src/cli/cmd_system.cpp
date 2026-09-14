@@ -17,7 +17,7 @@
 #include "../pinctrl/bus_pin_roles.h"   // busPinRole() for the DIAG PINS sweep (#304)
 #include "../storage/system_config.h"
 #include "../storage/json_config.h"
-#include "../comms/message_router.h"
+#include "../core/message_router.h"
 #include "../core/message_api.h"
 #include "../core/log_filter.h"
 #include "../core/log_tags.h"

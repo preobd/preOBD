@@ -42,7 +42,7 @@
 #include <Arduino.h>
 
 #include "frame_codec.h"
-#include "transport_interface.h"
+#include "../core/transport_interface.h"
 #include "../core/watchdog.h"
 
 // ---------------------------------------------------------------------------

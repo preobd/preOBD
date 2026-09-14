@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tools/check_layering.py` reports `src/`'s cross-directory `#include` and `extern` dependency edges against a tracked, cited exceptions ratchet (`tools/layering_exceptions.txt`), wired into a now-tracked `.githooks/pre-commit` (#401)
 
 ### Changed
+- `message_router.{h,cpp}`, `transport_interface.h`, and `transport_serial.h` moved from `src/comms/` into `src/core/` (pure move, no behaviour change), closing the last `core/` ratchet target so `core/` now includes nothing but `<Arduino.h>` and `hal/` (#418)
 - The JSON-import idle sweep runs from the main loop instead of from inside `MessageRouter::update()`, where it was periodic work misfiled as routing (#418)
 - `MessageRouter` no longer includes `storage/system_config.h` or `drivers/serial_manager.h`: its EEPROM marshalling now lives in `storage/system_config.cpp` (same call sites) and its serial-port-active check goes through a `main.cpp`-registered probe, removing the `comms/` -> `storage/` and `comms/` -> `drivers/` dependencies with no behaviour change (#418)
 - `MessageRouter` no longer includes `cli/serial_config.h`: its CLI command-pump calls go through a `main.cpp`-registered control-plane sink, removing the `comms/` -> `cli/` dependency entirely with no behaviour change (#418)

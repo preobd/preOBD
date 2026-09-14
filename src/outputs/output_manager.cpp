@@ -5,7 +5,7 @@
 #include "output_base.h"
 #include "../config.h"
 #include "../inputs/input_manager.h"
-#include "../comms/message_router.h"
+#include "../core/message_router.h"
 #include "../core/message_api.h"
 
 // Output mask filtering relies on OUTPUT_CAN..OUTPUT_SD being 0-3.

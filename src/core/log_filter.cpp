@@ -3,7 +3,7 @@
  */
 
 #include "log_filter.h"
-#include "../comms/message_router.h"  // For MessagePlane enum (after log_filter.h to avoid circular dependency)
+#include "message_router.h"  // For MessagePlane enum (after log_filter.h to avoid circular dependency)
 #include <string.h>
 
 // Constructor - initialize with permissive defaults (show everything)

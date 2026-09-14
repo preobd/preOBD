@@ -12,7 +12,7 @@
 #include "../inputs/input_manager.h"
 #include "../pinctrl/analog_pins.h"
 #include "../pinctrl/pin_label.h"
-#include "../comms/message_router.h"  // For msg.control
+#include "../core/message_router.h"  // For msg.control
 #include "../core/message_api.h"      // For msg
 #include "../sensors/units_registry.h"
 #include "../sensors/application_presets.h"

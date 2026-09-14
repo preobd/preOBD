@@ -463,7 +463,7 @@ public:
 
 ### Step 2: Add Transport ID
 
-Add to `TransportID` enum in [transport_interface.h](../../src/comms/transport_interface.h):
+Add to `TransportID` enum in [transport_interface.h](../../src/core/transport_interface.h):
 
 ```cpp
 enum TransportID {
@@ -625,8 +625,8 @@ CAN output modules use the CAN HAL to send OBD-II frames and broadcast data, whi
 
 ## References
 
-- [TransportInterface API](../../src/comms/transport_interface.h)
-- [MessageRouter Implementation](../../src/comms/message_router.h)
+- [TransportInterface API](../../src/core/transport_interface.h)
+- [MessageRouter Implementation](../../src/core/message_router.h)
 - [Serial Transport Wrapper](../../src/comms/transports/serial_transport_wrapper.h)
 - [ESP32 Bluetooth Transport](../../src/comms/transports/transport_bluetooth_esp32.h)
 - [CAN HAL Interface](../../src/hal/hal_can.h)

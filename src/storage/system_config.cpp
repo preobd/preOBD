@@ -5,7 +5,7 @@
 #include "system_config.h"
 #include "../config.h"
 #include "../sensors/units_registry.h"
-#include "../comms/message_router.h"  // For TransportID enum
+#include "../core/message_router.h"  // For TransportID enum
 #include "../hal/bus_defaults.h"
 #include "../pinctrl/bus_wiring.h"
 #include "../drivers/bus_manager.h"   // getI2CBusName()/getSPIBusName() — Tier-1 wired-bus reservation (#379)
@@ -372,11 +372,10 @@ bool saveSystemConfig(bool verbose) {
 // MessageRouter config marshalling (#418).
 //
 // These are MessageRouter member functions -- declared in
-// comms/message_router.h -- defined HERE instead of in
-// comms/message_router.cpp so storage/ owns the SystemConfig <-> router
-// shape and comms/ stays free of any storage/ dependency (the messaging
-// spine is meant to eventually live in core/). Call sites (router.loadConfig(),
-// router.syncConfig(), router.saveConfig()) are unchanged.
+// core/message_router.h -- defined HERE instead of in
+// core/message_router.cpp so storage/ owns the SystemConfig <-> router
+// shape and core/ stays free of any storage/ dependency. Call sites
+// (router.loadConfig(), router.syncConfig(), router.saveConfig()) are unchanged.
 //
 // loadConfig() writes through setTransportUnchecked(), not setTransport():
 // setTransport() refuses a serial transport whose port isn't enabled yet

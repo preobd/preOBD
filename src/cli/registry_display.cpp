@@ -8,7 +8,7 @@
 #include <string.h>
 
 #include "registry_display.h"
-#include "../comms/message_router.h"  // For msg.control
+#include "../core/message_router.h"  // For msg.control
 #include "../core/message_api.h"      // For msg
 #include "../sensors/application_presets.h"
 #include "../sensors/sensor_library.h"

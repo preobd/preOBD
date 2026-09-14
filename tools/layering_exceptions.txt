@@ -38,11 +38,11 @@ pinctrl -> inputs   # PERMANENT -- ARCHITECTURE.md §12.2: PinOwnerInputProbe ex
 
 # ---------------------------------------------------------------------------
 # RATCHET TARGETS -- #401's stated property for core/ is "core/ includes
-# nothing but <Arduino.h> and hal/". This pair is the measured gap
-# against that property today. Unlike the rest of this file, it is not
-# blessed as fine -- it is the named to-do list for shrinking core/'s
-# footprint. It is a single, specific site, not a diffuse coupling, which is
-# what makes it tractable to remove.
+# nothing but <Arduino.h> and hal/". As of #418, there are none: the last
+# remaining gap (core -> comms, via core/message_api.h and core/log_filter.cpp
+# including comms/message_router.h) was closed by relocating message_router,
+# transport_interface and transport_serial into core/ itself -- the messaging
+# spine core/message_api depends on no longer lives outside core/.
 #
 # (core -> (root), core -> drivers and core -> outputs were the other three
 # #401 core/ ratchet targets; all three originated in
@@ -51,11 +51,6 @@ pinctrl -> inputs   # PERMANENT -- ARCHITECTURE.md §12.2: PinOwnerInputProbe ex
 # SystemModeObserver function pointer registered from setup(), and the
 # config.h include was dropped as unneeded once that code left.)
 # ---------------------------------------------------------------------------
-
-core -> comms   # RATCHET TARGET -- #401, tracked in #411. src/core/message_api.h:33 and
-                # src/core/log_filter.cpp:6 both include comms/message_router.h;
-                # the control-plane message API reaches into the transport layer
-                # it should only be consumed by.
 
 # ---------------------------------------------------------------------------
 # Structural -- everything else measured against `main` at 8510ea7. None of
@@ -67,7 +62,8 @@ core -> comms   # RATCHET TARGET -- #401, tracked in #411. src/core/message_api.
 # ---------------------------------------------------------------------------
 
 (root) -> cli        # #401 -- main.cpp (the composition root) wires up the CLI.
-(root) -> comms      # #401 -- main.cpp wires up transports/message_router.
+(root) -> comms      # #401 -- main.cpp wires up transport_mux/elm327_framed/transports
+                     # (message_router moved to core/ in #418).
 (root) -> core       # #401 -- main.cpp wires up platform/watchdog/system_mode.
 (root) -> drivers    # #401 -- main.cpp wires up bus/serial/button/RGB drivers.
 (root) -> inputs     # #401 -- main.cpp owns inputs[] / input_manager.
@@ -97,7 +93,9 @@ cli -> storage       # #401 -- SET / SYSTEM DUMP read and write system_config/js
 cli -> test          # #401 -- TEST command leaves.
 
 comms -> (root)      # #401 -- transport code reads config.h.
-comms -> core        # #401 -- message_router uses core/message_api and logging.
+comms -> core        # #401 -- transport_mux.h and the ESP32 transports include
+                     # core/transport_interface.h and core/watchdog.h
+                     # (message_router itself moved into core/ in #418).
 comms -> outputs     # #401, narrowed by #411 item 4 -- transport_mux no longer
                      # includes the BLE broadcasters it multiplexes (the defect
                      # #401 named is fixed: frame dispatch is registration-based,

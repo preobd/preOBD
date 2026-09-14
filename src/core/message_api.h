@@ -30,7 +30,7 @@
 #ifndef MESSAGE_API_H
 #define MESSAGE_API_H
 
-#include "../comms/message_router.h"
+#include "message_router.h"
 #include "log_filter.h"
 #include "log_tags.h"
 #include <Arduino.h>
