@@ -4,13 +4,25 @@
 
 #include "message_router.h"
 #include "../core/message_api.h"
-#include "../storage/system_config.h"
-#include "../drivers/serial_manager.h"
 #include "../cli/serial_config.h"   // processSerialCommands(), handleCommandInput() -- see #418
 #include <string.h>
 
 // Global router instance
 MessageRouter router;
+
+// Serial-port-active probe (see header comment above setSerialPortActiveProbe()).
+static SerialPortActiveProbe serialPortActiveProbe = nullptr;
+
+void setSerialPortActiveProbe(SerialPortActiveProbe probe) {
+    serialPortActiveProbe = probe;
+}
+
+// Local wrapper: applies the unregistered-probe default documented in the
+// header (fail permissive -- see setSerialPortActiveProbe()'s comment).
+static bool serialTransportPortActive(uint8_t port_id) {
+    if (serialPortActiveProbe == nullptr) return true;
+    return serialPortActiveProbe(port_id);
+}
 
 MessageRouter::MessageRouter() : activeControlTransport(nullptr) {
     // Initialize transport registry to NULL
@@ -43,43 +55,33 @@ void MessageRouter::registerTransport(TransportID id, TransportInterface* transp
     }
 }
 
-void MessageRouter::loadConfig() {
-    // Load from SystemConfig.router (persisted in EEPROM)
-    primaryTransport[PLANE_CONTROL] = systemConfig.router.control_primary;
-    primaryTransport[PLANE_DATA] = systemConfig.router.data_primary;
-    primaryTransport[PLANE_DEBUG] = systemConfig.router.debug_primary;
+// loadConfig() / syncConfig() / saveConfig() are declared in message_router.h
+// but DEFINED in storage/system_config.cpp (#418) -- see the header comment
+// there for why.
 
-    secondaryTransport[PLANE_CONTROL] = systemConfig.router.control_secondary;
-    secondaryTransport[PLANE_DATA] = systemConfig.router.data_secondary;
-    secondaryTransport[PLANE_DEBUG] = systemConfig.router.debug_secondary;
-
-    // Load log filter configuration from SystemConfig.logFilter
-    logFilter.setLevel(PLANE_CONTROL, (LogLevel)systemConfig.logFilter.control_level);
-    logFilter.setLevel(PLANE_DATA, (LogLevel)systemConfig.logFilter.data_level);
-    logFilter.setLevel(PLANE_DEBUG, (LogLevel)systemConfig.logFilter.debug_level);
-    logFilter.setEnabledTags(systemConfig.logFilter.enabledTags);
+TransportID MessageRouter::getPrimaryTransportId(MessagePlane plane) const {
+    if (plane >= NUM_PLANES) return TRANSPORT_NONE;
+    return (TransportID)primaryTransport[plane];
 }
 
-void MessageRouter::syncConfig() {
-    // Copy router state to SystemConfig.router (does NOT save to EEPROM)
-    systemConfig.router.control_primary = primaryTransport[PLANE_CONTROL];
-    systemConfig.router.control_secondary = secondaryTransport[PLANE_CONTROL];
-    systemConfig.router.data_primary = primaryTransport[PLANE_DATA];
-    systemConfig.router.data_secondary = secondaryTransport[PLANE_DATA];
-    systemConfig.router.debug_primary = primaryTransport[PLANE_DEBUG];
-    systemConfig.router.debug_secondary = secondaryTransport[PLANE_DEBUG];
-
-    // Copy log filter state to SystemConfig.logFilter
-    systemConfig.logFilter.control_level = logFilter.getLevel(PLANE_CONTROL);
-    systemConfig.logFilter.data_level = logFilter.getLevel(PLANE_DATA);
-    systemConfig.logFilter.debug_level = logFilter.getLevel(PLANE_DEBUG);
-    systemConfig.logFilter.enabledTags = logFilter.getEnabledTags();
+TransportID MessageRouter::getSecondaryTransportId(MessagePlane plane) const {
+    if (plane >= NUM_PLANES) return TRANSPORT_NONE;
+    return (TransportID)secondaryTransport[plane];
 }
 
-void MessageRouter::saveConfig() {
-    // Sync state and persist to EEPROM
-    syncConfig();
-    saveSystemConfig();
+void MessageRouter::setTransportUnchecked(MessagePlane plane, TransportID transportId, bool secondary) {
+    // Deliberately no transportId range check: this mirrors the original
+    // loadConfig()'s direct field assignment byte-for-byte, including its
+    // handling of an out-of-range EEPROM value (getTransport() already
+    // treats any transportId >= NUM_TRANSPORTS as "no transport", so a
+    // corrupted stored byte behaves the same either way -- see #418 PR notes).
+    if (plane >= NUM_PLANES) return;
+
+    if (secondary) {
+        secondaryTransport[plane] = transportId;
+    } else {
+        primaryTransport[plane] = transportId;
+    }
 }
 
 TransportInterface* MessageRouter::getTransport(MessagePlane plane, bool primary) {
@@ -143,7 +145,7 @@ bool MessageRouter::setTransport(MessagePlane plane, TransportID transportId, bo
         // For hardware serial transports, verify the port is enabled
         if (transportId >= TRANSPORT_SERIAL1 && transportId <= TRANSPORT_SERIAL8) {
             uint8_t port_id = transportId - TRANSPORT_SERIAL1 + 1;
-            if (!isSerialPortActive(port_id)) {
+            if (!serialTransportPortActive(port_id)) {
                 return false;  // Serial port not enabled (use BUS SERIAL <n> ENABLE first)
             }
         }
@@ -206,7 +208,7 @@ void MessageRouter::listAvailableTransports() {
             // Skip disabled serial ports (TRANSPORT_SERIAL1=2 maps to port_id=1, etc.)
             if (i >= TRANSPORT_SERIAL1 && i <= TRANSPORT_SERIAL8) {
                 uint8_t port_id = i - TRANSPORT_SERIAL1 + 1;
-                if (!isSerialPortActive(port_id)) continue;
+                if (!serialTransportPortActive(port_id)) continue;
             }
 
             msg.control.print(F("  "));
@@ -276,7 +278,7 @@ void MessageRouter::listTransports() {
             // Skip disabled serial ports (TRANSPORT_SERIAL1=2 maps to port_id=1, etc.)
             if (i >= TRANSPORT_SERIAL1 && i <= TRANSPORT_SERIAL8) {
                 uint8_t port_id = i - TRANSPORT_SERIAL1 + 1;
-                if (!isSerialPortActive(port_id)) continue;
+                if (!serialTransportPortActive(port_id)) continue;
             }
 
             msg.control.print(F("  "));

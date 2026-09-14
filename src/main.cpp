@@ -300,6 +300,14 @@ void setup() {
     setPinOwnerInputProbe(inputHoldsPin);
     setPinOwnerBusProbe(storedBusHoldsPin);
 
+    // Router asks this instead of calling drivers/serial_manager.h directly
+    // (#418). Registered early, alongside the other boot-order-sensitive
+    // probes above: the first possible use is a SET/BUS-driven setTransport()
+    // or LIST TRANSPORTS, both CLI commands that can't run before setup()
+    // finishes, but this repo has a history of boot-order regressions here
+    // (#352, #368, #369) so it is wired up as early as the driver exists.
+    setSerialPortActiveProbe(isSerialPortActive);
+
     // ---- Bus need vote, computed here so registerSystemPins() (next) can
     // gate its Tier-1 *_WIRED_BUS reservation on it (#394) --------------------
     //

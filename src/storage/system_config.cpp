@@ -368,6 +368,62 @@ bool saveSystemConfig(bool verbose) {
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// MessageRouter config marshalling (#418).
+//
+// These are MessageRouter member functions -- declared in
+// comms/message_router.h -- defined HERE instead of in
+// comms/message_router.cpp so storage/ owns the SystemConfig <-> router
+// shape and comms/ stays free of any storage/ dependency (the messaging
+// spine is meant to eventually live in core/). Call sites (router.loadConfig(),
+// router.syncConfig(), router.saveConfig()) are unchanged.
+//
+// loadConfig() writes through setTransportUnchecked(), not setTransport():
+// setTransport() refuses a serial transport whose port isn't enabled yet
+// (isSerialPortActive()), and at load time that would silently drop a stored
+// routing choice for a port not yet brought up. Loading a persisted
+// configuration must never be refused this way.
+// ---------------------------------------------------------------------------
+
+void MessageRouter::loadConfig() {
+    // Load from SystemConfig.router (persisted in EEPROM)
+    setTransportUnchecked(PLANE_CONTROL, (TransportID)systemConfig.router.control_primary, false);
+    setTransportUnchecked(PLANE_DATA,    (TransportID)systemConfig.router.data_primary,    false);
+    setTransportUnchecked(PLANE_DEBUG,   (TransportID)systemConfig.router.debug_primary,   false);
+
+    setTransportUnchecked(PLANE_CONTROL, (TransportID)systemConfig.router.control_secondary, true);
+    setTransportUnchecked(PLANE_DATA,    (TransportID)systemConfig.router.data_secondary,    true);
+    setTransportUnchecked(PLANE_DEBUG,   (TransportID)systemConfig.router.debug_secondary,   true);
+
+    // Load log filter configuration from SystemConfig.logFilter
+    getLogFilter().setLevel(PLANE_CONTROL, (LogLevel)systemConfig.logFilter.control_level);
+    getLogFilter().setLevel(PLANE_DATA,    (LogLevel)systemConfig.logFilter.data_level);
+    getLogFilter().setLevel(PLANE_DEBUG,   (LogLevel)systemConfig.logFilter.debug_level);
+    getLogFilter().setEnabledTags(systemConfig.logFilter.enabledTags);
+}
+
+void MessageRouter::syncConfig() {
+    // Copy router state to SystemConfig.router (does NOT save to EEPROM)
+    systemConfig.router.control_primary   = getPrimaryTransportId(PLANE_CONTROL);
+    systemConfig.router.control_secondary = getSecondaryTransportId(PLANE_CONTROL);
+    systemConfig.router.data_primary      = getPrimaryTransportId(PLANE_DATA);
+    systemConfig.router.data_secondary    = getSecondaryTransportId(PLANE_DATA);
+    systemConfig.router.debug_primary     = getPrimaryTransportId(PLANE_DEBUG);
+    systemConfig.router.debug_secondary   = getSecondaryTransportId(PLANE_DEBUG);
+
+    // Copy log filter state to SystemConfig.logFilter
+    systemConfig.logFilter.control_level = getLogFilter().getLevel(PLANE_CONTROL);
+    systemConfig.logFilter.data_level    = getLogFilter().getLevel(PLANE_DATA);
+    systemConfig.logFilter.debug_level   = getLogFilter().getLevel(PLANE_DEBUG);
+    systemConfig.logFilter.enabledTags   = getLogFilter().getEnabledTags();
+}
+
+void MessageRouter::saveConfig() {
+    // Sync state and persist to EEPROM
+    syncConfig();
+    saveSystemConfig();
+}
+
 // Gap 5 (pin ownership design audit): every claimPins() call below used to
 // discard its return value, so two build-time pins colliding in wiring.ini /
 // board.h (e.g. BUZZER_PIN == MODE_BUTTON_PIN) was accepted in silence — the

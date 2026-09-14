@@ -99,7 +99,6 @@ cli -> test          # #401 -- TEST command leaves.
 comms -> (root)      # #401 -- transport code reads config.h.
 comms -> cli         # #401 -- named by #401 directly: comms initiates CLI-facing framing.
 comms -> core        # #401 -- message_router uses core/message_api and logging.
-comms -> drivers     # #401 -- transport_mux touches serial_manager.
 comms -> outputs     # #401, narrowed by #411 item 4 -- transport_mux no longer
                      # includes the BLE broadcasters it multiplexes (the defect
                      # #401 named is fixed: frame dispatch is registration-based,
@@ -109,7 +108,6 @@ comms -> outputs     # #401, narrowed by #411 item 4 -- transport_mux no longer
                      # can't remove that; only relocating the protocol engine out
                      # of outputs/ would, which is a larger design change than
                      # #411 warrants. So this pair stays, structural, at one site.
-comms -> storage     # #401 -- framed-protocol code reads system_config.
 
 core -> hal          # #401 -- src/core/watchdog.cpp includes hal/hal_watchdog.h; this
                      # is the *allowed* direction under the core/ target property.
