@@ -36,8 +36,13 @@ def _parse_pstr_macros(content: str) -> Dict[str, str]:
 
 def _extract_struct_block(content: str, struct_name: str) -> Optional[str]:
     """Extracts the full array definition for a given struct name."""
+    # "static" is optional: it's present for the traditional struct-array
+    # tables that are still defined inline in a header (e.g. SENSOR_CATEGORIES),
+    # but absent for the extern-linkage tables that #400 moved into their own
+    # .cpp (APPLICATION_PRESETS, UNITS_REGISTRY) — those need external linkage
+    # so sensor_library.h et al. can `extern` them.
     block_pattern = re.compile(
-        rf'static const PROGMEM \w+ {struct_name}\[\] = \{{(.*?)\}};\s*\n',
+        rf'(?:static )?const PROGMEM \w+ {struct_name}\[\] = \{{(.*?)\}};\s*\n',
         re.DOTALL
     )
     match = block_pattern.search(content)

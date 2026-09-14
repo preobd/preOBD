@@ -16,6 +16,11 @@
 #include <Arduino.h>
 #include <string.h>
 
+// SENSOR_LIBRARY / UNITS_REGISTRY / APPLICATION_PRESETS are now defined in
+// their own .cpp (#400), not inline in the header — pull the data in.
+#include "../../src/lib/sensor_library.cpp"
+#include "../../src/lib/units_registry.cpp"
+#include "../../src/lib/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"

@@ -6,7 +6,8 @@ Automatically generates C++ enum header file from sensor and application registr
 This provides type-safe, self-documenting constants instead of magic number indices.
 
 Parses the modular sensor library structure:
-  - src/lib/sensor_library.h (orchestrator)
+  - src/lib/sensor_library.cpp (assembly — the SENSOR_LIBRARY[] data itself;
+    sensor_library.h now only declares it, see #400)
   - src/lib/sensor_library/sensors/*.h (sensor definitions using X-macro pattern)
 """
 
@@ -95,8 +96,12 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_dir = os.path.dirname(script_dir)  # Parent of tools/ is project root
 
-    sensor_lib_path = os.path.join(project_dir, "src/lib/sensor_library.h")
-    app_presets_path = os.path.join(project_dir, "src/lib/application_presets.h")
+    # The SENSOR_LIBRARY[]/APPLICATION_PRESETS[] *data* lives in the .cpp now
+    # (#400 — one definition, not one per including .cpp); the .h files only
+    # declare `extern`. Parse the .cpp, which still #includes the
+    # sensor_library/sensors/*.h category headers the X-macro parser walks.
+    sensor_lib_path = os.path.join(project_dir, "src/lib/sensor_library.cpp")
+    app_presets_path = os.path.join(project_dir, "src/lib/application_presets.cpp")
     output_path = os.path.join(project_dir, "src/lib/generated/registry_enums.h")
 
     print("=== preOBD Registry Enum Generator ===")
@@ -114,8 +119,8 @@ def main():
         print(f"\u2717 Error parsing registries: {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\u2713 Parsed {len(sensors)} sensors from sensor_library.h (+ sensor_library/sensors/)")
-    print(f"\u2713 Parsed {len(apps)} applications from application_presets.h")
+    print(f"\u2713 Parsed {len(sensors)} sensors from sensor_library.cpp (+ sensor_library/sensors/)")
+    print(f"\u2713 Parsed {len(apps)} applications from application_presets.cpp")
     print()
 
     # Generate enum header

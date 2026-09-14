@@ -11,8 +11,9 @@
 //   #363      — the JSON import path never even looked at the return value.
 //
 // input_manager.cpp compiles on the host essentially unchanged: the registries
-// it reads (APPLICATION_PRESETS / SENSOR_LIBRARY) are header-resident PROGMEM
-// tables that the stub turns into plain RAM. What it needs from the rest of the
+// it reads (APPLICATION_PRESETS / SENSOR_LIBRARY, defined in their own .cpp
+// per #400) are PROGMEM tables that the stub turns into plain RAM. What it
+// needs from the rest of the
 // firmware comes from test/stubs/firmware_stubs.h — a null-transport message
 // router (so every msg.control print is a no-op), a test-settable
 // isPinAvailable(), and no-op bodies for the sensor read/init functions the
@@ -24,6 +25,11 @@
 #include <Arduino.h>
 #include <string.h>
 
+// SENSOR_LIBRARY / UNITS_REGISTRY / APPLICATION_PRESETS are now defined in
+// their own .cpp (#400), not inline in the header — pull the data in.
+#include "../../src/lib/sensor_library.cpp"
+#include "../../src/lib/units_registry.cpp"
+#include "../../src/lib/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"

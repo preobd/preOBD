@@ -27,6 +27,11 @@
 #include "../../src/lib/pin_owner.cpp"
 #include "../../src/lib/bus_needs.cpp"   // display vote; the sensor mapping is
                                         // inline in sensor_helpers.h
+// SENSOR_LIBRARY / UNITS_REGISTRY / APPLICATION_PRESETS are now defined in
+// their own .cpp (#400), not inline in the header — pull the data in.
+#include "../../src/lib/sensor_library.cpp"
+#include "../../src/lib/units_registry.cpp"
+#include "../../src/lib/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
 
 // ---------------------------------------------------------------------------
