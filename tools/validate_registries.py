@@ -6,9 +6,9 @@ A CI-friendly script to validate the integrity of the C registry files and,
 optionally, the generated static config in config.h.
 
 Parses the modular sensor library structure:
-  - src/lib/sensor_library.cpp (assembly — the SENSOR_LIBRARY[] data itself;
+  - src/sensors/sensor_library.cpp (assembly — the SENSOR_LIBRARY[] data itself;
     sensor_library.h now only declares it, see #400)
-  - src/lib/sensor_library/sensors/*.h (sensor definitions using X-macro pattern)
+  - src/sensors/sensor_library/sensors/*.h (sensor definitions using X-macro pattern)
 """
 
 import argparse
@@ -51,9 +51,9 @@ def main():
     # Load registries
     try:
         # The data lives in the .cpp now (#400); the .h files only declare `extern`.
-        sensors = parse_sensor_library(os.path.join(args.project_dir, "src/lib/sensor_library.cpp"))
-        apps = parse_application_presets(os.path.join(args.project_dir, "src/lib/application_presets.cpp"))
-        units = parse_units_registry(os.path.join(args.project_dir, "src/lib/units_registry.cpp"))
+        sensors = parse_sensor_library(os.path.join(args.project_dir, "src/sensors/sensor_library.cpp"))
+        apps = parse_application_presets(os.path.join(args.project_dir, "src/sensors/application_presets.cpp"))
+        units = parse_units_registry(os.path.join(args.project_dir, "src/sensors/units_registry.cpp"))
     except FileNotFoundError as e:
         print(f"\n\u2717 Critical Error: Could not find a registry file. {e}", file=sys.stderr)
         sys.exit(1)

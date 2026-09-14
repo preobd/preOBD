@@ -18,9 +18,9 @@
 #include "../lib/message_api.h"
 #include "../lib/log_filter.h"
 #include "../lib/log_tags.h"
-#include "../lib/units_registry.h"
-#include "../lib/application_presets.h"
-#include "../lib/sensor_library.h"
+#include "../sensors/units_registry.h"
+#include "../sensors/application_presets.h"
+#include "../sensors/sensor_library.h"
 #include "../lib/platform.h"
 #include "../lib/json_registry.h"
 #include "../lib/bus_manager.h"
@@ -43,8 +43,8 @@
 #include "../test/test_mode.h"
 #endif
 #if INCLUDE_CAN
-#include "../inputs/sensors/can/can_scan.h"
-#include "../lib/can_sensor_library/standard_pids.h"
+#include "../sensors/drivers/can/can_scan.h"
+#include "../sensors/can_sensor_library/standard_pids.h"
 #endif
 #include <string.h>
 #include <ctype.h>

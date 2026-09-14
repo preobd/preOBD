@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Sensor tables, calibration data, and the driver implementations moved from `src/lib/` and `src/inputs/` into a new `src/sensors/` directory (pure move, no behaviour change) (#401)
 - `SENSOR_LIBRARY`/`APPLICATION_PRESETS`/`UNITS_REGISTRY` and their calibration/string data now live in one `.cpp` each instead of being redefined by every including header, recovering ~11 KB of flash on mega2560 and ~76 KB on teensy41 that duplicate PROGMEM copies were wasting (#400)
 - `SENSOR_CATEGORIES` (the sensor-category name/label table `#400` missed) now lives in one `.cpp` instead of being redefined by every including header
 

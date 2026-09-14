@@ -3,8 +3,8 @@
  */
 
 #include "measurement_compat.h"
-#include "../lib/sensor_library.h"
-#include "../lib/application_presets.h"
+#include "../sensors/sensor_library.h"
+#include "../sensors/application_presets.h"
 
 bool sensorMatchesApplication(uint8_t sensorIndex, uint8_t applicationIndex) {
     // "Nothing is paired yet" — SENSOR_NONE / APP_NONE. There is genuinely no

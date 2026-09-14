@@ -6,8 +6,8 @@
 #define OUTPUT_BASE_H
 
 #include "../inputs/input.h"
-#include "../lib/sensor_types.h"
-#include "../lib/sensor_library.h"
+#include "../sensors/calibration_types.h"
+#include "../sensors/sensor_library.h"
 #include "../lib/system_config.h"  // For OutputID enum
 
 // Output module structure

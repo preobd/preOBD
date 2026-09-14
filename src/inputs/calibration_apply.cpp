@@ -197,7 +197,7 @@ CalApplyStatus applyCalCanImport(Input* input, uint16_t source_can_id, uint8_t s
     if (data_length < 1 || data_length > 4) return CAL_APPLY_ERR_CAN_LENGTH;
     if (data_offset > 7) return CAL_APPLY_ERR_CAN_OFFSET;
     // 0 is a legitimate value: CANSensorCalibration.timeout_ms treats 0 as
-    // "use CAN_DEFAULT_TIMEOUT_MS" (sensor_types.h). Anything else must fall
+    // "use CAN_DEFAULT_TIMEOUT_MS" (sensors/calibration_types.h). Anything else must fall
     // in the same range SET <pin> CAN_TIMEOUT has always enforced.
     if (timeout_ms != 0 && (timeout_ms < 100 || timeout_ms > 30000)) return CAL_APPLY_ERR_CAN_TIMEOUT;
 

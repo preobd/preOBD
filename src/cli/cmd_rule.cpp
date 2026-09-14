@@ -25,8 +25,8 @@
 #include "../lib/system_mode.h"
 #include "../lib/system_config.h"
 #include "../lib/message_api.h"
-#include "../lib/units_registry.h"    // getUnitStringByIndex
-#include "../lib/sensor_library.h"    // convertFromBaseUnits
+#include "../sensors/units_registry.h"    // getUnitStringByIndex
+#include "../sensors/sensor_library.h"    // convertFromBaseUnits
 #include "../control/control_manager.h"
 #include "../control/control_engine.h"
 

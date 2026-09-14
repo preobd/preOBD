@@ -17,7 +17,7 @@
 #include "../lib/bus_config.h"
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
-#include "sensors/can/can_frame_cache.h"
+#include "../sensors/drivers/can/can_frame_cache.h"
 #include "../hal/hal_can.h"
 
 // ============================================================================

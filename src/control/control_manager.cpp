@@ -10,7 +10,7 @@
 #include <math.h>
 #include "../lib/system_config.h"
 #include "../inputs/input_manager.h"
-#include "../lib/application_presets.h"
+#include "../sensors/application_presets.h"
 #include "../lib/pin_registry.h"
 #include "../lib/pin_owner.h"
 #include "../lib/message_api.h"

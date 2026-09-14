@@ -15,8 +15,8 @@
 #include "lib/platform.h"
 #include "lib/watchdog.h"
 
-#include "lib/sensor_types.h"
-#include "lib/sensor_library.h"
+#include "sensors/calibration_types.h"
+#include "sensors/sensor_library.h"
 #include "lib/system_config.h"
 #include "lib/bus_manager.h"
 #include "lib/bus_needs.h"
@@ -40,7 +40,7 @@
 #include "lib/obd_query.h"
 #if INCLUDE_CAN
     #include "inputs/input_can.h"
-    #include "inputs/sensors/can/can_scan.h"
+    #include "sensors/drivers/can/can_scan.h"
 #endif
 
 // Transport abstraction layer

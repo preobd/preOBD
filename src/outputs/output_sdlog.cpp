@@ -20,8 +20,8 @@
 
 #include "output_base.h"
 #include "../config.h"
-#include "../lib/sensor_library.h"
-#include "../lib/units_registry.h"
+#include "../sensors/sensor_library.h"
+#include "../sensors/units_registry.h"
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
 #include "../lib/system_mode.h"

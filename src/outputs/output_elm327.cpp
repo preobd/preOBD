@@ -16,7 +16,7 @@
 #include "../lib/log_tags.h"
 #include "../inputs/input.h"
 #include "../inputs/input_manager.h"
-#include "../lib/generated/registry_enums.h"  // APP_PRIMARY_BATTERY, APP_AUXILIARY_BATTERY
+#include "../sensors/generated/registry_enums.h"  // APP_PRIMARY_BATTERY, APP_AUXILIARY_BATTERY
 
 // ===== SINGLETON =====
 

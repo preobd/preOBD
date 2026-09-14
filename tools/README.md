@@ -9,7 +9,7 @@ configuration generators.
 
 ### `generate_registry_enums.py`
 
-Auto-generates `src/lib/generated/registry_enums.h` from the sensor library,
+Auto-generates `src/sensors/generated/registry_enums.h` from the sensor library,
 application presets, and units registry. Run after adding or reordering entries
 in any registry.
 

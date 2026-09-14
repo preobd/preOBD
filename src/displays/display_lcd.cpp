@@ -4,12 +4,12 @@
 
 #include "../config.h"
 #include "../inputs/input.h"
-#include "../lib/sensor_types.h"
-#include "../lib/units_registry.h"
+#include "../sensors/calibration_types.h"
+#include "../sensors/units_registry.h"
 #include "../lib/message_api.h"
 #include "../lib/log_tags.h"
-#include "../lib/application_presets.h"
-#include "../lib/sensor_library.h"
+#include "../sensors/application_presets.h"
+#include "../sensors/sensor_library.h"
 
 #if INCLUDE_LCD
 

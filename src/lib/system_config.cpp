@@ -4,7 +4,7 @@
 
 #include "system_config.h"
 #include "../config.h"
-#include "units_registry.h"
+#include "../sensors/units_registry.h"
 #include "message_router.h"  // For TransportID enum
 #include "bus_defaults.h"
 #include "bus_wiring.h"

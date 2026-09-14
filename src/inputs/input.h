@@ -82,7 +82,7 @@
 #define INPUT_H
 
 #include <Arduino.h>
-#include "../lib/sensor_types.h"
+#include "../sensors/calibration_types.h"
 
 // Forward declarations
 struct Input;

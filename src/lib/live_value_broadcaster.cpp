@@ -12,7 +12,7 @@
 #include "frame_codec.h"
 #include "transport_mux.h"
 #include "slotted_broadcaster.h"
-#include "sensor_library.h"   // convertFromBaseUnits()
+#include "../sensors/sensor_library.h"   // convertFromBaseUnits()
 #include "../inputs/input.h"
 #include "../inputs/input_manager.h"
 

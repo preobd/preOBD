@@ -20,12 +20,12 @@
 #ifndef FLASHMEM
 #define FLASHMEM
 #endif
-#include "sensor_library.h"
-#include "application_presets.h"
-#include "units_registry.h"
-#include "sensor_library/sensor_categories.h"
-#include "sensor_library/sensor_helpers.h"
-#include "can_sensor_library/standard_pids.h"
+#include "../sensors/sensor_library.h"
+#include "../sensors/application_presets.h"
+#include "../sensors/units_registry.h"
+#include "../sensors/sensor_library/sensor_categories.h"
+#include "../sensors/sensor_library/sensor_helpers.h"
+#include "../sensors/can_sensor_library/standard_pids.h"
 #include "../outputs/output_base.h"
 #include "system_config.h"
 #include "../version.h"
