@@ -9,6 +9,8 @@
 #include "command_helpers.h"
 #include "serial_config.h"
 #include "../inputs/input_manager.h"
+#include "input_display.h"
+#include "registry_display.h"
 #include "../config.h"
 #include "../version.h"
 #include "../core/system_mode.h"

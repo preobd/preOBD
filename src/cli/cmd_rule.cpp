@@ -21,6 +21,7 @@
 #include "command_handlers.h"
 #include "command_helpers.h"
 #include "../inputs/input_manager.h"
+#include "../pinctrl/pin_label.h"
 #include "../inputs/input.h"
 #include "../core/system_mode.h"
 #include "../storage/system_config.h"

@@ -26,6 +26,7 @@
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
+#include "../../src/pinctrl/pin_label.cpp"   // formatPinLabel, used by json_config.cpp's exportInputToJSON (#402 step 1)
 #include "../../src/storage/json_config.cpp"
 
 #include "../stubs/firmware_stubs.h"

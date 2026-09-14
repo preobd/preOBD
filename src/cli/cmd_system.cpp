@@ -8,6 +8,7 @@
 #include "command_table.h"
 #include "command_helpers.h"
 #include "../inputs/input_manager.h"
+#include "input_display.h"
 #include "../inputs/input.h"
 #include "serial_config.h"
 #include "../version.h"

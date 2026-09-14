@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SENSOR_CATEGORIES` (the sensor-category name/label table `#400` missed) now lives in one `.cpp` instead of being redefined by every including header
 - `src/lib/` and `src/displays/` dissolved into `src/hal/`, `src/pinctrl/`, `src/drivers/`, `src/core/`, `src/comms/`, `src/storage/`, `src/outputs/ble/`, and `src/outputs/display/` (pure move, no behaviour change) (#401)
 - `src/control/` renamed to `src/rules/`, with every `control*`/`CONTROL_*` identifier renamed to `rules*`/`RULES_*` to match (the `msg.control` control plane and its `controlLevel` JSON key are unrelated and untouched); the CLI now says "rules engine" where it used to say "control engine" (#401)
+- The 490-line presentation band of `src/inputs/input_manager.cpp` moved to `src/cli/input_display.{h,cpp}` (Input-info/output/calibration printers, `listAllInputs`), `src/cli/registry_display.{h,cpp}` (sensor/application registry listers), and `src/pinctrl/pin_label.{h,cpp}` (the pin-encoding decoder), fixing a CLI-in-the-domain-model layering inversion with no behaviour change (#402 step 1)
 
 ## [0.12.0-beta] - 2026-09-11
 

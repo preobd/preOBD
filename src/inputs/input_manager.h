@@ -120,17 +120,11 @@ void resetInputConfig();              // Clear all inputs and EEPROM
 void readAllInputs();                 // Read all enabled inputs
 
 // ===== INFO =====
-// Format a pin's display label ("A0", "I2C:0", "CAN:3", or the raw number)
-// into buf. Single source for LIST INPUTS and the JSON dump's "pinLabel".
-void formatPinLabel(uint8_t pin, char* buf, size_t bufLen);
-void printInputInfo(uint8_t pin);    // Print detailed input information
-// printInputAlarmInfo() lives in cmd_rule.cpp (declared in command_handlers.h):
-// the per-input alarm view renders the input's canonical alarm Rule, not the
-// retired legacy Input alarm fields (#338).
-void printInputOutputInfo(uint8_t pin);
-void printInputCalibration(uint8_t pin);
-void listAllInputs();                // List all active inputs
-void listApplicationPresets();       // List available Applications
-void listSensors(const char* filter = nullptr);  // List sensors (categories, by category, or by measurement type)
+// Presentation over inputs[] (printInputInfo, printInputOutputInfo,
+// printInputCalibration, listAllInputs) lives in cli/input_display.h, and the
+// pin-label decoder (formatPinLabel) lives in pinctrl/pin_label.h, and the
+// sensor/application registry listers (listApplicationPresets, listSensors)
+// live in cli/registry_display.h — moved out of the Input model in #402
+// step 1 since none of it is domain-model behaviour.
 
 #endif // INPUT_MANAGER_H

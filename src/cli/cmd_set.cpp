@@ -8,6 +8,7 @@
 #include "command_table.h"
 #include "command_helpers.h"
 #include "../inputs/input_manager.h"
+#include "input_display.h"
 #include "../inputs/input.h"
 #include "../inputs/calibration_apply.h"
 #include "../inputs/measurement_compat.h"

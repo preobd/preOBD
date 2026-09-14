@@ -16,6 +16,7 @@
 #include "../drivers/serial_manager.h"
 #include "../inputs/input.h"
 #include "../inputs/input_manager.h"
+#include "../pinctrl/pin_label.h"
 #include "../inputs/calibration_apply.h"
 #include "../sensors/units_registry.h"
 #include "../sensors/sensor_library.h"
@@ -32,19 +33,26 @@
 #include "../rules/rules_manager.h"
 #endif
 
-#if SUPPORTS_SD
-#include <SD.h>
-
 // JSON config is a COLD path: it runs only on SYSTEM DUMP JSON / JSON IMPORT,
 // never in the sensor loop. On Teensy 4.x every function lands in ITCM (RAM1) by
 // default, and ITCM is allocated in 32 KB blocks -- crossing a block boundary
 // costs 32 KB of RAM1 that local variables can no longer use, not the few hundred
 // bytes the code actually occupies. FLASHMEM keeps this module in flash where it
 // belongs. Same macro json_registry.cpp already uses; a no-op off Teensy.
+//
+// Unconditional (not nested under SUPPORTS_SD): the functions below using
+// FLASHMEM are used regardless of SD support (SUPPORTS_JSON_CONFIG can be 1
+// with SUPPORTS_SD 0, e.g. an SD-less board with JSON config still enabled).
+// Previously this only compiled by accident, via a same-macro #define that
+// leaked in from inputs/input_manager.cpp's own (now moved, #402 step 1)
+// FLASHMEM guard when both files were amalgamated into one translation unit
+// (as the native tests do) -- exposed once that guard moved to pin_label.cpp.
 #ifndef FLASHMEM
 #define FLASHMEM
 #endif
 
+#if SUPPORTS_SD
+#include <SD.h>
 // SD object is provided globally by SD.h
 #endif
 
