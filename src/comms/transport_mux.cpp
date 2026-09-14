@@ -7,8 +7,59 @@
 #include <string.h>
 
 #include "elm327_framed.h"
-#include "../outputs/ble/action_broadcaster.h"
-#include "../outputs/ble/live_value_broadcaster.h"
+
+namespace {
+
+// Frame-handler table (#411 item 4) -- see transport_mux.h for the
+// registration contract. Zero-initialized; an unregistered frameType or a
+// nullptr handler simply finds nothing to call, matching the "no-op when
+// the feature is compiled out" behaviour the direct calls used to rely on
+// (an off feature registers nothing).
+struct MuxFrameHandlerSlot {
+    uint8_t frameType;
+    MuxFrameHandler handler;
+};
+MuxFrameHandlerSlot muxFrameHandlers[kMaxMuxFrameHandlers] = {};
+uint8_t muxFrameHandlerCount = 0;
+
+MuxResyncHandler muxResyncHandlers[kMaxMuxResyncHandlers] = {};
+uint8_t muxResyncHandlerCount = 0;
+
+void dispatchMuxFrameHandler(uint8_t frameType, const uint8_t* payload, uint16_t len) {
+    for (uint8_t i = 0; i < muxFrameHandlerCount; ++i) {
+        if (muxFrameHandlers[i].frameType == frameType) {
+            if (muxFrameHandlers[i].handler) muxFrameHandlers[i].handler(payload, len);
+            return;
+        }
+    }
+}
+
+void notifyMuxResync() {
+    for (uint8_t i = 0; i < muxResyncHandlerCount; ++i) {
+        if (muxResyncHandlers[i]) muxResyncHandlers[i]();
+    }
+}
+
+} // namespace
+
+void setMuxFrameHandler(uint8_t frameType, MuxFrameHandler handler) {
+    for (uint8_t i = 0; i < muxFrameHandlerCount; ++i) {
+        if (muxFrameHandlers[i].frameType == frameType) {
+            muxFrameHandlers[i].handler = handler;
+            return;
+        }
+    }
+    if (muxFrameHandlerCount < kMaxMuxFrameHandlers) {
+        muxFrameHandlers[muxFrameHandlerCount++] = { frameType, handler };
+    }
+    // else: table exhausted -- silently dropped, see header comment.
+}
+
+bool addMuxResyncHandler(MuxResyncHandler handler) {
+    if (muxResyncHandlerCount >= kMaxMuxResyncHandlers) return false;
+    muxResyncHandlers[muxResyncHandlerCount++] = handler;
+    return true;
+}
 
 void MuxTransport::setFramedEnabled(bool enabled) {
     if (enabled == framedEnabled) return;
@@ -121,12 +172,14 @@ void MuxTransport::handleFrame(const Frame& f) {
         }
         break;
     case FRAME_TYPE_PING: {
-        // A ping marks a (re)connection: invalidate the action + live-value
-        // caches so the next tick re-emits all slots, populating a late
-        // client's panel without waiting on the heartbeat. Cache-only, safe
-        // mid-frame; no-op stubs when the respective features are off.
-        ActionBroadcaster::resync();
-        LiveValueBroadcaster::resync();
+        // A ping marks a (re)connection: invalidate every registered
+        // resync cache (today: action + live-value) so the next tick
+        // re-emits all slots, populating a late client's panel without
+        // waiting on the heartbeat. Cache-only, safe mid-frame. A feature
+        // that is compiled out simply never registered a handler here, so
+        // this stays a no-op for it exactly as the direct no-op-stub calls
+        // used to be (#411 item 4).
+        notifyMuxResync();
         // Echo immediately so the nRF's auto-detect upgrades the link. If
         // this PING was pumped from inside a partially-written frame, defer
         // the echo to the next frame boundary -- injecting it mid-frame
@@ -142,11 +195,13 @@ void MuxTransport::handleFrame(const Frame& f) {
     }
     case FRAME_TYPE_RELAY:
         // Webapp-initiated Action write (frame value 0x05; legacy name):
-        // forward to the broadcaster which applies the manual-toggle command
-        // and emits a confirmation notify on the next tick. ActionBroadcaster
-        // compiles to a no-op when the control engine is disabled, so the
-        // unconditional call is safe.
-        ActionBroadcaster::handleInbound(f.payload, f.len);
+        // dispatch to whoever registered for it (today: ActionBroadcaster,
+        // which applies the manual-toggle command and emits a confirmation
+        // notify on the next tick). When the control engine is disabled
+        // nothing registers for FRAME_TYPE_RELAY, so this is a no-op --
+        // same behaviour as the direct no-op-stub call it replaces (#411
+        // item 4).
+        dispatchMuxFrameHandler(FRAME_TYPE_RELAY, f.payload, f.len);
         break;
     case FRAME_TYPE_ELM327:
         // ELM327 client traffic (e.g. Torque over a concurrent BLE central):

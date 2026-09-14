@@ -25,6 +25,15 @@
  *   MuxTransport hwSerial1(&Serial1, "SERIAL1", 115200);
  *   // After initSystemConfig():
  *   hwSerial1.setFramedEnabled(systemConfig.serial.framed_enabled_mask & 0x01);
+ *
+ * Frame routing (#411 item 4): the mux used to reach directly into the two
+ * output modules it multiplexes for (ActionBroadcaster, LiveValueBroadcaster)
+ * -- a defect #401 named ("the multiplexer reaches into the broadcasters it
+ * multiplexes"). It now routes through two small registration tables, same
+ * shape as PinOwnerInputProbe (pinctrl/pin_owner.h) and SystemModeObserver
+ * (core/system_mode.h): comms/ declares the callback types and dispatches,
+ * the composition root (main.cpp) wires up who receives what. See
+ * setMuxFrameHandler() / addMuxResyncHandler() below.
  */
 
 #ifndef TRANSPORT_MUX_H
@@ -35,6 +44,43 @@
 #include "frame_codec.h"
 #include "transport_interface.h"
 #include "../core/watchdog.h"
+
+// ---------------------------------------------------------------------------
+// Frame-handler registration (#411 item 4).
+//
+// A claimed inbound frame type (today: FRAME_TYPE_RELAY, the webapp's Action
+// write) is dispatched to a handler registered for that type. Keyed by
+// frame type rather than a single fixed slot so a second claimed type
+// doesn't require another parallel mechanism later; only one type registers
+// today. Fixed-size table, no dynamic allocation (embedded firmware) --
+// registering past kMaxMuxFrameHandlers is silently dropped, which is the
+// same "table exhausted" contract MAX_ACTIONS/MAX_INPUTS use elsewhere, and
+// headroom (4 slots for the one user today) makes that a non-issue.
+typedef void (*MuxFrameHandler)(const uint8_t* payload, uint16_t len);
+constexpr uint8_t kMaxMuxFrameHandlers = 4;
+
+/**
+ * Claim `frameType`'s inbound payload for `handler`. Re-registering the same
+ * frameType replaces the previous handler (last writer wins); nothing in
+ * this firmware does that today.
+ */
+void setMuxFrameHandler(uint8_t frameType, MuxFrameHandler handler);
+
+// FRAME_TYPE_PING marks a (re)connection; more than one broadcaster needs to
+// invalidate its cache for it (today: Action + LiveValue), so this is a
+// small fixed array rather than a single slot -- again no dynamic
+// allocation.
+typedef void (*MuxResyncHandler)();
+constexpr uint8_t kMaxMuxResyncHandlers = 4;
+
+/**
+ * Register a handler to be called on every inbound FRAME_TYPE_PING. MUST be
+ * called before framed frames can be dispatched -- i.e. in setup() before
+ * the transport starts pumping (mirrors setSystemModeObserver()'s ordering
+ * requirement, core/system_mode.h: main.cpp registers both before anything
+ * that could invoke them). Returns false if every slot is already taken.
+ */
+bool addMuxResyncHandler(MuxResyncHandler handler);
 
 class MuxTransport : public TransportInterface {
 private:

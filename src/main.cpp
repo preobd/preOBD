@@ -404,6 +404,24 @@ void setup() {
     AlarmBroadcaster::init();
     ActionBroadcaster::init();
     LiveValueBroadcaster::init();
+#if INCLUDE_FRAMED_TRANSPORT
+    // Frame-handler registration (#411 item 4): transport_mux no longer
+    // reaches into these broadcasters directly (the defect #401 named) --
+    // it dispatches inbound frames through the tables declared in
+    // comms/transport_mux.h, and this composition root is where the wiring
+    // happens, same as setPinOwnerInputProbe() (:300) and
+    // setSystemModeObserver() (:587). MUST run before hwSerial1 can dispatch
+    // any inbound frame -- i.e. before loop() starts pumping it; placed
+    // here, immediately after the two init() calls above, so each callback
+    // is registered the moment it becomes safe to invoke. A feature that
+    // compiled out its broadcaster (INCLUDE_RULES_ENGINE off for Action,
+    // e.g.) still runs this line -- handleInbound()/resync() are no-op
+    // stubs in that case (see action_broadcaster.h), matching the
+    // unconditional direct calls this replaces.
+    setMuxFrameHandler(FRAME_TYPE_RELAY, ActionBroadcaster::handleInbound);
+    addMuxResyncHandler(ActionBroadcaster::resync);
+    addMuxResyncHandler(LiveValueBroadcaster::resync);
+#endif
     msg.control.println();
     msg.control.println(F("                 ____  ___  ___  "));
     msg.control.println(F("   ___  _______ / __ \\/ _ )/ _ \\ "));
