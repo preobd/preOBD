@@ -10,7 +10,7 @@
  *                           board that can't simply omits the line. Never 0.
  *   INCLUDE_X    here       "X's code is IN THE IMAGE." Capability AND wiring
  *                           AND no veto. What src/ tests for feature code.
- *                           (INCLUDE_SELFTEST and INCLUDE_CONTROL_ENGINE are
+ *                           (INCLUDE_SELFTEST and INCLUDE_RULES_ENGINE are
  *                           derived in src/ instead — the native test build
  *                           has no board.h, so they can't live here.)
  *   (runtime)    EEPROM     "X is actually ON." outputEnabled[], displayType,

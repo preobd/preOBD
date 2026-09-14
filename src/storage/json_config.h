@@ -30,7 +30,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include "sd_manager.h"
-#include "../control/control_types.h"  // INCLUDE_CONTROL_ENGINE + MAX_RULES/MAX_ACTIONS
+#include "../rules/rules_types.h"  // INCLUDE_RULES_ENGINE + MAX_RULES/MAX_ACTIONS
 
 // Forward declarations
 struct Input;
@@ -48,9 +48,9 @@ bool importSystemConfigFromJSON(JsonObject& systemObj);
 bool importInputsFromJSON(JsonArray& inputsArray);
 bool importInputFromJSON(JsonObject& inputObj, uint8_t index);
 
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
 // Control engine — Rule/Action table export/import (top-level "rules"/"actions"
-// arrays). Per-record (de)serialization lives in control_json.{h,cpp}.
+// arrays). Per-record (de)serialization lives in rules_json.{h,cpp}.
 void exportRulesToJSON(JsonArray& rulesArray);
 void exportActionsToJSON(JsonArray& actionsArray);
 void importRulesFromJSON(JsonArrayConst rulesArray);

@@ -13,7 +13,7 @@
 #define _COMMAND_HANDLERS_H_
 
 #include "../config.h"
-#include "../control/control_types.h"  // defines INCLUDE_CONTROL_ENGINE (order-independent)
+#include "../rules/rules_types.h"  // defines INCLUDE_RULES_ENGINE (order-independent)
 
 int cmd_help(int argc, const char* const* argv);
 int cmd_list(int argc, const char* const* argv);
@@ -37,7 +37,7 @@ int cmd_at(int argc, const char* const* argv);
 #if INCLUDE_RELAY_OUTPUT
 int cmd_relay(int argc, const char* const* argv);
 #endif
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
 int cmd_rule(int argc, const char* const* argv);
 int cmd_action(int argc, const char* const* argv);
 // INFO <pin> ALARM — the per-input alarm view. Lives with the RULE CLI because

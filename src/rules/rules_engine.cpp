@@ -1,8 +1,8 @@
 /*
- * control_engine.cpp - Rule evaluation state machine (see control_engine.h).
+ * rules_engine.cpp - Rule evaluation state machine (see rules_engine.h).
  */
 
-#include "control_engine.h"
+#include "rules_engine.h"
 #include "../config.h"
 #include <math.h>
 
@@ -12,7 +12,7 @@
 #define WARNING_THRESHOLD_PERCENT 90
 #endif
 
-void controlRuleInit(RuleContext& ctx, const Rule& rule, uint32_t now) {
+void rulesRuleInit(RuleContext& ctx, const Rule& rule, uint32_t now) {
     const bool enabled = (rule.flags & RULE_FLAG_ENABLED) != 0;
     ctx.state = enabled ? RULE_INIT : RULE_DISABLED;
     ctx.stateEntryTime = now;
@@ -21,7 +21,7 @@ void controlRuleInit(RuleContext& ctx, const Rule& rule, uint32_t now) {
     ctx.persistTime_ms = rule.debounceMs;
 }
 
-bool controlRuleConditionAsserted(const Rule& rule, float value, bool currentlyActive) {
+bool rulesRuleConditionAsserted(const Rule& rule, float value, bool currentlyActive) {
     // Safety: an untrustworthy (NaN) reading never asserts. An already-active
     // rule therefore de-asserts when its source goes NaN.
     if (isnan(value)) {
@@ -55,7 +55,7 @@ bool controlRuleConditionAsserted(const Rule& rule, float value, bool currentlyA
     }
 }
 
-void controlRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t now) {
+void rulesRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t now) {
     const bool enabled = (rule.flags & RULE_FLAG_ENABLED) != 0;
     if (!enabled) {
         ctx.state = RULE_DISABLED;
@@ -66,12 +66,12 @@ void controlRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t
     switch (ctx.state) {
         case RULE_DISABLED:
             // Enabled but unarmed (e.g. enabled without an explicit init) — arm.
-            controlRuleInit(ctx, rule, now);
+            rulesRuleInit(ctx, rule, now);
             return;
 
         case RULE_INIT:
             // Brief stabilization so an uninitialized reading can't trip a rule.
-            if (now - ctx.stateEntryTime > CONTROL_INIT_MS) {
+            if (now - ctx.stateEntryTime > RULES_INIT_MS) {
                 ctx.state = RULE_WARMUP;
                 ctx.stateEntryTime = now;
             }
@@ -91,7 +91,7 @@ void controlRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t
     }
 
     // ===== Qualification (READY / ACTIVE) =====
-    const bool asserted = controlRuleConditionAsserted(rule, value, ctx.state == RULE_ACTIVE);
+    const bool asserted = rulesRuleConditionAsserted(rule, value, ctx.state == RULE_ACTIVE);
     if (asserted) {
         if (ctx.faultStartTime == 0) {
             ctx.faultStartTime = now;  // start debounce timer
@@ -108,12 +108,12 @@ void controlRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t
     }
 }
 
-bool controlRuleIsActive(const RuleContext& ctx) {
+bool rulesRuleIsActive(const RuleContext& ctx) {
     return ctx.state == RULE_ACTIVE;
 }
 
-RuleSeverity controlRuleSeverity(const Rule& rule, const RuleContext& ctx) {
-    return controlRuleIsActive(ctx) ? (RuleSeverity)rule.severity : RULE_SEV_NONE;
+RuleSeverity rulesRuleSeverity(const Rule& rule, const RuleContext& ctx) {
+    return rulesRuleIsActive(ctx) ? (RuleSeverity)rule.severity : RULE_SEV_NONE;
 }
 
 // True when `value` has entered the warning band approaching the rule's limit
@@ -141,8 +141,8 @@ static bool ruleInWarningBand(const Rule& rule, float value) {
     }
 }
 
-RuleSeverity controlRuleAnnunciatorSeverity(const Rule& rule, const RuleContext& ctx, float value) {
-    if (controlRuleIsActive(ctx)) {
+RuleSeverity rulesRuleAnnunciatorSeverity(const Rule& rule, const RuleContext& ctx, float value) {
+    if (rulesRuleIsActive(ctx)) {
         return (RuleSeverity)rule.severity;
     }
     // Derived WARNING: an armed ALARM rule whose source is in the warning band
@@ -154,7 +154,7 @@ RuleSeverity controlRuleAnnunciatorSeverity(const Rule& rule, const RuleContext&
     return RULE_SEV_NONE;
 }
 
-bool controlActionDesired(const Action& action, const ActionDrive& drive,
+bool rulesActionDesired(const Action& action, const ActionDrive& drive,
                           bool manualState, ActionOverride override) {
     // Operator override outranks everything, including the failsafe (#329): a
     // deliberate FORCE is the tool of last resort when the sensor is exactly what

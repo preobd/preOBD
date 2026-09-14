@@ -176,7 +176,7 @@ struct PreobdAlarmEvent {
     uint32_t timestampMs;      // Bytes 14-17: millis() at emit time
     uint8_t  ruleId;           // Byte 18:     Rule.id of the firing rule
                                //              (stable per-record id, not a slot;
-                               //              CONTROL_ID_NONE=0xFF if none). Lets
+                               //              RULES_ID_NONE=0xFF if none). Lets
                                //              a client key firing state by rule
                                //              so multiple rules on one input are
                                //              distinguishable (#310).
@@ -254,7 +254,7 @@ static_assert(sizeof(PreobdRelayState) == PREOBD_RELAY_STATE_SIZE,
 #define PREOBD_ACTION_STATE_SIZE 16
 #define PREOBD_ACTION_ID_NONE    0xFF   // unconfigured slot / no triggering rule
 
-// type — matches ActionType in src/control/control_types.h
+// type — matches ActionType in src/rules/rules_types.h
 #define PREOBD_ACTION_TYPE_RELAY   0
 #define PREOBD_ACTION_TYPE_BEEPER  1
 #define PREOBD_ACTION_TYPE_LED     2

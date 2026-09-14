@@ -1,10 +1,10 @@
 /*
- * control_json.cpp - Rule/Action <-> JSON leaf converters. See control_json.h.
+ * rules_json.cpp - Rule/Action <-> JSON leaf converters. See rules_json.h.
  */
 
-#include "control_json.h"
+#include "rules_json.h"
 
-#if SUPPORTS_JSON_CONFIG && INCLUDE_CONTROL_ENGINE
+#if SUPPORTS_JSON_CONFIG && INCLUDE_RULES_ENGINE
 
 #include <string.h>
 
@@ -50,7 +50,7 @@ bool valOf(const NameMap (&m)[N], const char* s, uint8_t& out) {
 
 } // namespace
 
-void controlExportRule(JsonObject obj, const Rule& r) {
+void rulesExportRule(JsonObject obj, const Rule& r) {
     obj["id"]         = r.id;
     obj["input"]      = r.sourceInput;
     obj["condition"]  = nameOf(CONDITIONS, r.condition);
@@ -63,15 +63,15 @@ void controlExportRule(JsonObject obj, const Rule& r) {
     obj["enabled"]    = (r.flags & RULE_FLAG_ENABLED) != 0;
 }
 
-bool controlImportRule(JsonObjectConst obj, Rule& out) {
+bool rulesImportRule(JsonObjectConst obj, Rule& out) {
     // Required: id, input, condition. Severity defaults to NONE; the numeric
     // fields default to the hand-entry fallbacks.
     if (obj["id"].isNull() || obj["input"].isNull()) return false;
 
-    // CONTROL_ID_NONE (0xFF) is the empty-slot sentinel — a record carrying it
+    // RULES_ID_NONE (0xFF) is the empty-slot sentinel — a record carrying it
     // would silently vanish from later exports, so reject it outright.
     uint8_t id = obj["id"];
-    if (id == CONTROL_ID_NONE) return false;
+    if (id == RULES_ID_NONE) return false;
 
     uint8_t condition;
     if (!valOf(CONDITIONS, obj["condition"], condition)) return false;
@@ -101,12 +101,12 @@ bool controlImportRule(JsonObjectConst obj, Rule& out) {
     return true;
 }
 
-void controlExportAction(JsonObject obj, const Action& a,
+void rulesExportAction(JsonObject obj, const Action& a,
                          const uint8_t* memberRules, uint8_t memberCount) {
     obj["id"]     = a.id;
     obj["type"]   = nameOf(ACTION_TYPES, a.type);
     obj["target"] = a.target;
-    if (a.ruleRef != CONTROL_ID_NONE) obj["rule"] = a.ruleRef;  // omit = manual
+    if (a.ruleRef != RULES_ID_NONE) obj["rule"] = a.ruleRef;  // omit = manual
     // Multi-member actions ALSO emit the full list (#343). "rule" stays = rules[0]
     // so a reader that predates this key still sees a working single link rather
     // than a manual action.
@@ -120,15 +120,15 @@ void controlExportAction(JsonObject obj, const Action& a,
         obj["failsafe"] = (a.failsafe == ACT_FAILSAFE_ON) ? "ON" : "OFF";
 }
 
-bool controlImportAction(JsonObjectConst obj, Action& out,
+bool rulesImportAction(JsonObjectConst obj, Action& out,
                          uint8_t* extraRules, uint8_t maxExtra, uint8_t* nExtra) {
     if (nExtra) *nExtra = 0;
     // Required: id, type, target. A missing/null "rule"/"rules" means manual-only.
     if (obj["id"].isNull() || obj["target"].isNull()) return false;
 
-    // Reject the empty-slot sentinel (see controlImportRule).
+    // Reject the empty-slot sentinel (see rulesImportRule).
     uint8_t id = obj["id"];
-    if (id == CONTROL_ID_NONE) return false;
+    if (id == RULES_ID_NONE) return false;
 
     uint8_t type;
     if (!valOf(ACTION_TYPES, obj["type"], type)) return false;
@@ -139,13 +139,13 @@ bool controlImportAction(JsonObjectConst obj, Action& out,
     // "rules" (the full member list) wins over "rule" when both are present —
     // export writes them consistently, and a hand-edited config that disagrees
     // meant the list it spelled out in full.
-    out.ruleRef = CONTROL_ID_NONE;
+    out.ruleRef = RULES_ID_NONE;
     JsonArrayConst members = obj["rules"];
     if (!members.isNull()) {
         for (JsonVariantConst v : members) {
             uint8_t rid = v.as<uint8_t>();
-            if (rid == CONTROL_ID_NONE) continue;      // sentinel is never a member
-            if (out.ruleRef == CONTROL_ID_NONE) {
+            if (rid == RULES_ID_NONE) continue;      // sentinel is never a member
+            if (out.ruleRef == RULES_ID_NONE) {
                 out.ruleRef = rid;                     // first member goes inline
             } else if (extraRules && nExtra && *nExtra < maxExtra) {
                 extraRules[(*nExtra)++] = rid;
@@ -163,4 +163,4 @@ bool controlImportAction(JsonObjectConst obj, Action& out,
     return true;
 }
 
-#endif // SUPPORTS_JSON_CONFIG && INCLUDE_CONTROL_ENGINE
+#endif // SUPPORTS_JSON_CONFIG && INCLUDE_RULES_ENGINE

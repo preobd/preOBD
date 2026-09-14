@@ -27,7 +27,7 @@
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
 #include "cli/serial_config.h"
-#include "control/control_manager.h"   // Control engine runtime (Rules)
+#include "rules/rules_manager.h"   // Control engine runtime (Rules)
 #include "core/system_mode.h"        // System mode (CONFIG/RUN)
 #if INCLUDE_MODE_BUTTON
 #include "drivers/button_handler.h"
@@ -199,11 +199,11 @@ static void updateSensors(uint32_t now) {
 // — the engine is also active when only relays are compiled in). Drives nothing
 // yet: state is observable via the RULE CLI until the annunciator/actions land.
 static void updateControlEngine(uint32_t now) {
-    #if INCLUDE_CONTROL_ENGINE
+    #if INCLUDE_RULES_ENGINE
     static uint32_t lastControlUpdate = 0;
     if (now - lastControlUpdate >= ALARM_CHECK_INTERVAL_MS) {
-        controlManagerUpdate(now);
-        controlActionsUpdate(isInConfigMode());  // drive actions; suppressed in CONFIG
+        rulesManagerUpdate(now);
+        rulesActionsUpdate(isInConfigMode());  // drive actions; suppressed in CONFIG
         lastControlUpdate = now;
     }
     #endif
@@ -454,10 +454,10 @@ void setup() {
     // Initialize input manager (loads from EEPROM or config.h)
     bool eepromConfigLoaded = initInputManager();
 
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
     // Arm Rules from EEPROM now that SystemConfig + inputs are loaded (boot-load).
-    controlManagerInit(millis());
-    controlActionsInit();   // configure action target pins as outputs
+    rulesManagerInit(millis());
+    rulesActionsInit();   // configure action target pins as outputs
 #endif
 
 #if INCLUDE_MODE_BUTTON
@@ -537,11 +537,11 @@ void setup() {
 
     initSerialConfig();
 
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
     // Register action target pins LAST — after every hardware-fixed pin (system,
     // bus, RGB, serial) is in the registry — so a stray action target is flagged
     // as a conflict rather than silently winning a pin those subsystems need.
-    controlSyncActionPins();
+    rulesSyncActionPins();
 #endif
 
     // Initialize system mode and detect boot mode
@@ -604,7 +604,7 @@ void loop() {
     // while a config client is connected. (Previously a CONFIG early-return
     // froze updateSensors(), which is why a connected webapp stalled Torque's
     // readings — see #266.) Gated in CONFIG: physical actuation
-    // (control-engine Actions via controlActionsUpdate() + the alarm buzzer
+    // (control-engine Actions via rulesActionsUpdate() + the alarm buzzer
     // self-suppress so disconnected/test sensors on the bench can't flip
     // relays or sound the buzzer), and
     // the recording/serial outputs — serial CSV (shared-terminal usability)

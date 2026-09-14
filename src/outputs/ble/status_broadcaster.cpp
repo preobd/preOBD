@@ -13,7 +13,7 @@
 #include "../../core/system_mode.h"
 #include "../../comms/transport_mux.h"
 #include "../../inputs/input_manager.h"
-#include "../../control/control_manager.h"
+#include "../../rules/rules_manager.h"
 #include "../../version.h"
 
 
@@ -44,8 +44,8 @@ void packStatus(PreobdSystemStatus& s) {
     // (a relay is an Action of type RELAY — §11). Field name kept for
     // wire compatibility with PreobdSystemStatus.
     uint8_t actionCount = 0;
-#if INCLUDE_CONTROL_ENGINE
-    actionCount = controlActionCount();
+#if INCLUDE_RULES_ENGINE
+    actionCount = rulesActionCount();
 #endif
     s.relayCount = actionCount;
 

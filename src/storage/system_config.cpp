@@ -281,7 +281,7 @@ void resetSystemConfig() {
     }
 
     // NB (v13): the control-engine Rule/Action tables are no longer part of
-    // SystemConfig — they are reset via controlResetTables() and persisted by the
+    // SystemConfig — they are reset via rulesResetTables() and persisted by the
     // front config-store arena (input_manager.cpp), independent of this block.
 
     // Bus Configuration defaults (simplified "pick one" model)

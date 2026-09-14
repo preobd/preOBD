@@ -1,11 +1,11 @@
-// Native unit test: Rule<->Action MEMBERSHIP (src/control/control_manager.cpp).
+// Native unit test: Rule<->Action MEMBERSHIP (src/rules/rules_manager.cpp).
 //
-// The pure resolver (controlActionDesired) is covered by test_control_engine
+// The pure resolver (rulesActionDesired) is covered by test_rules_engine
 // against hand-built ActionDrive literals. This suite covers the layer BELOW
 // that -- the real rules[]/actions[]/actionLinks[] tables and the mutators over
 // them -- because that is where #343's load-bearing invariants live:
 //
-//   * ruleRef == CONTROL_ID_NONE MUST mean "zero members". controlActionRuleCount()
+//   * ruleRef == RULES_ID_NONE MUST mean "zero members". rulesActionRuleCount()
 //     short-circuits on it, so a link row left behind a NONE ruleRef would strand
 //     the surviving members AND hand the action back to its manual latch --
 //     reopening #294 by the documented route.
@@ -22,8 +22,8 @@
 #include <string.h>
 #include <math.h>
 
-#include "../../src/control/control_engine.cpp"
-#include "../../src/control/control_manager.cpp"
+#include "../../src/rules/rules_engine.cpp"
+#include "../../src/rules/rules_manager.cpp"
 
 // ---- messaging: the sweep logs a repair; nothing else here prints ----------
 // Just enough of the message plane to link: no transport is registered, so every
@@ -58,7 +58,7 @@ static void addInput(uint8_t pin, float value) {
 // A rule that is ACTIVE (or not) without running the state machine: the
 // membership layer keys off RuleContext.state, so set it directly.
 static uint8_t addRule(uint8_t id, uint8_t pin, bool active, bool enabled = true) {
-    int slot = controlRuleFreeSlot();
+    int slot = rulesRuleFreeSlot();
     Rule& r = rules[slot];
     memset(&r, 0, sizeof(r));
     r.id = id;
@@ -73,13 +73,13 @@ static uint8_t addRule(uint8_t id, uint8_t pin, bool active, bool enabled = true
 }
 
 static uint8_t addAction(uint8_t id, uint8_t target, uint8_t failsafe = ACT_FAILSAFE_OFF) {
-    int slot = controlActionFreeSlot();
+    int slot = rulesActionFreeSlot();
     Action& a = actions[slot];
     memset(&a, 0, sizeof(a));
     a.id = id;
     a.type = ACT_RELAY;
     a.target = target;
-    a.ruleRef = CONTROL_ID_NONE;
+    a.ruleRef = RULES_ID_NONE;
     a.failsafe = failsafe;
     return id;
 }
@@ -89,10 +89,10 @@ static uint8_t addAction(uint8_t id, uint8_t target, uint8_t failsafe = ACT_FAIL
 static void assertNoOrphanedLinks(void) {
     for (int i = 0; i < MAX_ACTION_LINKS; i++) {
         const ActionLink& l = actionLinks[i];
-        if (l.actionId == CONTROL_ID_NONE) continue;
-        const int slot = controlActionSlot(l.actionId);
+        if (l.actionId == RULES_ID_NONE) continue;
+        const int slot = rulesActionSlot(l.actionId);
         TEST_ASSERT_TRUE_MESSAGE(slot >= 0, "link row for an action that does not exist");
-        TEST_ASSERT_TRUE_MESSAGE(actions[slot].ruleRef != CONTROL_ID_NONE,
+        TEST_ASSERT_TRUE_MESSAGE(actions[slot].ruleRef != RULES_ID_NONE,
                                  "link row stranded behind ruleRef == NONE (#294 route)");
         TEST_ASSERT_TRUE_MESSAGE(actions[slot].ruleRef != l.ruleId,
                                  "link row duplicates the inline member");
@@ -104,8 +104,8 @@ static void assertNoOrphanedLinks(void) {
 }
 
 void setUp(void) {
-    controlResetTables();
-    controlActionsInit();     // zeroes the manual latch + override for every slot
+    rulesResetTables();
+    rulesActionsInit();     // zeroes the manual latch + override for every slot
     memset(g_inputs, 0, sizeof(g_inputs));
     g_inputCount = 0;
     g_test_now = 0;
@@ -118,10 +118,10 @@ static void test_add_first_member_goes_inline(void) {
     addInput(10, 50.0f);
     addRule(0, 10, false);
     addAction(0, 23);
-    TEST_ASSERT_TRUE(controlActionAddRule(0, 0));
-    TEST_ASSERT_EQUAL_UINT8(1, controlActionRuleCount(0));
+    TEST_ASSERT_TRUE(rulesActionAddRule(0, 0));
+    TEST_ASSERT_EQUAL_UINT8(1, rulesActionRuleCount(0));
     TEST_ASSERT_EQUAL_UINT8(0, actions[0].ruleRef);       // inline, no link row spent
-    TEST_ASSERT_EQUAL_UINT8(0, controlActionLinkCount());
+    TEST_ASSERT_EQUAL_UINT8(0, rulesActionLinkCount());
     assertNoOrphanedLinks();
 }
 
@@ -129,10 +129,10 @@ static void test_add_is_idempotent(void) {
     addInput(10, 50.0f);
     addRule(0, 10, false);
     addAction(0, 23);
-    controlActionAddRule(0, 0);
-    TEST_ASSERT_TRUE(controlActionAddRule(0, 0));         // same rule again
-    TEST_ASSERT_EQUAL_UINT8(1, controlActionRuleCount(0));
-    TEST_ASSERT_EQUAL_UINT8(0, controlActionLinkCount());
+    rulesActionAddRule(0, 0);
+    TEST_ASSERT_TRUE(rulesActionAddRule(0, 0));         // same rule again
+    TEST_ASSERT_EQUAL_UINT8(1, rulesActionRuleCount(0));
+    TEST_ASSERT_EQUAL_UINT8(0, rulesActionLinkCount());
     assertNoOrphanedLinks();
 }
 
@@ -140,33 +140,33 @@ static void test_members_are_enumerable_in_order(void) {
     addInput(10, 50.0f); addInput(11, 50.0f); addInput(12, 50.0f);
     addRule(0, 10, false); addRule(1, 11, false); addRule(2, 12, false);
     addAction(0, 23);
-    controlActionAddRule(0, 0);
-    controlActionAddRule(0, 1);
-    controlActionAddRule(0, 2);
-    TEST_ASSERT_EQUAL_UINT8(3, controlActionRuleCount(0));
-    TEST_ASSERT_EQUAL_UINT8(0, controlActionRuleAt(0, 0));
-    TEST_ASSERT_EQUAL_UINT8(1, controlActionRuleAt(0, 1));
-    TEST_ASSERT_EQUAL_UINT8(2, controlActionRuleAt(0, 2));
-    TEST_ASSERT_EQUAL_UINT8(CONTROL_ID_NONE, controlActionRuleAt(0, 3));
-    TEST_ASSERT_TRUE(controlActionHasRule(0, 2));
-    TEST_ASSERT_FALSE(controlActionHasRule(0, 9));
+    rulesActionAddRule(0, 0);
+    rulesActionAddRule(0, 1);
+    rulesActionAddRule(0, 2);
+    TEST_ASSERT_EQUAL_UINT8(3, rulesActionRuleCount(0));
+    TEST_ASSERT_EQUAL_UINT8(0, rulesActionRuleAt(0, 0));
+    TEST_ASSERT_EQUAL_UINT8(1, rulesActionRuleAt(0, 1));
+    TEST_ASSERT_EQUAL_UINT8(2, rulesActionRuleAt(0, 2));
+    TEST_ASSERT_EQUAL_UINT8(RULES_ID_NONE, rulesActionRuleAt(0, 3));
+    TEST_ASSERT_TRUE(rulesActionHasRule(0, 2));
+    TEST_ASSERT_FALSE(rulesActionHasRule(0, 9));
     assertNoOrphanedLinks();
 }
 
 // THE invariant: removing the INLINE member promotes a link row instead of
-// blanking ruleRef. Blanking would make controlActionRuleCount() report 0 --
+// blanking ruleRef. Blanking would make rulesActionRuleCount() report 0 --
 // "manual-only" -- stranding the survivors and re-arming the #294 route.
 static void test_removing_inline_member_promotes_a_link(void) {
     addInput(10, 50.0f); addInput(11, 50.0f);
     addRule(0, 10, false); addRule(1, 11, false);
     addAction(0, 23);
-    controlActionAddRule(0, 0);
-    controlActionAddRule(0, 1);
+    rulesActionAddRule(0, 0);
+    rulesActionAddRule(0, 1);
 
-    TEST_ASSERT_TRUE(controlActionRemoveRule(0, 0));      // drop the INLINE one
-    TEST_ASSERT_EQUAL_UINT8(1, controlActionRuleCount(0));
+    TEST_ASSERT_TRUE(rulesActionRemoveRule(0, 0));      // drop the INLINE one
+    TEST_ASSERT_EQUAL_UINT8(1, rulesActionRuleCount(0));
     TEST_ASSERT_EQUAL_UINT8(1, actions[0].ruleRef);       // promoted, not blanked
-    TEST_ASSERT_EQUAL_UINT8(0, controlActionLinkCount()); // row consumed
+    TEST_ASSERT_EQUAL_UINT8(0, rulesActionLinkCount()); // row consumed
     assertNoOrphanedLinks();
 }
 
@@ -174,10 +174,10 @@ static void test_removing_last_member_reverts_to_manual(void) {
     addInput(10, 50.0f);
     addRule(0, 10, false);
     addAction(0, 23);
-    controlActionAddRule(0, 0);
-    TEST_ASSERT_TRUE(controlActionRemoveRule(0, 0));
-    TEST_ASSERT_EQUAL_UINT8(0, controlActionRuleCount(0));
-    TEST_ASSERT_EQUAL_UINT8(CONTROL_ID_NONE, actions[0].ruleRef);
+    rulesActionAddRule(0, 0);
+    TEST_ASSERT_TRUE(rulesActionRemoveRule(0, 0));
+    TEST_ASSERT_EQUAL_UINT8(0, rulesActionRuleCount(0));
+    TEST_ASSERT_EQUAL_UINT8(RULES_ID_NONE, actions[0].ruleRef);
     assertNoOrphanedLinks();
 }
 
@@ -185,12 +185,12 @@ static void test_set_rule_replaces_whole_membership(void) {
     addInput(10, 50.0f); addInput(11, 50.0f); addInput(12, 50.0f);
     addRule(0, 10, false); addRule(1, 11, false); addRule(2, 12, false);
     addAction(0, 23);
-    controlActionAddRule(0, 0);
-    controlActionAddRule(0, 1);
-    TEST_ASSERT_TRUE(controlActionSetRule(0, 2));
-    TEST_ASSERT_EQUAL_UINT8(1, controlActionRuleCount(0));
+    rulesActionAddRule(0, 0);
+    rulesActionAddRule(0, 1);
+    TEST_ASSERT_TRUE(rulesActionSetRule(0, 2));
+    TEST_ASSERT_EQUAL_UINT8(1, rulesActionRuleCount(0));
     TEST_ASSERT_EQUAL_UINT8(2, actions[0].ruleRef);
-    TEST_ASSERT_EQUAL_UINT8(0, controlActionLinkCount());
+    TEST_ASSERT_EQUAL_UINT8(0, rulesActionLinkCount());
     assertNoOrphanedLinks();
 }
 
@@ -198,12 +198,12 @@ static void test_clear_rules_frees_every_row(void) {
     addInput(10, 50.0f); addInput(11, 50.0f);
     addRule(0, 10, false); addRule(1, 11, false);
     addAction(0, 23);
-    controlActionAddRule(0, 0);
-    controlActionAddRule(0, 1);
-    controlActionClearRules(0);
-    TEST_ASSERT_EQUAL_UINT8(0, controlActionRuleCount(0));
-    TEST_ASSERT_EQUAL_UINT8(CONTROL_ID_NONE, actions[0].ruleRef);
-    TEST_ASSERT_EQUAL_UINT8(0, controlActionLinkCount());
+    rulesActionAddRule(0, 0);
+    rulesActionAddRule(0, 1);
+    rulesActionClearRules(0);
+    TEST_ASSERT_EQUAL_UINT8(0, rulesActionRuleCount(0));
+    TEST_ASSERT_EQUAL_UINT8(RULES_ID_NONE, actions[0].ruleRef);
+    TEST_ASSERT_EQUAL_UINT8(0, rulesActionLinkCount());
     assertNoOrphanedLinks();
 }
 
@@ -215,34 +215,34 @@ static void test_every_mutator_releases_override_and_latch(void) {
     addAction(0, 23);
 
     // ADD releases
-    controlActionSetManual(0, true);
-    controlActionSetOverride(0, ACT_OVR_FORCE_ON);
+    rulesActionSetManual(0, true);
+    rulesActionSetOverride(0, ACT_OVR_FORCE_ON);
     bool released = false;
-    controlActionAddRule(0, 0, &released);
+    rulesActionAddRule(0, 0, &released);
     TEST_ASSERT_TRUE(released);
-    TEST_ASSERT_EQUAL_INT(ACT_OVR_AUTO, controlActionOverride(0));
+    TEST_ASSERT_EQUAL_INT(ACT_OVR_AUTO, rulesActionOverride(0));
 
     // ADD of a second member releases again
-    controlActionSetOverride(0, ACT_OVR_FORCE_ON);
+    rulesActionSetOverride(0, ACT_OVR_FORCE_ON);
     released = false;
-    controlActionAddRule(0, 1, &released);
+    rulesActionAddRule(0, 1, &released);
     TEST_ASSERT_TRUE(released);
-    TEST_ASSERT_EQUAL_INT(ACT_OVR_AUTO, controlActionOverride(0));
+    TEST_ASSERT_EQUAL_INT(ACT_OVR_AUTO, rulesActionOverride(0));
 
     // REMOVE releases
-    controlActionSetOverride(0, ACT_OVR_FORCE_OFF);
+    rulesActionSetOverride(0, ACT_OVR_FORCE_OFF);
     released = false;
-    controlActionRemoveRule(0, 1, &released);
+    rulesActionRemoveRule(0, 1, &released);
     TEST_ASSERT_TRUE(released);
-    TEST_ASSERT_EQUAL_INT(ACT_OVR_AUTO, controlActionOverride(0));
+    TEST_ASSERT_EQUAL_INT(ACT_OVR_AUTO, rulesActionOverride(0));
 
     // SET releases -- and reports it even when only the MANUAL LATCH was armed,
     // which is the case cmd_action previously reported silently.
-    controlActionSetManual(0, true);
+    rulesActionSetManual(0, true);
     released = false;
-    controlActionSetRule(0, 1, &released);
+    rulesActionSetRule(0, 1, &released);
     TEST_ASSERT_TRUE_MESSAGE(released, "latch-only release must still be reported");
-    TEST_ASSERT_EQUAL_INT(ACT_OVR_AUTO, controlActionOverride(0));
+    TEST_ASSERT_EQUAL_INT(ACT_OVR_AUTO, rulesActionOverride(0));
 }
 
 // A rejected ADD (link table full) must not touch membership OR drive state.
@@ -255,27 +255,27 @@ static void test_rejected_add_leaves_state_untouched(void) {
     // Fill: one inline + MAX_ACTION_LINKS rows.
     uint8_t placed = 0;
     for (uint8_t r = 0; r < MAX_RULES && placed <= MAX_ACTION_LINKS; r++)
-        if (controlActionAddRule(0, r)) placed++;
+        if (rulesActionAddRule(0, r)) placed++;
 
-    const uint8_t before = controlActionRuleCount(0);
-    controlActionSetOverride(0, ACT_OVR_FORCE_ON);
+    const uint8_t before = rulesActionRuleCount(0);
+    rulesActionSetOverride(0, ACT_OVR_FORCE_ON);
 
     // A rule that is not yet a member, with no room left for it.
     bool added = false, released = true;
     for (uint8_t r = 0; r < MAX_RULES; r++) {
-        if (controlRuleSlot(r) >= 0 && !controlActionHasRule(0, r)) {
-            added = controlActionAddRule(0, r, &released);
+        if (rulesRuleSlot(r) >= 0 && !rulesActionHasRule(0, r)) {
+            added = rulesActionAddRule(0, r, &released);
             break;
         }
     }
     if (!added) {
         // Table geometry left no spare rule to attempt with -- nothing to assert.
-        TEST_ASSERT_EQUAL_UINT8(before, controlActionRuleCount(0));
+        TEST_ASSERT_EQUAL_UINT8(before, rulesActionRuleCount(0));
         return;
     }
-    TEST_ASSERT_EQUAL_UINT8(before, controlActionRuleCount(0));
+    TEST_ASSERT_EQUAL_UINT8(before, rulesActionRuleCount(0));
     TEST_ASSERT_FALSE(released);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(ACT_OVR_FORCE_ON, controlActionOverride(0),
+    TEST_ASSERT_EQUAL_INT_MESSAGE(ACT_OVR_FORCE_ON, rulesActionOverride(0),
                                   "a rejected ADD must not release a live force");
     assertNoOrphanedLinks();
 }
@@ -286,15 +286,15 @@ static void test_clearing_one_rule_leaves_other_members(void) {
     addInput(10, 50.0f); addInput(11, 50.0f); addInput(12, 50.0f);
     addRule(0, 10, false); addRule(1, 11, false); addRule(2, 12, false);
     addAction(0, 23);
-    controlActionAddRule(0, 0);
-    controlActionAddRule(0, 1);
-    controlActionAddRule(0, 2);
+    rulesActionAddRule(0, 0);
+    rulesActionAddRule(0, 1);
+    rulesActionAddRule(0, 2);
 
-    controlClearActionsForRule(1);                       // RULE DEL 1
-    TEST_ASSERT_EQUAL_UINT8(2, controlActionRuleCount(0));
-    TEST_ASSERT_TRUE(controlActionHasRule(0, 0));
-    TEST_ASSERT_FALSE(controlActionHasRule(0, 1));
-    TEST_ASSERT_TRUE(controlActionHasRule(0, 2));
+    rulesClearActionsForRule(1);                       // RULE DEL 1
+    TEST_ASSERT_EQUAL_UINT8(2, rulesActionRuleCount(0));
+    TEST_ASSERT_TRUE(rulesActionHasRule(0, 0));
+    TEST_ASSERT_FALSE(rulesActionHasRule(0, 1));
+    TEST_ASSERT_TRUE(rulesActionHasRule(0, 2));
     assertNoOrphanedLinks();
 }
 
@@ -303,10 +303,10 @@ static void test_clearing_the_inline_rule_promotes(void) {
     addInput(10, 50.0f); addInput(11, 50.0f);
     addRule(0, 10, false); addRule(1, 11, false);
     addAction(0, 23);
-    controlActionAddRule(0, 0);
-    controlActionAddRule(0, 1);
-    controlClearActionsForRule(0);
-    TEST_ASSERT_EQUAL_UINT8(1, controlActionRuleCount(0));
+    rulesActionAddRule(0, 0);
+    rulesActionAddRule(0, 1);
+    rulesClearActionsForRule(0);
+    TEST_ASSERT_EQUAL_UINT8(1, rulesActionRuleCount(0));
     TEST_ASSERT_EQUAL_UINT8(1, actions[0].ruleRef);
     assertNoOrphanedLinks();
 }
@@ -322,8 +322,8 @@ static void test_prune_drops_dangling_duplicate_and_inline_dup_rows(void) {
     actionLinks[0] = {0, 0};                 // duplicates the inline member
     actionLinks[1] = {0, 99};                // rule does not exist
     actionLinks[2] = {77, 0};                // action does not exist
-    TEST_ASSERT_EQUAL_UINT8(3, controlPruneActionLinks());
-    TEST_ASSERT_EQUAL_UINT8(1, controlActionRuleCount(0));
+    TEST_ASSERT_EQUAL_UINT8(3, rulesPruneActionLinks());
+    TEST_ASSERT_EQUAL_UINT8(1, rulesActionRuleCount(0));
     assertNoOrphanedLinks();
 }
 
@@ -334,12 +334,12 @@ static void test_prune_collapses_repeated_rows(void) {
     actions[0].ruleRef = 0;
     actionLinks[0] = {0, 1};
     actionLinks[1] = {0, 1};                 // repeat of an earlier surviving row
-    TEST_ASSERT_EQUAL_UINT8(1, controlPruneActionLinks());
-    TEST_ASSERT_EQUAL_UINT8(2, controlActionRuleCount(0));
+    TEST_ASSERT_EQUAL_UINT8(1, rulesPruneActionLinks());
+    TEST_ASSERT_EQUAL_UINT8(2, rulesActionRuleCount(0));
     // ...and REMOVE now actually removes the membership, rather than leaving a
     // second copy that keeps the action rule-driven.
-    controlActionRemoveRule(0, 1);
-    TEST_ASSERT_FALSE(controlActionHasRule(0, 1));
+    rulesActionRemoveRule(0, 1);
+    TEST_ASSERT_FALSE(rulesActionHasRule(0, 1));
     assertNoOrphanedLinks();
 }
 
@@ -352,8 +352,8 @@ static void test_sweep_promotes_when_inline_member_is_missing(void) {
     actions[0].ruleRef = 0;                  // dangles
     actionLinks[0] = {0, 1};                 // valid survivor
 
-    TEST_ASSERT_TRUE(controlSweepActionRules() > 0);
-    TEST_ASSERT_EQUAL_UINT8(1, controlActionRuleCount(0));
+    TEST_ASSERT_TRUE(rulesSweepActionRules() > 0);
+    TEST_ASSERT_EQUAL_UINT8(1, rulesActionRuleCount(0));
     TEST_ASSERT_EQUAL_UINT8(1, actions[0].ruleRef);
     assertNoOrphanedLinks();
 }
@@ -362,9 +362,9 @@ static void test_sweep_reverts_to_manual_when_nothing_survives(void) {
     addAction(0, 23);
     actions[0].ruleRef = 5;                  // no rules exist at all
     actionLinks[0] = {0, 6};
-    controlSweepActionRules();
-    TEST_ASSERT_EQUAL_UINT8(0, controlActionRuleCount(0));
-    TEST_ASSERT_EQUAL_UINT8(CONTROL_ID_NONE, actions[0].ruleRef);
+    rulesSweepActionRules();
+    TEST_ASSERT_EQUAL_UINT8(0, rulesActionRuleCount(0));
+    TEST_ASSERT_EQUAL_UINT8(RULES_ID_NONE, actions[0].ruleRef);
     assertNoOrphanedLinks();
 }
 
@@ -374,37 +374,37 @@ static void test_new_action_does_not_inherit_a_dead_actions_links(void) {
     addInput(10, 50.0f); addInput(11, 50.0f);
     addRule(0, 10, false); addRule(1, 11, false);
     addAction(0, 23);
-    controlActionAddRule(0, 0);
-    controlActionAddRule(0, 1);
+    rulesActionAddRule(0, 0);
+    rulesActionAddRule(0, 1);
 
     // ACTION DEL 0 (cmd_action frees the rows before releasing the slot)...
-    controlActionForgetLinks(0);
-    actions[0].id = CONTROL_ID_NONE;
+    rulesActionForgetLinks(0);
+    actions[0].id = RULES_ID_NONE;
     // ...then ACTION ADD reuses id 0.
     addAction(0, 24);
-    TEST_ASSERT_EQUAL_UINT8(0, controlActionRuleCount(0));
-    TEST_ASSERT_EQUAL_UINT8(0, controlActionLinkCount());
+    TEST_ASSERT_EQUAL_UINT8(0, rulesActionRuleCount(0));
+    TEST_ASSERT_EQUAL_UINT8(0, rulesActionLinkCount());
     assertNoOrphanedLinks();
 }
 
 // --- resolveActionDrive: live tables -> the aggregate the resolver consumes ---
 // Everything above this line in the suite is membership bookkeeping; these drive
-// the real relay decision end-to-end (tables -> drive -> controlActionDesired).
+// the real relay decision end-to-end (tables -> drive -> rulesActionDesired).
 
 static void test_drive_or_combines_live_members(void) {
     addInput(10, 50.0f); addInput(11, 50.0f);
     addRule(0, 10, /*active*/false);
     addRule(1, 11, /*active*/true);
     addAction(0, 23);
-    controlActionAddRule(0, 0);
-    controlActionAddRule(0, 1);
+    rulesActionAddRule(0, 0);
+    rulesActionAddRule(0, 1);
 
-    controlActionsUpdate(/*configMode*/false);
-    TEST_ASSERT_TRUE_MESSAGE(controlActionState(0), "one active member must assert");
+    rulesActionsUpdate(/*configMode*/false);
+    TEST_ASSERT_TRUE_MESSAGE(rulesActionState(0), "one active member must assert");
 
-    g_ruleContexts[controlRuleSlot(1)].state = RULE_READY;   // both quiet now
-    controlActionsUpdate(false);
-    TEST_ASSERT_FALSE(controlActionState(0));
+    g_ruleContexts[rulesRuleSlot(1)].state = RULE_READY;   // both quiet now
+    rulesActionsUpdate(false);
+    TEST_ASSERT_FALSE(rulesActionState(0));
 }
 
 // The #343 safety call, through the real tables: a healthy member calling for the
@@ -415,13 +415,13 @@ static void test_drive_live_member_beats_faulted_sibling(void) {
     addRule(0, 10, false);
     addRule(1, 11, true);
     addAction(0, 23, ACT_FAILSAFE_OFF);      // the polarity that would cut it
-    controlActionAddRule(0, 0);
-    controlActionAddRule(0, 1);
+    rulesActionAddRule(0, 0);
+    rulesActionAddRule(0, 1);
 
-    controlActionsUpdate(false);
-    TEST_ASSERT_TRUE_MESSAGE(controlActionState(0),
+    rulesActionsUpdate(false);
+    TEST_ASSERT_TRUE_MESSAGE(rulesActionState(0),
                              "a dead sibling sensor must not cut a demanded output");
-    TEST_ASSERT_TRUE(controlActionSourceFaulted(0));   // ...but it is reported
+    TEST_ASSERT_TRUE(rulesActionSourceFaulted(0));   // ...but it is reported
 }
 
 // #348: the reported "a member rule is demanding this output" bit, through the
@@ -432,36 +432,36 @@ static void test_rule_active_tracks_demand_not_the_pin(void) {
     addInput(11, 50.0f);
     addRule(0, 11, /*active*/true);
     addAction(0, 23, ACT_FAILSAFE_OFF);
-    controlActionAddRule(0, 0);
+    rulesActionAddRule(0, 0);
 
-    controlActionsUpdate(false);
-    TEST_ASSERT_TRUE(controlActionState(0));
-    TEST_ASSERT_TRUE(controlActionRuleActive(0));
+    rulesActionsUpdate(false);
+    TEST_ASSERT_TRUE(rulesActionState(0));
+    TEST_ASSERT_TRUE(rulesActionRuleActive(0));
 
-    controlActionSetOverride(actions[0].id, ACT_OVR_FORCE_OFF);
-    controlActionsUpdate(false);
-    TEST_ASSERT_FALSE_MESSAGE(controlActionState(0), "the force wins the pin");
-    TEST_ASSERT_TRUE_MESSAGE(controlActionRuleActive(0),
+    rulesActionSetOverride(actions[0].id, ACT_OVR_FORCE_OFF);
+    rulesActionsUpdate(false);
+    TEST_ASSERT_FALSE_MESSAGE(rulesActionState(0), "the force wins the pin");
+    TEST_ASSERT_TRUE_MESSAGE(rulesActionRuleActive(0),
                              "...but the rule is still demanding it");
 
-    g_ruleContexts[controlRuleSlot(0)].state = RULE_READY;   // demand releases
-    controlActionsUpdate(false);
-    TEST_ASSERT_FALSE(controlActionRuleActive(0));
+    g_ruleContexts[rulesRuleSlot(0)].state = RULE_READY;   // demand releases
+    rulesActionsUpdate(false);
+    TEST_ASSERT_FALSE(rulesActionRuleActive(0));
 }
 
-// The exclusions mirror controlActionSourceFaulted(): a member that cannot assert
+// The exclusions mirror rulesActionSourceFaulted(): a member that cannot assert
 // must not be reported as demanding. A faulted (NaN) source is the sharp case --
 // it drives the FAILSAFE, so the pin can be ON with nothing actually demanding it.
 static void test_rule_active_false_for_members_that_cannot_assert(void) {
     addInput(10, NAN);                       // dead sensor -> faulted, not active
     addRule(0, 10, /*active*/true);          // ...even though the ctx says active
     addAction(0, 23, ACT_FAILSAFE_ON);
-    controlActionAddRule(0, 0);
+    rulesActionAddRule(0, 0);
 
-    controlActionsUpdate(false);
-    TEST_ASSERT_TRUE_MESSAGE(controlActionState(0), "failsafe drives the pin on");
-    TEST_ASSERT_TRUE(controlActionSourceFaulted(0));
-    TEST_ASSERT_FALSE_MESSAGE(controlActionRuleActive(0),
+    rulesActionsUpdate(false);
+    TEST_ASSERT_TRUE_MESSAGE(rulesActionState(0), "failsafe drives the pin on");
+    TEST_ASSERT_TRUE(rulesActionSourceFaulted(0));
+    TEST_ASSERT_FALSE_MESSAGE(rulesActionRuleActive(0),
                               "a faulted source never counts as a demand");
 }
 
@@ -474,11 +474,11 @@ static void test_rule_active_false_for_disabled_member(void) {
     addInput(11, 50.0f);
     addRule(0, 11, /*active*/true, /*enabled*/false);   // would be demanding, parked
     addAction(0, 23, ACT_FAILSAFE_OFF);
-    controlActionAddRule(0, 0);
+    rulesActionAddRule(0, 0);
 
-    controlActionsUpdate(false);
-    TEST_ASSERT_FALSE(controlActionState(0));
-    TEST_ASSERT_FALSE(controlActionRuleActive(0));
+    rulesActionsUpdate(false);
+    TEST_ASSERT_FALSE(rulesActionState(0));
+    TEST_ASSERT_FALSE(rulesActionRuleActive(0));
 }
 
 // An ORPHAN member (a rule whose source pin has no input, #345) is inert because
@@ -490,16 +490,16 @@ static void test_rule_active_false_for_disabled_member(void) {
 static void test_rule_active_matches_the_drive_for_an_orphan_member(void) {
     addRule(0, 10, /*active*/false);         // pin 10: NO input configured
     addAction(0, 23, ACT_FAILSAFE_OFF);
-    controlActionAddRule(0, 0);
+    rulesActionAddRule(0, 0);
 
-    controlActionsUpdate(false);
-    TEST_ASSERT_FALSE(controlActionState(0));
-    TEST_ASSERT_FALSE(controlActionRuleActive(0));
+    rulesActionsUpdate(false);
+    TEST_ASSERT_FALSE(rulesActionState(0));
+    TEST_ASSERT_FALSE(rulesActionRuleActive(0));
 
-    g_ruleContexts[controlRuleSlot(0)].state = RULE_ACTIVE;   // stale, pre-demotion
-    controlActionsUpdate(false);
-    TEST_ASSERT_TRUE_MESSAGE(controlActionState(0), "a stale ACTIVE ctx drives the pin");
-    TEST_ASSERT_TRUE_MESSAGE(controlActionRuleActive(0),
+    g_ruleContexts[rulesRuleSlot(0)].state = RULE_ACTIVE;   // stale, pre-demotion
+    rulesActionsUpdate(false);
+    TEST_ASSERT_TRUE_MESSAGE(rulesActionState(0), "a stale ACTIVE ctx drives the pin");
+    TEST_ASSERT_TRUE_MESSAGE(rulesActionRuleActive(0),
                              "...so the frame must report it, not disagree");
 }
 
@@ -507,10 +507,10 @@ static void test_rule_active_matches_the_drive_for_an_orphan_member(void) {
 // while its latch is holding the pin on.
 static void test_rule_active_false_for_manual_only_action(void) {
     addAction(0, 23);
-    controlActionSetManual(actions[0].id, true);
-    controlActionsUpdate(false);
-    TEST_ASSERT_TRUE(controlActionState(0));
-    TEST_ASSERT_FALSE(controlActionRuleActive(0));
+    rulesActionSetManual(actions[0].id, true);
+    rulesActionsUpdate(false);
+    TEST_ASSERT_TRUE(rulesActionState(0));
+    TEST_ASSERT_FALSE(rulesActionRuleActive(0));
 }
 
 static void test_drive_failsafe_applies_when_no_member_demands(void) {
@@ -519,11 +519,11 @@ static void test_drive_failsafe_applies_when_no_member_demands(void) {
     addRule(0, 10, false);
     addRule(1, 11, false);                   // healthy but not asserting
     addAction(0, 23, ACT_FAILSAFE_ON);
-    controlActionAddRule(0, 0);
-    controlActionAddRule(0, 1);
+    rulesActionAddRule(0, 0);
+    rulesActionAddRule(0, 1);
 
-    controlActionsUpdate(false);
-    TEST_ASSERT_TRUE(controlActionState(0));
+    rulesActionsUpdate(false);
+    TEST_ASSERT_TRUE(rulesActionState(0));
 }
 
 // A DISABLED member can never assert, so it must not be able to force a failsafe
@@ -535,13 +535,13 @@ static void test_disabled_member_cannot_force_the_failsafe(void) {
     addRule(0, 10, /*active*/false, /*enabled*/false);
     addRule(1, 11, /*active*/false);
     addAction(0, 23, ACT_FAILSAFE_ON);
-    controlActionAddRule(0, 0);
-    controlActionAddRule(0, 1);
+    rulesActionAddRule(0, 0);
+    rulesActionAddRule(0, 1);
 
-    controlActionsUpdate(false);
-    TEST_ASSERT_FALSE_MESSAGE(controlActionState(0),
+    rulesActionsUpdate(false);
+    TEST_ASSERT_FALSE_MESSAGE(rulesActionState(0),
                               "a disabled member must not latch the failsafe on");
-    TEST_ASSERT_FALSE(controlActionSourceFaulted(0));
+    TEST_ASSERT_FALSE(rulesActionSourceFaulted(0));
 }
 
 // A rule-driven action ignores the manual latch -- including when every member is
@@ -550,9 +550,9 @@ static void test_disabled_member_cannot_force_the_failsafe(void) {
 static void test_dangling_members_do_not_fall_back_to_the_latch(void) {
     addAction(0, 23);
     actions[0].ruleRef = 9;                  // rule 9 does not exist
-    controlActionSetManual(0, true);         // stale latch, armed
-    controlActionsUpdate(false);
-    TEST_ASSERT_FALSE(controlActionState(0));
+    rulesActionSetManual(0, true);         // stale latch, armed
+    rulesActionsUpdate(false);
+    TEST_ASSERT_FALSE(rulesActionState(0));
 }
 
 // --- orphan rules: a source pin with no input (#345) ------------------------
@@ -566,13 +566,13 @@ static void test_orphan_member_cannot_force_the_failsafe(void) {
     addRule(0, 10, /*active*/false);         // pin 10: NO input configured -> orphan
     addRule(1, 11, /*active*/false);
     addAction(0, 23, ACT_FAILSAFE_ON);
-    controlActionAddRule(0, 0);
-    controlActionAddRule(0, 1);
+    rulesActionAddRule(0, 0);
+    rulesActionAddRule(0, 1);
 
-    controlActionsUpdate(false);
-    TEST_ASSERT_FALSE_MESSAGE(controlActionState(0),
+    rulesActionsUpdate(false);
+    TEST_ASSERT_FALSE_MESSAGE(rulesActionState(0),
                               "an orphan member must not latch the failsafe on");
-    TEST_ASSERT_FALSE_MESSAGE(controlActionSourceFaulted(0),
+    TEST_ASSERT_FALSE_MESSAGE(rulesActionSourceFaulted(0),
                               "a missing input is inert, not faulted");
 }
 
@@ -582,11 +582,11 @@ static void test_configured_nan_source_still_faults(void) {
     addInput(10, NAN);
     addRule(0, 10, false);
     addAction(0, 23, ACT_FAILSAFE_ON);
-    controlActionAddRule(0, 0);
+    rulesActionAddRule(0, 0);
 
-    controlActionsUpdate(false);
-    TEST_ASSERT_TRUE(controlActionState(0));
-    TEST_ASSERT_TRUE(controlActionSourceFaulted(0));
+    rulesActionsUpdate(false);
+    TEST_ASSERT_TRUE(rulesActionState(0));
+    TEST_ASSERT_TRUE(rulesActionSourceFaulted(0));
 }
 
 // CLEAR <pin> takes the pin's rules with it, through the RULE DEL path: every
@@ -599,22 +599,22 @@ static void test_remove_rules_for_input_drops_memberships(void) {
     addRule(1, 10, false);
     addRule(2, 11, false);                    // a bystander on another pin
     addAction(0, 23);
-    controlActionAddRule(0, 0);
-    controlActionAddRule(0, 2);
+    rulesActionAddRule(0, 0);
+    rulesActionAddRule(0, 2);
     addAction(1, 24);
-    controlActionAddRule(1, 1);               // only member: reverts to manual-only
+    rulesActionAddRule(1, 1);               // only member: reverts to manual-only
 
     uint8_t released = 0;
-    TEST_ASSERT_EQUAL_UINT8(2, controlRemoveRulesForInput(10, &released));
-    TEST_ASSERT_EQUAL_UINT8(1, controlRuleCount());          // only rule 2 survives
-    TEST_ASSERT_TRUE(controlRuleSlot(2) >= 0);
-    TEST_ASSERT_EQUAL_UINT8(1, controlActionRuleCount(0));   // rule 0 dropped
-    TEST_ASSERT_TRUE(controlActionHasRule(0, 2));
-    TEST_ASSERT_EQUAL_UINT8(0, controlActionRuleCount(1));   // manual-only now
+    TEST_ASSERT_EQUAL_UINT8(2, rulesRemoveRulesForInput(10, &released));
+    TEST_ASSERT_EQUAL_UINT8(1, rulesRuleCount());          // only rule 2 survives
+    TEST_ASSERT_TRUE(rulesRuleSlot(2) >= 0);
+    TEST_ASSERT_EQUAL_UINT8(1, rulesActionRuleCount(0));   // rule 0 dropped
+    TEST_ASSERT_TRUE(rulesActionHasRule(0, 2));
+    TEST_ASSERT_EQUAL_UINT8(0, rulesActionRuleCount(1));   // manual-only now
     assertNoOrphanedLinks();
 
-    controlActionsUpdate(false);
-    TEST_ASSERT_FALSE_MESSAGE(controlActionState(0),
+    rulesActionsUpdate(false);
+    TEST_ASSERT_FALSE_MESSAGE(rulesActionState(0),
                               "the deleted rule must stop driving the action");
 }
 
@@ -622,13 +622,13 @@ static void test_remove_rules_for_input_reports_released_drive(void) {
     addInput(10, 50.0f);
     addRule(0, 10, false);
     addAction(0, 23);
-    controlActionAddRule(0, 0);
-    controlActionCommand(0, true);            // operator override held
+    rulesActionAddRule(0, 0);
+    rulesActionCommand(0, true);            // operator override held
 
     uint8_t released = 0;
-    TEST_ASSERT_EQUAL_UINT8(1, controlRemoveRulesForInput(10, &released));
+    TEST_ASSERT_EQUAL_UINT8(1, rulesRemoveRulesForInput(10, &released));
     TEST_ASSERT_EQUAL_UINT8(1, released);
-    TEST_ASSERT_EQUAL_UINT8(0, controlRemoveRulesForInput(10, nullptr));  // idempotent
+    TEST_ASSERT_EQUAL_UINT8(0, rulesRemoveRulesForInput(10, nullptr));  // idempotent
 }
 
 // --- RULE <id> ENABLE|DISABLE (#346) ----------------------------------------
@@ -637,7 +637,7 @@ static void test_rule_disable_parks_it_and_enable_rearms(void) {
     addInput(10, 50.0f);
     addRule(0, 10, /*active*/true);
 
-    TEST_ASSERT_TRUE(controlRuleSetEnabled(0, false, 1000));
+    TEST_ASSERT_TRUE(rulesRuleSetEnabled(0, false, 1000));
     TEST_ASSERT_EQUAL_UINT8(0, rules[0].flags & RULE_FLAG_ENABLED);
     TEST_ASSERT_EQUAL(RULE_DISABLED, g_ruleContexts[0].state);
 
@@ -645,7 +645,7 @@ static void test_rule_disable_parks_it_and_enable_rearms(void) {
                                      "parking is a state entry: INFO <pin> ALARM "
                                      "prints time-in-state from this stamp");
 
-    TEST_ASSERT_TRUE(controlRuleSetEnabled(0, true, 2000));
+    TEST_ASSERT_TRUE(rulesRuleSetEnabled(0, true, 2000));
     TEST_ASSERT_TRUE(rules[0].flags & RULE_FLAG_ENABLED);
     TEST_ASSERT_EQUAL(RULE_INIT, g_ruleContexts[0].state);   // re-armed, not ACTIVE
     TEST_ASSERT_EQUAL_UINT32(2000, g_ruleContexts[0].stateEntryTime);
@@ -658,13 +658,13 @@ static void test_rule_enable_is_idempotent_and_never_reinits(void) {
     addRule(0, 10, /*active*/true);
     g_ruleContexts[0].stateEntryTime = 500;
 
-    TEST_ASSERT_FALSE(controlRuleSetEnabled(0, true, 9000));
+    TEST_ASSERT_FALSE(rulesRuleSetEnabled(0, true, 9000));
     TEST_ASSERT_EQUAL(RULE_ACTIVE, g_ruleContexts[0].state);
     TEST_ASSERT_EQUAL_UINT32(500, g_ruleContexts[0].stateEntryTime);
 
-    TEST_ASSERT_TRUE(controlRuleSetEnabled(0, false, 9000));
-    TEST_ASSERT_FALSE(controlRuleSetEnabled(0, false, 9500));  // already parked
-    TEST_ASSERT_FALSE(controlRuleSetEnabled(7, true, 9500));   // unknown id
+    TEST_ASSERT_TRUE(rulesRuleSetEnabled(0, false, 9000));
+    TEST_ASSERT_FALSE(rulesRuleSetEnabled(0, false, 9500));  // already parked
+    TEST_ASSERT_FALSE(rulesRuleSetEnabled(7, true, 9500));   // unknown id
 }
 
 // A parked rule stops driving its action -- the CLI path #346 adds is what makes
@@ -673,13 +673,13 @@ static void test_parked_rule_stops_driving_its_action(void) {
     addInput(10, 50.0f);
     addRule(0, 10, /*active*/true);
     addAction(0, 23);
-    controlActionAddRule(0, 0);
-    controlActionsUpdate(false);
-    TEST_ASSERT_TRUE(controlActionState(0));
+    rulesActionAddRule(0, 0);
+    rulesActionsUpdate(false);
+    TEST_ASSERT_TRUE(rulesActionState(0));
 
-    controlRuleSetEnabled(0, false, 1000);
-    controlActionsUpdate(false);
-    TEST_ASSERT_FALSE(controlActionState(0));
+    rulesRuleSetEnabled(0, false, 1000);
+    rulesActionsUpdate(false);
+    TEST_ASSERT_FALSE(rulesActionState(0));
 }
 
 int main(int, char**) {

@@ -38,7 +38,7 @@ preOBD uses EEPROM (Electrically Erasable Programmable Read-Only Memory) to pers
 
 preOBD splits EEPROM into two blocks that grow toward each other:
 
-- **Config-store arena** grows up from address 0: one `ConfigStoreHeader` followed by three packed record sections — `InputEEPROM[]`, then control-engine `Rule[]`, then `Action[]` (the latter two present on `INCLUDE_CONTROL_ENGINE` builds). All three sections draw from one shared budget.
+- **Config-store arena** grows up from address 0: one `ConfigStoreHeader` followed by three packed record sections — `InputEEPROM[]`, then control-engine `Rule[]`, then `Action[]` (the latter two present on `INCLUDE_RULES_ENGINE` builds). All three sections draw from one shared budget.
 - **SystemConfig** is anchored at the **end** of EEPROM, so its address adapts to the platform automatically.
 
 ```
@@ -268,11 +268,11 @@ union CalibrationOverride {
 
 ## Control-Engine Tables (Rule / Action)
 
-On `INCLUDE_CONTROL_ENGINE` builds, the `Rule[]` and `Action[]` sections follow the inputs in the same arena. The records are stored **directly** (no hash mirror like inputs): a `Rule` keys off the source input's stable **pin**, and Actions reference Rules by stable **id**, neither of which shifts across firmware versions.
+On `INCLUDE_RULES_ENGINE` builds, the `Rule[]` and `Action[]` sections follow the inputs in the same arena. The records are stored **directly** (no hash mirror like inputs): a `Rule` keys off the source input's stable **pin**, and Actions reference Rules by stable **id**, neither of which shifts across firmware versions.
 
-- **Live tables are RAM globals** — `rules[MAX_RULES]` / `actions[MAX_ACTIONS]` in `control_manager.cpp` (mirroring `Input inputs[]`), **not** members of `SystemConfig`.
-- **RAM caps** come from `CONTROL_RAM_{RULES,ACTIONS}_MAX` (`control_types.h`): a uniform **64** on 32-bit boards, overridden **down to 2** on AVR (Mega), with an absolute **254** id-space ceiling (ids are `uint8_t`, `0xFF` = empty-slot sentinel). Decoupled from `MAX_INPUTS`, so the engine is N:N (many rules per input, many actions per rule).
-- **Empty slot = `id == 0xFF`.** The tables are BSS-zeroed, and `id == 0` is a *valid* id, so `controlResetTables()` stamps every slot empty before they're trusted (cold boot, factory reset, any failed load) — otherwise a blank table would look full of phantom record #0.
+- **Live tables are RAM globals** — `rules[MAX_RULES]` / `actions[MAX_ACTIONS]` in `rules_manager.cpp` (mirroring `Input inputs[]`), **not** members of `SystemConfig`.
+- **RAM caps** come from `RULES_RAM_{RULES,ACTIONS}_MAX` (`rules_types.h`): a uniform **64** on 32-bit boards, overridden **down to 2** on AVR (Mega), with an absolute **254** id-space ceiling (ids are `uint8_t`, `0xFF` = empty-slot sentinel). Decoupled from `MAX_INPUTS`, so the engine is N:N (many rules per input, many actions per rule).
+- **Empty slot = `id == 0xFF`.** The tables are BSS-zeroed, and `id == 0` is a *valid* id, so `rulesResetTables()` stamps every slot empty before they're trusted (cold boot, factory reset, any failed load) — otherwise a blank table would look full of phantom record #0.
 - **Persistence is bounded by the EEPROM budget, not the RAM cap.** Only non-empty records are written (compacted), and the arena truncates loudly if rules/actions don't fit after the inputs.
 - On load, a **dangling-`ruleRef` sweep** reverts any Action whose Rule didn't load to manual-only (mirrors the `RULE DEL` invariant and the JSON import path).
 
@@ -280,7 +280,7 @@ On `INCLUDE_CONTROL_ENGINE` builds, the `Rule[]` and `Action[]` sections follow 
 
 ### Validate-before-mutate load
 
-`loadInputConfig()` verifies the header (magic, version, arena bounds, checksum) via a **read-only** scan and only touches RAM (`inputs[]` and the control tables) once the store is confirmed good. A failed runtime `LOAD` (blank / wrong-version / corrupt EEPROM) is therefore a true no-op — it cannot wipe an unsaved in-RAM config or strand a driven output. `cmd_load` gates the control re-arm trio (`controlManagerInit` + `controlActionsInit` + `controlSyncActionPins`) on a successful load and reports honestly rather than always claiming success.
+`loadInputConfig()` verifies the header (magic, version, arena bounds, checksum) via a **read-only** scan and only touches RAM (`inputs[]` and the control tables) once the store is confirmed good. A failed runtime `LOAD` (blank / wrong-version / corrupt EEPROM) is therefore a true no-op — it cannot wipe an unsaved in-RAM config or strand a driven output. `cmd_load` gates the control re-arm trio (`rulesManagerInit` + `rulesActionsInit` + `rulesSyncActionPins`) on a successful load and reports honestly rather than always claiming success.
 
 ---
 
@@ -404,10 +404,10 @@ if (storedBytes(header) > SYSTEM_CONFIG_ADDRESS) return false;  // won't fit thi
 // … read-only checksum walk over header's stored counts …
 if (computed != header.checksum) return false;         // corrupt → prior config kept
 
-// Validated: NOW commit — blank inputs + controlResetTables(), then load records.
+// Validated: NOW commit — blank inputs + rulesResetTables(), then load records.
 ```
 
-Cold-boot safety for the BSS-zeroed control tables comes from `controlResetTables()` in `initInputManager()` (not the loader), so a blank/invalid EEPROM still ends with empty — not phantom — Rule/Action tables.
+Cold-boot safety for the BSS-zeroed control tables comes from `rulesResetTables()` in `initInputManager()` (not the loader), so a blank/invalid EEPROM still ends with empty — not phantom — Rule/Action tables.
 
 ### SystemConfig Version Check
 

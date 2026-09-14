@@ -1,13 +1,13 @@
-// Native unit test: Rule evaluation engine (src/control/control_engine.cpp).
+// Native unit test: Rule evaluation engine (src/rules/rules_engine.cpp).
 //
-// controlRuleUpdate() takes `now` as a parameter (never calls millis()), so the
+// rulesRuleUpdate() takes `now` as a parameter (never calls millis()), so the
 // INIT->WARMUP->READY->ACTIVE machine and the condition/hysteresis/debounce
 // logic are fully deterministic on the host.
 #include <unity.h>
 #include <Arduino.h>
 #include <math.h>
 
-#include "../../src/control/control_engine.cpp"
+#include "../../src/rules/rules_engine.cpp"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -33,10 +33,10 @@ static Rule makeRule(uint8_t cond, float lo, float hi = 0.0f,
 
 // Walk a rule from INIT to READY holding a settled, in-spec value.
 static void toReady(const Rule& r, RuleContext& ctx, float settledValue) {
-    controlRuleInit(ctx, r, 0);
-    controlRuleUpdate(r, ctx, settledValue, 0);      // INIT
-    controlRuleUpdate(r, ctx, settledValue, 1001);   // INIT -> WARMUP (>1000ms)
-    controlRuleUpdate(r, ctx, settledValue, 1602);   // WARMUP -> READY (601 > 500)
+    rulesRuleInit(ctx, r, 0);
+    rulesRuleUpdate(r, ctx, settledValue, 0);      // INIT
+    rulesRuleUpdate(r, ctx, settledValue, 1001);   // INIT -> WARMUP (>1000ms)
+    rulesRuleUpdate(r, ctx, settledValue, 1602);   // WARMUP -> READY (601 > 500)
     TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
 }
 
@@ -45,7 +45,7 @@ static void toReady(const Rule& r, RuleContext& ctx, float settledValue) {
 static void test_init_enabled_arms(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);
     RuleContext ctx{};
-    controlRuleInit(ctx, r, 0);
+    rulesRuleInit(ctx, r, 0);
     TEST_ASSERT_EQUAL(RULE_INIT, ctx.state);
     TEST_ASSERT_EQUAL_UINT16(500, ctx.warmupTime_ms);
     TEST_ASSERT_EQUAL_UINT16(200, ctx.persistTime_ms);
@@ -55,7 +55,7 @@ static void test_init_disabled_stays_disabled(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);
     r.flags = 0;  // disabled
     RuleContext ctx{};
-    controlRuleInit(ctx, r, 0);
+    rulesRuleInit(ctx, r, 0);
     TEST_ASSERT_EQUAL(RULE_DISABLED, ctx.state);
 }
 
@@ -63,9 +63,9 @@ static void test_disabled_rule_never_activates(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);
     r.flags = 0;
     RuleContext ctx{};
-    controlRuleInit(ctx, r, 0);
-    controlRuleUpdate(r, ctx, 9999.0f, 5000);
-    TEST_ASSERT_FALSE(controlRuleIsActive(ctx));
+    rulesRuleInit(ctx, r, 0);
+    rulesRuleUpdate(r, ctx, 9999.0f, 5000);
+    TEST_ASSERT_FALSE(rulesRuleIsActive(ctx));
     TEST_ASSERT_EQUAL(RULE_DISABLED, ctx.state);
 }
 
@@ -74,13 +74,13 @@ static void test_disabled_rule_never_activates(void) {
 static void test_warmup_blocks_assertion(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);
     RuleContext ctx{};
-    controlRuleInit(ctx, r, 0);
-    controlRuleUpdate(r, ctx, 200.0f, 0);     // INIT, over threshold but blocked
-    controlRuleUpdate(r, ctx, 200.0f, 500);   // still INIT
-    TEST_ASSERT_FALSE(controlRuleIsActive(ctx));
-    controlRuleUpdate(r, ctx, 200.0f, 1001);  // INIT -> WARMUP
+    rulesRuleInit(ctx, r, 0);
+    rulesRuleUpdate(r, ctx, 200.0f, 0);     // INIT, over threshold but blocked
+    rulesRuleUpdate(r, ctx, 200.0f, 500);   // still INIT
+    TEST_ASSERT_FALSE(rulesRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, 200.0f, 1001);  // INIT -> WARMUP
     TEST_ASSERT_EQUAL(RULE_WARMUP, ctx.state);
-    TEST_ASSERT_FALSE(controlRuleIsActive(ctx));
+    TEST_ASSERT_FALSE(rulesRuleIsActive(ctx));
 }
 
 // --- ABOVE + hysteresis + debounce -------------------------------------
@@ -89,27 +89,27 @@ static void test_above_asserts_after_debounce(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);
     RuleContext ctx{};
     toReady(r, ctx, 50.0f);
-    controlRuleUpdate(r, ctx, 120.0f, 2000);  // violation begins (debounce starts)
-    TEST_ASSERT_FALSE(controlRuleIsActive(ctx));   // not yet debounced
-    controlRuleUpdate(r, ctx, 120.0f, 2100);  // 100ms < 200ms debounce
-    TEST_ASSERT_FALSE(controlRuleIsActive(ctx));
-    controlRuleUpdate(r, ctx, 120.0f, 2200);  // 200ms >= debounce -> ACTIVE
-    TEST_ASSERT_TRUE(controlRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, 120.0f, 2000);  // violation begins (debounce starts)
+    TEST_ASSERT_FALSE(rulesRuleIsActive(ctx));   // not yet debounced
+    rulesRuleUpdate(r, ctx, 120.0f, 2100);  // 100ms < 200ms debounce
+    TEST_ASSERT_FALSE(rulesRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, 120.0f, 2200);  // 200ms >= debounce -> ACTIVE
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
 }
 
 static void test_above_hysteresis_holds_until_clear_band(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);  // hyst 2.0 -> clears below 98.0
     RuleContext ctx{};
     toReady(r, ctx, 50.0f);
-    controlRuleUpdate(r, ctx, 120.0f, 2000);
-    controlRuleUpdate(r, ctx, 120.0f, 2200);
-    TEST_ASSERT_TRUE(controlRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, 120.0f, 2000);
+    rulesRuleUpdate(r, ctx, 120.0f, 2200);
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
     // dip to 99.0: above the clear band (98.0) -> still active
-    controlRuleUpdate(r, ctx, 99.0f, 2300);
-    TEST_ASSERT_TRUE(controlRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, 99.0f, 2300);
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
     // drop to 97.0: below clear band -> de-asserts
-    controlRuleUpdate(r, ctx, 97.0f, 2400);
-    TEST_ASSERT_FALSE(controlRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, 97.0f, 2400);
+    TEST_ASSERT_FALSE(rulesRuleIsActive(ctx));
     TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
 }
 
@@ -119,13 +119,13 @@ static void test_below_asserts_and_clears(void) {
     Rule r = makeRule(RULE_BELOW, 10.0f);  // hyst 2.0 -> clears above 12.0
     RuleContext ctx{};
     toReady(r, ctx, 50.0f);
-    controlRuleUpdate(r, ctx, 5.0f, 2000);
-    controlRuleUpdate(r, ctx, 5.0f, 2200);  // debounced
-    TEST_ASSERT_TRUE(controlRuleIsActive(ctx));
-    controlRuleUpdate(r, ctx, 11.0f, 2300); // within clear band -> still active
-    TEST_ASSERT_TRUE(controlRuleIsActive(ctx));
-    controlRuleUpdate(r, ctx, 13.0f, 2400); // above clear band -> clears
-    TEST_ASSERT_FALSE(controlRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, 5.0f, 2000);
+    rulesRuleUpdate(r, ctx, 5.0f, 2200);  // debounced
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, 11.0f, 2300); // within clear band -> still active
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, 13.0f, 2400); // above clear band -> clears
+    TEST_ASSERT_FALSE(rulesRuleIsActive(ctx));
 }
 
 // --- OUTSIDE_BAND (both edges) -----------------------------------------
@@ -135,15 +135,15 @@ static void test_outside_band_both_edges(void) {
     RuleContext ctx{};
     toReady(r, ctx, 50.0f);
     // high edge
-    controlRuleUpdate(r, ctx, 120.0f, 2000);
-    controlRuleUpdate(r, ctx, 120.0f, 2200);
-    TEST_ASSERT_TRUE(controlRuleIsActive(ctx));
-    controlRuleUpdate(r, ctx, 50.0f, 2300);   // back in band
-    TEST_ASSERT_FALSE(controlRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, 120.0f, 2000);
+    rulesRuleUpdate(r, ctx, 120.0f, 2200);
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, 50.0f, 2300);   // back in band
+    TEST_ASSERT_FALSE(rulesRuleIsActive(ctx));
     // low edge
-    controlRuleUpdate(r, ctx, 5.0f, 2400);
-    controlRuleUpdate(r, ctx, 5.0f, 2600);
-    TEST_ASSERT_TRUE(controlRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, 5.0f, 2400);
+    rulesRuleUpdate(r, ctx, 5.0f, 2600);
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
 }
 
 // --- NaN safety ---------------------------------------------------------
@@ -152,12 +152,12 @@ static void test_nan_never_asserts_and_clears_active(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);
     RuleContext ctx{};
     toReady(r, ctx, 50.0f);
-    controlRuleUpdate(r, ctx, 120.0f, 2000);
-    controlRuleUpdate(r, ctx, 120.0f, 2200);
-    TEST_ASSERT_TRUE(controlRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, 120.0f, 2000);
+    rulesRuleUpdate(r, ctx, 120.0f, 2200);
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
     // sensor goes NaN -> de-asserts (failsafe intent)
-    controlRuleUpdate(r, ctx, NAN, 2300);
-    TEST_ASSERT_FALSE(controlRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, NAN, 2300);
+    TEST_ASSERT_FALSE(rulesRuleIsActive(ctx));
 }
 
 // --- INSIDE_BAND deferred ----------------------------------------------
@@ -166,9 +166,9 @@ static void test_inside_band_deferred_never_asserts(void) {
     Rule r = makeRule(RULE_INSIDE_BAND, 10.0f, 100.0f);
     RuleContext ctx{};
     toReady(r, ctx, 50.0f);  // squarely inside the band
-    controlRuleUpdate(r, ctx, 50.0f, 2000);
-    controlRuleUpdate(r, ctx, 50.0f, 2200);
-    TEST_ASSERT_FALSE(controlRuleIsActive(ctx));  // deferred shape: inert in v1
+    rulesRuleUpdate(r, ctx, 50.0f, 2000);
+    rulesRuleUpdate(r, ctx, 50.0f, 2200);
+    TEST_ASSERT_FALSE(rulesRuleIsActive(ctx));  // deferred shape: inert in v1
 }
 
 // --- severity rollup ----------------------------------------------------
@@ -178,10 +178,10 @@ static void test_severity_reflects_active_state(void) {
     r.severity = RULE_SEV_WARNING;
     RuleContext ctx{};
     toReady(r, ctx, 50.0f);
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE, controlRuleSeverity(r, ctx));  // not active
-    controlRuleUpdate(r, ctx, 120.0f, 2000);
-    controlRuleUpdate(r, ctx, 120.0f, 2200);
-    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, controlRuleSeverity(r, ctx));  // active -> configured severity
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleSeverity(r, ctx));  // not active
+    rulesRuleUpdate(r, ctx, 120.0f, 2000);
+    rulesRuleUpdate(r, ctx, 120.0f, 2200);
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleSeverity(r, ctx));  // active -> configured severity
 }
 
 // --- Derived warning tier (annunciator severity) ----------------------
@@ -190,15 +190,15 @@ static void test_annun_active_alarm_is_alarm(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);  // severity ALARM
     RuleContext ctx{};
     ctx.state = RULE_ACTIVE;
-    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, controlRuleAnnunciatorSeverity(r, ctx, 120.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, rulesRuleAnnunciatorSeverity(r, ctx, 120.0f));
 }
 
 static void test_annun_warning_band_below_limit(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);  // warn at 90
     RuleContext ctx{};
     ctx.state = RULE_READY;
-    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, controlRuleAnnunciatorSeverity(r, ctx, 95.0f));
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    controlRuleAnnunciatorSeverity(r, ctx, 80.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, 95.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 80.0f));
 }
 
 static void test_annun_warning_only_for_alarm_rules(void) {
@@ -206,7 +206,7 @@ static void test_annun_warning_only_for_alarm_rules(void) {
     r.severity = RULE_SEV_WARNING;          // a WARNING rule has no sub-tier
     RuleContext ctx{};
     ctx.state = RULE_READY;
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE, controlRuleAnnunciatorSeverity(r, ctx, 95.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx, 95.0f));
 }
 
 // An active INFO rule reports INFO to the notification path (the BLE broadcaster
@@ -217,7 +217,7 @@ static void test_annun_active_info_is_info(void) {
     r.severity = RULE_SEV_INFO;
     RuleContext ctx{};
     ctx.state = RULE_ACTIVE;
-    TEST_ASSERT_EQUAL(RULE_SEV_INFO, controlRuleAnnunciatorSeverity(r, ctx, 120.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_INFO, rulesRuleAnnunciatorSeverity(r, ctx, 120.0f));
 }
 
 // INFO is not a condition that pre-announces: an INFO rule approaching its limit
@@ -228,7 +228,7 @@ static void test_annun_no_derived_warning_for_info(void) {
     r.severity = RULE_SEV_INFO;
     RuleContext ctx{};
     ctx.state = RULE_READY;
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE, controlRuleAnnunciatorSeverity(r, ctx, 95.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx, 95.0f));
 }
 
 // Ordinal invariant: INFO sits below WARNING/ALARM so the LED rollup's bare
@@ -244,15 +244,15 @@ static void test_annun_no_warning_during_warmup(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);
     RuleContext ctx{};
     ctx.state = RULE_WARMUP;
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE, controlRuleAnnunciatorSeverity(r, ctx, 95.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx, 95.0f));
 }
 
 static void test_annun_outside_band_low_warning(void) {
     Rule r = makeRule(RULE_OUTSIDE_BAND, 10.0f, 100.0f);  // low warn at 11 (10*1.1)
     RuleContext ctx{};
     ctx.state = RULE_READY;
-    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, controlRuleAnnunciatorSeverity(r, ctx, 10.5f));
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    controlRuleAnnunciatorSeverity(r, ctx, 50.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, 10.5f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 50.0f));
 }
 
 // Regression: warning band must stay on the PRE-limit side for non-positive
@@ -263,9 +263,9 @@ static void test_annun_warning_band_negative_above(void) {
     RuleContext ctx{};
     ctx.state = RULE_READY;
     // approaching -10 from below: -10.5 is in [-11, -10) -> WARNING
-    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, controlRuleAnnunciatorSeverity(r, ctx, -10.5f));
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, -10.5f));
     // well below the limit -> not yet warning
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    controlRuleAnnunciatorSeverity(r, ctx, -20.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, -20.0f));
 }
 
 static void test_annun_warning_band_negative_below(void) {
@@ -273,8 +273,8 @@ static void test_annun_warning_band_negative_below(void) {
     RuleContext ctx{};
     ctx.state = RULE_READY;
     // approaching -10 from above: -9.5 is in (-10, -9] -> WARNING
-    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, controlRuleAnnunciatorSeverity(r, ctx, -9.5f));
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    controlRuleAnnunciatorSeverity(r, ctx, 0.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, -9.5f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 0.0f));
 }
 
 static void test_annun_outside_band_negative_low_edge(void) {
@@ -282,9 +282,9 @@ static void test_annun_outside_band_negative_low_edge(void) {
     RuleContext ctx{};
     ctx.state = RULE_READY;
     // approaching the -20 low edge from inside the band -> WARNING
-    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, controlRuleAnnunciatorSeverity(r, ctx, -19.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, -19.0f));
     // mid-band -> no warning
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    controlRuleAnnunciatorSeverity(r, ctx, 0.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 0.0f));
 }
 
 // --- Action resolution -------------------------------------------------
@@ -313,29 +313,29 @@ static Action makeAction(uint8_t type, uint8_t ruleRef, uint8_t failsafe = ACT_F
 }
 
 static void test_action_manual_follows_manual_state(void) {
-    Action a = makeAction(ACT_RELAY, CONTROL_ID_NONE);
+    Action a = makeAction(ACT_RELAY, RULES_ID_NONE);
     // rule state is ignored for a manual action
-    TEST_ASSERT_TRUE(controlActionDesired(a, manualOnly(), true, ACT_OVR_AUTO));
-    TEST_ASSERT_FALSE(controlActionDesired(a, manualOnly(), false, ACT_OVR_AUTO));
+    TEST_ASSERT_TRUE(rulesActionDesired(a, manualOnly(), true, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(rulesActionDesired(a, manualOnly(), false, ACT_OVR_AUTO));
 }
 
 static void test_action_follows_rule_when_trustworthy(void) {
     Action a = makeAction(ACT_RELAY, 5);  // linked to rule id 5
-    TEST_ASSERT_TRUE(controlActionDesired(a, linked(true, true), false, ACT_OVR_AUTO));
-    TEST_ASSERT_FALSE(controlActionDesired(a, linked(false, true), false, ACT_OVR_AUTO));
+    TEST_ASSERT_TRUE(rulesActionDesired(a, linked(true, true), false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(rulesActionDesired(a, linked(false, true), false, ACT_OVR_AUTO));
 }
 
 static void test_action_relay_failsafe_on_untrustworthy(void) {
     Action aOn  = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
     Action aOff = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_OFF);
     // source untrustworthy: ignore ruleActive, assume failsafe
-    TEST_ASSERT_TRUE(controlActionDesired(aOn,  linked(false, false), false, ACT_OVR_AUTO));
-    TEST_ASSERT_FALSE(controlActionDesired(aOff, linked(true,  false), false, ACT_OVR_AUTO));
+    TEST_ASSERT_TRUE(rulesActionDesired(aOn,  linked(false, false), false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(rulesActionDesired(aOff, linked(true,  false), false, ACT_OVR_AUTO));
 }
 
 static void test_action_nonrelay_deasserts_on_untrustworthy(void) {
     Action a = makeAction(ACT_LED, 5, ACT_FAILSAFE_ON);  // failsafe ignored for non-RELAY
-    TEST_ASSERT_FALSE(controlActionDesired(a, linked(true, false), false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(rulesActionDesired(a, linked(true, false), false, ACT_OVR_AUTO));
 }
 
 // --- Operator override (#329) ------------------------------------------
@@ -343,8 +343,8 @@ static void test_action_nonrelay_deasserts_on_untrustworthy(void) {
 // An override beats the Rule outright, in both directions.
 static void test_action_override_beats_rule(void) {
     Action a = makeAction(ACT_RELAY, 5);
-    TEST_ASSERT_TRUE(controlActionDesired(a, linked(false, true), false, ACT_OVR_FORCE_ON));
-    TEST_ASSERT_FALSE(controlActionDesired(a, linked(true, true), false, ACT_OVR_FORCE_OFF));
+    TEST_ASSERT_TRUE(rulesActionDesired(a, linked(false, true), false, ACT_OVR_FORCE_ON));
+    TEST_ASSERT_FALSE(rulesActionDesired(a, linked(true, true), false, ACT_OVR_FORCE_OFF));
 }
 
 // THE decision this issue turned on: a forced state also beats the FAILSAFE. If
@@ -352,30 +352,30 @@ static void test_action_override_beats_rule(void) {
 // must not be able to countermand a deliberate force. Both failsafe polarities.
 static void test_action_override_beats_failsafe(void) {
     Action failOff = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_OFF);
-    TEST_ASSERT_TRUE(controlActionDesired(failOff, linked(false, /*trustworthy*/false), false,
+    TEST_ASSERT_TRUE(rulesActionDesired(failOff, linked(false, /*trustworthy*/false), false,
                                           ACT_OVR_FORCE_ON));
     Action failOn = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
-    TEST_ASSERT_FALSE(controlActionDesired(failOn, linked(true, /*trustworthy*/false), false,
+    TEST_ASSERT_FALSE(rulesActionDesired(failOn, linked(true, /*trustworthy*/false), false,
                                            ACT_OVR_FORCE_OFF));
 }
 
 // AUTO is exactly today's behavior — the override tier must be inert by default.
 static void test_action_override_auto_is_transparent(void) {
     Action a = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
-    TEST_ASSERT_TRUE(controlActionDesired(a, linked(true, true), false, ACT_OVR_AUTO));
-    TEST_ASSERT_FALSE(controlActionDesired(a, linked(false, true), false, ACT_OVR_AUTO));
-    TEST_ASSERT_TRUE(controlActionDesired(a, linked(false, false), false, ACT_OVR_AUTO));  // failsafe
+    TEST_ASSERT_TRUE(rulesActionDesired(a, linked(true, true), false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(rulesActionDesired(a, linked(false, true), false, ACT_OVR_AUTO));
+    TEST_ASSERT_TRUE(rulesActionDesired(a, linked(false, false), false, ACT_OVR_AUTO));  // failsafe
 }
 
 // An override on an unlinked action wins over the manual latch too (the CLI/BLE
 // router never sets one there, but the resolution order must be unambiguous).
 static void test_action_override_beats_manual_latch(void) {
-    Action a = makeAction(ACT_RELAY, CONTROL_ID_NONE);
-    TEST_ASSERT_TRUE(controlActionDesired(a, manualOnly(), /*manual*/false, ACT_OVR_FORCE_ON));
-    TEST_ASSERT_FALSE(controlActionDesired(a, manualOnly(), /*manual*/true, ACT_OVR_FORCE_OFF));
+    Action a = makeAction(ACT_RELAY, RULES_ID_NONE);
+    TEST_ASSERT_TRUE(rulesActionDesired(a, manualOnly(), /*manual*/false, ACT_OVR_FORCE_ON));
+    TEST_ASSERT_FALSE(rulesActionDesired(a, manualOnly(), /*manual*/true, ACT_OVR_FORCE_OFF));
 }
 
-// #294 regression, at the resolution layer. The manager's controlActionReleaseDrive()
+// #294 regression, at the resolution layer. The manager's rulesActionReleaseDrive()
 // is what enforces this in the firmware (it clears the manual latch alongside the
 // override on every link change), but the reason it MUST is visible right here: an
 // action that is rule-driven ignores the latch entirely, so a latch left armed is
@@ -383,14 +383,14 @@ static void test_action_override_beats_manual_latch(void) {
 static void test_action_stale_manual_latch_would_snap_on_after_unlink(void) {
     Action linkedAction = makeAction(ACT_RELAY, 5);
     // While linked, a stale latch is correctly ignored: rule says off, output off.
-    TEST_ASSERT_FALSE(controlActionDesired(linkedAction, linked(false, true), /*manual*/true, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(rulesActionDesired(linkedAction, linked(false, true), /*manual*/true, ACT_OVR_AUTO));
     // Unlink it with that latch still set and the pin snaps ON, uncommanded. This
     // is the failure mode; the fix is that no code path may reach here with the
     // latch armed, because every link change releases it.
-    Action unlinked = makeAction(ACT_RELAY, CONTROL_ID_NONE);
-    TEST_ASSERT_TRUE(controlActionDesired(unlinked, manualOnly(), /*manual*/true, ACT_OVR_AUTO));
-    // Released (the invariant controlActionReleaseDrive maintains) -> stays off.
-    TEST_ASSERT_FALSE(controlActionDesired(unlinked, manualOnly(), /*manual*/false, ACT_OVR_AUTO));
+    Action unlinked = makeAction(ACT_RELAY, RULES_ID_NONE);
+    TEST_ASSERT_TRUE(rulesActionDesired(unlinked, manualOnly(), /*manual*/true, ACT_OVR_AUTO));
+    // Released (the invariant rulesActionReleaseDrive maintains) -> stays off.
+    TEST_ASSERT_FALSE(rulesActionDesired(unlinked, manualOnly(), /*manual*/false, ACT_OVR_AUTO));
 }
 
 
@@ -400,8 +400,8 @@ static void test_action_stale_manual_latch_would_snap_on_after_unlink(void) {
 // active member asserts the output; all quiet -> off.
 static void test_action_or_combines_members(void) {
     Action fan = makeAction(ACT_RELAY, 5);
-    TEST_ASSERT_TRUE(controlActionDesired(fan, members(3, /*anyActive*/true, false), false, ACT_OVR_AUTO));
-    TEST_ASSERT_FALSE(controlActionDesired(fan, members(3, /*anyActive*/false, false), false, ACT_OVR_AUTO));
+    TEST_ASSERT_TRUE(rulesActionDesired(fan, members(3, /*anyActive*/true, false), false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(rulesActionDesired(fan, members(3, /*anyActive*/false, false), false, ACT_OVR_AUTO));
 }
 
 // THE multi-source failsafe decision: a live member's demand outranks a dead
@@ -409,27 +409,27 @@ static void test_action_or_combines_members(void) {
 // legitimately calling for -- in BOTH failsafe polarities.
 static void test_action_live_member_outranks_faulted_sibling(void) {
     Action failOff = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_OFF);
-    TEST_ASSERT_TRUE(controlActionDesired(failOff, members(2, /*anyActive*/true, /*anyFaulted*/true),
+    TEST_ASSERT_TRUE(rulesActionDesired(failOff, members(2, /*anyActive*/true, /*anyFaulted*/true),
                                           false, ACT_OVR_AUTO));
     Action failOn = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
-    TEST_ASSERT_TRUE(controlActionDesired(failOn, members(2, true, true), false, ACT_OVR_AUTO));
+    TEST_ASSERT_TRUE(rulesActionDesired(failOn, members(2, true, true), false, ACT_OVR_AUTO));
 }
 
 // With no live demand at all, a faulted member still puts a RELAY in its failsafe.
 static void test_action_failsafe_applies_when_no_member_demands(void) {
     Action failOn  = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
     Action failOff = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_OFF);
-    TEST_ASSERT_TRUE(controlActionDesired(failOn,  members(2, false, /*anyFaulted*/true), false, ACT_OVR_AUTO));
-    TEST_ASSERT_FALSE(controlActionDesired(failOff, members(2, false, /*anyFaulted*/true), false, ACT_OVR_AUTO));
+    TEST_ASSERT_TRUE(rulesActionDesired(failOn,  members(2, false, /*anyFaulted*/true), false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(rulesActionDesired(failOff, members(2, false, /*anyFaulted*/true), false, ACT_OVR_AUTO));
 }
 
 // A multi-member action still ignores the manual latch, and an override still
 // outranks every member (the #329 tier is unchanged by membership).
 static void test_action_override_beats_all_members(void) {
     Action fan = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
-    TEST_ASSERT_FALSE(controlActionDesired(fan, members(3, true, true), /*manual*/true, ACT_OVR_FORCE_OFF));
-    TEST_ASSERT_TRUE(controlActionDesired(fan, members(3, false, false), /*manual*/false, ACT_OVR_FORCE_ON));
-    TEST_ASSERT_FALSE(controlActionDesired(fan, members(3, false, false), /*manual*/true, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(rulesActionDesired(fan, members(3, true, true), /*manual*/true, ACT_OVR_FORCE_OFF));
+    TEST_ASSERT_TRUE(rulesActionDesired(fan, members(3, false, false), /*manual*/false, ACT_OVR_FORCE_ON));
+    TEST_ASSERT_FALSE(rulesActionDesired(fan, members(3, false, false), /*manual*/true, ACT_OVR_AUTO));
 }
 
 // A dangling member (its Rule record is gone) counts toward memberCount but is
@@ -437,7 +437,7 @@ static void test_action_override_beats_all_members(void) {
 // NOT fall back to the manual latch (that is the #294 snap-on route).
 static void test_action_dangling_member_stays_off_not_manual(void) {
     Action a = makeAction(ACT_RELAY, 5);
-    TEST_ASSERT_FALSE(controlActionDesired(a, members(1, false, false), /*manual*/true, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(rulesActionDesired(a, members(1, false, false), /*manual*/true, ACT_OVR_AUTO));
 }
 
 int main(int, char**) {

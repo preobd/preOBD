@@ -1,9 +1,9 @@
 #include "alarm_broadcaster.h"
 
 #include "../../config.h"
-#include "../../control/control_types.h"  // defines INCLUDE_CONTROL_ENGINE
+#include "../../rules/rules_types.h"  // defines INCLUDE_RULES_ENGINE
 
-#if INCLUDE_FRAMED_TRANSPORT && INCLUDE_CONTROL_ENGINE
+#if INCLUDE_FRAMED_TRANSPORT && INCLUDE_RULES_ENGINE
 
 #include <Arduino.h>
 #include <math.h>
@@ -16,8 +16,8 @@
 #include "slotted_broadcaster.h"
 #include "../../inputs/input.h"
 #include "../../inputs/input_manager.h"
-#include "../../control/control_manager.h"
-#include "../../control/control_engine.h"
+#include "../../rules/rules_manager.h"
+#include "../../rules/rules_engine.h"
 
 extern MuxTransport hwSerial1;
 
@@ -79,7 +79,7 @@ AlarmKey evalSlot(int i, float& value, float& threshold, uint8_t& inputIdx) {
     // Notification path (not annunciation): includes INFO, which notifies via
     // the log timeline but never lights the LED/buzzer (#308). INFO<WARNING in
     // the RuleSeverity ordinal domain, so this gate is `>= RULE_SEV_INFO`.
-    const bool isNotifyRule = (r.id != CONTROL_ID_NONE) &&
+    const bool isNotifyRule = (r.id != RULES_ID_NONE) &&
                               (r.severity >= RULE_SEV_INFO) &&
                               (r.flags & RULE_FLAG_ENABLED);
     if (isNotifyRule) {
@@ -88,7 +88,7 @@ AlarmKey evalSlot(int i, float& value, float& threshold, uint8_t& inputIdx) {
         inputIdx = getInputIndex(r.sourceInput);
         // Includes the derived WARNING tier (§11.2): WARNING as the value
         // approaches the limit, ALARM once it trips.
-        RuleSeverity asev = controlRuleAnnunciatorSeverity(r, g_ruleContexts[i], value);
+        RuleSeverity asev = rulesRuleAnnunciatorSeverity(r, g_ruleContexts[i], value);
         if (asev != RULE_SEV_NONE) {
             k.severity = toPreobdSeverity(asev);
             k.kind     = kindFor(r, value);
@@ -138,11 +138,11 @@ void tick() {
 
 } // namespace AlarmBroadcaster
 
-#else // !(INCLUDE_FRAMED_TRANSPORT && INCLUDE_CONTROL_ENGINE)
+#else // !(INCLUDE_FRAMED_TRANSPORT && INCLUDE_RULES_ENGINE)
 
 namespace AlarmBroadcaster {
 void init() {}
 void tick() {}
 }
 
-#endif // INCLUDE_FRAMED_TRANSPORT && INCLUDE_CONTROL_ENGINE
+#endif // INCLUDE_FRAMED_TRANSPORT && INCLUDE_RULES_ENGINE

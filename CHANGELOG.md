@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SENSOR_LIBRARY`/`APPLICATION_PRESETS`/`UNITS_REGISTRY` and their calibration/string data now live in one `.cpp` each instead of being redefined by every including header, recovering ~11 KB of flash on mega2560 and ~76 KB on teensy41 that duplicate PROGMEM copies were wasting (#400)
 - `SENSOR_CATEGORIES` (the sensor-category name/label table `#400` missed) now lives in one `.cpp` instead of being redefined by every including header
 - `src/lib/` and `src/displays/` dissolved into `src/hal/`, `src/pinctrl/`, `src/drivers/`, `src/core/`, `src/comms/`, `src/storage/`, `src/outputs/ble/`, and `src/outputs/display/` (pure move, no behaviour change) (#401)
+- `src/control/` renamed to `src/rules/`, with every `control*`/`CONTROL_*` identifier renamed to `rules*`/`RULES_*` to match (the `msg.control` control plane and its `controlLevel` JSON key are unrelated and untouched); the CLI now says "rules engine" where it used to say "control engine" (#401)
 
 ## [0.12.0-beta] - 2026-09-11
 

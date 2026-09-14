@@ -18,9 +18,9 @@
  */
 
 #include "../config.h"
-#include "../control/control_types.h"  // defines INCLUDE_CONTROL_ENGINE before the guard
+#include "../rules/rules_types.h"  // defines INCLUDE_RULES_ENGINE before the guard
 
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
 
 #include "command_handlers.h"
 #include "command_helpers.h"
@@ -30,7 +30,7 @@
 #include "../core/message_api.h"
 #include "../pinctrl/pin_registry.h"
 #include "../pinctrl/pin_owner.h"
-#include "../control/control_manager.h"
+#include "../rules/rules_manager.h"
 
 // CLI handlers are cold — keep them in flash, not Teensy ITCM (RAM1).
 #ifndef FLASHMEM
@@ -62,7 +62,7 @@ static FLASHMEM void printActionRow(int i) {
     msg.control.print(a.target);
     if (a.behavior & ACT_BEHAVIOR_INVERT) msg.control.print(F(" INV"));
     msg.control.print(F("  src="));
-    const uint8_t members = controlActionRuleCount(i);
+    const uint8_t members = rulesActionRuleCount(i);
     if (members == 0) {
         msg.control.print(F("manual"));
     } else {
@@ -72,15 +72,15 @@ static FLASHMEM void printActionRow(int i) {
         msg.control.print(F("rule#"));
         for (uint8_t m = 0; m < members; m++) {
             if (m > 0) { msg.control.print(F(",#")); }
-            msg.control.print(controlActionRuleAt(i, m));
+            msg.control.print(rulesActionRuleAt(i, m));
         }
         if (members > 1) msg.control.print(F(" (any)"));
-        ActionOverride ovr = controlActionOverride(i);
+        ActionOverride ovr = rulesActionOverride(i);
         if (ovr != ACT_OVR_AUTO) {
             msg.control.print(F(" (OVERRIDE "));
             msg.control.print(ovr == ACT_OVR_FORCE_ON ? F("ON") : F("OFF"));
             // Never let a force held against a dead sensor look ordinary (#329).
-            if (controlActionSourceFaulted(i)) msg.control.print(F(" - source faulted"));
+            if (rulesActionSourceFaulted(i)) msg.control.print(F(" - source faulted"));
             msg.control.print(')');
         }
     }
@@ -89,11 +89,11 @@ static FLASHMEM void printActionRow(int i) {
         msg.control.print(a.failsafe == ACT_FAILSAFE_ON ? F("ON") : F("OFF"));
     }
     msg.control.print(F("  -> "));
-    msg.control.println(controlActionState(i) ? F("ON") : F("OFF"));
+    msg.control.println(rulesActionState(i) ? F("ON") : F("OFF"));
 }
 
 static FLASHMEM void printAllActions() {
-    uint8_t n = controlActionCount();
+    uint8_t n = rulesActionCount();
     msg.control.print(F("Actions ("));
     msg.control.print(n);
     msg.control.print('/');
@@ -104,7 +104,7 @@ static FLASHMEM void printAllActions() {
         return;
     }
     for (int i = 0; i < MAX_ACTIONS; i++) {
-        if (actions[i].id != CONTROL_ID_NONE) printActionRow(i);
+        if (actions[i].id != RULES_ID_NONE) printActionRow(i);
     }
 }
 
@@ -150,9 +150,9 @@ static FLASHMEM int actionAdd(int argc, const char* const* argv) {
         }
     }
 
-    int slot = controlActionFreeSlot();
-    uint8_t id = controlActionAllocId();
-    if (slot < 0 || id == CONTROL_ID_NONE) {
+    int slot = rulesActionFreeSlot();
+    uint8_t id = rulesActionAllocId();
+    if (slot < 0 || id == RULES_ID_NONE) {
         msg.control.print(F("ERROR: action table full ("));
         msg.control.print(MAX_ACTIONS);
         msg.control.println(F(")"));
@@ -163,13 +163,13 @@ static FLASHMEM int actionAdd(int argc, const char* const* argv) {
     a.id = id;
     a.type = ACT_RELAY;
     a.target = target;
-    a.ruleRef = CONTROL_ID_NONE;   // manual-only until linked
-    controlActionForgetLinks(id);  // ids are reusable — never inherit a dead action's members
+    a.ruleRef = RULES_ID_NONE;   // manual-only until linked
+    rulesActionForgetLinks(id);  // ids are reusable — never inherit a dead action's members
     a.behavior = behavior;
     a.failsafe = failsafe;
     memset(a.name, 0, sizeof(a.name));  // unnamed; a reused slot may hold a stale label
-    controlActionConfigurePin(slot);   // pinMode OUTPUT + de-assert
-    controlSyncActionPins();           // claim the target pin in the registry
+    rulesActionConfigurePin(slot);   // pinMode OUTPUT + de-assert
+    rulesSyncActionPins();           // claim the target pin in the registry
 
     msg.control.print(F("Action #"));
     msg.control.print(id);
@@ -180,7 +180,7 @@ static FLASHMEM int actionAdd(int argc, const char* const* argv) {
 // Report the membership left behind by a link change, so the operator sees the
 // resulting OR set rather than just the record they touched.
 static FLASHMEM void printMembership(int slot) {
-    const uint8_t n = controlActionRuleCount(slot);
+    const uint8_t n = rulesActionRuleCount(slot);
     msg.control.print(F("  now driven by "));
     if (n == 0) {
         msg.control.println(F("nothing (manual)"));
@@ -189,13 +189,13 @@ static FLASHMEM void printMembership(int slot) {
     for (uint8_t m = 0; m < n; m++) {
         if (m > 0) msg.control.print(F(" OR "));
         msg.control.print(F("rule#"));
-        msg.control.print(controlActionRuleAt(slot, m));
+        msg.control.print(rulesActionRuleAt(slot, m));
     }
     msg.control.println();
 }
 
 static FLASHMEM int actionLink(uint8_t id, const char* ruleArg) {
-    int slot = controlActionSlot(id);
+    int slot = rulesActionSlot(id);
     if (slot < 0) {
         msg.control.print(F("ERROR: no action #"));
         msg.control.println(id);
@@ -207,7 +207,7 @@ static FLASHMEM int actionLink(uint8_t id, const char* ruleArg) {
     // errored out is its own hazard, and the override is meant to be sticky
     // until explicitly released (#329).
     if (streq_P(ruleArg, PSTR("NONE"))) {
-        const bool wasDriven = controlActionClearRules(id);
+        const bool wasDriven = rulesActionClearRules(id);
         msg.control.print(F("Action #"));
         msg.control.print(id);
         msg.control.println(F(" unlinked from every rule (manual). SAVE to persist."));
@@ -215,7 +215,7 @@ static FLASHMEM int actionLink(uint8_t id, const char* ruleArg) {
         return 0;
     }
     uint8_t ruleId = (uint8_t)atoi(ruleArg);
-    if (controlRuleSlot(ruleId) < 0) {
+    if (rulesRuleSlot(ruleId) < 0) {
         msg.control.print(F("ERROR: no rule #"));
         msg.control.println(ruleId);
         return 1;
@@ -224,11 +224,11 @@ static FLASHMEM int actionLink(uint8_t id, const char* ruleArg) {
     // applies to what was driving it before, not to the rule it now follows. Left
     // in place, the latch goes dormant and snaps the pin ON the next time the link
     // goes away (#294); releasing both here is what actually closes that (#329).
-    // controlActionSetRule() does that release, and replaces the WHOLE membership:
+    // rulesActionSetRule() does that release, and replaces the WHOLE membership:
     // `RULE <id>` means "exactly this one" (use RULE ADD to keep the others).
-    const bool hadOthers = controlActionRuleCount(slot) > 1;
+    const bool hadOthers = rulesActionRuleCount(slot) > 1;
     bool wasDriven = false;
-    controlActionSetRule(id, ruleId, &wasDriven);
+    rulesActionSetRule(id, ruleId, &wasDriven);
     msg.control.print(F("Action #"));
     msg.control.print(id);
     msg.control.print(F(" linked to rule #"));
@@ -244,28 +244,28 @@ static FLASHMEM int actionLink(uint8_t id, const char* ruleArg) {
 
 // ACTION <id> RULE ADD|REMOVE <ruleId> — edit ONE membership, leaving the rest.
 static FLASHMEM int actionLinkEdit(uint8_t id, bool add, const char* ruleArg) {
-    int slot = controlActionSlot(id);
+    int slot = rulesActionSlot(id);
     if (slot < 0) {
         msg.control.print(F("ERROR: no action #"));
         msg.control.println(id);
         return 1;
     }
     uint8_t ruleId = (uint8_t)atoi(ruleArg);
-    if (controlRuleSlot(ruleId) < 0) {
+    if (rulesRuleSlot(ruleId) < 0) {
         msg.control.print(F("ERROR: no rule #"));
         msg.control.println(ruleId);
         return 1;
     }
     bool wasDriven = false;
     if (add) {
-        if (controlActionHasRule(slot, ruleId)) {
+        if (rulesActionHasRule(slot, ruleId)) {
             msg.control.print(F("Action #"));
             msg.control.print(id);
             msg.control.print(F(" already follows rule #"));
             msg.control.println(ruleId);
             return 0;
         }
-        if (!controlActionAddRule(id, ruleId, &wasDriven)) {
+        if (!rulesActionAddRule(id, ruleId, &wasDriven)) {
             msg.control.print(F("ERROR: rule-link table full ("));
             msg.control.print(MAX_ACTION_LINKS);
             msg.control.println(F("); remove a membership first"));
@@ -277,7 +277,7 @@ static FLASHMEM int actionLinkEdit(uint8_t id, bool add, const char* ruleArg) {
         msg.control.print(ruleId);
         msg.control.println(F(". SAVE to persist."));
     } else {
-        if (!controlActionRemoveRule(id, ruleId, &wasDriven)) {
+        if (!rulesActionRemoveRule(id, ruleId, &wasDriven)) {
             msg.control.print(F("ERROR: action #"));
             msg.control.print(id);
             msg.control.print(F(" does not follow rule #"));
@@ -299,7 +299,7 @@ static FLASHMEM int actionLinkEdit(uint8_t id, bool add, const char* ruleArg) {
 }
 
 static FLASHMEM int actionManual(uint8_t id, bool on) {
-    int slot = controlActionSlot(id);
+    int slot = rulesActionSlot(id);
     if (slot < 0) {
         msg.control.print(F("ERROR: no action #"));
         msg.control.println(id);
@@ -309,9 +309,9 @@ static FLASHMEM int actionManual(uint8_t id, bool on) {
     // operator override that outranks both the rule and the failsafe (#329). The
     // override is a DISTINCT field from the manual latch, which is what keeps the
     // #294 bug class away: unlinking later leaves AUTO, not a stale armed latch.
-    const uint8_t members = controlActionRuleCount(slot);
+    const uint8_t members = rulesActionRuleCount(slot);
     const bool ruleDriven = (members > 0);
-    controlActionCommand(id, on);
+    rulesActionCommand(id, on);
     msg.control.print(F("Action #"));
     msg.control.print(id);
     if (ruleDriven) {
@@ -320,7 +320,7 @@ static FLASHMEM int actionManual(uint8_t id, bool on) {
         msg.control.print(members > 1 ? F(" (rules held; release with ACTION <id> AUTO)")
                                       : F(" (rule held; release with ACTION <id> AUTO)"));
         msg.control.println();
-        if (controlActionSourceFaulted(slot)) {
+        if (rulesActionSourceFaulted(slot)) {
             msg.control.println(F("  NOTE: source is faulted - the failsafe is being overridden"));
         }
     } else {
@@ -331,19 +331,19 @@ static FLASHMEM int actionManual(uint8_t id, bool on) {
 }
 
 static FLASHMEM int actionAuto(uint8_t id) {
-    int slot = controlActionSlot(id);
+    int slot = rulesActionSlot(id);
     if (slot < 0) {
         msg.control.print(F("ERROR: no action #"));
         msg.control.println(id);
         return 1;
     }
-    const bool wasOverridden = (controlActionOverride(slot) != ACT_OVR_AUTO);
-    controlActionSetOverride(id, ACT_OVR_AUTO);
+    const bool wasOverridden = (rulesActionOverride(slot) != ACT_OVR_AUTO);
+    rulesActionSetOverride(id, ACT_OVR_AUTO);
     msg.control.print(F("Action #"));
     msg.control.print(id);
     if (!wasOverridden) {
         msg.control.println(F(" was not overridden (already AUTO)"));
-    } else if (controlActionRuleCount(slot) == 0) {
+    } else if (rulesActionRuleCount(slot) == 0) {
         // Defensive: nothing sets an override on an unlinked action today (the
         // router sends those to the manual latch), and a link change releases it.
         msg.control.println(F(" override released (action is manual)"));
@@ -363,7 +363,7 @@ static FLASHMEM int actionAuto(uint8_t id) {
 // change to use this — tracked separately in the app repo.
 static FLASHMEM int actionSetName(uint8_t id, const char* name) {
     const bool clearing = (name == nullptr || name[0] == '\0');
-    if (!controlActionSetName(id, name)) {
+    if (!rulesActionSetName(id, name)) {
         msg.control.print(F("ERROR: no action #"));
         msg.control.println(id);
         return 1;
@@ -381,7 +381,7 @@ static FLASHMEM int actionSetName(uint8_t id, const char* name) {
 }
 
 static FLASHMEM int actionDel(uint8_t id) {
-    int slot = controlActionSlot(id);
+    int slot = rulesActionSlot(id);
     if (slot < 0) {
         msg.control.print(F("ERROR: no action #"));
         msg.control.println(id);
@@ -396,10 +396,10 @@ static FLASHMEM int actionDel(uint8_t id) {
     const bool offHigh = relay && (a.behavior & ACT_BEHAVIOR_INVERT);  // OFF level for inverted = HIGH
     const uint8_t target = a.target;
 
-    controlActionConfigurePin(slot);  // de-assert the pin before freeing
-    controlActionForgetLinks(id);     // free its 2nd+ memberships (#343)
-    actions[slot].id = CONTROL_ID_NONE;
-    controlSyncActionPins();          // release the freed target pin in the registry
+    rulesActionConfigurePin(slot);  // de-assert the pin before freeing
+    rulesActionForgetLinks(id);     // free its 2nd+ memberships (#343)
+    actions[slot].id = RULES_ID_NONE;
+    rulesSyncActionPins();          // release the freed target pin in the registry
     msg.control.print(F("Action #"));
     msg.control.print(id);
     msg.control.println(F(" deleted. SAVE to persist."));
@@ -440,7 +440,7 @@ FLASHMEM int cmd_action(int argc, const char* const* argv) {
     }
 
     // ACTION <id> <verb> ...
-    int slot = controlActionSlot((uint8_t)atoi(argv[1]));
+    int slot = rulesActionSlot((uint8_t)atoi(argv[1]));
     if (slot < 0) {
         msg.control.print(F("ERROR: unknown action id or subcommand: "));
         msg.control.println(argv[1]);
@@ -487,4 +487,4 @@ FLASHMEM int cmd_action(int argc, const char* const* argv) {
     return 1;
 }
 
-#endif // INCLUDE_CONTROL_ENGINE
+#endif // INCLUDE_RULES_ENGINE

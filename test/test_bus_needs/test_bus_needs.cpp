@@ -54,12 +54,12 @@ size_t MessageStream::debug(const char*, const char*, ...) { return 0; }
 // self-conflict regression tests below) touch the control-engine tables even
 // though nothing here configures any Rule/Action — an empty, inert stand-in
 // for each is enough.
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
 Rule rules[MAX_RULES];
 Action actions[MAX_ACTIONS];
 ActionLink actionLinks[MAX_ACTION_LINKS];
-void controlResetTables() {}
-uint8_t controlSweepActionRules() { return 0; }
+void rulesResetTables() {}
+uint8_t rulesSweepActionRules() { return 0; }
 #endif
 
 int8_t analogIndexForPin(uint8_t) { return -1; }

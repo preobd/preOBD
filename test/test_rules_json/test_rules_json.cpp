@@ -1,5 +1,5 @@
 // Native unit test: control-engine Rule/Action <-> JSON leaf converters
-// (src/control/control_json.cpp). These are pure (no global state), so the full
+// (src/rules/rules_json.cpp). These are pure (no global state), so the full
 // export -> serialize -> parse -> import round-trip runs deterministically on
 // the host. Covers field fidelity, enum string mapping, the manual-Action
 // "rule" omission, default fill-in, and validation rejection.
@@ -7,7 +7,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
-#include "../../src/control/control_json.cpp"
+#include "../../src/rules/rules_json.cpp"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -45,13 +45,13 @@ static Action makeAction(uint8_t type, uint8_t target, uint8_t ruleRef) {
 static Rule roundTripRule(const Rule& in, bool* ok = nullptr) {
     JsonDocument doc;
     JsonObject o = doc.to<JsonObject>();
-    controlExportRule(o, in);
+    rulesExportRule(o, in);
     char buf[512];
     serializeJson(doc, buf, sizeof(buf));
     JsonDocument doc2;
     deserializeJson(doc2, buf);
     Rule out{};
-    bool r = controlImportRule(doc2.as<JsonObjectConst>(), out);
+    bool r = rulesImportRule(doc2.as<JsonObjectConst>(), out);
     if (ok) *ok = r;
     return out;
 }
@@ -59,13 +59,13 @@ static Rule roundTripRule(const Rule& in, bool* ok = nullptr) {
 static Action roundTripAction(const Action& in, bool* ok = nullptr) {
     JsonDocument doc;
     JsonObject o = doc.to<JsonObject>();
-    controlExportAction(o, in);
+    rulesExportAction(o, in);
     char buf[512];
     serializeJson(doc, buf, sizeof(buf));
     JsonDocument doc2;
     deserializeJson(doc2, buf);
     Action out{};
-    bool r = controlImportAction(doc2.as<JsonObjectConst>(), out);
+    bool r = rulesImportAction(doc2.as<JsonObjectConst>(), out);
     if (ok) *ok = r;
     return out;
 }
@@ -137,7 +137,7 @@ static void test_rule_export_enum_strings(void) {
     Rule in = makeRule(RULE_OUTSIDE_BAND, -1.0f, 100.0f, RULE_SEV_ALARM);
     JsonDocument doc;
     JsonObject o = doc.to<JsonObject>();
-    controlExportRule(o, in);
+    rulesExportRule(o, in);
     TEST_ASSERT_EQUAL_STRING("OUTSIDE", o["condition"]);
     TEST_ASSERT_EQUAL_STRING("ALARM", o["severity"]);
     TEST_ASSERT_TRUE(o["enabled"].as<bool>());
@@ -153,7 +153,7 @@ static void test_rule_info_roundtrip(void) {
 
     JsonDocument doc;
     JsonObject o = doc.to<JsonObject>();
-    controlExportRule(o, in);
+    rulesExportRule(o, in);
     TEST_ASSERT_EQUAL_STRING("INFO", o["severity"]);
 }
 
@@ -165,7 +165,7 @@ static void test_rule_import_missing_id_rejected(void) {
     o["input"] = 14;
     o["condition"] = "ABOVE";
     Rule out{};
-    TEST_ASSERT_FALSE(controlImportRule(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_FALSE(rulesImportRule(doc.as<JsonObjectConst>(), out));
 }
 
 static void test_rule_import_missing_condition_rejected(void) {
@@ -174,7 +174,7 @@ static void test_rule_import_missing_condition_rejected(void) {
     o["id"] = 1;
     o["input"] = 14;
     Rule out{};
-    TEST_ASSERT_FALSE(controlImportRule(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_FALSE(rulesImportRule(doc.as<JsonObjectConst>(), out));
 }
 
 static void test_rule_import_bad_condition_rejected(void) {
@@ -184,19 +184,19 @@ static void test_rule_import_bad_condition_rejected(void) {
     o["input"] = 14;
     o["condition"] = "SIDEWAYS";
     Rule out{};
-    TEST_ASSERT_FALSE(controlImportRule(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_FALSE(rulesImportRule(doc.as<JsonObjectConst>(), out));
 }
 
 static void test_rule_import_sentinel_id_rejected(void) {
-    // CONTROL_ID_NONE (0xFF) is the empty-slot sentinel; a record carrying it
+    // RULES_ID_NONE (0xFF) is the empty-slot sentinel; a record carrying it
     // would silently vanish from later exports.
     JsonDocument doc;
     JsonObject o = doc.to<JsonObject>();
-    o["id"] = CONTROL_ID_NONE;
+    o["id"] = RULES_ID_NONE;
     o["input"] = 14;
     o["condition"] = "ABOVE";
     Rule out{};
-    TEST_ASSERT_FALSE(controlImportRule(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_FALSE(rulesImportRule(doc.as<JsonObjectConst>(), out));
 }
 
 static void test_rule_import_outside_missing_hi_rejected(void) {
@@ -208,7 +208,7 @@ static void test_rule_import_outside_missing_hi_rejected(void) {
     o["condition"] = "OUTSIDE";
     o["limitLo"] = 10.0f;
     Rule out{};
-    TEST_ASSERT_FALSE(controlImportRule(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_FALSE(rulesImportRule(doc.as<JsonObjectConst>(), out));
 }
 
 static void test_rule_import_outside_inverted_band_rejected(void) {
@@ -220,17 +220,17 @@ static void test_rule_import_outside_inverted_band_rejected(void) {
     o["limitLo"] = 100.0f;
     o["limitHi"] = 10.0f;   // hi < lo
     Rule out{};
-    TEST_ASSERT_FALSE(controlImportRule(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_FALSE(rulesImportRule(doc.as<JsonObjectConst>(), out));
 }
 
 static void test_action_import_sentinel_id_rejected(void) {
     JsonDocument doc;
     JsonObject o = doc.to<JsonObject>();
-    o["id"] = CONTROL_ID_NONE;
+    o["id"] = RULES_ID_NONE;
     o["type"] = "RELAY";
     o["target"] = 13;
     Action out{};
-    TEST_ASSERT_FALSE(controlImportAction(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_FALSE(rulesImportAction(doc.as<JsonObjectConst>(), out));
 }
 
 static void test_rule_import_defaults(void) {
@@ -242,7 +242,7 @@ static void test_rule_import_defaults(void) {
     o["condition"] = "below";  // case-insensitive
     o["limitLo"] = 9.5f;
     Rule out{};
-    TEST_ASSERT_TRUE(controlImportRule(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_TRUE(rulesImportRule(doc.as<JsonObjectConst>(), out));
     TEST_ASSERT_EQUAL_UINT8(RULE_BELOW, out.condition);
     TEST_ASSERT_EQUAL_UINT8(RULE_SEV_NONE, out.severity);
     TEST_ASSERT_EQUAL_FLOAT(0.0f, out.hysteresis);
@@ -267,19 +267,19 @@ static void test_action_linked_roundtrip(void) {
 }
 
 static void test_action_manual_omits_rule(void) {
-    Action in = makeAction(ACT_RELAY, 5, CONTROL_ID_NONE);  // manual
+    Action in = makeAction(ACT_RELAY, 5, RULES_ID_NONE);  // manual
     in.behavior = 0;
     in.failsafe = ACT_FAILSAFE_OFF;
     // Export must NOT emit a "rule" key for a manual action.
     JsonDocument doc;
     JsonObject o = doc.to<JsonObject>();
-    controlExportAction(o, in);
+    rulesExportAction(o, in);
     TEST_ASSERT_TRUE(o["rule"].isNull());
     // ...and import maps the absence back to manual.
     bool ok = false;
     Action out = roundTripAction(in, &ok);
     TEST_ASSERT_TRUE(ok);
-    TEST_ASSERT_EQUAL_UINT8(CONTROL_ID_NONE, out.ruleRef);
+    TEST_ASSERT_EQUAL_UINT8(RULES_ID_NONE, out.ruleRef);
     TEST_ASSERT_EQUAL_UINT8(0, out.behavior & ACT_BEHAVIOR_INVERT);
     TEST_ASSERT_EQUAL_UINT8(ACT_FAILSAFE_OFF, out.failsafe);
 }
@@ -290,7 +290,7 @@ static void test_action_import_missing_type_rejected(void) {
     o["id"] = 1;
     o["target"] = 13;
     Action out{};
-    TEST_ASSERT_FALSE(controlImportAction(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_FALSE(rulesImportAction(doc.as<JsonObjectConst>(), out));
 }
 
 static void test_action_import_bad_type_rejected(void) {
@@ -300,7 +300,7 @@ static void test_action_import_bad_type_rejected(void) {
     o["type"] = "SERVO";
     o["target"] = 13;
     Action out{};
-    TEST_ASSERT_FALSE(controlImportAction(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_FALSE(rulesImportAction(doc.as<JsonObjectConst>(), out));
 }
 
 static void test_action_failsafe_defaults_off(void) {
@@ -310,9 +310,9 @@ static void test_action_failsafe_defaults_off(void) {
     o["type"] = "relay";   // case-insensitive
     o["target"] = 8;
     Action out{};
-    TEST_ASSERT_TRUE(controlImportAction(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_TRUE(rulesImportAction(doc.as<JsonObjectConst>(), out));
     TEST_ASSERT_EQUAL_UINT8(ACT_FAILSAFE_OFF, out.failsafe);
-    TEST_ASSERT_EQUAL_UINT8(CONTROL_ID_NONE, out.ruleRef);
+    TEST_ASSERT_EQUAL_UINT8(RULES_ID_NONE, out.ruleRef);
 }
 
 
@@ -327,7 +327,7 @@ static void test_action_multi_rule_roundtrip(void) {
 
     JsonDocument doc;
     JsonObject o = doc.to<JsonObject>();
-    controlExportAction(o, in, membersIn, 3);
+    rulesExportAction(o, in, membersIn, 3);
     TEST_ASSERT_EQUAL_UINT8(3, o["rule"].as<uint8_t>());
     TEST_ASSERT_EQUAL_INT(3, (int)o["rules"].as<JsonArrayConst>().size());
 
@@ -339,7 +339,7 @@ static void test_action_multi_rule_roundtrip(void) {
     Action out{};
     uint8_t extra[8] = {0};
     uint8_t nExtra = 0;
-    TEST_ASSERT_TRUE(controlImportAction(doc2.as<JsonObjectConst>(), out, extra, 8, &nExtra));
+    TEST_ASSERT_TRUE(rulesImportAction(doc2.as<JsonObjectConst>(), out, extra, 8, &nExtra));
     TEST_ASSERT_EQUAL_UINT8(3, out.ruleRef);   // first member stays inline
     TEST_ASSERT_EQUAL_UINT8(2, nExtra);
     TEST_ASSERT_EQUAL_UINT8(7, extra[0]);
@@ -352,7 +352,7 @@ static void test_action_single_member_omits_rules_array(void) {
     const uint8_t membersIn[] = {3};
     JsonDocument doc;
     JsonObject o = doc.to<JsonObject>();
-    controlExportAction(o, in, membersIn, 1);
+    rulesExportAction(o, in, membersIn, 1);
     TEST_ASSERT_TRUE(o["rules"].isNull());
     TEST_ASSERT_EQUAL_UINT8(3, o["rule"].as<uint8_t>());
 }
@@ -365,7 +365,7 @@ static void test_action_legacy_rule_key_still_imports(void) {
     Action out{};
     uint8_t extra[4] = {0};
     uint8_t nExtra = 99;
-    TEST_ASSERT_TRUE(controlImportAction(doc.as<JsonObjectConst>(), out, extra, 4, &nExtra));
+    TEST_ASSERT_TRUE(rulesImportAction(doc.as<JsonObjectConst>(), out, extra, 4, &nExtra));
     TEST_ASSERT_EQUAL_UINT8(6, out.ruleRef);
     TEST_ASSERT_EQUAL_UINT8(0, nExtra);
 }
@@ -377,17 +377,17 @@ static void test_action_rules_array_edge_cases(void) {
     o["id"] = 4; o["type"] = "RELAY"; o["target"] = 9;
     o["rules"].to<JsonArray>();
     Action out{};
-    TEST_ASSERT_TRUE(controlImportAction(doc.as<JsonObjectConst>(), out));
-    TEST_ASSERT_EQUAL_UINT8(CONTROL_ID_NONE, out.ruleRef);
+    TEST_ASSERT_TRUE(rulesImportAction(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_EQUAL_UINT8(RULES_ID_NONE, out.ruleRef);
 
     JsonDocument doc2;
     JsonObject o2 = doc2.to<JsonObject>();
     o2["id"] = 4; o2["type"] = "RELAY"; o2["target"] = 9;
     JsonArray arr = o2["rules"].to<JsonArray>();
-    arr.add(CONTROL_ID_NONE);
+    arr.add(RULES_ID_NONE);
     arr.add(2);
     Action out2{};
-    TEST_ASSERT_TRUE(controlImportAction(doc2.as<JsonObjectConst>(), out2));
+    TEST_ASSERT_TRUE(rulesImportAction(doc2.as<JsonObjectConst>(), out2));
     TEST_ASSERT_EQUAL_UINT8(2, out2.ruleRef);
 }
 

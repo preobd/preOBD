@@ -2880,7 +2880,7 @@ function onEditorAppChange() {
 
 // The application's default alarm band, or null when it doesn't default to one.
 // Mirrors the firmware's auto-seed gate exactly (defaultAlarmEnabled + min<max,
-// control_manager buildRuleConfigFromApplication).
+// rules_manager buildRuleConfigFromApplication).
 function appDefaultBand(appName) {
   const a = catalog.applications.find(x => x.name === appName);
   if (a && a.defaultAlarmEnabled &&

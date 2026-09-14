@@ -1,9 +1,9 @@
 #include "action_broadcaster.h"
 
 #include "../../config.h"
-#include "../../control/control_types.h"  // defines INCLUDE_CONTROL_ENGINE
+#include "../../rules/rules_types.h"  // defines INCLUDE_RULES_ENGINE
 
-#if INCLUDE_CONTROL_ENGINE && INCLUDE_FRAMED_TRANSPORT
+#if INCLUDE_RULES_ENGINE && INCLUDE_FRAMED_TRANSPORT
 
 #include <Arduino.h>
 #include <string.h>
@@ -13,7 +13,7 @@
 #include "../../storage/system_config.h"
 #include "../../comms/transport_mux.h"
 #include "slotted_broadcaster.h"
-#include "../../control/control_manager.h"
+#include "../../rules/rules_manager.h"
 #include "../../inputs/input_manager.h"  // ASSERT_INPUTS_TABLE_LIVE (#368/#369)
 
 extern MuxTransport hwSerial1;
@@ -48,13 +48,13 @@ PreobdActionState emptyState() {
 // Occupancy: the sentinel packState() already keys the empty frame on.
 bool slotOccupied(int i) {
     ASSERT_INPUTS_TABLE_LIVE();  // actions[] isn't ground truth until here (#369)
-    return actions[i].id != CONTROL_ID_NONE;
+    return actions[i].id != RULES_ID_NONE;
 }
 
 void packState(int i, PreobdActionState& s) {
     ASSERT_INPUTS_TABLE_LIVE();  // actions[] isn't ground truth until here (#369)
     const Action& a = actions[i];
-    if (a.id == CONTROL_ID_NONE) {
+    if (a.id == RULES_ID_NONE) {
         s = emptyState();                     // empty slot: nothing else to say
         return;
     }
@@ -62,23 +62,23 @@ void packState(int i, PreobdActionState& s) {
     s.protocolVersion = PREOBD_BLE_PROTOCOL_VERSION;
     s.actionId = a.id;
     s.type     = a.type;
-    s.state    = controlActionState(i) ? PREOBD_ACTION_STATE_ON
+    s.state    = rulesActionState(i) ? PREOBD_ACTION_STATE_ON
                                        : PREOBD_ACTION_STATE_OFF;
     s.target   = a.target;
     s.ruleRef   = a.ruleRef;   // PREOBD_ACTION_ID_NONE (0xFF) == manual
-    s.ruleCount = controlActionRuleCount(i);  // >1 = OR-driven by several Rules (#343)
+    s.ruleCount = rulesActionRuleCount(i);  // >1 = OR-driven by several Rules (#343)
     s.behavior = a.behavior;
     s.failsafe = a.failsafe;
     s.command  = PREOBD_ACTION_CMD_NONE;
     // Operator override + whether it is being held against a faulted source (#329).
-    switch (controlActionOverride(i)) {
+    switch (rulesActionOverride(i)) {
         case ACT_OVR_FORCE_ON:  s.overrideFlags = PREOBD_ACTION_OVR_FORCE_ON;  break;
         case ACT_OVR_FORCE_OFF: s.overrideFlags = PREOBD_ACTION_OVR_FORCE_OFF; break;
         default:                s.overrideFlags = PREOBD_ACTION_OVR_AUTO;      break;
     }
     // One membership walk for both bits — this runs per slot per loop, and
     // tick() has no scan gate.
-    const ActionDrive drive = controlActionDrive(i);
+    const ActionDrive drive = rulesActionDrive(i);
     if (drive.anyFaulted) s.overrideFlags |= PREOBD_ACTION_OVR_SOURCE_FAULTED;
     // Whether the automation is demanding ON right now, independent of whether an
     // override is currently winning (#348). sameIgnoringSequence() already covers
@@ -155,22 +155,22 @@ void handleInbound(const uint8_t* payload, uint16_t len) {
     // PreobdRelayState write isn't reinterpreted as an Action command.
     if (req.protocolVersion != PREOBD_BLE_PROTOCOL_VERSION) return;
 
-    int slot = controlActionSlot(req.actionId);
+    int slot = rulesActionSlot(req.actionId);
     if (slot < 0) return;
 
     // A rule-driven action used to have its write dropped here silently — no state
     // change and no notify, so a client couldn't even detect the refusal (#329).
-    // controlActionCommand() now routes it: manual latch when unlinked, operator
+    // rulesActionCommand() now routes it: manual latch when unlinked, operator
     // override when rule-driven. Same router the CLI uses, so the two can't diverge.
     switch (req.command) {
         case PREOBD_ACTION_CMD_MANUAL_ON:
-            controlActionCommand(req.actionId, true);
+            rulesActionCommand(req.actionId, true);
             break;
         case PREOBD_ACTION_CMD_MANUAL_OFF:
-            controlActionCommand(req.actionId, false);
+            rulesActionCommand(req.actionId, false);
             break;
         case PREOBD_ACTION_CMD_AUTO:
-            controlActionSetOverride(req.actionId, ACT_OVR_AUTO);
+            rulesActionSetOverride(req.actionId, ACT_OVR_AUTO);
             break;
         default:
             return;  // no-op command: nothing to confirm
@@ -190,7 +190,7 @@ void resync() {
 
 } // namespace ActionBroadcaster
 
-#else // !(INCLUDE_CONTROL_ENGINE && INCLUDE_FRAMED_TRANSPORT)
+#else // !(INCLUDE_RULES_ENGINE && INCLUDE_FRAMED_TRANSPORT)
 
 namespace ActionBroadcaster {
 void init() {}
@@ -199,4 +199,4 @@ void handleInbound(const uint8_t*, uint16_t) {}
 void resync() {}
 }
 
-#endif // INCLUDE_CONTROL_ENGINE && INCLUDE_FRAMED_TRANSPORT
+#endif // INCLUDE_RULES_ENGINE && INCLUDE_FRAMED_TRANSPORT

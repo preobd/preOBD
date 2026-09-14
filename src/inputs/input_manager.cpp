@@ -22,7 +22,7 @@
 #include "../pinctrl/pin_owner.h"
 #include "../storage/bus_needs.h"
 #include "../drivers/bus_manager.h"
-#include "../control/control_manager.h"  // controlResetTables + rule/action table helpers
+#include "../rules/rules_manager.h"  // rulesResetTables + rule/action table helpers
 
 // ===== GLOBAL STATE =====
 Input inputs[MAX_INPUTS];
@@ -74,7 +74,7 @@ bool inputsTableIsLiveForAssert() { return inputsTableIsLive; }
 struct ConfigStoreHeader {
     uint32_t magic;        // EEPROM_MAGIC
     uint16_t version;      // EEPROM_VERSION (store-layout version). NB: does NOT encode
-                           // the INCLUDE_CONTROL_ENGINE build flag — a store written with
+                           // the INCLUDE_RULES_ENGINE build flag — a store written with
                            // rules/actions won't re-checksum on a control-off build (fails
                            // safe → reject → blank). Academic: a board's control state is fixed.
     uint8_t  numInputs;    // records actually persisted in each section…
@@ -148,13 +148,13 @@ bool initInputManager() {
     // Clear all inputs
     memset(inputs, 0, sizeof(inputs));
     numActiveInputs = 0;
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
     // Empty the BSS-zeroed control tables up front: id==0 is a valid record id, so
     // an unstamped table looks full of phantom rule/action #0. loadInputConfig()
     // below is validate-before-mutate (it only touches the tables once a valid
     // store is confirmed), so cold-boot safety with a blank/invalid EEPROM relies
     // on this reset, not on the loader (#296 B2).
-    controlResetTables();
+    rulesResetTables();
 #endif
 
     // Initialize with invalid values
@@ -277,7 +277,7 @@ static void applyInputRecord(const InputEEPROM& rec, Input& in) {
         if (info.initFunction) info.initFunction(&in);
     }
     // (Legacy per-input alarm arming removed — alarms are control-engine Rules,
-    // armed from rules[] by controlManagerInit(). The flagsByte alarm bit /
+    // armed from rules[] by rulesManagerInit(). The flagsByte alarm bit /
     // min/max are retained as dead fields for layout stability, not evaluated.)
 }
 
@@ -294,12 +294,12 @@ bool saveInputConfig() {
     size_t remaining = budget;
     uint8_t persistInputs = fitSection(remaining, wantInputs, EEPROM_INPUT_SIZE, F("inputs"));
     remaining -= (size_t)persistInputs * EEPROM_INPUT_SIZE;
-#if INCLUDE_CONTROL_ENGINE
-    uint8_t persistRules = fitSection(remaining, controlRuleCount(), sizeof(Rule), F("rules"));
+#if INCLUDE_RULES_ENGINE
+    uint8_t persistRules = fitSection(remaining, rulesRuleCount(), sizeof(Rule), F("rules"));
     remaining -= (size_t)persistRules * sizeof(Rule);
-    uint8_t persistActions = fitSection(remaining, controlActionCount(), sizeof(Action), F("actions"));
+    uint8_t persistActions = fitSection(remaining, rulesActionCount(), sizeof(Action), F("actions"));
     remaining -= (size_t)persistActions * sizeof(Action);
-    uint8_t persistLinks = fitSection(remaining, controlActionLinkCount(), sizeof(ActionLink), F("rule links"));
+    uint8_t persistLinks = fitSection(remaining, rulesActionLinkCount(), sizeof(ActionLink), F("rule links"));
     remaining -= (size_t)persistLinks * sizeof(ActionLink);
 #endif
 
@@ -319,16 +319,16 @@ bool saveInputConfig() {
     }
 
     uint8_t savedRules = 0, savedActions = 0, savedLinks = 0;
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
     for (int i = 0; i < MAX_RULES && savedRules < persistRules; i++) {
-        if (rules[i].id == CONTROL_ID_NONE) continue;
+        if (rules[i].id == RULES_ID_NONE) continue;
         EEPROM.put(addr, rules[i]);
         checksum ^= xorBytes(&rules[i], sizeof(Rule));
         addr += sizeof(Rule);
         savedRules++;
     }
     for (int i = 0; i < MAX_ACTIONS && savedActions < persistActions; i++) {
-        if (actions[i].id == CONTROL_ID_NONE) continue;
+        if (actions[i].id == RULES_ID_NONE) continue;
         EEPROM.put(addr, actions[i]);
         checksum ^= xorBytes(&actions[i], sizeof(Action));
         addr += sizeof(Action);
@@ -337,7 +337,7 @@ bool saveInputConfig() {
     // Links last: a row whose action didn't fit is dropped by the load-time prune,
     // so an over-full store degrades to "some memberships lost", never a dangling ref.
     for (int i = 0; i < MAX_ACTION_LINKS && savedLinks < persistLinks; i++) {
-        if (actionLinks[i].actionId == CONTROL_ID_NONE) continue;
+        if (actionLinks[i].actionId == RULES_ID_NONE) continue;
         EEPROM.put(addr, actionLinks[i]);
         checksum ^= xorBytes(&actionLinks[i], sizeof(ActionLink));
         addr += sizeof(ActionLink);
@@ -359,7 +359,7 @@ bool saveInputConfig() {
     msg.control.print(F("✓ Saved "));
     msg.control.print(savedInputs);
     msg.control.print(F(" inputs"));
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
     msg.control.print(F(", "));
     msg.control.print(savedRules);
     msg.control.print(F(" rules, "));
@@ -483,7 +483,7 @@ bool loadInputConfig() {
     // LOAD — blank, wrong-version, or corrupt EEPROM — is a true no-op: it cannot
     // wipe an unsaved in-RAM config or strand a previously-driven output
     // (review: Codex BLOCKER / Opus SHOULD-FIX). Cold-boot safety for the
-    // BSS-zeroed control tables is handled by controlResetTables() in
+    // BSS-zeroed control tables is handled by rulesResetTables() in
     // initInputManager(), not here.
     ConfigStoreHeader header;
     EEPROM.get(0, header);
@@ -503,7 +503,7 @@ bool loadInputConfig() {
     // Silent reject — the caller (cmd_load) reports; no RAM-resident log on AVR.
     size_t storedBytes = EEPROM_HEADER_SIZE
                        + (size_t)header.numInputs  * EEPROM_INPUT_SIZE
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
                        + (size_t)header.numRules   * sizeof(Rule)
                        + (size_t)header.numActions * sizeof(Action)
                        + (size_t)header.numLinks   * sizeof(ActionLink)
@@ -523,7 +523,7 @@ bool loadInputConfig() {
             checksum ^= xorBytes(&rec, sizeof(rec));
             a += EEPROM_INPUT_SIZE;
         }
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
         for (uint8_t i = 0; i < header.numRules; i++) {
             Rule r; EEPROM.get(a, r);
             checksum ^= xorBytes(&r, sizeof(Rule));
@@ -554,8 +554,8 @@ bool loadInputConfig() {
     memset(inputs, 0, sizeof(inputs));
     for (uint8_t i = 0; i < MAX_INPUTS; i++) inputs[i].pin = 0xFF;
     numActiveInputs = 0;
-#if INCLUDE_CONTROL_ENGINE
-    controlResetTables();
+#if INCLUDE_RULES_ENGINE
+    rulesResetTables();
 #endif
 
     // --- inputs (hashes → indices) ---
@@ -603,7 +603,7 @@ bool loadInputConfig() {
     for (uint8_t i = 0; i < nInputs; i++)
         if (inputs[i].flags.isEnabled) numActiveInputs++;
 
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
     // Section bases from the STORED counts (not the RAM-clamped ones) so rules /
     // actions are located at the offsets they were actually written to.
     const size_t rulesBase   = EEPROM_HEADER_SIZE + (size_t)header.numInputs * EEPROM_INPUT_SIZE;
@@ -637,10 +637,10 @@ bool loadInputConfig() {
 
     // Dangling-ref sweep (#296 S3, extended to link rows by #343): a truncated or
     // hand-edited store may leave an Action referencing a Rule that didn't load.
-    // controlSweepActionRules() repairs both halves of the membership so the
+    // rulesSweepActionRules() repairs both halves of the membership so the
     // engine never evaluates a dangling ref. (Re-arming is the caller's job — boot
-    // does it via controlManagerInit; LOAD via the re-arm trio in cmd_load.)
-    controlSweepActionRules();
+    // does it via rulesManagerInit; LOAD via the re-arm trio in cmd_load.)
+    rulesSweepActionRules();
 #endif
 
     // Terse info string (RAM-resident on AVR); the SAVE confirmation already
@@ -661,8 +661,8 @@ void resetInputConfig() {
     }
     numActiveInputs = 0;
 
-#if INCLUDE_CONTROL_ENGINE
-    controlResetTables();  // empty Rule/Action tables too (#296 B4)
+#if INCLUDE_RULES_ENGINE
+    rulesResetTables();  // empty Rule/Action tables too (#296 B4)
 #endif
 
     msg.control.println(F("Configuration reset"));
@@ -837,7 +837,7 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     // The alarm flag the candidate would carry — validateInputConfig only looks
     // at the min/max band when it's armed, so it has to match what the commit
     // phase below writes.
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
     const bool candidateAlarm = false;
 #else
     const bool candidateAlarm = preset.defaultAlarmEnabled;

@@ -16,15 +16,15 @@
 SystemConfig systemConfig;
 Action       actions[MAX_ACTIONS];   // standalone table (was systemConfig.actions[])
 
-// controlActionState() — we own the driven-state truth here.
+// rulesActionState() — we own the driven-state truth here.
 static bool g_actionState[MAX_ACTIONS];
-bool controlActionState(int slot) {
+bool rulesActionState(int slot) {
     return (slot >= 0 && slot < MAX_ACTIONS) ? g_actionState[slot] : false;
 }
 
-// controlActionSlot() — resolve id → slot against our config.
-int controlActionSlot(uint8_t id) {
-    if (id == CONTROL_ID_NONE) return -1;
+// rulesActionSlot() — resolve id → slot against our config.
+int rulesActionSlot(uint8_t id) {
+    if (id == RULES_ID_NONE) return -1;
     for (int i = 0; i < MAX_ACTIONS; ++i) {
         if (actions[i].id == id) return i;
     }
@@ -35,22 +35,22 @@ int controlActionSlot(uint8_t id) {
 static int     g_setManualCalls = 0;
 static uint8_t g_setManualId = 0;
 static bool    g_setManualVal = false;
-bool controlActionSetManual(uint8_t id, bool on) {
+bool rulesActionSetManual(uint8_t id, bool on) {
     ++g_setManualCalls; g_setManualId = id; g_setManualVal = on; return true;
 }
 
-// controlActionCommand() — the shared ON/OFF router (#329). Mirror the real
+// rulesActionCommand() — the shared ON/OFF router (#329). Mirror the real
 // routing so a rule-driven write lands on the override, not the manual latch.
 static ActionOverride g_override[MAX_ACTIONS];
 static int            g_commandCalls = 0;
 static uint8_t        g_commandId = 0;
 static bool           g_commandVal = false;
-bool controlActionCommand(uint8_t id, bool on) {
-    int slot = controlActionSlot(id);
+bool rulesActionCommand(uint8_t id, bool on) {
+    int slot = rulesActionSlot(id);
     if (slot < 0) return false;
     ++g_commandCalls; g_commandId = id; g_commandVal = on;
-    if (actions[slot].ruleRef == CONTROL_ID_NONE) {
-        controlActionSetManual(id, on);
+    if (actions[slot].ruleRef == RULES_ID_NONE) {
+        rulesActionSetManual(id, on);
     } else {
         g_override[slot] = on ? ACT_OVR_FORCE_ON : ACT_OVR_FORCE_OFF;
     }
@@ -58,37 +58,37 @@ bool controlActionCommand(uint8_t id, bool on) {
 }
 
 static int g_setOverrideCalls = 0;
-bool controlActionSetOverride(uint8_t id, ActionOverride ovr) {
-    int slot = controlActionSlot(id);
+bool rulesActionSetOverride(uint8_t id, ActionOverride ovr) {
+    int slot = rulesActionSlot(id);
     if (slot < 0) return false;
     ++g_setOverrideCalls; g_override[slot] = ovr; return true;
 }
-ActionOverride controlActionOverride(int slot) {
+ActionOverride rulesActionOverride(int slot) {
     return (slot >= 0 && slot < MAX_ACTIONS) ? g_override[slot] : ACT_OVR_AUTO;
 }
 
-// controlActionRuleCount() — membership size (#343). The real manager counts the
+// rulesActionRuleCount() — membership size (#343). The real manager counts the
 // inline Action.ruleRef plus actionLinks[] rows; here the extra members are just
 // a per-slot number, which is all the frame cares about.
 static uint8_t g_extraMembers[MAX_ACTIONS];
-uint8_t controlActionRuleCount(int slot) {
+uint8_t rulesActionRuleCount(int slot) {
     if (slot < 0 || slot >= MAX_ACTIONS) return 0;
-    if (actions[slot].id == CONTROL_ID_NONE || actions[slot].ruleRef == CONTROL_ID_NONE) return 0;
+    if (actions[slot].id == RULES_ID_NONE || actions[slot].ruleRef == RULES_ID_NONE) return 0;
     return (uint8_t)(1 + g_extraMembers[slot]);
 }
 
-// controlActionDrive() — the single membership walk the frame reads both its
+// rulesActionDrive() — the single membership walk the frame reads both its
 // fault and its demand bit from (#348). The real manager derives it from
 // resolveActionDrive(); here both are set truth, which is all packing cares
 // about. Counting the calls also pins the "one walk per slot" property.
 static bool g_sourceFaulted[MAX_ACTIONS];
 static bool g_ruleActive[MAX_ACTIONS];
 static int  g_driveCalls = 0;
-ActionDrive controlActionDrive(int slot) {
+ActionDrive rulesActionDrive(int slot) {
     ActionDrive d{};
     if (slot < 0 || slot >= MAX_ACTIONS) return d;
     ++g_driveCalls;
-    d.memberCount = controlActionRuleCount(slot);
+    d.memberCount = rulesActionRuleCount(slot);
     d.anyFaulted  = g_sourceFaulted[slot];
     d.anyActive   = g_ruleActive[slot];
     return d;
@@ -151,7 +151,7 @@ void setUp(void) {
     memset(g_frames, 0, sizeof(g_frames));
     memset(&systemConfig, 0, sizeof(systemConfig));
     memset(g_actionState, 0, sizeof(g_actionState));
-    for (int i = 0; i < MAX_ACTIONS; ++i) actions[i].id = CONTROL_ID_NONE;  // all empty
+    for (int i = 0; i < MAX_ACTIONS; ++i) actions[i].id = RULES_ID_NONE;  // all empty
     g_setManualCalls = 0;
     g_commandCalls = 0;
     g_setOverrideCalls = 0;
@@ -204,10 +204,10 @@ static void test_first_tick_snapshots_configured_slots(void) {
 // its tile. Never-configured slots stay silent (#365) — the frame exists for the
 // TRANSITION, not as a census of the table.
 static void test_deleted_slot_emits_none_id(void) {
-    configureAction(0, 3, PREOBD_ACTION_TYPE_RELAY, 9, CONTROL_ID_NONE, 0, 0);
+    configureAction(0, 3, PREOBD_ACTION_TYPE_RELAY, 9, RULES_ID_NONE, 0, 0);
     ActionBroadcaster::tick();
     g_frameCount = 0;
-    actions[0].id = CONTROL_ID_NONE;          // ACTION 3 DELETE
+    actions[0].id = RULES_ID_NONE;          // ACTION 3 DELETE
     ActionBroadcaster::tick();
     TEST_ASSERT_EQUAL_INT(1, g_frameCount);
     TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_ID_NONE, frameState(0).actionId);
@@ -241,7 +241,7 @@ static void test_state_change_emits_one_frame(void) {
 
 // Inbound MANUAL_ON command toggles the targeted action via the manager.
 static void test_handle_inbound_manual_on(void) {
-    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, CONTROL_ID_NONE, 0, 0);
+    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, RULES_ID_NONE, 0, 0);
     PreobdActionState req;
     memset(&req, 0, sizeof(req));
     req.protocolVersion = PREOBD_BLE_PROTOCOL_VERSION;
@@ -268,7 +268,7 @@ static void test_handle_inbound_manual_on_rule_driven_sets_override(void) {
     ActionBroadcaster::handleInbound(reinterpret_cast<const uint8_t*>(&req), sizeof(req));
     TEST_ASSERT_EQUAL_INT(1, g_commandCalls);
     TEST_ASSERT_EQUAL_INT(0, g_setManualCalls);   // latch untouched
-    TEST_ASSERT_EQUAL_INT(ACT_OVR_FORCE_ON, controlActionOverride(0));
+    TEST_ASSERT_EQUAL_INT(ACT_OVR_FORCE_ON, rulesActionOverride(0));
 }
 
 // CMD_AUTO releases an override.
@@ -282,20 +282,20 @@ static void test_handle_inbound_auto_releases_override(void) {
     req.command  = PREOBD_ACTION_CMD_AUTO;
     ActionBroadcaster::handleInbound(reinterpret_cast<const uint8_t*>(&req), sizeof(req));
     TEST_ASSERT_EQUAL_INT(1, g_setOverrideCalls);
-    TEST_ASSERT_EQUAL_INT(ACT_OVR_AUTO, controlActionOverride(0));
+    TEST_ASSERT_EQUAL_INT(ACT_OVR_AUTO, rulesActionOverride(0));
 }
 
 // CMD_AUTO on an unlinked action is harmless: it clears an override that was
 // never set, and must not disturb the manual latch that actually drives the pin.
 static void test_handle_inbound_auto_on_manual_action_is_harmless(void) {
-    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, CONTROL_ID_NONE, 0, 0);
+    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, RULES_ID_NONE, 0, 0);
     PreobdActionState req;
     memset(&req, 0, sizeof(req));
     req.protocolVersion = PREOBD_BLE_PROTOCOL_VERSION;
     req.actionId = 7;
     req.command  = PREOBD_ACTION_CMD_AUTO;
     ActionBroadcaster::handleInbound(reinterpret_cast<const uint8_t*>(&req), sizeof(req));
-    TEST_ASSERT_EQUAL_INT(ACT_OVR_AUTO, controlActionOverride(0));
+    TEST_ASSERT_EQUAL_INT(ACT_OVR_AUTO, rulesActionOverride(0));
     TEST_ASSERT_EQUAL_INT(0, g_setManualCalls);   // manual latch untouched
 }
 
@@ -311,7 +311,7 @@ static void test_handle_inbound_unknown_command_is_inert(void) {
     ActionBroadcaster::handleInbound(reinterpret_cast<const uint8_t*>(&req), sizeof(req));
     TEST_ASSERT_EQUAL_INT(0, g_commandCalls);
     TEST_ASSERT_EQUAL_INT(0, g_setOverrideCalls);
-    TEST_ASSERT_EQUAL_INT(ACT_OVR_FORCE_ON, controlActionOverride(0));  // force survives
+    TEST_ASSERT_EQUAL_INT(ACT_OVR_FORCE_ON, rulesActionOverride(0));  // force survives
 }
 
 // The override state is reported in byte 11, and a change in it ALONE must push
@@ -384,7 +384,7 @@ static void test_rule_active_bit_absent_on_empty_slot(void) {
     ActionBroadcaster::tick();
     g_frameCount = 0;
     g_ruleActive[0] = true;                          // would-be truth for slot 0
-    actions[0].id = CONTROL_ID_NONE;                 // …which is now empty
+    actions[0].id = RULES_ID_NONE;                 // …which is now empty
     ActionBroadcaster::tick();
     TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_ID_NONE, frameState(0).actionId);
     TEST_ASSERT_EQUAL_UINT8(0, frameState(0).overrideFlags);
@@ -392,7 +392,7 @@ static void test_rule_active_bit_absent_on_empty_slot(void) {
 
 // A NONE (status-only) command performs no toggle.
 static void test_handle_inbound_none_is_noop(void) {
-    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, CONTROL_ID_NONE, 0, 0);
+    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, RULES_ID_NONE, 0, 0);
     PreobdActionState req;
     memset(&req, 0, sizeof(req));
     req.protocolVersion = PREOBD_BLE_PROTOCOL_VERSION;  // else the version gate
@@ -417,7 +417,7 @@ static void test_handle_inbound_unknown_id(void) {
 // A mismatched protocolVersion is rejected outright — the 0x05 frame id is shared
 // with the retired 16-byte PreobdRelayState, whose byte 10 is NOT a command field.
 static void test_handle_inbound_rejects_wrong_protocol_version(void) {
-    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, CONTROL_ID_NONE, 0, 0);
+    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, RULES_ID_NONE, 0, 0);
     PreobdActionState req;
     memset(&req, 0, sizeof(req));
     req.protocolVersion = PREOBD_BLE_PROTOCOL_VERSION + 1;
@@ -494,7 +494,7 @@ static void bootAsFirmwareDoes(int configured) {
     setInputsTableLive(false);                    // table not ground truth yet (#369)
     ActionBroadcaster::init();                    // …before the table exists
     setInputsTableLive(true);                     // initInputManager() flips this
-    for (int i = 0; i < MAX_ACTIONS; ++i) actions[i].id = CONTROL_ID_NONE;
+    for (int i = 0; i < MAX_ACTIONS; ++i) actions[i].id = RULES_ID_NONE;
     configureActions(configured);
     g_frameCount = 0;
     memset(g_countById, 0, sizeof(g_countById));
@@ -526,7 +526,7 @@ static void test_deleted_action_clear_repeats_then_stops(void) {
     g_frameCount = 0;
     memset(g_countById, 0, sizeof(g_countById));
 
-    actions[1].id = CONTROL_ID_NONE;              // ACTION 2 DELETE
+    actions[1].id = RULES_ID_NONE;              // ACTION 2 DELETE
     ActionBroadcaster::tick();                    // the edge-triggered push
     TEST_ASSERT_EQUAL_INT(1, g_countById[PREOBD_ACTION_ID_NONE]);
 
@@ -549,7 +549,7 @@ static void test_clear_window_survives_backpressure(void) {
     g_frameCount = 0;
     memset(g_countById, 0, sizeof(g_countById));
 
-    actions[7].id = CONTROL_ID_NONE;              // delete under a busy link
+    actions[7].id = RULES_ID_NONE;              // delete under a busy link
     for (int hb = 0; hb < 10; ++hb) {
         g_test_now += 5000;
         for (int pass = 0; pass < 20; ++pass) {   // let each sweep drain

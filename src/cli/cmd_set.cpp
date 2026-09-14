@@ -32,7 +32,7 @@
 #include "../outputs/output_base.h"
 #include "../outputs/obd_query.h"
 #include "../outputs/display/display_manager.h"
-#include "../control/control_manager.h"   // §11.5 seed default Rule from application
+#include "../rules/rules_manager.h"   // §11.5 seed default Rule from application
 #if INCLUDE_ELM327
 #include "../outputs/output_elm327.h"
 #endif
@@ -109,7 +109,7 @@ static int set_application(uint8_t pin, int argc, const char* const* argv) {
         msg.control.println(F("  Hint: Use 'LIST APPLICATIONS' to see valid options"));
         return 1;
     }
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
     // Capture the prior application so we can tell a fresh assignment from a
     // CHANGE — re-applying the SAME app preserves a customized Rule (§11.5), but
     // changing the measurement type invalidates the old thresholds.
@@ -118,15 +118,15 @@ static int set_application(uint8_t pin, int argc, const char* const* argv) {
 #endif
     if (setInputApplication(pin, appIndex)) {
         printInputFieldSet(argv[1], F("application"), argv[3]);
-#if INCLUDE_CONTROL_ENGINE
-        if (!controlRuleExistsForInput(pin)) {
+#if INCLUDE_RULES_ENGINE
+        if (!rulesRuleExistsForInput(pin)) {
             // Fresh input: seed a canonical default Rule from the app template (§11.5).
-            uint8_t ruleId = controlSeedRuleForInput(pin, appIndex, millis());
-            if (ruleId != CONTROL_ID_NONE) {
+            uint8_t ruleId = rulesSeedRuleForInput(pin, appIndex, millis());
+            if (ruleId != RULES_ID_NONE) {
                 msg.control.print(F("  Seeded Rule #"));
                 msg.control.print(ruleId);
                 msg.control.println(F(" from application defaults (RULE LIST to view)"));
-            } else if (controlRuleFreeSlot() < 0 || controlRuleAllocId() == CONTROL_ID_NONE) {
+            } else if (rulesRuleFreeSlot() < 0 || rulesRuleAllocId() == RULES_ID_NONE) {
                 // Distinguish the genuine table/id-space-full case from the benign
                 // "this application has no default alarm band" (the other reason
                 // seeding returns NONE). With caps at the 254-id ceiling this is
@@ -140,7 +140,7 @@ static int set_application(uint8_t pin, int argc, const char* const* argv) {
             // App CHANGED under existing Rule(s): their thresholds are now stale.
             // Re-seed them from the new application's defaults, or warn if the new
             // app has none (the old thresholds would otherwise silently mis-alarm).
-            uint8_t n = controlReseedRulesForInput(pin, millis());
+            uint8_t n = rulesReseedRulesForInput(pin, millis());
             if (n > 0) {
                 msg.control.print(F("  Application changed - re-seeded "));
                 msg.control.print(n);
@@ -327,9 +327,9 @@ static int set_units(uint8_t pin, int argc, const char* const* argv) {
 //   SET <pin> ALARM MAX <v>       ceiling → ABOVE  (alarm when value > v)
 // The general engine is still reachable via RULE ADD for WARNING/INFO/NONE Rules.
 static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
-#if !INCLUDE_CONTROL_ENGINE
+#if !INCLUDE_RULES_ENGINE
     (void)pin; (void)argc; (void)argv;
-    msg.control.println(F("ERROR: alarms require the control engine (not built into this firmware)"));
+    msg.control.println(F("ERROR: alarms require the rules engine (not built into this firmware)"));
     return 1;
 #else
     if (argc < 4) {
@@ -344,7 +344,7 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
     // SET <pin> ALARM DISABLE|OFF — remove the input's alarm Rule.
     if (streq_P(argv[3], PSTR("DISABLE")) || streq_P(argv[3], PSTR("OFF"))) {
         uint8_t released = 0;
-        if (controlRemoveAlarmRuleForInput(pin, &released)) {
+        if (rulesRemoveAlarmRuleForInput(pin, &released)) {
             msg.control.println(F("Alarm removed (Rule deleted). SAVE to persist."));
             // Clearing an alarm doesn't look like an action command, so say it
             // out loud when it just dropped a relay someone was holding (#329).
@@ -387,9 +387,9 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
         }
     }
 
-    bool created = (controlAlarmRuleSlotForInput(pin) < 0);
-    uint8_t id = controlSetAlarmRuleForInput(pin, condition, lo, hi, millis());
-    if (id == CONTROL_ID_NONE) {
+    bool created = (rulesAlarmRuleSlotForInput(pin) < 0);
+    uint8_t id = rulesSetAlarmRuleForInput(pin, condition, lo, hi, millis());
+    if (id == RULES_ID_NONE) {
         msg.control.print(F("ERROR: rule table full ("));
         msg.control.print(MAX_RULES);
         msg.control.println(F(") - free a Rule (RULE LIST / RULE DEL) and retry"));
@@ -1155,7 +1155,7 @@ static const char PSTR_HELP_SET_DISPLAY[] PROGMEM =
 static const char PSTR_HELP_SET_UNITS[] PROGMEM =
     "  SET <pin> UNITS <units>       Override display units";
 static const char PSTR_HELP_SET_ALARM[] PROGMEM =
-    "  SET <pin> ALARM <min> <max>   Set the input's alarm band (control-engine Rule)\n"
+    "  SET <pin> ALARM <min> <max>   Set the input's alarm band (rules-engine Rule)\n"
     "  SET <pin> ALARM DISABLE       Remove the input's alarm Rule\n"
     "  (one-sided / WARNING alarms: RULE ADD <pin> ABOVE|BELOW ... ; status: RULE LIST)";
 static const char PSTR_HELP_SET_DIVIDER[] PROGMEM =

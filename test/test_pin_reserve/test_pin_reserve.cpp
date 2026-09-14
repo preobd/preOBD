@@ -302,7 +302,7 @@ static void test_claim_order_does_not_change_who_ends_up_owning_each_pin(void) {
 // test for the bug the coordinator caught in review: dropping the PIN_RESERVED
 // gate widened "already mine" from "this specific reserved owner" to "anything
 // whose description string matches", which let a second Action silently share
-// a relay target pin with the first (control_manager.cpp's ACTION_PIN_DESC is
+// a relay target pin with the first (rules_manager.cpp's ACTION_PIN_DESC is
 // one shared string across every action, by design).
 // ===========================================================================
 

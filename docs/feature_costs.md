@@ -99,8 +99,8 @@ From `avr-nm --size-sort -S -C`:
 ## Lessons
 
 - **`SUPPORTS_ALARMS` is the control-engine switch on AVR, not a buzzer flag.**
-  `INCLUDE_CONTROL_ENGINE` is `INCLUDE_ALARMS || INCLUDE_RELAY_OUTPUT`
-  (`control_types.h`), so disabling alarms removes the entire Rules/Actions engine
+  `INCLUDE_RULES_ENGINE` is `INCLUDE_ALARMS || INCLUDE_RELAY_OUTPUT`
+  (`rules_types.h`), so disabling alarms removes the entire Rules/Actions engine
   (−16.4 KB / −455 B — grew with the standalone arena tables in #296). The physical
   buzzer is a separate pin (`BUZZER_PIN`).
 - **`CLI_BUFFER_SIZE` is the biggest single RAM lever** (−852 B for 820→512),

@@ -20,9 +20,9 @@
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
 #include "../core/system_mode.h"
-#include "../control/control_manager.h"   // annunciator: fold Rule severity into the rollup
+#include "../rules/rules_manager.h"   // annunciator: fold Rule severity into the rollup
 
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
 // RuleSeverity and AlarmSeverity are DISTINCT ordinal domains: RuleSeverity
 // inserts INFO=1 below WARNING (#308), so they no longer share numeric values.
 // Map explicitly at the annunciator boundary — INFO is a log-only notification
@@ -81,8 +81,8 @@ void sendAlarmOutput(Input* input) {
 AlarmSeverity getSystemSeverity() {
     // The legacy per-input alarm engine is retired — alarms are control-engine
     // Rules (§11). System severity is the max over active Rules.
-#if INCLUDE_CONTROL_ENGINE
-    return ruleToAlarmSeverity(controlSystemSeverity());
+#if INCLUDE_RULES_ENGINE
+    return ruleToAlarmSeverity(rulesSystemSeverity());
 #else
     return SEVERITY_NORMAL;
 #endif

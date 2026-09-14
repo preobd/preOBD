@@ -573,7 +573,7 @@ This directory contains the comprehensive test mode system for testing outputs w
 - **src/comms/** - Transports, framing and message routing
 - **src/storage/** - Persisted configuration (EEPROM, JSON, SD)
 - **src/cli/** - Command-line interface
-- **src/control/** - Rules engine
+- **src/rules/** - Rules engine
 - **src/outputs/** - Output module implementations (CAN, serial, SD, etc.)
 - **src/outputs/display/** - Display driver implementations (LCD, future OLED/TFT)
 - **src/test/** - Test mode system for bench testing without sensors

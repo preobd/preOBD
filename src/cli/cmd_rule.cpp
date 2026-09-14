@@ -12,9 +12,9 @@
  */
 
 #include "../config.h"
-#include "../control/control_types.h"  // defines INCLUDE_CONTROL_ENGINE before the guard
+#include "../rules/rules_types.h"  // defines INCLUDE_RULES_ENGINE before the guard
 
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
 
 #include <math.h>  // fabsf, isnan — hysteresis sanity check + faulted-value display
 
@@ -27,8 +27,8 @@
 #include "../core/message_api.h"
 #include "../sensors/units_registry.h"    // getUnitStringByIndex
 #include "../sensors/sensor_library.h"    // convertFromBaseUnits
-#include "../control/control_manager.h"
-#include "../control/control_engine.h"
+#include "../rules/rules_manager.h"
+#include "../rules/rules_engine.h"
 
 // CLI handlers are cold — keep them in flash, not Teensy ITCM (RAM1).
 // FLASHMEM is a Teensy core macro — no-op elsewhere.
@@ -160,7 +160,7 @@ static FLASHMEM void printLinkedActions(uint8_t ruleId) {
         const Action& a = actions[i];
         // Membership, not just the inline first member (#343) — a rule that is
         // one of several driving an action must still list it here.
-        if (a.id == CONTROL_ID_NONE || !controlActionHasRule(i, ruleId)) continue;
+        if (a.id == RULES_ID_NONE || !rulesActionHasRule(i, ruleId)) continue;
         if (!any) {
             msg.control.println(F("  Linked actions:"));
             any = true;
@@ -173,14 +173,14 @@ static FLASHMEM void printLinkedActions(uint8_t ruleId) {
         msg.control.print(a.target);
         // Say when this rule is only one of the things that can fire the action,
         // so deleting the rule doesn't look like it will free the actuator.
-        const uint8_t members = controlActionRuleCount(i);
+        const uint8_t members = rulesActionRuleCount(i);
         if (members > 1) {
             msg.control.print(F("  (1 of "));
             msg.control.print(members);
             msg.control.print(F(" rules)"));
         }
         msg.control.print(F("  -> "));
-        msg.control.println(controlActionState(i) ? F("ON") : F("OFF"));
+        msg.control.println(rulesActionState(i) ? F("ON") : F("OFF"));
     }
     if (!any) {
         msg.control.println(F("  Linked actions: (none)"));
@@ -188,7 +188,7 @@ static FLASHMEM void printLinkedActions(uint8_t ruleId) {
 }
 
 static FLASHMEM void printAllRules() {
-    uint8_t n = controlRuleCount();
+    uint8_t n = rulesRuleCount();
     msg.control.print(F("Rules ("));
     msg.control.print(n);
     msg.control.print('/');
@@ -199,11 +199,11 @@ static FLASHMEM void printAllRules() {
         return;
     }
     for (int i = 0; i < MAX_RULES; i++) {
-        if (rules[i].id != CONTROL_ID_NONE) printRuleRow(i);
+        if (rules[i].id != RULES_ID_NONE) printRuleRow(i);
     }
     // Annunciator rollup over all rules — this is what drives the buzzer/LED.
     msg.control.print(F("System severity (rules): "));
-    msg.control.println(severityName(controlSystemSeverity()));
+    msg.control.println(severityName(rulesSystemSeverity()));
 }
 
 // --- RULE ADD -----------------------------------------------------------
@@ -296,9 +296,9 @@ static FLASHMEM int ruleAdd(int argc, const char* const* argv) {
         }
     }
 
-    int slot = controlRuleFreeSlot();
-    uint8_t id = controlRuleAllocId();
-    if (slot < 0 || id == CONTROL_ID_NONE) {
+    int slot = rulesRuleFreeSlot();
+    uint8_t id = rulesRuleAllocId();
+    if (slot < 0 || id == RULES_ID_NONE) {
         msg.control.print(F("ERROR: rule table full ("));
         msg.control.print(MAX_RULES);
         msg.control.println(F(")"));
@@ -317,7 +317,7 @@ static FLASHMEM int ruleAdd(int argc, const char* const* argv) {
     r.warmupMs = RULE_DEFAULT_WARMUP_MS;
     r.debounceMs = RULE_DEFAULT_DEBOUNCE_MS;
 
-    controlRuleInit(g_ruleContexts[slot], r, millis());  // create-from-... : arm
+    rulesRuleInit(g_ruleContexts[slot], r, millis());  // create-from-... : arm
 
     msg.control.print(F("Rule #"));
     msg.control.print(id);
@@ -328,16 +328,16 @@ static FLASHMEM int ruleAdd(int argc, const char* const* argv) {
 // --- RULE DEL -----------------------------------------------------------
 
 static FLASHMEM int ruleDel(uint8_t id) {
-    int slot = controlRuleSlot(id);
+    int slot = rulesRuleSlot(id);
     if (slot < 0) {
         msg.control.print(F("ERROR: no rule #"));
         msg.control.println(id);
         return 1;
     }
-    rules[slot].id = CONTROL_ID_NONE;
+    rules[slot].id = RULES_ID_NONE;
     g_ruleContexts[slot].state = RULE_DISABLED;
     // referential integrity: referring actions → manual-only
-    const uint8_t released = controlClearActionsForRule(id);
+    const uint8_t released = rulesClearActionsForRule(id);
     msg.control.print(F("Rule #"));
     msg.control.print(id);
     msg.control.println(F(" deleted. SAVE to persist."));
@@ -358,13 +358,13 @@ static FLASHMEM int ruleDel(uint8_t id) {
 // rule back through INIT->WARMUP and silences it (and any Action it drives) for
 // warmupMs — the #254 lesson, same as the SET ALARM in-place edit.
 static FLASHMEM int ruleSetEnabled(uint8_t id, bool enable) {
-    int slot = controlRuleSlot(id);
+    int slot = rulesRuleSlot(id);
     if (slot < 0) {
         msg.control.print(F("ERROR: no rule #"));
         msg.control.println(id);
         return 1;
     }
-    const bool released = controlRuleSetEnabled(id, enable, millis());
+    const bool released = rulesRuleSetEnabled(id, enable, millis());
     msg.control.print(F("Rule #"));
     msg.control.print(id);
     if (!released) {
@@ -399,7 +399,7 @@ FLASHMEM void printInputAlarmInfo(uint8_t pin) {
     msg.control.print(label);
     msg.control.println(F("] ====="));
 
-    const int slot = controlAlarmRuleSlotForInput(pin);
+    const int slot = rulesAlarmRuleSlotForInput(pin);
     if (slot < 0) {
         msg.control.println(F("  No alarm Rule on this input."));
         msg.control.println(F("  Set one with: SET <pin> ALARM <min> <max> | ALARM MIN <v> | ALARM MAX <v>"));
@@ -464,7 +464,7 @@ FLASHMEM int cmd_rule(int argc, const char* const* argv) {
             return 1;
         }
         uint8_t id = (uint8_t)atoi(argv[2]);
-        if (controlRuleReset(id, millis())) {
+        if (rulesRuleReset(id, millis())) {
             msg.control.print(F("Rule #"));
             msg.control.print(id);
             msg.control.println(F(" reset to application defaults (re-armed). SAVE to persist."));
@@ -478,7 +478,7 @@ FLASHMEM int cmd_rule(int argc, const char* const* argv) {
 
     // RULE <id> — show one rule's detail.
     uint8_t ruleId = (uint8_t)atoi(argv[1]);
-    int slot = controlRuleSlot(ruleId);
+    int slot = rulesRuleSlot(ruleId);
     if (slot < 0) {
         msg.control.print(F("ERROR: unknown rule id or subcommand: "));
         msg.control.println(argv[1]);
@@ -508,4 +508,4 @@ FLASHMEM int cmd_rule(int argc, const char* const* argv) {
     return 0;
 }
 
-#endif // INCLUDE_CONTROL_ENGINE
+#endif // INCLUDE_RULES_ENGINE

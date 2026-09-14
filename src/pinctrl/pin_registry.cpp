@@ -315,13 +315,13 @@ static void printPinPadded(uint8_t pin, bool analogLabel = false) {
 void printPinStatus(uint8_t specificPin) {
     // Query specific pin mode
     if (specificPin != 0xFF) {
-        #if INCLUDE_CONTROL_ENGINE
+        #if INCLUDE_RULES_ENGINE
         // Check control-engine RELAY Action targets FIRST: action pins are also
         // registered (as PIN_OUTPUT, for conflict detection), but this dedicated
         // view carries the action id, which the generic registry entry doesn't.
         for (int i = 0; i < MAX_ACTIONS; i++) {
             const Action& a = actions[i];
-            if (a.id != CONTROL_ID_NONE && a.type == ACT_RELAY && a.target == specificPin) {
+            if (a.id != RULES_ID_NONE && a.type == ACT_RELAY && a.target == specificPin) {
                 printPinPadded(specificPin);
                 msg.control.print(F("Output    - Action #"));
                 msg.control.println(a.id);
@@ -378,11 +378,11 @@ void printPinStatus(uint8_t specificPin) {
     extern uint8_t numActiveInputs;
     msg.control.print(numActiveInputs);
 
-    #if INCLUDE_CONTROL_ENGINE
+    #if INCLUDE_RULES_ENGINE
     // Count control-engine RELAY Actions
     uint8_t actionCount = 0;
     for (int i = 0; i < MAX_ACTIONS; i++) {
-        if (actions[i].id != CONTROL_ID_NONE &&
+        if (actions[i].id != RULES_ID_NONE &&
             actions[i].type == ACT_RELAY) {
             actionCount++;
         }
@@ -456,12 +456,12 @@ void printPinStatus(uint8_t specificPin) {
     }
     if (hasInputs) msg.control.println();
 
-    #if INCLUDE_CONTROL_ENGINE
+    #if INCLUDE_RULES_ENGINE
     // Action Pins (control-engine RELAY actuators)
     bool hasActions = false;
     for (int i = 0; i < MAX_ACTIONS; i++) {
         const Action& a = actions[i];
-        if (a.id != CONTROL_ID_NONE && a.type == ACT_RELAY) {
+        if (a.id != RULES_ID_NONE && a.type == ACT_RELAY) {
             if (!hasActions) {
                 msg.control.println(F("Action Pins:"));
                 hasActions = true;

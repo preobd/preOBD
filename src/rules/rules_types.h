@@ -1,5 +1,5 @@
 /*
- * control_types.h - Control Engine type definitions (Rules / Actions)
+ * rules_types.h - Control Engine type definitions (Rules / Actions)
  *
  * The control engine unifies three previously-separate subsystems — per-input
  * alarm thresholds, the relay threshold engine, and the hardwired buzzer/LED
@@ -23,13 +23,13 @@
  *     AlarmState / AlarmContext (input.h); they model the same warmup/debounce
  *     state machine (§11.2).
  *
- * NOTE: the rules[]/actions[] tables are standalone RAM globals (control_manager.cpp),
+ * NOTE: the rules[]/actions[] tables are standalone RAM globals (rules_manager.cpp),
  * persisted by the shared config-store arena (input_manager.cpp) — NOT embedded
  * in SystemConfig. See the extern declarations below.
  */
 
-#ifndef CONTROL_TYPES_H
-#define CONTROL_TYPES_H
+#ifndef RULES_TYPES_H
+#define RULES_TYPES_H
 
 #include <Arduino.h>
 
@@ -37,13 +37,13 @@
 // Feature gate. The control engine subsumes alarms + relays, so it is active
 // whenever either was (a profile may still force it explicitly). Profiles own
 // feature flags (CLAUDE.md), but this derivation keeps existing profiles
-// working without edits — define INCLUDE_CONTROL_ENGINE in a profile to override.
+// working without edits — define INCLUDE_RULES_ENGINE in a profile to override.
 // ============================================================================
-#ifndef INCLUDE_CONTROL_ENGINE
+#ifndef INCLUDE_RULES_ENGINE
 #  if (defined(INCLUDE_ALARMS) && INCLUDE_ALARMS) || (defined(INCLUDE_RELAY_OUTPUT) && INCLUDE_RELAY_OUTPUT)
-#    define INCLUDE_CONTROL_ENGINE 1
+#    define INCLUDE_RULES_ENGINE 1
 #  else
-#    define INCLUDE_CONTROL_ENGINE 0
+#    define INCLUDE_RULES_ENGINE 0
 #  endif
 #endif
 
@@ -57,7 +57,7 @@
 // while deliberately leaving the ~13 KB of RAM1 that a 254-slot table would eat
 // FREE for future features. 64 is a fixed RAM ceiling, NOT the engine's hard
 // limit: record ids are uint8_t with 0xFF reserved, so 254 is the absolute id
-// space — a board with RAM to spare can override CONTROL_RAM_{RULES,ACTIONS}_MAX
+// space — a board with RAM to spare can override RULES_RAM_{RULES,ACTIONS}_MAX
 // upward toward 254. Overflow is never silent: the shared EEPROM arena truncates
 // LOUDLY (input_manager.cpp) and auto-seed warns at the CLI (cmd_set.cpp).
 //
@@ -67,28 +67,28 @@
 // This carries NO dependency on SYSTEM_CONFIG_ADDRESS / the EEPROM layout, so the
 // cap stays a pure compile-time constant here (no header cycle).
 // ============================================================================
-#ifndef CONTROL_RAM_RULES_MAX
-#define CONTROL_RAM_RULES_MAX   64    // standard RAM cap; absolute id-space max is 254
+#ifndef RULES_RAM_RULES_MAX
+#define RULES_RAM_RULES_MAX   64    // standard RAM cap; absolute id-space max is 254
 #endif
-#ifndef CONTROL_RAM_ACTIONS_MAX
-#define CONTROL_RAM_ACTIONS_MAX 64
+#ifndef RULES_RAM_ACTIONS_MAX
+#define RULES_RAM_ACTIONS_MAX 64
 #endif
 // Extra Rule->Action memberships beyond each Action's inline first one (#343).
 // An Action's FIRST member rule lives in Action.ruleRef; only the 2nd and later
 // spend a row here, so a config where every Action follows one Rule uses ZERO
 // rows and this table costs nothing but its (2 B/row) RAM reservation.
-#ifndef CONTROL_RAM_LINKS_MAX
-#define CONTROL_RAM_LINKS_MAX 64
+#ifndef RULES_RAM_LINKS_MAX
+#define RULES_RAM_LINKS_MAX 64
 #endif
-#define MAX_RULES        CONTROL_RAM_RULES_MAX
-#define MAX_ACTIONS      CONTROL_RAM_ACTIONS_MAX
-#define MAX_ACTION_LINKS CONTROL_RAM_LINKS_MAX
+#define MAX_RULES        RULES_RAM_RULES_MAX
+#define MAX_ACTIONS      RULES_RAM_ACTIONS_MAX
+#define MAX_ACTION_LINKS RULES_RAM_LINKS_MAX
 static_assert(MAX_RULES   >= 1 && MAX_RULES   <= 254, "MAX_RULES out of id space [1,254]");
 static_assert(MAX_ACTIONS >= 1 && MAX_ACTIONS <= 254, "MAX_ACTIONS out of id space [1,254]");
 static_assert(MAX_ACTION_LINKS >= 1 && MAX_ACTION_LINKS <= 254, "MAX_ACTION_LINKS out of range [1,254]");
 
 // Reserved id sentinel: an unused record, and (as Action.ruleRef) "manual-only".
-#define CONTROL_ID_NONE 0xFF
+#define RULES_ID_NONE 0xFF
 
 // Defaults for a manually-created Rule (RULE ADD) when the operator omits them.
 // Application default-Rule templates (§11.5) will carry their own; these are the
@@ -182,7 +182,7 @@ struct Rule {
     float    hysteresis;    // clear-band width, applied inward from each limit
     uint16_t debounceMs;    // condition must hold past the limit this long (= legacy persistTime_ms)
     uint16_t warmupMs;      // suppress evaluation until settled / since boot (= legacy warmupTime_ms)
-    uint8_t  id;            // stable per-record id; CONTROL_ID_NONE = empty slot. NOT an array slot.
+    uint8_t  id;            // stable per-record id; RULES_ID_NONE = empty slot. NOT an array slot.
     uint8_t  sourceInput;   // input PIN (stable identity), NOT an inputs[] slot (§8 Q9)
     uint8_t  condition;     // RuleCondition
     uint8_t  severity;      // RuleSeverity
@@ -191,13 +191,13 @@ struct Rule {
 
 // ~22 B.
 struct Action {
-    uint8_t id;         // stable per-record id; CONTROL_ID_NONE = empty slot
+    uint8_t id;         // stable per-record id; RULES_ID_NONE = empty slot
     uint8_t type;       // ActionType
     uint8_t target;     // pin / relay channel / LED channel
-    uint8_t ruleRef;    // FIRST member Rule.id; CONTROL_ID_NONE = manual-only. Additional
+    uint8_t ruleRef;    // FIRST member Rule.id; RULES_ID_NONE = manual-only. Additional
                         //   members live in actionLinks[] — see ActionLink (#343). NEVER
                         //   read this directly to answer "what drives this action": use
-                        //   controlActionRuleCount()/controlActionRuleAt().
+                        //   rulesActionRuleCount()/rulesActionRuleAt().
     uint8_t behavior;   // ACT_BEHAVIOR_*
     uint8_t failsafe;   // ActionFailsafe (RELAY only; ignored by other types in v1)
     char    name[16];   // optional operator label (e.g. "Cooling Fan"); "" = unnamed
@@ -207,7 +207,7 @@ struct Action {
 // a member of action `actionId`". The action's FIRST member stays inline in
 // Action.ruleRef, so this table holds only the 2nd and later memberships: an
 // Action driven by exactly one Rule (the common case) spends no row, and a store
-// written before #343 simply has zero rows. actionId == CONTROL_ID_NONE = empty
+// written before #343 simply has zero rows. actionId == RULES_ID_NONE = empty
 // slot. Order within an action is insertion order and is not otherwise meaningful
 // — membership is a SET, OR-combined by the engine.
 struct ActionLink {
@@ -217,14 +217,14 @@ struct ActionLink {
 
 // ============================================================================
 // The persisted Rule/Action tables are standalone RAM globals (defined in
-// control_manager.cpp), mirroring Input inputs[] — NOT members of SystemConfig.
+// rules_manager.cpp), mirroring Input inputs[] — NOT members of SystemConfig.
 // Persistence is handled by the shared EEPROM config-store arena in
 // input_manager.cpp (saveInputConfig/loadInputConfig), which packs inputs, rules
 // and actions into one front-growing region. Declared here so every translation
 // unit that sees the record types can reach the tables without pulling in
-// control_manager.h (e.g. pin_registry.cpp, which only has system_config.h).
+// rules_manager.h (e.g. pin_registry.cpp, which only has system_config.h).
 // ============================================================================
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
 extern Rule       rules[MAX_RULES];
 extern Action     actions[MAX_ACTIONS];
 extern ActionLink actionLinks[MAX_ACTION_LINKS];
@@ -241,4 +241,4 @@ struct RuleContext {
     uint16_t  persistTime_ms;   // effective debounce (from the Rule)
 };
 
-#endif // CONTROL_TYPES_H
+#endif // RULES_TYPES_H

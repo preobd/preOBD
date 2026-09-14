@@ -52,7 +52,7 @@ enum DisplayType {
 #if INCLUDE_ELM327
 #include "../outputs/output_elm327.h"
 #endif
-#include "../control/control_types.h"  // Rule/Action records + INCLUDE_CONTROL_ENGINE
+#include "../rules/rules_types.h"  // Rule/Action records + INCLUDE_RULES_ENGINE
 
 // System configuration structure
 struct SystemConfig {
@@ -105,7 +105,7 @@ struct SystemConfig {
     } router;
 
     // NB (v13): the control-engine Rule/Action tables are NO LONGER embedded
-    // here. They are standalone RAM globals (control_manager.cpp) persisted by
+    // here. They are standalone RAM globals (rules_manager.cpp) persisted by
     // the shared config-store arena at the FRONT of EEPROM (input_manager.cpp),
     // so the table size no longer competes with this back-anchored block and is
     // bounded by the EEPROM budget rather than an arbitrary MAX_RULES cap (#296).

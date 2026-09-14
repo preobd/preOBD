@@ -1,12 +1,12 @@
 /*
- * control_json.h - Rule/Action <-> JSON leaf converters (control engine).
+ * rules_json.h - Rule/Action <-> JSON leaf converters (control engine).
  *
  * The array-level iteration over rules[]/actions[] plus the
  * re-arming on import live in json_config.cpp. These per-record converters are
- * isolated here, depending only on ArduinoJson + control_types.h, so they link
+ * isolated here, depending only on ArduinoJson + rules_types.h, so they link
  * (and round-trip-test) on the native host without dragging json_config.cpp's
  * heavy dependency set (message_api / registries / EEPROM / SD). See
- * test/test_control_json.
+ * test/test_rules_json.
  *
  * Schema (additive — no JSON_SCHEMA_VERSION bump; absent arrays are ignored on
  * import, so pre-control-engine configs still load):
@@ -19,36 +19,36 @@
  *            //           rules[0], so a pre-#343 reader still sees a valid link.
  */
 
-#ifndef CONTROL_JSON_H
-#define CONTROL_JSON_H
+#ifndef RULES_JSON_H
+#define RULES_JSON_H
 
-#include "../control/control_types.h"  // Rule/Action + INCLUDE_CONTROL_ENGINE
+#include "../rules/rules_types.h"  // Rule/Action + INCLUDE_RULES_ENGINE
 
-#if SUPPORTS_JSON_CONFIG && INCLUDE_CONTROL_ENGINE
+#if SUPPORTS_JSON_CONFIG && INCLUDE_RULES_ENGINE
 
 #include <ArduinoJson.h>
 
 // Serialize one record into a (caller-created) JSON object.
-void controlExportRule(JsonObject obj, const Rule& r);
+void rulesExportRule(JsonObject obj, const Rule& r);
 
 // `memberRules`/`memberCount` are the action's FULL Rule membership (member 0
 // must equal a.ruleRef). Pass nullptr/0 to fall back to a.ruleRef alone.
-void controlExportAction(JsonObject obj, const Action& a,
+void rulesExportAction(JsonObject obj, const Action& a,
                          const uint8_t* memberRules = nullptr, uint8_t memberCount = 0);
 
 // Deserialize one record. Returns false (leaving `out` untouched) when a
 // required field is missing or an enum string doesn't map — the caller skips
 // that record. Optional fields fall back to sane defaults.
-bool controlImportRule(JsonObjectConst obj, Rule& out);
+bool rulesImportRule(JsonObjectConst obj, Rule& out);
 
 // `out.ruleRef` receives the first member. Any ADDITIONAL members (from a
 // "rules" array) are written to extraRules[0..*nExtra), for the caller to feed
-// to controlActionAddRule() once the action is in a table — this converter is
-// deliberately table-free so it still links on the host (see test/test_control_json).
+// to rulesActionAddRule() once the action is in a table — this converter is
+// deliberately table-free so it still links on the host (see test/test_rules_json).
 // Pass extraRules = nullptr to ignore them.
-bool controlImportAction(JsonObjectConst obj, Action& out,
+bool rulesImportAction(JsonObjectConst obj, Action& out,
                          uint8_t* extraRules = nullptr, uint8_t maxExtra = 0,
                          uint8_t* nExtra = nullptr);
 
-#endif // SUPPORTS_JSON_CONFIG && INCLUDE_CONTROL_ENGINE
-#endif // CONTROL_JSON_H
+#endif // SUPPORTS_JSON_CONFIG && INCLUDE_RULES_ENGINE
+#endif // RULES_JSON_H

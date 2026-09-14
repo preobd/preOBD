@@ -169,7 +169,7 @@ bool pinsConflict(const uint8_t* pins, uint8_t count, uint8_t rank, const char* 
         // Serial4's I2C1-overlapping (17/16 vs 16/17) entry and, for anything
         // sharing that type, wrongly conclude "that's us". Owner-only is worse:
         // Action targets deliberately share ONE description ("Action output",
-        // control_manager.cpp) across every action, so matching on the string
+        // rules_manager.cpp) across every action, so matching on the string
         // alone would let a second action claim a pin the first already has —
         // two Rules driving the same relay with no diagnostic. PIN_RESERVED is
         // what makes "this claimant is re-checking something already up" a safe

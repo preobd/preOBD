@@ -35,7 +35,7 @@ extern void sendAlarmOutput(Input*);
 extern void updateAlarmOutput();
 
 // Relay output module removed: a relay is now a control-engine Action of type
-// RELAY, driven by controlActionsUpdate() in the main loop (not an output
+// RELAY, driven by rulesActionsUpdate() in the main loop (not an output
 // module). The OUTPUT_RELAY slot below stays nullptr for EEPROM index
 // stability (OutputID enum / outputEnabled[]).
 

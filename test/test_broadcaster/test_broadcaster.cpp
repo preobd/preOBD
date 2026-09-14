@@ -10,7 +10,7 @@
 
 #include "boot_order_fixture.h"  // inputsTableIsLiveForAssert() stub (#352, #369)
 #include "../../src/outputs/ble/alarm_broadcaster.cpp"
-#include "../../src/control/control_engine.cpp"   // real annunciator-severity logic
+#include "../../src/rules/rules_engine.cpp"   // real annunciator-severity logic
 
 // ---- Globals the broadcaster TU expects from the rest of the firmware ----
 SystemConfig  systemConfig;
@@ -59,7 +59,7 @@ void setUp(void) {
     memset(&systemConfig, 0, sizeof(systemConfig));
     memset(g_ruleContexts, 0, sizeof(g_ruleContexts));
     memset(&g_srcInput, 0, sizeof(g_srcInput));
-    for (int i = 0; i < MAX_RULES; ++i) rules[i].id = CONTROL_ID_NONE;
+    for (int i = 0; i < MAX_RULES; ++i) rules[i].id = RULES_ID_NONE;
     setInputsTableLive(true);  // every test but the boot-order one below
     AlarmBroadcaster::init();
 }
@@ -68,7 +68,7 @@ void tearDown(void) {}
 // Reproduce the real boot order (main.cpp: AlarmBroadcaster::init() runs
 // alongside the other broadcasters, BEFORE initInputManager() loads rules[]):
 // at init() time rules[] is still BSS-zeroed (every id == 0, a valid record
-// id — CONTROL_ID_NONE is 0xFF) and the config load fills it afterwards
+// id — RULES_ID_NONE is 0xFF) and the config load fills it afterwards
 // (#352's twin for alarms; see boot_order_fixture.h / #369). init() must not
 // read rules[] — it primes NORMAL/CLEAR unconditionally.
 static void bootAsFirmwareDoes(void) {
@@ -77,7 +77,7 @@ static void bootAsFirmwareDoes(void) {
     setInputsTableLive(false);                   // table not ground truth yet (#369)
     AlarmBroadcaster::init();                    // …before the table exists
     setInputsTableLive(true);                    // initInputManager() flips this
-    for (int i = 0; i < MAX_RULES; ++i) rules[i].id = CONTROL_ID_NONE;
+    for (int i = 0; i < MAX_RULES; ++i) rules[i].id = RULES_ID_NONE;
     g_frameCount = 0;
 }
 

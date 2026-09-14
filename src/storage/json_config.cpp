@@ -27,9 +27,9 @@
 #include "../core/watchdog.h"
 #include "sd_manager.h"
 #include "../outputs/output_format.h"   // SdLogFormat / parseSdLogFormat
-#if INCLUDE_CONTROL_ENGINE
-#include "../control/control_json.h"
-#include "../control/control_manager.h"
+#if INCLUDE_RULES_ENGINE
+#include "../rules/rules_json.h"
+#include "../rules/rules_manager.h"
 #endif
 
 #if SUPPORTS_SD
@@ -306,8 +306,8 @@ FLASHMEM void exportInputToJSON(JsonObject& inputObj, const Input* input) {
     // (BELOW = Min-only floor, ABOVE = Max-only ceiling) emits null on the unused
     // side, which the webapp already tolerates (#312).
     JsonObject alarm = inputObj["alarm"].to<JsonObject>();
-#if INCLUDE_CONTROL_ENGINE
-    int alarmSlot = controlAlarmRuleSlotForInput(input->pin);
+#if INCLUDE_RULES_ENGINE
+    int alarmSlot = rulesAlarmRuleSlotForInput(input->pin);
     if (alarmSlot >= 0) {
         const Rule& ar = rules[alarmSlot];
         switch (ar.condition) {
@@ -390,33 +390,33 @@ FLASHMEM void exportPinRegistryToJSON(JsonArray& pinsArray) {
     }
 }
 
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
 // Export the control-engine Rule + Action tables as top-level arrays (siblings
-// of "inputs"). Only configured slots (id != CONTROL_ID_NONE) are emitted.
+// of "inputs"). Only configured slots (id != RULES_ID_NONE) are emitted.
 FLASHMEM void exportRulesToJSON(JsonArray& rulesArray) {
     for (int i = 0; i < MAX_RULES; i++) {
-        if (rules[i].id == CONTROL_ID_NONE) continue;
+        if (rules[i].id == RULES_ID_NONE) continue;
         JsonObject ruleObj = rulesArray.add<JsonObject>();
-        controlExportRule(ruleObj, rules[i]);
+        rulesExportRule(ruleObj, rules[i]);
     }
 }
 
 FLASHMEM void exportActionsToJSON(JsonArray& actionsArray) {
     for (int i = 0; i < MAX_ACTIONS; i++) {
-        if (actions[i].id == CONTROL_ID_NONE) continue;
+        if (actions[i].id == RULES_ID_NONE) continue;
         JsonObject actionObj = actionsArray.add<JsonObject>();
         // Emit the full Rule membership (#343), not just the inline first member.
-        // Size by the real bound on controlActionRuleCount() — one inline member
+        // Size by the real bound on rulesActionRuleCount() — one inline member
         // plus at most MAX_ACTION_LINKS rows. MAX_RULES is a DIFFERENT knob
         // (mega2560: RULES 2, LINKS 2 → a count of 3 is representable), and
         // clamping to it would silently truncate the export instead of failing.
         uint8_t members[MAX_ACTION_LINKS + 1];
-        const uint8_t n = controlActionRuleCount(i);
-        for (uint8_t m = 0; m < n; m++) members[m] = controlActionRuleAt(i, m);
-        controlExportAction(actionObj, actions[i], members, n);
+        const uint8_t n = rulesActionRuleCount(i);
+        for (uint8_t m = 0; m < n; m++) members[m] = rulesActionRuleAt(i, m);
+        rulesExportAction(actionObj, actions[i], members, n);
     }
 }
-#endif // INCLUDE_CONTROL_ENGINE
+#endif // INCLUDE_RULES_ENGINE
 
 // Export system configuration to JSON
 FLASHMEM void exportSystemConfigToJSON(JsonObject& systemObj) {
@@ -574,7 +574,7 @@ FLASHMEM void dumpConfigToJSON(Print& output) {
     JsonArray inputsArray = doc["inputs"].to<JsonArray>();
     exportInputsToJSON(inputsArray);
 
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
     // Control engine — Rule + Action tables (top-level, additive; omitted when
     // empty stays empty arrays so the webapp can tell "supported, none" apart
     // from "not supported").
@@ -1219,12 +1219,12 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
     return true;
 }
 
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
 // Replace the Rule table from a JSON array. Records pack into slots in array
 // order, preserving each record's stable `id` (Actions reference rules by id).
 // Records that fail validation are skipped. Re-arming is the caller's job.
 FLASHMEM void importRulesFromJSON(JsonArrayConst rulesArray) {
-    for (int i = 0; i < MAX_RULES; i++) rules[i].id = CONTROL_ID_NONE;
+    for (int i = 0; i < MAX_RULES; i++) rules[i].id = RULES_ID_NONE;
     int slot = 0;
     for (JsonObjectConst ruleObj : rulesArray) {
         if (slot >= MAX_RULES) {
@@ -1232,7 +1232,7 @@ FLASHMEM void importRulesFromJSON(JsonArrayConst rulesArray) {
             break;
         }
         Rule r{};
-        if (controlImportRule(ruleObj, r)) {
+        if (rulesImportRule(ruleObj, r)) {
             rules[slot++] = r;
         } else {
             msg.debug.warn(TAG_JSON, "skipped invalid rule record");
@@ -1241,8 +1241,8 @@ FLASHMEM void importRulesFromJSON(JsonArrayConst rulesArray) {
 }
 
 FLASHMEM void importActionsFromJSON(JsonArrayConst actionsArray) {
-    for (int i = 0; i < MAX_ACTIONS; i++) actions[i].id = CONTROL_ID_NONE;
-    for (int i = 0; i < MAX_ACTION_LINKS; i++) actionLinks[i].actionId = CONTROL_ID_NONE;
+    for (int i = 0; i < MAX_ACTIONS; i++) actions[i].id = RULES_ID_NONE;
+    for (int i = 0; i < MAX_ACTION_LINKS; i++) actionLinks[i].actionId = RULES_ID_NONE;
     int slot = 0;
     for (JsonObjectConst actionObj : actionsArray) {
         if (slot >= MAX_ACTIONS) {
@@ -1252,12 +1252,12 @@ FLASHMEM void importActionsFromJSON(JsonArrayConst actionsArray) {
         Action a{};
         uint8_t extra[MAX_ACTION_LINKS];
         uint8_t nExtra = 0;
-        if (controlImportAction(actionObj, a, extra, MAX_ACTION_LINKS, &nExtra)) {
+        if (rulesImportAction(actionObj, a, extra, MAX_ACTION_LINKS, &nExtra)) {
             actions[slot++] = a;
             // 2nd+ memberships need the action in the table first (they are keyed
             // by its id), so add them after the record lands (#343).
             for (uint8_t e = 0; e < nExtra; e++) {
-                if (!controlActionAddRule(a.id, extra[e])) {
+                if (!rulesActionAddRule(a.id, extra[e])) {
                     msg.debug.warn(TAG_JSON, "action #%u: rule link table full; rule #%u dropped",
                                    a.id, extra[e]);
                 }
@@ -1267,7 +1267,7 @@ FLASHMEM void importActionsFromJSON(JsonArrayConst actionsArray) {
         }
     }
 }
-#endif // INCLUDE_CONTROL_ENGINE
+#endif // INCLUDE_RULES_ENGINE
 
 // Load configuration from JSON string
 bool loadConfigFromJSON(const char* jsonString) {
@@ -1318,32 +1318,32 @@ bool loadConfigFromJSON(const char* jsonString) {
         }
     }
 
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
     // Import Rules + Actions after inputs (rules reference input pins; the
     // re-arm below evaluates against live inputs). Each table is replaced only
     // if its array is present, then both are re-armed once — boot-load semantics
-    // (#251): controlManagerInit arms rule contexts, controlActionsInit drives
+    // (#251): rulesManagerInit arms rule contexts, rulesActionsInit drives
     // the target pins to their initial state.
-    bool controlChanged = false;
+    bool rulesChanged = false;
     if (doc["rules"].isNull() == false) {
         importRulesFromJSON(doc["rules"].as<JsonArrayConst>());
-        controlChanged = true;
+        rulesChanged = true;
     }
     if (doc["actions"].isNull() == false) {
         importActionsFromJSON(doc["actions"].as<JsonArrayConst>());
-        controlChanged = true;
+        rulesChanged = true;
     }
-    if (controlChanged) {
+    if (rulesChanged) {
         // Referential integrity: an Action may now reference a Rule id absent
         // from the (possibly only partially re-imported) rule table — a
         // rules-only / actions-only payload, or a hand-edited config. The shared
         // sweep drops those references (and any dangling link rows, #343),
         // promoting a surviving member where it can, before re-arm — so the
         // engine never evaluates a dangling ref.
-        controlSweepActionRules();
-        controlManagerInit(millis());
-        controlActionsInit();
-        controlSyncActionPins();  // re-claim imported action pins (registry already populated)
+        rulesSweepActionRules();
+        rulesManagerInit(millis());
+        rulesActionsInit();
+        rulesSyncActionPins();  // re-claim imported action pins (registry already populated)
     }
 #endif
 

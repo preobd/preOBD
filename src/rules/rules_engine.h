@@ -1,5 +1,5 @@
 /*
- * control_engine.h - Rule evaluation (pure, deterministic, host-testable)
+ * rules_engine.h - Rule evaluation (pure, deterministic, host-testable)
  *
  * The state machine and qualification logic are lifted from the per-input
  * alarm engine (alarm_logic.cpp) and generalized to a Rule's condition shape
@@ -12,13 +12,13 @@
  * are safe — cf. the cross-context-underflow rule that bit the hall sensor.
  */
 
-#ifndef CONTROL_ENGINE_H
-#define CONTROL_ENGINE_H
+#ifndef RULES_ENGINE_H
+#define RULES_ENGINE_H
 
-#include "control_types.h"
+#include "rules_types.h"
 
 // Post-arm stabilization before warmup begins. Mirrors the alarm INIT period.
-#define CONTROL_INIT_MS 1000
+#define RULES_INIT_MS 1000
 
 /**
  * Arm a rule's runtime context. This is BOTH the create-from-template and the
@@ -29,10 +29,10 @@
  * Callers MUST NOT re-init an already-armed rule on a plain re-enable (the #254
  * idempotency lesson) — call this only on create / boot-load / RULE RESET.
  */
-void controlRuleInit(RuleContext& ctx, const Rule& rule, uint32_t now);
+void rulesRuleInit(RuleContext& ctx, const Rule& rule, uint32_t now);
 
 /** Advance one rule's state machine against the current source value. */
-void controlRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t now);
+void rulesRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t now);
 
 /**
  * Pure condition test with hysteresis. `currentlyActive` selects the assert vs.
@@ -40,13 +40,13 @@ void controlRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t
  * NaN never asserts — an untrustworthy reading must not trip a rule, and an
  * already-active rule de-asserts (failsafe intent, §11.3).
  */
-bool controlRuleConditionAsserted(const Rule& rule, float value, bool currentlyActive);
+bool rulesRuleConditionAsserted(const Rule& rule, float value, bool currentlyActive);
 
 /** True while the rule's condition is qualified (debounced): state == RULE_ACTIVE. */
-bool controlRuleIsActive(const RuleContext& ctx);
+bool rulesRuleIsActive(const RuleContext& ctx);
 
 /** Configured severity if active, else RULE_SEV_NONE. */
-RuleSeverity controlRuleSeverity(const Rule& rule, const RuleContext& ctx);
+RuleSeverity rulesRuleSeverity(const Rule& rule, const RuleContext& ctx);
 
 /**
  * Annunciator severity for a rule, including the DERIVED WARNING tier (§11.2):
@@ -57,7 +57,7 @@ RuleSeverity controlRuleSeverity(const Rule& rule, const RuleContext& ctx);
  * when active, else NONE). This drives annunciation (LED/buzzer/AlarmBroadcaster)
  * only — NOT Action triggering, which keys on RULE_ACTIVE.
  */
-RuleSeverity controlRuleAnnunciatorSeverity(const Rule& rule, const RuleContext& ctx, float value);
+RuleSeverity rulesRuleAnnunciatorSeverity(const Rule& rule, const RuleContext& ctx, float value);
 
 /**
  * Aggregate of an Action's Rule membership, resolved by the manager (which owns
@@ -95,7 +95,7 @@ struct ActionDrive {
  * legitimately calling for. At one member this is identical to the pre-#343
  * behavior (a faulted member is never `anyActive`).
  */
-bool controlActionDesired(const Action& action, const ActionDrive& drive,
+bool rulesActionDesired(const Action& action, const ActionDrive& drive,
                           bool manualState, ActionOverride override);
 
-#endif // CONTROL_ENGINE_H
+#endif // RULES_ENGINE_H

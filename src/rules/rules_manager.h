@@ -1,5 +1,5 @@
 /*
- * control_manager.h - Runtime owner of the control engine's Rule contexts.
+ * rules_manager.h - Runtime owner of the control engine's Rule contexts.
  *
  * Bridges the persisted rule table (rules[]) to live input values:
  * holds the parallel RuleContext[] runtime state, evaluates every configured
@@ -7,43 +7,43 @@
  *
  * Also exposes the rule-table helpers the RULE CLI uses (lookup / allocate by
  * stable id). Glue layer — not host-unit-tested (the pure engine is); see
- * control_engine.{h,cpp} for the tested logic.
+ * rules_engine.{h,cpp} for the tested logic.
  */
 
-#ifndef CONTROL_MANAGER_H
-#define CONTROL_MANAGER_H
+#ifndef RULES_MANAGER_H
+#define RULES_MANAGER_H
 
-#include "control_types.h"
-#include "control_engine.h"
+#include "rules_types.h"
+#include "rules_engine.h"
 
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
 
 // Runtime contexts, indexed 1:1 with rules[].
 extern RuleContext g_ruleContexts[MAX_RULES];
 
-// Stamp every Rule/Action slot empty (id = CONTROL_ID_NONE) and disable every
+// Stamp every Rule/Action slot empty (id = RULES_ID_NONE) and disable every
 // rule context. The tables are BSS-zeroed standalone globals where id==0 is a
 // VALID id, so this MUST run before they are trusted on any path that does NOT
 // load a valid store: boot before load, every load-failure/early-return, and
 // factory reset. Mirrors the inputs[] pin=0xFF defense.
-void controlResetTables();
+void rulesResetTables();
 
 // Arm every configured rule from the table (the boot-load path, §11.5). Call once
 // after the config store + inputs are loaded.
-void controlManagerInit(uint32_t now);
+void rulesManagerInit(uint32_t now);
 
 // Evaluate every configured rule against its live source input value. Call on
 // the alarm-check cadence from the main loop.
-void controlManagerUpdate(uint32_t now);
+void rulesManagerUpdate(uint32_t now);
 
 // Max configured severity over all rules currently ACTIVE (annunciator rollup).
-RuleSeverity controlSystemSeverity();
+RuleSeverity rulesSystemSeverity();
 
 // --- rule table helpers (operate on rules[]) ---
-int     controlRuleSlot(uint8_t id);    // slot index for a rule id, or -1
-int     controlRuleFreeSlot();          // first empty slot, or -1 if full
-uint8_t controlRuleAllocId();           // smallest unused id, or CONTROL_ID_NONE if exhausted
-uint8_t controlRuleCount();             // number of configured rules
+int     rulesRuleSlot(uint8_t id);    // slot index for a rule id, or -1
+int     rulesRuleFreeSlot();          // first empty slot, or -1 if full
+uint8_t rulesRuleAllocId();           // smallest unused id, or RULES_ID_NONE if exhausted
+uint8_t rulesRuleCount();             // number of configured rules
 
 // Referential integrity on rule delete: drop `ruleId` from every Action's Rule
 // membership and release whatever was driving those Actions. An Action that had
@@ -51,7 +51,7 @@ uint8_t controlRuleCount();             // number of configured rules
 // reverts to manual-only. Returns how many were actively driven (override or
 // manual latch) at the time, so the caller can say so rather than silently
 // de-energizing a relay. Called from RULE DEL / SET <pin> ALARM OFF.
-uint8_t controlClearActionsForRule(uint8_t ruleId);
+uint8_t rulesClearActionsForRule(uint8_t ruleId);
 
 // Delete every Rule sourced from input `pin`, through the same referential-
 // integrity path as RULE DEL (each rule's id is dropped from every Action's
@@ -60,7 +60,7 @@ uint8_t controlClearActionsForRule(uint8_t ruleId);
 // optional `releasedOut` accumulates how many Actions were actively driven at
 // the time, so the caller can report the relays it just de-energized (saturating
 // at 255 rather than wrapping — an under-report would understate the change).
-uint8_t controlRemoveRulesForInput(uint8_t pin, uint8_t* releasedOut = nullptr);
+uint8_t rulesRemoveRulesForInput(uint8_t pin, uint8_t* releasedOut = nullptr);
 
 // RULE <id> ENABLE|DISABLE (#346): park a Rule without deleting it, or re-arm a
 // parked one. A disabled Rule sits in RULE_DISABLED, never asserts, and (since
@@ -68,23 +68,23 @@ uint8_t controlRemoveRulesForInput(uint8_t pin, uint8_t* releasedOut = nullptr);
 // false means it was already in the requested state and NOTHING was touched —
 // re-enabling an already-armed Rule must not re-init it and drag a live rule
 // back through INIT->WARMUP (#254).
-bool    controlRuleSetEnabled(uint8_t id, bool enable, uint32_t now);
+bool    rulesRuleSetEnabled(uint8_t id, bool enable, uint32_t now);
 
 // --- application default-Rule template (§11.5) ---
 
 // True if any Rule already references this input pin.
-bool    controlRuleExistsForInput(uint8_t pin);
+bool    rulesRuleExistsForInput(uint8_t pin);
 
 // Create-from-template: seed one canonical default Rule for `pin` from its
 // application's template, IF no Rule already references `pin` (implicit
-// re-apply preserves). Returns the new rule id, or CONTROL_ID_NONE if nothing
+// re-apply preserves). Returns the new rule id, or RULES_ID_NONE if nothing
 // was created (rule already exists / app has no default alarm / table full).
-uint8_t controlSeedRuleForInput(uint8_t pin, uint8_t appIndex, uint32_t now);
+uint8_t rulesSeedRuleForInput(uint8_t pin, uint8_t appIndex, uint32_t now);
 
 // RULE RESET: rewrite rule <id>'s config from its source input's application
 // template and re-arm (explicit reset clobbers, §11.5). Returns false if the
 // rule is unknown, its input is gone, or the application has no default rule.
-bool    controlRuleReset(uint8_t id, uint32_t now);
+bool    rulesRuleReset(uint8_t id, uint32_t now);
 
 // --- per-input "alarm Rule" facade (SET <pin> ALARM ...) --------------------
 // The webapp / CLI expose a single per-input alarm on an input. That alarm maps
@@ -97,7 +97,7 @@ bool    controlRuleReset(uint8_t id, uint32_t now);
 // Slot of the input's canonical alarm Rule (severity ALARM, condition one of
 // {OUTSIDE_BAND, BELOW, ABOVE}, sourced from `pin`), or -1 if none. Read-back and
 // the upsert both key off this.
-int     controlAlarmRuleSlotForInput(uint8_t pin);
+int     rulesAlarmRuleSlotForInput(uint8_t pin);
 
 // Create-or-replace the input's alarm Rule at severity ALARM, re-arming it. An
 // existing alarm Rule is edited in place — id, source, and any Action links are
@@ -106,28 +106,28 @@ int     controlAlarmRuleSlotForInput(uint8_t pin);
 //   RULE_OUTSIDE_BAND — band, uses [lo, hi] (caller must pass lo < hi)
 //   RULE_BELOW        — Min-only floor, uses `lo` as the limit (hi ignored)
 //   RULE_ABOVE        — Max-only ceiling, uses `lo` as the limit (hi ignored)
-// Returns the Rule id, or CONTROL_ID_NONE only when a *new* Rule was needed and
+// Returns the Rule id, or RULES_ID_NONE only when a *new* Rule was needed and
 // the table is full.
-uint8_t controlSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, float hi, uint32_t now);
+uint8_t rulesSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, float hi, uint32_t now);
 
 // Remove the input's alarm Rule (frees the pool slot; referring Actions revert
 // to manual-only). Returns true if one was removed.
 // Optional `releasedOut` receives how many Actions following the removed Rule were
 // actively driven, so the caller can report a relay it just de-energized (#329).
-bool    controlRemoveAlarmRuleForInput(uint8_t pin, uint8_t* releasedOut = nullptr);
+bool    rulesRemoveAlarmRuleForInput(uint8_t pin, uint8_t* releasedOut = nullptr);
 
 // Application changed under existing rules: rewrite every Rule sourced from
 // `pin` to the input's (now-updated) application template and re-arm, keeping
 // each rule's id. Returns the number of rules rewritten (0 if none reference
 // the pin or the new application has no usable default band — the old, now
 // stale, thresholds are then left in place for the caller to warn about).
-uint8_t controlReseedRulesForInput(uint8_t pin, uint32_t now);
+uint8_t rulesReseedRulesForInput(uint8_t pin, uint32_t now);
 
 // === Actions ===
 // Configure all action target pins as outputs and set their initial state
 // (boot-load). Call once after SystemConfig is loaded. Does NOT touch the pin
-// registry — call controlSyncActionPins() separately (see below).
-void controlActionsInit();
+// registry — call rulesSyncActionPins() separately (see below).
+void rulesActionsInit();
 
 // Re-sync the pin registry with the configured Action targets: drop any entries
 // this engine previously added, then register each current target as
@@ -140,15 +140,15 @@ void controlActionsInit();
 // once near the end of boot (after those subsystems init) and again whenever the
 // action table changes at runtime (ADD / DEL / config import), when the registry
 // is already fully populated.
-uint8_t controlSyncActionPins();
+uint8_t rulesSyncActionPins();
 
 // Evaluate every configured action and drive its target. Call each cycle after
-// controlManagerUpdate(). Actuation is suppressed in CONFIG mode (bench safety,
+// rulesManagerUpdate(). Actuation is suppressed in CONFIG mode (bench safety,
 // mirrors the relay/buzzer gate in #268).
-void controlActionsUpdate(bool configMode);
+void rulesActionsUpdate(bool configMode);
 
 // Current driven (logical, pre-invert) state of the action in `slot`, for LIST.
-bool controlActionState(int slot);
+bool rulesActionState(int slot);
 
 // True when the action in `slot` is rule-driven and ANY member rule's source
 // input is untrustworthy — i.e. a CONFIGURED input reading NaN. Shared by the
@@ -156,7 +156,7 @@ bool controlActionState(int slot);
 // against a dead sensor is never silent (#329). Manual-only, dangling-ref,
 // disabled-rule and orphan-rule (no input on the source pin, #345) members all
 // report false: none of them can assert, so none may force a failsafe.
-bool controlActionSourceFaulted(int slot);
+bool rulesActionSourceFaulted(int slot);
 
 // True when the action in `slot` has at least one member rule that is currently
 // ACTIVE with a trustworthy source — i.e. the automation is demanding this
@@ -173,21 +173,21 @@ bool controlActionSourceFaulted(int slot);
 // parks their contexts at RULE_DISABLED / RULE_READY — not by a check here;
 // deliberately so, since a context that somehow read ACTIVE would be driving
 // the pin and the frame must agree with the pin.
-bool controlActionRuleActive(int slot);
+bool rulesActionRuleActive(int slot);
 
 // Both of the above in one membership walk, for callers that want both (the BLE
 // frame does). Zero-valued for an out-of-range or unconfigured slot.
-ActionDrive controlActionDrive(int slot);
+ActionDrive rulesActionDrive(int slot);
 
 // --- Rule<->Action membership (M:N, §11.6 / #343) ---
 // An Action is OR-driven by its member Rules: active while ANY member is active.
 // The first member is stored inline in Action.ruleRef and the rest in
-// actionLinks[], but NOTHING outside control_manager.cpp should care — read
+// actionLinks[], but NOTHING outside rules_manager.cpp should care — read
 // membership through these accessors, never off Action.ruleRef.
-uint8_t controlActionRuleCount(int slot);              // 0 = manual-only
-uint8_t controlActionRuleAt(int slot, uint8_t index);  // member `index`, or CONTROL_ID_NONE
-bool    controlActionHasRule(int slot, uint8_t ruleId);
-uint8_t controlActionLinkCount();                      // occupied actionLinks[] rows (for SAVE)
+uint8_t rulesActionRuleCount(int slot);              // 0 = manual-only
+uint8_t rulesActionRuleAt(int slot, uint8_t index);  // member `index`, or RULES_ID_NONE
+bool    rulesActionHasRule(int slot, uint8_t ruleId);
+uint8_t rulesActionLinkCount();                      // occupied actionLinks[] rows (for SAVE)
 
 // Mutators. Each RELEASES the action's override + manual latch (the driver
 // changed — #294/#329 invariant), so the action starts de-asserted. Optional
@@ -195,14 +195,14 @@ uint8_t controlActionLinkCount();                      // occupied actionLinks[]
 // caller can report a relay it just de-energized rather than doing it silently
 // (and can avoid claiming a release that never happened). A rejected call
 // (false) mutates nothing and never releases.
-bool    controlActionAddRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving = nullptr);     // false = unknown ids / link table full
-bool    controlActionRemoveRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving = nullptr);  // false = not a member
-bool    controlActionSetRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving = nullptr);     // membership := exactly {ruleId}
-bool    controlActionClearRules(uint8_t actionId);                  // → manual-only; returns "was driving"
+bool    rulesActionAddRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving = nullptr);     // false = unknown ids / link table full
+bool    rulesActionRemoveRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving = nullptr);  // false = not a member
+bool    rulesActionSetRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving = nullptr);     // membership := exactly {ruleId}
+bool    rulesActionClearRules(uint8_t actionId);                  // → manual-only; returns "was driving"
 
 // Free an action's link rows WITHOUT touching its drive state — for ACTION DEL,
 // where the record itself is going away (the pin is de-asserted separately).
-void    controlActionForgetLinks(uint8_t actionId);
+void    rulesActionForgetLinks(uint8_t actionId);
 
 // Repair Rule membership after a bulk table load (EEPROM store, JSON import),
 // where an Action may reference a Rule that didn't load (truncated store,
@@ -212,34 +212,34 @@ void    controlActionForgetLinks(uint8_t actionId);
 // action never silently degrades to manual. Returns the number of repairs (each
 // also logged); call before re-arming. Releases the drive on any action it
 // repairs (#294/#329).
-uint8_t controlSweepActionRules();
+uint8_t rulesSweepActionRules();
 
 // The link-table half of the sweep, exposed for callers that only touch links.
 // Drops rows that are dangling (unknown action/rule) or duplicate an action's
 // inline member. Returns how many were dropped.
-uint8_t controlPruneActionLinks();
+uint8_t rulesPruneActionLinks();
 
 // --- action table helpers (operate on actions[]) ---
-int     controlActionSlot(uint8_t id);
-int     controlActionFreeSlot();
-uint8_t controlActionAllocId();
-uint8_t controlActionCount();
-void    controlActionConfigurePin(int slot);   // pinMode target OUTPUT + de-assert
-bool    controlActionSetManual(uint8_t id, bool on);  // manual latch (unlinked actions)
+int     rulesActionSlot(uint8_t id);
+int     rulesActionFreeSlot();
+uint8_t rulesActionAllocId();
+uint8_t rulesActionCount();
+void    rulesActionConfigurePin(int slot);   // pinMode target OUTPUT + de-assert
+bool    rulesActionSetManual(uint8_t id, bool on);  // manual latch (unlinked actions)
 // ACTION <id> ON|OFF from any surface: routes to the manual latch when the action
 // is unlinked, or to a FORCE_ON/FORCE_OFF operator override when it is rule-driven
-// (#329). Use this rather than controlActionSetManual() from command paths.
-bool    controlActionCommand(uint8_t id, bool on);
+// (#329). Use this rather than rulesActionSetManual() from command paths.
+bool    rulesActionCommand(uint8_t id, bool on);
 // Operator override (RAM-only, reverts to AUTO on reboot). ACTION <id> AUTO
 // releases it; it is also cleared on any rule-link change and on pin reconfigure.
-ActionOverride controlActionOverride(int slot);
+ActionOverride rulesActionOverride(int slot);
 // Clear BOTH the override and the manual latch — the "this action's driver just
 // changed, so it starts de-asserted" invariant. Returns true if either was
 // actually driving. Call on every link change; clearing only one leaves the #294
 // stale-latch snap-on reachable via the other.
-bool    controlActionReleaseDrive(uint8_t id);
-bool    controlActionSetOverride(uint8_t id, ActionOverride ovr);
-bool    controlActionSetName(uint8_t id, const char* name);  // ACTION <id> NAME <text>
+bool    rulesActionReleaseDrive(uint8_t id);
+bool    rulesActionSetOverride(uint8_t id, ActionOverride ovr);
+bool    rulesActionSetName(uint8_t id, const char* name);  // ACTION <id> NAME <text>
 
-#endif // INCLUDE_CONTROL_ENGINE
-#endif // CONTROL_MANAGER_H
+#endif // INCLUDE_RULES_ENGINE
+#endif // RULES_MANAGER_H

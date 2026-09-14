@@ -27,7 +27,7 @@
 #include "../hal/bus_defaults.h"
 #include "../drivers/serial_manager.h"
 #include "../pinctrl/pin_registry.h"
-#include "../control/control_manager.h"  // control engine re-arm trio (LOAD path)
+#include "../rules/rules_manager.h"  // control engine re-arm trio (LOAD path)
 #include "../outputs/output_base.h"
 #include "../outputs/output_format.h"   // SdLogFormat / parseSdLogFormat
 #include "../outputs/obd_query.h"
@@ -112,7 +112,7 @@ const Command COMMANDS[] = {
 #if INCLUDE_RELAY_OUTPUT
     {"RELAY", cmd_relay, "Deprecated - use RULE / ACTION", false},  // prints a migration pointer; relays are now control-engine Actions
 #endif
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
     {"RULE", cmd_rule, "Configure control-engine rules", false},  // gated per-subcommand: RUN allows LIST/<id>; ADD/DEL/RESET config-only
     {"ACTION", cmd_action, "Configure control-engine actions", false},  // gated per-subcommand: RUN allows LIST/<id>/ON/OFF/AUTO; ADD/DEL/RULE config-only
 #endif
@@ -397,14 +397,14 @@ static int loadConfigFromEEPROM() {
     bool inputsOk = loadInputConfig();
     bool sysOk    = loadSystemConfig();
 
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
     if (inputsOk) {
         // Re-arm from the freshly-loaded tables: rule contexts, then action pin
         // states + registry (mirrors the JSON import path, #296 B3). Gated on a
         // successful input/control load so a failed LOAD can't reset the engine.
-        controlManagerInit(millis());
-        controlActionsInit();
-        controlSyncActionPins();
+        rulesManagerInit(millis());
+        rulesActionsInit();
+        rulesSyncActionPins();
     }
 #endif
 
@@ -549,7 +549,7 @@ int cmd_clear(int argc, const char* const* argv) {
     msg.control.print(argv[1]);
     msg.control.println(F(" cleared"));
 
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
     // Removing the input without its Rules used to leave them orphaned: a Rule
     // sourced from a pin with no input can never assert, renders as a nameless
     // `pinN` row, and (pre-#345) counted as a FAULTED source — so one forgotten
@@ -557,7 +557,7 @@ int cmd_clear(int argc, const char* const* argv) {
     // Rules with the input, through the same referential-integrity path as
     // RULE DEL, and say exactly what went.
     uint8_t releasedActions = 0;
-    const uint8_t removedRules = controlRemoveRulesForInput(pin, &releasedActions);
+    const uint8_t removedRules = rulesRemoveRulesForInput(pin, &releasedActions);
     if (removedRules) {
         msg.control.print(F("  Removed "));
         msg.control.print(removedRules);
@@ -587,7 +587,7 @@ int cmd_info(int argc, const char* const* argv) {
     // Check for subcommands (ALARM, CALIBRATION, OUTPUT)
     if (argc == 3) {
         if (streq_P(argv[2], PSTR("ALARM"))) {
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
             printInputAlarmInfo(pin);
 #else
             msg.control.println(F("ERROR: alarms are not enabled in this build"));
@@ -1088,10 +1088,10 @@ int cmd_test(int argc, const char* const* argv) {
         msg.control.println(F("Buzzer -> chirp"));
         tone(BUZZER_PIN, 700); watchdogReset(); delay(250); noTone(BUZZER_PIN);
 #endif
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
         for (int i = 0; i < MAX_ACTIONS; i++) {
             const Action& a = actions[i];
-            if (a.id == CONTROL_ID_NONE || a.type != ACT_RELAY) continue;
+            if (a.id == RULES_ID_NONE || a.type != ACT_RELAY) continue;
             any = true;
             msg.control.print(F("Action #")); msg.control.print(a.id);
             msg.control.print(F(" (pin ")); msg.control.print(a.target);

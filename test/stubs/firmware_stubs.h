@@ -61,9 +61,9 @@ bool reportNoSPIBus() { return false; }
 
 // Control engine: the JSON exporter reads an input's alarm Rule back out of the
 // live table. Empty table + "no rule for this input" keeps that path inert.
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
 Rule rules[MAX_RULES];
-int controlAlarmRuleSlotForInput(uint8_t) { return -1; }
+int rulesAlarmRuleSlotForInput(uint8_t) { return -1; }
 #endif
 
 #define STUB_READ(fn) void fn(Input*) {}

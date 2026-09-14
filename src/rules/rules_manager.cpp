@@ -1,10 +1,10 @@
 /*
- * control_manager.cpp - Runtime owner of the control engine (see header).
+ * rules_manager.cpp - Runtime owner of the control engine (see header).
  */
 
-#include "control_manager.h"
+#include "rules_manager.h"
 
-#if INCLUDE_CONTROL_ENGINE
+#if INCLUDE_RULES_ENGINE
 
 #include <string.h>
 #include <math.h>
@@ -17,7 +17,7 @@
 #include "../core/log_tags.h"
 
 // Shared, stable description pointer for every Action-owned pin registry entry.
-// claimPins() stores the pointer (no copy), and controlSyncActionPins()
+// claimPins() stores the pointer (no copy), and rulesSyncActionPins()
 // identifies its own prior entries by pointer equality against this — so it
 // must be a single static string, not a per-call temporary.
 static const char* const ACTION_PIN_DESC = "Action output";
@@ -25,35 +25,35 @@ static const char* const ACTION_PIN_DESC = "Action output";
 RuleContext g_ruleContexts[MAX_RULES];
 
 // Persisted record tables — standalone RAM globals (mirror Input inputs[]).
-// Declared extern in control_types.h; persisted by the shared config-store arena
+// Declared extern in rules_types.h; persisted by the shared config-store arena
 // (input_manager.cpp), NOT by SystemConfig. These live in BSS (zero-init), and
-// id==0 is a VALID record id — so controlResetTables() MUST stamp every slot
+// id==0 is a VALID record id — so rulesResetTables() MUST stamp every slot
 // empty before the tables are trusted (boot / reset / load-failure paths), or a
 // blank EEPROM would arm a table full of phantom id-0 records.
 Rule       rules[MAX_RULES];
 Action     actions[MAX_ACTIONS];
 ActionLink actionLinks[MAX_ACTION_LINKS];   // 2nd+ rule memberships (#343)
 
-void controlResetTables() {
+void rulesResetTables() {
     for (int i = 0; i < MAX_RULES; i++) {
-        rules[i].id = CONTROL_ID_NONE;
+        rules[i].id = RULES_ID_NONE;
         g_ruleContexts[i].state = RULE_DISABLED;
     }
     for (int i = 0; i < MAX_ACTIONS; i++) {
-        actions[i].id = CONTROL_ID_NONE;
+        actions[i].id = RULES_ID_NONE;
     }
     for (int i = 0; i < MAX_ACTION_LINKS; i++) {
-        actionLinks[i].actionId = CONTROL_ID_NONE;
+        actionLinks[i].actionId = RULES_ID_NONE;
     }
 }
 
-void controlManagerInit(uint32_t now) {
+void rulesManagerInit(uint32_t now) {
     for (int i = 0; i < MAX_RULES; i++) {
         Rule& rule = rules[i];
-        if (rule.id == CONTROL_ID_NONE) {
+        if (rule.id == RULES_ID_NONE) {
             g_ruleContexts[i].state = RULE_DISABLED;
         } else {
-            controlRuleInit(g_ruleContexts[i], rule, now);  // boot-load: arm (#251)
+            rulesRuleInit(g_ruleContexts[i], rule, now);  // boot-load: arm (#251)
             // An orphan (source pin carries no input) is INERT by design (#345),
             // and inert is exactly the state that can hide: the rule never fires
             // and never faults, so nothing else would ever mention it. Say so
@@ -80,10 +80,10 @@ void controlManagerInit(uint32_t now) {
     }
 }
 
-void controlManagerUpdate(uint32_t now) {
+void rulesManagerUpdate(uint32_t now) {
     for (int i = 0; i < MAX_RULES; i++) {
         Rule& rule = rules[i];
-        if (rule.id == CONTROL_ID_NONE) continue;
+        if (rule.id == RULES_ID_NONE) continue;
 
         // Resolve the source input by pin (the stable input identity). A missing
         // source yields NaN, which the engine treats as untrustworthy — the rule
@@ -91,67 +91,67 @@ void controlManagerUpdate(uint32_t now) {
         Input* in = getInputByPin(rule.sourceInput);
         float value = in ? in->value : NAN;
 
-        controlRuleUpdate(rule, g_ruleContexts[i], value, now);
+        rulesRuleUpdate(rule, g_ruleContexts[i], value, now);
     }
 }
 
-RuleSeverity controlSystemSeverity() {
+RuleSeverity rulesSystemSeverity() {
     uint8_t maxSev = RULE_SEV_NONE;
     for (int i = 0; i < MAX_RULES; i++) {
         Rule& rule = rules[i];
-        if (rule.id == CONTROL_ID_NONE) continue;
+        if (rule.id == RULES_ID_NONE) continue;
         // Annunciator rollup includes the derived WARNING tier (§11.2), so
         // resolve the source value for each rule.
         Input* in = getInputByPin(rule.sourceInput);
         float value = in ? in->value : NAN;
-        uint8_t s = controlRuleAnnunciatorSeverity(rule, g_ruleContexts[i], value);
+        uint8_t s = rulesRuleAnnunciatorSeverity(rule, g_ruleContexts[i], value);
         if (s > maxSev) maxSev = s;
     }
     return (RuleSeverity)maxSev;
 }
 
 // --- generic record-table helpers ---------------------------------------
-// Rule and Action are both id-keyed records (CONTROL_ID_NONE = empty slot; ids
+// Rule and Action are both id-keyed records (RULES_ID_NONE = empty slot; ids
 // are stable per record §8 Q9, so a freed id is safe to reuse). These templated
 // scans single-source the rule and action table lookups below.
 
 template <typename T>
 static int recSlot(const T* arr, int n, uint8_t id) {
-    if (id == CONTROL_ID_NONE) return -1;
+    if (id == RULES_ID_NONE) return -1;
     for (int i = 0; i < n; i++) if (arr[i].id == id) return i;
     return -1;
 }
 
 template <typename T>
 static int recFreeSlot(const T* arr, int n) {
-    for (int i = 0; i < n; i++) if (arr[i].id == CONTROL_ID_NONE) return i;
+    for (int i = 0; i < n; i++) if (arr[i].id == RULES_ID_NONE) return i;
     return -1;
 }
 
 template <typename T>
 static uint8_t recAllocId(const T* arr, int n) {
     // Smallest id not currently in use.
-    for (uint16_t cand = 0; cand < CONTROL_ID_NONE; cand++) {
+    for (uint16_t cand = 0; cand < RULES_ID_NONE; cand++) {
         bool used = false;
         for (int i = 0; i < n; i++) if (arr[i].id == (uint8_t)cand) { used = true; break; }
         if (!used) return (uint8_t)cand;
     }
-    return CONTROL_ID_NONE;
+    return RULES_ID_NONE;
 }
 
 template <typename T>
 static uint8_t recCount(const T* arr, int n) {
     uint8_t c = 0;
-    for (int i = 0; i < n; i++) if (arr[i].id != CONTROL_ID_NONE) c++;
+    for (int i = 0; i < n; i++) if (arr[i].id != RULES_ID_NONE) c++;
     return c;
 }
 
 // --- rule table helpers -------------------------------------------------
 
-int     controlRuleSlot(uint8_t id) { return recSlot(rules, MAX_RULES, id); }
-int     controlRuleFreeSlot()       { return recFreeSlot(rules, MAX_RULES); }
-uint8_t controlRuleAllocId()        { return recAllocId(rules, MAX_RULES); }
-uint8_t controlRuleCount()          { return recCount(rules, MAX_RULES); }
+int     rulesRuleSlot(uint8_t id) { return recSlot(rules, MAX_RULES, id); }
+int     rulesRuleFreeSlot()       { return recFreeSlot(rules, MAX_RULES); }
+uint8_t rulesRuleAllocId()        { return recAllocId(rules, MAX_RULES); }
+uint8_t rulesRuleCount()          { return recCount(rules, MAX_RULES); }
 
 // --- application default-Rule template (§11.5) ------------------------------
 
@@ -178,9 +178,9 @@ static bool buildRuleConfigFromApplication(uint8_t appIndex, Rule& out) {
     return true;
 }
 
-bool controlRuleExistsForInput(uint8_t pin) {
+bool rulesRuleExistsForInput(uint8_t pin) {
     for (int i = 0; i < MAX_RULES; i++) {
-        if (rules[i].id != CONTROL_ID_NONE &&
+        if (rules[i].id != RULES_ID_NONE &&
             rules[i].sourceInput == pin) {
             return true;
         }
@@ -188,17 +188,17 @@ bool controlRuleExistsForInput(uint8_t pin) {
     return false;
 }
 
-uint8_t controlSeedRuleForInput(uint8_t pin, uint8_t appIndex, uint32_t now) {
-    if (controlRuleExistsForInput(pin)) return CONTROL_ID_NONE;  // implicit re-apply preserves
+uint8_t rulesSeedRuleForInput(uint8_t pin, uint8_t appIndex, uint32_t now) {
+    if (rulesRuleExistsForInput(pin)) return RULES_ID_NONE;  // implicit re-apply preserves
     Rule tmpl{};
-    if (!buildRuleConfigFromApplication(appIndex, tmpl)) return CONTROL_ID_NONE;
-    int slot = controlRuleFreeSlot();
-    uint8_t id = controlRuleAllocId();
-    if (slot < 0 || id == CONTROL_ID_NONE) return CONTROL_ID_NONE;  // table full
+    if (!buildRuleConfigFromApplication(appIndex, tmpl)) return RULES_ID_NONE;
+    int slot = rulesRuleFreeSlot();
+    uint8_t id = rulesRuleAllocId();
+    if (slot < 0 || id == RULES_ID_NONE) return RULES_ID_NONE;  // table full
     tmpl.id = id;
     tmpl.sourceInput = pin;
     rules[slot] = tmpl;
-    controlRuleInit(g_ruleContexts[slot], rules[slot], now);  // create-from-template: arm (#251)
+    rulesRuleInit(g_ruleContexts[slot], rules[slot], now);  // create-from-template: arm (#251)
     return id;
 }
 
@@ -214,11 +214,11 @@ static void applyRuleTemplate(int slot, const Rule& tmpl, uint32_t now) {
     r.hysteresis = tmpl.hysteresis;
     r.warmupMs   = tmpl.warmupMs;
     r.debounceMs = tmpl.debounceMs;
-    controlRuleInit(g_ruleContexts[slot], r, now);  // re-arm
+    rulesRuleInit(g_ruleContexts[slot], r, now);  // re-arm
 }
 
-bool controlRuleReset(uint8_t id, uint32_t now) {
-    int slot = controlRuleSlot(id);
+bool rulesRuleReset(uint8_t id, uint32_t now) {
+    int slot = rulesRuleSlot(id);
     if (slot < 0) return false;
     Input* in = getInputByPin(rules[slot].sourceInput);
     if (!in) return false;
@@ -230,7 +230,7 @@ bool controlRuleReset(uint8_t id, uint32_t now) {
 
 // --- per-input "alarm Rule" facade (SET <pin> ALARM ...) --------------------
 
-int controlAlarmRuleSlotForInput(uint8_t pin) {
+int rulesAlarmRuleSlotForInput(uint8_t pin) {
     // The one canonical alarm Rule for an input is any ALARM-severity Rule whose
     // condition the per-input facade can represent: OUTSIDE_BAND (a Min+Max band,
     // what SET APPLICATION seeds), BELOW (a Min-only floor), or ABOVE (a Max-only
@@ -247,7 +247,7 @@ int controlAlarmRuleSlotForInput(uint8_t pin) {
     int firstOneSided = -1;
     for (int i = 0; i < MAX_RULES; i++) {
         const Rule& r = rules[i];
-        if (r.id == CONTROL_ID_NONE || r.sourceInput != pin ||
+        if (r.id == RULES_ID_NONE || r.sourceInput != pin ||
             r.severity != RULE_SEV_ALARM) {
             continue;
         }
@@ -279,8 +279,8 @@ static void applyAlarmShape(Rule& r, uint8_t condition, float lo, float hi) {
     }
 }
 
-uint8_t controlSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, float hi, uint32_t now) {
-    int slot = controlAlarmRuleSlotForInput(pin);
+uint8_t rulesSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, float hi, uint32_t now) {
+    int slot = rulesAlarmRuleSlotForInput(pin);
     if (slot >= 0) {
         // Edit in place: preserve id, source, warmup/debounce, AND the live
         // runtime state. An alarm tweak must NOT re-arm the Rule — re-arming drags
@@ -297,16 +297,16 @@ uint8_t controlSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, fl
         // Arm only if it isn't already (e.g. previously flag-disabled); a live
         // READY/ACTIVE rule keeps its state and just re-qualifies.
         if (g_ruleContexts[slot].state == RULE_DISABLED) {
-            controlRuleInit(g_ruleContexts[slot], r, now);
+            rulesRuleInit(g_ruleContexts[slot], r, now);
         }
         return r.id;
     }
     // None yet — allocate a fresh Rule. Inherit the application's warmup/debounce
     // (like the auto-seed) so a webapp-set alarm behaves identically to a seeded
     // one; fall back to the hand-entry defaults when the app has no template.
-    int free = controlRuleFreeSlot();
-    uint8_t id = controlRuleAllocId();
-    if (free < 0 || id == CONTROL_ID_NONE) return CONTROL_ID_NONE;  // table full
+    int free = rulesRuleFreeSlot();
+    uint8_t id = rulesRuleAllocId();
+    if (free < 0 || id == RULES_ID_NONE) return RULES_ID_NONE;  // table full
     Input* in = getInputByPin(pin);
     Rule appTmpl{};
     const bool haveAppTmpl = in && buildRuleConfigFromApplication(in->applicationIndex, appTmpl);
@@ -319,22 +319,22 @@ uint8_t controlSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, fl
     applyAlarmShape(r, condition, lo, hi);
     r.warmupMs    = haveAppTmpl ? appTmpl.warmupMs   : RULE_DEFAULT_WARMUP_MS;
     r.debounceMs  = haveAppTmpl ? appTmpl.debounceMs : RULE_DEFAULT_DEBOUNCE_MS;
-    controlRuleInit(g_ruleContexts[free], r, now);
+    rulesRuleInit(g_ruleContexts[free], r, now);
     return id;
 }
 
-bool controlRemoveAlarmRuleForInput(uint8_t pin, uint8_t* releasedOut) {
-    int slot = controlAlarmRuleSlotForInput(pin);
+bool rulesRemoveAlarmRuleForInput(uint8_t pin, uint8_t* releasedOut) {
+    int slot = rulesAlarmRuleSlotForInput(pin);
     if (slot < 0) return false;
     uint8_t id = rules[slot].id;
-    rules[slot].id = CONTROL_ID_NONE;
+    rules[slot].id = RULES_ID_NONE;
     g_ruleContexts[slot].state = RULE_DISABLED;
-    uint8_t released = controlClearActionsForRule(id);  // referential integrity (mirrors RULE DEL)
+    uint8_t released = rulesClearActionsForRule(id);  // referential integrity (mirrors RULE DEL)
     if (releasedOut) *releasedOut = released;
     return true;
 }
 
-uint8_t controlRemoveRulesForInput(uint8_t pin, uint8_t* releasedOut) {
+uint8_t rulesRemoveRulesForInput(uint8_t pin, uint8_t* releasedOut) {
     // `released` sums per-rule counts (each <= MAX_ACTIONS), so it is widened and
     // saturated rather than wrapped: an under-report here would understate how
     // many relays a CLEAR just de-energized.
@@ -342,40 +342,40 @@ uint8_t controlRemoveRulesForInput(uint8_t pin, uint8_t* releasedOut) {
     uint16_t released = 0;
     for (int i = 0; i < MAX_RULES; i++) {
         Rule& r = rules[i];
-        if (r.id == CONTROL_ID_NONE || r.sourceInput != pin) continue;
+        if (r.id == RULES_ID_NONE || r.sourceInput != pin) continue;
         const uint8_t id = r.id;
-        r.id = CONTROL_ID_NONE;
+        r.id = RULES_ID_NONE;
         g_ruleContexts[i].state = RULE_DISABLED;
-        released += controlClearActionsForRule(id);  // mirrors RULE DEL
+        released += rulesClearActionsForRule(id);  // mirrors RULE DEL
         removed++;
     }
     if (releasedOut) *releasedOut = (uint8_t)((released > 255) ? 255 : released);
     return removed;
 }
 
-bool controlRuleSetEnabled(uint8_t id, bool enable, uint32_t now) {
-    int slot = controlRuleSlot(id);
+bool rulesRuleSetEnabled(uint8_t id, bool enable, uint32_t now) {
+    int slot = rulesRuleSlot(id);
     if (slot < 0) return false;
     Rule& r = rules[slot];
     const bool wasEnabled = (r.flags & RULE_FLAG_ENABLED) != 0;
     if (wasEnabled == enable) return false;   // idempotent: touch nothing (#254)
     if (enable) {
         r.flags |= RULE_FLAG_ENABLED;
-        controlRuleInit(g_ruleContexts[slot], r, now);   // re-arm: INIT -> WARMUP -> READY
+        rulesRuleInit(g_ruleContexts[slot], r, now);   // re-arm: INIT -> WARMUP -> READY
     } else {
         r.flags &= (uint8_t)~RULE_FLAG_ENABLED;
         g_ruleContexts[slot].state = RULE_DISABLED;
         // Parking IS a state entry: `INFO <pin> ALARM` prints time-in-state, and
         // leaving the old stamp would report "PARKED, time in state: 1 h" for a
         // rule parked one second ago (the enable branch re-stamps via
-        // controlRuleInit).
+        // rulesRuleInit).
         g_ruleContexts[slot].stateEntryTime = now;
         g_ruleContexts[slot].faultStartTime = 0;
     }
     return true;
 }
 
-uint8_t controlReseedRulesForInput(uint8_t pin, uint32_t now) {
+uint8_t rulesReseedRulesForInput(uint8_t pin, uint32_t now) {
     Input* in = getInputByPin(pin);
     if (!in) return 0;
     Rule tmpl{};
@@ -385,7 +385,7 @@ uint8_t controlReseedRulesForInput(uint8_t pin, uint32_t now) {
     uint8_t n = 0;
     for (int i = 0; i < MAX_RULES; i++) {
         Rule& r = rules[i];
-        if (r.id == CONTROL_ID_NONE || r.sourceInput != pin) continue;
+        if (r.id == RULES_ID_NONE || r.sourceInput != pin) continue;
         applyRuleTemplate(i, tmpl, now);  // rewrite to new app's defaults, keep id
         n++;
     }
@@ -400,63 +400,63 @@ uint8_t controlReseedRulesForInput(uint8_t pin, uint32_t now) {
 // the split representation is invisible outside this block — and a store written
 // before #343 (zero link rows) reads back as a one-member action unchanged.
 
-uint8_t controlActionRuleCount(int slot) {
+uint8_t rulesActionRuleCount(int slot) {
     if (slot < 0 || slot >= MAX_ACTIONS) return 0;
     const Action& a = actions[slot];
-    if (a.id == CONTROL_ID_NONE || a.ruleRef == CONTROL_ID_NONE) return 0;
+    if (a.id == RULES_ID_NONE || a.ruleRef == RULES_ID_NONE) return 0;
     uint8_t n = 1;
     for (int i = 0; i < MAX_ACTION_LINKS; i++)
         if (actionLinks[i].actionId == a.id) n++;
     return n;
 }
 
-uint8_t controlActionRuleAt(int slot, uint8_t index) {
-    if (slot < 0 || slot >= MAX_ACTIONS) return CONTROL_ID_NONE;
+uint8_t rulesActionRuleAt(int slot, uint8_t index) {
+    if (slot < 0 || slot >= MAX_ACTIONS) return RULES_ID_NONE;
     const Action& a = actions[slot];
-    if (a.id == CONTROL_ID_NONE || a.ruleRef == CONTROL_ID_NONE) return CONTROL_ID_NONE;
+    if (a.id == RULES_ID_NONE || a.ruleRef == RULES_ID_NONE) return RULES_ID_NONE;
     if (index == 0) return a.ruleRef;
     uint8_t n = 1;
     for (int i = 0; i < MAX_ACTION_LINKS; i++) {
         if (actionLinks[i].actionId != a.id) continue;
         if (n++ == index) return actionLinks[i].ruleId;
     }
-    return CONTROL_ID_NONE;
+    return RULES_ID_NONE;
 }
 
-bool controlActionHasRule(int slot, uint8_t ruleId) {
-    if (ruleId == CONTROL_ID_NONE) return false;
-    uint8_t n = controlActionRuleCount(slot);
+bool rulesActionHasRule(int slot, uint8_t ruleId) {
+    if (ruleId == RULES_ID_NONE) return false;
+    uint8_t n = rulesActionRuleCount(slot);
     for (uint8_t i = 0; i < n; i++)
-        if (controlActionRuleAt(slot, i) == ruleId) return true;
+        if (rulesActionRuleAt(slot, i) == ruleId) return true;
     return false;
 }
 
-uint8_t controlActionLinkCount() {
+uint8_t rulesActionLinkCount() {
     uint8_t c = 0;
     for (int i = 0; i < MAX_ACTION_LINKS; i++)
-        if (actionLinks[i].actionId != CONTROL_ID_NONE) c++;
+        if (actionLinks[i].actionId != RULES_ID_NONE) c++;
     return c;
 }
 
 // Drop every link row belonging to `actionId` (the action itself is untouched).
 static void dropLinksForAction(uint8_t actionId) {
-    if (actionId == CONTROL_ID_NONE) return;
+    if (actionId == RULES_ID_NONE) return;
     for (int i = 0; i < MAX_ACTION_LINKS; i++)
-        if (actionLinks[i].actionId == actionId) actionLinks[i].actionId = CONTROL_ID_NONE;
+        if (actionLinks[i].actionId == actionId) actionLinks[i].actionId = RULES_ID_NONE;
 }
 
-bool controlActionAddRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving) {
+bool rulesActionAddRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving) {
     if (wasDriving) *wasDriving = false;
-    int slot = controlActionSlot(actionId);
-    if (slot < 0 || ruleId == CONTROL_ID_NONE) return false;
-    if (controlActionHasRule(slot, ruleId)) return true;  // idempotent
+    int slot = rulesActionSlot(actionId);
+    if (slot < 0 || ruleId == RULES_ID_NONE) return false;
+    if (rulesActionHasRule(slot, ruleId)) return true;  // idempotent
     Action& a = actions[slot];
-    if (a.ruleRef == CONTROL_ID_NONE) {
+    if (a.ruleRef == RULES_ID_NONE) {
         a.ruleRef = ruleId;                       // first membership: inline
     } else {
         int free = -1;
         for (int i = 0; i < MAX_ACTION_LINKS && free < 0; i++)
-            if (actionLinks[i].actionId == CONTROL_ID_NONE) free = i;
+            if (actionLinks[i].actionId == RULES_ID_NONE) free = i;
         if (free < 0) return false;               // link table full — caller reports
         actionLinks[free].actionId = actionId;
         actionLinks[free].ruleId   = ruleId;
@@ -467,107 +467,107 @@ bool controlActionAddRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving) {
     // reasoning about which membership a live force "belonged to" is exactly the
     // ambiguity that produced that bug class. Report it: silently de-energizing a
     // relay an operator was holding by hand is the hazard #329 added reporting for.
-    const bool released = controlActionReleaseDrive(actionId);
+    const bool released = rulesActionReleaseDrive(actionId);
     if (wasDriving) *wasDriving = released;
     return true;
 }
 
-bool controlActionRemoveRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving) {
+bool rulesActionRemoveRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving) {
     if (wasDriving) *wasDriving = false;
-    int slot = controlActionSlot(actionId);
-    if (slot < 0 || ruleId == CONTROL_ID_NONE) return false;
-    if (!controlActionHasRule(slot, ruleId)) return false;
+    int slot = rulesActionSlot(actionId);
+    if (slot < 0 || ruleId == RULES_ID_NONE) return false;
+    if (!rulesActionHasRule(slot, ruleId)) return false;
     Action& a = actions[slot];
     if (a.ruleRef == ruleId) {
         // Removing the inline member: PROMOTE the first link row into it, so
         // "ruleRef == NONE" keeps meaning "no members at all" everywhere.
-        a.ruleRef = CONTROL_ID_NONE;
+        a.ruleRef = RULES_ID_NONE;
         for (int i = 0; i < MAX_ACTION_LINKS; i++) {
             if (actionLinks[i].actionId != actionId) continue;
             a.ruleRef = actionLinks[i].ruleId;
-            actionLinks[i].actionId = CONTROL_ID_NONE;
+            actionLinks[i].actionId = RULES_ID_NONE;
             break;
         }
     } else {
         for (int i = 0; i < MAX_ACTION_LINKS; i++) {
             if (actionLinks[i].actionId == actionId && actionLinks[i].ruleId == ruleId) {
-                actionLinks[i].actionId = CONTROL_ID_NONE;
+                actionLinks[i].actionId = RULES_ID_NONE;
                 break;
             }
         }
     }
-    const bool released = controlActionReleaseDrive(actionId);
+    const bool released = rulesActionReleaseDrive(actionId);
     if (wasDriving) *wasDriving = released;
     return true;
 }
 
-bool controlActionClearRules(uint8_t actionId) {
-    int slot = controlActionSlot(actionId);
+bool rulesActionClearRules(uint8_t actionId) {
+    int slot = rulesActionSlot(actionId);
     if (slot < 0) return false;
-    actions[slot].ruleRef = CONTROL_ID_NONE;
+    actions[slot].ruleRef = RULES_ID_NONE;
     dropLinksForAction(actionId);
-    return controlActionReleaseDrive(actionId);
+    return rulesActionReleaseDrive(actionId);
 }
 
-bool controlActionSetRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving) {
+bool rulesActionSetRule(uint8_t actionId, uint8_t ruleId, bool* wasDriving) {
     if (wasDriving) *wasDriving = false;
-    int slot = controlActionSlot(actionId);
-    if (slot < 0 || ruleId == CONTROL_ID_NONE) return false;
+    int slot = rulesActionSlot(actionId);
+    if (slot < 0 || ruleId == RULES_ID_NONE) return false;
     actions[slot].ruleRef = ruleId;
     dropLinksForAction(actionId);   // "exactly this one" — drop any extra members
-    const bool released = controlActionReleaseDrive(actionId);
+    const bool released = rulesActionReleaseDrive(actionId);
     if (wasDriving) *wasDriving = released;
     return true;
 }
 
-void controlActionForgetLinks(uint8_t actionId) {
+void rulesActionForgetLinks(uint8_t actionId) {
     dropLinksForAction(actionId);
 }
 
-uint8_t controlSweepActionRules() {
+uint8_t rulesSweepActionRules() {
     // ORDER MATTERS: prune first, so a link row pointing at a missing rule can't
     // be promoted into ruleRef below and resurrect the dangling ref we just fixed.
-    uint8_t repairs = controlPruneActionLinks();
+    uint8_t repairs = rulesPruneActionLinks();
     for (int s = 0; s < MAX_ACTIONS; s++) {
         Action& a = actions[s];
-        if (a.id == CONTROL_ID_NONE || a.ruleRef == CONTROL_ID_NONE) continue;
-        if (controlRuleSlot(a.ruleRef) >= 0) continue;
+        if (a.id == RULES_ID_NONE || a.ruleRef == RULES_ID_NONE) continue;
+        if (rulesRuleSlot(a.ruleRef) >= 0) continue;
         // The inline member's Rule is gone. PROMOTE a surviving link row rather
         // than blanking ruleRef: with links present, ruleRef == NONE would read as
-        // "manual-only" everywhere (controlActionRuleCount short-circuits on it)
+        // "manual-only" everywhere (rulesActionRuleCount short-circuits on it)
         // and silently strand the remaining members — and hand the action back to
         // its manual latch, the #294 failure mode.
         msg.debug.warn(TAG_SYSTEM, "action #%u referenced missing rule #%u",
                        a.id, a.ruleRef);
-        a.ruleRef = CONTROL_ID_NONE;
+        a.ruleRef = RULES_ID_NONE;
         for (int i = 0; i < MAX_ACTION_LINKS; i++) {
             if (actionLinks[i].actionId != a.id) continue;
             a.ruleRef = actionLinks[i].ruleId;
-            actionLinks[i].actionId = CONTROL_ID_NONE;
+            actionLinks[i].actionId = RULES_ID_NONE;
             break;
         }
         // Whatever drove it is no longer what drives it (#294/#329).
-        controlActionReleaseDrive(a.id);
+        rulesActionReleaseDrive(a.id);
         repairs++;
     }
     return repairs;
 }
 
-uint8_t controlPruneActionLinks() {
+uint8_t rulesPruneActionLinks() {
     uint8_t dropped = 0;
     for (int i = 0; i < MAX_ACTION_LINKS; i++) {
         ActionLink& l = actionLinks[i];
-        if (l.actionId == CONTROL_ID_NONE) continue;
-        const int aslot = controlActionSlot(l.actionId);
+        if (l.actionId == RULES_ID_NONE) continue;
+        const int aslot = rulesActionSlot(l.actionId);
         // Drop a row whose action or rule is gone, and one that duplicates the
         // action's inline member (a hand-edited store / partial JSON import can
         // produce either; both would otherwise inflate the reported member count).
-        bool drop = (aslot < 0 || controlRuleSlot(l.ruleId) < 0 ||
+        bool drop = (aslot < 0 || rulesRuleSlot(l.ruleId) < 0 ||
                      actions[aslot].ruleRef == l.ruleId);
         // …and one that duplicates an EARLIER surviving row. Membership is a SET:
-        // controlActionAddRule() can't create a repeat (it is idempotent), but this
+        // rulesActionAddRule() can't create a repeat (it is idempotent), but this
         // sweep exists for stores this firmware did not write. Two identical rows
-        // would make controlActionRuleCount() over-report, and RULE REMOVE clears
+        // would make rulesActionRuleCount() over-report, and RULE REMOVE clears
         // only one — so the action stays rule-driven after the operator believes
         // they removed its last membership for that rule.
         for (int j = 0; j < i && !drop; j++) {
@@ -575,14 +575,14 @@ uint8_t controlPruneActionLinks() {
                     actionLinks[j].ruleId   == l.ruleId);
         }
         if (drop) {
-            l.actionId = CONTROL_ID_NONE;
+            l.actionId = RULES_ID_NONE;
             dropped++;
         }
     }
     // Postcondition — this is what makes prune-BEFORE-promote sufficient rather
     // than merely tidy: every surviving row for an action is now distinct from the
     // other rows AND from that action's inline ruleRef, so the promote step in
-    // controlSweepActionRules() cannot install a ruleRef that collides with a row
+    // rulesSweepActionRules() cannot install a ruleRef that collides with a row
     // it left behind. Duplicates can't be re-introduced after this point.
     return dropped;
 }
@@ -595,18 +595,18 @@ static bool g_actionState[MAX_ACTIONS];   // last driven logical (pre-invert) st
 // nothing here is persisted, so a forced relay reverts to AUTO on reboot.
 static ActionOverride g_actionOverride[MAX_ACTIONS];
 
-uint8_t controlClearActionsForRule(uint8_t ruleId) {
-    if (ruleId == CONTROL_ID_NONE) return 0;
+uint8_t rulesClearActionsForRule(uint8_t ruleId) {
+    if (ruleId == RULES_ID_NONE) return 0;
     uint8_t released = 0;
     for (int i = 0; i < MAX_ACTIONS; i++) {
-        if (actions[i].id == CONTROL_ID_NONE) continue;
-        if (!controlActionHasRule(i, ruleId)) continue;
+        if (actions[i].id == RULES_ID_NONE) continue;
+        if (!rulesActionHasRule(i, ruleId)) continue;
         // Losing a member must also drop whatever was driving the action, or the
         // pin snaps to a stale state nobody commanded (#294 / #329) — that is
-        // controlActionRemoveRule()'s job; we only need to report it, so sample
+        // rulesActionRemoveRule()'s job; we only need to report it, so sample
         // the drive state first.
         const bool wasDriving = (g_actionOverride[i] != ACT_OVR_AUTO) || g_actionManual[i];
-        controlActionRemoveRule(actions[i].id, ruleId);
+        rulesActionRemoveRule(actions[i].id, ruleId);
         if (wasDriving) released++;
     }
     return released;
@@ -618,33 +618,33 @@ static void driveAction(const Action& a, bool on) {
     digitalWrite(a.target, (on != invert) ? HIGH : LOW);  // (on XOR invert)
 }
 
-void controlActionConfigurePin(int slot) {
+void rulesActionConfigurePin(int slot) {
     if (slot < 0 || slot >= MAX_ACTIONS) return;
     g_actionManual[slot]   = false;  // a (re)configured slot starts de-asserted (no stale manual)
     g_actionOverride[slot] = ACT_OVR_AUTO;  // ...and no stale operator force (#329)
     Action& a = actions[slot];
-    if (a.id == CONTROL_ID_NONE) return;
+    if (a.id == RULES_ID_NONE) return;
     if (a.type == ACT_RELAY) {
         pinMode(a.target, OUTPUT);
         driveAction(a, false);  // de-assert until first evaluation
     }
 }
 
-void controlActionsInit() {
+void rulesActionsInit() {
     for (int i = 0; i < MAX_ACTIONS; i++) {
         g_actionManual[i] = false;
         g_actionState[i] = false;
         g_actionOverride[i] = ACT_OVR_AUTO;
-        controlActionConfigurePin(i);
+        rulesActionConfigurePin(i);
     }
     // NB: the pin-registry sync is deliberately NOT done here. At boot this runs
     // before the RGB and serial subsystems register their (hardware-fixed) pins,
     // so syncing now could let a stray action target claim a pin those need and
-    // win the race. The caller invokes controlSyncActionPins() once, late, after
+    // win the race. The caller invokes rulesSyncActionPins() once, late, after
     // all fixed pins are registered (see main.cpp setup + the JSON import path).
 }
 
-uint8_t controlSyncActionPins() {
+uint8_t rulesSyncActionPins() {
     // 1. Drop registry entries this engine previously added (identified by our
     //    shared description pointer) so a runtime config reload doesn't leave a
     //    stale action pin claimed. Collect first, then unregister — unregister
@@ -665,7 +665,7 @@ uint8_t controlSyncActionPins() {
     uint8_t conflicts = 0;
     for (int s = 0; s < MAX_ACTIONS; s++) {
         const Action& a = actions[s];
-        if (a.id == CONTROL_ID_NONE) continue;
+        if (a.id == RULES_ID_NONE) continue;
         if (!claimPins(&a.target, 1, PIN_OUTPUT, PIN_RANK_ACTION, TAG_SYSTEM, ACTION_PIN_DESC)) {
             conflicts++;
             const char* held = getPinDescription(a.target);
@@ -710,15 +710,15 @@ static bool sourceFaultedForRuleSlot(int rslot) {
 // Resolve an action's Rule membership into the aggregate the pure resolver takes.
 static ActionDrive resolveActionDrive(int slot) {
     ActionDrive d{};
-    d.memberCount = controlActionRuleCount(slot);
+    d.memberCount = rulesActionRuleCount(slot);
     for (uint8_t i = 0; i < d.memberCount; i++) {
-        const int rslot = controlRuleSlot(controlActionRuleAt(slot, i));
+        const int rslot = rulesRuleSlot(rulesActionRuleAt(slot, i));
         if (rslot < 0) continue;   // dangling ref (cleared on rule delete): inert,
                                    // and deliberately NOT a fault — mirrors the
                                    // pre-#343 sourceTrustworthy=true branch.
         if (sourceFaultedForRuleSlot(rslot)) {
             d.anyFaulted = true;   // a faulted source can't assert (NaN never does)
-        } else if (controlRuleIsActive(g_ruleContexts[rslot])) {
+        } else if (rulesRuleIsActive(g_ruleContexts[rslot])) {
             d.anyActive = true;
         }
     }
@@ -730,8 +730,8 @@ static ActionDrive resolveActionDrive(int slot) {
 // never be a different computation from what drove the pin. Reporting both bits
 // from ONE call also stops packState() resolving the same membership twice per
 // slot per loop — ActionBroadcaster::tick() has no scan gate.
-ActionDrive controlActionDrive(int slot) {
-    if (slot < 0 || slot >= MAX_ACTIONS || actions[slot].id == CONTROL_ID_NONE) {
+ActionDrive rulesActionDrive(int slot) {
+    if (slot < 0 || slot >= MAX_ACTIONS || actions[slot].id == RULES_ID_NONE) {
         return ActionDrive{};
     }
     return resolveActionDrive(slot);
@@ -740,17 +740,17 @@ ActionDrive controlActionDrive(int slot) {
 // ANY member's source faulted counts (#343): with several sources, one dead
 // sensor is exactly the condition an operator needs to see before trusting what
 // the actuator is doing.
-bool controlActionSourceFaulted(int slot) { return controlActionDrive(slot).anyFaulted; }
+bool rulesActionSourceFaulted(int slot) { return rulesActionDrive(slot).anyFaulted; }
 
-bool controlActionRuleActive(int slot) { return controlActionDrive(slot).anyActive; }
+bool rulesActionRuleActive(int slot) { return rulesActionDrive(slot).anyActive; }
 
-void controlActionsUpdate(bool configMode) {
+void rulesActionsUpdate(bool configMode) {
     for (int i = 0; i < MAX_ACTIONS; i++) {
         Action& a = actions[i];
-        if (a.id == CONTROL_ID_NONE) continue;
+        if (a.id == RULES_ID_NONE) continue;
 
         const ActionDrive drive = resolveActionDrive(i);
-        bool on = controlActionDesired(a, drive, g_actionManual[i], g_actionOverride[i]);
+        bool on = rulesActionDesired(a, drive, g_actionManual[i], g_actionOverride[i]);
 
         // Bench safety: suppress RULE-DRIVEN actuation in CONFIG so a settling /
         // garbage sensor reading can't fire a relay (#268). An explicit manual
@@ -766,41 +766,41 @@ void controlActionsUpdate(bool configMode) {
     }
 }
 
-bool controlActionState(int slot) {
+bool rulesActionState(int slot) {
     return (slot >= 0 && slot < MAX_ACTIONS) ? g_actionState[slot] : false;
 }
 
-int     controlActionSlot(uint8_t id) { return recSlot(actions, MAX_ACTIONS, id); }
-int     controlActionFreeSlot()       { return recFreeSlot(actions, MAX_ACTIONS); }
-uint8_t controlActionAllocId()        { return recAllocId(actions, MAX_ACTIONS); }
-uint8_t controlActionCount()          { return recCount(actions, MAX_ACTIONS); }
+int     rulesActionSlot(uint8_t id) { return recSlot(actions, MAX_ACTIONS, id); }
+int     rulesActionFreeSlot()       { return recFreeSlot(actions, MAX_ACTIONS); }
+uint8_t rulesActionAllocId()        { return recAllocId(actions, MAX_ACTIONS); }
+uint8_t rulesActionCount()          { return recCount(actions, MAX_ACTIONS); }
 
-bool controlActionSetManual(uint8_t id, bool on) {
-    int slot = controlActionSlot(id);
+bool rulesActionSetManual(uint8_t id, bool on) {
+    int slot = rulesActionSlot(id);
     if (slot < 0) return false;
     g_actionManual[slot] = on;
     return true;
 }
 
-ActionOverride controlActionOverride(int slot) {
+ActionOverride rulesActionOverride(int slot) {
     return (slot >= 0 && slot < MAX_ACTIONS) ? g_actionOverride[slot] : ACT_OVR_AUTO;
 }
 
-bool controlActionSetOverride(uint8_t id, ActionOverride ovr) {
-    int slot = controlActionSlot(id);
+bool rulesActionSetOverride(uint8_t id, ActionOverride ovr) {
+    int slot = rulesActionSlot(id);
     if (slot < 0) return false;
     g_actionOverride[slot] = ovr;
     return true;
 }
 
-bool controlActionReleaseDrive(uint8_t id) {
-    int slot = controlActionSlot(id);
+bool rulesActionReleaseDrive(uint8_t id) {
+    int slot = rulesActionSlot(id);
     if (slot < 0) return false;
     // An action whose *driver* changes starts de-asserted — one invariant covering
     // both the operator override and the manual latch. Clearing only the override
     // would leave the #294 bug intact by another route: arm the latch while the
     // action is unlinked, link it to a rule (latch goes dormant, not cleared), then
-    // unlink or delete that rule — and controlActionDesired() falls straight back
+    // unlink or delete that rule — and rulesActionDesired() falls straight back
     // through to the stale latch and snaps the pin ON with no operator command.
     const bool wasDriving = (g_actionOverride[slot] != ACT_OVR_AUTO) || g_actionManual[slot];
     g_actionOverride[slot] = ACT_OVR_AUTO;
@@ -808,12 +808,12 @@ bool controlActionReleaseDrive(uint8_t id) {
     return wasDriving;
 }
 
-bool controlActionCommand(uint8_t id, bool on) {
-    int slot = controlActionSlot(id);
+bool rulesActionCommand(uint8_t id, bool on) {
+    int slot = rulesActionSlot(id);
     if (slot < 0) return false;
     // One router so the CLI and the BLE write can never diverge: an unlinked
     // action's ON/OFF is the manual latch; a rule-driven one's is an override.
-    if (controlActionRuleCount(slot) == 0) {
+    if (rulesActionRuleCount(slot) == 0) {
         g_actionManual[slot] = on;
     } else {
         g_actionOverride[slot] = on ? ACT_OVR_FORCE_ON : ACT_OVR_FORCE_OFF;
@@ -821,8 +821,8 @@ bool controlActionCommand(uint8_t id, bool on) {
     return true;
 }
 
-bool controlActionSetName(uint8_t id, const char* name) {
-    int slot = controlActionSlot(id);
+bool rulesActionSetName(uint8_t id, const char* name) {
+    int slot = rulesActionSlot(id);
     if (slot < 0) return false;
     char* dst = actions[slot].name;
     strncpy(dst, name ? name : "", sizeof(actions[slot].name) - 1);
@@ -830,4 +830,4 @@ bool controlActionSetName(uint8_t id, const char* name) {
     return true;
 }
 
-#endif // INCLUDE_CONTROL_ENGINE
+#endif // INCLUDE_RULES_ENGINE
