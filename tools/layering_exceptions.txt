@@ -119,13 +119,6 @@ drivers -> storage   # #401 -- bus_manager reads system_config for bus selection
 
 hal -> (root)        # #401 -- hal_can.h / can_mcp2515.h read config.h (SPI CAN pin
                      # constants, per CLAUDE.md's CAN Controller Abstraction section).
-hal -> core          # #401, tracked in #411 -- src/hal/bus_defaults.h:18 includes core/platform.h.
-                     # Worth a look: core/ is supposed to sit above hal/ (see the
-                     # core/ target property above), so a hal -> core edge existing
-                     # alongside core -> hal is a genuine two-way coupling between
-                     # the two lowest layers, not obviously structural like the rest
-                     # of this file. Filed as #411, not fixed here.
-
 inputs -> (root)     # #401 -- input_manager reads config.h (MAX_INPUTS etc).
 inputs -> cli        # #401, tracked in #411 -- input_manager.cpp includes a cli/ header (presentation
                      # reached from the model it presents); worth checking whether

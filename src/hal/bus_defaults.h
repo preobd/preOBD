@@ -15,7 +15,11 @@
 #ifndef BUS_DEFAULTS_H
 #define BUS_DEFAULTS_H
 
-#include "../core/platform.h"
+// No core/ include: this header is pure per-platform fact tables, selected by
+// toolchain-defined board macros (__IMXRT1062__, ESP32, ...). It previously
+// included core/platform.h without using a single symbol from it, which made
+// hal/ depend upward on core/ while core/watchdog.cpp depends down on hal/ --
+// a two-way coupling between the two lowest layers (#411).
 
 // ============================================================================
 // DEFAULT BUS SELECTIONS AND SPEEDS
