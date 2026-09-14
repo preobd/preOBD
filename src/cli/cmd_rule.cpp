@@ -22,9 +22,9 @@
 #include "command_helpers.h"
 #include "../inputs/input_manager.h"
 #include "../inputs/input.h"
-#include "../lib/system_mode.h"
-#include "../lib/system_config.h"
-#include "../lib/message_api.h"
+#include "../core/system_mode.h"
+#include "../storage/system_config.h"
+#include "../core/message_api.h"
 #include "../sensors/units_registry.h"    // getUnitStringByIndex
 #include "../sensors/sensor_library.h"    // convertFromBaseUnits
 #include "../control/control_manager.h"

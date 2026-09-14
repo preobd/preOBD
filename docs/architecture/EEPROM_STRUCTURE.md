@@ -300,7 +300,7 @@ struct SystemConfig {
     uint16_t outputInterval[NUM_OUTPUTS];
 
     // Display, units, intervals, sea-level pressure
-    // (see src/lib/system_config.h for the full layout)
+    // (see src/storage/system_config.h for the full layout)
     // Note: hardware pin assignments are NOT stored here — they are compile-time
     // constants defined in the board definition (boards/<board>/board.h)
 
@@ -321,7 +321,7 @@ struct SystemConfig {
 };
 ```
 
-The struct above is a sketch — `SystemConfig` has grown across versions and may grow again. Treat [`src/lib/system_config.h`](../../src/lib/system_config.h) as authoritative.
+The struct above is a sketch — `SystemConfig` has grown across versions and may grow again. Treat [`src/storage/system_config.h`](../../src/storage/system_config.h) as authoritative.
 
 **Location:** `EEPROM_TOTAL_BYTES − sizeof(SystemConfig)` (per platform). On Teensy 4.1 (4284-byte EEPROM) this is roughly `0x1080`; on Teensy 4.0 (1080-byte EEPROM) it's roughly `0x03B0`. The exact address is computed at compile time from `E2END`.
 

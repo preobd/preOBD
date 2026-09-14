@@ -13,10 +13,10 @@
 #include "output_base.h"
 #include "../inputs/input.h"
 #include "../inputs/input_manager.h"
-#include "../lib/message_api.h"
-#include "../lib/log_tags.h"
-#include "../lib/system_config.h"
-#include "../lib/obd_query.h"
+#include "../core/message_api.h"
+#include "../core/log_tags.h"
+#include "../storage/system_config.h"
+#include "obd_query.h"
 
 #if INCLUDE_CAN
 

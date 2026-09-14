@@ -16,8 +16,8 @@
 #include <unity.h>
 #include <Arduino.h>
 
-#include "../../src/lib/bus_defaults.h"
-#include "../../src/lib/bus_pin_roles.cpp"
+#include "../../src/hal/bus_defaults.h"
+#include "../../src/pinctrl/bus_pin_roles.cpp"
 
 // F() on this host stub is just reinterpret_cast<const __FlashStringHelper*>
 // of the string literal pointer (test/stubs/Arduino.h) — safe to cast back

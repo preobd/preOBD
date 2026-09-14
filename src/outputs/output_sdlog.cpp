@@ -22,18 +22,18 @@
 #include "../config.h"
 #include "../sensors/sensor_library.h"
 #include "../sensors/units_registry.h"
-#include "../lib/message_api.h"
-#include "../lib/log_tags.h"
-#include "../lib/system_mode.h"
+#include "../core/message_api.h"
+#include "../core/log_tags.h"
+#include "../core/system_mode.h"
 
 #if INCLUDE_SD_LOGGING
 
 // Use Arduino SD library for consistency across platforms
 #include <SD.h>
-#include "../lib/sd_manager.h"
-#include "../lib/system_config.h"
-#include "../lib/watchdog.h"
-#include "../lib/hash.h"
+#include "../storage/sd_manager.h"
+#include "../storage/system_config.h"
+#include "../core/watchdog.h"
+#include "../core/hash.h"
 #include "../inputs/input_manager.h"
 #include "output_format.h"
 

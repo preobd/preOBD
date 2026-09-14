@@ -1,4 +1,4 @@
-// Native unit test: framed-mode wire codec (src/lib/frame_codec.cpp).
+// Native unit test: framed-mode wire codec (src/comms/frame_codec.cpp).
 //
 // frame_codec is fully pure (stdint/stddef/string.h only), so we compile the
 // implementation straight into this translation unit — no stubs required.
@@ -8,7 +8,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "../../src/lib/frame_codec.cpp"
+#include "../../src/comms/frame_codec.cpp"
 
 void setUp(void) {}
 void tearDown(void) {}

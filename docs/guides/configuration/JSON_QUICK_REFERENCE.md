@@ -176,13 +176,13 @@ if (schemaVer == 1) {
 
 | File | What to Update | When |
 |------|----------------|------|
-| `src/lib/system_config.h` | Add field to struct, increment version | SystemConfig change |
-| `src/lib/system_config.cpp` | Set default value | SystemConfig change |
+| `src/storage/system_config.h` | Add field to struct, increment version | SystemConfig change |
+| `src/storage/system_config.cpp` | Set default value | SystemConfig change |
 | `src/inputs/input.h` | Add field to Input struct | Input change |
 | `src/inputs/input_manager.cpp` | InputEEPROM, save/load, version | Input change |
-| `src/lib/json_config.cpp` | Export/import functions | Any struct change |
-| `src/lib/json_config.cpp` | `JSON_SCHEMA_VERSION` | Breaking change only |
-| `src/lib/json_config.h` | Version history comment | Schema version change |
+| `src/storage/json_config.cpp` | Export/import functions | Any struct change |
+| `src/storage/json_config.cpp` | `JSON_SCHEMA_VERSION` | Breaking change only |
+| `src/storage/json_config.h` | Version history comment | Schema version change |
 | `docs/guides/configuration/JSON_CONFIGURATION_GUIDE.md` | Document change | Any change |
 | `docs/CHANGELOG.md` | User-facing notes | Any change |
 
@@ -195,7 +195,7 @@ if (schemaVer == 1) {
 git checkout -b feature/display-brightness
 
 # Step 2: Update struct
-# Edit: src/lib/system_config.h
+# Edit: src/storage/system_config.h
 struct SystemConfig {
     uint16_t displayBrightness;
     uint8_t reserved[4];  // Was 6
@@ -203,17 +203,17 @@ struct SystemConfig {
 #define SYSTEM_CONFIG_VERSION 3  // Was 2
 
 # Step 3: Set default
-# Edit: src/lib/system_config.cpp
+# Edit: src/storage/system_config.cpp
 void resetSystemConfig() {
     systemConfig.displayBrightness = 200;
 }
 
 # Step 4: Export
-# Edit: src/lib/json_config.cpp → exportSystemConfigToJSON()
+# Edit: src/storage/json_config.cpp → exportSystemConfigToJSON()
 display["brightness"] = systemConfig.displayBrightness;
 
 # Step 5: Import with default
-# Edit: src/lib/json_config.cpp → importSystemConfigFromJSON()
+# Edit: src/storage/json_config.cpp → importSystemConfigFromJSON()
 systemConfig.displayBrightness = display["brightness"] | 200;
 
 # Step 6: Test

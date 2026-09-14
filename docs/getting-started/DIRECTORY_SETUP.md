@@ -280,14 +280,21 @@ This directory contains the input-based architecture for sensor configuration.
 
 ---
 
-## src/lib/ - Library Components
+## src/core/ - Shared Primitives
 
 **platform.h**
 - Auto-detects microcontroller platform
 - Sets ADC resolution, voltage references, pin mappings
 - **Edit:** SOMETIMES (when adding new board support)
 
-**sensor_types.h**
+Also here: `message_api.*` (user-facing output), `log_filter.*` / `log_tags.h`
+(logging), `hash.h`, `watchdog.*`, `system_mode.*`.
+
+---
+
+## src/sensors/ - Sensor Tables and Calibration Data
+
+**calibration_types.h**
 - Core data structures for calibration
 - Measurement types (temperature, pressure, etc.)
 - Calibration type enums
@@ -380,7 +387,7 @@ This directory contains the input-based architecture for sensor configuration.
 
 ---
 
-## src/displays/ - Display Modules
+## src/outputs/display/ - Display Modules
 
 **display_lcd.cpp**
 - 20x4 character LCD display driver
@@ -558,9 +565,17 @@ This directory contains the comprehensive test mode system for testing outputs w
 **Directory purposes:**
 - **src/** - Main program files (main.cpp, config.h, version.h)
 - **src/inputs/** - All input and sensor reading functionality
-- **src/lib/** - Reusable library components and sensor definitions
+- **src/sensors/** - Sensor tables, calibration data and sensor drivers
+- **src/core/** - Shared primitives (messaging, logging, platform, watchdog)
+- **src/hal/** - Per-MCU abstraction and platform fact tables
+- **src/pinctrl/** - Pin ownership and registry
+- **src/drivers/** - Peripheral drivers (bus manager, serial, LED, button)
+- **src/comms/** - Transports, framing and message routing
+- **src/storage/** - Persisted configuration (EEPROM, JSON, SD)
+- **src/cli/** - Command-line interface
+- **src/control/** - Rules engine
 - **src/outputs/** - Output module implementations (CAN, serial, SD, etc.)
-- **src/displays/** - Display driver implementations (LCD, future OLED/TFT)
+- **src/outputs/display/** - Display driver implementations (LCD, future OLED/TFT)
 - **src/test/** - Test mode system for bench testing without sensors
 - **docs/** - All user and developer documentation
 

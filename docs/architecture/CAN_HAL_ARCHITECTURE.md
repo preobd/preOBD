@@ -87,10 +87,8 @@ src/hal/
 │   ├── can_twai.h              # ESP32 TWAI implementation
 │   ├── can_mcp2515.h           # MCP2515 SPI implementation
 │   └── can_hybrid.h            # Hybrid mode dispatcher
-
-src/lib/
 ├── can_controller_types.h       # Controller type enum and mapping
-└── bus_defaults.h              # Default bus count per platform
+└── bus_defaults.h               # Default bus count per platform
 ```
 
 ## Controller Types
@@ -179,7 +177,7 @@ build_flags =
 
 ### Controller Mapping
 
-The mapping is defined at compile-time in `src/lib/can_controller_types.h`:
+The mapping is defined at compile-time in `src/hal/can_controller_types.h`:
 
 ```cpp
 // Bus 0 controller type
@@ -319,7 +317,7 @@ bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t
 
 ### Step 1: Define Controller Type
 
-Add to `src/lib/can_controller_types.h`:
+Add to `src/hal/can_controller_types.h`:
 
 ```cpp
 enum class CanControllerType : uint8_t {
@@ -454,7 +452,7 @@ lib_deps =
 
 - [HAL Interface](../../src/hal/hal_can.h)
 - [Platform Capabilities](../../src/hal/platform_caps.h)
-- [Controller Types](../../src/lib/can_controller_types.h)
+- [Controller Types](../../src/hal/can_controller_types.h)
 - [FlexCAN Implementation](../../src/hal/platforms/can_flexcan.h)
 - [TWAI Implementation](../../src/hal/platforms/can_twai.h)
 - [MCP2515 Implementation](../../src/hal/platforms/can_mcp2515.h)

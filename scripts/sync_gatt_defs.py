@@ -1,7 +1,7 @@
 """
 sync_gatt_defs.py - PlatformIO pre-build script for nRF firmware
 
-Copies src/lib/ble_gatt_defs.h (source of truth, owned by the main MCU
+Copies src/comms/ble_gatt_defs.h (source of truth, owned by the main MCU
 firmware) into nrf_firmware/include/ble_gatt_defs.h with a generated-file
 banner. Ensures the nRF and MCU firmwares are byte-identical on UUIDs and
 binary struct layouts.
@@ -19,12 +19,12 @@ import sys
 
 PROJECT_DIR = env["PROJECT_DIR"]            # nrf_firmware/
 REPO_ROOT = os.path.abspath(os.path.join(PROJECT_DIR, ".."))
-SRC = os.path.join(REPO_ROOT, "src", "lib", "ble_gatt_defs.h")
+SRC = os.path.join(REPO_ROOT, "src", "comms", "ble_gatt_defs.h")
 DST = os.path.join(PROJECT_DIR, "include", "ble_gatt_defs.h")
 
 BANNER = (
     "// =============================================================================\n"
-    "// AUTO-GENERATED from src/lib/ble_gatt_defs.h -- DO NOT EDIT.\n"
+    "// AUTO-GENERATED from src/comms/ble_gatt_defs.h -- DO NOT EDIT.\n"
     "// This file is regenerated on every build by scripts/sync_gatt_defs.py.\n"
     "// Edit the source file in the main MCU firmware tree instead.\n"
     "// =============================================================================\n\n"

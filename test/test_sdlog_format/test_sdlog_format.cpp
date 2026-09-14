@@ -140,7 +140,7 @@ static void test_unit_null_buffer_is_safe(void) {
 // their names or units, must change the signature — that is what triggers a
 // file roll instead of silently shifting columns under an existing header.
 
-#include "../../src/lib/hash.h"
+#include "../../src/core/hash.h"
 
 struct FakeColumn {
     uint8_t     slot;

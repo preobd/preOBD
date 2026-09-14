@@ -7,7 +7,7 @@
  */
 
 #include "calibration_apply.h"
-#include "../lib/platform.h"   // SYSTEM_VOLTAGE
+#include "../core/platform.h"   // SYSTEM_VOLTAGE
 
 // Bias resistor sanity: 10R to 10MR covers every practical thermistor /
 // resistive-sender bias resistor.

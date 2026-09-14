@@ -19,7 +19,7 @@
 
 #include <stdint.h>
 #include "../platform_caps.h"
-#include "../../lib/can_controller_types.h"
+#include "../can_controller_types.h"
 
 // ============================================================================
 // Compile-Time Validation

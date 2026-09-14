@@ -347,7 +347,7 @@ For a complete PID reference, see [OBD2_PID_REFERENCE.md](../../reference/OBD2_P
 
 ### Custom PID Assignments
 
-You can modify PID assignments in `src/lib/application_presets.h`:
+You can modify PID assignments in `src/sensors/application_presets.h`:
 
 ```cpp
 static const ApplicationPreset APP_OIL_TEMP = {

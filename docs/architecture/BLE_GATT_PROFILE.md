@@ -92,7 +92,7 @@ Base: 4f424400-7072-654f-4244-00000000XXXX
       "OBD"    "pr" "eO" "BD"          ^^^^-- varies per characteristic
 ```
 
-Defined in `src/lib/ble_gatt_defs.h`.
+Defined in `src/comms/ble_gatt_defs.h`.
 
 ### Service Map
 
@@ -238,7 +238,7 @@ Offset  Size  Type       Field
 Total:  32 bytes
 ```
 
-The struct is defined as `PreobdSystemStatus` in `src/lib/ble_gatt_defs.h`.
+The struct is defined as `PreobdSystemStatus` in `src/comms/ble_gatt_defs.h`.
 
 **Read behavior:** Returns the current status snapshot.
 
@@ -257,7 +257,7 @@ Tier 2 adds features that require a real BLE stack and cannot be done through si
 On every per-**rule** severity/kind transition — including return-to-normal
 (`severity = NORMAL`, `kind = CLEAR`) — the nRF coprocessor sends a
 `PreobdAlarmEvent` notification. The broadcaster emits one frame per firing rule;
-`ruleId` (the source of truth is `src/lib/ble_gatt_defs.h`) lets a client tell
+`ruleId` (the source of truth is `src/comms/ble_gatt_defs.h`) lets a client tell
 apart two rules that share one source input.
 
 ```
@@ -284,7 +284,7 @@ With the control engine, a relay is an Action of type `RELAY`. The broadcaster
 pushes one 16-byte `PreobdActionState` per Action slot on every state/config
 change, plus a 5 s heartbeat so a late subscriber gets the full set. An
 unconfigured slot reports `actionId = 0xFF`. The source of truth is
-`src/lib/ble_gatt_defs.h`.
+`src/comms/ble_gatt_defs.h`.
 
 ```
 Offset  Size  Type       Field
@@ -591,7 +591,7 @@ The HM-10 and similar transparent BLE UART modules cannot support custom GATT se
 
 | File | Description |
 |------|-------------|
-| `src/lib/ble_gatt_defs.h` | UUID constants, binary struct definitions, protocol version |
+| `src/comms/ble_gatt_defs.h` | UUID constants, binary struct definitions, protocol version |
 | `webapp/index.html` | Web Bluetooth reference webapp |
 | `docs/architecture/BLE_GATT_PROFILE.md` | This specification |
 | `docs/reference/SERIAL_COMMANDS.md` | Complete text command reference |

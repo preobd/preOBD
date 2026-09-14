@@ -7,7 +7,7 @@
  */
 
 #include "../../../config.h"
-#include "../../../lib/platform.h"
+#include "../../../core/platform.h"
 #include "../../../inputs/input.h"
 #include "../../calibration_types.h"
 #include "../sensor_utils.h"

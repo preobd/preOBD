@@ -105,7 +105,7 @@ Edit [src/config.h](../../config.h):
 
 ### Color Customization
 
-Edit [src/lib/rgb_led.h](../../lib/rgb_led.h) to customize colors:
+Edit [src/drivers/rgb_led.h](../../lib/rgb_led.h) to customize colors:
 
 ```cpp
 // Normal operation (default: green)
@@ -145,7 +145,7 @@ Disable effects if blinking is undesirable (photosensitivity, preferences):
 
 ### Timing Adjustment
 
-Adjust blink/pulse speeds in [src/lib/rgb_led.h](../../lib/rgb_led.h):
+Adjust blink/pulse speeds in [src/drivers/rgb_led.h](../../lib/rgb_led.h):
 
 ```cpp
 #define RGB_BLINK_PERIOD_MS 500     // Standard blink (1Hz)

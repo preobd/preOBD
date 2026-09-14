@@ -38,18 +38,18 @@ preOBD uses **hash-based registries** instead of enums. This provides:
 
 ### The Three Registries
 
-1. **Sensor Library** (`src/lib/sensor_library.h` + `src/lib/sensor_library/`)
+1. **Sensor Library** (`src/sensors/sensor_library.h` + `src/sensors/sensor_library/`)
    - Defines physical sensors (MAX6675, VDO_120C_TABLE, etc.)
    - Links sensors to read functions and calibration data
    - Modular structure: sensors organized by type in `sensor_library/sensors/`
    - ~28 sensors, ~3KB in PROGMEM
 
-2. **Application Presets** (`src/lib/application_presets.h`)
+2. **Application Presets** (`src/sensors/application_presets.h`)
    - Defines what you're measuring (CHT, OIL_PRESSURE, etc.)
    - Sets default sensors, units, alarm thresholds, OBD-II PIDs
    - ~16 applications, ~2KB in PROGMEM
 
-3. **Units Registry** (`src/lib/units_registry.h`)
+3. **Units Registry** (`src/sensors/units_registry.h`)
    - Defines display units (CELSIUS, BAR, PSI, etc.)
    - Contains conversion factors
    - ~11 units, ~500 bytes in PROGMEM
@@ -87,13 +87,13 @@ Example output: `0xABCD`
 
 ### Step 2: Add Calibration Data (if needed)
 
-In the appropriate manufacturer file under `src/lib/sensor_calibration_data/`, add calibration data if your sensor needs it.
+In the appropriate manufacturer file under `src/sensors/sensor_calibration_data/`, add calibration data if your sensor needs it.
 
-**For VDO sensors**: Edit `src/lib/sensor_calibration_data/vdo/vdo_calibrations.h`
-**For AEM sensors**: Edit `src/lib/sensor_calibration_data/aem/aem_calibrations.h`
-**For NXP sensors**: Edit `src/lib/sensor_calibration_data/nxp/nxp_calibrations.h`
-**For generic sensors**: Edit `src/lib/sensor_calibration_data/generic/generic_calibrations.h`
-**For system defaults**: Edit `src/lib/sensor_calibration_data/system/system_calibrations.h`
+**For VDO sensors**: Edit `src/sensors/sensor_calibration_data/vdo/vdo_calibrations.h`
+**For AEM sensors**: Edit `src/sensors/sensor_calibration_data/aem/aem_calibrations.h`
+**For NXP sensors**: Edit `src/sensors/sensor_calibration_data/nxp/nxp_calibrations.h`
+**For generic sensors**: Edit `src/sensors/sensor_calibration_data/generic/generic_calibrations.h`
+**For system defaults**: Edit `src/sensors/sensor_calibration_data/system/system_calibrations.h`
 **For new manufacturers**: Create a new directory and header file (see below)
 
 **For a Thermistor (Steinhart-Hart):**
@@ -144,7 +144,7 @@ static const PROGMEM PressureLinearCalibration my_pressure_cal = {
 
 ### Step 3: Find the Appropriate Category File
 
-The sensor library is organized by sensor type in `src/lib/sensor_library/sensors/`:
+The sensor library is organized by sensor type in `src/sensors/sensor_library/sensors/`:
 
 | File | Sensor Types |
 |------|--------------|
@@ -160,7 +160,7 @@ Choose the file that matches your sensor type.
 
 ### Step 4: Add PROGMEM Strings and X_SENSOR Entry
 
-Edit the appropriate category file (e.g., `src/lib/sensor_library/sensors/thermistors.h`):
+Edit the appropriate category file (e.g., `src/sensors/sensor_library/sensors/thermistors.h`):
 
 ```cpp
 // ===== PROGMEM STRINGS =====
@@ -193,7 +193,7 @@ The X_SENSOR macro parameters are:
 13. `pinTypeRequirement` - PIN_ANALOG, PIN_DIGITAL, or PIN_I2C
 
 **If your sensor needs a bus**, check `busNeedsForSensorIndex()` in
-`src/lib/sensor_library/sensor_helpers.h`. That is what tells the boot path to
+`src/sensors/sensor_library/sensor_helpers.h`. That is what tells the boot path to
 bring the bus up (and reserve its pins) before your sensor's init runs. `PIN_I2C`
 is recognized automatically; an SPI part is recognized as CAT_THERMOCOUPLE, so a
 new SPI family needs a line there or it will find `getActiveSPI()` empty.
@@ -281,10 +281,10 @@ If you're adding sensors from a new manufacturer not currently in the calibratio
 ### Step 1: Create Directory and Header
 
 ```bash
-mkdir -p src/lib/sensor_calibration_data/acme/
+mkdir -p src/sensors/sensor_calibration_data/acme/
 ```
 
-Create `src/lib/sensor_calibration_data/acme/acme_calibrations.h`:
+Create `src/sensors/sensor_calibration_data/acme/acme_calibrations.h`:
 
 ```cpp
 /*
@@ -316,7 +316,7 @@ static const PROGMEM LinearCalibration acme_example_cal = {
 
 ### Step 2: Register the Manufacturer
 
-Edit `src/lib/sensor_calibration_data.h` to include your new manufacturer file:
+Edit `src/sensors/sensor_calibration_data.h` to include your new manufacturer file:
 
 ```cpp
 // ... existing includes ...
@@ -325,7 +325,7 @@ Edit `src/lib/sensor_calibration_data.h` to include your new manufacturer file:
 
 ### Step 3: Add Sensors to Library
 
-Add your sensors to the appropriate category file in `src/lib/sensor_library/sensors/`, referencing the calibrations from your new manufacturer file.
+Add your sensors to the appropriate category file in `src/sensors/sensor_library/sensors/`, referencing the calibrations from your new manufacturer file.
 
 ---
 
@@ -428,7 +428,7 @@ python3 -c "h=5381; s='MY_NEW_APP'; [h:=(h<<5)+h+ord(c.upper()) for c in s]; pri
 
 ### Step 2: Add PROGMEM Strings
 
-In `src/lib/application_presets.h`:
+In `src/sensors/application_presets.h`:
 
 ```cpp
 static const char PSTR_MY_NEW_APP[] PROGMEM = "MY_NEW_APP";

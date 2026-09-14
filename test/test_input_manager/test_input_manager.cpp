@@ -35,7 +35,7 @@
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
-#include "../../src/lib/json_config.cpp"
+#include "../../src/storage/json_config.cpp"
 
 // Firmware symbols input_manager.cpp / json_config.cpp expect from other TUs
 // (shared with test_json_calibration).

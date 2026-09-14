@@ -13,10 +13,10 @@
 
 #include <Arduino.h>
 #include "input_can.h"
-#include "../lib/system_config.h"
-#include "../lib/bus_config.h"
-#include "../lib/message_api.h"
-#include "../lib/log_tags.h"
+#include "../storage/system_config.h"
+#include "../storage/bus_config.h"
+#include "../core/message_api.h"
+#include "../core/log_tags.h"
 #include "../sensors/drivers/can/can_frame_cache.h"
 #include "../hal/hal_can.h"
 

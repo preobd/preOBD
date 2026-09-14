@@ -14,8 +14,8 @@
 #include "test_mode.h"
 #include "test_scenarios.h"
 #include "../inputs/input_manager.h"
-#include "../lib/message_api.h"
-#include "../lib/log_tags.h"
+#include "../core/message_api.h"
+#include "../core/log_tags.h"
 #include <string.h>
 
 // Forward declaration of test value generator

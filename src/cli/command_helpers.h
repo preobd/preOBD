@@ -7,7 +7,7 @@
 
 #include <stdint.h>
 #include <Arduino.h>  // for __FlashStringHelper
-#include "../lib/message_router.h"
+#include "../comms/message_router.h"
 #include "../sensors/calibration_types.h"  // for MeasurementType
 
 // Forward declarations for enums

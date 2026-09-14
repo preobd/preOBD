@@ -1,5 +1,5 @@
 // Native unit test: SlottedBroadcaster::tick heartbeat/backpressure bookkeeping
-// (src/lib/slotted_broadcaster.h). Pure template — no Arduino/transport deps.
+// (src/outputs/ble/slotted_broadcaster.h). Pure template — no Arduino/transport deps.
 //
 // Regression targets:
 //  1. A transient send() failure during the heartbeat burst must NOT pin
@@ -14,7 +14,7 @@
 #include <unity.h>
 #include <Arduino.h>
 
-#include "../../src/lib/slotted_broadcaster.h"
+#include "../../src/outputs/ble/slotted_broadcaster.h"
 
 // --- test send hook ----------------------------------------------------
 static int g_emitCount;

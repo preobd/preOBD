@@ -5,8 +5,8 @@
 #include "output_base.h"
 #include "../config.h"
 #include "../inputs/input_manager.h"
-#include "../lib/message_router.h"
-#include "../lib/message_api.h"
+#include "../comms/message_router.h"
+#include "../core/message_api.h"
 
 // Output mask filtering relies on OUTPUT_CAN..OUTPUT_SD being 0-3.
 // NUM_OUTPUTS is now unconditionally 7 (stable enum), so this assert is always safe.

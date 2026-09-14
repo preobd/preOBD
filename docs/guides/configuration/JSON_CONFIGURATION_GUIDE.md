@@ -403,7 +403,7 @@ The JSON schema version is independent of the firmware version. It only incremen
 **Example:** Adding `uint16_t displayBrightness;`
 
 #### 1. Update the Struct
-**File:** `src/lib/system_config.h`
+**File:** `src/storage/system_config.h`
 ```cpp
 struct SystemConfig {
     // ... existing fields ...
@@ -416,7 +416,7 @@ struct SystemConfig {
 ```
 
 #### 2. Set Default Value
-**File:** `src/lib/system_config.cpp`
+**File:** `src/storage/system_config.cpp`
 ```cpp
 void resetSystemConfig() {
     // ... existing defaults ...
@@ -426,13 +426,13 @@ void resetSystemConfig() {
 ```
 
 #### 3. Update EEPROM Version
-**File:** `src/lib/system_config.h`
+**File:** `src/storage/system_config.h`
 ```cpp
 #define SYSTEM_CONFIG_VERSION 3  // Increment from 2 to 3
 ```
 
 #### 4. Export to JSON
-**File:** `src/lib/json_config.cpp` → `exportSystemConfigToJSON()`
+**File:** `src/storage/json_config.cpp` → `exportSystemConfigToJSON()`
 ```cpp
 JsonObject display = systemObj["display"].to<JsonObject>();
 display["enabled"] = (bool)systemConfig.displayEnabled;
@@ -441,7 +441,7 @@ display["brightness"] = systemConfig.displayBrightness;  // NEW
 ```
 
 #### 5. Import from JSON (with default fallback)
-**File:** `src/lib/json_config.cpp` → `importSystemConfigFromJSON()`
+**File:** `src/storage/json_config.cpp` → `importSystemConfigFromJSON()`
 ```cpp
 if (systemObj["display"].isNull() == false) {
     JsonObject display = systemObj["display"];
@@ -521,13 +521,13 @@ inputs[i].priority = eeprom.priority;  // NEW
 ```
 
 #### 5. Export to JSON
-**File:** `src/lib/json_config.cpp` → `exportInputToJSON()`
+**File:** `src/storage/json_config.cpp` → `exportInputToJSON()`
 ```cpp
 inputObj["priority"] = input->priority;  // NEW
 ```
 
 #### 6. Import from JSON (with default)
-**File:** `src/lib/json_config.cpp` → `importInputFromJSON()`
+**File:** `src/storage/json_config.cpp` → `importInputFromJSON()`
 ```cpp
 // NEW: Default to medium priority if not specified
 input->priority = inputObj["priority"] | 128;
@@ -555,7 +555,7 @@ union CalibrationOverride {
 ```
 
 #### 2. Add Calibration Type Enum
-**File:** `src/lib/sensor_types.h`
+**File:** `src/sensors/calibration_types.h`
 ```cpp
 enum CalibrationType {
     // ... existing types ...
@@ -564,7 +564,7 @@ enum CalibrationType {
 ```
 
 #### 3. Update getCalibrationType()
-**File:** `src/lib/json_config.cpp`
+**File:** `src/storage/json_config.cpp`
 ```cpp
 static const char* getCalibrationType(const Input* input) {
     switch (input->calibrationType) {
@@ -576,7 +576,7 @@ static const char* getCalibrationType(const Input* input) {
 ```
 
 #### 4. Update exportCalibration()
-**File:** `src/lib/json_config.cpp`
+**File:** `src/storage/json_config.cpp`
 ```cpp
 switch (input->calibrationType) {
     // ... existing cases ...
@@ -592,7 +592,7 @@ switch (input->calibrationType) {
 ```
 
 #### 5. Update importCalibration()
-**File:** `src/lib/json_config.cpp`
+**File:** `src/storage/json_config.cpp`
 ```cpp
 // Parse calibration type from JSON and apply
 // (Currently stubbed - implement as needed)
@@ -621,7 +621,7 @@ Document in changelog:
 ```
 
 #### 2. Remove Field (Release N+1)
-**File:** `src/lib/system_config.h`
+**File:** `src/storage/system_config.h`
 ```cpp
 struct SystemConfig {
     // ... fields ...
@@ -638,7 +638,7 @@ firmware["schemaVersion"] = 2;  // Was 1
 ```
 
 #### 4. Handle Old Schema on Import
-**File:** `src/lib/json_config.cpp` → `loadConfigFromJSON()`
+**File:** `src/storage/json_config.cpp` → `loadConfigFromJSON()`
 ```cpp
 // Check schema version
 uint8_t schemaVer = doc["schemaVersion"] | 1;  // Default to 1 if missing

@@ -8,13 +8,13 @@
 
 #include <string.h>
 #include <math.h>
-#include "../lib/system_config.h"
+#include "../storage/system_config.h"
 #include "../inputs/input_manager.h"
 #include "../sensors/application_presets.h"
-#include "../lib/pin_registry.h"
-#include "../lib/pin_owner.h"
-#include "../lib/message_api.h"
-#include "../lib/log_tags.h"
+#include "../pinctrl/pin_registry.h"
+#include "../pinctrl/pin_owner.h"
+#include "../core/message_api.h"
+#include "../core/log_tags.h"
 
 // Shared, stable description pointer for every Action-owned pin registry entry.
 // claimPins() stores the pointer (no copy), and controlSyncActionPins()

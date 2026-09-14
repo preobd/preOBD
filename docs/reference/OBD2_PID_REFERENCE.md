@@ -247,7 +247,7 @@ float obdConvertSpeed(float kph) {
 
 ## Custom PID Assignment
 
-To assign custom PIDs to your sensors, edit `src/lib/application_presets.h`:
+To assign custom PIDs to your sensors, edit `src/sensors/application_presets.h`:
 
 ```cpp
 {
@@ -327,5 +327,5 @@ Byte 4-7: Padding (0x00)
 - [ISO 15765-4](https://www.iso.org/standard/66574.html) - CAN diagnostic protocol
 - [OBD-II PIDs on Wikipedia](https://en.wikipedia.org/wiki/OBD-II_PIDs) - Community reference
 - [OBD-II Scanner Setup Guide](../guides/outputs/OBD2_SCANNER_GUIDE.md) - Using ELM327 adapters
-- [Application Presets Source](../../src/lib/application_presets.h) - Full PID assignments
+- [Application Presets Source](../../src/sensors/application_presets.h) - Full PID assignments
 

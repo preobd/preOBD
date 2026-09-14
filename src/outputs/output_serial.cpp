@@ -6,13 +6,13 @@
 #include "../config.h"
 #include "../sensors/sensor_library.h"
 #include "../sensors/units_registry.h"
-#include "../lib/message_api.h"
-#include "../lib/log_tags.h"
+#include "../core/message_api.h"
+#include "../core/log_tags.h"
 #include "output_format.h"
 
 #if INCLUDE_SERIAL_OUTPUT
 
-#include "../lib/system_mode.h"
+#include "../core/system_mode.h"
 
 void initSerialOutput() {
     msg.debug.info(TAG_SERIAL, "Serial output initialized");

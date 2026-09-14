@@ -19,7 +19,7 @@
 
 #include <Arduino.h>
 #include "sensor_types.h"
-#include "../../lib/hash.h"
+#include "../../core/hash.h"
 
 // ===== SENSOR CATEGORY ENUMERATION =====
 // Categories match the sensor definition files in sensors/ directory.

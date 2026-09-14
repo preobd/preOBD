@@ -8,18 +8,18 @@
 #include "command_helpers.h"
 #include "command_table.h"  // for Subcommand
 #include "../config.h"
-#include "../lib/message_router.h"
-#include "../lib/message_api.h"
-#include "../lib/system_config.h"
-#include "../lib/platform.h"
-#include "../lib/analog_pins.h"
+#include "../comms/message_router.h"
+#include "../core/message_api.h"
+#include "../storage/system_config.h"
+#include "../core/platform.h"
+#include "../pinctrl/analog_pins.h"
 #include "../sensors/application_presets.h"
 #include "../sensors/sensor_library.h"
 #include "../sensors/units_registry.h"
-#include "../lib/bus_manager.h"
-#include "../lib/bus_defaults.h"
-#include "../lib/pin_registry.h"
-#include "../lib/pin_owner.h"
+#include "../drivers/bus_manager.h"
+#include "../hal/bus_defaults.h"
+#include "../pinctrl/pin_registry.h"
+#include "../pinctrl/pin_owner.h"
 #include "../inputs/input.h"  // For Input struct definition
 #include "../inputs/input_manager.h"  // For inputs[] array access
 #include <string.h>

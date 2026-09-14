@@ -13,7 +13,7 @@
 #define INPUT_MANAGER_H
 
 #include "../config.h"
-#include "../lib/platform.h"
+#include "../core/platform.h"
 #include <Arduino.h>
 #include "input.h"
 

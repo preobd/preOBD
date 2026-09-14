@@ -11,29 +11,29 @@
 #include "../inputs/input.h"
 #include "serial_config.h"
 #include "../version.h"
-#include "../lib/system_mode.h"
-#include "../lib/bus_pin_roles.h"   // busPinRole() for the DIAG PINS sweep (#304)
-#include "../lib/system_config.h"
-#include "../lib/json_config.h"
-#include "../lib/message_router.h"
-#include "../lib/message_api.h"
-#include "../lib/log_filter.h"
-#include "../lib/log_tags.h"
+#include "../core/system_mode.h"
+#include "../pinctrl/bus_pin_roles.h"   // busPinRole() for the DIAG PINS sweep (#304)
+#include "../storage/system_config.h"
+#include "../storage/json_config.h"
+#include "../comms/message_router.h"
+#include "../core/message_api.h"
+#include "../core/log_filter.h"
+#include "../core/log_tags.h"
 #include "../sensors/units_registry.h"
 #include "../sensors/application_presets.h"
 #include "../sensors/sensor_library.h"
-#include "../lib/platform.h"
-#include "../lib/json_registry.h"
-#include "../lib/bus_manager.h"
-#include "../lib/bus_defaults.h"
-#include "../lib/sd_manager.h"
-#include "../lib/serial_manager.h"
-#include "../lib/pin_registry.h"
+#include "../core/platform.h"
+#include "../storage/json_registry.h"
+#include "../drivers/bus_manager.h"
+#include "../hal/bus_defaults.h"
+#include "../storage/sd_manager.h"
+#include "../drivers/serial_manager.h"
+#include "../pinctrl/pin_registry.h"
 #include "../outputs/output_base.h"
 #include "../outputs/output_sdlog.h"
 #include "../outputs/output_format.h"   // sdLogFormatName
-#include "../lib/obd_query.h"
-#include "../lib/display_manager.h"
+#include "../outputs/obd_query.h"
+#include "../outputs/display/display_manager.h"
 #if INCLUDE_RELAY_OUTPUT
 #endif
 #if INCLUDE_ELM327
@@ -50,7 +50,7 @@
 #include <ctype.h>
 #if SUPPORTS_JSON_EXPORT
 #include <ArduinoJson.h>
-#include "../lib/watchdog.h"  // WatchdogKickingPrint for the DIAG PINS JSON serialize
+#include "../core/watchdog.h"  // WatchdogKickingPrint for the DIAG PINS JSON serialize
 #endif
 
 // SYSTEM STATUS subcommand handler

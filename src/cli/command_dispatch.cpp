@@ -22,7 +22,7 @@
 
 #include "command_table.h"
 #include "command_dispatch.h"
-#include "../lib/system_mode.h"
+#include "../core/system_mode.h"
 
 // Case-insensitive compares — see command_helpers.h/.cpp for the definitions.
 // Forward-declared (not #included) to keep this TU lightweight; see header note.

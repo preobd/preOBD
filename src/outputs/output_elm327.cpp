@@ -9,11 +9,11 @@
 #if INCLUDE_ELM327
 
 #include "output_elm327.h"
-#include "../lib/obd_query.h"
-#include "../lib/system_config.h"
-#include "../lib/serial_manager.h"
-#include "../lib/message_api.h"
-#include "../lib/log_tags.h"
+#include "obd_query.h"
+#include "../storage/system_config.h"
+#include "../drivers/serial_manager.h"
+#include "../core/message_api.h"
+#include "../core/log_tags.h"
 #include "../inputs/input.h"
 #include "../inputs/input_manager.h"
 #include "../sensors/generated/registry_enums.h"  // APP_PRIMARY_BATTERY, APP_AUXILIARY_BATTERY

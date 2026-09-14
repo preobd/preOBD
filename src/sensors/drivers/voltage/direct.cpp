@@ -6,7 +6,7 @@
  */
 
 #include "../../../config.h"
-#include "../../../lib/platform.h"
+#include "../../../core/platform.h"
 #include "../../../inputs/input.h"
 
 /**

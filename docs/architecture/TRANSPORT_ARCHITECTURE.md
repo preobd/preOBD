@@ -378,7 +378,7 @@ This allows:
 ### File Structure
 
 ```
-src/lib/transports/
+src/comms/transports/
 ├── transport_interface.h          # Abstract TransportInterface
 ├── message_router.h/.cpp          # MessageRouter implementation
 ├── serial_transport_wrapper.h     # Wrapper for Serial/Serial1/Serial2
@@ -463,7 +463,7 @@ public:
 
 ### Step 2: Add Transport ID
 
-Add to `TransportID` enum in [transport_interface.h](../../src/lib/transports/transport_interface.h):
+Add to `TransportID` enum in [transport_interface.h](../../src/comms/transport_interface.h):
 
 ```cpp
 enum TransportID {
@@ -625,13 +625,13 @@ CAN output modules use the CAN HAL to send OBD-II frames and broadcast data, whi
 
 ## References
 
-- [TransportInterface API](../../src/lib/transports/transport_interface.h)
-- [MessageRouter Implementation](../../src/lib/transports/message_router.h)
-- [Serial Transport Wrapper](../../src/lib/transports/serial_transport_wrapper.h)
-- [ESP32 Bluetooth Transport](../../src/lib/transports/transport_bluetooth_esp32.h)
+- [TransportInterface API](../../src/comms/transport_interface.h)
+- [MessageRouter Implementation](../../src/comms/message_router.h)
+- [Serial Transport Wrapper](../../src/comms/transports/serial_transport_wrapper.h)
+- [ESP32 Bluetooth Transport](../../src/comms/transports/transport_bluetooth_esp32.h)
 - [CAN HAL Interface](../../src/hal/hal_can.h)
 - [Platform Capabilities](../../src/hal/platform_caps.h)
-- [CAN Controller Types](../../src/lib/can_controller_types.h)
+- [CAN Controller Types](../../src/hal/can_controller_types.h)
 - [Build Configuration Guide](../guides/configuration/BUILD_CONFIGURATION_GUIDE.md)
 - [CAN Transceiver Hardware Guide](../guides/hardware/CAN_TRANSCEIVER_GUIDE.md)
 - [RealDash Setup Guide](../guides/outputs/REALDASH_SETUP_GUIDE.md)

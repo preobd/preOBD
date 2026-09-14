@@ -16,10 +16,10 @@
 #include "output_alarm.h"
 #include "../config.h"
 #include "../inputs/input_manager.h"
-#include "../lib/pin_registry.h"
-#include "../lib/message_api.h"
-#include "../lib/log_tags.h"
-#include "../lib/system_mode.h"
+#include "../pinctrl/pin_registry.h"
+#include "../core/message_api.h"
+#include "../core/log_tags.h"
+#include "../core/system_mode.h"
 #include "../control/control_manager.h"   // annunciator: fold Rule severity into the rollup
 
 #if INCLUDE_CONTROL_ENGINE
@@ -37,7 +37,7 @@ static AlarmSeverity ruleToAlarmSeverity(RuleSeverity s) {
 #endif
 
 #if INCLUDE_LED
-#include "../lib/rgb_led.h"
+#include "../drivers/rgb_led.h"
 #endif
 
 // ===== ALARM OUTPUT STATE =====

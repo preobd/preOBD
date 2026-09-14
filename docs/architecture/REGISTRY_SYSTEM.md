@@ -86,14 +86,14 @@ struct InputEEPROM {
 preOBD has **three registries**, all stored in PROGMEM (flash):
 
 ### 1. Sensor Library
-**File:** `src/lib/sensor_library.h` (orchestrator)
-**Modular Files:** `src/lib/sensor_library/sensors/*.h`
+**File:** `src/sensors/sensor_library.h` (orchestrator)
+**Modular Files:** `src/sensors/sensor_library/sensors/*.h`
 **Size:** ~28 sensors
 **Primary Key:** Sensor name (e.g., "MAX6675", "VDO_120C_TABLE")
 
 **Structure:**
 ```
-src/lib/sensor_library/
+src/sensors/sensor_library/
 ├── sensor_types.h        # SensorInfo struct, forward declarations
 ├── sensor_categories.h   # Category enum and helpers
 ├── sensor_helpers.h      # Lookup functions
@@ -117,7 +117,7 @@ src/lib/sensor_library/
 - Precomputed name hash
 
 ### 2. Application Presets
-**File:** `src/lib/application_presets.h`
+**File:** `src/sensors/application_presets.h`
 **Size:** ~16 applications
 **Primary Key:** Application name (e.g., "CHT", "OIL_PRESSURE")
 
@@ -130,7 +130,7 @@ src/lib/sensor_library/
 - Precomputed name hash
 
 ### 3. Units Registry
-**File:** `src/lib/units_registry.h`
+**File:** `src/sensors/units_registry.h`
 **Size:** ~11 units
 **Primary Key:** Unit name (e.g., "CELSIUS", "BAR")
 
@@ -244,20 +244,20 @@ const char* appName = "OIL_PRESSURE";
 const char* sensName = "VDO_5BAR_CURVE";
 ```
 
-**2. Compute hashes** (`src/lib/hash.h`)
+**2. Compute hashes** (`src/core/hash.h`)
 ```cpp
 uint16_t appHash = djb2_hash("OIL_PRESSURE");   // 0x2361
 uint16_t sensHash = djb2_hash("VDO_5BAR_CURVE");      // 0xC3F7
 ```
 
-**3. Lookup application** (`src/lib/application_presets.h`)
+**3. Lookup application** (`src/sensors/application_presets.h`)
 ```cpp
 uint8_t appIndex = getApplicationIndexByHash(appHash);
 // Search PROGMEM for hash 0x2361
 // Returns index 6 (OIL_PRESSURE is 7th entry, 0-indexed)
 ```
 
-**4. Lookup sensor** (`src/lib/sensor_library.h`)
+**4. Lookup sensor** (`src/sensors/sensor_library.h`)
 ```cpp
 uint8_t sensIndex = getSensorIndexByHash(sensHash);
 // Search PROGMEM for hash 0xC3F7
@@ -309,7 +309,7 @@ python3 -c "h=5381; s='MY_NEW_SENSOR'; [h:=(h<<5)+h+ord(c.upper()) for c in s]; 
 # Output: 0xABCD
 ```
 
-**2. Add PROGMEM strings** (`src/lib/sensor_library.h`)
+**2. Add PROGMEM strings** (`src/sensors/sensor_library.h`)
 ```cpp
 static const char PSTR_MY_NEW_SENSOR[] PROGMEM = "MY_NEW_SENSOR";
 static const char PSTR_MY_NEW_SENSOR_LABEL[] PROGMEM = "My New Sensor Description";
@@ -410,10 +410,10 @@ MY_SENSOR_B  →  MY_SENSOR_B_V2
 
 | Registry | Header File | Size | Count |
 |----------|-------------|------|-------|
-| Sensors | `src/lib/sensor_library.h` + `sensor_library/sensors/*.h` | ~3KB | ~28 |
-| Applications | `src/lib/application_presets.h` | ~2KB | ~16 |
-| Units | `src/lib/units_registry.h` | ~500B | ~11 |
-| Hash Functions | `src/lib/hash.h` | ~2KB | N/A |
+| Sensors | `src/sensors/sensor_library.h` + `sensor_library/sensors/*.h` | ~3KB | ~28 |
+| Applications | `src/sensors/application_presets.h` | ~2KB | ~16 |
+| Units | `src/sensors/units_registry.h` | ~500B | ~11 |
+| Hash Functions | `src/core/hash.h` | ~2KB | N/A |
 
 ### Key Functions
 
@@ -483,8 +483,8 @@ When EEPROM version mismatch detected, firmware resets EEPROM to defaults.
 
 - [EEPROM Structure](EEPROM_STRUCTURE.md) - EEPROM layout and versioning
 - [Adding Sensors Guide](../guides/configuration/ADDING_SENSORS.md) - Step-by-step sensor addition
-- [Sensor Library Header](../../src/lib/sensor_library.h) - Sensor registry source code
-- [Application Presets Header](../../src/lib/application_presets.h) - Application registry source code
-- [Units Registry Header](../../src/lib/units_registry.h) - Units registry source code
-- [Hash Functions Header](../../src/lib/hash.h) - DJB2 hash implementation
+- [Sensor Library Header](../../src/sensors/sensor_library.h) - Sensor registry source code
+- [Application Presets Header](../../src/sensors/application_presets.h) - Application registry source code
+- [Units Registry Header](../../src/sensors/units_registry.h) - Units registry source code
+- [Hash Functions Header](../../src/core/hash.h) - DJB2 hash implementation
 

@@ -11,7 +11,7 @@
 #define SENSOR_UTILS_H
 
 #include <Arduino.h>
-#include "../../lib/platform.h"
+#include "../../core/platform.h"
 #include "../../inputs/input.h"
 
 // Linear interpolation in PROGMEM lookup tables (descending X order - thermistors)

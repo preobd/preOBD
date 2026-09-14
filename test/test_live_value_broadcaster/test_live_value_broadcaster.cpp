@@ -1,5 +1,5 @@
 // Native unit test: LiveValueBroadcaster wire payload
-// (src/lib/live_value_broadcaster.cpp).
+// (src/outputs/ble/live_value_broadcaster.cpp).
 //
 // The broadcaster scans the sparse inputs[] table at a 500 ms gate and emits
 // a 16-byte PreobdLiveValue on change + 5 s heartbeat. We capture the bytes
@@ -12,7 +12,7 @@
 #include <math.h>
 
 #include "boot_order_fixture.h"  // inputsTableIsLiveForAssert() stub (#352, #369)
-#include "../../src/lib/live_value_broadcaster.cpp"
+#include "../../src/outputs/ble/live_value_broadcaster.cpp"
 
 // ---- Globals the broadcaster TU expects from the rest of the firmware ----
 Input inputs[MAX_INPUTS];

@@ -25,11 +25,11 @@
 #include "command_handlers.h"
 #include "command_helpers.h"
 #include "../inputs/input_manager.h"
-#include "../lib/system_mode.h"
-#include "../lib/system_config.h"
-#include "../lib/message_api.h"
-#include "../lib/pin_registry.h"
-#include "../lib/pin_owner.h"
+#include "../core/system_mode.h"
+#include "../storage/system_config.h"
+#include "../core/message_api.h"
+#include "../pinctrl/pin_registry.h"
+#include "../pinctrl/pin_owner.h"
 #include "../control/control_manager.h"
 
 // CLI handlers are cold — keep them in flash, not Teensy ITCM (RAM1).

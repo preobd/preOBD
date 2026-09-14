@@ -557,7 +557,7 @@ If you have an existing EEPROM configuration using `A0` or `A1` for CHT with MAX
 
 ### PinTypeRequirement Enum (C/C++)
 
-Defined in [src/lib/sensor_library/sensor_types.h](../../../src/lib/sensor_library/sensor_types.h):
+Defined in [src/sensors/sensor_library/sensor_types.h](../../../src/sensors/sensor_library/sensor_types.h):
 
 ```cpp
 enum PinTypeRequirement {

@@ -1,5 +1,5 @@
-// Native unit test: group pin reservation (src/lib/pin_registry.cpp) and the
-// ranked ownership predicate (src/lib/pin_owner.cpp).
+// Native unit test: group pin reservation (src/pinctrl/pin_registry.cpp) and the
+// ranked ownership predicate (src/pinctrl/pin_owner.cpp).
 //
 // The invariant every claimant rests on is "up implies its pins are reserved"
 // (#351, #359). registerPin_unchecked() is first-writer-wins, so honoring that
@@ -24,9 +24,9 @@
 #include <Arduino.h>
 #include <string.h>
 
-#include "../../src/lib/transport_interface.h"
-#include "../../src/lib/pin_registry.cpp"
-#include "../../src/lib/pin_owner.cpp"
+#include "../../src/comms/transport_interface.h"
+#include "../../src/pinctrl/pin_registry.cpp"
+#include "../../src/pinctrl/pin_owner.cpp"
 
 // ---- messaging -------------------------------------------------------------
 // A tiny capturing transport lets the rank tests assert on the WORDING of a

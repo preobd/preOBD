@@ -9,14 +9,14 @@
 //
 // Two things are under test:
 //
-//  1. resolveWiredBusId() (src/lib/bus_wiring.h) — the decision itself, in
+//  1. resolveWiredBusId() (src/pinctrl/bus_wiring.h) — the decision itself, in
 //     isolation. It is a pure function of two bytes, so every property the
 //     issue cares about is exercised directly with synthetic values,
 //     independent of what this host platform's bus_defaults.h happens to
 //     report (NUM_I2C_BUSES==1 here — the "UNKNOWN PLATFORM" fallback branch,
 //     since no real board macro is defined on the host).
 //
-//  2. acquireI2C() / acquireSPI() (src/lib/bus_manager.cpp), compiled for
+//  2. acquireI2C() / acquireSPI() (src/drivers/bus_manager.cpp), compiled for
 //     real and exercised end to end: with neither a CONFIG selection nor a
 //     WIRING declaration, they must REFUSE (return nullptr) rather than
 //     falling back to a platform default. This is the regression test for the
@@ -31,10 +31,10 @@
 #include <unity.h>
 #include <Arduino.h>
 
-#include "../../src/lib/bus_wiring.h"
-#include "../../src/lib/pin_registry.cpp"
-#include "../../src/lib/pin_owner.cpp"
-#include "../../src/lib/bus_manager.cpp"
+#include "../../src/pinctrl/bus_wiring.h"
+#include "../../src/pinctrl/pin_registry.cpp"
+#include "../../src/pinctrl/pin_owner.cpp"
+#include "../../src/drivers/bus_manager.cpp"
 
 // ---------------------------------------------------------------------------
 // Firmware symbols bus_manager.cpp expects from elsewhere.

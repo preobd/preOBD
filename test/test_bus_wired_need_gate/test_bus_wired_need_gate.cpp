@@ -28,10 +28,10 @@
 #include <unity.h>
 #include <Arduino.h>
 
-#include "../../src/lib/pin_registry.cpp"
-#include "../../src/lib/pin_owner.cpp"
-#include "../../src/lib/bus_manager.cpp"
-#include "../../src/lib/system_config.cpp"
+#include "../../src/pinctrl/pin_registry.cpp"
+#include "../../src/pinctrl/pin_owner.cpp"
+#include "../../src/drivers/bus_manager.cpp"
+#include "../../src/storage/system_config.cpp"
 
 // ---------------------------------------------------------------------------
 // Firmware symbols these TUs expect from elsewhere.
@@ -50,7 +50,7 @@ size_t MessageStream::debug(const char*, const char*, ...) { return 0; }
 // declares `extern SystemConfig systemConfig;` and system_config.cpp is the
 // one TU that instantiates it in the real firmware) — do NOT redeclare it
 // here the way the other bus suites do; a second definition would be a link
-// error against the one #include "system_config.cpp" below already provides.
+// error against the one #include "../../src/storage/system_config.cpp" below already provides.
 
 static const uint8_t I2C0_SDA = 18;
 static const uint8_t I2C0_SCL = 19;

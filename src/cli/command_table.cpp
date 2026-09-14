@@ -11,31 +11,31 @@
 #include "../inputs/input_manager.h"
 #include "../config.h"
 #include "../version.h"
-#include "../lib/system_mode.h"
-#include "../lib/system_config.h"
-#include "../lib/json_config.h"
-#include "../lib/message_router.h"
-#include "../lib/message_api.h"
-#include "../lib/log_filter.h"
-#include "../lib/log_tags.h"
+#include "../core/system_mode.h"
+#include "../storage/system_config.h"
+#include "../storage/json_config.h"
+#include "../comms/message_router.h"
+#include "../core/message_api.h"
+#include "../core/log_filter.h"
+#include "../core/log_tags.h"
 #include "../sensors/units_registry.h"
 #include "../sensors/application_presets.h"
 #include "../sensors/sensor_library.h"
-#include "../lib/platform.h"
-#include "../lib/json_registry.h"
-#include "../lib/bus_manager.h"
-#include "../lib/bus_defaults.h"
-#include "../lib/serial_manager.h"
-#include "../lib/pin_registry.h"
+#include "../core/platform.h"
+#include "../storage/json_registry.h"
+#include "../drivers/bus_manager.h"
+#include "../hal/bus_defaults.h"
+#include "../drivers/serial_manager.h"
+#include "../pinctrl/pin_registry.h"
 #include "../control/control_manager.h"  // control engine re-arm trio (LOAD path)
 #include "../outputs/output_base.h"
 #include "../outputs/output_format.h"   // SdLogFormat / parseSdLogFormat
-#include "../lib/obd_query.h"
-#include "../lib/display_manager.h"
+#include "../outputs/obd_query.h"
+#include "../outputs/display/display_manager.h"
 #if INCLUDE_LED
-#include "../lib/rgb_led.h"   // TEST OUTPUT actuator
+#include "../drivers/rgb_led.h"   // TEST OUTPUT actuator
 #endif
-#include "../lib/watchdog.h"  // TEST OUTPUT feeds the WDT during its blocking sequence
+#include "../core/watchdog.h"  // TEST OUTPUT feeds the WDT during its blocking sequence
 #if INCLUDE_ELM327
 #include "../outputs/output_elm327.h"
 #endif

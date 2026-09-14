@@ -4,7 +4,7 @@
 
 #include "output_base.h"
 #include "../config.h"
-#include "../lib/message_api.h"
+#include "../core/message_api.h"
 
 #if INCLUDE_REALDASH
 

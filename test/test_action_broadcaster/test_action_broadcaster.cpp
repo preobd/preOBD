@@ -1,4 +1,4 @@
-// Native unit test: ActionBroadcaster (src/lib/action_broadcaster.cpp).
+// Native unit test: ActionBroadcaster (src/outputs/ble/action_broadcaster.cpp).
 //
 // Two directions exercised on the host: (a) tick() packs actions[]
 // into 16-byte PreobdActionState frames and emits on change, and (b)
@@ -10,7 +10,7 @@
 #include <string.h>
 
 #include "boot_order_fixture.h"  // inputsTableIsLiveForAssert() stub (#352, #369)
-#include "../../src/lib/action_broadcaster.cpp"
+#include "../../src/outputs/ble/action_broadcaster.cpp"
 
 // ---- Globals the broadcaster TU expects from the rest of the firmware ----
 SystemConfig systemConfig;

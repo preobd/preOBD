@@ -51,7 +51,7 @@
 
 #include <Arduino.h>
 #include "../inputs/input.h"
-#include "../lib/hash.h"
+#include "../core/hash.h"
 #include "generated/registry_enums.h"
 
 // ===== APPLICATION CAR-AREA GROUPS =====

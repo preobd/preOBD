@@ -37,7 +37,7 @@
 
 #include <Arduino.h>
 #include "../inputs/input.h"
-#include "../lib/hash.h"
+#include "../core/hash.h"
 
 // ===== CORE TYPE DEFINITIONS =====
 #include "sensor_library/sensor_types.h"

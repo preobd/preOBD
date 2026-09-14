@@ -8,9 +8,9 @@
 #include "serial_config.h"
 #include "command_table.h"
 #include "command_helpers.h"
-#include "../lib/message_router.h"
-#include "../lib/message_api.h"
-#include "../lib/json_config.h"
+#include "../comms/message_router.h"
+#include "../core/message_api.h"
+#include "../storage/json_config.h"
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>

@@ -10,11 +10,11 @@
  */
 
 #include "../../../config.h"
-#include "../../../lib/platform.h"
-#include "../../../lib/bus_manager.h"
+#include "../../../core/platform.h"
+#include "../../../drivers/bus_manager.h"
 #include "../../../inputs/input.h"
-#include "../../../lib/message_api.h"
-#include "../../../lib/log_tags.h"
+#include "../../../core/message_api.h"
+#include "../../../core/log_tags.h"
 #include <Wire.h>
 
 #if INCLUDE_BME280

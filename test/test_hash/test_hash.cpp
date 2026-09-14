@@ -1,4 +1,4 @@
-// Native unit test: DJB2 registry hashing (src/lib/hash.h).
+// Native unit test: DJB2 registry hashing (src/core/hash.h).
 //
 // hash.h is header-only and case-insensitive. These golden vectors pin the
 // algorithm so a refactor can't silently shift hashes (which would break
@@ -6,7 +6,7 @@
 #include <unity.h>
 #include <Arduino.h>
 
-#include "../../src/lib/hash.h"
+#include "../../src/core/hash.h"
 
 void setUp(void) {}
 void tearDown(void) {}

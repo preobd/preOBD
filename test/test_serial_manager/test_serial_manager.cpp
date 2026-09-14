@@ -39,9 +39,9 @@ FakeHardwareSerial Serial1;
 FakeHardwareSerial Serial2;
 FakeHardwareSerial Serial3;
 
-#include "../../src/lib/pin_registry.cpp"
-#include "../../src/lib/pin_owner.cpp"
-#include "../../src/lib/serial_manager.cpp"
+#include "../../src/pinctrl/pin_registry.cpp"
+#include "../../src/pinctrl/pin_owner.cpp"
+#include "../../src/drivers/serial_manager.cpp"
 
 // ---------------------------------------------------------------------------
 // Firmware symbols the included TUs expect from elsewhere.

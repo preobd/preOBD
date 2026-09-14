@@ -10,18 +10,18 @@
 #include "input_manager.h"
 #include "../cli/command_helpers.h"
 #include "measurement_compat.h"
-#include "../lib/system_config.h"
-#include "../lib/analog_pins.h"
+#include "../storage/system_config.h"
+#include "../pinctrl/analog_pins.h"
 #include "../sensors/units_registry.h"
-#include "../lib/message_router.h"  // For msg.control
-#include "../lib/message_api.h"
-#include "../lib/log_tags.h"
+#include "../comms/message_router.h"  // For msg.control
+#include "../core/message_api.h"
+#include "../core/log_tags.h"
 #include "../sensors/application_presets.h"
 #include "../sensors/sensor_library.h"
-#include "../lib/pin_registry.h"
-#include "../lib/pin_owner.h"
-#include "../lib/bus_needs.h"
-#include "../lib/bus_manager.h"
+#include "../pinctrl/pin_registry.h"
+#include "../pinctrl/pin_owner.h"
+#include "../storage/bus_needs.h"
+#include "../drivers/bus_manager.h"
 #include "../control/control_manager.h"  // controlResetTables + rule/action table helpers
 
 // ===== GLOBAL STATE =====

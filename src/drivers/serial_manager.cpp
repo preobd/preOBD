@@ -1,0 +1,424 @@
+/*
+ * serial_manager.cpp - Serial Port Manager Implementation
+ */
+
+#include "serial_manager.h"
+#include "../storage/bus_config.h"
+#include "../hal/bus_defaults.h"
+#include "../pinctrl/pin_registry.h"
+#include "../pinctrl/pin_owner.h"
+#include "../storage/system_config.h"
+#include "../core/message_api.h"
+#include "../core/log_tags.h"
+
+// ============================================================================
+// SERIAL CONFIG HELPERS
+// ============================================================================
+
+static inline bool isSerialPortEnabled(const SerialPortConfig* config, uint8_t port_id) {
+    if (port_id < 1 || port_id > 8) return false;
+    return (config->enabled_mask & (1 << (port_id - 1))) != 0;
+}
+
+static inline void setSerialPortEnabled(SerialPortConfig* config, uint8_t port_id, bool enabled) {
+    if (port_id < 1 || port_id > 8) return;
+    if (enabled) {
+        config->enabled_mask |= (1 << (port_id - 1));
+    } else {
+        config->enabled_mask &= ~(1 << (port_id - 1));
+    }
+}
+
+static inline void setSerialPortBaudrate(SerialPortConfig* config, uint8_t port_id, uint8_t baud_index) {
+    if (port_id < 1 || port_id > 8) return;
+    config->baudrate_index[port_id - 1] = baud_index;
+}
+
+// ============================================================================
+// BAUD RATE LOOKUP TABLE
+// ============================================================================
+
+static const uint32_t BAUD_RATES[] = {
+    9600,    // BAUD_9600   = 0
+    19200,   // BAUD_19200  = 1
+    38400,   // BAUD_38400  = 2
+    57600,   // BAUD_57600  = 3
+    115200,  // BAUD_115200 = 4
+    230400,  // BAUD_230400 = 5
+    460800,  // BAUD_460800 = 6
+    921600   // BAUD_921600 = 7
+};
+
+static const char* BAUD_STRINGS[] = {
+    "9600",
+    "19200",
+    "38400",
+    "57600",
+    "115200",
+    "230400",
+    "460800",
+    "921600"
+};
+
+uint32_t getBaudRateFromIndex(uint8_t index) {
+    if (index >= NUM_BAUD_RATES) return BAUD_RATES[BAUD_115200];
+    return BAUD_RATES[index];
+}
+
+uint8_t getBaudRateIndex(uint32_t baudrate) {
+    for (uint8_t i = 0; i < NUM_BAUD_RATES; i++) {
+        if (BAUD_RATES[i] == baudrate) return i;
+    }
+    return BAUD_115200;  // Default
+}
+
+const char* getBaudRateString(uint8_t index) {
+    if (index >= NUM_BAUD_RATES) return BAUD_STRINGS[BAUD_115200];
+    return BAUD_STRINGS[index];
+}
+
+// ============================================================================
+// SERIAL PORT STATE
+// ============================================================================
+
+// Track which ports have been initialized at runtime
+static uint8_t active_ports_mask = 0;
+
+// ============================================================================
+// MAIN INITIALIZATION
+// ============================================================================
+
+void initConfiguredSerialPorts() {
+    // Initialize each enabled serial port
+    for (uint8_t port_id = 1; port_id <= NUM_SERIAL_PORTS; port_id++) {
+        if (isSerialPortEnabled(&systemConfig.serial, port_id)) {
+            uint32_t baudrate = getBaudRateFromIndex(systemConfig.serial.baudrate_index[port_id - 1]);
+            initSerialPort(port_id, baudrate);
+        }
+    }
+}
+
+// ============================================================================
+// SERIAL PORT INITIALIZATION
+// ============================================================================
+
+bool initSerialPort(uint8_t port_id, uint32_t baudrate) {
+    // Validate port ID
+    if (port_id < 1 || port_id > NUM_SERIAL_PORTS) {
+        msg.debug.error(TAG_SERIAL, "Serial%d not available on this platform", port_id);
+        return false;
+    }
+
+    // Get pins for this port
+    uint8_t rx = getDefaultSerialRX(port_id);
+    uint8_t tx = getDefaultSerialTX(port_id);
+
+    // Check for pin conflicts BEFORE .begin() drives anything — the claim
+    // itself (registration) happens below, only once .begin() has succeeded,
+    // to match the platform-specific bring-up between the two.
+    uint8_t check_pins[4] = { rx, tx, 0xFF, 0xFF };
+    uint8_t n_check_pins = 2;
+#if defined(HOST_NRF_CTS_PIN) && defined(HOST_NRF_RTS_PIN)
+    // Phase 3 nRF coprocessor link: CTS/RTS GPIOs participate in pin
+    // allocation too, otherwise a later button/output assignment could
+    // silently reuse them and break the UART.
+    if (port_id == 1) {
+        check_pins[n_check_pins++] = HOST_NRF_CTS_PIN;
+        check_pins[n_check_pins++] = HOST_NRF_RTS_PIN;
+    }
+#endif
+    if (pinsConflict(check_pins, n_check_pins, PIN_RANK_SERIAL, getSerialPortName(port_id))) {
+        return false;
+    }
+
+    // Platform-specific initialization
+    bool success = false;
+
+#if defined(__IMXRT1062__)
+    // Teensy 4.x: Serial1-Serial7 (or Serial8 on 4.1)
+    switch (port_id) {
+        case 1:
+            Serial1.begin(baudrate);
+#if defined(HOST_NRF_CTS_PIN) && defined(HOST_NRF_RTS_PIN)
+            // Phase 3 nRF coprocessor link -- software-paced flow control.
+            // Teensy 4.x Serial1 (LPUART6) has no hardware CTS pin, so we
+            // GPIO-pace instead: the nRF drives HOST_NRF_CTS_PIN HIGH when
+            // its RX buffer is filling up; SerialTransport throttles
+            // Serial1.write while that line is asserted (see
+            // transport_serial.h). HOST_NRF_RTS_PIN is the Teensy's
+            // outbound throttle to the nRF -- driven LOW (always-ready)
+            // for now since nRF -> Teensy is the lower-bandwidth direction.
+            // INPUT_PULLDOWN so a disconnected nRF (line floating near the
+            // CMOS switching threshold) reads LOW = always-clear-to-send,
+            // not an indeterminate HIGH that would deadlock awaitFlowClear's
+            // indefinite wait. Matches the nRF side which uses
+            // INPUT_PULLDOWN on its own CTS_IN.
+            pinMode(HOST_NRF_CTS_PIN, INPUT_PULLDOWN);
+            pinMode(HOST_NRF_RTS_PIN, OUTPUT);
+            digitalWrite(HOST_NRF_RTS_PIN, LOW);
+#endif
+            success = true;
+            break;
+        case 2: Serial2.begin(baudrate); success = true; break;
+        case 3: Serial3.begin(baudrate); success = true; break;
+        case 4: Serial4.begin(baudrate); success = true; break;
+        case 5: Serial5.begin(baudrate); success = true; break;
+        case 6: Serial6.begin(baudrate); success = true; break;
+        case 7: Serial7.begin(baudrate); success = true; break;
+#if defined(ARDUINO_TEENSY41)
+        case 8: Serial8.begin(baudrate); success = true; break;
+#endif
+    }
+
+#elif defined(__MK66FX1M0__) || defined(__MK64FX512__)
+    // Teensy 3.5/3.6: Serial1-Serial6
+    switch (port_id) {
+        case 1: Serial1.begin(baudrate); success = true; break;
+        case 2: Serial2.begin(baudrate); success = true; break;
+        case 3: Serial3.begin(baudrate); success = true; break;
+        case 4: Serial4.begin(baudrate); success = true; break;
+        case 5: Serial5.begin(baudrate); success = true; break;
+        case 6: Serial6.begin(baudrate); success = true; break;
+    }
+
+#elif defined(__MK20DX256__)
+    // Teensy 3.1/3.2: Serial1-Serial3
+    switch (port_id) {
+        case 1: Serial1.begin(baudrate); success = true; break;
+        case 2: Serial2.begin(baudrate); success = true; break;
+        case 3: Serial3.begin(baudrate); success = true; break;
+    }
+
+#elif defined(ESP32)
+    // ESP32: Serial1-Serial2
+    switch (port_id) {
+        case 1: Serial1.begin(baudrate); success = true; break;
+        case 2: Serial2.begin(baudrate); success = true; break;
+    }
+
+#elif defined(__AVR_ATmega2560__)
+    // Arduino Mega: Serial1-Serial3
+    switch (port_id) {
+        case 1: Serial1.begin(baudrate); success = true; break;
+        case 2: Serial2.begin(baudrate); success = true; break;
+        case 3: Serial3.begin(baudrate); success = true; break;
+    }
+
+#endif
+
+    if (success) {
+        // Mark port as active
+        active_ports_mask |= (1 << (port_id - 1));
+
+        // Claim the pins now that .begin() has actually succeeded. The
+        // conflict check already ran above (before .begin() touched anything);
+        // this re-check is idempotent — nothing else can have taken the pins
+        // in between — and folds the registration itself through the same
+        // door (#384).
+        claimPins(check_pins, n_check_pins, PIN_RESERVED, PIN_RANK_SERIAL,
+                 TAG_SERIAL, getSerialPortName(port_id));
+
+        msg.debug.info(TAG_SERIAL, "Serial%d initialized @ %lu baud", port_id, baudrate);
+    }
+
+    return success;
+}
+
+bool enableSerialPort(uint8_t port_id, uint8_t baud_index) {
+    if (port_id < 1 || port_id > NUM_SERIAL_PORTS) return false;
+    if (baud_index >= NUM_BAUD_RATES) baud_index = BAUD_115200;
+
+    // ---- ADMISSION PHASE --------------------------------------------
+    // initSerialPort() is the thing that can refuse (pin conflict). Run it
+    // BEFORE touching systemConfig, so a refusal leaves nothing behind —
+    // same admission/commit split as setInputApplication() (#361/#364).
+    // A later unrelated SAVE must not persist a port the firmware itself
+    // denied (#390).
+    if (!initSerialPort(port_id, getBaudRateFromIndex(baud_index))) {
+        return false;
+    }
+
+    // ---- COMMIT PHASE -------------------------------------------------
+    // Past this point nothing may fail; do not add a `return false` below.
+    setSerialPortEnabled(&systemConfig.serial, port_id, true);
+    setSerialPortBaudrate(&systemConfig.serial, port_id, baud_index);
+
+    return true;
+}
+
+bool disableSerialPort(uint8_t port_id) {
+    if (port_id < 1 || port_id > NUM_SERIAL_PORTS) return false;
+
+    // Update config
+    setSerialPortEnabled(&systemConfig.serial, port_id, false);
+
+    // Mark port as inactive
+    active_ports_mask &= ~(1 << (port_id - 1));
+
+    // Release pins from registry
+    uint8_t rx = getDefaultSerialRX(port_id);
+    uint8_t tx = getDefaultSerialTX(port_id);
+    unregisterPin(rx);
+    unregisterPin(tx);
+#if defined(HOST_NRF_CTS_PIN) && defined(HOST_NRF_RTS_PIN)
+    // Release the Phase 3 flow-control pins so they're available for
+    // reassignment if Serial1 is reconfigured or repurposed.
+    if (port_id == 1) {
+        unregisterPin(HOST_NRF_CTS_PIN);
+        unregisterPin(HOST_NRF_RTS_PIN);
+    }
+#endif
+
+    // Note: We don't call Serial.end() as it might be in use by transport layer
+
+    msg.debug.info(TAG_SERIAL, "Serial%d disabled", port_id);
+
+    return true;
+}
+
+// ============================================================================
+// SERIAL PORT ACCESS
+// ============================================================================
+
+Stream* getSerialPort(uint8_t port_id) {
+#if defined(__IMXRT1062__)
+    switch (port_id) {
+        case 1: return &Serial1;
+        case 2: return &Serial2;
+        case 3: return &Serial3;
+        case 4: return &Serial4;
+        case 5: return &Serial5;
+        case 6: return &Serial6;
+        case 7: return &Serial7;
+#if defined(ARDUINO_TEENSY41)
+        case 8: return &Serial8;
+#endif
+    }
+
+#elif defined(__MK66FX1M0__) || defined(__MK64FX512__)
+    switch (port_id) {
+        case 1: return &Serial1;
+        case 2: return &Serial2;
+        case 3: return &Serial3;
+        case 4: return &Serial4;
+        case 5: return &Serial5;
+        case 6: return &Serial6;
+    }
+
+#elif defined(__MK20DX256__)
+    switch (port_id) {
+        case 1: return &Serial1;
+        case 2: return &Serial2;
+        case 3: return &Serial3;
+    }
+
+#elif defined(ESP32)
+    switch (port_id) {
+        case 1: return &Serial1;
+        case 2: return &Serial2;
+    }
+
+#elif defined(__AVR_ATmega2560__)
+    switch (port_id) {
+        case 1: return &Serial1;
+        case 2: return &Serial2;
+        case 3: return &Serial3;
+    }
+
+#endif
+
+    return nullptr;
+}
+
+bool isSerialPortActive(uint8_t port_id) {
+    if (port_id < 1 || port_id > 8) return false;
+    return (active_ports_mask & (1 << (port_id - 1))) != 0;
+}
+
+// ============================================================================
+// SERIAL PORT STATUS
+// ============================================================================
+
+void displaySerialStatus() {
+    msg.control.println();
+    msg.control.println(F("=== Serial Port Configuration ==="));
+    msg.control.print(F("Platform supports Serial1-Serial"));
+    msg.control.println(NUM_SERIAL_PORTS);
+    msg.control.println();
+
+    // Show each port's status
+    for (uint8_t port_id = 1; port_id <= NUM_SERIAL_PORTS; port_id++) {
+        bool enabled = isSerialPortEnabled(&systemConfig.serial, port_id);
+        uint8_t baud_idx = systemConfig.serial.baudrate_index[port_id - 1];
+
+        msg.control.print(F("Serial"));
+        msg.control.print(port_id);
+        msg.control.print(F(": "));
+
+        if (enabled) {
+            msg.control.print(F("ENABLED @ "));
+            msg.control.print(getBaudRateString(baud_idx));
+            msg.control.print(F(" baud"));
+        } else {
+            msg.control.print(F("disabled"));
+        }
+
+#if INCLUDE_ELM327
+        if (systemConfig.buses.elm327_serial_port == port_id) {
+            msg.control.print(F(" [ELM327]"));
+        }
+#endif
+#if INCLUDE_FRAMED_TRANSPORT
+        if (systemConfig.serial.framed_enabled_mask & (1u << (port_id - 1))) {
+            msg.control.print(F(" [FRAMED]"));
+        }
+#endif
+
+        msg.control.print(F(" (RX="));
+        msg.control.print(getDefaultSerialRX(port_id));
+        msg.control.print(F(", TX="));
+        msg.control.print(getDefaultSerialTX(port_id));
+        msg.control.println(F(")"));
+    }
+    msg.control.println();
+}
+
+void displaySerialPortStatus(uint8_t port_id) {
+    if (port_id < 1 || port_id > NUM_SERIAL_PORTS) {
+        msg.control.print(F("ERROR: Serial"));
+        msg.control.print(port_id);
+        msg.control.println(F(" not available on this platform"));
+        return;
+    }
+
+    bool enabled = isSerialPortEnabled(&systemConfig.serial, port_id);
+    uint8_t baud_idx = systemConfig.serial.baudrate_index[port_id - 1];
+
+    msg.control.println();
+    msg.control.print(F("Serial"));
+    msg.control.print(port_id);
+    msg.control.println(F(":"));
+    msg.control.print(F("  Status: "));
+    msg.control.print(enabled ? F("ENABLED") : F("disabled"));
+#if INCLUDE_ELM327
+    if (systemConfig.buses.elm327_serial_port == port_id) {
+        msg.control.print(F(" [ELM327]"));
+    }
+#endif
+    msg.control.println();
+    msg.control.print(F("  Baud:   "));
+    msg.control.print(getBaudRateString(baud_idx));
+    msg.control.println(F(" bps"));
+    msg.control.print(F("  RX pin: "));
+    msg.control.println(getDefaultSerialRX(port_id));
+    msg.control.print(F("  TX pin: "));
+    msg.control.println(getDefaultSerialTX(port_id));
+#if INCLUDE_FRAMED_TRANSPORT
+    // Framed-mode is persisted per port in serial.framed_enabled_mask and
+    // applied at boot to the MuxTransport instance bound to that port.
+    msg.control.print(F("  Framed: "));
+    const uint8_t framed_bit = 1u << (port_id - 1);
+    msg.control.println((systemConfig.serial.framed_enabled_mask & framed_bit)
+                            ? F("ENABLED") : F("disabled"));
+#endif
+}

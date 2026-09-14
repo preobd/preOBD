@@ -12,54 +12,54 @@
 // TEST_MODE_PIN is optional: when defined it provides a boot-time hardware
 // trigger for scenario auto-activation; when omitted, the TEST CLI commands
 // (INJECT/CLEAR/STOP/STATUS/<n>) remain fully available without burning a GPIO.
-#include "lib/platform.h"
-#include "lib/watchdog.h"
+#include "core/platform.h"
+#include "core/watchdog.h"
 
 #include "sensors/calibration_types.h"
 #include "sensors/sensor_library.h"
-#include "lib/system_config.h"
-#include "lib/bus_manager.h"
-#include "lib/bus_needs.h"
-#include "lib/pin_owner.h"
-#include "lib/serial_manager.h"
-#include "lib/pin_registry.h"
-#include "lib/sd_manager.h"
+#include "storage/system_config.h"
+#include "drivers/bus_manager.h"
+#include "storage/bus_needs.h"
+#include "pinctrl/pin_owner.h"
+#include "drivers/serial_manager.h"
+#include "pinctrl/pin_registry.h"
+#include "storage/sd_manager.h"
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
 #include "cli/serial_config.h"
 #include "control/control_manager.h"   // Control engine runtime (Rules)
-#include "lib/system_mode.h"        // System mode (CONFIG/RUN)
+#include "core/system_mode.h"        // System mode (CONFIG/RUN)
 #if INCLUDE_MODE_BUTTON
-#include "lib/button_handler.h"
+#include "drivers/button_handler.h"
 #endif
-#include "lib/display_manager.h"        // Display runtime state management
+#include "outputs/display/display_manager.h"        // Display runtime state management
 #if INCLUDE_LED
-    #include "lib/rgb_led.h"
+    #include "drivers/rgb_led.h"
 #endif
 #include "outputs/output_base.h"
-#include "lib/obd_query.h"
+#include "outputs/obd_query.h"
 #if INCLUDE_CAN
     #include "inputs/input_can.h"
     #include "sensors/drivers/can/can_scan.h"
 #endif
 
 // Transport abstraction layer
-#include "lib/message_router.h"
-#include "lib/message_api.h"
-#include "lib/log_tags.h"
-#include "lib/transport_mux.h"
-#include "lib/transport_serial.h"
-#include "lib/status_broadcaster.h"
-#include "lib/alarm_broadcaster.h"
-#include "lib/action_broadcaster.h"
-#include "lib/live_value_broadcaster.h"
-#include "lib/elm327_framed.h"
+#include "comms/message_router.h"
+#include "core/message_api.h"
+#include "core/log_tags.h"
+#include "comms/transport_mux.h"
+#include "comms/transport_serial.h"
+#include "outputs/ble/status_broadcaster.h"
+#include "outputs/ble/alarm_broadcaster.h"
+#include "outputs/ble/action_broadcaster.h"
+#include "outputs/ble/live_value_broadcaster.h"
+#include "comms/elm327_framed.h"
 #ifdef ESP32
 // Include appropriate Bluetooth transport for ESP32 variant
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
-    #include "lib/transports/transport_ble_esp32.h"
+    #include "comms/transports/transport_ble_esp32.h"
 #else
-    #include "lib/transports/transport_bluetooth_esp32.h"
+    #include "comms/transports/transport_bluetooth_esp32.h"
 #endif
 #endif
 

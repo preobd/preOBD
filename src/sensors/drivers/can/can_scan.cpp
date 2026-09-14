@@ -8,8 +8,8 @@
 #include "can_scan.h"
 #include "can_frame_cache.h"
 #include "../../can_sensor_library/standard_pids.h"
-#include "../../../lib/message_api.h"
-#include "../../../lib/log_tags.h"
+#include "../../../core/message_api.h"
+#include "../../../core/log_tags.h"
 #include <string.h>
 
 // ============================================================================

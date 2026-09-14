@@ -23,9 +23,9 @@
 #include <Arduino.h>
 #include <string.h>
 
-#include "../../src/lib/pin_registry.cpp"
-#include "../../src/lib/pin_owner.cpp"
-#include "../../src/lib/bus_needs.cpp"   // display vote; the sensor mapping is
+#include "../../src/pinctrl/pin_registry.cpp"
+#include "../../src/pinctrl/pin_owner.cpp"
+#include "../../src/storage/bus_needs.cpp"   // display vote; the sensor mapping is
                                         // inline in sensor_helpers.h
 // SENSOR_LIBRARY / UNITS_REGISTRY / APPLICATION_PRESETS are now defined in
 // their own .cpp (#400), not inline in the header — pull the data in.

@@ -10,7 +10,7 @@
 // the next reboot when initConfiguredBuses() and initConfiguredSerialPorts()
 // both tried to claim the same copper.
 //
-// storedBusHoldsPin() (src/lib/bus_manager.cpp) is the probe that closes this;
+// storedBusHoldsPin() (src/drivers/bus_manager.cpp) is the probe that closes this;
 // it is registered with pin_owner.cpp via setPinOwnerBusProbe() and consulted
 // by pinsConflict() only when the pin registry itself has nothing to say
 // (an ALREADY-STARTED bus is still judged by the ordinary registry path, with
@@ -25,11 +25,11 @@
 #include <Arduino.h>
 #include <string.h>
 
-#include "../../src/lib/transport_interface.h"
-#include "../../src/lib/bus_wiring.h"
-#include "../../src/lib/pin_registry.cpp"
-#include "../../src/lib/pin_owner.cpp"
-#include "../../src/lib/bus_manager.cpp"
+#include "../../src/comms/transport_interface.h"
+#include "../../src/pinctrl/bus_wiring.h"
+#include "../../src/pinctrl/pin_registry.cpp"
+#include "../../src/pinctrl/pin_owner.cpp"
+#include "../../src/drivers/bus_manager.cpp"
 
 // ---------------------------------------------------------------------------
 // Firmware symbols bus_manager.cpp expects from elsewhere.

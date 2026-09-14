@@ -102,7 +102,7 @@ than falling back to a compiled-in default (the bug this closed: a stock build
 used to silently claim Wire, or CAN1's pins, whether or not anything was
 actually attached). Declaring a bus is a permission, not a lock: an explicit
 `BUS I2C <n>` selection always wins over the declaration, and declaring bus 1
-does not forbid selecting bus 0. See `src/lib/bus_wiring.h` for the resolver.
+does not forbid selecting bus 0. See `src/pinctrl/bus_wiring.h` for the resolver.
 
 ## Adding / editing
 

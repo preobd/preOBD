@@ -6,10 +6,10 @@
  */
 
 #include "../../../config.h"
-#include "../../../lib/platform.h"
+#include "../../../core/platform.h"
 #include "../../../inputs/input.h"
-#include "../../../lib/message_api.h"
-#include "../../../lib/log_tags.h"
+#include "../../../core/message_api.h"
+#include "../../../core/log_tags.h"
 
 // ===== INITIALIZATION =====
 

@@ -1,4 +1,4 @@
-// Native unit test: AlarmBroadcaster wire payload (src/lib/alarm_broadcaster.cpp).
+// Native unit test: AlarmBroadcaster wire payload (src/outputs/ble/alarm_broadcaster.cpp).
 //
 // Alarms are now control-engine Rules (§11): the broadcaster scans
 // rules[] and emits a PreobdAlarmEvent on each alarm-Rule
@@ -9,7 +9,7 @@
 #include <string.h>
 
 #include "boot_order_fixture.h"  // inputsTableIsLiveForAssert() stub (#352, #369)
-#include "../../src/lib/alarm_broadcaster.cpp"
+#include "../../src/outputs/ble/alarm_broadcaster.cpp"
 #include "../../src/control/control_engine.cpp"   // real annunciator-severity logic
 
 // ---- Globals the broadcaster TU expects from the rest of the firmware ----

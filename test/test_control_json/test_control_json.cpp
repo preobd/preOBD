@@ -1,5 +1,5 @@
 // Native unit test: control-engine Rule/Action <-> JSON leaf converters
-// (src/lib/control_json.cpp). These are pure (no global state), so the full
+// (src/control/control_json.cpp). These are pure (no global state), so the full
 // export -> serialize -> parse -> import round-trip runs deterministically on
 // the host. Covers field fidelity, enum string mapping, the manual-Action
 // "rule" omission, default fill-in, and validation rejection.
@@ -7,7 +7,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
-#include "../../src/lib/control_json.cpp"
+#include "../../src/control/control_json.cpp"
 
 void setUp(void) {}
 void tearDown(void) {}

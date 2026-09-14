@@ -22,7 +22,7 @@
 #define HAL_PLATFORM_CAPS_H
 
 #include <stdint.h>
-#include "../lib/bus_defaults.h"
+#include "bus_defaults.h"
 
 // ============================================================================
 // CAN Controller Type Detection

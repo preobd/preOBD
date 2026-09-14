@@ -22,7 +22,7 @@
 
 #include <Arduino.h>
 #include "calibration_types.h"
-#include "../lib/hash.h"
+#include "../core/hash.h"
 
 // ===== UNITS INFO STRUCTURE =====
 

@@ -7,12 +7,12 @@
  */
 
 #include "../../../config.h"
-#include "../../../lib/platform.h"
+#include "../../../core/platform.h"
 #include "../../../inputs/input.h"
 #include "../../calibration_types.h"
 #include "../../sensor_library.h"
-#include "../../../lib/message_api.h"
-#include "../../../lib/log_tags.h"
+#include "../../../core/message_api.h"
+#include "../../../core/log_tags.h"
 
 // ===== GLOBAL VARIABLES FOR RPM CALCULATION =====
 // These must be global to be accessed by the ISR
