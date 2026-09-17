@@ -354,10 +354,12 @@ the full surface. (`RELAY` is deprecated and prints a pointer here.)
 |---------|-------------|
 | `SET <pin> ALARM <min> <max>` | Per-input alarm: band (alarm outside Min..Max) |
 | `SET <pin> ALARM MIN <v>` / `MAX <v>` | Per-input alarm: one-sided floor / ceiling |
+| `SET <pin> ALARM WARN <lo|NONE|AUTO> [<hi|NONE|AUTO>]` | Set/clear the alarm Rule's warning threshold |
 | `SET <pin> ALARM DISABLE` | Remove the input's alarm Rule |
-| `RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARNING|ALARM]` | Threshold Rule |
-| `RULE ADD <pin> OUTSIDE <lo> <hi> [WARNING|ALARM]` | Both-sided band Rule |
+| `RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARN <lo|NONE|AUTO>] [WARNING|ALARM]` | Threshold Rule |
+| `RULE ADD <pin> OUTSIDE <lo> <hi> [WARN <lo|NONE|AUTO> <hi|NONE|AUTO>] [WARNING|ALARM]` | Both-sided band Rule |
 | `RULE LIST` / `RULE <id>` / `RULE DEL <id>` | View / inspect / delete |
+| `RULE <id> WARN <lo|NONE|AUTO> [<hi|NONE|AUTO>]` | Edit an ALARM rule's warning threshold in place |
 | `RULE RESET <id>` | Restore the application's default Rule config |
 | `RULE <id> ENABLE|DISABLE` | Re-arm / park a Rule without deleting it (`PARKED` never fires) |
 | `ACTION ADD RELAY <pin> [FAILSAFE ON|OFF] [INVERT]` | Define an actuator |

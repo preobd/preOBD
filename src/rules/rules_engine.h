@@ -49,13 +49,59 @@ bool rulesRuleIsActive(const RuleContext& ctx);
 RuleSeverity rulesRuleSeverity(const Rule& rule, const RuleContext& ctx);
 
 /**
- * Annunciator severity for a rule, including the DERIVED WARNING tier (§11.2):
- * an ALARM rule annunciates ALARM once ACTIVE, but also WARNING while armed
- * (READY) and its source has entered the warning band (>= WARNING_THRESHOLD_PERCENT
- * of the limit) — reproducing the old two-tier warn/alarm behavior from a
- * single stored threshold. WARNING-severity rules have no sub-tier (WARNING
- * when active, else NONE). This drives annunciation (LED/buzzer/AlarmBroadcaster)
- * only — NOT Action triggering, which keys on RULE_ACTIVE.
+ * Effective WARNING edge on one side of `r`, in base units, or NaN if that
+ * side has no approach tier right now (§11.2, #425):
+ *   - RULE_WARN_NONE: always NaN.
+ *   - RULE_WARN_AUTO: derived from WARNING_THRESHOLD_PERCENT of the limit's
+ *     magnitude (today's single-threshold behaviour, per side).
+ *   - RULE_WARN_SET: the stored warnLo/warnHi value, verbatim.
+ * `hiSide` selects the OUTSIDE_BAND high edge; for ABOVE/BELOW (no hi side)
+ * this always returns NaN when hiSide is true, regardless of mode.
+ * Pure/host-testable; exported for the CLI row and JSON facade to show an
+ * operator where an AUTO edge currently sits.
+ */
+float rulesRuleWarnEdge(const Rule& r, bool hiSide);
+
+/**
+ * Which effective WARNING edge (if either) `value` has reached, or
+ * RULE_WARN_SIDE_NONE. For OUTSIDE_BAND the hi edge is checked first (matches
+ * the pre-#425 midpoint tie-break when both would somehow hit). Used both to
+ * decide "is this rule in its warning band" and, by the AlarmBroadcaster, to
+ * pick HIGH/LOW for a WARNING event without re-deriving the edges itself.
+ */
+RuleWarnSide rulesRuleWarnSideHit(const Rule& r, float value);
+
+/**
+ * Is the SET edge on `hiSide` of `r` legal for its condition? AUTO/NONE sides
+ * are always legal (nothing to validate). Strict inequalities — an edge equal
+ * to a limit or to the opposite edge is a zero-width band and rejected.
+ * Hysteresis is NOT considered (the approach tier is a pre-trip zone, not a
+ * clear point). A hi-side SET on ABOVE/BELOW is never legal (no hi side).
+ * Pure/host-testable; shared by every write path (CLI, JSON import, facade)
+ * so firmware can never persist/export a record it would refuse to import.
+ */
+bool rulesWarnSideValid(const Rule& r, bool hiSide);
+
+/**
+ * Degrade every SET side of `r` that `rulesWarnSideValid` rejects to AUTO
+ * (zeroing the stored value), leaving legal sides untouched. Both sides are
+ * evaluated against `r` as passed in — one side degrading never changes
+ * whether the other was legal. Returns a bitmask of degraded sides (bit0 =
+ * lo, bit1 = hi) so a caller can print a NOTE. Used by limit-moving paths
+ * (applyAlarmShape, template reseed) that must not simply refuse the edit —
+ * mirrors the existing HYST-drop precedent.
+ */
+uint8_t rulesNormalizeWarn(Rule& r);
+
+/**
+ * Annunciator severity for a rule, including the WARNING approach tier
+ * (§11.2): an ALARM rule annunciates ALARM once ACTIVE, but also WARNING
+ * while armed (READY) and its source has reached a per-side warning edge
+ * (see rulesRuleWarnEdge — AUTO/NONE/SET per side; RULE_WARN_NONE on the hit
+ * side suppresses this pre-announcement entirely, going straight to ALARM
+ * on trip). WARNING-severity rules have no sub-tier (WARNING when active,
+ * else NONE). This drives annunciation (LED/buzzer/AlarmBroadcaster) only —
+ * NOT Action triggering, which keys on RULE_ACTIVE.
  */
 RuleSeverity rulesRuleAnnunciatorSeverity(const Rule& rule, const RuleContext& ctx, float value);
 

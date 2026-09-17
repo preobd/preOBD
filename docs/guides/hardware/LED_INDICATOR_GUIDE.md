@@ -72,7 +72,7 @@ Arduino 5V:
 | State | Color | Effect | Meaning |
 |-------|-------|--------|---------|
 | **NORMAL** | Green | Solid | All sensors within normal range |
-| **WARNING** | Yellow/Orange | Blinking (1Hz) | One or more sensors at warning level (90% of alarm threshold) |
+| **WARNING** | Yellow/Orange | Blinking (1Hz) | One or more sensors at the rule's warning threshold (default: 90% of the alarm limit, configurable per rule with `WARN` — see `SERIAL_COMMANDS.md`) |
 | **ALARM** | Red | Fast blink (2.5Hz) | One or more sensors in alarm state |
 
 ### System Mode States

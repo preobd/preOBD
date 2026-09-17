@@ -287,6 +287,234 @@ static void test_annun_outside_band_negative_low_edge(void) {
     TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 0.0f));
 }
 
+// --- Approach tier: per-side warn mode (AUTO/NONE/SET, §11.2, #425) -----
+
+// SET lo edge on an ABOVE rule: warn strictly at the stored value, not the
+// derived 90% figure.
+static void test_warn_set_lo_on_above(void) {
+    Rule r = makeRule(RULE_ABOVE, 230.0f);
+    r.warnLo = 210.0f;
+    ruleSetWarnMode(r, false, RULE_WARN_SET);
+    RuleContext ctx{};
+    ctx.state = RULE_READY;
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 205.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, 215.0f));
+    // Past the limit and debounced -> ACTIVE -> configured severity (ALARM).
+    ctx.state = RULE_ACTIVE;
+    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, rulesRuleAnnunciatorSeverity(r, ctx, 235.0f));
+}
+
+// SET lo edge on a BELOW rule (approaching from above).
+static void test_warn_set_lo_on_below(void) {
+    Rule r = makeRule(RULE_BELOW, 10.0f);
+    r.warnLo = 15.0f;
+    ruleSetWarnMode(r, false, RULE_WARN_SET);
+    RuleContext ctx{};
+    ctx.state = RULE_READY;
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 20.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, 12.0f));
+}
+
+// NONE: no approach tier at all — a READY rule past its limit but not yet
+// debounced (still asserted, still READY) stays silent instead of going
+// through a WARNING step; the FIRST thing it ever annunciates is ALARM once
+// it debounces to ACTIVE. This is an intentional visible behaviour change
+// from the pre-#425 always-derived tier (§11.2 amendment A6).
+static void test_warn_none_never_warns_goes_straight_to_alarm(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    ruleSetWarnMode(r, false, RULE_WARN_NONE);
+    RuleContext ctx{};
+    ctx.state = RULE_READY;
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx, 99.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx, 150.0f));  // well past limit, still no WARNING
+    ctx.state = RULE_ACTIVE;
+    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, rulesRuleAnnunciatorSeverity(r, ctx, 150.0f));  // first tier it ever sees is ALARM
+}
+
+// OUTSIDE_BAND with one side SET, the other AUTO: each side derives independently.
+static void test_warn_outside_set_lo_auto_hi(void) {
+    Rule r = makeRule(RULE_OUTSIDE_BAND, 10.0f, 100.0f);
+    r.warnLo = 15.0f;  // SET, well inside the AUTO-derived 11
+    ruleSetWarnMode(r, false, RULE_WARN_SET);
+    // hi side stays AUTO: derived edge = 100 - 0.1*100 = 90
+    RuleContext ctx{};
+    ctx.state = RULE_READY;
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, 15.0f));   // hits SET lo edge
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 20.0f));   // above SET lo edge -> not yet warning
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, 95.0f));   // hits AUTO-derived hi edge
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 50.0f));   // mid-band
+}
+
+// OUTSIDE_BAND with one side NONE, the other SET.
+static void test_warn_outside_none_lo_set_hi(void) {
+    Rule r = makeRule(RULE_OUTSIDE_BAND, 10.0f, 100.0f);
+    ruleSetWarnMode(r, false, RULE_WARN_NONE);
+    r.warnHi = 90.0f;
+    ruleSetWarnMode(r, true, RULE_WARN_SET);
+    RuleContext ctx{};
+    ctx.state = RULE_READY;
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 10.5f));  // near lo edge -> NONE side, silent
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, 95.0f));  // hi SET edge hit
+}
+
+// OUTSIDE_BAND with both sides SET, deliberately asymmetric around the band
+// midpoint — this is the shape the AlarmBroadcaster midpoint bug got wrong
+// (see test_broadcaster::test_outside_band_set_warn_uses_correct_side).
+static void test_warn_outside_both_set_asymmetric(void) {
+    Rule r = makeRule(RULE_OUTSIDE_BAND, 0.0f, 100.0f);
+    r.warnLo = 80.0f;
+    r.warnHi = 90.0f;
+    ruleSetWarnMode(r, false, RULE_WARN_SET);
+    ruleSetWarnMode(r, true, RULE_WARN_SET);
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_LO, rulesRuleWarnSideHit(r, 75.0f));
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_HI, rulesRuleWarnSideHit(r, 95.0f));
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_NONE, rulesRuleWarnSideHit(r, 85.0f));  // strictly between the two edges
+}
+
+// rulesRuleWarnSideHit directly, across conditions.
+static void test_warn_side_hit_above_below(void) {
+    Rule above = makeRule(RULE_ABOVE, 100.0f);  // AUTO warn at 90
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_LO,   rulesRuleWarnSideHit(above, 95.0f));
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_NONE, rulesRuleWarnSideHit(above, 50.0f));
+    Rule below = makeRule(RULE_BELOW, 10.0f);   // AUTO warn at 11
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_LO,   rulesRuleWarnSideHit(below, 10.5f));
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_NONE, rulesRuleWarnSideHit(below, 50.0f));
+}
+
+// --- rulesWarnSideValid: accept/reject per condition (§11.2 amendment A2) -
+
+static void test_warn_valid_auto_none_always_legal(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);  // default flags -> AUTO both sides
+    TEST_ASSERT_TRUE(rulesWarnSideValid(r, false));
+    TEST_ASSERT_TRUE(rulesWarnSideValid(r, true));
+    ruleSetWarnMode(r, false, RULE_WARN_NONE);
+    TEST_ASSERT_TRUE(rulesWarnSideValid(r, false));
+}
+
+static void test_warn_valid_above_accepts_below_limit(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    ruleSetWarnMode(r, false, RULE_WARN_SET);
+    r.warnLo = 90.0f;
+    TEST_ASSERT_TRUE(rulesWarnSideValid(r, false));
+}
+
+static void test_warn_valid_above_rejects_at_or_past_limit(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    ruleSetWarnMode(r, false, RULE_WARN_SET);
+    r.warnLo = 100.0f;  // strict equality rejected — zero-width band
+    TEST_ASSERT_FALSE(rulesWarnSideValid(r, false));
+    r.warnLo = 110.0f;  // past the limit
+    TEST_ASSERT_FALSE(rulesWarnSideValid(r, false));
+}
+
+static void test_warn_valid_below_accepts_above_limit_rejects_at_or_under(void) {
+    Rule r = makeRule(RULE_BELOW, 10.0f);
+    ruleSetWarnMode(r, false, RULE_WARN_SET);
+    r.warnLo = 15.0f;
+    TEST_ASSERT_TRUE(rulesWarnSideValid(r, false));
+    r.warnLo = 10.0f;  // strict equality rejected
+    TEST_ASSERT_FALSE(rulesWarnSideValid(r, false));
+    r.warnLo = 5.0f;   // past the limit
+    TEST_ASSERT_FALSE(rulesWarnSideValid(r, false));
+}
+
+// A hi-side SET is never legal on a one-sided condition (no hi side to set).
+static void test_warn_valid_hi_set_on_above_below_rejected(void) {
+    Rule above = makeRule(RULE_ABOVE, 100.0f);
+    ruleSetWarnMode(above, true, RULE_WARN_SET);
+    above.warnHi = 90.0f;
+    TEST_ASSERT_FALSE(rulesWarnSideValid(above, true));
+
+    Rule below = makeRule(RULE_BELOW, 10.0f);
+    ruleSetWarnMode(below, true, RULE_WARN_SET);
+    below.warnHi = 15.0f;
+    TEST_ASSERT_FALSE(rulesWarnSideValid(below, true));
+}
+
+static void test_warn_valid_outside_edge_outside_band_rejected(void) {
+    Rule r = makeRule(RULE_OUTSIDE_BAND, 10.0f, 100.0f);
+    ruleSetWarnMode(r, false, RULE_WARN_SET);
+    r.warnLo = 5.0f;    // below limitLo — outside the band
+    TEST_ASSERT_FALSE(rulesWarnSideValid(r, false));
+    r.warnLo = 10.0f;   // strict equality with limitLo rejected
+    TEST_ASSERT_FALSE(rulesWarnSideValid(r, false));
+
+    ruleSetWarnMode(r, true, RULE_WARN_SET);
+    r.warnHi = 110.0f;  // above limitHi — outside the band
+    TEST_ASSERT_FALSE(rulesWarnSideValid(r, true));
+    r.warnHi = 100.0f;  // strict equality with limitHi rejected
+    TEST_ASSERT_FALSE(rulesWarnSideValid(r, true));
+}
+
+static void test_warn_valid_outside_both_set_requires_lo_less_than_hi(void) {
+    Rule r = makeRule(RULE_OUTSIDE_BAND, 0.0f, 100.0f);
+    ruleSetWarnMode(r, false, RULE_WARN_SET);
+    ruleSetWarnMode(r, true, RULE_WARN_SET);
+    r.warnLo = 90.0f;
+    r.warnHi = 80.0f;   // lo >= hi -> both sides invalid
+    TEST_ASSERT_FALSE(rulesWarnSideValid(r, false));
+    TEST_ASSERT_FALSE(rulesWarnSideValid(r, true));
+    r.warnLo = 80.0f;
+    r.warnHi = 80.0f;   // equal -> still invalid (strict)
+    TEST_ASSERT_FALSE(rulesWarnSideValid(r, false));
+    TEST_ASSERT_FALSE(rulesWarnSideValid(r, true));
+    r.warnLo = 80.0f;
+    r.warnHi = 90.0f;   // valid
+    TEST_ASSERT_TRUE(rulesWarnSideValid(r, false));
+    TEST_ASSERT_TRUE(rulesWarnSideValid(r, true));
+}
+
+// --- rulesNormalizeWarn: degrade-to-AUTO mask + zeroing -----------------
+
+static void test_normalize_warn_degrades_invalid_side_and_zeros(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    ruleSetWarnMode(r, false, RULE_WARN_SET);
+    r.warnLo = 150.0f;  // invalid: past the limit
+    uint8_t mask = rulesNormalizeWarn(r);
+    TEST_ASSERT_EQUAL_UINT8(0x01, mask);
+    TEST_ASSERT_EQUAL(RULE_WARN_AUTO, ruleWarnMode(r, false));
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, r.warnLo);
+}
+
+static void test_normalize_warn_leaves_valid_side_alone(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    ruleSetWarnMode(r, false, RULE_WARN_SET);
+    r.warnLo = 90.0f;  // valid
+    uint8_t mask = rulesNormalizeWarn(r);
+    TEST_ASSERT_EQUAL_UINT8(0, mask);
+    TEST_ASSERT_EQUAL(RULE_WARN_SET, ruleWarnMode(r, false));
+    TEST_ASSERT_EQUAL_FLOAT(90.0f, r.warnLo);
+}
+
+// Both sides invalid: each is evaluated against the ORIGINAL record (not a
+// partially-degraded one) — lo degrading first must not change whether hi
+// was legal, since the both-SET cross-check reads the other side's value.
+static void test_normalize_warn_both_sides_degrade_independently(void) {
+    Rule r = makeRule(RULE_OUTSIDE_BAND, 0.0f, 100.0f);
+    ruleSetWarnMode(r, false, RULE_WARN_SET);
+    ruleSetWarnMode(r, true, RULE_WARN_SET);
+    r.warnLo = 90.0f;  // both invalid: lo >= hi AND lo is fine on its own vs the band
+    r.warnHi = 80.0f;
+    uint8_t mask = rulesNormalizeWarn(r);
+    TEST_ASSERT_EQUAL_UINT8(0x03, mask);
+    TEST_ASSERT_EQUAL(RULE_WARN_AUTO, ruleWarnMode(r, false));
+    TEST_ASSERT_EQUAL(RULE_WARN_AUTO, ruleWarnMode(r, true));
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, r.warnLo);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, r.warnHi);
+}
+
+// Non-ALARM severity ignores warn modes entirely (annunciator gate is
+// severity == RULE_SEV_ALARM, independent of validity/mode bits).
+static void test_warn_non_alarm_severity_ignores_modes(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    r.severity = RULE_SEV_WARNING;
+    ruleSetWarnMode(r, false, RULE_WARN_SET);
+    r.warnLo = 90.0f;
+    RuleContext ctx{};
+    ctx.state = RULE_READY;
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx, 95.0f));
+}
+
 // --- Action resolution -------------------------------------------------
 
 // Membership aggregates the manager hands the resolver. `linked()` is the
@@ -464,6 +692,24 @@ int main(int, char**) {
     RUN_TEST(test_annun_warning_band_negative_above);
     RUN_TEST(test_annun_warning_band_negative_below);
     RUN_TEST(test_annun_outside_band_negative_low_edge);
+    RUN_TEST(test_warn_set_lo_on_above);
+    RUN_TEST(test_warn_set_lo_on_below);
+    RUN_TEST(test_warn_none_never_warns_goes_straight_to_alarm);
+    RUN_TEST(test_warn_outside_set_lo_auto_hi);
+    RUN_TEST(test_warn_outside_none_lo_set_hi);
+    RUN_TEST(test_warn_outside_both_set_asymmetric);
+    RUN_TEST(test_warn_side_hit_above_below);
+    RUN_TEST(test_warn_valid_auto_none_always_legal);
+    RUN_TEST(test_warn_valid_above_accepts_below_limit);
+    RUN_TEST(test_warn_valid_above_rejects_at_or_past_limit);
+    RUN_TEST(test_warn_valid_below_accepts_above_limit_rejects_at_or_under);
+    RUN_TEST(test_warn_valid_hi_set_on_above_below_rejected);
+    RUN_TEST(test_warn_valid_outside_edge_outside_band_rejected);
+    RUN_TEST(test_warn_valid_outside_both_set_requires_lo_less_than_hi);
+    RUN_TEST(test_normalize_warn_degrades_invalid_side_and_zeros);
+    RUN_TEST(test_normalize_warn_leaves_valid_side_alone);
+    RUN_TEST(test_normalize_warn_both_sides_degrade_independently);
+    RUN_TEST(test_warn_non_alarm_severity_ignores_modes);
     RUN_TEST(test_action_manual_follows_manual_state);
     RUN_TEST(test_action_follows_rule_when_trustworthy);
     RUN_TEST(test_action_relay_failsafe_on_untrustworthy);

@@ -107,8 +107,24 @@ int     rulesAlarmRuleSlotForInput(uint8_t pin);
 //   RULE_BELOW        — Min-only floor, uses `lo` as the limit (hi ignored)
 //   RULE_ABOVE        — Max-only ceiling, uses `lo` as the limit (hi ignored)
 // Returns the Rule id, or RULES_ID_NONE only when a *new* Rule was needed and
-// the table is full.
-uint8_t rulesSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, float hi, uint32_t now);
+// the table is full. `warnResetOut`, if given, receives the rulesNormalizeWarn()
+// mask (bit0 = lo side degraded to AUTO, bit1 = hi side) from clamping any SET
+// warn edge the new shape/limits stranded (#425, amendment A7) — a caller can
+// print a NOTE. Always 0 for a brand-new Rule (it starts AUTO on both sides).
+uint8_t rulesSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, float hi, uint32_t now,
+                                   uint8_t* warnResetOut = nullptr);
+
+// Edit the warn tier of the input's canonical alarm Rule (#425, slice B) — the
+// facade behind `SET <pin> ALARM WARN ...`. Unlike the shape edit above, this
+// REJECTS an illegal side rather than degrading it (validates a COPY via
+// rulesWarnSideValid, commits only if both sides check out): an explicit WARN
+// edit is the operator naming a number, not a limit move dragging one along.
+// Returns false when the input has no alarm Rule (`badSideOut` = 0xFF) or a
+// requested SET side is illegal for the rule's condition (`badSideOut` = 0 for
+// lo, 1 for hi) — including a hi value on a one-sided (ABOVE/BELOW) rule, where
+// `hiMode` must be RULE_WARN_AUTO (no hi side to set/clear). No re-arm.
+bool rulesSetAlarmWarnForInput(uint8_t pin, RuleWarnMode loMode, float lo,
+                                RuleWarnMode hiMode, float hi, uint8_t* badSideOut = nullptr);
 
 // Remove the input's alarm Rule (frees the pool slot; referring Actions revert
 // to manual-only). Returns true if one was removed.

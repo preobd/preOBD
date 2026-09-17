@@ -423,8 +423,15 @@ the application is assigned (`SET <pin> APPLICATION <app>`):
 SET <pin> ALARM <min> <max>          # Alarm outside a Min..Max band (min < max)
 SET <pin> ALARM MIN <v>              # One-sided floor: alarm when value < v
 SET <pin> ALARM MAX <v>              # One-sided ceiling: alarm when value > v
+SET <pin> ALARM WARN <lo|NONE|AUTO> [<hi|NONE|AUTO>]   # set/clear the warning threshold — see below
 SET <pin> ALARM DISABLE              # Remove the input's alarm Rule
 ```
+
+`SET <pin> ALARM WARN ...` is the facade for the same warning threshold
+described under **Warning threshold (`WARN`)** below — it edits the
+input's canonical alarm Rule by pin instead of by rule id, which is what
+the mobile app's warn/alarm slider uses. Moving `<min>`/`<max>`/`MIN`/`MAX`
+past an explicit warn side reverts that side to `AUTO`.
 
 Use `INFO <pin> ALARM` (or `RULE LIST` / `RULE <id>`) to view an input's live
 alarm Rule — condition, limits, severity, and firing state (see the
@@ -567,10 +574,11 @@ and triggers **Actions** (relay/GPIO outputs) and/or the built-in Annunciator
 (LED/buzzer/BLE). `SET <pin> APPLICATION <app>` seeds a default alarm Rule.
 
 ```
-RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARNING|ALARM|NONE]   # one-sided
-RULE ADD <pin> OUTSIDE <lo> <hi> [HYST <w>] [WARNING|ALARM|NONE]     # both-sided band
+RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARN <lo|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]         # one-sided
+RULE ADD <pin> OUTSIDE <lo> <hi> [HYST <w>] [WARN <lo|NONE|AUTO> <hi|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]  # both-sided band
 RULE LIST                         # all Rules + live state (READY/ACTIVE) + severity
 RULE <id>                         # one Rule's detail
+RULE <id> WARN <lo|NONE|AUTO> [<hi|NONE|AUTO>]   # edit an ALARM rule's warning threshold in place (no re-arm)
 RULE <id> ENABLE | DISABLE        # re-arm / park a Rule without deleting it
 RULE DEL <id>                     # delete (drops it from every Action's membership)
 RULE RESET <id>                   # restore config from the application default + re-arm
@@ -601,6 +609,34 @@ Rule does nothing rather than silencing a live alarm for its warmup.
 With several sources, a **live member's demand outranks a faulted sibling**: if one
 sensor dies while another is legitimately calling for the output, the output stays
 on. The `FAILSAFE` state applies only when no healthy member is demanding it.
+
+### Warning threshold (`WARN`)
+
+An `ALARM`-severity Rule optionally carries a **warning threshold** — a
+pre-trip band that lights the LED/LCD yellow before the value actually
+alarms. Each side (`lo`; `hi` too for `OUTSIDE`) is independently `AUTO`
+(derived, default 90% of the limit — today's behavior if you say nothing),
+`NONE` (skip the warning tier — straight to alarm), or an explicit value:
+
+```
+RULE ADD A0 ABOVE 230 WARN 210                # warn at 210, alarm at 230
+RULE ADD A0 ABOVE 230 WARN NONE               # no pre-warning — straight to ALARM
+RULE ADD VOLT OUTSIDE 11.5 15.0 WARN 12.0 14.6
+RULE 3 WARN 12.0 14.6                         # edit rule #3's warn tier in place
+SET A0 ALARM WARN 210                         # same edit via the per-input facade
+```
+
+`WARN` is rejected on a non-`ALARM` rule
+(`ERROR: WARN only applies to ALARM rules (a WARNING rule is its own tier)`)
+and an explicit value must sit strictly on the safe side of the limit
+(`ERROR: WARN must be below the ABOVE limit` / `...above the BELOW limit` /
+`...inside the OUTSIDE band` / `ERROR: WARN lo must be < hi`). `RULE LIST` /
+`RULE <id>` append the effective edge — `warn 210` (explicit), `warn 207*`
+(derived; `*` marks `AUTO`), or `warn none`; `RULE <id>` additionally shows
+the raw stored mode: `Warn: lo=SET 210  hi=AUTO (207)`. Moving a limit past
+an explicit warn side (via `SET <pin> ALARM ...`) reverts that side to
+`AUTO` with a `NOTE:`; `RULE RESET` and `SET <pin> APPLICATION` reseed both
+return warn modes to `AUTO` along with the limits.
 
 Severity: `NONE` = control-only (drives Actions, no annunciation); `WARNING` =
 indicator + log + BLE, no buzzer; `ALARM` = + buzzer. An ALARM Rule also raises a

@@ -54,7 +54,8 @@
 //            - RuleSeverity reordered to insert INFO=1 below WARNING (#308)
 //            Clean reset from v5.
 // =============================================================================
-#define EEPROM_VERSION 6
+// v7: Rule grows warnLo/warnHi (#425)
+#define EEPROM_VERSION 7
 
 // =============================================================================
 // Helper functions (defined in version.cpp)

@@ -145,6 +145,33 @@ enum ActionType : uint8_t {
 #define RULE_FLAG_ENABLED     0x01  // Rule.flags
 #define ACT_BEHAVIOR_INVERT   0x01  // Action.behavior: active-low / inverted output
 
+// Rule.flags warn-mode sub-fields (§11.2, #425): bits [1:2] = lo-side mode,
+// bits [3:4] = hi-side mode (OUTSIDE_BAND only; ABOVE/BELOW have no hi side).
+// AUTO = 0 so a zero-init'd, template-seeded, or pre-#425 imported Rule reads
+// as AUTO on both sides with no special-casing — today's derived
+// WARNING_THRESHOLD_PERCENT tier, unchanged.
+#define RULE_WARN_LO_SHIFT    1
+#define RULE_WARN_HI_SHIFT    3
+#define RULE_WARN_MASK        0x03
+
+// Per-side "approach tier" mode for an ALARM Rule's WARNING annunciation
+// (§11.2, #425). Annunciation-only — never gates Action triggering, which
+// keys on RULE_ACTIVE regardless of warn mode.
+enum RuleWarnMode : uint8_t {
+    RULE_WARN_AUTO = 0,  // derive the edge from WARNING_THRESHOLD_PERCENT of the limit (today's behaviour)
+    RULE_WARN_NONE = 1,  // no approach tier on this side — straight READY -> ACTIVE/ALARM, no WARNING first
+    RULE_WARN_SET  = 2   // explicit edge stored in warnLo/warnHi (base units)
+};
+
+// Which side of a Rule's condition a value's WARNING edge was hit on (§11.2,
+// #425). Lets a caller (the AlarmBroadcaster) pick HIGH/LOW for a WARNING
+// event without re-deriving the (possibly asymmetric) edges itself.
+enum RuleWarnSide : uint8_t {
+    RULE_WARN_SIDE_NONE = 0,
+    RULE_WARN_SIDE_LO   = 1,
+    RULE_WARN_SIDE_HI   = 2
+};
+
 // Action.failsafe — state a RELAY Action assumes when its source reading is
 // untrustworthy (OPEN/SHORTED/NO-READING/rail-pegged; §11.3). Per-Action so a
 // cooling fan can fail ON while a fuel pump fails OFF.
@@ -175,19 +202,50 @@ enum ActionOverride : uint8_t {
 // used count rather than the old fixed-array-in-SystemConfig layout (§11.8).
 // ============================================================================
 
-// ~21–24 B depending on platform alignment.
+// ~29 B (AVR) / 32 B (ARM, 4-byte float alignment). See rules_types.cpp for
+// the exact per-platform static_assert.
+//
+// Approach tier (§11.2, #425): each side of an ALARM Rule independently gets
+// a WARNING pre-announcement, controlled by the RuleWarnMode bits in `flags`
+// (see ruleWarnMode()/ruleSetWarnMode() below) —
+//   AUTO (0, default): derive the edge from WARNING_THRESHOLD_PERCENT of the
+//     limit, exactly like today's single stored threshold. A zero-init'd,
+//     template-seeded, or pre-#425-imported Rule is AUTO on both sides, so
+//     existing configs behave identically after the upgrade.
+//   NONE: no pre-announcement on that side — the rule goes straight from
+//     READY to ACTIVE/ALARM with no WARNING tier (§11.2 amendment A6).
+//   SET: the edge is the explicit value in warnLo/warnHi (base units).
+// This is annunciation-only (LED/LCD/AlarmBroadcaster, RULE_SEV_ALARM rules
+// only) — it never gates Action triggering, which keys on RULE_ACTIVE.
+// warnHi only applies to OUTSIDE_BAND (ABOVE/BELOW have no hi side).
 struct Rule {
     float    limitLo;       // ABOVE/BELOW: the limit; OUTSIDE_BAND: low edge
     float    limitHi;       // OUTSIDE_BAND: high edge; unused for ABOVE/BELOW
     float    hysteresis;    // clear-band width, applied inward from each limit
+    float    warnLo;        // lo-side WARNING edge when RULE_WARN_SET; else unused (base units)
+    float    warnHi;        // hi-side (OUTSIDE_BAND only) WARNING edge when RULE_WARN_SET; else unused
     uint16_t debounceMs;    // condition must hold past the limit this long (= legacy persistTime_ms)
     uint16_t warmupMs;      // suppress evaluation until settled / since boot (= legacy warmupTime_ms)
     uint8_t  id;            // stable per-record id; RULES_ID_NONE = empty slot. NOT an array slot.
     uint8_t  sourceInput;   // input PIN (stable identity), NOT an inputs[] slot (§8 Q9)
     uint8_t  condition;     // RuleCondition
     uint8_t  severity;      // RuleSeverity
-    uint8_t  flags;         // RULE_FLAG_*
+    uint8_t  flags;         // RULE_FLAG_* + RuleWarnMode bits (RULE_WARN_{LO,HI}_SHIFT)
 };
+
+// Read/write the per-side RuleWarnMode packed into Rule.flags (§11.2, #425).
+// `hiSide` selects the OUTSIDE_BAND high edge; ABOVE/BELOW only use the lo
+// side, so callers must not treat a hi-side mode as meaningful for them.
+inline RuleWarnMode ruleWarnMode(const Rule& r, bool hiSide) {
+    const uint8_t shift = hiSide ? RULE_WARN_HI_SHIFT : RULE_WARN_LO_SHIFT;
+    return (RuleWarnMode)((r.flags >> shift) & RULE_WARN_MASK);
+}
+
+inline void ruleSetWarnMode(Rule& r, bool hiSide, RuleWarnMode mode) {
+    const uint8_t shift = hiSide ? RULE_WARN_HI_SHIFT : RULE_WARN_LO_SHIFT;
+    r.flags = (uint8_t)((r.flags & ~(RULE_WARN_MASK << shift)) |
+                         ((mode & RULE_WARN_MASK) << shift));
+}
 
 // ~22 B.
 struct Action {

@@ -137,6 +137,8 @@ The JSON configuration system in preOBD serves multiple purposes:
 | `rules[].limitLo` | number | No | Limit (ABOVE/BELOW) or low band edge (OUTSIDE/INSIDE) |
 | `rules[].limitHi` | number | No | High band edge (band conditions only) |
 | `rules[].hysteresis` | number | No | Clear-band width, inset from each limit |
+| `rules[].warnLo` | number/null | No | Lo-side warning threshold on an `ALARM` rule. Present with a number = explicit edge; `null` = no warning tier on this side; key absent = `AUTO` (derived, `WARNING_THRESHOLD_PERCENT`) |
+| `rules[].warnHi` | number/null | No | Hi-side warning threshold (`OUTSIDE` rules only). Same tri-state as `warnLo` |
 | `rules[].warmupMs` | number | No | Settling time before the Rule evaluates |
 | `rules[].debounceMs` | number | No | How long the condition must hold before asserting |
 | `rules[].enabled` | bool | No | Rule enabled (default true) |

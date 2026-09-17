@@ -173,6 +173,8 @@ static bool buildRuleConfigFromApplication(uint8_t appIndex, Rule& out) {
     out.limitLo    = p.defaultMinValue;
     out.limitHi    = p.defaultMaxValue;
     out.hysteresis = 0.0f;
+    out.warnLo     = 0.0f;   // AUTO both sides (warn-mode bits are 0 in `flags` above)
+    out.warnHi     = 0.0f;
     out.warmupMs   = p.warmupTime_ms;
     out.debounceMs = p.persistTime_ms;
     return true;
@@ -212,6 +214,8 @@ static void applyRuleTemplate(int slot, const Rule& tmpl, uint32_t now) {
     r.limitLo    = tmpl.limitLo;
     r.limitHi    = tmpl.limitHi;
     r.hysteresis = tmpl.hysteresis;
+    r.warnLo     = tmpl.warnLo;   // template flags are AUTO (0) — RESET/reseed return warn modes to AUTO too
+    r.warnHi     = tmpl.warnHi;
     r.warmupMs   = tmpl.warmupMs;
     r.debounceMs = tmpl.debounceMs;
     rulesRuleInit(g_ruleContexts[slot], r, now);  // re-arm
@@ -263,8 +267,17 @@ int rulesAlarmRuleSlotForInput(uint8_t pin) {
 // hysteresis the new shape can't support (mirrors the RULE ADD guards). The facade
 // doesn't surface hysteresis, so a value that would wedge the Rule is dropped
 // rather than the edit refused.
-static void applyAlarmShape(Rule& r, uint8_t condition, float lo, float hi) {
+//
+// Also clamps warnLo/warnHi (#425, amendment A7): a limit move can strand a SET
+// warn side on the wrong side of its new limit (or, band->one-sided, on a hi
+// side that no longer exists). Rather than refuse the shape edit, every SET side
+// that `rulesWarnSideValid` now rejects is degraded to AUTO — same precedent as
+// the HYST clamp above, so an operator dragging the alarm slider is never
+// blocked by a stale warn edge. Returns the rulesNormalizeWarn() mask (bit0 =
+// lo degraded, bit1 = hi degraded) so a caller can print a NOTE.
+static uint8_t applyAlarmShape(Rule& r, uint8_t condition, float lo, float hi) {
     r.condition = condition;
+    uint8_t forcedMask = 0;  // side(s) unconditionally reset below, OR'd into the return
     if (condition == RULE_OUTSIDE_BAND) {
         r.limitLo = lo;
         r.limitHi = hi;
@@ -276,10 +289,22 @@ static void applyAlarmShape(Rule& r, uint8_t condition, float lo, float hi) {
         r.limitHi = 0.0f;  // unused for one-sided; keep deterministic for the dump
         // Hysteresis at/above the limit magnitude could invert the clear inset.
         if (r.hysteresis >= fabsf(lo)) r.hysteresis = 0.0f;
+        // A one-sided shape has no hi side at all — force it back to AUTO/0
+        // regardless of what it held under the previous (possibly OUTSIDE_BAND)
+        // shape, same as limitHi above. Note the mask ourselves: rulesNormalizeWarn()
+        // below would only catch this for a SET side (its one-sided check reads the
+        // NEW condition we just assigned), so an AUTO->AUTO no-op or a discarded
+        // NONE would otherwise vanish from the reported mask.
+        if (ruleWarnMode(r, true) != RULE_WARN_AUTO || r.warnHi != 0.0f) forcedMask |= 0x02;
+        ruleSetWarnMode(r, true, RULE_WARN_AUTO);
+        r.warnHi = 0.0f;
     }
+    return forcedMask | rulesNormalizeWarn(r);
 }
 
-uint8_t rulesSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, float hi, uint32_t now) {
+uint8_t rulesSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, float hi, uint32_t now,
+                                   uint8_t* warnResetOut) {
+    if (warnResetOut) *warnResetOut = 0;
     int slot = rulesAlarmRuleSlotForInput(pin);
     if (slot >= 0) {
         // Edit in place: preserve id, source, warmup/debounce, AND the live
@@ -293,7 +318,8 @@ uint8_t rulesSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, floa
         Rule& r = rules[slot];
         r.severity  = RULE_SEV_ALARM;
         r.flags    |= RULE_FLAG_ENABLED;
-        applyAlarmShape(r, condition, lo, hi);
+        const uint8_t warnMask = applyAlarmShape(r, condition, lo, hi);
+        if (warnResetOut) *warnResetOut = warnMask;
         // Arm only if it isn't already (e.g. previously flag-disabled); a live
         // READY/ACTIVE rule keeps its state and just re-qualifies.
         if (g_ruleContexts[slot].state == RULE_DISABLED) {
@@ -316,11 +342,48 @@ uint8_t rulesSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, floa
     r.severity    = RULE_SEV_ALARM;
     r.flags       = RULE_FLAG_ENABLED;
     r.hysteresis  = 0.0f;
-    applyAlarmShape(r, condition, lo, hi);
+    r.warnLo      = 0.0f;   // AUTO both sides (mode bits are 0 in the flags above)
+    r.warnHi      = 0.0f;
+    applyAlarmShape(r, condition, lo, hi);  // a brand-new Rule is already AUTO; mask is always 0
     r.warmupMs    = haveAppTmpl ? appTmpl.warmupMs   : RULE_DEFAULT_WARMUP_MS;
     r.debounceMs  = haveAppTmpl ? appTmpl.debounceMs : RULE_DEFAULT_DEBOUNCE_MS;
     rulesRuleInit(g_ruleContexts[free], r, now);
     return id;
+}
+
+bool rulesSetAlarmWarnForInput(uint8_t pin, RuleWarnMode loMode, float lo,
+                                RuleWarnMode hiMode, float hi, uint8_t* badSideOut) {
+    if (badSideOut) *badSideOut = 0xFF;
+    int slot = rulesAlarmRuleSlotForInput(pin);
+    if (slot < 0) return false;  // no alarm Rule on this input — caller reports
+    // Validate on a COPY, write only if both sides check out (§11.2, amendment
+    // A2): this is an explicit operator WARN edit, so an illegal side is
+    // REJECTED, never silently degraded — degrade is reserved for a limit move
+    // dragging an existing edge along with it (applyAlarmShape above).
+    Rule copy = rules[slot];
+    const bool oneSided = (copy.condition == RULE_ABOVE || copy.condition == RULE_BELOW);
+    if (oneSided && hiMode != RULE_WARN_AUTO) {
+        // A one-sided rule has no hi side to set/clear; the caller (RULE <id>
+        // WARN / SET ALARM WARN) must send exactly one value for these shapes.
+        if (badSideOut) *badSideOut = 1;
+        return false;
+    }
+    ruleSetWarnMode(copy, false, loMode);
+    copy.warnLo = (loMode == RULE_WARN_SET) ? lo : 0.0f;
+    ruleSetWarnMode(copy, true, hiMode);
+    copy.warnHi = (hiMode == RULE_WARN_SET) ? hi : 0.0f;
+    if (!rulesWarnSideValid(copy, false)) {
+        if (badSideOut) *badSideOut = 0;
+        return false;
+    }
+    if (!rulesWarnSideValid(copy, true)) {
+        if (badSideOut) *badSideOut = 1;
+        return false;
+    }
+    // No re-arm (mirrors the shape-edit facade above, #295): warn edges are
+    // read live from the Rule each tick, so the next evaluation just sees them.
+    rules[slot] = copy;
+    return true;
 }
 
 bool rulesRemoveAlarmRuleForInput(uint8_t pin, uint8_t* releasedOut) {

@@ -47,6 +47,12 @@
 #include <string.h>
 #include <ctype.h>
 
+// CLI handlers are cold — keep them in flash, not Teensy ITCM (RAM1).
+// FLASHMEM is a Teensy core macro — no-op elsewhere.
+#ifndef FLASHMEM
+#define FLASHMEM
+#endif
+
 //=============================================================================
 // SET command — leaves and dispatch
 //
@@ -319,6 +325,46 @@ static int set_units(uint8_t pin, int argc, const char* const* argv) {
     return 1;
 }
 
+#if INCLUDE_RULES_ENGINE
+// One WARN value token, shared by the SET <pin> ALARM WARN facade below.
+// Mirrors cmd_rule.cpp's parseWarnToken (kept file-local rather than shared —
+// each CLI leaf is self-contained, and this is three lines): keyword tested
+// BEFORE atof (atof("AUTO") == 0.0).
+static FLASHMEM void parseWarnToken(const char* tok, RuleWarnMode& mode, float& val) {
+    if (streq_P(tok, PSTR("NONE"))) {
+        mode = RULE_WARN_NONE;
+        val = 0.0f;
+    } else if (streq_P(tok, PSTR("AUTO"))) {
+        mode = RULE_WARN_AUTO;
+        val = 0.0f;
+    } else {
+        mode = RULE_WARN_SET;
+        val = atof(tok);
+    }
+}
+
+// Side-specific WARN validation error, mirroring cmd_rule.cpp's checkWarnSide
+// wording exactly (the operator sees the same message from either surface).
+static FLASHMEM void printWarnSideError(uint8_t condition, bool hiSide, float limitLo, float limitHi,
+                                          float warnLo, float warnHi) {
+    if (condition == RULE_ABOVE) {
+        msg.control.println(F("ERROR: WARN must be below the ABOVE limit"));
+    } else if (condition == RULE_BELOW) {
+        msg.control.println(F("ERROR: WARN must be above the BELOW limit"));
+    } else if (condition == RULE_OUTSIDE_BAND) {
+        const float warnVal = hiSide ? warnHi : warnLo;
+        const bool inBand = (limitLo < warnVal) && (warnVal < limitHi);
+        if (!inBand) {
+            msg.control.println(F("ERROR: WARN must be inside the OUTSIDE band"));
+        } else {
+            msg.control.println(F("ERROR: WARN lo must be < hi"));
+        }
+    } else {
+        msg.control.println(F("ERROR: WARN not supported for this rule's condition"));
+    }
+}
+#endif
+
 // SET <pin> ALARM <min> <max> | DISABLE
 // Facade over the input's canonical alarm Rule (severity ALARM, §11.5): upserts
 // one input-keyed Rule, preserving its id and any Action links. This is the
@@ -334,12 +380,59 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
     return 1;
 #else
     if (argc < 4) {
-        msg.control.println(F("ERROR: usage: SET <pin> ALARM <min> <max> | MIN <v> | MAX <v> | DISABLE"));
+        msg.control.println(F("ERROR: usage: SET <pin> ALARM <min> <max> | MIN <v> | MAX <v> | WARN <lo> [<hi>] | DISABLE"));
         return 1;
     }
     if (getInputByPin(pin) == nullptr) {
         msg.control.println(F("ERROR: no input configured on that pin (SET its APPLICATION first)"));
         return 1;
+    }
+
+    // SET <pin> ALARM WARN <lo|NONE|AUTO> [<hi|NONE|AUTO>] — edit the warn tier
+    // of the input's canonical alarm Rule. Matched BEFORE the MIN/MAX/numeric
+    // band branches below (else atof("WARN") silently parses as a band edge,
+    // #425 amendment A8).
+    if (streq_P(argv[3], PSTR("WARN"))) {
+        int alarmSlot = rulesAlarmRuleSlotForInput(pin);
+        if (alarmSlot < 0) {
+            msg.control.println(F("ERROR: no alarm Rule on this input (set one with SET <pin> ALARM <min> <max> | MIN <v> | MAX <v>)"));
+            return 1;
+        }
+        const Rule existing = rules[alarmSlot];  // copy: for the error report after a rejected write
+        const bool needsHi = (existing.condition == RULE_OUTSIDE_BAND);
+        if (argc < 5) {
+            msg.control.println(needsHi ? F("ERROR: WARN needs <lo> <hi>") : F("ERROR: WARN needs <lo>"));
+            return 1;
+        }
+        RuleWarnMode loMode, hiMode = RULE_WARN_AUTO;
+        float lo, hi = 0.0f;
+        parseWarnToken(argv[4], loMode, lo);
+        if (needsHi) {
+            if (argc < 6) {
+                msg.control.println(F("ERROR: WARN needs <lo> <hi>"));
+                return 1;
+            }
+            parseWarnToken(argv[5], hiMode, hi);
+        }
+        // Fixed arity on both shapes — a trailing token is a typo, not something
+        // to swallow silently.
+        const int expectedArgc = needsHi ? 6 : 5;
+        if (argc > expectedArgc) {
+            msg.control.print(F("ERROR: unexpected token: "));
+            msg.control.println(argv[expectedArgc]);
+            return 1;
+        }
+        uint8_t badSide = 0xFF;
+        if (!rulesSetAlarmWarnForInput(pin, loMode, lo, hiMode, hi, &badSide)) {
+            if (badSide == 0xFF) {
+                msg.control.println(F("ERROR: no alarm Rule on this input (set one with SET <pin> ALARM <min> <max> | MIN <v> | MAX <v>)"));
+            } else {
+                printWarnSideError(existing.condition, badSide == 1, existing.limitLo, existing.limitHi, lo, hi);
+            }
+            return 1;
+        }
+        msg.control.println(F("Alarm warn updated. SAVE to persist."));
+        return 0;
     }
 
     // SET <pin> ALARM DISABLE|OFF — remove the input's alarm Rule.
@@ -389,7 +482,8 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
     }
 
     bool created = (rulesAlarmRuleSlotForInput(pin) < 0);
-    uint8_t id = rulesSetAlarmRuleForInput(pin, condition, lo, hi, millis());
+    uint8_t warnReset = 0;
+    uint8_t id = rulesSetAlarmRuleForInput(pin, condition, lo, hi, millis(), &warnReset);
     if (id == RULES_ID_NONE) {
         msg.control.print(F("ERROR: rule table full ("));
         msg.control.print(MAX_RULES);
@@ -400,6 +494,20 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
     msg.control.print(id);
     msg.control.println(created ? F(" created. SAVE to persist.")
                                 : F(" updated. SAVE to persist."));
+    // A limit/shape move can strand a SET warn edge on the wrong side of the
+    // new limit (or, band->one-sided, on a hi side that no longer exists) —
+    // applyAlarmShape() silently degrades it to AUTO rather than blocking the
+    // edit (#425 amendment A7). Say so, or the operator's earlier explicit
+    // warn edge just vanishes with no explanation.
+    if (warnReset & 0x01) {
+        msg.control.println(F("  NOTE: warn lo reset to AUTO (limit moved past it)"));
+    }
+    if (warnReset & 0x02) {
+        // Band->one-sided: the hi side ceased to exist, nothing "moved past" it.
+        msg.control.println(condition == RULE_OUTSIDE_BAND
+                                ? F("  NOTE: warn hi reset to AUTO (limit moved past it)")
+                                : F("  NOTE: warn hi cleared (a one-sided alarm has no upper side)"));
+    }
     return 0;
 #endif
 }
@@ -1157,8 +1265,10 @@ static const char PSTR_HELP_SET_UNITS[] PROGMEM =
     "  SET <pin> UNITS <units>       Override display units";
 static const char PSTR_HELP_SET_ALARM[] PROGMEM =
     "  SET <pin> ALARM <min> <max>   Set the input's alarm band (rules-engine Rule)\n"
+    "  SET <pin> ALARM MIN|MAX <v>   One-sided floor/ceiling alarm\n"
+    "  SET <pin> ALARM WARN <lo|NONE|AUTO> [<hi|NONE|AUTO>]  Set the approach-warning edge(s)\n"
     "  SET <pin> ALARM DISABLE       Remove the input's alarm Rule\n"
-    "  (one-sided / WARNING alarms: RULE ADD <pin> ABOVE|BELOW ... ; status: RULE LIST)";
+    "  (INFO/WARNING-severity alarms: RULE ADD <pin> ABOVE|BELOW ... ; status: RULE LIST)";
 static const char PSTR_HELP_SET_DIVIDER[] PROGMEM =
     "  SET <pin> DIVIDER <ratio>     Set voltage divider ratio (0-1)";
 static const char PSTR_HELP_SET_OUTPUT[] PROGMEM =

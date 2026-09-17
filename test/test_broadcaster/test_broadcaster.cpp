@@ -165,6 +165,26 @@ static void test_derived_warning_band(void) {
     TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_HIGH, e.kind);
 }
 
+// #425: a SET approach-tier edge can sit off the band midpoint. The OLD
+// kindFor() picked HIGH/LOW purely by which half of the band the value was
+// in (75 is above the [0,100] midpoint 50 -> HIGH), which is wrong once the
+// per-side warn edges are explicit and asymmetric: 75 has crossed the lo
+// warn edge (80) from below, not the hi one (90), so it must report LOW.
+static void test_outside_band_set_warn_uses_correct_side(void) {
+    configRule(RULE_SEV_ALARM, 0.0f, 100.0f, 75.0f, /*active*/false);
+    Rule& r = rules[0];
+    ruleSetWarnMode(r, false, RULE_WARN_SET);
+    ruleSetWarnMode(r, true, RULE_WARN_SET);
+    r.warnLo = 80.0f;
+    r.warnHi = 90.0f;
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    const PreobdAlarmEvent& e = lastEvent();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_WARNING, e.severity);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_LOW, e.kind);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, e.threshold);  // limitLo, the LOW-side alarm limit
+}
+
 static void test_none_severity_rule_is_silent(void) {
     // A control Rule (severity NONE) is not an alarm — never broadcasts.
     configRule(RULE_SEV_NONE, -1.0f, 100.0f, 120.0f, /*active*/true);
@@ -201,6 +221,7 @@ int main(int, char**) {
     RUN_TEST(test_low_side_kind_and_threshold);
     RUN_TEST(test_warning_severity);
     RUN_TEST(test_derived_warning_band);
+    RUN_TEST(test_outside_band_set_warn_uses_correct_side);
     RUN_TEST(test_none_severity_rule_is_silent);
     RUN_TEST(test_return_to_normal_emits_clear);
     RUN_TEST(test_idempotent_tick);

@@ -84,8 +84,9 @@ board that vetoes it). `#ifndef`-guarded, so an explicit override still wins
 ### `src/config.h` — application constants
 
 Logic-level behavior, identical across boards: timing intervals, alarm behavior
-(`SILENCE_DURATION`, `WARNING_THRESHOLD_PERCENT`), calibration defaults, default
-display units. **No hardware pins.**
+(`SILENCE_DURATION`, `WARNING_THRESHOLD_PERCENT` — the `AUTO` default for a
+rule's per-side warning threshold; override per rule with `WARN`, #425),
+calibration defaults, default display units. **No hardware pins.**
 
 ### EEPROM — runtime
 

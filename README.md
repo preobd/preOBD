@@ -197,8 +197,8 @@ watches an input and (with a severity) annunciates and/or triggers **Actions**.
 ```
 SET <pin> ALARM <min> <max>                                    # per-input alarm: band
 SET <pin> ALARM MIN <v> | MAX <v>                              #   or one-sided floor/ceiling
-RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARNING|ALARM]   # threshold Rule
-RULE ADD <pin> OUTSIDE <lo> <hi> [WARNING|ALARM]                # both-sided band
+RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARN <lo|NONE|AUTO>] [WARNING|ALARM]   # threshold Rule
+RULE ADD <pin> OUTSIDE <lo> <hi> [WARN <lo|NONE|AUTO> <hi|NONE|AUTO>] [WARNING|ALARM] # both-sided band
 RULE LIST | RULE <id> | RULE DEL <id> | RULE RESET <id>         # RESET = app defaults
 ACTION ADD RELAY <outpin> [FAILSAFE ON|OFF] [INVERT]           # an actuator (relay/GPIO)
 ACTION <id> RULE <ruleId>                                       # drive it from a Rule

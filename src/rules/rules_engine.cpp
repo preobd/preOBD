@@ -116,37 +116,122 @@ RuleSeverity rulesRuleSeverity(const Rule& rule, const RuleContext& ctx) {
     return rulesRuleIsActive(ctx) ? (RuleSeverity)rule.severity : RULE_SEV_NONE;
 }
 
-// True when `value` has entered the warning band approaching the rule's limit
-// (mirrors the legacy evaluateSeverity percentages, per side).
-static bool ruleInWarningBand(const Rule& rule, float value) {
-    // Inset the warning edge by (1 - pct) of the limit's MAGNITUDE, applied
-    // toward the limit. Using fabsf keeps the band on the correct (pre-limit)
-    // side for non-positive limits — a plain limit*pct flips sides once the
-    // limit is <= 0 (e.g. a sub-zero low edge), making WARNING fire only AFTER
-    // the ALARM threshold. For positive limits this is identical to the old
-    // limit*pct / limit*(2-pct) form.
+float rulesRuleWarnEdge(const Rule& r, bool hiSide) {
+    // ABOVE/BELOW are one-sided: there is no hi edge regardless of mode.
+    if (hiSide && (r.condition == RULE_ABOVE || r.condition == RULE_BELOW)) {
+        return NAN;
+    }
+    const RuleWarnMode mode = ruleWarnMode(r, hiSide);
+    if (mode == RULE_WARN_NONE) {
+        return NAN;
+    }
+    if (mode == RULE_WARN_SET) {
+        return hiSide ? r.warnHi : r.warnLo;
+    }
+    // RULE_WARN_AUTO: derive from WARNING_THRESHOLD_PERCENT of the limit's
+    // MAGNITUDE, applied toward the limit. Using fabsf keeps the band on the
+    // correct (pre-limit) side for non-positive limits — a plain limit*pct
+    // flips sides once the limit is <= 0 (e.g. a sub-zero low edge), making
+    // WARNING fire only AFTER the ALARM threshold. For positive limits this is
+    // identical to the old limit*pct / limit*(2-pct) form.
     const float pct = WARNING_THRESHOLD_PERCENT / 100.0f;
-    const float marginLo = (1.0f - pct) * fabsf(rule.limitLo);
-    const float marginHi = (1.0f - pct) * fabsf(rule.limitHi);
-    switch (rule.condition) {
+    switch (r.condition) {
         case RULE_ABOVE:
-            return value >= rule.limitLo - marginLo;   // approaching from below
+            return r.limitLo - (1.0f - pct) * fabsf(r.limitLo);   // approaching from below
         case RULE_BELOW:
-            return value <= rule.limitLo + marginLo;   // approaching from above
+            return r.limitLo + (1.0f - pct) * fabsf(r.limitLo);   // approaching from above
         case RULE_OUTSIDE_BAND:
-            return (value >= rule.limitHi - marginHi) ||
-                   (value <= rule.limitLo + marginLo);
+            return hiSide ? (r.limitHi - (1.0f - pct) * fabsf(r.limitHi))
+                          : (r.limitLo + (1.0f - pct) * fabsf(r.limitLo));
         default:  // INSIDE_BAND (deferred) / unknown
+            return NAN;
+    }
+}
+
+RuleWarnSide rulesRuleWarnSideHit(const Rule& r, float value) {
+    if (isnan(value)) {
+        return RULE_WARN_SIDE_NONE;
+    }
+    switch (r.condition) {
+        case RULE_ABOVE: {
+            const float edge = rulesRuleWarnEdge(r, false);
+            return (!isnan(edge) && value >= edge) ? RULE_WARN_SIDE_LO : RULE_WARN_SIDE_NONE;
+        }
+        case RULE_BELOW: {
+            const float edge = rulesRuleWarnEdge(r, false);
+            return (!isnan(edge) && value <= edge) ? RULE_WARN_SIDE_LO : RULE_WARN_SIDE_NONE;
+        }
+        case RULE_OUTSIDE_BAND: {
+            const float hiEdge = rulesRuleWarnEdge(r, true);
+            const float loEdge = rulesRuleWarnEdge(r, false);
+            if (!isnan(hiEdge) && value >= hiEdge) return RULE_WARN_SIDE_HI;
+            if (!isnan(loEdge) && value <= loEdge) return RULE_WARN_SIDE_LO;
+            return RULE_WARN_SIDE_NONE;
+        }
+        default:  // INSIDE_BAND (deferred) / unknown
+            return RULE_WARN_SIDE_NONE;
+    }
+}
+
+// True when `value` has reached either side's effective WARNING edge.
+static bool ruleInWarningBand(const Rule& rule, float value) {
+    return rulesRuleWarnSideHit(rule, value) != RULE_WARN_SIDE_NONE;
+}
+
+bool rulesWarnSideValid(const Rule& r, bool hiSide) {
+    if (ruleWarnMode(r, hiSide) != RULE_WARN_SET) {
+        return true;  // AUTO/NONE are always legal — nothing to validate
+    }
+    if (hiSide && (r.condition == RULE_ABOVE || r.condition == RULE_BELOW)) {
+        return false;  // one-sided rule has no hi side
+    }
+    switch (r.condition) {
+        case RULE_ABOVE:
+            return r.warnLo < r.limitLo;
+        case RULE_BELOW:
+            return r.warnLo > r.limitLo;
+        case RULE_OUTSIDE_BAND: {
+            const bool otherSet = ruleWarnMode(r, !hiSide) == RULE_WARN_SET;
+            if (hiSide) {
+                if (!(r.limitLo < r.warnHi && r.warnHi < r.limitHi)) return false;
+                return !otherSet || (r.warnLo < r.warnHi);
+            }
+            if (!(r.limitLo < r.warnLo && r.warnLo < r.limitHi)) return false;
+            return !otherSet || (r.warnLo < r.warnHi);
+        }
+        default:  // INSIDE_BAND (deferred) — no defined warn shape
             return false;
     }
+}
+
+uint8_t rulesNormalizeWarn(Rule& r) {
+    // Evaluate both sides against `r` as passed in BEFORE mutating either —
+    // degrading the lo side first must not change what the hi-side check saw
+    // (the OUTSIDE_BAND both-SET cross-check reads the other side's value).
+    const bool loBad = !rulesWarnSideValid(r, false);
+    const bool hiBad = !rulesWarnSideValid(r, true);
+    uint8_t mask = 0;
+    if (loBad) {
+        ruleSetWarnMode(r, false, RULE_WARN_AUTO);
+        r.warnLo = 0.0f;
+        mask |= 0x01;
+    }
+    if (hiBad) {
+        ruleSetWarnMode(r, true, RULE_WARN_AUTO);
+        r.warnHi = 0.0f;
+        mask |= 0x02;
+    }
+    return mask;
 }
 
 RuleSeverity rulesRuleAnnunciatorSeverity(const Rule& rule, const RuleContext& ctx, float value) {
     if (rulesRuleIsActive(ctx)) {
         return (RuleSeverity)rule.severity;
     }
-    // Derived WARNING: an armed ALARM rule whose source is in the warning band
-    // (or past the limit but not yet debounced) annunciates WARNING first.
+    // Approach tier: an armed ALARM rule whose source has reached a per-side
+    // warning edge annunciates WARNING first. A side set to RULE_WARN_NONE
+    // never matches here, so that side goes straight READY -> ACTIVE/ALARM
+    // with no pre-announcement (§11.2 amendment A6).
     if (rule.severity == RULE_SEV_ALARM && ctx.state == RULE_READY &&
         !isnan(value) && ruleInWarningBand(rule, value)) {
         return RULE_SEV_WARNING;

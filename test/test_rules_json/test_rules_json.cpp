@@ -7,6 +7,11 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
+// rulesImportRule() calls rulesNormalizeWarn() (#425, slice B) to degrade an
+// illegal SET warn side to AUTO rather than reject the record — pull in the
+// engine .cpp too, same include-the-source-directly pattern as rules_json.cpp
+// itself, so the round-trip test link stays self-contained.
+#include "../../src/rules/rules_engine.cpp"
 #include "../../src/rules/rules_json.cpp"
 
 void setUp(void) {}
@@ -251,6 +256,144 @@ static void test_rule_import_defaults(void) {
     TEST_ASSERT_EQUAL_UINT8(RULE_FLAG_ENABLED, out.flags & RULE_FLAG_ENABLED);
 }
 
+// --- Warn tri-state (#425, slice B) --------------------------------------
+
+// SET on both sides of an OUTSIDE_BAND ALARM rule round-trips as numbers, and
+// the export omits nothing (both keys present since both are SET).
+static void test_rule_warn_outside_both_set_roundtrip(void) {
+    Rule in = makeRule(RULE_OUTSIDE_BAND, 0.0f, 100.0f, RULE_SEV_ALARM);
+    ruleSetWarnMode(in, false, RULE_WARN_SET);
+    in.warnLo = 10.0f;
+    ruleSetWarnMode(in, true, RULE_WARN_SET);
+    in.warnHi = 90.0f;
+    bool ok = false;
+    Rule out = roundTripRule(in, &ok);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_SET, ruleWarnMode(out, false));
+    TEST_ASSERT_EQUAL_FLOAT(10.0f, out.warnLo);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_SET, ruleWarnMode(out, true));
+    TEST_ASSERT_EQUAL_FLOAT(90.0f, out.warnHi);
+}
+
+// NONE on one side, AUTO (untouched) on the other: NONE must round-trip as an
+// explicit JSON null, not just "absent" — that's the distinction the whole
+// containsKey()-vs-isNull() tri-state exists to preserve.
+static void test_rule_warn_none_vs_auto_roundtrip(void) {
+    Rule in = makeRule(RULE_ABOVE, 240.0f, 0.0f, RULE_SEV_ALARM);
+    ruleSetWarnMode(in, false, RULE_WARN_NONE);
+    bool ok = false;
+    Rule out = roundTripRule(in, &ok);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_NONE, ruleWarnMode(out, false));
+}
+
+// AUTO (the default / untouched mode) means the "warnLo" key is ABSENT from
+// the export entirely, not present-with-a-value — exercised directly on the
+// JsonObject rather than through the string round-trip, since a serialized
+// absent key and a present-null key are otherwise indistinguishable to a
+// casual read of the buffer.
+static void test_rule_warn_auto_key_absent_on_export(void) {
+    Rule in = makeRule(RULE_ABOVE, 240.0f, 0.0f, RULE_SEV_ALARM);  // AUTO by construction
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    rulesExportRule(o, in);
+    TEST_ASSERT_FALSE(o["warnLo"].is<float>());
+    TEST_ASSERT_FALSE(o.containsKey("warnLo"));
+}
+
+// NONE exports as a present JSON null (distinguishable from "absent" = AUTO).
+static void test_rule_warn_none_key_present_null_on_export(void) {
+    Rule in = makeRule(RULE_BELOW, 5.0f, 0.0f, RULE_SEV_ALARM);
+    ruleSetWarnMode(in, false, RULE_WARN_NONE);
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    rulesExportRule(o, in);
+    TEST_ASSERT_TRUE(o.containsKey("warnLo"));
+    TEST_ASSERT_TRUE(o["warnLo"].isNull());
+}
+
+// A one-sided (ABOVE/BELOW) rule never emits warnHi, even if the caller
+// somehow left the hi-side mode bits SET — there is no hi side for the shape.
+static void test_rule_warn_hi_omitted_for_one_sided(void) {
+    Rule in = makeRule(RULE_ABOVE, 240.0f, 0.0f, RULE_SEV_ALARM);
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    rulesExportRule(o, in);
+    TEST_ASSERT_FALSE(o.containsKey("warnHi"));
+}
+
+// Non-ALARM severity with a warn key present: the record is still imported
+// (warn is never grounds for rejection outright — only rulesNormalizeWarn's
+// per-side degrade is), but the key is ignored — modes stay AUTO.
+static void test_rule_warn_non_alarm_severity_ignores_keys(void) {
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    o["id"] = 4;
+    o["input"] = 9;
+    o["condition"] = "ABOVE";
+    o["severity"] = "WARNING";
+    o["limitLo"] = 100.0f;
+    o["warnLo"] = 90.0f;
+    Rule out{};
+    TEST_ASSERT_TRUE(rulesImportRule(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_EQUAL_UINT8(RULE_SEV_WARNING, out.severity);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(out, false));
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, out.warnLo);
+}
+
+// warnHi on an ABOVE/BELOW record is ignored (no hi side to hold it) rather
+// than rejecting the whole record.
+static void test_rule_warn_hi_ignored_on_one_sided_import(void) {
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    o["id"] = 5;
+    o["input"] = 9;
+    o["condition"] = "BELOW";
+    o["severity"] = "ALARM";
+    o["limitLo"] = 5.0f;
+    o["warnHi"] = 3.0f;  // nonsensical for BELOW — must be ignored, not rejected
+    Rule out{};
+    TEST_ASSERT_TRUE(rulesImportRule(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(out, true));
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, out.warnHi);
+}
+
+// An illegal SET side (warnLo on the wrong side of the ABOVE limit) is
+// DEGRADED to AUTO by rulesNormalizeWarn(), not rejected — the record (and
+// its trip point + any relay links) is never lost over a bad warn edge
+// (#425 amendment A3).
+static void test_rule_warn_invalid_set_degrades_not_rejects(void) {
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    o["id"] = 6;
+    o["input"] = 9;
+    o["condition"] = "ABOVE";
+    o["severity"] = "ALARM";
+    o["limitLo"] = 100.0f;
+    o["warnLo"] = 150.0f;  // must be BELOW 100 for ABOVE — illegal
+    Rule out{};
+    TEST_ASSERT_TRUE(rulesImportRule(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(out, false));
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, out.warnLo);
+}
+
+// A legacy (pre-#425) record with no warn keys at all imports as AUTO on
+// both sides, byte-for-byte the same as today's un-annotated behaviour.
+static void test_rule_warn_legacy_record_imports_auto(void) {
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    o["id"] = 8;
+    o["input"] = 9;
+    o["condition"] = "OUTSIDE";
+    o["severity"] = "ALARM";
+    o["limitLo"] = 0.0f;
+    o["limitHi"] = 100.0f;
+    Rule out{};
+    TEST_ASSERT_TRUE(rulesImportRule(doc.as<JsonObjectConst>(), out));
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(out, false));
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(out, true));
+}
+
 // --- Action round-trips -------------------------------------------------
 
 static void test_action_linked_roundtrip(void) {
@@ -407,6 +550,15 @@ int main(int, char**) {
     RUN_TEST(test_rule_import_outside_inverted_band_rejected);
     RUN_TEST(test_action_import_sentinel_id_rejected);
     RUN_TEST(test_rule_import_defaults);
+    RUN_TEST(test_rule_warn_outside_both_set_roundtrip);
+    RUN_TEST(test_rule_warn_none_vs_auto_roundtrip);
+    RUN_TEST(test_rule_warn_auto_key_absent_on_export);
+    RUN_TEST(test_rule_warn_none_key_present_null_on_export);
+    RUN_TEST(test_rule_warn_hi_omitted_for_one_sided);
+    RUN_TEST(test_rule_warn_non_alarm_severity_ignores_keys);
+    RUN_TEST(test_rule_warn_hi_ignored_on_one_sided_import);
+    RUN_TEST(test_rule_warn_invalid_set_degrades_not_rejects);
+    RUN_TEST(test_rule_warn_legacy_record_imports_auto);
     RUN_TEST(test_action_linked_roundtrip);
     RUN_TEST(test_action_manual_omits_rule);
     RUN_TEST(test_action_import_missing_type_rejected);

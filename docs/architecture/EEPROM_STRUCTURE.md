@@ -97,7 +97,7 @@ The extra inputs continue to function until reboot — they're configured in RAM
 
 There are two independent version numbers:
 
-- **`EEPROM_VERSION`** (currently `6`) — config-store arena schema (`ConfigStoreHeader` + `InputEEPROM[]` + `Rule[]` + `Action[]`).
+- **`EEPROM_VERSION`** (currently `7`) — config-store arena schema (`ConfigStoreHeader` + `InputEEPROM[]` + `Rule[]` + `Action[]`).
 - **`SYSTEM_CONFIG_VERSION`** (currently `13`) — `SystemConfig` schema. Bumped whenever the struct's layout or address changes.
 
 A version mismatch on either block is non-fatal: the affected block resets to defaults on next boot, the user re-saves, and operation continues. The two blocks version independently — bumping `SYSTEM_CONFIG_VERSION` does not invalidate the arena and vice versa.
@@ -111,7 +111,8 @@ A version mismatch on either block is non-fatal: the affected block resets to de
 | **v3** | — | Internal layout iterations |
 | **v4** | — | Added `divider_ratio` to the per-input record |
 | **v5** | — | `CalibrationOverride` AVR union size corrected (18→16 bytes) |
-| **v6** | current | Header became `ConfigStoreHeader`; the arena now also packs control-engine `Rule[]` + `Action[]` after the inputs (single checksum over all records) — #296 |
+| **v6** | — | Header became `ConfigStoreHeader`; the arena now also packs control-engine `Rule[]` + `Action[]` after the inputs (single checksum over all records) — #296 |
+| **v7** | current | `Rule` grows `warnLo`/`warnHi` (per-side configurable warning/"approach tier" edge, `RuleWarnMode` packed into `Rule.flags`) — #425 |
 
 ### SystemConfig Version Progression
 
@@ -132,6 +133,8 @@ A version mismatch on either block is non-fatal: the affected block resets to de
 > **v10→v11:** Struct change (pin fields removed). SystemConfig resets to defaults on first boot. Re-`SAVE` to persist transport routing and output settings. Input configs are unaffected.
 >
 > **v12→v13:** Struct shrank (Rule/Action tables moved to the arena). SystemConfig resets to defaults on first boot; the arena also bumps `EEPROM_VERSION` 5→6 and resets, so configured Rules/Actions need re-creating. Re-`SAVE` once after upgrade.
+>
+> **`EEPROM_VERSION` v6→v7 (#425):** `Rule` grew `warnLo`/`warnHi` (24→32 B ARM, 21→29 B AVR) to carry a per-side configurable warning threshold. Clean arena reset on upgrade — inputs, Rules and Actions all need re-creating. **Back up first with `SYSTEM DUMP JSON`, then restore with `JSON IMPORT` after upgrading** (a pre-#425 dump imports cleanly; every warn mode comes back `AUTO`, matching pre-upgrade behaviour).
 
 ### Detail: Version 1 (v0.3.x - Deprecated)
 
@@ -178,7 +181,7 @@ All saved configurations became invalid.
 ```cpp
 struct ConfigStoreHeader {
     uint32_t magic;       // 0x4F454D53 ("OEMS" in ASCII)
-    uint16_t version;     // EEPROM_VERSION (currently 6)
+    uint16_t version;     // EEPROM_VERSION (currently 7)
     uint8_t  numInputs;   // records persisted in each section…
     uint8_t  numRules;
     uint8_t  numActions;
@@ -276,7 +279,7 @@ On `INCLUDE_RULES_ENGINE` builds, the `Rule[]` and `Action[]` sections follow th
 - **Persistence is bounded by the EEPROM budget, not the RAM cap.** Only non-empty records are written (compacted), and the arena truncates loudly if rules/actions don't fit after the inputs.
 - On load, a **dangling-`ruleRef` sweep** reverts any Action whose Rule didn't load to manual-only (mirrors the `RULE DEL` invariant and the JSON import path).
 
-`Rule` is ~21 B (AVR) / 24 B (ARM); `Action` is 6 B. As with `InputEEPROM`, use `sizeof()` — layout is alignment-sensitive and each device only ever reads its own EEPROM.
+`Rule` is 29 B (AVR) / 32 B (ARM) as of `EEPROM_VERSION` v7 (`warnLo`/`warnHi`, #425; was 21 B / 24 B at v6); `Action` is 6 B. As with `InputEEPROM`, use `sizeof()` — layout is alignment-sensitive and each device only ever reads its own EEPROM.
 
 ### Validate-before-mutate load
 

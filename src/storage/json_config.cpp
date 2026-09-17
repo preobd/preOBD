@@ -332,9 +332,40 @@ FLASHMEM void exportInputToJSON(JsonObject& inputObj, const Input* input) {
                 alarm["max"] = ar.limitHi;
                 break;
         }
+        // Approach-tier (WARNING) edges (#425, slice B) — read-only facade for the
+        // app's slider: the EFFECTIVE edge (AUTO derives it, so the slider can draw
+        // the auto handle where it actually sits) plus an *Auto flag so it can be
+        // labeled. NONE / an unused side both emit null + *Auto:false, mirroring how
+        // min/max already emit null for a one-sided rule. warnMin <-> the lo side;
+        // warnMax <-> the hi side — EXCEPT for an ABOVE (Max-only ceiling) rule,
+        // where the single lo-side edge IS the max-side warning, so it is reported
+        // as warnMax (mirrors how limitLo is reported as `max`, not `min`, for that
+        // shape). EXPORT ONLY — see the import side below for why.
+        float warnMinEdge = NAN, warnMaxEdge = NAN;
+        bool  warnMinAuto = false, warnMaxAuto = false;
+        if (ar.condition == RULE_ABOVE) {
+            warnMaxEdge = rulesRuleWarnEdge(ar, false);
+            warnMaxAuto = ruleWarnMode(ar, false) == RULE_WARN_AUTO;
+        } else {
+            warnMinEdge = rulesRuleWarnEdge(ar, false);
+            warnMinAuto = ruleWarnMode(ar, false) == RULE_WARN_AUTO;
+            if (ar.condition == RULE_OUTSIDE_BAND) {
+                warnMaxEdge = rulesRuleWarnEdge(ar, true);
+                warnMaxAuto = ruleWarnMode(ar, true) == RULE_WARN_AUTO;
+            }
+        }
+        // ArduinoJson has no "serialize NaN as null" — assign null explicitly.
+        if (isnan(warnMinEdge)) alarm["warnMin"] = nullptr; else alarm["warnMin"] = warnMinEdge;
+        if (isnan(warnMaxEdge)) alarm["warnMax"] = nullptr; else alarm["warnMax"] = warnMaxEdge;
+        alarm["warnMinAuto"] = warnMinAuto;
+        alarm["warnMaxAuto"] = warnMaxAuto;
     } else {
         alarm["min"] = nullptr;
         alarm["max"] = nullptr;
+        alarm["warnMin"] = nullptr;
+        alarm["warnMax"] = nullptr;
+        alarm["warnMinAuto"] = false;
+        alarm["warnMaxAuto"] = false;
     }
 #else
     alarm["min"] = input->minValue;

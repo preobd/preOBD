@@ -1879,11 +1879,31 @@ function ruleInputLabel(pin) {
     : pinStr;
 }
 
+// One side's warn suffix for the row renderer: 'W<n>' for an explicit edge,
+// 'W-' for NONE (no warning tier on this side), or null for AUTO (derived —
+// nothing shown, matching the CLI's LIST-row convention that AUTO is the
+// unmarked default). `v` is r.warnLo/r.warnHi as read from SYSTEM DUMP JSON:
+// undefined = AUTO, null = NONE, number = explicit.
+function ruleWarnSideText(v) {
+  if (v === null) return 'W-';
+  if (typeof v === 'number') return 'W' + fmtVal(v);
+  return null; // AUTO
+}
+
 function ruleConditionText(r) {
   const band = r.condition === 'OUTSIDE' || r.condition === 'INSIDE';
   let s = r.condition + ' ' + fmtVal(r.limitLo);
   if (band) s += '..' + fmtVal(r.limitHi);
   if (r.hysteresis) s += ' (H' + fmtVal(r.hysteresis) + ')';
+  // Warn tier only exists on ALARM rules (§11.2) — everything else ignores
+  // warnLo/warnHi even if present in a hand-edited dump.
+  if (r.severity === 'ALARM') {
+    const lo = ruleWarnSideText(r.warnLo);
+    const hi = band ? ruleWarnSideText(r.warnHi) : null;
+    if (lo != null || hi != null) {
+      s += ' ' + (lo != null ? lo : '') + (band ? ((lo != null && hi != null) ? '/' : '') + (hi != null ? hi : '') : '');
+    }
+  }
   return s;
 }
 
@@ -2093,11 +2113,51 @@ async function ctlRevert() {
 
 function ctlSevSelect(sel) {
   const s = sel || 'ALARM';   // firmware's implicit default when no keyword given
-  return '<select id="ruSev">' +
+  return '<select id="ruSev" onchange="onRuleSevChange()">' +
     [['NONE', 'None'], ['INFO', 'Info'], ['WARNING', 'Warning'], ['ALARM', 'Alarm']]
       .map(([v, l]) => '<option value="' + v + '"' + (v === s ? ' selected' : '') + '>' + l + '</option>').join('') +
     '</select>';
 }
+
+// Warn tier (#425) is meaningful only on ALARM rules (a WARNING rule is its
+// own tier — firmware rejects WARN on anything else). mode is 'AUTO' | 'NONE'
+// | 'VALUE': the number input only matters (and only round-trips) in VALUE.
+function ctlWarnModeSelect(idPrefix, mode) {
+  const m = mode || 'AUTO';
+  return '<select id="' + idPrefix + 'Mode" onchange="onRuleWarnModeChange(\'' + idPrefix + '\')">' +
+    [['AUTO', 'Auto (derived)'], ['NONE', 'None'], ['VALUE', 'Value']]
+      .map(([v, l]) => '<option value="' + v + '"' + (v === m ? ' selected' : '') + '>' + l + '</option>').join('') +
+    '</select>';
+}
+
+// Read a warnLo/warnHi field from SYSTEM DUMP JSON into {mode, value} for the
+// form: undefined = AUTO, null = NONE, number = an explicit VALUE.
+function ruleWarnFieldState(v) {
+  if (v === null) return { mode: 'NONE', value: '' };
+  if (typeof v === 'number') return { mode: 'VALUE', value: fmtVal(v) };
+  return { mode: 'AUTO', value: '' };
+}
+
+function onRuleWarnModeChange(idPrefix) {
+  const mode = document.getElementById(idPrefix + 'Mode').value;
+  const numField = document.getElementById(idPrefix + 'Val');
+  if (numField) numField.style.display = mode === 'VALUE' ? '' : 'none';
+}
+
+// Warn fields are visible only for ALARM severity; the upper (hi) pair only
+// additionally when the condition is a band (OUTSIDE). Shared by both the
+// severity and condition onchange handlers since either can flip the gate.
+function updateRuleWarnVisibility() {
+  const sev = document.getElementById('ruSev')?.value;
+  const band = document.getElementById('ruCond')?.value === 'OUTSIDE';
+  const alarm = sev === 'ALARM';
+  const loField = document.getElementById('ruWarnField');
+  const hiField = document.getElementById('ruWarnHiField');
+  if (loField) loField.style.display = alarm ? '' : 'none';
+  if (hiField) hiField.style.display = (alarm && band) ? '' : 'none';
+}
+
+function onRuleSevChange() { updateRuleWarnVisibility(); }
 
 function ctlCondSelect(sel) {
   return '<select id="ruCond" onchange="onRuleCondChange()">' +
@@ -2112,6 +2172,7 @@ function onRuleCondChange() {
   if (hiField) hiField.style.display = band ? '' : 'none';
   const loLabel = document.getElementById('ruLoLabel');
   if (loLabel) loLabel.textContent = band ? 'Lower limit' : 'Threshold';
+  updateRuleWarnVisibility();
 }
 
 function ctlInputOptions(selectedPin) {
@@ -2149,12 +2210,26 @@ function openRuleForm(id) {
       '<div class="editor-field"><label id="ruLoLabel">' + (band ? 'Lower limit' : 'Threshold') + '</label><input type="number" id="ruLo" value="' + (r ? fmtVal(r.limitLo) : '') + '" placeholder="e.g. 250"></div>' +
       '<div class="editor-field" id="ruHiField" style="' + (band ? '' : 'display:none') + '"><label>Upper limit</label><input type="number" id="ruHi" value="' + (r && band ? fmtVal(r.limitHi) : '') + '" placeholder="e.g. 260"></div>' +
       ctlField('Hysteresis', '<input type="number" id="ruHyst" value="' + (r ? fmtVal(r.hysteresis) : '') + '" placeholder="e.g. 5"><span class="field-hint">Deadband against on/off chatter near the limit: the rule stays active until the value returns past the limit by this much (e.g. <b>ABOVE 250 HYST 5</b> clears at 245). Blank = none.</span>') +
+      (() => {
+        const lo = ruleWarnFieldState(r ? r.warnLo : undefined);
+        const hi = ruleWarnFieldState(r ? r.warnHi : undefined);
+        return ctlField('Warn at',
+            ctlWarnModeSelect('ruWarnLo', lo.mode) +
+            '<input type="number" id="ruWarnLoVal" value="' + lo.value + '" placeholder="e.g. 210" style="margin-top:6px;' + (lo.mode === 'VALUE' ? '' : 'display:none') + '">' +
+            '<span class="field-hint">Pre-trip WARNING before the alarm limit is reached. Auto = the firmware\'s default percentage of the limit; None = straight to alarm, no pre-warning.</span>',
+            'ruWarnField') +
+          ctlField('Warn at (upper)',
+            ctlWarnModeSelect('ruWarnHi', hi.mode) +
+            '<input type="number" id="ruWarnHiVal" value="' + hi.value + '" placeholder="e.g. 14.6" style="margin-top:6px;' + (hi.mode === 'VALUE' ? '' : 'display:none') + '">',
+            'ruWarnHiField');
+      })() +
     '</div>' +
     '<div class="editor-actions">' +
       '<button class="btn primary" onclick="saveRuleForm()"' + (editable ? '' : ' disabled') + '>Save Rule</button>' +
       '<button class="btn secondary" onclick="closeCtlForm()">Cancel</button>' +
     '</div></div>';
   form.style.display = '';
+  updateRuleWarnVisibility();
   form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -2172,6 +2247,26 @@ async function saveRuleForm() {
 
   let cmd = 'RULE ADD ' + pin + ' ' + cond + ' ' + lo + (band ? ' ' + hi : '');
   if (hyst !== '') cmd += ' HYST ' + hyst;
+
+  // WARN is only legal on an ALARM rule; firmware rejects it outright on any
+  // other severity (a WARNING rule is its own tier). All-AUTO is identical to
+  // omitting WARN, so skip it in that case rather than emit a no-op token.
+  if (sev === 'ALARM') {
+    const loMode = document.getElementById('ruWarnLoMode').value;
+    const loVal = document.getElementById('ruWarnLoVal').value.trim();
+    const hiMode = band ? document.getElementById('ruWarnHiMode').value : null;
+    const hiVal = band ? document.getElementById('ruWarnHiVal').value.trim() : null;
+    if (loMode === 'VALUE' && loVal === '') { alert('Enter a warn value, or switch to Auto/None.'); return; }
+    if (band && hiMode === 'VALUE' && hiVal === '') { alert('Enter an upper warn value, or switch to Auto/None.'); return; }
+    const loTok = loMode === 'VALUE' ? loVal : loMode; // AUTO | NONE | <number>
+    const hiTok = hiMode === 'VALUE' ? hiVal : hiMode;
+    if (band) {
+      if (!(loMode === 'AUTO' && hiMode === 'AUTO')) cmd += ' WARN ' + loTok + ' ' + hiTok;
+    } else {
+      if (loMode !== 'AUTO') cmd += ' WARN ' + loTok;
+    }
+  }
+
   cmd += ' ' + sev;
 
   const oldId = ctlFormMode?.id;

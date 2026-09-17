@@ -7,6 +7,7 @@
 #if SUPPORTS_JSON_CONFIG && INCLUDE_RULES_ENGINE
 
 #include <string.h>
+#include "rules_engine.h"  // rulesNormalizeWarn (warn tri-state import, #425)
 
 namespace {
 
@@ -50,6 +51,19 @@ bool valOf(const NameMap (&m)[N], const char* s, uint8_t& out) {
 
 } // namespace
 
+// Tri-state warn-side export (#425, slice B): SET -> the stored number,
+// NONE -> explicit null, AUTO -> key absent entirely (so a pre-#425 export
+// and an AUTO-mode export are byte-for-byte identical, and an absent key on
+// import means exactly "AUTO", not "assume 0"). Callers pass whichever of
+// "warnLo"/"warnHi" applies.
+static void exportWarnSide(JsonObject obj, const char* key, const Rule& r, bool hiSide, float value) {
+    switch (ruleWarnMode(r, hiSide)) {
+        case RULE_WARN_SET:  obj[key] = value; break;
+        case RULE_WARN_NONE: obj[key] = nullptr; break;
+        case RULE_WARN_AUTO: default: /* key omitted */ break;
+    }
+}
+
 void rulesExportRule(JsonObject obj, const Rule& r) {
     obj["id"]         = r.id;
     obj["input"]      = r.sourceInput;
@@ -61,6 +75,15 @@ void rulesExportRule(JsonObject obj, const Rule& r) {
     obj["warmupMs"]   = r.warmupMs;
     obj["debounceMs"] = r.debounceMs;
     obj["enabled"]    = (r.flags & RULE_FLAG_ENABLED) != 0;
+    // Warn tri-state (#425): only meaningful for an ALARM rule; warnHi only for
+    // OUTSIDE_BAND (ABOVE/BELOW have no hi side, so never emit it — a reader
+    // must not infer a hi-side tier that can't exist for the shape).
+    if (r.severity == RULE_SEV_ALARM) {
+        exportWarnSide(obj, "warnLo", r, false, r.warnLo);
+        if (r.condition == RULE_OUTSIDE_BAND) {
+            exportWarnSide(obj, "warnHi", r, true, r.warnHi);
+        }
+    }
 }
 
 bool rulesImportRule(JsonObjectConst obj, Rule& out) {
@@ -98,6 +121,39 @@ bool rulesImportRule(JsonObjectConst obj, Rule& out) {
     out.warmupMs    = obj["warmupMs"]   | (uint16_t)RULE_DEFAULT_WARMUP_MS;
     out.debounceMs  = obj["debounceMs"] | (uint16_t)RULE_DEFAULT_DEBOUNCE_MS;
     out.flags       = (obj["enabled"] | true) ? RULE_FLAG_ENABLED : 0;
+
+    // Warn tri-state (#425, slice B): absent key -> AUTO, JSON null -> NONE,
+    // number -> SET. MUST use containsKey(), not isNull() alone — isNull() is
+    // true for BOTH "absent" and "present but null" in ArduinoJson 7, which
+    // would collapse NONE into AUTO. A non-ALARM rule ignores warn keys
+    // entirely (ARCHITECTURE §11.2: the approach tier only exists for ALARM
+    // rules) and warnHi is ignored on ABOVE/BELOW (no hi side to hold it) —
+    // both leave the mode bits AUTO (0) rather than rejecting the record, so
+    // a hand-edited or stale dump never loses a trip point + relay links over
+    // a warn key (#425 amendment A3). rulesNormalizeWarn() below degrades any
+    // SET side that isn't legal for the final shape/limits back to AUTO — it
+    // NEVER rejects the record.
+    out.warnLo = 0.0f;
+    out.warnHi = 0.0f;
+    if (severity == RULE_SEV_ALARM) {
+        if (obj.containsKey("warnLo")) {
+            if (obj["warnLo"].isNull()) {
+                ruleSetWarnMode(out, false, RULE_WARN_NONE);
+            } else {
+                ruleSetWarnMode(out, false, RULE_WARN_SET);
+                out.warnLo = obj["warnLo"];
+            }
+        }
+        if (condition == RULE_OUTSIDE_BAND && obj.containsKey("warnHi")) {
+            if (obj["warnHi"].isNull()) {
+                ruleSetWarnMode(out, true, RULE_WARN_NONE);
+            } else {
+                ruleSetWarnMode(out, true, RULE_WARN_SET);
+                out.warnHi = obj["warnHi"];
+            }
+        }
+    }
+    rulesNormalizeWarn(out);  // degrade, never reject (A2/A3)
     return true;
 }
 

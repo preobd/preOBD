@@ -66,6 +66,11 @@ bool reportNoSPIBus() { return false; }
 #if INCLUDE_RULES_ENGINE
 Rule rules[MAX_RULES];
 int rulesAlarmRuleSlotForInput(uint8_t) { return -1; }
+// json_config.cpp's alarm-facade export (#425, slice B) reads the warn tier's
+// effective edge via the real engine function; rulesAlarmRuleSlotForInput()
+// above always answers "no rule", so this is never actually invoked at
+// runtime, but the call still needs a link-time definition.
+float rulesRuleWarnEdge(const Rule&, bool) { return NAN; }
 #endif
 
 #define STUB_READ(fn) void fn(Input*) {}
