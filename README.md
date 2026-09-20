@@ -123,7 +123,7 @@ RUN                                                   # Enter RUN mode (starts s
 
 **Multi-function button:**
 - Hold during boot → Enter CONFIG mode
-- Press in RUN mode → Silence alarms for 30 seconds
+- Press in RUN mode → Acknowledge the sounding alarm(s) (buzzer off 30 s by default; `ALARM DURATION` / `ALARM SCOPE` change the policy, `ALARM SILENCE` does it remotely)
 - Hold briefly during RUN mode → Toggle display on/off
 
 **Serial commands in RUN mode:**

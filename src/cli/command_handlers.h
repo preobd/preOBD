@@ -40,6 +40,7 @@ int cmd_relay(int argc, const char* const* argv);
 #if INCLUDE_RULES_ENGINE
 int cmd_rule(int argc, const char* const* argv);
 int cmd_action(int argc, const char* const* argv);
+int cmd_alarm(int argc, const char* const* argv);   // cmd_alarm.cpp — acknowledgement (#433)
 // INFO <pin> ALARM — the per-input alarm view. Lives with the RULE CLI because
 // it renders the input's canonical alarm Rule (#338), reusing the same row
 // renderer as RULE LIST so the two can never disagree.

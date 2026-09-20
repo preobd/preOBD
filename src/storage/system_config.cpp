@@ -256,7 +256,7 @@ void resetSystemConfig() {
     systemConfig.alarmCheckInterval = ALARM_CHECK_INTERVAL_MS;
     systemConfig.lcdUpdateInterval = LCD_UPDATE_INTERVAL_MS;
     systemConfig.sdLogFormat = SDLOG_FORMAT_WIDE;
-    systemConfig.reserved1 = 0;
+    systemConfig.alarmSilence = 0;   // buzzer only, SILENCE_DURATION (#433)
 
     // Physical constants
     systemConfig.seaLevelPressure = SEA_LEVEL_PRESSURE_HPA;

@@ -39,6 +39,7 @@
 #endif
 #include "outputs/output_base.h"
 #include "outputs/obd_query.h"
+#include "outputs/output_alarm.h"                   // alarmAcknowledge() — mode button short press (#433)
 #if INCLUDE_CAN
     #include "inputs/input_can.h"
     #include "sensors/drivers/can/can_scan.h"
@@ -674,11 +675,15 @@ void loop() {
     ActionBroadcaster::tick();
     LiveValueBroadcaster::tick();
 
-    // Process button events (short press = silence alarm, long press = toggle display)
+    // Process button events (short press = acknowledge the sounding alarm(s),
+    // long press = toggle display). The short press and `ALARM SILENCE` share
+    // alarmAcknowledge() so button and remote behave identically (#433).
 #if INCLUDE_MODE_BUTTON
     ButtonPress buttonEvent = updateButtonHandler();
     if (buttonEvent == BUTTON_LONG_PRESS) {
         toggleDisplayRuntime();
+    } else if (buttonEvent == BUTTON_SHORT_PRESS) {
+        alarmAcknowledge();
     }
 #endif
 

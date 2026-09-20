@@ -118,6 +118,7 @@ const Command COMMANDS[] = {
 #if INCLUDE_RULES_ENGINE
     {"RULE", cmd_rule, "Configure control-engine rules", false},  // gated per-subcommand: RUN allows LIST/<id>; ADD/DEL/RESET config-only
     {"ACTION", cmd_action, "Configure control-engine actions", false},  // gated per-subcommand: RUN allows LIST/<id>/ON/OFF/AUTO; ADD/DEL/RULE config-only
+    {"ALARM", cmd_alarm, "Acknowledge alarms", false},  // gated per-subcommand: RUN allows STATUS/SILENCE; DURATION/SCOPE config-only
 #endif
 #if INCLUDE_TEST_MODE
     {"TEST", cmd_test, "Test mode control", false},

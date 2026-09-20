@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Alarm acknowledgement is now per rule and reachable remotely: `ALARM SILENCE` (or the mode button) mutes only the alarms sounding at that moment, `ALARM DURATION <secs|CLEAR>` and `ALARM SCOPE <BUZZER|ALL>` set how long and what it mutes, and `ALARM STATUS` shows what is acknowledged (#433)
 - Per-rule configurable warning threshold: `WARN` on `RULE ADD`, `RULE <id> WARN`, and `SET <pin> ALARM WARN` set each side of an alarm rule's pre-trip warning band to AUTO (derived), NONE (skip it), or an explicit value (#425)
 
 ### Changed

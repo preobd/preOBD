@@ -437,6 +437,26 @@ Use `INFO <pin> ALARM` (or `RULE LIST` / `RULE <id>`) to view an input's live
 alarm Rule — condition, limits, severity, and firing state (see the
 **Rules & Actions** section).
 
+### Acknowledging a Sounding Alarm
+
+```
+ALARM SILENCE                    # Acknowledge every alarm sounding right now (= mode button press)
+ALARM STATUS                     # Severity, which rules are acknowledged, time remaining, policy
+ALARM DURATION <secs|CLEAR>      # CONFIG: re-arm after 5..630 s (step 5), or hold until the rule clears
+ALARM SCOPE <BUZZER|ALL>         # CONFIG: ALL also stops the LED blink (steady red) while acknowledged
+```
+
+Acknowledgement is **per rule**: `ALARM SILENCE` (or a short press of the mode
+button — both take the same path) mutes only the rules that are sounding at
+that moment; a *different* rule tripping later still sounds. With a timed
+`DURATION` (default 30 s) the mute holds for exactly that long, even if the
+reading dips out of alarm and back in — a flaky sensor does not re-sound on
+every glitch. With `DURATION CLEAR` the mute holds until the reading returns
+to normal, however long that takes, and a re-trip is heard again. For a broken
+sensor that stays tripped on a long drive, `CLEAR` makes it one press; for one
+that flaps in and out, use a longer timed duration or `SET <pin> ALARM DISABLE`. `ALARM SILENCE` and `ALARM STATUS` work
+in RUN mode; the two policy verbs are CONFIG-only and need `SAVE`.
+
 ### Output Module Control (Global Alarm Hardware)
 
 ```

@@ -35,6 +35,7 @@ Action     actions[MAX_ACTIONS];
 ActionLink actionLinks[MAX_ACTION_LINKS];   // 2nd+ rule memberships (#343)
 
 void rulesResetTables() {
+    rulesAckReset();  // same BSS-zero hazard: an ack keyed to id 0 would be live (#433)
     for (int i = 0; i < MAX_RULES; i++) {
         rules[i].id = RULES_ID_NONE;
         g_ruleContexts[i].state = RULE_DISABLED;
@@ -48,6 +49,7 @@ void rulesResetTables() {
 }
 
 void rulesManagerInit(uint32_t now) {
+    rulesAckReset();  // a (re)load invalidates every acknowledgement (#433)
     for (int i = 0; i < MAX_RULES; i++) {
         Rule& rule = rules[i];
         if (rule.id == RULES_ID_NONE) {
@@ -95,19 +97,91 @@ void rulesManagerUpdate(uint32_t now) {
     }
 }
 
-RuleSeverity rulesSystemSeverity() {
+// Annunciator severity of one slot (derived WARNING tier included, §11.2).
+static RuleSeverity slotAnnunciatorSeverity(int i) {
+    const Rule& rule = rules[i];
+    if (rule.id == RULES_ID_NONE) return RULE_SEV_NONE;
+    Input* in = getInputByPin(rule.sourceInput);
+    float value = in ? in->value : NAN;
+    return rulesRuleAnnunciatorSeverity(rule, g_ruleContexts[i], value);
+}
+
+static RuleSeverity systemSeverity(bool skipAcked) {
     uint8_t maxSev = RULE_SEV_NONE;
     for (int i = 0; i < MAX_RULES; i++) {
-        Rule& rule = rules[i];
-        if (rule.id == RULES_ID_NONE) continue;
-        // Annunciator rollup includes the derived WARNING tier (§11.2), so
-        // resolve the source value for each rule.
-        Input* in = getInputByPin(rule.sourceInput);
-        float value = in ? in->value : NAN;
-        uint8_t s = rulesRuleAnnunciatorSeverity(rule, g_ruleContexts[i], value);
+        if (skipAcked && rulesRuleAcked(i)) continue;
+        uint8_t s = slotAnnunciatorSeverity(i);
         if (s > maxSev) maxSev = s;
     }
     return (RuleSeverity)maxSev;
+}
+
+RuleSeverity rulesSystemSeverity()        { return systemSeverity(false); }
+RuleSeverity rulesSystemSeverityUnacked() { return systemSeverity(true);  }
+
+// --- annunciator acknowledgement (#433) --------------------------------------
+// Per-SLOT, keyed by the rule id that was acknowledged so a slot reused by a
+// different record never inherits an ack. RAM only — an ack is a moment, not
+// config — and MAX_RULES*5 B (AVR: 10 B).
+
+static uint8_t  g_ackRuleId[MAX_RULES];   // RULES_ID_NONE = not acknowledged
+static uint32_t g_ackAtMs[MAX_RULES];
+
+void rulesAckReset() {
+    for (int i = 0; i < MAX_RULES; i++) g_ackRuleId[i] = RULES_ID_NONE;
+}
+
+bool rulesRuleAcked(int slot) {
+    return slot >= 0 && slot < MAX_RULES &&
+           g_ackRuleId[slot] != RULES_ID_NONE && g_ackRuleId[slot] == rules[slot].id;
+}
+
+uint8_t rulesAckActiveAlarms(uint32_t now) {
+    uint8_t n = 0;
+    for (int i = 0; i < MAX_RULES; i++) {
+        // Only what is BUZZING now: an ACTIVE rule at ALARM severity. The
+        // approach tier (WARNING) and WARNING/INFO rules never sound, so there
+        // is nothing to acknowledge — and acking them would suppress the LED
+        // under SCOPE ALL for a state the operator never heard.
+        if (slotAnnunciatorSeverity(i) != RULE_SEV_ALARM) continue;
+        if (rulesRuleAcked(i)) continue;    // re-pressing doesn't restart the clock
+        g_ackRuleId[i] = rules[i].id;
+        g_ackAtMs[i]   = now;
+        n++;
+    }
+    return n;
+}
+
+void rulesAckExpire(uint32_t now, uint32_t durationMs) {
+    for (int i = 0; i < MAX_RULES; i++) {
+        if (g_ackRuleId[i] == RULES_ID_NONE) continue;
+        const bool gone = (g_ackRuleId[i] != rules[i].id);   // deleted / slot reused
+        bool lapsed;
+        if (durationMs) {
+            // Timed: "mute THIS rule for N seconds", full stop. It deliberately
+            // survives a clear-and-retrip inside the window — a flaky sensor
+            // (NaN glitch de-asserts an ACTIVE rule instantly, then it
+            // re-trips after debounce) would otherwise re-sound on every
+            // glitch, which is exactly what the old global window rode through.
+            lapsed = (uint32_t)(now - g_ackAtMs[i]) >= durationMs;
+        } else {
+            // Until clear: lapse the moment the rule stops sounding, so a
+            // genuine re-trip is heard. A flapping sensor under this policy
+            // re-sounds by design — use a timed duration or disable the alarm.
+            lapsed = (slotAnnunciatorSeverity(i) != RULE_SEV_ALARM);
+        }
+        if (gone || lapsed) g_ackRuleId[i] = RULES_ID_NONE;
+    }
+}
+
+uint8_t rulesAckCount() {
+    uint8_t n = 0;
+    for (int i = 0; i < MAX_RULES; i++) if (rulesRuleAcked(i)) n++;
+    return n;
+}
+
+uint32_t rulesAckElapsedMs(int slot, uint32_t now) {
+    return rulesRuleAcked(slot) ? (uint32_t)(now - g_ackAtMs[slot]) : 0;
 }
 
 // --- generic record-table helpers ---------------------------------------

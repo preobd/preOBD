@@ -1,8 +1,8 @@
 /*
  * output_alarm.cpp - Alarm output module (buzzer, LEDs, etc.)
  *
- * Reacts to Input.flags.isInAlarm state set by alarm_logic.cpp
- * Manages silence button and alarm hardware outputs.
+ * Follows the control-engine Rules' annunciator severity (rules_manager).
+ * Owns the acknowledgement POLICY (scope/duration, #433) and the buzzer/LED.
  *
  * This is a true output module integrated with output_manager.
  *
@@ -21,6 +21,7 @@
 #include "../core/log_tags.h"
 #include "../core/system_mode.h"
 #include "../rules/rules_manager.h"   // annunciator: fold Rule severity into the rollup
+#include "../storage/system_config.h" // alarmSilence policy byte (#433)
 
 #if INCLUDE_RULES_ENGINE
 // RuleSeverity and AlarmSeverity are DISTINCT ordinal domains: RuleSeverity
@@ -40,9 +41,53 @@ static AlarmSeverity ruleToAlarmSeverity(RuleSeverity s) {
 #include "../drivers/rgb_led.h"
 #endif
 
-// ===== ALARM OUTPUT STATE =====
-static bool alarmSilenced = false;        // Is alarm currently silenced?
-static uint32_t silenceStartTime = 0;    // When was silence button pressed?
+// ===== ACKNOWLEDGEMENT POLICY (#433) =====
+// State lives per rule in the rules manager (rulesAck*); this module owns the
+// policy (scope + duration) and is the single call site for button + CLI.
+
+uint32_t alarmSilenceDurationMs() {
+    const uint8_t code = systemConfig.alarmSilence & ALARM_SILENCE_DUR_MASK;
+    if (code == ALARM_SILENCE_DUR_DEFAULT) return SILENCE_DURATION;
+    if (code == ALARM_SILENCE_DUR_CLEAR)   return 0;
+    return (uint32_t)code * ALARM_SILENCE_DUR_STEP_S * 1000UL;
+}
+
+bool alarmSilenceIncludesLed() {
+    return (systemConfig.alarmSilence & ALARM_SILENCE_LED_BIT) != 0;
+}
+
+bool alarmSilenceSetDuration(uint16_t seconds) {
+    uint8_t code;
+    if (seconds == 0) {
+        code = ALARM_SILENCE_DUR_CLEAR;
+    } else if (seconds % ALARM_SILENCE_DUR_STEP_S != 0 || seconds > ALARM_SILENCE_DUR_MAX_S) {
+        return false;
+    } else {
+        code = (uint8_t)(seconds / ALARM_SILENCE_DUR_STEP_S);
+    }
+    systemConfig.alarmSilence = (uint8_t)((systemConfig.alarmSilence & ALARM_SILENCE_LED_BIT) | code);
+    return true;
+}
+
+void alarmSilenceSetLed(bool includeLed) {
+    if (includeLed) systemConfig.alarmSilence |=  ALARM_SILENCE_LED_BIT;
+    else            systemConfig.alarmSilence &= (uint8_t)~ALARM_SILENCE_LED_BIT;
+}
+
+void alarmAckHousekeeping() {
+#if INCLUDE_RULES_ENGINE
+    rulesAckExpire(millis(), alarmSilenceDurationMs());
+#endif
+}
+
+uint8_t alarmAcknowledge() {
+#if INCLUDE_RULES_ENGINE
+    alarmAckHousekeeping();
+    return rulesAckActiveAlarms(millis());
+#else
+    return 0;
+#endif
+}
 
 // ===== INITIALIZATION =====
 
@@ -50,10 +95,6 @@ void initAlarmOutput() {
 #if INCLUDE_ALARMS && defined(BUZZER_PIN)
     pinMode(BUZZER_PIN, OUTPUT);
     noTone(BUZZER_PIN);
-#endif
-
-#if INCLUDE_MODE_BUTTON
-    pinMode(MODE_BUTTON_PIN, INPUT_PULLUP);
 #endif
 
 #if INCLUDE_LED
@@ -89,8 +130,9 @@ AlarmSeverity getSystemSeverity() {
 }
 
 #if INCLUDE_LED
-// Update RGB LED based on system severity
-void updateLEDs(AlarmSeverity severity) {
+// Update RGB LED based on system severity. `acked` = every sounding alarm is
+// acknowledged under SCOPE ALL (#433): show the ALARM colour steady.
+void updateLEDs(AlarmSeverity severity, bool acked) {
     switch (severity) {
         case SEVERITY_NORMAL:
             // Normal operation - solid green at PRIORITY_IDLE (#419). It used to
@@ -120,10 +162,13 @@ void updateLEDs(AlarmSeverity severity) {
             break;
 
         case SEVERITY_ALARM:
-            // Critical alarm - fast blink red (or solid if disabled)
+            // Critical alarm - fast blink red (or solid if disabled, or once
+            // acknowledged under SCOPE ALL)
 #if RGB_ALARM_USE_BLINK
-            rgbLedBlink(RGB_COLOR_ALARM, RGB_FAST_BLINK_MS, PRIORITY_ALARM);
+            if (acked) rgbLedSolid(RGB_COLOR_ALARM, PRIORITY_ALARM);
+            else       rgbLedBlink(RGB_COLOR_ALARM, RGB_FAST_BLINK_MS, PRIORITY_ALARM);
 #else
+            (void)acked;
             rgbLedSolid(RGB_COLOR_ALARM, PRIORITY_ALARM);
 #endif
             break;
@@ -132,29 +177,31 @@ void updateLEDs(AlarmSeverity severity) {
 #endif
 
 void updateAlarmOutput() {
-    // ===== SILENCE BUTTON HANDLING =====
-#if INCLUDE_MODE_BUTTON
-    if (digitalRead(MODE_BUTTON_PIN) == LOW) {
-        if (!alarmSilenced) {
-            alarmSilenced = true;
-            silenceStartTime = millis();
-        }
-    }
-#endif
-
-    // Check if silence duration expired
-    if (alarmSilenced && (millis() - silenceStartTime >= SILENCE_DURATION)) {
-        alarmSilenced = false;
-    }
+    // ===== ACKNOWLEDGEMENT BOOKKEEPING =====
+    // The mode button's short press arrives via main.cpp -> alarmAcknowledge()
+    // (edge, same path as ALARM SILENCE); here we only expire (#433).
+    alarmAckHousekeeping();
 
     // ===== ALARM STATE SCANNING =====
 #if INCLUDE_LED || (INCLUDE_ALARMS && defined(BUZZER_PIN))
     AlarmSeverity systemSeverity = getSystemSeverity();
+    // What is still UNACKNOWLEDGED — the buzzer follows this, and so does the
+    // LED blink under SCOPE ALL.
+    AlarmSeverity unackedSeverity = systemSeverity;
+#if INCLUDE_RULES_ENGINE
+    unackedSeverity = ruleToAlarmSeverity(rulesSystemSeverityUnacked());
+#endif
 #endif
 
 #if INCLUDE_LED
     // ===== LED CONTROL =====
-    updateLEDs(systemSeverity);
+    // SCOPE ALL: every sounding alarm acknowledged -> steady red instead of the
+    // blink. The fault stays visible; only the "you haven't seen this yet"
+    // urgency is dropped. Buzzer-only scope leaves the LED exactly as before.
+    const bool ledAcked = alarmSilenceIncludesLed() &&
+                          systemSeverity == SEVERITY_ALARM &&
+                          unackedSeverity != SEVERITY_ALARM;
+    updateLEDs(systemSeverity, ledAcked);
 #endif
 
     // ===== BUZZER CONTROL =====
@@ -164,7 +211,7 @@ void updateAlarmOutput() {
     // otherwise sound spurious alarms). The LED above is informative, not
     // physical actuation, so it is left running in both modes.
 #if INCLUDE_ALARMS && defined(BUZZER_PIN)
-    if (systemSeverity == SEVERITY_ALARM && !alarmSilenced && !isInConfigMode()) {
+    if (unackedSeverity == SEVERITY_ALARM && !isInConfigMode()) {
         tone(BUZZER_PIN, 700);
     } else {
         noTone(BUZZER_PIN);
@@ -179,5 +226,9 @@ bool isAnyAlarmActive() {
 }
 
 bool isAlarmSilenced() {
-    return alarmSilenced;
+#if INCLUDE_RULES_ENGINE
+    return rulesAckCount() > 0;
+#else
+    return false;
+#endif
 }

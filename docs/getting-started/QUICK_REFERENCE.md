@@ -71,7 +71,7 @@ Use `LIST SENSORS` to see sensor categories, then `LIST SENSORS <category>` for 
 
 **MODE_BUTTON:**
 - Hold during boot → Enter CONFIG mode
-- Press in RUN mode → Silence alarms for 30 seconds
+- Press in RUN mode → Acknowledge the sounding alarm(s) (30 s by default; see `ALARM DURATION`)
 
 ---
 

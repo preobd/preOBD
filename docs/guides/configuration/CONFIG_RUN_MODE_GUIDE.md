@@ -20,8 +20,8 @@ The mode button pin is `MODE_BUTTON_PIN`, set in your board's wiring overlay (`b
 | Context | Behavior |
 |---------|----------|
 | **Boot time** | Hold LOW during boot to enter CONFIG mode |
-| **RUN mode** | Press to silence alarms for 30 seconds |
-| **CONFIG mode** | No effect (alarm silence only works in RUN mode) |
+| **RUN mode** | Short press acknowledges every alarm sounding right now — same as the `ALARM SILENCE` command. Per rule: a different alarm tripping later still sounds. Default buzzer-only for 30 s; `ALARM DURATION <secs|CLEAR>` and `ALARM SCOPE <BUZZER|ALL>` change the policy (`ALARM STATUS` shows it) |
+| **CONFIG mode** | Acknowledgement still registers, but the buzzer is already muted in CONFIG |
 
 **Wiring:**
 - Connect momentary push button between `MODE_BUTTON_PIN` and GND

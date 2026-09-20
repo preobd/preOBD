@@ -535,6 +535,13 @@ void printHelpControl() {
     msg.control.println(F("  INFO <pin>               - Show detailed pin info"));
     msg.control.println(F("  INFO <pin> ALARM         - Show alarm status and configuration"));
     msg.control.println(F("  INFO <pin> CALIBRATION   - Show calibration details"));
+#if INCLUDE_RULES_ENGINE
+    msg.control.println();
+    msg.control.println(F("  ALARM STATUS             - Severity, acknowledged alarms, silence policy"));
+    msg.control.println(F("  ALARM SILENCE            - Acknowledge sounding alarm(s) (= mode button)"));
+    msg.control.println(F("  ALARM DURATION <s|CLEAR> - Re-arm after 5..630 s, or hold until it clears"));
+    msg.control.println(F("  ALARM SCOPE <BUZZER|ALL> - ALL: acknowledged alarm also stops LED blink"));
+#endif
     msg.control.println();
 }
 

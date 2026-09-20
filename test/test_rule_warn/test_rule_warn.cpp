@@ -256,6 +256,8 @@ static void test_brand_new_alarm_rule_starts_auto_mask_zero(void) {
 // #427 — warn slots are remapped by MEANING across a shape change. The lo
 // slot is the CEILING's edge on ABOVE but the FLOOR's on BELOW/OUTSIDE_BAND;
 // carrying it verbatim turned a ceiling pre-warn into a floor pre-warn.
+// ==============================================================}
+
 // =====================================================================
 
 // The issue's repro: MAX 120 / WARN 110 / ALARM 0 120 left lo=SET 110 on the
@@ -392,6 +394,116 @@ static void test_parse_warn_token_rejects_garbage_and_leaves_outputs(void) {
 }
 
 // =====================================================================
+// #433 — per-rule annunciator acknowledgement (rulesAck*)
+// =====================================================================
+
+// Two ALARM rules on two inputs; `trip(slot)` puts one into ACTIVE with a value
+// past its ceiling so the annunciator severity is ALARM.
+static int ackRule(uint8_t pin, float ceiling) {
+    addPlainInput(pin);
+    rulesSetAlarmRuleForInput(pin, RULE_ABOVE, ceiling, 0.0f, 0);
+    return rulesAlarmRuleSlotForInput(pin);
+}
+static void trip(int slot, float value) {
+    getInputByPin(rules[slot].sourceInput)->value = value;
+    g_ruleContexts[slot].state = RULE_ACTIVE;
+}
+static void untrip(int slot) {
+    getInputByPin(rules[slot].sourceInput)->value = 0.0f;
+    g_ruleContexts[slot].state = RULE_READY;
+}
+
+static void test_ack_covers_only_rules_sounding_now(void) {
+    int a = ackRule(10, 100.0f), b = ackRule(11, 100.0f);
+    trip(a, 150.0f);                                  // b is armed but quiet
+    TEST_ASSERT_EQUAL_UINT8(1, rulesAckActiveAlarms(1000));
+    TEST_ASSERT_TRUE(rulesRuleAcked(a));
+    TEST_ASSERT_FALSE(rulesRuleAcked(b));
+    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, rulesSystemSeverity());          // LED still sees it
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,  rulesSystemSeverityUnacked());   // buzzer does not
+    // A DIFFERENT rule tripping later is not covered — it sounds.
+    trip(b, 150.0f);
+    rulesAckExpire(2000, 30000);
+    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, rulesSystemSeverityUnacked());
+    TEST_ASSERT_TRUE(rulesRuleAcked(a));                               // a's ack survives
+}
+
+static void test_ack_expires_on_timer_and_repress_does_not_extend(void) {
+    int a = ackRule(10, 100.0f);
+    trip(a, 150.0f);
+    TEST_ASSERT_EQUAL_UINT8(1, rulesAckActiveAlarms(1000));
+    TEST_ASSERT_EQUAL_UINT8(0, rulesAckActiveAlarms(20000));   // re-press: nothing new, clock NOT restarted
+    rulesAckExpire(30999, 30000);
+    TEST_ASSERT_TRUE(rulesRuleAcked(a));
+    TEST_ASSERT_EQUAL_UINT32(29999, rulesAckElapsedMs(a, 30999));
+    rulesAckExpire(31000, 30000);                     // 1000 + 30000
+    TEST_ASSERT_FALSE(rulesRuleAcked(a));
+    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, rulesSystemSeverityUnacked());   // sounds again
+}
+
+// Timed policy = "mute this rule for N s" — it rides through a clear-and-retrip
+// inside the window (a NaN glitch de-asserts an ACTIVE rule instantly and it
+// re-trips after debounce; the old global window covered that, so must this).
+static void test_ack_timed_survives_clear_and_retrip_within_window(void) {
+    int a = ackRule(10, 100.0f);
+    trip(a, 150.0f);
+    rulesAckActiveAlarms(1000);
+    untrip(a);                                        // glitch
+    rulesAckExpire(2000, 30000);
+    TEST_ASSERT_TRUE(rulesRuleAcked(a));
+    trip(a, 150.0f);                                  // re-trip at 2 s: still muted
+    rulesAckExpire(3000, 30000);
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesSystemSeverityUnacked());
+    rulesAckExpire(31000, 30000);                     // window ends
+    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, rulesSystemSeverityUnacked());
+}
+
+static void test_ack_until_clear_holds_indefinitely_then_rearms(void) {
+    int a = ackRule(10, 100.0f);
+    trip(a, 150.0f);
+    rulesAckActiveAlarms(1000);
+    rulesAckExpire(1000UL + 3600UL * 1000UL * 6UL, /*untilClear*/0);   // six hours later
+    TEST_ASSERT_TRUE(rulesRuleAcked(a));
+    untrip(a);                                        // sensor recovers
+    rulesAckExpire(1, 0);
+    TEST_ASSERT_FALSE(rulesRuleAcked(a));
+    trip(a, 150.0f);                                  // re-trip sounds again
+    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, rulesSystemSeverityUnacked());
+}
+
+static void test_ack_dropped_when_rule_deleted_or_slot_reused(void) {
+    int a = ackRule(10, 100.0f);
+    trip(a, 150.0f);
+    rulesAckActiveAlarms(1000);
+    const uint8_t oldId = rules[a].id;
+    rules[a].id = (uint8_t)(oldId + 1);               // slot now holds a different record
+    TEST_ASSERT_FALSE(rulesRuleAcked(a));             // keyed by id, so not inherited
+    rulesAckExpire(1001, 30000);
+    rules[a].id = oldId;                              // even restoring the id: ack is gone
+    TEST_ASSERT_FALSE(rulesRuleAcked(a));
+}
+
+static void test_ack_count_and_reset(void) {
+    int a = ackRule(10, 100.0f), b = ackRule(11, 100.0f);
+    trip(a, 150.0f); trip(b, 150.0f);
+    TEST_ASSERT_EQUAL_UINT8(2, rulesAckActiveAlarms(0));
+    TEST_ASSERT_EQUAL_UINT8(2, rulesAckCount());
+    rulesResetTables();                               // a reload forgets every ack
+    TEST_ASSERT_EQUAL_UINT8(0, rulesAckCount());
+}
+
+// Only the ALARM tier sounds, so only it can be acknowledged: an ALARM rule in
+// its approach (WARNING) band, and a WARNING-severity rule, are not acked.
+static void test_ack_ignores_warning_tier(void) {
+    int a = ackRule(10, 100.0f);
+    getInputByPin(10)->value = 95.0f;                 // approach tier: 95 >= 90% of 100
+    g_ruleContexts[a].state = RULE_READY;
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesSystemSeverity());
+    TEST_ASSERT_EQUAL_UINT8(0, rulesAckActiveAlarms(0));
+    TEST_ASSERT_FALSE(rulesRuleAcked(a));
+}
+
+// =====================================================================
 // RULE RESET / SET APPLICATION reseed — templates are AUTO, so both
 // return an edited warn mode to AUTO (§11.5, amendment A7).
 // =====================================================================
@@ -444,6 +556,13 @@ int main(int, char**) {
     RUN_TEST(test_shape_change_band_to_above_then_limit_strands_moved_edge);
     RUN_TEST(test_parse_warn_token_keywords_and_numbers);
     RUN_TEST(test_parse_warn_token_rejects_garbage_and_leaves_outputs);
+    RUN_TEST(test_ack_covers_only_rules_sounding_now);
+    RUN_TEST(test_ack_expires_on_timer_and_repress_does_not_extend);
+    RUN_TEST(test_ack_timed_survives_clear_and_retrip_within_window);
+    RUN_TEST(test_ack_until_clear_holds_indefinitely_then_rearms);
+    RUN_TEST(test_ack_dropped_when_rule_deleted_or_slot_reused);
+    RUN_TEST(test_ack_count_and_reset);
+    RUN_TEST(test_ack_ignores_warning_tier);
     RUN_TEST(test_rule_reset_returns_warn_to_auto);
     RUN_TEST(test_reseed_for_input_returns_warn_to_auto);
     return UNITY_END();

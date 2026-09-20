@@ -28,6 +28,7 @@
 #include "../core/watchdog.h"
 #include "sd_manager.h"
 #include "../outputs/output_format.h"   // SdLogFormat / parseSdLogFormat
+#include "../outputs/output_alarm.h"   // alarmSilence* policy accessors (#433)
 #if INCLUDE_RULES_ENGINE
 #include "../rules/rules_json.h"
 #include "../rules/rules_manager.h"
@@ -482,6 +483,14 @@ FLASHMEM void exportSystemConfigToJSON(JsonObject& systemObj) {
 #if INCLUDE_SD_LOGGING
         if (i == OUTPUT_SD) {
             output["format"] = sdLogFormatName(systemConfig.sdLogFormat);
+        }
+#endif
+        // The annunciator's acknowledgement policy rides on the alarm output
+        // (#433). Additive keys: silenceSeconds 0 = hold until the rule clears.
+#if INCLUDE_RULES_ENGINE
+        if (i == OUTPUT_ALARM) {
+            output["silenceSeconds"] = (uint16_t)(alarmSilenceDurationMs() / 1000UL);
+            output["silenceLed"]     = alarmSilenceIncludesLed();
         }
 #endif
     }
@@ -1108,6 +1117,30 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
                     if (parseSdLogFormat(formatName, format)) {
                         staged.sdLogFormat = (uint8_t)format;
                     }
+                }
+#endif
+                // Acknowledgement policy (#433). Absent keys (older dump) keep
+                // the current byte; an out-of-range duration is dropped rather
+                // than failing the import, same posture as "format" above.
+#if INCLUDE_RULES_ENGINE
+                if (i == OUTPUT_ALARM) {
+                    uint8_t byte = staged.alarmSilence;
+                    if (output["silenceSeconds"].is<long>()) {   // a non-number must not coerce to 0 (= CLEAR)
+                        const long secs = output["silenceSeconds"];
+                        uint8_t code = ALARM_SILENCE_DUR_DEFAULT;
+                        bool ok = true;
+                        if (secs == 0) code = ALARM_SILENCE_DUR_CLEAR;
+                        else if (secs < 0 || secs > ALARM_SILENCE_DUR_MAX_S ||
+                                 secs % ALARM_SILENCE_DUR_STEP_S != 0) ok = false;
+                        else code = (uint8_t)(secs / ALARM_SILENCE_DUR_STEP_S);
+                        if (ok) byte = (uint8_t)((byte & ALARM_SILENCE_LED_BIT) | code);
+                    }
+                    if (output["silenceLed"].isNull() == false) {
+                        const bool led = output["silenceLed"];
+                        byte = led ? (uint8_t)(byte | ALARM_SILENCE_LED_BIT)
+                                   : (uint8_t)(byte & ~ALARM_SILENCE_LED_BIT);
+                    }
+                    staged.alarmSilence = byte;
                 }
 #endif
             }

@@ -85,7 +85,12 @@ struct SystemConfig {
     // arena to defaults and would wipe the user's configured inputs).
     // A legacy image reads back 0 here, which is why SDLOG_FORMAT_WIDE is 0.
     uint8_t sdLogFormat;         // SdLogFormat enum (output_format.h)
-    uint8_t reserved1;           // Remaining spare byte
+    // Alarm acknowledgement policy (#433) — the former spare byte, same rule:
+    // a legacy image reads 0, which decodes to today's behaviour (buzzer only,
+    // SILENCE_DURATION). Encoded, see ALARM_SILENCE_* in outputs/output_alarm.h:
+    //   bit 7      SCOPE ALL — an acknowledged alarm also stops the LED blink
+    //   bits 0..6  duration code: 0 = default, 1..126 = n*5 s, 127 = until clear
+    uint8_t alarmSilence;
 
     // Physical Constants (4 bytes)
     float seaLevelPressure;      // hPa for altitude
@@ -126,14 +131,14 @@ struct SystemConfig {
     } logFilter;
 };
 
-// sdLogFormat and reserved1 replaced a single `uint16_t reserved1` in place, so
+// sdLogFormat and alarmSilence replaced a single `uint16_t reserved1` in place, so
 // that no SYSTEM_CONFIG_VERSION bump (and therefore no EEPROM reset of the
 // user's configured inputs) was needed to add the field. That only holds while
 // the two stay a contiguous pair at the original 2-aligned offset — separating
 // them, or inserting anything between, shifts every field below and silently
 // invalidates existing images while the version number still claims v13.
-static_assert(offsetof(SystemConfig, reserved1) == offsetof(SystemConfig, sdLogFormat) + 1,
-              "sdLogFormat and reserved1 must stay adjacent (they replace one uint16_t)");
+static_assert(offsetof(SystemConfig, alarmSilence) == offsetof(SystemConfig, sdLogFormat) + 1,
+              "sdLogFormat and alarmSilence must stay adjacent (they replace one uint16_t)");
 static_assert(offsetof(SystemConfig, sdLogFormat) % 2 == 0,
               "sdLogFormat must sit at the replaced uint16_t's aligned offset");
 

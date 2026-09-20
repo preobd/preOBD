@@ -38,6 +38,25 @@ void rulesManagerUpdate(uint32_t now);
 
 // Max configured severity over all rules currently ACTIVE (annunciator rollup).
 RuleSeverity rulesSystemSeverity();
+// Same rollup, skipping acknowledged slots — what the BUZZER follows (#433).
+RuleSeverity rulesSystemSeverityUnacked();
+
+// --- annunciator acknowledgement (#433, ARCHITECTURE §11.4) ------------------
+// The mode button and `ALARM SILENCE` acknowledge every rule that is sounding
+// the buzzer NOW (ACTIVE at severity ALARM). An acknowledged rule stops
+// driving the buzzer (and, under SCOPE ALL, the LED blink). Timed policy
+// (`durationMs` > 0): the mute holds for exactly that long, through a
+// clear-and-retrip. Until-clear policy (0): it holds until the rule stops
+// sounding. Either way a rule that trips LATER is not covered and sounds, and
+// a deleted/replaced rule's ack is dropped. Per-slot state keyed by rule id,
+// RAM only. `rulesAckExpire` must be called on the annunciator cadence with
+// the configured policy.
+void     rulesAckReset();
+uint8_t  rulesAckActiveAlarms(uint32_t now);   // returns how many rules were NEWLY acked
+void     rulesAckExpire(uint32_t now, uint32_t durationMs);
+bool     rulesRuleAcked(int slot);
+uint8_t  rulesAckCount();
+uint32_t rulesAckElapsedMs(int slot, uint32_t now);   // 0 when not acked
 
 // --- rule table helpers (operate on rules[]) ---
 int     rulesRuleSlot(uint8_t id);    // slot index for a rule id, or -1
