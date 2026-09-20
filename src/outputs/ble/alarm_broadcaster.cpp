@@ -199,9 +199,9 @@ void tick() {
 void resync() {
     // A central that (re)connects while a rule is held sees nothing until the
     // rule next transitions — alarms have no heartbeat (#430). The nRF raises
-    // the PING on the 0->1 central edge only, so this covers connect and
-    // reconnect-after-drop; a SECOND central joining mid-alarm is not covered
-    // until the nRF re-PINGs per connect (see ARCHITECTURE §4.2). Re-announce only
+    // the PING on the 0->1 central edge (negotiation) and again whenever a
+    // central subscribes to Alarm/Action/Live Values (#435), so a late or
+    // second central gets the held slots once it can receive them. Re-announce only
     // the slots whose last accepted key is a held WARNING/ALARM/INFO; a quiet
     // slot has no tile for the client to rebuild, and invalidating all
     // MAX_RULES would push a CLEAR per slot down a link that just came up.

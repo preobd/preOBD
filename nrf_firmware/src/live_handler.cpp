@@ -12,6 +12,7 @@
 
 #include "ble_gatt_defs.h"
 #include "ble_services.h"
+#include "extended_service.h"
 #include "uuid_util.h"
 
 namespace {
@@ -30,6 +31,7 @@ void liveHandlerInit() {
     g_live.setProperties(CHR_PROPS_READ | CHR_PROPS_NOTIFY);
     g_live.setPermission(SECMODE_OPEN, SECMODE_OPEN);
     g_live.setFixedLen(PREOBD_LIVE_VALUE_SIZE);
+    g_live.setCccdWriteCallback(extendedServiceOnCccdWrite);  // #435 resync
     g_live.begin();
 
     // Seed the cache with zeros so reads before the host's first push

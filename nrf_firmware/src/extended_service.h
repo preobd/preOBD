@@ -24,4 +24,16 @@
 
 void extendedServiceInit();
 
+// Shared CCCD-write callback for the host-state characteristics on this
+// service (Alarm `...0030`, Action `...0031`, Live Values `...0032`). Each
+// handler registers it with setCccdWriteCallback() before .begin(). A
+// central turning notifications ON requests a host resync PING
+// (tierStateRequestResync, #435): the host's resync is otherwise tied to
+// the nRF's 0->1 negotiation PING, which (a) fires before any central has
+// subscribed, so notifyFanout skips it, and (b) never fires for a second
+// central joining mid-session -- a phone connecting while the webapp holds
+// an alarm saw "all normal" until the rule next transitioned.
+void extendedServiceOnCccdWrite(uint16_t conn_hdl, BLECharacteristic* chr,
+                                uint16_t value);
+
 #endif // EXTENDED_SERVICE_H

@@ -22,12 +22,25 @@ void tierStateInit();
 // concurrency these fire only on the 0<->1 connection edges (see
 // ble_bridge.cpp): negotiation runs once on the *first* connect and framing
 // is torn down only on the *last* disconnect, so a second central joining or
-// leaving mid-session leaves the established tier untouched.
+// leaving mid-session leaves the established tier untouched. A joining
+// central still gets the host's state via tierStateRequestResync().
 void tierStateOnConnect();
 void tierStateOnDisconnect();
 
 // Notify on a decoded ping frame received from the host (type 0xFF).
 void tierStateOnPingFrame();
+
+// Ask for a host resync outside the negotiation window (#435). Called from
+// the Extended Service CCCD callbacks (BLE event task) whenever a central
+// subscribes to Alarm / Action / Live Values: the host treats every inbound
+// 0xFF as a (re)connection edge and re-emits its held alarm slots and full
+// action / live-value tables (#430). Only meaningful once FRAMED; the
+// request is dropped if the link resolves TRANSPARENT. Bursts (one client
+// subscribing to all three characteristics) are coalesced by a short
+// debounce so the host sees one PING, not three. The PING itself goes out
+// from tierStatePoll() (loop task) through the TX ring, never from the
+// callback.
+void tierStateRequestResync();
 
 // Poll from loop(). Drives the 2s pinging timeout.
 void tierStatePoll();

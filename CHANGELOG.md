@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changing an alarm's shape (`SET <pin> ALARM` between MIN / MAX / band) now keeps an explicit `WARN` edge on the side it was set for instead of silently carrying it to the other side, and a mistyped `WARN` value is rejected rather than accepted as 0 (#427, #428)
 - BLE alarm events: deleting or disabling a firing alarm now sends a CLEAR that names that rule (clients no longer show it as firing until reconnect), and a client that connects (or reconnects after a drop) while an alarm is already active receives the held alarm on connect instead of after the next transition; `SYSTEM DUMP JSON` reports the alarm rule's `ruleId` per input (#429, #430, #431)
 - Webapp: a tripped standalone WARNING-severity rule now reads "exceeded"/"below" instead of "approaching", which is reserved for an alarm rule's pre-trip band (#432)
+- nRF52840 coprocessor: a client that subscribes to alarm, action or live-value notifications now receives the current state right away — including a second phone or browser joining while an alarm is already active, which previously showed "all normal" until the next alarm transition (#435)
 
 ## [0.13.0-beta] - 2026-09-13
 

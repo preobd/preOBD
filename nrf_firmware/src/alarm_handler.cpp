@@ -10,6 +10,7 @@
 
 #include "ble_gatt_defs.h"
 #include "ble_services.h"
+#include "extended_service.h"
 #include "uuid_util.h"
 
 namespace {
@@ -40,6 +41,7 @@ void alarmHandlerInit() {
     g_alarm.setProperties(CHR_PROPS_NOTIFY);
     g_alarm.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
     g_alarm.setFixedLen(PREOBD_ALARM_EVENT_SIZE);
+    g_alarm.setCccdWriteCallback(extendedServiceOnCccdWrite);  // #435 resync
     g_alarm.begin();
 }
 

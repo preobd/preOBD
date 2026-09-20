@@ -13,6 +13,7 @@
 
 #include "ble_gatt_defs.h"
 #include "ble_services.h"
+#include "extended_service.h"
 #include "frame_codec.h"
 #include "uart_bridge.h"
 #include "uuid_util.h"
@@ -43,6 +44,7 @@ void relayHandlerInit() {
     g_relay.setPermission(SECMODE_OPEN, SECMODE_OPEN);
     g_relay.setFixedLen(PREOBD_RELAY_STATE_SIZE);
     g_relay.setWriteCallback(relayWriteCallback);
+    g_relay.setCccdWriteCallback(extendedServiceOnCccdWrite);  // #435 resync
     g_relay.begin();
 
     // Seed the cache with zeros so reads before the host's first push

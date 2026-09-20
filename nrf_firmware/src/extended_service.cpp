@@ -3,6 +3,7 @@
 #include "extended_service.h"
 
 #include "ble_gatt_defs.h"
+#include "tier_state.h"
 #include "uuid_util.h"
 
 namespace {
@@ -20,4 +21,14 @@ void extendedServiceInit() {
         g_extService = BLEService(kExtServiceUuid);
     }
     g_extService.begin();
+}
+
+void extendedServiceOnCccdWrite(uint16_t /*conn_hdl*/, BLECharacteristic* /*chr*/,
+                                uint16_t value) {
+    // Subscribe edge only; unsubscribe/disconnect CCCD clears are not a
+    // reason to re-push state. Runs on the BLE event task: set the flag and
+    // let tierStatePoll() emit the PING from loop().
+    if (value & BLE_GATT_HVX_NOTIFICATION) {
+        tierStateRequestResync();
+    }
 }
