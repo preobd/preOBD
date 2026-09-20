@@ -435,6 +435,7 @@ void setup() {
     setMuxFrameHandler(FRAME_TYPE_RELAY, ActionBroadcaster::handleInbound);
     addMuxResyncHandler(ActionBroadcaster::resync);
     addMuxResyncHandler(LiveValueBroadcaster::resync);
+    addMuxResyncHandler(AlarmBroadcaster::resync);   // held alarms for a late central (#430)
 #endif
     msg.control.println();
     msg.control.println(F("                 ____  ___  ___  "));

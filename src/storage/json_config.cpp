@@ -318,6 +318,13 @@ FLASHMEM void exportInputToJSON(JsonObject& inputObj, const Input* input) {
     int alarmSlot = rulesAlarmRuleSlotForInput(input->pin);
     if (alarmSlot >= 0) {
         const Rule& ar = rules[alarmSlot];
+        // Which rules[] record this facade is derived from (#431). Without it
+        // a client listing rules must re-implement rulesAlarmRuleSlotForInput's
+        // band-over-one-sided / first-in-SLOT-order predicate — and slot order
+        // is not recoverable from the dump after a JSON IMPORT reorders it, so
+        // a pin with an extra hand-added RULE ADD could be misclassified.
+        // Additive: absent in older dumps, clients fall back to the predicate.
+        alarm["ruleId"] = ar.id;
         switch (ar.condition) {
             case RULE_BELOW:   // Min-only floor
                 alarm["min"] = ar.limitLo;

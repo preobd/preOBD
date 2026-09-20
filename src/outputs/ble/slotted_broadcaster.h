@@ -132,6 +132,16 @@ public:
 
     uint16_t sequence() const { return sequence_; }
 
+    // The last key this slot ACCEPTED onto the wire. Defined from prime()
+    // onward (reset() leaves it undefined until the slot's first accepted
+    // send), and it SURVIVES invalidate()/invalidateActive() — those only
+    // force a re-emit, they don't forget what was sent. A subsystem whose
+    // frame identity can vanish from its table before the clearing frame goes
+    // out (Alarms: RULE DEL zeroes the slot's id, so the CLEAR would otherwise
+    // carry 0xFF, #429) reads the identity it last announced from here
+    // instead of from the table — including on the tick right after a resync.
+    const Key& lastKey(int i) const { return last_[i]; }
+
     // True while a heartbeat sweep has been parked mid-table by backpressure and
     // still owes frames.
     bool sweepPending() const { return sweeping_; }

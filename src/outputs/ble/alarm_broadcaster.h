@@ -12,6 +12,12 @@
 //     automatically. No queue, no blocking.
 //   - Sequence number is global (not per-input) so a client can detect any
 //     dropped notify across the link.
+//   - No heartbeat, so resync() (registered as a mux PING handler in main.cpp)
+//     re-emits the held WARNING/ALARM slots for a central that connects while
+//     a rule is already firing (#430).
+//   - The change key carries the frame's identity (ruleId/inputIndex) so the
+//     CLEAR after RULE DEL / CLEAR <pin> names the rule the client is holding
+//     rather than the emptied slot's 0xFF (#429).
 //   - The broadcaster targets hwSerial1 directly; revisit if a second framed
 //     port is ever introduced.
 
@@ -22,6 +28,7 @@ namespace AlarmBroadcaster {
 
 void init();
 void tick();
+void resync();  // mux PING (re)connection edge: re-announce held slots (#430)
 
 } // namespace AlarmBroadcaster
 

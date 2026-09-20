@@ -213,6 +213,106 @@ static void test_idempotent_tick(void) {
     TEST_ASSERT_EQUAL_INT(0, g_frameCount);
 }
 
+// #429: RULE DEL / CLEAR <pin> / ALARM DISABLE zero the slot (id -> 0xFF)
+// while the client still holds the rule as firing. The CLEAR must name the
+// rule the client is holding, not the emptied slot — a CLEAR for ruleId 0xFF
+// is a no-op delete in every client and the alarm stays "firing" forever.
+static void test_clear_after_rule_delete_carries_last_announced_identity(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 120.0f, /*active*/true);
+    AlarmBroadcaster::tick();                 // ALARM, ruleId 1, inputIndex 3
+    g_frameCount = 0;
+    memset(&rules[0], 0, sizeof(Rule));       // RULE DEL: slot zeroed…
+    rules[0].id = RULES_ID_NONE;              // …and vacated
+    g_ruleContexts[0].state = RULE_DISABLED;
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    const PreobdAlarmEvent& e = lastEvent();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_NORMAL, e.severity);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_CLEAR, e.kind);
+    TEST_ASSERT_EQUAL_UINT8(1, e.ruleId);      // the rule the client holds
+    TEST_ASSERT_EQUAL_UINT8(3, e.inputIndex);  // not 0xFF
+    // And the emptied slot then stays quiet — no second CLEAR for 0xFF.
+    g_frameCount = 0;
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+}
+
+// A quiet rule that is deleted has nothing to clear: no frame at all.
+static void test_delete_of_quiet_rule_emits_nothing(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 50.0f, /*active*/false);
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+    memset(&rules[0], 0, sizeof(Rule)); rules[0].id = RULES_ID_NONE;
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+}
+
+// Slot reused by a DIFFERENT rule that is itself firing before the next tick:
+// the old identity is cleared first, then the new one announced — the client
+// never sees rule 1's entry silently become rule 2's.
+static void test_replaced_rule_in_slot_clears_old_then_announces_new(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 120.0f, /*active*/true);
+    AlarmBroadcaster::tick();                 // ALARM ruleId 1
+    g_frameCount = 0;
+    rules[0].id = 2;                          // same slot, new record, still firing
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_CLEAR, lastEvent().kind);
+    TEST_ASSERT_EQUAL_UINT8(1, lastEvent().ruleId);
+    g_frameCount = 0;
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_ALARM, lastEvent().severity);
+    TEST_ASSERT_EQUAL_UINT8(2, lastEvent().ruleId);
+    g_frameCount = 0;
+    AlarmBroadcaster::tick();                 // settled
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+}
+
+// #430: no heartbeat, so a central that connects while a rule is held would
+// see "all normal" until the next transition. resync() (the mux PING edge —
+// which the nRF raises on the 0->1 central transition, i.e. connect or
+// reconnect after a drop) re-announces held slots only.
+static void test_resync_reannounces_held_alarm(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 120.0f, /*active*/true);
+    AlarmBroadcaster::tick();                 // ALARM sent to the first central
+    g_frameCount = 0;
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);   // steady state: nothing
+    AlarmBroadcaster::resync();               // a central (re)connects: PING
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);   // exactly the held slot, not MAX_RULES
+    const PreobdAlarmEvent& e = lastEvent();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_ALARM, e.severity);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_HIGH, e.kind);
+    TEST_ASSERT_EQUAL_UINT8(1, e.ruleId);
+    TEST_ASSERT_EQUAL_FLOAT(120.0f, e.value);
+}
+
+static void test_resync_with_nothing_held_is_silent(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 50.0f, /*active*/false);
+    AlarmBroadcaster::tick();
+    AlarmBroadcaster::resync();
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);   // no CLEAR flood for a quiet table
+}
+
+// resync racing a delete: the held slot is invalidated, but by the tick the
+// rule is gone. No anonymous (0xFF) frame — the correct CLEAR still goes out
+// because the last-announced identity is what the slot clears against.
+static void test_resync_then_delete_still_clears_by_identity(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 120.0f, /*active*/true);
+    AlarmBroadcaster::tick();
+    g_frameCount = 0;
+    AlarmBroadcaster::resync();
+    memset(&rules[0], 0, sizeof(Rule)); rules[0].id = RULES_ID_NONE;
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_CLEAR, lastEvent().kind);
+    TEST_ASSERT_EQUAL_UINT8(1, lastEvent().ruleId);
+    TEST_ASSERT_NOT_EQUAL(0xFF, lastEvent().ruleId);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_inactive_rule_emits_nothing);
@@ -225,6 +325,12 @@ int main(int, char**) {
     RUN_TEST(test_none_severity_rule_is_silent);
     RUN_TEST(test_return_to_normal_emits_clear);
     RUN_TEST(test_idempotent_tick);
+    RUN_TEST(test_clear_after_rule_delete_carries_last_announced_identity);
+    RUN_TEST(test_delete_of_quiet_rule_emits_nothing);
+    RUN_TEST(test_replaced_rule_in_slot_clears_old_then_announces_new);
+    RUN_TEST(test_resync_reannounces_held_alarm);
+    RUN_TEST(test_resync_with_nothing_held_is_silent);
+    RUN_TEST(test_resync_then_delete_still_clears_by_identity);
     RUN_TEST(test_boot_order_emits_nothing_before_config_loads);
     return UNITY_END();
 }
