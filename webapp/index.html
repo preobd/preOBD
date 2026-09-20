@@ -1562,7 +1562,7 @@ function onAlarmNotify(event) {
   if (severity === SEV_WARNING || severity === SEV_ALARM) {
     const prior = firingState.get(ruleId);
     firingState.set(ruleId, {
-      inputIndex, severity, kind, value, threshold,
+      inputIndex, ruleId, severity, kind, value, threshold,
       since: (prior && prior.severity === severity && prior.kind === kind)
                 ? prior.since : now,
     });
@@ -1624,17 +1624,31 @@ function severityTone(severity, kind) {
 }
 
 // Severity/kind-aware description of one firing/cleared event ("225.0 approaching
-// 250.0"). A WARNING (the 90% band) is "approaching"; only a true ALARM is
-// "exceeded"/"below". Shared by the log row, firing banner, and health headline
-// so a warning is never dressed up as an exceeded alarm (#295).
+// 250.0"). Shared by the log row, firing banner, and health headline so a warning
+// is never dressed up as an exceeded alarm (#295). The frame's WARNING severity
+// covers two different things (#432): an ALARM rule's approach tier (genuinely
+// "approaching") and a standalone WARNING-severity rule that has TRIPPED — it
+// exceeded its limit, so it gets "exceeded"/"below" like an alarm. Only the
+// rule's configured severity in the dump tells them apart; without a dump (or
+// for an unknown ruleId) fall back to "approaching" as before. Mirrored by the
+// app's firingDescription (src/data/firing.ts) — change both together.
 function firingDescription(st) {
   const val = Number.isFinite(st.value) ? st.value.toFixed(1) : '--';
   if (st.kind === KIND_CLEAR) return 'cleared (' + val + ')';
   const thr = Number.isFinite(st.threshold) ? st.threshold.toFixed(1) : '--';
-  const verb = st.severity === SEV_WARNING ? 'approaching'
+  const verb = st.severity === SEV_WARNING ? (isApproachTier(st) ? 'approaching'
+                                              : (st.kind === KIND_LOW ? 'below' : 'exceeded'))
              : st.severity === SEV_INFO ? (st.kind === KIND_LOW ? 'dropped below' : 'reached')
              : (st.kind === KIND_LOW ? 'below' : 'exceeded');
   return val + ' ' + verb + ' ' + thr;
+}
+
+// True when a WARNING-severity frame is an ALARM rule's pre-trip band rather
+// than a tripped WARNING rule. Unknown rule (no dump yet, stale catalog, or a
+// pre-#310 device with no ruleId) → assume approach tier.
+function isApproachTier(st) {
+  const r = st.ruleId != null ? (localConfig?.rules || []).find(x => x.id === st.ruleId) : null;
+  return !r || r.severity === 'ALARM';
 }
 
 // Tier counts across the currently-firing inputs, plus the most-severe entry to
