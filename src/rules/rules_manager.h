@@ -107,10 +107,17 @@ int     rulesAlarmRuleSlotForInput(uint8_t pin);
 //   RULE_BELOW        — Min-only floor, uses `lo` as the limit (hi ignored)
 //   RULE_ABOVE        — Max-only ceiling, uses `lo` as the limit (hi ignored)
 // Returns the Rule id, or RULES_ID_NONE only when a *new* Rule was needed and
-// the table is full. `warnResetOut`, if given, receives the rulesNormalizeWarn()
-// mask (bit0 = lo side degraded to AUTO, bit1 = hi side) from clamping any SET
-// warn edge the new shape/limits stranded (#425, amendment A7) — a caller can
-// print a NOTE. Always 0 for a brand-new Rule (it starts AUTO on both sides).
+// the table is full. `warnResetOut`, if given, receives a RULE_WARN_*_MIN/MAX
+// mask (below) naming every warn side the edit changed behind the operator's
+// back — degraded to AUTO because the new limit stranded it (#425, amendment
+// A7), or cleared because the new shape has no such side (#427) — so a caller
+// can print a NOTE. Sides are named in facade terms (min = floor, max =
+// ceiling), NOT by storage slot: the lo slot IS the ceiling on an ABOVE rule.
+// Always 0 for a brand-new Rule (it starts AUTO on both sides).
+#define RULE_WARN_RESET_MIN   0x01  // floor   warn edge degraded to AUTO (limit moved past it)
+#define RULE_WARN_RESET_MAX   0x02  // ceiling warn edge degraded to AUTO (limit moved past it)
+#define RULE_WARN_DROPPED_MIN 0x04  // floor   warn setting cleared (MAX-only alarm has no lower side)
+#define RULE_WARN_DROPPED_MAX 0x08  // ceiling warn setting cleared (MIN-only alarm has no upper side)
 uint8_t rulesSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, float hi, uint32_t now,
                                    uint8_t* warnResetOut = nullptr);
 

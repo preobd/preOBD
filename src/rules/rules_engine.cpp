@@ -5,6 +5,9 @@
 #include "rules_engine.h"
 #include "../config.h"
 #include <math.h>
+#include <stdlib.h>   // strtod (rulesParseWarnToken, #428)
+#include <string.h>
+#include <ctype.h>    // toupper
 
 // Derived-warning band: percent of the alarm limit at which the WARNING tier
 // engages (§11.2). config.h owns it; fall back if a profile omits it.
@@ -176,6 +179,32 @@ RuleWarnSide rulesRuleWarnSideHit(const Rule& r, float value) {
 // True when `value` has reached either side's effective WARNING edge.
 static bool ruleInWarningBand(const Rule& rule, float value) {
     return rulesRuleWarnSideHit(rule, value) != RULE_WARN_SIDE_NONE;
+}
+
+// Case-insensitive keyword compare against a PROGMEM literal. The CLI upcases
+// only argv[0]; arguments arrive as typed, and every neighbouring keyword
+// (MIN/MAX/WARN) is matched case-insensitively by cli/'s streq_P — which
+// rules/ can't include (layering), hence this four-line local.
+static bool tokenIs_P(const char* tok, const char* kw_P) {
+    for (;; ++tok, ++kw_P) {
+        const char k = (char)pgm_read_byte(kw_P);
+        if (toupper((unsigned char)*tok) != k) return false;
+        if (k == '\0') return true;
+    }
+}
+
+bool rulesParseWarnToken(const char* tok, RuleWarnMode& mode, float& val) {
+    if (!tok || !*tok) return false;
+    if (tokenIs_P(tok, PSTR("NONE"))) { mode = RULE_WARN_NONE; val = 0.0f; return true; }
+    if (tokenIs_P(tok, PSTR("AUTO"))) { mode = RULE_WARN_AUTO; val = 0.0f; return true; }
+    char* end = nullptr;
+    const float v = (float)strtod(tok, &end);   // strtod, not strtof: avr-libc has no strtof
+    // Whole token must be consumed, and the result must be a real number —
+    // strtof also accepts "nan"/"inf", which are not edges.
+    if (end == tok || *end != '\0' || isnan(v) || isinf(v)) return false;
+    mode = RULE_WARN_SET;
+    val  = v;
+    return true;
 }
 
 bool rulesWarnSideValid(const Rule& r, bool hiSide) {

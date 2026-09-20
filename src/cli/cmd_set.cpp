@@ -33,6 +33,7 @@
 #include "../outputs/output_base.h"
 #include "../outputs/obd_query.h"
 #include "../outputs/display/display_manager.h"
+#include "../rules/rules_engine.h"    // rulesParseWarnToken (#428)
 #include "../rules/rules_manager.h"   // §11.5 seed default Rule from application
 #if INCLUDE_ELM327
 #include "../outputs/output_elm327.h"
@@ -327,20 +328,14 @@ static int set_units(uint8_t pin, int argc, const char* const* argv) {
 
 #if INCLUDE_RULES_ENGINE
 // One WARN value token, shared by the SET <pin> ALARM WARN facade below.
-// Mirrors cmd_rule.cpp's parseWarnToken (kept file-local rather than shared —
-// each CLI leaf is self-contained, and this is three lines): keyword tested
-// BEFORE atof (atof("AUTO") == 0.0).
-static FLASHMEM void parseWarnToken(const char* tok, RuleWarnMode& mode, float& val) {
-    if (streq_P(tok, PSTR("NONE"))) {
-        mode = RULE_WARN_NONE;
-        val = 0.0f;
-    } else if (streq_P(tok, PSTR("AUTO"))) {
-        mode = RULE_WARN_AUTO;
-        val = 0.0f;
-    } else {
-        mode = RULE_WARN_SET;
-        val = atof(tok);
-    }
+// Parse one WARN token via the shared rulesParseWarnToken(); on a bad token
+// print the error and return false (#428 — a typo used to become SET 0). Same
+// wording as cmd_rule.cpp's copy so both surfaces read identically.
+static FLASHMEM bool parseWarnToken(const char* tok, RuleWarnMode& mode, float& val) {
+    if (rulesParseWarnToken(tok, mode, val)) return true;
+    msg.control.print(F("ERROR: WARN value not a number (or NONE/AUTO): "));
+    msg.control.println(tok);
+    return false;
 }
 
 // Side-specific WARN validation error, mirroring cmd_rule.cpp's checkWarnSide
@@ -406,13 +401,13 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
         }
         RuleWarnMode loMode, hiMode = RULE_WARN_AUTO;
         float lo, hi = 0.0f;
-        parseWarnToken(argv[4], loMode, lo);
+        if (!parseWarnToken(argv[4], loMode, lo)) return 1;
         if (needsHi) {
             if (argc < 6) {
                 msg.control.println(F("ERROR: WARN needs <lo> <hi>"));
                 return 1;
             }
-            parseWarnToken(argv[5], hiMode, hi);
+            if (!parseWarnToken(argv[5], hiMode, hi)) return 1;
         }
         // Fixed arity on both shapes — a trailing token is a typo, not something
         // to swallow silently.
@@ -495,18 +490,22 @@ static int set_alarm(uint8_t pin, int argc, const char* const* argv) {
     msg.control.println(created ? F(" created. SAVE to persist.")
                                 : F(" updated. SAVE to persist."));
     // A limit/shape move can strand a SET warn edge on the wrong side of the
-    // new limit (or, band->one-sided, on a hi side that no longer exists) —
-    // applyAlarmShape() silently degrades it to AUTO rather than blocking the
-    // edit (#425 amendment A7). Say so, or the operator's earlier explicit
-    // warn edge just vanishes with no explanation.
-    if (warnReset & 0x01) {
-        msg.control.println(F("  NOTE: warn lo reset to AUTO (limit moved past it)"));
+    // new limit, or (shape change) leave a warn setting on a side the new shape
+    // doesn't have — applyAlarmShape() degrades/clears it rather than blocking
+    // the edit (#425 amendment A7, #427). Say so, or the operator's earlier
+    // explicit warn edge just vanishes with no explanation. Sides are named as
+    // the operator set them (min/max), not by storage slot.
+    if (warnReset & RULE_WARN_RESET_MIN) {
+        msg.control.println(F("  NOTE: warn min reset to AUTO (limit moved past it)"));
     }
-    if (warnReset & 0x02) {
-        // Band->one-sided: the hi side ceased to exist, nothing "moved past" it.
-        msg.control.println(condition == RULE_OUTSIDE_BAND
-                                ? F("  NOTE: warn hi reset to AUTO (limit moved past it)")
-                                : F("  NOTE: warn hi cleared (a one-sided alarm has no upper side)"));
+    if (warnReset & RULE_WARN_RESET_MAX) {
+        msg.control.println(F("  NOTE: warn max reset to AUTO (limit moved past it)"));
+    }
+    if (warnReset & RULE_WARN_DROPPED_MIN) {
+        msg.control.println(F("  NOTE: warn min cleared (a MAX-only alarm has no lower side)"));
+    }
+    if (warnReset & RULE_WARN_DROPPED_MAX) {
+        msg.control.println(F("  NOTE: warn max cleared (a MIN-only alarm has no upper side)"));
     }
     return 0;
 #endif

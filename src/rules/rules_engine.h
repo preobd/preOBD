@@ -72,6 +72,17 @@ float rulesRuleWarnEdge(const Rule& r, bool hiSide);
 RuleWarnSide rulesRuleWarnSideHit(const Rule& r, float value);
 
 /**
+ * Parse one CLI warn token — `NONE`, `AUTO`, or a number — into a (mode, value)
+ * pair. Returns false, leaving the outputs untouched, when the token is none
+ * of those: a mistyped number (`2l0`, `1O0`, `abc`, trailing junk) used to
+ * fall through atof() as SET 0, which rulesWarnSideValid happily accepts on
+ * an ABOVE rule (0 < limit) and lights the WARNING tier at every reading (#428).
+ * Keywords match case-insensitively (like every other CLI keyword). Shared by
+ * RULE ADD / RULE <id> WARN / SET <pin> ALARM WARN so the three cannot drift.
+ */
+bool rulesParseWarnToken(const char* tok, RuleWarnMode& mode, float& val);
+
+/**
  * Is the SET edge on `hiSide` of `r` legal for its condition? AUTO/NONE sides
  * are always legal (nothing to validate). Strict inequalities — an edge equal
  * to a limit or to the opposite edge is a zero-width band and rejected.

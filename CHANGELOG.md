@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Breaking: EEPROM configuration is reset on upgrade.** The stored config layout changed (`EEPROM_VERSION` 6 → 7) to carry the Rule record's new warning-threshold fields; the firmware detects the old version and starts from defaults. Back up your setup with `SYSTEM DUMP JSON` before flashing and restore it afterwards with `JSON IMPORT`.
 
+### Fixed
+- Changing an alarm's shape (`SET <pin> ALARM` between MIN / MAX / band) now keeps an explicit `WARN` edge on the side it was set for instead of silently carrying it to the other side, and a mistyped `WARN` value is rejected rather than accepted as 0 (#427, #428)
+
 ## [0.13.0-beta] - 2026-09-13
 
 ### Added

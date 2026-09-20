@@ -273,11 +273,58 @@ int rulesAlarmRuleSlotForInput(uint8_t pin) {
 // side that no longer exists). Rather than refuse the shape edit, every SET side
 // that `rulesWarnSideValid` now rejects is degraded to AUTO — same precedent as
 // the HYST clamp above, so an operator dragging the alarm slider is never
-// blocked by a stale warn edge. Returns the rulesNormalizeWarn() mask (bit0 =
-// lo degraded, bit1 = hi degraded) so a caller can print a NOTE.
+// blocked by a stale warn edge.
+//
+// The warn slots are remapped by MEANING across a condition change (#427). The
+// lo slot is the FLOOR's approach edge for BELOW/OUTSIDE_BAND but the CEILING's
+// for ABOVE (the dump reports it as warnMax there); the hi slot is the ceiling's
+// for OUTSIDE_BAND only. Carrying the slots verbatim across ABOVE<->OUTSIDE (or
+// ABOVE<->BELOW) therefore silently turned a ceiling pre-warn into a floor
+// pre-warn — a directionally wrong edge that rulesNormalizeWarn() cannot catch
+// because it only checks the edge sits between the limits. MAX 120 / WARN 110 /
+// ALARM 0 120 left lo=SET 110 on the band: WARNING at every reading. So: pull
+// the floor and ceiling settings out of the OLD shape, place them into the NEW
+// shape's slots, and drop a side the new shape has no room for.
+//
+// Returns a mask in facade terms so a caller can print an honest NOTE:
+//   RULE_WARN_RESET_MIN   floor   side degraded to AUTO (limit moved past it)
+//   RULE_WARN_RESET_MAX   ceiling side degraded to AUTO (limit moved past it)
+//   RULE_WARN_DROPPED_MIN floor   side cleared (new shape has no lower side)
+//   RULE_WARN_DROPPED_MAX ceiling side cleared (new shape has no upper side)
+// A dropped side is reported only if it held something other than AUTO/0 —
+// an AUTO->AUTO no-op is not a change the operator needs to hear about.
+static bool slotIsCeiling(uint8_t condition, bool hiSide) {
+    // Which real-world side a warn slot stands for under `condition`.
+    if (condition == RULE_ABOVE) return !hiSide;   // lo slot = ceiling; no hi slot
+    return hiSide;                                  // BELOW/OUTSIDE: lo = floor, hi = ceiling
+}
+
 static uint8_t applyAlarmShape(Rule& r, uint8_t condition, float lo, float hi) {
+    const uint8_t prev = r.condition;
+    uint8_t mask = 0;
+
+    // --- warn slots: lift floor/ceiling out of the old shape ------------------
+    RuleWarnMode floorMode = RULE_WARN_AUTO, ceilMode = RULE_WARN_AUTO;
+    float        floorVal  = 0.0f,           ceilVal  = 0.0f;
+    const bool prevOneSided = (prev == RULE_ABOVE || prev == RULE_BELOW);
+    if (prev == RULE_OUTSIDE_BAND || prevOneSided) {
+        for (int side = 0; side < 2; ++side) {
+            const bool hiSide = (side == 1);
+            if (hiSide && prevOneSided) break;   // one-sided shapes have no hi slot
+            const RuleWarnMode m = ruleWarnMode(r, hiSide);
+            const float        v = hiSide ? r.warnHi : r.warnLo;
+            if (slotIsCeiling(prev, hiSide)) { ceilMode = m; ceilVal = v; }
+            else                             { floorMode = m; floorVal = v; }
+        }
+    }
+    // A side the new shape cannot hold is dropped — say so if it was set.
+    const bool newHasFloor = (condition != RULE_ABOVE);
+    const bool newHasCeil  = (condition != RULE_BELOW);
+    if (!newHasFloor && (floorMode != RULE_WARN_AUTO || floorVal != 0.0f)) mask |= RULE_WARN_DROPPED_MIN;
+    if (!newHasCeil  && (ceilMode  != RULE_WARN_AUTO || ceilVal  != 0.0f)) mask |= RULE_WARN_DROPPED_MAX;
+
+    // --- condition + limits -----------------------------------------------------
     r.condition = condition;
-    uint8_t forcedMask = 0;  // side(s) unconditionally reset below, OR'd into the return
     if (condition == RULE_OUTSIDE_BAND) {
         r.limitLo = lo;
         r.limitHi = hi;
@@ -289,17 +336,24 @@ static uint8_t applyAlarmShape(Rule& r, uint8_t condition, float lo, float hi) {
         r.limitHi = 0.0f;  // unused for one-sided; keep deterministic for the dump
         // Hysteresis at/above the limit magnitude could invert the clear inset.
         if (r.hysteresis >= fabsf(lo)) r.hysteresis = 0.0f;
-        // A one-sided shape has no hi side at all — force it back to AUTO/0
-        // regardless of what it held under the previous (possibly OUTSIDE_BAND)
-        // shape, same as limitHi above. Note the mask ourselves: rulesNormalizeWarn()
-        // below would only catch this for a SET side (its one-sided check reads the
-        // NEW condition we just assigned), so an AUTO->AUTO no-op or a discarded
-        // NONE would otherwise vanish from the reported mask.
-        if (ruleWarnMode(r, true) != RULE_WARN_AUTO || r.warnHi != 0.0f) forcedMask |= 0x02;
-        ruleSetWarnMode(r, true, RULE_WARN_AUTO);
-        r.warnHi = 0.0f;
     }
-    return forcedMask | rulesNormalizeWarn(r);
+
+    // --- warn slots: place floor/ceiling into the new shape ----------------------
+    // Hi slot is AUTO/0 for a one-sided shape regardless of what it held before.
+    ruleSetWarnMode(r, false, RULE_WARN_AUTO); r.warnLo = 0.0f;
+    ruleSetWarnMode(r, true,  RULE_WARN_AUTO); r.warnHi = 0.0f;
+    if (condition == RULE_ABOVE) {
+        ruleSetWarnMode(r, false, ceilMode);  r.warnLo = ceilVal;
+    } else {
+        ruleSetWarnMode(r, false, floorMode); r.warnLo = floorVal;
+        if (condition == RULE_OUTSIDE_BAND) { ruleSetWarnMode(r, true, ceilMode); r.warnHi = ceilVal; }
+    }
+
+    // --- degrade anything the new limits stranded, reported per real side --------
+    const uint8_t slotMask = rulesNormalizeWarn(r);   // bit0 = lo slot, bit1 = hi slot
+    if (slotMask & 0x01) mask |= slotIsCeiling(condition, false) ? RULE_WARN_RESET_MAX : RULE_WARN_RESET_MIN;
+    if (slotMask & 0x02) mask |= RULE_WARN_RESET_MAX;  // hi slot only exists on a band: ceiling
+    return mask;
 }
 
 uint8_t rulesSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, float hi, uint32_t now,

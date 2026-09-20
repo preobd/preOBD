@@ -293,19 +293,13 @@ static FLASHMEM void printAllRules() {
 // --- WARN token parsing / validation (shared by RULE ADD and RULE <id> WARN,
 // #425 amendment A8) ------------------------------------------------------
 
-// One WARN value token: keyword tested BEFORE atof (atof("AUTO") == 0.0, so
-// testing order matters, or "AUTO" would silently become SET 0).
-static FLASHMEM void parseWarnToken(const char* tok, RuleWarnMode& mode, float& val) {
-    if (streq_P(tok, PSTR("NONE"))) {
-        mode = RULE_WARN_NONE;
-        val = 0.0f;
-    } else if (streq_P(tok, PSTR("AUTO"))) {
-        mode = RULE_WARN_AUTO;
-        val = 0.0f;
-    } else {
-        mode = RULE_WARN_SET;
-        val = atof(tok);
-    }
+// Parse one WARN token via the shared rulesParseWarnToken(); on a bad token
+// print the error and return false (#428 — a typo used to become SET 0).
+static FLASHMEM bool parseWarnToken(const char* tok, RuleWarnMode& mode, float& val) {
+    if (rulesParseWarnToken(tok, mode, val)) return true;
+    msg.control.print(F("ERROR: WARN value not a number (or NONE/AUTO): "));
+    msg.control.println(tok);
+    return false;
 }
 
 // Print the side-specific validation error for a SET warn side that
@@ -402,15 +396,15 @@ static FLASHMEM int ruleAdd(int argc, const char* const* argv) {
                     msg.control.println(F("ERROR: WARN needs <lo> <hi>"));
                     return 1;
                 }
-                parseWarnToken(argv[i + 1], warnLoMode, warnLo);
-                parseWarnToken(argv[i + 2], warnHiMode, warnHi);
+                if (!parseWarnToken(argv[i + 1], warnLoMode, warnLo)) return 1;
+                if (!parseWarnToken(argv[i + 2], warnHiMode, warnHi)) return 1;
                 i += 2;
             } else {
                 if (i + 1 >= argc) {
                     msg.control.println(F("ERROR: WARN needs <lo>"));
                     return 1;
                 }
-                parseWarnToken(argv[i + 1], warnLoMode, warnLo);
+                if (!parseWarnToken(argv[i + 1], warnLoMode, warnLo)) return 1;
                 i += 1;
             }
         } else if (streq_P(argv[i], PSTR("INFO"))) {
@@ -590,13 +584,13 @@ static FLASHMEM int ruleSetWarn(uint8_t id, int argc, const char* const* argv) {
     }
     RuleWarnMode loMode, hiMode = RULE_WARN_AUTO;
     float lo, hi = 0.0f;
-    parseWarnToken(argv[3], loMode, lo);
+    if (!parseWarnToken(argv[3], loMode, lo)) return 1;
     if (needsHi) {
         if (argc < 5) {
             msg.control.println(F("ERROR: WARN needs <lo> <hi>"));
             return 1;
         }
-        parseWarnToken(argv[4], hiMode, hi);
+        if (!parseWarnToken(argv[4], hiMode, hi)) return 1;
     }
     // Fixed arity on both shapes: a trailing token is a typo, not something to
     // silently ignore (a swallowed extra value would look like it took effect).

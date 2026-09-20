@@ -184,7 +184,9 @@ static void test_shape_edit_degrades_crossed_set_side_reports_mask(void) {
     // Move the ceiling DOWN past the SET warn edge (230 -> 200; warn was 210).
     uint8_t warnReset = 0;
     rulesSetAlarmRuleForInput(10, RULE_ABOVE, 200.0f, 0.0f, 0, &warnReset);
-    TEST_ASSERT_EQUAL_UINT8(0x01, warnReset & 0x01);  // lo side reported degraded
+    // Reported as the MAX (ceiling) side: on an ABOVE rule the lo slot IS the
+    // ceiling's edge, and the NOTE must name the side the operator set (#427).
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_RESET_MAX, warnReset);
     TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(rules[slot], false));
     TEST_ASSERT_EQUAL_FLOAT(0.0f, rules[slot].warnLo);
 }
@@ -213,7 +215,7 @@ static void test_shape_change_band_to_one_sided_resets_hi_mode_and_zeroes(void) 
     // Band -> one-sided (Min-only floor): the hi side no longer exists at all.
     uint8_t warnReset = 0;
     rulesSetAlarmRuleForInput(10, RULE_BELOW, 10.0f, 0.0f, 0, &warnReset);
-    TEST_ASSERT_TRUE((warnReset & 0x02) != 0);
+    TEST_ASSERT_TRUE((warnReset & RULE_WARN_DROPPED_MAX) != 0);
     TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(rules[slot], true));
     TEST_ASSERT_EQUAL_FLOAT(0.0f, rules[slot].warnHi);
 }
@@ -233,7 +235,7 @@ static void test_shape_change_band_to_one_sided_reports_discarded_none_hi(void) 
     // may be reported — proves the mask isn't just "something changed".
     uint8_t warnReset = 0;
     rulesSetAlarmRuleForInput(10, RULE_BELOW, 5.0f, 0.0f, 0, &warnReset);
-    TEST_ASSERT_EQUAL_UINT8(0x02, warnReset);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_DROPPED_MAX, warnReset);
     TEST_ASSERT_EQUAL_UINT8(RULE_WARN_SET, ruleWarnMode(rules[slot], false));
     TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(rules[slot], true));
     TEST_ASSERT_EQUAL_FLOAT(0.0f, rules[slot].warnHi);
@@ -248,6 +250,145 @@ static void test_brand_new_alarm_rule_starts_auto_mask_zero(void) {
     int slot = rulesAlarmRuleSlotForInput(10);
     TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(rules[slot], false));
     TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(rules[slot], true));
+}
+
+// =====================================================================
+// #427 — warn slots are remapped by MEANING across a shape change. The lo
+// slot is the CEILING's edge on ABOVE but the FLOOR's on BELOW/OUTSIDE_BAND;
+// carrying it verbatim turned a ceiling pre-warn into a floor pre-warn.
+// =====================================================================
+
+// The issue's repro: MAX 120 / WARN 110 / ALARM 0 120 left lo=SET 110 on the
+// band (WARNING at every reading). The ceiling edge must land in the hi slot.
+static void test_shape_change_above_to_band_moves_ceiling_edge_to_hi_slot(void) {
+    addPlainInput(14);
+    rulesSetAlarmRuleForInput(14, RULE_ABOVE, 120.0f, 0.0f, 0);
+    TEST_ASSERT_TRUE(rulesSetAlarmWarnForInput(14, RULE_WARN_SET, 110.0f, RULE_WARN_AUTO, 0.0f, nullptr));
+    int slot = rulesAlarmRuleSlotForInput(14);
+
+    uint8_t warnReset = 9;
+    rulesSetAlarmRuleForInput(14, RULE_OUTSIDE_BAND, 0.0f, 120.0f, 0, &warnReset);
+    TEST_ASSERT_EQUAL_UINT8(0, warnReset);                                    // nothing lost — no NOTE
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(rules[slot], false)); // floor: never set
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, rules[slot].warnLo);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_SET, ruleWarnMode(rules[slot], true));   // ceiling: still 110
+    TEST_ASSERT_EQUAL_FLOAT(110.0f, rules[slot].warnHi);
+    // And the engine agrees: a mid-band value is NOT in a warning band.
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_NONE, rulesRuleWarnSideHit(rules[slot], 60.0f));
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_HI,   rulesRuleWarnSideHit(rules[slot], 115.0f));
+}
+
+// Reverse repro: ALARM 0 120 / WARN 5 110 / MAX 120 — the ceiling edge (hi
+// slot, 110) must move INTO the lo slot; the floor edge (5) is dropped and
+// reported as such (a MAX-only alarm has no lower side).
+static void test_shape_change_band_to_above_moves_ceiling_edge_to_lo_slot(void) {
+    addPlainInput(14);
+    rulesSetAlarmRuleForInput(14, RULE_OUTSIDE_BAND, 0.0f, 120.0f, 0);
+    TEST_ASSERT_TRUE(rulesSetAlarmWarnForInput(14, RULE_WARN_SET, 5.0f, RULE_WARN_SET, 110.0f, nullptr));
+    int slot = rulesAlarmRuleSlotForInput(14);
+
+    uint8_t warnReset = 0;
+    rulesSetAlarmRuleForInput(14, RULE_ABOVE, 120.0f, 0.0f, 0, &warnReset);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_DROPPED_MIN, warnReset);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_SET, ruleWarnMode(rules[slot], false));  // lo slot = ceiling = 110
+    TEST_ASSERT_EQUAL_FLOAT(110.0f, rules[slot].warnLo);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(rules[slot], true));
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, rules[slot].warnHi);
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_NONE, rulesRuleWarnSideHit(rules[slot], 50.0f));  // 5 is gone
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_LO,   rulesRuleWarnSideHit(rules[slot], 112.0f));
+}
+
+// A NONE ceiling ("no pre-warn on the ceiling") must survive band->ABOVE as
+// NONE, not silently become AUTO — the issue's `WARN NONE 110` variant.
+static void test_shape_change_band_to_above_keeps_none_ceiling(void) {
+    addPlainInput(14);
+    rulesSetAlarmRuleForInput(14, RULE_OUTSIDE_BAND, 0.0f, 120.0f, 0);
+    TEST_ASSERT_TRUE(rulesSetAlarmWarnForInput(14, RULE_WARN_AUTO, 0.0f, RULE_WARN_NONE, 0.0f, nullptr));
+    int slot = rulesAlarmRuleSlotForInput(14);
+
+    uint8_t warnReset = 9;
+    rulesSetAlarmRuleForInput(14, RULE_ABOVE, 120.0f, 0.0f, 0, &warnReset);
+    TEST_ASSERT_EQUAL_UINT8(0, warnReset);  // floor was AUTO: nothing dropped
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_NONE, ruleWarnMode(rules[slot], false));
+}
+
+// ABOVE -> BELOW: the lo slot changes meaning (ceiling -> floor). 110 > 5 is
+// a directionally VALID floor edge to rulesWarnSideValid, so only the remap
+// can catch this — the ceiling edge is dropped, not kept as a floor edge.
+static void test_shape_change_above_to_below_drops_ceiling_edge(void) {
+    addPlainInput(14);
+    rulesSetAlarmRuleForInput(14, RULE_ABOVE, 120.0f, 0.0f, 0);
+    TEST_ASSERT_TRUE(rulesSetAlarmWarnForInput(14, RULE_WARN_SET, 110.0f, RULE_WARN_AUTO, 0.0f, nullptr));
+    int slot = rulesAlarmRuleSlotForInput(14);
+
+    uint8_t warnReset = 0;
+    rulesSetAlarmRuleForInput(14, RULE_BELOW, 5.0f, 0.0f, 0, &warnReset);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_DROPPED_MAX, warnReset);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(rules[slot], false));
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, rules[slot].warnLo);
+}
+
+// BELOW -> band: the floor edge keeps its slot AND its meaning; nothing lost.
+static void test_shape_change_below_to_band_keeps_floor_edge(void) {
+    addPlainInput(14);
+    rulesSetAlarmRuleForInput(14, RULE_BELOW, 5.0f, 0.0f, 0);
+    TEST_ASSERT_TRUE(rulesSetAlarmWarnForInput(14, RULE_WARN_SET, 8.0f, RULE_WARN_AUTO, 0.0f, nullptr));
+    int slot = rulesAlarmRuleSlotForInput(14);
+
+    uint8_t warnReset = 9;
+    rulesSetAlarmRuleForInput(14, RULE_OUTSIDE_BAND, 5.0f, 100.0f, 0, &warnReset);
+    TEST_ASSERT_EQUAL_UINT8(0, warnReset);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_SET, ruleWarnMode(rules[slot], false));
+    TEST_ASSERT_EQUAL_FLOAT(8.0f, rules[slot].warnLo);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(rules[slot], true));
+}
+
+// Remap THEN normalize: band->ABOVE where the moved ceiling edge is also
+// stranded by the new limit (hi=SET 110, new ceiling 100) — reported as a
+// MAX reset, with the dropped floor alongside.
+static void test_shape_change_band_to_above_then_limit_strands_moved_edge(void) {
+    addPlainInput(14);
+    rulesSetAlarmRuleForInput(14, RULE_OUTSIDE_BAND, 0.0f, 120.0f, 0);
+    TEST_ASSERT_TRUE(rulesSetAlarmWarnForInput(14, RULE_WARN_SET, 5.0f, RULE_WARN_SET, 110.0f, nullptr));
+    int slot = rulesAlarmRuleSlotForInput(14);
+
+    uint8_t warnReset = 0;
+    rulesSetAlarmRuleForInput(14, RULE_ABOVE, 100.0f, 0.0f, 0, &warnReset);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_DROPPED_MIN | RULE_WARN_RESET_MAX, warnReset);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(rules[slot], false));
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, rules[slot].warnLo);
+}
+
+// =====================================================================
+// #428 — rulesParseWarnToken: a typo must be an error, not SET 0.
+// =====================================================================
+
+static void test_parse_warn_token_keywords_and_numbers(void) {
+    RuleWarnMode m = RULE_WARN_SET; float v = 99.0f;
+    TEST_ASSERT_TRUE(rulesParseWarnToken("NONE", m, v));
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_NONE, m); TEST_ASSERT_EQUAL_FLOAT(0.0f, v);
+    TEST_ASSERT_TRUE(rulesParseWarnToken("AUTO", m, v));
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, m);
+    TEST_ASSERT_TRUE(rulesParseWarnToken("none", m, v));  // arguments arrive as typed; keywords are case-insensitive
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_NONE, m);
+    TEST_ASSERT_TRUE(rulesParseWarnToken("Auto", m, v));
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, m);
+    TEST_ASSERT_TRUE(rulesParseWarnToken("210", m, v));
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_SET, m); TEST_ASSERT_EQUAL_FLOAT(210.0f, v);
+    TEST_ASSERT_TRUE(rulesParseWarnToken("-12.5", m, v));
+    TEST_ASSERT_EQUAL_FLOAT(-12.5f, v);
+    TEST_ASSERT_TRUE(rulesParseWarnToken("0", m, v));   // an explicit 0 is still a number
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, v);
+}
+
+static void test_parse_warn_token_rejects_garbage_and_leaves_outputs(void) {
+    RuleWarnMode m = RULE_WARN_NONE; float v = 42.0f;
+    const char* bad[] = { "2l0", "1O0", "abc", "", "12x", "nan", "inf", "NONE2", "AUT" };
+    for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+        TEST_ASSERT_FALSE_MESSAGE(rulesParseWarnToken(bad[i], m, v), bad[i]);
+        TEST_ASSERT_EQUAL_UINT8(RULE_WARN_NONE, m);   // untouched on failure
+        TEST_ASSERT_EQUAL_FLOAT(42.0f, v);
+    }
 }
 
 // =====================================================================
@@ -295,6 +436,14 @@ int main(int, char**) {
     RUN_TEST(test_shape_change_band_to_one_sided_resets_hi_mode_and_zeroes);
     RUN_TEST(test_shape_change_band_to_one_sided_reports_discarded_none_hi);
     RUN_TEST(test_brand_new_alarm_rule_starts_auto_mask_zero);
+    RUN_TEST(test_shape_change_above_to_band_moves_ceiling_edge_to_hi_slot);
+    RUN_TEST(test_shape_change_band_to_above_moves_ceiling_edge_to_lo_slot);
+    RUN_TEST(test_shape_change_band_to_above_keeps_none_ceiling);
+    RUN_TEST(test_shape_change_above_to_below_drops_ceiling_edge);
+    RUN_TEST(test_shape_change_below_to_band_keeps_floor_edge);
+    RUN_TEST(test_shape_change_band_to_above_then_limit_strands_moved_edge);
+    RUN_TEST(test_parse_warn_token_keywords_and_numbers);
+    RUN_TEST(test_parse_warn_token_rejects_garbage_and_leaves_outputs);
     RUN_TEST(test_rule_reset_returns_warn_to_auto);
     RUN_TEST(test_reseed_for_input_returns_warn_to_auto);
     return UNITY_END();
