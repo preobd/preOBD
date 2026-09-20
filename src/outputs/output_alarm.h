@@ -67,7 +67,7 @@ uint8_t alarmAcknowledge();   // returns how many alarms were newly acknowledged
 void alarmAckHousekeeping();
 
 // Policy, decoded from systemConfig.alarmSilence (a legacy 0 = today's
-// behaviour: buzzer only, SILENCE_DURATION).
+// default: buzzer only, SILENCE_DURATION — 0 ms there means until clear).
 #define ALARM_SILENCE_LED_BIT     0x80   // SCOPE ALL: acked alarm shows steady, not blinking
 #define ALARM_SILENCE_DUR_MASK    0x7F
 #define ALARM_SILENCE_DUR_DEFAULT 0      // SILENCE_DURATION (config.h)

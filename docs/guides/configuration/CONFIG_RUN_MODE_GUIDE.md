@@ -67,7 +67,7 @@ The mode button pin is `MODE_BUTTON_PIN`, set in your board's wiring overlay (`b
 - LCD display updating in real-time
 - Read-only commands available (LIST, INFO, VERSION, DUMP)
 - Alarm system active
-- MODE_BUTTON silences alarms (30 seconds)
+- MODE_BUTTON acknowledges the sounding alarms (until they clear by default; `ALARM DURATION` for a timed window)
 
 **When entered:**
 - Automatically on boot if EEPROM config is valid and MODE_BUTTON not held

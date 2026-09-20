@@ -86,8 +86,8 @@ struct SystemConfig {
     // A legacy image reads back 0 here, which is why SDLOG_FORMAT_WIDE is 0.
     uint8_t sdLogFormat;         // SdLogFormat enum (output_format.h)
     // Alarm acknowledgement policy (#433) — the former spare byte, same rule:
-    // a legacy image reads 0, which decodes to today's behaviour (buzzer only,
-    // SILENCE_DURATION). Encoded, see ALARM_SILENCE_* in outputs/output_alarm.h:
+    // a legacy image reads 0, which decodes to the built-in default (buzzer
+    // only, SILENCE_DURATION). Encoded, see ALARM_SILENCE_* in outputs/output_alarm.h:
     //   bit 7      SCOPE ALL — an acknowledged alarm also stops the LED blink
     //   bits 0..6  duration code: 0 = default, 1..126 = n*5 s, 127 = until clear
     uint8_t alarmSilence;

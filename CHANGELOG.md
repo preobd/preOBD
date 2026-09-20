@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Per-rule configurable warning threshold: `WARN` on `RULE ADD`, `RULE <id> WARN`, and `SET <pin> ALARM WARN` set each side of an alarm rule's pre-trip warning band to AUTO (derived), NONE (skip it), or an explicit value (#425)
 
 ### Changed
+- An acknowledged alarm now stays silent until that alarm clears by default, instead of re-sounding every 30 s; a timed window is still available with `ALARM DURATION <secs>` and a second alarm always sounds regardless (#433 follow-up)
 - **Breaking: EEPROM configuration is reset on upgrade.** The stored config layout changed (`EEPROM_VERSION` 6 → 7) to carry the Rule record's new warning-threshold fields; the firmware detects the old version and starts from defaults. Back up your setup with `SYSTEM DUMP JSON` before flashing and restore it afterwards with `JSON IMPORT`.
 
 ### Fixed

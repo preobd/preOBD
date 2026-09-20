@@ -40,7 +40,13 @@
 // ALARM CONFIGURATION
 // ============================================================================
 
-#define SILENCE_DURATION 30000       // ms (how long MODE_BUTTON_PIN mutes alarm)
+// Default acknowledgement window (ms) — how long ALARM SILENCE / the mode
+// button mutes an alarm. 0 = hold until that rule stops sounding, which is
+// what a broken sensor on a long trip needs: one press, not one every 30 s
+// (#433 follow-up). A timed window survives a clear-and-retrip inside it, so
+// a flapping sensor is quieter under `ALARM DURATION <secs>`; that policy is
+// runtime-configurable and persisted, this is only what an unset config gets.
+#define SILENCE_DURATION 0
 #define WARNING_THRESHOLD_PERCENT 90 // Warning triggers at 90% of alarm threshold
 
 // ============================================================================

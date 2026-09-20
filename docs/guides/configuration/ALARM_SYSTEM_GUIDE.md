@@ -217,9 +217,9 @@ When alarm becomes ACTIVE:
 - SD log records alarm state
 
 **Alarm Silencing:**
-- Press mode button in RUN mode → Silences alarm for 30 seconds (requires `INCLUDE_MODE_BUTTON` and `MODE_BUTTON_PIN` defined in board profile)
+- Press mode button in RUN mode → Acknowledges the sounding alarm(s): silent until each one clears by default, or for `ALARM DURATION <secs>` (requires `INCLUDE_MODE_BUTTON` and `MODE_BUTTON_PIN` defined in board profile)
 - Alarm automatically reactivates if violation persists after silence period
-- Silence duration configurable via `SILENCE_DURATION` in `config.h`
+- Policy is runtime config: `ALARM DURATION <5..630|CLEAR>` and `ALARM SCOPE <BUZZER|ALL>` (persisted with SAVE); `SILENCE_DURATION` in `config.h` is only the built-in default (0 = until clear)
 
 ---
 
@@ -319,7 +319,7 @@ Set timing constants in `config.h`:
 
 ```cpp
 // Alarm silence duration (mode button press in RUN mode)
-#define SILENCE_DURATION 30000  // 30 seconds
+#define SILENCE_DURATION 0      // default ack window, ms; 0 = until the alarm clears
 
 // Per-input alarm thresholds (in STANDARD UNITS)
 // Temperature: Celsius, Pressure: bar, Voltage: volts
@@ -495,7 +495,7 @@ Time 7s:     CHT still high: 415°C
              Buzzer sounds, LCD shows alarm
 
 Time 10s:    User presses MODE_BUTTON
-             Buzzer silenced for 30 seconds
+             Buzzer silenced until the alarm clears (or ALARM DURATION)
              Alarm state: still ACTIVE (alarm condition persists)
 
 Time 15s:    CHT drops: 395°C (below threshold)
