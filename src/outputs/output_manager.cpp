@@ -164,7 +164,9 @@ bool setOutputEnabled(const char* name, bool enabled) {
     if (!output) return false;
 
     int index = output - outputModules;  // Calculate index
+#if INCLUDE_SD_LOGGING
     bool wasEnabled = output->enabled;
+#endif
     output->enabled = enabled;
     systemConfig.outputEnabled[index] = enabled ? 1 : 0;
 

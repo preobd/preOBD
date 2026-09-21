@@ -20,6 +20,11 @@
 // Post-arm stabilization before warmup begins. Mirrors the alarm INIT period.
 #define RULES_INIT_MS 1000
 
+// How long a source reading must stay NAN before rulesRuleSourceFaulted()
+// reports it as a fault (#443) — long enough that one dropped conversion
+// doesn't spam the alarm channel, short enough to be a useful log signal.
+#define RULES_FAULT_DEBOUNCE_MS 2000
+
 /**
  * Arm a rule's runtime context. This is BOTH the create-from-template and the
  * boot-load path (§11.5): an enabled rule arms (INIT → WARMUP → READY); a
@@ -44,6 +49,38 @@ bool rulesRuleConditionAsserted(const Rule& rule, float value, bool currentlyAct
 
 /** True while the rule's condition is qualified (debounced): state == RULE_ACTIVE. */
 bool rulesRuleIsActive(const RuleContext& ctx);
+
+/**
+ * True when `ctx`'s source reading has been untrustworthy (NAN) for at least
+ * the required debounce: the rule is armed (state is neither RULE_DISABLED
+ * nor RULE_INIT — WARMUP counts, since a thermocouple unplugged from boot
+ * never leaves WARMUP, and that is exactly a case to report) AND
+ * ctx.nanSince is stamped AND the debounce has elapsed. Used by the
+ * AlarmBroadcaster to announce a fault instead of a misleading CLEAR (#443).
+ *
+ * The required debounce is normally RULES_FAULT_DEBOUNCE_MS (2 s), but while
+ * `ctx.state == RULE_WARMUP` it is max(RULES_FAULT_DEBOUNCE_MS,
+ * ctx.warmupTime_ms): a CAN-sourced input (an OBD-II PID) reads NaN until its
+ * first frame arrives, which can be tens of seconds after key-on, and the
+ * rule's own warmupMs already models how long that source legitimately takes
+ * to start reporting — without this a rule with a long warmup would FAULT on
+ * every key-on before its source ever had a chance to report (#443 review).
+ * READY/ACTIVE always use the short 2 s figure: by then the rule was already
+ * reporting real values, so a NAN there really is news.
+ */
+bool rulesRuleSourceFaulted(const RuleContext& ctx, uint32_t now);
+
+/**
+ * True while an ARMED-and-READY rule has an assertion currently debouncing
+ * toward RULE_ACTIVE (ctx.faultStartTime != 0 while ctx.state == RULE_READY)
+ * — i.e. the condition is asserted right now but hasn't held past
+ * ctx.persistTime_ms yet. Deliberately excludes RULE_ACTIVE, where
+ * faultStartTime is also nonzero but there is no "pending" left: the trip
+ * already qualified. Named apart from raw ctx.faultStartTime access so a
+ * caller outside the engine (the AlarmBroadcaster's fault-exit hold window,
+ * #443 review) doesn't need to know the field doubles as a debounce anchor.
+ */
+bool rulesRuleTripPending(const RuleContext& ctx);
 
 /** Configured severity if active, else RULE_SEV_NONE. */
 RuleSeverity rulesRuleSeverity(const Rule& rule, const RuleContext& ctx);

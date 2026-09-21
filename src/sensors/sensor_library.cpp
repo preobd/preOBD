@@ -2,7 +2,7 @@
  * sensor_library.cpp - Hardware Sensor Library (data + assembly)
  *
  * See sensor_library.h. This is the ONLY translation unit that includes the
- * sensor category headers (sensor_library/sensors/*.h) and the calibration
+ * sensor category headers (sensor_library/sensors/ *.h) and the calibration
  * data aggregator (sensor_calibration_data.h). Every PROGMEM string literal
  * and calibration array declared "static" inside those headers therefore
  * now compiles exactly once, and SENSOR_LIBRARY[] itself is defined exactly
@@ -10,8 +10,8 @@
  * sensor_library.h, which is what produced 5-7 duplicate copies of the
  * table (and up to 12 of some individual calibration arrays) before #400.
  *
- * The category headers (sensor_library/sensors/*.h) and per-vendor
- * calibration headers (sensor_calibration_data/<vendor>/*.h) are unchanged — they
+ * The category headers (sensor_library/sensors/ *.h) and per-vendor
+ * calibration headers (sensor_calibration_data/<vendor>/ *.h) are unchanged — they
  * still declare their data "static const ... PROGMEM", which is exactly
  * right now that this is their only translation unit.
  */

@@ -160,6 +160,17 @@ static_assert(sizeof(PreobdSystemStatus) == PREOBD_STATUS_SIZE,
 #define PREOBD_ALARM_KIND_CLEAR 0
 #define PREOBD_ALARM_KIND_HIGH  1   // value at/above maxValue threshold
 #define PREOBD_ALARM_KIND_LOW   2   // value at/below minValue threshold
+#define PREOBD_ALARM_KIND_FAULT 3   // rule's source reading is untrustworthy (NAN
+                                    // past the debounce) — the reading itself is
+                                    // in doubt, not just out of range. Always sent
+                                    // at severity INFO (never LED/buzzer, never
+                                    // acked — a fault is not an alarm; an Action's
+                                    // FAILSAFE is the safety mechanism). value and
+                                    // threshold are 0 on the wire (there is no
+                                    // trustworthy value to report). Held (non-quiet)
+                                    // so it survives the PING resync, like a
+                                    // WARNING/ALARM. Additive — protocol version
+                                    // unchanged (#443).
 
 #ifdef __cplusplus
 

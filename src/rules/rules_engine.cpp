@@ -20,6 +20,7 @@ void rulesRuleInit(RuleContext& ctx, const Rule& rule, uint32_t now) {
     ctx.state = enabled ? RULE_INIT : RULE_DISABLED;
     ctx.stateEntryTime = now;
     ctx.faultStartTime = 0;
+    ctx.nanSince = 0;
     ctx.warmupTime_ms = rule.warmupMs;
     ctx.persistTime_ms = rule.debounceMs;
 }
@@ -63,7 +64,20 @@ void rulesRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t n
     if (!enabled) {
         ctx.state = RULE_DISABLED;
         ctx.faultStartTime = 0;
+        ctx.nanSince = 0;
         return;
+    }
+
+    // Maintain nanSince BEFORE the state switch so WARMUP/INIT stamp it too
+    // (#443) — a thermocouple unplugged from boot never leaves WARMUP, and
+    // that is exactly a case rulesRuleSourceFaulted() must be able to report.
+    // `now ? now : 1` keeps 0 meaning "finite": a test harness or a boot-time
+    // tick can legitimately pass now == 0, and 0 must never be mistaken for
+    // "not faulted" once nanSince is deliberately stamped.
+    if (isnan(value)) {
+        if (ctx.nanSince == 0) ctx.nanSince = now ? now : 1;
+    } else {
+        ctx.nanSince = 0;
     }
 
     switch (ctx.state) {
@@ -113,6 +127,23 @@ void rulesRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t n
 
 bool rulesRuleIsActive(const RuleContext& ctx) {
     return ctx.state == RULE_ACTIVE;
+}
+
+bool rulesRuleSourceFaulted(const RuleContext& ctx, uint32_t now) {
+    if (ctx.state == RULE_DISABLED || ctx.state == RULE_INIT) return false;
+    if (ctx.nanSince == 0) return false;
+    // WARMUP gets the longer of the two: a CAN-sourced input reads NaN until
+    // its first frame, which can be tens of seconds after key-on, and the
+    // rule's own warmupMs already models that startup latency (#443 review).
+    uint32_t required = RULES_FAULT_DEBOUNCE_MS;
+    if (ctx.state == RULE_WARMUP && ctx.warmupTime_ms > required) {
+        required = ctx.warmupTime_ms;
+    }
+    return (now - ctx.nanSince) >= required;
+}
+
+bool rulesRuleTripPending(const RuleContext& ctx) {
+    return ctx.state == RULE_READY && ctx.faultStartTime != 0;
 }
 
 RuleSeverity rulesRuleSeverity(const Rule& rule, const RuleContext& ctx) {

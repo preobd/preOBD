@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Alarm acknowledgement is now per rule and reachable remotely: `ALARM SILENCE` (or the mode button) mutes only the alarms sounding at that moment, `ALARM DURATION <secs|CLEAR>` and `ALARM SCOPE <BUZZER|ALL>` set how long and what it mutes, and `ALARM STATUS` shows what is acknowledged (#433)
 - Per-rule configurable warning threshold: `WARN` on `RULE ADD`, `RULE <id> WARN`, and `SET <pin> ALARM WARN` set each side of an alarm rule's pre-trip warning band to AUTO (derived), NONE (skip it), or an explicit value (#425)
+- A disconnected/faulted sensor now announces itself on the alarm channel as an INFO-tier FAULT event instead of silently clearing the alarm (#443)
 
 ### Changed
 - An acknowledged alarm now stays silent until that alarm clears by default, instead of re-sounding every 30 s; a timed window is still available with `ALARM DURATION <secs>` and a second alarm always sounds regardless (#433 follow-up)

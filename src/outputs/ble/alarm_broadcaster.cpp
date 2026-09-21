@@ -95,10 +95,39 @@ float thresholdFor(const Rule& r, uint8_t kind) {
     return r.limitLo;  // ABOVE / BELOW use the single limit
 }
 
+// Hold the previous ACCEPTED key across two windows where evalSlot()'s
+// instantaneous truth would otherwise flash a misleading transient onto the
+// wire (#443 review). Called only when a real Input is configured on the
+// rule's source pin (an orphan rule is inert and never faults — #345 parity,
+// checked by the caller) and only after the caller has already ruled out
+// "faulted right now" (so ctx.nanSince != 0 here always means PENDING, not
+// past the debounce):
+//
+//   Window 1 — fault PENDING: the reading is NAN and ctx.nanSince is
+//   stamped, but the FAULT debounce hasn't elapsed. rulesManagerUpdate()
+//   runs every 50ms and de-asserts an ACTIVE rule to READY on the FIRST NaN
+//   tick (NaN never asserts, §11.3), so evalSlot()'s truthful key right now
+//   is NONE/CLEAR. Without this, a rule's source dying goes
+//   ALARM -> CLEAR (<=50ms) -> FAULT (+2s) instead of the correct
+//   ALARM -> FAULT.
+//
+//   Window 2 — fault CLEARING while re-tripping: the reading has returned
+//   and is (still) past the limit, so the rule sits READY with its
+//   assertion re-debouncing toward ACTIVE (rulesRuleTripPending()). The last
+//   accepted key is the held FAULT; without this it flashes CLEAR for the
+//   persist window before reasserting ALARM.
+bool holdAcrossFaultTransition(const AlarmKey& last, const RuleContext& ctx) {
+    if (ctx.nanSince != 0) return true;
+    if (last.kind == PREOBD_ALARM_KIND_FAULT && rulesRuleTripPending(ctx)) return true;
+    return false;
+}
+
 // Evaluate slot i from the rules table: its (severity, kind, identity) key and
 // the payload fields (value/threshold) needed to build a frame. Quiet
-// (NORMAL/CLEAR) for an empty/non-alarm/not-firing rule.
-AlarmKey evalSlot(int i, float& value, float& threshold) {
+// (NORMAL/CLEAR) for an empty/non-alarm/not-firing rule. `last` is the last
+// key this slot put on the wire — needed to decide the fault-transition hold
+// above; it is NOT otherwise part of the per-tick evaluation.
+AlarmKey evalSlot(int i, const AlarmKey& last, float& value, float& threshold) {
     ASSERT_INPUTS_TABLE_LIVE();  // rules[]/inputs[] aren't ground truth until here (#369)
     const Rule& r = rules[i];
     AlarmKey k = kQuietKey;
@@ -112,19 +141,56 @@ AlarmKey evalSlot(int i, float& value, float& threshold) {
                               (r.flags & RULE_FLAG_ENABLED);
     if (isNotifyRule) {
         Input* in = getInputByPin(r.sourceInput);
+        RuleContext& ctx = g_ruleContexts[i];
         value      = in ? in->value : NAN;
         k.ruleId   = r.id;
         k.inputIdx = getInputIndex(r.sourceInput);
+
+        // FAULT (and the hold windows around it) only apply to a rule with a
+        // real configured input on its source pin. An ORPHAN rule (no input
+        // on the pin — CLEAR <pin> can leave these behind) is INERT, exactly
+        // like sourceFaultedForRuleSlot() already treats it for Actions
+        // (#345): it can never assert, so it must not announce a fault
+        // either. Without this gate, CLEAR <pin> on a live faulted input
+        // would leave the rule announcing a PERMANENT FAULT with
+        // inputIndex 0xFF forever (getInputIndex returns 0xFF for an unowned
+        // pin) instead of the truthful CLEAR nextKey() already produces for
+        // a vacated identity.
+        if (in != nullptr) {
+            // A source reading that's been NAN past the debounce is announced
+            // as FAULT/INFO instead of whatever rulesRuleAnnunciatorSeverity
+            // would say (#443). This matters most for an ACTIVE rule: NAN
+            // de-asserts it (rulesRuleConditionAsserted never asserts on NAN,
+            // by design — a failsafe intent, §11.3), so without this branch
+            // the broadcaster would emit NORMAL/CLEAR for a sensor that just
+            // died mid-alarm — the opposite of what happened, and a false
+            // "all clear" for the driver. INFO on purpose: a fault must
+            // never sound the buzzer or light the LED (that's what an
+            // Action's FAILSAFE is for) and is never acknowledged (#433) —
+            // there is nothing to silence, only to log. FAULT is held
+            // (non-quiet) like WARNING/ALARM so it survives the PING resync
+            // (#430).
+            if (rulesRuleSourceFaulted(ctx, millis())) {
+                k.severity = PREOBD_ALARM_SEVERITY_INFO;
+                k.kind     = PREOBD_ALARM_KIND_FAULT;
+                value = 0.0f; threshold = 0.0f;
+                return k;
+            }
+            if (holdAcrossFaultTransition(last, ctx)) {
+                value = 0.0f; threshold = 0.0f;
+                return last;
+            }
+        }
         // Includes the derived WARNING tier (§11.2): WARNING as the value
         // approaches the limit, ALARM once it trips.
-        RuleSeverity asev = rulesRuleAnnunciatorSeverity(r, g_ruleContexts[i], value);
+        RuleSeverity asev = rulesRuleAnnunciatorSeverity(r, ctx, value);
         if (asev != RULE_SEV_NONE) {
             k.severity = toPreobdSeverity(asev);
             // READY here only happens via the approach-tier path in
             // rulesRuleAnnunciatorSeverity (ACTIVE rules return early above
             // it with ctx.state == RULE_ACTIVE) — so READY unambiguously
             // means "use the warn edge, not the midpoint".
-            const bool approaching = (g_ruleContexts[i].state == RULE_READY);
+            const bool approaching = (ctx.state == RULE_READY);
             k.kind     = kindFor(r, value, approaching);
             threshold  = thresholdFor(r, k.kind);
         }
@@ -139,10 +205,10 @@ AlarmKey evalSlot(int i, float& value, float& threshold) {
 // can drop its held entry (#429). A replacement rule that is itself firing is
 // announced on the following tick, once that CLEAR is cached.
 AlarmKey nextKey(int i, float& value, float& threshold) {
-    AlarmKey k = evalSlot(i, value, threshold);
     // lastKey() is defined from init()'s prime() on and survives a resync
     // invalidate, so this holds on the tick right after a PING too.
     const AlarmKey& last = g_bc.lastKey(i);
+    AlarmKey k = evalSlot(i, last, value, threshold);
     if (!isQuiet(last) && last.ruleId != k.ruleId) {
         value = 0.0f; threshold = 0.0f;
         return AlarmKey{ PREOBD_ALARM_SEVERITY_NORMAL, PREOBD_ALARM_KIND_CLEAR,

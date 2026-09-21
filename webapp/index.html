@@ -1149,6 +1149,13 @@ const DIS_SERVICE        = 0x180A;
 // Severity / kind constants mirror ble_gatt_defs.h
 const SEV_NORMAL = 0, SEV_WARNING = 1, SEV_ALARM = 2, SEV_INFO = 3;
 const KIND_CLEAR = 0, KIND_HIGH = 1, KIND_LOW = 2;
+// KIND_FAULT (#443): the rule's source reading is untrustworthy (NAN past the
+// firmware's debounce). Always severity INFO, value/threshold 0, held on the
+// device so a resync re-announces it. Rule ids currently faulted are tracked
+// so the CLEAR that ends a fault can say "reading restored" — the device's
+// CLEAR frame is the same bytes either way.
+const KIND_FAULT = 3;
+const faultedRules = new Set();
 // PreobdActionState enums (ble_gatt_defs.h §11).
 const ACTION_TYPE_RELAY = 0, ACTION_TYPE_BEEPER = 1, ACTION_TYPE_LED = 2, ACTION_TYPE_DISPLAY = 3;
 const ACTION_STATE_OFF = 0, ACTION_STATE_ON = 1;
@@ -1371,6 +1378,7 @@ function onDisconnected() {
   updateFramedBadge();
   alarmLog.length = 0;
   firingState.clear();
+  faultedRules.clear();
   actionState.clear();
   closeCtlForm();   // drop any open Rule/Action edit form so it can't outlive the config it edits
   ctlDirty = false;
@@ -1569,11 +1577,25 @@ function onAlarmNotify(event) {
   } else if (severity === SEV_NORMAL && kind === KIND_CLEAR) {
     // A held condition cleared.
     firingState.delete(ruleId);
+  } else if (kind === KIND_FAULT) {
+    // The source died (#443). The device de-asserted the rule — its LED and
+    // buzzer are already off — so the held entry must go too: the state is
+    // unknown, not normal, and a red banner over a dead sensor is a lie in the
+    // other direction. Stays out of firingState like any INFO edge.
+    firingState.delete(ruleId);
   }
   // else: an INFO edge — log-only, leaves firingState untouched.
 
+  // Fault bookkeeping for the wording of the frame that ENDS the fault: a
+  // CLEAR after a fault reads "fault cleared" — NOT "reading restored", because
+  // a RULE DEL / ALARM DISABLE while faulted also yields a CLEAR for this
+  // ruleId (#429) and the wire can't tell the two apart. A WARNING/ALARM after
+  // a fault is just the trip it is (the reading came back tripped).
+  const restored = kind !== KIND_FAULT && faultedRules.has(ruleId);
+  if (kind === KIND_FAULT) faultedRules.add(ruleId); else faultedRules.delete(ruleId);
+
   // Push to the log (newest first).
-  alarmLog.unshift({ inputIndex, ruleId, severity, kind, value, threshold, sequence, at: now });
+  alarmLog.unshift({ inputIndex, ruleId, severity, kind, value, threshold, sequence, at: now, restored });
   if (alarmLog.length > MAX_ALARM_LOG) alarmLog.length = MAX_ALARM_LOG;
 
   renderAlarmPanel();
@@ -1617,6 +1639,7 @@ function formatFiringDuration(ms) {
 
 function severityTone(severity, kind) {
   if (kind === KIND_CLEAR) return 'ok';
+  if (kind === KIND_FAULT) return 'info';
   if (severity === SEV_ALARM)   return 'bad';
   if (severity === SEV_WARNING) return 'warn';
   if (severity === SEV_INFO)    return 'info';
@@ -1634,7 +1657,8 @@ function severityTone(severity, kind) {
 // app's firingDescription (src/data/firing.ts) — change both together.
 function firingDescription(st) {
   const val = Number.isFinite(st.value) ? st.value.toFixed(1) : '--';
-  if (st.kind === KIND_CLEAR) return 'cleared (' + val + ')';
+  if (st.kind === KIND_FAULT) return 'sensor fault';
+  if (st.kind === KIND_CLEAR) return st.restored ? 'fault cleared' : 'cleared (' + val + ')';
   const thr = Number.isFinite(st.threshold) ? st.threshold.toFixed(1) : '--';
   const verb = st.severity === SEV_WARNING ? (isApproachTier(st) ? 'approaching'
                                               : (st.kind === KIND_LOW ? 'below' : 'exceeded'))

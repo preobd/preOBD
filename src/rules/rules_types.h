@@ -295,6 +295,9 @@ struct RuleContext {
     RuleState state;            // current runtime state
     uint32_t  stateEntryTime;   // millis() when current state was entered
     uint32_t  faultStartTime;   // millis() when threshold violation started (0 = none) — debounce anchor
+    uint32_t  nanSince;         // millis() when the source reading went NAN (0 = reading
+                                 // finite). Runtime only, never persisted — a source fault
+                                 // is a live sensor condition, not configuration (#443).
     uint16_t  warmupTime_ms;    // effective warmup (from the Rule)
     uint16_t  persistTime_ms;   // effective debounce (from the Rule)
 };

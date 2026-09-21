@@ -17,10 +17,14 @@ SystemConfig  systemConfig;
 Rule          rules[MAX_RULES];      // standalone table (was systemConfig.rules[])
 RuleContext   g_ruleContexts[MAX_RULES];
 
-// One synthetic source input; getInputByPin returns it, getInputIndex is fixed.
+// One synthetic source input; getInputByPin returns it, getInputIndex is fixed
+// — except when g_orphanPin flips them to "no input configured on this pin"
+// (getInputByPin -> nullptr, getInputIndex -> 0xFF), simulating CLEAR <pin>
+// on a rule's source (#443 review item 2 / #345 parity).
 static Input g_srcInput;
-Input*  getInputByPin(uint8_t)  { return &g_srcInput; }
-uint8_t getInputIndex(uint8_t)  { return 3; }  // arbitrary stable index
+static bool  g_orphanPin = false;
+Input*  getInputByPin(uint8_t)  { return g_orphanPin ? nullptr : &g_srcInput; }
+uint8_t getInputIndex(uint8_t)  { return g_orphanPin ? 0xFF : 3; }
 
 // ---- Capturing transport ----
 static int      g_frameCount = 0;
@@ -29,6 +33,14 @@ static uint16_t g_frameLen   = 0;
 static uint8_t  g_framePayload[64];
 static uint8_t  g_ruleIds[MAX_RULES];  // ruleId of each frame, in emit order
 
+// Full (severity, kind) history of every accepted frame, in emit order — the
+// #443-review FAULT tests drive the real engine tick-by-tick and need to
+// assert "no CLEAR was ever emitted along the way", not just inspect the
+// most recent frame.
+static uint8_t g_histSeverity[512];
+static uint8_t g_histKind[512];
+static int     g_histCount = 0;
+
 bool MuxTransport::sendFrame(uint8_t type, const uint8_t* payload, uint16_t len) {
     g_frameType = type;
     g_frameLen  = len;
@@ -36,6 +48,12 @@ bool MuxTransport::sendFrame(uint8_t type, const uint8_t* payload, uint16_t len)
     if (g_frameCount < (int)MAX_RULES && len == PREOBD_ALARM_EVENT_SIZE)
         g_ruleIds[g_frameCount] =
             reinterpret_cast<const PreobdAlarmEvent*>(payload)->ruleId;
+    if (len == PREOBD_ALARM_EVENT_SIZE && g_histCount < (int)(sizeof(g_histSeverity))) {
+        const PreobdAlarmEvent* ev = reinterpret_cast<const PreobdAlarmEvent*>(payload);
+        g_histSeverity[g_histCount] = ev->severity;
+        g_histKind[g_histCount]     = ev->kind;
+        ++g_histCount;
+    }
     ++g_frameCount;
     return true;
 }
@@ -54,11 +72,17 @@ static const PreobdAlarmEvent& lastEvent() {
 
 void setUp(void) {
     g_frameCount = 0; g_frameType = 0; g_frameLen = 0;
+    g_histCount = 0;
+    g_orphanPin = false;
+    g_test_now = 0;
     memset(g_framePayload, 0, sizeof(g_framePayload));
     memset(g_ruleIds, 0, sizeof(g_ruleIds));
+    memset(g_histSeverity, 0, sizeof(g_histSeverity));
+    memset(g_histKind, 0, sizeof(g_histKind));
     memset(&systemConfig, 0, sizeof(systemConfig));
     memset(g_ruleContexts, 0, sizeof(g_ruleContexts));
     memset(&g_srcInput, 0, sizeof(g_srcInput));
+    memset(rules, 0, sizeof(rules));
     for (int i = 0; i < MAX_RULES; ++i) rules[i].id = RULES_ID_NONE;
     setInputsTableLive(true);  // every test but the boot-order one below
     AlarmBroadcaster::init();
@@ -269,6 +293,339 @@ static void test_replaced_rule_in_slot_clears_old_then_announces_new(void) {
     TEST_ASSERT_EQUAL_INT(0, g_frameCount);
 }
 
+// ---- #443: FAULT (NAN source, INFO tier) --------------------------------
+
+// An ACTIVE alarm whose source goes NAN and stays NAN past the debounce
+// announces FAULT/INFO — NOT a CLEAR (an ACTIVE rule going NAN would
+// otherwise de-assert and look like "all clear" for a dead sensor).
+static void test_active_rule_nan_past_debounce_emits_fault(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 120.0f, /*active*/true);
+    g_test_now = 1000;
+    AlarmBroadcaster::tick();                 // establish held ALARM
+    g_frameCount = 0;
+
+    g_srcInput.value = NAN;
+    g_ruleContexts[0].nanSince = 1000;
+    g_test_now = 1000 + RULES_FAULT_DEBOUNCE_MS;
+    AlarmBroadcaster::tick();
+
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    const PreobdAlarmEvent& e = lastEvent();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_INFO, e.severity);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_FAULT, e.kind);
+    TEST_ASSERT_EQUAL_UINT8(1, e.ruleId);
+    TEST_ASSERT_EQUAL_UINT8(3, e.inputIndex);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, e.value);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, e.threshold);
+    TEST_ASSERT_NOT_EQUAL(PREOBD_ALARM_KIND_CLEAR, e.kind);
+}
+
+// Same, but still inside the debounce window: the broadcaster now HOLDS the
+// last accepted key (ALARM) instead of emitting whatever evalSlot() would
+// say right now — holdAcrossFaultTransition()'s Window 1 (#443 review):
+// ctx.nanSince is stamped but rulesRuleSourceFaulted() isn't true yet, so the
+// slot holds until either the debounce elapses (-> FAULT) or the reading
+// returns. See test_fault_a_no_clear_before_debounce_then_one_fault() below
+// for the same window driven through the REAL rulesRuleUpdate() state
+// machine tick-by-tick, which is what motivated the hold in the first place
+// (rulesManagerUpdate() de-asserts an ACTIVE rule to READY on the very FIRST
+// NaN tick, long before the FAULT debounce elapses).
+static void test_active_rule_nan_within_debounce_no_frame(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 120.0f, /*active*/true);
+    g_test_now = 1000;
+    AlarmBroadcaster::tick();                 // establish held ALARM
+    g_frameCount = 0;
+
+    g_srcInput.value = NAN;
+    g_ruleContexts[0].nanSince = 1000;
+    g_test_now = 1000 + RULES_FAULT_DEBOUNCE_MS - 1;  // not yet debounced
+    AlarmBroadcaster::tick();
+
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+}
+
+// A READY (not yet active) rule whose source is NAN past the debounce also
+// announces FAULT/INFO.
+static void test_ready_rule_nan_emits_fault(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 50.0f, /*active*/false);  // READY
+    g_test_now = 1000;
+    AlarmBroadcaster::tick();                 // quiet
+    g_frameCount = 0;
+
+    g_srcInput.value = NAN;
+    g_ruleContexts[0].nanSince = 1000;
+    g_test_now = 1000 + RULES_FAULT_DEBOUNCE_MS;
+    AlarmBroadcaster::tick();
+
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    const PreobdAlarmEvent& e = lastEvent();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_INFO, e.severity);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_FAULT, e.kind);
+}
+
+// The reading returning while the rule is READY reports the truthful key
+// (NORMAL/CLEAR), not FAULT.
+static void test_reading_returns_ready_emits_clear(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 50.0f, /*active*/false);
+    g_test_now = 1000;
+    g_srcInput.value = NAN;
+    g_ruleContexts[0].nanSince = 1000;
+    g_test_now = 1000 + RULES_FAULT_DEBOUNCE_MS;
+    AlarmBroadcaster::tick();                 // FAULT held
+    g_frameCount = 0;
+
+    g_srcInput.value = 50.0f;                 // reading restored
+    g_ruleContexts[0].nanSince = 0;
+    g_ruleContexts[0].state = RULE_READY;
+    AlarmBroadcaster::tick();
+
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    const PreobdAlarmEvent& e = lastEvent();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_NORMAL, e.severity);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_CLEAR, e.kind);
+}
+
+// The reading returning while the rule is (still/again) ACTIVE reports ALARM
+// again, not a lingering FAULT.
+static void test_reading_returns_active_emits_alarm_again(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 120.0f, /*active*/true);
+    g_test_now = 1000;
+    g_srcInput.value = NAN;
+    g_ruleContexts[0].nanSince = 1000;
+    g_test_now = 1000 + RULES_FAULT_DEBOUNCE_MS;
+    AlarmBroadcaster::tick();                 // FAULT held
+    g_frameCount = 0;
+
+    g_srcInput.value = 120.0f;                // reading restored, still tripped
+    g_ruleContexts[0].nanSince = 0;
+    g_ruleContexts[0].state = RULE_ACTIVE;
+    AlarmBroadcaster::tick();
+
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    const PreobdAlarmEvent& e = lastEvent();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_ALARM, e.severity);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_HIGH, e.kind);
+}
+
+// A NONE-severity control rule (drives Actions only, never notifies) stays
+// silent even while its source is NAN past the debounce.
+static void test_none_severity_rule_nan_is_silent(void) {
+    configRule(RULE_SEV_NONE, -1.0f, 100.0f, 120.0f, /*active*/true);
+    g_srcInput.value = NAN;
+    g_ruleContexts[0].nanSince = 1000;
+    g_test_now = 1000 + RULES_FAULT_DEBOUNCE_MS;
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+}
+
+// A rule still in RULE_INIT never reports FAULT even with nanSince stamped
+// and the debounce elapsed — matches rulesRuleSourceFaulted's INIT exclusion.
+static void test_rule_init_state_nan_past_debounce_is_silent(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 120.0f, /*active*/false);
+    g_ruleContexts[0].state = RULE_INIT;
+    g_srcInput.value = NAN;
+    g_ruleContexts[0].nanSince = 1000;
+    g_test_now = 1000 + RULES_FAULT_DEBOUNCE_MS;
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+}
+
+// ---- #443 review: real-engine-driven FAULT transitions ------------------
+//
+// The tests above pin ctx.state/ctx.nanSince by hand, which cannot exercise
+// holdAcrossFaultTransition() honestly: rulesManagerUpdate() runs every
+// 50ms in the firmware and de-asserts an ACTIVE rule to READY on the FIRST
+// NaN tick (NaN never asserts, §11.3) — long before the 2s FAULT debounce
+// elapses. Without the hold, that produces the exact bug the review caught:
+// ALARM -> CLEAR (<=50ms) -> FAULT (+2s) instead of ALARM -> FAULT. These
+// tests drive the REAL rulesRuleUpdate() state machine tick-by-tick (the
+// harness includes rules_engine.cpp) to prove the hold actually closes that
+// window, not just that the broadcaster's key math is internally consistent.
+
+// Fully-specified Rule for these tests: unlike configRule() above (which
+// only sets what the older pinned-state tests need), driving the REAL state
+// machine means every timing field it reads — hysteresis, warmupMs,
+// debounceMs — must be explicit rather than left over from a previous test.
+static void configRealRule(uint8_t severity, float lo, float hi,
+                            uint16_t warmupMs = 500, uint16_t debounceMs = 200,
+                            float hysteresis = 2.0f) {
+    Rule& r = rules[0];
+    memset(&r, 0, sizeof(Rule));
+    r.id = 1; r.sourceInput = 21; r.condition = RULE_OUTSIDE_BAND;
+    r.severity = severity; r.flags = RULE_FLAG_ENABLED;
+    r.limitLo = lo; r.limitHi = hi; r.hysteresis = hysteresis;
+    r.warmupMs = warmupMs; r.debounceMs = debounceMs;
+}
+
+// Advance g_test_now by stepMs, run the REAL rulesRuleUpdate() against the
+// CURRENT g_srcInput.value (mirroring rulesManagerUpdate()'s per-loop-pass
+// cadence), then run one broadcaster tick. This is the driver every test in
+// this section uses instead of pinning ctx.state/ctx.nanSince by hand.
+static void stepEngine(uint32_t stepMs = 50) {
+    g_test_now += stepMs;
+    rulesRuleUpdate(rules[0], g_ruleContexts[0], g_srcInput.value, g_test_now);
+    AlarmBroadcaster::tick();
+}
+
+// Arm rule 0 and drive it INIT -> WARMUP -> READY with a settled, in-band
+// reading, using the real engine — the same sequence rules_manager.cpp's
+// boot-load path runs.
+static void armRuleToReady(float settledValue) {
+    g_srcInput.value = settledValue;
+    rulesRuleInit(g_ruleContexts[0], rules[0], g_test_now);
+    stepEngine(RULES_INIT_MS + 1);              // INIT -> WARMUP
+    stepEngine(rules[0].warmupMs + 1);          // WARMUP -> READY
+    TEST_ASSERT_EQUAL(RULE_READY, g_ruleContexts[0].state);
+}
+
+// (a) An ACTIVE alarm rule, real-armed and real-tripped, whose source then
+// goes NAN: no frame at all until the FAULT debounce elapses, then exactly
+// one INFO/FAULT — and no CLEAR is emitted anywhere along the way.
+static void test_fault_a_no_clear_before_debounce_then_one_fault(void) {
+    configRealRule(RULE_SEV_ALARM, -1.0f, 100.0f);
+    armRuleToReady(50.0f);
+
+    g_srcInput.value = 120.0f;                  // trip
+    stepEngine(10);                             // begin assertion (faultStartTime set)
+    stepEngine(rules[0].debounceMs + 1);        // cross the persist debounce -> ACTIVE
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, g_ruleContexts[0].state);
+    TEST_ASSERT_TRUE(g_histCount >= 1);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_ALARM, g_histSeverity[g_histCount - 1]);
+    const int histBefore = g_histCount;
+
+    g_srcInput.value = NAN;                     // source dies
+    for (uint32_t t = 0; t < RULES_FAULT_DEBOUNCE_MS + 100 && g_histCount == histBefore; t += 50) {
+        stepEngine(50);
+    }
+
+    TEST_ASSERT_EQUAL_INT(histBefore + 1, g_histCount);   // exactly one new frame
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_INFO, g_histSeverity[g_histCount - 1]);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_FAULT, g_histKind[g_histCount - 1]);
+    for (int i = 0; i < g_histCount; ++i) {
+        const bool isClear = g_histSeverity[i] == PREOBD_ALARM_SEVERITY_NORMAL &&
+                              g_histKind[i] == PREOBD_ALARM_KIND_CLEAR;
+        TEST_ASSERT_FALSE(isClear);             // never a misleading CLEAR
+    }
+}
+
+// Shared setup for (b)/(c): real-arm, real-trip to ALARM, then drive the
+// source to NAN until the real engine (via the broadcaster's hold) reports
+// FAULT.
+static void armRuleActiveThenFault(void) {
+    configRealRule(RULE_SEV_ALARM, -1.0f, 100.0f);
+    armRuleToReady(50.0f);
+    g_srcInput.value = 120.0f;
+    stepEngine(10);                             // begin assertion (faultStartTime set)
+    stepEngine(rules[0].debounceMs + 1);        // cross the persist debounce -> ACTIVE
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, g_ruleContexts[0].state);
+
+    g_srcInput.value = NAN;
+    for (uint32_t t = 0; t < RULES_FAULT_DEBOUNCE_MS + 100; t += 50) stepEngine(50);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_FAULT, lastEvent().kind);
+}
+
+// (b) From a held FAULT, the reading returns still-tripped: no CLEAR while
+// the re-assertion re-debounces (Window 2), then exactly one ALARM once the
+// persist debounce elapses.
+static void test_fault_b_reading_returns_tripped_then_alarm(void) {
+    armRuleActiveThenFault();
+    const int histBefore = g_histCount;
+
+    g_srcInput.value = 130.0f;                  // reading restored, still tripped
+    for (uint32_t t = 0; t <= rules[0].debounceMs + 50; t += 50) stepEngine(50);
+
+    TEST_ASSERT_EQUAL_INT(histBefore + 1, g_histCount);   // exactly one new frame
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_ALARM, g_histSeverity[g_histCount - 1]);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_HIGH, g_histKind[g_histCount - 1]);
+}
+
+// (c) From a held FAULT, the reading returns NORMAL (not tripped): one CLEAR,
+// immediately — no re-debounce window applies since the rule never re-asserts.
+static void test_fault_c_reading_returns_normal_then_clear(void) {
+    armRuleActiveThenFault();
+    const int histBefore = g_histCount;
+
+    g_srcInput.value = 50.0f;                   // reading restored, well in-band
+    stepEngine(50);
+
+    TEST_ASSERT_EQUAL_INT(histBefore + 1, g_histCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_NORMAL, g_histSeverity[g_histCount - 1]);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_CLEAR, g_histKind[g_histCount - 1]);
+}
+
+// (d) An orphan rule (no Input configured on the source pin — CLEAR <pin>
+// parity, #345) whose source reads NAN forever never announces a fault: no
+// frame at all, ever. Mirrors sourceFaultedForRuleSlot()'s INERT treatment.
+static void test_fault_d_orphan_rule_never_faults(void) {
+    configRealRule(RULE_SEV_ALARM, -1.0f, 100.0f);
+    g_orphanPin = true;
+    rulesRuleInit(g_ruleContexts[0], rules[0], g_test_now);
+    g_srcInput.value = NAN;
+    for (uint32_t t = 0; t < RULES_FAULT_DEBOUNCE_MS * 3; t += 50) stepEngine(50);
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);
+}
+
+// Bonus (#443 review item 2, "confirm what happens instead"): CLEAR <pin> on
+// a LIVE faulted input removes the input but leaves the rule record in
+// place, so nextKey()'s replaced/deleted-identity check (keyed on ruleId)
+// never fires — the in!=nullptr gate is what turns this into one truthful
+// CLEAR (inputIndex 0xFF, the input is genuinely gone) instead of a
+// permanent FAULT frozen at the stale inputIndex.
+static void test_fault_orphaned_mid_fault_clears_not_stuck_faulted(void) {
+    armRuleActiveThenFault();
+    const int histBefore = g_histCount;
+
+    g_orphanPin = true;                         // CLEAR <pin>: input gone, rule stays
+    stepEngine(50);
+    TEST_ASSERT_EQUAL_INT(histBefore + 1, g_histCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_NORMAL, g_histSeverity[g_histCount - 1]);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_CLEAR, g_histKind[g_histCount - 1]);
+
+    const int afterClear = g_histCount;
+    stepEngine(50);                             // stays quiet: no repeat, no re-FAULT
+    TEST_ASSERT_EQUAL_INT(afterClear, g_histCount);
+}
+
+// (e) WARMUP is warmup-aware: a rule with a 30s warmup (a CAN/OBD-II PID
+// that reads NaN until its first frame) does not FAULT at the ordinary 2s —
+// only past its own warmupMs.
+static void test_fault_e_warmup_uses_warmup_debounce(void) {
+    configRealRule(RULE_SEV_ALARM, -1.0f, 100.0f, /*warmupMs*/30000);
+    g_srcInput.value = NAN;                     // dead from boot
+    rulesRuleInit(g_ruleContexts[0], rules[0], g_test_now);
+    stepEngine(RULES_INIT_MS + 1);              // INIT -> WARMUP
+    TEST_ASSERT_EQUAL(RULE_WARMUP, g_ruleContexts[0].state);
+
+    for (uint32_t t = 0; t < 5000; t += 50) stepEngine(50);
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);     // 5s in: still nothing
+
+    for (uint32_t t = 5000; t < 30000 + 100; t += 50) stepEngine(50);
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);     // past 30s: exactly one FAULT
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_INFO, lastEvent().severity);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_FAULT, lastEvent().kind);
+}
+
+// #430 resync: a held FAULT is re-announced to a newly (re)connected central,
+// same as a held WARNING/ALARM.
+static void test_resync_reannounces_held_fault(void) {
+    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 120.0f, /*active*/true);
+    g_srcInput.value = NAN;
+    g_ruleContexts[0].nanSince = 1000;
+    g_test_now = 1000 + RULES_FAULT_DEBOUNCE_MS;
+    AlarmBroadcaster::tick();                 // FAULT sent
+    g_frameCount = 0;
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(0, g_frameCount);   // steady state: nothing
+
+    AlarmBroadcaster::resync();
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    const PreobdAlarmEvent& e = lastEvent();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_INFO, e.severity);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_FAULT, e.kind);
+    TEST_ASSERT_EQUAL_UINT8(1, e.ruleId);
+}
+
 // #430: no heartbeat, so a central that connects while a rule is held would
 // see "all normal" until the next transition. resync() (the mux PING edge —
 // which the nRF raises on the 0->1 central transition, i.e. connect or
@@ -332,5 +689,19 @@ int main(int, char**) {
     RUN_TEST(test_resync_with_nothing_held_is_silent);
     RUN_TEST(test_resync_then_delete_still_clears_by_identity);
     RUN_TEST(test_boot_order_emits_nothing_before_config_loads);
+    RUN_TEST(test_active_rule_nan_past_debounce_emits_fault);
+    RUN_TEST(test_active_rule_nan_within_debounce_no_frame);
+    RUN_TEST(test_ready_rule_nan_emits_fault);
+    RUN_TEST(test_reading_returns_ready_emits_clear);
+    RUN_TEST(test_reading_returns_active_emits_alarm_again);
+    RUN_TEST(test_none_severity_rule_nan_is_silent);
+    RUN_TEST(test_rule_init_state_nan_past_debounce_is_silent);
+    RUN_TEST(test_fault_a_no_clear_before_debounce_then_one_fault);
+    RUN_TEST(test_fault_b_reading_returns_tripped_then_alarm);
+    RUN_TEST(test_fault_c_reading_returns_normal_then_clear);
+    RUN_TEST(test_fault_d_orphan_rule_never_faults);
+    RUN_TEST(test_fault_orphaned_mid_fault_clears_not_stuck_faulted);
+    RUN_TEST(test_fault_e_warmup_uses_warmup_debounce);
+    RUN_TEST(test_resync_reannounces_held_fault);
     return UNITY_END();
 }

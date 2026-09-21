@@ -123,7 +123,7 @@ bool rulesImportRule(JsonObjectConst obj, Rule& out) {
     out.flags       = (obj["enabled"] | true) ? RULE_FLAG_ENABLED : 0;
 
     // Warn tri-state (#425, slice B): absent key -> AUTO, JSON null -> NONE,
-    // number -> SET. MUST use containsKey(), not isNull() alone — isNull() is
+    // number -> SET. MUST use isUnbound(), not isNull() alone — isNull() is
     // true for BOTH "absent" and "present but null" in ArduinoJson 7, which
     // would collapse NONE into AUTO. A non-ALARM rule ignores warn keys
     // entirely (ARCHITECTURE §11.2: the approach tier only exists for ALARM
@@ -136,7 +136,7 @@ bool rulesImportRule(JsonObjectConst obj, Rule& out) {
     out.warnLo = 0.0f;
     out.warnHi = 0.0f;
     if (severity == RULE_SEV_ALARM) {
-        if (obj.containsKey("warnLo")) {
+        if (!obj["warnLo"].isUnbound()) {
             if (obj["warnLo"].isNull()) {
                 ruleSetWarnMode(out, false, RULE_WARN_NONE);
             } else {
@@ -144,7 +144,7 @@ bool rulesImportRule(JsonObjectConst obj, Rule& out) {
                 out.warnLo = obj["warnLo"];
             }
         }
-        if (condition == RULE_OUTSIDE_BAND && obj.containsKey("warnHi")) {
+        if (condition == RULE_OUTSIDE_BAND && !obj["warnHi"].isUnbound()) {
             if (obj["warnHi"].isNull()) {
                 ruleSetWarnMode(out, true, RULE_WARN_NONE);
             } else {

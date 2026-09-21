@@ -160,6 +160,87 @@ static void test_nan_never_asserts_and_clears_active(void) {
     TEST_ASSERT_FALSE(rulesRuleIsActive(ctx));
 }
 
+// --- nanSince / rulesRuleSourceFaulted (#443) --------------------------
+
+static void test_nansince_stamps_on_nan_and_clears_on_finite(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    toReady(r, ctx, 50.0f);
+    TEST_ASSERT_EQUAL_UINT32(0, ctx.nanSince);
+    rulesRuleUpdate(r, ctx, NAN, 3000);
+    TEST_ASSERT_EQUAL_UINT32(3000, ctx.nanSince);
+    // Stays stamped at the FIRST nan tick, not re-stamped on later nan ticks.
+    rulesRuleUpdate(r, ctx, NAN, 3500);
+    TEST_ASSERT_EQUAL_UINT32(3000, ctx.nanSince);
+    // A finite reading clears it immediately.
+    rulesRuleUpdate(r, ctx, 50.0f, 3600);
+    TEST_ASSERT_EQUAL_UINT32(0, ctx.nanSince);
+}
+
+static void test_nansince_clears_on_disable(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    toReady(r, ctx, 50.0f);
+    rulesRuleUpdate(r, ctx, NAN, 3000);
+    TEST_ASSERT_EQUAL_UINT32(3000, ctx.nanSince);
+    r.flags = 0;  // disable
+    rulesRuleUpdate(r, ctx, NAN, 4000);
+    TEST_ASSERT_EQUAL(RULE_DISABLED, ctx.state);
+    TEST_ASSERT_EQUAL_UINT32(0, ctx.nanSince);
+}
+
+// now == 0 must still stamp nanSince (as 1) rather than being mistaken for
+// "reading is finite" — a boot-time tick or a test harness can legitimately
+// pass now == 0.
+static void test_nansince_now_zero_stamps_one(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    rulesRuleInit(ctx, r, 0);
+    rulesRuleUpdate(r, ctx, NAN, 0);
+    TEST_ASSERT_EQUAL_UINT32(1, ctx.nanSince);
+}
+
+// WARMUP/INIT stamp nanSince too (maintained before the state switch) — a
+// thermocouple unplugged from boot never leaves WARMUP, and that is exactly
+// the case rulesRuleSourceFaulted() must be able to report.
+static void test_nansince_stamps_during_warmup(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    rulesRuleInit(ctx, r, 0);
+    rulesRuleUpdate(r, ctx, NAN, 0);        // INIT
+    rulesRuleUpdate(r, ctx, NAN, 1001);     // INIT -> WARMUP; still nan
+    TEST_ASSERT_EQUAL(RULE_WARMUP, ctx.state);
+    TEST_ASSERT_NOT_EQUAL(0, ctx.nanSince);
+}
+
+static void test_source_faulted_false_in_init(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    rulesRuleInit(ctx, r, 0);
+    rulesRuleUpdate(r, ctx, NAN, 0);   // still RULE_INIT (< RULES_INIT_MS)
+    TEST_ASSERT_EQUAL(RULE_INIT, ctx.state);
+    TEST_ASSERT_FALSE(rulesRuleSourceFaulted(ctx, 0 + RULES_FAULT_DEBOUNCE_MS + 5000));
+}
+
+static void test_source_faulted_true_in_warmup_past_debounce(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    rulesRuleInit(ctx, r, 0);
+    rulesRuleUpdate(r, ctx, NAN, 0);        // INIT
+    rulesRuleUpdate(r, ctx, NAN, 1001);     // INIT -> WARMUP, nanSince stamped ~1001
+    TEST_ASSERT_EQUAL(RULE_WARMUP, ctx.state);
+    TEST_ASSERT_FALSE(rulesRuleSourceFaulted(ctx, 1001));  // not yet debounced
+    TEST_ASSERT_TRUE(rulesRuleSourceFaulted(ctx, ctx.nanSince + RULES_FAULT_DEBOUNCE_MS));
+}
+
+static void test_source_faulted_false_when_disabled(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    ctx.state = RULE_DISABLED;
+    ctx.nanSince = 1;
+    TEST_ASSERT_FALSE(rulesRuleSourceFaulted(ctx, 999999));
+}
+
 // --- INSIDE_BAND deferred ----------------------------------------------
 
 static void test_inside_band_deferred_never_asserts(void) {
@@ -679,6 +760,13 @@ int main(int, char**) {
     RUN_TEST(test_below_asserts_and_clears);
     RUN_TEST(test_outside_band_both_edges);
     RUN_TEST(test_nan_never_asserts_and_clears_active);
+    RUN_TEST(test_nansince_stamps_on_nan_and_clears_on_finite);
+    RUN_TEST(test_nansince_clears_on_disable);
+    RUN_TEST(test_nansince_now_zero_stamps_one);
+    RUN_TEST(test_nansince_stamps_during_warmup);
+    RUN_TEST(test_source_faulted_false_in_init);
+    RUN_TEST(test_source_faulted_true_in_warmup_past_debounce);
+    RUN_TEST(test_source_faulted_false_when_disabled);
     RUN_TEST(test_inside_band_deferred_never_asserts);
     RUN_TEST(test_severity_reflects_active_state);
     RUN_TEST(test_annun_active_alarm_is_alarm);
