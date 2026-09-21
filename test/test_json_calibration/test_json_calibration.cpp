@@ -525,6 +525,63 @@ static void test_pressure_table_custom_is_refused(void) {
     assertRecordLeftNothing(TEST_PIN);
 }
 
+// ---------------------------------------------------------------------------
+// #445 — the input voltage-divider ratio must survive SYSTEM DUMP JSON →
+// JSON IMPORT. It persisted in EEPROM but the JSON path never carried it, so a
+// profile capture restored the input reading wrong by the ratio, silently.
+//
+// MUTANT TARGET: dropping either the export key or the post-commit assignment
+// must fail the round trip (setInputApplication() resets the ratio to 1.0).
+// ---------------------------------------------------------------------------
+
+static void test_divider_ratio_round_trips(void) {
+    Input* in = buildInput(CAL_LINEAR);
+    in->divider_ratio = 0.654f;          // 5 V MPX4250AP on a 3.3 V ADC
+    char json[3072];
+    exportToText(in, json, sizeof(json));
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(json, "\"divider\""), "export omitted the divider key");
+
+    TEST_ASSERT_TRUE(importText(json));
+    Input* got = getInputByPin(TEST_PIN);
+    TEST_ASSERT_NOT_NULL(got);
+    TEST_ASSERT_EQUAL_FLOAT(0.654f, got->divider_ratio);
+}
+
+// 1.0 (no divider) and 0 (legacy unset) stay implicit: the key is absent and
+// an import without it lands on 1.0, so older dumps read exactly as before.
+static void test_divider_ratio_default_is_implicit(void) {
+    Input* in = buildInput(CAL_LINEAR);
+    in->divider_ratio = 1.0f;
+    char json[3072];
+    exportToText(in, json, sizeof(json));
+    TEST_ASSERT_NULL_MESSAGE(strstr(json, "\"divider\""), "1.0 must not be exported");
+
+    in->divider_ratio = 0.0f;
+    exportToText(in, json, sizeof(json));
+    TEST_ASSERT_NULL_MESSAGE(strstr(json, "\"divider\""), "legacy 0 must not be exported");
+
+    TEST_ASSERT_TRUE(importText(json));
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, getInputByPin(TEST_PIN)->divider_ratio);
+}
+
+// Same range check as SET <pin> DIVIDER, and a bad value refuses the whole
+// record before anything is written (the import's all-or-nothing contract).
+static void test_divider_ratio_out_of_range_is_refused(void) {
+    static const float bad[] = { 0.0f, -0.5f, 1.5f };
+    for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+        resetInputs();
+        JsonDocument doc;
+        JsonObject o = doc.to<JsonObject>();
+        o["pin"] = TEST_PIN;
+        o["app"] = "OIL_PRESSURE";
+        o["sensor"] = (const char*)getSensorNameByIndex(sensorIndexForCal(CAL_LINEAR));
+        o["units"] = "BAR";
+        o["divider"] = bad[i];
+        TEST_ASSERT_FALSE(importInputFromJSON(o, 0));
+        assertRecordLeftNothing(TEST_PIN);
+    }
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_registry_available);
@@ -549,5 +606,8 @@ int main(int, char**) {
     RUN_TEST(test_import_preserves_an_explicit_bus_selection);
     RUN_TEST(test_import_display_object_without_type_preserves_current_type);
     RUN_TEST(test_import_timing_partial_keys_preserve_the_other);
+    RUN_TEST(test_divider_ratio_round_trips);
+    RUN_TEST(test_divider_ratio_default_is_implicit);
+    RUN_TEST(test_divider_ratio_out_of_range_is_refused);
     return UNITY_END();
 }

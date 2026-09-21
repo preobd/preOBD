@@ -391,6 +391,14 @@ FLASHMEM void exportInputToJSON(JsonObject& inputObj, const Input* input) {
     inputObj["displayEnabled"] = (bool)input->flags.display;
     inputObj["outputMask"] = input->outputMask;
 
+    // Voltage-divider ratio at the ADC pin (#445). Emitted only when one is set:
+    // 1.0 is "no divider" and 0 is the pre-field EEPROM default the reader
+    // already treats as 1.0, so both stay implicit and older dumps read the same.
+    // Additive key, schemaVersion unchanged.
+    if (input->divider_ratio != 0.0f && input->divider_ratio != 1.0f) {
+        addFloatParam(inputObj, "divider", input->divider_ratio);
+    }
+
     // OBD2 (if applicable)
     if (input->obd2pid != 0) {
         JsonObject obd2 = inputObj["obd2"].to<JsonObject>();
@@ -921,6 +929,22 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         stagedOverride = staged.customCalibration;
     }
 
+    // Divider ratio (#445): same range check as SET <pin> DIVIDER, judged here
+    // so a bad value fails the record before anything is written. Absent → 1.0
+    // (no divider), which is also what setInputApplication() seeds below.
+    float dividerRatio = 1.0f;
+    if (inputObj["divider"].isNull() == false) {
+        dividerRatio = inputObj["divider"].as<float>();
+        if (!(dividerRatio > 0.0f && dividerRatio <= 1.0f)) {
+            msg.control.print(F("ERROR: Failed to import input "));
+            msg.control.print(index);
+            msg.control.print(F(" (pin "));
+            msg.control.print(pin);
+            msg.control.println(F(") - divider ratio must be > 0.0 and <= 1.0"));
+            return false;
+        }
+    }
+
     // ===== COMMIT - from here on nothing may fail =====
     // Use input manager functions to properly configure the input
     // This ensures all function pointers and calibration are wired correctly
@@ -1016,6 +1040,9 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         JsonObject obd2 = inputObj["obd2"];
         setInputOBD(pin, obd2["pid"], obd2["length"]);
     }
+
+    // Divider ratio — after setInputApplication(), which resets it to 1.0.
+    input->divider_ratio = dividerRatio;
 
     // Calibration: install the bytes admission already validated. Nothing here
     // can be refused - the judging happened before the first write, which is
