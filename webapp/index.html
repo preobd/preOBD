@@ -349,6 +349,42 @@
     transition: background 0.15s;
   }
   .status-health .health-review:hover { background: #862828; }
+  /* Acknowledge (#441): outlined red beside Review; disabled + muted once every
+     held alarm is acked (the label then carries the remaining time). */
+  .status-health .health-ack {
+    flex-shrink: 0;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--red);
+    background: transparent;
+    border: 1px solid var(--red);
+    border-radius: 5px;
+    padding: 5px 11px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .status-health .health-ack:hover:not(:disabled) { background: var(--red); color: var(--surface-raised); }
+  .status-health .health-ack:disabled { cursor: default; opacity: 0.6; }
+  .status-health .health-ack.acked { text-transform: none; letter-spacing: 0; }
+  /* SILENCED chip: what the device's policy muted; the row/headline stays red. */
+  .ack-chip {
+    display: inline-block;
+    vertical-align: 1px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--red);
+    background: rgba(160,48,48,0.12);
+    border: 1px solid rgba(160,48,48,0.35);
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-left: 6px;
+    white-space: nowrap;
+  }
   /* Warning-only headline: yellow, not the red alarm treatment (#295). */
   .status-health.warning {
     border: 1.5px solid var(--yellow);
@@ -460,6 +496,9 @@
   .firing-banner.warning { border-color: var(--yellow); animation: warnFlash 1.6s ease-in-out infinite; }
   .firing-row.warn .firing-dot { background: var(--yellow); box-shadow: 0 0 0 4px rgba(184,134,11,0.18); }
   .firing-row.warn .firing-text { color: var(--yellow); }
+  /* Acked alarm row: muted, still red, still listed (#441). */
+  .firing-row.acked .firing-dot { animation: none; opacity: 0.55; }
+  .firing-row.acked .firing-text { opacity: 0.75; }
 
   .alarm-log {
     border: 1px solid var(--border-light);
@@ -1192,6 +1231,16 @@ let historyIdx = -1;
 const alarmLog = [];           // newest-first, capped at MAX_ALARM_LOG
 const MAX_ALARM_LOG = 50;
 const firingState = new Map(); // ruleId -> { inputIndex, severity, kind, value, threshold, since }
+// Alarm acknowledgement (#441). The DEVICE is the
+// source of truth: Acknowledge sends ALARM SILENCE, and everything shown — the
+// acked rules, their remaining time, the DURATION/SCOPE policy — is the
+// device's own ALARM STATUS answer, re-read on every alarm frame and polled
+// every 2 s while an alarm is held (an ack at the dash button mid-session
+// produces no frame). mode: 'unknown' until the first reply; 'device' once a
+// status parsed; 'unsupported' once the firmware said it has no ALARM verb
+// (pre-#433) — the poll then stops and the button is not offered.
+const ack = { mode: 'unknown', acked: new Map(), durationS: 30, includesLed: false, pending: false, refreshing: false };
+const ACK_POLL_MS = 2000;
 const actionState = new Map(); // actionId -> last-seen PreobdActionState fields
 
 // Command queue
@@ -1199,6 +1248,16 @@ let cmdQueue = [];
 let cmdPending = false;
 let pendingResolve = null;
 let pendingReject = null;
+// Replies come back in the order commands were written, but two paths write:
+// the queue (drainQueue) and the terminal input (sendCommand, unqueued). Each
+// write appends here and each prompt pops the head, so a queued {quiet} poll
+// can't be handed the reply to a command the user just typed (and vice
+// versa). A typed command that never yields a prompt (REBOOT) would stall the
+// attribution, so a direct entry older than DIRECT_REPLY_MAX_MS is skipped.
+const inflight = [];
+const DIRECT_REPLY_MAX_MS = 10000;
+let pendingQuiet = false;  // in-flight command was queued {quiet}: keep it out of the terminal
+let pendingHold = false;   // in-flight command was queued {hold}: keep the slot claimed after its prompt
 let suppressOutput = false;
 
 // Config UI state
@@ -1349,7 +1408,7 @@ async function connect() {
     renderAlarmPanel();
     renderControlPanel();
 
-    fetchInitialState();
+    fetchInitialState().then(() => { if (framedMode) refreshAckStatus(); });
 
   } catch (err) {
     if (err.name !== 'NotFoundError') {  // User cancelled scan
@@ -1379,6 +1438,7 @@ function onDisconnected() {
   alarmLog.length = 0;
   firingState.clear();
   faultedRules.clear();
+  ack.mode = 'unknown'; ack.acked.clear(); ack.pending = false; ack.refreshing = false;
   actionState.clear();
   closeCtlForm();   // drop any open Rule/Action edit form so it can't outlive the config it edits
   ctlDirty = false;
@@ -1395,6 +1455,9 @@ function onDisconnected() {
   for (const { reject } of cmdQueue) reject(new Error('Disconnected'));
   cmdQueue = [];
   cmdPending = false;
+  inflight.length = 0;
+  pendingQuiet = false;
+  pendingHold = false;
   suppressOutput = false;
   // Reset config UI
   originalConfig = null;
@@ -1426,26 +1489,41 @@ function onRxData(event) {
   if (promptIdx !== -1) {
     const response = rxBuffer.substring(0, promptIdx);
     rxBuffer = rxBuffer.substring(promptIdx + PROMPT.length);
-    if (response.trim() && !suppressOutput) {
+    // Whose reply is this? Drop expired direct entries, then take the head.
+    while (inflight.length && inflight[0].direct &&
+           Date.now() - inflight[0].at > DIRECT_REPLY_MAX_MS && pendingResolve) inflight.shift();
+    const exp = inflight.shift();
+    if (exp && exp.direct && pendingResolve) {
+      // The user's typed command was written before the queued one in flight:
+      // this is its reply. Print it and leave the queued command pending.
+      if (response.trim() && !suppressOutput) appendOutput(response);
+      return;
+    }
+    if (response.trim() && !suppressOutput && !pendingQuiet) {
       appendOutput(response);
     }
+    pendingQuiet = false;
     if (pendingResolve) {
       const res = pendingResolve;
       pendingResolve = null;
       pendingReject = null;
-      cmdPending = false;
+      // A {hold} command keeps the slot claimed past its own prompt so the raw
+      // write that must follow it (a JSON IMPORT payload) can't be interleaved
+      // with whatever else is queued — see sendQueued().
+      cmdPending = pendingHold;
+      pendingHold = false;
       res(response);
     } else {
       cmdPending = false;
     }
-    drainQueue();
+    if (!cmdPending) drainQueue();
   }
 }
 
-async function sendText(cmd) {
+async function sendText(cmd, quiet) {
   if (!txChar) return;
   const text = cmd + '\n';
-  appendCmd(cmd);
+  if (!quiet) appendCmd(cmd);
 
   // Split into chunks if needed (BLE write limit)
   const data = ENCODER.encode(text);
@@ -1472,6 +1550,7 @@ function sendCommand() {
   if (cmdHistory.length > 50) cmdHistory.pop();
   historyIdx = -1;
   cmdInput.value = '';
+  inflight.push({ direct: true, at: Date.now() });
   sendText(cmd);
 }
 
@@ -1598,8 +1677,143 @@ function onAlarmNotify(event) {
   alarmLog.unshift({ inputIndex, ruleId, severity, kind, value, threshold, sequence, at: now, restored });
   if (alarmLog.length > MAX_ALARM_LOG) alarmLog.length = MAX_ALARM_LOG;
 
+  if (!firingState.has(ruleId)) ack.acked.delete(ruleId);
   renderAlarmPanel();
+  // The device re-evaluates its ack set on every edge (a CLEAR ends an ack, a
+  // new trip is unacked); read back rather than guess.
+  if (severity === SEV_ALARM || ack.acked.size) refreshAckStatus();
 }
+
+// --- Acknowledge (#441) ---
+// Pure parsers shared with the mobile app (tested against a
+// B910 hardware capture). Reply shapes (cmd_alarm.cpp):
+//   ALARM STATUS
+//     System severity: ALARM
+//     Buzzer: silenced (all sounding alarms acknowledged)
+//     Acknowledged: 1
+//       Rule #2 (pin A1) - 22 s remaining        | - until clear
+//     Silence policy: 30 s, scope BUZZER          | until clear, scope ALL (buzzer + LED blink)
+//   ALARM SILENCE
+//     Acknowledged 1 alarm; silent for 30 s.      | ...; silent until it clears.
+//     Already acknowledged; 22 s remaining.       | Already acknowledged (until it clears).
+//     No alarm sounding - nothing to acknowledge.
+
+function ackUnsupported(reply) {
+  return /^\s*ERROR: Unknown command 'ALARM'/m.test(reply);
+}
+
+// null when the reply is not a status block at all, so "could not read" is
+// never mistaken for "nothing acknowledged".
+function parseAckStatus(reply) {
+  const policy = /^Silence policy: (until clear|(\d+) s), scope (BUZZER|ALL)/m.exec(reply);
+  if (!policy) return null;
+  const acked = new Map();
+  for (const m of reply.matchAll(/^\s+Rule #(\d+) \(pin [^)]*\) - (?:(\d+) s remaining|until clear)$/gm)) {
+    acked.set(Number(m[1]), m[2] === undefined ? null : Number(m[2]));
+  }
+  return {
+    acked,
+    durationS: policy[1] === 'until clear' ? 0 : Number(policy[2]),
+    includesLed: policy[3] === 'ALL',
+  };
+}
+
+function parseSilenceReply(reply) {
+  const acked = /^Acknowledged (\d+) alarms?; silent/m.exec(reply);
+  if (acked) return { kind: 'acked', count: Number(acked[1]) };
+  const already = /^Already acknowledged(?:; (\d+) s remaining\.|\s\(until it clears\)\.)/m.exec(reply);
+  if (already) return { kind: 'already', remainingS: already[1] === undefined ? null : Number(already[1]) };
+  if (/^No alarm sounding/m.test(reply)) return { kind: 'nothing' };
+  return null;
+}
+
+function ackRemainingLabel(remainingS) {
+  return remainingS === null ? 'until clear' : remainingS + ' s';
+}
+
+// Re-read the device's ack state. Quiet (the terminal is the user's), queued
+// behind whatever is in flight, and a parse failure changes nothing — a stale
+// "acked" can never be manufactured by a failed read. Detects the pre-#433
+// firmware once and stops asking.
+async function refreshAckStatus() {
+  if (ack.mode === 'unsupported' || !txChar || !framedMode) return null;
+  // One outstanding read at a time: a PING resync re-announces every held
+  // alarm in a burst, and each frame asks for a refresh.
+  if (ack.refreshing) return null;
+  ack.refreshing = true;
+  try {
+    const reply = await sendQueued('ALARM STATUS', { quiet: true });
+    if (ackUnsupported(reply)) { ack.mode = 'unsupported'; renderAlarmPanel(); return null; }
+    const st = parseAckStatus(reply);
+    if (st) {
+      ack.mode = 'device';
+      ack.acked = st.acked;
+      ack.durationS = st.durationS;
+      ack.includesLed = st.includesLed;
+      renderAlarmPanel();
+    }
+    return st;
+  } catch (_) { return null; }   // disconnect mid-flight: the next poll or frame corrects it
+  finally { ack.refreshing = false; }
+}
+
+// Acknowledge = the device's ALARM SILENCE. Scope and duration are the device's
+// policy (ALARM DURATION / ALARM SCOPE), shown in the SILENCED chip; the device
+// never restarts a running window. The command and its one-line reply are
+// echoed to the terminal — it is the user's action.
+async function ackAlarm() {
+  if (ack.pending || ack.mode === 'unsupported' || !txChar) return;
+  ack.pending = true;
+  renderAlarmPanel();
+  try {
+    const reply = await sendQueued('ALARM SILENCE');
+    if (ackUnsupported(reply)) { ack.mode = 'unsupported'; return; }
+    const outcome = parseSilenceReply(reply);
+    if (outcome && (outcome.kind === 'acked' || outcome.kind === 'already')) {
+      // Reflect the ack at once so a failed read-back can't leave the button
+      // re-enabled against a silenced device; STATUS then supplies the exact
+      // set and remaining times.
+      ack.mode = 'device';
+      for (const st of firingState.values())
+        if (st.severity === SEV_ALARM && !ack.acked.has(st.ruleId))
+          ack.acked.set(st.ruleId, ack.durationS === 0 ? null : ack.durationS);
+    }
+    if ((await refreshAckStatus()) === null) await refreshAckStatus();
+  } catch (_) {
+    // Disconnect mid-flight: leave the state as it was.
+  } finally {
+    ack.pending = false;
+    renderAlarmPanel();
+  }
+}
+
+// Held ALARM-severity entries and whether every one of them is acked. Warnings
+// are never acked (nothing sounds for them) and never count here.
+function ackSummary() {
+  const held = [...firingState.values()].filter(st => st.severity === SEV_ALARM);
+  const unacked = held.filter(st => !ack.acked.has(st.ruleId));
+  let least = null;
+  if (held.length && !unacked.length) {
+    const windows = held.map(st => ack.acked.get(st.ruleId));
+    const timed = windows.filter(w => w !== null);
+    least = timed.length === windows.length ? Math.min(...timed) : null;
+  }
+  return { held, unacked, allAcked: held.length > 0 && unacked.length === 0, least };
+}
+
+// "SILENCED · buzzer[ + LED]" once every held alarm is acked on the device.
+function silencedChipText() {
+  return 'SILENCED · ' + (ack.includesLed ? 'buzzer + LED' : 'buzzer');
+}
+
+// While any alarm is held, re-read the device's ack state every few seconds: a
+// countdown and its lapse are then the device's, not a page-side timer that
+// drifts from it. Skipped while the queue is busy (a config write batch, an
+// import) so polls never pile up behind it; the next tick catches up.
+setInterval(() => {
+  if (!alarmChar || ack.mode === 'unsupported' || cmdPending || cmdQueue.length) return;
+  if (ackSummary().held.length) refreshAckStatus();
+}, ACK_POLL_MS);
 
 function inputLabel(idx) {
   // Cross-reference against the catalog if it's been fetched. Falls back to
@@ -1646,8 +1860,61 @@ function severityTone(severity, kind) {
   return 'ok';
 }
 
-// Severity/kind-aware description of one firing/cleared event ("225.0 approaching
-// 250.0"). Shared by the log row, firing banner, and health headline so a warning
+// Decimal places for a value in this unit — the LCD's rule (display_lcd.cpp,
+// keyed on the unit's measurement type), so the dash, the phone app
+// and this page agree
+// (#442): temperature, RPM, speed, %, elevation → whole numbers; pressure → 1
+// (inHg 2); voltage → 1. Keyed on the symbol the dump's `units` carries
+// ('bar', 'psi', 'C', …), case-insensitive. An unknown unit gets 1 decimal —
+// the LCD's default too — rather than 0, so a new fractional unit is never
+// silently truncated to "1 exceeded 1".
+function displayDecimals(unit) {
+  switch ((unit || '').replace(/^°/, '').trim().toLowerCase()) {
+    case 'c': case 'f': case 'rpm': case '%': case 'm': case 'ft':
+    case 'km/h': case 'kph': case 'mph':
+      return 0;
+    case 'inhg':
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+// The dump's unit info for an input: symbol plus the base→display coefficients
+// SYSTEM DUMP JSON exports for exactly this purpose — the alarm frame's value
+// and threshold are BASE units (°C, bar, …), the same numbers the rule was
+// stored with. null until the dump has loaded.
+// The editor writes the catalog NAME ('FAHRENHEIT') into localConfig.units
+// and can't refresh the dump's coefficients, so prefer LIST UNITS JSON
+// (name/alias/symbol + factor/offset) whenever the unit is found there; the
+// dump's own fields are the fallback before the catalog has loaded.
+function inputUnitInfo(idx) {
+  const inp = ((localConfig && localConfig.inputs) || [])[idx];
+  if (!inp || !inp.units) return null;
+  const want = String(inp.units).toLowerCase();
+  const cu = (catalog.units || []).find(u =>
+    [u.name, u.alias, u.symbol].some(k => k && String(k).toLowerCase() === want));
+  if (cu && Number.isFinite(cu.factor)) {
+    return { units: cu.symbol || inp.units, factor: cu.factor, offset: Number.isFinite(cu.offset) ? cu.offset : 0 };
+  }
+  const factor = Number.isFinite(inp.unitsFactor) ? inp.unitsFactor : 1;
+  const offset = Number.isFinite(inp.unitsOffset) ? inp.unitsOffset : 0;
+  return { units: inp.units, factor, offset };
+}
+
+// A base-unit frame value rendered in the input's display units at the unit's
+// precision, with the symbol ("192°F", "1.3 bar"). Without a dump the raw
+// base value is shown to 1 decimal, as before.
+function formatFrameValue(v, u) {
+  if (!Number.isFinite(v)) return '--';
+  if (!u) return v.toFixed(1);
+  const shown = (v * u.factor + u.offset).toFixed(displayDecimals(u.units));
+  const sym = u.units.replace(/^°/, '');
+  return /^[cf]$/i.test(sym) ? shown + '°' + sym.toUpperCase() : shown + ' ' + u.units;
+}
+
+// Severity/kind-aware description of one firing/cleared event ("225 approaching
+// 250°F"). Shared by the log row, firing banner, and health headline so a warning
 // is never dressed up as an exceeded alarm (#295). The frame's WARNING severity
 // covers two different things (#432): an ALARM rule's approach tier (genuinely
 // "approaching") and a standalone WARNING-severity rule that has TRIPPED — it
@@ -1656,10 +1923,11 @@ function severityTone(severity, kind) {
 // for an unknown ruleId) fall back to "approaching" as before. Mirrored by the
 // app's firingDescription (src/data/firing.ts) — change both together.
 function firingDescription(st) {
-  const val = Number.isFinite(st.value) ? st.value.toFixed(1) : '--';
+  const u = inputUnitInfo(st.inputIndex);
+  const val = formatFrameValue(st.value, u);
   if (st.kind === KIND_FAULT) return 'sensor fault';
   if (st.kind === KIND_CLEAR) return st.restored ? 'fault cleared' : 'cleared (' + val + ')';
-  const thr = Number.isFinite(st.threshold) ? st.threshold.toFixed(1) : '--';
+  const thr = formatFrameValue(st.threshold, u);
   const verb = st.severity === SEV_WARNING ? (isApproachTier(st) ? 'approaching'
                                               : (st.kind === KIND_LOW ? 'below' : 'exceeded'))
              : st.severity === SEV_INFO ? (st.kind === KIND_LOW ? 'dropped below' : 'reached')
@@ -1719,15 +1987,36 @@ function updateStatusHealth() {
   const noun = (sum.anyAlarm ? 'alarm' : 'warning') + (count === 1 ? '' : 's');
   const title = sum.anyAlarm ? (count + ' ' + noun + ' firing') : (count + ' ' + noun);
 
+  // Acknowledge (#441): offered only while an ALARM is held unacked, and only
+  // when the device knows the verb. Once every held alarm is acked the button
+  // stays, disabled, and says so with the device's remaining time (the
+  // shortest window when several are held) — plus a SILENCED chip naming what
+  // the device's policy actually muted. Words and red are unchanged: an ack
+  // never hides state. Warnings are never acked.
+  const a = ackSummary();
+  const ackable = sum.anyAlarm && ack.mode !== 'unsupported';
+  let ackBtn = '';
+  if (ackable && a.unacked.length)
+    ackBtn = '<button class="health-ack" id="healthAck"' + (ack.pending ? ' disabled' : '') + '>' +
+             (ack.pending ? 'Acknowledging…' : 'Acknowledge') + '</button>';
+  else if (ackable && a.allAcked)
+    ackBtn = '<button class="health-ack acked" disabled>Acknowledged · ' +
+             escHtml(ackRemainingLabel(a.least)) + '</button>';
+  const chip = (ackable && a.allAcked)
+    ? ' <span class="ack-chip">' + escHtml(silencedChipText()) + '</span>' : '';
+
   el.className = 'status-health ' + (sum.anyAlarm ? 'firing' : 'warning');
   el.innerHTML =
     '<span class="health-dot"></span>' +
     '<div class="health-text">' +
-      '<div class="health-title">' + escHtml(title) + '</div>' +
+      '<div class="health-title">' + escHtml(title) + chip + '</div>' +
       '<div class="health-meta">' + escHtml(label) + ' · ' +
         escHtml(firingDescription(sum.lead)) + escHtml(more) + '</div>' +
     '</div>' +
+    ackBtn +
     '<button class="health-review" id="healthReview">Review</button>';
+  const ackEl = document.getElementById('healthAck');
+  if (ackEl) ackEl.onclick = () => { ackAlarm(); };
   const btn = document.getElementById('healthReview');
   if (btn) btn.onclick = () => {
     // Expand the Alarms panel first — scrolling to a collapsed (header-only)
@@ -1763,10 +2052,16 @@ function renderAlarmPanel() {
     for (const st of firingState.values()) {
       const warn = st.severity === SEV_WARNING;
       const label = inputLabel(st.inputIndex);
-      html += '<div class="firing-row ' + (warn ? 'warn' : 'alarm') + '">' +
+      // An acked alarm row is muted and chipped with the device's remaining
+      // window, but stays listed in red: acknowledged, not gone (#441).
+      const acked = !warn && ack.acked.has(st.ruleId);
+      const chip = acked
+        ? ' <span class="ack-chip">SILENCED · ' + escHtml(ackRemainingLabel(ack.acked.get(st.ruleId))) + '</span>'
+        : '';
+      html += '<div class="firing-row ' + (warn ? 'warn' : 'alarm') + (acked ? ' acked' : '') + '">' +
               '<span class="firing-dot"></span>' +
               '<div class="firing-text">' +
-              escHtml(label) + ' · ' + escHtml(firingDescription(st)) +
+              escHtml(label) + ' · ' + escHtml(firingDescription(st)) + chip +
               '<span class="meta">' + (warn ? 'Warning' : 'Firing') + ' for ' +
               escHtml(formatFiringDuration(st.since)) + '</span>' +
               '</div></div>';
@@ -2670,20 +2965,56 @@ function scrollToBottom() {
 
 // --- Command Queue ---
 
-function sendQueued(cmd) {
+// Options:
+//   quiet — neither the command nor its reply is echoed to the terminal. For
+//           the webapp's own housekeeping traffic (the ALARM STATUS poll,
+//           #441), which would otherwise scroll the user's session away.
+//   hold  — after this command's prompt, keep the command slot claimed instead
+//           of draining the next queued command. The caller then owns the
+//           line for a raw write (sendRaw) and must finish with sendHeld(),
+//           whose prompt releases the slot. Without this, the webapp's first
+//           autonomous command (the ack poll) could be drained — synchronously,
+//           inside onRxData — between JSON IMPORT's prompt and the payload
+//           write, landing in the middle of the byte stream (the same hazard
+//           the mobile app closed in its transport).
+function sendQueued(cmd, opts) {
+  const quiet = !!(opts && opts.quiet);
+  const hold = !!(opts && opts.hold);
   return new Promise((resolve, reject) => {
-    cmdQueue.push({ cmd, resolve, reject });
+    cmdQueue.push({ cmd, resolve, reject, quiet, hold });
     drainQueue();
   });
 }
 
+// Send a command on a slot already claimed with {hold}; its prompt releases the
+// slot and drains the queue. Only legal while cmdPending is true from a hold.
+function sendHeld(cmd) {
+  return new Promise((resolve, reject) => {
+    pendingResolve = resolve;
+    pendingReject = reject;
+    pendingQuiet = false;
+    pendingHold = false;
+    inflight.push({ direct: false, at: Date.now() });
+    sendText(cmd);
+  });
+}
+
+// Give back a slot claimed with {hold} without sending anything (the raw write
+// failed, or the held command errored). A no-op if nothing is in flight.
+function releaseHeldSlot() {
+  if (cmdPending && !pendingResolve) { cmdPending = false; drainQueue(); }
+}
+
 function drainQueue() {
   if (cmdPending || !cmdQueue.length || !txChar) return;
-  const { cmd, resolve, reject } = cmdQueue.shift();
+  const { cmd, resolve, reject, quiet, hold } = cmdQueue.shift();
   cmdPending = true;
   pendingResolve = resolve;
   pendingReject = reject;
-  sendText(cmd);
+  pendingQuiet = quiet;
+  pendingHold = hold;
+  inflight.push({ direct: false, at: Date.now() });
+  sendText(cmd, quiet);
 }
 
 async function sendRaw(text) {
@@ -3389,11 +3720,19 @@ document.getElementById('importFile').addEventListener('change', async e => {
     if (!confirm('Import will overwrite current device RAM config. Continue?')) return;
 
     await withConfigMode(async () => {
-      await sendChecked('JSON IMPORT');
+      // {hold}: nothing queued behind (the ALARM STATUS poll included) may be
+      // written between this prompt and END JSON — the device is reading the
+      // payload as JSON, not as commands.
+      const importResp = await sendQueued('JSON IMPORT', { hold: true });
+      if (/^\s*ERROR:/m.test(importResp)) { releaseHeldSlot(); throw new Error(importResp.trim()); }
       suppressOutput = true;
       appendInfo('Streaming ' + text.length + ' bytes…');
-      await sendRaw(text);
-      const result = await sendQueued('END JSON');
+      // A failed payload write must release the held slot HERE: withConfigMode's
+      // finally queues RUN, which could never drain against a slot still held,
+      // and the outer catch below sits past that await.
+      try { await sendRaw(text); }
+      catch (e) { suppressOutput = false; releaseHeldSlot(); throw e; }
+      const result = await sendHeld('END JSON');
       suppressOutput = false;
       if (result.trim()) appendOutput(result.trim());
       if (/^\s*ERROR:/m.test(result)) throw new Error(result.trim());
@@ -3405,6 +3744,7 @@ document.getElementById('importFile').addEventListener('change', async e => {
     await fetchInitialState();   // reload in RUN (reads are RUN-legal)
   } catch(e) {
     suppressOutput = false;
+    releaseHeldSlot();   // a failed payload write must not leave the queue stalled
     appendErr('Import failed: ' + e.message);
   } finally {
     setConfigBusy(false);
