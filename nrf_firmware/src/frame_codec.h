@@ -76,4 +76,12 @@ FrameFeedResult frameFeedByte(FrameDecoderState& state, uint8_t b, Frame& out);
 // transition so a partial frame can't leak into the next session.
 void frameDecoderReset(FrameDecoderState& state);
 
+// True while the decoder is inside a frame (has seen SYNC and is waiting for
+// more of TYPE/LEN/PAYLOAD/CRC). The owner uses this with its own clock to
+// abandon a frame whose remaining bytes never arrive: a byte lost from the
+// LEN field on an overrun otherwise parks the decoder waiting for up to 513
+// phantom bytes, and every real frame that lands in that window -- the nRF's
+// one connect PING included -- is swallowed as payload (#449).
+bool frameDecoderMidFrame(const FrameDecoderState& state);
+
 #endif // FRAME_CODEC_H

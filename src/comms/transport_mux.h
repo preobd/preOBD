@@ -92,10 +92,20 @@ private:
     bool framedEnabled = false;
 
     // --- Framed-mode RX (decoded type 0x01 text payloads) ---
-    static constexpr size_t kRxRingSize = 256;
+    // The nRF chunks a BLE client's text into 256-byte 0x01 frames, and
+    // pumpInbound() decodes every frame already sitting in the UART buffer
+    // before the CLI gets to read() any of it -- so the ring must hold more
+    // than one frame or the second one's tail is dropped on the floor. Four
+    // frames covers a bulk write whose echo blocks the CLI for one frame
+    // time (#449); rxDropped counts what still doesn't fit. Sized 4*256+1
+    // because the ring keeps one slot empty to tell full from empty -- at a
+    // flat 1024 an exact four-frame burst drops its last byte, corrupting a
+    // CLI line for the sake of one byte.
+    static constexpr size_t kRxRingSize = 4 * 256 + 1;
     uint8_t rxRing[kRxRingSize];
     size_t rxHead = 0;         // producer
     size_t rxTail = 0;         // consumer
+    uint32_t rxDropped = 0;    // text bytes discarded because the ring was full
 
     // --- Framed-mode TX accumulator (CLI bytes pending as 0x02 frame) ---
     // Sized to match the max payload chunk: full responses larger than this
@@ -112,6 +122,19 @@ private:
     // frames. decoderFrame is the output target for completed frames.
     FrameDecoderState decoderState;
     Frame decoderFrame;
+    // Inter-byte gap watchdog for the decoder (#449): a frame whose bytes
+    // stop arriving mid-way (UART overrun ate its LEN, or the sender died) is
+    // abandoned after kRxFrameGapMs so the decoder is back hunting SYNC before
+    // the nRF's next PING. Well above one byte time at 115200 (~87 us) and
+    // the nRF's own frame-at-a-time TX drain; well below its 2 s ping window.
+    // Deliberately LONGER than the nRF's kOutboundStallMs (100 ms), which is
+    // how long it will pause mid-frame waiting on our RTS: at equal values a
+    // legitimately stalled frame would be abandoned at the same instant the
+    // sender resumed it, turning a pause into a lost frame. (HOST_NRF_RTS_PIN
+    // is held LOW today, so the nRF never actually stalls -- this keeps the
+    // margin correct for when it does.)
+    uint32_t rxLastByteMs = 0;
+    static constexpr uint32_t kRxFrameGapMs = 250;
 
     // --- Phase 3 software flow control ---
     static constexpr size_t kFlowChunkBytes = 32;
@@ -184,6 +207,10 @@ public:
 
     void setFramedEnabled(bool enabled);
     bool isFramedEnabled() const { return framedEnabled; }
+    // Text bytes dropped because the framed RX ring was full (0 in a healthy
+    // session). Surfaced by BUS SERIAL so a truncated bulk import is
+    // diagnosable rather than "shouldn't happen" (#449).
+    uint32_t framedRxDropped() const { return rxDropped; }
 
     // Send a complete framed packet of arbitrary type. Non-blocking and
     // atomic: returns false immediately if the transport isn't in framed

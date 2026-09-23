@@ -124,3 +124,7 @@ FrameFeedResult frameFeedByte(FrameDecoderState& s, uint8_t b, Frame& out) {
 void frameDecoderReset(FrameDecoderState& s) {
     clearState(s);
 }
+
+bool frameDecoderMidFrame(const FrameDecoderState& s) {
+    return s.phase != PHASE_SYNC;
+}

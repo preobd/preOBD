@@ -43,7 +43,10 @@ namespace {
 
 constexpr size_t kRxFlushBytes  = 20;       // BLE 4.2 minimum payload
 constexpr uint32_t kRxStallMs   = 50;
-constexpr size_t kTxRingSize    = 1024;
+// 4 KB: enqueueAsFrames refuses (and the BLE write loses) whatever doesn't
+// fit, and a client writing 200 B chunks back-to-back outruns the 115200
+// drain -- one 1 KB ring held five frames, ~90 ms of link time (#449).
+constexpr size_t kTxRingSize    = 4096;
 
 #if defined(PIN_NRF_RTS_OUT) && defined(PIN_NRF_CTS_IN)
 // Hysteresis thresholds on Serial1.available(). Sized so the worst-case
@@ -74,6 +77,16 @@ volatile size_t g_txTail = 0;
 // one instance is needed since uart_bridge is the sole inbound feeder.
 Frame g_frame;
 FrameDecoderState g_decoder;
+// Inter-byte gap watchdog, the mirror of the host's (#449). The nRF's
+// decoder wedges the same way: it deliberately stops reading Serial1 while a
+// frame is parked in the hold slot, so on a rig without the optional flow
+// control GPIOs the RX ring can overflow during a bulk dump and a lost LEN
+// byte then swallows up to 513 bytes of real frames -- a PING echo included.
+// It self-heals only while more bytes keep arriving; a wedge on the last
+// frame of a response persists until the next inbound traffic and eats that
+// frame too. 250 ms for the same reason as the host side.
+uint32_t g_decoderLastByteMs = 0;
+constexpr uint32_t kDecoderGapMs = 250;
 
 // --- Framed-mode pending-notify stashes for back-pressure ---
 // When a type 0x02 (text) or 0x30 (ELM327) response frame arrives, its
@@ -503,6 +516,13 @@ void uartBridgePoll() {
         }
     }
 
+    // Abandon a half-received frame whose remaining bytes never came, so the
+    // decoder is hunting SYNC again before the next real frame arrives.
+    if ((framed || pinging) && frameDecoderMidFrame(g_decoder) &&
+        (millis() - g_decoderLastByteMs) >= kDecoderGapMs) {
+        frameDecoderReset(g_decoder);
+    }
+
     while (Serial1.available()) {
         const int b = Serial1.read();
         if (b < 0) break;
@@ -510,6 +530,7 @@ void uartBridgePoll() {
         if (!connected) continue;
 
         if (framed || pinging) {
+            g_decoderLastByteMs = millis();
             const FrameFeedResult r = frameFeedByte(
                 g_decoder, static_cast<uint8_t>(b), g_frame);
             if (r == FRAME_READY) {

@@ -68,6 +68,7 @@ void MuxTransport::setFramedEnabled(bool enabled) {
     // can't leak across the transition.
     rxHead = rxTail = 0;
     txAccLen = 0;
+    rxDropped = 0;
     frameDecoderReset(decoderState);
 }
 
@@ -142,6 +143,13 @@ void MuxTransport::update() {
     if (txAccLen > 0 && (millis() - txLastByteMs) >= kTxStallMs) {
         flushTxAcc();
     }
+    // Abandon a frame whose remaining bytes never came (#449). Only here,
+    // not inside pumpInbound(): the gap is measured against the last byte
+    // actually consumed, and a pump only runs while bytes are available.
+    if (frameDecoderMidFrame(decoderState) &&
+        (millis() - rxLastByteMs) >= kRxFrameGapMs) {
+        frameDecoderReset(decoderState);
+    }
 }
 
 void MuxTransport::pumpInbound() {
@@ -152,6 +160,7 @@ void MuxTransport::pumpInbound() {
     while (serial->available()) {
         const int b = serial->read();
         if (b < 0) break;
+        rxLastByteMs = millis();
         FrameFeedResult r = frameFeedByte(decoderState, static_cast<uint8_t>(b), decoderFrame);
         if (r == FRAME_READY) {
             handleFrame(decoderFrame);
@@ -167,8 +176,14 @@ void MuxTransport::handleFrame(const Frame& f) {
     switch (f.type) {
     case FRAME_TYPE_TEXT_CMD:
         for (uint16_t i = 0; i < f.len; ++i) {
-            if (rxRingFull()) break;  // text overflow -- shouldn't happen
-            rxRingPush(f.payload[i]);  // for typical CLI commands
+            if (rxRingFull()) {
+                // The CLI hasn't drained the previous frame(s) yet -- a bulk
+                // write whose byte echo is blocking it. Count what we lose
+                // (BUS SERIAL shows it) rather than pretend it can't happen.
+                rxDropped += static_cast<uint32_t>(f.len - i);
+                break;
+            }
+            rxRingPush(f.payload[i]);
         }
         break;
     case FRAME_TYPE_PING: {

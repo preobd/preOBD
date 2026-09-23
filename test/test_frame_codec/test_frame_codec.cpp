@@ -86,8 +86,43 @@ static void test_oversize_payload_rejected(void) {
     TEST_ASSERT_EQUAL_UINT(0, n);
 }
 
+// #449: a frame whose LEN byte was lost to a UART overrun parks the decoder
+// waiting for phantom payload; the owner needs to see that it is mid-frame
+// so it can abandon it on an inter-byte gap. Idle → false; after SYNC → true;
+// after a completed frame → false; after an explicit reset → false.
+static void test_mid_frame_reports_partial_state(void) {
+    FrameDecoderState st{};
+    Frame f{};
+    TEST_ASSERT_FALSE(frameDecoderMidFrame(st));
+
+    // SYNC + TYPE + a LEN claiming 500 bytes that will never arrive.
+    frameFeedByte(st, FRAME_SYNC, f);
+    TEST_ASSERT_TRUE(frameDecoderMidFrame(st));
+    frameFeedByte(st, FRAME_TYPE_TEXT_CMD, f);
+    frameFeedByte(st, 0xF4, f);
+    frameFeedByte(st, 0x01, f);
+    TEST_ASSERT_TRUE(frameDecoderMidFrame(st));
+
+    // A PING landing now is swallowed as payload -- the failure this guards.
+    uint8_t ping[FRAME_MAX_BYTES];
+    size_t n = frameEncode(FRAME_TYPE_PING, nullptr, 0, ping);
+    FrameFeedResult r = FRAME_NEED_MORE;
+    for (size_t i = 0; i < n; ++i) r = frameFeedByte(st, ping[i], f);
+    TEST_ASSERT_EQUAL(FRAME_NEED_MORE, r);
+    TEST_ASSERT_TRUE(frameDecoderMidFrame(st));
+
+    // The owner's gap timeout resets; the same PING now decodes.
+    frameDecoderReset(st);
+    TEST_ASSERT_FALSE(frameDecoderMidFrame(st));
+    for (size_t i = 0; i < n; ++i) r = frameFeedByte(st, ping[i], f);
+    TEST_ASSERT_EQUAL(FRAME_READY, r);
+    TEST_ASSERT_EQUAL_HEX8(FRAME_TYPE_PING, f.type);
+    TEST_ASSERT_FALSE(frameDecoderMidFrame(st));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_mid_frame_reports_partial_state);
     RUN_TEST(test_encode_structure_and_crc);
     RUN_TEST(test_round_trip);
     RUN_TEST(test_empty_payload_round_trip);

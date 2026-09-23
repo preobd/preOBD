@@ -26,6 +26,10 @@
 #include "../drivers/bus_manager.h"
 #include "../hal/bus_defaults.h"
 #include "../drivers/serial_manager.h"
+#if INCLUDE_FRAMED_TRANSPORT
+#include "../comms/transport_mux.h"
+extern MuxTransport hwSerial1;   // main.cpp -- the nRF coprocessor link
+#endif
 #include "../pinctrl/pin_registry.h"
 #include "../outputs/output_base.h"
 #include "../outputs/obd_query.h"
@@ -520,6 +524,20 @@ static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
         // BUS SERIAL <port> (no subcommand) - show port status
         if (argc == 3) {
             displaySerialPortStatus(port_id);
+#if INCLUDE_FRAMED_TRANSPORT
+            // Framed RX health (#449): text the nRF delivered that the CLI
+            // never saw because the RX ring was full. Non-zero after a bulk
+            // import means the payload had holes -- the import is what to
+            // fix, not the parser.
+            if (port_id == 1 && hwSerial1.isFramedEnabled()) {
+                msg.control.print(F("  Framed RX dropped: "));
+                msg.control.print(hwSerial1.framedRxDropped());
+                // Cumulative since boot -- there is no reset short of one,
+                // so say so rather than let a stale count from an earlier
+                // bad transfer read as a fresh one.
+                msg.control.println(F(" B (since boot)"));
+            }
+#endif
             return 0;
         }
 

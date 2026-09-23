@@ -339,6 +339,27 @@ void setup() {
     // in system_config.cpp for why both conditions are required.
     registerSystemPins(busNeeds);
 
+    // Enlarge Serial1's RX buffer BEFORE it is opened. The nRF drains one
+    // 261-byte frame at a time and the CLI can block this loop for a whole
+    // frame time while echoing, so the stock buffer (64 B on Teensy, 256 B
+    // on ESP32) overruns during a bulk inbound transfer -- a hardware loss
+    // that desyncs the framer (#449). Four frames of slack covers one
+    // blocked frame time with margin; no HW flow control is available on
+    // this pin (ARCHITECTURE.md §7.1). Both APIs must precede begin():
+    // Teensy's addMemoryForRead() resets the ring head/tail without masking
+    // the RX interrupt, so calling it on a live port drops whatever has
+    // already arrived and can race the ISR.
+#if INCLUDE_FRAMED_TRANSPORT && NUM_SERIAL_PORTS >= 1
+    if (systemConfig.serial.framed_enabled_mask & (1 << 0)) {
+#  if defined(__IMXRT1062__) || defined(__MK66FX1M0__)
+        static uint8_t serial1RxSlack[1024];
+        Serial1.addMemoryForRead(serial1RxSlack, sizeof(serial1RxSlack));
+#  elif defined(ESP32)
+        Serial1.setRxBufferSize(1024);
+#  endif
+    }
+#endif
+
     // Initialize configured serial ports based on SystemConfig.serial
     // This replaces the old hardcoded Serial1.begin() / Serial2.begin() calls
     initConfiguredSerialPorts();
