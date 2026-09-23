@@ -2986,6 +2986,35 @@ function sendQueued(cmd, opts) {
   });
 }
 
+// Wait for the device's next prompt on a slot already claimed with {hold},
+// writing nothing. A byte-counted JSON IMPORT dispatches on its Nth payload
+// byte, so its result arrives with no command to attribute it to — hence a
+// wait-only await rather than sendHeld(). The prompt releases the slot.
+//
+// Call this BEFORE writing the payload, exactly as sendHeld() registers
+// before it writes: the device answers on the last byte, so on a small
+// payload that reply can arrive before the final write promise settles. An
+// unclaimed prompt is treated as unsolicited — it frees the slot and drains
+// the queue — and this would then arm on nothing and be resolved by some
+// later, unrelated reply, hiding a failed import behind a "Save to EEPROM?"
+// prompt.
+function awaitHeldPrompt() {
+  return new Promise((resolve, reject) => {
+    pendingResolve = resolve;
+    pendingReject = reject;
+    pendingQuiet = false;
+    pendingHold = false;
+  });
+}
+
+// Drop an armed awaitHeldPrompt() without waiting for it (the payload write
+// failed). Leaves the slot itself to releaseHeldSlot(), which needs the
+// resolver cleared first or it will decline to release.
+function cancelHeldPrompt() {
+  pendingResolve = null;
+  pendingReject = null;
+}
+
 // Send a command on a slot already claimed with {hold}; its prompt releases the
 // slot and drains the queue. Only legal while cmdPending is true from a hold.
 function sendHeld(cmd) {
@@ -3017,9 +3046,20 @@ function drainQueue() {
   sendText(cmd, quiet);
 }
 
+// Raw bytes with no command framing, for a JSON IMPORT payload.
+//
+// The 200-byte chunk size is load-bearing, so resist "matching" the phone
+// app's 20 B: the nRF wraps EACH BLE write in its own 5-byte frame, so small
+// writes add 25% to what it must buffer and forward over a 115200 UART
+// (~11.5 KB/s) — and Chrome issues them fast enough to burst well past that
+// (~26 KB/s), overrunning the nRF's TX ring, which drops whatever doesn't
+// fit and cannot report it (writes without response have no backpressure).
+// At 200 B the overhead is 2.5% and the writes arrive at ~7 KB/s, under the
+// drain rate, so the ring stays flat. Measured on the bench: 3.5 KB at 20 B
+// never arrived; at 200 B it lands in ~520 ms (#449, #450).
 async function sendRaw(text) {
   if (!txChar) return;
-  const data = ENCODER.encode(text);
+  const data = (text instanceof Uint8Array) ? text : ENCODER.encode(text);
   const chunkSize = 200;
   for (let i = 0; i < data.length; i += chunkSize) {
     const chunk = data.slice(i, i + chunkSize);
@@ -3720,21 +3760,40 @@ document.getElementById('importFile').addEventListener('change', async e => {
     if (!confirm('Import will overwrite current device RAM config. Continue?')) return;
 
     await withConfigMode(async () => {
+      // Byte-counted import (#450). Two reasons over the sentinel form: the
+      // device does not echo a counted payload (the sentinel form echoes every
+      // byte, doubling load on the link the payload is arriving over), and it
+      // dispatches on the Nth byte, so no 'END JSON' line has to survive the
+      // transfer intact. The count is UTF-8 BYTES, not string length — a '°'
+      // in a device name is two.
       // {hold}: nothing queued behind (the ALARM STATUS poll included) may be
-      // written between this prompt and END JSON — the device is reading the
-      // payload as JSON, not as commands.
-      const importResp = await sendQueued('JSON IMPORT', { hold: true });
+      // written between this prompt and the end of the payload — the device is
+      // reading those bytes as JSON, not as commands.
+      const payload = ENCODER.encode(text);
+      const importResp = await sendQueued('JSON IMPORT ' + payload.length, { hold: true });
       if (/^\s*ERROR:/m.test(importResp)) { releaseHeldSlot(); throw new Error(importResp.trim()); }
-      suppressOutput = true;
-      appendInfo('Streaming ' + text.length + ' bytes…');
+      // Firmware without counted mode (pre-#322) answers the bare-import
+      // banner instead of 'Ready for N bytes'; fall back to the sentinel so
+      // an older device still imports.
+      const counted = /Ready for \d+ bytes/.test(importResp);
+      if (!counted) suppressOutput = true;   // sentinel mode echoes the payload
+      appendInfo('Streaming ' + payload.length + ' bytes…');
+      // Armed before the write: see awaitHeldPrompt().
+      const dispatched = counted ? awaitHeldPrompt() : null;
       // A failed payload write must release the held slot HERE: withConfigMode's
       // finally queues RUN, which could never drain against a slot still held,
       // and the outer catch below sits past that await.
-      try { await sendRaw(text); }
-      catch (e) { suppressOutput = false; releaseHeldSlot(); throw e; }
-      const result = await sendHeld('END JSON');
+      // The sentinel needs its payload to end in a newline: the device only
+      // compares the bytes since the last one, so an export trimmed of its
+      // trailing newline arrives as '}END JSON' and never matches.
+      try { await sendRaw(counted ? payload : (text.endsWith('\n') ? text : text + '\n')); }
+      catch (e) { suppressOutput = false; cancelHeldPrompt(); releaseHeldSlot(); throw e; }
+      const result = counted ? await dispatched : await sendHeld('END JSON');
       suppressOutput = false;
-      if (result.trim()) appendOutput(result.trim());
+      // In counted mode the reply was never suppressed, so onRxData has
+      // already echoed it to the terminal; printing it again here would
+      // double every import result.
+      if (!counted && result.trim()) appendOutput(result.trim());
       if (/^\s*ERROR:/m.test(result)) throw new Error(result.trim());
 
       if (confirm('Import complete. Save to EEPROM now?')) {
