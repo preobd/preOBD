@@ -386,6 +386,99 @@ static void test_divider_follows_sensor_not_custom_cal(void) {
     TEST_ASSERT_FALSE(inputHonorsDivider(vdo));
 }
 
+// ---------------------------------------------------------------------------
+// #458 — units must exist and match the input's measurement type.
+// ---------------------------------------------------------------------------
+
+static void test_units_strict_lookup(void) {
+    TEST_ASSERT_EQUAL_UINT8(UNITS_NOT_FOUND, findUnitsIndexByName("BAAR"));
+    TEST_ASSERT_EQUAL_UINT8(UNITS_NOT_FOUND, findUnitsIndexByName(nullptr));
+    TEST_ASSERT_EQUAL_UINT8(getUnitsIndexByName("FAHRENHEIT"), findUnitsIndexByName("F"));  // alias
+    // The lenient lookup keeps its CELSIUS default for EEPROM/system callers.
+    TEST_ASSERT_EQUAL_UINT8(0, getUnitsIndexByName("BAAR"));
+}
+
+// Every seed must pass the new check, or SET APPLICATION / an import degrade
+// would hand an input units setInputUnits() itself refuses.
+static void test_application_default_units_match_their_type(void) {
+    for (uint8_t i = 1; i < NUM_APPLICATION_PRESETS; i++) {
+        const ApplicationPreset* p = getApplicationByIndex(i);
+        TEST_ASSERT_TRUE_MESSAGE(
+            unitsMatchMeasurement(READ_APP_DEFAULT_UNITS(p), getApplicationExpectedMeasurementType(i)),
+            getApplicationNameByIndex(i));
+    }
+}
+
+static void test_set_units_refuses_unknown_and_wrong_type(void) {
+    TEST_ASSERT_TRUE(setInputApplication(4, appOIL_P()));
+    TEST_ASSERT_TRUE(setInputSensor(4, getSensorIndexByName("MPX4250AP")));
+    Input* in = getInputByPin(4);
+    const uint8_t before = in->unitsIndex;
+
+    TEST_ASSERT_FALSE(setInputUnits(4, UNITS_NOT_FOUND));
+    TEST_ASSERT_FALSE(setInputUnits(4, findUnitsIndexByName("F")));   // temperature on pressure
+    TEST_ASSERT_EQUAL_UINT8(before, in->unitsIndex);                   // refusal changes nothing
+
+    TEST_ASSERT_TRUE(setInputUnits(4, findUnitsIndexByName("PSI")));
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("PSI"), in->unitsIndex);
+}
+
+// The one PERCENT unit is tagged HUMIDITY but is also what PERCENT and
+// DIGITAL inputs display in; nothing else crosses families.
+static void test_percent_family_shares_the_percent_unit(void) {
+    const uint8_t pct = findUnitsIndexByName("PERCENT");
+    TEST_ASSERT_NOT_EQUAL(UNITS_NOT_FOUND, pct);
+    TEST_ASSERT_TRUE(unitsMatchMeasurement(pct, MEASURE_HUMIDITY));
+    TEST_ASSERT_TRUE(unitsMatchMeasurement(pct, MEASURE_PERCENT));
+    TEST_ASSERT_TRUE(unitsMatchMeasurement(pct, MEASURE_DIGITAL));
+    TEST_ASSERT_FALSE(unitsMatchMeasurement(pct, MEASURE_PRESSURE));
+    TEST_ASSERT_FALSE(unitsMatchMeasurement(findUnitsIndexByName("VOLTS"), MEASURE_PERCENT));
+}
+
+static void test_json_import_degrades_bad_units_to_app_default(void) {
+    const uint8_t chtDefault = READ_APP_DEFAULT_UNITS(getApplicationByIndex(appCHT()));
+    const char* bad[] = {"BAAR", "PSI"};  // unknown; wrong type for a temperature input
+    for (uint8_t k = 0; k < 2; k++) {
+        setUp();
+        JsonDocument doc;
+        JsonObject o = doc.to<JsonObject>();
+        makeInputRecord(o, 0, 4);
+        o["units"] = bad[k];
+        TEST_ASSERT_TRUE_MESSAGE(importInputFromJSON(o, 0), bad[k]);   // degrade, never reject
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(chtDefault, getInputByPin(4)->unitsIndex, bad[k]);
+    }
+}
+
+// A record without `units` degrades like a bad one instead of failing.
+static void test_json_import_missing_units_uses_app_default(void) {
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    makeInputRecord(o, 0, 4);
+    o.remove("units");
+    TEST_ASSERT_TRUE(importInputFromJSON(o, 0));
+    TEST_ASSERT_EQUAL_UINT8(READ_APP_DEFAULT_UNITS(getApplicationByIndex(appCHT())), getInputByPin(4)->unitsIndex);
+}
+
+// Units saved before #458 could be of another quantity; loading repairs them.
+static void test_eeprom_load_repairs_wrong_type_units(void) {
+    TEST_ASSERT_TRUE(setInputApplication(4, appCHT()));
+    Input* in = getInputByPin(4);
+    in->unitsIndex = findUnitsIndexByName("PSI");   // what the old SET UNITS allowed
+    InputEEPROM rec;
+    buildInputRecord(*in, rec);
+    Input loaded;
+    memset(&loaded, 0, sizeof(loaded));
+    applyInputRecord(rec, loaded);
+    TEST_ASSERT_EQUAL_UINT8(READ_APP_DEFAULT_UNITS(getApplicationByIndex(appCHT())), loaded.unitsIndex);
+
+    // A valid choice survives the round trip untouched.
+    in->unitsIndex = findUnitsIndexByName("F");
+    buildInputRecord(*in, rec);
+    memset(&loaded, 0, sizeof(loaded));
+    applyInputRecord(rec, loaded);
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("F"), loaded.unitsIndex);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_registry_available);
@@ -407,5 +500,12 @@ int main(int, char**) {
     RUN_TEST(test_cal_linear_pairs_with_read_linear_sensor);
     RUN_TEST(test_divider_honored_only_by_linear_sensors);
     RUN_TEST(test_divider_follows_sensor_not_custom_cal);
+    RUN_TEST(test_units_strict_lookup);
+    RUN_TEST(test_application_default_units_match_their_type);
+    RUN_TEST(test_set_units_refuses_unknown_and_wrong_type);
+    RUN_TEST(test_percent_family_shares_the_percent_unit);
+    RUN_TEST(test_json_import_degrades_bad_units_to_app_default);
+    RUN_TEST(test_json_import_missing_units_uses_app_default);
+    RUN_TEST(test_eeprom_load_repairs_wrong_type_units);
     return UNITY_END();
 }

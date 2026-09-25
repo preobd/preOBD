@@ -248,7 +248,7 @@ SET <pin> SENSOR <sensor>        # Set hardware sensor
 SET <pin> NAME <name>            # Set short display name (8 chars max)
 SET <pin> NAME <full_name>      # Set full display label (32 chars max)
 SET <pin> ABBR <abbreviation>    # Set full display name (32 chars max)
-SET <pin> UNITS <units>          # Override display units
+SET <pin> UNITS <units>          # Override display units (must measure the same quantity as the input; unknown names are refused)
 SET <pin> ALARM <min> <max>      # Alarm outside a Min..Max band
 SET <pin> ALARM MIN <v>          # One-sided: alarm below <v> (floor)
 SET <pin> ALARM MAX <v>          # One-sided: alarm above <v> (ceiling)

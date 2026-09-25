@@ -466,6 +466,11 @@ bool setInputDisplayName(uint8_t pin, const char* displayName) {
 bool setInputUnits(uint8_t pin, uint8_t unitsIndex) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
+    // A unit of another quantity would run e.g. the °F factor+offset over a
+    // value in bar on every display/log path (#458). Callers print the reason.
+    if (!unitsMatchMeasurement(unitsIndex, inputMeasurementType(input->sensorIndex, input->applicationIndex))) {
+        return false;
+    }
 
     input->unitsIndex = unitsIndex;
     return true;

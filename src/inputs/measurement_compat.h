@@ -27,6 +27,7 @@
 #define MEASUREMENT_COMPAT_H
 
 #include <Arduino.h>
+#include "../sensors/calibration_types.h"  // MeasurementType
 
 // True iff `sensorIndex`'s physical measurement type is a valid match for
 // what `applicationIndex` expects.
@@ -42,5 +43,14 @@
 //     branch is unreachable in current code — it is the default the next
 //     caller inherits, and "yes" is the wrong default for a validator.
 bool sensorMatchesApplication(uint8_t sensorIndex, uint8_t applicationIndex);
+
+// The physical quantity an input measures: its sensor's type, or — with no
+// sensor yet (SENSOR_NONE) — what its application expects.
+MeasurementType inputMeasurementType(uint8_t sensorIndex, uint8_t applicationIndex);
+
+// True iff `unitsIndex` is a registry unit for measurement type `type` (#458).
+// HUMIDITY, PERCENT and DIGITAL form one family (they share the PERCENT unit).
+// An index outside the table (UNITS_NOT_FOUND included) is false.
+bool unitsMatchMeasurement(uint8_t unitsIndex, MeasurementType type);
 
 #endif // MEASUREMENT_COMPAT_H

@@ -80,6 +80,8 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex);
 bool setInputSensor(uint8_t pin, uint8_t sensorIndex);
 bool setInputAbbr(uint8_t pin, const char* abbr);
 bool setInputDisplayName(uint8_t pin, const char* displayName);
+// Refuses (false, no message) an unknown index or a unit of another
+// measurement type than the input's (#458).
 bool setInputUnits(uint8_t pin, uint8_t unitsIndex);
 bool setInputAlarmRange(uint8_t pin, float minValue, float maxValue);
 bool setInputOBD(uint8_t pin, uint8_t pid, uint8_t length);

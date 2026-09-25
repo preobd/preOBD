@@ -164,8 +164,10 @@ static int system_units(int argc, const char* const* argv, int /*tokenIndex*/) {
 
     const char* unitType = argv[2];
     const char* unitStr = argv[3];
-    uint8_t index = getUnitsIndexByName(unitStr);
-    const UnitsInfo* info = getUnitsByIndex(index);
+    // Strict: getUnitsIndexByName() maps a typo to CELSIUS, which then passed
+    // the TEMP check below (#458).
+    uint8_t index = findUnitsIndexByName(unitStr);
+    const UnitsInfo* info = (index == UNITS_NOT_FOUND) ? nullptr : getUnitsByIndex(index);
 
     if (!info) {
         msg.control.print(F("ERROR: Unknown unit '"));

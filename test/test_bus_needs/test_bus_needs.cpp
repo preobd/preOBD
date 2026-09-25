@@ -36,6 +36,7 @@
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/storage/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
+#include "../../src/inputs/measurement_compat.cpp"  // units check on load (#458)
 
 // ---------------------------------------------------------------------------
 // Firmware symbols the included TUs expect from elsewhere.

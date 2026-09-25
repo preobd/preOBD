@@ -19,6 +19,7 @@
 #include "../pinctrl/pin_label.h"
 #include "../inputs/calibration_apply.h"
 #include "../sensors/units_registry.h"
+#include "../inputs/measurement_compat.h"  // units vs measurement type (#458)
 #include "../sensors/sensor_library.h"
 #include "../sensors/application_presets.h"
 #include "../version.h"
@@ -825,7 +826,9 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
                     unitsName ? unitsName : "NULL");
 
     // Validate required fields are present
-    if (!appName || !sensorName || !unitsName) {
+    // A missing `units` is not fatal: findUnitsIndexByName(nullptr) is
+    // UNITS_NOT_FOUND, which degrades to the application default below (#458).
+    if (!appName || !sensorName) {
         msg.control.print(F("ERROR: Failed to import input "));
         msg.control.print(index);
         msg.control.print(F(" (pin "));
@@ -848,13 +851,13 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     // Find indices in registries
     uint8_t appIdx = getApplicationIndexByName(appName);
     uint8_t sensorIdx = getSensorIndexByName(sensorName);
-    uint8_t unitsIdx = getUnitsIndexByName(unitsName);
+    uint8_t unitsIdx = findUnitsIndexByName(unitsName);  // strict: a miss is UNITS_NOT_FOUND (#458)
 
     msg.debug.debug(TAG_JSON, "Registry indices: app=%d, sensor=%d, units=%d", appIdx, sensorIdx, unitsIdx);
 
-    // Validate registry lookups (index 0 = NONE for app/sensor, but CELSIUS for units)
-    // Note: Units index 0 is CELSIUS (valid), so we can't use 0 to detect lookup failure
-    // Instead, we rely on the NULL check above to ensure unitsName exists
+    // Validate registry lookups (index 0 = NONE for app/sensor). Units are
+    // judged below, after the sensor resolves: a bad units key degrades, it
+    // never fails the record.
     if (appIdx == 0 || sensorIdx == 0) {
         msg.control.print(F("ERROR: Failed to import input "));
         msg.control.print(index);
@@ -888,6 +891,23 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     }
     SensorInfo sensorInfo;
     loadSensorInfo(flashSensor, &sensorInfo);
+
+    // Units (#458): an unknown name or a unit of another quantity used to be
+    // stored as-is (a typo became CELSIUS; °F on a pressure input ran the °F
+    // conversion over bar). Degrade to the application's default units with a
+    // NOTE instead of failing the record — a display preference isn't worth
+    // losing the input's trip point and relay links over (import policy, #425).
+    if (!unitsMatchMeasurement(unitsIdx, inputMeasurementType(sensorIdx, appIdx))) {
+        const ApplicationPreset* appPreset = getApplicationByIndex(appIdx);
+        unitsIdx = appPreset ? READ_APP_DEFAULT_UNITS(appPreset) : 0;
+        msg.control.print(F("  NOTE: input "));
+        msg.control.print(index);
+        msg.control.print(F(" (pin "));
+        msg.control.print(pin);
+        msg.control.print(F(") units '"));
+        msg.control.print(unitsName ? unitsName : "");
+        msg.control.println(F("' unknown or wrong type; using the application default"));
+    }
 
     // Stage the calibration on a scratch Input, so a calibration this firmware
     // refuses fails the record BEFORE anything is written. Applying it to the
@@ -1220,20 +1240,20 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
             JsonObject units = display["defaultUnits"];
 
             if (units["temperature"].isNull() == false) {
-                uint8_t idx = getUnitsIndexByName(units["temperature"]);
-                if (idx != 0) staged.defaultTempUnits = idx;
+                uint8_t idx = findUnitsIndexByName(units["temperature"]);
+                if (unitsMatchMeasurement(idx, MEASURE_TEMPERATURE)) staged.defaultTempUnits = idx;
             }
             if (units["pressure"].isNull() == false) {
-                uint8_t idx = getUnitsIndexByName(units["pressure"]);
-                if (idx != 0) staged.defaultPressUnits = idx;
+                uint8_t idx = findUnitsIndexByName(units["pressure"]);
+                if (unitsMatchMeasurement(idx, MEASURE_PRESSURE)) staged.defaultPressUnits = idx;
             }
             if (units["elevation"].isNull() == false) {
-                uint8_t idx = getUnitsIndexByName(units["elevation"]);
-                if (idx != 0) staged.defaultElevUnits = idx;
+                uint8_t idx = findUnitsIndexByName(units["elevation"]);
+                if (unitsMatchMeasurement(idx, MEASURE_ELEVATION)) staged.defaultElevUnits = idx;
             }
             if (units["speed"].isNull() == false) {
-                uint8_t idx = getUnitsIndexByName(units["speed"]);
-                if (idx != 0) staged.defaultSpeedUnits = idx;
+                uint8_t idx = findUnitsIndexByName(units["speed"]);
+                if (unitsMatchMeasurement(idx, MEASURE_SPEED)) staged.defaultSpeedUnits = idx;
             }
         }
     }

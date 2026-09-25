@@ -318,12 +318,30 @@ static int set_units(uint8_t pin, int argc, const char* const* argv) {
         msg.control.println(F("ERROR: UNITS requires a unit name"));
         return 1;
     }
-    uint8_t unitsIndex = getUnitsIndexByName(argv[3]);
-    if (setInputUnits(pin, unitsIndex)) {
-        printInputFieldSet(argv[1], F("units"), argv[3]);
-        return 0;
+    Input* input = requireInput(pin);
+    if (!input) return 1;
+    // Strict lookup: getUnitsIndexByName() maps a typo to CELSIUS (#458).
+    uint8_t unitsIndex = findUnitsIndexByName(argv[3]);
+    if (unitsIndex == UNITS_NOT_FOUND) {
+        msg.control.print(F("ERROR: Unknown units '"));
+        msg.control.print(argv[3]);
+        msg.control.println(F("'"));
+        msg.control.println(F("  Hint: LIST UNITS JSON shows every unit and what it measures"));
+        return 1;
     }
-    return 1;
+    MeasurementType want = inputMeasurementType(input->sensorIndex, input->applicationIndex);
+    if (!setInputUnits(pin, unitsIndex)) {
+        MeasurementType got = (MeasurementType)pgm_read_byte(&UNITS_REGISTRY[unitsIndex].measurementType);
+        msg.control.print(F("ERROR: "));
+        msg.control.print(argv[3]);
+        msg.control.print(F(" is a "));
+        msg.control.print(measurementTypeName(got));
+        msg.control.print(F(" unit; this input measures "));
+        msg.control.println(measurementTypeName(want));
+        return 1;
+    }
+    printInputFieldSet(argv[1], F("units"), argv[3]);
+    return 0;
 }
 
 #if INCLUDE_RULES_ENGINE

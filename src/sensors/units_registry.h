@@ -111,7 +111,12 @@ inline const UnitsInfo* getUnitsByHash(uint16_t hash) {
  * @param hash  16-bit hash value to search for
  * @return      Array index (0-10), or 0 (CELSIUS) if not found
  */
-inline uint8_t getUnitsIndexByHash(uint16_t hash) {
+// Miss sentinel for the find* lookups. Index 0 is CELSIUS, a real unit, so the
+// get* lookups below can't signal a miss — use find* wherever an operator or an
+// import supplied the name and a typo must not become CELSIUS (#458).
+static const uint8_t UNITS_NOT_FOUND = 0xFF;
+
+inline uint8_t findUnitsIndexByHash(uint16_t hash) {
     for (uint8_t i = 0; i < NUM_UNITS; i++) {
         const UnitsInfo* info = &UNITS_REGISTRY[i];
         uint16_t nameHash = pgm_read_word(&info->nameHash);
@@ -121,7 +126,18 @@ inline uint8_t getUnitsIndexByHash(uint16_t hash) {
             return i;
         }
     }
-    return 0;  // CELSIUS (default)
+    return UNITS_NOT_FOUND;
+}
+
+inline uint8_t getUnitsIndexByHash(uint16_t hash) {
+    uint8_t i = findUnitsIndexByHash(hash);
+    return i == UNITS_NOT_FOUND ? 0 : i;  // CELSIUS (default)
+}
+
+/** Like getUnitsIndexByName(), but UNITS_NOT_FOUND on a miss instead of CELSIUS. */
+inline uint8_t findUnitsIndexByName(const char* name) {
+    if (!name) return UNITS_NOT_FOUND;
+    return findUnitsIndexByHash(djb2_hash(name));
 }
 
 /**

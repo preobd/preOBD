@@ -21,6 +21,7 @@
 #include "../inputs/input_manager.h"   // inputs[] / numActiveInputs / Input, inputManagerTableIsLive()
 #include "system_config.h"
 #include "../sensors/units_registry.h"
+#include "../inputs/measurement_compat.h"  // units repair on load (#458)
 #include "../core/message_router.h"   // For msg.control
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
@@ -240,6 +241,13 @@ static FLASHMEM void applyInputRecord(const InputEEPROM& rec, Input& in) {
         in.readFunction = info.readFunction;
         in.measurementType = info.measurementType;
         in.calibrationType = info.calibrationType;
+        // Units stored before #458 could be of another quantity (°F on a
+        // pressure input) and would keep converting wrongly: repair to the
+        // application default.
+        if (!unitsMatchMeasurement(in.unitsIndex, inputMeasurementType(in.sensorIndex, in.applicationIndex))) {
+            const ApplicationPreset* app = getApplicationByIndex(in.applicationIndex);
+            if (app != nullptr) in.unitsIndex = READ_APP_DEFAULT_UNITS(app);
+        }
         if (!in.flags.useCustomCalibration) in.presetCalibration = info.defaultCalibration;
         if (info.initFunction) info.initFunction(&in);
     }
