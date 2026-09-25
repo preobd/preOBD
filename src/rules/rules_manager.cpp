@@ -494,6 +494,24 @@ uint8_t rulesSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, floa
     return id;
 }
 
+bool rulesSetRuleLimit(uint8_t id, uint8_t condition, float lo, float hi,
+                       uint8_t* warnResetOut, bool* hystClearedOut) {
+    if (warnResetOut) *warnResetOut = 0;
+    if (hystClearedOut) *hystClearedOut = false;
+    int slot = rulesRuleSlot(id);
+    if (slot < 0) return false;
+    // In place, exactly the facade's shape edit minus its ALARM/enable writes:
+    // id, source, severity, enabled flag, warmup/debounce, Action links and the
+    // live RuleContext all stay. No re-arm — limits and condition are read live
+    // each tick, so the engine re-qualifies next cycle (#295).
+    Rule& r = rules[slot];
+    const float hystBefore = r.hysteresis;
+    const uint8_t mask = applyAlarmShape(r, condition, lo, hi);
+    if (warnResetOut) *warnResetOut = mask;
+    if (hystClearedOut) *hystClearedOut = (hystBefore != 0.0f && r.hysteresis == 0.0f);
+    return true;
+}
+
 bool rulesSetAlarmWarnForInput(uint8_t pin, RuleWarnMode loMode, float lo,
                                 RuleWarnMode hiMode, float hi, uint8_t* badSideOut) {
     if (badSideOut) *badSideOut = 0xFF;

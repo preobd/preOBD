@@ -575,8 +575,107 @@ static void test_reseed_for_input_returns_warn_to_auto(void) {
     TEST_ASSERT_EQUAL_FLOAT(0.0f, rules[slot].warnHi);
 }
 
+// =====================================================================
+// RULE <id> LIMIT — rulesSetRuleLimit (#457)
+// =====================================================================
+
+// A standalone WARNING rule (not the canonical alarm) with an Action on it.
+static uint8_t addLinkedWarningRule(uint8_t pin, uint8_t actionId) {
+    int slot = rulesRuleFreeSlot();
+    Rule& r = rules[slot];
+    memset(&r, 0, sizeof(r));
+    r.id = rulesRuleAllocId();
+    r.sourceInput = pin;
+    r.condition = RULE_ABOVE;
+    r.severity = RULE_SEV_WARNING;
+    r.limitLo = 100.0f;
+    r.hysteresis = 5.0f;
+    r.warmupMs = 1234;
+    r.flags = RULE_FLAG_ENABLED;
+    g_ruleContexts[slot].state = RULE_ACTIVE;
+    int aslot = rulesActionFreeSlot();
+    Action& a = actions[aslot];
+    memset(&a, 0, sizeof(a));
+    a.id = actionId;
+    a.type = ACT_RELAY;
+    a.target = 6;
+    a.ruleRef = RULES_ID_NONE;
+    TEST_ASSERT_TRUE(rulesActionAddRule(actionId, r.id));
+    return r.id;
+}
+
+static void test_limit_keeps_id_links_severity_and_state(void) {
+    addPlainInput(10);
+    const uint8_t id = addLinkedWarningRule(10, 3);
+    const int slot = rulesRuleSlot(id);
+
+    TEST_ASSERT_TRUE(rulesSetRuleLimit(id, RULE_ABOVE, 120.0f, 0.0f));
+    TEST_ASSERT_EQUAL_INT(slot, rulesRuleSlot(id));              // same record, same id
+    TEST_ASSERT_EQUAL_FLOAT(120.0f, rules[slot].limitLo);
+    TEST_ASSERT_EQUAL_UINT8(RULE_SEV_WARNING, rules[slot].severity);  // not forced to ALARM
+    TEST_ASSERT_EQUAL_UINT32(1234, rules[slot].warmupMs);
+    TEST_ASSERT_EQUAL_FLOAT(5.0f, rules[slot].hysteresis);
+    TEST_ASSERT_EQUAL_UINT8(RULE_ACTIVE, g_ruleContexts[slot].state);  // no re-arm
+    int aslot = rulesActionSlot(3);
+    TEST_ASSERT_EQUAL_UINT8(1, rulesActionRuleCount(aslot));
+    TEST_ASSERT_EQUAL_UINT8(id, rulesActionRuleAt(aslot, 0));   // link survives
+}
+
+static void test_limit_leaves_a_disabled_rule_disabled(void) {
+    addPlainInput(10);
+    const uint8_t id = addLinkedWarningRule(10, 3);
+    const int slot = rulesRuleSlot(id);
+    rules[slot].flags &= ~RULE_FLAG_ENABLED;
+    g_ruleContexts[slot].state = RULE_DISABLED;
+    TEST_ASSERT_TRUE(rulesSetRuleLimit(id, RULE_BELOW, 10.0f, 0.0f));
+    TEST_ASSERT_FALSE(rules[slot].flags & RULE_FLAG_ENABLED);   // the facade would have enabled it
+    TEST_ASSERT_EQUAL_UINT8(RULE_DISABLED, g_ruleContexts[slot].state);
+}
+
+static void test_limit_shape_change_and_warn_mask_match_the_facade(void) {
+    addPlainInput(10);
+    rulesSetAlarmRuleForInput(10, RULE_OUTSIDE_BAND, 0.0f, 100.0f, 0);
+    const int slot = rulesAlarmRuleSlotForInput(10);
+    const uint8_t id = rules[slot].id;
+    TEST_ASSERT_TRUE(rulesSetAlarmWarnForInput(10, RULE_WARN_SET, 10.0f, RULE_WARN_SET, 90.0f));
+    uint8_t mask = 0xAA;
+    TEST_ASSERT_TRUE(rulesSetRuleLimit(id, RULE_BELOW, 5.0f, 0.0f, &mask));
+    TEST_ASSERT_EQUAL_UINT8(RULE_BELOW, rules[slot].condition);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_DROPPED_MAX, mask);        // band's ceiling edge has nowhere to go
+    TEST_ASSERT_EQUAL_FLOAT(10.0f, rules[slot].warnLo);          // floor edge kept (still above 5)
+}
+
+static void test_limit_reports_cleared_hysteresis(void) {
+    addPlainInput(10);
+    const uint8_t id = addLinkedWarningRule(10, 3);             // HYST 5
+    bool cleared = false;
+    TEST_ASSERT_TRUE(rulesSetRuleLimit(id, RULE_ABOVE, 3.0f, 0.0f, nullptr, &cleared));
+    TEST_ASSERT_TRUE(cleared);                                   // 5 >= |3| would never clear
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, rules[rulesRuleSlot(id)].hysteresis);
+}
+
+static void test_limit_unknown_id(void) {
+    TEST_ASSERT_FALSE(rulesSetRuleLimit(200, RULE_ABOVE, 1.0f, 0.0f));
+}
+
+static void test_parse_number_is_strict(void) {
+    float v = 0;
+    TEST_ASSERT_TRUE(rulesParseNumber("-12.5", v));
+    TEST_ASSERT_EQUAL_FLOAT(-12.5f, v);
+    TEST_ASSERT_FALSE(rulesParseNumber("12x", v));
+    TEST_ASSERT_FALSE(rulesParseNumber("", v));
+    TEST_ASSERT_FALSE(rulesParseNumber("nan", v));
+    TEST_ASSERT_FALSE(rulesParseNumber(nullptr, v));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_limit_keeps_id_links_severity_and_state);
+    RUN_TEST(test_limit_leaves_a_disabled_rule_disabled);
+    RUN_TEST(test_limit_shape_change_and_warn_mask_match_the_facade);
+    RUN_TEST(test_limit_reports_cleared_hysteresis);
+    RUN_TEST(test_limit_unknown_id);
+    RUN_TEST(test_parse_number_is_strict);
     RUN_TEST(test_warn_facade_no_alarm_rule_reports_badside_0xFF);
     RUN_TEST(test_warn_facade_accepts_legal_lo_on_above);
     RUN_TEST(test_warn_facade_rejects_illegal_lo_on_above);

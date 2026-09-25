@@ -117,6 +117,9 @@ RuleWarnSide rulesRuleWarnSideHit(const Rule& r, float value);
  * Keywords match case-insensitively (like every other CLI keyword). Shared by
  * RULE ADD / RULE <id> WARN / SET <pin> ALARM WARN so the three cannot drift.
  */
+// A whole token as a finite number ("12x", "nan", "" are false) — a typo must
+// never become 0 (#428).
+bool rulesParseNumber(const char* tok, float& val);
 bool rulesParseWarnToken(const char* tok, RuleWarnMode& mode, float& val);
 
 /**

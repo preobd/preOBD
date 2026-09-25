@@ -599,6 +599,7 @@ RULE ADD <pin> OUTSIDE <lo> <hi> [HYST <w>] [WARN <lo|NONE|AUTO> <hi|NONE|AUTO>]
 RULE LIST                         # all Rules + live state (READY/ACTIVE) + severity
 RULE <id>                         # one Rule's detail
 RULE <id> WARN <lo|NONE|AUTO> [<hi|NONE|AUTO>]   # edit an ALARM rule's warning threshold in place (no re-arm)
+RULE <id> LIMIT ABOVE|BELOW <limit> | OUTSIDE <lo> <hi>   # move a Rule's limits in place (keeps id, severity, Action links; no re-arm). Values in base units (°C, bar), like RULE ADD
 RULE <id> ENABLE | DISABLE        # re-arm / park a Rule without deleting it
 RULE DEL <id>                     # delete (drops it from every Action's membership)
 RULE RESET <id>                   # restore config from the application default + re-arm

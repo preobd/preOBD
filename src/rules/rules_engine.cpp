@@ -224,17 +224,23 @@ static bool tokenIs_P(const char* tok, const char* kw_P) {
     }
 }
 
+bool rulesParseNumber(const char* tok, float& val) {
+    if (!tok || !*tok) return false;
+    char* end = nullptr;
+    const float v = (float)strtod(tok, &end);   // strtod, not strtof: avr-libc has no strtof
+    // Whole token must be consumed, and the result must be a real number —
+    // strtof also accepts "nan"/"inf", which are not limits or edges.
+    if (end == tok || *end != '\0' || isnan(v) || isinf(v)) return false;
+    val = v;
+    return true;
+}
+
 bool rulesParseWarnToken(const char* tok, RuleWarnMode& mode, float& val) {
     if (!tok || !*tok) return false;
     if (tokenIs_P(tok, PSTR("NONE"))) { mode = RULE_WARN_NONE; val = 0.0f; return true; }
     if (tokenIs_P(tok, PSTR("AUTO"))) { mode = RULE_WARN_AUTO; val = 0.0f; return true; }
-    char* end = nullptr;
-    const float v = (float)strtod(tok, &end);   // strtod, not strtof: avr-libc has no strtof
-    // Whole token must be consumed, and the result must be a real number —
-    // strtof also accepts "nan"/"inf", which are not edges.
-    if (end == tok || *end != '\0' || isnan(v) || isinf(v)) return false;
+    if (!rulesParseNumber(tok, val)) return false;
     mode = RULE_WARN_SET;
-    val  = v;
     return true;
 }
 

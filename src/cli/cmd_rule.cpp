@@ -670,10 +670,82 @@ FLASHMEM void printInputAlarmInfo(uint8_t pin) {
 
 // --- dispatch -----------------------------------------------------------
 
+// RULE <id> LIMIT ABOVE|BELOW <limit>
+// RULE <id> LIMIT OUTSIDE <lo> <hi>
+// Move a Rule's condition/limits in place (#457): keeps the id, severity,
+// enabled flag, Action links and live state — DEL+ADD lost the links. The
+// condition is required, so `LIMIT 90` on a band is a usage error rather than
+// a silent shape change.
+static int ruleSetLimit(uint8_t id, int argc, const char* const* argv) {
+    if (argc < 5) {
+        msg.control.println(F("ERROR: usage: RULE <id> LIMIT ABOVE|BELOW <limit> | RULE <id> LIMIT OUTSIDE <lo> <hi>"));
+        return 1;
+    }
+    uint8_t condition;
+    int expectedArgc;
+    if (streq_P(argv[3], PSTR("ABOVE")) || streq_P(argv[3], PSTR("BELOW"))) {
+        condition = streq_P(argv[3], PSTR("ABOVE")) ? RULE_ABOVE : RULE_BELOW;
+        expectedArgc = 5;
+    } else if (streq_P(argv[3], PSTR("OUTSIDE"))) {
+        condition = RULE_OUTSIDE_BAND;
+        expectedArgc = 6;
+        if (argc < 6) {
+            msg.control.println(F("ERROR: OUTSIDE requires <lo> <hi>"));
+            return 1;
+        }
+    } else {
+        msg.control.println(F("ERROR: condition must be ABOVE, BELOW, or OUTSIDE"));
+        return 1;
+    }
+    float lo = 0.0f, hi = 0.0f;
+    for (int i = 4; i < expectedArgc; i++) {
+        float& v = (i == 4) ? lo : hi;
+        if (!rulesParseNumber(argv[i], v)) {
+            msg.control.print(F("ERROR: limit not a number: "));
+            msg.control.println(argv[i]);
+            return 1;
+        }
+    }
+    if (argc > expectedArgc) {
+        msg.control.print(F("ERROR: unexpected token: "));
+        msg.control.println(argv[expectedArgc]);
+        return 1;
+    }
+    if (condition == RULE_OUTSIDE_BAND && !(lo < hi)) {
+        msg.control.println(F("ERROR: OUTSIDE requires lo < hi"));
+        return 1;
+    }
+
+    // Which Rule SET <pin> ALARM edits can change with a shape change (#312:
+    // a band is preferred over one-sided), so report it if it moves.
+    const int slot = rulesRuleSlot(id);
+    const uint8_t pin = rules[slot].sourceInput;
+    const int canonicalBefore = rulesAlarmRuleSlotForInput(pin);
+
+    uint8_t warnReset = 0;
+    bool hystCleared = false;
+    rulesSetRuleLimit(id, condition, lo, hi, &warnReset, &hystCleared);
+
+    msg.control.print(F("Rule #"));
+    msg.control.print(id);
+    msg.control.println(F(" limit updated. SAVE to persist."));
+    if (warnReset & RULE_WARN_RESET_MIN)   msg.control.println(F("  NOTE: warn min reset to AUTO (limit moved past it)"));
+    if (warnReset & RULE_WARN_RESET_MAX)   msg.control.println(F("  NOTE: warn max reset to AUTO (limit moved past it)"));
+    if (warnReset & RULE_WARN_DROPPED_MIN) msg.control.println(F("  NOTE: warn min cleared (an ABOVE rule has no lower side)"));
+    if (warnReset & RULE_WARN_DROPPED_MAX) msg.control.println(F("  NOTE: warn max cleared (a BELOW rule has no upper side)"));
+    if (hystCleared) msg.control.println(F("  NOTE: hysteresis cleared (too wide for the new limits)"));
+    const int canonicalAfter = rulesAlarmRuleSlotForInput(pin);
+    if (canonicalAfter != canonicalBefore && canonicalAfter >= 0) {
+        msg.control.print(F("  NOTE: SET <pin> ALARM on this input now edits rule #"));
+        msg.control.println(rules[canonicalAfter].id);
+    }
+    return 0;
+}
+
 FLASHMEM int cmd_rule(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: RULE requires a subcommand"));
-        msg.control.println(F("  Usage: RULE LIST | ADD ... | <id> | <id> ENABLE|DISABLE | <id> WARN ... | DEL <id> | RESET <id>"));
+        msg.control.println(F("  Usage: RULE LIST | ADD ... | <id> | <id> ENABLE|DISABLE | <id> WARN ... | <id> LIMIT ... | DEL <id> | RESET <id>"));
         return 1;
     }
 
@@ -742,7 +814,8 @@ FLASHMEM int cmd_rule(int argc, const char* const* argv) {
         const bool enable  = streq_P(argv[2], PSTR("ENABLE"));
         const bool disable = streq_P(argv[2], PSTR("DISABLE"));
         const bool warn    = streq_P(argv[2], PSTR("WARN"));
-        if (enable || disable || warn) {
+        const bool limit   = streq_P(argv[2], PSTR("LIMIT"));
+        if (enable || disable || warn || limit) {
             // Structural, like ADD/DEL/RESET: an unarmed edit path, so it
             // belongs in CONFIG — follows the ENABLE/DISABLE self-gate (#346).
             if (isInRunMode()) {
@@ -753,6 +826,7 @@ FLASHMEM int cmd_rule(int argc, const char* const* argv) {
             }
             configGenerationBump();
             if (warn) return ruleSetWarn(ruleId, argc, argv);
+            if (limit) return ruleSetLimit(ruleId, argc, argv);
             return ruleSetEnabled(ruleId, enable);
         }
         msg.control.print(F("ERROR: unknown RULE verb: "));

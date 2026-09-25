@@ -141,6 +141,17 @@ int     rulesAlarmRuleSlotForInput(uint8_t pin);
 uint8_t rulesSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, float hi, uint32_t now,
                                    uint8_t* warnResetOut = nullptr);
 
+// RULE <id> LIMIT (#457): move any Rule's condition/limits in place, whatever
+// its severity and whether or not it's the input's canonical alarm Rule. Same
+// shape logic as the facade above (applyAlarmShape: band<->one-sided, warn
+// degrade reported in `warnResetOut`), but it never touches severity, the
+// enabled flag or the RuleContext, and keeps the id and every Action link —
+// what DEL+ADD used to lose. `hystClearedOut` is set when the existing
+// hysteresis was too wide for the new limits and was zeroed. Caller validates
+// lo < hi for a band. Returns false for an unknown id.
+bool rulesSetRuleLimit(uint8_t id, uint8_t condition, float lo, float hi,
+                       uint8_t* warnResetOut = nullptr, bool* hystClearedOut = nullptr);
+
 // Edit the warn tier of the input's canonical alarm Rule (#425, slice B) — the
 // facade behind `SET <pin> ALARM WARN ...`. Unlike the shape edit above, this
 // REJECTS an illegal side rather than degrading it (validates a COPY via
