@@ -22,6 +22,19 @@ enum MeasurementType {
     MEASURE_PERCENT       // Normalized 0-100% (TPS, fuel level, engine load, etc.)
 };
 
+// Typical 10 kΩ NTC (25 °C, β = 3950 K) — what the Steinhart/Beta readers
+// assume with neither a preset nor a custom calibration (the generic NTC
+// sensors), and what CAL BIAS seeds from on such a sensor so overriding only
+// the bias can't leave zeroed coefficients behind (#465). One definition so
+// the readers and the seed can't drift apart.
+static const float NTC_DEFAULT_BIAS_OHMS   = 10000.0f;
+static const float NTC_DEFAULT_STEINHART_A = 1.129241e-3f;
+static const float NTC_DEFAULT_STEINHART_B = 2.341077e-4f;
+static const float NTC_DEFAULT_STEINHART_C = 8.775468e-8f;
+static const float NTC_DEFAULT_BETA        = 3950.0f;
+static const float NTC_DEFAULT_R0_OHMS     = 10000.0f;
+static const float NTC_DEFAULT_T0_C        = 25.0f;
+
 // Calibration type enumeration (for type safety)
 enum CalibrationType {
     CAL_NONE,

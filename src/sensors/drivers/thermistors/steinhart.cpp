@@ -55,10 +55,10 @@ void readThermistorSteinhart(Input *ptr) {
         C = pgm_read_float(&cal->steinhart_c);
     } else {
         // Use defaults
-        R_bias = 10000.0;
-        A = 1.129241e-3;
-        B = 2.341077e-4;
-        C = 8.775468e-8;
+        R_bias = NTC_DEFAULT_BIAS_OHMS;
+        A = NTC_DEFAULT_STEINHART_A;
+        B = NTC_DEFAULT_STEINHART_B;
+        C = NTC_DEFAULT_STEINHART_C;
     }
 
     // Calculate thermistor resistance

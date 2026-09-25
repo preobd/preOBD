@@ -116,6 +116,19 @@ CalApplyStatus applyCalBias(Input* input, float bias_r) {
             default:
                 break;  // Table: only bias is overridable; nothing to seed.
         }
+    } else if (!input->flags.useCustomCalibration) {
+        // No preset (the generic NTC sensors, #465): seed from the defaults the
+        // reader would otherwise use, not from a zeroed/stale union — A=B=C=0
+        // reads INF, beta=r0=t0=0 reads -273.15 °C.
+        if (input->calibrationType == CAL_THERMISTOR_STEINHART) {
+            input->customCalibration.steinhart.steinhart_a = NTC_DEFAULT_STEINHART_A;
+            input->customCalibration.steinhart.steinhart_b = NTC_DEFAULT_STEINHART_B;
+            input->customCalibration.steinhart.steinhart_c = NTC_DEFAULT_STEINHART_C;
+        } else if (input->calibrationType == CAL_THERMISTOR_BETA) {
+            input->customCalibration.beta.beta = NTC_DEFAULT_BETA;
+            input->customCalibration.beta.r0 = NTC_DEFAULT_R0_OHMS;
+            input->customCalibration.beta.t0 = NTC_DEFAULT_T0_C;
+        }
     }
 
     input->flags.useCustomCalibration = true;

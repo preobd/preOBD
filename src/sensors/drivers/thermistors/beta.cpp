@@ -55,10 +55,10 @@ void readThermistorBeta(Input *ptr) {
         T0_celsius = pgm_read_float(&cal->t0);
     } else {
         // Use defaults (typical 10K NTC thermistor at 25°C, β=3950K)
-        R_bias = 10000.0;
-        beta = 3950.0;
-        R0 = 10000.0;
-        T0_celsius = 25.0;
+        R_bias = NTC_DEFAULT_BIAS_OHMS;
+        beta = NTC_DEFAULT_BETA;
+        R0 = NTC_DEFAULT_R0_OHMS;
+        T0_celsius = NTC_DEFAULT_T0_C;
     }
 
     // Calculate thermistor resistance

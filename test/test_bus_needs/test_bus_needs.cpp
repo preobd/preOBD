@@ -71,7 +71,7 @@ bool i2cBusPinsConflict(uint8_t) { return false; }
 // Sensor read/init entry points referenced by SENSOR_LIBRARY[] as data.
 #define STUB_READ(fn) void fn(Input*) {}
 STUB_READ(readMAX6675)          STUB_READ(readMAX31855)
-STUB_READ(readThermistorSteinhart) STUB_READ(readThermistorLookup)
+STUB_READ(readThermistorSteinhart) STUB_READ(readThermistorLookup) STUB_READ(readThermistorBeta)
 STUB_READ(readLinearSensor)     STUB_READ(readPressureTable)
 STUB_READ(readPressureTableDescending) STUB_READ(readPressurePolynomial)
 STUB_READ(readVoltageDivider)   STUB_READ(readLevelTable)

@@ -550,6 +550,52 @@ static void test_every_typed_profile_refuses_a_wrong_sensor(void) {
     TEST_ASSERT_EQUAL_INT(0, memcmp(&linBefore, lin, sizeof(Input)));
 }
 
+// #464: a sensor that can host a typed custom profile must actually be read,
+// or CAL on it configures an input readAllInputs() skips.
+static void test_every_calibratable_sensor_has_a_reader(void) {
+    for (uint8_t i = 1; i < NUM_SENSORS; i++) {
+        SensorInfo info;
+        loadSensorInfo(getSensorByIndex(i), &info);
+        switch (info.calibrationType) {
+            case CAL_THERMISTOR_STEINHART: case CAL_THERMISTOR_BETA: case CAL_LINEAR:
+            case CAL_PRESSURE_POLYNOMIAL: case CAL_RPM: case CAL_SPEED:
+            case CAL_VOLTAGE_DIVIDER: case CAL_CAN_IMPORT:
+                TEST_ASSERT_NOT_NULL_MESSAGE((void*)info.readFunction, info.name);
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+// #465: CAL BIAS on a sensor with no preset seeds the reader's own 10 kΩ NTC
+// defaults, not a zeroed (INF) or stale union.
+static void test_bias_on_generic_ntc_seeds_defaults(void) {
+    const uint8_t app = getApplicationIndexByName("OIL_TEMP");
+    TEST_ASSERT_TRUE(setInputApplication(4, app));
+    TEST_ASSERT_TRUE(setInputSensor(4, getSensorIndexByName("GENERIC_NTC_STEINHART")));
+    Input* in = getInputByPin(4);
+    memset(&in->customCalibration, 0x5A, sizeof(in->customCalibration));   // stale garbage
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_OK, applyCalBias(in, 4700.0f));
+    TEST_ASSERT_EQUAL_FLOAT(4700.0f, in->customCalibration.steinhart.bias_resistor);
+    TEST_ASSERT_EQUAL_FLOAT(NTC_DEFAULT_STEINHART_A, in->customCalibration.steinhart.steinhart_a);
+    TEST_ASSERT_EQUAL_FLOAT(NTC_DEFAULT_STEINHART_C, in->customCalibration.steinhart.steinhart_c);
+
+    TEST_ASSERT_TRUE(setInputApplication(5, app));
+    TEST_ASSERT_TRUE(setInputSensor(5, getSensorIndexByName("GENERIC_NTC_BETA")));
+    Input* b = getInputByPin(5);
+    memset(&b->customCalibration, 0, sizeof(b->customCalibration));
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_OK, applyCalBias(b, 2200.0f));
+    TEST_ASSERT_EQUAL_FLOAT(NTC_DEFAULT_BETA, b->customCalibration.beta.beta);
+    TEST_ASSERT_EQUAL_FLOAT(NTC_DEFAULT_R0_OHMS, b->customCalibration.beta.r0);
+    TEST_ASSERT_EQUAL_FLOAT(NTC_DEFAULT_T0_C, b->customCalibration.beta.t0);
+
+    // An existing custom profile's coefficients are kept.
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_OK, applyCalBeta(b, 10000.0f, 3435.0f, 10000.0f, 25.0f));
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_OK, applyCalBias(b, 4700.0f));
+    TEST_ASSERT_EQUAL_FLOAT(3435.0f, b->customCalibration.beta.beta);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_registry_available);
@@ -573,6 +619,8 @@ int main(int, char**) {
     RUN_TEST(test_divider_follows_sensor_not_custom_cal);
     RUN_TEST(test_cal_preset_restores_sensor_type);
     RUN_TEST(test_every_typed_profile_refuses_a_wrong_sensor);
+    RUN_TEST(test_every_calibratable_sensor_has_a_reader);
+    RUN_TEST(test_bias_on_generic_ntc_seeds_defaults);
     RUN_TEST(test_eeprom_load_drops_mismatched_custom_cal);
     RUN_TEST(test_units_strict_lookup);
     RUN_TEST(test_application_default_units_match_their_type);

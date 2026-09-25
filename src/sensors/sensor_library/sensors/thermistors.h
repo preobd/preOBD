@@ -83,13 +83,16 @@ static const char PSTR_GENERIC_TEMP_LINEAR_LABEL[] PROGMEM = "0.5-4.5V linear (-
              MEASURE_TEMPERATURE, CAL_THERMISTOR_STEINHART, &vdo120_steinhart_cal, SENSOR_READ_INTERVAL_MS, -40.0, 150.0, 0x7434, PIN_ANALOG) \
     X_SENSOR(PSTR_VDO_150C_STEINHART, PSTR_VDO_150C_STEINHART_LABEL, nullptr, readThermistorSteinhart, nullptr, \
              MEASURE_TEMPERATURE, CAL_THERMISTOR_STEINHART, &vdo150_steinhart_cal, SENSOR_READ_INTERVAL_MS, -40.0, 180.0, 0x90B7, PIN_ANALOG) \
-    /* Generic NTC (placeholders - no read function) */ \
+    /* Generic NTC — the hosts for SET <pin> CAL STEINHART / BETA (#460 only   \
+       accepts a profile on a sensor of its type). With no custom calibration  \
+       both readers fall back to a typical 10 kΩ NTC (#464). TABLE stays a      \
+       placeholder: there is no custom table profile to fill it. */            \
     X_SENSOR(PSTR_NTC_TABLE, PSTR_NTC_TABLE_LABEL, nullptr, nullptr, nullptr, \
              MEASURE_TEMPERATURE, CAL_THERMISTOR_TABLE, nullptr, 0, -40.0, 150.0, 0x482D, PIN_ANALOG) \
-    X_SENSOR(PSTR_NTC_STEINHART, PSTR_NTC_STEINHART_LABEL, nullptr, nullptr, nullptr, \
-             MEASURE_TEMPERATURE, CAL_THERMISTOR_STEINHART, nullptr, 0, -40.0, 150.0, 0xA5F7, PIN_ANALOG) \
-    X_SENSOR(PSTR_NTC_BETA, PSTR_NTC_BETA_LABEL, nullptr, nullptr, nullptr, \
-             MEASURE_TEMPERATURE, CAL_THERMISTOR_BETA, nullptr, 0, -40.0, 150.0, 0x1F61, PIN_ANALOG) \
+    X_SENSOR(PSTR_NTC_STEINHART, PSTR_NTC_STEINHART_LABEL, nullptr, readThermistorSteinhart, nullptr, \
+             MEASURE_TEMPERATURE, CAL_THERMISTOR_STEINHART, nullptr, SENSOR_READ_INTERVAL_MS, -40.0, 150.0, 0xA5F7, PIN_ANALOG) \
+    X_SENSOR(PSTR_NTC_BETA, PSTR_NTC_BETA_LABEL, nullptr, readThermistorBeta, nullptr, \
+             MEASURE_TEMPERATURE, CAL_THERMISTOR_BETA, nullptr, SENSOR_READ_INTERVAL_MS, -40.0, 150.0, 0x1F61, PIN_ANALOG) \
     /* Smiths (British classics) */ \
     X_SENSOR(PSTR_SMITHS_TT6811_TEMP, PSTR_SMITHS_TT6811_TEMP_LABEL, PSTR_SMITHS_TT6811_TEMP_DESC, readThermistorLookup, nullptr, \
              MEASURE_TEMPERATURE, CAL_THERMISTOR_TABLE, &smiths_tt6811_temp_cal, SENSOR_READ_INTERVAL_MS, 70.0, 120.0, 0x5FA9, PIN_ANALOG) \
