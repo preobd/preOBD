@@ -240,6 +240,13 @@ static FLASHMEM void applyInputRecord(const InputEEPROM& rec, Input& in) {
         loadSensorInfo(flashInfo, &info);
         in.readFunction = info.readFunction;
         in.measurementType = info.measurementType;
+        // A custom override of another type than the sensor reads was
+        // accepted before #460; its bytes would now be read as this type's
+        // layout. Drop it back to the preset.
+        if (in.flags.useCustomCalibration && (CalibrationType)rec.calibrationType != info.calibrationType) {
+            in.flags.useCustomCalibration = false;
+            memset(&in.customCalibration, 0, sizeof(CalibrationOverride));
+        }
         in.calibrationType = info.calibrationType;
         // Units stored before #458 could be of another quantity (°F on a
         // pressure input) and would keep converting wrongly: repair to the

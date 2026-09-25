@@ -30,7 +30,7 @@ Most users won't need this guide. The preset sensor library covers common automo
 ### Custom Thermistor (Steinhart-Hart)
 
 ```
-SET A0 OIL_TEMP THERMISTOR_STEINHART
+SET A0 OIL_TEMP GENERIC_NTC_STEINHART
 SET A0 CAL STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
 SAVE
 ```
@@ -38,7 +38,7 @@ SAVE
 ### Custom Thermistor (Beta Equation)
 
 ```
-SET A0 OIL_TEMP THERMISTOR_STEINHART
+SET A0 OIL_TEMP GENERIC_NTC_BETA
 SET A0 CAL BETA 10000 3950 10000 25
 SAVE
 ```
@@ -62,6 +62,8 @@ SAVE
 
 ## Calibration Commands Reference
 
+**A profile must match the sensor.** Each sensor's driver reads exactly one calibration type, so `STEINHART` only applies to a Steinhart thermistor sensor, `PRESSURE_LINEAR` only to a linear voltage sensor, and so on. Any other profile is refused (`ERROR: STEINHART calibration doesn't apply to MPX4250AP`). To use a different kind of curve, first `SET <pin> SENSOR` to a sensor of that type, then apply the profile. `BIAS` keeps the sensor's own type, and `PRESET` works on any input. A configuration import with a mismatched profile keeps the input on its preset and prints a note.
+
 ### STEINHART - Steinhart-Hart Thermistor
 
 ```
@@ -77,7 +79,7 @@ SET <pin> CAL STEINHART <bias> <a> <b> <c>
 
 **Example:** 10kΩ NTC thermistor with known coefficients:
 ```
-SET A0 OIL_TEMP THERMISTOR_STEINHART
+SET A0 OIL_TEMP GENERIC_NTC_STEINHART
 SET A0 CAL STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
 SAVE
 ```
@@ -97,7 +99,7 @@ SET <pin> CAL BETA <bias> <beta> <r0> <t0>
 
 **Example:** Generic 10kΩ NTC with β=3950:
 ```
-SET A0 OIL_TEMP THERMISTOR_STEINHART
+SET A0 OIL_TEMP GENERIC_NTC_BETA
 SET A0 CAL BETA 10000 3950 10000 25
 SAVE
 ```
@@ -284,7 +286,7 @@ See [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) for detailed an
 You have a cheap 10kΩ NTC thermistor with β=3950.
 
 ```
-SET A0 OIL_TEMP THERMISTOR_STEINHART
+SET A0 OIL_TEMP GENERIC_NTC_BETA
 SET A0 CAL BETA 10000 3950 10000 25
 RULE ADD A0 OUTSIDE 60 130
 SAVE
@@ -295,7 +297,7 @@ SAVE
 You have a Bosch temperature sender with known coefficients.
 
 ```
-SET A1 COOLANT_TEMP THERMISTOR_STEINHART
+SET A1 COOLANT_TEMP GENERIC_NTC_STEINHART
 SET A1 CAL STEINHART 1000 1.46e-3 2.38e-4 1.01e-7
 RULE ADD A1 OUTSIDE 60 105
 SAVE

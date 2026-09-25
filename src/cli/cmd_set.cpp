@@ -100,6 +100,7 @@ struct CalProfile {
     const char* token;          // PROGMEM-resident profile keyword
     CalProfileHandler handler;
     const char* help;           // PROGMEM-resident multi-line help (nullptr ok)
+    uint8_t type;               // CalibrationType the profile writes; CAL_NONE = any (BIAS, PRESET)
 };
 
 // SET <pin> APPLICATION <application>
@@ -1214,14 +1215,14 @@ static const char PSTR_HELP_CAL_PRESET[] PROGMEM =
     "  SET <pin> CAL PRESET                            Clear custom, restore preset";
 
 static const CalProfile CAL_PROFILES[] PROGMEM = {
-    { PSTR_CAL_STEINHART,       set_cal_steinhart,       PSTR_HELP_CAL_STEINHART       },
-    { PSTR_CAL_BETA,            set_cal_beta,            PSTR_HELP_CAL_BETA            },
-    { PSTR_CAL_PRESSURE_LINEAR, set_cal_pressure_linear, PSTR_HELP_CAL_PRESSURE_LINEAR },
-    { PSTR_CAL_PRESSURE_POLY,   set_cal_pressure_poly,   PSTR_HELP_CAL_PRESSURE_POLY   },
-    { PSTR_CAL_RPM,             set_cal_rpm,             PSTR_HELP_CAL_RPM             },
-    { PSTR_CAL_SPEED,           set_cal_speed,           PSTR_HELP_CAL_SPEED           },
-    { PSTR_CAL_BIAS,            set_cal_bias,            PSTR_HELP_CAL_BIAS            },
-    { PSTR_CAL_PRESET,          set_cal_preset,          PSTR_HELP_CAL_PRESET          },
+    { PSTR_CAL_STEINHART,       set_cal_steinhart,       PSTR_HELP_CAL_STEINHART, CAL_THERMISTOR_STEINHART },
+    { PSTR_CAL_BETA,            set_cal_beta,            PSTR_HELP_CAL_BETA, CAL_THERMISTOR_BETA },
+    { PSTR_CAL_PRESSURE_LINEAR, set_cal_pressure_linear, PSTR_HELP_CAL_PRESSURE_LINEAR, CAL_LINEAR },
+    { PSTR_CAL_PRESSURE_POLY,   set_cal_pressure_poly,   PSTR_HELP_CAL_PRESSURE_POLY, CAL_PRESSURE_POLYNOMIAL },
+    { PSTR_CAL_RPM,             set_cal_rpm,             PSTR_HELP_CAL_RPM, CAL_RPM },
+    { PSTR_CAL_SPEED,           set_cal_speed,           PSTR_HELP_CAL_SPEED, CAL_SPEED },
+    { PSTR_CAL_BIAS,            set_cal_bias,            PSTR_HELP_CAL_BIAS, CAL_NONE },
+    { PSTR_CAL_PRESET,          set_cal_preset,          PSTR_HELP_CAL_PRESET, CAL_NONE },
 };
 static const uint8_t NUM_CAL_PROFILES = sizeof(CAL_PROFILES) / sizeof(CalProfile);
 
@@ -1240,6 +1241,26 @@ static int set_cal(uint8_t pin, int argc, const char* const* argv) {
     for (uint8_t i = 0; i < NUM_CAL_PROFILES; i++) {
         const char* token = (const char*)pgm_read_ptr(&CAL_PROFILES[i].token);
         if (streq_P(profile, token)) {
+            // #460: a typed profile must be what this input's sensor reads. The
+            // core refuses it too (calibration_apply); this gives the CLI one
+            // message for every profile instead of eight.
+            const uint8_t want = pgm_read_byte(&CAL_PROFILES[i].type);
+            Input* input = getInputByPin(pin);
+            if (want != CAL_NONE && input != nullptr && input->calibrationType != want) {
+                msg.control.print(F("ERROR: "));
+                msg.control.print(profile);
+                msg.control.print(F(" calibration doesn't apply to "));
+                const SensorInfo* flash = getSensorByIndex(input->sensorIndex);
+                if (flash != nullptr) {
+                    SensorInfo info;
+                    loadSensorInfo(flash, &info);
+                    msg.control.println(info.name);
+                } else {
+                    msg.control.println(F("this input's sensor"));
+                }
+                msg.control.println(F("  Each sensor reads one calibration type; change the sensor instead"));
+                return 1;
+            }
             CalProfileHandler h = (CalProfileHandler)pgm_read_ptr(&CAL_PROFILES[i].handler);
             return h(pin, argc, argv, 4);
         }

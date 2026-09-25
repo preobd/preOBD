@@ -12,6 +12,14 @@
  * Input it is handed, which also keeps it host-testable.
  *
  * Contract: on any status other than CAL_APPLY_OK the Input is left untouched.
+ *
+ * Type contract (#460): a typed profile is accepted only when it matches
+ * `input->calibrationType`, which every writer sets from the sensor library
+ * (setInputSensor, EEPROM load, JSON staging) and which these functions can
+ * therefore never move. The read function is fixed by the sensor and each
+ * driver reads only its own override layout — a Steinhart override on a linear
+ * sensor was accepted and then ignored, and on an RPM/speed/CAN input (whose
+ * readers check only the flag) its bytes were read as the wrong struct.
  */
 
 #ifndef CALIBRATION_APPLY_H
@@ -46,7 +54,8 @@ enum CalApplyStatus : uint8_t {
     CAL_APPLY_ERR_SPEED_MAX,         // max speed outside 50..500 km/h
     CAL_APPLY_ERR_CAN_LENGTH,        // data length outside 1..4 bytes
     CAL_APPLY_ERR_CAN_OFFSET,        // data offset outside 0..7
-    CAL_APPLY_ERR_CAN_TIMEOUT        // timeout nonzero and outside 100..30000 ms
+    CAL_APPLY_ERR_CAN_TIMEOUT,       // timeout nonzero and outside 100..30000 ms
+    CAL_APPLY_ERR_SENSOR_TYPE        // profile is not the type the input's sensor reads (#460)
 };
 
 // Thermistor, Steinhart-Hart. Sets calibrationType = CAL_THERMISTOR_STEINHART.

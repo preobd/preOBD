@@ -667,6 +667,16 @@ bool clearInputCalibration(uint8_t pin) {
 
     input->flags.useCustomCalibration = false;
     memset(&input->customCalibration, 0, sizeof(CalibrationOverride));
+    // Back to exactly what setInputSensor() installs (#460): the preset branch
+    // of every driver checks the type, so a stale one fell through to the
+    // driver's hard-coded default instead of the sensor's preset.
+    const SensorInfo* flash = getSensorByIndex(input->sensorIndex);
+    if (flash != nullptr) {
+        SensorInfo info;
+        loadSensorInfo(flash, &info);
+        input->calibrationType = info.calibrationType;
+        input->presetCalibration = info.defaultCalibration;
+    }
 
     return true;
 }

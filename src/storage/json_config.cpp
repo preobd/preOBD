@@ -779,6 +779,18 @@ static FLASHMEM bool importCalibration(Input* input, JsonObject& calObj, uint8_t
         return false;
     }
 
+    if (st == CAL_APPLY_ERR_SENSOR_TYPE) {
+        // A profile the sensor can't read (#460): keep the input on its preset
+        // and say so, rather than drop the record (import policy, #425).
+        input->flags.useCustomCalibration = false;
+        memset(&input->customCalibration, 0, sizeof(CalibrationOverride));
+        msg.control.print(F("  NOTE: input "));
+        msg.control.print(index);
+        msg.control.print(F(" calibration "));
+        msg.control.print(type);
+        msg.control.println(F(" doesn't match its sensor; using the preset"));
+        return true;
+    }
     if (st != CAL_APPLY_OK) {
         // Leave nothing half-applied behind.
         input->flags.useCustomCalibration = false;

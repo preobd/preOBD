@@ -374,16 +374,61 @@ static void test_divider_follows_sensor_not_custom_cal(void) {
     TEST_ASSERT_TRUE(setInputApplication(4, appOIL_P()));
     TEST_ASSERT_TRUE(setInputSensor(4, getSensorIndexByName("MPX4250AP")));
     Input* in = getInputByPin(4);
-    applyCalSteinhart(in, 10000.0f, 1.0e-3f, 2.0e-4f, 1.0e-7f);   // wrong profile, by mistake
-    TEST_ASSERT_TRUE(clearInputCalibration(4));                     // SET <pin> CAL PRESET
-    TEST_ASSERT_TRUE(inputHonorsDivider(in));                       // readLinearSensor still runs
+    // #460 made a mismatched profile impossible, so the type can't drift...
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_ERR_SENSOR_TYPE, applyCalSteinhart(in, 10000.0f, 1.0e-3f, 2.0e-4f, 1.0e-7f));
+    TEST_ASSERT_EQUAL_UINT8(CAL_LINEAR, in->calibrationType);
+    TEST_ASSERT_TRUE(inputHonorsDivider(in));
 
     TEST_ASSERT_TRUE(setInputApplication(5, appOIL_P()));
     TEST_ASSERT_TRUE(setInputSensor(5, getSensorIndexByName("VDO_5BAR_CURVE")));
     Input* vdo = getInputByPin(5);
-    TEST_ASSERT_EQUAL(CAL_APPLY_OK, applyCalLinear(vdo, 0.5f, 3.0f, 0.0f, 5.0f));  // CAL_LINEAR type, polynomial reader
-    TEST_ASSERT_EQUAL(CAL_LINEAR, vdo->calibrationType);
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_ERR_SENSOR_TYPE, applyCalLinear(vdo, 0.5f, 3.0f, 0.0f, 5.0f));
+    // ...and the predicate still follows the sensor even if it did (legacy data).
+    vdo->calibrationType = CAL_LINEAR;
     TEST_ASSERT_FALSE(inputHonorsDivider(vdo));
+}
+
+// #460: CAL PRESET (clearInputCalibration) restores the sensor's type and
+// preset, so the driver's preset branch runs again.
+static void test_cal_preset_restores_sensor_type(void) {
+    TEST_ASSERT_TRUE(setInputApplication(4, appOIL_P()));
+    TEST_ASSERT_TRUE(setInputSensor(4, getSensorIndexByName("MPX4250AP")));
+    Input* in = getInputByPin(4);
+    const void* preset = in->presetCalibration;
+    in->calibrationType = CAL_THERMISTOR_STEINHART;   // stale, as pre-#460 CLI left it
+    in->presetCalibration = nullptr;
+    in->flags.useCustomCalibration = true;
+    TEST_ASSERT_TRUE(clearInputCalibration(4));
+    TEST_ASSERT_EQUAL_UINT8(CAL_LINEAR, in->calibrationType);
+    TEST_ASSERT_EQUAL_PTR(preset, in->presetCalibration);
+    TEST_ASSERT_FALSE(in->flags.useCustomCalibration);
+}
+
+// #460: an override saved with another type than the sensor reads is dropped
+// on load instead of being reinterpreted as this type's layout.
+static void test_eeprom_load_drops_mismatched_custom_cal(void) {
+    TEST_ASSERT_TRUE(setInputApplication(4, appOIL_P()));
+    TEST_ASSERT_TRUE(setInputSensor(4, getSensorIndexByName("MPX4250AP")));
+    Input* in = getInputByPin(4);
+    in->calibrationType = CAL_THERMISTOR_STEINHART;   // what the old CLI stored
+    in->flags.useCustomCalibration = true;
+    in->customCalibration.steinhart.bias_resistor = 2200.0f;
+    InputEEPROM rec;
+    buildInputRecord(*in, rec);
+    Input loaded;
+    memset(&loaded, 0, sizeof(loaded));
+    applyInputRecord(rec, loaded);
+    TEST_ASSERT_FALSE(loaded.flags.useCustomCalibration);
+    TEST_ASSERT_EQUAL_UINT8(CAL_LINEAR, loaded.calibrationType);
+    TEST_ASSERT_NOT_NULL(loaded.presetCalibration);
+
+    // A matching custom survives.
+    in->calibrationType = CAL_LINEAR;
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_OK, applyCalLinear(in, 0.5f, 3.0f, 0.0f, 5.0f));
+    buildInputRecord(*in, rec);
+    memset(&loaded, 0, sizeof(loaded));
+    applyInputRecord(rec, loaded);
+    TEST_ASSERT_TRUE(loaded.flags.useCustomCalibration);
 }
 
 // ---------------------------------------------------------------------------
@@ -479,6 +524,32 @@ static void test_eeprom_load_repairs_wrong_type_units(void) {
     TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("F"), loaded.unitsIndex);
 }
 
+// #460: every typed profile is refused on an input whose sensor reads another
+// type (one mutant per applyCal*() — the review found only 2 of 8 guarded).
+// Arguments are all valid, so SENSOR_TYPE is the only possible refusal, and
+// the input must be left exactly as it was.
+static void test_every_typed_profile_refuses_a_wrong_sensor(void) {
+    TEST_ASSERT_TRUE(setInputApplication(4, appOIL_P()));
+    TEST_ASSERT_TRUE(setInputSensor(4, getSensorIndexByName("VDO_5BAR_CURVE")));   // CAL_PRESSURE_POLYNOMIAL
+    Input* poly = getInputByPin(4);
+    TEST_ASSERT_TRUE(setInputApplication(5, appOIL_P()));
+    TEST_ASSERT_TRUE(setInputSensor(5, getSensorIndexByName("MPX4250AP")));        // CAL_LINEAR
+    Input* lin = getInputByPin(5);
+    const Input polyBefore = *poly, linBefore = *lin;
+
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_ERR_SENSOR_TYPE, applyCalSteinhart(lin, 10000.0f, 1.1e-3f, 2.3e-4f, 8.7e-8f));
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_ERR_SENSOR_TYPE, applyCalBeta(lin, 10000.0f, 3950.0f, 10000.0f, 25.0f));
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_ERR_SENSOR_TYPE, applyCalPressurePoly(lin, 220.0f, 1.0f, 2.0f, 3.0f));
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_ERR_SENSOR_TYPE, applyCalLinear(poly, 0.5f, 3.0f, 0.0f, 5.0f));
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_ERR_SENSOR_TYPE, applyCalRpm(lin, 12, 3.0f, 1.0f, 2000, 100, 8000));
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_ERR_SENSOR_TYPE, applyCalVoltageDivider(lin, 100000.0f, 22000.0f, 1.0f, 0.0f));
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_ERR_SENSOR_TYPE, applyCalSpeed(lin, 100, 2008, 3.73f, 1.0f, 2000, 300));
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_ERR_SENSOR_TYPE, applyCalCanImport(lin, 0x7E8, 0x0C, 0, 2, true, 0.25f, 0.0f, 2000));
+
+    TEST_ASSERT_EQUAL_INT(0, memcmp(&polyBefore, poly, sizeof(Input)));
+    TEST_ASSERT_EQUAL_INT(0, memcmp(&linBefore, lin, sizeof(Input)));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_registry_available);
@@ -500,6 +571,9 @@ int main(int, char**) {
     RUN_TEST(test_cal_linear_pairs_with_read_linear_sensor);
     RUN_TEST(test_divider_honored_only_by_linear_sensors);
     RUN_TEST(test_divider_follows_sensor_not_custom_cal);
+    RUN_TEST(test_cal_preset_restores_sensor_type);
+    RUN_TEST(test_every_typed_profile_refuses_a_wrong_sensor);
+    RUN_TEST(test_eeprom_load_drops_mismatched_custom_cal);
     RUN_TEST(test_units_strict_lookup);
     RUN_TEST(test_application_default_units_match_their_type);
     RUN_TEST(test_set_units_refuses_unknown_and_wrong_type);

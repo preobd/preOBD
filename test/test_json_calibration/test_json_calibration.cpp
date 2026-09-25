@@ -227,21 +227,39 @@ static void test_roundtrip_speed(void) {
     assertRoundTrips(in);
 }
 
-// Same bug, CAL_CAN_IMPORT. Built directly (not via buildInput()'s
-// sensorIndexForCal lookup): the CAN_IMPORT sensor library entry is gated by
+// Same bug, CAL_CAN_IMPORT. The CAN_IMPORT sensor library entry is gated by
 // INCLUDE_CAN (sensor_library.h), which the native test profile does not set,
-// so no sensor in this test binary's library carries CAL_CAN_IMPORT as its
-// OWN type. applyCalCanImport() doesn't care what sensor the input started
-// on -- like every other applyCal*(), it sets calibrationType itself -- so
-// any already-admitted input is a fine host for the round trip.
+// so no sensor here reads CAL_CAN_IMPORT — and since #460 a profile is only
+// accepted on an input whose sensor reads it, a whole-record round trip has no
+// legal host. Round-trip the calibration block itself instead, on inputs typed
+// the way a CAN sensor's input is.
 static void test_roundtrip_can_import(void) {
-    TEST_ASSERT_TRUE(setInputApplication(TEST_PIN, appCHT()));
-    Input* in = getInputByPin(TEST_PIN);
-    memset(&in->customCalibration, 0, sizeof(CalibrationOverride));
-    in->flags.useCustomCalibration = false;
+    Input src;
+    memset(&src, 0, sizeof(src));
+    src.calibrationType = CAL_CAN_IMPORT;
     TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_OK,
-        applyCalCanImport(in, 0x7E8, 0x0C, 0, 2, true, 0.25f, 0.0f, 2000));
-    assertRoundTrips(in);
+        applyCalCanImport(&src, 0x7E8, 0x0C, 0, 2, true, 0.25f, 0.0f, 2000));
+
+    // Through real JSON text, as SYSTEM DUMP JSON → JSON IMPORT does:
+    // addFloatParam() writes raw JSON that only reads back as a number once
+    // parsed.
+    JsonDocument out;
+    JsonObject exported = out.to<JsonObject>();
+    exportCalibration(exported, &src);
+    char text[1024];
+    TEST_ASSERT_TRUE(serializeJson(out, text, sizeof(text)) > 0);
+    JsonDocument doc;
+    TEST_ASSERT_FALSE(deserializeJson(doc, text));
+    JsonObject cal = doc.as<JsonObject>();
+
+    Input dst;
+    memset(&dst, 0, sizeof(dst));
+    dst.calibrationType = CAL_CAN_IMPORT;
+    TEST_ASSERT_TRUE(importCalibration(&dst, cal, 0));
+    TEST_ASSERT_TRUE(dst.flags.useCustomCalibration);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, memcmp(&src.customCalibration, &dst.customCalibration, sizeof(CalibrationOverride)),
+        "customCalibration union differs after the round trip");
 }
 
 // Table sensors keep their curve in flash; the bias resistor is the one
@@ -287,9 +305,8 @@ static void test_level_table_export_forces_preset_source(void) {
 // ---------------------------------------------------------------------------
 
 static void test_preset_source_clears_custom_calibration(void) {
-    // Slot already carrying a custom override.
-    TEST_ASSERT_TRUE(setInputApplication(TEST_PIN, appCHT()));
-    Input* victim = getInputByPin(TEST_PIN);
+    // Slot already carrying a custom override (on a sensor that reads one, #460).
+    Input* victim = buildInput(CAL_THERMISTOR_STEINHART);
     TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_OK,
         applyCalSteinhart(victim, 2200.0f, 0.001129f, 0.0002341f, 8.775e-8f));
 
@@ -297,7 +314,7 @@ static void test_preset_source_clears_custom_calibration(void) {
     JsonObject o = doc.to<JsonObject>();
     o["pin"] = TEST_PIN;
     o["app"] = "CHT";
-    o["sensor"] = "MAX6675";
+    o["sensor"] = "VDO_120C_STEINHART";
     o["units"] = "C";
     JsonObject cal = o["calibration"].to<JsonObject>();
     cal["type"] = "THERMISTOR_STEINHART";
@@ -373,12 +390,13 @@ static void test_rejected_calibration_leaves_existing_input_untouched(void) {
     Input before = *in;
     uint8_t activeBefore = numActiveInputs;
 
-    // A record for the same pin whose calibration this firmware refuses.
+    // A record for the same pin whose calibration this firmware refuses (on a
+    // Steinhart sensor, so it reaches the bias check rather than #460's type check).
     JsonDocument doc;
     JsonObject o = doc.to<JsonObject>();
     o["pin"] = TEST_PIN;
     o["app"] = "CHT";
-    o["sensor"] = "MAX6675";
+    o["sensor"] = "VDO_120C_STEINHART";
     o["units"] = "C";
     JsonObject cal = o["calibration"].to<JsonObject>();
     cal["type"] = "THERMISTOR_STEINHART";
@@ -582,6 +600,30 @@ static void test_divider_ratio_out_of_range_is_refused(void) {
     }
 }
 
+// #460: a profile the record's sensor can't read degrades to the preset with a
+// NOTE; the record still imports.
+static void test_mismatched_profile_imports_on_preset(void) {
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    o["pin"] = TEST_PIN;
+    o["app"] = "OIL_PRESSURE";
+    o["sensor"] = "MPX4250AP";              // CAL_LINEAR
+    o["units"] = "BAR";
+    JsonObject cal = o["calibration"].to<JsonObject>();
+    cal["type"] = "THERMISTOR_STEINHART";
+    cal["source"] = "CUSTOM";
+    cal["params"]["biasResistor"] = 2200.0f;
+    cal["params"]["steinhartA"] = 0.001129f;
+    cal["params"]["steinhartB"] = 0.0002341f;
+    cal["params"]["steinhartC"] = 8.775e-8f;
+
+    TEST_ASSERT_TRUE(importInputFromJSON(o, 0));
+    Input* got = getInputByPin(TEST_PIN);
+    TEST_ASSERT_NOT_NULL(got);
+    TEST_ASSERT_FALSE(got->flags.useCustomCalibration);
+    TEST_ASSERT_EQUAL_UINT8(CAL_LINEAR, got->calibrationType);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_registry_available);
@@ -599,6 +641,7 @@ int main(int, char**) {
     RUN_TEST(test_missing_source_is_refused_not_dereferenced);
     RUN_TEST(test_rejected_calibration_fails_the_record);
     RUN_TEST(test_rejected_calibration_leaves_existing_input_untouched);
+    RUN_TEST(test_mismatched_profile_imports_on_preset);
     RUN_TEST(test_custom_without_params_is_refused);
     RUN_TEST(test_pressure_table_custom_is_refused);
     RUN_TEST(test_import_without_buses_object_selects_no_bus);
