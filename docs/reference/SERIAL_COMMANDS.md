@@ -300,7 +300,7 @@ SET <pin> CAL STEINHART <bias> <a> <b> <c>  # Steinhart-Hart thermistor
 SET <pin> CAL BETA <bias> <beta> <r0> <t0>  # Beta equation thermistor
 SET <pin> CAL PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>  # Linear pressure
 SET <pin> CAL PRESSURE_POLY <bias> <a> <b> <c>  # Polynomial pressure (VDO)
-SET <pin> DIVIDER <ratio>        # Voltage divider ratio for linear sensors (0 < ratio ≤ 1.0)
+SET <pin> DIVIDER <ratio>        # Voltage divider ratio for linear sensors (0 < ratio ≤ 1.0; refused on others except 1.0)
 SET <pin> CAL RPM <poles> <ratio> <timeout> <min> <max>  # RPM (5 params)
 SET <pin> CAL RPM <poles> <ratio> <mult> <timeout> <min> <max>  # RPM (6 params)
 SET <pin> CAL SPEED <ppr> <tire_circ> <ratio> <timeout> <max>  # Speed (5 params)

@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking: EEPROM configuration is reset on upgrade.** The stored config layout changed (`EEPROM_VERSION` 6 → 7) to carry the Rule record's new warning-threshold fields; the firmware detects the old version and starts from defaults. Back up your setup with `SYSTEM DUMP JSON` before flashing and restore it afterwards with `JSON IMPORT`.
 
 ### Fixed
+- `SET <pin> DIVIDER` now refuses a ratio on sensors that ignore it (resistive senders, thermistors, battery-voltage inputs) instead of accepting a setting that has no effect; only linear voltage-output sensors use a divider, and `1.0` still clears it on any input (app #51)
 - Webapp: importing a configuration file over Bluetooth now uses the device's byte-counted import, so the payload is no longer echoed back over the same link — large configs import reliably in about half a second instead of stalling until the device's 45-second timeout (#450)
 - Framed BLE link: a large configuration import no longer corrupts the connection — previously a bulk `JSON IMPORT` could lose bytes mid-frame, after which the board stopped answering any Bluetooth command and reconnecting filled the terminal with binary garbage until the board was rebooted (#449)
 - Changing an alarm's shape (`SET <pin> ALARM` between MIN / MAX / band) now keeps an explicit `WARN` edge on the side it was set for instead of silently carrying it to the other side, and a mistyped `WARN` value is rejected rather than accepted as 0 (#427, #428)

@@ -337,6 +337,55 @@ static void test_json_import_refusal_leaves_earlier_records_intact(void) {
     TEST_ASSERT_EQUAL_INT(0, memcmp(&before, getInputByPin(4), sizeof(Input)));
 }
 
+// ---------------------------------------------------------------------------
+// #51 (app) — DIVIDER only reaches readLinearSensor(). inputHonorsDivider()
+// keys on CAL_LINEAR, which is only correct while the library keeps
+// CAL_LINEAR and readLinearSensor paired one-to-one.
+// ---------------------------------------------------------------------------
+
+static void test_cal_linear_pairs_with_read_linear_sensor(void) {
+    uint8_t linear = 0;
+    for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+        SensorInfo info;
+        loadSensorInfo(getSensorByIndex(i), &info);
+        const bool isLinearCal  = info.calibrationType == CAL_LINEAR;
+        const bool isLinearRead = info.readFunction == readLinearSensor;
+        TEST_ASSERT_EQUAL_MESSAGE(isLinearCal, isLinearRead, info.name);
+        if (isLinearCal) linear++;
+    }
+    TEST_ASSERT_TRUE(linear > 0);
+}
+
+static void test_divider_honored_only_by_linear_sensors(void) {
+    TEST_ASSERT_TRUE(setInputApplication(4, appOIL_P()));
+    TEST_ASSERT_TRUE(setInputSensor(4, getSensorIndexByName("MPX4250AP")));
+    TEST_ASSERT_TRUE(inputHonorsDivider(getInputByPin(4)));
+
+    TEST_ASSERT_TRUE(setInputSensor(4, getSensorIndexByName("VDO_5BAR_CURVE")));
+    TEST_ASSERT_FALSE(inputHonorsDivider(getInputByPin(4)));
+
+    TEST_ASSERT_FALSE(inputHonorsDivider(nullptr));
+}
+
+// A custom CAL profile rewrites input->calibrationType but never the read
+// function, and CAL PRESET doesn't restore the type — so the predicate must
+// follow the sensor, not that field (PR #459 review).
+static void test_divider_follows_sensor_not_custom_cal(void) {
+    TEST_ASSERT_TRUE(setInputApplication(4, appOIL_P()));
+    TEST_ASSERT_TRUE(setInputSensor(4, getSensorIndexByName("MPX4250AP")));
+    Input* in = getInputByPin(4);
+    applyCalSteinhart(in, 10000.0f, 1.0e-3f, 2.0e-4f, 1.0e-7f);   // wrong profile, by mistake
+    TEST_ASSERT_TRUE(clearInputCalibration(4));                     // SET <pin> CAL PRESET
+    TEST_ASSERT_TRUE(inputHonorsDivider(in));                       // readLinearSensor still runs
+
+    TEST_ASSERT_TRUE(setInputApplication(5, appOIL_P()));
+    TEST_ASSERT_TRUE(setInputSensor(5, getSensorIndexByName("VDO_5BAR_CURVE")));
+    Input* vdo = getInputByPin(5);
+    TEST_ASSERT_EQUAL(CAL_APPLY_OK, applyCalLinear(vdo, 0.5f, 3.0f, 0.0f, 5.0f));  // CAL_LINEAR type, polynomial reader
+    TEST_ASSERT_EQUAL(CAL_LINEAR, vdo->calibrationType);
+    TEST_ASSERT_FALSE(inputHonorsDivider(vdo));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_registry_available);
@@ -355,5 +404,8 @@ int main(int, char**) {
     RUN_TEST(test_json_import_refusal_leaves_earlier_records_intact);
     RUN_TEST(test_out_of_range_indices_fail_closed);
     RUN_TEST(test_unset_indices_are_compatible);
+    RUN_TEST(test_cal_linear_pairs_with_read_linear_sensor);
+    RUN_TEST(test_divider_honored_only_by_linear_sensors);
+    RUN_TEST(test_divider_follows_sensor_not_custom_cal);
     return UNITY_END();
 }

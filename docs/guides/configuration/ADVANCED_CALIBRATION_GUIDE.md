@@ -140,7 +140,7 @@ SET <pin> DIVIDER <ratio>
 
 Use when a linear sensor's output is scaled by a hardware voltage divider before reaching the ADC (typically a 5V sensor on a 3.3V board). The cal stays expressed in raw sensor terms; `readLinearSensor()` unscales the ADC voltage through this ratio before comparing to `vmin`/`vmax`.
 
-This is a per-input property (different inputs can have different dividers) and is persisted to EEPROM on `SAVE`. Default is 1.0 (no divider). Only linear-calibration sensors honor the field — VDO polynomial, thermistor, and `VOLTAGE_DIVIDER` battery inputs ignore it.
+This is a per-input property (different inputs can have different dividers) and is persisted to EEPROM on `SAVE`. Default is 1.0 (no divider). Only linear-calibration sensors honor the field — VDO polynomial, thermistor, and `VOLTAGE_DIVIDER` battery inputs ignore it, so `SET <pin> DIVIDER` refuses any ratio other than `1.0` on them. `1.0` (no divider) is accepted on any input, to clear a stale value.
 
 **Example:** MPX4250 on a Teensy 4.1 behind a 2.2kΩ/3.3kΩ divider:
 ```

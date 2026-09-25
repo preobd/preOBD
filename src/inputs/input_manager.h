@@ -107,6 +107,13 @@ Input* getInputByPin(uint8_t pin);   // Find input by pin number
 // the Input model rather than in cli/ (#411).
 Input* requireInput(uint8_t pin);
 Input* getInputByIndex(uint8_t index); // Get input by array index
+
+// Whether this input's read path applies `divider_ratio`. Only the linear
+// (voltage-output) driver does — readLinearSensor() is installed for exactly
+// the sensors whose LIBRARY calibration type is CAL_LINEAR. Decided by the
+// sensor, not by a custom CAL profile. Resistive senders, thermistors and
+// VOLTAGE_DIVIDER battery inputs ignore the field.
+bool inputHonorsDivider(const Input* input);
 uint8_t getInputIndex(uint8_t pin);  // Get array index for pin
 
 // ===== BUS REQUIREMENTS / PERSISTENCE =====

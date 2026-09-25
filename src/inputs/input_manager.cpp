@@ -369,6 +369,19 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     return true;
 }
 
+bool inputHonorsDivider(const Input* input) {
+    if (input == nullptr) return false;
+    // Ask the sensor library, not input->calibrationType: that field tracks the
+    // last custom CAL profile applied (and CAL PRESET doesn't restore it), while
+    // the read function — and so whether the divider is applied — is fixed by
+    // the sensor. CAL_LINEAR <-> readLinearSensor is pinned by a native test.
+    const SensorInfo* flash = getSensorByIndex(input->sensorIndex);
+    if (flash == nullptr) return false;
+    SensorInfo info;
+    loadSensorInfo(flash, &info);
+    return info.calibrationType == CAL_LINEAR;
+}
+
 bool setInputSensor(uint8_t pin, uint8_t sensorIndex) {
     Input* input = requireInput(pin);
     if (!input) return false;

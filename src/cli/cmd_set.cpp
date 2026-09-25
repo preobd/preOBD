@@ -525,6 +525,13 @@ static int set_divider(uint8_t pin, int argc, const char* const* argv) {
     }
     Input* input = requireInput(pin);
     if (!input) return 1;
+    // A ratio the read path never applies would be accepted and silently do
+    // nothing. 1.0 ("no divider") is always allowed so any input can be cleared.
+    if (ratio != 1.0f && !inputHonorsDivider(input)) {
+        msg.control.println(F("ERROR: DIVIDER only applies to linear voltage-output sensors"));
+        msg.control.println(F("  This input's sensor ignores it (resistive, thermistor or VOLTAGE_DIVIDER)"));
+        return 1;
+    }
     input->divider_ratio = ratio;
     printInputFieldSet(argv[1], F("divider ratio"), ratio, 3);
     return 0;
