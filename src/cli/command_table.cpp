@@ -15,6 +15,7 @@
 #include "../config.h"
 #include "../version.h"
 #include "../core/system_mode.h"
+#include "../core/reset_reason.h"
 #include "../storage/system_config.h"
 #include "../storage/json_config.h"
 #include "../core/message_router.h"
@@ -303,6 +304,8 @@ int cmd_version(int argc, const char* const* argv) {
     msg.control.println(firmwareVersion());
     msg.control.print(F("  Git: "));
     msg.control.println(FW_GIT_HASH);
+    msg.control.print(F("  "));
+    printResetReason(msg.control, true);
     msg.control.print(F("  EEPROM Version: "));
     msg.control.println(EEPROM_VERSION);
     msg.control.print(F("  System Config Version: "));

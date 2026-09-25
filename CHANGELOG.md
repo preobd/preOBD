@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A disconnected/faulted sensor now announces itself on the alarm channel as an INFO-tier FAULT event instead of silently clearing the alarm (#443)
 - Webapp: an Acknowledge button on the health headline (the device's `ALARM SILENCE`, with a `SILENCED · buzzer[ + LED]` chip and the device's remaining time read back from `ALARM STATUS`), and alarm values shown in the input's display units at the LCD's precision (`230°F exceeded 220°F`, `1.3 bar`) instead of raw base units to one decimal (#441, #442)
 - BLE status now tells connected apps the moment an alarm is acknowledged (at the dash button or from another phone) or the configuration is changed by another client, so the app and webapp update immediately instead of polling; needs both the main board and the nRF52840 updated, and older firmware on either side keeps working as before (#455)
+- The board now reports why it last reset (watchdog, CPU fault, brown-out, reboot, power-on) in `SYSTEM STATUS` and, with register detail, in `VERSION`; an unexpected reset also prints a one-line warning ahead of the boot banner. Teensy 3.x/4.x and ESP32 only (#454)
 
 ### Changed
 - An acknowledged alarm now stays silent until that alarm clears by default, instead of re-sounding every 30 s; a timed window is still available with `ALARM DURATION <secs>` and a second alarm always sounds regardless (#433 follow-up)

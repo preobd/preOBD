@@ -14,6 +14,7 @@
 #include "serial_config.h"
 #include "../version.h"
 #include "../core/system_mode.h"
+#include "../core/reset_reason.h"
 #include "../pinctrl/bus_pin_roles.h"   // busPinRole() for the DIAG PINS sweep (#304)
 #include "../storage/system_config.h"
 #include "../storage/json_config.h"
@@ -59,6 +60,7 @@
 // SYSTEM STATUS subcommand handler
 static int system_status(int argc, const char* const* argv, int /*tokenIndex*/) {
     printSystemStatus();
+    printResetReason(msg.control);
     return 0;
 }
 

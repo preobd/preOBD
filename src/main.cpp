@@ -14,6 +14,7 @@
 // (INJECT/CLEAR/STOP/STATUS/<n>) remain fully available without burning a GPIO.
 #include "core/platform.h"
 #include "core/watchdog.h"
+#include "core/reset_reason.h"
 
 #include "sensors/calibration_types.h"
 #include "sensors/sensor_library.h"
@@ -279,6 +280,10 @@ static void updateTestMode_Wrapper() {
 
 void setup() {
 
+    // Snapshot why we reset before anything can clear or overwrite the
+    // hardware reset-cause registers (#454).
+    resetReasonCapture();
+
     // Initialize serial for debugging
     Serial.begin(115200);
     while (!Serial && millis() < 3000) {};  // Wait up to 3 seconds for serial
@@ -464,6 +469,13 @@ void setup() {
     addMuxResyncHandler(AlarmBroadcaster::resync);   // held alarms for a late central (#430)
     addMuxResyncHandler(StatusBroadcaster::resync);  // ack/config generations now (#455)
 #endif
+    // Only a reset nobody asked for gets a line at boot, and it goes first so
+    // it isn't lost in the banner; VERSION has the full detail (#454).
+    if (resetReasonAbnormal()) {
+        msg.control.println();
+        msg.control.print(F("!! "));
+        printResetReason(msg.control);
+    }
     msg.control.println();
     msg.control.println(F("                 ____  ___  ___  "));
     msg.control.println(F("   ___  _______ / __ \\/ _ )/ _ \\ "));
