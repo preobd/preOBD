@@ -126,10 +126,21 @@ RuleSeverity rulesSystemSeverityUnacked() { return systemSeverity(true);  }
 
 static uint8_t  g_ackRuleId[MAX_RULES];   // RULES_ID_NONE = not acknowledged
 static uint32_t g_ackAtMs[MAX_RULES];
+// Bumped whenever the acknowledged set changes, so the status frame can push
+// the edge instead of clients polling ALARM STATUS (#455). Wraps; clients
+// compare for inequality only.
+static uint8_t  g_ackGeneration = 0;
 
 void rulesAckReset() {
-    for (int i = 0; i < MAX_RULES; i++) g_ackRuleId[i] = RULES_ID_NONE;
+    bool changed = false;
+    for (int i = 0; i < MAX_RULES; i++) {
+        if (g_ackRuleId[i] != RULES_ID_NONE) changed = true;
+        g_ackRuleId[i] = RULES_ID_NONE;
+    }
+    if (changed) g_ackGeneration++;
 }
+
+uint8_t rulesAckGeneration() { return g_ackGeneration; }
 
 bool rulesRuleAcked(int slot) {
     return slot >= 0 && slot < MAX_RULES &&
@@ -149,6 +160,7 @@ uint8_t rulesAckActiveAlarms(uint32_t now) {
         g_ackAtMs[i]   = now;
         n++;
     }
+    if (n) g_ackGeneration++;
     return n;
 }
 
@@ -170,7 +182,10 @@ void rulesAckExpire(uint32_t now, uint32_t durationMs) {
             // re-sounds by design — use a timed duration or disable the alarm.
             lapsed = (slotAnnunciatorSeverity(i) != RULE_SEV_ALARM);
         }
-        if (gone || lapsed) g_ackRuleId[i] = RULES_ID_NONE;
+        if (gone || lapsed) {
+            g_ackRuleId[i] = RULES_ID_NONE;
+            g_ackGeneration++;
+        }
     }
 }
 

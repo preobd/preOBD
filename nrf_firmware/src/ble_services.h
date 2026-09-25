@@ -100,10 +100,12 @@ void bleServicesNotifyAll(BLECharacteristic& chr, const uint8_t* data,
 // reconnect and may differ between centrals.
 size_t bleServicesMaxNotifyChunk();
 
-// Update the System Status characteristic with a fresh 32-byte snapshot
-// pushed by the host MCU via framed transport (type 0x03). Writes the cache
+// Update the System Status characteristic with a fresh snapshot pushed by
+// the host MCU via framed transport (type 0x03): 32 bytes, or 32 + the host's
+// 0x07 extension when one was joined on (status_compose.h; 40 B today). Writes the cache
 // (so subsequent GATT reads return the latest value) and pushes a notify
-// to any subscribed centrals. Caller guarantees `len == PREOBD_STATUS_SIZE`.
+// to any subscribed centrals. A length outside [32, PREOBD_STATUS_MAX_SIZE]
+// is ignored.
 // No-op (silent) when no client is connected — the write still updates the
 // cache so a future connect's first read returns current data.
 void bleServicesUpdateStatus(const uint8_t* payload, uint16_t len);

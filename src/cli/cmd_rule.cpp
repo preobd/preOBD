@@ -31,6 +31,7 @@
 #include "../sensors/sensor_library.h"    // convertFromBaseUnits
 #include "../rules/rules_manager.h"
 #include "../rules/rules_engine.h"
+#include "../core/config_generation.h"
 
 // CLI handlers are cold — keep them in flash, not Teensy ITCM (RAM1).
 // FLASHMEM is a Teensy core macro — no-op elsewhere.
@@ -691,6 +692,7 @@ FLASHMEM int cmd_rule(int argc, const char* const* argv) {
         msg.control.println(F(" is config-only; enter CONFIG mode first"));
         return 1;
     }
+    if (structural) configGenerationBump();   // past the CONFIG gate (#455)
 
     if (streq_P(argv[1], PSTR("ADD"))) {
         return ruleAdd(argc, argv);
@@ -749,6 +751,7 @@ FLASHMEM int cmd_rule(int argc, const char* const* argv) {
                 msg.control.println(F(" is config-only; enter CONFIG mode first"));
                 return 1;
             }
+            configGenerationBump();
             if (warn) return ruleSetWarn(ruleId, argc, argv);
             return ruleSetEnabled(ruleId, enable);
         }

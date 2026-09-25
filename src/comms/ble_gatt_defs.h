@@ -131,6 +131,53 @@ struct PreobdSystemStatus {
 static_assert(sizeof(PreobdSystemStatus) == PREOBD_STATUS_SIZE,
               "PreobdSystemStatus must be exactly 32 bytes");
 
+// -----------------------------------------------------------------------------
+// Status extension (#455) — bytes 32.. of the characteristic value.
+//
+// The host sends it as its own UART frame (FRAME_TYPE_STATUS_EXT, 0x07)
+// immediately before every 0x03, which stays exactly 32 B. A current nRF holds
+// the EXT one-shot and publishes 32 + ext bytes on the next 0x03; a 0x03 with
+// no pending EXT publishes 32 B. An older nRF drops the unknown 0x07 and keeps
+// publishing 32 B, so neither side has to know the other's version.
+//
+// VERSIONING. Byte 4 (protocolVersion) is shared by every frame type and is
+// NOT the layout discriminator — bumping it would make older apps reject
+// Action writes. The extension carries its own:
+//   * PRESENCE: length >= PREOBD_STATUS_V2_SIZE (40) and extLayout != 0.
+//   * extLayout is the MAJOR version. A client parses the extension only if it
+//     knows that exact layout; otherwise it treats the extension as absent
+//     (falls back to polling) — it degrades, it never misreads.
+//   * Within a layout, fields are only ever APPENDED. A client reads the
+//     fields it knows and ignores anything past them; the nRF passes any
+//     extension of 8..32 B through unread, so appending needs no nRF update.
+//   * Bump extLayout only for an incompatible reshuffle (moving/resizing a
+//     field). Appending never bumps it.
+// -----------------------------------------------------------------------------
+
+#define PREOBD_STATUS_EXT_SIZE    8
+#define PREOBD_STATUS_V2_SIZE     (PREOBD_STATUS_SIZE + PREOBD_STATUS_EXT_SIZE)   // layout 1
+#define PREOBD_STATUS_MAX_SIZE    64  // characteristic ceiling: 32 + up to 32 B of extension
+#define PREOBD_STATUS_EXT_LAYOUT  1   // major version: bump only on an incompatible reshuffle
+
+#define PREOBD_STATUS_FLAG_ACKED        0x01  // at least one rule acknowledged now
+#define PREOBD_STATUS_FLAG_SILENCE_LED  0x02  // ALARM SCOPE ALL (ack also mutes the LED)
+
+#pragma pack(push, 1)
+
+struct PreobdStatusExt {
+    uint8_t  extLayout;         // Byte 32:    PREOBD_STATUS_EXT_LAYOUT (0 = invalid)
+    uint8_t  flags;             // Byte 33:    PREOBD_STATUS_FLAG_*
+    uint8_t  ackGeneration;     // Byte 34:    ++ whenever the acknowledged set changes
+    uint8_t  ackedCount;        // Byte 35:    rules acknowledged now
+    uint16_t configGeneration;  // Bytes 36-37: ++ on every config mutation (RAM, 0 at boot)
+    uint16_t reserved;          // Bytes 38-39: 0
+};
+
+#pragma pack(pop)
+
+static_assert(sizeof(PreobdStatusExt) == PREOBD_STATUS_EXT_SIZE,
+              "PreobdStatusExt must be exactly 8 bytes");
+
 #endif // __cplusplus
 
 // =============================================================================

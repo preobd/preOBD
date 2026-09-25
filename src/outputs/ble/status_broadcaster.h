@@ -1,6 +1,7 @@
 // status_broadcaster.h -- Pushes 32-byte PreobdSystemStatus snapshots over
 // the framed transport (type 0x03) on state change and on a 5s liveness
-// heartbeat.
+// heartbeat, each preceded by its 8-byte PreobdStatusExt (type 0x07: ack and
+// config generations, #455). A change in either counts as a change.
 //
 // Design notes (see TASK1_STATUS_BROADCASTER_DESIGN.md):
 //   - tick() is called every loop iteration. Each call packs current state,
@@ -19,6 +20,7 @@ namespace StatusBroadcaster {
 
 void init();
 void tick();
+void resync();   // FRAME_TYPE_PING: send on the next tick
 
 } // namespace StatusBroadcaster
 

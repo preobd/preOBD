@@ -199,7 +199,8 @@ void bleServicesInit() {
     }
     g_status.setProperties(CHR_PROPS_READ | CHR_PROPS_NOTIFY);
     g_status.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
-    g_status.setFixedLen(PREOBD_STATUS_SIZE);
+    // 32 B from an older host, 32 + extension (40 B today) otherwise (#455).
+    g_status.setMaxLen(PREOBD_STATUS_MAX_SIZE);
     g_status.begin();
 
     // Initialize the cache to 32 zero bytes so reads before the host's first
@@ -373,7 +374,7 @@ void bleServicesNotifyAll(BLECharacteristic& chr, const uint8_t* data,
 }
 
 void bleServicesUpdateStatus(const uint8_t* payload, uint16_t len) {
-    if (len != PREOBD_STATUS_SIZE) return;
+    if (len < PREOBD_STATUS_SIZE || len > PREOBD_STATUS_MAX_SIZE) return;
     g_status.write(payload, len);
     bleServicesNotifyAll(g_status, payload, len);
 }

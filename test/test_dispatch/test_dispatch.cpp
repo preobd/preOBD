@@ -21,6 +21,7 @@
 
 #include "../../src/cli/command_table.h"
 #include "../../src/cli/command_dispatch.cpp"
+#include "../../src/core/config_generation.cpp"
 
 // ---------------------------------------------------------------------------
 // Lightweight stand-ins for symbols command_dispatch.cpp expects from the rest
@@ -272,6 +273,48 @@ static void test_sub_match_is_case_insensitive(void) {
     TEST_ASSERT_EQUAL_INT(RET_STATUS, rc);
 }
 
+// --- configGeneration (#455): passing the CONFIG gate IS the mutation marker.
+// A read must never bump — every BLE client refreshes on a bump, so a bumping
+// read would ping-pong refreshes between clients.
+
+static void test_gen_configonly_command_bumps(void) {
+    const uint16_t g0 = configGeneration();
+    const char* argv[] = {"SET", "3", "APPLICATION", "CHT"};
+    dispatchCommand(4, argv);
+    TEST_ASSERT_EQUAL_UINT16((uint16_t)(g0 + 1), configGeneration());
+}
+
+static void test_gen_readonly_and_mode_commands_do_not_bump(void) {
+    const uint16_t g0 = configGeneration();
+    const char* list[] = {"LIST", "INPUTS"};
+    const char* cfg[]  = {"CONFIG"};
+    dispatchCommand(2, list);
+    dispatchCommand(1, cfg);
+    g_runMode = true;
+    dispatchCommand(2, list);
+    TEST_ASSERT_EQUAL_UINT16(g0, configGeneration());
+}
+
+static void test_gen_rejected_in_run_mode_does_not_bump(void) {
+    g_runMode = true;
+    const uint16_t g0 = configGeneration();
+    const char* argv[] = {"SET", "3", "APPLICATION", "CHT"};
+    dispatchCommand(4, argv);
+    const char* sub[] = {"SYSTEM", "RESET"};
+    dispatchSubcommand(SUB_TABLE, SUB_TABLE_LEN, "RESET", "SYSTEM", 2, sub, 1);
+    TEST_ASSERT_EQUAL_UINT16(g0, configGeneration());
+}
+
+static void test_gen_subcommand_gate(void) {
+    const uint16_t g0 = configGeneration();
+    const char* st[] = {"SYSTEM", "STATUS"};
+    dispatchSubcommand(SUB_TABLE, SUB_TABLE_LEN, "STATUS", "SYSTEM", 2, st, 1);
+    TEST_ASSERT_EQUAL_UINT16(g0, configGeneration());           // runModeAllowed: read
+    const char* rs[] = {"SYSTEM", "RESET"};
+    dispatchSubcommand(SUB_TABLE, SUB_TABLE_LEN, "RESET", "SYSTEM", 2, rs, 1);
+    TEST_ASSERT_EQUAL_UINT16((uint16_t)(g0 + 1), configGeneration());
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_cmd_empty_is_noop);
@@ -286,5 +329,9 @@ int main(int, char**) {
     RUN_TEST(test_sub_destructive_verb_blocked_in_run_mode);
     RUN_TEST(test_sub_destructive_verb_runs_in_config_mode);
     RUN_TEST(test_sub_match_is_case_insensitive);
+    RUN_TEST(test_gen_configonly_command_bumps);
+    RUN_TEST(test_gen_readonly_and_mode_commands_do_not_bump);
+    RUN_TEST(test_gen_rejected_in_run_mode_does_not_bump);
+    RUN_TEST(test_gen_subcommand_gate);
     return UNITY_END();
 }

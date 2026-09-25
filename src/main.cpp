@@ -241,6 +241,10 @@ static void updateControlEngine(uint32_t now) {
     if (now - lastControlUpdate >= ALARM_CHECK_INTERVAL_MS) {
         rulesManagerUpdate(now);
         rulesActionsUpdate(isInConfigMode());  // drive actions; suppressed in CONFIG
+        // Ack lapses must happen (and reach the status frame, #455) even
+        // with the Alarm output module disabled, whose update is the other
+        // caller — clients no longer poll ALARM STATUS to force it.
+        alarmAckHousekeeping();
         lastControlUpdate = now;
     }
     #endif
@@ -458,6 +462,7 @@ void setup() {
     addMuxResyncHandler(ActionBroadcaster::resync);
     addMuxResyncHandler(LiveValueBroadcaster::resync);
     addMuxResyncHandler(AlarmBroadcaster::resync);   // held alarms for a late central (#430)
+    addMuxResyncHandler(StatusBroadcaster::resync);  // ack/config generations now (#455)
 #endif
     msg.control.println();
     msg.control.println(F("                 ____  ___  ___  "));

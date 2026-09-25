@@ -31,6 +31,7 @@
 #include "../pinctrl/pin_registry.h"
 #include "../pinctrl/pin_owner.h"
 #include "../rules/rules_manager.h"
+#include "../core/config_generation.h"
 
 // CLI handlers are cold — keep them in flash, not Teensy ITCM (RAM1).
 #ifndef FLASHMEM
@@ -432,6 +433,7 @@ FLASHMEM int cmd_action(int argc, const char* const* argv) {
         msg.control.println(F(" is config-only; enter CONFIG mode first"));
         return 1;
     }
+    if (structural) configGenerationBump();   // past the CONFIG gate (#455)
 
     if (streq_P(argv[1], PSTR("ADD"))) return actionAdd(argc, argv);
     if (streq_P(argv[1], PSTR("DEL"))) {
@@ -458,6 +460,7 @@ FLASHMEM int cmd_action(int argc, const char* const* argv) {
             msg.control.println(F("ERROR: ACTION <id> RULE is config-only; enter CONFIG mode first"));
             return 1;
         }
+        configGenerationBump();
         if (argc < 4) {
             msg.control.println(F("ERROR: usage: ACTION <id> RULE <ruleId|NONE|ADD <ruleId>|REMOVE <ruleId>>"));
             return 1;
@@ -474,6 +477,7 @@ FLASHMEM int cmd_action(int argc, const char* const* argv) {
             msg.control.println(F("ERROR: ACTION <id> NAME is config-only; enter CONFIG mode first"));
             return 1;
         }
+        configGenerationBump();
         // Bare `ACTION <id> NAME` clears the label — the only reachable spelling
         // of "unnamed", since `""` never survives tokenization (#336).
         return actionSetName(id, (argc >= 4) ? argv[3] : "");

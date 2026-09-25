@@ -49,6 +49,7 @@
 #include "../sensors/drivers/can/can_scan.h"
 #include "../sensors/can_sensor_library/standard_pids.h"
 #endif
+#include "../core/config_generation.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -1246,6 +1247,7 @@ int cmd_log(int argc, const char* const* argv) {
             msg.control.println(F("ERROR: LOG LEVEL requires CONFIG mode (mutates log filter)"));
             return 1;
         }
+        configGenerationBump();   // logFilter is in SYSTEM DUMP JSON (#455)
         if (argc < 4) {
             msg.control.println(F("ERROR: LEVEL requires plane and level"));
             msg.control.println(F("  Usage: LOG LEVEL <CONTROL|DATA|DEBUG> <NONE|ERROR|WARN|INFO|DEBUG>"));
@@ -1307,6 +1309,7 @@ int cmd_log(int argc, const char* const* argv) {
             msg.control.println(F("ERROR: LOG TAG requires CONFIG mode (mutates log filter)"));
             return 1;
         }
+        configGenerationBump();   // logFilter is in SYSTEM DUMP JSON (#455)
         if (argc < 4) {
             msg.control.println(F("ERROR: TAG requires tag name and state"));
             msg.control.println(F("  Usage: LOG TAG <tagname> <ENABLE|DISABLE>"));

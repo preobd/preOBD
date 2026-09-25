@@ -33,6 +33,7 @@
 #include "../rules/rules_json.h"
 #include "../rules/rules_manager.h"
 #endif
+#include "../core/config_generation.h"
 
 // JSON config is a COLD path: it runs only on SYSTEM DUMP JSON / JSON IMPORT,
 // never in the sensor loop. On Teensy 4.x every function lands in ITCM (RAM1) by
@@ -1405,6 +1406,12 @@ bool loadConfigFromJSON(const char* jsonString) {
         msg.control.println(mode);
         return false;
     }
+
+    // Past validation, the apply below mutates the live config — tell BLE
+    // clients (status-frame extension, #455). JSON IMPORT's handler
+    // returns before its payload arrives, so the dispatcher's own bump fires
+    // too early to cover it.
+    configGenerationBump();
 
     // Import system config
     if (doc["system"].isNull() == false) {

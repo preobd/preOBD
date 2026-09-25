@@ -37,7 +37,13 @@
 #include "frame_codec.h"
 #include "live_handler.h"
 #include "relay_handler.h"
+#include "status_compose.h"
 #include "tier_state.h"
+
+static_assert(kStatusComposeBaseSize == PREOBD_STATUS_SIZE &&
+              kStatusComposeExtMinSize == PREOBD_STATUS_EXT_SIZE &&
+              kStatusComposeMaxSize == PREOBD_STATUS_MAX_SIZE,
+              "status_compose.h sizes must match ble_gatt_defs.h");
 
 namespace {
 
@@ -61,6 +67,9 @@ constexpr size_t kInboundLowWaterBytes  = 64;
 constexpr uint32_t kOutboundStallMs     = 100;
 static bool g_rtsAsserted = false;
 #endif
+
+// --- Status characteristic: 0x07 extension held for the next 0x03 ---
+StatusComposer g_statusComposer = {};   // static storage: extLen = 0 (nothing held)
 
 // --- Tier 1 RX accumulator ---
 uint8_t  g_rx[kRxFlushBytes];
@@ -398,14 +407,21 @@ bool handleFrame(const Frame& f) {
         drainStash(s, dest);  // best-effort; leftover drains on later polls
         return true;
     }
-    case FRAME_TYPE_STATUS:
-        // Host MCU pushed a fresh 32-byte PreobdSystemStatus snapshot. Cache
-        // it into the GATT characteristic and notify subscribers. Drop any
-        // wrong-sized payload defensively.
-        if (f.len == PREOBD_STATUS_SIZE) {
-            bleServicesUpdateStatus(f.payload, f.len);
-        }
+    case FRAME_TYPE_STATUS_EXT:
+        // Host MCU's PreobdStatusExt (8 B today, may grow by appending), sent
+        // just before each 0x03. Held one-shot until that snapshot arrives
+        // (status_compose.h).
+        statusComposeOnExt(g_statusComposer, f.payload, f.len);
         return true;
+    case FRAME_TYPE_STATUS: {
+        // Host MCU pushed a fresh 32-byte PreobdSystemStatus snapshot. Join a
+        // held extension (-> 40 B today), cache it into the GATT characteristic and
+        // notify subscribers. A wrong-sized payload composes to 0 and is dropped.
+        uint8_t value[kStatusComposeMaxSize];
+        const uint16_t n = statusComposeOnStatus(g_statusComposer, f.payload, f.len, value);
+        if (n) bleServicesUpdateStatus(value, n);
+        return true;
+    }
     case FRAME_TYPE_ALARM:
         // Host MCU pushed a 19-byte PreobdAlarmEvent. Best-effort notify;
         // wrong-sized payloads are dropped silently.

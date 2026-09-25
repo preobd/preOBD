@@ -33,6 +33,7 @@
 #include "../storage/system_config.h"
 #include "../rules/rules_manager.h"
 #include "../outputs/output_alarm.h"
+#include "../core/config_generation.h"
 #include "../pinctrl/pin_label.h"     // formatPinLabel: "A0", not "14"
 
 // CLI handlers are cold — keep them in flash, not Teensy ITCM (RAM1).
@@ -184,6 +185,7 @@ FLASHMEM int cmd_alarm(int argc, const char* const* argv) {
         msg.control.println(F(" is config-only; enter CONFIG mode first"));
         return 1;
     }
+    if (policy) configGenerationBump();   // past the CONFIG gate (#455)
     if (streq_P(argv[1], PSTR("DURATION"))) return alarmDuration(argc, argv);
     if (streq_P(argv[1], PSTR("SCOPE")))    return alarmScope(argc, argv);
 

@@ -23,6 +23,7 @@
 #include "command_table.h"
 #include "command_dispatch.h"
 #include "../core/system_mode.h"
+#include "../core/config_generation.h"
 
 // Case-insensitive compares — see command_helpers.h/.cpp for the definitions.
 // Forward-declared (not #included) to keep this TU lightweight; see header note.
@@ -53,6 +54,10 @@ int dispatchSubcommand(const Subcommand* table, uint8_t tableLen,
                 dispatchReportSubcmdConfigRequired(commandName, token);
                 return 1;
             }
+            // Past the CONFIG gate = a mutation; bump regardless of the
+            // handler's result (a spurious client refresh is cheap, a missed
+            // partial mutation is not).
+            if (!runOk) configGenerationBump();
             SubcommandHandler h = (SubcommandHandler)pgm_read_ptr(&table[i].handler);
             return h(argc, argv, tokenIndex);
         }
@@ -90,6 +95,7 @@ int dispatchCommand(int argc, const char* const* argv) {
                 dispatchReportConfigRequired(cmdUpper);
                 return 1;
             }
+            if (COMMANDS[i].configModeOnly) configGenerationBump();  // see dispatchSubcommand
             return COMMANDS[i].handler(argc, argv);
         }
     }

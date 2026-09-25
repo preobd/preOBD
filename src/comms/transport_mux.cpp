@@ -290,6 +290,28 @@ bool MuxTransport::sendFrame(uint8_t type, const uint8_t* payload, uint16_t len)
     return true;
 }
 
+bool MuxTransport::sendFramePair(uint8_t type1, const uint8_t* payload1, uint16_t len1,
+                                 uint8_t type2, const uint8_t* payload2, uint16_t len2) {
+    if (!framedEnabled) return false;
+    if (len1 > FRAME_MAX_PAYLOAD || len2 > FRAME_MAX_PAYLOAD) return false;
+
+    // Two stack frames: 2 x FRAME_MAX_BYTES. Only the status broadcaster calls
+    // this, from loop() — the same depth sendFrame() already runs at.
+    uint8_t f1[FRAME_MAX_BYTES];
+    uint8_t f2[FRAME_MAX_BYTES];
+    const size_t n1 = frameEncode(type1, payload1, len1, f1);
+    const size_t n2 = frameEncode(type2, payload2, len2, f2);
+    if (n1 == 0 || n2 == 0) return false;
+
+    if (writingFrame) return false;   // see sendFrame()
+    if (static_cast<size_t>(serial->availableForWrite()) < n1 + n2) return false;
+    if (flowInPin >= 0 && digitalRead(flowInPin) == HIGH) return false;
+
+    serial->write(f1, n1);
+    serial->write(f2, n2);
+    return true;
+}
+
 void MuxTransport::writeSerialChunked(const uint8_t* data, size_t len) {
     if (flowInPin < 0) {
         serial->write(data, len);

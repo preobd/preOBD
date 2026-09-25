@@ -57,6 +57,7 @@ void     rulesAckExpire(uint32_t now, uint32_t durationMs);
 bool     rulesRuleAcked(int slot);
 uint8_t  rulesAckCount();
 uint32_t rulesAckElapsedMs(int slot, uint32_t now);   // 0 when not acked
+uint8_t  rulesAckGeneration();   // bumps on every acked-set change; wraps (#455)
 
 // --- rule table helpers (operate on rules[]) ---
 int     rulesRuleSlot(uint8_t id);    // slot index for a rule id, or -1

@@ -492,6 +492,47 @@ static void test_ack_count_and_reset(void) {
     TEST_ASSERT_EQUAL_UINT8(0, rulesAckCount());
 }
 
+// The status frame pushes rulesAckGeneration() so clients drop the ALARM STATUS
+// poll (#455): it must move on EVERY acked-set change and on nothing else —
+// a missed bump strands a client's SILENCED chip, a spurious one is a refresh.
+static void test_ack_generation_moves_on_every_set_change_only(void) {
+    int a = ackRule(10, 100.0f), b = ackRule(11, 100.0f);
+    uint8_t g = rulesAckGeneration();
+    rulesAckExpire(500, 30000);                       // nothing acked: no change
+    TEST_ASSERT_EQUAL_UINT8(g, rulesAckGeneration());
+
+    trip(a, 150.0f);
+    rulesAckActiveAlarms(1000);
+    TEST_ASSERT_EQUAL_UINT8(++g, rulesAckGeneration());
+    rulesAckActiveAlarms(2000);                       // re-press: set unchanged
+    TEST_ASSERT_EQUAL_UINT8(g, rulesAckGeneration());
+    rulesAckExpire(2000, 30000);                      // still inside the window
+    TEST_ASSERT_EQUAL_UINT8(g, rulesAckGeneration());
+
+    trip(b, 150.0f);                                  // second rule acked later
+    rulesAckActiveAlarms(3000);
+    TEST_ASSERT_EQUAL_UINT8(++g, rulesAckGeneration());
+
+    rulesAckExpire(31000, 30000);                     // a lapses (timed), b holds
+    TEST_ASSERT_EQUAL_UINT8(++g, rulesAckGeneration());
+    TEST_ASSERT_EQUAL_UINT8(1, rulesAckCount());
+
+    untrip(b);                                        // until-clear lapse
+    rulesAckExpire(31001, 0);
+    TEST_ASSERT_EQUAL_UINT8(++g, rulesAckGeneration());
+    TEST_ASSERT_EQUAL_UINT8(0, rulesAckCount());
+
+    trip(a, 150.0f);                                  // deleted rule: dropped on expire
+    rulesAckActiveAlarms(40000);
+    ++g;
+    rules[a].id = (uint8_t)(rules[a].id + 1);
+    rulesAckExpire(40001, 30000);
+    TEST_ASSERT_EQUAL_UINT8(++g, rulesAckGeneration());
+
+    rulesAckReset();                                  // nothing acked: no change
+    TEST_ASSERT_EQUAL_UINT8(g, rulesAckGeneration());
+}
+
 // Only the ALARM tier sounds, so only it can be acknowledged: an ALARM rule in
 // its approach (WARNING) band, and a WARNING-severity rule, are not acked.
 static void test_ack_ignores_warning_tier(void) {
@@ -562,6 +603,7 @@ int main(int, char**) {
     RUN_TEST(test_ack_until_clear_holds_indefinitely_then_rearms);
     RUN_TEST(test_ack_dropped_when_rule_deleted_or_slot_reused);
     RUN_TEST(test_ack_count_and_reset);
+    RUN_TEST(test_ack_generation_moves_on_every_set_change_only);
     RUN_TEST(test_ack_ignores_warning_tier);
     RUN_TEST(test_rule_reset_returns_warn_to_auto);
     RUN_TEST(test_reseed_for_input_returns_warn_to_auto);

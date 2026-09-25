@@ -27,6 +27,7 @@ constexpr uint8_t  FRAME_TYPE_STATUS    = 0x03;
 constexpr uint8_t  FRAME_TYPE_ALARM     = 0x04;
 constexpr uint8_t  FRAME_TYPE_RELAY     = 0x05;
 constexpr uint8_t  FRAME_TYPE_LIVE      = 0x06;
+constexpr uint8_t  FRAME_TYPE_STATUS_EXT = 0x07;  // 8 B PreobdStatusExt, sent just before each 0x03
 constexpr uint8_t  FRAME_TYPE_CONN_EVT  = 0x10;
 constexpr uint8_t  FRAME_TYPE_OTA_DATA  = 0x20;
 constexpr uint8_t  FRAME_TYPE_OTA_ACK   = 0x21;

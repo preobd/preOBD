@@ -1239,8 +1239,26 @@ const firingState = new Map(); // ruleId -> { inputIndex, severity, kind, value,
 // produces no frame). mode: 'unknown' until the first reply; 'device' once a
 // status parsed; 'unsupported' once the firmware said it has no ALARM verb
 // (pre-#433) — the poll then stops and the button is not offered.
-const ack = { mode: 'unknown', acked: new Map(), durationS: 30, includesLed: false, pending: false, refreshing: false };
+const ack = { mode: 'unknown', acked: new Map(), durationS: 30, includesLed: false, pending: false, refreshing: false, rerun: false };
 const ACK_POLL_MS = 2000;
+
+// Status-frame extension (ARCHITECTURE §4.3, #455): bytes 32.. of a status
+// value from a current host + nRF. The device then PUSHES ack and config edges,
+// so the ACK_POLL_MS poll and the countdown it drove are replaced by an
+// ackGeneration edge + a local 1 s countdown. null until a v2 frame is seen
+// (an older device keeps the poll).
+const STATUS_EXT_LAYOUT = 1;          // the only extension layout this page knows
+const CONFIG_SETTLE_MS = 2000;        // configGeneration stable this long before re-reading
+const OWN_WRITE_GRACE_MS = 1500;      // our own batch's trailing bump arrives after it ends
+let statusExt = null;                 // { ackGen, configGen, uptime }
+let configWriteDepth = 0;             // >0 while withConfigMode() runs a batch
+let ownWriteUntil = 0;
+let configSettleTimer = null;
+let configStaleNoticeShown = false;
+// configGeneration current when the loaded config's dump was ASKED for (null =
+// unknown / older device). A change the loaded config already reflects — e.g.
+// Revert's own re-read landing while a deferred reload waited — skips the dump.
+let loadedConfigGen = null;   // "changed on the device" said once while edits are pending
 const actionState = new Map(); // actionId -> last-seen PreobdActionState fields
 
 // Command queue
@@ -1433,6 +1451,13 @@ function onDisconnected() {
   actionChar = null;
   framedMode = false;
   lastStatusNotifyMs = 0;
+  statusExt = null;
+  loadedConfigGen = null;
+  ackEdgeToken++;
+  clearTimeout(configSettleTimer);
+  configSettleTimer = null;
+  configWriteDepth = 0;
+  configStaleNoticeShown = false;
   document.getElementById('valNrfFw').textContent = 'nRF --';
   updateFramedBadge();
   alarmLog.length = 0;
@@ -1462,6 +1487,7 @@ function onDisconnected() {
   // Reset config UI
   originalConfig = null;
   localConfig = null;
+  catalog = { applications: [], sensors: [], units: [] };   // next device may run other firmware
   inputState.clear();
   document.getElementById('inputsPanel').style.display = 'none';
 }
@@ -1481,23 +1507,46 @@ function setConnected(connected) {
 
 let rxBuffer = '';
 
+// Whose reply is this? The nRF delivers every text reply to EVERY subscribed
+// central — the CLI is shared — so with a phone also connected, the next
+// prompt may end the PHONE's command. The device echoes the command line as
+// the first line of its reply, so a reply is ours only if it echoes the
+// command we wrote (any line — a log line can land ahead of it; case- and
+// whitespace-insensitive; a long command may come back truncated, so a
+// 20+ character prefix counts). The mobile app attributes replies the same way.
+function replyEchoes(response, cmd) {
+  const norm = t => t.replace(/\s+/g, ' ').trim().toUpperCase();
+  const want = norm(cmd);
+  if (!want) return true;
+  return response.split(/\r?\n/).some(line => {
+    const got = norm(line);
+    return got && (got === want || (got.length >= 20 && want.startsWith(got)));
+  });
+}
+
 function onRxData(event) {
   const chunk = DECODER.decode(event.target.value);
   rxBuffer += chunk;
 
-  const promptIdx = rxBuffer.indexOf(PROMPT);
-  if (promptIdx !== -1) {
+  // Several prompts can arrive in one chunk once another client shares the
+  // channel — settle each in order.
+  let promptIdx;
+  while ((promptIdx = rxBuffer.indexOf(PROMPT)) !== -1) {
     const response = rxBuffer.substring(0, promptIdx);
     rxBuffer = rxBuffer.substring(promptIdx + PROMPT.length);
-    // Whose reply is this? Drop expired direct entries, then take the head.
+    // Whose reply is this? Drop expired direct entries, then check the head.
     while (inflight.length && inflight[0].direct &&
            Date.now() - inflight[0].at > DIRECT_REPLY_MAX_MS && pendingResolve) inflight.shift();
+    if (inflight.length && inflight[0].cmd && !replyEchoes(response, inflight[0].cmd)) {
+      // Another client's reply: not ours, and it must not consume our slot.
+      continue;
+    }
     const exp = inflight.shift();
     if (exp && exp.direct && pendingResolve) {
       // The user's typed command was written before the queued one in flight:
       // this is its reply. Print it and leave the queued command pending.
       if (response.trim() && !suppressOutput) appendOutput(response);
-      return;
+      continue;
     }
     if (response.trim() && !suppressOutput && !pendingQuiet) {
       appendOutput(response);
@@ -1550,7 +1599,7 @@ function sendCommand() {
   if (cmdHistory.length > 50) cmdHistory.pop();
   historyIdx = -1;
   cmdInput.value = '';
-  inflight.push({ direct: true, at: Date.now() });
+  inflight.push({ direct: true, at: Date.now(), cmd });
   sendText(cmd);
 }
 
@@ -1606,7 +1655,88 @@ function applySystemStatus(val) {
   document.getElementById('valDevice').textContent = name || '--';
 
   statusPanel.classList.remove('hidden');
+  applyStatusExt(val, uptime);
   return true;
+}
+
+// Present iff length >= 40 and extLayout != 0; parsed only for a layout this
+// page knows (fields are append-only within a layout, so bytes past 40 are
+// ignored). A lone 32-byte frame from a v2 device (lost 0x07) keeps the last
+// generations — it is not a reboot.
+function applyStatusExt(val, uptime) {
+  if (val.byteLength < 40 || val.getUint8(32) !== STATUS_EXT_LAYOUT) return;
+  const next = { ackGen: val.getUint8(34), configGen: val.getUint16(36, true), uptime };
+  const prev = statusExt;
+  // A value up to 5 s older than the last one is a stale GATT read delivered
+  // after a newer notify, not a reboot (which restarts uptime near 0): ignore
+  // it whole rather than regress the baseline.
+  if (prev && uptime < prev.uptime && prev.uptime - uptime <= 5) return;
+  statusExt = next;
+  if (!prev) return;   // first v2 frame: connect already read both
+  const rebooted = uptime < prev.uptime;
+  if (rebooted || next.ackGen !== prev.ackGen) refreshAckOnEdge();
+  if (rebooted || next.configGen !== prev.configGen) onConfigGenerationChanged();
+}
+
+// An edge-triggered ALARM STATUS can time out behind a long dump or import on
+// the shared channel; with no poll left nothing else would re-ask. Retry a few
+// times unless a newer edge or a disconnect supersedes it.
+let ackEdgeToken = 0;
+async function refreshAckOnEdge() {
+  const token = ++ackEdgeToken;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const st = await refreshAckStatus();
+    // null while another read is in flight is not a failure: rerun covers it.
+    if (st !== null || ack.rerun || ack.mode === 'unsupported' || !txChar) return;
+    await new Promise(r => setTimeout(r, 2000));
+    if (token !== ackEdgeToken) return;
+  }
+}
+
+// Another client (or the device itself) changed the configuration. Re-read it
+// once the counter has been still for CONFIG_SETTLE_MS: a batch of SETs bumps
+// many times, and every subscriber receives each dump reply, so refreshing
+// mid-batch would drop a multi-KB dump into the writer's reply stream. Our own
+// batches are recognised by timing and adopted without a re-read.
+function onConfigGenerationChanged() {
+  if (configWriteDepth > 0 || Date.now() < ownWriteUntil) return;
+  clearTimeout(configSettleTimer);
+  configSettleTimer = setTimeout(reloadDeviceConfig, CONFIG_SETTLE_MS);
+}
+
+async function reloadDeviceConfig() {
+  configSettleTimer = null;
+  if (!txChar || !originalConfig) return;
+  if (configWriteDepth > 0 || cmdPending || cmdQueue.length) {   // busy: try again later
+    configSettleTimer = setTimeout(reloadDeviceConfig, CONFIG_SETTLE_MS);
+    return;
+  }
+  if (statusExt && statusExt.configGen === loadedConfigGen) {
+    configStaleNoticeShown = false;   // already current (another re-read got there first)
+    return;
+  }
+  const editorOpen = document.getElementById('inputEditor')?.style.display !== 'none';
+  if (editorOpen || ctlFormMode !== null || [...inputState.values()].some(s => s === 'dirty')) {
+    // Never overwrite unapplied edits or an open form (a re-render would drop
+    // what is being typed): say so once, and keep checking — the reload runs
+    // as soon as the edits are applied or discarded and the forms are closed.
+    if (!configStaleNoticeShown)
+      appendInfo('Configuration changed on the device (another client). It will reload once your pending edits are applied or discarded and open forms are closed.');
+    configStaleNoticeShown = true;
+    configSettleTimer = setTimeout(reloadDeviceConfig, CONFIG_SETTLE_MS);
+    return;
+  }
+  configStaleNoticeShown = false;
+  try {
+    const askedAt = statusExt ? statusExt.configGen : null;
+    const dumpResp = await sendQueued('SYSTEM DUMP JSON', { quiet: true });
+    originalConfig = parseJsonResponse(dumpResp);
+    loadedConfigGen = askedAt;
+    localConfig = JSON.parse(JSON.stringify(originalConfig));
+    renderInputsPanel();
+    renderControlPanel();
+    appendInfo('Configuration changed on the device — reloaded.');
+  } catch (_) { /* disconnect / parse failure: the next change retries */ }
 }
 
 function onStatusNotify(event) {
@@ -1739,7 +1869,8 @@ async function refreshAckStatus() {
   if (ack.mode === 'unsupported' || !txChar || !framedMode) return null;
   // One outstanding read at a time: a PING resync re-announces every held
   // alarm in a burst, and each frame asks for a refresh.
-  if (ack.refreshing) return null;
+  // An edge that lands during the read is not lost: one re-read follows.
+  if (ack.refreshing) { ack.rerun = true; return null; }
   ack.refreshing = true;
   try {
     const reply = await sendQueued('ALARM STATUS', { quiet: true });
@@ -1754,7 +1885,10 @@ async function refreshAckStatus() {
     }
     return st;
   } catch (_) { return null; }   // disconnect mid-flight: the next poll or frame corrects it
-  finally { ack.refreshing = false; }
+  finally {
+    ack.refreshing = false;
+    if (ack.rerun) { ack.rerun = false; setTimeout(refreshAckStatus, 0); }
+  }
 }
 
 // Acknowledge = the device's ALARM SILENCE. Scope and duration are the device's
@@ -1806,14 +1940,26 @@ function silencedChipText() {
   return 'SILENCED · ' + (ack.includesLed ? 'buzzer + LED' : 'buzzer');
 }
 
-// While any alarm is held, re-read the device's ack state every few seconds: a
-// countdown and its lapse are then the device's, not a page-side timer that
-// drifts from it. Skipped while the queue is busy (a config write batch, an
+// Older device (no status extension): while any alarm is held, re-read the
+// device's ack state every few seconds — the countdown and its lapse are then
+// the device's. Skipped while the queue is busy (a config write batch, an
 // import) so polls never pile up behind it; the next tick catches up.
 setInterval(() => {
-  if (!alarmChar || ack.mode === 'unsupported' || cmdPending || cmdQueue.length) return;
+  if (statusExt || !alarmChar || ack.mode === 'unsupported' || cmdPending || cmdQueue.length) return;
   if (ackSummary().held.length) refreshAckStatus();
 }, ACK_POLL_MS);
+
+// Current device: the lapse arrives as an ackGeneration edge, so only the
+// displayed countdown is local — tick the timed windows down once a second,
+// never below 0 (the device's edge, not this timer, ends the window).
+setInterval(() => {
+  if (!statusExt || !ack.acked.size) return;
+  let changed = false;
+  for (const [ruleId, remaining] of ack.acked) {
+    if (remaining !== null && remaining > 0) { ack.acked.set(ruleId, remaining - 1); changed = true; }
+  }
+  if (changed) renderAlarmPanel();
+}, 1000);
 
 function inputLabel(idx) {
   // Cross-reference against the catalog if it's been fetched. Falls back to
@@ -3023,7 +3169,7 @@ function sendHeld(cmd) {
     pendingReject = reject;
     pendingQuiet = false;
     pendingHold = false;
-    inflight.push({ direct: false, at: Date.now() });
+    inflight.push({ direct: false, at: Date.now(), cmd });
     sendText(cmd);
   });
 }
@@ -3042,7 +3188,7 @@ function drainQueue() {
   pendingReject = reject;
   pendingQuiet = quiet;
   pendingHold = hold;
-  inflight.push({ direct: false, at: Date.now() });
+  inflight.push({ direct: false, at: Date.now(), cmd });
   sendText(cmd, quiet);
 }
 
@@ -3125,15 +3271,28 @@ async function fetchInitialState() {
     // No CONFIG here: SYSTEM DUMP / LIST are RUN-legal, so the device stays
     // live while we load. CONFIG is entered only by withConfigMode() for the
     // actual write batches (Apply / Save / Revert / Import / Remove).
+    const askedAt = statusExt ? statusExt.configGen : null;
     const dumpResp = await sendQueued('SYSTEM DUMP JSON');
     originalConfig = parseJsonResponse(dumpResp);
+    loadedConfigGen = askedAt;
     localConfig = JSON.parse(JSON.stringify(originalConfig));
-    const appResp = await sendQueued('LIST APPLICATIONS JSON');
-    catalog.applications = parseJsonResponse(appResp);
-    const sensResp = await sendQueued('LIST SENSORS JSON');
-    catalog.sensors = parseJsonResponse(sensResp);
-    const unitResp = await sendQueued('LIST UNITS JSON');
-    catalog.units = parseJsonResponse(unitResp);
+    // The catalogs are compiled into the firmware — fixed for a connection —
+    // so only the first load fetches them. Revert re-reading ~14 KB of them
+    // was most of its bulk traffic, and on a link without UART flow control
+    // a multi-KB burst fanned out to two centrals can overrun the nRF's RX
+    // ring (uart_bridge.cpp, #449). Cleared on disconnect.
+    if (!catalog.applications.length) {
+      const appResp = await sendQueued('LIST APPLICATIONS JSON');
+      catalog.applications = parseJsonResponse(appResp);
+    }
+    if (!catalog.sensors.length) {
+      const sensResp = await sendQueued('LIST SENSORS JSON');
+      catalog.sensors = parseJsonResponse(sensResp);
+    }
+    if (!catalog.units.length) {
+      const unitResp = await sendQueued('LIST UNITS JSON');
+      catalog.units = parseJsonResponse(unitResp);
+    }
     renderInputsPanel();
     renderControlPanel();   // Rules/Actions tables now have localConfig to render
     appendInfo('Configuration loaded.');
@@ -3571,17 +3730,25 @@ async function readDeviceMode() {
 // CONFIG-mode global freeze (so writes don't stop the world at all) is tracked
 // separately — see #268.
 async function withConfigMode(fn) {
-  const priorMode = await readDeviceMode();   // capture before we touch it
-  await sendChecked('CONFIG');                 // idempotent if already CONFIG
+  // Our own writes bump configGeneration; don't re-read the config we just
+  // wrote (see onConfigGenerationChanged).
+  configWriteDepth++;
   try {
-    return await fn();
-  } finally {
-    // Restore the prior mode rather than forcing RUN, so we don't yank the
-    // user out of a CONFIG they explicitly chose. Only skip the RUN restore
-    // when we know we started in CONFIG; unknown prior mode defaults to RUN.
-    if (priorMode !== 'CONFIG') {
-      try { await sendChecked('RUN'); } catch (_) { /* best-effort */ }
+    const priorMode = await readDeviceMode();   // capture before we touch it
+    await sendChecked('CONFIG');                 // idempotent if already CONFIG
+    try {
+      return await fn();
+    } finally {
+      // Restore the prior mode rather than forcing RUN, so we don't yank the
+      // user out of a CONFIG they explicitly chose. Only skip the RUN restore
+      // when we know we started in CONFIG; unknown prior mode defaults to RUN.
+      if (priorMode !== 'CONFIG') {
+        try { await sendChecked('RUN'); } catch (_) { /* best-effort */ }
+      }
     }
+  } finally {
+    configWriteDepth--;
+    ownWriteUntil = Date.now() + OWN_WRITE_GRACE_MS;
   }
 }
 

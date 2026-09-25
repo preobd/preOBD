@@ -67,11 +67,11 @@ constexpr uint8_t kMaxMuxFrameHandlers = 4;
 void setMuxFrameHandler(uint8_t frameType, MuxFrameHandler handler);
 
 // FRAME_TYPE_PING marks a (re)connection; more than one broadcaster needs to
-// invalidate its cache for it (today: Action + LiveValue), so this is a
+// invalidate its cache for it (Action, LiveValue, Alarm, Status), so this is a
 // small fixed array rather than a single slot -- again no dynamic
 // allocation.
 typedef void (*MuxResyncHandler)();
-constexpr uint8_t kMaxMuxResyncHandlers = 4;
+constexpr uint8_t kMaxMuxResyncHandlers = 6;
 
 /**
  * Register a handler to be called on every inbound FRAME_TYPE_PING. MUST be
@@ -219,6 +219,14 @@ public:
     // Phase 3 flow control is asserted). Never writes a partial frame.
     // Callers that need delivery guarantees should retry on false.
     bool sendFrame(uint8_t type, const uint8_t* payload, uint16_t len);
+
+    // Two frames that must land back to back or not at all (the status
+    // extension 0x07 + its 0x03, #455): capacity is checked for BOTH before
+    // either is written. Sent as two sendFrame() calls, a TX buffer that keeps
+    // ~13 B free but never the full pair would emit an endless stream of lone
+    // first frames. Same non-blocking contract as sendFrame().
+    bool sendFramePair(uint8_t type1, const uint8_t* payload1, uint16_t len1,
+                       uint8_t type2, const uint8_t* payload2, uint16_t len2);
 
     // ========== TransportInterface Implementation ==========
 
