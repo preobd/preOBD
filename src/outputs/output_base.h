@@ -63,6 +63,9 @@ inline bool buildOBD2Frame(byte* frameData, Input* ptr) {
 
     // Convert value to OBDII format using sensor's conversion function
     float obdValue = getObdConvertFunc(ptr->measurementType)(ptr->value);
+    // The encodings are unsigned: a value below the PID's floor (vacuum from a
+    // linear boost curve, #467) reads as the floor, not an undefined cast.
+    if (!(obdValue > 0.0f)) obdValue = 0.0f;
 
     // Encode data based on size (big-endian / MSB first)
     if (dataBytes == 1) {

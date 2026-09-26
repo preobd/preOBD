@@ -116,8 +116,10 @@ SET <pin> CAL PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>
 |-----------|-------------|---------|
 | `vmin` | Voltage at minimum pressure (V) | 0.5 |
 | `vmax` | Voltage at maximum pressure (V) | 4.5 |
-| `pmin` | Minimum pressure (bar) | 0.0 |
+| `pmin` | Minimum pressure (bar) — may be negative (vacuum, sub-zero temperature) | 0.0 |
 | `pmax` | Maximum pressure (bar) | 3.0 |
+
+The voltages are **at the sensor**. They must lie between 0 and the board's supply divided by the input's divider ratio: up to 3.3 V on a 3.3 V board with no divider, up to about 5.05 V behind a 0.654 divider. So on a 3.3 V board, set the divider **before** the calibration.
 
 **Example:** 0.5-4.5V sensor, 0-3 bar range:
 ```
@@ -128,7 +130,7 @@ SAVE
 
 **Disconnect detection:** Linear sensors return `NaN` when the ADC voltage falls more than ~0.05V outside `vmin`/`vmax` — disconnected, unpowered, or shorted sensors no longer produce a plausible mid-range reading. Built-in linear presets enable an internal pull-up so a disconnected pin rails high; **custom calibrations do not**, because the EEPROM-backed override layout is fixed. Wire an external pull-down (e.g. 100kΩ to GND) if you want disconnect detection on a custom-calibrated linear sensor.
 
-**Voltage dividers:** When a 5V linear sensor is wired through a hardware divider for a 3.3V ADC, leave `vmin`/`vmax` at the sensor-side voltages (typically 0.5/4.5V) and apply the divider with `SET <pin> DIVIDER <ratio>` (see [DIVIDER](#divider--voltage-divider-ratio-linear-sensors-only) below). Custom calibrations don't carry a `divider_ratio` field of their own — `CalibrationOverride` is fixed at 16 bytes, so the divider lives on the input. Alternately, you can specify post-divider voltages directly in `PRESSURE_LINEAR` and skip `DIVIDER`.
+**Voltage dividers:** When a 5V linear sensor is wired through a hardware divider for a 3.3V ADC, leave `vmin`/`vmax` at the sensor-side voltages (typically 0.5/4.5V) and apply the divider with `SET <pin> DIVIDER <ratio>` first (see [DIVIDER](#divider--voltage-divider-ratio-linear-sensors-only) below). Custom calibrations don't carry a `divider_ratio` field of their own — `CalibrationOverride` is fixed at 16 bytes, so the divider lives on the input. Alternately, you can specify post-divider voltages directly in `PRESSURE_LINEAR` and skip `DIVIDER`.
 
 ### DIVIDER - Voltage Divider Ratio (linear sensors only)
 

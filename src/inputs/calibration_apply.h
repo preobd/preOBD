@@ -36,9 +36,9 @@ enum CalApplyStatus : uint8_t {
     CAL_APPLY_ERR_BIAS_TYPE,         // this calibration type has no bias resistor
     CAL_APPLY_ERR_R0_POSITIVE,       // beta r0 must be > 0
     CAL_APPLY_ERR_VOLTAGE_ORDER,     // vmin >= vmax
-    CAL_APPLY_ERR_VOLTAGE_RANGE,     // outside 0..SYSTEM_VOLTAGE
+    CAL_APPLY_ERR_VOLTAGE_RANGE,     // outside 0..SYSTEM_VOLTAGE/divider_ratio (#467)
     CAL_APPLY_ERR_OUTPUT_ORDER,      // output min >= output max
-    CAL_APPLY_ERR_OUTPUT_MIN,        // output min < 0
+    CAL_APPLY_ERR_OUTPUT_MIN,        // retired by #467 (negative mins allowed); kept so codes do not renumber
     CAL_APPLY_ERR_POLES,             // poles outside 2..32
     CAL_APPLY_ERR_PULLEY_RATIO,      // pulley ratio outside 0.5..10.0
     CAL_APPLY_ERR_CAL_MULT,          // calibration multiplier outside 0.5..2.0
@@ -66,6 +66,15 @@ CalApplyStatus applyCalBeta(Input* input, float bias_r, float beta, float r0, fl
 
 // Polynomial pressure (VDO). Sets calibrationType = CAL_PRESSURE_POLYNOMIAL.
 CalApplyStatus applyCalPressurePoly(Input* input, float bias_r, float a, float b, float c);
+
+// Highest SENSOR-side voltage a linear calibration may use on this input: the
+// supply over the input's divider ratio (#467).
+float calLinearMaxSensorVolts(const Input* input);
+
+// Whether the input's custom linear calibration (if any) still fits under a
+// divider of `ratio` — SET <pin> DIVIDER must not strand a calibration the
+// input's own export/import would then refuse (#467).
+bool calLinearFitsRatio(const Input* input, float ratio);
 
 // Linear sensor (voltage -> engineering units). Sets calibrationType = CAL_LINEAR.
 CalApplyStatus applyCalLinear(Input* input, float vmin, float vmax,

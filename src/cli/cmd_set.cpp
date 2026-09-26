@@ -551,6 +551,16 @@ static int set_divider(uint8_t pin, int argc, const char* const* argv) {
         msg.control.println(F("  This input's sensor ignores it (resistive, thermistor or VOLTAGE_DIVIDER)"));
         return 1;
     }
+    // A custom linear calibration's voltages are sensor-side and judged
+    // against SYSTEM_VOLTAGE / ratio (#467): a larger ratio must not leave the
+    // curve above what the pin can see.
+    if (!calLinearFitsRatio(input, ratio)) {
+        msg.control.print(F("ERROR: This input's calibration reaches "));
+        msg.control.print(input->customCalibration.pressureLinear.voltage_max);
+        msg.control.println(F("V, which this ratio can't read"));
+        msg.control.println(F("  Change the calibration first (SET <pin> CAL ...)"));
+        return 1;
+    }
     input->divider_ratio = ratio;
     printInputFieldSet(argv[1], F("divider ratio"), ratio, 3);
     return 0;
@@ -969,14 +979,15 @@ static int set_cal_pressure_linear(uint8_t pin, int argc, const char* const* arg
             return 1;
         case CAL_APPLY_ERR_VOLTAGE_RANGE:
             msg.control.print(F("ERROR: Voltage range must be 0.0-"));
-            msg.control.print(SYSTEM_VOLTAGE);
-            msg.control.println(F("V for this platform"));
+            msg.control.print(calLinearMaxSensorVolts(input));
+            msg.control.println(F("V at the sensor on this input"));
+            msg.control.println(F("  (behind a divider, SET <pin> DIVIDER first)"));
             return 1;
         case CAL_APPLY_ERR_OUTPUT_ORDER:
             msg.control.println(F("ERROR: pmin must be less than pmax"));
             return 1;
         default:
-            msg.control.println(F("ERROR: pmin must be >= 0.0"));
+            msg.control.println(F("ERROR: invalid linear calibration"));
             return 1;
     }
 

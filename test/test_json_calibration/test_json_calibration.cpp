@@ -582,6 +582,80 @@ static void test_divider_ratio_default_is_implicit(void) {
     TEST_ASSERT_EQUAL_FLOAT(1.0f, getInputByPin(TEST_PIN)->divider_ratio);
 }
 
+// ---------------------------------------------------------------------------
+// #467 — a linear calibration's voltages are SENSOR-side (the reader divides
+// by divider_ratio first), so the ceiling is SYSTEM_VOLTAGE / ratio: a 5 V
+// 0.5-4.5 V sender behind a 0.654 divider must calibrate on a 3.3 V board. A
+// negative output minimum (vacuum, sub-zero temperature) is legitimate.
+// ---------------------------------------------------------------------------
+
+static void test_linear_cal_ceiling_follows_divider(void) {
+    Input* in = buildInput(CAL_LINEAR);
+    in->divider_ratio = 1.0f;
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_ERR_VOLTAGE_RANGE,
+        applyCalLinear(in, 0.5f, 4.5f, 0.0f, 2.5f));
+    in->divider_ratio = 0.654f;          // ceiling 3.3 / 0.654 = 5.05 V
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_OK,
+        applyCalLinear(in, 0.5f, 4.5f, 0.0f, 2.5f));
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_ERR_VOLTAGE_RANGE,
+        applyCalLinear(in, 0.5f, 5.2f, 0.0f, 2.5f));
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_ERR_VOLTAGE_RANGE,
+        applyCalLinear(in, -0.1f, 3.0f, 0.0f, 2.5f));
+}
+
+// SET <pin> DIVIDER must not raise the ratio past a stored custom curve: the
+// input could no longer read it and its own export would fail to import.
+static void test_divider_cannot_strand_a_linear_cal(void) {
+    Input* in = buildInput(CAL_LINEAR);
+    in->divider_ratio = 0.654f;
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_OK, applyCalLinear(in, 0.5f, 4.5f, 0.0f, 2.5f));
+    TEST_ASSERT_FALSE(calLinearFitsRatio(in, 1.0f));
+    TEST_ASSERT_FALSE(calLinearFitsRatio(in, 0.8f));      // ceiling 4.125 V
+    TEST_ASSERT_TRUE(calLinearFitsRatio(in, 0.7f));       // ceiling 4.71 V
+    TEST_ASSERT_TRUE(calLinearFitsRatio(in, 0.5f));
+    in->flags.useCustomCalibration = false;               // preset: nothing to strand
+    TEST_ASSERT_TRUE(calLinearFitsRatio(in, 1.0f));
+}
+
+// Legacy divider_ratio 0 means "unset" = 1.0; an exact fit isn't lost to float
+// rounding (3.3 / 0.66 = 5.0).
+static void test_linear_cal_ceiling_edges(void) {
+    Input* in = buildInput(CAL_LINEAR);
+    in->divider_ratio = 0.0f;
+    TEST_ASSERT_EQUAL_FLOAT(3.3f, calLinearMaxSensorVolts(in));
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_OK, applyCalLinear(in, 0.5f, 3.3f, 0.0f, 2.5f));
+    in->divider_ratio = 0.66f;
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_OK, applyCalLinear(in, 0.5f, 5.0f, 0.0f, 2.5f));
+    TEST_ASSERT_TRUE(calLinearFitsRatio(in, 0.66f));
+}
+
+static void test_linear_cal_accepts_negative_output_min(void) {
+    Input* in = buildInput(CAL_LINEAR);
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_OK,
+        applyCalLinear(in, 0.5f, 3.0f, -1.0f, 2.5f));
+    TEST_ASSERT_EQUAL_FLOAT(-1.0f, in->customCalibration.pressureLinear.output_min);
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_ERR_OUTPUT_ORDER,
+        applyCalLinear(in, 0.5f, 3.0f, 2.5f, -1.0f));
+}
+
+// MUTANT TARGET: staging the calibration before the record's divider is read
+// judges 4.5 V against the bare 3.3 V supply and refuses the whole record.
+static void test_divided_linear_cal_round_trips(void) {
+    Input* in = buildInput(CAL_LINEAR);
+    in->divider_ratio = 0.654f;
+    TEST_ASSERT_EQUAL_UINT8(CAL_APPLY_OK,
+        applyCalLinear(in, 0.5f, 4.5f, 0.0f, 2.5f));
+    char json[3072];
+    exportToText(in, json, sizeof(json));
+
+    TEST_ASSERT_TRUE(importText(json));
+    Input* got = getInputByPin(TEST_PIN);
+    TEST_ASSERT_NOT_NULL(got);
+    TEST_ASSERT_TRUE(got->flags.useCustomCalibration);
+    TEST_ASSERT_EQUAL_FLOAT(4.5f, got->customCalibration.pressureLinear.voltage_max);
+    TEST_ASSERT_EQUAL_FLOAT(0.654f, got->divider_ratio);
+}
+
 // Same range check as SET <pin> DIVIDER, and a bad value refuses the whole
 // record before anything is written (the import's all-or-nothing contract).
 static void test_divider_ratio_out_of_range_is_refused(void) {
@@ -652,5 +726,10 @@ int main(int, char**) {
     RUN_TEST(test_divider_ratio_round_trips);
     RUN_TEST(test_divider_ratio_default_is_implicit);
     RUN_TEST(test_divider_ratio_out_of_range_is_refused);
+    RUN_TEST(test_linear_cal_ceiling_follows_divider);
+    RUN_TEST(test_linear_cal_accepts_negative_output_min);
+    RUN_TEST(test_divider_cannot_strand_a_linear_cal);
+    RUN_TEST(test_linear_cal_ceiling_edges);
+    RUN_TEST(test_divided_linear_cal_round_trips);
     return UNITY_END();
 }

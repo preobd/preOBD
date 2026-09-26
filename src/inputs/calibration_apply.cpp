@@ -57,14 +57,40 @@ CalApplyStatus applyCalPressurePoly(Input* input, float bias_r, float a, float b
     return CAL_APPLY_OK;
 }
 
+// Float slack on the ceiling, so an exact fit (3.3 / 0.66 = 5.0) isn't
+// refused by rounding.
+static const float CAL_LINEAR_VOLT_SLACK = 0.001f;
+
+static float maxSensorVoltsAt(float ratio) {
+    return SYSTEM_VOLTAGE / (ratio > 0.0f ? ratio : 1.0f);   // 0 = legacy unset
+}
+
+float calLinearMaxSensorVolts(const Input* input) {
+    return maxSensorVoltsAt(input != nullptr ? input->divider_ratio : 1.0f);
+}
+
+bool calLinearFitsRatio(const Input* input, float ratio) {
+    if (input == nullptr || !input->flags.useCustomCalibration || input->calibrationType != CAL_LINEAR) {
+        return true;
+    }
+    return input->customCalibration.pressureLinear.voltage_max <= maxSensorVoltsAt(ratio) + CAL_LINEAR_VOLT_SLACK;
+}
+
 CalApplyStatus applyCalLinear(Input* input, float vmin, float vmax,
                               float output_min, float output_max) {
     if (input == nullptr) return CAL_APPLY_ERR_NO_INPUT;
     if (input->calibrationType != CAL_LINEAR) return CAL_APPLY_ERR_SENSOR_TYPE;
     if (vmin >= vmax) return CAL_APPLY_ERR_VOLTAGE_ORDER;
-    if (vmin < 0.0f || vmax > SYSTEM_VOLTAGE) return CAL_APPLY_ERR_VOLTAGE_RANGE;
+    // vmin/vmax are SENSOR-side volts: readLinearSensor() divides the pin
+    // voltage by divider_ratio before comparing. So the ceiling is the highest
+    // sensor voltage the pin can see — the supply over the ratio — not the raw
+    // supply, or a 5 V sensor behind a divider could never be calibrated at its
+    // own 0.5-4.5 V (#467).
+    if (vmin < 0.0f || vmax > calLinearMaxSensorVolts(input) + CAL_LINEAR_VOLT_SLACK) return CAL_APPLY_ERR_VOLTAGE_RANGE;
     if (output_min >= output_max) return CAL_APPLY_ERR_OUTPUT_ORDER;
-    if (output_min < 0.0f) return CAL_APPLY_ERR_OUTPUT_MIN;
+    // A negative output minimum is legitimate (a linear temperature sender
+    // below 0 °C, a boost sensor's vacuum range) — the interpolation handles it
+    // (#467). CAL_APPLY_ERR_OUTPUT_MIN is kept so status codes don't renumber.
 
     input->flags.useCustomCalibration = true;
     input->calibrationType = CAL_LINEAR;

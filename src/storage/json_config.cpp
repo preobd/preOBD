@@ -921,6 +921,24 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         msg.control.println(F("' unknown or wrong type; using the application default"));
     }
 
+    // Divider ratio (#445): same range check as SET <pin> DIVIDER, judged here
+    // so a bad value fails the record before anything is written. Absent → 1.0
+    // (no divider), which is also what setInputApplication() seeds below.
+    // Read before the calibration is staged: a linear calibration's voltage
+    // ceiling depends on it (#467).
+    float dividerRatio = 1.0f;
+    if (inputObj["divider"].isNull() == false) {
+        dividerRatio = inputObj["divider"].as<float>();
+        if (!(dividerRatio > 0.0f && dividerRatio <= 1.0f)) {
+            msg.control.print(F("ERROR: Failed to import input "));
+            msg.control.print(index);
+            msg.control.print(F(" (pin "));
+            msg.control.print(pin);
+            msg.control.println(F(") - divider ratio must be > 0.0 and <= 1.0"));
+            return false;
+        }
+    }
+
     // Stage the calibration on a scratch Input, so a calibration this firmware
     // refuses fails the record BEFORE anything is written. Applying it to the
     // real input at the end instead left an enabled, fully configured input
@@ -945,6 +963,9 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         // the parameters against the same type and seeds from the same preset.
         staged.calibrationType = sensorInfo.calibrationType;
         staged.presetCalibration = sensorInfo.defaultCalibration;
+        // A linear calibration is judged against the divider it will sit
+        // behind (#467), so the record's ratio is read first.
+        staged.divider_ratio = dividerRatio;
 
         JsonObject cal = inputObj["calibration"];
         if (!importCalibration(&staged, cal, index)) {
@@ -960,22 +981,6 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         stagedCustom = staged.flags.useCustomCalibration;
         stagedType = staged.calibrationType;   // a typed profile sets its own
         stagedOverride = staged.customCalibration;
-    }
-
-    // Divider ratio (#445): same range check as SET <pin> DIVIDER, judged here
-    // so a bad value fails the record before anything is written. Absent → 1.0
-    // (no divider), which is also what setInputApplication() seeds below.
-    float dividerRatio = 1.0f;
-    if (inputObj["divider"].isNull() == false) {
-        dividerRatio = inputObj["divider"].as<float>();
-        if (!(dividerRatio > 0.0f && dividerRatio <= 1.0f)) {
-            msg.control.print(F("ERROR: Failed to import input "));
-            msg.control.print(index);
-            msg.control.print(F(" (pin "));
-            msg.control.print(pin);
-            msg.control.println(F(") - divider ratio must be > 0.0 and <= 1.0"));
-            return false;
-        }
     }
 
     // ===== COMMIT - from here on nothing may fail =====
