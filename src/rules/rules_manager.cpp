@@ -512,6 +512,30 @@ bool rulesSetRuleLimit(uint8_t id, uint8_t condition, float lo, float hi,
     return true;
 }
 
+bool rulesSetRuleSeverity(uint8_t id, uint8_t severity, bool* warnClearedOut) {
+    if (warnClearedOut) *warnClearedOut = false;
+    const int slot = rulesRuleSlot(id);
+    if (slot < 0) return false;
+    Rule& r = rules[slot];
+    if (r.severity == severity) return true;   // no-op: keep warn tier and ack
+    if (severity != RULE_SEV_ALARM) {
+        const bool hadWarn = ruleWarnMode(r, false) != RULE_WARN_AUTO ||
+                             ruleWarnMode(r, true) != RULE_WARN_AUTO;
+        ruleSetWarnMode(r, false, RULE_WARN_AUTO);
+        ruleSetWarnMode(r, true, RULE_WARN_AUTO);
+        r.warnLo = 0.0f;
+        r.warnHi = 0.0f;
+        if (warnClearedOut) *warnClearedOut = hadWarn;
+    }
+    r.severity = severity;
+    // No re-arm: severity is read live each tick, like the limits (#295).
+    if (g_ackRuleId[slot] != RULES_ID_NONE) {
+        g_ackRuleId[slot] = RULES_ID_NONE;
+        g_ackGeneration++;
+    }
+    return true;
+}
+
 bool rulesSetAlarmWarnForInput(uint8_t pin, RuleWarnMode loMode, float lo,
                                 RuleWarnMode hiMode, float hi, uint8_t* badSideOut) {
     if (badSideOut) *badSideOut = 0xFF;

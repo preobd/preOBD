@@ -654,6 +654,79 @@ static void test_limit_reports_cleared_hysteresis(void) {
     TEST_ASSERT_EQUAL_FLOAT(0.0f, rules[rulesRuleSlot(id)].hysteresis);
 }
 
+// =====================================================================
+// RULE <id> SEVERITY — rulesSetRuleSeverity (#470)
+// =====================================================================
+
+static void test_severity_keeps_id_links_limits_and_state(void) {
+    addPlainInput(10);
+    const uint8_t id = addLinkedWarningRule(10, 3);
+    const int slot = rulesRuleSlot(id);
+    TEST_ASSERT_TRUE(rulesSetRuleSeverity(id, RULE_SEV_ALARM));
+    TEST_ASSERT_EQUAL_INT(slot, rulesRuleSlot(id));
+    TEST_ASSERT_EQUAL_UINT8(RULE_SEV_ALARM, rules[slot].severity);
+    TEST_ASSERT_EQUAL_FLOAT(100.0f, rules[slot].limitLo);
+    TEST_ASSERT_EQUAL_FLOAT(5.0f, rules[slot].hysteresis);
+    TEST_ASSERT_EQUAL_UINT32(1234, rules[slot].warmupMs);
+    TEST_ASSERT_TRUE(rules[slot].flags & RULE_FLAG_ENABLED);
+    TEST_ASSERT_EQUAL_UINT8(RULE_ACTIVE, g_ruleContexts[slot].state);   // no re-arm
+    const int aslot = rulesActionSlot(3);
+    TEST_ASSERT_EQUAL_UINT8(id, rulesActionRuleAt(aslot, 0));          // link survives
+    // Now an ALARM ABOVE rule on pin 10: the input's canonical alarm.
+    TEST_ASSERT_EQUAL_INT(slot, rulesAlarmRuleSlotForInput(10));
+}
+
+// The warn tier is ALARM-only: leaving ALARM resets it to AUTO and says so.
+static void test_severity_leaving_alarm_clears_warn(void) {
+    addPlainInput(10);
+    rulesSetAlarmRuleForInput(10, RULE_OUTSIDE_BAND, 0.0f, 100.0f, 0);
+    const int slot = rulesAlarmRuleSlotForInput(10);
+    const uint8_t id = rules[slot].id;
+    TEST_ASSERT_TRUE(rulesSetAlarmWarnForInput(10, RULE_WARN_SET, 10.0f, RULE_WARN_NONE, 0.0f));
+    bool cleared = false;
+    TEST_ASSERT_TRUE(rulesSetRuleSeverity(id, RULE_SEV_WARNING, &cleared));
+    TEST_ASSERT_TRUE(cleared);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(rules[slot], false));
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_AUTO, ruleWarnMode(rules[slot], true));
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, rules[slot].warnLo);
+    TEST_ASSERT_EQUAL_INT(-1, rulesAlarmRuleSlotForInput(10));   // no canonical alarm left
+    // Back to ALARM: nothing to clear, and it is canonical again.
+    TEST_ASSERT_TRUE(rulesSetRuleSeverity(id, RULE_SEV_ALARM, &cleared));
+    TEST_ASSERT_FALSE(cleared);
+    TEST_ASSERT_EQUAL_INT(slot, rulesAlarmRuleSlotForInput(10));
+}
+
+// An acknowledgement silenced the old tier; a rule moved back to ALARM inside
+// a timed window must be heard, so a severity change drops the ack.
+static void test_severity_change_drops_the_ack(void) {
+    int a = ackRule(10, 100.0f);
+    trip(a, 150.0f);
+    TEST_ASSERT_EQUAL_UINT8(1, rulesAckActiveAlarms(1000));
+    const uint8_t gen = rulesAckGeneration();
+    TEST_ASSERT_TRUE(rulesSetRuleSeverity(rules[a].id, RULE_SEV_WARNING));
+    TEST_ASSERT_FALSE(rulesRuleAcked(a));
+    TEST_ASSERT_TRUE(rulesAckGeneration() != gen);
+    TEST_ASSERT_TRUE(rulesSetRuleSeverity(rules[a].id, RULE_SEV_ALARM));
+    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, rulesSystemSeverityUnacked());   // sounds again
+}
+
+// Re-asserting the current severity must not drop an ack or the warn tier.
+static void test_severity_same_value_is_a_noop(void) {
+    int a = ackRule(10, 100.0f);
+    TEST_ASSERT_TRUE(rulesSetAlarmWarnForInput(10, RULE_WARN_SET, 90.0f, RULE_WARN_AUTO, 0.0f));
+    trip(a, 150.0f);
+    TEST_ASSERT_EQUAL_UINT8(1, rulesAckActiveAlarms(1000));
+    bool cleared = true;
+    TEST_ASSERT_TRUE(rulesSetRuleSeverity(rules[a].id, RULE_SEV_ALARM, &cleared));
+    TEST_ASSERT_FALSE(cleared);
+    TEST_ASSERT_TRUE(rulesRuleAcked(a));
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_SET, ruleWarnMode(rules[a], false));
+}
+
+static void test_severity_unknown_id(void) {
+    TEST_ASSERT_FALSE(rulesSetRuleSeverity(200, RULE_SEV_ALARM));
+}
+
 static void test_limit_unknown_id(void) {
     TEST_ASSERT_FALSE(rulesSetRuleLimit(200, RULE_ABOVE, 1.0f, 0.0f));
 }
@@ -675,6 +748,11 @@ int main(int, char**) {
     RUN_TEST(test_limit_shape_change_and_warn_mask_match_the_facade);
     RUN_TEST(test_limit_reports_cleared_hysteresis);
     RUN_TEST(test_limit_unknown_id);
+    RUN_TEST(test_severity_keeps_id_links_limits_and_state);
+    RUN_TEST(test_severity_leaving_alarm_clears_warn);
+    RUN_TEST(test_severity_change_drops_the_ack);
+    RUN_TEST(test_severity_same_value_is_a_noop);
+    RUN_TEST(test_severity_unknown_id);
     RUN_TEST(test_parse_number_is_strict);
     RUN_TEST(test_warn_facade_no_alarm_rule_reports_badside_0xFF);
     RUN_TEST(test_warn_facade_accepts_legal_lo_on_above);

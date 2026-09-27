@@ -600,6 +600,7 @@ RULE LIST                         # all Rules + live state (READY/ACTIVE) + seve
 RULE <id>                         # one Rule's detail
 RULE <id> WARN <lo|NONE|AUTO> [<hi|NONE|AUTO>]   # edit an ALARM rule's warning threshold in place (no re-arm)
 RULE <id> LIMIT ABOVE|BELOW <limit> | OUTSIDE <lo> <hi>   # move a Rule's limits in place (keeps id, severity, Action links; no re-arm). Values in base units (°C, bar), like RULE ADD
+RULE <id> SEVERITY INFO|WARNING|ALARM|NONE   # change a Rule's tier in place (keeps id, limits, Action links; no re-arm). Leaving ALARM clears its warn tier; drops any acknowledgement
 RULE <id> ENABLE | DISABLE        # re-arm / park a Rule without deleting it
 RULE DEL <id>                     # delete (drops it from every Action's membership)
 RULE RESET <id>                   # restore config from the application default + re-arm

@@ -152,6 +152,15 @@ uint8_t rulesSetAlarmRuleForInput(uint8_t pin, uint8_t condition, float lo, floa
 bool rulesSetRuleLimit(uint8_t id, uint8_t condition, float lo, float hi,
                        uint8_t* warnResetOut = nullptr, bool* hystClearedOut = nullptr);
 
+// RULE <id> SEVERITY (#470): change a Rule's tier in place, keeping its id,
+// limits, enabled flag, Action links and live RuleContext (DEL+ADD lost the
+// links). The warn tier only exists on ALARM rules, so leaving ALARM resets
+// both warn sides to AUTO (`warnClearedOut` = a side was not AUTO). Any
+// acknowledgement on the rule is dropped: it silenced the old tier, and a
+// rule moved back to ALARM must be heard. Setting the current severity is a
+// no-op. Returns false for an unknown id.
+bool rulesSetRuleSeverity(uint8_t id, uint8_t severity, bool* warnClearedOut = nullptr);
+
 // Edit the warn tier of the input's canonical alarm Rule (#425, slice B) — the
 // facade behind `SET <pin> ALARM WARN ...`. Unlike the shape edit above, this
 // REJECTS an illegal side rather than degrading it (validates a COPY via

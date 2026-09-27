@@ -676,7 +676,7 @@ FLASHMEM void printInputAlarmInfo(uint8_t pin) {
 // enabled flag, Action links and live state — DEL+ADD lost the links. The
 // condition is required, so `LIMIT 90` on a band is a usage error rather than
 // a silent shape change.
-static int ruleSetLimit(uint8_t id, int argc, const char* const* argv) {
+static FLASHMEM int ruleSetLimit(uint8_t id, int argc, const char* const* argv) {
     if (argc < 5) {
         msg.control.println(F("ERROR: usage: RULE <id> LIMIT ABOVE|BELOW <limit> | RULE <id> LIMIT OUTSIDE <lo> <hi>"));
         return 1;
@@ -742,10 +742,67 @@ static int ruleSetLimit(uint8_t id, int argc, const char* const* argv) {
     return 0;
 }
 
+// RULE <id> SEVERITY INFO|WARNING|ALARM|NONE
+// Change a Rule's tier in place (#470): keeps the id, limits, enabled flag,
+// Action links and live state — DEL+ADD lost the links. Leaving ALARM clears
+// the warn tier (ALARM-only); the input's canonical alarm can move or vanish,
+// so say which rule SET <pin> ALARM edits now.
+static FLASHMEM int ruleSetSeverity(uint8_t id, int argc, const char* const* argv) {
+    if (argc != 4) {
+        if (argc > 4) {
+            msg.control.print(F("ERROR: unexpected token: "));
+            msg.control.println(argv[4]);
+        } else {
+            msg.control.println(F("ERROR: usage: RULE <id> SEVERITY INFO|WARNING|ALARM|NONE"));
+        }
+        return 1;
+    }
+    uint8_t severity;
+    if (streq_P(argv[3], PSTR("INFO")))          severity = RULE_SEV_INFO;
+    else if (streq_P(argv[3], PSTR("WARNING")))  severity = RULE_SEV_WARNING;
+    else if (streq_P(argv[3], PSTR("ALARM")))    severity = RULE_SEV_ALARM;
+    else if (streq_P(argv[3], PSTR("NONE")))     severity = RULE_SEV_NONE;
+    else {
+        msg.control.println(F("ERROR: severity must be INFO, WARNING, ALARM, or NONE"));
+        return 1;
+    }
+
+    const int slot = rulesRuleSlot(id);
+    const uint8_t pin = rules[slot].sourceInput;
+    const int canonicalBefore = rulesAlarmRuleSlotForInput(pin);
+
+    bool warnCleared = false;
+    rulesSetRuleSeverity(id, severity, &warnCleared);
+
+    msg.control.print(F("Rule #"));
+    msg.control.print(id);
+    msg.control.print(F(" severity set to "));
+    if (severity == RULE_SEV_NONE) msg.control.print(F("NONE"));   // severityName says "--"
+    else msg.control.print(severityName(severity));
+    msg.control.println(F(". SAVE to persist."));
+    if (warnCleared) msg.control.println(F("  NOTE: warn tier cleared (only ALARM rules have one)"));
+    const int canonicalAfter = rulesAlarmRuleSlotForInput(pin);
+    if (canonicalAfter != canonicalBefore) {
+        if (canonicalAfter >= 0) {
+            msg.control.print(F("  NOTE: SET <pin> ALARM on this input now edits rule #"));
+            msg.control.println(rules[canonicalAfter].id);
+        } else {
+            msg.control.println(F("  NOTE: this input has no alarm Rule now (SET <pin> ALARM would add one)"));
+        }
+    } else if (severity == RULE_SEV_ALARM && canonicalAfter >= 0 && rules[canonicalAfter].id != id) {
+        // Promoted beside the input's existing alarm: both sound, and the
+        // facade keeps editing the other one.
+        msg.control.print(F("  NOTE: this input's alarm is still rule #"));
+        msg.control.print(rules[canonicalAfter].id);
+        msg.control.println(F("; both will sound"));
+    }
+    return 0;
+}
+
 FLASHMEM int cmd_rule(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: RULE requires a subcommand"));
-        msg.control.println(F("  Usage: RULE LIST | ADD ... | <id> | <id> ENABLE|DISABLE | <id> WARN ... | <id> LIMIT ... | DEL <id> | RESET <id>"));
+        msg.control.println(F("  Usage: RULE LIST | ADD ... | <id> | <id> ENABLE|DISABLE | <id> WARN ... | <id> LIMIT ... | <id> SEVERITY ... | DEL <id> | RESET <id>"));
         return 1;
     }
 
@@ -815,7 +872,8 @@ FLASHMEM int cmd_rule(int argc, const char* const* argv) {
         const bool disable = streq_P(argv[2], PSTR("DISABLE"));
         const bool warn    = streq_P(argv[2], PSTR("WARN"));
         const bool limit   = streq_P(argv[2], PSTR("LIMIT"));
-        if (enable || disable || warn || limit) {
+        const bool sev     = streq_P(argv[2], PSTR("SEVERITY"));
+        if (enable || disable || warn || limit || sev) {
             // Structural, like ADD/DEL/RESET: an unarmed edit path, so it
             // belongs in CONFIG — follows the ENABLE/DISABLE self-gate (#346).
             if (isInRunMode()) {
@@ -827,6 +885,7 @@ FLASHMEM int cmd_rule(int argc, const char* const* argv) {
             configGenerationBump();
             if (warn) return ruleSetWarn(ruleId, argc, argv);
             if (limit) return ruleSetLimit(ruleId, argc, argv);
+            if (sev) return ruleSetSeverity(ruleId, argc, argv);
             return ruleSetEnabled(ruleId, enable);
         }
         msg.control.print(F("ERROR: unknown RULE verb: "));

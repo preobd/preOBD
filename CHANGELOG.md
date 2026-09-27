@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `RULE <id> SEVERITY INFO|WARNING|ALARM|NONE` changes a rule's severity in place, keeping its id, limits and the relays/actions linked to it (previously only possible by deleting and re-adding the rule) (#470)
 - `RULE <id> LIMIT ABOVE|BELOW <limit>` / `OUTSIDE <lo> <hi>` moves any rule's limits in place, keeping its id, severity and the relays/actions linked to it (previously only possible by deleting and re-adding the rule, which dropped those links) (#457)
 - Alarm acknowledgement is now per rule and reachable remotely: `ALARM SILENCE` (or the mode button) mutes only the alarms sounding at that moment, `ALARM DURATION <secs|CLEAR>` and `ALARM SCOPE <BUZZER|ALL>` set how long and what it mutes, and `ALARM STATUS` shows what is acknowledged (#433)
 - Per-rule configurable warning threshold: `WARN` on `RULE ADD`, `RULE <id> WARN`, and `SET <pin> ALARM WARN` set each side of an alarm rule's pre-trip warning band to AUTO (derived), NONE (skip it), or an explicit value (#425)
