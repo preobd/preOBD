@@ -22,7 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking: EEPROM configuration is reset on upgrade.** The stored config layout changed (`EEPROM_VERSION` 6 → 7) to carry the Rule record's new warning-threshold fields; the firmware detects the old version and starts from defaults. Back up your setup with `SYSTEM DUMP JSON` before flashing and restore it afterwards with `JSON IMPORT`.
 
 ### Fixed
-- Documentation corrected against the firmware: commands, sensor names, bias-resistor wiring (bias to VCC, sender to ground), alarm units and the relay, alarm, CONFIG/RUN, JSON and CAN import guides now describe current behaviour
 - Teensy uploads (`pio run -t upload`) retry the loader once instead of failing on its first write, and CONFIG mode now says the watchdog is still armed on Teensy 4.x instead of claiming it was disabled (#461)
 - `SET <pin> CAL PRESSURE_LINEAR` now accepts sensor voltages up to the supply divided by the input's divider ratio, so a 5 V 0.5–4.5 V sender behind a divider can be calibrated on a 3.3 V board (it was capped at 3.3 V), accepts a negative value at the low end (vacuum, sub-zero temperature), and `SET <pin> DIVIDER` refuses a ratio the input's calibration no longer fits under (#467)
 - Inputs on the generic NTC thermistor sensors (`GENERIC_NTC_STEINHART`, `GENERIC_NTC_BETA`) are now actually read — they had no read function, so a custom-calibrated generic thermistor never produced a value (#464)

@@ -21,6 +21,21 @@ preOBD supports two types of Bluetooth connectivity:
 
 This guide focuses on **UART Bluetooth modules** for platforms that don't have built-in Bluetooth.
 
+### What you can do over Bluetooth
+
+- **Type commands wirelessly** — a BLE module on a serial port can carry the same
+  command line as USB (`TRANSPORT CONTROL SERIAL1 SECONDARY`), so a phone terminal
+  app or laptop works in the car.
+- **Use OBD-II apps with no adapter** — the ELM327 emulator; see the
+  [Direct BLE OBD Guide](../outputs/DIRECT_BLE_OBD_GUIDE.md).
+- **Configure and watch readings from a browser (optional)** — open
+  <https://preobd.github.io/preOBD/>, a Web Bluetooth page that connects to preOBD
+  through the module. It runs in Chrome or Edge on desktop and Android and needs no
+  install; it can also be added to the home screen. Everything it does can also be
+  done with serial commands. (The page's source is the repository's `webapp/`
+  folder; to host it yourself, serve it over HTTPS or from `localhost`, as Web
+  Bluetooth requires.)
+
 ### Running the webapp and ELM327 emulator concurrently
 
 Each UART Bluetooth module consumes one hardware serial port, and a port assigned to the ELM327 emulator (`BUS SERIAL <n> ELM327 ENABLE`) cannot simultaneously carry preOBD CONTROL/DATA/DEBUG traffic. This means **you cannot share a single BLE module between the preOBD webapp and an ELM327 scanner app** — the port is exclusive to one role.
@@ -458,7 +473,7 @@ Before powering on:
 
 ## References
 
-- [Transport Architecture Guide](../../architecture/TRANSPORT_ARCHITECTURE.md)
+- [Transport Architecture Guide](../../development/architecture/TRANSPORT_ARCHITECTURE.md)
 - [RealDash Setup Guide](../outputs/REALDASH_SETUP_GUIDE.md)
 - [Build Configuration Guide](../configuration/BUILD_CONFIGURATION_GUIDE.md)
 - [HC-05 AT Command Reference](https://www.electronicwings.com/sensors-modules/hc-05-bluetooth-module)

@@ -18,6 +18,17 @@ It's useful for ambient conditions monitoring, altitude estimation, and weather 
 
 ## Quick Start
 
+First tell preOBD which I2C bus the BME280 is wired to (once; it then stays saved).
+preOBD never guesses a bus. Alternatively declare it with `-D I2C_WIRED_BUS=0` in
+your `boards/<board>/wiring.ini`.
+
+```
+CONFIG
+BUS I2C 0            # 0 = Wire (Teensy 4.x pins 18/19, Mega 20/21)
+SAVE
+SYSTEM REBOOT
+```
+
 ### Ambient Temperature
 ```
 SET I2C AMBIENT_TEMP BME280_TEMP

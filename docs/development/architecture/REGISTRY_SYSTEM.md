@@ -482,9 +482,9 @@ When EEPROM version mismatch detected, firmware resets EEPROM to defaults.
 ## See Also
 
 - [EEPROM Structure](EEPROM_STRUCTURE.md) - EEPROM layout and versioning
-- [Adding Sensors Guide](../guides/configuration/ADDING_SENSORS.md) - Step-by-step sensor addition
-- [Sensor Library Header](../../src/sensors/sensor_library.h) - Sensor registry source code
-- [Application Presets Header](../../src/sensors/application_presets.h) - Application registry source code
-- [Units Registry Header](../../src/sensors/units_registry.h) - Units registry source code
-- [Hash Functions Header](../../src/core/hash.h) - DJB2 hash implementation
+- [Adding Sensors Guide](../ADDING_SENSORS.md) - Step-by-step sensor addition
+- [Sensor Library Header](../../../src/sensors/sensor_library.h) - Sensor registry source code
+- [Application Presets Header](../../../src/sensors/application_presets.h) - Application registry source code
+- [Units Registry Header](../../../src/sensors/units_registry.h) - Units registry source code
+- [Hash Functions Header](../../../src/core/hash.h) - DJB2 hash implementation
 

@@ -270,30 +270,40 @@ SAVE
 
 ## Application Types
 
-Each input needs both an **Application** (what you're measuring) and a **Sensor** (physical hardware).
+Each input needs both an **application** (what you're measuring) and a **sensor** (the hardware). The warmup is how long after start-up its alarm waits before it can trigger (see the [Alarm System Guide](../configuration/ALARM_SYSTEM_GUIDE.md)).
 
-| Application | Description | Typical Sensors |
-|-------------|-------------|-----------------|
-| `CHT` | Cylinder Head Temperature | MAX6675, MAX31855 |
-| `EGT` | Exhaust Gas Temperature | MAX31855 |
-| `COOLANT_TEMP` | Engine Coolant Temperature | VDO_120C_TABLE |
-| `OIL_TEMP` | Engine Oil Temperature | VDO_150C_TABLE |
-| `TCASE_TEMP` | Transfer Case Temperature | VDO_150C_TABLE |
-| `OIL_PRESSURE` | Engine Oil Pressure | VDO_5BAR_CURVE |
-| `BOOST_PRESSURE` | Turbo/Supercharger Boost | VDO_2BAR_CURVE, GENERIC_BOOST |
-| `FUEL_PRESSURE` | Fuel Rail Pressure | VDO_5BAR_CURVE |
-| `PRIMARY_BATTERY` | Main Battery Voltage | VOLTAGE_DIVIDER |
-| `AUXILIARY_BATTERY` | Secondary Battery Voltage | VOLTAGE_DIVIDER |
-| `COOLANT_LEVEL` | Coolant Level Switch | FLOAT_SWITCH |
-| `AMBIENT_TEMP` | Ambient Temperature | BME280_TEMP |
-| `BAROMETRIC_PRESSURE` | Barometric Pressure | BME280_PRESSURE |
-| `HUMIDITY` | Relative Humidity | BME280_HUMIDITY |
-| `ELEVATION` | Altitude | BME280_ELEVATION |
-| `ENGINE_RPM` | Engine RPM | W_PHASE_RPM |
-| `VEHICLE_SPEED` | Vehicle speed | HALL_SPEED |
-| `FUEL_LEVEL` | Fuel tank level | VDO_FUEL_LEVEL_*, SW_FUEL_LEVEL_240 |
+| Application | Description | Warmup | Default Sensor |
+|-------------|-------------|--------|----------------|
+| `CHT` | Cylinder Head Temperature | 30s | `MAX31855` |
+| `EGT` | Exhaust Gas Temperature | 20s | `MAX31855` |
+| `COOLANT_TEMP` | Engine Coolant Temperature | 60s | `VDO_120C_STEINHART` |
+| `OIL_TEMP` | Engine Oil Temperature | 60s | `VDO_150C_STEINHART` |
+| `TCASE_TEMP` | Transfer Case Fluid Temperature | 60s | `VDO_120C_STEINHART` |
+| `AMBIENT_TEMP` | Ambient Air Temperature | 0s | `BME280_TEMP` |
+| `OIL_PRESSURE` | Engine Oil Pressure | 5s | `VDO_5BAR_CURVE` |
+| `BOOST_PRESSURE` | Boost Pressure | 1s | `VDO_2BAR_CURVE` |
+| `FUEL_PRESSURE` | Fuel Pressure | 2s | — |
+| `BAROMETRIC_PRESSURE` | Barometric Pressure | 0s | `BME280_PRESSURE` |
+| `PRIMARY_BATTERY` | Primary Battery Voltage | 0s | `VOLTAGE_DIVIDER` |
+| `AUXILIARY_BATTERY` | Auxiliary Battery Voltage | 0s | `VOLTAGE_DIVIDER` |
+| `COOLANT_LEVEL` | Engine Coolant Level | 5s | `FLOAT_SWITCH` |
+| `HUMIDITY` | Relative Humidity | 0s | `BME280_HUMIDITY` |
+| `ELEVATION` | Elevation | 0s | `BME280_ELEVATION` |
+| `ENGINE_RPM` | Engine RPM | 2s | `W_PHASE_RPM` |
+| `HYDRAULIC_PRESSURE` | Hydraulic Pressure | 2s | `VDO_10BAR_TABLE` |
+| `BRAKE_PRESSURE` | Brake Pressure | 1s | `VDO_10BAR_TABLE` |
+| `FUEL_LEVEL` | Fuel Tank Level | 2s | `VDO_FUEL_LEVEL_180` |
+| `VEHICLE_SPEED` | Vehicle Speed | 0s | `HALL_SPEED` |
+| `TRANS_TEMP` | Transmission Fluid Temperature | 60s | `VDO_150C_STEINHART` |
+| `INTAKE_AIR_TEMP` | Intake Air Temperature | 10s | `VDO_120C_STEINHART` |
+| `MAP_PRESSURE` | Manifold Absolute Pressure | 1s | `MPX4250AP` |
+| `THROTTLE_POSITION` | Throttle Position | 0s | `GENERIC_TPS` |
+| `DIFF_TEMP` | Differential Fluid Temperature | 60s | `VDO_150C_STEINHART` |
+| `GEAR_OIL_TEMP` | Gearbox Fluid Temperature | 60s | `VDO_150C_STEINHART` |
+| `OIL_LEVEL` | Engine Oil Level | 10s | `FLOAT_SWITCH` |
+| `INTERCOOLER_TEMP` | Intercooler Temperature | 10s | `GENERIC_TEMP_LINEAR` |
 
-This is the common subset; `LIST APPLICATIONS` shows all of them.
+`LIST APPLICATIONS` prints the same list on the device.
 
 ---
 

@@ -37,7 +37,7 @@ treating one as if it could is a classic bug here (e.g. assuming a screen is fit
 
 **To make a build smaller, comment a `SUPPORTS_*` line out of `board.h`.** That
 is the intended lever, and measured per-feature costs are in
-[`docs/feature_costs.md`](../../feature_costs.md). A board that can't support
+[`docs/development/FEATURE_COSTS.md`](../../development/FEATURE_COSTS.md). A board that can't support
 something at all simply has no line for it — there is no negative to declare.
 
 ## Configuration layers

@@ -13,46 +13,11 @@
 
 ---
 
-## Build Platforms
-
-### Platform Selection
-
-```bash
-pio run -e teensy41      # Teensy 4.1 with built-in SD (recommended)
-pio run -e teensy40      # Teensy 4.0
-pio run -e teensy36      # Teensy 3.6
-pio run -e mega2560      # Arduino Mega 2560
-pio run -e esp32s3dev    # ESP32-S3
-```
-
-### Platform Comparison
-
-| Platform | Flash | RAM | Features | Notes |
-|----------|-------|-----|----------|-------|
-| **Teensy 4.1** | 8MB | 512KB | All | **Recommended** - Built-in SD |
-| Teensy 4.0 | 2MB | 512KB | All | External SD module |
-| Teensy 3.6 | 1MB | 256KB | All | Older platform, 3.3V |
-| Mega 2560 | 256KB | 8KB | Most | 5V, no native CAN |
-| ESP32-S3 | 4MB | 512KB | Most | WiFi/BT capable, 3.3V |
-
-**Recommended**: Teensy 4.1 provides best value with built-in SD card, ample resources, and native CAN support.
-
-See [Build Configuration Guide](../guides/configuration/BUILD_CONFIGURATION_GUIDE.md) for details.
-
----
-
 ## Quick Start
 
-### 1. Connect and Build
+New board? Follow [Getting Started](GETTING_STARTED.md) to install the tools and flash it.
 
-```bash
-git clone https://github.com/preobd/preOBD.git
-cd preOBD
-pio run -e teensy41 -t upload    # Build and upload for Teensy 4.1
-pio device monitor               # 115200 baud
-```
-
-### 2. Configure Your Sensors
+### Configure Your Sensors
 
 ```
 CONFIG                                    # Enter configuration mode
@@ -67,7 +32,7 @@ RUN                                       # Start monitoring
 
 Use `LIST SENSORS` to see sensor categories, then `LIST SENSORS <category>` for specific sensors.
 
-### 3. Operate
+### Operate
 
 **MODE_BUTTON:**
 - Hold during boot → Enter CONFIG mode
@@ -81,7 +46,8 @@ Use `LIST SENSORS` to see sensor categories, then `LIST SENSORS <category>` for 
 ### K-Type Thermocouple (CHT/EGT)
 
 ```
-SET 7 EGT MAX31855                  # EGT on digital pin 7
+BUS SPI 0                           # once: bring up the SPI bus (then SAVE, SYSTEM REBOOT)
+SET 7 EGT MAX31855                  # EGT, chip-select on pin 7
 ```
 
 **Wiring:**
@@ -217,6 +183,7 @@ SET 2 CAL SPEED 100 2008 3.73 2000 300
 ### Environmental (BME280)
 
 ```
+BUS I2C 0                           # once: bring up the I2C bus (then SAVE, SYSTEM REBOOT)
 SET I2C:0 AMBIENT_TEMP BME280_TEMP
 SET I2C:1 BAROMETRIC_PRESSURE BME280_PRESSURE
 SET I2C:2 HUMIDITY BME280_HUMIDITY
@@ -236,7 +203,8 @@ SET 4 COOLANT_LEVEL FLOAT_SWITCH
 ### OBD-II Scanner Support (ELM327 / Torque)
 
 ```
-OUTPUT CAN ENABLE                   # Enable CAN output
+BUS CAN OUTPUT CAN1 ENABLE 500000   # Bring up the CAN bus your transceiver is on
+OUTPUT CAN ENABLE                   # Answer OBD-II requests on it
 # Plug in ELM327 Bluetooth adapter to OBD-II port
 # Open Torque app → Settings → OBD/ECU → Connection → Bluetooth
 # Select your ELM327 adapter
@@ -250,8 +218,8 @@ See [OBD-II Scanner Guide](../guides/outputs/OBD2_SCANNER_GUIDE.md) for details.
 ### RealDash Dashboard
 
 ```
-OUTPUT RealDash ENABLE              # Enable RealDash CAN output
-# Works simultaneously with OBD-II scanners (hybrid mode)
+OUTPUT RealDash ENABLE              # RealDash frames on the data channel (USB or BLE module)
+OUTPUT Serial DISABLE               # CSV shares that channel
 ```
 
 See [RealDash Setup Guide](../guides/outputs/REALDASH_SETUP_GUIDE.md) for details.
@@ -304,7 +272,7 @@ HELP EXAMPLES           # Show worked examples
 | `VERSION` | Show firmware version |
 | `HELP <category>` | Show help for category |
 
-### System Commands
+### Mode Commands
 
 | Command | Description |
 |---------|-------------|
@@ -438,85 +406,13 @@ See [Serial Commands Reference](../reference/SERIAL_COMMANDS.md#bus-configuratio
 
 ---
 
-## Application Types
+## Sensors and Applications
 
-| Application | Description | Suggested Sensors |
-|-------------|-------------|-------------------|
-| `CHT` | Cylinder Head Temperature | MAX6675, MAX31855 |
-| `EGT` | Exhaust Gas Temperature | MAX31855 (high range) |
-| `COOLANT_TEMP` | Engine Coolant | VDO_120C_*, GENERIC_NTC_* |
-| `OIL_TEMP` | Engine Oil | VDO_150C_*, GENERIC_NTC_* |
-| `TCASE_TEMP` | Transfer Case | VDO_150C_*, GENERIC_NTC_* |
-| `OIL_PRESSURE` | Engine Oil Pressure | VDO_5BAR_CURVE, GENERIC_PRESSURE_150PSI |
-| `BOOST_PRESSURE` | Boost/Manifold Pressure | GENERIC_BOOST, VDO_2BAR_CURVE |
-| `FUEL_PRESSURE` | Fuel Pressure | VDO_5BAR_CURVE, GENERIC_PRESSURE_150PSI |
-| `PRIMARY_BATTERY` | Main Battery | VOLTAGE_DIVIDER |
-| `AUXILIARY_BATTERY` | Secondary Battery | VOLTAGE_DIVIDER |
-| `COOLANT_LEVEL` | Coolant Level Switch | FLOAT_SWITCH |
-| `AMBIENT_TEMP` | Ambient Temperature | BME280_TEMP |
-| `BAROMETRIC_PRESSURE` | Barometric Pressure | BME280_PRESSURE |
-| `HUMIDITY` | Relative Humidity | BME280_HUMIDITY |
-| `ELEVATION` | Estimated Altitude | BME280_ELEVATION |
-| `ENGINE_RPM` | Engine RPM | W_PHASE_RPM |
-| `VEHICLE_SPEED` | Vehicle Speed | HALL_SPEED |
+`LIST SENSORS` and `LIST APPLICATIONS` show everything on the device; the
+[Sensor Selection Guide](../guides/sensor-types/SENSOR_SELECTION_GUIDE.md) has the
+complete tables.
 
-This is the common subset — `LIST APPLICATIONS` shows all of them (fuel level, throttle position, transmission and differential temps, and more).
-
----
-
-## Sensor Types
-
-### Thermocouples
-- `MAX6675` - K-Type thermocouple (0-1024°C)
-- `MAX31855` - K-Type thermocouple (high range, -270 to 1372°C)
-
-### VDO Thermistors
-- `VDO_120C_TABLE` - VDO 120°C (lookup table, most accurate)
-- `VDO_120C_STEINHART` - VDO 120°C (Steinhart-Hart, faster)
-- `VDO_150C_TABLE` - VDO 150°C (table)
-- `VDO_150C_STEINHART` - VDO 150°C (Steinhart-Hart)
-- `VDO_200C_TABLE` - VDO 200°C cylinder-head sender
-
-### Other Resistive Temperature Senders
-- `SMITHS_TT6811_TEMP`, `SMITHS_TT4201_TEMP`, `SMITHS_GTR104_TEMP` - Smiths coolant senders
-- `ACDELCO_TEMP_PRE79`, `ACDELCO_TEMP_POST79` - AC Delco GM coolant senders
-- `BOSCH_NTC_M12` - Bosch M12 EFI NTC sensor
-- `JEEP_4_0_TEMP_GAUGE`, `JEEP_CJ_TEMP_GAUGE`, `JEEP_RENIX_CTS` - Jeep senders
-
-### Generic NTC Thermistors
-- `GENERIC_NTC_BETA` - Any NTC; set coefficients with `SET <pin> CAL BETA`
-- `GENERIC_NTC_STEINHART` - Any NTC; set coefficients with `SET <pin> CAL STEINHART`
-- `GENERIC_NTC_TABLE` - Any NTC with a custom lookup table (JSON import)
-
-### Linear Temperature Sensors
-- `GENERIC_TEMP_LINEAR` - Linear 0.5-4.5V, -40 to 150°C
-
-### VDO Pressure Sensors (Resistive)
-- `VDO_2BAR_CURVE` - VDO 0-2 bar
-- `VDO_5BAR_CURVE` - VDO 0-5 bar
-- `VDO_10BAR_TABLE` / `VDO_10BAR_CURVE` - VDO 0-10 bar
-- `VDO_25BAR_TABLE` - VDO 0-25 bar
-- `VDO_80PSI_TABLE` - VDO 0-80 PSI (US)
-- `SMITHS_OIL_PRESSURE_BP`, `SW_OIL_PRESSURE`, `JEEP_4_0_OIL_GAUGE`, `JEEP_CJ_OIL_THIN`, `JEEP_CJ_OIL_DEEP` - Classic gauge senders (0-80 PSI)
-
-### Linear Pressure Sensors (0.5-4.5V)
-- `GENERIC_BOOST` - Generic 0-5 bar boost
-- `GENERIC_PRESSURE_150PSI` - Generic 0-150 PSI
-- `AEM_30_2130_150` - AEM 0-150 PSI
-- `MPX4250AP` - Freescale/NXP MAP sensor (20-250 kPa)
-- `MPX5700AP` - Freescale/NXP MAP sensor (15-700 kPa)
-- Any other range: pick a linear preset and set it with `SET <pin> CAL PRESSURE_LINEAR`
-
-### Other
-- `VOLTAGE_DIVIDER` - 12V battery monitoring
-- `W_PHASE_RPM` - Alternator RPM
-- `HALL_SPEED` - Hall effect speed sensor (VDO, OEM, generic 3-wire)
-- `FLOAT_SWITCH` - Digital level switch
-- `VDO_FUEL_LEVEL_*`, `SW_FUEL_LEVEL_240`, `SW_FORD_FUEL_LEVEL`, `JEEP_CJ_FUEL_LEVEL` - Fuel level senders
-- `GENERIC_TPS` - 0.5-4.5V throttle position
-- `BME280_TEMP`, `BME280_PRESSURE`, `BME280_HUMIDITY`, `BME280_ELEVATION`
-
-### Custom Calibration Commands
+### Custom Calibration
 ```
 SET <pin> CAL RPM <poles> <ratio> [<mult>] <timeout> <min> <max>     # Custom RPM
 SET <pin> CAL SPEED <ppr> <tire_circ> <ratio> [<mult>] <timeout> <max>  # Custom speed
@@ -525,18 +421,6 @@ SET <pin> CAL BETA <bias> <beta> <r0> <t0>           # Custom Beta equation
 SET <pin> CAL PRESSURE_LINEAR <vmin> <vmax> <pmin> <pmax>  # Custom linear range
 SET <pin> CAL BIAS <resistor>                         # Override bias resistor
 ```
-
----
-
-## Platform Quick Reference
-
-| Board | ADC | Voltage | Max Inputs | Notes |
-|-------|-----|---------|------------|-------|
-| Teensy 4.0/4.1 | 12-bit | 3.3V | 40 | Best performance, native CAN |
-| Teensy 3.6 | 12-bit | 3.3V | 32 | Older platform, native CAN |
-| Arduino Mega | 10-bit | 5V | 8 | Tight on flash and RAM; MCP2515 for CAN |
-| ESP32-S3 | 12-bit | 3.3V | 32 | Native TWAI CAN |
-| Arduino Uno | 10-bit | 5V | 8 | Not supported — too little RAM for runtime CLI |
 
 ---
 
@@ -554,33 +438,7 @@ SET <pin> CAL BIAS <resistor>                         # Override bias resistor
 
 ## Troubleshooting
 
-### Sensor reads NaN or ERR
-
-- Check wiring
-- Verify bias resistor is installed (VDO sensors)
-- Confirm correct sensor type is configured
-
-### Alarm triggers at startup
-
-- Normal behavior - each application has a warmup time before its alarm arms (see `RULE <id>`)
-- Warmup can be changed per Rule through a JSON import (`warmupMs`)
-
-### Can't change configuration
-
-- Type `CONFIG` to enter configuration mode
-- Configuration commands only work in CONFIG mode
-
-### LCD doesn't display
-
-- Check I2C address (try 0x27 and 0x3F)
-- Verify I2C wiring (SDA, SCL)
-- Check `DISPLAY STATUS` to ensure the display is enabled and the type/address are right
-
-### CAN not working
-
-- Verify CAN pin assignments in your board definition (`boards/<board>/board.h` — SPI-CAN `CAN_CS_*`/`CAN_INT_*`)
-- Check 120Ω termination resistors
-- Ensure baud rate matches receiver
+See [Troubleshooting](../TROUBLESHOOTING.md).
 
 ---
 

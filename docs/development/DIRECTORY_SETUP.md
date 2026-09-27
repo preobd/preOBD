@@ -519,7 +519,7 @@ This directory contains the comprehensive test mode system for testing outputs w
 - Ask in GitHub Discussions
 
 **Configuration questions:**
-- See [docs/getting-started/QUICK_REFERENCE.md](QUICK_REFERENCE.md)
+- See [docs/getting-started/QUICK_REFERENCE.md](../getting-started/QUICK_REFERENCE.md)
 - Check relevant sensor guide
 - Post in GitHub Discussions with your config
 

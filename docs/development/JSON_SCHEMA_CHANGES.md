@@ -1,7 +1,7 @@
 # JSON Configuration Quick Reference
 
 A contributor cheat sheet for keeping preOBD's JSON configuration format backward compatible.
-(For using JSON backup/restore, see the [JSON Configuration Guide](JSON_CONFIGURATION_GUIDE.md).)
+(For using JSON backup/restore, see the [JSON Configuration Guide](../guides/configuration/JSON_CONFIGURATION_GUIDE.md).)
 
 ## When Do I Need to Update JSON Code?
 

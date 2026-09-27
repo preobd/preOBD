@@ -21,7 +21,7 @@
 // Declared by presence: a board that can't simply omits the line. Never 0.
 // boards/resolve.h turns each of these into the INCLUDE_* flag src/ tests.
 // To reclaim a feature's flash/RAM on this board, comment its line out here —
-// measured per-feature costs are in docs/feature_costs.md. (For a one-off local
+// measured per-feature costs are in docs/development/FEATURE_COSTS.md. (For a one-off local
 // build, put `-D INCLUDE_<X>=0` in your gitignored wiring.ini instead.)
 #define SUPPORTS_CAN              1
 #define SUPPORTS_REALDASH         1

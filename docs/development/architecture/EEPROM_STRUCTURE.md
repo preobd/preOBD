@@ -324,7 +324,7 @@ struct SystemConfig {
 };
 ```
 
-The struct above is a sketch — `SystemConfig` has grown across versions and may grow again. Treat [`src/storage/system_config.h`](../../src/storage/system_config.h) as authoritative.
+The struct above is a sketch — `SystemConfig` has grown across versions and may grow again. Treat [`src/storage/system_config.h`](../../../src/storage/system_config.h) as authoritative.
 
 **Location:** `EEPROM_TOTAL_BYTES − sizeof(SystemConfig)` (per platform). On Teensy 4.1 (4284-byte EEPROM) this is roughly `0x1080`; on Teensy 4.0 (1080-byte EEPROM) it's roughly `0x03B0`. The exact address is computed at compile time from `E2END`.
 
@@ -516,6 +516,6 @@ If you're seeing this on current firmware, run `SAVE` once after upgrade to migr
 ## See Also
 
 - [Registry System](REGISTRY_SYSTEM.md) - Hash-based lookup architecture
-- [Adding Sensors](../guides/configuration/ADDING_SENSORS.md) - Adding new sensor types
-- [Serial Commands](../reference/SERIAL_COMMANDS.md) - SAVE, LOAD, RESET commands
+- [Adding Sensors](../ADDING_SENSORS.md) - Adding new sensor types
+- [Serial Commands](../../reference/SERIAL_COMMANDS.md) - SAVE, LOAD, RESET commands
 

@@ -17,6 +17,19 @@ Thermocouples are ideal for high-temperature measurements like Cylinder Head Tem
 
 ## Quick Start
 
+The MAX6675/MAX31855 modules share the SPI bus. First tell preOBD which SPI bus
+they're wired to (once; it then stays saved) — preOBD never guesses a bus.
+Alternatively declare it with `-D SPI_WIRED_BUS=0` in your `boards/<board>/wiring.ini`.
+
+```
+CONFIG
+BUS SPI 0            # 0 = SPI (Teensy 4.x pins 11/12/13, Mega 51/50/52)
+SAVE
+SYSTEM REBOOT
+```
+
+The pin in `SET <pin> ...` below is the module's chip-select (CS) pin.
+
 ### CHT (Cylinder Head Temperature)
 ```
 SET 6 CHT MAX6675

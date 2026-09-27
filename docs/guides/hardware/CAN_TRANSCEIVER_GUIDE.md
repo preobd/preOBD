@@ -32,7 +32,7 @@ preOBD uses a Hardware Abstraction Layer (HAL) that supports multiple CAN contro
 - ESP32 TWAI (bus 0) + MCP2515 (bus 1) for dual-bus operation
 - Teensy 4.1 with 3 FlexCAN buses + MCP2515 (bus 3) for a 4th bus
 
-See [Build Configuration Guide](../configuration/BUILD_CONFIGURATION_GUIDE.md#hybrid-can-controller-mode) for hybrid mode setup.
+See [Build Configuration Guide](../configuration/BUILD_CONFIGURATION_GUIDE.md#hybrid-can) for hybrid mode setup.
 
 ### When Do You Need This?
 

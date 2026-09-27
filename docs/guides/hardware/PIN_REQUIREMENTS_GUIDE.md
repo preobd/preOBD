@@ -545,9 +545,9 @@ If you have an existing EEPROM configuration using `A0` or `A1` for CHT with MAX
 ## See Also
 
 - **[Sensor Selection Guide](../sensor-types/SENSOR_SELECTION_GUIDE.md)** - Choosing the right sensor for your application
-- **[Adding Sensors Guide](../configuration/ADDING_SENSORS.md)** - Step-by-step sensor integration
-- **[EEPROM Structure Documentation](../../architecture/EEPROM_STRUCTURE.md)** - How pin configurations are stored
-- **[Registry System Documentation](../../architecture/REGISTRY_SYSTEM.md)** - Understanding sensor library architecture
+- **[Adding Sensors Guide](../../development/ADDING_SENSORS.md)** - Step-by-step sensor integration
+- **[EEPROM Structure Documentation](../../development/architecture/EEPROM_STRUCTURE.md)** - How pin configurations are stored
+- **[Registry System Documentation](../../development/architecture/REGISTRY_SYSTEM.md)** - Understanding sensor library architecture
 
 ---
 

@@ -545,15 +545,16 @@ OUTPUT <name> INTERVAL <ms>      # Set send interval (10-60000ms)
 | Name | Description |
 |------|-------------|
 | `CAN` | CAN bus output (OBDII PIDs) |
-| `RealDash` | RealDash CAN frames |
-| `Serial` | CSV serial output |
+| `RealDash` | RealDash frames on the data channel (USB or a serial/BLE module) |
+| `Serial` | CSV lines on the data channel |
 | `SD_Log` | SD card data logging |
 | `Alarm` | Alarm system (buzzer, LED) |
 
 ### Examples
 
 ```
-# Enable CAN at 100ms interval
+# Enable CAN at 100ms interval (the CAN bus itself must be up — see Bus Configuration)
+BUS CAN OUTPUT CAN1 ENABLE 500000
 OUTPUT CAN ENABLE
 OUTPUT CAN INTERVAL 100
 
@@ -695,6 +696,13 @@ examples, see the [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md).
 ## Bus Configuration
 
 Select which I2C, SPI, CAN bus, or serial ports to use for sensors and outputs. This is useful when you want to use alternate bus pins (e.g., Wire1 instead of Wire on Teensy) or enable additional serial ports for communication.
+
+**preOBD never guesses which bus you wired.** An I2C, SPI or CAN bus is brought up
+only when you select it here (`BUS I2C 0`, `BUS SPI 0`, `BUS CAN OUTPUT CAN1 ENABLE`)
+or when your `boards/<board>/wiring.ini` declares it (`-D I2C_WIRED_BUS=0`,
+`SPI_WIRED_BUS`, `CAN_WIRED_BUS`). So an LCD or BME280 needs an I2C bus, a
+thermocouple needs an SPI bus, and the OBD-II CAN output needs a CAN bus
+before they work. The boot log tells you when one is missing.
 
 ### Commands
 
@@ -1454,6 +1462,7 @@ SET A3 OIL_PRESSURE GENERIC_PRESSURE_150PSI
 SET A6 PRIMARY_BATTERY VOLTAGE_DIVIDER
 RULE ADD A2 OUTSIDE 60 120
 RULE ADD A3 OUTSIDE 0.5 7.0
+BUS CAN OUTPUT CAN1 ENABLE 500000
 OUTPUT CAN ENABLE
 OUTPUT CAN INTERVAL 100
 SYSTEM UNITS TEMP F

@@ -6,7 +6,7 @@
  * boards/resolve.h. See boards/README.md.
  *
  * RAM budget: 8 KB HARD limit (target ≤99%). Every CEILING below is a real
- * RAM/flash limit, not a preference — see docs/feature_costs.md for measured
+ * RAM/flash limit, not a preference — see docs/development/FEATURE_COSTS.md for measured
  * costs. SERIAL_*_BUFFER_SIZE live as -D flags in board.ini (core TUs aren't
  * reached by -include).
  */
@@ -22,7 +22,7 @@
 #define CAN_CS                 CAN_CS_0   // legacy aliases used by HAL/system code
 #define CAN_INT                CAN_INT_0
 
-// ===== CEILINGS (board genuinely can't — RAM/flash; see docs/feature_costs.md) =====
+// ===== CEILINGS (board genuinely can't — RAM/flash; see docs/development/FEATURE_COSTS.md) =====
 #define PLATFORM_NO_SD_LOGGING 1     // SD lib + buffers blow the 8 KB budget (and SD.h isn't in lib_deps)
 // The rest are vetoed by simple omission — a capability this board lacks has no
 // line at all, so there is no negative to declare. RAM each WOULD cost if added:
@@ -34,10 +34,10 @@
 // Declared by presence: a board that can't simply omits the line. Never 0.
 // boards/resolve.h turns each of these into the INCLUDE_* flag src/ tests.
 // To reclaim a feature's flash/RAM on this board, comment its line out here —
-// measured per-feature costs are in docs/feature_costs.md. (For a one-off local
+// measured per-feature costs are in docs/development/FEATURE_COSTS.md. (For a one-off local
 // build, put `-D INCLUDE_<X>=0` in your gitignored wiring.ini instead.)
 // Savings shown are what commenting the line out reclaims on THIS board
-// (flash / static RAM, measured — docs/feature_costs.md).
+// (flash / static RAM, measured — docs/development/FEATURE_COSTS.md).
 #define SUPPORTS_CAN             1     // −11,568 B / −691 B — largest RAM consumer
 #define SUPPORTS_SERIAL_OUTPUT   1     //  −3,170 B /  −28 B
 #define SUPPORTS_LCD             1     //  −4,746 B / −236 B

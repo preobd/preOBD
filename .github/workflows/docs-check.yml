@@ -1,0 +1,22 @@
+# Checks README.md and docs/ against the firmware source (tools/check_docs.py):
+# every serial command, sensor and application name in the docs must exist.
+# Same check as the pre-commit hook, for commits made without it.
+name: Docs check
+
+on:
+  pull_request:
+    paths: ["README.md", "docs/**", "src/cli/**", "src/sensors/**", "src/outputs/output_manager.cpp", "tools/check_docs.py"]
+  push:
+    branches: ["main"]
+    paths: ["README.md", "docs/**", "src/cli/**", "src/sensors/**", "src/outputs/output_manager.cpp", "tools/check_docs.py"]
+
+permissions:
+  contents: read
+
+jobs:
+  check-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check docs against firmware
+        run: python3 tools/check_docs.py

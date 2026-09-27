@@ -382,5 +382,5 @@ SAVE
 - [SENSOR_SELECTION_GUIDE.md](../sensor-types/SENSOR_SELECTION_GUIDE.md) - Preset sensor options
 - [THERMISTOR_GUIDE.md](../sensor-types/THERMISTOR_GUIDE.md) - Resistive temperature sensors (NTC, VDO senders)
 - [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) - Bias resistor selection
-- [ADDING_SENSORS.md](ADDING_SENSORS.md) - Adding new sensor types to the library
+- [ADDING_SENSORS.md](../../development/ADDING_SENSORS.md) - Adding new sensor types to the library
 

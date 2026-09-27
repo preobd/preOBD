@@ -58,4 +58,21 @@ fi
 
 echo "✓ Layering check passed"
 
+# Docs drift guard: every command, sensor and application name in README.md
+# and docs/ must exist in the firmware. Runs on every commit because a CLI or
+# registry change can break the docs without touching them.
+echo "🔍 Checking docs against the firmware..."
+python3 tools/check_docs.py
+
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "❌ Docs check failed!"
+    echo "A doc names a command, sensor or application the firmware doesn't have"
+    echo "(or the firmware changed under the doc). Fix the doc, or mark an"
+    echo "intentional example with <!-- docs-check: ignore -->."
+    exit 1
+fi
+
+echo "✓ Docs check passed"
+
 exit 0

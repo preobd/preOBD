@@ -8,8 +8,8 @@
 
 This guide is for **developers and contributors** who want to add new sensor types to the preOBD sensor library. If you just want to configure an existing sensor or use custom calibration values, see:
 
-- **[QUICK_REFERENCE.md](../../getting-started/QUICK_REFERENCE.md)** - Configure existing sensors
-- **[ADVANCED_CALIBRATION_GUIDE.md](ADVANCED_CALIBRATION_GUIDE.md)** - Custom calibration for existing sensor types
+- **[QUICK_REFERENCE.md](../getting-started/QUICK_REFERENCE.md)** - Configure existing sensors
+- **[ADVANCED_CALIBRATION_GUIDE.md](../guides/configuration/ADVANCED_CALIBRATION_GUIDE.md)** - Custom calibration for existing sensor types
 
 preOBD uses a **registry-based architecture** where sensors are defined in PROGMEM arrays with hash-based lookups. This allows adding new sensors without breaking existing EEPROM configurations.
 
@@ -226,7 +226,8 @@ Validating sensor_library.h...
    LIST SENSORS
    ```
 
-3. Configure and test:
+3. Configure and test (with your sensor's name):
+   <!-- docs-check: ignore -->
    ```
    CONFIG
    SET A0 OIL_TEMP MY_NEW_SENSOR
@@ -518,7 +519,7 @@ If you've added a useful sensor type, consider contributing it back:
 
 ## See Also
 
-- **[REGISTRY_SYSTEM.md](../../architecture/REGISTRY_SYSTEM.md)** - Hash-based registry architecture
-- **[ADVANCED_CALIBRATION_GUIDE.md](ADVANCED_CALIBRATION_GUIDE.md)** - Custom calibration for existing sensors
-- **[SENSOR_SELECTION_GUIDE.md](../sensor-types/SENSOR_SELECTION_GUIDE.md)** - Available sensors
+- **[REGISTRY_SYSTEM.md](architecture/REGISTRY_SYSTEM.md)** - Hash-based registry architecture
+- **[ADVANCED_CALIBRATION_GUIDE.md](../guides/configuration/ADVANCED_CALIBRATION_GUIDE.md)** - Custom calibration for existing sensors
+- **[SENSOR_SELECTION_GUIDE.md](../guides/sensor-types/SENSOR_SELECTION_GUIDE.md)** - Available sensors
 

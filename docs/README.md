@@ -1,519 +1,101 @@
 # preOBD Documentation
 
-**Open Source Engine Monitoring System for Classic Cars**
-
 See [DISCLAIMER](../DISCLAIMER.md) for safety information and software limitations.
 
----
+**New to preOBD?** Read these in order:
 
-## Table of Contents
+1. [Choosing Hardware](getting-started/CHOOSING_HARDWARE.md) — which board and parts to buy
+2. [Getting Started](getting-started/GETTING_STARTED.md) — install, flash and get your first reading on the bench
+3. [Sensor Selection Guide](guides/sensor-types/SENSOR_SELECTION_GUIDE.md) — find the senders you have
+4. [Quick Reference](getting-started/QUICK_REFERENCE.md) — the everyday commands
 
-1. [Introduction](#introduction)
-2. [System Architecture](#system-architecture)
-3. [Hardware Setup](#hardware-setup)
-4. [Configuration](#configuration)
-5. [Sensor Library](#sensor-library)
-6. [Application Types](#application-types)
-7. [Output Modules](#output-modules)
-8. [Documentation Index](#documentation-index)
-9. [Getting Help](#getting-help)
+Something not working? [Troubleshooting](TROUBLESHOOTING.md).
 
 ---
 
-## Introduction
+## How preOBD Works
 
-preOBD provides comprehensive engine monitoring for vehicles that lack modern electronic systems. It's designed for classic cars that typically have minimal instrumentation.
+Each **input** is a sensor on a pin, configured with two names:
 
-**Key Features:**
-- Multiple sensor type support (temperature, pressure, voltage, RPM, speed)
-- Pre-calibrated sensor library (50+ sensors, including VDO, Smiths, Stewart-Warner, AC Delco, Bosch, Jeep, and generic NTC)
-- Flexible runtime configuration via serial commands or Web Bluetooth webapp
-- JSON bulk import/export for sensor configuration backup and transfer
-- CAN sensor import — pull OBD-II data from a modern engine swap's ECU alongside classic gauges
-- Multiple outputs: LCD, CAN (OBD-II request/response + broadcast), ELM327 BLE emulator, RealDash, serial, SD logging, relay control
-- Web Bluetooth PWA — configure and monitor wirelessly from a browser, no app install required
-- Multi-platform support (Teensy 4.1, Teensy 3.6/4.0, ESP32-S3, Arduino Mega)
-- Open-source and community-driven
+- the **application** — what it measures (`COOLANT_TEMP`, `OIL_PRESSURE`, `ENGINE_RPM`)
+- the **sensor** — the hardware (`VDO_120C_TABLE`, `MAX6675`, `W_PHASE_RPM`)
 
-**⚠️ Beta Software Notice:**
-This is beta software under active development. Always maintain mechanical backup gauges and thoroughly test before relying on readings for critical engine monitoring.
+```
+SET A2 COOLANT_TEMP VDO_120C_TABLE
+```
+
+preOBD picks the calibration, units and a sensible default alarm from those two
+names. Readings then go to every output you enable — LCD, OBD-II, RealDash, SD
+card, serial — and to **Rules**, which sound alarms and switch relays.
+
+You configure preOBD by typing commands over USB in **CONFIG mode**, `SAVE` them to
+the board's memory, and switch to **RUN mode** for normal use. `HELP` on the device
+lists every command.
 
 ---
 
-## System Architecture
+## Guides
 
-preOBD uses an **input-based system** where each physical pin (Input) is assigned:
+### Sensors
+| Guide | Covers |
+|-------|--------|
+| [Sensor Selection](guides/sensor-types/SENSOR_SELECTION_GUIDE.md) | Every supported sensor and application |
+| [Thermistors](guides/sensor-types/THERMISTOR_GUIDE.md) | VDO, Smiths, AC Delco, Bosch, Jeep senders; generic NTC |
+| [Thermocouples](guides/sensor-types/THERMOCOUPLE_GUIDE.md) | MAX6675 / MAX31855 for CHT and EGT |
+| [Pressure](guides/sensor-types/PRESSURE_SENSOR_GUIDE.md) | Resistive senders, 0.5–4.5V sensors, MAP |
+| [Voltage](guides/sensor-types/VOLTAGE_SENSOR_GUIDE.md) | Battery monitoring |
+| [W-Phase RPM](guides/sensor-types/W_PHASE_RPM_GUIDE.md) | RPM from the alternator |
+| [Hall-Effect Speed](guides/sensor-types/HALL_SPEED_GUIDE.md) | Vehicle speed |
+| [Digital Inputs](guides/sensor-types/DIGITAL_SENSOR_GUIDE.md) | Float switches |
+| [BME280](guides/sensor-types/BME280_GUIDE.md) | Ambient temperature, pressure, humidity |
+| [CAN Sensor Import](guides/sensor-types/CAN_SENSOR_IMPORT_GUIDE.md) | Reading OBD-II PIDs from an ECU |
 
-1. **Application** - What you're measuring (CHT, OIL_PRESSURE, etc.)
-2. **Sensor** - Physical hardware device (VDO sensor, thermocouple, etc.)
-3. **Calibration** - Conversion from raw readings to engineering units (automatic from library)
+### Wiring and Hardware
+| Guide | Covers |
+|-------|--------|
+| [Bias Resistors](guides/hardware/BIAS_RESISTOR_GUIDE.md) | The resistor every resistive sender needs |
+| [Pin Requirements](guides/hardware/PIN_REQUIREMENTS_GUIDE.md) | Which pins suit which sensors |
+| [CAN Transceivers](guides/hardware/CAN_TRANSCEIVER_GUIDE.md) | CAN bus hardware |
+| [Bluetooth](guides/hardware/BLUETOOTH_HARDWARE_GUIDE.md) | HM-10 and other BLE modules; wireless configuration |
+| [LED Indicator](guides/hardware/LED_INDICATOR_GUIDE.md) | RGB status LED |
 
-This separates "what you want to measure" from "hardware you're using."
+### Configuration
+| Guide | Covers |
+|-------|--------|
+| [Config/Run Mode](guides/configuration/CONFIG_RUN_MODE_GUIDE.md) | The two modes and the mode button |
+| [Alarms](guides/configuration/ALARM_SYSTEM_GUIDE.md) | Alarm limits, warnings, acknowledging |
+| [Advanced Calibration](guides/configuration/ADVANCED_CALIBRATION_GUIDE.md) | Custom calibration for unlisted sensors |
+| [JSON Backup and Restore](guides/configuration/JSON_CONFIGURATION_GUIDE.md) | Export, import, SD card backups |
+| [Build Configuration](guides/configuration/BUILD_CONFIGURATION_GUIDE.md) | `wiring.ini`, board definitions, feature flags |
 
-**Example data flow:**
-```
-VDO Oil Pressure Sensor → Pin A3 → 512 (raw ADC) → 2.5 bar → LCD: "EOP:2.5 BAR"
-```
-
----
-
-## Hardware Setup
-
-### Supported Platforms
-
-| Platform | ADC | Voltage | CAN Controller | Recommended For |
-|----------|-----|---------|----------------|-----------------|
-| Teensy 4.1 | 12-bit | 3.3V | FlexCAN (native, transceiver req.) | Best performance, built-in SD |
-| Teensy 4.0 | 12-bit | 3.3V | FlexCAN (native, transceiver req.) | Modern features, smaller footprint |
-| Teensy 3.6 | 13-bit | 3.3V | FlexCAN (native, transceiver req.) | Older builds |
-| ESP32-S3 | 12-bit | 3.3V | TWAI (native, transceiver req.) | BLE / WiFi capability |
-| Arduino Mega 2560 | 10-bit | 5V | MCP2515 (SPI) | Prototyping, 5V sensors |
-
-All native CAN peripherals require an external transceiver (MCP2551, SN65HVD230, etc.). Per-platform RAM input limits are derived from EEPROM size — see [EEPROM_STRUCTURE.md](architecture/EEPROM_STRUCTURE.md).
-
-### Critical: Voltage Compatibility
-
-**3.3V Boards (Teensy, ESP32-S3):**
-- **GPIO pins are NOT 5V tolerant**
-- Applying 5V will permanently damage the board
-- Use 3.3V sensors or voltage dividers
-- Platform auto-configures 3.3V voltage dividers
-
-**5V Boards (Arduino Mega):**
-- Use 5V sensors or appropriate level shifting
-- VDO sensors work directly (resistive)
-- Platform auto-configures 5V voltage dividers
-
-### Wiring Overview
-
-**Thermocouples (MAX6675/MAX31855):**
-```
-MAX6675 Module:
-  VCC → 5V (or 3.3V for 3.3V boards)
-  GND → GND
-  SCK → Pin 13 (SPI clock)
-  SO  → Pin 12 (SPI MISO)
-  CS  → Configurable pin (e.g., Pin 6)
-```
-
-**VDO Temperature Sensors:**
-```
-VDO Sensor:
-  Signal wire → Analog pin (e.g., A2)
-  Ground → Chassis ground (sensor body)
-
-Required: 100Ω bias resistor from pin → VCC (see [Bias Resistor Guide](guides/hardware/BIAS_RESISTOR_GUIDE.md))
-```
-
-**VDO Pressure Sensors:**
-```
-VDO Sensor:
-  Signal wire → Analog pin (e.g., A3)
-  Ground → Chassis ground (sensor body)
-
-Required: 100Ω bias resistor from pin → VCC (see [Bias Resistor Guide](guides/hardware/BIAS_RESISTOR_GUIDE.md))
-```
-
-**Voltage Monitoring:**
-```
-Battery + → 100kΩ → Junction → Analog pin
-Junction → Lower resistor → GND
-  - 22kΩ for 3.3V boards (Teensy)
-  - 6.8kΩ for 5V boards (Arduino)
-```
-
-**CAN Bus:**
-
-**⚠️ All CAN functionality requires an external CAN transceiver** (MCP2551, SN65HVD230, etc.)
-
-For complete wiring diagrams, transceiver selection, and troubleshooting, see:
-[CAN Transceiver Hardware Guide](guides/hardware/CAN_TRANSCEIVER_GUIDE.md)
-
-*Quick reference - Teensy with Native FlexCAN:*
-```
-Teensy Pin 22 (CAN_TX) → CAN transceiver TX
-Teensy Pin 23 (CAN_RX) → CAN transceiver RX
-Transceiver CAN_H → Vehicle CAN High
-Transceiver CAN_L → Vehicle CAN Low
-```
-
-*Quick reference - Boards with MCP2515:*
-```
-MCP2515 CS → Configurable pin (default: Pin 9)
-MCP2515 INT → Configurable pin (default: Pin 2)
-MCP2515 SCK/MISO/MOSI → SPI pins
-MCP2515 requires external MCP2551/TJA1050 transceiver
-```
-
-CAN bus requires 120Ω termination resistors at both ends.
+### Outputs
+| Guide | Covers |
+|-------|--------|
+| [LCD Display](guides/outputs/LCD_DISPLAY_GUIDE.md) | 20×4 I2C LCD |
+| [OBD-II Scanners](guides/outputs/OBD2_SCANNER_GUIDE.md) | ELM327 adapters, Torque, OBD Fusion |
+| [Direct BLE OBD](guides/outputs/DIRECT_BLE_OBD_GUIDE.md) | OBD-II apps over Bluetooth, no adapter |
+| [RealDash](guides/outputs/REALDASH_SETUP_GUIDE.md) | RealDash dashboards |
+| [Data Logging](guides/outputs/DATA_LOGGING_GUIDE.md) | SD card and serial CSV |
+| [Relay Control](guides/outputs/RELAY_CONTROL.md) | Fans, pumps and lights |
 
 ---
 
-## Configuration
+## Reference
 
-### Serial Commands
+- [Serial Commands](reference/SERIAL_COMMANDS.md) — every command
+- [OBD-II PID Reference](reference/OBD2_PID_REFERENCE.md) — the PIDs preOBD answers
+- [Troubleshooting](TROUBLESHOOTING.md)
 
-The help system is hierarchical and organized by category. Use `HELP` to see all categories, or `HELP <category>` for detailed help:
+## Development
 
-```
-HELP                    # Show all help categories
-HELP SET                # Show all SET commands
-HELP CALIBRATION        # Show calibration commands
-HELP QUICK              # Show compact command reference
-```
-
-Configure sensors using the `SET` command:
-
-```
-SET <pin> <application> <sensor>
-```
-
-**Examples:**
-```
-SET 6 CHT MAX6675                    # K-type thermocouple on digital pin 6
-SET A2 COOLANT_TEMP VDO_120C_TABLE  # VDO 120°C sensor on analog pin A2
-SET A3 OIL_PRESSURE VDO_5BAR_CURVE         # VDO 5-bar pressure on analog pin A3
-SET A4 OIL_TEMP VDO_150C_STEINHART   # VDO 150°C sensor on analog pin A4
-SET A6 PRIMARY_BATTERY VOLTAGE_DIVIDER  # Battery voltage on analog pin A6
-```
-
-### Alarm Thresholds
-
-```
-RULE ADD A2 OUTSIDE 60 120                  # Coolant: alarm if <60°C or >120°C
-RULE ADD A3 OUTSIDE 0.5 6.0                 # Oil pressure: alarm if <0.5 bar or >6.0 bar
-```
-
-### Display Units
-
-```
-SET A2 UNITS FAHRENHEIT              # Display coolant in °F
-SET A3 UNITS PSI                     # Display pressure in PSI
-```
-
-### Persistence
-
-```
-SAVE                                 # Save all configuration to EEPROM
-LOAD                                 # Reload from EEPROM
-SYSTEM RESET CONFIRM                 # Erase all configuration and reboot
-```
-
-For complete command reference, see [Serial Commands](reference/SERIAL_COMMANDS.md).
-
----
-
-## Sensor Library
-
-preOBD includes 50+ pre-calibrated sensors. `LIST SENSORS` prints the full list on the device; the most common are:
-
-### Temperature Sensors
-
-| Sensor | Description | Range |
-|--------|-------------|-------|
-| `MAX6675` | K-type thermocouple | 0-1024°C |
-| `MAX31855` | K-type thermocouple (high accuracy) | -270 to 1372°C |
-| `VDO_120C_TABLE` | VDO 120°C sender | -40 to 120°C |
-| `VDO_120C_STEINHART` | VDO 120°C sender (faster) | -40 to 120°C |
-| `VDO_150C_TABLE` | VDO 150°C sender | -40 to 150°C |
-| `VDO_150C_STEINHART` | VDO 150°C sender (faster) | -40 to 150°C |
-| `VDO_200C_TABLE` | VDO 200°C cylinder-head sender | up to 200°C |
-| `SMITHS_*` | Smiths coolant senders (TT6811, TT4201, GTR104) | varies |
-| `ACDELCO_TEMP_PRE79` / `ACDELCO_TEMP_POST79` | AC Delco GM coolant senders | varies |
-| `BOSCH_NTC_M12` | Bosch M12 EFI NTC sensor | -40 to 130°C |
-| `JEEP_4_0_TEMP_GAUGE`, `JEEP_CJ_TEMP_GAUGE`, `JEEP_RENIX_CTS` | Jeep gauge senders and Renix CTS | varies |
-| `GENERIC_NTC_BETA` / `GENERIC_NTC_STEINHART` / `GENERIC_NTC_TABLE` | Any NTC thermistor with your own coefficients | varies |
-| `GENERIC_TEMP_LINEAR` | 0.5-4.5V linear temperature sensor | -40 to 150°C |
-
-### Pressure Sensors
-
-| Sensor | Description | Range |
-|--------|-------------|-------|
-| `VDO_2BAR_CURVE` | VDO 2-bar sender | 0-2 bar (0-29 PSI) |
-| `VDO_5BAR_CURVE` | VDO 5-bar sender | 0-5 bar (0-73 PSI) |
-| `VDO_10BAR_CURVE` / `VDO_25BAR_TABLE` / `VDO_80PSI_TABLE` | Other VDO senders | 0-10 bar, 0-25 bar, 0-80 PSI |
-| `SMITHS_OIL_PRESSURE_BP`, `SW_OIL_PRESSURE`, `JEEP_4_0_OIL_GAUGE` | Classic gauge oil-pressure senders | 0-80 PSI |
-| `GENERIC_BOOST` | Generic 0.5-4.5V | 0-5 bar |
-| `GENERIC_PRESSURE_150PSI` / `AEM_30_2130_150` | Generic / AEM 0.5-4.5V | 0-150 PSI |
-| `MPX4250AP` | Freescale MAP sensor | 20-250 kPa |
-| `MPX5700AP` | Freescale MAP sensor | 15-700 kPa |
-
-### Other Sensors
-
-| Sensor | Description |
-|--------|-------------|
-| `VOLTAGE_DIVIDER` | 12V battery monitoring |
-| `W_PHASE_RPM` | Alternator W-phase RPM |
-| `HALL_SPEED` | Hall effect speed sensor (VDO, OEM, generic) |
-| `FLOAT_SWITCH` | Digital level switch |
-| `VDO_FUEL_LEVEL_*`, `SW_FUEL_LEVEL_240`, `SW_FORD_FUEL_LEVEL`, `JEEP_CJ_FUEL_LEVEL` | Fuel level senders |
-| `GENERIC_TPS` | 0.5-4.5V throttle position |
-| `BME280_TEMP` | Ambient temperature |
-| `BME280_PRESSURE` | Barometric pressure |
-| `BME280_HUMIDITY` | Relative humidity |
-| `BME280_ELEVATION` | Altitude from barometric pressure |
-
-For complete catalog, see [Sensor Selection Guide](guides/sensor-types/SENSOR_SELECTION_GUIDE.md).
-
----
-
-## Application Types
-
-Each input measures a specific application:
-
-| Application | Description | Warmup | Default Sensor |
-|-------------|-------------|--------|----------------|
-| `CHT` | Cylinder Head Temperature | 30s | `MAX31855` |
-| `EGT` | Exhaust Gas Temperature | 20s | `MAX31855` |
-| `COOLANT_TEMP` | Engine Coolant Temperature | 60s | `VDO_120C_STEINHART` |
-| `OIL_TEMP` | Engine Oil Temperature | 60s | `VDO_150C_STEINHART` |
-| `TCASE_TEMP` | Transfer Case Fluid Temperature | 60s | `VDO_120C_STEINHART` |
-| `AMBIENT_TEMP` | Ambient Air Temperature | 0s | `BME280_TEMP` |
-| `OIL_PRESSURE` | Engine Oil Pressure | 5s | `VDO_5BAR_CURVE` |
-| `BOOST_PRESSURE` | Boost Pressure | 1s | `VDO_2BAR_CURVE` |
-| `FUEL_PRESSURE` | Fuel Pressure | 2s | — |
-| `BAROMETRIC_PRESSURE` | Barometric Pressure | 0s | `BME280_PRESSURE` |
-| `PRIMARY_BATTERY` | Primary Battery Voltage | 0s | `VOLTAGE_DIVIDER` |
-| `AUXILIARY_BATTERY` | Auxiliary Battery Voltage | 0s | `VOLTAGE_DIVIDER` |
-| `COOLANT_LEVEL` | Engine Coolant Level | 5s | `FLOAT_SWITCH` |
-| `HUMIDITY` | Relative Humidity | 0s | `BME280_HUMIDITY` |
-| `ELEVATION` | Elevation | 0s | `BME280_ELEVATION` |
-| `ENGINE_RPM` | Engine RPM | 2s | `W_PHASE_RPM` |
-| `HYDRAULIC_PRESSURE` | Hydraulic Pressure | 2s | `VDO_10BAR_TABLE` |
-| `BRAKE_PRESSURE` | Brake Pressure | 1s | `VDO_10BAR_TABLE` |
-| `FUEL_LEVEL` | Fuel Tank Level | 2s | `VDO_FUEL_LEVEL_180` |
-| `VEHICLE_SPEED` | Vehicle Speed | 0s | `HALL_SPEED` |
-| `TRANS_TEMP` | Transmission Fluid Temperature | 60s | `VDO_150C_STEINHART` |
-| `INTAKE_AIR_TEMP` | Intake Air Temperature | 10s | `VDO_120C_STEINHART` |
-| `MAP_PRESSURE` | Manifold Absolute Pressure | 1s | `MPX4250AP` |
-| `THROTTLE_POSITION` | Throttle Position | 0s | `GENERIC_TPS` |
-| `DIFF_TEMP` | Differential Fluid Temperature | 60s | `VDO_150C_STEINHART` |
-| `GEAR_OIL_TEMP` | Gearbox Fluid Temperature | 60s | `VDO_150C_STEINHART` |
-| `OIL_LEVEL` | Engine Oil Level | 10s | `FLOAT_SWITCH` |
-| `INTERCOOLER_TEMP` | Intercooler Temperature | 10s | `GENERIC_TEMP_LINEAR` |
-
-`LIST APPLICATIONS` prints the current list on the device.
-
----
-
-## Output Modules
-
-### LCD Display
-
-20x4 I2C character LCD showing live sensor values.
-
-```
-DISPLAY ENABLE
-DISPLAY DISABLE
-DISPLAY STATUS
-SYSTEM UNITS TEMP F         # Default temperature units (per input: SET <pin> UNITS)
-SET A2 DISPLAY DISABLE      # Hide one input from the LCD
-```
-
-### CAN Bus
-
-OBDII-compatible CAN output for gauges and data loggers.
-
-```
-OUTPUT CAN ENABLE
-OUTPUT CAN INTERVAL 100     # Send every 100ms
-```
-
-### Serial CSV
-
-CSV output for data logging and debugging.
-
-```
-OUTPUT Serial ENABLE
-OUTPUT Serial INTERVAL 1000 # Output every 1 second
-```
-
-### SD Card Logging
-
-Continuous data logging to SD card.
-
-```
-OUTPUT SD_Log ENABLE
-OUTPUT SD_Log INTERVAL 1000     # One row per second (default 5000)
-OUTPUT SD_Log FORMAT WIDE       # or LONG — see below (default WIDE)
-```
-
-Only inputs routed to SD are logged — see `SET <pin> OUTPUT SD_LOG ENABLE|DISABLE`
-(all data outputs are on by default).
-
-**File format.** Two layouts are available.
-
-`WIDE` (default) writes one row per sample with a column per logged input. The
-unit is folded into the column heading, so it drops straight into a spreadsheet
-and graphs without a pivot:
-
-```
-millis,CLT_C,OILP_PSI,EGT_C
-14231,87.50,42.10,610.00
-19231,88.10,41.90,615.50
-24231,88.40,ERROR,617.20
-```
-
-`LONG` writes one row per reading. Every row carries its own sensor name and
-unit, so the layout absorbs a changing input set without needing a new header —
-and it is the layout preOBD wrote before the wide format existed, so scripts
-built on it keep working:
-
-```
-Time,Sensor,Value,Units
-14231,CLT,87.50,C
-14231,OILP,42.10,PSI
-14231,EGT,610.00,C
-```
-
-In both layouts a faulted or disconnected sensor records `ERROR` rather than
-disappearing, so a fault is distinguishable from a gap. (This is the one
-difference from pre-`FORMAT` behaviour, which dropped the reading silently —
-worth knowing if a script converts the value column without guarding.)
-
-`millis`/`Time` is uptime in milliseconds, captured once per sample — every
-reading in a tick shares one timestamp. There is no RTC on any supported board,
-so rows are correlatable within a session but not tied to wall-clock time.
-
-**Files** are written to the card root as `LOG0001.CSV`, `LOG0002.CSV`, … The
-next free number is claimed when logging starts, so a power cycle always begins
-a new file rather than appending to the previous drive's.
-
-In `WIDE`, the column set is fixed when a file is opened. Changing what gets
-logged mid-session — adding or clearing an input, toggling its SD routing,
-changing its units — closes the current file and starts the next one, so a
-header always describes the rows beneath it. `LONG` needs no such roll, since
-each row names its own sensor. Switching `FORMAT` always starts a new file.
-
-**Durability.** Rows are flushed at least once a second, so an abrupt power cut
-loses at most about a second of data. `OUTPUT SD_Log DISABLE` closes the file
-cleanly.
-
-**Checking on it.** A mounted card does not mean rows are landing — a full card,
-or one pulled mid-drive, fails every write. `SYSTEM DIAG HW` reports the live
-state:
-
-```
-[hardware]    SD card .............. OK
-[hardware]    SD logging ........... OK (LOG0007.CSV, WIDE, 412 rows, 0 errors)
-```
-
-`OUTPUT STATUS` also shows the active format, and it round-trips through
-`SYSTEM DUMP JSON` / `JSON IMPORT` as `system.outputs.sd.format`.
-
-### Alarm Output
-
-Buzzer and LED alarm indication.
-
-```
-OUTPUT Alarm ENABLE
-OUTPUT Alarm INTERVAL 500   # Check alarms every 500ms
-```
-
-### OBD-II Scanner Support
-
-Standard OBD-II request/response for Bluetooth scanners.
-
-```
-OUTPUT CAN ENABLE
-# Works automatically with ELM327 Bluetooth adapters
-# Supports apps: Torque, OBD Fusion, Car Scanner, DashCommand
-```
-
-See [OBD-II Scanner Guide](guides/outputs/OBD2_SCANNER_GUIDE.md) for setup.
-
-### Bluetooth (BLE)
-
-preOBD has three BLE connectivity modes:
-
-**1. Web Bluetooth webapp** — A browser-based PWA (installable via GitHub Pages) for wireless sensor configuration and live monitoring. No app install required; works in Chrome and Edge on desktop and Android.
-
-**2. ELM327 AT command emulator** — Emulates an ELM327 OBD adapter over BLE, so OBD-II apps (Torque, OBD Fusion, Car Scanner) can connect directly to preOBD without any hardware adapter.
-
-```
-BUS SERIAL 2 ENABLE 9600       # BLE module (e.g. HM-10) wired to Serial2
-BUS SERIAL 2 ELM327 ENABLE     # Dedicate that port to the ELM327 emulator
-SAVE
-```
-
-See the [Direct BLE OBD Guide](guides/outputs/DIRECT_BLE_OBD_GUIDE.md) for details.
-
-**3. HM-10 / UART BLE module** — Transparent serial bridge for the webapp or a serial terminal over BLE. Configure the module with `AT <n> <command>` (n = the serial port number).
-
-```
-BUS SERIAL 1 ENABLE 9600     # The HM-10 is wired to Serial1
-AT 1 AT+NAMEpreOBD           # Configure the module
-TRANSPORT CONTROL SERIAL1 SECONDARY   # Accept commands over BLE as well as USB
-```
-
-See [BLUETOOTH_HARDWARE_GUIDE.md](guides/hardware/BLUETOOTH_HARDWARE_GUIDE.md), [DIRECT_BLE_OBD_GUIDE.md](guides/outputs/DIRECT_BLE_OBD_GUIDE.md), and [BLE_GATT_PROFILE.md](architecture/BLE_GATT_PROFILE.md).
-
----
-
-## Documentation Index
-
-### Getting Started
-- [QUICK_REFERENCE.md](getting-started/QUICK_REFERENCE.md) - Command cheat sheet
-- [DIRECTORY_SETUP.md](getting-started/DIRECTORY_SETUP.md) - Project file organization
-
-### Configuration Guides
-- [CONFIG_RUN_MODE_GUIDE.md](guides/configuration/CONFIG_RUN_MODE_GUIDE.md) - Safe configuration workflow
-- [BUILD_CONFIGURATION_GUIDE.md](guides/configuration/BUILD_CONFIGURATION_GUIDE.md) - Compile-time feature flags
-- [JSON_CONFIGURATION_GUIDE.md](guides/configuration/JSON_CONFIGURATION_GUIDE.md) - JSON config import/export
-- [JSON_QUICK_REFERENCE.md](guides/configuration/JSON_QUICK_REFERENCE.md) - JSON command cheat sheet
-- [ADDING_SENSORS.md](guides/configuration/ADDING_SENSORS.md) - Adding new sensor types
-- [ADVANCED_CALIBRATION_GUIDE.md](guides/configuration/ADVANCED_CALIBRATION_GUIDE.md) - Custom calibrations
-- [ALARM_SYSTEM_GUIDE.md](guides/configuration/ALARM_SYSTEM_GUIDE.md) - Alarm state machine
-
-### Sensor Type Guides
-- [SENSOR_SELECTION_GUIDE.md](guides/sensor-types/SENSOR_SELECTION_GUIDE.md) - Complete sensor catalog
-- [THERMOCOUPLE_GUIDE.md](guides/sensor-types/THERMOCOUPLE_GUIDE.md) - MAX6675/MAX31855
-- [THERMISTOR_GUIDE.md](guides/sensor-types/THERMISTOR_GUIDE.md) - Resistive temperature sensors (NTC, VDO senders)
-- [PRESSURE_SENSOR_GUIDE.md](guides/sensor-types/PRESSURE_SENSOR_GUIDE.md) - Pressure sensors (VDO, MPX, generic)
-- [W_PHASE_RPM_GUIDE.md](guides/sensor-types/W_PHASE_RPM_GUIDE.md) - RPM for classic cars
-- [HALL_SPEED_GUIDE.md](guides/sensor-types/HALL_SPEED_GUIDE.md) - Vehicle speed sensing
-- [VOLTAGE_SENSOR_GUIDE.md](guides/sensor-types/VOLTAGE_SENSOR_GUIDE.md) - Voltage monitoring
-- [DIGITAL_SENSOR_GUIDE.md](guides/sensor-types/DIGITAL_SENSOR_GUIDE.md) - Float switches
-- [BME280_GUIDE.md](guides/sensor-types/BME280_GUIDE.md) - BME280 environmental sensor
-- [CAN_SENSOR_IMPORT_GUIDE.md](guides/sensor-types/CAN_SENSOR_IMPORT_GUIDE.md) - Import sensors from CAN bus
-
-### Output Guides
-- [REALDASH_SETUP_GUIDE.md](guides/outputs/REALDASH_SETUP_GUIDE.md) - RealDash dashboard
-- [OBD2_SCANNER_GUIDE.md](guides/outputs/OBD2_SCANNER_GUIDE.md) - ELM327 / Torque setup
-- [DIRECT_BLE_OBD_GUIDE.md](guides/outputs/DIRECT_BLE_OBD_GUIDE.md) - Direct BLE OBD adapters
-- [RELAY_CONTROL.md](guides/outputs/RELAY_CONTROL.md) - Relay control outputs
-
-### Hardware Guides
-- [CAN_TRANSCEIVER_GUIDE.md](guides/hardware/CAN_TRANSCEIVER_GUIDE.md) - CAN transceiver selection and wiring
-- [BLUETOOTH_HARDWARE_GUIDE.md](guides/hardware/BLUETOOTH_HARDWARE_GUIDE.md) - BLE module selection and wiring
-- [BIAS_RESISTOR_GUIDE.md](guides/hardware/BIAS_RESISTOR_GUIDE.md) - Resistor selection
-- [LED_INDICATOR_GUIDE.md](guides/hardware/LED_INDICATOR_GUIDE.md) - Status LED wiring
-- [PIN_REQUIREMENTS_GUIDE.md](guides/hardware/PIN_REQUIREMENTS_GUIDE.md) - Pin validation
-
-### Reference
-- [SERIAL_COMMANDS.md](reference/SERIAL_COMMANDS.md) - Complete command reference
-- [OBD2_PID_REFERENCE.md](reference/OBD2_PID_REFERENCE.md) - OBD-II PID catalog
-
-### Architecture (Contributors)
-- [REGISTRY_SYSTEM.md](architecture/REGISTRY_SYSTEM.md) - Hash-based sensor lookups
-- [EEPROM_STRUCTURE.md](architecture/EEPROM_STRUCTURE.md) - Memory layout and versioning
-- [TRANSPORT_ARCHITECTURE.md](architecture/TRANSPORT_ARCHITECTURE.md) - Multi-transport serial communication
-- [CAN_HAL_ARCHITECTURE.md](architecture/CAN_HAL_ARCHITECTURE.md) - CAN controller abstraction and hybrid mode
-- [BLE_GATT_PROFILE.md](architecture/BLE_GATT_PROFILE.md) - BLE GATT service definitions
+For contributors: [development documentation](development/README.md) — code
+layout, architecture, adding sensors.
 
 ---
 
 ## Getting Help
 
-**File organization questions:**
-- Check [DIRECTORY_SETUP.md](getting-started/DIRECTORY_SETUP.md)
+- **GitHub Issues** — bug reports
+- **GitHub Discussions** — questions and setup help
 
-**Configuration questions:**
-- Check [QUICK_REFERENCE.md](getting-started/QUICK_REFERENCE.md)
-- Check the relevant sensor guide
-- Post in GitHub Discussions
-
-**Bug reports:**
-- GitHub Issues
-- Include firmware version (`VERSION` command)
-- Include your configuration (`SYSTEM DUMP` command)
+Include your board, `VERSION`, `SYSTEM DUMP` and `SYSTEM DIAG` output.

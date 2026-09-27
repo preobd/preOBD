@@ -65,7 +65,7 @@ has to be overridable.)
 // #define SUPPORTS_REALDASH  1   ← reclaims 222 B flash / 36 B RAM on mega2560
 ```
 
-`docs/feature_costs.md` has the measured cost of every flag on mega2560, the one
+`docs/development/FEATURE_COSTS.md` has the measured cost of every flag on mega2560, the one
 board where the 8 KB budget makes the numbers decision-relevant; `mega2560/board.h`
 repeats them inline per flag.
 

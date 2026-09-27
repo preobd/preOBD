@@ -3,7 +3,7 @@
 
 Toggles one knob at a time in a board profile relative to the current baseline,
 rebuilds, and diffs flash (.text + .data) and static RAM (.data + .bss) from the
-ELF. Regenerate the table in docs/feature_costs.md as the code evolves.
+ELF. Regenerate the table in docs/development/FEATURE_COSTS.md as the code evolves.
 
 Usage:
     python3 tools/measure_feature_costs.py            # mega2560 (default)
@@ -31,7 +31,7 @@ ENVS = {
         # knobs this tool toggles. WIRED features (LED / button / buzzer) are
         # gated on their wiring.ini pin, so they're measured by adding those to
         # the overlay, not here — their costs are already recorded in
-        # docs/feature_costs.md.
+        # docs/development/FEATURE_COSTS.md.
         "profile": "boards/mega2560/board.h",
         "size_tool": "~/.platformio/packages/toolchain-atmelavr/bin/avr-size",
         "ram_total": 8192,

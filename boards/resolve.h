@@ -79,7 +79,7 @@
 // ---- Feature code: in the image iff the board declares the capability ----
 // These need no wiring beyond what the board already has, so capability is the
 // only gate. Comment a SUPPORTS_* line out of board.h to reclaim its flash;
-// see docs/feature_costs.md for the measured cost of each.
+// see docs/development/FEATURE_COSTS.md for the measured cost of each.
 //
 // Tested by VALUE, not defined(). The convention is "declare by presence, never
 // write 0" — but if someone writes `#define SUPPORTS_TEST_MODE 0` anyway (an

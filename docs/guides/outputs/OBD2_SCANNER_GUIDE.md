@@ -140,20 +140,24 @@ GND         →   GND
 
 ## Software Setup
 
-### Step 1: Enable CAN Output in preOBD
+### Step 1: Bring Up the CAN Bus and the OBD-II Output
 
-CAN output must be enabled in your build configuration:
+CAN support is built into every board's firmware. It is switched on at runtime,
+once, from the serial console:
 
-**In `platformio.ini`:**
-```ini
-build_flags =
-    -D SUPPORTS_CAN              ; Enable CAN bus output
+```
+CONFIG
+BUS CAN OUTPUT CAN1 ENABLE 500000   # the bus your transceiver is wired to, at 500 kbps
+OUTPUT CAN ENABLE                   # answer OBD-II requests on it
+SAVE
+SYSTEM REBOOT
 ```
 
-Verify CAN is enabled:
-```
-pio run -e teensy41
-```
+preOBD never guesses which CAN bus you wired. Instead of `BUS CAN OUTPUT ...` you
+can declare it in `boards/<board>/wiring.ini` with `-D CAN_WIRED_BUS=0` (0 = CAN1).
+On the Arduino Mega the single MCP2515 module is `CAN1`.
+
+`BUS CAN` shows the bus state and `OUTPUT STATUS` shows the output.
 
 ### Step 2: Configure Sensors
 
@@ -166,20 +170,8 @@ SET 7 EGT MAX31855
 SAVE
 ```
 
-Each sensor with an OBD-II PID assignment will automatically be available via the scanner.
-
-### Step 3: Upload Firmware
-
-```bash
-pio run -e teensy41 -t upload
-```
-
-On boot, you should see:
-```
-✓ Native FlexCAN initialized (500kbps)
-✓ OBD-II RX filters configured (0x7DF, 0x7E0)
-✓ Built OBD-II PID lookup table: 8 PIDs available
-```
+Each sensor with an OBD-II PID assignment is automatically available to the
+scanner (`LIST INPUTS` shows the PID next to each input).
 
 ---
 
@@ -425,5 +417,5 @@ processOBD2Request(0x7DF, testRequest, 8);
 - [RealDash Setup Guide](REALDASH_SETUP_GUIDE.md) - Broadcast mode configuration
 - [OBD-II PID Reference](../../reference/OBD2_PID_REFERENCE.md) - Complete PID table
 - [Serial Commands](../../reference/SERIAL_COMMANDS.md) - Sensor configuration
-- [CAN Bus Output](../../README.md#can-bus) - General CAN configuration
+- [CAN Transceiver Guide](../hardware/CAN_TRANSCEIVER_GUIDE.md) - CAN bus hardware
 

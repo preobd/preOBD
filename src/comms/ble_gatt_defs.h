@@ -11,7 +11,7 @@
  *   Tier 1: Text commands over GATT (universal, any BLE hardware)
  *   Tier 2: Binary characteristics + OTA (nRF coprocessor, spec only)
  *
- * See docs/architecture/BLE_GATT_PROFILE.md for the full specification.
+ * See docs/development/architecture/BLE_GATT_PROFILE.md for the full specification.
  */
 
 #ifndef BLE_GATT_DEFS_H

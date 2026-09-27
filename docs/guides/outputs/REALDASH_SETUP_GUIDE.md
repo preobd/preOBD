@@ -34,23 +34,32 @@ To connect preOBD to RealDash, you need one of the following:
    - Free version supports 1 dashboard with basic features
    - Premium version unlocks unlimited dashboards and advanced features
 
-2. **preOBD Firmware**
-   - RealDash output must be enabled in `config.h`
-   - Verify `#define SUPPORTS_REALDASH` is uncommented
-   - Upload firmware to Teensy
+2. **preOBD Firmware** on any board except the Arduino Mega (which leaves RealDash out to save RAM)
 
 ## Installation Steps
 
 ### Step 1: Enable RealDash Output in preOBD
 
-Edit `/src/config.h`:
+RealDash frames are sent on preOBD's **data channel** — USB by default. In the
+serial console:
 
-```cpp
-// ===== OUTPUT MODULES =====
-#define SUPPORTS_REALDASH      // Enable RealDash CAN output
+```
+CONFIG
+OUTPUT RealDash ENABLE
+OUTPUT Serial DISABLE        # the CSV output shares the data channel; turn it off
+SAVE
 ```
 
-Compile and upload the firmware to your Teensy.
+For a **Bluetooth module** (e.g. an HM-10 on Serial1), also route the data
+channel to it:
+
+```
+BUS SERIAL 1 ENABLE 115200
+TRANSPORT DATA SERIAL1
+SAVE
+```
+
+`TRANSPORT STATUS` shows where each channel goes.
 
 ### Step 2: Install preOBD XML Channel Description
 

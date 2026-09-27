@@ -230,10 +230,10 @@ frame decoding (`CAN_IMPORT`). The others can also be set with `SET <pin> CAL ..
 
 Changing the configuration format (adding fields, calibration types, or
 bumping the schema version) is covered in the contributor checklist:
-[JSON_QUICK_REFERENCE.md](JSON_QUICK_REFERENCE.md). The code lives in
+[JSON_SCHEMA_CHANGES.md](../../development/JSON_SCHEMA_CHANGES.md). The code lives in
 `src/storage/json_config.cpp` and `src/rules/rules_json.cpp`.
 
 ## See Also
 
 - [Serial Commands Reference](../../reference/SERIAL_COMMANDS.md#persistence-commands) — `SAVE` / `LOAD`
-- [EEPROM Structure](../../architecture/EEPROM_STRUCTURE.md) — how the configuration is stored internally
+- [EEPROM Structure](../../development/architecture/EEPROM_STRUCTURE.md) — how the configuration is stored internally
