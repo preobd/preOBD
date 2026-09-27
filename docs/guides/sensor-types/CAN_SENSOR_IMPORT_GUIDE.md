@@ -1,6 +1,6 @@
 # CAN Sensor Import Guide
 
-**Import sensors from CAN bus (OBD-II, J1939, custom protocols)**
+**Import sensors from a CAN bus (OBD-II PIDs and simple custom frames)**
 
 ---
 
@@ -11,13 +11,19 @@ preOBD can import sensors from the CAN bus and use them alongside local analog/d
 - **Monitor vehicle ECU sensors** (engine RPM, coolant temp, vehicle speed) via OBD-II
 - **Combine remote and local sensors** (ECU sensors + your custom oil temp sensor)
 - **Use dual-CAN setups** (import from vehicle ECU on CAN1, broadcast all sensors on CAN2)
-- **Support custom protocols** (J1939, proprietary CAN protocols)
+- **Decode simple custom frames** from other CAN devices (configured through JSON)
 
 **Key features:**
 - Up to 32 CAN-imported sensors (virtual pins CAN:0 to CAN:31)
 - Automatic configuration for ~30 common OBD-II PIDs
 - EEPROM persistence (save/load CAN sensor configurations)
 - Independent input and output buses (read from one CAN bus, broadcast to another)
+
+> **preOBD listens; it does not poll.** CAN input is passive — preOBD never sends
+> OBD-II requests to the ECU. An imported PID updates when an OBD-II *response*
+> for it appears on the bus: because a scan tool, dash or other module is asking
+> for it, or because the ECU broadcasts it. If nothing on the bus is requesting
+> a PID, it will read `NaN`. `SCAN CAN` shows what is actually on the bus.
 
 ---
 
@@ -95,16 +101,10 @@ BUS CAN INPUT CAN1 ENABLE
 BUS CAN OUTPUT CAN2 ENABLE
 
 # Disable CAN input (keep output active)
-BUS CAN INPUT DISABLE
+BUS CAN INPUT CAN1 DISABLE
 
 # Show CAN bus status
 BUS CAN
-```
-
-**Output:**
-```
-CAN Input:  CAN1 (ENABLED, 500000 bps)
-CAN Output: CAN2 (ENABLED, 500000 bps)
 ```
 
 ---
@@ -142,7 +142,7 @@ SET CAN 0x0F
 
 ### Method 2: SCAN CAN (Discovery)
 
-Use this when you **don't know what PIDs are available**.
+Use this when you **don't know what PIDs are available** on the bus.
 
 ```bash
 # Enable CAN input first
@@ -170,7 +170,9 @@ Found 12 PIDs:
   0x0F  Intake Air Temp         0x7E8   1    450
   0x11  Throttle Position       0x7E8   1    450
 
-Use SET CAN <pid> to import a sensor.
+To import a PID: SET CAN <pid_hex>
+Example: SET CAN 0x0C (imports Engine RPM)
+
 Type 'SCAN CANCEL' to clear results.
 ```
 
@@ -180,7 +182,8 @@ Then import sensors using `SET CAN <pid>` as shown above.
 
 ## Standard OBD-II PIDs
 
-preOBD includes automatic configuration for ~30 common OBD-II PIDs:
+preOBD includes automatic configuration for ~30 common OBD-II PIDs (`LIST PIDS JSON`
+prints the full table). The most common:
 
 | PID  | Name                      | Units   | Data Length |
 |------|---------------------------|---------|-------------|
@@ -188,9 +191,9 @@ preOBD includes automatic configuration for ~30 common OBD-II PIDs:
 | 0x0C | Engine RPM                | RPM     | 2 bytes     |
 | 0x0D | Vehicle Speed             | km/h    | 1 byte      |
 | 0x0F | Intake Air Temperature    | °C      | 1 byte      |
-| 0x10 | MAF Air Flow Rate         | g/s     | 2 bytes     |
+| 0x0B | Intake Manifold Pressure  | kPa     | 1 byte      |
 | 0x11 | Throttle Position         | %       | 1 byte      |
-| 0x21 | Distance Since MIL        | km      | 2 bytes     |
+| 0x42 | Control Module Voltage    | V       | 2 bytes     |
 | 0x2F | Fuel Tank Level           | %       | 1 byte      |
 | 0x46 | Ambient Air Temperature   | °C      | 1 byte      |
 | 0x5C | Engine Oil Temperature    | °C      | 1 byte      |
@@ -203,7 +206,7 @@ If you import a PID not in the table (e.g., manufacturer-specific), preOBD uses 
   Hint: Use 'SET CAN:0 ...' commands to customize
 ```
 
-Then manually configure with SET commands (see Customization section).
+Its scaling can then be set through JSON (see [Custom Frames](#custom-frames)).
 
 ---
 
@@ -221,9 +224,9 @@ CAN sensors use virtual pins `CAN:0` through `CAN:31`:
 
 # Reference CAN sensors by index in other commands
 > RULE ADD CAN:0 OUTSIDE 500 6000
-> SET CAN:1 NAME "SPEED"
+> SET CAN:1 ABBR SPEED
 > INFO CAN:0
-> ENABLE CAN:1
+> SET CAN:1 INPUT ENABLE
 > CLEAR CAN:0
 ```
 
@@ -241,9 +244,9 @@ CAN sensors use virtual pins `CAN:0` through `CAN:31`:
 Once imported, CAN sensors support all standard SET commands:
 
 ```bash
-# Change display name
-SET CAN:0 NAME "ERPM"
-SET CAN:0 NAME "Engine RPM"
+# Change labels
+SET CAN:0 ABBR ERPM
+SET CAN:0 NAME Engine RPM
 
 # Set alarm thresholds (band; setting it arms the alarm Rule)
 SET CAN:0 ALARM 500 6000            # Alarm if <500 or >6000 RPM
@@ -251,36 +254,47 @@ SET CAN:0 ALARM 500 6000            # Alarm if <500 or >6000 RPM
 # Change units
 SET CAN:1 UNITS MPH          # Change speed from km/h to MPH
 
-# Configure output PID
-SET CAN:0 OBD 0x0C 2         # Broadcast as PID 0x0C (2 bytes)
+# Stale-data timeout (default 2000 ms)
+SET CAN:0 CAN_TIMEOUT 500
+
+# Report it on preOBD's own OBD-II output under a PID
+SET CAN:0 OBD_PID 0x0C
+SET CAN:0 OBD_LENGTH 2
 ```
 
-### Manual CAN Calibration
+### Custom Frames
 
-For unknown PIDs or custom protocols, manually configure calibration:
+For a PID preOBD doesn't know, or a frame from another CAN device, the
+decoding is set through a [JSON import](../configuration/JSON_CONFIGURATION_GUIDE.md) —
+there is no serial command for it. Import the input first (`SET CAN 0x99`), export
+with `SYSTEM DUMP JSON`, edit that input's calibration, and import it back:
 
-```bash
-# Import unknown PID
-SET CAN 0x99
-
-# Configure CAN source (CAN ID and PID)
-SET CAN:0 CAN SOURCE 0x400 0x99
-
-# Configure data format
-SET CAN:0 CAN FORMAT 2 BIGENDIAN SCALE 0.25 OFFSET 0.0
+```json
+"calibration": {
+  "type": "CAN_IMPORT",
+  "source": "CUSTOM",
+  "params": {
+    "sourceCanId": 1024,
+    "sourcePid": 153,
+    "dataOffset": 0,
+    "dataLength": 2,
+    "isBigEndian": true,
+    "scaleFactor": 0.25,
+    "offset": 0.0,
+    "timeoutMs": 2000
+  }
+}
 ```
 
-**CAN FORMAT syntax:**
-```
-SET <pin> CAN FORMAT <bytes> <BIGENDIAN|LITTLEENDIAN> SCALE <factor> OFFSET <offset>
-```
+How a frame is matched:
+- **OBD-II Mode 01 responses** (mode byte `0x41`): matched on the CAN ID and the PID; data starts after the PID.
+- **Any other frame**: matched on the CAN ID and **the first data byte**, which is treated as an identifier; data starts after it.
+- The value is `raw × scaleFactor + offset`, reading `dataLength` bytes (1-4) starting `dataOffset` bytes into the data.
 
-**Parameters:**
-- `<bytes>`: Number of data bytes (1-4)
-- `BIGENDIAN`: Most significant byte first (OBD-II standard)
-- `LITTLEENDIAN`: Least significant byte first (some protocols)
-- `SCALE <factor>`: Multiply raw value by this (e.g., 0.25 for RPM)
-- `OFFSET <offset>`: Add this to scaled value (e.g., -40 for temperature)
+**Limitations:** CAN IDs are stored as 16 bits, and a non-OBD frame must carry a
+fixed identifier in its first byte. That fits many simple 11-bit broadcast
+protocols, but **not J1939**, whose 29-bit IDs and data layout don't match this
+scheme. J1939 decoding is not supported yet.
 
 ---
 
@@ -363,7 +377,7 @@ Ensure CAN input is enabled and bus is active.
 3. **Check baud rate:**
    ```bash
    BUS CAN INPUT BAUDRATE 500000   # Most vehicles use 500 kbps
-   BUS CAN INPUT BAUDRATE 250000   # Some older vehicles (J1939) use 250 kbps
+   BUS CAN INPUT BAUDRATE 250000   # Some buses run at 250 kbps
    ```
 
 4. **Use listen-only mode for vehicle ECU buses:**
@@ -435,44 +449,15 @@ BUS CAN OUTPUT CAN2 ENABLE
 
 ## Advanced Topics
 
-### J1939 Protocol Support
-
-J1939 uses 29-bit extended CAN IDs and different addressing:
-
-```bash
-# Import J1939 PGN (example: Engine Speed from address 0)
-SET CAN:0 CAN SOURCE 0x18F00400 0x01
-SET CAN:0 CAN FORMAT 2 LITTLEENDIAN SCALE 0.125 OFFSET 0.0
-SET CAN:0 NAME "J1939RPM"
-```
-
-**Note:** J1939 support is basic in this release. Future versions will add PGN tables and automatic configuration.
-
-### Custom CAN Protocols
-
-For proprietary CAN protocols:
-
-```bash
-# Import sensor with custom CAN ID and identifier
-SET CAN 0x99                          # Import unknown PID
-SET CAN:0 CAN SOURCE 0x300 0x10       # CAN ID 0x300, identifier byte 0x10
-SET CAN:0 CAN FORMAT 4 LITTLEENDIAN SCALE 0.01 OFFSET -100.0
-SET CAN:0 NAME "CUSTOM"
-```
-
 ### Frame Cache Details
 
-preOBD uses a circular buffer to cache CAN frames:
+Received frames are kept in a small cache that sensors read from:
 
-- **Size:** 16 entries (200 bytes RAM)
-- **Replacement:** LRU (Least Recently Used)
-- **Timeout:** 2000ms (frames older than 2 seconds treated as stale)
-- **Hash function:** `(can_id ^ pid) & 0x0F`
+- **Size:** 16 entries (8 on the Arduino Mega)
+- **Timeout:** a value older than the input's CAN timeout (default 2000 ms) reads as `NaN`
 
-**Implications:**
-- If >16 different PIDs are active, oldest ones get evicted
-- High-frequency PIDs (RPM, speed) stay in cache
-- Low-frequency PIDs (fuel level) may get evicted if many sensors configured
+If more distinct frames/PIDs are active than the cache holds, the least recently
+seen are evicted, so low-rate values can drop out on a busy bus.
 
 ---
 
@@ -518,20 +503,19 @@ SAVE
 RUN
 ```
 
-### Example 3: Dual-Bus with Separate Baud Rates (Mixed Protocols)
+### Example 3: Listen-Only Input, Separate Output Bus
 
 ```bash
 CONFIG
 
-# Configure input bus (J1939 vehicle ECU at 250 kbps, listen-only)
-BUS CAN INPUT CAN1 LISTEN 250000    # Passive monitoring of J1939 bus
+# Read the vehicle bus passively (no ACK, no transmit)
+BUS CAN INPUT CAN1 LISTEN 500000
 
-# Configure output bus (OBD-II/RealDash at 500 kbps)
-BUS CAN OUTPUT CAN2 ENABLE 500000   # Active broadcast to dashboard
+# Broadcast to the dashboard on its own bus
+BUS CAN OUTPUT CAN2 ENABLE 500000
 
-# Import J1939 sensors from vehicle
-SET CAN:0 ENGINE_RPM                 # Map CAN:0 to engine RPM
-SET CAN:1 COOLANT_TEMP               # Map CAN:1 to coolant temp
+SET CAN 0x0C    # Engine RPM
+SET CAN 0x05    # Coolant Temperature
 
 SAVE
 RUN
@@ -541,21 +525,18 @@ RUN
 
 ## Limitations
 
-### Current Version (v0.7.0-beta)
+1. **Passive only** - preOBD does not send OBD-II requests; see the note at the top
+2. **OBD-II Mode 01 only** - single-frame PIDs; no ISO-TP multi-frame reassembly (Mode 09, Mode 22)
+3. **No J1939** - 29-bit IDs are not decoded (see [Custom Frames](#custom-frames))
 
-1. **OBD-II focus** - Standard PID table only includes OBD-II Mode 01 PIDs
-2. **No multi-frame support** - Only single-frame PIDs (no ISO-TP reassembly for Mode 09, etc.)
-3. **Basic J1939** - No PGN table or automatic J1939 configuration
-4. **Static config not supported** - CAN sensor import requires CONFIG/RUN mode with EEPROM
-
-### Platform Limitations
+### Platform Support
 
 | Platform | CAN Buses | Notes |
 |----------|-----------|-------|
-| Teensy 4.1 | 3 (CAN1, CAN2, CAN3) | Requires external transceivers |
-| Teensy 4.0 | 2 (CAN1, CAN2) | Requires external transceivers |
-| ESP32 | 1 (TWAI) | Built-in transceiver on some boards |
-| Arduino Mega | 0 | Requires MCP2515 shield |
+| Teensy 4.1 / 4.0 | 3 (CAN1-CAN3) | Native FlexCAN; external transceivers required |
+| Teensy 3.6 | 2 (CAN1, CAN2) | Native FlexCAN; external transceivers required |
+| ESP32-S3 | 1 (TWAI) | External transceiver required |
+| Arduino Mega | 1 | MCP2515 SPI controller + transceiver |
 
 ---
 
@@ -566,14 +547,3 @@ RUN
 - **[BUS Commands Reference](../../reference/SERIAL_COMMANDS.md)** - Complete BUS command syntax
 - **[Standard PID Reference](../../reference/OBD2_PID_REFERENCE.md)** - Full OBD-II PID table
 
----
-
-## Future Enhancements
-
-Planned for future releases:
-
-- **ISO-TP support** - Multi-frame PID reassembly (Mode 09, Mode 22)
-- **J1939 PGN table** - Automatic configuration for J1939 sensors
-- **Interactive import** - Select PIDs from SCAN results directly
-- **CAN message logging** - Log raw CAN frames to SD card
-- **Hardware CAN filters** - Reduce CPU load by filtering at hardware level

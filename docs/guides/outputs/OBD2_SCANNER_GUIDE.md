@@ -297,14 +297,14 @@ For a complete PID reference, see [OBD2_PID_REFERENCE.md](../../reference/OBD2_P
 ### "No PIDs found" or "Supported PIDs shows 0000"
 
 **Possible causes:**
-1. **No sensors configured** - Run `LIST SENSORS` to verify
-2. **Sensors not enabled** - Check sensor flags: `DUMP`
+1. **No sensors configured** - Run `LIST INPUTS` to verify
+2. **Sensors not enabled** - Check sensor flags: `SYSTEM DUMP`
 3. **Invalid PID assignments** - PIDs are 0x00 (none configured)
 
 **Fix:**
 - Configure sensors with valid applications
-- Ensure sensors are enabled: `SET A2 ENABLE`
-- Verify OBD-II PIDs are assigned in application_presets.h
+- Ensure sensors are enabled: `SET A2 INPUT ENABLE`
+- Check the input's PID with `INFO A2`; set one with `SET A2 OBD_PID 0x05`
 
 ### "Incorrect readings" or "Values don't match LCD"
 
@@ -337,7 +337,7 @@ For a complete PID reference, see [OBD2_PID_REFERENCE.md](../../reference/OBD2_P
 3. **App-specific PID support** - Some apps only query standard PIDs
 
 **Fix:**
-- Verify sensor readings: `DUMP` or serial CSV output
+- Verify sensor readings: `LIST INPUTS` or serial CSV output
 - Use PID 0x00 to see which PIDs scanner detects
 - Try different scanner app (Torque is most comprehensive)
 

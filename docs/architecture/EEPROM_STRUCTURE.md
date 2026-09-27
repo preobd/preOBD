@@ -66,11 +66,11 @@ constexpr size_t MAX_EEPROM_INPUTS =
 
 A compile-time `static_assert` prevents the two regions from overlapping.
 
-**Shared budget + loud truncation.** Because inputs, rules and actions compete for the same space, `saveInputConfig()` fits the sections in priority order **inputs > rules > actions** (a rule needs its source input to evaluate; an action needs its rule) and warns on the control plane for any section it has to truncate — never a silent drop. This generalizes the original input-only truncation to the whole store (#296).
+**Shared budget + loud truncation.** Because inputs, rules and actions compete for the same space, `saveInputConfig()` fits the sections in priority order **inputs > rules > actions** (a rule needs its source input to evaluate; an action needs its rule) and warns on the control plane for any section it has to truncate — never a silent drop. This generalizes the original input-only truncation to the whole store.
 
 **Why anchored at the end?** Earlier firmware used a hardcoded `SYSTEM_CONFIG_ADDRESS`. On platforms with smaller EEPROM than expected (Teensy 4.0, 1080 bytes) the hardcoded address fell past `E2END` and writes silently failed. Anchoring SystemConfig at the end makes the layout self-adjust per platform.
 
-> **Why are the Rule/Action tables in the arena rather than in `SystemConfig`?** They used to be fixed-size arrays embedded in `SystemConfig`, sized by an arbitrary `MAX_RULES`/`MAX_ACTIONS` cap. That capped the table far below `MAX_INPUTS` and made auto-seeded alarm Rules fail silently when full (#296). As standalone RAM globals persisted in the shared arena, the persistence limit is the EEPROM budget (loud on overflow), and the RAM cap is decoupled from input count — see [Control-Engine Tables](#control-engine-tables-rule--action).
+> **Why are the Rule/Action tables in the arena rather than in `SystemConfig`?** They used to be fixed-size arrays embedded in `SystemConfig`, sized by an arbitrary `MAX_RULES`/`MAX_ACTIONS` cap. That capped the table far below `MAX_INPUTS` and made auto-seeded alarm Rules fail silently when full. As standalone RAM globals persisted in the shared arena, the persistence limit is the EEPROM budget (loud on overflow), and the RAM cap is decoupled from input count — see [Control-Engine Tables](#control-engine-tables-rule--action).
 
 ### Platform Capacity
 
@@ -111,8 +111,8 @@ A version mismatch on either block is non-fatal: the affected block resets to de
 | **v3** | — | Internal layout iterations |
 | **v4** | — | Added `divider_ratio` to the per-input record |
 | **v5** | — | `CalibrationOverride` AVR union size corrected (18→16 bytes) |
-| **v6** | — | Header became `ConfigStoreHeader`; the arena now also packs control-engine `Rule[]` + `Action[]` after the inputs (single checksum over all records) — #296 |
-| **v7** | current | `Rule` grows `warnLo`/`warnHi` (per-side configurable warning/"approach tier" edge, `RuleWarnMode` packed into `Rule.flags`) — #425 |
+| **v6** | — | Header became `ConfigStoreHeader`; the arena now also packs control-engine `Rule[]` + `Action[]` after the inputs (single checksum over all records) |
+| **v7** | current | `Rule` grows `warnLo`/`warnHi` (per-side configurable warning/"approach tier" edge, `RuleWarnMode` packed into `Rule.flags`) |
 
 ### SystemConfig Version Progression
 
@@ -126,7 +126,7 @@ A version mismatch on either block is non-fatal: the affected block resets to de
 | **v10** | Layout shift — `SystemConfig` now anchored at the end of EEPROM (per-platform address) |
 | **v11** | Removed system pin fields (`modeButtonPin`, `buzzerPin`, `canCSPin`, `canIntPin`, `sdCSPin`, `testModePin`) — pins are compile-time constants in the board profile, not runtime state |
 | **v12** | Control engine — embedded `Rule rules[]` / `Action actions[]` tables (replaced `RelayConfig relays[]`) |
-| **v13** | Removed those tables again — Rule/Action moved OUT to the front config-store arena (#296); `SystemConfig` now holds only scalar settings |
+| **v13** | Removed those tables again — Rule/Action moved OUT to the front config-store arena; `SystemConfig` now holds only scalar settings |
 
 > **Note:** v9→v10 is a pure address change, not a struct change. T4.1 users who upgrade past v10 will see SystemConfig reset to defaults on first boot and need to re-`SAVE`. Input configs are unaffected.
 >
@@ -134,7 +134,7 @@ A version mismatch on either block is non-fatal: the affected block resets to de
 >
 > **v12→v13:** Struct shrank (Rule/Action tables moved to the arena). SystemConfig resets to defaults on first boot; the arena also bumps `EEPROM_VERSION` 5→6 and resets, so configured Rules/Actions need re-creating. Re-`SAVE` once after upgrade.
 >
-> **`EEPROM_VERSION` v6→v7 (#425):** `Rule` grew `warnLo`/`warnHi` (24→32 B ARM, 21→29 B AVR) to carry a per-side configurable warning threshold. Clean arena reset on upgrade — inputs, Rules and Actions all need re-creating. **Back up first with `SYSTEM DUMP JSON`, then restore with `JSON IMPORT` after upgrading** (a pre-#425 dump imports cleanly; every warn mode comes back `AUTO`, matching pre-upgrade behaviour).
+> **`EEPROM_VERSION` v6→v7:** `Rule` grew `warnLo`/`warnHi` (24→32 B ARM, 21→29 B AVR) to carry a per-side configurable warning threshold. Clean arena reset on upgrade — inputs, Rules and Actions all need re-creating. **Back up first with `SYSTEM DUMP JSON`, then restore with `JSON IMPORT` after upgrading** (a pre-v7 dump imports cleanly; every warn mode comes back `AUTO`, matching pre-upgrade behaviour).
 
 ### Detail: Version 1 (v0.3.x - Deprecated)
 
@@ -157,7 +157,7 @@ All saved configurations became invalid.
 
 ---
 
-### Version 2 (v0.4.0+ - Current)
+### Detail: Version 2 (v0.4.0+; superseded — see the tables above for the current layout)
 
 **Introduced:** Registry architecture (hash-based storage)
 
@@ -279,7 +279,7 @@ On `INCLUDE_RULES_ENGINE` builds, the `Rule[]` and `Action[]` sections follow th
 - **Persistence is bounded by the EEPROM budget, not the RAM cap.** Only non-empty records are written (compacted), and the arena truncates loudly if rules/actions don't fit after the inputs.
 - On load, a **dangling-`ruleRef` sweep** reverts any Action whose Rule didn't load to manual-only (mirrors the `RULE DEL` invariant and the JSON import path).
 
-`Rule` is 29 B (AVR) / 32 B (ARM) as of `EEPROM_VERSION` v7 (`warnLo`/`warnHi`, #425; was 21 B / 24 B at v6); `Action` is 6 B. As with `InputEEPROM`, use `sizeof()` — layout is alignment-sensitive and each device only ever reads its own EEPROM.
+`Rule` is 29 B (AVR) / 32 B (ARM) as of `EEPROM_VERSION` v7 (`warnLo`/`warnHi`; was 21 B / 24 B at v6); `Action` is 6 B. As with `InputEEPROM`, use `sizeof()` — layout is alignment-sensitive and each device only ever reads its own EEPROM.
 
 ### Validate-before-mutate load
 
@@ -312,7 +312,7 @@ struct SystemConfig {
 
     // NB (v13): the control-engine Rule/Action tables are NO LONGER here —
     // they live in the front config-store arena (see Control-Engine Tables
-    // above). v12 embedded them; #296 moved them out so the table size is
+    // above). v12 embedded them; v13 moved them out so the table size is
     // bounded by the EEPROM budget, not an arbitrary cap.
 
     // Bus + serial port config — which I2C/SPI/CAN bus, which serial ports
@@ -497,7 +497,7 @@ if (temp.magic != SYSTEM_CONFIG_MAGIC ||
 
 **Solution:**
 1. Always run `SAVE` after configuring
-2. Verify with `DUMP` command before power-off
+2. Verify with `SYSTEM DUMP` before power-off
 3. On T4.0, keep input count ≤ `MAX_EEPROM_INPUTS` or accept that extras are RAM-only
 
 ### Output enable flags reset to defaults each boot
@@ -506,8 +506,8 @@ Symptom: `OUTPUT SERIAL ENABLE` + `SAVE` works for the session, but the output r
 
 This was a real bug fixed in `SYSTEM_CONFIG_VERSION` 9 and 10:
 
-- **v9** (PR #159): hardcoded `SYSTEM_CONFIG_ADDRESS` overlapped the input block once ≥12 inputs were configured; saving inputs corrupted SystemConfig's magic number, and load fell back to defaults every boot.
-- **v10** (PR #160): on Teensy 4.0 the hardcoded address was past `E2END` entirely, so SystemConfig writes silently failed. Anchoring at the end of EEPROM fixed both.
+- **v9**: hardcoded `SYSTEM_CONFIG_ADDRESS` overlapped the input block once ≥12 inputs were configured; saving inputs corrupted SystemConfig's magic number, and load fell back to defaults every boot.
+- **v10**: on Teensy 4.0 the hardcoded address was past `E2END` entirely, so SystemConfig writes silently failed. Anchoring at the end of EEPROM fixed both.
 
 If you're seeing this on current firmware, run `SAVE` once after upgrade to migrate SystemConfig to its new (per-platform) address.
 

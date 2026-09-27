@@ -31,7 +31,12 @@ python3 tools/measure_feature_costs.py --env mega2560
 
 ## mega2560
 
-Baseline (post-#296): **flash 194,398 B (76.5%)**, **static RAM 8,102 / 8,192 B
+> **These figures are out of date.** They were measured before the v0.13.0
+> registry change that cut mega2560 flash from 85.6% to 69.0%, so the flash
+> baseline below is too high; the RAM picture (≈98% used) still holds. Per-flag
+> deltas are indicative. Re-run `tools/measure_feature_costs.py` to refresh.
+
+Baseline at the time of measurement: **flash 194,398 B (76.5%)**, **static RAM 8,102 / 8,192 B
 (98.9%) — only 90 B of headroom.**
 
 ### Per-flag cost
@@ -50,7 +55,7 @@ much (and several would overflow the 90 B RAM headroom — see notes).
 | `INCLUDE_MODE_BUTTON` | −808 B | −133 B | wiring-derived† |
 | `SUPPORTS_SERIAL_OUTPUT` | −3,170 B | −28 B | cheap RAM, but a core output |
 | **Currently off** | | | |
-| `SUPPORTS_FRAMED_TRANSPORT` | +5,192 B | **+1,691 B** | would overflow RAM ~19× over; real ceiling (cf. #233) |
+| `SUPPORTS_FRAMED_TRANSPORT` | +5,192 B | **+1,691 B** | would overflow RAM ~19× over; real ceiling |
 | `SUPPORTS_ELM327` | +4,202 B | +301 B | would overflow RAM headroom |
 | `SUPPORTS_TEST_MODE` | +7,568 B | +238 B | would overflow RAM headroom |
 | `SUPPORTS_RELAY_OUTPUT` | +1,194 B | +32 B | cheap (deprecated → Actions) |
@@ -61,7 +66,7 @@ much (and several would overflow the 90 B RAM headroom — see notes).
 > not `board.h` flags, so the measurement tool (which toggles `board.h`) can't
 > re-measure them — values carried from a prior run.
 
-> **Naming:** these were `ENABLE_*` before #357. `SUPPORTS_*` is the `board.h`
+> **Naming:** these were `ENABLE_*` in older releases. `SUPPORTS_*` is the `board.h`
 > capability you comment out to reclaim the memory; `INCLUDE_*` is what
 > `resolve.h` derives and `src/` tests. Neither means the feature is *on* at
 > runtime.
@@ -92,7 +97,7 @@ From `avr-nm --size-sort -S -C`:
 | control tables `rules`+`actions`+`g_ruleContexts` (cap 2) | 80 |
 | `Serial`/`Serial1..3` | 77 each (308) |
 
-> Since #296 the control-engine Rule/Action tables are standalone globals
+> Since v0.10 the control-engine Rule/Action tables are standalone globals
 > (`rules` 42 B + `actions` 12 B + `g_ruleContexts` 26 B at the AVR cap of 2),
 > no longer part of `systemConfig` (which dropped 163 → 109 B accordingly).
 
@@ -101,16 +106,16 @@ From `avr-nm --size-sort -S -C`:
 - **`SUPPORTS_ALARMS` is the control-engine switch on AVR, not a buzzer flag.**
   `INCLUDE_RULES_ENGINE` is `INCLUDE_ALARMS || INCLUDE_RELAY_OUTPUT`
   (`rules_types.h`), so disabling alarms removes the entire Rules/Actions engine
-  (−16.4 KB / −455 B — grew with the standalone arena tables in #296). The physical
+  (−16.4 KB / −455 B — grew with the standalone arena tables). The physical
   buzzer is a separate pin (`BUZZER_PIN`).
 - **`CLI_BUFFER_SIZE` is the biggest single RAM lever** (−852 B for 820→512),
   larger than any feature — at the cost of max command / JSON-import length.
 - **`MAX_INPUTS` is the cleanest scaling knob** (~110 B/input), confirming the
-  PR #144 estimate.
+  earlier estimate.
 - **Not every disabled feature is a RAM ceiling.** `REALDASH` costs +36 B — it's
   off on mega by *choice*, not necessity. `FRAMED_TRANSPORT` (+1,691 B), `ELM327`
   (+301 B), and `TEST_MODE` (+238 B) are genuine ceilings (each exceeds the 90 B
   headroom); `SD_LOGGING` can't even link without added `lib_deps`.
 - **ArduinoJson/SD are flash + heap costs, not static-RAM drivers** — consistent
-  with the PR #144 finding; the static-RAM drivers are the CLI buffers and the
+  with the earlier finding; the static-RAM drivers are the CLI buffers and the
   input array.

@@ -1,107 +1,27 @@
 # Relay Output Control
 
-> **⚠️ Superseded by the Control Engine (Rules + Actions).** A relay is no longer a
-> separate subsystem — it is an **Action of type `RELAY`** driven by a **Rule**. The
-> legacy `RELAY ...` command is **deprecated** (it prints a pointer to the new
-> commands). Configure relay control with:
->
-> - `RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>]` — the threshold + hysteresis
-> - `ACTION ADD RELAY <outpin> [FAILSAFE ON|OFF] [INVERT]` — the output
-> - `ACTION <id> RULE <ruleId>` to link; `ACTION <id> ON|OFF` to drive by hand
->   (on a rule-linked Action this is an operator override that outranks both the
->   rule and the failsafe; `ACTION <id> AUTO` releases it). The override is
->   RAM-only — it reverts to AUTO on reboot.
-> - `ACTION <id> RULE ADD|REMOVE <ruleId>` — an Action can follow **several**
->   Rules and runs while *any* of them is active, e.g. one cooling fan demanded
->   by coolant temp OR trans temp. A live Rule's demand outranks a faulted
->   sibling sensor, so the failsafe only applies when no healthy member is
->   asking for the output.
-> - `ACTION LIST` for status
->
-> Actions add a sensor-loss **failsafe** the old relay engine lacked. Over BLE,
-> relay state is now the `PreobdActionState` payload (Action broadcaster) rather
-> than `PreobdRelayState`. See `ARCHITECTURE.md` §11.
->
-> **The configuration examples below show the legacy `RELAY` commands and are kept
-> for reference only** — translate `RELAY <n> PIN/INPUT/THRESHOLD/MODE` to the
-> `RULE` + `ACTION` form above. (Hardware wiring sections remain accurate.)
+preOBD can switch 12V loads through a relay — cooling fans, electric water pumps,
+warning lights, heaters, solenoids — based on sensor readings.
 
-The relay output module enables automatic control of 12V electrical relays based on sensor thresholds with hysteresis and manual override capability.
+A relay is set up with two pieces of the **control engine**:
+
+- a **Rule** watches an input and decides *when* (threshold + hysteresis), and
+- an **Action** of type `RELAY` is the output pin that the Rule drives.
+
+The same engine runs alarms, so a Rule can drive a relay, sound the buzzer, or both.
+
+> The older `RELAY ...` command is deprecated. It now only prints a pointer to
+> `RULE` / `ACTION`; see [Migrating from `RELAY`](#migrating-from-relay) at the end.
 
 ## Table of Contents
-- [Overview](#overview)
-- [Features](#features)
 - [Hardware Setup](#hardware-setup)
-- [Configuration](#configuration)
+- [Quick Start: Cooling Fan](#quick-start-cooling-fan)
+- [How Rules Switch a Relay](#how-rules-switch-a-relay)
 - [Command Reference](#command-reference)
 - [Use Cases](#use-cases)
 - [Troubleshooting](#troubleshooting)
-- [Technical Details](#technical-details)
-
----
-
-## Overview
-
-The relay control feature allows preOBD to automatically switch 12V relays ON/OFF based on sensor readings. This is useful for controlling:
-- Electric cooling fans (turn on when temperature exceeds threshold)
-- Water pumps (activate based on temperature or pressure)
-- Warning lights or indicators
-- Electric heaters (turn on when cold)
-- Bypass valves or solenoids
-
-### Key Capabilities
-- **2 independent relays** with separate configurations
-- **Automatic control** with hysteresis to prevent relay chattering
-- **Manual override** for testing or emergency operation
-- **EEPROM persistence** - configuration survives power cycles
-- **Safety features** - relays default OFF, warmup protection
-
----
-
-## Features
-
-### Automatic Control Modes
-
-#### AUTO_HIGH Mode
-Relay turns **ON** when sensor value rises above threshold, **OFF** when it falls below.
-
-**Use case**: Cooling fan
-- Temperature rises → fan turns ON at 90°C
-- Temperature falls → fan turns OFF at 85°C
-- Hysteresis band (85-90°C) prevents rapid ON/OFF cycling
-
-```
-Temperature (°C)
-    ↑
-100 |
- 95 |                    ┌────────────
- 90 |            ┌───────┘            ← Relay ON threshold
- 85 |════════════╝                    ← Relay OFF threshold
- 80 |
-    └──────────────────────────────→ Time
-         OFF    |    ON    |   OFF
-```
-
-#### AUTO_LOW Mode
-Relay turns **ON** when sensor value falls below threshold, **OFF** when it rises above.
-
-**Use case**: Low oil pressure warning light
-- Pressure drops → light ON at 0.5 bar
-- Pressure rises → light OFF at 1.0 bar
-
-### Manual Override Modes
-
-- **MANUAL_ON**: Force relay ON (ignores sensor)
-- **MANUAL_OFF**: Force relay OFF (ignores sensor)
-- **DISABLED**: Relay completely disabled
-
-### Safety Features
-
-1. **Safe Startup**: All relays initialize to OFF state
-2. **Warmup Protection**: Relays stay OFF during sensor warmup period
-3. **NaN Handling**: Relay turns OFF if sensor value is invalid
-4. **Disabled Sensor**: Relay turns OFF if linked sensor is disabled
-5. **EEPROM Persistence**: Configuration survives power cycles and resets
+- [Safety Considerations](#safety-considerations)
+- [Migrating from `RELAY`](#migrating-from-relay)
 
 ---
 
@@ -125,7 +45,10 @@ Relay turns **ON** when sensor value falls below threshold, **OFF** when it rise
 └─────────────────────┘
 ```
 
-### Example: Cooling Fan Control
+Many relay modules are **active-low** (the relay turns on when `IN` is pulled to
+GND). Add `INVERT` to `ACTION ADD RELAY` for those.
+
+### Example: Cooling Fan Wiring
 
 **Components needed:**
 - 12V electric cooling fan
@@ -136,18 +59,18 @@ Relay turns **ON** when sensor value falls below threshold, **OFF** when it rise
 1. **Relay module power**: VCC → 5V, GND → GND
 2. **Control signal**: IN → Teensy GPIO pin 23
 3. **Fan power**:
-   - Connect +12V battery → Relay COM terminal
+   - Connect +12V battery (fused) → Relay COM terminal
    - Connect Relay NO → Fan positive wire
    - Connect Fan negative → Battery ground
 
-**Result**: When relay activates, it completes the circuit powering the fan.
+When the relay activates, it completes the circuit powering the fan.
 
 ### GPIO Pin Selection
 
 **Available pins** (platform-dependent):
 - **Teensy 4.1**: Most digital pins (2-41)
 - **Arduino Mega**: Digital pins (22-53 recommended to avoid conflicts)
-- **Avoid**: Pins already used for sensors, CAN, I2C, SPI
+- **Avoid**: Pins already used for sensors, CAN, I2C, SPI — `SYSTEM PINS` shows what is taken
 
 **Recommended pins** for relays:
 - Teensy 4.1: 23, 24, 25, 26 (not used by other peripherals)
@@ -155,335 +78,235 @@ Relay turns **ON** when sensor value falls below threshold, **OFF** when it rise
 
 ---
 
-## Configuration
+## Quick Start: Cooling Fan
 
-### Quick Start Example: Cooling Fan
+Fan on above 90°C, off again below 85°C. Coolant sensor on A2, relay on pin 23.
 
-This example configures a cooling fan to turn ON at 90°C and OFF at 85°C.
-
-```bash
-# 1. Configure coolant temperature sensor on pin A2
-SET A2 APPLICATION COOLANT_TEMP
-SET A2 SENSOR VDO_120C_STEINHART
-SET A2 INPUT ENABLE
-# 2. Configure relay 0 for the fan
-RELAY 0 PIN 23                    # Control signal on GPIO 23
-RELAY 0 INPUT A2                  # Link to coolant temp sensor
-RELAY 0 THRESHOLD 90 85           # ON at 90°C, OFF at 85°C
-RELAY 0 MODE AUTO_HIGH            # Automatic mode (high temp triggers)
-
-# 3. Save configuration to EEPROM
+```
+CONFIG
+SET A2 COOLANT_TEMP VDO_120C_STEINHART   # the sensor (also creates its default alarm Rule)
+RULE ADD A2 ABOVE 90 HYST 5 NONE         # prints: Rule #<r> added
+ACTION ADD RELAY 23                      # prints: Action #<a> added
+ACTION <a> RULE <r>                      # the relay now follows the Rule
 SAVE
+RUN
 ```
 
-**Done!** The fan will now automatically turn on when coolant reaches 90°C.
+Use the ids the firmware prints — `SET A2 ...` already created an alarm Rule for
+the input, so your fan Rule is usually not `#0`. `RULE LIST` and `ACTION LIST`
+show every id.
 
-### Step-by-Step Configuration
+`NONE` at the end of `RULE ADD` makes this a **control-only** Rule: it switches
+the relay but does not light the warning LED or sound the buzzer. The input's
+own alarm (from `SET <pin> ALARM`) is unaffected.
 
-#### Step 1: Configure Your Sensor
+**Relays only switch in RUN mode.** In CONFIG mode all Actions are held off so a
+sensor on the bench can't start a fan or pump while you are wiring it.
 
-Before linking a relay, ensure the sensor is configured and enabled:
+---
 
-```bash
-# Check available sensors
-LIST SENSORS
+## How Rules Switch a Relay
 
-# Configure sensor
-SET A2 APPLICATION COOLANT_TEMP
-SET A2 SENSOR VDO_120C_STEINHART
+### Thresholds and hysteresis
 
-# Set alarm thresholds (optional, separate from relay thresholds)
-SET A2 ALARM 50 110
+| Rule | Turns ON when | Turns OFF when |
+|------|---------------|----------------|
+| `ABOVE <limit> HYST <w>` | value rises above `limit` | value falls below `limit - w` |
+| `BELOW <limit> HYST <w>` | value falls below `limit` | value rises above `limit + w` |
+| `OUTSIDE <lo> <hi> HYST <w>` | value leaves the `lo..hi` band | value is back inside by `w` |
 
-# Enable sensor
-SET A2 INPUT ENABLE
-# Verify sensor is reading
-INFO A2
+```
+Temperature (°C)            RULE ADD A2 ABOVE 90 HYST 5
+    ↑
+ 95 |                    ┌────────────
+ 90 |            ┌───────┘            ← turns ON above 90
+ 85 |════════════╝                    ← turns OFF below 85
+ 80 |
+    └──────────────────────────────→ Time
+         OFF    |    ON    |   OFF
 ```
 
-#### Step 2: Configure Relay Output Pin
+The hysteresis band stops the relay chattering when the reading hovers around
+the limit.
 
-```bash
-# Set which GPIO pin controls the relay
-RELAY 0 PIN 23
+**Units:** limits are always in base units — °C, bar, volts, RPM, km/h — even if
+the input displays °F or PSI.
+
+### Timing
+
+A Rule doesn't act the instant a reading crosses the limit:
+- **Warmup** — after power-up (or after the Rule is armed) it waits before acting.
+  Rules created with `RULE ADD` use a 3 s warmup; the alarm Rule seeded by
+  `SET <pin> <application> ...` uses the application's warmup.
+- **Debounce** — the condition must hold for a short time (500 ms by default)
+  before the Rule changes state.
+
+`RULE <id>` shows a Rule's warmup and debounce. They can be changed through a
+JSON import (`warmupMs`, `debounceMs`); see the
+[JSON Configuration Guide](../configuration/JSON_CONFIGURATION_GUIDE.md).
+
+### When the sensor fails
+
+If the Rule's input stops producing a trustworthy reading (disconnected,
+shorted, pegged at the rail), the Action goes to its **failsafe** state:
+
+- `FAILSAFE OFF` (default) — the relay turns off. Right for a fuel pump.
+- `FAILSAFE ON` — the relay turns on. Right for a cooling fan: if you lose the
+  temperature sensor, you'd rather the fan ran.
+
+```
+ACTION ADD RELAY 23 FAILSAFE ON
 ```
 
-**Response**: `Relay 0 pin set to 23`
+### Several Rules, one relay
 
-#### Step 3: Link Relay to Sensor
+An Action can follow several Rules and is on while **any** of them is active —
+for example one fan demanded by coolant temperature *or* transmission
+temperature. A healthy Rule that is asking for the output outranks a sibling
+whose sensor has failed; the failsafe applies only when no healthy Rule is
+asking.
 
-```bash
-# Connect relay to sensor input
-RELAY 0 INPUT A2
-```
+### Manual override
 
-**Response**: `Relay 0 linked to input on pin 54` (A2 = pin 54 on Teensy)
-
-#### Step 4: Set Thresholds
-
-```bash
-# Set ON and OFF thresholds
-# Format: RELAY <index> THRESHOLD <on_value> <off_value>
-RELAY 0 THRESHOLD 90 85
-```
-
-**For AUTO_HIGH mode** (like cooling fan):
-- First value (90) = Turn ON threshold
-- Second value (85) = Turn OFF threshold
-- OFF value should be < ON value
-
-**For AUTO_LOW mode** (like low pressure warning):
-- First value (0.5) = Turn ON threshold
-- Second value (1.0) = Turn OFF threshold
-- ON value should be < OFF value
-
-#### Step 5: Set Mode
-
-```bash
-# Enable automatic control
-RELAY 0 MODE AUTO_HIGH
-```
-
-**Available modes**:
-- `AUTO_HIGH` - Turn ON when value ≥ ON threshold
-- `AUTO_LOW` - Turn ON when value ≤ ON threshold
-- `ON` - Force ON (manual override)
-- `OFF` - Force OFF (manual override)
-
-#### Step 6: Save Configuration
-
-```bash
-# Save to EEPROM (survives power cycles)
-SAVE
-```
-
-**Response**: `✓ Configuration saved`
+`ACTION <id> ON` / `ACTION <id> OFF` force the relay, outranking both the Rule
+and the failsafe. `ACTION <id> AUTO` hands control back to the Rule. The override
+works in RUN mode and is not saved — after a reboot the relay is back under Rule
+control.
 
 ---
 
 ## Command Reference
 
-### RELAY LIST
-Show status of all relays.
+### Rules
 
-```bash
-RELAY LIST
+```
+RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [INFO|WARNING|ALARM|NONE]
+RULE ADD <pin> OUTSIDE <lo> <hi> [HYST <w>] [INFO|WARNING|ALARM|NONE]
+RULE LIST                          # all Rules, their state and severity
+RULE <id>                          # one Rule in detail (limits, warmup, debounce, linked Actions)
+RULE <id> LIMIT ABOVE|BELOW <limit>   # move the limit, keeping the id and links
+RULE <id> SEVERITY INFO|WARNING|ALARM|NONE
+RULE <id> ENABLE|DISABLE           # park / re-arm without deleting
+RULE DEL <id>
 ```
 
-**Output**:
-```
-=================================
-Relay 0
-=================================
-Output Pin: 23
-Input: Pin 54 (COOL)
-  Current Value: 85.3 °C
-Mode: AUTO_HIGH
-Threshold ON: 90.00
-Threshold OFF: 85.00
-Current State: OFF
-State Changes: 3
-Last Change: 45 seconds ago
-```
+Severity: `NONE` = control only; `INFO` = log only; `WARNING` = indicator LED;
+`ALARM` = indicator + buzzer. Use `NONE` for a Rule that only drives a relay.
 
-### RELAY \<index\> STATUS
-Show detailed status of a specific relay.
+### Actions
 
-```bash
-RELAY 0 STATUS
-RELAY 1 STATUS
+```
+ACTION ADD RELAY <pin> [FAILSAFE ON|OFF] [INVERT]
+ACTION <id> RULE <ruleId>          # follow exactly this Rule (NONE = manual only)
+ACTION <id> RULE ADD <ruleId>      # also follow another Rule
+ACTION <id> RULE REMOVE <ruleId>   # stop following one Rule
+ACTION <id> NAME <text>            # label, e.g. Cooling Fan (no text clears it)
+ACTION <id> ON|OFF                 # manual override (RUN mode)
+ACTION <id> AUTO                   # release the override
+ACTION LIST                        # every Action and its current state
+ACTION <id>                        # one Action in detail
+ACTION DEL <id>
 ```
 
-**Alias**: Just typing `RELAY 0` also shows status.
+`RULE ADD/DEL`, `RULE <id> LIMIT/SEVERITY/ENABLE/DISABLE`, `ACTION ADD/DEL`,
+`ACTION <id> RULE` and `ACTION <id> NAME` need CONFIG mode. `SAVE` makes them
+permanent.
 
-### RELAY \<index\> PIN \<pin\>
-Set the GPIO pin for relay control signal.
+### Capacity
 
-```bash
-RELAY 0 PIN 23
-RELAY 1 PIN 24
-```
-
-**Parameters**:
-- `index`: 0 or 1
-- `pin`: GPIO pin number (e.g., 23, 24, 25)
-
-### RELAY \<index\> INPUT \<pin\>
-Link relay to a sensor input.
-
-```bash
-RELAY 0 INPUT A2
-RELAY 1 INPUT A3
-```
-
-**Parameters**:
-- `index`: 0 or 1
-- `pin`: Sensor pin (A0-A15, or digital pin)
-
-**Note**: Sensor must be enabled first (`ENABLE A2`)
-
-### RELAY \<index\> THRESHOLD \<on\> \<off\>
-Set activation thresholds.
-
-```bash
-RELAY 0 THRESHOLD 90 85        # Cooling fan
-RELAY 1 THRESHOLD 0.5 1.0      # Low pressure warning
-```
-
-**Parameters**:
-- `index`: 0 or 1
-- `on`: Activation threshold (in sensor's current units)
-- `off`: Deactivation threshold
-
-**Units**: Thresholds use the sensor's configured units (°C, bar, PSI, etc.)
-
-### RELAY \<index\> MODE \<mode\>
-Set relay operating mode.
-
-```bash
-RELAY 0 MODE AUTO_HIGH         # Automatic: ON when hot
-RELAY 0 MODE AUTO_LOW          # Automatic: ON when cold
-RELAY 0 MODE ON                # Manual: Force ON
-RELAY 0 MODE OFF               # Manual: Force OFF
-```
-
-**Modes**:
-- `AUTO_HIGH`: Automatic control, activates on high values
-- `AUTO_LOW`: Automatic control, activates on low values
-- `ON`: Manual override, force relay ON
-- `OFF`: Manual override, force relay OFF
-
-### RELAY \<index\> DISABLE
-Disable a relay completely.
-
-```bash
-RELAY 0 DISABLE
-```
-
-**Effect**: Relay turns OFF and stops evaluating rules.
+Most boards hold up to 64 Rules and 64 Actions (sharing EEPROM space with the
+inputs). The **Arduino Mega holds only 2 of each** because of its 8 KB of RAM —
+and each input's default alarm counts as one Rule.
 
 ---
 
 ## Use Cases
 
-### 1. Electric Cooling Fan
+### 1. Electric Cooling Fan (fails ON)
 
-**Scenario**: Turn on cooling fan when coolant temperature exceeds 90°C.
-
-**Configuration**:
-```bash
-SET A2 APPLICATION COOLANT_TEMP
-SET A2 SENSOR VDO_120C_STEINHART
-SET A2 INPUT ENABLERELAY 0 PIN 23
-RELAY 0 INPUT A2
-RELAY 0 THRESHOLD 90 85
-RELAY 0 MODE AUTO_HIGH
+```
+SET A2 COOLANT_TEMP VDO_120C_STEINHART
+RULE ADD A2 ABOVE 90 HYST 5 NONE           # Rule #r
+ACTION ADD RELAY 23 FAILSAFE ON            # Action #a
+ACTION <a> RULE <r>
+ACTION <a> NAME Cooling Fan
 SAVE
 ```
 
-**Behavior**:
-- Temperature < 85°C: Fan OFF
-- Temperature 85-90°C: Fan maintains current state (hysteresis)
-- Temperature ≥ 90°C: Fan ON
-- When temperature drops ≤ 85°C: Fan OFF
-
-**Hysteresis benefit**: Prevents fan from rapidly cycling ON/OFF if temperature hovers around 90°C.
-
----
+- Below 85°C: fan off
+- 85-90°C: fan keeps its current state (hysteresis)
+- Above 90°C: fan on
+- Sensor fails: fan on
 
 ### 2. Low Oil Pressure Warning Light
 
-**Scenario**: Turn on warning light when oil pressure drops below 0.5 bar.
-
-**Configuration**:
-```bash
-SET A3 APPLICATION OIL_PRESSURE
-SET A3 SENSOR VDO_5BAR_CURVE
-SET A3 INPUT ENABLERELAY 1 PIN 24
-RELAY 1 INPUT A3
-RELAY 1 THRESHOLD 0.5 1.0
-RELAY 1 MODE AUTO_LOW
+```
+SET A3 OIL_PRESSURE VDO_5BAR_CURVE
+RULE ADD A3 BELOW 0.5 HYST 0.5 NONE        # on below 0.5 bar, off above 1.0 bar
+ACTION ADD RELAY 24
+ACTION <a> RULE <r>
 SAVE
 ```
-
-**Behavior**:
-- Pressure > 1.0 bar: Light OFF
-- Pressure 0.5-1.0 bar: Light maintains current state
-- Pressure ≤ 0.5 bar: Light ON
-- When pressure rises ≥ 1.0 bar: Light OFF
-
----
 
 ### 3. Electric Water Pump
 
-**Scenario**: Turn on electric water pump when coolant temperature exceeds 80°C.
-
-**Configuration**:
-```bash
-SET A2 APPLICATION COOLANT_TEMP
-SET A2 INPUT ENABLERELAY 0 PIN 23
-RELAY 0 INPUT A2
-RELAY 0 THRESHOLD 80 75
-RELAY 0 MODE AUTO_HIGH
+```
+SET A2 COOLANT_TEMP VDO_120C_STEINHART
+RULE ADD A2 ABOVE 80 HYST 5 NONE           # on above 80°C, off below 75°C
+ACTION ADD RELAY 23 FAILSAFE ON
+ACTION <a> RULE <r>
 SAVE
 ```
 
-**Behavior**:
-- Pump turns ON at 80°C
-- Pump turns OFF at 75°C
-- 5°C hysteresis prevents pump cycling
+### 4. Two-Speed Fan
 
----
+Two relays on the same sensor at different temperatures:
 
-### 4. Manual Testing
-
-**Scenario**: Test relay operation without automatic control.
-
-**Commands**:
-```bash
-# Force relay ON
-RELAY 0 MODE ON
-
-# Wait and observe...
-# (Check that fan/pump/light activates)
-
-# Force relay OFF
-RELAY 0 MODE OFF
-
-# Return to automatic control
-RELAY 0 MODE AUTO_HIGH
 ```
-
-**Use case**: Verify wiring, test relay module, check fan operation.
-
----
-
-### 5. Two-Speed Fan Control
-
-**Scenario**: Low speed fan at 85°C, high speed fan at 95°C.
-
-**Configuration**:
-```bash
-# Low speed fan
-RELAY 0 PIN 23
-RELAY 0 INPUT A2
-RELAY 0 THRESHOLD 85 80
-RELAY 0 MODE AUTO_HIGH
-
-# High speed fan
-RELAY 1 PIN 24
-RELAY 1 INPUT A2
-RELAY 1 THRESHOLD 95 90
-RELAY 1 MODE AUTO_HIGH
-
+RULE ADD A2 ABOVE 85 HYST 5 NONE           # low speed, Rule #r1
+RULE ADD A2 ABOVE 95 HYST 5 NONE           # high speed, Rule #r2
+ACTION ADD RELAY 23 FAILSAFE ON            # low-speed relay, Action #a1
+ACTION ADD RELAY 24 FAILSAFE ON            # high-speed relay, Action #a2
+ACTION <a1> RULE <r1>
+ACTION <a2> RULE <r2>
 SAVE
 ```
 
-**Behavior**:
-- < 80°C: Both fans OFF
-- 80-85°C: Hysteresis for low speed
-- ≥ 85°C: Low speed fan ON
-- ≥ 95°C: Both fans ON (high speed)
+### 5. One Fan, Two Sensors
+
+Fan on if coolant is above 95°C **or** transmission fluid is above 110°C:
+
+```
+RULE ADD A2 ABOVE 95 HYST 5 NONE           # coolant, Rule #r1
+RULE ADD A4 ABOVE 110 HYST 5 NONE          # trans temp, Rule #r2
+ACTION ADD RELAY 23 FAILSAFE ON            # Action #a
+ACTION <a> RULE <r1>
+ACTION <a> RULE ADD <r2>
+SAVE
+```
+
+### 6. Fan Plus an Alarm
+
+The fan comes on at 90°C; the buzzer sounds only if the coolant reaches 110°C
+anyway:
+
+```
+SET A2 ALARM MAX 110                       # the input's alarm (buzzer)
+RULE ADD A2 ABOVE 90 HYST 5 NONE           # the fan (silent)
+ACTION ADD RELAY 23 FAILSAFE ON
+ACTION <a> RULE <r>
+SAVE
+```
+
+### 7. Manual Testing
+
+In RUN mode:
+
+```
+ACTION <a> ON          # relay should click and the load should run
+ACTION <a> OFF
+ACTION <a> AUTO        # back to Rule control
+```
 
 ---
 
@@ -491,293 +314,73 @@ SAVE
 
 ### Relay doesn't activate
 
-**Check 1: Verify relay configuration**
-```bash
-RELAY 0 STATUS
-```
-- Confirm `Output Pin` is correct
-- Confirm `Input` is linked to correct sensor
-- Confirm `Mode` is AUTO_HIGH or AUTO_LOW
+1. **Are you in RUN mode?** Actions are held off in CONFIG mode. Type `RUN`.
+2. **Is the Action linked?** `ACTION <a>` should list the Rule it follows.
+3. **Is the Rule active?** `RULE <r>` shows its state. `WARMUP` means it is still
+   waiting after power-up; `READY` means the condition isn't met yet; `ACTIVE`
+   means it is asking for the output.
+4. **Are the limits in the right units?** Limits are °C / bar, not °F / PSI.
+5. **Does the sensor read?** `INFO <pin>` — a `NaN`/`ERROR` value puts the Action
+   in its failsafe state.
+6. **Is it wiring?** `ACTION <a> ON` in RUN mode. If the relay doesn't click,
+   check the wiring and whether the module needs `INVERT`.
 
-**Check 2: Verify sensor is reading**
-```bash
-INFO A2
-```
-- Confirm sensor is `Enabled`
-- Confirm `Value` is not NaN
-- Confirm sensor is past warmup period
+### Relay is on when it should be off (or the other way round)
 
-**Check 3: Check threshold logic**
-```bash
-RELAY 0 STATUS
-```
-- For AUTO_HIGH: `Current Value` must exceed `Threshold ON`
-- For AUTO_LOW: `Current Value` must drop below `Threshold ON`
-
-**Check 4: Test with manual override**
-```bash
-RELAY 0 MODE ON
-```
-- If relay clicks/activates → wiring is good, automatic logic issue
-- If relay doesn't activate → wiring or hardware problem
-
----
+- Active-low relay module: delete and re-add the Action with `INVERT`.
+- A manual override is still in effect: `ACTION <a> AUTO`.
+- The sensor has failed and the Action is `FAILSAFE ON`: check `INFO <pin>`.
 
 ### Relay chatters (rapid ON/OFF)
 
-**Cause**: Insufficient hysteresis (ON and OFF thresholds too close).
-
-**Solution**: Increase hysteresis gap.
-
-**Example**:
-```bash
-# Bad: 1°C hysteresis (may chatter)
-RELAY 0 THRESHOLD 90 89
-
-# Good: 5°C hysteresis (stable)
-RELAY 0 THRESHOLD 90 85
-```
-
-**Recommended hysteresis**:
-- Temperature: 5-10°C
-- Pressure: 0.2-0.5 bar
-- Voltage: 0.5-1.0V
-
----
-
-### Relay stays ON after condition clears
-
-**Check 1: Verify thresholds are correct**
-```bash
-RELAY 0 STATUS
-```
-- For AUTO_HIGH: `Threshold OFF` should be < `Threshold ON`
-- For AUTO_LOW: `Threshold OFF` should be > `Threshold ON`
-
-**Check 2: Verify sensor value**
-```bash
-INFO A2
-```
-- Confirm sensor value has actually dropped below OFF threshold
-
-**Check 3: Check if in manual mode**
-```bash
-RELAY 0 STATUS
-```
-- If `Mode: MANUAL_ON`, return to auto: `RELAY 0 MODE AUTO_HIGH`
-
----
+Increase the hysteresis — e.g. `RULE ADD A2 ABOVE 90 HYST 5` rather than `HYST 1`.
+Typical values: temperature 5-10°C, pressure 0.2-0.5 bar, voltage 0.5-1.0V.
 
 ### Configuration lost after power cycle
 
-**Cause**: Configuration not saved to EEPROM.
-
-**Solution**: Always run `SAVE` after configuration changes.
-
-```bash
-# After making changes:
-SAVE
-```
-
-**Verification**:
-```bash
-# Reboot system, then check:
-RELAY 0 STATUS
-```
-
----
-
-### Relay activates during startup
-
-**Expected behavior**: Relays should stay OFF during sensor warmup.
-
-**If relay activates immediately**:
-1. Check sensor warmup time: `INFO A2 ALARM`
-2. Increase warmup if needed: `SET A2 WARMUP 60000` (60 seconds)
-3. Save configuration: `SAVE`
-
----
-
-## Technical Details
-
-### Hysteresis Implementation
-
-The relay module implements **Schmitt trigger hysteresis** to prevent chattering:
-
-```cpp
-// AUTO_HIGH mode logic
-if (!currentState && value >= thresholdOn) {
-    return true;   // Turn ON
-}
-if (currentState && value <= thresholdOff) {
-    return false;  // Turn OFF
-}
-return currentState;  // Maintain state in hysteresis band
-```
-
-**Key feature**: Different ON and OFF thresholds create a "dead band" where the relay maintains its current state.
-
-### Memory Usage
-
-**Per relay** (16 bytes in EEPROM):
-- Output pin: 1 byte
-- Input index: 1 byte
-- Mode: 1 byte
-- Reserved: 1 byte
-- Threshold ON: 4 bytes (float)
-- Threshold OFF: 4 bytes (float)
-- Reserved: 4 bytes
-
-**Total for 2 relays**: 32 bytes
-
-**Runtime RAM** (~24 bytes per relay):
-- Current state: 1 byte (bool)
-- Last state change: 4 bytes (uint32_t)
-- State change count: 4 bytes (uint32_t)
-
-### Integration with Alarm System
-
-The relay module is **independent** from the alarm system:
-- Relays can have different thresholds than alarms
-- Relay activation doesn't trigger alarms
-- Alarms can trigger without relay activation
-
-**Example**:
-- Alarm threshold: 110°C (critical temperature)
-- Relay threshold: 90°C (turn on cooling)
-- Fan activates at 90°C, alarm triggers at 110°C
-
-### Update Rate
-
-Relays are evaluated every **100ms** (10 Hz) by default.
-
-**To change**:
-```bash
-OUTPUT RELAY INTERVAL 50    # 50ms = 20 Hz (faster response)
-OUTPUT RELAY INTERVAL 200   # 200ms = 5 Hz (slower, saves CPU)
-SAVE
-```
-
-**Recommendation**: Keep default 100ms for most applications.
-
----
-
-## Advanced Topics
-
-### Multiple Relays on Same Sensor
-
-You can link multiple relays to the same sensor for staged control:
-
-```bash
-# Stage 1: Low speed fan at 85°C
-RELAY 0 PIN 23
-RELAY 0 INPUT A2
-RELAY 0 THRESHOLD 85 80
-RELAY 0 MODE AUTO_HIGH
-
-# Stage 2: High speed fan at 95°C
-RELAY 1 PIN 24
-RELAY 1 INPUT A2
-RELAY 1 THRESHOLD 95 90
-RELAY 1 MODE AUTO_HIGH
-```
-
-### Relay with Different Unit Systems
-
-If sensor is configured in Fahrenheit, thresholds use Fahrenheit:
-
-```bash
-SET A2 UNITS FAHRENHEIT
-RELAY 0 INPUT A2
-RELAY 0 THRESHOLD 190 180    # °F, not °C
-```
-
-**Important**: Thresholds always use the sensor's current unit setting.
-
-### Combining with Alarms
-
-You can use both alarms and relays:
-
-```bash
-# Alarm at critical temperature (setting the band arms the alarm Rule)
-SET A2 ALARM 50 110
-
-# Relay activates earlier for cooling
-RELAY 0 INPUT A2
-RELAY 0 THRESHOLD 90 85
-RELAY 0 MODE AUTO_HIGH
-```
-
-**Result**:
-- 90°C: Fan turns ON (relay)
-- 110°C: Alarm buzzer sounds (alarm system)
+Run `SAVE` after changes. Manual `ON`/`OFF` overrides are intentionally never saved.
 
 ---
 
 ## Safety Considerations
 
-### Electrical Safety
+### Electrical
 1. **Use isolated relay modules** with optocouplers
 2. **Fuse the load circuit** appropriately for the fan/pump
-3. **Check relay ratings** (10A relays for high-current loads)
-4. **Avoid back-EMF** from inductive loads (use flyback diodes)
+3. **Check relay ratings** (10A+ relays for high-current loads, or drive a
+   automotive relay from the module)
+4. **Suppress back-EMF** from inductive loads (flyback diodes)
 
-### Software Safety
-1. **Safe startup**: Relays default to OFF on boot
-2. **Warmup protection**: Relays stay OFF during sensor warmup
-3. **Fail-safe**: Relay turns OFF if sensor fails (NaN)
-4. **Manual override**: Can force relay state for emergencies
-
-### Best Practices
-1. **Test in manual mode first**: Verify wiring with `RELAY 0 MODE ON`
-2. **Use appropriate hysteresis**: Prevent relay cycling (5-10°C recommended)
-3. **Monitor state changes**: Check `State Changes` count for excessive switching
-4. **Save configuration**: Always `SAVE` after changes
-5. **Document your setup**: Note which relay controls which device
+### Software
+1. Relays start OFF at boot and stay off in CONFIG mode
+2. Rules wait out their warmup before switching anything
+3. Choose `FAILSAFE ON` or `OFF` per load for what should happen if a sensor fails
+4. Manual overrides are RAM-only and cleared by a reboot
 
 ---
 
-## Quick Reference
+## Migrating from `RELAY`
 
-| Command | Purpose | Example |
-|---------|---------|---------|
-| `RELAY LIST` | Show all relays | `RELAY LIST` |
-| `RELAY <n> STATUS` | Show relay details | `RELAY 0 STATUS` |
-| `RELAY <n> PIN <p>` | Set output pin | `RELAY 0 PIN 23` |
-| `RELAY <n> INPUT <p>` | Link to sensor | `RELAY 0 INPUT A2` |
-| `RELAY <n> THRESHOLD <on> <off>` | Set thresholds | `RELAY 0 THRESHOLD 90 85` |
-| `RELAY <n> MODE <m>` | Set mode | `RELAY 0 MODE AUTO_HIGH` |
-| `RELAY <n> DISABLE` | Disable relay | `RELAY 0 DISABLE` |
-| `SAVE` | Save to EEPROM | `SAVE` |
+| Old `RELAY` command | Rules & Actions equivalent |
+|---------------------|----------------------------|
+| `RELAY 0 PIN 23` | `ACTION ADD RELAY 23` |
+| `RELAY 0 INPUT A2` + `THRESHOLD 90 85` + `MODE AUTO_HIGH` | `RULE ADD A2 ABOVE 90 HYST 5 NONE`, then `ACTION <a> RULE <r>` |
+| `RELAY 1 INPUT A3` + `THRESHOLD 0.5 1.0` + `MODE AUTO_LOW` | `RULE ADD A3 BELOW 0.5 HYST 0.5 NONE`, then `ACTION <a> RULE <r>` |
+| `MODE MANUAL_ON` / `MANUAL_OFF` | `ACTION <a> ON` / `ACTION <a> OFF` |
+| Back to an `AUTO_*` mode | `ACTION <a> AUTO` |
+| `RELAY <n> DISABLE` | `ACTION DEL <a>` (or `RULE <r> DISABLE` to park the Rule) |
+| `RELAY LIST` / `RELAY <n> STATUS` | `ACTION LIST` / `ACTION <a>` and `RULE LIST` / `RULE <r>` |
 
-### Typical Workflow
-
-```bash
-# 1. Configure sensor
-SET A2 APPLICATION COOLANT_TEMP
-SET A2 INPUT ENABLE
-# 2. Configure relay
-RELAY 0 PIN 23
-RELAY 0 INPUT A2
-RELAY 0 THRESHOLD 90 85
-RELAY 0 MODE AUTO_HIGH
-
-# 3. Save
-SAVE
-
-# 4. Monitor
-RELAY 0 STATUS
-```
+Differences worth knowing:
+- Old relay thresholds followed the input's display units; Rule limits are always
+  base units (°C, bar).
+- Actions have a sensor-loss failsafe the old relays didn't.
+- There is no fixed limit of two relays (except on the Mega).
 
 ---
 
-## Additional Resources
+## See Also
 
-- **Main documentation**: [README.md](../../README.md)
-- **Command reference**: Type `HELP` in serial console
-- **Examples**: Type `HELP` and see Examples section
-- **Source code**: [src/outputs/output_relay.cpp](../../../src/outputs/output_relay.cpp)
-
----
-
-**Questions or issues?** Report at https://github.com/preobd/preOBD/issues
+- [Alarm System Guide](../configuration/ALARM_SYSTEM_GUIDE.md) — Rule states, warmup and acknowledgement
+- [Serial Commands Reference](../../reference/SERIAL_COMMANDS.md#rules--actions-control-engine)
+- Type `HELP` in the serial console for on-device help

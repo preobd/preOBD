@@ -378,11 +378,13 @@ This allows:
 ### File Structure
 
 ```
-src/comms/transports/
+src/core/
 ├── transport_interface.h          # Abstract TransportInterface
 ├── message_router.h/.cpp          # MessageRouter implementation
-├── serial_transport_wrapper.h     # Wrapper for Serial/Serial1/Serial2
-└── transport_bluetooth_esp32.h    # ESP32 Bluetooth transport
+└── transport_serial.h             # Wrapper for Serial/Serial1/Serial2
+src/comms/transports/
+├── transport_ble_esp32.h          # ESP32 BLE transport
+└── transport_bluetooth_esp32.h    # ESP32 Bluetooth Classic transport
 ```
 
 ### Memory Footprint
@@ -627,7 +629,7 @@ CAN output modules use the CAN HAL to send OBD-II frames and broadcast data, whi
 
 - [TransportInterface API](../../src/core/transport_interface.h)
 - [MessageRouter Implementation](../../src/core/message_router.h)
-- [Serial Transport Wrapper](../../src/comms/transports/serial_transport_wrapper.h)
+- [Serial Transport Wrapper](../../src/core/transport_serial.h)
 - [ESP32 Bluetooth Transport](../../src/comms/transports/transport_bluetooth_esp32.h)
 - [CAN HAL Interface](../../src/hal/hal_can.h)
 - [Platform Capabilities](../../src/hal/platform_caps.h)

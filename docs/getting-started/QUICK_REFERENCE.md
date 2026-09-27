@@ -59,7 +59,7 @@ CONFIG                                    # Enter configuration mode
 SET 7 EGT MAX31855                       # Pin 7: EGT with thermocouple
 SET A0 OIL_TEMP VDO_150C_STEINHART        # Pin A0: VDO 150C using Steinhart Calibration
 SET A2 COOLANT_TEMP VDO_120C_TABLE      # Pin A2: VDO coolant sensor using Lookup table
-SET A3 OIL_PRESSURE GENERIC_150PSI       # Pin A3: Generic 0.5-4.5V pressure
+SET A3 OIL_PRESSURE GENERIC_PRESSURE_150PSI  # Pin A3: Generic 0.5-4.5V pressure
 SET A6 PRIMARY_BATTERY VOLTAGE_DIVIDER   # Pin A6: Battery voltage
 SAVE                                      # Save configuration
 RUN                                       # Start monitoring
@@ -72,6 +72,7 @@ Use `LIST SENSORS` to see sensor categories, then `LIST SENSORS <category>` for 
 **MODE_BUTTON:**
 - Hold during boot → Enter CONFIG mode
 - Press in RUN mode → Acknowledge the sounding alarm(s) (until that alarm clears by default; see `ALARM DURATION`)
+- Hold for 2 seconds in RUN mode → Toggle the display on/off
 
 ---
 
@@ -87,8 +88,8 @@ SET 7 EGT MAX31855                  # EGT on digital pin 7
 ```
 MAX31855 VCC → 3.3V (or 5V)
 MAX31855 GND → GND
-MAX31855 SCK → Pin 13 (SPI)
-MAX31855 SO  → Pin 12 (SPI MISO)
+MAX31855 SCK → SPI clock (Teensy pin 13, Mega pin 52)
+MAX31855 SO  → SPI MISO (Teensy pin 12, Mega pin 50)
 MAX31855 CS  → Your configured pin
 ```
 
@@ -112,10 +113,10 @@ Add bias resistor: Pin → 100Ω → 3.3V/5V
 For non-VDO NTC thermistors (common 10K sensors):
 
 ```
-SET A0 OIL_TEMP NTC_10K_BETA_3950       # Most common generic NTC
-SET A1 COOLANT_TEMP NTC_10K_STEINHART   # Alternative method
-SET A2 COOLANT_TEMP NTC_STEINHART       # Then set coefficients
-SET A2 CAL STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
+SET A0 OIL_TEMP GENERIC_NTC_BETA                     # Beta equation (from the datasheet)
+SET A0 CAL BETA 2490 3950 10000 25                   # bias, beta, R0, T0
+SET A2 COOLANT_TEMP GENERIC_NTC_STEINHART            # Steinhart-Hart
+SET A2 CAL STEINHART 2490 1.129e-3 2.341e-4 8.775e-8 # bias, A, B, C
 ```
 
 **Wiring:**
@@ -130,24 +131,24 @@ Bias resistor  → Between analog pin and 3.3V/5V
 ```
 SET A3 OIL_PRESSURE VDO_5BAR_CURVE          # Oil pressure
 SET A7 BOOST_PRESSURE VDO_2BAR_CURVE        # Boost pressure
-SET A8 FUEL_PRESSURE VDO_10BAR        # Fuel pressure
+SET A8 FUEL_PRESSURE VDO_10BAR_TABLE  # Fuel pressure
 ```
 
-**Wiring:** Same as temperature sensor (signal + ground + 100Ω bias)
+**Wiring:** Same as temperature sensor (signal + ground + 100Ω bias to VCC)
 
 ### Generic Linear Pressure Sensor (0.5-4.5V)
 
 For modern 3-wire pressure sensors with linear voltage output:
 
 ```
-SET A3 OIL_PRESSURE GENERIC_150PSI    # 150 PSI oil pressure
+SET A3 OIL_PRESSURE GENERIC_PRESSURE_150PSI  # 150 PSI oil pressure
 SET A4 BOOST_PRESSURE GENERIC_BOOST   # 0-5 bar boost
 SET A5 BOOST_PRESSURE MPX4250AP       # Freescale MAP sensor
 ```
 
 **Custom range (any 0.5-4.5V sensor):**
 ```
-SET A3 OIL_PRESSURE GENERIC_LINEAR
+SET A3 OIL_PRESSURE GENERIC_PRESSURE_150PSI
 SET A3 CAL PRESSURE_LINEAR 0.5 4.5 0.0 7.0   # 0.5-4.5V maps to 0-7 bar
 ```
 
@@ -173,9 +174,11 @@ Sensor Signal → 18kΩ → Analog pin
 ```
 
 This scales 0.5–4.5V to ~0.32–2.91V — safely within the 3.3V ADC range.
-Update the calibration to match the divided voltage range:
+Tell the firmware about the divider (33k / (18k + 33k) = 0.647) and keep the
+calibration in sensor-side volts:
 ```
-SET A3 CAL PRESSURE_LINEAR 0.32 2.91 0.0 7.0   # example: 0-7 bar sensor
+SET A3 DIVIDER 0.647
+SET A3 CAL PRESSURE_LINEAR 0.5 4.5 0.0 7.0     # example: 0-7 bar sensor
 ```
 
 ### Battery Voltage
@@ -264,7 +267,7 @@ The help system is hierarchical and organized by category:
 | Command | Description |
 |---------|-------------|
 | `HELP` | Show category overview |
-| `HELP <category>` | Show detailed help (LIST, SET, CALIBRATION, CONTROL, OUTPUT, RELAY, DISPLAY, TRANSPORT, SYSTEM, CONFIG) |
+| `HELP <category>` | Show detailed help (LIST, SET, CONTROL, OUTPUT, BUS, DISPLAY, TRANSPORT, SYSTEM, CONFIG, EXAMPLES) |
 | `HELP QUICK` | Show compact command reference |
 | `?` | Alias for HELP |
 
@@ -272,7 +275,7 @@ The help system is hierarchical and organized by category:
 ```
 HELP                    # Show all categories
 HELP SET                # Show all SET commands
-HELP CALIBRATION        # Show calibration commands
+HELP EXAMPLES           # Show worked examples
 ```
 
 ### Configuration Commands (CONFIG mode only)
@@ -281,10 +284,11 @@ HELP CALIBRATION        # Show calibration commands
 |---------|-------------|---------|
 | `SET <pin> <app> <sensor>` | Configure input (also seeds a default alarm Rule) | `SET A2 COOLANT_TEMP VDO_120C_TABLE` |
 | `SET <pin> UNITS <unit>` | Set display units | `SET A2 UNITS FAHRENHEIT` |
-| `SET <pin> NAME <n>` | Set short name | `SET A2 NAME CLT` |
+| `SET <pin> NAME <name>` | Set full display label | `SET A2 NAME Coolant` |
+| `SET <pin> ABBR <abbr>` | Set short (LCD) label | `SET A2 ABBR CLT` |
 | `CLEAR <pin>` | Remove input (and its Rules) | `CLEAR A2` |
-| `ENABLE <pin>` | Enable input | `ENABLE A2` |
-| `DISABLE <pin>` | Disable input | `DISABLE A2` |
+| `SET <pin> INPUT ENABLE` | Enable input | `SET A2 INPUT ENABLE` |
+| `SET <pin> INPUT DISABLE` | Disable input | `SET A2 INPUT DISABLE` |
 | `SAVE` | Save to EEPROM | `SAVE` |
 
 ### Query Commands (any mode)
@@ -296,7 +300,7 @@ HELP CALIBRATION        # Show calibration commands
 | `LIST SENSORS` | Show sensor categories |
 | `LIST SENSORS <category>` | Show sensors in category |
 | `INFO <pin>` | Show input details |
-| `DUMP` | Show complete configuration |
+| `SYSTEM DUMP` | Show complete configuration |
 | `VERSION` | Show firmware version |
 | `HELP <category>` | Show help for category |
 
@@ -313,6 +317,7 @@ HELP CALIBRATION        # Show calibration commands
 | Command | Description |
 |---------|-------------|
 | `LIST OUTPUTS` | Show all output modules |
+| `OUTPUT STATUS` | Show which outputs are enabled |
 | `OUTPUT <n> ENABLE` | Enable output |
 | `OUTPUT <n> DISABLE` | Disable output |
 | `OUTPUT <n> INTERVAL <ms>` | Set update interval |
@@ -356,16 +361,19 @@ the full surface. (`RELAY` is deprecated and prints a pointer here.)
 | `SET <pin> ALARM MIN <v>` / `MAX <v>` | Per-input alarm: one-sided floor / ceiling |
 | `SET <pin> ALARM WARN <lo|NONE|AUTO> [<hi|NONE|AUTO>]` | Set/clear the alarm Rule's warning threshold |
 | `SET <pin> ALARM DISABLE` | Remove the input's alarm Rule |
-| `RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARN <lo|NONE|AUTO>] [WARNING|ALARM]` | Threshold Rule |
-| `RULE ADD <pin> OUTSIDE <lo> <hi> [WARN <lo|NONE|AUTO> <hi|NONE|AUTO>] [WARNING|ALARM]` | Both-sided band Rule |
+| `RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARN <lo|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]` | Threshold Rule |
+| `RULE ADD <pin> OUTSIDE <lo> <hi> [HYST <w>] [WARN <lo|NONE|AUTO> <hi|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]` | Both-sided band Rule |
 | `RULE LIST` / `RULE <id>` / `RULE DEL <id>` | View / inspect / delete |
 | `RULE <id> WARN <lo|NONE|AUTO> [<hi|NONE|AUTO>]` | Edit an ALARM rule's warning threshold in place |
+| `RULE <id> LIMIT ABOVE|BELOW <limit>` / `LIMIT OUTSIDE <lo> <hi>` | Move a Rule's limits in place |
+| `RULE <id> SEVERITY INFO|WARNING|ALARM|NONE` | Change a Rule's severity in place |
 | `RULE RESET <id>` | Restore the application's default Rule config |
 | `RULE <id> ENABLE|DISABLE` | Re-arm / park a Rule without deleting it (`PARKED` never fires) |
 | `ACTION ADD RELAY <pin> [FAILSAFE ON|OFF] [INVERT]` | Define an actuator |
 | `ACTION <id> RULE <ruleId>` | Drive the Action from a Rule (replaces its membership) |
 | `ACTION <id> RULE ADD|REMOVE <ruleId>` | Add / drop one member Rule — the Action is OR-driven |
 | `ACTION <id> ON|OFF` | Manual override (RUN-mode allowed) |
+| `ACTION <id> AUTO` | Release the override and return to Rule control |
 | `ACTION <id> NAME [text]` | Set the operator label; no text clears it |
 | `ACTION LIST` / `ACTION DEL <id>` | View / delete |
 
@@ -390,13 +398,14 @@ See [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md) and
 
 | Command | Description |
 |---------|-------------|
-| `BUS` | Show all bus configurations |
+| `BUS` | Show bus command help |
 | `BUS I2C [0\|1\|2]` | Show or select I2C bus (Wire/Wire1/Wire2) |
 | `BUS I2C CLOCK <kHz>` | Set I2C clock (100, 400, 1000) |
 | `BUS SPI [0\|1\|2]` | Show or select SPI bus (SPI/SPI1/SPI2) |
 | `BUS SPI CLOCK <Hz>` | Set SPI clock speed |
-| `BUS CAN [0\|1\|2]` | Show or select CAN bus (CAN1/CAN2/CAN3) |
+| `BUS CAN` | Show CAN bus status |
 | `BUS CAN BAUDRATE <bps>` | Set CAN baudrate |
+| `BUS CAN INPUT\|OUTPUT <bus> ENABLE\|DISABLE` | Choose which CAN bus carries input and output |
 
 **Example - Switch to Wire1:**
 ```
@@ -418,6 +427,7 @@ See [Serial Commands Reference](../reference/SERIAL_COMMANDS.md#bus-configuratio
 | `PSI` | Pressure in PSI |
 | `BAR` | Pressure in bar |
 | `KPA` | Pressure in kilopascals |
+| `INHG` | Pressure in inches of mercury |
 | `VOLTS` or `V` | Voltage |
 | `RPM` | Revolutions per minute |
 | `KPH` | Speed in kilometers per hour |
@@ -434,12 +444,12 @@ See [Serial Commands Reference](../reference/SERIAL_COMMANDS.md#bus-configuratio
 |-------------|-------------|-------------------|
 | `CHT` | Cylinder Head Temperature | MAX6675, MAX31855 |
 | `EGT` | Exhaust Gas Temperature | MAX31855 (high range) |
-| `COOLANT_TEMP` | Engine Coolant | VDO_120C_*, NTC_10K_* |
-| `OIL_TEMP` | Engine Oil | VDO_150C_*, NTC_10K_* |
-| `TCASE_TEMP` | Transfer Case | VDO_150C_*, NTC_10K_* |
-| `OIL_PRESSURE` | Engine Oil Pressure | VDO_5BAR_CURVE, GENERIC_150PSI |
+| `COOLANT_TEMP` | Engine Coolant | VDO_120C_*, GENERIC_NTC_* |
+| `OIL_TEMP` | Engine Oil | VDO_150C_*, GENERIC_NTC_* |
+| `TCASE_TEMP` | Transfer Case | VDO_150C_*, GENERIC_NTC_* |
+| `OIL_PRESSURE` | Engine Oil Pressure | VDO_5BAR_CURVE, GENERIC_PRESSURE_150PSI |
 | `BOOST_PRESSURE` | Boost/Manifold Pressure | GENERIC_BOOST, VDO_2BAR_CURVE |
-| `FUEL_PRESSURE` | Fuel Pressure | VDO_5BAR_CURVE, GENERIC_150PSI |
+| `FUEL_PRESSURE` | Fuel Pressure | VDO_5BAR_CURVE, GENERIC_PRESSURE_150PSI |
 | `PRIMARY_BATTERY` | Main Battery | VOLTAGE_DIVIDER |
 | `AUXILIARY_BATTERY` | Secondary Battery | VOLTAGE_DIVIDER |
 | `COOLANT_LEVEL` | Coolant Level Switch | FLOAT_SWITCH |
@@ -450,47 +460,60 @@ See [Serial Commands Reference](../reference/SERIAL_COMMANDS.md#bus-configuratio
 | `ENGINE_RPM` | Engine RPM | W_PHASE_RPM |
 | `VEHICLE_SPEED` | Vehicle Speed | HALL_SPEED |
 
+This is the common subset — `LIST APPLICATIONS` shows all of them (fuel level, throttle position, transmission and differential temps, and more).
+
 ---
 
 ## Sensor Types
 
 ### Thermocouples
 - `MAX6675` - K-Type thermocouple (0-1024°C)
-- `MAX31855` - K-Type thermocouple (high range, -200 to 1350°C)
+- `MAX31855` - K-Type thermocouple (high range, -270 to 1372°C)
 
 ### VDO Thermistors
 - `VDO_120C_TABLE` - VDO 120°C (lookup table, most accurate)
 - `VDO_120C_STEINHART` - VDO 120°C (Steinhart-Hart, faster)
 - `VDO_150C_TABLE` - VDO 150°C (table)
 - `VDO_150C_STEINHART` - VDO 150°C (Steinhart-Hart)
+- `VDO_200C_TABLE` - VDO 200°C cylinder-head sender
+
+### Other Resistive Temperature Senders
+- `SMITHS_TT6811_TEMP`, `SMITHS_TT4201_TEMP`, `SMITHS_GTR104_TEMP` - Smiths coolant senders
+- `ACDELCO_TEMP_PRE79`, `ACDELCO_TEMP_POST79` - AC Delco GM coolant senders
+- `BOSCH_NTC_M12` - Bosch M12 EFI NTC sensor
+- `JEEP_4_0_TEMP_GAUGE`, `JEEP_CJ_TEMP_GAUGE`, `JEEP_RENIX_CTS` - Jeep senders
 
 ### Generic NTC Thermistors
-- `NTC_10K_BETA_3950` - 10K NTC, β=3950 (most common)
-- `NTC_10K_BETA_3435` - 10K NTC, β=3435
-- `NTC_10K_STEINHART` - 10K NTC, Steinhart-Hart
-- `NTC_STEINHART` - Generic, set coefficients with `SET <pin> STEINHART`
-- `NTC_BETA` - Generic, set coefficients with `SET <pin> BETA`
+- `GENERIC_NTC_BETA` - Any NTC; set coefficients with `SET <pin> CAL BETA`
+- `GENERIC_NTC_STEINHART` - Any NTC; set coefficients with `SET <pin> CAL STEINHART`
+- `GENERIC_NTC_TABLE` - Any NTC with a custom lookup table (JSON import)
 
 ### Linear Temperature Sensors
-- `LINEAR_TEMP_40_150` - Linear 0.5-4.5V, -40 to 150°C
+- `GENERIC_TEMP_LINEAR` - Linear 0.5-4.5V, -40 to 150°C
 
 ### VDO Pressure Sensors (Resistive)
 - `VDO_2BAR_CURVE` - VDO 0-2 bar
 - `VDO_5BAR_CURVE` - VDO 0-5 bar
-- `VDO_10BAR` - VDO 0-10 bar
+- `VDO_10BAR_TABLE` / `VDO_10BAR_CURVE` - VDO 0-10 bar
+- `VDO_25BAR_TABLE` - VDO 0-25 bar
+- `VDO_80PSI_TABLE` - VDO 0-80 PSI (US)
+- `SMITHS_OIL_PRESSURE_BP`, `SW_OIL_PRESSURE`, `JEEP_4_0_OIL_GAUGE`, `JEEP_CJ_OIL_THIN`, `JEEP_CJ_OIL_DEEP` - Classic gauge senders (0-80 PSI)
 
 ### Linear Pressure Sensors (0.5-4.5V)
 - `GENERIC_BOOST` - Generic 0-5 bar boost
-- `GENERIC_150PSI` - Generic 0-150 PSI
+- `GENERIC_PRESSURE_150PSI` - Generic 0-150 PSI
+- `AEM_30_2130_150` - AEM 0-150 PSI
 - `MPX4250AP` - Freescale/NXP MAP sensor (20-250 kPa)
 - `MPX5700AP` - Freescale/NXP MAP sensor (15-700 kPa)
-- `GENERIC_LINEAR` - Custom, set range with `SET <pin> PRESSURE_LINEAR`
+- Any other range: pick a linear preset and set it with `SET <pin> CAL PRESSURE_LINEAR`
 
 ### Other
 - `VOLTAGE_DIVIDER` - 12V battery monitoring
 - `W_PHASE_RPM` - Alternator RPM
 - `HALL_SPEED` - Hall effect speed sensor (VDO, OEM, generic 3-wire)
 - `FLOAT_SWITCH` - Digital level switch
+- `VDO_FUEL_LEVEL_*`, `SW_FUEL_LEVEL_240`, `SW_FORD_FUEL_LEVEL`, `JEEP_CJ_FUEL_LEVEL` - Fuel level senders
+- `GENERIC_TPS` - 0.5-4.5V throttle position
 - `BME280_TEMP`, `BME280_PRESSURE`, `BME280_HUMIDITY`, `BME280_ELEVATION`
 
 ### Custom Calibration Commands
@@ -509,10 +532,10 @@ SET <pin> CAL BIAS <resistor>                         # Override bias resistor
 
 | Board | ADC | Voltage | Max Inputs | Notes |
 |-------|-----|---------|------------|-------|
-| Teensy 4.0/4.1 | 12-bit | 3.3V | 16 | Best performance, native CAN |
-| Teensy 3.6 | 12-bit | 3.3V | 16 | Older platform, native CAN |
-| Arduino Mega | 10-bit | 5V | 16 | Good all-rounder |
-| ESP32-S3 | 12-bit | 3.3V | 16 | WiFi/BT capable |
+| Teensy 4.0/4.1 | 12-bit | 3.3V | 40 | Best performance, native CAN |
+| Teensy 3.6 | 12-bit | 3.3V | 32 | Older platform, native CAN |
+| Arduino Mega | 10-bit | 5V | 8 | Tight on flash and RAM; MCP2515 for CAN |
+| ESP32-S3 | 12-bit | 3.3V | 32 | Native TWAI CAN |
 | Arduino Uno | 10-bit | 5V | 8 | Not supported — too little RAM for runtime CLI |
 
 ---
@@ -539,8 +562,8 @@ SET <pin> CAL BIAS <resistor>                         # Override bias resistor
 
 ### Alarm triggers at startup
 
-- Normal behavior - sensors need warmup time
-- Increase warmup if needed: `ALARM <pin> WARMUP 60000`
+- Normal behavior - each application has a warmup time before its alarm arms (see `RULE <id>`)
+- Warmup can be changed per Rule through a JSON import (`warmupMs`)
 
 ### Can't change configuration
 
@@ -551,7 +574,7 @@ SET <pin> CAL BIAS <resistor>                         # Override bias resistor
 
 - Check I2C address (try 0x27 and 0x3F)
 - Verify I2C wiring (SDA, SCL)
-- Check `OUTPUT LIST` to ensure LCD is enabled
+- Check `DISPLAY STATUS` to ensure the display is enabled and the type/address are right
 
 ### CAN not working
 
@@ -575,6 +598,6 @@ SET <pin> CAL BIAS <resistor>                         # Override bias resistor
 **When asking for help, include:**
 - Board type (Mega, Teensy 4.0, etc.)
 - Firmware version (`VERSION` command)
-- Your configuration (`DUMP` command)
+- Your configuration (`SYSTEM DUMP` command)
 - What you expected vs. what happened
 

@@ -271,7 +271,7 @@ Offset  Size  Type       Field
 6       4     float32_le value        (current sensor value)
 10      4     float32_le threshold    (violated threshold; 0 on CLEAR)
 14      4     uint32_le  timestampMs  (device millis() at emit)
-18      1     uint8      ruleId       (Rule.id; 0xFF = none) — protocol v2, #310
+18      1     uint8      ruleId       (Rule.id; 0xFF = none) — protocol v2
 ------  ----
 Total:  19 bytes
 ```
@@ -300,7 +300,7 @@ Offset  Size  Type       Field
 9       1     uint8      failsafe     0=OFF, 1=ON (RELAY only)
 10      1     uint8      command      PREOBD_ACTION_CMD_* (WRITABLE; reads back NONE)
 11      1     uint8      overrideFlags bits0-1 = 0=AUTO, 1=FORCE_ON, 2=FORCE_OFF
-                                       bit2 (0x04) = rule source faulted — #329
+                                       bit2 (0x04) = rule source faulted
 12      4     uint8[4]   reserved
 ------  ----
 Total:  16 bytes
@@ -313,7 +313,7 @@ Total:  16 bytes
 | 0 | `CMD_NONE` | no-op (status only); no confirming notify |
 | 1 | `CMD_MANUAL_ON` | unlinked Action → manual latch ON; rule-driven Action → operator override `FORCE_ON` |
 | 2 | `CMD_MANUAL_OFF` | as above, OFF |
-| 3 | `CMD_AUTO` | release an operator override, returning to rule control (#329) |
+| 3 | `CMD_AUTO` | release an operator override, returning to rule control |
 
 A write is confirmed by the notify it provokes — nothing is optimistic. Writes
 are gated on `protocolVersion` matching, so a stale client's differently-laid-out
@@ -322,8 +322,7 @@ are gated on `protocolVersion` matching, so a stale client's differently-laid-ou
 An **operator override** outranks both the Rule and the failsafe, is RAM-only
 (reverts to `AUTO` on reboot), and is sticky until released. When it is being
 held while the rule's source input is untrustworthy, bit 2 of `overrideFlags` is
-set so a client can flag it rather than showing an ordinary forced state. See
-`ARCHITECTURE.md` §11.3.
+set so a client can flag it rather than showing an ordinary forced state.
 
 `CMD_AUTO` and `overrideFlags` are **additive** into a previously-reserved byte:
 the frame stays 16 bytes and the protocol version stays 2, so older clients
@@ -333,7 +332,7 @@ simply ignore them.
 
 > **⚠️ Superseded by the Action Control payload above.** The `...0031`
 > characteristic / frame `0x05` carried `PreobdRelayState` before the control
-> engine. See `ARCHITECTURE.md` §4.2 / §11. The layout below is historical.
+> engine. The layout below is historical.
 
 **Characteristic:** Relay Control (`...0031`), Read / Write / Notify
 

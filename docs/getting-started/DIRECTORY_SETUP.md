@@ -8,153 +8,76 @@
 
 ```
 preOBD/
-├── platformio.ini              # PlatformIO build configuration
+├── platformio.ini              # Shared build settings; per-board envs come from boards/
 ├── README.md                   # Project overview, quick start
+├── CHANGELOG.md                # Release notes
 ├── LICENSE                     # MIT + NonCommercial License
 ├── DISCLAIMER.md               # Safety and warranty disclaimer
 │
-├── src/                        # All source code
-│   ├── main.cpp               # Main program loop
-│   ├── config.h               # ⭐ APPLICATION CONSTANTS (timing, thresholds, units)
-│   ├── version.h              # Firmware version
-│   │
-│   │                         # board definitions live in top-level boards/ (see below)
-│   │
-│   ├── hal/                   # Hardware abstraction layer
-│   │   ├── hal_can.h          # CAN bus HAL interface
-│   │   ├── hal_watchdog.h     # Watchdog HAL interface
-│   │   ├── platform_caps.h    # Platform capability flags
-│   │   └── platforms/         # Platform-specific HAL implementations
-│   │
-│   ├── inputs/                # Input and sensor management
-│   │   ├── input.h            # Input structure definitions
-│   │   ├── input_manager.cpp  # Input configuration management
-│   │   ├── input_manager.h    # Input manager exports
-│   │   ├── input_can.cpp      # CAN sensor input handling
-│   │   ├── sensor_read.cpp    # Central sensor reading dispatcher
-│   │   ├── sensors/           # Modular sensor reading implementations
-│   │   │   ├── thermistors/   # Thermistor sensors (lookup, Steinhart, beta, linear)
-│   │   │   ├── thermocouples/ # Thermocouple sensors (MAX6675, MAX31855)
-│   │   │   ├── pressure/      # Pressure sensors (linear, polynomial, table)
-│   │   │   ├── voltage/       # Voltage sensors (direct, divider)
-│   │   │   ├── linear/        # Generic linear sensors
-│   │   │   ├── rpm/           # RPM sensors (W-phase)
-│   │   │   ├── speed/         # Speed sensors (Hall effect)
-│   │   │   ├── digital/       # Digital sensors (float switch)
-│   │   │   ├── level/         # Level sensors (table-based)
-│   │   │   ├── environmental/ # Environmental sensors (BME280)
-│   │   │   ├── can/           # CAN sensor reading (frame cache, scan)
-│   │   │   └── sensor_utils.* # Shared utility functions
-│   │   ├── command_table.cpp  # Serial command processor (large file)
-│   │   ├── command_table.h    # Command table exports
-│   │   ├── command_helpers.cpp # Command helper functions
-│   │   ├── serial_config.h    # Serial command interface
-│   │   ├── serial_config.cpp  # Serial input handling
-│   │   └── alarm_logic.cpp    # Alarm state machine
-│   │
-│   ├── lib/                   # Library components
-│   │   ├── platform.h         # Platform auto-detection
-│   │   ├── sensor_types.h     # Data structures
-│   │   ├── sensor_library.h   # Sensor library orchestrator
-│   │   ├── sensor_library/    # Modular sensor definitions
-│   │   │   ├── sensor_types.h       # SensorInfo struct, enums
-│   │   │   ├── sensor_categories.h  # Category enum, helpers
-│   │   │   ├── sensor_helpers.h     # Lookup functions
-│   │   │   └── sensors/             # Sensor entries by type
-│   │   │       ├── thermocouples.h  # MAX6675, MAX31855
-│   │   │       ├── thermistors.h    # VDO, generic NTC
-│   │   │       ├── pressure.h       # Linear, polynomial, table
-│   │   │       ├── voltage.h        # Voltage divider
-│   │   │       ├── frequency.h      # RPM, speed sensors
-│   │   │       ├── environmental.h  # BME280 sensors
-│   │   │       ├── digital.h        # Float switch
-│   │   │       ├── level.h          # Level sensors
-│   │   │       ├── can.h            # CAN sensors
-│   │   │       └── none.h           # Unassigned/placeholder
-│   │   ├── sensor_calibration_data.h  # Calibration orchestrator
-│   │   ├── sensor_calibration_data/   # Calibration database (by manufacturer)
-│   │   │   ├── vdo/                 # VDO thermistors & pressure sensors
-│   │   │   ├── aem/                 # AEM performance sensors
-│   │   │   ├── nxp/                 # NXP/Freescale sensors
-│   │   │   ├── bosch/               # Bosch sensors
-│   │   │   ├── acdelco/             # AC Delco sensors
-│   │   │   ├── smiths/              # Smiths sensors
-│   │   │   ├── stewart_warner/      # Stewart Warner sensors
-│   │   │   ├── jeep/                # Jeep OEM sensors
-│   │   │   ├── generic/             # Generic/aftermarket sensors
-│   │   │   └── system/              # System default calibrations
-│   │   ├── system_config.h        # System-wide EEPROM config struct
-│   │   ├── bus_manager.cpp        # CAN bus management (dual-bus)
-│   │   ├── generated/             # Auto-generated files (registry enums)
-│   │   └── application_presets.h  # Application configurations
-│   │
-│   ├── outputs/               # Output module directory
-│   │   ├── output_base.h      # Output interface
-│   │   ├── output_manager.cpp # Output coordinator
-│   │   ├── output_can.cpp     # CAN bus (OBDII)
-│   │   ├── output_elm327.cpp  # ELM327 emulation
-│   │   ├── output_realdash.cpp # RealDash protocol
-│   │   ├── output_serial.cpp  # Serial CSV output
-│   │   ├── output_sdlog.cpp   # SD card logging
-│   │   ├── output_relay.cpp   # Relay output control
-│   │   └── output_alarm.cpp   # Alarm hardware control
-│   │
-│   ├── displays/              # Display module directory
-│   │   └── display_lcd.cpp    # 20x4 LCD display
-│   │
-│   └── test/                  # Test mode system
-│       ├── README.md          # Test mode documentation
-│       ├── test_mode.h        # Test mode interface
-│       ├── test_mode.cpp      # Test mode implementation
-│       ├── test_scenarios.h   # Pre-defined test scenarios
-│       └── test_value_generator.cpp  # Test value generators
+├── boards/                     # One folder per board (see boards/README.md)
+│   ├── resolve.h               # Derives INCLUDE_* from board capabilities + wiring
+│   └── <board>/
+│       ├── board.h             # ⭐ Board capabilities, limits, CAN chip-select pins
+│       ├── board.ini           # PlatformIO [env:<board>] fragment
+│       └── wiring.ini.example  # ⭐ Copy to wiring.ini: YOUR pin assignments
 │
+├── src/                        # Firmware source
+│   ├── main.cpp                # Setup and main loop
+│   ├── config.h                # ⭐ APPLICATION CONSTANTS (timing, thresholds, units)
+│   ├── version.h / .cpp        # Firmware version
+│   │
+│   ├── cli/                    # Serial command interface
+│   │   ├── command_table.cpp   # Top-level command table and single-screen commands
+│   │   ├── cmd_set.cpp         # SET command
+│   │   ├── cmd_rule.cpp        # RULE command
+│   │   ├── cmd_action.cpp      # ACTION command
+│   │   ├── cmd_alarm.cpp       # ALARM command
+│   │   ├── cmd_bus.cpp         # BUS command
+│   │   ├── cmd_system.cpp      # SYSTEM command
+│   │   ├── command_helpers.*   # Parsing and HELP text
+│   │   └── serial_config.*     # Line input / embedded-cli glue
+│   │
+│   ├── inputs/                 # The Input model
+│   │   ├── input.h             # Input struct
+│   │   ├── input_manager.*     # Configure / enable / clear inputs
+│   │   ├── input_can.*         # CAN input bus (frame reception)
+│   │   └── calibration_apply.* # Applying custom calibrations
+│   │
+│   ├── sensors/                # Sensor library and drivers
+│   │   ├── sensor_library/     # Sensor definitions (sensors/*.h, one file per category)
+│   │   ├── sensor_calibration_data/  # Calibration tables by manufacturer
+│   │   ├── can_sensor_library/ # Standard OBD-II PID table
+│   │   ├── drivers/            # Read functions by type (thermistors/, pressure/, rpm/, ...)
+│   │   ├── application_presets.*  # Applications (CHT, OIL_PRESSURE, ...)
+│   │   ├── units_registry.*    # Units
+│   │   ├── sensor_read.cpp     # Central read dispatcher
+│   │   └── generated/          # Auto-generated registry enums
+│   │
+│   ├── rules/                  # Control engine: Rules (alarms) and Actions (relays)
+│   ├── outputs/                # Output modules
+│   │   ├── output_manager.cpp  # Output coordinator
+│   │   ├── output_can.cpp      # CAN / OBD-II
+│   │   ├── output_elm327.cpp   # ELM327 emulation
+│   │   ├── output_realdash.cpp # RealDash
+│   │   ├── output_serial.cpp   # Serial CSV
+│   │   ├── output_sdlog.cpp    # SD card logging
+│   │   ├── output_alarm.cpp    # Buzzer / LED annunciation
+│   │   ├── ble/                # BLE status / alarm / action / live-value broadcasters
+│   │   └── display/            # Display manager + 20x4 LCD driver
+│   │
+│   ├── storage/                # EEPROM config store, JSON import/export, SD
+│   ├── core/                   # Messaging, logging, system mode, platform, watchdog
+│   ├── comms/                  # Framed BLE-coprocessor protocol, transports
+│   ├── drivers/                # Bus manager, button, RGB LED, serial ports
+│   ├── hal/                    # Hardware abstraction (CAN controllers, watchdog)
+│   ├── pinctrl/                # Pin registry and ownership
+│   └── test/                   # Test mode (simulated sensors)
+│
+├── nrf_firmware/               # Firmware for the optional nRF52840 BLE coprocessor
+├── webapp/                     # Web Bluetooth configuration page
+├── test/                       # Host-side unit tests (pio test -e native)
+├── tools/                      # Registry generators, validators, checks
 └── docs/                       # Documentation
-    ├── README.md                       # Documentation hub
-    ├── getting-started/
-    │   ├── QUICK_REFERENCE.md          # Quick lookup guide
-    │   └── DIRECTORY_SETUP.md          # This file
-    ├── guides/
-    │   ├── sensor-types/               # Sensor-specific guides
-    │   │   ├── SENSOR_SELECTION_GUIDE.md
-    │   │   ├── PRESSURE_SENSOR_GUIDE.md
-    │   │   ├── VOLTAGE_SENSOR_GUIDE.md
-    │   │   ├── DIGITAL_SENSOR_GUIDE.md
-    │   │   ├── W_PHASE_RPM_GUIDE.md
-    │   │   ├── HALL_SPEED_GUIDE.md
-    │   │   ├── THERMISTOR_GUIDE.md
-    │   │   ├── THERMOCOUPLE_GUIDE.md
-    │   │   ├── BME280_GUIDE.md
-    │   │   └── CAN_SENSOR_IMPORT_GUIDE.md
-    │   ├── configuration/              # Configuration guides
-    │   │   ├── CONFIG_RUN_MODE_GUIDE.md
-    │   │   ├── BUILD_CONFIGURATION_GUIDE.md
-    │   │   ├── ADDING_SENSORS.md
-    │   │   ├── ADVANCED_CALIBRATION_GUIDE.md
-    │   │   ├── ALARM_SYSTEM_GUIDE.md
-    │   │   ├── JSON_CONFIGURATION_GUIDE.md
-    │   │   └── JSON_QUICK_REFERENCE.md
-    │   ├── hardware/
-    │   │   ├── BIAS_RESISTOR_GUIDE.md
-    │   │   ├── PIN_REQUIREMENTS_GUIDE.md
-    │   │   ├── CAN_TRANSCEIVER_GUIDE.md
-    │   │   ├── LED_INDICATOR_GUIDE.md
-    │   │   └── BLUETOOTH_HARDWARE_GUIDE.md
-    │   └── outputs/
-    │       ├── OBD2_SCANNER_GUIDE.md
-    │       ├── REALDASH_SETUP_GUIDE.md
-    │       ├── RELAY_CONTROL.md
-    │       └── DIRECT_BLE_OBD_GUIDE.md
-    ├── reference/
-    │   ├── SERIAL_COMMANDS.md
-    │   ├── OBD2_PID_REFERENCE.md
-    │   └── README.md
-    └── architecture/                   # Developer documentation
-        ├── REGISTRY_SYSTEM.md
-        ├── EEPROM_STRUCTURE.md
-        ├── CAN_HAL_ARCHITECTURE.md
-        ├── TRANSPORT_ARCHITECTURE.md
-        └── BLE_GATT_PROFILE.md
 ```
 
 ---
@@ -261,6 +184,10 @@ This directory contains the input-based architecture for sensor configuration.
 - **sensor_utils.*** - Shared utility functions (unit conversions, range validation)
 - **Edit:** YES (add new sensor implementations to appropriate subdirectory)
 
+---
+
+## src/cli/ - Serial Command Interface
+
 **command_table.cpp / command_table.h**
 - Serial command processor — the main implementation of all CLI commands
 - **Edit:** RARELY (when adding new commands)
@@ -272,11 +199,6 @@ This directory contains the input-based architecture for sensor configuration.
 **serial_config.h / serial_config.cpp**
 - Serial input buffering and dispatch (feeds input to the command processor)
 - **Edit:** RARELY
-
-**alarm_logic.cpp**
-- Alarm state machine implementation
-- Warmup, persistence, fault detection
-- **Edit:** RARELY (alarm behavior is configurable)
 
 ---
 
@@ -366,10 +288,6 @@ Also here: `message_api.*` (user-facing output), `log_filter.*` / `log_tags.h`
 
 **output_realdash.cpp**
 - RealDash mobile app protocol
-- **Edit:** RARELY
-
-**output_relay.cpp**
-- Relay output control (e.g., cooling fan based on coolant temp)
 - **Edit:** RARELY
 
 **output_serial.cpp**

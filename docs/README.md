@@ -26,10 +26,10 @@ preOBD provides comprehensive engine monitoring for vehicles that lack modern el
 
 **Key Features:**
 - Multiple sensor type support (temperature, pressure, voltage, RPM, speed)
-- Pre-calibrated sensor library (30+ configurations, including VDO, Smiths, Stewart-Warner, AC Delco, Bosch, Jeep, and generic NTC)
+- Pre-calibrated sensor library (50+ sensors, including VDO, Smiths, Stewart-Warner, AC Delco, Bosch, Jeep, and generic NTC)
 - Flexible runtime configuration via serial commands or Web Bluetooth webapp
 - JSON bulk import/export for sensor configuration backup and transfer
-- CAN sensor import — pull OBD-II or J1939 data from a modern engine swap's ECU alongside classic gauges
+- CAN sensor import — pull OBD-II data from a modern engine swap's ECU alongside classic gauges
 - Multiple outputs: LCD, CAN (OBD-II request/response + broadcast), ELM327 BLE emulator, RealDash, serial, SD logging, relay control
 - Web Bluetooth PWA — configure and monitor wirelessly from a browser, no app install required
 - Multi-platform support (Teensy 4.1, Teensy 3.6/4.0, ESP32-S3, Arduino Mega)
@@ -73,7 +73,7 @@ All native CAN peripherals require an external transceiver (MCP2551, SN65HVD230,
 
 ### Critical: Voltage Compatibility
 
-**3.3V Boards (Teensy, Due, ESP32):**
+**3.3V Boards (Teensy, ESP32-S3):**
 - **GPIO pins are NOT 5V tolerant**
 - Applying 5V will permanently damage the board
 - Use 3.3V sensors or voltage dividers
@@ -102,7 +102,7 @@ VDO Sensor:
   Signal wire → Analog pin (e.g., A2)
   Ground → Chassis ground (sensor body)
 
-Required: 100Ω pull-down resistor from pin → GND (see BIAS_RESISTOR_GUIDE.md)
+Required: 100Ω bias resistor from pin → VCC (see [Bias Resistor Guide](guides/hardware/BIAS_RESISTOR_GUIDE.md))
 ```
 
 **VDO Pressure Sensors:**
@@ -111,7 +111,7 @@ VDO Sensor:
   Signal wire → Analog pin (e.g., A3)
   Ground → Chassis ground (sensor body)
 
-Required: 100Ω pull-down resistor from pin → GND (see BIAS_RESISTOR_GUIDE.md)
+Required: 100Ω bias resistor from pin → VCC (see [Bias Resistor Guide](guides/hardware/BIAS_RESISTOR_GUIDE.md))
 ```
 
 **Voltage Monitoring:**
@@ -196,7 +196,7 @@ SET A3 UNITS PSI                     # Display pressure in PSI
 ```
 SAVE                                 # Save all configuration to EEPROM
 LOAD                                 # Reload from EEPROM
-RESET                                # Clear all configuration (confirmation required)
+SYSTEM RESET CONFIRM                 # Erase all configuration and reboot
 ```
 
 For complete command reference, see [Serial Commands](reference/SERIAL_COMMANDS.md).
@@ -205,23 +205,25 @@ For complete command reference, see [Serial Commands](reference/SERIAL_COMMANDS.
 
 ## Sensor Library
 
-preOBD includes 30+ pre-calibrated sensor configurations:
+preOBD includes 50+ pre-calibrated sensors. `LIST SENSORS` prints the full list on the device; the most common are:
 
 ### Temperature Sensors
 
 | Sensor | Description | Range |
 |--------|-------------|-------|
 | `MAX6675` | K-type thermocouple | 0-1024°C |
-| `MAX31855` | K-type thermocouple (high accuracy) | -200 to 1350°C |
+| `MAX31855` | K-type thermocouple (high accuracy) | -270 to 1372°C |
 | `VDO_120C_TABLE` | VDO 120°C sender | -40 to 120°C |
 | `VDO_120C_STEINHART` | VDO 120°C sender (faster) | -40 to 120°C |
 | `VDO_150C_TABLE` | VDO 150°C sender | -40 to 150°C |
 | `VDO_150C_STEINHART` | VDO 150°C sender (faster) | -40 to 150°C |
-| `SMITHS_*` | Smiths NTC thermistors | varies |
-| `STEWART_WARNER_*` | Stewart-Warner NTC thermistors | varies |
-| `AC_DELCO_*` | AC Delco NTC thermistors | varies |
-| `BOSCH_NTC_*` | Bosch NTC thermistors | varies |
-| `JEEP_4L_*` | Jeep 4.0L gauge sender, Renix CTS | varies |
+| `VDO_200C_TABLE` | VDO 200°C cylinder-head sender | up to 200°C |
+| `SMITHS_*` | Smiths coolant senders (TT6811, TT4201, GTR104) | varies |
+| `ACDELCO_TEMP_PRE79` / `ACDELCO_TEMP_POST79` | AC Delco GM coolant senders | varies |
+| `BOSCH_NTC_M12` | Bosch M12 EFI NTC sensor | -40 to 130°C |
+| `JEEP_4_0_TEMP_GAUGE`, `JEEP_CJ_TEMP_GAUGE`, `JEEP_RENIX_CTS` | Jeep gauge senders and Renix CTS | varies |
+| `GENERIC_NTC_BETA` / `GENERIC_NTC_STEINHART` / `GENERIC_NTC_TABLE` | Any NTC thermistor with your own coefficients | varies |
+| `GENERIC_TEMP_LINEAR` | 0.5-4.5V linear temperature sensor | -40 to 150°C |
 
 ### Pressure Sensors
 
@@ -229,7 +231,10 @@ preOBD includes 30+ pre-calibrated sensor configurations:
 |--------|-------------|-------|
 | `VDO_2BAR_CURVE` | VDO 2-bar sender | 0-2 bar (0-29 PSI) |
 | `VDO_5BAR_CURVE` | VDO 5-bar sender | 0-5 bar (0-73 PSI) |
-| `GENERIC_BOOST` | Generic 0.5-4.5V | Configurable |
+| `VDO_10BAR_CURVE` / `VDO_25BAR_TABLE` / `VDO_80PSI_TABLE` | Other VDO senders | 0-10 bar, 0-25 bar, 0-80 PSI |
+| `SMITHS_OIL_PRESSURE_BP`, `SW_OIL_PRESSURE`, `JEEP_4_0_OIL_GAUGE` | Classic gauge oil-pressure senders | 0-80 PSI |
+| `GENERIC_BOOST` | Generic 0.5-4.5V | 0-5 bar |
+| `GENERIC_PRESSURE_150PSI` / `AEM_30_2130_150` | Generic / AEM 0.5-4.5V | 0-150 PSI |
 | `MPX4250AP` | Freescale MAP sensor | 20-250 kPa |
 | `MPX5700AP` | Freescale MAP sensor | 15-700 kPa |
 
@@ -241,9 +246,12 @@ preOBD includes 30+ pre-calibrated sensor configurations:
 | `W_PHASE_RPM` | Alternator W-phase RPM |
 | `HALL_SPEED` | Hall effect speed sensor (VDO, OEM, generic) |
 | `FLOAT_SWITCH` | Digital level switch |
+| `VDO_FUEL_LEVEL_*`, `SW_FUEL_LEVEL_240`, `SW_FORD_FUEL_LEVEL`, `JEEP_CJ_FUEL_LEVEL` | Fuel level senders |
+| `GENERIC_TPS` | 0.5-4.5V throttle position |
 | `BME280_TEMP` | Ambient temperature |
 | `BME280_PRESSURE` | Barometric pressure |
 | `BME280_HUMIDITY` | Relative humidity |
+| `BME280_ELEVATION` | Altitude from barometric pressure |
 
 For complete catalog, see [Sensor Selection Guide](guides/sensor-types/SENSOR_SELECTION_GUIDE.md).
 
@@ -253,22 +261,38 @@ For complete catalog, see [Sensor Selection Guide](guides/sensor-types/SENSOR_SE
 
 Each input measures a specific application:
 
-| Application | Description | Warmup | Typical Sensor |
+| Application | Description | Warmup | Default Sensor |
 |-------------|-------------|--------|----------------|
-| `CHT` | Cylinder Head Temperature | 30s | MAX6675 |
-| `EGT` | Exhaust Gas Temperature | 20s | MAX31855 |
-| `COOLANT_TEMP` | Engine Coolant | 60s | VDO_120C_TABLE |
-| `OIL_TEMP` | Engine Oil | 60s | VDO_150C_STEINHART |
-| `TCASE_TEMP` | Transfer Case | 60s | VDO_150C_STEINHART |
-| `OIL_PRESSURE` | Engine Oil Pressure | 60s | VDO_5BAR_CURVE |
-| `BOOST_PRESSURE` | Boost/MAP | 0s | MPX4250AP, MPX5700AP |
-| `FUEL_PRESSURE` | Fuel Pressure | 5s | VDO_5BAR_CURVE |
-| `PRIMARY_BATTERY` | Main Battery | 1s | VOLTAGE_DIVIDER |
-| `AUXILIARY_BATTERY` | Secondary Battery | 2s | VOLTAGE_DIVIDER |
-| `ENGINE_RPM` | Engine Speed | 0s | W_PHASE_RPM |
-| `VEHICLE_SPEED` | Vehicle Speed | 0s | HALL_SPEED |
-| `COOLANT_LEVEL` | Coolant Level | 0s | FLOAT_SWITCH |
-| `AMBIENT_TEMP` | Ambient Temperature | 2s | BME280_TEMP |
+| `CHT` | Cylinder Head Temperature | 30s | `MAX31855` |
+| `EGT` | Exhaust Gas Temperature | 20s | `MAX31855` |
+| `COOLANT_TEMP` | Engine Coolant Temperature | 60s | `VDO_120C_STEINHART` |
+| `OIL_TEMP` | Engine Oil Temperature | 60s | `VDO_150C_STEINHART` |
+| `TCASE_TEMP` | Transfer Case Fluid Temperature | 60s | `VDO_120C_STEINHART` |
+| `AMBIENT_TEMP` | Ambient Air Temperature | 0s | `BME280_TEMP` |
+| `OIL_PRESSURE` | Engine Oil Pressure | 5s | `VDO_5BAR_CURVE` |
+| `BOOST_PRESSURE` | Boost Pressure | 1s | `VDO_2BAR_CURVE` |
+| `FUEL_PRESSURE` | Fuel Pressure | 2s | — |
+| `BAROMETRIC_PRESSURE` | Barometric Pressure | 0s | `BME280_PRESSURE` |
+| `PRIMARY_BATTERY` | Primary Battery Voltage | 0s | `VOLTAGE_DIVIDER` |
+| `AUXILIARY_BATTERY` | Auxiliary Battery Voltage | 0s | `VOLTAGE_DIVIDER` |
+| `COOLANT_LEVEL` | Engine Coolant Level | 5s | `FLOAT_SWITCH` |
+| `HUMIDITY` | Relative Humidity | 0s | `BME280_HUMIDITY` |
+| `ELEVATION` | Elevation | 0s | `BME280_ELEVATION` |
+| `ENGINE_RPM` | Engine RPM | 2s | `W_PHASE_RPM` |
+| `HYDRAULIC_PRESSURE` | Hydraulic Pressure | 2s | `VDO_10BAR_TABLE` |
+| `BRAKE_PRESSURE` | Brake Pressure | 1s | `VDO_10BAR_TABLE` |
+| `FUEL_LEVEL` | Fuel Tank Level | 2s | `VDO_FUEL_LEVEL_180` |
+| `VEHICLE_SPEED` | Vehicle Speed | 0s | `HALL_SPEED` |
+| `TRANS_TEMP` | Transmission Fluid Temperature | 60s | `VDO_150C_STEINHART` |
+| `INTAKE_AIR_TEMP` | Intake Air Temperature | 10s | `VDO_120C_STEINHART` |
+| `MAP_PRESSURE` | Manifold Absolute Pressure | 1s | `MPX4250AP` |
+| `THROTTLE_POSITION` | Throttle Position | 0s | `GENERIC_TPS` |
+| `DIFF_TEMP` | Differential Fluid Temperature | 60s | `VDO_150C_STEINHART` |
+| `GEAR_OIL_TEMP` | Gearbox Fluid Temperature | 60s | `VDO_150C_STEINHART` |
+| `OIL_LEVEL` | Engine Oil Level | 10s | `FLOAT_SWITCH` |
+| `INTERCOOLER_TEMP` | Intercooler Temperature | 10s | `GENERIC_TEMP_LINEAR` |
+
+`LIST APPLICATIONS` prints the current list on the device.
 
 ---
 
@@ -276,13 +300,14 @@ Each input measures a specific application:
 
 ### LCD Display
 
-20x4 I2C character LCD. Shows sensor values with automatic rotation.
+20x4 I2C character LCD showing live sensor values.
 
 ```
-OUTPUT LCD ENABLE
-OUTPUT LCD DISABLE
+DISPLAY ENABLE
+DISPLAY DISABLE
 DISPLAY STATUS
-DISPLAY UNITS TEMP F        # Display temps in Fahrenheit
+SYSTEM UNITS TEMP F         # Default temperature units (per input: SET <pin> UNITS)
+SET A2 DISPLAY DISABLE      # Hide one input from the LCD
 ```
 
 ### CAN Bus
@@ -374,7 +399,7 @@ state:
 ```
 
 `OUTPUT STATUS` also shows the active format, and it round-trips through
-`SYSTEM DUMP JSON` / `JSON IMPORT` as `outputs.sd.format`.
+`SYSTEM DUMP JSON` / `JSON IMPORT` as `system.outputs.sd.format`.
 
 ### Alarm Output
 
@@ -406,15 +431,19 @@ preOBD has three BLE connectivity modes:
 **2. ELM327 AT command emulator** — Emulates an ELM327 OBD adapter over BLE, so OBD-II apps (Torque, OBD Fusion, Car Scanner) can connect directly to preOBD without any hardware adapter.
 
 ```
-# No configuration needed — enable CAN output and connect your OBD app via BLE
-OUTPUT CAN ENABLE
+BUS SERIAL 2 ENABLE 9600       # BLE module (e.g. HM-10) wired to Serial2
+BUS SERIAL 2 ELM327 ENABLE     # Dedicate that port to the ELM327 emulator
+SAVE
 ```
 
-**3. HM-10 / UART BLE module** — Transparent serial bridge for the webapp or a serial terminal over BLE. Attach via `AT <port> <command>` for module configuration.
+See the [Direct BLE OBD Guide](guides/outputs/DIRECT_BLE_OBD_GUIDE.md) for details.
+
+**3. HM-10 / UART BLE module** — Transparent serial bridge for the webapp or a serial terminal over BLE. Configure the module with `AT <n> <command>` (n = the serial port number).
 
 ```
-AT UART2 AT+BAUD4    # Set HM-10 to 115200 baud
-TRANSPORT BLE PRIMARY
+BUS SERIAL 1 ENABLE 9600     # The HM-10 is wired to Serial1
+AT 1 AT+NAMEpreOBD           # Configure the module
+TRANSPORT CONTROL SERIAL1 SECONDARY   # Accept commands over BLE as well as USB
 ```
 
 See [BLUETOOTH_HARDWARE_GUIDE.md](guides/hardware/BLUETOOTH_HARDWARE_GUIDE.md), [DIRECT_BLE_OBD_GUIDE.md](guides/outputs/DIRECT_BLE_OBD_GUIDE.md), and [BLE_GATT_PROFILE.md](architecture/BLE_GATT_PROFILE.md).
@@ -487,4 +516,4 @@ See [BLUETOOTH_HARDWARE_GUIDE.md](guides/hardware/BLUETOOTH_HARDWARE_GUIDE.md), 
 **Bug reports:**
 - GitHub Issues
 - Include firmware version (`VERSION` command)
-- Include your configuration (`DUMP` command)
+- Include your configuration (`SYSTEM DUMP` command)

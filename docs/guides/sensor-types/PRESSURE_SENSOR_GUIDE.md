@@ -88,8 +88,8 @@ VDO Sensor:
   Signal wire → Analog pin (e.g., A3)
   Ground → Chassis ground (sensor body grounds through engine block)
 
-Required: Pull-down resistor from analog pin to GND
-  Analog pin → 100Ω resistor → GND
+Required: bias resistor from the analog pin to VCC (5V or 3.3V)
+  VCC → 100Ω resistor → Analog pin
 ```
 
 **Note:** VDO pressure sensors are low-resistance gauge senders (10–184Ω). Use a 100Ω bias resistor for best ADC resolution. See [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) for full details. You can override per-sensor with the `SET <pin> CAL BIAS <ohms>` command.
@@ -214,7 +214,7 @@ For this to work reliably, a disconnected pin must rail rather than float to mid
 
 **Check:**
 1. Wiring connections - most common issue
-2. Pull-down resistor installed (for VDO sensors)
+2. Bias resistor installed between the analog pin and VCC (for VDO sensors)
 3. Sensor has power (for 3-wire sensors)
 4. Measure voltage at analog pin with multimeter
 

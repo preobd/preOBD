@@ -217,8 +217,8 @@ SET 2 UNITS MPH   # Miles per hour
 INFO 2 CALIBRATION
 
 # Enable/disable input
-ENABLE 2
-DISABLE 2
+SET 2 INPUT ENABLE
+SET 2 INPUT DISABLE
 
 # Remove configuration
 CLEAR 2

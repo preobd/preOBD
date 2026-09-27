@@ -8,32 +8,26 @@
 
 preOBD is configured via serial commands at 115200 baud using an interactive command-line interface.
 
-**Terminal Mode (Default):**
-- Full-featured CLI with tab completion, command history, and arrow key navigation
-- Requires a terminal emulator (screen, minicom, picocom, PuTTY, etc.)
-- Build environments: `teensy41`, `mega2560`, `esp32dev` (with `ENABLE_TERMINAL_EMULATOR` flag)
-
-**Serial Monitor Mode (Alternative):**
-- Basic CLI compatible with Arduino/PlatformIO serial monitors
-- No tab completion or command history
-- Build environment: `teensy41_serial` (without `ENABLE_TERMINAL_EMULATOR` flag)
+Any serial monitor works for typing commands. A terminal emulator (screen,
+minicom, picocom, PuTTY, etc.) additionally gives you tab completion, command
+history and arrow-key editing.
 
 Commands are case-insensitive. Pin names can be `A0`, `a0`, `6`, etc.
 
 ### Quick Connection Guide
 
-**macOS/Linux (Terminal Mode):**
+**macOS/Linux (terminal emulator):**
 ```bash
 screen /dev/tty.usbmodem* 115200   # macOS
 screen /dev/ttyACM0 115200         # Linux
 # Exit: Ctrl+A then K then Y
 ```
 
-**Windows (Terminal Mode):**
+**Windows (terminal emulator):**
 - Use PuTTY, Tera Term, or similar terminal emulator
 - Set to Serial, 115200 baud, with VT100 emulation
 
-**Serial Monitor Mode:**
+**Serial monitor:**
 ```bash
 pio device monitor                  # PlatformIO
 # Or use Arduino IDE Serial Monitor
@@ -65,7 +59,7 @@ Pattern: `LIST <type>`
 LIST INPUTS              # Show all configured inputs
 LIST APPLICATIONS        # Show available application presets
 LIST SENSORS             # Show sensor categories
-LIST SENSORS <category>  # Show sensors in category (e.g., NTC_THERMISTOR)
+LIST SENSORS <category>  # Show sensors in category (e.g., THERMISTOR)
 LIST SENSORS TEMPERATURE # Show all temperature sensors
 LIST OUTPUTS             # Show available output modules
 LIST TRANSPORTS          # Show available transports
@@ -94,13 +88,13 @@ Pattern: `SET <pin> <field> <value>`
 ```
 SET A0 CHT MAX6675                       # Combined syntax (recommended)
 SET A0 APPLICATION CHT                   # Set application type
-SET A0 SENSOR NTC VDO_120C_TABLE        # Two-layer: category + preset
-SET A0 SENSOR VDO_120C_TABLE            # Legacy: direct sensor name
-RULE ADD A0 OUTSIDE 100 900             # Add an alarm Rule (both-sided band)
+SET A0 SENSOR THERMISTOR VDO_120C_TABLE # Two-layer: category + preset
+SET A0 SENSOR VDO_120C_TABLE            # Direct sensor name
+RULE ADD A0 OUTSIDE 50 260              # Add an alarm Rule (both-sided band, °C)
 ```
 
 ### Control Commands
-Pattern: `<ACTION> <pin>`
+Pattern: `SET <pin> INPUT <ENABLE|DISABLE>` / `CLEAR <pin>`
 
 ```
 SET A0 INPUT ENABLE            # Enable input reading
@@ -133,7 +127,7 @@ Pattern: `SYSTEM <action> [parameters]`
 SYSTEM STATUS                      # Show global config
 SYSTEM DUMP                        # Complete dump
 SYSTEM PINS                        # Show pin allocations
-INFO A0                     # Query specific pin
+INFO A0                            # Query specific pin
 SYSTEM UNITS TEMP F                # Set default units
 SYSTEM INTERVAL SENSOR 100         # Set sensor interval
 SYSTEM REBOOT                      # Restart the device
@@ -158,7 +152,7 @@ preOBD has three levels of configuration:
 Apply to individual sensor inputs:
 - Application type, sensor hardware
 - Display names and units override
-- Alarm thresholds, warmup, persistence
+- Alarm thresholds
 - Custom calibration parameters
 
 **Example:**
@@ -209,14 +203,18 @@ SET A2 UNITS F                   # A2 overrides to Fahrenheit
 4. [Custom Calibration](#custom-calibration)
 5. [Alarm Configuration](#alarm-configuration)
 6. [Output Configuration](#output-configuration)
-7. [Relay Control](#relay-control)
-8. [Bus Configuration](#bus-configuration)
-9. [Display Configuration](#display-configuration)
-10. [System Configuration](#system-configuration)
-11. [Mode Commands](#mode-commands)
-12. [Persistence Commands](#persistence-commands)
-13. [Query Commands](#query-commands)
-14. [Quick Reference Examples](#quick-reference-examples)
+7. [Rules & Actions](#rules--actions-control-engine)
+8. [Relay Control (deprecated)](#relay-control)
+9. [Bus Configuration](#bus-configuration)
+10. [AT Command Passthrough](#at-command-passthrough)
+11. [Transport Configuration](#transport-configuration)
+12. [Display Configuration](#display-configuration)
+13. [System Configuration](#system-configuration)
+14. [Mode Commands](#mode-commands)
+15. [Persistence Commands](#persistence-commands)
+16. [Query Commands](#query-commands)
+17. [Diagnostics](#diagnostics)
+18. [Quick Reference Examples](#quick-reference-examples)
 
 ---
 
@@ -234,8 +232,8 @@ SET <pin> <application> <sensor>
 ```
 SET 6 CHT MAX6675                    # CHT with K-type thermocouple
 SET A0 OIL_TEMP VDO_150C_STEINHART   # Oil temp with VDO sensor
-SET A2 COOLANT_TEMP NTC_10K_BETA_3950  # Coolant with generic NTC
-SET A3 OIL_PRESSURE GENERIC_150PSI   # Oil pressure with linear sensor
+SET A2 COOLANT_TEMP GENERIC_NTC_BETA  # Coolant with generic NTC (then SET A2 CAL BETA ...)
+SET A3 OIL_PRESSURE GENERIC_PRESSURE_150PSI  # Oil pressure with linear sensor
 SET 2 VEHICLE_SPEED HALL_SPEED       # Vehicle speed with Hall sensor
 SET A6 PRIMARY_BATTERY VOLTAGE_DIVIDER  # Battery voltage
 ```
@@ -245,9 +243,9 @@ SET A6 PRIMARY_BATTERY VOLTAGE_DIVIDER  # Battery voltage
 ```
 SET <pin> APPLICATION <app>      # Set measurement type
 SET <pin> SENSOR <sensor>        # Set hardware sensor
-SET <pin> NAME <name>            # Set short display name (8 chars max)
-SET <pin> NAME <full_name>      # Set full display label (32 chars max)
-SET <pin> ABBR <abbreviation>    # Set full display name (32 chars max)
+SET <pin> NAME <name>            # Set full display label (32 chars max)
+SET <pin> ABBR <abbreviation>    # Set short LCD label (8 chars max)
+SET <pin> DISPLAY ENABLE|DISABLE # Show or hide this input on the LCD
 SET <pin> UNITS <units>          # Override display units (must measure the same quantity as the input; unknown names are refused)
 SET <pin> ALARM <min> <max>      # Alarm outside a Min..Max band
 SET <pin> ALARM MIN <v>          # One-sided: alarm below <v> (floor)
@@ -258,15 +256,14 @@ SET <pin> ALARM OFF              # Disable alarm
 ### Input Control
 
 ```
-ENABLE <pin>                     # Enable input reading
-DISABLE <pin>                    # Disable input (keeps config)
+SET <pin> INPUT ENABLE           # Enable input reading
+SET <pin> INPUT DISABLE          # Disable input (keeps config)
 CLEAR <pin>                      # Remove input configuration completely (and its Rules)
 ```
 
 `CLEAR <pin>` also deletes every Rule sourced from that pin, reporting what it
-removed and any Action it released — a Rule left behind on a pin with no input
-can never fire, and used to hold a `FAILSAFE ON` Action energized indefinitely
-(#345). Use `SAVE` to persist the removal.
+removed and any Action it released, so no orphaned Rule is left holding a
+`FAILSAFE ON` Action energized. Use `SAVE` to persist the removal.
 
 ### Available Units
 
@@ -277,6 +274,7 @@ can never fire, and used to hold a `FAILSAFE ON` Action energized indefinitely
 | `BAR` | | Pressure in bar |
 | `PSI` | | Pressure in PSI |
 | `KPA` | | Pressure in kilopascals |
+| `INHG` | | Pressure in inches of mercury |
 | `VOLTS` | `V` | Voltage |
 | `RPM` | | Revolutions per minute |
 | `KPH` | | Speed in kilometers per hour |
@@ -313,15 +311,15 @@ Use `INFO <pin> CALIBRATION` to view active calibration parameters (see [INFO Co
 
 **Steinhart-Hart (when you have A, B, C coefficients):**
 ```
-SET A0 OIL_TEMP THERMISTOR_STEINHART
-SET A0 CAL STEINHART 10000 1.129e-3 2.341e-4 8.775e-8
+SET A0 OIL_TEMP GENERIC_NTC_STEINHART
+SET A0 CAL STEINHART 2490 1.129e-3 2.341e-4 8.775e-8
 SAVE
 ```
 
 **Beta equation (when you have β value from datasheet):**
 ```
-SET A0 OIL_TEMP THERMISTOR_BETA
-SET A0 CAL BETA 10000 3950 10000 25
+SET A0 OIL_TEMP GENERIC_NTC_BETA
+SET A0 CAL BETA 2490 3950 10000 25
 SAVE
 ```
 
@@ -349,7 +347,7 @@ SAVE
 
 **Linear 0.5-4.5V sensor, 0-7 bar:**
 ```
-SET A1 BOOST_PRESSURE GENERIC_LINEAR
+SET A1 BOOST_PRESSURE GENERIC_BOOST
 SET A1 CAL PRESSURE_LINEAR 0.5 4.5 0.0 7.0
 SAVE
 ```
@@ -397,10 +395,12 @@ See **[Hall Speed Guide](../guides/sensor-types/HALL_SPEED_GUIDE.md)** and **[Ad
 > input's alarm — it creates or edits **one** `ALARM`-severity Rule keyed to that
 > input. Under the hood alarms are control-engine Rules; for warning/info tiers,
 > control-only thresholds, hysteresis, or more than one Rule per input, use
-> `RULE ADD` directly (see the **Rules & Actions** section below and
-> `ARCHITECTURE.md` §11). Timing (warmup/debounce) is seeded from the
+> `RULE ADD` directly (see the **Rules & Actions** section below). Timing (warmup/debounce) is seeded from the
 > application's default template on `SET <pin> APPLICATION <app>` and lives on the
-> Rule; tune it with `RULE`.
+> Rule (see `RULE <id>`).
+>
+> **Units:** alarm and Rule limits are entered in base units — °C, bar, volts,
+> RPM, km/h — whatever units the input displays in.
 
 Configure an input's alarm as a two-sided band or a one-sided floor/ceiling.
 
@@ -429,8 +429,7 @@ SET <pin> ALARM DISABLE              # Remove the input's alarm Rule
 
 `SET <pin> ALARM WARN ...` is the facade for the same warning threshold
 described under **Warning threshold (`WARN`)** below — it edits the
-input's canonical alarm Rule by pin instead of by rule id, which is what
-the mobile app's warn/alarm slider uses. Moving `<min>`/`<max>`/`MIN`/`MAX`
+input's canonical alarm Rule by pin instead of by rule id. Moving `<min>`/`<max>`/`MIN`/`MAX`
 past an explicit warn side reverts that side to `AUTO`.
 
 Use `INFO <pin> ALARM` (or `RULE LIST` / `RULE <id>`) to view an input's live
@@ -448,8 +447,8 @@ ALARM SCOPE <BUZZER|ALL>         # CONFIG: ALL also stops the LED blink (steady 
 
 Acknowledgement is **per rule**: `ALARM SILENCE` (or a short press of the mode
 button — both take the same path) mutes only the rules that are sounding at
-that moment; a *different* rule tripping later still sounds. With a timed
-`DURATION` (default 30 s) the mute holds for exactly that long, even if the
+that moment; a *different* rule tripping later still sounds. The default is
+`DURATION CLEAR`. With a timed `DURATION` the mute holds for exactly that long, even if the
 reading dips out of alarm and back in — a flaky sensor does not re-sound on
 every glitch. With `DURATION CLEAR` the mute holds until the reading returns
 to normal, however long that takes, and a re-trip is heard again. For a broken
@@ -470,7 +469,7 @@ OUTPUT Alarm INTERVAL <ms>       # Set alarm check interval (10-10000ms)
 **Oil Pressure Alarm (one-sided floor):**
 ```
 SET A3 OIL_PRESSURE VDO_5BAR_CURVE
-SET A3 ALARM MIN 10                  # Alarm only if pressure drops below 10 PSI
+SET A3 ALARM MIN 0.7                 # Alarm only if pressure drops below 0.7 bar (~10 PSI)
 ```
 *Why:* You care about a **loss** of oil pressure, not a ceiling — a one-sided floor
 is exactly right. Warmup/debounce come from the application default (oil pressure
@@ -487,7 +486,7 @@ a two-sided band catches both ends with one Rule.
 **CHT Alarm (one-sided ceiling):**
 ```
 SET 6 CHT MAX6675
-SET 6 ALARM MAX 900                  # Alarm only on overtemp above 900°F
+SET 6 ALARM MAX 260                  # Alarm only on overtemp above 260°C
 ```
 *Why:* Cylinder head overtemp is the danger; a low CHT isn't an alarm condition.
 
@@ -504,15 +503,15 @@ OUTPUT Alarm DISABLE                 # Silent mode (no buzzer)
 
 ### Alarm State Machine
 
-Each input tracks alarm state: `DISABLED → INIT → WARMUP → READY ↔ ACTIVE`
+Each Rule tracks its state: `INIT → WARMUP → READY ↔ ACTIVE` (or `PARKED` when disabled with `RULE <id> DISABLE`)
 
 | State | Description |
 |-------|-------------|
-| DISABLED | Alarm off for this input |
-| INIT | 1-second initialization after alarm enabled |
-| WARMUP | Sensor-specific warmup (0-60s depending on application) |
-| READY | Normal monitoring, alarm checking active |
-| ACTIVE | Alarm condition met, buzzer sounding |
+| PARKED | Rule disabled; it never fires |
+| INIT | Brief initialization after the Rule is armed |
+| WARMUP | Application-specific warmup (0-60s) before the Rule can fire |
+| READY | Normal monitoring |
+| ACTIVE | Condition met (buzzer sounds for `ALARM` severity) |
 
 See **[Alarm System Guide](../guides/configuration/ALARM_SYSTEM_GUIDE.md)** for complete documentation.
 
@@ -524,7 +523,7 @@ Control output modules at runtime.
 
 ### Output Module Availability
 
-Output modules must be compiled into firmware to be available. Standard builds (`teensy41`, `teensy40`, `mega2560`) include all outputs by default.
+Output modules must be compiled into the firmware to be available. Which ones are included depends on the board (see `boards/<board>/board.h`).
 
 **Check which outputs are available**:
 ```
@@ -616,7 +615,7 @@ ACTION <id> AUTO                  # release an operator override
 ACTION LIST | ACTION <id> | ACTION DEL <id>
 ```
 
-**An Action can follow several Rules** (§11.6): it is asserted while **any**
+**An Action can follow several Rules**: it is asserted while **any**
 member Rule is active, so one cooling fan can be demanded by coolant temp, trans
 temp and an A/C request at once. `ACTION <id> RULE <ruleId>` *replaces* the whole
 membership; use `RULE ADD` to keep the existing members. Every membership change
@@ -643,7 +642,7 @@ alarms. Each side (`lo`; `hi` too for `OUTSIDE`) is independently `AUTO`
 ```
 RULE ADD A0 ABOVE 230 WARN 210                # warn at 210, alarm at 230
 RULE ADD A0 ABOVE 230 WARN NONE               # no pre-warning — straight to ALARM
-RULE ADD VOLT OUTSIDE 11.5 15.0 WARN 12.0 14.6
+RULE ADD A6 OUTSIDE 11.5 15.0 WARN 12.0 14.6
 RULE 3 WARN 12.0 14.6                         # edit rule #3's warn tier in place
 SET A0 ALARM WARN 210                         # same edit via the per-input facade
 ```
@@ -667,85 +666,29 @@ derived WARNING as its value approaches the limit. Structural edits (`ADD`/`DEL`
 
 ## Relay Control
 
-> **⚠️ Deprecated — relays are now control-engine Actions of type `RELAY`.** The
-> `RELAY ...` command prints a pointer to `RULE` / `ACTION` (see the section above)
-> and no longer configures a relay. The section below is retained for historical
-> reference.
+The `RELAY` command is **deprecated**: it only prints a pointer to `RULE` / `ACTION`.
+A relay is now an **Action** of type `RELAY` driven by a **Rule** (see
+[Rules & Actions](#rules--actions-control-engine) above). Translating the old commands:
 
-**Note**: Relay functionality requires `INCLUDE_RELAY_OUTPUT` to be defined in `config.h`.
+| Old `RELAY` command | Rules & Actions equivalent |
+|---------------------|----------------------------|
+| `RELAY 0 PIN 23` | `ACTION ADD RELAY 23` |
+| `RELAY 0 INPUT A2` + `THRESHOLD 90 85` + `MODE AUTO_HIGH` | `RULE ADD A2 ABOVE 90 HYST 5 NONE`, then `ACTION <id> RULE <ruleId>` |
+| `MODE AUTO_LOW` (on below 15, off above 20) | `RULE ADD A3 BELOW 15 HYST 5 NONE` |
+| `MODE MANUAL_ON` / `MANUAL_OFF` | `ACTION <id> ON` / `ACTION <id> OFF` |
+| Back to automatic | `ACTION <id> AUTO` |
+| `RELAY LIST` | `ACTION LIST` (and `RULE LIST`) |
 
-Control automatic relay outputs based on sensor thresholds. Useful for cooling fans, warning lights, pumps, and other switched loads.
-
-### Commands
-
+**Cooling fan example** (coolant on A2, fan relay on pin 23):
 ```
-RELAY LIST                           # Show all relay status
-RELAY <0-1> STATUS                   # Show specific relay configuration
-RELAY <0-1> PIN <pin>                # Set relay output pin
-RELAY <0-1> INPUT <pin>              # Link relay to sensor input
-RELAY <0-1> THRESHOLD <on> <off>     # Set ON/OFF thresholds with hysteresis
-RELAY <0-1> MODE <mode>              # Set relay mode (see modes below)
-RELAY <0-1> DISABLE                  # Disable relay
-```
-
-### Relay Modes
-
-| Mode | Description |
-|------|-------------|
-| `AUTO_HIGH` | Relay ON when sensor rises above ON threshold, OFF when falls below OFF threshold |
-| `AUTO_LOW` | Relay ON when sensor falls below ON threshold, OFF when rises above OFF threshold |
-| `MANUAL_ON` | Manual override - always ON |
-| `MANUAL_OFF` | Manual override - always OFF |
-| `DISABLED` | Relay disabled (same as `RELAY <0-1> DISABLE` command) |
-
-### Examples
-
-**Cooling fan (AUTO_HIGH mode)**:
-```
-# Configure relay 0 for cooling fan control
-RELAY 0 PIN 23                       # Relay connected to digital pin 23
-RELAY 0 INPUT A2                     # Monitor coolant temperature on A2
-RELAY 0 THRESHOLD 90 85              # Fan ON at 90°C, OFF at 85°C
-RELAY 0 MODE AUTO_HIGH               # Activate on high temperature
+RULE ADD A2 ABOVE 90 HYST 5 NONE      # fan demand: on above 90°C, off below 85°C
+ACTION ADD RELAY 23                   # the relay output
+ACTION 0 RULE 0                       # link them (use the ids printed above)
+SAVE
 ```
 
-**Low pressure warning (AUTO_LOW mode)**:
-```
-# Configure relay 1 for low oil pressure warning light
-RELAY 1 PIN 22                       # Warning light on pin 22
-RELAY 1 INPUT A3                     # Monitor oil pressure on A3
-RELAY 1 THRESHOLD 15 20              # Light ON below 15 PSI, OFF above 20 PSI
-RELAY 1 MODE AUTO_LOW                # Activate on low pressure
-```
-
-**Manual override**:
-```
-RELAY 0 MODE MANUAL_ON               # Force fan ON for testing
-RELAY 0 MODE AUTO_HIGH               # Resume automatic control
-```
-
-### Relay Status Display
-
-```
-RELAY LIST
-```
-Shows:
-```
-=== Relay Status ===
-
-Relay 0:
-  Mode: AUTO_HIGH
-  Output Pin: 23
-  Input: A2 (Coolant Temp)
-  Thresholds: ON=90.0°C, OFF=85.0°C
-  Current Value: 82.3°C
-  State: OFF
-
-Relay 1:
-  Mode: DISABLED
-```
-
-**For detailed relay configuration guide, see [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md)**.
+`NONE` severity makes it a control-only Rule (no alarm). For wiring and more
+examples, see the [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md).
 
 ---
 
@@ -756,14 +699,17 @@ Select which I2C, SPI, CAN bus, or serial ports to use for sensors and outputs. 
 ### Commands
 
 ```
-BUS                              # Show all bus configurations
+BUS                              # Show BUS command help
 BUS I2C                          # Show current I2C bus configuration
 BUS I2C <0|1|2>                  # Select I2C bus (0=Wire, 1=Wire1, 2=Wire2)
+BUS I2C NONE                     # Release the I2C bus (frees its pins on next reboot)
 BUS I2C CLOCK <kHz>              # Set I2C clock speed (100, 400, or 1000 kHz)
 BUS SPI                          # Show current SPI bus configuration
 BUS SPI <0|1|2>                  # Select SPI bus (0=SPI, 1=SPI1, 2=SPI2)
 BUS SPI CLOCK <Hz>               # Set SPI clock speed in Hz
+BUS SPI NONE                     # Release the SPI bus
 BUS CAN                                               # Show current CAN bus configuration
+BUS CAN NONE                                          # Release the CAN bus
 BUS CAN BAUDRATE <bps>                                # Set CAN baudrate for both input/output (125000, 250000, 500000, 1000000)
 BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|LISTEN|DISABLE> [bps]  # Configure CAN input bus with mode and optional baudrate
 BUS CAN INPUT BAUDRATE <bps>                          # Set CAN input baudrate only
@@ -774,7 +720,7 @@ BUS SERIAL <1-8>                 # Show specific port status
 BUS SERIAL <1-8> ENABLE [baud]   # Enable serial port with optional baud rate
 BUS SERIAL <1-8> DISABLE         # Disable serial port
 BUS SERIAL <1-8> BAUDRATE <rate> # Set serial port baud rate
-BUS SERIAL <1-8> ELM327 ENABLE   # Assign ELM327 emulator to serial port (requires INCLUDE_ELM327 build flag)
+BUS SERIAL <1-8> ELM327 ENABLE   # Assign ELM327 emulator to serial port (boards with SUPPORTS_ELM327)
 BUS SERIAL <1-8> ELM327 DISABLE  # Remove ELM327 emulator from serial port
 ```
 
@@ -785,10 +731,8 @@ BUS SERIAL <1-8> ELM327 DISABLE  # Remove ELM327 emulator from serial port
 | Teensy 4.1 | Wire, Wire1, Wire2 | SPI, SPI1, SPI2 | CAN1, CAN2, CAN3 | Serial1-Serial8 |
 | Teensy 4.0 | Wire, Wire1, Wire2 | SPI, SPI1, SPI2 | CAN1, CAN2, CAN3 | Serial1-Serial7 |
 | Teensy 3.6 | Wire, Wire1, Wire2 | SPI, SPI1 | CAN1, CAN2 | Serial1-Serial6 |
-| Teensy 3.5 | Wire, Wire1, Wire2 | SPI, SPI1 | CAN1 | Serial1-Serial6 |
-| Teensy 3.1/3.2 | Wire, Wire1 | SPI | CAN1 | Serial1-Serial3 |
-| ESP32 | Wire, Wire1 | SPI | CAN1 (TWAI) | Serial1-Serial2 |
-| Arduino Mega | Wire | SPI | None | Serial1-Serial3 |
+| ESP32-S3 | Wire, Wire1 | SPI | CAN1 (TWAI) | Serial1-Serial2 |
+| Arduino Mega | Wire | SPI | CAN1 (MCP2515 over SPI) | Serial1-Serial3 |
 
 ### CAN Input Modes
 
@@ -801,7 +745,7 @@ CAN input supports three operating modes:
 
 Supported CAN baud rates: 125000, 250000, 500000, 1000000 (bps)
 
-Input and output buses can operate at different speeds to support mixed protocols (e.g., J1939 input at 250kbps, OBD-II output at 500kbps).
+Input and output buses can operate at different speeds to support mixed protocols (e.g., input from a 250kbps bus, OBD-II output at 500kbps).
 
 ### Serial Port Baud Rates
 
@@ -833,14 +777,14 @@ bus on demand.
 **Configure dual CAN buses with different baud rates:**
 ```
 BUS CAN OUTPUT CAN1 ENABLE 500000   # OBD-II output on CAN1 at 500kbps
-BUS CAN INPUT CAN2 ENABLE 250000    # J1939 input on CAN2 at 250kbps (active mode)
+BUS CAN INPUT CAN2 ENABLE 250000    # Input on CAN2 at 250kbps (active mode)
 SAVE
 ```
 
 **Enable listen-only mode for passive vehicle bus monitoring:**
 ```
 BUS CAN OUTPUT CAN1 ENABLE 500000   # OBD-II output on CAN1
-BUS CAN INPUT CAN2 LISTEN 250000    # Passive monitoring of J1939 on CAN2 (no ACK/TX)
+BUS CAN INPUT CAN2 LISTEN 250000    # Passive monitoring on CAN2 (no ACK/TX)
 SAVE
 ```
 
@@ -853,7 +797,7 @@ SAVE
 
 **Update just the input baud rate:**
 ```
-BUS CAN INPUT BAUDRATE 250000    # Change input to 250kbps for J1939
+BUS CAN INPUT BAUDRATE 250000    # Change input to 250kbps
 SAVE
 ```
 
@@ -896,10 +840,7 @@ SAVE
 
 ### Bus Status Display
 
-```
-BUS
-```
-Shows:
+`BUS I2C`, `BUS SPI` and `BUS CAN` each print the status of that bus type, for example:
 ```
 === I2C Bus Configuration ===
 Active: Wire (SDA=18, SCL=19) @ 400kHz
@@ -950,7 +891,7 @@ Use BUS SERIAL <port> ELM327 ENABLE to assign ELM327 emulator to a port
 
 ### ELM327 Serial Emulator
 
-Requires the `INCLUDE_ELM327` build flag (set in `platformio.ini`).
+Available on boards whose `board.h` declares `SUPPORTS_ELM327`.
 
 - The port must be enabled first: `BUS SERIAL <n> ENABLE <baud>` before running `ELM327 ENABLE`
 - Only one serial port may act as the ELM327 port at a time
@@ -1109,16 +1050,12 @@ SYSTEM DUMP              # Show complete system dump (all subsystems)
 SYSTEM DUMP JSON         # Export active configuration as JSON (copy/paste)
 SYSTEM DUMP REGISTRY JSON  # Export firmware catalogs as JSON (Teensy/ESP32 only)
 SYSTEM PINS              # Show all pin allocations (diagnostic)
-SYSTEM PINS <pin>        # Query specific pin status (e.g., A0, CAN:0)
+INFO <pin>               # Query one pin (e.g., A0, CAN:0)
 ```
 
-**SYSTEM STATUS** output:
-```
-=== System Configuration ===
-Sea Level Pressure: 1013.25 hPa
-Global Intervals: Sensor=100ms, Alarm=100ms
-Default Units: Temp=°C, Pressure=bar, Elevation=m, Speed=kph
-```
+**SYSTEM STATUS** shows the number of active inputs, the ADC reference and
+resolution, sea-level pressure, the sensor/alarm/display intervals, and the
+log-filter and display settings.
 
 **SYSTEM DUMP** shows complete configuration including all inputs, outputs, display, and system parameters.
 
@@ -1148,11 +1085,11 @@ Relay Pins:
   Pin 22: Output      - Relay 0
 ```
 
-**SYSTEM PINS <pin>** queries a specific pin to check if it's allocated:
+**INFO <pin>** queries a specific pin to check if it's allocated:
 ```bash
 INFO A0        # Check if pin A0 is in use
 INFO CAN:0     # Check CAN virtual pin 0
-SYSTEM PINS 22        # Check digital pin 22
+INFO 22        # Check digital pin 22
 ```
 
 Example output:
@@ -1277,23 +1214,27 @@ Whole commands (no gating):
 - `INFO <pin>`
 - `LIST *`
 - `AT *` (raw serial passthrough — diagnostic)
-- `SELFTEST` (validate dispatch tables)
 
 Specific subcommands of mixed parents (read-only verbs only — destructive siblings are blocked):
 
-- `SYSTEM STATUS`, `SYSTEM PINS [<pin>]`, `SYSTEM DUMP [JSON | REGISTRY JSON]`
+- `SYSTEM STATUS`, `SYSTEM PINS`, `SYSTEM DUMP [JSON | REGISTRY JSON]`, `SYSTEM DIAG ...`
 - `LOG STATUS`, `LOG TAGS`
+- `RULE LIST`, `RULE <id>`
+- `ACTION LIST`, `ACTION <id>`, `ACTION <id> ON|OFF|AUTO`
+- `ALARM STATUS`, `ALARM SILENCE`
 
 ### Blocked in RUN Mode
 
 Anything that writes EEPROM, mutates active config, factory-resets, or reboots:
 
-- All `SET *` / `ENABLE` / `DISABLE` / `CLEAR`
+- All `SET *` / `CLEAR`
 - `OUTPUT *`, `DISPLAY *`, `TRANSPORT *`, `BUS *`
 - `SAVE`, `LOAD`, `JSON`, `REBOOT`
 - `SYSTEM RESET`, `SYSTEM REBOOT`, `SYSTEM SEA_LEVEL`, `SYSTEM UNITS`, `SYSTEM INTERVAL`
-- `LOG LEVEL`, `LOG TAG`
-- `RELAY *`, `SCAN`, `TEST` (when applicable to the build)
+- `LOG LEVEL`
+- `RULE ADD|DEL|RESET`, `RULE <id> ...` edits, `ACTION ADD|DEL`, `ACTION <id> RULE|NAME`
+- `ALARM DURATION`, `ALARM SCOPE`
+- `SCAN` (when applicable to the build)
 
 Type `CONFIG` to switch to configuration mode and re-enable these.
 
@@ -1326,9 +1267,7 @@ LOAD [destination:]filename     # Load from file storage
 ```
 
 **Destination Prefixes:**
-- `SD:` - SD card storage (default if no prefix specified)
-- `USB:` - USB drive storage (if `INCLUDE_USB_STORAGE` defined)
-- Additional destinations may be added in future releases
+- `SD:` - SD card storage (default if no prefix specified; currently the only destination)
 
 **Common File Storage Examples:**
 
@@ -1345,10 +1284,6 @@ SAVE SD:winter_setup.json           # Winter configuration
 # Absolute paths for organization
 SAVE SD:/backups/backup_20260111.json
 LOAD SD:/backups/backup_20260111.json
-
-# USB storage (if available)
-SAVE USB:backup.json
-LOAD USB:restore.json
 ```
 
 **Workflow Example - Configuration Backup and Restore:**
@@ -1377,7 +1312,7 @@ If a file operation fails, you'll see:
 ERROR: Failed to save configuration
   Check: SD card inserted and formatted
   Check: Filename length < 32 characters
-  Check: Destination prefix valid (SD, USB)
+  Check: Destination prefix valid (SD)
 ```
 
 ### What Gets Saved
@@ -1391,7 +1326,7 @@ ERROR: Failed to save configuration
 
 - Save after completing all configuration changes (not after each command)
 - EEPROM has ~100,000 write cycles - avoid excessive saves
-- Use file storage (SD/USB) for archival and sharing configurations
+- Use SD file storage for archival and sharing configurations
 - Create timestamped backups: `SAVE SD:backup_20260109.json`
 - Test loaded configurations before persisting to EEPROM
 
@@ -1414,20 +1349,21 @@ HELP QUICK                       # Show compact command reference
 
 **Available Categories:**
 - `HELP LIST` - Discovery commands (list inputs, applications, sensors)
-- `HELP SET` - Basic configuration commands (application, sensor, names, units, alarms)
-- `HELP CALIBRATION` - Advanced sensor calibration (RPM, speed, pressure, temperature)
+- `HELP SET` - Input configuration (application, sensor, names, units, alarms, calibration)
 - `HELP CONTROL` - Input control (enable, disable, clear, info)
 - `HELP OUTPUT` - Output module configuration (CAN, RealDash, Serial, SD logging)
-- `HELP DISPLAY` - Display settings (LCD/OLED, unit preferences)
+- `HELP BUS` - I2C / SPI / CAN / serial bus selection
+- `HELP DISPLAY` - Display settings (LCD/OLED)
 - `HELP TRANSPORT` - Message routing (control, data, debug messages)
-- `HELP SYSTEM` - System configuration (sea level, intervals)
-- `HELP CONFIG` - Persistence and modes (save, load, reset, version, dump)
+- `HELP SYSTEM` - System configuration (units, sea level, intervals, diagnostics)
+- `HELP CONFIG` - Persistence and modes (save, load, version)
+- `HELP EXAMPLES` - Worked examples
 
 **Examples:**
 ```
 HELP                            # Show all categories
 HELP SET                        # Show all SET commands
-HELP CALIBRATION                # Show calibration commands
+HELP SYSTEM                     # Show SYSTEM commands
 HELP QUICK                      # Show compact reference
 ```
 
@@ -1478,7 +1414,7 @@ VERSION                          # Show firmware version
 LIST INPUTS                      # Show all configured inputs
 LIST APPLICATIONS                # Show available application types
 LIST SENSORS                     # Show sensor categories
-LIST SENSORS NTC_THERMISTOR      # Show NTC thermistor sensors
+LIST SENSORS THERMISTOR          # Show thermistor sensors
 LIST SENSORS TEMPERATURE         # Show all temperature sensors
 ```
 
@@ -1488,22 +1424,19 @@ LIST SENSORS TEMPERATURE         # Show all temperature sensors
 
 ## Diagnostics
 
-### SELFTEST
-
-Walks every internal dispatch table (`COMMANDS[]`, `SET_FIELDS[]`, `BUS_SUBCOMMANDS[]`, `SYSTEM_SUBCOMMANDS[]`) and validates entry invariants — non-null pointers, valid token length, uppercase ASCII tokens. Catches PROGMEM-access regressions on AVR (where a missing `pgm_read_ptr` returns garbage) the moment a user runs the command after flashing.
-
 ```
-SELFTEST
-```
-
-Expected output:
-
-```
-Running dispatch-table selftest...
-SELFTEST: PASS
+SYSTEM DIAG                  # Run all diagnostics (integrity + hardware + inputs)
+SYSTEM DIAG INTEGRITY        # Validate the firmware's command tables
+SYSTEM DIAG HW               # Probe configured peripherals (SD card, display, buses, ...)
+SYSTEM DIAG INPUTS           # Per-input fault detection (open / short / out of range)
+SYSTEM DIAG INPUTS VERBOSE   # Same, with the raw evidence for each verdict
+SYSTEM DIAG PINS             # Sweep all analog pins with live raw/voltage readings
 ```
 
-A `FAIL` result indicates a firmware bug — file an issue with the offending table name and entry index from the diagnostic output. Available in both CONFIG and RUN modes. Compiled out when `INCLUDE_SELFTEST=0` (saves ~700 B flash, ~40 B RAM).
+`SYSTEM DIAG PINS` is the quickest way to find which pin a sensor is actually
+wired to. `SYSTEM DIAG INPUTS` explains why an input reads `ERROR` or `NaN`.
+A `FAIL` from `SYSTEM DIAG INTEGRITY` indicates a firmware bug — please file an
+issue with the output. All `SYSTEM DIAG` commands work in both CONFIG and RUN mode.
 
 ---
 
@@ -1514,9 +1447,10 @@ A `FAIL` result indicates a firmware bug — file an issue with the offending ta
 ```
 CONFIG
 SET 6 CHT MAX6675
-SET A0 OIL_TEMP NTC_10K_BETA_3950
+SET A0 OIL_TEMP GENERIC_NTC_BETA
+SET A0 CAL BETA 2490 3950 10000 25
 SET A2 COOLANT_TEMP VDO_120C_TABLE
-SET A3 OIL_PRESSURE GENERIC_150PSI
+SET A3 OIL_PRESSURE GENERIC_PRESSURE_150PSI
 SET A6 PRIMARY_BATTERY VOLTAGE_DIVIDER
 RULE ADD A2 OUTSIDE 60 120
 RULE ADD A3 OUTSIDE 0.5 7.0
@@ -1541,8 +1475,8 @@ RUN
 
 ```
 CONFIG
-SET A0 OIL_TEMP THERMISTOR_STEINHART
-SET A0 CAL STEINHART 4700 1.129e-3 2.341e-4 8.775e-8
+SET A0 OIL_TEMP GENERIC_NTC_STEINHART
+SET A0 CAL STEINHART 2490 1.129e-3 2.341e-4 8.775e-8
 SAVE
 RUN
 ```
@@ -1553,7 +1487,7 @@ RUN
 CONFIG
 SET 2 VEHICLE_SPEED HALL_SPEED
 SET 2 CAL SPEED 100 2008 3.73 2000 300
-SET 2 NAME SPEED
+SET 2 ABBR SPEED
 SAVE
 RUN
 ```
@@ -1566,7 +1500,8 @@ RUN
 |------|--------|----------|
 | Digital | Number | `0`, `1`, `6`, `13` |
 | Analog | A + Number | `A0`, `A1`, `A6`, `A15` |
-| I2C | `I2C` | For BME280 and other I2C sensors |
+| I2C | `I2C:<n>` | BME280 and other I2C sensors (`I2C:0`, `I2C:1`, ...) |
+| CAN import | `CAN` / `CAN:<n>` | `SET CAN <pid>` imports a PID; `CAN:0` addresses it afterwards |
 | SPI CS | Number | Use any digital pin for chip select |
 
 ---
@@ -1577,14 +1512,12 @@ If a command fails, you'll see helpful error messages:
 
 ```
 ERROR: Unknown output 'CANBUS'
-  Hint: Use 'LIST OUTPUTS' to see available outputs
 
-ERROR: SYSTEM RESET requires CONFIG mode
+ERROR: SET requires CONFIG mode
   Type CONFIG to enter configuration mode
-
-ERROR: Pin A20 out of range
-  Hint: Valid pins: 0-53, A0-A15
 ```
+
+Most errors include a usage line or a hint pointing to the `LIST` command that shows valid values.
 
 ---
 

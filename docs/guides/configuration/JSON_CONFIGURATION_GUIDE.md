@@ -1,964 +1,239 @@
 # JSON Configuration Guide
 
-**Version:** 0.5.0-alpha (Unreleased)
-**Last Updated:** 2025-12-19
+preOBD can export its whole configuration as JSON and import it again. Use it to:
 
-This guide covers JSON configuration in preOBD: importing/exporting JSON, SD card backup/restore, custom calibrations, and maintaining backward compatibility when evolving firmware.
+- **Back up** a working setup before you change things
+- **Restore** a setup after a factory reset or on a replacement board
+- **Keep several setups** on an SD card (street, track, dyno) and swap between them
+- **Edit in bulk** — change a file on your computer instead of typing many commands
+
+> **Board support:** JSON export/import is available on Teensy 3.6/4.0/4.1 and
+> ESP32-S3. It is left out of the Arduino Mega build to fit its flash and RAM.
+> SD card save/load additionally needs an SD card (built in on Teensy 4.1).
 
 ## Table of Contents
-- [Overview](#overview)
-- [JSON Schema Format](#json-schema-format)
+- [Export](#export)
+- [Import](#import)
 - [SD Card Backup and Restore](#sd-card-backup-and-restore)
-- [Custom Calibrations in JSON](#custom-calibrations-in-json)
-- [Schema Versioning](#schema-versioning)
-- [Adding Fields (Developer Guide)](#adding-fields-developer-guide)
-- [Removing Fields (Developer Guide)](#removing-fields-developer-guide)
-- [Migration Checklist](#migration-checklist)
-- [Examples](#examples)
+- [File Format](#file-format)
+- [Things to Know](#things-to-know)
+- [For Developers](#for-developers)
 
 ---
 
-## Overview
+## Export
 
-The JSON configuration system in preOBD serves multiple purposes:
-
-1. **Runtime Backup/Restore** - Save and load complete system state to/from SD card
-2. **Configuration Transfer** - Share configs between devices or archive proven setups
-3. **Development** - Maintain backward compatibility as firmware evolves
-
-### Key Principles
-
-1. **Always maintain backward compatibility** - Old JSON files should work with new firmware
-2. **Use default values** - New fields should have sensible defaults
-3. **Version your schema** - Track changes with schema version numbers
-4. **Test round-trips** - Verify DUMP → SAVE → LOAD → DUMP produces identical output
-
-### Use Cases
-
-| Use Case | Tool | Workflow |
-|----------|------|----------|
-| **Initial Setup** | Serial commands | `SET <pin> <app> <sensor>` then `SAVE` |
-| **Backup Configuration** | Serial commands | `CONFIG SAVE backup.json` to SD card |
-| **Restore Configuration** | Serial commands | `CONFIG LOAD backup.json` from SD card |
-| **Share Configurations** | Serial commands | Export JSON, edit, import on another device |
-| **Custom Calibrations** | Serial commands | `SET <pin> CAL <params>` |
-
----
-
-## JSON Schema Format
-
-### Schema v1 Structure
-
-```json
-{
-  "schemaVersion": 1,
-  "mode": "static",
-  "metadata": {
-    "toolVersion": "1.0.0",
-    "platform": "megaatmega2560",
-    "timestamp": 1704067200
-  },
-  "inputs": [
-    {
-      "idx": 0,
-      "pin": "6",
-      "application": "CHT",
-      "sensor": "MAX6675",
-      "calibration": null
-    },
-    {
-      "idx": 1,
-      "pin": "A0",
-      "application": "OIL_TEMP",
-      "sensor": "VDO_150C_STEINHART",
-      "calibration": {
-        "type": "THERMISTOR_STEINHART",
-        "parameters": {
-          "a": 0.00112764,
-          "b": 0.000234282,
-          "c": 8.52635e-08,
-          "r25": 796.4,
-          "seriesR": 1000.0
-        }
-      }
-    }
-  ],
-  "rules": [
-    {
-      "id": 0,
-      "input": 14,
-      "condition": "OUTSIDE",
-      "severity": "ALARM",
-      "limitLo": -1.0,
-      "limitHi": 100.0,
-      "hysteresis": 0.0,
-      "warmupMs": 60000,
-      "debounceMs": 5000,
-      "enabled": true
-    }
-  ],
-  "actions": [
-    {
-      "id": 0,
-      "type": "RELAY",
-      "target": 13,
-      "rule": 0,
-      "invert": false,
-      "failsafe": "OFF"
-    }
-  ]
-}
+```
+SYSTEM DUMP JSON
 ```
 
-> `rules` and `actions` are emitted only on control-engine builds (anything that
-> enables alarms or relays). They are additive — older configs without them
-> still import, and the arrays are simply absent on boards that omit the engine.
+Prints the complete active configuration as JSON. Copy it from the serial
+terminal into a file. It works in both CONFIG and RUN mode.
 
-### Field Descriptions
+(`SYSTEM DUMP REGISTRY JSON` is different: it exports the firmware's built-in
+catalog of sensors, applications and units, not your configuration.)
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `schemaVersion` | number | Yes | JSON schema version (currently 1) |
-| `mode` | string | Yes | Configuration mode: "static" or "runtime" |
-| `metadata.toolVersion` | string | No | Version of the tool that generated this file (informational) |
-| `metadata.platform` | string | Yes | Target platform (e.g., "megaatmega2560") |
-| `metadata.timestamp` | number | No | Unix timestamp of generation |
-| `inputs` | array | Yes | Array of input configurations (0-10 elements) |
-| `inputs[].idx` | number | Yes | Input index (0-9) |
-| `inputs[].pin` | string | Yes | Pin assignment (e.g., "A0", "6", "I2C") |
-| `inputs[].application` | string | Yes | Application name (e.g., "CHT", "OIL_TEMP") |
-| `inputs[].sensor` | string | Yes | Sensor name (e.g., "MAX6675", "VDO_150C") |
-| `inputs[].calibration` | object/null | No | Custom calibration (null = use sensor default) |
-| `rules` | array | No | Control-engine Rule table (control-engine builds only) |
-| `rules[].id` | number | Yes | Stable Rule id (referenced by `actions[].rule`) |
-| `rules[].input` | number | Yes | Source input **pin** the Rule watches |
-| `rules[].condition` | string | Yes | `ABOVE`, `BELOW`, `OUTSIDE`, or `INSIDE` |
-| `rules[].severity` | string | No | `NONE`, `WARNING`, or `ALARM` (default `NONE`) |
-| `rules[].limitLo` | number | No | Limit (ABOVE/BELOW) or low band edge (OUTSIDE/INSIDE) |
-| `rules[].limitHi` | number | No | High band edge (band conditions only) |
-| `rules[].hysteresis` | number | No | Clear-band width, inset from each limit |
-| `rules[].warnLo` | number/null | No | Lo-side warning threshold on an `ALARM` rule. Present with a number = explicit edge; `null` = no warning tier on this side; key absent = `AUTO` (derived, `WARNING_THRESHOLD_PERCENT`) |
-| `rules[].warnHi` | number/null | No | Hi-side warning threshold (`OUTSIDE` rules only). Same tri-state as `warnLo` |
-| `rules[].warmupMs` | number | No | Settling time before the Rule evaluates |
-| `rules[].debounceMs` | number | No | How long the condition must hold before asserting |
-| `rules[].enabled` | bool | No | Rule enabled (default true) |
-| `actions` | array | No | Control-engine Action table (control-engine builds only) |
-| `actions[].id` | number | Yes | Stable Action id |
-| `actions[].type` | string | Yes | `RELAY`, `BEEPER`, `LED`, or `DISPLAY` (v1 drives `RELAY`) |
-| `actions[].target` | number | Yes | Target pin / channel |
-| `actions[].rule` | number | No | Triggering Rule id; omit for a manual-only Action |
-| `actions[].invert` | bool | No | Active-low / inverted output (default false) |
-| `actions[].failsafe` | string | No | `ON`/`OFF` state on untrustworthy reading (RELAY only) |
+---
+
+## Import
+
+In CONFIG mode:
+
+```
+JSON IMPORT
+```
+
+then paste the JSON and finish with a line containing only:
+
+```
+END JSON
+```
+
+The imported configuration takes effect immediately but is **not saved** until
+you run `SAVE`. Check it first with `LIST INPUTS`, `RULE LIST` and `OUTPUT STATUS`.
+
+Tools that send the file programmatically can use `JSON IMPORT <byte-count>` and
+stream exactly that many bytes, with no `END JSON` line.
 
 ---
 
 ## SD Card Backup and Restore
 
-preOBD supports runtime backup and restore of the complete system configuration via SD card. This includes:
-- All input configurations (pin, application, sensor, calibration)
-- System settings (output modules, display, timing, pins)
-- Alarm thresholds and warmup times
-
-### Prerequisites
-
-1. **SD Card Module** - Wired to SPI bus (CS pin configurable via `systemConfig.sdCSPin`)
-2. **Firmware Compiled with SD Support** - SD output module enabled
-3. **Formatted SD Card** - FAT16/FAT32 format
-
-### Backup Configuration to SD Card
-
-```bash
-# Export current configuration to SD card
-> CONFIG SAVE my_backup.json
-
-# Response:
-Configuration saved to: my_backup.json
+```
+SAVE SD:mycar.json          # write the configuration to the SD card
+LOAD SD:mycar.json          # read it back (then SAVE to keep it)
 ```
 
-**What gets saved:**
-- Schema version (for migration support)
-- Firmware version (for reference)
-- Platform information
-- All input configurations
-- System configuration (outputs, display, timing, pins)
-- Alarm settings (per-input warmup, persistence)
+- `SAVE` / `LOAD` on their own (or with `EEPROM`) use the internal EEPROM, as usual.
+- A filename without a prefix goes to the SD card: `SAVE mycar.json`.
+- A relative name is stored under `/config/` on the card; start it with `/` to
+  choose the folder yourself (`SAVE SD:/backups/2026-09.json`).
+- Paths are limited to 32 characters including the `SD:` prefix.
 
-### Restore Configuration from SD Card
+**Backup and restore workflow:**
 
-```bash
-# Load configuration from SD card
-> CONFIG LOAD my_backup.json
-
-# Response:
-Configuration loaded from: my_backup.json
-Inputs restored: 5
-System config restored: OK
-
-# IMPORTANT: Changes are in RAM only!
-# Persist to EEPROM:
-> SAVE
 ```
-
-**What gets restored:**
-- Input configurations (pins, apps, sensors, calibrations)
-- System settings (outputs, display, timing)
-- Alarm thresholds and warmup times
-
-**Note:** After `CONFIG LOAD`, the configuration is active but **not persisted to EEPROM** until you run `SAVE`.
-
-### Workflow: Complete Backup/Restore
-
-```bash
-# === Backup Workflow ===
-# 1. Configure system via serial commands
-> SET 6 CHT MAX6675
-> SET A0 OIL_TEMP VDO_150C_STEINHART
-> OUTPUT CAN ENABLE
-> OUTPUT CAN INTERVAL 100
-
-# 2. Persist to EEPROM
-> SAVE
-
-# 3. Backup to SD card
-> CONFIG SAVE production_config.json
-Configuration saved to: production_config.json
-
-# === Restore Workflow (on same or different device) ===
-# 1. Load from SD card
-> CONFIG LOAD production_config.json
-
-# 2. Review loaded configuration
-> SHOW INPUTS
-> SHOW OUTPUTS
-
-# 3. Persist to EEPROM
-> SAVE
-
-# 4. Verify with DUMP
-> DUMP JSON
-[Should match production_config.json contents]
+CONFIG
+SAVE SD:before_changes.json     # backup
+... make changes, test them ...
+LOAD SD:before_changes.json     # didn't work out: restore
+SAVE                            # make the restored config permanent
+RUN
 ```
-
-### Use Cases for SD Card Backup/Restore
-
-1. **Device Replacement** - Quickly configure replacement hardware with proven settings
-2. **Multiple Profiles** - Swap between different configurations (e.g., "dyno_tune.json", "street_config.json")
-3. **Configuration Archival** - Keep timestamped backups of known-good configs
-4. **Rollback** - Restore previous configuration after experimental changes
-5. **Fleet Deployment** - Distribute identical configs to multiple vehicles
 
 ---
 
-## Custom Calibrations in JSON
+## File Format
 
-preOBD supports **four types** of custom calibrations that can be specified in JSON configs. These override sensor defaults with user-specific parameters.
+The file is a single JSON object. `SYSTEM DUMP JSON` on your own board is the
+best reference; the overall shape is:
 
-### Calibration Type 1: THERMISTOR_STEINHART
-
-**For:** Generic thermistors not in the VDO library
-
-**Parameters:**
-- `a`, `b`, `c` - Steinhart-Hart coefficients
-- `r25` - Resistance at 25°C (Ω)
-- `seriesR` - Series resistor value (Ω)
-
-**JSON Example:**
-```json
-{
-  "idx": 0,
-  "pin": "A0",
-  "application": "CUSTOM_TEMP",
-  "sensor": "THERMISTOR_STEINHART",
-  "calibration": {
-    "type": "THERMISTOR_STEINHART",
-    "parameters": {
-      "a": 0.00112764,
-      "b": 0.000234282,
-      "c": 8.52635e-08,
-      "r25": 796.4,
-      "seriesR": 1000.0
-    }
-  }
-}
-```
-
-### Calibration Type 2: PRESSURE_LINEAR
-
-**For:** Linear pressure sensors (e.g., 0.5V = 0 bar, 4.5V = 5 bar)
-
-**Parameters:**
-- `voltageMin` - Voltage at minimum pressure (V)
-- `voltageMax` - Voltage at maximum pressure (V)
-- `pressureMin` - Minimum pressure (bar)
-- `pressureMax` - Maximum pressure (bar)
-
-**JSON Example:**
-```json
-{
-  "idx": 1,
-  "pin": "A1",
-  "application": "OIL_PRESSURE",
-  "sensor": "GENERIC_PRESSURE",
-  "calibration": {
-    "type": "PRESSURE_LINEAR",
-    "parameters": {
-      "voltageMin": 0.5,
-      "voltageMax": 4.5,
-      "pressureMin": 0.0,
-      "pressureMax": 10.0
-    }
-  }
-}
-```
-
-### Calibration Type 3: PRESSURE_POLY
-
-**For:** Non-linear pressure sensors requiring polynomial correction
-
-**Parameters:**
-- `c0`, `c1`, `c2`, `c3` - Polynomial coefficients (pressure = c0 + c1*V + c2*V² + c3*V³)
-
-**JSON Example:**
-```json
-{
-  "idx": 2,
-  "pin": "A2",
-  "application": "BOOST",
-  "sensor": "GENERIC_BOOST",
-  "calibration": {
-    "type": "PRESSURE_POLY",
-    "parameters": {
-      "c0": -1.2,
-      "c1": 2.5,
-      "c2": -0.15,
-      "c3": 0.005
-    }
-  }
-}
-```
-
-### Calibration Type 4: RPM
-
-**For:** Custom RPM sensors with non-standard pulses per revolution
-
-**Parameters:**
-- `pulsesPerRev` - Number of pulses per revolution (e.g., 3 for W-phase alternator)
-
-**JSON Example:**
-```json
-{
-  "idx": 3,
-  "pin": "2",
-  "application": "ENGINE_RPM",
-  "sensor": "W_PHASE_RPM",
-  "calibration": {
-    "type": "RPM",
-    "parameters": {
-      "pulsesPerRev": 3.0
-    }
-  }
-}
-```
-
-### Using Custom Calibrations
-
-Custom calibrations are set via serial commands at runtime, e.g.
-`SET A0 CAL STEINHART <bias> <a> <b> <c>`, then `SAVE` to persist them to
-EEPROM. The JSON file produced by `CONFIG SAVE` includes any custom
-calibration parameters that have been set.
-
-To apply a calibration from a JSON file, edit the file on the SD card and
-run `CONFIG LOAD <filename>`.
-
----
-
-## Schema Versioning
-
-### Current Schema Version: 1
-
-The JSON schema version is independent of the firmware version. It only increments when the JSON structure changes in a backward-incompatible way.
-
-**Schema Version Location:**
 ```json
 {
   "schemaVersion": 1,
-  "firmware": {
-    "version": "0.4.1-alpha",
-    ...
-  }
-}
-```
-
-**When to Increment Schema Version:**
-- ❌ **DO NOT** increment for adding optional fields (backward compatible)
-- ❌ **DO NOT** increment for adding new registry entries (sensors/apps/units)
-- ✅ **DO** increment when removing required fields
-- ✅ **DO** increment when changing field types (string → number)
-- ✅ **DO** increment when renaming fields
-
----
-
-## Adding Fields (Developer Guide)
-
-### To SystemConfig Struct
-
-**Example:** Adding `uint16_t displayBrightness;`
-
-#### 1. Update the Struct
-**File:** `src/storage/system_config.h`
-```cpp
-struct SystemConfig {
-    // ... existing fields ...
-
-    uint16_t displayBrightness;  // NEW: LCD brightness 0-255
-
-    // Update reserved bytes accordingly
-    uint8_t reserved[4];  // Reduced from 6 to 4
-};
-```
-
-#### 2. Set Default Value
-**File:** `src/storage/system_config.cpp`
-```cpp
-void resetSystemConfig() {
-    // ... existing defaults ...
-
-    systemConfig.displayBrightness = 200;  // Default to 200/255
-}
-```
-
-#### 3. Update EEPROM Version
-**File:** `src/storage/system_config.h`
-```cpp
-#define SYSTEM_CONFIG_VERSION 3  // Increment from 2 to 3
-```
-
-#### 4. Export to JSON
-**File:** `src/storage/json_config.cpp` → `exportSystemConfigToJSON()`
-```cpp
-JsonObject display = systemObj["display"].to<JsonObject>();
-display["enabled"] = (bool)systemConfig.displayEnabled;
-display["type"] = displayTypeStr;
-display["brightness"] = systemConfig.displayBrightness;  // NEW
-```
-
-#### 5. Import from JSON (with default fallback)
-**File:** `src/storage/json_config.cpp` → `importSystemConfigFromJSON()`
-```cpp
-if (systemObj["display"].isNull() == false) {
-    JsonObject display = systemObj["display"];
-    systemConfig.displayEnabled = display["enabled"];
-
-    // NEW: Use default if not present (backward compatibility)
-    systemConfig.displayBrightness = display["brightness"] | 200;
-}
-```
-
-#### 6. Add Serial Command (Optional)
-**File:** `src/cli/serial_config.cpp`
-```cpp
-if (streq(cmd, "DISPLAY") && secondToken) {
-    if (streq(secondToken, "BRIGHTNESS")) {
-        // Parse and set brightness
+  "mode": "runtime",
+  "firmware": { "version": "0.13.0-beta", "platform": "...", "maxInputs": 40, "...": "..." },
+  "system": {
+    "outputs":   { "can": { "enabled": true, "interval": 100 }, "sd": { "enabled": true, "interval": 5000, "format": "WIDE" }, "...": {} },
+    "display":   { "enabled": true, "type": "LCD", "address": "0x27", "updateInterval": 1000,
+                   "defaultUnits": { "temperature": "CELSIUS", "pressure": "BAR", "elevation": "METERS", "speed": "KPH" } },
+    "timing":    { "sensorRead": 100, "alarmCheck": 100 },
+    "constants": { "seaLevelPressure": 1013.25 },
+    "buses":     { "i2c": 0, "spi": 0, "canOutputBus": 0, "canOutputBaudrate": 500000, "...": "..." },
+    "serial":    { "ports": [ { "port": 1, "enabled": true, "baudrate": 9600, "elm327": false } ] },
+    "logFilter": { "controlLevel": "INFO", "dataLevel": "INFO", "debugLevel": "WARN", "enabledTags": "0xFFFFFFFF" }
+  },
+  "inputs": [
+    {
+      "idx": 0,
+      "pin": 16,
+      "pinLabel": "A2",
+      "abbr": "ECT",
+      "name": "Engine Coolant Temperature",
+      "app": "COOLANT_TEMP",
+      "sensor": "VDO_120C_STEINHART",
+      "units": "CELSIUS",
+      "alarm": { "ruleId": 0, "min": -1.0, "max": 100.0 },
+      "enabled": true,
+      "displayEnabled": true,
+      "outputMask": 15
     }
+  ],
+  "rules": [
+    { "id": 0, "input": 16, "condition": "OUTSIDE", "severity": "ALARM",
+      "limitLo": -1.0, "limitHi": 100.0, "hysteresis": 0.0,
+      "warmupMs": 60000, "debounceMs": 500, "enabled": true }
+  ],
+  "actions": [
+    { "id": 0, "type": "RELAY", "target": 23, "rule": 1, "name": "Cooling Fan",
+      "invert": false, "failsafe": "ON" }
+  ]
 }
 ```
 
-#### 7. Test
-```bash
-> DUMP JSON              # Should show "brightness": 200
-> CONFIG SAVE test.json
-> RESET
-> CONFIG LOAD test.json  # Should restore brightness
-> DUMP JSON              # Should match original
-```
+### Inputs
 
----
+| Field | Meaning |
+|-------|---------|
+| `pin` | The board's pin number. **This is what import uses** — see [Things to Know](#things-to-know) |
+| `pinLabel` | The pin as you'd type it (`A2`, `I2C:0`, `CAN:0`); informational |
+| `app`, `sensor` | Application and sensor names, as in `SET <pin> <app> <sensor>` |
+| `units` | Display units |
+| `abbr`, `name` | Short (LCD) and full labels |
+| `enabled`, `displayEnabled` | Input on/off; shown on the LCD or not |
+| `outputMask` | Which data outputs carry this input (CAN, RealDash, Serial, SD) |
+| `divider` | Voltage-divider ratio, present only when one is set (`SET <pin> DIVIDER`) |
+| `obd2` | `{ "pid", "length" }` when the input reports as an OBD-II PID |
+| `alarm` | Read-only summary of the input's alarm Rule — edit the `rules` array instead |
+| `calibration` | Present only for a custom calibration — see below |
 
-### To Input Struct
+### Custom calibration
 
-**Example:** Adding `uint8_t priority;` for alarm priority
+A custom calibration looks like this:
 
-#### 1. Update Input Struct
-**File:** `src/inputs/input.h`
-```cpp
-struct Input {
-    // ... existing fields ...
-
-    uint8_t priority;  // NEW: Alarm priority (0=lowest, 255=highest)
-
-    // ... rest of fields ...
-};
-```
-
-#### 2. Update InputEEPROM Struct
-**File:** `src/inputs/input_manager.cpp`
-```cpp
-struct InputEEPROM {
-    // ... existing fields ...
-
-    uint8_t priority;  // NEW: Match Input struct
-
-    uint8_t reserved[N];  // Adjust size
-};
-```
-
-#### 3. Update EEPROM Save/Load
-**File:** `src/inputs/input_manager.cpp`
-
-In `saveInputConfig()`:
-```cpp
-eeprom.priority = inputs[i].priority;  // NEW
-```
-
-In `loadInputConfig()`:
-```cpp
-inputs[i].priority = eeprom.priority;  // NEW
-```
-
-#### 4. Update EEPROM Version
-**File:** `src/inputs/input_manager.cpp`
-```cpp
-#define EEPROM_VERSION 3  // Increment
-```
-
-#### 5. Export to JSON
-**File:** `src/storage/json_config.cpp` → `exportInputToJSON()`
-```cpp
-inputObj["priority"] = input->priority;  // NEW
-```
-
-#### 6. Import from JSON (with default)
-**File:** `src/storage/json_config.cpp` → `importInputFromJSON()`
-```cpp
-// NEW: Default to medium priority if not specified
-input->priority = inputObj["priority"] | 128;
-```
-
----
-
-### To CalibrationOverride Union
-
-**Example:** Adding custom lookup table
-
-#### 1. Add to Union
-**File:** `src/inputs/input.h`
-```cpp
-union CalibrationOverride {
-    // ... existing calibrations ...
-
-    // NEW: Custom lookup table (16 bytes)
-    struct {
-        float table[4];  // 4 calibration points
-    } customLookup;
-
-    byte raw[16];
-};
-```
-
-#### 2. Add Calibration Type Enum
-**File:** `src/sensors/calibration_types.h`
-```cpp
-enum CalibrationType {
-    // ... existing types ...
-    CAL_CUSTOM_LOOKUP,  // NEW
-};
-```
-
-#### 3. Update getCalibrationType()
-**File:** `src/storage/json_config.cpp`
-```cpp
-static const char* getCalibrationType(const Input* input) {
-    switch (input->calibrationType) {
-        // ... existing cases ...
-        case CAL_CUSTOM_LOOKUP: return "CUSTOM_LOOKUP";  // NEW
-        default: return "UNKNOWN";
-    }
+```json
+"calibration": {
+  "type": "THERMISTOR_BETA",
+  "source": "CUSTOM",
+  "params": { "biasResistor": 2490, "beta": 3950, "r0": 10000, "t0": 25 }
 }
 ```
 
-#### 4. Update exportCalibration()
-**File:** `src/storage/json_config.cpp`
-```cpp
-switch (input->calibrationType) {
-    // ... existing cases ...
+| `type` | `params` |
+|--------|----------|
+| `THERMISTOR_STEINHART` | `biasResistor`, `steinhartA`, `steinhartB`, `steinhartC` |
+| `THERMISTOR_BETA` | `biasResistor`, `beta`, `r0`, `t0` |
+| `THERMISTOR_TABLE`, `PRESSURE_TABLE` | `biasResistor` |
+| `PRESSURE_POLYNOMIAL` | `biasResistor`, `polyA`, `polyB`, `polyC` |
+| `LINEAR` | `voltageMin`, `voltageMax`, `outputMin`, `outputMax` |
+| `VOLTAGE_DIVIDER` | `r1`, `r2`, `correction`, `offset` |
+| `RPM` | `poles`, `pulleyRatio`, `calibrationMult`, `timeoutMs`, `minRPM`, `maxRPM` |
+| `SPEED` | `pulsesPerRev`, `tireCircumferenceMm`, `finalDriveRatio`, `calibrationMult`, `timeoutMs`, `maxSpeedKph` |
+| `CAN_IMPORT` | `sourceCanId`, `sourcePid`, `dataOffset`, `dataLength`, `isBigEndian`, `scaleFactor`, `offset`, `timeoutMs` |
 
-    case CAL_CUSTOM_LOOKUP:  // NEW
-        for (int i = 0; i < 4; i++) {
-            char key[8];
-            snprintf(key, sizeof(key), "point%d", i);
-            params[key] = input->customCalibration.customLookup.table[i];
-        }
-        break;
-}
-```
+`source` must be `"CUSTOM"` for the parameters to apply (`"PRESET"` means "use the
+sensor's built-in calibration"), and `type` must match the calibration type of the
+input's sensor.
 
-#### 5. Update importCalibration()
-**File:** `src/storage/json_config.cpp`
-```cpp
-// Parse calibration type from JSON and apply
-// (Currently stubbed - implement as needed)
-```
+Some calibrations can **only** be set through JSON: the battery voltage divider
+resistors (`VOLTAGE_DIVIDER` — `r1`, `r2`, `correction`, `offset`) and custom CAN
+frame decoding (`CAN_IMPORT`). The others can also be set with `SET <pin> CAL ...`.
 
----
+### Rules
 
-## Removing Fields (Developer Guide)
+| Field | Meaning |
+|-------|---------|
+| `id` | Rule id (referenced by actions) |
+| `input` | The **pin number** the Rule watches |
+| `condition` | `ABOVE`, `BELOW` or `OUTSIDE` |
+| `severity` | `NONE`, `INFO`, `WARNING` or `ALARM` (default `NONE`) |
+| `limitLo`, `limitHi` | Limit (`ABOVE`/`BELOW` use `limitLo`), or the band for `OUTSIDE` — in base units (°C, bar, ...) |
+| `hysteresis` | Hysteresis band width |
+| `warmupMs`, `debounceMs` | Warmup after arming, and how long the condition must hold (max 65535 ms) |
+| `enabled` | `false` = parked |
+| `warnLo`, `warnHi` | `ALARM` rules only: a number sets the warning edge, `null` means no warning tier, and leaving the key out means automatic |
 
-### Breaking Change - Requires Migration
+`warmupMs` and `debounceMs` can only be changed through JSON.
 
-When removing fields, you **must** increment the schema version and provide a migration path.
+### Actions
 
-**Example:** Removing deprecated `systemConfig.reserved1`
-
-#### 1. Mark as Deprecated (Release N)
-```cpp
-// @deprecated Will be removed in v0.5.0
-uint16_t reserved1;
-```
-
-Document in changelog:
-```markdown
-## v0.4.2 - Deprecation Notice
-- systemConfig.reserved1 is deprecated and will be removed in v0.5.0
-```
-
-#### 2. Remove Field (Release N+1)
-**File:** `src/storage/system_config.h`
-```cpp
-struct SystemConfig {
-    // ... fields ...
-    // REMOVED: reserved1 (was deprecated in v0.4.2)
-
-    uint8_t reserved[10];  // Increased
-};
-```
-
-#### 3. Increment Schema Version
-```cpp
-// In json_config.cpp
-firmware["schemaVersion"] = 2;  // Was 1
-```
-
-#### 4. Handle Old Schema on Import
-**File:** `src/storage/json_config.cpp` → `loadConfigFromJSON()`
-```cpp
-// Check schema version
-uint8_t schemaVer = doc["schemaVersion"] | 1;  // Default to 1 if missing
-
-if (schemaVer == 1) {
-    // Old schema - skip reserved1 field if present
-    // All other fields still work
-}
-```
-
-#### 5. Document Migration
-Update `docs/CHANGELOG.md`:
-```markdown
-## v0.5.0 - Breaking Changes
-- **JSON Schema v2**: Removed systemConfig.reserved1
-- Old JSON configs (schema v1) still supported
-- No user action required
-```
+| Field | Meaning |
+|-------|---------|
+| `id` | Action id |
+| `type` | `RELAY` |
+| `target` | Output pin |
+| `rule` / `rules` | The Rule id it follows, or an array of ids when it follows several; leave out for manual-only |
+| `name` | Optional label |
+| `invert` | Active-low output |
+| `failsafe` | `ON` or `OFF` — state when the Rule's sensor fails |
 
 ---
 
-## Migration Checklist
+## Things to Know
 
-Use this checklist when modifying configuration structures:
-
-### Adding Field to SystemConfig
-- [ ] Add field to `SystemConfig` struct in `system_config.h`
-- [ ] Set default value in `resetSystemConfig()` in `system_config.cpp`
-- [ ] Increment `SYSTEM_CONFIG_VERSION` in `system_config.h`
-- [ ] Add export line in `exportSystemConfigToJSON()` in `json_config.cpp`
-- [ ] Add import line with default fallback in `importSystemConfigFromJSON()`
-- [ ] Add serial command if user-configurable (optional)
-- [ ] Update `docs/CHANGELOG.md`
-- [ ] Test: `DUMP JSON` shows new field with correct value
-- [ ] Test: `CONFIG LOAD` from old JSON uses default value
-- [ ] Test: Round-trip DUMP → SAVE → LOAD → DUMP matches
-
-### Adding Field to Input
-- [ ] Add field to `Input` struct in `input.h`
-- [ ] Add field to `InputEEPROM` struct in `input_manager.cpp`
-- [ ] Update `saveInputConfig()` to serialize new field
-- [ ] Update `loadInputConfig()` to deserialize new field
-- [ ] Increment `EEPROM_VERSION` in `input_manager.cpp`
-- [ ] Add export line in `exportInputToJSON()` in `json_config.cpp`
-- [ ] Add import line with default in `importInputFromJSON()`
-- [ ] Update `docs/CHANGELOG.md`
-- [ ] Test: `DUMP JSON` includes new field for all inputs
-- [ ] Test: `CONFIG LOAD` from old JSON uses default
-- [ ] Test: Round-trip preserves new field value
-
-### Adding Calibration Type
-- [ ] Add to `CalibrationType` enum in `sensor_types.h`
-- [ ] Add struct to `CalibrationOverride` union in `input.h`
-- [ ] Add case to `getCalibrationType()` in `json_config.cpp`
-- [ ] Add case to `exportCalibration()` in `json_config.cpp`
-- [ ] Add parsing to `importCalibration()` in `json_config.cpp`
-- [ ] Add read function and wire up in sensor library
-- [ ] Update `docs/CHANGELOG.md`
-- [ ] Test: Export/import custom calibration parameters
-
-### Adding Registry Entry (Sensor/Application/Unit)
-- [ ] Add sensor to appropriate file in `sensor_library/sensors/*.h` using X-macro pattern
-- [ ] Add PROGMEM string literals in the same file
-- [ ] Compute and add DJB2 hash
-- [ ] Add read function if new sensor
-- [ ] Add calibration data to `sensor_calibration_data/<manufacturer>/` if needed
-- [ ] Update `docs/CHANGELOG.md`
-- [ ] Test: JSON export uses new registry name
-- [ ] Test: JSON import finds new registry entry
-- [ ] **No JSON code changes needed!** (Registry architecture handles it)
-
-### Removing Field (Breaking Change)
-- [ ] Mark as `@deprecated` in previous release
-- [ ] Document deprecation in `docs/CHANGELOG.md`
-- [ ] Remove field in next major release
-- [ ] Increment schema version in `json_config.cpp`
-- [ ] Add migration code in `loadConfigFromJSON()` if needed
-- [ ] Update all export/import functions
-- [ ] Document breaking change in `docs/CHANGELOG.md`
-- [ ] Test: Old JSON configs still load (skip removed field)
-- [ ] Test: New JSON configs omit removed field
+- **Pins are board pin numbers.** `A2` is pin 16 on a Teensy 4.x but a different
+  number on another board, so a file exported from one board type should not be
+  imported on a different one without editing the `pin`, `input` and `target`
+  numbers.
+- **Missing sections are left alone.** A file with only `inputs` leaves the
+  system settings, Rules and Actions as they were.
+- **Inputs are written by slot.** Each entry in `inputs` is written into slot
+  `idx`; inputs in other slots are kept. To start clean, `SYSTEM RESET CONFIRM`
+  first. A `rules` or `actions` array, by contrast, replaces that whole table.
+- **Missing fields take defaults**, so an older export still imports on newer firmware.
+- **`schemaVersion` must be 1** and `mode` must be `"runtime"`; anything else is refused.
+- **Import doesn't save.** Run `SAVE` afterwards.
 
 ---
 
-## Examples
+## For Developers
 
-### Example 1: Adding Display Brightness
-
-**Scenario:** Add user-configurable LCD brightness
-
-**Changes:**
-```cpp
-// system_config.h
-struct SystemConfig {
-    uint8_t displayBrightness;  // 0-255
-    uint8_t reserved[5];  // Was 6
-};
-#define SYSTEM_CONFIG_VERSION 3  // Was 2
-
-// system_config.cpp
-void resetSystemConfig() {
-    systemConfig.displayBrightness = 200;  // Default
-}
-
-// json_config.cpp - Export
-display["brightness"] = systemConfig.displayBrightness;
-
-// json_config.cpp - Import (with default)
-systemConfig.displayBrightness = display["brightness"] | 200;
-```
-
-**Result:**
-- Old JSON: Missing "brightness" field → Uses default 200
-- New JSON: Includes "brightness" field → Uses saved value
-
----
-
-### Example 2: Adding Alarm Priority
-
-**Scenario:** Add priority levels to inputs for alarm handling
-
-**Changes:**
-```cpp
-// input.h
-struct Input {
-    uint8_t priority;  // 0=low, 255=critical
-};
-
-// input_manager.cpp
-struct InputEEPROM {
-    uint8_t priority;
-};
-#define EEPROM_VERSION 4  // Was 3
-
-// Save/Load updated accordingly
-
-// json_config.cpp - Export
-inputObj["priority"] = input->priority;
-
-// json_config.cpp - Import (with default)
-input->priority = inputObj["priority"] | 128;  // Default to medium
-```
-
-**Result:**
-- Old JSON: Missing "priority" → Defaults to 128 (medium)
-- New JSON: Includes "priority" → Uses specified value
-
----
-
-### Example 3: Removing Deprecated Field
-
-**Scenario:** Remove `systemConfig.reserved1` after deprecation period
-
-**v0.4.2 (Deprecation):**
-```cpp
-// system_config.h
-struct SystemConfig {
-    uint16_t reserved1;  // @deprecated - Remove in v0.5.0
-};
-```
-
-**v0.5.0 (Removal):**
-```cpp
-// system_config.h
-struct SystemConfig {
-    // REMOVED: reserved1
-    uint8_t reserved[8];  // Increased from 6
-};
-
-// json_config.cpp
-firmware["schemaVersion"] = 2;  // Increment from 1
-
-// loadConfigFromJSON() - Handle old schema
-uint8_t schemaVer = doc["schemaVersion"] | 1;
-if (schemaVer == 1) {
-    // Old schema - just ignore reserved1 if present
-}
-```
-
-**Result:**
-- Schema v1 JSON (old): Loads successfully, ignores reserved1
-- Schema v2 JSON (new): Cleaner format without reserved1
-
----
-
-## Testing Strategy
-
-### Manual Round-Trip Test
-```bash
-# 1. Export current config
-> DUMP JSON
-[Copy output to file: config_v1.json]
-
-# 2. Save to SD card
-> CONFIG SAVE backup.json
-
-# 3. Make changes (add sensors, modify settings)
-> SET A2 OIL_TEMP VDO_150C_STEINHART
-
-# 4. Export again
-> DUMP JSON
-[Should show changes]
-
-# 5. Restore original
-> CONFIG LOAD backup.json
-> DUMP JSON
-[Should match step 1 output]
-
-# 6. Persist
-> SAVE
-```
-
-### Automated Testing (Future)
-```cpp
-// test_json_migration.cpp
-void testBackwardCompatibility() {
-    // Load old schema v1 JSON
-    loadConfigFromJSON(oldSchemaJSON);
-
-    // Verify defaults applied
-    assert(systemConfig.displayBrightness == 200);
-
-    // Export and verify schema v2
-    String exported = dumpToString();
-    assert(exported.contains("\"schemaVersion\": 2"));
-}
-```
-
----
-
-## Common Pitfalls
-
-### ❌ Don't: Change Field Types
-```cpp
-// BAD - Breaking change
-uint16_t sensorInterval;  // Was uint8_t
-```
-**Fix:** Add new field, deprecate old one
-
-### ❌ Don't: Rename Fields
-```cpp
-// BAD - Old JSON won't work
-display["lcdBrightness"]  // Was "brightness"
-```
-**Fix:** Keep old name or add migration code
-
-### ❌ Don't: Remove Required Fields
-```cpp
-// BAD - Old JSON will fail
-// Removed: inputObj["pin"]
-```
-**Fix:** Mark deprecated first, remove in major version
-
-### ✅ Do: Use Default Values
-```cpp
-// GOOD - Backward compatible
-input->priority = inputObj["priority"] | 128;
-```
-
-### ✅ Do: Check for Null
-```cpp
-// GOOD - Safe for old JSON
-if (inputObj["priority"].isNull() == false) {
-    input->priority = inputObj["priority"];
-}
-```
-
-### ✅ Do: Increment Versions
-```cpp
-// GOOD - Track changes
-#define SYSTEM_CONFIG_VERSION 3  // Was 2
-```
-
----
-
-## Schema Version History
-
-### Schema v1 (Initial Release - v0.4.1)
-- Firmware info: version, platform, timestamp
-- System config: outputs, display, timing, pins, constants
-- Inputs: pin, app, sensor, units, alarm, flags, calibration
-
-### Schema v2 (Planned - v0.5.0)
-- **Added:** `systemConfig.displayBrightness`
-- **Added:** `input.priority`
-- **Removed:** `systemConfig.reserved1` (deprecated in v0.4.2)
-
----
-
-## Migration Support
-
-If you need help migrating old configurations:
-
-1. Check firmware changelog for breaking changes
-2. Use `DUMP JSON` to export before upgrading
-3. Upgrade firmware
-4. Use `CONFIG LOAD` to restore (will apply defaults for new fields)
-5. Review with `DUMP JSON` and adjust as needed
-6. Use `SAVE` to persist
-
-For complex migrations, consider writing a Python script to transform old JSON to new format.
-
----
+Changing the configuration format (adding fields, calibration types, or
+bumping the schema version) is covered in the contributor checklist:
+[JSON_QUICK_REFERENCE.md](JSON_QUICK_REFERENCE.md). The code lives in
+`src/storage/json_config.cpp` and `src/rules/rules_json.cpp`.
 
 ## See Also
 
-- **[JSON_QUICK_REFERENCE.md](JSON_QUICK_REFERENCE.md)** - Quick cheat sheet for JSON changes
-- **[SERIAL_COMMANDS.md](../../reference/SERIAL_COMMANDS.md)** - CONFIG SAVE/LOAD commands
-- **[EEPROM_STRUCTURE.md](../../architecture/EEPROM_STRUCTURE.md)** - How configurations are stored
-- **[REGISTRY_SYSTEM.md](../../architecture/REGISTRY_SYSTEM.md)** - Understanding sensor/app registries
-- **[CHANGELOG.md](../../../CHANGELOG.md)** - Version-specific changes and breaking changes
-
-## Questions?
-
-- Check `docs/CHANGELOG.md` for version-specific changes
-- Review this guide for structural changes
-- Test with `DUMP JSON → CONFIG SAVE → CONFIG LOAD → DUMP JSON` cycle
-
----
-
-**End of Guide**
+- [Serial Commands Reference](../../reference/SERIAL_COMMANDS.md#persistence-commands) — `SAVE` / `LOAD`
+- [EEPROM Structure](../../architecture/EEPROM_STRUCTURE.md) — how the configuration is stored internally

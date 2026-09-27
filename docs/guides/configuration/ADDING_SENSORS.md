@@ -331,7 +331,7 @@ Add your sensors to the appropriate category file in `src/sensors/sensor_library
 
 ## Adding a New Read Function
 
-If your sensor needs a custom read function, add it to the appropriate subdirectory under `src/inputs/sensors/`.
+If your sensor needs a custom read function, add it to the appropriate subdirectory under `src/sensors/drivers/`.
 
 ### Step 1: Determine the Sensor Category
 
@@ -341,13 +341,16 @@ Choose the appropriate subdirectory based on sensor type:
 - **pressure/** - Pressure sensors
 - **voltage/** - Voltage measurement
 - **linear/** - Generic linear sensors
-- **rpm/** - RPM/frequency sensors
+- **rpm/** - RPM sensors
+- **speed/** - Speed sensors
+- **level/** - Fuel level senders
+- **can/** - CAN import
 - **digital/** - Digital inputs
 - **environmental/** - Environmental sensors
 
 ### Step 2: Create Implementation File
 
-For example, adding a new thermistor algorithm to `src/inputs/sensors/thermistors/beta.cpp`:
+For example, a thermistor algorithm lives in `src/sensors/drivers/thermistors/beta.cpp`. The sketch below is illustrative — read the existing drivers for the current calibration and error-handling conventions:
 
 ```cpp
 #include "../../input.h"
@@ -381,31 +384,15 @@ void readThermistorBeta(Input* input) {
 }
 ```
 
-### Step 3: Declare in Header
+### Step 3: Declare It
 
-Add the declaration to the corresponding header (create if needed). For thermistors, you might add to `src/inputs/sensors/thermistors/thermistor_read.h`:
-
-```cpp
-#ifndef THERMISTOR_READ_H
-#define THERMISTOR_READ_H
-
-#include "../../input.h"
-
-void readThermistorSteinhart(Input* input);
-void readThermistorLookup(Input* input);
-void readThermistorBeta(Input* input);  // Add your new function
-
-#endif
-```
-
-### Step 4: Include in Main Build
-
-Make sure the header is included in `src/inputs/sensor_read.h` (the main orchestrator):
+Read functions are declared in `src/sensors/sensor_library/sensor_types.h`:
 
 ```cpp
-// Thermistor sensors
-#include "sensors/thermistors/thermistor_read.h"
+extern void readThermistorBeta(Input*);
 ```
+
+Then reference the function from your sensor's `X_SENSOR(...)` entry.
 
 ### Benefits of Modular Organization
 
@@ -428,7 +415,7 @@ python3 -c "h=5381; s='MY_NEW_APP'; [h:=(h<<5)+h+ord(c.upper()) for c in s]; pri
 
 ### Step 2: Add PROGMEM Strings
 
-In `src/sensors/application_presets.h`:
+In `src/sensors/application_presets.cpp`:
 
 ```cpp
 static const char PSTR_MY_NEW_APP[] PROGMEM = "MY_NEW_APP";
@@ -478,24 +465,25 @@ static const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
 
 ## Read Functions Reference
 
-Read functions are organized in `src/inputs/sensors/` by sensor type.
+Read functions are organized in `src/sensors/drivers/` by sensor type.
 
 | Function | Input Type | Output | Location | Sensors |
 |----------|------------|--------|----------|---------|
-| `readThermistorSteinhart` | Analog | °C | sensors/thermistors/ | NTC thermistors |
-| `readThermistorLookup` | Analog | °C | sensors/thermistors/ | Thermistors with tables |
-| `readThermistorBeta` | Analog | °C | sensors/thermistors/ | Beta equation thermistors |
-| `readLinearThermistor` | Analog | °C | sensors/thermistors/ | Linear thermistors |
-| `readMAX6675` | SPI | °C | sensors/thermocouples/ | MAX6675 K-type |
-| `readMAX31855` | SPI | °C | sensors/thermocouples/ | MAX31855 K-type |
-| `readLinearSensor` | Analog | varies | sensors/linear/ | 0.5-4.5V sensors |
-| `readPressureLinear` | Analog | bar | sensors/pressure/ | Linear voltage pressure |
-| `readPressurePolynomial` | Analog | bar | sensors/pressure/ | VDO resistive pressure |
-| `readVoltageDirect` | Analog | V | sensors/voltage/ | Direct voltage |
-| `readVoltageDivider` | Analog | V | sensors/voltage/ | Battery voltage divider |
-| `readWPhaseRPM` | Interrupt | RPM | sensors/rpm/ | Alternator W-phase |
-| `readDigitalFloatSwitch` | Digital | 0/1 | sensors/digital/ | Float switches |
-| `readBME280Temp` | I2C | °C | sensors/environmental/ | BME280 environmental |
+| `readThermistorSteinhart` | Analog | °C | thermistors/ | NTC thermistors |
+| `readThermistorLookup` | Analog | °C | thermistors/ | Thermistors with tables |
+| `readThermistorBeta` | Analog | °C | thermistors/ | Beta equation thermistors |
+| `readMAX6675` | SPI | °C | thermocouples/ | MAX6675 K-type |
+| `readMAX31855` | SPI | °C | thermocouples/ | MAX31855 K-type |
+| `readLinearSensor` | Analog | varies | linear/ | 0.5-4.5V sensors |
+| `readPressureTable` | Analog | bar | pressure/ | Resistive pressure (table) |
+| `readPressurePolynomial` | Analog | bar | pressure/ | VDO resistive pressure |
+| `readVoltageDirect` | Analog | V | voltage/ | Direct voltage |
+| `readVoltageDivider` | Analog | V | voltage/ | Battery voltage divider |
+| `readWPhaseRPM` | Interrupt | RPM | rpm/ | Alternator W-phase |
+| `readDigitalFloatSwitch` | Digital | 0/1 | digital/ | Float switches |
+| `readBME280Temp` | I2C | °C | environmental/ | BME280 environmental |
+| `readHallSpeed` | Interrupt | km/h | speed/ | Hall-effect speed |
+| `readLevelTable` | Analog | % | level/ | Fuel level senders |
 
 ---
 

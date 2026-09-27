@@ -1,719 +1,271 @@
 # Alarm System Guide
 
-**Comprehensive guide to the preOBD alarm state machine**
+preOBD warns you when a reading goes out of range: the status LED turns yellow for
+a **warning** and red with the buzzer for an **alarm**. The LCD and Bluetooth
+clients show the same state.
 
-> **Now part of the Control Engine (Rules).** Alarms are no longer a separate
-> subsystem — an alarm is a **Rule** with `severity = WARNING|ALARM`. The
-> `SET <pin> ALARM ...` command is still supported as a **per-input facade** over
-> a single `ALARM`-severity Rule, in three shapes:
->
-> - `SET <pin> ALARM <min> <max>` — two-sided band (alarm outside Min..Max)
-> - `SET <pin> ALARM MIN <v>` — one-sided floor (alarm below `<v>`)
-> - `SET <pin> ALARM MAX <v>` — one-sided ceiling (alarm above `<v>`)
-> - `SET <pin> ALARM DISABLE` — remove the input's alarm Rule
->
-> For warning/info tiers, control-only thresholds, hysteresis, or multiple Rules
-> per input, use `RULE ADD <pin> ABOVE|BELOW <limit>` / `OUTSIDE <lo> <hi>` directly
-> (and `SET <pin> APPLICATION <app>` seeds the application's default alarm Rule).
-> The state machine (INIT → WARMUP → READY → ACTIVE), warmup/debounce timing, and
-> the derived warning tier described below still apply — they now live on the Rule.
-> See `ARCHITECTURE.md` §11.
-
----
+Alarms are built on the same **Rules** that drive relays (see the
+[Relay Control Guide](../outputs/RELAY_CONTROL.md)). An alarm is a Rule whose
+severity is `WARNING` or `ALARM`.
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [State Machine Architecture](#state-machine-architecture)
-3. [Alarm States Explained](#alarm-states-explained)
-4. [Warmup Times by Application](#warmup-times-by-application)
-5. [Fault Persistence](#fault-persistence)
-6. [Configuration](#configuration)
-7. [Serial Commands](#serial-commands)
-8. [Practical Examples](#practical-examples)
-9. [Troubleshooting](#troubleshooting)
+1. [Quick Start](#quick-start)
+2. [Default Alarms](#default-alarms)
+3. [Setting an Input's Alarm](#setting-an-inputs-alarm)
+4. [More Rules per Input](#more-rules-per-input)
+5. [Warmup and Debounce](#warmup-and-debounce)
+6. [Warnings Before the Alarm](#warnings-before-the-alarm)
+7. [Acknowledging an Alarm](#acknowledging-an-alarm)
+8. [When a Sensor Fails](#when-a-sensor-fails)
+9. [Build and Wiring](#build-and-wiring)
+10. [Troubleshooting](#troubleshooting)
 
 ---
 
-## Overview
-
-The preOBD alarm system uses a **state-machine architecture** to provide robust, false-alarm-resistant monitoring. This system addresses common problems with simple threshold alarms:
-
-**Problems Solved:**
-- False alarms during cold start (oil pressure, coolant temp rising)
-- False alarms from transient sensor spikes/noise
-- Unstable alarm state during sensor initialization
-- Alarm triggers from invalid sensor readings (NaN values)
-
-**Key Features:**
-- Per-input alarm state tracking
-- Sensor-specific warmup periods
-- Configurable fault persistence timing
-- NaN-safe threshold checking
-- Runtime configuration via serial commands
-- Alarm is now an output module (can be enabled/disabled)
-
----
-
-## State Machine Architecture
-
-The alarm system has **5 distinct states**:
-
-```
-DISABLED ──────────────────────────────────────┐
-   │                                            │
-   │ (alarm enabled)                            │
-   ↓                                            │
-INIT (1 second stabilization)                  │
-   │                                            │
-   ↓                                            │
-WARMUP (sensor-specific duration)              │
-   │                                            │
-   │ (sensor valid + warmup expired)           │
-   ↓                                            │
-READY ←──────────────────────┐                 │
-   │                          │                 │
-   │ (violation + persist)    │ (value normal) │
-   ↓                          │                 │
-ACTIVE ────────────────────── ┘                │
-   │                                            │
-   │ (alarm disabled)                          │
-   └────────────────────────────────────────────┘
-```
-
-### State Transitions
-
-| From | To | Trigger | Duration |
-|------|----|---------| ---------|
-| DISABLED | INIT | Alarm enabled | Immediate |
-| INIT | WARMUP | Init period complete | 1 second |
-| WARMUP | READY | Sensor valid + warmup complete | Application-specific |
-| READY | ACTIVE | Threshold violation + persistence | Persistence time |
-| ACTIVE | READY | Value returns to normal | Immediate |
-| ANY | DISABLED | Alarm disabled | Immediate |
-
----
-
-## Alarm States Explained
-
-### DISABLED
-**Purpose:** Alarm feature is turned off for this input
-
-**Characteristics:**
-- No alarm checking occurs
-- Sensor still reads normally
-- No hardware alarm output (buzzer, LED)
-- Alarm threshold violations are ignored
-
-**Entry Conditions:**
-- User disables alarm: `SET <pin> ALARM OFF`
-- Input is disabled: `DISABLE <pin>`
-- Alarm output module disabled: `OUTPUT Alarm DISABLE`
-
-**Exit Conditions:**
-- User enables alarm: `SET <pin> ALARM <min> <max>`
-- Transitions to: **INIT**
-
----
-
-### INIT
-**Purpose:** Brief stabilization period after alarm activation
-
-**Characteristics:**
-- Duration: **1 second** (fixed)
-- Sensor readings may be incomplete/invalid
-- Prevents alarm triggers from uninitialized values
-- Hardware alarm output: OFF
-- `Input.flags.isInAlarm = false`
-
-**Entry Conditions:**
-- Alarm just enabled
-- System boot with alarm configured
-- Sensor reconfigured while alarm enabled
-
-**Exit Conditions:**
-- 1 second elapsed
-- Transitions to: **WARMUP**
-
----
-
-### WARMUP
-**Purpose:** Sensor-specific warmup period to prevent false alarms
-
-**Characteristics:**
-- Duration: **Application-specific** (0-60 seconds)
-- Sensor reads actively but alarm triggers blocked
-- Waits for sensor to produce valid readings (not NaN)
-- Hardware alarm output: OFF
-- `Input.flags.isInAlarm = false`
-
-**Entry Conditions:**
-- INIT period complete (1 second elapsed)
-
-**Exit Conditions:**
-- Warmup time elapsed **AND** sensor produces valid reading (not NaN)
-- Transitions to: **READY**
-
-**Why Warmup?**
-During engine cold start:
-- **Oil pressure** starts low, rises as engine runs
-- **Coolant temp** starts low, gradually increases
-- **CHT** takes time to stabilize after ignition
-- **EGT** requires exhaust flow to produce valid readings
-
-Without warmup, these sensors would immediately trigger alarms during normal startup.
-
----
-
-### READY
-**Purpose:** Normal alarm monitoring active
-
-**Characteristics:**
-- Sensor readings are valid and stable
-- Threshold checking active
-- Hardware alarm output: OFF (waiting for persistence)
-- `Input.flags.isInAlarm = false`
-
-**Entry Conditions:**
-- WARMUP period complete
-- Sensor producing valid readings
-- OR: Value returned to normal from ACTIVE state
-
-**Exit Conditions:**
-- **Threshold violation + persistence time elapsed** → Transitions to: **ACTIVE**
-- **Alarm disabled** → Transitions to: **DISABLED**
-
-**Threshold Checking:**
-- Violation if: `value >= maxValue` OR `value <= minValue`
-- NaN values are ignored (treated as non-violating)
-- Fault timer starts when violation first detected
-- Alarm triggers only after fault persists for `persistTime_ms`
-
----
-
-### ACTIVE
-**Purpose:** Alarm condition confirmed and active
-
-**Characteristics:**
-- Threshold violation has persisted long enough
-- Hardware alarm output: **ON** (buzzer sounds)
-- `Input.flags.isInAlarm = true`
-- Alarm state visible in all outputs (LCD, CAN, Serial, SD)
-
-**Entry Conditions:**
-- Threshold violation detected in READY state
-- Violation persisted for `persistTime_ms` duration
-
-**Exit Conditions:**
-- **Value returns to normal range** → Transitions to: **READY**
-- **Alarm disabled** → Transitions to: **DISABLED**
-
-**Hardware Output:**
-When alarm becomes ACTIVE:
-- Buzzer sounds (configurable interval)
-- LCD shows alarm icon and flashing indicator
-- CAN/RealDash outputs include alarm flag
-- Serial CSV includes `isInAlarm` column
-- SD log records alarm state
-
-**Alarm Silencing:**
-- Press mode button in RUN mode → Acknowledges the sounding alarm(s): silent until each one clears by default, or for `ALARM DURATION <secs>` (requires `INCLUDE_MODE_BUTTON` and `MODE_BUTTON_PIN` defined in board profile)
-- Alarm automatically reactivates if violation persists after silence period
-- Policy is runtime config: `ALARM DURATION <5..630|CLEAR>` and `ALARM SCOPE <BUZZER|ALL>` (persisted with SAVE); `SILENCE_DURATION` in `config.h` is only the built-in default (0 = until clear)
-
----
-
-## Warmup Times by Application
-
-Each application type has a **preset warmup time** based on typical sensor behavior during engine cold start:
-
-| Application | Warmup Time | Persistence | Rationale |
-|-------------|-------------|-------------|-----------|
-| **CHT** | 30 seconds | 2 seconds | Cylinder heads warm slowly after startup |
-| **EGT** | 20 seconds | 2 seconds | Exhaust temps stabilize after combustion begins |
-| **COOLANT_TEMP** | 60 seconds | 5 seconds | Coolant takes time to circulate and warm |
-| **OIL_TEMP** | 60 seconds | 5 seconds | Oil warms gradually from engine heat |
-| **OIL_PRESSURE** | 60 seconds | 5 seconds | Oil pressure builds as engine warms and oil thins |
-| **BOOST_PRESSURE** | 0 seconds | 5 seconds | Boost responds immediately, no warmup needed |
-| **FUEL_PRESSURE** | 5 seconds | 1 second | Fuel pump pressurizes quickly |
-| **PRIMARY_BATTERY** | 1 second | 500ms | Voltage stabilizes quickly after start |
-| **AUXILIARY_BATTERY** | 2 seconds | 1 second | Secondary battery stabilizes after initial load |
-| **BAROMETRIC_PRESSURE** | 0 seconds | 5 seconds | Environmental, no engine dependency |
-| **ENGINE_RPM** | 0 seconds | 1 second | RPM is immediate, no warmup |
-| **COOLANT_LEVEL** | 0 seconds | 1 second | Digital sensor, immediate response |
-| **HUMIDITY** | 5 seconds | 2 seconds | Environmental sensor stabilization |
-| **TCASE_TEMP** | 60 seconds | 5 seconds | Transfer case warms slowly |
-| **AMBIENT_TEMP** | 2 seconds | 0 seconds | Environmental, instant readout |
-
-**Warmup Time = 0:**
-Applications with no warmup requirement transition directly from INIT → WARMUP → READY in ~1 second total.
-
----
-
-## Fault Persistence
-
-**Fault persistence** prevents false alarms from transient sensor spikes or electrical noise.
-
-### How It Works
-
-1. **Violation Detected:** Sensor value exceeds threshold
-2. **Fault Timer Starts:** `AlarmContext.faultStartTime = currentTime`
-3. **Persistence Check:** System waits for `persistTime_ms`
-4. **Alarm Triggers:** If violation still present after persistence time
-
-**If value returns to normal before persistence time:**
-- Fault timer resets to 0
-- No alarm triggered
-- Alarm remains in READY state
-
-### Persistence Times by Application
-
-| Application Type | Persistence Time | Rationale |
-|------------------|------------------|-----------|
-| **Temperature Sensors** | 2-5 seconds | Temps change slowly, longer persistence prevents false positives |
-| **Pressure Sensors** | 1-5 seconds | Pressure fluctuates, moderate persistence filters noise |
-| **Voltage Sensors** | 500ms-1s | Voltage responds quickly, short persistence acceptable |
-| **RPM Sensors** | 1 second | RPM changes rapidly, brief persistence sufficient |
-| **Digital Sensors** | 500ms-1s | Binary state changes, short persistence |
-
-**Example: Oil Pressure**
-```
-Time 0s:    Oil pressure drops to 0.3 bar (below 0.5 bar min threshold)
-Time 0s:    Fault timer starts
-Time 1s:    Violation still present (persistence = 5s)
-Time 2s:    Violation still present
-Time 3s:    Violation still present
-Time 4s:    Violation still present
-Time 5s:    Violation still present → ALARM TRIGGERS (ACTIVE state)
-```
-
-**Example: Transient Spike (No Alarm)**
-```
-Time 0s:    CHT spikes to 450°C (electrical noise, above 400°C max threshold)
-Time 0s:    Fault timer starts
-Time 0.1s:  Value returns to normal 350°C
-Time 0.1s:  Fault timer RESETS to 0 → NO ALARM
-```
-
----
-
-## Configuration
-
-### Compile-Time Configuration
-
-`SUPPORTS_ALARMS` is a capability flag in your board definition (`boards/<board>/board.h`), which `resolve.h` turns into the `INCLUDE_ALARMS` the code tests; the buzzer and silence-button pins are wiring, set in your gitignored overlay (`boards/<board>/wiring.ini`). Wiring a pin turns that peripheral on:
-
-```cpp
-// boards/<board>/board.h — software alarm/annunciator feature
-#define SUPPORTS_ALARMS   1
-```
-```ini
-; boards/<board>/wiring.ini — omit a pin and that peripheral is simply off
-[<board>]
-wiring =
-    -D BUZZER_PIN=3       ; alarm buzzer
-    -D MODE_BUTTON_PIN=5  ; silence button (its presence enables INCLUDE_MODE_BUTTON)
-```
-
-Set timing constants in `config.h`:
-
-```cpp
-// Alarm silence duration (mode button press in RUN mode)
-#define SILENCE_DURATION 0      // default ack window, ms; 0 = until the alarm clears
-
-// Per-input alarm thresholds (in STANDARD UNITS)
-// Temperature: Celsius, Pressure: bar, Voltage: volts
-
-#define INPUT_0_ALARM_MIN 50.0    // CHT minimum: 50°C
-#define INPUT_0_ALARM_MAX 400.0   // CHT maximum: 400°C
-
-#define INPUT_1_ALARM_MIN 0.5     // Oil pressure min: 0.5 bar
-#define INPUT_1_ALARM_MAX 10.0    // Oil pressure max: 10 bar
-```
-
-**Note:** Warmup and persistence times are preset per application and cannot be overridden in compile-time mode. Use runtime mode for custom warmup/persistence.
-
-### Runtime Configuration
-
-Set alarm thresholds via serial commands (CONFIG mode):
+## Quick Start
 
 ```
 CONFIG
-RULE ADD A0 OUTSIDE 50 400        # CHT: 50-400°C
-RULE ADD A1 OUTSIDE 0.5 10        # Oil pressure: 0.5-10 bar
-RULE ADD A2 OUTSIDE -40 150       # Coolant: -40-150°C
+SET A1 OIL_PRESSURE VDO_5BAR_CURVE     # creates a default oil-pressure alarm
+SET A1 ALARM MIN 0.7                   # alarm below 0.7 bar (~10 PSI) instead
+SET A2 COOLANT_TEMP VDO_120C_STEINHART
+SET A2 ALARM MAX 105                   # alarm above 105°C
 SAVE
 RUN
 ```
 
-### Custom Warmup/Persistence (Runtime Only)
+**Limits are always in base units** — °C, bar, volts, RPM, km/h — even if the
+input displays °F or PSI.
 
-Override application defaults:
-
-```
-CONFIG
-SET A1 OIL_PRESSURE VDO_5BAR_CURVE
-ALARM A1 WARMUP 45000      # Custom 45-second warmup
-ALARM A1 PERSIST 3000      # Custom 3-second persistence
-SAVE
-RUN
-```
-
-**Use cases for custom values:**
-- Older engines that warm slower (increase warmup)
-- Noisy sensors (increase persistence)
-- Racing applications (decrease warmup for faster response)
+`INFO <pin> ALARM` shows an input's alarm; `RULE LIST` shows every Rule.
 
 ---
 
-## Serial Commands
+## Default Alarms
 
-### Query Alarm Status
+`SET <pin> <application> <sensor>` creates a default alarm for the applications
+below (an `ALARM`-severity band). Other applications start with no alarm.
 
-```
-INFO <pin>
-```
+| Application | Default alarm band (base units) | Warmup | Debounce |
+|---|---|---|---|
+| `CHT` | -1 to 260 °C | 30 s | 2 s |
+| `EGT` | -1 to 600 °C | 20 s | 2 s |
+| `COOLANT_TEMP` | -1 to 100 °C | 60 s | 5 s |
+| `OIL_TEMP` | -1 to 150 °C | 60 s | 5 s |
+| `TCASE_TEMP` | -1 to 100 °C | 60 s | 5 s |
+| `TRANS_TEMP` | -1 to 130 °C | 60 s | 5 s |
+| `DIFF_TEMP` | -1 to 120 °C | 60 s | 5 s |
+| `GEAR_OIL_TEMP` | -1 to 120 °C | 60 s | 5 s |
+| `OIL_PRESSURE` | 1 to 5 bar | 5 s | 1 s |
+| `FUEL_LEVEL` | 10 to 100 % | 2 s | 5 s |
+| `COOLANT_LEVEL`, `OIL_LEVEL` | 0 to 1 (see note) | 5 s / 10 s | 2 s / 3 s |
 
-Shows alarm state, warmup, and persistence:
+A band alarms when the value goes **outside** it; the `-1` lower edges mean the
+temperature alarms are effectively over-temperature only.
 
-```
-======================================
-  Input A1 (OIL_PRESSURE)
-======================================
-Sensor: VDO_5BAR_CURVE
-Value: 2.35 bar
-Alarm Thresholds: 0.50 - 10.00 bar
-Alarm State: READY
-Warmup Time: 60000ms
-Persistence Time: 5000ms
-```
+> **Note:** for float switches (`COOLANT_LEVEL`, `OIL_LEVEL`) the default band
+> currently never trips (a known firmware issue). Until it's fixed, set the alarm
+> yourself: `SET <pin> ALARM MIN 0.5`.
 
-### Enable/Disable Alarm Output Module
+Every application also has a warmup and debounce time that applies to the Rules
+you add for it; `LIST APPLICATIONS` lists them all.
 
-The alarm system is now an **output module**:
+---
 
-```
-OUTPUT Alarm ENABLE        # Enable alarm output (buzzer, LEDs)
-OUTPUT Alarm DISABLE       # Disable alarm output (silent mode)
-OUTPUT Alarm INTERVAL 500  # Set alarm check interval (10-10000ms)
-OUTPUT LIST                # Show alarm status with other outputs
-```
+## Setting an Input's Alarm
 
-**Example:**
-```
-OUTPUT LIST
-```
-Output:
-```
-=== Output Modules ===
-CAN: Enabled, Interval: 100ms
-RealDash: Disabled
-Serial: Enabled, Interval: 1000ms
-SD_Log: Disabled
-Alarm: Enabled, Interval: 500ms
-```
-
-### Per-Input Alarm Configuration
+`SET <pin> ALARM` edits the input's single alarm Rule (creating it if needed):
 
 ```
-ALARM <pin> WARMUP <ms>    # Set custom warmup time
-ALARM <pin> PERSIST <ms>   # Set custom persistence time
+SET <pin> ALARM <min> <max>     # alarm outside the band
+SET <pin> ALARM MIN <v>         # alarm below v (e.g. oil pressure)
+SET <pin> ALARM MAX <v>         # alarm above v (e.g. temperature)
+SET <pin> ALARM DISABLE         # remove the input's alarm
 ```
 
 Examples:
+
 ```
-ALARM A0 WARMUP 20000      # CHT: 20-second warmup (faster than default 30s)
-ALARM A1 PERSIST 1000      # Oil pressure: 1-second persistence (faster response)
+SET A3 ALARM MIN 0.7            # oil pressure below 0.7 bar
+SET 6 ALARM MAX 260             # CHT above 260°C
+SET A6 ALARM 11.5 15.0          # battery outside 11.5-15.0 V
 ```
 
-**Note:** These commands are available in runtime mode only and override application defaults.
+Changing the limits keeps the Rule's id, its warmup/debounce and any relays
+linked to it.
 
 ---
 
-## Practical Examples
+## More Rules per Input
 
-### Example 1: Cold Start - Oil Pressure
-
-**Scenario:** Engine starts, oil pressure low initially
-
-```
-Time 0s:     Engine start, oil pressure = 0.2 bar
-             Alarm state: INIT (1s stabilization)
-
-Time 1s:     Alarm state: WARMUP (60s warmup begins)
-             Oil pressure still low: 0.3 bar
-             No alarm (warmup blocks trigger)
-
-Time 30s:    Oil pressure rising: 1.5 bar
-             Alarm state: WARMUP (30s remaining)
-
-Time 61s:    Warmup complete, oil pressure = 3.0 bar
-             Alarm state: READY
-             Normal operation
-```
-
-**Without warmup:** Alarm would trigger immediately at 0s (pressure below 0.5 bar minimum).
-
-### Example 2: Transient Sensor Spike - CHT
-
-**Scenario:** Electrical noise causes brief CHT spike
+For anything beyond one alarm per input — a separate warning level, hysteresis,
+an `INFO` log entry, or a silent Rule that only drives a relay — use `RULE`
+directly:
 
 ```
-Time 0s:     CHT reading: 350°C (normal)
-             Alarm state: READY
-
-Time 0.05s:  Electrical spike: CHT = 500°C (above 400°C max)
-             Fault timer starts
-             Alarm state: READY (waiting for persistence)
-
-Time 0.15s:  Spike clears: CHT = 355°C (normal)
-             Fault timer RESETS to 0
-             Alarm state: READY
-             No alarm triggered
+RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [INFO|WARNING|ALARM|NONE]
+RULE ADD <pin> OUTSIDE <lo> <hi> [HYST <w>] [INFO|WARNING|ALARM|NONE]
+RULE <id> LIMIT ABOVE|BELOW <limit>       # move a Rule's limit
+RULE <id> SEVERITY WARNING                # change its tier
+RULE <id> DISABLE / ENABLE                # park / re-arm
+RULE DEL <id>
+RULE RESET <id>                           # back to the application default
 ```
 
-**Without persistence:** Alarm would trigger immediately from brief 50ms spike.
+| Severity | Effect |
+|----------|--------|
+| `NONE` | Nothing shown; used to drive relays |
+| `INFO` | Logged / reported to Bluetooth clients only |
+| `WARNING` | Yellow LED, LCD and Bluetooth; no buzzer |
+| `ALARM` | Red LED and **buzzer**, plus LCD and Bluetooth |
 
-### Example 3: Real Overheat - CHT
-
-**Scenario:** Actual cylinder head overheating
-
-```
-Time 0s:     CHT reading: 380°C (normal)
-             Alarm state: READY
-
-Time 5s:     CHT rising: 405°C (above 400°C max)
-             Fault timer starts
-             Alarm state: READY (persistence = 2s)
-
-Time 6s:     CHT still high: 410°C
-             Fault timer: 1s elapsed (1s remaining)
-
-Time 7s:     CHT still high: 415°C
-             Fault timer: 2s elapsed → PERSISTENCE MET
-             Alarm state: ACTIVE
-             Buzzer sounds, LCD shows alarm
-
-Time 10s:    User presses MODE_BUTTON
-             Buzzer silenced until the alarm clears (or ALARM DURATION)
-             Alarm state: still ACTIVE (alarm condition persists)
-
-Time 15s:    CHT drops: 395°C (below threshold)
-             Alarm state: READY
-             Buzzer remains silent (silence period active)
-```
-
-### Example 4: Runtime Alarm Configuration
-
-**Scenario:** Add alarm to existing sensor
+Example — a warning at 100°C and an alarm at 110°C on the same input:
 
 ```
-# Check current state
-INFO A2
-
-# Add alarm thresholds
-CONFIG
-RULE ADD A2 OUTSIDE 60 120       # Coolant: 60-120°C
-SAVE
-
-# Check alarm state
-INFO A2
-# Shows: Alarm State: INIT (just configured)
-
-# Wait 1 second
-# Alarm state transitions: INIT → WARMUP
-
-# Wait 60 seconds (coolant warmup)
-# Alarm state transitions: WARMUP → READY
-
-RUN
+RULE ADD A2 ABOVE 100 WARNING
+SET A2 ALARM MAX 110
 ```
+
+---
+
+## Warmup and Debounce
+
+A Rule doesn't fire the instant a reading crosses its limit. It moves through
+these states (shown by `RULE LIST` and `INFO <pin> ALARM`):
+
+| State | Meaning |
+|-------|---------|
+| `INIT` | Just armed (1 s) |
+| `WARMUP` | Waiting out the warmup time, and for a valid reading |
+| `READY` | Monitoring |
+| `ACTIVE` | The condition has held for the debounce time — alarm/warning is on |
+| `PARKED` | Disabled with `RULE <id> DISABLE` |
+
+- **Warmup** stops alarms during start-up — oil pressure takes a few seconds to
+  build and a cold engine is below any "too cold" limit. It starts when the Rule
+  is armed (at power-up, or after an edit that re-arms it).
+- **Debounce** stops a brief spike or electrical noise from tripping an alarm: the
+  reading must stay out of range for the whole debounce time.
+
+Rules created by `SET <pin> <application> ...` use the application's times (table
+above). Rules created with `RULE ADD` use a 3 s warmup and 500 ms debounce.
+`RULE <id>` shows a Rule's times. They can be changed through a JSON import
+(`warmupMs`, `debounceMs`, up to 65 s) — see the
+[JSON Configuration Guide](JSON_CONFIGURATION_GUIDE.md).
+
+---
+
+## Warnings Before the Alarm
+
+An `ALARM` Rule also raises a **warning** as the value approaches its limit, so the
+LED turns yellow before the buzzer sounds. By default the warning edge is 90% of
+the limit (`AUTO`). Set it explicitly, or turn it off:
+
+```
+RULE ADD A0 ABOVE 230 WARN 210        # warn at 210, alarm at 230
+RULE <id> WARN NONE                   # no warning tier
+SET A0 ALARM WARN 210                 # same, via the input's alarm
+```
+
+An explicit warning edge must be on the safe side of the limit.
+
+---
+
+## Acknowledging an Alarm
+
+A short press of the mode button — or `ALARM SILENCE` — acknowledges every alarm
+that is sounding at that moment. Acknowledgement is per alarm: a *different*
+alarm tripping afterwards still sounds.
+
+```
+ALARM SILENCE                 # acknowledge (works in RUN and CONFIG mode)
+ALARM STATUS                  # what's sounding, what's acknowledged, the policy
+ALARM DURATION <secs|CLEAR>   # CONFIG: how long an acknowledgement lasts
+ALARM SCOPE <BUZZER|ALL>      # CONFIG: silence just the buzzer, or the LED blink too
+```
+
+- **Default: `DURATION CLEAR`** — the alarm stays silent until its reading
+  returns to normal; if it trips again later, you hear it again. One press
+  covers a stuck sensor for the whole drive.
+- **`DURATION <5-630>`** (seconds, in steps of 5) — the alarm re-sounds after that
+  long if it is still active.
+- **`SCOPE BUZZER`** (default) silences the buzzer and keeps the LED blinking;
+  **`SCOPE ALL`** also stops the blink (steady red).
+
+`ALARM DURATION` and `ALARM SCOPE` need `SAVE`.
+
+`OUTPUT Alarm DISABLE` turns off the buzzer and LED alarm output entirely (Rules
+still evaluate and Bluetooth clients still see them).
+
+---
+
+## When a Sensor Fails
+
+A disconnected or shorted sensor reads `NaN`, shown as `ERR` on the LCD. A Rule
+never fires on `NaN` — a broken wire shouldn't sound the "oil pressure low"
+alarm. Instead, after 2 seconds of invalid readings (or the warmup time, if
+longer), Bluetooth clients are told the input has a **sensor fault**.
+
+So a failed sensor does **not** sound the buzzer. Watch for `ERR` on the display,
+and use `SYSTEM DIAG INPUTS` to see why an input is failing.
+
+Relays driven by a failed sensor go to their failsafe state instead — see the
+[Relay Control Guide](../outputs/RELAY_CONTROL.md#when-the-sensor-fails).
+
+---
+
+## Build and Wiring
+
+The alarm engine is included when the board's `board.h` declares
+`SUPPORTS_ALARMS`. The buzzer, the mode (silence) button and the status LED are
+optional hardware; each is enabled by wiring its pin in your
+`boards/<board>/wiring.ini`:
+
+```ini
+[<board>]
+wiring =
+    -D BUZZER_PIN=3
+    -D MODE_BUTTON_PIN=2
+    -D RGB_PIN_R=6
+    -D RGB_PIN_G=5
+    -D RGB_PIN_B=4
+```
+
+See the [Build Configuration Guide](BUILD_CONFIGURATION_GUIDE.md) and
+[LED Indicator Guide](../hardware/LED_INDICATOR_GUIDE.md).
+
+In CONFIG mode the buzzer stays silent, so bench testing can't set it off.
 
 ---
 
 ## Troubleshooting
 
-### Problem: Alarm triggers immediately on cold start
+**An alarm doesn't trigger**
+- `INFO <pin> ALARM` — is there an alarm Rule, and what state is it in?
+  `WARMUP` means it's still waiting; `READY` means the condition isn't met.
+- Are the limits in base units? `SET A1 ALARM MIN 10` on oil pressure means 10 **bar**.
+- Are you in RUN mode? The buzzer is silent in CONFIG mode.
+- Is the reading valid? A sensor showing `ERR` never trips a Rule.
+- Is the alarm output on? `OUTPUT STATUS` should show `Alarm` enabled.
+- Has it been acknowledged? `ALARM STATUS`.
 
-**Symptom:**
-```
-Alarm active at startup despite normal readings
-```
+**An alarm sounds at start-up**
+- Its warmup is too short for your engine. `RULE <id>` shows the warmup; raise it
+  with a JSON import, or loosen the limit.
 
-**Diagnosis:**
-Check warmup time for application:
-```
-INFO <pin>
-```
+**Brief spikes trip the alarm**
+- Increase the Rule's debounce (JSON `debounceMs`), and check the sensor's wiring
+  and grounding.
 
-Look for:
-```
-Warmup Time: 0ms
-```
-
-**Solution:**
-Increase warmup time:
-```
-CONFIG
-ALARM <pin> WARMUP 30000    # 30-second warmup
-SAVE
-RUN
-```
-
----
-
-### Problem: Alarm triggers from brief sensor spikes
-
-**Symptom:**
-```
-Alarm active for <1 second, then clears
-Sensor readings show occasional spikes
-```
-
-**Diagnosis:**
-Check persistence time:
-```
-INFO <pin>
-```
-
-Look for:
-```
-Persistence Time: 0ms
-```
-
-**Solution:**
-Increase persistence:
-```
-CONFIG
-ALARM <pin> PERSIST 2000    # 2-second persistence
-SAVE
-RUN
-```
-
----
-
-### Problem: Alarm doesn't trigger when it should
-
-**Symptom:**
-```
-Sensor reading violates threshold but no alarm
-```
-
-**Diagnosis:**
-1. Check if alarm is enabled:
-```
-INFO <pin>
-```
-
-Look for:
-```
-Alarm Thresholds: OFF
-```
-
-2. Check alarm state:
-```
-Alarm State: WARMUP
-```
-
-3. Check if Alarm output module is enabled:
-```
-OUTPUT LIST
-```
-
-Look for:
-```
-Alarm: Disabled
-```
-
-**Solutions:**
-
-**If alarm thresholds not set:**
-```
-CONFIG
-SET <pin> ALARM <min> <max>
-SAVE
-RUN
-```
-
-**If stuck in WARMUP:**
-- Wait for warmup period to complete
-- Check if sensor is producing valid readings (not NaN)
-
-**If Alarm output disabled:**
-```
-CONFIG
-OUTPUT Alarm ENABLE
-SAVE
-RUN
-```
-
----
-
-### Problem: Alarm stays active after value returns to normal
-
-**Symptom:**
-```
-Sensor reading back in normal range but alarm still active
-```
-
-**Diagnosis:**
-This should not happen. Check for:
-1. Software bug (report to GitHub)
-2. Sensor reading oscillating around threshold
-
-**Temporary Solution:**
-Manually disable and re-enable alarm:
-```
-CONFIG
-SET <pin> ALARM OFF
-SET <pin> ALARM <min> <max>
-SAVE
-RUN
-```
-
----
-
-## Implementation Details
-
-### AlarmContext Structure
-
-Each input has a 12-byte alarm context:
-
-```cpp
-struct AlarmContext {
-    AlarmState state;           // Current alarm state (1 byte)
-    uint32_t stateEntryTime;    // When current state was entered (4 bytes)
-    uint32_t faultStartTime;    // When threshold violation started (4 bytes, 0 = no violation)
-    uint16_t warmupTime_ms;     // Warmup duration in milliseconds (2 bytes)
-    uint16_t persistTime_ms;    // Fault persistence time in milliseconds (2 bytes)
-};
-```
-
-### State Machine Code
-
-See `src/inputs/alarm_logic.cpp` for complete implementation.
-
-**Key functions:**
-- `initInputAlarmContext()` - Initialize alarm context for input
-- `updateInputAlarmState()` - Update single input alarm state
-- `updateAllInputAlarms()` - Update all inputs (called from main loop)
-
-**Hardware control:**
-- Alarm logic sets `Input.flags.isInAlarm = true/false`
-- Hardware output handled by `src/outputs/output_alarm.cpp`
-- Separation allows flexible alarm output (buzzer, LED, relay, etc.)
+**The buzzer doesn't stop when I press the button**
+- The button acknowledges only the alarms sounding at that moment; a new alarm
+  sounds again. Check `ALARM STATUS`, and `MODE_BUTTON_PIN` in your `wiring.ini`.
 
 ---
 
 ## See Also
 
-- [Serial Command Reference](../../reference/SERIAL_COMMANDS.md) - Complete command list
-- [Config/Run Mode Guide](CONFIG_RUN_MODE_GUIDE.md) - Configuration workflow
-- [Adding Sensors Guide](ADDING_SENSORS.md) - How to add sensors
-- [CHANGELOG](../../../CHANGELOG.md) - Alarm system refactor details
-
----
-
-**Last Updated:** 2025-01-28
-**Firmware Version:** 0.5.0-alpha (Unreleased)
-**EEPROM Version:** 3
+- [Serial Command Reference](../../reference/SERIAL_COMMANDS.md#alarm-configuration)
+- [Relay Control Guide](../outputs/RELAY_CONTROL.md) — Rules that drive relays
+- [Config/Run Mode Guide](CONFIG_RUN_MODE_GUIDE.md)

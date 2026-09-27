@@ -11,19 +11,19 @@ Resistive sensors (temperature and pressure senders) are not powered sources —
 ```
 VCC (5V or 3.3V)
     │
-    R_sensor (variable — changes with temperature or pressure)
+    R_bias (fixed resistor you choose and install)
     │
     ├─────► ADC Input
     │
-    R_bias (fixed resistor you choose and install)
+    R_sensor (variable — changes with temperature or pressure)
     │
-   GND
+   GND (the sender's body / ground terminal)
 ```
 
 The voltage at the ADC input is:
 
 ```
-V_ADC = VCC × (R_bias / (R_sensor + R_bias))
+V_ADC = VCC × (R_sensor / (R_sensor + R_bias))
 ```
 
 The firmware inverts this to compute resistance from the ADC reading, then looks up the resistance in a calibration table.
@@ -67,13 +67,13 @@ These are mechanical gauge senders designed to drive a D'Arsonval or air-core ga
 
 | Condition | Sensor R | ADC counts |
 |---|---|---|
-| VDO coolant, 50°C | ~197Ω | ~2,700 |
-| VDO coolant, 90°C | ~38Ω | ~3,720 |
-| VDO coolant, 120°C | ~22Ω | ~3,900 |
-| VDO pressure, 0 bar | 10Ω | ~4,010 |
-| VDO pressure, 5 bar | 184Ω | ~2,600 |
-| Jeep oil, 0 psi | 90Ω | ~2,150 |
-| Jeep oil, 80 psi | 2Ω | ~4,090 (near rail) |
+| VDO coolant, 50°C | ~197Ω | ~2,720 |
+| VDO coolant, 90°C | ~38Ω | ~1,130 |
+| VDO coolant, 120°C | ~22Ω | ~740 |
+| VDO pressure, 0 bar | 10Ω | ~370 |
+| VDO pressure, 5 bar | 184Ω | ~2,650 |
+| Jeep oil, 0 psi | 90Ω | ~1,940 |
+| Jeep oil, 80 psi | 2Ω | ~80 (near rail) |
 
 The Mopar oil pressure sender at maximum pressure (2Ω) approaches the ADC rail. This is inherent to the sensor's design and not a problem with the bias resistor choice — it is within firmware's `ADC_RAIL_MARGIN` guard and readings at that point have inherently lower precision.
 
@@ -104,13 +104,13 @@ These are negative-temperature-coefficient thermistors used in EFI systems as EC
 
 | Condition | Sensor R | ADC counts |
 |---|---|---|
-| GM ECT, −20°C | ~9,420Ω | ~857 |
-| GM ECT, 20°C | ~3,500Ω | ~1,690 |
-| GM ECT, 80°C | ~470Ω | ~3,280 |
-| GM ECT, 120°C | ~177Ω | ~3,820 |
-| Mopar 56027012, 0°C | 7,800Ω | ~989 |
-| Mopar 56027012, 80°C | ~370Ω | ~3,559 |
-| Mopar 56027012, 120°C | 135Ω | ~3,879 |
+| GM ECT, −20°C | ~9,420Ω | ~3,240 |
+| GM ECT, 20°C | ~3,500Ω | ~2,390 |
+| GM ECT, 80°C | ~470Ω | ~650 |
+| GM ECT, 120°C | ~177Ω | ~270 |
+| Mopar 56027012, 0°C | 7,800Ω | ~3,100 |
+| Mopar 56027012, 80°C | ~370Ω | ~530 |
+| Mopar 56027012, 120°C | 135Ω | ~210 |
 
 ---
 
@@ -173,13 +173,13 @@ A small number of sensors do not fit either family and require special handling:
 ```
 VCC (5V or 3.3V)
     │
-    Sensor wire from vehicle
+   [R_bias]  ← install this resistor here
     │
     ├─────► Analog input pin (ADC)
     │
-   [R_bias]  ← install this resistor here
+    Sensor wire from vehicle
     │
-   GND
+   Sender body → chassis GND
 ```
 
 **Resistor specifications:**
@@ -189,7 +189,7 @@ VCC (5V or 3.3V)
 
 The bias resistor should be installed as close to the ADC pin as practical. Add a 100nF ceramic decoupling capacitor from the ADC pin to GND to filter ignition noise — classic vehicle electrical systems are very noisy.
 
-**Important:** The value in `config.h` (`BIAS_RESISTOR_LOW` / `BIAS_RESISTOR_HIGH` or `DEFAULT_BIAS_RESISTOR` depending on your build) must exactly match the physical resistor you installed. A mismatch here causes systematic error in every reading.
+**Important:** Each built-in sensor assumes the bias value recommended above (100Ω or 2.49kΩ). If you install a different resistor, tell the firmware with `SET <pin> CAL BIAS <ohms>` — a mismatch causes a systematic error in every reading.
 
 ---
 

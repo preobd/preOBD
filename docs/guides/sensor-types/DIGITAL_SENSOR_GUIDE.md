@@ -96,10 +96,10 @@ SAVE
 
 ```
 SET 7 COOLANT_LEVEL FLOAT_SWITCH
-SET 7 NAME COOL
+SET 7 ABBR COOL
 
 SET 8 COOLANT_LEVEL FLOAT_SWITCH
-SET 8 NAME FUEL
+SET 8 ABBR FUEL
 
 SAVE
 ```
@@ -110,16 +110,20 @@ SAVE
 
 ### Display Output
 
-Digital sensors display as:
-- **OK** - Normal level (switch open for NC)
-- **LOW** - Low level (switch closed for NC)
+A float switch reads **1** when the level is OK and **0** when it is low; the
+LCD shows the number.
 
 ### Alarm Behavior
 
-When the float switch indicates low level:
-1. Display shows "LOW"
-2. Alarm triggers (if enabled)
-3. OBD-II diagnostic code can be set
+To sound the alarm when the level drops, set a floor on the input:
+
+```
+SET 7 ALARM MIN 0.5        # alarm when the switch reads 0 (low)
+SAVE
+```
+
+The default alarm that `SET <pin> COOLANT_LEVEL FLOAT_SWITCH` creates currently
+never trips (a known firmware issue), so set this explicitly.
 
 ---
 
@@ -218,7 +222,7 @@ For other digital sensors (door switches, limit switches, etc.), use the same FL
 
 ```
 SET 9 COOLANT_LEVEL FLOAT_SWITCH
-SET 9 NAME DOOR
+SET 9 ABBR DOOR
 SAVE
 ```
 

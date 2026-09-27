@@ -24,88 +24,24 @@ Use a **common-cathode** RGB LED (recommended for 3.3V systems):
 
 ### Pin Assignment
 
-Default pins on Teensy 4.1:
-- **Pin 6**: Red channel (PWM)
-- **Pin 7**: Green channel (PWM)
-- **Pin 8**: Blue channel (PWM)
+The LED is enabled by wiring its pins in your board's wiring file,
+`boards/<board>/wiring.ini` (copy `wiring.ini.example`):
 
-**Important**: These pins **must** be PWM-capable. The default pins (6, 7, 8) work on Teensy 4.1, Teensy 4.0, and most Arduino boards.
-
-### Wiring Diagram
-
-```
-Common-Cathode RGB LED:
-
-  RGB LED          Teensy 4.1
-  ┌─────┐
-  │  R  ├───[220Ω]───► Pin 6 (PWM)
-  │  G  ├───[220Ω]───► Pin 7 (PWM)
-  │  B  ├───[220Ω]───► Pin 8 (PWM)
-  │ GND ├──────────────► GND
-  └─────┘
+```ini
+[teensy41]
+wiring =
+    -D RGB_PIN_R=6       ; Red channel (PWM capable)
+    -D RGB_PIN_G=5       ; Green channel (PWM capable)
+    -D RGB_PIN_B=4       ; Blue channel (PWM capable)
+;   -D RGB_COMMON_ANODE  ; add for a common-anode LED (default: common cathode)
 ```
 
-### Current Limiting Resistors
-
-Calculate resistor values based on your LED specs:
-
-```
-R = (V_supply - V_forward) / I_forward
-
-Teensy 4.1 (3.3V):
-- Red:   R = (3.3V - 2.0V) / 0.020A = 65Ω  → use 68Ω or 100Ω
-- Green: R = (3.3V - 3.0V) / 0.020A = 15Ω  → use 22Ω or 33Ω
-- Blue:  R = (3.3V - 3.0V) / 0.020A = 15Ω  → use 22Ω or 33Ω
-
-Arduino 5V:
-- Red:   R = (5.0V - 2.0V) / 0.020A = 150Ω → use 150Ω or 180Ω
-- Green: R = (5.0V - 3.0V) / 0.020A = 100Ω → use 100Ω or 120Ω
-- Blue:  R = (5.0V - 3.0V) / 0.020A = 100Ω → use 100Ω or 120Ω
-```
-
-**Safe default**: Use 220Ω for all channels (slightly dimmer but works universally)
-
-## LED States and Colors
-
-### Alarm System States
-
-| State | Color | Effect | Meaning |
-|-------|-------|--------|---------|
-| **NORMAL** | Green | Solid | All sensors within normal range |
-| **WARNING** | Yellow/Orange | Blinking (1Hz) | One or more sensors at the rule's warning threshold (default: 90% of the alarm limit, configurable per rule with `WARN` — see `SERIAL_COMMANDS.md`) |
-| **ALARM** | Red | Fast blink (2.5Hz) | One or more sensors in alarm state |
-
-### System Mode States
-
-| Mode | Color | Effect | Priority |
-|------|-------|--------|----------|
-| **RUN** | (Alarm color) | (Alarm effect) | Alarms control the LED |
-| **CONFIG** | Blue | Breathing/Pulse | Lower priority - overridden by alarms |
-
-**Priority order**: ALARM (highest) > WARNING > MODE > IDLE (lowest)
-
-This means if you're in CONFIG mode (blue pulsing) and a sensor triggers a warning, the LED will change to yellow blinking and stay that way until the warning clears.
-
-## Configuration
-
-### Pin Assignment
-
-Edit [src/config.h](../../config.h):
-
-```cpp
-#ifdef INCLUDE_LED
-    #define RGB_PIN_R 6       // Red channel (PWM capable)
-    #define RGB_PIN_G 7       // Green channel (PWM capable)
-    #define RGB_PIN_B 8       // Blue channel (PWM capable)
-
-    #define RGB_COMMON_ANODE false  // false = common cathode (recommended)
-                                     // true = common anode
-#endif
-```
+Omit the pins and the LED code is left out of the build. Rebuild after changing
+`wiring.ini` (a clean build — PlatformIO doesn't notice the change on its own).
 
 ### Color Customization
 
-Edit [src/drivers/rgb_led.h](../../lib/rgb_led.h) to customize colors:
+Edit [src/drivers/rgb_led.h](../../../src/drivers/rgb_led.h) to customize colors:
 
 ```cpp
 // Normal operation (default: green)
@@ -145,7 +81,7 @@ Disable effects if blinking is undesirable (photosensitivity, preferences):
 
 ### Timing Adjustment
 
-Adjust blink/pulse speeds in [src/drivers/rgb_led.h](../../lib/rgb_led.h):
+Adjust blink/pulse speeds in [src/drivers/rgb_led.h](../../../src/drivers/rgb_led.h):
 
 ```cpp
 #define RGB_BLINK_PERIOD_MS 500     // Standard blink (1Hz)
@@ -155,15 +91,8 @@ Adjust blink/pulse speeds in [src/drivers/rgb_led.h](../../lib/rgb_led.h):
 
 ## Build Configuration
 
-Enable the LED indicator in [platformio.ini](../../../platformio.ini):
-
-```ini
-[standard_features]
-build_flags =
-    -D INCLUDE_LED  # RGB LED status indicator
-```
-
-Compile and flash:
+There is no separate flag to set: wiring the `RGB_PIN_*` pins in `wiring.ini`
+(above) includes the LED code. Compile and flash:
 ```bash
 pio run -e teensy41 -t upload
 ```
@@ -175,20 +104,20 @@ pio run -e teensy41 -t upload
 **Check wiring**:
 - Common pin connected to GND (common-cathode) or VCC (common-anode)
 - Current limiting resistors in place
-- Correct pin assignments in config.h
+- Correct pin assignments in your `wiring.ini`
 
 **Check pin conflicts**:
 - At startup, preOBD validates pins don't conflict
 - Check serial output for "RGB LED Red pin X conflict" warnings
 
 **Verify PWM capability**:
-- Pins 6, 7, 8 are PWM on Teensy 4.1
+- Pins 4, 5 and 6 are PWM on Teensy 4.1
 - Check your board's PWM pin list if using different hardware
 
 ### Wrong colors or dim
 
 **Common-anode vs common-cathode**:
-- If colors are inverted, change `RGB_COMMON_ANODE` in config.h
+- If colors are inverted, add or remove `-D RGB_COMMON_ANODE` in your `wiring.ini`
 
 **Resistor values**:
 - Too high = dim LED

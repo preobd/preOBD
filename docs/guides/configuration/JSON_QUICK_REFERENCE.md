@@ -1,6 +1,7 @@
 # JSON Configuration Quick Reference
 
-A cheat sheet for maintaining JSON backward compatibility in preOBD.
+A contributor cheat sheet for keeping preOBD's JSON configuration format backward compatible.
+(For using JSON backup/restore, see the [JSON Configuration Guide](JSON_CONFIGURATION_GUIDE.md).)
 
 ## When Do I Need to Update JSON Code?
 
@@ -25,7 +26,7 @@ uint16_t newField;
 systemConfig.newField = 123;
 
 // 3. system_config.h - Increment version
-#define SYSTEM_CONFIG_VERSION 3  // Was 2
+#define SYSTEM_CONFIG_VERSION <n+1>
 
 // 4. json_config.cpp - Export
 systemObj["newField"] = systemConfig.newField;
@@ -39,15 +40,15 @@ systemConfig.newField = systemObj["newField"] | 123;
 // 1. input.h - Add to Input struct
 uint8_t newField;
 
-// 2. input_manager.cpp - Add to InputEEPROM
+// 2. storage/input_store.cpp - Add to InputEEPROM
 uint8_t newField;
 
-// 3. input_manager.cpp - Save/Load
+// 3. storage/input_store.cpp - Save/Load
 eeprom.newField = input.newField;  // Save
 input.newField = eeprom.newField;  // Load
 
-// 4. input_manager.cpp - Increment version
-#define EEPROM_VERSION 4  // Was 3
+// 4. src/version.h - Increment version
+#define EEPROM_VERSION <n+1>
 
 // 5. json_config.cpp - Export
 inputObj["newField"] = input->newField;
@@ -64,8 +65,8 @@ input->newField = inputObj["newField"] | 0;
 input->priority = inputObj["priority"] | 128;
 config.brightness = display["brightness"] | 200;
 
-// ❌ BAD - Old JSON will crash
-input->priority = inputObj["priority"];  // Missing field = crash!
+// ❌ BAD - a missing field silently becomes 0
+input->priority = inputObj["priority"];
 ```
 
 ### Check for Null Before Using
@@ -103,36 +104,28 @@ input->priority = inputObj["priority"] | 128;
 
 ### Version Check on Import
 
-The system automatically handles version checking:
-- Old schema (v1) loading into new firmware (v2) → Migration applied
-- New schema (v2) loading into old firmware (v1) → Warning shown
-- Same version → Normal load
-
-```cpp
-// Automatic - already implemented!
-uint8_t schemaVer = doc["schemaVersion"] | 1;
-if (schemaVer < JSON_SCHEMA_VERSION) {
-    // Apply migration logic here
-}
-```
+Today there is only schema v1, and `loadConfigFromJSON()` **rejects** any other
+`schemaVersion` (a missing field is treated as 1). Bumping the schema version
+therefore means adding migration code for v1 files in the same change — there is
+no migration path yet.
 
 ## Testing Your Changes
 
 ```bash
 # 1. Before changes - export baseline
-> DUMP JSON
+> SYSTEM DUMP JSON
 [Save output as baseline.json]
 
 # 2. After changes - verify new field appears
-> DUMP JSON
+> SYSTEM DUMP JSON
 [Should show new field with default value]
 
 # 3. Test import of OLD config (without new field)
-> CONFIG LOAD baseline.json
-[Should use default for new field]
+> JSON IMPORT
+[paste baseline.json, then END JSON — should use default for new field]
 
 # 4. Verify round-trip
-> DUMP JSON
+> SYSTEM DUMP JSON
 [Should show old values + new default]
 ```
 
@@ -154,8 +147,8 @@ struct Input {
     uint8_t newField;  // Added but version not incremented!
 };
 
-// GOOD
-#define EEPROM_VERSION 4  // Was 3
+// GOOD (src/version.h)
+#define EEPROM_VERSION <n+1>
 ```
 
 ### ❌ Breaking Changes Without Migration
@@ -179,16 +172,17 @@ if (schemaVer == 1) {
 | `src/storage/system_config.h` | Add field to struct, increment version | SystemConfig change |
 | `src/storage/system_config.cpp` | Set default value | SystemConfig change |
 | `src/inputs/input.h` | Add field to Input struct | Input change |
-| `src/inputs/input_manager.cpp` | InputEEPROM, save/load, version | Input change |
+| `src/storage/input_store.cpp` | InputEEPROM, save/load | Input change |
+| `src/version.h` | `EEPROM_VERSION` | Any stored-struct change |
 | `src/storage/json_config.cpp` | Export/import functions | Any struct change |
 | `src/storage/json_config.cpp` | `JSON_SCHEMA_VERSION` | Breaking change only |
 | `src/storage/json_config.h` | Version history comment | Schema version change |
 | `docs/guides/configuration/JSON_CONFIGURATION_GUIDE.md` | Document change | Any change |
-| `docs/CHANGELOG.md` | User-facing notes | Any change |
+| `CHANGELOG.md` | User-facing notes | Any change |
 
 ## Example: Full Workflow
 
-**Task:** Add `displayBrightness` to SystemConfig
+**Task (hypothetical):** Add `displayBrightness` to SystemConfig
 
 ```bash
 # Step 1: Branch
@@ -198,9 +192,9 @@ git checkout -b feature/display-brightness
 # Edit: src/storage/system_config.h
 struct SystemConfig {
     uint16_t displayBrightness;
-    uint8_t reserved[4];  // Was 6
+    // ...shrink the reserved/padding bytes to match, if the struct has any
 };
-#define SYSTEM_CONFIG_VERSION 3  // Was 2
+#define SYSTEM_CONFIG_VERSION <n+1>
 
 # Step 3: Set default
 # Edit: src/storage/system_config.cpp
@@ -217,17 +211,16 @@ display["brightness"] = systemConfig.displayBrightness;
 systemConfig.displayBrightness = display["brightness"] | 200;
 
 # Step 6: Test
-pio run -e megaatmega2560  # Compile
+pio run -e mega2560  # Compile (and your target board)
 # Upload and test:
-> DUMP JSON  # Should show "brightness": 200
-> CONFIG SAVE test.json
-> RESET
-> CONFIG LOAD test.json
-> DUMP JSON  # Should match
+> SYSTEM DUMP JSON        # Should show "brightness": 200
+> SAVE SD:test.json
+> SYSTEM RESET CONFIRM    # erases config and reboots
+> LOAD SD:test.json
+> SYSTEM DUMP JSON        # Should match
 
 # Step 7: Document
-# Edit: docs/CHANGELOG.md
-## v0.5.0
+# Edit: CHANGELOG.md ([Unreleased] section, one line per branch)
 - Added display brightness control (0-255)
 
 # Step 8: Commit
@@ -247,10 +240,8 @@ git commit -m "feat: Add display brightness control"
 - See full guide: `docs/guides/configuration/JSON_CONFIGURATION_GUIDE.md`
 - Check examples in configuration guide
 - Review recent commits for patterns
-- Test with `DUMP JSON` → `CONFIG LOAD` cycle
+- Test with a `SYSTEM DUMP JSON` → `JSON IMPORT` round trip
 
 ---
 
-**Last Updated:** 2025-12-19
 **Current Schema Version:** 1
-**Current Firmware Version:** 0.5.0-alpha (Unreleased)

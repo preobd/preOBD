@@ -33,7 +33,7 @@ INCLUDE_X  ⟺  SUPPORTS_X  AND  (wired, if X needs a pin)  AND  (no PLATFORM_NO
 `#if INCLUDE_REALDASH` says the encoder is **linked in**, while
 `outputEnabled[OUTPUT_REALDASH]` — which defaults to 0 — decides whether frames
 actually go out. A build-time macro cannot answer a runtime question, and
-treating one as if it could is the #351 bug.
+treating one as if it could is a classic bug here (e.g. assuming a screen is fitted because the LCD driver is compiled in).
 
 **To make a build smaller, comment a `SUPPORTS_*` line out of `board.h`.** That
 is the intended lever, and measured per-feature costs are in
@@ -85,7 +85,7 @@ board that vetoes it). `#ifndef`-guarded, so an explicit override still wins
 
 Logic-level behavior, identical across boards: timing intervals, alarm behavior
 (`SILENCE_DURATION`, `WARNING_THRESHOLD_PERCENT` — the `AUTO` default for a
-rule's per-side warning threshold; override per rule with `WARN`, #425),
+rule's per-side warning threshold; override per rule with `WARN`),
 calibration defaults, default display units. **No hardware pins.**
 
 ### EEPROM — runtime
@@ -161,8 +161,8 @@ A feature flag controls whether output code is *compiled in*; once in, outputs
 toggle at runtime via EEPROM:
 
 ```
-SET OUTPUT CAN ENABLED       # runtime enable
-SET OUTPUT CAN INTERVAL 100
+OUTPUT CAN ENABLE            # runtime enable
+OUTPUT CAN INTERVAL 100
 SAVE
 ```
 

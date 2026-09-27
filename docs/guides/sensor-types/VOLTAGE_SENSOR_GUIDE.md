@@ -6,7 +6,7 @@
 
 ## Overview
 
-The `VOLTAGE_DIVIDER` sensor type monitors battery voltage using a resistor divider network. preOBD auto-configures the correct divider ratio based on your board's voltage level.
+The `VOLTAGE_DIVIDER` sensor type monitors battery voltage using a resistor divider network. The firmware assumes the standard divider for your board (below), so with those resistors no calibration is needed.
 
 ---
 
@@ -51,7 +51,7 @@ Battery (+12V)
 
 | Board Type | R1 (High) | R2 (Low) | Max Input |
 |------------|-----------|----------|-----------|
-| 5V boards (Uno, Mega) | 100kΩ | 6.8kΩ | ~18V |
+| 5V boards (Mega) | 100kΩ | 6.8kΩ | ~18V |
 | 3.3V boards (Teensy) | 100kΩ | 22kΩ | ~15V |
 
 **Formula:**
@@ -104,33 +104,32 @@ SAVE
 
 ### Auto-Configuration
 
-preOBD automatically detects your board voltage and configures the divider ratio. For most setups, no calibration is needed.
+The firmware assumes 100kΩ/22kΩ on 3.3V boards and 100kΩ/6.8kΩ on 5V boards. If you used those values, no calibration is needed.
 
 ### Custom Divider Values
 
-If you used different resistor values:
+If you used different resistors, or want to trim the reading against a
+multimeter, set the divider through a [JSON import](../configuration/JSON_CONFIGURATION_GUIDE.md)
+— there is no serial command for it yet. In the input's entry:
 
-```
-SET A8 VOLTAGE <R1> <R2> [correction] [offset]
-```
-
-**Example:** Using 47kΩ/10kΩ divider:
-```
-SET A8 VOLTAGE 47000 10000
-SAVE
-```
-
-### Fine-Tuning
-
-If readings are slightly off, add a correction factor:
-
-```
-SET A8 VOLTAGE 100000 6800 1.02 0
-SAVE
+```json
+"calibration": {
+  "type": "VOLTAGE_DIVIDER",
+  "source": "CUSTOM",
+  "params": { "r1": 47000, "r2": 10000, "correction": 1.0, "offset": 0.0 }
+}
 ```
 
-- `1.02` = 2% correction multiplier
-- `0` = no offset
+- `r1` / `r2` — the high-side and low-side resistors in ohms (measure them for best accuracy)
+- `correction` — multiplier, e.g. `1.02` if the reading is 2% low
+- `offset` — volts added after the correction
+
+Export with `SYSTEM DUMP JSON`, edit that input, paste it back with `JSON IMPORT`
+(end with `END JSON`), then `SAVE`. Not available on the Arduino Mega, which has
+no JSON support.
+
+`SET <pin> DIVIDER` is a different setting — it applies only to linear 0.5-4.5V
+sensors and is refused on battery inputs.
 
 ---
 
@@ -152,8 +151,7 @@ SAVE
 
 **Solutions:**
 1. Measure actual resistor values with multimeter
-2. Use `SET A8 VOLTAGE <actual_R1> <actual_R2>`
-3. Add correction factor if needed
+2. Enter them (and a correction factor if needed) as described in [Custom Divider Values](#custom-divider-values)
 
 ### Reading is Noisy
 
@@ -193,11 +191,11 @@ You can monitor multiple voltage sources:
 ```
 SET A8 PRIMARY_BATTERY VOLTAGE_DIVIDER
 SET A9 AUXILIARY_BATTERY VOLTAGE_DIVIDER
-SET A10 IGNITION_VOLTAGE VOLTAGE_DIVIDER
 SAVE
 ```
 
-Each input needs its own voltage divider circuit.
+Each input needs its own voltage divider circuit. `PRIMARY_BATTERY` and
+`AUXILIARY_BATTERY` are the two voltage applications.
 
 ---
 

@@ -113,17 +113,16 @@ NTC thermistors are single-wire resistive sensors. Automotive sensors typically 
 ```
 +5V (or 3.3V)
     |
-    |
-[Thermistor] <-- Sensor (may ground through engine block)
+[Bias resistor] <-- 100Ω for VDO/gauge senders, 2.49kΩ for EFI NTC sensors
     |
     +-----> Analog Pin (e.g., A0)
     |
-[100Ω Resistor] <-- Pull-down resistor (for VDO/gauge senders)
+[Thermistor] <-- Sensor (grounds through the engine block)
     |
    GND
 ```
 
-**Note:** The pull-down resistor creates a voltage divider with the thermistor. As temperature increases, thermistor resistance decreases, and voltage at the analog pin increases.
+**Note:** The bias resistor and the thermistor form a voltage divider. As temperature increases, thermistor resistance decreases, and the voltage at the analog pin decreases.
 
 ### Linear Sensor Wiring
 
@@ -137,9 +136,9 @@ GND ---------> Sensor GND
 
 **Warning:** Most linear sensors require 5V power. For 3.3V systems, use a voltage divider on the signal (configurable per-input via `SET <pin> DIVIDER <ratio>` — see [ADVANCED_CALIBRATION_GUIDE.md → DIVIDER](../configuration/ADVANCED_CALIBRATION_GUIDE.md#divider--voltage-divider-ratio-linear-sensors-only)) or choose 3.3V-compatible sensors.
 
-**Disconnect detection:** linear temp sensors return `NaN` when the ADC voltage falls more than ~0.05 V outside the calibrated `voltage_min`/`voltage_max` window — preOBD's signal that the sensor is disconnected, unpowered, or shorted. For this to work, the pin must rail rather than float to mid-scale: built-in linear-temp presets (e.g. `GENERIC_TEMP_LINEAR`) enable an internal pull-up automatically. Custom calibrations (`SET <pin> TEMP_LINEAR ...`) do **not** enable the pull-up — wire an external pull-down (e.g. 100 kΩ to GND) if you want disconnect detection on a custom-calibrated linear temp sensor. See [PRESSURE_SENSOR_GUIDE.md → Disconnect Detection](PRESSURE_SENSOR_GUIDE.md#disconnect-detection) for the full mechanism.
+**Disconnect detection:** linear temp sensors return `NaN` when the ADC voltage falls more than ~0.05 V outside the calibrated `voltage_min`/`voltage_max` window — preOBD's signal that the sensor is disconnected, unpowered, or shorted. For this to work, the pin must rail rather than float to mid-scale: built-in linear-temp presets (e.g. `GENERIC_TEMP_LINEAR`) enable an internal pull-up automatically. Custom calibrations (`SET <pin> CAL PRESSURE_LINEAR <vmin> <vmax> <tmin> <tmax>` — the linear profile is shared by pressure and temperature, with the output range in °C) do **not** enable the pull-up — wire an external pull-down (e.g. 100 kΩ to GND) if you want disconnect detection on a custom-calibrated linear temp sensor. See [PRESSURE_SENSOR_GUIDE.md → Disconnect Detection](PRESSURE_SENSOR_GUIDE.md#disconnect-detection) for the full mechanism.
 
-### Pull-Down Resistor Value (NTC Only)
+### Bias Resistor Value (NTC Only)
 
 The bias resistor value depends on your sensor family — see [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) for full details. The short answer:
 
@@ -165,7 +164,7 @@ SAVE
 ### Using Beta Equation
 
 The Beta equation is the most common format in thermistor datasheets. It requires:
-- **bias_r** - Pull-down resistor value in ohms
+- **bias_r** - Bias resistor value in ohms
 - **beta** - Beta coefficient (typically 3000-4500 for automotive)
 - **r0** - Reference resistance in ohms (typically at 25°C)
 - **t0** - Reference temperature in °C (typically 25)

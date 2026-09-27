@@ -1,7 +1,5 @@
 # Pin Type Requirements Guide
 
-**Version:** 0.5.0-alpha (Unreleased)
-**Last Updated:** 2025-12-19
 
 ---
 
@@ -41,7 +39,7 @@ preOBD categorizes pins into three types based on the **hardware interface** req
 - Reads continuous voltage levels (0-5V → 0-1023 ADC value)
 
 **Typical sensors:**
-- Thermistors (VDO_120C, VDO_150C, etc.)
+- Thermistors (VDO_120C_TABLE, VDO_150C_STEINHART, etc.)
 - Analog pressure sensors (MPX4250AP, VDO_2BAR_CURVE, GENERIC_BOOST)
 - Voltage dividers (battery voltage monitoring)
 
@@ -299,8 +297,8 @@ The tool prevents assigning the same pin to multiple inputs:
 
 ```
 Input 0: Pin 6,  Application CHT,          Sensor MAX6675        (PIN_DIGITAL - SPI CS)
-Input 1: Pin A0, Application OIL_TEMP,     Sensor VDO_150C       (PIN_ANALOG - Thermistor)
-Input 2: Pin A1, Application COOLANT,      Sensor VDO_120C       (PIN_ANALOG - Thermistor)
+Input 1: Pin A0, Application OIL_TEMP,     Sensor VDO_150C_TABLE       (PIN_ANALOG - Thermistor)
+Input 2: Pin A1, Application COOLANT_TEMP,     Sensor VDO_120C_TABLE       (PIN_ANALOG - Thermistor)
 Input 3: Pin A2, Application OIL_PRESSURE, Sensor VDO_5BAR_CURVE       (PIN_ANALOG - Pressure)
 Input 4: Pin 2,  Application ENGINE_RPM,   Sensor W_PHASE_RPM    (PIN_DIGITAL - Interrupt)
 Input 5: Pin I2C, Application AMBIENT,     Sensor BME280_TEMP    (PIN_I2C - Shared bus)
@@ -320,7 +318,7 @@ Input 0: Pin 6,  Application CHT,      Sensor MAX6675
 Input 1: Pin 7,  Application EGT_1,    Sensor MAX31855
 Input 2: Pin 8,  Application EGT_2,    Sensor MAX31855
 Input 3: Pin 9,  Application EGT_3,    Sensor MAX31855
-Input 4: Pin A0, Application OIL_TEMP, Sensor VDO_150C
+Input 4: Pin A0, Application OIL_TEMP, Sensor VDO_150C_TABLE
 ```
 
 **Why this works:**
@@ -350,8 +348,8 @@ Input 3: Pin I2C, Application ELEVATION,      Sensor BME280_ELEVATION
 
 ```
 Input 0: Pin 6,  Application CHT,          Sensor MAX6675        (PIN_DIGITAL)
-Input 1: Pin A0, Application OIL_TEMP,     Sensor VDO_150C       (PIN_ANALOG)
-Input 2: Pin A1, Application COOLANT,      Sensor VDO_120C       (PIN_ANALOG)
+Input 1: Pin A0, Application OIL_TEMP,     Sensor VDO_150C_TABLE       (PIN_ANALOG)
+Input 2: Pin A1, Application COOLANT_TEMP,     Sensor VDO_120C_TABLE       (PIN_ANALOG)
 Input 3: Pin A2, Application OIL_PRESSURE, Sensor VDO_5BAR_CURVE       (PIN_ANALOG)
 Input 4: Pin 2,  Application ENGINE_RPM,   Sensor W_PHASE_RPM    (PIN_DIGITAL)
 ```
@@ -450,12 +448,12 @@ Input 4: Pin 2,  Application ENGINE_RPM,   Sensor W_PHASE_RPM    (PIN_DIGITAL)
 
 **Example:**
 ```
-❌ Input 0: Pin A0, Sensor VDO_120C
-   Input 1: Pin A0, Sensor VDO_150C
+❌ Input 0: Pin A0, Sensor VDO_120C_TABLE
+   Input 1: Pin A0, Sensor VDO_150C_TABLE
    Error: Pin A0 is already in use.
 
-✅ Input 0: Pin A0, Sensor VDO_120C
-   Input 1: Pin A1, Sensor VDO_150C
+✅ Input 0: Pin A0, Sensor VDO_120C_TABLE
+   Input 1: Pin A1, Sensor VDO_150C_TABLE
    Success!
 ```
 
@@ -479,10 +477,10 @@ Input 4: Pin 2,  Application ENGINE_RPM,   Sensor W_PHASE_RPM    (PIN_DIGITAL)
 
 **Example (Arduino Uno):**
 ```
-❌ Input 0: Pin A6, Sensor VDO_120C
+❌ Input 0: Pin A6, Sensor VDO_120C_TABLE
    Error: Analog pin A6 exceeds platform limit of 5
 
-✅ Input 0: Pin A0, Sensor VDO_120C
+✅ Input 0: Pin A0, Sensor VDO_120C_TABLE
    Success!
 ```
 
@@ -569,33 +567,6 @@ enum PinTypeRequirement {
 
 Each sensor entry in `sensor_library/sensors/*.h` specifies its required pin type as the last X_SENSOR parameter.
 
-### Pin Validation Logic (Python)
-
-Implemented in [tools/preobd_config/platform.py](../../../tools/preobd_config/platform.py):
-
-```python
-def validate_pin(pin_str: str, platform: str, used_pins: List[str], sensor_pin_requirement: Optional[str] = None) -> Optional[str]:
-    """
-    Validates a pin against platform limits, reserved pins, used pins, and sensor requirements.
-    Returns an error message string if invalid, otherwise None.
-    """
-    # Parse pin format (analog/digital/i2c)
-    parsed_pin = parse_pin(pin_str)
-
-    # Check platform limits
-    limits = get_platform_limits(platform)
-
-    # Check reserved pins
-    if pin_num in RESERVED_PINS:
-        return f"Pin {pin_num} is reserved for {RESERVED_PINS[pin_num]}"
-
-    # Check pin type compatibility with sensor requirements
-    if sensor_pin_requirement:
-        requirement = sensor_pin_requirement.replace("PIN_", "").lower()
-        # Validation logic for analog/digital/i2c compatibility
-
-    return None  # Valid pin
-```
 
 ---
 

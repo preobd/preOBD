@@ -275,7 +275,7 @@ The correct bias resistor depends on the sensor's resistance family, not a singl
 | VDO, Smiths, Stewart Warner, pre-EFI Ford/GM, Jeep CJ | 2–330Ω (low-impedance) | **100Ω** |
 | GM EFI NTC, Bosch NTC M12, Jeep XJ/Renix CTS | 135–9400Ω (high-impedance) | **2.49kΩ** |
 
-**Rule of thumb:** Match the bias resistor to the sensor's resistance family. The built-in presets already encode the correct value — only use `SET <pin> BIAS` if your physical resistor differs from the preset default.
+**Rule of thumb:** Match the bias resistor to the sensor's resistance family. The built-in presets already encode the correct value — only use `SET <pin> CAL BIAS` if your physical resistor differs from the preset default.
 
 See [BIAS_RESISTOR_GUIDE.md](../hardware/BIAS_RESISTOR_GUIDE.md) for detailed analysis.
 
