@@ -15,8 +15,13 @@ void watchdogEnable(uint16_t timeout_ms);
 // Reset watchdog timer (call regularly in main loop)
 void watchdogReset();
 
-// Disable watchdog (use sparingly, mainly for debugging)
+// Disable watchdog (use sparingly, mainly for debugging). A no-op on
+// Teensy 4.x, whose watchdog can't be disabled once armed (#243).
 void watchdogDisable();
+
+// Whether the watchdog is running now — still true after watchdogDisable()
+// on a board that can't disable it, so user-facing text can say so (#461).
+bool watchdogArmed();
 
 // Print wrapper that feeds the watchdog every N bytes.
 // Use when serializing large payloads over slow transports (e.g. a BLE UART

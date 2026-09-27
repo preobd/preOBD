@@ -110,6 +110,8 @@ pio run -e teensy41        # build
 pio run -e teensy41 -t upload
 ```
 
+On Teensy the upload may print `error writing to Teensy` and then program anyway: the loader's first write after the reboot into the bootloader can fail, so the build retries it once (`scripts/teensy_upload_retry.py`). If the board never reaches the bootloader, press its program button while the loader waits.
+
 ## Customizing for your hardware
 
 - **Your pins:** edit `boards/<board>/wiring.ini` only. Never a tracked file.

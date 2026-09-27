@@ -666,9 +666,15 @@ void setup() {
         watchdogEnable(2000);
         msg.debug.info(TAG_SYSTEM, "Watchdog enabled (2s timeout)");
     } else {
-        // On Teensy 4.x the watchdog simply was never enabled here (vs. actively
-        // disabled) — it can't be disabled once armed. See #243.
+        // Not enabled here for CONFIG. On Teensy 4.x it may still be running:
+        // initSD()'s exit arms it before the boot mode is known, and it can't
+        // be disabled once armed (#243, #469).
+#if defined(__IMXRT1062__)
+        msg.debug.info(TAG_SYSTEM, watchdogArmed() ? "Watchdog still armed (CONFIG mode)"
+                                                   : "Watchdog disabled (CONFIG mode)");
+#else
         msg.debug.info(TAG_SYSTEM, "Watchdog disabled (CONFIG mode)");
+#endif
     }
 
     // Boot is one reporting episode for the no-bus guidance; everything past

@@ -43,16 +43,19 @@ void setMode(SystemMode newMode) {
             // Disable watchdog when entering CONFIG mode.
             // NOTE: on Teensy 4.x this is a no-op — WDT_T4 has no disable, so the
             // 2s watchdog (if armed at boot in RUN mode) keeps running and is only
-            // held off by the main loop's watchdogReset(). The "Watchdog disabled"
-            // line below is therefore not literally true there; any CONFIG-mode path
-            // that blocks >2s without feeding still resets the MCU. We keep the
-            // user-facing wording as-is and instead guard blocking paths. See #243.
+            // held off by the main loop's watchdogReset(); any CONFIG-mode path
+            // that blocks >2s without feeding still resets the MCU, so blocking
+            // paths feed it (#243). The banner says which is true (#461).
             watchdogDisable();
 
             msg.control.println(F("========================================"));
             msg.control.println(F("  ENTERED CONFIG MODE"));
             msg.control.println(F("  Sensors paused, configuration unlocked"));
-            msg.control.println(F("  Watchdog disabled"));
+            if (watchdogArmed()) {
+                msg.control.println(F("  Watchdog still armed (can't be disabled on this board)"));
+            } else {
+                msg.control.println(F("  Watchdog disabled"));
+            }
             msg.control.println(F("  Type RUN to resume normal operation"));
             msg.control.println(F("========================================"));
         } else {
