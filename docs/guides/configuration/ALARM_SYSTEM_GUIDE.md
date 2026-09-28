@@ -59,14 +59,15 @@ below (an `ALARM`-severity band). Other applications start with no alarm.
 | `GEAR_OIL_TEMP` | -1 to 120 °C | 60 s | 5 s |
 | `OIL_PRESSURE` | 1 to 5 bar | 5 s | 1 s |
 | `FUEL_LEVEL` | 10 to 100 % | 2 s | 5 s |
-| `COOLANT_LEVEL`, `OIL_LEVEL` | 0 to 1 (see note) | 5 s / 10 s | 2 s / 3 s |
+| `COOLANT_LEVEL`, `OIL_LEVEL` | below 0.5 (see note) | 5 s / 10 s | 2 s / 3 s |
 
 A band alarms when the value goes **outside** it; the `-1` lower edges mean the
 temperature alarms are effectively over-temperature only.
 
-> **Note:** for float switches (`COOLANT_LEVEL`, `OIL_LEVEL`) the default band
-> currently never trips (a known firmware issue). Until it's fixed, set the alarm
-> yourself: `SET <pin> ALARM MIN 0.5`.
+> **Note:** float switches (`COOLANT_LEVEL`, `OIL_LEVEL`) read 1 (OK) or 0 (low),
+> so their default is a one-sided `BELOW 0.5` alarm with no warning tier rather
+> than a band. A rule saved by older firmware as a 0-to-1 band never trips;
+> `RULE RESET <id>` rebuilds it.
 
 Every application also has a warmup and debounce time that applies to the Rules
 you add for it; `LIST APPLICATIONS` lists them all.

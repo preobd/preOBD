@@ -266,6 +266,15 @@ static bool buildRuleConfigFromApplication(uint8_t appIndex, Rule& out) {
     out.warnHi     = 0.0f;
     out.warmupMs   = p.warmupTime_ms;
     out.debounceMs = p.persistTime_ms;
+    if (p.expectedMeasurementType == MEASURE_DIGITAL) {
+        // A 0/1 switch can never leave its own [0,1] band, and the AUTO hi warn
+        // edge (0.9) sits below "OK" (1). Alarm on the low state instead, with
+        // no approach tier — a switch has nothing to approach (#477).
+        out.condition = RULE_BELOW;
+        out.limitLo   = (p.defaultMinValue + p.defaultMaxValue) * 0.5f;
+        out.limitHi   = 0.0f;  // unused for one-sided
+        ruleSetWarnMode(out, false, RULE_WARN_NONE);
+    }
     return true;
 }
 
@@ -303,7 +312,7 @@ static void applyRuleTemplate(int slot, const Rule& tmpl, uint32_t now) {
     r.limitLo    = tmpl.limitLo;
     r.limitHi    = tmpl.limitHi;
     r.hysteresis = tmpl.hysteresis;
-    r.warnLo     = tmpl.warnLo;   // template flags are AUTO (0) — RESET/reseed return warn modes to AUTO too
+    r.warnLo     = tmpl.warnLo;   // template flags: AUTO, or NONE for a digital preset (#477) — RESET/reseed restore them
     r.warnHi     = tmpl.warnHi;
     r.warmupMs   = tmpl.warmupMs;
     r.debounceMs = tmpl.debounceMs;

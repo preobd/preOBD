@@ -3543,12 +3543,17 @@ function onEditorAppChange() {
 
 // The application's default alarm band, or null when it doesn't default to one.
 // Mirrors the firmware's auto-seed gate exactly (defaultAlarmEnabled + min<max,
-// rules_manager buildRuleConfigFromApplication).
+// rules_manager buildRuleConfigFromApplication) — including its digital case: a
+// 0/1 switch (COOLANT_LEVEL, OIL_LEVEL) seeds a FLOOR at the midpoint, max null,
+// because a 0..1 band can never trip (#477).
 function appDefaultBand(appName) {
   const a = catalog.applications.find(x => x.name === appName);
   if (a && a.defaultAlarmEnabled &&
       a.defaultMinValue != null && a.defaultMaxValue != null &&
       a.defaultMinValue < a.defaultMaxValue) {
+    if (a.measurementType === 'DIGITAL') {
+      return { min: (a.defaultMinValue + a.defaultMaxValue) / 2, max: null };
+    }
     return { min: a.defaultMinValue, max: a.defaultMaxValue };
   }
   return null;
@@ -3576,7 +3581,7 @@ function applyAppDefaultsToAlarm() {
   const band = appDefaultBand(document.getElementById('edApp').value);
   if (band) {
     minEl.value = band.min;
-    maxEl.value = band.max;
+    maxEl.value = band.max ?? '';
     chkEl.checked = true;
   } else {
     minEl.value = '';
@@ -3620,7 +3625,7 @@ function onAlarmEnabledToggle() {
   if (document.getElementById('edAlarmEnabled').checked &&
       minEl.value === '' && maxEl.value === '') {
     const band = appDefaultBand(document.getElementById('edApp').value);
-    if (band) { minEl.value = band.min; maxEl.value = band.max; }
+    if (band) { minEl.value = band.min; maxEl.value = band.max ?? ''; }
   }
   syncAlarmFieldsToCheckbox();
 }

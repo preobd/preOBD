@@ -66,7 +66,7 @@ static void addTemplatedInput(uint8_t pin) {
 // rules_manager.cpp's buildRuleConfigFromApplication() reads this through the
 // real (inline, header-defined) getApplicationByIndex()/loadApplicationPreset()
 // — only the backing PROGMEM array is firmware-external, so that's all this
-// suite needs to supply. One entry, index 0, with a real [min,max] band and
+// suite needs to supply. Index 0 has a real [min,max] band and
 // alarms enabled so RULE RESET / reseed have something to rewrite to.
 static const char PSTR_APP_NAME[]  PROGMEM = "TEST_ALARM_APP";
 static const char PSTR_APP_ABBR[]  PROGMEM = "TST";
@@ -82,6 +82,18 @@ const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         MEASURE_TEMPERATURE,
         /*nameHash*/ 0,
         /*warmupTime_ms*/ 1000, /*persistTime_ms*/ 500,
+        APP_GROUP_OTHER,
+    },
+    // Index 1: a float-switch style digital preset (COOLANT_LEVEL shape, #477)
+    {
+        PSTR_APP_NAME, PSTR_APP_ABBR, PSTR_APP_LABEL, nullptr,
+        /*defaultSensor*/ 0, /*defaultUnits*/ 0,
+        /*defaultMinValue*/ 0.0f, /*defaultMaxValue*/ 1.0f,
+        /*obd2pid*/ 0, /*obd2length*/ 0,
+        /*defaultAlarmEnabled*/ true, /*defaultDisplayEnabled*/ true,
+        MEASURE_DIGITAL,
+        /*nameHash*/ 0,
+        /*warmupTime_ms*/ 0, /*persistTime_ms*/ 0,
         APP_GROUP_OTHER,
     },
 };
@@ -575,6 +587,35 @@ static void test_reseed_for_input_returns_warn_to_auto(void) {
     TEST_ASSERT_EQUAL_FLOAT(0.0f, rules[slot].warnHi);
 }
 
+// A digital (0/1 float switch) preset seeds BELOW the midpoint with no warn
+// tier: an OUTSIDE 0..1 band could never fire, and its AUTO hi warn edge (0.9)
+// sat below the "level OK" reading of 1 (#477).
+static void test_digital_preset_seeds_below_midpoint(void) {
+    memset(&g_inputs[g_inputCount], 0, sizeof(Input));
+    g_inputs[g_inputCount].pin = 21;
+    g_inputs[g_inputCount].applicationIndex = 1;
+    g_inputCount++;
+    uint8_t id = rulesSeedRuleForInput(21, 1, 0);
+    TEST_ASSERT_NOT_EQUAL(RULES_ID_NONE, id);
+    int slot = rulesRuleSlot(id);
+    const Rule& r = rules[slot];
+    TEST_ASSERT_EQUAL_UINT8(RULE_BELOW, r.condition);
+    TEST_ASSERT_EQUAL_UINT8(RULE_SEV_ALARM, r.severity);
+    TEST_ASSERT_EQUAL_FLOAT(0.5f, r.limitLo);
+    TEST_ASSERT_EQUAL_UINT8(RULE_WARN_NONE, ruleWarnMode(r, false));
+    TEST_ASSERT_EQUAL_INT(slot, rulesAlarmRuleSlotForInput(21));
+
+    TEST_ASSERT_TRUE(rulesRuleConditionAsserted(r, 0.0f, false));    // level low
+    TEST_ASSERT_FALSE(rulesRuleConditionAsserted(r, 1.0f, false));   // level OK
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_NONE, rulesRuleWarnSideHit(r, 1.0f));
+
+    // RULE RESET rebuilds the same shape
+    rules[slot].limitLo = 0.2f;
+    TEST_ASSERT_TRUE(rulesRuleReset(id, 0));
+    TEST_ASSERT_EQUAL_UINT8(RULE_BELOW, rules[slot].condition);
+    TEST_ASSERT_EQUAL_FLOAT(0.5f, rules[slot].limitLo);
+}
+
 // =====================================================================
 // RULE <id> LIMIT — rulesSetRuleLimit (#457)
 // =====================================================================
@@ -783,6 +824,7 @@ int main(int, char**) {
     RUN_TEST(test_ack_generation_moves_on_every_set_change_only);
     RUN_TEST(test_ack_ignores_warning_tier);
     RUN_TEST(test_rule_reset_returns_warn_to_auto);
+    RUN_TEST(test_digital_preset_seeds_below_midpoint);
     RUN_TEST(test_reseed_for_input_returns_warn_to_auto);
     return UNITY_END();
 }
