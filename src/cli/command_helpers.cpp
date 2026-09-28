@@ -533,6 +533,7 @@ void printHelpControl() {
     msg.control.println(F("  SET <pin> INPUT DISABLE  - Disable input reading"));
     msg.control.println(F("  CLEAR <pin>              - Reset input to unconfigured"));
     msg.control.println(F("  CLEAR <pin> CALIBRATION  - Clear custom calibration only"));
+    msg.control.println(F("  CLEAR <pin> [CALIBRATION] SAVE - Clear, then SAVE (whole config)"));
     msg.control.println(F("  INFO <pin>               - Show detailed pin info"));
     msg.control.println(F("  INFO <pin> ALARM         - Show alarm status and configuration"));
     msg.control.println(F("  INFO <pin> CALIBRATION   - Show calibration details"));
@@ -763,8 +764,8 @@ void printHelpQuick() {
     msg.control.println();
     msg.control.println(F("Input Control:"));
     msg.control.println(F("  SET <pin> INPUT ENABLE|DISABLE"));
-    msg.control.println(F("  CLEAR <pin>"));
-    msg.control.println(F("  CLEAR <pin> CALIBRATION"));
+    msg.control.println(F("  CLEAR <pin> [SAVE]"));
+    msg.control.println(F("  CLEAR <pin> CALIBRATION [SAVE]"));
     msg.control.println(F("  INFO [<pin>] [ALARM|CALIBRATION]"));
     msg.control.println();
     msg.control.println(F("Input Configuration:"));

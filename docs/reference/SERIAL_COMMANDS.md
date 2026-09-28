@@ -100,7 +100,12 @@ Pattern: `SET <pin> INPUT <ENABLE|DISABLE>` / `CLEAR <pin>`
 SET A0 INPUT ENABLE            # Enable input reading
 SET A0 INPUT DISABLE           # Disable input (keeps config)
 CLEAR A0             # Remove input configuration
+CLEAR A0 SAVE        # Remove it and persist to EEPROM in one command
 ```
+
+`CLEAR` changes RAM only until you `SAVE`. A trailing `SAVE` (also accepted
+after `CLEAR <pin> CALIBRATION`) does both in one command. It saves the
+**whole** RAM config, not just the clear — exactly like typing `SAVE` next.
 
 ### Query Commands
 Pattern: `INFO <pin> [subcommand]`
@@ -292,7 +297,7 @@ Override sensor preset calibration with custom values.
 ### Calibration Commands
 
 ```
-CLEAR <pin> CALIBRATION            # Revert to preset calibration
+CLEAR <pin> CALIBRATION [SAVE]     # Revert to preset calibration
 SET <pin> CAL BIAS <resistor>        # Set bias resistor (Ω)
 SET <pin> CAL STEINHART <bias> <a> <b> <c>  # Steinhart-Hart thermistor
 SET <pin> CAL BETA <bias> <beta> <r0> <t0>  # Beta equation thermistor

@@ -332,24 +332,26 @@ int cmd_run(int argc, const char* const* argv) {
     return 0;
 }
 
+// Persist the whole RAM config to EEPROM. Shared by `SAVE` / `SAVE EEPROM`
+// and the one-shot `CLEAR <pin> SAVE` (#320) so they can't drift apart.
+static void saveConfigToEeprom() {
+    msg.control.println(F("Saving configuration to EEPROM..."));
+    saveInputConfig();
+    saveSystemConfig();
+    obdQuery_buildLookupTable();  // Rebuild PID table — inputs may have changed
+    msg.control.println(F("Configuration saved"));
+}
+
 int cmd_save(int argc, const char* const* argv) {
     // Case 1: SAVE (bare) → EEPROM (backward compatible)
     if (argc == 1) {
-        msg.control.println(F("Saving configuration to EEPROM..."));
-        saveInputConfig();
-        saveSystemConfig();
-        obdQuery_buildLookupTable();  // Rebuild PID table — inputs may have changed
-        msg.control.println(F("Configuration saved"));
+        saveConfigToEeprom();
         return 0;
     }
 
     // Case 2: SAVE EEPROM (explicit)
     if (argc == 2 && streq_P(argv[1], PSTR("EEPROM"))) {
-        msg.control.println(F("Saving configuration to EEPROM..."));
-        saveInputConfig();
-        saveSystemConfig();
-        obdQuery_buildLookupTable();  // Rebuild PID table — inputs may have changed
-        msg.control.println(F("Configuration saved"));
+        saveConfigToEeprom();
         return 0;
     }
 
@@ -528,10 +530,33 @@ int cmd_reboot(int argc, const char* const* argv) {
 
 
 int cmd_clear(int argc, const char* const* argv) {
-    if (argc < 2) {
-        msg.control.println(F("ERROR: CLEAR requires a pin"));
-        msg.control.println(F("  Usage: CLEAR <pin>"));
-        msg.control.println(F("         CLEAR <pin> CALIBRATION"));
+    // Accepted shapes (a trailing SAVE persists in the same command, #320):
+    //   CLEAR <pin> [SAVE]
+    //   CLEAR <pin> CALIBRATION [SAVE]
+    // SAVE writes the WHOLE RAM config, exactly like a following `SAVE` —
+    // not just this clear. Anything else is rejected rather than falling
+    // through to a full clear, so a typo can't wipe an input.
+    bool calibrationOnly = false;
+    bool save = false;
+    bool argsOk = argc >= 2 && argc <= 4;
+    for (int i = 2; argsOk && i < argc; i++) {
+        if (i == 2 && streq_P(argv[i], PSTR("CALIBRATION"))) {
+            calibrationOnly = true;
+        } else if (i == argc - 1 && streq_P(argv[i], PSTR("SAVE"))) {
+            save = true;
+        } else {
+            argsOk = false;
+        }
+    }
+    if (!argsOk) {
+        if (argc < 2) {
+            msg.control.println(F("ERROR: CLEAR requires a pin"));
+        } else {
+            msg.control.println(F("ERROR: Invalid CLEAR arguments"));
+        }
+        msg.control.println(F("  Usage: CLEAR <pin> [SAVE]"));
+        msg.control.println(F("         CLEAR <pin> CALIBRATION [SAVE]"));
+        msg.control.println(F("  SAVE persists the whole config, not just this clear"));
         return 1;
     }
 
@@ -540,7 +565,7 @@ int cmd_clear(int argc, const char* const* argv) {
     if (!valid) return 1;
 
     // CLEAR <pin> CALIBRATION — drop custom calibration only.
-    if (argc >= 3 && streq_P(argv[2], PSTR("CALIBRATION"))) {
+    if (calibrationOnly) {
         if (!clearInputCalibration(pin)) {
             msg.control.println(F("ERROR: Input not configured"));
             return 1;
@@ -548,7 +573,11 @@ int cmd_clear(int argc, const char* const* argv) {
         msg.control.print(F("Cleared custom calibration for pin "));
         msg.control.println(argv[1]);
         msg.control.println(F("Using preset calibration from sensor library"));
-        printSaveReminder();
+        if (save) {
+            saveConfigToEeprom();
+        } else {
+            printSaveReminder();
+        }
         return 0;
     }
 
@@ -575,9 +604,14 @@ int cmd_clear(int argc, const char* const* argv) {
             msg.control.print(releasedActions);
             msg.control.println(F(" driven action(s) that followed them; they are now OFF"));
         }
-        printSaveReminder();
     }
 #endif
+
+    if (save) {
+        saveConfigToEeprom();
+    } else {
+        printSaveReminder();
+    }
     return 0;
 }
 
