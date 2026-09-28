@@ -241,7 +241,8 @@ struct Input {
         uint8_t display : 1;        // Show on LCD
         uint8_t isInAlarm : 1;      // Currently in alarm state
         uint8_t useCustomCalibration : 1;  // Use custom or preset calibration
-        uint8_t reserved : 3;       // Reserved for future use
+        uint8_t hasReading : 1;     // Runtime only (never persisted): read at least once since configured
+        uint8_t reserved : 2;       // Reserved for future use
     } flags;
 
     // === Function Pointers ===

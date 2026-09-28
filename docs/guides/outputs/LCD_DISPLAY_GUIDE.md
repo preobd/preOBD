@@ -24,7 +24,7 @@ input's units. Special values:
 |-------|---------|
 | `ERR` | The sensor isn't giving a valid reading (open, shorted, out of range) — see `SYSTEM DIAG INPUTS` |
 | `CFG` | The input is configured but disabled (CONFIG mode) |
-| `---` | No reading yet — and, currently, a reading of exactly 0 (a known firmware issue) |
+| `---` | No reading yet (the input was just added or the board just started) |
 
 **Up to eight inputs fit.** A ninth and later input isn't shown correctly yet
 (a known firmware issue), so keep the LCD to eight inputs.

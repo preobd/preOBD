@@ -111,8 +111,7 @@ SAVE
 ### Display Output
 
 A float switch reads **1** when the level is OK and **0** when it is low.
-`LIST INPUTS` shows the number; the LCD currently shows a reading of exactly 0 as
-`---` (a known firmware issue), so on the LCD `1` means OK and `---` means low.
+`LIST INPUTS` and the LCD both show the number.
 
 ### Alarm Behavior
 

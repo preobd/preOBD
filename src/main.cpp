@@ -225,6 +225,7 @@ static void updateSensors(uint32_t now) {
         // Check if enough time has elapsed for this sensor
         if (now - lastInputRead[i] >= interval) {
             inputs[i].readFunction(&inputs[i]);
+            inputs[i].flags.hasReading = 1;
             lastInputRead[i] = now;
         }
     }

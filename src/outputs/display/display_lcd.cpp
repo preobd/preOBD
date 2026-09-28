@@ -227,8 +227,9 @@ void displaySensor(Input *ptr, byte line) {
                 }
             }
         }
-        // If value is exactly 0.0, show "---" (likely in CONFIG mode, not yet read)
-        else if (ptr->value == 0.0f) {
+        // Not read yet since it was configured: show "---". A reading of 0 is
+        // real (0 bar, 0 RPM, a low float switch) and is displayed (#481).
+        else if (!ptr->flags.hasReading) {
             if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
                 int remaining = LCD_COLUMNS_PER_SENSOR - charsPrinted;
                 if (remaining >= 3) {

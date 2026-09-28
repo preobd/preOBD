@@ -687,6 +687,7 @@ void readAllInputs() {
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled && inputs[i].readFunction != nullptr) {
             inputs[i].readFunction(&inputs[i]);
+            inputs[i].flags.hasReading = 1;
         }
     }
 }

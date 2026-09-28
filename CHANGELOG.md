@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - CAN import now receives OBD-II PIDs with 1-, 3-, 4- or 5-byte replies (coolant temp `0x05`, speed `0x0D`, …); previously only 2-byte PIDs such as RPM were matched and the rest never updated (#473)
+- The LCD now shows a reading of exactly 0 (0 oil pressure, 0 RPM, a low float switch, 0 °C) instead of `---`, which now means only that the input hasn't been read yet (#481)
 - Teensy uploads (`pio run -t upload`) retry the loader once instead of failing on its first write, and CONFIG mode now says the watchdog is still armed on Teensy 4.x instead of claiming it was disabled (#461)
 - `SET <pin> CAL PRESSURE_LINEAR` now accepts sensor voltages up to the supply divided by the input's divider ratio, so a 5 V 0.5–4.5 V sender behind a divider can be calibrated on a 3.3 V board (it was capped at 3.3 V), accepts a negative value at the low end (vacuum, sub-zero temperature), and `SET <pin> DIVIDER` refuses a ratio the input's calibration no longer fits under (#467)
 - Inputs on the generic NTC thermistor sensors (`GENERIC_NTC_STEINHART`, `GENERIC_NTC_BETA`) are now actually read — they had no read function, so a custom-calibrated generic thermistor never produced a value (#464)
