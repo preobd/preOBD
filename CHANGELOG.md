@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking: EEPROM configuration is reset on upgrade.** The stored config layout changed (`EEPROM_VERSION` 6 → 7) to carry the Rule record's new warning-threshold fields; the firmware detects the old version and starts from defaults. Back up your setup with `SYSTEM DUMP JSON` before flashing and restore it afterwards with `JSON IMPORT`.
 
 ### Fixed
+- The one-line `SET <pin> <application> <sensor>` form (e.g. `SET 6 CHT MAX6675`) now creates the application's default alarm, like `SET <pin> APPLICATION`; inputs configured that way had no alarm at all (#487)
 - On-device `HELP` and the CONFIG banner no longer advertise removed commands (`RELOAD`, top-level `RESET`, `RELAY` subcommands, `SET <pin> ALARM WARMUP|PERSIST`) and now say CONFIG keeps sensors running; `DISPLAY TYPE OLED` is refused since no OLED driver exists (#474)
 - CAN import now receives OBD-II PIDs with 1-, 3-, 4- or 5-byte replies (coolant temp `0x05`, speed `0x0D`, …); previously only 2-byte PIDs such as RPM were matched and the rest never updated (#473)
 - The LCD now shows a reading of exactly 0 (0 oil pressure, 0 RPM, a low float switch, 0 °C) instead of `---`, which now means only that the input hasn't been read yet (#481)

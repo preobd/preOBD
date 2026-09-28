@@ -103,6 +103,49 @@ struct CalProfile {
     uint8_t type;               // CalibrationType the profile writes; CAL_NONE = any (BIAS, PRESET)
 };
 
+#if INCLUDE_RULES_ENGINE
+// After setInputApplication(): seed the input's default Rule from the app
+// template on a fresh input, re-seed on an application CHANGE, keep a
+// customized Rule when the same app is re-applied (§11.5). Shared by
+// `SET <pin> APPLICATION` and the combined `SET <pin> <app> <sensor>` form,
+// which used to skip it and left the input with no default alarm (#487).
+static FLASHMEM void seedRulesForApplication(uint8_t pin, uint8_t appIndex, uint8_t oldApp) {
+    if (!rulesRuleExistsForInput(pin)) {
+        // Fresh input: seed a canonical default Rule from the app template (§11.5).
+        uint8_t ruleId = rulesSeedRuleForInput(pin, appIndex, millis());
+        if (ruleId != RULES_ID_NONE) {
+            msg.control.print(F("  Seeded Rule #"));
+            msg.control.print(ruleId);
+            msg.control.println(F(" from application defaults (RULE LIST to view)"));
+        } else if (rulesRuleFreeSlot() < 0 || rulesRuleAllocId() == RULES_ID_NONE) {
+            // Distinguish the genuine table/id-space-full case from the benign
+            // "this application has no default alarm band" (the other reason
+            // seeding returns NONE). With caps at the 254-id ceiling this is
+            // effectively unreachable, but the original silent-drop bug (#296)
+            // is exactly this path — surface it loudly rather than leave the
+            // input unmonitored without a word.
+            msg.control.println(F("  WARNING: Rule table full — input configured WITHOUT an alarm"));
+            msg.control.println(F("  (free a Rule with RULE DEL, then SET <pin> ALARM <min> <max>)"));
+        }
+    } else if (appIndex != oldApp) {
+        // App CHANGED under existing Rule(s): their thresholds are now stale.
+        // Re-seed them from the new application's defaults, or warn if the new
+        // app has none (the old thresholds would otherwise silently mis-alarm).
+        uint8_t n = rulesReseedRulesForInput(pin, millis());
+        if (n > 0) {
+            msg.control.print(F("  Application changed - re-seeded "));
+            msg.control.print(n);
+            msg.control.println(F(" Rule(s) from new defaults (RULE LIST to view)"));
+        } else {
+            msg.control.println(F("  WARNING: existing Rule(s) on this input keep their old"));
+            msg.control.println(F("  thresholds (new application has no default band) - review"));
+            msg.control.println(F("  with RULE LIST, then RULE RESET / RULE DEL as needed"));
+        }
+    }
+    // else: same app re-applied — preserve existing Rule (§11.5).
+}
+#endif
+
 // SET <pin> APPLICATION <application>
 static int set_application(uint8_t pin, int argc, const char* const* argv) {
     if (argc < 4) {
@@ -128,39 +171,7 @@ static int set_application(uint8_t pin, int argc, const char* const* argv) {
     if (setInputApplication(pin, appIndex)) {
         printInputFieldSet(argv[1], F("application"), argv[3]);
 #if INCLUDE_RULES_ENGINE
-        if (!rulesRuleExistsForInput(pin)) {
-            // Fresh input: seed a canonical default Rule from the app template (§11.5).
-            uint8_t ruleId = rulesSeedRuleForInput(pin, appIndex, millis());
-            if (ruleId != RULES_ID_NONE) {
-                msg.control.print(F("  Seeded Rule #"));
-                msg.control.print(ruleId);
-                msg.control.println(F(" from application defaults (RULE LIST to view)"));
-            } else if (rulesRuleFreeSlot() < 0 || rulesRuleAllocId() == RULES_ID_NONE) {
-                // Distinguish the genuine table/id-space-full case from the benign
-                // "this application has no default alarm band" (the other reason
-                // seeding returns NONE). With caps at the 254-id ceiling this is
-                // effectively unreachable, but the original silent-drop bug (#296)
-                // is exactly this path — surface it loudly rather than leave the
-                // input unmonitored without a word.
-                msg.control.println(F("  WARNING: Rule table full — input configured WITHOUT an alarm"));
-                msg.control.println(F("  (free a Rule with RULE DEL, then SET <pin> ALARM <min> <max>)"));
-            }
-        } else if (appIndex != oldApp) {
-            // App CHANGED under existing Rule(s): their thresholds are now stale.
-            // Re-seed them from the new application's defaults, or warn if the new
-            // app has none (the old thresholds would otherwise silently mis-alarm).
-            uint8_t n = rulesReseedRulesForInput(pin, millis());
-            if (n > 0) {
-                msg.control.print(F("  Application changed - re-seeded "));
-                msg.control.print(n);
-                msg.control.println(F(" Rule(s) from new defaults (RULE LIST to view)"));
-            } else {
-                msg.control.println(F("  WARNING: existing Rule(s) on this input keep their old"));
-                msg.control.println(F("  thresholds (new application has no default band) - review"));
-                msg.control.println(F("  with RULE LIST, then RULE RESET / RULE DEL as needed"));
-            }
-        }
-        // else: same app re-applied — preserve existing Rule (§11.5).
+        seedRulesForApplication(pin, appIndex, oldApp);
 #endif
         return 0;
     }
@@ -1448,6 +1459,10 @@ int cmd_set(int argc, const char* const* argv) {
                 return 1;
             }
 
+#if INCLUDE_RULES_ENGINE
+            const Input* prev = getInputByPin(pin);
+            const uint8_t oldApp = prev ? prev->applicationIndex : 0;
+#endif
             // First set application (which also calls setInputSensor with preset sensor)
             if (setInputApplication(pin, appIndex)) {
                 // Then override sensor if different from preset
@@ -1470,6 +1485,11 @@ int cmd_set(int argc, const char* const* argv) {
                 msg.control.print(F(" with "));
                 msg.control.println(argv[3]);
                 printSaveReminder();
+#if INCLUDE_RULES_ENGINE
+                // Same seeding as SET <pin> APPLICATION (#487): this form used
+                // to leave the input with no default alarm.
+                seedRulesForApplication(pin, appIndex, oldApp);
+#endif
                 return 0;
             }
             return 1;

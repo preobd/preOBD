@@ -115,7 +115,7 @@ A float switch reads **1** when the level is OK and **0** when it is low.
 
 ### Alarm Behavior
 
-`SET <pin> APPLICATION COOLANT_LEVEL` (or `OIL_LEVEL`) creates an alarm that
+`SET <pin> COOLANT_LEVEL FLOAT_SWITCH` (or `SET <pin> APPLICATION COOLANT_LEVEL`; likewise `OIL_LEVEL`) creates an alarm that
 sounds when the switch reads **0** (level low), i.e. a floor of 0.5. There is no
 warning tier: a switch is either OK or low. `RULE LIST` shows it as `BELOW 0.5`.
 
