@@ -34,6 +34,10 @@ size_t uartBridgeWriteElm(const uint8_t* data, size_t len);
 // relay control) where partial-frame transmission would corrupt the wire.
 bool uartBridgeSendFrame(uint8_t type, const uint8_t* payload, uint16_t len);
 
+// Queue a zero-length PING (tier negotiation / resync) in any mode, whole or
+// not at all. Returns false if the TX ring is full.
+bool uartBridgeSendPing();
+
 // Drop any accumulated RX. Called on BLE disconnect so a stale tail doesn't
 // leak into the next session.
 void uartBridgeResetRx();

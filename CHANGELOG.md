@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking: EEPROM configuration is reset on upgrade.** The stored config layout changed (`EEPROM_VERSION` 6 → 7) to carry the Rule record's new warning-threshold fields; the firmware detects the old version and starts from defaults. Back up your setup with `SYSTEM DUMP JSON` before flashing and restore it afterwards with `JSON IMPORT`.
 
 ### Fixed
+- The nRF52840 BLE board's link to the main board now receives by DMA on its second UART, so Bluetooth radio activity can no longer make it drop bytes, and uploads over it (e.g. `JSON IMPORT`) are ~15% faster; wire the flow-control pins, without which a large `SYSTEM DUMP JSON` to a slow client still loses data (#491)
 - The LCD pages through inputs in groups of eight every 4 s when more than eight are shown (a ninth was drawn off-screen or over the eighth), and an input hidden with `SET <pin> DISPLAY DISABLE` no longer takes a cell; `DISPLAY STATUS` shows how many are on the LCD (#480)
 - The one-line `SET <pin> <application> <sensor>` form (e.g. `SET 6 CHT MAX6675`) now creates the application's default alarm, like `SET <pin> APPLICATION`; inputs configured that way had no alarm at all (#487)
 - On-device `HELP` and the CONFIG banner no longer advertise removed commands (`RELOAD`, top-level `RESET`, `RELAY` subcommands, `SET <pin> ALARM WARMUP|PERSIST`) and now say CONFIG keeps sensors running; `DISPLAY TYPE OLED` is refused since no OLED driver exists (#474)

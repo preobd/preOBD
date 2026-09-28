@@ -42,12 +42,11 @@ volatile bool     g_resyncRequested = false;
 volatile uint32_t g_resyncRequestMs = 0;
 constexpr uint32_t kResyncDebounceMs = 250;
 
+// Through the TX ring like every other frame (#491 review): whole or not at
+// all, and never inside a frame already queued. A full ring at connect is
+// covered by the PING timeout/retry below.
 void sendPing() {
-    uint8_t frame[FRAME_HEADER_BYTES + 1];   // zero-length payload
-    const size_t n = frameEncode(FRAME_TYPE_PING, nullptr, 0, frame);
-    if (n > 0) {
-        Serial1.write(frame, n);
-    }
+    uartBridgeSendPing();
 }
 
 } // namespace

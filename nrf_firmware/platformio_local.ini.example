@@ -11,7 +11,9 @@
 ;   PIN_NRF_CTS_IN : nRF reads, host drives as RTS-out
 ;
 ; Both pins must be defined together or neither. Pin numbers are nRF GPIOs
-; (digital pin index).
+; (digital pin index). Wire them: without the RTS line a large SYSTEM DUMP to
+; a slowly draining BLE client overruns the nRF's receive ring and loses
+; frames (measured, #491). Check it by holding RTS high -- the host must stop.
 ;
 ; Typical Adafruit ItsyBitsy nRF52840 bench:
 ;   nrf_flow_control =

@@ -15,14 +15,13 @@
 //     handshake on a framed-capable host. After resolution they're flushed
 //     in the mode-appropriate form.
 //
-// TX path is still a ring drained from loop() so BLE callbacks never block
-// on Serial1. Phase 3 adds opt-in software-paced flow control via two GPIOs
-// (PIN_NRF_RTS_OUT / PIN_NRF_CTS_IN, see board_pins.h):
-//   - Inbound: assert PIN_NRF_RTS_OUT when Serial1.available() crosses a
-//     high watermark; deassert at a low watermark. Hysteresis avoids
-//     toggle storms.
-//   - Outbound: yield in drainTx while PIN_NRF_CTS_IN is HIGH (~100ms
-//     timeout failsafe so a stuck line can't hang the loop).
+// The UART itself is host_uart (UARTE1 + EasyDMA, #491), not Serial1. TX is a
+// ring drained from loop() into host_uart's DMA ring, so BLE callbacks never
+// block on the wire. Phase 3 adds opt-in software-paced flow control via two
+// GPIOs (PIN_NRF_RTS_OUT / PIN_NRF_CTS_IN, see board_pins.h):
+//   - Inbound: assert PIN_NRF_RTS_OUT when the RX backlog crosses a high
+//     watermark; deassert at a low watermark. Hysteresis avoids toggle storms.
+//   - Outbound: host_uart starts no DMA chunk while PIN_NRF_CTS_IN is HIGH.
 
 #include "uart_bridge.h"
 
@@ -35,6 +34,7 @@
 #include "ble_services.h"
 #include "board_pins.h"
 #include "frame_codec.h"
+#include "host_uart.h"
 #include "live_handler.h"
 #include "relay_handler.h"
 #include "status_compose.h"
@@ -44,6 +44,13 @@ static_assert(kStatusComposeBaseSize == PREOBD_STATUS_SIZE &&
               kStatusComposeExtMinSize == PREOBD_STATUS_EXT_SIZE &&
               kStatusComposeMaxSize == PREOBD_STATUS_MAX_SIZE,
               "status_compose.h sizes must match ble_gatt_defs.h");
+
+// Host link rate: 115200 by contract with the host MCU. A bench build can
+// override it (-D HOST_UART_BAUD=921600 in platformio_local.ini) to measure a
+// faster link; the host's BUS SERIAL <n> BAUDRATE must then match (#452).
+#ifndef HOST_UART_BAUD
+#define HOST_UART_BAUD 115200
+#endif
 
 namespace {
 
@@ -55,21 +62,24 @@ constexpr uint32_t kRxStallMs   = 50;
 constexpr size_t kTxRingSize    = 4096;
 
 #if defined(PIN_NRF_RTS_OUT) && defined(PIN_NRF_CTS_IN)
-// Hysteresis thresholds on Serial1.available(). Sized so the worst-case
+// Hysteresis thresholds on the host_uart RX backlog. Sized so the worst-case
 // BLE notify stall (Bluefruit's getHvnPacket blocks up to 100ms on the
 // HVN semaphore = ~1440 bytes inflight at 115200 baud) plus the host's
-// chunked reaction window (~32 bytes) leaves comfortable headroom in the
-// SERIAL_BUFFER_SIZE RX ring before any drops. At the current 8192-byte
-// buffer, high-water=256 leaves ~6464 bytes of margin even during the
-// worst case -- well over-engineered, but cheap.
+// chunked reaction window (~32 bytes) leaves headroom in host_uart's 7 KB
+// DMA ring. Measured (#491): without this line a bulk dump to a slowly
+// draining central overruns the ring at any baud; with it, none do.
 constexpr size_t kInboundHighWaterBytes = 256;
 constexpr size_t kInboundLowWaterBytes  = 64;
-constexpr uint32_t kOutboundStallMs     = 100;
 static bool g_rtsAsserted = false;
 #endif
 
 // --- Status characteristic: 0x07 extension held for the next 0x03 ---
 StatusComposer g_statusComposer = {};   // static storage: extLen = 0 (nothing held)
+
+// Bytes the framed decoder discarded while hunting for the next SYNC -- a
+// corrupted or truncated frame. Nonzero on a healthy link means bytes were
+// lost on the wire (#491); reported with host_uart's counters.
+uint32_t g_junkBytes = 0;
 
 // --- Tier 1 RX accumulator ---
 uint8_t  g_rx[kRxFlushBytes];
@@ -219,26 +229,13 @@ bool enqueueTxAtomic(const uint8_t* data, size_t len) {
 }
 
 #if defined(PIN_NRF_RTS_OUT) && defined(PIN_NRF_CTS_IN)
-// Returns true once the host's RTS line (our CTS_IN) is clear. Returns
-// false if the line is still asserted after kOutboundStallMs -- caller
-// must abort the drain and retry on the next poll iteration. A naive
-// per-byte timeout (block, advance, repeat) would multiply the stall by
-// the drain length: at 100ms each, a full 1KB TX ring would stall the
-// task for up to 100 seconds on a stuck line, starving everything else.
-bool awaitOutboundClear() {
-    if (digitalRead(PIN_NRF_CTS_IN) == LOW) return true;
-    const uint32_t start = millis();
-    while (digitalRead(PIN_NRF_CTS_IN) == HIGH) {
-        if (millis() - start >= kOutboundStallMs) return false;
-        yield();
-    }
-    return true;
-}
+// Outbound pacing (the host's RTS = our CTS_IN) lives in host_uart: no DMA
+// chunk starts while the line is HIGH (#491).
 
 // Drive our RTS line based on Serial1 RX ring fill with hysteresis. Called
 // from uartBridgePoll on every iteration.
 void updateInboundRts() {
-    const int avail = Serial1.available();
+    const int avail = static_cast<int>(hostUartAvailable());
     if (!g_rtsAsserted && avail >= static_cast<int>(kInboundHighWaterBytes)) {
         g_rtsAsserted = true;
         digitalWrite(PIN_NRF_RTS_OUT, HIGH);
@@ -249,15 +246,17 @@ void updateInboundRts() {
 }
 #endif
 
+// Move queued bytes into host_uart's DMA ring in contiguous runs; its IRQ
+// chains the transfers (and holds them while the host pauses us).
 void drainTx() {
     while (g_txTail != g_txHead) {
-#if defined(PIN_NRF_RTS_OUT) && defined(PIN_NRF_CTS_IN)
-        if (!awaitOutboundClear()) break;   // bail whole drain; retry next poll
-#endif
-        const int wrote = Serial1.write(g_tx[g_txTail]);
-        if (wrote <= 0) break;
-        g_txTail = (g_txTail + 1) % kTxRingSize;
+        const size_t run = (g_txHead > g_txTail) ? (g_txHead - g_txTail)
+                                                 : (kTxRingSize - g_txTail);
+        const size_t n = hostUartWrite(&g_tx[g_txTail], run);
+        if (n == 0) break;
+        g_txTail = (g_txTail + n) % kTxRingSize;
     }
+    hostUartService();
 }
 
 // Wrap `data`/`len` as frames of the given type and push into the TX ring.
@@ -468,8 +467,13 @@ void flushPendingTx() {
 } // namespace
 
 void uartBridgeInit() {
-    // 115200 fixed by contract with the host MCU; same as Phase 1.
-    Serial1.begin(115200);
+    // 115200 fixed by contract with the host MCU; same as Phase 1. The link
+    // runs on UARTE1 with EasyDMA (host_uart, #491), not Serial1.
+#if defined(PIN_NRF_RTS_OUT) && defined(PIN_NRF_CTS_IN)
+    hostUartBegin(HOST_UART_BAUD, PIN_NRF_CTS_IN);
+#else
+    hostUartBegin(HOST_UART_BAUD);
+#endif
 #if defined(PIN_NRF_RTS_OUT) && defined(PIN_NRF_CTS_IN)
     pinMode(PIN_NRF_RTS_OUT, OUTPUT);
     digitalWrite(PIN_NRF_RTS_OUT, LOW);     // start deasserted (clear-to-send)
@@ -479,6 +483,20 @@ void uartBridgeInit() {
 }
 
 void uartBridgePoll() {
+#if DEBUG_SERIAL
+    {
+        // Link-integrity counters, printed only when one moves.
+        static uint32_t lastSig = 0;
+        const uint32_t sig = hostUartRxLost() * 31u + hostUartRxErrors() * 7u + hostUartRxRestarts() * 3u +
+                             g_junkBytes;
+        if (sig != lastSig) {
+            lastSig = sig;
+            Serial.printf("[uart] rxLost=%lu rxErrors=%lu restarts=%lu junk=%lu\n",
+                          (unsigned long)hostUartRxLost(), (unsigned long)hostUartRxErrors(),
+                          (unsigned long)hostUartRxRestarts(), (unsigned long)g_junkBytes);
+        }
+    }
+#endif
     const bool connected = bleBridgeConnected();
     const bool pinging = tierStateIsPinging();
     const bool framed  = tierStateIsFramed();
@@ -539,8 +557,8 @@ void uartBridgePoll() {
         frameDecoderReset(g_decoder);
     }
 
-    while (Serial1.available()) {
-        const int b = Serial1.read();
+    while (hostUartAvailable()) {
+        const int b = hostUartRead();
         if (b < 0) break;
 
         if (!connected) continue;
@@ -549,6 +567,7 @@ void uartBridgePoll() {
             g_decoderLastByteMs = millis();
             const FrameFeedResult r = frameFeedByte(
                 g_decoder, static_cast<uint8_t>(b), g_frame);
+            if (r == FRAME_RESYNCING) ++g_junkBytes;
             if (r == FRAME_READY) {
                 if (!handleFrame(g_frame)) {
                     // Frame parked in the hold slot (its destination stash
@@ -630,6 +649,15 @@ size_t uartBridgeWriteElm(const uint8_t* data, size_t len) {
         return enqueueAsFrames(FRAME_TYPE_ELM327, data, len);
     }
     return enqueueTx(data, len);
+}
+
+bool uartBridgeSendPing() {
+    // The negotiation PING is the one frame that is valid while PINGING, so
+    // it skips uartBridgeSendFrame's framed-only gate -- but still goes
+    // through the TX ring whole-or-nothing, never inside a queued frame.
+    uint8_t frame[FRAME_HEADER_BYTES + 1];
+    const size_t n = frameEncode(FRAME_TYPE_PING, nullptr, 0, frame);
+    return n > 0 && enqueueTxAtomic(frame, n);
 }
 
 bool uartBridgeSendFrame(uint8_t type, const uint8_t* payload, uint16_t len) {
