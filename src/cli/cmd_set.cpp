@@ -1308,7 +1308,7 @@ static const char PSTR_SET_CAN_TIMEOUT[]     PROGMEM = "CAN_TIMEOUT";
 static const char PSTR_HELP_SET_APPLICATION[] PROGMEM =
     "  SET <pin> APPLICATION <app>   Set measurement type (CHT, OIL_PRESSURE, ...)";
 static const char PSTR_HELP_SET_SENSOR[] PROGMEM =
-    "  SET <pin> SENSOR <sensor>     Set hardware sensor (e.g. MAX6675, VDO_120C)";
+    "  SET <pin> SENSOR <sensor>     Set hardware sensor (e.g. MAX6675, VDO_120C_TABLE)";
 static const char PSTR_HELP_SET_NAME[] PROGMEM =
     "  SET <pin> NAME <name>         Set full display label (32 chars)";
 static const char PSTR_HELP_SET_ABBR[] PROGMEM =

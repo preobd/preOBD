@@ -1006,7 +1006,7 @@ Configure display hardware and refresh rate.
 DISPLAY STATUS                   # Show display hardware status
 DISPLAY ENABLE                   # Enable display
 DISPLAY DISABLE                  # Disable display
-DISPLAY TYPE <LCD|OLED|NONE>     # Set display type
+DISPLAY TYPE <LCD|NONE>          # Set display type (OLED is not supported yet)
 DISPLAY ADDRESS <hex>            # Set I2C address (LCD only)
 DISPLAY INTERVAL <ms>            # Set display refresh rate
 ```
@@ -1026,11 +1026,6 @@ For unit configuration, use `SYSTEM UNITS` commands.
 ### Examples
 
 ```
-# Switch to OLED display
-DISPLAY TYPE OLED
-SAVE
-SYSTEM REBOOT  # Reboot to reinitialize display
-
 # Configure display hardware
 DISPLAY TYPE LCD
 DISPLAY ADDRESS 0x27
@@ -1361,7 +1356,7 @@ HELP QUICK                       # Show compact command reference
 - `HELP CONTROL` - Input control (enable, disable, clear, info)
 - `HELP OUTPUT` - Output module configuration (CAN, RealDash, Serial, SD logging)
 - `HELP BUS` - I2C / SPI / CAN / serial bus selection
-- `HELP DISPLAY` - Display settings (LCD/OLED)
+- `HELP DISPLAY` - Display settings (LCD)
 - `HELP TRANSPORT` - Message routing (control, data, debug messages)
 - `HELP SYSTEM` - System configuration (units, sea level, intervals, diagnostics)
 - `HELP CONFIG` - Persistence and modes (save, load, version)

@@ -781,11 +781,11 @@ int cmd_display(int argc, const char* const* argv) {
         return 0;
     }
 
-    // DISPLAY TYPE <LCD|OLED|NONE>
+    // DISPLAY TYPE <LCD|NONE>  (OLED is reserved: no driver yet, #58)
     if (streq_P(subcommand, PSTR("TYPE"))) {
         if (argc < 3) {
             msg.control.println(F("ERROR: TYPE requires a display type"));
-            msg.control.println(F("  Valid types: LCD, OLED, NONE"));
+            msg.control.println(F("  Valid types: LCD, NONE"));
             return 1;
         }
         const char* typeStr = argv[2];
@@ -803,8 +803,8 @@ int cmd_display(int argc, const char* const* argv) {
             msg.control.println(F("Display type set to LCD"));
             msg.control.println(F("Note: Takes effect on next reboot"));
         } else if (streq_P(typeStr, PSTR("OLED"))) {
-            systemConfig.displayType = DISPLAY_OLED;
-            msg.control.println(F("Display type set to OLED"));
+            msg.control.println(F("ERROR: OLED displays are not supported yet"));
+            return 1;
         } else if (streq_P(typeStr, PSTR("NONE"))) {
             systemConfig.displayType = DISPLAY_NONE;
             msg.control.println(F("Display type set to NONE"));
@@ -812,7 +812,7 @@ int cmd_display(int argc, const char* const* argv) {
             msg.control.print(F("ERROR: Invalid display type '"));
             msg.control.print(typeStr);
             msg.control.println(F("'"));
-            msg.control.println(F("  Valid types: LCD, OLED, NONE"));
+            msg.control.println(F("  Valid types: LCD, NONE"));
             return 1;
         }
         return 0;

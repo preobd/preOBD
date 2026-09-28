@@ -50,7 +50,8 @@ void setMode(SystemMode newMode) {
 
             msg.control.println(F("========================================"));
             msg.control.println(F("  ENTERED CONFIG MODE"));
-            msg.control.println(F("  Sensors paused, configuration unlocked"));
+            msg.control.println(F("  Configuration unlocked; sensors keep reading"));
+            msg.control.println(F("  Actions, buzzer, CSV and SD logging held"));
             if (watchdogArmed()) {
                 msg.control.println(F("  Watchdog still armed (can't be disabled on this board)"));
             } else {

@@ -297,7 +297,7 @@ HELP EXAMPLES           # Show worked examples
 | `DISPLAY STATUS` | Show display config |
 | `DISPLAY ENABLE` | Enable display |
 | `DISPLAY DISABLE` | Disable display |
-| `DISPLAY TYPE <LCD\|OLED\|NONE>` | Set display type |
+| `DISPLAY TYPE <LCD\|NONE>` | Set display type |
 | `DISPLAY INTERVAL <ms>` | Set display refresh rate |
 
 ### System Commands

@@ -7,6 +7,7 @@
 
 #include "command_helpers.h"
 #include "command_table.h"  // for Subcommand
+#include "command_handlers.h"  // cmd_relay (HELP RELAY reuses its pointer)
 #include "../config.h"
 #include "../core/message_router.h"
 #include "../core/message_api.h"
@@ -361,7 +362,7 @@ static const char PSTR_HELP_BUS_DESC[] PROGMEM = "Bus Config - Configure I2C, SP
 
 #if INCLUDE_RELAY_OUTPUT
 static const char PSTR_HELP_RELAY[] PROGMEM = "RELAY";
-static const char PSTR_HELP_RELAY_DESC[] PROGMEM = "Relay Control - Threshold-based relay outputs for cooling fans, alarms, etc.";
+static const char PSTR_HELP_RELAY_DESC[] PROGMEM = "Deprecated - relays are now RULE / ACTION";
 #endif
 
 #if INCLUDE_TEST_MODE
@@ -370,7 +371,7 @@ static const char PSTR_HELP_TEST_DESC[] PROGMEM = "Test Mode - Simulate sensor i
 #endif
 
 static const char PSTR_HELP_DISPLAY[] PROGMEM = "DISPLAY";
-static const char PSTR_HELP_DISPLAY_DESC[] PROGMEM = "Display Config - LCD/OLED settings and unit preferences";
+static const char PSTR_HELP_DISPLAY_DESC[] PROGMEM = "Display Config - LCD settings";
 
 static const char PSTR_HELP_TRANSPORT[] PROGMEM = "TRANSPORT";
 static const char PSTR_HELP_TRANSPORT_DESC[] PROGMEM = "Message Routing - Route control, data, and debug messages";
@@ -562,15 +563,7 @@ void printHelpOutput() {
 #if INCLUDE_RELAY_OUTPUT
 void printHelpRelay() {
     msg.control.println();
-    msg.control.println(F("=== RELAY Commands ==="));
-    msg.control.println(F("Threshold-based relay outputs for cooling fans, alarms, etc."));
-    msg.control.println();
-    msg.control.println(F("  RELAY LIST  - Show all relay status"));
-    msg.control.println(F("  RELAY <0-1> STATUS  - Show specific relay"));
-    msg.control.println(F("  RELAY <0-1> PIN <pin>  - Set relay output pin"));
-    msg.control.println(F("  RELAY <0-1> INPUT <pin>  - Link relay to sensor input"));
-    msg.control.println(F("  RELAY <0-1> THRESHOLD <on> <off>  - Set activation thresholds"));
-    msg.control.println(F("  RELAY <0-1> MODE <DISABLED|AUTO_HIGH|AUTO_LOW|MANUAL_ON|MANUAL_OFF>"));
+    cmd_relay(0, nullptr);  // same migration pointer the deprecated command prints
     msg.control.println();
 }
 #endif
@@ -600,7 +593,7 @@ void printHelpDisplay() {
     msg.control.println(F("  DISPLAY STATUS           - Show display hardware status"));
     msg.control.println(F("  DISPLAY ENABLE           - Enable display"));
     msg.control.println(F("  DISPLAY DISABLE          - Disable display"));
-    msg.control.println(F("  DISPLAY TYPE <LCD|OLED|NONE>"));
+    msg.control.println(F("  DISPLAY TYPE <LCD|NONE>"));
     msg.control.println(F("  DISPLAY ADDRESS <hex>    - I2C address (LCD only)"));
     msg.control.println(F("  DISPLAY INTERVAL <ms>    - Display refresh rate"));
     msg.control.println();
@@ -685,7 +678,7 @@ void printHelpExamples() {
     msg.control.println(F("  SET I2C:0 ALARM 10 50  (modify existing I2C sensor)"));
     msg.control.println(F("  INFO I2C:1  (query I2C sensor)"));
     msg.control.println();
-    msg.control.println(F("CAN sensor import (OBD-II, J1939):"));
+    msg.control.println(F("CAN sensor import (OBD-II, custom):"));
     msg.control.println(F("  SET CAN 0x0C  (import Engine RPM from CAN bus)"));
     msg.control.println(F("  SET CAN 0x0D  (import Vehicle Speed)"));
     msg.control.println(F("  SET CAN:0 ALARM 500 6000  (modify CAN sensor)"));
@@ -695,12 +688,10 @@ void printHelpExamples() {
     msg.control.println(F("  SET 3 ENGINE_RPM W_PHASE_RPM  (alternator RPM)"));
     msg.control.println(F("  SET A1 CAL PRESSURE_LINEAR 0.5 4.5 0 7  (custom pressure)"));
     msg.control.println(F("  SET A0 CAL BIAS 4700  (change bias resistor)"));
-    msg.control.println(F("  SET A2 ALARM WARMUP 30000  (30 second warmup)"));
-    msg.control.println(F("  SET A2 ALARM PERSIST 2000  (2 second persistence)"));
     msg.control.println();
     msg.control.println(F("Alarm configuration:"));
     msg.control.println(F("  SET A2 ALARM 50 120  (set alarm thresholds)"));
-    msg.control.println(F("  SET A2 ALARM ENABLE  (enable alarm)"));
+    msg.control.println(F("  SET A2 ALARM MIN 1  (one-sided: alarm below 1)"));
     msg.control.println(F("  INFO A2 ALARM  (show alarm status)"));
     msg.control.println();
     msg.control.println(F("Output and control:"));
@@ -784,8 +775,9 @@ void printHelpQuick() {
     msg.control.println(F("  SET <pin> ABBR <abbreviation>"));
     msg.control.println(F("  SET <pin> UNITS <units>"));
     msg.control.println(F("  SET <pin> ALARM <min> <max>"));
-    msg.control.println(F("  SET <pin> ALARM ENABLE|DISABLE"));
-    msg.control.println(F("  SET <pin> ALARM WARMUP|PERSIST <ms>"));
+    msg.control.println(F("  SET <pin> ALARM MIN|MAX <v>"));
+    msg.control.println(F("  SET <pin> ALARM WARN <lo> [<hi>]"));
+    msg.control.println(F("  SET <pin> ALARM DISABLE"));
     msg.control.println(F("  SET <pin> CAL PRESET"));
     msg.control.println(F("  SET <pin> CAL <STEINHART|BETA|RPM|SPEED|PRESSURE_LINEAR|PRESSURE_POLY|BIAS> ..."));
     msg.control.println();
@@ -800,14 +792,16 @@ void printHelpQuick() {
     msg.control.println(F("  BUS I2C <0-2> CLOCK <100|400|1000>"));
     msg.control.println(F("  BUS SPI <0-2> CLOCK <Hz>"));
     msg.control.println(F("  BUS CAN <0-2> BAUDRATE <125000|250000|500000|1000000>"));
-#if INCLUDE_RELAY_OUTPUT
+#if INCLUDE_RULES_ENGINE
     msg.control.println();
-    msg.control.println(F("Relays:"));
-    msg.control.println(F("  RELAY LIST"));
-    msg.control.println(F("  RELAY <0-1> STATUS"));
-    msg.control.println(F("  RELAY <0-1> PIN|INPUT <pin>"));
-    msg.control.println(F("  RELAY <0-1> THRESHOLD <on> <off>"));
-    msg.control.println(F("  RELAY <0-1> MODE <DISABLED|AUTO_HIGH|AUTO_LOW|MANUAL_ON|MANUAL_OFF>"));
+    msg.control.println(F("Rules & Actions (relays):"));
+    msg.control.println(F("  RULE LIST|<id>"));
+    msg.control.println(F("  RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>]"));
+    msg.control.println(F("  ACTION LIST|<id>"));
+    msg.control.println(F("  ACTION ADD RELAY <pin> [FAILSAFE ON|OFF] [INVERT]"));
+    msg.control.println(F("  ACTION <id> RULE <ruleId>"));
+    msg.control.println(F("  ACTION <id> ON|OFF|AUTO"));
+    msg.control.println(F("  ALARM STATUS|SILENCE"));
 #endif
 #if INCLUDE_TEST_MODE
     msg.control.println();
@@ -819,7 +813,7 @@ void printHelpQuick() {
     msg.control.println(F("Display:"));
     msg.control.println(F("  DISPLAY STATUS"));
     msg.control.println(F("  DISPLAY ENABLE|DISABLE"));
-    msg.control.println(F("  DISPLAY TYPE <LCD|OLED|NONE>"));
+    msg.control.println(F("  DISPLAY TYPE <LCD|NONE>"));
     msg.control.println(F("  DISPLAY ADDRESS <hex>"));
     msg.control.println(F("  DISPLAY INTERVAL <ms>"));
     msg.control.println();
@@ -837,10 +831,9 @@ void printHelpQuick() {
     msg.control.println(F("  SYSTEM RESET CONFIRM"));
     msg.control.println();
     msg.control.println(F("Configuration:"));
-    msg.control.println(F("  CONFIG|RUN|RELOAD"));
+    msg.control.println(F("  CONFIG|RUN"));
     msg.control.println(F("  SAVE [EEPROM|[dest:]file]"));
     msg.control.println(F("  LOAD [EEPROM|[dest:]file]"));
-    msg.control.println(F("  RESET"));
     msg.control.println(F("  VERSION"));
     msg.control.println();
     msg.control.println(F("For detailed help: HELP <category>"));

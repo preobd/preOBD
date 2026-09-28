@@ -208,8 +208,8 @@ All existing preOBD serial commands work over BLE. Key commands for BLE control:
 | `LIST OUTPUTS` | Any | Show output module status |
 | `INFO <pin>` | Any | Show input details for a pin |
 | `SET <pin> ...` | CONFIG | Configure an input |
-| `RELAY LIST` | Any | Show relay status |
-| `RELAY <n> MODE <mode>` | CONFIG | Set relay mode |
+| `RULE LIST` / `ACTION LIST` | Any | Show rules and actions (relays) |
+| `ACTION <id> ON\|OFF\|AUTO` | Any | Drive or release an action |
 | `OUTPUT <name> ENABLE` | CONFIG | Enable an output module |
 | `OUTPUT <name> DISABLE` | CONFIG | Disable an output module |
 | `SAVE` | CONFIG | Save configuration to EEPROM |
