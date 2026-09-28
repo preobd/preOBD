@@ -175,6 +175,25 @@ SET A3 CAL PRESSURE_POLY 1000 -0.3682 36.465 10.648
 SAVE
 ```
 
+### VOLTAGE_DIVIDER - Battery / Voltage Divider
+
+```
+SET <pin> CAL VOLTAGE_DIVIDER <r1> <r2> [<correction> [<offset>]]
+```
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `r1` | High-side resistor (Ω), 0–10M | 100000 |
+| `r2` | Low-side resistor (Ω), above 0 up to 10M | 22000 |
+| `correction` | Multiplier, 0.1–10 (default 1.0) | 1.02 |
+| `offset` | Volts added after the correction, -10 to 10 (default 0) | 0 |
+
+Only for inputs on the `VOLTAGE_DIVIDER` sensor. **Example:** a 47k/10k divider:
+```
+SET A8 CAL VOLTAGE_DIVIDER 47000 10000
+SAVE
+```
+
 ### RPM - Alternator RPM Calibration
 
 ```

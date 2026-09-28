@@ -109,8 +109,21 @@ The firmware assumes 100kΩ/22kΩ on 3.3V boards and 100kΩ/6.8kΩ on 5V boards.
 ### Custom Divider Values
 
 If you used different resistors, or want to trim the reading against a
-multimeter, set the divider through a [JSON import](../configuration/JSON_CONFIGURATION_GUIDE.md)
-— there is no serial command for it yet. In the input's entry:
+multimeter, set the divider on the input:
+
+```
+SET <pin> CAL VOLTAGE_DIVIDER <r1> <r2> [<correction> [<offset>]]
+SET A8 CAL VOLTAGE_DIVIDER 47000 10000          # 47k / 10k divider
+SET A8 CAL VOLTAGE_DIVIDER 100000 22000 1.02    # reads 2% low: correct it
+SAVE
+```
+
+- `r1` / `r2` — the high-side and low-side resistors in plain ohms (`100000`, not `100k`, which would read as 100 Ω); measure them for best accuracy
+- `correction` — multiplier, default 1.0, e.g. `1.02` if the reading is 2% low
+- `offset` — volts added after the correction, default 0
+
+`SET <pin> CAL PRESET` goes back to the board's standard divider. The same values
+can also come from a [JSON import](../configuration/JSON_CONFIGURATION_GUIDE.md):
 
 ```json
 "calibration": {
@@ -120,13 +133,6 @@ multimeter, set the divider through a [JSON import](../configuration/JSON_CONFIG
 }
 ```
 
-- `r1` / `r2` — the high-side and low-side resistors in ohms (measure them for best accuracy)
-- `correction` — multiplier, e.g. `1.02` if the reading is 2% low
-- `offset` — volts added after the correction
-
-Export with `SYSTEM DUMP JSON`, edit that input, paste it back with `JSON IMPORT`
-(end with `END JSON`), then `SAVE`. Not available on the Arduino Mega, which has
-no JSON support.
 
 `SET <pin> DIVIDER` is a different setting — it applies only to linear 0.5-4.5V
 sensors and is refused on battery inputs.

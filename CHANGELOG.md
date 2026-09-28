@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `SET <pin> CAL VOLTAGE_DIVIDER <r1> <r2> [<correction> [<offset>]]` sets a battery input's divider resistors and trim from the serial console; this was only possible through a JSON import, so not at all on the Arduino Mega (#478)
 - `CLEAR <pin> SAVE` (and `CLEAR <pin> CALIBRATION SAVE`) clears and saves to EEPROM in one command; `CLEAR` now reminds you to `SAVE`, and rejects unrecognised trailing words instead of clearing the whole input (#320)
 - `RULE <id> SEVERITY INFO|WARNING|ALARM|NONE` changes a rule's severity in place, keeping its id, limits and the relays/actions linked to it (previously only possible by deleting and re-adding the rule) (#470)
 - `RULE <id> LIMIT ABOVE|BELOW <limit>` / `OUTSIDE <lo> <hi>` moves any rule's limits in place, keeping its id, severity and the relays/actions linked to it (previously only possible by deleting and re-adding the rule, which dropped those links) (#457)

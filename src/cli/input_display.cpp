@@ -229,6 +229,18 @@ FLASHMEM void printInputCalibration(uint8_t pin) {
         msg.control.print(F("  Max Speed: "));
         msg.control.print(input->customCalibration.speed.max_speed_kph);
         msg.control.println(F(" km/h"));
+    } else if (input->calibrationType == CAL_VOLTAGE_DIVIDER) {
+        msg.control.println(F("Voltage Divider Custom"));
+        msg.control.print(F("  R1: "));
+        msg.control.print(input->customCalibration.voltageDivider.r1, 1);
+        msg.control.print(F(" Ω  R2: "));
+        msg.control.print(input->customCalibration.voltageDivider.r2, 1);
+        msg.control.println(F(" Ω"));
+        msg.control.print(F("  Correction: "));
+        msg.control.print(input->customCalibration.voltageDivider.correction, 3);
+        msg.control.print(F("  Offset: "));
+        msg.control.print(input->customCalibration.voltageDivider.offset, 3);
+        msg.control.println(F(" V"));
     } else if (input->calibrationType == CAL_CAN_IMPORT) {
         CANSensorCalibration cal;
         if (input->flags.useCustomCalibration) {

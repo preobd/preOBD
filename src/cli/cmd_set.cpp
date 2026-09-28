@@ -1206,6 +1206,58 @@ static int set_cal_pressure_poly(uint8_t pin, int argc, const char* const* argv,
     return 0;
 }
 
+// SET <pin> CAL VOLTAGE_DIVIDER <r1> <r2> [<correction> [<offset>]]
+// Battery / voltage-divider inputs (#478): until now only reachable through a
+// JSON import, so a Mega (no JSON) was stuck on the preset 100k/6.8k.
+static FLASHMEM int set_cal_voltage_divider(uint8_t pin, int argc, const char* const* argv,
+                                            int argStart) {
+    if (argc < argStart + 2 || argc > argStart + 4) {
+        msg.control.println(F("ERROR: VOLTAGE_DIVIDER requires <r1> <r2> [<correction> [<offset>]]"));
+        msg.control.println(F("  Example: SET A9 CAL VOLTAGE_DIVIDER 100000 6800 1.02"));
+        return 1;
+    }
+
+    Input* input = getInputByPin(pin);
+    if (!input || !input->flags.isEnabled) {
+        msg.control.println(F("ERROR: Input not configured"));
+        return 1;
+    }
+
+    float r1 = atof(argv[argStart]);
+    float r2 = atof(argv[argStart + 1]);
+    float correction = (argc > argStart + 2) ? atof(argv[argStart + 2]) : 1.0f;
+    float offset = (argc > argStart + 3) ? atof(argv[argStart + 3]) : 0.0f;
+
+    switch (applyCalVoltageDivider(input, r1, r2, correction, offset)) {
+        case CAL_APPLY_OK:
+            break;
+        case CAL_APPLY_ERR_DIVIDER_R:
+            msg.control.println(F("ERROR: r1 must be 0-10M and r2 above 0 up to 10M (ohms)"));
+            return 1;
+        case CAL_APPLY_ERR_DIVIDER_SCALE:
+            msg.control.println(F("ERROR: correction must be 0.1-10 and offset -10 to 10 V"));
+            return 1;
+        default:
+            msg.control.println(F("ERROR: invalid voltage divider calibration"));
+            return 1;
+    }
+
+    msg.control.print(F("Voltage divider calibration set for pin "));
+    msg.control.println(argv[1]);
+    msg.control.print(F("  R1: "));
+    msg.control.print(r1, 1);
+    msg.control.print(F(" Ω  R2: "));
+    msg.control.print(r2, 1);
+    msg.control.println(F(" Ω"));
+    msg.control.print(F("  Correction: "));
+    msg.control.print(correction, 3);
+    msg.control.print(F("  Offset: "));
+    msg.control.print(offset, 3);
+    msg.control.println(F(" V"));
+    printSaveReminder();
+    return 0;
+}
+
 //=============================================================================
 // CAL profiles — sub-table reached via SET <pin> CAL <profile> ...
 //=============================================================================
@@ -1216,6 +1268,7 @@ static const char PSTR_CAL_PRESSURE_LINEAR[] PROGMEM = "PRESSURE_LINEAR";
 static const char PSTR_CAL_PRESSURE_POLY[]   PROGMEM = "PRESSURE_POLY";
 static const char PSTR_CAL_RPM[]             PROGMEM = "RPM";
 static const char PSTR_CAL_SPEED[]           PROGMEM = "SPEED";
+static const char PSTR_CAL_VOLTAGE_DIVIDER[] PROGMEM = "VOLTAGE_DIVIDER";
 static const char PSTR_CAL_BIAS[]            PROGMEM = "BIAS";
 static const char PSTR_CAL_PRESET[]          PROGMEM = "PRESET";
 
@@ -1231,6 +1284,8 @@ static const char PSTR_HELP_CAL_RPM[] PROGMEM =
     "  SET <pin> CAL RPM <poles> <ratio> [<mult>] <timeout> <min> <max>";
 static const char PSTR_HELP_CAL_SPEED[] PROGMEM =
     "  SET <pin> CAL SPEED <ppr> <tire_circ> <ratio> [<mult>] <timeout> <max>";
+static const char PSTR_HELP_CAL_VOLTAGE_DIVIDER[] PROGMEM =
+    "  SET <pin> CAL VOLTAGE_DIVIDER <r1> <r2> [<corr> [<offset>]]";
 static const char PSTR_HELP_CAL_BIAS[] PROGMEM =
     "  SET <pin> CAL BIAS <resistor>                   Bias resistor (Ω)";
 static const char PSTR_HELP_CAL_PRESET[] PROGMEM =
@@ -1243,6 +1298,7 @@ static const CalProfile CAL_PROFILES[] PROGMEM = {
     { PSTR_CAL_PRESSURE_POLY,   set_cal_pressure_poly,   PSTR_HELP_CAL_PRESSURE_POLY, CAL_PRESSURE_POLYNOMIAL },
     { PSTR_CAL_RPM,             set_cal_rpm,             PSTR_HELP_CAL_RPM, CAL_RPM },
     { PSTR_CAL_SPEED,           set_cal_speed,           PSTR_HELP_CAL_SPEED, CAL_SPEED },
+    { PSTR_CAL_VOLTAGE_DIVIDER, set_cal_voltage_divider, PSTR_HELP_CAL_VOLTAGE_DIVIDER, CAL_VOLTAGE_DIVIDER },
     { PSTR_CAL_BIAS,            set_cal_bias,            PSTR_HELP_CAL_BIAS, CAL_NONE },
     { PSTR_CAL_PRESET,          set_cal_preset,          PSTR_HELP_CAL_PRESET, CAL_NONE },
 };
@@ -1256,7 +1312,7 @@ static int set_cal(uint8_t pin, int argc, const char* const* argv) {
         msg.control.println(F("ERROR: CAL requires a profile keyword"));
         msg.control.println(F("  Usage: SET <pin> CAL <profile> [<args>]"));
         msg.control.println(F("  Profiles: STEINHART, BETA, PRESSURE_LINEAR, PRESSURE_POLY,"));
-        msg.control.println(F("            RPM, SPEED, BIAS, PRESET"));
+        msg.control.println(F("            RPM, SPEED, VOLTAGE_DIVIDER, BIAS, PRESET"));
         return 1;
     }
     const char* profile = argv[3];

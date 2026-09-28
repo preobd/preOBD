@@ -780,7 +780,7 @@ void printHelpQuick() {
     msg.control.println(F("  SET <pin> ALARM WARN <lo> [<hi>]"));
     msg.control.println(F("  SET <pin> ALARM DISABLE"));
     msg.control.println(F("  SET <pin> CAL PRESET"));
-    msg.control.println(F("  SET <pin> CAL <STEINHART|BETA|RPM|SPEED|PRESSURE_LINEAR|PRESSURE_POLY|BIAS> ..."));
+    msg.control.println(F("  SET <pin> CAL <STEINHART|BETA|RPM|SPEED|PRESSURE_LINEAR|PRESSURE_POLY|VOLTAGE_DIVIDER|BIAS> ..."));
     msg.control.println();
     msg.control.println(F("Outputs:"));
     msg.control.println(F("  OUTPUT STATUS"));
