@@ -33,7 +33,7 @@ bool initCANInput();
  * Populates canFrameCache with received data for CAN sensors to consume.
  *
  * Supports:
- * - OBD-II Mode 01 responses (0x41) - extracts PID from byte[2]
+ * - OBD-II Mode 01 responses (0x41), 1-5 data bytes - PID is the identifier
  * - Custom protocols - uses byte[0] as identifier
  * - Any CAN ID (not limited to 0x7E8)
  */

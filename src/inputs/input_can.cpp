@@ -13,6 +13,7 @@
 
 #include <Arduino.h>
 #include "input_can.h"
+#include "can_frame_parse.h"
 #include "../storage/system_config.h"
 #include "../storage/bus_config.h"
 #include "../core/message_api.h"
@@ -123,48 +124,25 @@ static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len) {
         return;
     }
 
-    // Detect protocol format and extract identifier
+    // Detect protocol format and extract identifier (see can_frame_parse.h)
     uint8_t identifier;
     uint8_t data_offset;
 
-    if (len >= 3 && data[0] == 0x04 && data[1] == 0x41) {
-        // OBD-II Mode 01 response format:
-        // [0] = 0x04 (number of data bytes)
-        // [1] = 0x41 (Mode 01 response)
-        // [2] = PID
-        // [3+] = Data bytes
-        identifier = data[2];  // PID
-        data_offset = 3;
-    } else if (len >= 3 && data[0] == 0x41) {
-        // OBD-II without length prefix (some ECUs)
-        // [0] = 0x41 (Mode 01 response)
-        // [1] = PID
-        // [2+] = Data bytes
-        identifier = data[1];  // PID
-        data_offset = 2;
-    } else if (len >= 2 && data[0] == 0x41) {
-        // Malformed OBD-II frame (too short for proper extraction)
-        // Fall back to custom protocol handling
-        #ifdef DEBUG
+    #ifdef DEBUG
+    if (len == 2 && data[0] == 0x41) {
+        // Too short for PID extraction; stored under the custom-protocol key
         msg.debug.warn(TAG_CAN, "Short OBD-II frame (ID 0x%03X, len=%d)", can_id, len);
-        #endif
-        identifier = data[0];
-        data_offset = 0;
-    } else {
-        // Custom protocol or J1939 - use first byte as identifier
-        identifier = data[0];
-        data_offset = 0;
     }
+    #endif
 
-    // Update cache with extracted data
-    uint8_t data_length = (len > data_offset) ? (len - data_offset) : 0;
-    if (data_length == 0) {
+    if (!parseCANInputFrame(data, len, identifier, data_offset)) {
         #ifdef DEBUG
         msg.debug.warn(TAG_CAN, "No data after protocol parsing (ID 0x%03X)", can_id);
         #endif
         return;
     }
 
+    uint8_t data_length = len - data_offset;
     updateCANCache(can_id, identifier, &data[data_offset], data_length);
 }
 
@@ -174,7 +152,7 @@ static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len) {
  * Uses HAL for platform abstraction.
  *
  * Supports:
- * - OBD-II responses (Mode 0x41) - extracts PID from byte[2]
+ * - OBD-II Mode 01 responses (0x41), 1-5 data bytes - PID is the identifier
  * - J1939 and custom protocols - uses byte[0] as identifier
  * - Any CAN ID (not limited to 0x7E8)
  */
