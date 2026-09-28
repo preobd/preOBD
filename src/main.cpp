@@ -57,6 +57,7 @@
 #include "outputs/ble/action_broadcaster.h"
 #include "outputs/ble/live_value_broadcaster.h"
 #include "comms/elm327_framed.h"
+#include "outputs/display/lcd_layout.h"  // LCD input selection (#480)
 #ifdef ESP32
 // Include appropriate Bluetooth transport for ESP32 variant
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
@@ -196,8 +197,9 @@ static void updateConfigModeDisplay(uint32_t now) {
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            // In CONFIG mode, show any sensor with a valid pin (configured)
-            if (inputs[i].pin != 0xFF) {
+            // CONFIG: every configured input, disabled ones as "CFG"; a hidden
+            // one (DISPLAY DISABLE) takes no cell (#480).
+            if (lcdShowsInput(inputs[i].pin != 0xFF, inputs[i].flags.isEnabled, inputs[i].flags.display, true)) {
                 inputPtrs[activeCount++] = &inputs[i];
             }
         }
@@ -260,7 +262,7 @@ static void updateDisplay(uint32_t now) {
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            if (inputs[i].flags.isEnabled) {
+            if (lcdShowsInput(inputs[i].pin != 0xFF, inputs[i].flags.isEnabled, inputs[i].flags.display, false)) {
                 inputPtrs[activeCount++] = &inputs[i];
             }
         }

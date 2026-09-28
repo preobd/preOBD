@@ -26,8 +26,10 @@ input's units. Special values:
 | `CFG` | The input is configured but disabled (CONFIG mode) |
 | `---` | No reading yet (the input was just added or the board just started) |
 
-**Up to eight inputs fit.** A ninth and later input isn't shown correctly yet
-(a known firmware issue), so keep the LCD to eight inputs.
+**Eight inputs fit at once.** With more, the LCD pages through them in groups
+of eight, every 4 seconds. An input hidden with `SET <pin> DISPLAY DISABLE`
+takes no cell, so hiding one makes room for another. `DISPLAY STATUS` shows how
+many inputs are on the LCD (and whether it is paging).
 
 Units aren't printed; set them per input with `SET <pin> UNITS` or for everything
 with `SYSTEM UNITS`.
@@ -74,7 +76,7 @@ reserved and `SET <pin>` refuses them. See the
 
 ```
 SET A2 ABBR ECT            # short label in the cell (keep it to ~4 characters)
-SET A5 DISPLAY DISABLE     # blank this input's cell
+SET A5 DISPLAY DISABLE     # hide this input (its cell goes to the next one)
 SET A2 UNITS F             # show °F for this input
 SYSTEM UNITS PRESSURE PSI  # default units for all pressure inputs
 DISPLAY INTERVAL 500       # refresh every 500 ms (default)

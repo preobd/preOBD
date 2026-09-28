@@ -66,6 +66,7 @@
 #define CAN_OUTPUT_INTERVAL_MS 100       // CAN bus updates (10Hz) - smooth dashboards
 #define REALDASH_INTERVAL_MS 100         // RealDash updates (10Hz)
 #define LCD_UPDATE_INTERVAL_MS 500       // LCD display (2Hz) - human readable
+#define LCD_PAGE_INTERVAL_MS 4000        // >8 shown inputs: rotate pages of 8 this often (#480)
 #define SERIAL_CSV_INTERVAL_MS 1000      // Serial CSV (1Hz) - prevents buffer flooding
 #define SD_LOG_INTERVAL_MS 5000          // SD logging (0.2Hz) - reduces wear
 

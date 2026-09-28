@@ -23,6 +23,7 @@
 #include "../core/log_filter.h"
 #include "../core/log_tags.h"
 #include "../sensors/units_registry.h"
+#include "../outputs/display/lcd_layout.h"
 #include "../sensors/application_presets.h"
 #include "../sensors/sensor_library.h"
 #include "../core/platform.h"
@@ -794,6 +795,21 @@ int cmd_display(int argc, const char* const* argv) {
         msg.control.print(F("Update Interval: "));
         msg.control.print(systemConfig.lcdUpdateInterval);
         msg.control.println(F("ms"));
+#if INCLUDE_LCD
+        // The grid holds 8; more pages through groups of 8 (#480).
+        uint8_t shown = 0;
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (lcdShowsInput(inputs[i].pin != 0xFF, inputs[i].flags.isEnabled, inputs[i].flags.display, isInConfigMode())) shown++;
+        }
+        msg.control.print(F("Inputs shown: "));
+        msg.control.print(shown);
+        if (shown > LCD_CELLS) {
+            msg.control.print(F(" (pages of 8, every "));
+            msg.control.print(LCD_PAGE_INTERVAL_MS / 1000);
+            msg.control.print(F(" s)"));
+        }
+        msg.control.println();
+#endif
         return 0;
     }
 

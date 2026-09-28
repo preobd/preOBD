@@ -17,6 +17,7 @@
 
 #include "../../drivers/bus_manager.h"
 #include "../../storage/system_config.h"
+#include "lcd_layout.h"
 
 // LCD display configuration
 #define LCD_COLS 20
@@ -324,12 +325,27 @@ void displaySensor(Input *ptr, byte line) {
     }
 }
 
+// Blank one grid cell (a page with fewer than 8 inputs, or an input that went
+// away, must not leave a stale reading behind).
+static void clearCell(byte line) {
+    lcd.setCursor((line >= LCD_ROWS) ? LCD_COLUMNS_PER_SENSOR : 0, (line >= LCD_ROWS) ? line - LCD_ROWS : line);
+    for (int i = 0; i < LCD_COLUMNS_PER_SENSOR; i++) lcd.print(" ");
+}
+
 void updateLCD(Input** inputs, int numInputs) {
     if (!lcdReady) return;
     currentLine = 0;
 
-    // If no sensors configured, show CONFIG MODE message
+    static bool firstSensorShown = false;
+
     if (numInputs == 0) {
+        // Readings were on screen and every input is now hidden (DISPLAY
+        // DISABLE) or gone: blank the grid rather than freeze them there (#490
+        // review). Before any input was shown, it's the CONFIG MODE message.
+        if (firstSensorShown) {
+            for (uint8_t line = 0; line < LCD_CELLS; line++) clearCell(line);
+            return;
+        }
         static bool configMsgShown = false;
         if (!configMsgShown) {
             showConfigModeMessage();
@@ -339,17 +355,20 @@ void updateLCD(Input** inputs, int numInputs) {
     }
 
     // Clear the CONFIG MODE message when first sensor is configured
-    static bool firstSensorShown = false;
     if (!firstSensorShown) {
         lcd.clear();
         firstSensorShown = true;
     }
 
-    // Display all sensors (enabled will show values, disabled will show "CFG")
-    for (int i = 0; i < numInputs; i++) {
-        displaySensor(inputs[i], currentLine);
+    // The grid holds 8 cells; more than that pages through groups of 8 (#480)
+    // instead of drawing a 9th input off row 3. Unused cells are blanked.
+    const uint8_t perPage = LCD_CELLS;
+    const LcdPage page = lcdPageAt((uint8_t)numInputs, perPage, millis(), LCD_PAGE_INTERVAL_MS);
+    for (uint8_t i = 0; i < page.count; i++) {
+        displaySensor(inputs[page.start + i], currentLine);
         currentLine++;
     }
+    for (uint8_t line = page.count; line < perPage; line++) clearCell(line);
 }
 
 void clearLCD() {
