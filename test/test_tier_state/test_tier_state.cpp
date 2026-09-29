@@ -22,10 +22,6 @@
 // --- Collaborator stubs, defined before the unit under test ---------------
 // Serial1 is the host UART; tier_state only ever writes whole PING frames.
 static int g_pingsWritten = 0;
-struct FakeSerial1 {
-    size_t write(const uint8_t*, size_t n) { ++g_pingsWritten; return n; }
-};
-static FakeSerial1 Serial1;
 
 static int g_decoderResets = 0;
 void uartBridgeDecoderReset() { ++g_decoderResets; }
@@ -34,6 +30,13 @@ static bool g_txRingAccepts = true;
 bool uartBridgeSendFrame(uint8_t type, const uint8_t*, uint16_t) {
     if (!g_txRingAccepts) return false;
     if (type == 0xFF) ++g_pingsWritten;
+    return true;
+}
+
+// The negotiation PING (#491: through the TX ring, like the resync PING).
+bool uartBridgeSendPing() {
+    if (!g_txRingAccepts) return false;
+    ++g_pingsWritten;
     return true;
 }
 
