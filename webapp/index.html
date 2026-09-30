@@ -621,6 +621,7 @@
   #terminal.collapsed .panel-body { display: none; }
   .panel.collapsed .panel-body { display: none; }
   .panel.collapsed .panel-header { border-bottom: 0; }
+  #canPanel.collapsed > :not(.panel-header) { display: none; }
   .panel-collapse-btn {
     background: none;
     border: none;
@@ -989,6 +990,38 @@
   }
   .ctl-rule-radio input { width: auto; }
 
+  /* ── CAN bus panel ─────────────────────────────────────────── */
+  .status-item .can-sub { font-size: 11px; font-family: var(--mono); color: var(--dim); line-height: 1.3; }
+  .status-item span.can-warn { color: var(--yellow); }
+  .status-item span.can-bad  { color: var(--red); }
+  .can-notice {
+    margin-top: 10px; padding: 9px 12px; border-radius: 6px; font-size: 12px; line-height: 1.45;
+    background: rgba(184,134,11,0.10); border: 1px solid rgba(184,134,11,0.3); color: #6b4d00;
+  }
+  .can-notice b { font-weight: 600; }
+  #canForm {
+    padding: 14px 16px; border-top: 1px solid var(--border-light); border-bottom: 1px solid var(--border-light);
+    background: linear-gradient(180deg, rgba(255,255,255,0.5) 0%, var(--surface-raised) 100%);
+  }
+  .can-scan-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .can-progress { flex: 1 1 160px; height: 6px; border-radius: 3px; background: var(--border-light); overflow: hidden; }
+  .can-progress > div { height: 100%; background: var(--brand-light); transition: width 0.4s linear; }
+  .can-progress.indeterminate > div { width: 35%; animation: can-sweep 1.1s ease-in-out infinite; }
+  @keyframes can-sweep { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+  .can-scan-msg { font-size: 12px; color: var(--dim); }
+  .can-ecu-chip {
+    display: inline-block; font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 10px;
+    background: rgba(58,107,138,0.12); color: var(--blue); border: 1px solid rgba(58,107,138,0.3); white-space: nowrap;
+  }
+  .can-have { font-size: 10.5px; color: var(--green); font-weight: 600; white-space: nowrap; }
+  .can-age-ok { color: var(--green); }
+  .can-age-stale { color: var(--red); }
+  .ctl-table tr.can-disabled td { color: var(--dim-light); }
+  .ctl-table td input[type="checkbox"] { accent-color: var(--brand-light); }
+  @media (prefers-reduced-motion: reduce) {
+    .can-progress.indeterminate > div { animation: none; width: 100%; opacity: 0.5; }
+  }
+
   /* ── Responsive ───────────────────────────────────────────── */
   @media (max-width: 600px) {
     .status-grid { display: grid; grid-template-columns: repeat(2, 1fr); }
@@ -1074,6 +1107,27 @@
       <button class="btn secondary" id="btnExportJSON">Export JSON</button>
       <label class="btn secondary" for="importFile">Import JSON</label>
       <input type="file" id="importFile" accept=".json" style="display:none">
+    </div>
+  </div>
+
+  <!-- CAN bus: status, imported PIDs, Add CAN sensor (firmware with BUS CAN JSON, #510/#511) -->
+  <div class="panel" id="canPanel" style="display:none">
+    <div class="panel-header" id="canPanelHeader" style="cursor:pointer">
+      <div class="inputs-header">
+        <span class="panel-title">CAN Bus</span>
+        <span class="badge badge-warning" id="canRebootBadge" style="display:none" title="BUS CAN INPUT changes take effect after SAVE and a reboot">Reboot pending</span>
+      </div>
+      <button class="panel-collapse-btn" id="btnCanToggle" title="Collapse CAN bus">▲</button>
+    </div>
+    <div class="panel-body" style="padding:12px">
+      <div class="status-grid" id="canStatusGrid"></div>
+      <div id="canNotice" class="can-notice" style="display:none"></div>
+    </div>
+    <div id="canForm" style="display:none"></div>
+    <div class="table-scroll"><div id="canImportsWrap"></div></div>
+    <div class="config-actions">
+      <button class="btn primary" id="btnCanAdd">+ Add CAN sensor</button>
+      <button class="btn secondary" id="btnCanBus">Bus settings</button>
     </div>
   </div>
 
@@ -1426,7 +1480,7 @@ async function connect() {
     renderAlarmPanel();
     renderControlPanel();
 
-    fetchInitialState().then(() => { if (framedMode) refreshAckStatus(); });
+    fetchInitialState().then(() => { if (framedMode) refreshAckStatus(); return canInit(); });
 
   } catch (err) {
     if (err.name !== 'NotFoundError') {  // User cancelled scan
@@ -1490,6 +1544,7 @@ function onDisconnected() {
   catalog = { applications: [], sensors: [], units: [] };   // next device may run other firmware
   inputState.clear();
   document.getElementById('inputsPanel').style.display = 'none';
+  canTeardown();
 }
 
 function setConnected(connected) {
@@ -1733,6 +1788,8 @@ async function reloadDeviceConfig() {
     originalConfig = parseJsonResponse(dumpResp);
     loadedConfigGen = askedAt;
     localConfig = JSON.parse(JSON.stringify(originalConfig));
+    for (const p of canUi.pendingPins) inputState.set(p, 'applied');   // CAN imports (#515)
+    canUi.pendingPins.clear();
     renderInputsPanel();
     renderControlPanel();
     appendInfo('Configuration changed on the device — reloaded.');
@@ -4046,6 +4103,538 @@ document.getElementById('ctlTableWrap').addEventListener('click', e => {
     case 'act-off':   ctlActionManual(id, ACTION_CMD_MANUAL_OFF); break;
     case 'act-auto':  ctlActionManual(id, ACTION_CMD_AUTO); break;
   }
+});
+
+// --- CAN bus panel (#510 / #511) ---
+//
+// Built on the read-only JSON the firmware answers in RUN without bumping
+// configGeneration: BUS CAN JSON (polled while the panel is open), SCAN
+// STATUS / RESULTS / SUPPORTED JSON. Starting a scan, importing a PID and
+// changing the bus are CONFIG writes, wrapped in withConfigMode() like every
+// other write; a scan keeps running after it returns to RUN.
+//
+// "Add CAN sensor" prefers SCAN PIDS, which asks the ECUs which PIDs they
+// support (needs input in ENABLE mode). SCAN CAN only listens, so on a car
+// where nothing else polls the ECU it finds nothing; it is the fallback for
+// LISTEN mode and for non-OBD broadcast frames.
+const CAN_POLL_MS = 2000;        // BUS CAN JSON cadence (#510: 2 s or slower)
+const CAN_SCAN_POLL_MS = 1000;   // SCAN STATUS JSON cadence while a scan runs
+const CAN_STALE_MS = 2000;       // firmware's default CAN import timeout
+const CAN_LISTEN_MS = 5000;
+const canUi = {
+  available: false,   // this firmware answers BUS CAN JSON
+  bus: null,          // last BUS CAN JSON
+  pids: new Map(),    // LIST PIDS JSON by PID
+  timer: null,
+  polling: false,
+  busy: false,        // a write batch is running
+  form: null,         // null | 'add' | 'bus'
+  scan: null,         // { kind:'pids'|'listen', state, scanId, found, ecus, rows, error, timer }
+  selected: new Set(), // "canId:pid" rows ticked for import
+  pendingPins: new Set() // imported while edits were pending: mark unsaved on the next reload
+};
+
+function canHex(n, width) { return '0x' + n.toString(16).toUpperCase().padStart(width || 2, '0'); }
+function canBusName(i) { return (i == null || i === 255) ? 'none' : 'CAN' + (i + 1); }
+function canEcuLabel(id) { return id === 0x7E8 ? 'Engine ' + canHex(id, 3) : 'ECU ' + canHex(id, 3); }
+function canAgeText(ms) {
+  if (ms == null) return 'never';
+  if (ms < 1000) return ms + ' ms';
+  if (ms < 60000) return (ms / 1000).toFixed(1) + ' s';
+  return ms < 3600000 ? Math.round(ms / 60000) + ' min' : Math.round(ms / 3600000) + ' h';
+}
+// LIST PIDS JSON names units by registry name (CELSIUS, KPA): show the symbol
+function canUnitSymbol(name) {
+  if (!name) return '';
+  const lc = name.toLowerCase();
+  const u = catalog.units.find(x => x.name?.toLowerCase() === lc || x.alias?.toLowerCase() === lc);
+  return u?.symbol || name;
+}
+function canIsImported(canId, pid) {
+  return (canUi.bus?.imports || []).some(i => i.sourceCanId === canId && i.sourcePid === pid);
+}
+
+// The ERROR lines of a failed sendChecked(), without the echo and prompt.
+function canErrText(msg) {
+  const lines = String(msg).split(/\r?\n/).map(l => l.trim())
+    .filter(l => l && !/^=+$/.test(l) && !l.startsWith('preOBD>'));
+  const at = lines.findIndex(l => l.startsWith('ERROR'));
+  return (at >= 0 ? lines.slice(at) : lines).slice(0, 3).join(' ');
+}
+
+// Decode a SCAN RESULTS payload with the standard PID's scale/offset.
+function canDecode(row) {
+  const info = canUi.pids.get(row.pid);
+  if (!row.obd || !info || !row.data) return null;
+  const bytes = row.data.match(/../g)?.map(h => parseInt(h, 16)) || [];
+  const n = Math.min(info.dataLength || 1, bytes.length);
+  if (!n) return null;
+  let raw = 0;
+  for (let i = 0; i < n; i++) raw = raw * 256 + bytes[i];
+  const v = raw * info.scale + info.offset;
+  return (Math.round(v * 10) / 10) + ' ' + canUnitSymbol(info.units);
+}
+
+async function canInit() {
+  if (!txChar) return;
+  try {
+    const bus = parseJsonResponse(await sendQueued('BUS CAN JSON', { quiet: true }));
+    if (!txChar) return;   // disconnected meanwhile: canTeardown() already ran
+    if (!bus || !bus.input || !bus.caps) throw new Error('unexpected reply');
+    canUi.bus = bus;
+    canUi.available = true;
+  } catch (_) {
+    // Older firmware, no CAN in this build, or JSON compiled out (Mega)
+    canUi.available = false;
+    document.getElementById('canPanel').style.display = 'none';
+    return;
+  }
+  if (!canUi.pids.size) {
+    try {
+      const rows = parseJsonResponse(await sendQueued('LIST PIDS JSON', { quiet: true }));
+      canUi.pids = new Map(rows.map(r => [r.pid, r]));
+    } catch (_) { /* names fall back to hex */ }
+  }
+  if (!txChar) return;
+  document.getElementById('canPanel').style.display = '';
+  renderCanPanel();
+  clearInterval(canUi.timer);
+  canUi.timer = setInterval(() => canPollBus(false), CAN_POLL_MS);
+}
+
+function canTeardown() {
+  clearInterval(canUi.timer);
+  if (canUi.scan?.timer) clearTimeout(canUi.scan.timer);
+  Object.assign(canUi, { available: false, bus: null, timer: null, polling: false, busy: false,
+                         form: null, scan: null });
+  canUi.pids = new Map();   // the next device may run other firmware
+  canUi.selected.clear();
+  canUi.pendingPins.clear();
+  document.getElementById('canPanel').style.display = 'none';
+  document.getElementById('canForm').style.display = 'none';
+}
+
+// Refresh BUS CAN JSON. The timer skips while the panel is hidden or
+// collapsed, the page is in the background, or other commands are queued, so
+// polling never delays a user's command; `force` refreshes regardless.
+async function canPollBus(force) {
+  if (!txChar || !canUi.available || canUi.polling) return;
+  if (!force) {
+    // configWriteDepth: between two writes of another panel's batch the
+    // queue is briefly empty; don't drop a reply into the middle of it
+    if (canUi.busy || configWriteDepth > 0 || document.hidden || cmdPending || cmdQueue.length) return;
+    if (document.getElementById('canPanel').classList.contains('collapsed')) return;
+  }
+  canUi.polling = true;
+  try {
+    const importsKey = b => JSON.stringify((b?.imports || []).map(i => [i.pin, i.sourceCanId, i.sourcePid]));
+    const before = importsKey(canUi.bus);
+    canUi.bus = parseJsonResponse(await sendQueued('BUS CAN JSON', { quiet: true }));
+    renderCanStatus();
+    renderCanImports();
+    // Re-render the results only when the "✓ imported" marks change: a
+    // rebuild every poll resets the table's scroll and can eat a click
+    if (canUi.form === 'add' && canUi.scan?.state === 'done' && importsKey(canUi.bus) !== before) renderCanForm();
+  } catch (_) { /* disconnect or a mangled reply: the next tick retries */ }
+  finally { canUi.polling = false; }
+}
+
+function renderCanPanel() {
+  renderCanStatus();
+  renderCanImports();
+  renderCanForm();
+}
+
+function renderCanStatus() {
+  const b = canUi.bus;
+  if (!b) return;
+  const inp = b.input, out = b.output, poll = inp.poll || {};
+  const tile = (label, value, sub, cls) =>
+    `<div class="status-item"><label>${label}</label><span class="${cls || ''}">${escHtml(value)}</span>` +
+    `<span class="can-sub">${escHtml(sub)}</span></div>`;
+
+  const inOff = inp.mode === 'OFF' || inp.bus === 255;
+  const inputTile = tile('Input',
+    inOff ? 'Off' : canBusName(inp.bus) + ' · ' + (inp.mode === 'NORMAL' ? 'ENABLE' : inp.mode),
+    inOff ? 'no CAN sensors' : (inp.baudrate / 1000) + ' kbps · ' + (inp.running ? 'running' : 'not running'),
+    !inOff && !inp.running ? 'can-warn' : '');
+
+  const quiet = inp.lastFrameAgeMs == null || inp.lastFrameAgeMs > CAN_STALE_MS;
+  const trafficTile = tile('Traffic',
+    (inp.framesRx || 0).toLocaleString() + ' frames',
+    inp.lastFrameAgeMs == null ? 'nothing received' : 'last ' + canAgeText(inp.lastFrameAgeMs) + ' ago',
+    inp.running && quiet ? 'can-warn' : '');
+
+  let pollVal, pollSub, pollCls = '';
+  if (inp.mode === 'LISTEN') { pollVal = 'Listen only'; pollSub = 'never transmits'; }
+  else if (!poll.active) { pollVal = 'Idle'; pollSub = inOff ? 'input off' : 'no OBD-II PIDs imported'; }
+  else if (poll.backoff) { pollVal = 'ECU silent'; pollSub = poll.missStreak + ' unanswered · 1 request/s'; pollCls = 'can-bad'; }
+  else { pollVal = (poll.answers || 0).toLocaleString() + ' / ' + (poll.requests || 0).toLocaleString(); pollSub = 'answered / requested'; }
+  const pollTile = tile('ECU polling', pollVal, pollSub + (poll.txFail ? ' · ' + poll.txFail + ' TX fail' : ''), pollCls);
+
+  const outOn = out.enabled && out.bus !== 255;
+  const outTile = tile('Output',
+    outOn ? canBusName(out.bus) : 'Off',
+    outOn ? (out.module ? 'OBD-II responder on' : 'responder off (OUTPUT CAN)') : 'OBD-II / RealDash out');
+
+  document.getElementById('canStatusGrid').innerHTML = inputTile + trafficTile + pollTile + outTile;
+  document.getElementById('canRebootBadge').style.display = inp.rebootPending ? '' : 'none';
+
+  const notice = document.getElementById('canNotice');
+  let msg = '';
+  if (inp.rebootPending) msg = '<b>Bus settings saved but not running yet.</b> Reboot preOBD to apply them (power-cycle it, or type <code>SYSTEM REBOOT</code> in CONFIG mode).';
+  else if (inOff) msg = 'CAN input is off. Open <b>Bus settings</b> to read sensors from the car’s CAN bus.';
+  else if (!inp.running) msg = 'CAN input is configured but did not start. Check the wiring and <b>Bus settings</b>.';
+  notice.innerHTML = msg;
+  notice.style.display = msg ? '' : 'none';
+}
+
+function renderCanImports() {
+  const wrap = document.getElementById('canImportsWrap');
+  const imports = canUi.bus?.imports || [];
+  if (!imports.length) {
+    wrap.innerHTML = '<table class="ctl-table"><tbody><tr class="empty-row"><td>No CAN sensors imported. Click “+ Add CAN sensor” to find what your car offers.</td></tr></tbody></table>';
+    return;
+  }
+  let html = '<table class="ctl-table"><thead><tr><th>Pin</th><th>Sensor</th><th>PID</th><th>Source</th><th>Read by</th><th>Updated</th><th></th></tr></thead><tbody>';
+  for (const im of imports) {
+    const info = canUi.pids.get(im.sourcePid);
+    const stale = im.ageMs == null || im.ageMs > CAN_STALE_MS;
+    html += '<tr>' +
+      `<td class="mono">${escHtml(im.pinLabel)}</td>` +
+      `<td>${escHtml(info ? info.name : 'PID ' + canHex(im.sourcePid))}</td>` +
+      `<td class="mono">${canHex(im.sourcePid)}</td>` +
+      `<td><span class="can-ecu-chip">${escHtml(im.sourceCanId >= 0x7E8 && im.sourceCanId <= 0x7EF ? canEcuLabel(im.sourceCanId) : 'ID ' + canHex(im.sourceCanId, 3))}</span></td>` +
+      `<td class="dim">${im.polled ? 'polled' : 'listened'}</td>` +
+      `<td class="dim ${stale ? 'can-age-stale' : 'can-age-ok'}">${im.ageMs == null ? 'no data' : canAgeText(im.ageMs) + ' ago'}</td>` +
+      `<td class="ctl-actions-cell"><button class="btn row-btn" style="color:var(--red);border-color:rgba(160,48,48,0.4)" data-can-remove="${escHtml(im.pinLabel)}">Remove</button></td>` +
+      '</tr>';
+  }
+  wrap.innerHTML = html + '</tbody></table>';
+}
+
+// ---- Add CAN sensor / Bus settings form ----
+
+function canOpenForm(kind) {
+  if (canUi.scan?.timer) clearTimeout(canUi.scan.timer);
+  canUi.form = (canUi.form === kind) ? null : kind;   // the button toggles its form
+  canUi.scan = null;
+  canUi.selected.clear();
+  renderCanForm();
+}
+
+function renderCanForm() {
+  const el = document.getElementById('canForm');
+  if (!canUi.form || !canUi.bus) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = '';
+  el.innerHTML = canUi.form === 'bus' ? canBusFormHtml() : canAddFormHtml();
+}
+
+function canAddFormHtml() {
+  const inp = canUi.bus.input;
+  const inOff = inp.mode === 'OFF' || inp.bus === 255;
+  let h = '<div class="ctl-subhead">Add CAN sensor</div>';
+  if (inOff || !inp.running || inp.rebootPending) {
+    return h + '<p class="editor-hint">CAN input has to be running before preOBD can find sensors on the bus. ' +
+      'Set it up in <b>Bus settings</b>, save, and reboot preOBD.</p>' +
+      '<div class="editor-actions"><button class="btn primary" data-can="bus">Bus settings</button>' +
+      '<button class="btn secondary" data-can="close">Close</button></div>';
+  }
+  const canAsk = inp.mode === 'NORMAL';
+  const sc = canUi.scan;
+  const running = sc && (sc.state === 'starting' || sc.state === 'querying' || sc.state === 'listening');
+  h += '<div class="can-scan-row">' +
+    `<button class="btn primary" data-can="ask" ${!canAsk || running || canUi.busy ? 'disabled' : ''} ` +
+      `title="${canAsk ? 'Send the OBD-II “supported PIDs” request to every ECU' : 'Needs input in ENABLE mode: LISTEN never transmits'}">Ask the ECU</button>` +
+    `<button class="btn secondary" data-can="listen" ${running || canUi.busy ? 'disabled' : ''} ` +
+      `title="Listen ${CAN_LISTEN_MS / 1000} s for frames already on the bus">Listen ${CAN_LISTEN_MS / 1000} s</button>` +
+    '<button class="btn secondary" data-can="close">Close</button></div>';
+  if (!sc) {
+    h += '<p class="editor-hint">' + (canAsk
+      ? '<b>Ask the ECU</b> lists every OBD-II PID your car’s ECUs support. Turn the ignition on first. ' +
+        '<b>Listen</b> only shows what something else is already asking for, plus non-OBD broadcast frames.'
+      : 'Input is in <b>LISTEN</b> mode, so preOBD can only hear what another tool asks the ECU for. ' +
+        'To ask the ECU directly, switch the input to ENABLE in <b>Bus settings</b>.') + '</p>';
+    return h;
+  }
+  if (sc.state === 'error') return h + `<p class="editor-hint" style="color:var(--red)">${escHtml(sc.error || 'Scan failed')}</p>`;
+
+  if (running) {
+    const pct = sc.kind === 'listen' && sc.durationMs ? Math.round(100 * (1 - sc.remainingMs / sc.durationMs)) : null;
+    h += '<div class="can-scan-row">' +
+      `<div class="can-progress${pct == null ? ' indeterminate' : ''}"><div style="${pct == null ? '' : 'width:' + pct + '%'}"></div></div>` +
+      `<span class="can-scan-msg">${sc.kind === 'pids' ? 'Asking the ECUs…' : 'Listening… ' + (sc.found || 0) + ' found'}</span></div>`;
+  } else {
+    let summary;
+    if (sc.kind === 'pids') {
+      summary = sc.ecus === 0 ? '<b>No ECU answered.</b> Turn the ignition on (engine running is best) and ask again.'
+        : sc.found === 0 ? 'The ECU answered but lists no PIDs.'
+        : `${sc.ecus} ECU${sc.ecus === 1 ? '' : 's'} answered: ${sc.found} PID${sc.found === 1 ? '' : 's'} supported.`;
+    } else {
+      summary = sc.rows.length ? `Heard ${sc.rows.length} PID${sc.rows.length === 1 ? '' : 's'} / frame ID${sc.rows.length === 1 ? '' : 's'}.`
+        : 'Nothing heard. Nothing on the bus is asking the ECU for data' + (canAsk ? ': use <b>Ask the ECU</b>.' : '.');
+    }
+    h += `<p class="editor-hint" style="margin-bottom:10px">${summary}</p>`;
+  }
+  if (sc.rows?.length) h += canResultsTableHtml(sc);
+  return h;
+}
+
+function canResultsTableHtml(sc) {
+  const listen = sc.kind === 'listen';
+  let h = '<div class="table-scroll"><table class="ctl-table"><thead><tr><th></th><th>PID</th><th>Sensor</th><th>Source</th>' +
+    (listen ? '<th>Value</th><th>Frames</th>' : '') + '</tr></thead><tbody>';
+  for (const r of sc.rows) {
+    const key = r.canId + ':' + r.pid;
+    const info = canUi.pids.get(r.pid);
+    const have = r.obd && canIsImported(r.canId, r.pid);
+    const importable = r.obd && !have;
+    let name = r.obd ? (info ? escHtml(info.name) : '<span class="driven-manual">Not in preOBD’s PID table (raw value)</span>')
+                     : '<span class="driven-manual">Custom frame: set up through JSON</span>';
+    if (have) name += ' <span class="can-have">✓ imported</span>';
+    h += `<tr class="${importable ? '' : 'can-disabled'}">` +
+      `<td><input type="checkbox" data-can-pick="${key}" ${importable ? '' : 'disabled'} ${canUi.selected.has(key) ? 'checked' : ''}></td>` +
+      `<td class="mono">${r.obd ? canHex(r.pid) : '—'}</td>` +
+      `<td>${name}</td>` +
+      `<td><span class="can-ecu-chip">${r.obd ? canEcuLabel(r.canId) : 'ID ' + canHex(r.canId, 3)}</span></td>` +
+      (listen ? `<td class="mono">${escHtml(canDecode(r) || r.data || '')}</td><td class="dim">${r.frames}</td>` : '') +
+      '</tr>';
+  }
+  h += '</tbody></table></div>';
+  const n = canUi.selected.size;
+  h += '<div class="editor-actions">' +
+    `<button class="btn primary" data-can="import" ${n && !canUi.busy ? '' : 'disabled'}>Import ${n || ''} selected</button>` +
+    '</div>';
+  return h;
+}
+
+async function canStartScan(kind) {
+  if (canUi.scan?.timer) clearTimeout(canUi.scan.timer);
+  canUi.selected.clear();
+  const sc = { kind, state: 'starting', rows: [] };
+  canUi.scan = sc;
+  canUi.busy = true;
+  renderCanForm();
+  try {
+    await withConfigMode(() => sendChecked(kind === 'pids' ? 'SCAN PIDS JSON' : 'SCAN CAN ' + CAN_LISTEN_MS + ' JSON'));
+  } catch (e) {
+    sc.state = 'error';
+    sc.error = canErrText(e.message);
+  } finally {
+    canUi.busy = false;
+  }
+  if (sc.state === 'error') { renderCanForm(); return; }
+  await canScanPoll(sc, true);
+}
+
+async function canScanPoll(sc, first) {
+  if (canUi.scan !== sc || !txChar) return;   // form closed or a newer scan
+  let st;
+  try {
+    st = parseJsonResponse(await sendQueued('SCAN STATUS JSON', { quiet: true }));
+  } catch (e) {
+    if (canUi.scan !== sc) return;
+    sc.state = 'error'; sc.error = 'Lost the scan status: ' + e.message; renderCanForm(); return;
+  }
+  if (canUi.scan !== sc) return;
+  if (first) sc.scanId = st.scanId;
+  else if (st.scanId !== sc.scanId) {
+    sc.state = 'error'; sc.error = 'Another client started a new scan.'; renderCanForm(); return;
+  }
+  Object.assign(sc, { state: st.state, found: st.found, ecus: st.ecus,
+                      durationMs: st.durationMs, remainingMs: st.remainingMs });
+  if (st.state === 'idle') { sc.state = 'error'; sc.error = 'The scan was cancelled.'; renderCanForm(); return; }
+  if (st.state === 'done' || (sc.kind === 'listen' && st.found !== sc.fetchedFound)) {
+    await canFetchResults(sc);
+    if (canUi.scan !== sc) return;
+  }
+  renderCanForm();
+  if (st.state !== 'done') sc.timer = setTimeout(() => canScanPoll(sc, false), CAN_SCAN_POLL_MS);
+}
+
+async function canFetchResults(sc) {
+  try {
+    if (sc.kind === 'pids') {
+      const ecus = parseJsonResponse(await sendQueued('SCAN SUPPORTED JSON', { quiet: true }));
+      sc.rows = [];
+      for (const e of ecus) for (const pid of e.pids) sc.rows.push({ canId: e.canId, pid, obd: true });
+    } else {
+      sc.rows = parseJsonResponse(await sendQueued('SCAN RESULTS JSON', { quiet: true }));
+      sc.fetchedFound = sc.found;
+    }
+  } catch (_) { /* keep the previous rows; the next poll retries */ }
+}
+
+async function canImportSelected() {
+  const keys = [...canUi.selected];
+  if (!keys.length) return;
+  canUi.busy = true;
+  renderCanForm();
+  const pins = [];
+  let failed = null;
+  try {
+    await withConfigMode(async () => {
+      for (const key of keys) {
+        const [canId, pid] = key.split(':').map(Number);
+        // SET CAN <pid> [ecu]: the engine (0x7E8) is the default (#511)
+        const cmd = 'SET CAN ' + canHex(pid) + (canId !== 0x7E8 ? ' ' + canHex(canId, 3) : '');
+        const resp = await sendChecked(cmd);
+        const m = resp.match(/CAN:(\d+)/);
+        if (m) pins.push('CAN:' + m[1]);
+        canUi.selected.delete(key);
+      }
+    });
+  } catch (e) {
+    failed = canErrText(e.message);
+  }
+  await canReloadInputs(pins);
+  canUi.busy = false;
+  if (pins.length) appendInfo(`Imported ${pins.length} CAN sensor${pins.length === 1 ? '' : 's'} (${pins.join(', ')}) into device RAM. Click "Save to EEPROM" in Inputs to keep ${pins.length === 1 ? 'it' : 'them'}.`);
+  if (failed) appendErr('CAN import failed: ' + failed);
+  await canPollBus(true);
+  renderCanForm();
+}
+
+// Our own writes don't trigger the configGeneration re-read (withConfigMode
+// marks them), so pull the new inputs in here and flag them unsaved.
+async function canReloadInputs(pins) {
+  if (!pins.length || !originalConfig) return;
+  const editorOpen = document.getElementById('inputEditor')?.style.display !== 'none';
+  if (editorOpen || ctlFormMode !== null || [...inputState.values()].some(s => s === 'dirty')) {
+    // Never overwrite pending edits or an open form: hand the re-read to
+    // reloadDeviceConfig(), which waits until they are applied or discarded
+    // and then marks these pins unsaved (canUi.pendingPins)
+    for (const p of pins) canUi.pendingPins.add(p);
+    loadedConfigGen = null;   // our own write: force the re-read past the configGen check
+    clearTimeout(configSettleTimer);
+    configSettleTimer = setTimeout(reloadDeviceConfig, CONFIG_SETTLE_MS);
+    appendInfo('The new CAN inputs will show in Inputs once your pending edits are applied or discarded and open forms are closed.');
+    return;
+  }
+  try {
+    const askedAt = statusExt ? statusExt.configGen : null;
+    originalConfig = parseJsonResponse(await sendQueued('SYSTEM DUMP JSON', { quiet: true }));
+    loadedConfigGen = askedAt;
+    localConfig = JSON.parse(JSON.stringify(originalConfig));
+    for (const p of pins) inputState.set(p, 'applied');
+    renderInputsPanel();
+    renderControlPanel();
+  } catch (_) { /* the Inputs table catches up on the next reload */ }
+}
+
+function canBusFormHtml() {
+  const b = canUi.bus, inp = b.input;
+  const busOpts = [`<option value="255" ${inp.mode === 'OFF' || inp.bus === 255 ? 'selected' : ''}>None (input off)</option>`];
+  for (let i = 0; i < b.caps.buses; i++) {
+    busOpts.push(`<option value="${i}" ${inp.mode !== 'OFF' && inp.bus === i ? 'selected' : ''}>CAN${i + 1}${b.output.enabled && b.output.bus === i ? ' (also output)' : ''}</option>`);
+  }
+  const mode = inp.mode === 'OFF' ? 'NORMAL' : inp.mode;
+  const rates = b.caps.baudrates.map(r => `<option value="${r}" ${inp.baudrate === r ? 'selected' : ''}>${r / 1000} kbps</option>`).join('');
+  return '<div class="ctl-subhead">CAN input bus</div>' +
+    '<div class="editor-grid">' +
+      ctlField('Bus', `<select id="canBusSel">${busOpts.join('')}</select>`) +
+      ctlField('Mode', '<select id="canModeSel">' +
+        `<option value="NORMAL" ${mode === 'NORMAL' ? 'selected' : ''}>ENABLE: asks the ECU</option>` +
+        `<option value="LISTEN" ${mode === 'LISTEN' ? 'selected' : ''}>LISTEN: never transmits</option></select>`) +
+      ctlField('Speed', `<select id="canRateSel">${rates}</select>`) +
+    '</div>' +
+    '<p class="editor-hint" id="canBusHint" style="margin-top:10px">Most cars use 500 kbps on the OBD-II port. ' +
+      'ENABLE polls the ECU for each imported PID; LISTEN only hears what another tool asks for. ' +
+      'The change is saved to EEPROM and takes effect after a reboot.</p>' +
+    '<div class="editor-actions">' +
+      '<button class="btn primary" data-can="bus-save">Save</button>' +
+      '<button class="btn secondary" data-can="close">Cancel</button>' +
+    '</div>';
+}
+
+async function canSaveBus() {
+  if (canUi.busy) return;
+  const bus = parseInt(document.getElementById('canBusSel').value, 10);
+  const mode = document.getElementById('canModeSel').value;
+  const rate = document.getElementById('canRateSel').value;
+  const out = canUi.bus.output;
+  if (bus !== 255 && mode === 'LISTEN' && out.enabled && out.bus === bus) {
+    alert('LISTEN can’t share the output bus: listen-only stops every transmit on it, including OBD-II output. Pick another bus or ENABLE.');
+    return;
+  }
+  // SAVE persists everything in device RAM. Unapplied Inputs edits aren't
+  // there, so saving would leave them looking saved: apply or discard first.
+  if ([...inputState.values()].some(s => s === 'dirty')) {
+    alert('You have Inputs edits that are not applied yet. Apply or revert them first, then save the bus settings.');
+    return;
+  }
+  const anyApplied = [...inputState.values()].some(s => s === 'applied');
+  if ((anyApplied || ctlDirty) && !confirm('Saving also writes your other applied-but-unsaved changes (inputs, rules, actions) to EEPROM. Continue?')) return;
+  const cmd = bus === 255
+    ? 'BUS CAN INPUT NONE DISABLE'
+    : `BUS CAN INPUT ${canBusName(bus)} ${mode === 'NORMAL' ? 'ENABLE' : 'LISTEN'} ${rate}`;
+  canUi.busy = true;
+  try {
+    await withConfigMode(async () => {
+      await sendChecked(cmd);
+      await sendChecked('SAVE');
+    });
+    // Nothing was dirty (checked above), so localConfig is exactly what was saved
+    originalConfig = JSON.parse(JSON.stringify(localConfig));
+    inputState.clear();
+    ctlDirty = false;
+    renderInputsPanel();
+    renderControlPanel();
+    appendInfo('CAN bus settings saved. Reboot preOBD to apply them.');
+    canUi.form = null;
+  } catch (e) {
+    appendErr('CAN bus settings failed: ' + canErrText(e.message));
+  } finally {
+    canUi.busy = false;
+  }
+  await canPollBus(true);
+  renderCanForm();
+}
+
+document.getElementById('btnCanAdd').addEventListener('click', () => canOpenForm('add'));
+document.getElementById('btnCanBus').addEventListener('click', () => canOpenForm('bus'));
+document.getElementById('canForm').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-can]');
+  if (!btn || btn.disabled) return;
+  switch (btn.dataset.can) {
+    case 'ask':      canStartScan('pids'); break;
+    case 'listen':   canStartScan('listen'); break;
+    case 'import':   canImportSelected(); break;
+    case 'bus':      canOpenForm('bus'); break;
+    case 'bus-save': canSaveBus(); break;
+    case 'close':    canOpenForm(canUi.form); break;   // toggles it shut
+  }
+});
+document.getElementById('canForm').addEventListener('change', e => {
+  const box = e.target.closest('input[data-can-pick]');
+  if (!box) return;
+  if (box.checked) canUi.selected.add(box.dataset.canPick); else canUi.selected.delete(box.dataset.canPick);
+  const imp = document.querySelector('#canForm button[data-can="import"]');
+  if (imp) {
+    imp.disabled = !canUi.selected.size || canUi.busy;
+    imp.textContent = 'Import ' + (canUi.selected.size || '') + ' selected';
+  }
+});
+document.getElementById('canImportsWrap').addEventListener('click', async e => {
+  const btn = e.target.closest('button[data-can-remove]');
+  if (!btn || canUi.busy) return;
+  canUi.busy = true;
+  try { await removeInput(btn.dataset.canRemove); }
+  finally { canUi.busy = false; }
+  await canPollBus(true);
+});
+wirePanelCollapse('canPanelHeader', 'canPanel', 'btnCanToggle', 'CAN bus');
+document.getElementById('btnCanToggle').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const panel = document.getElementById('canPanel');
+  setPanelCollapsed('canPanel', 'btnCanToggle', 'CAN bus', !panel.classList.contains('collapsed'));
+  if (!panel.classList.contains('collapsed')) canPollBus(true);
+});
+// The poll skips a collapsed panel: refresh as soon as it opens again
+document.getElementById('canPanelHeader').addEventListener('click', () => {
+  setTimeout(() => {
+    if (!document.getElementById('canPanel').classList.contains('collapsed')) canPollBus(true);
+  }, 0);
 });
 
 // --- Add / Remove ---
