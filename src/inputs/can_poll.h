@@ -63,16 +63,18 @@ static inline void canPollReset(CanPollState& s, uint32_t now) {
 /**
  * A Mode 01 response (id, pid) was received at `now`. Clears the outstanding
  * request if it matches, restarting the gap from the answer, and any answer
- * ends a backoff.
+ * ends a backoff. Returns true when it answered the outstanding request.
  */
-static inline void canPollOnResponse(CanPollState& s, uint16_t id, uint8_t pid,
+static inline bool canPollOnResponse(CanPollState& s, uint16_t id, uint8_t pid,
                                      uint32_t now) {
-    if (!isObdResponseId(id)) return;
+    if (!isObdResponseId(id)) return false;
     s.missStreak = 0;
     if (s.pending && id == s.pendingId && pid == s.pendingPid) {
         s.pending = false;
         s.lastTxMs = now;   // CAN_POLL_MIN_GAP_MS counts from the answer
+        return true;
     }
+    return false;
 }
 
 /**

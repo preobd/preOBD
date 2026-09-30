@@ -167,7 +167,7 @@ Listening for all CAN frames...
 === CAN Scan Complete ===
 Found 12 PIDs:
 
-  PID   Name                    CAN ID  Len  Samples
+  PID   Name                    CAN ID  Len  Frames
   ----- ----------------------- ------- ---- --------
   0x05  Coolant Temperature     0x7E8   1    450
   0x0C  Engine RPM              0x7E8   2    450

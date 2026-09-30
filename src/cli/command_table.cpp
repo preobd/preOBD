@@ -40,7 +40,13 @@
 #if INCLUDE_LED
 #include "../drivers/rgb_led.h"   // TEST OUTPUT actuator
 #endif
-#include "../core/watchdog.h"  // TEST OUTPUT feeds the WDT during its blocking sequence
+#include "../core/watchdog.h"
+#if INCLUDE_CAN
+#include "../inputs/input_can.h"   // canInputIsRunning (SCAN CAN)
+#endif
+#if INCLUDE_CAN && SUPPORTS_JSON_EXPORT
+#include "../inputs/can_status_json.h"
+#endif  // TEST OUTPUT feeds the WDT during its blocking sequence
 #if INCLUDE_ELM327
 #include "../outputs/output_elm327.h"
 #endif
@@ -53,6 +59,10 @@
 #endif
 #include "../core/config_generation.h"
 #include <string.h>
+
+#ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
+#define FLASHMEM
+#endif
 #include <ctype.h>
 
 // AVR watchdog for system reset
@@ -111,7 +121,12 @@ const Command COMMANDS[] = {
     {"JSON", cmd_json, "Import JSON configuration over serial", true},
 #endif
     {"REBOOT", cmd_reboot, "", true},  // Undocumented alias for SYSTEM REBOOT
-    {"BUS", cmd_bus, "Configure I2C/SPI/CAN buses", true},
+    // BUS / SCAN: configModeOnly=false so their read-only JSON forms (BUS CAN
+    // JSON, SCAN STATUS|RESULTS JSON) answer in RUN and never bump
+    // configGeneration -- the app re-reads the whole dump on every bump
+    // (#510). Every mutating form is still gated: BUS by its subcommand
+    // table's runModeAllowed=false, SCAN inline in cmd_scan().
+    {"BUS", cmd_bus, "Configure I2C/SPI/CAN buses", false},
     {"LOG", cmd_log, "Configure log levels and tags", false},
     {"AT", cmd_at, "Send raw AT command to a serial port", false},
 
@@ -127,7 +142,7 @@ const Command COMMANDS[] = {
     {"TEST", cmd_test, "Test mode control", false},
 #endif
 #if INCLUDE_CAN
-    {"SCAN", cmd_scan, "Scan CAN bus for PIDs", true},
+    {"SCAN", cmd_scan, "Scan CAN bus for PIDs", false},
 #endif
     // NOTE: the former top-level SELFTEST command is retired; its dispatch-table
     // validation is now `SYSTEM DIAG INTEGRITY` (see runDiagIntegrity / cmd_system.cpp).
@@ -1450,39 +1465,117 @@ int cmd_log(int argc, const char* const* argv) {
 // ============================================================================
 
 #if INCLUDE_CAN
+#if SUPPORTS_JSON_EXPORT
+// SCAN STATUS JSON / SCAN RESULTS JSON (#510): the scan's machine-readable
+// face, readable in RUN. Framed like LIST ... JSON (blank line before, one
+// line of JSON, newline).
+static FLASHMEM void emitScanJson(bool results) {
+    uint32_t now = millis();
+    JsonDocument doc;
+    if (results) {
+        JsonArray arr = doc.to<JsonArray>();
+        uint8_t count = 0;
+        const CANScanResult* r = getCANScanResults(&count);
+        for (uint8_t i = 0; i < count; i++) {
+            CanScanEntrySnapshot e;
+            e.canId = r[i].can_id;
+            e.pid = r[i].pid;
+            e.dataLength = r[i].data_length;
+            e.frames = r[i].sample_count;
+            e.ageMs = now - r[i].last_seen_ms;
+            e.data = r[i].last_data;
+            canScanEntryToJson(e, arr.add<JsonObject>());
+        }
+    } else {
+        CanScanSnapshot s;
+        uint8_t count = 0;
+        getCANScanResults(&count);
+        CANScanState st = getCANScanState();
+        s.state = st == SCAN_LISTENING ? CAN_SCAN_JSON_LISTENING
+                : st == SCAN_DONE      ? CAN_SCAN_JSON_DONE
+                                       : CAN_SCAN_JSON_IDLE;
+        s.scanId = getCANScanId();
+        s.durationMs = getCANScanDuration();
+        s.remainingMs = getCANScanRemainingMs(now);
+        s.found = count;
+        canScanStatusToJson(s, doc.to<JsonObject>());
+    }
+    msg.control.println();
+    WatchdogKickingPrint out(msg.control);
+    serializeJson(doc, out);
+    msg.control.println();
+}
+#endif
+
 int cmd_scan(int argc, const char* const* argv) {
-    // Usage: SCAN CAN [duration_ms]
-    //        SCAN CANCEL
+    // Usage: SCAN CAN [duration_ms] [JSON]   (CONFIG)
+    //        SCAN CANCEL                     (CONFIG)
+    //        SCAN STATUS JSON | RESULTS JSON (any mode, read-only)
 
     if (argc < 2) {
         msg.control.println(F("SCAN - Scan CAN bus for active PIDs"));
         msg.control.println(F(""));
         msg.control.println(F("Usage:"));
-        msg.control.println(F("  SCAN CAN [duration]  - Scan CAN bus (default 10000ms)"));
+        msg.control.println(F("  SCAN CAN [duration] [JSON] - Scan CAN bus (default 10000ms)"));
         msg.control.println(F("  SCAN CANCEL          - Cancel/clear scan results"));
+        msg.control.println(F("  SCAN STATUS JSON     - Scan state and progress"));
+        msg.control.println(F("  SCAN RESULTS JSON    - What the scan found"));
         msg.control.println(F(""));
         msg.control.println(F("Examples:"));
         msg.control.println(F("  SCAN CAN             - Scan for 10 seconds"));
         msg.control.println(F("  SCAN CAN 15000       - Scan for 15 seconds"));
+        msg.control.println(F("  SCAN CAN 15000 JSON  - Same, without the text table at the end"));
         msg.control.println(F("  SCAN CANCEL          - Clear results"));
         return 0;
     }
 
     const char* subcmd = argv[1];
 
+    // Read-only JSON forms: any mode, no configGeneration bump (#510)
+    if (streq_P(subcmd, PSTR("STATUS")) || streq_P(subcmd, PSTR("RESULTS"))) {
+        if (argc != 3 || !streq_P(argv[2], PSTR("JSON"))) {
+            msg.control.println(F("ERROR: Usage: SCAN STATUS JSON | SCAN RESULTS JSON"));
+            return 1;
+        }
+#if SUPPORTS_JSON_EXPORT
+        emitScanJson(streq_P(subcmd, PSTR("RESULTS")));
+        return 0;
+#else
+        msg.control.println(F("ERROR: JSON export not supported on this platform"));
+        return 1;
+#endif
+    }
+
+    // Starting or clearing a scan is CONFIG-only (SCAN is not configModeOnly
+    // at the top level so the forms above answer in RUN). A scan changes no
+    // configuration, so it does not bump configGeneration.
+    if (isInRunMode()) {
+        dispatchReportConfigRequired("SCAN");
+        return 1;
+    }
+
     if (streq_P(subcmd, PSTR("CAN"))) {
+        // SCAN CAN [duration] [JSON]
+        bool quiet = (argc >= 3 && streq_P(argv[argc - 1], PSTR("JSON")));
+        uint8_t nArgs = quiet ? argc - 1 : argc;
+        if (nArgs > 3) {
+            msg.control.println(F("ERROR: Usage: SCAN CAN [duration] [JSON]"));
+            return 1;
+        }
+
         // Get duration (default 10 seconds)
         uint16_t duration = 10000;
-        if (argc >= 3) {
-            duration = atoi(argv[2]);
-            if (duration < 1000) {
+        if (nArgs >= 3) {
+            long ms = atol(argv[2]);
+            if (ms < 1000) {
                 msg.control.println(F("ERROR: Duration must be at least 1000ms"));
                 return 1;
             }
-            if (duration > 60000) {
+            if (ms > 60000) {
                 msg.control.println(F("ERROR: Duration must be at most 60000ms"));
                 return 1;
             }
+            duration = (uint16_t)ms;
         }
 
         // Check if CAN input is enabled
@@ -1491,9 +1584,17 @@ int cmd_scan(int argc, const char* const* argv) {
             msg.control.println(F("  Use 'BUS CAN INPUT CAN1 ENABLE' or 'BUS CAN INPUT CAN1 LISTEN' first"));
             return 1;
         }
+        // ...and actually running: BUS CAN INPUT takes effect on reboot, so
+        // an input enabled since boot would scan its whole window and find
+        // nothing, with no error (#510 review)
+        if (!canInputIsRunning()) {
+            msg.control.println(F("ERROR: CAN input is not running"));
+            msg.control.println(F("  SAVE and reboot after 'BUS CAN INPUT ...' to start it"));
+            return 1;
+        }
 
         // Start scan
-        startCANScan(duration);
+        startCANScan(duration, quiet);
         return 0;
     }
 
@@ -1506,7 +1607,7 @@ int cmd_scan(int argc, const char* const* argv) {
     msg.control.print(F("ERROR: Unknown SCAN subcommand '"));
     msg.control.print(subcmd);
     msg.control.println(F("'"));
-    msg.control.println(F("  Valid: CAN, CANCEL"));
+    msg.control.println(F("  Valid: CAN, CANCEL, STATUS JSON, RESULTS JSON"));
     return 1;
 }
 #endif // INCLUDE_CAN

@@ -15,6 +15,10 @@
 #include "input_can.h"
 #include "can_frame_parse.h"
 #include "can_poll.h"
+#include "../sensors/drivers/can/can_scan.h"
+#if SUPPORTS_JSON_EXPORT
+#include "can_status_json.h"
+#endif
 #include "input_manager.h"
 #include "../storage/system_config.h"
 #include "../storage/bus_config.h"
@@ -22,6 +26,10 @@
 #include "../core/log_tags.h"
 #include "../sensors/drivers/can/can_frame_cache.h"
 #include "../hal/hal_can.h"
+
+#ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
+#define FLASHMEM
+#endif
 
 // ============================================================================
 // INTERNAL STATE
@@ -38,6 +46,23 @@ static CANRequestHandler requestHandler = nullptr;
 static CanPollState pollState;
 static uint8_t pollCursor = 0;   // inputs[] slot to try next
 
+#if SUPPORTS_JSON_EXPORT
+// Counters behind BUS CAN JSON (#510). JSON is compiled out on AVR, and so
+// are these: they exist only to be reported.
+static uint32_t statFramesRx = 0;
+static uint32_t statLastFrameMs = 0;
+static uint32_t statRequests = 0;
+static uint32_t statAnswers = 0;
+static uint32_t statTxFail = 0;
+static bool     statSharedBus = false;
+// What initCANInput() actually brought up: BUS CAN INPUT edits systemConfig
+// immediately but only take effect on reboot, so BUS CAN JSON reports
+// rebootPending when the two differ (#510 review).
+static uint8_t  statInitBus = 0xFF;
+static uint8_t  statInitMode = CAN_INPUT_OFF;
+static uint32_t statInitBaud = 0;
+#endif
+
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
@@ -52,6 +77,12 @@ static uint8_t pollCursor = 0;   // inputs[] slot to try next
 bool initCANInput() {
     // Check if input is enabled (NORMAL or LISTEN mode)
     uint8_t mode = systemConfig.buses.can_input_mode;
+#if SUPPORTS_JSON_EXPORT
+    // Recorded before any early return: "what boot tried to bring up"
+    statInitMode = mode;
+    statInitBus = systemConfig.buses.input_can_bus;
+    statInitBaud = systemConfig.buses.can_input_baudrate;
+#endif
     if (mode == CAN_INPUT_OFF) {
         canInputInitialized = false;
         return false;
@@ -75,6 +106,10 @@ bool initCANInput() {
     // nothing would, and reading an unstarted FlexCAN stalls the loop into a
     // watchdog reset (#495). Input starts it itself in that case.
     bool outputStartsBus = sharedBus && systemConfig.outputEnabled[OUTPUT_CAN];
+#if SUPPORTS_JSON_EXPORT
+    statSharedBus = sharedBus;
+    statInitBaud = sharedBus ? systemConfig.buses.can_output_baudrate : baudrate;
+#endif
 
     if (outputStartsBus) {
         // Output subsystem will initialize the shared bus
@@ -123,6 +158,10 @@ void shutdownCANInput() {
     canInputInitialized = false;
 }
 
+bool canInputIsRunning() {
+    return canInputInitialized && systemConfig.buses.can_input_mode != CAN_INPUT_OFF;
+}
+
 bool canInputOwnsBus(uint8_t bus) {
     // The live mode, not just init state: BUS CAN INPUT DISABLE writes OFF at
     // runtime and updateCANInput() stops reading, so output must resume.
@@ -133,6 +172,34 @@ bool canInputOwnsBus(uint8_t bus) {
 void setCANRequestHandler(CANRequestHandler handler) {
     requestHandler = handler;
 }
+
+#if SUPPORTS_JSON_EXPORT
+FLASHMEM bool canInputIsPolled(const Input& in) {
+    if (in.pin < PIN_CAN_BASE || in.pin > PIN_CAN_MAX) return false;
+    if (!in.flags.isEnabled || !in.flags.useCustomCalibration) return false;
+    if (in.calibrationType != CAL_CAN_IMPORT) return false;
+    return systemConfig.buses.can_input_mode == CAN_INPUT_NORMAL &&
+           isObdResponseId(in.customCalibration.can.source_can_id);
+}
+
+FLASHMEM void getCANInputStatus(CanBusSnapshot& s, uint32_t now) {
+    s.inRunning = canInputIsRunning();
+    // Configured (systemConfig, what the dump shows) vs brought up at boot
+    s.rebootPending = s.inMode != statInitMode ||
+                      (s.inMode != CAN_INPUT_OFF &&
+                       (s.inBus != statInitBus || s.inBaudrate != statInitBaud));
+    s.inShared = canInputInitialized && statSharedBus;
+    s.framesRx = statFramesRx;
+    s.haveFrame = statFramesRx != 0;
+    s.lastFrameAgeMs = s.haveFrame ? now - statLastFrameMs : 0;
+    s.pollActive = s.inRunning && systemConfig.buses.can_input_mode == CAN_INPUT_NORMAL;
+    s.pollBackoff = s.pollActive && pollState.missStreak >= CAN_POLL_BACKOFF_AFTER;
+    s.missStreak = pollState.missStreak;
+    s.requests = statRequests;
+    s.answers = statAnswers;
+    s.txFail = statTxFail;
+}
+#endif
 
 // ============================================================================
 // FRAME RECEPTION
@@ -182,11 +249,30 @@ static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len,
     uint8_t data_length = len - data_offset;
     updateCANCache(can_id, identifier, &data[data_offset], data_length);
 
+    // The scan sees every parsed 11-bit frame (#510); a 29-bit ID would be
+    // truncated to 16 bits here and could pose as OBD (0x18DA07E8 -> 0x7E8).
+    // An ISO-TP single frame
+    // carries its payload length (length byte - mode - PID); the rest of the
+    // 8 bytes is padding.
+    uint8_t payload = data_length;
+    if (data_offset == 3 && data[0] >= 2 && (uint8_t)(data[0] - 2) < payload) {
+        payload = data[0] - 2;
+    }
+    uint32_t now = millis();
+    if (!extended) {
+        canScanOnFrame((uint16_t)can_id, identifier, &data[data_offset], payload, now);
+    }
+
     // A Mode 01 response (offset 2 or 3; custom frames parse at offset 0)
     // answers our outstanding request and ends any backoff. A 29-bit ID
     // truncated to 16 bits could otherwise pose as 0x7E8.
     if (data_offset != 0 && !extended) {
-        canPollOnResponse(pollState, (uint16_t)can_id, identifier, millis());
+        bool answered = canPollOnResponse(pollState, (uint16_t)can_id, identifier, now);
+#if SUPPORTS_JSON_EXPORT
+        if (answered) statAnswers++;
+#else
+        (void)answered;
+#endif
     }
 }
 
@@ -251,6 +337,10 @@ static void pollCANInputs() {
         buildMode01Request(pid, frame);
         bool ok = hal::can::write(obdRequestIdFor(responseId), frame, 8, false, canInputBus);
         canPollOnSent(pollState, responseId, pid, ok, now);
+#if SUPPORTS_JSON_EXPORT
+        statRequests++;
+        if (!ok) statTxFail++;
+#endif
         return;
     }
     // Nothing to poll: rescan after the normal gap rather than every loop.
@@ -280,6 +370,10 @@ void updateCANInput() {
     bool extended;
 
     while (hal::can::read(id, data, len, extended, canInputBus)) {
+#if SUPPORTS_JSON_EXPORT
+        statFramesRx++;
+        statLastFrameMs = millis();
+#endif
         processCANFrame(id, data, len, extended);
     }
 

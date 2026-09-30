@@ -57,11 +57,30 @@ void shutdownCANInput();
  */
 bool canInputOwnsBus(uint8_t bus);
 
+/** Is CAN input initialized and not switched OFF at runtime? */
+bool canInputIsRunning();
+
 /**
  * OBD-II request frames (11-bit 0x7DF / 0x7E0) that input reads are passed
  * here instead of being cached. nullptr (the default) caches them as before.
  */
 typedef void (*CANRequestHandler)(uint32_t id, const uint8_t* data, uint8_t len);
 void setCANRequestHandler(CANRequestHandler handler);
+
+#if SUPPORTS_JSON_EXPORT
+struct Input;
+struct CanBusSnapshot;
+
+/** Would the poller request this input's PID (NORMAL mode, OBD source, #476)? */
+bool canInputIsPolled(const Input& in);
+
+/**
+ * Fill BUS CAN JSON's live input fields (#510): running/shared, frame and
+ * poll counters, backoff, and rebootPending. The caller fills the configured
+ * bus/mode/baud (s.inBus/inMode/inBaudrate) from systemConfig FIRST —
+ * rebootPending compares them with what was brought up at boot.
+ */
+void getCANInputStatus(CanBusSnapshot& s, uint32_t now);
+#endif
 
 #endif // INPUT_CAN_H

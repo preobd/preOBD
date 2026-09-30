@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `BUS CAN JSON`, `SCAN STATUS JSON` and `SCAN RESULTS JSON` report live CAN state and scan results as JSON, in RUN as well as CONFIG; `SCAN CAN` now counts real frames and payload lengths, and `SCAN CAN … JSON` skips the text table (#510)
 - CAN input in `ENABLE` mode now polls the ECU for each imported OBD-II PID, so `SET CAN <pid>` reads without a scan tool on the bus (`LISTEN` stays passive), and `INFO CAN:<n>` shows when the last frame arrived (#476)
 
 ### Fixed

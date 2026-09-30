@@ -45,8 +45,19 @@ extern MuxTransport hwSerial1;   // main.cpp -- the nRF coprocessor link
 #if INCLUDE_CAN
 #include "../sensors/drivers/can/can_scan.h"
 #include "../sensors/can_sensor_library/standard_pids.h"
+#if INCLUDE_CAN && SUPPORTS_JSON_EXPORT
+#include "../inputs/input_can.h"
+#include "../inputs/can_status_json.h"
+#include "../sensors/drivers/can/can_frame_cache.h"
+#include "../pinctrl/pin_label.h"
+#include "../core/watchdog.h"
+#endif
 #endif
 #include <string.h>
+
+#ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
+#define FLASHMEM
+#endif
 #include <ctype.h>
 
 // BUS I2C subcommand handler
@@ -777,11 +788,11 @@ static const char PSTR_BUS_SPI[]    PROGMEM = "SPI";
 static const char PSTR_BUS_CAN[]    PROGMEM = "CAN";
 static const char PSTR_BUS_SERIAL[] PROGMEM = "SERIAL";
 
-// runModeAllowed=false across the board: BUS itself is configModeOnly=true at
-// the COMMANDS[] level, so these flags are defensive-only — the parent gate
-// rejects in RUN mode before this table is ever consulted. Keeping them
-// uniformly false documents intent and protects against an accidental flip
-// of the parent flag.
+// runModeAllowed=false across the board, and since #510 these flags ARE the
+// gate: BUS is configModeOnly=false at the COMMANDS[] level so that the
+// read-only BUS CAN JSON (caught in cmd_bus() before this table) answers in
+// RUN. dispatchSubcommand() refuses every leaf here in RUN and bumps
+// configGeneration for it in CONFIG, exactly as the parent flag did.
 // Each help block is printed verbatim by printSubcommandTable, so it bakes in
 // the "BUS <leaf>" prefix and lists every supported sub-form. Adding a new
 // sub-form is a one-string edit and HELP BUS / bare BUS stay structurally in
@@ -798,6 +809,7 @@ static const char PSTR_HELP_BUS_SPI[] PROGMEM =
     "  BUS SPI CLOCK <Hz>            Set SPI clock (e.g. 4000000)";
 static const char PSTR_HELP_BUS_CAN[] PROGMEM =
     "  BUS CAN                       Show CAN bus status\n"
+    "  BUS CAN JSON                  Live CAN status as JSON (any mode)\n"
     "  BUS CAN NONE                  Disable CAN bus (frees pins on next reboot)\n"
     "  BUS CAN BAUDRATE <bps>        Set CAN baudrate (both buses)\n"
     "  BUS CAN INPUT <bus> <ENABLE|LISTEN|DISABLE> [bps]\n"
@@ -832,7 +844,69 @@ void printHelpBus() {
     msg.control.println();
 }
 
+#if INCLUDE_CAN && SUPPORTS_JSON_EXPORT
+// BUS CAN JSON (#510): configured + live CAN state for the webapp/app.
+static FLASHMEM void emitBusCanJson() {
+    const uint32_t now = millis();
+    CanBusSnapshot s;
+    memset(&s, 0, sizeof(s));
+    s.buses = NUM_CAN_BUSES;
+    s.maxScanResults = MAX_SCAN_RESULTS;
+    s.inBus = systemConfig.buses.input_can_bus;
+    s.inMode = systemConfig.buses.can_input_mode;
+    s.inBaudrate = systemConfig.buses.can_input_baudrate;
+    getCANInputStatus(s, now);
+    // poll.active only when something is actually being requested
+    bool anyPolled = false;
+    for (uint8_t i = 0; i < MAX_INPUTS && !anyPolled; i++) {
+        if (inputs[i].pin != 0xFF && canInputIsPolled(inputs[i])) anyPolled = true;
+    }
+    s.pollActive = s.pollActive && anyPolled;
+    s.pollBackoff = s.pollBackoff && anyPolled;
+    s.outBus = systemConfig.buses.output_can_bus;
+    s.outEnabled = systemConfig.buses.can_output_enabled && s.outBus != 0xFF;
+    s.outModule = systemConfig.outputEnabled[OUTPUT_CAN];
+    s.outBaudrate = systemConfig.buses.can_output_baudrate;
+
+    JsonDocument doc;
+    JsonArray imports = canBusStatusToJson(s, doc.to<JsonObject>());
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        const Input& in = inputs[i];
+        if (in.pin < PIN_CAN_BASE || in.pin > PIN_CAN_MAX) continue;
+        if (in.calibrationType != CAL_CAN_IMPORT || !in.flags.useCustomCalibration) continue;
+        char label[8];
+        formatPinLabel(in.pin, label, sizeof(label));
+        CanImportSnapshot imp;
+        imp.pin = in.pin;
+        imp.pinLabel = label;
+        imp.sourceCanId = in.customCalibration.can.source_can_id;
+        imp.sourcePid = in.customCalibration.can.source_pid;
+        imp.polled = canInputIsPolled(in);
+        CANFrameEntry* e = getCANCacheEntry(imp.sourceCanId, imp.sourcePid);
+        imp.haveFrame = e != nullptr && e->valid;
+        imp.ageMs = imp.haveFrame ? now - e->timestamp_ms : 0;
+        canImportToJson(imp, imports.add<JsonObject>());
+    }
+    msg.control.println();
+    WatchdogKickingPrint out(msg.control);
+    serializeJson(doc, out);
+    msg.control.println();
+}
+#endif
+
 int cmd_bus(int argc, const char* const* argv) {
+    // BUS CAN JSON: read-only, answers in RUN and never bumps configGeneration
+    // (every other BUS form is gated by BUS_SUBCOMMANDS below)
+    if (argc == 3 && streq_P(argv[1], PSTR("CAN")) && streq_P(argv[2], PSTR("JSON"))) {
+#if INCLUDE_CAN && SUPPORTS_JSON_EXPORT
+        emitBusCanJson();
+        return 0;
+#else
+        msg.control.println(F("ERROR: JSON export not supported on this platform"));
+        return 1;
+#endif
+    }
+
     if (argc < 2) {
         // Bare "BUS" — delegate to the same printer HELP BUS uses, so the
         // two stay structurally in sync (issue #189: BUS help drift).

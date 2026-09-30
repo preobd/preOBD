@@ -1,12 +1,14 @@
 /*
  * can_scan.cpp - CAN Bus Scanning State Machine
  *
- * Scans the CAN bus for active PIDs and displays results.
- * Integrates with CAN frame cache to collect traffic.
+ * Scans the CAN bus for active PIDs and displays results. CAN input's frame
+ * handler reports every parsed frame through canScanOnFrame() (#510); the
+ * scan used to sample the frame cache each loop instead, which counted loop
+ * passes rather than frames, lost the payload length (always 8), and missed
+ * IDs once more were active than the cache holds.
  */
 
 #include "can_scan.h"
-#include "can_frame_cache.h"
 #include "../../can_sensor_library/standard_pids.h"
 #include "../../../core/message_api.h"
 #include "../../../core/log_tags.h"
@@ -21,6 +23,10 @@ static CANScanResult scanResults[MAX_SCAN_RESULTS];
 static uint8_t scanResultCount = 0;
 static uint32_t scanStartTime = 0;
 static uint16_t scanDuration = 0;
+#if SUPPORTS_JSON_EXPORT || defined(NATIVE_TEST)
+static uint8_t scanId = 0;        // SCAN STATUS JSON: tells a restarted scan apart
+static bool scanQuiet = false;    // SCAN CAN ... JSON: no text table at the end
+#endif
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -41,7 +47,7 @@ static void displayScanResults() {
     msg.control.print(F("Found "));
     msg.control.print(scanResultCount);
     msg.control.println(F(" PIDs:\n"));
-    msg.control.println(F("  PID   Name                    CAN ID  Len  Samples"));
+    msg.control.println(F("  PID   Name                    CAN ID  Len  Frames"));
     msg.control.println(F("  ----- ----------------------- ------- ---- --------"));
 
     for (uint8_t i = 0; i < scanResultCount; i++) {
@@ -91,13 +97,20 @@ static void displayScanResults() {
 // PUBLIC FUNCTIONS
 // ============================================================================
 
-void startCANScan(uint16_t duration_ms) {
+void startCANScan(uint16_t duration_ms, bool quiet) {
     // Reset state
     scanState = SCAN_LISTENING;
     scanResultCount = 0;
     scanStartTime = millis();
     scanDuration = duration_ms;
     memset(scanResults, 0, sizeof(scanResults));
+#if SUPPORTS_JSON_EXPORT || defined(NATIVE_TEST)
+    scanId++;
+    if (scanId == 0) scanId = 1;   // 0 means "never scanned"
+    scanQuiet = quiet;
+#else
+    (void)quiet;
+#endif
 
     msg.control.print(F("Scanning CAN bus for "));
     msg.control.print(duration_ms);
@@ -109,50 +122,44 @@ void updateCANScan() {
     if (scanState != SCAN_LISTENING) {
         return;
     }
-
-    // Check if scan period has elapsed
     if (millis() - scanStartTime > scanDuration) {
-        scanState = SCAN_DISPLAYING;
+        scanState = SCAN_DONE;
+#if SUPPORTS_JSON_EXPORT || defined(NATIVE_TEST)
+        if (scanQuiet) return;
+#endif
         displayScanResults();
-        return;
     }
+}
 
-    // Collect PIDs from cache
-    // Iterate through cache and add new PIDs to results
-    for (uint8_t i = 0; i < CAN_CACHE_SIZE; i++) {
-        // Access cache entry
-        CANFrameEntry entry;
+void canScanOnFrame(uint16_t can_id, uint8_t pid, const uint8_t* data, uint8_t len,
+                    uint32_t now) {
+    if (scanState != SCAN_LISTENING) return;
+    if (len > 8) len = 8;
 
-        // Get pointer to cache entry (external linkage)
-        extern CANFrameEntry canFrameCache[CAN_CACHE_SIZE];
-        memcpy(&entry, &canFrameCache[i], sizeof(CANFrameEntry));
-
-        if (!entry.valid) continue;
-
-        // Check if PID already in results
-        bool found = false;
-        for (uint8_t j = 0; j < scanResultCount; j++) {
-            if (scanResults[j].can_id == entry.can_id &&
-                scanResults[j].pid == entry.pid) {
-                // Update sample count and last data
-                scanResults[j].sample_count++;
-                memcpy(scanResults[j].last_data, entry.data, 8);
-                found = true;
-                break;
-            }
+    for (uint8_t j = 0; j < scanResultCount; j++) {
+        if (scanResults[j].can_id == can_id && scanResults[j].pid == pid) {
+            scanResults[j].sample_count++;
+            scanResults[j].data_length = len;
+            memcpy(scanResults[j].last_data, data, len);
+#if SUPPORTS_JSON_EXPORT || defined(NATIVE_TEST)
+            scanResults[j].last_seen_ms = now;
+#endif
+            return;
         }
-
-        // Add new PID if space available
-        if (!found && scanResultCount < MAX_SCAN_RESULTS) {
-            scanResults[scanResultCount].can_id = entry.can_id;
-            scanResults[scanResultCount].pid = entry.pid;
-            // NOTE: Cache doesn't store data_length, so we default to 8
-            // Standard PIDs define actual data_length in standard_pids.h
-            scanResults[scanResultCount].data_length = 8;
-            scanResults[scanResultCount].sample_count = 1;
-            memcpy(scanResults[scanResultCount].last_data, entry.data, 8);
-            scanResultCount++;
-        }
+    }
+    if (scanResultCount < MAX_SCAN_RESULTS) {
+        CANScanResult& r = scanResults[scanResultCount++];
+        r.can_id = can_id;
+        r.pid = pid;
+        r.data_length = len;
+        r.sample_count = 1;
+        memset(r.last_data, 0, sizeof(r.last_data));
+        memcpy(r.last_data, data, len);
+#if SUPPORTS_JSON_EXPORT || defined(NATIVE_TEST)
+        r.last_seen_ms = now;
+#else
+        (void)now;
+#endif
     }
 }
 
@@ -165,6 +172,24 @@ const CANScanResult* getCANScanResults(uint8_t* count) {
         *count = scanResultCount;
     }
     return scanResults;
+}
+
+uint8_t getCANScanId() {
+#if SUPPORTS_JSON_EXPORT || defined(NATIVE_TEST)
+    return scanId;
+#else
+    return 0;
+#endif
+}
+
+uint16_t getCANScanDuration() {
+    return scanDuration;
+}
+
+uint32_t getCANScanRemainingMs(uint32_t now) {
+    if (scanState != SCAN_LISTENING) return 0;
+    uint32_t elapsed = now - scanStartTime;
+    return elapsed >= scanDuration ? 0 : scanDuration - elapsed;
 }
 
 void cancelCANScan() {
