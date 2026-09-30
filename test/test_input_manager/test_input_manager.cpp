@@ -25,6 +25,12 @@
 #include <Arduino.h>
 #include <string.h>
 
+// The CAN_IMPORT sensor is only in the registry with INCLUDE_CAN (#496 tests
+// build CAN inputs). Its read function is never called here.
+#define INCLUDE_CAN 1
+struct Input;
+void readCANSensor(Input*) {}
+
 // SENSOR_LIBRARY / UNITS_REGISTRY / APPLICATION_PRESETS are now defined in
 // their own .cpp (#400), not inline in the header — pull the data in.
 // SENSOR_CATEGORIES too (missed by #400, fixed separately) — pull it in.
@@ -596,6 +602,57 @@ static void test_bias_on_generic_ntc_seeds_defaults(void) {
     TEST_ASSERT_EQUAL_FLOAT(3435.0f, b->customCalibration.beta.beta);
 }
 
+
+// ===== #496: an imported OBD-II PID measures what the PID table says =====
+
+// A CAN input as `SET CAN 0x0C` builds it: CAN_IMPORT sensor + custom cal.
+static Input* makeCanImport(uint8_t pin, uint8_t pid, float scale) {
+    if (!allocateInputSlot(pin)) return nullptr;
+    if (!setInputSensor(pin, getSensorIndexByName("CAN_IMPORT"))) return nullptr;
+    Input* in = getInputByPin(pin);
+    if (applyCalCanImport(in, 0x7E8, pid, 0, 2, true, scale, 0.0f, 2000) != CAL_APPLY_OK) return nullptr;
+    return in;
+}
+
+static void test_can_import_measurement_type(void) {
+    TEST_ASSERT_EQUAL_INT(MEASURE_RPM, canImportMeasurementType(0x7E8, 0x0C, MEASURE_TEMPERATURE));
+    TEST_ASSERT_EQUAL_INT(MEASURE_SPEED, canImportMeasurementType(0x7E9, 0x0D, MEASURE_TEMPERATURE));
+    TEST_ASSERT_EQUAL_INT(MEASURE_PRESSURE, canImportMeasurementType(0x7E8, 0x0B, MEASURE_TEMPERATURE));
+    // Not an ECU response ID (custom broadcast), or a PID the table lacks
+    TEST_ASSERT_EQUAL_INT(MEASURE_TEMPERATURE, canImportMeasurementType(0x400, 0x0C, MEASURE_TEMPERATURE));
+    TEST_ASSERT_EQUAL_INT(MEASURE_TEMPERATURE, canImportMeasurementType(0x7E8, 0xEE, MEASURE_TEMPERATURE));
+
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("BAR"), defaultUnitsForMeasurement(MEASURE_PRESSURE));
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("KPH"), defaultUnitsForMeasurement(MEASURE_SPEED));
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("RPM"), defaultUnitsForMeasurement(MEASURE_RPM));
+}
+
+// SET UNITS judges an imported RPM input as RPM, and the EEPROM round trip
+// keeps both the unit and the measurement type (the OBD output reads it).
+static void test_can_import_units_survive_eeprom(void) {
+    Input* in = makeCanImport(0xC0, 0x0C, 0.25f);
+    TEST_ASSERT_NOT_NULL(in);
+    TEST_ASSERT_EQUAL_INT(MEASURE_RPM, inputMeasurementTypeOf(*in));
+    TEST_ASSERT_TRUE(setInputUnits(0xC0, findUnitsIndexByName("RPM")));
+    TEST_ASSERT_FALSE(setInputUnits(0xC0, findUnitsIndexByName("CELSIUS")));
+
+    InputEEPROM rec;
+    buildInputRecord(*in, rec);
+    Input loaded;
+    memset(&loaded, 0, sizeof(loaded));
+    applyInputRecord(rec, loaded);
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("RPM"), loaded.unitsIndex);
+    TEST_ASSERT_EQUAL_INT(MEASURE_RPM, loaded.measurementType);
+
+    // Saved before #496 with the preset's CELSIUS: repaired to the PID's unit type
+    in->unitsIndex = findUnitsIndexByName("CELSIUS");
+    buildInputRecord(*in, rec);
+    memset(&loaded, 0, sizeof(loaded));
+    applyInputRecord(rec, loaded);
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("RPM"), loaded.unitsIndex);
+}
+
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_registry_available);
@@ -629,5 +686,7 @@ int main(int, char**) {
     RUN_TEST(test_json_import_degrades_bad_units_to_app_default);
     RUN_TEST(test_json_import_missing_units_uses_app_default);
     RUN_TEST(test_eeprom_load_repairs_wrong_type_units);
+    RUN_TEST(test_can_import_measurement_type);
+    RUN_TEST(test_can_import_units_survive_eeprom);
     return UNITY_END();
 }

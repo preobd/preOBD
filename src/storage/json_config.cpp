@@ -904,22 +904,6 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     SensorInfo sensorInfo;
     loadSensorInfo(flashSensor, &sensorInfo);
 
-    // Units (#458): an unknown name or a unit of another quantity used to be
-    // stored as-is (a typo became CELSIUS; °F on a pressure input ran the °F
-    // conversion over bar). Degrade to the application's default units with a
-    // NOTE instead of failing the record — a display preference isn't worth
-    // losing the input's trip point and relay links over (import policy, #425).
-    if (!unitsMatchMeasurement(unitsIdx, inputMeasurementType(sensorIdx, appIdx))) {
-        const ApplicationPreset* appPreset = getApplicationByIndex(appIdx);
-        unitsIdx = appPreset ? READ_APP_DEFAULT_UNITS(appPreset) : 0;
-        msg.control.print(F("  NOTE: input "));
-        msg.control.print(index);
-        msg.control.print(F(" (pin "));
-        msg.control.print(pin);
-        msg.control.print(F(") units '"));
-        msg.control.print(unitsName ? unitsName : "");
-        msg.control.println(F("' unknown or wrong type; using the application default"));
-    }
 
     // Divider ratio (#445): same range check as SET <pin> DIVIDER, judged here
     // so a bad value fails the record before anything is written. Absent → 1.0
@@ -983,6 +967,33 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         stagedOverride = staged.customCalibration;
     }
 
+    // Units (#458): an unknown name or a unit of another quantity used to be
+    // stored as-is (a typo became CELSIUS; °F on a pressure input ran the °F
+    // conversion over bar). Degrade to the application's default units with a
+    // NOTE instead of failing the record — a display preference isn't worth
+    // losing the input's trip point and relay links over (import policy, #425).
+    //
+    // Judged after the calibration is staged: an imported OBD-II PID measures
+    // what the PID table says, not the CAN_IMPORT preset's TEMPERATURE (#496).
+    MeasurementType measured = inputMeasurementType(sensorIdx, appIdx);
+    if (stagedCustom && stagedType == CAL_CAN_IMPORT) {
+        measured = canImportMeasurementType(stagedOverride.can.source_can_id,
+                                            stagedOverride.can.source_pid, measured);
+    }
+    if (!unitsMatchMeasurement(unitsIdx, measured)) {
+        const ApplicationPreset* appPreset = getApplicationByIndex(appIdx);
+        uint8_t appUnits = appPreset ? READ_APP_DEFAULT_UNITS(appPreset) : 0;
+        unitsIdx = unitsMatchMeasurement(appUnits, measured)
+                   ? appUnits : defaultUnitsForMeasurement(measured);
+        msg.control.print(F("  NOTE: input "));
+        msg.control.print(index);
+        msg.control.print(F(" (pin "));
+        msg.control.print(pin);
+        msg.control.print(F(") units '"));
+        msg.control.print(unitsName ? unitsName : "");
+        msg.control.println(F("' unknown or wrong type; using the application default"));
+    }
+
     // ===== COMMIT - from here on nothing may fail =====
     // Use input manager functions to properly configure the input
     // This ensures all function pointers and calibration are wired correctly
@@ -1037,7 +1048,7 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     // only on a missing slot, which setInputApplication() just created. The
     // guard stays as a tripwire -- if a future failure mode is added, a new
     // record must still leave nothing behind rather than a half-built input.
-    if (!setInputSensor(pin, sensorIdx) || !setInputUnits(pin, unitsIdx)) {
+    if (!setInputSensor(pin, sensorIdx)) {
         if (isNewInput) freeInputSlot(pin);
         msg.control.print(F("ERROR: Failed to import input "));
         msg.control.print(index);
@@ -1092,6 +1103,12 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
             input->calibrationType = stagedType;
         }
     }
+
+    // Units last: their check reads the calibration just installed (#496).
+    // unitsIdx was judged against the same measurement type above, so this
+    // cannot refuse.
+    input->measurementType = inputMeasurementTypeOf(*input);
+    setInputUnits(pin, unitsIdx);
 
     return true;
 }

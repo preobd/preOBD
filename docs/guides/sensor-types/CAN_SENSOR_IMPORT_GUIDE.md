@@ -295,6 +295,7 @@ How a frame is matched:
 - **OBD-II Mode 01 responses** (mode byte `0x41`): matched on the CAN ID and the PID; data starts after the PID.
 - **Any other frame**: matched on the CAN ID and **the first data byte**, which is treated as an identifier; data starts after it.
 - The value is `raw × scaleFactor + offset`, reading `dataLength` bytes (1-4) starting `dataOffset` bytes into the data.
+- The result must be in preOBD's base unit for its quantity: °C, **bar** (not kPa: a kPa value needs a scale 100× smaller), km/h, V, RPM, %. The display converts from there to the input's units.
 
 **Limitations:** CAN IDs are stored as 16 bits, and a non-OBD frame must carry a
 fixed identifier in its first byte. That fits many simple 11-bit broadcast

@@ -50,8 +50,10 @@ static void displayScanResults() {
 
         char name[32];
         if (info) {
-            // Copy name from PROGMEM
-            strncpy_P(name, info->name, 31);
+            // Copy name from PROGMEM: the name pointer itself lives in the
+            // PROGMEM row, so read it with pgm_read_ptr (#496 — reading
+            // info->name directly gave a garbage name on AVR)
+            strncpy_P(name, (const char*)pgm_read_ptr(&info->name), 31);
             name[31] = '\0';
         } else {
             sprintf(name, "Unknown PID");

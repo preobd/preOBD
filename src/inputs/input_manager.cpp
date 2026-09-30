@@ -468,7 +468,7 @@ bool setInputUnits(uint8_t pin, uint8_t unitsIndex) {
     if (input == nullptr) return false;
     // A unit of another quantity would run e.g. the °F factor+offset over a
     // value in bar on every display/log path (#458). Callers print the reason.
-    if (!unitsMatchMeasurement(unitsIndex, inputMeasurementType(input->sensorIndex, input->applicationIndex))) {
+    if (!unitsMatchMeasurement(unitsIndex, inputMeasurementTypeOf(*input))) {
         return false;
     }
 

@@ -53,4 +53,23 @@ MeasurementType inputMeasurementType(uint8_t sensorIndex, uint8_t applicationInd
 // An index outside the table (UNITS_NOT_FOUND included) is false.
 bool unitsMatchMeasurement(uint8_t unitsIndex, MeasurementType type);
 
+struct Input;
+
+// What an OBD-II CAN import measures (#496): the standard Mode 01 PID table's
+// type when `sourceCanId` is an ECU response ID (0x7E8-0x7EF) and the PID is
+// in the table, otherwise `fallback`. The CAN_IMPORT sensor preset says
+// TEMPERATURE for every PID, so judging a CAN input by its sensor turned RPM
+// and speed into "C" and refused their real units.
+MeasurementType canImportMeasurementType(uint16_t sourceCanId, uint8_t pid,
+                                         MeasurementType fallback);
+
+// inputMeasurementType() for a configured input: an imported OBD-II PID
+// measures what the PID table says, anything else what its sensor/app says.
+// The one answer the units checks and Input::measurementType should agree on.
+MeasurementType inputMeasurementTypeOf(const Input& in);
+
+// The first registry unit of `type` (e.g. BAR for PRESSURE, KPH for SPEED;
+// the PERCENT family shares PERCENT), or 0 if the registry has none.
+uint8_t defaultUnitsForMeasurement(MeasurementType type);
+
 #endif // MEASUREMENT_COMPAT_H

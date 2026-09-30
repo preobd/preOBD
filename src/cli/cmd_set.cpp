@@ -341,7 +341,7 @@ static int set_units(uint8_t pin, int argc, const char* const* argv) {
         msg.control.println(F("  Hint: LIST UNITS JSON shows every unit and what it measures"));
         return 1;
     }
-    MeasurementType want = inputMeasurementType(input->sensorIndex, input->applicationIndex);
+    MeasurementType want = inputMeasurementTypeOf(*input);
     if (!setInputUnits(pin, unitsIndex)) {
         MeasurementType got = (MeasurementType)pgm_read_byte(&UNITS_REGISTRY[unitsIndex].measurementType);
         msg.control.print(F("ERROR: "));
@@ -1582,8 +1582,13 @@ int cmd_set(int argc, const char* const* argv) {
         // pin was already allocated by parsePin("CAN") at the top of cmd_set
         uint8_t virtualPin = pin;
 
-        // Lookup standard PID info
-        const StandardPIDInfo* pidInfo = lookupStandardPID(pid);
+        // Lookup standard PID info. The table is PROGMEM: copy the row to RAM
+        // (reading its fields through the flash pointer returned garbage on
+        // AVR, #496). Its name/abbr/units pointers stay PROGMEM addresses.
+        const StandardPIDInfo* pidRow = lookupStandardPID(pid);
+        StandardPIDInfo pidBuf;
+        if (pidRow) memcpy_P(&pidBuf, pidRow, sizeof(pidBuf));
+        const StandardPIDInfo* pidInfo = pidRow ? &pidBuf : nullptr;
 
         // Configure as CAN_IMPORT sensor
         uint8_t canSensorIndex = getSensorIndexByName("CAN_IMPORT");
@@ -1619,11 +1624,26 @@ int cmd_set(int argc, const char* const* argv) {
             input->customCalibration.can.is_big_endian = true;
             input->customCalibration.can.scale_factor = pidInfo->scale_factor;
             input->customCalibration.can.offset = pidInfo->offset;
+            // The table's pressure PIDs are in kPa; preOBD's pressure base unit
+            // is bar (display/OBD output convert from bar), so store bar.
+            if (pidInfo->measurementType == MEASURE_PRESSURE) {
+                input->customCalibration.can.scale_factor *= 0.01f;
+                input->customCalibration.can.offset *= 0.01f;
+            }
             input->customCalibration.can.timeout_ms = CAN_DEFAULT_TIMEOUT_MS;
             input->flags.useCustomCalibration = true;
 
-            // Set measurement type from standard PID table
+            // Measurement type and units from the standard PID table (#496):
+            // the CAN_IMPORT preset left every PID labelled CELSIUS.
             input->measurementType = pidInfo->measurementType;
+            {
+                char unitName[12];
+                strncpy_P(unitName, pidInfo->units, sizeof(unitName) - 1);
+                unitName[sizeof(unitName) - 1] = '\0';
+                uint8_t u = findUnitsIndexByName(unitName);
+                input->unitsIndex = unitsMatchMeasurement(u, pidInfo->measurementType)
+                                    ? u : defaultUnitsForMeasurement(pidInfo->measurementType);
+            }
 
             // Set display name from standard table
             strncpy_P(input->displayName, pidInfo->name, sizeof(input->displayName) - 1);

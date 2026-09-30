@@ -251,9 +251,15 @@ static FLASHMEM void applyInputRecord(const InputEEPROM& rec, Input& in) {
         // Units stored before #458 could be of another quantity (°F on a
         // pressure input) and would keep converting wrongly: repair to the
         // application default.
-        if (!unitsMatchMeasurement(in.unitsIndex, inputMeasurementType(in.sensorIndex, in.applicationIndex))) {
+        // An imported OBD-II PID measures what the PID table says, not the
+        // CAN_IMPORT preset's TEMPERATURE (#496); the OBD output conversion
+        // reads measurementType, so it must survive a reboot too.
+        in.measurementType = inputMeasurementTypeOf(in);
+        if (!unitsMatchMeasurement(in.unitsIndex, in.measurementType)) {
             const ApplicationPreset* app = getApplicationByIndex(in.applicationIndex);
-            if (app != nullptr) in.unitsIndex = READ_APP_DEFAULT_UNITS(app);
+            uint8_t appUnits = app != nullptr ? READ_APP_DEFAULT_UNITS(app) : 0;
+            in.unitsIndex = unitsMatchMeasurement(appUnits, in.measurementType)
+                            ? appUnits : defaultUnitsForMeasurement(in.measurementType);
         }
         if (!in.flags.useCustomCalibration) in.presetCalibration = info.defaultCalibration;
         if (info.initFunction) info.initFunction(&in);

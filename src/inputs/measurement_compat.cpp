@@ -6,6 +6,9 @@
 #include "../sensors/sensor_library.h"
 #include "../sensors/application_presets.h"
 #include "../sensors/units_registry.h"
+#include "../sensors/can_sensor_library/standard_pids.h"
+#include "input.h"
+#include "can_poll.h"   // isObdResponseId
 
 bool sensorMatchesApplication(uint8_t sensorIndex, uint8_t applicationIndex) {
     // "Nothing is paired yet" — SENSOR_NONE / APP_NONE. There is genuinely no
@@ -43,4 +46,28 @@ bool unitsMatchMeasurement(uint8_t unitsIndex, MeasurementType type) {
     if (unitsIndex >= NUM_UNITS) return false;
     const MeasurementType unitType = (MeasurementType)pgm_read_byte(&UNITS_REGISTRY[unitsIndex].measurementType);
     return unitType == type || (isPercentFamily(unitType) && isPercentFamily(type));
+}
+
+MeasurementType canImportMeasurementType(uint16_t sourceCanId, uint8_t pid,
+                                         MeasurementType fallback) {
+    if (!isObdResponseId(sourceCanId)) return fallback;
+    const StandardPIDInfo* info = lookupStandardPID(pid);
+    if (info == nullptr) return fallback;
+    StandardPIDInfo row;
+    memcpy_P(&row, info, sizeof(row));   // PROGMEM on AVR
+    return row.measurementType;
+}
+
+MeasurementType inputMeasurementTypeOf(const Input& in) {
+    MeasurementType base = inputMeasurementType(in.sensorIndex, in.applicationIndex);
+    if (in.calibrationType != CAL_CAN_IMPORT || !in.flags.useCustomCalibration) return base;
+    return canImportMeasurementType(in.customCalibration.can.source_can_id,
+                                    in.customCalibration.can.source_pid, base);
+}
+
+uint8_t defaultUnitsForMeasurement(MeasurementType type) {
+    for (uint8_t i = 0; i < NUM_UNITS; i++) {
+        if (unitsMatchMeasurement(i, type)) return i;
+    }
+    return 0;
 }

@@ -13,6 +13,7 @@
  *   0x05 Coolant   80-95 C        (A-40)
  *   0x0D Speed     0-100 km/h     (A)
  *   0x0F Intake    30 C           (A-40)   <- default "unsupported" PID
+ *   0x0B MAP       101 kPa        (A)      <- fixed, checks kPa -> bar -> psi
  * Anything else is ignored, like a real ECU.
  *
  * Serial commands (115200, end with Enter):
@@ -199,6 +200,10 @@ static bool buildAnswer(uint8_t pid, can_frame& f, uint32_t now) {
         case 0x0D:              // Speed 0..100 km/h
             f.data[0] = 0x03;
             f.data[3] = (uint8_t)(tri / 10);
+            return true;
+        case 0x0B:              // MAP 101 kPa (14.65 psi)
+            f.data[0] = 0x03;
+            f.data[3] = 101;
             return true;
         case 0x0F:              // Intake 30 C
             f.data[0] = 0x03;
