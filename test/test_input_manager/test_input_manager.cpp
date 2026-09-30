@@ -750,6 +750,27 @@ static void test_can_import_input_gets_new_input_defaults(void) {
     TEST_ASSERT_EQUAL_UINT8(0, in->obd2pid);
 }
 
+// #502: a sensor/application mismatch imported over an EXISTING input used to
+// commit the new application (setInputApplication) and then fail in
+// setInputSensor, leaving the input half-rewritten. It must be refused before
+// the first write and leave the input byte-identical.
+static void test_json_import_mismatch_leaves_existing_input_intact(void) {
+    TEST_ASSERT_TRUE(setInputApplication(4, appOIL_P()));
+    const Input before = *getInputByPin(4);
+
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    o["idx"] = 0;
+    o["pin"] = 4;
+    o["app"] = "CHT";          // MEASURE_TEMPERATURE
+    o["sensor"] = "MPX4250AP"; // MEASURE_PRESSURE
+    o["units"] = "CELSIUS";
+    o["enabled"] = true;
+
+    TEST_ASSERT_FALSE(importInputFromJSON(o, 0));
+    TEST_ASSERT_EQUAL_INT(0, memcmp(&before, getInputByPin(4), sizeof(Input)));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_registry_available);
@@ -764,6 +785,7 @@ int main(int, char**) {
     RUN_TEST(test_two_step_accepts_matching_measurement_type);
     RUN_TEST(test_json_import_accepts_a_valid_record);
     RUN_TEST(test_json_import_refuses_measurement_type_mismatch);
+    RUN_TEST(test_json_import_mismatch_leaves_existing_input_intact);
     RUN_TEST(test_json_import_refuses_a_bus_reserved_pin);
     RUN_TEST(test_json_import_refusal_leaves_earlier_records_intact);
     RUN_TEST(test_out_of_range_indices_fail_closed);

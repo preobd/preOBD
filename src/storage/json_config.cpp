@@ -894,6 +894,20 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         return false;  // Invalid registry entry (0 = NONE for app/sensor)
     }
 
+    // Measurement-type compatibility (#383), judged here rather than left to
+    // setInputSensor(): on an EXISTING input the commit phase runs
+    // setInputApplication() first, so a refusal there would leave the input
+    // half-rewritten with the new application (#502). App NONE (a CAN import)
+    // matches any sensor.
+    if (!sensorMatchesApplication(sensorIdx, appIdx)) {
+        msg.control.print(F("ERROR: Failed to import input "));
+        msg.control.print(index);
+        msg.control.print(F(" (pin "));
+        msg.control.print(pin);
+        msg.control.println(F(") - sensor measures a different quantity than the application"));
+        return false;
+    }
+
     // Resolve the sensor here rather than inside setInputSensor(): an unknown
     // sensor index is that function's ONLY failure mode, so pre-checking it is
     // what makes the commit phase below infallible. The resolved SensorInfo also
@@ -1061,11 +1075,12 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
 
     // Apply configuration using input manager functions.
     //
-    // Neither call can fail here: setInputSensor()'s only failure mode is an
-    // unresolvable sensor index (pre-checked during admission) and both bail
-    // only on a missing slot, which setInputApplication() just created. The
-    // guard stays as a tripwire -- if a future failure mode is added, a new
-    // record must still leave nothing behind rather than a half-built input.
+    // Neither call can fail here: setInputSensor()'s failure modes -- an
+    // unresolvable sensor index and a sensor/application type mismatch (#383)
+    // -- are both pre-checked during admission, and both bail only on a
+    // missing slot, which the slot step above just created. The guard stays as
+    // a tripwire -- if a future failure mode is added, a new record must still
+    // leave nothing behind rather than a half-built input.
     if (!setInputSensor(pin, sensorIdx)) {
         if (isNewInput) freeInputSlot(pin);
         msg.control.print(F("ERROR: Failed to import input "));
