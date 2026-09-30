@@ -21,6 +21,7 @@
 #if INCLUDE_CAN
 
 #include "../hal/hal_can.h"
+#include "../inputs/input_can.h"
 
 // Which bus we're outputting on (set during init)
 static uint8_t canOutputBus = 0;
@@ -151,6 +152,16 @@ static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
     sendOBD2Response(input);
 }
 
+/**
+ * OBD-II request drained by CAN input on a shared bus (#495). Output's own
+ * read loop is skipped there, so this is the only way requests reach the
+ * responder. The module can be disabled at runtime without a re-init.
+ */
+static void onSharedBusRequest(uint32_t id, const uint8_t* data, uint8_t len) {
+    if (!systemConfig.outputEnabled[OUTPUT_CAN] || !systemConfig.buses.can_output_enabled) return;
+    processOBD2Request(id, data, len);
+}
+
 void initCAN() {
     // Check if output is enabled
     if (!systemConfig.buses.can_output_enabled) {
@@ -172,6 +183,9 @@ void initCAN() {
 
     // Configure RX filters for OBD-II requests
     hal::can::setFilters(0x7DF, 0x7E0, canOutputBus);  // Functional and physical addressing
+
+    // Shared with CAN input: input drains the bus and hands requests over
+    setCANRequestHandler(canInputOwnsBus(canOutputBus) ? onSharedBusRequest : nullptr);
 
     msg.debug.info(TAG_CAN, "CAN output initialized on bus %d (%lu bps)", canOutputBus, baudrate);
     msg.debug.info(TAG_CAN, "OBD-II request/response enabled");
@@ -208,6 +222,9 @@ void updateCAN() {
     uint8_t data[8];
     uint8_t len;
     bool extended;
+
+    // Shared with CAN input: input is the only reader (see onSharedBusRequest)
+    if (canInputOwnsBus(canOutputBus)) return;
 
     while (hal::can::read(id, data, len, extended, canOutputBus)) {
         // Check if this is an OBD-II request

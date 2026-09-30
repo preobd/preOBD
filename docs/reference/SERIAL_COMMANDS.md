@@ -753,7 +753,7 @@ BUS SERIAL <1-8> ELM327 DISABLE  # Remove ELM327 emulator from serial port
 CAN input supports three operating modes:
 - **DISABLE** - Input disabled, bus not initialized
 - **ENABLE** (Normal) - Active input with ACK. Also polls the ECU: each imported OBD-II PID (source ID `0x7E8`-`0x7EF`) is requested in turn with a Mode 01 request, so a PID reads without a scan tool on the bus
-- **LISTEN** (Passive) - Listen-only monitoring. No ACK bits, no error frames, no TX of any kind (no OBD-II polling) — except on a bus shared with CAN output, where output opens the controller in normal mode and it ACKs (polling still stays off). Use when sniffing an existing CAN bus (e.g., reading from a car's OBD-II/ECU network) to avoid disrupting communication between other nodes
+- **LISTEN** (Passive) - Listen-only monitoring. No ACK bits, no error frames, no TX of any kind (no OBD-II polling). `BUS` refuses a LISTEN input on the CAN output's bus, in either order. A config imported or saved with that combination still runs, but the bus is not listen-only: input never polls, while output transmits and ACKs. Use when sniffing an existing CAN bus (e.g., reading from a car's OBD-II/ECU network) to avoid disrupting communication between other nodes
 
 ### CAN Baud Rates
 

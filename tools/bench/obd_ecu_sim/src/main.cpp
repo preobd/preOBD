@@ -23,6 +23,8 @@
  *   s            toggle silent (ECU off: no answers, still counts requests)
  *   r            print stats now
  *   z            zero counters
+ *   q <hex>      act as a TESTER: send 02 01 <pid> to 0x7DF and print any
+ *                0x7E8 answer for 200 ms (tests preOBD's own OBD responder)
  * Stats print every 5 s: requests per PID, overall rate, min/avg gap.
  */
 
@@ -67,6 +69,10 @@ static uint32_t lastRequestMs = 0;
 static uint32_t minGapMs = 0xFFFFFFFF;
 static uint32_t gapSumMs = 0;
 static uint32_t gapCount = 0;
+
+// ---- tester mode (q <pid>) ----
+static uint32_t queryUntilMs = 0;
+static uint8_t  queryPid = 0;
 
 static void zeroStats() {
     trackedUsed = 0;
@@ -153,6 +159,7 @@ static void printSettings() {
 static void printHelp() {
     Serial.println(F("h help | d <ms> answer delay | u <hex> unsupported PID (00=none)"));
     Serial.println(F("n toggle unsupported: silence/NRC | s toggle ECU silent | r stats | z zero"));
+    Serial.println(F("q <hex> send a tester request to 0x7DF and print 0x7E8 answers"));
     printSettings();
 }
 
@@ -225,6 +232,22 @@ static void handleSerial() {
             case 's': silent = !silent; replyQueued = false; printSettings(); break;
             case 'r': printStats(); break;
             case 'z': zeroStats(); Serial.println(F("[stats] zeroed")); break;
+            case 'q': {
+                can_frame q;
+                memset(&q, 0, sizeof(q));
+                q.can_id = 0x7DF;
+                q.can_dlc = 8;
+                q.data[0] = 0x02;
+                q.data[1] = 0x01;
+                queryPid = (uint8_t)strtoul(arg, nullptr, 16);
+                q.data[2] = queryPid;
+                bool ok = mcp.sendMessage(&q) == MCP2515::ERROR_OK;
+                queryUntilMs = millis() + 200;
+                Serial.print(F("[query] 0x7DF 02 01 "));
+                printHex2(queryPid);
+                Serial.println(ok ? F(" sent") : F(" SEND FAILED"));
+                break;
+            }
             default:  Serial.println(F("? (h for help)")); break;
         }
     }
@@ -264,6 +287,14 @@ void loop() {
     while (mcp.readMessage(&rx) == MCP2515::ERROR_OK) {
         if (rx.can_id & CAN_EFF_FLAG) continue;
         uint32_t id = rx.can_id & CAN_SFF_MASK;
+        if (queryUntilMs && id >= 0x7E8 && id <= 0x7EF) {
+            Serial.print(F("[query] answer 0x"));
+            Serial.print(id, HEX);
+            Serial.print(':');
+            for (uint8_t i = 0; i < rx.can_dlc; i++) { Serial.print(' '); printHex2(rx.data[i]); }
+            Serial.println();
+            continue;
+        }
         if (id != 0x7DF && id != 0x7E0) continue;
         // ISO-TP single frame: 02 01 <pid>
         if (rx.can_dlc < 3 || rx.data[0] != 0x02 || rx.data[1] != 0x01) continue;
@@ -281,6 +312,11 @@ void loop() {
         replyQueued = false;
         if (mcp.sendMessage(&replyFrame) == MCP2515::ERROR_OK) answersSent++;
         else txErrors++;
+    }
+
+    if (queryUntilMs && (int32_t)(now - queryUntilMs) >= 0) {
+        queryUntilMs = 0;
+        Serial.println(F("[query] window closed"));
     }
 
     static uint32_t lastStatsMs = 0;

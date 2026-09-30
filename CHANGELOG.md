@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - CAN input in `ENABLE` mode now polls the ECU for each imported OBD-II PID, so `SET CAN <pid>` reads without a scan tool on the bus (`LISTEN` stays passive), and `INFO CAN:<n>` shows when the last frame arrived (#476)
 
+### Fixed
+- The OBD-II responder now answers requests over CAN on Teensy (it never received them), and CAN input sharing a bus with CAN output no longer reboot-loops the board when the CAN output module is off (#495)
+
 ## [0.14.0-beta] - 2026-09-29
 
 **Breaking: EEPROM configuration is reset on upgrade.** The stored config layout changed (`EEPROM_VERSION` 6 → 7) to carry the Rule record's new warning-threshold fields; the firmware detects the old version and starts from defaults. Back up your setup with `SYSTEM DUMP JSON` before flashing and restore it afterwards with `JSON IMPORT`.

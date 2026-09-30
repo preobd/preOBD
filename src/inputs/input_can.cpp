@@ -30,6 +30,10 @@
 static bool canInputInitialized = false;
 static uint8_t canInputBus = 0;  // Which bus we're reading from
 
+// On a bus shared with CAN output, input is the only reader; OBD-II requests
+// it drains are handed to output's responder through this (#495).
+static CANRequestHandler requestHandler = nullptr;
+
 // Active Mode 01 polling (#476) — see can_poll.h for the pacing rules
 static CanPollState pollState;
 static uint8_t pollCursor = 0;   // inputs[] slot to try next
@@ -67,7 +71,12 @@ bool initCANInput() {
                      systemConfig.buses.can_output_enabled &&
                      bus != 0xFF);
 
-    if (sharedBus) {
+    // Output starts a shared bus only when its module is enabled; otherwise
+    // nothing would, and reading an unstarted FlexCAN stalls the loop into a
+    // watchdog reset (#495). Input starts it itself in that case.
+    bool outputStartsBus = sharedBus && systemConfig.outputEnabled[OUTPUT_CAN];
+
+    if (outputStartsBus) {
         // Output subsystem will initialize the shared bus
         // Just verify baudrates match
         if (baudrate != systemConfig.buses.can_output_baudrate) {
@@ -114,6 +123,17 @@ void shutdownCANInput() {
     canInputInitialized = false;
 }
 
+bool canInputOwnsBus(uint8_t bus) {
+    // The live mode, not just init state: BUS CAN INPUT DISABLE writes OFF at
+    // runtime and updateCANInput() stops reading, so output must resume.
+    return canInputInitialized && canInputBus == bus &&
+           systemConfig.buses.can_input_mode != CAN_INPUT_OFF;
+}
+
+void setCANRequestHandler(CANRequestHandler handler) {
+    requestHandler = handler;
+}
+
 // ============================================================================
 // FRAME RECEPTION
 // ============================================================================
@@ -127,6 +147,12 @@ void shutdownCANInput() {
  */
 static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len,
                            bool extended) {
+    // OBD-II request on a bus shared with output: output's responder owns it
+    if (requestHandler && !extended && (can_id == 0x7DF || can_id == 0x7E0)) {
+        requestHandler(can_id, data, len);
+        return;
+    }
+
     // Validate frame has minimum data
     if (len == 0) {
         #ifdef DEBUG

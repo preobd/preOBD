@@ -1331,6 +1331,16 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
         staged.buses.can_output_enabled =
             buses["canOutputEnabled"] | (BUS_WIRED_CAN_ID != 0xFF ? 1 : 0);
 
+        // BUS refuses a LISTEN input on the output's bus (#495); an imported
+        // config can still carry one. It runs, but not listen-only: input
+        // never polls, while output opens the controller in TX mode and ACKs.
+        if (staged.buses.can_input_mode == CAN_INPUT_LISTEN &&
+            staged.buses.can_output_enabled &&
+            staged.buses.input_can_bus != 0xFF &&
+            staged.buses.input_can_bus == staged.buses.output_can_bus) {
+            msg.control.println(F("  NOTE: CAN input LISTEN shares the output bus; the bus will ACK and transmit"));
+        }
+
         // Backward compatibility: if old canBaudrate exists but new ones don't, use it for both
         if (buses["canBaudrate"].is<uint32_t>() && !buses["canInputBaudrate"].is<uint32_t>()) {
             uint32_t baudrate = buses["canBaudrate"] | DEFAULT_CAN_BAUDRATE;

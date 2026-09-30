@@ -49,4 +49,19 @@ void updateCANInput();
  */
 void shutdownCANInput();
 
+/**
+ * Is CAN input reading `bus`? On a bus shared with CAN output, input's
+ * updateCANInput() is the only reader: two drain loops on one controller
+ * each discard the other's frames (#495). Output checks this and, instead
+ * of reading, registers a handler for the OBD-II requests input drains.
+ */
+bool canInputOwnsBus(uint8_t bus);
+
+/**
+ * OBD-II request frames (11-bit 0x7DF / 0x7E0) that input reads are passed
+ * here instead of being cached. nullptr (the default) caches them as before.
+ */
+typedef void (*CANRequestHandler)(uint32_t id, const uint8_t* data, uint8_t len);
+void setCANRequestHandler(CANRequestHandler handler);
+
 #endif // INPUT_CAN_H

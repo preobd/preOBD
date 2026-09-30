@@ -120,28 +120,26 @@ inline bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint
     return false;
 }
 
+// Mailboxes stay POLLED: read() skips interrupt-enabled mailboxes, and with
+// no FlexCAN_T4 callbacks registered the ISR drops their frames. Enabling
+// the MB0/MB1 interrupts here meant every 0x7DF/0x7E0 request vanished and
+// the OBD-II responder never answered over CAN (#495).
 inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
     switch (bus) {
         case 0:
             detail::canBus0.setMBFilter(MB0, filter1);
             detail::canBus0.setMBFilter(MB1, filter2);
-            detail::canBus0.enableMBInterrupt(MB0);
-            detail::canBus0.enableMBInterrupt(MB1);
             break;
         #if defined(CAN2)
         case 1:
             detail::canBus1.setMBFilter(MB0, filter1);
             detail::canBus1.setMBFilter(MB1, filter2);
-            detail::canBus1.enableMBInterrupt(MB0);
-            detail::canBus1.enableMBInterrupt(MB1);
             break;
         #endif
         #if defined(CAN3)
         case 2:
             detail::canBus2.setMBFilter(MB0, filter1);
             detail::canBus2.setMBFilter(MB1, filter2);
-            detail::canBus2.enableMBInterrupt(MB0);
-            detail::canBus2.enableMBInterrupt(MB1);
             break;
         #endif
     }

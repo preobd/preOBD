@@ -452,6 +452,15 @@ static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
             }
         }
 
+        // Mirror of the INPUT-side check: a listen-only input can't share
+        // with an output (set in the other order, it slipped through, #495)
+        if (enable && bus_id != 0xFF && bus_id == systemConfig.buses.input_can_bus &&
+            systemConfig.buses.can_input_mode == CAN_INPUT_LISTEN) {
+            msg.control.println(F("ERROR: CAN input on this bus is LISTEN (listen-only)"));
+            msg.control.println(F("  Use another bus, or set input to ENABLE or DISABLE first"));
+            return 1;
+        }
+
         // Apply configuration (all validation passed)
         if (enable) {
             systemConfig.buses.output_can_bus = bus_id;
