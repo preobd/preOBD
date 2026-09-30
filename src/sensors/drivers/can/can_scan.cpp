@@ -26,6 +26,12 @@ static uint16_t scanDuration = 0;
 #if SUPPORTS_JSON_EXPORT || defined(NATIVE_TEST)
 static uint8_t scanId = 0;        // SCAN STATUS JSON: tells a restarted scan apart
 static bool scanQuiet = false;    // SCAN CAN ... JSON: no text table at the end
+static CanDiscState disc;         // SCAN PIDS (#511)
+static bool scanIsPids = false;   // The current/last scan was SCAN PIDS
+#endif
+
+#ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
+#define FLASHMEM
 #endif
 
 // ============================================================================
@@ -93,9 +99,96 @@ static void displayScanResults() {
     msg.control.println(F("\nType 'SCAN CANCEL' to clear results."));
 }
 
+#if SUPPORTS_JSON_EXPORT || defined(NATIVE_TEST)
+/** Copy a standard PID's name from PROGMEM, or "" when it is not in the table. */
+static FLASHMEM void standardPidName(uint8_t pid, char* name, size_t size) {
+    const StandardPIDInfo* info = lookupStandardPID(pid);
+    name[0] = '\0';
+    if (!info) return;
+    strncpy_P(name, (const char*)pgm_read_ptr(&info->name), size - 1);
+    name[size - 1] = '\0';
+}
+
+/** SCAN PIDS text result: each answering ECU and the PIDs it supports. */
+static FLASHMEM void displayDiscoveryResults() {
+    msg.control.println(F("\n=== Supported PIDs ==="));
+    if (disc.ecuMask == 0) {
+        msg.control.println(F("No ECU answered. Is the ignition on?"));
+        return;
+    }
+    for (uint8_t e = 0; e < CAN_DISC_MAX_ECUS; e++) {
+        if (!(disc.ecuMask & (1 << e))) continue;
+        char hex[8];
+        snprintf(hex, sizeof(hex), "0x%03X", 0x7E8 + e);   // HEX prints lowercase on Teensy
+        msg.control.print(F("\nECU "));
+        msg.control.print(hex);
+        msg.control.print(F(": "));
+        msg.control.print(canDiscCountEcu(disc, e));
+        msg.control.println(F(" PIDs"));
+        for (uint16_t p = 1; p <= 0xFF; p++) {
+            if (!canDiscSupports(disc, (uint16_t)(0x7E8 + e), (uint8_t)p)) continue;
+            char name[32];
+            standardPidName((uint8_t)p, name, sizeof(name));
+            snprintf(hex, sizeof(hex), "0x%02X", (unsigned)p);
+            msg.control.print(F("  "));
+            msg.control.print(hex);
+            msg.control.print(F("  "));
+            msg.control.println(name[0] ? name : "(not in preOBD's PID table)");
+        }
+    }
+    msg.control.println(F("\nTo import a PID: SET CAN <pid_hex> [ecu]"));
+    msg.control.println(F("  (ecu only for a PID another ECU lists, e.g. SET CAN 0x05 0x7E9)"));
+}
+#endif
+
 // ============================================================================
 // PUBLIC FUNCTIONS
 // ============================================================================
+
+#if SUPPORTS_JSON_EXPORT || defined(NATIVE_TEST)
+FLASHMEM void startCANPidScan(bool quiet) {
+    scanState = SCAN_QUERYING;
+    scanResultCount = 0;
+    scanStartTime = millis();
+    scanDuration = 0;
+    memset(scanResults, 0, sizeof(scanResults));
+    scanId++;
+    if (scanId == 0) scanId = 1;
+    scanQuiet = quiet;
+    scanIsPids = true;
+    canDiscStart(disc);
+    msg.control.println(F("Asking the ECUs for their supported PIDs..."));
+}
+
+bool canScanQuerying() {
+    return scanState == SCAN_QUERYING;
+}
+
+bool canScanDiscoveryDue(uint32_t now, uint8_t& base) {
+    if (scanState != SCAN_QUERYING) return false;
+    return canDiscDue(disc, now, base);
+}
+
+void canScanDiscoverySent(uint32_t now) {
+    canDiscOnSent(disc, now);
+}
+
+bool canScanOnBitmap(uint16_t can_id, uint8_t pid, const uint8_t* data, uint8_t len) {
+    if (scanState != SCAN_QUERYING) return false;
+    if (canDiscOnAnswer(disc, can_id, pid, data, len)) return true;
+    // A bitmap that missed its window is still no sensor value: keep it out
+    // of the frame cache too
+    return can_id >= 0x7E8 && can_id <= 0x7EF && canDiscIsBitmapPid(pid);
+}
+
+void canScanDiscoveryStop() {
+    if (canDiscActive(disc)) disc.phase = CAN_DISC_DONE;   // updateCANScan finishes it
+}
+
+const CanDiscState* getCANScanDiscovery() {
+    return scanIsPids ? &disc : nullptr;
+}
+#endif
 
 void startCANScan(uint16_t duration_ms, bool quiet) {
     // Reset state
@@ -108,6 +201,8 @@ void startCANScan(uint16_t duration_ms, bool quiet) {
     scanId++;
     if (scanId == 0) scanId = 1;   // 0 means "never scanned"
     scanQuiet = quiet;
+    scanIsPids = false;
+    canDiscReset(disc);
 #else
     (void)quiet;
 #endif
@@ -119,6 +214,13 @@ void startCANScan(uint16_t duration_ms, bool quiet) {
 }
 
 void updateCANScan() {
+#if SUPPORTS_JSON_EXPORT || defined(NATIVE_TEST)
+    if (scanState == SCAN_QUERYING && !canDiscActive(disc)) {
+        scanState = SCAN_DONE;
+        if (!scanQuiet) displayDiscoveryResults();
+        return;
+    }
+#endif
     if (scanState != SCAN_LISTENING) {
         return;
     }
@@ -195,5 +297,9 @@ uint32_t getCANScanRemainingMs(uint32_t now) {
 void cancelCANScan() {
     scanState = SCAN_IDLE;
     scanResultCount = 0;
+#if SUPPORTS_JSON_EXPORT || defined(NATIVE_TEST)
+    scanIsPids = false;
+    canDiscReset(disc);
+#endif
     msg.control.println(F("CAN scan cancelled."));
 }

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `SCAN PIDS` asks the car's ECUs which OBD-II PIDs they support, so you can find what to import on a car where nothing else is polling the ECU (`SCAN SUPPORTED JSON` for the webapp/app), and `SET CAN <pid> <ecu>` imports a PID from a second ECU such as the transmission (#511)
 - `BUS CAN JSON`, `SCAN STATUS JSON` and `SCAN RESULTS JSON` report live CAN state and scan results as JSON, in RUN as well as CONFIG; `SCAN CAN` now counts real frames and payload lengths, and `SCAN CAN … JSON` skips the text table (#510)
 - CAN input in `ENABLE` mode now polls the ECU for each imported OBD-II PID, so `SET CAN <pid>` reads without a scan tool on the bus (`LISTEN` stays passive), and `INFO CAN:<n>` shows when the last frame arrived (#476)
 
@@ -16,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Imported CAN PIDs now carry their real units (RPM, km/h, kPa, …) instead of `C`, accept `SET <pin> UNITS` for their quantity, keep them across a reboot, and read pressure PIDs correctly; `SET CAN` also works on the Arduino Mega, where it read the PID table from the wrong memory (#496). A pressure PID (MAP, fuel pressure, …) imported on 0.14.0-beta reads 100× too high after upgrading: run `SET CAN <pid>` for it again
 - `JSON IMPORT` restores CAN inputs: a `SYSTEM DUMP JSON` backup or an app profile used to drop every imported CAN PID (#499)
 - `SET CAN <pid>` inputs now go to every data output (CAN, RealDash, serial, SD) and the display like any other new input; they were created with all outputs off. For a CAN input created earlier, run `SET CAN:<n> OUTPUT ALL ENABLE` (#501)
+- CAN input no longer records an ECU's "PID not supported" reply or the start of a multi-frame reply as PID 0x03 / 0x10 (MAF), which put phantom PIDs in `SCAN CAN` results (#511)
 - A `JSON IMPORT` record whose sensor measures a different quantity than its application is refused before it changes anything; over an existing input it used to leave that input half-rewritten (#502)
 
 ## [0.14.0-beta] - 2026-09-29

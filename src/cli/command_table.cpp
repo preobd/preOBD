@@ -1469,6 +1469,21 @@ int cmd_log(int argc, const char* const* argv) {
 // SCAN STATUS JSON / SCAN RESULTS JSON (#510): the scan's machine-readable
 // face, readable in RUN. Framed like LIST ... JSON (blank line before, one
 // line of JSON, newline).
+static FLASHMEM void emitScanSupportedJson() {
+    JsonDocument doc;
+    JsonArray arr = doc.to<JsonArray>();
+    if (const CanDiscState* d = getCANScanDiscovery()) {
+        for (uint8_t e = 0; e < CAN_DISC_MAX_ECUS; e++) {
+            if (!(d->ecuMask & (1 << e))) continue;
+            canScanSupportedToJson((uint16_t)(0x7E8 + e), d->supported[e], arr.add<JsonObject>());
+        }
+    }
+    msg.control.println();
+    WatchdogKickingPrint out(msg.control);
+    serializeJson(doc, out);
+    msg.control.println();
+}
+
 static FLASHMEM void emitScanJson(bool results) {
     uint32_t now = millis();
     JsonDocument doc;
@@ -1492,12 +1507,21 @@ static FLASHMEM void emitScanJson(bool results) {
         getCANScanResults(&count);
         CANScanState st = getCANScanState();
         s.state = st == SCAN_LISTENING ? CAN_SCAN_JSON_LISTENING
+                : st == SCAN_QUERYING  ? CAN_SCAN_JSON_QUERYING
                 : st == SCAN_DONE      ? CAN_SCAN_JSON_DONE
                                        : CAN_SCAN_JSON_IDLE;
         s.scanId = getCANScanId();
         s.durationMs = getCANScanDuration();
         s.remainingMs = getCANScanRemainingMs(now);
         s.found = count;
+        s.passive = true;
+        s.ecus = 0;
+        if (const CanDiscState* d = getCANScanDiscovery()) {
+            s.passive = false;
+            s.ecus = canDiscEcuCount(*d);
+            s.found = 0;
+            for (uint8_t e = 0; e < CAN_DISC_MAX_ECUS; e++) s.found += canDiscCountEcu(*d, e);
+        }
         canScanStatusToJson(s, doc.to<JsonObject>());
     }
     msg.control.println();
@@ -1509,22 +1533,26 @@ static FLASHMEM void emitScanJson(bool results) {
 
 int cmd_scan(int argc, const char* const* argv) {
     // Usage: SCAN CAN [duration_ms] [JSON]   (CONFIG)
+    //        SCAN PIDS [JSON]                (CONFIG, #511)
     //        SCAN CANCEL                     (CONFIG)
-    //        SCAN STATUS JSON | RESULTS JSON (any mode, read-only)
+    //        SCAN STATUS JSON | RESULTS JSON | SUPPORTED JSON (any mode, read-only)
 
     if (argc < 2) {
         msg.control.println(F("SCAN - Scan CAN bus for active PIDs"));
         msg.control.println(F(""));
         msg.control.println(F("Usage:"));
         msg.control.println(F("  SCAN CAN [duration] [JSON] - Scan CAN bus (default 10000ms)"));
+        msg.control.println(F("  SCAN PIDS [JSON]     - Ask the ECUs which PIDs they support"));
         msg.control.println(F("  SCAN CANCEL          - Cancel/clear scan results"));
         msg.control.println(F("  SCAN STATUS JSON     - Scan state and progress"));
-        msg.control.println(F("  SCAN RESULTS JSON    - What the scan found"));
+        msg.control.println(F("  SCAN RESULTS JSON    - What SCAN CAN found"));
+        msg.control.println(F("  SCAN SUPPORTED JSON  - What SCAN PIDS found, per ECU"));
         msg.control.println(F(""));
         msg.control.println(F("Examples:"));
         msg.control.println(F("  SCAN CAN             - Scan for 10 seconds"));
         msg.control.println(F("  SCAN CAN 15000       - Scan for 15 seconds"));
         msg.control.println(F("  SCAN CAN 15000 JSON  - Same, without the text table at the end"));
+        msg.control.println(F("  SCAN PIDS            - List the PIDs this car's ECUs support"));
         msg.control.println(F("  SCAN CANCEL          - Clear results"));
         return 0;
     }
@@ -1532,13 +1560,15 @@ int cmd_scan(int argc, const char* const* argv) {
     const char* subcmd = argv[1];
 
     // Read-only JSON forms: any mode, no configGeneration bump (#510)
-    if (streq_P(subcmd, PSTR("STATUS")) || streq_P(subcmd, PSTR("RESULTS"))) {
+    if (streq_P(subcmd, PSTR("STATUS")) || streq_P(subcmd, PSTR("RESULTS")) ||
+        streq_P(subcmd, PSTR("SUPPORTED"))) {
         if (argc != 3 || !streq_P(argv[2], PSTR("JSON"))) {
-            msg.control.println(F("ERROR: Usage: SCAN STATUS JSON | SCAN RESULTS JSON"));
+            msg.control.println(F("ERROR: Usage: SCAN STATUS JSON | SCAN RESULTS JSON | SCAN SUPPORTED JSON"));
             return 1;
         }
 #if SUPPORTS_JSON_EXPORT
-        emitScanJson(streq_P(subcmd, PSTR("RESULTS")));
+        if (streq_P(subcmd, PSTR("SUPPORTED"))) emitScanSupportedJson();
+        else emitScanJson(streq_P(subcmd, PSTR("RESULTS")));
         return 0;
 #else
         msg.control.println(F("ERROR: JSON export not supported on this platform"));
@@ -1598,6 +1628,34 @@ int cmd_scan(int argc, const char* const* argv) {
         return 0;
     }
 
+    if (streq_P(subcmd, PSTR("PIDS"))) {
+        // SCAN PIDS [JSON] (#511): transmits, so NORMAL input only
+        bool quiet = (argc == 3 && streq_P(argv[2], PSTR("JSON")));
+        if (argc > 3 || (argc == 3 && !quiet)) {
+            msg.control.println(F("ERROR: Usage: SCAN PIDS [JSON]"));
+            return 1;
+        }
+#if SUPPORTS_JSON_EXPORT
+        if (systemConfig.buses.can_input_mode != CAN_INPUT_NORMAL) {
+            msg.control.println(F("ERROR: SCAN PIDS needs CAN input in ENABLE mode"));
+            msg.control.println(F("  It sends requests to the ECU; LISTEN never transmits."));
+            msg.control.println(F("  Use SCAN CAN to listen, or 'BUS CAN INPUT CAN1 ENABLE' first"));
+            return 1;
+        }
+        if (!canInputRunsNormal()) {
+            // Configured ENABLE but not running, or still in its boot mode
+            msg.control.println(F("ERROR: CAN input is not running in ENABLE mode yet"));
+            msg.control.println(F("  SAVE and reboot after 'BUS CAN INPUT ...' to apply it"));
+            return 1;
+        }
+        startCANPidScan(quiet);
+        return 0;
+#else
+        msg.control.println(F("ERROR: SCAN PIDS not supported on this platform"));
+        return 1;
+#endif
+    }
+
     if (streq_P(subcmd, PSTR("CANCEL"))) {
         cancelCANScan();
         return 0;
@@ -1607,7 +1665,7 @@ int cmd_scan(int argc, const char* const* argv) {
     msg.control.print(F("ERROR: Unknown SCAN subcommand '"));
     msg.control.print(subcmd);
     msg.control.println(F("'"));
-    msg.control.println(F("  Valid: CAN, CANCEL, STATUS JSON, RESULTS JSON"));
+    msg.control.println(F("  Valid: CAN, PIDS, CANCEL, STATUS JSON, RESULTS JSON, SUPPORTED JSON"));
     return 1;
 }
 #endif // INCLUDE_CAN

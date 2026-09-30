@@ -766,19 +766,26 @@ Input and output buses can operate at different speeds to support mixed protocol
 
 ```bash
 SCAN CAN [ms] [JSON]   # CONFIG: listen for ms (1000-60000, default 10000) and list what was seen
+SCAN PIDS [JSON]       # CONFIG: ask the ECUs which OBD-II PIDs they support
 SCAN CANCEL            # CONFIG: stop and clear the results
 SCAN STATUS JSON       # Scan state and progress (any mode)
-SCAN RESULTS JSON      # What the scan found (any mode)
+SCAN RESULTS JSON      # What SCAN CAN found (any mode)
+SCAN SUPPORTED JSON    # What SCAN PIDS found, per ECU (any mode)
 BUS CAN JSON           # Live CAN input/output/poll state (any mode)
 ```
 
 `SCAN CAN` only listens: it reports frames that appear on the bus, including the answers to preOBD's own polling of imported PIDs. It sends no requests of its own, so on an ECU bus with nothing imported and nothing else polling it finds nothing. The text table printed when the scan ends counts real frames per `(CAN ID, PID)`. A trailing `JSON` skips that table; read the results with `SCAN RESULTS JSON` instead.
 
-The three `JSON` forms are read-only. They answer in RUN mode and don't count as configuration changes (they leave the BLE status frame's `configGeneration` alone), so a client can poll them. Each prints a blank line, then one line of JSON:
+`SCAN PIDS` does transmit: it sends the OBD-II "supported PIDs" requests (Mode 01 PID 0x00, then 0x20, … while an ECU says there are more) to the functional address `0x7DF`, so every ECU answers, and collects each ECU's list. It takes under a second, needs CAN input in `ENABLE` mode (it is refused in `LISTEN`), and pauses the polling of imported PIDs while it runs. `SCAN PIDS` and `SCAN CAN` share one scan: starting either clears the other's results. Import a PID that only another ECU supports with `SET CAN <pid> <ecu>`, e.g. `SET CAN 0x05 0x7E9`.
+
+The four `JSON` forms are read-only. They answer in RUN mode and don't count as configuration changes (they leave the BLE status frame's `configGeneration` alone), so a client can poll them. Each prints a blank line, then one line of JSON:
 
 ```bash
 SCAN STATUS JSON
-{"state":"listening","scanId":1,"durationMs":4000,"remainingMs":1523,"found":2,"passive":true}
+{"state":"listening","scanId":1,"durationMs":4000,"remainingMs":1523,"found":2,"passive":true,"ecus":null}
+
+SCAN SUPPORTED JSON
+[{"canId":2024,"pids":[5,11,12,13]},{"canId":2025,"pids":[5,33]}]
 
 SCAN RESULTS JSON
 [{"canId":2024,"pid":5,"obd":true,"dataLength":1,"frames":201,"ageMs":4899,"data":"79"},{"canId":2024,"pid":12,"obd":true,"dataLength":2,"frames":200,"ageMs":4909,"data":"0F7C"}]
@@ -787,7 +794,9 @@ BUS CAN JSON
 {"caps":{"buses":3,"baudrates":[125000,250000,500000,1000000],"listenShared":false,"maxScanResults":32,"scanMs":[1000,60000]},"input":{"bus":0,"mode":"NORMAL","baudrate":500000,"running":true,"sharedWithOutput":true,"rebootPending":false,"framesRx":229,"lastFrameAgeMs":8,"poll":{"active":true,"backoff":false,"missStreak":0,"requests":229,"answers":229,"txFail":0}},"output":{"bus":0,"enabled":true,"module":false,"baudrate":500000},"imports":[{"pin":192,"pinLabel":"CAN:0","sourceCanId":2024,"sourcePid":12,"polled":true,"ageMs":8},{"pin":193,"pinLabel":"CAN:1","sourceCanId":2024,"sourcePid":5,"polled":true,"ageMs":18}]}
 ```
 
-- `state` is `idle`, `listening` or `done`. `scanId` increases with every `SCAN CAN`, so a client can tell that someone else restarted the scan. `found` changes when a new result appears.
+- `state` is `idle`, `listening` (`SCAN CAN`), `querying` (`SCAN PIDS`) or `done`. `scanId` increases with every `SCAN CAN` or `SCAN PIDS`, so a client can tell that someone else restarted the scan. `found` changes when a new result appears.
+- `passive` is `false` after `SCAN PIDS`. Then `found` counts the supported PIDs over all ECUs, and `ecus` is how many ECUs answered: `0` means none did (ignition off, no ECU), as opposed to an ECU that supports nothing. `ecus` is `null` for `SCAN CAN`.
+- In `SCAN SUPPORTED JSON`, `canId` is each answering ECU's response ID (`2024` = `0x7E8`, the engine) and `pids` its supported PIDs in decimal, without the bitmap PIDs `0x00`/`0x20`/…. It is `[]` after a `SCAN CAN`.
 - `pid` is the OBD-II PID for an OBD response (`obd: true`, CAN ID `0x7E8`-`0x7EF`), otherwise the frame's first byte. `data` is the last payload in hex. Look up names and units in `LIST PIDS JSON`.
 - Buses are indexes (`0` = CAN1), and `255` means none, as in `SYSTEM DUMP JSON`. `mode` is `OFF`, `NORMAL` or `LISTEN`. `output.enabled` is the bus setting and `output.module` is `OUTPUT CAN ENABLE`.
 - `input.bus`, `mode` and `baudrate` are the *configured* values. `BUS CAN INPUT` changes take effect after `SAVE` and a reboot, and until then `rebootPending` is `true` and `running` describes the old settings.

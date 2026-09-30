@@ -13,19 +13,31 @@
 #define FLASHMEM
 #endif
 
-static const char* const SCAN_STATE_NAMES[] = {"idle", "listening", "done"};
+static const char* const SCAN_STATE_NAMES[] = {"idle", "listening", "done", "querying"};
 static const char* const INPUT_MODE_NAMES[] = {"OFF", "NORMAL", "LISTEN"};
 static const uint32_t CAN_BAUDRATES[] = {125000, 250000, 500000, 1000000};
 
 FLASHMEM void canScanStatusToJson(const CanScanSnapshot& s, JsonObject out) {
-    out["state"] = SCAN_STATE_NAMES[s.state <= CAN_SCAN_JSON_DONE ? s.state : 0];
+    out["state"] = SCAN_STATE_NAMES[s.state <= CAN_SCAN_JSON_QUERYING ? s.state : 0];
     out["scanId"] = s.scanId;
     out["durationMs"] = s.durationMs;
     out["remainingMs"] = s.remainingMs;
     out["found"] = s.found;
-    // The scan only listens: it reports what is on the bus, and requests
-    // nothing itself (active discovery is #511).
-    out["passive"] = true;
+    // SCAN CAN only listens: it reports what is on the bus. SCAN PIDS asks
+    // the ECUs (#511); `ecus` tells "no ECU answered" (ignition off) apart
+    // from "answered, supports nothing". null for a passive scan.
+    out["passive"] = s.passive;
+    if (s.passive) out["ecus"] = nullptr;
+    else           out["ecus"] = s.ecus;
+}
+
+FLASHMEM void canScanSupportedToJson(uint16_t canId, const uint8_t bits[32], JsonObject out) {
+    out["canId"] = canId;
+    JsonArray pids = out["pids"].to<JsonArray>();
+    for (uint16_t p = 1; p <= 0xFF; p++) {
+        if ((p & 0x1F) == 0) continue;   // bitmap PIDs
+        if (bits[p >> 3] & (0x80 >> (p & 7))) pids.add(p);
+    }
 }
 
 FLASHMEM void canScanEntryToJson(const CanScanEntrySnapshot& e, JsonObject out) {

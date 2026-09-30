@@ -96,8 +96,30 @@ static void test_short_obd_is_custom(void) {
     expectParse(f, 2, 0x41, 0);
 }
 
+// #511: an NRC and the ISO-TP multi-frame PCIs are not values. They used
+// to be cached as PIDs 0x03 and 0x10 (MAF).
+static void test_obd_non_value_frames(void) {
+    const uint8_t nrc[8]  = {0x03, 0x7F, 0x01, 0x31, 0x00, 0x00, 0x00, 0x00};
+    const uint8_t ff[8]   = {0x10, 0x0A, 0x41, 0x7F, 0x01, 0x02, 0x03, 0x04};
+    const uint8_t cf[8]   = {0x21, 0x05, 0x06, 0x07, 0x08, 0x00, 0x00, 0x00};
+    const uint8_t fc[8]   = {0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    TEST_ASSERT_TRUE(isObdNonValueFrame(nrc, 8));
+    TEST_ASSERT_TRUE(isObdNonValueFrame(ff, 8));
+    TEST_ASSERT_TRUE(isObdNonValueFrame(cf, 8));
+    TEST_ASSERT_TRUE(isObdNonValueFrame(fc, 8));
+
+    const uint8_t rpm[8]    = {0x04, 0x41, 0x0C, 0x1A, 0xF8, 0x00, 0x00, 0x00};
+    const uint8_t bitmap[8] = {0x06, 0x41, 0x00, 0xBE, 0x3F, 0xA8, 0x13, 0x00};
+    const uint8_t bare[3]   = {0x41, 0x05, 0x7B};
+    TEST_ASSERT_FALSE(isObdNonValueFrame(rpm, 8));
+    TEST_ASSERT_FALSE(isObdNonValueFrame(bitmap, 8));
+    TEST_ASSERT_FALSE(isObdNonValueFrame(bare, 3));
+    TEST_ASSERT_FALSE(isObdNonValueFrame(nrc, 0));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_obd_non_value_frames);
     RUN_TEST(test_one_byte_pid);
     RUN_TEST(test_two_byte_pid);
     RUN_TEST(test_three_byte_pid);

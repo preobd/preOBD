@@ -17,6 +17,7 @@
 enum CANScanState {
     SCAN_IDLE,          // Not scanning
     SCAN_LISTENING,     // Actively listening for frames
+    SCAN_QUERYING,      // SCAN PIDS: asking the ECUs for their supported PIDs (#511)
     SCAN_DONE           // Window closed; results kept until the next scan / CANCEL
 };
 
@@ -82,5 +83,34 @@ uint32_t getCANScanRemainingMs(uint32_t now);
  * Cancel/clear scan results
  */
 void cancelCANScan();
+
+#if SUPPORTS_JSON_EXPORT || defined(NATIVE_TEST)
+#include "can_discovery.h"
+
+/**
+ * SCAN PIDS (#511): ask the ECUs which Mode 01 PIDs they support. Shares the
+ * scan slot with SCAN CAN (clears its results, bumps the scan ID) but
+ * collects supported-PID bitmaps instead of frames. CAN input does the
+ * transmitting: it asks canScanDiscoveryDue() each loop and reports answers
+ * through canScanOnBitmap(). The caller checks the input is running NORMAL.
+ */
+void startCANPidScan(bool quiet);
+
+/** True while SCAN PIDS is querying: CAN input pauses its own polling. */
+bool canScanQuerying();
+
+/** Should the bitmap request for block `base` go out now? (see can_discovery.h) */
+bool canScanDiscoveryDue(uint32_t now, uint8_t& base);
+void canScanDiscoverySent(uint32_t now);
+
+/** A Mode 01 answer; true if it was a bitmap the discovery consumed. */
+bool canScanOnBitmap(uint16_t can_id, uint8_t pid, const uint8_t* data, uint8_t len);
+
+/** End a discovery early (CAN input left NORMAL mode). */
+void canScanDiscoveryStop();
+
+/** The last SCAN PIDS result, or nullptr if the last scan was SCAN CAN. */
+const CanDiscState* getCANScanDiscovery();
+#endif
 
 #endif // CAN_SCAN_H

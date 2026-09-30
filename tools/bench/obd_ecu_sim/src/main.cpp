@@ -14,7 +14,15 @@
  *   0x0D Speed     0-100 km/h     (A)
  *   0x0F Intake    30 C           (A-40)   <- default "unsupported" PID
  *   0x0B MAP       101 kPa        (A)      <- fixed, checks kPa -> bar -> psi
- * Anything else is ignored, like a real ECU.
+ *   0x00 supported-PID bitmap of the above, minus the unsupported PID (#511)
+ * Anything else is ignored, like a real ECU. The bitmap block 0x20 is
+ * treated like the unsupported PID (silence, or NRC with `n`), so SCAN PIDS
+ * meets the negative response a real engine ECU sends there.
+ *
+ * With `e`, a second ECU (transmission, 0x7E9, physical 0x7E1) also answers:
+ *   0x00 bitmap: 0x05 + continuation   0x20 bitmap: 0x21
+ *   0x05 Trans temp 70 C, 0x21 distance 1234 km
+ * It exercises SCAN PIDS's multi-ECU collection and block walk.
  *
  * Serial commands (115200, end with Enter):
  *   h            help
@@ -22,6 +30,7 @@
  *   u <hex>      PID to treat as unsupported (00 = none), e.g. "u 0F"
  *   n            toggle unsupported PID: silence <-> NRC 7F 01 31
  *   s            toggle silent (ECU off: no answers, still counts requests)
+ *   e            toggle the second ECU (0x7E9)
  *   r            print stats now
  *   z            zero counters
  *   q <hex>      act as a TESTER: send 02 01 <pid> to 0x7DF and print any
@@ -50,11 +59,15 @@ static uint16_t answerDelayMs = 0;
 static uint8_t  unsupportedPid = 0x0F;
 static bool     unsupportedSendsNrc = false;
 static bool     silent = false;
+static bool     secondEcu = false;
 
-// ---- one queued answer (delay is non-blocking) ----
+// ---- one queued answer per ECU (delay is non-blocking) ----
 static bool      replyQueued = false;
 static uint32_t  replyDueMs;
 static can_frame replyFrame;
+static bool      reply2Queued = false;
+static uint32_t  reply2DueMs;
+static can_frame reply2Frame;
 
 // ---- stats ----
 static const uint8_t TRACKED = 8;
@@ -154,12 +167,14 @@ static void printSettings() {
     printHex2(unsupportedPid);
     Serial.print(unsupportedSendsNrc ? F(" (NRC)") : F(" (silent)"));
     Serial.print(F("  ecu="));
-    Serial.println(silent ? F("SILENT") : F("answering"));
+    Serial.print(silent ? F("SILENT") : F("answering"));
+    Serial.println(secondEcu ? F("  ecu2=0x7E9 on") : F("  ecu2=off"));
 }
 
 static void printHelp() {
     Serial.println(F("h help | d <ms> answer delay | u <hex> unsupported PID (00=none)"));
-    Serial.println(F("n toggle unsupported: silence/NRC | s toggle ECU silent | r stats | z zero"));
+    Serial.println(F("n toggle unsupported: silence/NRC | s toggle ECU silent | e toggle 2nd ECU 0x7E9"));
+    Serial.println(F("r stats | z zero"));
     Serial.println(F("q <hex> send a tester request to 0x7DF and print 0x7E8 answers"));
     printSettings();
 }
@@ -176,6 +191,15 @@ static bool buildAnswer(uint8_t pid, can_frame& f, uint32_t now) {
         f.data[1] = 0x7F;
         f.data[2] = 0x01;
         f.data[3] = 0x31;       // requestOutOfRange
+        return true;
+    }
+
+    if (pid == 0x20) {          // no second bitmap block: as unsupported
+        if (!unsupportedSendsNrc) return false;
+        f.data[0] = 0x03;
+        f.data[1] = 0x7F;
+        f.data[2] = 0x01;
+        f.data[3] = 0x31;
         return true;
     }
 
@@ -209,6 +233,47 @@ static bool buildAnswer(uint8_t pid, can_frame& f, uint32_t now) {
             f.data[0] = 0x03;
             f.data[3] = 30 + 40;
             return true;
+        case 0x00: {            // Supported PIDs 0x01-0x20: what this switch answers
+            static const uint8_t answered[] = {0x05, 0x0B, 0x0C, 0x0D, 0x0F};
+            f.data[0] = 0x06;
+            for (uint8_t p : answered) {
+                if (p == unsupportedPid) continue;
+                uint8_t i = p - 1;   // PID 0x01 is bit 7 of A
+                f.data[3 + i / 8] |= (uint8_t)(0x80 >> (i % 8));
+            }
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+// The second ECU's answer (0x7E9); false if it ignores `pid`.
+static bool buildAnswer2(uint8_t pid, can_frame& f) {
+    memset(&f, 0, sizeof(f));
+    f.can_id = 0x7E9;
+    f.can_dlc = 8;
+    f.data[1] = 0x41;
+    f.data[2] = pid;
+    switch (pid) {
+        case 0x00:              // 0x05 + continuation (0x20)
+            f.data[0] = 0x06;
+            f.data[3] = 0x08;
+            f.data[6] = 0x01;
+            return true;
+        case 0x20:              // 0x21
+            f.data[0] = 0x06;
+            f.data[3] = 0x80;
+            return true;
+        case 0x05:              // Trans temp 70 C
+            f.data[0] = 0x03;
+            f.data[3] = 70 + 40;
+            return true;
+        case 0x21:              // Distance with MIL on: 1234 km
+            f.data[0] = 0x04;
+            f.data[3] = 1234 >> 8;
+            f.data[4] = 1234 & 0xFF;
+            return true;
         default:
             return false;
     }
@@ -234,7 +299,8 @@ static void handleSerial() {
             case 'd': answerDelayMs = (uint16_t)atoi(arg); printSettings(); break;
             case 'u': unsupportedPid = (uint8_t)strtoul(arg, nullptr, 16); printSettings(); break;
             case 'n': unsupportedSendsNrc = !unsupportedSendsNrc; printSettings(); break;
-            case 's': silent = !silent; replyQueued = false; printSettings(); break;
+            case 's': silent = !silent; replyQueued = false; reply2Queued = false; printSettings(); break;
+            case 'e': secondEcu = !secondEcu; reply2Queued = false; printSettings(); break;
             case 'r': printStats(); break;
             case 'z': zeroStats(); Serial.println(F("[stats] zeroed")); break;
             case 'q': {
@@ -300,22 +366,34 @@ void loop() {
             Serial.println();
             continue;
         }
-        if (id != 0x7DF && id != 0x7E0) continue;
+        if (id != 0x7DF && id != 0x7E0 && id != 0x7E1) continue;
         // ISO-TP single frame: 02 01 <pid>
         if (rx.can_dlc < 3 || rx.data[0] != 0x02 || rx.data[1] != 0x01) continue;
 
         uint8_t pid = rx.data[2];
         countRequest(pid, now);
+        if (silent) continue;
 
-        if (silent || replyQueued) continue;   // one answer in flight, like a busy ECU
-        if (!buildAnswer(pid, replyFrame, now)) continue;
-        replyQueued = true;
-        replyDueMs = now + answerDelayMs;
+        // Engine: functional or 0x7E0. One answer in flight, like a busy ECU.
+        if (id != 0x7E1 && !replyQueued && buildAnswer(pid, replyFrame, now)) {
+            replyQueued = true;
+            replyDueMs = now + answerDelayMs;
+        }
+        // Transmission: functional or 0x7E1, answering alongside the engine
+        if (secondEcu && id != 0x7E0 && !reply2Queued && buildAnswer2(pid, reply2Frame)) {
+            reply2Queued = true;
+            reply2DueMs = now + answerDelayMs;
+        }
     }
 
     if (replyQueued && (int32_t)(now - replyDueMs) >= 0) {
         replyQueued = false;
         if (mcp.sendMessage(&replyFrame) == MCP2515::ERROR_OK) answersSent++;
+        else txErrors++;
+    }
+    if (reply2Queued && (int32_t)(now - reply2DueMs) >= 0) {
+        reply2Queued = false;
+        if (mcp.sendMessage(&reply2Frame) == MCP2515::ERROR_OK) answersSent++;
         else txErrors++;
     }
 

@@ -3,7 +3,8 @@
  *
  * The contract the webapp and mobile app build their CAN UIs on:
  *   SCAN STATUS JSON   small, polled ~1 Hz during a scan
- *   SCAN RESULTS JSON  the scan's findings, fetched when `found` changes
+ *   SCAN RESULTS JSON  SCAN CAN's findings, fetched when `found` changes
+ *   SCAN SUPPORTED JSON  SCAN PIDS's findings: supported PIDs per ECU (#511)
  *   BUS CAN JSON       live input/output/poll state + per-import age
  * Key names follow SYSTEM DUMP JSON (numeric bus index, 255 = none;
  * `baudrate`; `pin` + `pinLabel`; `sourceCanId`/`sourcePid`); config choices
@@ -22,14 +23,19 @@
 #include <ArduinoJson.h>
 
 // ---- SCAN STATUS JSON ------------------------------------------------------
-enum CanScanJsonState : uint8_t { CAN_SCAN_JSON_IDLE, CAN_SCAN_JSON_LISTENING, CAN_SCAN_JSON_DONE };
+enum CanScanJsonState : uint8_t {
+    CAN_SCAN_JSON_IDLE, CAN_SCAN_JSON_LISTENING, CAN_SCAN_JSON_DONE,
+    CAN_SCAN_JSON_QUERYING   // SCAN PIDS asking the ECUs (#511)
+};
 
 struct CanScanSnapshot {
     CanScanJsonState state;
-    uint8_t  scanId;        // increments per SCAN CAN start (0 = never scanned)
-    uint16_t durationMs;
+    uint8_t  scanId;        // increments per SCAN CAN / SCAN PIDS start (0 = never scanned)
+    uint16_t durationMs;    // 0 for SCAN PIDS: it ends when the ECUs have answered
     uint32_t remainingMs;   // 0 unless listening
-    uint8_t  found;
+    uint16_t found;         // SCAN CAN: results; SCAN PIDS: supported PIDs, all ECUs
+    bool     passive;       // false for SCAN PIDS, which transmits
+    uint8_t  ecus;          // SCAN PIDS: ECUs that answered (ignored when passive)
 };
 
 void canScanStatusToJson(const CanScanSnapshot& s, JsonObject out);
@@ -45,6 +51,11 @@ struct CanScanEntrySnapshot {
 };
 
 void canScanEntryToJson(const CanScanEntrySnapshot& e, JsonObject out);
+
+// ---- SCAN SUPPORTED JSON (one element per answering ECU) -------------------
+// `bits`: bit (0x80 >> (pid & 7)) of byte pid >> 3 (can_discovery.h layout).
+// The bitmap PIDs 0x00/0x20/.../0xE0 are left out: they are not sensors.
+void canScanSupportedToJson(uint16_t canId, const uint8_t bits[32], JsonObject out);
 
 // ---- BUS CAN JSON ----------------------------------------------------------
 struct CanBusSnapshot {

@@ -1552,7 +1552,7 @@ int cmd_set(int argc, const char* const* argv) {
         }
     }
 
-    // SET CAN <pid>  -  Import CAN sensor by PID
+    // SET CAN <pid> [ecu]  -  Import CAN sensor by PID (ecu: response ID, default 0x7E8)
     // Example: SET CAN 0x0C  (imports Engine RPM from OBD-II)
     // This automatically assigns the next available CAN virtual pin (CAN:0, CAN:1, etc.)
 #if INCLUDE_CAN
@@ -1577,6 +1577,21 @@ int cmd_set(int argc, const char* const* argv) {
             pid = (uint8_t)strtoul(argv[2] + 2, nullptr, 16);
         } else {
             pid = (uint8_t)atoi(argv[2]);
+        }
+
+        // Optional ECU response ID (#511): SCAN PIDS lists each ECU's PIDs,
+        // and one only a second ECU (0x7E9 transmission, ...) answers must be
+        // requested from and read on that ECU's ID. Default: engine, 0x7E8.
+        uint16_t ecuId = 0x7E8;
+        if (argc >= 4) {
+            char* end = nullptr;
+            unsigned long id = strtoul(argv[3], &end, 0);
+            if (argc > 4 || end == argv[3] || *end != '\0' || id < 0x7E8 || id > 0x7EF) {
+                msg.control.println(F("ERROR: Usage: SET CAN <pid> [ecu]"));
+                msg.control.println(F("  ecu is the ECU's response ID, 0x7E8-0x7EF (default 0x7E8)"));
+                return 1;
+            }
+            ecuId = (uint16_t)id;
         }
 
         // pin was already allocated by parsePin("CAN") at the top of cmd_set
@@ -1609,7 +1624,7 @@ int cmd_set(int argc, const char* const* argv) {
         // Configure CAN calibration
         if (pidInfo) {
             // Use standard PID info for automatic configuration
-            input->customCalibration.can.source_can_id = 0x7E8;  // OBD-II default
+            input->customCalibration.can.source_can_id = ecuId;
             input->customCalibration.can.source_pid = pid;
             input->customCalibration.can.data_offset = 0;
             input->customCalibration.can.data_length = pidInfo->data_length;
@@ -1653,7 +1668,7 @@ int cmd_set(int argc, const char* const* argv) {
             msg.control.println(F(")"));
         } else {
             // Unknown PID - use default calibration
-            input->customCalibration.can.source_can_id = 0x7E8;
+            input->customCalibration.can.source_can_id = ecuId;
             input->customCalibration.can.source_pid = pid;
             input->customCalibration.can.data_offset = 0;
             input->customCalibration.can.data_length = 1;
@@ -1673,6 +1688,14 @@ int cmd_set(int argc, const char* const* argv) {
             msg.control.print(pid, HEX);
             msg.control.println(F(" (unknown PID - using defaults)"));
             msg.control.println(F("  Hint: Use 'SET CAN:0 ...' commands to customize"));
+        }
+
+        if (ecuId != 0x7E8) {
+            // By hand: HEX prints lowercase on Teensy, and a printf format
+            // string would sit in RAM on AVR
+            msg.control.print(F("  from ECU 0x7E"));
+            uint8_t d = ecuId & 0x0F;
+            msg.control.println((char)(d < 10 ? '0' + d : 'A' + d - 10));
         }
 
         input->flags.isEnabled = true;

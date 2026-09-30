@@ -71,6 +71,13 @@ void setCANRequestHandler(CANRequestHandler handler);
 struct Input;
 struct CanBusSnapshot;
 
+/**
+ * May CAN input transmit requests now? NORMAL both as configured and as
+ * brought up at boot: after BUS CAN INPUT ... ENABLE on a LISTEN boot the
+ * controller stays listen-only until a reboot (SCAN PIDS, #511).
+ */
+bool canInputRunsNormal();
+
 /** Would the poller request this input's PID (NORMAL mode, OBD source, #476)? */
 bool canInputIsPolled(const Input& in);
 

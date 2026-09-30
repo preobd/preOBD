@@ -43,4 +43,22 @@ static inline bool parseCANInputFrame(const uint8_t* data, uint8_t len,
     return len > dataOffset;
 }
 
+/**
+ * On an OBD-II ECU response ID (0x7E8-0x7EF), is this frame something other
+ * than a value? A negative response (03 7F 01 31: "PID not supported") and
+ * the ISO-TP multi-frame PCIs (1x first frame, 2x consecutive, 3x flow
+ * control) fall through parseCANInputFrame to the custom path, keyed by
+ * their first byte: an NRC was cached as PID 0x03 and a first frame as PID
+ * 0x10 (MAF), and a scan listed both. Supported-PID discovery (#511) makes
+ * both routine: a functional request for a block an ECU lacks draws an NRC.
+ * The caller drops such frames; it applies this only to ECU response IDs,
+ * so a custom device whose first byte is 0x10-0x3F is unaffected.
+ */
+static inline bool isObdNonValueFrame(const uint8_t* data, uint8_t len) {
+    if (len == 0) return false;
+    uint8_t pci = data[0] & 0xF0;
+    if (pci == 0x10 || pci == 0x20 || pci == 0x30) return true;
+    return len >= 2 && data[0] >= 0x01 && data[0] <= 0x07 && data[1] == 0x7F;
+}
+
 #endif // CAN_FRAME_PARSE_H

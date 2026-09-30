@@ -183,6 +183,63 @@ Type 'SCAN CANCEL' to clear results.
 
 Then import sensors using `SET CAN <pid>` as shown above.
 
+`SCAN CAN` only listens. On a bus where nothing else asks the ECU for data
+(no scan tool or dash plugged in), it finds nothing: use `SCAN PIDS` instead.
+
+### Method 3: SCAN PIDS (Ask the ECU)
+
+Use this to find out **which PIDs your car's ECUs support**, even when
+nothing else is on the bus. preOBD sends the standard OBD-II "supported PIDs"
+requests (Mode 01 PID 0x00, 0x20, …) to every ECU and lists what each one
+answers. It needs CAN input in `ENABLE` mode, because `LISTEN` never
+transmits, and the ignition on.
+
+```bash
+CONFIG
+SCAN PIDS
+```
+
+**Output:**
+```
+Asking the ECUs for their supported PIDs...
+
+=== Supported PIDs ===
+
+ECU 0x7E8: 4 PIDs
+  0x05  Engine Coolant Temperature
+  0x0B  Intake Manifold Pressure
+  0x0C  Engine RPM
+  0x0D  Vehicle Speed
+
+ECU 0x7E9: 2 PIDs
+  0x05  Engine Coolant Temperature
+  0x21  Distance w/ MIL On
+
+To import a PID: SET CAN <pid_hex> [ecu]
+  (ecu only for a PID another ECU lists, e.g. SET CAN 0x05 0x7E9)
+```
+
+It takes under a second. `No ECU answered. Is the ignition on?` means
+nothing replied to the first request.
+
+`0x7E8` is the engine ECU; other IDs (`0x7E9` is usually the transmission)
+are further ECUs. `SET CAN <pid>` imports from the engine. To import a PID
+from another ECU, add its ID:
+
+```bash
+SET CAN 0x05 0x7E9     # transmission temperature from the second ECU
+```
+
+For the webapp and app, `SCAN PIDS JSON` runs the same query without the
+text table, and `SCAN SUPPORTED JSON` returns the result:
+
+```
+[{"canId":2024,"pids":[5,11,12,13]},{"canId":2025,"pids":[5,33]}]
+```
+
+`SCAN STATUS JSON` reports `"passive":false` for a `SCAN PIDS` scan, and
+`"ecus"` is the number of ECUs that answered.
+
 ---
 
 ## Standard OBD-II PIDs

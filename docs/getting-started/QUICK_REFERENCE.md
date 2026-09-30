@@ -374,6 +374,9 @@ See [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md) and
 | `BUS CAN` | Show CAN bus status |
 | `BUS CAN BAUDRATE <bps>` | Set CAN baudrate |
 | `BUS CAN INPUT\|OUTPUT <bus> ENABLE\|DISABLE` | Choose which CAN bus carries input and output |
+| `SCAN PIDS` | Ask the ECUs which OBD-II PIDs they support (CAN input in ENABLE mode) |
+| `SCAN CAN [ms]` | Listen for OBD-II answers and other CAN frames already on the bus |
+| `SET CAN <pid> [ecu]` | Import a PID (ecu: `0x7E9`… for a second ECU; default engine `0x7E8`) |
 
 **Example - Switch to Wire1:**
 ```

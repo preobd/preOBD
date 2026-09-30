@@ -182,6 +182,13 @@ FLASHMEM bool canInputIsPolled(const Input& in) {
            isObdResponseId(in.customCalibration.can.source_can_id);
 }
 
+FLASHMEM bool canInputRunsNormal() {
+    // Both the setting and what boot brought up: BUS CAN INPUT edits the
+    // first at once, the controller follows only after a reboot
+    return canInputIsRunning() && statInitMode == CAN_INPUT_NORMAL &&
+           systemConfig.buses.can_input_mode == CAN_INPUT_NORMAL;
+}
+
 FLASHMEM void getCANInputStatus(CanBusSnapshot& s, uint32_t now) {
     s.inRunning = canInputIsRunning();
     // Configured (systemConfig, what the dump shows) vs brought up at boot
@@ -228,6 +235,13 @@ static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len,
         return;
     }
 
+    // A negative response or an ISO-TP multi-frame PCI from an ECU is not a
+    // value; it would be keyed by its first byte (NRC as PID 0x03, a first
+    // frame as 0x10). See can_frame_parse.h.
+    if (!extended && isObdResponseId((uint16_t)can_id) && isObdNonValueFrame(data, len)) {
+        return;
+    }
+
     // Detect protocol format and extract identifier (see can_frame_parse.h)
     uint8_t identifier;
     uint8_t data_offset;
@@ -247,17 +261,27 @@ static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len,
     }
 
     uint8_t data_length = len - data_offset;
-    updateCANCache(can_id, identifier, &data[data_offset], data_length);
 
-    // The scan sees every parsed 11-bit frame (#510); a 29-bit ID would be
-    // truncated to 16 bits here and could pose as OBD (0x18DA07E8 -> 0x7E8).
-    // An ISO-TP single frame
-    // carries its payload length (length byte - mode - PID); the rest of the
-    // 8 bytes is padding.
+    // An ISO-TP single frame carries its payload length (length byte - mode
+    // - PID); the rest of the 8 bytes is padding.
     uint8_t payload = data_length;
     if (data_offset == 3 && data[0] >= 2 && (uint8_t)(data[0] - 2) < payload) {
         payload = data[0] - 2;
     }
+
+#if SUPPORTS_JSON_EXPORT
+    // SCAN PIDS (#511): a supported-PID bitmap answer belongs to the
+    // discovery, not to the frame cache or the scan results
+    if (data_offset != 0 && !extended &&
+        canScanOnBitmap((uint16_t)can_id, identifier, &data[data_offset], payload)) {
+        return;
+    }
+#endif
+
+    updateCANCache(can_id, identifier, &data[data_offset], data_length);
+
+    // The scan sees every parsed 11-bit frame (#510); a 29-bit ID would be
+    // truncated to 16 bits here and could pose as OBD (0x18DA07E8 -> 0x7E8).
     uint32_t now = millis();
     if (!extended) {
         canScanOnFrame((uint16_t)can_id, identifier, &data[data_offset], payload, now);
@@ -313,12 +337,49 @@ static bool pollTargetAt(uint8_t slot, uint16_t& responseId, uint8_t& pid) {
     return true;
 }
 
+#if SUPPORTS_JSON_EXPORT
+/**
+ * SCAN PIDS (#511): send the next supported-PID bitmap request, functional
+ * (0x7DF) so every ECU answers. The imported-PID poller is paused meanwhile
+ * (one requester on the bus); the walk takes about 100 ms per block, under
+ * a second in all. These requests are not counted in BUS CAN JSON's poll
+ * block, which describes the imported-PID poller.
+ */
+static FLASHMEM void runCANDiscovery() {
+    // LISTEN must never transmit; the mode can change under a running scan,
+    // and the controller keeps its boot mode until a reboot
+    if (!canInputRunsNormal()) {
+        canScanDiscoveryStop();
+        return;
+    }
+    uint32_t now = millis();
+    uint8_t base;
+    if (!canScanDiscoveryDue(now, base)) return;
+    uint8_t frame[8];
+    buildMode01Request(base, frame);
+    // A refused write still waits out its window (can_discovery.h); count it
+    // so BUS CAN JSON shows a TX problem rather than only "no ECU answered"
+    if (!hal::can::write(0x7DF, frame, 8, false, canInputBus)) statTxFail++;
+    canScanDiscoverySent(now);
+}
+#endif
+
 /**
  * Send the next Mode 01 request, round-robin over the imported PIDs.
  * NORMAL mode only: LISTEN must never transmit, and on a bus shared with
  * CAN output the hardware is in TX mode, so this check is the guard.
  */
+
 static void pollCANInputs() {
+#if SUPPORTS_JSON_EXPORT
+    if (canScanQuerying()) {   // before the mode check: it ends a scan left in LISTEN
+        runCANDiscovery();
+        // Answers to the poller's last request may still arrive; start its
+        // next round clean once the scan ends
+        canPollReset(pollState, millis());
+        return;
+    }
+#endif
     if (systemConfig.buses.can_input_mode != CAN_INPUT_NORMAL) return;
     if (!inputManagerTableIsLive()) return;
 
@@ -360,6 +421,9 @@ static void pollCANInputs() {
 void updateCANInput() {
     // Check if input is enabled and initialized
     if (!canInputInitialized || systemConfig.buses.can_input_mode == CAN_INPUT_OFF) {
+#if SUPPORTS_JSON_EXPORT
+        canScanDiscoveryStop();   // input turned off under SCAN PIDS: end it, don't hang
+#endif
         return;
     }
 
