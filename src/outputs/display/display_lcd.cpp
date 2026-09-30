@@ -264,7 +264,16 @@ void displaySensor(Input *ptr, byte line) {
                 case MEASURE_RPM:
                 case MEASURE_SPEED:
                 case MEASURE_DIGITAL:
+                case MEASURE_DISTANCE:
                     decimals = 0;  // No decimals for these
+                    break;
+                case MEASURE_TIME:
+                    // s and min whole; h keeps one (1.5 h, not 2) (#509)
+                    decimals = (ptr->unitsIndex == getUnitsIndexByName("HOURS")) ? 1 : 0;
+                    break;
+                case MEASURE_MASS_FLOW:
+                case MEASURE_FUEL_RATE:
+                    decimals = 1;
                     break;
                 case MEASURE_PRESSURE:
                     // inHg uses 2 decimals, others use 1

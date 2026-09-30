@@ -406,6 +406,10 @@ See [Serial Commands Reference](../reference/SERIAL_COMMANDS.md#bus-configuratio
 | `PERCENT` or `%` | Percentage |
 | `METERS` or `M` | Altitude in meters |
 | `FEET` or `FT` | Altitude in feet |
+| `KILOMETERS` or `KM`, `MILES` or `MI` | Distance (odometer and distance PIDs) |
+| `SECONDS` or `S`, `MINUTES` or `MIN`, `HOURS` or `H` | Time (run-time PIDs) |
+| `GRAMS_PER_SEC` or `GPS`, `LB_PER_MIN` or `LBMIN` | Mass air flow |
+| `LITERS_PER_HOUR` or `LPH`, `GAL_PER_HOUR` or `GPH` | Fuel rate (US gallons) |
 
 ---
 

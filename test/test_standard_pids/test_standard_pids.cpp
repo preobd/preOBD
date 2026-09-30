@@ -1,0 +1,150 @@
+// Native unit test: the standard OBD-II PID table and the units it maps to
+// (src/sensors/can_sensor_library/standard_pids.cpp, #509).
+//
+// The table's first version was wrong in 16 of 31 rows. Among other errors,
+// several rows named a unit the registry lacked, so SET CAN labelled them %.
+// This pins every row's shape against what SET CAN and the decoder assume,
+// the J1979-unit -> base-unit conversion, and the JSON unit lookup that must
+// accept the exported symbol without hash-colliding (djb2("L/H") == "KPH").
+#include <unity.h>
+#include <Arduino.h>
+#include <string.h>
+
+#include "../../src/sensors/sensor_library.cpp"
+#include "../../src/sensors/sensor_library/sensor_categories.cpp"
+#include "../../src/sensors/units_registry.cpp"
+#include "../../src/sensors/application_presets.cpp"
+#include "../../src/inputs/measurement_compat.cpp"
+#include "../../src/sensors/can_sensor_library/standard_pids.cpp"
+
+void setUp(void) {}
+void tearDown(void) {}
+
+static StandardPIDInfo row(uint8_t i) {
+    StandardPIDInfo r;
+    memcpy_P(&r, &STANDARD_PID_TABLE[i], sizeof(r));
+    return r;
+}
+
+static StandardPIDInfo rowFor(uint8_t pid) {
+    const StandardPIDInfo* p = lookupStandardPID(pid);
+    TEST_ASSERT_NOT_NULL_MESSAGE(p, "PID missing from table");
+    StandardPIDInfo r;
+    memcpy_P(&r, p, sizeof(r));
+    return r;
+}
+
+// Every row: sorted/unique, single-frame, real unit of its own type, fits
+// the input's name buffers
+static void test_every_row_is_well_formed(void) {
+    for (uint8_t i = 0; i < NUM_STANDARD_PIDS; i++) {
+        StandardPIDInfo r = row(i);
+        char msg[48];
+        snprintf(msg, sizeof(msg), "PID 0x%02X", r.pid);
+        if (i) TEST_ASSERT_TRUE_MESSAGE(row(i - 1).pid < r.pid, msg);          // sorted, unique
+        TEST_ASSERT_TRUE_MESSAGE((r.pid & 0x1F) != 0, msg);                   // not a bitmap PID
+        TEST_ASSERT_TRUE_MESSAGE(r.data_length == 1 || r.data_length == 2 || r.data_length == 4, msg);
+        TEST_ASSERT_TRUE_MESSAGE(r.data_offset + r.data_length <= 5, msg);    // one ISO-TP single frame
+        TEST_ASSERT_TRUE_MESSAGE(r.measurementType != MEASURE_DIGITAL, msg);  // #509: shows up as %
+        TEST_ASSERT_TRUE_MESSAGE(r.scale_factor != 0.0f, msg);
+        TEST_ASSERT_TRUE_MESSAGE(strlen_P(r.name) < 32, msg);                 // Input::displayName
+        TEST_ASSERT_TRUE_MESSAGE(strlen_P(r.abbr) < 8, msg);                  // Input::abbrName
+        float scale, offset;
+        uint8_t u = 0xEE;
+        TEST_ASSERT_TRUE_MESSAGE(standardPidToBase(r, scale, offset, u), msg);  // unit resolves, right type
+        TEST_ASSERT_TRUE_MESSAGE(unitsMatchMeasurement(u, (MeasurementType)r.measurementType), msg);
+    }
+}
+
+// Rows are in J1979 units; the input stores base units
+static void test_conversion_to_base(void) {
+    float scale, offset;
+    uint8_t u;
+
+    StandardPIDInfo map = rowFor(0x0B);                  // kPa -> bar
+    TEST_ASSERT_TRUE(standardPidToBase(map, scale, offset, u));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.01f, scale);
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("KPA"), u);   // shown in kPa, as before
+
+    StandardPIDInfo tmil = rowFor(0x4D);                 // min -> s
+    TEST_ASSERT_TRUE(standardPidToBase(tmil, scale, offset, u));
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, 60.0f, scale);
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("MIN"), u);
+
+    StandardPIDInfo ect = rowFor(0x05);                  // C base: unchanged
+    TEST_ASSERT_TRUE(standardPidToBase(ect, scale, offset, u));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f, scale);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, -40.0f, offset);
+
+    StandardPIDInfo maf = rowFor(0x10);
+    TEST_ASSERT_EQUAL(MEASURE_MASS_FLOW, maf.measurementType);
+    TEST_ASSERT_TRUE(standardPidToBase(maf, scale, offset, u));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.01f, scale);
+}
+
+// The rows #509 fixed, and those left out on purpose
+static void test_audited_rows(void) {
+    TEST_ASSERT_EQUAL(MEASURE_FUEL_RATE, rowFor(0x5E).measurementType);   // was "Mass Airflow"
+    TEST_ASSERT_EQUAL(MEASURE_DISTANCE, rowFor(0xA6).measurementType);    // odometer
+    TEST_ASSERT_EQUAL(MEASURE_TIME, rowFor(0x1F).measurementType);
+    TEST_ASSERT_EQUAL(MEASURE_PERCENT, rowFor(0x8E).measurementType);     // friction torque, A-125
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, -125.0f, rowFor(0x8E).offset);
+    TEST_ASSERT_EQUAL_UINT8(1, rowFor(0x66).data_offset);                 // A = sensor-support byte
+    TEST_ASSERT_EQUAL_UINT8(1, rowFor(0x67).data_offset);
+    const uint8_t gone[] = {0x6F, 0x78, 0x7F, 0xA4, 0xAA, 0xC3, 0xC4};
+    for (uint8_t p : gone) TEST_ASSERT_NULL(lookupStandardPID(p));
+}
+
+// New types: base unit first (factor 1), conversions, exclusive matching
+static void test_new_units(void) {
+    const MeasurementType types[] = {MEASURE_DISTANCE, MEASURE_TIME, MEASURE_MASS_FLOW, MEASURE_FUEL_RATE};
+    for (MeasurementType t : types) {
+        uint8_t base = defaultUnitsForMeasurement(t);
+        TEST_ASSERT_TRUE(unitsMatchMeasurement(base, t));
+        TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f, pgm_read_float(&UNITS_REGISTRY[base].conversionFactor));
+    }
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.621371f, pgm_read_float(&UNITS_REGISTRY[findUnitsIndexByName("MI")].conversionFactor));
+    TEST_ASSERT_FLOAT_WITHIN(1e-7f, 1.0f / 3600.0f, pgm_read_float(&UNITS_REGISTRY[findUnitsIndexByName("H")].conversionFactor));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.132277f, pgm_read_float(&UNITS_REGISTRY[findUnitsIndexByName("LBMIN")].conversionFactor));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.264172f, pgm_read_float(&UNITS_REGISTRY[findUnitsIndexByName("GPH")].conversionFactor));
+    TEST_ASSERT_FALSE(unitsMatchMeasurement(findUnitsIndexByName("KM"), MEASURE_SPEED));
+    TEST_ASSERT_FALSE(unitsMatchMeasurement(findUnitsIndexByName("MIN"), MEASURE_DISTANCE));
+    TEST_ASSERT_FALSE(unitsMatchMeasurement(findUnitsIndexByName("PERCENT"), MEASURE_TIME));
+    // Every name/alias hash in the table is what djb2 computes
+    for (uint8_t i = 0; i < NUM_UNITS; i++) {
+        char buf[20];
+        strncpy_P(buf, (const char*)pgm_read_ptr(&UNITS_REGISTRY[i].name), sizeof(buf));
+        TEST_ASSERT_EQUAL_HEX16(djb2_hash(buf), pgm_read_word(&UNITS_REGISTRY[i].nameHash));
+        strncpy_P(buf, (const char*)pgm_read_ptr(&UNITS_REGISTRY[i].alias), sizeof(buf));
+        TEST_ASSERT_EQUAL_HEX16(djb2_hash(buf), pgm_read_word(&UNITS_REGISTRY[i].aliasHash));
+    }
+}
+
+// SYSTEM DUMP JSON exports the symbol; the import must read it back
+static void test_symbol_lookup(void) {
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("KPH"), findUnitsIndexByNameOrSymbol("km/h"));   // lost on restore before
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("LPH"), findUnitsIndexByNameOrSymbol("L/h"));    // hash == KPH's
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("GPS"), findUnitsIndexByNameOrSymbol("g/s"));
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("LBMIN"), findUnitsIndexByNameOrSymbol("lb/min"));
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("GPH"), findUnitsIndexByNameOrSymbol("gal/h"));
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("KM"), findUnitsIndexByNameOrSymbol("km"));
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("PSI"), findUnitsIndexByNameOrSymbol("psi"));
+    TEST_ASSERT_EQUAL_UINT8(UNITS_NOT_FOUND, findUnitsIndexByNameOrSymbol("furlongs"));
+    TEST_ASSERT_EQUAL_UINT8(UNITS_NOT_FOUND, findUnitsIndexByNameOrSymbol(nullptr));
+    // No symbol may name another unit: an exported symbol reads back as itself
+    for (uint8_t i = 0; i < NUM_UNITS; i++) {
+        char sym[16];
+        strncpy_P(sym, (const char*)pgm_read_ptr(&UNITS_REGISTRY[i].symbol), sizeof(sym));
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(i, findUnitsIndexByNameOrSymbol(sym), sym);
+    }
+}
+
+int main(int, char**) {
+    UNITY_BEGIN();
+    RUN_TEST(test_every_row_is_well_formed);
+    RUN_TEST(test_conversion_to_base);
+    RUN_TEST(test_audited_rows);
+    RUN_TEST(test_new_units);
+    RUN_TEST(test_symbol_lookup);
+    return UNITY_END();
+}

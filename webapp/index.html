@@ -2075,6 +2075,7 @@ function displayDecimals(unit) {
   switch ((unit || '').replace(/^°/, '').trim().toLowerCase()) {
     case 'c': case 'f': case 'rpm': case '%': case 'm': case 'ft':
     case 'km/h': case 'kph': case 'mph':
+    case 'km': case 'mi': case 's': case 'min':   // #509; h, g/s, L/h keep 1
       return 0;
     case 'inhg':
       return 2;
@@ -4166,7 +4167,8 @@ function canErrText(msg) {
 function canDecode(row) {
   const info = canUi.pids.get(row.pid);
   if (!row.obd || !info || !row.data) return null;
-  const bytes = row.data.match(/../g)?.map(h => parseInt(h, 16)) || [];
+  // dataOffset skips a multi-sensor PID's support byte (0x66, 0x67; #509)
+  const bytes = (row.data.match(/../g)?.map(h => parseInt(h, 16)) || []).slice(info.dataOffset || 0);
   const n = Math.min(info.dataLength || 1, bytes.length);
   if (!n) return null;
   let raw = 0;

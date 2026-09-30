@@ -66,6 +66,36 @@ static const char PSTR_KPH_SYMBOL[] PROGMEM = "km/h";
 static const char PSTR_MPH[] PROGMEM = "MPH";
 static const char PSTR_MPH_SYMBOL[] PROGMEM = "mph";
 
+// #509: units of imported OBD-II PIDs. Where the symbol equals the alias
+// ("km", "s") the alias string doubles as the symbol.
+static const char PSTR_KILOMETERS[] PROGMEM = "KILOMETERS";
+static const char PSTR_KM[] PROGMEM = "KM";
+static const char PSTR_KM_SYMBOL[] PROGMEM = "km";
+static const char PSTR_MILES[] PROGMEM = "MILES";
+static const char PSTR_MI[] PROGMEM = "MI";
+static const char PSTR_MI_SYMBOL[] PROGMEM = "mi";
+static const char PSTR_SECONDS[] PROGMEM = "SECONDS";
+static const char PSTR_S[] PROGMEM = "S";
+static const char PSTR_S_SYMBOL[] PROGMEM = "s";
+static const char PSTR_MINUTES[] PROGMEM = "MINUTES";
+static const char PSTR_MIN[] PROGMEM = "MIN";
+static const char PSTR_MIN_SYMBOL[] PROGMEM = "min";
+static const char PSTR_HOURS[] PROGMEM = "HOURS";
+static const char PSTR_H[] PROGMEM = "H";
+static const char PSTR_H_SYMBOL[] PROGMEM = "h";
+static const char PSTR_GRAMS_PER_SEC[] PROGMEM = "GRAMS_PER_SEC";
+static const char PSTR_GPS[] PROGMEM = "GPS";
+static const char PSTR_GPS_SYMBOL[] PROGMEM = "g/s";
+static const char PSTR_LB_PER_MIN[] PROGMEM = "LB_PER_MIN";
+static const char PSTR_LBMIN[] PROGMEM = "LBMIN";
+static const char PSTR_LBMIN_SYMBOL[] PROGMEM = "lb/min";
+static const char PSTR_LITERS_PER_HOUR[] PROGMEM = "LITERS_PER_HOUR";
+static const char PSTR_LPH[] PROGMEM = "LPH";
+static const char PSTR_LPH_SYMBOL[] PROGMEM = "L/h";
+static const char PSTR_GAL_PER_HOUR[] PROGMEM = "GAL_PER_HOUR";
+static const char PSTR_GPH[] PROGMEM = "GPH";
+static const char PSTR_GPH_SYMBOL[] PROGMEM = "gal/h";
+
 /**
  * UNITS_REGISTRY - Complete unit definitions
  */
@@ -224,6 +254,104 @@ const PROGMEM UnitsInfo UNITS_REGISTRY[] = {
         .conversionOffset = 0.0,
         .nameHash = 0x050A,  // djb2_hash("MPH")
         .aliasHash = 0x050A  // same as name
+    },    // Index 13: KILOMETERS (base unit for distance)
+    {
+        .name = PSTR_KILOMETERS,
+        .alias = PSTR_KM,
+        .symbol = PSTR_KM_SYMBOL,
+        .measurementType = MEASURE_DISTANCE,
+        .conversionFactor = 1.0,
+        .conversionOffset = 0.0,
+        .nameHash = 0xA304,
+        .aliasHash = 0x743D
+    },
+    // Index 14: MILES
+    {
+        .name = PSTR_MILES,
+        .alias = PSTR_MI,
+        .symbol = PSTR_MI_SYMBOL,
+        .measurementType = MEASURE_DISTANCE,
+        .conversionFactor = 0.621371,
+        .conversionOffset = 0.0,
+        .nameHash = 0xB31F,
+        .aliasHash = 0x747B
+    },
+    // Index 15: SECONDS (base unit for time)
+    {
+        .name = PSTR_SECONDS,
+        .alias = PSTR_S,
+        .symbol = PSTR_S_SYMBOL,
+        .measurementType = MEASURE_TIME,
+        .conversionFactor = 1.0,
+        .conversionOffset = 0.0,
+        .nameHash = 0x53F4,
+        .aliasHash = 0xB5F8
+    },
+    // Index 16: MINUTES
+    {
+        .name = PSTR_MINUTES,
+        .alias = PSTR_MIN,
+        .symbol = PSTR_MIN_SYMBOL,
+        .measurementType = MEASURE_TIME,
+        .conversionFactor = (1.0 / 60.0),
+        .conversionOffset = 0.0,
+        .nameHash = 0xFB6A,
+        .aliasHash = 0x0429
+    },
+    // Index 17: HOURS
+    {
+        .name = PSTR_HOURS,
+        .alias = PSTR_H,
+        .symbol = PSTR_H_SYMBOL,
+        .measurementType = MEASURE_TIME,
+        .conversionFactor = (1.0 / 3600.0),
+        .conversionOffset = 0.0,
+        .nameHash = 0xAAD6,
+        .aliasHash = 0xB5ED
+    },
+    // Index 18: GRAMS_PER_SEC (base unit for mass air flow)
+    {
+        .name = PSTR_GRAMS_PER_SEC,
+        .alias = PSTR_GPS,
+        .symbol = PSTR_GPS_SYMBOL,
+        .measurementType = MEASURE_MASS_FLOW,
+        .conversionFactor = 1.0,
+        .conversionOffset = 0.0,
+        .nameHash = 0x7B7F,
+        .aliasHash = 0xEB8F
+    },
+    // Index 19: LB_PER_MIN (1 g/s = 0.132277 lb/min)
+    {
+        .name = PSTR_LB_PER_MIN,
+        .alias = PSTR_LBMIN,
+        .symbol = PSTR_LBMIN_SYMBOL,
+        .measurementType = MEASURE_MASS_FLOW,
+        .conversionFactor = 0.132277,
+        .conversionOffset = 0.0,
+        .nameHash = 0x491C,
+        .aliasHash = 0xC8B7
+    },
+    // Index 20: LITERS_PER_HOUR (base unit for fuel rate)
+    {
+        .name = PSTR_LITERS_PER_HOUR,
+        .alias = PSTR_LPH,
+        .symbol = PSTR_LPH_SYMBOL,
+        .measurementType = MEASURE_FUEL_RATE,
+        .conversionFactor = 1.0,
+        .conversionOffset = 0.0,
+        .nameHash = 0x645B,
+        .aliasHash = 0x00C9
+    },
+    // Index 21: GAL_PER_HOUR (US gallons)
+    {
+        .name = PSTR_GAL_PER_HOUR,
+        .alias = PSTR_GPH,
+        .symbol = PSTR_GPH_SYMBOL,
+        .measurementType = MEASURE_FUEL_RATE,
+        .conversionFactor = 0.264172,
+        .conversionOffset = 0.0,
+        .nameHash = 0x8D7C,
+        .aliasHash = 0xEB84
     }
 };
 

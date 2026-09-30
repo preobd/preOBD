@@ -13,7 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `BUS CAN JSON`, `SCAN STATUS JSON` and `SCAN RESULTS JSON` report live CAN state and scan results as JSON, in RUN as well as CONFIG; `SCAN CAN` now counts real frames and payload lengths, and `SCAN CAN … JSON` skips the text table (#510)
 - CAN input in `ENABLE` mode now polls the ECU for each imported OBD-II PID, so `SET CAN <pid>` reads without a scan tool on the bus (`LISTEN` stays passive), and `INFO CAN:<n>` shows when the last frame arrived (#476)
 
+### Changed
+- Arduino Mega: 180 B more free RAM (7,963 of 8,192 B used, was 8,143 B): the compiler no longer builds `switch` lookup tables, which avr-gcc keeps in RAM (#509)
+
 ### Fixed
+- Imported OBD-II PIDs are decoded and labelled to the J1979 standard: mass air flow (g/s, lb/min), run time (s, min, h), distance and odometer (km, mi) and fuel rate (L/h, gal/h) no longer show `%`. PIDs 0x31, 0x4D and 0x4E are new, and the PID table was corrected against three references. For an input imported earlier from 0x5A, 0x5E, 0x66 or 0x67, run `SET CAN <pid>` again for the right name and value. 0x6F, 0x78, 0x7F, 0xA4, 0xAA, 0xC3 and 0xC4 were removed because they never decoded correctly (#509)
 - The OBD-II responder now answers requests over CAN on Teensy (it never received them), and CAN input sharing a bus with CAN output no longer reboot-loops the board when the CAN output module is off (#495)
 - Imported CAN PIDs now carry their real units (RPM, km/h, kPa, …) instead of `C`, accept `SET <pin> UNITS` for their quantity, keep them across a reboot, and read pressure PIDs correctly; `SET CAN` also works on the Arduino Mega, where it read the PID table from the wrong memory (#496). A pressure PID (MAP, fuel pressure, …) imported on 0.14.0-beta reads 100× too high after upgrading: run `SET CAN <pid>` for it again
 - `JSON IMPORT` restores CAN inputs: a `SYSTEM DUMP JSON` backup or an app profile used to drop every imported CAN PID (#499)

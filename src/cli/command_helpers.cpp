@@ -164,6 +164,10 @@ const __FlashStringHelper* measurementTypeName(MeasurementType type) {
         case MEASURE_ELEVATION:   return F("ELEVATION");
         case MEASURE_DIGITAL:     return F("DIGITAL");
         case MEASURE_PERCENT:     return F("PERCENT");
+        case MEASURE_DISTANCE:    return F("DISTANCE");
+        case MEASURE_TIME:        return F("TIME");
+        case MEASURE_MASS_FLOW:   return F("MASS_FLOW");
+        case MEASURE_FUEL_RATE:   return F("FUEL_RATE");
     }
     return nullptr;
 }

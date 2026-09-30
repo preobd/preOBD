@@ -287,6 +287,17 @@ removed and any Action it released, so no orphaned Rule is left holding a
 | `PERCENT` | `%` | Percentage |
 | `METERS` | `M` | Altitude in meters |
 | `FEET` | `FT` | Altitude in feet |
+| `KILOMETERS` | `KM` | Distance in kilometers (odometer, distance PIDs) |
+| `MILES` | `MI` | Distance in miles |
+| `SECONDS` | `S` | Time in seconds (run-time PIDs) |
+| `MINUTES` | `MIN` | Time in minutes |
+| `HOURS` | `H` | Time in hours |
+| `GRAMS_PER_SEC` | `GPS` | Mass air flow in g/s |
+| `LB_PER_MIN` | `LBMIN` | Mass air flow in lb/min |
+| `LITERS_PER_HOUR` | `LPH` | Fuel rate in L/h |
+| `GAL_PER_HOUR` | `GPH` | Fuel rate in US gallons per hour |
+
+An input accepts only units of what it measures: a distance input takes `KM` or `MI`, not `MPH`.
 
 ---
 

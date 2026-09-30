@@ -1626,31 +1626,25 @@ int cmd_set(int argc, const char* const* argv) {
             // Use standard PID info for automatic configuration
             input->customCalibration.can.source_can_id = ecuId;
             input->customCalibration.can.source_pid = pid;
-            input->customCalibration.can.data_offset = 0;
+            // A multi-sensor PID (0x66, 0x67) leads with a sensor-support byte
+            input->customCalibration.can.data_offset = pidInfo->data_offset;
             input->customCalibration.can.data_length = pidInfo->data_length;
             input->customCalibration.can.is_big_endian = true;
-            input->customCalibration.can.scale_factor = pidInfo->scale_factor;
-            input->customCalibration.can.offset = pidInfo->offset;
-            // The table's pressure PIDs are in kPa; preOBD's pressure base unit
-            // is bar (display/OBD output convert from bar), so store bar.
-            if (pidInfo->measurementType == MEASURE_PRESSURE) {
-                input->customCalibration.can.scale_factor *= 0.01f;
-                input->customCalibration.can.offset *= 0.01f;
-            }
+            // The table is in each PID's J1979 unit (kPa, min); the input
+            // stores its base unit (bar, s) and displays in the row's unit,
+            // both through the units registry (#496, #509)
+            float scale = pidInfo->scale_factor, off = pidInfo->offset;
+            uint8_t u = defaultUnitsForMeasurement(pidInfo->measurementType);
+            standardPidToBase(*pidInfo, scale, off, u);   // test_standard_pids: never false
+            input->customCalibration.can.scale_factor = scale;
+            input->customCalibration.can.offset = off;
             input->customCalibration.can.timeout_ms = CAN_DEFAULT_TIMEOUT_MS;
             input->flags.useCustomCalibration = true;
 
             // Measurement type and units from the standard PID table (#496):
             // the CAN_IMPORT preset left every PID labelled CELSIUS.
             input->measurementType = pidInfo->measurementType;
-            {
-                char unitName[12];
-                strncpy_P(unitName, pidInfo->units, sizeof(unitName) - 1);
-                unitName[sizeof(unitName) - 1] = '\0';
-                uint8_t u = findUnitsIndexByName(unitName);
-                input->unitsIndex = unitsMatchMeasurement(u, pidInfo->measurementType)
-                                    ? u : defaultUnitsForMeasurement(pidInfo->measurementType);
-            }
+            input->unitsIndex = u;
 
             // Set display name from standard table
             strncpy_P(input->displayName, pidInfo->name, sizeof(input->displayName) - 1);

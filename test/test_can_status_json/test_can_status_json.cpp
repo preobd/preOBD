@@ -17,6 +17,7 @@
 
 #include "../../src/inputs/can_status_json.cpp"
 #include "../../src/sensors/drivers/can/can_scan.cpp"
+#include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
 
 // can_scan.cpp prints through msg.control; a null-transport router makes
 // every print a no-op.

@@ -65,6 +65,21 @@ MeasurementType inputMeasurementTypeOf(const Input& in) {
                                     in.customCalibration.can.source_pid, base);
 }
 
+bool standardPidToBase(const StandardPIDInfo& row, float& scale, float& offset,
+                       uint8_t& unitsIndex) {
+    char unitName[16];
+    strncpy_P(unitName, row.units, sizeof(unitName) - 1);
+    unitName[sizeof(unitName) - 1] = '\0';
+    uint8_t u = findUnitsIndexByName(unitName);
+    if (!unitsMatchMeasurement(u, row.measurementType)) return false;
+    const float f = pgm_read_float(&UNITS_REGISTRY[u].conversionFactor);
+    const float o = pgm_read_float(&UNITS_REGISTRY[u].conversionOffset);
+    scale = row.scale_factor / f;
+    offset = (row.offset - o) / f;
+    unitsIndex = u;
+    return true;
+}
+
 uint8_t defaultUnitsForMeasurement(MeasurementType type) {
     for (uint8_t i = 0; i < NUM_UNITS; i++) {
         if (unitsMatchMeasurement(i, type)) return i;

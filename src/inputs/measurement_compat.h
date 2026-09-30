@@ -72,4 +72,18 @@ MeasurementType inputMeasurementTypeOf(const Input& in);
 // the PERCENT family shares PERCENT), or 0 if the registry has none.
 uint8_t defaultUnitsForMeasurement(MeasurementType type);
 
+struct StandardPIDInfo;
+
+/**
+ * Decode of a standard PID row in the input's BASE unit (#509). Rows are in
+ * the PID's J1979 unit (kPa, min); inputs store base units (bar, s), so
+ * scale and offset go through that unit's registry conversion:
+ * base = (raw * scale + offset - unitOffset) / unitFactor.
+ * `unitsIndex` is the row's own unit (the natural display unit). Returns
+ * false if the row's unit is not a registry unit of its measurement type.
+ * `row` must be a RAM copy (memcpy_P).
+ */
+bool standardPidToBase(const StandardPIDInfo& row, float& scale, float& offset,
+                       uint8_t& unitsIndex);
+
 #endif // MEASUREMENT_COMPAT_H

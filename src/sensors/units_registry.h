@@ -56,7 +56,7 @@ struct UnitsInfo {
 // an extern array of unknown bound can't be sized from here. units_registry.cpp
 // carries a static_assert tying it to the array's real extent so the two
 // cannot silently drift.
-#define NUM_UNITS 13
+#define NUM_UNITS 22
 
 extern const PROGMEM UnitsInfo UNITS_REGISTRY[];
 
@@ -138,6 +138,21 @@ inline uint8_t getUnitsIndexByHash(uint16_t hash) {
 inline uint8_t findUnitsIndexByName(const char* name) {
     if (!name) return UNITS_NOT_FOUND;
     return findUnitsIndexByHash(djb2_hash(name));
+}
+
+/**
+ * An exact (case-sensitive) match on the display symbol first, then name or
+ * alias. SYSTEM DUMP JSON exports the symbol ("km/h", "g/s"), which is not
+ * always a name or alias, so a restore resolved it to nothing (#509).
+ * Symbol first, and by string, because the hashed name lookup collides:
+ * djb2("L/H") == djb2("KPH"), so "L/h" would come back as km/h.
+ */
+inline uint8_t findUnitsIndexByNameOrSymbol(const char* s) {
+    if (!s) return UNITS_NOT_FOUND;
+    for (uint8_t j = 0; j < NUM_UNITS; j++) {
+        if (strcmp_P(s, (const char*)pgm_read_ptr(&UNITS_REGISTRY[j].symbol)) == 0) return j;
+    }
+    return findUnitsIndexByName(s);
 }
 
 /**

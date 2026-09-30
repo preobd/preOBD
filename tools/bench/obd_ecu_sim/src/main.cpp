@@ -14,10 +14,15 @@
  *   0x0D Speed     0-100 km/h     (A)
  *   0x0F Intake    30 C           (A-40)   <- default "unsupported" PID
  *   0x0B MAP       101 kPa        (A)      <- fixed, checks kPa -> bar -> psi
- *   0x00 supported-PID bitmap of the above, minus the unsupported PID (#511)
- * Anything else is ignored, like a real ECU. The bitmap block 0x20 is
- * treated like the unsupported PID (silence, or NRC with `n`), so SCAN PIDS
- * meets the negative response a real engine ECU sends there.
+ * #509 units (fixed values, J1979 formulas):
+ *   0x10 MAF 12.34 g/s   0x1F run time = uptime s   0x21 dist MIL 42 km
+ *   0x31 dist since clear 1500 km   0x4D time MIL 90 min   0x5E fuel 5.5 L/h
+ *   0x66 MAF sensor A 20 g/s (A = support byte 01)
+ *   0x67 ECT sensor 1 90 C (A = support byte 01)   0xA6 odometer 123456.7 km
+ *   0x00/0x20/... supported-PID bitmaps of the above, minus the unsupported
+ *   PID (#511); a bitmap block with nothing above it is treated like the
+ *   unsupported PID (silence, or NRC with `n`).
+ * Anything else is ignored, like a real ECU.
  *
  * With `e`, a second ECU (transmission, 0x7E9, physical 0x7E1) also answers:
  *   0x00 bitmap: 0x05 + continuation   0x20 bitmap: 0x21
@@ -194,12 +199,31 @@ static bool buildAnswer(uint8_t pid, can_frame& f, uint32_t now) {
         return true;
     }
 
-    if (pid == 0x20) {          // no second bitmap block: as unsupported
-        if (!unsupportedSendsNrc) return false;
-        f.data[0] = 0x03;
-        f.data[1] = 0x7F;
-        f.data[2] = 0x01;
-        f.data[3] = 0x31;
+    static const uint8_t answered[] = {0x05, 0x0B, 0x0C, 0x0D, 0x0F, 0x10, 0x1F, 0x21,
+                                       0x31, 0x4D, 0x5E, 0x66, 0x67, 0xA6};
+    if ((pid & 0x1F) == 0) {    // supported-PID bitmap for (pid, pid+0x20]
+        bool any = false, more = false;
+        uint8_t bits[4] = {0, 0, 0, 0};
+        for (uint8_t p : answered) {
+            if (p == unsupportedPid || p <= pid) continue;
+            any = true;
+            if (p > pid + 0x20) { more = true; continue; }
+            uint8_t i = p - pid - 1;
+            bits[i / 8] |= (uint8_t)(0x80 >> (i % 8));
+        }
+        if (!any) {             // nothing above this block: as unsupported
+            if (!unsupportedSendsNrc) return false;
+            f.data[0] = 0x03;
+            f.data[1] = 0x7F;
+            f.data[2] = 0x01;
+            f.data[3] = 0x31;
+            return true;
+        }
+        if (more) bits[3] |= 0x01;   // PID pid+0x20 is the next bitmap
+        f.data[0] = 0x06;
+        f.data[1] = 0x41;
+        f.data[2] = pid;
+        memcpy(&f.data[3], bits, 4);
         return true;
     }
 
@@ -233,14 +257,35 @@ static bool buildAnswer(uint8_t pid, can_frame& f, uint32_t now) {
             f.data[0] = 0x03;
             f.data[3] = 30 + 40;
             return true;
-        case 0x00: {            // Supported PIDs 0x01-0x20: what this switch answers
-            static const uint8_t answered[] = {0x05, 0x0B, 0x0C, 0x0D, 0x0F};
-            f.data[0] = 0x06;
-            for (uint8_t p : answered) {
-                if (p == unsupportedPid) continue;
-                uint8_t i = p - 1;   // PID 0x01 is bit 7 of A
-                f.data[3 + i / 8] |= (uint8_t)(0x80 >> (i % 8));
-            }
+        case 0x10:              // MAF 12.34 g/s: (256A+B)/100
+            f.data[0] = 0x04; f.data[3] = 1234 >> 8; f.data[4] = 1234 & 0xFF;
+            return true;
+        case 0x1F: {            // run time since start: uptime, s
+            uint16_t t = (uint16_t)(now / 1000);
+            f.data[0] = 0x04; f.data[3] = t >> 8; f.data[4] = t & 0xFF;
+            return true;
+        }
+        case 0x21:              // distance with MIL on: 42 km
+            f.data[0] = 0x04; f.data[4] = 42;
+            return true;
+        case 0x31:              // distance since codes cleared: 1500 km
+            f.data[0] = 0x04; f.data[3] = 1500 >> 8; f.data[4] = 1500 & 0xFF;
+            return true;
+        case 0x4D:              // time run with MIL on: 90 min
+            f.data[0] = 0x04; f.data[4] = 90;
+            return true;
+        case 0x5E:              // fuel rate 5.5 L/h: (256A+B)/20
+            f.data[0] = 0x04; f.data[4] = 110;
+            return true;
+        case 0x66:              // MAF: A = support (sensor A), sensor A 20 g/s = 640/32
+            f.data[0] = 0x07; f.data[3] = 0x01; f.data[4] = 640 >> 8; f.data[5] = 640 & 0xFF;
+            return true;
+        case 0x67:              // ECT: A = support (sensor 1), B = 90 + 40
+            f.data[0] = 0x05; f.data[3] = 0x01; f.data[4] = 130;
+            return true;
+        case 0xA6: {            // odometer 123456.7 km: 32-bit / 10
+            uint32_t o = 1234567;
+            f.data[0] = 0x06; f.data[3] = o >> 24; f.data[4] = o >> 16; f.data[5] = o >> 8; f.data[6] = o;
             return true;
         }
         default:

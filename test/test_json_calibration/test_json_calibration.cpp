@@ -27,6 +27,7 @@
 #include "../../src/storage/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
+#include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
 #include "../../src/pinctrl/pin_label.cpp"   // formatPinLabel, used by json_config.cpp's exportInputToJSON (#402 step 1)
 #include "../../src/storage/json_config.cpp"
 

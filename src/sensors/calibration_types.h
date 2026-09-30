@@ -19,7 +19,12 @@ enum MeasurementType {
     MEASURE_ELEVATION,    // Meters -> feet/meters
     MEASURE_DIGITAL,      // Digital on/off (float switch)
     MEASURE_SPEED,        // Vehicle speed in km/h
-    MEASURE_PERCENT       // Normalized 0-100% (TPS, fuel level, engine load, etc.)
+    MEASURE_PERCENT,      // Normalized 0-100% (TPS, fuel level, engine load, etc.)
+    // Imported OBD-II PIDs (#509). Append only: the value is stored per input.
+    MEASURE_DISTANCE,     // Kilometers -> km/mi (odometer, distance with MIL on)
+    MEASURE_TIME,         // Seconds -> s/min/h (run time, time since codes cleared)
+    MEASURE_MASS_FLOW,    // Grams per second -> g/s, lb/min (MAF)
+    MEASURE_FUEL_RATE     // Liters per hour -> L/h, gal/h (engine fuel rate)
 };
 
 // Typical 10 kΩ NTC (25 °C, β = 3950 K) — what the Steinhart/Beta readers

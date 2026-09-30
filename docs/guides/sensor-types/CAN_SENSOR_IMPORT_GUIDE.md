@@ -244,21 +244,50 @@ text table, and `SCAN SUPPORTED JSON` returns the result:
 
 ## Standard OBD-II PIDs
 
-preOBD includes automatic configuration for ~30 common OBD-II PIDs (`LIST PIDS JSON`
-prints the full table). The most common:
+preOBD knows how to decode 27 standard OBD-II PIDs (`LIST PIDS JSON` prints the full
+table). Each was checked against three references for SAE J1979: Wikipedia's "OBD-II PIDs",
+the python-OBD library and CSS Electronics' J1979 PID table.
 
-| PID  | Name                      | Units   | Data Length |
-|------|---------------------------|---------|-------------|
-| 0x05 | Coolant Temperature       | °C      | 1 byte      |
-| 0x0C | Engine RPM                | RPM     | 2 bytes     |
-| 0x0D | Vehicle Speed             | km/h    | 1 byte      |
-| 0x0F | Intake Air Temperature    | °C      | 1 byte      |
-| 0x0B | Intake Manifold Pressure  | kPa     | 1 byte      |
-| 0x11 | Throttle Position         | %       | 1 byte      |
-| 0x42 | Control Module Voltage    | V       | 2 bytes     |
-| 0x2F | Fuel Tank Level           | %       | 1 byte      |
-| 0x46 | Ambient Air Temperature   | °C      | 1 byte      |
-| 0x5C | Engine Oil Temperature    | °C      | 1 byte      |
+| PID  | Name                           | Units   | Other units      |
+|------|--------------------------------|---------|------------------|
+| 0x04 | Engine Load                    | %       |                  |
+| 0x05 | Engine Coolant Temperature     | °C      | °F               |
+| 0x0A | Fuel Pressure (gauge)          | kPa     | bar, psi, inHg   |
+| 0x0B | Intake Manifold Pressure       | kPa     | bar, psi, inHg   |
+| 0x0C | Engine RPM                     | rpm     |                  |
+| 0x0D | Vehicle Speed                  | km/h    | mph              |
+| 0x0F | Intake Air Temperature         | °C      | °F               |
+| 0x10 | Mass Air Flow                  | g/s     | lb/min           |
+| 0x11 | Throttle Position              | %       |                  |
+| 0x1F | Run Time Since Start           | s       | min, h           |
+| 0x21 | Distance w/ MIL On             | km      | mi               |
+| 0x23 | Fuel Rail Gauge Pressure       | kPa     | bar, psi, inHg   |
+| 0x2F | Fuel Tank Level                | %       |                  |
+| 0x31 | Distance Since Codes Cleared   | km      | mi               |
+| 0x33 | Barometric Pressure            | kPa     | bar, psi, inHg   |
+| 0x42 | Control Module Voltage         | V       |                  |
+| 0x45 | Relative Throttle Position     | %       |                  |
+| 0x46 | Ambient Air Temperature        | °C      | °F               |
+| 0x4D | Time Run w/ MIL On             | min     | s, h             |
+| 0x4E | Time Since Codes Cleared       | min     | s, h             |
+| 0x5A | Relative Accel Pedal Position  | %       |                  |
+| 0x5C | Engine Oil Temperature         | °C      | °F               |
+| 0x5E | Engine Fuel Rate               | L/h     | gal/h            |
+| 0x66 | Mass Air Flow (Sensor A)       | g/s     | lb/min           |
+| 0x67 | Engine Coolant Temp (Sensor 1) | °C      | °F               |
+| 0x8E | Engine Friction Torque         | %       |                  |
+| 0xA6 | Odometer                       | km      | mi               |
+
+Change the unit with `SET CAN:<n> UNITS <unit>`, e.g. `SET CAN:0 UNITS MI`.
+
+**Upgrading from 0.14.0-beta or earlier:** an input already imported from 0x5A, 0x5E, 0x66
+or 0x67 keeps the name (and, for 0x66/0x67, the decoding) it was imported with. Run
+`SET CAN <pid>` again to replace it. Units of other imported PIDs are corrected
+automatically at boot.
+
+Some PIDs are left out on purpose. Exhaust gas temperature (0x78) and the total engine
+run time (0x7F) arrive as multi-frame replies, which preOBD does not reassemble. The
+transmission gear (0xA4) is a ratio, not a sensor value.
 
 **Unknown PIDs:**
 If you import a PID not in the table (e.g., manufacturer-specific), preOBD uses default calibration:

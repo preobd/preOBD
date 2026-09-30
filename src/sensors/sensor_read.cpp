@@ -164,6 +164,18 @@ float obdConvertSpeed(float kph) {
     return kph;
 }
 
+// #509 types. OBD encoding follows a measurement type, not a PID, so these
+// match the one J1979 PID each type comes from: 0x10 MAF (256A+B)/100 g/s,
+// 0x5E fuel rate (256A+B)/20 L/h; distance (0x21/0x31, km) and time (0x1F,
+// s) are raw. An output PID of another layout needs its own formula.
+float obdConvertMassFlow(float gps) {
+    return gps * 100.0f;
+}
+
+float obdConvertFuelRate(float lph) {
+    return lph * 20.0f;
+}
+
 // ===== MEASUREMENT TYPE CONVERSION HELPERS =====
 
 ObdConvertFunc getObdConvertFunc(MeasurementType type) {
@@ -177,6 +189,10 @@ ObdConvertFunc getObdConvertFunc(MeasurementType type) {
         case MEASURE_DIGITAL: return obdConvertFloatSwitch;
         case MEASURE_SPEED: return obdConvertSpeed;
         case MEASURE_PERCENT: return obdConvertHumidity;  // 0-100% same encoding as humidity
+        case MEASURE_DISTANCE: return obdConvertDirect;   // km
+        case MEASURE_TIME: return obdConvertDirect;       // s
+        case MEASURE_MASS_FLOW: return obdConvertMassFlow;
+        case MEASURE_FUEL_RATE: return obdConvertFuelRate;
         default: return obdConvertVoltage;
     }
 }

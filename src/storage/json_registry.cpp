@@ -46,6 +46,10 @@ static const MeasTypeEntry MEAS_TYPE_TABLE[] = {
     {MEASURE_DIGITAL,     "DIGITAL"},
     {MEASURE_SPEED,       "SPEED"},
     {MEASURE_PERCENT,     "PERCENT"},
+    {MEASURE_DISTANCE,    "DISTANCE"},
+    {MEASURE_TIME,        "TIME"},
+    {MEASURE_MASS_FLOW,   "MASS_FLOW"},
+    {MEASURE_FUEL_RATE,   "FUEL_RATE"},
 };
 static const uint8_t MEAS_TYPE_COUNT = sizeof(MEAS_TYPE_TABLE) / sizeof(MEAS_TYPE_TABLE[0]);
 
@@ -286,7 +290,7 @@ FLASHMEM void writeOutputsJson(Print& out) {
 }
 
 FLASHMEM void writePidsJson(Print& out) {
-    const uint8_t count = sizeof(STANDARD_PID_TABLE) / sizeof(STANDARD_PID_TABLE[0]);
+    const uint8_t count = NUM_STANDARD_PIDS;
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
     for (uint8_t i = 0; i < count; i++) {
@@ -296,6 +300,7 @@ FLASHMEM void writePidsJson(Print& out) {
         obj["pid"]             = pid.pid;
         obj["name"]            = (const __FlashStringHelper*)pid.name;
         obj["abbr"]            = (const __FlashStringHelper*)pid.abbr;
+        obj["dataOffset"]      = pid.data_offset;   // first value byte from A (#509)
         obj["dataLength"]      = pid.data_length;
         obj["measurementType"] = measurementTypeName(pid.measurementType);
         obj["scale"]           = pid.scale_factor;

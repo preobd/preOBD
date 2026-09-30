@@ -863,7 +863,8 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     // Find indices in registries
     uint8_t appIdx = getApplicationIndexByName(appName);
     uint8_t sensorIdx = getSensorIndexByName(sensorName);
-    uint8_t unitsIdx = findUnitsIndexByName(unitsName);  // strict: a miss is UNITS_NOT_FOUND (#458)
+    // strict: a miss is UNITS_NOT_FOUND (#458); the export writes the symbol (#509)
+    uint8_t unitsIdx = findUnitsIndexByNameOrSymbol(unitsName);
 
     msg.debug.debug(TAG_JSON, "Registry indices: app=%d, sensor=%d, units=%d", appIdx, sensorIdx, unitsIdx);
 
@@ -1307,19 +1308,19 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
             JsonObject units = display["defaultUnits"];
 
             if (units["temperature"].isNull() == false) {
-                uint8_t idx = findUnitsIndexByName(units["temperature"]);
+                uint8_t idx = findUnitsIndexByNameOrSymbol(units["temperature"]);
                 if (unitsMatchMeasurement(idx, MEASURE_TEMPERATURE)) staged.defaultTempUnits = idx;
             }
             if (units["pressure"].isNull() == false) {
-                uint8_t idx = findUnitsIndexByName(units["pressure"]);
+                uint8_t idx = findUnitsIndexByNameOrSymbol(units["pressure"]);
                 if (unitsMatchMeasurement(idx, MEASURE_PRESSURE)) staged.defaultPressUnits = idx;
             }
             if (units["elevation"].isNull() == false) {
-                uint8_t idx = findUnitsIndexByName(units["elevation"]);
+                uint8_t idx = findUnitsIndexByNameOrSymbol(units["elevation"]);
                 if (unitsMatchMeasurement(idx, MEASURE_ELEVATION)) staged.defaultElevUnits = idx;
             }
             if (units["speed"].isNull() == false) {
-                uint8_t idx = findUnitsIndexByName(units["speed"]);
+                uint8_t idx = findUnitsIndexByNameOrSymbol(units["speed"]);
                 if (unitsMatchMeasurement(idx, MEASURE_SPEED)) staged.defaultSpeedUnits = idx;
             }
         }

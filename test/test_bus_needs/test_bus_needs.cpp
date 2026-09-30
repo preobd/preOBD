@@ -37,6 +37,7 @@
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/storage/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
 #include "../../src/inputs/measurement_compat.cpp"  // units check on load (#458)
+#include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
 
 // ---------------------------------------------------------------------------
 // Firmware symbols the included TUs expect from elsewhere.

@@ -77,6 +77,9 @@ extern float obdConvertHumidity(float value);
 extern float obdConvertElevation(float value);
 extern float obdConvertFloatSwitch(float value);
 extern float obdConvertSpeed(float value);
+extern float obdConvertDirect(float value);
+extern float obdConvertMassFlow(float value);
+extern float obdConvertFuelRate(float value);
 
 // Helper function to get OBD conversion function pointer from measurement type
 typedef float (*ObdConvertFunc)(float);

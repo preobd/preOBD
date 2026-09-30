@@ -695,6 +695,10 @@ static FLASHMEM const __FlashStringHelper* diagUnitLabel(MeasurementType m) {
         case MEASURE_HUMIDITY:
         case MEASURE_PERCENT:     return F("%");
         case MEASURE_ELEVATION:   return F("m");
+        case MEASURE_DISTANCE:    return F("km");
+        case MEASURE_TIME:        return F("s");
+        case MEASURE_MASS_FLOW:   return F("g/s");
+        case MEASURE_FUEL_RATE:   return F("L/h");
         default:                  return F("");
     }
 }
@@ -722,9 +726,13 @@ static FLASHMEM bool diagValuePlausible(MeasurementType m, float v) {
         case MEASURE_VOLTAGE:     return v >= 0.0f    && v <= 60.0f;
         case MEASURE_RPM:         return v >= 0.0f    && v <= 20000.0f;
         case MEASURE_SPEED:       return v >= 0.0f    && v <= 400.0f;   // kph
-        case MEASURE_HUMIDITY:
-        case MEASURE_PERCENT:     return v >= 0.0f    && v <= 100.0f;
+        case MEASURE_HUMIDITY:    return v >= 0.0f    && v <= 100.0f;
+        case MEASURE_PERCENT:     return v >= -125.0f && v <= 130.0f;   // J1979 signed % (0x8E torque)
         case MEASURE_ELEVATION:   return v >= -500.0f && v <= 10000.0f;
+        case MEASURE_DISTANCE:    return v >= 0.0f    && v <= 429496730.0f;  // J1979 odometer max, km
+        case MEASURE_TIME:        return v >= 0.0f    && v <= 3932100.0f;    // 65535 min, s
+        case MEASURE_MASS_FLOW:   return v >= 0.0f    && v <= 2048.0f;       // g/s
+        case MEASURE_FUEL_RATE:   return v >= 0.0f    && v <= 3276.75f;      // L/h
         default:                  return true;
     }
 }
