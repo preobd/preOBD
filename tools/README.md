@@ -47,3 +47,17 @@ Mark an intentional non-command (a placeholder in a tutorial) with
 
 - `registry_parser.py` — parses C++ registry headers into Python dicts.
 - `validators.py` — validation rules used by `validate_registries.py`.
+
+## Bench: `bench/obd_ecu_sim/`
+
+A standalone PlatformIO project (Mega 2560 + MCP2515 shield) that acts as an
+OBD-II engine ECU: it answers Mode 01 requests on `0x7DF`/`0x7E0` from `0x7E8`
+and counts every request it sees, for testing CAN input polling (#476) against
+something other than preOBD's own responder. Serial knobs add answer delay,
+an unsupported PID (silent or NRC) and a silent ECU; stats print every 5 s.
+`s` (silent) still ACKs frames, so to test a dead bus, power the Mega off.
+
+```bash
+cd tools/bench/obd_ecu_sim
+pio run -t upload && pio device monitor   # set MCP_CS_PIN / MCP_CRYSTAL_MHZ in its platformio.ini first
+```

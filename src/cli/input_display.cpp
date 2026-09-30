@@ -18,6 +18,9 @@
 #include "../sensors/application_presets.h"
 #include "../sensors/sensor_library.h"
 #include "../storage/system_config.h"
+#if INCLUDE_CAN
+#include "../sensors/drivers/can/can_frame_cache.h"
+#endif
 
 // These are COLD paths: they run only when a CLI command asks for them, never
 // in the sensor loop. On Teensy 4.x every function lands in ITCM (RAM1) by
@@ -269,6 +272,17 @@ FLASHMEM void printInputCalibration(uint8_t pin) {
         msg.control.print(F("  Timeout: "));
         msg.control.print(resolved_timeout);
         msg.control.println(F(" ms"));
+#if INCLUDE_CAN
+        // Why a CAN input reads NaN is usually "nothing answered" (#476)
+        msg.control.print(F("  Last frame: "));
+        CANFrameEntry* entry = getCANCacheEntry(cal.source_can_id, cal.source_pid);
+        if (entry && entry->valid) {
+            msg.control.print((unsigned long)(millis() - entry->timestamp_ms));
+            msg.control.println(F(" ms ago"));
+        } else {
+            msg.control.println(F("never"));
+        }
+#endif
     }
     msg.control.println();
 }

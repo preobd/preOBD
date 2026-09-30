@@ -36,6 +36,10 @@ bool initCANInput();
  * - OBD-II Mode 01 responses (0x41), 1-5 data bytes - PID is the identifier
  * - Custom protocols - uses byte[0] as identifier
  * - Any CAN ID (not limited to 0x7E8)
+ *
+ * In NORMAL (ENABLE) mode it also requests each imported OBD-II PID
+ * (source ID 0x7E8-0x7EF) round-robin with a Mode 01 request, so a lone
+ * preOBD on an ECU bus gets data (#476). LISTEN never transmits.
  */
 void updateCANInput();
 

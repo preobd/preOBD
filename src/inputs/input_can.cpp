@@ -14,6 +14,8 @@
 #include <Arduino.h>
 #include "input_can.h"
 #include "can_frame_parse.h"
+#include "can_poll.h"
+#include "input_manager.h"
 #include "../storage/system_config.h"
 #include "../storage/bus_config.h"
 #include "../core/message_api.h"
@@ -27,6 +29,10 @@
 
 static bool canInputInitialized = false;
 static uint8_t canInputBus = 0;  // Which bus we're reading from
+
+// Active Mode 01 polling (#476) — see can_poll.h for the pacing rules
+static CanPollState pollState;
+static uint8_t pollCursor = 0;   // inputs[] slot to try next
 
 // ============================================================================
 // INITIALIZATION
@@ -85,6 +91,9 @@ bool initCANInput() {
     // Initialize CAN frame cache
     initCANFrameCache();
 
+    canPollReset(pollState, millis());
+    pollCursor = 0;
+
     canInputInitialized = true;
     return true;
 }
@@ -114,8 +123,10 @@ void shutdownCANInput() {
  * @param can_id    CAN identifier
  * @param data      Frame data buffer
  * @param len       Frame data length
+ * @param extended  29-bit identifier (never a Mode 01 answer to our request)
  */
-static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len) {
+static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len,
+                           bool extended) {
     // Validate frame has minimum data
     if (len == 0) {
         #ifdef DEBUG
@@ -144,6 +155,80 @@ static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len) {
 
     uint8_t data_length = len - data_offset;
     updateCANCache(can_id, identifier, &data[data_offset], data_length);
+
+    // A Mode 01 response (offset 2 or 3; custom frames parse at offset 0)
+    // answers our outstanding request and ends any backoff. A 29-bit ID
+    // truncated to 16 bits could otherwise pose as 0x7E8.
+    if (data_offset != 0 && !extended) {
+        canPollOnResponse(pollState, (uint16_t)can_id, identifier, millis());
+    }
+}
+
+// ============================================================================
+// ACTIVE POLLING (#476)
+// ============================================================================
+
+/**
+ * Does inputs[slot] need its PID requested? Only an enabled, imported
+ * (custom-calibration) CAN input whose source is an OBD-II ECU response ID
+ * (0x7E8-0x7EF). A CAN input still on its preset carries the placeholder
+ * PID 0x00 and is skipped; custom/J1939 IDs are broadcast data and are
+ * never polled. A (source ID, PID) pair already owned by an earlier slot is
+ * skipped so each pair is requested once per round.
+ */
+static bool pollTargetAt(uint8_t slot, uint16_t& responseId, uint8_t& pid) {
+    const Input& in = inputs[slot];
+    if (in.pin < PIN_CAN_BASE || in.pin > PIN_CAN_MAX) return false;
+    if (!in.flags.isEnabled || !in.flags.useCustomCalibration) return false;
+    if (in.calibrationType != CAL_CAN_IMPORT) return false;
+
+    const CANSensorCalibration& cal = in.customCalibration.can;
+    if (!isObdResponseId(cal.source_can_id)) return false;
+
+    for (uint8_t j = 0; j < slot; j++) {
+        const Input& other = inputs[j];
+        if (other.pin < PIN_CAN_BASE || other.pin > PIN_CAN_MAX) continue;
+        if (!other.flags.isEnabled || !other.flags.useCustomCalibration) continue;
+        if (other.calibrationType != CAL_CAN_IMPORT) continue;
+        if (other.customCalibration.can.source_can_id == cal.source_can_id &&
+            other.customCalibration.can.source_pid == cal.source_pid) {
+            return false;
+        }
+    }
+
+    responseId = cal.source_can_id;
+    pid = cal.source_pid;
+    return true;
+}
+
+/**
+ * Send the next Mode 01 request, round-robin over the imported PIDs.
+ * NORMAL mode only: LISTEN must never transmit, and on a bus shared with
+ * CAN output the hardware is in TX mode, so this check is the guard.
+ */
+static void pollCANInputs() {
+    if (systemConfig.buses.can_input_mode != CAN_INPUT_NORMAL) return;
+    if (!inputManagerTableIsLive()) return;
+
+    uint32_t now = millis();
+    if (!canPollReady(pollState, now)) return;
+
+    for (uint8_t n = 0; n < MAX_INPUTS; n++) {
+        uint8_t slot = pollCursor;
+        pollCursor = (uint8_t)((pollCursor + 1) % MAX_INPUTS);
+
+        uint16_t responseId;
+        uint8_t pid;
+        if (!pollTargetAt(slot, responseId, pid)) continue;
+
+        uint8_t frame[8];
+        buildMode01Request(pid, frame);
+        bool ok = hal::can::write(obdRequestIdFor(responseId), frame, 8, false, canInputBus);
+        canPollOnSent(pollState, responseId, pid, ok, now);
+        return;
+    }
+    // Nothing to poll: rescan after the normal gap rather than every loop.
+    pollState.lastTxMs = now;
 }
 
 /**
@@ -169,8 +254,10 @@ void updateCANInput() {
     bool extended;
 
     while (hal::can::read(id, data, len, extended, canInputBus)) {
-        processCANFrame(id, data, len);
+        processCANFrame(id, data, len, extended);
     }
+
+    pollCANInputs();
 }
 
 #endif // INCLUDE_CAN

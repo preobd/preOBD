@@ -19,11 +19,16 @@ preOBD can import sensors from the CAN bus and use them alongside local analog/d
 - EEPROM persistence (save/load CAN sensor configurations)
 - Independent input and output buses (read from one CAN bus, broadcast to another)
 
-> **preOBD listens; it does not poll.** CAN input is passive — preOBD never sends
-> OBD-II requests to the ECU. An imported PID updates when an OBD-II *response*
-> for it appears on the bus: because a scan tool, dash or other module is asking
-> for it, or because the ECU broadcasts it. If nothing on the bus is requesting
-> a PID, it will read `NaN`. `SCAN CAN` shows what is actually on the bus.
+> **`ENABLE` polls the ECU; `LISTEN` only listens.** With CAN input set to
+> `ENABLE`, preOBD sends an OBD-II Mode 01 request for each imported PID in turn
+> (to `0x7E0` for an ECU answering on `0x7E8`), so it can read the ECU with
+> nothing else on the bus. It waits for each answer (up to 50 ms), and when
+> nothing answers ten requests in a row (ignition off, no ECU) it slows to one
+> request per second until something does. With `LISTEN`, preOBD never
+> transmits: an imported PID updates only when a *response* for it appears on
+> the bus because a scan tool, dash or other module asked for it. If nothing
+> is asking, it reads `NaN`. Custom (non-OBD-II) CAN IDs are never polled;
+> those devices send without being asked.
 
 ---
 
@@ -313,8 +318,8 @@ scheme. J1939 decoding is not supported yet.
 # Enter configuration mode
 CONFIG
 
-# Configure CAN buses with listen-only mode for vehicle ECU monitoring
-BUS CAN INPUT CAN1 LISTEN 500000   # Passive read from vehicle ECU (no ACK/TX)
+# Poll the vehicle ECU on CAN1 (use LISTEN instead if a scan tool is already polling)
+BUS CAN INPUT CAN1 ENABLE 500000   # Requests the imported PIDs from the ECU
 BUS CAN OUTPUT CAN2 ENABLE 500000  # Broadcast to RealDash on CAN2
 
 # Import CAN sensors from vehicle ECU
@@ -380,10 +385,10 @@ Ensure CAN input is enabled and bus is active.
    BUS CAN INPUT BAUDRATE 250000   # Some buses run at 250 kbps
    ```
 
-4. **Use listen-only mode for vehicle ECU buses:**
+4. **Pick the input mode for what else is on the bus:**
    ```bash
-   BUS CAN INPUT CAN1 LISTEN 500000   # Passive monitoring (recommended for vehicles)
-   # Listen mode prevents disrupting vehicle ECU communication
+   BUS CAN INPUT CAN1 ENABLE 500000   # preOBD polls the ECU itself
+   BUS CAN INPUT CAN1 LISTEN 500000   # No transmit; another tool must be polling
    ```
 
 5. **Verify vehicle ECU is active:**
@@ -403,10 +408,10 @@ CAN:0: RPM (Engine RPM) = NAN RPM
 
 **Causes:**
 
-1. **No CAN data received** (most common)
-   - Frame cache is empty for this PID
+1. **No CAN data received** (most common) — `INFO CAN:0` shows `Last frame: never`
    - CAN input not enabled
-   - Vehicle ECU not broadcasting this PID
+   - CAN input in `LISTEN` mode and nothing else on the bus is requesting this PID
+   - The ECU does not support this PID (it ignores the request)
 
 2. **Data timeout** (2 second default)
    - Frame was received but is now stale
@@ -525,9 +530,11 @@ RUN
 
 ## Limitations
 
-1. **Passive only** - preOBD does not send OBD-II requests; see the note at the top
-2. **OBD-II Mode 01 only** - single-frame PIDs; no ISO-TP multi-frame reassembly (Mode 09, Mode 22)
-3. **No J1939** - 29-bit IDs are not decoded (see [Custom Frames](#custom-frames))
+1. **Polling needs `ENABLE`** - `LISTEN` is passive; see the note at the top. While preOBD polls, `SCAN CAN` shows the ECU's answers to its requests (only PIDs the ECU supports) plus anything else on the bus
+2. **Frame cache size** - received frames are cached per (CAN ID, PID) in a small table (16 entries on Teensy/ESP32, 8 on the Mega). Importing more PIDs than that, or a busy bus with other traffic, can evict a PID between polls, so it flickers to `NaN` and `INFO CAN:<n>` shows `Last frame: never`
+3. **Ignition off** - with nothing answering, `ENABLE` keeps sending one request per second. If no other node is powered to acknowledge it, the CAN controller retransmits that frame continuously. Power preOBD from switched ignition, or use `LISTEN`, if that bus activity could keep other modules awake
+4. **OBD-II Mode 01 only** - single-frame PIDs; no ISO-TP multi-frame reassembly (Mode 09, Mode 22)
+5. **No J1939** - 29-bit IDs are not decoded (see [Custom Frames](#custom-frames))
 
 ### Platform Support
 
