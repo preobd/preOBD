@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CAN input in `ENABLE` mode now polls the ECU for each imported OBD-II PID, so `SET CAN <pid>` reads without a scan tool on the bus (`LISTEN` stays passive), and `INFO CAN:<n>` shows when the last frame arrived (#476)
 
 ### Changed
-- Arduino Mega: 180 B more free RAM (7,963 of 8,192 B used, was 8,143 B): the compiler no longer builds `switch` lookup tables, which avr-gcc keeps in RAM (#509)
+- **Breaking (OBD-II output):** standard PIDs now use the SAE J1979 encoding, so scan tools read RPM, MAP, barometric and fuel pressure, and battery voltage correctly with no setup (RPM used to read 16× low). Boost and EGT move to J1979's 0x70 and 0x78 (multi-frame replies). Sensors J1979 has no PID for move to preOBD's 0xAA–0xB7, with wider ranges (CHT no longer stops at 215 °C). Saved inputs keep their old PID: set them up again or use `SET <pin> OBD_PID`, update Torque custom PIDs, and re-import the RealDash XML (#516)
+- Arduino Mega: 195 B more free RAM (7,948 of 8,192 B used, was 8,143 B): the compiler no longer builds `switch` lookup tables, which avr-gcc keeps in RAM (#509)
 
 ### Fixed
 - Imported OBD-II PIDs are decoded and labelled to the J1979 standard: mass air flow (g/s, lb/min), run time (s, min, h), distance and odometer (km, mi) and fuel rate (L/h, gal/h) no longer show `%`. PIDs 0x31, 0x4D and 0x4E are new, and the PID table was corrected against three references. For an input imported earlier from 0x5A, 0x5E, 0x66 or 0x67, run `SET CAN <pid>` again for the right name and value. 0x6F, 0x78, 0x7F, 0xA4, 0xAA, 0xC3 and 0xC4 were removed because they never decoded correctly (#509)

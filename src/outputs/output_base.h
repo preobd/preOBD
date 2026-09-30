@@ -8,6 +8,7 @@
 #include "../inputs/input.h"
 #include "../sensors/calibration_types.h"
 #include "../sensors/sensor_library.h"
+#include "obd_encode.h"
 #include "../storage/system_config.h"  // For OutputID enum
 
 // Output module structure
@@ -36,54 +37,22 @@ void listOutputModules();    // Show available output module names
 
 // ===== OBDII FRAME BUILDING =====
 
-// Build standard OBDII Mode 01 frame data (ISO 15765-4 compliant)
-// Fixes: 1) Correct length byte calculation, 2) Big-endian byte order
-// Parameters:
-//   frameData - 8-byte buffer to fill
-//   ptr - Input with obd2pid, obd2length, and obdConvert()
-// Returns: true if successful, false if data size invalid
+// One CAN frame of an input's Mode 01 answer (ISO 15765-4 single-frame
+// layout), for the frame-at-a-time consumers: CAN broadcast and RealDash.
+//   frameData[0] = 2 + data bytes, [1] = 0x41, [2] = PID, [3..7] = data
+// The encoding is the PID's (obd_encode.h, #516). A multi-frame answer
+// (0x70 boost, 0x78 EGT) is cut to its first 5 data bytes, which hold the
+// support byte and preOBD's one sensor value; the OBD-II responders send
+// the whole answer instead.
+// Returns false if the input has no answerable PID or no valid value.
 inline bool buildOBD2Frame(byte* frameData, Input* ptr) {
-    byte mode = 0x41;  // Mode 01: Show current data
-    byte dataBytes = ptr->obd2length;
-
-    // Validate data size (max 5 bytes to fit in frameData[3..7])
-    if (dataBytes == 0 || dataBytes > 5) {
-        return false;
-    }
-
-    // Clear frame
-    for (int i = 0; i < 8; i++) {
-        frameData[i] = 0;
-    }
-
-    // Byte 0: Length = mode + PID + data (ISO 15765-4 single-frame format)
-    frameData[0] = 2 + dataBytes;  // FIX: Was just dataBytes, now 2 + dataBytes
-    frameData[1] = mode;
-    frameData[2] = ptr->obd2pid;
-
-    // Convert value to OBDII format using sensor's conversion function
-    float obdValue = getObdConvertFunc(ptr->measurementType)(ptr->value);
-    // The encodings are unsigned: a value below the PID's floor (vacuum from a
-    // linear boost curve, #467) reads as the floor, not an undefined cast.
-    if (!(obdValue > 0.0f)) obdValue = 0.0f;
-
-    // Encode data based on size (big-endian / MSB first)
-    if (dataBytes == 1) {
-        // 1-byte data (most temperatures, percentages)
-        frameData[3] = (byte)obdValue;
-    } else if (dataBytes == 2) {
-        // 2-byte data (RPM, high-precision temps, pressures)
-        uint16_t value = (uint16_t)obdValue;
-        frameData[3] = (value >> 8) & 0xFF;  // MSB first (FIX: Was LSB first)
-        frameData[4] = value & 0xFF;         // LSB second
-    } else {
-        // 3-5 byte data (rare, but supported)
-        uint32_t value = (uint32_t)obdValue;
-        for (byte i = 0; i < dataBytes; i++) {
-            frameData[3 + i] = (value >> ((dataBytes - 1 - i) * 8)) & 0xFF;
-        }
-    }
-
+    uint8_t answer[OBD_ANSWER_MAX];
+    uint8_t n = obdBuildAnswer(*ptr, answer);
+    if (n < 3) return false;
+    if (n > 7) n = 7;
+    for (int i = 0; i < 8; i++) frameData[i] = 0;
+    frameData[0] = n;
+    for (uint8_t i = 0; i < n; i++) frameData[1 + i] = answer[i];
     return true;
 }
 

@@ -87,19 +87,110 @@ static void sendNegativeResponse(uint32_t requestId, uint8_t mode, uint8_t nrc) 
     #endif
 }
 
-/**
- * Send OBD-II Mode 01 response on CAN ID 0x7E8
- * @param input Input to respond with
- */
-static void sendOBD2Response(Input* input) {
-    byte frameData[8];
+// ===== MULTI-FRAME (ISO 15765-2) ANSWERS =====
+//
+// J1979 PIDs whose answer is longer than a single frame (0x70 boost: 12
+// bytes, 0x78 EGT: 11, counting mode + PID) go out as a First Frame, then,
+// once the tester's Flow Control allows it, Consecutive Frames (#516).
+// One answer in flight; a new request replaces it. Paced from updateCAN().
 
-    if (!buildOBD2Frame(frameData, input)) {
-        msg.debug.warn(TAG_CAN, "Failed to build OBD2 response");
+#define ISOTP_FC_TIMEOUT_MS 1000   // N_Bs: give up if no Flow Control arrives
+
+static struct {
+    uint8_t  buf[OBD_ANSWER_MAX];
+    uint8_t  len;         // answer bytes (mode + PID + payload)
+    uint8_t  pos;         // next byte to send
+    uint8_t  seq;         // next Consecutive Frame sequence number
+    uint8_t  blockSize;   // CFs allowed before the next Flow Control (0 = all)
+    uint8_t  sentInBlock;
+    uint8_t  stMinMs;
+    uint32_t lastMs;
+    enum : uint8_t { IDLE, WAIT_FC, SENDING } state;
+} isotp = {};
+
+static void isotpSendConsecutive() {
+    byte f[8] = {0};
+    f[0] = 0x20 | (isotp.seq & 0x0F);
+    for (uint8_t i = 0; i < 7 && isotp.pos < isotp.len; i++) f[1 + i] = isotp.buf[isotp.pos++];
+    sendCANFrame(0x7E8, f, 8);
+    isotp.seq = (isotp.seq + 1) & 0x0F;
+    isotp.lastMs = millis();
+    isotp.sentInBlock++;
+    if (isotp.pos >= isotp.len) isotp.state = isotp.IDLE;
+    else if (isotp.blockSize && isotp.sentInBlock >= isotp.blockSize) {
+        isotp.state = isotp.WAIT_FC;
+        isotp.sentInBlock = 0;
+    }
+}
+
+// A Flow Control frame from the tester (30 = continue, 31 = wait, 32 = abort)
+static void isotpOnFlowControl(const byte* data, uint8_t len) {
+    if (isotp.state != isotp.WAIT_FC || len < 3) return;
+    switch (data[0] & 0x0F) {
+        case 0:   // ContinueToSend
+            isotp.blockSize = data[1];
+            // STmin: 0x00-0x7F ms; 0xF1-0xF9 are 100-900 us, under one tick;
+            // reserved values count as the longest, 127 ms (ISO 15765-2)
+            isotp.stMinMs = data[2] <= 0x7F ? data[2]
+                          : (data[2] >= 0xF1 && data[2] <= 0xF9) ? 0 : 0x7F;
+            isotp.sentInBlock = 0;
+            isotp.state = isotp.SENDING;
+            isotp.lastMs = millis() - isotp.stMinMs;   // first CF right away
+            break;
+        case 1:   // Wait: the tester restarts the timeout
+            isotp.lastMs = millis();
+            break;
+        default:  // Overflow / abort
+            isotp.state = isotp.IDLE;
+            break;
+    }
+}
+
+static void isotpTick() {
+    if (isotp.state == isotp.IDLE) return;
+    uint32_t now = millis();
+    if (isotp.state == isotp.WAIT_FC) {
+        if (now - isotp.lastMs > ISOTP_FC_TIMEOUT_MS) isotp.state = isotp.IDLE;
         return;
     }
+    while (isotp.state == isotp.SENDING && (uint32_t)(now - isotp.lastMs) >= isotp.stMinMs) {
+        isotpSendConsecutive();
+        if (isotp.stMinMs) break;   // one per STmin
+    }
+}
 
-    sendCANFrame(0x7E8, frameData, 8);
+/**
+ * Send an input's Mode 01 answer on 0x7E8: one frame when it fits,
+ * otherwise a First Frame and the rest on the tester's Flow Control.
+ */
+static void sendOBD2Response(Input* input) {
+    uint8_t answer[OBD_ANSWER_MAX];
+    uint8_t n = obdBuildAnswer(*input, answer);
+    if (n == 0) {
+        // No answer (e.g. the input's type changed since the PID table was
+        // built): say so, rather than let the tester time out
+        byte nrc[8] = {0x03, 0x7F, 0x01, 0x31, 0, 0, 0, 0};
+        sendCANFrame(0x7E8, nrc, 8);
+        return;
+    }
+    byte f[8] = {0};
+    if (n <= 7) {
+        f[0] = n;
+        for (uint8_t i = 0; i < n; i++) f[1 + i] = answer[i];
+        sendCANFrame(0x7E8, f, 8);
+        return;
+    }
+    memcpy(isotp.buf, answer, n);
+    isotp.len = n;
+    f[0] = 0x10;              // First Frame, length high nibble 0
+    f[1] = n;
+    for (uint8_t i = 0; i < 6; i++) f[2 + i] = answer[i];
+    isotp.pos = 6;
+    isotp.seq = 1;
+    isotp.sentInBlock = 0;
+    isotp.state = isotp.WAIT_FC;
+    isotp.lastMs = millis();
+    sendCANFrame(0x7E8, f, 8);
 }
 
 /**
@@ -119,6 +210,15 @@ static void sendOBD2Response(Input* input) {
 static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
     // Validate minimum frame structure
     if (len < 3) return;
+
+    // Flow Control for a multi-frame answer in flight (physical address only)
+    if ((data[0] & 0xF0) == 0x30) {
+        if (canId == 0x7E0) isotpOnFlowControl(data, len);
+        return;
+    }
+
+    // A new request replaces a multi-frame answer still in flight
+    isotp.state = isotp.IDLE;
 
     // data[0] is frame length, not validated per OBD-II spec
     uint8_t mode = data[1];
@@ -201,6 +301,10 @@ void sendCAN(Input *ptr) {
         return;  // Don't send invalid data
     }
 
+    // A single frame on 0x7E8 in the middle of a multi-frame answer makes the
+    // tester drop the answer (ISO 15765-2): hold broadcasts until it is done
+    if (isotp.state != isotp.IDLE) return;
+
     byte frameData[8];
 
     // Build OBDII frame using shared helper (fixes length byte and endianness)
@@ -222,6 +326,8 @@ void updateCAN() {
     uint8_t data[8];
     uint8_t len;
     bool extended;
+
+    isotpTick();   // pace a multi-frame answer's Consecutive Frames
 
     // Shared with CAN input: input is the only reader (see onSharedBusRequest)
     if (canInputOwnsBus(canOutputBus)) return;

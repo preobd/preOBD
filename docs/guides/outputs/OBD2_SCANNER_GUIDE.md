@@ -236,32 +236,33 @@ scanner (`LIST INPUTS` shows the PID next to each input).
 
 ## Available OBD-II PIDs
 
-preOBD automatically maps your configured sensors to standard OBD-II PIDs based on the application type.
+preOBD answers each sensor on the SAE J1979 PID that means the same thing, with J1979's own encoding, so a scanner shows it with no setup:
 
-### Common PIDs
+| PID | Name | Application |
+|-----|------|-------------|
+| `0x05` | Engine coolant temperature | COOLANT_TEMP |
+| `0x0A` | Fuel pressure (gauge) | FUEL_PRESSURE |
+| `0x0B` | Intake manifold absolute pressure | MAP_PRESSURE |
+| `0x0C` | Engine RPM | ENGINE_RPM |
+| `0x0D` | Vehicle speed | VEHICLE_SPEED |
+| `0x0F` | Intake air temperature | INTAKE_AIR_TEMP |
+| `0x11` | Throttle position | THROTTLE_POSITION |
+| `0x2F` | Fuel tank level | FUEL_LEVEL |
+| `0x33` | Barometric pressure | BAROMETRIC_PRESSURE |
+| `0x42` | Control module voltage | PRIMARY_BATTERY |
+| `0x46` | Ambient air temperature | AMBIENT_TEMP |
+| `0x5C` | Engine oil temperature | OIL_TEMP |
+| `0x70` | Boost pressure (absolute) | BOOST_PRESSURE |
+| `0x78` | Exhaust gas temperature bank 1 | EGT |
 
-| PID | Name | Application | Range | Units |
-|-----|------|-------------|-------|-------|
-| `0x00` | Supported PIDs 01-20 | *(auto-generated)* | Bitmap | - |
-| `0x05` | Engine Coolant Temp | COOLANT_TEMP | -40 to 215°C | °C |
-| `0x0C` | Engine RPM | ENGINE_RPM | 0 to 16383 rpm | rpm |
-| `0x0D` | Vehicle Speed | VEHICLE_SPEED | 0 to 255 km/h | km/h |
-| `0x0F` | Intake Air Temp | AMBIENT_TEMP | -40 to 215°C | °C |
-| `0x11` | Throttle Position | *(custom)* | 0 to 100% | % |
-| `0x23` | Fuel Rail Pressure | FUEL_PRESSURE | 0 to 5177 kPa | kPa |
-| `0x33` | Barometric Pressure | BAROMETRIC_PRESSURE | 0 to 255 kPa | kPa |
-| `0x42` | Control Module Voltage | PRIMARY_BATTERY | 0 to 65.535 V | V |
-| `0x5C` | Engine Oil Temperature | OIL_TEMP | -40 to 210°C | °C |
+Sensors J1979 has no PID for (oil pressure, cylinder head temperature, transmission, diff and gear-oil temperatures, brake and hydraulic pressure, and so on) answer on preOBD's PIDs 0xAA–0xB7. Add them to your app once as custom PIDs, with the formulas in the reference.
 
 **To see YOUR active PIDs:**
 ```
-LIST SENSORS     # Shows all configured sensors with their PIDs
+LIST INPUTS      # Each input with its OBD PID and reply length
 ```
 
-**Custom PIDs:**
-- PIDs 0x21-0xFF are manufacturer-specific
-- You can assign custom PIDs in `application_presets.h`
-- preOBD uses standard PIDs where possible
+Change an input's PID with `SET <pin> OBD_PID <pid>`. A standard or preOBD PID only accepts an input that measures the same quantity.
 
 For a complete PID reference, see [OBD2_PID_REFERENCE.md](../../reference/OBD2_PID_REFERENCE.md).
 
@@ -339,19 +340,14 @@ For a complete PID reference, see [OBD2_PID_REFERENCE.md](../../reference/OBD2_P
 
 ### Custom PID Assignments
 
-You can modify PID assignments in `src/sensors/application_presets.h`:
+Each application has a default PID (see the table above). To answer on another one:
 
-```cpp
-static const ApplicationPreset APP_OIL_TEMP = {
-    .name = PSTR_OIL_TEMP,
-    // ... other fields ...
-    .obd2pid = 0x5C,        // Engine Oil Temperature (standard)
-    .obd2length = 1,        // 1-byte response
-    // ...
-};
+```
+SET <pin> OBD_PID 0x0B        # e.g. a boost sensor also readable as MAP
+SAVE
 ```
 
-Rebuild and upload after changes.
+A PID no table defines gets preOBD's own encoding, with `SET <pin> OBD_LENGTH <1-5>` bytes. See [OBD2_PID_REFERENCE.md](../../reference/OBD2_PID_REFERENCE.md#your-own-pid).
 
 ### Hybrid Mode with RealDash
 

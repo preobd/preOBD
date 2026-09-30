@@ -39,7 +39,9 @@
  *   r            print stats now
  *   z            zero counters
  *   q <hex>      act as a TESTER: send 02 01 <pid> to 0x7DF and print any
- *                0x7E8 answer for 200 ms (tests preOBD's own OBD responder)
+ *                0x7E8 answer for 200 ms (tests preOBD's own OBD responder).
+ *                A multi-frame answer (First Frame 1x) gets Flow Control
+ *                30 00 00 on 0x7E0, and its Consecutive Frames print too (#516).
  * Stats print every 5 s: requests per PID, overall rate, min/avg gap.
  */
 
@@ -409,6 +411,15 @@ void loop() {
             Serial.print(':');
             for (uint8_t i = 0; i < rx.can_dlc; i++) { Serial.print(' '); printHex2(rx.data[i]); }
             Serial.println();
+            if ((rx.data[0] & 0xF0) == 0x10) {   // First Frame: allow the rest, no gap
+                can_frame fc;
+                memset(&fc, 0, sizeof(fc));
+                fc.can_id = 0x7E0;
+                fc.can_dlc = 8;
+                fc.data[0] = 0x30;
+                bool ok = mcp.sendMessage(&fc) == MCP2515::ERROR_OK;
+                Serial.println(ok ? F("[query] flow control 30 00 00 sent") : F("[query] FLOW CONTROL SEND FAILED"));
+            }
             continue;
         }
         if (id != 0x7DF && id != 0x7E0 && id != 0x7E1) continue;

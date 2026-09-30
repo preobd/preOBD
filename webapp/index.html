@@ -3499,7 +3499,7 @@ function buildEditorHTML(pinStr, inp, isAdd) {
     </div>
     <div class="editor-field">
       <label>OBD Response Bytes</label>
-      <input type="number" id="edObdLength" value="${obdLength}" min="1" max="5" ${obdPid ? '' : 'disabled'}>
+      <input type="number" id="edObdLength" value="${obdLength}" min="1" max="10" ${obdPid ? '' : 'disabled'}>
     </div>
   </div>
   <div class="editor-field" style="grid-column: 1 / -1;">
@@ -3723,7 +3723,9 @@ function saveEditorLocal() {
       return;
     }
   }
-  const obdLength = Math.min(5, Math.max(1, Number(document.getElementById('edObdLength').value) || 1));
+  // 1-5 for a PID of your own; a J1979 / preOBD PID has a fixed length the
+  // firmware keeps whatever is sent (0x70 boost is 10, #516)
+  const obdLength = Math.min(10, Math.max(1, Number(document.getElementById('edObdLength').value) || 1));
 
   const changes = {
     app: document.getElementById('edApp').value,

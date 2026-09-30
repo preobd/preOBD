@@ -12,6 +12,7 @@
 #include "../inputs/input.h"
 #include "../inputs/calibration_apply.h"
 #include "../inputs/measurement_compat.h"
+#include "../sensors/can_sensor_library/obd_output_pids.h"
 #include "serial_config.h"
 #include "../version.h"
 #include "../core/system_mode.h"
@@ -867,10 +868,24 @@ static int set_obd_pid(uint8_t pin, int argc, const char* const* argv) {
     }
     uint8_t pid = (uint8_t)pidVal;
 
-    // Default length to 1 if this input has never had an OBD length configured,
-    // so buildOBD2Frame's dataBytes==0 check doesn't silently drop it.
-    uint8_t length = input->obd2length;
-    if (pid != 0 && length == 0) length = 1;
+    // A J1979 or preOBD-block PID carries one quantity with a fixed layout
+    // (obd_output_pids.h, #516): a scanner would decode the wrong thing
+    ObdOutputPid spec;
+    if (pid != 0 && obdOutputSpec(pid, spec) &&
+        !obdSpecAccepts(spec, (MeasurementType)input->measurementType)) {
+        msg.control.print(F("ERROR: PID 0x"));
+        if (pid < 0x10) msg.control.print('0');
+        msg.control.print(pid, HEX);
+        msg.control.print(F(" carries "));
+        msg.control.print(measurementTypeName(spec.measurementType));
+        msg.control.print(F("; this input measures "));
+        msg.control.println(measurementTypeName((MeasurementType)input->measurementType));
+        return 1;
+    }
+
+    // The table's reply length for a table-defined PID; otherwise the input's
+    // own (at least 1, so an unset length doesn't silently drop the PID)
+    uint8_t length = pid != 0 ? obdLengthFor(pid, input->obd2length) : input->obd2length;
 
     setInputOBD(pin, pid, length);
     obdQuery_buildLookupTable();
@@ -900,10 +915,19 @@ static int set_obd_length(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
 
-    int length = atoi(argv[3]);
-    if (length < 1 || length > 5) {
-        msg.control.println(F("ERROR: OBD_LENGTH must be between 1 and 5"));
-        return 1;
+    // A table-defined PID has a fixed length (0x70 boost is 10 bytes): keep
+    // it, whatever is asked. Clients re-send the length they read back, so
+    // this must not be an error.
+    ObdOutputPid spec;
+    int length;
+    if (input->obd2pid != 0 && obdOutputSpec(input->obd2pid, spec)) {
+        length = spec.length;
+    } else {
+        length = atoi(argv[3]);
+        if (length < 1 || length > 5) {
+            msg.control.println(F("ERROR: OBD_LENGTH must be between 1 and 5"));
+            return 1;
+        }
     }
 
     setInputOBD(pin, input->obd2pid, (uint8_t)length);

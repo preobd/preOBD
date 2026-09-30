@@ -30,7 +30,8 @@ void obdQuery_getSupportedPIDBitmap(uint8_t* bitmap4, uint8_t baseRange);
 // Resolve a Mode 01 OBD-II query to a response payload.
 // Handles mode check, PID 00 special case, lookup, and frame encoding.
 // On success: fills out[] with response bytes (0x41, pid, data...) and sets *outLen.
-// Returns false if mode/PID unsupported or no valid data. out[] must be >= 7 bytes.
+// Returns false if mode/PID unsupported or no valid data. out[] must hold
+// OBD_ANSWER_MAX (obd_encode.h) bytes; more than 7 needs a multi-frame reply.
 bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen);
 
 #endif // OBD_QUERY_H

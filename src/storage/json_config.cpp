@@ -5,6 +5,7 @@
  *       JSON features are only available in EEPROM mode (runtime config).
  */
 
+#include "../sensors/can_sensor_library/obd_output_pids.h"  // obdLengthFor (#516)
 #include "../config.h"
 
 // Only compile JSON features on platforms with enough RAM and in runtime config mode
@@ -1121,7 +1122,8 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     // OBD2
     if (inputObj["obd2"].isNull() == false) {
         JsonObject obd2 = inputObj["obd2"];
-        setInputOBD(pin, obd2["pid"], obd2["length"]);
+        uint8_t pid = obd2["pid"] | (uint8_t)0;
+        setInputOBD(pin, pid, pid ? obdLengthFor(pid, obd2["length"] | (uint8_t)0) : 0);
     }
 
     // Divider ratio — after setInputApplication(), which resets it to 1.0.

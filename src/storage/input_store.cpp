@@ -22,6 +22,7 @@
 #include "system_config.h"
 #include "../sensors/units_registry.h"
 #include "../inputs/measurement_compat.h"  // units repair on load (#458)
+#include "../sensors/can_sensor_library/obd_output_pids.h"  // obdLengthFor (#516)
 #include "../core/message_router.h"   // For msg.control
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
@@ -261,6 +262,9 @@ static FLASHMEM void applyInputRecord(const InputEEPROM& rec, Input& in) {
             in.unitsIndex = unitsMatchMeasurement(appUnits, in.measurementType)
                             ? appUnits : defaultUnitsForMeasurement(in.measurementType);
         }
+        // A table-defined OBD PID replies with the table's length (#516:
+        // EGT 0x78 is 9 bytes, stored as 2 before)
+        if (in.obd2pid != 0) in.obd2length = obdLengthFor(in.obd2pid, in.obd2length);
         if (!in.flags.useCustomCalibration) in.presetCalibration = info.defaultCalibration;
         if (info.initFunction) info.initFunction(&in);
     }

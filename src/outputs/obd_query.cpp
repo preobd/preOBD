@@ -9,6 +9,7 @@
 #include "../inputs/input.h"
 #include "../inputs/input_manager.h"
 #include "../outputs/output_base.h"
+#include "obd_encode.h"
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
 
@@ -25,7 +26,9 @@ void obdQuery_buildLookupTable() {
     pidLookupCount = 0;
 
     for (uint8_t i = 0; i < MAX_INPUTS && pidLookupCount < MAX_PID_ENTRIES; i++) {
-        if (inputs[i].flags.isEnabled && inputs[i].obd2pid != 0x00) {
+        // Only inputs that can answer on their PID: a J1979 PID carrying the
+        // wrong quantity is neither advertised nor answered (#516)
+        if (inputs[i].flags.isEnabled && inputs[i].obd2pid != 0x00 && obdInputAnswerable(inputs[i])) {
             bool isDuplicate = false;
             for (uint8_t j = 0; j < pidLookupCount; j++) {
                 if (pidLookupTable[j].pid == inputs[i].obd2pid) {
@@ -98,14 +101,8 @@ bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen) 
     Input* input = obdQuery_findByPID(pid);
     if (input == nullptr || isnan(input->value)) return false;
 
-    byte frameData[8];
-    if (!buildOBD2Frame(frameData, input)) return false;
-
-    // frameData[0] = length (2 + dataBytes), [1]=0x41, [2]=pid, [3+]=data
-    uint8_t len = frameData[0];
-    out[0] = frameData[1];
-    out[1] = frameData[2];
-    for (uint8_t i = 0; i < len - 2; i++) out[2 + i] = frameData[3 + i];
-    *outLen = len;
+    uint8_t n = obdBuildAnswer(*input, out);   // 0x41, pid, payload (may exceed 7: multi-frame)
+    if (n == 0) return false;
+    *outLen = n;
     return true;
 }

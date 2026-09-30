@@ -10,6 +10,8 @@
 
 #include "output_elm327.h"
 #include "obd_query.h"
+#include "obd_encode.h"
+#include "elm327_format.h"
 #include "../storage/system_config.h"
 #include "../drivers/serial_manager.h"
 #include "../core/message_api.h"
@@ -296,7 +298,7 @@ void ELM327Output::_handleOBDQuery(const char* hex) {
     uint8_t mode = (hexNibble(hex[0]) << 4) | hexNibble(hex[1]);
     uint8_t pid  = (hexNibble(hex[2]) << 4) | hexNibble(hex[3]);
 
-    uint8_t responseBytes[7];
+    uint8_t responseBytes[OBD_ANSWER_MAX];
     uint8_t responseLen = 0;
 
     if (!obdQuery_resolve(mode, pid, responseBytes, &responseLen)) {
@@ -305,8 +307,9 @@ void ELM327Output::_handleOBDQuery(const char* hex) {
     }
 
     // Format response bytes as ASCII hex
-    // Buffer: headers (up to 8) + spaces + data + \r\r> + NUL
-    char out[48];
+    // Buffer: a multi-frame answer (12 bytes) as two frame lines with headers
+    // and spaces is ~60 chars, plus \r\r> and NUL
+    char out[96];
     _formatDataResponse(responseBytes, responseLen, out, sizeof(out));
     _sendString(out);
 }
@@ -316,41 +319,7 @@ void ELM327Output::_handleOBDQuery(const char* hex) {
 void ELM327Output::_formatDataResponse(const uint8_t* bytes, uint8_t len,
                                         char* out, size_t outSize)
 {
-    size_t pos = 0;
-
-    auto appendHex = [&](uint8_t b) {
-        static const char hex[] = "0123456789ABCDEF";
-        if (pos + 2 < outSize) {
-            out[pos++] = hex[b >> 4];
-            out[pos++] = hex[b & 0x0F];
-        }
-    };
-    auto appendChar = [&](char c) {
-        if (pos + 1 < outSize) out[pos++] = c;
-    };
-    auto appendStr = [&](const char* s) {
-        while (*s && pos + 1 < outSize) out[pos++] = *s++;
-    };
-
-    if (_headersOn) {
-        // Fixed ECU response header 7E8, followed by length byte
-        if (_spacesOn) {
-            appendStr("7E8 ");
-            appendHex(len);
-            appendChar(' ');
-        } else {
-            appendStr("7E8");
-            appendHex(len);
-        }
-    }
-
-    for (uint8_t i = 0; i < len; i++) {
-        if (_spacesOn && i > 0) appendChar(' ');
-        appendHex(bytes[i]);
-    }
-
-    appendStr("\r\r>");
-    out[pos] = '\0';
+    elmFormatAnswer(bytes, len, _headersOn, _spacesOn, out, outSize);
 }
 
 // ===== OUTPUT HELPERS =====

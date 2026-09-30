@@ -36,6 +36,7 @@ bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen) 
 
 // ---- modules under test (output_elm327 first: defines ELM327Output) ----
 #include "../../src/outputs/output_elm327.cpp"
+#include "../../src/outputs/elm327_format.cpp"   // the answer text, split out by #516
 #include "../../src/comms/elm327_framed.cpp"
 
 // ---- globals the parser TU references ----

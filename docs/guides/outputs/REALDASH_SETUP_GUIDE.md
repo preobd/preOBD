@@ -275,12 +275,12 @@ Byte 3+: Data (big-endian encoding)
 The XML uses RealDash's composite frame ID feature to discriminate sensors by PID:
 
 ```xml
-<frame id="0x0c80:200,2,1">
+<frame id="0x0c80:170,2,1">
 ```
 
 This means:
 - Frame ID: `0x0C80`
-- Discriminator value: `200` (PID 0xC8 for CHT)
+- Discriminator value: `170` (PID 0xAA for CHT)
 - Discriminator offset: `2` (PID is at byte 2)
 - Discriminator length: `1` (PID is 1 byte)
 
