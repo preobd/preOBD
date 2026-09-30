@@ -870,7 +870,14 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     // Validate registry lookups (index 0 = NONE for app/sensor). Units are
     // judged below, after the sensor resolves: a bad units key degrades, it
     // never fails the record.
-    if (appIdx == 0 || sensorIdx == 0) {
+    // A CAN import has no application: SET CAN builds it as app NONE +
+    // CAN_IMPORT on a CAN:n virtual pin, and the dump exports it that way.
+    // Rejecting app NONE outright dropped every CAN input on restore (#499).
+    // Only the literal "NONE" counts: an unknown name also resolves to 0.
+    const bool canImportRecord = appIdx == 0 && strcasecmp(appName, "NONE") == 0 &&
+                                 pin >= PIN_CAN_BASE && pin <= PIN_CAN_MAX &&
+                                 sensorIdx != 0 && sensorIdx == getSensorIndexByName("CAN_IMPORT");
+    if ((appIdx == 0 && !canImportRecord) || sensorIdx == 0) {
         msg.control.print(F("ERROR: Failed to import input "));
         msg.control.print(index);
         msg.control.print(F(" (pin "));
@@ -1026,7 +1033,24 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     // must not free a slot that was not ours.
     const bool isNewInput = (getInputByPin(pin) == nullptr);
 
-    if (!setInputApplication(pin, appIdx)) {
+    // A CAN import is built the way SET CAN builds it: a bare slot, then the
+    // sensor. setInputApplication(NONE) can't — the NONE preset has no
+    // default sensor to resolve (#499).
+    bool slotReady;
+    if (canImportRecord) {
+        slotReady = allocateInputSlot(pin);
+        if (slotReady && !isNewInput) {
+            // What setInputApplication() would reset on the normal path; the
+            // record's own obd2 (export writes it only when set) re-applies below.
+            Input* existing = getInputByPin(pin);
+            existing->applicationIndex = 0;
+            existing->obd2pid = 0;
+            existing->obd2length = 0;
+        }
+    } else {
+        slotReady = setInputApplication(pin, appIdx);
+    }
+    if (!slotReady) {
         msg.control.print(F("ERROR: Failed to import input "));
         msg.control.print(index);
         msg.control.print(F(" (pin "));

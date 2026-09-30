@@ -43,6 +43,7 @@ void readCANSensor(Input*) {}
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/storage/json_config.cpp"
+#include "../../src/pinctrl/pin_label.cpp"   // exportInputToJSON (#499 round trip)
 
 // Firmware symbols input_manager.cpp / json_config.cpp expect from other TUs
 // (shared with test_json_calibration).
@@ -653,6 +654,80 @@ static void test_can_import_units_survive_eeprom(void) {
 }
 
 
+// #499: a CAN input (app NONE + CAN_IMPORT) survives SYSTEM DUMP JSON ->
+// JSON IMPORT with its calibration and units; import used to reject app NONE.
+static void test_json_import_restores_can_input(void) {
+    Input* in = makeCanImport(0xC1, 0x0D, 1.0f);
+    TEST_ASSERT_NOT_NULL(in);
+    TEST_ASSERT_TRUE(setInputUnits(0xC1, findUnitsIndexByName("MPH")));
+    in->flags.isEnabled = true;
+    const CANSensorCalibration before = in->customCalibration.can;
+
+    // Through text, as SYSTEM DUMP JSON -> JSON IMPORT does: float params are
+    // exported as serialized() raw text and only parse back as numbers.
+    JsonDocument out;
+    JsonObject e = out.to<JsonObject>();
+    exportInputToJSON(e, in);
+    char text[1024];
+    serializeJson(out, text, sizeof(text));
+    freeInputSlot(0xC1);
+    JsonDocument doc;
+    TEST_ASSERT_FALSE(deserializeJson(doc, text));
+    JsonObject o = doc.as<JsonObject>();
+
+    TEST_ASSERT_TRUE(importInputFromJSON(o, 0));
+    Input* back = getInputByPin(0xC1);
+    TEST_ASSERT_NOT_NULL(back);
+    TEST_ASSERT_EQUAL_UINT8(0, back->applicationIndex);
+    TEST_ASSERT_EQUAL_UINT8(getSensorIndexByName("CAN_IMPORT"), back->sensorIndex);
+    TEST_ASSERT_TRUE(back->flags.useCustomCalibration);
+    TEST_ASSERT_EQUAL_INT(CAL_CAN_IMPORT, back->calibrationType);
+    const CANSensorCalibration& after = back->customCalibration.can;   // fieldwise: struct has padding
+    TEST_ASSERT_EQUAL_HEX16(before.source_can_id, after.source_can_id);
+    TEST_ASSERT_EQUAL_HEX8(before.source_pid, after.source_pid);
+    TEST_ASSERT_EQUAL_UINT8(before.data_offset, after.data_offset);
+    TEST_ASSERT_EQUAL_UINT8(before.data_length, after.data_length);
+    TEST_ASSERT_EQUAL(before.is_big_endian, after.is_big_endian);
+    TEST_ASSERT_EQUAL_FLOAT(before.scale_factor, after.scale_factor);
+    TEST_ASSERT_EQUAL_FLOAT(before.offset, after.offset);
+    TEST_ASSERT_EQUAL_UINT16(before.timeout_ms, after.timeout_ms);
+    TEST_ASSERT_EQUAL_UINT8(findUnitsIndexByName("MPH"), back->unitsIndex);
+    TEST_ASSERT_EQUAL_INT(MEASURE_SPEED, back->measurementType);
+    TEST_ASSERT_TRUE(back->flags.isEnabled);
+
+    // Importing over the existing CAN input replaces it in place, and does not
+    // keep an OBD output PID the record doesn't carry
+    back->obd2pid = 0x0D;
+    back->obd2length = 1;
+    TEST_ASSERT_TRUE(importInputFromJSON(o, 0));
+    TEST_ASSERT_EQUAL_PTR(back, getInputByPin(0xC1));
+    TEST_ASSERT_EQUAL_UINT8(0, back->obd2pid);
+
+    // "none" is the same application as "NONE" (registry lookups ignore case)
+    o["app"] = "none";
+    TEST_ASSERT_TRUE(importInputFromJSON(o, 0));
+}
+
+// App NONE is only a CAN import's shape: on a physical pin, or with an
+// unknown app name, the record is still refused.
+static void test_json_import_refuses_app_none_elsewhere(void) {
+    Input* in = makeCanImport(0xC2, 0x0C, 0.25f);
+    TEST_ASSERT_NOT_NULL(in);
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    exportInputToJSON(o, in);
+    freeInputSlot(0xC2);
+
+    o["pin"] = 4;                       // a physical pin
+    TEST_ASSERT_FALSE(importInputFromJSON(o, 0));
+    TEST_ASSERT_NULL(getInputByPin(4));
+
+    o["pin"] = 0xC2;
+    o["app"] = "NOT_AN_APP";            // resolves to 0 too, but is a typo
+    TEST_ASSERT_FALSE(importInputFromJSON(o, 0));
+    TEST_ASSERT_NULL(getInputByPin(0xC2));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_registry_available);
@@ -688,5 +763,7 @@ int main(int, char**) {
     RUN_TEST(test_eeprom_load_repairs_wrong_type_units);
     RUN_TEST(test_can_import_measurement_type);
     RUN_TEST(test_can_import_units_survive_eeprom);
+    RUN_TEST(test_json_import_restores_can_input);
+    RUN_TEST(test_json_import_refuses_app_none_elsewhere);
     return UNITY_END();
 }
