@@ -58,6 +58,13 @@ bool initInputManager();              // Initialize and load from EEPROM (return
 bool allocateInputSlot(uint8_t pin);  // Create an empty input slot (required before setInputSensor on a new pin)
 void freeInputSlot(uint8_t pin);      // Release a slot allocated by allocateInputSlot on failure
 
+// Build a CAN-import input on a CAN:n pin (app NONE + CAN_IMPORT sensor) with
+// the defaults setInputApplication() gives every other new input: all data
+// outputs, display on, enabled, no divider (#501). An existing input at the
+// pin is reset to that shape. The caller installs the calibration. nullptr if
+// CAN_IMPORT isn't in this build or no slot is free (nothing is left behind).
+Input* createCanImportInput(uint8_t pin);
+
 // setInputApplication() — assign an application preset to `pin`, creating the
 // input if it doesn't exist yet.
 //

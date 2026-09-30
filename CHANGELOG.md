@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The OBD-II responder now answers requests over CAN on Teensy (it never received them), and CAN input sharing a bus with CAN output no longer reboot-loops the board when the CAN output module is off (#495)
 - Imported CAN PIDs now carry their real units (RPM, km/h, kPa, …) instead of `C`, accept `SET <pin> UNITS` for their quantity, keep them across a reboot, and read pressure PIDs correctly; `SET CAN` also works on the Arduino Mega, where it read the PID table from the wrong memory (#496). A pressure PID (MAP, fuel pressure, …) imported on 0.14.0-beta reads 100× too high after upgrading: run `SET CAN <pid>` for it again
 - `JSON IMPORT` restores CAN inputs: a `SYSTEM DUMP JSON` backup or an app profile used to drop every imported CAN PID (#499)
+- `SET CAN <pid>` inputs now go to every data output (CAN, RealDash, serial, SD) and the display like any other new input; they were created with all outputs off. For a CAN input created earlier, run `SET CAN:<n> OUTPUT ALL ENABLE` (#501)
 
 ## [0.14.0-beta] - 2026-09-29
 

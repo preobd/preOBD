@@ -219,6 +219,34 @@ bool allocateInputSlot(uint8_t pin) {
     return true;
 }
 
+Input* createCanImportInput(uint8_t pin) {
+    uint8_t canSensor = getSensorIndexByName("CAN_IMPORT");
+    if (canSensor == 0) return nullptr;
+
+    const bool isNew = (getInputByPin(pin) == nullptr);
+    if (!allocateInputSlot(pin)) return nullptr;
+    Input* input = getInputByPin(pin);
+    if (!isNew) {
+        // What setInputApplication() resets on the normal path
+        input->applicationIndex = 0;
+        input->obd2pid = 0;
+        input->obd2length = 0;
+        input->minValue = 0;
+        input->maxValue = 0;
+    }
+    // Can't refuse: the index resolves and app NONE matches any sensor
+    if (!setInputSensor(pin, canSensor)) {
+        if (isNew) freeInputSlot(pin);
+        return nullptr;
+    }
+    input->outputMask = OUTPUT_MASK_ALL_DATA;
+    input->flags.display = true;
+    input->flags.alarm = false;
+    input->flags.isEnabled = true;
+    input->divider_ratio = 1.0f;
+    return input;
+}
+
 void freeInputSlot(uint8_t pin) {
     // Wipe the whole slot, not just the pin: findFreeSlot() recycles on
     // pin == 0xFF alone, so anything left behind here (notably

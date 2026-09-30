@@ -1597,18 +1597,10 @@ int cmd_set(int argc, const char* const* argv) {
             return 1;
         }
 
-        // Create the input slot before setInputSensor (which requires the slot to exist)
-        if (!allocateInputSlot(virtualPin)) {
-            return 1;
-        }
-
-        if (!setInputSensor(virtualPin, canSensorIndex)) {
-            msg.control.println(F("ERROR: Failed to configure CAN sensor"));
-            freeInputSlot(virtualPin);
-            return 1;
-        }
-
-        Input* input = getInputByPin(virtualPin);
+        // Slot + sensor + the defaults every new input gets (outputs, display):
+        // allocateInputSlot() alone left outputMask 0, so a SET CAN input
+        // reached no output and never displayed (#501)
+        Input* input = createCanImportInput(virtualPin);
         if (!input) {
             msg.control.println(F("ERROR: Failed to create CAN input"));
             return 1;

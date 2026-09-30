@@ -1038,15 +1038,9 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     // default sensor to resolve (#499).
     bool slotReady;
     if (canImportRecord) {
-        slotReady = allocateInputSlot(pin);
-        if (slotReady && !isNewInput) {
-            // What setInputApplication() would reset on the normal path; the
-            // record's own obd2 (export writes it only when set) re-applies below.
-            Input* existing = getInputByPin(pin);
-            existing->applicationIndex = 0;
-            existing->obd2pid = 0;
-            existing->obd2length = 0;
-        }
+        // Resets an existing input's app/OBD PID like setInputApplication()
+        // does; the record's own fields (obd2 only when set) re-apply below.
+        slotReady = createCanImportInput(pin) != nullptr;
     } else {
         slotReady = setInputApplication(pin, appIdx);
     }

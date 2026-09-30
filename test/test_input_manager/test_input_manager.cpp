@@ -608,9 +608,8 @@ static void test_bias_on_generic_ntc_seeds_defaults(void) {
 
 // A CAN input as `SET CAN 0x0C` builds it: CAN_IMPORT sensor + custom cal.
 static Input* makeCanImport(uint8_t pin, uint8_t pid, float scale) {
-    if (!allocateInputSlot(pin)) return nullptr;
-    if (!setInputSensor(pin, getSensorIndexByName("CAN_IMPORT"))) return nullptr;
-    Input* in = getInputByPin(pin);
+    Input* in = createCanImportInput(pin);
+    if (in == nullptr) return nullptr;
     if (applyCalCanImport(in, 0x7E8, pid, 0, 2, true, scale, 0.0f, 2000) != CAL_APPLY_OK) return nullptr;
     return in;
 }
@@ -728,6 +727,29 @@ static void test_json_import_refuses_app_none_elsewhere(void) {
     TEST_ASSERT_NULL(getInputByPin(0xC2));
 }
 
+// #501: a CAN input gets the defaults every new input gets from
+// setInputApplication() — before, SET CAN left outputMask 0 (no CAN,
+// RealDash, serial or SD output) and display off.
+static void test_can_import_input_gets_new_input_defaults(void) {
+    Input* in = createCanImportInput(0xC3);
+    TEST_ASSERT_NOT_NULL(in);
+    TEST_ASSERT_EQUAL_HEX8(OUTPUT_MASK_ALL_DATA, in->outputMask);
+    TEST_ASSERT_TRUE(in->flags.display);
+    TEST_ASSERT_TRUE(in->flags.isEnabled);
+    TEST_ASSERT_FALSE(in->flags.alarm);
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, in->divider_ratio);
+    TEST_ASSERT_EQUAL_UINT8(0, in->applicationIndex);
+    TEST_ASSERT_EQUAL_UINT8(getSensorIndexByName("CAN_IMPORT"), in->sensorIndex);
+    TEST_ASSERT_EQUAL_INT(CAL_CAN_IMPORT, in->calibrationType);
+
+    // Rebuilding over an existing input resets it to that shape in place
+    in->outputMask = 0;
+    in->obd2pid = 0x0C;
+    TEST_ASSERT_EQUAL_PTR(in, createCanImportInput(0xC3));
+    TEST_ASSERT_EQUAL_HEX8(OUTPUT_MASK_ALL_DATA, in->outputMask);
+    TEST_ASSERT_EQUAL_UINT8(0, in->obd2pid);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_registry_available);
@@ -764,6 +786,7 @@ int main(int, char**) {
     RUN_TEST(test_can_import_measurement_type);
     RUN_TEST(test_can_import_units_survive_eeprom);
     RUN_TEST(test_json_import_restores_can_input);
+    RUN_TEST(test_can_import_input_gets_new_input_defaults);
     RUN_TEST(test_json_import_refuses_app_none_elsewhere);
     return UNITY_END();
 }
