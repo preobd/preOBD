@@ -10,6 +10,7 @@
 
 // Only compile JSON features on platforms with enough RAM and in runtime config mode
 #include "json_config.h"
+#include "json_registry.h"
 #if SUPPORTS_JSON_CONFIG
 #include "system_config.h"
 #include "../hal/bus_defaults.h"
@@ -302,6 +303,12 @@ FLASHMEM void exportInputToJSON(JsonObject& inputObj, const Input* input) {
     inputObj["sensor"] = reinterpret_cast<const char*>(getSensorNameByIndex(input->sensorIndex));
     inputObj["sensorIndex"] = input->sensorIndex;
     inputObj["units"] = reinterpret_cast<const char*>(getUnitStringByIndex(input->unitsIndex));
+#if SUPPORTS_JSON_EXPORT
+    // What the input measures, which SET UNITS checks against. Not always the
+    // application's: a CAN import has application NONE and takes its type
+    // from the PID (#517). Export-only; JSON IMPORT derives it again.
+    inputObj["measurementType"] = jsonMeasurementTypeName((MeasurementType)input->measurementType);
+#endif
     // Base→display conversion coefficients (display = base * factor + offset),
     // so a client can convert base-unit values (alarm thresholds below, alarm
     // frame value/threshold) to display units without duplicating the registry.

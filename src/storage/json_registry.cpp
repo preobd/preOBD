@@ -69,7 +69,7 @@ static const CalTypeEntry CAL_TYPE_TABLE[] = {
 };
 static const uint8_t CAL_TYPE_COUNT = sizeof(CAL_TYPE_TABLE) / sizeof(CAL_TYPE_TABLE[0]);
 
-static FLASHMEM const char* measurementTypeName(MeasurementType t) {
+FLASHMEM const char* jsonMeasurementTypeName(MeasurementType t) {
     for (uint8_t i = 0; i < MEAS_TYPE_COUNT; i++) {
         if (MEAS_TYPE_TABLE[i].id == t) return MEAS_TYPE_TABLE[i].name;
     }
@@ -150,7 +150,7 @@ FLASHMEM void writeUnitsJson(Print& out) {
         obj["name"]            = (const __FlashStringHelper*)u.name;
         obj["alias"]           = (const __FlashStringHelper*)u.alias;
         obj["symbol"]          = (const __FlashStringHelper*)u.symbol;
-        obj["measurementType"] = measurementTypeName(u.measurementType);
+        obj["measurementType"] = jsonMeasurementTypeName(u.measurementType);
         obj["factor"]          = u.conversionFactor;
         obj["offset"]          = u.conversionOffset;
     }
@@ -198,7 +198,7 @@ FLASHMEM void writeSensorsJson(Print& out, const char* filter) {
         } else {
             obj["description"] = nullptr;
         }
-        obj["measurementType"] = measurementTypeName(s.measurementType);
+        obj["measurementType"] = jsonMeasurementTypeName(s.measurementType);
         obj["calibrationType"] = calibrationTypeName(s.calibrationType);
         obj["minReadInterval"] = s.minReadInterval;
         obj["minValue"]        = s.minValue;
@@ -266,7 +266,7 @@ FLASHMEM void writeApplicationsJson(Print& out) {
         obj["defaultAlarmEnabled"] = p.defaultAlarmEnabled;
         obj["obd2pid"]         = p.obd2pid;
         obj["obd2length"]      = p.obd2length;
-        obj["measurementType"] = measurementTypeName(p.expectedMeasurementType);
+        obj["measurementType"] = jsonMeasurementTypeName(p.expectedMeasurementType);
         obj["warmupMs"]        = p.warmupTime_ms;
         obj["persistMs"]       = p.persistTime_ms;
     }
@@ -302,7 +302,7 @@ FLASHMEM void writePidsJson(Print& out) {
         obj["abbr"]            = (const __FlashStringHelper*)pid.abbr;
         obj["dataOffset"]      = pid.data_offset;   // first value byte from A (#509)
         obj["dataLength"]      = pid.data_length;
-        obj["measurementType"] = measurementTypeName(pid.measurementType);
+        obj["measurementType"] = jsonMeasurementTypeName(pid.measurementType);
         obj["scale"]           = pid.scale_factor;
         obj["offset"]          = pid.offset;
         obj["units"]           = (const __FlashStringHelper*)pid.units;

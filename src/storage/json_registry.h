@@ -17,6 +17,7 @@
 
 #include <Arduino.h>
 #include "../core/platform.h"
+#include "../sensors/calibration_types.h"
 
 #if SUPPORTS_JSON_EXPORT
 
@@ -29,6 +30,9 @@ void writeUnitsJson(Print& out);
 void writeCategoriesJson(Print& out);
 void writeOutputsJson(Print& out);
 void writePidsJson(Print& out);
+// Registry name of a measurement type ("PRESSURE"), as LIST UNITS JSON and
+// LIST PIDS JSON print it
+const char* jsonMeasurementTypeName(MeasurementType t);
 void writeMeasurementTypesJson(Print& out);
 void writeCalibrationTypesJson(Print& out);
 

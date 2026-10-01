@@ -2084,6 +2084,15 @@ function displayDecimals(unit) {
   }
 }
 
+// Is catalog unit `u` the one named `units`? The dump names an input's units
+// by symbol ("kPa", "C"), the catalog and the editor by registry name (KPA,
+// CELSIUS), so match name, alias or symbol.
+function unitMatches(u, units) {
+  if (!units) return false;
+  const want = String(units).toLowerCase();
+  return [u.name, u.alias, u.symbol].some(k => k && String(k).toLowerCase() === want);
+}
+
 // The dump's unit info for an input: symbol plus the base→display coefficients
 // SYSTEM DUMP JSON exports for exactly this purpose — the alarm frame's value
 // and threshold are BASE units (°C, bar, …), the same numbers the rule was
@@ -2095,9 +2104,7 @@ function displayDecimals(unit) {
 function inputUnitInfo(idx) {
   const inp = ((localConfig && localConfig.inputs) || [])[idx];
   if (!inp || !inp.units) return null;
-  const want = String(inp.units).toLowerCase();
-  const cu = (catalog.units || []).find(u =>
-    [u.name, u.alias, u.symbol].some(k => k && String(k).toLowerCase() === want));
+  const cu = (catalog.units || []).find(u => unitMatches(u, inp.units));
   if (cu && Number.isFinite(cu.factor)) {
     return { units: cu.symbol || inp.units, factor: cu.factor, offset: Number.isFinite(cu.offset) ? cu.offset : 0 };
   }
@@ -3421,6 +3428,13 @@ function buildEditorHTML(pinStr, inp, isAdd) {
     groups[g].push(app);
   }
   let appOptions = '';
+  // An application the catalog doesn't list (NONE: a CAN import) gets its own
+  // selected option. Without it the select falls back to its first entry and
+  // Save would send SET <pin> APPLICATION <that entry> (#517).
+  if (inp?.app && !catalog.applications.some(a => a.name === inp.app)) {
+    const label = inp.app === 'NONE' ? 'None' : inp.app;
+    appOptions += `<option value="${escHtml(inp.app)}" selected>${escHtml(label)}</option>`;
+  }
   for (const [g, apps] of Object.entries(groups).sort()) {
     appOptions += `<optgroup label="${g}">`;
     for (const app of apps) {
@@ -3439,10 +3453,11 @@ function buildEditorHTML(pinStr, inp, isAdd) {
     sensOptions += `<option value="${escHtml(s.name)}" ${sel}>${escHtml(s.label || s.name)}</option>`;
   }
 
-  const filtUnits = measType ? catalog.units.filter(u => u.measurementType === measType) : catalog.units;
+  const unitType = editorUnitsType(inp, inp?.app);
+  const filtUnits = unitType ? catalog.units.filter(u => u.measurementType === unitType) : catalog.units;
   let unitOptions = '';
   for (const u of filtUnits) {
-    const sel = inp && inp.units === u.name ? 'selected' : '';
+    const sel = inp && unitMatches(u, inp.units) ? 'selected' : '';
     const sym = u.symbol || u.alias || '';
     unitOptions += `<option value="${escHtml(u.name)}" ${sel}>${escHtml(u.name)}${sym ? ' (' + escHtml(sym) + ')' : ''}</option>`;
   }
@@ -3557,6 +3572,13 @@ function updateEditorDropdowns() {
   const appName = document.getElementById('edApp').value;
   const appObj = catalog.applications.find(a => a.name === appName);
   const measType = appObj?.measurementType;
+  const editInp = editingPin === null ? null
+    : localConfig.inputs.find(i => pinNumToStr(i.pin) === editingPin);
+  // Back on the input's own application (or never left it): re-select its
+  // own sensor and unit. A trip through another application replaced both,
+  // and NONE has no defaults to put them back, so Save would turn a CAN
+  // import into that application's analog sensor (#517 review).
+  const ownApp = !!editInp && editInp.app === appName;
 
   const filtSensors = measType ? catalog.sensors.filter(s => s.measurementType === measType) : catalog.sensors;
   const sensEl = document.getElementById('edSensor');
@@ -3569,11 +3591,14 @@ function updateEditorDropdowns() {
     if (s.name === curSens) opt.selected = true;
     sensEl.appendChild(opt);
   }
-  if (appObj?.defaultSensor && !filtSensors.find(s => s.name === sensEl.value)) {
+  if (ownApp && filtSensors.some(s => s.name === editInp.sensor)) {
+    sensEl.value = editInp.sensor;
+  } else if (appObj?.defaultSensor && !filtSensors.find(s => s.name === sensEl.value)) {
     sensEl.value = appObj.defaultSensor;
   }
 
-  const filtUnits = measType ? catalog.units.filter(u => u.measurementType === measType) : catalog.units;
+  const unitType = editorUnitsType(editInp, appName);
+  const filtUnits = unitType ? catalog.units.filter(u => u.measurementType === unitType) : catalog.units;
   const unitEl = document.getElementById('edUnits');
   const curUnit = unitEl.value;
   unitEl.innerHTML = '';
@@ -3584,9 +3609,22 @@ function updateEditorDropdowns() {
     if (u.name === curUnit) opt.selected = true;
     unitEl.appendChild(opt);
   }
-  if (appObj?.defaultUnits && !filtUnits.find(u => u.name === unitEl.value)) {
+  const ownUnit = ownApp ? filtUnits.find(u => unitMatches(u, editInp.units)) : null;
+  if (ownUnit) {
+    unitEl.value = ownUnit.name;
+  } else if (appObj?.defaultUnits && !filtUnits.find(u => u.name === unitEl.value)) {
     unitEl.value = appObj.defaultUnits;
   }
+}
+
+// The measurement type to offer units for. The input's own type when the
+// dump reports it and the application is unchanged: a CAN import has
+// application NONE but measures what its PID measures, and SET UNITS checks
+// the input's type, not the application's (#517). Otherwise the selected
+// application's (a new input, a changed application, or older firmware).
+function editorUnitsType(inp, appName) {
+  if (inp?.measurementType && inp.app === appName) return inp.measurementType;
+  return catalog.applications.find(a => a.name === appName)?.measurementType;
 }
 
 // Application changed in the editor: refresh the dependent dropdowns AND re-fill
@@ -3750,6 +3788,9 @@ function saveEditorLocal() {
     inputState.set(newPin, 'dirty');
   } else {
     const inp = localConfig.inputs.find(i => pinNumToStr(i.pin) === editingPin);
+    // A changed application changes what the input measures: drop the
+    // dump's measurementType until the next reload reports the new one
+    if (inp && inp.app !== changes.app) delete inp.measurementType;
     if (inp) Object.assign(inp, changes);  // preserve inp.pin (numeric)
     inputState.set(editingPin, 'dirty');
   }
@@ -3826,7 +3867,11 @@ async function applyInput(pinStr) {
       await sendChecked('SET ' + pinStr + ' APPLICATION ' + cur.app);
     if (!orig || cur.sensor !== orig.sensor)
       await sendChecked('SET ' + pinStr + ' SENSOR ' + cur.sensor);
-    if (!orig || cur.units !== orig.units)
+    // cur holds the catalog name (KPA), orig the dump's symbol (kPa)
+    const curUnit = catalog.units.find(u => unitMatches(u, cur.units));
+    // No units to pick (a DIGITAL application has none): send nothing
+    // rather than a bare "SET <pin> UNITS"
+    if (cur.units && (!orig || (curUnit ? !unitMatches(curUnit, orig.units) : cur.units !== orig.units)))
       await sendChecked('SET ' + pinStr + ' UNITS ' + cur.units);
 
     const alarmChanged = !orig ||
