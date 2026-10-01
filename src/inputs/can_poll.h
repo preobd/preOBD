@@ -140,7 +140,8 @@ static inline bool canPollStartRound(CanPollState& s, uint32_t now) {
 /**
  * May the next request go out now? lastTxMs is the last request, or the
  * answer that released it. A request that has waited past its timeout is
- * counted as a miss here.
+ * counted as a miss here, whether or not the next one may go yet: the
+ * caller sees `pending` drop and can abort the frame (#506).
  */
 static inline bool canPollReady(CanPollState& s, uint32_t now) {
     // Set only with nothing pending (a round starts after canPollReady)
@@ -149,6 +150,15 @@ static inline bool canPollReady(CanPollState& s, uint32_t now) {
         s.roundHeld = false;   // due; don't let a stale flag outlive a millis() wrap
     }
     uint32_t elapsed = now - s.lastTxMs;
+
+    // A request times out after CAN_POLL_RESPONSE_TIMEOUT_MS even while
+    // backed off, so the caller can abort an unACKed frame then, rather than
+    // just before the next request a second later (#506)
+    if (s.pending && elapsed >= CAN_POLL_RESPONSE_TIMEOUT_MS) {
+        s.pending = false;
+        if (s.missStreak < 0xFF) s.missStreak++;
+    }
+
     uint32_t wait;
     if (s.missStreak >= CAN_POLL_BACKOFF_AFTER) {
         wait = CAN_POLL_BACKOFF_MS;
@@ -157,13 +167,7 @@ static inline bool canPollReady(CanPollState& s, uint32_t now) {
     } else {
         wait = CAN_POLL_MIN_GAP_MS;
     }
-    if (elapsed < wait) return false;
-
-    if (s.pending) {
-        s.pending = false;
-        if (s.missStreak < 0xFF) s.missStreak++;
-    }
-    return true;
+    return elapsed >= wait;
 }
 
 /**

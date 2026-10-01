@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Arduino Mega: 195 B more free RAM (7,948 of 8,192 B used, was 8,143 B): the compiler no longer builds `switch` lookup tables, which avr-gcc keeps in RAM (#509)
 
 ### Fixed
+- With the ignition off and nothing else on the bus to acknowledge it, CAN input polling no longer keeps the bus busy: an unanswered request is retried for 50 ms and then dropped, cutting the traffic from about 3,650 frames/s to about 180 (#506)
 - CAN input polling no longer floods the bus: each imported PID is requested at most 20 times a second (was up to 100 with one PID), and a PID the ECU reports as unsupported no longer stalls the round for 50 ms (#507, #508)
 - Imported OBD-II PIDs are decoded and labelled to the J1979 standard: mass air flow (g/s, lb/min), run time (s, min, h), distance and odometer (km, mi) and fuel rate (L/h, gal/h) no longer show `%`. PIDs 0x31, 0x4D and 0x4E are new, and the PID table was corrected against three references. For an input imported earlier from 0x5A, 0x5E, 0x66 or 0x67, run `SET CAN <pid>` again for the right name and value. 0x6F, 0x78, 0x7F, 0xA4, 0xAA, 0xC3 and 0xC4 were removed because they never decoded correctly (#509)
 - The OBD-II responder now answers requests over CAN on Teensy (it never received them), and CAN input sharing a bus with CAN output no longer reboot-loops the board when the CAN output module is off (#495)

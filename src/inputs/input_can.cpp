@@ -395,7 +395,19 @@ static void pollCANInputs() {
     if (!inputManagerTableIsLive()) return;
 
     uint32_t now = millis();
-    if (!canPollReady(pollState, now)) return;
+    bool wasPending = pollState.pending;
+    bool ready = canPollReady(pollState, now);
+
+    // The last request just timed out. If no node ACKed it (ignition off,
+    // ECU unpowered) the controller is still retransmitting it back to
+    // back: stop that, so the bus is quiet until the next request (#506).
+    // The driver acts only while the controller is error-passive or
+    // bus-off, so on a healthy bus it never touches a frame output queued.
+    // On a failing one (TEC >= 128 from a bad wire, say) it also drops
+    // output's pending frames, e.g. the rest of an ISO-TP reply; the tester
+    // retries.
+    if (wasPending && !pollState.pending) hal::can::abortUnackedTx(canInputBus);
+    if (!ready) return;
 
     for (uint8_t n = 0; n < MAX_INPUTS; n++) {
         uint8_t slot = (uint8_t)(((uint16_t)pollCursor + n) % MAX_INPUTS);

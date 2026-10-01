@@ -145,6 +145,87 @@ inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
     }
 }
 
+namespace detail {
+    // Register offsets are the same on Kinetis (3.x) and i.MX RT (4.x);
+    // FlexCAN_T4 names the macros differently on each, so spell them out
+    inline volatile uint32_t& esr1(uint32_t base) { return *(volatile uint32_t*)(base + 0x20); }
+    inline volatile uint32_t& imask1(uint32_t base) { return *(volatile uint32_t*)(base + 0x28); }
+    inline volatile uint32_t& iflag1(uint32_t base) { return *(volatile uint32_t*)(base + 0x30); }
+    inline volatile uint32_t& mbCS(uint32_t base, uint8_t n) {
+        return *(volatile uint32_t*)(base + 0x80 + n * 0x10);
+    }
+
+    // Mailbox i's abort has finished: clear its flag and hand it back as
+    // TX_INACTIVE with its interrupt on, as setMaxMB left it, so write() can
+    // use it again
+    template<typename T>
+    inline void finishAbort(T& bus, uint32_t base, uint8_t i) {
+        iflag1(base) = 1UL << i;   // write-1-to-clear
+        bus.setMB((FLEXCAN_MAILBOX)i, TX);
+    }
+
+    template<typename T>
+    inline bool abortUnacked(T& bus, uint32_t base) {
+        // initBus: setMaxMB(16) leaves MB0-7 RX and MB8-15 TX.
+        // First finish any abort a previous call left pending (masked, no
+        // longer TX_ONCE), whatever the bus state is now.
+        for (uint8_t i = 8; i < 16; i++) {
+            if (!(imask1(base) & (1UL << i)) &&
+                ((mbCS(base, i) >> 24) & 0x0F) != FLEXCAN_MB_CODE_TX_ONCE) {
+                finishAbort(bus, base, i);
+            }
+        }
+
+        // FLTCONF (ESR1[5:4]): 00 error-active, 01 passive, 1x bus-off
+        if ((esr1(base) & 0x30) == 0) return false;
+        bool aborted = false;
+        for (uint8_t i = 8; i < 16; i++) {
+            if (((mbCS(base, i) >> 24) & 0x0F) != FLEXCAN_MB_CODE_TX_ONCE) continue;
+            // FlexCAN_T4 sets MCR[AEN], so only the ABORT code stops a
+            // pending frame; writing TX_INACTIVE is ignored (bench, #506).
+            // The abort completes when the attempt on the wire ends: one
+            // unACKed attempt plus error frame, ~140 bit times (~280 us at
+            // 500 kbps, ~1.1 ms at 125 kbps, the slowest BUS CAN BAUDRATE).
+            //
+            // Mask the mailbox's interrupt first. A finished abort sets its
+            // IFLAG, and FlexCAN_T4's ISR has no case for the ABORT code, so
+            // it never clears the flag and re-enters until the watchdog
+            // resets the board (bench, #506). The library can't mask it
+            // (disableMBInterrupt keeps TX interrupts on), hence registers.
+            imask1(base) &= ~(1UL << i);
+            mbCS(base, i) = (mbCS(base, i) & ~(0x0FUL << 24)) |
+                            ((uint32_t)FLEXCAN_MB_CODE_TX_ABORT << 24);
+            uint32_t t0 = micros();
+            while (((mbCS(base, i) >> 24) & 0x0F) == FLEXCAN_MB_CODE_TX_ONCE &&
+                   micros() - t0 < 3000) {}
+            aborted = true;
+            // Still on the wire: leave it masked. Unmasking now would let the
+            // abort land under the ISR (#522 review); the next call finishes it.
+            if (((mbCS(base, i) >> 24) & 0x0F) == FLEXCAN_MB_CODE_TX_ONCE) continue;
+            finishAbort(bus, base, i);
+        }
+        return aborted;
+    }
+}
+
+/**
+ * If the controller is error-passive or bus-off (nothing has ACKed its
+ * frames: the ECU is unpowered), stop retransmitting what is still
+ * waiting to go out (#506). A no-op on a healthy bus.
+ */
+inline bool abortUnackedTx(uint8_t bus = 0) {
+    switch (bus) {
+        case 0: return detail::abortUnacked(detail::canBus0, (uint32_t)CAN1);
+        #if defined(CAN2)
+        case 1: return detail::abortUnacked(detail::canBus1, (uint32_t)CAN2);
+        #endif
+        #if defined(CAN3)
+        case 2: return detail::abortUnacked(detail::canBus2, (uint32_t)CAN3);
+        #endif
+        default: return false;
+    }
+}
+
 #if INCLUDE_CAN_HYBRID
 } // namespace flexcan
 #endif

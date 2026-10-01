@@ -621,7 +621,7 @@ RUN
 
 1. **Polling needs `ENABLE`** - `LISTEN` is passive; see the note at the top. While preOBD polls, `SCAN CAN` shows the ECU's answers to its requests (only PIDs the ECU supports) plus anything else on the bus
 2. **Frame cache size** - received frames are cached per (CAN ID, PID) in a small table (16 entries on Teensy/ESP32, 8 on the Mega). Importing more PIDs than that, or a busy bus with other traffic, can evict a PID between polls, so it flickers to `NaN` and `INFO CAN:<n>` shows `Last frame: never`
-3. **Ignition off** - with nothing answering, `ENABLE` keeps sending one request per second. If no other node is powered to acknowledge it, the CAN controller retransmits that frame continuously. Power preOBD from switched ignition, or use `LISTEN`, if that bus activity could keep other modules awake
+3. **Ignition off** - with nothing answering, `ENABLE` keeps sending one request per second. If no other node is powered to acknowledge it, the CAN controller retries that frame back to back until preOBD gives up on it 50 ms later, so the bus is busy for about 5% of the time instead of continuously. Power preOBD from switched ignition, or use `LISTEN`, if even that could keep other modules awake
 4. **OBD-II Mode 01 only** - single-frame PIDs; no ISO-TP multi-frame reassembly (Mode 09, Mode 22)
 5. **No J1939** - 29-bit IDs are not decoded (see [Custom Frames](#custom-frames))
 

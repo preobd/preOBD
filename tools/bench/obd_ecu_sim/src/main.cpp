@@ -35,6 +35,9 @@
  *   u <hex>      PID to treat as unsupported (00 = none), e.g. "u 0F"
  *   n            toggle unsupported PID: silence <-> NRC 7F 01 31
  *   s            toggle silent (ECU off: no answers, still counts requests)
+ *   l            toggle listen-only: the MCP2515 stops ACKing, like an
+ *                unpowered ECU, and counts every retransmission of preOBD's
+ *                unACKed request (#506). Also silent while on.
  *   e            toggle the second ECU (0x7E9)
  *   r            print stats now
  *   z            zero counters
@@ -66,6 +69,7 @@ static uint16_t answerDelayMs = 0;
 static uint8_t  unsupportedPid = 0x0F;
 static bool     unsupportedSendsNrc = false;
 static bool     silent = false;
+static bool     listenOnly = false;
 static bool     secondEcu = false;
 
 // ---- one queued answer per ECU (delay is non-blocking) ----
@@ -174,14 +178,14 @@ static void printSettings() {
     printHex2(unsupportedPid);
     Serial.print(unsupportedSendsNrc ? F(" (NRC)") : F(" (silent)"));
     Serial.print(F("  ecu="));
-    Serial.print(silent ? F("SILENT") : F("answering"));
+    Serial.print(listenOnly ? F("LISTEN-ONLY (no ACK)") : silent ? F("SILENT") : F("answering"));
     Serial.println(secondEcu ? F("  ecu2=0x7E9 on") : F("  ecu2=off"));
 }
 
 static void printHelp() {
     Serial.println(F("h help | d <ms> answer delay | u <hex> unsupported PID (00=none)"));
     Serial.println(F("n toggle unsupported: silence/NRC | s toggle ECU silent | e toggle 2nd ECU 0x7E9"));
-    Serial.println(F("r stats | z zero"));
+    Serial.println(F("l toggle listen-only (no ACK: unpowered ECU) | r stats | z zero"));
     Serial.println(F("q <hex> send a tester request to 0x7DF and print 0x7E8 answers"));
     printSettings();
 }
@@ -347,6 +351,14 @@ static void handleSerial() {
             case 'u': unsupportedPid = (uint8_t)strtoul(arg, nullptr, 16); printSettings(); break;
             case 'n': unsupportedSendsNrc = !unsupportedSendsNrc; printSettings(); break;
             case 's': silent = !silent; replyQueued = false; reply2Queued = false; printSettings(); break;
+            case 'l':
+                listenOnly = !listenOnly;
+                replyQueued = false; reply2Queued = false;
+                if ((listenOnly ? mcp.setListenOnlyMode() : mcp.setNormalMode()) != MCP2515::ERROR_OK) {
+                    Serial.println(F("[cfg] MODE CHANGE FAILED"));
+                }
+                printSettings();
+                break;
             case 'e': secondEcu = !secondEcu; reply2Queued = false; printSettings(); break;
             case 'r': printStats(); break;
             case 'z': zeroStats(); Serial.println(F("[stats] zeroed")); break;
@@ -428,7 +440,7 @@ void loop() {
 
         uint8_t pid = rx.data[2];
         countRequest(pid, now);
-        if (silent) continue;
+        if (silent || listenOnly) continue;
 
         // Engine: functional or 0x7E0. One answer in flight, like a busy ECU.
         if (id != 0x7E1 && !replyQueued && buildAnswer(pid, replyFrame, now)) {

@@ -95,6 +95,34 @@ inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
     (void)filter2;
 }
 
+/**
+ * If the controller is error-passive or bus-off (nothing has ACKed its
+ * frames: the ECU is unpowered), stop retransmitting what is still
+ * waiting to go out (#506). A no-op on a healthy bus.
+ *
+ * twai_clear_transmit_queue() leaves the frame in flight retrying, so
+ * this restarts the driver, which drops it along with the TX queue and any
+ * unread RX frames. Only an error-passive bus gets here: with no other node
+ * powered there is nothing to receive.
+ *
+ * Legacy driver only: on IDF 5.5+ with more than one TWAI controller the
+ * ESP32-TWAI-CAN wrapper uses the new driver, where these calls would act
+ * on an uninstalled legacy driver, so this is a no-op there.
+ */
+inline bool abortUnackedTx(uint8_t bus = 0) {
+#ifdef TWAI_CAN_NEW_DRIVER
+    (void)bus;
+    return false;
+#else
+    if (bus != 0) return false;
+    twai_status_info_t st;
+    if (twai_get_status_info(&st) != ESP_OK || st.state != TWAI_STATE_RUNNING) return false;
+    if (st.tx_error_counter < 128 || st.msgs_to_tx == 0) return false;
+    if (twai_stop() != ESP_OK) return false;
+    return twai_start() == ESP_OK;
+#endif
+}
+
 #if INCLUDE_CAN_HYBRID
 } // namespace twai
 #endif

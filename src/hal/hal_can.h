@@ -69,6 +69,11 @@ inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
     (void)filter1; (void)filter2; (void)bus;
 }
 
+inline bool abortUnackedTx(uint8_t bus = 0) {
+    (void)bus;
+    return false;
+}
+
 }} // namespace hal::can
 
 #endif // INCLUDE_CAN

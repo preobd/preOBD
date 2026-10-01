@@ -84,16 +84,17 @@ static void test_backoff_and_recovery(void) {
         TEST_ASSERT_TRUE(canPollReady(s, t));
         canPollOnSent(s, 0x7E8, 0x0C, true, t);
     }
-    // The last request's timeout pushes the streak to the threshold
+    // The last request's timeout pushes the streak to the threshold, and
+    // the backoff starts there: no further full-rate request (#506)
+    uint32_t lastSent = t;
     t += CAN_POLL_RESPONSE_TIMEOUT_MS;
-    TEST_ASSERT_TRUE(canPollReady(s, t));
+    TEST_ASSERT_FALSE(canPollReady(s, t));
     TEST_ASSERT_EQUAL_UINT8(CAN_POLL_BACKOFF_AFTER, s.missStreak);
-    canPollOnSent(s, 0x7E8, 0x0C, true, t);
 
-    // Backed off: the next request waits CAN_POLL_BACKOFF_MS, not the timeout
-    TEST_ASSERT_FALSE(canPollReady(s, t + CAN_POLL_RESPONSE_TIMEOUT_MS));
-    TEST_ASSERT_FALSE(canPollReady(s, t + CAN_POLL_BACKOFF_MS - 1));
-    TEST_ASSERT_TRUE(canPollReady(s, t + CAN_POLL_BACKOFF_MS));
+    // Backed off: the next request waits CAN_POLL_BACKOFF_MS from the last
+    TEST_ASSERT_FALSE(canPollReady(s, lastSent + CAN_POLL_BACKOFF_MS - 1));
+    TEST_ASSERT_TRUE(canPollReady(s, lastSent + CAN_POLL_BACKOFF_MS));
+    t = lastSent;
 
     uint32_t sent = t + CAN_POLL_BACKOFF_MS;
     canPollOnSent(s, 0x7E8, 0x0C, true, sent);
@@ -279,6 +280,24 @@ static void test_reset_clears_round_hold(void) {
     TEST_ASSERT_TRUE(canPollStartRound(s, 120 + CAN_POLL_MIN_GAP_MS));
 }
 
+// #506: while backed off, a request still times out at the response
+// timeout (so the caller can abort an unACKed frame then), but the next
+// request waits the full backoff
+static void test_backoff_times_out_early(void) {
+    CanPollState s;
+    canPollReset(s, 0);
+    s.missStreak = CAN_POLL_BACKOFF_AFTER;
+    canPollOnSent(s, 0x7E8, 0x0C, true, 1000);
+    TEST_ASSERT_FALSE(canPollReady(s, 1000 + CAN_POLL_RESPONSE_TIMEOUT_MS - 1));
+    TEST_ASSERT_TRUE(s.pending);
+    TEST_ASSERT_FALSE(canPollReady(s, 1000 + CAN_POLL_RESPONSE_TIMEOUT_MS));
+    TEST_ASSERT_FALSE(s.pending);                       // timed out: abort now
+    TEST_ASSERT_EQUAL_UINT8(CAN_POLL_BACKOFF_AFTER + 1, s.missStreak);
+    TEST_ASSERT_FALSE(canPollReady(s, 1000 + CAN_POLL_BACKOFF_MS - 1));
+    TEST_ASSERT_EQUAL_UINT8(CAN_POLL_BACKOFF_AFTER + 1, s.missStreak);   // counted once
+    TEST_ASSERT_TRUE(canPollReady(s, 1000 + CAN_POLL_BACKOFF_MS));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_request_frame);
@@ -300,5 +319,6 @@ int main(int, char**) {
     RUN_TEST(test_opens_round);
     RUN_TEST(test_round_floor_multi_pid_table);
     RUN_TEST(test_reset_clears_round_hold);
+    RUN_TEST(test_backoff_times_out_early);
     return UNITY_END();
 }

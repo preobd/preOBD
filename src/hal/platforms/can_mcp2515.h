@@ -184,6 +184,48 @@ inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
     (void)bus;
 }
 
+namespace detail {
+    // The library keeps register access private: clear TXREQ in TXBnCTRL
+    // with a BIT MODIFY of our own, at the library's SPI settings
+    inline void clearTxRequests(uint8_t cs) {
+        for (uint8_t ctrl = 0x30; ctrl <= 0x50; ctrl += 0x10) {   // TXB0-2CTRL
+            SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
+            digitalWrite(cs, LOW);
+            SPI.transfer(0x05);          // BIT MODIFY
+            SPI.transfer(ctrl);
+            SPI.transfer(0x08);          // mask: TXREQ
+            SPI.transfer(0x00);
+            digitalWrite(cs, HIGH);
+            SPI.endTransaction();
+        }
+    }
+
+    inline bool abortUnacked(MCP2515& m, uint8_t cs) {
+        if (!(m.getErrorFlags() & (MCP2515::EFLG_TXEP | MCP2515::EFLG_TXBO))) return false;
+        // A frame mid-transmission finishes or fails, then isn't retried
+        clearTxRequests(cs);
+        return true;
+    }
+}
+
+/**
+ * If the controller is error-passive or bus-off (nothing has ACKed its
+ * frames: the ECU is unpowered), stop retransmitting what is still
+ * waiting to go out (#506). A no-op on a healthy bus.
+ */
+inline bool abortUnackedTx(uint8_t bus = 0) {
+    switch (bus) {
+        case 0:
+            return detail::bus0Initialized && detail::abortUnacked(detail::canBus0, CAN_CS_0);
+        #if defined(CAN_CS_1) && (CAN_CS_1 != 0xFF)
+        case 1:
+            return detail::bus1Initialized && detail::abortUnacked(detail::canBus1, CAN_CS_1);
+        #endif
+        default:
+            return false;
+    }
+}
+
 #if INCLUDE_CAN_HYBRID
 } // namespace mcp2515
 #endif

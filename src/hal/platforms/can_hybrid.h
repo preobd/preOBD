@@ -197,6 +197,29 @@ inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
     }
 }
 
+inline bool abortUnackedTx(uint8_t bus = 0) {
+    switch (getBusControllerType(bus)) {
+        #if HYBRID_HAS_FLEXCAN
+        case CanControllerType::FLEXCAN:
+            return flexcan::abortUnackedTx(bus);
+        #endif
+
+        #if HYBRID_HAS_TWAI
+        case CanControllerType::TWAI:
+            return (bus == 0) ? twai::abortUnackedTx(0) : false;
+        #endif
+
+        #if HYBRID_HAS_MCP2515
+        case CanControllerType::MCP2515:
+            return mcp2515::abortUnackedTx(bus);
+        #endif
+
+        case CanControllerType::NONE:
+        default:
+            return false;
+    }
+}
+
 }} // namespace hal::can
 
 #endif // HAL_CAN_HYBRID_H
