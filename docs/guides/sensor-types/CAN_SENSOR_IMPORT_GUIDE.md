@@ -22,7 +22,9 @@ preOBD can import sensors from the CAN bus and use them alongside local analog/d
 > **`ENABLE` polls the ECU; `LISTEN` only listens.** With CAN input set to
 > `ENABLE`, preOBD sends an OBD-II Mode 01 request for each imported PID in turn
 > (to `0x7E0` for an ECU answering on `0x7E8`), so it can read the ECU with
-> nothing else on the bus. It waits for each answer (up to 50 ms), and when
+> nothing else on the bus. It waits for each answer (up to 50 ms; an ECU's
+> "not supported" reply counts as the answer), asks for each PID at most 20
+> times a second (the rate preOBD reads its inputs), and when
 > nothing answers ten requests in a row (ignition off, no ECU) it slows to one
 > request per second until something does. With `LISTEN`, preOBD never
 > transmits: an imported PID updates only when a *response* for it appears on

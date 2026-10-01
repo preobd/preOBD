@@ -235,10 +235,22 @@ static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len,
         return;
     }
 
+    uint32_t now = millis();
+
     // A negative response or an ISO-TP multi-frame PCI from an ECU is not a
     // value; it would be keyed by its first byte (NRC as PID 0x03, a first
     // frame as 0x10). See can_frame_parse.h.
     if (!extended && isObdResponseId((uint16_t)can_id) && isObdNonValueFrame(data, len)) {
+        // "PID not supported" still answers our request: release it now
+        // rather than after the timeout, and don't count a miss (#507)
+        if (isMode01NegativeResponse(data, len)) {
+            bool answered = canPollOnNegative(pollState, (uint16_t)can_id, now);
+#if SUPPORTS_JSON_EXPORT
+            if (answered) statAnswers++;
+#else
+            (void)answered;
+#endif
+        }
         return;
     }
 
@@ -282,7 +294,6 @@ static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len,
 
     // The scan sees every parsed 11-bit frame (#510); a 29-bit ID would be
     // truncated to 16 bits here and could pose as OBD (0x18DA07E8 -> 0x7E8).
-    uint32_t now = millis();
     if (!extended) {
         canScanOnFrame((uint16_t)can_id, identifier, &data[data_offset], payload, now);
     }
@@ -387,12 +398,19 @@ static void pollCANInputs() {
     if (!canPollReady(pollState, now)) return;
 
     for (uint8_t n = 0; n < MAX_INPUTS; n++) {
-        uint8_t slot = pollCursor;
-        pollCursor = (uint8_t)((pollCursor + 1) % MAX_INPUTS);
+        uint8_t slot = (uint8_t)(((uint16_t)pollCursor + n) % MAX_INPUTS);
 
         uint16_t responseId;
         uint8_t pid;
         if (!pollTargetAt(slot, responseId, pid)) continue;
+
+        // A new round waits out the round floor (#508). The cursor stays
+        // put so the same slot is tried again once it is due.
+        if (canPollOpensRound(pollCursor, n, MAX_INPUTS) &&
+            !canPollStartRound(pollState, now)) {
+            return;
+        }
+        pollCursor = (uint8_t)((slot + 1) % MAX_INPUTS);
 
         uint8_t frame[8];
         buildMode01Request(pid, frame);

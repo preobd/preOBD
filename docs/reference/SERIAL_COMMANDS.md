@@ -811,7 +811,7 @@ BUS CAN JSON
 - `pid` is the OBD-II PID for an OBD response (`obd: true`, CAN ID `0x7E8`-`0x7EF`), otherwise the frame's first byte. `data` is the last payload in hex. Look up names and units in `LIST PIDS JSON`.
 - Buses are indexes (`0` = CAN1), and `255` means none, as in `SYSTEM DUMP JSON`. `mode` is `OFF`, `NORMAL` or `LISTEN`. `output.enabled` is the bus setting and `output.module` is `OUTPUT CAN ENABLE`.
 - `input.bus`, `mode` and `baudrate` are the *configured* values. `BUS CAN INPUT` changes take effect after `SAVE` and a reboot, and until then `rebootPending` is `true` and `running` describes the old settings.
-- `lastFrameAgeMs` and each import's `ageMs` are `null` until a frame has been received. `poll.backoff` is `true` while nothing answers the poller (it has slowed to one request per second).
+- `lastFrameAgeMs` and each import's `ageMs` are `null` until a frame has been received. `poll.backoff` is `true` while nothing answers the poller (it has slowed to one request per second). `poll.answers` counts an ECU's "PID not supported" reply as an answer, so `answers` matching `requests` doesn't mean every imported PID has a value: check each import's `ageMs`.
 - These are not available on the Arduino Mega (JSON is compiled out there).
 
 ### Serial Port Baud Rates

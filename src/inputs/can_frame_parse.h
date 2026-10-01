@@ -61,4 +61,14 @@ static inline bool isObdNonValueFrame(const uint8_t* data, uint8_t len) {
     return len >= 2 && data[0] >= 0x01 && data[0] <= 0x07 && data[1] == 0x7F;
 }
 
+/**
+ * Is this a negative response to a Mode 01 request (03 7F 01 <nrc>)? The
+ * poller treats it as the answer to its outstanding request (#507). NRC
+ * 0x78 (response pending) is excluded: the real answer is still coming.
+ */
+static inline bool isMode01NegativeResponse(const uint8_t* data, uint8_t len) {
+    return len >= 4 && data[0] == 0x03 && data[1] == 0x7F && data[2] == 0x01 &&
+           data[3] != 0x78;
+}
+
 #endif // CAN_FRAME_PARSE_H
