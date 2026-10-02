@@ -3309,11 +3309,12 @@ function pinNumToStr(pin) {
   return String(pin);
 }
 
-// Normalise unit display against the loaded catalog so casing is always canonical.
+// Normalise unit display against the loaded catalog so casing is always
+// canonical. The dump names units by symbol (km/h), so match any spelling.
 function normalizeUnitDisplay(units) {
   if (!units) return '—';
-  const found = catalog.units.find(u => u.name.toLowerCase() === units.toLowerCase());
-  return found ? found.name : units;
+  const found = catalog.units.find(u => unitMatches(u, units));
+  return found ? (found.symbol || found.name) : units;
 }
 
 // Render an input's OBD-II PID assignment as a hex chip, or a dim dash when unset.
@@ -4194,8 +4195,7 @@ function canAgeText(ms) {
 // LIST PIDS JSON names units by registry name (CELSIUS, KPA): show the symbol
 function canUnitSymbol(name) {
   if (!name) return '';
-  const lc = name.toLowerCase();
-  const u = catalog.units.find(x => x.name?.toLowerCase() === lc || x.alias?.toLowerCase() === lc);
+  const u = catalog.units.find(x => unitMatches(x, name));
   return u?.symbol || name;
 }
 function canIsImported(canId, pid) {
