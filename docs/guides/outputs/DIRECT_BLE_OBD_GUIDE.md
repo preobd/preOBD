@@ -118,14 +118,13 @@ dedicated to ELM327 for the scanner app.
 
 ## Response format notes
 
-### MTU and spaces
+### Spaces
 
-The HM-10 BLE MTU is 20 bytes. preOBD defaults to spaces-off (`ATS0`) to keep
-responses compact. A typical RPM response with spaces off is `410C1AF8` (8
-chars); with spaces on it would be `41 0C 1A F8` (11 chars + overhead).
-
-Most apps work fine with spaces off. If an app forces `ATS1` and responses are
-truncated on multi-byte PIDs, switch to OBD Fusion which handles both formats.
+Like a real ELM327, preOBD starts with spaces on (`ATS1`): RPM reads
+`41 0C 1A F8`. Apps that prefer compact replies send `ATS0` (`410C1AF8`), and
+`ATZ` restores the default. A reply longer than one BLE packet (20 bytes at the
+default MTU) is split across several notifications and reassembled by the app,
+so spaces cost a little airtime and never truncate a reply.
 
 ### Headers
 

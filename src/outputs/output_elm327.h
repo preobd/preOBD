@@ -60,7 +60,7 @@ private:
     bool _echoOn;       // ATE0/ATE1, default on
     bool _headersOn;    // ATH0/ATH1, default off
     bool _linefeedsOn;  // ATL0/ATL1, default off
-    bool _spacesOn;     // ATS0/ATS1, default off
+    bool _spacesOn;     // ATS0/ATS1, default on like a real ELM327
                         // (off by default: HM-10 20-byte MTU is tight with spaces)
 
     void _resetState();

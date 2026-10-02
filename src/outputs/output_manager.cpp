@@ -16,7 +16,6 @@ static_assert(OUTPUT_CAN == 0 && OUTPUT_REALDASH == 1 &&
 
 // Declare external functions from output modules
 extern void initCAN();
-extern void sendCAN(Input*);
 extern void updateCAN();
 
 extern void initRealdash();
@@ -47,7 +46,7 @@ extern void updateELM327();
 
 // Define output modules array - always compiled, controlled by runtime flags
 OutputModule outputModules[] = {
-    {"CAN",     false, initCAN,           sendCAN,           updateCAN,           100},
+    {"CAN",     false, initCAN,           nullptr,           updateCAN,           100},  // responder only (#528)
     {"RealDash",false, initRealdash,      sendRealdash,      updateRealdash,      100},
     {"Serial",  false, initSerialOutput,  sendSerialOutput,  updateSerialOutput,  1000},
 #if INCLUDE_SD_LOGGING

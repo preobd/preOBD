@@ -27,8 +27,11 @@ void obdQuery_buildLookupTable() {
 
     for (uint8_t i = 0; i < MAX_INPUTS && pidLookupCount < MAX_PID_ENTRIES; i++) {
         // Only inputs that can answer on their PID: a J1979 PID carrying the
-        // wrong quantity is neither advertised nor answered (#516)
-        if (inputs[i].flags.isEnabled && inputs[i].obd2pid != 0x00 && obdInputAnswerable(inputs[i])) {
+        // wrong quantity is neither advertised nor answered (#516). The
+        // input's CAN output toggle decides whether it is published to OBD-II
+        // tools at all, over CAN and ELM327 alike (#528).
+        if (inputs[i].flags.isEnabled && inputs[i].obd2pid != 0x00 &&
+            (inputs[i].outputMask & (1 << OUTPUT_CAN)) && obdInputAnswerable(inputs[i])) {
             bool isDuplicate = false;
             for (uint8_t j = 0; j < pidLookupCount; j++) {
                 if (pidLookupTable[j].pid == inputs[i].obd2pid) {

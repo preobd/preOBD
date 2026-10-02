@@ -78,7 +78,7 @@ void ELM327Output::_resetState() {
     _echoOn      = true;
     _headersOn   = false;
     _linefeedsOn = false;
-    _spacesOn    = false;
+    _spacesOn    = true;    // an ELM327 powers up and resets with ATS1 (#528)
 }
 
 // ===== MAIN LOOP =====

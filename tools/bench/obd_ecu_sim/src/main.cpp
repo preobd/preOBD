@@ -43,6 +43,9 @@
  *   z            zero counters
  *   q <hex>      act as a TESTER: send 02 01 <pid> to 0x7DF and print any
  *                0x7E8 answer for 200 ms (tests preOBD's own OBD responder).
+ *                `q <mode> <pid>` sends another mode (`q 09 02`, `q 03 00`).
+ *   p ...        the same, physically addressed to 0x7E0 (#528: preOBD sends
+ *                negative responses only there; 0x7DF gets silence)
  *                A multi-frame answer (First Frame 1x) gets Flow Control
  *                30 00 00 on 0x7E0, and its Consecutive Frames print too (#516).
  * Stats print every 5 s: requests per PID, overall rate, min/avg gap.
@@ -186,7 +189,7 @@ static void printHelp() {
     Serial.println(F("h help | d <ms> answer delay | u <hex> unsupported PID (00=none)"));
     Serial.println(F("n toggle unsupported: silence/NRC | s toggle ECU silent | e toggle 2nd ECU 0x7E9"));
     Serial.println(F("l toggle listen-only (no ACK: unpowered ECU) | r stats | z zero"));
-    Serial.println(F("q <hex> send a tester request to 0x7DF and print 0x7E8 answers"));
+    Serial.println(F("q [<mode>] <pid> tester request to 0x7DF, print 0x7E8 answers | p ... same to 0x7E0"));
     printSettings();
 }
 
@@ -362,18 +365,26 @@ static void handleSerial() {
             case 'e': secondEcu = !secondEcu; reply2Queued = false; printSettings(); break;
             case 'r': printStats(); break;
             case 'z': zeroStats(); Serial.println(F("[stats] zeroed")); break;
-            case 'q': {
+            case 'q':
+            case 'p': {
                 can_frame q;
                 memset(&q, 0, sizeof(q));
-                q.can_id = 0x7DF;
+                q.can_id = (line[0] == 'p') ? 0x7E0 : 0x7DF;
                 q.can_dlc = 8;
                 q.data[0] = 0x02;
-                q.data[1] = 0x01;
-                queryPid = (uint8_t)strtoul(arg, nullptr, 16);
+                char* rest = nullptr;
+                uint8_t a = (uint8_t)strtoul(arg, &rest, 16);
+                char* rest2 = nullptr;
+                uint8_t b = (uint8_t)strtoul(rest, &rest2, 16);
+                bool twoArgs = rest2 != rest;           // `<mode> <pid>`
+                q.data[1] = twoArgs ? a : 0x01;
+                queryPid = twoArgs ? b : a;
                 q.data[2] = queryPid;
                 bool ok = mcp.sendMessage(&q) == MCP2515::ERROR_OK;
                 queryUntilMs = millis() + 200;
-                Serial.print(F("[query] 0x7DF 02 01 "));
+                Serial.print(line[0] == 'p' ? F("[query] 0x7E0 02 ") : F("[query] 0x7DF 02 "));
+                printHex2(q.data[1]);
+                Serial.print(' ');
                 printHex2(queryPid);
                 Serial.println(ok ? F(" sent") : F(" SEND FAILED"));
                 break;

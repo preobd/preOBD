@@ -2,11 +2,12 @@
  * output_can.cpp - CAN bus output module
  * Supports FlexCAN (Teensy), TWAI (ESP32), and MCP2515 (AVR) via HAL
  *
- * Features:
- * - Broadcast mode: Periodic transmission of all sensor PIDs (for RealDash)
- * - Request/Response mode: OBD-II Mode 01 queries (for ELM327/Torque)
- * - Hybrid mode: Both modes work simultaneously
- * - Configurable output bus (supports dual-bus on Teensy)
+ * An OBD-II Mode 01 responder: preOBD answers a scan tool's requests on 0x7E8
+ * the way an engine ECU does, and sends nothing unasked. It used to broadcast
+ * every input on 0x7E8 as well. That is the response ID a tester reads after
+ * each request, so the extra frames reached tools as stray answers, and nothing
+ * consumed them: RealDash reads 0x0C80 from output_realdash (#528).
+ * Configurable output bus (supports dual-bus on Teensy).
  */
 
 #include "../config.h"
@@ -75,7 +76,13 @@ static void sendSupportedPIDsResponse(uint8_t basePID) {
  * @param mode Service ID that failed
  * @param nrc Negative Response Code
  */
+// Only to a physically addressed request (0x7E0). Every ECU hears a functional
+// request (0x7DF), and one that can't help stays silent: ISO 15765-4 and the
+// UDS rule suppress NRC 0x11/0x12/0x31 there. A scan tool or gauge probing a
+// PID or service we lack (PID 01, Mode 09 VIN) would otherwise read the 7F
+// frame as an answer or an error (#528).
 static void sendNegativeResponse(uint32_t requestId, uint8_t mode, uint8_t nrc) {
+    if (requestId != 0x7E0) return;
     byte frameData[8] = {0x03, 0x7F, mode, nrc, 0x00, 0x00, 0x00, 0x00};
     //                    Len  Neg  Mode NRC
 
@@ -163,14 +170,13 @@ static void isotpTick() {
  * Send an input's Mode 01 answer on 0x7E8: one frame when it fits,
  * otherwise a First Frame and the rest on the tester's Flow Control.
  */
-static void sendOBD2Response(Input* input) {
+static void sendOBD2Response(uint32_t requestId, Input* input) {
     uint8_t answer[OBD_ANSWER_MAX];
     uint8_t n = obdBuildAnswer(*input, answer);
     if (n == 0) {
         // No answer (e.g. the input's type changed since the PID table was
-        // built): say so, rather than let the tester time out
-        byte nrc[8] = {0x03, 0x7F, 0x01, 0x31, 0, 0, 0, 0};
-        sendCANFrame(0x7E8, nrc, 8);
+        // built): say so to a physical request, rather than let it time out
+        sendNegativeResponse(requestId, 0x01, 0x31);
         return;
     }
     byte f[8] = {0};
@@ -230,7 +236,7 @@ static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
 
     // Only handle Mode 01 (Show current data)
     if (mode != 0x01) {
-        sendNegativeResponse(canId, mode, 0x12);  // Sub-function not supported
+        sendNegativeResponse(canId, mode, 0x11);  // Service not supported
         return;
     }
 
@@ -249,7 +255,7 @@ static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
     }
 
     // Build and send response
-    sendOBD2Response(input);
+    sendOBD2Response(canId, input);
 }
 
 /**
@@ -292,30 +298,6 @@ void initCAN() {
     // PID lookup table built in main.cpp after initOutputModules()
 }
 
-void sendCAN(Input *ptr) {
-    if (!systemConfig.buses.can_output_enabled || canOutputBus == 0xFF) {
-        return;  // Output not configured
-    }
-
-    if (isnan(ptr->value)) {
-        return;  // Don't send invalid data
-    }
-
-    // A single frame on 0x7E8 in the middle of a multi-frame answer makes the
-    // tester drop the answer (ISO 15765-2): hold broadcasts until it is done
-    if (isotp.state != isotp.IDLE) return;
-
-    byte frameData[8];
-
-    // Build OBDII frame using shared helper (fixes length byte and endianness)
-    if (!buildOBD2Frame(frameData, ptr)) {
-        return;  // Invalid data size
-    }
-
-    // Send on standard OBDII ECU response ID
-    hal::can::write(0x7E8, frameData, 8, false, canOutputBus);
-}
-
 void updateCAN() {
     if (!systemConfig.buses.can_output_enabled || canOutputBus == 0xFF) {
         return;  // Output not configured
@@ -344,7 +326,6 @@ void updateCAN() {
 
 // Dummy functions if CAN is disabled
 void initCAN() {}
-void sendCAN(Input *ptr) { (void)ptr; }
 void updateCAN() {}
 
 #endif

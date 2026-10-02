@@ -8,7 +8,7 @@ preOBD now supports standard OBD-II request/response protocol (SAE J1979), allow
 
 - **Use your phone as a display** - No need for a dedicated LCD or tablet
 - **Works with existing tools** - Compatible with popular OBD-II scanner apps
-- **Hybrid mode** - Simultaneously supports RealDash broadcast and scanner request/response
+- **Works alongside RealDash** - RealDash's own output and scanner request/response run at the same time
 - **Standard protocol** - Uses the same OBD-II PIDs as modern vehicles
 
 ### How It Differs from RealDash
@@ -23,7 +23,7 @@ preOBD now supports standard OBD-II request/response protocol (SAE J1979), allow
 | **Cost** | ELM327 adapter: $15-25 | Same |
 | **Setup complexity** | Plug-and-play | Requires XML configuration |
 
-**Best of both worlds**: You can use **both simultaneously**! preOBD runs in hybrid mode, broadcasting for RealDash while responding to scanner queries.
+**Best of both worlds**: You can use **both simultaneously**. RealDash gets its own output (frame `0x0C80` over Bluetooth/USB serial) while preOBD answers scanner queries.
 
 ---
 
@@ -349,14 +349,14 @@ SAVE
 
 A PID no table defines gets preOBD's own encoding, with `SET <pin> OBD_LENGTH <1-5>` bytes. See [OBD2_PID_REFERENCE.md](../../reference/OBD2_PID_REFERENCE.md#your-own-pid).
 
-### Hybrid Mode with RealDash
+### Alongside RealDash
 
-**Works simultaneously!** No configuration needed.
+**Works simultaneously.** No configuration needed.
 
-- **Broadcast mode** (for RealDash): Periodic transmission of all sensors
-- **Request/response mode** (for scanners): On-demand PID queries
+- **RealDash** reads its own output: frame `0x0C80`, sent periodically over Bluetooth/USB serial.
+- **Scanners** get OBD-II request/response: preOBD answers on `0x7E8` the way an engine ECU does, and sends nothing on CAN unasked, so a scan tool only ever sees answers to its own requests.
 
-Both modes use CAN ID 0x7E8 for responses, so they coexist peacefully.
+Each input's CAN output toggle decides whether it's published to OBD-II tools at all (over CAN and over the ELM327 emulator): `SET <pin> OUTPUT CAN DISABLE` stops it being answered or advertised.
 
 **Typical setup:**
 - RealDash on tablet (permanent dash)

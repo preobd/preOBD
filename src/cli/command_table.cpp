@@ -760,6 +760,11 @@ int cmd_output(int argc, const char* const* argv) {
             msg.control.println(F("ERROR: INTERVAL requires a time in ms"));
             return 1;
         }
+        if (streq_P(outputName, PSTR("CAN"))) {
+            // A responder: nothing to pace since the 0x7E8 broadcast went (#528)
+            msg.control.println(F("ERROR: CAN output answers OBD-II requests as they arrive; it has no interval"));
+            return 1;
+        }
         uint16_t interval = atoi(argv[3]);
         if (setOutputInterval(outputName, interval)) {
             msg.control.print(outputName);

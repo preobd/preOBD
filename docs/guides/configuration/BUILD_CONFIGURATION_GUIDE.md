@@ -162,7 +162,7 @@ toggle at runtime via EEPROM:
 
 ```
 OUTPUT CAN ENABLE            # runtime enable
-OUTPUT CAN INTERVAL 100
+OUTPUT SERIAL INTERVAL 1000  # periodic outputs take an interval
 SAVE
 ```
 

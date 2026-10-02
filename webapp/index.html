@@ -3523,7 +3523,7 @@ function buildEditorHTML(pinStr, inp, isAdd) {
     <div class="editor-toggle-row">
       <label><input type="checkbox" id="edEnabled" ${enabled ? 'checked' : ''}> Input Enabled</label>
       <span class="editor-toggle-divider"></span>
-      <label><input type="checkbox" id="edOutCAN"      ${mask & 1 ? 'checked' : ''}> CAN</label>
+      <label title="Answer OBD-II scan tools for this input, over CAN and the ELM327 emulator (SET <pin> OUTPUT CAN)"><input type="checkbox" id="edOutCAN"      ${mask & 1 ? 'checked' : ''}> OBD-II</label>
       <label><input type="checkbox" id="edOutRealDash" ${mask & 2 ? 'checked' : ''}> RealDash</label>
       <label><input type="checkbox" id="edOutSerial"   ${mask & 4 ? 'checked' : ''}> Serial</label>
       <label><input type="checkbox" id="edOutSD"       ${mask & 8 ? 'checked' : ''}> SD Log</label>
@@ -4324,7 +4324,7 @@ function renderCanStatus() {
   const outOn = out.enabled && out.bus !== 255;
   const outTile = tile('Output',
     outOn ? canBusName(out.bus) : 'Off',
-    outOn ? (out.module ? 'OBD-II responder on' : 'responder off (OUTPUT CAN)') : 'OBD-II / RealDash out');
+    outOn ? (out.module ? 'OBD-II responder on' : 'responder off (OUTPUT CAN)') : 'OBD-II responder');
 
   document.getElementById('canStatusGrid').innerHTML = inputTile + trafficTile + pollTile + outTile;
   document.getElementById('canRebootBadge').style.display = inp.rebootPending ? '' : 'none';

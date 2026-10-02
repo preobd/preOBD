@@ -426,8 +426,7 @@ RULE ADD A0 OUTSIDE 50 130                   # Oil temp alarm
 RULE ADD A1 OUTSIDE 1.0 6.0                  # Oil pressure alarm
 
 # Enable outputs
-OUTPUT CAN ENABLE
-OUTPUT CAN INTERVAL 100               # Broadcast every 100ms
+OUTPUT CAN ENABLE                     # Answer OBD-II requests
 
 # Save configuration
 SAVE

@@ -110,19 +110,32 @@ static void test_ate0_ok_and_suppresses_echo(void) {
     g_capLen = 0; g_cap[0] = '\0';   // isolate the next command's output
     feed("0100\r");
     TEST_ASSERT_FALSE(capContains("0100"));     // echo suppressed
-    TEST_ASSERT_TRUE(capContains("410018000001"));
+    TEST_ASSERT_TRUE(capContains("41 00 18 00 00 01"));
 }
 
 // Mode 01 PID 00 -> supported-PID bitmap, hex-encoded (echo on by default).
 static void test_obd_pid00_supported_bitmap(void) {
     feed("0100\r");
-    TEST_ASSERT_TRUE(capContains("410018000001"));
+    TEST_ASSERT_TRUE(capContains("41 00 18 00 00 01"));
 }
 
 // Mode 01 PID 0C -> RPM data bytes hex-encoded.
 static void test_obd_pid0c_data(void) {
     feed("010C\r");
+    TEST_ASSERT_TRUE(capContains("41 0C 1A F8"));
+}
+
+// Spaces start on, like a real ELM327 (#528); ATS0 gives the compact form and
+// ATZ restores the default.
+static void test_spaces_default_on_and_ats0(void) {
+    feed("ATS0\r");
+    g_capLen = 0; g_cap[0] = '\0';
+    feed("010C\r");
     TEST_ASSERT_TRUE(capContains("410C1AF8"));
+    feed("ATZ\r");
+    g_capLen = 0; g_cap[0] = '\0';
+    feed("010C\r");
+    TEST_ASSERT_TRUE(capContains("41 0C 1A F8"));
 }
 
 // Unsupported PID -> "NO DATA".
@@ -137,7 +150,7 @@ static void test_command_split_across_frames(void) {
     feed("01");      // no CR yet -> no response
     TEST_ASSERT_EQUAL_INT(0, g_frameCnt);
     feed("0C\r");    // completes "010C"
-    TEST_ASSERT_TRUE(capContains("410C1AF8"));
+    TEST_ASSERT_TRUE(capContains("41 0C 1A F8"));
 }
 
 // Back-pressure: if sendFrame refuses, the response is held and flushed on the
@@ -171,6 +184,7 @@ int main(int, char**) {
     RUN_TEST(test_ate0_ok_and_suppresses_echo);
     RUN_TEST(test_obd_pid00_supported_bitmap);
     RUN_TEST(test_obd_pid0c_data);
+    RUN_TEST(test_spaces_default_on_and_ats0);
     RUN_TEST(test_unsupported_pid_no_data);
     RUN_TEST(test_command_split_across_frames);
     RUN_TEST(test_backpressure_retries);

@@ -611,6 +611,7 @@ static int set_output(uint8_t pin, int argc, const char* const* argv) {
         Input* input = requireInput(pin);
         if (!input) return 1;
         input->outputMask = enable ? OUTPUT_MASK_ALL_DATA : 0x00;
+        obdQuery_buildLookupTable();   // the CAN bit decides what OBD-II answers
         printInputFlag(argv[1], F("all data outputs"), enable);
         return 0;
     }
@@ -633,6 +634,7 @@ static int set_output(uint8_t pin, int argc, const char* const* argv) {
     }
 
     if (setInputOutputMask(pin, outputId, enable)) {
+        if (outputId == OUTPUT_CAN) obdQuery_buildLookupTable();
         msg.control.print(F("Input "));
         msg.control.print(argv[1]);
         msg.control.print(F(" output "));

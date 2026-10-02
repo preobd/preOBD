@@ -44,6 +44,8 @@ void readCANSensor(Input*) {}
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
 #include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"  // obdLengthFor (#516)
+#include "../../src/outputs/obd_encode.cpp"                       // obdInputAnswerable
+#include "../../src/outputs/obd_query.cpp"                        // PID table (#528)
 #include "../../src/storage/json_config.cpp"
 #include "../../src/pinctrl/pin_label.cpp"   // exportInputToJSON (#499 round trip)
 
@@ -773,8 +775,46 @@ static void test_json_import_mismatch_leaves_existing_input_intact(void) {
     TEST_ASSERT_EQUAL_INT(0, memcmp(&before, getInputByPin(4), sizeof(Input)));
 }
 
+
+// #528: an input's CAN output toggle decides whether OBD-II tools get it at all
+// (CAN responder and ELM327 share this table). Off -> neither answered nor
+// advertised; a second input on the same PID then takes it.
+static void rpmInput(uint8_t slot, uint8_t pin, bool canOn) {
+    Input* in = &inputs[slot];
+    in->pin = pin;
+    in->flags.isEnabled = true;
+    in->obd2pid = 0x0C;
+    in->measurementType = MEASURE_RPM;
+    in->outputMask = canOn ? OUTPUT_MASK_ALL_DATA : (OUTPUT_MASK_ALL_DATA & ~(1 << OUTPUT_CAN));
+}
+static bool bitmapHas0C() {
+    uint8_t bitmap[4];
+    obdQuery_getSupportedPIDBitmap(bitmap, 0x00);
+    return bitmap[1] & 0x10;   // PID 0x0C: byte 1 (PIDs 0x09-0x10), bit 4
+}
+static void test_can_toggle_gates_obd_answers(void) {
+    rpmInput(0, 10, true);
+    obdQuery_buildLookupTable();
+    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C));
+    TEST_ASSERT_TRUE(bitmapHas0C());
+
+    inputs[0].outputMask &= ~(1 << OUTPUT_CAN);
+    obdQuery_buildLookupTable();
+    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C));
+    TEST_ASSERT_FALSE(bitmapHas0C());
+
+    rpmInput(1, 11, true);                 // same PID, toggle on: it answers now
+    obdQuery_buildLookupTable();
+    TEST_ASSERT_EQUAL_PTR(&inputs[1], obdQuery_findByPID(0x0C));
+
+    inputs[0].outputMask |= (1 << OUTPUT_CAN);   // first one back: first wins again
+    obdQuery_buildLookupTable();
+    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_can_toggle_gates_obd_answers);
     RUN_TEST(test_registry_available);
     RUN_TEST(test_accepts_a_valid_new_input);
     RUN_TEST(test_refused_new_input_claims_no_slot);

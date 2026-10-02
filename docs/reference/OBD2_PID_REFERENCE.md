@@ -142,12 +142,16 @@ Example: 0.85 bar boost with standard baro is 186 kPa absolute, raw 5950 (0x173E
 
 ### Negative Response (ISO 14229-1)
 
+Sent only to a request addressed to preOBD (`0x7E0`). A request to every ECU
+(`0x7DF`) for a PID or service preOBD doesn't have gets no reply at all, as
+from a real ECU: the tool sees silence (an ELM327 prints `NO DATA`), not an error.
+
 ```
 Byte 0: 0x03 (length)
 Byte 1: 0x7F (negative response indicator)
 Byte 2: Service ID (e.g., 0x01 for Mode 01)
 Byte 3: NRC (Negative Response Code)
-   0x12 = Sub-function not supported (wrong mode)
+   0x11 = Service not supported (a mode preOBD doesn't answer)
    0x31 = Request out of range (no input on that PID, or no valid reading)
 Byte 4-7: Padding (0x00)
 ```

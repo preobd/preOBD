@@ -133,7 +133,8 @@ FLASHMEM void printInputOutputInfo(uint8_t pin) {
     msg.control.println();
 
     msg.control.print(F("  CAN:      "));
-    msg.control.println((input->outputMask & (1 << OUTPUT_CAN)) ? F("ENABLED") : F("DISABLED"));
+    msg.control.print((input->outputMask & (1 << OUTPUT_CAN)) ? F("ENABLED") : F("DISABLED"));
+    msg.control.println(F("  (answered to OBD-II tools, CAN and ELM327)"));
     msg.control.print(F("  RealDash: "));
     msg.control.println((input->outputMask & (1 << OUTPUT_REALDASH)) ? F("ENABLED") : F("DISABLED"));
     msg.control.print(F("  Serial:   "));
