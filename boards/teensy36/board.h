@@ -21,6 +21,7 @@
 #define SUPPORTS_CAN              1
 #define SUPPORTS_REALDASH         1
 #define SUPPORTS_SERIAL_OUTPUT    1
+#define SUPPORTS_CLI_EDITING      1    // embedded-cli: history + in-line editing (#147)
 #define SUPPORTS_FRAMED_TRANSPORT 1    // nRF52840 coprocessor framed link + broadcasters
 #define SUPPORTS_LCD              1
 #define SUPPORTS_ALARMS           1    // control engine (Rules/Actions/Annunciator) — NOT the buzzer

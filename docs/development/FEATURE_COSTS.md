@@ -33,7 +33,8 @@ python3 tools/measure_feature_costs.py --env mega2560
 
 > **These figures are out of date.** They were measured before the v0.13.0
 > registry change that cut mega2560 flash from 85.6% to 69.0%, so the flash
-> baseline below is too high; the RAM picture (≈98% used) still holds. Per-flag
+> baseline below is too high; the RAM picture has changed too: 86.4% after #147/#523, and see the
+> stack note below — the old ≈98% figure didn't leave enough stack to boot. Per-flag
 > deltas are indicative. Re-run `tools/measure_feature_costs.py` to refresh.
 
 Baseline at the time of measurement: **flash 194,398 B (76.5%)**, **static RAM 8,102 / 8,192 B
@@ -58,6 +59,7 @@ much (and several would overflow the 90 B RAM headroom — see notes).
 | `SUPPORTS_FRAMED_TRANSPORT` | +5,192 B | **+1,691 B** | would overflow RAM ~19× over; real ceiling |
 | `SUPPORTS_ELM327` | +4,202 B | +301 B | would overflow RAM headroom |
 | `SUPPORTS_TEST_MODE` | +7,568 B | +238 B | would overflow RAM headroom |
+| `SUPPORTS_CLI_EDITING` | ≈ +3.1 KB | **≈ +690 B** | embedded-cli editor; the stack can't spare it (#147, measured 2026-10-01 below) |
 | `SUPPORTS_RELAY_OUTPUT` | +1,194 B | +32 B | cheap (deprecated → Actions) |
 | `SUPPORTS_REALDASH` | +222 B | +36 B | **nearly free** — disabled by choice, not a RAM limit |
 | `INCLUDE_SD_LOGGING` | — | — | won't build: `SD.h` not in mega `lib_deps` (lib + RAM ceiling) |
@@ -76,7 +78,7 @@ much (and several would overflow the 90 B RAM headroom — see notes).
 | Knob | ΔFlash | ΔStatic RAM | Per-unit |
 |---|---|---|---|
 | `MAX_INPUTS` 8→16 / 8→4 | ~0 | +880 B / −440 B | **≈110 B / input** |
-| `CLI_BUFFER_SIZE` 820→512 | −754 B | **−852 B** | single largest RAM lever |
+| `CLI_CMD_BUFFER_SIZE` | 0 | 1 B / char | longest command line; `CLI_BUFFER_SIZE` only applies with `SUPPORTS_CLI_EDITING` |
 | `CAN_CACHE_SIZE` 8→16 | ~0 | +128 B | 16 B / entry |
 | `MAX_PIN_REGISTRY` 24→16 | 0 | −40 B | 5 B / entry |
 | `MAX_PID_ENTRIES` 8→16 | 0 | +24 B | 3 B / entry |
@@ -108,8 +110,19 @@ From `avr-nm --size-sort -S -C`:
   (`rules_types.h`), so disabling alarms removes the entire Rules/Actions engine
   (−16.4 KB / −455 B — grew with the standalone arena tables). The physical
   buzzer is a separate pin (`BUZZER_PIN`).
-- **`CLI_BUFFER_SIZE` is the biggest single RAM lever** (−852 B for 820→512),
-  larger than any feature — at the cost of max command / JSON-import length.
+- **Static RAM % is not the budget; the stack is.** Measured on hardware
+  (2026-10-01, #523) by painting free RAM at reset: boot peaks at 501 B of stack,
+  `SAVE` at ~630 B. At 97.4% static RAM (≈210 B left) the board crash-looped
+  before printing anything, so keep **≥ ~900 B** free (≲ 89% static). It was
+  the embedded-cli editor's 820 B arena that ate the margin: mega now drops
+  `SUPPORTS_CLI_EDITING` for a 128 B line reader (#147) and sits at 86.4%,
+  with 492 B of stack never touched.
+- **PROGMEM must end below 64 KB.** Near `pgm_read_*` only addresses
+  0x0000–0xFFFF, so a table or `F()` string above it reads garbage.
+  `scripts/avr_progmem_guard.py` fails the build past the line, and
+  `boards/avr_pstr_merge.h` lets the linker fold duplicate `F()` strings
+  (−9.3 KB, #523). The build prints `PROGMEM: ends at 0x…`: watch that headroom
+  as well as flash %.
 - **`MAX_INPUTS` is the cleanest scaling knob** (~110 B/input), confirming the
   earlier estimate.
 - **Not every disabled feature is a RAM ceiling.** `REALDASH` costs +36 B — it's

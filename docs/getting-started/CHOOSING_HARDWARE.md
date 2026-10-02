@@ -20,6 +20,7 @@ CAN, and has room to grow.
 | ELM327 emulator over Bluetooth | ✅ | ✅ | ✅ | ✅ | ❌ |
 | JSON backup/restore | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Test mode (simulated sensors) | ✅ | ✅ | ✅ | ✅ | ❌ |
+| CLI history and line editing | ✅ | ✅ | ✅ | ✅ | ❌ (plain line input) |
 
 Every native CAN port needs an external **CAN transceiver** chip or module
 (SN65HVD230 on 3.3V boards, MCP2551/TJA1050 on 5V) — see the
@@ -27,9 +28,15 @@ Every native CAN port needs an external **CAN transceiver** chip or module
 
 ### Why is the Mega limited?
 
-It has 8 KB of RAM, and preOBD uses about 98% of it. The features marked ❌ are
-left out of the Mega build because they don't fit, not because they are
-unfinished. The Mega is fine for a simple dash of up to 8 sensors on 5V senders.
+It has 8 KB of RAM. preOBD's globals take about 86% of it, and the rest is
+the stack, which needs about 620 B at its peak (`SAVE`). The features marked ❌
+are left out of the Mega build because they don't fit, not because they are
+unfinished. Its command line takes the same commands as every other board, but
+without history or cursor editing: up-arrow and left/right do nothing, and
+backspace still works. Type commands in full: the other boards complete an
+abbreviation such as `VERS` when you press Enter, and the Mega doesn't.
+
+The Mega is fine for a simple dash of up to 8 sensors on 5V senders.
 
 ## 3.3V vs 5V
 

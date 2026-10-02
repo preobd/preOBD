@@ -33,6 +33,14 @@
 #define FLASHMEM
 #endif
 
+// The registry name getters return PROGMEM pointers. Printed as a plain
+// const char* they only work where flash is memory-mapped: on AVR, print()
+// read RAM at that address and INFO showed hundreds of bytes of garbage (#523).
+FLASHMEM static void printFlashName(const char* name) {
+    if (name != nullptr) msg.control.println(reinterpret_cast<const __FlashStringHelper*>(name));
+    else msg.control.println(F("?"));
+}
+
 // Helper to print pin name (A0, 1, I2C:0, CAN:0, etc)
 FLASHMEM static void printPin(uint8_t pin) {
     if (pin >= 0xF0) {
@@ -71,10 +79,10 @@ FLASHMEM void printInputInfo(uint8_t pin) {
     msg.control.println(input->flags.isEnabled ? F("YES") : F("NO"));
 
     msg.control.print(F("  Application: "));
-    msg.control.println(getApplicationNameByIndex(input->applicationIndex));
+    printFlashName(getApplicationNameByIndex(input->applicationIndex));
 
     msg.control.print(F("  Sensor: "));
-    msg.control.println(getSensorNameByIndex(input->sensorIndex));
+    printFlashName(getSensorNameByIndex(input->sensorIndex));
 
     msg.control.print(F("  Display Name: '"));
     msg.control.print(input->displayName);
@@ -85,7 +93,7 @@ FLASHMEM void printInputInfo(uint8_t pin) {
     msg.control.println(F("'"));
 
     msg.control.print(F("  Units: "));
-    msg.control.println(getUnitStringByIndex(input->unitsIndex));
+    printFlashName(getUnitStringByIndex(input->unitsIndex));
 
     msg.control.println(F("  Alarms: managed by Rules — see RULE LIST"));
 
@@ -100,7 +108,7 @@ FLASHMEM void printInputInfo(uint8_t pin) {
         msg.control.print(convertFromBaseUnits(input->value, input->unitsIndex), 2);
     }
     msg.control.print(F(" "));
-    msg.control.println(getUnitStringByIndex(input->unitsIndex));
+    printFlashName(getUnitStringByIndex(input->unitsIndex));
 
     msg.control.println();
     msg.control.println(F("To see alarm config:  INFO <pin> ALARM"));

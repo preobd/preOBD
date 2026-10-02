@@ -1271,7 +1271,7 @@ int cmd_log(int argc, const char* const* argv) {
                 const char* tagName = getTagName(i);
                 if (tagName) {
                     msg.control.print(F("  "));
-                    msg.control.println(tagName);
+                    msg.control.println(reinterpret_cast<const __FlashStringHelper*>(tagName));
                     anyEnabled = true;
                 }
             }
@@ -1298,7 +1298,7 @@ int cmd_log(int argc, const char* const* argv) {
             if (tagName) {
                 bool enabled = router.getLogFilter().isTagEnabled(i);
                 msg.control.print(F("  "));
-                msg.control.print(tagName);
+                msg.control.print(reinterpret_cast<const __FlashStringHelper*>(tagName));
                 msg.control.print(F(": "));
                 msg.control.println(enabled ? F("ENABLED") : F("DISABLED"));
             }
@@ -1444,7 +1444,7 @@ int cmd_log(int argc, const char* const* argv) {
         router.syncConfig();
 
         msg.control.print(F("✓ Tag "));
-        msg.control.print(getTagName(tagId));
+        msg.control.print(reinterpret_cast<const __FlashStringHelper*>(getTagName(tagId)));  // PROGMEM (log_tags.h)
         msg.control.print(F(" "));
         msg.control.println(enable ? F("enabled") : F("disabled"));
         printSaveReminder();

@@ -5,7 +5,9 @@
  * gitignored boards/mega2560/wiring.ini overlay. `-include`d before
  * boards/resolve.h. See boards/README.md.
  *
- * RAM budget: 8 KB HARD limit (target ≤99%). Every CEILING below is a real
+ * RAM budget: 8 KB HARD limit, and static RAM % is NOT the budget: the stack
+ * peaks at ~630 B (SAVE), so keep static ≲ 89% (#523; at 97.4% it crash-looped
+ * at boot). PROGMEM must also end below 64 KB (post-link guard). Every CEILING below is a real
  * RAM/flash limit, not a preference — see docs/development/FEATURE_COSTS.md for measured
  * costs. SERIAL_*_BUFFER_SIZE live as -D flags in board.ini (core TUs aren't
  * reached by -include).
@@ -29,6 +31,8 @@
 //   SUPPORTS_ELM327 (+301 B), SUPPORTS_FRAMED_TRANSPORT (+1689 B),
 //   SUPPORTS_TEST_MODE (+238 B) — each exceeds the 8 KB headroom.
 //   SUPPORTS_REALDASH (+36 B) would fit; it is omitted by preference, not ceiling.
+//   SUPPORTS_CLI_EDITING (+~690 B: embedded-cli's 820 B arena vs a 128 B line)
+//   — would leave the stack too little room to boot (#147, #523).
 
 // ===== FEATURE CAPABILITY (what this board CAN do) =====
 // Declared by presence: a board that can't simply omits the line. Never 0.
@@ -55,11 +59,11 @@
 #define MAX_SCAN_RESULTS        4
 
 // ===== CLI BUFFER SIZES =====
-#define CLI_RX_BUFFER_SIZE      128
-#define CLI_CMD_BUFFER_SIZE     128
-#define CLI_HISTORY_BUFFER_SIZE 64
-#define CLI_MAX_BINDINGS        32
-#define CLI_BUFFER_SIZE         820   // single biggest RAM lever on this board
+// No SUPPORTS_CLI_EDITING: the CLI is the plain line reader (#147), so none of
+// embedded-cli's CLI_BUFFER_SIZE / RX / HISTORY / BINDINGS sizes apply. Its
+// 820 B arena was the board's largest allocation, and without it the stack
+// had ~210 B against a measured 633 B peak (SAVE): the board couldn't boot (#523).
+#define CLI_CMD_BUFFER_SIZE     128   // one line, incl. 2 B tokenizer slack
 #define CLI_MAX_ARGS            9     // longest cmd: set <name> rpm 4 <4 pairs> <max>
 #define CLI_MAX_ARG_LEN         20
 

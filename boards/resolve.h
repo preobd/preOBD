@@ -111,6 +111,14 @@
 #  endif
 #endif
 
+// Without it the CLI is a plain line reader (src/cli/line_reader.h): same
+// commands, prompt and quoting, no history or cursor editing (#147).
+#if SUPPORTS_CLI_EDITING
+#  ifndef INCLUDE_CLI_EDITING
+#    define INCLUDE_CLI_EDITING 1
+#  endif
+#endif
+
 #if SUPPORTS_FRAMED_TRANSPORT
 #  ifndef INCLUDE_FRAMED_TRANSPORT
 #    define INCLUDE_FRAMED_TRANSPORT 1

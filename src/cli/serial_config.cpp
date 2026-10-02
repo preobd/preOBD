@@ -1,6 +1,11 @@
 /*
- * serial_config.cpp - embedded-cli based Serial Command Interface
- * Uses embedded-cli library for command line interface with history and autocompletion
+ * serial_config.cpp - Serial Command Interface
+ *
+ * With INCLUDE_CLI_EDITING, embedded-cli provides the line editor (history,
+ * cursor movement). Without it (mega2560, #147), line_reader.h assembles the
+ * line in CLI_CMD_BUFFER_SIZE bytes instead of embedded-cli's CLI_BUFFER_SIZE
+ * arena. Both builds tokenize with embedded-cli's own embeddedCliTokenizeArgs,
+ * so quoting and escapes are identical, and both call dispatchCommand().
  */
 
 #include "../config.h"
@@ -18,10 +23,14 @@
 #include <strings.h>  // strncasecmp (POSIX); not available on AVR toolchain
 #endif
 
-// embedded-cli requires EMBEDDED_CLI_IMPL in exactly one compilation unit
+// embedded-cli requires EMBEDDED_CLI_IMPL in exactly one compilation unit.
+// The line-reader build uses only its tokenizer; LTO drops the rest.
 #define EMBEDDED_CLI_IMPL
 #include <embedded_cli.h>
 
+static const char CLI_PROMPT[] = "preOBD> ";
+
+#if INCLUDE_CLI_EDITING
 //=============================================================================
 // CLI instance and configuration
 //=============================================================================
@@ -31,6 +40,28 @@
 // board.h if CLI init fails.
 static CLI_UINT cli_buffer[BYTES_TO_CLI_UINTS(CLI_BUFFER_SIZE)];
 static EmbeddedCli* cli = nullptr;
+#else
+#include "line_reader.h"
+
+static char lineBuf[CLI_CMD_BUFFER_SIZE];
+static LineReader lineReader;
+static bool promptShown = false;
+#endif
+
+#if SUPPORTS_JSON_IMPORT_STREAM
+// Print a line, then the prompt again: embedded-cli's embeddedCliPrint().
+// For output produced outside a command (the JSON import stream), after
+// which nothing else would reprint the prompt.
+static void cliPrintLine(const char* line) {
+#if INCLUDE_CLI_EDITING
+    if (cli != nullptr) embeddedCliPrint(cli, line);
+#else
+    msg.control.print(line);
+    msg.control.print(F("\r\n"));
+    msg.control.print(CLI_PROMPT);
+#endif
+}
+#endif
 
 #if SUPPORTS_JSON_IMPORT_STREAM
 //=============================================================================
@@ -73,7 +104,9 @@ static void resetJsonImport() {
     jsonImportLen = 0;
     jsonImportLastLineStart = 0;
     jsonImportOverflowed = false;
+#if INCLUDE_CLI_EDITING
     if (cli != nullptr) embeddedCliProcess(cli);
+#endif
 }
 
 // Shared completion tail for both modes: parse, report, reset. Reports via
@@ -91,7 +124,7 @@ static void dispatchJsonImport() {
     } else {
         msg.control.println(F("ERROR: Failed to apply JSON configuration"));
     }
-    if (cli != nullptr) embeddedCliPrint(cli, "");
+    cliPrintLine("");
     resetJsonImport();
 }
 
@@ -99,7 +132,7 @@ void serialConfig_checkJsonImportIdle() {
     if (!jsonImportActive) return;
     // Signed subtraction: safe across a millis() wraparound (~49 days).
     if ((int32_t)(millis() - jsonImportLastByteMs) < (int32_t)JSON_IMPORT_IDLE_TIMEOUT_MS) return;
-    if (cli != nullptr) embeddedCliPrint(cli, "ERROR: JSON import timed out (no data received)");
+    cliPrintLine("ERROR: JSON import timed out (no data received)");
     resetJsonImport();
 }
 #endif
@@ -107,6 +140,8 @@ void serialConfig_checkJsonImportIdle() {
 //=============================================================================
 // Callbacks
 //=============================================================================
+
+#if INCLUDE_CLI_EDITING
 
 // Write character callback - embedded-cli calls this to output characters
 static void cli_write_char(EmbeddedCli* embeddedCli, char c) {
@@ -185,19 +220,87 @@ static void cli_on_command(EmbeddedCli* embeddedCli, CliCommand* command) {
     // Try to dispatch - dispatchCommand will handle unknown commands
     dispatchCommand(argc, argv);
 }
+#else
+static void lineWriteChar(char c) {
+    msg.control.write(c);
+}
+
+// One completed line, parsed as embedded-cli's parseCommand() + our two
+// callbacks did it: the name is everything up to the first space, the args
+// start at the next non-space. The name is upper-cased (embedded-cli's
+// bindings were the upper-case COMMANDS[] names, and cli_on_command folded
+// any other spelling), `H` is HELP's alias binding, and `<NAME> -h` /
+// `--help` on a bound name prints that command's one-line help.
+static void dispatchLine(char* line) {
+    char* name = line;
+    while (*name == ' ') name++;
+    if (*name == '\0') return;                      // blank line: prompt only
+
+    char* args = name;
+    while (*args != '\0' && *args != ' ') args++;
+    bool exact = true;                              // name already upper-case?
+    if (*args == ' ') {
+        *args++ = '\0';
+        while (*args == ' ') args++;
+    }
+    if (*args == '\0') args = nullptr;
+
+    char cmdUpper[32];
+    strncpy(cmdUpper, name, sizeof(cmdUpper) - 1);
+    cmdUpper[sizeof(cmdUpper) - 1] = '\0';
+    for (char* p = cmdUpper; *p; p++) {
+        if (islower(*p)) exact = false;
+        *p = toupper(*p);
+    }
+    const char* cmdName = (strcmp(cmdUpper, "H") == 0) ? "HELP" : cmdUpper;
+
+    const char* argv[CLI_MAX_ARGS];
+    int argc = 1;
+    argv[0] = cmdName;
+    if (args != nullptr) {
+        // lineBuf keeps two bytes of slack past the line (line_reader.h)
+        embeddedCliTokenizeArgs(args);
+        uint16_t tokenCount = embeddedCliGetTokenCount(args);
+        for (uint16_t i = 0; i < tokenCount && argc < CLI_MAX_ARGS; i++) {
+            const char* token = embeddedCliGetToken(args, i + 1);  // 1-indexed
+            if (token != nullptr) argv[argc++] = token;
+        }
+    }
+
+    // embedded-cli compared its tokenized args, so only the first token
+    // counts: `SET -h x` and `SET "-h"` print the help line too
+    if (exact && argc > 1 &&
+        (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)) {
+        for (uint8_t i = 0; i < NUM_COMMANDS; i++) {
+            if (strcmp(COMMANDS[i].name, cmdUpper) == 0) {
+                if (COMMANDS[i].help != nullptr) {
+                    msg.control.write('\t');
+                    msg.control.print(COMMANDS[i].help);
+                    msg.control.print(F("\r\n"));
+                }
+                return;
+            }
+        }
+    }
+    dispatchCommand(argc, argv);
+}
+#endif
 
 //=============================================================================
 // Public API implementation
 //=============================================================================
 
 void initSerialConfig() {
+#if !INCLUDE_CLI_EDITING
+    lineReaderInit(lineReader, lineBuf, sizeof(lineBuf));
+#else
     // Configure CLI
     EmbeddedCliConfig* config = embeddedCliDefaultConfig();
     config->rxBufferSize = CLI_RX_BUFFER_SIZE;
     config->cmdBufferSize = CLI_CMD_BUFFER_SIZE;
     config->historyBufferSize = CLI_HISTORY_BUFFER_SIZE;
     config->maxBindingCount = CLI_MAX_BINDINGS;
-    config->invitation = "preOBD> ";
+    config->invitation = CLI_PROMPT;
     config->enableAutoComplete = false;  // Disable live autocomplete (too noisy)
 
     // Check required size
@@ -264,6 +367,7 @@ void initSerialConfig() {
         .binding = cli_command_handler
     };
     embeddedCliAddBinding(cli, hBinding);
+#endif
 
     // Print startup banner
     msg.control.println();
@@ -274,7 +378,7 @@ void initSerialConfig() {
     msg.control.println();
 
     // Print initial prompt
-    embeddedCliProcess(cli);
+    processSerialCommands();
 }
 
 /**
@@ -345,9 +449,20 @@ void handleCommandInput(char c) {
         return;
     }
 #endif
+#if INCLUDE_CLI_EDITING
     if (cli != nullptr) {
         embeddedCliReceiveChar(cli, c);
     }
+#else
+    // Dispatched here, not deferred to processSerialCommands(): the router
+    // feeds this transport's bytes with it already set as the reply target,
+    // and there is no rx FIFO to hold the bytes that follow the Enter.
+    if (lineReaderFeed(lineReader, c, lineWriteChar)) {
+        dispatchLine(lineReader.buf);
+        lineReaderClear(lineReader);
+        msg.control.print(CLI_PROMPT);
+    }
+#endif
 }
 
 /**
@@ -355,9 +470,17 @@ void handleCommandInput(char c) {
  * This processes received characters and executes commands
  */
 void processSerialCommands() {
+#if INCLUDE_CLI_EDITING
     if (cli != nullptr) {
         embeddedCliProcess(cli);
     }
+#else
+    // The first call prints the prompt, as embeddedCliProcess() does
+    if (!promptShown) {
+        promptShown = true;
+        msg.control.print(CLI_PROMPT);
+    }
+#endif
 }
 
 #if SUPPORTS_JSON_IMPORT_STREAM

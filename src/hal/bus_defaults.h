@@ -306,7 +306,10 @@
 // Only SPI on Mega
 
 // ----- CAN Default Pins -----
-// No native CAN on Arduino Mega (requires external MCP2515)
+// No native CAN: one MCP2515 on SPI (board.h CAN_CS_0 / CAN_INT_0, which
+// system_config reserves). It has no TX/RX pins of its own to claim (#524).
+#define DEFAULT_CAN1_TX 0xFF
+#define DEFAULT_CAN1_RX 0xFF
 
 // ----- Serial Port Default Pins -----
 #define DEFAULT_SERIAL1_RX  19
@@ -319,7 +322,7 @@
 // ----- Platform Capabilities -----
 #define NUM_I2C_BUSES 1
 #define NUM_SPI_BUSES 1
-#define NUM_CAN_BUSES 0
+#define NUM_CAN_BUSES 1
 #define NUM_SERIAL_PORTS 3
 #define SUPPORTS_WIRE_PIN_REMAP 0
 #define SUPPORTS_SPI_PIN_REMAP 0

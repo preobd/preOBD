@@ -14,4 +14,7 @@ wiring =
 ;    -D MODE_BUTTON_PIN=5  ; CONFIG-on-boot / silence button
 ;    -D I2C_WIRED_BUS=0    ; this I2C instance is physically wired (only Wire exists)
 ;    -D SPI_WIRED_BUS=0    ; this SPI instance is physically wired (only SPI exists)
-;    ; no CAN_WIRED_BUS: this board has no CAN controller (NUM_CAN_BUSES=0)
+;    -D CAN_WIRED_BUS=0    ; the MCP2515 (board.h CAN_CS_0 9 / CAN_INT_0 2) is fitted
+;    -D MCP2515_CLOCK_16MHZ ; the MCP2515's crystal is 16 MHz (Seeed and most shields);
+;                          ; omit for an 8 MHz module. A wrong crystal runs the bus at the
+;                          ; wrong bit rate with no error: CAN1 comes up, nothing is heard
