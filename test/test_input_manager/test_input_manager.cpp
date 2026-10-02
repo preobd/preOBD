@@ -46,6 +46,9 @@ void readCANSensor(Input*) {}
 #include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"  // obdLengthFor (#516)
 #include "../../src/outputs/obd_encode.cpp"                       // obdInputAnswerable
 #include "../../src/outputs/obd_query.cpp"                        // PID table (#528)
+// obd_query's sensor-answer path; these tests only reach the table and the
+// fixed answers, so the real encoder (and its unit-conversion deps) stays out
+uint8_t obdBuildAnswer(const Input&, uint8_t*) { return 0; }
 #include "../../src/storage/json_config.cpp"
 #include "../../src/pinctrl/pin_label.cpp"   // exportInputToJSON (#499 round trip)
 
@@ -812,9 +815,37 @@ static void test_can_toggle_gates_obd_answers(void) {
     TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C));
 }
 
+
+// #528: PID 01 and the no-codes modes answer for a car with no ECU, whatever
+// its inputs, and PID 01 is always in the 0x00 bitmap
+static void test_fixed_obd_answers(void) {
+    uint8_t out[OBD_ANSWER_MAX];
+    uint8_t n = 0;
+    obdQuery_buildLookupTable();                 // no inputs at all
+    TEST_ASSERT_TRUE(obdQuery_resolve(0x01, 0x01, out, &n));
+    const uint8_t pid01[] = {0x41, 0x01, 0x00, 0x00, 0x00, 0x00};
+    TEST_ASSERT_EQUAL_UINT8(6, n);
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(pid01, out, 6);
+    const uint8_t modes[] = {0x03, 0x07, 0x0A};
+    for (uint8_t m : modes) {
+        TEST_ASSERT_TRUE(obdQuery_resolve(m, 0x00, out, &n));
+        TEST_ASSERT_EQUAL_UINT8(2, n);
+        TEST_ASSERT_EQUAL_HEX8(m + 0x40, out[0]);
+        TEST_ASSERT_EQUAL_HEX8(0x00, out[1]);       // no codes
+    }
+    TEST_ASSERT_FALSE(obdQuery_resolve(0x09, 0x02, out, &n));   // VIN: not answered
+    TEST_ASSERT_FALSE(obdQuery_resolve(0x04, 0x00, out, &n));   // clear codes: not answered
+    uint8_t bitmap[4];
+    obdQuery_getSupportedPIDBitmap(bitmap, 0x00);
+    TEST_ASSERT_EQUAL_HEX8(0x80, bitmap[0]);                    // PID 01 only
+    obdQuery_getSupportedPIDBitmap(bitmap, 0x20);
+    TEST_ASSERT_EQUAL_HEX8(0x00, bitmap[0]);                    // not in later ranges
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_can_toggle_gates_obd_answers);
+    RUN_TEST(test_fixed_obd_answers);
     RUN_TEST(test_registry_available);
     RUN_TEST(test_accepts_a_valid_new_input);
     RUN_TEST(test_refused_new_input_claims_no_slot);

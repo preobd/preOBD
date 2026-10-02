@@ -74,6 +74,8 @@ void obdQuery_getSupportedPIDBitmap(uint8_t* bitmap, uint8_t baseRange) {
         }
     }
 
+    if (baseRange == 0x00) bitmap[0] |= 0x80;   // PID 01 (obdQuery_fixedAnswer)
+
     // Set continuation bit (LSB of bitmap[3], representing PID baseRange+0x20)
     // if any PIDs exist anywhere beyond this range, so the scanner chains through
     // even if the immediately next 32-PID window is empty.
@@ -87,7 +89,28 @@ void obdQuery_getSupportedPIDBitmap(uint8_t* bitmap, uint8_t baseRange) {
     }
 }
 
+bool obdQuery_fixedAnswer(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen) {
+    // Stored (03), pending (07), permanent (0A) codes: none. On CAN the
+    // answer is the mode + 0x40 and a count byte (J1979).
+    if (mode == 0x03 || mode == 0x07 || mode == 0x0A) {
+        out[0] = mode + 0x40;
+        out[1] = 0x00;
+        *outLen = 2;
+        return true;
+    }
+    // Monitor status since codes cleared: A = MIL off, 0 codes; B-D = no
+    // readiness monitors supported, so none can read "incomplete"
+    if (mode == 0x01 && pid == 0x01) {
+        out[0] = 0x41; out[1] = 0x01;
+        out[2] = 0x00; out[3] = 0x00; out[4] = 0x00; out[5] = 0x00;
+        *outLen = 6;
+        return true;
+    }
+    return false;
+}
+
 bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen) {
+    if (obdQuery_fixedAnswer(mode, pid, out, outLen)) return true;
     if (mode != 0x01) return false;
 
     // Discovery PIDs are 0x00, 0x20, 0x40 … 0xE0 (multiples of 32)

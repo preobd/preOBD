@@ -2,12 +2,29 @@
 
 ## Overview
 
-preOBD answers OBD-II Service 01 ("Mode 01", show current data) requests, over CAN and through its ELM327 emulation. You wire analog sensors to preOBD and tell it what each one measures. A standard tool (Torque, Car Scanner, OBD Fusion or a handheld scanner) then reads them like any ECU value, **with no setup**, wherever SAE J1979 defines a PID for that quantity.
+preOBD answers OBD-II Service 01 ("Mode 01", show current data) requests, plus the status and trouble-code queries a tool makes at start-up, over CAN and through its ELM327 emulation. You wire analog sensors to preOBD and tell it what each one measures. A standard tool (Torque, Car Scanner, OBD Fusion or a handheld scanner) then reads them like any ECU value, **with no setup**, wherever SAE J1979 defines a PID for that quantity.
 
 - **Standard PIDs** use J1979's exact encoding. A tool decodes them with the formula it already knows.
 - **preOBD PIDs** (0xAA–0xB7) carry sensors J1979 has no PID for: oil pressure, cylinder head temperature, transmission temperature and so on. A tool needs a one-time custom-PID entry for each, with the formula in the table below.
 
 Every application gets its PID automatically, and `SET <pin> OBD_PID <pid>` changes it. Each encoding was checked against Wikipedia's "OBD-II PIDs", CSS Electronics' J1979 table, and DashLogic's J1979 PID listing (see `src/sensors/can_sensor_library/obd_output_pids.h` for which source confirms what).
+
+## Always answered
+
+Gauges and scan tools ask for these at start-up. preOBD answers them for a car
+with no engine computer, whatever inputs you have:
+
+| Request | Answer | Meaning |
+|---------|--------|---------|
+| Mode 01 PID `0x01` (monitor status) | `41 01 00 00 00 00` | MIL off, no trouble codes, no readiness monitors. Always listed in the `0x00` supported-PID bitmap. |
+| Mode `03` (stored codes) | `43 00` | No codes |
+| Mode `07` (pending codes) | `47 00` | No codes |
+| Mode `0A` (permanent codes) | `4A 00` | No codes |
+
+Anything else preOBD doesn't support (another mode such as `09` VIN, or a PID
+with no input) gets silence when the request goes to every ECU (`0x7DF`), and a
+negative response only when it's addressed to preOBD (`0x7E0`): see
+[Negative Response](#negative-response-iso-14229-1).
 
 ## Standard PIDs (read with no setup)
 

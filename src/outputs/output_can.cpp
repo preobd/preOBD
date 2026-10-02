@@ -234,7 +234,18 @@ static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
     msg.debug.debug(TAG_CAN, "OBD-II Request: Mode=0x%02X PID=0x%02X", mode, pid);
     #endif
 
-    // Only handle Mode 01 (Show current data)
+    // PID 01 and the no-codes answers (Modes 03/07/0A): single frames
+    uint8_t fixed[6];
+    uint8_t fixedLen = 0;
+    if (obdQuery_fixedAnswer(mode, pid, fixed, &fixedLen)) {
+        byte f[8] = {0};
+        f[0] = fixedLen;
+        memcpy(&f[1], fixed, fixedLen);
+        sendCANFrame(0x7E8, f, 8);
+        return;
+    }
+
+    // Otherwise only Mode 01 (Show current data)
     if (mode != 0x01) {
         sendNegativeResponse(canId, mode, 0x11);  // Service not supported
         return;

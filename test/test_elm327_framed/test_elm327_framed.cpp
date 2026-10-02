@@ -22,6 +22,9 @@
 // ---- canned OBD layer (real obd_query.cpp deliberately not compiled) ----
 #include "../../src/outputs/obd_query.h"
 bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen) {
+    if (mode == 0x03) {  // no stored codes (#528)
+        out[0] = 0x43; out[1] = 0x00; *outLen = 2; return true;
+    }
     if (mode != 0x01) return false;
     if (pid == 0x00) {  // supported PIDs 01-20 bitmap
         static const uint8_t b[] = {0x41, 0x00, 0x18, 0x00, 0x00, 0x01};
@@ -138,6 +141,16 @@ static void test_spaces_default_on_and_ats0(void) {
     TEST_ASSERT_TRUE(capContains("41 0C 1A F8"));
 }
 
+// Modes 03/07/0A take no PID: a bare `03` is a query, not "?" (#528);
+// any other mode still needs its PID.
+static void test_mode03_without_pid(void) {
+    feed("03\r");
+    TEST_ASSERT_TRUE(capContains("43 00"));
+    g_capLen = 0; g_cap[0] = '\0';
+    feed("01\r");
+    TEST_ASSERT_TRUE(capContains("?"));
+}
+
 // Unsupported PID -> "NO DATA".
 static void test_unsupported_pid_no_data(void) {
     feed("0199\r");
@@ -185,6 +198,7 @@ int main(int, char**) {
     RUN_TEST(test_obd_pid00_supported_bitmap);
     RUN_TEST(test_obd_pid0c_data);
     RUN_TEST(test_spaces_default_on_and_ats0);
+    RUN_TEST(test_mode03_without_pid);
     RUN_TEST(test_unsupported_pid_no_data);
     RUN_TEST(test_command_split_across_frames);
     RUN_TEST(test_backpressure_retries);

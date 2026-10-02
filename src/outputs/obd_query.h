@@ -25,7 +25,14 @@ Input* obdQuery_findByPID(uint8_t pid);
 // Fill a 4-byte bitmap of supported PIDs for the given base range.
 // baseRange 0x00 → PIDs 0x01–0x20, 0x20 → 0x21–0x40, etc.
 // The LSB of bitmap4[3] (continuation bit) is set if any PIDs exist in the next range.
+// PID 01 is always listed (obdQuery_fixedAnswer).
 void obdQuery_getSupportedPIDBitmap(uint8_t* bitmap4, uint8_t baseRange);
+
+// The answers a car with no ECU gives truthfully, whatever its inputs: Mode 01
+// PID 01 (MIL off, no codes, no readiness monitors) and Modes 03/07/0A (no
+// stored, pending or permanent codes). Gauges and scan tools ask for these at
+// start-up. Fills out[] and *outLen; false for anything else. (#528)
+bool obdQuery_fixedAnswer(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen);
 
 // Resolve a Mode 01 OBD-II query to a response payload.
 // Handles mode check, PID 00 special case, lookup, and frame encoding.

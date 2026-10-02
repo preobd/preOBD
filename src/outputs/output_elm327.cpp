@@ -291,12 +291,13 @@ static uint8_t hexNibble(char c) {
 }
 
 void ELM327Output::_handleOBDQuery(const char* hex) {
-    // Expect at least 4 hex chars: mode (2) + pid (2)
+    // Mode (2 hex chars) + PID (2). Modes 03/07/0A take no PID: `03`.
     size_t len = strlen(hex);
-    if (len < 4) { _sendString("?\r\r>"); return; }
+    if (len < 2) { _sendString("?\r\r>"); return; }
 
     uint8_t mode = (hexNibble(hex[0]) << 4) | hexNibble(hex[1]);
-    uint8_t pid  = (hexNibble(hex[2]) << 4) | hexNibble(hex[3]);
+    if (len < 4 && mode != 0x03 && mode != 0x07 && mode != 0x0A) { _sendString("?\r\r>"); return; }
+    uint8_t pid  = len >= 4 ? (uint8_t)((hexNibble(hex[2]) << 4) | hexNibble(hex[3])) : 0;
 
     uint8_t responseBytes[OBD_ANSWER_MAX];
     uint8_t responseLen = 0;

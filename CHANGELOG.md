@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- OBD-II output answers the start-up checks gauges and scan tools make: monitor status (PID 01) as MIL off with no codes, and stored, pending and permanent trouble codes (Modes 03, 07, 0A) as none, over CAN and Bluetooth (ELM327) (#528)
 - Webapp: a CAN Bus panel shows the CAN input, ECU polling and imported sensors live, and "Add CAN sensor" asks the car's ECUs which PIDs they support and imports the ones you tick (#515)
 - `SCAN PIDS` asks the car's ECUs which OBD-II PIDs they support, so you can find what to import on a car where nothing else is polling the ECU (`SCAN SUPPORTED JSON` for the webapp/app), and `SET CAN <pid> <ecu>` imports a PID from a second ECU such as the transmission (#511)
 - `BUS CAN JSON`, `SCAN STATUS JSON` and `SCAN RESULTS JSON` report live CAN state and scan results as JSON, in RUN as well as CONFIG; `SCAN CAN` now counts real frames and payload lengths, and `SCAN CAN … JSON` skips the text table (#510)
