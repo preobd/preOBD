@@ -278,7 +278,10 @@ bool MuxTransport::sendFrame(uint8_t type, const uint8_t* payload, uint16_t len)
     if (writingFrame) return false;
 
     // Atomic check: enough TX buffer space AND flow-control gate open.
-    // Refuse rather than block — caller retries on next tick.
+    // Refuse rather than block — caller retries on next tick. A frame larger
+    // than the port's whole TX buffer (64 B on Teensy 4's Serial1) can never
+    // pass this, so callers must keep frames small: see elm327_framed.cpp's
+    // kMaxElmFramePayload, which this wedged at ~60 B.
     if (static_cast<size_t>(serial->availableForWrite()) < n) return false;
     if (flowInPin >= 0 && digitalRead(flowInPin) == HIGH) return false;
 

@@ -116,6 +116,11 @@ void tick() {
 
     if (!changed && !heartbeatDue) return;
 
+    // Both frames must fit the TX buffer at once, or the pair is refused
+    // forever (see kMuxMaxSendableFrame). Growing the extension toward its
+    // 32 B ceiling would cross this, so it fails the build instead.
+    static_assert(sizeof(ext) + sizeof(snap) + 2 * (FRAME_HEADER_BYTES + 1) <= kMuxMaxSendableFrame,
+                  "status + extension frames must fit the UART TX buffer together");
     // EXT first: the nRF holds it one-shot and appends it to the next 0x03.
     // All-or-nothing — a lone EXT per tick would never let the 0x03 through
     // on a TX buffer that is merely busy (see sendFramePair).

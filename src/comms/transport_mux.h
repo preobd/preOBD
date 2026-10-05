@@ -57,6 +57,13 @@
 // same "table exhausted" contract MAX_ACTIONS/MAX_INPUTS use elsewhere, and
 // headroom (4 slots for the one user today) makes that a non-issue.
 typedef void (*MuxFrameHandler)(const uint8_t* payload, uint16_t len);
+// Largest encoded frame (payload + FRAME_HEADER_BYTES + CRC) that
+// sendFrame()/sendFramePair() can ever send. They refuse until the whole frame
+// fits in the UART's free TX space, and Teensy 3.6/4.x Serial1 has a 64-byte
+// ring (63 usable). A frame bigger than that is refused forever, and its
+// sender stalls behind it: the ELM327 channel did, at ~60 B (#528).
+constexpr size_t kMuxMaxSendableFrame = 63;
+
 constexpr uint8_t kMaxMuxFrameHandlers = 4;
 
 /**

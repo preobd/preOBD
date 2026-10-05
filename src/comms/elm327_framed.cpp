@@ -89,12 +89,24 @@ FramedElmStream g_bridge;
 ELM327Output    g_elm;  // dedicated instance: per-channel session state, kept
                         // independent of the serial-bound elm327Output singleton
 
-// Send as many full 0x30 frames as the transport accepts; stop at the first
+// Largest 0x30 payload we send. MuxTransport::sendFrame refuses a frame
+// until the whole encoded frame (payload + 5) fits in the UART's free TX
+// space, and Teensy 4's Serial1 ring is only 64 bytes. A bigger frame is
+// therefore refused forever: it stays at the head of this queue, and every
+// later reply waits behind it, so the Bluetooth ELM327 channel goes silent
+// for good. A 0x70 boost reply with headers and spaces on (~60-68 bytes)
+// did exactly that. ELM327 text is a byte stream that apps read up to the
+// '>' prompt, so splitting a reply across frames changes nothing they see.
+constexpr size_t kMaxElmFramePayload = 32;
+static_assert(kMaxElmFramePayload + FRAME_HEADER_BYTES + 1 <= kMuxMaxSendableFrame,
+              "an ELM327 frame must fit the smallest UART TX buffer");
+
+// Send as many 0x30 frames as the transport accepts; stop at the first
 // back-pressured send and leave the remainder for the next handleInbound call.
 void drainOut(MuxTransport& out) {
     while (g_bridge.outPending() > 0) {
         size_t n = g_bridge.outPending();
-        if (n > FRAME_MAX_PAYLOAD) n = FRAME_MAX_PAYLOAD;
+        if (n > kMaxElmFramePayload) n = kMaxElmFramePayload;
         if (!out.sendFrame(FRAME_TYPE_ELM327, g_bridge.outPtr(),
                            static_cast<uint16_t>(n))) {
             return;

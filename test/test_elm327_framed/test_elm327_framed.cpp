@@ -30,6 +30,10 @@ bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen) 
         static const uint8_t b[] = {0x41, 0x00, 0x18, 0x00, 0x00, 0x01};
         memcpy(out, b, sizeof(b)); *outLen = sizeof(b); return true;
     }
+    if (pid == 0x70) {  // boost: 12 bytes, a multi-frame reply
+        static const uint8_t b[] = {0x41, 0x70, 0x02, 0, 0, 0x17, 0x39, 0, 0, 0, 0, 0};
+        memcpy(out, b, sizeof(b)); *outLen = sizeof(b); return true;
+    }
     if (pid == 0x0C) {  // engine RPM: ((0x1A*256)+0xF8)/4 = 1726 rpm
         static const uint8_t b[] = {0x41, 0x0C, 0x1A, 0xF8};
         memcpy(out, b, sizeof(b)); *outLen = sizeof(b); return true;
@@ -55,10 +59,12 @@ static size_t   g_capLen   = 0;
 static int      g_frameCnt  = 0;
 static uint8_t  g_lastType  = 0;
 static bool     g_sendOk    = true;  // toggle to simulate back-pressure
+static uint16_t g_maxFrameLen = 0;
 
 bool MuxTransport::sendFrame(uint8_t type, const uint8_t* payload, uint16_t len) {
     if (!g_sendOk) return false;
     g_lastType = type;
+    if (len > g_maxFrameLen) g_maxFrameLen = len;
     if (g_capLen + len <= sizeof(g_cap)) {
         memcpy(g_cap + g_capLen, payload, len);
         g_capLen += len;
@@ -81,6 +87,7 @@ void setUp(void) {
     g_frameCnt = 0;
     g_lastType = 0;
     g_sendOk = true;
+    g_maxFrameLen = 0;
     memset(inputs, 0, sizeof(inputs));
     Elm327Framed::init();  // re-bind + reset parser session (echo on, etc.)
 }
@@ -151,6 +158,23 @@ static void test_mode03_without_pid(void) {
     TEST_ASSERT_TRUE(capContains("?"));
 }
 
+// A long reply (0x70 with headers and spaces, ~60 B) goes out as several small
+// 0x30 frames: one frame that size never fits Teensy 4's 64-byte Serial1 TX
+// buffer, so the mux refused it forever and the channel went silent (#528).
+static void test_long_reply_split_into_small_frames(void) {
+    feed("ATE0\r");
+    feed("ATH1\r");
+    g_capLen = 0; g_frameCnt = 0; g_maxFrameLen = 0;
+    feed("0170\r");
+    TEST_ASSERT_TRUE(g_frameCnt >= 2);
+    TEST_ASSERT_TRUE(g_maxFrameLen <= 32);
+    TEST_ASSERT_TRUE(capContains("7E8 10 0C 41 70 02 00 00 17"));
+    TEST_ASSERT_TRUE(capContains("7E8 21 39 00 00 00 00 00 00"));
+    g_capLen = 0;
+    feed("0100\r");                              // and the channel still answers
+    TEST_ASSERT_TRUE(capContains("41 00 18 00 00 01"));
+}
+
 // Unsupported PID -> "NO DATA".
 static void test_unsupported_pid_no_data(void) {
     feed("0199\r");
@@ -198,6 +222,7 @@ int main(int, char**) {
     RUN_TEST(test_obd_pid00_supported_bitmap);
     RUN_TEST(test_obd_pid0c_data);
     RUN_TEST(test_spaces_default_on_and_ats0);
+    RUN_TEST(test_long_reply_split_into_small_frames);
     RUN_TEST(test_mode03_without_pid);
     RUN_TEST(test_unsupported_pid_no_data);
     RUN_TEST(test_command_split_across_frames);

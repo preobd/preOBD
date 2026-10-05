@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Arduino Mega: 195 B more free RAM (7,948 of 8,192 B used, was 8,143 B): the compiler no longer builds `switch` lookup tables, which avr-gcc keeps in RAM (#509)
 
 ### Fixed
+- Bluetooth OBD apps (ELM327) no longer lose the connection's answers for good after a long reply, such as boost or EGT read with headers on: every later request went unanswered until preOBD was restarted (#528)
 - Arduino Mega: the firmware boots again (it printed nothing or garbage and reset every few seconds), its MCP2515 CAN bus can be configured with `BUS CAN` (it reported no CAN bus), and `INFO` and `LOG TAGS` print names instead of garbage. Its command line no longer has history or cursor editing, which freed the RAM the stack needed: 86.4% of RAM used, was 97.4% (#523, #524, #147)
 - Webapp: editing an imported CAN sensor no longer turns it into a coolant-level switch on Save, and offers the units of what the PID measures (kPa/psi for MAP) instead of none or temperature units; `SYSTEM DUMP JSON` now gives each input's `measurementType` (#517)
 - With the ignition off and nothing else on the bus to acknowledge it, CAN input polling no longer keeps the bus busy: an unanswered request is retried for 50 ms and then dropped, cutting the traffic from about 3,650 frames/s to about 180 (#506)
