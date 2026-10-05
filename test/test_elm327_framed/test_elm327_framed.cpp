@@ -148,14 +148,21 @@ static void test_spaces_default_on_and_ats0(void) {
     TEST_ASSERT_TRUE(capContains("41 0C 1A F8"));
 }
 
-// Modes 03/07/0A take no PID: a bare `03` is a query, not "?" (#528);
-// any other mode still needs its PID.
+// Modes 03/07/0A take no PID: a bare `03` is a query, not "?" (#528). As on
+// a real STN (OBDLink LX), any whole-byte hex string goes to the "bus" and an
+// unanswered one is NO DATA (`04`); only a half byte is "?".
 static void test_mode03_without_pid(void) {
     feed("03\r");
     TEST_ASSERT_TRUE(capContains("43 00"));
     g_capLen = 0; g_cap[0] = '\0';
-    feed("01\r");
+    feed("04\r");
+    TEST_ASSERT_TRUE(capContains("NO DATA"));
+    g_capLen = 0; g_cap[0] = '\0';
+    feed("010\r");
     TEST_ASSERT_TRUE(capContains("?"));
+    g_capLen = 0; g_cap[0] = '\0';
+    feed("01\r");                                 // Mode 01 with no PID: no answer
+    TEST_ASSERT_TRUE(capContains("NO DATA"));
 }
 
 // A long reply (0x70 with headers and spaces, ~60 B) goes out as several small

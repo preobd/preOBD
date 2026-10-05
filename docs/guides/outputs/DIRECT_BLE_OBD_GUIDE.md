@@ -129,7 +129,9 @@ so spaces cost a little airtime and never truncate a reply.
 ### Headers
 
 Headers are off by default (`ATH0`). When on, preOBD uses the fixed header
-`7E8` (standard ECU response ID), e.g. `7E8 04 41 0C 1A F8`.
+`7E8` (standard ECU response ID) and shows the whole 8-byte CAN frame, padding
+included, e.g. `7E8 04 41 0C 1A F8 00 00 00`. That, and the space after the last
+byte when spaces are on, is how a genuine STN/ELM327 adapter prints it.
 
 ### Supply voltage (ATRV)
 

@@ -12,9 +12,10 @@
 
 /**
  * `bytes` = 0x41, PID, payload. Up to 7 bytes: one line, as an ELM327
- * prints a single frame (headers: "7E8 <len> ..."). Longer (0x70 boost,
- * 0x78 EGT): the ISO-TP frames, as an ELM327 prints a multi-frame reply.
- * Ends with "\r\r>".
+ * prints a single frame (headers: "7E8 <len> ..." padded to the full frame).
+ * Longer (0x70 boost, 0x78 EGT): the ISO-TP frames, as an ELM327 prints a
+ * multi-frame reply. Ends with "\r\r>". The text matches a genuine STN1155
+ * byte for byte, trailing spaces included (see the .cpp).
  */
 void elmFormatAnswer(const uint8_t* bytes, uint8_t len, bool headersOn, bool spacesOn,
                      char* out, size_t outSize);

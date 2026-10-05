@@ -226,9 +226,19 @@ static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
     // A new request replaces a multi-frame answer still in flight
     isotp.state = isotp.IDLE;
 
-    // data[0] is frame length, not validated per OBD-II spec
+    // data[0] is the ISO-TP single-frame PCI: 0x0N, N = request bytes. Use it
+    // rather than read padding as data. An OBDLink LX sending a bare `01` put
+    // 01 01 <pad> on the bus, and preOBD answered with the PID 00 bitmap. A
+    // real ECU ignores a Mode 01/02/09 request with no PID (#528).
+    if ((data[0] & 0xF0) != 0x00) return;          // not a single frame
+    const uint8_t reqLen = data[0] & 0x0F;
+    if (reqLen < 1 || reqLen > 7) return;
     uint8_t mode = data[1];
-    uint8_t pid = data[2];
+    uint8_t pid = reqLen >= 2 ? data[2] : 0x00;
+    if (reqLen < 2 && (mode == 0x01 || mode == 0x02 || mode == 0x09)) {
+        sendNegativeResponse(canId, mode, 0x13);  // incorrect length (physical only)
+        return;
+    }
 
     #ifdef DEBUG
     msg.debug.debug(TAG_CAN, "OBD-II Request: Mode=0x%02X PID=0x%02X", mode, pid);

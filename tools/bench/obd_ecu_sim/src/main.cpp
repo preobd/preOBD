@@ -46,6 +46,8 @@
  *                `q <mode> <pid>` sends another mode (`q 09 02`, `q 03 00`).
  *   p ...        the same, physically addressed to 0x7E0 (#528: preOBD sends
  *                negative responses only there; 0x7DF gets silence)
+ *   b <mode>     a one-byte request (`01 <mode>`) to 0x7DF, as an ELM327
+ *                sends for a bare `03`, or `01` with no PID (#528)
  *                A multi-frame answer (First Frame 1x) gets Flow Control
  *                30 00 00 on 0x7E0, and its Consecutive Frames print too (#516).
  * Stats print every 5 s: requests per PID, overall rate, min/avg gap.
@@ -365,6 +367,21 @@ static void handleSerial() {
             case 'e': secondEcu = !secondEcu; reply2Queued = false; printSettings(); break;
             case 'r': printStats(); break;
             case 'z': zeroStats(); Serial.println(F("[stats] zeroed")); break;
+            case 'b': {
+                can_frame q;
+                memset(&q, 0, sizeof(q));
+                q.can_id = 0x7DF;
+                q.can_dlc = 8;
+                q.data[0] = 0x01;
+                q.data[1] = (uint8_t)strtoul(arg, nullptr, 16);
+                queryPid = 0;
+                bool ok = mcp.sendMessage(&q) == MCP2515::ERROR_OK;
+                queryUntilMs = millis() + 200;
+                Serial.print(F("[query] 0x7DF 01 "));
+                printHex2(q.data[1]);
+                Serial.println(ok ? F(" sent") : F(" SEND FAILED"));
+                break;
+            }
             case 'q':
             case 'p': {
                 can_frame q;

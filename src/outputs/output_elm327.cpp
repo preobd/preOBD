@@ -291,12 +291,20 @@ static uint8_t hexNibble(char c) {
 }
 
 void ELM327Output::_handleOBDQuery(const char* hex) {
-    // Mode (2 hex chars) + PID (2). Modes 03/07/0A take no PID: `03`.
+    // Mode (2 hex chars), then the PID if the mode takes one (`03` doesn't).
+    // A real ELM327/STN sends any whole-byte hex string to the bus and prints
+    // NO DATA when nothing answers (an OBDLink LX does for `04`); only a
+    // half byte is `?`. So `04`, `01` and `0902` all reach the resolver.
     size_t len = strlen(hex);
-    if (len < 2) { _sendString("?\r\r>"); return; }
+    if (len < 2 || (len & 1)) { _sendString("?\r\r>"); return; }
 
     uint8_t mode = (hexNibble(hex[0]) << 4) | hexNibble(hex[1]);
-    if (len < 4 && mode != 0x03 && mode != 0x07 && mode != 0x0A) { _sendString("?\r\r>"); return; }
+    // Modes 01, 02 and 09 need a PID: without one no ECU answers, so the
+    // chip prints NO DATA (rather than us reading a missing PID as 00)
+    if (len < 4 && (mode == 0x01 || mode == 0x02 || mode == 0x09)) {
+        _sendString("NO DATA\r\r>");
+        return;
+    }
     uint8_t pid  = len >= 4 ? (uint8_t)((hexNibble(hex[2]) << 4) | hexNibble(hex[3])) : 0;
 
     uint8_t responseBytes[OBD_ANSWER_MAX];

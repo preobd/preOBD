@@ -27,6 +27,20 @@ FLASHMEM void elmFormatAnswer(const uint8_t* bytes, uint8_t len, bool headersOn,
     auto appendStr = [&](const char* s) {
         while (*s && pos + 1 < outSize) out[pos++] = *s++;
     };
+    // Reference: a genuine STN1155 (OBDLink LX, v4.0.0) reading preOBD over
+    // CAN, captured 2026-10-02 (#528 follow-up). Apps are written against
+    // real adapters, so the emulator copies them byte for byte rather than
+    // trusting every client to normalise whitespace:
+    //   - with spaces on, every byte is followed by a space, so each line
+    //     (the "00C " byte count too) ends in one before its \r. With spaces
+    //     off there is nothing to trail.
+    //   - with headers on, the whole 8-byte CAN frame is shown, padding
+    //     included ("7E8 06 41 00 80 00 00 01 00 "), not just the length
+    //     byte's worth. Headers off shows only the answer.
+    auto endLine = [&]() {
+        if (spacesOn) appendChar(' ');
+        appendChar('\r');
+    };
 
     // Longer than one CAN frame (0x70 boost, 0x78 EGT; #516): print it the way
     // an ELM327 prints an ISO-TP reply.
@@ -38,7 +52,7 @@ FLASHMEM void elmFormatAnswer(const uint8_t* bytes, uint8_t len, bool headersOn,
         if (!headersOn) {
             appendChar('0');            // "00C": the byte count in 3 hex digits
             appendHex(len);
-            appendChar('\r');
+            endLine();
         }
         uint8_t i = 0;
         for (uint8_t frame = 0; i < len; frame++) {
@@ -61,7 +75,7 @@ FLASHMEM void elmFormatAnswer(const uint8_t* bytes, uint8_t len, bool headersOn,
                 appendHex(i < len ? bytes[i] : 0x00);
                 i++;
             }
-            appendChar('\r');
+            endLine();
         }
         appendStr("\r>");
         out[pos] = '\0';
@@ -80,12 +94,15 @@ FLASHMEM void elmFormatAnswer(const uint8_t* bytes, uint8_t len, bool headersOn,
         }
     }
 
-    for (uint8_t i = 0; i < len; i++) {
+    // With headers, the frame's 7 data bytes, zero-padded as sent on the bus
+    const uint8_t shown = headersOn ? 7 : len;
+    for (uint8_t i = 0; i < shown; i++) {
         if (spacesOn && i > 0) appendChar(' ');
-        appendHex(bytes[i]);
+        appendHex(i < len ? bytes[i] : 0x00);
     }
 
-    appendStr("\r\r>");
+    endLine();
+    appendStr("\r>");
     out[pos] = '\0';
 }
 
