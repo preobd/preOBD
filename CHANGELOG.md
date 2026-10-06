@@ -7,32 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0-beta] - 2026-10-06
+
+**Breaking (OBD-II output): some PIDs moved.** Standard PIDs now use the SAE J1979 encoding, so any scan tool reads them correctly with no setup. Boost and EGT moved to J1979's 0x70 and 0x78, and sensors J1979 has no PID for moved to preOBD's 0xAA–0xB7. Saved inputs keep their old PID, and the saved configuration is kept on upgrade (`EEPROM_VERSION` is unchanged). Set those inputs up again or use `SET <pin> OBD_PID`, update Torque custom PIDs, and re-import the RealDash XML (#516).
+
 ### Added
 - OBD-II output answers the start-up checks gauges and scan tools make: monitor status (PID 01) as MIL off with no codes, and stored, pending and permanent trouble codes (Modes 03, 07, 0A) as none, over CAN and Bluetooth (ELM327) (#528)
-- Webapp: a CAN Bus panel shows the CAN input, ECU polling and imported sensors live, and "Add CAN sensor" asks the car's ECUs which PIDs they support and imports the ones you tick (#515)
-- `SCAN PIDS` asks the car's ECUs which OBD-II PIDs they support, so you can find what to import on a car where nothing else is polling the ECU (`SCAN SUPPORTED JSON` for the webapp/app), and `SET CAN <pid> <ecu>` imports a PID from a second ECU such as the transmission (#511)
-- `BUS CAN JSON`, `SCAN STATUS JSON` and `SCAN RESULTS JSON` report live CAN state and scan results as JSON, in RUN as well as CONFIG; `SCAN CAN` now counts real frames and payload lengths, and `SCAN CAN … JSON` skips the text table (#510)
 - CAN input in `ENABLE` mode now polls the ECU for each imported OBD-II PID, so `SET CAN <pid>` reads without a scan tool on the bus (`LISTEN` stays passive), and `INFO CAN:<n>` shows when the last frame arrived (#476)
+- `SCAN PIDS` asks the car's ECUs which OBD-II PIDs they support, and `SET CAN <pid> <ecu>` imports a PID from a second ECU such as the transmission (#511)
+- Webapp: a CAN Bus panel shows the CAN input, ECU polling and imported sensors live, and "Add CAN sensor" asks the car's ECUs which PIDs they support and imports the ones you tick (#515)
+- `BUS CAN JSON`, `SCAN STATUS JSON`, `SCAN RESULTS JSON` and `SCAN SUPPORTED JSON` report live CAN state and scan results as JSON, in RUN as well as CONFIG; `SCAN CAN` now counts real frames and payload lengths (#510, #511)
 
 ### Changed
-- Bluetooth OBD (ELM327) replies now match a genuine OBDLink/ELM327 adapter byte for byte (the space after each line, the full 8-byte frame with headers on, `NO DATA` for a request nothing answers), and the CAN responder no longer answers a Mode 01 request that has no PID (#528)
-- OBD-II output now behaves like a real ECU so any standard scan tool reads it cleanly: CAN output only answers requests (it used to also send every sensor on 0x7E8 unasked, which reached tools as stray answers), each input's CAN output setting now decides whether OBD-II tools get it over CAN and Bluetooth (ELM327) alike, `OUTPUT CAN INTERVAL` is refused since there is nothing to pace, and the ELM327 emulator starts with spaces on (`41 0C 1A F8`) like a real ELM327 (#528)
-- **Breaking (OBD-II output):** standard PIDs now use the SAE J1979 encoding, so scan tools read RPM, MAP, barometric and fuel pressure, and battery voltage correctly with no setup (RPM used to read 16× low). Boost and EGT move to J1979's 0x70 and 0x78 (multi-frame replies). Sensors J1979 has no PID for move to preOBD's 0xAA–0xB7, with wider ranges (CHT no longer stops at 215 °C). Saved inputs keep their old PID: set them up again or use `SET <pin> OBD_PID`, update Torque custom PIDs, and re-import the RealDash XML (#516)
-- Arduino Mega: 195 B more free RAM (7,948 of 8,192 B used, was 8,143 B): the compiler no longer builds `switch` lookup tables, which avr-gcc keeps in RAM (#509)
+- OBD-II output behaves like a real ECU, and an OBDLink LX reads it like a stock car. RPM, MAP, barometric and fuel pressure, and battery voltage now read correctly; RPM used to read 16× low. CHT no longer stops at 215 °C (#516). CAN output now only answers requests: it no longer sends every sensor on 0x7E8 unasked, so `OUTPUT CAN INTERVAL` is refused. Each input's CAN output setting now applies to CAN and Bluetooth (ELM327) alike. Bluetooth (ELM327) replies now match a genuine OBDLink/ELM327 byte for byte, with spaces on by default (`41 0C 1A F8`) (#528)
+- Arduino Mega: 195 B more free RAM, because the compiler no longer builds `switch` lookup tables, which avr-gcc keeps in RAM (#509)
 
 ### Fixed
-- Bluetooth OBD apps (ELM327) no longer lose the connection's answers for good after a long reply, such as boost or EGT read with headers on: every later request went unanswered until preOBD was restarted (#528)
-- Arduino Mega: the firmware boots again (it printed nothing or garbage and reset every few seconds), its MCP2515 CAN bus can be configured with `BUS CAN` (it reported no CAN bus), and `INFO` and `LOG TAGS` print names instead of garbage. Its command line no longer has history or cursor editing, which freed the RAM the stack needed: 86.4% of RAM used, was 97.4% (#523, #524, #147)
-- Webapp: editing an imported CAN sensor no longer turns it into a coolant-level switch on Save, and offers the units of what the PID measures (kPa/psi for MAP) instead of none or temperature units; `SYSTEM DUMP JSON` now gives each input's `measurementType` (#517)
-- With the ignition off and nothing else on the bus to acknowledge it, CAN input polling no longer keeps the bus busy: an unanswered request is retried for 50 ms and then dropped, cutting the traffic from about 3,650 frames/s to about 180 (#506)
-- CAN input polling no longer floods the bus: each imported PID is requested at most 20 times a second (was up to 100 with one PID), and a PID the ECU reports as unsupported no longer stalls the round for 50 ms (#507, #508)
-- Imported OBD-II PIDs are decoded and labelled to the J1979 standard: mass air flow (g/s, lb/min), run time (s, min, h), distance and odometer (km, mi) and fuel rate (L/h, gal/h) no longer show `%`. PIDs 0x31, 0x4D and 0x4E are new, and the PID table was corrected against three references. For an input imported earlier from 0x5A, 0x5E, 0x66 or 0x67, run `SET CAN <pid>` again for the right name and value. 0x6F, 0x78, 0x7F, 0xA4, 0xAA, 0xC3 and 0xC4 were removed because they never decoded correctly (#509)
-- The OBD-II responder now answers requests over CAN on Teensy (it never received them), and CAN input sharing a bus with CAN output no longer reboot-loops the board when the CAN output module is off (#495)
-- Imported CAN PIDs now carry their real units (RPM, km/h, kPa, …) instead of `C`, accept `SET <pin> UNITS` for their quantity, keep them across a reboot, and read pressure PIDs correctly; `SET CAN` also works on the Arduino Mega, where it read the PID table from the wrong memory (#496). A pressure PID (MAP, fuel pressure, …) imported on 0.14.0-beta reads 100× too high after upgrading: run `SET CAN <pid>` for it again
-- `JSON IMPORT` restores CAN inputs: a `SYSTEM DUMP JSON` backup or an app profile used to drop every imported CAN PID (#499)
-- `SET CAN <pid>` inputs now go to every data output (CAN, RealDash, serial, SD) and the display like any other new input; they were created with all outputs off. For a CAN input created earlier, run `SET CAN:<n> OUTPUT ALL ENABLE` (#501)
+- Arduino Mega: the firmware boots again (it printed nothing or garbage and reset every few seconds). Its MCP2515 CAN bus can be configured with `BUS CAN` (it reported no CAN bus), and `INFO` and `LOG TAGS` print names instead of garbage. Its command line no longer has history or cursor editing, which freed the RAM the stack needed: 86.4% of RAM used, was 97.4% (#523, #524, #147)
+- Bluetooth OBD apps (ELM327) no longer stop getting answers after a long reply, such as boost or EGT read with headers on. Every later request used to go unanswered until preOBD was restarted (#528)
+- The OBD-II responder now answers requests over CAN on Teensy; it never received them. CAN input sharing a bus with CAN output no longer reboot-loops the board when the CAN output module is off (#495)
+- CAN input polling no longer floods the bus. Each imported PID is requested at most 20 times a second (was up to 100), and a PID the ECU doesn't support no longer stalls the round. With the ignition off, an unanswered request is dropped after 50 ms: about 180 frames/s, was about 3,650 (#506, #507, #508)
+- Imported OBD-II PIDs are decoded and labelled to the J1979 standard, with their real units (RPM, km/h, kPa, g/s, …) instead of `C` or `%`. They accept `SET <pin> UNITS` and keep it across a reboot. PIDs 0x31, 0x4D and 0x4E are new, and 0x6F, 0x78, 0x7F, 0xA4, 0xAA, 0xC3 and 0xC4 were removed because they never decoded correctly. An input imported on 0.14.0-beta from a pressure PID (MAP, fuel pressure, …) or from 0x5A, 0x5E, 0x66 or 0x67 needs `SET CAN <pid>` run again (#496, #509)
+- `SET CAN` works on the Arduino Mega; it read the PID table from the wrong memory (#496)
+- `SET CAN <pid>` inputs now go to every data output (CAN, RealDash, serial, SD) and the display like any other input; they were created with all outputs off. For a CAN input created earlier, run `SET CAN:<n> OUTPUT ALL ENABLE` (#501)
 - CAN input no longer records an ECU's "PID not supported" reply or the start of a multi-frame reply as PID 0x03 / 0x10 (MAF), which put phantom PIDs in `SCAN CAN` results (#511)
-- A `JSON IMPORT` record whose sensor measures a different quantity than its application is refused before it changes anything; over an existing input it used to leave that input half-rewritten (#502)
+- `JSON IMPORT` restores CAN inputs: a `SYSTEM DUMP JSON` backup or an app profile used to drop every imported CAN PID (#499)
+- A `JSON IMPORT` record whose sensor measures a different quantity than its application is refused before it changes anything. Over an existing input it used to leave that input half-rewritten (#502)
+- Webapp: editing an imported CAN sensor no longer turns it into a coolant-level switch on Save, and it offers the units of what the PID measures (kPa/psi for MAP); `SYSTEM DUMP JSON` now gives each input's `measurementType` (#517)
 
 ## [0.14.0-beta] - 2026-09-29
 
