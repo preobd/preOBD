@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0-beta] - 2026-11-04
+
+**Upgrading:** the saved configuration is kept (`EEPROM_VERSION` is unchanged). Three things may need attention. An external SD card (Teensy 4.0, ESP32-S3) now needs `SPI_WIRED_BUS` in `wiring.ini` or `BUS SPI <n>` (#381). A RealDash interval saved below 50 ms now runs at 50 ms (#608). The `teensy41_hybrid` and `esp32s3_hybrid` build targets are gone (#556). Not yet run on hardware: the ESP32-S3 external SD path and the Teensy 3.6 CAN pin change (#554).
+
 ### Added
 - New board: Adafruit Feather STM32F405 Express (`feather_f405`), with every feature: native CAN (bxCAN), the built-in microSD slot, the on-board NeoPixel as status LED, the nRF52840 Bluetooth link, and uploads over USB without a jumper after the first (#100)
 - `SYSTEM RESET CONFIG CONFIRM` erases the configuration but keeps the hardware setup (I2C/SPI/CAN buses, serial ports, display), so sensors and the LCD keep working when you start over (#551)
@@ -14,14 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CAN import can pick any sensor of a PID that carries several (EGT sensors 2–4, boost and MAF sensor B, coolant sensor 2, idle and PTO run time) from the CLI and the webapp, without a JSON import; a sensor the ECU reports as not fitted reads as no value instead of a false reading (#535)
 - `SYSTEM SD` and `SYSTEM SD JSON` report whether SD logging is actually working (no card, removed, write errors, logging) and how much space is left on the card, in RUN mode too (#536)
 - For developers: `tools/watchdog_bench.py` and a bench-build-only `SYSTEM DIAG WATCHDOG STALL` check that the watchdog still resets a hung board (#543); `pio run -e debug` now builds a Teensy 4.1 image that boots, with full symbols and the stall command (it was `-Og` and hung before USB, #544)
-
 - OLED display: the Feather STM32F405 can show its readings on the Adafruit 128x64 OLED FeatherWing (SH1107) instead of the LCD (#58)
 - After an unexpected restart by the watchdog, `VERSION` on Teensy 4 boards says what the firmware was doing and where it was stuck, e.g. `Last reset: WATCHDOG in SD … hung at PC 0x…` (#542)
 
 ### Changed
 - The LCD no longer shows an icon before each input (they were often wrong, and on some boards garbled at boot); right-hand cells gain a column, units are printed when they fit whole (`°C`, `V`), and the degree sign is the LCD's built-in one (#579)
 - Pin checks now use what each board's Arduino core says it has: `SET` refuses a pin the board doesn't have on every board (Teensy 3.6 and ESP32-S3 accepted any number), ESP32-S3 refuses the GPIOs wired to its own flash and PSRAM (26–37), Teensy 3.6 offers A0–A24, and an ESP32-S3 reports itself as `ESP32S3` in `SYSTEM DUMP JSON` (#570)
-- A Teensy 4.1 now leaves about 54 KB for the firmware's working memory (stack), up from 4.9 KB in 0.15.0-beta; Teensy 4.x builds now fail if it drops below 16 KB (#555, #557)
+- A Teensy 4.1 now leaves about 45 KB for the firmware's working memory (stack), up from 4.9 KB in 0.15.0-beta; Teensy 4.x builds now fail if it drops below 16 KB (#555, #557)
 - The watchdog now keeps running in CONFIG mode on every board, relaxed to 8 s, instead of being switched off on boards that allow it; it only restarts a board whose firmware has frozen, never an idle one, and every board now behaves the same (#541)
 
 ### Removed
@@ -32,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Turning an output on or off by importing a configuration file or by `LOAD` now takes effect straight away instead of after the next reboot (only starting CAN output for the first time still needs one, and says so); `BUS SERIAL <n> ELM327 ENABLE` now starts the emulator without a reboot and `DISABLE` on a port that isn't the ELM327 port is refused; turning off the alarm output also silences the buzzer and clears the alarm LED (#610)
 - Output send intervals are range-checked: RealDash takes 50 ms or more and Serial 100 ms or more (faster overran a 115200-baud link), and SD logging 1 ms or more. A value that is too large no longer wraps to a different one, an interval on an output that has none is refused, and an imported interval takes effect without a reboot. A saved or imported interval outside the new range is moved to the nearest allowed value, so a RealDash interval saved below 50 ms now runs at 50 ms (#608)
-- `SYSTEM UNITS` now sets the units a temperature, pressure, elevation or speed input starts in when its application is set (or a CAN PID is imported); before, it was stored and shown but ignored. Factory elevation and speed defaults are now metres and km/h, matching what new inputs already got, but a board set up earlier keeps its saved ft/mph, so its new elevation and speed inputs now start in those (`SYSTEM UNITS ELEVATION M` / `SPEED KPH` to switch)
+- `SYSTEM UNITS` now sets the units a temperature, pressure, elevation or speed input starts in when its application is set (or a CAN PID is imported); before, it was stored and shown but ignored. Factory elevation and speed defaults are now metres and km/h, matching what new inputs already got, but a board set up earlier keeps its saved ft/mph, so its new elevation and speed inputs now start in those (`SYSTEM UNITS ELEVATION M` / `SPEED KPH` to switch) (#606)
 - An external SD card is no longer mounted when a configured input uses its CS pin (both drove the same chip-select), and the boot error now says to `CLEAR` or move that input instead of blaming wiring.ini (#594)
 - When the pin table is full, the boot error now says so and what to turn off, instead of pointing at `SYSTEM PINS` or wiring.ini for an owner that doesn't exist (#599)
 - An external SD card (Teensy 4.0, ESP32-S3) now runs on the SPI bus preOBD manages, so `BUS SPI` and the pin checks see it; it needs `SPI_WIRED_BUS` in `wiring.ini` or `BUS SPI <n>`, runs at up to 12 MHz instead of 25 MHz (at 25 MHz a breadboarded module read data wrong and the card looked unformatted), and an external `SD_PIN` on the Feather F405 is now a build error instead of silently using the built-in slot (#381)
