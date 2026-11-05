@@ -40,11 +40,6 @@ void initELM327() {
     }
 }
 
-void sendELM327(Input* /*ptr*/) {
-    // ELM327 is pull-based — phone sends queries, we respond.
-    // No push logic needed here.
-}
-
 void updateELM327() {
     elm327Output.update();
 }

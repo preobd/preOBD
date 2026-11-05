@@ -418,6 +418,8 @@ void updateSDLog() {
     // 1000 ms const measured against a timestamp only ever updated inside the
     // 5 s flush branch — which suppressed rows for 1 s after each flush and
     // capped throughput at ~1 Hz, so OUTPUT SD_Log INTERVAL did nothing.
+    // outputIntervalValid() (1-60000 ms) holds for every writer (#608); the
+    // 0 guard costs nothing and keeps a future direct write off the hot path
     uint16_t interval = systemConfig.outputInterval[OUTPUT_SD];
     if (interval == 0) interval = SD_LOG_INTERVAL_MS;
 

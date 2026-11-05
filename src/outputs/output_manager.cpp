@@ -30,7 +30,6 @@ extern void updateSerialOutput();
 #include "output_format.h"  // sdLogFormatName for OUTPUT STATUS
 
 extern void initAlarmOutput();
-extern void sendAlarmOutput(Input*);
 extern void updateAlarmOutput();
 
 // Relay output module removed: a relay is now a control-engine Action of type
@@ -40,32 +39,32 @@ extern void updateAlarmOutput();
 
 #if INCLUDE_ELM327
 extern void initELM327();
-extern void sendELM327(Input*);
 extern void updateELM327();
 #endif
 
-// Define output modules array - always compiled, controlled by runtime flags
+// Define output modules array - always compiled, controlled by runtime flags.
+// Which of these pace on outputInterval[] is outputTakesInterval()
+// (system_config.h); a new paced output must be added there too (#608).
 OutputModule outputModules[] = {
-    {"CAN",     false, initCAN,           nullptr,           updateCAN,           100},  // responder only (#528)
-    {"RealDash",false, initRealdash,      sendRealdash,      updateRealdash,      100},
-    {"Serial",  false, initSerialOutput,  sendSerialOutput,  updateSerialOutput,  1000},
+    {"CAN",     false, initCAN,           nullptr,           updateCAN},  // responder only (#528)
+    {"RealDash",false, initRealdash,      sendRealdash,      updateRealdash},
+    {"Serial",  false, initSerialOutput,  sendSerialOutput,  updateSerialOutput},
 #if INCLUDE_SD_LOGGING
     // send = nullptr: a wide CSV row needs the whole sample at once, so
     // updateSDLog() owns the cadence (reading systemConfig.outputInterval
     // itself) rather than being driven one input at a time by sendToOutputs().
-    {"SD_Log",  false, initSDLog,         nullptr,           updateSDLog,         5000},
+    {"SD_Log",  false, initSDLog,         nullptr,           updateSDLog},
 #else
-    {nullptr,   false, nullptr,           nullptr,           nullptr,             0},
+    {nullptr,   false, nullptr,           nullptr,           nullptr},
 #endif
-    {"Alarm",   true,  initAlarmOutput,   sendAlarmOutput,   updateAlarmOutput,   100},
-    {nullptr,   false, nullptr,           nullptr,           nullptr,             0},  // OUTPUT_RELAY slot retired (control-engine Actions)
+    // Alarm: updateAlarmOutput() scans every input each loop (#608)
+    {"Alarm",   true,  initAlarmOutput,   nullptr,           updateAlarmOutput},
+    {nullptr,   false, nullptr,           nullptr,           nullptr},  // OUTPUT_RELAY slot retired (control-engine Actions)
 #if INCLUDE_ELM327
-    // sendInterval = UINT16_MAX: ELM327 is pull-based, send() is a no-op.
-    // Setting interval to max prevents sendToOutputs() from iterating all
-    // inputs every loop just to call the no-op.
-    {"ELM327",  false, initELM327,        sendELM327,        updateELM327,        UINT16_MAX},
+    // Pull-based: the phone asks, updateELM327() answers (#608)
+    {"ELM327",  false, initELM327,        nullptr,           updateELM327},
 #else
-    {nullptr,   false, nullptr,           nullptr,           nullptr,             0},
+    {nullptr,   false, nullptr,           nullptr,           nullptr},
 #endif
 };
 
@@ -81,7 +80,6 @@ void initOutputModules() {
         if (outputModules[i].name == nullptr) continue;  // Placeholder slot
 
         outputModules[i].enabled = systemConfig.outputEnabled[i];
-        outputModules[i].sendInterval = systemConfig.outputInterval[i];
 
         if (outputModules[i].enabled && outputModules[i].init != nullptr) {
             outputModules[i].init();
@@ -98,7 +96,7 @@ void sendToOutputs(uint32_t now) {
         if (outputModules[i].send == nullptr) continue;  // Owns its own cadence
 
         // Check if enough time has elapsed for this output
-        if (now - lastOutputSend[i] >= outputModules[i].sendInterval) {
+        if (now - lastOutputSend[i] >= systemConfig.outputInterval[i]) {
             // Send all enabled inputs to this output
             for (uint8_t j = 0; j < MAX_INPUTS; j++) {
                 if (inputs[j].flags.isEnabled && !isnan(inputs[j].value)) {
@@ -188,19 +186,15 @@ bool setOutputEnabled(const char* name, bool enabled) {
 }
 
 /**
- * Set output send interval
- * @param name Output name
- * @param interval Interval in milliseconds
- * @return true if successful
+ * Set a paced output's send interval
+ * @return false for an unknown output, one without an interval, or a value
+ *         outside outputIntervalValid() — nothing changes then
  */
-bool setOutputInterval(const char* name, uint16_t interval) {
-    OutputModule* output = getOutputByName(name);
-    if (!output) return false;
-
-    int index = output - outputModules;  // Calculate index
-    output->sendInterval = interval;
-    systemConfig.outputInterval[index] = interval;
-
+bool setOutputInterval(uint8_t outputId, long interval) {
+    // Every writer is held to the same rule (#608): a 0 here would make the
+    // SD log write a row every loop and Serial flood its port.
+    if (outputId >= NUM_OUTPUTS || !outputIntervalValid(outputId, interval)) return false;
+    systemConfig.outputInterval[outputId] = (uint16_t)interval;  // valid => fits
     return true;
 }
 
@@ -214,9 +208,12 @@ void listOutputs() {
         msg.control.print(outputModules[i].name);
         msg.control.print(F(": "));
         if (outputModules[i].enabled) {
-            msg.control.print(F("Enabled, Interval: "));
-            msg.control.print(outputModules[i].sendInterval);
-            msg.control.print(F("ms"));
+            msg.control.print(F("Enabled"));
+            if (outputTakesInterval(i)) {   // the others have none (#608)
+                msg.control.print(F(", Interval: "));
+                msg.control.print(systemConfig.outputInterval[i]);
+                msg.control.print(F("ms"));
+            }
 #if INCLUDE_SD_LOGGING
             if (i == OUTPUT_SD) {
                 msg.control.print(F(", Format: "));

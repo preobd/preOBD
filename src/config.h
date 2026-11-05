@@ -65,7 +65,6 @@
 
 #define SENSOR_READ_INTERVAL_MS 50       // Fast sensors (20Hz) - responsive alarms
 #define ALARM_CHECK_INTERVAL_MS 50       // Alarm checks (20Hz) - safety critical
-#define CAN_OUTPUT_INTERVAL_MS 100       // CAN bus updates (10Hz) - smooth dashboards
 #define REALDASH_INTERVAL_MS 100         // RealDash updates (10Hz)
 #define LCD_UPDATE_INTERVAL_MS 500       // LCD display (2Hz) - human readable
 #define LCD_PAGE_INTERVAL_MS 4000        // >8 shown inputs: rotate pages of 8 this often (#480)

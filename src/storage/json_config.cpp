@@ -472,7 +472,9 @@ FLASHMEM void exportSystemConfigToJSON(JsonObject& systemObj) {
         if (outputNames[i] == nullptr) continue;  // retired slot (OUTPUT_RELAY)
         JsonObject output = outputs[outputNames[i]].to<JsonObject>();
         output["enabled"] = (bool)systemConfig.outputEnabled[i];
-        output["interval"] = systemConfig.outputInterval[i];
+        // Only a paced output has an interval (#608); an older dump's
+        // CAN/Alarm/ELM327 interval still imports, and is ignored.
+        if (outputTakesInterval(i)) output["interval"] = systemConfig.outputInterval[i];
         // SD alone carries a file layout. Additive key, no schema bump (#230).
 #if INCLUDE_SD_LOGGING
         if (i == OUTPUT_SD) {
@@ -1240,6 +1242,9 @@ FLASHMEM static uint8_t parseLogLevelName(const char* name) {
 
 static const char kSerialKept1[] PROGMEM = "NOTE: Serial";
 static const char kDisplayAddrIgnored[] PROGMEM = "NOTE: display address ignored: valid 0x20-0x27 or 0x38-0x3F";
+static const char kIntervalNoteA[] PROGMEM = "NOTE: outputs.";
+static const char kIntervalNoteClamped[] PROGMEM = ".interval out of range; using ";
+static const char kIntervalNoteIgnored[] PROGMEM = ".interval is not a number; ignored";
 static const char kSerialKept2[] PROGMEM = " kept its settings: it carries commands (BUS SERIAL to change it)";
 static const char kSerialReboot[] PROGMEM = "NOTE: serial port changes take effect after SAVE and a reboot";
 #define JSON_FSTR(a) (reinterpret_cast<const __FlashStringHelper*>(a))
@@ -1261,8 +1266,32 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
                 if (output["enabled"].isNull() == false) {
                     staged.outputEnabled[i] = output["enabled"];
                 }
-                if (output["interval"].isNull() == false) {
-                    staged.outputInterval[i] = output["interval"];
+                // Only a paced output's interval is read (#608); dumps from
+                // before #608 carry CAN/Alarm/ELM327's too, ignored silently.
+                if (output["interval"].isNull() == false && outputTakesInterval(i)) {
+                    // Out of range: clamped, as EEPROM load does, so restoring
+                    // an older backup keeps the nearest rate it can (a RealDash
+                    // 10 -> 50) rather than whatever the unit had. Not a number:
+                    // ignored. Either way a NOTE says so.
+                    JsonVariant iv = output["interval"];
+                    // Any whole number, read as a double (is<double> is true for
+                    // integers too, so 5e9 and 1000.0 both land here) and
+                    // clamped before any narrowing. 250.5 is not whole.
+                    const double d = iv.is<double>() ? iv.as<double>() : NAN;
+                    const bool isNumber = !isnan(d) && d == floor(d);
+                    if (isNumber && d >= outputIntervalMinMs(i) && d <= OUTPUT_INTERVAL_MAX_MS) {
+                        staged.outputInterval[i] = (uint16_t)d;
+                    } else {
+                        msg.control.print(JSON_FSTR(kIntervalNoteA));
+                        msg.control.print(outputNames[i]);
+                        if (isNumber) {
+                            staged.outputInterval[i] = clampOutputInterval(i, d);
+                            msg.control.print(JSON_FSTR(kIntervalNoteClamped));
+                            msg.control.println(staged.outputInterval[i]);
+                        } else {
+                            msg.control.println(JSON_FSTR(kIntervalNoteIgnored));
+                        }
+                    }
                 }
                 // Optional: a dump from an older firmware has no "format" key,
                 // and an unparseable value leaves the current setting alone.

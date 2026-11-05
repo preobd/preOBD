@@ -122,7 +122,7 @@ Pattern: `OUTPUT <name> <action> [parameters]`
 ```
 OUTPUT STATUS                # Show all outputs
 OUTPUT CAN ENABLE            # Enable CAN output
-OUTPUT CAN INTERVAL 100      # Set interval to 100ms
+OUTPUT SD_Log INTERVAL 1000  # One SD log row per second
 ```
 
 ### System Commands
@@ -185,7 +185,6 @@ Control output modules independently:
 **Example:**
 ```
 OUTPUT CAN ENABLE
-OUTPUT CAN INTERVAL 100          # CAN at 100ms
 OUTPUT RealDash INTERVAL 50      # RealDash at 50ms (faster)
 ```
 
@@ -476,8 +475,9 @@ in RUN mode; the two policy verbs are CONFIG-only and need `SAVE`.
 ```
 OUTPUT Alarm ENABLE              # Enable alarm hardware (buzzer, LED)
 OUTPUT Alarm DISABLE             # Disable alarm hardware (silent mode)
-OUTPUT Alarm INTERVAL <ms>       # Set alarm check interval (10-10000ms)
 ```
+
+The alarm output checks on every loop pass, so it takes no interval.
 
 ### Practical Examples
 
@@ -550,8 +550,14 @@ OUTPUT STATUS          # Show current configuration (enabled/disabled + interval
 ```
 OUTPUT <name> ENABLE             # Enable output module
 OUTPUT <name> DISABLE            # Disable output module
-OUTPUT <name> INTERVAL <ms>      # Set send interval (10-60000ms)
+OUTPUT <name> INTERVAL <ms>      # Set send interval: RealDash 50-60000 ms, Serial 100-60000 ms, SD_Log 1-60000 ms
 ```
+
+Only RealDash, Serial and SD_Log send on a timer. CAN and ELM327 answer
+requests as they arrive and Alarm checks every loop pass, so `INTERVAL` on
+those is refused, as is a value outside the output's range. The Serial and
+RealDash floors are what a 115200-baud link (a UART or the Bluetooth bridge)
+carries with about 20 inputs.
 
 **Note**: If an output is not listed by `LIST OUTPUTS`, it wasn't compiled into your build. See [Build Configuration Guide](../guides/configuration/BUILD_CONFIGURATION_GUIDE.md) to create a custom environment with the outputs you need.
 
@@ -568,10 +574,9 @@ OUTPUT <name> INTERVAL <ms>      # Set send interval (10-60000ms)
 ### Examples
 
 ```
-# Enable CAN at 100ms interval (the CAN bus itself must be up — see Bus Configuration)
+# Enable CAN output (the CAN bus itself must be up — see Bus Configuration)
 BUS CAN OUTPUT CAN1 ENABLE 500000
 OUTPUT CAN ENABLE
-OUTPUT CAN INTERVAL 100
 
 # Enable RealDash at 50ms for smooth gauges
 OUTPUT RealDash ENABLE
@@ -592,11 +597,11 @@ OUTPUT STATUS
 Shows:
 ```
 === Output Modules ===
-CAN: Enabled, Interval: 100ms
+CAN: Enabled
 RealDash: Enabled, Interval: 50ms
 Serial: Disabled
-SD_Log: Disabled
-Alarm: Enabled, Interval: 500ms
+SD_Log: Enabled, Interval: 5000ms, Format: WIDE
+Alarm: Enabled
 ```
 
 ### SD Logging Status
@@ -1570,8 +1575,8 @@ RUN
 
 ```
 CONFIG
-OUTPUT CAN INTERVAL 500          # Slow down CAN
-OUTPUT RealDash INTERVAL 20      # Speed up RealDash
+OUTPUT SD_Log INTERVAL 1000      # Log a row every second
+OUTPUT RealDash INTERVAL 50      # Speed up RealDash (fastest allowed)
 SAVE
 RUN
 ```

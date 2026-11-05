@@ -16,11 +16,16 @@ typedef struct {
     const char* name;
     bool enabled;
     void (*init)(void);
-    void (*send)(Input*);   // Per-input push; nullptr for outputs that own their
-                            // own cadence (SD log) or are pull-based (ELM327)
+    void (*send)(Input*);   // Per-input push, paced by systemConfig.outputInterval[]
+                            // (the only copy, so CLI and JSON IMPORT apply at
+                            // once, #608); nullptr for outputs that own their
+                            // cadence (SD log), answer requests (CAN, ELM327)
+                            // or run every loop (Alarm)
     void (*update)(void);   // Called each loop iteration
-    uint16_t sendInterval;  // Milliseconds between sends
 } OutputModule;
+
+// The module table, indexed by OutputID (output_manager.cpp)
+extern OutputModule outputModules[];
 
 // Output module functions
 void initOutputModules();
@@ -29,7 +34,7 @@ void updateOutputs();              // Housekeeping (drain buffers, etc.)
 
 // Runtime configuration API
 bool setOutputEnabled(const char* name, bool enabled);
-bool setOutputInterval(const char* name, uint16_t interval);
+bool setOutputInterval(uint8_t outputId, long interval);  // false unless outputIntervalValid(); nothing changes
 OutputModule* getOutputByName(const char* name);
 int getOutputIndexByName(const char* name);  // OutputID index, or -1 if unknown
 void listOutputs();          // Show output status (enabled/disabled + intervals)

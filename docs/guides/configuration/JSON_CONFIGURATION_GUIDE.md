@@ -94,7 +94,7 @@ best reference; the overall shape is:
   "mode": "runtime",
   "firmware": { "version": "0.13.0-beta", "platform": "...", "maxInputs": 40, "...": "..." },
   "system": {
-    "outputs":   { "can": { "enabled": true, "interval": 100 }, "sd": { "enabled": true, "interval": 5000, "format": "WIDE" }, "...": {} },
+    "outputs":   { "can": { "enabled": true }, "sd": { "enabled": true, "interval": 5000, "format": "WIDE" }, "...": {} },
     "display":   { "enabled": true, "type": "LCD", "address": "0x27",
                    "defaultUnits": { "temperature": "CELSIUS", "pressure": "BAR", "elevation": "METERS", "speed": "KPH" } },
     "constants": { "seaLevelPressure": 1013.25 },

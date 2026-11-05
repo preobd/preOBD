@@ -20,15 +20,6 @@
 void initAlarmOutput();
 
 /**
- * Send alarm output for a specific input
- * Required by output_manager interface, but not used
- * (Alarm decision is made by scanning ALL inputs in updateAlarmOutput)
- *
- * @param input Pointer to Input (unused but required by interface)
- */
-void sendAlarmOutput(Input* input);
-
-/**
  * Update alarm output (called every loop)
  * Scans all inputs for alarm state, handles silence button, controls buzzer
  */

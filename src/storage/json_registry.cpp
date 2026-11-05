@@ -256,7 +256,6 @@ FLASHMEM void writeApplicationsJson(Print& out) {
 }
 
 FLASHMEM void writeOutputsJson(Print& out) {
-    extern OutputModule outputModules[];
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
     for (int i = 0; i < NUM_OUTPUTS; i++) {
@@ -264,7 +263,8 @@ FLASHMEM void writeOutputsJson(Print& out) {
         JsonObject obj = arr.add<JsonObject>();
         obj["name"]       = outputModules[i].name;
         obj["enabled"]    = outputModules[i].enabled;
-        obj["intervalMs"] = outputModules[i].sendInterval;
+        // Only paced outputs have an interval (#608)
+        if (outputTakesInterval(i)) obj["intervalMs"] = systemConfig.outputInterval[i];
     }
     WatchdogKickingPrint wdOut(out);
     serializeJson(doc, wdOut);

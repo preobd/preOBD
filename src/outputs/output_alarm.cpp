@@ -107,12 +107,6 @@ void initAlarmOutput() {
 
 // ===== OUTPUT MODULE INTERFACE =====
 
-void sendAlarmOutput(Input* input) {
-    // This function is called per-input by output_manager
-    // We don't send per-input data, just need to satisfy the interface
-    // (Actual alarm decision happens in updateAlarmOutput which scans all inputs)
-}
-
 // ===== HELPER FUNCTIONS =====
 
 // Annunciator severity rollup: worst-case over legacy per-input alarms AND

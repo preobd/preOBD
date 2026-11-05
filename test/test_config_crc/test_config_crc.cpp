@@ -130,6 +130,23 @@ static void test_save_then_load_round_trips(void) {
     TEST_ASSERT_EQUAL_MEMORY(&saved, &systemConfig, sizeof(SystemConfig));
 }
 
+// #608: an interval saved before the range check is repaired on load —
+// clamped to the nearest valid value, 0 to the default — for every paced
+// slot; the unpaced ones are left exactly as stored.
+static void test_load_repairs_out_of_range_output_intervals(void) {
+    systemConfig.outputInterval[OUTPUT_REALDASH] = 10;      // valid before #608
+    systemConfig.outputInterval[OUTPUT_SERIAL]   = 0;       // sent every loop
+    systemConfig.outputInterval[OUTPUT_SD]       = 65000;   // above the ceiling
+    systemConfig.outputInterval[OUTPUT_ALARM]    = 7;       // no interval: untouched
+    TEST_ASSERT_TRUE(saveSystemConfig(false));
+    TEST_ASSERT_TRUE(loadSystemConfig());
+    TEST_ASSERT_EQUAL_UINT16(50,                     systemConfig.outputInterval[OUTPUT_REALDASH]);
+    TEST_ASSERT_EQUAL_UINT16(SERIAL_CSV_INTERVAL_MS, systemConfig.outputInterval[OUTPUT_SERIAL]);
+    TEST_ASSERT_EQUAL_UINT16(OUTPUT_INTERVAL_MAX_MS, systemConfig.outputInterval[OUTPUT_SD]);
+    TEST_ASSERT_EQUAL_UINT16(7,                      systemConfig.outputInterval[OUTPUT_ALARM]);
+    resetSystemConfig();   // leave the shared global at factory values
+}
+
 static void test_save_writes_at_the_top_of_eeprom(void) {
     saveSystemConfig(false);
     SystemConfig raw;
@@ -221,6 +238,7 @@ int main(int, char**) {
     RUN_TEST(test_every_other_byte_contributes);
     RUN_TEST(test_reset_leaves_a_self_consistent_checksum);
     RUN_TEST(test_save_then_load_round_trips);
+    RUN_TEST(test_load_repairs_out_of_range_output_intervals);
     RUN_TEST(test_save_writes_at_the_top_of_eeprom);
     RUN_TEST(test_blank_eeprom_is_refused);
     RUN_TEST(test_any_single_corrupted_byte_is_refused);

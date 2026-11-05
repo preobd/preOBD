@@ -195,49 +195,21 @@ void resetSystemConfig(uint8_t keep) {
     // Data outputs default OFF to keep USB clean - user must explicitly enable
     // Safety outputs default ON when compiled in
 
-    #if INCLUDE_CAN
-    systemConfig.outputEnabled[OUTPUT_CAN] = 0;  // OFF - data plane output
-    systemConfig.outputInterval[OUTPUT_CAN] = CAN_OUTPUT_INTERVAL_MS;
-    #else
-    systemConfig.outputEnabled[OUTPUT_CAN] = 0;
-    systemConfig.outputInterval[OUTPUT_CAN] = 100;
-    #endif
-
-    #if INCLUDE_REALDASH
+    // Intervals (#608): see defaultOutputInterval() for the unpaced slots
+    for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
+        systemConfig.outputInterval[i] = defaultOutputInterval(i);
+    }
+    systemConfig.outputEnabled[OUTPUT_CAN] = 0;       // OFF - data plane output
     systemConfig.outputEnabled[OUTPUT_REALDASH] = 0;  // OFF - data plane output
-    systemConfig.outputInterval[OUTPUT_REALDASH] = REALDASH_INTERVAL_MS;
-    #else
-    systemConfig.outputEnabled[OUTPUT_REALDASH] = 0;
-    systemConfig.outputInterval[OUTPUT_REALDASH] = 100;
-    #endif
-
-    #if INCLUDE_SERIAL_OUTPUT
-    systemConfig.outputEnabled[OUTPUT_SERIAL] = 0;  // OFF - clogs USB serial
-    systemConfig.outputInterval[OUTPUT_SERIAL] = SERIAL_CSV_INTERVAL_MS;
-    #else
-    systemConfig.outputEnabled[OUTPUT_SERIAL] = 0;
-    systemConfig.outputInterval[OUTPUT_SERIAL] = 1000;
-    #endif
-
-    #if INCLUDE_SD_LOGGING
-    systemConfig.outputEnabled[OUTPUT_SD] = 0;  // OFF - requires SD card hardware
-    systemConfig.outputInterval[OUTPUT_SD] = SD_LOG_INTERVAL_MS;
-    #else
-    systemConfig.outputEnabled[OUTPUT_SD] = 0;
-    systemConfig.outputInterval[OUTPUT_SD] = 5000;
-    #endif
-
+    systemConfig.outputEnabled[OUTPUT_SERIAL] = 0;    // OFF - clogs USB serial
+    systemConfig.outputEnabled[OUTPUT_SD] = 0;        // OFF - requires SD card hardware
     #if INCLUDE_ALARMS
-    systemConfig.outputEnabled[OUTPUT_ALARM] = 1;  // ON - safety critical
-    systemConfig.outputInterval[OUTPUT_ALARM] = 100;  // 10Hz check rate
+    systemConfig.outputEnabled[OUTPUT_ALARM] = 1;     // ON - safety critical
     #else
     systemConfig.outputEnabled[OUTPUT_ALARM] = 0;
-    systemConfig.outputInterval[OUTPUT_ALARM] = 100;
     #endif
-
     #if INCLUDE_RELAY_OUTPUT
-    systemConfig.outputEnabled[OUTPUT_RELAY] = 1;  // ON - user-configured relay control
-    systemConfig.outputInterval[OUTPUT_RELAY] = 100;  // 10Hz check rate
+    systemConfig.outputEnabled[OUTPUT_RELAY] = 1;     // ON - user-configured relay control
     #endif
 
     // Display defaults.
@@ -699,6 +671,16 @@ bool loadSystemConfig() {
     // export all see the address that is actually used.
     if (!isValidLcdI2CAddress(systemConfig.lcdI2CAddress)) {
         systemConfig.lcdI2CAddress = LCD_I2C_ADDRESS_DEFAULT;
+    }
+    // Same for a paced output's interval saved before #608's range check
+    // (0 sent every loop; 70000 was stored as 4464), compiled in or not, so
+    // the export is clean too.
+    // clampOutputInterval(): a RealDash 10 saved when the docs allowed it
+    // becomes 50, not the 100 ms default. JSON IMPORT repairs the same way.
+    for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
+        if (outputTakesInterval(i)) {
+            systemConfig.outputInterval[i] = clampOutputInterval(i, systemConfig.outputInterval[i]);
+        }
     }
     return true;
 }

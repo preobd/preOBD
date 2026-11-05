@@ -770,24 +770,48 @@ int cmd_output(int argc, const char* const* argv) {
             msg.control.println(F("ERROR: INTERVAL requires a time in ms"));
             return 1;
         }
-        if (streq_P(outputName, PSTR("CAN"))) {
-            // A responder: nothing to pace since the 0x7E8 broadcast went (#528)
-            msg.control.println(F("ERROR: CAN output answers OBD-II requests as they arrive; it has no interval"));
-            return 1;
-        }
-        uint16_t interval = atoi(argv[3]);
-        if (setOutputInterval(outputName, interval)) {
-            msg.control.print(outputName);
-            msg.control.print(F(" interval set to "));
-            msg.control.print(interval);
-            msg.control.println(F("ms"));
-            printSaveReminder();
-        } else {
+        const int outputIdx = getOutputIndexByName(outputName);
+        if (outputIdx < 0) {
             msg.control.print(F("ERROR: Unknown output '"));
             msg.control.print(outputName);
             msg.control.println(F("'"));
             return 1;
         }
+        if (!outputTakesInterval(outputIdx)) {
+            // Why it has none: CAN since the 0x7E8 broadcast went (#528),
+            // the other two never used theirs (#608)
+            if (outputIdx == OUTPUT_CAN) {
+                msg.control.println(F("ERROR: CAN output answers OBD-II requests as they arrive; it has no interval"));
+            } else {
+                // One message for ELM327 (answers requests) and Alarm (runs
+                // every loop): F() text is RAM1 on Teensy 4
+                msg.control.print(F("ERROR: "));
+                msg.control.print(outputModules[outputIdx].name);  // canonical case
+                msg.control.println(F(" output doesn't send on a timer; it has no interval"));
+            }
+            return 1;
+        }
+        // Digits only: atoi into a uint16_t wrapped 70000 to 4464 and read
+        // "abc" as 0, which floods the data channel (#608). strtoul would
+        // take a leading '+', '-' or space, hence the first-digit check; an
+        // overflow returns ULONG_MAX, past the max like any other big value.
+        const char* arg = argv[3];
+        char* end = nullptr;
+        const unsigned long parsed = isdigit((unsigned char)arg[0]) ? strtoul(arg, &end, 10) : 0;
+        if (end == nullptr || *end != '\0' || parsed > OUTPUT_INTERVAL_MAX_MS ||
+            !setOutputInterval((uint8_t)outputIdx, (long)parsed)) {
+            msg.control.print(F("ERROR: Interval must be "));
+            msg.control.print(outputIntervalMinMs(outputIdx));
+            msg.control.print(F("-"));
+            msg.control.print(OUTPUT_INTERVAL_MAX_MS);
+            msg.control.println(F(" ms"));
+            return 1;
+        }
+        msg.control.print(outputModules[outputIdx].name);
+        msg.control.print(F(" interval set to "));
+        msg.control.print(parsed);
+        msg.control.println(F("ms"));
+        printSaveReminder();
     } else {
         msg.control.print(F("ERROR: Unknown subcommand '"));
         msg.control.print(subcommand);

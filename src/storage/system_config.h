@@ -12,6 +12,7 @@
 #include "eeprom_store.h"   // EEPROM: the core library, or a flash-backed image on STM32
 #include <stddef.h>   // offsetof, for the layout static_asserts below
 #include "bus_config.h"
+#include "../config.h"   // *_INTERVAL_MS factory defaults (defaultOutputInterval)
 
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
@@ -44,6 +45,60 @@ enum OutputID {
     OUTPUT_ELM327   = 6,
     NUM_OUTPUTS     = 7
 };
+
+// Only these outputs pace on outputInterval[] (#608). CAN and ELM327 answer
+// requests as they arrive and Alarm runs every loop; their slots stay in the
+// EEPROM layout but are neither read nor exported. Keep this list in step
+// with outputModules[] (output_manager.cpp): a paced output has a non-null
+// send, or owns its cadence from outputInterval[] like SD_Log.
+constexpr bool outputTakesInterval(uint8_t id) {
+    return id == OUTPUT_REALDASH || id == OUTPUT_SERIAL || id == OUTPUT_SD;
+}
+// Floors are per output (#608), set by what a 115200-baud data link (UART or
+// the BLE bridge) carries, ~11.5 KB/s: a CSV line per input stalls the loop
+// below ~100 ms; RealDash's 16-byte frames for 20 inputs are 6.4 KB/s at
+// 50 ms. The SD log buffers its rows, and 1 ms rows are the #537 watchdog
+// soak load (tools/watchdog_bench.py), so 1 ms only costs card space.
+static const uint16_t OUTPUT_INTERVAL_MAX_MS = 60000;
+constexpr uint16_t outputIntervalMinMs(uint8_t id) {
+    return id == OUTPUT_REALDASH ? 50 : id == OUTPUT_SD ? 1 : 100;
+}
+// The one validity rule for outputInterval[id]: setOutputInterval(), the CLI,
+// JSON IMPORT and EEPROM load all go through it.
+inline bool outputIntervalValid(uint8_t id, long ms) {
+    return outputTakesInterval(id) && ms >= outputIntervalMinMs(id) && ms <= OUTPUT_INTERVAL_MAX_MS;
+}
+// Factory interval of every slot: the one source for resetSystemConfig() and
+// both repairs below. The unpaced slots are never read here, but keep their
+// pre-#608 values, which an older build flashed over this config paces its
+// no-op sends on (0 would walk every input each loop; ELM327's UINT16_MAX is
+// that build's own table value).
+constexpr uint16_t defaultOutputInterval(uint8_t id) {
+    return id == OUTPUT_REALDASH ? REALDASH_INTERVAL_MS
+         : id == OUTPUT_SERIAL   ? SERIAL_CSV_INTERVAL_MS
+         : id == OUTPUT_SD       ? SD_LOG_INTERVAL_MS
+         : id == OUTPUT_ELM327   ? UINT16_MAX : 100;
+}
+// The config.h factory values must be valid, or reset and the next load would
+// disagree (load clamps)
+constexpr bool defaultIntervalValid(uint8_t id) {
+    return defaultOutputInterval(id) >= outputIntervalMinMs(id) && defaultOutputInterval(id) <= OUTPUT_INTERVAL_MAX_MS;
+}
+static_assert(defaultIntervalValid(OUTPUT_REALDASH), "REALDASH_INTERVAL_MS outside RealDash's range (#608)");
+static_assert(defaultIntervalValid(OUTPUT_SERIAL), "SERIAL_CSV_INTERVAL_MS outside Serial's range (#608)");
+static_assert(defaultIntervalValid(OUTPUT_SD), "SD_LOG_INTERVAL_MS outside SD_Log's range (#608)");
+// An interval stored or exported before #608's check, made valid the same way
+// on EEPROM load and JSON IMPORT: clamped to the nearest end of the range,
+// and 0 (which sent every loop, or meant "default" to the SD log) to the
+// default. Only meaningful for outputTakesInterval(id).
+// Takes a double so JSON IMPORT can pass any number (5e9, -5, 1e12) without a
+// narrowing step; EEPROM load passes its uint16_t.
+inline uint16_t clampOutputInterval(uint8_t id, double ms) {
+    if (ms == 0) return defaultOutputInterval(id);
+    if (ms < outputIntervalMinMs(id)) return outputIntervalMinMs(id);
+    if (ms > OUTPUT_INTERVAL_MAX_MS) return OUTPUT_INTERVAL_MAX_MS;
+    return (uint16_t)ms;
+}
 
 // Display types
 enum DisplayType {

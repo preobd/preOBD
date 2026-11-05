@@ -588,7 +588,11 @@ void printHelpOutput() {
     msg.control.println(F("  OUTPUT STATUS  - Show current output states"));
     msg.control.println(F("  OUTPUT <name> ENABLE  - Enable output (CAN, RealDash, Serial, SD_Log)"));
     msg.control.println(F("  OUTPUT <name> DISABLE  - Disable output"));
-    msg.control.println(F("  OUTPUT <name> INTERVAL <ms>  - Set output interval"));
+#if INCLUDE_SD_LOGGING
+    msg.control.println(F("  OUTPUT <name> INTERVAL <ms>  - RealDash 50+, Serial 100+, SD_Log 1+ (max 60000)"));
+#else
+    msg.control.println(F("  OUTPUT <name> INTERVAL <ms>  - RealDash 50+, Serial 100+ (max 60000)"));
+#endif
     msg.control.println();
 }
 
@@ -736,7 +740,7 @@ void printHelpExamples() {
     msg.control.println(F("Output and control:"));
     msg.control.println(F("  SET A2 INPUT ENABLE"));
     msg.control.println(F("  OUTPUT CAN ENABLE"));
-    msg.control.println(F("  OUTPUT CAN INTERVAL 100"));
+    msg.control.println(F("  OUTPUT Serial INTERVAL 1000"));
     msg.control.println(F("  SAVE"));
     msg.control.println();
 }
@@ -823,7 +827,11 @@ void printHelpQuick() {
     msg.control.println(F("Outputs:"));
     msg.control.println(F("  OUTPUT STATUS"));
     msg.control.println(F("  OUTPUT <module> ENABLE|DISABLE"));
-    msg.control.println(F("  OUTPUT <module> INTERVAL <ms>"));
+#if INCLUDE_SD_LOGGING
+    msg.control.println(F("  OUTPUT RealDash|Serial|SD_Log INTERVAL <ms>"));
+#else
+    msg.control.println(F("  OUTPUT RealDash|Serial INTERVAL <ms>"));
+#endif
     msg.control.println();
     msg.control.println(F("Bus Configuration:"));
     msg.control.println(F("  BUS I2C|SPI|CAN"));

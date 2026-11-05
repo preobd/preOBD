@@ -288,7 +288,7 @@ HELP EXAMPLES           # Show worked examples
 | `OUTPUT STATUS` | Show which outputs are enabled |
 | `OUTPUT <n> ENABLE` | Enable output |
 | `OUTPUT <n> DISABLE` | Disable output |
-| `OUTPUT <n> INTERVAL <ms>` | Set update interval |
+| `OUTPUT <n> INTERVAL <ms>` | Set send interval: RealDash 50-60000 ms, Serial 100-60000 ms, SD_Log 1-60000 ms |
 
 ### Display Commands
 
