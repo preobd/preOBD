@@ -9,6 +9,7 @@
 #include "oled_sh1107.h"
 #include "oled_font5x7.h"
 #include "lcd_layout.h"     // LCD_DEGREE_CHAR
+#include "../../drivers/bus_manager.h"
 
 // I2C control bytes: what follows is a command stream, or display RAM.
 static const uint8_t CTRL_CMD  = 0x00;
@@ -55,9 +56,13 @@ bool OledSh1107::command(const uint8_t* cmds, uint8_t n) {
     return true;
 }
 
+// A failed write. On the STM32 core it also leaves Wire refusing every later
+// transaction, re-probes included, so the bus manager re-initializes the
+// peripheral (#586); elsewhere that's a no-op.
 void OledSh1107::fail() {
     _online = false;
     _lastTry = millis();
+    clearI2CFault();
 }
 
 bool OledSh1107::init() {
@@ -87,10 +92,7 @@ bool OledSh1107::begin(TwoWire* wire, uint8_t addr) {
     _lastTry = millis();
     if (!_wire) return false;
     _wire->beginTransmission(_addr);
-    if (_wire->endTransmission() != 0) {
-        fail();
-        return false;
-    }
+    if (_wire->endTransmission() != 0) return false;   // offline; service() retries
     return init();
 }
 
@@ -113,7 +115,10 @@ bool OledSh1107::service() {
         return true;
     }
     _wire->beginTransmission(_addr);
-    if (_wire->endTransmission() != 0) return false;
+    if (_wire->endTransmission() != 0) {
+        clearI2CFault();             // as in LcdPcf8574::service() (#586)
+        return false;
+    }
     return init();
 }
 

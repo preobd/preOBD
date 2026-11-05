@@ -114,6 +114,7 @@ RUN mode (if you've wired one). `DISPLAY DISABLE` turns it off permanently.
 | Nothing at all | `DISPLAY STATUS` shows type `LCD` and enabled? `SAVE` and `SYSTEM REBOOT` after changing it |
 | Boot says "no display configured" | `DISPLAY TYPE LCD` |
 | "LCD: no I2C bus" in the log | `BUS I2C` shows which bus is up; the SDA/SCL pins must match the wiring |
+| "LCD: no answer, retrying" in the log | Nothing answered at 0x27: check the wiring. preOBD keeps trying every 5 s, so a reconnected LCD comes back without a reboot |
 | `ERR` in a cell | That sensor isn't reading — `INFO <pin>`, `SYSTEM DIAG INPUTS` |
 
 `SYSTEM DIAG HW` checks whether the display answers on the bus.

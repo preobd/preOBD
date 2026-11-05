@@ -22,7 +22,7 @@
 #include "lcd_layout.h"
 
 #if INCLUDE_LCD
-#include <LiquidCrystal_PCF8574.h>
+#include "lcd_pcf8574.h"
 #endif
 #if INCLUDE_OLED
 #include "oled_sh1107.h"
@@ -30,16 +30,11 @@
 
 // LCD geometry (LCD_COLS, LCD_ROWS, cells) lives in lcd_layout.h.
 
-// NOTE: the PCF8574 address is fixed at construction — the library has no setter,
-// so `DISPLAY ADDRESS` remains cosmetic here exactly as it was with the previous
-// library (which also hardcoded 0x27). Tracked separately, not part of #351.
-#define LCD_I2C_ADDRESS 0x27
+// NOTE: the LCD is always driven at LCD_I2C_ADDRESS (0x27); `DISPLAY ADDRESS`
+// remains cosmetic, as it was with the LiquidCrystal libraries before the
+// in-tree driver. Tracked separately, not part of #351.
 #if INCLUDE_LCD
-LiquidCrystal_PCF8574 lcd(LCD_I2C_ADDRESS);
-// PCF8574 backlight is on/off, not a brightness ramp; keep the two named levels
-// in one place so enable/disable can't drift apart.
-static const uint8_t LCD_BACKLIGHT_ON  = 255;
-static const uint8_t LCD_BACKLIGHT_OFF = 0;
+static LcdPcf8574 lcd;
 #endif
 #if INCLUDE_OLED
 static OledSh1107 oled;
@@ -102,8 +97,30 @@ static void screenPower(bool on) {
     if (activePanel == DISPLAY_OLED) { oled.setPower(on); return; }
 #endif
 #if INCLUDE_LCD
-    lcd.setBacklight(on ? LCD_BACKLIGHT_ON : LCD_BACKLIGHT_OFF);
+    lcd.setBacklight(on);
 #endif
+}
+
+// Re-probe an offline panel, at most once per retry interval: false while it's
+// away. `blanked` is set when the panel was just (re)initialized, blank.
+static bool screenService(bool& blanked) {
+    blanked = false;
+#if INCLUDE_OLED
+    if (activePanel == DISPLAY_OLED) {
+        if (!oled.service()) return false;
+        blanked = oled.takeReset();
+        return true;
+    }
+#endif
+#if INCLUDE_LCD
+    if (activePanel == DISPLAY_LCD) {
+        const bool wasOnline = lcd.online();
+        if (!lcd.service()) return false;
+        blanked = !wasOnline;            // init() cleared it
+        return true;
+    }
+#endif
+    return true;
 }
 
 
@@ -135,7 +152,8 @@ static void screenPower(bool on) {
 // byte tachometer_icon[8] = {0x00,0x0E,0x11,0x11,0x15,0x11,0x0E,0x00};
 // byte coolant_icon[8] = {0x04,0x07,0x04,0x07,0x04,0x0E,0x0E,0x04};
 //
-// Loaded in initLCD() after setBacklight():
+// Loaded in initLCD() after setBacklight(). The in-tree LCD driver
+// (lcd_pcf8574.h, #586) has no createChar() yet: add one before restoring this.
 //     lcd.createChar(ICON_DEGREE, degree_icon);
 //     lcd.createChar(ICON_THERMOMETER, thermometer_icon);
 //     lcd.createChar(ICON_OIL_CAN, oil_can_icon);
@@ -162,21 +180,18 @@ void initLCD() {
         return;
     }
 
-    lcd.begin(LCD_COLS, LCD_ROWS, *wire);
-
-    // LiquidCrystal_PCF8574::begin() calls _i2cPort->begin() itself, and
-    // TwoWire::begin() re-inits the peripheral at 100 kHz (WireIMXRT.cpp:24 on
-    // Teensy 4.x; twi_init()'s TWI_FREQ on AVR). Restore the configured clock, or
-    // the bus silently runs at 100 kHz while `BUS I2C` reports 400 — the exact
-    // "status disagrees with the peripheral" failure this module was fixed for,
-    // and a slowdown inflicted on every other client sharing the bus.
-    wire->setClock((uint32_t)systemConfig.buses.i2c_clock * 1000UL);
-
-    activePanel = DISPLAY_LCD;
-    lcd.setBacklight(LCD_BACKLIGHT_ON);
+    // The panel drives the grid from here on even if it doesn't answer: a
+    // redraw re-probes it (lcd.service()), so an LCD fitted or reseated after
+    // boot comes up without a reboot. Nothing is written to it until it
+    // answers, and a failed write takes it offline: on the STM32 an
+    // unanswered LCD cost 100 ms per write, ~90 writes a redraw (#586).
     // No createChar(): nothing is loaded into CGRAM (#579, see above).
-    lcd.clear();
-    msg.debug.info(TAG_DISPLAY, "LCD initialized");
+    activePanel = DISPLAY_LCD;
+    if (lcd.begin(wire, LCD_I2C_ADDRESS)) {
+        msg.debug.info(TAG_DISPLAY, "LCD initialized");
+    } else {
+        msg.debug.warn(TAG_DISPLAY, "LCD: no answer, retrying");
+    }
 }
 #else
 void initLCD() {}
@@ -381,20 +396,21 @@ static void clearCell(byte line) {
 }
 
 // Whether the panel holds readings / the CONFIG MODE message. File scope so
-// an OLED that went away and came back (blank) gets them drawn again.
+// a panel that went away and came back (blank) gets them drawn again.
 static bool firstSensorShown = false;
 static bool configMsgShown = false;
 
 static void drawLCD(Input** inputs, int numInputs) {
     currentLine = 0;
 
-#if INCLUDE_OLED
-    if (activePanel == DISPLAY_OLED) {
-        if (!oled.service()) return;      // offline: one probe per 5 s at most
-        // A (re)initialized panel is blank: draw everything again.
-        if (oled.takeReset()) { firstSensorShown = false; configMsgShown = false; }
+    bool blanked = false;
+    if (!screenService(blanked)) return;      // offline: one probe per 5 s at most
+    if (blanked) {
+        // The panel was (re)initialized and is already blank: draw everything
+        // again, without clearing it a second time.
+        configMsgShown = false;
+        firstSensorShown = (numInputs > 0);
     }
-#endif
 
     if (numInputs == 0) {
         // Readings were on screen and every input is now hidden (DISPLAY

@@ -106,6 +106,20 @@ TwoWire* getActiveI2C();
 TwoWire* acquireI2C();
 
 /**
+ * Re-initialize the active I2C peripheral after a client's write failed.
+ *
+ * Only the STM32 core needs it. Its Wire answers a NACKed write by putting the
+ * peripheral in slave-listen mode (twi.c's HAL_I2C_ErrorCallback and
+ * HAL_I2C_ListenCpltCallback both call HAL_I2C_EnableListen_IT on a master),
+ * and from then on every write or read on the bus, to ANY device, waits out
+ * I2C_TIMEOUT_TICK (100 ms) and fails, while a zero-byte probe fails at once
+ * without touching the wires (#586). begin() resets the peripheral; the clock
+ * is then restored, since begin() leaves it at 100 kHz. No-op on other cores,
+ * whose Wire recovers from a NACK by itself.
+ */
+void clearI2CFault();
+
+/**
  * Print the "no I2C bus available" guidance, once per boot.
  *
  * Shared by acquireI2C() (called there when it refuses) and by any client that

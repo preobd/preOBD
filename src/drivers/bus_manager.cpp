@@ -32,6 +32,9 @@ static SPIClass* active_spi = nullptr;
 
 // Active bus IDs (for reference)
 static uint8_t active_i2c_id = 0;
+// Clock the active I2C bus was brought up at. systemConfig.buses.i2c_clock may
+// already hold a pending `BUS I2C CLOCK` change that only applies at reboot.
+static uint16_t active_i2c_khz = 0;
 static uint8_t active_spi_id = 0;
 static uint8_t active_can_id = 0;
 
@@ -239,6 +242,7 @@ bool initI2CBus(uint8_t bus_id, uint16_t clock_khz) {
 
     if (success) {
         active_i2c_id = bus_id;
+        active_i2c_khz = clock_khz;
         msg.debug.info(TAG_I2C, BUS_STARTED, i2c_desc);
     } else {
         // Unreachable bus id for this platform: hand the pins back rather than
@@ -514,6 +518,14 @@ TwoWire* acquireI2C() {
         return nullptr;
     }
     return active_i2c;
+}
+
+void clearI2CFault() {
+#if defined(ARDUINO_ARCH_STM32)
+    if (!active_i2c) return;
+    active_i2c->begin();
+    active_i2c->setClock((uint32_t)active_i2c_khz * 1000UL);
+#endif
 }
 
 SPIClass* getActiveSPI() {
