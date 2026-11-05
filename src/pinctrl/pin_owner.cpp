@@ -65,6 +65,7 @@ enum PinOwnerDiagKind : uint8_t {
     PDK_CONFLICT_HELD_PRECEDENCE,   // registry holder; precedence wording
     PDK_PENDING_BUS,                // held by a stored-but-not-yet-started bus selection
     PDK_CLAIM_FAILED,               // claimPins(): conflict check passed, reservation still failed
+    PDK_REGISTRY_FULL,              // claimPins(): refused only because the registry has no room (#599)
 };
 
 struct PinOwnerDiagRecord {
@@ -128,6 +129,14 @@ static void printDiag(uint8_t pin, const char* a, const char* b, uint8_t kind) {
             msg.control.print(a);
             msg.control.println(F(" not started - a pin it needs is already in use"));
             msg.control.println(F("  SYSTEM PINS shows the owner; reconfigure one of them."));
+            break;
+        case PDK_REGISTRY_FULL:
+            msg.control.print(F("ERROR: "));
+            msg.control.print(a);
+            msg.control.print(F(" not started - the pin table is full ("));
+            msg.control.print(getPinRegistryCapacity());
+            msg.control.println(F(" pins)"));
+            msg.control.println(F("  Turn off a serial port, bus or Action you don't use (SYSTEM PINS lists them)."));
             break;
     }
 }
@@ -238,8 +247,28 @@ bool pinsConflict(const uint8_t* pins, uint8_t count, uint8_t rank, const char* 
     return false;
 }
 
+static bool lastClaimRegistryFull = false;
+
+bool lastClaimFailedRegistryFull() { return lastClaimRegistryFull; }
+
+// How many registry slots would this claim add? Pins already reserved to the
+// same owner and absent pins (0xFF) take none: same rules as
+// reservePins_unchecked(), so "doesn't fit" here means it would fail there.
+static uint8_t newSlotsNeeded(const uint8_t* pins, uint8_t count, PinUsageType type,
+                              const char* owner) {
+    uint8_t n = 0;
+    for (uint8_t i = 0; i < count; i++) {
+        if (pins[i] == 0xFF) continue;
+        const char* held = getPinDescription(pins[i]);
+        if (held && owner && getPinUsage(pins[i]) == type && strcmp(held, owner) == 0) continue;
+        n++;
+    }
+    return n;
+}
+
 bool claimPins(const uint8_t* pins, uint8_t count, PinUsageType type, uint8_t rank,
               const char* tag, const char* owner) {
+    lastClaimRegistryFull = false;
     // Inputs first: they are invisible to the registry, so reservePins_unchecked()
     // would happily hand a claimant the copper an input is already reading (#358).
     if (pinsConflict(pins, count, rank, owner)) {
@@ -251,9 +280,15 @@ bool claimPins(const uint8_t* pins, uint8_t count, PinUsageType type, uint8_t ra
     // stock hardware (Teensy 4.x I2C1 17/16 vs Serial4 16/17), so the claim is
     // all or nothing: a half-claim leaves a caller believing it owns another
     // function's pin.
+    // Measured before reserving: a refused group is rolled back, which frees
+    // the slots again, so the registry no longer looks full afterwards.
+    const bool fits = !pins || count > 8 ||   // refused for bad arguments, not for room
+                      (uint16_t)getPinRegistrySize() + newSlotsNeeded(pins, count, type, owner)
+                          <= getPinRegistryCapacity();
     if (reservePins_unchecked(pins, count, type, owner, rank)) return true;
 
+    lastClaimRegistryFull = !fits;
     msg.debug.error(tag, PIN_OWNER_BUSY, owner);
-    reportDiag(0xFF, owner, nullptr, PDK_CLAIM_FAILED);
+    reportDiag(0xFF, owner, nullptr, fits ? PDK_CLAIM_FAILED : PDK_REGISTRY_FULL);
     return false;
 }

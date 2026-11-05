@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - An external SD card is no longer mounted when a configured input uses its CS pin (both drove the same chip-select), and the boot error now says to `CLEAR` or move that input instead of blaming wiring.ini (#594)
+- When the pin table is full, the boot error now says so and what to turn off, instead of pointing at `SYSTEM PINS` or wiring.ini for an owner that doesn't exist (#599)
 - An external SD card (Teensy 4.0, ESP32-S3) now runs on the SPI bus preOBD manages, so `BUS SPI` and the pin checks see it; it needs `SPI_WIRED_BUS` in `wiring.ini` or `BUS SPI <n>`, runs at up to 12 MHz instead of 25 MHz (at 25 MHz a breadboarded module read data wrong and the card looked unformatted), and an external `SD_PIN` on the Feather F405 is now a build error instead of silently using the built-in slot (#381)
 - The LCD's I2C address setting now works: a display at 0x3F (or any other backpack address) can be used, the hardware check tests the address you set, and an address no LCD can have is refused (#590)
 - A missing or unplugged LCD no longer restarts the Feather STM32F405 every few seconds, and an LCD that is reconnected comes back by itself (#586)

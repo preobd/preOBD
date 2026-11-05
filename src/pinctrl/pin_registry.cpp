@@ -248,6 +248,10 @@ uint8_t getPinRegistrySize() {
     return registrySize;
 }
 
+uint8_t getPinRegistryCapacity() {
+    return MAX_PIN_REGISTRY;
+}
+
 const PinUsage* getPinUsageByIndex(uint8_t index) {
     if (index >= registrySize) {
         return nullptr;

@@ -168,4 +168,12 @@ bool pinsConflict(const uint8_t* pins, uint8_t count, uint8_t rank, const char* 
 bool claimPins(const uint8_t* pins, uint8_t count, PinUsageType type, uint8_t rank,
                const char* tag, const char* owner);
 
+/**
+ * Was the most recent claimPins() refused only because the pin registry had no
+ * room (#599)? Then nothing holds the pins, and advice that names an owner
+ * (SYSTEM PINS, wiring.ini) would send the user looking for one that isn't
+ * there. False after a successful claim or a refusal for a real conflict.
+ */
+bool lastClaimFailedRegistryFull();
+
 #endif // PIN_OWNER_H

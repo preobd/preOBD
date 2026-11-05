@@ -206,5 +206,6 @@ float seaLevelPressureHpa();
 // acquireRequiredBuses() — gates the Tier-1 *_WIRED_BUS reservation on the
 // bus actually being needed, not just declared (#394).
 void registerSystemPins(uint8_t busNeeds);   // Register system pins in pin registry
+bool sdCsClaimRefusedTableFull();             // registerSystemPins() refused SD CS for a full pin table (#599)
 
 #endif // SYSTEM_CONFIG_H

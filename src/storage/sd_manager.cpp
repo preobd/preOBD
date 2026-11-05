@@ -196,7 +196,10 @@ FLASHMEM void initSD() {
             // printed what to run) or the selected one couldn't start.
             SPIClass* sdSpi = csOwned ? acquireSPI() : nullptr;
             bool busReady = sdSpi != nullptr;
-            if (!csOwned) {
+            if (!csOwned && sdCsClaimRefusedTableFull()) {
+                // Refused only because the pin table was full (#599).
+                msg.control.println(F("Note: SD card not mounted: the pin table was full when it claimed its CS pin (see above)."));
+            } else if (!csOwned) {
                 msg.control.print(F("Note: SD card not mounted: its CS pin "));
                 msg.control.print(SD_PIN);
                 msg.control.println(F(" is in use by something else (see SYSTEM PINS)."));

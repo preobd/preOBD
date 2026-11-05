@@ -166,6 +166,51 @@ static void test_registry_full_refuses_the_whole_group(void) {
     TEST_ASSERT_TRUE(isPinAvailable(101));
 }
 
+// --- #599: a claim refused by a full registry says so, not "SYSTEM PINS" ----
+static void fill_registry_leaving(uint8_t freeSlots) {
+    for (uint8_t i = 0; i < MAX_PIN_REGISTRY - freeSlots; i++) {
+        TEST_ASSERT_TRUE(registerPin_unchecked(i, PIN_RESERVED, "filler", PIN_RANK_BUS));
+    }
+}
+
+static void test_full_registry_claim_reports_full_table(void) {
+    fill_registry_leaving(0);
+    const uint8_t pin = 100;
+    TEST_ASSERT_FALSE(claimPins(&pin, 1, PIN_CS, PIN_RANK_BUILTIN, "SYS", "SD CS"));
+    TEST_ASSERT_TRUE(lastClaimFailedRegistryFull());
+    TEST_ASSERT_NOT_NULL(strstr(g_capture.buf, "pin table is full"));
+    TEST_ASSERT_NULL(strstr(g_capture.buf, "shows the owner"));
+}
+
+// The group is rolled back, so the registry no longer looks full afterwards:
+// the verdict must come from before the reservation.
+static void test_group_that_does_not_fit_reports_full_table(void) {
+    fill_registry_leaving(1);
+    const uint8_t pins[2] = { 100, 101 };
+    TEST_ASSERT_FALSE(claimPins(pins, 2, PIN_RESERVED, PIN_RANK_BUS, "SYS", OWNER_A));
+    TEST_ASSERT_TRUE(lastClaimFailedRegistryFull());
+    TEST_ASSERT_EQUAL(MAX_PIN_REGISTRY - 1, getPinRegistrySize());
+    TEST_ASSERT_NOT_NULL(strstr(g_capture.buf, "pin table is full"));
+}
+
+static void test_conflict_is_not_reported_as_full_table(void) {
+    TEST_ASSERT_TRUE(registerPin_unchecked(30, PIN_RESERVED, OWNER_B, PIN_RANK_SERIAL));
+    const uint8_t pin = 30;
+    TEST_ASSERT_FALSE(claimPins(&pin, 1, PIN_RESERVED, PIN_RANK_BUS, "SYS", OWNER_A));
+    TEST_ASSERT_FALSE(lastClaimFailedRegistryFull());
+    TEST_ASSERT_NULL(strstr(g_capture.buf, "pin table is full"));
+}
+
+// A successful claim clears the previous verdict.
+static void test_successful_claim_clears_full_verdict(void) {
+    fill_registry_leaving(0);
+    const uint8_t pin = 100;
+    TEST_ASSERT_FALSE(claimPins(&pin, 1, PIN_CS, PIN_RANK_BUILTIN, "SYS", "SD CS"));
+    unregisterPin(0);
+    TEST_ASSERT_TRUE(claimPins(&pin, 1, PIN_CS, PIN_RANK_BUILTIN, "SYS", "SD CS"));
+    TEST_ASSERT_FALSE(lastClaimFailedRegistryFull());
+}
+
 // --- release is the mirror image, and is owner-scoped ----------------------
 static void test_release_frees_only_the_named_owners_pins(void) {
     TEST_ASSERT_TRUE(registerPin_unchecked(16, PIN_RESERVED, OWNER_B, PIN_RANK_SERIAL));
@@ -393,6 +438,10 @@ int main(int, char**) {
     RUN_TEST(test_reclaim_by_the_same_owner_succeeds);
     RUN_TEST(test_absent_pins_are_skipped);
     RUN_TEST(test_registry_full_refuses_the_whole_group);
+    RUN_TEST(test_full_registry_claim_reports_full_table);
+    RUN_TEST(test_group_that_does_not_fit_reports_full_table);
+    RUN_TEST(test_conflict_is_not_reported_as_full_table);
+    RUN_TEST(test_successful_claim_clears_full_verdict);
     RUN_TEST(test_release_frees_only_the_named_owners_pins);
     RUN_TEST(test_same_named_non_reserved_pin_is_still_a_conflict);
 

@@ -201,6 +201,9 @@ const char* getPinUsageTypeName(PinUsageType type);
  */
 uint8_t getPinRegistrySize();
 
+/** Number of entries the registry can hold (MAX_PIN_REGISTRY). */
+uint8_t getPinRegistryCapacity();
+
 /**
  * Get pin usage entry by index
  *

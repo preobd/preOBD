@@ -65,7 +65,7 @@ enum BuiltinPinKind : uint8_t {
 // the deferred half of the same message, so it needs the symbol early.
 static void reportBuiltinPinCollisionNow(const __FlashStringHelper* what, bool byInput);
 
-static void replayBuiltinPinCollision(uint8_t bit, const __FlashStringHelper* what) {
+FLASHMEM static void replayBuiltinPinCollision(uint8_t bit, const __FlashStringHelper* what) {
     const uint16_t m = (uint16_t)(1u << bit);
     if (bootDiag.pinCollisionInputFlags & m) reportBuiltinPinCollisionNow(what, true);
     if (bootDiag.pinCollisionFlags & m)      reportBuiltinPinCollisionNow(what, false);
@@ -477,7 +477,7 @@ void MessageRouter::saveConfig() {
 // byInput (#594): the pin is held by a configured input, which the claimant
 // outranks. The build is fine; the stored input is what has to move, so
 // blaming wiring.ini sent people to the wrong file.
-static void reportBuiltinPinCollisionNow(const __FlashStringHelper* what, bool byInput) {
+FLASHMEM static void reportBuiltinPinCollisionNow(const __FlashStringHelper* what, bool byInput) {
     if (byInput) {
         msg.control.print(F("ERROR: "));
         msg.control.print(what);
@@ -496,7 +496,7 @@ static void reportBuiltinPinCollisionNow(const __FlashStringHelper* what, bool b
 // buffer here too so this annotation and pin_owner's own conflict message
 // (buffered separately, pin_owner.cpp) both survive to flush time instead of
 // only one of them being fixed.
-static void reportBuiltinPinCollision(const __FlashStringHelper* what, uint8_t bit, bool byInput) {
+FLASHMEM static void recordBuiltinPinCollision(const __FlashStringHelper* what, uint8_t bit, bool byInput) {
     if (pinOwnerBootDiagBuffering()) {
         if (byInput) bootDiag.pinCollisionInputFlags |= (uint16_t)(1u << bit);
         else         bootDiag.pinCollisionFlags      |= (uint16_t)(1u << bit);
@@ -505,10 +505,23 @@ static void reportBuiltinPinCollision(const __FlashStringHelper* what, uint8_t b
     }
 }
 
+// Call right after the refused claimPins(): it reads that claim's verdict.
+// A full pin table is not a duplicate pin: claimPins() has already said what
+// happened, and "check wiring.ini" would be the wrong advice (#599).
+FLASHMEM static void reportBuiltinPinCollision(const __FlashStringHelper* what, uint8_t bit, bool byInput) {
+    if (!byInput && lastClaimFailedRegistryFull()) return;
+    recordBuiltinPinCollision(what, bit, byInput);
+}
+
+// initSD() needs to know why ITS claim failed, and by then the registry and
+// the stored bus selections can look different, so keep the verdict (#599).
+static bool sdCsRefusedTableFull = false;
+bool sdCsClaimRefusedTableFull() { return sdCsRefusedTableFull; }
+
 // A multi-pin claim (I2C/SPI wired bus) can be refused by an input on one pin
 // and a registry holder on another, so check every pin and report each cause
 // that is present; pinsConflict() itself stops at the first.
-static void reportBuiltinPinsCollision(const __FlashStringHelper* what, uint8_t bit,
+FLASHMEM static void reportBuiltinPinsCollision(const __FlashStringHelper* what, uint8_t bit,
                                        const uint8_t* pins, uint8_t count) {
     bool byInput = false, byBuild = false;
     for (uint8_t i = 0; i < count; i++) {
@@ -523,7 +536,7 @@ static void reportBuiltinPinsCollision(const __FlashStringHelper* what, uint8_t 
  * Register system pins in the pin registry
  * This reserves these pins and makes them visible in the registry export
  */
-void registerSystemPins(uint8_t busNeeds) {
+FLASHMEM void registerSystemPins(uint8_t busNeeds) {
 #ifdef BOARD_RESERVED_PINS
     // First: pins wired to the board's own module (board.h, #570) are taken
     // before anything wired.ini declares, so a wired pin that lands on one is
@@ -536,11 +549,11 @@ void registerSystemPins(uint8_t busNeeds) {
       for (uint8_t i = 0; i < sizeof(p); i++) {
           if (!claimPins(&p[i], 1, PIN_RESERVED, PIN_RANK_BUILTIN, TAG_SYSTEM, BOARD_RESERVED_NAME)) {
               if (pinHeldByConfiguredInput(p[i])) byInput = true;
-              else byBuild = true;
+              else if (!lastClaimFailedRegistryFull()) byBuild = true;
           }
       }
-      if (byInput) reportBuiltinPinCollision(F("BOARD_RESERVED_PINS"), BPK_RESERVED, true);
-      if (byBuild) reportBuiltinPinCollision(F("BOARD_RESERVED_PINS"), BPK_RESERVED, false); }
+      if (byInput) recordBuiltinPinCollision(F("BOARD_RESERVED_PINS"), BPK_RESERVED, true);
+      if (byBuild) recordBuiltinPinCollision(F("BOARD_RESERVED_PINS"), BPK_RESERVED, false); }
 #endif
 #if INCLUDE_MODE_BUTTON
     { const uint8_t p = MODE_BUTTON_PIN;
@@ -575,8 +588,10 @@ void registerSystemPins(uint8_t busNeeds) {
     #endif
     #if SD_PIN != BUILTIN_SDCARD
     { const uint8_t p = SD_PIN;
-      if (!claimPins(&p, 1, PIN_CS, PIN_RANK_BUILTIN, TAG_SYSTEM, SD_CS_OWNER))
+      if (!claimPins(&p, 1, PIN_CS, PIN_RANK_BUILTIN, TAG_SYSTEM, SD_CS_OWNER)) {
+          sdCsRefusedTableFull = lastClaimFailedRegistryFull();
           reportBuiltinPinCollision(F("SD_PIN"), BPK_SD, pinHeldByConfiguredInput(p));
+      }
       else {
           // Deselect the card now: other SPI devices (an MCP2515 on the
           // hybrid boards) talk before initSD() runs, and a floating CS
