@@ -18,6 +18,7 @@
 #include "../config.h"
 #include "../version.h"
 #include "input_store.h"
+#include "../core/watchdog.h"
 #include "../inputs/input_manager.h"   // inputs[] / numActiveInputs / Input, inputManagerTableIsLive()
 #include "system_config.h"
 #include "../sensors/units_registry.h"
@@ -274,6 +275,10 @@ static FLASHMEM void applyInputRecord(const InputEEPROM& rec, Input& in) {
 }
 
 FLASHMEM bool saveInputConfig() {
+    // EEPROM writes are slow on AVR (~3.3 ms per changed byte) and the watchdog
+    // runs in CONFIG now (#541): one scope for the save, plus a feed per record
+    // below, so a growing config can't creep up on the AVR's 8 s ceiling.
+    WatchdogScope wd(EEPROM_WDT_WINDOW_MS, "EEPROM");
     const size_t budget = (size_t)SYSTEM_CONFIG_ADDRESS - EEPROM_HEADER_SIZE;
 
     // What we WANT to persist in each section.
@@ -305,6 +310,7 @@ FLASHMEM bool saveInputConfig() {
         InputEEPROM rec;
         buildInputRecord(inputs[i], rec);
         EEPROM.put(addr, rec);
+        watchdogReset();
         checksum ^= xorBytes(&rec, sizeof(rec));
         addr += EEPROM_INPUT_SIZE;
         savedInputs++;
@@ -315,6 +321,7 @@ FLASHMEM bool saveInputConfig() {
     for (int i = 0; i < MAX_RULES && savedRules < persistRules; i++) {
         if (rules[i].id == RULES_ID_NONE) continue;
         EEPROM.put(addr, rules[i]);
+        watchdogReset();
         checksum ^= xorBytes(&rules[i], sizeof(Rule));
         addr += sizeof(Rule);
         savedRules++;
@@ -322,6 +329,7 @@ FLASHMEM bool saveInputConfig() {
     for (int i = 0; i < MAX_ACTIONS && savedActions < persistActions; i++) {
         if (actions[i].id == RULES_ID_NONE) continue;
         EEPROM.put(addr, actions[i]);
+        watchdogReset();
         checksum ^= xorBytes(&actions[i], sizeof(Action));
         addr += sizeof(Action);
         savedActions++;
@@ -331,6 +339,7 @@ FLASHMEM bool saveInputConfig() {
     for (int i = 0; i < MAX_ACTION_LINKS && savedLinks < persistLinks; i++) {
         if (actionLinks[i].actionId == RULES_ID_NONE) continue;
         EEPROM.put(addr, actionLinks[i]);
+        watchdogReset();
         checksum ^= xorBytes(&actionLinks[i], sizeof(ActionLink));
         addr += sizeof(ActionLink);
         savedLinks++;

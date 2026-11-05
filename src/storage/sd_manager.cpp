@@ -45,11 +45,6 @@
 // Track if SD has been successfully initialized
 static bool sdInitialized = false;
 
-// Nesting depth of the widened watchdog window (see sdWatchdogWindowEnter).
-// Loop-context only: every SD call site runs from loop() or setup(), never from
-// an ISR, so this needs no synchronisation. A future ISR-side caller would.
-static uint8_t sdWindowDepth = 0;
-
 // Latched once the card is confirmed gone; see sdMediaPresent().
 static bool sdMediaGone = false;
 
@@ -57,39 +52,6 @@ static bool sdMediaGone = false;
 static bool     sdCapacityKnown = false;
 static uint64_t sdFreeAtMount   = 0;
 static uint64_t sdTotalAtMount  = 0;
-
-void sdWatchdogWindowEnter() {
-    if (sdWindowDepth++ == 0) {
-        watchdogEnable(SD_WDT_WINDOW_MS);
-        // The IMXRT watchdog loads a new timeout only when it is next serviced,
-        // so widening without a feed leaves the old 2 s countdown running and
-        // the window would do nothing. Same reason for the feed on the way out:
-        // it starts the narrow window from now, rather than from wherever the
-        // just-finished I/O left the counter.
-        watchdogReset();
-    }
-}
-
-void sdWatchdogWindowExit() {
-    if (sdWindowDepth > 0 && --sdWindowDepth == 0) {
-        // Restore what the current mode asks for, not a fixed 2 s. CONFIG mode
-        // deliberately disables the watchdog (system_mode.cpp), and re-arming it
-        // here would silently undo that on every platform where disable actually
-        // works (AVR, ESP32, Teensy 3.6) — entering CONFIG with logging active is
-        // enough to trigger it, and a long CONFIG operation would then reset the
-        // board. Teensy 4.x cannot disable (#243), so there the window simply
-        // stays wide in CONFIG, which is strictly safer than narrowing it.
-        //
-        // initSD() runs before setMode(), while currentMode is still its MODE_RUN
-        // default, so boot behaviour is unchanged.
-        if (isInConfigMode()) {
-            watchdogDisable();
-        } else {
-            watchdogEnable(SD_WDT_NORMAL_MS);
-            watchdogReset();
-        }
-    }
-}
 
 bool sdMediaPresent() {
     // A card that never mounted has nothing to probe — and on Teensy the probe
@@ -105,7 +67,7 @@ bool sdMediaPresent() {
 
 #if SD_HAS_MEDIA_PROBE
     // Can itself talk to the card, so it belongs inside a widened window.
-    SdWatchdogWindow window;
+    WatchdogScope window(SD_WDT_WINDOW_MS, SD_WDT_TAG);
     if (SD.mediaPresent()) return true;
 
     // Second opinion before condemning the card, because the caller's response
@@ -136,58 +98,57 @@ bool sdMediaKnownGone() {
 FLASHMEM void initSD() {
     msg.debug.info(TAG_SD, "Initializing SD card...");
 
-    // Extend watchdog timeout - SD.begin() can take 2-3 seconds per attempt and
-    // we make several. Note: Teensy 4.x cannot disable watchdog, only extend it.
-    sdWatchdogWindowEnter();
-
     bool initSuccess = false;
+    {
+        // SD.begin() can take 2-3 s per attempt and we make several, and the
+        // capacity scan below reads the whole FAT: one scope across both.
+        WatchdogScope wd(SD_WDT_WINDOW_MS, SD_WDT_TAG);
 
 #if SD_PIN == 254
-        msg.debug.info(TAG_SD, "Using built-in SD (BUILTIN_SDCARD)");
+            msg.debug.info(TAG_SD, "Using built-in SD (BUILTIN_SDCARD)");
 #else
-        pinMode(SD_PIN, OUTPUT);
-        msg.debug.info(TAG_SD, "Using external SD, CS pin: %d", SD_PIN);
+            pinMode(SD_PIN, OUTPUT);
+            msg.debug.info(TAG_SD, "Using external SD, CS pin: %d", SD_PIN);
 #endif
 
-    // Retry: a card that is still powering up, or a slot with marginal contact,
-    // frequently fails the first begin() and succeeds on a later one. The
-    // comment here has always claimed retries; the code only ever made one
-    // attempt, so a cold card came up unmounted for the whole session.
-    for (uint8_t attempt = 1; attempt <= SD_INIT_ATTEMPTS && !initSuccess; attempt++) {
-        msg.debug.debug(TAG_SD, "SD.begin() attempt %u/%u", attempt, SD_INIT_ATTEMPTS);
-        delay(100);
+        // Retry: a card that is still powering up, or a slot with marginal contact,
+        // frequently fails the first begin() and succeeds on a later one. The
+        // comment here has always claimed retries; the code only ever made one
+        // attempt, so a cold card came up unmounted for the whole session.
+        for (uint8_t attempt = 1; attempt <= SD_INIT_ATTEMPTS && !initSuccess; attempt++) {
+            msg.debug.debug(TAG_SD, "SD.begin() attempt %u/%u", attempt, SD_INIT_ATTEMPTS);
+            delay(100);
 #if SD_PIN == 254
-        initSuccess = SD.begin(BUILTIN_SDCARD);
+            initSuccess = SD.begin(BUILTIN_SDCARD);
 #else
-        initSuccess = SD.begin(SD_PIN);
+            initSuccess = SD.begin(SD_PIN);
 #endif
-        watchdogReset();
-    }
+            watchdogReset();
+        }
 
-    // Capacity, while the window is still wide: the free count is a scan of
-    // the FAT (FAT32) or allocation bitmap (exFAT), so it is read here once and
-    // never from a status poll (#536).
+        // Capacity, while the window is still wide: the free count is a scan of
+        // the FAT (FAT32) or allocation bitmap (exFAT), so it is read here once and
+        // never from a status poll (#536).
 #if defined(CORE_TEENSY) || defined(ESP32)
-    // (The stock Arduino SD library has no capacity call; AVR also keeps
-    // msg.debug format strings in RAM, so the timing line stays out of it.)
-    if (initSuccess) {
-        uint32_t scanStart = millis();
+        // (The stock Arduino SD library has no capacity call; AVR also keeps
+        // msg.debug format strings in RAM, so the timing line stays out of it.)
+        if (initSuccess) {
+            uint32_t scanStart = millis();
 #if defined(CORE_TEENSY)
-        sdTotalAtMount = SD.totalSize();
-        sdFreeAtMount  = sdTotalAtMount - SD.usedSize();
+            sdTotalAtMount = SD.totalSize();
+            sdFreeAtMount  = sdTotalAtMount - SD.usedSize();
 #else
-        sdTotalAtMount = SD.totalBytes();
-        sdFreeAtMount  = sdTotalAtMount - SD.usedBytes();
+            sdTotalAtMount = SD.totalBytes();
+            sdFreeAtMount  = sdTotalAtMount - SD.usedBytes();
 #endif
-        sdCapacityKnown = sdTotalAtMount > 0;
-        msg.debug.info(TAG_SD, "SD free-space scan: %lu ms",
-                       (unsigned long)(millis() - scanStart));
-        watchdogReset();
-    }
+            sdCapacityKnown = sdTotalAtMount > 0;
+            msg.debug.info(TAG_SD, "SD free-space scan: %lu ms",
+                           (unsigned long)(millis() - scanStart));
+            watchdogReset();
+        }
 #endif
 
-    // Restore normal watchdog timeout
-    sdWatchdogWindowExit();
+    }   // end of the SD watchdog scope
 
     if (initSuccess) {
         msg.debug.info(TAG_SD, "SD card initialized successfully");

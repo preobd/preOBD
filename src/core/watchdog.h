@@ -8,20 +8,40 @@
 
 #include <Arduino.h>
 
-// Platform-agnostic watchdog interface
-// Enable watchdog with specified timeout in milliseconds
-void watchdogEnable(uint16_t timeout_ms);
+// The watchdog's timeout is decided in one place, watchdog_policy.h (#541):
+// it runs in every mode on every board once started, at 8 s in BOOT and
+// CONFIG and 2 s in RUN, and a WatchdogScope widens it around known slow work.
+// Nothing outside core/ sets a timeout directly.
+
+// Arm the watchdog at the BOOT timeout. Called once from setup().
+void watchdogStart();
+
+// The phase follows the system mode; setMode() calls this.
+void watchdogSetConfigMode(bool config);
 
 // Reset watchdog timer (call regularly in main loop)
 void watchdogReset();
 
-// Disable watchdog (use sparingly, mainly for debugging). A no-op on
-// Teensy 4.x, whose watchdog can't be disabled once armed (#243).
-void watchdogDisable();
+// Timeout in force now, in ms (0 before watchdogStart()). For status text.
+uint16_t watchdogTimeoutMs();
 
-// Whether the watchdog is running now — still true after watchdogDisable()
-// on a board that can't disable it, so user-facing text can say so (#461).
-bool watchdogArmed();
+// What slow work is running ("SD", ...), or "LOOP" outside any scope (#542).
+const char* watchdogActiveTag();
+
+// Widen the watchdog around work known to block, e.g. SD card I/O:
+//     { WatchdogScope wd(20000, "SD"); file.flush(); }
+// Nestable; the timeout is the widest of the mode and every open scope, so an
+// inner scope never narrows an outer one. Leaving the last scope restores the
+// mode's timeout, counted from that moment. The tag must be a string that
+// outlives the scope (a literal).
+class WatchdogScope {
+public:
+    WatchdogScope(uint16_t timeout_ms, const char* tag);
+    ~WatchdogScope();
+private:
+    WatchdogScope(const WatchdogScope&);
+    WatchdogScope& operator=(const WatchdogScope&);
+};
 
 // Print wrapper that feeds the watchdog every N bytes.
 // Use when serializing large payloads over slow transports (e.g. a BLE UART

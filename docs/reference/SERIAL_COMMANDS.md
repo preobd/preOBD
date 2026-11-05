@@ -1531,8 +1531,9 @@ A `FAIL` from `SYSTEM DIAG INTEGRITY` indicates a firmware bug — please file a
 issue with the output. All `SYSTEM DIAG` commands work in both CONFIG and RUN mode.
 
 Developer bench builds (built with `-D INCLUDE_WATCHDOG_STALL=1`, never in a
-release image) also have `SYSTEM DIAG WATCHDOG STALL <ms> [SD]`. It stops
-feeding the watchdog for `<ms>` to check that it still resets the board, and
+release image) also have `SYSTEM DIAG WATCHDOG STALL <ms> [SCOPE <ms>]`. It stops
+feeding the watchdog for `<ms>` (optionally inside a widened watchdog scope)
+to check that it still resets the board: after 2 s in RUN, 8 s in CONFIG. It
 resets the board on purpose. `tools/watchdog_bench.py stall` runs the checks.
 
 ---

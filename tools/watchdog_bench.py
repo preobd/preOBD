@@ -7,12 +7,15 @@ Two jobs, both over USB serial:
   stall   Proves the watchdog still protects the board. Needs a build with
           INCLUDE_WATCHDOG_STALL, which release images never have:
             PLATFORMIO_BUILD_FLAGS="-D INCLUDE_WATCHDOG_STALL=1" pio run -e teensy41
-          then flash it. Runs SYSTEM DIAG WATCHDOG STALL in RUN mode and checks:
+          then flash it. Runs SYSTEM DIAG WATCHDOG STALL and checks, in RUN (2 s):
             STALL 1500          survives        (inside the 2 s RUN timeout)
             STALL 3000          resets, TOUT    (WRSR 0x2, a real timeout)
-            STALL 15000 SD      survives        (the SD window widens to 20 s)
-            STALL 3000          resets, TOUT    (the window narrowed back)
-          About a minute. Exit status 0 only if all four pass.
+            STALL 15000 SCOPE 20000  survives   (a WatchdogScope widens it)
+            STALL 3000          resets, TOUT    (the scope narrowed it back)
+          then in CONFIG (8 s, #541):
+            STALL 6000          survives
+            STALL 10000         resets, TOUT
+          About a minute and a half. Exit status 0 only if all pass.
 
   soak    Counts unexpected resets under load: polls a command once a second
           for N minutes, reconnects after every drop, and prints each reset's
@@ -24,8 +27,8 @@ Usage:
     python3 tools/watchdog_bench.py stall [PORT]
     python3 tools/watchdog_bench.py soak  [PORT] [--minutes N] [--poll "CMD"]
 
-The board must be in RUN mode with a saved config (it reboots into RUN after
-each reset). Opening a Teensy's USB port doesn't reset it. With two Teensys
+The board must boot into RUN (a saved config): the RUN steps rely on it after
+each reset, and the CONFIG steps switch to CONFIG themselves. Opening a Teensy's USB port doesn't reset it. With two Teensys
 plugged in, pass the port explicitly.
 
 Prerequisites: pip install pyserial
@@ -56,7 +59,7 @@ def open_port(port, wait_s=30.0):
             time.sleep(0.5)   # let a just-booted board finish its banner
             s.reset_input_buffer()
             return s
-        except (serial.SerialException, OSError):
+        except Exception:   # SerialException, OSError, termios.error: port mid-(re)enumeration
             if time.time() > deadline:
                 raise
             time.sleep(0.2)
@@ -84,16 +87,19 @@ def last_reset(port, wait_s=15.0):
                 s.close()
             if m:
                 return m.group(0).decode()
-        except (serial.SerialException, OSError):
+        except Exception:
             pass
         time.sleep(0.5)
     return "?"
 
 
-def stall(port, ms, sd):
+def stall(port, ms, scope_ms, config=False):
     """Run one stall. Returns ("survived" | "reset" | "error", detail)."""
     s = open_port(port)
-    cmd = f"SYSTEM DIAG WATCHDOG STALL {ms}{' SD' if sd else ''}\r\n"
+    if config:
+        s.write(b"CONFIG\r\n")
+        read_for(s, 0.5)
+    cmd = f"SYSTEM DIAG WATCHDOG STALL {ms}{f' SCOPE {scope_ms}' if scope_ms else ''}\r\n"
     s.write(cmd.encode())
     buf = b""
     start = time.time()
@@ -106,7 +112,7 @@ def stall(port, ms, sd):
             m = re.search(rb"(?m)^ERROR:[^\r\n]*", buf)
             if m:
                 return "error", m.group(0).decode(errors="replace").strip()
-    except (serial.SerialException, OSError):
+    except Exception:
         elapsed = time.time() - start
         time.sleep(3)   # reboot + USB re-enumeration
         return "reset", f"after {elapsed:.1f} s, {last_reset(port)}"
@@ -120,20 +126,22 @@ def stall(port, ms, sd):
 
 def cmd_stall(port):
     steps = [
-        (1500, False, "survived", None),
-        (3000, False, "reset", "WRSR 0x2"),
-        (15000, True, "survived", None),
-        (3000, False, "reset", "WRSR 0x2"),
+        (1500, 0, False, "survived", None),
+        (3000, 0, False, "reset", "WRSR 0x2"),
+        (15000, 20000, False, "survived", None),
+        (3000, 0, False, "reset", "WRSR 0x2"),
+        (6000, 0, True, "survived", None),
+        (10000, 0, True, "reset", "WRSR 0x2"),
     ]
     failures = 0
-    for ms, sd, want, detail_has in steps:
-        got, detail = stall(port, ms, sd)
+    for ms, scope_ms, config, want, detail_has in steps:
+        got, detail = stall(port, ms, scope_ms, config)
         ok = got == want and (detail_has is None or detail_has in detail)
         failures += not ok
-        label = f"STALL {ms}{' SD' if sd else ''}"
-        print(f"{'PASS' if ok else 'FAIL'}  {label:16} want {want:8} got {got}: {detail}", flush=True)
+        label = f"{'CONFIG ' if config else ''}STALL {ms}{f' SCOPE {scope_ms}' if scope_ms else ''}"
+        print(f"{'PASS' if ok else 'FAIL'}  {label:24} want {want:8} got {got}: {detail}", flush=True)
         if got == "error":
-            print("      (is this a build with INCLUDE_WATCHDOG_STALL, in RUN mode?)")
+            print("      (is this a build with INCLUDE_WATCHDOG_STALL?)")
             break
     print("all passed" if failures == 0 else f"{failures} failed")
     return 0 if failures == 0 else 1

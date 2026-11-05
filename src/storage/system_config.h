@@ -25,6 +25,9 @@
 #define EEPROM_TOTAL_BYTES (E2END + 1)
 #endif
 
+// Watchdog scope around an EEPROM save (#541). AVR caps every timeout at 8 s.
+#define EEPROM_WDT_WINDOW_MS 20000
+
 // Per-input output mask: all 4 data outputs enabled by default
 #define OUTPUT_MASK_ALL_DATA 0x0F
 

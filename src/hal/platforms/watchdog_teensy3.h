@@ -18,21 +18,22 @@ inline void watchdogEnable(uint16_t timeout_ms) {
     WDOG_UNLOCK = 0xD928;
     delayMicroseconds(1);  // Required delay
 
-    // Calculate timeout value
-    // WDOG runs at ~1kHz after prescaler, timeout = ms value
-    uint32_t timeout = timeout_ms;
+    // Clocked from the 1 kHz LPO (CLKSRC clear) with no prescaling, so TOVAL
+    // is in milliseconds. This used to select the bus clock (CLKSRC set) with
+    // PRESC 0x400, i.e. divide by 5: ~12 MHz, so "2000 ms" was ~0.17 ms. It
+    // went unnoticed because nothing ran a Teensy 3.6 in RUN; since #541 the
+    // watchdog starts at boot on every board and would have reset every boot.
+    // Not yet verified on Teensy 3.6 hardware.
+    const uint32_t timeout = timeout_ms;
     WDOG_TOVALH = (timeout >> 16) & 0xFFFF;
     WDOG_TOVALL = timeout & 0xFFFF;
+    WDOG_PRESC = 0;
 
-    // Set prescaler (0x400 = divide by 1024, ~7.2MHz -> ~7kHz)
-    WDOG_PRESC = 0x400;
-
-    // Enable watchdog with update allowed
+    // Enable watchdog with update allowed (so it can be retuned later)
     WDOG_STCTRLH = WDOG_STCTRLH_ALLOWUPDATE |
                    WDOG_STCTRLH_WDOGEN |
                    WDOG_STCTRLH_WAITEN |
-                   WDOG_STCTRLH_STOPEN |
-                   WDOG_STCTRLH_CLKSRC;
+                   WDOG_STCTRLH_STOPEN;
     interrupts();
 }
 

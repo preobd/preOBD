@@ -1587,13 +1587,11 @@ bool saveConfigToSD(const char* filename) {
         return false;
     }
 
-    // Every SD call below blocks for seconds on a card that has gone away, and
-    // these run from CONFIG mode where the watchdog is meant to be off — the
-    // same trap as #331 in the sibling path. Hold a window across the whole
-    // operation (the four bare watchdogEnable(2000) calls this replaces had no
-    // matching widening at all, and would have narrowed the watchdog out from
-    // under an enclosing window).
-    SdWatchdogWindow window;
+    // Every SD call below blocks for seconds on a card that has gone away (the
+    // #331 trap), and the watchdog runs in CONFIG too (8 s, #541). Hold one
+    // scope across the whole operation; scopes nest and only ever widen, so
+    // the helpers' own SD scopes can't narrow it.
+    WatchdogScope window(SD_WDT_WINDOW_MS, SD_WDT_TAG);
 
     if (!sdMediaPresent()) {
         msg.control.println(F("ERROR: SD card removed"));
@@ -1680,7 +1678,7 @@ bool loadConfigFromSD(const char* filename) {
     }
 
     // See saveConfigToSD(): blocking card I/O from CONFIG mode (#331).
-    SdWatchdogWindow window;
+    WatchdogScope window(SD_WDT_WINDOW_MS, SD_WDT_TAG);
 
     if (!sdMediaPresent()) {
         msg.control.println(F("ERROR: SD card removed"));

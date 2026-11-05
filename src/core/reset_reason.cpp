@@ -105,9 +105,11 @@ FLASHMEM void resetReasonCapture() {
     // SRSR is cleared every boot, so every set bit belongs to this reset, but
     // one reset can set several — hence the order, which is bench-measured on
     // a teensy40 (#454):
-    //  - a fault parks the CPU in the core's handler, and our 2 s watchdog
+    //  - a fault parks the CPU in the core's handler, and our watchdog (2 s
+    //    in RUN; 8 s in CONFIG since #541, a tie with the handler) usually
     //    fires before the handler's own 8 s auto-reboot, so SRSR reads
     //    WDOG_RST_B alone; only the valid fault block says what happened.
+    //    Either way the fault block classifies it as FAULT below.
     //  - a software reboot (SCB_AIRCR) with the watchdog armed reads
     //    LOCKUP_SYSRESETREQ | WDOG_RST_B, while a genuine watchdog timeout
     //    reads WDOG_RST_B alone. It is one reset, not a reboot followed by a

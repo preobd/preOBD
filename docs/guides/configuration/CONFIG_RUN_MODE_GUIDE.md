@@ -67,10 +67,15 @@ On a first boot with nothing stored you'll see:
 | SD card logging | **Paused** (no bench data in the drive log) | Running |
 | Configuration commands | Allowed | Blocked |
 | Read-only commands | Allowed | Allowed |
-| Watchdog | Disabled where the board allows | Enabled (2 s) |
+| Watchdog | Running, relaxed to 8 s | Running, 2 s |
 
 Relays and the buzzer are held off so that a sensor sitting on the bench — or
 disconnected while you wire it — can't start a fan, run a pump or sound an alarm.
+
+The watchdog restarts the board only if the firmware itself freezes. It isn't
+an idle timer: leaving the board at a CONFIG prompt for hours is fine. It runs
+in both modes on every board, with more slack in CONFIG for slow operations
+like saving or importing a configuration.
 
 ---
 

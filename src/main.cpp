@@ -559,6 +559,11 @@ void setup() {
     }
     #endif
 
+    // The watchdog runs from here on, in every mode on every board (#541):
+    // 8 s for the rest of setup(), then setMode() picks 2 s (RUN) or 8 s
+    // (CONFIG). Earlier init (buses, CAN, transports) is not covered, as before.
+    watchdogStart();
+
     // Initialize SD card (shared by SD logging and JSON config)
     initSD();
 
@@ -596,10 +601,9 @@ void setup() {
 
     // Wait for sensors to stabilize
     msg.debug.info(TAG_SENSOR, "Waiting for sensors to stabilize...");
-    // Feed the watchdog across the wait. initSD() arms the WDT at 2 s and
-    // Teensy 4.x cannot disarm it (#243), yet nothing feeds it again until the
-    // end of setup() — so this 1 s sleep plus the surrounding init was running
-    // on ~100 ms of margin, and any growth in setup tipped it into a boot loop.
+    // Feed the watchdog across the wait: nothing else feeds it until the end
+    // of setup(). (Before #541 this ran on a 2 s Teensy 4 watchdog with ~100 ms
+    // of margin; boot is 8 s now, but the feed costs nothing.)
     // MAX6675 still gets its full ~1 s (needs ~220 ms for the first conversion).
     for (uint8_t i = 0; i < 10; i++) {
         delay(100);
@@ -664,21 +668,8 @@ void setup() {
     SystemMode bootMode = detectBootMode(eepromConfigLoaded);
     setMode(bootMode);
 
-    // Only enable watchdog in RUN mode (CONFIG mode doesn't need it)
-    if (bootMode == MODE_RUN) {
-        watchdogEnable(2000);
-        msg.debug.info(TAG_SYSTEM, "Watchdog enabled (2s timeout)");
-    } else {
-        // Not enabled here for CONFIG. On Teensy 4.x it may still be running:
-        // initSD()'s exit arms it before the boot mode is known, and it can't
-        // be disabled once armed (#243, #469).
-#if defined(__IMXRT1062__)
-        msg.debug.info(TAG_SYSTEM, watchdogArmed() ? "Watchdog still armed (CONFIG mode)"
-                                                   : "Watchdog disabled (CONFIG mode)");
-#else
-        msg.debug.info(TAG_SYSTEM, "Watchdog disabled (CONFIG mode)");
-#endif
-    }
+    msg.debug.info(TAG_SYSTEM, "Watchdog %u ms (%s)", (unsigned)watchdogTimeoutMs(),
+                   bootMode == MODE_RUN ? "RUN" : "CONFIG");
 
     // Boot is one reporting episode for the no-bus guidance; everything past
     // this point is interactive. Re-arm so configuring an I2C/SPI input at the

@@ -118,7 +118,7 @@ static FLASHMEM void closeLogFile() {
         // flush()/close() are card I/O and block for seconds on a card that has
         // gone away — this is a closing path, so it is exactly when the card is
         // most likely to be missing. Widen the watchdog around it (#331).
-        SdWatchdogWindow window;
+        WatchdogScope window(SD_WDT_WINDOW_MS, SD_WDT_TAG);
         logFile.flush();
         closedFileBytes += logFile.position();
         logFile.close();
@@ -141,7 +141,7 @@ static FLASHMEM void closeLogFile() {
 static FLASHMEM bool claimNextFileName(char* name, size_t len) {
     // A card holding thousands of logs makes this a long run of SD lookups;
     // widen the watchdog for the scan the same way initSD() does for begin().
-    SdWatchdogWindow window;
+    WatchdogScope window(SD_WDT_WINDOW_MS, SD_WDT_TAG);
 
     bool found = false;
     for (uint16_t i = logFileIndex + 1; i <= SDLOG_MAX_FILE_INDEX; i++) {
@@ -190,7 +190,7 @@ static FLASHMEM void writeHeader() {
 }
 
 static FLASHMEM void openLogFile() {
-    SdWatchdogWindow window;   // open/header/flush are all blocking card I/O
+    WatchdogScope window(SD_WDT_WINDOW_MS, SD_WDT_TAG);   // open/header/flush are all blocking card I/O
 
     closeLogFile();   // never leak the previous handle over a re-init
 
@@ -294,7 +294,7 @@ static FLASHMEM void handleCardRemoved() {
     // every row, so the block cache is normally already clean when removal is
     // detected; that is load-bearing, not incidental.
     if (logFile) {
-        SdWatchdogWindow window;
+        WatchdogScope window(SD_WDT_WINDOW_MS, SD_WDT_TAG);
         closedFileBytes += logFile.position();   // in the handle, no card I/O
         logFile.close();
     }
@@ -352,7 +352,7 @@ static void writeRow(uint32_t now) {
 
 static void maybeFlush(uint32_t now) {
     if (logFile && (now - lastFlushMs >= SDLOG_FLUSH_INTERVAL_MS)) {
-        SdWatchdogWindow window;   // flush() blocks for seconds on a bad card
+        WatchdogScope window(SD_WDT_WINDOW_MS, SD_WDT_TAG);   // flush() blocks for seconds on a bad card
         logFile.flush();
         lastFlushMs = now;
     }
@@ -403,7 +403,7 @@ void updateSDLog() {
     if (isInConfigMode()) {
         if (!wasInConfig) {
             if (logFile) {
-                SdWatchdogWindow window;
+                WatchdogScope window(SD_WDT_WINDOW_MS, SD_WDT_TAG);
                 logFile.flush();
                 lastFlushMs = now;
             }
@@ -439,7 +439,7 @@ void updateSDLog() {
     // Everything below touches the card, so hold one window across the whole
     // row (the nested ones inside openLogFile/closeLogFile/maybeFlush fold into
     // it) rather than re-arming the watchdog per operation.
-    SdWatchdogWindow window;
+    WatchdogScope window(SD_WDT_WINDOW_MS, SD_WDT_TAG);
 
     // Stop before writing to a card that is not there. This probe, not the
     // widened watchdog, is what actually saves the board: bench-testing a

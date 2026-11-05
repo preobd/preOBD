@@ -12,12 +12,13 @@
 
 #if SUPPORTS_SD
 
-// Watchdog window for card I/O. A single SD operation on a marginal or absent
-// card blocks for seconds inside the library while it retries, and RUN mode
-// holds a 2 s watchdog that Teensy 4.x cannot disarm (#243) — so every blocking
-// card access has to widen the window around itself or the board resets (#331).
+// Watchdog scope for card I/O. A single SD operation on a marginal or absent
+// card blocks for seconds inside the library while it retries, and RUN holds a
+// 2 s watchdog (#243), so every blocking card access sits inside
+//     WatchdogScope wd(SD_WDT_WINDOW_MS, SD_WDT_TAG);
+// or the board resets (#331). Scopes nest; see core/watchdog.h (#541).
 #define SD_WDT_WINDOW_MS 20000
-#define SD_WDT_NORMAL_MS 2000
+#define SD_WDT_TAG       "SD"
 
 // Does this platform's SD library expose a cheap liveness probe? Teensy's SD
 // wrapper does (SDClass::mediaPresent(), an SDIO status read on the builtin
@@ -65,22 +66,6 @@ bool sdMediaPresent();
 // never the card, so a status poll can call it.
 bool sdMediaKnownGone();
 
-// Widen/restore the watchdog around card I/O. Nestable — only the outermost
-// scope restores, so a helper that opens its own window inside a caller's does
-// not drop the caller back to 2 s mid-operation.
-void sdWatchdogWindowEnter();
-void sdWatchdogWindowExit();
-
-// Scoped form of the pair above.
-class SdWatchdogWindow {
-public:
-    SdWatchdogWindow()  { sdWatchdogWindowEnter(); }
-    ~SdWatchdogWindow() { sdWatchdogWindowExit(); }
-private:
-    SdWatchdogWindow(const SdWatchdogWindow&);
-    SdWatchdogWindow& operator=(const SdWatchdogWindow&);
-};
-
 #else
 
 // Stub functions when SD is not available on this board. sdMediaPresent() is
@@ -92,12 +77,6 @@ inline bool isSDInitialized() { return false; }
 inline bool sdCapacityAtMount(uint64_t&, uint64_t&) { return false; }
 inline bool sdMediaPresent() { return false; }
 inline bool sdMediaKnownGone() { return false; }
-inline void sdWatchdogWindowEnter() {}
-inline void sdWatchdogWindowExit() {}
-class SdWatchdogWindow {
-public:
-    SdWatchdogWindow() {}
-};
 
 #endif
 

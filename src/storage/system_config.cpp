@@ -3,6 +3,11 @@
  */
 
 #include "system_config.h"
+#include "../core/watchdog.h"
+
+#ifndef FLASHMEM
+#define FLASHMEM
+#endif
 #include "../config.h"
 #include "../sensors/units_registry.h"
 #include "../core/message_router.h"  // For TransportID enum
@@ -344,7 +349,9 @@ void resetSystemConfig() {
  * Save system configuration to EEPROM
  * @return true if successful
  */
-bool saveSystemConfig(bool verbose) {
+FLASHMEM bool saveSystemConfig(bool verbose) {
+    WatchdogScope wd(EEPROM_WDT_WINDOW_MS, "EEPROM");   // see saveInputConfig()
+
     // Update checksum before saving
     systemConfig.checksum = calculateChecksum(&systemConfig);
 

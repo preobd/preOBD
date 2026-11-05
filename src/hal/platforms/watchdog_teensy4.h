@@ -1,19 +1,35 @@
 /*
  * watchdog_teensy4.h - Teensy 4.x (IMXRT1062) watchdog implementation
  * Part of the preOBD Hardware Abstraction Layer
- * Uses WDT_T4 library for IMXRT watchdog
+ *
+ * Drives WDOG1 directly. It used to go through WDT_T4::begin(), which writes
+ * WDOG1_WCR in two steps, `WCR = SRS | WT` and then `WCR |= WDE | WDA | ...`.
+ * The first write clears WDA, asserting WDOG_B, and the board resets if that
+ * gap is long enough to be seen. An interrupt in it always is (#537:
+ * SRSR 0x10 / WRSR 0x1, SFTW, not a timeout).
+ *
+ * #539 called begin() only once (IRQs masked) and changed only WT afterwards.
+ * One unexplained SFTW reset still turned up during a boot on the bench, and
+ * begin()'s two-step write was the only remaining candidate. So now every
+ * write to WCR is a single 16-bit store with WDA held at 1 (#541):
+ *   - arming: SRS | WDA | WT | WDE | WDT | SRE, all at once from the reset
+ *     value (WDE, WDT and SRE are write-once; this is that one write);
+ *   - retuning: read WCR, replace WT, write it back.
+ * The IMXRT loads a new WT only when the watchdog is next serviced, so every
+ * enable ends with a feed and the new timeout counts from now.
+ *
+ * WICR is left at its reset value: WIE is write-once, and #542 needs it free
+ * to arm a pre-timeout interrupt that records where the firmware hung.
  */
 
 #ifndef HAL_WATCHDOG_TEENSY4_H
 #define HAL_WATCHDOG_TEENSY4_H
 
-#include <Watchdog_t4.h>
+#include <Arduino.h>
 
 namespace hal {
 
 namespace detail {
-    // Static instance in anonymous namespace to avoid ODR issues
-    static WDT_T4<WDT1> wdt;  // Using WDOG1
     static bool wdtStarted = false;
 
     // WDOG1_WCR.WT encodes the timeout as (WT + 1) * 0.5 s, so 0.5..128 s.
@@ -22,52 +38,37 @@ namespace detail {
         if (timeout_s > 128) timeout_s = 128;
         return (uint8_t)(timeout_s * 2 - 1);
     }
+
+    inline void wdogFeed() {
+        WDOG1_WSR = 0x5555;
+        WDOG1_WSR = 0xAAAA;
+    }
 }
 
-/*
- * Arm the watchdog, or change its timeout. Either way the new timeout counts
- * from now.
- *
- * WDT_T4::begin() runs only once. It writes WDOG1_WCR in two steps,
- * `WCR = SRS | WT` and then `WCR |= WDE | WDA | ...`, with interrupts on, and
- * the first write clears WDA, which asserts WDOG_B. An interrupt between the
- * two holds WDOG_B long enough to reset the board, recorded as
- * SRSR 0x10 / WRSR 0x1 (SFTW), not a timeout (#537). That was harmless as a
- * one-off at boot, but the timeout is changed at runtime: on every RUN entry,
- * and twice per logged SD row (SdWatchdogWindow, #331). Bench: 4 resets in
- * 10 min at 1 s rows with a USB poll running, and one within ~2 s at 1 ms rows.
- *
- * So after the first call only the WT field changes, in one 16-bit write with
- * interrupts off. Every other WCR bit is written back as read: SRS and WDA
- * stay 1, and WDE/WDT/SRE are write-once and already set. The feed afterwards
- * matters too: the IMXRT loads a new WT only when it is next serviced.
- */
 inline void watchdogEnable(uint16_t timeout_ms) {
     const uint16_t timeout_s = (timeout_ms + 999) / 1000;  // whole seconds, rounded up
+    const uint16_t wt = WDOG_WCR_WT(detail::wdogTimeoutField(timeout_s));
 
+    __disable_irq();
     if (!detail::wdtStarted) {
-        WDT_timings_t config;
-        config.trigger = timeout_s;      // pre-timeout interrupt: unused (no callback)
-        config.timeout = timeout_s;      // reset at timeout
-        config.callback = nullptr;
-        // IRQs off for the same two-step write: the first call is usually
-        // initSD()'s window at boot, with USB and systick already running.
-        // begin() doesn't block, and NVIC_ENABLE_IRQ is fine with PRIMASK set.
-        __disable_irq();
-        detail::wdt.begin(config);
-        __enable_irq();
+        CCM_CCGR3 |= CCM_CCGR3_WDOG1(CCM_CCGR_ON);   // WDOG1 clock
+        IOMUXC_GPR_GPR16 |= 0x200000;   // carried over from WDT_T4 ("fixes reset", PaulS)
+        // Power-down counter off: otherwise it asserts WDOG_B 16 s after reset.
+        WDOG1_WMCR = 0;
+        WDOG1_WCR = (uint16_t)(WDOG_WCR_SRS | WDOG_WCR_WDA | wt |
+                               WDOG_WCR_WDE | WDOG_WCR_WDT | WDOG_WCR_SRE);
         detail::wdtStarted = true;
     } else {
-        const uint16_t wt = WDOG_WCR_WT(detail::wdogTimeoutField(timeout_s));
-        __disable_irq();
+        // Every other bit written back as read: SRS and WDA stay 1, and the
+        // write-once WDE/WDT/SRE are already set.
         WDOG1_WCR = (uint16_t)((WDOG1_WCR & ~WDOG_WCR_WT(0xFF)) | wt);
-        __enable_irq();
     }
-    detail::wdt.feed();
+    detail::wdogFeed();
+    __enable_irq();
 }
 
 inline void watchdogReset() {
-    detail::wdt.feed();
+    detail::wdogFeed();
 }
 
 inline void watchdogDisable() {
