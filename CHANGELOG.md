@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Teensy 4.1 now leaves about 54 KB for the firmware's working memory (stack), up from 4.9 KB in 0.15.0-beta; Teensy 4.x builds now fail if it drops below 16 KB (#555, #557)
 - The watchdog now keeps running in CONFIG mode on every board, relaxed to 8 s, instead of being switched off on boards that allow it; it only restarts a board whose firmware has frozen, never an idle one, and every board now behaves the same (#541)
 
+### Removed
+- The `teensy41_hybrid` build target (FlexCAN + MCP2515 as a fourth bus): its MCP2515 bus never worked (#556) and a Teensy 4.1 already has three native CAN buses; `esp32s3_hybrid` remains (#573)
+
 ### Fixed
 - An external SD card (Teensy 4.0, ESP32-S3) now runs on the SPI bus preOBD manages, so `BUS SPI` and the pin checks see it; it needs `SPI_WIRED_BUS` in `wiring.ini` or `BUS SPI <n>`, runs at up to 12 MHz instead of 25 MHz (at 25 MHz a breadboarded module read data wrong and the card looked unformatted), and an external `SD_PIN` on the Feather F405 is now a build error instead of silently using the built-in slot (#381)
 - The LCD's I2C address setting now works: a display at 0x3F (or any other backpack address) can be used, the hardware check tests the address you set, and an address no LCD can have is refused (#590)

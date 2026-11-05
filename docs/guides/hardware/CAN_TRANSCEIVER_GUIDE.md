@@ -30,7 +30,6 @@ preOBD uses a Hardware Abstraction Layer (HAL) that supports multiple CAN contro
 
 **Hybrid Mode** allows mixing controller types on different buses. For example:
 - ESP32 TWAI (bus 0) + MCP2515 (bus 1) for dual-bus operation
-- Teensy 4.1 with 3 FlexCAN buses + MCP2515 (bus 3) for a 4th bus
 
 See [Build Configuration Guide](../configuration/BUILD_CONFIGURATION_GUIDE.md#hybrid-can) for hybrid mode setup.
 
@@ -249,13 +248,13 @@ GND         →   GND            GND
 
 **Configuration:**
 - Pin assignments for SPI CAN controllers are in `src/config.h`
-- Hybrid mode requires build flags in `platformio.ini`:
-  ```ini
-  -D SUPPORTS_CAN_HYBRID
-  -D CAN_BUS_0_TYPE=CanControllerType::TWAI
-  -D CAN_BUS_1_TYPE=CanControllerType::MCP2515
+- Hybrid mode is a board fact in `boards/<board>/board.h`:
+  ```c
+  #define SUPPORTS_CAN_HYBRID 1
+  #define CAN_BUS_0_TYPE CanControllerType::TWAI
+  #define CAN_BUS_1_TYPE CanControllerType::MCP2515
   ```
-- Use pre-configured environments: `esp32s3_hybrid` or `teensy41_hybrid`
+- Use the pre-configured environment: `esp32s3_hybrid` (Teensy 4.x already has native FlexCAN buses for multi-bus)
 
 **Notes:**
 - Each bus requires its own CAN transceiver

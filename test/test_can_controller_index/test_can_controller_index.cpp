@@ -1,7 +1,7 @@
 // Native unit test: controllerIndexForBus (#556).
 //
 // The MCP2515 driver numbers its chips 0 and 1; hybrid boards put their
-// MCP2515 on a later bus (bus 1 on esp32s3_hybrid, bus 3 on teensy41_hybrid).
+// MCP2515 on a later bus (bus 1 on esp32s3_hybrid).
 // The dispatcher hands the driver the chip's index, not the bus number. This
 // layout mixes both shapes: a native controller on bus 0, an MCP2515 on
 // bus 1, FlexCAN on bus 2 and a second MCP2515 on bus 3.

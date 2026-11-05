@@ -163,18 +163,17 @@ Platform capabilities are detected via `src/hal/platform_caps.h`:
 ### What is Hybrid Mode?
 
 Hybrid mode allows different CAN controller types on different buses. For example:
-- ESP32 TWAI (bus 0) + MCP2515 (bus 1)
-- Teensy 4.1 with 3 FlexCAN buses (0-2) + MCP2515 (bus 3)
+- ESP32 TWAI (bus 0) + MCP2515 (bus 1) — `boards/esp32s3_hybrid`, the one hybrid board
 
 ### Build Configuration
 
-Enable via platformio.ini:
+Hybrid mode is a board fact, declared in `boards/<board>/board.h`
+(`boards/resolve.h` derives `INCLUDE_CAN_HYBRID` from it):
 
-```ini
-build_flags =
-    -D SUPPORTS_CAN_HYBRID                        # Enable hybrid support
-    -D CAN_BUS_0_TYPE=CanControllerType::TWAI   # Explicit bus 0 controller
-    -D CAN_BUS_1_TYPE=CanControllerType::MCP2515 # Explicit bus 1 controller
+```c
+#define SUPPORTS_CAN_HYBRID 1                         // enable hybrid support
+#define CAN_BUS_0_TYPE CanControllerType::TWAI        // bus 0 controller
+#define CAN_BUS_1_TYPE CanControllerType::MCP2515     // bus 1 controller
 ```
 
 ### Controller Mapping

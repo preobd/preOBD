@@ -10,10 +10,11 @@
  *   CanControllerType ctrl = getBusControllerType(bus);
  *   if (ctrl == CanControllerType::TWAI) { ... }
  *
- * Build flags (platformio.ini) for hybrid mode:
- *   -D INCLUDE_CAN_HYBRID
- *   -D CAN_BUS_0_TYPE=CanControllerType::TWAI
- *   -D CAN_BUS_1_TYPE=CanControllerType::MCP2515
+ * Hybrid mode is declared in boards/<board>/board.h (resolve.h derives
+ * INCLUDE_CAN_HYBRID), e.g. boards/esp32s3_hybrid/board.h:
+ *   #define SUPPORTS_CAN_HYBRID 1
+ *   #define CAN_BUS_0_TYPE CanControllerType::TWAI
+ *   #define CAN_BUS_1_TYPE CanControllerType::MCP2515
  */
 
 #ifndef CAN_CONTROLLER_TYPES_H

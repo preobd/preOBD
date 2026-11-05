@@ -103,7 +103,6 @@ unit preferences. Set via serial commands, `SAVE`d to EEPROM.
 | `boards/teensy36` (`teensy36`) | Teensy 3.6 | FlexCAN | built-in |
 | `boards/esp32s3` (`esp32s3dev`) | ESP32-S3 | TWAI | external |
 | `boards/mega2560` (`mega2560`) | Arduino Mega | MCP2515 (SPI) | vetoed (RAM) |
-| `boards/teensy41_hybrid` (`teensy41_hybrid`) | Teensy 4.1 | 3× FlexCAN + MCP2515 | built-in |
 | `boards/esp32s3_hybrid` (`esp32s3_hybrid`) | ESP32-S3 | TWAI + MCP2515 | external |
 
 ```bash
