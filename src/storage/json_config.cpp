@@ -13,7 +13,7 @@
 // Only compile JSON features on platforms with enough RAM and in runtime config mode
 #include "json_config.h"
 #include "json_registry.h"
-#include "../pinctrl/board_pins.h"   // boardName(): firmware.platform (#570)
+#include "../pinctrl/board_pins.h"   // boardName(), boardHasPin(): firmware.platform and the board check (#567, #570)
 #if SUPPORTS_JSON_CONFIG
 #include "system_config.h"
 #include "../hal/bus_defaults.h"
@@ -1618,6 +1618,79 @@ FLASHMEM void importActionsFromJSON(JsonArrayConst actionsArray) {
 #endif // INCLUDE_RULES_ENGINE
 
 // Load configuration from JSON string
+// Every physical pin the file uses must exist on this board, and an input the
+// file labels A<n> must land on this board's A<n> (#567). Pin numbers are
+// board pin numbers: a dump from a Teensy 4.1 names pins a 4.0 lacks, and its
+// A14 (pin 38) is a plain digital pin on the 4.0. Judged before anything is
+// written, so a refusal changes nothing. A dump from this board always fits;
+// moving a config to another board is a migration, which the clients do,
+// where someone can see the mapping and confirm it. Each refusal line starts
+// "ERROR: Pin <n>" so a client can read it.
+static const char kFitPin[] PROGMEM = "ERROR: Pin ";
+static const char kFitInput[] PROGMEM = " (input)";
+static const char kFitAction[] PROGMEM = " (action ";
+static const char kFitMissing[] PROGMEM = " does not exist on this board";
+static const char kFitInFile[] PROGMEM = " is ";
+static const char kFitButHere[] PROGMEM = " in the file but ";
+static const char kFitOnBoard[] PROGMEM = " on this board";
+static const char kFitFrom[] PROGMEM = "NOTE: The file is from ";
+static const char kFitThisBoard[] PROGMEM = "; this board is ";
+static const char kFitRefused[] PROGMEM = "ERROR: Config does not fit this board; nothing was changed";
+
+FLASHMEM static bool configFitsBoard(JsonDocument& doc) {
+    bool fits = true;
+    char here[8];
+    for (JsonVariantConst v : doc["inputs"].as<JsonArrayConst>()) {
+        // A pin that isn't a whole number 0..255 (300, "A2") is a hand edit
+        // the import would read as pin 0: it fits nowhere.
+        const bool readable = v["pin"].is<uint8_t>();
+        const uint8_t pin = v["pin"];
+        if (readable && pin > PIN_PHYSICAL_MAX) continue;   // CAN:/I2C: virtual pins
+        const char* label = v["pinLabel"] | "";
+        const bool exists = readable && boardHasPin(pin);
+        formatPinLabel(pin, here, sizeof(here));
+        if (exists && (label[0] != 'A' || strcmp(label, here) == 0)) continue;
+        fits = false;
+        msg.control.print(JSON_FSTR(kFitPin));
+        serializeJson(v["pin"], msg.control);
+        msg.control.print(JSON_FSTR(kFitInput));
+        if (!exists) {
+            msg.control.println(JSON_FSTR(kFitMissing));
+        } else {
+            msg.control.print(JSON_FSTR(kFitInFile));
+            msg.control.print(label);
+            msg.control.print(JSON_FSTR(kFitButHere));
+            msg.control.print(here);
+            msg.control.println(JSON_FSTR(kFitOnBoard));
+        }
+    }
+#if INCLUDE_RULES_ENGINE
+    // Only a RELAY's target is a pin; BEEPER/LED/DISPLAY name a channel.
+    for (JsonVariantConst v : doc["actions"].as<JsonArrayConst>()) {
+        if (v["target"].isNull() || strcasecmp(v["type"] | "", "RELAY") != 0) continue;
+        if (v["target"].is<uint8_t>() && boardHasPin(v["target"].as<uint8_t>())) continue;
+        fits = false;
+        msg.control.print(JSON_FSTR(kFitPin));
+        serializeJson(v["target"], msg.control);
+        msg.control.print(JSON_FSTR(kFitAction));
+        msg.control.print(v["id"] | 0);
+        msg.control.print(')');
+        msg.control.println(JSON_FSTR(kFitMissing));
+    }
+#endif
+    // Said whether or not the pins fit: a file from another board may be on
+    // the wrong copper even where every pin number exists.
+    const char* from = doc["firmware"]["platform"] | (const char*)nullptr;
+    if (from && strcmp(from, boardName()) != 0) {
+        msg.control.print(JSON_FSTR(kFitFrom));
+        msg.control.print(from);
+        msg.control.print(JSON_FSTR(kFitThisBoard));
+        msg.control.println(boardName());
+    }
+    if (!fits) msg.control.println(JSON_FSTR(kFitRefused));
+    return fits;
+}
+
 bool loadConfigFromJSON(const char* jsonString) {
     // Allocate JSON document (same size as export)
     JsonDocument doc;
@@ -1647,6 +1720,8 @@ bool loadConfigFromJSON(const char* jsonString) {
         msg.control.println(mode);
         return false;
     }
+
+    if (!configFitsBoard(doc)) return false;
 
     // Past validation, the apply below mutates the live config — tell BLE
     // clients (status-frame extension, #455). JSON IMPORT's handler

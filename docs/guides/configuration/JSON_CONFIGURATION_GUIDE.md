@@ -136,7 +136,7 @@ best reference; the overall shape is:
 | Field | Meaning |
 |-------|---------|
 | `pin` | The board's pin number. **This is what import uses** — see [Things to Know](#things-to-know) |
-| `pinLabel` | The pin as you'd type it (`A2`, `I2C:0`, `CAN:0`); informational |
+| `pinLabel` | The pin as you'd type it (`A2`, `I2C:0`, `CAN:0`). Import checks that an analog label (`A2`) is that analog pin on this board; otherwise informational |
 | `app`, `sensor` | Application and sensor names, as in `SET <pin> <app> <sensor>` |
 | `units` | Display units |
 | `abbr`, `name` | Short (LCD) and full labels |
@@ -214,7 +214,12 @@ frame decoding (`CAN_IMPORT`). The others can also be set with `SET <pin> CAL ..
 - **Pins are board pin numbers.** `A2` is pin 16 on a Teensy 4.x but a different
   number on another board, so a file exported from one board type should not be
   imported on a different one without editing the `pin`, `input` and `target`
-  numbers.
+  numbers. The import checks the file against the board first: every input pin
+  and every `RELAY` target must exist on this board, and an input whose
+  `pinLabel` is an analog name (`A14`) must be on that analog pin here. If any
+  of them doesn't fit, nothing is changed and each one is named in an
+  `ERROR: Pin <n> ...` line. A file from another board type whose pins all fit
+  is imported, with a `NOTE:` naming both boards: check the wiring matches.
 - **Missing sections are left alone.** A file with only `inputs` leaves the
   system settings, Rules and Actions as they were.
 - **An `inputs` array replaces all inputs**, just as a `rules` or `actions` array

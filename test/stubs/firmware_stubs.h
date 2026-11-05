@@ -51,9 +51,18 @@ bool pinsConflict(const uint8_t* pins, uint8_t count, uint8_t /*rank*/, const ch
     }
     return false;
 }
-// Board pins and name (pinctrl/board_pins.cpp, #570): a stand-in board with
-// no analog pins, named NATIVE.
-int8_t analogIndexForPin(uint8_t) { return -1; }
+// Board pins and name (pinctrl/board_pins.cpp, #570): a stand-in board named
+// NATIVE. By default no pin is analog and every pin exists; a test sets these
+// to stand in for a real board (JSON IMPORT's board check, #567).
+static uint8_t g_stubDigitalPinMax = 0xFF;  // highest digital pin
+static uint8_t g_stubAnalogFirst = 0xFF;    // A0's pin; 0xFF = no analog pins
+static uint8_t g_stubAnalogCount = 0;
+int8_t analogIndexForPin(uint8_t pin) {
+    if (g_stubAnalogFirst == 0xFF || pin < g_stubAnalogFirst ||
+        pin >= g_stubAnalogFirst + g_stubAnalogCount) return -1;
+    return (int8_t)(pin - g_stubAnalogFirst);
+}
+bool boardHasPin(uint8_t pin) { return pin <= g_stubDigitalPinMax || analogIndexForPin(pin) >= 0; }
 const char* boardName() { return "NATIVE"; }
 
 // requireInput() is no longer stubbed: it moved into input_manager.cpp (#411),

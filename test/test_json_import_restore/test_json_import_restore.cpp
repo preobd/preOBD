@@ -6,6 +6,8 @@
 // and "actions" already did.
 // #561: system.logFilter was exported and never read back. (system.serial is
 // imported too, but the native platform has no serial ports: bench-tested.)
+// #567: a file must fit this board -- every physical pin it uses exists here,
+// and an input it labels A<n> is on this board's A<n> -- or nothing changes.
 //
 // Host scaffolding is shared with test_json_calibration (test/stubs/firmware_stubs.h).
 #include <unity.h>
@@ -63,6 +65,9 @@ void setUp(void) {
     resetInputs();
     inputsTableIsLive = true;
     g_applyLogFilterCalls = 0;
+    g_stubDigitalPinMax = 0xFF;
+    g_stubAnalogFirst = 0xFF;
+    g_stubAnalogCount = 0;
     g_obdTableBuilds = 0;
 #if INCLUDE_RULES_ENGINE
     g_rulesInitCalls = 0;
@@ -240,6 +245,117 @@ static void test_no_log_filter_key_leaves_the_live_filter_alone(void) {
     TEST_ASSERT_EQUAL_INT(0, g_applyLogFilterCalls);
 }
 
+// ---------------------------------------------------------------------------
+// #567: the file must fit this board
+// ---------------------------------------------------------------------------
+
+// Stand-in board: digital pins 0..39, A0..A3 on pins 14..17.
+static void useSmallBoard() {
+    g_stubDigitalPinMax = 39;
+    g_stubAnalogFirst = 14;
+    g_stubAnalogCount = 4;
+}
+
+// A file naming a pin this board lacks is refused before anything is written.
+static void test_a_pin_this_board_lacks_refuses_the_whole_file(void) {
+    configure(4);
+    configure(45);
+    const uint8_t pins[2] = {4, 45};
+    static char json[4096];
+    buildDoc(pins, 2, json, sizeof(json));
+    clearInput(45);
+    configure(6);                          // must survive: nothing may change
+
+    useSmallBoard();
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    TEST_ASSERT_NOT_NULL_MESSAGE(getInputByPin(6), "a refused file still replaced the inputs");
+    TEST_ASSERT_NULL(getInputByPin(45));
+    TEST_ASSERT_EQUAL_INT(0, g_obdTableBuilds);
+}
+
+// An input the file calls A<n> must be on this board's A<n>; a number-labelled
+// input only needs its pin to exist, even where that pin is analog here.
+static void test_an_analog_input_must_land_on_the_same_a_pin(void) {
+    useSmallBoard();
+    configure(16);                         // A2 on this board
+    const uint8_t pins[1] = {16};
+    static char json[4096];
+
+    const char* labels[] = {"A2", "16", "A6"};
+    const bool fits[] = {true, true, false};
+    for (uint8_t i = 0; i < 3; i++) {
+        buildDoc(pins, 1, json, sizeof(json));
+        JsonDocument d;
+        TEST_ASSERT_FALSE(deserializeJson(d, json));
+        d["inputs"][0]["pinLabel"] = labels[i];
+        serializeJson(d, json, sizeof(json));
+        TEST_ASSERT_EQUAL_MESSAGE(fits[i], loadConfigFromJSON(json), labels[i]);
+    }
+}
+
+// A RELAY's target is a pin; the other action types name a channel.
+static void test_a_relay_on_a_pin_this_board_lacks_is_refused(void) {
+#if INCLUDE_RULES_ENGINE
+    useSmallBoard();
+    TEST_ASSERT_FALSE(loadConfigFromJSON(
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"actions\":"
+        "[{\"id\":1,\"type\":\"relay\",\"target\":60}]}"));
+    TEST_ASSERT_EQUAL_INT(0, g_rulesInitCalls);
+    TEST_ASSERT_TRUE(loadConfigFromJSON(
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"actions\":"
+        "[{\"id\":1,\"type\":\"LED\",\"target\":60}]}"));
+#endif
+}
+
+// On the mega the A-names (pins 54..69) sit past the digital range (0..53):
+// they exist only through the analog map.
+static void test_analog_pins_past_the_digital_range_exist(void) {
+    g_stubDigitalPinMax = 53;
+    g_stubAnalogFirst = 54;
+    g_stubAnalogCount = 16;
+    configure(60);                         // A6
+    const uint8_t pins[1] = {60};
+    static char json[4096];
+    buildDoc(pins, 1, json, sizeof(json));
+    TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+    g_stubAnalogCount = 4;                 // A0..A3 only: pin 60 is gone
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+}
+
+// A pin the import would misread as pin 0 (out of range, or a string) fits
+// nowhere, though the rest of its record is valid.
+static void test_an_unreadable_pin_is_refused(void) {
+    configure(4);
+    const uint8_t pins[1] = {4};
+    static char json[4096];
+    const char* bad[] = {"300", "\"A2\"", "-1"};
+    for (const char* p : bad) {
+        buildDoc(pins, 1, json, sizeof(json));
+        JsonDocument d, v;
+        TEST_ASSERT_FALSE(deserializeJson(d, json));
+        TEST_ASSERT_FALSE(deserializeJson(v, p));
+        d["inputs"][0]["pin"] = v.as<JsonVariantConst>();
+        serializeJson(d, json, sizeof(json));
+        TEST_ASSERT_FALSE_MESSAGE(loadConfigFromJSON(json), p);
+        TEST_ASSERT_NOT_NULL_MESSAGE(getInputByPin(4), p);
+    }
+}
+
+// Another board's file whose pins all fit is imported (with a NOTE naming both).
+static void test_a_file_from_another_board_that_fits_is_imported(void) {
+    useSmallBoard();
+    configure(4);
+    const uint8_t pins[1] = {4};
+    static char json[4096];
+    buildDoc(pins, 1, json, sizeof(json));
+    JsonDocument d;
+    TEST_ASSERT_FALSE(deserializeJson(d, json));
+    d["firmware"]["platform"] = "TEENSY41";
+    serializeJson(d, json, sizeof(json));
+    TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+    TEST_ASSERT_NOT_NULL(getInputByPin(4));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_inputs_absent_from_the_file_are_removed);
@@ -253,5 +369,11 @@ int main(int, char**) {
     RUN_TEST(test_unreadable_log_filter_values_keep_the_current_ones);
     RUN_TEST(test_malformed_tag_masks_are_refused);
     RUN_TEST(test_no_log_filter_key_leaves_the_live_filter_alone);
+    RUN_TEST(test_a_pin_this_board_lacks_refuses_the_whole_file);
+    RUN_TEST(test_an_analog_input_must_land_on_the_same_a_pin);
+    RUN_TEST(test_a_relay_on_a_pin_this_board_lacks_is_refused);
+    RUN_TEST(test_a_file_from_another_board_that_fits_is_imported);
+    RUN_TEST(test_analog_pins_past_the_digital_range_exist);
+    RUN_TEST(test_an_unreadable_pin_is_refused);
     return UNITY_END();
 }
