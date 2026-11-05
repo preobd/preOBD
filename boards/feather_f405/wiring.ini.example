@@ -1,0 +1,22 @@
+; boards/feather_f405/wiring.ini — YOUR Feather STM32F405 wiring (gitignored).
+;
+; Copy to `wiring.ini` (drop `.example`) and uncomment the pins you wired.
+; These -D flags feed boards/resolve.h. Omit a pin → that peripheral is off.
+; Pin numbers are the Feather's Arduino numbers (D0..D25, A0 = 16 .. A5 = 21).
+; On-board parts own D2-D4, D7 (SPI flash), D26-D32 (SD), D33-D38 (crystal,
+; USB, SWD): board.h reserves them.
+
+[feather_f405]
+wiring =
+;    -D BUZZER_PIN=11      ; alarm buzzer (tone output)
+;    -D MODE_BUTTON_PIN=12 ; CONFIG-on-boot / silence button
+;    -D TEST_MODE_PIN=13   ; hold LOW at boot to enter test mode (optional)
+;    -D HOST_NRF_CTS_PIN=5 ; nRF52840 software flow control — define BOTH or neither.
+;    -D HOST_NRF_RTS_PIN=6 ;   (the nRF link is Serial1 = D0/D1; these two then can't be Serial2)
+;    -D I2C_WIRED_BUS=0    ; SDA/SCL (and STEMMA QT) are wired
+;    -D SPI_WIRED_BUS=0    ; SCK/MI/MO are wired
+;    -D CAN_WIRED_BUS=0    ; a transceiver (e.g. SN65HVD230) is on D9 RX / D10 TX
+
+; ADC sample time (default 144 cycles, see board.ini). For the breadboard
+; short-vs-long check, override it here, e.g.:
+; adc_sampling = -D ADC_SAMPLINGTIME=ADC_SAMPLETIME_3CYCLES

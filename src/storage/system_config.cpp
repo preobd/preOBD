@@ -20,7 +20,7 @@
 #include "../pinctrl/pin_registry.h"
 #include "../pinctrl/pin_owner.h"
 #include "../outputs/output_format.h"  // SdLogFormat
-#include <EEPROM.h>
+#include "eeprom_store.h"
 
 // Global system config instance
 SystemConfig systemConfig;
@@ -376,6 +376,7 @@ void resetSystemConfig(uint8_t keep) {
  */
 FLASHMEM bool saveSystemConfig(bool verbose) {
     WatchdogScope wd(EEPROM_WDT_WINDOW_MS, "EEPROM");   // see saveInputConfig()
+    EepromBatch batch;   // flash-backed stores write here (eeprom_store.h)
 
     // Update checksum before saving
     systemConfig.checksum = calculateChecksum(&systemConfig);

@@ -7,6 +7,7 @@
  * - Teensy 3.x (Kinetis K20/K66)
  * - Teensy 4.x (IMXRT1062)
  * - ESP32
+ * - STM32F4 (IWDG)
  * - Arduino Due (SAM3X)
  *
  * Usage:
@@ -42,6 +43,10 @@
 #elif defined(ESP32)
     // ESP32 variants (ESP32, ESP32-S3, ESP32-C3, etc.)
     #include "platforms/watchdog_esp32.h"
+
+#elif defined(ARDUINO_ARCH_STM32) && defined(STM32F4xx)
+    // STM32F4 independent watchdog (IWDG)
+    #include "platforms/watchdog_stm32.h"
 
 #else
     // Unknown platform - use stub (no-op)

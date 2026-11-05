@@ -51,7 +51,7 @@ enum class CanControllerType : uint8_t {
     // ESP32 with TWAI
     #define CAN_CONTROLLER_BUS_0 CanControllerType::TWAI
 #elif defined(STM32F4xx) || defined(STM32F1xx)
-    // STM32 with bxCAN (future)
+    // STM32 with bxCAN (STM32F4 driver: hal/platforms/can_bxcan.cpp)
     #define CAN_CONTROLLER_BUS_0 CanControllerType::BXCAN
 #else
     // Default: External SPI CAN controller

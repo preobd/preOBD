@@ -208,6 +208,26 @@ bool initSerialPort(uint8_t port_id, uint32_t baudrate) {
         case 3: Serial3.begin(baudrate); success = true; break;
     }
 
+#elif defined(ARDUINO_ARCH_STM32)
+    // STM32: ports map to the core's USART objects (hal/serial_ports.h)
+    switch (port_id) {
+        case 1:
+            HW_SERIAL1.begin(baudrate);
+#if defined(HOST_NRF_CTS_PIN) && defined(HOST_NRF_RTS_PIN)
+            // nRF link software flow control, as on Teensy 4.x above
+            pinMode(HOST_NRF_CTS_PIN, INPUT_PULLDOWN);
+            pinMode(HOST_NRF_RTS_PIN, OUTPUT);
+            digitalWrite(HOST_NRF_RTS_PIN, LOW);
+#endif
+            success = true;
+            break;
+#if NUM_SERIAL_PORTS >= 2
+        case 2: HW_SERIAL2.begin(baudrate); success = true; break;
+#endif
+    }
+
+#else
+#error "initSerialPort(): add this platform's serial ports"
 #endif
 
     if (success) {
@@ -327,6 +347,14 @@ Stream* getSerialPort(uint8_t port_id) {
         case 1: return &Serial1;
         case 2: return &Serial2;
         case 3: return &Serial3;
+    }
+
+#elif defined(ARDUINO_ARCH_STM32)
+    switch (port_id) {
+        case 1: return &HW_SERIAL1;
+#if NUM_SERIAL_PORTS >= 2
+        case 2: return &HW_SERIAL2;
+#endif
     }
 
 #endif

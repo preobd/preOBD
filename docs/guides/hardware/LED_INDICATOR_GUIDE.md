@@ -22,6 +22,11 @@ Use a **common-cathode** RGB LED (recommended for 3.3V systems):
 
 **Common-anode** LEDs are also supported via the `RGB_COMMON_ANODE` config flag.
 
+**Boards with an on-board NeoPixel** (the Feather STM32F405) use it as the
+status LED instead: its board definition declares the pixel's pin, so there is
+nothing to wire and no `RGB_PIN_*` lines to add (adding them is a build error).
+It runs at reduced brightness (`RGB_NEOPIXEL_BRIGHTNESS`, default 8 of 255).
+
 ### Pin Assignment
 
 The LED is enabled by wiring its pins in your board's wiring file,
@@ -88,6 +93,18 @@ Adjust blink/pulse speeds in [src/drivers/rgb_led.h](../../../src/drivers/rgb_le
 #define RGB_FAST_BLINK_MS   200     // Fast blink (2.5Hz)
 #define RGB_PULSE_PERIOD_MS 2000    // Breathing cycle (0.5Hz)
 ```
+
+The breathing cycle and an on-board NeoPixel's brightness can also be set for
+your unit alone in `wiring.ini`, without editing the source:
+
+```ini
+    -D RGB_PULSE_PERIOD_MS=1200
+    -D RGB_NEOPIXEL_BRIGHTNESS=12
+```
+
+A NeoPixel has only brightness + 1 levels between off and its peak (9 at the
+default 8), so at low brightness a slow breath shows the steps; a shorter
+cycle or a higher brightness smooths it.
 
 ## Build Configuration
 

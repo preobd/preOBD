@@ -1,7 +1,8 @@
 /*
  * rgb_led.cpp - RGB LED Status Indicator Implementation
  *
- * Non-blocking PWM-based RGB LED controller with priority system
+ * Non-blocking RGB LED controller with priority system: three PWM channels,
+ * or a single NeoPixel where the board has one (RGB_NEOPIXEL_PIN)
  */
 
 #include "rgb_led.h"
@@ -44,16 +45,75 @@ static struct {
 } rgbState;
 
 // ============================================================================
-// PLATFORM-SPECIFIC PWM
+// PLATFORM-SPECIFIC OUTPUT
 // ============================================================================
 
-#ifdef ESP32
+#if defined(RGB_NEOPIXEL_PIN)
+// One WS2812 on a single data pin, bit-banged with interrupts masked for the
+// 24 bits (~30 us); writeColor() only runs when the color changes. Bits are
+// timed on the DWT cycle counter. Not Adafruit_NeoPixel: on STM32 it times
+// them by reprogramming SysTick, and restoring it costs millis()/micros() a
+// tick per show() -- the CONFIG-mode pulse ran the clock ~28% fast and RPM
+// read 25-50% low (#100).
+#if !defined(ARDUINO_ARCH_STM32)
+#error "RGB_NEOPIXEL_PIN: the WS2812 driver is STM32-only (DWT cycle counter + GPIO BSRR)"
+#endif
+
+static GPIO_TypeDef* neoPort;
+static uint32_t neoMask;
+
+// Adafruit_NeoPixel::setBrightness(b) scaled by (c * (b + 1)) >> 8; same here
+// so the levels chosen with it on the bench still hold.
+static inline uint8_t neoScale(uint8_t c) {
+    return (uint8_t)(((uint16_t)c * (RGB_NEOPIXEL_BRIGHTNESS + 1)) >> 8);
+}
+
+static void writeColor(RGBColor c) {
+    const uint8_t grb[3] = { neoScale(c.g), neoScale(c.r), neoScale(c.b) };
+    // The caller dedupes before scaling, so a pulse calls this ~255 times a
+    // second for only 9 distinct levels at brightness 8; skip the repeats.
+    static uint8_t last[3] = { 0xFF, 0xFF, 0xFF };
+    if (memcmp(grb, last, sizeof(grb)) == 0) return;
+    memcpy(last, grb, sizeof(grb));
+    const uint32_t period = SystemCoreClock / 800000;    // 1.25 us bit slot
+    const uint32_t t0h = SystemCoreClock / 2500000;      // 0.4 us high = 0
+    const uint32_t t1h = SystemCoreClock / 1250000;      // 0.8 us high = 1
+    const uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    uint32_t start = DWT->CYCCNT - period;
+    for (uint8_t i = 0; i < 3; i++) {
+        for (uint8_t bit = 0x80; bit; bit >>= 1) {
+            while (DWT->CYCCNT - start < period) {}
+            start = DWT->CYCCNT;
+            neoPort->BSRR = neoMask;
+            const uint32_t high = (grb[i] & bit) ? t1h : t0h;
+            while (DWT->CYCCNT - start < high) {}
+            neoPort->BSRR = neoMask << 16;
+        }
+    }
+    while (DWT->CYCCNT - start < period) {}
+    __set_PRIMASK(primask);
+    // The >280 us low latch is the gap until the next color change.
+}
+
+static void initOutput() {
+    pinMode(RGB_NEOPIXEL_PIN, OUTPUT);
+    digitalWrite(RGB_NEOPIXEL_PIN, LOW);
+    neoPort = digitalPinToPort(RGB_NEOPIXEL_PIN);
+    neoMask = STM_LL_GPIO_PIN(digitalPinToPinName(RGB_NEOPIXEL_PIN));
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;   // enable the cycle counter
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+    delayMicroseconds(300);                           // reset/latch before the first frame
+    writeColor({0, 0, 0});
+}
+
+#elif defined(ESP32)
 // ESP32 uses LEDC peripheral for PWM
 // Channel assignment: R=0, G=1, B=2
 static const uint8_t LEDC_FREQ = 5000;  // 5kHz PWM frequency
 static const uint8_t LEDC_RESOLUTION = 8;  // 8-bit resolution (0-255)
 
-static void initPWM() {
+static void initOutput() {
     // Configure LEDC channels
     ledcSetup(0, LEDC_FREQ, LEDC_RESOLUTION);  // Red channel
     ledcSetup(1, LEDC_FREQ, LEDC_RESOLUTION);  // Green channel
@@ -77,7 +137,7 @@ static void writePWM(uint8_t pin, uint8_t value) {
 
 #else
 // Teensy and Arduino use standard analogWrite
-static void initPWM() {
+static void initOutput() {
     pinMode(RGB_PIN_R, OUTPUT);
     pinMode(RGB_PIN_G, OUTPUT);
     pinMode(RGB_PIN_B, OUTPUT);
@@ -92,9 +152,7 @@ static void writePWM(uint8_t pin, uint8_t value) {
 }
 #endif
 
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
+#if !defined(RGB_NEOPIXEL_PIN)
 
 // Apply common anode inversion if needed
 static inline uint8_t applyPolarity(uint8_t value) {
@@ -104,6 +162,17 @@ static inline uint8_t applyPolarity(uint8_t value) {
     return value;  // Direct for common cathode
 #endif
 }
+
+static void writeColor(RGBColor c) {
+    writePWM(RGB_PIN_R, applyPolarity(c.r));
+    writePWM(RGB_PIN_G, applyPolarity(c.g));
+    writePWM(RGB_PIN_B, applyPolarity(c.b));
+}
+#endif
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
 
 // Convert priority enum to array slot (0-4)
 static inline uint8_t priorityToSlot(RGBPriority priority) {
@@ -131,6 +200,17 @@ static void setRequest(RGBColor color, RGBEffect effect, uint16_t period_ms, RGB
     uint8_t slot = priorityToSlot(priority);
     if (slot >= 5) return;  // Safety check
 
+    // Callers re-assert their state on every pass (the alarm output does,
+    // every 50 ms). Re-requesting what is already showing must not restart
+    // it: resetting effectStartTime each time pinned a blink in its "on"
+    // half, so alarm and warning blinks showed solid on every board.
+    const RGBRequest& a = rgbState.active;
+    if (rgbState.priorityActive[slot] && a.priority == priority && a.effect == effect &&
+        a.period_ms == period_ms && a.color.r == color.r && a.color.g == color.g &&
+        a.color.b == color.b) {
+        return;
+    }
+
     // Store in priority stack
     rgbState.priorityStack[slot] = {color, effect, period_ms, priority};
     rgbState.priorityActive[slot] = true;
@@ -147,6 +227,14 @@ static void setRequest(RGBColor color, RGBEffect effect, uint16_t period_ms, RGB
 // ============================================================================
 
 void initRGBLed() {
+#if defined(RGB_NEOPIXEL_PIN)
+    // On-board pixel (board.h): one data pin, BUILTIN rank like the others.
+    const uint8_t d = RGB_NEOPIXEL_PIN;
+    if (!claimPins(&d, 1, PIN_OUTPUT, PIN_RANK_BUILTIN, TAG_SYSTEM, "RGB LED (NeoPixel)")) {
+        msg.debug.warn(TAG_SYSTEM, "RGB LED NeoPixel pin %d conflict - LED disabled", RGB_NEOPIXEL_PIN);
+        return;
+    }
+#else
     // Validate all three before registering any (all-or-nothing): a conflict
     // on G must not leave R claimed with the LED never actually enabled.
     // Checked/claimed one channel at a time so a conflict names the specific
@@ -171,8 +259,10 @@ void initRGBLed() {
     claimPins(&g, 1, PIN_OUTPUT, PIN_RANK_BUILTIN, TAG_SYSTEM, "RGB LED Green");
     claimPins(&b, 1, PIN_OUTPUT, PIN_RANK_BUILTIN, TAG_SYSTEM, "RGB LED Blue");
 
-    // Initialize PWM hardware
-    initPWM();
+#endif
+
+    // Initialize output hardware
+    initOutput();
 
     // Initialize state
     rgbState.active.effect = EFFECT_OFF;
@@ -188,8 +278,12 @@ void initRGBLed() {
 
     rgbState.initialized = true;
 
+#if defined(RGB_NEOPIXEL_PIN)
+    msg.debug.info(TAG_SYSTEM, "RGB LED indicator initialized (NeoPixel on pin %d)", RGB_NEOPIXEL_PIN);
+#else
     msg.debug.info(TAG_SYSTEM, "RGB LED indicator initialized (pins R=%d G=%d B=%d)",
                    RGB_PIN_R, RGB_PIN_G, RGB_PIN_B);
+#endif
 }
 
 void rgbLedSolid(RGBColor color, RGBPriority priority) {
@@ -306,14 +400,12 @@ void updateRGBLed() {
         }
     }
 
-    // Only update PWM if values changed (reduce overhead)
+    // Only write the LED when the color changed (reduce overhead)
     if (output.r != rgbState.currentR ||
         output.g != rgbState.currentG ||
         output.b != rgbState.currentB) {
 
-        writePWM(RGB_PIN_R, applyPolarity(output.r));
-        writePWM(RGB_PIN_G, applyPolarity(output.g));
-        writePWM(RGB_PIN_B, applyPolarity(output.b));
+        writeColor(output);
 
         rgbState.currentR = output.r;
         rgbState.currentG = output.g;

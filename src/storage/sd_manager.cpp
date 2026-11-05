@@ -24,7 +24,7 @@
 #include "../core/watchdog.h"
 #include "../core/system_mode.h"
 #include <SPI.h>
-#include <SD.h>
+#include "sd_fs.h"   // SD library for this platform (STM32: SDIO)
 
 #ifndef FLASHMEM
 #define FLASHMEM
@@ -52,6 +52,63 @@ static bool sdMediaGone = false;
 static bool     sdCapacityKnown = false;
 static uint64_t sdFreeAtMount   = 0;
 static uint64_t sdTotalAtMount  = 0;
+
+#if defined(ARDUINO_ARCH_STM32)
+// ---------------------------------------------------------------------------
+// Bounded card handshake before SD.begin() (STM32 SDIO)
+//
+// ST's HAL power-up (SD_PowerON) polls ACMD41 "are you ready?" up to 65535
+// times with no time limit: a card that keeps answering busy holds SD.begin()
+// for tens of seconds, past the watchdog, and the board resets into the same
+// wait on every boot. The bench hit it after every pass through the ROM DFU
+// bootloader (which probes SPI3/USART3 on PC10-PC12, the SDIO D2/D3/CLK
+// lines); a failing card in the car would hit it on every power-up.
+//
+// So the same handshake runs here first, bounded by the SD spec's 1 s (plus
+// margin): reset (CMD0), interface check (CMD8), ACMD41 until ready. A card
+// that comes ready is left ready, and SD.begin()'s own handshake then passes
+// at once. One that doesn't is skipped for this session.
+static constexpr uint32_t SD_READY_BUDGET_MS = 1500;
+
+// Milliseconds the card took to report ready, or -1 if it stayed busy past
+// the budget, or -2 if it didn't answer at all (no card, no response).
+static int32_t sdioCardReadyMs() {
+    pinmap_pinout(PinMap_SD_DATA0[0].pin, PinMap_SD_DATA0);
+    pinmap_pinout(PinMap_SD_DATA1[0].pin, PinMap_SD_DATA1);
+    pinmap_pinout(PinMap_SD_DATA2[0].pin, PinMap_SD_DATA2);
+    pinmap_pinout(PinMap_SD_DATA3[0].pin, PinMap_SD_DATA3);
+    pinmap_pinout(PinMap_SD_CMD[0].pin, PinMap_SD_CMD);
+    pinmap_pinout(PinMap_SD_CK[0].pin, PinMap_SD_CK);
+    __HAL_RCC_SDIO_CLK_ENABLE();
+
+    SDIO_InitTypeDef init = {};
+    init.ClockEdge = SDIO_CLOCK_EDGE_RISING;
+    init.ClockBypass = SDIO_CLOCK_BYPASS_DISABLE;
+    init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
+    init.BusWide = SDIO_BUS_WIDE_1B;
+    init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
+    init.ClockDiv = SDIO_INIT_CLK_DIV;   // 400 kHz identification clock
+    SDIO_Init(SDIO, init);
+    __SDIO_DISABLE(SDIO);
+    SDIO_PowerState_ON(SDIO);
+    delay(2);
+    __SDIO_ENABLE(SDIO);
+    delay(2);   // >= 74 clocks before the first command
+
+    if (SDMMC_CmdGoIdleState(SDIO) != SDMMC_ERROR_NONE) return -2;
+    // CMD8 answers only on SD 2.0+ cards, which may then claim high capacity.
+    const bool v2 = SDMMC_CmdOperCond(SDIO) == SDMMC_ERROR_NONE;
+    const uint32_t arg = SDMMC_VOLTAGE_WINDOW_SD | (v2 ? SDMMC_HIGH_CAPACITY : 0U);
+
+    const uint32_t t0 = millis();
+    do {
+        if (SDMMC_CmdAppCommand(SDIO, 0) != SDMMC_ERROR_NONE) return -2;
+        if (SDMMC_CmdAppOperCommand(SDIO, arg) != SDMMC_ERROR_NONE) return -2;
+        if (SDIO_GetResponse(SDIO, SDIO_RESP1) >> 31) return (int32_t)(millis() - t0);
+    } while (millis() - t0 < SD_READY_BUDGET_MS);
+    return -1;
+}
+#endif
 
 bool sdMediaPresent() {
     // A card that never mounted has nothing to probe — and on Teensy the probe
@@ -118,7 +175,25 @@ FLASHMEM void initSD() {
         for (uint8_t attempt = 1; attempt <= SD_INIT_ATTEMPTS && !initSuccess; attempt++) {
             msg.debug.debug(TAG_SD, "SD.begin() attempt %u/%u", attempt, SD_INIT_ATTEMPTS);
             delay(100);
-#if SD_PIN == 254
+#if SD_PIN == 254 && defined(ARDUINO_ARCH_STM32)
+            // SDIO slot. No card-detect pin: the Feather F405 Rev B routes
+            // it wrong (Adafruit pinout page), so mount and see -- but only
+            // after a bounded handshake (sdioCardReadyMs above).
+            {
+                const int32_t readyMs = sdioCardReadyMs();
+                if (readyMs < 0) {
+                    // Per attempt, so debug: a card fresh from the ROM
+                    // bootloader fails the first one and passes the next.
+                    // Every attempt failing is reported below.
+                    msg.debug.debug(TAG_SD, readyMs == -1 ? "SD handshake: card busy past %lu ms"
+                                                           : "SD handshake: no answer",
+                                    (unsigned long)SD_READY_BUDGET_MS);
+                    continue;
+                }
+                msg.debug.info(TAG_SD, "SD card ready after %ld ms", (long)readyMs);
+            }
+            initSuccess = SD.begin(SD_DETECT_NONE);
+#elif SD_PIN == 254
             initSuccess = SD.begin(BUILTIN_SDCARD);
 #else
             initSuccess = SD.begin(SD_PIN);
@@ -129,7 +204,7 @@ FLASHMEM void initSD() {
         // Capacity, while the window is still wide: the free count is a scan of
         // the FAT (FAT32) or allocation bitmap (exFAT), so it is read here once and
         // never from a status poll (#536).
-#if defined(CORE_TEENSY) || defined(ESP32)
+#if defined(CORE_TEENSY) || defined(ESP32) || defined(ARDUINO_ARCH_STM32)
         // (The stock Arduino SD library has no capacity call; AVR also keeps
         // msg.debug format strings in RAM, so the timing line stays out of it.)
         if (initSuccess) {
@@ -137,6 +212,15 @@ FLASHMEM void initSD() {
 #if defined(CORE_TEENSY)
             sdTotalAtMount = SD.totalSize();
             sdFreeAtMount  = sdTotalAtMount - SD.usedSize();
+#elif defined(ARDUINO_ARCH_STM32)
+            // STM32SD has no capacity call; FatFs counts free clusters.
+            DWORD freeClusters = 0;
+            FATFS* fs = nullptr;
+            if (f_getfree(SD.fatFs()->getRoot(), &freeClusters, &fs) == FR_OK && fs) {
+                const uint64_t clusterBytes = (uint64_t)fs->csize * 512;   // SD sectors are 512 B
+                sdTotalAtMount = (uint64_t)(fs->n_fatent - 2) * clusterBytes;
+                sdFreeAtMount  = (uint64_t)freeClusters * clusterBytes;
+            }
 #else
             sdTotalAtMount = SD.totalBytes();
             sdFreeAtMount  = sdTotalAtMount - SD.usedBytes();

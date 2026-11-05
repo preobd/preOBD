@@ -30,6 +30,15 @@
     #error "board_pins: kAnalog lists A0..A26; extend it for this board"
 #endif
 
+#if defined(ARDUINO_ARCH_STM32)
+// STM32: the core's A-names are 0xC0 + n (PNUM_ANALOG_BASE), the range preOBD
+// reserves for virtual CAN inputs (inputs/input.h). So analog pins go by
+// their digital numbers instead (Feather F405: A0 = D16 .. A6 = D22), from the
+// variant's own table; platformAnalogRead() translates back for the ADC.
+#define ANALOG_PIN_AT(i) ((uint8_t)analogInputPin[i])
+#else
+#define ANALOG_PIN_AT(i) pgm_read_byte(&kAnalog[i])
+
 // The core's own A-name constants, in PROGMEM (flash on AVR; nothing on the
 // mega's 8 KB of RAM). A constant the core doesn't define fails the build.
 static const uint8_t kAnalog[] PROGMEM = {
@@ -114,6 +123,7 @@ static const uint8_t kAnalog[] PROGMEM = {
 #endif
 };
 static_assert(sizeof(kAnalog) == BOARD_ANALOG_COUNT, "kAnalog must list every A-name");
+#endif
 
 // All cold (CLI and JSON paths): FLASHMEM keeps them out of Teensy 4 RAM1.
 FLASHMEM uint8_t analogPinCount() {
@@ -122,12 +132,12 @@ FLASHMEM uint8_t analogPinCount() {
 
 FLASHMEM uint8_t analogPinForIndex(uint8_t index) {
     if (index >= BOARD_ANALOG_COUNT) return 0xFF;
-    return pgm_read_byte(&kAnalog[index]);
+    return ANALOG_PIN_AT(index);
 }
 
 FLASHMEM int8_t analogIndexForPin(uint8_t pin) {
     for (uint8_t i = 0; i < BOARD_ANALOG_COUNT; i++) {
-        if (pgm_read_byte(&kAnalog[i]) == pin) return (int8_t)i;
+        if (ANALOG_PIN_AT(i) == pin) return (int8_t)i;
     }
     return -1;
 }
@@ -161,6 +171,8 @@ FLASHMEM const char* boardName() {
     return "UNO";
 #elif defined(ARDUINO_ESP32S3_DEV)
     return "ESP32S3";
+#elif defined(ARDUINO_FEATHER_F405)
+    return "FEATHER_F405";
 #else
     #error "boardName(): add this board's ARDUINO_<BOARD> define (from its PlatformIO board JSON)"
 #endif

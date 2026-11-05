@@ -10,6 +10,7 @@
  * - Teensy 3.6 (MK66FX1M0): 3x I2C, 2x SPI, 2x CAN, 6x Serial (I2C remappable)
  * - ESP32: 2x I2C, 1x SPI, 1x CAN, 2x Serial (fully remappable)
  * - Arduino Mega (ATmega2560): 1x I2C, 1x SPI, 0x CAN, 3x Serial
+ * - Feather STM32F405: 1x I2C, 1x SPI, 1x CAN (bxCAN), 2x Serial
  */
 
 #ifndef BUS_DEFAULTS_H
@@ -357,8 +358,51 @@
 #define SUPPORTS_SERIAL_PIN_REMAP 0
 
 // ============================================================================
+// ADAFRUIT FEATHER STM32F405 EXPRESS (STM32duino variant FEATHER_F405)
+// ============================================================================
+// Pins are the variant's Arduino numbers (variant_FEATHER_F405.cpp), not
+// STM32 port pins. Only the instances the Feather breaks out are listed:
+// I2C2 (D0/D1) and USART1 (SDA/SCL) would take the pins of a listed bus.
+#elif defined(ARDUINO_FEATHER_F405)
+
+// ----- I2C Default Pins -----
+#define DEFAULT_I2C0_SDA 14   // PB7, I2C1 (10k pull-ups + STEMMA QT on board)
+#define DEFAULT_I2C0_SCL 15   // PB6
+
+// ----- SPI Default Pins -----
+// SPI2 on the SCK/MI/MO header. SPI1 (D2-D4, CS D7) is the on-board SPI flash.
+#define DEFAULT_SPI0_MOSI 25  // PB15
+#define DEFAULT_SPI0_MISO 24  // PB14
+#define DEFAULT_SPI0_SCK  23  // PB13
+
+// ----- CAN Default Pins -----
+// bxCAN1 on D9/D10. Needs an external transceiver (e.g. SN65HVD230).
+#define DEFAULT_CAN1_TX 10    // PB9
+#define DEFAULT_CAN1_RX 9     // PB8
+
+// ----- Serial Port Default Pins -----
+// preOBD Serial1 is USART3 (the Feather's RX/TX pins, nRF link); Serial2 is
+// USART6. hal/serial_ports.h maps the port numbers to the core's objects.
+#define DEFAULT_SERIAL1_RX  0  // PB11
+#define DEFAULT_SERIAL1_TX  1  // PB10
+#define DEFAULT_SERIAL2_RX  5  // PC7
+#define DEFAULT_SERIAL2_TX  6  // PC6
+
+// ----- Platform Capabilities -----
+#define NUM_I2C_BUSES 1
+#define NUM_SPI_BUSES 1
+#define NUM_CAN_BUSES 1
+#define NUM_SERIAL_PORTS 2
+#define SUPPORTS_WIRE_PIN_REMAP 0
+#define SUPPORTS_SPI_PIN_REMAP 0
+#define SUPPORTS_CAN_PIN_REMAP 0
+#define SUPPORTS_SERIAL_PIN_REMAP 0
+
+// ============================================================================
 // UNKNOWN PLATFORM
 // ============================================================================
+#elif defined(ARDUINO_ARCH_STM32)
+#error "bus_defaults.h: add this STM32 board's bus pins (it would otherwise get another board's)"
 #else
 
 // ----- Fallback Defaults -----

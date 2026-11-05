@@ -32,6 +32,10 @@ void setupADC() {
     #elif defined(ARDUINO_SAM_DUE)
         // Arduino Due - 3.3V system
         analogReadResolution(ADC_RESOLUTION);
+    #elif defined(ARDUINO_ARCH_STM32)
+        // STM32 - 3.3V system. The core has no averaging; the sample time
+        // is the compile-time ADC_SAMPLINGTIME (boards/<board>/board.ini).
+        analogReadResolution(ADC_RESOLUTION);
     #elif defined(ESP32)
         // ESP32 - 3.3V system
         analogReadResolution(ADC_RESOLUTION);
@@ -49,3 +53,84 @@ void setupADC() {
         #endif
     #endif
 }
+
+#if defined(ARDUINO_ARCH_STM32)
+// ---------------------------------------------------------------------------
+// USB CDC receive (STM32 core 4.30000 / Arduino_Core_STM32 <= 3.0.0)
+//
+// When the core's 192-byte receive queue is full, USBD_CDC_Receive() calls
+// USBD_CDC_ClearBuffer(), which re-arms the OUT endpoint with a zero-length
+// NULL buffer: the host's next packets are ACKed and thrown away instead of
+// NAKed. Anything sent faster than loop() drains it is lost, e.g. a
+// 512-byte JSON IMPORT sent in one write (bench, #100). Upstream fix:
+// stm32duino/Arduino_Core_STM32 PR #3058 (merged 2026-09-21, for 3.0.1),
+// which removes the call. Until the PlatformIO package carries it, board.ini
+// links USBD_CDC_ClearBuffer to this no-op (-Wl,--wrap), which leaves the
+// endpoint unarmed, so the host is NAKed and waits.
+//
+// The core then re-arms only from USBSerial::read(), and the maintainer notes
+// on that PR that the full-queue case still needs a fix, so loop() also
+// re-arms here: a no-op unless reception is parked and the queue has room.
+#if defined(USBD_USE_CDC)
+extern "C" bool CDC_resume_receive(void);
+extern "C" uint8_t __wrap_USBD_CDC_ClearBuffer(void* /*pdev*/) { return 0; /* USBD_OK */ }
+#endif
+
+void platformLoopService() {
+#if defined(USBD_USE_CDC)
+    CDC_resume_receive();
+#endif
+}
+
+int platformAnalogRead(uint8_t pin) {
+    for (uint8_t i = 0; i < NUM_ANALOG_INPUTS; i++) {
+        if (analogInputPin[i] == pin) return analogRead(PNUM_ANALOG_BASE + i);
+    }
+    return 0;   // not an analog pin
+}
+#endif
+
+#if defined(ARDUINO_ARCH_STM32) && defined(STM32F4xx)
+// ---------------------------------------------------------------------------
+// Reboot into the ROM DFU bootloader
+//
+// Jumping straight to the ROM from a running sketch is unreliable: the ROM
+// expects the reset clock tree (HSI), no live interrupts and a clean USB
+// peripheral. So platformRebootToBootloader() only leaves a flag in a backup
+// register (which survives a reset, unlike RAM, which startup zeroes) and
+// resets. The next boot finds the flag in .preinit_array, which runs before
+// any constructor, the core's premain() and so its clock setup included, and
+// jumps from there, with the chip still in its reset state.
+
+// RTC backup register 19, the last one: RTC alarms/calibration don't use it.
+static constexpr uint32_t BOOTLOADER_MAGIC = 0xDF00B007UL;
+static constexpr uint32_t SYSTEM_MEMORY = 0x1FFF0000UL;   // F405/F407 ROM bootloader
+
+void platformRebootToBootloader() {
+    __HAL_RCC_PWR_CLK_ENABLE();
+    HAL_PWR_EnableBkUpAccess();
+    RTC->BKP19R = BOOTLOADER_MAGIC;
+    delay(100);   // let the CLI reply drain over USB
+    NVIC_SystemReset();
+}
+
+static void bootloaderJumpCheck() {
+    __HAL_RCC_PWR_CLK_ENABLE();
+    if (RTC->BKP19R != BOOTLOADER_MAGIC) return;
+    HAL_PWR_EnableBkUpAccess();
+    RTC->BKP19R = 0;   // once only: the next reset boots the firmware again
+
+    // Map system memory at address 0, as BOOT0 would, then start the ROM
+    // with its own stack pointer and reset vector.
+    __HAL_RCC_SYSCFG_CLK_ENABLE();
+    __HAL_SYSCFG_REMAPMEMORY_SYSTEMFLASH();
+    const uint32_t sp = *(volatile uint32_t*)SYSTEM_MEMORY;
+    const uint32_t pc = *(volatile uint32_t*)(SYSTEM_MEMORY + 4);
+    __set_MSP(sp);
+    ((void (*)(void))pc)();
+    while (1) {}
+}
+
+__attribute__((section(".preinit_array"), used))
+static void (*const s_bootloaderJumpCheck)(void) = bootloaderJumpCheck;
+#endif

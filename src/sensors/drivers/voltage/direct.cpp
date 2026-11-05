@@ -22,7 +22,7 @@
  * @note Returns NAN if reading is below threshold (sensor disconnected)
  */
 void readVoltageDirect(Input *ptr) {
-    int reading = analogRead(ptr->pin);
+    int reading = platformAnalogRead(ptr->pin);
 
     if (reading < 10) {
         ptr->value = NAN;

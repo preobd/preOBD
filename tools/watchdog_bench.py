@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Watchdog bench checks for Teensy 4.x (#543).
+Watchdog bench checks for Teensy 4.x (#543) and STM32 (Feather F405, #100).
 
 Two jobs, both over USB serial:
 
@@ -132,6 +132,13 @@ def stall(port, ms, scope_ms, config=False):
     return "error", "no reply and no reset"
 
 
+def timed_out(detail):
+    """A real watchdog timeout in the board's own terms: Teensy 4 WDOG1 reads
+    WRSR 0x2 (TOUT; a software reboot reads 0x1); STM32 reports WATCHDOG from
+    the IWDG reset flag, shown with its raw RCC_CSR."""
+    return "WRSR 0x2" in detail or ("RCC_CSR" in detail and "WATCHDOG" in detail)
+
+
 def cmd_stall(port):
     steps = [
         (1500, 0, False, "survived", None),
@@ -144,7 +151,7 @@ def cmd_stall(port):
     failures = 0
     for ms, scope_ms, config, want, detail_has in steps:
         got, detail = stall(port, ms, scope_ms, config)
-        ok = got == want and (detail_has is None or detail_has in detail)
+        ok = got == want and (detail_has is None or timed_out(detail))
         failures += not ok
         label = f"{'CONFIG ' if config else ''}STALL {ms}{f' SCOPE {scope_ms}' if scope_ms else ''}"
         print(f"{'PASS' if ok else 'FAIL'}  {label:24} want {want:8} got {got}: {detail}", flush=True)

@@ -16,6 +16,7 @@
 #include "../version.h"
 #include "../core/system_mode.h"
 #include "../core/reset_reason.h"
+#include "../core/ram_stats.h"
 #include "../storage/system_config.h"
 #include "../storage/json_config.h"
 #include "../core/message_router.h"
@@ -86,6 +87,8 @@ void platformReboot() {
         while(1) {}
     #elif defined(ESP32)
         ESP.restart();
+    #elif defined(ARDUINO_ARCH_STM32)
+        NVIC_SystemReset();
     #else
         msg.control.println(F("ERROR: Reboot not supported on this platform"));
     #endif
@@ -322,6 +325,10 @@ int cmd_version(int argc, const char* const* argv) {
     msg.control.println(FW_GIT_HASH);
     msg.control.print(F("  "));
     printResetReason(msg.control, true);
+#if defined(ARDUINO_ARCH_STM32)
+    msg.control.print(F("  "));
+    ramStatsPrint(msg.control);
+#endif
     msg.control.print(F("  EEPROM Version: "));
     msg.control.println(EEPROM_VERSION);
     msg.control.print(F("  System Config Version: "));
@@ -350,25 +357,30 @@ int cmd_run(int argc, const char* const* argv) {
 
 // Persist the whole RAM config to EEPROM. Shared by `SAVE` / `SAVE EEPROM`
 // and the one-shot `CLEAR <pin> SAVE` (#320) so they can't drift apart.
-static void saveConfigToEeprom() {
+// Returns false if a flash-backed store failed to write; the batch has
+// already printed why.
+static bool saveConfigToEeprom() {
     msg.control.println(F("Saving configuration to EEPROM..."));
-    saveInputConfig();
-    saveSystemConfig();
+    {
+        EepromBatch batch;   // one flash write for both, on flash-backed stores
+        saveInputConfig();
+        saveSystemConfig();
+    }
     obdQuery_buildLookupTable();  // Rebuild PID table — inputs may have changed
+    if (eepromCommitFailed()) return false;
     msg.control.println(F("Configuration saved"));
+    return true;
 }
 
 int cmd_save(int argc, const char* const* argv) {
     // Case 1: SAVE (bare) → EEPROM (backward compatible)
     if (argc == 1) {
-        saveConfigToEeprom();
-        return 0;
+        return saveConfigToEeprom() ? 0 : 1;
     }
 
     // Case 2: SAVE EEPROM (explicit)
     if (argc == 2 && streq_P(argv[1], PSTR("EEPROM"))) {
-        saveConfigToEeprom();
-        return 0;
+        return saveConfigToEeprom() ? 0 : 1;
     }
 
     // Case 3: SAVE [destination:]filename (file path - anything that's not "EEPROM")
@@ -590,10 +602,9 @@ int cmd_clear(int argc, const char* const* argv) {
         msg.control.println(argv[1]);
         msg.control.println(F("Using preset calibration from sensor library"));
         if (save) {
-            saveConfigToEeprom();
-        } else {
-            printSaveReminder();
+            return saveConfigToEeprom() ? 0 : 1;
         }
+        printSaveReminder();
         return 0;
     }
 
@@ -624,10 +635,9 @@ int cmd_clear(int argc, const char* const* argv) {
 #endif
 
     if (save) {
-        saveConfigToEeprom();
-    } else {
-        printSaveReminder();
+        return saveConfigToEeprom() ? 0 : 1;
     }
+    printSaveReminder();
     return 0;
 }
 
@@ -1164,7 +1174,7 @@ int cmd_test(int argc, const char* const* argv) {
 #if INCLUDE_ALARMS && defined(BUZZER_PIN)
         any = true;
         msg.control.println(F("Buzzer -> chirp"));
-        tone(BUZZER_PIN, 700); watchdogReset(); delay(250); noTone(BUZZER_PIN);
+        tone(BUZZER_PIN, 700); watchdogReset(); delay(250); platformNoTone(BUZZER_PIN);
 #endif
 #if INCLUDE_RULES_ENGINE
         for (int i = 0; i < MAX_ACTIONS; i++) {

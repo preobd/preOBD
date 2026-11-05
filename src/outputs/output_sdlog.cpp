@@ -28,8 +28,7 @@
 
 #if INCLUDE_SD_LOGGING
 
-// Use Arduino SD library for consistency across platforms
-#include <SD.h>
+#include "../storage/sd_fs.h"   // SD library for this platform (STM32: SDIO)
 #include "../storage/sd_manager.h"
 #include "../storage/system_config.h"
 #include "../core/watchdog.h"
@@ -353,8 +352,8 @@ static void writeRow(uint32_t now) {
 static void maybeFlush(uint32_t now) {
     if (logFile && (now - lastFlushMs >= SDLOG_FLUSH_INTERVAL_MS)) {
         WatchdogScope window(SD_WDT_WINDOW_MS, SD_WDT_TAG);   // flush() blocks for seconds on a bad card
-        logFile.flush();
         lastFlushMs = now;
+        if (!sdFlush(logFile)) handleWriteError();
     }
 }
 
@@ -474,7 +473,7 @@ void updateSDLog() {
 
     writeRow(now);
 
-    if (logFile.getWriteError()) {
+    if (sdWriteFailed(logFile)) {
         handleWriteError();
         return;
     }

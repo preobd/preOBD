@@ -12,8 +12,8 @@ diagnostics.
 preOBD reads the temperature, pressure, voltage, RPM and speed senders a classic
 car already has — or new ones you fit — and makes the readings available on a
 dash LCD, in OBD-II phone apps, in RealDash, and in SD-card logs. It can sound
-alarms and switch relays for fans and pumps. It runs on a Teensy, ESP32-S3 or
-Arduino Mega and is configured by typing commands over USB.
+alarms and switch relays for fans and pumps. It runs on a Teensy, ESP32-S3,
+Feather STM32F405 or Arduino Mega and is configured by typing commands over USB.
 
 **What it does:**
 - Reads temperature (thermocouples, VDO/Smiths/Stewart-Warner/AC Delco/Bosch/Jeep senders, NTC thermistors, 0.5–4.5V sensors)
@@ -63,6 +63,7 @@ Type `HELP` on the device for the full command list.
 | **Teensy 4.1** | Recommended — every feature, built-in SD slot, 3 native CAN buses |
 | Teensy 4.0 / 3.6 | Every feature; native CAN |
 | ESP32-S3 | Every feature; native CAN (TWAI) |
+| Feather STM32F405 | Every feature; native CAN (bxCAN), built-in SD slot |
 | Arduino Mega 2560 | 5V; up to 8 inputs; no SD logging, RealDash, Bluetooth OBD or CLI history (8 KB RAM) |
 
 See [Choosing Hardware](docs/getting-started/CHOOSING_HARDWARE.md) for the full comparison.

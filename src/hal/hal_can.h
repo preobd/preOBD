@@ -39,6 +39,10 @@
     // ESP32 with native TWAI
     #include "platforms/can_twai.h"
 
+#elif defined(ARDUINO_ARCH_STM32) && defined(STM32F4xx)
+    // STM32F4 with native bxCAN
+    #include "platforms/can_bxcan.h"
+
 #else
     // All other platforms: MCP2515 via SPI
     #include "platforms/can_mcp2515.h"

@@ -27,7 +27,7 @@
  * Formula: V = ADC * (AREF / ADC_MAX) * divider_ratio * correction + offset
  */
 void readVoltageDivider(Input *ptr) {
-    int reading = analogRead(ptr->pin);
+    int reading = platformAnalogRead(ptr->pin);
 
     if (reading < 10) {
         ptr->value = NAN;

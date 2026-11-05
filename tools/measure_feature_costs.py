@@ -23,8 +23,9 @@ import argparse, os, re, shutil, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Per-env profile + the knobs worth measuring. Only mega2560 is curated today
-# (the one platform where the 8 KB RAM budget makes costs decision-relevant).
+# Per-env profile + the knobs worth measuring. mega2560 is where the 8 KB RAM
+# budget makes costs decision-relevant; feather_f405 is the v1 PCB candidate
+# MCU, measured for the preOBD-hardware RAM gate (#100).
 ENVS = {
     "mega2560": {
         # The board definition holds the SUPPORTS_* capability flags + sizing
@@ -59,6 +60,20 @@ ENVS = {
             ("MAX_PID_ENTRIES 8->16",    "MAX_PID_ENTRIES", "16"),
             ("MAX_PIN_REGISTRY 24->16",  "MAX_PIN_REGISTRY", "16"),
             ("CAN_CACHE_SIZE 8->16",     "CAN_CACHE_SIZE", "16"),
+        ],
+    },
+    "feather_f405": {
+        # Every capability is declared on this board, so there is nothing to
+        # enable; the interesting numbers are what each one costs.
+        "profile": "boards/feather_f405/board.h",
+        "size_tool": "~/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-size",
+        "ram_total": 131072,
+        "enable": {},
+        "struct": [
+            ("MAX_INPUTS 40->20",               "MAX_INPUTS", "20"),
+            ("JSON_IMPORT_MAX_BYTES 16384->8192", "JSON_IMPORT_MAX_BYTES", "8192"),
+            ("MAX_PID_ENTRIES 64->32",          "MAX_PID_ENTRIES", "32"),
+            ("CAN_CACHE_SIZE 16->32",           "CAN_CACHE_SIZE", "32"),
         ],
     },
 }

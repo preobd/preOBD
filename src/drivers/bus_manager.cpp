@@ -325,6 +325,15 @@ bool initSPIBus(uint8_t bus_id, uint32_t clock_hz) {
 #else
     // Generic Arduino: Single SPI bus
     if (bus_id == 0) {
+#if defined(ARDUINO_ARCH_STM32)
+        // STM32 core 3.0.0: begin() skips spi_init() when its settings equal the
+        // cached default (4 MHz, MODE0), so the peripheral is never clocked and
+        // the first transfer() spins forever -- a MAX31855 read hung until the
+        // watchdog fired (#100). Configuring another speed first makes begin()'s
+        // settings a change. Upstream: stm32duino #3052, fixed by PR #3049 after
+        // 3.0.0; scripts/stm32_core_workarounds.py says when this can go.
+        SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+#endif
         SPI.begin();
         active_spi = &SPI;
         success = true;

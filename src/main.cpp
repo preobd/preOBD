@@ -15,6 +15,7 @@
 #include "core/platform.h"
 #include "core/watchdog.h"
 #include "core/reset_reason.h"
+#include "core/ram_stats.h"
 
 #include "sensors/calibration_types.h"
 #include "sensors/sensor_library.h"
@@ -22,7 +23,7 @@
 #include "drivers/bus_manager.h"
 #include "storage/bus_needs.h"
 #include "pinctrl/pin_owner.h"
-#include "drivers/serial_manager.h"
+#include "drivers/serial_manager.h"   // also HW_SERIAL<n>: port number -> core UART object
 #include "pinctrl/pin_registry.h"
 #include "storage/sd_manager.h"
 #include "inputs/input.h"
@@ -81,41 +82,41 @@ SerialTransport usbSerial(&Serial, "USB", 115200);
 // Phase 3 software flow control (HOST_NRF_CTS_PIN) wraps both modes.
 #if INCLUDE_FRAMED_TRANSPORT
 #  if defined(HOST_NRF_CTS_PIN)
-MuxTransport hwSerial1(&Serial1, "SERIAL1", 115200, HOST_NRF_CTS_PIN);
+MuxTransport hwSerial1(&HW_SERIAL1, "SERIAL1", 115200, HOST_NRF_CTS_PIN);
 #  else
-MuxTransport hwSerial1(&Serial1, "SERIAL1", 115200);
+MuxTransport hwSerial1(&HW_SERIAL1, "SERIAL1", 115200);
 #  endif
 #else
 // No nRF coprocessor on this build — Serial1 is a plain transparent transport
 // (byte-for-byte equivalent to MuxTransport's transparent mode), saving the
 // ~1.6 KB of framed RX/TX/decoder buffers. See profile INCLUDE_FRAMED_TRANSPORT.
 #  if defined(HOST_NRF_CTS_PIN)
-SerialTransport hwSerial1(&Serial1, "SERIAL1", 115200, HOST_NRF_CTS_PIN);
+SerialTransport hwSerial1(&HW_SERIAL1, "SERIAL1", 115200, HOST_NRF_CTS_PIN);
 #  else
-SerialTransport hwSerial1(&Serial1, "SERIAL1", 115200);
+SerialTransport hwSerial1(&HW_SERIAL1, "SERIAL1", 115200);
 #  endif
 #endif
 #endif
 #if NUM_SERIAL_PORTS >= 2
-SerialTransport hwSerial2(&Serial2, "SERIAL2", 115200);
+SerialTransport hwSerial2(&HW_SERIAL2, "SERIAL2", 115200);
 #endif
 #if NUM_SERIAL_PORTS >= 3
-SerialTransport hwSerial3(&Serial3, "SERIAL3", 115200);
+SerialTransport hwSerial3(&HW_SERIAL3, "SERIAL3", 115200);
 #endif
 #if NUM_SERIAL_PORTS >= 4
-SerialTransport hwSerial4(&Serial4, "SERIAL4", 115200);
+SerialTransport hwSerial4(&HW_SERIAL4, "SERIAL4", 115200);
 #endif
 #if NUM_SERIAL_PORTS >= 5
-SerialTransport hwSerial5(&Serial5, "SERIAL5", 115200);
+SerialTransport hwSerial5(&HW_SERIAL5, "SERIAL5", 115200);
 #endif
 #if NUM_SERIAL_PORTS >= 6
-SerialTransport hwSerial6(&Serial6, "SERIAL6", 115200);
+SerialTransport hwSerial6(&HW_SERIAL6, "SERIAL6", 115200);
 #endif
 #if NUM_SERIAL_PORTS >= 7
-SerialTransport hwSerial7(&Serial7, "SERIAL7", 115200);
+SerialTransport hwSerial7(&HW_SERIAL7, "SERIAL7", 115200);
 #endif
 #if NUM_SERIAL_PORTS >= 8
-SerialTransport hwSerial8(&Serial8, "SERIAL8", 115200);
+SerialTransport hwSerial8(&HW_SERIAL8, "SERIAL8", 115200);
 #endif
 
 #ifdef ESP32
@@ -286,6 +287,7 @@ void setup() {
     // Snapshot why we reset before anything can clear or overwrite the
     // hardware reset-cause registers (#454).
     resetReasonCapture();
+    ramStatsPaint();   // RAM high-water marks, reported by VERSION (STM32)
 
     // Initialize serial for debugging
     Serial.begin(115200);
@@ -369,6 +371,8 @@ void setup() {
 #  elif defined(ESP32)
         Serial1.setRxBufferSize(1024);
 #  endif
+        // STM32: no runtime API. SERIAL_RX_BUFFER_SIZE is a -D in board.ini
+        // and applies to every UART the core instantiates.
     }
 #endif
 
@@ -694,6 +698,8 @@ void loop() {
 
     // Reset watchdog at start of every loop iteration
     watchdogReset();
+
+    platformLoopService();   // per-loop core workarounds (STM32 USB receive)
 
 #if SUPPORTS_JSON_IMPORT_STREAM
     // Unconditional every tick — a JSON IMPORT abandoned mid-paste (or an

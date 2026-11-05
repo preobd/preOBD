@@ -338,6 +338,13 @@ static int system_interval(int argc, const char* const* argv, int /*tokenIndex*/
 
 // SYSTEM REBOOT subcommand handler
 static int system_reboot(int argc, const char* const* argv, int /*tokenIndex*/) {
+#if PLATFORM_HAS_BOOTLOADER_REBOOT
+    if (argc == 3 && streq_P(argv[2], PSTR("BOOTLOADER"))) {
+        msg.control.println(F("Rebooting into the USB DFU bootloader..."));
+        platformRebootToBootloader();
+        return 0;
+    }
+#endif
     msg.control.println(F("Rebooting system..."));
     platformReboot();
     return 0;
@@ -360,9 +367,19 @@ static int system_reset(int argc, const char* const* argv, int /*tokenIndex*/) {
     if (full || configOnly) {
         msg.control.println(full ? F("Factory reset: Erasing all configuration...")
                                  : F("Erasing configuration (hardware setup kept)..."));
-        resetInputConfig();
-        resetSystemConfig(configOnly ? (RESET_KEEP_LINK | RESET_KEEP_HARDWARE) : RESET_KEEP_LINK);
-        saveSystemConfig();
+        {
+            EepromBatch batch;   // one flash erase for both, on flash-backed stores
+            resetInputConfig();
+            resetSystemConfig(configOnly ? (RESET_KEEP_LINK | RESET_KEEP_HARDWARE) : RESET_KEEP_LINK);
+            saveSystemConfig();
+        }
+        if (eepromCommitFailed()) {
+            // The previous configuration is still in flash; rebooting would
+            // bring it back, so stay up and say so.
+            msg.control.println(F("ERROR: reset NOT saved; the stored configuration is unchanged"));
+            msg.control.println(F("  Not rebooting. Retry, or SYSTEM REBOOT to return to the stored configuration"));
+            return 1;
+        }
         msg.control.println(F("Configuration reset complete"));
         msg.control.println(full ? F("Serial port settings kept (BUS SERIAL shows them)")
                                  : F("Serial ports, buses and display kept"));
@@ -693,8 +710,8 @@ static FLASHMEM void diagProbe(Input* in, InputProbe* p) {
     const int cautHi = (int)(ADC_MAX_VALUE * 0.93f);
 
     if (p->cls == DC_RESISTIVE || p->cls == DC_VOLTAGE) {
-        analogRead(in->pin);                 // discard: mux settling
-        p->rawAdc = analogRead(in->pin);
+        platformAnalogRead(in->pin);                 // discard: mux settling
+        p->rawAdc = platformAnalogRead(in->pin);
         p->pctFS = 100.0f * p->rawAdc / (float)ADC_MAX_VALUE;
         p->nearRailLo = p->rawAdc <= railLo;
         p->nearRailHi = p->rawAdc >= railHi;
@@ -1015,13 +1032,13 @@ static FLASHMEM Input* diagInputOnPin(uint8_t pin) {
 // sequential-mux ghosting (a floating high-Z pin can otherwise hold a
 // neighbour's charge and masquerade as driven).
 static FLASHMEM PinDiscovery diagSamplePin(uint8_t pin, int& last, int& jitter) {
-    analogRead(pin);
+    platformAnalogRead(pin);
     delayMicroseconds(20);
-    analogRead(pin);
+    platformAnalogRead(pin);
     int rawMin = (int)ADC_MAX_VALUE + 1, rawMax = -1;
     last = 0;
     for (uint8_t s = 0; s < 8; s++) {
-        int r = analogRead(pin);
+        int r = platformAnalogRead(pin);
         last = r;
         if (r < rawMin) rawMin = r;
         if (r > rawMax) rawMax = r;
@@ -1329,7 +1346,11 @@ static const char PSTR_HELP_SYS_INTERVAL[] PROGMEM =
     "  SYSTEM INTERVAL SENSOR <ms>   Sensor read interval\n"
     "  SYSTEM INTERVAL ALARM <ms>    Alarm check interval";
 static const char PSTR_HELP_SYS_REBOOT[] PROGMEM =
-    "  SYSTEM REBOOT                 Restart the device";
+    "  SYSTEM REBOOT                 Restart the device"
+#if PLATFORM_HAS_BOOTLOADER_REBOOT
+    "\n  SYSTEM REBOOT BOOTLOADER      Restart into the USB DFU bootloader (firmware upload)"
+#endif
+    ;
 static const char PSTR_HELP_SYS_RESET[] PROGMEM =
     "  SYSTEM RESET CONFIRM          Factory reset (erase config + reboot)\n"
     "  SYSTEM RESET CONFIG CONFIRM   Erase config, keep buses/serial/display";

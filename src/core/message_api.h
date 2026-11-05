@@ -35,6 +35,9 @@
 #include "log_tags.h"
 #include <Arduino.h>
 #include <stdarg.h>  // For variadic functions
+#if defined(ARDUINO_ARCH_STM32)
+#include <api/itoa.h>  // ltoa/ultoa: declared by the core but not pulled in by Arduino.h
+#endif
 
 // Print stream wrapper that routes to a specific message plane.
 // Inherits from Print so MessageStream can be passed as Print& to ArduinoJson

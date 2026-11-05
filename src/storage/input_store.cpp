@@ -13,7 +13,7 @@
  * EEPROM_VERSION, same validation, same truncation policy.
  */
 
-#include <EEPROM.h>
+#include "eeprom_store.h"
 #include <string.h>
 #include "../config.h"
 #include "../version.h"
@@ -279,6 +279,7 @@ FLASHMEM bool saveInputConfig() {
     // runs in CONFIG now (#541): one scope for the save, plus a feed per record
     // below, so a growing config can't creep up on the AVR's 8 s ceiling.
     WatchdogScope wd(EEPROM_WDT_WINDOW_MS, "EEPROM");
+    EepromBatch batch;   // flash-backed stores write here (eeprom_store.h)
     const size_t budget = (size_t)SYSTEM_CONFIG_ADDRESS - EEPROM_HEADER_SIZE;
 
     // What we WANT to persist in each section.
@@ -658,7 +659,10 @@ FLASHMEM bool loadInputConfig() {
 FLASHMEM void resetInputConfig() {
     // Clear the store header (magic zeroed → next load reverts to blank config).
     ConfigStoreHeader header = {};
-    EEPROM.put(0, header);
+    {
+        EepromBatch batch;
+        EEPROM.put(0, header);
+    }
 
     // Clear inputs
     memset(inputs, 0, sizeof(inputs));

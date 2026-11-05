@@ -116,9 +116,9 @@ int readAnalogPin(int pin, bool* isValid) {
     // settling and sample-and-hold capacitor charging. Read twice, keep second.
     // Note: 10ms delay between reads improves stability but is currently disabled
     // to minimize loop time. Uncomment if experiencing noisy readings.
-    analogRead(pin);              // Discard first reading (multiplexer settling)
+    platformAnalogRead(pin);              // Discard first reading (multiplexer settling)
     //delay(10);                  // Optional: Allow ADC input to stabilize
-    int reading = analogRead(pin); // Actual measurement
+    int reading = platformAnalogRead(pin); // Actual measurement
 
     // Check if reading is within valid range (not stuck at rails)
     *isValid = (reading < (ADC_MAX_VALUE - ADC_RAIL_MARGIN) && reading > ADC_RAIL_MARGIN);

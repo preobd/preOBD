@@ -6,7 +6,8 @@
  * - Non-blocking effects (solid, blink, pulse/breathing)
  * - Priority system (alarms override mode indication)
  * - Common cathode/anode support
- * - Platform-specific PWM (Teensy, ESP32, Arduino)
+ * - Platform-specific PWM (Teensy, ESP32, Arduino), or one addressable
+ *   WS2812 / NeoPixel on boards that have one fitted (RGB_NEOPIXEL_PIN)
  */
 
 #ifndef RGB_LED_H
@@ -61,7 +62,15 @@
 
 #define RGB_BLINK_PERIOD_MS 500     // Standard blink: 1Hz (500ms on, 500ms off)
 #define RGB_FAST_BLINK_MS   200     // Fast blink: 2.5Hz (urgent alarms)
+#ifndef RGB_PULSE_PERIOD_MS               // per unit: -D RGB_PULSE_PERIOD_MS=<ms> in wiring.ini
 #define RGB_PULSE_PERIOD_MS 2000    // Breathing cycle: 0.5Hz
+#endif
+
+// Peak brightness (0-255) of an on-board NeoPixel. Full power is too bright to
+// look at on a bench and a dash; the colors above are scaled down to this.
+#ifndef RGB_NEOPIXEL_BRIGHTNESS
+#define RGB_NEOPIXEL_BRIGHTNESS 8
+#endif
 
 // ============================================================================
 // RGB COLOR STRUCTURE

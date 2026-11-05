@@ -10,7 +10,7 @@
  * its own reset. printResetReason() renders the snapshot as one line for the
  * boot (abnormal resets only), VERSION and SYSTEM STATUS.
  *
- * Reported on Teensy 4.x, Teensy 3.x and ESP32. AVR prints "unknown": the
+ * Reported on Teensy 4.x, Teensy 3.x, ESP32 and STM32F4. AVR prints "unknown": the
  * Mega's bootloader clears MCUSR before the sketch can read it.
  */
 

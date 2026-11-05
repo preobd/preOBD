@@ -20,6 +20,7 @@
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
 #include "../core/system_mode.h"
+#include "../core/platform.h"       // platformNoTone()
 #include "../rules/rules_manager.h"   // annunciator: fold Rule severity into the rollup
 #include "../storage/system_config.h" // alarmSilence policy byte (#433)
 
@@ -94,7 +95,7 @@ uint8_t alarmAcknowledge() {
 void initAlarmOutput() {
 #if INCLUDE_ALARMS && defined(BUZZER_PIN)
     pinMode(BUZZER_PIN, OUTPUT);
-    noTone(BUZZER_PIN);
+    platformNoTone(BUZZER_PIN);
 #endif
 
 #if INCLUDE_LED
@@ -214,7 +215,7 @@ void updateAlarmOutput() {
     if (unackedSeverity == SEVERITY_ALARM && !isInConfigMode()) {
         tone(BUZZER_PIN, 700);
     } else {
-        noTone(BUZZER_PIN);
+        platformNoTone(BUZZER_PIN);
     }
 #endif
 }

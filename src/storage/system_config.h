@@ -9,7 +9,7 @@
 #define SYSTEM_CONFIG_H
 
 #include <Arduino.h>
-#include <EEPROM.h>
+#include "eeprom_store.h"   // EEPROM: the core library, or a flash-backed image on STM32
 #include <stddef.h>   // offsetof, for the layout static_asserts below
 #include "bus_config.h"
 

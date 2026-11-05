@@ -22,6 +22,7 @@
 #include <Arduino.h>
 #include "../storage/bus_config.h"
 #include "../hal/bus_defaults.h"
+#include "../hal/serial_ports.h"   // HW_SERIAL<n>: port number -> the core's UART object
 
 // ============================================================================
 // BAUD RATE LOOKUP

@@ -45,7 +45,7 @@
     #define PLATFORM_NEEDS_SPI_CAN 0
     // ESP32 has 1 native TWAI bus (NUM_CAN_BUSES defined in bus_defaults.h)
 
-// Detect STM32 bxCAN (future support)
+// Detect STM32 bxCAN (driver: STM32F4, hal/platforms/can_bxcan.cpp)
 #elif defined(STM32F4xx) || defined(STM32F1xx)
 
     #define PLATFORM_CAN_CONTROLLER "bxCAN"

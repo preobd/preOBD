@@ -47,8 +47,9 @@
 
 // ---- WIRED peripherals: in the image iff their pin(s)/bus are declared ----
 
-// RGB status LED — active when all three channels are wired.
-#if defined(RGB_PIN_R) && defined(RGB_PIN_G) && defined(RGB_PIN_B)
+// RGB status LED — active when all three channels are wired, or when the
+// board has a single addressable pixel (RGB_NEOPIXEL_PIN, board.h).
+#if (defined(RGB_PIN_R) && defined(RGB_PIN_G) && defined(RGB_PIN_B)) || defined(RGB_NEOPIXEL_PIN)
 #  ifndef INCLUDE_LED
 #    define INCLUDE_LED 1
 #  endif
@@ -177,8 +178,11 @@
 #if INCLUDE_SD_LOGGING && defined(PLATFORM_NO_SD_LOGGING)
 #  error "INCLUDE_SD_LOGGING on a board that vetoes SD (PLATFORM_NO_SD_LOGGING)."
 #endif
-#if INCLUDE_LED && !(defined(RGB_PIN_R) && defined(RGB_PIN_G) && defined(RGB_PIN_B))
+#if INCLUDE_LED && !(defined(RGB_PIN_R) && defined(RGB_PIN_G) && defined(RGB_PIN_B)) && !defined(RGB_NEOPIXEL_PIN)
 #  error "INCLUDE_LED set without all of RGB_PIN_R/G/B — define them in boards/<board>/wiring.ini."
+#endif
+#if defined(RGB_NEOPIXEL_PIN) && (defined(RGB_PIN_R) || defined(RGB_PIN_G) || defined(RGB_PIN_B))
+#  error "RGB_PIN_R/G/B wired on a board with an on-board NeoPixel (RGB_NEOPIXEL_PIN): the status LED drives one or the other. Drop the RGB_PIN_* lines from wiring.ini."
 #endif
 #if SUPPORTS_SD && !defined(SD_PIN)
 #  error "SUPPORTS_SD without SD_PIN."

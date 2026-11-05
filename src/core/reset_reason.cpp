@@ -53,6 +53,11 @@ const char* const RR_LABELS[RR_COUNT] PROGMEM = {
 
 uint8_t s_reason = RR_UNKNOWN;
 
+#if defined(ARDUINO_ARCH_STM32)
+// Raw RCC_CSR for the VERSION detail: a reset can set several flags.
+uint32_t s_csr = 0;
+#endif
+
 #if defined(__IMXRT1062__)
 // Where the previous run was when the watchdog reset it (#542). Teensy 4
 // only for now: elsewhere the trace is a no-op, so keep its RAM off AVR.
@@ -166,6 +171,21 @@ FLASHMEM void resetReasonCapture() {
     else if (srs0 & RCM_SRS0_WAKEUP)                 s_reason = RR_WAKEUP;
     else if (srs0 & RCM_SRS0_PIN)                    s_reason = RR_POWER_ON;
 
+#elif defined(ARDUINO_ARCH_STM32) && defined(STM32F4xx)
+    // RCC_CSR flags accumulate until RMVF clears them. A power-on also sets
+    // PIN and BOR, so POR is tested before both; a reset-button press or a
+    // DFU upload reads PIN alone. A fault spins in the core's handler until
+    // the IWDG fires, so it reads as WATCHDOG.
+    const uint32_t csr = RCC->CSR;
+    s_csr = csr;
+    if (csr & (RCC_CSR_IWDGRSTF | RCC_CSR_WWDGRSTF))  s_reason = RR_WATCHDOG;
+    else if (csr & RCC_CSR_LPWRRSTF)                 s_reason = RR_WAKEUP;
+    else if (csr & RCC_CSR_SFTRSTF)                  s_reason = RR_SOFTWARE;
+    else if (csr & RCC_CSR_PORRSTF)                  s_reason = RR_POWER_ON;
+    else if (csr & RCC_CSR_BORRSTF)                  s_reason = RR_BROWNOUT;
+    else if (csr & RCC_CSR_PINRSTF)                  s_reason = RR_POWER_ON;
+    RCC->CSR |= RCC_CSR_RMVF;
+
 #elif defined(ESP32)
     switch (esp_reset_reason()) {
         case ESP_RST_POWERON:
@@ -238,6 +258,13 @@ FLASHMEM void printResetReason(Print& out, bool detail) {
             out.print(F(" CFSR 0x"));
             out.print(s_faultCfsr, HEX);
         }
+    }
+#endif
+#if defined(ARDUINO_ARCH_STM32)
+    if (detail) {
+        out.print(F(" (RCC_CSR 0x"));
+        out.print(s_csr, HEX);
+        out.print(')');
     }
 #endif
     out.println();

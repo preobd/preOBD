@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- New board: Adafruit Feather STM32F405 Express (`feather_f405`), with every feature: native CAN (bxCAN), the built-in microSD slot, the on-board NeoPixel as status LED, the nRF52840 Bluetooth link, and uploads over USB without a jumper after the first (#100)
 - `SYSTEM RESET CONFIG CONFIRM` erases the configuration but keeps the hardware setup (I2C/SPI/CAN buses, serial ports, display), so sensors and the LCD keep working when you start over (#551)
 - CAN import reads OBD-II PIDs whose reply is longer than one CAN frame: boost (0x70), exhaust gas temperature (0x78, 0x79) and total engine run time (0x7F). In `ENABLE` preOBD asks the ECU for the rest of the reply; in `LISTEN` it reads them while another tool requests them (#527)
 - CAN import can pick any sensor of a PID that carries several (EGT sensors 2–4, boost and MAF sensor B, coolant sensor 2, idle and PTO run time) from the CLI and the webapp, without a JSON import; a sensor the ECU reports as not fitted reads as no value instead of a false reading (#535)
@@ -23,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The watchdog now keeps running in CONFIG mode on every board, relaxed to 8 s, instead of being switched off on boards that allow it; it only restarts a board whose firmware has frozen, never an idle one, and every board now behaves the same (#541)
 
 ### Fixed
+- The RGB status LED's alarm and warning blinks now blink; they showed as solid on every board (#100)
 - HALL_SPEED no longer reads low above 2 kHz (38.6 km/h with the default calibration): it ignored any pulse within 500 µs of the last one and silently reported a half or a third of the real speed. Noise rejection now follows the calibration's `max_speed_kph`, and a speed above it reads as no value (#577)
 - BME280 elevation now uses the sea-level pressure set with `SYSTEM SEA_LEVEL`; it always used 1013.25 hPa. `SYSTEM SEA_LEVEL` and `JSON IMPORT` refuse a value outside 850–1100 hPa (a typo such as `SYSTEM SEA_LEVEL abc` used to store 0) (#574)
 - `JSON IMPORT` (and `LOAD SD:`) refuses a file that uses pins this board doesn't have, or whose analog inputs (`A14`) are on a different pin here, and names each one, instead of importing it; a file from another board type that fits is imported with a note naming both boards (#567)

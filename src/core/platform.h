@@ -57,6 +57,15 @@
     #define AREF_VOLTAGE 3.3
     #define ADC_RESOLUTION 12
     #define ADC_MAX_VALUE 4095
+#elif defined(ARDUINO_ARCH_STM32)
+    // STM32 (Feather F405) - 3.3V system, 12-bit SAR ADC referenced to VDDA
+    #define I2C_CLOCK_SPEED "400kHz"
+    #define SYSTEM_VOLTAGE 3.3
+    #define SYSTEM_VOLTAGE_MV 3300
+    #define AREF_VOLTAGE 3.3
+    #undef ADC_RESOLUTION   // the core's is analogRead()'s 10-bit default; setupADC() selects 12
+    #define ADC_RESOLUTION 12
+    #define ADC_MAX_VALUE 4095
 #elif defined(ESP32)
     // ESP32
     #define I2C_CLOCK_SPEED "100kHz"
@@ -97,5 +106,40 @@
 
 // ===== PLATFORM INITIALIZATION FUNCTIONS =====
 void setupADC();  // Configure ADC settings for the current platform
+
+// Called every loop() pass. STM32: re-arms USB CDC reception (platform.cpp).
+#if defined(ARDUINO_ARCH_STM32)
+void platformLoopService();
+#else
+inline void platformLoopService() {}
+#endif
+
+// analogRead() for a preOBD pin number. Everywhere but STM32 that is the
+// core's own number. The STM32 core names analog pins 0xC0 + n, which preOBD
+// reserves for virtual CAN inputs, so there preOBD uses their digital numbers
+// (pinctrl/board_pins.cpp) and this maps them back to the ADC channel.
+#if defined(ARDUINO_ARCH_STM32)
+int platformAnalogRead(uint8_t pin);
+#else
+#define platformAnalogRead(pin) analogRead(pin)
+#endif
+
+// noTone() that leaves the pin LOW. The STM32 core's noTone() only pauses the
+// tone timer, so the pin stays wherever the last toggle left it: HIGH half
+// the time, which keeps an active buzzer (or a transistor-driven one)
+// sounding after the alarm is silenced (#100 bench).
+#if defined(ARDUINO_ARCH_STM32)
+#define platformNoTone(pin) do { noTone(pin); digitalWrite((pin), LOW); } while (0)
+#else
+#define platformNoTone(pin) noTone(pin)
+#endif
+
+// Reboot into the chip's ROM USB bootloader, so a new image can be uploaded
+// without a BOOT0 jumper (SYSTEM REBOOT BOOTLOADER). STM32 only: Teensy has
+// its own program button and protocol, AVR and ESP32 reset into theirs.
+#if defined(ARDUINO_ARCH_STM32)
+#define PLATFORM_HAS_BOOTLOADER_REBOOT 1
+void platformRebootToBootloader();
+#endif
 
 #endif

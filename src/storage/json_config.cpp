@@ -61,8 +61,7 @@
 #endif
 
 #if SUPPORTS_SD
-#include <SD.h>
-// SD object is provided globally by SD.h
+#include "sd_fs.h"   // SD library for this platform (STM32: SDIO)
 #endif
 
 // External references
