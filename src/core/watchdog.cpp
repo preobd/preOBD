@@ -8,6 +8,7 @@
 
 #include "watchdog.h"
 #include "watchdog_policy.h"
+#include "watchdog_trace.h"
 #include "../hal/hal_watchdog.h"
 
 #ifndef FLASHMEM
@@ -28,8 +29,10 @@ static uint16_t s_appliedMs = 0;
 // restart it each time, so retry loops around scoped work must be bounded.
 static void apply() {
     if (!s_started) return;
+    watchdogTraceTag(watchdogPolicyTag(s_policy));   // no-op unless it changed (#542)
     const uint16_t ms = watchdogPolicyTimeoutMs(s_policy);
     if (ms == s_appliedMs) return;
+    watchdogTraceFed();   // this is a feed too: clears a near-miss PC (#542)
     hal::watchdogEnable(ms);
     hal::watchdogReset();
     s_appliedMs = ms;
@@ -38,6 +41,9 @@ static void apply() {
 FLASHMEM void watchdogStart() {
     if (s_started) return;
     s_started = true;
+#if defined(__IMXRT1062__)
+    hal::watchdogSetPreTimeoutHook(watchdogTracePreTimeout);   // #542
+#endif
     apply();
 }
 
@@ -47,6 +53,7 @@ FLASHMEM void watchdogSetConfigMode(bool config) {
 }
 
 void watchdogReset() {
+    watchdogTraceFed();
     hal::watchdogReset();
 }
 

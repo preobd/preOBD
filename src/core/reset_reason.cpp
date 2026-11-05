@@ -6,6 +6,7 @@
  */
 
 #include "reset_reason.h"
+#include "watchdog_trace.h"
 
 #if defined(ESP32)
 #include <esp_system.h>
@@ -53,6 +54,12 @@ const char* const RR_LABELS[RR_COUNT] PROGMEM = {
 uint8_t s_reason = RR_UNKNOWN;
 
 #if defined(__IMXRT1062__)
+// Where the previous run was when the watchdog reset it (#542). Teensy 4
+// only for now: elsewhere the trace is a no-op, so keep its RAM off AVR.
+WatchdogTrace s_trace;
+#endif
+
+#if defined(__IMXRT1062__)
 // The Teensy core's fault handler leaves an arm_fault_info_struct (imxrt.h)
 // here and reboots. We read and clear it ourselves rather than through the
 // CrashReport object: referencing that object links its virtual printTo(),
@@ -89,6 +96,7 @@ uint32_t s_faultCfsr = 0;
 
 FLASHMEM void resetReasonCapture() {
 #if defined(__IMXRT1062__)
+    watchdogTraceCapture(s_trace);
     const uint32_t srsr = SRC_SRSR;
     s_srsr = srsr;
     s_wrsr = WDOG1_WRSR;
@@ -193,6 +201,16 @@ FLASHMEM bool resetReasonAbnormal() {
 FLASHMEM void printResetReason(Print& out, bool detail) {
     out.print(F("Last reset: "));
     out.print((const __FlashStringHelper*)pgm_read_ptr(&RR_LABELS[s_reason]));
+    // What was running (#542): the watchdog scope's tag, and on Teensy 4 the
+    // PC the pre-timeout interrupt caught. A fault is ended by the watchdog
+    // too, so the tag says what it was doing; its own PC is printed below.
+#if defined(__IMXRT1062__)
+    const bool traced = s_trace.valid && (s_reason == RR_WATCHDOG || s_reason == RR_FAULT);
+    if (traced) {
+        out.print(F(" in "));
+        out.print(s_trace.tag);
+    }
+#endif
 #if defined(__IMXRT1062__)
     if (detail) {
         out.print(F(" (SRSR 0x"));
@@ -200,6 +218,18 @@ FLASHMEM void printResetReason(Print& out, bool detail) {
         out.print(F(" WRSR 0x"));
         out.print(s_wrsr, HEX);
         out.print(')');
+        // Not for a fault: the pre-timeout interrupt can't run inside the
+        // fault handler, so any PC there would be an older near miss. The
+        // fault's own PC is printed below.
+        if (traced && s_trace.hasPc && s_reason == RR_WATCHDOG) {
+            out.print(F(", hung at PC 0x"));
+            out.print(s_trace.pc, HEX);
+            out.print(F(" LR 0x"));
+            out.print(s_trace.lr, HEX);
+            out.print(F(" after "));
+            out.print(s_trace.uptimeMs / 1000UL);
+            out.print(F(" s"));
+        }
         if (s_hasFault) {
             // `ret` is the stacked PC (the core's "Code was executing from"),
             // not the faulting data address.

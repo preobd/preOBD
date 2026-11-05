@@ -73,5 +73,5 @@ uint16_t watchdogPolicyTimeoutMs(const WatchdogPolicy& p) {
 FLASHMEM const char* watchdogPolicyTag(const WatchdogPolicy& p) {
     if (p.extra > 0 && p.extraTag) return p.extraTag;
     if (p.depth > 0 && p.tag[p.depth - 1]) return p.tag[p.depth - 1];
-    return "LOOP";
+    return p.phase == WD_PHASE_BOOT ? "BOOT" : "LOOP";
 }

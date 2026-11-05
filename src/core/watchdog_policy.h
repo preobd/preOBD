@@ -16,7 +16,8 @@
  *     effective timeout is the maximum of the phase and every open scope, so
  *     an inner short scope can't narrow an outer long one.
  *   - The innermost scope's tag says what slow work is running, for reporting
- *     where a watchdog reset happened (#542). No scope = "LOOP".
+ *     where a watchdog reset happened (#542). No scope: "BOOT" in setup(),
+ *     "LOOP" after.
  *
  * Pure: no hardware, no globals. core/watchdog.cpp holds the state and
  * applies the result; the native test includes the .cpp directly.
@@ -58,7 +59,7 @@ void        watchdogPolicySetPhase(WatchdogPolicy& p, WatchdogPhase phase);
 void        watchdogPolicyPush(WatchdogPolicy& p, uint16_t ms, const char* tag);
 void        watchdogPolicyPop(WatchdogPolicy& p);   // an extra pop is ignored
 uint16_t    watchdogPolicyTimeoutMs(const WatchdogPolicy& p);
-const char* watchdogPolicyTag(const WatchdogPolicy& p);   // innermost scope, or "LOOP"
+const char* watchdogPolicyTag(const WatchdogPolicy& p);   // innermost scope, else "BOOT"/"LOOP"
 uint16_t    watchdogPhaseTimeoutMs(WatchdogPhase phase);
 
 #endif // WATCHDOG_POLICY_H

@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SYSTEM SD` and `SYSTEM SD JSON` report whether SD logging is actually working (no card, removed, write errors, logging) and how much space is left on the card, in RUN mode too (#536)
 - For developers: `tools/watchdog_bench.py` and a bench-build-only `SYSTEM DIAG WATCHDOG STALL` check that the watchdog still resets a hung board (#543)
 
+- After an unexpected restart by the watchdog, `VERSION` on Teensy 4 boards says what the firmware was doing and where it was stuck, e.g. `Last reset: WATCHDOG in SD … hung at PC 0x…` (#542)
+
 ### Changed
 - The watchdog now keeps running in CONFIG mode on every board, relaxed to 8 s, instead of being switched off on boards that allow it; it only restarts a board whose firmware has frozen, never an idle one, and every board now behaves the same (#541)
 

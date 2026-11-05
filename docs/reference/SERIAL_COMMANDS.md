@@ -1510,6 +1510,19 @@ LIST SENSORS THERMISTOR          # Show thermistor sensors
 LIST SENSORS TEMPERATURE         # Show all temperature sensors
 ```
 
+`VERSION` also says why the board last restarted, e.g. `Last reset: power-on`.
+After an unexpected restart by the watchdog (the firmware froze), Teensy 4
+boards add what it was doing and where:
+
+```
+Last reset: WATCHDOG in SD (SRSR 0x10 WRSR 0x2), hung at PC 0x6000F69A LR 0x22FB7 after 812 s
+```
+
+`in SD` names the slow operation in progress (`SD`, `EEPROM`, `BOOT` during
+startup, `LOOP` for everything else). The PC is the code that was stuck; please
+include this line when reporting an unexpected restart. Developers can map it to
+a function with `tools/watchdog_bench.py where 0x6000F69A`.
+
 **Note:** For complete system dumps, use `SYSTEM DUMP` or `SYSTEM DUMP JSON` (see [System Configuration](#system-configuration)).
 
 ---

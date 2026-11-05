@@ -23,7 +23,11 @@ Two jobs, both over USB serial:
           1 ms SD rows (OUTPUT SD_Log INTERVAL 1) plus the default poll for
           10 minutes: expect 0 resets.
 
+  where   Maps a PC from VERSION's "hung at PC 0x..." (#542) to a function,
+          using the firmware.elf of the build that was running.
+
 Usage:
+    python3 tools/watchdog_bench.py where 0x6000F69A [--env teensy41]
     python3 tools/watchdog_bench.py stall [PORT]
     python3 tools/watchdog_bench.py soak  [PORT] [--minutes N] [--poll "CMD"]
 
@@ -35,7 +39,9 @@ Prerequisites: pip install pyserial
 """
 
 import argparse
+import os
 import re
+import subprocess
 import sys
 import time
 
@@ -182,13 +188,31 @@ def cmd_soak(port, minutes, poll):
     return 0 if resets == 0 else 1
 
 
+def cmd_where(pc, env):
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    elf = os.path.join(root, ".pio", "build", env, "firmware.elf")
+    a2l = os.path.expanduser(
+        "~/.platformio/packages/toolchain-gccarmnoneeabi-teensy/bin/arm-none-eabi-addr2line")
+    if not os.path.exists(elf):
+        print(f"no {elf}: build the env that was running first (pio run -e {env})")
+        return 2
+    out = subprocess.run([a2l, "-f", "-C", "-i", "-e", elf, pc], capture_output=True, text=True)
+    print(out.stdout.strip() or out.stderr.strip())
+    print("(release builds have no line tables: the function name is the answer;\n"
+          " the build must be the exact one that produced the PC)")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("mode", choices=["stall", "soak"])
-    ap.add_argument("port", nargs="?", default=DEFAULT_PORT)
+    ap.add_argument("mode", choices=["stall", "soak", "where"])
+    ap.add_argument("port", nargs="?", default=DEFAULT_PORT, help="serial port, or the PC for `where`")
+    ap.add_argument("--env", default="teensy41", help="where: build env whose firmware.elf to use")
     ap.add_argument("--minutes", type=float, default=10.0, help="soak length (default 10)")
     ap.add_argument("--poll", default="SYSTEM SD JSON", help="soak poll command (default: SYSTEM SD JSON)")
     a = ap.parse_args()
+    if a.mode == "where":
+        return cmd_where(a.port, a.env)
     if a.mode == "stall":
         return cmd_stall(a.port)
     return cmd_soak(a.port, a.minutes, a.poll)

@@ -26,7 +26,7 @@ static void test_zeroed_storage_is_boot_with_no_scopes(void) {
     memset(&p, 0, sizeof(p));
     TEST_ASSERT_EQUAL(WD_PHASE_BOOT, p.phase);
     TEST_ASSERT_EQUAL_UINT16(WD_BOOT_TIMEOUT_MS, watchdogPolicyTimeoutMs(p));
-    TEST_ASSERT_EQUAL_STRING("LOOP", watchdogPolicyTag(p));
+    TEST_ASSERT_EQUAL_STRING("BOOT", watchdogPolicyTag(p));
 }
 
 static void test_phase_timeouts(void) {
@@ -46,7 +46,7 @@ static void test_scope_widens_and_restores(void) {
     TEST_ASSERT_EQUAL_STRING("SD", watchdogPolicyTag(p));
     watchdogPolicyPop(p);
     TEST_ASSERT_EQUAL_UINT16(2000, watchdogPolicyTimeoutMs(p));
-    TEST_ASSERT_EQUAL_STRING("LOOP", watchdogPolicyTag(p));
+    TEST_ASSERT_EQUAL_STRING("LOOP", watchdogPolicyTag(p));   // past boot, no scope
 }
 
 static void test_scope_never_narrows_the_phase(void) {

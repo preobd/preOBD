@@ -18,8 +18,13 @@
  * The IMXRT loads a new WT only when the watchdog is next serviced, so every
  * enable ends with a feed and the new timeout counts from now.
  *
- * WICR is left at its reset value: WIE is write-once, and #542 needs it free
- * to arm a pre-timeout interrupt that records where the firmware hung.
+ * Pre-timeout interrupt (#542): WICR is armed in the same one-time setup
+ * (WIE and WICT are write-once) to interrupt 0.5 s before the reset. The
+ * handler reads the interrupted PC/LR from the exception frame and passes them
+ * to the hook core/watchdog.cpp registers, which records them where the next
+ * boot can read them. It runs at the highest priority so it still fires when
+ * the hang is in a lower-priority ISR; a hang with interrupts masked can't be
+ * caught this way.
  */
 
 #ifndef HAL_WATCHDOG_TEENSY4_H
@@ -29,8 +34,14 @@
 
 namespace hal {
 
+// WICR fields (i.MX RT1060 RM, WDOG_WICR; imxrt.h has no macros for them).
+#define PREOBD_WDOG_WICR_WIE      ((uint16_t)(1u << 15))   // interrupt enable, write-once
+#define PREOBD_WDOG_WICR_WTIS     ((uint16_t)(1u << 14))   // interrupt status, write 1 to clear
+#define PREOBD_WDOG_WICR_WICT(n)  ((uint16_t)((n) & 0xFF)) // 0.5 s units before timeout, write-once
+
 namespace detail {
     static bool wdtStarted = false;
+    static void (*preTimeoutHook)(uint32_t pc, uint32_t lr) = nullptr;
 
     // WDOG1_WCR.WT encodes the timeout as (WT + 1) * 0.5 s, so 0.5..128 s.
     inline uint8_t wdogTimeoutField(uint16_t timeout_s) {
@@ -45,6 +56,34 @@ namespace detail {
     }
 }
 
+} // namespace hal
+
+// Defined in this header (extern "C", no inline) because only core/watchdog.cpp
+// includes it; a second includer gets a multiple-definition link error.
+// Pre-timeout handler. Naked so the exception frame is still where the
+// hardware put it: pick MSP or PSP from EXC_RETURN and pass the frame on.
+// Frame: r0 r1 r2 r3 r12 lr pc xpsr.
+extern "C" void preobdWdogPreTimeoutC(const uint32_t* frame) {
+    WDOG1_WICR = (uint16_t)(WDOG1_WICR | PREOBD_WDOG_WICR_WTIS);   // ack
+    if (hal::detail::preTimeoutHook) hal::detail::preTimeoutHook(frame[6], frame[5]);
+}
+extern "C" __attribute__((naked)) void preobdWdogPreTimeoutIsr() {
+    __asm__ volatile(
+        "tst lr, #4      \n"
+        "ite eq          \n"
+        "mrseq r0, msp   \n"
+        "mrsne r0, psp   \n"
+        "b preobdWdogPreTimeoutC \n");
+}
+
+namespace hal {
+
+// Teensy 4 only: called from the pre-timeout interrupt with the interrupted
+// PC and LR. Set it before the first watchdogEnable().
+inline void watchdogSetPreTimeoutHook(void (*hook)(uint32_t pc, uint32_t lr)) {
+    detail::preTimeoutHook = hook;
+}
+
 inline void watchdogEnable(uint16_t timeout_ms) {
     const uint16_t timeout_s = (timeout_ms + 999) / 1000;  // whole seconds, rounded up
     const uint16_t wt = WDOG_WCR_WT(detail::wdogTimeoutField(timeout_s));
@@ -55,6 +94,12 @@ inline void watchdogEnable(uint16_t timeout_ms) {
         IOMUXC_GPR_GPR16 |= 0x200000;   // carried over from WDT_T4 ("fixes reset", PaulS)
         // Power-down counter off: otherwise it asserts WDOG_B 16 s after reset.
         WDOG1_WMCR = 0;
+        // Pre-timeout interrupt 0.5 s (WICT = 1) before the reset (#542).
+        WDOG1_WICR = (uint16_t)(PREOBD_WDOG_WICR_WIE | PREOBD_WDOG_WICR_WTIS |
+                                PREOBD_WDOG_WICR_WICT(1));
+        attachInterruptVector(IRQ_WDOG1, preobdWdogPreTimeoutIsr);
+        NVIC_SET_PRIORITY(IRQ_WDOG1, 0);
+        NVIC_ENABLE_IRQ(IRQ_WDOG1);
         WDOG1_WCR = (uint16_t)(WDOG_WCR_SRS | WDOG_WCR_WDA | wt |
                                WDOG_WCR_WDE | WDOG_WCR_WDT | WDOG_WCR_SRE);
         detail::wdtStarted = true;

@@ -29,6 +29,7 @@
 // saveSystemConfig() holds a WatchdogScope (#541); the HAL is a no-op stub here.
 #include "../../src/core/watchdog.cpp"
 #include "../../src/core/watchdog_policy.cpp"
+#include "../../src/core/watchdog_trace.cpp"
 
 // ---------------------------------------------------------------------------
 // Firmware symbols these TUs expect from elsewhere (same set as
