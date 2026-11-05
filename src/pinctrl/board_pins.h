@@ -41,7 +41,7 @@ int8_t analogIndexForPin(uint8_t pin);
 bool boardHasPin(uint8_t pin);
 
 // This board's name as SYSTEM DUMP JSON reports it in firmware.platform
-// ("TEENSY40", "ESP32S3"): the hardware, not the build (a hybrid-CAN build of a
+// ("TEENSY40", "ESP32S3"): the hardware, not the build (the debug build of a
 // Teensy 4.1 is still TEENSY41).
 const char* boardName();
 

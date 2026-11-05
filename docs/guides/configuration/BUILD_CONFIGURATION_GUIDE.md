@@ -50,7 +50,7 @@ something at all simply has no line for it — there is no negative to declare.
 - Capabilities: `SUPPORTS_CAN`, `SUPPORTS_ELM327`, `SUPPORTS_TEST_MODE`, … plus
   `PROFILE_HAS_NATIVE_CAN`, `HAS_BUILTIN_SD`, `EEPROM_TOTAL_BYTES`
 - Ceilings: `PLATFORM_NO_SD_LOGGING`, `SUPPORTS_JSON_CONFIG=0`, `MAX_INPUTS`, CLI buffer sizes
-- Intrinsic pins only: SPI-CAN `CAN_CS_*`/`CAN_INT_*`, hybrid `CAN_BUS_*_TYPE`
+- Intrinsic pins only: SPI-CAN `CAN_CS_*`/`CAN_INT_*`
 
 ### `boards/<board>/wiring.ini` — your wiring (gitignored)
 
@@ -103,7 +103,6 @@ unit preferences. Set via serial commands, `SAVE`d to EEPROM.
 | `boards/teensy36` (`teensy36`) | Teensy 3.6 | FlexCAN | built-in |
 | `boards/esp32s3` (`esp32s3dev`) | ESP32-S3 | TWAI | external |
 | `boards/mega2560` (`mega2560`) | Arduino Mega | MCP2515 (SPI) | vetoed (RAM) |
-| `boards/esp32s3_hybrid` (`esp32s3_hybrid`) | ESP32-S3 | TWAI + MCP2515 | external |
 
 ```bash
 pio run -e teensy41        # build
@@ -134,19 +133,6 @@ cp -r boards/teensy41 boards/my_board
 > **Core-TU caveat:** macros read by framework core TUs (e.g.
 > `SERIAL_*_BUFFER_SIZE` on AVR) must be real `-D` flags in `board.ini` —
 > `-include` doesn't reach those TUs, so they can't live in `board.h`.
-
-### Hybrid CAN
-
-`INCLUDE_CAN_HYBRID` + the `CAN_BUS_*_TYPE` controller map are board facts in
-`board.h`:
-
-```cpp
-#define SUPPORTS_CAN_HYBRID  1
-#define CAN_BUS_0_TYPE     CanControllerType::FLEXCAN
-#define CAN_BUS_3_TYPE     CanControllerType::MCP2515
-#define CAN_CS_0           9    // MCP2515 SPI pins (intrinsic — board.h)
-#define CAN_INT_0          2
-```
 
 ## Library dependencies
 

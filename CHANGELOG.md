@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The watchdog now keeps running in CONFIG mode on every board, relaxed to 8 s, instead of being switched off on boards that allow it; it only restarts a board whose firmware has frozen, never an idle one, and every board now behaves the same (#541)
 
 ### Removed
-- The `teensy41_hybrid` build target (FlexCAN + MCP2515 as a fourth bus): its MCP2515 bus never worked (#556) and a Teensy 4.1 already has three native CAN buses; `esp32s3_hybrid` remains (#573)
+- Hybrid CAN mode and its build targets `teensy41_hybrid` and `esp32s3_hybrid` (a native CAN controller plus an MCP2515 as an extra bus): the MCP2515 bus never worked on either (#556), and every board now drives all of its CAN buses with one controller type (#556, #573)
 
 ### Fixed
 - An external SD card is no longer mounted when a configured input uses its CS pin (both drove the same chip-select), and the boot error now says to `CLEAR` or move that input instead of blaming wiring.ini (#594)

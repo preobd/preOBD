@@ -105,10 +105,10 @@ void flushSystemConfigBootDiagnostics() {
 #if INCLUDE_ALARMS && defined(BUZZER_PIN)
     replayBuiltinPinCollision(BPK_BUZZER, F("BUZZER_PIN"));
 #endif
-#if (INCLUDE_CAN_HYBRID || !PROFILE_HAS_NATIVE_CAN) && defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)
+#if !PROFILE_HAS_NATIVE_CAN && defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)
     replayBuiltinPinCollision(BPK_CAN_CS, F("CAN_CS_0"));
 #endif
-#if (INCLUDE_CAN_HYBRID || !PROFILE_HAS_NATIVE_CAN) && defined(CAN_INT_0) && (CAN_INT_0 != 0xFF)
+#if !PROFILE_HAS_NATIVE_CAN && defined(CAN_INT_0) && (CAN_INT_0 != 0xFF)
     replayBuiltinPinCollision(BPK_CAN_INT, F("CAN_INT_0"));
 #endif
 #if SUPPORTS_SD
@@ -569,7 +569,7 @@ FLASHMEM void registerSystemPins(uint8_t busNeeds) {
     #endif
 #endif
 
-#if INCLUDE_CAN_HYBRID || !PROFILE_HAS_NATIVE_CAN
+#if !PROFILE_HAS_NATIVE_CAN
     #if defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)
     { const uint8_t p = CAN_CS_0;
       if (!claimPins(&p, 1, PIN_CS, PIN_RANK_BUILTIN, TAG_SYSTEM, "CAN CS"))
@@ -593,9 +593,9 @@ FLASHMEM void registerSystemPins(uint8_t busNeeds) {
           reportBuiltinPinCollision(F("SD_PIN"), BPK_SD, pinHeldByConfiguredInput(p));
       }
       else {
-          // Deselect the card now: other SPI devices (an MCP2515 on the
-          // hybrid boards) talk before initSD() runs, and a floating CS
-          // would let the card answer them.
+          // Deselect the card now: other devices on the same SPI bus may
+          // talk before initSD() runs, and a floating CS would let the
+          // card answer them.
           pinMode(p, OUTPUT);
           digitalWrite(p, HIGH);
       } }

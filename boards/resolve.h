@@ -94,12 +94,6 @@
 #  endif
 #endif
 
-#if SUPPORTS_CAN_HYBRID
-#  ifndef INCLUDE_CAN_HYBRID
-#    define INCLUDE_CAN_HYBRID 1
-#  endif
-#endif
-
 #if SUPPORTS_REALDASH
 #  ifndef INCLUDE_REALDASH
 #    define INCLUDE_REALDASH 1
@@ -203,12 +197,4 @@
 #if SUPPORTS_SD && !defined(SD_PIN)
 #  error "SUPPORTS_SD without SD_PIN."
 #endif
-// Hybrid mode is "two CAN controllers of different types on one board", so it
-// is meaningless without the CAN driver itself. (RealDash and ELM327 look like
-// they should assert the same, but neither calls the CAN HAL — ELM327 emulates
-// ISO 15765-4 over the serial/BLE link — so no dependency is asserted here.)
-#if INCLUDE_CAN_HYBRID && !INCLUDE_CAN
-#  error "INCLUDE_CAN_HYBRID requires INCLUDE_CAN."
-#endif
-
 #define PREOBD_RESOLVED 1

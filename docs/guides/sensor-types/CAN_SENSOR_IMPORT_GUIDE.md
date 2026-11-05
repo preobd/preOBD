@@ -603,7 +603,7 @@ SAVE
 RUN
 ```
 
-### Example 2: Hybrid Setup (ECU + Local Sensors)
+### Example 2: Mixed Setup (ECU + Local Sensors)
 
 Combine vehicle ECU sensors with custom sensors:
 

@@ -598,24 +598,12 @@ namespace hal { namespace can {
 - **FlexCAN** (Teensy 3.6/4.0/4.1 native) - 2-3 buses
 - **TWAI** (ESP32/ESP32-S3 native) - 1 bus
 - **MCP2515** (External SPI) - 1-2 buses
-- **bxCAN** (STM32 native, planned) - 1-2 buses
-
-### Hybrid Controller Support
-
-Hybrid mode allows mixing different controller types on different buses:
-
-```ini
-# ESP32-S3 with native TWAI + external MCP2515
--D SUPPORTS_CAN_HYBRID
--D CAN_BUS_0_TYPE=CanControllerType::TWAI
--D CAN_BUS_1_TYPE=CanControllerType::MCP2515
-```
+- **bxCAN** (STM32F4 native) - 1 bus
 
 Platform capabilities are detected at compile-time via `src/hal/platform_caps.h`:
 - `PLATFORM_CAN_CONTROLLER` - String identifier ("FlexCAN", "TWAI", "SPI", "bxCAN")
 - `PLATFORM_HAS_NATIVE_CAN` - Boolean flag (1 = integrated peripheral, 0 = external)
-- `PLATFORM_NEEDS_SPI_CAN` - Boolean flag (1 = requires SPI CAN pins in config.h)
-- `PLATFORM_SUPPORTS_HYBRID` - Boolean flag (1 = hybrid mode enabled)
+- `PLATFORM_NEEDS_SPI_CAN` - Boolean flag (1 = requires SPI CAN pins in board.h)
 
 ### Relationship to Transport System
 
@@ -633,7 +621,6 @@ CAN output modules use the CAN HAL to send OBD-II frames and broadcast data, whi
 - [ESP32 Bluetooth Transport](../../../src/comms/transports/transport_bluetooth_esp32.h)
 - [CAN HAL Interface](../../../src/hal/hal_can.h)
 - [Platform Capabilities](../../../src/hal/platform_caps.h)
-- [CAN Controller Types](../../../src/hal/can_controller_types.h)
 - [Build Configuration Guide](../../guides/configuration/BUILD_CONFIGURATION_GUIDE.md)
 - [CAN Transceiver Hardware Guide](../../guides/hardware/CAN_TRANSCEIVER_GUIDE.md)
 - [RealDash Setup Guide](../../guides/outputs/REALDASH_SETUP_GUIDE.md)

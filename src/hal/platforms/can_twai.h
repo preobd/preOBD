@@ -13,11 +13,6 @@
 
 namespace hal { namespace can {
 
-#if INCLUDE_CAN_HYBRID
-// In hybrid mode, wrap in twai namespace for dispatcher
-namespace twai {
-#endif
-
 inline bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
     // ESP32 only supports a single CAN bus
     if (bus != 0) return false;
@@ -122,10 +117,6 @@ inline bool abortUnackedTx(uint8_t bus = 0) {
     return twai_start() == ESP_OK;
 #endif
 }
-
-#if INCLUDE_CAN_HYBRID
-} // namespace twai
-#endif
 
 }} // namespace hal::can
 

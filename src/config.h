@@ -110,7 +110,7 @@
 // OBD-II CONFIGURATION
 // ============================================================================
 // OBD-II request/response support for ELM327 adapters and apps like Torque.
-// Works in hybrid mode: simultaneous broadcast (RealDash) and request/response.
+// Runs alongside broadcast mode (RealDash): both can be on at once.
 
 #if INCLUDE_CAN
     // Optional: Minimum interval between OBD-II requests (ms) to prevent bus flooding.

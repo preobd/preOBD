@@ -26,12 +26,11 @@ preOBD uses a Hardware Abstraction Layer (HAL) that supports multiple CAN contro
 - **SPI** (External SPI-based controllers) - 1-2 buses, works on any platform with SPI
   - Currently supported: MCP2515
   - Future: MCP25625 (integrated transceiver), SJA1000
-- **bxCAN** (STM32 native, planned) - 1-2 buses depending on variant
+- **bxCAN** (STM32F4 native) - 1 bus on the Feather STM32F405 (`feather_f405`)
 
-**Hybrid Mode** allows mixing controller types on different buses. For example:
-- ESP32 TWAI (bus 0) + MCP2515 (bus 1) for dual-bus operation
-
-See [Build Configuration Guide](../configuration/BUILD_CONFIGURATION_GUIDE.md#hybrid-can) for hybrid mode setup.
+Each build uses one controller type for all of its CAN buses. For more than
+one bus, use a board whose native controller has several (Teensy FlexCAN), or
+two MCP2515s (`CAN_CS_0` and `CAN_CS_1`) on a board without native CAN.
 
 ### When Do You Need This?
 
@@ -175,7 +174,7 @@ GND         →   GND
 **Notes**:
 - Requires **two chips**: MCP2515 (CAN controller) + MCP2551 (transceiver)
 - Many modules combine both chips on one PCB (~$3-5)
-- CS and INT pins configurable in config.h
+- CS and INT pins configurable in `boards/<board>/board.h`
 - sandeepmistry/CAN library required (installed automatically)
 
 ### Arduino Uno with MCP2515 + MCP2551
@@ -205,7 +204,7 @@ GND         →   GND
 - Same wiring as Mega
 - **Not supported** — 2KB RAM is insufficient for the runtime CLI
 
-### Multi-Bus and Hybrid Mode
+### Multi-Bus
 
 **Multi-bus configurations** allow preOBD to communicate on multiple CAN buses simultaneously. This is useful for:
 - Separating input (reading sensors via CAN) from output (sending data to displays)
@@ -226,35 +225,8 @@ GND          →  GND            GND
                                CANH/CANL → Vehicle CAN Bus 1
 ```
 
-**ESP32-S3 Hybrid Mode Example (TWAI + MCP2515):**
-```
-ESP32-S3        SN65HVD230     MCP2515        MCP2551
------------     -------------  --------       --------
-GPIO20 (TX) →   CTX (bus 0)
-GPIO21 (RX) ←   CRX (bus 0)
-GPIO10 (CS) →                  CS
-GPIO11 (SCK)→                  SCK
-GPIO12 (MISO)←                 SO
-GPIO13 (MOSI)→                 SI
-3.3V        →   VCC            VCC
-GND         →   GND            GND
-                CANH/CANL →    Vehicle CAN Bus 0
-                               TX         →   TXD
-                               RX         ←   RXD
-                                              VCC (5V or 3.3V)
-                                              GND
-                                              CANH/CANL → Vehicle CAN Bus 1
-```
-
 **Configuration:**
-- Pin assignments for SPI CAN controllers are in `src/config.h`
-- Hybrid mode is a board fact in `boards/<board>/board.h`:
-  ```c
-  #define SUPPORTS_CAN_HYBRID 1
-  #define CAN_BUS_0_TYPE CanControllerType::TWAI
-  #define CAN_BUS_1_TYPE CanControllerType::MCP2515
-  ```
-- Use the pre-configured environment: `esp32s3_hybrid` (Teensy 4.x already has native FlexCAN buses for multi-bus)
+- Pin assignments for SPI CAN controllers (`CAN_CS_*`/`CAN_INT_*`) are in `boards/<board>/board.h`
 
 **Notes:**
 - Each bus requires its own CAN transceiver
@@ -389,7 +361,7 @@ For classic cars or custom installations without OBD-II.
 
 **Notes**:
 - All-in-one solution for Arduino Mega/Uno
-- Check CS and INT pin configuration in config.h
+- Check CS and INT pin configuration in `boards/<board>/board.h`
 - Crystal frequency: 8MHz or 16MHz (auto-detected by library)
 
 ---
@@ -409,13 +381,13 @@ For classic cars or custom installations without OBD-II.
 1. **No transceiver connected** - Check wiring
 2. **Wrong voltage** - 5V transceiver on 3.3V platform
 3. **Bad solder joints** - Reflow connections
-4. **Incorrect CS/INT pins** - Verify config.h settings (MCP2515 only)
+4. **Incorrect CS/INT pins** - Verify `boards/<board>/board.h` settings (MCP2515 only)
 5. **Crystal mismatch** - MCP2515 module uses wrong crystal (8MHz vs 16MHz)
 
 **Fix**:
 - Double-check wiring against diagrams above
 - Use multimeter to verify 3.3V/5V on transceiver VCC pin
-- For MCP2515: Verify CS and INT pins match config.h
+- For MCP2515: Verify CS and INT pins match `boards/<board>/board.h`
 
 ### No Communication on CAN Bus
 

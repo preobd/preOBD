@@ -43,11 +43,6 @@
 
 namespace hal { namespace can {
 
-#if INCLUDE_CAN_HYBRID
-// In hybrid mode, wrap in flexcan namespace for dispatcher
-namespace flexcan {
-#endif
-
 namespace detail {
     // RX is polled straight from the mailboxes (see setFilters), so the
     // library's RX ring is never filled: keep it at its smallest.
@@ -280,10 +275,6 @@ bool abortUnackedTx(uint8_t bus) {
         default: return false;
     }
 }
-
-#if INCLUDE_CAN_HYBRID
-} // namespace flexcan
-#endif
 
 }} // namespace hal::can
 

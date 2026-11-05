@@ -22,11 +22,6 @@
 
 namespace hal { namespace can {
 
-#if INCLUDE_CAN_HYBRID
-// In hybrid mode, wrap in mcp2515 namespace for dispatcher
-namespace mcp2515 {
-#endif
-
 namespace detail {
     // One driver object and one "started" flag per controller for the whole
     // image, defined in can_mcp2515.cpp. As `static`s here every including
@@ -227,10 +222,6 @@ inline bool abortUnackedTx(uint8_t bus = 0) {
             return false;
     }
 }
-
-#if INCLUDE_CAN_HYBRID
-} // namespace mcp2515
-#endif
 
 }} // namespace hal::can
 

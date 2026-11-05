@@ -16,9 +16,6 @@
 namespace hal { namespace can {
 
 #ifdef HAL_CAN_MCP2515_H
-#if INCLUDE_CAN_HYBRID
-namespace mcp2515 {
-#endif
 namespace detail {
     MCP2515 canBus0(CAN_CS_0);
     #if defined(CAN_CS_1) && (CAN_CS_1 != 0xFF)
@@ -27,9 +24,6 @@ namespace detail {
     bool bus0Initialized = false;
     bool bus1Initialized = false;
 }
-#if INCLUDE_CAN_HYBRID
-}
-#endif
 #endif // HAL_CAN_MCP2515_H
 
 }} // namespace hal::can

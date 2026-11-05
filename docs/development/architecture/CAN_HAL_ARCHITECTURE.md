@@ -9,9 +9,8 @@ This document describes the CAN controller abstraction layer that enables preOBD
 3. [Architecture](#architecture)
 4. [Controller Types](#controller-types)
 5. [Platform Capabilities](#platform-capabilities)
-6. [Hybrid Mode](#hybrid-mode)
-7. [Implementation Details](#implementation-details)
-8. [Adding New Controllers](#adding-new-controllers)
+6. [Implementation Details](#implementation-details)
+7. [Adding New Controllers](#adding-new-controllers)
 
 ## Overview
 
@@ -21,29 +20,28 @@ The CAN HAL is a compile-time abstraction layer that provides a unified API for 
 
 - **Native controllers** (FlexCAN, TWAI, bxCAN) - Integrated CAN peripherals in the microcontroller
 - **External controllers** (MCP2515, MCP25625, SJA1000) - SPI-based CAN controllers
-- **Hybrid mode** - Mixing different controller types on different buses
+
+Each build drives exactly one controller type: every CAN bus on a board uses
+the same driver.
 
 ### Why Was This Needed?
 
 **Before (Pre-HAL):**
 - Platform-specific CAN code scattered throughout the codebase
 - Manual conditional compilation (`#ifdef USE_FLEXCAN_NATIVE`)
-- No way to mix controller types
 - Adding new platforms required extensive changes
 
 **After (With HAL):**
 - Single unified API (`hal::can::begin()`, `hal::can::write()`, etc.)
 - Platform detection happens automatically at compile-time
-- Hybrid mode allows mixing controllers (e.g., ESP32 TWAI + MCP2515)
 - Adding new controllers requires only implementing the HAL interface
 
 ## Design Goals
 
 1. **Zero Runtime Overhead** - All platform selection happens at compile-time via templates/constexpr
-2. **Type Safety** - Controller types are strongly typed enums
+2. **One Driver per Build** - `hal_can.h` includes exactly one controller implementation
 3. **Extensibility** - Easy to add new controller types without modifying existing code
 4. **Explicit Configuration** - No hidden auto-detection, clear build flags
-5. **Hybrid Support** - Allow mixing different controller types on different buses
 
 ## Architecture
 
@@ -66,7 +64,7 @@ The CAN HAL is a compile-time abstraction layer that provides a unified API for 
          ▼              ▼              ▼              ▼
 ┌────────────────┐ ┌────────────┐ ┌────────────┐ ┌─────────────┐
 │ FlexCAN        │ │ TWAI       │ │ MCP2515    │ │ bxCAN       │
-│ Implementation │ │ Impl       │ │ Impl       │ │ (planned)   │
+│ Implementation │ │ Impl       │ │ Impl       │ │ Impl        │
 └────────────────┘ └────────────┘ └────────────┘ └─────────────┘
          │              │              │              │
          ▼              ▼              ▼              ▼
@@ -88,8 +86,7 @@ src/hal/
 │   ├── can_twai.h              # ESP32 TWAI implementation
 │   ├── can_mcp2515.h           # MCP2515 SPI implementation
 │   ├── can_mcp2515.cpp         # MCP2515 driver objects + "started" flags (one definition)
-│   └── can_hybrid.h            # Hybrid mode dispatcher
-├── can_controller_types.h       # Controller type enum and mapping
+│   └── can_bxcan.h / .cpp      # STM32F4 bxCAN implementation
 └── bus_defaults.h               # Default bus count per platform
 ```
 
@@ -97,16 +94,9 @@ src/hal/
 
 ### Supported Controllers
 
-```cpp
-enum class CanControllerType : uint8_t {
-    NONE = 0,       // No controller / disabled
-    FLEXCAN = 1,    // Teensy native FlexCAN
-    TWAI = 2,       // ESP32 native TWAI
-    MCP2515 = 3,    // External SPI (MCP2515, MCP25625)
-    BXCAN = 4,      // STM32 native bxCAN (future)
-    SJA1000 = 5     // External SPI SJA1000 (future)
-};
-```
+`src/hal/hal_can.h` includes exactly one implementation, picked by platform:
+FlexCAN on Teensy (`USE_FLEXCAN_NATIVE`), TWAI on ESP32, bxCAN on STM32F4,
+and the MCP2515 SPI driver everywhere else.
 
 ### Controller Capabilities
 
@@ -115,7 +105,7 @@ enum class CanControllerType : uint8_t {
 | **FlexCAN** | 2-3 | 1 Mbps | Teensy 3.6/4.0/4.1 | External | High performance, multiple buses |
 | **TWAI** | 1 | 1 Mbps | ESP32/ESP32-S3 | External | ESP32 integrated peripheral |
 | **MCP2515** | 1-2 | 1 Mbps | SPI (any platform) | External | Requires SPI pins |
-| **bxCAN** | 1-2 | 1 Mbps | STM32F1/F4 | External | Planned support |
+| **bxCAN** | 1 | 1 Mbps | STM32F4 (`feather_f405`) | External | CAN1 |
 
 ## Platform Capabilities
 
@@ -128,8 +118,6 @@ Platform capabilities are detected via `src/hal/platform_caps.h`:
 #define PLATFORM_CAN_CONTROLLER "FlexCAN"  // or "TWAI", "SPI", "bxCAN"
 #define PLATFORM_HAS_NATIVE_CAN 1          // 1 = integrated, 0 = external
 #define PLATFORM_NEEDS_SPI_CAN 0           // 1 = requires SPI pin config
-#define PLATFORM_SUPPORTS_HYBRID 0         // 1 = hybrid mode enabled
-#define PLATFORM_EFFECTIVE_CAN_BUSES 2     // Total buses available
 ```
 
 ### Platform Detection Logic
@@ -156,76 +144,6 @@ Platform capabilities are detected via `src/hal/platform_caps.h`:
     #define PLATFORM_HAS_NATIVE_CAN 0
     #define PLATFORM_NEEDS_SPI_CAN 1
 #endif
-```
-
-## Hybrid Mode
-
-### What is Hybrid Mode?
-
-Hybrid mode allows different CAN controller types on different buses. For example:
-- ESP32 TWAI (bus 0) + MCP2515 (bus 1) — `boards/esp32s3_hybrid`, the one hybrid board
-
-### Build Configuration
-
-Hybrid mode is a board fact, declared in `boards/<board>/board.h`
-(`boards/resolve.h` derives `INCLUDE_CAN_HYBRID` from it):
-
-```c
-#define SUPPORTS_CAN_HYBRID 1                         // enable hybrid support
-#define CAN_BUS_0_TYPE CanControllerType::TWAI        // bus 0 controller
-#define CAN_BUS_1_TYPE CanControllerType::MCP2515     // bus 1 controller
-```
-
-### Controller Mapping
-
-The mapping is defined at compile-time in `src/hal/can_controller_types.h`:
-
-```cpp
-// Bus 0 controller type
-#if defined(CAN_BUS_0_TYPE)
-    #define CAN_CONTROLLER_BUS_0 CAN_BUS_0_TYPE  // Explicit override
-#elif defined(USE_FLEXCAN_NATIVE) && defined(__IMXRT1062__)
-    #define CAN_CONTROLLER_BUS_0 CanControllerType::FLEXCAN  // Auto-detect
-#elif defined(ESP32)
-    #define CAN_CONTROLLER_BUS_0 CanControllerType::TWAI
-#else
-    #define CAN_CONTROLLER_BUS_0 CanControllerType::MCP2515
-#endif
-
-// Helper function
-constexpr CanControllerType getBusControllerType(uint8_t bus) {
-    switch (bus) {
-        case 0: return CAN_CONTROLLER_BUS_0;
-        case 1: return CAN_CONTROLLER_BUS_1;
-        case 2: return CAN_CONTROLLER_BUS_2;
-        case 3: return CAN_CONTROLLER_BUS_3;
-        default: return CanControllerType::NONE;
-    }
-}
-```
-
-### Hybrid Dispatcher
-
-In hybrid mode, the HAL dispatcher routes calls to the correct controller:
-
-```cpp
-// src/hal/platforms/can_hybrid.h
-namespace hal { namespace can {
-
-bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t bus) {
-    switch (getBusControllerType(bus)) {
-        case CanControllerType::FLEXCAN:
-            return flexcan::write(id, data, len, extended, bus);
-        case CanControllerType::TWAI:
-            return twai::write(id, data, len, extended, bus);
-        case CanControllerType::MCP2515:
-            return mcp2515::write(id, data, len, extended, bus);
-        default:
-            return false;
-    }
-}
-
-}} // namespace hal::can
 ```
 
 ## Implementation Details
@@ -305,26 +223,13 @@ FLASHMEM bool begin(uint32_t baudrate, uint8_t bus, bool listenOnly) {
 
 | Component | Flash (bytes) | RAM (bytes) |
 |-----------|---------------|-------------|
-| HAL interface (constexpr dispatch) | ~500 | 0 |
 | FlexCAN implementation | ~2KB | 3,664 per bus on Teensy 4.1 (RX_SIZE_2, TX_SIZE_16; measured, #555) |
 | TWAI implementation | ~1.5KB | 256 per bus |
 | MCP2515 implementation | ~2KB | 128 per bus |
-| Hybrid dispatcher | ~300 | 0 |
 
 ## Adding New Controllers
 
-### Step 1: Define Controller Type
-
-Add to `src/hal/can_controller_types.h`:
-
-```cpp
-enum class CanControllerType : uint8_t {
-    // ... existing types ...
-    SJA1000 = 5     // New controller type
-};
-```
-
-### Step 2: Create Controller Implementation
+### Step 1: Create Controller Implementation
 
 Create `src/hal/platforms/can_sja1000.h`:
 
@@ -334,21 +239,20 @@ Create `src/hal/platforms/can_sja1000.h`:
 
 #include <SJA1000.h>  // Hypothetical library
 
-namespace hal { namespace can { namespace sja1000 {
+namespace hal { namespace can {
 
-bool begin(uint32_t baudrate, uint8_t bus = 0);
-void end(uint8_t bus = 0);
+bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false);
 bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t bus = 0);
 bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint8_t bus = 0);
-int available(uint8_t bus = 0);
 void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0);
+bool abortUnackedTx(uint8_t bus = 0);   // drop pending TX when nothing ACKs (#506)
 
-}}} // namespace hal::can::sja1000
+}} // namespace hal::can
 
 #endif
 ```
 
-### Step 3: Add to Platform Capabilities
+### Step 2: Add to Platform Capabilities
 
 Update `src/hal/platform_caps.h` if auto-detection is needed:
 
@@ -359,42 +263,26 @@ Update `src/hal/platform_caps.h` if auto-detection is needed:
     #define PLATFORM_NEEDS_SPI_CAN 1
 ```
 
-### Step 4: Add to Hybrid Dispatcher
+### Step 3: Select It in the HAL
 
-Update `src/hal/platforms/can_hybrid.h`:
+Add a branch to the platform chain in `src/hal/hal_can.h`:
 
 ```cpp
-#include "can_sja1000.h"
-
-bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t bus) {
-    switch (getBusControllerType(bus)) {
-        // ... existing cases ...
-        case CanControllerType::SJA1000:
-            return sja1000::write(id, data, len, extended, bus);
-        default:
-            return false;
-    }
-}
+#elif defined(USE_SJA1000)
+    #include "platforms/can_sja1000.h"
 ```
 
-### Step 5: Add Library Dependency
+### Step 4: Add Library Dependency
 
-Update `platformio.ini`:
+Add the library to the board's `boards/<board>/board.ini` `lib_deps`, and
+declare the board facts in `boards/<board>/board.h`:
 
-```ini
-[sja1000_lib]
-lib_deps =
-    https://github.com/example/SJA1000-CAN.git
-
-[env:custom_sja1000]
-build_flags =
-    -D SUPPORTS_CAN
-    -D CAN_BUS_0_TYPE=CanControllerType::SJA1000
-lib_deps =
-    ${sja1000_lib.lib_deps}
+```c
+#define SUPPORTS_CAN 1
+#define USE_SJA1000  1
 ```
 
-### Step 6: Test
+### Step 5: Test
 
 1. Build and flash
 2. Verify controller initialization
@@ -419,19 +307,16 @@ lib_deps =
 4. **Bus range checking** - Validate bus number before use
 5. **Resource cleanup** - `end()` must release all resources
 
-### For Hybrid Mode
+### For Multi-Bus Setups
 
-1. **Explicit configuration** - Always use build flags to specify controller types
-2. **Pin conflicts** - Ensure SPI pins don't overlap with other peripherals
-3. **Per-bus baud rates** - Input and output buses can use different baud rates for mixed protocols
-4. **Listen-only mode** - Use passive monitoring for vehicle ECU buses to avoid disrupting communication
-5. **Test independently** - Verify each bus works before enabling hybrid mode
+1. **Pin conflicts** - Ensure SPI pins don't overlap with other peripherals
+2. **Per-bus baud rates** - Input and output buses can use different baud rates for mixed protocols
+3. **Listen-only mode** - Use passive monitoring for vehicle ECU buses to avoid disrupting communication
 
 ## Future Enhancements
 
 ### Planned Features
 
-- **STM32 bxCAN support** - Native CAN for STM32F1/F4 platforms
 - **MCP25625 support** - Integrated transceiver, simplified wiring
 - **SJA1000 support** - Industrial-grade SPI CAN controller
 - **DMA support** - Reduce CPU overhead for high-throughput applications
@@ -450,10 +335,8 @@ lib_deps =
 
 - [HAL Interface](../../../src/hal/hal_can.h)
 - [Platform Capabilities](../../../src/hal/platform_caps.h)
-- [Controller Types](../../../src/hal/can_controller_types.h)
 - [FlexCAN Implementation](../../../src/hal/platforms/can_flexcan.h)
 - [TWAI Implementation](../../../src/hal/platforms/can_twai.h)
 - [MCP2515 Implementation](../../../src/hal/platforms/can_mcp2515.h)
-- [Hybrid Dispatcher](../../../src/hal/platforms/can_hybrid.h)
 - [Build Configuration Guide](../../guides/configuration/BUILD_CONFIGURATION_GUIDE.md)
 - [CAN Transceiver Hardware Guide](../../guides/hardware/CAN_TRANSCEIVER_GUIDE.md)
