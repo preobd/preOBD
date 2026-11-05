@@ -17,10 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - After an unexpected restart by the watchdog, `VERSION` on Teensy 4 boards says what the firmware was doing and where it was stuck, e.g. `Last reset: WATCHDOG in SD … hung at PC 0x…` (#542)
 
 ### Changed
+- A Teensy 4.1 now leaves about 54 KB for the firmware's working memory (stack), up from 4.9 KB in 0.15.0-beta; Teensy 4.x builds now fail if it drops below 16 KB (#555, #557)
 - The watchdog now keeps running in CONFIG mode on every board, relaxed to 8 s, instead of being switched off on boards that allow it; it only restarts a board whose firmware has frozen, never an idle one, and every board now behaves the same (#541)
 
 ### Fixed
-- Teensy boards no longer carry two copies of the CAN driver: on a Teensy 4.1 the room left for the firmware's working memory (stack) grows from 4.7 KB to 22 KB, and a Teensy 4.0 gains about 17 KB (#555)
 - `SYSTEM RESET CONFIRM` keeps the serial port settings (enabled ports, baud rates, framed mode) and the transport routing; resetting them cut a Bluetooth bridge off from the board the reset was sent from (#549)
 - Teensy 4.x boards no longer reset at random while SD logging (every few minutes at the default rate, within seconds at fast intervals) or occasionally when switching to RUN; changing the watchdog timeout could itself trigger a reset (#537)
 

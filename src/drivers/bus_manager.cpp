@@ -18,6 +18,10 @@
 #include <Wire.h>
 #include <SPI.h>
 
+#ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
+#define FLASHMEM
+#endif
+
 // ============================================================================
 // GLOBAL STATE
 // ============================================================================
@@ -772,7 +776,7 @@ static void printWiredBusLine(const char* wiredName) {
 }
 
 // Helper function to display I2C bus configuration
-void displayI2CStatus() {
+FLASHMEM void displayI2CStatus() {
     // Report the bus that is actually up, not just the stored selection: a client
     // may have acquired the platform default on demand (#351), and a status line
     // reading "NONE" while the peripheral is clocking is exactly the confusion
@@ -818,7 +822,7 @@ void displayI2CStatus() {
 }
 
 // Helper function to display SPI bus configuration
-void displaySPIStatus() {
+FLASHMEM void displaySPIStatus() {
     // Declaration-aware, as in displayI2CStatus() — see the note there.
     uint8_t bus_id = active_spi ? active_spi_id
                                 : resolveWiredBusId(systemConfig.buses.active_spi,
@@ -857,7 +861,7 @@ void displaySPIStatus() {
 }
 
 // Helper function to display CAN bus configuration
-void displayCANStatus() {
+FLASHMEM void displayCANStatus() {
     msg.control.println();
     msg.control.println(F("=== CAN Bus Configuration ==="));
 #if NUM_CAN_BUSES > 0

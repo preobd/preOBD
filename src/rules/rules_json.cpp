@@ -9,6 +9,10 @@
 #include <string.h>
 #include "rules_engine.h"  // rulesNormalizeWarn (warn tri-state import, #425)
 
+#ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
+#define FLASHMEM
+#endif
+
 namespace {
 
 struct NameMap { const char* name; uint8_t val; };
@@ -56,7 +60,7 @@ bool valOf(const NameMap (&m)[N], const char* s, uint8_t& out) {
 // and an AUTO-mode export are byte-for-byte identical, and an absent key on
 // import means exactly "AUTO", not "assume 0"). Callers pass whichever of
 // "warnLo"/"warnHi" applies.
-static void exportWarnSide(JsonObject obj, const char* key, const Rule& r, bool hiSide, float value) {
+static FLASHMEM void exportWarnSide(JsonObject obj, const char* key, const Rule& r, bool hiSide, float value) {
     switch (ruleWarnMode(r, hiSide)) {
         case RULE_WARN_SET:  obj[key] = value; break;
         case RULE_WARN_NONE: obj[key] = nullptr; break;
@@ -64,7 +68,7 @@ static void exportWarnSide(JsonObject obj, const char* key, const Rule& r, bool 
     }
 }
 
-void rulesExportRule(JsonObject obj, const Rule& r) {
+FLASHMEM void rulesExportRule(JsonObject obj, const Rule& r) {
     obj["id"]         = r.id;
     obj["input"]      = r.sourceInput;
     obj["condition"]  = nameOf(CONDITIONS, r.condition);
@@ -86,7 +90,7 @@ void rulesExportRule(JsonObject obj, const Rule& r) {
     }
 }
 
-bool rulesImportRule(JsonObjectConst obj, Rule& out) {
+FLASHMEM bool rulesImportRule(JsonObjectConst obj, Rule& out) {
     // Required: id, input, condition. Severity defaults to NONE; the numeric
     // fields default to the hand-entry fallbacks.
     if (obj["id"].isNull() || obj["input"].isNull()) return false;
@@ -157,7 +161,7 @@ bool rulesImportRule(JsonObjectConst obj, Rule& out) {
     return true;
 }
 
-void rulesExportAction(JsonObject obj, const Action& a,
+FLASHMEM void rulesExportAction(JsonObject obj, const Action& a,
                          const uint8_t* memberRules, uint8_t memberCount) {
     obj["id"]     = a.id;
     obj["type"]   = nameOf(ACTION_TYPES, a.type);
@@ -176,7 +180,7 @@ void rulesExportAction(JsonObject obj, const Action& a,
         obj["failsafe"] = (a.failsafe == ACT_FAILSAFE_ON) ? "ON" : "OFF";
 }
 
-bool rulesImportAction(JsonObjectConst obj, Action& out,
+FLASHMEM bool rulesImportAction(JsonObjectConst obj, Action& out,
                          uint8_t* extraRules, uint8_t maxExtra, uint8_t* nExtra) {
     if (nExtra) *nExtra = 0;
     // Required: id, type, target. A missing/null "rule"/"rules" means manual-only.

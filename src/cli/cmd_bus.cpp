@@ -61,7 +61,7 @@ extern MuxTransport hwSerial1;   // main.cpp -- the nRF coprocessor link
 #include <ctype.h>
 
 // BUS I2C subcommand handler
-static int bus_i2c(int argc, const char* const* argv, int /*tokenIndex*/) {
+static FLASHMEM int bus_i2c(int argc, const char* const* argv, int /*tokenIndex*/) {
     // BUS I2C (no arguments) - display I2C status
     if (argc == 2) {
         displayI2CStatus();
@@ -130,7 +130,7 @@ static int bus_i2c(int argc, const char* const* argv, int /*tokenIndex*/) {
 }
 
 // BUS SPI subcommand handler
-static int bus_spi(int argc, const char* const* argv, int /*tokenIndex*/) {
+static FLASHMEM int bus_spi(int argc, const char* const* argv, int /*tokenIndex*/) {
     // BUS SPI (no arguments) - display SPI status
     if (argc == 2) {
         displaySPIStatus();
@@ -202,7 +202,7 @@ static int bus_spi(int argc, const char* const* argv, int /*tokenIndex*/) {
 }
 
 // BUS CAN subcommand handler
-static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
+static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
 #if NUM_CAN_BUSES == 0
     msg.control.println(F("ERROR: No CAN buses available on this platform"));
     return 1;
@@ -515,7 +515,7 @@ static int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
 }
 
 // BUS SERIAL subcommand handler
-static int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
+static FLASHMEM int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
 #if NUM_SERIAL_PORTS == 0
     msg.control.println(F("ERROR: No serial ports available on this platform"));
     return 1;
@@ -835,7 +835,7 @@ static const Subcommand BUS_SUBCOMMANDS[] PROGMEM = {
 };
 static const uint8_t NUM_BUS_SUBCOMMANDS = sizeof(BUS_SUBCOMMANDS) / sizeof(Subcommand);
 
-void printHelpBus() {
+FLASHMEM void printHelpBus() {
     msg.control.println();
     msg.control.println(F("=== BUS Commands ==="));
     msg.control.println(F("Configure I2C, SPI, CAN buses and Serial ports"));
@@ -895,7 +895,7 @@ static FLASHMEM void emitBusCanJson() {
 }
 #endif
 
-int cmd_bus(int argc, const char* const* argv) {
+FLASHMEM int cmd_bus(int argc, const char* const* argv) {
     // BUS CAN JSON: read-only, answers in RUN and never bumps configGeneration
     // (every other BUS form is gated by BUS_SUBCOMMANDS below)
     if (argc == 3 && streq_P(argv[1], PSTR("CAN")) && streq_P(argv[2], PSTR("JSON"))) {
@@ -925,7 +925,7 @@ int cmd_bus(int argc, const char* const* argv) {
 // ===== LOG COMMAND =====
 
 #if INCLUDE_SELFTEST
-int selftestBusTable() {
+FLASHMEM int selftestBusTable() {
     int failures = 0;
     for (uint8_t i = 0; i < NUM_BUS_SUBCOMMANDS; i++) {
         const char*        tok = (const char*)pgm_read_ptr(&BUS_SUBCOMMANDS[i].token);

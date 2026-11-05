@@ -11,6 +11,10 @@
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
 
+#ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
+#define FLASHMEM
+#endif
+
 // ============================================================================
 // SERIAL CONFIG HELPERS
 // ============================================================================
@@ -339,7 +343,7 @@ bool isSerialPortActive(uint8_t port_id) {
 // SERIAL PORT STATUS
 // ============================================================================
 
-void displaySerialStatus() {
+FLASHMEM void displaySerialStatus() {
     msg.control.println();
     msg.control.println(F("=== Serial Port Configuration ==="));
     msg.control.print(F("Platform supports Serial1-Serial"));
@@ -383,7 +387,7 @@ void displaySerialStatus() {
     msg.control.println();
 }
 
-void displaySerialPortStatus(uint8_t port_id) {
+FLASHMEM void displaySerialPortStatus(uint8_t port_id) {
     if (port_id < 1 || port_id > NUM_SERIAL_PORTS) {
         msg.control.print(F("ERROR: Serial"));
         msg.control.print(port_id);
