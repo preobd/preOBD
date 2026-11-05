@@ -166,10 +166,14 @@ typedef struct {
 // ===== CAN SENSOR CALIBRATION STRUCTURE =====
 // For sensors imported from CAN bus (OBD-II, J1939, custom protocols)
 #define CAN_DEFAULT_TIMEOUT_MS 2000  // ms before cached CAN data is considered stale
+// Value bytes the frame cache keeps per (ID, PID): a single frame's 8, or a
+// reassembled multi-frame Mode 01 reply's data (0x7F run time: support byte
+// + 3 x 4 bytes, the longest in the PID table) (#527)
+#define CAN_FRAME_DATA_MAX     13
 typedef struct {
     uint16_t source_can_id;      // CAN ID to listen for (0x7E8 for OBD-II, 0x400+ for J1939)
     uint8_t source_pid;          // PID or identifier byte within CAN frame
-    uint8_t data_offset;         // Byte offset within CAN frame data (0-7)
+    uint8_t data_offset;         // Byte offset within CAN frame data (offset + length <= CAN_FRAME_DATA_MAX)
     uint8_t data_length;         // Number of bytes to extract (1-4)
     bool is_big_endian;          // Byte order: true for big-endian (OBD-II), false for little-endian
     float scale_factor;          // Conversion multiplier (e.g., 0.25 for RPM)

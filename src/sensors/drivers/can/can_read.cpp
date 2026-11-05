@@ -46,7 +46,7 @@ void readCANSensor(Input* ptr) {
     }
 
     // Validate data offset and length
-    if (cal->data_offset + cal->data_length > 8) {
+    if (cal->data_offset + cal->data_length > CAN_FRAME_DATA_MAX) {
         ptr->value = NAN;
         return;
     }

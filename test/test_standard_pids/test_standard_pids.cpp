@@ -34,7 +34,7 @@ static StandardPIDInfo rowFor(uint8_t pid) {
     return r;
 }
 
-// Every row: sorted/unique, single-frame, real unit of its own type, fits
+// Every row: sorted/unique, fits a cache entry, real unit of its own type, fits
 // the input's name buffers
 static void test_every_row_is_well_formed(void) {
     for (uint8_t i = 0; i < NUM_STANDARD_PIDS; i++) {
@@ -44,7 +44,11 @@ static void test_every_row_is_well_formed(void) {
         if (i) TEST_ASSERT_TRUE_MESSAGE(row(i - 1).pid < r.pid, msg);          // sorted, unique
         TEST_ASSERT_TRUE_MESSAGE((r.pid & 0x1F) != 0, msg);                   // not a bitmap PID
         TEST_ASSERT_TRUE_MESSAGE(r.data_length == 1 || r.data_length == 2 || r.data_length == 4, msg);
-        TEST_ASSERT_TRUE_MESSAGE(r.data_offset + r.data_length <= 5, msg);    // one ISO-TP single frame
+        TEST_ASSERT_TRUE_MESSAGE(r.data_offset + r.data_length <= CAN_FRAME_DATA_MAX, msg);  // a cache entry
+        // Past one single frame's 5 bytes, only the multi-frame PIDs (#527)
+        if (r.data_offset + r.data_length > 5) {
+            TEST_ASSERT_TRUE_MESSAGE(r.pid == 0x70 || r.pid == 0x78 || r.pid == 0x79 || r.pid == 0x7F, msg);
+        }
         TEST_ASSERT_TRUE_MESSAGE(r.measurementType != MEASURE_DIGITAL, msg);  // #509: shows up as %
         TEST_ASSERT_TRUE_MESSAGE(r.scale_factor != 0.0f, msg);
         TEST_ASSERT_TRUE_MESSAGE(strlen_P(r.name) < 32, msg);                 // Input::displayName
@@ -91,8 +95,32 @@ static void test_audited_rows(void) {
     TEST_ASSERT_FLOAT_WITHIN(1e-6f, -125.0f, rowFor(0x8E).offset);
     TEST_ASSERT_EQUAL_UINT8(1, rowFor(0x66).data_offset);                 // A = sensor-support byte
     TEST_ASSERT_EQUAL_UINT8(1, rowFor(0x67).data_offset);
-    const uint8_t gone[] = {0x6F, 0x78, 0x7F, 0xA4, 0xAA, 0xC3, 0xC4};
+    const uint8_t gone[] = {0x6F, 0xA4, 0xAA, 0xC3, 0xC4};
     for (uint8_t p : gone) TEST_ASSERT_NULL(lookupStandardPID(p));
+}
+
+// Multi-frame rows (#527) read the value J1979 puts after the support byte,
+// in the layout preOBD's own output sends on 0x70/0x78 (obd_output_pids.cpp)
+static void test_multi_frame_rows(void) {
+    StandardPIDInfo boost = rowFor(0x70);
+    TEST_ASSERT_EQUAL_UINT8(3, boost.data_offset);                 // D-E: boost sensor A
+    TEST_ASSERT_EQUAL_UINT8(2, boost.data_length);
+    TEST_ASSERT_FLOAT_WITHIN(1e-7f, 0.03125f, boost.scale_factor);
+    TEST_ASSERT_EQUAL(MEASURE_PRESSURE, boost.measurementType);
+    const uint8_t egtPids[] = {0x78, 0x79};
+    for (uint8_t pid : egtPids) {
+        StandardPIDInfo egt = rowFor(pid);
+        TEST_ASSERT_EQUAL_UINT8(1, egt.data_offset);               // B-C: sensor 1
+        TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.1f, egt.scale_factor);
+        TEST_ASSERT_FLOAT_WITHIN(1e-6f, -40.0f, egt.offset);
+    }
+    StandardPIDInfo rt = rowFor(0x7F);
+    TEST_ASSERT_EQUAL_UINT8(1, rt.data_offset);                    // B-E: total run time
+    TEST_ASSERT_EQUAL_UINT8(4, rt.data_length);
+    TEST_ASSERT_EQUAL(MEASURE_TIME, rt.measurementType);
+    // EGT sensor 4 (H-I, offset 7) and 0x7F's PTO time (J-M, offset 9) fit a cache entry
+    TEST_ASSERT_TRUE(7 + 2 <= CAN_FRAME_DATA_MAX);
+    TEST_ASSERT_TRUE(9 + 4 <= CAN_FRAME_DATA_MAX);
 }
 
 // New types: base unit first (factor 1), conversions, exclusive matching
@@ -144,6 +172,7 @@ int main(int, char**) {
     RUN_TEST(test_every_row_is_well_formed);
     RUN_TEST(test_conversion_to_base);
     RUN_TEST(test_audited_rows);
+    RUN_TEST(test_multi_frame_rows);
     RUN_TEST(test_new_units);
     RUN_TEST(test_symbol_lookup);
     return UNITY_END();

@@ -18,7 +18,9 @@
  * every CAN_POLL_MIN_GAP_MS (#508). After
  * CAN_POLL_BACKOFF_AFTER consecutive unanswered or unsent requests (ignition
  * off, no ECU, bus down) the rate drops to one request per
- * CAN_POLL_BACKOFF_MS until an answer arrives.
+ * CAN_POLL_BACKOFF_MS until an answer arrives. A multi-frame answer (#527)
+ * restarts the timeout with each of its frames, so it is never cut off
+ * part way.
  */
 
 #ifndef CAN_POLL_H
@@ -110,6 +112,20 @@ static inline bool canPollOnNegative(CanPollState& s, uint16_t id, uint32_t now)
         return true;
     }
     return false;
+}
+
+/**
+ * A multi-frame reply to the outstanding request (same ECU, same PID) has
+ * started or moved on (#527). Restarts the answer timeout from `now`, so a
+ * reply still arriving is not counted as a miss and its frames aren't
+ * aborted mid-exchange. Its last frame answers the request through
+ * canPollOnResponse(). Returns true when it extended the outstanding request.
+ */
+static inline bool canPollOnProgress(CanPollState& s, uint16_t id, uint8_t pid,
+                                     uint32_t now) {
+    if (!s.pending || id != s.pendingId || pid != s.pendingPid) return false;
+    s.lastTxMs = now;
+    return true;
 }
 
 /**

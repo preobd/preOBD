@@ -15,6 +15,7 @@
 #include "input_can.h"
 #include "can_frame_parse.h"
 #include "can_poll.h"
+#include "isotp_rx.h"
 #include "../sensors/drivers/can/can_scan.h"
 #if SUPPORTS_JSON_EXPORT
 #include "can_status_json.h"
@@ -45,6 +46,11 @@ static CANRequestHandler requestHandler = nullptr;
 // Active Mode 01 polling (#476) — see can_poll.h for the pacing rules
 static CanPollState pollState;
 static uint8_t pollCursor = 0;   // inputs[] slot to try next
+
+// Multi-frame Mode 01 replies (#527) — see isotp_rx.h
+static IsoTpRx isoTpRx;
+static_assert(ISOTP_RX_MAX - 2 <= CAN_FRAME_DATA_MAX,
+              "a reassembled reply's data must fit a frame cache entry");
 
 #if SUPPORTS_JSON_EXPORT
 // Counters behind BUS CAN JSON (#510). JSON is compiled out on AVR, and so
@@ -137,6 +143,7 @@ bool initCANInput() {
 
     canPollReset(pollState, millis());
     pollCursor = 0;
+    isoTpRxReset(isoTpRx);
 
     canInputInitialized = true;
     return true;
@@ -212,6 +219,52 @@ FLASHMEM void getCANInputStatus(CanBusSnapshot& s, uint32_t now) {
 // FRAME RECEPTION
 // ============================================================================
 
+static void acceptCANValue(uint32_t can_id, uint8_t identifier, const uint8_t* value,
+                           uint8_t stored, uint8_t payload, bool mode01, bool extended,
+                           uint32_t now);
+
+/**
+ * A First or Consecutive Frame from an ECU (#527). Reassembles a Mode 01
+ * reply and, once complete, stores it like a single-frame answer. Flow
+ * Control goes out only for a reply to our own outstanding request, and
+ * only in NORMAL mode: in LISTEN, or for another tester's request, that
+ * tester sends it and this only listens along. If another tester asked the
+ * same ECU for the same PID while ours is outstanding, both send Flow
+ * Control; ISO 15765-2 has the ECU ignore the unexpected second one.
+ * Returns true when the frame belonged to a reply (whatever became of it).
+ */
+static bool handleIsoTpFrame(uint16_t id, const uint8_t* data, uint8_t len, uint32_t now) {
+    switch (isoTpRxFrame(isoTpRx, id, data, len, now)) {
+    case ISOTP_RX_STARTED:
+        if (pollState.pending && id == pollState.pendingId &&
+            isoTpRx.buf[1] == pollState.pendingPid &&
+            systemConfig.buses.can_input_mode == CAN_INPUT_NORMAL) {   // the poller's own guard
+            uint8_t fc[8];
+            buildIsoTpFlowControl(fc);
+            bool ok = hal::can::write(obdRequestIdFor(id), fc, 8, false, canInputBus);
+            if (ok) canPollOnProgress(pollState, id, isoTpRx.buf[1], now);   // else it times out
+#if SUPPORTS_JSON_EXPORT
+            if (!ok) statTxFail++;
+#endif
+        }
+        return true;
+    case ISOTP_RX_PROGRESS:
+        // Only a reply to our request holds it open, not another tester's
+        canPollOnProgress(pollState, id, isoTpRx.buf[1], now);
+        return true;
+    case ISOTP_RX_COMPLETE:
+        // buf: 41 <pid> <data...>
+        acceptCANValue(id, isoTpRx.buf[1], &isoTpRx.buf[2], isoTpRx.total - 2,
+                       isoTpRx.total - 2, true, false, now);
+        return true;
+    case ISOTP_RX_ABORTED:
+        return true;   // the request times out and the next round asks again
+    case ISOTP_RX_IGNORED:
+    default:
+        return false;
+    }
+}
+
 /**
  * Process a single CAN frame and extract data into cache
  * @param can_id    CAN identifier
@@ -237,9 +290,16 @@ static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len,
 
     uint32_t now = millis();
 
-    // A negative response or an ISO-TP multi-frame PCI from an ECU is not a
-    // value; it would be keyed by its first byte (NRC as PID 0x03, a first
-    // frame as 0x10). See can_frame_parse.h.
+    // A multi-frame Mode 01 reply (0x70 boost, 0x78 EGT, ...) is
+    // reassembled before it is a value (#527)
+    if (!extended && isObdResponseId((uint16_t)can_id) && handleIsoTpFrame((uint16_t)can_id, data, len, now)) {
+        return;
+    }
+
+    // A negative response or any other ISO-TP PCI (a Flow Control, a frame
+    // of a reply we aren't reassembling) from an ECU is not a value; it
+    // would be keyed by its first byte (NRC as PID 0x03, a first frame as
+    // 0x10). See can_frame_parse.h.
     if (!extended && isObdResponseId((uint16_t)can_id) && isObdNonValueFrame(data, len)) {
         // "PID not supported" still answers our request: release it now
         // rather than after the timeout, and don't count a miss (#507)
@@ -281,27 +341,40 @@ static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len,
         payload = data[0] - 2;
     }
 
+    acceptCANValue(can_id, identifier, &data[data_offset], data_length, payload,
+                   data_offset != 0, extended, now);
+}
+
+/**
+ * Store a parsed value frame: SCAN PIDS bitmap, frame cache, scan results,
+ * and the poller's answer. `stored` bytes go to the cache (a single frame's
+ * padding included); `payload` is what the ECU actually sent. `mode01` is a
+ * Mode 01 answer rather than a custom frame keyed by its first byte.
+ */
+static void acceptCANValue(uint32_t can_id, uint8_t identifier, const uint8_t* value,
+                           uint8_t stored, uint8_t payload, bool mode01, bool extended,
+                           uint32_t now) {
 #if SUPPORTS_JSON_EXPORT
     // SCAN PIDS (#511): a supported-PID bitmap answer belongs to the
     // discovery, not to the frame cache or the scan results
-    if (data_offset != 0 && !extended &&
-        canScanOnBitmap((uint16_t)can_id, identifier, &data[data_offset], payload)) {
+    if (mode01 && !extended &&
+        canScanOnBitmap((uint16_t)can_id, identifier, value, payload)) {
         return;
     }
 #endif
 
-    updateCANCache(can_id, identifier, &data[data_offset], data_length);
+    updateCANCache(can_id, identifier, value, stored);
 
     // The scan sees every parsed 11-bit frame (#510); a 29-bit ID would be
     // truncated to 16 bits here and could pose as OBD (0x18DA07E8 -> 0x7E8).
     if (!extended) {
-        canScanOnFrame((uint16_t)can_id, identifier, &data[data_offset], payload, now);
+        canScanOnFrame((uint16_t)can_id, identifier, value, payload, now);
     }
 
     // A Mode 01 response (offset 2 or 3; custom frames parse at offset 0)
     // answers our outstanding request and ends any backoff. A 29-bit ID
     // truncated to 16 bits could otherwise pose as 0x7E8.
-    if (data_offset != 0 && !extended) {
+    if (mode01 && !extended) {
         bool answered = canPollOnResponse(pollState, (uint16_t)can_id, identifier, now);
 #if SUPPORTS_JSON_EXPORT
         if (answered) statAnswers++;

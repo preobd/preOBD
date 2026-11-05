@@ -53,7 +53,7 @@ enum CalApplyStatus : uint8_t {
     CAL_APPLY_ERR_SPEED_TIMEOUT,     // timeout outside 100..10000 ms
     CAL_APPLY_ERR_SPEED_MAX,         // max speed outside 50..500 km/h
     CAL_APPLY_ERR_CAN_LENGTH,        // data length outside 1..4 bytes
-    CAL_APPLY_ERR_CAN_OFFSET,        // data offset outside 0..7
+    CAL_APPLY_ERR_CAN_OFFSET,        // data offset + length past CAN_FRAME_DATA_MAX
     CAL_APPLY_ERR_CAN_TIMEOUT,       // timeout nonzero and outside 100..30000 ms
     CAL_APPLY_ERR_SENSOR_TYPE        // profile is not the type the input's sensor reads (#460)
 };

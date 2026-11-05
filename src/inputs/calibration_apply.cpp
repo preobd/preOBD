@@ -242,7 +242,8 @@ CalApplyStatus applyCalCanImport(Input* input, uint16_t source_can_id, uint8_t s
     if (input == nullptr) return CAL_APPLY_ERR_NO_INPUT;
     if (input->calibrationType != CAL_CAN_IMPORT) return CAL_APPLY_ERR_SENSOR_TYPE;
     if (data_length < 1 || data_length > 4) return CAL_APPLY_ERR_CAN_LENGTH;
-    if (data_offset > 7) return CAL_APPLY_ERR_CAN_OFFSET;
+    // A multi-frame reply's value can sit past byte 7 (EGT sensor 4 of 0x78: #527)
+    if (data_offset + data_length > CAN_FRAME_DATA_MAX) return CAL_APPLY_ERR_CAN_OFFSET;
     // 0 is a legitimate value: CANSensorCalibration.timeout_ms treats 0 as
     // "use CAN_DEFAULT_TIMEOUT_MS" (sensors/calibration_types.h). Anything else must fall
     // in the same range SET <pin> CAN_TIMEOUT has always enforced.

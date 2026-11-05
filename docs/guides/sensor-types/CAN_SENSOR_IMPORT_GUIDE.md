@@ -277,6 +277,10 @@ the python-OBD library and CSS Electronics' J1979 PID table.
 | 0x5E | Engine Fuel Rate               | L/h     | gal/h            |
 | 0x66 | Mass Air Flow (Sensor A)       | g/s     | lb/min           |
 | 0x67 | Engine Coolant Temp (Sensor 1) | °C      | °F               |
+| 0x70 | Boost Pressure (Sensor A)      | kPa     | bar, psi, inHg   |
+| 0x78 | EGT Bank 1 Sensor 1            | °C      | °F               |
+| 0x79 | EGT Bank 2 Sensor 1            | °C      | °F               |
+| 0x7F | Total Engine Run Time          | s       | min, h           |
 | 0x8E | Engine Friction Torque         | %       |                  |
 | 0xA6 | Odometer                       | km      | mi               |
 
@@ -287,9 +291,15 @@ or 0x67 keeps the name (and, for 0x66/0x67, the decoding) it was imported with. 
 `SET CAN <pid>` again to replace it. Units of other imported PIDs are corrected
 automatically at boot.
 
-Some PIDs are left out on purpose. Exhaust gas temperature (0x78) and the total engine
-run time (0x7F) arrive as multi-frame replies, which preOBD does not reassemble. The
-transmission gear (0xA4) is a ratio, not a sensor value.
+Boost (0x70), exhaust gas temperature (0x78, 0x79) and total run time (0x7F) are
+longer than one CAN frame. In `ENABLE`, preOBD asks the ECU for the rest of the reply
+(ISO-TP Flow Control) and reassembles it. In `LISTEN` it never transmits, so it reads
+these PIDs only while another tool on the bus is requesting them. Boost is absolute
+pressure, like MAP. An EGT PID carries up to four sensors, and `SET CAN` imports
+sensor 1. For sensors 2–4, set `dataOffset` to 3, 5 or 7 through a JSON import (see
+[Custom Frames](#custom-frames)).
+
+The transmission gear (0xA4) is left out on purpose: it is a ratio, not a sensor value.
 
 **Unknown PIDs:**
 If you import a PID not in the table (e.g., manufacturer-specific), preOBD uses default calibration:
@@ -382,7 +392,7 @@ with `SYSTEM DUMP JSON`, edit that input's calibration, and import it back:
 How a frame is matched:
 - **OBD-II Mode 01 responses** (mode byte `0x41`): matched on the CAN ID and the PID; data starts after the PID.
 - **Any other frame**: matched on the CAN ID and **the first data byte**, which is treated as an identifier; data starts after it.
-- The value is `raw × scaleFactor + offset`, reading `dataLength` bytes (1-4) starting `dataOffset` bytes into the data.
+- The value is `raw × scaleFactor + offset`, reading `dataLength` bytes (1-4) starting `dataOffset` bytes into the data. `dataOffset + dataLength` can be at most 13, which reaches the last value of a multi-frame reply (EGT sensor 4 of 0x78 is `dataOffset` 7).
 - The result must be in preOBD's base unit for its quantity: °C, **bar** (not kPa: a kPa value needs a scale 100× smaller), km/h, V, RPM, %. The display converts from there to the input's units.
 
 **Limitations:** CAN IDs are stored as 16 bits, and a non-OBD frame must carry a
@@ -621,7 +631,7 @@ RUN
 1. **Polling needs `ENABLE`** - `LISTEN` is passive; see the note at the top. While preOBD polls, `SCAN CAN` shows the ECU's answers to its requests (only PIDs the ECU supports) plus anything else on the bus
 2. **Frame cache size** - received frames are cached per (CAN ID, PID) in a small table (16 entries on Teensy/ESP32, 8 on the Mega). Importing more PIDs than that, or a busy bus with other traffic, can evict a PID between polls, so it flickers to `NaN` and `INFO CAN:<n>` shows `Last frame: never`
 3. **Ignition off** - with nothing answering, `ENABLE` keeps sending one request per second. If no other node is powered to acknowledge it, the CAN controller retries that frame back to back until preOBD gives up on it 50 ms later, so the bus is busy for about 5% of the time instead of continuously. Power preOBD from switched ignition, or use `LISTEN`, if even that could keep other modules awake
-4. **OBD-II Mode 01 only** - single-frame PIDs; no ISO-TP multi-frame reassembly (Mode 09, Mode 22)
+4. **OBD-II Mode 01 only** - multi-frame replies are reassembled for Mode 01 PIDs of up to 13 data bytes (0x70, 0x78, 0x79, 0x7F); not for Mode 09 or Mode 22
 5. **No J1939** - 29-bit IDs are not decoded (see [Custom Frames](#custom-frames))
 
 ### Platform Support

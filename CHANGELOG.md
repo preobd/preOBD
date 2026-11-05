@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- CAN import reads OBD-II PIDs whose reply is longer than one CAN frame: boost (0x70), exhaust gas temperature (0x78, 0x79) and total engine run time (0x7F). In `ENABLE` preOBD asks the ECU for the rest of the reply; in `LISTEN` it reads them while another tool requests them (#527)
+
 ## [0.15.0-beta] - 2026-10-06
 
 **Breaking (OBD-II output): some PIDs moved.** Standard PIDs now use the SAE J1979 encoding, so any scan tool reads them correctly with no setup. Boost and EGT moved to J1979's 0x70 and 0x78, and sensors J1979 has no PID for moved to preOBD's 0xAA–0xB7. Saved inputs keep their old PID, and the saved configuration is kept on upgrade (`EEPROM_VERSION` is unchanged). Set those inputs up again or use `SET <pin> OBD_PID`, update Torque custom PIDs, and re-import the RealDash XML (#516).

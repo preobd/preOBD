@@ -37,7 +37,7 @@
 struct CANFrameEntry {
     uint16_t can_id;        // CAN identifier (0x7E8 for OBD-II, 0x400+ for J1939, etc.)
     uint8_t pid;            // PID or identifier byte (OBD-II PID or custom protocol ID)
-    uint8_t data[8];        // Full 8-byte CAN frame data payload
+    uint8_t data[CAN_FRAME_DATA_MAX]; // Value bytes: a frame's payload, or a reassembled reply's (#527)
     uint32_t timestamp_ms;  // millis() when frame was last updated
     bool valid;             // Entry is populated and valid
 };

@@ -56,6 +56,14 @@ static const char PSTR_PID_MAF_A[] PROGMEM = "Mass Air Flow (Sensor A)";
 static const char PSTR_PID_MAFA[] PROGMEM = "MAFA";
 static const char PSTR_PID_ECT_1[] PROGMEM = "Engine Coolant Temp (Sensor 1)";
 static const char PSTR_PID_ECT1[] PROGMEM = "ECT1";
+static const char PSTR_PID_BOOST_A[] PROGMEM = "Boost Pressure (Sensor A)";
+static const char PSTR_PID_BOOST[] PROGMEM = "BOOST";
+static const char PSTR_PID_EGT_B1S1[] PROGMEM = "EGT Bank 1 Sensor 1";
+static const char PSTR_PID_EGT11[] PROGMEM = "EGT11";
+static const char PSTR_PID_EGT_B2S1[] PROGMEM = "EGT Bank 2 Sensor 1";
+static const char PSTR_PID_EGT21[] PROGMEM = "EGT21";
+static const char PSTR_PID_RUN_TOTAL[] PROGMEM = "Total Engine Run Time";
+static const char PSTR_PID_RUNTOT[] PROGMEM = "RUNTOT";
 static const char PSTR_PID_FRICTION[] PROGMEM = "Engine Friction Torque";
 static const char PSTR_PID_FRIC[] PROGMEM = "FRIC";
 static const char PSTR_PID_ODOMETER[] PROGMEM = "Odometer";
@@ -102,6 +110,12 @@ const PROGMEM StandardPIDInfo STANDARD_PID_TABLE[] = {
     {0x5E, PSTR_PID_FUEL_RATE,       PSTR_PID_FRATE,     0, 2, MEASURE_FUEL_RATE,   0.05,        0.0, PSTR_U_LPH},     // (256A+B)/20 L/h
     {0x66, PSTR_PID_MAF_A,           PSTR_PID_MAFA,      1, 2, MEASURE_MASS_FLOW,   0.03125,     0.0, PSTR_U_GPS},     // A=support, (256B+C)/32 g/s
     {0x67, PSTR_PID_ECT_1,           PSTR_PID_ECT1,      1, 1, MEASURE_TEMPERATURE, 1.0,       -40.0, PSTR_U_C},       // A=support, B-40
+    // Multi-frame replies, reassembled by CAN input (#527). One row per
+    // value: EGT sensors 2-4 (offsets 3, 5, 7) import through JSON dataOffset.
+    {0x70, PSTR_PID_BOOST_A,         PSTR_PID_BOOST,     3, 2, MEASURE_PRESSURE,    0.03125,     0.0, PSTR_U_KPA},     // A=support, B-C commanded, (256D+E)/32 kPa abs
+    {0x78, PSTR_PID_EGT_B1S1,        PSTR_PID_EGT11,     1, 2, MEASURE_TEMPERATURE, 0.1,       -40.0, PSTR_U_C},       // A=support, (256B+C)/10-40
+    {0x79, PSTR_PID_EGT_B2S1,        PSTR_PID_EGT21,     1, 2, MEASURE_TEMPERATURE, 0.1,       -40.0, PSTR_U_C},       // A=support, (256B+C)/10-40
+    {0x7F, PSTR_PID_RUN_TOTAL,       PSTR_PID_RUNTOT,    1, 4, MEASURE_TIME,        1.0,         0.0, PSTR_U_S},       // A=support, B-E total s (F-I idle, J-M PTO)
     {0x8E, PSTR_PID_FRICTION,        PSTR_PID_FRIC,      0, 1, MEASURE_PERCENT,     1.0,      -125.0, PSTR_U_PERCENT}, // A-125 (-125..130 %)
     {0xA6, PSTR_PID_ODOMETER,        PSTR_PID_ODO,       0, 4, MEASURE_DISTANCE,    0.1,         0.0, PSTR_U_KM},      // 32-bit /10 km
 };

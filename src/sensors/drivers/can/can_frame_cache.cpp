@@ -60,12 +60,13 @@ void initCANFrameCache() {
 
 void updateCANCache(uint16_t can_id, uint8_t pid, const uint8_t* data, uint8_t len) {
     // Validate input parameters
-    // NOTE: Caller MUST ensure 'data' buffer has at least 'len' bytes available
-    // Current callers (updateCANInput, CAN scan) always provide 8-byte buffers
-    if (!data || len == 0 || len > 8) return;
+    // NOTE: Caller MUST ensure 'data' buffer has at least 'len' bytes available.
+    // A single frame gives up to 8; a reassembled multi-frame reply up to
+    // CAN_FRAME_DATA_MAX (#527). Longer is clipped: no table PID reads past it.
+    if (!data || len == 0) return;
 
     uint8_t index = hashCANFrame(can_id, pid);
-    uint8_t copy_len = min(len, (uint8_t)8);
+    uint8_t copy_len = min(len, (uint8_t)CAN_FRAME_DATA_MAX);
 
     // Check if entry already exists at hash index
     if (canFrameCache[index].valid &&

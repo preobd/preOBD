@@ -48,7 +48,7 @@ struct StandardPIDInfo {
 
 // Manifest constant: an extern array can't be sized here. standard_pids.cpp
 // static_asserts it against the table.
-#define NUM_STANDARD_PIDS 27
+#define NUM_STANDARD_PIDS 31
 
 extern const PROGMEM StandardPIDInfo STANDARD_PID_TABLE[];
 

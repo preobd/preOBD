@@ -19,6 +19,12 @@
  *   0x31 dist since clear 1500 km   0x4D time MIL 90 min   0x5E fuel 5.5 L/h
  *   0x66 MAF sensor A 20 g/s (A = support byte 01)
  *   0x67 ECT sensor 1 90 C (A = support byte 01)   0xA6 odometer 123456.7 km
+ * Multi-frame (#527): a First Frame, then the Consecutive Frames once the
+ * tester's Flow Control (30 <BS> <STmin>) arrives on 0x7E0, STmin honoured.
+ * No Flow Control within 75 ms (N_Bs) drops the answer, like a strict ECU;
+ * stats show the worst Flow Control latency and how many were late:
+ *   0x70 boost sensor A 150 kPa abs   0x78 EGT B1S1 650 C   0x79 EGT B2S1 600 C
+ *   0x7F run time total 360000 s (100 h), idle 3600 s
  *   0x00/0x20/... supported-PID bitmaps of the above, minus the unsupported
  *   PID (#511); a bitmap block with nothing above it is treated like the
  *   unsupported PID (silence, or NRC with `n`).
@@ -39,6 +45,9 @@
  *                unpowered ECU, and counts every retransmission of preOBD's
  *                unACKed request (#506). Also silent while on.
  *   e            toggle the second ECU (0x7E9)
+ *   x            toggle a bad sequence number on multi-frame answers (the
+ *                first Consecutive Frame goes out as 22, not 21): preOBD
+ *                must drop the reply, not store a half-filled one (#527)
  *   r            print stats now
  *   z            zero counters
  *   q <hex>      act as a TESTER: send 02 01 <pid> to 0x7DF and print any
@@ -76,6 +85,7 @@ static bool     unsupportedSendsNrc = false;
 static bool     silent = false;
 static bool     listenOnly = false;
 static bool     secondEcu = false;
+static bool     badSequence = false;
 
 // ---- one queued answer per ECU (delay is non-blocking) ----
 static bool      replyQueued = false;
@@ -84,6 +94,23 @@ static can_frame replyFrame;
 static bool      reply2Queued = false;
 static uint32_t  reply2DueMs;
 static can_frame reply2Frame;
+
+// ---- multi-frame answer (#527): the First Frame goes out as replyFrame,
+// the rest after the tester's Flow Control ----
+static uint8_t  mfMsg[16];        // 41 <pid> <data...>
+static uint8_t  mfLen = 0;
+static uint8_t  mfPos = 0;
+static uint8_t  mfSeq = 1;
+static uint8_t  mfStMinMs = 0;
+static bool     mfFirstQueued = false;   // replyFrame is a First Frame
+static bool     mfAwaitFc = false;
+static bool     mfSending = false;
+static uint32_t mfFcDeadlineMs = 0;
+static uint32_t mfFirstSentMs = 0;
+static uint16_t mfFcMaxMs = 0;    // worst First Frame -> Flow Control latency
+static uint16_t mfFcLate = 0;     // answers dropped: no Flow Control within N_Bs
+#define MF_N_BS_MS 75             // ISO 15765-4: tester's Flow Control within 75 ms
+static uint32_t mfNextMs = 0;
 
 // ---- stats ----
 static const uint8_t TRACKED = 8;
@@ -111,6 +138,8 @@ static void zeroStats() {
     minGapMs = 0xFFFFFFFF;
     gapSumMs = gapCount = 0;
     lastRequestMs = 0;
+    mfFcMaxMs = 0;
+    mfFcLate = 0;
     windowStartMs = millis();
 }
 
@@ -173,6 +202,10 @@ static void printStats() {
         Serial.print(F(" other="));
         Serial.print(otherCount);
     }
+    Serial.print(F("  FC max="));
+    Serial.print(mfFcMaxMs);
+    Serial.print(F(" ms late="));
+    Serial.print(mfFcLate);
     Serial.println();
 }
 
@@ -184,15 +217,57 @@ static void printSettings() {
     Serial.print(unsupportedSendsNrc ? F(" (NRC)") : F(" (silent)"));
     Serial.print(F("  ecu="));
     Serial.print(listenOnly ? F("LISTEN-ONLY (no ACK)") : silent ? F("SILENT") : F("answering"));
-    Serial.println(secondEcu ? F("  ecu2=0x7E9 on") : F("  ecu2=off"));
+    Serial.print(secondEcu ? F("  ecu2=0x7E9 on") : F("  ecu2=off"));
+    Serial.println(badSequence ? F("  multi-frame=BAD SEQUENCE") : F(""));
 }
 
 static void printHelp() {
     Serial.println(F("h help | d <ms> answer delay | u <hex> unsupported PID (00=none)"));
     Serial.println(F("n toggle unsupported: silence/NRC | s toggle ECU silent | e toggle 2nd ECU 0x7E9"));
-    Serial.println(F("l toggle listen-only (no ACK: unpowered ECU) | r stats | z zero"));
+    Serial.println(F("l toggle listen-only (no ACK: unpowered ECU) | x toggle bad multi-frame sequence | r stats | z zero"));
     Serial.println(F("q [<mode>] <pid> tester request to 0x7DF, print 0x7E8 answers | p ... same to 0x7E0"));
     printSettings();
+}
+
+// A Mode 01 answer longer than one frame (#527): fill mfMsg and put its
+// First Frame in `f`. One at a time, like a busy ECU.
+static bool buildMultiFrameAnswer(uint8_t pid, can_frame& f) {
+    if (mfFirstQueued || mfAwaitFc || mfSending) return false;
+    memset(mfMsg, 0, sizeof(mfMsg));
+    mfMsg[0] = 0x41;
+    mfMsg[1] = pid;
+    switch (pid) {
+        case 0x70: {            // A = support (sensor A), D-E boost A (256D+E)/32 kPa abs
+            uint16_t raw = 150 * 32;
+            mfMsg[2] = 0x02; mfMsg[5] = raw >> 8; mfMsg[6] = raw & 0xFF;
+            mfLen = 12;         // A..J
+            break;
+        }
+        case 0x78:              // A = support (sensor 1), B-C (256B+C)/10-40
+        case 0x79: {
+            uint16_t raw = (uint16_t)(((pid == 0x78 ? 650 : 600) + 40) * 10);
+            mfMsg[2] = 0x01; mfMsg[3] = raw >> 8; mfMsg[4] = raw & 0xFF;
+            mfLen = 11;         // A..I
+            break;
+        }
+        case 0x7F: {            // A = support (total, idle), B-E total s, F-I idle s
+            uint32_t total = 360000, idle = 3600;
+            mfMsg[2] = 0x03;
+            mfMsg[3] = total >> 24; mfMsg[4] = total >> 16; mfMsg[5] = total >> 8; mfMsg[6] = total;
+            mfMsg[7] = idle >> 24;  mfMsg[8] = idle >> 16;  mfMsg[9] = idle >> 8;  mfMsg[10] = idle;
+            mfLen = 15;         // A..M
+            break;
+        }
+        default:
+            return false;
+    }
+    f.data[0] = 0x10;           // First Frame, length < 256
+    f.data[1] = mfLen;
+    memcpy(&f.data[2], mfMsg, 6);
+    mfPos = 6;
+    mfSeq = 1;
+    mfFirstQueued = true;
+    return true;
 }
 
 // Fill `f` with the Mode 01 answer for `pid`; false if this ECU ignores it.
@@ -211,7 +286,8 @@ static bool buildAnswer(uint8_t pid, can_frame& f, uint32_t now) {
     }
 
     static const uint8_t answered[] = {0x05, 0x0B, 0x0C, 0x0D, 0x0F, 0x10, 0x1F, 0x21,
-                                       0x31, 0x4D, 0x5E, 0x66, 0x67, 0xA6};
+                                       0x31, 0x4D, 0x5E, 0x66, 0x67, 0x70, 0x78, 0x79,
+                                       0x7F, 0xA6};
     if ((pid & 0x1F) == 0) {    // supported-PID bitmap for (pid, pid+0x20]
         bool any = false, more = false;
         uint8_t bits[4] = {0, 0, 0, 0};
@@ -300,7 +376,7 @@ static bool buildAnswer(uint8_t pid, can_frame& f, uint32_t now) {
             return true;
         }
         default:
-            return false;
+            return buildMultiFrameAnswer(pid, f);
     }
 }
 
@@ -355,7 +431,8 @@ static void handleSerial() {
             case 'd': answerDelayMs = (uint16_t)atoi(arg); printSettings(); break;
             case 'u': unsupportedPid = (uint8_t)strtoul(arg, nullptr, 16); printSettings(); break;
             case 'n': unsupportedSendsNrc = !unsupportedSendsNrc; printSettings(); break;
-            case 's': silent = !silent; replyQueued = false; reply2Queued = false; printSettings(); break;
+            case 's': silent = !silent; replyQueued = false; reply2Queued = false;
+                      mfFirstQueued = mfAwaitFc = mfSending = false; printSettings(); break;
             case 'l':
                 listenOnly = !listenOnly;
                 replyQueued = false; reply2Queued = false;
@@ -365,6 +442,7 @@ static void handleSerial() {
                 printSettings();
                 break;
             case 'e': secondEcu = !secondEcu; reply2Queued = false; printSettings(); break;
+            case 'x': badSequence = !badSequence; printSettings(); break;
             case 'r': printStats(); break;
             case 'z': zeroStats(); Serial.println(F("[stats] zeroed")); break;
             case 'b': {
@@ -463,6 +541,23 @@ void loop() {
             continue;
         }
         if (id != 0x7DF && id != 0x7E0 && id != 0x7E1) continue;
+        // The tester's Flow Control for our First Frame (#527)
+        if (id == 0x7E0 && mfAwaitFc && rx.can_dlc >= 3 && (rx.data[0] & 0xF0) == 0x30) {
+            if (rx.data[0] != 0x30) {   // 31 wait / 32 overflow: give up
+                mfAwaitFc = false;
+                Serial.println(F("[mf] flow control wait/overflow: answer dropped"));
+                continue;
+            }
+            mfAwaitFc = false;
+            mfSending = true;
+            if (now - mfFirstSentMs > mfFcMaxMs) mfFcMaxMs = (uint16_t)(now - mfFirstSentMs);
+            mfStMinMs = rx.data[2] <= 0x7F ? rx.data[2] : 1;
+            mfNextMs = now;
+            Serial.print(F("[mf] flow control STmin "));
+            Serial.print(rx.data[2]);
+            Serial.println(F(": sending the rest"));
+            continue;
+        }
         // ISO-TP single frame: 02 01 <pid>
         if (rx.can_dlc < 3 || rx.data[0] != 0x02 || rx.data[1] != 0x01) continue;
 
@@ -484,8 +579,40 @@ void loop() {
 
     if (replyQueued && (int32_t)(now - replyDueMs) >= 0) {
         replyQueued = false;
-        if (mcp.sendMessage(&replyFrame) == MCP2515::ERROR_OK) answersSent++;
+        bool ok = mcp.sendMessage(&replyFrame) == MCP2515::ERROR_OK;
+        if (ok) answersSent++;
         else txErrors++;
+        if (mfFirstQueued) {    // a First Frame: the rest waits for Flow Control
+            mfFirstQueued = false;
+            mfAwaitFc = ok;
+            mfFirstSentMs = now;
+            mfFcDeadlineMs = now + MF_N_BS_MS;
+        }
+    }
+    if (mfAwaitFc && (int32_t)(now - mfFcDeadlineMs) >= 0) {
+        mfAwaitFc = false;
+        Serial.print(F("[mf] 0x"));
+        printHex2(mfMsg[1]);
+        Serial.println(F(": no flow control within 75 ms (N_Bs), answer dropped"));
+        mfFcLate++;
+    }
+    if (mfSending && (int32_t)(now - mfNextMs) >= 0) {
+        can_frame cf;
+        memset(&cf, 0, sizeof(cf));
+        cf.can_id = 0x7E8;
+        cf.can_dlc = 8;
+        uint8_t seq = (badSequence && mfSeq == 1) ? 2 : mfSeq;
+        cf.data[0] = 0x20 | (seq & 0x0F);
+        for (uint8_t i = 0; i < 7 && mfPos < mfLen; i++) cf.data[1 + i] = mfMsg[mfPos++];
+        if (mcp.sendMessage(&cf) != MCP2515::ERROR_OK) txErrors++;
+        mfSeq = (mfSeq + 1) & 0x0F;
+        mfNextMs = now + mfStMinMs;
+        if (mfPos >= mfLen) {
+            mfSending = false;
+            Serial.print(F("[mf] 0x"));
+            printHex2(mfMsg[1]);
+            Serial.println(badSequence ? F(" sent (bad sequence)") : F(" sent"));
+        }
     }
     if (reply2Queued && (int32_t)(now - reply2DueMs) >= 0) {
         reply2Queued = false;
