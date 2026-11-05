@@ -14,3 +14,7 @@ uint8_t busNeedsForDisplayType(uint8_t displayType) {
     // only counts the vote when the driver is built in).
     return (displayType == DISPLAY_LCD || displayType == DISPLAY_OLED) ? BUS_NEED_I2C : BUS_NEED_NONE;
 }
+
+uint8_t busNeedsForSdPin(uint8_t sdPin) {
+    return sdPin == 254 ? BUS_NEED_NONE : BUS_NEED_SPI;   // 254 = BUILTIN_SDCARD (SDIO)
+}

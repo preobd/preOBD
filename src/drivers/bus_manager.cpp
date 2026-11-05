@@ -319,7 +319,11 @@ bool initSPIBus(uint8_t bus_id, uint32_t clock_hz) {
     }
 
 #elif defined(ESP32)
-    // ESP32: Single SPI bus with default pins
+    // ESP32: Single SPI bus with default pins -- the variant's, which the
+    // pins claimed above must match or the registry guards the wrong copper.
+    static_assert(DEFAULT_SPI0_MOSI == MOSI && DEFAULT_SPI0_MISO == MISO &&
+                  DEFAULT_SPI0_SCK == SCK,
+                  "bus_defaults.h DEFAULT_SPI0_* disagree with this ESP32 variant's SPI pins");
     if (bus_id == 0) {
         SPI.begin();
         active_spi = &SPI;

@@ -11,10 +11,27 @@ Both pause in CONFIG mode, so bench setup doesn't end up in your log.
 
 ## SD Card Logging
 
-**Hardware:** the Teensy 4.1 and 3.6 have a built-in microSD slot. On a Teensy 4.0
-or ESP32-S3, wire an SD card module to the SPI bus and set its chip-select pin with
-`-D SD_PIN=<pin>` in `boards/<board>/wiring.ini`. The Arduino Mega has no room
-for SD logging. Use a FAT32-formatted card.
+**Hardware:** the Teensy 4.1 and 3.6 and the Feather F405 have a built-in microSD
+slot. On a Teensy 4.0 or ESP32-S3, wire an SD card module to the SPI bus and set its
+chip-select pin in `boards/<board>/wiring.ini`. The Arduino Mega has no room for SD
+logging. Use a FAT32-formatted card.
+
+An external card shares the SPI bus with any thermocouples, so it needs a bus like they
+do: declare it in `wiring.ini`, or run `BUS SPI <n>` then `SAVE` and reboot. With no
+bus, the card stays unmounted and boot says what to run.
+
+```ini
+[teensy40]
+wiring =
+    -D SD_PIN=10          ; chip-select
+    -D SPI_WIRED_BUS=0    ; the card is on SPI (Teensy 4.0: MOSI 11, MISO 12, SCK 13)
+```
+
+Check your module's supply: one with its own 3.3 V regulator (most blue "HW-125"
+style boards) needs **5 V** on VCC and fails on 3.3 V, while a bare 3.3 V module
+must never get 5 V.
+The card runs at up to 12 MHz. If a card reads as unformatted on long or breadboarded
+wiring, lower it with `-D SD_SPI_MAX_HZ=4000000`.
 
 ```
 CONFIG

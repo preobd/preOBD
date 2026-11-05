@@ -260,9 +260,19 @@
 // No Wire2 on ESP32
 
 // ----- SPI Default Pins -----
+// What SPI.begin() drives with no arguments: the variant's MOSI/MISO/SCK.
+// The S3 moved them; 23/19/18 there are a missing GPIO, USB D-, and a free
+// pin, so the registry reserved the wrong copper while the bus clocked 11/12/13
+// (#381 review). bus_manager.cpp static_asserts these against the variant.
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#define DEFAULT_SPI0_MOSI 11
+#define DEFAULT_SPI0_MISO 13
+#define DEFAULT_SPI0_SCK  12
+#else
 #define DEFAULT_SPI0_MOSI 23
 #define DEFAULT_SPI0_MISO 19
 #define DEFAULT_SPI0_SCK  18
+#endif
 // ESP32 can have multiple SPI buses, but default library config uses one
 
 // ----- CAN (TWAI) Default Pins -----

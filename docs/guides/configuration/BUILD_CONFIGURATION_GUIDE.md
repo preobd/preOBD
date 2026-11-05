@@ -69,6 +69,7 @@ wiring =
     -D BUZZER_PIN=3       ; alarm buzzer
     -D MODE_BUTTON_PIN=2  ; CONFIG-on-boot / silence button
     -D SD_PIN=10          ; external SD CS (boards without a built-in slot)
+    -D SPI_WIRED_BUS=0    ; ...and the SPI bus it is wired to (or BUS SPI <n>)
 ```
 
 Omit a pin and that peripheral is simply off. A fresh clone with no `wiring.ini`

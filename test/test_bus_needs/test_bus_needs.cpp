@@ -281,6 +281,15 @@ static void test_display_is_one_more_voter(void) {
     TEST_ASSERT_EQUAL(BUS_NEED_NONE, busNeedsForDisplayType(DISPLAY_NONE));
 }
 
+// An SD card on an external chip-select is an SPI device and must vote for the
+// bus before the SD library starts clocking it (#381). The built-in slot is
+// SDIO and must not: voting would reserve MOSI/MISO/SCK for nothing.
+static void test_sd_votes_spi_only_on_an_external_cs(void) {
+    TEST_ASSERT_EQUAL(BUS_NEED_SPI,  busNeedsForSdPin(10));
+    TEST_ASSERT_EQUAL(BUS_NEED_SPI,  busNeedsForSdPin(4));
+    TEST_ASSERT_EQUAL(BUS_NEED_NONE, busNeedsForSdPin(254));
+}
+
 // ===========================================================================
 // 3. The boot pre-scan: the stored records are read BEFORE anything loads
 // ===========================================================================
@@ -488,6 +497,7 @@ int main(int, char**) {
     RUN_TEST(test_analog_and_digital_sensors_need_no_bus);
     RUN_TEST(test_unknown_sensor_hash_needs_no_bus);
     RUN_TEST(test_display_is_one_more_voter);
+    RUN_TEST(test_sd_votes_spi_only_on_an_external_cs);
 
     RUN_TEST(test_stored_i2c_sensor_asks_for_the_i2c_bus);
     RUN_TEST(test_stored_thermocouple_asks_for_the_spi_bus);

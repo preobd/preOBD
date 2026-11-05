@@ -10,6 +10,10 @@
  *   - the display type — one more voter with no special status. The LCD is an
  *     add-on peripheral; it must not be the thing that decides whether the
  *     board's I2C bus exists.
+ *   - an SD card on an external chip-select (#381). Unlike the other two this
+ *     is WIRING (SD_PIN, compile time), not stored configuration, but it votes
+ *     the same way: the card shares MOSI/MISO/SCK with every other SPI device,
+ *     so the bus manager has to own them before the SD library starts clocking.
  *
  * The masks are OR-ed and handed to acquireRequiredBuses() in ONE pass before
  * any client initializes, so pin reservations are in place before the record
@@ -43,5 +47,12 @@ enum : uint8_t {
 
 /** The display's vote: an I2C-attached LCD needs I2C, everything else nothing. */
 uint8_t busNeedsForDisplayType(uint8_t displayType);
+
+/**
+ * The SD card's vote, from the board's SD_PIN: a card on an external
+ * chip-select is an SPI device; the built-in slot (BUILTIN_SDCARD, 254) is
+ * SDIO on every board that has one and needs no bus.
+ */
+uint8_t busNeedsForSdPin(uint8_t sdPin);
 
 #endif // BUS_NEEDS_H

@@ -361,6 +361,11 @@ void setup() {
         busNeeds |= busNeedsForDisplayType(systemConfig.displayType);
     }
     #endif
+    // An SD card on an external CS is an SPI device like any other: it votes
+    // here so MOSI/MISO/SCK are owned before initSD() starts the card (#381).
+    #if SUPPORTS_SD
+    busNeeds |= busNeedsForSdPin(SD_PIN);
+    #endif
 
     // Register system pins in the pin registry. Includes the Tier-1 wired-bus
     // reservation (#379) when a *_WIRED_BUS declaration is in effect AND the

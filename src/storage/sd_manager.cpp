@@ -25,6 +25,19 @@
 #include "../core/system_mode.h"
 #include <SPI.h>
 #include "sd_fs.h"   // SD library for this platform (STM32: SDIO)
+#include "../drivers/bus_manager.h"   // acquireSPI(): the card mounts on the owned bus (#381)
+
+// SPI clock ceiling for a card on an external chip-select. Not the SD spec's
+// 25 MHz, which is what Teensy's SD.begin() used: SPI-mode reads carry no CRC
+// check, so a marginal link returns wrong data with no error. A breadboarded
+// microSD breakout on a Teensy 4.0 read 4 of 32 sectors wrong at 25 MHz and
+// none at 20 MHz or below, and the corrupted MBR made the card look
+// unformatted (#381). 12 MHz keeps margin for car wiring; a log row is a few
+// dozen bytes, so speed doesn't matter here. Override from wiring.ini with
+// -D SD_SPI_MAX_HZ=<hz>.
+#ifndef SD_SPI_MAX_HZ
+#define SD_SPI_MAX_HZ 12000000UL
+#endif
 
 #ifndef FLASHMEM
 #define FLASHMEM
@@ -163,16 +176,38 @@ FLASHMEM void initSD() {
 
 #if SD_PIN == 254
             msg.debug.info(TAG_SD, "Using built-in SD (BUILTIN_SDCARD)");
+            const bool busReady = true;   // SDIO: no shared bus
 #else
+            // Deselect the card before anything else can clock the bus.
             pinMode(SD_PIN, OUTPUT);
+            digitalWrite(SD_PIN, HIGH);
             msg.debug.info(TAG_SD, "Using external SD, CS pin: %d", SD_PIN);
+
+            // The card is an SPI device: mount it on the bus the bus manager
+            // owns, never let the SD library start SPI behind its back (#381).
+            // main.cpp's bus vote already acquired it, so this is a lookup; a
+            // nullptr means no bus is declared or selected (acquireSPI() has
+            // printed what to run) or the selected one couldn't start.
+            SPIClass* sdSpi = acquireSPI();
+            bool busReady = sdSpi != nullptr;
+            if (!busReady) {
+                msg.control.println(F("Note: SD card not mounted: it needs an SPI bus (see above)."));
+            }
+#if !SD_LIB_SPI_ANY_PORT
+            else if (sdSpi != &SPI) {
+                busReady = false;
+                msg.control.print(F("Note: SD card not mounted: this board's SD library only drives SPI, not "));
+                msg.control.print(getSPIBusName(getActiveSPIId()));
+                msg.control.println(F(". Wire the card to SPI and run BUS SPI 0."));
+            }
+#endif
 #endif
 
         // Retry: a card that is still powering up, or a slot with marginal contact,
         // frequently fails the first begin() and succeeds on a later one. The
         // comment here has always claimed retries; the code only ever made one
         // attempt, so a cold card came up unmounted for the whole session.
-        for (uint8_t attempt = 1; attempt <= SD_INIT_ATTEMPTS && !initSuccess; attempt++) {
+        for (uint8_t attempt = 1; busReady && attempt <= SD_INIT_ATTEMPTS && !initSuccess; attempt++) {
             msg.debug.debug(TAG_SD, "SD.begin() attempt %u/%u", attempt, SD_INIT_ATTEMPTS);
             delay(100);
 #if SD_PIN == 254 && defined(ARDUINO_ARCH_STM32)
@@ -196,7 +231,7 @@ FLASHMEM void initSD() {
 #elif SD_PIN == 254
             initSuccess = SD.begin(BUILTIN_SDCARD);
 #else
-            initSuccess = SD.begin(SD_PIN);
+            initSuccess = sdBeginSpi(SD_PIN, *sdSpi, SD_SPI_MAX_HZ);
 #endif
             watchdogReset();
         }

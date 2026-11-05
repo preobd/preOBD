@@ -546,7 +546,14 @@ void registerSystemPins(uint8_t busNeeds) {
     #if SD_PIN != BUILTIN_SDCARD
     { const uint8_t p = SD_PIN;
       if (!claimPins(&p, 1, PIN_CS, PIN_RANK_BUILTIN, TAG_SYSTEM, "SD CS"))
-          reportBuiltinPinCollision(F("SD_PIN"), BPK_SD); }
+          reportBuiltinPinCollision(F("SD_PIN"), BPK_SD);
+      else {
+          // Deselect the card now: other SPI devices (an MCP2515 on the
+          // hybrid boards) talk before initSD() runs, and a floating CS
+          // would let the card answer them.
+          pinMode(p, OUTPUT);
+          digitalWrite(p, HIGH);
+      } }
     #endif
 #endif
 

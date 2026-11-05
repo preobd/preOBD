@@ -26,6 +26,57 @@
 #else
 #include <SD.h>
 #endif
+#include <SPI.h>
+
+// ---------------------------------------------------------------------------
+// Mounting a card on an external chip-select (#381)
+//
+// The bus manager owns the SPI bus: acquireSPI() claims MOSI/MISO/SCK and
+// starts the peripheral, and the card must be mounted on THAT SPIClass. Each
+// SD library takes the port its own way, so this is the one place that knows
+// how; sd_manager.cpp only ever calls sdBeginSpi().
+//
+// SD_LIB_SPI_ANY_PORT says whether the library can use any SPI instance. One
+// that can't drives the global `SPI` only, and the caller must refuse another
+// bus rather than mount a card on wires the bus manager never started.
+// ---------------------------------------------------------------------------
+#if defined(ARDUINO_ARCH_STM32)
+// STM32SD drives the SDIO peripheral only; its begin() argument is a card-
+// DETECT pin, so an external SD_PIN would silently mount the on-board slot
+// instead. An SPI card on STM32 needs a different SD library: refuse the build.
+#  if defined(SD_PIN) && SD_PIN != 254
+#    error "SD_PIN: an SPI SD card isn't supported on STM32 (STM32SD is SDIO only). Use the board's built-in slot."
+#  endif
+#elif defined(CORE_TEENSY)
+#  define SD_LIB_SPI_ANY_PORT 1
+#elif defined(ESP32)
+#  define SD_LIB_SPI_ANY_PORT 1
+#else
+#  define SD_LIB_SPI_ANY_PORT 0     // stock Arduino SD: always `SPI`
+#endif
+
+#if !defined(ARDUINO_ARCH_STM32)
+// Mount the card behind `cs` on `spi`, clocked at up to `hz`. `spi` must
+// already be started by the bus manager.
+inline bool sdBeginSpi(uint8_t cs, SPIClass& spi, uint32_t hz) {
+#if defined(CORE_TEENSY)
+    // Teensy's SD wrapper has no port parameter, but its SdFat is public and
+    // takes one. Going around SDClass::begin() skips two things it does:
+    // the file timestamp callback (set here), and latching "card present",
+    // which totalSize()/usedSize() and mediaPresent() depend on.
+    // mediaPresent() latches it: on a card not yet seen it remounts once via
+    // sdfs.restart(), which reuses this config, port included.
+    FsDateTime::setCallback(SDClass::dateTime);
+    if (!SD.sdfs.begin(SdSpiConfig(cs, SHARED_SPI, hz, &spi))) return false;
+    return SD.mediaPresent();
+#elif defined(ESP32)
+    return SD.begin(cs, spi, hz);
+#else
+    if (&spi != &SPI) return false;   // see SD_LIB_SPI_ANY_PORT
+    return SD.begin(hz, cs);
+#endif
+}
+#endif
 
 // Has a write to this file failed? On STM32, FatFs latches the first disk
 // error on the file object and refuses further writes.
