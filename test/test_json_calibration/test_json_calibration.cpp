@@ -511,23 +511,22 @@ static void test_import_display_object_without_type_preserves_current_type(void)
     TEST_ASSERT_TRUE(systemConfig.displayEnabled);
 }
 
-// A "timing" object present with only ONE of sensorRead/alarmCheck used to
-// coerce the other, absent key to 0 -- zeroing an interval a config never
-// mentioned, rather than leaving it alone.
+// sensorRead/alarmCheck are retired (#601): every older dump carries them, so
+// the import must still accept the file and leave the values alone.
 //
-// MUTANT TARGET: reverting either timing field back to an unguarded
-// `staged.X = timing["X"];` must fail this test.
-static void test_import_timing_partial_keys_preserve_the_other(void) {
+// MUTANT TARGET: restoring either `staged.X = timing["X"];` must fail this test.
+static void test_import_timing_retired_keys_are_ignored(void) {
     systemConfig.sensorReadInterval = 250;
     systemConfig.alarmCheckInterval = 500;
     JsonDocument doc;
     JsonObject sys = doc.to<JsonObject>();
     JsonObject timing = sys["timing"].to<JsonObject>();
-    timing["sensorRead"] = 100;   // states sensorRead only
+    timing["sensorRead"] = 100;
+    timing["alarmCheck"] = 0;
 
     TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
-    TEST_ASSERT_EQUAL_UINT16(100, systemConfig.sensorReadInterval);
-    TEST_ASSERT_EQUAL_UINT16(500, systemConfig.alarmCheckInterval);  // untouched
+    TEST_ASSERT_EQUAL_UINT16(250, systemConfig.sensorReadInterval);
+    TEST_ASSERT_EQUAL_UINT16(500, systemConfig.alarmCheckInterval);
 }
 
 static void test_pressure_table_custom_is_refused(void) {
@@ -728,7 +727,7 @@ int main(int, char**) {
     RUN_TEST(test_import_with_absent_bus_keys_selects_no_bus);
     RUN_TEST(test_import_preserves_an_explicit_bus_selection);
     RUN_TEST(test_import_display_object_without_type_preserves_current_type);
-    RUN_TEST(test_import_timing_partial_keys_preserve_the_other);
+    RUN_TEST(test_import_timing_retired_keys_are_ignored);
     RUN_TEST(test_divider_ratio_round_trips);
     RUN_TEST(test_divider_ratio_default_is_implicit);
     RUN_TEST(test_divider_ratio_out_of_range_is_refused);

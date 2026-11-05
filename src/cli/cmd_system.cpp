@@ -308,34 +308,6 @@ static int system_units(int argc, const char* const* argv, int /*tokenIndex*/) {
     return 0;
 }
 
-// SYSTEM INTERVAL subcommand handler
-static int system_interval(int argc, const char* const* argv, int /*tokenIndex*/) {
-    if (argc < 4) {
-        msg.control.println(F("ERROR: INTERVAL requires a type and time in ms"));
-        msg.control.println(F("  Usage: SYSTEM INTERVAL <SENSOR|ALARM> <ms>"));
-        return 1;
-    }
-    uint16_t interval = atoi(argv[3]);
-    if (streq_P(argv[2], PSTR("SENSOR"))) {
-        systemConfig.sensorReadInterval = interval;
-        msg.control.print(F("Sensor read interval set to "));
-        msg.control.print(interval);
-        msg.control.println(F(" ms"));
-    } else if (streq_P(argv[2], PSTR("ALARM"))) {
-        systemConfig.alarmCheckInterval = interval;
-        msg.control.print(F("Alarm check interval set to "));
-        msg.control.print(interval);
-        msg.control.println(F(" ms"));
-    } else {
-        msg.control.print(F("ERROR: Unknown interval type '"));
-        msg.control.print(argv[2]);
-        msg.control.println(F("'"));
-        msg.control.println(F("  Valid types: SENSOR, ALARM"));
-        return 1;
-    }
-    return 0;
-}
-
 // SYSTEM REBOOT subcommand handler
 static int system_reboot(int argc, const char* const* argv, int /*tokenIndex*/) {
 #if PLATFORM_HAS_BOOTLOADER_REBOOT
@@ -1324,7 +1296,6 @@ static const char PSTR_SYS_DIAG[] PROGMEM = "DIAG";
 static const char PSTR_SYS_SD[] PROGMEM = "SD";
 static const char PSTR_SYS_SEA_LEVEL[] PROGMEM = "SEA_LEVEL";
 static const char PSTR_SYS_UNITS[] PROGMEM = "UNITS";
-static const char PSTR_SYS_INTERVAL[] PROGMEM = "INTERVAL";
 static const char PSTR_SYS_REBOOT[] PROGMEM = "REBOOT";
 static const char PSTR_SYS_RESET[] PROGMEM = "RESET";
 
@@ -1360,9 +1331,6 @@ static const char PSTR_HELP_SYS_UNITS[] PROGMEM =
     "  SYSTEM UNITS PRESSURE <BAR|PSI|KPA|INHG>\n"
     "  SYSTEM UNITS ELEVATION <M|FT>\n"
     "  SYSTEM UNITS SPEED <KPH|MPH>";
-static const char PSTR_HELP_SYS_INTERVAL[] PROGMEM =
-    "  SYSTEM INTERVAL SENSOR <ms>   Sensor read interval\n"
-    "  SYSTEM INTERVAL ALARM <ms>    Alarm check interval";
 static const char PSTR_HELP_SYS_REBOOT[] PROGMEM =
     "  SYSTEM REBOOT                 Restart the device"
 #if PLATFORM_HAS_BOOTLOADER_REBOOT
@@ -1374,8 +1342,8 @@ static const char PSTR_HELP_SYS_RESET[] PROGMEM =
     "  SYSTEM RESET CONFIG CONFIRM   Erase config, keep buses/serial/display";
 
 // runModeAllowed: STATUS / PINS / DUMP / DIAG / SD are read-only and useful in RUN mode.
-// SEA_LEVEL / UNITS / INTERVAL mutate persistent config; REBOOT / RESET are
-// destructive. All four belong in CONFIG mode only.
+// SEA_LEVEL / UNITS mutate persistent config; REBOOT / RESET are
+// destructive. All of them belong in CONFIG mode only.
 static const Subcommand SYSTEM_SUBCOMMANDS[] PROGMEM = {
     { PSTR_SYS_STATUS,    system_status,    true,  PSTR_HELP_SYS_STATUS    },
     { PSTR_SYS_PINS,      system_pins,      true,  PSTR_HELP_SYS_PINS      },
@@ -1384,7 +1352,6 @@ static const Subcommand SYSTEM_SUBCOMMANDS[] PROGMEM = {
     { PSTR_SYS_SD,        system_sd,        true,  PSTR_HELP_SYS_SD        },
     { PSTR_SYS_SEA_LEVEL, system_sea_level, false, PSTR_HELP_SYS_SEA_LEVEL },
     { PSTR_SYS_UNITS,     system_units,     false, PSTR_HELP_SYS_UNITS     },
-    { PSTR_SYS_INTERVAL,  system_interval,  false, PSTR_HELP_SYS_INTERVAL  },
     { PSTR_SYS_REBOOT,    system_reboot,    false, PSTR_HELP_SYS_REBOOT    },
     { PSTR_SYS_RESET,     system_reset,     false, PSTR_HELP_SYS_RESET     },
 };

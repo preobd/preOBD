@@ -312,8 +312,6 @@ HELP EXAMPLES           # Show worked examples
 | `SYSTEM UNITS ELEVATION <M\|FT>` | Set default elevation units |
 | `SYSTEM UNITS SPEED <KPH\|MPH>` | Set default speed units |
 | `SYSTEM SEA_LEVEL <hPa>` | Set sea level pressure |
-| `SYSTEM INTERVAL SENSOR <ms>` | Set sensor read interval |
-| `SYSTEM INTERVAL ALARM <ms>` | Set alarm check interval |
 | `SYSTEM REBOOT` | Restart the device |
 | `SYSTEM RESET CONFIRM` | Factory reset (erase config + reboot) |
 | `SYSTEM RESET CONFIG CONFIRM` | Erase config, keep buses, serial ports and display (+ reboot) |

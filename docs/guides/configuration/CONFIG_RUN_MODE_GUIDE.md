@@ -106,7 +106,7 @@ Everything that changes configuration, including:
 - `ACTION ADD/DEL`, `ACTION <id> RULE ...`, `ACTION <id> NAME ...`
 - `ALARM DURATION`, `ALARM SCOPE`
 - `OUTPUT ...`, `DISPLAY ...`, `BUS ...`, `TRANSPORT ...`
-- `SYSTEM UNITS/INTERVAL/SEA_LEVEL/REBOOT/RESET`, `LOG LEVEL`
+- `SYSTEM UNITS/SEA_LEVEL/REBOOT/RESET`, `LOG LEVEL`
 - `SAVE`, `LOAD`, `JSON IMPORT`, `SCAN`
 
 Trying one of these in RUN mode names the command that was blocked:

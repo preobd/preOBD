@@ -97,7 +97,6 @@ best reference; the overall shape is:
     "outputs":   { "can": { "enabled": true, "interval": 100 }, "sd": { "enabled": true, "interval": 5000, "format": "WIDE" }, "...": {} },
     "display":   { "enabled": true, "type": "LCD", "address": "0x27", "updateInterval": 1000,
                    "defaultUnits": { "temperature": "CELSIUS", "pressure": "BAR", "elevation": "METERS", "speed": "KPH" } },
-    "timing":    { "sensorRead": 100, "alarmCheck": 100 },
     "constants": { "seaLevelPressure": 1013.25 },
     "buses":     { "i2c": 0, "spi": 0, "canOutputBus": 0, "canOutputBaudrate": 500000, "...": "..." },
     "serial":    { "ports": [ { "port": 1, "enabled": true, "baudrate": 9600, "framed": false, "elm327": false } ] },

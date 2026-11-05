@@ -139,12 +139,6 @@ void printSystemStatus() {
     msg.control.print(systemConfig.seaLevelPressure);
     msg.control.println(F(" hPa"));
 
-    msg.control.print(F("Global Intervals: Sensor="));
-    msg.control.print(systemConfig.sensorReadInterval);
-    msg.control.print(F("ms, Alarm="));
-    msg.control.print(systemConfig.alarmCheckInterval);
-    msg.control.println(F("ms"));
-
     msg.control.print(F("Default Units: Temp="));
     msg.control.print((__FlashStringHelper*)getUnitStringByIndex(systemConfig.defaultTempUnits));
     msg.control.print(F(", Pressure="));
@@ -271,7 +265,7 @@ void resetSystemConfig(uint8_t keep) {
     systemConfig.defaultElevUnits = getUnitsIndexByName(DEFAULT_ELEVATION_UNITS);
     systemConfig.defaultSpeedUnits = getUnitsIndexByName(DEFAULT_SPEED_UNITS);
 
-    // Timing intervals
+    // Timing intervals (sensor/alarm retired, #601: kept only so the bytes are defined)
     systemConfig.sensorReadInterval = SENSOR_READ_INTERVAL_MS;
     systemConfig.alarmCheckInterval = ALARM_CHECK_INTERVAL_MS;
     systemConfig.lcdUpdateInterval = LCD_UPDATE_INTERVAL_MS;

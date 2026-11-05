@@ -134,7 +134,6 @@ SYSTEM DUMP                        # Complete dump
 SYSTEM PINS                        # Show pin allocations
 INFO A0                            # Query specific pin
 SYSTEM UNITS TEMP F                # Set default units
-SYSTEM INTERVAL SENSOR 100         # Set sensor interval
 SYSTEM REBOOT                      # Restart the device
 ```
 
@@ -169,14 +168,12 @@ RULE ADD A2 OUTSIDE 60 120
 ### Global System Settings (use SYSTEM command)
 Apply to all inputs as defaults:
 - Default units (temperature, pressure, elevation, speed)
-- System timing intervals (sensor read, alarm check)
 - Calibration constants (sea level pressure)
 
 **Example:**
 ```
 SYSTEM UNITS TEMP F              # All temps default to Fahrenheit
 SYSTEM UNITS PRESSURE PSI        # All pressures default to PSI
-SYSTEM INTERVAL SENSOR 100       # Read sensors every 100ms
 ```
 
 ### Output Module Settings (use OUTPUT command)
@@ -1216,16 +1213,7 @@ SYSTEM UNITS SPEED <KPH|MPH>               # Speed units
 SYSTEM SEA_LEVEL <hPa>                     # Sea level pressure for altitude calculations
 ```
 
-**Timing Intervals:**
-```bash
-SYSTEM INTERVAL <type> <ms>                # Set timing intervals
-```
-
-Interval types:
-- `SENSOR` - How often to read sensor values (default: 100ms)
-- `ALARM` - How often to check alarm thresholds (default: 100ms)
-
-**Note:** Display refresh rate has moved to `DISPLAY INTERVAL`. Per-output intervals are configured with `OUTPUT <name> INTERVAL`.
+**Timing:** sensors are read at the rate their sensor type sets (50 ms for most), and rules are checked every 50 ms; shape an alarm's timing with the rule's debounce and warmup. The old interval setting was removed: it never changed either rate (#601). Per-output intervals are configured with `OUTPUT <name> INTERVAL`.
 
 ### Examples
 
@@ -1234,7 +1222,6 @@ Interval types:
 SYSTEM UNITS TEMP F
 SYSTEM UNITS PRESSURE PSI
 SYSTEM SEA_LEVEL 1013.25
-SYSTEM INTERVAL SENSOR 50
 
 # View configuration
 SYSTEM STATUS
@@ -1247,12 +1234,6 @@ SYSTEM DUMP JSON
 SYSTEM PINS                # Show all pins
 INFO A0             # Check if A0 is available
 INFO CAN:0          # Check CAN virtual pin
-
-# Read sensors faster
-SYSTEM INTERVAL SENSOR 50
-
-# Check alarms more frequently
-SYSTEM INTERVAL ALARM 100
 ```
 
 **System Control:**
@@ -1333,7 +1314,7 @@ Anything that writes EEPROM, mutates active config, factory-resets, or reboots:
 - All `SET *` / `CLEAR`
 - `OUTPUT *`, `DISPLAY *`, `TRANSPORT *`, `BUS *`
 - `SAVE`, `LOAD`, `JSON`, `REBOOT`
-- `SYSTEM RESET`, `SYSTEM REBOOT`, `SYSTEM SEA_LEVEL`, `SYSTEM UNITS`, `SYSTEM INTERVAL`
+- `SYSTEM RESET`, `SYSTEM REBOOT`, `SYSTEM SEA_LEVEL`, `SYSTEM UNITS`
 - `LOG LEVEL`
 - `RULE ADD|DEL|RESET`, `RULE <id> ...` edits, `ACTION ADD|DEL`, `ACTION <id> RULE|NAME`
 - `ALARM DURATION`, `ALARM SCOPE`

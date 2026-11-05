@@ -78,6 +78,10 @@ struct SystemConfig {
     uint8_t defaultSpeedUnits;   // Unit index: 11=KPH, 12=MPH
 
     // Timing Intervals (8 bytes)
+    // sensorReadInterval / alarmCheckInterval are RETIRED (#601): nothing ever
+    // read them (sensors use their own minReadInterval, the control engine
+    // ALARM_CHECK_INTERVAL_MS). Kept so the EEPROM layout doesn't change; not
+    // set, shown or exported. Don't wire them back up without a reason.
     uint16_t sensorReadInterval;
     uint16_t alarmCheckInterval;
     uint16_t lcdUpdateInterval;

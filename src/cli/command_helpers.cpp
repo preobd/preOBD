@@ -464,11 +464,7 @@ void printSystemConfig() {
     msg.control.print(F("Sea Level Pressure: "));
     msg.control.print(systemConfig.seaLevelPressure);
     msg.control.println(F(" hPa"));
-    msg.control.print(F("Intervals: Sensor="));
-    msg.control.print(systemConfig.sensorReadInterval);
-    msg.control.print(F("ms, Alarm="));
-    msg.control.print(systemConfig.alarmCheckInterval);
-    msg.control.print(F("ms, LCD="));
+    msg.control.print(F("Intervals: LCD="));
     msg.control.print(systemConfig.lcdUpdateInterval);
     msg.control.println(F("ms"));
 
@@ -882,7 +878,6 @@ void printHelpQuick() {
     msg.control.println(F("  SYSTEM DUMP [JSON]"));
     msg.control.println(F("  SYSTEM UNITS <TEMP|PRESSURE|ELEVATION|SPEED> <unit>"));
     msg.control.println(F("  SYSTEM SEA_LEVEL <hPa>"));
-    msg.control.println(F("  SYSTEM INTERVAL <SENSOR|ALARM> <ms>"));
     msg.control.println(F("  SYSTEM REBOOT"));
     msg.control.println(F("  SYSTEM RESET CONFIRM"));
     msg.control.println();

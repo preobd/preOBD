@@ -513,10 +513,7 @@ FLASHMEM void exportSystemConfigToJSON(JsonObject& systemObj) {
     defaultUnits["elevation"] = reinterpret_cast<const char*>(getUnitStringByIndex(systemConfig.defaultElevUnits));
     defaultUnits["speed"] = reinterpret_cast<const char*>(getUnitStringByIndex(systemConfig.defaultSpeedUnits));
 
-    // Timing intervals
-    JsonObject timing = systemObj["timing"].to<JsonObject>();
-    timing["sensorRead"] = systemConfig.sensorReadInterval;
-    timing["alarmCheck"] = systemConfig.alarmCheckInterval;
+    // No "timing": its sensorRead/alarmCheck were never used and are retired (#601).
 
     // Export all registered pins from pin registry (read-only diagnostic — pins are compile-time constants from the board profile)
     JsonArray pins = systemObj["pins"].to<JsonArray>();
@@ -1207,10 +1204,9 @@ FLASHMEM bool importInputsFromJSON(JsonArray& inputsArray) {
 //     displayType = display["type"]` come back nullptr, and strcmp(nullptr,
 //     "LCD") is undefined behaviour -- a hand-edited or partial config could
 //     fault the board;
-//   - a "timing" object present without "sensorRead"/"alarmCheck" (an old
-//     export, or a hand-edited partial one) coerced the missing JsonVariant
-//     to 0, zeroing the sensor-read/alarm-check interval instead of leaving
-//     the existing value alone -- the same "absent key must not become zero"
+//   - a partial object (an old export, or a hand-edited one) coerced a
+//     missing JsonVariant to 0, zeroing a value instead of leaving the
+//     existing one alone -- the same "absent key must not become zero"
 //     shape #377 already fixed for the bus selection below.
 //
 // The fix here is a STAGED copy: every key is applied to `staged` (seeded
@@ -1379,17 +1375,10 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
         }
     }
 
-    // Timing intervals — absent key keeps the staged (current) value rather
-    // than coercing to 0, which would zero the sensor-read/alarm-check period.
+    // "timing": sensorRead/alarmCheck are retired (#601) and ignored, silently,
+    // because every older dump carries them. Only the legacy lcdUpdate is read.
     if (systemObj["timing"].isNull() == false) {
         JsonObject timing = systemObj["timing"];
-        if (timing["sensorRead"].isNull() == false) {
-            staged.sensorReadInterval = timing["sensorRead"];
-        }
-        if (timing["alarmCheck"].isNull() == false) {
-            staged.alarmCheckInterval = timing["alarmCheck"];
-        }
-
         // Backward compatibility: check for lcdUpdate in timing section (old location)
         if (timing["lcdUpdate"].isNull() == false) {
             staged.lcdUpdateInterval = timing["lcdUpdate"];
