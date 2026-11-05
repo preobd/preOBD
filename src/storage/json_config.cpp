@@ -603,6 +603,11 @@ FLASHMEM void dumpConfigToJSON(Print& output) {
     JsonArray caps = firmware["capabilities"].to<JsonArray>();
 #if SUPPORTS_JSON_IMPORT_STREAM
     caps.add("json_import");
+    // JSON IMPORT replaces the inputs instead of merging (#566), so a client
+    // must not CLEAR them first: a refused file would leave the unit empty
+    // (#569). Clients can't infer this from firmware.build, which counts the
+    // building repo's commits (#603).
+    caps.add("json_import_replace");
 #endif
     caps.add("json_export");
 #if INCLUDE_CAN

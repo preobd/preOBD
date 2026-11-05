@@ -327,6 +327,7 @@ static FLASHMEM void writeFirmwareJson(Print& out) {
     JsonArray caps = obj["capabilities"].to<JsonArray>();
 #if SUPPORTS_JSON_IMPORT_STREAM
     caps.add("json_import");
+    caps.add("json_import_replace");   // see json_config.cpp (#603)
 #endif
     caps.add("json_export");
 #if INCLUDE_CAN
