@@ -418,10 +418,18 @@ void MessageRouter::loadConfig() {
     setTransportUnchecked(PLANE_DEBUG,   (TransportID)systemConfig.router.debug_secondary,   true);
 
     // Load log filter configuration from SystemConfig.logFilter
-    getLogFilter().setLevel(PLANE_CONTROL, (LogLevel)systemConfig.logFilter.control_level);
-    getLogFilter().setLevel(PLANE_DATA,    (LogLevel)systemConfig.logFilter.data_level);
-    getLogFilter().setLevel(PLANE_DEBUG,   (LogLevel)systemConfig.logFilter.debug_level);
-    getLogFilter().setEnabledTags(systemConfig.logFilter.enabledTags);
+    applyLogFilterConfig();
+}
+
+// Also called by JSON IMPORT (#561): the live filter is the router's, and the
+// LOG commands copy it back over systemConfig.logFilter (syncConfig), so an
+// import that set only the stored copy would be undone by the next LOG command.
+void applyLogFilterConfig() {
+    LogFilter& f = router.getLogFilter();
+    f.setLevel(PLANE_CONTROL, (LogLevel)systemConfig.logFilter.control_level);
+    f.setLevel(PLANE_DATA,    (LogLevel)systemConfig.logFilter.data_level);
+    f.setLevel(PLANE_DEBUG,   (LogLevel)systemConfig.logFilter.debug_level);
+    f.setEnabledTags(systemConfig.logFilter.enabledTags);
 }
 
 void MessageRouter::syncConfig() {

@@ -7,6 +7,8 @@
 
 #include "../sensors/can_sensor_library/obd_output_pids.h"  // obdLengthFor (#516)
 #include "../config.h"
+#include <errno.h>
+#include <ctype.h>
 
 // Only compile JSON features on platforms with enough RAM and in runtime config mode
 #include "json_config.h"
@@ -30,6 +32,7 @@
 #include "../pinctrl/pin_registry.h"
 #include "../core/watchdog.h"
 #include "sd_manager.h"
+#include "../outputs/obd_query.h"     // PID table rebuilt after an inputs import (#562)
 #include "../outputs/output_format.h"   // SdLogFormat / parseSdLogFormat
 #include "../outputs/output_alarm.h"   // alarmSilence* policy accessors (#433)
 #if INCLUDE_RULES_ENGINE
@@ -1161,6 +1164,21 @@ FLASHMEM bool importInputsFromJSON(JsonArray& inputsArray) {
     uint8_t importedCount = 0;
     uint8_t totalInputs = inputsArray.size();
 
+    // An "inputs" array REPLACES the input table, as "rules" and "actions" already
+    // replace theirs (#562): a dump describes the whole config, so restoring one
+    // must not keep inputs added since. The file's records are applied first (an
+    // input already on one of its pins is updated in place, so no pin ends up in
+    // two slots), and only then are inputs the file does not mention removed --
+    // and only if the import worked, so a file whose every record is refused
+    // leaves the table as it was rather than empty. Rules are left alone: the
+    // caller re-arms them, and rulesManagerInit() names any rule whose input
+    // the file did not bring back.
+    uint8_t filePins[32] = {0};   // bitmap of every pin the file names
+    for (JsonVariant v : inputsArray) {
+        const uint8_t pin = v["pin"] | 0xFF;
+        filePins[pin >> 3] |= (uint8_t)(1u << (pin & 7));
+    }
+
     msg.debug.info(TAG_JSON, "Processing %d inputs from JSON", totalInputs);
 
     for (JsonVariant v : inputsArray) {
@@ -1185,7 +1203,16 @@ FLASHMEM bool importInputsFromJSON(JsonArray& inputsArray) {
             numActiveInputs++;
         }
     }
-    return importedCount > 0;
+    // An empty array is a valid request for no inputs; otherwise at least one
+    // record must have made it before anything is removed.
+    const bool ok = totalInputs == 0 || importedCount > 0;
+    if (ok) {
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            const uint8_t pin = inputs[i].pin;
+            if (pin != 0xFF && !(filePins[pin >> 3] & (1u << (pin & 7)))) clearInput(pin);
+        }
+    }
+    return ok;
 }
 
 // Import system configuration from JSON.
@@ -1210,6 +1237,38 @@ FLASHMEM bool importInputsFromJSON(JsonArray& inputsArray) {
 // value" rather than "coerce to zero/null"), each string field is null-
 // guarded before use, and the live config is only overwritten once, at the
 // very end -- one assignment nothing above this line can fail past.
+#if NUM_SERIAL_PORTS > 0
+// A serial port that is running and routed for commands may be the link this
+// import arrived on, so the import never changes it (#561) -- the same reason
+// SYSTEM RESET CONFIRM keeps serial settings (RESET_KEEP_LINK, #549). Read from
+// systemConfig.router, which every routing command keeps in step (syncConfig).
+FLASHMEM static bool serialPortCarriesCommands(uint8_t port_id) {
+    if (!isSerialPortActive(port_id)) return false;
+    const uint8_t t = (uint8_t)(TRANSPORT_SERIAL1 + (port_id - 1));
+    return systemConfig.router.control_primary == t || systemConfig.router.control_secondary == t;
+}
+#endif
+
+// "NONE".."DEBUG" -> 0..4, or 0xFF for anything else ("UNKNOWN", a typo, a
+// non-string): an unreadable level keeps the current one rather than becoming NONE.
+// PROGMEM, not literals: on Teensy 4 a literal (F() included) stays in RAM1,
+// where these and the NOTE lines below cost a 1 KB step of stack on teensy41.
+static const char kLevelNames[] PROGMEM = "NONE\0ERROR\0WARN\0INFO\0DEBUG\0";
+FLASHMEM static uint8_t parseLogLevelName(const char* name) {
+    if (!name) return 0xFF;
+    const char* p = kLevelNames;
+    for (uint8_t i = 0; i < 5; i++) {
+        if (strcasecmp_P(name, p) == 0) return i;
+        p += strlen_P(p) + 1;
+    }
+    return 0xFF;
+}
+
+static const char kSerialKept1[] PROGMEM = "NOTE: Serial";
+static const char kSerialKept2[] PROGMEM = " kept its settings: it carries commands (BUS SERIAL to change it)";
+static const char kSerialReboot[] PROGMEM = "NOTE: serial port changes take effect after SAVE and a reboot";
+#define JSON_FSTR(a) (reinterpret_cast<const __FlashStringHelper*>(a))
+
 FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
     // ---- ADMISSION PHASE -------------------------------------------------
     SystemConfig staged = systemConfig;
@@ -1427,9 +1486,110 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
         staged.buses.can_output_baudrate = DEFAULT_CAN_BAUDRATE;
     }
 
+    // Serial ports (#561). Applied to the stored config only, so they take
+    // effect at the next boot, like BUS SERIAL <n> BAUDRATE / FRAMED; starting
+    // or stopping a port mid-import would mean doing #558's ordering here. A
+    // port that carries this command link keeps its settings (see
+    // serialPortCarriesCommands). Absent keys keep the current value.
+    uint8_t serialKeptMask = 0;
+    bool serialChanged = false;
+#if NUM_SERIAL_PORTS > 0
+    if (systemObj["serial"]["ports"].is<JsonArray>()) {
+        for (JsonObject port : systemObj["serial"]["ports"].as<JsonArray>()) {
+            const int portNum = port["port"] | 0;     // range-check before narrowing: 257 is not Serial1
+            if (portNum < 1 || portNum > NUM_SERIAL_PORTS) continue;
+            const uint8_t id = (uint8_t)portNum;
+            const uint8_t bit = (uint8_t)(1u << (id - 1));
+            if (serialPortCarriesCommands(id)) {
+                // Worth a NOTE only if the file wanted something else for it.
+                const bool en = (staged.serial.enabled_mask & bit) != 0;
+                const bool fr = (staged.serial.framed_enabled_mask & bit) != 0;
+                if ((port["enabled"].is<bool>() && port["enabled"].as<bool>() != en) ||
+                    (port["framed"].is<bool>() && port["framed"].as<bool>() != fr) ||
+                    (port["baudrate"].is<uint32_t>() &&
+                     port["baudrate"].as<uint32_t>() != getBaudRateFromIndex(staged.serial.baudrate_index[id - 1]))) {
+                    serialKeptMask |= bit;
+                }
+                continue;
+            }
+            if (port["enabled"].is<bool>()) {
+                if (port["enabled"].as<bool>()) staged.serial.enabled_mask |= bit;
+                else staged.serial.enabled_mask &= (uint8_t)~bit;
+            }
+            if (port["baudrate"].is<uint32_t>()) {
+                const uint32_t baud = port["baudrate"];
+                const uint8_t idx = getBaudRateIndex(baud);
+                if (getBaudRateFromIndex(idx) == baud) staged.serial.baudrate_index[id - 1] = idx;
+            }
+#if INCLUDE_FRAMED_TRANSPORT
+            if (port["framed"].is<bool>()) {
+                if (port["framed"].as<bool>()) staged.serial.framed_enabled_mask |= bit;
+                else staged.serial.framed_enabled_mask &= (uint8_t)~bit;
+            }
+#endif
+            if (port["elm327"].is<bool>()) {
+                if (port["elm327"].as<bool>()) staged.buses.elm327_serial_port = id;
+                else if (staged.buses.elm327_serial_port == id) staged.buses.elm327_serial_port = 0xFF;
+            }
+        }
+        // BUS SERIAL <n> ELM327 ENABLE's own rule: the ELM327 port must be an
+        // enabled port the router does not use on any plane.
+        const uint8_t elm = staged.buses.elm327_serial_port;
+        bool elmRouted = false;
+        if (elm >= 1 && elm <= NUM_SERIAL_PORTS) {
+            const uint8_t t = (uint8_t)(TRANSPORT_SERIAL1 + (elm - 1));
+            const auto& r = systemConfig.router;
+            elmRouted = r.control_primary == t || r.control_secondary == t ||
+                        r.data_primary == t || r.data_secondary == t ||
+                        r.debug_primary == t || r.debug_secondary == t;
+        }
+        if (elm != 0xFF && (elm < 1 || elm > NUM_SERIAL_PORTS ||
+                            !(staged.serial.enabled_mask & (1u << (elm - 1))) || elmRouted)) {
+            staged.buses.elm327_serial_port = systemConfig.buses.elm327_serial_port;
+        }
+        serialChanged = memcmp(&staged.serial, &systemConfig.serial, sizeof(staged.serial)) != 0 ||
+                        staged.buses.elm327_serial_port != systemConfig.buses.elm327_serial_port;
+    }
+#endif
+
+    // Log filter (#561). Levels by name; an unreadable value keeps the current one.
+    const bool logFilterPresent = systemObj["logFilter"].is<JsonObject>();
+    if (logFilterPresent) {
+        JsonObject lf = systemObj["logFilter"];
+        uint8_t lvl = parseLogLevelName(lf["controlLevel"]);
+        if (lvl != 0xFF) staged.logFilter.control_level = lvl;
+        lvl = parseLogLevelName(lf["dataLevel"]);
+        if (lvl != 0xFF) staged.logFilter.data_level = lvl;
+        lvl = parseLogLevelName(lf["debugLevel"]);
+        if (lvl != 0xFF) staged.logFilter.debug_level = lvl;
+        const char* tags = lf["enabledTags"];
+        // strtoul alone would take "-1" (all tags), a leading space, and wrap or
+        // saturate an out-of-range value; insist on a plain hex number that fits.
+        if (tags && isxdigit((unsigned char)tags[0])) {
+            char* end = nullptr;
+            errno = 0;
+            const unsigned long v = strtoul(tags, &end, 16);   // accepts the "0x" prefix
+            if (end != tags && *end == '\0' && errno == 0 && v <= 0xFFFFFFFFUL) {
+                staged.logFilter.enabledTags = (uint32_t)v;
+            }
+        }
+    }
+
     // ---- COMMIT PHASE ----------------------------------------------------
     // Nothing above this line may fail past this point; one write.
     systemConfig = staged;
+    if (logFilterPresent) applyLogFilterConfig();
+#if NUM_SERIAL_PORTS > 0
+    for (uint8_t id = 1; id <= NUM_SERIAL_PORTS; id++) {
+        if (!(serialKeptMask & (1u << (id - 1)))) continue;
+        msg.control.print(JSON_FSTR(kSerialKept1));
+        msg.control.print(id);
+        msg.control.println(JSON_FSTR(kSerialKept2));
+    }
+    if (serialChanged) {
+        msg.control.println(JSON_FSTR(kSerialReboot));
+    }
+#endif
     return true;
 }
 
@@ -1544,7 +1704,8 @@ bool loadConfigFromJSON(const char* jsonString) {
     // if its array is present, then both are re-armed once — boot-load semantics
     // (#251): rulesManagerInit arms rule contexts, rulesActionsInit drives
     // the target pins to their initial state.
-    bool rulesChanged = false;
+    // Replacing the inputs (#562) can orphan a rule, so it re-arms the engine too.
+    bool rulesChanged = doc["inputs"].isNull() == false;
     if (doc["rules"].isNull() == false) {
         importRulesFromJSON(doc["rules"].as<JsonArrayConst>());
         rulesChanged = true;
@@ -1566,6 +1727,10 @@ bool loadConfigFromJSON(const char* jsonString) {
         rulesSyncActionPins();  // re-claim imported action pins (registry already populated)
     }
 #endif
+
+    // The OBD-II PID table points into inputs[], whose slots this import may
+    // have rearranged; boot and SAVE rebuild it, and so must an import (#562).
+    if (doc["inputs"].isNull() == false) obdQuery_buildLookupTable();
 
     msg.control.print(F("Successfully loaded config (schema v"));
     msg.control.print(schemaVer);

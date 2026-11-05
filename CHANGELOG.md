@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The watchdog now keeps running in CONFIG mode on every board, relaxed to 8 s, instead of being switched off on boards that allow it; it only restarts a board whose firmware has frozen, never an idle one, and every board now behaves the same (#541)
 
 ### Fixed
+- `JSON IMPORT` (and `LOAD SD:`) restores a `SYSTEM DUMP JSON` exactly: an `inputs` array now replaces all inputs instead of keeping ones added since the backup, and serial port settings and log levels come back too; a serial port that is carrying commands keeps its settings (#561, #562)
 - `BUS CAN INPUT`/`OUTPUT` refuses a bus whose pins are held by a serial port, a configured input or an Action, as `BUS I2C`/`BUS SPI` already did, and a bus that cannot start at boot no longer takes the configured input in its way down with it; `BUS CAN` names what is blocking the bus (#563, #564)
 - Teensy 4: disabling a framed serial port (`BUS SERIAL 1 DISABLE`) and saving no longer leaves a board that crashes on every boot and needs the program button to recover (#558)
 - Teensy 4: CAN2 and CAN3 work; only CAN1 was ever started, though `BUS CAN` offered all three. Teensy 3.6: bus 0 now drives the CAN0 pins (3/4) that `SYSTEM PINS` lists, and bus 1 (pins 33/34) works (#554)

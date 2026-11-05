@@ -100,7 +100,7 @@ best reference; the overall shape is:
     "timing":    { "sensorRead": 100, "alarmCheck": 100 },
     "constants": { "seaLevelPressure": 1013.25 },
     "buses":     { "i2c": 0, "spi": 0, "canOutputBus": 0, "canOutputBaudrate": 500000, "...": "..." },
-    "serial":    { "ports": [ { "port": 1, "enabled": true, "baudrate": 9600, "elm327": false } ] },
+    "serial":    { "ports": [ { "port": 1, "enabled": true, "baudrate": 9600, "framed": false, "elm327": false } ] },
     "logFilter": { "controlLevel": "INFO", "dataLevel": "INFO", "debugLevel": "WARN", "enabledTags": "0xFFFFFFFF" }
   },
   "inputs": [
@@ -217,9 +217,20 @@ frame decoding (`CAN_IMPORT`). The others can also be set with `SET <pin> CAL ..
   numbers.
 - **Missing sections are left alone.** A file with only `inputs` leaves the
   system settings, Rules and Actions as they were.
-- **Inputs are written by slot.** Each entry in `inputs` is written into slot
-  `idx`; inputs in other slots are kept. To start clean, `SYSTEM RESET CONFIRM`
-  first. A `rules` or `actions` array, by contrast, replaces that whole table.
+- **An `inputs` array replaces all inputs**, just as a `rules` or `actions` array
+  replaces that whole table. Inputs that aren't in the file are removed, so
+  restoring a backup gives you exactly the inputs it had. Their Rules stay
+  until the file's own `rules` replace them; a Rule left without an input is
+  named in a `WARNING:` line. Even an empty `"inputs": []` removes every input.
+  If every input in the file is refused, the import reports an error and
+  leaves your inputs as they were.
+- **Serial ports take effect after `SAVE` and a reboot**, as `BUS SERIAL <n>
+  BAUDRATE` does. A port that is running and carries commands keeps its
+  settings, since the import may be arriving over it; a `NOTE:` names it, and
+  `BUS SERIAL` changes it. Because the new port settings only start after the
+  reboot, imported inputs are checked against the ports running now: an input
+  on the pins of a port the file turns off is refused until that reboot.
+- **Log levels** (`logFilter`) apply straight away.
 - **Missing fields take defaults**, so an older export still imports on newer firmware.
 - **`schemaVersion` must be 1** and `mode` must be `"runtime"`; anything else is refused.
 - **Import doesn't save.** Run `SAVE` afterwards.

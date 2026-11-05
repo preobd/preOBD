@@ -34,6 +34,10 @@
 
 #include "../stubs/firmware_stubs.h"
 
+// json_config.cpp rebuilds the OBD-II PID table after an inputs import (#562);
+// obd_query.cpp is not in this binary.
+void obdQuery_buildLookupTable() {}
+
 // ---------------------------------------------------------------------------
 // Fixture
 // ---------------------------------------------------------------------------

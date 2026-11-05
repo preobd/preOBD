@@ -168,6 +168,7 @@ enum ResetKeep : uint8_t {
     RESET_KEEP_HARDWARE = 0x02,   // buses (I2C/SPI/CAN, ELM327 port) + display (#551)
 };
 void resetSystemConfig(uint8_t keep = RESET_KEEP_NONE);  // Reset to defaults, except `keep`
+void applyLogFilterConfig();      // Make the live log filter match systemConfig.logFilter (#561)
 uint8_t calculateChecksum(SystemConfig* cfg);
 void printSystemStatus();
 // busNeeds: the stored configuration's bus vote (BUS_NEED_I2C/BUS_NEED_SPI,

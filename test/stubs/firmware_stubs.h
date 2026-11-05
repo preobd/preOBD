@@ -25,6 +25,10 @@ SystemConfig systemConfig;
 LogFilter::LogFilter() {}
 MessageRouter::MessageRouter() {}
 TransportInterface* MessageRouter::getTransport(MessagePlane, bool) { return nullptr; }
+// JSON IMPORT applies an imported logFilter to the live filter (#561); system_config.cpp
+// is not in these binaries, so count the calls instead.
+int g_applyLogFilterCalls = 0;
+void applyLogFilterConfig() { g_applyLogFilterCalls++; }
 size_t MessageStream::error(const char*, const char*, ...) { return 0; }
 size_t MessageStream::warn(const char*, const char*, ...) { return 0; }
 size_t MessageStream::info(const char*, const char*, ...) { return 0; }
