@@ -15,6 +15,7 @@
 #include "../../../inputs/input.h"
 #include "../../../core/message_api.h"
 #include "../../../core/log_tags.h"
+#include "../../../storage/system_config.h"   // seaLevelPressureHpa() (SYSTEM SEA_LEVEL)
 #include <Wire.h>
 
 #if INCLUDE_BME280
@@ -130,14 +131,15 @@ void readBME280Humidity(Input *ptr) {
 /**
  * Read BME280 calculated elevation
  *
- * Calculates elevation based on atmospheric pressure.
+ * Calculates elevation based on atmospheric pressure, against the
+ * SYSTEM SEA_LEVEL reference.
  *
  * @param ptr  Pointer to Input structure to store elevation reading
  * @return     Elevation in meters, or NAN if sensor not initialized
  */
 void readBME280Elevation(Input *ptr) {
     if (bme280_ptr && bme280_initialized) {
-        ptr->value = bme280_ptr->readAltitude(SEA_LEVEL_PRESSURE_HPA);  // Store in meters
+        ptr->value = bme280_ptr->readAltitude(seaLevelPressureHpa());  // Store in meters
     } else {
         ptr->value = NAN;
     }

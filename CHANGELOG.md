@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The watchdog now keeps running in CONFIG mode on every board, relaxed to 8 s, instead of being switched off on boards that allow it; it only restarts a board whose firmware has frozen, never an idle one, and every board now behaves the same (#541)
 
 ### Fixed
+- BME280 elevation now uses the sea-level pressure set with `SYSTEM SEA_LEVEL`; it always used 1013.25 hPa. `SYSTEM SEA_LEVEL` and `JSON IMPORT` refuse a value outside 850–1100 hPa (a typo such as `SYSTEM SEA_LEVEL abc` used to store 0) (#574)
 - `JSON IMPORT` (and `LOAD SD:`) refuses a file that uses pins this board doesn't have, or whose analog inputs (`A14`) are on a different pin here, and names each one, instead of importing it; a file from another board type that fits is imported with a note naming both boards (#567)
 - `JSON IMPORT` (and `LOAD SD:`) restores a `SYSTEM DUMP JSON` exactly: an `inputs` array now replaces all inputs instead of keeping ones added since the backup, and serial port settings and log levels come back too; a serial port that is carrying commands keeps its settings (#561, #562)
 - `BUS CAN INPUT`/`OUTPUT` refuses a bus whose pins are held by a serial port, a configured input or an Action, as `BUS I2C`/`BUS SPI` already did, and a bus that cannot start at boot no longer takes the configured input in its way down with it; `BUS CAN` names what is blocking the bus (#563, #564)

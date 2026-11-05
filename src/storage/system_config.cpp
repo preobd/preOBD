@@ -124,6 +124,11 @@ void flushSystemConfigBootDiagnostics() {
     bootDiag.pinCollisionFlags = 0;
 }
 
+float seaLevelPressureHpa() {
+    return seaLevelPressureValid(systemConfig.seaLevelPressure)
+        ? systemConfig.seaLevelPressure : (float)SEA_LEVEL_PRESSURE_HPA;
+}
+
 void printSystemStatus() {
     msg.control.println(F("=== System Configuration ==="));
 

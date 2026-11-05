@@ -1388,8 +1388,10 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
     // Physical constants
     if (systemObj["constants"].isNull() == false) {
         JsonObject constants = systemObj["constants"];
+        // Out of range keeps the current value, as an unknown unit name does above.
         if (constants["seaLevelPressure"].isNull() == false) {
-            staged.seaLevelPressure = constants["seaLevelPressure"];
+            const float hPa = constants["seaLevelPressure"];
+            if (seaLevelPressureValid(hPa)) staged.seaLevelPressure = hPa;
         }
     }
 

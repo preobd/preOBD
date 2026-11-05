@@ -171,6 +171,19 @@ void resetSystemConfig(uint8_t keep = RESET_KEEP_NONE);  // Reset to defaults, e
 void applyLogFilterConfig();      // Make the live log filter match systemConfig.logFilter (#561)
 uint8_t calculateChecksum(SystemConfig* cfg);
 void printSystemStatus();
+
+// Sea-level reference for BME280 elevation (#574). seaLevelPressureHpa()
+// returns the stored value, or the config.h default when the stored one is
+// out of range (an EEPROM image saved before SYSTEM SEA_LEVEL checked input).
+// Accepted range: recorded sea-level extremes are 870 and 1084.8 hPa, so
+// anything outside is a typo. Inline so json_config links without this .cpp.
+#define SEA_LEVEL_PRESSURE_MIN_HPA 850.0f
+#define SEA_LEVEL_PRESSURE_MAX_HPA 1100.0f
+inline bool seaLevelPressureValid(float hPa) {
+    // Written so NaN fails both comparisons and is rejected.
+    return hPa >= SEA_LEVEL_PRESSURE_MIN_HPA && hPa <= SEA_LEVEL_PRESSURE_MAX_HPA;
+}
+float seaLevelPressureHpa();
 // busNeeds: the stored configuration's bus vote (BUS_NEED_I2C/BUS_NEED_SPI,
 // see bus_needs.h), computed by main.cpp BEFORE this call and reused later at
 // acquireRequiredBuses() — gates the Tier-1 *_WIRED_BUS reservation on the

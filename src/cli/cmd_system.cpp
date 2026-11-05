@@ -208,7 +208,19 @@ static int system_sea_level(int argc, const char* const* argv, int /*tokenIndex*
         msg.control.println(F("ERROR: SEA_LEVEL requires a pressure in hPa"));
         return 1;
     }
-    systemConfig.seaLevelPressure = atof(argv[2]);
+    char* end;
+    const float hPa = (float)strtod(argv[2], &end);   // strtod: avr-libc has no strtof
+    if (end == argv[2] || *end != '\0' || !seaLevelPressureValid(hPa)) {
+        msg.control.print(F("ERROR: '"));
+        msg.control.print(argv[2]);
+        msg.control.print(F("' is not a sea-level pressure; use "));
+        msg.control.print((int)SEA_LEVEL_PRESSURE_MIN_HPA);
+        msg.control.print(F("-"));
+        msg.control.print((int)SEA_LEVEL_PRESSURE_MAX_HPA);
+        msg.control.println(F(" hPa"));
+        return 1;
+    }
+    systemConfig.seaLevelPressure = hPa;
     msg.control.print(F("Sea level pressure set to "));
     msg.control.print(systemConfig.seaLevelPressure);
     msg.control.println(F(" hPa"));

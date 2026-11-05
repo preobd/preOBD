@@ -199,6 +199,32 @@ static void test_a_document_without_inputs_leaves_them_alone(void) {
 }
 
 // ---------------------------------------------------------------------------
+// #574: seaLevelPressure is range-checked like SYSTEM SEA_LEVEL
+// ---------------------------------------------------------------------------
+
+static void test_sea_level_pressure_is_imported(void) {
+    systemConfig.seaLevelPressure = 1013.25f;
+    TEST_ASSERT_TRUE(loadConfigFromJSON(
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":"
+        "{\"constants\":{\"seaLevelPressure\":1025.5}}}"));
+    TEST_ASSERT_EQUAL_FLOAT(1025.5f, systemConfig.seaLevelPressure);
+}
+
+// 0 is what a pre-#574 `SYSTEM SEA_LEVEL abc` saved and exported.
+static void test_an_out_of_range_sea_level_pressure_keeps_the_current_one(void) {
+    const char* bad[] = {"0", "849.9", "1100.1", "-1013", "\"abc\""};
+    for (const char* v : bad) {
+        char json[160];
+        snprintf(json, sizeof(json),
+                 "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":"
+                 "{\"constants\":{\"seaLevelPressure\":%s}}}", v);
+        systemConfig.seaLevelPressure = 1013.25f;
+        TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(1013.25f, systemConfig.seaLevelPressure, v);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // #561: logFilter comes back
 // ---------------------------------------------------------------------------
 
@@ -365,6 +391,8 @@ int main(int, char**) {
     RUN_TEST(test_an_empty_inputs_array_clears_the_table_and_succeeds);
     RUN_TEST(test_replacing_inputs_re_arms_the_rules);
     RUN_TEST(test_a_document_without_inputs_leaves_them_alone);
+    RUN_TEST(test_sea_level_pressure_is_imported);
+    RUN_TEST(test_an_out_of_range_sea_level_pressure_keeps_the_current_one);
     RUN_TEST(test_log_filter_is_imported_and_applied_live);
     RUN_TEST(test_unreadable_log_filter_values_keep_the_current_ones);
     RUN_TEST(test_malformed_tag_masks_are_refused);
