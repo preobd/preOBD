@@ -127,7 +127,7 @@ You must determine these parameters for your specific vehicle:
 5. **timeout_ms**: Zero speed timeout in milliseconds (default: 2000)
    - Time to wait without pulses before reporting 0 speed
 
-6. **max_speed_kph**: Maximum valid speed for safety check (default: 300)
+6. **max_speed_kph**: Maximum valid speed for safety check (default: 300). It also sets the input's noise rejection: pulses closer together than half the pulse interval at this speed are ignored, so set it near your vehicle's real top speed.
    - Readings above this will be rejected as invalid
 
 ### Calibration Procedure
@@ -178,7 +178,7 @@ You must determine these parameters for your specific vehicle:
 - Check voltage protection circuit
 - Verify solid ground connection
 - Check for electrical noise (route sensor wire away from spark plug wires)
-- Increase debounce (modify code if necessary)
+- Lower `max_speed_kph` toward the vehicle's real top speed — noise rejection scales with it
 
 **Speed stuck at zero:**
 - Check voltage protection circuit (may be clamping signal too much)
@@ -250,7 +250,7 @@ Compatible with:
 | Compatible tire sizes | Any (configurable) |
 | Speed range | 0-300 km/h (configurable) |
 | Update rate | Continuous (interrupt-driven) |
-| Debounce | 500µs (allows up to ~300 km/h) |
+| Debounce | Half the pulse interval at `max_speed_kph` (minimum 20µs) |
 | Timeout | 2000ms default (configurable) |
 
 ## Example Configurations
