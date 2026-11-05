@@ -331,30 +331,51 @@ static int system_reboot(int argc, const char* const* argv, int /*tokenIndex*/) 
 }
 
 // SYSTEM RESET subcommand handler
+//
+//   SYSTEM RESET CONFIRM          full factory reset
+//   SYSTEM RESET CONFIG CONFIRM   erase the configuration, keep the hardware setup (#551)
+//
+// Both keep the serial ports and the transport router: they are how this
+// board is wired, and the reset may have arrived over a BLE bridge (nRF on
+// Serial1 in framed mode, another port, another baud) — resetting them cuts
+// the very link it came over (#549). The CONFIG form also keeps the buses (I2C/SPI/CAN selection,
+// clocks, baud rates) and the display, so SPI/I2C sensors and the LCD still
+// work after starting the configuration over.
 static int system_reset(int argc, const char* const* argv, int /*tokenIndex*/) {
-    if (argc == 3 && streq_P(argv[2], PSTR("CONFIRM"))) {
-        msg.control.println(F("Factory reset: Erasing all configuration..."));
-        // The serial ports and the transport router are how this board is
-        // wired, not configuration: the reset may have arrived over a BLE
-        // bridge on Serial1 in framed mode (or on another port, or at another
-        // baud), and resetting them cuts the very link it came over (#549).
+    const bool full = (argc == 3 && streq_P(argv[2], PSTR("CONFIRM")));
+    const bool configOnly = (argc == 4 && streq_P(argv[2], PSTR("CONFIG")) && streq_P(argv[3], PSTR("CONFIRM")));
+    if (full || configOnly) {
+        msg.control.println(full ? F("Factory reset: Erasing all configuration...")
+                                 : F("Erasing configuration (hardware setup kept)..."));
         resetInputConfig();
-        resetSystemConfig(RESET_KEEP_LINK);
+        resetSystemConfig(configOnly ? (RESET_KEEP_LINK | RESET_KEEP_HARDWARE) : RESET_KEEP_LINK);
         saveSystemConfig();
         msg.control.println(F("Configuration reset complete"));
-        msg.control.println(F("Serial port settings kept (BUS SERIAL shows them)"));
+        msg.control.println(full ? F("Serial port settings kept (BUS SERIAL shows them)")
+                                 : F("Serial ports, buses and display kept"));
         msg.control.println(F("Rebooting..."));
         platformReboot();
         return 0;
     }
 
+    const bool askedConfig = (argc >= 3 && streq_P(argv[2], PSTR("CONFIG")));
     msg.control.println();
     msg.control.println(F("========================================"));
-    msg.control.println(F("  WARNING: Factory Reset"));
-    msg.control.println(F("  This will erase ALL configuration"));
-    msg.control.println(F("  except serial port settings,"));
-    msg.control.println(F("  and reboot the device"));
-    msg.control.println(F("  Type: SYSTEM RESET CONFIRM"));
+    if (askedConfig) {
+        msg.control.println(F("  WARNING: Erase Configuration"));
+        msg.control.println(F("  This will erase inputs, rules, actions"));
+        msg.control.println(F("  and settings, keep serial ports, buses"));
+        msg.control.println(F("  and display, and reboot the device"));
+        msg.control.println(F("  Type: SYSTEM RESET CONFIG CONFIRM"));
+    } else {
+        msg.control.println(F("  WARNING: Factory Reset"));
+        msg.control.println(F("  This will erase ALL configuration"));
+        msg.control.println(F("  except serial port settings,"));
+        msg.control.println(F("  and reboot the device"));
+        msg.control.println(F("  Type: SYSTEM RESET CONFIRM"));
+        msg.control.println(F("  To keep buses and display instead:"));
+        msg.control.println(F("    SYSTEM RESET CONFIG CONFIRM"));
+    }
     msg.control.println(F("========================================"));
     msg.control.println();
     return 0;
@@ -1297,7 +1318,8 @@ static const char PSTR_HELP_SYS_INTERVAL[] PROGMEM =
 static const char PSTR_HELP_SYS_REBOOT[] PROGMEM =
     "  SYSTEM REBOOT                 Restart the device";
 static const char PSTR_HELP_SYS_RESET[] PROGMEM =
-    "  SYSTEM RESET CONFIRM          Factory reset (erase config + reboot)";
+    "  SYSTEM RESET CONFIRM          Factory reset (erase config + reboot)\n"
+    "  SYSTEM RESET CONFIG CONFIRM   Erase config, keep buses/serial/display";
 
 // runModeAllowed: STATUS / PINS / DUMP / DIAG / SD are read-only and useful in RUN mode.
 // SEA_LEVEL / UNITS / INTERVAL mutate persistent config; REBOOT / RESET are

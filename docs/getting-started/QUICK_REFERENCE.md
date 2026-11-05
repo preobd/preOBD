@@ -316,6 +316,7 @@ HELP EXAMPLES           # Show worked examples
 | `SYSTEM INTERVAL ALARM <ms>` | Set alarm check interval |
 | `SYSTEM REBOOT` | Restart the device |
 | `SYSTEM RESET CONFIRM` | Factory reset (erase config + reboot) |
+| `SYSTEM RESET CONFIG CONFIRM` | Erase config, keep buses, serial ports and display (+ reboot) |
 
 ### Rules & Actions (control engine)
 

@@ -244,6 +244,8 @@ void resetSystemConfig(uint8_t keep) {
     // which is also what lets you attach one to a running unit without a reflash.
     //
     // A stored config still wins; this is only the fresh-EEPROM default.
+    // Hardware setup (#551): SYSTEM RESET CONFIG keeps the display.
+    if (!(keep & RESET_KEEP_HARDWARE)) {
     #if defined(INCLUDE_OLED)
         systemConfig.displayEnabled = 1;
         systemConfig.displayType = DISPLAY_OLED;
@@ -253,6 +255,7 @@ void resetSystemConfig(uint8_t keep) {
     #endif
 
     systemConfig.lcdI2CAddress = 0x27;
+    }  // RESET_KEEP_HARDWARE (display)
 
     // Resolve unit names to indices at boot time
     systemConfig.defaultTempUnits = getUnitsIndexByName(DEFAULT_TEMPERATURE_UNITS);
@@ -297,7 +300,9 @@ void resetSystemConfig(uint8_t keep) {
     // SystemConfig — they are reset via rulesResetTables() and persisted by the
     // front config-store arena (input_manager.cpp), independent of this block.
 
-    // Bus Configuration defaults (simplified "pick one" model)
+    // Bus Configuration defaults (simplified "pick one" model). Hardware
+    // setup (#551): SYSTEM RESET CONFIG keeps the whole block.
+    if (!(keep & RESET_KEEP_HARDWARE)) {
     systemConfig.buses.active_i2c = 0xFF;  // NONE — not initialized until explicitly selected
     systemConfig.buses.i2c_clock = DEFAULT_I2C_CLOCK;
     systemConfig.buses.active_spi = 0xFF;  // NONE — not initialized until explicitly selected
@@ -327,6 +332,7 @@ void resetSystemConfig(uint8_t keep) {
     systemConfig.buses.can_output_baudrate = DEFAULT_CAN_BAUDRATE;
     systemConfig.buses.can_input_mode = CAN_INPUT_OFF;  // Disabled by default
     systemConfig.buses.elm327_serial_port = 0xFF;  // Disabled by default
+    }  // RESET_KEEP_HARDWARE (buses)
 
     // Serial Port Configuration defaults
     // USB Serial is always available; Serial1 enabled by default, others disabled

@@ -1257,6 +1257,7 @@ SYSTEM INTERVAL ALARM 100
 ```bash
 SYSTEM REBOOT                                  # Restart the device
 SYSTEM RESET CONFIRM                           # Factory reset (erase config + reboot)
+SYSTEM RESET CONFIG CONFIRM                    # Erase config, keep buses/serial/display, reboot
 ```
 
 **System Control Examples:**
@@ -1267,6 +1268,9 @@ SYSTEM REBOOT
 # Factory reset (requires CONFIRM for safety)
 SYSTEM RESET CONFIRM                           # Erases all config except serial ports, and reboots
 
+# Start the configuration over on a working unit
+SYSTEM RESET CONFIG CONFIRM                    # Also keeps I2C/SPI/CAN buses and the display
+
 ```
 
 **Comparison of Reset Commands:**
@@ -1275,8 +1279,11 @@ SYSTEM RESET CONFIRM                           # Erases all config except serial
 |---------|---------------|----------|----------|
 | `SYSTEM REBOOT` | No | Yes | Clean restart |
 | `SYSTEM RESET CONFIRM` | Yes | Yes | Factory reset to defaults |
+| `SYSTEM RESET CONFIG CONFIRM` | Yes, not the hardware setup | Yes | Start the configuration over, sensors and display still wired up |
 
 `SYSTEM RESET CONFIRM` keeps the serial port settings (enabled ports, baud rates, framed mode) and the transport routing (which ports carry commands and data). They describe how the board is wired, and a reset sent over a Bluetooth bridge would otherwise cut the link it came over. Change them with `BUS SERIAL`.
+
+`SYSTEM RESET CONFIG CONFIRM` erases inputs, rules, actions and settings (outputs, units, intervals, alarm acknowledge policy, SD log format, sea-level pressure, log levels) but also keeps the hardware setup: the whole `BUS` block (I2C/SPI selection and clocks, CAN buses, baud rates, CAN import mode, output enable and the ELM327 port) and the display (`DISPLAY`). SPI/I2C sensors and an LCD keep working without re-running `BUS` and `DISPLAY`.
 
 ---
 

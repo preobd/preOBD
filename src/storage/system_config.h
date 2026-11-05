@@ -164,7 +164,8 @@ bool loadSystemConfig();         // Load from EEPROM
 // SYSTEM RESET keeps the link it may have arrived over (#549).
 enum ResetKeep : uint8_t {
     RESET_KEEP_NONE = 0,
-    RESET_KEEP_LINK = 0x01,   // serial ports (enabled, baud, framed) + transport router
+    RESET_KEEP_LINK = 0x01,       // serial ports (enabled, baud, framed) + transport router
+    RESET_KEEP_HARDWARE = 0x02,   // buses (I2C/SPI/CAN, ELM327 port) + display (#551)
 };
 void resetSystemConfig(uint8_t keep = RESET_KEEP_NONE);  // Reset to defaults, except `keep`
 uint8_t calculateChecksum(SystemConfig* cfg);
