@@ -89,8 +89,8 @@ static void test_bus_can_json(void) {
 
     JsonDocument doc;
     JsonArray imports = canBusStatusToJson(s, doc.to<JsonObject>());
-    CanImportSnapshot a = {0xC0, "CAN:0", 0x7E8, 0x0C, true, true, 35};
-    CanImportSnapshot b = {0xC1, "CAN:1", 0x400, 0x10, false, false, 0};
+    CanImportSnapshot a = {0xC0, "CAN:0", 0x7E8, 0x78, 5, true, true, 35};
+    CanImportSnapshot b = {0xC1, "CAN:1", 0x400, 0x10, 0, false, false, 0};
     canImportToJson(a, imports.add<JsonObject>());
     canImportToJson(b, imports.add<JsonObject>());
 
@@ -114,6 +114,7 @@ static void test_bus_can_json(void) {
     TEST_ASSERT_EQUAL_STRING("CAN:0", doc["imports"][0]["pinLabel"]);
     TEST_ASSERT_EQUAL_UINT8(192, doc["imports"][0]["pin"]);
     TEST_ASSERT_EQUAL_UINT16(2024, doc["imports"][0]["sourceCanId"]);
+    TEST_ASSERT_EQUAL_UINT8(5, doc["imports"][0]["dataOffset"]);   // EGT sensor 3 (#535)
     TEST_ASSERT_EQUAL_UINT32(35, doc["imports"][0]["ageMs"]);
     TEST_ASSERT_TRUE(doc["imports"][1]["ageMs"].isNull());   // never seen
 

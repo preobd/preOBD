@@ -881,6 +881,7 @@ static FLASHMEM void emitBusCanJson() {
         imp.pinLabel = label;
         imp.sourceCanId = in.customCalibration.can.source_can_id;
         imp.sourcePid = in.customCalibration.can.source_pid;
+        imp.dataOffset = in.customCalibration.can.data_offset;
         imp.polled = canInputIsPolled(in);
         CANFrameEntry* e = getCANCacheEntry(imp.sourceCanId, imp.sourcePid);
         imp.haveFrame = e != nullptr && e->valid;

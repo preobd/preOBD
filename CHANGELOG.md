@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `SYSTEM RESET CONFIG CONFIRM` erases the configuration but keeps the hardware setup (I2C/SPI/CAN buses, serial ports, display), so sensors and the LCD keep working when you start over (#551)
 - CAN import reads OBD-II PIDs whose reply is longer than one CAN frame: boost (0x70), exhaust gas temperature (0x78, 0x79) and total engine run time (0x7F). In `ENABLE` preOBD asks the ECU for the rest of the reply; in `LISTEN` it reads them while another tool requests them (#527)
+- CAN import can pick any sensor of a PID that carries several (EGT sensors 2–4, boost and MAF sensor B, coolant sensor 2, idle and PTO run time) from the CLI and the webapp, without a JSON import; a sensor the ECU reports as not fitted reads as no value instead of a false reading (#535)
 - `SYSTEM SD` and `SYSTEM SD JSON` report whether SD logging is actually working (no card, removed, write errors, logging) and how much space is left on the card, in RUN mode too (#536)
 - For developers: `tools/watchdog_bench.py` and a bench-build-only `SYSTEM DIAG WATCHDOG STALL` check that the watchdog still resets a hung board (#543); `pio run -e debug` now builds a Teensy 4.1 image that boots, with full symbols and the stall command (it was `-Og` and hung before USB, #544)
 

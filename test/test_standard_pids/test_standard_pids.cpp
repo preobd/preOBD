@@ -123,6 +123,72 @@ static void test_multi_frame_rows(void) {
     TEST_ASSERT_TRUE(9 + 4 <= CAN_FRAME_DATA_MAX);
 }
 
+// Sensors 2+ of multi-sensor PIDs (#535): each belongs to a table row, the
+// sensors of a PID run 2..n with no gap, and each value sits inside the
+// reply (single-frame PIDs inside one frame's 5 bytes), clear of the others
+static void test_pid_sensors_well_formed(void) {
+    for (uint8_t i = 0; i < NUM_STANDARD_PID_SENSORS; i++) {
+        StandardPIDSensor v;
+        memcpy_P(&v, &STANDARD_PID_SENSORS[i], sizeof(v));
+        char msg[48];
+        snprintf(msg, sizeof(msg), "PID 0x%02X sensor %u", v.pid, v.sensor);
+        StandardPIDInfo r = rowFor(v.pid);
+        if (i) {
+            StandardPIDSensor p;
+            memcpy_P(&p, &STANDARD_PID_SENSORS[i - 1], sizeof(p));
+            TEST_ASSERT_TRUE_MESSAGE(p.pid < v.pid || (p.pid == v.pid && p.sensor + 1 == v.sensor), msg);
+            if (p.pid != v.pid) TEST_ASSERT_EQUAL_UINT8_MESSAGE(2, v.sensor, msg);
+        } else {
+            TEST_ASSERT_EQUAL_UINT8_MESSAGE(2, v.sensor, msg);
+        }
+        TEST_ASSERT_TRUE_MESSAGE(v.data_offset >= 1, msg);   // past the support byte
+        TEST_ASSERT_TRUE_MESSAGE(v.data_offset + r.data_length <= CAN_FRAME_DATA_MAX, msg);
+        const bool multiFrame = v.pid == 0x70 || v.pid == 0x78 || v.pid == 0x79 || v.pid == 0x7F;
+        if (!multiFrame) {
+            TEST_ASSERT_TRUE_MESSAGE(v.data_offset + r.data_length <= 5, msg);
+        }
+        // No overlap with sensor 1 or any other sensor of the PID
+        const uint8_t lo = v.data_offset, hi = v.data_offset + r.data_length;
+        TEST_ASSERT_TRUE_MESSAGE(hi <= r.data_offset || lo >= r.data_offset + r.data_length, msg);
+        for (uint8_t j = 0; j < i; j++) {
+            StandardPIDSensor o;
+            memcpy_P(&o, &STANDARD_PID_SENSORS[j], sizeof(o));
+            if (o.pid != v.pid) continue;
+            TEST_ASSERT_TRUE_MESSAGE(hi <= o.data_offset || lo >= o.data_offset + r.data_length, msg);
+        }
+        TEST_ASSERT_TRUE_MESSAGE(strlen_P(v.name) < 32, msg);   // Input::displayName
+        TEST_ASSERT_TRUE_MESSAGE(strlen_P(v.abbr) < 8, msg);    // Input::abbrName
+        TEST_ASSERT_TRUE_MESSAGE(lookupStandardPIDSensor(v.pid, v.sensor) == &STANDARD_PID_SENSORS[i], msg);
+    }
+}
+
+// The J1979 positions: EGT 1-4 at B, D, F, H; boost B's actual value at H
+// (F-G is its commanded value); run time idle F-I, PTO J-M
+static void test_pid_sensor_offsets(void) {
+    const uint8_t egt[] = {0x78, 0x79};
+    for (uint8_t pid : egt) {
+        TEST_ASSERT_EQUAL_UINT8(4, standardPIDSensorCount(pid));
+        for (uint8_t n = 2; n <= 4; n++) {
+            StandardPIDSensor v;
+            memcpy_P(&v, lookupStandardPIDSensor(pid, n), sizeof(v));
+            TEST_ASSERT_EQUAL_UINT8(2 * n - 1, v.data_offset);
+        }
+        TEST_ASSERT_NULL(lookupStandardPIDSensor(pid, 5));
+    }
+    struct { uint8_t pid, sensor, offset, count; } cases[] = {
+        {0x66, 2, 3, 2}, {0x67, 2, 2, 2}, {0x70, 2, 7, 2}, {0x7F, 2, 5, 3}, {0x7F, 3, 9, 3},
+    };
+    for (auto& c : cases) {
+        StandardPIDSensor v;
+        memcpy_P(&v, lookupStandardPIDSensor(c.pid, c.sensor), sizeof(v));
+        TEST_ASSERT_EQUAL_UINT8(c.offset, v.data_offset);
+        TEST_ASSERT_EQUAL_UINT8(c.count, standardPIDSensorCount(c.pid));
+    }
+    TEST_ASSERT_EQUAL_UINT8(1, standardPIDSensorCount(0x0C));   // one value
+    TEST_ASSERT_NULL(lookupStandardPIDSensor(0x0C, 2));
+    TEST_ASSERT_NULL(lookupStandardPIDSensor(0x78, 1));         // sensor 1 is the row
+}
+
 // New types: base unit first (factor 1), conversions, exclusive matching
 static void test_new_units(void) {
     const MeasurementType types[] = {MEASURE_DISTANCE, MEASURE_TIME, MEASURE_MASS_FLOW, MEASURE_FUEL_RATE};
@@ -173,6 +239,8 @@ int main(int, char**) {
     RUN_TEST(test_conversion_to_base);
     RUN_TEST(test_audited_rows);
     RUN_TEST(test_multi_frame_rows);
+    RUN_TEST(test_pid_sensors_well_formed);
+    RUN_TEST(test_pid_sensor_offsets);
     RUN_TEST(test_new_units);
     RUN_TEST(test_symbol_lookup);
     return UNITY_END();

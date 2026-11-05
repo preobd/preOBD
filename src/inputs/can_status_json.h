@@ -90,6 +90,7 @@ struct CanImportSnapshot {
     const char* pinLabel;
     uint16_t sourceCanId;
     uint8_t  sourcePid;
+    uint8_t  dataOffset;        // which value of a multi-sensor PID (#535)
     bool     polled;
     bool     haveFrame;         // false: ageMs is null
     uint32_t ageMs;

@@ -1485,6 +1485,31 @@ void printHelpSet() {
     msg.control.println();
 }
 
+#if INCLUDE_CAN
+// SET CAN messages (#535). Named PROGMEM arrays, not F(): F() is a bare cast
+// on Teensy 4, so its literals sit in RAM1.
+static const char PSTR_SET_CAN_USAGE[] PROGMEM =
+    "ERROR: Usage: SET CAN <pid> [ecu] [SENSOR <n>]\n"
+    "  ecu is the ECU's response ID, 0x7E8-0x7EF (default 0x7E8)\n"
+    "  n picks a value of a multi-sensor PID, e.g. SET CAN 0x78 SENSOR 2";
+static const char PSTR_SET_CAN_NO_TABLE[] PROGMEM =
+    " is not in the PID table, so its sensors are unknown\n"
+    "  Set dataOffset through a JSON import instead";
+static const char PSTR_SET_CAN_ONE_VALUE[] PROGMEM = " has one value: leave out SENSOR";
+static const char PSTR_SET_CAN_HAS_SENSORS[] PROGMEM = " has sensors 1-";
+static const char PSTR_SET_CAN_HINT[] PROGMEM = "  This PID has sensors 1-";
+static const char PSTR_SET_CAN_HINT_END[] PROGMEM = ": add SENSOR <n> for another";
+
+// "0x0C": HEX prints lowercase on Teensy
+static void printPidHex(uint8_t pid) {
+    msg.control.print(F("0x"));
+    for (int8_t shift = 4; shift >= 0; shift -= 4) {
+        uint8_t d = (pid >> shift) & 0x0F;
+        msg.control.print((char)(d < 10 ? '0' + d : 'A' + d - 10));
+    }
+}
+#endif
+
 int cmd_set(int argc, const char* const* argv) {
     // SET <pin> <field> <value>
     // Also supports combined syntax: SET <pin> <application> <sensor>
@@ -1578,8 +1603,10 @@ int cmd_set(int argc, const char* const* argv) {
         }
     }
 
-    // SET CAN <pid> [ecu]  -  Import CAN sensor by PID (ecu: response ID, default 0x7E8)
+    // SET CAN <pid> [ecu] [SENSOR <n>]  -  Import CAN sensor by PID (ecu:
+    // response ID, default 0x7E8; n: which value of a multi-sensor PID, #535)
     // Example: SET CAN 0x0C  (imports Engine RPM from OBD-II)
+    //          SET CAN 0x78 SENSOR 3  (EGT bank 1 sensor 3)
     // This automatically assigns the next available CAN virtual pin (CAN:0, CAN:1, etc.)
 #if INCLUDE_CAN
     // Bare "CAN" (no :N suffix) is *only* valid as the import prelude — there's
@@ -1609,15 +1636,33 @@ int cmd_set(int argc, const char* const* argv) {
         // and one only a second ECU (0x7E9 transmission, ...) answers must be
         // requested from and read on that ECU's ID. Default: engine, 0x7E8.
         uint16_t ecuId = 0x7E8;
-        if (argc >= 4) {
-            char* end = nullptr;
-            unsigned long id = strtoul(argv[3], &end, 0);
-            if (argc > 4 || end == argv[3] || *end != '\0' || id < 0x7E8 || id > 0x7EF) {
-                msg.control.println(F("ERROR: Usage: SET CAN <pid> [ecu]"));
-                msg.control.println(F("  ecu is the ECU's response ID, 0x7E8-0x7EF (default 0x7E8)"));
+        uint8_t sensor = 1;
+        bool sensorGiven = false;
+        {
+            int a = 3;
+            bool ok = true;
+            if (argc > a && !streq_P(argv[a], PSTR("SENSOR"))) {
+                char* end = nullptr;
+                unsigned long id = strtoul(argv[a], &end, 0);
+                ok = end != argv[a] && *end == '\0' && id >= 0x7E8 && id <= 0x7EF;
+                ecuId = (uint16_t)id;
+                a++;
+            }
+            if (ok && argc > a) {
+                // Multi-sensor PIDs (0x78 EGT 1-4, ...), #535
+                ok = argc == a + 2 && streq_P(argv[a], PSTR("SENSOR"));
+                if (ok) {
+                    char* end = nullptr;
+                    unsigned long n = strtoul(argv[a + 1], &end, 10);
+                    ok = end != argv[a + 1] && *end == '\0' && n >= 1 && n <= 9;
+                    sensor = (uint8_t)n;
+                    sensorGiven = true;
+                }
+            }
+            if (!ok) {
+                msg.control.println((const __FlashStringHelper*)PSTR_SET_CAN_USAGE);
                 return 1;
             }
-            ecuId = (uint16_t)id;
         }
 
         // pin was already allocated by parsePin("CAN") at the top of cmd_set
@@ -1630,6 +1675,31 @@ int cmd_set(int argc, const char* const* argv) {
         StandardPIDInfo pidBuf;
         if (pidRow) memcpy_P(&pidBuf, pidRow, sizeof(pidBuf));
         const StandardPIDInfo* pidInfo = pidRow ? &pidBuf : nullptr;
+
+        // Sensor 2+ of a multi-sensor PID: same decode, another position and
+        // name. Checked before the slot is created, so a refusal leaves nothing.
+        const uint8_t sensors = pidInfo ? standardPIDSensorCount(pid) : 0;
+        if (pidInfo && sensor > 1 && sensor <= sensors) {
+            // Sensor n's position and name in place of sensor 1's
+            StandardPIDSensor sensorBuf;
+            memcpy_P(&sensorBuf, lookupStandardPIDSensor(pid, sensor), sizeof(sensorBuf));
+            pidBuf.data_offset = sensorBuf.data_offset;
+            pidBuf.name = sensorBuf.name;
+            pidBuf.abbr = sensorBuf.abbr;
+            pidBuf.support_bit = sensorBuf.support_bit;
+        } else if (sensor > 1) {
+            msg.control.print(F("ERROR: PID "));
+            printPidHex(pid);
+            if (!pidInfo) {
+                msg.control.println((const __FlashStringHelper*)PSTR_SET_CAN_NO_TABLE);
+            } else if (sensors == 1) {
+                msg.control.println((const __FlashStringHelper*)PSTR_SET_CAN_ONE_VALUE);
+            } else {
+                msg.control.print((const __FlashStringHelper*)PSTR_SET_CAN_HAS_SENSORS);
+                msg.control.println(sensors);
+            }
+            return 1;
+        }
 
         // Configure as CAN_IMPORT sensor
         uint8_t canSensorIndex = getSensorIndexByName("CAN_IMPORT");
@@ -1680,12 +1750,16 @@ int cmd_set(int argc, const char* const* argv) {
 
             msg.control.print(F("✓ Imported CAN sensor CAN:"));
             msg.control.print(virtualPin - 0xC0);
-            msg.control.print(F(" - PID 0x"));
-            if (pid < 0x10) msg.control.print('0');
-            msg.control.print(pid, HEX);
+            msg.control.print(F(" - PID "));
+            printPidHex(pid);
             msg.control.print(F(" ("));
             msg.control.print(input->displayName);
             msg.control.println(F(")"));
+            if (sensors > 1 && !sensorGiven) {
+                msg.control.print((const __FlashStringHelper*)PSTR_SET_CAN_HINT);
+                msg.control.print(sensors);
+                msg.control.println((const __FlashStringHelper*)PSTR_SET_CAN_HINT_END);
+            }
         } else {
             // Unknown PID - use default calibration
             input->customCalibration.can.source_can_id = ecuId;
@@ -1703,9 +1777,8 @@ int cmd_set(int argc, const char* const* argv) {
 
             msg.control.print(F("✓ Imported CAN sensor CAN:"));
             msg.control.print(virtualPin - 0xC0);
-            msg.control.print(F(" - PID 0x"));
-            if (pid < 0x10) msg.control.print('0');
-            msg.control.print(pid, HEX);
+            msg.control.print(F(" - PID "));
+            printPidHex(pid);
             msg.control.println(F(" (unknown PID - using defaults)"));
             msg.control.println(F("  Hint: Use 'SET CAN:0 ...' commands to customize"));
         }

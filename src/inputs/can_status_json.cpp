@@ -104,6 +104,7 @@ FLASHMEM void canImportToJson(const CanImportSnapshot& i, JsonObject out) {
     out["pinLabel"] = i.pinLabel;
     out["sourceCanId"] = i.sourceCanId;
     out["sourcePid"] = i.sourcePid;
+    out["dataOffset"] = i.dataOffset;
     out["polled"] = i.polled;
     if (i.haveFrame) out["ageMs"] = i.ageMs;
     else             out["ageMs"] = nullptr;

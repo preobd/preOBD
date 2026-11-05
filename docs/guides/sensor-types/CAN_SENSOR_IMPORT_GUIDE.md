@@ -246,7 +246,7 @@ text table, and `SCAN SUPPORTED JSON` returns the result:
 
 ## Standard OBD-II PIDs
 
-preOBD knows how to decode 27 standard OBD-II PIDs (`LIST PIDS JSON` prints the full
+preOBD knows how to decode 31 standard OBD-II PIDs (`LIST PIDS JSON` prints the full
 table). Each was checked against three references for SAE J1979: Wikipedia's "OBD-II PIDs",
 the python-OBD library and CSS Electronics' J1979 PID table.
 
@@ -295,9 +295,31 @@ Boost (0x70), exhaust gas temperature (0x78, 0x79) and total run time (0x7F) are
 longer than one CAN frame. In `ENABLE`, preOBD asks the ECU for the rest of the reply
 (ISO-TP Flow Control) and reassembles it. In `LISTEN` it never transmits, so it reads
 these PIDs only while another tool on the bus is requesting them. Boost is absolute
-pressure, like MAP. An EGT PID carries up to four sensors, and `SET CAN` imports
-sensor 1. For sensors 2–4, set `dataOffset` to 3, 5 or 7 through a JSON import (see
-[Custom Frames](#custom-frames)).
+pressure, like MAP.
+
+**Multi-sensor PIDs.** Some PIDs carry more than one value. `SET CAN <pid>` imports the
+first, and `SENSOR <n>` picks another. Each sensor is its own input, and the PID is still
+requested once per round however many of its sensors you import.
+
+| PID  | `SENSOR 1` (default)           | Others                                         |
+|------|--------------------------------|------------------------------------------------|
+| 0x66 | Mass Air Flow (Sensor A)       | 2: Sensor B                                    |
+| 0x67 | Engine Coolant Temp (Sensor 1) | 2: Sensor 2                                    |
+| 0x70 | Boost Pressure (Sensor A)      | 2: Sensor B                                    |
+| 0x78 | EGT Bank 1 Sensor 1            | 2, 3, 4: EGT Bank 1 Sensors 2–4                |
+| 0x79 | EGT Bank 2 Sensor 1            | 2, 3, 4: EGT Bank 2 Sensors 2–4                |
+| 0x7F | Total Engine Run Time          | 2: Total Idle Run Time, 3: Total PTO Run Time  |
+
+```
+SET CAN 0x78              # EGT bank 1 sensor 1
+SET CAN 0x78 SENSOR 2     # EGT bank 1 sensor 2
+SET CAN 0x78 0x7E9 SENSOR 3   # from a second ECU: the ECU comes before SENSOR
+```
+
+The PID's first byte says which sensors the ECU has. A sensor the ECU reports as not
+fitted has no value (it shows as an error, like a sensor that stopped answering), rather
+than whatever bytes the ECU sends in its place. The webapp's **Add CAN sensor** lists each
+sensor separately, and greys out one the ECU says isn't fitted when it has heard the reply.
 
 The transmission gear (0xA4) is left out on purpose: it is a ratio, not a sensor value.
 

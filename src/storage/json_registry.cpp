@@ -306,6 +306,22 @@ FLASHMEM void writePidsJson(Print& out) {
         obj["scale"]           = pid.scale_factor;
         obj["offset"]          = pid.offset;
         obj["units"]           = (const __FlashStringHelper*)pid.units;
+        // Multi-sensor PIDs (#535): the value's bit in byte A, and sensors
+        // 2+ (SET CAN <pid> SENSOR <n>)
+        if (pid.support_bit != NO_SUPPORT_BIT) obj["supportBit"] = pid.support_bit;
+        JsonArray sensors;
+        for (uint8_t j = 0; j < NUM_STANDARD_PID_SENSORS; j++) {
+            StandardPIDSensor s;
+            memcpy_P(&s, &STANDARD_PID_SENSORS[j], sizeof(s));
+            if (s.pid != pid.pid) continue;
+            if (sensors.isNull()) sensors = obj["sensors"].to<JsonArray>();
+            JsonObject so = sensors.add<JsonObject>();
+            so["sensor"]     = s.sensor;
+            so["name"]       = (const __FlashStringHelper*)s.name;
+            so["abbr"]       = (const __FlashStringHelper*)s.abbr;
+            so["dataOffset"] = s.data_offset;
+            so["supportBit"] = s.support_bit;
+        }
     }
     WatchdogKickingPrint wdOut(out);
     serializeJson(doc, wdOut);

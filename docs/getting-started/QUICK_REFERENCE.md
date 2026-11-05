@@ -377,7 +377,7 @@ See [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md) and
 | `BUS CAN INPUT\|OUTPUT <bus> ENABLE\|DISABLE` | Choose which CAN bus carries input and output |
 | `SCAN PIDS` | Ask the ECUs which OBD-II PIDs they support (CAN input in ENABLE mode) |
 | `SCAN CAN [ms]` | Listen for OBD-II answers and other CAN frames already on the bus |
-| `SET CAN <pid> [ecu]` | Import a PID (ecu: `0x7E9`… for a second ECU; default engine `0x7E8`) |
+| `SET CAN <pid> [ecu] [SENSOR <n>]` | Import a PID (ecu: `0x7E9`… for a second ECU; default engine `0x7E8`). `SENSOR` picks one value of a multi-sensor PID, e.g. `SET CAN 0x78 SENSOR 2` |
 
 **Example - Switch to Wire1:**
 ```

@@ -12,10 +12,18 @@
  *   - python-OBD, obd/commands.py + obd/UnitsAndScaling.py (brendan-w)
  *   - CSS Electronics, "OBD2 PID table" (J1979 DBC: bit start/length, scale)
  * A PID goes in only when the sources agree on its layout. Left out on
- * purpose: replies longer than one CAN frame (0x78 EGT, 0x7F run time:
- * preOBD does not reassemble ISO-TP multi-frame replies), non-scalar data
- * (0xA4 gear ratio), 0x6F (no source gives its byte layout), and anything
- * that is not a J1979 PID.
+ * purpose: non-scalar data (0xA4 gear ratio), 0x6F (no source gives its byte
+ * layout), and anything that is not a J1979 PID. Replies longer than one CAN
+ * frame (0x70, 0x78, 0x79, 0x7F) are in since CAN input reassembles them
+ * (#527).
+ *
+ * MULTI-SENSOR PIDs. Some PIDs carry several values of one kind after a
+ * sensor-support byte (0x78: EGT sensors 1-4). The table row is sensor 1;
+ * STANDARD_PID_SENSORS lists the others, which differ from it only in where
+ * the value starts and what it is called (`SET CAN <pid> SENSOR <n>`, #535).
+ * Byte A says which of them the ECU has: `support_bit` is the value's bit
+ * there, and CAN input reads a value whose bit is clear as no value, not as
+ * whatever the ECU leaves in its place.
  *
  * Rows are in the PID's J1979 unit (kPa, min, L/h ...). SET CAN converts the
  * scale and offset to the input's base unit through the units registry, so
@@ -44,13 +52,31 @@ struct StandardPIDInfo {
     float scale_factor;             // J1979 scale: value = raw * scale + offset, in `units`
     float offset;                   // J1979 offset
     const char* units;              // Registry name or alias of the J1979 unit ("KPA", "MIN") (PROGMEM)
+    uint8_t support_bit;            // Bit in byte A that says the value is there; NO_SUPPORT_BIT if none
 };
+
+#define NO_SUPPORT_BIT 0xFF
 
 // Manifest constant: an extern array can't be sized here. standard_pids.cpp
 // static_asserts it against the table.
 #define NUM_STANDARD_PIDS 31
 
 extern const PROGMEM StandardPIDInfo STANDARD_PID_TABLE[];
+
+// Sensor 2+ of a multi-sensor PID. Length, type, scale and unit are the PID
+// row's; only the value's position and the name change.
+struct StandardPIDSensor {
+    uint8_t pid;                    // A PID in STANDARD_PID_TABLE
+    uint8_t sensor;                 // 2..; sensor 1 is the PID's own row
+    uint8_t data_offset;            // First value byte, counted from A
+    const char* name;               // (PROGMEM)
+    const char* abbr;               // (PROGMEM)
+    uint8_t support_bit;            // Bit in byte A that says this sensor is there
+};
+
+#define NUM_STANDARD_PID_SENSORS 11
+
+extern const PROGMEM StandardPIDSensor STANDARD_PID_SENSORS[];
 
 // ===== HELPER FUNCTIONS =====
 
@@ -69,6 +95,47 @@ inline const StandardPIDInfo* lookupStandardPID(uint8_t pid) {
         }
     }
     return nullptr;  // Not found
+}
+
+/**
+ * Sensor `sensor` (2..) of a multi-sensor PID, or nullptr if the PID has no
+ * such sensor. Returns a PROGMEM pointer.
+ */
+inline const StandardPIDSensor* lookupStandardPIDSensor(uint8_t pid, uint8_t sensor) {
+    for (uint8_t i = 0; i < NUM_STANDARD_PID_SENSORS; i++) {
+        if (pgm_read_byte(&STANDARD_PID_SENSORS[i].pid) == pid &&
+            pgm_read_byte(&STANDARD_PID_SENSORS[i].sensor) == sensor) {
+            return &STANDARD_PID_SENSORS[i];
+        }
+    }
+    return nullptr;
+}
+
+/**
+ * The support-byte bit of the value at `dataOffset` of a multi-sensor PID,
+ * or NO_SUPPORT_BIT when the PID has no support byte or no table value
+ * starts there (a custom JSON offset).
+ */
+inline uint8_t standardPidSupportBit(uint8_t pid, uint8_t dataOffset) {
+    const StandardPIDInfo* row = lookupStandardPID(pid);
+    if (!row) return NO_SUPPORT_BIT;
+    if (pgm_read_byte(&row->data_offset) == dataOffset) return pgm_read_byte(&row->support_bit);
+    for (uint8_t i = 0; i < NUM_STANDARD_PID_SENSORS; i++) {
+        if (pgm_read_byte(&STANDARD_PID_SENSORS[i].pid) == pid &&
+            pgm_read_byte(&STANDARD_PID_SENSORS[i].data_offset) == dataOffset) {
+            return pgm_read_byte(&STANDARD_PID_SENSORS[i].support_bit);
+        }
+    }
+    return NO_SUPPORT_BIT;
+}
+
+/** How many sensors a PID in the table carries: 1, or more for 0x78 etc. */
+inline uint8_t standardPIDSensorCount(uint8_t pid) {
+    uint8_t n = 1;
+    for (uint8_t i = 0; i < NUM_STANDARD_PID_SENSORS; i++) {
+        if (pgm_read_byte(&STANDARD_PID_SENSORS[i].pid) == pid) n++;
+    }
+    return n;
 }
 
 /**

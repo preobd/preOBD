@@ -4179,7 +4179,7 @@ const canUi = {
   busy: false,        // a write batch is running
   form: null,         // null | 'add' | 'bus'
   scan: null,         // { kind:'pids'|'listen', state, scanId, found, ecus, rows, error, timer }
-  selected: new Set(), // "canId:pid" rows ticked for import
+  selected: new Set(), // "canId:pid:sensor" rows ticked for import (#535)
   pendingPins: new Set() // imported while edits were pending: mark unsaved on the next reload
 };
 
@@ -4198,8 +4198,28 @@ function canUnitSymbol(name) {
   const u = catalog.units.find(x => unitMatches(x, name));
   return u?.symbol || name;
 }
-function canIsImported(canId, pid) {
-  return (canUi.bus?.imports || []).some(i => i.sourceCanId === canId && i.sourcePid === pid);
+// A PID's values: one, or one per sensor of a multi-sensor PID (0x78 EGT
+// 1-4, ...; LIST PIDS JSON "sensors", #535). Sensor 1 is the PID's own row.
+function canSensorsOf(info) {
+  if (!info) return [{ sensor: 1, name: null, dataOffset: undefined }];
+  return [{ sensor: 1, name: info.name, dataOffset: info.dataOffset, supportBit: info.supportBit },
+          ...(info.sensors || [])];
+}
+// False when the reply's support byte (A) says this sensor isn't fitted;
+// true when it is, or there's no reply or support bit to go by
+function canSensorFitted(row, v) {
+  if (v.supportBit == null || !row.data || row.data.length < 2) return true;
+  return ((parseInt(row.data.slice(0, 2), 16) >> v.supportBit) & 1) === 1;
+}
+// The table name of an import, by the value it reads (dataOffset)
+function canImportName(info, dataOffset) {
+  if (!info) return null;
+  return canSensorsOf(info).find(v => v.dataOffset === dataOffset)?.name || info.name;
+}
+// dataOffset undefined (firmware before #535 doesn't report it): match the PID
+function canIsImported(canId, pid, dataOffset) {
+  return (canUi.bus?.imports || []).some(i => i.sourceCanId === canId && i.sourcePid === pid &&
+    (i.dataOffset == null || dataOffset == null || i.dataOffset === dataOffset));
 }
 
 // The ERROR lines of a failed sendChecked(), without the echo and prompt.
@@ -4211,13 +4231,16 @@ function canErrText(msg) {
 }
 
 // Decode a SCAN RESULTS payload with the standard PID's scale/offset.
-function canDecode(row) {
+function canDecode(row, dataOffset) {
   const info = canUi.pids.get(row.pid);
   if (!row.obd || !info || !row.data) return null;
   // dataOffset skips a multi-sensor PID's support byte (0x66, 0x67; #509)
-  const bytes = (row.data.match(/../g)?.map(h => parseInt(h, 16)) || []).slice(info.dataOffset || 0);
-  const n = Math.min(info.dataLength || 1, bytes.length);
-  if (!n) return null;
+  // and picks its sensor (#535)
+  const bytes = (row.data.match(/../g)?.map(h => parseInt(h, 16)) || []).slice(dataOffset ?? info.dataOffset ?? 0);
+  // Scan results keep a reply's first 8 bytes: a later sensor (EGT 4,
+  // boost B, 0x7F idle/PTO) can't be decoded from them
+  const n = info.dataLength || 1;
+  if (bytes.length < n) return null;
   let raw = 0;
   for (let i = 0; i < n; i++) raw = raw * 256 + bytes[i];
   const v = raw * info.scale + info.offset;
@@ -4351,7 +4374,7 @@ function renderCanImports() {
     const stale = im.ageMs == null || im.ageMs > CAN_STALE_MS;
     html += '<tr>' +
       `<td class="mono">${escHtml(im.pinLabel)}</td>` +
-      `<td>${escHtml(info ? info.name : 'PID ' + canHex(im.sourcePid))}</td>` +
+      `<td>${escHtml(info ? canImportName(info, im.dataOffset) : 'PID ' + canHex(im.sourcePid))}</td>` +
       `<td class="mono">${canHex(im.sourcePid)}</td>` +
       `<td><span class="can-ecu-chip">${escHtml(im.sourceCanId >= 0x7E8 && im.sourceCanId <= 0x7EF ? canEcuLabel(im.sourceCanId) : 'ID ' + canHex(im.sourceCanId, 3))}</span></td>` +
       `<td class="dim">${im.polled ? 'polled' : 'listened'}</td>` +
@@ -4433,20 +4456,23 @@ function canResultsTableHtml(sc) {
   const listen = sc.kind === 'listen';
   let h = '<div class="table-scroll"><table class="ctl-table"><thead><tr><th></th><th>PID</th><th>Sensor</th><th>Source</th>' +
     (listen ? '<th>Value</th><th>Frames</th>' : '') + '</tr></thead><tbody>';
-  for (const r of sc.rows) {
-    const key = r.canId + ':' + r.pid;
+  for (const r of sc.rows) for (const v of (r.obd ? canSensorsOf(canUi.pids.get(r.pid)) : [{ sensor: 1 }])) {
+    // One row per sensor of a multi-sensor PID (#535); key canId:pid:sensor
+    const key = r.canId + ':' + r.pid + ':' + v.sensor;
     const info = canUi.pids.get(r.pid);
-    const have = r.obd && canIsImported(r.canId, r.pid);
-    const importable = r.obd && !have;
-    let name = r.obd ? (info ? escHtml(info.name) : '<span class="driven-manual">Not in preOBD’s PID table (raw value)</span>')
+    const have = r.obd && canIsImported(r.canId, r.pid, v.dataOffset);
+    const fitted = !r.obd || canSensorFitted(r, v);
+    const importable = r.obd && !have && fitted;
+    let name = r.obd ? (info ? escHtml(v.name) : '<span class="driven-manual">Not in preOBD’s PID table (raw value)</span>')
                      : '<span class="driven-manual">Custom frame: set up through JSON</span>';
     if (have) name += ' <span class="can-have">✓ imported</span>';
+    else if (!fitted) name += ' <span class="driven-manual">not fitted on this ECU</span>';
     h += `<tr class="${importable ? '' : 'can-disabled'}">` +
       `<td><input type="checkbox" data-can-pick="${key}" ${importable ? '' : 'disabled'} ${canUi.selected.has(key) ? 'checked' : ''}></td>` +
       `<td class="mono">${r.obd ? canHex(r.pid) : '—'}</td>` +
       `<td>${name}</td>` +
       `<td><span class="can-ecu-chip">${r.obd ? canEcuLabel(r.canId) : 'ID ' + canHex(r.canId, 3)}</span></td>` +
-      (listen ? `<td class="mono">${escHtml(canDecode(r) || r.data || '')}</td><td class="dim">${r.frames}</td>` : '') +
+      (listen ? `<td class="mono">${escHtml(canDecode(r, v.dataOffset) || (v.sensor > 1 ? '—' : r.data) || '')}</td><td class="dim">${r.frames}</td>` : '') +
       '</tr>';
   }
   h += '</tbody></table></div>';
@@ -4524,9 +4550,11 @@ async function canImportSelected() {
   try {
     await withConfigMode(async () => {
       for (const key of keys) {
-        const [canId, pid] = key.split(':').map(Number);
-        // SET CAN <pid> [ecu]: the engine (0x7E8) is the default (#511)
-        const cmd = 'SET CAN ' + canHex(pid) + (canId !== 0x7E8 ? ' ' + canHex(canId, 3) : '');
+        const [canId, pid, sensor] = key.split(':').map(Number);
+        // SET CAN <pid> [ecu] [SENSOR <n>]: the engine (0x7E8) is the
+        // default (#511); SENSOR picks a multi-sensor PID's value (#535)
+        const cmd = 'SET CAN ' + canHex(pid) + (canId !== 0x7E8 ? ' ' + canHex(canId, 3) : '') +
+          (sensor > 1 ? ' SENSOR ' + sensor : '');
         const resp = await sendChecked(cmd);
         const m = resp.match(/CAN:(\d+)/);
         if (m) pins.push('CAN:' + m[1]);

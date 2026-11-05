@@ -9,6 +9,7 @@
 #include "../../../inputs/input.h"
 #include "../../calibration_types.h"
 #include "can_frame_cache.h"
+#include "../../can_sensor_library/standard_pids.h"
 
 /**
  * Read CAN-imported sensor
@@ -49,6 +50,16 @@ void readCANSensor(Input* ptr) {
     if (cal->data_offset + cal->data_length > CAN_FRAME_DATA_MAX) {
         ptr->value = NAN;
         return;
+    }
+
+    // A multi-sensor PID (0x78 EGT 1-4, ...) says in byte A which sensors
+    // the ECU has. One it lacks has no value, whatever bytes sit there (#535).
+    if (cal->source_can_id >= 0x7E8 && cal->source_can_id <= 0x7EF && cal->data_offset >= 1) {
+        uint8_t bit = standardPidSupportBit(cal->source_pid, cal->data_offset);
+        if (bit != NO_SUPPORT_BIT && !(entry->data[0] & (1u << bit))) {
+            ptr->value = NAN;
+            return;
+        }
     }
 
     // Extract multi-byte value from CAN frame

@@ -687,6 +687,7 @@ void printHelpExamples() {
     msg.control.println(F("  SET CAN 0x0C  (import Engine RPM from CAN bus)"));
     msg.control.println(F("  SET CAN 0x0D  (import Vehicle Speed)"));
     msg.control.println(F("  SET CAN 0x05 0x7E9  (from a second ECU; SCAN PIDS lists them)"));
+    msg.control.println(F("  SET CAN 0x78 SENSOR 3  (EGT bank 1 sensor 3)"));
     msg.control.println(F("  SET CAN:0 ALARM 500 6000  (modify CAN sensor)"));
     msg.control.println();
     msg.control.println(F("Advanced sensor setup:"));

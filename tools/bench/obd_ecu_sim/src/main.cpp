@@ -17,14 +17,18 @@
  * #509 units (fixed values, J1979 formulas):
  *   0x10 MAF 12.34 g/s   0x1F run time = uptime s   0x21 dist MIL 42 km
  *   0x31 dist since clear 1500 km   0x4D time MIL 90 min   0x5E fuel 5.5 L/h
- *   0x66 MAF sensor A 20 g/s (A = support byte 01)
- *   0x67 ECT sensor 1 90 C (A = support byte 01)   0xA6 odometer 123456.7 km
+ *   0x66 MAF sensor A 20 g/s, B 25 g/s (A = support byte 03)
+ *   0x67 ECT sensor 1 90 C, 2 95 C (A = support byte 03)   0xA6 odometer 123456.7 km
  * Multi-frame (#527): a First Frame, then the Consecutive Frames once the
  * tester's Flow Control (30 <BS> <STmin>) arrives on 0x7E0, STmin honoured.
  * No Flow Control within 75 ms (N_Bs) drops the answer, like a strict ECU;
  * stats show the worst Flow Control latency and how many were late:
- *   0x70 boost sensor A 150 kPa abs   0x78 EGT B1S1 650 C   0x79 EGT B2S1 600 C
- *   0x7F run time total 360000 s (100 h), idle 3600 s
+ *   0x70 boost A 150 kPa abs (commanded 160), B 120 (commanded 130)
+ *   0x78 EGT bank 1 sensors 1-4 650/660/670/680 C   0x79 bank 2 600/610/620 C,
+ *   sensor 4 not fitted (support 07) but 630 C in its place: preOBD must not read it
+ *   0x7F run time total 360000 s (100 h), idle 3600 s, PTO 1800 s
+ * Every sensor of a multi-sensor PID differs, so SET CAN <pid> SENSOR <n>
+ * reading the wrong offset shows up as a wrong value (#535).
  *   0x00/0x20/... supported-PID bitmaps of the above, minus the unsupported
  *   PID (#511); a bitmap block with nothing above it is treated like the
  *   unsupported PID (silence, or NRC with `n`).
@@ -237,24 +241,33 @@ static bool buildMultiFrameAnswer(uint8_t pid, can_frame& f) {
     mfMsg[0] = 0x41;
     mfMsg[1] = pid;
     switch (pid) {
-        case 0x70: {            // A = support (sensor A), D-E boost A (256D+E)/32 kPa abs
-            uint16_t raw = 150 * 32;
-            mfMsg[2] = 0x02; mfMsg[5] = raw >> 8; mfMsg[6] = raw & 0xFF;
+        case 0x70: {            // A = support; commanded/actual A at B-C/D-E, B at F-G/H-I, (256x+y)/32 kPa abs
+            const uint16_t kpa[4] = {160, 150, 130, 120};
+            mfMsg[2] = 0x0F;
+            for (uint8_t i = 0; i < 4; i++) {
+                uint16_t raw = kpa[i] * 32;
+                mfMsg[3 + 2 * i] = raw >> 8; mfMsg[4 + 2 * i] = raw & 0xFF;
+            }
             mfLen = 12;         // A..J
             break;
         }
-        case 0x78:              // A = support (sensor 1), B-C (256B+C)/10-40
+        case 0x78:              // A = support (sensors 1-4), B-C ... H-I (256x+y)/10-40
         case 0x79: {
-            uint16_t raw = (uint16_t)(((pid == 0x78 ? 650 : 600) + 40) * 10);
-            mfMsg[2] = 0x01; mfMsg[3] = raw >> 8; mfMsg[4] = raw & 0xFF;
+            mfMsg[2] = pid == 0x78 ? 0x0F : 0x07;
+            for (uint8_t i = 0; i < 4; i++) {
+                uint16_t raw = (uint16_t)(((pid == 0x78 ? 650 : 600) + 10 * i + 40) * 10);
+                mfMsg[3 + 2 * i] = raw >> 8; mfMsg[4 + 2 * i] = raw & 0xFF;
+            }
             mfLen = 11;         // A..I
             break;
         }
-        case 0x7F: {            // A = support (total, idle), B-E total s, F-I idle s
-            uint32_t total = 360000, idle = 3600;
-            mfMsg[2] = 0x03;
-            mfMsg[3] = total >> 24; mfMsg[4] = total >> 16; mfMsg[5] = total >> 8; mfMsg[6] = total;
-            mfMsg[7] = idle >> 24;  mfMsg[8] = idle >> 16;  mfMsg[9] = idle >> 8;  mfMsg[10] = idle;
+        case 0x7F: {            // A = support (total, idle, PTO), B-E total s, F-I idle s, J-M PTO s
+            const uint32_t t[3] = {360000, 3600, 1800};
+            mfMsg[2] = 0x07;
+            for (uint8_t i = 0; i < 3; i++) {
+                mfMsg[3 + 4 * i] = t[i] >> 24; mfMsg[4 + 4 * i] = t[i] >> 16;
+                mfMsg[5 + 4 * i] = t[i] >> 8;  mfMsg[6 + 4 * i] = t[i];
+            }
             mfLen = 15;         // A..M
             break;
         }
@@ -364,11 +377,12 @@ static bool buildAnswer(uint8_t pid, can_frame& f, uint32_t now) {
         case 0x5E:              // fuel rate 5.5 L/h: (256A+B)/20
             f.data[0] = 0x04; f.data[4] = 110;
             return true;
-        case 0x66:              // MAF: A = support (sensor A), sensor A 20 g/s = 640/32
-            f.data[0] = 0x07; f.data[3] = 0x01; f.data[4] = 640 >> 8; f.data[5] = 640 & 0xFF;
+        case 0x66:              // MAF: A = support (A, B), sensor A 20 g/s = 640/32, B 25 g/s = 800/32
+            f.data[0] = 0x07; f.data[3] = 0x03; f.data[4] = 640 >> 8; f.data[5] = 640 & 0xFF;
+            f.data[6] = 800 >> 8; f.data[7] = 800 & 0xFF;
             return true;
-        case 0x67:              // ECT: A = support (sensor 1), B = 90 + 40
-            f.data[0] = 0x05; f.data[3] = 0x01; f.data[4] = 130;
+        case 0x67:              // ECT: A = support (1, 2), B = 90 + 40, C = 95 + 40
+            f.data[0] = 0x05; f.data[3] = 0x03; f.data[4] = 130; f.data[5] = 135;
             return true;
         case 0xA6: {            // odometer 123456.7 km: 32-bit / 10
             uint32_t o = 1234567;
