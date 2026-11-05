@@ -265,7 +265,7 @@ void resetSystemConfig(uint8_t keep) {
     systemConfig.defaultElevUnits = getUnitsIndexByName(DEFAULT_ELEVATION_UNITS);
     systemConfig.defaultSpeedUnits = getUnitsIndexByName(DEFAULT_SPEED_UNITS);
 
-    // Timing intervals (sensor/alarm retired, #601: kept only so the bytes are defined)
+    // Retired intervals (#601, DISPLAY INTERVAL): kept only so the bytes are defined
     systemConfig.sensorReadInterval = SENSOR_READ_INTERVAL_MS;
     systemConfig.alarmCheckInterval = ALARM_CHECK_INTERVAL_MS;
     systemConfig.lcdUpdateInterval = LCD_UPDATE_INTERVAL_MS;

@@ -101,7 +101,6 @@ SET A2 ABBR ECT            # short label in the cell (keep it to ~4 characters; 
 SET A5 DISPLAY DISABLE     # hide this input (its cell goes to the next one)
 SET A2 UNITS F             # show °F for this input
 SYSTEM UNITS PRESSURE PSI  # pressure inputs added from now on start in PSI
-DISPLAY INTERVAL 500       # refresh every 500 ms (default)
 ```
 
 A disabled input still keeps its cell (blank) — it doesn't make room for another.

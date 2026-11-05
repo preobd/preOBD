@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The watchdog now keeps running in CONFIG mode on every board, relaxed to 8 s, instead of being switched off on boards that allow it; it only restarts a board whose firmware has frozen, never an idle one, and every board now behaves the same (#541)
 
 ### Removed
+- `DISPLAY INTERVAL`: the LCD always redrew every 500 ms whatever it was set to. `SYSTEM DUMP JSON` no longer exports `display.updateInterval`, and `JSON IMPORT` ignores it in older files (#607)
 - `SYSTEM INTERVAL SENSOR/ALARM`: neither setting ever changed how often sensors are read or alarms are checked. Sensors keep their own read rates (50 ms for most), rules are checked every 50 ms, and a rule's debounce and warmup set its timing. `SYSTEM DUMP JSON` no longer exports `system.timing`, and `JSON IMPORT` ignores it in older files (#601)
 - Hybrid CAN mode and its build targets `teensy41_hybrid` and `esp32s3_hybrid` (a native CAN controller plus an MCP2515 as an extra bus): the MCP2515 bus never worked on either (#556), and every board now drives all of its CAN buses with one controller type (#556, #573)
 

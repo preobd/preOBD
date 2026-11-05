@@ -464,9 +464,6 @@ void printSystemConfig() {
     msg.control.print(F("Sea Level Pressure: "));
     msg.control.print(systemConfig.seaLevelPressure);
     msg.control.println(F(" hPa"));
-    msg.control.print(F("Intervals: LCD="));
-    msg.control.print(systemConfig.lcdUpdateInterval);
-    msg.control.println(F("ms"));
 
     // Log Filter Configuration
     msg.control.println();
@@ -531,11 +528,6 @@ void printDisplayConfig() {
     }
 
     printDisplayPanel();
-
-    // Update interval
-    msg.control.print(F("Update Interval: "));
-    msg.control.print(systemConfig.lcdUpdateInterval);
-    msg.control.println(F(" ms"));
 
     // Default units
     msg.control.print(F("Default Units - Temp: "));
@@ -641,7 +633,6 @@ void printHelpDisplay() {
     msg.control.println(F("  DISPLAY TYPE <LCD|NONE>"));
 #endif
     msg.control.println(F("  DISPLAY ADDRESS <hex>    - LCD I2C address, 0x20-0x27 or 0x38-0x3F (at next boot)"));
-    msg.control.println(F("  DISPLAY INTERVAL <ms>    - Display refresh rate"));
     msg.control.println();
     msg.control.println(F("Note: Unit preferences moved to SYSTEM UNITS"));
     msg.control.println();
@@ -867,7 +858,6 @@ void printHelpQuick() {
     msg.control.println(F("  DISPLAY TYPE <LCD|NONE>"));
 #endif
     msg.control.println(F("  DISPLAY ADDRESS <hex>"));
-    msg.control.println(F("  DISPLAY INTERVAL <ms>"));
     msg.control.println();
     msg.control.println(F("Transport:"));
     msg.control.println(F("  TRANSPORT STATUS|LIST"));

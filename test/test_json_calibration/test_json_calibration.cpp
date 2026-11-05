@@ -518,15 +518,19 @@ static void test_import_display_object_without_type_preserves_current_type(void)
 static void test_import_timing_retired_keys_are_ignored(void) {
     systemConfig.sensorReadInterval = 250;
     systemConfig.alarmCheckInterval = 500;
+    systemConfig.lcdUpdateInterval = 500;
     JsonDocument doc;
     JsonObject sys = doc.to<JsonObject>();
     JsonObject timing = sys["timing"].to<JsonObject>();
     timing["sensorRead"] = 100;
     timing["alarmCheck"] = 0;
+    timing["lcdUpdate"] = 7;                 // its old location
+    sys["display"]["updateInterval"] = 9;    // DISPLAY INTERVAL, retired too
 
     TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
     TEST_ASSERT_EQUAL_UINT16(250, systemConfig.sensorReadInterval);
     TEST_ASSERT_EQUAL_UINT16(500, systemConfig.alarmCheckInterval);
+    TEST_ASSERT_EQUAL_UINT16(500, systemConfig.lcdUpdateInterval);
 }
 
 static void test_pressure_table_custom_is_refused(void) {

@@ -827,9 +827,6 @@ int cmd_display(int argc, const char* const* argv) {
             default: msg.control.println(F("Unknown")); break;
         }
         printDisplayPanel();
-        msg.control.print(F("Update Interval: "));
-        msg.control.print(systemConfig.lcdUpdateInterval);
-        msg.control.println(F("ms"));
 #if INCLUDE_DISPLAY
         // The grid holds 8; more pages through groups of 8 (#480).
         uint8_t shown = 0;
@@ -931,25 +928,10 @@ int cmd_display(int argc, const char* const* argv) {
         return 0;
     }
 
-    // DISPLAY INTERVAL <ms>
-    if (streq_P(subcommand, PSTR("INTERVAL"))) {
-        if (argc < 3) {
-            msg.control.println(F("ERROR: INTERVAL requires a time in ms"));
-            msg.control.println(F("  Usage: DISPLAY INTERVAL <ms>"));
-            return 1;
-        }
-        uint16_t interval = atoi(argv[2]);
-        systemConfig.lcdUpdateInterval = interval;
-        msg.control.print(F("Display update interval set to "));
-        msg.control.print(interval);
-        msg.control.println(F(" ms"));
-        return 0;
-    }
-
     msg.control.print(F("ERROR: Unknown subcommand '"));
     msg.control.print(subcommand);
     msg.control.println(F("'"));
-    msg.control.println(F("  Valid commands: STATUS, ENABLE, DISABLE, TYPE, ADDRESS, INTERVAL"));
+    msg.control.println(F("  Valid commands: STATUS, ENABLE, DISABLE, TYPE, ADDRESS"));
     msg.control.println(F("  Note: Unit configuration moved to SYSTEM UNITS"));
     return 1;
 }

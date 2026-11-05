@@ -505,7 +505,6 @@ FLASHMEM void exportSystemConfigToJSON(JsonObject& systemObj) {
     snprintf(addrBuf, sizeof(addrBuf), "0x%02X", systemConfig.lcdI2CAddress);
     display["address"] = addrBuf;
 
-    display["updateInterval"] = systemConfig.lcdUpdateInterval;
 
     JsonObject defaultUnits = display["defaultUnits"].to<JsonObject>();
     defaultUnits["temperature"] = reinterpret_cast<const char*>(getUnitStringByIndex(systemConfig.defaultTempUnits));
@@ -1345,11 +1344,6 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
             }
         }
 
-        // Display update interval
-        if (display["updateInterval"].isNull() == false) {
-            staged.lcdUpdateInterval = display["updateInterval"];
-        }
-
         // Default units
         if (display["defaultUnits"].isNull() == false) {
             JsonObject units = display["defaultUnits"];
@@ -1373,15 +1367,10 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
         }
     }
 
-    // "timing": sensorRead/alarmCheck are retired (#601) and ignored, silently,
-    // because every older dump carries them. Only the legacy lcdUpdate is read.
-    if (systemObj["timing"].isNull() == false) {
-        JsonObject timing = systemObj["timing"];
-        // Backward compatibility: check for lcdUpdate in timing section (old location)
-        if (timing["lcdUpdate"].isNull() == false) {
-            staged.lcdUpdateInterval = timing["lcdUpdate"];
-        }
-    }
+    // "timing" (sensorRead/alarmCheck/lcdUpdate, #601) and
+    // display.updateInterval (DISPLAY INTERVAL) are retired and ignored,
+    // silently, because every older dump carries them. The LCD redraws on
+    // LCD_UPDATE_INTERVAL_MS (config.h); the stored value was never read.
 
     // Physical constants
     if (systemObj["constants"].isNull() == false) {

@@ -84,6 +84,8 @@ struct SystemConfig {
     // set, shown or exported. Don't wire them back up without a reason.
     uint16_t sensorReadInterval;
     uint16_t alarmCheckInterval;
+    // RETIRED too (DISPLAY INTERVAL): the LCD always redrew on
+    // LCD_UPDATE_INTERVAL_MS; kept for the EEPROM layout like the two above.
     uint16_t lcdUpdateInterval;
     // These two bytes were a single `uint16_t reserved1`. Splitting them keeps
     // the struct's size, field offsets, alignment, and XOR checksum byte-for-byte
@@ -110,9 +112,13 @@ struct SystemConfig {
         uint8_t data_secondary;      // Multi-cast target or TRANSPORT_NONE
         uint8_t debug_primary;       // TransportID for DEBUG plane
         uint8_t debug_secondary;     // Multi-cast target or TRANSPORT_NONE
-        uint8_t bt_type;             // BluetoothType enum (0=none)
-        uint8_t bt_auth_required;    // 0=disabled, 1=enabled
-        uint16_t bt_pin;             // 4-digit PIN (0=not set)
+        // UNUSED since they were added (Dec 2025): meant for a PIN-pairing
+        // Bluetooth module, superseded by the nRF52840 BLE bridge, which does
+        // its own security. No command sets them and nothing reads them; kept
+        // only for the EEPROM layout (always 0). Free for reuse.
+        uint8_t bt_type;
+        uint8_t bt_auth_required;
+        uint16_t bt_pin;
         uint8_t reserved_router[6];  // Future expansion
     } router;
 

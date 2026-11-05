@@ -1096,7 +1096,6 @@ DISPLAY ENABLE                   # Enable display
 DISPLAY DISABLE                  # Disable display
 DISPLAY TYPE <LCD|OLED|NONE>     # Set display type (OLED: 128x64 SH1107, Feather F405 only)
 DISPLAY ADDRESS <hex>            # Set LCD I2C address: 0x20-0x27 or 0x38-0x3F (next reboot)
-DISPLAY INTERVAL <ms>            # Set display refresh rate
 ```
 
 ### DISPLAY STATUS Output
@@ -1106,8 +1105,10 @@ DISPLAY INTERVAL <ms>            # Set display refresh rate
 Status: Enabled
 Type: LCD
 LCD I2C Address: 0x27
-Update Interval: 1000ms
 ```
+
+The display redraws every 500 ms (`LCD_UPDATE_INTERVAL_MS` in `src/config.h`).
+The old refresh-rate setting was removed: it was stored but never used.
 
 For unit configuration, use `SYSTEM UNITS` commands.
 
@@ -1117,7 +1118,6 @@ For unit configuration, use `SYSTEM UNITS` commands.
 # Configure display hardware
 DISPLAY TYPE LCD
 DISPLAY ADDRESS 0x27
-DISPLAY INTERVAL 500    # Update display every 500ms
 
 # View configuration
 DISPLAY STATUS

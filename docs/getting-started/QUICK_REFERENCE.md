@@ -298,7 +298,6 @@ HELP EXAMPLES           # Show worked examples
 | `DISPLAY ENABLE` | Enable display |
 | `DISPLAY DISABLE` | Disable display |
 | `DISPLAY TYPE <LCD\|OLED\|NONE>` | Set display type (OLED on the Feather F405) |
-| `DISPLAY INTERVAL <ms>` | Set display refresh rate |
 
 ### System Commands
 
