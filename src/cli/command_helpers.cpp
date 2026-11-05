@@ -57,6 +57,20 @@ bool spiBusPinsConflict(uint8_t bus_id) {
     return pinsConflict(pins, 3, PIN_RANK_BUS, getSPIBusName(bus_id));
 }
 
+#if NUM_CAN_BUSES > 0
+// The CAN twin of the two above (#563). Re-selecting a bus that is already up,
+// or that the other CAN direction has already selected, is not a conflict:
+// pinsConflict() skips the bus's own PIN_RESERVED entry and storedBusHoldsPin()
+// skips its own name, so input and output can share one bus.
+// SPI-attached controllers have no TX/RX of their own (0xFF), so nothing to check.
+bool canBusPinsConflict(uint8_t bus_id) {
+    if (bus_id >= NUM_CAN_BUSES) return false;   // caller reports the bad bus id
+
+    const uint8_t pins[2] = { getDefaultCANTX(bus_id), getDefaultCANRX(bus_id) };
+    return pinsConflict(pins, 2, PIN_RANK_BUS, getCANBusName(bus_id));
+}
+#endif
+
 void printSaveReminder() {
     msg.control.println(F("  (use SAVE to persist)"));
 }

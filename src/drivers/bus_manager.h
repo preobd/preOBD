@@ -243,6 +243,11 @@ const char* getCANBusName(uint8_t bus_id);
  */
 bool storedBusHoldsPin(uint8_t pin, const char* excludeOwner, const char** descOut);
 
+// A BUS I2C/SPI/CAN selection that has just passed its pin check (cmd_bus.cpp)
+// is pending again, even if that bus was refused earlier this boot, so it must
+// defend its pins until the reboot (#564 review). `kind`: 0 = I2C, 1 = SPI, 2 = CAN.
+void busSelectionAdmitted(uint8_t kind, uint8_t bus_id);
+
 // ============================================================================
 // BUS STATUS DISPLAY
 // ============================================================================

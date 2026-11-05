@@ -44,6 +44,8 @@ static bool pinHeldByInput(uint8_t pin) {
     return input_probe && input_probe(pin);
 }
 
+bool pinHeldByConfiguredInput(uint8_t pin) { return pin != 0xFF && pinHeldByInput(pin); }
+
 // ---------------------------------------------------------------------------
 // Boot diagnostics buffer (#396) — see pin_owner.h for the rationale.
 // ---------------------------------------------------------------------------

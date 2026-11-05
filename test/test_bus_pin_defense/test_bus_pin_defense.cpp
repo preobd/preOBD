@@ -78,6 +78,10 @@ TransportInterface* MessageRouter::getTransport(MessagePlane plane, bool primary
     return (plane == PLANE_CONTROL && primary) ? &g_capture : nullptr;
 }
 
+// A configured input on one pin, for the #564 tests.
+static uint8_t g_inputPin = 0xFF;
+static bool inputOnPin(uint8_t pin) { return pin == g_inputPin; }
+
 void setUp(void) {
     initPinRegistry();
     setPinOwnerInputProbe(nullptr);
@@ -90,6 +94,12 @@ void setUp(void) {
     bootDiagCount = 0;
     bootDiagOverflow = 0;
     bootDiagBuffering = false;
+    i2c_refused_id = 0xFF;      // #564 refusal latches, also visible via the #include
+    spi_refused_id = 0xFF;
+    can_refused_mask = 0;
+    active_i2c = nullptr;       // bus_manager's live-bus pointers: a started bus
+    active_spi = nullptr;       // would otherwise leak into the next test
+    g_inputPin = 0xFF;
     systemConfig.buses.active_i2c = 0xFF;
     systemConfig.buses.i2c_clock = 400;
     systemConfig.buses.active_spi = 0xFF;
@@ -218,6 +228,100 @@ static void test_pending_selection_never_says_stale_regardless_of_rank(void) {
     TEST_ASSERT_NULL(strstr(g_capture.buf, "Stale"));
 }
 
+// ===========================================================================
+// 4. #564: a selection refused at boot stops defending its pins
+// ===========================================================================
+
+// Stored `BUS I2C 0` plus a stored input on SDA. The bus is refused because the
+// input holds SDA; the input must then load. Before #564 the still-stored
+// selection answered "held" here and the input was dropped too: both lost.
+static void test_refused_selection_releases_its_pins_to_the_input(void) {
+    systemConfig.buses.active_i2c = 0;
+    g_inputPin = getDefaultI2CSDA(0);
+    setPinOwnerInputProbe(inputOnPin);
+
+    TEST_ASSERT_FALSE(initI2CBus(0, 400));
+
+    // The input's own boot check (input_store.cpp) is a pinsConflict() at
+    // input rank with the input itself excluded, so the probe is off for it.
+    setPinOwnerInputProbe(nullptr);
+    g_capture.reset();
+    const uint8_t sda = getDefaultI2CSDA(0);
+    TEST_ASSERT_FALSE(pinsConflict(&sda, 1, PIN_RANK_INPUT, "stored input"));
+    TEST_ASSERT_NULL(strstr(g_capture.buf, "is claimed by"));
+
+    const char* desc = nullptr;
+    TEST_ASSERT_FALSE(storedBusHoldsPin(getDefaultI2CSCL(0), nullptr, &desc));
+}
+
+// Only the refused bus is released: a different stored selection still defends.
+static void test_refusal_is_per_bus(void) {
+    systemConfig.buses.active_i2c = 0;
+    g_inputPin = getDefaultI2CSDA(0);
+    setPinOwnerInputProbe(inputOnPin);
+    TEST_ASSERT_FALSE(initI2CBus(0, 400));
+
+    systemConfig.buses.active_spi = 0;   // never attempted, so still pending
+    const char* desc = nullptr;
+    TEST_ASSERT_TRUE(storedBusHoldsPin(getDefaultSPIMOSI(0), nullptr, &desc));
+}
+
+// A later successful start of the same bus clears the latch.
+static void test_a_later_successful_start_clears_the_refusal(void) {
+    systemConfig.buses.active_i2c = 0;
+    g_inputPin = getDefaultI2CSDA(0);
+    setPinOwnerInputProbe(inputOnPin);
+    TEST_ASSERT_FALSE(initI2CBus(0, 400));
+    TEST_ASSERT_EQUAL_UINT8(0, i2c_refused_id);
+
+    g_inputPin = 0xFF;   // the input was cleared
+    TEST_ASSERT_TRUE(initI2CBus(0, 400));
+    TEST_ASSERT_EQUAL_UINT8(0xFF, i2c_refused_id);
+}
+
+// The status line names the input instead of calling the bus idle.
+static void test_status_names_the_blocking_input(void) {
+    systemConfig.buses.active_i2c = 0;
+    g_inputPin = getDefaultI2CSDA(0);
+    setPinOwnerInputProbe(inputOnPin);
+    TEST_ASSERT_FALSE(initI2CBus(0, 400));
+
+    g_capture.reset();
+    displayI2CStatus();
+    TEST_ASSERT_NOT_NULL(strstr(g_capture.buf, "NOT RUNNING"));
+    TEST_ASSERT_NOT_NULL(strstr(g_capture.buf, "held by a configured input"));
+    TEST_ASSERT_NULL(strstr(g_capture.buf, "idle until"));
+}
+
+// Fixing the conflict and re-selecting the bus makes it pending again, so it
+// defends its pins until the reboot (review of #564). Without this a later SET
+// could take SDA and silently undo the fix at the next boot.
+static void test_reselecting_a_refused_bus_makes_it_defend_again(void) {
+    systemConfig.buses.active_i2c = 0;
+    g_inputPin = getDefaultI2CSDA(0);
+    setPinOwnerInputProbe(inputOnPin);
+    TEST_ASSERT_FALSE(initI2CBus(0, 400));
+
+    g_inputPin = 0xFF;                 // CLEAR the input
+    busSelectionAdmitted(0, 0);        // BUS I2C 0 passed its pin check
+
+    const char* desc = nullptr;
+    TEST_ASSERT_TRUE(storedBusHoldsPin(getDefaultI2CSDA(0), nullptr, &desc));
+}
+
+// A bus that was never refused is not "blocked" by an input on its copper: a
+// declared bus nothing needs leaves those pins to inputs (#394) and is idle.
+static void test_status_does_not_blame_an_input_without_a_refusal(void) {
+    systemConfig.buses.active_i2c = 0;
+    g_inputPin = getDefaultI2CSDA(0);
+    setPinOwnerInputProbe(inputOnPin);
+
+    g_capture.reset();
+    displayI2CStatus();
+    TEST_ASSERT_NOT_NULL(strstr(g_capture.buf, "idle until"));
+    TEST_ASSERT_NULL(strstr(g_capture.buf, "held by a configured input"));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_no_stored_selection_holds_nothing);
@@ -232,5 +336,12 @@ int main(int, char**) {
     RUN_TEST(test_order_A_i2c_selected_then_serial_is_refused_not_stale);
     RUN_TEST(test_order_B_serial_first_then_i2c_selection_is_refused_not_stale);
     RUN_TEST(test_pending_selection_never_says_stale_regardless_of_rank);
+
+    RUN_TEST(test_refused_selection_releases_its_pins_to_the_input);
+    RUN_TEST(test_refusal_is_per_bus);
+    RUN_TEST(test_a_later_successful_start_clears_the_refusal);
+    RUN_TEST(test_status_names_the_blocking_input);
+    RUN_TEST(test_reselecting_a_refused_bus_makes_it_defend_again);
+    RUN_TEST(test_status_does_not_blame_an_input_without_a_refusal);
     return UNITY_END();
 }

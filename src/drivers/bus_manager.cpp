@@ -42,6 +42,15 @@ static bool can_ready = false;
 // 0/1 even when Serial1 holds them (review of #560).
 static uint8_t can_claimed_mask = 0;
 
+// Selections whose claim was REFUSED this boot (#564). A refused bus stays down
+// until the next reboot, so its stored selection must stop defending its pins:
+// otherwise the input that blocked it is then dropped by storedBusHoldsPin(),
+// and the pin ends up held by nobody. One id per bus kind is enough, as only
+// the stored selection is ever brought up; CAN has two directions, so a mask.
+static uint8_t i2c_refused_id = 0xFF;
+static uint8_t spi_refused_id = 0xFF;
+static uint8_t can_refused_mask = 0;
+
 // ============================================================================
 // PIN CLAIMING
 // ============================================================================
@@ -140,7 +149,11 @@ bool initI2CBus(uint8_t bus_id, uint16_t clock_khz) {
     // Claim SDA/SCL first: if the copper is already someone else's, the bus must
     // not come up at all. Refusing here rather than after Wire.begin() also means
     // there is nothing to un-begin — TwoWire has no portable end().
-    if (!claimPins(i2c_pins, 2, PIN_RESERVED, PIN_RANK_BUS, TAG_I2C, i2c_desc)) return false;
+    if (!claimPins(i2c_pins, 2, PIN_RESERVED, PIN_RANK_BUS, TAG_I2C, i2c_desc)) {
+        i2c_refused_id = bus_id;
+        return false;
+    }
+    if (i2c_refused_id == bus_id) i2c_refused_id = 0xFF;
 
     // Platform-specific initialization
     bool success = false;
@@ -255,7 +268,11 @@ bool initSPIBus(uint8_t bus_id, uint32_t clock_hz) {
     const char* spi_desc = getSPIBusName(bus_id);
 
     // Same contract as I2C: claim the bus pins before SPI.begin() drives them.
-    if (!claimPins(spi_pins, 3, PIN_RESERVED, PIN_RANK_BUS, TAG_SPI, spi_desc)) return false;
+    if (!claimPins(spi_pins, 3, PIN_RESERVED, PIN_RANK_BUS, TAG_SPI, spi_desc)) {
+        spi_refused_id = bus_id;
+        return false;
+    }
+    if (spi_refused_id == bus_id) spi_refused_id = 0xFF;
 
     // Platform-specific initialization
     bool success = false;
@@ -350,7 +367,11 @@ bool initCANBus(uint8_t bus_id, uint32_t baudrate) {
     // Claim before declaring the bus ready: can_ready is what the rest of the
     // firmware reads as "this bus is mine", so it must not be set over pins the
     // registry attributes to another function.
-    if (!claimPins(can_pins, 2, PIN_RESERVED, PIN_RANK_BUS, TAG_CAN, can_desc)) return false;
+    if (!claimPins(can_pins, 2, PIN_RESERVED, PIN_RANK_BUS, TAG_CAN, can_desc)) {
+        if (bus_id < 8) can_refused_mask |= (uint8_t)(1u << bus_id);
+        return false;
+    }
+    if (bus_id < 8) can_refused_mask &= (uint8_t)~(1u << bus_id);
 
     // CAN buses are started by CAN input and output through the HAL (hal_can.h)
     // Here we just mark the bus as ready
@@ -567,7 +588,10 @@ const char* getCANBusName(uint8_t bus_id) {
 bool storedBusHoldsPin(uint8_t pin, const char* excludeOwner, const char** descOut) {
     if (pin == 0xFF) return false;
 
-    if (systemConfig.buses.active_i2c != 0xFF && systemConfig.buses.active_i2c < NUM_I2C_BUSES) {
+    // A selection refused this boot is not pending: it will not start until a
+    // reboot, so it defends nothing (#564). Skipped per bus below.
+    if (systemConfig.buses.active_i2c != 0xFF && systemConfig.buses.active_i2c < NUM_I2C_BUSES &&
+        systemConfig.buses.active_i2c != i2c_refused_id) {
         const uint8_t b = systemConfig.buses.active_i2c;
         if (pin == getDefaultI2CSDA(b) || pin == getDefaultI2CSCL(b)) {
             const char* d = getI2CBusName(b);
@@ -578,7 +602,8 @@ bool storedBusHoldsPin(uint8_t pin, const char* excludeOwner, const char** descO
         }
     }
 
-    if (systemConfig.buses.active_spi != 0xFF && systemConfig.buses.active_spi < NUM_SPI_BUSES) {
+    if (systemConfig.buses.active_spi != 0xFF && systemConfig.buses.active_spi < NUM_SPI_BUSES &&
+        systemConfig.buses.active_spi != spi_refused_id) {
         const uint8_t b = systemConfig.buses.active_spi;
         if (pin == getDefaultSPIMOSI(b) || pin == getDefaultSPIMISO(b) || pin == getDefaultSPISCK(b)) {
             const char* d = getSPIBusName(b);
@@ -595,7 +620,8 @@ bool storedBusHoldsPin(uint8_t pin, const char* excludeOwner, const char** descO
     // actually enabled, mirroring initConfiguredBuses()'s own gating.
     if (systemConfig.buses.can_output_enabled &&
         systemConfig.buses.output_can_bus != 0xFF &&
-        systemConfig.buses.output_can_bus < NUM_CAN_BUSES) {
+        systemConfig.buses.output_can_bus < NUM_CAN_BUSES &&
+        !(can_refused_mask & (1u << systemConfig.buses.output_can_bus))) {
         const uint8_t b = systemConfig.buses.output_can_bus;
         if (pin == getDefaultCANTX(b) || pin == getDefaultCANRX(b)) {
             const char* d = getCANBusName(b);
@@ -607,7 +633,8 @@ bool storedBusHoldsPin(uint8_t pin, const char* excludeOwner, const char** descO
     }
     if (systemConfig.buses.can_input_mode != CAN_INPUT_OFF &&
         systemConfig.buses.input_can_bus != 0xFF &&
-        systemConfig.buses.input_can_bus < NUM_CAN_BUSES) {
+        systemConfig.buses.input_can_bus < NUM_CAN_BUSES &&
+        !(can_refused_mask & (1u << systemConfig.buses.input_can_bus))) {
         const uint8_t b = systemConfig.buses.input_can_bus;
         if (pin == getDefaultCANTX(b) || pin == getDefaultCANRX(b)) {
             const char* d = getCANBusName(b);
@@ -620,6 +647,12 @@ bool storedBusHoldsPin(uint8_t pin, const char* excludeOwner, const char** descO
 #endif
 
     return false;
+}
+
+void busSelectionAdmitted(uint8_t kind, uint8_t bus_id) {
+    if (kind == 0 && i2c_refused_id == bus_id) i2c_refused_id = 0xFF;
+    else if (kind == 1 && spi_refused_id == bus_id) spi_refused_id = 0xFF;
+    else if (kind == 2 && bus_id < 8) can_refused_mask &= (uint8_t)~(1u << bus_id);
 }
 
 //=============================================================================
@@ -690,7 +723,7 @@ enum : uint8_t { BK_I2C = 0, BK_SPI = 1, BK_CAN = 2 };
 
 __attribute__((noinline))
 static void printBusNotStarted(uint8_t kind, const char* busName, bool fromWiring,
-                               const uint8_t* pins, uint8_t count) {
+                               const uint8_t* pins, uint8_t count, bool refused) {
     char buf[88];
     char k[4];
     strncpy_P(k, kind == BK_I2C ? PSTR("I2C") : kind == BK_SPI ? PSTR("SPI") : PSTR("CAN"),
@@ -699,10 +732,21 @@ static void printBusNotStarted(uint8_t kind, const char* busName, bool fromWirin
 
     // Find what is holding a pin, if anything, BEFORE choosing the wording: a
     // bus that is down is not automatically a fault.
+    // Inputs never enter the registry, so ask the input probe too: a bus refused
+    // because a configured input holds its pin used to read as "idle" (#564).
+    // Only for a bus whose claim was REFUSED: a declared bus nothing needs is
+    // allowed to leave its copper to inputs (#394), and is idle, not blocked.
     uint8_t blockedPin = 0xFF;
     const char* owner = nullptr;
+    bool byInput = false;
     for (uint8_t i = 0; i < count; i++) {
-        if (pins[i] == 0xFF || getPinUsage(pins[i]) == PIN_UNUSED) continue;
+        if (pins[i] == 0xFF) continue;
+        if (refused && pinHeldByConfiguredInput(pins[i])) {
+            blockedPin = pins[i];
+            byInput = true;
+            break;
+        }
+        if (getPinUsage(pins[i]) == PIN_UNUSED) continue;
         const char* d = getPinDescription(pins[i]);
         if (!d) continue;
         blockedPin = pins[i];
@@ -710,7 +754,7 @@ static void printBusNotStarted(uint8_t kind, const char* busName, bool fromWirin
         break;
     }
 
-    if (!owner) {
+    if (!owner && !byInput) {
         // Nothing is in the way. Bring-up is NEED-DRIVEN — acquireRequiredBuses()
         // only starts a bus some stored input or the display actually asks for —
         // so a declared bus on a board with no I2C device configured is idle, not
@@ -742,8 +786,14 @@ static void printBusNotStarted(uint8_t kind, const char* busName, bool fromWirin
     // The usual cause is a saved setting, not a wire: a serial port enabled for a
     // module that has since been unplugged still claims its pins every boot. Name
     // the setting to turn off, since that is what the user actually changes.
-    uint8_t port = serialPortHoldingPin(blockedPin);
-    if (port) {
+    uint8_t port = byInput ? 0 : serialPortHoldingPin(blockedPin);
+    if (byInput) {
+        snprintf_P(buf, sizeof(buf), PSTR("  Blocked: pin %u is held by a configured input"),
+                   (unsigned)blockedPin);
+        msg.control.println(buf);
+        snprintf_P(buf, sizeof(buf),
+                   PSTR("  Fix:     CLEAR that input, or choose another %s bus"), k);
+    } else if (port) {
         snprintf_P(buf, sizeof(buf),
                    PSTR("  Blocked: pin %u is held by %s (enabled in saved config)"),
                    (unsigned)blockedPin, owner);
@@ -805,7 +855,8 @@ FLASHMEM void displayI2CStatus() {
         // unreadable.
         const uint8_t pins[2] = { getDefaultI2CSDA(bus_id), getDefaultI2CSCL(bus_id) };
         printBusNotStarted(BK_I2C, getI2CBusName(bus_id),
-                           systemConfig.buses.active_i2c == 0xFF, pins, 2);
+                           systemConfig.buses.active_i2c == 0xFF, pins, 2,
+                           i2c_refused_id == bus_id);
     } else {
     msg.control.print(F("Active: "));
     if (bus_id == 0xFF) {
@@ -842,7 +893,8 @@ FLASHMEM void displaySPIStatus() {
         const uint8_t pins[3] = { getDefaultSPIMOSI(bus_id), getDefaultSPIMISO(bus_id),
                                   getDefaultSPISCK(bus_id) };
         printBusNotStarted(BK_SPI, getSPIBusName(bus_id),
-                           systemConfig.buses.active_spi == 0xFF, pins, 3);
+                           systemConfig.buses.active_spi == 0xFF, pins, 3,
+                           spi_refused_id == bus_id);
     } else {
     msg.control.print(F("Active: "));
     if (bus_id == 0xFF) {
@@ -904,7 +956,8 @@ FLASHMEM void displayCANStatus() {
             // A CAN declaration seeds output_can_bus at defaults time rather than
             // being consulted at bring-up, so by here it is always a stored value.
             printBusNotStarted(BK_CAN, getCANBusName(systemConfig.buses.output_can_bus),
-                               false, pins, 2);
+                               false, pins, 2,
+                               (can_refused_mask >> systemConfig.buses.output_can_bus) & 1);
         }
     } else {
         msg.control.print(F("DISABLED"));

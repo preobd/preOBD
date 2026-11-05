@@ -71,6 +71,9 @@ typedef bool (*PinOwnerInputProbe)(uint8_t pin);
 /** Register the configured-input probe (see header comment). */
 void setPinOwnerInputProbe(PinOwnerInputProbe probe);
 
+/** Does a configured input hold `pin`? For status displays that name what blocks a bus (#564). */
+bool pinHeldByConfiguredInput(uint8_t pin);
+
 // Note on self-exclusion: a candidate re-validating its OWN unchanged pin must
 // not see itself in the probe and misreport a self-conflict. That can't be
 // solved HERE by excluding a pin value — two DIFFERENT inputs may legitimately
