@@ -23,6 +23,16 @@ static bool serialTransportPortActive(uint8_t port_id) {
     return serialPortActiveProbe(port_id);
 }
 
+// A hardware serial transport is only touched once its port has been
+// started. On Teensy 4 a UART that never ran begin() has its clock gated,
+// and reading any of its registers (available() reads WATER) is a hard
+// fault: BUS SERIAL 1 DISABLE + SAVE on a FRAMED port boot-looped the
+// board, whatever the firmware.
+static bool transportPortStarted(uint8_t transportId) {
+    if (transportId < TRANSPORT_SERIAL1 || transportId > TRANSPORT_SERIAL8) return true;
+    return serialTransportPortActive(transportId - TRANSPORT_SERIAL1 + 1);
+}
+
 // Control-plane command sink (see header comment above setCommandSink()).
 static CommandByteSink commandByteSink = nullptr;
 static CommandDispatchFn commandDispatchFn = nullptr;
@@ -92,16 +102,27 @@ void MessageRouter::setTransportUnchecked(MessagePlane plane, TransportID transp
     }
 }
 
-TransportInterface* MessageRouter::getTransport(MessagePlane plane, bool primary) {
-    if (plane >= NUM_PLANES) return nullptr;
-
-    uint8_t transportId = primary ? primaryTransport[plane] : secondaryTransport[plane];
-
+TransportInterface* MessageRouter::usableTransport(uint8_t transportId) const {
     if (transportId == TRANSPORT_NONE || transportId >= NUM_TRANSPORTS) {
         return nullptr;
     }
-
+    if (!transportPortStarted(transportId)) return nullptr;
     return transports[transportId];
+}
+
+TransportInterface* MessageRouter::getTransport(MessagePlane plane, bool primary) {
+    if (plane >= NUM_PLANES) return nullptr;
+
+    TransportInterface* t = usableTransport(primary ? primaryTransport[plane] : secondaryTransport[plane]);
+
+    // The CLI must always be reachable. With neither control transport usable
+    // (one was a serial port that is now disabled), answer on USB rather than
+    // boot a board nothing can talk to, or reset from the CLI (#558).
+    if (t == nullptr && plane == PLANE_CONTROL && primary &&
+        usableTransport(secondaryTransport[plane]) == nullptr) {
+        return transports[TRANSPORT_USB_SERIAL];
+    }
+    return t;
 }
 
 void MessageRouter::routeMessage(MessagePlane plane, const char* message) {
@@ -170,9 +191,6 @@ bool MessageRouter::setTransport(MessagePlane plane, TransportID transportId, bo
 }
 
 void MessageRouter::printTransportStatus() {
-    TransportInterface* ctrl = getTransport(PLANE_CONTROL, true);
-    if (!ctrl) return;
-
     msg.control.println(F("=== Transport Routing ==="));
 
     const char* planeNames[] = {"CONTROL", "DATA", "DEBUG"};
@@ -203,9 +221,6 @@ void MessageRouter::printTransportStatus() {
 }
 
 void MessageRouter::listAvailableTransports() {
-    TransportInterface* ctrl = getTransport(PLANE_CONTROL, true);
-    if (!ctrl) return;
-
     msg.control.println(F("=== Available Transports ==="));
 
     const char* transportNames[] = {"NONE", "USB_SERIAL", "SERIAL1", "SERIAL2", "SERIAL3",
@@ -245,9 +260,6 @@ void MessageRouter::listTransports() {
 
     // This will be implemented after msg.control is available
     // For now, just a placeholder
-    TransportInterface* ctrl = getTransport(PLANE_CONTROL, true);
-    if (!ctrl) return;
-
     msg.control.println(F("=== Transport Configuration ==="));
 
     // Show plane assignments
@@ -331,7 +343,7 @@ void MessageRouter::update() {
 
     // Poll all transports for housekeeping
     for (int i = 0; i < NUM_TRANSPORTS; i++) {
-        if (transports[i] != nullptr) {
+        if (transports[i] != nullptr && transportPortStarted(i)) {
             transports[i]->update();
         }
     }

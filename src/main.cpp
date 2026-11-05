@@ -381,7 +381,11 @@ void setup() {
     // Bluefruit/pre-framed nRF firmware). Set via the CLI:
     //   BUS SERIAL <port> FRAMED ENABLE
 #if INCLUDE_FRAMED_TRANSPORT && NUM_SERIAL_PORTS >= 1
-    hwSerial1.setFramedEnabled(systemConfig.serial.framed_enabled_mask & (1 << 0));
+    // Only on a port that started: the status/alarm/live broadcasters call
+    // hwSerial1.sendFrame() directly every loop, bypassing the router, and a
+    // write to a never-begun Teensy 4 UART is a hard fault (#558).
+    hwSerial1.setFramedEnabled((systemConfig.serial.framed_enabled_mask & (1 << 0)) &&
+                               isSerialPortActive(1));
 #endif
 
     // Initialize transport router - register USB serial (always available)

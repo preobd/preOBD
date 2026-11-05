@@ -112,6 +112,10 @@ private:
     uint8_t primaryTransport[NUM_PLANES];
     uint8_t secondaryTransport[NUM_PLANES];  // For multi-cast
 
+    // transports[id], or nullptr if none is registered there or it is a
+    // hardware serial port that was never started (#558)
+    TransportInterface* usableTransport(uint8_t transportId) const;
+
     // Log filtering (runtime configurable)
     LogFilter logFilter;
 
