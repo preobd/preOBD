@@ -94,6 +94,23 @@
 #endif
 
 // ============================================================================
+// WATCHDOG BENCH STALL (#543)
+// ============================================================================
+// `SYSTEM DIAG WATCHDOG STALL <ms> [SD]` busy-waits without feeding the
+// watchdog, to check on the bench that it still resets the board (and that
+// the SD window widens it). It resets the board on purpose, so release images
+// never include it: it's on in the debug env, and for a normal bench build
+//   PLATFORMIO_BUILD_FLAGS="-D INCLUDE_WATCHDOG_STALL=1" pio run -e teensy41
+// (the debug env's -Og image didn't boot on a Teensy 4.1 when tried; #544).
+#ifndef INCLUDE_WATCHDOG_STALL
+    #if defined(DEBUG)
+        #define INCLUDE_WATCHDOG_STALL 1
+    #else
+        #define INCLUDE_WATCHDOG_STALL 0
+    #endif
+#endif
+
+// ============================================================================
 // OBD-II CONFIGURATION
 // ============================================================================
 // OBD-II request/response support for ELM327 adapters and apps like Torque.

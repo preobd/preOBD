@@ -15,6 +15,7 @@
 #include "../version.h"
 #include "../core/system_mode.h"
 #include "../core/reset_reason.h"
+#include "../core/watchdog.h"   // WatchdogKickingPrint, DIAG WATCHDOG STALL
 #include "../pinctrl/bus_pin_roles.h"   // busPinRole() for the DIAG PINS sweep (#304)
 #include "../storage/system_config.h"
 #include "../storage/json_config.h"
@@ -55,7 +56,6 @@
 #include <ctype.h>
 #if SUPPORTS_JSON_EXPORT
 #include <ArduinoJson.h>
-#include "../core/watchdog.h"  // WatchdogKickingPrint for the DIAG PINS JSON serialize
 #endif
 
 // FLASHMEM is a Teensy core macro — no-op elsewhere.
@@ -1130,6 +1130,59 @@ static FLASHMEM void diagSectionPinsJson(Print& out) {
 }
 #endif // SUPPORTS_JSON_EXPORT
 
+#if INCLUDE_WATCHDOG_STALL
+// SYSTEM DIAG WATCHDOG STALL <ms> [SD] (#543, bench builds only): busy-wait
+// without feeding, optionally inside the SD watchdog window, then report. If
+// the watchdog works, a stall past its timeout never returns: the board resets
+// and VERSION shows WATCHDOG (on Teensy 4 with WRSR 0x2, TOUT).
+// tools/watchdog_bench.py runs the checks.
+//
+// RUN only. CONFIG disables the watchdog where the platform can, so a stall
+// would "survive" and look like a failure. On Teensy 4, which can't disable
+// it, leaving an SD window in CONFIG keeps it at 20 s until the next RUN.
+static FLASHMEM int diagWatchdogStall(int argc, const char* const* argv) {
+    const bool sd = argc == 6 && streq_P(argv[5], PSTR("SD"));
+    if (argc < 5 || argc > 6 || !streq_P(argv[3], PSTR("STALL")) || (argc == 6 && !sd)) {
+        msg.control.println(F("ERROR: Usage: SYSTEM DIAG WATCHDOG STALL <ms> [SD]"));
+        return 1;
+    }
+    if (!isInRunMode()) {
+        msg.control.println(F("ERROR: STALL needs RUN mode (the watchdog is relaxed in CONFIG)"));
+        return 1;
+    }
+    const uint32_t ms = strtoul(argv[4], nullptr, 10);
+    if (ms == 0 || ms > 120000UL) {
+        msg.control.println(F("ERROR: STALL takes 1..120000 ms"));
+        return 1;
+    }
+#if !SUPPORTS_SD
+    if (sd) {
+        msg.control.println(F("ERROR: no SD support in this build"));
+        return 1;
+    }
+#endif
+    msg.control.print(F("Stalling "));
+    msg.control.print((unsigned long)ms);
+    msg.control.println(sd ? F(" ms inside the SD watchdog window, not feeding") : F(" ms, not feeding"));
+    // Get the line out before a reset can eat it, on whichever transport asked.
+    if (TransportInterface* t = router.getActiveControlTransport()) t->flush();
+    // Fed once here, so the stall is measured from now, not from the last loop pass.
+    watchdogReset();
+#if SUPPORTS_SD
+    if (sd) sdWatchdogWindowEnter();
+#endif
+    const uint32_t start = millis();
+    while (millis() - start < ms) { }
+#if SUPPORTS_SD
+    if (sd) sdWatchdogWindowExit();
+#endif
+    msg.control.print(F("Stall survived ("));
+    msg.control.print((unsigned long)ms);
+    msg.control.println(F(" ms)"));
+    return 0;
+}
+#endif
+
 // SYSTEM DIAG [INTEGRITY|HW|INPUTS|PINS] — bare form runs integrity+hw+inputs.
 // FLASHMEM: diagnostics are serial-driven (never hot path) and this keeps the
 // inlined diagSectionPins sweep out of scarce ITCM (RAM1) on Teensy 4.x.
@@ -1178,6 +1231,9 @@ static FLASHMEM int system_diag(int argc, const char* const* argv, int /*tokenIn
             diagSectionPins();
             return 0;
         }
+#if INCLUDE_WATCHDOG_STALL
+        if (streq_P(argv[2], PSTR("WATCHDOG"))) return diagWatchdogStall(argc, argv);
+#endif
         msg.control.print(F("ERROR: Unknown DIAG scope '"));
         msg.control.print(argv[2]);
         msg.control.println(F("'"));
@@ -1220,7 +1276,11 @@ static const char PSTR_HELP_SYS_DIAG[] PROGMEM =
     "  SYSTEM DIAG INPUTS            Per-input fault detection (open/short/range)\n"
     "  SYSTEM DIAG INPUTS VERBOSE    Per-input fault detection with raw evidence chain\n"
     "  SYSTEM DIAG PINS              Sweep all analog pins (live raw/voltage; find wiring)\n"
-    "  SYSTEM DIAG PINS JSON         Same sweep as JSON (mobile app pin picker)";
+    "  SYSTEM DIAG PINS JSON         Same sweep as JSON (mobile app pin picker)"
+#if INCLUDE_WATCHDOG_STALL
+    "\n  SYSTEM DIAG WATCHDOG STALL <ms> [SD]  Bench only: stall without feeding (resets the board)"
+#endif
+    ;
 static const char PSTR_HELP_SYS_SD[] PROGMEM =
     "  SYSTEM SD                     SD card + logging status (no card access)\n"
     "  SYSTEM SD JSON                Same as JSON (mobile app System tab)";

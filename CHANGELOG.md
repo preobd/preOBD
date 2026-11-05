@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - CAN import reads OBD-II PIDs whose reply is longer than one CAN frame: boost (0x70), exhaust gas temperature (0x78, 0x79) and total engine run time (0x7F). In `ENABLE` preOBD asks the ECU for the rest of the reply; in `LISTEN` it reads them while another tool requests them (#527)
 - `SYSTEM SD` and `SYSTEM SD JSON` report whether SD logging is actually working (no card, removed, write errors, logging) and how much space is left on the card, in RUN mode too (#536)
+- For developers: `tools/watchdog_bench.py` and a bench-build-only `SYSTEM DIAG WATCHDOG STALL` check that the watchdog still resets a hung board (#543)
 
 ### Fixed
 - Teensy 4.x boards no longer reset at random while SD logging (every few minutes at the default rate, within seconds at fast intervals) or occasionally when switching to RUN; changing the watchdog timeout could itself trigger a reset (#537)
