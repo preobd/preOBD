@@ -31,6 +31,20 @@ characters are loaded. Special values:
 | `CFG` | The input is configured but disabled (CONFIG mode) |
 | `---` | No reading yet (the input was just added or the board just started) |
 
+**When a value doesn't fit,** the LCD never shows part of a number (a `1650`
+cut to `16` would read as a real, wrong reading). In order, it:
+
+1. drops the decimals (`BOOST:11.4` becomes `BOOST:11` in a left-hand cell),
+2. then shortens the label, down to two characters (`RUNTOT:12345` becomes
+   `RUN:12345`; `EGT11:1650` becomes `EGT1:1650`),
+3. and if the whole number still doesn't fit, fills the room with `#`
+   (`ODO:#####`, or `OAT:-####` for a negative value). Check the value with
+   `INFO <pin>` or on another output, or move the input to a right-hand cell,
+   which has one more character.
+
+The unit is only added in the room left after the value. `ERR`, `CFG` and
+`---` shorten a long label the same way rather than being cut.
+
 **Eight inputs fit at once.** With more, the LCD pages through them in groups
 of eight, every 4 seconds. An input hidden with `SET <pin> DISPLAY DISABLE`
 takes no cell, so hiding one makes room for another. `DISPLAY STATUS` shows how
@@ -80,7 +94,7 @@ reserved and `SET <pin>` refuses them. See the
 ## Choosing What's Shown
 
 ```
-SET A2 ABBR ECT            # short label in the cell (keep it to ~4 characters)
+SET A2 ABBR ECT            # short label in the cell (keep it to ~4 characters; longer ones are shortened to fit the value)
 SET A5 DISPLAY DISABLE     # hide this input (its cell goes to the next one)
 SET A2 UNITS F             # show °F for this input
 SYSTEM UNITS PRESSURE PSI  # default units for all pressure inputs

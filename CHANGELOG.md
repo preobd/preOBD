@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The watchdog now keeps running in CONFIG mode on every board, relaxed to 8 s, instead of being switched off on boards that allow it; it only restarts a board whose firmware has frozen, never an idle one, and every board now behaves the same (#541)
 
 ### Fixed
+- The LCD no longer cuts a reading that doesn't fit its cell: `1650` behind a long label could show as `16`. Decimals are dropped first, then the label is shortened, and a number that still doesn't fit shows as `####`; `ERR`/`CFG`/`---` are no longer clipped either (#581)
 - The RGB status LED's alarm and warning blinks now blink; they showed as solid on every board (#100)
 - HALL_SPEED no longer reads low above 2 kHz (38.6 km/h with the default calibration): it ignored any pulse within 500 µs of the last one and silently reported a half or a third of the real speed. Noise rejection now follows the calibration's `max_speed_kph`, and a speed above it reads as no value (#577)
 - BME280 elevation now uses the sea-level pressure set with `SYSTEM SEA_LEVEL`; it always used 1013.25 hPa. `SYSTEM SEA_LEVEL` and `JSON IMPORT` refuse a value outside 850–1100 hPa (a typo such as `SYSTEM SEA_LEVEL abc` used to store 0) (#574)

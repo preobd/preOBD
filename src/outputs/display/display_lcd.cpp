@@ -184,69 +184,25 @@ void displaySensor(Input *ptr, byte line) {
     int charsPrinted = 0;
 
     if (ptr->flags.display) {
-        // Print sensor abbreviation
-        if (charsPrinted < width) {
-            int abbrLen = strlen(ptr->abbrName);
-            int charsAvailable = width - charsPrinted;
-            if (abbrLen > charsAvailable) abbrLen = charsAvailable;
-            for (int i = 0; i < abbrLen; i++) {
-                lcd.print(ptr->abbrName[i]);
-            }
-            charsPrinted += abbrLen;
-        }
+        // "label:value" never shows a partial number (#581): decimals go
+        // first, then the label is shortened, then an overflow marker. The
+        // rules live in lcd_layout.h (lcdFormatValueCell) and are unit-tested.
+        char cell[LCD_CELL_BUF];
 
-        // Print colon
-        if (charsPrinted < width) {
-            lcd.print(":");
-            charsPrinted++;
-        }
-
-        // If sensor is not enabled, show "CFG"
         if (!ptr->flags.isEnabled) {
-            if (charsPrinted < width) {
-                int remaining = width - charsPrinted;
-                if (remaining >= 3) {
-                    charsPrinted += lcd.print("CFG");
-                } else {
-                    // Print as much as we can fit
-                    const char* msg = "CFG";
-                    for (int i = 0; i < remaining; i++) {
-                        lcd.print(msg[i]);
-                        charsPrinted++;
-                    }
-                }
-            }
-        }
-        // Check for invalid values (NaN)
-        else if (isnan(ptr->value)) {
-            if (charsPrinted < width) {
-                int remaining = width - charsPrinted;
-                if (remaining >= 3) {
-                    charsPrinted += lcd.print("ERR");
-                } else {
-                    const char* msg = "ERR";
-                    for (int i = 0; i < remaining; i++) {
-                        lcd.print(msg[i]);
-                        charsPrinted++;
-                    }
-                }
-            }
+            // Configured but disabled (CONFIG mode)
+            charsPrinted = lcdFormatTextCell(cell, width, ptr->abbrName, "CFG");
+            lcd.print(cell);
+        } else if (isnan(ptr->value)) {
+            // Invalid reading
+            charsPrinted = lcdFormatTextCell(cell, width, ptr->abbrName, "ERR");
+            lcd.print(cell);
         }
         // Not read yet since it was configured: show "---". A reading of 0 is
         // real (0 bar, 0 RPM, a low float switch) and is displayed (#481).
         else if (!ptr->flags.hasReading) {
-            if (charsPrinted < width) {
-                int remaining = width - charsPrinted;
-                if (remaining >= 3) {
-                    charsPrinted += lcd.print("---");
-                } else {
-                    const char* msg = "---";
-                    for (int i = 0; i < remaining; i++) {
-                        lcd.print(msg[i]);
-                        charsPrinted++;
-                    }
-                }
-            }
+            charsPrinted = lcdFormatTextCell(cell, width, ptr->abbrName, "---");
+            lcd.print(cell);
         } else {
             // Convert to display units
             float displayValue = convertFromBaseUnits(ptr->value, ptr->unitsIndex);
@@ -288,42 +244,21 @@ void displaySensor(Input *ptr, byte line) {
                     break;
             }
 
-            // Print value with appropriate precision (if space available)
-            if (charsPrinted < width) {
-                // Format the value to a string first to check length
-                char valBuffer[12];
-                dtostrf(displayValue, 1, decimals, valBuffer);
-                int valLen = strlen(valBuffer);
-                int charsAvailable = width - charsPrinted;
-
-                // If value + unit symbols won't fit, truncate
-                if (valLen > charsAvailable) {
-                    valLen = charsAvailable;
-                }
-
-                for (int i = 0; i < valLen; i++) {
-                    lcd.print(valBuffer[i]);
-                    charsPrinted++;
-                }
-            }
+            charsPrinted = lcdFormatValueCell(cell, width, ptr->abbrName, displayValue, (uint8_t)decimals);
+            lcd.print(cell);
 
             // Unit symbol from the registry, only if it fits whole: a clipped
             // "rp" or "ba" reads as a different unit. Temperatures get the
             // LCD's built-in degree sign first (°C / °F); with room for the
-            // sign alone it's printed without the letter, as before (#579).
+            // sign alone it's printed without the letter (#579).
             const char* symPtr = unitInfo ? (const char*)pgm_read_ptr(&unitInfo->symbol) : nullptr;
-            const int symLen = symPtr ? (int)strlen_P(symPtr) : 0;
+            const uint8_t symLen = symPtr ? (uint8_t)strlen_P(symPtr) : 0;
             const bool isTemp = (measType == MEASURE_TEMPERATURE);
-            const int unitLen = symLen + (isTemp ? 1 : 0);
-            const int room = width - charsPrinted;
-            if (unitLen > 0 && unitLen <= room) {
-                if (isTemp) lcd.write(LCD_DEGREE_CHAR);
-                for (int i = 0; i < symLen; i++) lcd.print((char)pgm_read_byte(symPtr + i));
-                charsPrinted += unitLen;
-            } else if (isTemp && room >= 1) {
-                lcd.write(LCD_DEGREE_CHAR);
-                charsPrinted++;
-            }
+            const uint8_t unitChars = lcdUnitChars((uint8_t)(width - charsPrinted), symLen, isTemp);
+            uint8_t u = 0;
+            if (isTemp && unitChars > 0) { lcd.write(LCD_DEGREE_CHAR); u = 1; }
+            for (uint8_t i = 0; u < unitChars; i++, u++) lcd.print((char)pgm_read_byte(symPtr + i));
+            charsPrinted += unitChars;
         }
     }
 
