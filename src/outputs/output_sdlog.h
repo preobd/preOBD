@@ -27,5 +27,12 @@ bool        sdLogCardRemoved();   // that fault was a pulled card, not a bad wri
 const char* sdLogFileName();      // current 8.3 name, or "(none)"
 uint32_t    sdLogRowsWritten();
 uint16_t    sdLogWriteErrors();
+uint64_t    sdLogBytesWritten();  // all files this session, for the free-space estimate
+
+#if INCLUDE_SD_LOGGING
+// SYSTEM SD / SYSTEM SD JSON (#536). Never touches the card.
+struct SdStatusSnapshot;
+void sdLogStatusSnapshot(SdStatusSnapshot& out);
+#endif
 
 #endif // OUTPUT_SDLOG_H

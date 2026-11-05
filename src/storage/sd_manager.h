@@ -35,6 +35,17 @@ void initSD();
 bool isSDInitialized();
 
 /**
+ * Card capacity, read once at mount (#536). False when no card mounted or the
+ * platform's SD library has no capacity call (the stock Arduino one).
+ *
+ * Never re-read: on a FAT32 card the free count is a scan of the whole FAT,
+ * and SdFat on Teensy re-scans exFAT on every call, so a client's status poll
+ * must not be what triggers it. Free space now = this minus what the logger
+ * has written since (sdLogBytesWritten()).
+ */
+bool sdCapacityAtMount(uint64_t& freeBytes, uint64_t& totalBytes);
+
+/**
  * Is the card still physically there?
  *
  * Cheap enough to call once per logged row on platforms that support it.
@@ -49,6 +60,10 @@ bool isSDInitialized();
  * it while the answer is still actionable, and stop calling once it says no.
  */
 bool sdMediaPresent();
+
+// True once sdMediaPresent() has found the slot empty. Reads the latch only,
+// never the card, so a status poll can call it.
+bool sdMediaKnownGone();
 
 // Widen/restore the watchdog around card I/O. Nestable — only the outermost
 // scope restores, so a helper that opens its own window inside a caller's does
@@ -74,7 +89,9 @@ private:
 // different things, and only the latter is a caller's cue to attempt I/O.
 inline void initSD() {}
 inline bool isSDInitialized() { return false; }
+inline bool sdCapacityAtMount(uint64_t&, uint64_t&) { return false; }
 inline bool sdMediaPresent() { return false; }
+inline bool sdMediaKnownGone() { return false; }
 inline void sdWatchdogWindowEnter() {}
 inline void sdWatchdogWindowExit() {}
 class SdWatchdogWindow {

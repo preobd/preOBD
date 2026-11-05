@@ -601,6 +601,36 @@ SD_Log: Disabled
 Alarm: Enabled, Interval: 500ms
 ```
 
+### SD Logging Status
+
+`OUTPUT STATUS` says whether SD logging is *enabled*. `SYSTEM SD` says whether it is *working*:
+
+```
+SYSTEM SD                    # One line of text
+SYSTEM SD JSON               # The same as JSON (the mobile app's System tab polls it)
+```
+
+```bash
+SYSTEM SD
+SD: logging, LOG0042.CSV, 12400 rows, 0 errors, 15660 of 15699 MB free
+
+SYSTEM SD JSON
+{"sd":{"state":"logging","file":"LOG0042.CSV","rows":12400,"errors":0,"freeMB":15660,"totalMB":15699}}
+```
+
+- `state` is one of:
+  - `none`: this board or build has no SD logging (for example a Teensy 4.0 without an SD module wired).
+  - `nocard`: no card was found at boot. Cards are only detected at boot, so insert one and restart.
+  - `removed`: the card was pulled while logging. Logging has stopped until a restart. Only Teensy boards can detect a pulled card; elsewhere it shows as `error`.
+  - `off`: SD logging is disabled (`OUTPUT SD_Log ENABLE` turns it on).
+  - `error`: logging stopped after write errors (usually a full or failing card), or no log file could be created.
+  - `idle`: enabled but not writing, because preOBD is in CONFIG mode or no input is routed to SD.
+  - `logging`: writing rows.
+- `file` is the current or last log file (`null` before the first one). `rows` and `errors` count since logging was last enabled.
+- `freeMB` and `totalMB` are decimal megabytes, as printed on the card. Free space is measured once at boot and then reduced by what preOBD writes, so it's an estimate. Both are `null` with no card, or after a removal.
+- Both forms are read-only: they work in RUN mode, never touch the card and don't count as configuration changes. A removal is noticed by the logger before its next write, so it shows up only while logging. `SYSTEM DIAG HW` checks the slot directly.
+- `SYSTEM SD JSON` is not available on the Arduino Mega (JSON is compiled out there), and the Mega has no SD logging, so `SYSTEM SD` answers `none`.
+
 ---
 
 ## Rules & Actions (control engine)

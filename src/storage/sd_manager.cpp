@@ -26,6 +26,10 @@
 #include <SPI.h>
 #include <SD.h>
 
+#ifndef FLASHMEM
+#define FLASHMEM
+#endif
+
 // Use Arduino SD library across all platforms for consistency
 // SD object is provided globally by SD.h
 
@@ -48,6 +52,11 @@ static uint8_t sdWindowDepth = 0;
 
 // Latched once the card is confirmed gone; see sdMediaPresent().
 static bool sdMediaGone = false;
+
+// Capacity snapshot taken by initSD(); see sdCapacityAtMount().
+static bool     sdCapacityKnown = false;
+static uint64_t sdFreeAtMount   = 0;
+static uint64_t sdTotalAtMount  = 0;
 
 void sdWatchdogWindowEnter() {
     if (sdWindowDepth++ == 0) {
@@ -116,11 +125,15 @@ bool sdMediaPresent() {
 #endif
 }
 
+bool sdMediaKnownGone() {
+    return sdMediaGone;
+}
+
 /**
  * Initialize SD card
  * Called once during setup(), used by both SD logging and JSON config
  */
-void initSD() {
+FLASHMEM void initSD() {
     msg.debug.info(TAG_SD, "Initializing SD card...");
 
     // Extend watchdog timeout - SD.begin() can take 2-3 seconds per attempt and
@@ -151,6 +164,28 @@ void initSD() {
         watchdogReset();
     }
 
+    // Capacity, while the window is still wide: the free count is a scan of
+    // the FAT (FAT32) or allocation bitmap (exFAT), so it is read here once and
+    // never from a status poll (#536).
+#if defined(CORE_TEENSY) || defined(ESP32)
+    // (The stock Arduino SD library has no capacity call; AVR also keeps
+    // msg.debug format strings in RAM, so the timing line stays out of it.)
+    if (initSuccess) {
+        uint32_t scanStart = millis();
+#if defined(CORE_TEENSY)
+        sdTotalAtMount = SD.totalSize();
+        sdFreeAtMount  = sdTotalAtMount - SD.usedSize();
+#else
+        sdTotalAtMount = SD.totalBytes();
+        sdFreeAtMount  = sdTotalAtMount - SD.usedBytes();
+#endif
+        sdCapacityKnown = sdTotalAtMount > 0;
+        msg.debug.info(TAG_SD, "SD free-space scan: %lu ms",
+                       (unsigned long)(millis() - scanStart));
+        watchdogReset();
+    }
+#endif
+
     // Restore normal watchdog timeout
     sdWatchdogWindowExit();
 
@@ -170,6 +205,13 @@ void initSD() {
  */
 bool isSDInitialized() {
     return sdInitialized;
+}
+
+FLASHMEM bool sdCapacityAtMount(uint64_t& freeBytes, uint64_t& totalBytes) {
+    if (!sdInitialized || !sdCapacityKnown) return false;
+    freeBytes  = sdFreeAtMount;
+    totalBytes = sdTotalAtMount;
+    return true;
 }
 
 #endif // SUPPORTS_SD

@@ -35,6 +35,7 @@
 #include "../pinctrl/pin_registry.h"
 #include "../outputs/output_base.h"
 #include "../outputs/output_sdlog.h"
+#include "../outputs/sd_status_json.h"
 #include "../outputs/output_format.h"   // sdLogFormatName
 #include "../outputs/obd_query.h"
 #include "../outputs/display/display_manager.h"
@@ -57,6 +58,11 @@
 #include "../core/watchdog.h"  // WatchdogKickingPrint for the DIAG PINS JSON serialize
 #endif
 
+// FLASHMEM is a Teensy core macro — no-op elsewhere.
+#ifndef FLASHMEM
+#define FLASHMEM
+#endif
+
 // SYSTEM STATUS subcommand handler
 static int system_status(int argc, const char* const* argv, int /*tokenIndex*/) {
     printSystemStatus();
@@ -75,6 +81,63 @@ static int system_pins(int argc, const char* const* argv, int /*tokenIndex*/) {
         return 1;
     }
     printPinStatus();
+    return 0;
+}
+
+// SYSTEM SD [JSON] (#536): is the drive being logged? Read-only, RUN-legal,
+// never bumps configGeneration, never touches the card — the app polls it
+// while its System tab is open. SYSTEM DIAG HW is the probing version.
+static FLASHMEM int system_sd(int argc, const char* const* argv, int /*tokenIndex*/) {
+    const bool json = argc == 3 && streq_P(argv[2], PSTR("JSON"));
+    if (argc != 2 && !json) {
+        msg.control.println(F("ERROR: Usage: SYSTEM SD [JSON]"));
+        return 1;
+    }
+    // A build without SD logging answers too ("none"), so a client polling
+    // every board gets JSON back rather than an ERROR line.
+    SdStatusSnapshot s;
+    memset(&s, 0, sizeof(s));
+#if INCLUDE_SD_LOGGING
+    sdLogStatusSnapshot(s);
+#endif
+    if (json) {
+#if SUPPORTS_JSON_EXPORT
+        JsonDocument doc;
+        sdStatusToJson(s, doc.to<JsonObject>());
+        msg.control.println();
+        serializeJson(doc, msg.control);
+        msg.control.println();
+        return 0;
+#else
+        msg.control.println(F("ERROR: JSON export not supported on this platform"));
+        return 1;
+#endif
+    }
+    // One line, from the same snapshot as the JSON so the two cannot disagree.
+    const SdStatusState state = sdStatusState(s);
+    msg.control.print(F("SD: "));
+    msg.control.print(sdStatusStateName(state));
+    if (state == SD_STATE_NONE) {
+        msg.control.println(F(" (no SD logging in this build)"));
+        return 0;
+    }
+    if (s.fileName) {
+        msg.control.print(F(", "));
+        msg.control.print(s.fileName);
+    }
+    msg.control.print(F(", "));
+    msg.control.print((unsigned long)s.rows);
+    msg.control.print(F(" rows, "));
+    msg.control.print(s.errors);
+    msg.control.print(F(" errors"));
+    if (s.capacityKnown && state != SD_STATE_NOCARD && state != SD_STATE_REMOVED) {
+        msg.control.print(F(", "));
+        msg.control.print((unsigned long)(s.freeBytes / 1000000ULL));
+        msg.control.print(F(" of "));
+        msg.control.print((unsigned long)(s.totalBytes / 1000000ULL));
+        msg.control.print(F(" MB free"));
+    }
+    msg.control.println();
     return 0;
 }
 
@@ -451,10 +514,6 @@ static void diagSectionHw() {
 
 // Diagnostics are serial-command driven, never hot-path. On Teensy 4.x code
 // defaults to fast ITCM (RAM1, scarce); keep these helpers in FLASH instead.
-// FLASHMEM is a Teensy core macro — no-op elsewhere.
-#ifndef FLASHMEM
-#define FLASHMEM
-#endif
 
 // Per-input fault detection (#238).
 //
@@ -1137,6 +1196,7 @@ static const char PSTR_SYS_STATUS[] PROGMEM = "STATUS";
 static const char PSTR_SYS_PINS[] PROGMEM = "PINS";
 static const char PSTR_SYS_DUMP[] PROGMEM = "DUMP";
 static const char PSTR_SYS_DIAG[] PROGMEM = "DIAG";
+static const char PSTR_SYS_SD[] PROGMEM = "SD";
 static const char PSTR_SYS_SEA_LEVEL[] PROGMEM = "SEA_LEVEL";
 static const char PSTR_SYS_UNITS[] PROGMEM = "UNITS";
 static const char PSTR_SYS_INTERVAL[] PROGMEM = "INTERVAL";
@@ -1161,6 +1221,9 @@ static const char PSTR_HELP_SYS_DIAG[] PROGMEM =
     "  SYSTEM DIAG INPUTS VERBOSE    Per-input fault detection with raw evidence chain\n"
     "  SYSTEM DIAG PINS              Sweep all analog pins (live raw/voltage; find wiring)\n"
     "  SYSTEM DIAG PINS JSON         Same sweep as JSON (mobile app pin picker)";
+static const char PSTR_HELP_SYS_SD[] PROGMEM =
+    "  SYSTEM SD                     SD card + logging status (no card access)\n"
+    "  SYSTEM SD JSON                Same as JSON (mobile app System tab)";
 static const char PSTR_HELP_SYS_SEA_LEVEL[] PROGMEM =
     "  SYSTEM SEA_LEVEL <hPa>        Set sea-level pressure (for altitude calc)";
 static const char PSTR_HELP_SYS_UNITS[] PROGMEM =
@@ -1176,7 +1239,7 @@ static const char PSTR_HELP_SYS_REBOOT[] PROGMEM =
 static const char PSTR_HELP_SYS_RESET[] PROGMEM =
     "  SYSTEM RESET CONFIRM          Factory reset (erase config + reboot)";
 
-// runModeAllowed: STATUS / PINS / DUMP are read-only and useful in RUN mode.
+// runModeAllowed: STATUS / PINS / DUMP / DIAG / SD are read-only and useful in RUN mode.
 // SEA_LEVEL / UNITS / INTERVAL mutate persistent config; REBOOT / RESET are
 // destructive. All four belong in CONFIG mode only.
 static const Subcommand SYSTEM_SUBCOMMANDS[] PROGMEM = {
@@ -1184,6 +1247,7 @@ static const Subcommand SYSTEM_SUBCOMMANDS[] PROGMEM = {
     { PSTR_SYS_PINS,      system_pins,      true,  PSTR_HELP_SYS_PINS      },
     { PSTR_SYS_DUMP,      system_dump,      true,  PSTR_HELP_SYS_DUMP      },
     { PSTR_SYS_DIAG,      system_diag,      true,  PSTR_HELP_SYS_DIAG      },
+    { PSTR_SYS_SD,        system_sd,        true,  PSTR_HELP_SYS_SD        },
     { PSTR_SYS_SEA_LEVEL, system_sea_level, false, PSTR_HELP_SYS_SEA_LEVEL },
     { PSTR_SYS_UNITS,     system_units,     false, PSTR_HELP_SYS_UNITS     },
     { PSTR_SYS_INTERVAL,  system_interval,  false, PSTR_HELP_SYS_INTERVAL  },

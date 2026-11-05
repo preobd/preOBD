@@ -36,6 +36,11 @@
 #include "../core/hash.h"
 #include "../inputs/input_manager.h"
 #include "output_format.h"
+#include "sd_status_json.h"
+
+#ifndef FLASHMEM
+#define FLASHMEM
+#endif
 
 // SD object is provided globally by SD.h
 
@@ -65,6 +70,7 @@ static uint32_t lastFlushMs    = 0;
 static bool     reopenUsed     = false;
 static uint16_t rowsSinceReopen = 0;
 static bool     wasInConfig    = false;
+static uint64_t closedFileBytes = 0;   // sizes of this session's closed files (#536)
 
 static void openLogFile();
 static void handleCardRemoved();
@@ -107,13 +113,14 @@ static uint32_t computeColumnSignature() {
     return sig;
 }
 
-static void closeLogFile() {
+static FLASHMEM void closeLogFile() {
     if (logFile) {
         // flush()/close() are card I/O and block for seconds on a card that has
         // gone away — this is a closing path, so it is exactly when the card is
         // most likely to be missing. Widen the watchdog around it (#331).
         SdWatchdogWindow window;
         logFile.flush();
+        closedFileBytes += logFile.position();
         logFile.close();
     }
 }
@@ -131,15 +138,15 @@ static void closeLogFile() {
  * logFileIndex persists across calls so a rotation or a re-enable resumes the
  * scan instead of restarting it.
  */
-static bool claimNextFileName() {
+static FLASHMEM bool claimNextFileName(char* name, size_t len) {
     // A card holding thousands of logs makes this a long run of SD lookups;
     // widen the watchdog for the scan the same way initSD() does for begin().
     SdWatchdogWindow window;
 
     bool found = false;
     for (uint16_t i = logFileIndex + 1; i <= SDLOG_MAX_FILE_INDEX; i++) {
-        snprintf(logFileName, sizeof(logFileName), "LOG%04u.CSV", (unsigned)i);
-        if (!SD.exists(logFileName)) {
+        snprintf(name, len, "LOG%04u.CSV", (unsigned)i);
+        if (!SD.exists(name)) {
             logFileIndex = i;
             found = true;
             break;
@@ -150,7 +157,7 @@ static bool claimNextFileName() {
     return found;
 }
 
-static void writeHeader() {
+static FLASHMEM void writeHeader() {
     // Long layout is self-describing per row, so its header is a fixed string —
     // byte-identical to what this module wrote before the wide format landed,
     // which is the whole point of keeping the mode available.
@@ -182,7 +189,7 @@ static void writeHeader() {
     logFile.println();
 }
 
-static void openLogFile() {
+static FLASHMEM void openLogFile() {
     SdWatchdogWindow window;   // open/header/flush are all blocking card I/O
 
     closeLogFile();   // never leak the previous handle over a re-init
@@ -196,19 +203,23 @@ static void openLogFile() {
         return;
     }
 
-    if (!claimNextFileName()) {
+    // Built locally and copied in only once the file exists, so a failed open
+    // never leaves SYSTEM SD naming a file preOBD did not create (#536).
+    char name[sizeof(logFileName)];
+    if (!claimNextFileName(name, sizeof(name))) {
         msg.debug.error(TAG_SD, "SD log names exhausted (LOG%04u.CSV) - logging halted",
                         (unsigned)SDLOG_MAX_FILE_INDEX);
         logFaulted = true;
         return;
     }
 
-    logFile = SD.open(logFileName, FILE_WRITE);
+    logFile = SD.open(name, FILE_WRITE);
     if (!logFile) {
-        msg.debug.error(TAG_SD, "Failed to create log file %s", logFileName);
+        msg.debug.error(TAG_SD, "Failed to create log file %s", name);
         logFaulted = true;
         return;
     }
+    memcpy(logFileName, name, sizeof(logFileName));
 
     // Latch the layout for this file's lifetime — writeHeader() branches on it,
     // and a file cannot hold both layouts.
@@ -230,7 +241,7 @@ static void openLogFile() {
  * wrote nothing for the rest of the drive while OUTPUT STATUS still reported
  * "Enabled".
  */
-static void handleWriteError() {
+static FLASHMEM void handleWriteError() {
     logWriteErrors++;
     logFile.clearWriteError();
     closeLogFile();
@@ -270,7 +281,7 @@ static void handleWriteError() {
  * engine running — the alternative is every subsequent tick spending seconds
  * blocked in the SD library while gauges, alarms and OBD output wait.
  */
-static void handleCardRemoved() {
+static FLASHMEM void handleCardRemoved() {
     msg.debug.error(TAG_SD, "SD card removed - logging halted (%s, %lu rows)",
                     logFileName[0] ? logFileName : "(no file)",
                     (unsigned long)logRowsWritten);
@@ -284,6 +295,7 @@ static void handleCardRemoved() {
     // detected; that is load-bearing, not incidental.
     if (logFile) {
         SdWatchdogWindow window;
+        closedFileBytes += logFile.position();   // in the handle, no card I/O
         logFile.close();
     }
 
@@ -346,7 +358,7 @@ static void maybeFlush(uint32_t now) {
     }
 }
 
-void initSDLog() {
+FLASHMEM void initSDLog() {
     logRowsWritten  = 0;
     logWriteErrors  = 0;
     logFaulted      = false;
@@ -470,7 +482,7 @@ void updateSDLog() {
     maybeFlush(now);
 }
 
-void closeSDLog() {
+FLASHMEM void closeSDLog() {
     if (logFile) {
         closeLogFile();
         msg.debug.info(TAG_SD, "Log file closed: %s (%lu rows)",
@@ -486,6 +498,33 @@ bool sdLogCardRemoved()       { return logCardRemoved; }
 const char* sdLogFileName()   { return logFileName[0] ? logFileName : "(none)"; }
 uint32_t sdLogRowsWritten()   { return logRowsWritten; }
 uint16_t sdLogWriteErrors()   { return logWriteErrors; }
+// position(), not size(): every log file is new and written sequentially, so
+// they agree, but on ESP32 size() stat()s the card after a write and position()
+// is in memory on both platforms. The status poll must not touch the card.
+uint64_t sdLogBytesWritten()  { return closedFileBytes + (logFile ? (uint64_t)logFile.position() : 0); }
+
+FLASHMEM void sdLogStatusSnapshot(SdStatusSnapshot& out) {
+    out.mounted     = isSDInitialized();
+    out.enabled     = systemConfig.outputEnabled[OUTPUT_SD];
+    out.configMode  = isInConfigMode();
+    // sdMediaKnownGone() as well: re-enabling the output clears the logger's
+    // own latch, but the card is still gone (mounts happen at boot only).
+    out.supported   = true;
+    out.cardRemoved = logCardRemoved || sdMediaKnownGone();
+    out.faulted     = logFaulted;
+    out.fileOpen    = sdLogIsActive();
+    out.fileName    = logFileName[0] ? logFileName : nullptr;
+    out.rows        = logRowsWritten;
+    out.errors      = logWriteErrors;
+    // Estimate rather than re-read: see sdCapacityAtMount(). Undercounts by
+    // under one cluster per file, and misses anything else written to the card
+    // (a JSON config save), which is fine for "how much room is left".
+    uint64_t freeBytes = 0, totalBytes = 0;
+    out.capacityKnown = sdCapacityAtMount(freeBytes, totalBytes);
+    const uint64_t used = sdLogBytesWritten();
+    out.freeBytes  = freeBytes > used ? freeBytes - used : 0;
+    out.totalBytes = totalBytes;
+}
 
 #else
 
@@ -500,5 +539,6 @@ bool sdLogCardRemoved()       { return false; }
 const char* sdLogFileName()   { return "(none)"; }
 uint32_t sdLogRowsWritten()   { return 0; }
 uint16_t sdLogWriteErrors()   { return 0; }
+uint64_t sdLogBytesWritten()  { return 0; }
 
 #endif
