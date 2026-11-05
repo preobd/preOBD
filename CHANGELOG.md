@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - A missing or unplugged LCD no longer restarts the Feather STM32F405 every few seconds, and an LCD that is reconnected comes back by itself (#586)
+- An unplugged BME280 no longer slows down or freezes every other I2C device on the Feather STM32F405, and while it is unplugged its readings show as errors instead of false values (#589)
 - Feather STM32F405: SD logging no longer stops after its first row with a false write error (#583)
 - The LCD no longer cuts a reading that doesn't fit its cell: `1650` behind a long label could show as `16`. Decimals are dropped first, then the label is shortened, and a number that still doesn't fit shows as `####`; `ERR`/`CFG`/`---` are no longer clipped either (#581)
 - The RGB status LED's alarm and warning blinks now blink; they showed as solid on every board (#100)

@@ -1,6 +1,6 @@
 """
 PlatformIO pre-build check: say when an STM32 core workaround has become
-unnecessary (#100). Two are checked; see the end of this docstring for SPI.
+unnecessary (#100). Three are checked; I2C and SPI are at the end of this docstring.
 
 preOBD works around a USB CDC receive bug in the STM32 Arduino core: when its
 receive queue is full, USBD_CDC_Receive() calls USBD_CDC_ClearBuffer(), which
@@ -13,6 +13,12 @@ removing the call.
 So: look for the call in the core this build actually uses. While it is
 there, stay silent. Once it is gone, print what to remove, every build,
 until someone does.
+
+I2C: Wire's HAL_I2C_ErrorCallback() puts a master into slave listen mode
+after any error (`if (obj->isMaster)`), so one NACK jams the bus for every
+device (#589). board.ini wraps HAL_I2C_EnableListen_IT and platform.cpp
+refuses it on a master. Upstream fixed it in stm32duino PR #3044 (merged
+2026-08-11) by testing `!obj->isMaster`.
 
 SPI: SPIClass::begin() in core 3.0.0 calls configSpi(defaultSettings), which
 skips spi_init() because the settings match the cached default, so SPI is
@@ -49,4 +55,18 @@ if os.path.isfile(spi):
             "\n*** stm32_core_workarounds: this STM32 core's SPI.begin() initializes the\n"
             "*** peripheral (upstream PR #3049 landed). Remove the 1 MHz beginTransaction()\n"
             "*** before SPI.begin() in initSPIBus(), src/drivers/bus_manager.cpp.\n"
+        )
+
+twi = os.path.join(core or "", "libraries", "Wire", "src", "utility", "twi.c")
+if os.path.isfile(twi):
+    with open(twi, encoding="utf-8", errors="replace") as f:
+        text = f.read()
+    # The buggy test is twi.c's only `if (obj->isMaster) {`.
+    if "if (obj->isMaster) {" not in text:
+        print(
+            "\n*** stm32_core_workarounds: this STM32 core's Wire no longer jams a master after\n"
+            "*** a NACK (upstream PR #3044 landed). Remove the workaround: the\n"
+            "*** -Wl,--wrap=HAL_I2C_EnableListen_IT and -D STM32_WIRE_LISTEN_WRAP lines in\n"
+            "*** boards/feather_f405/board.ini and __wrap_HAL_I2C_EnableListen_IT in\n"
+            "*** src/core/platform.cpp (#589).\n"
         )

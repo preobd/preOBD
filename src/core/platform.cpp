@@ -76,6 +76,33 @@ extern "C" bool CDC_resume_receive(void);
 extern "C" uint8_t __wrap_USBD_CDC_ClearBuffer(void* /*pdev*/) { return 0; /* USBD_OK */ }
 #endif
 
+// ---------------------------------------------------------------------------
+// I2C master jams after a NACK (STM32 core 4.30000 / Arduino_Core_STM32
+// <= 3.0.0, #589)
+//
+// Wire's HAL_I2C_ErrorCallback() (twi.c) re-enables slave listen mode on a
+// *master* after any I2C error: `if (obj->isMaster)` where it means
+// `!obj->isMaster`. A NACKed data transfer (a sensor or display unplugged)
+// leaves the peripheral in LISTEN, and every later transaction on the bus,
+// to any device, then waits out Wire's 100 ms timeout: a loose BME280
+// connector would starve the watchdog. Upstream fix: stm32duino/
+// Arduino_Core_STM32 issue #3043, PR #3044 (merged 2026-08-11, after 3.0.0).
+//
+// The callback itself can't be wrapped (the HAL file that calls it defines a
+// weak default), but its call into HAL_I2C_EnableListen_IT() can: board.ini
+// links that to this (-Wl,--wrap). Every other caller in twi.c is a slave
+// path, so refusing the call on a master handle is exactly upstream's fix.
+// Wire.cpp begins a master with own address MASTER_ADDRESS (0x01), which
+// i2c_init() stores shifted into Init.OwnAddress1.
+#if defined(STM32_WIRE_LISTEN_WRAP) && defined(HAL_I2C_MODULE_ENABLED)
+static const uint32_t WIRE_MASTER_OWN_ADDRESS = 0x01 << 1;
+extern "C" HAL_StatusTypeDef __real_HAL_I2C_EnableListen_IT(I2C_HandleTypeDef* hi2c);
+extern "C" HAL_StatusTypeDef __wrap_HAL_I2C_EnableListen_IT(I2C_HandleTypeDef* hi2c) {
+    if (hi2c && hi2c->Init.OwnAddress1 == WIRE_MASTER_OWN_ADDRESS) return HAL_OK;
+    return __real_HAL_I2C_EnableListen_IT(hi2c);
+}
+#endif
+
 void platformLoopService() {
 #if defined(USBD_USE_CDC)
     CDC_resume_receive();
