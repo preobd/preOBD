@@ -252,16 +252,15 @@ static FLASHMEM void applyInputRecord(const InputEEPROM& rec, Input& in) {
         in.calibrationType = info.calibrationType;
         // Units stored before #458 could be of another quantity (°F on a
         // pressure input) and would keep converting wrongly: repair to the
-        // application default.
+        // default (SYSTEM UNITS, else the application's), as JSON import does.
         // An imported OBD-II PID measures what the PID table says, not the
         // CAN_IMPORT preset's TEMPERATURE (#496); the OBD output conversion
         // reads measurementType, so it must survive a reboot too.
         in.measurementType = inputMeasurementTypeOf(in);
         if (!unitsMatchMeasurement(in.unitsIndex, in.measurementType)) {
             const ApplicationPreset* app = getApplicationByIndex(in.applicationIndex);
-            uint8_t appUnits = app != nullptr ? READ_APP_DEFAULT_UNITS(app) : 0;
-            in.unitsIndex = unitsMatchMeasurement(appUnits, in.measurementType)
-                            ? appUnits : defaultUnitsForMeasurement(in.measurementType);
+            in.unitsIndex = preferredUnitsFor(in.measurementType,
+                                              app != nullptr ? READ_APP_DEFAULT_UNITS(app) : 0);
         }
         // A table-defined OBD PID replies with the table's length (#516:
         // EGT 0x78 is 9 bytes, stored as 2 before)

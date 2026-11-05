@@ -305,6 +305,9 @@ static int system_units(int argc, const char* const* argv, int /*tokenIndex*/) {
         msg.control.println(F("  Valid types: TEMP, PRESSURE, ELEVATION, SPEED"));
         return 1;
     }
+    // Read when an input's units are picked for it (preferredUnitsFor):
+    // SET <pin> APPLICATION, SET CAN. Configured inputs are not rewritten.
+    msg.control.println(F("  Used when an input's application is set; to change one now: SET <pin> UNITS"));
     return 0;
 }
 

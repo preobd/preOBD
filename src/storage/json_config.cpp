@@ -993,16 +993,14 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     }
     if (!unitsMatchMeasurement(unitsIdx, measured)) {
         const ApplicationPreset* appPreset = getApplicationByIndex(appIdx);
-        uint8_t appUnits = appPreset ? READ_APP_DEFAULT_UNITS(appPreset) : 0;
-        unitsIdx = unitsMatchMeasurement(appUnits, measured)
-                   ? appUnits : defaultUnitsForMeasurement(measured);
+        unitsIdx = preferredUnitsFor(measured, appPreset ? READ_APP_DEFAULT_UNITS(appPreset) : 0);
         msg.control.print(F("  NOTE: input "));
         msg.control.print(index);
         msg.control.print(F(" (pin "));
         msg.control.print(pin);
         msg.control.print(F(") units '"));
         msg.control.print(unitsName ? unitsName : "");
-        msg.control.println(F("' unknown or wrong type; using the application default"));
+        msg.control.println(F("' unknown or wrong type; using the default (SYSTEM UNITS)"));
     }
 
     // ===== COMMIT - from here on nothing may fail =====

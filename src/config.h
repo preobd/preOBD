@@ -24,13 +24,15 @@
 // ============================================================================
 // DEFAULT UNITS
 // ============================================================================
-// Set your preferred display units.
-// Individual sensors can override these defaults.
+// Factory values for SYSTEM UNITS: the units a NEW temperature, pressure,
+// elevation or speed input starts in (SET <pin> UNITS overrides per input).
+// They match the application presets' own units, so an unconfigured board
+// behaves as it did before these were honoured.
 
 #define DEFAULT_TEMPERATURE_UNITS  "CELSIUS"     // or "FAHRENHEIT"
 #define DEFAULT_PRESSURE_UNITS     "BAR"         // or "PSI", "KPA"
-#define DEFAULT_ELEVATION_UNITS    "FEET"        // or "METERS"
-#define DEFAULT_SPEED_UNITS        "MPH"         // or "KPH"
+#define DEFAULT_ELEVATION_UNITS    "METERS"      // or "FEET"
+#define DEFAULT_SPEED_UNITS        "KPH"         // or "MPH"
 
 // NOTE: Voltage is always in VOLTS
 // NOTE: Humidity is always in PERCENT

@@ -15,6 +15,7 @@
 #include "../core/log_tags.h"
 #include "../sensors/application_presets.h"
 #include "../sensors/sensor_library.h"
+#include "../sensors/units_registry.h"  // UNITS_NOT_FOUND
 #include "../pinctrl/pin_registry.h"
 #include "../pinctrl/pin_owner.h"
 #include "../storage/bus_needs.h"
@@ -355,7 +356,7 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     // Don't set sensorIndex yet - let setInputSensor() do it
     // (This allows sensorChanged check to work correctly; defaultSensor was
     // resolved and validated in the admission phase above.)
-    input->unitsIndex = preset.defaultUnits;
+    input->unitsIndex = preferredUnitsForApplication(appIndex);
 
     // CRITICAL: Store min/max in STANDARD UNITS (no conversion!)
     // Preset already has values in Celsius, bar, volts, etc.
@@ -471,6 +472,29 @@ bool setInputSensor(uint8_t pin, uint8_t sensorIndex) {
     if ((needs & BUS_NEED_SPI) && !getActiveSPI()) reportNoSPIBus();
 
     return true;
+}
+
+uint8_t preferredUnitsFor(MeasurementType type, uint8_t fallback) {
+    uint8_t sys = UNITS_NOT_FOUND;
+    switch (type) {
+        case MEASURE_TEMPERATURE: sys = systemConfig.defaultTempUnits;  break;
+        case MEASURE_PRESSURE:    sys = systemConfig.defaultPressUnits; break;
+        case MEASURE_ELEVATION:   sys = systemConfig.defaultElevUnits;  break;
+        case MEASURE_SPEED:       sys = systemConfig.defaultSpeedUnits; break;
+        default:                  break;
+    }
+    // Each candidate is checked, so a stale or corrupt stored index never
+    // reaches an input (#458)
+    if (unitsMatchMeasurement(sys, type)) return sys;
+    if (unitsMatchMeasurement(fallback, type)) return fallback;
+    return defaultUnitsForMeasurement(type);
+}
+
+uint8_t preferredUnitsForApplication(uint8_t appIndex) {
+    const ApplicationPreset* preset = getApplicationByIndex(appIndex);
+    if (preset == nullptr) return 0;
+    return preferredUnitsFor(inputMeasurementType(SENSOR_NONE, appIndex),
+                             READ_APP_DEFAULT_UNITS(preset));
 }
 
 bool setInputAbbr(uint8_t pin, const char* abbr) {

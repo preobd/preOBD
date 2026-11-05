@@ -84,6 +84,16 @@ Input* createCanImportInput(uint8_t pin);
 // On `true` the input exists, is populated from the preset, and has a valid
 // readFunction installed by setInputSensor().
 bool setInputApplication(uint8_t pin, uint8_t appIndex);
+// The units an input measuring `type` starts in: the device default for that
+// quantity (SYSTEM UNITS: temperature, pressure, elevation, speed), else
+// `fallback` (the preset's or PID row's own unit), else the first registry
+// unit of `type`. Used by every path that picks units for an input rather
+// than taking the user's: SET <pin> APPLICATION, SET CAN <id> <pid>, and the
+// #458 repairs in JSON import and EEPROM load.
+uint8_t preferredUnitsFor(MeasurementType type, uint8_t fallback);
+// preferredUnitsFor() with the application's expected quantity and preset
+// unit. 0 for an unknown application.
+uint8_t preferredUnitsForApplication(uint8_t appIndex);
 bool setInputSensor(uint8_t pin, uint8_t sensorIndex);
 bool setInputAbbr(uint8_t pin, const char* abbr);
 bool setInputDisplayName(uint8_t pin, const char* displayName);

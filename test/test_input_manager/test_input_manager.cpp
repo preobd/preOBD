@@ -72,6 +72,11 @@ void setUp(void) {
     // table — otherwise it would fall back to the (here, blank) EEPROM scan
     // and every input-vs-input conflict check below would go silently inert.
     inputsTableIsLive = true;
+    // Factory SYSTEM UNITS (system_config.cpp) — some tests change them
+    systemConfig.defaultTempUnits  = getUnitsIndexByName(DEFAULT_TEMPERATURE_UNITS);
+    systemConfig.defaultPressUnits = getUnitsIndexByName(DEFAULT_PRESSURE_UNITS);
+    systemConfig.defaultElevUnits  = getUnitsIndexByName(DEFAULT_ELEVATION_UNITS);
+    systemConfig.defaultSpeedUnits = getUnitsIndexByName(DEFAULT_SPEED_UNITS);
 }
 void tearDown(void) {}
 
@@ -842,6 +847,86 @@ static void test_fixed_obd_answers(void) {
     TEST_ASSERT_EQUAL_HEX8(0x00, bitmap[0]);                    // not in later ranges
 }
 
+// ---------------------------------------------------------------------------
+// SYSTEM UNITS: a new input starts in the device default for its quantity.
+// Before this the defaults were stored, shown and exported but never read —
+// SYSTEM UNITS TEMP F still gave a new CHT input C.
+// ---------------------------------------------------------------------------
+
+static uint8_t unitsOf(uint8_t pin) { return getInputByPin(pin)->unitsIndex; }
+
+static void test_factory_units_match_the_presets(void) {
+    // An unconfigured board must behave as it did before the defaults were
+    // honoured: each preset's own unit wins because the defaults equal it.
+    const char* apps[] = { "CHT", "OIL_PRESSURE", "ELEVATION", "VEHICLE_SPEED" };
+    for (uint8_t i = 0; i < 4; i++) {
+        uint8_t app = getApplicationIndexByName(apps[i]);
+        TEST_ASSERT_NOT_EQUAL_MESSAGE(0, app, apps[i]);
+        const ApplicationPreset* p = getApplicationByIndex(app);
+        TEST_ASSERT_EQUAL_MESSAGE(READ_APP_DEFAULT_UNITS(p),
+                                  preferredUnitsForApplication(app), apps[i]);
+    }
+}
+
+static void test_new_input_takes_the_system_default(void) {
+    systemConfig.defaultTempUnits  = getUnitsIndexByName("FAHRENHEIT");
+    systemConfig.defaultPressUnits = getUnitsIndexByName("PSI");
+    TEST_ASSERT_TRUE(setInputApplication(4, appCHT()));
+    TEST_ASSERT_TRUE(setInputApplication(5, appOIL_P()));
+    TEST_ASSERT_EQUAL(getUnitsIndexByName("FAHRENHEIT"), unitsOf(4));
+    TEST_ASSERT_EQUAL(getUnitsIndexByName("PSI"), unitsOf(5));
+}
+
+static void test_system_default_leaves_other_quantities_alone(void) {
+    // Voltage has no SYSTEM UNITS setting: still the preset's VOLTS
+    systemConfig.defaultTempUnits = getUnitsIndexByName("FAHRENHEIT");
+    uint8_t app = getApplicationIndexByName("PRIMARY_BATTERY");
+    TEST_ASSERT_NOT_EQUAL(0, app);
+    TEST_ASSERT_EQUAL(READ_APP_DEFAULT_UNITS(getApplicationByIndex(app)),
+                      preferredUnitsForApplication(app));
+}
+
+static void test_bad_stored_default_falls_back_to_the_preset(void) {
+    // A pressure unit in the temperature slot (corrupt or hand-edited EEPROM)
+    // must never reach an input (#458)
+    systemConfig.defaultTempUnits = getUnitsIndexByName("PSI");
+    TEST_ASSERT_TRUE(setInputApplication(4, appCHT()));
+    TEST_ASSERT_EQUAL(READ_APP_DEFAULT_UNITS(getApplicationByIndex(appCHT())), unitsOf(4));
+    systemConfig.defaultTempUnits = 0xFF;
+    TEST_ASSERT_EQUAL(READ_APP_DEFAULT_UNITS(getApplicationByIndex(appCHT())),
+                      preferredUnitsForApplication(appCHT()));
+}
+
+static void test_preferred_units_keyed_on_what_is_measured(void) {
+    // SET CAN <id> <pid> and the #458 repairs know the measured quantity, not
+    // an application (a CAN_IMPORT input's app says TEMPERATURE for every PID)
+    const uint8_t BAR = getUnitsIndexByName("BAR"), PSI = getUnitsIndexByName("PSI");
+    systemConfig.defaultPressUnits = PSI;
+    TEST_ASSERT_EQUAL(PSI, preferredUnitsFor(MEASURE_PRESSURE, BAR));
+    systemConfig.defaultPressUnits = 0xFF;                       // corrupt
+    TEST_ASSERT_EQUAL(BAR, preferredUnitsFor(MEASURE_PRESSURE, BAR));
+    // fallback of the wrong quantity too: the registry's first pressure unit
+    TEST_ASSERT_EQUAL(defaultUnitsForMeasurement(MEASURE_PRESSURE),
+                      preferredUnitsFor(MEASURE_PRESSURE, getUnitsIndexByName("CELSIUS")));
+    // no SYSTEM UNITS setting for voltage: the fallback
+    const uint8_t V = getUnitsIndexByName("VOLTS");
+    TEST_ASSERT_EQUAL(V, preferredUnitsFor(MEASURE_VOLTAGE, V));
+}
+
+static void test_json_import_repairs_bad_units_to_the_system_default(void) {
+    systemConfig.defaultTempUnits = getUnitsIndexByName("FAHRENHEIT");
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    makeInputRecord(o, 0, 4);
+    o["units"] = "XYZ";
+    TEST_ASSERT_TRUE(importInputFromJSON(o, 0));
+    TEST_ASSERT_EQUAL(getUnitsIndexByName("FAHRENHEIT"), unitsOf(4));
+    // a valid unit in the record is the user's and is kept
+    o["units"] = "CELSIUS";
+    TEST_ASSERT_TRUE(importInputFromJSON(o, 0));
+    TEST_ASSERT_EQUAL(getUnitsIndexByName("CELSIUS"), unitsOf(4));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_can_toggle_gates_obd_answers);
@@ -883,5 +968,11 @@ int main(int, char**) {
     RUN_TEST(test_json_import_restores_can_input);
     RUN_TEST(test_can_import_input_gets_new_input_defaults);
     RUN_TEST(test_json_import_refuses_app_none_elsewhere);
+    RUN_TEST(test_factory_units_match_the_presets);
+    RUN_TEST(test_new_input_takes_the_system_default);
+    RUN_TEST(test_system_default_leaves_other_quantities_alone);
+    RUN_TEST(test_bad_stored_default_falls_back_to_the_preset);
+    RUN_TEST(test_preferred_units_keyed_on_what_is_measured);
+    RUN_TEST(test_json_import_repairs_bad_units_to_the_system_default);
     return UNITY_END();
 }

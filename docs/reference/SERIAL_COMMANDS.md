@@ -166,14 +166,14 @@ RULE ADD A2 OUTSIDE 60 120
 ```
 
 ### Global System Settings (use SYSTEM command)
-Apply to all inputs as defaults:
-- Default units (temperature, pressure, elevation, speed)
+Device-wide settings:
+- Default units (temperature, pressure, elevation, speed): the units a new input starts in
 - Calibration constants (sea level pressure)
 
 **Example:**
 ```
-SYSTEM UNITS TEMP F              # All temps default to Fahrenheit
-SYSTEM UNITS PRESSURE PSI        # All pressures default to PSI
+SYSTEM UNITS TEMP F              # New temperature inputs start in Fahrenheit
+SYSTEM UNITS PRESSURE PSI        # New pressure inputs start in PSI
 ```
 
 ### Output Module Settings (use OUTPUT command)
@@ -189,10 +189,11 @@ OUTPUT CAN INTERVAL 100          # CAN at 100ms
 OUTPUT RealDash INTERVAL 50      # RealDash at 50ms (faster)
 ```
 
-**Note:** Individual inputs can override global defaults:
+**Note:** `SYSTEM UNITS` is what an input starts in when its application is
+set; after that each input has its own units:
 ```
-SYSTEM UNITS TEMP C              # Global default: Celsius
-SET A2 UNITS F                   # A2 overrides to Fahrenheit
+SYSTEM UNITS TEMP C              # New temperature inputs start in Celsius
+SET A2 UNITS F                   # A2 switches to Fahrenheit
 ```
 
 ---
@@ -1200,7 +1201,8 @@ Pin 13: Available
 
 ### Configure Global Defaults
 
-**Default Units** (inherited by all inputs unless overridden):
+**Default Units** — the units a new input starts in. Existing inputs keep
+theirs; change one with `SET <pin> UNITS`. Factory values: C, bar, metres, km/h.
 ```bash
 SYSTEM UNITS TEMP <C|F>                    # Temperature units
 SYSTEM UNITS PRESSURE <BAR|PSI|KPA|INHG>   # Pressure units
@@ -1218,7 +1220,7 @@ SYSTEM SEA_LEVEL <hPa>                     # Sea level pressure for altitude cal
 ### Examples
 
 ```bash
-# Set global defaults
+# Set global defaults (set units before adding inputs)
 SYSTEM UNITS TEMP F
 SYSTEM UNITS PRESSURE PSI
 SYSTEM SEA_LEVEL 1013.25
@@ -1549,6 +1551,7 @@ resets the board on purpose. `tools/watchdog_bench.py stall` runs the checks.
 
 ```
 CONFIG
+SYSTEM UNITS TEMP F
 SET 6 CHT MAX6675
 SET A0 OIL_TEMP GENERIC_NTC_BETA
 SET A0 CAL BETA 2490 3950 10000 25
@@ -1559,8 +1562,6 @@ RULE ADD A2 OUTSIDE 60 120
 RULE ADD A3 OUTSIDE 0.5 7.0
 BUS CAN OUTPUT CAN1 ENABLE 500000
 OUTPUT CAN ENABLE
-OUTPUT CAN INTERVAL 100
-SYSTEM UNITS TEMP F
 SAVE
 RUN
 ```

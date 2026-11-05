@@ -55,7 +55,7 @@ See the [Config/Run Mode Guide](guides/configuration/CONFIG_RUN_MODE_GUIDE.md).
 - Is the bias resistor the value the sensor expects (100 Ω for gauge senders, 2.49 kΩ for
   EFI NTC sensors)? Otherwise tell the firmware: `SET <pin> CAL BIAS <ohms>`.
 - A 0.5-4.5V sensor on a 3.3V board behind a divider needs `SET <pin> DIVIDER <ratio>`.
-- Units: `SET <pin> UNITS F`, `SYSTEM UNITS PRESSURE PSI`.
+- Units: `SET <pin> UNITS F` (`SYSTEM UNITS` only sets what new inputs start in).
 - See the guide for your sensor type and the [Advanced Calibration Guide](guides/configuration/ADVANCED_CALIBRATION_GUIDE.md).
 
 **The reading is noisy or jumps around.**

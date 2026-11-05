@@ -1732,6 +1732,9 @@ int cmd_set(int argc, const char* const* argv) {
             float scale = pidInfo->scale_factor, off = pidInfo->offset;
             uint8_t u = defaultUnitsForMeasurement(pidInfo->measurementType);
             standardPidToBase(*pidInfo, scale, off, u);   // test_standard_pids: never false
+            // Display units only (the conversion above is to base units):
+            // a new CAN input starts in SYSTEM UNITS like any other
+            u = preferredUnitsFor(pidInfo->measurementType, u);
             input->customCalibration.can.scale_factor = scale;
             input->customCalibration.can.offset = off;
             input->customCalibration.can.timeout_ms = CAN_DEFAULT_TIMEOUT_MS;
