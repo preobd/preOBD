@@ -30,9 +30,8 @@
 
 // LCD geometry (LCD_COLS, LCD_ROWS, cells) lives in lcd_layout.h.
 
-// NOTE: the LCD is always driven at LCD_I2C_ADDRESS (0x27); `DISPLAY ADDRESS`
-// remains cosmetic, as it was with the LiquidCrystal libraries before the
-// in-tree driver. Tracked separately, not part of #351.
+// The LCD is driven at the stored `DISPLAY ADDRESS` (effectiveLcdI2CAddress(),
+// #590). begin() latches it, so the re-probe in lcd.service() uses it too.
 #if INCLUDE_LCD
 static LcdPcf8574 lcd;
 #endif
@@ -187,14 +186,23 @@ void initLCD() {
     // unanswered LCD cost 100 ms per write, ~90 writes a redraw (#586).
     // No createChar(): nothing is loaded into CGRAM (#579, see above).
     activePanel = DISPLAY_LCD;
-    if (lcd.begin(wire, LCD_I2C_ADDRESS)) {
+    // The stored DISPLAY ADDRESS, fixed until the next boot (#590).
+    const uint8_t addr = effectiveLcdI2CAddress();
+    if (lcd.begin(wire, addr)) {
         msg.debug.info(TAG_DISPLAY, "LCD initialized");
     } else {
-        msg.debug.warn(TAG_DISPLAY, "LCD: no answer, retrying");
+        msg.debug.warn(TAG_DISPLAY, "LCD: no answer at 0x%02X, retrying", addr);
     }
+}
+
+// The address the LCD is being driven at: DISPLAY ADDRESS only applies at the
+// next boot, so after a change this differs from the stored value.
+uint8_t lcdDrivenAddress() {
+    return activePanel == DISPLAY_LCD ? lcd.address() : effectiveLcdI2CAddress();
 }
 #else
 void initLCD() {}
+uint8_t lcdDrivenAddress() { return effectiveLcdI2CAddress(); }
 #endif
 
 #if INCLUDE_OLED

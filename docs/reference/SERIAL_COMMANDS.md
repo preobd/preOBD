@@ -1097,7 +1097,7 @@ DISPLAY STATUS                   # Show display hardware status
 DISPLAY ENABLE                   # Enable display
 DISPLAY DISABLE                  # Disable display
 DISPLAY TYPE <LCD|OLED|NONE>     # Set display type (OLED: 128x64 SH1107, Feather F405 only)
-DISPLAY ADDRESS <hex>            # Set I2C address (LCD only)
+DISPLAY ADDRESS <hex>            # Set LCD I2C address: 0x20-0x27 or 0x38-0x3F (next reboot)
 DISPLAY INTERVAL <ms>            # Set display refresh rate
 ```
 
@@ -1124,9 +1124,10 @@ DISPLAY INTERVAL 500    # Update display every 500ms
 # View configuration
 DISPLAY STATUS
 
-# Change LCD I2C address
+# Change LCD I2C address (a PCF8574A backpack); takes effect on next reboot
 DISPLAY ADDRESS 0x3F
 SAVE
+SYSTEM REBOOT
 ```
 
 ---

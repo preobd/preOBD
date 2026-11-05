@@ -71,7 +71,7 @@ struct SystemConfig {
     // Display Settings (7 bytes)
     uint8_t displayEnabled;      // Display on/off (bool)
     uint8_t displayType;         // LCD/OLED/None (DisplayType enum)
-    uint8_t lcdI2CAddress;       // I2C address (default 0x27)
+    uint8_t lcdI2CAddress;       // LCD I2C address (default 0x27); see isValidLcdI2CAddress()
     uint8_t defaultTempUnits;    // Unit index: 0=Celsius, 1=Fahrenheit
     uint8_t defaultPressUnits;   // Unit index: 2=Bar, 3=PSI, 4=kPa
     uint8_t defaultElevUnits;    // Unit index: 9=Meters, 10=Feet
@@ -154,6 +154,23 @@ static_assert(EEPROM_TOTAL_BYTES >= sizeof(SystemConfig) + 16,
 
 // Global system config instance
 extern SystemConfig systemConfig;
+
+// LCD I2C address (#590). A character LCD's backpack is a PCF8574 (0x20-0x27)
+// or a PCF8574A (0x38-0x3F); its three address jumpers pick within the range,
+// so nothing else is a valid LCD address. `DISPLAY ADDRESS` and JSON import
+// both reject anything outside these.
+#define LCD_I2C_ADDRESS_DEFAULT 0x27
+inline bool isValidLcdI2CAddress(long addr) {
+    return (addr >= 0x20 && addr <= 0x27) || (addr >= 0x38 && addr <= 0x3F);
+}
+// The address the LCD is driven at. loadSystemConfig() corrects an
+// out-of-range stored value (a pre-#590 EEPROM could hold any 0x03-0x77, and
+// driving an unknown device as an LCD could write to it); this guards the
+// callers that run before or without a load.
+inline uint8_t effectiveLcdI2CAddress() {
+    return isValidLcdI2CAddress(systemConfig.lcdI2CAddress)
+               ? systemConfig.lcdI2CAddress : (uint8_t)LCD_I2C_ADDRESS_DEFAULT;
+}
 
 // Initialization and persistence
 void initSystemConfig();         // Load from EEPROM or set defaults

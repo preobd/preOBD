@@ -644,7 +644,7 @@ void printHelpDisplay() {
 #else
     msg.control.println(F("  DISPLAY TYPE <LCD|NONE>"));
 #endif
-    msg.control.println(F("  DISPLAY ADDRESS <hex>    - I2C address (LCD only)"));
+    msg.control.println(F("  DISPLAY ADDRESS <hex>    - LCD I2C address, 0x20-0x27 or 0x38-0x3F (at next boot)"));
     msg.control.println(F("  DISPLAY INTERVAL <ms>    - Display refresh rate"));
     msg.control.println();
     msg.control.println(F("Note: Unit preferences moved to SYSTEM UNITS"));

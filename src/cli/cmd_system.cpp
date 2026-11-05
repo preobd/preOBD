@@ -495,11 +495,19 @@ static void diagSectionHw() {
 
 #if INCLUDE_LCD
     any = true;
-    msg.control.print(F("[hardware]    LCD (I2C 0x27) ....... "));
-    switch (i2cProbe(0x27)) {
+    {
+    // The address the LCD is driven at now (#590): a DISPLAY ADDRESS change
+    // waits for the next boot.
+    extern uint8_t lcdDrivenAddress();
+    const uint8_t lcdAddr = lcdDrivenAddress();
+    msg.control.print(F("[hardware]    LCD (I2C 0x"));
+    msg.control.print(lcdAddr, HEX);
+    msg.control.print(F(") ....... "));
+    switch (i2cProbe(lcdAddr)) {
         case 1:  msg.control.println(F("OK")); break;
         case 0:  msg.control.println(F("FAIL (no ACK)")); break;
         default: msg.control.println(F("off (no I2C bus)")); break;
+    }
     }
 #endif
 

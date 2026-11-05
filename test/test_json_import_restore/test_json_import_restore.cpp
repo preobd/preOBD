@@ -225,6 +225,46 @@ static void test_an_out_of_range_sea_level_pressure_keeps_the_current_one(void) 
 }
 
 // ---------------------------------------------------------------------------
+// #590: display.address is a PCF8574/PCF8574A address, like DISPLAY ADDRESS
+// ---------------------------------------------------------------------------
+
+static void test_an_lcd_address_in_either_backpack_range_is_imported(void) {
+    const char* good[] = {"0x20", "0x27", "0x38", "0x3F", "3f"};
+    const uint8_t want[] = {0x20, 0x27, 0x38, 0x3F, 0x3F};
+    for (size_t i = 0; i < sizeof(good) / sizeof(good[0]); i++) {
+        char json[160];
+        snprintf(json, sizeof(json),
+                 "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":"
+                 "{\"display\":{\"address\":\"%s\"}}}", good[i]);
+        systemConfig.lcdI2CAddress = 0x21;
+        TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+        TEST_ASSERT_EQUAL_HEX8_MESSAGE(want[i], systemConfig.lcdI2CAddress, good[i]);
+    }
+}
+
+static void test_a_non_lcd_address_keeps_the_current_one(void) {
+    const char* bad[] = {"\"0x1F\"", "\"0x28\"", "\"0x37\"", "\"0x40\"", "\"0x3C0\"",
+                         "\"0x3G\"", "\"\"", "\"zz\"", "39"};
+    for (const char* v : bad) {
+        char json[160];
+        snprintf(json, sizeof(json),
+                 "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":"
+                 "{\"display\":{\"address\":%s}}}", v);
+        systemConfig.lcdI2CAddress = 0x27;
+        TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+        TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x27, systemConfig.lcdI2CAddress, v);
+    }
+}
+
+static void test_an_out_of_range_stored_lcd_address_drives_the_default(void) {
+    systemConfig.lcdI2CAddress = 0x50;   // a pre-#590 DISPLAY ADDRESS could save this
+    TEST_ASSERT_EQUAL_HEX8(0x27, effectiveLcdI2CAddress());
+    systemConfig.lcdI2CAddress = 0x3F;
+    TEST_ASSERT_EQUAL_HEX8(0x3F, effectiveLcdI2CAddress());
+    systemConfig.lcdI2CAddress = 0x27;
+}
+
+// ---------------------------------------------------------------------------
 // #561: logFilter comes back
 // ---------------------------------------------------------------------------
 
@@ -393,6 +433,9 @@ int main(int, char**) {
     RUN_TEST(test_a_document_without_inputs_leaves_them_alone);
     RUN_TEST(test_sea_level_pressure_is_imported);
     RUN_TEST(test_an_out_of_range_sea_level_pressure_keeps_the_current_one);
+    RUN_TEST(test_an_lcd_address_in_either_backpack_range_is_imported);
+    RUN_TEST(test_a_non_lcd_address_keeps_the_current_one);
+    RUN_TEST(test_an_out_of_range_stored_lcd_address_drives_the_default);
     RUN_TEST(test_log_filter_is_imported_and_applied_live);
     RUN_TEST(test_unreadable_log_filter_values_keep_the_current_ones);
     RUN_TEST(test_malformed_tag_masks_are_refused);

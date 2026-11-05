@@ -914,16 +914,20 @@ int cmd_display(int argc, const char* const* argv) {
         const char* addrStr = argv[2];
         char* endptr;
         long addr = strtol(addrStr, &endptr, 16);
-        if (endptr == addrStr || addr < 0x03 || addr > 0x77) {
-            msg.control.print(F("ERROR: Invalid I2C address '"));
+        // An LCD backpack is a PCF8574 or PCF8574A: nothing else is an LCD
+        // address (#590). The trailing-garbage check rejects "0x3G" etc.
+        if (endptr == addrStr || *endptr != '\0' || !isValidLcdI2CAddress(addr)) {
+            msg.control.print(F("ERROR: Invalid LCD I2C address '"));
             msg.control.print(addrStr);
             msg.control.println(F("'"));
-            msg.control.println(F("  Valid range: 0x03-0x77"));
+            msg.control.println(F("  Valid: 0x20-0x27 (PCF8574) or 0x38-0x3F (PCF8574A)"));
             return 1;
         }
         systemConfig.lcdI2CAddress = (uint8_t)addr;
         msg.control.print(F("LCD I2C address set to 0x"));
         msg.control.println(systemConfig.lcdI2CAddress, HEX);
+        msg.control.println(F("Note: Takes effect on next reboot"));
+        printSaveReminder();
         return 0;
     }
 

@@ -1241,6 +1241,7 @@ FLASHMEM static uint8_t parseLogLevelName(const char* name) {
 }
 
 static const char kSerialKept1[] PROGMEM = "NOTE: Serial";
+static const char kDisplayAddrIgnored[] PROGMEM = "NOTE: display address ignored: valid 0x20-0x27 or 0x38-0x3F";
 static const char kSerialKept2[] PROGMEM = " kept its settings: it carries commands (BUS SERIAL to change it)";
 static const char kSerialReboot[] PROGMEM = "NOTE: serial port changes take effect after SAVE and a reboot";
 #define JSON_FSTR(a) (reinterpret_cast<const __FlashStringHelper*>(a))
@@ -1330,15 +1331,18 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
             }
         }
 
-        // Parse I2C address (hex string like "0x27")
+        // LCD I2C address (hex string like "0x27"). Same rule as
+        // `DISPLAY ADDRESS` (#590): only a PCF8574/PCF8574A backpack address is
+        // taken; anything else keeps the current address, with a note, rather
+        // than failing the import (same posture as "format" above).
         if (display["address"].isNull() == false) {
             const char* addr = display["address"];
-            if (addr != nullptr) {
-                if (addr[0] == '0' && (addr[1] == 'x' || addr[1] == 'X')) {
-                    staged.lcdI2CAddress = strtol(addr + 2, nullptr, 16);
-                } else {
-                    staged.lcdI2CAddress = strtol(addr, nullptr, 16);
-                }
+            char* end = nullptr;
+            const long value = addr ? strtol(addr, &end, 16) : -1;  // base 16 accepts a 0x prefix
+            if (addr && end != addr && *end == '\0' && isValidLcdI2CAddress(value)) {
+                staged.lcdI2CAddress = (uint8_t)value;
+            } else {
+                msg.control.println(JSON_FSTR(kDisplayAddrIgnored));
             }
         }
 

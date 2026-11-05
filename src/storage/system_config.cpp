@@ -259,7 +259,7 @@ void resetSystemConfig(uint8_t keep) {
         systemConfig.displayEnabled = 1;   // on/off toggle; type is what gates bring-up
         systemConfig.displayType = DISPLAY_NONE;
 
-    systemConfig.lcdI2CAddress = 0x27;
+    systemConfig.lcdI2CAddress = LCD_I2C_ADDRESS_DEFAULT;
     }  // RESET_KEEP_HARDWARE (display)
 
     // Resolve unit names to indices at boot time
@@ -648,5 +648,11 @@ bool loadSystemConfig() {
 
     // Valid config - copy to global
     memcpy(&systemConfig, &temp, sizeof(SystemConfig));
+    // An EEPROM written before #590 could hold any 0x03-0x77 LCD address.
+    // Correct it here, once, so the driver, DISPLAY STATUS, DIAG HW and JSON
+    // export all see the address that is actually used.
+    if (!isValidLcdI2CAddress(systemConfig.lcdI2CAddress)) {
+        systemConfig.lcdI2CAddress = LCD_I2C_ADDRESS_DEFAULT;
+    }
     return true;
 }

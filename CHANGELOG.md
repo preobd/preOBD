@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The watchdog now keeps running in CONFIG mode on every board, relaxed to 8 s, instead of being switched off on boards that allow it; it only restarts a board whose firmware has frozen, never an idle one, and every board now behaves the same (#541)
 
 ### Fixed
+- The LCD's I2C address setting now works: a display at 0x3F (or any other backpack address) can be used, the hardware check tests the address you set, and an address no LCD can have is refused (#590)
 - A missing or unplugged LCD no longer restarts the Feather STM32F405 every few seconds, and an LCD that is reconnected comes back by itself (#586)
 - An unplugged BME280 no longer slows down or freezes every other I2C device on the Feather STM32F405, and while it is unplugged its readings show as errors instead of false values (#589)
 - Feather STM32F405: SD logging no longer stops after its first row with a false write error (#583)

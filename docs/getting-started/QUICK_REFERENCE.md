@@ -436,7 +436,7 @@ SET <pin> CAL BIAS <resistor>                         # Override bias resistor
 
 1. **Wrong sensor type** - VDO 120C vs 150C makes huge difference
 2. **Wrong bias resistor** - VDO/low-impedance senders need 100Ω; high-impedance NTC (10K) sensors need 2.49kΩ. See [Bias Resistor Guide](../guides/hardware/BIAS_RESISTOR_GUIDE.md).
-3. **Wrong I2C address** - Try both 0x27 and 0x3F for LCD
+3. **Wrong I2C address** - Try both 0x27 and 0x3F for LCD (`DISPLAY ADDRESS`, then `SAVE` and reboot)
 4. **5V to 3.3V board** - Will destroy Teensy/ESP32!
 5. **No CAN termination** - CAN bus needs 120Ω resistors at each end
 6. **Loose connections** - Vibration in engine bay breaks wires

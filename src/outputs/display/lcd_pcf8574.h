@@ -26,14 +26,15 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-#define LCD_I2C_ADDRESS    0x27
 #define LCD_RETRY_MS       5000
 
 class LcdPcf8574 : public Print {
 public:
     // Probe the panel and initialize it. False (and offline) when nothing
     // answers at `addr`; service() retries.
-    bool begin(TwoWire* wire, uint8_t addr = LCD_I2C_ADDRESS);
+    bool begin(TwoWire* wire, uint8_t addr);
+
+    uint8_t address() const { return _addr; }
 
     // True while the panel is answering.
     bool online() const { return _online; }
@@ -58,7 +59,7 @@ private:
     void fail();
 
     TwoWire* _wire = nullptr;
-    uint8_t  _addr = LCD_I2C_ADDRESS;
+    uint8_t  _addr = 0;
     bool     _online = false;
     bool     _backlight = true;
     uint32_t _lastTry = 0;

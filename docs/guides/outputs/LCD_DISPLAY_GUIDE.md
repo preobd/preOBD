@@ -80,7 +80,10 @@ SYSTEM REBOOT
 ```
 
 `DISPLAY STATUS` shows the display settings. If the screen stays blank, try the
-other address.
+other address. An LCD backpack answers at 0x20-0x27 (PCF8574) or 0x38-0x3F
+(PCF8574A), set by its A0-A2 jumpers; `DISPLAY ADDRESS` refuses anything else.
+A new address takes effect after `SAVE` and a reboot, and `SYSTEM DIAG HW`
+checks the LCD at the address you set.
 
 ### Which I2C bus
 
@@ -110,11 +113,11 @@ RUN mode (if you've wired one). `DISPLAY DISABLE` turns it off permanently.
 
 | Symptom | Check |
 |---------|-------|
-| Backlight on, no characters | Adjust the contrast pot on the backpack; wrong address (`DISPLAY ADDRESS 0x3F`) |
+| Backlight on, no characters | Adjust the contrast pot on the backpack; wrong address (`DISPLAY ADDRESS 0x3F`, then `SAVE` and reboot) |
 | Nothing at all | `DISPLAY STATUS` shows type `LCD` and enabled? `SAVE` and `SYSTEM REBOOT` after changing it |
 | Boot says "no display configured" | `DISPLAY TYPE LCD` |
 | "LCD: no I2C bus" in the log | `BUS I2C` shows which bus is up; the SDA/SCL pins must match the wiring |
-| "LCD: no answer, retrying" in the log | Nothing answered at 0x27: check the wiring. preOBD keeps trying every 5 s, so a reconnected LCD comes back without a reboot |
+| "LCD: no answer at 0x27, retrying" in the log | Nothing answered at that address: check the wiring and `DISPLAY ADDRESS`. preOBD keeps trying every 5 s, so a reconnected LCD comes back without a reboot |
 | `ERR` in a cell | That sensor isn't reading — `INFO <pin>`, `SYSTEM DIAG INPUTS` |
 
 `SYSTEM DIAG HW` checks whether the display answers on the bus.
