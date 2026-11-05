@@ -28,19 +28,21 @@ namespace mcp2515 {
 #endif
 
 namespace detail {
-    // Static MCP2515 instances
-    static MCP2515 canBus0(CAN_CS_0);
+    // One driver object and one "started" flag per controller for the whole
+    // image, defined in can_mcp2515.cpp. As `static`s here every including
+    // file had its own copy (see there).
+    extern MCP2515 canBus0;
 
     #if defined(CAN_CS_1) && (CAN_CS_1 != 0xFF)
-        static MCP2515 canBus1(CAN_CS_1);
+        extern MCP2515 canBus1;
         static constexpr bool hasBus1 = true;
     #else
         static constexpr bool hasBus1 = false;
     #endif
 
     // Track initialization state
-    static bool bus0Initialized = false;
-    static bool bus1Initialized = false;
+    extern bool bus0Initialized;
+    extern bool bus1Initialized;
 
     // Convert baudrate to MCP2515 speed enum
     inline CAN_SPEED baudrateToSpeed(uint32_t baudrate) {

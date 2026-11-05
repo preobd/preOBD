@@ -344,7 +344,7 @@ bool initCANBus(uint8_t bus_id, uint32_t baudrate) {
     // registry attributes to another function.
     if (!claimPins(can_pins, 2, PIN_RESERVED, PIN_RANK_BUS, TAG_CAN, can_desc)) return false;
 
-    // CAN initialization is handled in output_can.cpp since it needs FlexCAN_T4 objects
+    // CAN buses are started by CAN input and output through the HAL (hal_can.h)
     // Here we just mark the bus as ready
     active_can_id = bus_id;
     can_ready = true;

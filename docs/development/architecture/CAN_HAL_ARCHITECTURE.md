@@ -83,9 +83,11 @@ src/hal/
 ├── hal_can.h                    # Unified HAL interface
 ├── platform_caps.h              # Platform capability detection
 ├── platforms/
-│   ├── can_flexcan.h           # Teensy FlexCAN implementation
+│   ├── can_flexcan.h           # Teensy FlexCAN: declarations only
+│   ├── can_flexcan.cpp         # Teensy FlexCAN: driver objects + bodies (the only FlexCAN_T4 includer)
 │   ├── can_twai.h              # ESP32 TWAI implementation
 │   ├── can_mcp2515.h           # MCP2515 SPI implementation
+│   ├── can_mcp2515.cpp         # MCP2515 driver objects + "started" flags (one definition)
 │   └── can_hybrid.h            # Hybrid mode dispatcher
 ├── can_controller_types.h       # Controller type enum and mapping
 └── bus_defaults.h               # Default bus count per platform
@@ -260,45 +262,42 @@ void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0);
 
 ### Controller-Specific Implementation
 
-Each controller provides its own implementation in `src/hal/platforms/can_*.h`:
+Each controller is implemented under `src/hal/platforms/`.
 
-**Example: FlexCAN Implementation**
+**Driver objects are defined once, in a `.cpp`, never in a header.** A
+driver object (or any state, like a "started" flag) defined `static` in a
+header gives every file that includes `hal_can.h` its own copy: CAN input
+and output then drive the same controller through different objects. On
+Teensy 4 that cost 10.5 KB of RAM1 per copy (#555).
+
+**FlexCAN_T4 may be included by one file only, `can_flexcan.cpp`.** The
+library keeps its ISR target (`_CAN1`) and ISR as `static`s in its own
+header, while the linker merges its template code across files. With the
+library in two files, `begin()` can install an ISR that reads another
+file's `_CAN1`, still null: the interrupt is never serviced and re-fires
+until the watchdog resets the board. `can_flexcan.h` therefore only
+declares the HAL functions, and `tools/check_layering.py` fails a commit
+that includes `FlexCAN_T4.h` anywhere else.
+
+**Example: FlexCAN (abridged from `can_flexcan.cpp`)**
 ```cpp
-// src/hal/platforms/can_flexcan.h
-#include <FlexCAN_T4.h>
+#include "../hal_can.h"     // declares hal::can::begin(), write(), ...
+#include <FlexCAN_T4.h>     // here and nowhere else
 
-namespace hal { namespace can { namespace flexcan {
+namespace hal { namespace can {
+namespace detail {
+    // RX is polled from the mailboxes, so the library's RX ring is never
+    // filled: keep it at its smallest
+    static FlexCAN_T4<CAN1, RX_SIZE_2, TX_SIZE_16> canBus0;
+}
 
-FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16> can0;
-FlexCAN_T4<CAN2, RX_SIZE_256, TX_SIZE_16> can1;
-
-bool begin(uint32_t baudrate, uint8_t bus, bool listenOnly = false) {
-    FLEXCAN_RXQUEUE_TABLE mode = listenOnly ? LISTEN_ONLY : TX;
-    if (bus == 0) {
-        can0.begin();
-        can0.setBaudRate(baudrate, mode);
-        return true;
-    } else if (bus == 1) {
-        can1.begin();
-        can1.setBaudRate(baudrate, mode);
-        return true;
+FLASHMEM bool begin(uint32_t baudrate, uint8_t bus, bool listenOnly) {
+    switch (bus) {
+        case 0: detail::initBus(detail::canBus0, baudrate, listenOnly); return true;
+        default: return false;   // CAN2/CAN3: #554
     }
-    return false;
 }
-
-bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t bus) {
-    CAN_message_t msg;
-    msg.id = id;
-    msg.len = len;
-    msg.flags.extended = extended ? 1 : 0;
-    memcpy(msg.buf, data, len);
-
-    if (bus == 0) return can0.write(msg) == 1;
-    if (bus == 1) return can1.write(msg) == 1;
-    return false;
-}
-
-}}} // namespace hal::can::flexcan
+}} // namespace hal::can
 ```
 
 **Note on FlexCAN listen-only mode:** The FlexCAN_T4 library's `setBaudRate()` accepts an optional second parameter for operating mode (`TX`, `LISTEN_ONLY`, etc.). This allows setting baudrate and mode in a single call, which is used to support the `listenOnly` parameter in `hal::can::begin()`.
@@ -308,7 +307,7 @@ bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t
 | Component | Flash (bytes) | RAM (bytes) |
 |-----------|---------------|-------------|
 | HAL interface (constexpr dispatch) | ~500 | 0 |
-| FlexCAN implementation | ~2KB | 512 per bus |
+| FlexCAN implementation | ~2KB | 3,664 per bus on Teensy 4.1 (RX_SIZE_2, TX_SIZE_16; measured, #555) |
 | TWAI implementation | ~1.5KB | 256 per bus |
 | MCP2515 implementation | ~2KB | 128 per bus |
 | Hybrid dispatcher | ~300 | 0 |

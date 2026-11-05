@@ -253,6 +253,31 @@ def load_exceptions(path):
 # main
 # ---------------------------------------------------------------------------
 
+# Libraries that only ONE file under src/ may include. FlexCAN_T4 keeps its
+# ISR target and ISR as `static`s in its header while its template code is
+# merged across files by the linker, so a second includer can make begin()
+# install an ISR that reads a null target: the board watchdog-resets (#555).
+SINGLE_INCLUDER = {
+    "FlexCAN_T4.h": "src/hal/platforms/can_flexcan.cpp",
+}
+ANGLE_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]')
+
+
+def find_single_includer_violations(files):
+    out = []
+    for path in files:
+        r = rel(path)
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for ln, line in enumerate(fh, 1):
+                m = ANGLE_INCLUDE_RE.match(line)
+                if not m:
+                    continue
+                owner = SINGLE_INCLUDER.get(os.path.basename(m.group(1)))
+                if owner and r != owner:
+                    out.append((r, ln, m.group(1), owner))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--exceptions", default=DEFAULT_EXCEPTIONS)
@@ -357,10 +382,13 @@ def main():
         else:
             print("OK: every cross-directory edge is accounted for in the exceptions file.")
 
-    if args.json:
-        return 1 if violations else 0
+    single = find_single_includer_violations(files)
+    if single and not args.json:
+        print(f"FAIL: {len(single)} include(s) of a single-includer library:")
+        for f, ln, inc, owner in single:
+            print(f"  {f}:{ln} includes <{inc}>; only {owner} may (see SINGLE_INCLUDER)")
 
-    return 1 if violations else 0
+    return 1 if (violations or single) else 0
 
 
 if __name__ == "__main__":
