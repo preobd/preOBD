@@ -68,7 +68,7 @@ static const char PSTR_COOLANT_LEVEL_ABBR[] PROGMEM = "CLVL";
 static const char PSTR_COOLANT_LEVEL_LABEL[] PROGMEM = "Engine Coolant Level";
 
 static const char PSTR_HUMIDITY[] PROGMEM = "HUMIDITY";
-static const char PSTR_HUMIDITY_ABBR[] PROGMEM = " RH";
+static const char PSTR_HUMIDITY_ABBR[] PROGMEM = "RH";
 static const char PSTR_HUMIDITY_LABEL[] PROGMEM = "Relative Humidity";
 
 static const char PSTR_ELEVATION[] PROGMEM = "ELEVATION";

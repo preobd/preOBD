@@ -56,6 +56,7 @@
 #define SDLOG_FLUSH_INTERVAL_MS 1000
 
 static File     logFile;
+static SdWriter logOut(logFile);         // all header/row output goes through it (#583)
 static char     logFileName[13];        // 8.3 name + NUL
 static uint16_t logFileIndex   = 0;     // last sequence number handed out
 static uint32_t logRowsWritten = 0;
@@ -161,31 +162,31 @@ static FLASHMEM void writeHeader() {
     // byte-identical to what this module wrote before the wide format landed,
     // which is the whole point of keeping the mode available.
     if (openFileFormat == SDLOG_FORMAT_LONG) {
-        logFile.println(F(SDLOG_LONG_HEADER));
+        logOut.println(F(SDLOG_LONG_HEADER));
         return;
     }
 
-    logFile.print(F("millis"));
+    logOut.print(F("millis"));
 
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         if (!logsThisInput(i)) continue;
 
-        logFile.print(',');
-        logFile.print(inputs[i].abbrName);
+        logOut.print(',');
+        logOut.print(inputs[i].abbrName);
 
         char unitBuf[UNIT_FIELD_LEN];
         formatUnitSymbol(unitBuf, sizeof(unitBuf), getUnitStringByIndex(inputs[i].unitsIndex));
         if (unitBuf[0] != '\0') {
-            logFile.print('_');
+            logOut.print('_');
             // A symbol carrying a comma would split the column; none in the
             // registry does today, but the header must stay parseable.
             for (char* p = unitBuf; *p; p++) {
-                logFile.print(*p == ',' ? '_' : *p);
+                logOut.print(*p == ',' ? '_' : *p);
             }
         }
     }
 
-    logFile.println();
+    logOut.println();
 }
 
 static FLASHMEM void openLogFile() {
@@ -219,6 +220,7 @@ static FLASHMEM void openLogFile() {
         return;
     }
     memcpy(logFileName, name, sizeof(logFileName));
+    logOut.reset();
 
     // Latch the layout for this file's lifetime — writeHeader() branches on it,
     // and a file cannot hold both layouts.
@@ -317,18 +319,18 @@ static void writeRow(uint32_t now) {
             char unitBuf[UNIT_FIELD_LEN];
             formatUnitSymbol(unitBuf, sizeof(unitBuf), getUnitStringByIndex(inputs[i].unitsIndex));
 
-            logFile.print((unsigned long)now);
-            logFile.print(',');
-            logFile.print(inputs[i].abbrName);
-            logFile.print(',');
-            logFile.print(valBuf);
-            logFile.print(',');
-            logFile.print(unitBuf);
-            logFile.println();
+            logOut.print((unsigned long)now);
+            logOut.print(',');
+            logOut.print(inputs[i].abbrName);
+            logOut.print(',');
+            logOut.print(valBuf);
+            logOut.print(',');
+            logOut.print(unitBuf);
+            logOut.println();
         }
         logRowsWritten++;   // counts samples, not lines, in both layouts
     } else {
-        logFile.print((unsigned long)now);
+        logOut.print((unsigned long)now);
 
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
             if (!logsThisInput(i)) continue;
@@ -336,11 +338,11 @@ static void writeRow(uint32_t now) {
             char valBuf[VALUE_FIELD_LEN];
             formatValueField(valBuf, sizeof(valBuf),
                              convertFromBaseUnits(inputs[i].value, inputs[i].unitsIndex));
-            logFile.print(',');
-            logFile.print(valBuf);
+            logOut.print(',');
+            logOut.print(valBuf);
         }
 
-        logFile.println();
+        logOut.println();
         logRowsWritten++;
     }
 
@@ -473,7 +475,7 @@ void updateSDLog() {
 
     writeRow(now);
 
-    if (sdWriteFailed(logFile)) {
+    if (sdWriteFailed(logFile) || logOut.shortWrite()) {
         handleWriteError();
         return;
     }

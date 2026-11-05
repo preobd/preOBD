@@ -39,13 +39,49 @@ inline bool sdWriteFailed(File& f) {
 
 // flush(), saying whether it reached the card. Elsewhere a failed flush shows
 // up through getWriteError() on the next write, so this reports success.
+//
+// On STM32 one retry: f_sync() first checks the card with CMD13, and the card
+// can answer with a stale "previous command's CRC was bad" flag that it clears
+// on that same read. FatFs reports it as FR_INVALID_OBJECT, though the card
+// and file are fine and an immediate second f_sync() succeeds. This hit the
+// first flush of every log on the Feather (#583). A pulled card fails both.
 inline bool sdFlush(File& f) {
 #if defined(ARDUINO_ARCH_STM32)
-    return f._fil && f_sync(f._fil) == FR_OK;
+    if (!f._fil) return false;
+    FRESULT r = f_sync(f._fil);
+    if (r == FR_INVALID_OBJECT || r == FR_NOT_READY) r = f_sync(f._fil);
+    return r == FR_OK;
 #else
     f.flush();
     return true;
 #endif
 }
+
+// Print adapter for a log file: write through it instead of the File, so a
+// write that loses bytes is caught. FatFs f_write() runs the same CMD13 check
+// as f_sync(), and when the card's stale flag lands there (#583) it writes
+// nothing and records no error on the file, so sdWriteFailed() can't see it
+// and a value, comma or newline would vanish from a row. On STM32 a refused
+// write (0 bytes) is retried once; it was refused before anything was
+// written, so the retry can't duplicate data. Any write still short is
+// remembered for the caller.
+class SdWriter : public Print {
+public:
+    explicit SdWriter(File& f) : f_(f) {}
+    size_t write(uint8_t c) override { return write(&c, 1); }
+    size_t write(const uint8_t* buf, size_t n) override {
+        size_t w = f_.write(buf, n);
+#if defined(ARDUINO_ARCH_STM32)
+        if (w == 0 && n) w = f_.write(buf, n);
+#endif
+        if (w != n) short_ = true;
+        return w;
+    }
+    bool shortWrite() const { return short_; }
+    void reset() { short_ = false; }
+private:
+    File& f_;
+    bool short_ = false;
+};
 
 #endif // SD_FS_H
