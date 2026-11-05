@@ -307,15 +307,19 @@ Also here: `message_api.*` (user-facing output), `log_filter.*` / `log_tags.h`
 
 ## src/outputs/display/ - Display Modules
 
-**display_lcd.cpp**
-- 20x4 character LCD display driver
-- I2C interface
-- Automatic sensor value rotation
-- Status display
+**display_grid.cpp**
+- The 20x4 reading grid (8 cells, paged), drawn on whichever display is configured
+- Brings up the 20x4 I2C character LCD (PCF8574 backpack) or the OLED
 - **Edit:** SOMETIMES (to customize display layout)
 
+**lcd_layout.h**
+- Pure cell layout and value-fitting rules, unit-tested natively
+
+**oled_sh1107.cpp / oled_sh1107.h, oled_font5x7.h**
+- 128x64 SH1107 OLED driver (Adafruit FeatherWing #4650): framebuffer, 6x8 text
+- Goes offline on an I2C error and re-probes every 5 s
+
 **Future displays:**
-- OLED (stub exists, not implemented)
 - TFT
 - LED matrix
 - Custom displays

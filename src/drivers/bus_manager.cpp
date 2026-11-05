@@ -540,7 +540,7 @@ SPIClass* acquireSPI() {
 
 void acquireRequiredBuses(uint8_t needs) {
     // A refused bus is a degraded board, never a dead one: acquire*() returns
-    // nullptr, the clients that need it report and no-op (display_lcd.cpp,
+    // nullptr, the clients that need it report and no-op (display_grid.cpp,
     // bme280.cpp, max6675.cpp), and boot continues to the CLI where the user can
     // fix the conflict. Nothing here may abort or reset.
     if (needs & BUS_NEED_I2C) acquireI2C();

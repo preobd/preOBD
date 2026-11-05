@@ -122,3 +122,29 @@ RUN mode (if you've wired one). `DISPLAY DISABLE` turns it off permanently.
 
 - [Serial Commands Reference](../../reference/SERIAL_COMMANDS.md#display-configuration)
 - [Config/Run Mode Guide](../configuration/CONFIG_RUN_MODE_GUIDE.md) — the mode button
+
+## OLED FeatherWing (Feather STM32F405)
+
+On the Feather STM32F405 the same readings can go to the Adafruit
+**FeatherWing OLED 128x64** (product 4650, SH1107, I2C address 0x3C). Stack
+the wing on the Feather, then:
+
+```
+CONFIG
+DISPLAY TYPE OLED
+SAVE
+SYSTEM REBOOT
+```
+
+The OLED shows the LCD's layout: the same eight cells, the same labels and
+units, and pages of eight when there are more inputs. The rows are spaced out
+to fill the taller screen. `DISPLAY STATUS` says whether the panel is
+answering. If it's unplugged, or fitted after boot, preOBD checks for it
+every 5 seconds and starts drawing when it answers, without a restart.
+
+The wing's buttons are on the Feather's pins: **A = D9, B = D6, C = D5**.
+D9 is also the CAN receive pin, so button A can't be used with CAN wired.
+D5/D6 are the usual nRF flow-control pins; to use buttons B or C, move flow
+control to other pins (e.g. D11/D12) in `boards/feather_f405/wiring.ini`.
+The mode button can then be one of them, e.g. `-D MODE_BUTTON_PIN=6` for
+button B.

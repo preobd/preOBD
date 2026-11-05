@@ -1096,7 +1096,7 @@ Configure display hardware and refresh rate.
 DISPLAY STATUS                   # Show display hardware status
 DISPLAY ENABLE                   # Enable display
 DISPLAY DISABLE                  # Disable display
-DISPLAY TYPE <LCD|NONE>          # Set display type (OLED is not supported yet)
+DISPLAY TYPE <LCD|OLED|NONE>     # Set display type (OLED: 128x64 SH1107, Feather F405 only)
 DISPLAY ADDRESS <hex>            # Set I2C address (LCD only)
 DISPLAY INTERVAL <ms>            # Set display refresh rate
 ```

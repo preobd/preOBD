@@ -139,7 +139,7 @@ outputs -> drivers   # #401 -- display/RGB-adjacent outputs touch drivers.
 outputs -> hal       # #401 -- output_can.cpp calls the CAN HAL.
 outputs -> inputs    # #401 -- every output module takes Input* -- the same shape of
                      # coupling as sensors -> inputs and inputs -> sensors.
-outputs -> pinctrl   # #401 -- display_lcd checks pin ownership before driving the LCD.
+outputs -> pinctrl   # #401 -- display_grid checks pin ownership before driving the LCD.
 outputs -> rules     # #401 -- alarm/status outputs read rules-engine state.
 outputs -> sensors   # #401 -- outputs format sensor-calibrated values.
 outputs -> storage   # #401 -- outputs read system_config for enable flags/intervals.

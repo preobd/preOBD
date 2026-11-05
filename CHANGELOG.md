@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SYSTEM SD` and `SYSTEM SD JSON` report whether SD logging is actually working (no card, removed, write errors, logging) and how much space is left on the card, in RUN mode too (#536)
 - For developers: `tools/watchdog_bench.py` and a bench-build-only `SYSTEM DIAG WATCHDOG STALL` check that the watchdog still resets a hung board (#543); `pio run -e debug` now builds a Teensy 4.1 image that boots, with full symbols and the stall command (it was `-Og` and hung before USB, #544)
 
+- OLED display: the Feather STM32F405 can show its readings on the Adafruit 128x64 OLED FeatherWing (SH1107) instead of the LCD (#58)
 - After an unexpected restart by the watchdog, `VERSION` on Teensy 4 boards says what the firmware was doing and where it was stuck, e.g. `Last reset: WATCHDOG in SD … hung at PC 0x…` (#542)
 
 ### Changed

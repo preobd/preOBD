@@ -16,7 +16,7 @@ analysis alone has a blind spot:
       include graph. src/core/system_mode.cpp is the canonical example: it
       includes nothing from outputs/, but declares
       `extern void showConfigModeMessage();` / `extern void clearLCD();`,
-      both defined in src/outputs/display/display_lcd.cpp. An include-only
+      both defined in src/outputs/display/display_grid.cpp. An include-only
       checker misses this edge entirely.
 
 Usage:

@@ -96,6 +96,11 @@ FilePathComponents parseFilePath(const char* pathStr);
 
 // System status printers
 void printDisplayConfig();
+// Address and panel-state lines for the configured display type, shared by
+// DISPLAY STATUS and SYSTEM STATUS.
+void printDisplayPanel();
+// DISPLAY TYPE <LCD|OLED>: refuse when the display's I2C pins are taken.
+bool displayI2CPinsConflict();
 
 // Help system
 // Shared I2C SDA/SCL conflict check (DISPLAY TYPE LCD, BUS I2C <n>).

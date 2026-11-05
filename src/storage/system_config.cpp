@@ -255,13 +255,9 @@ void resetSystemConfig(uint8_t keep) {
     // A stored config still wins; this is only the fresh-EEPROM default.
     // Hardware setup (#551): SYSTEM RESET CONFIG keeps the display.
     if (!(keep & RESET_KEEP_HARDWARE)) {
-    #if defined(INCLUDE_OLED)
-        systemConfig.displayEnabled = 1;
-        systemConfig.displayType = DISPLAY_OLED;
-    #else
+        // Same for the OLED: INCLUDE_OLED doesn't mean one is fitted.
         systemConfig.displayEnabled = 1;   // on/off toggle; type is what gates bring-up
         systemConfig.displayType = DISPLAY_NONE;
-    #endif
 
     systemConfig.lcdI2CAddress = 0x27;
     }  // RESET_KEEP_HARDWARE (display)

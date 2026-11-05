@@ -148,6 +148,22 @@
 #  endif
 #endif
 
+// The OLED follows the LCD's rule above: in the image when the board can drive
+// it, fitted or not (systemConfig.displayType = DISPLAY_OLED brings it up).
+#if SUPPORTS_OLED
+#  ifndef INCLUDE_OLED
+#    define INCLUDE_OLED 1
+#  endif
+#endif
+
+// Either character display: the shared cell renderer, DISPLAY STATUS paging
+// and the loop's redraw are built in when at least one driver is.
+#if INCLUDE_LCD || INCLUDE_OLED
+#  ifndef INCLUDE_DISPLAY
+#    define INCLUDE_DISPLAY 1
+#  endif
+#endif
+
 #if SUPPORTS_BME280
 #  ifndef INCLUDE_BME280
 #    define INCLUDE_BME280 1

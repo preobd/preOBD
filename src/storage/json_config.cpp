@@ -614,6 +614,9 @@ FLASHMEM void dumpConfigToJSON(Print& output) {
 #if INCLUDE_LCD
     caps.add("lcd");
 #endif
+#if INCLUDE_OLED
+    caps.add("oled");
+#endif
 
     // System configuration
     JsonObject system = doc["system"].to<JsonObject>();

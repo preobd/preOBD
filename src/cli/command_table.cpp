@@ -799,6 +799,12 @@ int cmd_output(int argc, const char* const* argv) {
     return 0;
 }
 
+#if INCLUDE_OLED
+#define DISPLAY_VALID_TYPES F("  Valid types: LCD, OLED, NONE")
+#else
+#define DISPLAY_VALID_TYPES F("  Valid types: LCD, NONE")
+#endif
+
 int cmd_display(int argc, const char* const* argv) {
     if (argc < 2) {
         msg.control.println(F("ERROR: DISPLAY requires a subcommand"));
@@ -820,12 +826,11 @@ int cmd_display(int argc, const char* const* argv) {
             case DISPLAY_OLED: msg.control.println(F("OLED")); break;
             default: msg.control.println(F("Unknown")); break;
         }
-        msg.control.print(F("LCD I2C Address: 0x"));
-        msg.control.println(systemConfig.lcdI2CAddress, HEX);
+        printDisplayPanel();
         msg.control.print(F("Update Interval: "));
         msg.control.print(systemConfig.lcdUpdateInterval);
         msg.control.println(F("ms"));
-#if INCLUDE_LCD
+#if INCLUDE_DISPLAY
         // The grid holds 8; more pages through groups of 8 (#480).
         uint8_t shown = 0;
         for (uint8_t i = 0; i < MAX_INPUTS; i++) {
@@ -861,30 +866,31 @@ int cmd_display(int argc, const char* const* argv) {
         return 0;
     }
 
-    // DISPLAY TYPE <LCD|NONE>  (OLED is reserved: no driver yet, #58)
+    // DISPLAY TYPE <LCD|OLED|NONE>  (OLED where the board has the driver, #58)
     if (streq_P(subcommand, PSTR("TYPE"))) {
         if (argc < 3) {
             msg.control.println(F("ERROR: TYPE requires a display type"));
-            msg.control.println(F("  Valid types: LCD, NONE"));
+            msg.control.println(DISPLAY_VALID_TYPES);
             return 1;
         }
         const char* typeStr = argv[2];
         if (streq_P(typeStr, PSTR("LCD"))) {
-            // The LCD will acquire an I2C bus at the next boot, which reserves
-            // SDA/SCL. Reject now if another function holds one of those pins,
-            // so the clash surfaces as an error instead of a silently dropped
-            // input at the next reboot.
-            uint8_t bus = (systemConfig.buses.active_i2c != 0xFF)
-                              ? systemConfig.buses.active_i2c
-                              : (uint8_t)DEFAULT_I2C_BUS;
-            if (i2cBusPinsConflict(bus)) return 1;
+            if (displayI2CPinsConflict()) return 1;
 
             systemConfig.displayType = DISPLAY_LCD;
             msg.control.println(F("Display type set to LCD"));
             msg.control.println(F("Note: Takes effect on next reboot"));
         } else if (streq_P(typeStr, PSTR("OLED"))) {
-            msg.control.println(F("ERROR: OLED displays are not supported yet"));
+#if INCLUDE_OLED
+            if (displayI2CPinsConflict()) return 1;   // the OLED takes SDA/SCL at boot too
+
+            systemConfig.displayType = DISPLAY_OLED;
+            msg.control.println(F("Display type set to OLED (128x64 SH1107, I2C 0x3C)"));
+            msg.control.println(F("Note: Takes effect on next reboot"));
+#else
+            msg.control.println(F("ERROR: this board's firmware has no OLED driver"));
             return 1;
+#endif
         } else if (streq_P(typeStr, PSTR("NONE"))) {
             systemConfig.displayType = DISPLAY_NONE;
             msg.control.println(F("Display type set to NONE"));
@@ -892,7 +898,7 @@ int cmd_display(int argc, const char* const* argv) {
             msg.control.print(F("ERROR: Invalid display type '"));
             msg.control.print(typeStr);
             msg.control.println(F("'"));
-            msg.control.println(F("  Valid types: LCD, NONE"));
+            msg.control.println(DISPLAY_VALID_TYPES);
             return 1;
         }
         return 0;

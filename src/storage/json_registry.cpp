@@ -338,6 +338,9 @@ static FLASHMEM void writeFirmwareJson(Print& out) {
 #if INCLUDE_LCD
     caps.add("lcd");
 #endif
+#if INCLUDE_OLED
+    caps.add("oled");
+#endif
     WatchdogKickingPrint wdOut(out);
     serializeJson(doc, wdOut);
 }

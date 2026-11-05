@@ -43,6 +43,7 @@
 #define SUPPORTS_CLI_EDITING      1    // embedded-cli: history + in-line editing (#147)
 #define SUPPORTS_FRAMED_TRANSPORT 1    // nRF52840 coprocessor framed link + broadcasters
 #define SUPPORTS_LCD              1
+#define SUPPORTS_OLED             1    // 128x64 SH1107 on I2C (Adafruit FeatherWing OLED #4650)
 #define SUPPORTS_ALARMS           1    // control engine (Rules/Actions/Annunciator) — NOT the buzzer
 #define SUPPORTS_BME280           1
 #define SUPPORTS_RELAY_OUTPUT     1    // deprecated shim (→ control-engine Actions)

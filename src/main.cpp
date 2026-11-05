@@ -135,9 +135,22 @@ extern void updateOutputs();
 
 // Declare display functions
 extern void initLCD();
+extern void initOLED();
 extern void updateLCD(Input**, int);
-#if INCLUDE_LCD
+#if INCLUDE_DISPLAY
 extern void clearLCD();
+
+// Whether this image has a driver for `type`. A displayType carried over from
+// another board (or a JSON import) may name a panel this firmware can't drive.
+static bool displayDriverInImage(uint8_t type) {
+#if INCLUDE_LCD
+    if (type == DISPLAY_LCD) return true;
+#endif
+#if INCLUDE_OLED
+    if (type == DISPLAY_OLED) return true;
+#endif
+    return false;
+}
 #endif
 
 // System-mode observer (registered with setSystemModeObserver() below): the
@@ -146,7 +159,7 @@ extern void clearLCD();
 // drivers/ dependencies -- core/ only announces the transition.
 void onSystemModeChange(SystemMode oldMode, SystemMode newMode) {
     if (newMode == MODE_CONFIG) {
-        #if INCLUDE_LCD
+        #if INCLUDE_DISPLAY
         // Clear LCD (message will be shown by loop if no sensors)
         clearLCD();
         #endif
@@ -160,7 +173,7 @@ void onSystemModeChange(SystemMode oldMode, SystemMode newMode) {
 #endif
         #endif
     } else {
-        #if INCLUDE_LCD
+        #if INCLUDE_DISPLAY
         // Clear LCD when entering RUN mode (sensors will update it)
         clearLCD();
         #endif
@@ -184,7 +197,7 @@ void onSystemModeChange(SystemMode oldMode, SystemMode newMode) {
 static uint32_t lastInputRead[MAX_INPUTS];  // Per-sensor read timing
 #if INCLUDE_ALARMS
 #endif
-#if INCLUDE_LCD
+#if INCLUDE_DISPLAY
 static uint32_t lastLCDUpdate = 0;
 #endif
 
@@ -193,7 +206,7 @@ static uint32_t lastLCDUpdate = 0;
 
 // Update LCD display in CONFIG mode
 static void updateConfigModeDisplay(uint32_t now) {
-    #if INCLUDE_LCD
+    #if INCLUDE_DISPLAY
     if (isDisplayActive() && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
@@ -258,7 +271,7 @@ static void updateControlEngine(uint32_t now) {
 
 // Update LCD display in RUN mode
 static void updateDisplay(uint32_t now) {
-    #if INCLUDE_LCD
+    #if INCLUDE_DISPLAY
     if (isDisplayActive() && now - lastLCDUpdate >= LCD_UPDATE_INTERVAL_MS) {
         static Input* inputPtrs[MAX_INPUTS];
         uint8_t activeCount = 0;
@@ -340,11 +353,13 @@ void setup() {
     // value rather than recomputing it — the vote must not change between the
     // two call sites.
     uint8_t busNeeds = storedInputBusNeeds();
-    #if INCLUDE_LCD
+    #if INCLUDE_DISPLAY
     // The display votes only where its driver is in the image: a displayType
     // carried over from another board can't be served by a firmware that has no
-    // LCD code, and must not hold that board's SDA/SCL hostage.
-    busNeeds |= busNeedsForDisplayType(systemConfig.displayType);
+    // code for that panel, and must not hold that board's SDA/SCL hostage.
+    if (displayDriverInImage(systemConfig.displayType)) {
+        busNeeds |= busNeedsForDisplayType(systemConfig.displayType);
+    }
     #endif
 
     // Register system pins in the pin registry. Includes the Tier-1 wired-bus
@@ -545,15 +560,26 @@ void setup() {
     // bring-up on that: a board with DISPLAY TYPE NONE must not acquire the I2C
     // bus, and its SDA/SCL pins stay free for inputs (#351).
     // displayEnabled remains the on/off toggle, handled by initDisplayManager().
-    #if INCLUDE_LCD
-    if (systemConfig.displayType == DISPLAY_LCD) {
-        initLCD();
+    #if INCLUDE_DISPLAY
+    if (displayDriverInImage(systemConfig.displayType)) {
+        if (systemConfig.displayType == DISPLAY_OLED) initOLED();
+        else initLCD();
+    } else if (systemConfig.displayType != DISPLAY_NONE) {
+        // A type this firmware can't drive, e.g. OLED from a JSON config made
+        // on another board. Say so rather than "no display configured".
+        msg.control.println(F("Note: the configured display type isn't supported by this firmware (DISPLAY TYPE to change it)"));
     } else {
-        // The board can drive an LCD but none is declared. Say so: a fitted
+        // The board can drive a display but none is declared. Say so: a fitted
         // display would otherwise stay dark with no explanation, and DISPLAY
         // STATUS reports "Enabled" (the on/off toggle) either way, so nothing
         // else on the board would tell the user what is wrong.
+#if INCLUDE_LCD && INCLUDE_OLED
+        msg.control.println(F("Note: no display configured (DISPLAY TYPE LCD or OLED to enable one)"));
+#elif INCLUDE_OLED
+        msg.control.println(F("Note: no display configured (DISPLAY TYPE OLED to enable one)"));
+#else
         msg.control.println(F("Note: no display configured (DISPLAY TYPE LCD to enable one)"));
+#endif
         // Not "the I2C pins are free": since #358 an I2C SENSOR brings the bus up
         // on its own, so the display's absence no longer decides that either way.
         msg.control.println(F("  The display is not holding an I2C bus. BUS I2C shows what is."));

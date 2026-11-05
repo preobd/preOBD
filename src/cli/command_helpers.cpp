@@ -486,6 +486,38 @@ void printSystemConfig() {
     msg.control.println(systemConfig.logFilter.enabledTags, HEX);
 }
 
+#if INCLUDE_OLED
+extern const __FlashStringHelper* oledPanelState();
+#endif
+
+void printDisplayPanel() {
+    if (systemConfig.displayType == DISPLAY_OLED) {
+        // The OLED's address is fixed (the FeatherWing can't change it).
+        msg.control.println(F("OLED I2C Address: 0x3C"));
+        msg.control.print(F("OLED Panel: "));
+#if INCLUDE_OLED
+        msg.control.println(oledPanelState());
+#else
+        msg.control.println(F("not supported by this firmware"));
+#endif
+    } else if (systemConfig.displayType == DISPLAY_LCD) {
+        msg.control.print(F("LCD I2C Address: 0x"));
+        if (systemConfig.lcdI2CAddress < 0x10) msg.control.print(F("0"));
+        msg.control.println(systemConfig.lcdI2CAddress, HEX);
+    }
+}
+
+bool displayI2CPinsConflict() {
+    // The display acquires an I2C bus at the next boot, which reserves
+    // SDA/SCL. Refuse now if another function holds one of those pins, so the
+    // clash surfaces as an error instead of a silently dropped input at the
+    // next reboot.
+    uint8_t bus = (systemConfig.buses.active_i2c != 0xFF)
+                      ? systemConfig.buses.active_i2c
+                      : (uint8_t)DEFAULT_I2C_BUS;
+    return i2cBusPinsConflict(bus);
+}
+
 void printDisplayConfig() {
     msg.control.println(F("=== Display Configuration ==="));
 
@@ -502,12 +534,7 @@ void printDisplayConfig() {
         default: msg.control.println(F("Unknown")); break;
     }
 
-    // I2C address (for LCD)
-    if (systemConfig.displayType == DISPLAY_LCD) {
-        msg.control.print(F("LCD I2C Address: 0x"));
-        if (systemConfig.lcdI2CAddress < 0x10) msg.control.print(F("0"));
-        msg.control.println(systemConfig.lcdI2CAddress, HEX);
-    }
+    printDisplayPanel();
 
     // Update interval
     msg.control.print(F("Update Interval: "));
@@ -612,7 +639,11 @@ void printHelpDisplay() {
     msg.control.println(F("  DISPLAY STATUS           - Show display hardware status"));
     msg.control.println(F("  DISPLAY ENABLE           - Enable display"));
     msg.control.println(F("  DISPLAY DISABLE          - Disable display"));
+#if INCLUDE_OLED
+    msg.control.println(F("  DISPLAY TYPE <LCD|OLED|NONE>"));
+#else
     msg.control.println(F("  DISPLAY TYPE <LCD|NONE>"));
+#endif
     msg.control.println(F("  DISPLAY ADDRESS <hex>    - I2C address (LCD only)"));
     msg.control.println(F("  DISPLAY INTERVAL <ms>    - Display refresh rate"));
     msg.control.println();
@@ -834,7 +865,11 @@ void printHelpQuick() {
     msg.control.println(F("Display:"));
     msg.control.println(F("  DISPLAY STATUS"));
     msg.control.println(F("  DISPLAY ENABLE|DISABLE"));
+#if INCLUDE_OLED
+    msg.control.println(F("  DISPLAY TYPE <LCD|OLED|NONE>"));
+#else
     msg.control.println(F("  DISPLAY TYPE <LCD|NONE>"));
+#endif
     msg.control.println(F("  DISPLAY ADDRESS <hex>"));
     msg.control.println(F("  DISPLAY INTERVAL <ms>"));
     msg.control.println();

@@ -1,5 +1,9 @@
 /*
- * display_lcd.cpp - LCD display module
+ * display_grid.cpp - The 20x4 reading grid, drawn on the LCD or the OLED
+ *
+ * One cell renderer for both panels. The PCF8574-backpack LCD and the 128x64
+ * SH1107 OLED (oled_sh1107.h) draw the same lcd_layout.h 20x4 grid; systemConfig.displayType picks which one is brought up at boot. The
+ * "LCD" in the function names predates the OLED and means "the display".
  */
 
 #include "../../config.h"
@@ -11,13 +15,18 @@
 #include "../../sensors/application_presets.h"
 #include "../../sensors/sensor_library.h"
 
-#if INCLUDE_LCD
-
-#include <LiquidCrystal_PCF8574.h>
+#if INCLUDE_DISPLAY
 
 #include "../../drivers/bus_manager.h"
 #include "../../storage/system_config.h"
 #include "lcd_layout.h"
+
+#if INCLUDE_LCD
+#include <LiquidCrystal_PCF8574.h>
+#endif
+#if INCLUDE_OLED
+#include "oled_sh1107.h"
+#endif
 
 // LCD geometry (LCD_COLS, LCD_ROWS, cells) lives in lcd_layout.h.
 
@@ -25,18 +34,78 @@
 // so `DISPLAY ADDRESS` remains cosmetic here exactly as it was with the previous
 // library (which also hardcoded 0x27). Tracked separately, not part of #351.
 #define LCD_I2C_ADDRESS 0x27
+#if INCLUDE_LCD
 LiquidCrystal_PCF8574 lcd(LCD_I2C_ADDRESS);
-byte currentLine = 0;
-
-// The LCD is a *client* of the I2C bus, not its owner. Until acquireI2C() hands
-// one over, every entry point below must no-op: driving an un-begun TwoWire is
-// what used to leave the bus wedged (#351).
-static bool lcdReady = false;
-
 // PCF8574 backlight is on/off, not a brightness ramp; keep the two named levels
 // in one place so enable/disable can't drift apart.
 static const uint8_t LCD_BACKLIGHT_ON  = 255;
 static const uint8_t LCD_BACKLIGHT_OFF = 0;
+#endif
+#if INCLUDE_OLED
+static OledSh1107 oled;
+// The 20x4 grid on the 128x64 panel: 120 px wide, centered, and one text row
+// every 16 px (each 8 px row centered in its band).
+static const uint8_t OLED_GRID_X = (OLED_WIDTH - LCD_COLS * OLED_CHAR_WIDTH) / 2;
+static const uint8_t OLED_GRID_PITCH = OLED_HEIGHT / LCD_ROWS;
+static const uint8_t OLED_GRID_Y = (OLED_GRID_PITCH - OLED_CHAR_HEIGHT) / 2;
+#endif
+byte currentLine = 0;
+
+// The display is a *client* of the I2C bus, not its owner. Until acquireI2C()
+// hands one over, every entry point below must no-op: driving an un-begun
+// TwoWire is what used to leave the bus wedged (#351). DISPLAY_NONE until
+// initLCD()/initOLED() runs; then which panel the calls below drive.
+static uint8_t activePanel = DISPLAY_NONE;
+static inline bool panelReady() { return activePanel != DISPLAY_NONE; }
+
+// Panel-neutral primitives. Both drivers are a Print, so text goes through
+// screen(); the rest dispatch on activePanel.
+static Print& screen() {
+#if INCLUDE_OLED
+    if (activePanel == DISPLAY_OLED) return oled;
+#endif
+#if INCLUDE_LCD
+    return lcd;
+#else
+    return oled;
+#endif
+}
+
+static void screenSetCursor(uint8_t col, uint8_t row) {
+#if INCLUDE_OLED
+    if (activePanel == DISPLAY_OLED) { oled.setCursor(col, row); return; }
+#endif
+#if INCLUDE_LCD
+    lcd.setCursor(col, row);
+#endif
+}
+
+static void screenClear() {
+#if INCLUDE_OLED
+    if (activePanel == DISPLAY_OLED) { oled.clear(); return; }
+#endif
+#if INCLUDE_LCD
+    lcd.clear();
+#endif
+}
+
+// The OLED draws into a framebuffer; this pushes what changed. The LCD
+// writes through, so it has nothing to do.
+static void screenFlush() {
+#if INCLUDE_OLED
+    if (activePanel == DISPLAY_OLED) oled.flush();
+#endif
+}
+
+static void screenPower(bool on) {
+#if INCLUDE_OLED
+    if (activePanel == DISPLAY_OLED) { oled.setPower(on); return; }
+#endif
+#if INCLUDE_LCD
+    lcd.setBacklight(on ? LCD_BACKLIGHT_ON : LCD_BACKLIGHT_OFF);
+#endif
+}
+
 
 // Per-input icons: REMOVED (#579), kept here commented out so they can be
 // brought back. They were often wrong (getIconForApplication() guessed from the
@@ -82,6 +151,7 @@ static const uint8_t LCD_BACKLIGHT_OFF = 0;
 // Forward declarations
 void showConfigModeMessage();
 
+#if INCLUDE_LCD
 void initLCD() {
     // Ask the bus manager for a bus rather than calling Wire.begin() ourselves.
     // It picks the bus (honoring `BUS I2C <n>`) and reserves SDA/SCL, so an input
@@ -102,12 +172,47 @@ void initLCD() {
     // and a slowdown inflicted on every other client sharing the bus.
     wire->setClock((uint32_t)systemConfig.buses.i2c_clock * 1000UL);
 
-    lcdReady = true;
+    activePanel = DISPLAY_LCD;
     lcd.setBacklight(LCD_BACKLIGHT_ON);
     // No createChar(): nothing is loaded into CGRAM (#579, see above).
     lcd.clear();
     msg.debug.info(TAG_DISPLAY, "LCD initialized");
 }
+#else
+void initLCD() {}
+#endif
+
+#if INCLUDE_OLED
+void initOLED() {
+    // Same bus contract as the LCD: the bus manager picks and owns the bus.
+    TwoWire* wire = acquireI2C();
+    if (!wire) {
+        msg.debug.error(TAG_DISPLAY, "OLED: no I2C bus");
+        return;
+    }
+
+    // The panel drives the grid from here on even if it doesn't answer yet:
+    // a redraw re-probes it (oled.service()), so a panel fitted or reseated
+    // after boot comes up without a reboot.
+    activePanel = DISPLAY_OLED;
+    oled.setTextGrid(OLED_GRID_X, OLED_GRID_Y, OLED_GRID_PITCH);
+    if (oled.begin(wire, OLED_I2C_ADDRESS)) {
+        msg.debug.info(TAG_DISPLAY, "OLED initialized");
+    } else {
+        msg.debug.warn(TAG_DISPLAY, "OLED: no answer at 0x3C, retrying every 5 s");
+    }
+}
+
+// For DISPLAY STATUS / SYSTEM STATUS.
+const __FlashStringHelper* oledPanelState() {
+    if (activePanel != DISPLAY_OLED) return F("not started (DISPLAY TYPE takes effect at boot; BUS I2C shows the bus)");
+    if (oled.online()) return F("responding");
+    return F("not responding (checked every 5 s while the display is enabled)");
+}
+#else
+void initOLED() {}
+const __FlashStringHelper* oledPanelState() { return F("not in this firmware"); }
+#endif
 
 // Icon lookup: REMOVED (#579), kept for possible resurrection (see the ICONS
 // note above).
@@ -175,8 +280,8 @@ void initLCD() {
 // }
 
 void displaySensor(Input *ptr, byte line) {
-    if (!lcdReady) return;
-    lcd.setCursor(lcdCellCol(line), lcdCellRow(line));
+    if (!panelReady()) return;
+    screenSetCursor(lcdCellCol(line), lcdCellRow(line));
 
     // Text this cell may use. The left cell's last column stays blank as the
     // gap before the right cell (the icon column used to be that gap, #579).
@@ -192,17 +297,17 @@ void displaySensor(Input *ptr, byte line) {
         if (!ptr->flags.isEnabled) {
             // Configured but disabled (CONFIG mode)
             charsPrinted = lcdFormatTextCell(cell, width, ptr->abbrName, "CFG");
-            lcd.print(cell);
+            screen().print(cell);
         } else if (isnan(ptr->value)) {
             // Invalid reading
             charsPrinted = lcdFormatTextCell(cell, width, ptr->abbrName, "ERR");
-            lcd.print(cell);
+            screen().print(cell);
         }
         // Not read yet since it was configured: show "---". A reading of 0 is
         // real (0 bar, 0 RPM, a low float switch) and is displayed (#481).
         else if (!ptr->flags.hasReading) {
             charsPrinted = lcdFormatTextCell(cell, width, ptr->abbrName, "---");
-            lcd.print(cell);
+            screen().print(cell);
         } else {
             // Convert to display units
             float displayValue = convertFromBaseUnits(ptr->value, ptr->unitsIndex);
@@ -245,7 +350,7 @@ void displaySensor(Input *ptr, byte line) {
             }
 
             charsPrinted = lcdFormatValueCell(cell, width, ptr->abbrName, displayValue, (uint8_t)decimals);
-            lcd.print(cell);
+            screen().print(cell);
 
             // Unit symbol from the registry, only if it fits whole: a clipped
             // "rp" or "ba" reads as a different unit. Temperatures get the
@@ -256,30 +361,40 @@ void displaySensor(Input *ptr, byte line) {
             const bool isTemp = (measType == MEASURE_TEMPERATURE);
             const uint8_t unitChars = lcdUnitChars((uint8_t)(width - charsPrinted), symLen, isTemp);
             uint8_t u = 0;
-            if (isTemp && unitChars > 0) { lcd.write(LCD_DEGREE_CHAR); u = 1; }
-            for (uint8_t i = 0; u < unitChars; i++, u++) lcd.print((char)pgm_read_byte(symPtr + i));
+            if (isTemp && unitChars > 0) { screen().write(LCD_DEGREE_CHAR); u = 1; }
+            for (uint8_t i = 0; u < unitChars; i++, u++) screen().print((char)pgm_read_byte(symPtr + i));
             charsPrinted += unitChars;
         }
     }
 
     // Pad remaining space in the column to clear old data
     for (int i = charsPrinted; i < LCD_COLUMNS_PER_SENSOR; i++) {
-        lcd.print(" ");
+        screen().print(' ');
     }
 }
 
 // Blank one grid cell (a page with fewer than 8 inputs, or an input that went
 // away, must not leave a stale reading behind).
 static void clearCell(byte line) {
-    lcd.setCursor(lcdCellCol(line), lcdCellRow(line));
-    for (int i = 0; i < LCD_COLUMNS_PER_SENSOR; i++) lcd.print(" ");
+    screenSetCursor(lcdCellCol(line), lcdCellRow(line));
+    for (int i = 0; i < LCD_COLUMNS_PER_SENSOR; i++) screen().print(' ');
 }
 
-void updateLCD(Input** inputs, int numInputs) {
-    if (!lcdReady) return;
+// Whether the panel holds readings / the CONFIG MODE message. File scope so
+// an OLED that went away and came back (blank) gets them drawn again.
+static bool firstSensorShown = false;
+static bool configMsgShown = false;
+
+static void drawLCD(Input** inputs, int numInputs) {
     currentLine = 0;
 
-    static bool firstSensorShown = false;
+#if INCLUDE_OLED
+    if (activePanel == DISPLAY_OLED) {
+        if (!oled.service()) return;      // offline: one probe per 5 s at most
+        // A (re)initialized panel is blank: draw everything again.
+        if (oled.takeReset()) { firstSensorShown = false; configMsgShown = false; }
+    }
+#endif
 
     if (numInputs == 0) {
         // Readings were on screen and every input is now hidden (DISPLAY
@@ -289,7 +404,6 @@ void updateLCD(Input** inputs, int numInputs) {
             for (uint8_t line = 0; line < LCD_CELLS; line++) clearCell(line);
             return;
         }
-        static bool configMsgShown = false;
         if (!configMsgShown) {
             showConfigModeMessage();
             configMsgShown = true;
@@ -299,7 +413,7 @@ void updateLCD(Input** inputs, int numInputs) {
 
     // Clear the CONFIG MODE message when first sensor is configured
     if (!firstSensorShown) {
-        lcd.clear();
+        screenClear();
         firstSensorShown = true;
     }
 
@@ -314,34 +428,45 @@ void updateLCD(Input** inputs, int numInputs) {
     for (uint8_t line = page.count; line < perPage; line++) clearCell(line);
 }
 
+void updateLCD(Input** inputs, int numInputs) {
+    if (!panelReady()) return;
+    drawLCD(inputs, numInputs);
+    screenFlush();
+}
+
 void clearLCD() {
-    if (!lcdReady) return;
-    lcd.clear();
+    if (!panelReady()) return;
+    screenClear();
+    screenFlush();
 }
 
 void showConfigModeMessage() {
-    if (!lcdReady) return;
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("CONFIG MODE");
-    lcd.setCursor(0, 1);
-    lcd.print("Use serial console");
+    if (!panelReady()) return;
+    screenClear();
+    screenSetCursor(0, 0);
+    screen().print(F("CONFIG MODE"));
+    screenSetCursor(0, 1);
+    screen().print(F("Use serial console"));
+    screenFlush();
 }
 
 void enableLCD() {
-    if (!lcdReady) return;
-    lcd.setBacklight(LCD_BACKLIGHT_ON);
+    if (!panelReady()) return;
+    screenPower(true);
 }
 
 void disableLCD() {
-    if (!lcdReady) return;
-    lcd.setBacklight(LCD_BACKLIGHT_OFF);
-    lcd.clear();
+    if (!panelReady()) return;
+    screenPower(false);
+    screenClear();
+    screenFlush();
 }
 
 #else
 
 void initLCD() {}
+void initOLED() {}
+const __FlashStringHelper* oledPanelState() { return F("not in this firmware"); }
 void displaySensor(Input *ptr, byte line) {}
 void updateLCD(Input** inputs, int numInputs) {}
 void clearLCD() {}

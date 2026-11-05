@@ -277,6 +277,7 @@ static void test_unknown_sensor_hash_needs_no_bus(void) {
 // The display votes like anything else: it neither wins nor is exempt.
 static void test_display_is_one_more_voter(void) {
     TEST_ASSERT_EQUAL(BUS_NEED_I2C, busNeedsForDisplayType(DISPLAY_LCD));
+    TEST_ASSERT_EQUAL(BUS_NEED_I2C, busNeedsForDisplayType(DISPLAY_OLED));
     TEST_ASSERT_EQUAL(BUS_NEED_NONE, busNeedsForDisplayType(DISPLAY_NONE));
 }
 

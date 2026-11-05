@@ -503,6 +503,16 @@ static void diagSectionHw() {
     }
 #endif
 
+#if INCLUDE_OLED
+    any = true;
+    msg.control.print(F("[hardware]    OLED (I2C 0x3C) ...... "));
+    switch (i2cProbe(0x3C)) {
+        case 1:  msg.control.println(F("OK")); break;
+        case 0:  msg.control.println(F("FAIL (no ACK)")); break;
+        default: msg.control.println(F("off (no I2C bus)")); break;
+    }
+#endif
+
 #if INCLUDE_BME280
     any = true;
     msg.control.print(F("[hardware]    BME280 (I2C) ......... "));
