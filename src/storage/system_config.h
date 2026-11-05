@@ -160,7 +160,13 @@ void initSystemConfig();         // Load from EEPROM or set defaults
 void flushSystemConfigBootDiagnostics();  // Emit buffered boot messages (call after router.begin())
 bool saveSystemConfig(bool verbose = true);  // Save to EEPROM (verbose=false for background saves)
 bool loadSystemConfig();         // Load from EEPROM
-void resetSystemConfig();        // Reset to defaults
+// Sections resetSystemConfig() leaves alone. Wiring, not configuration:
+// SYSTEM RESET keeps the link it may have arrived over (#549).
+enum ResetKeep : uint8_t {
+    RESET_KEEP_NONE = 0,
+    RESET_KEEP_LINK = 0x01,   // serial ports (enabled, baud, framed) + transport router
+};
+void resetSystemConfig(uint8_t keep = RESET_KEEP_NONE);  // Reset to defaults, except `keep`
 uint8_t calculateChecksum(SystemConfig* cfg);
 void printSystemStatus();
 // busNeeds: the stored configuration's bus vote (BUS_NEED_I2C/BUS_NEED_SPI,

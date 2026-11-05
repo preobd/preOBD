@@ -174,9 +174,13 @@ void initSystemConfig() {
 }
 
 /**
- * Reset system configuration to defaults
+ * Reset system configuration to defaults, except the sections in `keep`
+ * (ResetKeep in system_config.h): SYSTEM RESET leaves the link it may have
+ * arrived over alone (#549). Skipping sections here rather than snapshotting
+ * and restoring them keeps the structs off the CLI handler's stack, which
+ * matters on mega2560 (~630 B peak).
  */
-void resetSystemConfig() {
+void resetSystemConfig(uint8_t keep) {
     systemConfig.magic = SYSTEM_CONFIG_MAGIC;
     systemConfig.version = SYSTEM_CONFIG_VERSION;
 
@@ -267,7 +271,10 @@ void resetSystemConfig() {
     systemConfig.seaLevelPressure = SEA_LEVEL_PRESSURE_HPA;
 
     // Transport Router Configuration (NEW in v4)
-    // Default: All planes → USB Serial
+    // Default: All planes → USB Serial. Part of the link: the router only reads
+    // CLI input from the control-plane transports, so a bridge on Serial2+
+    // with control routed to it would go deaf if this were reset (#549).
+    if (!(keep & RESET_KEEP_LINK)) {
     systemConfig.router.control_primary = TRANSPORT_USB_SERIAL;
     systemConfig.router.control_secondary = TRANSPORT_SERIAL1;
     systemConfig.router.data_primary = TRANSPORT_USB_SERIAL;
@@ -284,6 +291,7 @@ void resetSystemConfig() {
     for (int i = 0; i < 6; i++) {
         systemConfig.router.reserved_router[i] = 0;
     }
+    }  // RESET_KEEP_LINK (router)
 
     // NB (v13): the control-engine Rule/Action tables are no longer part of
     // SystemConfig — they are reset via rulesResetTables() and persisted by the
@@ -322,6 +330,7 @@ void resetSystemConfig() {
 
     // Serial Port Configuration defaults
     // USB Serial is always available; Serial1 enabled by default, others disabled
+    if (!(keep & RESET_KEEP_LINK)) {
     systemConfig.serial.enabled_mask = 0x01;  // Bit 0 = Serial1 enabled
     for (int i = 0; i < 8; i++) {
         systemConfig.serial.baudrate_index[i] = BAUD_115200;  // Default 115200 baud
@@ -330,6 +339,7 @@ void resetSystemConfig() {
     for (size_t i = 0; i < sizeof(systemConfig.serial.reserved); i++) {
         systemConfig.serial.reserved[i] = 0;
     }
+    }  // RESET_KEEP_LINK (serial)
 
     // Log Filter Configuration defaults
     // Default to INFO level (show ERROR, WARN, INFO but not DEBUG)

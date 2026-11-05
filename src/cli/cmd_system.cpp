@@ -334,10 +334,15 @@ static int system_reboot(int argc, const char* const* argv, int /*tokenIndex*/) 
 static int system_reset(int argc, const char* const* argv, int /*tokenIndex*/) {
     if (argc == 3 && streq_P(argv[2], PSTR("CONFIRM"))) {
         msg.control.println(F("Factory reset: Erasing all configuration..."));
+        // The serial ports and the transport router are how this board is
+        // wired, not configuration: the reset may have arrived over a BLE
+        // bridge on Serial1 in framed mode (or on another port, or at another
+        // baud), and resetting them cuts the very link it came over (#549).
         resetInputConfig();
-        resetSystemConfig();
+        resetSystemConfig(RESET_KEEP_LINK);
         saveSystemConfig();
         msg.control.println(F("Configuration reset complete"));
+        msg.control.println(F("Serial port settings kept (BUS SERIAL shows them)"));
         msg.control.println(F("Rebooting..."));
         platformReboot();
         return 0;
@@ -347,6 +352,7 @@ static int system_reset(int argc, const char* const* argv, int /*tokenIndex*/) {
     msg.control.println(F("========================================"));
     msg.control.println(F("  WARNING: Factory Reset"));
     msg.control.println(F("  This will erase ALL configuration"));
+    msg.control.println(F("  except serial port settings,"));
     msg.control.println(F("  and reboot the device"));
     msg.control.println(F("  Type: SYSTEM RESET CONFIRM"));
     msg.control.println(F("========================================"));

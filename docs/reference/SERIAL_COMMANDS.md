@@ -1265,7 +1265,7 @@ SYSTEM RESET CONFIRM                           # Factory reset (erase config + r
 SYSTEM REBOOT
 
 # Factory reset (requires CONFIRM for safety)
-SYSTEM RESET CONFIRM                           # Erases ALL config and reboots
+SYSTEM RESET CONFIRM                           # Erases all config except serial ports, and reboots
 
 ```
 
@@ -1275,6 +1275,8 @@ SYSTEM RESET CONFIRM                           # Erases ALL config and reboots
 |---------|---------------|----------|----------|
 | `SYSTEM REBOOT` | No | Yes | Clean restart |
 | `SYSTEM RESET CONFIRM` | Yes | Yes | Factory reset to defaults |
+
+`SYSTEM RESET CONFIRM` keeps the serial port settings (enabled ports, baud rates, framed mode) and the transport routing (which ports carry commands and data). They describe how the board is wired, and a reset sent over a Bluetooth bridge would otherwise cut the link it came over. Change them with `BUS SERIAL`.
 
 ---
 
