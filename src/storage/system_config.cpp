@@ -21,6 +21,7 @@
 #include "../pinctrl/pin_owner.h"
 #include "../outputs/output_format.h"  // SdLogFormat
 #include "eeprom_store.h"
+#include "sd_manager.h"   // SD_CS_OWNER: initSD() looks the claim up by this name (#594)
 
 // Global system config instance
 SystemConfig systemConfig;
@@ -44,10 +45,14 @@ static struct {
 
     // reportBuiltinPinCollision()'s annotation line (#396) — registerSystemPins()
     // runs in the same pre-router-transport window as loadSystemConfig(), so its
-    // "build-time pin collision" context is lost the same way. One bit per call
+    // context (a build-time duplicate, or since #594 a configured input on the
+    // pin) is lost the same way. One bit per call
     // site below is enough (there are exactly 9, all fixed at compile time) —
     // no array/capacity needed the way pin_owner.cpp's general buffer does.
     uint16_t pinCollisionFlags = 0;
+    // Same bits: the colliding pin was held by a configured input, not a
+    // duplicate in wiring.ini/board.h, so the fix is CLEAR, not a rebuild (#594).
+    uint16_t pinCollisionInputFlags = 0;
 } bootDiag;
 
 enum BuiltinPinKind : uint8_t {
@@ -58,7 +63,13 @@ enum BuiltinPinKind : uint8_t {
 // Forward declaration: the definition (below, beside registerSystemPins())
 // always prints immediately — flushSystemConfigBootDiagnostics() (here) is
 // the deferred half of the same message, so it needs the symbol early.
-static void reportBuiltinPinCollisionNow(const __FlashStringHelper* what);
+static void reportBuiltinPinCollisionNow(const __FlashStringHelper* what, bool byInput);
+
+static void replayBuiltinPinCollision(uint8_t bit, const __FlashStringHelper* what) {
+    const uint16_t m = (uint16_t)(1u << bit);
+    if (bootDiag.pinCollisionInputFlags & m) reportBuiltinPinCollisionNow(what, true);
+    if (bootDiag.pinCollisionFlags & m)      reportBuiltinPinCollisionNow(what, false);
+}
 
 void flushSystemConfigBootDiagnostics() {
     if (bootDiag.flags & bootDiag.DIAG_BAD_MAGIC) {
@@ -86,42 +97,34 @@ void flushSystemConfigBootDiagnostics() {
     // never compiles a given claim never carries its (unused) flag bit's flash
     // cost either.
 #ifdef BOARD_RESERVED_PINS
-    if (bootDiag.pinCollisionFlags & (1u << BPK_RESERVED))
-        reportBuiltinPinCollisionNow(F("BOARD_RESERVED_PINS"));
+    replayBuiltinPinCollision(BPK_RESERVED, F("BOARD_RESERVED_PINS"));
 #endif
 #if INCLUDE_MODE_BUTTON
-    if (bootDiag.pinCollisionFlags & (1u << BPK_MODE_BUTTON))
-        reportBuiltinPinCollisionNow(F("MODE_BUTTON_PIN"));
+    replayBuiltinPinCollision(BPK_MODE_BUTTON, F("MODE_BUTTON_PIN"));
 #endif
 #if INCLUDE_ALARMS && defined(BUZZER_PIN)
-    if (bootDiag.pinCollisionFlags & (1u << BPK_BUZZER))
-        reportBuiltinPinCollisionNow(F("BUZZER_PIN"));
+    replayBuiltinPinCollision(BPK_BUZZER, F("BUZZER_PIN"));
 #endif
 #if (INCLUDE_CAN_HYBRID || !PROFILE_HAS_NATIVE_CAN) && defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)
-    if (bootDiag.pinCollisionFlags & (1u << BPK_CAN_CS))
-        reportBuiltinPinCollisionNow(F("CAN_CS_0"));
+    replayBuiltinPinCollision(BPK_CAN_CS, F("CAN_CS_0"));
 #endif
 #if (INCLUDE_CAN_HYBRID || !PROFILE_HAS_NATIVE_CAN) && defined(CAN_INT_0) && (CAN_INT_0 != 0xFF)
-    if (bootDiag.pinCollisionFlags & (1u << BPK_CAN_INT))
-        reportBuiltinPinCollisionNow(F("CAN_INT_0"));
+    replayBuiltinPinCollision(BPK_CAN_INT, F("CAN_INT_0"));
 #endif
 #if SUPPORTS_SD
-    if (bootDiag.pinCollisionFlags & (1u << BPK_SD))
-        reportBuiltinPinCollisionNow(F("SD_PIN"));
+    replayBuiltinPinCollision(BPK_SD, F("SD_PIN"));
 #endif
 #if INCLUDE_TEST_MODE && defined(TEST_MODE_PIN)
-    if (bootDiag.pinCollisionFlags & (1u << BPK_TEST_MODE))
-        reportBuiltinPinCollisionNow(F("TEST_MODE_PIN"));
+    replayBuiltinPinCollision(BPK_TEST_MODE, F("TEST_MODE_PIN"));
 #endif
 #if BUS_WIRED_I2C_ID != 0xFF
-    if (bootDiag.pinCollisionFlags & (1u << BPK_I2C_WIRED))
-        reportBuiltinPinCollisionNow(F("I2C_WIRED_BUS"));
+    replayBuiltinPinCollision(BPK_I2C_WIRED, F("I2C_WIRED_BUS"));
 #endif
 #if BUS_WIRED_SPI_ID != 0xFF
-    if (bootDiag.pinCollisionFlags & (1u << BPK_SPI_WIRED))
-        reportBuiltinPinCollisionNow(F("SPI_WIRED_BUS"));
+    replayBuiltinPinCollision(BPK_SPI_WIRED, F("SPI_WIRED_BUS"));
 #endif
     bootDiag.pinCollisionFlags = 0;
+    bootDiag.pinCollisionInputFlags = 0;
 }
 
 float seaLevelPressureHpa() {
@@ -471,7 +474,16 @@ void MessageRouter::saveConfig() {
 // literal, and a plain const char* parameter would still cost AVR RAM for the
 // literal even though the callee never mutates it — F() only keeps a string
 // in flash when both the literal AND everything that touches it agree to.
-static void reportBuiltinPinCollisionNow(const __FlashStringHelper* what) {
+// byInput (#594): the pin is held by a configured input, which the claimant
+// outranks. The build is fine; the stored input is what has to move, so
+// blaming wiring.ini sent people to the wrong file.
+static void reportBuiltinPinCollisionNow(const __FlashStringHelper* what, bool byInput) {
+    if (byInput) {
+        msg.control.print(F("ERROR: "));
+        msg.control.print(what);
+        msg.control.println(F(" not reserved: a configured input holds a pin it needs — CLEAR that input or move it to another pin"));
+        return;
+    }
     msg.control.print(F("ERROR: build-time pin collision reserving "));
     msg.control.print(what);
     msg.control.println(F(" — check wiring.ini / board.h for a duplicate pin"));
@@ -484,12 +496,27 @@ static void reportBuiltinPinCollisionNow(const __FlashStringHelper* what) {
 // buffer here too so this annotation and pin_owner's own conflict message
 // (buffered separately, pin_owner.cpp) both survive to flush time instead of
 // only one of them being fixed.
-static void reportBuiltinPinCollision(const __FlashStringHelper* what, uint8_t bit) {
+static void reportBuiltinPinCollision(const __FlashStringHelper* what, uint8_t bit, bool byInput) {
     if (pinOwnerBootDiagBuffering()) {
-        bootDiag.pinCollisionFlags |= (uint16_t)(1u << bit);
+        if (byInput) bootDiag.pinCollisionInputFlags |= (uint16_t)(1u << bit);
+        else         bootDiag.pinCollisionFlags      |= (uint16_t)(1u << bit);
     } else {
-        reportBuiltinPinCollisionNow(what);
+        reportBuiltinPinCollisionNow(what, byInput);
     }
+}
+
+// A multi-pin claim (I2C/SPI wired bus) can be refused by an input on one pin
+// and a registry holder on another, so check every pin and report each cause
+// that is present; pinsConflict() itself stops at the first.
+static void reportBuiltinPinsCollision(const __FlashStringHelper* what, uint8_t bit,
+                                       const uint8_t* pins, uint8_t count) {
+    bool byInput = false, byBuild = false;
+    for (uint8_t i = 0; i < count; i++) {
+        if (pinHeldByConfiguredInput(pins[i])) byInput = true;
+        else if (!isPinAvailable(pins[i])) byBuild = true;
+    }
+    if (byInput) reportBuiltinPinCollision(what, bit, true);
+    if (byBuild || !byInput) reportBuiltinPinCollision(what, bit, false);
 }
 
 /**
@@ -505,24 +532,27 @@ void registerSystemPins(uint8_t busNeeds) {
     // (a stored input from before this reservation existed) must not leave
     // the others unclaimed.
     { static const uint8_t p[] = { BOARD_RESERVED_PINS };
-      bool collided = false;
+      bool byInput = false, byBuild = false;
       for (uint8_t i = 0; i < sizeof(p); i++) {
-          if (!claimPins(&p[i], 1, PIN_RESERVED, PIN_RANK_BUILTIN, TAG_SYSTEM, BOARD_RESERVED_NAME))
-              collided = true;
+          if (!claimPins(&p[i], 1, PIN_RESERVED, PIN_RANK_BUILTIN, TAG_SYSTEM, BOARD_RESERVED_NAME)) {
+              if (pinHeldByConfiguredInput(p[i])) byInput = true;
+              else byBuild = true;
+          }
       }
-      if (collided) reportBuiltinPinCollision(F("BOARD_RESERVED_PINS"), BPK_RESERVED); }
+      if (byInput) reportBuiltinPinCollision(F("BOARD_RESERVED_PINS"), BPK_RESERVED, true);
+      if (byBuild) reportBuiltinPinCollision(F("BOARD_RESERVED_PINS"), BPK_RESERVED, false); }
 #endif
 #if INCLUDE_MODE_BUTTON
     { const uint8_t p = MODE_BUTTON_PIN;
       if (!claimPins(&p, 1, PIN_BUTTON, PIN_RANK_BUILTIN, TAG_SYSTEM, "Mode Button"))
-          reportBuiltinPinCollision(F("MODE_BUTTON_PIN"), BPK_MODE_BUTTON); }
+          reportBuiltinPinCollision(F("MODE_BUTTON_PIN"), BPK_MODE_BUTTON, pinHeldByConfiguredInput(p)); }
 #endif
 
 #if INCLUDE_ALARMS
     #ifdef BUZZER_PIN
     { const uint8_t p = BUZZER_PIN;
       if (!claimPins(&p, 1, PIN_BUZZER, PIN_RANK_BUILTIN, TAG_SYSTEM, "Buzzer"))
-          reportBuiltinPinCollision(F("BUZZER_PIN"), BPK_BUZZER); }
+          reportBuiltinPinCollision(F("BUZZER_PIN"), BPK_BUZZER, pinHeldByConfiguredInput(p)); }
     #endif
 #endif
 
@@ -530,12 +560,12 @@ void registerSystemPins(uint8_t busNeeds) {
     #if defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)
     { const uint8_t p = CAN_CS_0;
       if (!claimPins(&p, 1, PIN_CS, PIN_RANK_BUILTIN, TAG_SYSTEM, "CAN CS"))
-          reportBuiltinPinCollision(F("CAN_CS_0"), BPK_CAN_CS); }
+          reportBuiltinPinCollision(F("CAN_CS_0"), BPK_CAN_CS, pinHeldByConfiguredInput(p)); }
     #endif
     #if defined(CAN_INT_0) && (CAN_INT_0 != 0xFF)
     { const uint8_t p = CAN_INT_0;
       if (!claimPins(&p, 1, PIN_RESERVED, PIN_RANK_BUILTIN, TAG_SYSTEM, "CAN INT"))
-          reportBuiltinPinCollision(F("CAN_INT_0"), BPK_CAN_INT); }
+          reportBuiltinPinCollision(F("CAN_INT_0"), BPK_CAN_INT, pinHeldByConfiguredInput(p)); }
     #endif
 #endif
 
@@ -545,8 +575,8 @@ void registerSystemPins(uint8_t busNeeds) {
     #endif
     #if SD_PIN != BUILTIN_SDCARD
     { const uint8_t p = SD_PIN;
-      if (!claimPins(&p, 1, PIN_CS, PIN_RANK_BUILTIN, TAG_SYSTEM, "SD CS"))
-          reportBuiltinPinCollision(F("SD_PIN"), BPK_SD);
+      if (!claimPins(&p, 1, PIN_CS, PIN_RANK_BUILTIN, TAG_SYSTEM, SD_CS_OWNER))
+          reportBuiltinPinCollision(F("SD_PIN"), BPK_SD, pinHeldByConfiguredInput(p));
       else {
           // Deselect the card now: other SPI devices (an MCP2515 on the
           // hybrid boards) talk before initSD() runs, and a floating CS
@@ -561,7 +591,7 @@ void registerSystemPins(uint8_t busNeeds) {
     #ifdef TEST_MODE_PIN
     { const uint8_t p = TEST_MODE_PIN;
       if (!claimPins(&p, 1, PIN_BUTTON, PIN_RANK_BUILTIN, TAG_SYSTEM, "Test Mode Trigger"))
-          reportBuiltinPinCollision(F("TEST_MODE_PIN"), BPK_TEST_MODE); }
+          reportBuiltinPinCollision(F("TEST_MODE_PIN"), BPK_TEST_MODE, pinHeldByConfiguredInput(p)); }
     #endif
 #endif
 
@@ -603,7 +633,7 @@ void registerSystemPins(uint8_t busNeeds) {
         wiredBusIsInEffect(systemConfig.buses.active_i2c, BUS_WIRED_I2C_ID)) {
         const uint8_t p[2] = { getDefaultI2CSDA(BUS_WIRED_I2C_ID), getDefaultI2CSCL(BUS_WIRED_I2C_ID) };
         if (!claimPins(p, 2, PIN_RESERVED, PIN_RANK_BUILTIN, TAG_SYSTEM, getI2CBusName(BUS_WIRED_I2C_ID)))
-            reportBuiltinPinCollision(F("I2C_WIRED_BUS"), BPK_I2C_WIRED);
+            reportBuiltinPinsCollision(F("I2C_WIRED_BUS"), BPK_I2C_WIRED, p, 2);
     }
 #endif
 #if BUS_WIRED_SPI_ID != 0xFF
@@ -612,7 +642,7 @@ void registerSystemPins(uint8_t busNeeds) {
         const uint8_t p[3] = { getDefaultSPIMOSI(BUS_WIRED_SPI_ID), getDefaultSPIMISO(BUS_WIRED_SPI_ID),
                                getDefaultSPISCK(BUS_WIRED_SPI_ID) };
         if (!claimPins(p, 3, PIN_RESERVED, PIN_RANK_BUILTIN, TAG_SYSTEM, getSPIBusName(BUS_WIRED_SPI_ID)))
-            reportBuiltinPinCollision(F("SPI_WIRED_BUS"), BPK_SPI_WIRED);
+            reportBuiltinPinsCollision(F("SPI_WIRED_BUS"), BPK_SPI_WIRED, p, 3);
     }
 #endif
     // CAN_WIRED_BUS is deliberately NOT reserved here: unlike I2C/SPI, CAN has

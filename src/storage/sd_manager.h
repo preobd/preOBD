@@ -29,6 +29,10 @@
     #define SD_HAS_MEDIA_PROBE 0
 #endif
 
+// The pin-registry owner name of an external card's CS line. registerSystemPins()
+// claims under it and initSD() looks it up, so the two can't drift apart (#594).
+#define SD_CS_OWNER "SD CS"
+
 // Initialize SD card (called once during setup)
 void initSD();
 

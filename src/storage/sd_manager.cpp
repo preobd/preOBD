@@ -26,6 +26,7 @@
 #include <SPI.h>
 #include "sd_fs.h"   // SD library for this platform (STM32: SDIO)
 #include "../drivers/bus_manager.h"   // acquireSPI(): the card mounts on the owned bus (#381)
+#include "../pinctrl/pin_registry.h"  // initSD() mounts only if it owns CS (#594)
 
 // SPI clock ceiling for a card on an external chip-select. Not the SD spec's
 // 25 MHz, which is what Teensy's SD.begin() used: SPI-mode reads carry no CRC
@@ -169,6 +170,7 @@ FLASHMEM void initSD() {
     msg.debug.info(TAG_SD, "Initializing SD card...");
 
     bool initSuccess = false;
+    bool mountTried = false;   // false: skipped, and the reason is already printed
     {
         // SD.begin() can take 2-3 s per attempt and we make several, and the
         // capacity scan below reads the whole FAT: one scope across both.
@@ -178,23 +180,37 @@ FLASHMEM void initSD() {
             msg.debug.info(TAG_SD, "Using built-in SD (BUILTIN_SDCARD)");
             const bool busReady = true;   // SDIO: no shared bus
 #else
-            // Deselect the card before anything else can clock the bus.
-            pinMode(SD_PIN, OUTPUT);
-            digitalWrite(SD_PIN, HIGH);
-            msg.debug.info(TAG_SD, "Using external SD, CS pin: %d", SD_PIN);
+            // The card may use CS only if registerSystemPins() got it. When
+            // that claim was refused, something else (a stored input, #594)
+            // drives the pin, and mounting would drive it too -- so leave the
+            // pin alone, not even set HIGH. Nothing here may touch CS before
+            // this check.
+            const char* csOwner = getPinDescription(SD_PIN);
+            const bool csOwned = getPinUsage(SD_PIN) == PIN_CS &&
+                                 csOwner && strcmp(csOwner, SD_CS_OWNER) == 0;
 
             // The card is an SPI device: mount it on the bus the bus manager
             // owns, never let the SD library start SPI behind its back (#381).
             // main.cpp's bus vote already acquired it, so this is a lookup; a
             // nullptr means no bus is declared or selected (acquireSPI() has
             // printed what to run) or the selected one couldn't start.
-            SPIClass* sdSpi = acquireSPI();
+            SPIClass* sdSpi = csOwned ? acquireSPI() : nullptr;
             bool busReady = sdSpi != nullptr;
-            if (!busReady) {
+            if (!csOwned) {
+                msg.control.print(F("Note: SD card not mounted: its CS pin "));
+                msg.control.print(SD_PIN);
+                msg.control.println(F(" is in use by something else (see SYSTEM PINS)."));
+            } else {
+                // Deselect the card before anything else can clock the bus.
+                pinMode(SD_PIN, OUTPUT);
+                digitalWrite(SD_PIN, HIGH);
+                msg.debug.info(TAG_SD, "Using external SD, CS pin: %d", SD_PIN);
+            }
+            if (csOwned && !busReady) {
                 msg.control.println(F("Note: SD card not mounted: it needs an SPI bus (see above)."));
             }
 #if !SD_LIB_SPI_ANY_PORT
-            else if (sdSpi != &SPI) {
+            else if (csOwned && sdSpi != &SPI) {
                 busReady = false;
                 msg.control.print(F("Note: SD card not mounted: this board's SD library only drives SPI, not "));
                 msg.control.print(getSPIBusName(getActiveSPIId()));
@@ -209,6 +225,7 @@ FLASHMEM void initSD() {
         // attempt, so a cold card came up unmounted for the whole session.
         for (uint8_t attempt = 1; busReady && attempt <= SD_INIT_ATTEMPTS && !initSuccess; attempt++) {
             msg.debug.debug(TAG_SD, "SD.begin() attempt %u/%u", attempt, SD_INIT_ATTEMPTS);
+            mountTried = true;
             delay(100);
 #if SD_PIN == 254 && defined(ARDUINO_ARCH_STM32)
             // SDIO slot. No card-detect pin: the Feather F405 Rev B routes
@@ -274,8 +291,12 @@ FLASHMEM void initSD() {
         msg.debug.info(TAG_SD, "Card detected and ready");
         sdInitialized = true;
     } else {
-        msg.debug.warn(TAG_SD, "SD card initialization failed");
-        msg.debug.warn(TAG_SD, "Check: Is SD card inserted? Is it formatted FAT32?");
+        // The card hints only follow a mount that was tried: after a skip
+        // (CS in use, no SPI bus) they would point at the wrong cause (#594).
+        if (mountTried) {
+            msg.debug.warn(TAG_SD, "SD card initialization failed");
+            msg.debug.warn(TAG_SD, "Check: Is SD card inserted? Is it formatted FAT32?");
+        }
         sdInitialized = false;
     }
 }
