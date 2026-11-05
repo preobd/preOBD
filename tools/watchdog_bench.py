@@ -5,8 +5,9 @@ Watchdog bench checks for Teensy 4.x (#543).
 Two jobs, both over USB serial:
 
   stall   Proves the watchdog still protects the board. Needs a build with
-          INCLUDE_WATCHDOG_STALL, which release images never have:
-            PLATFORMIO_BUILD_FLAGS="-D INCLUDE_WATCHDOG_STALL=1" pio run -e teensy41
+          INCLUDE_WATCHDOG_STALL, which release images never have: the debug
+          env (`pio run -e debug`, Teensy 4.1) has it, or add it to any env with
+            PLATFORMIO_BUILD_FLAGS="-D INCLUDE_WATCHDOG_STALL=1" pio run -e <env>
           then flash it. Runs SYSTEM DIAG WATCHDOG STALL and checks, in RUN (2 s):
             STALL 1500          survives        (inside the 2 s RUN timeout)
             STALL 3000          resets, TOUT    (WRSR 0x2, a real timeout)
@@ -31,8 +32,8 @@ Usage:
     python3 tools/watchdog_bench.py stall [PORT]
     python3 tools/watchdog_bench.py soak  [PORT] [--minutes N] [--poll "CMD"]
 
-The board must boot into RUN (a saved config): the RUN steps rely on it after
-each reset, and the CONFIG steps switch to CONFIG themselves. Opening a Teensy's USB port doesn't reset it. With two Teensys
+Each step sets the mode itself (RUN or CONFIG) first, so the board needn't
+boot into RUN. Opening a Teensy's USB port doesn't reset it. With two Teensys
 plugged in, pass the port explicitly.
 
 Prerequisites: pip install pyserial
@@ -102,9 +103,10 @@ def last_reset(port, wait_s=15.0):
 def stall(port, ms, scope_ms, config=False):
     """Run one stall. Returns ("survived" | "reset" | "error", detail)."""
     s = open_port(port)
-    if config:
-        s.write(b"CONFIG\r\n")
-        read_for(s, 0.5)
+    # Set the mode every time: a board with no saved config boots into CONFIG,
+    # and after a reset the board is back in its boot mode.
+    s.write(b"CONFIG\r\n" if config else b"RUN\r\n")
+    read_for(s, 0.5)
     cmd = f"SYSTEM DIAG WATCHDOG STALL {ms}{f' SCOPE {scope_ms}' if scope_ms else ''}\r\n"
     s.write(cmd.encode())
     buf = b""
@@ -198,8 +200,8 @@ def cmd_where(pc, env):
         return 2
     out = subprocess.run([a2l, "-f", "-C", "-i", "-e", elf, pc], capture_output=True, text=True)
     print(out.stdout.strip() or out.stderr.strip())
-    print("(release builds have no line tables: the function name is the answer;\n"
-          " the build must be the exact one that produced the PC)")
+    print("(file:line needs the debug env's symbols; a release build gives the\n"
+          " function only. The build must be the exact one that produced the PC.)")
     return 0
 
 

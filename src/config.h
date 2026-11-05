@@ -99,15 +99,11 @@
 // `SYSTEM DIAG WATCHDOG STALL <ms> [SCOPE <ms>]` busy-waits without feeding the
 // watchdog, to check on the bench that it still resets the board (and that
 // a WatchdogScope widens it). It resets the board on purpose, so release images
-// never include it: it's on in the debug env, and for a normal bench build
-//   PLATFORMIO_BUILD_FLAGS="-D INCLUDE_WATCHDOG_STALL=1" pio run -e teensy41
-// (the debug env's -Og image didn't boot on a Teensy 4.1 when tried; #544).
+// never include it: the debug env turns it on (`pio run -e debug`, a Teensy
+// 4.1 image with symbols), and any other bench build can add it with
+//   PLATFORMIO_BUILD_FLAGS="-D INCLUDE_WATCHDOG_STALL=1" pio run -e <env>
 #ifndef INCLUDE_WATCHDOG_STALL
-    #if defined(DEBUG)
-        #define INCLUDE_WATCHDOG_STALL 1
-    #else
-        #define INCLUDE_WATCHDOG_STALL 0
-    #endif
+    #define INCLUDE_WATCHDOG_STALL 0
 #endif
 
 // ============================================================================
