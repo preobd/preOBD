@@ -12,8 +12,28 @@
 
 #include <stdint.h>
 
-// Cells on the 20x4 LCD grid: 2 columns x 4 rows.
-#define LCD_CELLS 8
+// The 20x4 LCD: 2 columns x 4 rows = 8 cells, 10 characters each.
+#define LCD_COLS 20
+#define LCD_ROWS 4
+#define LCD_COLUMNS_PER_SENSOR (LCD_COLS / 2)
+#define LCD_CELLS (LCD_ROWS * 2)
+
+// HD44780 A00 ROM (the common Japanese ROM) character for the degree sign.
+// Built in, so no custom character is loaded into CGRAM (#579).
+#define LCD_DEGREE_CHAR ((uint8_t)0xDF)
+
+// Cells 0-3 are the left column top to bottom, 4-7 the right column.
+static inline uint8_t lcdCellCol(uint8_t line) { return line >= LCD_ROWS ? LCD_COLUMNS_PER_SENSOR : 0; }
+static inline uint8_t lcdCellRow(uint8_t line) { return line >= LCD_ROWS ? (uint8_t)(line - LCD_ROWS) : line; }
+
+// Characters of text a cell may print. The per-input icon (#579) used to sit
+// in each cell's first column and doubled as the gap between the two columns.
+// Without it the left cell keeps its last column blank as that gap (or its
+// value would run into the right cell's label); the right cell ends at the
+// screen edge and gets all 10.
+static inline uint8_t lcdCellTextWidth(uint8_t line) {
+    return line >= LCD_ROWS ? LCD_COLUMNS_PER_SENSOR : (uint8_t)(LCD_COLUMNS_PER_SENSOR - 1);
+}
 
 // Whether an input takes an LCD cell. Hidden inputs (SET <pin> DISPLAY
 // DISABLE) no longer do. RUN shows enabled inputs; CONFIG also shows

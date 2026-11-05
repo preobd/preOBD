@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - After an unexpected restart by the watchdog, `VERSION` on Teensy 4 boards says what the firmware was doing and where it was stuck, e.g. `Last reset: WATCHDOG in SD … hung at PC 0x…` (#542)
 
 ### Changed
+- The LCD no longer shows an icon before each input (they were often wrong, and on some boards garbled at boot); right-hand cells gain a column, units are printed when they fit whole (`°C`, `V`), and the degree sign is the LCD's built-in one (#579)
 - Pin checks now use what each board's Arduino core says it has: `SET` refuses a pin the board doesn't have on every board (Teensy 3.6 and ESP32-S3 accepted any number), ESP32-S3 refuses the GPIOs wired to its own flash and PSRAM (26–37), Teensy 3.6 offers A0–A24, and an ESP32-S3 reports itself as `ESP32S3` in `SYSTEM DUMP JSON` (#570)
 - A Teensy 4.1 now leaves about 54 KB for the firmware's working memory (stack), up from 4.9 KB in 0.15.0-beta; Teensy 4.x builds now fail if it drops below 16 KB (#555, #557)
 - The watchdog now keeps running in CONFIG mode on every board, relaxed to 8 s, instead of being switched off on boards that allow it; it only restarts a board whose firmware has frozen, never an idle one, and every board now behaves the same (#541)

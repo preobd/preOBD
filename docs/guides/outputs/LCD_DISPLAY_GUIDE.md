@@ -10,15 +10,20 @@ characters each. Each enabled input gets a cell, in order:
 
 ```
 ┌────────────────────┐
-│°ECT:87.5 °EOT:95.0 │
-│ EOP:3.2   BAT:13.8 │
-│°CHT:185   RPM:2450 │
-│ BST:0.8   AAT:22.4 │
+│ECT:87°C  EOT:95°C  │
+│EOP:3.2   BAT:13.8V │
+│CHT:185°C RPM:2450  │
+│BST:0.8   AAT:22°C  │
 └────────────────────┘
 ```
 
-Each cell is an icon, the input's short label (`ABBR`), and the value in the
-input's units. Special values:
+Each cell is the input's short label (`ABBR`), a colon, and the value in the
+input's units. The unit is printed after the value when it fits whole in the
+cell, and is left off otherwise (`RPM:2450`, not `RPM:2450rp`). A left-hand
+cell has nine characters, leaving one blank column before the right-hand
+cell; a right-hand cell has all ten. A temperature gets `°C`/`°F`, or just the
+degree sign, when there's room. The degree sign is the LCD's own built-in character, so no custom
+characters are loaded. Special values:
 
 | Shown | Meaning |
 |-------|---------|
@@ -31,8 +36,8 @@ of eight, every 4 seconds. An input hidden with `SET <pin> DISPLAY DISABLE`
 takes no cell, so hiding one makes room for another. `DISPLAY STATUS` shows how
 many inputs are on the LCD (and whether it is paging).
 
-Units aren't printed; set them per input with `SET <pin> UNITS` or for everything
-with `SYSTEM UNITS`.
+Set the units per input with `SET <pin> UNITS` or for everything with
+`SYSTEM UNITS`.
 
 ## Wiring
 

@@ -53,6 +53,23 @@ static void test_nothing_shown(void) {
     TEST_ASSERT_EQUAL_UINT8(0, p.count);
 }
 
+// #579: no icon column. The left cell keeps one blank gap column before the
+// right cell; the right cell runs to the screen edge.
+static void test_cell_geometry_without_icons(void) {
+    TEST_ASSERT_EQUAL_UINT8(0, lcdCellCol(0));
+    TEST_ASSERT_EQUAL_UINT8(3, lcdCellRow(3));
+    TEST_ASSERT_EQUAL_UINT8(10, lcdCellCol(4));
+    TEST_ASSERT_EQUAL_UINT8(0, lcdCellRow(4));
+    TEST_ASSERT_EQUAL_UINT8(3, lcdCellRow(7));
+    TEST_ASSERT_EQUAL_UINT8(9, lcdCellTextWidth(0));
+    TEST_ASSERT_EQUAL_UINT8(10, lcdCellTextWidth(4));
+    for (uint8_t line = 0; line < LCD_CELLS; line++) {
+        TEST_ASSERT_TRUE(lcdCellCol(line) + lcdCellTextWidth(line) <= LCD_COLS);
+        if (line < LCD_ROWS)   // left text never touches the right column
+            TEST_ASSERT_TRUE(lcdCellCol(line) + lcdCellTextWidth(line) < lcdCellCol(line + LCD_ROWS));
+    }
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_hidden_and_unconfigured_inputs_take_no_cell);
@@ -60,5 +77,6 @@ int main(int, char**) {
     RUN_TEST(test_nine_inputs_page_eight_then_one);
     RUN_TEST(test_forty_inputs_five_pages);
     RUN_TEST(test_nothing_shown);
+    RUN_TEST(test_cell_geometry_without_icons);
     return UNITY_END();
 }

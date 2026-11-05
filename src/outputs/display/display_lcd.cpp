@@ -19,10 +19,7 @@
 #include "../../storage/system_config.h"
 #include "lcd_layout.h"
 
-// LCD display configuration
-#define LCD_COLS 20
-#define LCD_ROWS 4
-#define LCD_COLUMNS_PER_SENSOR (LCD_COLS / 2)  // Split display into 2 columns
+// LCD geometry (LCD_COLS, LCD_ROWS, cells) lives in lcd_layout.h.
 
 // NOTE: the PCF8574 address is fixed at construction — the library has no setter,
 // so `DISPLAY ADDRESS` remains cosmetic here exactly as it was with the previous
@@ -41,31 +38,49 @@ static bool lcdReady = false;
 static const uint8_t LCD_BACKLIGHT_ON  = 255;
 static const uint8_t LCD_BACKLIGHT_OFF = 0;
 
-// Custom character icon definitions
-enum ICONS{
-    ICON_DEGREE,
-    ICON_THERMOMETER,
-    ICON_OIL_CAN,
-    ICON_TURBO,
-    ICON_BATTERY,
-    ICON_TACHOMETER,
-    ICON_COOLANT,
-    ICON_OIL
-};
-
-byte degree_icon[8] = {0xc,0x12,0x12,0xc,0x0,0x0,0x0,0x0};
-byte thermometer_icon[8] = {0x4,0xa,0xa,0xa,0x11,0x1f,0xe,0x0};
-byte oil_can_icon[8] = {0x02,0x05,0x0E,0x11,0x11,0x11,0x1F,0x00};
-//byte oil_icon[8] = {0x04,0x0E,0x1F,0x1D,0x1D,0x1B,0x0E,0x00}; //big drop
-byte oil_icon[8] = {0x00,0x04,0x0E,0x1D,0x1D,0x1B,0x0E,0x00}; //small drop
-byte turbo_icon[8] = {0x00,0x0F,0x1E,0x1B,0x15,0x1B,0x0E,0x00};
-byte battery_icon[8] = {0x00,0x00,0x0A,0x1F,0x11,0x11,0x1F,0x00};
-byte tachometer_icon[8] = {0x00,0x0E,0x11,0x11,0x15,0x11,0x0E,0x00};
-byte coolant_icon[8] = {0x04,0x07,0x04,0x07,0x04,0x0E,0x0E,0x04};
+// Per-input icons: REMOVED (#579), kept here commented out so they can be
+// brought back. They were often wrong (getIconForApplication() guessed from the
+// application name, so RPM could show a thermometer), each took one of a cell's
+// ten columns, and on the Feather F405 the createChar() pass at boot left all
+// eight custom characters garbled. The degree sign is now the LCD's built-in
+// ROM character (LCD_DEGREE_CHAR), so no CGRAM is loaded at all.
+//
+// enum ICONS{
+//     ICON_DEGREE,
+//     ICON_THERMOMETER,
+//     ICON_OIL_CAN,
+//     ICON_TURBO,
+//     ICON_BATTERY,
+//     ICON_TACHOMETER,
+//     ICON_COOLANT,
+//     ICON_OIL
+// };
+//
+// byte degree_icon[8] = {0xc,0x12,0x12,0xc,0x0,0x0,0x0,0x0};
+// byte thermometer_icon[8] = {0x4,0xa,0xa,0xa,0x11,0x1f,0xe,0x0};
+// byte oil_can_icon[8] = {0x02,0x05,0x0E,0x11,0x11,0x11,0x1F,0x00};
+// //byte oil_icon[8] = {0x04,0x0E,0x1F,0x1D,0x1D,0x1B,0x0E,0x00}; //big drop
+// byte oil_icon[8] = {0x00,0x04,0x0E,0x1D,0x1D,0x1B,0x0E,0x00}; //small drop
+// byte turbo_icon[8] = {0x00,0x0F,0x1E,0x1B,0x15,0x1B,0x0E,0x00};
+// byte battery_icon[8] = {0x00,0x00,0x0A,0x1F,0x11,0x11,0x1F,0x00};
+// byte tachometer_icon[8] = {0x00,0x0E,0x11,0x11,0x15,0x11,0x0E,0x00};
+// byte coolant_icon[8] = {0x04,0x07,0x04,0x07,0x04,0x0E,0x0E,0x04};
+//
+// Loaded in initLCD() after setBacklight():
+//     lcd.createChar(ICON_DEGREE, degree_icon);
+//     lcd.createChar(ICON_THERMOMETER, thermometer_icon);
+//     lcd.createChar(ICON_OIL_CAN, oil_can_icon);
+//     lcd.createChar(ICON_TURBO, turbo_icon);
+//     lcd.createChar(ICON_BATTERY, battery_icon);
+//     lcd.createChar(ICON_TACHOMETER, tachometer_icon);
+//     lcd.createChar(ICON_COOLANT, coolant_icon);
+//     lcd.createChar(ICON_OIL, oil_icon);
+//
+// Printed first in displaySensor() (one column off the cell's text width):
+//     lcd.write(getIconForApplication(ptr->applicationIndex));
 
 // Forward declarations
 void showConfigModeMessage();
-byte getIconForApplication(uint8_t appIndex);
 
 void initLCD() {
     // Ask the bus manager for a bus rather than calling Wire.begin() ourselves.
@@ -89,101 +104,90 @@ void initLCD() {
 
     lcdReady = true;
     lcd.setBacklight(LCD_BACKLIGHT_ON);
-    lcd.createChar(ICON_DEGREE, degree_icon);
-    lcd.createChar(ICON_THERMOMETER, thermometer_icon);
-    lcd.createChar(ICON_OIL_CAN, oil_can_icon);
-    lcd.createChar(ICON_TURBO, turbo_icon);
-    lcd.createChar(ICON_BATTERY, battery_icon);
-    lcd.createChar(ICON_TACHOMETER, tachometer_icon);
-    lcd.createChar(ICON_COOLANT, coolant_icon);
-    lcd.createChar(ICON_OIL, oil_icon);
+    // No createChar(): nothing is loaded into CGRAM (#579, see above).
     lcd.clear();
     msg.debug.info(TAG_DISPLAY, "LCD initialized");
 }
 
-/**
- * Get icon for application using registry-based pattern matching
- *
- * Uses application name patterns and measurement types to determine
- * the appropriate icon. This is data-driven - no code changes needed
- * when adding new applications.
- *
- * @param appIndex Index into APPLICATION_PRESETS array
- * @return Icon character code (custom LCD characters)
- */
-byte getIconForApplication(uint8_t appIndex) {
-    if (appIndex >= NUM_APPLICATION_PRESETS) return 32; // space
-
-    // Get application info from registry
-    const ApplicationPreset* preset = getApplicationByIndex(appIndex);
-    if (!preset) return 32;
-
-    // Read name from PROGMEM into RAM buffer
-    const char* namePtr = (const char*)pgm_read_ptr(&preset->name);
-    char nameBuf[32];
-    strncpy_P(nameBuf, namePtr, sizeof(nameBuf) - 1);
-    nameBuf[sizeof(nameBuf) - 1] = '\0';
-
-    MeasurementType measType = (MeasurementType)pgm_read_byte(&preset->expectedMeasurementType);
-
-    // Pattern matching on name (now in RAM)
-    // Check specific patterns first, then fall back to measurement type
-
-    if (strstr(nameBuf, "COOLANT") && strstr(nameBuf, "TEMP")) {
-        return ICON_COOLANT;
-    }
-    if (strstr(nameBuf, "OIL")) {
-        return ICON_OIL;
-    }
-    if (strstr(nameBuf, "FUEL")) {
-        return ICON_OIL_CAN;
-    }
-    if (strstr(nameBuf, "BOOST")) {
-        return ICON_TURBO;
-    }
-    if (strstr(nameBuf, "BATTERY")) {
-        return ICON_BATTERY;
-    }
-    if (strstr(nameBuf, "RPM")) {
-        return ICON_TACHOMETER;
-    }
-
-    // Fallback to measurement type
-    switch (measType) {
-        case MEASURE_TEMPERATURE:
-            return ICON_THERMOMETER;
-        case MEASURE_PRESSURE:
-            return 32;  // Generic pressure icon
-        case MEASURE_VOLTAGE:
-            return ICON_BATTERY;
-        case MEASURE_RPM:
-            return ICON_TACHOMETER;
-        default:
-            return 32; // space
-    }
-}
+// Icon lookup: REMOVED (#579), kept for possible resurrection (see the ICONS
+// note above).
+//
+// /**
+//  * Get icon for application using registry-based pattern matching
+//  *
+//  * Uses application name patterns and measurement types to determine
+//  * the appropriate icon. This is data-driven - no code changes needed
+//  * when adding new applications.
+//  *
+//  * @param appIndex Index into APPLICATION_PRESETS array
+//  * @return Icon character code (custom LCD characters)
+//  */
+// byte getIconForApplication(uint8_t appIndex) {
+//     if (appIndex >= NUM_APPLICATION_PRESETS) return 32; // space
+//
+//     // Get application info from registry
+//     const ApplicationPreset* preset = getApplicationByIndex(appIndex);
+//     if (!preset) return 32;
+//
+//     // Read name from PROGMEM into RAM buffer
+//     const char* namePtr = (const char*)pgm_read_ptr(&preset->name);
+//     char nameBuf[32];
+//     strncpy_P(nameBuf, namePtr, sizeof(nameBuf) - 1);
+//     nameBuf[sizeof(nameBuf) - 1] = '\0';
+//
+//     MeasurementType measType = (MeasurementType)pgm_read_byte(&preset->expectedMeasurementType);
+//
+//     // Pattern matching on name (now in RAM)
+//     // Check specific patterns first, then fall back to measurement type
+//
+//     if (strstr(nameBuf, "COOLANT") && strstr(nameBuf, "TEMP")) {
+//         return ICON_COOLANT;
+//     }
+//     if (strstr(nameBuf, "OIL")) {
+//         return ICON_OIL;
+//     }
+//     if (strstr(nameBuf, "FUEL")) {
+//         return ICON_OIL_CAN;
+//     }
+//     if (strstr(nameBuf, "BOOST")) {
+//         return ICON_TURBO;
+//     }
+//     if (strstr(nameBuf, "BATTERY")) {
+//         return ICON_BATTERY;
+//     }
+//     if (strstr(nameBuf, "RPM")) {
+//         return ICON_TACHOMETER;
+//     }
+//
+//     // Fallback to measurement type
+//     switch (measType) {
+//         case MEASURE_TEMPERATURE:
+//             return ICON_THERMOMETER;
+//         case MEASURE_PRESSURE:
+//             return 32;  // Generic pressure icon
+//         case MEASURE_VOLTAGE:
+//             return ICON_BATTERY;
+//         case MEASURE_RPM:
+//             return ICON_TACHOMETER;
+//         default:
+//             return 32; // space
+//     }
+// }
 
 void displaySensor(Input *ptr, byte line) {
     if (!lcdReady) return;
-    // Calculate column position based on LCD_COLUMNS_PER_SENSOR
-    byte col = (line >= LCD_ROWS) ? LCD_COLUMNS_PER_SENSOR : 0;
-    byte row = (line >= LCD_ROWS) ? line - LCD_ROWS : line;
+    lcd.setCursor(lcdCellCol(line), lcdCellRow(line));
 
-    lcd.setCursor(col, row);
-
+    // Text this cell may use. The left cell's last column stays blank as the
+    // gap before the right cell (the icon column used to be that gap, #579).
+    const int width = lcdCellTextWidth(line);
     int charsPrinted = 0;
 
     if (ptr->flags.display) {
-        // Print icon
-        if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
-            lcd.write(getIconForApplication(ptr->applicationIndex));
-            charsPrinted++;
-        }
-
         // Print sensor abbreviation
-        if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
+        if (charsPrinted < width) {
             int abbrLen = strlen(ptr->abbrName);
-            int charsAvailable = LCD_COLUMNS_PER_SENSOR - charsPrinted;
+            int charsAvailable = width - charsPrinted;
             if (abbrLen > charsAvailable) abbrLen = charsAvailable;
             for (int i = 0; i < abbrLen; i++) {
                 lcd.print(ptr->abbrName[i]);
@@ -192,15 +196,15 @@ void displaySensor(Input *ptr, byte line) {
         }
 
         // Print colon
-        if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
+        if (charsPrinted < width) {
             lcd.print(":");
             charsPrinted++;
         }
 
         // If sensor is not enabled, show "CFG"
         if (!ptr->flags.isEnabled) {
-            if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
-                int remaining = LCD_COLUMNS_PER_SENSOR - charsPrinted;
+            if (charsPrinted < width) {
+                int remaining = width - charsPrinted;
                 if (remaining >= 3) {
                     charsPrinted += lcd.print("CFG");
                 } else {
@@ -215,8 +219,8 @@ void displaySensor(Input *ptr, byte line) {
         }
         // Check for invalid values (NaN)
         else if (isnan(ptr->value)) {
-            if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
-                int remaining = LCD_COLUMNS_PER_SENSOR - charsPrinted;
+            if (charsPrinted < width) {
+                int remaining = width - charsPrinted;
                 if (remaining >= 3) {
                     charsPrinted += lcd.print("ERR");
                 } else {
@@ -231,8 +235,8 @@ void displaySensor(Input *ptr, byte line) {
         // Not read yet since it was configured: show "---". A reading of 0 is
         // real (0 bar, 0 RPM, a low float switch) and is displayed (#481).
         else if (!ptr->flags.hasReading) {
-            if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
-                int remaining = LCD_COLUMNS_PER_SENSOR - charsPrinted;
+            if (charsPrinted < width) {
+                int remaining = width - charsPrinted;
                 if (remaining >= 3) {
                     charsPrinted += lcd.print("---");
                 } else {
@@ -285,12 +289,12 @@ void displaySensor(Input *ptr, byte line) {
             }
 
             // Print value with appropriate precision (if space available)
-            if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
+            if (charsPrinted < width) {
                 // Format the value to a string first to check length
                 char valBuffer[12];
                 dtostrf(displayValue, 1, decimals, valBuffer);
                 int valLen = strlen(valBuffer);
-                int charsAvailable = LCD_COLUMNS_PER_SENSOR - charsPrinted;
+                int charsAvailable = width - charsPrinted;
 
                 // If value + unit symbols won't fit, truncate
                 if (valLen > charsAvailable) {
@@ -303,27 +307,22 @@ void displaySensor(Input *ptr, byte line) {
                 }
             }
 
-            // Print unit symbol from registry (if space available)
-            if (charsPrinted < LCD_COLUMNS_PER_SENSOR) {
-                if (measType == MEASURE_TEMPERATURE) {
-                    // Temperature gets a degree symbol before the unit
-                    lcd.write((byte)ICON_DEGREE);
-                    charsPrinted++;
-                } else if (unitInfo) {
-                    // Use symbol from registry
-                    const char* symPtr = (const char*)pgm_read_ptr(&unitInfo->symbol);
-                    if (symPtr) {
-                        int symLen = strlen_P(symPtr);
-                        int charsAvailable = LCD_COLUMNS_PER_SENSOR - charsPrinted;
-                        if (symLen > charsAvailable) symLen = charsAvailable;
-
-                        for (int i = 0; i < symLen; i++) {
-                            char c = pgm_read_byte(symPtr + i);
-                            lcd.print(c);
-                            charsPrinted++;
-                        }
-                    }
-                }
+            // Unit symbol from the registry, only if it fits whole: a clipped
+            // "rp" or "ba" reads as a different unit. Temperatures get the
+            // LCD's built-in degree sign first (°C / °F); with room for the
+            // sign alone it's printed without the letter, as before (#579).
+            const char* symPtr = unitInfo ? (const char*)pgm_read_ptr(&unitInfo->symbol) : nullptr;
+            const int symLen = symPtr ? (int)strlen_P(symPtr) : 0;
+            const bool isTemp = (measType == MEASURE_TEMPERATURE);
+            const int unitLen = symLen + (isTemp ? 1 : 0);
+            const int room = width - charsPrinted;
+            if (unitLen > 0 && unitLen <= room) {
+                if (isTemp) lcd.write(LCD_DEGREE_CHAR);
+                for (int i = 0; i < symLen; i++) lcd.print((char)pgm_read_byte(symPtr + i));
+                charsPrinted += unitLen;
+            } else if (isTemp && room >= 1) {
+                lcd.write(LCD_DEGREE_CHAR);
+                charsPrinted++;
             }
         }
     }
@@ -337,7 +336,7 @@ void displaySensor(Input *ptr, byte line) {
 // Blank one grid cell (a page with fewer than 8 inputs, or an input that went
 // away, must not leave a stale reading behind).
 static void clearCell(byte line) {
-    lcd.setCursor((line >= LCD_ROWS) ? LCD_COLUMNS_PER_SENSOR : 0, (line >= LCD_ROWS) ? line - LCD_ROWS : line);
+    lcd.setCursor(lcdCellCol(line), lcdCellRow(line));
     for (int i = 0; i < LCD_COLUMNS_PER_SENSOR; i++) lcd.print(" ");
 }
 
