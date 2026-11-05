@@ -168,6 +168,14 @@ A small number of sensors do not fit either family and require special handling:
 
 ---
 
+## Sharing a Sender with a Gauge or ECU
+
+If the sender also drives a factory gauge or an ECU input, **do not add a bias resistor**. That circuit already supplies the sender's current. A second pull-up shifts both readings: the gauge or ECU reads wrong, and so does preOBD. Haltech gives the same advice for its own inputs when a sensor is shared with an OEM ECU.
+
+Read the node voltage instead, through a divider if needed, and calibrate against known temperatures or pressures. Two cautions:
+- Many older gauges run from a voltage stabilizer (for example 10V on a Volvo 240 or on British cars with Smiths gauges, 5V on AMC-era Jeeps). The node can sit well above 3.3V, so size the divider for the stabilizer's voltage, not the sensor's.
+- Some stabilizers, and older Smiths/Jaguar oil-pressure senders, are bimetal switching types. The node then pulses on and off rather than holding a steady voltage. Averaging can recover a reading, but a resistive replacement sender is the reliable fix.
+
 ## Hardware Wiring
 
 ```
@@ -197,11 +205,11 @@ The bias resistor should be installed as close to the ADC pin as practical. Add 
 
 Earlier versions of this guide recommended 1kΩ as a default "compromise" value. This was based on early analysis of VDO sensors before the full sensor landscape was validated.
 
-1kΩ was never actually optimal for anything:
-- For low-resistance gauge senders (10–330Ω), it provides poor resolution — the ADC swing across the sensor's operating range is compressed significantly compared to 100Ω
-- For high-impedance NTC sensors (GM, Jeep, Bosch), the cold-end compression is worse than 2.49kΩ and there is no compensating benefit at the hot end
+1kΩ is a poor fit for gauge senders and isn't needed for NTCs:
+- For low-resistance gauge senders (10–330Ω), it provides poor resolution: about 2–3 ADC counts per °C on a VDO temperature sender, against about 16 with 100Ω.
+- For high-impedance NTC sensors (GM, Jeep, Bosch), 1kΩ does resolve the hot end better. Some ECUs use it (Haltech's analog inputs have a 1kΩ pull-up), and on a Bosch NTC M12 at 120°C it gives about twice the resolution of 2.49kΩ. But 2.49kΩ already gives about 4 counts per °C there, and it is far better at the cold end (intake air, cold starts).
 
-1kΩ has no constituency in the validated sensor set. Do not use it.
+Neither family needs it, so the built-in sensors don't assume it. If you wire one, tell the firmware with `SET <pin> CAL BIAS 1000`.
 
 ## Why Not 2.2kΩ?
 
