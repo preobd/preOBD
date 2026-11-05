@@ -58,6 +58,39 @@ extern MuxTransport hwSerial1;   // main.cpp -- the nRF coprocessor link
 #ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
 #define FLASHMEM
 #endif
+
+// At boot an enabled CAN bus reserves its pins before the serial ports start,
+// so a serial port on the same pins is refused (Teensy 4: CAN2 = Serial1's
+// pins 0/1, the nRF link). Say so when the bus is chosen, not at the reboot.
+#if NUM_CAN_BUSES > 0 && NUM_SERIAL_PORTS > 0
+// PROGMEM arrays, not F(): Teensy 4's F() leaves the text in RAM1, which here
+// cost a whole 1 KB step of stack on teensy41.
+static const char kCanSerialWarn1[] PROGMEM = "WARNING: Serial";
+static const char kCanSerialWarn2[] PROGMEM = " uses these pins; it stays off after the next reboot";
+static const char kCanSerialWarn3[] PROGMEM = "  (BUS SERIAL ";
+static const char kCanSerialWarn4[] PROGMEM = " DISABLE to make that explicit, or choose another CAN bus)";
+#define FSTR_(a) (reinterpret_cast<const __FlashStringHelper*>(a))
+#endif
+
+FLASHMEM static void warnSerialOnCanPins(uint8_t bus_id) {
+#if NUM_CAN_BUSES > 0 && NUM_SERIAL_PORTS > 0
+    if (bus_id >= NUM_CAN_BUSES) return;
+    const uint8_t tx = getDefaultCANTX(bus_id), rx = getDefaultCANRX(bus_id);
+    for (uint8_t port = 1; port <= NUM_SERIAL_PORTS; port++) {
+        if (!(systemConfig.serial.enabled_mask & (1u << (port - 1)))) continue;
+        const uint8_t srx = getDefaultSerialRX(port), stx = getDefaultSerialTX(port);
+        if (tx == 0xFF || (tx != srx && tx != stx && rx != srx && rx != stx)) continue;
+        msg.control.print(FSTR_(kCanSerialWarn1));
+        msg.control.print(port);
+        msg.control.println(FSTR_(kCanSerialWarn2));
+        msg.control.print(FSTR_(kCanSerialWarn3));
+        msg.control.print(port);
+        msg.control.println(FSTR_(kCanSerialWarn4));
+    }
+#else
+    (void)bus_id;
+#endif
+}
 #include <ctype.h>
 
 // BUS I2C subcommand handler
@@ -362,6 +395,7 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
             msg.control.print(mode == CAN_INPUT_LISTEN ? F("listen-only") : F("normal"));
             msg.control.print(F(" on "));
             msg.control.println(argv[3]);
+            warnSerialOnCanPins(bus_id);
             if (mode == CAN_INPUT_LISTEN) {
                 msg.control.println(F("  No ACK/TX - safe for passive bus monitoring"));
             }
@@ -480,6 +514,7 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
 
             msg.control.print(F("CAN output enabled on "));
             msg.control.println(argv[3]);
+            warnSerialOnCanPins(bus_id);
 
             // Shared-bus baudrate synchronization
             if (systemConfig.buses.input_can_bus == systemConfig.buses.output_can_bus &&

@@ -2,10 +2,10 @@
  * can_flexcan.h - FlexCAN driver for Teensy 3.x/4.x
  * Part of the preOBD Hardware Abstraction Layer
  *
- * Supports multiple CAN buses:
- * - Bus 0: CAN1 (available on all Teensy 3.x/4.x)
- * - Bus 1: CAN2 (Teensy 3.6, 4.0, 4.1)
- * - Bus 2: CAN3 (Teensy 4.1 only)
+ * HAL bus -> FlexCAN controller (map in can_flexcan.cpp):
+ * - Teensy 4.0/4.1: bus 0 CAN1, bus 1 CAN2, bus 2 CAN3
+ * - Teensy 3.6:     bus 0 CAN0, bus 1 CAN1
+ * - Teensy 3.2/3.5: bus 0 CAN0
  */
 
 #ifndef HAL_CAN_FLEXCAN_H

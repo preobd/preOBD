@@ -63,10 +63,10 @@
 // Source: https://github.com/tonton81/FlexCAN_T4
 #define DEFAULT_CAN1_TX 22
 #define DEFAULT_CAN1_RX 23
-#define DEFAULT_CAN2_TX 0
-#define DEFAULT_CAN2_RX 1
-#define DEFAULT_CAN3_TX 30
-#define DEFAULT_CAN3_RX 31
+#define DEFAULT_CAN2_TX 1   // CTX2 (pin 0 is CRX2; both shared with Serial1)
+#define DEFAULT_CAN2_RX 0
+#define DEFAULT_CAN3_TX 31  // CTX3 (pin 30 is CRX3)
+#define DEFAULT_CAN3_RX 30
 
 // ----- Serial Port Default Pins -----
 // Source: https://www.pjrc.com/teensy/td_uart.html
@@ -128,7 +128,7 @@
 // ----- CAN Default Pins -----
 #define DEFAULT_CAN1_TX 3
 #define DEFAULT_CAN1_RX 4
-#define DEFAULT_CAN2_TX 33  // CAN FD capable
+#define DEFAULT_CAN2_TX 33  // FlexCAN_T4's CAN1 on the 3.6 (classic CAN, no FD)
 #define DEFAULT_CAN2_RX 34
 // No CAN3 on Teensy 3.6
 

@@ -22,6 +22,7 @@
 #if INCLUDE_CAN
 
 #include "../hal/hal_can.h"
+#include "../drivers/bus_manager.h"
 #include "../inputs/input_can.h"
 
 // Which bus we're outputting on (set during init)
@@ -303,8 +304,10 @@ void initCAN() {
     uint32_t baudrate = systemConfig.buses.can_output_baudrate;
 
     // Initialize CAN bus via HAL
-    if (!hal::can::begin(baudrate, canOutputBus)) {
+    // canBusClaimed: the bus's pins may belong to another function (see bus_manager.h)
+    if (!canBusClaimed(canOutputBus) || !hal::can::begin(baudrate, canOutputBus)) {
         msg.debug.error(TAG_CAN, "CAN output init failed on bus %d!", canOutputBus);
+        canOutputBus = 0xFF;  // updateCAN() must not poll a bus that never started
         return;
     }
 

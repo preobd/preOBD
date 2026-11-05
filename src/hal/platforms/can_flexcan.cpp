@@ -23,6 +23,24 @@
 
 #include <FlexCAN_T4.h>
 
+// HAL bus number -> FlexCAN controller. FlexCAN_T4 names the controllers
+// with CAN_DEV_TABLE enum values, not macros, so they can't be tested with
+// #if defined(CAN2): that hid buses 1 and 2 on every Teensy 4 (#554). The
+// map follows bus_defaults.h's pins: Teensy 3.x bus 0 is CAN0 (pins 3/4),
+// not CAN1 (the 3.6's second controller, pins 33/34).
+#if defined(__IMXRT1062__)
+    #define FLEXCAN_BUS0_DEV CAN1   // CTX1 22 / CRX1 23
+    #define FLEXCAN_BUS1_DEV CAN2   // CTX2 1  / CRX2 0
+    #define FLEXCAN_BUS2_DEV CAN3   // CTX3 31 / CRX3 30
+#elif defined(__MK66FX1M0__)
+    #define FLEXCAN_BUS0_DEV CAN0   // pins 3/4
+    #define FLEXCAN_BUS1_DEV CAN1   // pins 33/34
+#elif defined(__MK64FX512__) || defined(__MK20DX256__)
+    #define FLEXCAN_BUS0_DEV CAN0   // pins 3/4
+#else
+    #error "can_flexcan.cpp: no FlexCAN controller map for this chip"
+#endif
+
 namespace hal { namespace can {
 
 #if INCLUDE_CAN_HYBRID
@@ -33,19 +51,36 @@ namespace flexcan {
 namespace detail {
     // RX is polled straight from the mailboxes (see setFilters), so the
     // library's RX ring is never filled: keep it at its smallest.
-    // CAN2/CAN3 below are FlexCAN_T4 enum values, not macros, so those
-    // branches never compile (only CAN1 works on Teensy, #554).
-    static FlexCAN_T4<CAN1, RX_SIZE_2, TX_SIZE_16> canBus0;
-    #if defined(CAN2)
-        static FlexCAN_T4<CAN2, RX_SIZE_2, TX_SIZE_16> canBus1;
+    static FlexCAN_T4<FLEXCAN_BUS0_DEV, RX_SIZE_2, TX_SIZE_16> canBus0;
+    #ifdef FLEXCAN_BUS1_DEV
+        static FlexCAN_T4<FLEXCAN_BUS1_DEV, RX_SIZE_2, TX_SIZE_16> canBus1;
     #endif
-    #if defined(CAN3)
-        static FlexCAN_T4<CAN3, RX_SIZE_2, TX_SIZE_16> canBus2;
+    #ifdef FLEXCAN_BUS2_DEV
+        static FlexCAN_T4<FLEXCAN_BUS2_DEV, RX_SIZE_2, TX_SIZE_16> canBus2;
     #endif
+
+    // Controllers begin() has started. A FlexCAN controller that was never
+    // begun has its clock gated on Teensy 4, and touching its registers is a
+    // hard fault, so read/write/setFilters/abort refuse any other bus (#560).
+    static bool started[3] = {false, false, false};
+    inline bool isStarted(uint8_t bus) { return bus < 3 && started[bus]; }
 
     // Helper to initialize a specific bus instance
     template<typename T>
     inline void initBus(T& bus, uint32_t baudrate, bool listenOnly = false) {
+    #if defined(__IMXRT1062__)
+        // With the CAN clock root still off, FlexCAN_T4's begin() calls
+        // setClock(), which runs setBaudRate() on EVERY constructed
+        // controller: CAN2/CAN3 too, whose clock gates are still off, and
+        // touching a gated FlexCAN is a hard fault (boot hang, #560 review).
+        // Select the root ourselves, as setClock(CLK_24MHz) would, so begin()
+        // never calls it. The root survives a warm reset, which is why this
+        // only struck some boots.
+        if (((CCM_CSCMR2 >> 8) & 0x3) == 3) {
+            CCM_CSCMR2 = (CCM_CSCMR2 & 0xFFFFFC03) | CCM_CSCMR2_CAN_CLK_SEL(1) |
+                         CCM_CSCMR2_CAN_CLK_PODF(0);
+        }
+    #endif
         bus.begin();
         bus.setBaudRate(baudrate, listenOnly ? LISTEN_ONLY : TX);
         bus.setMaxMB(16);
@@ -60,15 +95,18 @@ FLASHMEM bool begin(uint32_t baudrate, uint8_t bus, bool listenOnly) {
     switch (bus) {
         case 0:
             detail::initBus(detail::canBus0, baudrate, listenOnly);
+            detail::started[0] = true;
             return true;
-        #if defined(CAN2)
+        #ifdef FLEXCAN_BUS1_DEV
         case 1:
             detail::initBus(detail::canBus1, baudrate, listenOnly);
+            detail::started[1] = true;
             return true;
         #endif
-        #if defined(CAN3)
+        #ifdef FLEXCAN_BUS2_DEV
         case 2:
             detail::initBus(detail::canBus2, baudrate, listenOnly);
+            detail::started[2] = true;
             return true;
         #endif
         default:
@@ -77,6 +115,7 @@ FLASHMEM bool begin(uint32_t baudrate, uint8_t bus, bool listenOnly) {
 }
 
 bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t bus) {
+    if (!detail::isStarted(bus)) return false;
     CAN_message_t msg;
     if (len > 8) len = 8;
     msg.id = id;
@@ -88,11 +127,11 @@ bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t
     switch (bus) {
         case 0:
             return detail::canBus0.write(msg) > 0;
-        #if defined(CAN2)
+        #ifdef FLEXCAN_BUS1_DEV
         case 1:
             return detail::canBus1.write(msg) > 0;
         #endif
-        #if defined(CAN3)
+        #ifdef FLEXCAN_BUS2_DEV
         case 2:
             return detail::canBus2.write(msg) > 0;
         #endif
@@ -102,6 +141,7 @@ bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t
 }
 
 bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint8_t bus) {
+    if (!detail::isStarted(bus)) return false;
     CAN_message_t msg;
     bool result = false;
 
@@ -109,12 +149,12 @@ bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint8_t bus
         case 0:
             result = detail::canBus0.read(msg);
             break;
-        #if defined(CAN2)
+        #ifdef FLEXCAN_BUS1_DEV
         case 1:
             result = detail::canBus1.read(msg);
             break;
         #endif
-        #if defined(CAN3)
+        #ifdef FLEXCAN_BUS2_DEV
         case 2:
             result = detail::canBus2.read(msg);
             break;
@@ -138,18 +178,19 @@ bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint8_t bus
 // the MB0/MB1 interrupts here meant every 0x7DF/0x7E0 request vanished and
 // the OBD-II responder never answered over CAN (#495).
 FLASHMEM void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus) {
+    if (!detail::isStarted(bus)) return;
     switch (bus) {
         case 0:
             detail::canBus0.setMBFilter(MB0, filter1);
             detail::canBus0.setMBFilter(MB1, filter2);
             break;
-        #if defined(CAN2)
+        #ifdef FLEXCAN_BUS1_DEV
         case 1:
             detail::canBus1.setMBFilter(MB0, filter1);
             detail::canBus1.setMBFilter(MB1, filter2);
             break;
         #endif
-        #if defined(CAN3)
+        #ifdef FLEXCAN_BUS2_DEV
         case 2:
             detail::canBus2.setMBFilter(MB0, filter1);
             detail::canBus2.setMBFilter(MB1, filter2);
@@ -227,13 +268,14 @@ namespace detail {
  * waiting to go out (#506). A no-op on a healthy bus.
  */
 bool abortUnackedTx(uint8_t bus) {
+    if (!detail::isStarted(bus)) return false;
     switch (bus) {
-        case 0: return detail::abortUnacked(detail::canBus0, (uint32_t)CAN1);
-        #if defined(CAN2)
-        case 1: return detail::abortUnacked(detail::canBus1, (uint32_t)CAN2);
+        case 0: return detail::abortUnacked(detail::canBus0, (uint32_t)FLEXCAN_BUS0_DEV);
+        #ifdef FLEXCAN_BUS1_DEV
+        case 1: return detail::abortUnacked(detail::canBus1, (uint32_t)FLEXCAN_BUS1_DEV);
         #endif
-        #if defined(CAN3)
-        case 2: return detail::abortUnacked(detail::canBus2, (uint32_t)CAN3);
+        #ifdef FLEXCAN_BUS2_DEV
+        case 2: return detail::abortUnacked(detail::canBus2, (uint32_t)FLEXCAN_BUS2_DEV);
         #endif
         default: return false;
     }

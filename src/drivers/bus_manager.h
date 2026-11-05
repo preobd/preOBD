@@ -67,6 +67,13 @@ bool initSPIBus(uint8_t bus_id, uint32_t clock_hz);
  */
 bool initCANBus(uint8_t bus_id, uint32_t baudrate);
 
+/**
+ * True if initCANBus() claimed this bus's pins at boot. CAN input/output must
+ * not start a controller on a bus it didn't: the claim is refused when a
+ * higher-ranked function (e.g. Serial1 on Teensy 4 CAN2's pins 0/1) holds them.
+ */
+bool canBusClaimed(uint8_t bus_id);
+
 // ============================================================================
 // ACTIVE BUS ACCESS
 // ============================================================================

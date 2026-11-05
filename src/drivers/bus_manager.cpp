@@ -37,6 +37,10 @@ static uint8_t active_can_id = 0;
 
 // CAN ready flag (actual FlexCAN objects are in output_can.cpp)
 static bool can_ready = false;
+// Bit n: initCANBus(n) claimed bus n's pins. Input and output only start a
+// controller on a claimed bus: on Teensy 4, FlexCAN2's begin() remuxes pins
+// 0/1 even when Serial1 holds them (review of #560).
+static uint8_t can_claimed_mask = 0;
 
 // ============================================================================
 // PIN CLAIMING
@@ -352,11 +356,16 @@ bool initCANBus(uint8_t bus_id, uint32_t baudrate) {
     // Here we just mark the bus as ready
     active_can_id = bus_id;
     can_ready = true;
+    if (bus_id < 8) can_claimed_mask |= (uint8_t)(1u << bus_id);
 
     msg.debug.info(TAG_CAN, BUS_STARTED, can_desc);
 
     return true;
 #endif
+}
+
+bool canBusClaimed(uint8_t bus_id) {
+    return bus_id < 8 && (can_claimed_mask & (1u << bus_id));
 }
 
 // ============================================================================

@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Teensy 4: disabling a framed serial port (`BUS SERIAL 1 DISABLE`) and saving no longer leaves a board that crashes on every boot and needs the program button to recover (#558)
+- Teensy 4: CAN2 and CAN3 work; only CAN1 was ever started, though `BUS CAN` offered all three, and `BUS CAN` now warns when the chosen bus's pins belong to an enabled serial port. Teensy 3.6: bus 0 now drives the CAN0 pins (3/4) that `SYSTEM PINS` lists, and bus 1 (pins 33/34) works (#554)
 - `SYSTEM RESET CONFIRM` keeps the serial port settings (enabled ports, baud rates, framed mode) and the transport routing; resetting them cut a Bluetooth bridge off from the board the reset was sent from (#549)
 - Teensy 4.x boards no longer reset at random while SD logging (every few minutes at the default rate, within seconds at fast intervals) or occasionally when switching to RUN; changing the watchdog timeout could itself trigger a reset (#537)
 

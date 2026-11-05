@@ -27,6 +27,7 @@
 #include "../core/log_tags.h"
 #include "../sensors/drivers/can/can_frame_cache.h"
 #include "../hal/hal_can.h"
+#include "../drivers/bus_manager.h"
 
 #ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
 #define FLASHMEM
@@ -128,7 +129,7 @@ bool initCANInput() {
         msg.debug.info(TAG_CAN, "CAN input using shared bus %d (initialized by output)", bus);
     } else {
         // Independent bus - initialize via HAL
-        if (!hal::can::begin(baudrate, bus, listenOnly)) {
+        if (!canBusClaimed(bus) || !hal::can::begin(baudrate, bus, listenOnly)) {
             msg.debug.error(TAG_CAN, "CAN input init failed on bus %d", bus);
             canInputInitialized = false;
             return false;
