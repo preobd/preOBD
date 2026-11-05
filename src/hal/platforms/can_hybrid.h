@@ -7,6 +7,8 @@
  *
  * This file is only included when INCLUDE_CAN_HYBRID is defined.
  * Routes CAN operations to the appropriate driver based on bus controller type.
+ * The MCP2515 driver numbers its chips 0 and 1 (CAN_CS_0, CAN_CS_1), so the
+ * global bus is translated to the chip's index (controllerIndexForBus) first.
  *
  * Configured in boards/<board>/board.h (see boards/*_hybrid/), NOT platformio.ini:
  *   #define SUPPORTS_CAN_HYBRID 1     // resolve.h derives INCLUDE_CAN_HYBRID
@@ -104,7 +106,7 @@ inline bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
 
         #if HYBRID_HAS_MCP2515
         case CanControllerType::MCP2515:
-            return mcp2515::begin(baudrate, bus, listenOnly);
+            return mcp2515::begin(baudrate, controllerIndexForBus(bus), listenOnly);
         #endif
 
         case CanControllerType::NONE:
@@ -132,7 +134,7 @@ inline bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, 
 
         #if HYBRID_HAS_MCP2515
         case CanControllerType::MCP2515:
-            return mcp2515::write(id, data, len, extended, bus);
+            return mcp2515::write(id, data, len, extended, controllerIndexForBus(bus));
         #endif
 
         case CanControllerType::NONE:
@@ -160,7 +162,7 @@ inline bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint
 
         #if HYBRID_HAS_MCP2515
         case CanControllerType::MCP2515:
-            return mcp2515::read(id, data, len, extended, bus);
+            return mcp2515::read(id, data, len, extended, controllerIndexForBus(bus));
         #endif
 
         case CanControllerType::NONE:
@@ -187,7 +189,7 @@ inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
 
         #if HYBRID_HAS_MCP2515
         case CanControllerType::MCP2515:
-            mcp2515::setFilters(filter1, filter2, bus);
+            mcp2515::setFilters(filter1, filter2, controllerIndexForBus(bus));
             break;
         #endif
 
@@ -211,7 +213,7 @@ inline bool abortUnackedTx(uint8_t bus = 0) {
 
         #if HYBRID_HAS_MCP2515
         case CanControllerType::MCP2515:
-            return mcp2515::abortUnackedTx(bus);
+            return mcp2515::abortUnackedTx(controllerIndexForBus(bus));
         #endif
 
         case CanControllerType::NONE:

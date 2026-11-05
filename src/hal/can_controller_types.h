@@ -110,4 +110,20 @@ inline constexpr bool hasBusController(uint8_t bus) {
     return getBusControllerType(bus) != CanControllerType::NONE;
 }
 
+namespace can_ctrl_detail {
+    // Buses below `bus` (from `i` up) whose controller is `type`
+    inline constexpr uint8_t sameTypeBefore(uint8_t bus, CanControllerType type, uint8_t i) {
+        return (i >= bus) ? 0 :
+               (uint8_t)((getBusControllerType(i) == type ? 1 : 0) + sameTypeBefore(bus, type, i + 1));
+    }
+}
+
+// Which controller of its type a bus is: 0 for the first MCP2515, 1 for the
+// second, whatever bus numbers they sit on. A driver that owns several chips
+// indexes them by this, not by the bus number (#556: hybrid boards put their
+// one MCP2515 on bus 1 or 3, and the driver only knew chips 0 and 1).
+inline constexpr uint8_t controllerIndexForBus(uint8_t bus) {
+    return can_ctrl_detail::sameTypeBefore(bus, getBusControllerType(bus), 0);
+}
+
 #endif // CAN_CONTROLLER_TYPES_H
