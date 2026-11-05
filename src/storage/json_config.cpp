@@ -36,6 +36,7 @@
 #include "../outputs/obd_query.h"     // PID table rebuilt after an inputs import (#562)
 #include "../outputs/output_format.h"   // SdLogFormat / parseSdLogFormat
 #include "../outputs/output_alarm.h"   // alarmSilence* policy accessors (#433)
+#include "../outputs/output_base.h"    // syncOutputsToConfig (#610)
 #if INCLUDE_RULES_ENGINE
 #include "../rules/rules_json.h"
 #include "../rules/rules_manager.h"
@@ -1571,6 +1572,13 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
     // Nothing above this line may fail past this point; one write.
     systemConfig = staged;
     if (logFilterPresent) applyLogFilterConfig();
+    // The live outputs follow the committed outputEnabled[], as OUTPUT <name>
+    // ENABLE/DISABLE would (until #610 that waited for a reboot). Here, not at
+    // the end of the whole load: once systemConfig commits, the rest of it is
+    // live too and a SAVE persists it, so a later stage failing must not leave
+    // the outputs alone out of step. A file refused before this commit (board
+    // fit, bad JSON, a system-block error) touches nothing.
+    syncOutputsToConfig();
 #if NUM_SERIAL_PORTS > 0
     for (uint8_t id = 1; id <= NUM_SERIAL_PORTS; id++) {
         if (!(serialKeptMask & (1u << (id - 1)))) continue;

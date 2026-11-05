@@ -446,6 +446,10 @@ static int loadConfigFromEEPROM() {
     }
 #endif
 
+    // The loaded outputEnabled[] reaches the live outputs, as a JSON IMPORT's
+    // does (#610): an OUTPUT ENABLE that was never SAVEd is undone here.
+    if (sysOk) syncOutputsToConfig();
+
     if (inputsOk && sysOk) {
         msg.control.println(F("Configuration loaded"));
         return 0;

@@ -26,7 +26,7 @@
 #include "../inputs/input_can.h"
 
 // Which bus we're outputting on (set during init)
-static uint8_t canOutputBus = 0;
+static uint8_t canOutputBus = 0xFF;   // 0xFF until initCAN() starts a bus (#610)
 
 // ===== PLATFORM ABSTRACTION =====
 
@@ -286,7 +286,10 @@ static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
  * responder. The module can be disabled at runtime without a re-init.
  */
 static void onSharedBusRequest(uint32_t id, const uint8_t* data, uint8_t len) {
-    if (!systemConfig.outputEnabled[OUTPUT_CAN] || !systemConfig.buses.can_output_enabled) return;
+    // The live flag, not systemConfig: an imported/loaded enable waiting for
+    // the reboot (#610) must not answer while updateCAN() — which paces
+    // multi-frame replies — isn't running.
+    if (!outputModules[OUTPUT_CAN].enabled || !systemConfig.buses.can_output_enabled) return;
     processOBD2Request(id, data, len);
 }
 
@@ -322,6 +325,21 @@ void initCAN() {
     // PID lookup table built in main.cpp after initOutputModules()
 }
 
+// initCAN() brought the output bus up this session (#610): the sync may then
+// turn CAN output back on without re-beginning the bus.
+bool canOutputBusStarted() {
+    // ...and on the bus the config names now: an import that also moved or
+    // turned off the output bus needs the reboot like a first start
+    return canOutputBus != 0xFF && systemConfig.buses.can_output_enabled &&
+           canOutputBus == systemConfig.buses.output_can_bus;
+}
+
+// The config can start CAN output at boot at all (a bus selected and on), so
+// a deferred enable is really pending
+bool canOutputConfigured() {
+    return systemConfig.buses.can_output_enabled && systemConfig.buses.output_can_bus != 0xFF;
+}
+
 void updateCAN() {
     if (!systemConfig.buses.can_output_enabled || canOutputBus == 0xFF) {
         return;  // Output not configured
@@ -351,5 +369,7 @@ void updateCAN() {
 // Dummy functions if CAN is disabled
 void initCAN() {}
 void updateCAN() {}
+bool canOutputBusStarted() { return false; }
+bool canOutputConfigured() { return false; }
 
 #endif

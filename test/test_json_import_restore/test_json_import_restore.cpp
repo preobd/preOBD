@@ -65,6 +65,7 @@ void setUp(void) {
     resetInputs();
     inputsTableIsLive = true;
     g_applyLogFilterCalls = 0;
+    g_syncOutputsCalls = 0;
     g_stubDigitalPinMax = 0xFF;
     g_stubAnalogFirst = 0xFF;
     g_stubAnalogCount = 0;
@@ -166,6 +167,19 @@ static void test_a_file_whose_records_all_fail_leaves_the_inputs_alone(void) {
     TEST_ASSERT_NOT_NULL(getInputByPin(4));
     TEST_ASSERT_NOT_NULL(getInputByPin(5));
     TEST_ASSERT_EQUAL_UINT8(2, occupiedSlots());
+}
+
+// #610: the live outputs follow the system block once it commits, even if a
+// later stage then fails: systemConfig (and so a SAVE) already holds the new
+// flags, and outputs left behind would stay out of step with it.
+static void test_outputs_follow_a_committed_system_block_even_if_inputs_fail(void) {
+    configure(4);
+    TEST_ASSERT_FALSE(loadConfigFromJSON(
+        "{\"schemaVersion\":1,\"mode\":\"runtime\","
+        "\"system\":{\"outputs\":{\"serial\":{\"enabled\":true}}},\"inputs\":"
+        "[{\"idx\":0,\"pin\":6,\"app\":\"NO_SUCH_APP\",\"sensor\":\"NO_SUCH_SENSOR\"}]}"));
+    TEST_ASSERT_EQUAL_UINT8(1, systemConfig.outputEnabled[OUTPUT_SERIAL]);
+    TEST_ASSERT_EQUAL_INT(1, g_syncOutputsCalls);
 }
 
 // The OBD-II PID table points into inputs[]; an inputs import rebuilds it.
@@ -306,6 +320,18 @@ static void test_malformed_tag_masks_are_refused(void) {
     }
 }
 
+// #610: an imported outputs.<name>.enabled used to wait for a reboot. A
+// committed import hands the live outputs the new flags; a refused one
+// leaves them alone.
+static void test_imported_output_enables_reach_the_live_outputs(void) {
+    systemConfig.outputEnabled[OUTPUT_SERIAL] = 0;
+    TEST_ASSERT_TRUE(loadConfigFromJSON(
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"outputs\":"
+        "{\"serial\":{\"enabled\":true}}}}"));
+    TEST_ASSERT_EQUAL_UINT8(1, systemConfig.outputEnabled[OUTPUT_SERIAL]);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, g_syncOutputsCalls, "imported enable never reached the live outputs");
+}
+
 static void test_no_log_filter_key_leaves_the_live_filter_alone(void) {
     TEST_ASSERT_TRUE(loadConfigFromJSON("{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{}}"));
     TEST_ASSERT_EQUAL_INT(0, g_applyLogFilterCalls);
@@ -337,6 +363,7 @@ static void test_a_pin_this_board_lacks_refuses_the_whole_file(void) {
     TEST_ASSERT_NOT_NULL_MESSAGE(getInputByPin(6), "a refused file still replaced the inputs");
     TEST_ASSERT_NULL(getInputByPin(45));
     TEST_ASSERT_EQUAL_INT(0, g_obdTableBuilds);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, g_syncOutputsCalls, "a refused file touched the live outputs (#610)");
 }
 
 // An input the file calls A<n> must be on this board's A<n>; a number-labelled
@@ -440,6 +467,8 @@ int main(int, char**) {
     RUN_TEST(test_unreadable_log_filter_values_keep_the_current_ones);
     RUN_TEST(test_malformed_tag_masks_are_refused);
     RUN_TEST(test_no_log_filter_key_leaves_the_live_filter_alone);
+    RUN_TEST(test_imported_output_enables_reach_the_live_outputs);
+    RUN_TEST(test_outputs_follow_a_committed_system_block_even_if_inputs_fail);
     RUN_TEST(test_a_pin_this_board_lacks_refuses_the_whole_file);
     RUN_TEST(test_an_analog_input_must_land_on_the_same_a_pin);
     RUN_TEST(test_a_relay_on_a_pin_this_board_lacks_is_refused);

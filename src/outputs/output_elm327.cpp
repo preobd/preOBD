@@ -44,6 +44,22 @@ void updateELM327() {
     elm327Output.update();
 }
 
+// After an ELM327 enable: say why it isn't answering yet, if it isn't. One
+// copy of the text for the sync and BUS SERIAL (F() is RAM1 on Teensy 4).
+void noteELM327PortState() {
+    const uint8_t port = systemConfig.buses.elm327_serial_port;
+    if (port == 0xFF) {
+        msg.control.println(F("NOTE: ELM327 has no serial port; assign one with BUS SERIAL <n> ELM327 ENABLE"));
+    } else if (!isSerialPortActive(port)) {
+        msg.control.println(F("NOTE: ELM327 answers once its serial port is running (next reboot)"));
+    }
+}
+
+// ELM327 output disabled at runtime (#610): unbind as BUS ... ELM327 DISABLE does
+void stopELM327() {
+    elm327Output.end();   // also clears its serial
+}
+
 // ===== ELM327Output IMPLEMENTATION =====
 
 ELM327Output::ELM327Output()

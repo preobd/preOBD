@@ -105,6 +105,21 @@ void initAlarmOutput() {
 #endif
 }
 
+// Alarm output turned off at runtime (OUTPUT Alarm DISABLE, an import, LOAD):
+// updateAlarmOutput() stops running, so drop what it was driving (#610),
+// including the idle green: left on, it would read "all normal" while nothing
+// is watching. The mode slot (CONFIG indication) is not the alarm's and stays.
+void stopAlarmOutput() {
+#if INCLUDE_ALARMS && defined(BUZZER_PIN)
+    platformNoTone(BUZZER_PIN);
+#endif
+#if INCLUDE_LED
+    rgbLedRelease(PRIORITY_ALARM);
+    rgbLedRelease(PRIORITY_WARNING);
+    rgbLedRelease(PRIORITY_IDLE);
+#endif
+}
+
 // ===== OUTPUT MODULE INTERFACE =====
 
 // ===== HELPER FUNCTIONS =====

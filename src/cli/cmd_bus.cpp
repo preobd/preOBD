@@ -739,11 +739,12 @@ static FLASHMEM int bus_serial(int argc, const char* const* argv, int /*tokenInd
                     return 1;
                 }
 
-                Stream* ser = getSerialPort(port_id);
-                elm327Output.setSerial(ser);
-                elm327Output.begin();
+                // The port first, then the one on/off path (#610): it binds and
+                // begins via initELM327() and sets the live flag as well as
+                // systemConfig. Setting only systemConfig, as this did, left
+                // updateELM327() unpolled until a reboot.
                 systemConfig.buses.elm327_serial_port = port_id;
-                systemConfig.outputEnabled[OUTPUT_ELM327] = 1;
+                setOutputEnabled("ELM327", true);   // the port was checked active above
 
                 msg.control.print(F("ELM327 emulator assigned to Serial"));
                 msg.control.println(port_id);
@@ -752,10 +753,18 @@ static FLASHMEM int bus_serial(int argc, const char* const* argv, int /*tokenInd
             }
 
             if (streq_P(argv[4], PSTR("DISABLE"))) {
-                elm327Output.end();
-                elm327Output.setSerial(nullptr);
+                // Only the ELM327 port: on another port this would tear down a
+                // working emulator and clear its port (#610 review)
+                if (systemConfig.buses.elm327_serial_port != 0xFF &&
+                    systemConfig.buses.elm327_serial_port != port_id) {
+                    msg.control.print(F("ERROR: ELM327 is not on Serial"));
+                    msg.control.println(port_id);
+                    return 1;
+                }
+                const bool wasLive = outputModules[OUTPUT_ELM327].enabled;
+                setOutputEnabled("ELM327", false);   // live flag + config; unbinds if live (#610)
+                if (!wasLive) stopELM327();          // bound but never polled
                 systemConfig.buses.elm327_serial_port = 0xFF;
-                systemConfig.outputEnabled[OUTPUT_ELM327] = 0;
 
                 msg.control.print(F("ELM327 disabled on Serial"));
                 msg.control.println(port_id);

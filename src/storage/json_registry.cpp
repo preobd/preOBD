@@ -263,6 +263,8 @@ FLASHMEM void writeOutputsJson(Print& out) {
         JsonObject obj = arr.add<JsonObject>();
         obj["name"]       = outputModules[i].name;
         obj["enabled"]    = outputModules[i].enabled;
+        // A CAN enable from an import/LOAD waiting for the reboot (#610)
+        if (i == OUTPUT_CAN && canOutputPendingReboot()) obj["pendingReboot"] = true;
         // Only paced outputs have an interval (#608)
         if (outputTakesInterval(i)) obj["intervalMs"] = systemConfig.outputInterval[i];
     }

@@ -29,6 +29,9 @@ TransportInterface* MessageRouter::getTransport(MessagePlane, bool) { return nul
 // is not in these binaries, so count the calls instead.
 int g_applyLogFilterCalls = 0;
 void applyLogFilterConfig() { g_applyLogFilterCalls++; }
+// ...and the live outputs (#610); output_manager.cpp is not in them either.
+int g_syncOutputsCalls = 0;
+void syncOutputsToConfig() { g_syncOutputsCalls++; }
 size_t MessageStream::error(const char*, const char*, ...) { return 0; }
 size_t MessageStream::warn(const char*, const char*, ...) { return 0; }
 size_t MessageStream::info(const char*, const char*, ...) { return 0; }

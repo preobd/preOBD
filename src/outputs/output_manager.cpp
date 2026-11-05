@@ -3,6 +3,10 @@
  */
 
 #include "output_base.h"
+
+#ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
+#define FLASHMEM
+#endif
 #include "../config.h"
 #include "../inputs/input_manager.h"
 #include "../core/message_router.h"
@@ -17,6 +21,8 @@ static_assert(OUTPUT_CAN == 0 && OUTPUT_REALDASH == 1 &&
 // Declare external functions from output modules
 extern void initCAN();
 extern void updateCAN();
+extern bool canOutputBusStarted();
+extern bool canOutputConfigured();
 
 extern void initRealdash();
 extern void sendRealdash(Input*);
@@ -31,6 +37,7 @@ extern void updateSerialOutput();
 
 extern void initAlarmOutput();
 extern void updateAlarmOutput();
+extern void stopAlarmOutput();
 
 // Relay output module removed: a relay is now a control-engine Action of type
 // RELAY, driven by rulesActionsUpdate() in the main loop (not an output
@@ -40,6 +47,8 @@ extern void updateAlarmOutput();
 #if INCLUDE_ELM327
 extern void initELM327();
 extern void updateELM327();
+extern void stopELM327();
+extern void noteELM327PortState();
 #endif
 
 // Define output modules array - always compiled, controlled by runtime flags.
@@ -150,6 +159,38 @@ int getOutputIndexByName(const char* name) {
     return output ? (int)(output - outputModules) : -1;
 }
 
+// The one place an output's live state changes: OUTPUT <name> ENABLE/DISABLE,
+// a JSON IMPORT and LOAD all come here, so each takes effect immediately
+// (#610). Live state only — systemConfig is the caller's (setOutputEnabled
+// writes it; the sync reads it). Enabling runs init() even when the output is
+// already on: OUTPUT <name> ENABLE is how a user retries a faulted SD log or
+// an ELM327 whose port wasn't up. The sync only calls this on a change.
+static FLASHMEM void applyOutputEnabled(int index, bool enabled) {
+    OutputModule* output = &outputModules[index];
+    const bool wasEnabled = output->enabled;
+    output->enabled = enabled;
+
+    if (enabled && output->init != nullptr) {
+        output->init();
+    }
+    if (enabled || !wasEnabled) return;
+
+    // Teardown on disable is called directly rather than through a per-module
+    // deinit hook: a function pointer on every OutputModule costs 14 bytes of
+    // SRAM on the mega, which has 182 bytes free.
+#if INCLUDE_SD_LOGGING
+    // Close the log file, or it stays open and unflushed for the session.
+    if (index == OUTPUT_SD) closeSDLog();
+#endif
+    // Silence the buzzer and blank the LED, or they hold their last state
+    // once updateAlarmOutput() stops running (#610).
+    if (index == OUTPUT_ALARM) stopAlarmOutput();
+#if INCLUDE_ELM327
+    // Unbind from the port, as BUS SERIAL <n> ELM327 DISABLE does.
+    if (index == OUTPUT_ELM327) stopELM327();
+#endif
+}
+
 /**
  * Enable or disable an output module
  * @param name Output name
@@ -159,30 +200,42 @@ int getOutputIndexByName(const char* name) {
 bool setOutputEnabled(const char* name, bool enabled) {
     OutputModule* output = getOutputByName(name);
     if (!output) return false;
-
-    int index = output - outputModules;  // Calculate index
-#if INCLUDE_SD_LOGGING
-    bool wasEnabled = output->enabled;
-#endif
-    output->enabled = enabled;
-    systemConfig.outputEnabled[index] = enabled ? 1 : 0;
-
-    // Initialize if enabling for first time
-    if (enabled && output->init != nullptr) {
-        output->init();
-    }
-
-#if INCLUDE_SD_LOGGING
-    // Close the log file on disable — otherwise it stays open and unflushed for
-    // the rest of the session. Called directly rather than through a per-module
-    // deinit hook: a function pointer on every OutputModule costs 14 bytes of
-    // SRAM on the mega, which has 182 bytes free and cannot do SD logging at all.
-    if (!enabled && wasEnabled && index == OUTPUT_SD) {
-        closeSDLog();
-    }
-#endif
-
+    systemConfig.outputEnabled[output - outputModules] = enabled ? 1 : 0;
+    applyOutputEnabled(output - outputModules, enabled);
     return true;
+}
+
+FLASHMEM bool canOutputPendingReboot() {
+    return !outputModules[OUTPUT_CAN].enabled && systemConfig.outputEnabled[OUTPUT_CAN] &&
+           canOutputConfigured();
+}
+
+FLASHMEM void syncOutputsToConfig() {
+    for (int i = 0; i < numOutputModules; i++) {
+        if (outputModules[i].name == nullptr) continue;  // not in this build
+        const bool want = systemConfig.outputEnabled[i] != 0;
+        if (outputModules[i].enabled == want) continue;
+        // CAN buses are brought up at boot from this config: starting CAN
+        // output now would re-begin a bus CAN input set up (its mode, baud and
+        // filters). If initCAN() already started it this session, turning it
+        // back on is just the flag; otherwise it starts at the next reboot,
+        // says so, and OUTPUT STATUS shows it pending. Stopping touches no bus.
+        if (want && i == OUTPUT_CAN) {
+            if (canOutputBusStarted()) {
+                outputModules[i].enabled = true;
+            } else if (canOutputPendingReboot()) {
+                // Like the import's serial NOTE: nothing is saved until SAVE
+                msg.control.println(F("NOTE: CAN output turns on after SAVE and a reboot"));
+            }
+            continue;
+        }
+        applyOutputEnabled(i, want);
+#if INCLUDE_ELM327
+        // initELM327() quietly skips a port that isn't running yet (one this
+        // same import enabled waits for the reboot), so say so
+        if (want && i == OUTPUT_ELM327) noteELM327PortState();
+#endif
+    }
 }
 
 /**
@@ -207,7 +260,9 @@ void listOutputs() {
         if (outputModules[i].name == nullptr) continue;
         msg.control.print(outputModules[i].name);
         msg.control.print(F(": "));
-        if (outputModules[i].enabled) {
+        if (i == OUTPUT_CAN && canOutputPendingReboot()) {
+            msg.control.println(F("Disabled (on after SAVE and reboot)"));
+        } else if (outputModules[i].enabled) {
             msg.control.print(F("Enabled"));
             if (outputTakesInterval(i)) {   // the others have none (#608)
                 msg.control.print(F(", Interval: "));

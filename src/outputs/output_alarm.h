@@ -19,6 +19,9 @@
  */
 void initAlarmOutput();
 
+// Silence the buzzer and release the alarm/warning LED (output disabled, #610)
+void stopAlarmOutput();
+
 /**
  * Update alarm output (called every loop)
  * Scans all inputs for alarm state, handles silence button, controls buzzer

@@ -74,5 +74,10 @@ private:
 
 extern ELM327Output elm327Output;
 
+// Unbind from its serial port: the output disabled at runtime (#610)
+void stopELM327();
+// After an enable, print why ELM327 isn't answering yet (no port / port not up)
+void noteELM327PortState();
+
 #endif // INCLUDE_ELM327
 #endif // OUTPUT_ELM327_H
