@@ -104,6 +104,23 @@ actually attached). Declaring a bus is a permission, not a lock: an explicit
 `BUS I2C <n>` selection always wins over the declaration, and declaring bus 1
 does not forbid selecting bus 0. See `src/pinctrl/bus_wiring.h` for the resolver.
 
+## Pins and the board's name come from the core
+
+Which pins a board has, which pin each `A<n>` name is, and the board's name
+(`firmware.platform`, e.g. `TEENSY40`) are not declared here: the Arduino core
+and the PlatformIO board definition already know them (`NUM_DIGITAL_PINS`, the
+`A0`..`An` constants, `NUM_ANALOG_INPUTS`, `ARDUINO_<BOARD>`), and
+`src/pinctrl/board_pins.{h,cpp}` reads them. A core without them fails the
+build. Two optional `board.h` facts cover what no core header can know:
+
+| Macro | Meaning |
+|---|---|
+| `BOARD_ANALOG_USABLE` | How many of the core's analog inputs the firmware can read, when fewer (ESP32: `10`, ADC2 is unusable while BLE runs) |
+| `BOARD_RESERVED_PINS` / `BOARD_RESERVED_NAME` | Pins that exist but are wired to the board's own module (ESP32-S3 N8R8: flash and PSRAM, GPIO 26–37). Claimed in the pin registry at boot, so every command refuses them |
+
+A new board whose PlatformIO board JSON sets an `ARDUINO_<BOARD>` define not yet
+named in `boardName()` fails the build until it is added there.
+
 ## Adding / editing
 
 - **New board:** `cp -r boards/teensy41 boards/<new>`, edit `board.h` (facts) and

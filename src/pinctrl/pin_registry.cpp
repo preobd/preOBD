@@ -9,7 +9,8 @@
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
 #include "../storage/system_config.h"
-#include "analog_pins.h"
+#include "board_pins.h"
+#include "pin_label.h"
 #include "../inputs/input_manager.h"
 #include <Arduino.h>
 #include <string.h>
@@ -258,27 +259,16 @@ const PinUsage* getPinUsageByIndex(uint8_t index) {
 // PIN STATUS DISPLAY
 // ============================================================================
 
-// Helper to print pin name (A0, CAN:0, I2C:0, or numeric)
+// Helper to print pin name (SDIO, A0, CAN:0, I2C:0, or numeric)
 static void printPinName(uint8_t pin) {
-    // Check for special Teensy pins first before virtual pin ranges
     if (pin == 254) {
         // Teensy built-in SDIO pin
         msg.control.print(F("SDIO"));
-    } else if (pin >= 0xF0) {
-        msg.control.print(F("I2C:"));
-        msg.control.print(pin - 0xF0);
-    } else if (pin >= 0xC0 && pin < 0xE0) {
-        msg.control.print(F("CAN:"));
-        msg.control.print(pin - 0xC0);
-    } else {
-        int8_t analogNum = analogIndexForPin(pin);
-        if (analogNum >= 0) {
-            msg.control.print(F("A"));
-            msg.control.print(analogNum);
-        } else {
-            msg.control.print(pin);
-        }
+        return;
     }
+    char label[8];
+    formatPinLabel(pin, label, sizeof(label));
+    msg.control.print(label);
 }
 
 // Helper to print pin with padding for alignment.

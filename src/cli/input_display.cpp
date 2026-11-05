@@ -10,7 +10,7 @@
 
 #include "input_display.h"
 #include "../inputs/input_manager.h"
-#include "../pinctrl/analog_pins.h"
+#include "../pinctrl/board_pins.h"
 #include "../pinctrl/pin_label.h"
 #include "../core/message_router.h"  // For msg.control
 #include "../core/message_api.h"      // For msg
@@ -43,21 +43,9 @@ FLASHMEM static void printFlashName(const char* name) {
 
 // Helper to print pin name (A0, 1, I2C:0, CAN:0, etc)
 FLASHMEM static void printPin(uint8_t pin) {
-    if (pin >= 0xF0) {
-        msg.control.print(F("I2C:"));
-        msg.control.print(pin - 0xF0);
-    } else if (pin >= 0xC0 && pin < 0xE0) {
-        msg.control.print(F("CAN:"));
-        msg.control.print(pin - 0xC0);
-    } else {
-        int8_t analogNum = analogIndexForPin(pin);
-        if (analogNum >= 0) {
-            msg.control.print(F("A"));
-            msg.control.print(analogNum);
-        } else {
-            msg.control.print(pin);
-        }
-    }
+    char label[8];
+    formatPinLabel(pin, label, sizeof(label));
+    msg.control.print(label);
 }
 
 FLASHMEM void printInputInfo(uint8_t pin) {

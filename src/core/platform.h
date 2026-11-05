@@ -11,7 +11,6 @@
 // ===== AUTOMATIC PLATFORM DETECTION =====
 #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
     // Arduino Uno - 5V system with 1.1V internal reference
-    #define PLATFORM_NAME "Arduino Uno"
     #define I2C_CLOCK_SPEED "400kHz"
     #define SYSTEM_VOLTAGE 5.0
     #define SYSTEM_VOLTAGE_MV 5000  // For preprocessor comparisons
@@ -20,7 +19,6 @@
     #define ADC_MAX_VALUE 1023
 #elif defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
     // Arduino Mega - 5V system with 1.1V internal reference
-    #define PLATFORM_NAME "Arduino Mega 2560"
     #define I2C_CLOCK_SPEED "400kHz"
     #define SYSTEM_VOLTAGE 5.0
     #define SYSTEM_VOLTAGE_MV 5000
@@ -29,7 +27,6 @@
     #define ADC_MAX_VALUE 1023
 #elif defined(__MK20DX256__) || defined(__MK20DX128__)
     // Teensy 3.x - 3.3V system with 1.2V internal reference
-    #define PLATFORM_NAME "Teensy 3.x"
     #define I2C_CLOCK_SPEED "400kHz"
     #define SYSTEM_VOLTAGE 3.3
     #define SYSTEM_VOLTAGE_MV 3300
@@ -38,7 +35,6 @@
     #define ADC_MAX_VALUE 4095
 #elif defined(__MK64FX512__) || defined(__MK66FX1M0__)
     // Teensy 3.5/3.6 - can be 3.3V or 5V tolerant
-    #define PLATFORM_NAME "Teensy 3.5/3.6"
     #define I2C_CLOCK_SPEED "400kHz"
     #define SYSTEM_VOLTAGE 3.3
     #define SYSTEM_VOLTAGE_MV 3300
@@ -47,13 +43,6 @@
     #define ADC_MAX_VALUE 4095
 #elif defined(__IMXRT1062__)
     // Teensy 4.x - can be 3.3V or 5V tolerant
-    #if defined(ARDUINO_TEENSY41)
-        #define PLATFORM_NAME "Teensy 4.1"
-    #elif defined(ARDUINO_TEENSY40)
-        #define PLATFORM_NAME "Teensy 4.0"
-    #else
-        #define PLATFORM_NAME "Teensy 4.x"
-    #endif
     #define I2C_CLOCK_SPEED "400kHz"
     #define SYSTEM_VOLTAGE 3.3
     #define SYSTEM_VOLTAGE_MV 3300
@@ -62,7 +51,6 @@
     #define ADC_MAX_VALUE 4095
 #elif defined(ARDUINO_SAM_DUE)
     // Arduino Due
-    #define PLATFORM_NAME "Arduino Due"
     #define I2C_CLOCK_SPEED "400kHz"
     #define SYSTEM_VOLTAGE 3.3
     #define SYSTEM_VOLTAGE_MV 3300
@@ -71,7 +59,6 @@
     #define ADC_MAX_VALUE 4095
 #elif defined(ESP32)
     // ESP32
-    #define PLATFORM_NAME "ESP32"
     #define I2C_CLOCK_SPEED "100kHz"
     #define SYSTEM_VOLTAGE 3.3
     #define SYSTEM_VOLTAGE_MV 3300
@@ -80,7 +67,6 @@
     #define ADC_MAX_VALUE 4095
 #else
     // Default safe values for unknown platforms
-    #define PLATFORM_NAME "Unknown"
     #define I2C_CLOCK_SPEED "400kHz"
     #define SYSTEM_VOLTAGE 3.3
     #define SYSTEM_VOLTAGE_MV 3300
@@ -107,20 +93,7 @@
 
 #define VOLTAGE_DIVIDER_RATIO ((VOLTAGE_DIVIDER_R1 + VOLTAGE_DIVIDER_R2) / VOLTAGE_DIVIDER_R2)
 
-// ===== ANALOG PIN PROBE TABLE =====
-// Ordered list of analog-capable pins for diagnostic sweeps (SYSTEM DIAG PINS).
-// Index i corresponds to the label "A<i>"; the value is the digital pin number.
-//
-// Defined with the Arduino core's own A0..An constants so the index->pin mapping
-// is correct on every platform — notably on Teensy where A-names are NOT
-// contiguous (Teensy 4.1 A14..A17 are pins 38..41, not A0+14; Teensy 3.6 is
-// wildly non-contiguous). Do NOT reconstruct pins as `A0 + i`.
-//
-// This is a PROBE list (which pins are safe/useful to sweep), not a
-// SET-validation source — e.g. ESP32-S3 deliberately lists only ADC1 here.
-// Stored in PROGMEM on AVR; read with pgm_read_byte().
-extern const uint8_t ANALOG_PINS[];
-extern const uint8_t ANALOG_PIN_COUNT;
+// The analog pins themselves (A<n> -> pin) live in pinctrl/board_pins.h (#570).
 
 // ===== PLATFORM INITIALIZATION FUNCTIONS =====
 void setupADC();  // Configure ADC settings for the current platform

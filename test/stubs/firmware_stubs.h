@@ -51,7 +51,10 @@ bool pinsConflict(const uint8_t* pins, uint8_t count, uint8_t /*rank*/, const ch
     }
     return false;
 }
+// Board pins and name (pinctrl/board_pins.cpp, #570): a stand-in board with
+// no analog pins, named NATIVE.
 int8_t analogIndexForPin(uint8_t) { return -1; }
+const char* boardName() { return "NATIVE"; }
 
 // requireInput() is no longer stubbed: it moved into input_manager.cpp (#411),
 // which every TU including this header already amalgamates, so the tests now

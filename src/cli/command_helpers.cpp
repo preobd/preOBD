@@ -13,7 +13,7 @@
 #include "../core/message_api.h"
 #include "../storage/system_config.h"
 #include "../core/platform.h"
-#include "../pinctrl/analog_pins.h"
+#include "../pinctrl/board_pins.h"
 #include "../sensors/application_presets.h"
 #include "../sensors/sensor_library.h"
 #include "../sensors/units_registry.h"
@@ -985,48 +985,17 @@ uint8_t parsePin(const char* pinStr, bool* isValid) {
         return analogPinForIndex((uint8_t)analogNum);
     }
 
-    // Digital pins
-    uint8_t pin = atoi(pinStr);
-
-    // Validate digital pin range
-    #if defined(__IMXRT1062__)  // Teensy 4.x
-        #if defined(ARDUINO_TEENSY41)
-            if (pin > 54) {  // Teensy 4.1: pins 0-54
-                if (isValid) *isValid = false;
-                msg.control.print(F("ERROR: Digital pin "));
-                msg.control.print(pin);
-                msg.control.println(F(" not available (Teensy 4.1 supports 0-54)"));
-                return 0;
-            }
-        #else  // Teensy 4.0
-            if (pin > 39) {  // Teensy 4.0: pins 0-39
-                if (isValid) *isValid = false;
-                msg.control.print(F("ERROR: Digital pin "));
-                msg.control.print(pin);
-                msg.control.println(F(" not available (Teensy 4.0 supports 0-39)"));
-                return 0;
-            }
-        #endif
-    #elif defined(__AVR_ATmega2560__)  // Mega has 54 digital pins
-        if (pin > 53) {
-            if (isValid) *isValid = false;
-            msg.control.print(F("ERROR: Digital pin "));
-            msg.control.print(pin);
-            msg.control.println(F(" not available (Arduino Mega supports 0-53)"));
-            return 0;
-        }
-    #elif defined(__AVR_ATmega328P__)  // Uno has 14 digital pins
-        if (pin > 13) {
-            if (isValid) *isValid = false;
-            msg.control.print(F("ERROR: Digital pin "));
-            msg.control.print(pin);
-            msg.control.println(F(" not available (Arduino Uno supports 0-13)"));
-            return 0;
-        }
-    #else
-        // For unknown platforms, allow any pin (no validation)
-        // This prevents breaking support for new platforms
-    #endif
+    // Digital pins: any pin the core says this board has (board_pins.h, #570).
+    // Read as int first, so "300" isn't narrowed to pin 44.
+    const int num = atoi(pinStr);
+    if (num < 0 || num > 0xFF || !boardHasPin((uint8_t)num)) {
+        if (isValid) *isValid = false;
+        msg.control.print(F("ERROR: Pin "));
+        msg.control.print(num);
+        msg.control.println(F(" does not exist on this board"));
+        return 0;
+    }
+    const uint8_t pin = (uint8_t)num;
 
     return pin;
 }

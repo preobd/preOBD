@@ -9,7 +9,7 @@
 #include "../storage/input_store.h"    // inputStoreSetProbeExclusion (#402 step 2)
 #include "measurement_compat.h"
 #include "../storage/system_config.h"  // OUTPUT_MASK_ALL_DATA / OutputId enum
-#include "../pinctrl/analog_pins.h"
+#include "../pinctrl/board_pins.h"
 #include "../core/message_router.h"  // For msg.control
 #include "../core/message_api.h"
 #include "../core/log_tags.h"

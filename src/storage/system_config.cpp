@@ -45,14 +45,14 @@ static struct {
     // reportBuiltinPinCollision()'s annotation line (#396) — registerSystemPins()
     // runs in the same pre-router-transport window as loadSystemConfig(), so its
     // "build-time pin collision" context is lost the same way. One bit per call
-    // site below is enough (there are exactly 8, all fixed at compile time) —
+    // site below is enough (there are exactly 9, all fixed at compile time) —
     // no array/capacity needed the way pin_owner.cpp's general buffer does.
-    uint8_t pinCollisionFlags = 0;
+    uint16_t pinCollisionFlags = 0;
 } bootDiag;
 
 enum BuiltinPinKind : uint8_t {
     BPK_MODE_BUTTON = 0, BPK_BUZZER, BPK_CAN_CS, BPK_CAN_INT,
-    BPK_SD, BPK_TEST_MODE, BPK_I2C_WIRED, BPK_SPI_WIRED,
+    BPK_SD, BPK_TEST_MODE, BPK_I2C_WIRED, BPK_SPI_WIRED, BPK_RESERVED,
 };
 
 // Forward declaration: the definition (below, beside registerSystemPins())
@@ -85,6 +85,10 @@ void flushSystemConfigBootDiagnostics() {
     // same #if as the call site in registerSystemPins() below, so a board that
     // never compiles a given claim never carries its (unused) flag bit's flash
     // cost either.
+#ifdef BOARD_RESERVED_PINS
+    if (bootDiag.pinCollisionFlags & (1u << BPK_RESERVED))
+        reportBuiltinPinCollisionNow(F("BOARD_RESERVED_PINS"));
+#endif
 #if INCLUDE_MODE_BUTTON
     if (bootDiag.pinCollisionFlags & (1u << BPK_MODE_BUTTON))
         reportBuiltinPinCollisionNow(F("MODE_BUTTON_PIN"));
@@ -480,7 +484,7 @@ static void reportBuiltinPinCollisionNow(const __FlashStringHelper* what) {
 // only one of them being fixed.
 static void reportBuiltinPinCollision(const __FlashStringHelper* what, uint8_t bit) {
     if (pinOwnerBootDiagBuffering()) {
-        bootDiag.pinCollisionFlags |= (uint8_t)(1u << bit);
+        bootDiag.pinCollisionFlags |= (uint16_t)(1u << bit);
     } else {
         reportBuiltinPinCollisionNow(what);
     }
@@ -491,6 +495,21 @@ static void reportBuiltinPinCollision(const __FlashStringHelper* what, uint8_t b
  * This reserves these pins and makes them visible in the registry export
  */
 void registerSystemPins(uint8_t busNeeds) {
+#ifdef BOARD_RESERVED_PINS
+    // First: pins wired to the board's own module (board.h, #570) are taken
+    // before anything wired.ini declares, so a wired pin that lands on one is
+    // the claim that fails, and is reported under its own name.
+    // One pin at a time: claimPins() takes at most 8, and a pin already held
+    // (a stored input from before this reservation existed) must not leave
+    // the others unclaimed.
+    { static const uint8_t p[] = { BOARD_RESERVED_PINS };
+      bool collided = false;
+      for (uint8_t i = 0; i < sizeof(p); i++) {
+          if (!claimPins(&p[i], 1, PIN_RESERVED, PIN_RANK_BUILTIN, TAG_SYSTEM, BOARD_RESERVED_NAME))
+              collided = true;
+      }
+      if (collided) reportBuiltinPinCollision(F("BOARD_RESERVED_PINS"), BPK_RESERVED); }
+#endif
 #if INCLUDE_MODE_BUTTON
     { const uint8_t p = MODE_BUTTON_PIN;
       if (!claimPins(&p, 1, PIN_BUTTON, PIN_RANK_BUILTIN, TAG_SYSTEM, "Mode Button"))

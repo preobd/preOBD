@@ -7,6 +7,7 @@
 #include "../config.h"
 
 #include "json_registry.h"
+#include "../pinctrl/board_pins.h"   // boardName(): firmware.platform (#570)
 #include "../core/platform.h"
 
 #if SUPPORTS_JSON_EXPORT
@@ -90,26 +91,6 @@ static FLASHMEM const char* pinTypeName(PinTypeRequirement p) {
         case PIN_I2C:     return "I2C";
         default:          return "UNKNOWN";
     }
-}
-
-static FLASHMEM const char* getPlatformStr() {
-#if defined(TEENSY_41)
-    return "TEENSY41";
-#elif defined(TEENSY_40)
-    return "TEENSY40";
-#elif defined(TEENSY_36)
-    return "TEENSY36";
-#elif defined(TEENSY_35)
-    return "TEENSY35";
-#elif defined(TEENSY_32)
-    return "TEENSY32";
-#elif defined(TEENSY_31)
-    return "TEENSY31";
-#elif defined(ESP32)
-    return "ESP32";
-#else
-    return "UNKNOWN";
-#endif
 }
 
 // ===== ENUM REGISTRY EXPORTS =====
@@ -342,7 +323,7 @@ static FLASHMEM void writeFirmwareJson(Print& out) {
     obj["patch"]      = FW_PATCH;
     obj["prerelease"] = FW_PRERELEASE;
     obj["gitHash"]    = FW_GIT_HASH;
-    obj["platform"]   = getPlatformStr();
+    obj["platform"]   = boardName();
     JsonArray caps = obj["capabilities"].to<JsonArray>();
 #if SUPPORTS_JSON_IMPORT_STREAM
     caps.add("json_import");

@@ -17,6 +17,7 @@
 #include "../core/reset_reason.h"
 #include "../core/watchdog.h"   // WatchdogKickingPrint, DIAG WATCHDOG STALL
 #include "../pinctrl/bus_pin_roles.h"   // busPinRole() for the DIAG PINS sweep (#304)
+#include "../pinctrl/board_pins.h"     // the analog pins the DIAG PINS sweep walks (#570)
 #include "../storage/system_config.h"
 #include "../storage/json_config.h"
 #include "../core/message_router.h"
@@ -957,7 +958,7 @@ static FLASHMEM void diagSectionInputs(bool verbose) {
 //
 // DIAG INPUTS only walks configured inputs[], so it can't answer the bench
 // question "which analog pin did I wire this sensor to?". This sweeps every
-// analog-capable pin (ANALOG_PINS[], platform.cpp) and reports its live state,
+// analog pin (analogPinForIndex(), pinctrl/board_pins) and reports its live state,
 // whether or not an Input is configured on it. A floating (unconnected) pin
 // jitters; a wired sensor/divider holds a steady value — that contrast is the
 // discovery signal.
@@ -1025,8 +1026,8 @@ static FLASHMEM PinDiscovery diagSamplePin(uint8_t pin, int& last, int& jitter) 
 
 static FLASHMEM void diagSectionPins() {
     msg.control.println(F("=== ANALOG PIN SWEEP ==="));
-    for (uint8_t i = 0; i < ANALOG_PIN_COUNT; i++) {
-        uint8_t pin = pgm_read_byte(&ANALOG_PINS[i]);
+    for (uint8_t i = 0; i < analogPinCount(); i++) {
+        uint8_t pin = analogPinForIndex(i);
 
         // 1) Configured analog Input on this pin? Reuse diagProbe so DIAG PINS and
         //    DIAG INPUTS never disagree about the same pin.
@@ -1113,8 +1114,8 @@ static FLASHMEM void diagSectionPins() {
 static FLASHMEM void diagSectionPinsJson(Print& out) {
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
-    for (uint8_t i = 0; i < ANALOG_PIN_COUNT; i++) {
-        uint8_t pin = pgm_read_byte(&ANALOG_PINS[i]);
+    for (uint8_t i = 0; i < analogPinCount(); i++) {
+        uint8_t pin = analogPinForIndex(i);
         JsonObject obj = arr.add<JsonObject>();
         char label[6];
         snprintf(label, sizeof(label), "A%u", (unsigned)i);

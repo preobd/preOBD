@@ -14,6 +14,18 @@
 // No HAS_BUILTIN_SD: SD is an external module — wire it and set SD_PIN in the
 // overlay to enable logging (resolve.h derives SUPPORTS_SD / SUPPORTS_SD_LOGGING).
 
+// ===== PINS (what the core can't know; pinctrl/board_pins.h, #570) =====
+// Which pins exist and which pin each A-name is come from the Arduino core.
+// The core counts 20 analog inputs; A10..A19 are ADC2, which can't be read
+// while the radio runs, and this board runs BLE.
+#define BOARD_ANALOG_USABLE    10
+// GPIOs wired to the ESP32-S3-DevKitC-1-N8R8 module itself: SPI flash 26..32
+// and octal PSRAM 33..37. Claimed in the pin registry at boot, so SET, BUS and
+// JSON IMPORT refuse them like any other taken pin. USB D-/D+ (GPIO 19/20)
+// are left free: they are ordinary GPIOs when the USB port isn't in use.
+#define BOARD_RESERVED_PINS    26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37
+#define BOARD_RESERVED_NAME    "Module flash/PSRAM"
+
 // ===== FEATURE CAPABILITY (what this board CAN do) =====
 // Declared by presence: a board that can't simply omits the line. Never 0.
 // boards/resolve.h turns each of these into the INCLUDE_* flag src/ tests.

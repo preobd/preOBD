@@ -6,7 +6,7 @@
  */
 
 #include "pin_label.h"
-#include "analog_pins.h"
+#include "board_pins.h"
 #include <Arduino.h>
 #include <stdio.h>
 

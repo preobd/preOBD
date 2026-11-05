@@ -145,7 +145,7 @@ outputs -> sensors   # #401 -- outputs format sensor-calibrated values.
 outputs -> storage   # #401 -- outputs read system_config for enable flags/intervals.
 
 pinctrl -> core      # #401 -- pin_owner/pin_registry use core/message_api and logging.
-pinctrl -> hal       # #401 -- analog_pins.h reads hal platform pin tables.
+pinctrl -> hal       # #401 -- board_pins.h reads hal platform pin tables.
 pinctrl -> storage   # #401 -- pin_registry reads system_config for wired-bus declarations.
 
 rules -> (root)      # #401 -- rules_manager reads config.h.

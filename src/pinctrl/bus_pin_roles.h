@@ -15,7 +15,7 @@
  * static array inside a statement expression, so several in one function hit
  * "section type conflict"; and a header-inlined table would be duplicated into
  * every TU that includes bus_defaults.h (which is most of them). One TU with
- * one table solves both — the same shape as analog_pins.{h,cpp}.
+ * one table solves both — the same shape as board_pins.{h,cpp}.
  */
 
 #ifndef BUS_PIN_ROLES_H

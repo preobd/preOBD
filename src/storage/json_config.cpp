@@ -13,6 +13,7 @@
 // Only compile JSON features on platforms with enough RAM and in runtime config mode
 #include "json_config.h"
 #include "json_registry.h"
+#include "../pinctrl/board_pins.h"   // boardName(): firmware.platform (#570)
 #if SUPPORTS_JSON_CONFIG
 #include "system_config.h"
 #include "../hal/bus_defaults.h"
@@ -73,33 +74,6 @@ extern uint8_t numActiveInputs;
 // For now, we'll use millis() / 1000 as a placeholder
 static FLASHMEM uint32_t getCurrentTimestamp() {
     return millis() / 1000;
-}
-
-// Get platform string
-static FLASHMEM const char* getPlatformString() {
-#if defined(TEENSY_40)
-    return "TEENSY40";
-#elif defined(TEENSY_41)
-    return "TEENSY41";
-#elif defined(TEENSY_36)
-    return "TEENSY36";
-#elif defined(TEENSY_35)
-    return "TEENSY35";
-#elif defined(TEENSY_32)
-    return "TEENSY32";
-#elif defined(TEENSY_31)
-    return "TEENSY31";
-#elif defined(ARDUINO_MEGA)
-    return "MEGA2560";
-#elif defined(ARDUINO_UNO)
-    return "UNO";
-#elif defined(ARDUINO_DUE)
-    return "DUE";
-#elif defined(ESP32)
-    return "ESP32";
-#else
-    return "UNKNOWN";
-#endif
 }
 
 // Get calibration type string
@@ -616,7 +590,7 @@ FLASHMEM void dumpConfigToJSON(Print& output) {
     firmware["prerelease"] = FW_PRERELEASE;
     firmware["build"] = firmwareVersion();
     firmware["gitHash"] = FW_GIT_HASH;
-    firmware["platform"] = getPlatformString();
+    firmware["platform"] = boardName();
     firmware["timestamp"] = getCurrentTimestamp();
     firmware["maxInputs"] = MAX_INPUTS;
     firmware["activeInputs"] = numActiveInputs;
