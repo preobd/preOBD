@@ -1193,7 +1193,7 @@ static void test_can_pins_refuse_wired_paths(void) {
 static void test_json_import_can_application_rule(void) {
     Input* in = makeCanImport(0xC7, 0x70, 1.0f);
     TEST_ASSERT_NOT_NULL(in);
-    in->applicationIndex = APP_BOOST_PRESSURE;   // hand-edited: 0x70 is absolute (#639)
+    in->applicationIndex = APP_OIL_TEMP;         // hand-edited: 0x70 is a pressure
     char text[1024];
     canRecordText(in, text, sizeof(text));
     freeInputSlot(0xC7);
@@ -1202,6 +1202,10 @@ static void test_json_import_can_application_rule(void) {
     JsonObject o = doc.as<JsonObject>();
     TEST_ASSERT_FALSE(importInputFromJSON(o, 0));
     TEST_ASSERT_NULL(getInputByPin(0xC7));
+    o["app"] = "BOOST_PRESSURE";                 // absolute PID, gauge application: converted (#639)
+    TEST_ASSERT_TRUE(importInputFromJSON(o, 0));
+    TEST_ASSERT_EQUAL_UINT8(APP_BOOST_PRESSURE, getInputByPin(0xC7)->applicationIndex);
+    freeInputSlot(0xC7);
     o["app"] = "MAP_PRESSURE";                   // absolute on absolute
     TEST_ASSERT_TRUE(importInputFromJSON(o, 0));
     TEST_ASSERT_EQUAL_UINT8(APP_MAP_PRESSURE, getInputByPin(0xC7)->applicationIndex);

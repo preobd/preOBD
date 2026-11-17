@@ -52,7 +52,17 @@ FLASHMEM void applyPressureReference(Input& in) {
     if (in.applicationIndex == APP_BAROMETRIC_PRESSURE) return;
     const SensorInfo* row = getSensorByIndex(in.sensorIndex);
     if (row == nullptr || (void*)in.readFunction != pgm_read_ptr(&row->readFunction)) return;
-    const PressureReference from = getSensorReference(in.sensorIndex);
+    PressureReference from = getSensorReference(in.sensorIndex);
+    if (in.calibrationType == CAL_CAN_IMPORT) {
+        // The PID decides (#639 phase 3); a custom CAN frame has no
+        // application but NONE (#640), so it never gets this far
+        uint8_t pid = in.flags.useCustomCalibration
+            ? in.customCalibration.can.source_pid
+            : (in.presetCalibration
+                   ? pgm_read_byte(&((const CANSensorCalibration*)in.presetCalibration)->source_pid)
+                   : 0);
+        from = pidPressureReference(pid);
+    }
     const PressureReference to = applicationReference(in.applicationIndex);
     if (from == REF_NONE || to == REF_NONE || from == to) return;   // skip the baro scan
     in.value += pressureReferenceOffset(from, to, baroReferenceBar());

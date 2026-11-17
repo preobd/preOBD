@@ -350,26 +350,28 @@ preOBD doesn't answer on, are added as extra coolant and EGT sources:
 | 0x0C | `ENGINE_RPM` | 0x46 | `AMBIENT_TEMP` |
 | 0x0D | `VEHICLE_SPEED` | 0x5C | `OIL_TEMP` |
 | 0x0F | `INTAKE_AIR_TEMP` | 0x78, 0x79 | `EGT` |
-| 0x11 | `THROTTLE_POSITION` | | |
+| 0x11 | `THROTTLE_POSITION` | 0x70 | `BOOST_PRESSURE` |
 
-Every other PID, and any PID outside the table, imports with the application `NONE`. That
-includes 0x70: it is an absolute boost pressure, and preOBD's `BOOST_PRESSURE` is gauge (until
-absolute and gauge pressures are converted, #639).
+Every other PID, and any PID outside the table, imports with the application `NONE`.
+A pressure is converted between the PID's reference and the application's, as for a wired
+sensor (see the Pressure Sensor Guide): 0x70 is absolute boost, so as `BOOST_PRESSURE` it reads
+gauge, the ECU's value minus the barometric pressure.
 `NONE` inputs read and log normally, but `PREOBD` has no signal for them. Notes:
 - When a wired input and an imported one have the same application, the wired one comes first
   (lower pin), as do the barometric reference for OBD boost answers and ELM327's `ATRV`.
 - 0x42 is the ECU's own supply voltage, usually a few tenths of a volt below the battery.
 - `SET CAN` arms no alarm; set one with `SET CAN:<n> ALARM ...`.
-- An input imported before this keeps `NONE`: import it again.
+- An input imported before this keeps `NONE`: import it again, or set its application with
+  `SET CAN:<n> APPLICATION` (an imported 0x70 kept `NONE` until #639).
 - `SET CAN:<n> CAL PRESET` (or `CLEAR CAN:<n> CALIBRATION`) drops the PID decode, and the application with it (an alarm Rule already set stays; remove it with `RULE`).
 
 **Changing the application.** `SET CAN:<n> APPLICATION <app>` changes only the application of
 a CAN input; the PID decode, name, units and sensor stay. `SET CAN:<n> APPLICATION NONE` takes it
 off. preOBD refuses an application the PID can't carry, with
-`ERROR: PID 0x70 can't carry BOOST_PRESSURE`:
+`ERROR: PID 0x0C can't carry OIL_PRESSURE`:
 - it must measure what the PID measures (0x05 can be `OIL_TEMP`, not `OIL_PRESSURE`);
-- a pressure must have the PID's reference: 0x0B, 0x33 and 0x70 are absolute and take
-  `MAP_PRESSURE` or `BAROMETRIC_PRESSURE`; 0x0A and 0x23 are gauge and take the others (#639);
+- a pressure PID takes any pressure application, and the value is converted between absolute
+  and gauge (0x0B, 0x33 and 0x70 are absolute; 0x0A and 0x23 gauge);
 - `BAROMETRIC_PRESSURE` only on 0x33 and `PRIMARY_BATTERY` only on 0x42: other parts of preOBD
   read them as the barometric reference and the battery;
 - a PID outside the table, a CAN ID other than 0x7E8-0x7EF, or an input whose decode was dropped

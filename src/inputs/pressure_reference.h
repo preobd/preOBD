@@ -54,7 +54,8 @@ float pressureReferenceOffset(PressureReference from, PressureReference to, floa
  * reference to the application's, once, right after the sensor's own read.
  * Only a real sensor read is converted: an input whose read function is not
  * its sensor row's (TEST INJECT, a test-mode scenario) already holds an
- * application value (#639 decision 3A). A CAN import's row is REF_NONE.
+ * application value (#639 decision 3A). A CAN import takes its PID's
+ * reference (0x0B/0x33/0x70 absolute, 0x0A/0x23 gauge).
  */
 void applyPressureReference(Input& in);
 

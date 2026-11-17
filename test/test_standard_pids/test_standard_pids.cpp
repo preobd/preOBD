@@ -249,32 +249,32 @@ static void test_import_applications(void) {
         mapped++;
         TEST_ASSERT_EQUAL_INT_MESSAGE(r.measurementType, getApplicationExpectedMeasurementType(app), msg);
     }
-    TEST_ASSERT_EQUAL_UINT8(15, mapped);
+    TEST_ASSERT_EQUAL_UINT8(16, mapped);   // 0x70 -> BOOST since #639
     const struct { uint8_t pid, app; } spot[] = {
         {0x05, APP_COOLANT_TEMP}, {0x0A, APP_FUEL_PRESSURE}, {0x0B, APP_MAP_PRESSURE},
         {0x0C, APP_ENGINE_RPM}, {0x0D, APP_VEHICLE_SPEED}, {0x0F, APP_INTAKE_AIR_TEMP},
         {0x11, APP_THROTTLE_POSITION}, {0x2F, APP_FUEL_LEVEL}, {0x33, APP_BAROMETRIC_PRESSURE},
         {0x42, APP_PRIMARY_BATTERY}, {0x46, APP_AMBIENT_TEMP}, {0x5C, APP_OIL_TEMP},
-        {0x78, APP_EGT},
+        {0x78, APP_EGT}, {0x70, APP_BOOST_PRESSURE},              // 0x70 converted (#639)
         {0x67, APP_COOLANT_TEMP}, {0x79, APP_EGT},                 // the aliases
         {0x23, APP_NONE}, {0x04, APP_NONE}, {0x45, APP_NONE},       // no preset answers on them
         {0xEE, APP_NONE},                                           // not a standard PID
     };
     for (const auto& s : spot) TEST_ASSERT_EQUAL_UINT8_MESSAGE(s.app, importApplicationForPid(s.pid), "spot");
 
-    // 0x70: a preset (BOOST_PRESSURE) answers on it, so NONE comes from the
-    // export converting it (a gauge application on an absolute PID), not from
-    // a hard-coded PID. MAP and baro are absolute PIDs too, but absolute
-    // applications: they map.
-    bool boostAnswers = false;
-    for (uint8_t i = 1; i < NUM_APPLICATION_PRESETS; i++)
-        if (pgm_read_byte(&APPLICATION_PRESETS[i].obd2pid) == 0x70) boostAnswers = true;
-    TEST_ASSERT_TRUE(boostAnswers);
-    ObdOutputPid spec;
-    TEST_ASSERT_TRUE(obdOutputSpec(0x70, spec));
-    TEST_ASSERT_TRUE((spec.flags & OBD_OUT_ABSOLUTE) != 0);
-    TEST_ASSERT_EQUAL_UINT8(APP_NONE, importApplicationForPid(0x70));
-    TEST_ASSERT_TRUE(obdOutputSpec(0x0B, spec));   // absolute PID, absolute application
+    // Each pressure PID's reference: the import converts from it (#639)
+    TEST_ASSERT_EQUAL_UINT8(REF_ABSOLUTE, pidPressureReference(0x0B));
+    TEST_ASSERT_EQUAL_UINT8(REF_ABSOLUTE, pidPressureReference(0x33));
+    TEST_ASSERT_EQUAL_UINT8(REF_ABSOLUTE, pidPressureReference(0x70));
+    TEST_ASSERT_EQUAL_UINT8(REF_GAUGE, pidPressureReference(0x0A));
+    TEST_ASSERT_EQUAL_UINT8(REF_GAUGE, pidPressureReference(0x23));
+    TEST_ASSERT_EQUAL_UINT8(REF_NONE, pidPressureReference(0x05));
+    TEST_ASSERT_EQUAL_UINT8(REF_NONE, pidPressureReference(0xEE));
+    for (uint8_t i = 0; i < NUM_STANDARD_PIDS; i++) {   // every pressure PID has one
+        StandardPIDInfo r = row(i);
+        if (r.measurementType == MEASURE_PRESSURE && r.data_offset == 0)
+            TEST_ASSERT_NOT_EQUAL_MESSAGE(REF_NONE, pidPressureReference(r.pid), "pressure PID");
+    }
     TEST_ASSERT_EQUAL_UINT8(APP_MAP_PRESSURE, importApplicationForPid(0x0B));
 }
 
@@ -288,27 +288,23 @@ static void test_pid_admits_application(void) {
         // What SET CAN gives a PID, the rule admits
         TEST_ASSERT_EQUAL_INT_MESSAGE(PID_APP_OK, pidAdmitsApplication(r.pid, importApplicationForPid(r.pid)), msg);
         TEST_ASSERT_EQUAL_INT_MESSAGE(PID_APP_OK, pidAdmitsApplication(r.pid, APP_NONE), msg);
-        ObdOutputPid spec;
-        const bool absPid = obdOutputSpec(r.pid, spec) && (spec.flags & OBD_OUT_ABSOLUTE);
         for (uint8_t app = 1; app < NUM_APPLICATION_PRESETS; app++) {
             snprintf(msg, sizeof(msg), "PID 0x%02X app %u", r.pid, app);
             if (pidAdmitsApplication(r.pid, app) != PID_APP_OK) continue;
             TEST_ASSERT_EQUAL_INT_MESSAGE(r.measurementType, getApplicationExpectedMeasurementType(app), msg);
-            if (r.measurementType == MEASURE_PRESSURE)
-                TEST_ASSERT_EQUAL_MESSAGE(absPid, absolutePressureApplication(app), msg);
             if (app == APP_BAROMETRIC_PRESSURE) TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x33, r.pid, msg);
             if (app == APP_PRIMARY_BATTERY) TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x42, r.pid, msg);
         }
     }
     const struct { uint8_t pid, app; PidAppVerdict v; } spot[] = {
-        {0x70, APP_BOOST_PRESSURE, PID_APP_REFERENCE},     // absolute PID, gauge application (#639)
+        {0x70, APP_BOOST_PRESSURE, PID_APP_OK},            // absolute PID, gauge application: converted (#639)
         {0x70, APP_MAP_PRESSURE, PID_APP_OK},              // absolute boost IS a manifold pressure
-        {0x0B, APP_BOOST_PRESSURE, PID_APP_REFERENCE},
-        {0x0B, APP_OIL_PRESSURE, PID_APP_REFERENCE},
+        {0x0B, APP_BOOST_PRESSURE, PID_APP_OK},
+        {0x0B, APP_OIL_PRESSURE, PID_APP_OK},
         {0x0B, APP_BAROMETRIC_PRESSURE, PID_APP_OWN_PID},  // MAP at cruise passes for a barometer
         {0x33, APP_BAROMETRIC_PRESSURE, PID_APP_OK},
         {0x33, APP_MAP_PRESSURE, PID_APP_OK},
-        {0x0A, APP_MAP_PRESSURE, PID_APP_REFERENCE},       // gauge PID, absolute application
+        {0x0A, APP_MAP_PRESSURE, PID_APP_OK},              // gauge PID, absolute application: converted
         {0x0A, APP_OIL_PRESSURE, PID_APP_OK},
         {0x23, APP_FUEL_PRESSURE, PID_APP_OK},
         {0x0C, APP_OIL_PRESSURE, PID_APP_QUANTITY},

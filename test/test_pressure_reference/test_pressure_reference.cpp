@@ -8,11 +8,19 @@
 #include <Arduino.h>
 #include <string.h>
 
+// The CAN_IMPORT row is only in the registry with INCLUDE_CAN; its read
+// function is the stub below
+#define INCLUDE_CAN 1
+struct Input;
+void readCANSensor(Input*) {}
+
 #include "../../src/sensors/sensor_library.cpp"
 #include "../../src/sensors/sensor_library/sensor_categories.cpp"
 #include "../../src/sensors/units_registry.cpp"
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
+#include "../../src/sensors/can_sensor_library/standard_pids.cpp"
+#include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"
 #include "../../src/inputs/pressure_reference.cpp"
 
 #include <math.h>
@@ -166,6 +174,35 @@ static void test_cases_end_to_end(void) {
     TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.95f, readThrough("MPX4250AP", APP_NONE, 0.95f));             // no application: as read
 }
 
+// A CAN import is in its PID's reference (#639 phase 3): an imported 0x70
+// (absolute) on BOOST reads gauge; on MAP, as imported
+static float importThrough(uint8_t pid, uint8_t app, float raw) {
+    uint8_t s = getSensorIndexByName("CAN_IMPORT");
+    TEST_ASSERT_NOT_EQUAL(0xFF, s);
+    Input& in = inputs[2];
+    memset(&in, 0, sizeof(in));
+    in.pin = 0xC1; in.flags.isEnabled = true;
+    in.sensorIndex = s; in.applicationIndex = app;
+    in.measurementType = MEASURE_PRESSURE;
+    in.calibrationType = CAL_CAN_IMPORT;
+    in.flags.useCustomCalibration = 1;
+    in.customCalibration.can.source_pid = pid;
+    in.readFunction = readCANSensor;
+    in.value = raw;
+    readInputNow(in);
+    return in.value;
+}
+
+static void test_can_import_reference(void) {
+    addBaro(0, 5, 0.95f);
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.55f, importThrough(0x70, APP_BOOST_PRESSURE, 1.50f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 1.50f, importThrough(0x70, APP_MAP_PRESSURE, 1.50f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 1.50f, importThrough(0x70, APP_NONE, 1.50f));     // NONE kept (#636): as imported
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.40f, importThrough(0x0A, APP_FUEL_PRESSURE, 0.40f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 1.35f, importThrough(0x0A, APP_MAP_PRESSURE, 0.40f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.0f, importThrough(0x0B, APP_BOOST_PRESSURE, 0.95f));
+}
+
 // Injected and test-mode values are already application values (decision 3A)
 static void readStub(Input* in) { in->value = 0.5f; }
 static void test_injected_not_converted(void) {
@@ -203,6 +240,7 @@ int main(int, char**) {
     RUN_TEST(test_application_reference);
     RUN_TEST(test_offset_is_pure);
     RUN_TEST(test_cases_end_to_end);
+    RUN_TEST(test_can_import_reference);
     RUN_TEST(test_injected_not_converted);
     RUN_TEST(test_baro_input_not_converted);
     return UNITY_END();

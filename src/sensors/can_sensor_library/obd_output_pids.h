@@ -40,6 +40,7 @@
 #include <Arduino.h>
 #include "../calibration_types.h"
 #include "../generated/registry_enums.h"   // APP_*
+#include "../../inputs/pressure_reference.h"   // PressureReference
 
 #define OBD_OUT_PREOBD   0x01   // preOBD-defined PID (0xAA-0xBF), not J1979
 #define OBD_OUT_ABSOLUTE 0x02   // absolute pressure: a boost (gauge) input adds barometric
@@ -67,6 +68,13 @@ extern const PROGMEM ObdOutputPid OBD_OUTPUT_TABLE[];
  * False when neither table defines the PID (the legacy case).
  */
 bool obdOutputSpec(uint8_t pid, ObdOutputPid& spec);
+
+/**
+ * A standard pressure PID's reference: REF_ABSOLUTE for 0x0B, 0x33, 0x70,
+ * REF_GAUGE for every other pressure PID, REF_NONE for anything else. A CAN
+ * import's value is in its PID's reference (#639).
+ */
+PressureReference pidPressureReference(uint8_t pid);
 
 /**
  * May an input measuring `type` answer on a PID with this spec? The type must
@@ -101,7 +109,6 @@ enum PidAppVerdict : uint8_t {
     PID_APP_OK = 0,
     PID_APP_NOT_STANDARD,   // not in STANDARD_PID_TABLE: no quantity to judge
     PID_APP_QUANTITY,       // the application measures another quantity
-    PID_APP_REFERENCE,      // absolute PID / gauge application, or the reverse (#639)
     PID_APP_OWN_PID,        // a reference application (baro, battery) off its own PID
 };
 
@@ -110,9 +117,8 @@ enum PidAppVerdict : uint8_t {
  *   - NONE always;
  *   - otherwise the PID must be in STANDARD_PID_TABLE, and the application
  *     must measure the PID's quantity;
- *   - a pressure must have the same reference: absolute PIDs (0x0B, 0x33,
- *     0x70, OBD_OUT_ABSOLUTE) take absolute applications (MAP, baro), gauge
- *     PIDs (0x0A, 0x23) the rest, until #639 converts between them;
+ *   - a pressure PID takes any pressure application: an absolute PID on a
+ *     gauge application, or the reverse, is converted (#639);
  *   - the applications other code reads as THE reference (BAROMETRIC_PRESSURE:
  *     the OBD boost answer's baro; PRIMARY_BATTERY: ELM327 ATRV) only on the
  *     PID their preset answers on (0x33, 0x42): MAP at cruise passes for

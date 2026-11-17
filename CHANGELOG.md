@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Teensy 4.0/4.1 builds could fail to boot at all (no USB, the program button needed) depending on how the code happened to lay out; the Teensy core is now pinned at 1.60, which fixes its startup clock setup (#621)
 
 ### Changed
+- `SET CAN 0x70` imports the ECU's boost as `BOOST_PRESSURE`, converted to gauge pressure, and `SET CAN:<n> APPLICATION` accepts any pressure application on a pressure PID, converting between absolute and gauge
 - An absolute pressure sensor (MPX4250AP, MPX5700AP) on a gauge application such as boost or oil pressure now reads gauge pressure, 0 at rest, instead of about 1 bar more; a gauge sender on `MAP_PRESSURE` now reads absolute; and every pressure on an OBD-II PID is sent in that PID's reference
 - A Rule now waits its debounce before clearing as well as before tripping, and its warning comes on and goes off the same way, so a reading sitting at a limit no longer makes the relay, alarm and warning chatter; set the debounce with `RULE <id> DEBOUNCE <ms>` or `RULE ADD … DEBOUNCE <ms>`, and Rules seeded for RPM, speed and throttle now default to 250 ms instead of none
 - A `FAILSAFE ON` relay (a cooling fan) now starts on at boot and stays on until its rule has a reading it trusts, so after a reset a fan wired to NC keeps running instead of stopping through the rule's warmup; `ACTION LIST` marks a relay the failsafe is holding on with `FAILSAFE`, and a JSON import refuses an `OUTSIDE` rule whose hysteresis is too wide for it ever to clear

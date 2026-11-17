@@ -132,8 +132,8 @@ running. Pick the slowest interval your gauges tolerate.
 An input imported from the car's network (`SET CAN`) gets its PID's
 application (0x0C `ENGINE_RPM`, 0x05 `COOLANT_TEMP`, ...) and maps like a wired
 input: instance n is the n-th input of that application in pin order, so a
-wired sensor (a lower pin than `CAN:0`) comes first. A PID with no application
-(including 0x70 boost, which is absolute) reads as no data. The full list is in
+wired sensor (a lower pin than `CAN:0`) comes first. An imported 0x70 boost is
+`BOOST_PRESSURE`, converted to gauge. A PID with no application reads as no data. The full list is in
 the CAN sensor import guide.
 
 ## Known limitation

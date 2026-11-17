@@ -78,6 +78,12 @@ FLASHMEM bool obdOutputSpec(uint8_t pid, ObdOutputPid& spec) {
     return true;
 }
 
+FLASHMEM PressureReference pidPressureReference(uint8_t pid) {
+    ObdOutputPid spec;
+    if (!obdOutputSpec(pid, spec) || spec.measurementType != MEASURE_PRESSURE) return REF_NONE;
+    return (spec.flags & OBD_OUT_ABSOLUTE) ? REF_ABSOLUTE : REF_GAUGE;
+}
+
 FLASHMEM uint8_t obdLengthFor(uint8_t pid, uint8_t current) {
     ObdOutputPid spec;
     if (pid != 0 && obdOutputSpec(pid, spec)) return spec.length;
@@ -108,11 +114,8 @@ FLASHMEM PidAppVerdict pidAdmitsApplication(uint8_t pid, uint8_t app) {
     StandardPIDInfo row;
     memcpy_P(&row, p, sizeof(row));   // PROGMEM on AVR
     if (getApplicationExpectedMeasurementType(app) != row.measurementType) return PID_APP_QUANTITY;
-    if (row.measurementType == MEASURE_PRESSURE) {
-        ObdOutputPid spec;
-        const bool absolutePid = obdOutputSpec(pid, spec) && (spec.flags & OBD_OUT_ABSOLUTE);
-        if (absolutePid != absolutePressureApplication(app)) return PID_APP_REFERENCE;
-    }
+    // An absolute PID on a gauge application, or the reverse, is converted
+    // (inputs/pressure_reference, #639): no refusal
     if ((app == APP_BAROMETRIC_PRESSURE || app == APP_PRIMARY_BATTERY) &&
         pgm_read_byte(&APPLICATION_PRESETS[app].obd2pid) != pid) return PID_APP_OWN_PID;
     return PID_APP_OK;

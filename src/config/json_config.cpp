@@ -1072,9 +1072,9 @@ static FLASHMEM bool admitInputRecord(JsonObject& inputObj, uint8_t index, bool 
                                             stagedOverride.can.source_pid, measured);
     }
     // A CAN import's application: the rule SET CAN:n APPLICATION applies
-    // (#636, #640) — its PID's quantity, the same pressure reference (0x70 is
-    // absolute, BOOST_PRESSURE gauge, #639), baro and battery only on their own
-    // PID. Only a standard PID read from an OBD ECU has a known quantity: a
+    // (#636, #640) — its PID's quantity (any pressure reference: an absolute
+    // PID on a gauge application is converted, #639), baro and battery only on
+    // their own PID. Only a standard PID read from an OBD ECU has a known quantity: a
     // record without its decode, or with a custom CAN ID or PID, keeps only
     // NONE (what SET CAN gives it).
     const bool stagedCanDecode = stagedCustom && stagedType == CAL_CAN_IMPORT;

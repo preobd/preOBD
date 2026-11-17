@@ -163,7 +163,7 @@ static void printPidHex(uint8_t pid) {
 // Why a CAN import may not carry `app` (pidAdmitsApplication(), #640). One
 // short line on every board: the mega2560's near PROGMEM has no room for a
 // line per verdict. "ERROR: PID " is the SET CAN literal, merged on AVR.
-//   ERROR: PID 0x70 can't carry BOOST_PRESSURE
+//   ERROR: PID 0x0C can't carry OIL_PRESSURE
 // A custom CAN ID or a dropped decode names the pin: its PID isn't the reason.
 //   ERROR: CAN:3 can't carry COOLANT_TEMP
 static FLASHMEM void printCanAppRefusal(PidAppVerdict v, const char* pinArg, const Input& in, uint8_t app) {
