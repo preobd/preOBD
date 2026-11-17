@@ -104,6 +104,22 @@ struct CalProfile {
 };
 
 #if INCLUDE_RULES_ENGINE
+// App CHANGED under existing Rule(s): their thresholds are now stale.
+// Re-seed them from the new application's defaults, or warn if the new
+// app has none (the old thresholds would otherwise silently mis-alarm).
+static FLASHMEM void reseedRulesOnChange(uint8_t pin) {
+    uint8_t n = rulesReseedRulesForInput(pin, millis());
+    if (n > 0) {
+        msg.control.print(F("  Application changed - re-seeded "));
+        msg.control.print(n);
+        msg.control.println(F(" Rule(s) from new defaults (RULE LIST to view)"));
+    } else {
+        msg.control.println(F("  WARNING: existing Rule(s) on this input keep their old"));
+        msg.control.println(F("  thresholds (new application has no default band) - review"));
+        msg.control.println(F("  with RULE LIST, then RULE RESET / RULE DEL as needed"));
+    }
+}
+
 // After setInputApplication(): seed the input's default Rule from the app
 // template on a fresh input, re-seed on an application CHANGE, keep a
 // customized Rule when the same app is re-applied (§11.5). Shared by
@@ -128,21 +144,61 @@ static FLASHMEM void seedRulesForApplication(uint8_t pin, uint8_t appIndex, uint
             msg.control.println(F("  (free a Rule with RULE DEL, then SET <pin> ALARM <min> <max>)"));
         }
     } else if (appIndex != oldApp) {
-        // App CHANGED under existing Rule(s): their thresholds are now stale.
-        // Re-seed them from the new application's defaults, or warn if the new
-        // app has none (the old thresholds would otherwise silently mis-alarm).
-        uint8_t n = rulesReseedRulesForInput(pin, millis());
-        if (n > 0) {
-            msg.control.print(F("  Application changed - re-seeded "));
-            msg.control.print(n);
-            msg.control.println(F(" Rule(s) from new defaults (RULE LIST to view)"));
-        } else {
-            msg.control.println(F("  WARNING: existing Rule(s) on this input keep their old"));
-            msg.control.println(F("  thresholds (new application has no default band) - review"));
-            msg.control.println(F("  with RULE LIST, then RULE RESET / RULE DEL as needed"));
-        }
+        reseedRulesOnChange(pin);
     }
     // else: same app re-applied — preserve existing Rule (§11.5).
+}
+#endif
+
+#if INCLUDE_CAN
+// "0x0C": HEX prints lowercase on Teensy
+static void printPidHex(uint8_t pid) {
+    msg.control.print(F("0x"));
+    for (int8_t shift = 4; shift >= 0; shift -= 4) {
+        uint8_t d = (pid >> shift) & 0x0F;
+        msg.control.print((char)(d < 10 ? '0' + d : 'A' + d - 10));
+    }
+}
+
+// Why a CAN import may not carry `app` (pidAdmitsApplication(), #640). One
+// short line on every board: the mega2560's near PROGMEM has no room for a
+// line per verdict. "ERROR: PID " is the SET CAN literal, merged on AVR.
+//   ERROR: PID 0x70 can't carry BOOST_PRESSURE
+// A custom CAN ID or a dropped decode names the pin: its PID isn't the reason.
+//   ERROR: CAN:3 can't carry COOLANT_TEMP
+static FLASHMEM void printCanAppRefusal(PidAppVerdict v, const char* pinArg, const Input& in, uint8_t app) {
+    if (v == PID_APP_NOT_STANDARD) {
+        msg.control.print(F("ERROR: "));
+        msg.control.print(pinArg);
+    } else {
+        msg.control.print(F("ERROR: PID "));
+        printPidHex(in.customCalibration.can.source_pid);
+    }
+    msg.control.print(F(" can't carry "));
+    msg.control.println((const __FlashStringHelper*)getApplicationNameByIndex(app));
+}
+
+// SET CAN:n APPLICATION <application|NONE> on a CAN import (#640): the
+// application only. The sensor, decode, names, units and OBD PID stay. Rules:
+// existing ones re-seed on a change, none is seeded (SET CAN arms no alarm,
+// the user is asked, #636).
+static FLASHMEM int set_can_import_application(uint8_t pin, const Input& in, uint8_t appIndex,
+                                               const char* const* argv) {
+    const uint8_t oldApp = in.applicationIndex;
+    const PidAppVerdict v = setCanImportApplication(pin, appIndex);
+    if (v != PID_APP_OK) {
+        printCanAppRefusal(v, argv[1], in, appIndex);
+        return 1;
+    }
+    printInputFieldSet(argv[1], F("application"), argv[3]);
+#if INCLUDE_RULES_ENGINE
+    if (canImportRuleAction(rulesRuleExistsForInput(pin), appIndex, oldApp) == CAN_RULES_RESEED) {
+        reseedRulesOnChange(pin);
+    }
+#else
+    (void)oldApp;
+#endif
+    return 0;
 }
 #endif
 
@@ -154,6 +210,14 @@ static int set_application(uint8_t pin, int argc, const char* const* argv) {
         return 1;
     }
     uint8_t appIndex = getApplicationIndexByName(argv[3]);
+#if INCLUDE_CAN
+    // A CAN import changes only its application (#640), and may go back to NONE
+    Input* canIn = getInputByPin(pin);
+    if (canIn != nullptr && !isCanImportInput(*canIn)) canIn = nullptr;
+    if (canIn != nullptr && (appIndex != 0 || strcasecmp(argv[3], "NONE") == 0)) {
+        return set_can_import_application(pin, *canIn, appIndex, argv);
+    }
+#endif
     if (appIndex == 0) {
         msg.control.print(F("ERROR: Unknown application '"));
         msg.control.print(argv[3]);
@@ -181,6 +245,11 @@ static int set_application(uint8_t pin, int argc, const char* const* argv) {
 // SET <pin> SENSOR <category> <preset>  (two-layer syntax)
 // SET <pin> SENSOR <sensor>             (legacy flat syntax)
 static int set_sensor(uint8_t pin, int argc, const char* const* argv) {
+    // Even CAN_IMPORT: setInputSensor() clears the CAN decode (#640)
+    if (isCanPin(pin)) {
+        printCanPinRefusal();
+        return 1;
+    }
     if (argc < 4) {
         msg.control.println(F("ERROR: SENSOR requires arguments"));
         msg.control.println(F("  Usage: SET <pin> SENSOR <category> <preset>"));
@@ -1477,14 +1546,6 @@ static const char PSTR_SET_CAN_HAS_SENSORS[] PROGMEM = " has sensors 1-";
 static const char PSTR_SET_CAN_HINT[] PROGMEM = "  This PID has sensors 1-";
 static const char PSTR_SET_CAN_HINT_END[] PROGMEM = ": add SENSOR <n> for another";
 
-// "0x0C": HEX prints lowercase on Teensy
-static void printPidHex(uint8_t pid) {
-    msg.control.print(F("0x"));
-    for (int8_t shift = 4; shift >= 0; shift -= 4) {
-        uint8_t d = (pid >> shift) & 0x0F;
-        msg.control.print((char)(d < 10 ? '0' + d : 'A' + d - 10));
-    }
-}
 #endif
 
 int cmd_set(int argc, const char* const* argv) {
@@ -1514,6 +1575,11 @@ int cmd_set(int argc, const char* const* argv) {
 
         // If both lookups succeed, treat as combined command
         if (appIndex != 0 && sensorIndex != 0) {
+            // A CAN:n pin takes neither (#640)
+            if (isCanPin(pin)) {
+                printCanPinRefusal();
+                return 1;
+            }
             // Check sensor/application measurement type compatibility. This is
             // a courtesy message only -- the real gate is inside
             // setInputApplication()/setInputSensor() below (#383), which is

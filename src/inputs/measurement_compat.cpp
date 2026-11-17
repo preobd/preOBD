@@ -65,6 +65,19 @@ MeasurementType inputMeasurementTypeOf(const Input& in) {
                                     in.customCalibration.can.source_pid, base);
 }
 
+PidAppVerdict canImportAdmitsApplication(uint16_t sourceCanId, uint8_t pid, uint8_t app) {
+    if (app == 0) return PID_APP_OK;
+    if (!isObdResponseId(sourceCanId)) return PID_APP_NOT_STANDARD;
+    return pidAdmitsApplication(pid, app);
+}
+
+PidAppVerdict canImportInputAdmits(const Input& in, uint8_t app) {
+    if (app == 0) return PID_APP_OK;
+    if (in.calibrationType != CAL_CAN_IMPORT || !in.flags.useCustomCalibration) return PID_APP_NOT_STANDARD;
+    return canImportAdmitsApplication(in.customCalibration.can.source_can_id,
+                                      in.customCalibration.can.source_pid, app);
+}
+
 bool standardPidToBase(const StandardPIDInfo& row, float& scale, float& offset,
                        uint8_t& unitsIndex) {
     char unitName[16];

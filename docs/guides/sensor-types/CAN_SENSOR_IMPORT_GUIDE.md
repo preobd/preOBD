@@ -363,6 +363,25 @@ absolute and gauge pressures are converted, #639).
 - An input imported before this keeps `NONE`: import it again.
 - `SET CAN:<n> CAL PRESET` (or `CLEAR CAN:<n> CALIBRATION`) drops the PID decode, and the application with it (an alarm Rule already set stays; remove it with `RULE`).
 
+**Changing the application.** `SET CAN:<n> APPLICATION <app>` changes only the application of
+a CAN input; the PID decode, name, units and sensor stay. `SET CAN:<n> APPLICATION NONE` takes it
+off. preOBD refuses an application the PID can't carry, with
+`ERROR: PID 0x70 can't carry BOOST_PRESSURE`:
+- it must measure what the PID measures (0x05 can be `OIL_TEMP`, not `OIL_PRESSURE`);
+- a pressure must have the PID's reference: 0x0B, 0x33 and 0x70 are absolute and take
+  `MAP_PRESSURE` or `BAROMETRIC_PRESSURE`; 0x0A and 0x23 are gauge and take the others (#639);
+- `BAROMETRIC_PRESSURE` only on 0x33 and `PRIMARY_BATTERY` only on 0x42: other parts of preOBD
+  read them as the barometric reference and the battery;
+- a PID outside the table, a CAN ID other than 0x7E8-0x7EF, or an input whose decode was dropped
+  takes only `NONE` (`ERROR: CAN:3 can't carry COOLANT_TEMP`).
+
+An existing alarm Rule is re-seeded from the new application's defaults; none is created (set
+one with `SET CAN:<n> ALARM ...`). A JSON import is judged by the same rule.
+
+`SET CAN:<n> SENSOR` and `SET CAN:<n> <app> <sensor>` are refused
+(`ERROR: SET CAN <pid> makes CAN:n inputs; then only APPLICATION changes`): they replaced the PID decode
+with a wired sensor. To start over, `CLEAR CAN:<n>` and then `SET CAN <pid>`.
+
 preOBD knows how to decode 31 standard OBD-II PIDs (`LIST PIDS JSON` prints the full
 table). Each was checked against three references for SAE J1979: Wikipedia's "OBD-II PIDs",
 the python-OBD library and CSS Electronics' J1979 PID table.

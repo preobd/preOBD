@@ -91,16 +91,55 @@ uint8_t obdLengthFor(uint8_t pid, uint8_t current);
 inline bool obdGaugeApplication(uint8_t app) { return app == APP_BOOST_PRESSURE; }
 
 /**
+ * Does this pressure application hold ABSOLUTE pressure (MAP, barometric)?
+ * Every other pressure application is gauge (0 at atmosphere). Only the CAN
+ * import admission (pidAdmitsApplication) asks this; the export still
+ * converts BOOST_PRESSURE alone (obdGaugeApplication), so nothing changes on
+ * the OBD output (#640).
+ */
+inline bool absolutePressureApplication(uint8_t app) {
+    return app == APP_MAP_PRESSURE || app == APP_BAROMETRIC_PRESSURE;
+}
+
+/**
+ * Why a standard PID may not carry an application (#640). One rule, shared
+ * by `SET CAN:n APPLICATION`, JSON import and SET CAN's own mapping.
+ */
+enum PidAppVerdict : uint8_t {
+    PID_APP_OK = 0,
+    PID_APP_NOT_STANDARD,   // not in STANDARD_PID_TABLE: no quantity to judge
+    PID_APP_QUANTITY,       // the application measures another quantity
+    PID_APP_REFERENCE,      // absolute PID / gauge application, or the reverse (#639)
+    PID_APP_OWN_PID,        // a reference application (baro, battery) off its own PID
+};
+
+/**
+ * May a CAN import of standard PID `pid` carry application `app`?
+ *   - NONE always;
+ *   - otherwise the PID must be in STANDARD_PID_TABLE, and the application
+ *     must measure the PID's quantity;
+ *   - a pressure must have the same reference: absolute PIDs (0x0B, 0x33,
+ *     0x70, OBD_OUT_ABSOLUTE) take absolute applications (MAP, baro), gauge
+ *     PIDs (0x0A, 0x23) the rest, until #639 converts between them;
+ *   - the applications other code reads as THE reference (BAROMETRIC_PRESSURE:
+ *     the OBD boost answer's baro; PRIMARY_BATTERY: ELM327 ATRV) only on the
+ *     PID their preset answers on (0x33, 0x42): MAP at cruise passes for
+ *     a barometer.
+ * The CAN ID is the caller's to judge (an OBD response ID, measurement_compat).
+ */
+PidAppVerdict pidAdmitsApplication(uint8_t pid, uint8_t app);
+
+/**
  * The application SET CAN gives an imported standard PID (#636), from the one
  * PID map there is: the application presets' `.obd2pid` (the PID preOBD
  * answers for that application), read backwards. Also:
  *   - import-only aliases for PIDs no preset answers on: 0x67 (coolant
  *     sensors 1-2) is COOLANT_TEMP, 0x79 (EGT bank 2) is EGT;
- *   - NONE when the export converts the PID for its application (a gauge
- *     application on an absolute PID: 0x70 boost): it arrives absolute, the
- *     application holds gauge (#639);
- *   - NONE when the preset measures another quantity than the PID, or no
- *     preset answers on it.
+ *   - NONE when pidAdmitsApplication() refuses the preset on this PID (a
+ *     gauge application on an absolute PID: 0x70 boost arrives absolute, the
+ *     application holds gauge, #639; or another quantity);
+ *   - NONE when no preset answers on it.
+ * Whatever it returns, pidAdmitsApplication() admits (test_standard_pids).
  * APP_NONE (0) for a PID outside STANDARD_PID_TABLE.
  */
 uint8_t importApplicationForPid(uint8_t pid);

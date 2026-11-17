@@ -92,18 +92,28 @@ FLASHMEM uint8_t importApplicationForPid(uint8_t pid) {
         case 0x79: return APP_EGT;            // EGT bank 2, sensors 1-4
         default: break;
     }
-    const StandardPIDInfo* p = lookupStandardPID(pid);
-    if (p == nullptr) return APP_NONE;
-    StandardPIDInfo row;
-    memcpy_P(&row, p, sizeof(row));   // PROGMEM on AVR
+    // Presets claim distinct PIDs (test_standard_pids), so the first that
+    // answers on this one is the only one
     for (uint8_t i = 1; i < NUM_APPLICATION_PRESETS; i++) {
-        if (pgm_read_byte(&APPLICATION_PRESETS[i].obd2pid) != pid ||
-            getApplicationExpectedMeasurementType(i) != row.measurementType) continue;
-        // The export converts this PID for this application (gauge on an
-        // absolute PID): an imported reading would be ~1 bar high (#639)
-        ObdOutputPid spec;
-        if (obdGaugeApplication(i) && obdOutputSpec(pid, spec) && (spec.flags & OBD_OUT_ABSOLUTE)) return APP_NONE;
-        return i;
+        if (pgm_read_byte(&APPLICATION_PRESETS[i].obd2pid) != pid) continue;
+        return pidAdmitsApplication(pid, i) == PID_APP_OK ? i : (uint8_t)APP_NONE;
     }
     return APP_NONE;
+}
+
+FLASHMEM PidAppVerdict pidAdmitsApplication(uint8_t pid, uint8_t app) {
+    if (app == APP_NONE) return PID_APP_OK;
+    const StandardPIDInfo* p = lookupStandardPID(pid);
+    if (p == nullptr || app >= NUM_APPLICATION_PRESETS) return PID_APP_NOT_STANDARD;
+    StandardPIDInfo row;
+    memcpy_P(&row, p, sizeof(row));   // PROGMEM on AVR
+    if (getApplicationExpectedMeasurementType(app) != row.measurementType) return PID_APP_QUANTITY;
+    if (row.measurementType == MEASURE_PRESSURE) {
+        ObdOutputPid spec;
+        const bool absolutePid = obdOutputSpec(pid, spec) && (spec.flags & OBD_OUT_ABSOLUTE);
+        if (absolutePid != absolutePressureApplication(app)) return PID_APP_REFERENCE;
+    }
+    if ((app == APP_BAROMETRIC_PRESSURE || app == APP_PRIMARY_BATTERY) &&
+        pgm_read_byte(&APPLICATION_PRESETS[app].obd2pid) != pid) return PID_APP_OWN_PID;
+    return PID_APP_OK;
 }

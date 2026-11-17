@@ -16,6 +16,7 @@
 #include "../core/platform.h"
 #include <Arduino.h>
 #include "input.h"
+#include "measurement_compat.h"   // PidAppVerdict (#640)
 
 // Global inputs array
 extern Input inputs[MAX_INPUTS];
@@ -65,8 +66,32 @@ void freeInputSlot(uint8_t pin);      // Release a slot allocated by allocateInp
 // CAN_IMPORT isn't in this build or no slot is free (nothing is left behind).
 Input* createCanImportInput(uint8_t pin);
 
+// CAN:n virtual pins (#640). isCanImportInput(): the CAN_IMPORT sensor on a
+// CAN:n pin, what SET CAN and JSON import build. setInputApplication() and
+// (for any other sensor) setInputSensor() refuse every CAN pin, with
+// printCanPinRefusal()'s text, which the CLI also prints.
+bool isCanPin(uint8_t pin);
+bool isCanImportInput(const Input& in);
+void printCanPinRefusal();
+
+// Change ONLY a CAN import's application (#640): the sensor, decode, names,
+// units, OBD PID and route stay. canImportInputAdmits() (measurement_compat.h)
+// judges it; anything but PID_APP_OK changes nothing (as does a pin that is
+// not a CAN import: PID_APP_NOT_STANDARD). Message-free: the caller prints
+// the verdict. Rules are the caller's too (canImportRuleAction()).
+PidAppVerdict setCanImportApplication(uint8_t pin, uint8_t appIndex);
+
+// What a CAN import's Rules do when its application changes (#640): re-seed
+// existing Rules from the new application (their thresholds are stale), but
+// never seed a fresh one — SET CAN arms no alarm, the user (or the app) is
+// asked (#636). Same application again: keep a customized Rule.
+enum CanImportRuleAction : uint8_t { CAN_RULES_KEEP = 0, CAN_RULES_RESEED };
+inline CanImportRuleAction canImportRuleAction(bool hasRules, uint8_t appIndex, uint8_t oldApp) {
+    return (hasRules && appIndex != oldApp) ? CAN_RULES_RESEED : CAN_RULES_KEEP;
+}
+
 // setInputApplication() — assign an application preset to `pin`, creating the
-// input if it doesn't exist yet.
+// input if it doesn't exist yet. Refused on a CAN:n pin (above).
 //
 // CONTRACT — all-or-nothing. On `false` NOTHING has changed:
 //   * no slot was claimed and numActiveInputs is untouched, so a refused NEW

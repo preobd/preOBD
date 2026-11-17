@@ -280,6 +280,54 @@ static void test_import_applications(void) {
     TEST_ASSERT_EQUAL_UINT8(APP_MAP_PRESSURE, importApplicationForPid(0x0B));
 }
 
+// #640: one rule decides whether a CAN import of a standard PID may carry an
+// application (SET CAN:n APPLICATION, JSON import, SET CAN's own mapping)
+static void test_pid_admits_application(void) {
+    for (uint8_t i = 0; i < NUM_STANDARD_PIDS; i++) {
+        StandardPIDInfo r = row(i);
+        char msg[48];
+        snprintf(msg, sizeof(msg), "PID 0x%02X", r.pid);
+        // What SET CAN gives a PID, the rule admits
+        TEST_ASSERT_EQUAL_INT_MESSAGE(PID_APP_OK, pidAdmitsApplication(r.pid, importApplicationForPid(r.pid)), msg);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(PID_APP_OK, pidAdmitsApplication(r.pid, APP_NONE), msg);
+        ObdOutputPid spec;
+        const bool absPid = obdOutputSpec(r.pid, spec) && (spec.flags & OBD_OUT_ABSOLUTE);
+        for (uint8_t app = 1; app < NUM_APPLICATION_PRESETS; app++) {
+            snprintf(msg, sizeof(msg), "PID 0x%02X app %u", r.pid, app);
+            if (pidAdmitsApplication(r.pid, app) != PID_APP_OK) continue;
+            TEST_ASSERT_EQUAL_INT_MESSAGE(r.measurementType, getApplicationExpectedMeasurementType(app), msg);
+            if (r.measurementType == MEASURE_PRESSURE)
+                TEST_ASSERT_EQUAL_MESSAGE(absPid, absolutePressureApplication(app), msg);
+            if (app == APP_BAROMETRIC_PRESSURE) TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x33, r.pid, msg);
+            if (app == APP_PRIMARY_BATTERY) TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x42, r.pid, msg);
+        }
+    }
+    const struct { uint8_t pid, app; PidAppVerdict v; } spot[] = {
+        {0x70, APP_BOOST_PRESSURE, PID_APP_REFERENCE},     // absolute PID, gauge application (#639)
+        {0x70, APP_MAP_PRESSURE, PID_APP_OK},              // absolute boost IS a manifold pressure
+        {0x0B, APP_BOOST_PRESSURE, PID_APP_REFERENCE},
+        {0x0B, APP_OIL_PRESSURE, PID_APP_REFERENCE},
+        {0x0B, APP_BAROMETRIC_PRESSURE, PID_APP_OWN_PID},  // MAP at cruise passes for a barometer
+        {0x33, APP_BAROMETRIC_PRESSURE, PID_APP_OK},
+        {0x33, APP_MAP_PRESSURE, PID_APP_OK},
+        {0x0A, APP_MAP_PRESSURE, PID_APP_REFERENCE},       // gauge PID, absolute application
+        {0x0A, APP_OIL_PRESSURE, PID_APP_OK},
+        {0x23, APP_FUEL_PRESSURE, PID_APP_OK},
+        {0x0C, APP_OIL_PRESSURE, PID_APP_QUANTITY},
+        {0x05, APP_OIL_TEMP, PID_APP_OK},                  // the user's override, same quantity
+        {0x67, APP_OIL_TEMP, PID_APP_OK},
+        {0x42, APP_PRIMARY_BATTERY, PID_APP_OK},
+        {0x42, APP_AUXILIARY_BATTERY, PID_APP_OK},
+        {0xEE, APP_ENGINE_RPM, PID_APP_NOT_STANDARD},
+        {0xEE, APP_NONE, PID_APP_OK},
+    };
+    for (const auto& s : spot) {
+        char msg[32];
+        snprintf(msg, sizeof(msg), "PID 0x%02X app %u", s.pid, s.app);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(s.v, pidAdmitsApplication(s.pid, s.app), msg);
+    }
+}
+
 // The reverse lookup is unambiguous: no two presets answer on one standard PID
 static void test_presets_claim_distinct_pids(void) {
     for (uint8_t i = 1; i < NUM_APPLICATION_PRESETS; i++) {
@@ -295,6 +343,7 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_every_row_is_well_formed);
     RUN_TEST(test_import_applications);
+    RUN_TEST(test_pid_admits_application);
     RUN_TEST(test_presets_claim_distinct_pids);
     RUN_TEST(test_conversion_to_base);
     RUN_TEST(test_audited_rows);

@@ -28,6 +28,7 @@
 
 #include <Arduino.h>
 #include "../sensors/calibration_types.h"  // MeasurementType
+#include "../sensors/can_sensor_library/obd_output_pids.h"  // PidAppVerdict
 
 // True iff `sensorIndex`'s physical measurement type is a valid match for
 // what `applicationIndex` expects.
@@ -67,6 +68,18 @@ MeasurementType canImportMeasurementType(uint16_t sourceCanId, uint8_t pid,
 // measures what the PID table says, anything else what its sensor/app says.
 // The one answer the units checks and Input::measurementType should agree on.
 MeasurementType inputMeasurementTypeOf(const Input& in);
+
+// May a CAN import decoding PID `pid` from `sourceCanId` carry application
+// `app` (#640)? NONE always; anything else only on a standard PID read from an
+// ECU response ID (0x7E8-0x7EF), judged by pidAdmitsApplication()
+// (obd_output_pids.h). A custom ID or PID has no quantity to judge against,
+// so it keeps NONE until the user defines its decode (phase 4).
+PidAppVerdict canImportAdmitsApplication(uint16_t sourceCanId, uint8_t pid, uint8_t app);
+
+// The same for a configured CAN import, judged on its own decode: one CAL
+// PRESET / CLEAR ... CALIBRATION dropped (no custom CAN_IMPORT calibration)
+// measures nothing in particular and keeps NONE.
+PidAppVerdict canImportInputAdmits(const Input& in, uint8_t app);
 
 // The first registry unit of `type` (e.g. BAR for PRESSURE, KPH for SPEED;
 // the PERCENT family shares PERCENT), or 0 if the registry has none.

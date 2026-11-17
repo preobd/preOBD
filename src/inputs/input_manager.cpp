@@ -21,6 +21,10 @@
 #include "../buses/bus_manager.h"
 #include "../rules/rules_manager.h"  // rulesResetTables + rule/action table helpers
 
+#ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
+#define FLASHMEM
+#endif
+
 // ===== GLOBAL STATE =====
 Input inputs[MAX_INPUTS];
 uint8_t numActiveInputs = 0;
@@ -247,6 +251,31 @@ Input* createCanImportInput(uint8_t pin) {
     return input;
 }
 
+FLASHMEM bool isCanPin(uint8_t pin) {
+    return pin >= PIN_CAN_BASE && pin <= PIN_CAN_MAX;
+}
+
+FLASHMEM bool isCanImportInput(const Input& in) {
+    const uint8_t canSensor = getSensorIndexByName("CAN_IMPORT");
+    return isCanPin(in.pin) && canSensor != 0 && in.sensorIndex == canSensor;
+}
+
+// PROGMEM array, not F(): F() is a bare cast on Teensy 4 (literal in RAM1)
+static const char PSTR_CAN_PIN_REFUSAL[] PROGMEM =
+    "ERROR: SET CAN <pid> makes CAN:n inputs; then only APPLICATION changes";
+
+FLASHMEM void printCanPinRefusal() {
+    msg.control.println((const __FlashStringHelper*)PSTR_CAN_PIN_REFUSAL);
+}
+
+FLASHMEM PidAppVerdict setCanImportApplication(uint8_t pin, uint8_t appIndex) {
+    Input* input = getInputByPin(pin);
+    if (input == nullptr || !isCanImportInput(*input)) return PID_APP_NOT_STANDARD;
+    const PidAppVerdict v = canImportInputAdmits(*input, appIndex);
+    if (v == PID_APP_OK) input->applicationIndex = appIndex;   // and nothing else
+    return v;
+}
+
 void freeInputSlot(uint8_t pin) {
     // Wipe the whole slot, not just the pin: findFreeSlot() recycles on
     // pin == 0xFF alone, so anything left behind here (notably
@@ -262,6 +291,15 @@ void freeInputSlot(uint8_t pin) {
 }
 
 bool setInputApplication(uint8_t pin, uint8_t appIndex) {
+    // A CAN:n pin holds only what SET CAN builds (#640): a preset here swapped
+    // the CAN_IMPORT sensor out and dropped the decode, or built an analog
+    // input on a virtual pin. setCanImportApplication() changes a CAN
+    // import's application.
+    if (isCanPin(pin)) {
+        printCanPinRefusal();
+        return false;
+    }
+
     // Find or create input
     Input* input = getInputByPin(pin);
     bool isNewInput = (input == nullptr);
@@ -413,6 +451,15 @@ bool inputHonorsDivider(const Input* input) {
 bool setInputSensor(uint8_t pin, uint8_t sensorIndex) {
     Input* input = requireInput(pin);
     if (!input) return false;
+
+    // A CAN:n pin takes only the CAN_IMPORT sensor (#640): any other drops
+    // the decode and reads a virtual pin. CAN_IMPORT itself stays allowed for
+    // createCanImportInput() and JSON import, which install the decode after
+    // (the CLI refuses even that: this clears useCustomCalibration).
+    if (isCanPin(pin) && sensorIndex != getSensorIndexByName("CAN_IMPORT")) {
+        printCanPinRefusal();
+        return false;
+    }
 
     // ---- ADMISSION PHASE ------------------------------------------------
     // Get Sensor info from flash

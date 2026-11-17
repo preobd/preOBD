@@ -1079,8 +1079,133 @@ static void test_clear_calibration_drops_can_application(void) {
     freeInputSlot(0xC4);
 }
 
+// ===== #640: SET CAN:n APPLICATION changes only a CAN import's application =====
+
+static void test_can_import_application_override(void) {
+    Input* in = makeCanImport(0xC6, 0x05, 1.0f);
+    TEST_ASSERT_NOT_NULL(in);
+    in->applicationIndex = APP_COOLANT_TEMP;   // what SET CAN gives 0x05
+    TEST_ASSERT_TRUE(isCanImportInput(*in));
+    Input before;
+    memcpy(&before, in, sizeof(Input));
+
+    // Another temperature: only the application changes (decode, sensor,
+    // names, units, OBD PID, route, read function all stay)
+    TEST_ASSERT_EQUAL_INT(PID_APP_OK, setCanImportApplication(0xC6, APP_OIL_TEMP));
+    before.applicationIndex = APP_OIL_TEMP;
+    TEST_ASSERT_EQUAL_MEMORY(&before, in, sizeof(Input));
+
+    // A refusal changes nothing
+    TEST_ASSERT_EQUAL_INT(PID_APP_QUANTITY, setCanImportApplication(0xC6, APP_OIL_PRESSURE));
+    TEST_ASSERT_EQUAL_MEMORY(&before, in, sizeof(Input));
+
+    // NONE is always allowed
+    TEST_ASSERT_EQUAL_INT(PID_APP_OK, setCanImportApplication(0xC6, APP_NONE));
+    TEST_ASSERT_EQUAL_UINT8(APP_NONE, in->applicationIndex);
+    TEST_ASSERT_TRUE(in->flags.useCustomCalibration);
+
+    // With its decode dropped it measures nothing in particular: NONE only
+    TEST_ASSERT_TRUE(clearInputCalibration(0xC6));
+    TEST_ASSERT_TRUE(isCanImportInput(*in));
+    TEST_ASSERT_EQUAL_INT(PID_APP_NOT_STANDARD, setCanImportApplication(0xC6, APP_COOLANT_TEMP));
+    TEST_ASSERT_EQUAL_INT(PID_APP_OK, setCanImportApplication(0xC6, APP_NONE));
+    freeInputSlot(0xC6);
+
+    // A custom CAN ID: NONE only (its quantity is the user's, phase 4)
+    Input* custom = createCanImportInput(0xC5);
+    TEST_ASSERT_NOT_NULL(custom);
+    TEST_ASSERT_EQUAL_INT(CAL_APPLY_OK, applyCalCanImport(custom, 0x400, 0x05, 0, 1, true, 1.0f, -40.0f, 2000));
+    TEST_ASSERT_EQUAL_INT(PID_APP_NOT_STANDARD, setCanImportApplication(0xC5, APP_COOLANT_TEMP));
+    TEST_ASSERT_EQUAL_UINT8(APP_NONE, custom->applicationIndex);
+    freeInputSlot(0xC5);
+
+    // Not a CAN import: refused, nothing created
+    TEST_ASSERT_EQUAL_INT(PID_APP_NOT_STANDARD, setCanImportApplication(0xC7, APP_COOLANT_TEMP));
+    TEST_ASSERT_NULL(getInputByPin(0xC7));
+    TEST_ASSERT_TRUE(setInputApplication(4, appCHT()));
+    TEST_ASSERT_FALSE(isCanImportInput(*getInputByPin(4)));
+    TEST_ASSERT_EQUAL_INT(PID_APP_NOT_STANDARD, setCanImportApplication(4, APP_OIL_TEMP));
+    TEST_ASSERT_EQUAL_UINT8(appCHT(), getInputByPin(4)->applicationIndex);
+}
+
+// The wired-input paths refuse every CAN pin: they dropped the decode, or
+// built an analog input on a virtual pin
+static void test_can_pins_refuse_wired_paths(void) {
+    Input* in = makeCanImport(0xC2, 0x0C, 0.25f);
+    TEST_ASSERT_NOT_NULL(in);
+    in->applicationIndex = APP_ENGINE_RPM;
+    Input before;
+    memcpy(&before, in, sizeof(Input));
+
+    TEST_ASSERT_FALSE(setInputApplication(0xC2, APP_ENGINE_RPM));
+    TEST_ASSERT_EQUAL_MEMORY(&before, in, sizeof(Input));
+    TEST_ASSERT_NOT_EQUAL(0, getSensorIndexByName("VDO_120C_STEINHART"));
+    TEST_ASSERT_FALSE(setInputSensor(0xC2, getSensorIndexByName("VDO_120C_STEINHART")));
+    TEST_ASSERT_EQUAL_MEMORY(&before, in, sizeof(Input));
+
+    // An empty CAN pin: no wired-style input on it
+    TEST_ASSERT_FALSE(setInputApplication(0xC9, appCHT()));
+    TEST_ASSERT_NULL(getInputByPin(0xC9));
+    TEST_ASSERT_EQUAL_UINT8(1, occupiedSlots());
+
+    // CAN_IMPORT itself stays allowed: createCanImportInput() rebuilds an
+    // existing CAN input through it (JSON import over a dump)
+    TEST_ASSERT_EQUAL_PTR(in, createCanImportInput(0xC2));
+    TEST_ASSERT_EQUAL_UINT8(getSensorIndexByName("CAN_IMPORT"), in->sensorIndex);
+    freeInputSlot(0xC2);
+}
+
+// JSON import judges a CAN record's application with the same rule, and a
+// dump re-imports over the inputs it came from
+static void test_json_import_can_application_rule(void) {
+    Input* in = makeCanImport(0xC7, 0x70, 1.0f);
+    TEST_ASSERT_NOT_NULL(in);
+    in->applicationIndex = APP_BOOST_PRESSURE;   // hand-edited: 0x70 is absolute (#639)
+    char text[1024];
+    canRecordText(in, text, sizeof(text));
+    freeInputSlot(0xC7);
+    JsonDocument doc;
+    TEST_ASSERT_FALSE(deserializeJson(doc, text));
+    JsonObject o = doc.as<JsonObject>();
+    TEST_ASSERT_FALSE(importInputFromJSON(o, 0));
+    TEST_ASSERT_NULL(getInputByPin(0xC7));
+    o["app"] = "MAP_PRESSURE";                   // absolute on absolute
+    TEST_ASSERT_TRUE(importInputFromJSON(o, 0));
+    TEST_ASSERT_EQUAL_UINT8(APP_MAP_PRESSURE, getInputByPin(0xC7)->applicationIndex);
+    // ... again over the input it just made
+    TEST_ASSERT_TRUE(importInputFromJSON(o, 0));
+    Input* back = getInputByPin(0xC7);
+    TEST_ASSERT_EQUAL_UINT8(APP_MAP_PRESSURE, back->applicationIndex);
+    TEST_ASSERT_TRUE(back->flags.useCustomCalibration);
+    TEST_ASSERT_EQUAL_HEX8(0x70, back->customCalibration.can.source_pid);
+    freeInputSlot(0xC7);
+
+    // A wired record on a CAN pin is refused
+    TEST_ASSERT_TRUE(setInputApplication(4, appCHT()));
+    char wtext[1024];
+    canRecordText(getInputByPin(4), wtext, sizeof(wtext));
+    freeInputSlot(4);
+    JsonDocument wdoc;
+    TEST_ASSERT_FALSE(deserializeJson(wdoc, wtext));
+    JsonObject w = wdoc.as<JsonObject>();
+    w["pin"] = 0xC8;
+    TEST_ASSERT_FALSE(importInputFromJSON(w, 0));
+    TEST_ASSERT_NULL(getInputByPin(0xC8));
+}
+
+static void test_can_import_rule_action(void) {
+    TEST_ASSERT_EQUAL_INT(CAN_RULES_KEEP, canImportRuleAction(false, APP_OIL_TEMP, APP_COOLANT_TEMP));   // never seeds
+    TEST_ASSERT_EQUAL_INT(CAN_RULES_RESEED, canImportRuleAction(true, APP_OIL_TEMP, APP_COOLANT_TEMP));
+    TEST_ASSERT_EQUAL_INT(CAN_RULES_RESEED, canImportRuleAction(true, APP_NONE, APP_COOLANT_TEMP));
+    TEST_ASSERT_EQUAL_INT(CAN_RULES_KEEP, canImportRuleAction(true, APP_COOLANT_TEMP, APP_COOLANT_TEMP));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_can_import_application_override);
+    RUN_TEST(test_can_pins_refuse_wired_paths);
+    RUN_TEST(test_json_import_can_application_rule);
+    RUN_TEST(test_can_import_rule_action);
     RUN_TEST(test_can_toggle_gates_obd_answers);
     RUN_TEST(test_a_stale_pid_table_rebuilds_on_the_next_request);
     RUN_TEST(test_obd_and_elm327_answer_their_own_routes);

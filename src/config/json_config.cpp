@@ -29,7 +29,6 @@
 #include "../inputs/calibration_apply.h"
 #include "../sensors/units_registry.h"
 #include "../inputs/measurement_compat.h"  // units vs measurement type (#458)
-#include "../sensors/can_sensor_library/standard_pids.h"  // lookupStandardPID: a CAN record's application (#636)
 #include "../sensors/sensor_library.h"
 #include "../sensors/application_presets.h"
 #include "../version.h"
@@ -1026,16 +1025,17 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         measured = canImportMeasurementType(stagedOverride.can.source_can_id,
                                             stagedOverride.can.source_pid, measured);
     }
-    // A CAN import's application must be what its PID measures (#636). Only
-    // a standard PID read from an OBD ECU has a known quantity: a record
-    // without its decode, or with a custom CAN ID or PID, would otherwise
-    // judge as the preset's TEMPERATURE and admit any temperature application,
-    // so it keeps only NONE (what SET CAN gives it).
-    const bool knownPid = stagedCustom && stagedType == CAL_CAN_IMPORT &&
-                          isObdResponseId(stagedOverride.can.source_can_id) &&
-                          lookupStandardPID(stagedOverride.can.source_pid) != nullptr;
+    // A CAN import's application: the rule SET CAN:n APPLICATION applies
+    // (#636, #640) — its PID's quantity, the same pressure reference (0x70 is
+    // absolute, BOOST_PRESSURE gauge, #639), baro and battery only on their own
+    // PID. Only a standard PID read from an OBD ECU has a known quantity: a
+    // record without its decode, or with a custom CAN ID or PID, keeps only
+    // NONE (what SET CAN gives it).
+    const bool stagedCanDecode = stagedCustom && stagedType == CAL_CAN_IMPORT;
     if (canImportRecord && appIdx != 0 &&
-        (!knownPid || measured != getApplicationExpectedMeasurementType(appIdx))) {
+        (!stagedCanDecode ||
+         canImportAdmitsApplication(stagedOverride.can.source_can_id,
+                                    stagedOverride.can.source_pid, appIdx) != PID_APP_OK)) {
         msg.control.print(F("ERROR: Failed to import input "));
         msg.control.print(index);
         msg.control.print(F(" (pin "));

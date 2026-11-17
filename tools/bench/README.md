@@ -7,6 +7,7 @@
 | `obdlink_daemon.py` | Holds the OBDLink LX's Bluetooth port open: closing it costs a manual re-pair. Commands through `~/.preobd/obdlink_fifo`. |
 | `obdlink_send.py` | Sends commands to the daemon and prints the replies; `--monitor <s>` captures traffic (ATMA). |
 | `can_decode.py` | Decodes a capture against a DBC (`docs/can/preOBD.dbc`). |
+| `can_application_override.sh` | #640: `SET CAN:n APPLICATION` on CAN imports (allowed, refused, Rule re-seed); reboots at the end instead of SAVE. |
 | `serial_cmd.py` | Runs preOBD console commands over USB with a fixed time per command. |
 
 **Long-running holders are started by a person, in their own terminal, and left
