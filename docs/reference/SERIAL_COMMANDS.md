@@ -1126,6 +1126,8 @@ AT <port> <command>
 
 The command waits up to ~500 ms for a response, extending the window while bytes are still arriving, then prints what was received.
 
+`AT` is refused (`ERROR: Serial<n> is in use`) on a port whose bytes belong to something else: the framed nRF52840 link (it is not an AT module, and raw bytes would break its framing), the port the `AT` command itself was typed on, or a port a `JSON IMPORT` is arriving on. A port that is a console link but idle, such as an HM-10 with no phone connected, is fine.
+
 ### Examples
 
 ```

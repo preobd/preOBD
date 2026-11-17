@@ -1595,18 +1595,37 @@ int cmd_at(int argc, const char* const* argv) {
         return 1;
     }
 
-    uint8_t port_id = atoi(argv[1]);
-    if (port_id < 1 || port_id > NUM_SERIAL_PORTS) {
+    const int n = atoi(argv[1]);                    // int first: 257 must not wrap to 1
+    if (n < 1 || n > NUM_SERIAL_PORTS) {
         msg.control.print(F("ERROR: Invalid port (1-"));
         msg.control.print(NUM_SERIAL_PORTS);
         msg.control.println(F(")"));
         return 1;
     }
+    const uint8_t port_id = (uint8_t)n;
 
     if (!isSerialPortActive(port_id)) {
         msg.control.print(F("ERROR: Serial"));
         msg.control.print(port_id);
         msg.control.println(F(" is not active. Enable it first with BUS SERIAL <port> ENABLE"));
+        return 1;
+    }
+
+    // AT reads the port itself, so not one whose bytes belong to someone else
+    // (#627): the framed nRF link (raw bytes would break its framing), the port
+    // this command came from, or one a JSON import is arriving on. An idle
+    // console port is fine: that's an HM-10 being configured with no phone on it.
+    const uint8_t id = (uint8_t)(TRANSPORT_SERIAL1 + (port_id - 1));
+    TransportInterface* t = transportGet(id);
+    const bool framed = t != nullptr && (t->getCapabilities() & CAP_FRAMED);
+    bool importing = false;
+#if SUPPORTS_JSON_IMPORT_STREAM
+    importing = jsonImportActive() && jsonImportSource() == id;
+#endif
+    if (framed || id == consoleActiveSourceId() || importing) {
+        msg.control.print(F("ERROR: Serial"));
+        msg.control.print(port_id);
+        msg.control.println(F(" is in use"));
         return 1;
     }
 

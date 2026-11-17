@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - RealDash can connect over Bluetooth LE through the nRF52840 link (`OUTPUT ADD REALDASH BLE`), instead of ELM327 over BLE; it needs the updated nRF firmware
 
 ### Fixed
+- `AT <port>` is refused on the nRF Bluetooth port, on the port it was typed on, and on a port a JSON import is arriving on, instead of reading bytes that belong to them
 - Commands and JSON imports from two links at once (USB, a second serial console and Bluetooth) no longer get mixed together: each link has its own command line, and an import belongs to the link that started it; an import or `LOAD` no longer changes the serial settings of the nRF Bluetooth port (use `BUS SERIAL 1` for that)
 - Teensy 4.0/4.1 builds could fail to boot at all (no USB, the program button needed) depending on how the code happened to lay out; the Teensy core is now pinned at 1.60, which fixes its startup clock setup (#621)
 
