@@ -250,7 +250,7 @@ frame decoding (`CAN_IMPORT`). The others can also be set with `SET <pin> CAL ..
 | `enabled` | `false` = parked |
 | `warnLo`, `warnHi` | `ALARM` rules only: a number sets the warning edge, `null` means no warning tier, and leaving the key out means automatic |
 
-`warmupMs` and `debounceMs` can only be changed through JSON.
+`warmupMs` can only be changed through JSON; `debounceMs` also through `RULE <id> DEBOUNCE <ms>`.
 
 ### Actions
 

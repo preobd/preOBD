@@ -224,7 +224,7 @@ struct Rule {
     float    hysteresis;    // clear-band width, applied inward from each limit
     float    warnLo;        // lo-side WARNING edge when RULE_WARN_SET; else unused (base units)
     float    warnHi;        // hi-side (OUTSIDE_BAND only) WARNING edge when RULE_WARN_SET; else unused
-    uint16_t debounceMs;    // condition must hold past the limit this long (= legacy persistTime_ms)
+    uint16_t debounceMs;    // a reading must hold on the new side this long before the rule changes state, either way (#668; = legacy persistTime_ms)
     uint16_t warmupMs;      // suppress evaluation until settled / since boot (= legacy warmupTime_ms)
     uint8_t  id;            // stable per-record id; RULES_ID_NONE = empty slot. NOT an array slot.
     uint8_t  sourceInput;   // input PIN (stable identity), NOT an inputs[] slot (§8 Q9)
@@ -291,18 +291,32 @@ extern ActionLink actionLinks[MAX_ACTION_LINKS];
 // ============================================================================
 // Runtime context (NOT persisted) — lift-and-rename target of AlarmContext.
 // ============================================================================
+// RuleContext.warnFlags (#668): the WARNING approach tier and the trip side are
+// latched state, updated by rulesRuleUpdate() on each tick, not re-derived from
+// each sample (so noise at a warn edge can't flicker the annunciators).
+#define RULE_CTX_WARN_LATCHED     0x01  // approach tier showing (READY only)
+#define RULE_CTX_WARN_SIDE_SHIFT  1     // bits 1-2: RuleWarnSide of the latched warning
+#define RULE_CTX_TRIP_SIDE_SHIFT  3     // bits 3-4: RuleWarnSide of the limit that tripped (ACTIVE)
+#define RULE_CTX_SIDE_MASK        0x03
+
 struct RuleContext {
-    RuleState state;            // current runtime state
     uint32_t  stateEntryTime;   // millis() when current state was entered
     uint32_t  faultStartTime;   // millis() when threshold violation started (0 = none) — debounce anchor
+    uint32_t  clearSince;       // millis() since the readings have been continuously on the
+                                 // clear side (0 = not counting): an ACTIVE rule's clear
+                                 // timer, and a READY rule's first-verdict timer (#668, #669)
+    uint32_t  warnSince;        // millis() since the approach tier's pending change began
+                                 // (enter or leave; 0 = none pending, #668)
     uint32_t  nanSince;         // millis() when the source reading went NAN (0 = reading
                                  // finite). Runtime only, never persisted — a source fault
                                  // is a live sensor condition, not configuration (#443).
     uint16_t  warmupTime_ms;    // effective warmup (from the Rule)
-    uint16_t  persistTime_ms;   // effective debounce (from the Rule)
+    uint16_t  persistTime_ms;   // effective debounce (from the Rule), both directions (#668)
+    RuleState state;            // current runtime state
     uint8_t   verdictPending;   // 1 from arming until the first trusted verdict
                                  // (rulesRuleUnsettled(), #669). Zero = settled, so a
                                  // context nobody armed (BSS) counts as settled.
+    uint8_t   warnFlags;        // RULE_CTX_* above (#668)
 };
 
 #endif // RULES_TYPES_H

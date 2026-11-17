@@ -110,13 +110,11 @@ void rulesManagerUpdate(uint32_t now) {
     }
 }
 
-// Annunciator severity of one slot (derived WARNING tier included, §11.2).
+// Annunciator severity of one slot (latched WARNING tier included, §11.2).
 static RuleSeverity slotAnnunciatorSeverity(int i) {
     const Rule& rule = rules[i];
     if (rule.id == RULES_ID_NONE) return RULE_SEV_NONE;
-    Input* in = getInputByPin(rule.sourceInput);
-    float value = in ? in->value : NAN;
-    return rulesRuleAnnunciatorSeverity(rule, g_ruleContexts[i], value);
+    return rulesRuleAnnunciatorSeverity(rule, g_ruleContexts[i]);
 }
 
 static RuleSeverity systemSeverity(bool skipAcked) {

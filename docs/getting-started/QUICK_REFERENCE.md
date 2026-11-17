@@ -327,12 +327,13 @@ the full surface. (`RELAY` is deprecated and prints a pointer here.)
 | `SET <pin> ALARM MIN <v>` / `MAX <v>` | Per-input alarm: one-sided floor / ceiling |
 | `SET <pin> ALARM WARN <lo|NONE|AUTO> [<hi|NONE|AUTO>]` | Set/clear the alarm Rule's warning threshold |
 | `SET <pin> ALARM DISABLE` | Remove the input's alarm Rule |
-| `RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARN <lo|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]` | Threshold Rule |
-| `RULE ADD <pin> OUTSIDE <lo> <hi> [HYST <w>] [WARN <lo|NONE|AUTO> <hi|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]` | Both-sided band Rule |
+| `RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [DEBOUNCE <ms>] [WARN <lo|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]` | Threshold Rule |
+| `RULE ADD <pin> OUTSIDE <lo> <hi> [HYST <w>] [DEBOUNCE <ms>] [WARN <lo|NONE|AUTO> <hi|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]` | Both-sided band Rule |
 | `RULE LIST` / `RULE <id>` / `RULE DEL <id>` | View / inspect / delete |
 | `RULE <id> WARN <lo|NONE|AUTO> [<hi|NONE|AUTO>]` | Edit an ALARM rule's warning threshold in place |
 | `RULE <id> LIMIT ABOVE|BELOW <limit>` / `LIMIT OUTSIDE <lo> <hi>` | Move a Rule's limits in place |
 | `RULE <id> SEVERITY INFO|WARNING|ALARM|NONE` | Change a Rule's severity in place |
+| `RULE <id> DEBOUNCE <ms>` | How long a reading must hold before the Rule changes state, either way (0-65535) |
 | `RULE RESET <id>` | Restore the application's default Rule config |
 | `RULE <id> ENABLE|DISABLE` | Re-arm / park a Rule without deleting it (`PARKED` never fires) |
 | `ACTION ADD RELAY <pin> [FAILSAFE ON|OFF] [INVERT]` | Define an actuator |

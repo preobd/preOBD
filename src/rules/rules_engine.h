@@ -85,9 +85,9 @@ bool rulesRuleSourceUntrusted(const RuleContext& ctx, uint32_t now);
 
 /**
  * True while an armed rule has not yet given its first trusted verdict
- * (§11.3, #669): from arming (INIT, WARMUP) until, in READY, a finite reading
- * either clears the condition by the ACTIVE test (hysteresis included) or the
- * rule qualifies to ACTIVE. A pending trip on the first readings is therefore
+ * (§11.3, #669): from arming (INIT, WARMUP) until, in READY, finite readings
+ * clear the condition by the ACTIVE test (hysteresis included) for debounceMs
+ * without a break (#668), or the rule qualifies to ACTIVE. A pending trip on the first readings is therefore
  * still unsettled, so a FAILSAFE ON relay is not dropped for the persist time
  * on a hot restart. A NaN is never a verdict; past the fault debounce the
  * source is untrusted instead. Steady-state debounce is unaffected: once a
@@ -106,6 +106,24 @@ bool rulesRuleUnsettled(const RuleContext& ctx);
  * #443 review) doesn't need to know the field doubles as a debounce anchor.
  */
 bool rulesRuleTripPending(const RuleContext& ctx);
+
+/**
+ * True while a READY rule's approach tier is about to ENTER: the reading is
+ * at a warn edge but hasn't held there for debounceMs yet (#668). The
+ * AlarmBroadcaster's fault-exit hold uses it like rulesRuleTripPending(), so a
+ * recovery into the warn band reads FAULT -> WARNING, never FAULT -> CLEAR.
+ */
+bool rulesRuleWarnPending(const RuleContext& ctx);
+
+/** Latched side of a READY rule's WARNING, else RULE_WARN_SIDE_NONE (#668). */
+RuleWarnSide rulesRuleWarnSide(const RuleContext& ctx);
+
+/**
+ * Side of the limit an ACTIVE rule tripped on (HI for ABOVE, LO for BELOW,
+ * the nearer edge at the trip for OUTSIDE_BAND), latched at the trip; NONE
+ * when not ACTIVE (#668).
+ */
+RuleWarnSide rulesRuleTripSide(const RuleContext& ctx);
 
 /** Configured severity if active, else RULE_SEV_NONE. */
 RuleSeverity rulesRuleSeverity(const Rule& rule, const RuleContext& ctx);
@@ -172,14 +190,15 @@ uint8_t rulesNormalizeWarn(Rule& r);
 /**
  * Annunciator severity for a rule, including the WARNING approach tier
  * (§11.2): an ALARM rule annunciates ALARM once ACTIVE, but also WARNING
- * while armed (READY) and its source has reached a per-side warning edge
+ * while armed (READY) and its latched warning is set — the source held at a
+ * per-side warning edge for debounceMs (rulesRuleUpdate(), #668)
  * (see rulesRuleWarnEdge — AUTO/NONE/SET per side; RULE_WARN_NONE on the hit
  * side suppresses this pre-announcement entirely, going straight to ALARM
  * on trip). WARNING-severity rules have no sub-tier (WARNING when active,
  * else NONE). This drives annunciation (LED/buzzer/AlarmBroadcaster) only —
  * NOT Action triggering, which keys on RULE_ACTIVE.
  */
-RuleSeverity rulesRuleAnnunciatorSeverity(const Rule& rule, const RuleContext& ctx, float value);
+RuleSeverity rulesRuleAnnunciatorSeverity(const Rule& rule, const RuleContext& ctx);
 
 /**
  * Aggregate of an Action's Rule membership, resolved by the manager (which owns

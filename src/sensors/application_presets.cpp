@@ -154,7 +154,7 @@ const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_TEMPERATURE,
         .nameHash = 0x2F75,  // djb2_hash("NONE")
         .warmupTime_ms = 0,
-        .persistTime_ms = 0,
+        .persistTime_ms = 250,  // rules change state after 250 ms (#668)
         .group = APP_GROUP_OTHER
     },
 
@@ -512,7 +512,7 @@ const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_RPM,
         .nameHash = 0x4429,  // djb2_hash("ENGINE_RPM")
         .warmupTime_ms = 2000,  // 2 seconds warmup
-        .persistTime_ms = 0,  // No persistence needed
+        .persistTime_ms = 250,  // rules change state after 250 ms (#668)
         .group = APP_GROUP_ENGINE
     },
 
@@ -599,7 +599,7 @@ const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_SPEED,
         .nameHash = 0x46F5,  // djb2_hash("VEHICLE_SPEED")
         .warmupTime_ms = 0,  // No warmup needed
-        .persistTime_ms = 0,  // No persistence needed
+        .persistTime_ms = 250,  // rules change state after 250 ms (#668)
         .group = APP_GROUP_DRIVETRAIN
     },
 
@@ -686,7 +686,7 @@ const PROGMEM ApplicationPreset APPLICATION_PRESETS[] = {
         .expectedMeasurementType = MEASURE_PERCENT,
         .nameHash = 0x7E2F,  // djb2_hash("THROTTLE_POSITION")
         .warmupTime_ms = 0,
-        .persistTime_ms = 0,
+        .persistTime_ms = 250,  // rules change state after 250 ms (#668)
         .group = APP_GROUP_ENGINE
     },
 

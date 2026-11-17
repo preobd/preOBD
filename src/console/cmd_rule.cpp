@@ -330,14 +330,32 @@ static FLASHMEM bool checkWarnSide(const Rule& r, bool hiSide) {
     return false;
 }
 
+// --- DEBOUNCE token (#668) ---------------------------------------------
+
+// A whole-number millisecond debounce, 0..65535 (Rule.debounceMs is uint16).
+// A typo or a fraction is refused, never truncated (the #428 lesson). Every
+// DEBOUNCE error shares this one message: on mega2560 each F() string sits in
+// the near-PROGMEM region, which has a few hundred bytes left (#523).
+static const char kDebounceTok[] PROGMEM = "DEBOUNCE";
+static FLASHMEM bool parseDebounceToken(const char* tok, uint16_t& out, bool bad = false) {
+    float v;
+    if (bad || !rulesParseNumber(tok, v) || v < 0.0f || v > 65535.0f || v != (float)(long)v) {
+        msg.control.print(F("ERROR: DEBOUNCE ms 0-65535: "));
+        msg.control.println(tok);
+        return false;
+    }
+    out = (uint16_t)v;
+    return true;
+}
+
 // --- RULE ADD -----------------------------------------------------------
 
 static FLASHMEM int ruleAdd(int argc, const char* const* argv) {
-    // RULE ADD <input> ABOVE|BELOW <limit> [HYST <w>] [WARN <lo|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]
-    // RULE ADD <input> OUTSIDE <lo> <hi>   [HYST <w>] [WARN <lo|NONE|AUTO> <hi|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]
+    // RULE ADD <input> ABOVE|BELOW <limit> [HYST <w>] [DEBOUNCE <ms>] [WARN <lo|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]
+    // RULE ADD <input> OUTSIDE <lo> <hi>   [HYST <w>] [DEBOUNCE <ms>] [WARN <lo|NONE|AUTO> <hi|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]
     if (argc < 5) {
-        msg.control.println(F("ERROR: usage: RULE ADD <input> ABOVE|BELOW <limit> [HYST <w>] [WARN <lo|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]"));
-        msg.control.println(F("              RULE ADD <input> OUTSIDE <lo> <hi> [HYST <w>] [WARN <lo|NONE|AUTO> <hi|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]"));
+        msg.control.println(F("ERROR: usage: RULE ADD <input> ABOVE|BELOW <limit> [HYST <w>] [DEBOUNCE <ms>] [WARN <lo|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]"));
+        msg.control.println(F("              RULE ADD <input> OUTSIDE <lo> <hi> [HYST <w>] [DEBOUNCE <ms>] [WARN <lo|NONE|AUTO> <hi|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]"));
         return 1;
     }
 
@@ -385,6 +403,7 @@ static FLASHMEM int ruleAdd(int argc, const char* const* argv) {
     // second WARN value, and `OUTSIDE ... WARN NONE NONE` leaves nothing for
     // severity to consume by accident (#425 amendment A8).
     float hysteresis = 0.0f;
+    uint16_t debounceMs = RULE_DEFAULT_DEBOUNCE_MS;
     uint8_t severity = RULE_SEV_ALARM;
     bool warnGiven = false;
     RuleWarnMode warnLoMode = RULE_WARN_AUTO, warnHiMode = RULE_WARN_AUTO;
@@ -392,6 +411,8 @@ static FLASHMEM int ruleAdd(int argc, const char* const* argv) {
     for (int i = optStart; i < argc; i++) {
         if (streq_P(argv[i], PSTR("HYST")) && (i + 1) < argc) {
             hysteresis = atof(argv[++i]);
+        } else if (streq_P(argv[i], kDebounceTok)) {
+            if (!parseDebounceToken((i + 1 < argc) ? argv[++i] : "", debounceMs)) return 1;
         } else if (streq_P(argv[i], PSTR("WARN"))) {
             warnGiven = true;
             if (condition == RULE_OUTSIDE_BAND) {
@@ -496,7 +517,7 @@ static FLASHMEM int ruleAdd(int argc, const char* const* argv) {
     ruleSetWarnMode(r, false, warnLoMode);
     ruleSetWarnMode(r, true, warnHiMode);
     r.warmupMs = RULE_DEFAULT_WARMUP_MS;
-    r.debounceMs = RULE_DEFAULT_DEBOUNCE_MS;
+    r.debounceMs = debounceMs;
 
     rulesRuleInit(g_ruleContexts[slot], r, millis());  // create-from-... : arm
 
@@ -621,6 +642,28 @@ static FLASHMEM int ruleSetWarn(uint8_t id, int argc, const char* const* argv) {
     msg.control.print(F("Rule #"));
     msg.control.print(id);
     msg.control.println(F(" warn updated. SAVE to persist."));
+    return 0;
+}
+
+// --- RULE <id> DEBOUNCE (#668) -----------------------------------------
+
+// How long a reading must hold on the new side before the rule changes state,
+// in both directions, the WARNING tier included (§11.2). In place, no re-arm
+// (like RULE <id> WARN): the running context's cached copy is updated too, so
+// the edit takes effect on the next tick, not at the next re-arm.
+static FLASHMEM int ruleSetDebounce(uint8_t id, int argc, const char* const* argv) {
+    // The caller has already resolved the id to a live slot. argv: RULE <id>
+    // DEBOUNCE <ms>; a missing or extra token is reported as the bad value.
+    const int slot = rulesRuleSlot(id);
+    uint16_t ms;
+    if (!parseDebounceToken(argc == 4 ? argv[3] : (argc > 4 ? argv[4] : ""), ms, argc != 4)) {
+        return 1;
+    }
+    rules[slot].debounceMs = ms;
+    g_ruleContexts[slot].persistTime_ms = ms;
+    msg.control.print(F("Rule #"));
+    msg.control.print(id);
+    msg.control.println(F(" debounce set. SAVE to persist."));
     return 0;
 }
 
@@ -875,7 +918,8 @@ FLASHMEM int cmd_rule(int argc, const char* const* argv) {
         const bool warn    = streq_P(argv[2], PSTR("WARN"));
         const bool limit   = streq_P(argv[2], PSTR("LIMIT"));
         const bool sev     = streq_P(argv[2], PSTR("SEVERITY"));
-        if (enable || disable || warn || limit || sev) {
+        const bool deb     = streq_P(argv[2], kDebounceTok);
+        if (enable || disable || warn || limit || sev || deb) {
             // Structural, like ADD/DEL/RESET: an unarmed edit path, so it
             // belongs in CONFIG — follows the ENABLE/DISABLE self-gate (#346).
             if (isInRunMode()) {
@@ -888,6 +932,7 @@ FLASHMEM int cmd_rule(int argc, const char* const* argv) {
             if (warn) return ruleSetWarn(ruleId, argc, argv);
             if (limit) return ruleSetLimit(ruleId, argc, argv);
             if (sev) return ruleSetSeverity(ruleId, argc, argv);
+            if (deb) return ruleSetDebounce(ruleId, argc, argv);
             return ruleSetEnabled(ruleId, enable);
         }
         msg.control.print(F("ERROR: unknown RULE verb: "));
@@ -897,6 +942,10 @@ FLASHMEM int cmd_rule(int argc, const char* const* argv) {
 
     printRuleRow(slot);
     printWarnDetail(slot);
+    // The debounce is settable here (#668), so show it here too.
+    msg.control.print(F("  debounce "));
+    msg.control.print(rules[slot].debounceMs);
+    msg.control.println(F(" ms"));
     printLinkedActions(ruleId);
     return 0;
 }

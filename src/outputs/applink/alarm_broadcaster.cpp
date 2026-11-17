@@ -57,32 +57,19 @@ uint8_t toPreobdSeverity(RuleSeverity s) {
     }
 }
 
-// Which edge of the rule the value is at/approaching → HIGH / LOW.
-// `approaching` selects the WARNING approach tier (asev == WARNING while
-// ctx.state == RULE_READY — the derived/explicit warn edge, which the plan
-// terms the approach tier, §11.2/#425): the effective warn edges can now sit
-// asymmetrically off the band midpoint (a SET edge near one limit), so the
-// midpoint heuristic below picks the WRONG side once that happens
-// (OUTSIDE 0..100 WARN 80 90, value 75 -> midpoint says HIGH, but 75 is past
-// the lo edge 80, not the hi edge 90). Once the rule is actually ACTIVE/ALARM
-// (the trip case), there is no derived warn edge to consult — keep the
-// midpoint rule, which is exactly which LIMIT (not warn edge) was crossed.
-uint8_t kindFor(const Rule& r, float value, bool approaching) {
+// Which edge of the rule is firing → HIGH / LOW. The engine latches the side
+// (#668): the warn side while the approach tier shows (an explicit edge can sit
+// off the band midpoint: OUTSIDE 0..100 WARN 80 90, value 75 is the lo edge),
+// the tripped limit while ACTIVE. Re-deriving it from the live value would let
+// noise, or a value wandering through the clear window, flip HIGH/LOW.
+uint8_t kindFor(const Rule& r, const RuleContext& ctx) {
     switch (r.condition) {
     case RULE_ABOVE: return PREOBD_ALARM_KIND_HIGH;
     case RULE_BELOW: return PREOBD_ALARM_KIND_LOW;
     case RULE_OUTSIDE_BAND: {
-        if (approaching) {
-            const RuleWarnSide side = rulesRuleWarnSideHit(r, value);
-            if (side == RULE_WARN_SIDE_HI) return PREOBD_ALARM_KIND_HIGH;
-            if (side == RULE_WARN_SIDE_LO) return PREOBD_ALARM_KIND_LOW;
-            // Shouldn't happen (evalSlot only asks when the rule IS in a
-            // warning band) — fall through to the midpoint default below.
-        }
-        if (isnan(value)) return PREOBD_ALARM_KIND_HIGH;
-        // Nearer side of the trip band (ACTIVE/ALARM case: which limit tripped).
-        const float mid = (r.limitLo + r.limitHi) * 0.5f;
-        return (value >= mid) ? PREOBD_ALARM_KIND_HIGH : PREOBD_ALARM_KIND_LOW;
+        const RuleWarnSide side = (ctx.state == RULE_ACTIVE) ? rulesRuleTripSide(ctx)
+                                                             : rulesRuleWarnSide(ctx);
+        return (side == RULE_WARN_SIDE_LO) ? PREOBD_ALARM_KIND_LOW : PREOBD_ALARM_KIND_HIGH;
     }
     default: return PREOBD_ALARM_KIND_HIGH;
     }
@@ -104,21 +91,23 @@ float thresholdFor(const Rule& r, uint8_t kind) {
 // past the debounce):
 //
 //   Window 1 — fault PENDING: the reading is NAN and ctx.nanSince is
-//   stamped, but the FAULT debounce hasn't elapsed. An ACTIVE rule is held
-//   ACTIVE through that gap (#650), but a READY rule in its approach tier
-//   reads NONE (the warn band needs a real value), and in WARMUP the FAULT
-//   debounce is stretched past the 2 s at which the engine gives up on the
-//   reading. Holding the last key keeps the wire at ALARM/WARNING -> FAULT,
+//   stamped, but the FAULT debounce hasn't elapsed. The engine holds an
+//   ACTIVE rule and a latched warning through that gap (#650, #668), but at
+//   2 s it drops both, and in WARMUP the FAULT debounce is stretched past
+//   those 2 s. Holding the last key keeps the wire at ALARM/WARNING -> FAULT,
 //   never a CLEAR in between.
 //
 //   Window 2 — fault CLEARING while re-tripping: the reading has returned
 //   and is (still) past the limit, so the rule sits READY with its
 //   assertion re-debouncing toward ACTIVE (rulesRuleTripPending()). The last
 //   accepted key is the held FAULT; without this it flashes CLEAR for the
-//   persist window before reasserting ALARM.
+//   persist window before reasserting ALARM. The same holds while the
+//   approach tier is re-entering (rulesRuleWarnPending(), #668): a reading
+//   back inside the warn band reads FAULT -> WARNING, not FAULT -> CLEAR.
 bool holdAcrossFaultTransition(const AlarmKey& last, const RuleContext& ctx) {
     if (ctx.nanSince != 0) return true;
-    if (last.kind == PREOBD_ALARM_KIND_FAULT && rulesRuleTripPending(ctx)) return true;
+    if (last.kind == PREOBD_ALARM_KIND_FAULT &&
+        (rulesRuleTripPending(ctx) || rulesRuleWarnPending(ctx))) return true;
     return false;
 }
 
@@ -181,17 +170,12 @@ AlarmKey evalSlot(int i, const AlarmKey& last, float& value, float& threshold) {
                 return last;
             }
         }
-        // Includes the derived WARNING tier (§11.2): WARNING as the value
-        // approaches the limit, ALARM once it trips.
-        RuleSeverity asev = rulesRuleAnnunciatorSeverity(r, ctx, value);
+        // Includes the latched WARNING tier (§11.2, #668): WARNING as the
+        // value approaches the limit, ALARM once it trips.
+        RuleSeverity asev = rulesRuleAnnunciatorSeverity(r, ctx);
         if (asev != RULE_SEV_NONE) {
             k.severity = toPreobdSeverity(asev);
-            // READY here only happens via the approach-tier path in
-            // rulesRuleAnnunciatorSeverity (ACTIVE rules return early above
-            // it with ctx.state == RULE_ACTIVE) — so READY unambiguously
-            // means "use the warn edge, not the midpoint".
-            const bool approaching = (ctx.state == RULE_READY);
-            k.kind     = kindFor(r, value, approaching);
+            k.kind     = kindFor(r, ctx);
             threshold  = thresholdFor(r, k.kind);
         }
     }

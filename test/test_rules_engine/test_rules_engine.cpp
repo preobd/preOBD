@@ -40,6 +40,25 @@ static void toReady(const Rule& r, RuleContext& ctx, float settledValue) {
     TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
 }
 
+
+// Tick-driven annunciator severity (#668): the approach tier is a latch that
+// rulesRuleUpdate() sets after debounceMs, so a severity check feeds the value
+// through the real state machine for debounce + a margin, never pins ctx.
+static RuleSeverity annunAt(const Rule& r, float v) {
+    RuleContext ctx{};
+    toReady(r, ctx, v);
+    for (uint32_t t = 1650; t <= 1650u + r.debounceMs + 100u; t += 50) {
+        rulesRuleUpdate(r, ctx, v, t);
+    }
+    return rulesRuleAnnunciatorSeverity(r, ctx);
+}
+
+// Feed `v` every 50 ms from `*t` for `ms`, advancing *t.
+static void feed(const Rule& r, RuleContext& ctx, float v, uint32_t& t, uint32_t ms) {
+    const uint32_t end = t + ms;
+    while (t < end) { t += 50; rulesRuleUpdate(r, ctx, v, t); }
+}
+
 // --- init / arming (#251/#254) -----------------------------------------
 
 static void test_init_enabled_arms(void) {
@@ -107,8 +126,11 @@ static void test_above_hysteresis_holds_until_clear_band(void) {
     // dip to 99.0: above the clear band (98.0) -> still active
     rulesRuleUpdate(r, ctx, 99.0f, 2300);
     TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
-    // drop to 97.0: below clear band -> de-asserts
+    // drop to 97.0: below clear band -> the clear timer starts; the rule
+    // leaves ACTIVE only after debounceMs (200) of clear readings (#668).
     rulesRuleUpdate(r, ctx, 97.0f, 2400);
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, 97.0f, 2600);
     TEST_ASSERT_FALSE(rulesRuleIsActive(ctx));
     TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
 }
@@ -124,7 +146,9 @@ static void test_below_asserts_and_clears(void) {
     TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
     rulesRuleUpdate(r, ctx, 11.0f, 2300); // within clear band -> still active
     TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
-    rulesRuleUpdate(r, ctx, 13.0f, 2400); // above clear band -> clears
+    rulesRuleUpdate(r, ctx, 13.0f, 2400); // above clear band -> clear timer starts (#668)
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, 13.0f, 2600); // held debounceMs -> clears
     TEST_ASSERT_FALSE(rulesRuleIsActive(ctx));
 }
 
@@ -138,12 +162,34 @@ static void test_outside_band_both_edges(void) {
     rulesRuleUpdate(r, ctx, 120.0f, 2000);
     rulesRuleUpdate(r, ctx, 120.0f, 2200);
     TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
-    rulesRuleUpdate(r, ctx, 50.0f, 2300);   // back in band
+    rulesRuleUpdate(r, ctx, 50.0f, 2300);   // back in band: clear timer starts (#668)
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, 50.0f, 2500);   // held debounceMs
     TEST_ASSERT_FALSE(rulesRuleIsActive(ctx));
     // low edge
-    rulesRuleUpdate(r, ctx, 5.0f, 2400);
     rulesRuleUpdate(r, ctx, 5.0f, 2600);
+    rulesRuleUpdate(r, ctx, 5.0f, 2800);
     TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
+}
+
+// The trip side is latched at the trip and stays put inside the band (the
+// clear window), but a reading past the OTHER limit while still ACTIVE (a
+// held NaN gap, a coarse jump) re-latches it (#668 pre-merge review).
+static void test_trip_side_relatches_past_the_other_limit(void) {
+    Rule r = makeRule(RULE_OUTSIDE_BAND, 10.0f, 100.0f);
+    RuleContext ctx{};
+    toReady(r, ctx, 50.0f);
+    uint32_t t = 1650;
+    feed(r, ctx, 120.0f, t, 300);
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_HI, rulesRuleTripSide(ctx));
+    feed(r, ctx, 50.0f, t, 100);             // clear window: side stays
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_HI, rulesRuleTripSide(ctx));
+    feed(r, ctx, NAN, t, 500);               // short gap, held ACTIVE
+    feed(r, ctx, 5.0f, t, 50);               // comes back past limitLo
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_LO, rulesRuleTripSide(ctx));
 }
 
 // --- NaN safety ---------------------------------------------------------
@@ -187,8 +233,11 @@ static void test_active_rule_rides_out_a_short_nan_gap(void) {
     rulesRuleUpdate(r, ctx, 120.0f, 3050 + RULES_FAULT_DEBOUNCE_MS - 50);
     TEST_ASSERT_EQUAL_MESSAGE(RULE_ACTIVE, ctx.state, "no re-qualification after the gap");
     TEST_ASSERT_EQUAL_UINT32(0, ctx.nanSince);
-    // A value back on the clear side still de-asserts as before.
+    // A value back on the clear side de-asserts after debounceMs (1000) of
+    // clear readings (#668), no longer at once.
     rulesRuleUpdate(r, ctx, 50.0f, 6000);
+    TEST_ASSERT_EQUAL_MESSAGE(RULE_ACTIVE, ctx.state, "clear timer just started");
+    rulesRuleUpdate(r, ctx, 50.0f, 7000);
     TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
 }
 
@@ -337,25 +386,19 @@ static void test_severity_reflects_active_state(void) {
 
 static void test_annun_active_alarm_is_alarm(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);  // severity ALARM
-    RuleContext ctx{};
-    ctx.state = RULE_ACTIVE;
-    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, rulesRuleAnnunciatorSeverity(r, ctx, 120.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, annunAt(r, 120.0f));
 }
 
 static void test_annun_warning_band_below_limit(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);  // warn at 90
-    RuleContext ctx{};
-    ctx.state = RULE_READY;
-    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, 95.0f));
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 80.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, annunAt(r, 95.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    annunAt(r, 80.0f));
 }
 
 static void test_annun_warning_only_for_alarm_rules(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);
     r.severity = RULE_SEV_WARNING;          // a WARNING rule has no sub-tier
-    RuleContext ctx{};
-    ctx.state = RULE_READY;
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx, 95.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, annunAt(r, 95.0f));
 }
 
 // An active INFO rule reports INFO to the notification path (the BLE broadcaster
@@ -364,9 +407,7 @@ static void test_annun_warning_only_for_alarm_rules(void) {
 static void test_annun_active_info_is_info(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);
     r.severity = RULE_SEV_INFO;
-    RuleContext ctx{};
-    ctx.state = RULE_ACTIVE;
-    TEST_ASSERT_EQUAL(RULE_SEV_INFO, rulesRuleAnnunciatorSeverity(r, ctx, 120.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_INFO, annunAt(r, 120.0f));
 }
 
 // INFO is not a condition that pre-announces: an INFO rule approaching its limit
@@ -375,9 +416,7 @@ static void test_annun_active_info_is_info(void) {
 static void test_annun_no_derived_warning_for_info(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);  // warn band at 90
     r.severity = RULE_SEV_INFO;
-    RuleContext ctx{};
-    ctx.state = RULE_READY;
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx, 95.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, annunAt(r, 95.0f));
 }
 
 // Ordinal invariant: INFO sits below WARNING/ALARM so the LED rollup's bare
@@ -392,16 +431,18 @@ static void test_info_below_warning_and_alarm(void) {
 static void test_annun_no_warning_during_warmup(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);
     RuleContext ctx{};
-    ctx.state = RULE_WARMUP;
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx, 95.0f));
+    rulesRuleInit(ctx, r, 0);
+    rulesRuleUpdate(r, ctx, 95.0f, 0);
+    rulesRuleUpdate(r, ctx, 95.0f, 1001);
+    rulesRuleUpdate(r, ctx, 95.0f, 1400);
+    TEST_ASSERT_EQUAL(RULE_WARMUP, ctx.state);
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx));
 }
 
 static void test_annun_outside_band_low_warning(void) {
     Rule r = makeRule(RULE_OUTSIDE_BAND, 10.0f, 100.0f);  // low warn at 11 (10*1.1)
-    RuleContext ctx{};
-    ctx.state = RULE_READY;
-    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, 10.5f));
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 50.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, annunAt(r, 10.5f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    annunAt(r, 50.0f));
 }
 
 // Regression: warning band must stay on the PRE-limit side for non-positive
@@ -409,31 +450,25 @@ static void test_annun_outside_band_low_warning(void) {
 // old limit*pct form flipped sides once the limit went <= 0.
 static void test_annun_warning_band_negative_above(void) {
     Rule r = makeRule(RULE_ABOVE, -10.0f);  // warn at -10 - 0.1*10 = -11
-    RuleContext ctx{};
-    ctx.state = RULE_READY;
     // approaching -10 from below: -10.5 is in [-11, -10) -> WARNING
-    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, -10.5f));
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, annunAt(r, -10.5f));
     // well below the limit -> not yet warning
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, -20.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    annunAt(r, -20.0f));
 }
 
 static void test_annun_warning_band_negative_below(void) {
     Rule r = makeRule(RULE_BELOW, -10.0f);  // warn at -10 + 0.1*10 = -9
-    RuleContext ctx{};
-    ctx.state = RULE_READY;
     // approaching -10 from above: -9.5 is in (-10, -9] -> WARNING
-    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, -9.5f));
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 0.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, annunAt(r, -9.5f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    annunAt(r, 0.0f));
 }
 
 static void test_annun_outside_band_negative_low_edge(void) {
     Rule r = makeRule(RULE_OUTSIDE_BAND, -20.0f, 100.0f);  // low warn at -20 + 0.1*20 = -18
-    RuleContext ctx{};
-    ctx.state = RULE_READY;
     // approaching the -20 low edge from inside the band -> WARNING
-    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, -19.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, annunAt(r, -19.0f));
     // mid-band -> no warning
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 0.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    annunAt(r, 0.0f));
 }
 
 // --- Approach tier: per-side warn mode (AUTO/NONE/SET, §11.2, #425) -----
@@ -444,13 +479,10 @@ static void test_warn_set_lo_on_above(void) {
     Rule r = makeRule(RULE_ABOVE, 230.0f);
     r.warnLo = 210.0f;
     ruleSetWarnMode(r, false, RULE_WARN_SET);
-    RuleContext ctx{};
-    ctx.state = RULE_READY;
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 205.0f));
-    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, 215.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    annunAt(r, 205.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, annunAt(r, 215.0f));
     // Past the limit and debounced -> ACTIVE -> configured severity (ALARM).
-    ctx.state = RULE_ACTIVE;
-    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, rulesRuleAnnunciatorSeverity(r, ctx, 235.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, annunAt(r, 235.0f));
 }
 
 // SET lo edge on a BELOW rule (approaching from above).
@@ -458,10 +490,8 @@ static void test_warn_set_lo_on_below(void) {
     Rule r = makeRule(RULE_BELOW, 10.0f);
     r.warnLo = 15.0f;
     ruleSetWarnMode(r, false, RULE_WARN_SET);
-    RuleContext ctx{};
-    ctx.state = RULE_READY;
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 20.0f));
-    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, 12.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    annunAt(r, 20.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, annunAt(r, 12.0f));
 }
 
 // NONE: no approach tier at all — a READY rule past its limit but not yet
@@ -472,12 +502,15 @@ static void test_warn_set_lo_on_below(void) {
 static void test_warn_none_never_warns_goes_straight_to_alarm(void) {
     Rule r = makeRule(RULE_ABOVE, 100.0f);
     ruleSetWarnMode(r, false, RULE_WARN_NONE);
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, annunAt(r, 99.0f));
+    // Past the limit but not yet debounced: still READY, still silent.
     RuleContext ctx{};
-    ctx.state = RULE_READY;
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx, 99.0f));
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx, 150.0f));  // well past limit, still no WARNING
-    ctx.state = RULE_ACTIVE;
-    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, rulesRuleAnnunciatorSeverity(r, ctx, 150.0f));  // first tier it ever sees is ALARM
+    toReady(r, ctx, 50.0f);
+    rulesRuleUpdate(r, ctx, 150.0f, 2000);
+    TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx));
+    rulesRuleUpdate(r, ctx, 150.0f, 2200);
+    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, rulesRuleAnnunciatorSeverity(r, ctx));  // first tier it ever sees is ALARM
 }
 
 // OUTSIDE_BAND with one side SET, the other AUTO: each side derives independently.
@@ -486,12 +519,10 @@ static void test_warn_outside_set_lo_auto_hi(void) {
     r.warnLo = 15.0f;  // SET, well inside the AUTO-derived 11
     ruleSetWarnMode(r, false, RULE_WARN_SET);
     // hi side stays AUTO: derived edge = 100 - 0.1*100 = 90
-    RuleContext ctx{};
-    ctx.state = RULE_READY;
-    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, 15.0f));   // hits SET lo edge
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 20.0f));   // above SET lo edge -> not yet warning
-    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, 95.0f));   // hits AUTO-derived hi edge
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 50.0f));   // mid-band
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, annunAt(r, 15.0f));   // hits SET lo edge
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    annunAt(r, 20.0f));   // above SET lo edge -> not yet warning
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, annunAt(r, 95.0f));   // hits AUTO-derived hi edge
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    annunAt(r, 50.0f));   // mid-band
 }
 
 // OUTSIDE_BAND with one side NONE, the other SET.
@@ -500,10 +531,8 @@ static void test_warn_outside_none_lo_set_hi(void) {
     ruleSetWarnMode(r, false, RULE_WARN_NONE);
     r.warnHi = 90.0f;
     ruleSetWarnMode(r, true, RULE_WARN_SET);
-    RuleContext ctx{};
-    ctx.state = RULE_READY;
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    rulesRuleAnnunciatorSeverity(r, ctx, 10.5f));  // near lo edge -> NONE side, silent
-    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx, 95.0f));  // hi SET edge hit
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE,    annunAt(r, 10.5f));  // near lo edge -> NONE side, silent
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, annunAt(r, 95.0f));  // hi SET edge hit
 }
 
 // OUTSIDE_BAND with both sides SET, deliberately asymmetric around the band
@@ -659,9 +688,7 @@ static void test_warn_non_alarm_severity_ignores_modes(void) {
     r.severity = RULE_SEV_WARNING;
     ruleSetWarnMode(r, false, RULE_WARN_SET);
     r.warnLo = 90.0f;
-    RuleContext ctx{};
-    ctx.state = RULE_READY;
-    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx, 95.0f));
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, annunAt(r, 95.0f));
 }
 
 // --- Action resolution -------------------------------------------------
@@ -848,6 +875,8 @@ static void test_cold_first_reading_settles(void) {
     toReady(r, ctx, 20.0f);
     TEST_ASSERT_TRUE_MESSAGE(rulesRuleUnsettled(ctx), "READY alone is not a verdict");
     rulesRuleUpdate(r, ctx, 20.0f, 1650);
+    TEST_ASSERT_TRUE_MESSAGE(rulesRuleUnsettled(ctx), "#668: one clear reading is not a verdict");
+    rulesRuleUpdate(r, ctx, 20.0f, 1850);                      // debounceMs (200) of clear readings
     TEST_ASSERT_FALSE(rulesRuleUnsettled(ctx));
 }
 
@@ -875,6 +904,8 @@ static void test_reading_in_hysteresis_band_does_not_settle(void) {
     TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
     TEST_ASSERT_TRUE_MESSAGE(rulesRuleUnsettled(ctx), "95 < 97 <= 100: not a verdict");
     rulesRuleUpdate(r, ctx, 94.0f, 9000);
+    TEST_ASSERT_TRUE_MESSAGE(rulesRuleUnsettled(ctx), "#668: the verdict needs debounceMs of them");
+    rulesRuleUpdate(r, ctx, 94.0f, 9200);
     TEST_ASSERT_FALSE(rulesRuleUnsettled(ctx));
 }
 
@@ -892,6 +923,7 @@ static void test_hysteresis_zero_settles_on_first_clear(void) {
     RuleContext ctx{};
     toReady(r, ctx, 99.0f);
     rulesRuleUpdate(r, ctx, 99.0f, 1650);
+    rulesRuleUpdate(r, ctx, 99.0f, 1850);                      // debounceMs of clear readings (#668)
     TEST_ASSERT_FALSE(rulesRuleUnsettled(ctx));
 }
 
@@ -909,7 +941,8 @@ static void test_settled_rule_stays_settled_through_later_trips(void) {
     RuleContext ctx{};
     toReady(r, ctx, 20.0f);
     rulesRuleUpdate(r, ctx, 20.0f, 1650);
-    rulesRuleUpdate(r, ctx, 150.0f, 1700);
+    rulesRuleUpdate(r, ctx, 20.0f, 1850);                      // settled (#668: after debounceMs)
+    rulesRuleUpdate(r, ctx, 150.0f, 1900);
     TEST_ASSERT_TRUE(rulesRuleTripPending(ctx));
     TEST_ASSERT_FALSE(rulesRuleUnsettled(ctx));
 }
@@ -943,6 +976,251 @@ static void test_action_failsafe_while_unsettled(void) {
     TEST_ASSERT_TRUE(rulesActionDesired(aOff, d, false, ACT_OVR_AUTO));   // a live demand outranks
 }
 
+// --- #668: every state change waits debounceMs, in both directions -----------
+// The tests below drive rulesRuleUpdate() with real samples and time (50 ms
+// poll, debounce 200 unless said) and never pin ctx fields.
+
+// READY -> ACTIVE on the default rule (above 100, clears below 98); returns t.
+static uint32_t toActive(const Rule& r, RuleContext& ctx) {
+    toReady(r, ctx, 50.0f);
+    uint32_t t = 1602;
+    feed(r, ctx, 120.0f, t, 300);
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, ctx.state);
+    return t;
+}
+
+static void test_clear_noise_at_the_limit_never_leaves_active(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    uint32_t t = toActive(r, ctx);
+    for (int i = 0; i < 100; i++) {          // 5 s of asserted / clear alternation
+        t += 50; rulesRuleUpdate(r, ctx, (i & 1) ? 50.0f : 120.0f, t);
+        TEST_ASSERT_EQUAL_MESSAGE(RULE_ACTIVE, ctx.state, "noise must not clear the rule");
+    }
+}
+
+static void test_clear_needs_debounce_of_continuous_clear_readings(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    uint32_t t = toActive(r, ctx);
+    feed(r, ctx, 50.0f, t, 200);             // timer started at the first sample: 150 ms elapsed
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, ctx.state);
+    feed(r, ctx, 50.0f, t, 50);              // 200 ms
+    TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
+    TEST_ASSERT_EQUAL_UINT32(0, ctx.clearSince);
+}
+
+static void test_clear_restarted_by_an_asserted_sample_or_a_hysteresis_reading(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    uint32_t t = toActive(r, ctx);
+    feed(r, ctx, 50.0f, t, 150);
+    feed(r, ctx, 120.0f, t, 50);             // asserted: restart
+    feed(r, ctx, 50.0f, t, 200);
+    TEST_ASSERT_EQUAL_MESSAGE(RULE_ACTIVE, ctx.state, "restarted, 150 ms of the new count");
+    feed(r, ctx, 99.0f, t, 50);              // inside the hysteresis band still asserts: restart
+    feed(r, ctx, 50.0f, t, 200);
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, ctx.state);
+    feed(r, ctx, 50.0f, t, 50);
+    TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
+}
+
+static void test_debounce_zero_keeps_the_instant_clear(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f, 0.0f, 2.0f, 500, /*debounce*/0);
+    RuleContext ctx{};
+    toReady(r, ctx, 50.0f);
+    rulesRuleUpdate(r, ctx, 120.0f, 1700);
+    TEST_ASSERT_EQUAL_MESSAGE(RULE_ACTIVE, ctx.state, "instant trip");
+    rulesRuleUpdate(r, ctx, 50.0f, 1750);
+    TEST_ASSERT_EQUAL_MESSAGE(RULE_READY, ctx.state, "instant clear");
+}
+
+// --- warning-tier latch ---
+
+static void test_warn_latch_enters_and_leaves_after_debounce(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);   // warn edge 90
+    RuleContext ctx{};
+    toReady(r, ctx, 50.0f);
+    uint32_t t = 1602;
+    feed(r, ctx, 95.0f, t, 150);
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx));
+    TEST_ASSERT_TRUE_MESSAGE(rulesRuleWarnPending(ctx), "entry pending");
+    feed(r, ctx, 95.0f, t, 100);
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx));
+    TEST_ASSERT_FALSE(rulesRuleWarnPending(ctx));
+    feed(r, ctx, 50.0f, t, 200);             // out of band: 150 ms elapsed
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx));
+    feed(r, ctx, 50.0f, t, 50);
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx));
+}
+
+static void test_warn_latch_no_flicker_from_noise_at_the_edge(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    toReady(r, ctx, 50.0f);
+    uint32_t t = 1602;
+    for (int i = 0; i < 100; i++) {          // never latches
+        t += 50; rulesRuleUpdate(r, ctx, (i & 1) ? 80.0f : 95.0f, t);
+        TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx));
+    }
+    feed(r, ctx, 95.0f, t, 300);             // latch it
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx));
+    for (int i = 0; i < 100; i++) {          // never unlatches
+        t += 50; rulesRuleUpdate(r, ctx, (i & 1) ? 80.0f : 95.0f, t);
+        TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx));
+    }
+}
+
+static void test_warn_latch_side_refreshes_at_once(void) {
+    Rule r = makeRule(RULE_OUTSIDE_BAND, 10.0f, 100.0f);   // warn edges 11 and 90
+    RuleContext ctx{};
+    toReady(r, ctx, 50.0f);
+    uint32_t t = 1602;
+    feed(r, ctx, 10.5f, t, 300);
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_LO, rulesRuleWarnSide(ctx));
+    feed(r, ctx, 95.0f, t, 50);              // jumps to the other band: no debounce, still WARNING
+    TEST_ASSERT_EQUAL(RULE_WARN_SIDE_HI, rulesRuleWarnSide(ctx));
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx));
+}
+
+static void test_active_to_ready_through_the_warn_band_shows_warning_at_once(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    uint32_t t = toActive(r, ctx);
+    TEST_ASSERT_EQUAL(RULE_SEV_ALARM, rulesRuleAnnunciatorSeverity(r, ctx));
+    for (int i = 0; i < 5; i++) {            // 95: clears the limit, sits in the warn band
+        t += 50; rulesRuleUpdate(r, ctx, 95.0f, t);
+        TEST_ASSERT_NOT_EQUAL_MESSAGE(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx),
+                                      "never NORMAL on the way down");
+    }
+    TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx));
+}
+
+// --- NaN ---
+
+static void test_nan_gap_restarts_the_clear_timer_and_keeps_state(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    uint32_t t = toActive(r, ctx);
+    feed(r, ctx, 50.0f, t, 150);             // 100 ms into the clear
+    feed(r, ctx, NAN, t, 50);                // gap: restart
+    TEST_ASSERT_EQUAL_UINT32(0, ctx.clearSince);
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, ctx.state);
+    feed(r, ctx, 50.0f, t, 200);
+    TEST_ASSERT_EQUAL_MESSAGE(RULE_ACTIVE, ctx.state, "count restarted after the gap");
+    feed(r, ctx, 50.0f, t, 50);
+    TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
+}
+
+static void test_nan_gap_keeps_the_warn_latch_and_restarts_its_timer(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    toReady(r, ctx, 50.0f);
+    uint32_t t = 1602;
+    feed(r, ctx, 95.0f, t, 300);
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx));
+    feed(r, ctx, 50.0f, t, 100);             // leave pending
+    feed(r, ctx, NAN, t, 500);               // gap shorter than 2 s
+    TEST_ASSERT_EQUAL_UINT32(0, ctx.warnSince);
+    TEST_ASSERT_EQUAL_MESSAGE(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, ctx), "latch held");
+}
+
+static void test_nan_past_the_fault_debounce_goes_ready_at_once_and_drops_the_latch(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    uint32_t t = toActive(r, ctx);
+    const uint32_t t0 = t + 50;
+    while (t < t0 + RULES_FAULT_DEBOUNCE_MS - 50) {
+        t += 50; rulesRuleUpdate(r, ctx, NAN, t);
+        TEST_ASSERT_EQUAL(RULE_ACTIVE, ctx.state);
+    }
+    t += 50; rulesRuleUpdate(r, ctx, NAN, t);   // 2 s of NaN: READY, no extra debounce
+    TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, ctx));
+
+    // A latched WARNING on a dead sensor drops too.
+    RuleContext w{};
+    toReady(r, w, 50.0f);
+    uint32_t u = 1602;
+    feed(r, w, 95.0f, u, 300);
+    TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesRuleAnnunciatorSeverity(r, w));
+    feed(r, w, NAN, u, RULES_FAULT_DEBOUNCE_MS + 50);
+    TEST_ASSERT_EQUAL(RULE_SEV_NONE, rulesRuleAnnunciatorSeverity(r, w));
+}
+
+// #668 decision 4, accepted on purpose: a NaN restarts the clear timer, so a
+// flaky sensor (clear, NaN, clear, NaN ...) never accumulates debounceMs of
+// continuous clear readings and keeps an ACTIVE rule (and its relay) on. A
+// gap of 2 s or more is the only thing that releases it. Don't "fix" this
+// without reopening the decision.
+static void test_flaky_sensor_holds_an_active_rule(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    uint32_t t = toActive(r, ctx);
+    for (int i = 0; i < 400; i++) {          // 20 s >> debounce + 2 s
+        t += 50; rulesRuleUpdate(r, ctx, (i & 1) ? NAN : 50.0f, t);
+        TEST_ASSERT_EQUAL(RULE_ACTIVE, ctx.state);
+    }
+}
+
+// --- #669 first verdict is timed ---
+
+static void test_verdict_needs_debounce_of_continuous_clear_readings(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    toReady(r, ctx, 20.0f);
+    uint32_t t = 1602;
+    feed(r, ctx, 20.0f, t, 150);
+    TEST_ASSERT_TRUE(rulesRuleUnsettled(ctx));
+    feed(r, ctx, 99.0f, t, 50);              // in the hysteresis band: restart
+    feed(r, ctx, 20.0f, t, 200);
+    TEST_ASSERT_TRUE(rulesRuleUnsettled(ctx));
+    feed(r, ctx, 105.0f, t, 50);             // an asserted sample restarts it too
+    feed(r, ctx, 20.0f, t, 200);
+    TEST_ASSERT_TRUE(rulesRuleUnsettled(ctx));
+    feed(r, ctx, 20.0f, t, 50);
+    TEST_ASSERT_FALSE(rulesRuleUnsettled(ctx));
+}
+
+// --- timer stamps at now == 0 ---
+
+// A stamp of 0 means "not counting", so a timer started on a tick at now == 0
+// must not read as "started long ago" and fire at once. The rule is armed
+// 2 s before the 32-bit wrap so a real tick lands on 0.
+static void test_a_timer_stamped_at_now_zero_does_not_fire(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    const uint32_t base = (uint32_t)-2000;   // base + 2000 == 0
+    rulesRuleInit(ctx, r, base);
+    rulesRuleUpdate(r, ctx, 50.0f, base);
+    rulesRuleUpdate(r, ctx, 50.0f, base + 1001);
+    rulesRuleUpdate(r, ctx, 50.0f, base + 1602);
+    TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
+    rulesRuleUpdate(r, ctx, 120.0f, 0);      // assert timer starts at 0
+    TEST_ASSERT_EQUAL_MESSAGE(RULE_READY, ctx.state, "no instant trip");
+    rulesRuleUpdate(r, ctx, 120.0f, 100);
+    TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
+    rulesRuleUpdate(r, ctx, 120.0f, 250);
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, ctx.state);
+
+    // The clear timer too: first clear sample on the tick at 0.
+    RuleContext c{};
+    rulesRuleInit(c, r, base);
+    rulesRuleUpdate(r, c, 50.0f, base);
+    rulesRuleUpdate(r, c, 50.0f, base + 1001);
+    rulesRuleUpdate(r, c, 50.0f, base + 1602);
+    rulesRuleUpdate(r, c, 120.0f, base + 1700);
+    rulesRuleUpdate(r, c, 120.0f, base + 1950);
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, c.state);
+    rulesRuleUpdate(r, c, 50.0f, 0);
+    TEST_ASSERT_EQUAL_MESSAGE(RULE_ACTIVE, c.state, "no instant clear");
+    rulesRuleUpdate(r, c, 50.0f, 100);
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, c.state);
+    rulesRuleUpdate(r, c, 50.0f, 250);
+    TEST_ASSERT_EQUAL(RULE_READY, c.state);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_init_enabled_arms);
@@ -953,6 +1231,7 @@ int main(int, char**) {
     RUN_TEST(test_above_hysteresis_holds_until_clear_band);
     RUN_TEST(test_below_asserts_and_clears);
     RUN_TEST(test_outside_band_both_edges);
+    RUN_TEST(test_trip_side_relatches_past_the_other_limit);
     RUN_TEST(test_nan_never_asserts_and_clears_active);
     RUN_TEST(test_active_rule_rides_out_a_short_nan_gap);
     RUN_TEST(test_nan_gap_restarts_a_ready_rules_persist_timer);
@@ -1020,5 +1299,19 @@ int main(int, char**) {
     RUN_TEST(test_settled_rule_stays_settled_through_later_trips);
     RUN_TEST(test_disable_clears_and_rearm_sets_again);
     RUN_TEST(test_action_failsafe_while_unsettled);
+    RUN_TEST(test_clear_noise_at_the_limit_never_leaves_active);
+    RUN_TEST(test_clear_needs_debounce_of_continuous_clear_readings);
+    RUN_TEST(test_clear_restarted_by_an_asserted_sample_or_a_hysteresis_reading);
+    RUN_TEST(test_debounce_zero_keeps_the_instant_clear);
+    RUN_TEST(test_warn_latch_enters_and_leaves_after_debounce);
+    RUN_TEST(test_warn_latch_no_flicker_from_noise_at_the_edge);
+    RUN_TEST(test_warn_latch_side_refreshes_at_once);
+    RUN_TEST(test_active_to_ready_through_the_warn_band_shows_warning_at_once);
+    RUN_TEST(test_nan_gap_restarts_the_clear_timer_and_keeps_state);
+    RUN_TEST(test_nan_gap_keeps_the_warn_latch_and_restarts_its_timer);
+    RUN_TEST(test_nan_past_the_fault_debounce_goes_ready_at_once_and_drops_the_latch);
+    RUN_TEST(test_flaky_sensor_holds_an_active_rule);
+    RUN_TEST(test_verdict_needs_debounce_of_continuous_clear_readings);
+    RUN_TEST(test_a_timer_stamped_at_now_zero_does_not_fire);
     return UNITY_END();
 }

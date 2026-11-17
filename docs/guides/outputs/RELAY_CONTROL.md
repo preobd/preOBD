@@ -222,11 +222,14 @@ A Rule doesn't act the instant a reading crosses the limit:
 - **Warmup** — after power-up (or after the Rule is armed) it waits before acting.
   Rules created with `RULE ADD` use a 3 s warmup; the alarm Rule seeded by
   `SET <pin> <application> ...` uses the application's warmup.
-- **Debounce** — the condition must hold for a short time (500 ms by default)
-  before the Rule changes state.
+- **Debounce** — the reading must hold on the new side for a short time (500 ms
+  by default) before the Rule changes state, both when it trips and when it
+  clears. A relay on a reading that sits at the limit therefore switches at
+  most once per debounce instead of chattering.
 
-`RULE <id>` shows a Rule's warmup and debounce. They can be changed through a
-JSON import (`warmupMs`, `debounceMs`); see the
+`RULE <id>` shows a Rule's debounce, and `INFO <pin> ALARM` the warmup and debounce of the input's alarm Rule. Change the debounce with
+`RULE <id> DEBOUNCE <ms>` (or `RULE ADD … DEBOUNCE <ms>`); the warmup through
+a JSON import (`warmupMs`); see the
 [JSON Configuration Guide](../configuration/JSON_CONFIGURATION_GUIDE.md).
 
 ### When the sensor fails

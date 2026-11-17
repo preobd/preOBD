@@ -147,12 +147,16 @@ these states (shown by `RULE LIST` and `INFO <pin> ALARM`):
   build and a cold engine is below any "too cold" limit. It starts when the Rule
   is armed (at power-up, or after an edit that re-arms it).
 - **Debounce** stops a brief spike or electrical noise from tripping an alarm: the
-  reading must stay out of range for the whole debounce time.
+  reading must stay out of range for the whole debounce time. It works both ways:
+  an alarm clears, and a warning comes on or goes off, only once the reading has
+  held on the new side for the debounce time, so a reading that sits at a limit
+  doesn't flicker the alarm.
 
 Rules created by `SET <pin> <application> ...` use the application's times (table
 above). Rules created with `RULE ADD` use a 3 s warmup and 500 ms debounce.
-`RULE <id>` shows a Rule's times. They can be changed through a JSON import
-(`warmupMs`, `debounceMs`, up to 65 s) — see the
+`RULE <id>` shows a Rule's debounce, and `INFO <pin> ALARM` the warmup and debounce of the input's alarm Rule. Change the debounce with
+`RULE <id> DEBOUNCE <ms>` (0-65535) and the warmup through a JSON import
+(`warmupMs`, up to 65 s) — see the
 [JSON Configuration Guide](JSON_CONFIGURATION_GUIDE.md).
 
 ---
@@ -254,11 +258,11 @@ In CONFIG mode the buzzer stays silent, so bench testing can't set it off.
 - Has it been acknowledged? `ALARM STATUS`.
 
 **An alarm sounds at start-up**
-- Its warmup is too short for your engine. `RULE <id>` shows the warmup; raise it
+- Its warmup is too short for your engine. `INFO <pin> ALARM` shows the warmup; raise it
   with a JSON import, or loosen the limit.
 
 **Brief spikes trip the alarm**
-- Increase the Rule's debounce (JSON `debounceMs`), and check the sensor's wiring
+- Increase the Rule's debounce (`RULE <id> DEBOUNCE <ms>`), and check the sensor's wiring
   and grounding.
 
 **The buzzer doesn't stop when I press the button**

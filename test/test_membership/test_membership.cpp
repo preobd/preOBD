@@ -1135,6 +1135,43 @@ static void test_failsafe_on_cold_start_goes_off_at_the_verdict(void) {
     TEST_ASSERT_EQUAL_UINT8(LOW, stubPinLatch[23]);
 }
 
+// ---- #668: a relay on a noisy rule holds each state for debounceMs ----------
+// The source flips between asserted and clear with random dwell times (some
+// shorter, some longer than the 500 ms debounce); the relay may only change
+// after debounceMs of continuous readings on the new side, so consecutive
+// changes are never closer than that. Real state machine, no pinned contexts.
+static void test_relay_on_a_noisy_rule_holds_each_state_for_the_debounce(void) {
+    addInput(10, 20.0f);
+    armRule(0, 10);                            // debounce 500, hysteresis 5, clear < 95
+    addAction(0, 23);
+    rulesActionAddRule(0, 0);
+    g_test_now = 1200;
+    rulesSyncActionPins(false);
+
+    uint32_t seed = 12345, nextFlip = 0, lastChange = 0;
+    bool high = false, last = rulesActionState(0);
+    int changes = 0;
+    for (uint32_t t = 1250; t <= 90000; t += 50) {
+        if (t >= 5000 && t >= nextFlip) {      // after the arming sequence
+            high = !high;
+            seed = seed * 1103515245u + 12345u;
+            nextFlip = t + 50 + ((seed >> 16) % 14) * 50;   // 50..700 ms dwell
+        }
+        if (t >= 5000) g_inputs[0].value = high ? 120.0f : 20.0f;
+        stepEngine(t);
+        const bool now = rulesActionState(0);
+        if (now != last) {
+            if (lastChange != 0) {
+                TEST_ASSERT_TRUE_MESSAGE(t - lastChange >= 500, "relay changed sooner than debounceMs");
+            }
+            lastChange = t;
+            last = now;
+            changes++;
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(changes >= 6, "the noise must have moved the relay at all");
+}
+
 static void test_failsafe_on_dead_sensor_stays_on(void) {
     addInput(10, NAN);
     armRule(0, 10);
@@ -1284,6 +1321,7 @@ int main(int, char**) {
     RUN_TEST(test_failsafe_on_claims_on_and_holds_through_a_hot_start);
     RUN_TEST(test_failsafe_on_inverted_claims_low);
     RUN_TEST(test_failsafe_on_cold_start_goes_off_at_the_verdict);
+    RUN_TEST(test_relay_on_a_noisy_rule_holds_each_state_for_the_debounce);
     RUN_TEST(test_failsafe_on_dead_sensor_stays_on);
     RUN_TEST(test_failsafe_on_claims_off_in_config);
     RUN_TEST(test_failsafe_off_and_manual_still_claim_off);

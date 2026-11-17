@@ -735,13 +735,14 @@ and triggers **Actions** (relay/GPIO outputs) and/or the built-in Annunciator
 (LED/buzzer/BLE). `SET <pin> APPLICATION <app>` seeds a default alarm Rule.
 
 ```
-RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [WARN <lo|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]         # one-sided
-RULE ADD <pin> OUTSIDE <lo> <hi> [HYST <w>] [WARN <lo|NONE|AUTO> <hi|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]  # both-sided band
+RULE ADD <pin> ABOVE|BELOW <limit> [HYST <w>] [DEBOUNCE <ms>] [WARN <lo|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]         # one-sided
+RULE ADD <pin> OUTSIDE <lo> <hi> [HYST <w>] [DEBOUNCE <ms>] [WARN <lo|NONE|AUTO> <hi|NONE|AUTO>] [INFO|WARNING|ALARM|NONE]  # both-sided band
 RULE LIST                         # all Rules + live state (READY/ACTIVE) + severity
 RULE <id>                         # one Rule's detail
 RULE <id> WARN <lo|NONE|AUTO> [<hi|NONE|AUTO>]   # edit an ALARM rule's warning threshold in place (no re-arm)
 RULE <id> LIMIT ABOVE|BELOW <limit> | OUTSIDE <lo> <hi>   # move a Rule's limits in place (keeps id, severity, Action links; no re-arm). Values in base units (°C, bar), like RULE ADD
 RULE <id> SEVERITY INFO|WARNING|ALARM|NONE   # change a Rule's tier in place (keeps id, limits, Action links; no re-arm). Leaving ALARM clears its warn tier; drops any acknowledgement
+RULE <id> DEBOUNCE <ms>           # how long a reading must hold on the new side before the Rule changes state, in both directions, warning tier included (0-65535; no re-arm)
 RULE <id> ENABLE | DISABLE        # re-arm / park a Rule without deleting it
 RULE DEL <id>                     # delete (drops it from every Action's membership)
 RULE RESET <id>                   # restore config from the application default + re-arm

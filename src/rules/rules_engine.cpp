@@ -24,7 +24,78 @@ void rulesRuleInit(RuleContext& ctx, const Rule& rule, uint32_t now) {
     ctx.warmupTime_ms = rule.warmupMs;
     ctx.persistTime_ms = rule.debounceMs;
     ctx.verdictPending = enabled ? 1 : 0;   // armed: no verdict yet (#669)
+    ctx.clearSince = 0;
+    ctx.warnSince = 0;
+    ctx.warnFlags = 0;
 }
+
+namespace {
+
+// Timer anchors use 0 for "not counting", so a stamp taken at now == 0 is 1
+// (as nanSince does). elapsed() reads such a stamp as 0 ms instead of
+// underflowing to ~UINT32_MAX and firing at once.
+inline uint32_t stamp(uint32_t now) { return now ? now : 1; }
+inline uint32_t elapsed(uint32_t since, uint32_t now) {
+    const int32_t d = (int32_t)(now - since);
+    return d > 0 ? (uint32_t)d : 0;
+}
+
+inline RuleWarnSide ctxSide(const RuleContext& ctx, uint8_t shift) {
+    return (RuleWarnSide)((ctx.warnFlags >> shift) & RULE_CTX_SIDE_MASK);
+}
+inline void setCtxSide(RuleContext& ctx, uint8_t shift, RuleWarnSide side) {
+    ctx.warnFlags = (uint8_t)((ctx.warnFlags & ~(RULE_CTX_SIDE_MASK << shift)) |
+                              (((uint8_t)side & RULE_CTX_SIDE_MASK) << shift));
+}
+// Latch (or drop) the approach tier at `side` (NONE drops it).
+inline void setWarnLatch(RuleContext& ctx, RuleWarnSide side) {
+    if (side == RULE_WARN_SIDE_NONE) {
+        ctx.warnFlags &= (uint8_t)~RULE_CTX_WARN_LATCHED;
+    } else {
+        ctx.warnFlags |= RULE_CTX_WARN_LATCHED;
+    }
+    setCtxSide(ctx, RULE_CTX_WARN_SIDE_SHIFT, side);
+}
+
+// Which limit an assertion is on: the trip side the broadcaster reports while
+// ACTIVE, latched at the trip so a value wandering through the clear window
+// can't flip HIGH/LOW (#668).
+RuleWarnSide tripSide(const Rule& r, float value) {
+    switch (r.condition) {
+        case RULE_BELOW: return RULE_WARN_SIDE_LO;
+        case RULE_OUTSIDE_BAND:
+            return (value >= (r.limitLo + r.limitHi) * 0.5f) ? RULE_WARN_SIDE_HI
+                                                             : RULE_WARN_SIDE_LO;
+        default: return RULE_WARN_SIDE_HI;
+    }
+}
+
+// The approach tier (§11.2, #668): a READY ALARM rule's WARNING changes only
+// once the reading has held on the new side of a warn edge for debounceMs, in
+// both directions. Moving to the other side's band while latched refreshes the
+// side at once (an edge edit or a coarse sample can jump lo to hi).
+void updateWarnLatch(const Rule& rule, RuleContext& ctx, float value, uint32_t now) {
+    if (rule.severity != RULE_SEV_ALARM) {
+        setWarnLatch(ctx, RULE_WARN_SIDE_NONE);
+        ctx.warnSince = 0;
+        return;
+    }
+    const RuleWarnSide side = rulesRuleWarnSideHit(rule, value);
+    const bool in = side != RULE_WARN_SIDE_NONE;
+    const bool latched = (ctx.warnFlags & RULE_CTX_WARN_LATCHED) != 0;
+    if (in == latched) {
+        ctx.warnSince = 0;
+        if (in) setWarnLatch(ctx, side);
+        return;
+    }
+    if (ctx.warnSince == 0) ctx.warnSince = stamp(now);
+    if (elapsed(ctx.warnSince, now) >= ctx.persistTime_ms) {
+        setWarnLatch(ctx, side);
+        ctx.warnSince = 0;
+    }
+}
+
+}  // namespace
 
 bool rulesRuleConditionAsserted(const Rule& rule, float value, bool currentlyActive) {
     // Safety: an untrustworthy (NaN) reading never asserts. rulesRuleUpdate()
@@ -68,6 +139,9 @@ void rulesRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t n
         ctx.faultStartTime = 0;
         ctx.nanSince = 0;
         ctx.verdictPending = 0;
+        ctx.clearSince = 0;
+        ctx.warnSince = 0;
+        ctx.warnFlags = 0;
         return;
     }
 
@@ -102,6 +176,9 @@ void rulesRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t n
             if (!isnan(value) && (now - ctx.stateEntryTime > ctx.warmupTime_ms)) {
                 ctx.state = RULE_READY;
                 ctx.stateEntryTime = now;
+                ctx.clearSince = 0;
+                ctx.warnSince = 0;
+                ctx.warnFlags = 0;
             }
             return;
 
@@ -111,40 +188,93 @@ void rulesRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t n
     }
 
     // ===== Qualification (READY / ACTIVE) =====
-    // An ACTIVE rule rides out a NaN gap shorter than the fault debounce
-    // (#650, §11.3): one dropped conversion or CAN frame must not drop a
-    // running fan and make it re-qualify for persistTime. Past the debounce
-    // the source is faulted and the rule de-asserts below, as before. A READY
-    // rule is not held: its persist timer counts observed samples only, so a
-    // gap restarts it (spike, NaN, spike is not a sustained condition).
-    if (isnan(value) && ctx.state == RULE_ACTIVE &&
-        !rulesRuleSourceUntrusted(ctx, now)) {
+    // Every state change waits debounceMs of continuous readings on the new
+    // side, in both directions (#668, §11.2): entering ACTIVE (faultStartTime),
+    // leaving it (clearSince), the first verdict (#669, clearSince) and the
+    // approach tier (warnSince). A sample on the old side restarts the count.
+    //
+    // A NaN gap restarts every running timer and the rule keeps its state and
+    // its warning (#650: one dropped conversion or CAN frame must not drop a
+    // running fan). Past the fault debounce the source is untrusted: an ACTIVE
+    // rule de-asserts at once (no clear timer: a NaN is no clear reading) and
+    // the warning drops (a dead sensor is approaching nothing).
+    if (isnan(value)) {
+        ctx.faultStartTime = 0;
+        ctx.clearSince = 0;
+        ctx.warnSince = 0;
+        if (rulesRuleSourceUntrusted(ctx, now)) {
+            ctx.state = RULE_READY;
+            ctx.warnFlags = 0;
+        }
         return;
     }
-    const bool asserted = rulesRuleConditionAsserted(rule, value, ctx.state == RULE_ACTIVE);
-    // The first trusted verdict since arming (#669, §11.3). "Not asserted" only
-    // counts once the reading also clears the ACTIVE (hysteresis-inset) test:
-    // after a reset the rule can't know an actuator was running, and a reading
-    // inside the band is what a running fan leaves behind. A NaN is no verdict.
-    if (ctx.verdictPending && !isnan(value) && !asserted &&
-        !rulesRuleConditionAsserted(rule, value, true)) {
-        ctx.verdictPending = 0;
-    }
-    if (asserted) {
-        if (ctx.faultStartTime == 0) {
-            ctx.faultStartTime = now;  // start debounce timer
+
+    const bool active = ctx.state == RULE_ACTIVE;
+    // Hysteresis-inset test while ACTIVE, the limit while READY (unchanged).
+    const bool asserted = rulesRuleConditionAsserted(rule, value, active);
+
+    if (active) {
+        if (asserted) {
+            ctx.clearSince = 0;
+            // A reading past the OTHER limit (after a held NaN gap or a coarse
+            // jump) re-latches the trip side, so the frame never reports HIGH
+            // for a LOW alarm. Inside the band (the clear window) it stays put.
+            if (rule.condition == RULE_OUTSIDE_BAND &&
+                (value < rule.limitLo || value > rule.limitHi)) {
+                setCtxSide(ctx, RULE_CTX_TRIP_SIDE_SHIFT,
+                           value > rule.limitHi ? RULE_WARN_SIDE_HI : RULE_WARN_SIDE_LO);
+            }
+            return;
         }
-        if (now - ctx.faultStartTime >= ctx.persistTime_ms) {
+        if (ctx.clearSince == 0) ctx.clearSince = stamp(now);
+        if (elapsed(ctx.clearSince, now) >= ctx.persistTime_ms) {
+            ctx.state = RULE_READY;
+            ctx.faultStartTime = 0;
+            ctx.clearSince = 0;
+            ctx.warnSince = 0;
+            // Coming down from ALARM through the warn band shows WARNING at
+            // once: the clear itself was debounced, and waiting another
+            // debounceMs would show a false NORMAL in between.
+            setWarnLatch(ctx, rule.severity == RULE_SEV_ALARM
+                                  ? rulesRuleWarnSideHit(rule, value)
+                                  : RULE_WARN_SIDE_NONE);
+        }
+        return;
+    }
+
+    // READY
+    if (asserted) {
+        ctx.clearSince = 0;
+        if (ctx.faultStartTime == 0) ctx.faultStartTime = stamp(now);
+        if (elapsed(ctx.faultStartTime, now) >= ctx.persistTime_ms) {
             ctx.state = RULE_ACTIVE;
             ctx.verdictPending = 0;    // qualified: a verdict (#669)
+            ctx.warnSince = 0;
+            setWarnLatch(ctx, RULE_WARN_SIDE_NONE);
+            setCtxSide(ctx, RULE_CTX_TRIP_SIDE_SHIFT, tripSide(rule, value));
+            return;
         }
         // else: asserted but not yet debounced — wait
     } else {
         ctx.faultStartTime = 0;
-        if (ctx.state == RULE_ACTIVE) {
-            ctx.state = RULE_READY;
+        // The first trusted verdict since arming (#669, §11.3): "not demanding"
+        // needs the reading to clear the ACTIVE (hysteresis-inset) test for
+        // debounceMs, as if the rule had been ACTIVE: after a reset it can't
+        // know an actuator was running, and a reading inside the band is what
+        // a running fan leaves behind.
+        if (ctx.verdictPending) {
+            if (rulesRuleConditionAsserted(rule, value, true)) {
+                ctx.clearSince = 0;    // in the hysteresis band: no verdict
+            } else {
+                if (ctx.clearSince == 0) ctx.clearSince = stamp(now);
+                if (elapsed(ctx.clearSince, now) >= ctx.persistTime_ms) {
+                    ctx.verdictPending = 0;
+                    ctx.clearSince = 0;
+                }
+            }
         }
     }
+    updateWarnLatch(rule, ctx, value, now);
 }
 
 bool rulesRuleIsActive(const RuleContext& ctx) {
@@ -179,6 +309,23 @@ bool rulesRuleSourceFaulted(const RuleContext& ctx, uint32_t now) {
 
 bool rulesRuleTripPending(const RuleContext& ctx) {
     return ctx.state == RULE_READY && ctx.faultStartTime != 0;
+}
+
+bool rulesRuleWarnPending(const RuleContext& ctx) {
+    return ctx.state == RULE_READY && ctx.warnSince != 0 &&
+           (ctx.warnFlags & RULE_CTX_WARN_LATCHED) == 0;
+}
+
+RuleWarnSide rulesRuleWarnSide(const RuleContext& ctx) {
+    if (ctx.state != RULE_READY || (ctx.warnFlags & RULE_CTX_WARN_LATCHED) == 0) {
+        return RULE_WARN_SIDE_NONE;
+    }
+    return ctxSide(ctx, RULE_CTX_WARN_SIDE_SHIFT);
+}
+
+RuleWarnSide rulesRuleTripSide(const RuleContext& ctx) {
+    if (ctx.state != RULE_ACTIVE) return RULE_WARN_SIDE_NONE;
+    return ctxSide(ctx, RULE_CTX_TRIP_SIDE_SHIFT);
 }
 
 RuleSeverity rulesRuleSeverity(const Rule& rule, const RuleContext& ctx) {
@@ -240,11 +387,6 @@ RuleWarnSide rulesRuleWarnSideHit(const Rule& r, float value) {
         default:  // INSIDE_BAND (deferred) / unknown
             return RULE_WARN_SIDE_NONE;
     }
-}
-
-// True when `value` has reached either side's effective WARNING edge.
-static bool ruleInWarningBand(const Rule& rule, float value) {
-    return rulesRuleWarnSideHit(rule, value) != RULE_WARN_SIDE_NONE;
 }
 
 // Case-insensitive keyword compare against a PROGMEM literal. The CLI upcases
@@ -325,16 +467,15 @@ uint8_t rulesNormalizeWarn(Rule& r) {
     return mask;
 }
 
-RuleSeverity rulesRuleAnnunciatorSeverity(const Rule& rule, const RuleContext& ctx, float value) {
+RuleSeverity rulesRuleAnnunciatorSeverity(const Rule& rule, const RuleContext& ctx) {
     if (rulesRuleIsActive(ctx)) {
         return (RuleSeverity)rule.severity;
     }
-    // Approach tier: an armed ALARM rule whose source has reached a per-side
-    // warning edge annunciates WARNING first. A side set to RULE_WARN_NONE
-    // never matches here, so that side goes straight READY -> ACTIVE/ALARM
-    // with no pre-announcement (§11.2 amendment A6).
-    if (rule.severity == RULE_SEV_ALARM && ctx.state == RULE_READY &&
-        !isnan(value) && ruleInWarningBand(rule, value)) {
+    // Approach tier: an armed ALARM rule annunciates WARNING while its latched
+    // warning is set (rulesRuleUpdate() debounces it both ways, #668). A side
+    // set to RULE_WARN_NONE never latches, so that side goes straight READY ->
+    // ACTIVE/ALARM with no pre-announcement (§11.2 amendment A6).
+    if (rule.severity == RULE_SEV_ALARM && rulesRuleWarnSide(ctx) != RULE_WARN_SIDE_NONE) {
         return RULE_SEV_WARNING;
     }
     return RULE_SEV_NONE;

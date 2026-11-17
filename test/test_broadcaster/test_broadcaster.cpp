@@ -164,13 +164,6 @@ static void test_two_rules_one_input_distinct_ruleid(void) {
     TEST_ASSERT_NOT_EQUAL(g_ruleIds[0], g_ruleIds[1]); // distinguishable on the wire
 }
 
-static void test_low_side_kind_and_threshold(void) {
-    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, -5.0f, /*active*/true);
-    AlarmBroadcaster::tick();
-    const PreobdAlarmEvent& e = lastEvent();
-    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_LOW, e.kind);
-    TEST_ASSERT_EQUAL_FLOAT(-1.0f, e.threshold);       // limitLo
-}
 
 static void test_warning_severity(void) {
     configRule(RULE_SEV_WARNING, -1.0f, 100.0f, 120.0f, /*active*/true);
@@ -180,34 +173,12 @@ static void test_warning_severity(void) {
 
 // Derived WARNING tier (§11.2): an armed (READY, not active) ALARM rule whose
 // value is in the warning band emits a WARNING event before it trips.
-static void test_derived_warning_band(void) {
-    configRule(RULE_SEV_ALARM, -1.0f, 100.0f, 95.0f, /*active*/false);  // 95 >= 90% of 100
-    AlarmBroadcaster::tick();
-    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
-    const PreobdAlarmEvent& e = lastEvent();
-    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_WARNING, e.severity);
-    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_HIGH, e.kind);
-}
 
 // #425: a SET approach-tier edge can sit off the band midpoint. The OLD
 // kindFor() picked HIGH/LOW purely by which half of the band the value was
 // in (75 is above the [0,100] midpoint 50 -> HIGH), which is wrong once the
 // per-side warn edges are explicit and asymmetric: 75 has crossed the lo
 // warn edge (80) from below, not the hi one (90), so it must report LOW.
-static void test_outside_band_set_warn_uses_correct_side(void) {
-    configRule(RULE_SEV_ALARM, 0.0f, 100.0f, 75.0f, /*active*/false);
-    Rule& r = rules[0];
-    ruleSetWarnMode(r, false, RULE_WARN_SET);
-    ruleSetWarnMode(r, true, RULE_WARN_SET);
-    r.warnLo = 80.0f;
-    r.warnHi = 90.0f;
-    AlarmBroadcaster::tick();
-    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
-    const PreobdAlarmEvent& e = lastEvent();
-    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_WARNING, e.severity);
-    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_LOW, e.kind);
-    TEST_ASSERT_EQUAL_FLOAT(0.0f, e.threshold);  // limitLo, the LOW-side alarm limit
-}
 
 static void test_none_severity_rule_is_silent(void) {
     // A control Rule (severity NONE) is not an alarm — never broadcasts.
@@ -478,6 +449,125 @@ static void armRuleToReady(float settledValue) {
     TEST_ASSERT_EQUAL(RULE_READY, g_ruleContexts[0].state);
 }
 
+// ---- #668: the latched tiers, driven through the real engine ----
+// (These replace the old by-value checks, which pinned ctx.state by hand: the
+// WARNING tier and the trip side are now latched by rulesRuleUpdate().)
+
+// Hold `value` for `ms` of 50 ms engine+broadcaster steps.
+static void holdFor(float value, uint32_t ms) {
+    g_srcInput.value = value;
+    for (uint32_t t = 0; t < ms; t += 50) stepEngine(50);
+}
+
+static void test_low_side_kind_and_threshold(void) {
+    configRealRule(RULE_SEV_ALARM, -1.0f, 100.0f);
+    armRuleToReady(50.0f);
+    holdFor(-5.0f, 300);
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, g_ruleContexts[0].state);
+    const PreobdAlarmEvent& e = lastEvent();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_ALARM, e.severity);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_LOW, e.kind);
+    TEST_ASSERT_EQUAL_FLOAT(-1.0f, e.threshold);       // limitLo
+}
+
+// Derived WARNING tier (§11.2): an armed ALARM rule whose value held in the
+// warning band for debounceMs emits a WARNING event before it trips.
+static void test_derived_warning_band(void) {
+    configRealRule(RULE_SEV_ALARM, -1.0f, 100.0f);
+    armRuleToReady(50.0f);
+    const int before = g_histCount;
+    holdFor(95.0f, 300);                       // 95 >= 90% of 100
+    TEST_ASSERT_EQUAL_INT(before + 1, g_histCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_WARNING, g_histSeverity[before]);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_HIGH, g_histKind[before]);
+}
+
+// #425: a SET approach-tier edge can sit off the band midpoint; 75 has crossed
+// the lo warn edge (80) from below, not the hi one (90), so it reports LOW.
+static void test_outside_band_set_warn_uses_correct_side(void) {
+    configRealRule(RULE_SEV_ALARM, 0.0f, 100.0f);
+    Rule& r = rules[0];
+    ruleSetWarnMode(r, false, RULE_WARN_SET);
+    ruleSetWarnMode(r, true, RULE_WARN_SET);
+    r.warnLo = 80.0f;
+    r.warnHi = 90.0f;
+    armRuleToReady(85.0f);                     // between the two edges
+    holdFor(75.0f, 300);
+    const PreobdAlarmEvent& e = lastEvent();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_WARNING, e.severity);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_LOW, e.kind);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, e.threshold);  // limitLo, the LOW-side alarm limit
+}
+
+// Noise at a warn edge: one WARNING frame, never a stream of WARNING/CLEAR.
+static void test_warn_edge_noise_is_one_frame(void) {
+    configRealRule(RULE_SEV_ALARM, -1.0f, 100.0f);
+    armRuleToReady(50.0f);
+    const int before = g_histCount;
+    for (int i = 0; i < 60; ++i) {             // never in band long enough to latch
+        g_srcInput.value = (i & 1) ? 80.0f : 95.0f;
+        stepEngine(50);
+    }
+    TEST_ASSERT_EQUAL_INT_MESSAGE(before, g_histCount, "noise alone puts nothing on the wire");
+    holdFor(95.0f, 300);
+    TEST_ASSERT_EQUAL_INT(before + 1, g_histCount);
+    for (int i = 0; i < 100; ++i) {            // and it doesn't flicker once latched
+        g_srcInput.value = (i & 1) ? 80.0f : 95.0f;
+        stepEngine(50);
+    }
+    TEST_ASSERT_EQUAL_INT_MESSAGE(before + 1, g_histCount, "one WARNING frame, not a stream");
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_WARNING, g_histSeverity[before]);
+}
+
+// ALARM -> WARNING on the way down: the clear is debounced, then the rule
+// comes down through the warn band; the wire never shows a CLEAR between.
+static void test_alarm_to_warning_has_no_clear_between(void) {
+    configRealRule(RULE_SEV_ALARM, -1.0f, 100.0f);
+    armRuleToReady(50.0f);
+    holdFor(120.0f, 300);
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, g_ruleContexts[0].state);
+    const int before = g_histCount;
+    holdFor(95.0f, 500);
+    TEST_ASSERT_EQUAL(RULE_READY, g_ruleContexts[0].state);
+    TEST_ASSERT_EQUAL_INT(before + 1, g_histCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_WARNING, g_histSeverity[before]);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_HIGH, g_histKind[before]);
+}
+
+// FAULT -> WARNING: the reading returns into the warn band; the approach tier
+// re-debounces, and the held FAULT covers that window (no CLEAR in between).
+static void test_fault_to_warning_has_no_clear_between(void) {
+    configRealRule(RULE_SEV_ALARM, -1.0f, 100.0f);
+    armRuleToReady(50.0f);
+    holdFor(95.0f, 300);                       // WARNING latched
+    holdFor(NAN, RULES_FAULT_DEBOUNCE_MS + 100);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_FAULT, lastEvent().kind);
+    const int before = g_histCount;
+    holdFor(95.0f, 500);
+    TEST_ASSERT_EQUAL_INT(before + 1, g_histCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_WARNING, g_histSeverity[before]);
+    for (int i = 0; i < g_histCount; ++i) {
+        TEST_ASSERT_NOT_EQUAL(PREOBD_ALARM_KIND_CLEAR, g_histKind[i]);
+    }
+}
+
+// The trip side is latched: a value wandering through the clear window must
+// not flip HIGH to LOW (the old midpoint rule would: 20 < 49.5).
+static void test_trip_side_stays_put_while_the_value_wanders(void) {
+    configRealRule(RULE_SEV_ALARM, -1.0f, 100.0f);
+    armRuleToReady(50.0f);
+    holdFor(120.0f, 300);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_HIGH, lastEvent().kind);
+    const int before = g_histCount;
+    holdFor(20.0f, 100);                       // inside the clear window
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, g_ruleContexts[0].state);
+    TEST_ASSERT_EQUAL_INT(before, g_histCount);
+    AlarmBroadcaster::resync();
+    AlarmBroadcaster::tick();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_SEVERITY_ALARM, lastEvent().severity);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ALARM_KIND_HIGH, lastEvent().kind);
+}
+
 // (a) An ACTIVE alarm rule, real-armed and real-tripped, whose source then
 // goes NAN: no frame at all until the FAULT debounce elapses, then exactly
 // one INFO/FAULT — and no CLEAR is emitted anywhere along the way.
@@ -698,10 +788,7 @@ int main(int, char**) {
     RUN_TEST(test_inactive_rule_emits_nothing);
     RUN_TEST(test_active_alarm_high_payload);
     RUN_TEST(test_two_rules_one_input_distinct_ruleid);
-    RUN_TEST(test_low_side_kind_and_threshold);
     RUN_TEST(test_warning_severity);
-    RUN_TEST(test_derived_warning_band);
-    RUN_TEST(test_outside_band_set_warn_uses_correct_side);
     RUN_TEST(test_none_severity_rule_is_silent);
     RUN_TEST(test_return_to_normal_emits_clear);
     RUN_TEST(test_idempotent_tick);
@@ -727,5 +814,12 @@ int main(int, char**) {
     RUN_TEST(test_fault_orphaned_mid_fault_clears_not_stuck_faulted);
     RUN_TEST(test_fault_e_warmup_uses_warmup_debounce);
     RUN_TEST(test_resync_reannounces_held_fault);
+    RUN_TEST(test_low_side_kind_and_threshold);
+    RUN_TEST(test_derived_warning_band);
+    RUN_TEST(test_outside_band_set_warn_uses_correct_side);
+    RUN_TEST(test_warn_edge_noise_is_one_frame);
+    RUN_TEST(test_alarm_to_warning_has_no_clear_between);
+    RUN_TEST(test_fault_to_warning_has_no_clear_between);
+    RUN_TEST(test_trip_side_stays_put_while_the_value_wanders);
     return UNITY_END();
 }

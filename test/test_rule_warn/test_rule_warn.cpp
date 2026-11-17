@@ -554,7 +554,15 @@ static void test_ack_generation_moves_on_every_set_change_only(void) {
 static void test_ack_ignores_warning_tier(void) {
     int a = ackRule(10, 100.0f);
     getInputByPin(10)->value = 95.0f;                 // approach tier: 95 >= 90% of 100
-    g_ruleContexts[a].state = RULE_READY;
+    // Drive the real state machine: arm, warm up, then hold 95 until the
+    // approach tier latches (it waits debounceMs, #668).
+    rulesManagerUpdate(0);
+    rulesManagerUpdate(1001);
+    rulesManagerUpdate(1000 + (uint32_t)rules[a].warmupMs + 100);
+    TEST_ASSERT_EQUAL(RULE_READY, g_ruleContexts[a].state);
+    uint32_t t = 1000 + (uint32_t)rules[a].warmupMs + 100;
+    for (uint32_t end = t + rules[a].debounceMs + 100; t < end; ) { t += 50; rulesManagerUpdate(t); }
+    TEST_ASSERT_EQUAL(RULE_READY, g_ruleContexts[a].state);
     TEST_ASSERT_EQUAL(RULE_SEV_WARNING, rulesSystemSeverity());
     TEST_ASSERT_EQUAL_UINT8(0, rulesAckActiveAlarms(0));
     TEST_ASSERT_FALSE(rulesRuleAcked(a));
