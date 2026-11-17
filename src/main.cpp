@@ -618,7 +618,7 @@ void setup() {
 #if INCLUDE_RULES_ENGINE
     // Arm Rules from EEPROM now that SystemConfig + inputs are loaded (boot-load).
     rulesManagerInit(millis());
-    rulesActionsInit();   // configure action target pins as outputs
+    rulesActionsInit();   // action run state only; pins are claimed, then configured, by the late rulesSyncActionPins()
 #endif
 
 #if INCLUDE_USER_BUTTON

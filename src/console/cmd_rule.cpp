@@ -228,7 +228,9 @@ static FLASHMEM void printLinkedActions(uint8_t ruleId) {
             msg.control.print(F(" rules)"));
         }
         msg.control.print(F("  -> "));
-        msg.control.println(rulesActionState(i) ? F("ON") : F("OFF"));
+        msg.control.print(rulesActionState(i) ? F("ON") : F("OFF"));
+        rulesPrintNotDriven(i);
+        msg.control.println();
     }
     if (!any) {
         msg.control.println(F("  Linked actions: (none)"));

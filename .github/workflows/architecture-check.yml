@@ -1,0 +1,39 @@
+# The architecture guards, for commits made without the pre-commit hook:
+# src/ layering (tools/check_layering.py), pin drives (tools/check_pins.py,
+# ARCHITECTURE.md §12.5) and the maps of record (tools/check_maps.py --strict:
+# a map whose described files changed must be re-traced before merge).
+name: Architecture check
+
+on:
+  pull_request:
+    paths: ["src/**", "tools/**", "architecture/**", "ARCHITECTURE.md", ".github/workflows/architecture-check.yml"]
+  push:
+    branches: ["main"]
+    paths: ["src/**", "tools/**", "architecture/**", "ARCHITECTURE.md", ".github/workflows/architecture-check.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  architecture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Checker self-tests
+        run: python3 tools/test_check_pins.py && python3 tools/test_check_maps.py
+      - name: Layering
+        run: python3 tools/check_layering.py --quiet
+      - name: Pin drives (no new ratchet targets over main)
+        run: |
+          git show origin/main:tools/pin_drive_sites.txt > /tmp/main_sites.txt 2>/dev/null || true
+          if [ -s /tmp/main_sites.txt ]; then
+            MAX=$(python3 tools/check_pins.py --count-targets /tmp/main_sites.txt)
+            python3 tools/check_pins.py --quiet --max-targets "$MAX"
+          else
+            python3 tools/check_pins.py --quiet
+          fi
+          git diff origin/main -- tools/pin_drive_sites.txt | grep '^+[^+]' || true
+      - name: Maps of record
+        run: python3 tools/check_maps.py --strict

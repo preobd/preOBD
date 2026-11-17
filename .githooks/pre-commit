@@ -58,6 +58,38 @@ fi
 
 echo "✓ Layering check passed"
 
+# Pin-ownership guard (ARCHITECTURE.md §12.5): every direct pin drive is
+# listed in tools/pin_drive_sites.txt, and only pin_owner.cpp writes the
+# registry unchecked. A ratchet: a new drive site fails the commit.
+echo "🔍 Checking pin drives..."
+python3 tools/test_check_pins.py >/dev/null && python3 tools/test_check_maps.py >/dev/null
+if [ $? -ne 0 ]; then
+    echo "❌ The pin/map checkers' self-tests failed (run tools/test_check_pins.py, tools/test_check_maps.py)"
+    exit 1
+fi
+python3 tools/check_pins.py --quiet
+
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "❌ Pin check failed!"
+    echo "A pin is driven directly without being listed, or the registry is"
+    echo "written outside pin_owner.cpp. A claimant may drive only a pin it"
+    echo "claimed first and still holds (§12.5); check that, then list the site."
+    exit 1
+fi
+
+echo "✓ Pin check passed"
+
+# Maps of record (architecture/maps/, private repo): warn here when a map's
+# described files changed without a re-trace; CI fails on it (--strict).
+python3 tools/check_maps.py
+
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "❌ Map check failed! (a malformed map, or src/README.md misses a src/ folder)"
+    exit 1
+fi
+
 # Docs drift guard: every command, sensor and application name in README.md
 # and docs/ must exist in the firmware. Runs on every commit because a CLI or
 # registry change can break the docs without touching them.

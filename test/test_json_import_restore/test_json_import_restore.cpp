@@ -78,7 +78,7 @@ void setUp(void) {
     g_generationBumps = 0;
 #if INCLUDE_RULES_ENGINE
     g_rulesInitCalls = 0;
-    g_releaseActionPinsCalls = 0;
+    g_quiesceCalls = 0;
     memset(g_pinAction, 0, sizeof(g_pinAction));
     for (uint8_t i = 0; i < MAX_RULES; i++) rules[i].id = RULES_ID_NONE;
     for (uint8_t i = 0; i < MAX_ACTIONS; i++) actions[i].id = RULES_ID_NONE;
@@ -791,7 +791,7 @@ static void test_an_input_may_take_an_old_relays_pin(void) {
     g_pinAction[7] = true;                 // its registry claim
     TEST_ASSERT_TRUE(loadConfigFromJSON(json));
     TEST_ASSERT_NOT_NULL(getInputByPin(7));
-    TEST_ASSERT_EQUAL_INT(1, g_releaseActionPinsCalls);
+    TEST_ASSERT_EQUAL_INT(1, g_quiesceCalls);
 }
 
 // ...but not while that relay stays: the file has no actions, so it keeps it
@@ -806,7 +806,42 @@ static void test_an_input_on_a_kept_relays_pin_is_refused(void) {
     g_pinAction[7] = true;
     TEST_ASSERT_FALSE(loadConfigFromJSON(json));
     TEST_ASSERT_NULL(getInputByPin(7));
-    TEST_ASSERT_EQUAL_INT(0, g_releaseActionPinsCalls);
+    TEST_ASSERT_EQUAL_INT(0, g_quiesceCalls);
+}
+
+// A file with no inputs, rules or actions leaves the relays alone (#648):
+// only a table replacement switches them off.
+static void test_a_system_only_import_leaves_relays_alone(void) {
+    static char json[4096];
+    docFrom(nullptr, 0, json, sizeof(json));
+    JsonDocument d;
+    TEST_ASSERT_FALSE(deserializeJson(d, json));
+    d.remove("inputs");
+    d.remove("rules");
+    d.remove("actions");
+    serializeJson(d, json, sizeof(json));
+    actions[0].id = 1;
+    actions[0].type = ACT_RELAY;
+    actions[0].target = 7;
+    actions[0].ruleRef = RULES_ID_NONE;
+    g_pinAction[7] = true;
+    TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+    TEST_ASSERT_EQUAL_INT(0, g_quiesceCalls);
+}
+
+// A refused file switches nothing off (#648): quiesce runs only after admission.
+static void test_a_refused_import_leaves_relays_alone(void) {
+    static char json[4096];
+    const uint8_t pins[1] = {7};
+    docFrom(pins, 1, json, sizeof(json));
+    addMembers(json, sizeof(json), "\"firmware\":{\"platform\":\"SOME_OTHER_BOARD\"}");
+    actions[0].id = 1;
+    actions[0].type = ACT_RELAY;
+    actions[0].target = 9;
+    actions[0].ruleRef = RULES_ID_NONE;
+    g_pinAction[9] = true;
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    TEST_ASSERT_EQUAL_INT(0, g_quiesceCalls);
 }
 
 static void test_a_relay_on_an_input_or_another_relay_is_refused(void) {
@@ -1053,6 +1088,8 @@ int main(int, char**) {
     RUN_TEST(test_actions_that_overflow_the_pin_registry_are_refused);
     RUN_TEST(test_an_unreadable_rule_id_or_input_is_refused);
     RUN_TEST(test_an_input_may_take_an_old_relays_pin);
+    RUN_TEST(test_a_system_only_import_leaves_relays_alone);
+    RUN_TEST(test_a_refused_import_leaves_relays_alone);
     RUN_TEST(test_an_input_on_a_kept_relays_pin_is_refused);
     RUN_TEST(test_a_relay_on_an_input_or_another_relay_is_refused);
     RUN_TEST(test_a_rule_without_its_input_is_refused);

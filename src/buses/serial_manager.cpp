@@ -276,22 +276,24 @@ bool disableSerialPort(uint8_t port_id) {
     // Update config
     setSerialPortEnabled(&systemConfig.serial, port_id, false);
 
+    const bool wasActive = (active_ports_mask & (1 << (port_id - 1))) != 0;
     // Mark port as inactive
     active_ports_mask &= ~(1 << (port_id - 1));
 
-    // Release pins from registry
-    uint8_t rx = getDefaultSerialRX(port_id);
-    uint8_t tx = getDefaultSerialTX(port_id);
-    unregisterPin(rx);
-    unregisterPin(tx);
+    // Release only this port's own registry entries, and only if it held
+    // them: unregistering by pin would also delete whatever else holds that
+    // pin (an action's relay pin, which then could never be switched off,
+    // #648 review). The flow-control pins were claimed with Serial1's.
+    if (wasActive) {
+        uint8_t pins[4] = { getDefaultSerialRX(port_id), getDefaultSerialTX(port_id), 0xFF, 0xFF };
 #if defined(HOST_NRF_CTS_PIN) && defined(HOST_NRF_RTS_PIN)
-    // Release the Phase 3 flow-control pins so they're available for
-    // reassignment if Serial1 is reconfigured or repurposed.
-    if (port_id == 1) {
-        unregisterPin(HOST_NRF_CTS_PIN);
-        unregisterPin(HOST_NRF_RTS_PIN);
-    }
+        if (port_id == 1) {
+            pins[2] = HOST_NRF_CTS_PIN;
+            pins[3] = HOST_NRF_RTS_PIN;
+        }
 #endif
+        releasePins(pins, 4, getSerialPortName(port_id));
+    }
 
     // Note: We don't call Serial.end() as it might be in use by transport layer
 

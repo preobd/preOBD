@@ -31,6 +31,7 @@
 #include "../buses/pinctrl/pin_registry.h"
 #include "../buses/pinctrl/pin_owner.h"
 #include "../rules/rules_manager.h"
+#include "../buses/pinctrl/board_pins.h"   // boardHasPin
 #include "../core/config_generation.h"
 
 // CLI handlers are cold — keep them in flash, not Teensy ITCM (RAM1).
@@ -90,7 +91,9 @@ static FLASHMEM void printActionRow(int i) {
         msg.control.print(a.failsafe == ACT_FAILSAFE_ON ? F("ON") : F("OFF"));
     }
     msg.control.print(F("  -> "));
-    msg.control.println(rulesActionState(i) ? F("ON") : F("OFF"));
+    msg.control.print(rulesActionState(i) ? F("ON") : F("OFF"));
+    rulesPrintNotDriven(i);
+    msg.control.println();
 }
 
 static FLASHMEM void printAllActions() {
@@ -122,7 +125,8 @@ static FLASHMEM int actionAdd(int argc, const char* const* argv) {
 
     bool validPin = false;
     uint8_t target = parsePin(argv[3], &validPin);
-    if (!validPin) {
+    // A relay needs a real GPIO: parsePin() also accepts virtual pins (I2C, CAN)
+    if (!validPin || !boardHasPin(target)) {
         msg.control.println(F("ERROR: invalid target pin"));
         return 1;
     }
@@ -169,12 +173,11 @@ static FLASHMEM int actionAdd(int argc, const char* const* argv) {
     a.behavior = behavior;
     a.failsafe = failsafe;
     memset(a.name, 0, sizeof(a.name));  // unnamed; a reused slot may hold a stale label
-    rulesActionConfigurePin(slot);   // pinMode OUTPUT + de-assert
-    rulesSyncActionPins();           // claim the target pin in the registry
-
-    msg.control.print(F("Action #"));
-    msg.control.print(id);
+    // The "added" line goes first: it is the reply's first "Action #", which
+    // the app reads as the new id; the sync may report other slots.
+    rulesPrintActionId(id);
     msg.control.println(F(" added (manual). Link with ACTION <id> RULE <ruleId>. SAVE to persist."));
+    rulesSyncActionPins();           // claim, then configure the pin OFF (§12.5)
     return 0;
 }
 
@@ -312,7 +315,11 @@ static FLASHMEM int actionManual(uint8_t id, bool on) {
     // #294 bug class away: unlinking later leaves AUTO, not a stale armed latch.
     const uint8_t members = rulesActionRuleCount(slot);
     const bool ruleDriven = (members > 0);
-    rulesActionCommand(id, on);
+    if (!rulesActionCommand(id, on)) {
+        // §12.5: its pin is held by something else (SYSTEM PINS says what)
+        msg.control.println(F("ERROR: not driven"));
+        return 1;
+    }
     msg.control.print(F("Action #"));
     msg.control.print(id);
     if (ruleDriven) {
@@ -389,28 +396,18 @@ static FLASHMEM int actionDel(uint8_t id) {
         msg.control.println(id);
         return 1;
     }
-    // Capture the resolved physical level the pin is left at so the operator
-    // isn't surprised by an inverted (active-low) relay sitting HIGH after clear
-    // (#293): de-asserted/OFF respects INVERT, so OFF == HIGH for an active-low
-    // relay (its safe, de-energized state) — not a stuck-on bug.
-    const Action& a = actions[slot];
-    const bool relay = (a.type == ACT_RELAY);
-    const bool offHigh = relay && (a.behavior & ACT_BEHAVIOR_INVERT);  // OFF level for inverted = HIGH
-    const uint8_t target = a.target;
-
-    rulesActionConfigurePin(slot);  // de-assert the pin before freeing
-    rulesActionForgetLinks(id);     // free its 2nd+ memberships (#343)
-    actions[slot].id = RULES_ID_NONE;
-    rulesSyncActionPins();          // release the freed target pin in the registry
-    msg.control.print(F("Action #"));
-    msg.control.print(id);
+    // The pin it held is switched OFF (INVERT respected, #293), returned to
+    // INPUT and released (§12.5, #648); one it didn't hold is not touched.
+    const bool relay = (actions[slot].type == ACT_RELAY);
+    const uint8_t target = actions[slot].target;
+    bool held = false;
+    rulesActionDelete(id, &held);
+    rulesPrintActionId(id);
     msg.control.println(F(" deleted. SAVE to persist."));
-    if (relay) {
+    if (relay && held) {
         msg.control.print(F("  pin "));
         msg.control.print(target);
-        msg.control.print(F(" left de-energized (OFF = "));
-        msg.control.print(offHigh ? F("HIGH, inverted") : F("LOW"));
-        msg.control.println(F(")"));
+        msg.control.println(F(" off, released"));
     }
     return 0;
 }

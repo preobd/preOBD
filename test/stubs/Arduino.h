@@ -26,6 +26,7 @@ typedef bool    boolean;
 #define INPUT        0
 #define OUTPUT       1
 #define INPUT_PULLUP 2
+#define INPUT_PULLDOWN 3
 #define A0 0
 
 // ----- PROGMEM is meaningless on the host: flash == RAM here -----
@@ -65,9 +66,35 @@ inline uint32_t micros() { return g_test_now * 1000UL; }
 // ----- No-op hardware -----
 inline void delay(uint32_t) {}
 inline void delayMicroseconds(uint32_t) {}
-inline void pinMode(uint8_t, uint8_t) {}
-inline void digitalWrite(uint8_t, uint8_t) {}
-inline int  digitalRead(uint8_t) { return LOW; }
+// ----- Recorded pins -----
+// pinMode/digitalWrite record per-pin state and an ordered event log, so a
+// test can prove the order of a configure (OFF latched before OUTPUT, §12.5)
+// or that a pin was never touched. digitalRead returns stubPinInput[], which
+// a test sets; it is not the write latch. Call stubPinReset() in setUp().
+struct StubPinEvent { uint8_t pin; char kind; uint8_t value; };   // kind 'M' mode, 'W' write
+inline uint8_t      stubPinMode[256];
+inline bool         stubPinModeSet[256];
+inline uint8_t      stubPinLatch[256];
+inline bool         stubPinWritten[256];
+inline uint8_t      stubPinInput[256];
+inline StubPinEvent stubPinLog[128];
+inline int          stubPinLogN = 0;
+inline void stubPinReset() {
+    memset(stubPinMode, 0, sizeof(stubPinMode));
+    memset(stubPinModeSet, 0, sizeof(stubPinModeSet));
+    memset(stubPinLatch, 0, sizeof(stubPinLatch));
+    memset(stubPinWritten, 0, sizeof(stubPinWritten));
+    memset(stubPinInput, 0, sizeof(stubPinInput));
+    stubPinLogN = 0;
+}
+inline bool stubPinTouched(uint8_t p) { return stubPinModeSet[p] || stubPinWritten[p]; }
+inline void stubPinRecord(uint8_t p, char kind, uint8_t v) {
+    if (stubPinLogN < 128) stubPinLog[stubPinLogN++] = {p, kind, v};
+}
+inline void pinMode(uint8_t p, uint8_t m) { stubPinMode[p] = m; stubPinModeSet[p] = true; stubPinRecord(p, 'M', m); }
+inline void digitalWrite(uint8_t p, uint8_t v) { stubPinLatch[p] = v; stubPinWritten[p] = true; stubPinRecord(p, 'W', v); }
+inline void digitalWriteFast(uint8_t p, uint8_t v) { digitalWrite(p, v); }
+inline int  digitalRead(uint8_t p) { return stubPinInput[p]; }
 inline int  analogRead(uint8_t) { return 0; }
 inline void analogWrite(uint8_t, int) {}
 inline void yield() {}

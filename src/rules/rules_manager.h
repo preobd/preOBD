@@ -187,30 +187,52 @@ bool    rulesRemoveAlarmRuleForInput(uint8_t pin, uint8_t* releasedOut = nullptr
 uint8_t rulesReseedRulesForInput(uint8_t pin, uint32_t now);
 
 // === Actions ===
-// Configure all action target pins as outputs and set their initial state
-// (boot-load). Call once after SystemConfig is loaded. Does NOT touch the pin
-// registry — call rulesSyncActionPins() separately (see below).
+// Action pins follow ARCHITECTURE.md §12.5: a slot configures, drives or reads
+// its pin only while it holds the pin's registry entry.
+
+// Reset every action's run state (manual latch, override, last state). Touches
+// no pin: rulesSyncActionPins() configures pins, after claiming them.
 void rulesActionsInit();
 
-// Re-sync the pin registry with the configured Action targets: drop any entries
-// this engine previously added, then register each current target as
-// PIN_OUTPUT (conflict-checked). Idempotent — safe at boot and after a runtime
-// config reload (the registry is not otherwise cleared mid-run). Returns the
-// number of conflicts detected (each also logged).
+// Claim and configure each action target that isn't held yet, and release any
+// hold that went stale. Incremental: a slot already holding its unchanged
+// target is not touched, so a running relay never glitches. A newly held
+// RELAY pin is configured OFF level first, then OUTPUT. A refused slot is
+// reported ("Action #n not driven"), never touches its pin, and is retried at
+// the next sync (boot, LOAD, import, ACTION ADD). Returns the refusals.
 //
-// ORDERING: action pins must register LAST, so they are validated against — and
-// never override — the hardware-fixed bus / serial / system / RGB pins. Call it
-// once near the end of boot (after those subsystems init) and again whenever the
-// action table changes at runtime (ADD / DEL / config import), when the registry
-// is already fully populated.
+// ORDERING: at boot, call it LAST, after every fixed bus / serial / system /
+// RGB pin is held, so an action never takes a pin those need.
 uint8_t rulesSyncActionPins();
-// The two halves a JSON import needs apart (#567): rulesReleaseActionPins()
-// drops every action target's registry claim (step 1 of the sync above), so
-// an import can place an input on a pin the old config used as a relay before
-// the new actions re-claim theirs; rulesIsActionPinEntry() tells an import's
-// pin check which registry entries those are.
+
+// Switch off and release every pin the actions hold: a relay goes to its OFF
+// level (its INVERT bit as claimed), then INPUT, then leaves the registry; an
+// action that was on is reported. Call before anything replaces the action
+// table (rulesResetTables() does it; a JSON import calls it before its commit).
+void rulesActionsQuiesce();
+
+// ACTION DEL: release the slot's pin (as above), free its links, empty it.
+// `heldOut` says whether it held its pin. False for an unknown id.
+bool rulesActionDelete(uint8_t id, bool* heldOut = nullptr);
+
+// True while the slot holds its target pin, so its pin is driven.
+bool rulesActionDriven(int slot);
+// Print "Action #<id>": one copy of the text for every reply (mega2560 PROGMEM).
+void rulesPrintActionId(uint8_t id);
+// Print "  NOT DRIVEN" for a RELAY slot that doesn't hold its pin (LIST rows).
+void rulesPrintNotDriven(int slot);
+
+// TEST OUTPUT, one relay at a time. on=true: logical ON (INVERT applied).
+// on=false: logical OFF, then straight back to the engine's computed state.
+// Refuses, touching nothing, a slot that isn't a RELAY, doesn't hold its pin,
+// is forced by the operator, or is a manual relay already ON.
+enum ActionTest : uint8_t {
+    ACT_TEST_OK, ACT_TEST_NOT_RELAY, ACT_TEST_NOT_DRIVEN, ACT_TEST_FORCED, ACT_TEST_ALREADY_ON,
+};
+ActionTest rulesActionTestPulse(int slot, bool on, bool configMode);
+
+// Which registry entries are action pins (a JSON import's pin check).
 struct PinUsage;
-void rulesReleaseActionPins();
 bool rulesIsActionPinEntry(const PinUsage* u);
 
 // Evaluate every configured action and drive its target. Call each cycle after
@@ -295,14 +317,15 @@ int     rulesActionSlot(uint8_t id);
 int     rulesActionFreeSlot();
 uint8_t rulesActionAllocId();
 uint8_t rulesActionCount();
-void    rulesActionConfigurePin(int slot);   // pinMode target OUTPUT + de-assert
 bool    rulesActionSetManual(uint8_t id, bool on);  // manual latch (unlinked actions)
 // ACTION <id> ON|OFF from any surface: routes to the manual latch when the action
 // is unlinked, or to a FORCE_ON/FORCE_OFF operator override when it is rule-driven
 // (#329). Use this rather than rulesActionSetManual() from command paths.
+// Refused (false) for a RELAY that doesn't hold its pin (rulesActionDriven()).
 bool    rulesActionCommand(uint8_t id, bool on);
 // Operator override (RAM-only, reverts to AUTO on reboot). ACTION <id> AUTO
-// releases it; it is also cleared on any rule-link change and on pin reconfigure.
+// releases it; it is also cleared on any rule-link change and whenever the
+// slot's pin is claimed or released.
 ActionOverride rulesActionOverride(int slot);
 // Clear BOTH the override and the manual latch — the "this action's driver just
 // changed, so it starts de-asserted" invariant. Returns true if either was

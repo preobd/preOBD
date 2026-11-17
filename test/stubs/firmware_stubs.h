@@ -99,9 +99,11 @@ static uint8_t g_stubRegistryCapacity = 64;
 uint8_t getPinRegistryCapacity() { return g_stubRegistryCapacity; }
 #if INCLUDE_RULES_ENGINE
 bool rulesIsActionPinEntry(const PinUsage* u) { return u != nullptr && g_pinAction[u->pin]; }
-int g_releaseActionPinsCalls = 0;
-void rulesReleaseActionPins() {
-    g_releaseActionPinsCalls++;
+// rulesActionsQuiesce(): switches off and releases every action pin before a
+// table replacement (#648). The stub counts calls and frees the stub action pins.
+int g_quiesceCalls = 0;
+void rulesActionsQuiesce() {
+    g_quiesceCalls++;
     memset(g_pinAction, 0, sizeof(g_pinAction));
 }
 #endif

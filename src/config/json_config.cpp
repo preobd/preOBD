@@ -2338,10 +2338,11 @@ FLASHMEM bool loadConfigFromJSON(const char* jsonString) {
     const bool hasActions = doc["actions"].is<JsonArray>();
     // Replacing the inputs (#562) touches the rules' inputs, so it re-arms too.
     const bool rulesChanged = hasInputs || hasRules || hasActions;
-    // The old action targets stay claimed until the new actions re-claim
-    // theirs, so an input the file puts on an old relay's pin would be refused
-    // halfway through the import. Released first; re-claimed below.
-    if (rulesChanged) rulesReleaseActionPins();
+    // Every old relay is switched off and its pin released before anything
+    // is written (#648, §12.5): a dropped or moved action must not leave its
+    // pin driven, and an input the file puts on an old relay's pin must find
+    // it free. Re-claimed below, after the new tables are in.
+    if (rulesChanged) rulesActionsQuiesce();
 #endif
 
     // System first: the inputs' pin checks read its buses (#612 bus probe).
@@ -2359,8 +2360,9 @@ FLASHMEM bool loadConfigFromJSON(const char* jsonString) {
     // Rules + Actions after inputs (rules reference input pins; the re-arm
     // below evaluates against live inputs). Each table is replaced only if its
     // array is present, then both are re-armed once — boot-load semantics
-    // (#251): rulesManagerInit arms rule contexts, rulesActionsInit drives
-    // the target pins to their initial state.
+    // (#251): rulesManagerInit arms rule contexts, rulesActionsInit resets
+    // the actions' run state, and rulesSyncActionPins claims each target and
+    // only then configures it OFF (§12.5).
     if (hasRules) importRulesFromJSON(doc["rules"].as<JsonArrayConst>());
     if (hasActions) importActionsFromJSON(doc["actions"].as<JsonArrayConst>());
     if (rulesChanged) {

@@ -109,10 +109,31 @@ static void test_unrefused_enable_does_change_config(void) {
     TEST_ASSERT_EQUAL_UINT8(BAUD_115200, systemConfig.serial.baudrate_index[1]);
 }
 
+// #648 review B1: disabling a port that never came up must not delete what
+// else holds its default pins (an action's relay pin, which then could never
+// be switched off).
+static void test_disabling_an_idle_port_leaves_other_holders(void) {
+    uint8_t claimed = 16;   // Serial2's TX on this profile
+    TEST_ASSERT_TRUE(claimPins(&claimed, 1, PIN_OUTPUT, PIN_RANK_ACTION, "TEST", "Action output"));
+    TEST_ASSERT_TRUE(disableSerialPort(2));
+    TEST_ASSERT_EQUAL_STRING("Action output", getPinDescription(16));
+}
+
+// ...and a port that was up releases only its own pins
+static void test_disabling_an_active_port_releases_only_its_own(void) {
+    TEST_ASSERT_TRUE(enableSerialPort(2, BAUD_115200));
+    TEST_ASSERT_NOT_NULL(getPinDescription(16));
+    TEST_ASSERT_TRUE(disableSerialPort(2));
+    TEST_ASSERT_NULL(getPinDescription(16));
+    TEST_ASSERT_NULL(getPinDescription(17));
+}
+
 int main(int /*argc*/, char** /*argv*/) {
     UNITY_BEGIN();
     RUN_TEST(test_refused_enable_is_byte_identical);
     RUN_TEST(test_refused_enable_preserves_prior_config);
     RUN_TEST(test_unrefused_enable_does_change_config);
+    RUN_TEST(test_disabling_an_idle_port_leaves_other_holders);
+    RUN_TEST(test_disabling_an_active_port_releases_only_its_own);
     return UNITY_END();
 }

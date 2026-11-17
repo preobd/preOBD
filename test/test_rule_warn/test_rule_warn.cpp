@@ -27,6 +27,11 @@
 MessageAPI    msg;
 LogFilter::LogFilter() {}
 TransportInterface* messageSink(MessagePlane, bool) { return nullptr; }
+// The pin registry: no test here gives an action a pin, so rulesResetTables()'s
+// release (#648) never reaches these.
+const char* getPinDescription(uint8_t) { return nullptr; }
+void unregisterPin(uint8_t) {}
+bool pinsFree(const uint8_t*, uint8_t, uint8_t, const char*) { return true; }
 size_t MessageStream::warn(const char* tag, const char* fmt, ...) {
     (void)tag; (void)fmt; return 0;
 }

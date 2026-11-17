@@ -13,6 +13,7 @@
 #include "../sensors/application_presets.h"
 #include "../buses/pinctrl/pin_registry.h"
 #include "../buses/pinctrl/pin_owner.h"
+#include "../buses/pinctrl/board_pins.h"   // boardHasPin
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
 
@@ -39,6 +40,11 @@ Action     actions[MAX_ACTIONS];
 ActionLink actionLinks[MAX_ACTION_LINKS];   // 2nd+ rule memberships (#343)
 
 void rulesResetTables() {
+    // Every relay an action holds is switched off and handed back first (#648):
+    // emptying the table would otherwise leave a driven pin with no owner.
+    // Gated on the per-slot held pin, not on actions[].id, which BSS-zero reads
+    // as a live action #0 on pin 0 -- so at boot this does nothing.
+    rulesActionsQuiesce();
     rulesAckReset();  // same BSS-zero hazard: an ack keyed to id 0 would be live (#433)
     for (int i = 0; i < MAX_RULES; i++) {
         rules[i].id = RULES_ID_NONE;
@@ -873,75 +879,201 @@ uint8_t rulesClearActionsForRule(uint8_t ruleId) {
     return released;
 }
 
+// ---- Action pins (ARCHITECTURE.md §12.5) -----------------------------------
+// A slot touches its pin only while it holds the pin's registry entry. The
+// held pin and its OFF level are recorded when the claim is made, so the pin
+// can be released correctly even after the record that claimed it has been
+// replaced. Stored as pin + 1, so BSS zero means "holds nothing".
+static uint8_t g_heldPin[MAX_ACTIONS];    // target + 1 while held; 0 = not held
+static uint8_t g_heldOff[MAX_ACTIONS];    // OFF level (LOW/HIGH); 0xFF = claim only (not a RELAY)
+static uint8_t g_refused[MAX_ACTIONS];    // 1 = the last claim was refused (for "now driven")
+
+static uint8_t offLevel(const Action& a) {
+    return (a.behavior & ACT_BEHAVIOR_INVERT) ? HIGH : LOW;
+}
+
+// "Action #<id>", one copy of the text for every message here: the mega2560's
+// near PROGMEM has a few dozen bytes to spare, and each F() literal is its own.
+void rulesPrintActionId(uint8_t id) {
+    msg.control.print(F("Action #"));
+    msg.control.print(id);
+}
+
+void rulesPrintNotDriven(int slot) {
+    if (slot >= 0 && slot < MAX_ACTIONS && actions[slot].type == ACT_RELAY && !rulesActionDriven(slot))
+        msg.control.print(F("  NOT DRIVEN"));
+}
+
 // Write a resolved logical state to an action's target, applying inversion.
+// Callers check rulesActionDriven() first.
 static void driveAction(const Action& a, bool on) {
     bool invert = (a.behavior & ACT_BEHAVIOR_INVERT) != 0;
     digitalWrite(a.target, (on != invert) ? HIGH : LOW);  // (on XOR invert)
 }
 
-void rulesActionConfigurePin(int slot) {
-    if (slot < 0 || slot >= MAX_ACTIONS) return;
-    g_actionManual[slot]   = false;  // a (re)configured slot starts de-asserted (no stale manual)
-    g_actionOverride[slot] = ACT_OVR_AUTO;  // ...and no stale operator force (#329)
-    Action& a = actions[slot];
-    if (a.id == RULES_ID_NONE) return;
-    if (a.type == ACT_RELAY) {
-        pinMode(a.target, OUTPUT);
-        driveAction(a, false);  // de-assert until first evaluation
+// The first write of a newly held pin must reach the output latch while the
+// driver is still off, so the pin never passes through the energized level
+// (§12.5). On Teensy 3.x/4.x digitalWrite() on an input sets a pull instead, so
+// it must be digitalWriteFast(). arduino-esp32 3.x refuses digitalWrite()
+// before pinMode(); this relies on the 2.x core the board uses today.
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+#error "arduino-esp32 3.x refuses digitalWrite() before pinMode(): writeLatch() needs a gpio_set_level() path (§12.5)"
+#endif
+static void writeLatch(uint8_t pin, uint8_t level) {
+#if defined(TEENSYDUINO)
+    // Teensy 3's runtime digitalWriteFast() has no range check: a virtual pin
+    // (I2C, CAN: 0xC0+) would index past the pin table and write anywhere.
+    if (pin >= CORE_NUM_DIGITAL) return;
+    digitalWriteFast(pin, level);
+#else
+    digitalWrite(pin, level);
+#endif
+}
+
+// Configure a pin this slot has just claimed: INPUT first (no electrical change
+// on a pin nobody drove; enables the STM32 port clock; drops a stale pull-up),
+// then the OFF latch, then OUTPUT, then OFF again.
+static FLASHMEM void configureHeldPin(const Action& a) {
+    const uint8_t off = offLevel(a);
+    pinMode(a.target, INPUT);
+    writeLatch(a.target, off);
+    pinMode(a.target, OUTPUT);
+    digitalWrite(a.target, off);
+}
+
+// Another slot also records `pin` as held: the registry can't say which of
+// them owns it, so neither may touch it.
+static bool heldByAnotherSlot(int slot, uint8_t heldPinP1) {
+    for (int i = 0; i < MAX_ACTIONS; i++)
+        if (i != slot && g_heldPin[i] == heldPinP1) return true;
+    return false;
+}
+
+bool rulesActionDriven(int slot) {
+    if (slot < 0 || slot >= MAX_ACTIONS) return false;
+    const Action& a = actions[slot];
+    return a.id != RULES_ID_NONE && g_heldPin[slot] == (uint8_t)(a.target + 1) &&
+           getPinDescription(a.target) == ACTION_PIN_DESC &&
+           !heldByAnotherSlot(slot, g_heldPin[slot]);
+}
+
+// Release whatever this slot holds: a relay pin goes to its OFF level, then
+// INPUT (held OFF by the wiring, §12.5), then leaves the registry. A pin whose
+// registry entry is no longer the action's is never touched.
+static FLASHMEM bool releaseActionPin(int slot) {
+    if (g_heldPin[slot] == 0) return false;
+    const uint8_t pin = g_heldPin[slot] - 1;
+    const bool wasOn = g_actionState[slot] || g_actionManual[slot] ||
+                       g_actionOverride[slot] == ACT_OVR_FORCE_ON;
+    const char* holder = getPinDescription(pin);
+    // Still the action's entry; or no entry at all (something unregistered it
+    // by number) AND nothing else holds the pin -- pinsFree() asks every source,
+    // inputs and pending buses included, quietly. Switching off is then the
+    // safe direction and fights nobody. A pin another function holds, or
+    // another slot also records, is left alone (§12.5).
+    const bool ours = !heldByAnotherSlot(slot, g_heldPin[slot]) &&
+                      (holder == ACTION_PIN_DESC ||
+                       (holder == nullptr && pinsFree(&pin, 1, PIN_RANK_ACTION, ACTION_PIN_DESC)));
+    const bool relay = g_heldOff[slot] != 0xFF;
+    if (ours) {
+        if (relay) {
+            digitalWrite(pin, g_heldOff[slot]);
+            pinMode(pin, INPUT);
+        }
+        if (holder == ACTION_PIN_DESC) unregisterPin(pin);
+    }
+    g_heldPin[slot] = 0;
+    g_heldOff[slot] = 0;
+    g_actionState[slot] = false;
+    g_actionManual[slot] = false;
+    g_actionOverride[slot] = ACT_OVR_AUTO;
+    if (wasOn && actions[slot].id != RULES_ID_NONE) {
+        msg.control.print(F("NOTE: "));
+        rulesPrintActionId(actions[slot].id);
+        msg.control.print(F(" off, pin "));
+        msg.control.println(pin);
+    }
+    return ours && relay;   // a relay pin was switched off and released
+}
+
+void rulesActionsQuiesce() {
+    for (int i = 0; i < MAX_ACTIONS; i++) {
+        releaseActionPin(i);
+        g_refused[i] = 0;   // the table is about to be replaced
     }
 }
 
+bool rulesActionDelete(uint8_t id, bool* heldOut) {
+    const int slot = rulesActionSlot(id);
+    if (slot < 0) return false;
+    const bool switched = releaseActionPin(slot);
+    if (heldOut) *heldOut = switched;
+    rulesActionForgetLinks(id);   // free its 2nd+ memberships (#343)
+    actions[slot].id = RULES_ID_NONE;
+    g_refused[slot] = 0;
+    return true;
+}
+
 void rulesActionsInit() {
+    // State only. Pins are configured by rulesSyncActionPins(), which claims
+    // first (§12.5): at boot that runs late, after every fixed pin is held.
     for (int i = 0; i < MAX_ACTIONS; i++) {
         g_actionManual[i] = false;
         g_actionState[i] = false;
         g_actionOverride[i] = ACT_OVR_AUTO;
-        rulesActionConfigurePin(i);
     }
-    // NB: the pin-registry sync is deliberately NOT done here. At boot this runs
-    // before the RGB and serial subsystems register their (hardware-fixed) pins,
-    // so syncing now could let a stray action target claim a pin those need and
-    // win the race. The caller invokes rulesSyncActionPins() once, late, after
-    // all fixed pins are registered (see main.cpp setup + the JSON import path).
 }
 
 bool rulesIsActionPinEntry(const PinUsage* u) {
     return u != nullptr && u->description == ACTION_PIN_DESC;
 }
 
-FLASHMEM void rulesReleaseActionPins() {
-    // Drop registry entries this engine previously added (identified by our
-    // shared description pointer) so a runtime config reload doesn't leave a
-    // stale action pin claimed. Collect first, then unregister — unregister
-    // shifts the array, which would corrupt an in-progress index walk.
-    uint8_t stale[MAX_ACTIONS];
-    uint8_t nStale = 0;
-    uint8_t regSize = getPinRegistrySize();
-    for (uint8_t i = 0; i < regSize && nStale < MAX_ACTIONS; i++) {
-        const PinUsage* u = getPinUsageByIndex(i);
-        if (rulesIsActionPinEntry(u)) stale[nStale++] = u->pin;
-    }
-    for (uint8_t i = 0; i < nStale; i++) unregisterPin(stale[i]);
-}
-
 uint8_t rulesSyncActionPins() {
-    // 1. Release the targets this engine claimed before (see above).
-    rulesReleaseActionPins();
-
-    // 2. Register each configured action target as PIN_OUTPUT. claimPins()
-    //    rejects a pin already claimed (by a bus, system pin, RGB output, a
-    //    configured input, or another action), which is exactly the conflict
-    //    we want to surface.
+    // Incremental (§12.5): a slot that already holds its unchanged target is
+    // left alone, so a running relay never glitches when another action is
+    // added. A stale hold is released; an unheld live slot claims, and only on
+    // a successful claim is its pin configured.
     uint8_t conflicts = 0;
     for (int s = 0; s < MAX_ACTIONS; s++) {
         const Action& a = actions[s];
-        if (a.id == RULES_ID_NONE) continue;
-        if (!claimPins(&a.target, 1, PIN_OUTPUT, PIN_RANK_ACTION, TAG_SYSTEM, ACTION_PIN_DESC)) {
+        const bool live = a.id != RULES_ID_NONE;
+        if (g_heldPin[s] != 0) {
+            if (live && rulesActionDriven(s)) continue;
+            releaseActionPin(s);
+        }
+        if (!live) {
+            g_refused[s] = 0;
+            continue;
+        }
+        // A slot already refused is re-checked silently, so a sync (every
+        // ACTION ADD) doesn't repeat its refusal; it is reported again only
+        // if its state changes.
+        const bool exists = a.type != ACT_RELAY || boardHasPin(a.target);
+        if (g_refused[s] && (!exists || !pinsFree(&a.target, 1, PIN_RANK_ACTION, ACTION_PIN_DESC))) {
             conflicts++;
-            const char* held = getPinDescription(a.target);
-            msg.debug.warn(TAG_SYSTEM,
-                           "action #%u target pin %u conflicts with %s",
-                           a.id, a.target, held ? held : "another use");
+            continue;
+        }
+        if (exists && claimPins(&a.target, 1, PIN_OUTPUT, PIN_RANK_ACTION, TAG_SYSTEM, ACTION_PIN_DESC)) {
+            g_heldPin[s] = a.target + 1;
+            g_heldOff[s] = (a.type == ACT_RELAY) ? offLevel(a) : 0xFF;
+            // A slot that starts driving starts de-asserted (#294).
+            g_actionManual[s] = false;
+            g_actionOverride[s] = ACT_OVR_AUTO;
+            g_actionState[s] = false;
+            if (a.type == ACT_RELAY) configureHeldPin(a);
+            if (g_refused[s]) {
+                rulesPrintActionId(a.id);
+                msg.control.println(F(" now driven"));
+            }
+            g_refused[s] = 0;
+        } else {
+            // claimPins() has already named the pin and its holder; a pin
+            // that doesn't exist on this board (a stored virtual target) has
+            // no further message, to keep mega2560's PROGMEM.
+            conflicts++;
+            g_refused[s] = 1;
+            rulesPrintActionId(a.id);
+            msg.control.println(F(" not driven; no failsafe"));
         }
     }
     return conflicts;
@@ -1014,11 +1146,8 @@ bool rulesActionSourceFaulted(int slot) { return rulesActionDrive(slot).anyFault
 
 bool rulesActionRuleActive(int slot) { return rulesActionDrive(slot).anyActive; }
 
-void rulesActionsUpdate(bool configMode) {
-    for (int i = 0; i < MAX_ACTIONS; i++) {
-        Action& a = actions[i];
-        if (a.id == RULES_ID_NONE) continue;
-
+static bool actionComputedOn(int i, bool configMode) {
+        const Action& a = actions[i];
         const ActionDrive drive = resolveActionDrive(i);
         bool on = rulesActionDesired(a, drive, g_actionManual[i], g_actionOverride[i]);
 
@@ -1030,10 +1159,43 @@ void rulesActionsUpdate(bool configMode) {
         // the same kind of deliberate command, so it actuates in CONFIG too (#329).
         if (configMode && drive.memberCount > 0 &&
             g_actionOverride[i] == ACT_OVR_AUTO) on = false;
+        return on;
+}
 
-        g_actionState[i] = on;
-        if (a.type == ACT_RELAY) driveAction(a, on);
+void rulesActionsUpdate(bool configMode) {
+    for (int i = 0; i < MAX_ACTIONS; i++) {
+        const Action& a = actions[i];
+        if (a.id == RULES_ID_NONE) continue;
+        const bool on = actionComputedOn(i, configMode);
+        if (a.type == ACT_RELAY) {
+            // A relay that doesn't hold its pin is reported OFF: it is, as far
+            // as this unit can make it (#653 adds the BLE "not driven" bit).
+            const bool driven = rulesActionDriven(i);
+            g_actionState[i] = on && driven;
+            if (driven) driveAction(a, on);
+        } else {
+            g_actionState[i] = on;
+        }
     }
+}
+
+ActionTest rulesActionTestPulse(int slot, bool on, bool configMode) {
+    if (slot < 0 || slot >= MAX_ACTIONS) return ACT_TEST_NOT_RELAY;
+    const Action& a = actions[slot];
+    if (a.id == RULES_ID_NONE || a.type != ACT_RELAY) return ACT_TEST_NOT_RELAY;
+    if (!rulesActionDriven(slot)) return ACT_TEST_NOT_DRIVEN;
+    if (g_actionOverride[slot] == ACT_OVR_FORCE_ON)  return ACT_TEST_FORCED;
+    if (g_actionOverride[slot] == ACT_OVR_FORCE_OFF) return ACT_TEST_FORCED;
+    if (rulesActionRuleCount(slot) == 0 && g_actionManual[slot]) return ACT_TEST_ALREADY_ON;
+    if (on) {
+        driveAction(a, true);
+    } else {
+        // OFF, then straight back to what the engine computes now (CONFIG holds
+        // rule-driven relays off), so the test leaves nothing changed.
+        driveAction(a, false);
+        driveAction(a, actionComputedOn(slot, configMode));
+    }
+    return ACT_TEST_OK;
 }
 
 bool rulesActionState(int slot) {
@@ -1081,6 +1243,9 @@ bool rulesActionReleaseDrive(uint8_t id) {
 bool rulesActionCommand(uint8_t id, bool on) {
     int slot = rulesActionSlot(id);
     if (slot < 0) return false;
+    // A RELAY that doesn't hold its pin can't honour a command (§12.5); a latch
+    // set now would energize it the moment a later sync claims the pin.
+    if (actions[slot].type == ACT_RELAY && !rulesActionDriven(slot)) return false;
     // One router so the CLI and the BLE write can never diverge: an unlinked
     // action's ON/OFF is the manual latch; a rule-driven one's is an override.
     if (rulesActionRuleCount(slot) == 0) {

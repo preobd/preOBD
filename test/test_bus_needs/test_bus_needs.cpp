@@ -62,7 +62,10 @@ size_t MessageStream::debug(const char*, const char*, ...) { return 0; }
 Rule rules[MAX_RULES];
 Action actions[MAX_ACTIONS];
 ActionLink actionLinks[MAX_ACTION_LINKS];
-void rulesResetTables() {}
+// Counts calls: the real one switches off and releases every action pin first
+// (#648), so a LOAD must reach it only once the store has been validated.
+static int g_resetTablesCalls = 0;
+void rulesResetTables() { g_resetTablesCalls++; }
 uint8_t rulesSweepActionRules() { return 0; }
 #endif
 
@@ -383,8 +386,28 @@ static void test_corrupt_store_asks_for_nothing(void) {
     inputStoreForgetValidity();
 
     TEST_ASSERT_EQUAL(BUS_NEED_NONE, storedInputBusNeeds());
+#if INCLUDE_RULES_ENGINE
+    g_resetTablesCalls = 0;
+#endif
     TEST_ASSERT_FALSE(loadInputConfig());   // the loader agrees
+#if INCLUDE_RULES_ENGINE
+    // ...and switched no relay off: the release runs only past validation (#648)
+    TEST_ASSERT_EQUAL_INT(0, g_resetTablesCalls);
+#endif
 }
+
+#if INCLUDE_RULES_ENGINE
+// A good store resets the tables (and so releases the old relay pins) once,
+// before any stored input configures a pin (#648).
+static void test_valid_load_releases_old_relays_once(void) {
+    const char* sensors[] = { "BME280_TEMP" };
+    const uint8_t pins[]  = { 0xF0 };
+    writeStore(sensors, pins, 1);
+    g_resetTablesCalls = 0;
+    TEST_ASSERT_TRUE(loadInputConfig());
+    TEST_ASSERT_EQUAL_INT(1, g_resetTablesCalls);
+}
+#endif
 
 #if INCLUDE_RULES_ENGINE
 // The checksum covers every section: a good inputs section with a corrupt rule
@@ -699,6 +722,9 @@ int main(int, char**) {
     RUN_TEST(test_foreign_store_version_asks_for_nothing);
     RUN_TEST(test_impossible_record_count_asks_for_nothing);
     RUN_TEST(test_corrupt_store_asks_for_nothing);
+#if INCLUDE_RULES_ENGINE
+    RUN_TEST(test_valid_load_releases_old_relays_once);
+#endif
 #if INCLUDE_RULES_ENGINE
     RUN_TEST(test_store_corrupt_only_in_the_rules_section_asks_for_nothing);
 #endif

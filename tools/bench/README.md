@@ -9,6 +9,7 @@
 | `can_decode.py` | Decodes a capture against a DBC (`docs/can/preOBD.dbc`). |
 | `can_application_override.sh` | #640: `SET CAN:n APPLICATION` on CAN imports (allowed, refused, Rule re-seed); reboots at the end instead of SAVE. |
 | `serial_cmd.py` | Runs preOBD console commands over USB with a fixed time per command. |
+| `relay_release.py` | #648/#649: relay actions claim before they configure (registry count), a manual-ON relay survives TEST OUTPUT, an inverted one pulses, a JSON import that moves an ON relay reports it off and releases the old pin, ACTION DEL releases; restores the baseline by import, never SAVEs. Default pins 6, 19, 18 (must be free and unwired). |
 | `json_import_cases.py` | #567/#603: JSON IMPORT all-or-nothing cases from the unit's own dump (another board, no platform, a bad record, held/bus/serial pins, a rule without its input, a full table of other pins); each refusal must leave the dump identical; re-imports the baseline after each accepted case, never SAVEs. `--replies DIR` keeps each reply verbatim for the app fixtures. |
 
 **Long-running holders are started by a person, in their own terminal, and left

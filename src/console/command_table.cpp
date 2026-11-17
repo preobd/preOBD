@@ -1070,18 +1070,27 @@ int cmd_test(int argc, const char* const* argv) {
         tone(BUZZER_PIN, 700); watchdogReset(); delay(250); platformNoTone(BUZZER_PIN);
 #endif
 #if INCLUDE_RULES_ENGINE
+        // Each relay through the engine's own gates (§12.5, #649): INVERT
+        // applied, only a pin the action holds, never against an operator
+        // force, and straight back to its computed state afterwards.
         for (int i = 0; i < MAX_ACTIONS; i++) {
             const Action& a = actions[i];
             if (a.id == RULES_ID_NONE || a.type != ACT_RELAY) continue;
             any = true;
-            msg.control.print(F("Action #")); msg.control.print(a.id);
-            msg.control.print(F(" (pin ")); msg.control.print(a.target);
-            msg.control.println(F(") -> ON"));
-            pinMode(a.target, OUTPUT);
-            digitalWrite(a.target, HIGH); watchdogReset(); delay(700);
-            msg.control.print(F("Action #")); msg.control.print(a.id);
+            rulesPrintActionId(a.id);
+            const ActionTest r = rulesActionTestPulse(i, true, true);
+            if (r != ACT_TEST_OK) {
+                msg.control.print(F(" skipped: "));
+                msg.control.println(r == ACT_TEST_NOT_DRIVEN ? F("not driven")
+                                  : r == ACT_TEST_FORCED     ? F("forced")
+                                                             : F("already ON"));
+                continue;
+            }
+            msg.control.println(F(" -> ON"));
+            watchdogReset(); delay(700); watchdogReset();
+            rulesActionTestPulse(i, false, true);
+            rulesPrintActionId(a.id);
             msg.control.println(F(" -> OFF"));
-            digitalWrite(a.target, LOW);
         }
 #endif
         if (!any) msg.control.println(F("(no actuable outputs in this build)"));
