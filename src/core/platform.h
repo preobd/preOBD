@@ -102,7 +102,7 @@
 
 #define VOLTAGE_DIVIDER_RATIO ((VOLTAGE_DIVIDER_R1 + VOLTAGE_DIVIDER_R2) / VOLTAGE_DIVIDER_R2)
 
-// The analog pins themselves (A<n> -> pin) live in pinctrl/board_pins.h (#570).
+// The analog pins themselves (A<n> -> pin) live in buses/pinctrl/board_pins.h (#570).
 
 // ===== PLATFORM INITIALIZATION FUNCTIONS =====
 void setupADC();  // Configure ADC settings for the current platform
@@ -117,7 +117,7 @@ inline void platformLoopService() {}
 // analogRead() for a preOBD pin number. Everywhere but STM32 that is the
 // core's own number. The STM32 core names analog pins 0xC0 + n, which preOBD
 // reserves for virtual CAN inputs, so there preOBD uses their digital numbers
-// (pinctrl/board_pins.cpp) and this maps them back to the ADC channel.
+// (buses/pinctrl/board_pins.cpp) and this maps them back to the ADC channel.
 #if defined(ARDUINO_ARCH_STM32)
 int platformAnalogRead(uint8_t pin);
 #else

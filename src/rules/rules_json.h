@@ -22,7 +22,7 @@
 #ifndef RULES_JSON_H
 #define RULES_JSON_H
 
-#include "../rules/rules_types.h"  // Rule/Action + INCLUDE_RULES_ENGINE
+#include "rules_types.h"  // Rule/Action + INCLUDE_RULES_ENGINE
 
 #if SUPPORTS_JSON_CONFIG && INCLUDE_RULES_ENGINE
 

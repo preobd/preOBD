@@ -70,9 +70,9 @@
 
 // CAN sensors (CAN bus imported sensors)
 #if INCLUDE_CAN
-#include "drivers/can/can_frame_cache.cpp"
-#include "drivers/can/can_read.cpp"
-#include "drivers/can/can_scan.cpp"
+#include "can/can_frame_cache.cpp"
+#include "can/can_read.cpp"
+#include "can/can_scan.cpp"
 #endif
 
 // Note: thermistors/linear.cpp and pressure/linear.cpp are wrapper files

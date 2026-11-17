@@ -1,6 +1,6 @@
 // Native unit test: ISO-TP multi-frame Mode 01 reply reassembly
-// (src/inputs/isotp_rx.h, #527) and how it holds the poller's request open
-// (canPollOnProgress, src/inputs/can_poll.h).
+// (src/sensors/can/isotp_rx.h, #527) and how it holds the poller's request open
+// (canPollOnProgress, src/sensors/can/can_poll.h).
 //
 // CAN import read single-frame replies only, so 0x70 boost, 0x78/0x79 EGT
 // and 0x7F run time, all longer than one frame, could not be imported. The
@@ -8,8 +8,8 @@
 #include <unity.h>
 #include <Arduino.h>
 
-#include "../../src/inputs/isotp_rx.h"
-#include "../../src/inputs/can_poll.h"
+#include "../../src/sensors/can/isotp_rx.h"
+#include "../../src/sensors/can/can_poll.h"
 
 void setUp(void) {}
 void tearDown(void) {}

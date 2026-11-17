@@ -22,9 +22,9 @@ bool isInConfigMode();
 bool isInRunMode();
 
 // Mode-transition observer (same shape as PinOwnerInputProbe in
-// pinctrl/pin_owner.h): core/ announces the transition, the composition root
-// (main.cpp) wires up who reacts (LCD, LED). Keeps core/ free of outputs/ and
-// drivers/ dependencies. Unregistered, setMode() simply notifies no one.
+// buses/pinctrl/pin_owner.h): core/ announces the transition, the composition root
+// (main.cpp) wires up who reacts (LCD, LED). Keeps core/ free of outputs/
+// dependencies. Unregistered, setMode() simply notifies no one.
 typedef void (*SystemModeObserver)(SystemMode oldMode, SystemMode newMode);
 
 /**

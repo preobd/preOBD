@@ -54,7 +54,7 @@ bool pinsConflict(const uint8_t* pins, uint8_t count, uint8_t /*rank*/, const ch
     }
     return false;
 }
-// Board pins and name (pinctrl/board_pins.cpp, #570): a stand-in board named
+// Board pins and name (buses/pinctrl/board_pins.cpp, #570): a stand-in board named
 // NATIVE. By default no pin is analog and every pin exists; a test sets these
 // to stand in for a real board (JSON IMPORT's board check, #567).
 static uint8_t g_stubDigitalPinMax = 0xFF;  // highest digital pin

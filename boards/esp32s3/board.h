@@ -14,7 +14,7 @@
 // No HAS_BUILTIN_SD: SD is an external module — wire it and set SD_PIN in the
 // overlay to enable logging (resolve.h derives SUPPORTS_SD / SUPPORTS_SD_LOGGING).
 
-// ===== PINS (what the core can't know; pinctrl/board_pins.h, #570) =====
+// ===== PINS (what the core can't know; buses/pinctrl/board_pins.h, #570) =====
 // Which pins exist and which pin each A-name is come from the Arduino core.
 // The core counts 20 analog inputs; A10..A19 are ADC2, which can't be read
 // while the radio runs, and this board runs BLE.

@@ -23,9 +23,9 @@
 #include <Arduino.h>
 #include <string.h>
 
-#include "../../src/pinctrl/pin_registry.cpp"
-#include "../../src/pinctrl/pin_owner.cpp"
-#include "../../src/storage/bus_needs.cpp"   // display vote; the sensor mapping is
+#include "../../src/buses/pinctrl/pin_registry.cpp"
+#include "../../src/buses/pinctrl/pin_owner.cpp"
+#include "../../src/buses/bus_needs.cpp"   // display vote; the sensor mapping is
                                         // inline in sensor_helpers.h
 // SENSOR_LIBRARY / UNITS_REGISTRY / APPLICATION_PRESETS are now defined in
 // their own .cpp (#400), not inline in the header — pull the data in.
@@ -35,7 +35,7 @@
 #include "../../src/sensors/units_registry.cpp"
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
-#include "../../src/storage/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
+#include "../../src/config/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
 #include "../../src/inputs/measurement_compat.cpp"  // units check on load (#458)
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
 #include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"  // obdLengthFor (#516)

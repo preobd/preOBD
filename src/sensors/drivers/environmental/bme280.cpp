@@ -11,11 +11,11 @@
 
 #include "../../../config.h"
 #include "../../../core/platform.h"
-#include "../../../drivers/bus_manager.h"
+#include "../../../buses/bus_manager.h"
 #include "../../../inputs/input.h"
 #include "../../../core/message_api.h"
 #include "../../../core/log_tags.h"
-#include "../../../storage/system_config.h"   // seaLevelPressureHpa() (SYSTEM SEA_LEVEL)
+#include "../../../config/system_config.h"   // seaLevelPressureHpa() (SYSTEM SEA_LEVEL)
 #include <Wire.h>
 
 #if INCLUDE_BME280

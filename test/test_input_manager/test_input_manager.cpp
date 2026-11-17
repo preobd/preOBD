@@ -39,18 +39,18 @@ void readCANSensor(Input*) {}
 #include "../../src/sensors/units_registry.cpp"
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
-#include "../../src/storage/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
+#include "../../src/config/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
 #include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"  // obdLengthFor (#516)
-#include "../../src/outputs/obd_encode.cpp"                       // obdInputAnswerable
-#include "../../src/outputs/obd_query.cpp"                        // PID table (#528)
+#include "../../src/outputs/formats/obd_encode.cpp"                       // obdInputAnswerable
+#include "../../src/outputs/formats/obd_query.cpp"                        // PID table (#528)
 // obd_query's sensor-answer path; these tests only reach the table and the
 // fixed answers, so the real encoder (and its unit-conversion deps) stays out
 uint8_t obdBuildAnswer(const Input&, uint8_t*) { return 0; }
-#include "../../src/storage/json_config.cpp"
-#include "../../src/pinctrl/pin_label.cpp"   // exportInputToJSON (#499 round trip)
+#include "../../src/config/json_config.cpp"
+#include "../../src/buses/pinctrl/pin_label.cpp"   // exportInputToJSON (#499 round trip)
 
 // Firmware symbols input_manager.cpp / json_config.cpp expect from other TUs
 // (shared with test_json_calibration).

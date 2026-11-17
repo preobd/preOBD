@@ -10,7 +10,7 @@
 #include <string.h>
 
 #include "../../nrf_firmware/src/status_compose.cpp"
-#include "../../src/comms/ble_gatt_defs.h"
+#include "../../src/outputs/applink/ble_gatt_defs.h"
 
 static_assert(kStatusComposeBaseSize == PREOBD_STATUS_SIZE, "base size");
 static_assert(kStatusComposeExtMinSize == PREOBD_STATUS_EXT_SIZE, "ext size");

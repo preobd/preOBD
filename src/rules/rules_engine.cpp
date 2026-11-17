@@ -214,7 +214,7 @@ static bool ruleInWarningBand(const Rule& rule, float value) {
 
 // Case-insensitive keyword compare against a PROGMEM literal. The CLI upcases
 // only argv[0]; arguments arrive as typed, and every neighbouring keyword
-// (MIN/MAX/WARN) is matched case-insensitively by cli/'s streq_P — which
+// (MIN/MAX/WARN) is matched case-insensitively by console/'s streq_P — which
 // rules/ can't include (layering), hence this four-line local.
 static bool tokenIs_P(const char* tok, const char* kw_P) {
     for (;; ++tok, ++kw_P) {

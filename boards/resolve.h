@@ -106,7 +106,7 @@
 #  endif
 #endif
 
-// Without it the CLI is a plain line reader (src/cli/line_reader.h): same
+// Without it the CLI is a plain line reader (src/console/line_reader.h): same
 // commands, prompt and quoting, no history or cursor editing (#147).
 #if SUPPORTS_CLI_EDITING
 #  ifndef INCLUDE_CLI_EDITING

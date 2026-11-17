@@ -1,0 +1,364 @@
+/*
+ * output_elm327.cpp — ELM327 AT command emulator output module
+ *
+ * See output_elm327.h for architecture notes and configuration commands.
+ */
+
+#include "../../config.h"
+
+#if INCLUDE_ELM327
+
+#include "output_elm327.h"
+#include "obd_query.h"
+#include "obd_encode.h"
+#include "elm327_format.h"
+#include "../../config/system_config.h"
+#include "../../buses/serial_manager.h"
+#include "../../core/message_api.h"
+#include "../../core/log_tags.h"
+#include "../../inputs/input.h"
+#include "../../inputs/input_manager.h"
+#include "../../sensors/generated/registry_enums.h"  // APP_PRIMARY_BATTERY, APP_AUXILIARY_BATTERY
+
+// ===== SINGLETON =====
+
+ELM327Output elm327Output;
+
+// ===== OUTPUT MODULE FREE FUNCTIONS (called by output_manager) =====
+
+void initELM327() {
+    uint8_t port = systemConfig.buses.elm327_serial_port;
+    if (port == 0xFF) return;
+
+    Stream* ser = getSerialPort(port);
+    if (ser && isSerialPortActive(port)) {
+        elm327Output.setSerial(ser);
+        elm327Output.begin();
+        msg.debug.info(TAG_ELM327, "ELM327 emulator active on Serial%d", port);
+    } else {
+        msg.debug.warn(TAG_ELM327, "ELM327: Serial%d not active at boot", port);
+    }
+}
+
+void updateELM327() {
+    elm327Output.update();
+}
+
+// After an ELM327 enable: say why it isn't answering yet, if it isn't. One
+// copy of the text for the sync and BUS SERIAL (F() is RAM1 on Teensy 4).
+void noteELM327PortState() {
+    const uint8_t port = systemConfig.buses.elm327_serial_port;
+    if (port == 0xFF) {
+        msg.control.println(F("NOTE: ELM327 has no serial port; assign one with BUS SERIAL <n> ELM327 ENABLE"));
+    } else if (!isSerialPortActive(port)) {
+        msg.control.println(F("NOTE: ELM327 answers once its serial port is running (next reboot)"));
+    }
+}
+
+// ELM327 output disabled at runtime (#610): unbind as BUS ... ELM327 DISABLE does
+void stopELM327() {
+    elm327Output.end();   // also clears its serial
+}
+
+// ===== ELM327Output IMPLEMENTATION =====
+
+ELM327Output::ELM327Output()
+    : _serial(nullptr), _active(false), _connected(false), _rxLen(0)
+{
+    _resetState();
+}
+
+void ELM327Output::setSerial(Stream* serial) {
+    _serial = serial;
+}
+
+void ELM327Output::begin() {
+    if (!_serial) return;
+    _active = true;
+    _rxLen = 0;
+    _resetState();
+    _connected = false;
+}
+
+void ELM327Output::end() {
+    _active = false;
+    _serial = nullptr;
+}
+
+void ELM327Output::_resetState() {
+    _echoOn      = true;
+    _headersOn   = false;
+    _linefeedsOn = false;
+    _spacesOn    = true;    // an ELM327 powers up and resets with ATS1 (#528)
+}
+
+// ===== MAIN LOOP =====
+
+void ELM327Output::update() {
+    if (!_active || !_serial) return;
+
+    while (_serial->available()) {
+        char c = (char)_serial->read();
+
+        if (c == '\r') {
+            _rxBuf[_rxLen] = '\0';
+            _processLine(_rxBuf);
+            _rxLen = 0;
+        } else if (c == '\n') {
+            // Discard — ELM327 uses CR line endings
+        } else if (_rxLen < ELM327_RX_BUF_SIZE - 1) {
+            _rxBuf[_rxLen++] = c;
+        }
+        // Silently drop bytes when buffer is full (oversized input)
+    }
+}
+
+// ===== LINE PROCESSING =====
+
+// Strip leading/trailing whitespace in place; returns pointer to first non-space.
+static const char* trimLine(const char* s) {
+    while (*s == ' ' || *s == '\t') s++;
+    return s;
+}
+
+// Return true if every character in s is a hex digit or space.
+static bool isHexQuery(const char* s) {
+    if (!*s) return false;
+    for (const char* p = s; *p; p++) {
+        char c = *p;
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+              (c >= 'A' && c <= 'F') || c == ' ')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Uppercase a string in place.
+static void toUpperInPlace(char* s) {
+    for (; *s; s++) {
+        if (*s >= 'a' && *s <= 'z') *s -= 32;
+    }
+}
+
+// Copy src to dst stripping spaces, then uppercase.
+static void stripSpacesUpper(const char* src, char* dst, size_t dstSize) {
+    size_t n = 0;
+    for (; *src && n < dstSize - 1; src++) {
+        if (*src != ' ' && *src != '\t') dst[n++] = *src;
+    }
+    dst[n] = '\0';
+    toUpperInPlace(dst);
+}
+
+void ELM327Output::_processLine(const char* line) {
+    line = trimLine(line);
+
+    if (line[0] == '\0') {
+        // Empty line: send prompt if we've seen at least one command
+        if (_connected) _sendPrompt();
+        return;
+    }
+
+    // Check for AT command (case-insensitive)
+    bool isAT = ((line[0] == 'A' || line[0] == 'a') &&
+                 (line[1] == 'T' || line[1] == 't'));
+
+    if (isAT) {
+        _connected = true;
+        char cmd[ELM327_RX_BUF_SIZE];
+        stripSpacesUpper(line, cmd, sizeof(cmd));
+
+        // Echo the original received line before responding
+        // Note: real ELM327 echoes char-by-char; we do line-level echo.
+        // Phone apps send ATE0 immediately after reset so the divergence
+        // is almost never observable.
+        if (_echoOn) {
+            _serial->print(line);
+            _serial->print('\r');
+            if (_linefeedsOn) _serial->print('\n');
+        }
+
+        _handleATCommand(cmd);
+        return;
+    }
+
+    // Check for hex OBD query
+    if (isHexQuery(line)) {
+        _connected = true;
+        char upper[ELM327_RX_BUF_SIZE];
+        // Strip spaces, uppercase
+        size_t n = 0;
+        for (const char* p = line; *p && n < sizeof(upper) - 1; p++) {
+            if (*p != ' ') upper[n++] = *p;
+        }
+        upper[n] = '\0';
+        toUpperInPlace(upper);
+
+        if (_echoOn) {
+            _serial->print(line);
+            _serial->print('\r');
+            if (_linefeedsOn) _serial->print('\n');
+        }
+
+        _handleOBDQuery(upper);
+        return;
+    }
+
+    // Unknown input
+    _sendString("?\r\r>");
+}
+
+// ===== AT COMMAND HANDLER =====
+
+void ELM327Output::_handleATCommand(const char* cmd) {
+    // cmd is space-stripped, uppercased, starts with "AT"
+    const char* a = cmd + 2;  // skip "AT"
+
+    // Reset commands
+    if (strcmp(a, "Z") == 0 || strcmp(a, "WS") == 0) {
+        _resetState();
+        _sendString("\r\r" ELM327_VERSION_STR "\r\r>");
+        return;
+    }
+
+    // Echo
+    if (strcmp(a, "E0") == 0) { _echoOn = false; _sendString("OK\r\r>"); return; }
+    if (strcmp(a, "E1") == 0) { _echoOn = true;  _sendString("OK\r\r>"); return; }
+
+    // Headers
+    if (strcmp(a, "H0") == 0) { _headersOn = false; _sendString("OK\r\r>"); return; }
+    if (strcmp(a, "H1") == 0) { _headersOn = true;  _sendString("OK\r\r>"); return; }
+
+    // Linefeeds
+    if (strcmp(a, "L0") == 0) { _linefeedsOn = false; _sendString("OK\r\r>"); return; }
+    if (strcmp(a, "L1") == 0) { _linefeedsOn = true;  _sendString("OK\r\r>"); return; }
+
+    // Spaces
+    if (strcmp(a, "S0") == 0) { _spacesOn = false; _sendString("OK\r\r>"); return; }
+    if (strcmp(a, "S1") == 0) { _spacesOn = true;  _sendString("OK\r\r>"); return; }
+
+    // Set protocol (accept any, ignore — we're always CAN ISO 15765-4)
+    if (strncmp(a, "SP", 2) == 0) { _sendString("OK\r\r>"); return; }
+
+    // Describe protocol — check ATDPN before ATDP (prefix match order)
+    if (strcmp(a, "DPN") == 0) { _sendString("A6\r\r>"); return; }
+    if (strcmp(a, "DP")  == 0) { _sendString("AUTO, ISO 15765-4 (CAN 11/500)\r\r>"); return; }
+
+    // Version / identity
+    if (strcmp(a, "I")   == 0) { _sendString(ELM327_VERSION_STR "\r\r>"); return; }
+    if (strcmp(a, "@1")  == 0) { _sendString("preOBD\r\r>"); return; }
+    if (strcmp(a, "@2")  == 0) { _sendString("OK\r\r>"); return; }
+
+    // Supply voltage — live from PRIMARY_BATTERY input if available, else fixed
+    if (strcmp(a, "RV") == 0) {
+        char vbuf[24];
+        bool found = false;
+        for (uint8_t i = 0; i < MAX_INPUTS && !found; i++) {
+            if (inputs[i].flags.isEnabled &&
+                (inputs[i].applicationIndex == APP_PRIMARY_BATTERY ||
+                 inputs[i].applicationIndex == APP_AUXILIARY_BATTERY) &&
+                !isnan(inputs[i].value))
+            {
+                // Format as "12.3V"
+                int whole = (int)inputs[i].value;
+                int frac  = (int)((inputs[i].value - whole) * 10 + 0.5f);
+                if (frac >= 10) { whole++; frac = 0; }
+                if (whole < 0)  { whole = 0; frac = 0; }
+                if (whole > 99) { whole = 99; frac = 9; }
+                snprintf(vbuf, sizeof(vbuf), "%d.%dV\r\r>", whole, frac);
+                found = true;
+            }
+        }
+        if (!found) snprintf(vbuf, sizeof(vbuf), "12.0V\r\r>");
+        _sendString(vbuf);
+        return;
+    }
+
+    // Timeout / adaptive timing (accept and ignore)
+    if (strncmp(a, "ST", 2) == 0) { _sendString("OK\r\r>"); return; }
+    if (strncmp(a, "AT", 2) == 0 && a[2] >= '0' && a[2] <= '2') {
+        // ATAT0, ATAT1, ATAT2
+        _sendString("OK\r\r>"); return;
+    }
+
+    // Miscellaneous no-ops
+    if (strcmp(a, "AR") == 0) { _sendString("OK\r\r>"); return; }  // Allow long messages
+    if (strcmp(a, "PC") == 0) { _sendString("OK\r\r>"); return; }  // Protocol close
+
+    // Monitor all — not supported
+    if (strcmp(a, "MA") == 0) { _sendString("?\r\r>"); return; }
+
+    // Unknown AT command
+    _sendString("?\r\r>");
+}
+
+// ===== OBD QUERY HANDLER =====
+
+static uint8_t hexNibble(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return 0;
+}
+
+void ELM327Output::_handleOBDQuery(const char* hex) {
+    // Mode (2 hex chars), then the PID if the mode takes one (`03` doesn't).
+    // A real ELM327/STN sends any whole-byte hex string to the bus and prints
+    // NO DATA when nothing answers (an OBDLink LX does for `04`); only a
+    // half byte is `?`. So `04`, `01` and `0902` all reach the resolver.
+    size_t len = strlen(hex);
+    if (len < 2 || (len & 1)) { _sendString("?\r\r>"); return; }
+
+    uint8_t mode = (hexNibble(hex[0]) << 4) | hexNibble(hex[1]);
+    // Modes 01, 02 and 09 need a PID: without one no ECU answers, so the
+    // chip prints NO DATA (rather than us reading a missing PID as 00)
+    if (len < 4 && (mode == 0x01 || mode == 0x02 || mode == 0x09)) {
+        _sendString("NO DATA\r\r>");
+        return;
+    }
+    uint8_t pid  = len >= 4 ? (uint8_t)((hexNibble(hex[2]) << 4) | hexNibble(hex[3])) : 0;
+
+    uint8_t responseBytes[OBD_ANSWER_MAX];
+    uint8_t responseLen = 0;
+
+    if (!obdQuery_resolve(mode, pid, responseBytes, &responseLen)) {
+        _sendString("NO DATA\r\r>");
+        return;
+    }
+
+    // Format response bytes as ASCII hex
+    // Buffer: a multi-frame answer (12 bytes) as two frame lines with headers
+    // and spaces is ~60 chars, plus \r\r> and NUL
+    char out[96];
+    _formatDataResponse(responseBytes, responseLen, out, sizeof(out));
+    _sendString(out);
+}
+
+// ===== RESPONSE FORMATTING =====
+
+void ELM327Output::_formatDataResponse(const uint8_t* bytes, uint8_t len,
+                                        char* out, size_t outSize)
+{
+    elmFormatAnswer(bytes, len, _headersOn, _spacesOn, out, outSize);
+}
+
+// ===== OUTPUT HELPERS =====
+
+void ELM327Output::_sendString(const char* str) {
+    if (!_serial) return;
+    if (_linefeedsOn) {
+        // Insert \n after every \r
+        for (; *str; str++) {
+            _serial->print(*str);
+            if (*str == '\r') _serial->print('\n');
+        }
+    } else {
+        _serial->print(str);
+    }
+}
+
+void ELM327Output::_sendPrompt() {
+    _sendString(">");
+}
+
+#endif // INCLUDE_ELM327

@@ -9,7 +9,7 @@
 #include "oled_sh1107.h"
 #include "oled_font5x7.h"
 #include "lcd_layout.h"     // LCD_DEGREE_CHAR
-#include "../../drivers/bus_manager.h"
+#include "../../buses/bus_manager.h"
 
 // I2C control bytes: what follows is a command stream, or display RAM.
 static const uint8_t CTRL_CMD  = 0x00;

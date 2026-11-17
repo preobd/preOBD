@@ -13,7 +13,7 @@
 #define MESSAGE_ROUTER_H
 
 #include "transport_interface.h"
-#include "../core/log_filter.h"
+#include "log_filter.h"
 #include <Arduino.h>
 
 // Message plane enumeration
@@ -25,11 +25,11 @@ enum MessagePlane {
 };
 
 // Registered predicate: is a hardware serial port's transport currently
-// enabled? (Same shape as PinOwnerInputProbe/pinctrl/pin_owner.h,
+// enabled? (Same shape as PinOwnerInputProbe/buses/pinctrl/pin_owner.h,
 // SystemModeObserver/core/system_mode.h, and
-// setMuxFrameHandler/comms/transport_mux.h: the layer that actually knows --
-// drivers/serial_manager.h -- implements it, main.cpp wires it up, and
-// comms/ never includes drivers/serial_manager.h, #418.)
+// setMuxFrameHandler/transports/transport_mux.h: the layer that actually knows --
+// buses/serial_manager.h -- implements it, main.cpp wires it up, and
+// transports/ never includes buses/serial_manager.h, #418.)
 // port_id is 1-based (TRANSPORT_SERIAL1 -> port_id 1, ... SERIAL8 -> 8).
 typedef bool (*SerialPortActiveProbe)(uint8_t port_id);
 
@@ -52,12 +52,12 @@ typedef bool (*SerialPortActiveProbe)(uint8_t port_id);
 void setSerialPortActiveProbe(SerialPortActiveProbe probe);
 
 // Registered control-plane consumer: who actually pumps CLI command
-// processing (same shape as PinOwnerInputProbe/pinctrl/pin_owner.h,
+// processing (same shape as PinOwnerInputProbe/buses/pinctrl/pin_owner.h,
 // SystemModeObserver/core/system_mode.h, setMuxFrameHandler/
-// addMuxResyncHandler in comms/transport_mux.h, and
+// addMuxResyncHandler in transports/transport_mux.h, and
 // setSerialPortActiveProbe() above: the layer that actually knows --
-// cli/serial_config.h -- implements it, main.cpp wires it up, and comms/
-// never includes cli/serial_config.h, #418).
+// console/serial_config.h -- implements it, main.cpp wires it up, and transports/
+// never includes console/serial_config.h, #418).
 //
 // byteSink receives one drained byte at a time (handleCommandInput()).
 // dispatchFn is called after a transport's bytes are drained, to run
@@ -131,8 +131,8 @@ public:
 
     // Load configuration from EEPROM (called by begin())
     //
-    // Declared here, DEFINED in storage/system_config.cpp (#418): the
-    // SystemConfig <-> router shape is storage/'s to know, not comms/'s, so
+    // Declared here, DEFINED in config/system_config.cpp (#418): the
+    // SystemConfig <-> router shape is config/'s to know, not transports/'s, so
     // this stays a plain method (call sites are unchanged) while its body
     // lives on the storage side of the edge. loadConfig() writes through
     // setTransportUnchecked() below, not setTransport() -- a persisted
@@ -141,11 +141,11 @@ public:
     void loadConfig();
 
     // Sync router state to SystemConfig (without saving to EEPROM)
-    // Defined in storage/system_config.cpp -- see loadConfig() note above.
+    // Defined in config/system_config.cpp -- see loadConfig() note above.
     void syncConfig();
 
     // Save configuration to EEPROM
-    // Defined in storage/system_config.cpp -- see loadConfig() note above.
+    // Defined in config/system_config.cpp -- see loadConfig() note above.
     void saveConfig();
 
     // ========== Message Routing ==========
@@ -182,8 +182,8 @@ public:
     bool setTransport(MessagePlane plane, TransportID transportId, bool secondary = false);
 
     // ========== Config marshalling accessors (#418) ==========
-    // Surface for storage/'s loadConfig()/syncConfig() definitions (above) to
-    // read and write router state without comms/ needing to know SystemConfig
+    // Surface for config/'s loadConfig()/syncConfig() definitions (above) to
+    // read and write router state without transports/ needing to know SystemConfig
     // or EEPROM exists.
 
     // Raw transport IDs, no validation.

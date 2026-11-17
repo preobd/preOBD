@@ -1,4 +1,4 @@
-// Native unit test: OBD-II supported-PID discovery (src/inputs/can_discovery.h, #511).
+// Native unit test: OBD-II supported-PID discovery (src/sensors/can/can_discovery.h, #511).
 //
 // SCAN CAN only listens, so on a bus where nothing asks the ECU it finds
 // nothing. SCAN PIDS walks the Mode 01 supported-PID bitmaps. Pins the bit
@@ -7,7 +7,7 @@
 #include <unity.h>
 #include <Arduino.h>
 
-#include "../../src/sensors/drivers/can/can_discovery.h"
+#include "../../src/sensors/can/can_discovery.h"
 
 void setUp(void) {}
 void tearDown(void) {}

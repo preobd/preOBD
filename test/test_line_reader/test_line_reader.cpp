@@ -1,4 +1,4 @@
-// Native unit test: the plain CLI line reader (src/cli/line_reader.*, #147).
+// Native unit test: the plain CLI line reader (src/console/line_reader.*, #147).
 //
 // It replaces embedded-cli's editor on mega2560. Clients (webapp, app) match
 // replies on the echo, the "\r\n" and the prompt, so these pin each behaviour
@@ -7,7 +7,7 @@
 #include <unity.h>
 #include <string>
 
-#include "../../src/cli/line_reader.cpp"
+#include "../../src/console/line_reader.cpp"
 
 static std::string echoed;
 static void capture(char c) { echoed += c; }

@@ -8,7 +8,7 @@
 
 #include "lcd_pcf8574.h"
 #include "lcd_layout.h"      // LCD_COLS, LCD_ROWS
-#include "../../drivers/bus_manager.h"
+#include "../../buses/bus_manager.h"
 
 // PCF8574 output bits on the backpack.
 static const uint8_t BIT_RS = 0x01;

@@ -1,5 +1,5 @@
 // Native unit test: ELM327 routing over framed type 0x30
-// (src/comms/elm327_framed.cpp + the real src/outputs/output_elm327.cpp parser).
+// (src/outputs/formats/elm327_framed.cpp + the real src/outputs/formats/output_elm327.cpp parser).
 //
 // Feeds ELM327 command bytes as if they arrived in a 0x30 frame and captures
 // the bytes the module hands back to MuxTransport::sendFrame -- the same
@@ -20,7 +20,7 @@
 #include <string.h>
 
 // ---- canned OBD layer (real obd_query.cpp deliberately not compiled) ----
-#include "../../src/outputs/obd_query.h"
+#include "../../src/outputs/formats/obd_query.h"
 bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen) {
     if (mode == 0x03) {  // no stored codes (#528)
         out[0] = 0x43; out[1] = 0x00; *outLen = 2; return true;
@@ -42,9 +42,9 @@ bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen) 
 }
 
 // ---- modules under test (output_elm327 first: defines ELM327Output) ----
-#include "../../src/outputs/output_elm327.cpp"
-#include "../../src/outputs/elm327_format.cpp"   // the answer text, split out by #516
-#include "../../src/comms/elm327_framed.cpp"
+#include "../../src/outputs/formats/output_elm327.cpp"
+#include "../../src/outputs/formats/elm327_format.cpp"   // the answer text, split out by #516
+#include "../../src/outputs/formats/elm327_framed.cpp"
 
 // ---- globals the parser TU references ----
 // Only the reachable parser path needs a backing symbol: the ATRV branch reads

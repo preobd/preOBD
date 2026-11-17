@@ -16,10 +16,10 @@
 
 // ===== CAPABILITY (board facts) =====
 #define PROFILE_HAS_NATIVE_CAN 1     // bxCAN1 (needs external transceiver)
-#define EEPROM_TOTAL_BYTES     4096  // flash-emulated EEPROM (storage/eeprom_store.h)
+#define EEPROM_TOTAL_BYTES     4096  // flash-emulated EEPROM (config/eeprom_store.h)
 #define HAS_BUILTIN_SD         1     // microSD slot on SDIO (STM32SD; resolves to SD_PIN=254)
 
-// ===== PINS (what the core can't know; pinctrl/board_pins.h, #570) =====
+// ===== PINS (what the core can't know; buses/pinctrl/board_pins.h, #570) =====
 // Feather pins wired to on-board parts, claimed at boot so every command
 // refuses them: SPI flash D2-D4 + CS D7, SDIO D26-D31 + card detect D32,
 // 32 kHz crystal D33/D34, USB D35/D36, SWD D37/D38. D8 (NeoPixel) is the
@@ -78,7 +78,7 @@
 //   (status LED: on-board NeoPixel above)   BUZZER_PIN (buzzer)   MODE_BUTTON_PIN → SUPPORTS_MODE_BUTTON
 //   TEST_MODE_PIN (trigger)   HOST_NRF_CTS_PIN + HOST_NRF_RTS_PIN (nRF software flow control)
 
-// ===== CONFIG STORE (storage/eeprom_store.h) =====
+// ===== CONFIG STORE (config/eeprom_store.h) =====
 // The emulated EEPROM lives in the last 128 KB flash sector; board.ini caps
 // the image at 896 KB so the linker never places code there.
 #define EEPROM_FLASH_SECTOR    11            // FLASH_SECTOR_11

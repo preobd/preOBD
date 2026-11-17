@@ -46,7 +46,7 @@ Omit the pins and the LED code is left out of the build. Rebuild after changing
 
 ### Color Customization
 
-Edit [src/drivers/rgb_led.h](../../../src/drivers/rgb_led.h) to customize colors:
+Edit [src/outputs/annunciator/rgb_led.h](../../../src/outputs/annunciator/rgb_led.h) to customize colors:
 
 ```cpp
 // Normal operation (default: green)
@@ -86,7 +86,7 @@ Disable effects if blinking is undesirable (photosensitivity, preferences):
 
 ### Timing Adjustment
 
-Adjust blink/pulse speeds in [src/drivers/rgb_led.h](../../../src/drivers/rgb_led.h):
+Adjust blink/pulse speeds in [src/outputs/annunciator/rgb_led.h](../../../src/outputs/annunciator/rgb_led.h):
 
 ```cpp
 #define RGB_BLINK_PERIOD_MS 500     // Standard blink (1Hz)

@@ -1,4 +1,4 @@
-// Native unit test: command routing (src/cli/command_dispatch.cpp).
+// Native unit test: command routing (src/console/command_dispatch.cpp).
 //
 // This is the routing half of issue #192. The dispatch *mechanism* —
 // case-folding, table lookup, the configModeOnly / runModeAllowed mode gates,
@@ -19,8 +19,8 @@
 #include <Arduino.h>
 #include <string.h>
 
-#include "../../src/cli/command_table.h"
-#include "../../src/cli/command_dispatch.cpp"
+#include "../../src/console/command_table.h"
+#include "../../src/console/command_dispatch.cpp"
 #include "../../src/core/config_generation.cpp"
 
 // ---------------------------------------------------------------------------

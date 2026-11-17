@@ -102,7 +102,7 @@ than falling back to a compiled-in default (the bug this closed: a stock build
 used to silently claim Wire, or CAN1's pins, whether or not anything was
 actually attached). Declaring a bus is a permission, not a lock: an explicit
 `BUS I2C <n>` selection always wins over the declaration, and declaring bus 1
-does not forbid selecting bus 0. See `src/pinctrl/bus_wiring.h` for the resolver.
+does not forbid selecting bus 0. See `src/buses/pinctrl/bus_wiring.h` for the resolver.
 
 ## Pins and the board's name come from the core
 
@@ -110,7 +110,7 @@ Which pins a board has, which pin each `A<n>` name is, and the board's name
 (`firmware.platform`, e.g. `TEENSY40`) are not declared here: the Arduino core
 and the PlatformIO board definition already know them (`NUM_DIGITAL_PINS`, the
 `A0`..`An` constants, `NUM_ANALOG_INPUTS`, `ARDUINO_<BOARD>`), and
-`src/pinctrl/board_pins.{h,cpp}` reads them. A core without them fails the
+`src/buses/pinctrl/board_pins.{h,cpp}` reads them. A core without them fails the
 build. Two optional `board.h` facts cover what no core header can know:
 
 | Macro | Meaning |

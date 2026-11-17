@@ -382,7 +382,7 @@ src/core/
 ├── transport_interface.h          # Abstract TransportInterface
 ├── message_router.h/.cpp          # MessageRouter implementation
 └── transport_serial.h             # Wrapper for Serial/Serial1/Serial2
-src/comms/transports/
+src/transports/
 ├── transport_ble_esp32.h          # ESP32 BLE transport
 └── transport_bluetooth_esp32.h    # ESP32 Bluetooth Classic transport
 ```
@@ -617,8 +617,8 @@ CAN output modules use the CAN HAL to send OBD-II frames and broadcast data, whi
 
 - [TransportInterface API](../../../src/core/transport_interface.h)
 - [MessageRouter Implementation](../../../src/core/message_router.h)
-- [Serial Transport Wrapper](../../../src/core/transport_serial.h)
-- [ESP32 Bluetooth Transport](../../../src/comms/transports/transport_bluetooth_esp32.h)
+- [Serial Transport Wrapper](../../../src/transports/transport_serial.h)
+- [ESP32 Bluetooth Transport](../../../src/transports/transport_bluetooth_esp32.h)
 - [CAN HAL Interface](../../../src/hal/hal_can.h)
 - [Platform Capabilities](../../../src/hal/platform_caps.h)
 - [Build Configuration Guide](../../guides/configuration/BUILD_CONFIGURATION_GUIDE.md)

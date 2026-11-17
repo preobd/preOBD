@@ -19,52 +19,52 @@
 
 #include "sensors/calibration_types.h"
 #include "sensors/sensor_library.h"
-#include "storage/system_config.h"
-#include "drivers/bus_manager.h"
-#include "storage/bus_needs.h"
-#include "pinctrl/pin_owner.h"
-#include "drivers/serial_manager.h"   // also HW_SERIAL<n>: port number -> core UART object
-#include "pinctrl/pin_registry.h"
-#include "storage/sd_manager.h"
+#include "config/system_config.h"
+#include "buses/bus_manager.h"
+#include "buses/bus_needs.h"
+#include "buses/pinctrl/pin_owner.h"
+#include "buses/serial_manager.h"   // also HW_SERIAL<n>: port number -> core UART object
+#include "buses/pinctrl/pin_registry.h"
+#include "transports/sd_manager.h"
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
-#include "storage/input_store.h"  // saveInputConfig/loadInputConfig/inputHoldsPin/storedInputBusNeeds (#402 step 2)
-#include "cli/serial_config.h"
+#include "config/input_store.h"  // saveInputConfig/loadInputConfig/inputHoldsPin/storedInputBusNeeds (#402 step 2)
+#include "console/serial_config.h"
 #include "rules/rules_manager.h"   // Control engine runtime (Rules)
 #include "core/system_mode.h"        // System mode (CONFIG/RUN)
 #if INCLUDE_MODE_BUTTON
-#include "drivers/button_handler.h"
+#include "console/button_handler.h"
 #endif
 #include "outputs/display/display_manager.h"        // Display runtime state management
 #if INCLUDE_LED
-    #include "drivers/rgb_led.h"
+    #include "outputs/annunciator/rgb_led.h"
 #endif
-#include "outputs/output_base.h"
-#include "outputs/obd_query.h"
-#include "outputs/output_alarm.h"                   // alarmAcknowledge() — mode button short press (#433)
+#include "outputs/table/output_base.h"
+#include "outputs/formats/obd_query.h"
+#include "outputs/annunciator/output_alarm.h"                   // alarmAcknowledge() — mode button short press (#433)
 #if INCLUDE_CAN
-    #include "inputs/input_can.h"
-    #include "sensors/drivers/can/can_scan.h"
+    #include "sensors/can/input_can.h"
+    #include "sensors/can/can_scan.h"
 #endif
 
 // Transport abstraction layer
 #include "core/message_router.h"
 #include "core/message_api.h"
 #include "core/log_tags.h"
-#include "comms/transport_mux.h"
-#include "core/transport_serial.h"
-#include "outputs/ble/status_broadcaster.h"
-#include "outputs/ble/alarm_broadcaster.h"
-#include "outputs/ble/action_broadcaster.h"
-#include "outputs/ble/live_value_broadcaster.h"
-#include "comms/elm327_framed.h"
+#include "transports/transport_mux.h"
+#include "transports/transport_serial.h"
+#include "outputs/applink/status_broadcaster.h"
+#include "outputs/applink/alarm_broadcaster.h"
+#include "outputs/applink/action_broadcaster.h"
+#include "outputs/applink/live_value_broadcaster.h"
+#include "outputs/formats/elm327_framed.h"
 #include "outputs/display/lcd_layout.h"  // LCD input selection (#480)
 #ifdef ESP32
 // Include appropriate Bluetooth transport for ESP32 variant
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
-    #include "comms/transports/transport_ble_esp32.h"
+    #include "transports/transport_ble_esp32.h"
 #else
-    #include "comms/transports/transport_bluetooth_esp32.h"
+    #include "transports/transport_bluetooth_esp32.h"
 #endif
 #endif
 
@@ -155,8 +155,8 @@ static bool displayDriverInImage(uint8_t type) {
 
 // System-mode observer (registered with setSystemModeObserver() below): the
 // composition root's LCD/LED reaction to a CONFIG/RUN transition. Moved here
-// from core/system_mode.cpp (#411) so core/ stays free of outputs/ and
-// drivers/ dependencies -- core/ only announces the transition.
+// from core/system_mode.cpp (#411) so core/ stays free of outputs/
+// dependencies -- core/ only announces the transition.
 void onSystemModeChange(SystemMode oldMode, SystemMode newMode) {
     if (newMode == MODE_CONFIG) {
         #if INCLUDE_DISPLAY
@@ -189,7 +189,7 @@ void onSystemModeChange(SystemMode oldMode, SystemMode newMode) {
 
 // Test mode (if enabled)
 #if INCLUDE_TEST_MODE
-#include "test/test_mode.h"
+#include "sensors/simulate/test_mode.h"
 #endif
 
 // ===== TIME-SLICING STATE =====
@@ -328,7 +328,7 @@ void setup() {
     setPinOwnerInputProbe(inputHoldsPin);
     setPinOwnerBusProbe(storedBusHoldsPin);
 
-    // Router asks this instead of calling drivers/serial_manager.h directly
+    // Router asks this instead of calling buses/serial_manager.h directly
     // (#418). Registered early, alongside the other boot-order-sensitive
     // probes above: the first possible use is a SET/BUS-driven setTransport()
     // or LIST TRANSPORTS, both CLI commands that can't run before setup()
@@ -337,7 +337,7 @@ void setup() {
     setSerialPortActiveProbe(isSerialPortActive);
 
     // Router pumps CLI command processing through this sink instead of
-    // calling cli/serial_config.h directly (#418, item 4). MUST run before
+    // calling console/serial_config.h directly (#418, item 4). MUST run before
     // loop() first calls router.update() -- registered here alongside the
     // probe above, for the same boot-order reasons (#352, #368, #369).
     setCommandSink(handleCommandInput, processSerialCommands);
@@ -484,7 +484,7 @@ void setup() {
     // Frame-handler registration (#411 item 4): transport_mux no longer
     // reaches into these broadcasters directly (the defect #401 named) --
     // it dispatches inbound frames through the tables declared in
-    // comms/transport_mux.h, and this composition root is where the wiring
+    // transports/transport_mux.h, and this composition root is where the wiring
     // happens, same as setPinOwnerInputProbe() (:300) and
     // setSystemModeObserver() (:587). MUST run before hwSerial1 can dispatch
     // any inbound frame -- i.e. before loop() starts pumping it; placed
@@ -738,7 +738,7 @@ void loop() {
     // forever, since the router's processIncomingCommands() only runs when a
     // transport actually has bytes available(). Ran inside MessageRouter::update()
     // until #418: it needs a heartbeat, not a router, and keeping it there made
-    // comms/ depend upward on cli/. Stays immediately before router.update() so
+    // transports/ depend upward on console/. Stays immediately before router.update() so
     // the tick order is unchanged.
     serialConfig_checkJsonImportIdle();
 #endif

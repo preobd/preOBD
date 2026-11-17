@@ -8,7 +8,7 @@
 
 #include "../../../config.h"
 #include "../../../core/platform.h"
-#include "../../../drivers/bus_manager.h"
+#include "../../../buses/bus_manager.h"
 #include "../../../inputs/input.h"
 #include <SPI.h>
 

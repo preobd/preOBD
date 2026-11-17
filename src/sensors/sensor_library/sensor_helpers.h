@@ -12,7 +12,7 @@
 #include "sensor_types.h"
 #include "sensor_categories.h"
 #include "../../core/hash.h"
-#include "../../storage/bus_needs.h"   // BUS_NEED_* for busNeedsForSensorIndex()
+#include "../../buses/bus_needs.h"   // BUS_NEED_* for busNeedsForSensorIndex()
 
 // Helper macros for reading individual fields from PROGMEM
 #define READ_SENSOR_NAME(info) ((const char*)pgm_read_ptr(&(info)->name))

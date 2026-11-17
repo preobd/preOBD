@@ -6,20 +6,20 @@
 #include <string.h>
  #include "../config.h"
 #include "input_manager.h"
-#include "../storage/input_store.h"    // inputStoreSetProbeExclusion (#402 step 2)
+#include "../config/input_store.h"    // inputStoreSetProbeExclusion (#402 step 2)
 #include "measurement_compat.h"
-#include "../storage/system_config.h"  // OUTPUT_MASK_ALL_DATA / OutputId enum
-#include "../pinctrl/board_pins.h"
+#include "../config/system_config.h"  // OUTPUT_MASK_ALL_DATA / OutputId enum
+#include "../buses/pinctrl/board_pins.h"
 #include "../core/message_router.h"  // For msg.control
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
 #include "../sensors/application_presets.h"
 #include "../sensors/sensor_library.h"
 #include "../sensors/units_registry.h"  // UNITS_NOT_FOUND
-#include "../pinctrl/pin_registry.h"
-#include "../pinctrl/pin_owner.h"
-#include "../storage/bus_needs.h"
-#include "../drivers/bus_manager.h"
+#include "../buses/pinctrl/pin_registry.h"
+#include "../buses/pinctrl/pin_owner.h"
+#include "../buses/bus_needs.h"
+#include "../buses/bus_manager.h"
 #include "../rules/rules_manager.h"  // rulesResetTables + rule/action table helpers
 
 // ===== GLOBAL STATE =====
@@ -177,7 +177,7 @@ static bool validateInputConfig(uint8_t pin, const Input* self,
     // pin would see itself and misreport a conflict), plus a hand-rolled
     // other-input scan that duplicated exactly what the probe already knows.
     // inputStoreSetProbeExclusion() closes that gap by identity (see its
-    // declaration in storage/input_store.h) — set immediately before the
+    // declaration in config/input_store.h) — set immediately before the
     // call, cleared immediately after so the exclusion never leaks into an
     // unrelated one. The excluded pointer itself lives in input_store.cpp,
     // behind inputHoldsPin() — this is a setter call, not a direct write,

@@ -17,8 +17,8 @@
 
 #if INCLUDE_DISPLAY
 
-#include "../../drivers/bus_manager.h"
-#include "../../storage/system_config.h"
+#include "../../buses/bus_manager.h"
+#include "../../config/system_config.h"
 #include "lcd_layout.h"
 
 #if INCLUDE_LCD

@@ -24,13 +24,13 @@
 #include "../../src/sensors/units_registry.cpp"
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
-#include "../../src/storage/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
+#include "../../src/config/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
 #include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"  // obdLengthFor (#516)
-#include "../../src/pinctrl/pin_label.cpp"   // formatPinLabel, used by json_config.cpp's exportInputToJSON (#402 step 1)
-#include "../../src/storage/json_config.cpp"
+#include "../../src/buses/pinctrl/pin_label.cpp"   // formatPinLabel, used by json_config.cpp's exportInputToJSON (#402 step 1)
+#include "../../src/config/json_config.cpp"
 
 #include "../stubs/firmware_stubs.h"
 

@@ -3,7 +3,7 @@
  */
 
 #include "message_router.h"
-#include "../core/message_api.h"
+#include "message_api.h"
 #include <string.h>
 
 // Global router instance
@@ -74,7 +74,7 @@ void MessageRouter::registerTransport(TransportID id, TransportInterface* transp
 }
 
 // loadConfig() / syncConfig() / saveConfig() are declared in message_router.h
-// but DEFINED in storage/system_config.cpp (#418) -- see the header comment
+// but DEFINED in config/system_config.cpp (#418) -- see the header comment
 // there for why.
 
 TransportID MessageRouter::getPrimaryTransportId(MessagePlane plane) const {

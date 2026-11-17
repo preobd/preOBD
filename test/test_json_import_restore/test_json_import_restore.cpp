@@ -19,13 +19,13 @@
 #include "../../src/sensors/units_registry.cpp"
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
-#include "../../src/storage/input_store.cpp"
+#include "../../src/config/input_store.cpp"
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"
 #include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"
-#include "../../src/pinctrl/pin_label.cpp"
-#include "../../src/storage/json_config.cpp"
+#include "../../src/buses/pinctrl/pin_label.cpp"
+#include "../../src/config/json_config.cpp"
 
 #include "../stubs/firmware_stubs.h"
 

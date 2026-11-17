@@ -1,4 +1,4 @@
-// Native unit test: readCANSensor() (src/sensors/drivers/can/can_read.cpp)
+// Native unit test: readCANSensor() (src/sensors/can/can_read.cpp)
 // on cached Mode 01 replies, for the values of multi-sensor PIDs (#535).
 //
 // Byte A of 0x66/0x67/0x70/0x78/0x79/0x7F says which sensors the ECU has.
@@ -15,8 +15,8 @@
 using std::min;
 
 #include "../../src/inputs/input.h"
-#include "../../src/sensors/drivers/can/can_frame_cache.cpp"
-#include "../../src/sensors/drivers/can/can_read.cpp"
+#include "../../src/sensors/can/can_frame_cache.cpp"
+#include "../../src/sensors/can/can_read.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"
 
 void setUp(void) { g_test_now = 1000; initCANFrameCache(); }

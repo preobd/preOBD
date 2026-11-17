@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- For developers: `src/` is reorganised with one folder per layer (`sensors/`, `inputs/`, `rules/`, `outputs/`, `transports/`, `buses/`, `hal/`, `console/`, `config/`, `core/`, see `src/README.md`); no functional change, but local patches need their paths updated
+
 ## [0.16.0-beta] - 2026-11-04
 
 **Upgrading:** the saved configuration is kept (`EEPROM_VERSION` is unchanged). Three things may need attention. An external SD card (Teensy 4.0, ESP32-S3) now needs `SPI_WIRED_BUS` in `wiring.ini` or `BUS SPI <n>` (#381). A RealDash interval saved below 50 ms now runs at 50 ms (#608). The `teensy41_hybrid` and `esp32s3_hybrid` build targets are gone (#556). Not yet run on hardware: the ESP32-S3 external SD path and the Teensy 3.6 CAN pin change (#554).

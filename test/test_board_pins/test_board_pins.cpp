@@ -1,4 +1,4 @@
-// Native unit test: pinctrl/board_pins (#570) against a fake core.
+// Native unit test: buses/pinctrl/board_pins (#570) against a fake core.
 //
 // board_pins.cpp reads every fact from the Arduino core. This test plays the
 // core: a board with digital pins 0..41, analog names that are NOT a
@@ -21,7 +21,7 @@
 #define BOARD_ANALOG_USABLE 6
 #define ARDUINO_TEENSY41
 
-#include "../../src/pinctrl/board_pins.cpp"
+#include "../../src/buses/pinctrl/board_pins.cpp"
 
 void setUp(void) {}
 void tearDown(void) {}

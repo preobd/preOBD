@@ -29,7 +29,7 @@ extern uint8_t numActiveInputs;
 // broadcaster init() block in main.cpp).
 bool inputsTableIsLiveForAssert();
 
-// Production accessor for the same flag — used by storage/input_store.cpp's
+// Production accessor for the same flag — used by config/input_store.cpp's
 // inputHoldsPin() (§12.2 source 2), which is a real runtime dispatch, not a
 // debug assert, so it does not go through the guard above (#402 step 2).
 bool inputManagerTableIsLive();
@@ -123,7 +123,7 @@ Input* getInputByPin(uint8_t pin);   // Find input by pin number
 // Look up an Input by pin; if absent, print the standard "ERROR: Input not
 // configured" message on the control plane and return nullptr. Used by every
 // pin-scoped CLI leaf and by setInputSensor() here, which is why it lives with
-// the Input model rather than in cli/ (#411).
+// the Input model rather than in console/ (#411).
 Input* requireInput(uint8_t pin);
 Input* getInputByIndex(uint8_t index); // Get input by array index
 
@@ -137,19 +137,19 @@ uint8_t getInputIndex(uint8_t pin);  // Get array index for pin
 
 // ===== BUS REQUIREMENTS / PERSISTENCE =====
 // storedInputBusNeeds(), inputHoldsPin(), saveInputConfig(), loadInputConfig()
-// and resetInputConfig() moved to storage/input_store.h in #402 step 2 — the
+// and resetInputConfig() moved to config/input_store.h in #402 step 2 — the
 // shared EEPROM config-store arena is a storage-format concern, not part of
-// the Input model. Include "../storage/input_store.h" for those.
+// the Input model. Include "../config/input_store.h" for those.
 
 // ===== RUNTIME =====
 void readAllInputs();                 // Read all enabled inputs
 
 // ===== INFO =====
 // Presentation over inputs[] (printInputInfo, printInputOutputInfo,
-// printInputCalibration, listAllInputs) lives in cli/input_display.h, and the
-// pin-label decoder (formatPinLabel) lives in pinctrl/pin_label.h, and the
+// printInputCalibration, listAllInputs) lives in console/input_display.h, and the
+// pin-label decoder (formatPinLabel) lives in buses/pinctrl/pin_label.h, and the
 // sensor/application registry listers (listApplicationPresets, listSensors)
-// live in cli/registry_display.h — moved out of the Input model in #402
+// live in console/registry_display.h — moved out of the Input model in #402
 // step 1 since none of it is domain-model behaviour.
 
 #endif // INPUT_MANAGER_H

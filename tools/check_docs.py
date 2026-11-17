@@ -5,11 +5,11 @@ check_docs.py - keep the Markdown docs honest about the serial CLI.
 Scans README.md and docs/**/*.md for serial commands, sensor names and
 application names, and checks them against the firmware source:
 
-  - top-level commands          <- COMMANDS[] in src/cli/command_table.cpp
+  - top-level commands          <- COMMANDS[] in src/console/command_table.cpp
   - second tokens (SYSTEM DUMP, BUS I2C, RULE ADD, ...)
                                 <- PSTR("...") tokens in each command's handler
-  - SET <pin> <field>           <- PSTR_SET_* in src/cli/cmd_set.cpp
-  - SET <pin> CAL <profile>     <- PSTR_CAL_* in src/cli/cmd_set.cpp, and the
+  - SET <pin> <field>           <- PSTR_SET_* in src/console/cmd_set.cpp
+  - SET <pin> CAL <profile>     <- PSTR_CAL_* in src/console/cmd_set.cpp, and the
                                    profile must match the sensor's calibration type
   - sensor / application names  <- src/sensors/sensor_library/sensors/*.h and
                                    src/sensors/application_presets.cpp, including
@@ -74,43 +74,43 @@ def upper_tokens(text):
 
 def load_catalog():
     cat = {}
-    table = read("src/cli/command_table.cpp")
+    table = read("src/console/command_table.cpp")
     cat["commands"] = set(re.findall(r'\{"([A-Z?]+)",\s*cmd_\w+', table))
 
     # Second tokens: every uppercase PSTR token in the handler (a superset of
     # the real verbs, which is fine — it catches verbs that don't exist).
     subs = {}
     for name, src in [
-        ("LIST", ("src/cli/command_table.cpp", "int cmd_list(")),
-        ("OUTPUT", ("src/cli/command_table.cpp", "int cmd_output(")),
-        ("DISPLAY", ("src/cli/command_table.cpp", "int cmd_display(")),
-        ("TRANSPORT", ("src/cli/command_table.cpp", "int cmd_transport(")),
-        ("TEST", ("src/cli/command_table.cpp", "int cmd_test(")),
-        ("LOG", ("src/cli/command_table.cpp", "int cmd_log(")),
-        ("JSON", ("src/cli/command_table.cpp", "int cmd_json(")),
-        ("SCAN", ("src/cli/command_table.cpp", "int cmd_scan(")),
+        ("LIST", ("src/console/command_table.cpp", "int cmd_list(")),
+        ("OUTPUT", ("src/console/command_table.cpp", "int cmd_output(")),
+        ("DISPLAY", ("src/console/command_table.cpp", "int cmd_display(")),
+        ("TRANSPORT", ("src/console/command_table.cpp", "int cmd_transport(")),
+        ("TEST", ("src/console/command_table.cpp", "int cmd_test(")),
+        ("LOG", ("src/console/command_table.cpp", "int cmd_log(")),
+        ("JSON", ("src/console/command_table.cpp", "int cmd_json(")),
+        ("SCAN", ("src/console/command_table.cpp", "int cmd_scan(")),
     ]:
         subs[name] = upper_tokens(function_body(read(src[0]), src[1]))
-    for name, path in [("RULE", "src/cli/cmd_rule.cpp"),
-                       ("ACTION", "src/cli/cmd_action.cpp"),
-                       ("ALARM", "src/cli/cmd_alarm.cpp")]:
+    for name, path in [("RULE", "src/console/cmd_rule.cpp"),
+                       ("ACTION", "src/console/cmd_action.cpp"),
+                       ("ALARM", "src/console/cmd_alarm.cpp")]:
         subs[name] = upper_tokens(read(path)) | {"#"}
-    subs["SYSTEM"] = {v for k, v in pstr_defs(read("src/cli/cmd_system.cpp")).items()
+    subs["SYSTEM"] = {v for k, v in pstr_defs(read("src/console/cmd_system.cpp")).items()
                       if k.startswith("PSTR_SYS_")}
-    bus = read("src/cli/cmd_bus.cpp")
+    bus = read("src/console/cmd_bus.cpp")
     subs["BUS"] = {v for k, v in pstr_defs(bus).items() if k.startswith("PSTR_BUS_")} \
         | {"I2C", "SPI", "CAN", "SERIAL"}
     # OUTPUT <module>: module names from the output table (case-insensitive).
-    outputs = read("src/outputs/output_manager.cpp")
+    outputs = read("src/outputs/table/output_manager.cpp")
     subs["OUTPUT"] |= {n.upper() for n in re.findall(r'\{"(\w+)",\s*(?:true|false)', outputs)}
     subs["OUTPUT"] |= {"STATUS"}
     subs["TEST"] |= {"#"}
     # TRANSPORT <plane> ...: plane names come from parsePlane(), not the handler.
-    helpers = read("src/cli/command_helpers.cpp")
+    helpers = read("src/console/command_helpers.cpp")
     subs["TRANSPORT"] |= set(re.findall(r'"([A-Z]+)"', function_body(helpers, "MessagePlane parsePlane(")))
     cat["subs"] = subs
 
-    setsrc = read("src/cli/cmd_set.cpp")
+    setsrc = read("src/console/cmd_set.cpp")
     defs = pstr_defs(setsrc)
     cat["set_fields"] = {v for k, v in defs.items() if k.startswith("PSTR_SET_")}
     calmap = dict(re.findall(r'\{\s*(PSTR_CAL_\w+),\s*set_cal_\w+,\s*\w+,\s*(CAL_\w+)\s*\}', setsrc))

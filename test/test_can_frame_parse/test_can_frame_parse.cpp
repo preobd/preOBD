@@ -1,4 +1,4 @@
-// Native unit test: CAN input frame identification (src/inputs/can_frame_parse.h).
+// Native unit test: CAN input frame identification (src/sensors/can/can_frame_parse.h).
 //
 // Pins which cache key a received frame lands under. Regression for #473:
 // only 2-byte PID responses (length byte 0x04) were recognised, so a 1-byte
@@ -7,7 +7,7 @@
 #include <unity.h>
 #include <Arduino.h>
 
-#include "../../src/inputs/can_frame_parse.h"
+#include "../../src/sensors/can/can_frame_parse.h"
 
 void setUp(void) {}
 void tearDown(void) {}

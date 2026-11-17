@@ -10,7 +10,7 @@
 #include <ArduinoJson.h>
 #include <string.h>
 
-#include "../../src/outputs/sd_status_json.cpp"
+#include "../../src/outputs/formats/sd_status_json.cpp"
 
 void setUp(void) {}
 void tearDown(void) {}

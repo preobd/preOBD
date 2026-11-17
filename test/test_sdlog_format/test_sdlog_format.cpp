@@ -1,4 +1,4 @@
-// Native unit test: shared CSV field formatting (src/outputs/output_format.h).
+// Native unit test: shared CSV field formatting (src/outputs/formats/output_format.h).
 //
 // These two helpers are the single definition of "how a reading looks in CSV"
 // for both recording outputs (serial + SD). Before they existed the two paths
@@ -9,7 +9,7 @@
 #include <Arduino.h>
 #include <math.h>
 
-#include "../../src/outputs/output_format.h"
+#include "../../src/outputs/formats/output_format.h"
 
 void setUp(void) {}
 void tearDown(void) {}

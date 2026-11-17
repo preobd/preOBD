@@ -22,7 +22,7 @@ refuses it on a master. Upstream fixed it in stm32duino PR #3044 (merged
 
 SPI: SPIClass::begin() in core 3.0.0 calls configSpi(defaultSettings), which
 skips spi_init() because the settings match the cached default, so SPI is
-never initialized. src/drivers/bus_manager.cpp (initSPIBus) configures 1 MHz
+never initialized. src/buses/bus_manager.cpp (initSPIBus) configures 1 MHz
 first to force it. Upstream fixed it in stm32duino PR #3049 (merged
 2026-08-20) by calling spi_init() from begin() directly.
 """
@@ -54,7 +54,7 @@ if os.path.isfile(spi):
         print(
             "\n*** stm32_core_workarounds: this STM32 core's SPI.begin() initializes the\n"
             "*** peripheral (upstream PR #3049 landed). Remove the 1 MHz beginTransaction()\n"
-            "*** before SPI.begin() in initSPIBus(), src/drivers/bus_manager.cpp.\n"
+            "*** before SPI.begin() in initSPIBus(), src/buses/bus_manager.cpp.\n"
         )
 
 twi = os.path.join(core or "", "libraries", "Wire", "src", "utility", "twi.c")

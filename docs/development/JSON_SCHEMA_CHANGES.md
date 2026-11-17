@@ -40,10 +40,10 @@ systemConfig.newField = systemObj["newField"] | 123;
 // 1. input.h - Add to Input struct
 uint8_t newField;
 
-// 2. storage/input_store.cpp - Add to InputEEPROM
+// 2. config/input_store.cpp - Add to InputEEPROM
 uint8_t newField;
 
-// 3. storage/input_store.cpp - Save/Load
+// 3. config/input_store.cpp - Save/Load
 eeprom.newField = input.newField;  // Save
 input.newField = eeprom.newField;  // Load
 
@@ -169,14 +169,14 @@ if (schemaVer == 1) {
 
 | File | What to Update | When |
 |------|----------------|------|
-| `src/storage/system_config.h` | Add field to struct, increment version | SystemConfig change |
-| `src/storage/system_config.cpp` | Set default value | SystemConfig change |
+| `src/config/system_config.h` | Add field to struct, increment version | SystemConfig change |
+| `src/config/system_config.cpp` | Set default value | SystemConfig change |
 | `src/inputs/input.h` | Add field to Input struct | Input change |
-| `src/storage/input_store.cpp` | InputEEPROM, save/load | Input change |
+| `src/config/input_store.cpp` | InputEEPROM, save/load | Input change |
 | `src/version.h` | `EEPROM_VERSION` | Any stored-struct change |
-| `src/storage/json_config.cpp` | Export/import functions | Any struct change |
-| `src/storage/json_config.cpp` | `JSON_SCHEMA_VERSION` | Breaking change only |
-| `src/storage/json_config.h` | Version history comment | Schema version change |
+| `src/config/json_config.cpp` | Export/import functions | Any struct change |
+| `src/config/json_config.cpp` | `JSON_SCHEMA_VERSION` | Breaking change only |
+| `src/config/json_config.h` | Version history comment | Schema version change |
 | `docs/guides/configuration/JSON_CONFIGURATION_GUIDE.md` | Document change | Any change |
 | `CHANGELOG.md` | User-facing notes | Any change |
 
@@ -189,7 +189,7 @@ if (schemaVer == 1) {
 git checkout -b feature/display-brightness
 
 # Step 2: Update struct
-# Edit: src/storage/system_config.h
+# Edit: src/config/system_config.h
 struct SystemConfig {
     uint16_t displayBrightness;
     // ...shrink the reserved/padding bytes to match, if the struct has any
@@ -197,17 +197,17 @@ struct SystemConfig {
 #define SYSTEM_CONFIG_VERSION <n+1>
 
 # Step 3: Set default
-# Edit: src/storage/system_config.cpp
+# Edit: src/config/system_config.cpp
 void resetSystemConfig() {
     systemConfig.displayBrightness = 200;
 }
 
 # Step 4: Export
-# Edit: src/storage/json_config.cpp → exportSystemConfigToJSON()
+# Edit: src/config/json_config.cpp → exportSystemConfigToJSON()
 display["brightness"] = systemConfig.displayBrightness;
 
 # Step 5: Import with default
-# Edit: src/storage/json_config.cpp → importSystemConfigFromJSON()
+# Edit: src/config/json_config.cpp → importSystemConfigFromJSON()
 systemConfig.displayBrightness = display["brightness"] | 200;
 
 # Step 6: Test

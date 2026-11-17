@@ -1,6 +1,11 @@
 # layering_exceptions.txt -- the current cross-directory dependency graph
 # under src/, as measured by tools/check_layering.py on 2026-09-12 (#401
-# slice 5), against `main` at 8510ea7.
+# slice 5), against `main` at 8510ea7, and re-keyed on 2026-11-06 when
+# src/ was reorganised one folder per layer (#612).
+#
+# The re-keying added and removed no dependency: every site below existed
+# before the move. Each pair cites the old pair(s) its sites came from
+# ("was a -> b"); "was inside x/" marks sites that crossed no folder before.
 #
 # THIS IS A RATCHET, NOT A WALL. Every line below names a directory-pair
 # edge (FROM -> TO, both top-level names under src/, "(root)" meaning a
@@ -27,16 +32,6 @@
 # everything after '#' is documentation for humans.
 
 # ---------------------------------------------------------------------------
-# PERMANENT -- locked by ARCHITECTURE.md, not subject to ratcheting away.
-# ---------------------------------------------------------------------------
-
-pinctrl -> inputs   # PERMANENT -- ARCHITECTURE.md §12.2: PinOwnerInputProbe exists
-                     # precisely because configured inputs deliberately never enter
-                     # the live pin registry (mega2560's MAX_PIN_REGISTRY can't pay
-                     # for it). pin_registry.cpp includes inputs/input_manager.h and
-                     # also reaches `extern uint8_t numActiveInputs;` at pin_registry.cpp:378.
-
-# ---------------------------------------------------------------------------
 # RATCHET TARGETS -- #401's stated property for core/ is "core/ includes
 # nothing but <Arduino.h> and hal/". As of #418, there are none: the last
 # remaining gap (core -> comms, via core/message_api.h and core/log_filter.cpp
@@ -51,141 +46,265 @@ pinctrl -> inputs   # PERMANENT -- ARCHITECTURE.md §12.2: PinOwnerInputProbe ex
 # SystemModeObserver function pointer registered from setup(), and the
 # config.h include was dropped as unneeded once that code left.)
 # ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# Structural -- everything else measured against `main` at 8510ea7. None of
-# these were adjudicated as "correct" by this slice; #401 is explicit that
-# this work makes couplings visible, not fewer. They are recorded here so
-# the check has a baseline to ratchet down from. See the PR / session report
-# for a per-pair discussion of which look like genuine problems worth their
-# own issue vs. which are structurally what the module is for.
+#
+# Old folder names in the "was" citations below are as they were before #612:
+# cli = console, comms = transports, storage = config, test = sensors/simulate,
+# drivers = buses + console + annunciator, pinctrl = buses/pinctrl.
 # ---------------------------------------------------------------------------
 
-(root) -> cli        # #401 -- main.cpp (the composition root) wires up the CLI.
-(root) -> comms      # #401 -- main.cpp wires up transport_mux/elm327_framed/transports
-                     # (message_router moved to core/ in #418).
-(root) -> core       # #401 -- main.cpp wires up platform/watchdog/system_mode.
-(root) -> drivers    # #401 -- main.cpp wires up bus/serial/button/RGB drivers.
-(root) -> inputs     # #401 -- main.cpp owns inputs[] / input_manager.
-(root) -> outputs    # #401 -- main.cpp wires up every output module + BLE broadcasters
-                     # (main.cpp:127-133 extern-declares initOutputModules/sendToOutputs/
-                     # updateOutputs/initLCD/updateLCD, all defined in outputs/).
-(root) -> pinctrl    # #401 -- main.cpp owns pin_owner/pin_registry setup.
-(root) -> rules      # #401 -- main.cpp wires up the rules engine.
-(root) -> sensors    # #401 -- main.cpp includes calibration_types/sensor_library.
-(root) -> storage    # #401 -- main.cpp owns system_config/bus_needs/sd_manager.
-(root) -> test       # #401 -- main.cpp wires up test-mode activation.
-
-cli -> (root)        # #401 -- CLI handlers read config.h constants and version.h.
-cli -> comms         # #401 -- BUS SERIAL / transport-facing CLI leaves.
-cli -> core          # #401 -- CLI is the widest consumer of core/message_api and logging.
-cli -> drivers       # #401 -- cmd_bus.cpp drives bus_manager; button/RGB status leaves.
-cli -> hal           # #401 -- platform capability reporting (SYSTEM STATUS/DIAG).
-cli -> inputs        # #401 -- the whole reason #401 exists: cmd_set/cmd_rule etc. are
-                     # CLI surface over the Input model. Includes 2 extern sites
-                     # (command_helpers.cpp:440, command_table.cpp:306 -> numActiveInputs).
-cli -> outputs       # #401 -- SYSTEM STATUS/DUMP leaves report on output modules;
-                     # cmd_system.cpp:114,129 extern-declare listOutputs/printSystemConfig.
-cli -> pinctrl       # #401 -- SYSTEM PINS / pin diagnostics leaves.
-cli -> rules         # #401 -- cmd_rule.cpp / cmd_action.cpp drive the rules engine.
-cli -> sensors       # #401 -- SET SENSOR and sensor-listing leaves.
-cli -> storage       # #401 -- SET / SYSTEM DUMP read and write system_config/json_config.
-cli -> test          # #401 -- TEST command leaves.
-
-comms -> (root)      # #401 -- transport code reads config.h.
-comms -> core        # #401 -- transport_mux.h and the ESP32 transports include
-                     # core/transport_interface.h and core/watchdog.h
-                     # (message_router itself moved into core/ in #418).
-comms -> outputs     # #401, narrowed by #411 item 4 -- transport_mux no longer
-                     # includes the BLE broadcasters it multiplexes (the defect
-                     # #401 named is fixed: frame dispatch is registration-based,
-                     # comms/transport_mux.h). The one remaining site is
-                     # elm327_framed.cpp:17 -> outputs/output_elm327.h, which owns
-                     # the ELM327Output protocol engine instance -- registration
-                     # can't remove that; only relocating the protocol engine out
-                     # of outputs/ would, which is a larger design change than
-                     # #411 warrants. So this pair stays, structural, at one site.
-
-core -> hal          # #401 -- src/core/watchdog.cpp includes hal/hal_watchdog.h; this
-                     # is the *allowed* direction under the core/ target property.
-
-drivers -> (root)    # #401 -- bus/serial drivers read config.h.
-drivers -> core      # #401 -- drivers use core/message_api and logging.
-drivers -> hal       # #401 -- drivers call the HAL by design (bus_manager -> hal_can, etc).
-drivers -> pinctrl   # #401 -- bus_manager/serial_manager claim pins via pin_owner.
-drivers -> storage   # #401 -- bus_manager reads system_config for bus selection.
-
-hal -> (root)        # #401 -- hal_can.h / can_mcp2515.h read config.h (SPI CAN pin
-                     # constants, per CLAUDE.md's CAN Controller Abstraction section).
-inputs -> (root)     # #401 -- input_manager reads config.h (MAX_INPUTS etc).
-inputs -> comms      # #401 -- input CAN import touches the transport layer.
-inputs -> core       # #401 -- input_manager uses core/message_api and logging.
-inputs -> drivers    # #401 -- input_manager touches bus_manager for sensor buses.
-inputs -> hal        # #401 -- input_can.h reaches the CAN HAL directly.
-inputs -> pinctrl    # #401 -- inputs claim pins via pin_owner when configured.
-inputs -> rules      # #401 -- input_manager references rules_types for alarm wiring.
-inputs -> sensors    # #401 -- named by #401 directly: sensor drivers take Input*,
-                     # so this pair is bidirectional (see sensors -> inputs below).
-                     # Structural: the Input model exposes calibration/sensor types.
-inputs -> storage    # #401 -- input_manager reads/writes system_config, json_config.
-
-outputs -> (root)    # #401 -- output modules read config.h; 4 BLE broadcasters
-                     # (action/alarm/status/live_value_broadcaster.cpp) extern-declare
-                     # `extern MuxTransport hwSerial1;`, defined in main.cpp:80-91 --
-                     # invisible to include-graph analysis, found only via extern parsing.
-outputs -> comms     # #401 -- ELM327/CAN/BLE outputs use the framed transport layer.
-outputs -> core      # #401 -- output modules are wide consumers of core/message_api.
-outputs -> drivers   # #401 -- display/RGB-adjacent outputs touch drivers.
-outputs -> hal       # #401 -- output_can.cpp calls the CAN HAL.
-outputs -> inputs    # #401 -- every output module takes Input* -- the same shape of
-                     # coupling as sensors -> inputs and inputs -> sensors.
-outputs -> pinctrl   # #401 -- display_grid checks pin ownership before driving the LCD.
-outputs -> rules     # #401 -- alarm/status outputs read rules-engine state.
-outputs -> sensors   # #401 -- outputs format sensor-calibrated values.
-outputs -> storage   # #401 -- outputs read system_config for enable flags/intervals.
-
-pinctrl -> core      # #401 -- pin_owner/pin_registry use core/message_api and logging.
-pinctrl -> hal       # #401 -- board_pins.h reads hal platform pin tables.
-pinctrl -> storage   # #401 -- pin_registry reads system_config for wired-bus declarations.
-
-rules -> (root)      # #401 -- rules_manager reads config.h.
-rules -> core        # #401 -- rules_manager uses core/message_api and logging.
-rules -> inputs      # #401 -- named by #401 directly: the rules engine evaluates
-                     # conditions against inputs[].
-rules -> pinctrl     # #401 -- Action targets claim pins via pin_owner.
-rules -> sensors     # #401 -- rules reference sensor/application registries for conditions.
-rules -> storage     # #401 -- named by #401 directly (storage -> rules is the reverse
-                     # edge -- control_json includes rules_types.h): rules persist via
-                     # the shared config-store arena in storage/.
-
-sensors -> (root)    # #401 -- sensor drivers/tables read config.h.
-sensors -> core      # #401 -- sensor drivers are wide consumers of core/message_api
-                     # and logging (23 driver files, largest single -> core pair).
-sensors -> drivers   # #401 -- CAN sensor drivers touch bus_manager.
-sensors -> inputs    # #401 -- named by #401 directly: 23 include sites, sensor
-                     # drivers take Input* as their read-function argument. Structural,
-                     # not drift -- this is the shape #401's own "sensors/" section
-                     # describes (tables, calibration data, drivers/, sensor_read.cpp).
-sensors -> storage   # #401 -- sensor registry lookups read system_config.
-
-storage -> (root)    # #401 -- system_config/json_config read config.h.
-storage -> comms     # #401 -- json_config reaches transport status for reporting.
-storage -> core      # #401 -- storage is a wide consumer of core/message_api/logging.
-storage -> drivers   # #401 -- bus_needs.cpp reads bus_manager state.
-storage -> hal       # #401 -- system_config reads hal platform capability tables.
-storage -> inputs    # #401 -- named by #401 directly: json_config.cpp extern-declares
-                     # `extern Input inputs[MAX_INPUTS];`, `extern SystemConfig
-                     # systemConfig;`, `extern uint8_t numActiveInputs;`, and 10 more
-                     # `extern bool setInput*/enableInput*` functions, all defined in
-                     # inputs/input_manager.cpp -- invisible to include-graph analysis.
-storage -> outputs   # #401 -- named by #401 directly: json_registry.cpp extern-declares
-                     # `extern OutputModule outputModules[];`, defined in
-                     # outputs/output_manager.cpp -- invisible to include-graph analysis.
-storage -> pinctrl   # #401 -- system_config persists wired-bus declarations pin_registry reads.
-storage -> rules     # #401 -- named by #401 directly: control_json.{h,cpp} (now under
-                     # rules/) includes rules_types.h; storage owns its persistence.
-storage -> sensors   # #401 -- json_config/json_registry serialize sensor/application selections.
-
-test -> (root)       # #401 -- test-mode scaffolding reads config.h.
-test -> core         # #401 -- test_mode uses core/message_api and logging.
-test -> inputs       # #401 -- test mode substitutes Input read functions.
+(root) -> buses             # was (root) -> drivers (2; now from main.cpp):
+                            #   #401 -- main.cpp wires up bus/serial/button/RGB drivers.
+                            # was (root) -> pinctrl (2; now from main.cpp):
+                            #   #401 -- main.cpp owns pin_owner/pin_registry setup.
+                            # was (root) -> storage (1; now from main.cpp):
+                            #   #401 -- main.cpp owns system_config/bus_needs/sd_manager.
+(root) -> config            # was (root) -> storage (2; now from main.cpp):
+                            #   #401 -- main.cpp owns system_config/bus_needs/sd_manager.
+(root) -> console           # was (root) -> cli (1; now from main.cpp):
+                            #   #401 -- main.cpp (the composition root) wires up the CLI.
+                            # was (root) -> drivers (1; now from main.cpp):
+                            #   #401 -- main.cpp wires up bus/serial/button/RGB drivers.
+(root) -> core              # was (root) -> core (8; now from main.cpp):
+                            #   #401 -- main.cpp wires up platform/watchdog/system_mode.
+(root) -> inputs            # was (root) -> inputs (2; now from main.cpp):
+                            #   #401 -- main.cpp owns inputs[] / input_manager.
+(root) -> outputs           # was (root) -> outputs (22; now from main.cpp):
+                            #   #401 -- main.cpp wires up every output module + BLE broadcasters
+                            #   (main.cpp:127-133 extern-declares initOutputModules/sendToOutputs/
+                            #   updateOutputs/initLCD/updateLCD, all defined in outputs/).
+                            # was (root) -> drivers (1; now from main.cpp):
+                            #   #401 -- main.cpp wires up bus/serial/button/RGB drivers.
+                            # was (root) -> comms (1; now from main.cpp):
+                            #   #401 -- main.cpp wires up transport_mux/elm327_framed/transports
+                            #   (message_router moved to core/ in #418).
+(root) -> rules             # was (root) -> rules (1; now from main.cpp):
+                            #   #401 -- main.cpp wires up the rules engine.
+(root) -> sensors           # was (root) -> sensors (3; now from main.cpp):
+                            #   #401 -- main.cpp includes calibration_types/sensor_library.
+                            # was (root) -> inputs (1; now from main.cpp):
+                            #   #401 -- main.cpp owns inputs[] / input_manager.
+                            # was (root) -> test (1; now from main.cpp):
+                            #   #401 -- main.cpp wires up test-mode activation.
+(root) -> transports        # was (root) -> comms (3; now from main.cpp):
+                            #   #401 -- main.cpp wires up transport_mux/elm327_framed/transports
+                            #   (message_router moved to core/ in #418).
+                            # was (root) -> storage (1; now from main.cpp):
+                            #   #401 -- main.cpp owns system_config/bus_needs/sd_manager.
+                            # was (root) -> core (1; now from main.cpp):
+                            #   #401 -- main.cpp wires up platform/watchdog/system_mode.
+buses -> config             # was drivers -> storage (2; now from bus_manager.cpp, serial_manager.cpp):
+                            #   #401 -- bus_manager reads system_config for bus selection.
+                            # was inside storage/ (1 site(s))
+                            # was pinctrl -> storage (1; now from pin_registry.cpp):
+                            #   #401 -- pin_registry reads system_config for wired-bus declarations.
+buses -> core               # was drivers -> core (4; now from bus_manager.cpp, serial_manager.cpp):
+                            #   #401 -- drivers use core/message_api and logging.
+                            # was pinctrl -> core (3; now from pin_owner.cpp, pin_registry.cpp):
+                            #   #401 -- pin_owner/pin_registry use core/message_api and logging.
+buses -> hal                # was drivers -> hal (5; now from bus_manager.cpp, bus_manager.h, serial_manager.cpp, serial_manager.h):
+                            #   #401 -- drivers call the HAL by design (bus_manager -> hal_can, etc).
+                            # was pinctrl -> hal (2; now from bus_pin_roles.cpp, bus_wiring.h):
+                            #   #401 -- board_pins.h reads hal platform pin tables.
+buses -> inputs             # was pinctrl -> inputs (2; now from pin_registry.cpp):
+                            #   PERMANENT -- ARCHITECTURE.md §12.2: PinOwnerInputProbe exists
+                            #   precisely because configured inputs deliberately never enter
+                            #   the live pin registry (mega2560's MAX_PIN_REGISTRY can't pay
+                            #   for it). pin_registry.cpp includes inputs/input_manager.h and
+                            #   also reaches `extern uint8_t numActiveInputs;` at pin_registry.cpp:378.
+config -> (root)            # was storage -> (root) (9; now from input_store.cpp, input_store.h, json_config.cpp, json_registry.cpp, system_config.cpp, system_config.h):
+                            #   #401 -- system_config/json_config read config.h.
+config -> buses             # was storage -> pinctrl (9; now from input_store.cpp, json_config.cpp, json_registry.cpp, system_config.cpp):
+                            #   #401 -- system_config persists wired-bus declarations pin_registry reads.
+                            # was inside storage/ (3 site(s))
+                            # was storage -> drivers (2; now from json_config.cpp, system_config.cpp):
+                            #   #401 -- bus_needs.cpp reads bus_manager state.
+config -> core              # was storage -> core (19; now from eeprom_store.cpp, input_store.cpp, input_store.h, json_config.cpp, json_config.h, json_registry.cpp, json_registry.h, system_config.cpp):
+                            #   #401 -- storage is a wide consumer of core/message_api/logging.
+config -> hal               # was storage -> hal (2; now from json_config.cpp, system_config.cpp):
+                            #   #401 -- system_config reads hal platform capability tables.
+config -> inputs            # was storage -> inputs (19; now from input_store.cpp, input_store.h, json_config.cpp):
+                            #   #401 -- named by #401 directly: json_config.cpp extern-declares
+                            #   `extern Input inputs[MAX_INPUTS];`, `extern SystemConfig
+                            #   systemConfig;`, `extern uint8_t numActiveInputs;`, and 10 more
+                            #   `extern bool setInput*/enableInput*` functions, all defined in
+                            #   inputs/input_manager.cpp -- invisible to include-graph analysis.
+config -> outputs           # was storage -> outputs (7; now from json_config.cpp, json_registry.cpp, system_config.cpp, system_config.h):
+                            #   #401 -- named by #401 directly: json_registry.cpp extern-declares
+                            #   `extern OutputModule outputModules[];`, defined in
+                            #   outputs/output_manager.cpp -- invisible to include-graph analysis.
+config -> rules             # was storage -> rules (5; now from input_store.cpp, json_config.cpp, json_config.h, system_config.h):
+                            #   #401 -- named by #401 directly: control_json.{h,cpp} (now under
+                            #   rules/) includes rules_types.h; storage owns its persistence.
+config -> sensors           # was storage -> sensors (16; now from input_store.cpp, json_config.cpp, json_registry.cpp, json_registry.h, system_config.cpp):
+                            #   #401 -- json_config/json_registry serialize sensor/application selections.
+config -> transports        # #612 -- the move split a folder; these sites are unchanged.
+                            # was inside storage/ (4 site(s))
+console -> (root)           # was cli -> (root) (17; now from cmd_action.cpp, cmd_alarm.cpp, cmd_bus.cpp, cmd_rule.cpp, cmd_set.cpp, cmd_system.cpp, command_handlers.h, command_helpers.cpp, command_table.cpp, serial_config.cpp, serial_config.h):
+                            #   #401 -- CLI handlers read config.h constants and version.h.
+                            # was drivers -> (root) (1; now from button_handler.cpp):
+                            #   #401 -- bus/serial drivers read config.h.
+console -> buses            # was cli -> pinctrl (16; now from cmd_action.cpp, cmd_alarm.cpp, cmd_bus.cpp, cmd_rule.cpp, cmd_set.cpp, cmd_system.cpp, command_helpers.cpp, command_table.cpp, input_display.cpp):
+                            #   #401 -- SYSTEM PINS / pin diagnostics leaves.
+                            # was cli -> drivers (9; now from cmd_bus.cpp, cmd_set.cpp, cmd_system.cpp, command_helpers.cpp, command_table.cpp):
+                            #   #401 -- cmd_bus.cpp drives bus_manager; button/RGB status leaves.
+console -> config           # was cli -> storage (20; now from cmd_action.cpp, cmd_alarm.cpp, cmd_bus.cpp, cmd_rule.cpp, cmd_set.cpp, cmd_system.cpp, command_helpers.cpp, command_table.cpp, input_display.cpp, serial_config.cpp):
+                            #   #401 -- SET / SYSTEM DUMP read and write system_config/json_config.
+console -> core             # was cli -> core (53; now from cmd_action.cpp, cmd_alarm.cpp, cmd_bus.cpp, cmd_rule.cpp, cmd_set.cpp, cmd_system.cpp, command_dispatch.cpp, command_helpers.cpp, command_helpers.h, command_table.cpp, input_display.cpp, registry_display.cpp, serial_config.cpp, serial_config.h):
+                            #   #401 -- CLI is the widest consumer of core/message_api and logging.
+                            # was drivers -> core (2; now from button_handler.cpp):
+                            #   #401 -- drivers use core/message_api and logging.
+console -> hal              # was cli -> hal (5; now from cmd_bus.cpp, cmd_set.cpp, cmd_system.cpp, command_helpers.cpp, command_table.cpp):
+                            #   #401 -- platform capability reporting (SYSTEM STATUS/DIAG).
+console -> inputs           # was cli -> inputs (17; now from cmd_action.cpp, cmd_bus.cpp, cmd_rule.cpp, cmd_set.cpp, cmd_system.cpp, command_helpers.cpp, command_table.cpp, input_display.cpp):
+                            #   #401 -- the whole reason #401 exists: cmd_set/cmd_rule etc. are
+                            #   CLI surface over the Input model. Includes 2 extern sites
+                            #   (command_helpers.cpp:440, command_table.cpp:306 -> numActiveInputs).
+console -> outputs          # was cli -> outputs (28; now from cmd_alarm.cpp, cmd_bus.cpp, cmd_set.cpp, cmd_system.cpp, command_helpers.cpp, command_table.cpp):
+                            #   #401 -- SYSTEM STATUS/DUMP leaves report on output modules;
+                            #   cmd_system.cpp:114,129 extern-declare listOutputs/printSystemConfig.
+                            # was cli -> drivers (2; now from cmd_system.cpp, command_table.cpp):
+                            #   #401 -- cmd_bus.cpp drives bus_manager; button/RGB status leaves.
+console -> rules            # was cli -> rules (11; now from cmd_action.cpp, cmd_alarm.cpp, cmd_rule.cpp, cmd_set.cpp, command_handlers.h, command_table.cpp):
+                            #   #401 -- cmd_rule.cpp / cmd_action.cpp drive the rules engine.
+console -> sensors          # was cli -> sensors (34; now from cmd_bus.cpp, cmd_rule.cpp, cmd_set.cpp, cmd_system.cpp, command_helpers.cpp, command_helpers.h, command_table.cpp, input_display.cpp, registry_display.cpp):
+                            #   #401 -- SET SENSOR and sensor-listing leaves.
+                            # was cli -> test (4; now from cmd_bus.cpp, cmd_set.cpp, cmd_system.cpp, command_table.cpp):
+                            #   #401 -- TEST command leaves.
+                            # was cli -> inputs (4; now from cmd_bus.cpp, command_table.cpp):
+                            #   #401 -- the whole reason #401 exists: cmd_set/cmd_rule etc. are
+                            #   CLI surface over the Input model. Includes 2 extern sites
+                            #   (command_helpers.cpp:440, command_table.cpp:306 -> numActiveInputs).
+console -> transports       # was cli -> comms (1; now from cmd_bus.cpp):
+                            #   #401 -- BUS SERIAL / transport-facing CLI leaves.
+                            # was cli -> storage (1; now from cmd_system.cpp):
+                            #   #401 -- SET / SYSTEM DUMP read and write system_config/json_config.
+core -> hal                 # was core -> hal (1; now from watchdog.cpp):
+                            #   #401 -- src/core/watchdog.cpp includes hal/hal_watchdog.h; this
+                            #   is the *allowed* direction under the core/ target property.
+hal -> (root)               # was hal -> (root) (2; now from can_mcp2515.h, hal_can.h):
+                            #   #401 -- hal_can.h / can_mcp2515.h read config.h (SPI CAN pin
+                            #   constants, per CLAUDE.md's CAN Controller Abstraction section).
+inputs -> (root)            # was inputs -> (root) (2; now from input_manager.cpp, input_manager.h):
+                            #   #401 -- input_manager reads config.h (MAX_INPUTS etc).
+inputs -> buses             # was inputs -> pinctrl (3; now from input_manager.cpp):
+                            #   #401 -- inputs claim pins via pin_owner when configured.
+                            # was inputs -> storage (1; now from input_manager.cpp):
+                            #   #401 -- input_manager reads/writes system_config, json_config.
+                            # was inputs -> drivers (1; now from input_manager.cpp):
+                            #   #401 -- input_manager touches bus_manager for sensor buses.
+inputs -> config            # was inputs -> storage (2; now from input_manager.cpp):
+                            #   #401 -- input_manager reads/writes system_config, json_config.
+inputs -> core              # was inputs -> core (5; now from calibration_apply.cpp, input_manager.cpp, input_manager.h):
+                            #   #401 -- input_manager uses core/message_api and logging.
+inputs -> rules             # was inputs -> rules (1; now from input_manager.cpp):
+                            #   #401 -- input_manager references rules_types for alarm wiring.
+inputs -> sensors           # was inputs -> sensors (9; now from input.h, input_manager.cpp, measurement_compat.cpp, measurement_compat.h):
+                            #   #401 -- named by #401 directly: sensor drivers take Input*,
+                            #   so this pair is bidirectional (see sensors -> inputs below).
+                            #   Structural: the Input model exposes calibration/sensor types.
+                            # was inside inputs/ (1 site(s))
+outputs -> (root)           # was outputs -> (root) (32; now from action_broadcaster.cpp, alarm_broadcaster.cpp, display_grid.cpp, display_manager.h, lcd_pcf8574.cpp, live_value_broadcaster.cpp, oled_sh1107.cpp, output_alarm.cpp, output_can.cpp, output_elm327.cpp, output_manager.cpp, output_realdash.cpp, output_sdlog.cpp, output_serial.cpp, status_broadcaster.cpp):
+                            #   #401 -- output modules read config.h; 4 BLE broadcasters
+                            #   (action/alarm/status/live_value_broadcaster.cpp) extern-declare
+                            #   `extern MuxTransport hwSerial1;`, defined in main.cpp:80-91 --
+                            #   invisible to include-graph analysis, found only via extern parsing.
+                            # was drivers -> (root) (1; now from rgb_led.h):
+                            #   #401 -- bus/serial drivers read config.h.
+                            # was comms -> (root) (1; now from elm327_framed.cpp):
+                            #   #401 -- transport code reads config.h.
+outputs -> buses            # was outputs -> drivers (5; now from display_grid.cpp, lcd_pcf8574.cpp, oled_sh1107.cpp, output_can.cpp, output_elm327.cpp):
+                            #   #401 -- display/RGB-adjacent outputs touch drivers.
+                            # was drivers -> pinctrl (2; now from rgb_led.cpp):
+                            #   #401 -- bus_manager/serial_manager claim pins via pin_owner.
+                            # was outputs -> pinctrl (1; now from output_alarm.cpp):
+                            #   #401 -- display_grid checks pin ownership before driving the LCD.
+outputs -> config           # was outputs -> storage (10; now from action_broadcaster.cpp, alarm_broadcaster.cpp, display_grid.cpp, display_manager.cpp, output_alarm.cpp, output_base.h, output_can.cpp, output_elm327.cpp, output_sdlog.cpp, status_broadcaster.cpp):
+                            #   #401 -- outputs read system_config for enable flags/intervals.
+outputs -> core             # was outputs -> core (27; now from display_grid.cpp, display_manager.cpp, obd_query.cpp, output_alarm.cpp, output_can.cpp, output_elm327.cpp, output_manager.cpp, output_realdash.cpp, output_sdlog.cpp, output_serial.cpp, status_broadcaster.cpp):
+                            #   #401 -- output modules are wide consumers of core/message_api.
+                            # was drivers -> core (2; now from rgb_led.cpp):
+                            #   #401 -- drivers use core/message_api and logging.
+outputs -> hal              # was outputs -> hal (1; now from output_can.cpp):
+                            #   #401 -- output_can.cpp calls the CAN HAL.
+outputs -> inputs           # was outputs -> inputs (22; now from action_broadcaster.cpp, alarm_broadcaster.cpp, display_grid.cpp, live_value_broadcaster.cpp, obd_answer.cpp, obd_encode.cpp, obd_query.cpp, output_alarm.cpp, output_alarm.h, output_base.h, output_can.cpp, output_elm327.cpp, output_elm327.h, output_manager.cpp, output_sdlog.cpp, status_broadcaster.cpp):
+                            #   #401 -- every output module takes Input* -- the same shape of
+                            #   coupling as sensors -> inputs and inputs -> sensors.
+outputs -> rules            # was outputs -> rules (7; now from action_broadcaster.cpp, alarm_broadcaster.cpp, output_alarm.cpp, status_broadcaster.cpp):
+                            #   #401 -- alarm/status outputs read rules-engine state.
+outputs -> sensors          # was outputs -> sensors (16; now from display_grid.cpp, live_value_broadcaster.cpp, obd_answer.cpp, obd_encode.cpp, obd_encode.h, output_base.h, output_elm327.cpp, output_sdlog.cpp, output_serial.cpp):
+                            #   #401 -- outputs format sensor-calibrated values.
+                            # was outputs -> inputs (1; now from output_can.cpp):
+                            #   #401 -- every output module takes Input* -- the same shape of
+                            #   coupling as sensors -> inputs and inputs -> sensors.
+outputs -> transports       # was outputs -> comms (8; now from action_broadcaster.cpp, alarm_broadcaster.cpp, live_value_broadcaster.cpp, status_broadcaster.cpp):
+                            #   #401 -- ELM327/CAN/BLE outputs use the framed transport layer.
+                            # was inside comms/ (2 site(s))
+                            # was outputs -> storage (2; now from output_sdlog.cpp):
+                            #   #401 -- outputs read system_config for enable flags/intervals.
+rules -> (root)             # was rules -> (root) (1; now from rules_engine.cpp):
+                            #   #401 -- rules_manager reads config.h.
+rules -> buses              # was rules -> pinctrl (2; now from rules_manager.cpp):
+                            #   #401 -- Action targets claim pins via pin_owner.
+rules -> config             # was rules -> storage (1; now from rules_manager.cpp):
+                            #   #401 -- named by #401 directly (storage -> rules is the reverse
+                            #   edge -- control_json includes rules_types.h): rules persist via
+                            #   the shared config-store arena in storage/.
+rules -> core               # was rules -> core (2; now from rules_manager.cpp):
+                            #   #401 -- rules_manager uses core/message_api and logging.
+rules -> inputs             # was rules -> inputs (1; now from rules_manager.cpp):
+                            #   #401 -- named by #401 directly: the rules engine evaluates
+                            #   conditions against inputs[].
+rules -> sensors            # was rules -> sensors (1; now from rules_manager.cpp):
+                            #   #401 -- rules reference sensor/application registries for conditions.
+sensors -> (root)           # was sensors -> (root) (23; now from aem_calibrations.h, beta.cpp, bme280.cpp, direct.cpp, divider.cpp, float_switch.cpp, generic_calibrations.h, hall_speed.cpp, linear_sensor.cpp, max31855.cpp, max6675.cpp, nxp_calibrations.h, polynomial.cpp, sensor_calibration_data.h, sensor_library.cpp, sensor_read.cpp, steinhart.cpp, system_calibrations.h, table.cpp, thermocouple_common.cpp, w_phase.cpp):
+                            #   #401 -- sensor drivers/tables read config.h.
+                            # was test -> (root) (3; now from test_mode.cpp, test_scenarios.h, test_value_generator.cpp):
+                            #   #401 -- test-mode scaffolding reads config.h.
+sensors -> buses            # was sensors -> drivers (3; now from bme280.cpp, max31855.cpp, max6675.cpp):
+                            #   #401 -- CAN sensor drivers touch bus_manager.
+                            # was inputs -> storage (1; now from input_can.cpp):
+                            #   #401 -- input_manager reads/writes system_config, json_config.
+                            # was inputs -> drivers (1; now from input_can.cpp):
+                            #   #401 -- input_manager touches bus_manager for sensor buses.
+                            # was sensors -> storage (1; now from sensor_helpers.h):
+                            #   #401 -- sensor registry lookups read system_config.
+sensors -> config           # was inputs -> storage (1; now from input_can.cpp):
+                            #   #401 -- input_manager reads/writes system_config, json_config.
+                            # was sensors -> storage (1; now from bme280.cpp):
+                            #   #401 -- sensor registry lookups read system_config.
+sensors -> core             # was sensors -> core (35; now from application_presets.h, beta.cpp, bme280.cpp, can_scan.cpp, direct.cpp, divider.cpp, float_switch.cpp, hall_speed.cpp, linear_sensor.cpp, max31855.cpp, max6675.cpp, polynomial.cpp, sensor_categories.h, sensor_helpers.h, sensor_library.h, sensor_read.cpp, sensor_utils.h, steinhart.cpp, table.cpp, thermocouple_common.cpp, units_registry.h, w_phase.cpp):
+                            #   #401 -- sensor drivers are wide consumers of core/message_api
+                            #   and logging (23 driver files, largest single -> core pair).
+                            # was inputs -> core (2; now from input_can.cpp):
+                            #   #401 -- input_manager uses core/message_api and logging.
+                            # was test -> core (2; now from test_mode.cpp):
+                            #   #401 -- test_mode uses core/message_api and logging.
+sensors -> hal              # was inputs -> hal (1; now from input_can.cpp):
+                            #   #401 -- input_can.h reaches the CAN HAL directly.
+sensors -> inputs           # was sensors -> inputs (23; now from application_presets.h, beta.cpp, bme280.cpp, can_read.cpp, direct.cpp, divider.cpp, float_switch.cpp, hall_speed.cpp, hall_speed.h, linear_sensor.cpp, max31855.cpp, max6675.cpp, polynomial.cpp, sensor_library.h, sensor_read.cpp, sensor_types.h, sensor_utils.h, steinhart.cpp, table.cpp, thermocouple_common.cpp, w_phase.cpp):
+                            #   #401 -- named by #401 directly: 23 include sites, sensor
+                            #   drivers take Input* as their read-function argument. Structural,
+                            #   not drift -- this is the shape #401's own "sensors/" section
+                            #   describes (tables, calibration data, drivers/, sensor_read.cpp).
+                            # was test -> inputs (3; now from test_mode.cpp, test_mode.h):
+                            #   #401 -- test mode substitutes Input read functions.
+                            # was inside inputs/ (1 site(s))
+transports -> (root)        # was storage -> (root) (2; now from sd_manager.cpp, sd_manager.h):
+                            #   #401 -- system_config/json_config read config.h.
+                            # was comms -> (root) (1; now from transport_mux.cpp):
+                            #   #401 -- transport code reads config.h.
+transports -> buses         # was storage -> drivers (1; now from sd_manager.cpp):
+                            #   #401 -- bus_needs.cpp reads bus_manager state.
+                            # was storage -> pinctrl (1; now from sd_manager.cpp):
+                            #   #401 -- system_config persists wired-bus declarations pin_registry reads.
+transports -> config        # #612 -- the move split a folder; these sites are unchanged.
+                            # was inside storage/ (1 site(s))
+transports -> core          # was storage -> core (4; now from sd_manager.cpp):
+                            #   #401 -- storage is a wide consumer of core/message_api/logging.
+                            # was comms -> core (4; now from transport_ble_esp32.h, transport_bluetooth_esp32.h, transport_mux.h):
+                            #   #401 -- transport_mux.h and the ESP32 transports include
+                            #   core/transport_interface.h and core/watchdog.h
+                            #   (message_router itself moved into core/ in #418).
+                            # was inside core/ (2 site(s))
+transports -> outputs       # #612 -- the move split a folder; these sites are unchanged.
+                            # was inside comms/ (1 site(s))

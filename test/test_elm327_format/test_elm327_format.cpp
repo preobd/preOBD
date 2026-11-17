@@ -1,4 +1,4 @@
-// Native unit test: ELM327 text of a Mode 01 answer (src/outputs/elm327_format.cpp, #516).
+// Native unit test: ELM327 text of a Mode 01 answer (src/outputs/formats/elm327_format.cpp, #516).
 //
 // 0x70 boost and 0x78 EGT answers are longer than one CAN frame; an ELM327
 // client (Torque over BLE) expects them printed the way a real ELM327 prints
@@ -6,7 +6,7 @@
 #include <unity.h>
 #include <string.h>
 
-#include "../../src/outputs/elm327_format.cpp"
+#include "../../src/outputs/formats/elm327_format.cpp"
 
 void setUp(void) {}
 void tearDown(void) {}

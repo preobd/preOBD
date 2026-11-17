@@ -8,7 +8,7 @@
 #include "../sensors/units_registry.h"
 #include "../sensors/can_sensor_library/standard_pids.h"
 #include "input.h"
-#include "can_poll.h"   // isObdResponseId
+#include "../sensors/can/can_poll.h"   // isObdResponseId
 
 bool sensorMatchesApplication(uint8_t sensorIndex, uint8_t applicationIndex) {
     // "Nothing is paired yet" — SENSOR_NONE / APP_NONE. There is genuinely no

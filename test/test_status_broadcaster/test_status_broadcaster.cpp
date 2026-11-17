@@ -1,4 +1,4 @@
-// Native unit test: StatusBroadcaster (src/outputs/ble/status_broadcaster.cpp).
+// Native unit test: StatusBroadcaster (src/outputs/applink/status_broadcaster.cpp).
 //
 // Every status push is a PAIR on the wire: the 8-byte PreobdStatusExt (frame
 // 0x07) immediately followed by the 32-byte PreobdSystemStatus (0x03), which
@@ -12,7 +12,7 @@
 #include <string.h>
 
 #include "boot_order_fixture.h"  // inputsTableIsLiveForAssert() stub (#352, #369)
-#include "../../src/outputs/ble/status_broadcaster.cpp"
+#include "../../src/outputs/applink/status_broadcaster.cpp"
 #include "../../src/core/config_generation.cpp"
 
 // ---- Globals / collaborators the broadcaster TU expects ----

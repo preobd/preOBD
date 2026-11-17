@@ -8,11 +8,11 @@
 
 #include <string.h>
 #include <math.h>
-#include "../storage/system_config.h"
+#include "../config/system_config.h"
 #include "../inputs/input_manager.h"
 #include "../sensors/application_presets.h"
-#include "../pinctrl/pin_registry.h"
-#include "../pinctrl/pin_owner.h"
+#include "../buses/pinctrl/pin_registry.h"
+#include "../buses/pinctrl/pin_owner.h"
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
 

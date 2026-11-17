@@ -5,10 +5,10 @@ name: Docs check
 
 on:
   pull_request:
-    paths: ["README.md", "docs/**", "src/cli/**", "src/sensors/**", "src/outputs/output_manager.cpp", "tools/check_docs.py"]
+    paths: ["README.md", "docs/**", "src/console/**", "src/sensors/**", "src/outputs/table/output_manager.cpp", "tools/check_docs.py"]
   push:
     branches: ["main"]
-    paths: ["README.md", "docs/**", "src/cli/**", "src/sensors/**", "src/outputs/output_manager.cpp", "tools/check_docs.py"]
+    paths: ["README.md", "docs/**", "src/console/**", "src/sensors/**", "src/outputs/table/output_manager.cpp", "tools/check_docs.py"]
 
 permissions:
   contents: read

@@ -21,12 +21,41 @@ preOBD/
 │       ├── board.ini           # PlatformIO [env:<board>] fragment
 │       └── wiring.ini.example  # ⭐ Copy to wiring.ini: YOUR pin assignments
 │
-├── src/                        # Firmware source
-│   ├── main.cpp                # Setup and main loop
+├── src/                        # Firmware source, one folder per layer (src/README.md)
+│   ├── main.cpp                # Setup, and loop() calling the layers in order
 │   ├── config.h                # ⭐ APPLICATION CONSTANTS (timing, thresholds, units)
 │   ├── version.h / .cpp        # Firmware version
 │   │
-│   ├── cli/                    # Serial command interface
+│   ├── sensors/                # ACQUIRE: sensor library and drivers
+│   │   ├── sensor_library/     # Sensor definitions (sensors/*.h, one file per category)
+│   │   ├── sensor_calibration_data/  # Calibration tables by manufacturer
+│   │   ├── can_sensor_library/ # Standard OBD-II PID table
+│   │   ├── drivers/            # Read functions by type (thermistors/, pressure/, rpm/, ...)
+│   │   ├── can/                # CAN input: frame reception, polling, scan, CAN readers
+│   │   ├── simulate/           # Test mode (simulated sensors)
+│   │   ├── application_presets.*  # Applications (CHT, OIL_PRESSURE, ...)
+│   │   ├── units_registry.*    # Units
+│   │   ├── sensor_read.cpp     # Central read dispatcher
+│   │   └── generated/          # Auto-generated registry enums
+│   │
+│   ├── inputs/                 # STATE: the Input model and value table
+│   │   ├── input.h             # Input struct
+│   │   ├── input_manager.*     # Configure / enable / clear inputs
+│   │   └── calibration_apply.* # Applying custom calibrations
+│   │
+│   ├── rules/                  # DECIDE: Rules (alarms) and Actions (relays)
+│   ├── outputs/                # DESTINATIONS
+│   │   ├── table/              # Output coordinator
+│   │   ├── formats/            # CAN / OBD-II, ELM327, RealDash, serial CSV, SD logging
+│   │   ├── applink/            # BLE status / alarm / action / live-value broadcasters
+│   │   ├── display/            # Display manager, LCD and OLED drivers
+│   │   └── annunciator/        # Buzzer and RGB LED
+│   │
+│   ├── transports/             # CARRY: framed nRF link, ESP32 Bluetooth, serial stream, SD mount
+│   ├── buses/                  # SHARE: I2C/SPI/CAN/UART bring-up, which buses the config needs
+│   │   └── pinctrl/            # Pin registry and ownership
+│   ├── hal/                    # CHIP: hardware abstraction (CAN controllers, watchdog)
+│   ├── console/                # Serial command interface and the button
 │   │   ├── command_table.cpp   # Top-level command table and single-screen commands
 │   │   ├── cmd_set.cpp         # SET command
 │   │   ├── cmd_rule.cpp        # RULE command
@@ -36,42 +65,8 @@ preOBD/
 │   │   ├── cmd_system.cpp      # SYSTEM command
 │   │   ├── command_helpers.*   # Parsing and HELP text
 │   │   └── serial_config.*     # Line input / embedded-cli glue
-│   │
-│   ├── inputs/                 # The Input model
-│   │   ├── input.h             # Input struct
-│   │   ├── input_manager.*     # Configure / enable / clear inputs
-│   │   ├── input_can.*         # CAN input bus (frame reception)
-│   │   └── calibration_apply.* # Applying custom calibrations
-│   │
-│   ├── sensors/                # Sensor library and drivers
-│   │   ├── sensor_library/     # Sensor definitions (sensors/*.h, one file per category)
-│   │   ├── sensor_calibration_data/  # Calibration tables by manufacturer
-│   │   ├── can_sensor_library/ # Standard OBD-II PID table
-│   │   ├── drivers/            # Read functions by type (thermistors/, pressure/, rpm/, ...)
-│   │   ├── application_presets.*  # Applications (CHT, OIL_PRESSURE, ...)
-│   │   ├── units_registry.*    # Units
-│   │   ├── sensor_read.cpp     # Central read dispatcher
-│   │   └── generated/          # Auto-generated registry enums
-│   │
-│   ├── rules/                  # Control engine: Rules (alarms) and Actions (relays)
-│   ├── outputs/                # Output modules
-│   │   ├── output_manager.cpp  # Output coordinator
-│   │   ├── output_can.cpp      # CAN / OBD-II
-│   │   ├── output_elm327.cpp   # ELM327 emulation
-│   │   ├── output_realdash.cpp # RealDash
-│   │   ├── output_serial.cpp   # Serial CSV
-│   │   ├── output_sdlog.cpp    # SD card logging
-│   │   ├── output_alarm.cpp    # Buzzer / LED annunciation
-│   │   ├── ble/                # BLE status / alarm / action / live-value broadcasters
-│   │   └── display/            # Display manager + 20x4 LCD driver
-│   │
-│   ├── storage/                # EEPROM config store, JSON import/export, SD
-│   ├── core/                   # Messaging, logging, system mode, platform, watchdog
-│   ├── comms/                  # Framed BLE-coprocessor protocol, transports
-│   ├── drivers/                # Bus manager, button, RGB LED, serial ports
-│   ├── hal/                    # Hardware abstraction (CAN controllers, watchdog)
-│   ├── pinctrl/                # Pin registry and ownership
-│   └── test/                   # Test mode (simulated sensors)
+│   ├── config/                 # EEPROM config store, JSON import/export
+│   └── core/                   # Messaging, logging, system mode, platform, watchdog
 │
 ├── nrf_firmware/               # Firmware for the optional nRF52840 BLE coprocessor
 ├── webapp/                     # Web Bluetooth configuration page
@@ -186,7 +181,7 @@ This directory contains the input-based architecture for sensor configuration.
 
 ---
 
-## src/cli/ - Serial Command Interface
+## src/console/ - Serial Command Interface
 
 **command_table.cpp / command_table.h**
 - Serial command processor — the main implementation of all CLI commands
@@ -267,38 +262,38 @@ Also here: `message_api.*` (user-facing output), `log_filter.*` / `log_tags.h`
 
 ## src/outputs/ - Output Modules
 
-**output_base.h**
+**table/output_base.h**
 - Output module interface
 - Common output functions
 - **Edit:** RARELY
 
-**output_manager.cpp**
+**table/output_manager.cpp**
 - Coordinates all output modules
 - Schedules output updates
 - **Edit:** RARELY (when adding new output types)
 
-**output_can.cpp**
+**formats/output_can.cpp**
 - CAN bus output (OBDII PIDs)
 - MCP2515 or FlexCAN support
 - **Edit:** RARELY
 
-**output_elm327.cpp**
+**formats/output_elm327.cpp**
 - ELM327 protocol emulation (for Bluetooth OBD adapters)
 - **Edit:** RARELY
 
-**output_realdash.cpp**
+**formats/output_realdash.cpp**
 - RealDash mobile app protocol
 - **Edit:** RARELY
 
-**output_serial.cpp**
+**formats/output_serial.cpp**
 - Serial CSV output
 - **Edit:** SOMETIMES (to customize format)
 
-**output_sdlog.cpp**
+**formats/output_sdlog.cpp**
 - SD card data logging
 - **Edit:** SOMETIMES (to customize format)
 
-**output_alarm.cpp**
+**annunciator/output_alarm.cpp**
 - Alarm hardware control (buzzer, LED)
 - Reads alarm states from inputs
 - **Edit:** RARELY
@@ -326,7 +321,7 @@ Also here: `message_api.*` (user-facing output), `log_filter.*` / `log_tags.h`
 
 ---
 
-## src/test/ - Test Mode System
+## src/sensors/simulate/ - Test Mode System
 
 This directory contains the comprehensive test mode system for testing outputs without physical sensors.
 
@@ -486,19 +481,16 @@ This directory contains the comprehensive test mode system for testing outputs w
 
 **Directory purposes:**
 - **src/** - Main program files (main.cpp, config.h, version.h)
-- **src/inputs/** - All input and sensor reading functionality
-- **src/sensors/** - Sensor tables, calibration data and sensor drivers
-- **src/core/** - Shared primitives (messaging, logging, platform, watchdog)
-- **src/hal/** - Per-MCU abstraction and platform fact tables
-- **src/pinctrl/** - Pin ownership and registry
-- **src/drivers/** - Peripheral drivers (bus manager, serial, LED, button)
-- **src/comms/** - Transports, framing and message routing
-- **src/storage/** - Persisted configuration (EEPROM, JSON, SD)
-- **src/cli/** - Command-line interface
+- **src/sensors/** - Sensor tables, calibration data, sensor drivers, CAN input (`can/`) and test mode (`simulate/`)
+- **src/inputs/** - The Input model and value table
 - **src/rules/** - Rules engine
-- **src/outputs/** - Output module implementations (CAN, serial, SD, etc.)
-- **src/outputs/display/** - Display driver implementations (LCD, future OLED/TFT)
-- **src/test/** - Test mode system for bench testing without sensors
+- **src/outputs/** - Outputs: the output table, formats (CAN, serial, SD, ELM327, RealDash), and the built-in app link, display and annunciator
+- **src/transports/** - What carries an output's or the console's bytes: framed link, Bluetooth, serial stream, SD mount
+- **src/buses/** - Shared bus bring-up (I2C, SPI, CAN, UARTs) and pin ownership (`pinctrl/`)
+- **src/hal/** - Per-MCU abstraction and platform fact tables
+- **src/console/** - Command-line interface and the button
+- **src/config/** - Persisted configuration (EEPROM, JSON)
+- **src/core/** - Shared primitives (messaging, logging, platform, watchdog)
 - **docs/** - All user and developer documentation
 
 **Best practices:**

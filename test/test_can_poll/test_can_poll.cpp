@@ -1,4 +1,4 @@
-// Native unit test: OBD-II Mode 01 request pacing (src/inputs/can_poll.h, #476).
+// Native unit test: OBD-II Mode 01 request pacing (src/sensors/can/can_poll.h, #476).
 //
 // CAN input used to be passive only, so an imported PID read NaN unless
 // another tester polled the ECU. Pins the request frame, the ECU addressing
@@ -6,8 +6,8 @@
 #include <unity.h>
 #include <Arduino.h>
 
-#include "../../src/inputs/can_poll.h"
-#include "../../src/inputs/can_frame_parse.h"
+#include "../../src/sensors/can/can_poll.h"
+#include "../../src/sensors/can/can_frame_parse.h"
 
 void setUp(void) {}
 void tearDown(void) {}

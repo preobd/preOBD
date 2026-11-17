@@ -1,4 +1,4 @@
-// Native unit test: OBD-II output encoding by PID (src/outputs/obd_encode.cpp,
+// Native unit test: OBD-II output encoding by PID (src/outputs/formats/obd_encode.cpp,
 // src/sensors/can_sensor_library/obd_output_pids.cpp, #516).
 //
 // The output chose its encoding by measurement type, so standard PIDs went
@@ -18,7 +18,7 @@
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"
 #include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"
-#include "../../src/outputs/obd_encode.cpp"
+#include "../../src/outputs/formats/obd_encode.cpp"
 
 void setUp(void) {}
 void tearDown(void) {}

@@ -4,7 +4,7 @@
 
 #include "display_manager.h"
 
-#include "../../storage/system_config.h"
+#include "../../config/system_config.h"
 #include "../../core/message_api.h"
 #include "../../core/log_tags.h"
 
