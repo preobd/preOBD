@@ -120,9 +120,9 @@ Pattern: `OUTPUT <id> <action> [parameters]` — see [Output Configuration](#out
 
 ```
 OUTPUT LIST                # The outputs, their ids, and the built-in outputs
-OUTPUT 0 ENABLE            # Turn on output 0 (OBD on the CAN output bus)
-OUTPUT 3 INTERVAL 1000     # One SD log row per second (output 3: CSV on SD)
-SET A0 ROUTE 2 DISABLE     # Don't send A0 to output 2
+OUTPUT ADD CSV SD          # Add an output: prints its id (say 3)
+OUTPUT 3 INTERVAL 1000     # One SD log row per second
+SET A0 ROUTE 3 DISABLE     # Don't send A0 to output 3
 ```
 
 ### System Commands
@@ -182,8 +182,8 @@ Each output has its own on/off, interval and options — see
 
 **Example:**
 ```
-OUTPUT 0 ENABLE
-OUTPUT 1 INTERVAL 50      # output 1, RealDash, at 50 ms (faster)
+OUTPUT 1 ENABLE           # an output's id is in OUTPUT LIST
+OUTPUT 2 INTERVAL 50      # a RealDash output at 50 ms (faster)
 ```
 
 **Note:** `SYSTEM UNITS` is what an input starts in when its application is
@@ -535,12 +535,12 @@ See **[Alarm System Guide](../guides/configuration/ALARM_SYSTEM_GUIDE.md)** for 
 ## Output Configuration
 
 An **output** is a *format* on a *transport*: OBD-II answers on a CAN bus,
-CSV lines on USB, CSV rows in a file on the SD card. Each has an **id**, and
-each input is **routed** to the outputs it should go to.
+CSV lines on USB, RealDash frames on a serial port, CSV rows in a file on the
+SD card. Each has an **id**, and each input is **routed** to the outputs it
+should go to.
 
 The **built-in outputs** — the alarm (buzzer and LED), the display and the app
 link over BLE — are always there, take no routes and aren't added or deleted.
-ELM327 over BLE (for phone OBD apps) is an output like the others: id 5.
 
 ### Listing and changing outputs
 
@@ -550,38 +550,51 @@ OUTPUT <id>                           # One output and the inputs routed to it (
 OUTPUT ADD <format> <transport> [INTERVAL <ms>] [LONG|WIDE]
 OUTPUT <id> ENABLE | DISABLE
 OUTPUT <id> INTERVAL <ms>             # RealDash 50-60000 ms, CSV 100-60000 ms (CSV on SD 1-60000 ms)
+OUTPUT <id> TRANSPORT <transport>     # Move it to another transport of the same kind
 OUTPUT <id> CSV LONG | WIDE           # The CSV output on SD
 OUTPUT DEL <id>                       # Remove it, and every route to it
 ```
 
-Formats: `CSV`, `REALDASH`, `OBD`, `ELM327`. Only the push formats (CSV,
-REALDASH) have an interval; OBD and ELM327 answer requests as they arrive, so
-`INTERVAL` on them is refused, as is a value outside the output's range. The
-CSV and RealDash floors are what a 115200-baud link (a UART or the Bluetooth
-bridge) carries with about 20 inputs. `OUTPUT ADD` turns the new output on
-and routes every input to it; `SAVE` keeps it.
+`OUTPUT ADD` takes the lowest free id, turns the new output on and routes every
+input to it; the id stays the output's until `OUTPUT DEL` frees it. `SAVE`
+keeps the table. A board holds up to `MAX_OUTPUTS` outputs (8; 2 on the Mega).
 
-### Ids and transports in this firmware
+Only the push formats (CSV, REALDASH) have an interval; OBD and ELM327 answer
+requests as they arrive, so `INTERVAL` on them is refused, as is a value
+outside the format's range. The CSV and RealDash floors are what a 115200-baud
+link (a UART or the Bluetooth bridge) carries with about 20 inputs.
 
-This firmware has one output of each format and transport kind, so each has
-a fixed id. `OUTPUT ADD` names the transport. OBD and ELM327 bind to the one
-you name at once; to move one, `OUTPUT DEL` it and add it again. On a fresh
-config OBD and the serial ELM327 exist with no transport (`NONE`): `OUTPUT ADD`
-binds it, and `OUTPUT <id> ENABLE` is refused until it has one it can run on
-(OBD needs its bus on and not `LISTEN`).
+`OUTPUT <id> TRANSPORT` keeps the id and the routes: `CAN1` to `CAN2`,
+`SERIAL2` to `SERIAL5`, `USB` to `SERIAL1`. A different kind of transport (a
+stream to `SD`) is `OUTPUT DEL` and `OUTPUT ADD`.
 
-| Id | Output | Transport | Notes |
-|----|--------|-----------|-------|
-| 0 | `OBD` — answers OBD-II scan tools and gauges | a CAN bus (`CAN1`–`CAN3`) | The bus must be on and not `LISTEN` (`BUS CAN <bus> ENABLE`) |
-| 1 | `REALDASH` — RealDash frames | the data stream (`USB`, `SERIAL<n>`) | `TRANSPORT DATA <transport>` moves the stream |
-| 2 | `CSV` — CSV lines | the data stream | as RealDash |
-| 3 | `CSV` on `SD` — a log file | the SD card | — |
-| 4 | `ELM327` — ELM327 emulator on a serial port | `SERIAL1`–`SERIAL8` | The port must be enabled (`BUS SERIAL <n> ENABLE`), not framed and not a `TRANSPORT` port |
-| 5 | `ELM327` over BLE — phone OBD apps (Torque, OBD Fusion) | `BLE` | Needs the nRF coprocessor on a framed port (`BUS SERIAL <n> FRAMED ENABLE`) |
+### Formats and transports
 
-RealDash and CSV on the stream share it, so they go to the same transport.
+| Format | Transports | Notes |
+|--------|------------|-------|
+| `CSV` | `USB`, `SERIAL1`–`SERIAL8`, `ESP32_BT`, or `SD` (a log file) | On a stream, it may share the console's transport; quiet in CONFIG mode |
+| `REALDASH` | `USB`, `SERIAL1`–`SERIAL8`, `ESP32_BT` | Binary frames: needs the stream to itself |
+| `OBD` | `CAN1`–`CAN3` | Answers OBD-II scan tools and gauges. The bus must be on and not `LISTEN` (`BUS CAN <bus> ENABLE`) |
+| `ELM327` | `SERIAL1`–`SERIAL8`, or `BLE` | An ELM327 emulator for phone OBD apps (Torque, OBD Fusion). On a serial port it needs the port to itself; `BLE` needs the nRF coprocessor on a framed port |
+
+**One format per stream.** A stream can't tell formats apart, so two enabled
+outputs never share one. CSV may share its stream with the console and the
+log; RealDash and ELM327 need the stream to themselves: no console, no log, no
+other output. The framed nRF link's port carries the console and ELM327 over
+BLE, never a raw stream output. Disabled outputs may coexist; they are checked
+when enabled. Each refusal says what to move (`CONSOLE TRANSPORT`, `LOG
+TRANSPORT`, `OUTPUT <id> TRANSPORT`).
+
+There is one `OBD` output, one `CSV` on `SD`, one `ELM327` on a serial port and
+one on `BLE`; CSV and RealDash on streams can be several, one per stream.
+
+**Defaults** (a fresh unit, `SYSTEM RESET`): `ELM327` on `BLE`, enabled, when
+the build has the nRF link; `OBD` on the wired CAN bus (`CAN_WIRED_BUS`),
+disabled, when one is declared (enabling it makes the bus ACK). Nothing else:
+add CSV, RealDash or the SD log yourself.
+
 An output that a board's build leaves out (for example SD logging on the
-Mega) isn't listed. See the [Build Configuration Guide](../guides/configuration/BUILD_CONFIGURATION_GUIDE.md)
+Mega) can't be added. See the [Build Configuration Guide](../guides/configuration/BUILD_CONFIGURATION_GUIDE.md)
 for builds with other outputs.
 
 ### Routes
@@ -592,10 +605,10 @@ SET <pin> ROUTE ALL ENABLE|DISABLE    # To every output, or none
 INFO <pin> ROUTE                      # This input's routes
 ```
 
-A new input is routed to every output. OBD and both ELM327 outputs answer
-only the inputs routed to them: an input routed away from output 0 is neither
-answered nor listed as supported on CAN, and the same holds for output 5 and
-a phone app over BLE.
+A new input is routed to every output. OBD and the ELM327 outputs answer only
+the inputs routed to them: an input routed away from the OBD output is neither
+answered nor listed as supported on CAN, and the same holds for ELM327 over
+BLE and a phone app.
 
 ### Examples
 
@@ -609,13 +622,19 @@ OUTPUT ADD OBD CAN1
 BUS SERIAL 2 ENABLE 38400
 OUTPUT ADD ELM327 SERIAL2
 
-# RealDash at 50 ms for smooth gauges
-OUTPUT 1 ENABLE
-OUTPUT 1 INTERVAL 50
+# RealDash on an HC-05 on Serial5, at 50 ms for smooth gauges
+BUS SERIAL 5 ENABLE 115200
+OUTPUT ADD REALDASH SERIAL5 INTERVAL 50
 
-# One SD row per reading, and keep coolant (A2) out of the log
-OUTPUT 3 CSV LONG
+# CSV lines on USB beside the console, and an SD log with one row per reading
+OUTPUT ADD CSV USB INTERVAL 500
+OUTPUT ADD CSV SD LONG
+
+# Keep coolant (A2) out of the SD log (its id from OUTPUT LIST, say 3)
 SET A2 ROUTE 3 DISABLE
+
+# Move the RealDash output to Serial2, keeping its id and routes
+OUTPUT 2 TRANSPORT SERIAL2
 
 # Check
 OUTPUT LIST
@@ -630,20 +649,26 @@ Shows:
 ```
 === Outputs ===
 0: OBD on CAN1 - enabled
-1: REALDASH on USB - enabled, interval 50 ms
-2: CSV on USB - disabled, interval 1000 ms
-3: CSV on SD - enabled, interval 5000 ms, WIDE
-4: ELM327 on SERIAL5 - enabled
-5: ELM327 on BLE - enabled
+1: ELM327 on BLE - enabled
+2: REALDASH on SERIAL5 - enabled, interval 50 ms
+3: CSV on SD - enabled, interval 5000 ms, LONG
+4: CSV on USB - disabled, interval 500 ms
 Built-in (no routes):
   Alarm - enabled
   Display - see DISPLAY STATUS
   App link (BLE)
 ```
 
-An output that was deleted (`OUTPUT DEL`) isn't listed. Output 5 shows
-`(no framed port: BUS SERIAL <n> FRAMED ENABLE)` while no serial port is
-framed, as it needs the nRF coprocessor link.
+An ELM327 output on BLE shows `(no framed port: BUS SERIAL <n> FRAMED ENABLE)`
+while no serial port is framed, as it needs the nRF coprocessor link.
+
+An enabled output shows `, not running` when it couldn't start: its serial
+port or CAN bus isn't up yet, or it no longer fits next to the console, the log
+or the framed port (for example after a `LOAD` moved the console onto its
+stream). It starts by itself once its port or bus comes up (`BUS SERIAL <n>
+ENABLE`, `BUS CAN <bus> ENABLE`), on `LOAD` and `JSON IMPORT`, and on reboot;
+`OUTPUT <id> ENABLE` retries now and prints the reason, as does moving it with
+`OUTPUT <id> TRANSPORT`.
 
 ### SD Logging Status
 
@@ -666,7 +691,7 @@ SYSTEM SD JSON
   - `none`: this board or build has no SD logging (for example a Teensy 4.0 without an SD module wired).
   - `nocard`: no card was found at boot. Cards are only detected at boot, so insert one and restart.
   - `removed`: the card was pulled while logging. Logging has stopped until a restart. Only Teensy boards can detect a pulled card; elsewhere it shows as `error`.
-  - `off`: SD logging is disabled (`OUTPUT 3 ENABLE` turns it on).
+  - `off`: no CSV-on-SD output is enabled (`OUTPUT ADD CSV SD`, or `OUTPUT <id> ENABLE`).
   - `error`: logging stopped after write errors (usually a full or failing card), or no log file could be created.
   - `idle`: enabled but not writing, because preOBD is in CONFIG mode or no input is routed to SD.
   - `logging`: writing rows.
@@ -994,9 +1019,9 @@ OUTPUT ADD ELM327 SERIAL2        # ELM327 answers on Serial2, at once
 SAVE
 ```
 
-**Remove it (the port stays enabled):**
+**Remove it (the port stays enabled; its id is in `OUTPUT LIST`):**
 ```
-OUTPUT DEL 4
+OUTPUT DEL 2
 SAVE
 ```
 
@@ -1050,21 +1075,21 @@ Use BUS SERIAL <port> DISABLE to disable a port
 - I2C and SPI changes take effect on next reboot (use `SYSTEM REBOOT` after `SAVE`); CAN bus changes apply at once
 - All sensors of a type use the selected bus (no per-sensor bus assignment)
 - Bus configuration is saved to EEPROM and included in JSON exports
-- Serial ports can be assigned to TRANSPORT for message routing (see `TRANSPORT` command)
+- A serial port can carry the console or the log (`CONSOLE TRANSPORT`, `LOG TRANSPORT`) or an output (`OUTPUT ADD`)
 - Enabled serial ports register their pins with the pin registry to prevent conflicts
 
 ### ELM327 Serial Emulator
 
 Available on boards whose `board.h` declares `SUPPORTS_ELM327`. The ELM327
-emulator is an output: id 4 on a serial port, id 5 over BLE (see
+emulator is an output, on a serial port or over BLE (see
 [Output Configuration](#output-configuration)).
 
 - `OUTPUT ADD ELM327 SERIAL<n>` binds it to a port; the port must be enabled first (`BUS SERIAL <n> ENABLE <baud>`)
-- One serial port at a time; to move it, `OUTPUT DEL 4` and add it on the other port
-- The port can't be the framed nRF link or carry CONTROL/DATA/DEBUG router traffic; remove the transport assignment first
-- `OUTPUT DEL 4` removes the emulator and leaves the port enabled
+- One serial port at a time; `OUTPUT <id> TRANSPORT SERIAL<m>` moves it, live
+- The port must be its own: not the framed nRF link's, the console's or the log's
+- `OUTPUT DEL <id>` removes the emulator and leaves the port enabled
 - Changes take effect immediately; use `SAVE` to persist across reboots
-- It answers only the inputs routed to it (`SET <pin> ROUTE 4 ENABLE`)
+- It answers only the inputs routed to it (`SET <pin> ROUTE <id> ENABLE`)
 
 For full setup instructions (HM-10 wiring, phone app configuration), see
 [`docs/guides/outputs/DIRECT_BLE_OBD_GUIDE.md`](../guides/outputs/DIRECT_BLE_OBD_GUIDE.md).
@@ -1106,50 +1131,63 @@ See [`BLUETOOTH_HARDWARE_GUIDE.md`](../guides/hardware/BLUETOOTH_HARDWARE_GUIDE.
 
 ---
 
-## Transport Configuration
+## Console and Log
 
-Route control commands, sensor data output, and debug messages to different serial ports. Each message plane (CONTROL/DATA/DEBUG) has a **primary** and an optional **secondary** transport — both receive all output and both are polled for incoming commands.
+The **console** is where commands come in and replies go out; the **log** is
+where diagnostic messages go (filtered by `LOG LEVEL` and `LOG TAG`). Each has
+a **primary** and an optional **secondary** transport. Sensor data is not on
+either: each output has its own transport (see [Output Configuration](#output-configuration)).
 
 ### Commands
 
 ```
-TRANSPORT STATUS                          # Show current transport routing
-TRANSPORT <plane> <transport>             # Set primary transport for plane
-TRANSPORT <plane> <transport> SECONDARY   # Set secondary transport for plane
-TRANSPORT <plane> NONE SECONDARY          # Clear secondary transport
+CONSOLE STATUS                            # The console's and the log's transports (any mode)
+CONSOLE TRANSPORT <transport>             # The console's primary
+CONSOLE TRANSPORT <transport> SECONDARY   # Its secondary (NONE clears it)
+LOG TRANSPORT <transport> [SECONDARY]     # The log's primary / secondary
 ```
 
-**Planes:** `CONTROL`, `DATA`, `DEBUG`
+**Transports:** `USB`, `SERIAL1`–`SERIAL8`, `ESP32_BT`, and `NONE` for a secondary.
+`LIST TRANSPORTS` shows which are up.
 
-**Transports:** `USB_SERIAL`, `SERIAL1`–`SERIAL8`, `ESP32_BT`, `NONE`
+The console reads commands from both of its transports and answers on the one
+a command came from. If neither is usable (a serial port that was turned off),
+it answers on USB, so the CLI stays reachable; a RealDash output on USB pauses
+meanwhile.
 
-Use `LIST TRANSPORTS` to see registered transports and their connection state.
+A stream a RealDash or ELM327 output uses can't carry the console or the log
+(one format per stream). The log stays off the framed nRF link's port, where
+its text would land in the app's replies. The framed port's text channel is
+always part of the console while the port is framed.
 
-### Simultaneous Multi-Port Control
+`SYSTEM RESET` keeps the console and log transports (they are part of the
+link you may be using). Flashing firmware with a new configuration layout
+resets them to USB + Serial1 for the console and USB for the log.
 
-Setting a secondary transport on the CONTROL plane lets two ports share control of the device — useful for keeping a laptop USB session open while also accepting commands from a Bluetooth module or other serial device.
+### Two ports at once
+
+A secondary console transport lets two ports share control: a laptop on USB
+and a Bluetooth module, say.
 
 ```
-BUS SERIAL 7 ENABLE 9600                  # Enable Serial7 (e.g. HM-10 at 9600 baud)
-TRANSPORT CONTROL SERIAL7                 # HM-10 as primary control port
-TRANSPORT CONTROL USB_SERIAL SECONDARY    # Laptop USB stays active alongside it
+BUS SERIAL 7 ENABLE 9600                  # Serial7 (e.g. an HM-10 at 9600 baud)
+CONSOLE TRANSPORT SERIAL7                 # The HM-10 as the console's primary
+CONSOLE TRANSPORT USB SECONDARY           # USB stays a console too
 SAVE
 ```
 
-After this, both ports accept commands and receive all responses. Responses always go to **both** primary and secondary — there is no exclusive ownership.
-
-To revert to USB-only control:
+Back to USB only:
 ```
-TRANSPORT CONTROL USB_SERIAL              # Restore USB as primary
-TRANSPORT CONTROL NONE SECONDARY          # Clear secondary
+CONSOLE TRANSPORT USB
+CONSOLE TRANSPORT NONE SECONDARY
 SAVE
 ```
 
 ### Notes
 
-- Hardware serial ports must be enabled first (`BUS SERIAL <n> ENABLE <baud>`) before they can be assigned as a transport
-- A serial port owned by ELM327 cannot be assigned as a transport; use `OUTPUT DEL 4` first
-- Transport routing is persisted to EEPROM on `SAVE` and restored on boot
+- A serial port must be enabled first (`BUS SERIAL <n> ENABLE <baud>`)
+- A port an output needs to itself (RealDash, ELM327) is refused; the error names the output (`OUTPUT <id> TRANSPORT` or `DISABLE` frees it)
+- The transports are saved with `SAVE` and restored at boot
 
 ---
 
@@ -1385,10 +1423,10 @@ Specific subcommands of mixed parents (read-only verbs only — destructive sibl
 Anything that writes EEPROM, mutates active config, factory-resets, or reboots:
 
 - All `SET *` / `CLEAR`
-- `OUTPUT *`, `DISPLAY *`, `TRANSPORT *`, `BUS *`
+- `OUTPUT *` (but `OUTPUT LIST` / `OUTPUT <id>`), `DISPLAY *`, `CONSOLE TRANSPORT`, `BUS *` (but `BUS CAN [STATUS|JSON]`)
 - `SAVE`, `LOAD`, `JSON`, `REBOOT`
 - `SYSTEM RESET`, `SYSTEM REBOOT`, `SYSTEM SEA_LEVEL`, `SYSTEM UNITS`
-- `LOG LEVEL`
+- `LOG LEVEL`, `LOG TRANSPORT`
 - `RULE ADD|DEL|RESET`, `RULE <id> ...` edits, `ACTION ADD|DEL`, `ACTION <id> RULE|NAME`
 - `ALARM DURATION`, `ALARM SCOPE`
 - `SCAN` (when applicable to the build)
@@ -1511,7 +1549,7 @@ HELP QUICK                       # Show compact command reference
 - `HELP OUTPUT` - Outputs, their ids, and routes
 - `HELP BUS` - I2C / SPI / CAN / serial bus selection
 - `HELP DISPLAY` - Display settings (LCD)
-- `HELP TRANSPORT` - Message routing (control, data, debug messages)
+- `HELP CONSOLE` - Console and log transports (where commands, replies and the log go)
 - `HELP SYSTEM` - System configuration (units, sea level, intervals, diagnostics)
 - `HELP CONFIG` - Persistence and modes (save, load, version)
 - `HELP EXAMPLES` - Worked examples
@@ -1641,8 +1679,8 @@ RUN
 
 ```
 CONFIG
-OUTPUT 3 INTERVAL 1000      # Log a row every second
-OUTPUT 1 INTERVAL 50      # Speed up RealDash (fastest allowed)
+OUTPUT 3 INTERVAL 1000      # The SD log (its id from OUTPUT LIST): a row every second
+OUTPUT 2 INTERVAL 50        # A RealDash output: the fastest allowed
 SAVE
 RUN
 ```

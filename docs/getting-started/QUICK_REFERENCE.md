@@ -218,8 +218,8 @@ See [OBD-II Scanner Guide](../guides/outputs/OBD2_SCANNER_GUIDE.md) for details.
 ### RealDash Dashboard
 
 ```
-OUTPUT 1 ENABLE                     # Output 1: RealDash frames on the data channel (USB or BLE module)
-OUTPUT 2 DISABLE                    # Output 2, CSV, shares that channel
+BUS SERIAL 5 ENABLE 115200          # A Bluetooth module on Serial5
+OUTPUT ADD REALDASH SERIAL5         # RealDash frames to it (the port carries nothing else)
 ```
 
 See [RealDash Setup Guide](../guides/outputs/REALDASH_SETUP_GUIDE.md) for details.

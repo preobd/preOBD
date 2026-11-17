@@ -261,26 +261,32 @@ FLASHMEM void writeApplicationsJson(Print& out) {
 FLASHMEM void writeOutputsJson(Print& out) {
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
-    for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
         if (outputExists(id)) outputToJson(arr.add<JsonObject>(), id);
     }
     WatchdogKickingPrint wdOut(out);
     serializeJson(doc, wdOut);
 }
 
-// The formats this build can add, and the transport kind each uses in this
-// firmware (SYSTEM DUMP REGISTRY JSON "formats"). A deleted output's format
-// is still listed: OUTPUT ADD brings it back.
+// The formats this build can add, each with the kinds of transport it may
+// use (SYSTEM DUMP REGISTRY JSON "formats", #612): "STREAM" (USB, SERIAL<n>,
+// ESP32_BT), "SERIAL" (a serial port only), "CAN", "SD", "BLE". Ids are not a
+// property of a format: OUTPUT ADD assigns them.
 FLASHMEM void writeOutputFormatsJson(Print& out) {
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
-    for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
-        if (!outputIdBuilt(id)) continue;
+    for (uint8_t f = FMT_CSV; f < NUM_FORMATS; f++) {
+        const OutputFormat fmt = (OutputFormat)f;
+        if (!outputFormatBuilt(fmt)) continue;
         JsonObject obj = arr.add<JsonObject>();
-        obj["format"] = outputFormatName(outputFormatOf(id));
-        const OutputTransportKind k = outputKindOf(id);
-        obj["transport"] = k == OTK_CAN ? "CAN" : k == OTK_SD ? "SD" : k == OTK_SERIAL ? "SERIAL" : "STREAM";
-        obj["id"] = id;
+        obj["format"] = outputFormatName(fmt);
+        JsonArray kinds = obj["transports"].to<JsonArray>();
+        if (outputTransportAllowed(fmt, OT_USB)) kinds.add("STREAM");
+        else if (outputTransportAllowed(fmt, OT_SERIAL1)) kinds.add("SERIAL");
+        if (outputTransportAllowed(fmt, OT_CAN1)) kinds.add("CAN");
+        if (outputTransportAllowed(fmt, OT_SD)) kinds.add("SD");
+        if (outputTransportAllowed(fmt, OT_BLE)) kinds.add("BLE");
+        obj["paced"] = outputFormatPaced(fmt);
     }
     WatchdogKickingPrint wdOut(out);
     serializeJson(doc, wdOut);

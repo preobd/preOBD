@@ -9,54 +9,47 @@
 #include "../../sensors/calibration_types.h"
 #include "../../sensors/sensor_library.h"
 #include "../formats/obd_encode.h"
-#include "../../config/system_config.h"  // For OutputID enum
+#include "../../config/system_config.h"
+#include "output_table.h"
+#include <Arduino.h>   // Print
 
-// Output module structure
-typedef struct {
-    const char* name;
-    bool enabled;
-    void (*init)(void);
-    void (*send)(Input*);   // Per-input push, paced by systemConfig.outputInterval[]
-                            // (the only copy, so CLI and JSON IMPORT apply at
-                            // once, #608); nullptr for outputs that own their
-                            // cadence (SD log), answer requests (CAN, ELM327)
-                            // or run every loop (Alarm)
-    void (*update)(void);   // Called each loop iteration
-} OutputModule;
+// ===== The outputs, run from their records (#612 phase 2b-1) =====
+// output_table.h holds the records; this is the part that starts and stops
+// the code behind each one, paces the push formats and prints the table.
 
-// The module table, indexed by OutputID (output_manager.cpp)
-extern OutputModule outputModules[];
+void initOutputModules();          // boot: start every enabled output, and the alarm
+void sendToOutputs(uint32_t now);  // push formats (CSV, RealDash), each on its own timer
+void updateOutputs();              // every loop: answer formats, the SD log, the alarm
 
-// Output module functions
-void initOutputModules();
-void sendToOutputs(uint32_t now);  // Send data to all outputs (time-sliced)
-void updateOutputs();              // Housekeeping (drain buffers, etc.)
-
-// Runtime configuration API
-bool setOutputEnabled(const char* name, bool enabled);
-// Turn each output on or off to match systemConfig.outputEnabled[], through
-// the same path as OUTPUT <id> ENABLE/DISABLE (init on enable, teardown on
-// disable). Only outputs whose state differs are touched, plus an enabled
-// OBD or ELM327 output whose bus or port changed (re-attached). JSON IMPORT
-// and LOAD call it, so changes apply without a reboot (#610, #612).
+// Every output to the state its record asks for, at once: started, stopped,
+// or restarted when its transport changed (JSON IMPORT, LOAD; #610, #612).
 void syncOutputsToConfig();
-uint8_t canOutputAttachedBus();   // the bus the OBD output is attached to, 0xFF if none
-bool setOutputInterval(uint8_t outputId, long interval);  // false unless outputIntervalValid(); nothing changes
-OutputModule* getOutputByName(const char* name);
-int getOutputIndexByName(const char* name);  // OutputID index, or -1 if unknown
 
-// ===== The outputs you add, by id (#612 phase 1, output_table.h) =====
-// Start/stop and print; the table itself (which exist, intervals, names) is
-// output_table.h. Each returns false when there is no output <id>.
-bool outputSetEnabledById(uint8_t id, bool enabled);   // also starts or stops it
-bool outputSetIntervalById(uint8_t id, long ms);       // false: no output, or outputIntervalValid() fails
-bool outputLiveById(uint8_t id);                       // running now
-bool outputAddById(uint8_t id);                        // ADD: routes every input to it and turns it on
-void outputDeleteById(uint8_t id);                     // DEL: turns it off, removes it and its routes
-size_t outputTransportText(uint8_t id, char* buf, size_t n);  // "CAN1", "USB", "SD", "SERIAL2", "NONE"
-void printOutputLabel(uint8_t id);                     // "CSV on USB"
-void listOutputTable();                                // OUTPUT LIST
-bool printOutputDetail(uint8_t id);                    // OUTPUT <id>
+// Changes by id; each returns false when there is no output <id>. They write
+// the record and apply it live. The CLI and JSON IMPORT check admission first
+// (output_admission.h).
+bool    outputSetEnabledById(uint8_t id, bool enabled);  // ENABLE also retries a failed start
+bool    outputSetIntervalById(uint8_t id, long ms);      // false unless outputIntervalValid()
+bool    outputSetTransportById(uint8_t id, uint8_t transport);  // OUTPUT <id> TRANSPORT (same kind)
+bool    outputSetOptionById(uint8_t id, uint8_t option); // CSV on SD: LONG/WIDE
+bool    outputLiveById(uint8_t id);                      // running now
+// ADD: a new record at the lowest free id, every input routed to it, started.
+// OUT_ID_NONE when the table is full.
+uint8_t outputAddRecord(OutputFormat format, uint8_t transport);
+void    outputDeleteById(uint8_t id);                    // DEL: stops it, frees the id and its routes
+
+// The built-in alarm (ALARM ENABLE|DISABLE)
+void setAlarmEnabled(bool enabled);
+
+uint8_t canOutputAttachedBus();    // the bus the OBD output is attached to, 0xFF if none
+
+void printOutputLabel(uint8_t id);   // "CSV on USB"
+void listOutputTable();              // OUTPUT LIST
+bool printOutputDetail(uint8_t id);  // OUTPUT <id>
+
+// ===== Format encoders: one input onto a stream (#612: no data plane) =====
+void sendCsvLine(Input* in, Print& out);       // output_serial.cpp
+void sendRealdashFrame(Input* in, Print& out); // output_realdash.cpp
 
 // ===== OBDII FRAME BUILDING =====
 

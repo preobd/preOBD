@@ -24,7 +24,7 @@
 
 // Use constants to avoid circular dependency with message_router.h
 // These must match MessagePlane enum in message_router.h
-#define MAX_MESSAGE_PLANES 3
+#define MAX_MESSAGE_PLANES 2   // console, log (#612)
 
 // Log level enumeration (increasing verbosity)
 enum LogLevel {

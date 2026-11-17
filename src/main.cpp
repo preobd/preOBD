@@ -28,7 +28,8 @@
 #include "transports/sd_manager.h"
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
-#include "config/input_store.h"  // saveInputConfig/loadInputConfig/inputHoldsPin/storedInputBusNeeds (#402 step 2)
+#include "config/input_store.h"
+#include "outputs/table/output_table.h"   // outputsSeedDefaults (#612)  // saveInputConfig/loadInputConfig/inputHoldsPin/storedInputBusNeeds (#402 step 2)
 #include "console/serial_config.h"
 #include "rules/rules_manager.h"   // Control engine runtime (Rules)
 #include "core/system_mode.h"        // System mode (CONFIG/RUN)
@@ -609,6 +610,9 @@ void setup() {
 
     // Initialize input manager (loads from EEPROM or config.h)
     bool eepromConfigLoaded = initInputManager();
+    // A blank or rejected store has no outputs: start from the defaults
+    // (a runtime LOAD that fails leaves the live table alone, #612)
+    if (!eepromConfigLoaded) outputsSeedDefaults();
 
 #if INCLUDE_RULES_ENGINE
     // Arm Rules from EEPROM now that SystemConfig + inputs are loaded (boot-load).
@@ -634,10 +638,7 @@ void setup() {
     // Called unconditionally so it works even when CAN output is not enabled.
     obdQuery_buildLookupTable();
 
-    // Bind the framed-transport ELM327 channel (type 0x30) to the parser. Uses
-    // the same OBD lookup table just built; no-op stub unless both
-    // INCLUDE_FRAMED_TRANSPORT and INCLUDE_ELM327 are set.
-    Elm327Framed::init();
+    // (ELM327 over BLE starts through its output record in initOutputModules.)
 
     // Wait for sensors to stabilize
     msg.debug.info(TAG_SENSOR, "Waiting for sensors to stabilize...");

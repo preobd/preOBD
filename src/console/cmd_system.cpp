@@ -544,15 +544,15 @@ static void diagSectionHw() {
         msg.control.print(F("OK ("));
         msg.control.print(sdLogFileName());
         msg.control.print(F(", "));
-        msg.control.print(sdLogFormatName(systemConfig.sdLogFormat));
+        const OutputRecord* sd = outputRecord(outputFind(FMT_CSV, OTK_SD));
+        msg.control.print(sdLogFormatName(sd ? sd->option : 0));
         msg.control.print(F(", "));
         msg.control.print((unsigned long)sdLogRowsWritten());
         msg.control.print(F(" rows, "));
         msg.control.print(sdLogWriteErrors());
         msg.control.println(F(" errors)"));
     } else {
-        msg.control.print(F("off (output disabled or no file open), format "));
-        msg.control.println(sdLogFormatName(systemConfig.sdLogFormat));
+        msg.control.println(F("off (no CSV-on-SD output enabled, or no file open)"));
     }
 #endif
 

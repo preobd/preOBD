@@ -28,7 +28,7 @@
 
 #include "command_handlers.h"
 #include "command_helpers.h"
-#include "../outputs/table/output_base.h"   // setOutputEnabled: ALARM ENABLE|DISABLE (#612)
+#include "../outputs/table/output_base.h"   // setAlarmEnabled: ALARM ENABLE|DISABLE (#612)
 #include "../core/system_mode.h"
 #include "../core/message_api.h"
 #include "../config/system_config.h"
@@ -194,7 +194,7 @@ FLASHMEM int cmd_alarm(int argc, const char* const* argv) {
     // Off silences the buzzer and blanks the LED, as it always has.
     if (streq_P(argv[1], PSTR("ENABLE")) || streq_P(argv[1], PSTR("DISABLE"))) {
         const bool on = streq_P(argv[1], PSTR("ENABLE"));
-        setOutputEnabled("Alarm", on);
+        setAlarmEnabled(on);
         msg.control.println(on ? F("Alarm output enabled") : F("Alarm output disabled"));
         printSaveReminder();
         return 0;

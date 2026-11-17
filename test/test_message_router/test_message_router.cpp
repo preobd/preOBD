@@ -68,9 +68,11 @@ static void test_routed_message_skips_unstarted_serial_port(void) {
     MessageRouter r;
     FakeTransport s2;
     r.registerTransport(TRANSPORT_SERIAL2, &s2);
-    r.setTransportUnchecked(PLANE_DATA, TRANSPORT_SERIAL2, false);
-    r.routeMessage(PLANE_DATA, "x");
+    r.setTransportUnchecked(PLANE_DEBUG, TRANSPORT_SERIAL2, false);
+    r.routeMessage(PLANE_DEBUG, "x");
     TEST_ASSERT_EQUAL_INT(0, s2.touches);
+    // A stream output looks its port up the same way (#612): not started, nothing
+    TEST_ASSERT_NULL(r.streamTransport(TRANSPORT_SERIAL2));
 }
 
 // A control plane whose only transport is a disabled serial port falls back
@@ -93,10 +95,60 @@ static void test_control_falls_back_to_usb(void) {
     g_portActive[1] = true;                                       // port started: no fallback
     TEST_ASSERT_EQUAL_PTR(&s1, r.getTransport(PLANE_CONTROL, true));
 
-    // Data and debug planes never fall back.
+    // The log never falls back.
     g_portActive[1] = false;
-    r.setTransportUnchecked(PLANE_DATA, TRANSPORT_SERIAL1, false);
-    TEST_ASSERT_NULL(r.getTransport(PLANE_DATA, true));
+    r.setTransportUnchecked(PLANE_DEBUG, TRANSPORT_SERIAL1, false);
+    TEST_ASSERT_NULL(r.getTransport(PLANE_DEBUG, true));
+
+    // The console's fallback is visible to the outputs: a RealDash output on
+    // USB pauses while the console answers there (#612)
+    r.setTransportUnchecked(PLANE_CONTROL, TRANSPORT_SERIAL1, false);
+    r.setTransportUnchecked(PLANE_CONTROL, TRANSPORT_NONE, true);
+    TEST_ASSERT_TRUE(r.consoleOnUsbFallback());
+    g_portActive[1] = true;
+    TEST_ASSERT_FALSE(r.consoleOnUsbFallback());
+}
+
+// A framed port (the nRF link) is a console source whatever CONSOLE TRANSPORT
+// says, so the app can't be cut off (#612): its bytes reach the CLI even with
+// the console on USB only. An unframed port outside the console is left
+// alone, and an unstarted framed port is never touched.
+class InputFake : public FakeTransport {
+public:
+    uint8_t caps = CAP_HARDWARE_SERIAL;
+    int pending = 0;
+    int available() override { touches++; return pending; }
+    int read() override { touches++; if (pending > 0) { pending--; return 'x'; } return -1; }
+    uint8_t getCapabilities() const override { return caps; }
+};
+static int g_bytes = 0, g_dispatches = 0;
+static void byteSink(char) { g_bytes++; }
+static void dispatchFn() { g_dispatches++; }
+
+static void test_a_framed_port_is_always_a_console_source(void) {
+    MessageRouter r;
+    InputFake usb, s1, s2;
+    s1.caps |= CAP_FRAMED;
+    r.registerTransport(TRANSPORT_USB_SERIAL, &usb);
+    r.registerTransport(TRANSPORT_SERIAL1, &s1);
+    r.registerTransport(TRANSPORT_SERIAL2, &s2);
+    r.setTransportUnchecked(PLANE_CONTROL, TRANSPORT_USB_SERIAL, false);
+    r.setTransportUnchecked(PLANE_CONTROL, TRANSPORT_NONE, true);
+    setCommandSink(byteSink, dispatchFn);
+    g_bytes = g_dispatches = 0;
+
+    s1.pending = 3; s2.pending = 3;
+    r.update();                                  // ports not started: nothing read
+    TEST_ASSERT_EQUAL_INT(0, s1.touches);
+    TEST_ASSERT_EQUAL_INT(0, g_bytes);
+
+    g_portActive[1] = g_portActive[2] = true;
+    r.update();
+    TEST_ASSERT_EQUAL_INT(0, s1.pending);        // the framed port was drained
+    TEST_ASSERT_EQUAL_INT(3, g_bytes);
+    TEST_ASSERT_EQUAL_INT(1, g_dispatches);
+    TEST_ASSERT_EQUAL_INT(3, s2.pending);        // the unframed one was not
+    setCommandSink(nullptr, nullptr);
 }
 
 int main(int, char**) {
@@ -104,5 +156,6 @@ int main(int, char**) {
     RUN_TEST(test_update_skips_unstarted_serial_port);
     RUN_TEST(test_routed_message_skips_unstarted_serial_port);
     RUN_TEST(test_control_falls_back_to_usb);
+    RUN_TEST(test_a_framed_port_is_always_a_console_source);
     return UNITY_END();
 }

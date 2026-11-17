@@ -81,12 +81,20 @@ static void handleCardRemoved();
  * Occupied, enabled, and routed to SD by its per-input mask. sendToOutputs()
  * used to apply the mask for us; now that the logger owns its own cadence
  * (see updateSDLog) it has to apply the mask itself, or
- * `SET <pin> ROUTE 3 DISABLE` would stop working.
+ * `SET <pin> ROUTE <id> DISABLE` would stop working.
  */
+static uint8_t sdLogId = 0xFF;   // the CSV-on-SD output's id: its route bit, interval and layout (#612)
+
 static inline bool logsThisInput(uint8_t slot) {
-    return inputs[slot].pin != 0xFF &&
+    return sdLogId < 8 && inputs[slot].pin != 0xFF &&
            inputs[slot].flags.isEnabled &&
-           (inputs[slot].routeMask & (1 << OUTPUT_SD));
+           (inputs[slot].routeMask & (1u << sdLogId));
+}
+
+// The record's CSV layout (LONG/WIDE) and interval
+static uint8_t sdLogLayout() {
+    const OutputRecord* r = outputRecord(sdLogId);
+    return r ? r->option : (uint8_t)SDLOG_FORMAT_WIDE;
 }
 
 static uint8_t countLoggedInputs() {
@@ -224,7 +232,7 @@ static FLASHMEM void openLogFile() {
 
     // Latch the layout for this file's lifetime — writeHeader() branches on it,
     // and a file cannot hold both layouts.
-    openFileFormat  = systemConfig.sdLogFormat;
+    openFileFormat  = sdLogLayout();
     writeHeader();
     columnSignature = computeColumnSignature();
     logFile.flush();
@@ -359,7 +367,8 @@ static void maybeFlush(uint32_t now) {
     }
 }
 
-FLASHMEM void initSDLog() {
+FLASHMEM void initSDLog(uint8_t id) {
+    sdLogId         = id;
     logRowsWritten  = 0;
     logWriteErrors  = 0;
     logFaulted      = false;
@@ -417,10 +426,11 @@ void updateSDLog() {
     // Honour the configured interval. The old code gated rows on a hardcoded
     // 1000 ms const measured against a timestamp only ever updated inside the
     // 5 s flush branch — which suppressed rows for 1 s after each flush and
-    // capped throughput at ~1 Hz, so OUTPUT 3 INTERVAL did nothing.
+    // capped throughput at ~1 Hz, so the SD output's INTERVAL did nothing.
     // outputIntervalValid() (1-60000 ms) holds for every writer (#608); the
     // 0 guard costs nothing and keeps a future direct write off the hot path
-    uint16_t interval = systemConfig.outputInterval[OUTPUT_SD];
+    const OutputRecord* rec = outputRecord(sdLogId);
+    uint16_t interval = rec ? rec->interval : 0;
     if (interval == 0) interval = SD_LOG_INTERVAL_MS;
 
     if (now - lastRowMs < interval) {
@@ -462,7 +472,7 @@ void updateSDLog() {
 
     if (!logFile) {
         openLogFile();                      // first row of the session
-    } else if (systemConfig.sdLogFormat != openFileFormat) {
+    } else if (sdLogLayout() != openFileFormat) {
         msg.debug.info(TAG_SD, "Log format changed - starting new file");
         openLogFile();
     } else if (openFileFormat == SDLOG_FORMAT_WIDE &&
@@ -508,7 +518,7 @@ uint64_t sdLogBytesWritten()  { return closedFileBytes + (logFile ? (uint64_t)lo
 
 FLASHMEM void sdLogStatusSnapshot(SdStatusSnapshot& out) {
     out.mounted     = isSDInitialized();
-    out.enabled     = systemConfig.outputEnabled[OUTPUT_SD];
+    out.enabled     = outputIsEnabled(outputFind(FMT_CSV, OTK_SD));
     out.configMode  = isInConfigMode();
     // sdMediaKnownGone() as well: re-enabling the output clears the logger's
     // own latch, but the card is still gone (mounts happen at boot only).
@@ -532,7 +542,7 @@ FLASHMEM void sdLogStatusSnapshot(SdStatusSnapshot& out) {
 #else
 
 // Dummy functions if SD logging is disabled
-void initSDLog() {}
+void initSDLog(uint8_t) {}
 void updateSDLog() {}
 void closeSDLog() {}
 

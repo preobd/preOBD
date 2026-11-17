@@ -22,6 +22,7 @@ enum TransportCapabilities {
     CAP_AUTHENTICATED   = 0x08,  // Requires/supports authentication
     CAP_HARDWARE_SERIAL = 0x10,  // Hardware UART (reliable, fast)
     CAP_VIRTUAL         = 0x20,  // Virtual/software serial
+    CAP_FRAMED          = 0x40,  // Framed nRF link: its text channel is always a console source (#612)
 };
 
 // Transport connection state

@@ -155,6 +155,11 @@ RETIRED_FORMS = [
      "BUS CAN <bus> alone no longer selects a bus; use BUS CAN <bus> ENABLE"),
     (re.compile(r'^BUS SERIAL \S+ ELM327\b', re.I),
      "BUS SERIAL <n> ELM327 was removed; use OUTPUT ADD ELM327 SERIAL<n>"),
+    # #612 phase 2b-1: the router's planes became the console and the log
+    (re.compile(r'^TRANSPORT\b'),   # case-sensitive: `transport` is also a JSON key
+     "TRANSPORT was retired; use CONSOLE TRANSPORT / LOG TRANSPORT (CONSOLE STATUS shows both)"),
+    (re.compile(r'^LOG LEVEL (CONTROL|DATA)\b', re.I),
+     "LOG LEVEL CONTROL|DATA were removed; use LOG LEVEL CONSOLE|DEBUG"),
 ]
 VENDOR = re.compile(r'\b(?:VDO|SMITHS|SW|ACDELCO|AC_DELCO|BOSCH|JEEP|GENERIC|MPX|AEM|BME280)_[A-Z0-9_]*[A-Z0-9]\b')
 
@@ -264,9 +269,15 @@ def check_file(cat, path):
                 first = text.split()[0] if text.split() else ""
                 if first in cat["commands"] and len(text.split()) > 1 and re.match(r'^[A-Z<0-9]', text.split()[1]):
                     candidates.append(text)
+                elif any(p.search(text) for p, _ in RETIRED_FORMS):
+                    candidates.append(text)   # a removed command whose first word no longer exists
 
         for text in candidates:
             words = text.split()
+            retired = next((why for p, why in RETIRED_FORMS if p.search(" ".join(words))), None)
+            if retired:
+                problems.append(f"{rel}:{no}: {retired}  | {text[:80]}")
+                continue
             if in_block and words[0].upper() not in cat["commands"] and words[0].upper() not in RETIRED:
                 # Other capitalised lines in code blocks are usually program
                 # output; only flag words that have been mistaken for commands.

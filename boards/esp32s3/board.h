@@ -46,6 +46,7 @@
 
 // ===== SIZING =====
 #define MAX_INPUTS              32
+#define MAX_OUTPUTS             8     // outputs you add (OUTPUT ADD), one route bit each (#612)
 #define MAX_PID_ENTRIES         64
 #define MAX_PIN_REGISTRY        64
 #define MAX_RELAYS              2

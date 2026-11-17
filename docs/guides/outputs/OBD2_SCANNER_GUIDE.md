@@ -148,7 +148,7 @@ once, from the serial console:
 ```
 CONFIG
 BUS CAN CAN1 ENABLE               # the bus your transceiver is wired to (500 kbps by default)
-OUTPUT ADD OBD CAN1               # output 0: answer OBD-II requests on it, at once
+OUTPUT ADD OBD CAN1               # the OBD output: answer OBD-II requests on it, at once
 SAVE
 ```
 
@@ -357,7 +357,7 @@ A PID no table defines gets preOBD's own encoding, with `SET <pin> OBD_LENGTH <1
 - **RealDash** reads its own output: frame `0x0C80`, sent periodically over Bluetooth/USB serial.
 - **Scanners** get OBD-II request/response: preOBD answers on `0x7E8` the way an engine ECU does, and sends nothing on CAN unasked, so a scan tool only ever sees answers to its own requests.
 
-Each input's route to output 0 (OBD) decides whether it's published to OBD-II tools on CAN at all, and its route to output 4 does the same for the ELM327 emulator on a serial port: `SET <pin> ROUTE 0 DISABLE` stops it being answered or advertised.
+Each input's route to the OBD output decides whether it's published to OBD-II tools on CAN at all, and its routes to the ELM327 outputs do the same for the emulator on a serial port or BLE: `SET <pin> ROUTE <id> DISABLE` (the output's id from `OUTPUT LIST`) stops it being answered or advertised.
 
 **Typical setup:**
 - RealDash on tablet (permanent dash)

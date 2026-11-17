@@ -24,7 +24,7 @@
 #include "../../src/buses/pinctrl/pin_owner.cpp"
 #include "../../src/buses/bus_manager.cpp"
 #include "../../src/config/system_config.cpp"
-#include "../../src/outputs/table/output_table.cpp"   // the outputs view (#612)
+#include "../../src/outputs/table/output_table.cpp"   // the stored outputs (#612)
 // resetSystemConfig() resolves default unit names to indices.
 #include "../../src/sensors/units_registry.cpp"
 // saveSystemConfig() holds a WatchdogScope (#541); the HAL is a no-op stub here.
@@ -71,14 +71,16 @@ void tearDown(void) {}
 // 1. calculateChecksum() itself
 // ===========================================================================
 
-static void test_checksum_of_all_zero_config_is_zero(void) {
+// The checksum is the XOR of every byte, seeded with the layout tag (#612
+// phase 2b-1), so an all-zero block sums to the tag alone
+static void test_checksum_of_all_zero_config_is_the_layout_tag(void) {
     SystemConfig cfg;
     memset(&cfg, 0, sizeof(cfg));
-    TEST_ASSERT_EQUAL_HEX8(0x00, calculateChecksum(&cfg));
+    TEST_ASSERT_EQUAL_HEX8(SYSTEM_CONFIG_LAYOUT, calculateChecksum(&cfg));
 }
 
 static void test_checksum_matches_independent_xor_of_defaults(void) {
-    TEST_ASSERT_EQUAL_HEX8(referenceXor(systemConfig), calculateChecksum(&systemConfig));
+    TEST_ASSERT_EQUAL_HEX8((uint8_t)(referenceXor(systemConfig) ^ SYSTEM_CONFIG_LAYOUT), calculateChecksum(&systemConfig));
 }
 
 // The checksum field must be excluded, or a stored block could never verify
@@ -118,7 +120,7 @@ static void test_reset_leaves_a_self_consistent_checksum(void) {
 
 static void test_save_then_load_round_trips(void) {
     systemConfig.seaLevelPressure = 1001.5f;
-    systemConfig.sensorReadInterval = 123;
+    systemConfig.alarmSilence = 0x17;
     systemConfig.checksum = 0;           // stale on purpose: save must recompute
     TEST_ASSERT_TRUE(saveSystemConfig(false));
 
@@ -129,23 +131,6 @@ static void test_save_then_load_round_trips(void) {
     memset(&systemConfig, 0, sizeof(systemConfig));
     TEST_ASSERT_TRUE(loadSystemConfig());
     TEST_ASSERT_EQUAL_MEMORY(&saved, &systemConfig, sizeof(SystemConfig));
-}
-
-// #608: an interval saved before the range check is repaired on load —
-// clamped to the nearest valid value, 0 to the default — for every paced
-// slot; the unpaced ones are left exactly as stored.
-static void test_load_repairs_out_of_range_output_intervals(void) {
-    systemConfig.outputInterval[OUTPUT_REALDASH] = 10;      // valid before #608
-    systemConfig.outputInterval[OUTPUT_SERIAL]   = 0;       // sent every loop
-    systemConfig.outputInterval[OUTPUT_SD]       = 65000;   // above the ceiling
-    systemConfig.outputInterval[OUTPUT_ALARM]    = 7;       // no interval: untouched
-    TEST_ASSERT_TRUE(saveSystemConfig(false));
-    TEST_ASSERT_TRUE(loadSystemConfig());
-    TEST_ASSERT_EQUAL_UINT16(50,                     systemConfig.outputInterval[OUTPUT_REALDASH]);
-    TEST_ASSERT_EQUAL_UINT16(SERIAL_CSV_INTERVAL_MS, systemConfig.outputInterval[OUTPUT_SERIAL]);
-    TEST_ASSERT_EQUAL_UINT16(OUTPUT_INTERVAL_MAX_MS, systemConfig.outputInterval[OUTPUT_SD]);
-    TEST_ASSERT_EQUAL_UINT16(7,                      systemConfig.outputInterval[OUTPUT_ALARM]);
-    resetSystemConfig();   // leave the shared global at factory values
 }
 
 static void test_save_writes_at_the_top_of_eeprom(void) {
@@ -162,10 +147,10 @@ static void test_save_writes_at_the_top_of_eeprom(void) {
 
 // Sentinel so "untouched" is observable: differs from what's in EEPROM.
 static void markLiveConfig(void) {
-    systemConfig.sensorReadInterval = 0xBEEF;
+    systemConfig.logFilter.enabledTags = 0xBEEF;
 }
 static void assertLiveConfigUntouched(void) {
-    TEST_ASSERT_EQUAL_HEX16(0xBEEF, systemConfig.sensorReadInterval);
+    TEST_ASSERT_EQUAL_HEX32(0xBEEF, systemConfig.logFilter.enabledTags);
 }
 
 static void test_blank_eeprom_is_refused(void) {
@@ -213,7 +198,7 @@ static void test_init_falls_back_to_defaults_on_corrupt_store(void) {
     SystemConfig defaults;
     memcpy(&defaults, &systemConfig, sizeof(defaults));
 
-    systemConfig.sensorReadInterval = 777;
+    systemConfig.logFilter.enabledTags = 777;
     saveSystemConfig(false);
     EEPROM.write(eepromByte(CKSUM_OFF), EEPROM.read(eepromByte(CKSUM_OFF)) ^ 0x80);
 
@@ -223,23 +208,36 @@ static void test_init_falls_back_to_defaults_on_corrupt_store(void) {
 }
 
 static void test_init_loads_a_valid_store(void) {
-    systemConfig.sensorReadInterval = 777;
+    systemConfig.logFilter.enabledTags = 777;
     saveSystemConfig(false);
 
     markLiveConfig();
     initSystemConfig();
-    TEST_ASSERT_EQUAL_UINT16(777, systemConfig.sensorReadInterval);
+    TEST_ASSERT_EQUAL_UINT32(777, systemConfig.logFilter.enabledTags);
+}
+
+// #612 phase 2b-1: unreleased layouts share one SYSTEM_CONFIG_VERSION, so the
+// checksum is salted with the layout; an image of another layout (checksum
+// computed without this salt) must load as defaults, not be read field by field
+static void test_an_image_of_another_layout_is_rejected(void) {
+    TEST_ASSERT_TRUE(saveSystemConfig(false));
+    SystemConfig img;
+    memcpy(&img, &systemConfig, sizeof(img));
+    img.checksum = (uint8_t)(calculateChecksum(&img) ^ SYSTEM_CONFIG_LAYOUT ^ 0x2A);   // a different salt
+    EEPROM.put(SYSTEM_CONFIG_ADDRESS, img);
+    TEST_ASSERT_FALSE(loadSystemConfig());
+    resetSystemConfig();
 }
 
 int main(int, char**) {
     UNITY_BEGIN();
-    RUN_TEST(test_checksum_of_all_zero_config_is_zero);
+    RUN_TEST(test_an_image_of_another_layout_is_rejected);
+    RUN_TEST(test_checksum_of_all_zero_config_is_the_layout_tag);
     RUN_TEST(test_checksum_matches_independent_xor_of_defaults);
     RUN_TEST(test_checksum_field_is_excluded);
     RUN_TEST(test_every_other_byte_contributes);
     RUN_TEST(test_reset_leaves_a_self_consistent_checksum);
     RUN_TEST(test_save_then_load_round_trips);
-    RUN_TEST(test_load_repairs_out_of_range_output_intervals);
     RUN_TEST(test_save_writes_at_the_top_of_eeprom);
     RUN_TEST(test_blank_eeprom_is_refused);
     RUN_TEST(test_any_single_corrupted_byte_is_refused);

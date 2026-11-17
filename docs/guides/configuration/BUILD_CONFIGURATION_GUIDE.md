@@ -23,7 +23,7 @@ The prefix on a macro tells you which question it answers:
 |---|---|---|---|
 | `SUPPORTS_X` | *Can this board do X?* | `board.h` | by **presence** — a board that can't omits the line. Never `0`. |
 | `INCLUDE_X` | *Is X's code in the image?* | `resolve.h` only | derived: capability **and** wiring **and** no veto |
-| — | *Is X on right now?* | EEPROM / runtime | `outputEnabled[]`, `displayType`, an I²C probe — never a macro |
+| — | *Is X on right now?* | EEPROM / runtime | an output record's `enabled`, `displayType`, an I²C probe — never a macro |
 
 ```
 INCLUDE_X  ⟺  SUPPORTS_X  AND  (wired, if X needs a pin)  AND  (no PLATFORM_NO_X)
@@ -31,8 +31,8 @@ INCLUDE_X  ⟺  SUPPORTS_X  AND  (wired, if X needs a pin)  AND  (no PLATFORM_NO
 
 `src/` tests only `INCLUDE_*`. It is worth being precise about what that means:
 `#if INCLUDE_REALDASH` says the encoder is **linked in**, while
-`outputEnabled[OUTPUT_REALDASH]` — which defaults to 0 — decides whether frames
-actually go out. A build-time macro cannot answer a runtime question, and
+whether a RealDash output exists and is enabled (`OUTPUT LIST`; there is none
+by default) decides whether frames actually go out. A build-time macro cannot answer a runtime question, and
 treating one as if it could is a classic bug here (e.g. assuming a screen is fitted because the LCD driver is compiled in).
 
 **To make a build smaller, comment a `SUPPORTS_*` line out of `board.h`.** That
@@ -144,11 +144,11 @@ Modular groups in `platformio.ini` (`[display_libs]`, `[can_libs]`,
 ## Output availability: compile-time vs runtime
 
 A feature flag controls whether output code is *compiled in*; once in, outputs
-toggle at runtime via EEPROM:
+are added and switched at runtime and saved to EEPROM:
 
 ```
-OUTPUT 0 ENABLE            # runtime enable (output 0: OBD on CAN)
-OUTPUT 2 INTERVAL 1000     # periodic outputs take an interval (output 2: CSV)
+OUTPUT ADD CSV USB         # an output of a compiled-in format (prints its id)
+OUTPUT 1 INTERVAL 1000     # periodic outputs take an interval (its id from OUTPUT LIST)
 SAVE
 ```
 

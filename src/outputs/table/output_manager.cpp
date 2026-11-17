@@ -1,308 +1,256 @@
 /*
- * output_manager.cpp - Manages all output modules
+ * output_manager.cpp - Runs the outputs from their records (#612 phase 2b-1)
+ *
+ * output_table.h holds the records (what exists, where, enabled, interval).
+ * This file starts and stops the code behind each record, paces the push
+ * formats on a timer per output, and prints the table.
+ *
+ *   CSV on a stream, REALDASH  push, several (one per stream): sendToOutputs()
+ *                              writes each routed input to the output's
+ *                              transport, every `interval` ms
+ *   CSV on SD                  one; output_sdlog.cpp owns its cadence
+ *   OBD                        one; attaches to its CAN bus (output_can.cpp)
+ *   ELM327 on a serial port    one; binds the port (output_elm327.cpp)
+ *   ELM327 on BLE              one; the framed link's 0x30 channel (elm327_framed.cpp)
+ *   the alarm                  built in, no record (systemConfig.alarmEnabled)
  */
 
 #include "output_base.h"
 #include "output_table.h"
-
-#ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
-#define FLASHMEM
-#endif
+#include "output_admission.h"
 #include "../../config.h"
 #include "../../inputs/input_manager.h"
 #include "../../core/message_router.h"
 #include "../../core/message_api.h"
+#include "../../core/system_mode.h"
+#include "../formats/output_sdlog.h"
+#include "../formats/output_format.h"   // sdLogFormatName for OUTPUT LIST
+#if INCLUDE_FRAMED_TRANSPORT && INCLUDE_ELM327
+#include "../formats/elm327_framed.h"
+#endif
 
-// Output mask filtering relies on OUTPUT_CAN..OUTPUT_SD being 0-3.
-// NUM_OUTPUTS is now unconditionally 7 (stable enum), so this assert is always safe.
-static_assert(OUTPUT_CAN == 0 && OUTPUT_REALDASH == 1 &&
-              OUTPUT_SERIAL == 2 && OUTPUT_SD == 3,
-              "OutputID data output enum values must be 0-3 for per-input mask filtering");
+#ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
+#define FLASHMEM
+#endif
 
-// Declare external functions from output modules
-extern void initCAN();
+extern void initCAN(uint8_t id);
 extern void stopCAN();
 extern void updateCAN();
-
-extern void initRealdash();
-extern void sendRealdash(Input*);
-extern void updateRealdash();
-
-extern void initSerialOutput();
-extern void sendSerialOutput(Input*);
-extern void updateSerialOutput();
-
-#include "../formats/output_sdlog.h"   // initSDLog / updateSDLog / closeSDLog
-#include "../formats/output_format.h"  // sdLogFormatName for OUTPUT LIST
 
 extern void initAlarmOutput();
 extern void updateAlarmOutput();
 extern void stopAlarmOutput();
 
-#if INCLUDE_FRAMED_TRANSPORT && INCLUDE_ELM327
-#include "../formats/elm327_framed.h"
-// Output 5's init: a fresh ELM327 session over BLE
-static void initELM327Ble() { Elm327Framed::init(); }
-#endif
 #if INCLUDE_ELM327
-extern void initELM327();
+extern void initELM327(uint8_t id);
 extern void updateELM327();
 extern void stopELM327();
-extern void noteELM327PortState();
+extern void noteELM327PortState(uint8_t id);
 extern uint8_t elm327BoundPort();
 #endif
 
-// Define output modules array - always compiled, controlled by runtime flags.
-// Which of these pace on outputInterval[] is outputTakesInterval()
-// (system_config.h); a new paced output must be added there too (#608).
-OutputModule outputModules[] = {
-    {"CAN",     false, initCAN,           nullptr,           updateCAN},  // responder only (#528)
-    {"RealDash",false, initRealdash,      sendRealdash,      updateRealdash},
-    {"Serial",  false, initSerialOutput,  sendSerialOutput,  updateSerialOutput},
-#if INCLUDE_SD_LOGGING
-    // send = nullptr: a wide CSV row needs the whole sample at once, so
-    // updateSDLog() owns the cadence (reading systemConfig.outputInterval
-    // itself) rather than being driven one input at a time by sendToOutputs().
-    {"SD_Log",  false, initSDLog,         nullptr,           updateSDLog},
-#else
-    {nullptr,   false, nullptr,           nullptr,           nullptr},
-#endif
-    // Alarm: updateAlarmOutput() scans every input each loop (#608)
-    {"Alarm",   true,  initAlarmOutput,   nullptr,           updateAlarmOutput},
-#if INCLUDE_FRAMED_TRANSPORT && INCLUDE_ELM327
-    // ELM327 over BLE (#612 phase 2a): answers 0x30 frames from the nRF as
-    // they arrive (elm327_framed.cpp checks this entry's live flag)
-    {"ELM327_BLE", false, initELM327Ble,  nullptr,           nullptr},
-#else
-    {nullptr,   false, nullptr,           nullptr,           nullptr},
+// What each output runs as now: its format and transport when it started
+// (FMT_NONE: not running). A record that no longer matches is restarted.
+static uint8_t  liveFormat[MAX_OUTPUTS];
+static uint8_t  liveTransport[MAX_OUTPUTS];
+static uint32_t lastSend[MAX_OUTPUTS];
+static bool     alarmLive = false;
+
+static bool isLive(uint8_t id) { return id < MAX_OUTPUTS && liveFormat[id] != FMT_NONE; }
+
+// Start the code behind output <id> from its record. It counts as running
+// only once its transport took it (OBD attached, ELM327 bound, a stream
+// registered and started); otherwise it stays stopped and the next sync
+// (LOAD, JSON IMPORT, BUS ... ENABLE) or OUTPUT <id> ENABLE tries again.
+// Admission runs here too, so a stored record that no longer fits the
+// console, the log or the framed ports (SystemConfig reset or LOADed under it)
+// is left stopped with the reason rather than run on someone else's stream.
+static FLASHMEM bool startOutput(uint8_t id) {
+    const OutputRecord* r = outputRecord(id);
+    if (!r) return false;
+    const OutputFormat fmt = (OutputFormat)r->format;
+    const __FlashStringHelper* why = outputAdmitReason(id, fmt, r->transport, systemConfig, outputRecords);
+    if (!why && outputSingletonHolder(id, fmt, r->transport, outputRecords) != OUT_ID_NONE) {
+        why = F("an output of this kind with a lower id runs instead");
+    }
+    if (why) {
+        msg.control.print(F("NOTE: output "));
+        msg.control.print(id);
+        msg.control.print(F(" not started: it "));
+        msg.control.println(why);
+        return false;
+    }
+    bool running = true;
+    switch (fmt) {
+#if INCLUDE_CAN
+    case FMT_OBD:
+        initCAN(id);
+        running = canOutputAttachedBus() != 0xFF;
+        break;
 #endif
 #if INCLUDE_ELM327
-    // Pull-based: the phone asks, updateELM327() answers (#608)
-    {"ELM327",  false, initELM327,        nullptr,           updateELM327},
-#else
-    {nullptr,   false, nullptr,           nullptr,           nullptr},
+    case FMT_ELM327:
+#if INCLUDE_FRAMED_TRANSPORT
+        if (r->transport == OT_BLE) { Elm327Framed::start(id); break; }
 #endif
+        initELM327(id);
+        running = elm327BoundPort() != 0xFF;
+        break;
+#endif
+    case FMT_CSV:
+#if INCLUDE_SD_LOGGING
+        if (r->transport == OT_SD) { initSDLog(id); break; }
+#endif
+        running = router.streamTransport(r->transport) != nullptr;
+        break;
+    case FMT_REALDASH:
+        running = router.streamTransport(r->transport) != nullptr;
+        break;
+    default: break;
+    }
+    if (!running) return false;
+    liveFormat[id] = r->format;
+    liveTransport[id] = r->transport;
+    lastSend[id] = 0;
+    return true;
+}
+
+// Stop it, as what it was started as
+static FLASHMEM void stopOutput(uint8_t id) {
+    if (!isLive(id)) return;
+    const uint8_t fmt = liveFormat[id], t = liveTransport[id];
+    liveFormat[id] = FMT_NONE;
+    liveTransport[id] = OT_NONE;
+    switch (fmt) {
+#if INCLUDE_CAN
+    case FMT_OBD: stopCAN(); break;
+#endif
+#if INCLUDE_ELM327
+    case FMT_ELM327:
+#if INCLUDE_FRAMED_TRANSPORT
+        if (t == OT_BLE) { Elm327Framed::stop(); break; }
+#endif
+        stopELM327();
+        break;
+#endif
+#if INCLUDE_SD_LOGGING
+    case FMT_CSV:
+        if (t == OT_SD) closeSDLog();
+        break;
+#endif
+    default: break;
+    }
+    (void)t;
+}
+
+FLASHMEM void initOutputModules() {
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+        liveFormat[id] = FMT_NONE;
+        if (outputIsEnabled(id)) startOutput(id);
+    }
+    alarmLive = systemConfig.alarmEnabled != 0;
+    if (alarmLive) initAlarmOutput();
+}
+
+// A transport as a Print, for the encoders
+class TransportPrint : public Print {
+public:
+    TransportInterface* t = nullptr;
+    size_t write(uint8_t c) override { return t->write(c); }
+    size_t write(const uint8_t* b, size_t n) override { return t->write(b, n); }
 };
+static TransportPrint streamOut;
 
-// Always 7 entries — matches NUM_OUTPUTS enum (stable regardless of compile flags)
-const int numOutputModules = 7;
-
-// Track last send time for each output module
-static uint32_t lastOutputSend[sizeof(outputModules) / sizeof(outputModules[0])];
-
-// A module slot's output id (#612): slots 0-3 are ids 0-3, ELM327's slot 6
-// is id 4, ELM327 over BLE's slot 5 is id 5. Alarm is a built-in output (no id).
-static uint8_t idOfSlot(int slot) {
-    if (slot <= OUTPUT_SD) return (uint8_t)slot;
-    if (slot == OUTPUT_ELM327) return OUT_ID_ELM327;
-    if (slot == OUTPUT_ELM327_BLE) return OUT_ID_ELM327_BLE;
-    return OUT_ID_NONE;
+// Where a stream output writes: its transport if registered and started, and
+// not USB while the console has fallen back to it (#558): the console wins
+static Print* streamFor(uint8_t transport) {
+    if (transport == OT_USB && router.consoleOnUsbFallback()) return nullptr;
+    TransportInterface* t = router.streamTransport(transport);
+    if (!t) return nullptr;
+    streamOut.t = t;
+    return &streamOut;
 }
 
-// What a slot's live state should be: switched on in the config, and for the
-// outputs you add, not deleted (OUTPUT DEL). Built-ins only need the switch.
-static bool slotWanted(int slot) {
-    if (!systemConfig.outputEnabled[slot]) return false;
-    const uint8_t id = idOfSlot(slot);
-    return id == OUT_ID_NONE || outputExists(id);
-}
-
-void initOutputModules() {
-    // Apply runtime configuration from system config
-    for (int i = 0; i < numOutputModules; i++) {
-        if (outputModules[i].name == nullptr) continue;  // Placeholder slot
-
-        outputModules[i].enabled = slotWanted(i);
-
-        if (outputModules[i].enabled && outputModules[i].init != nullptr) {
-            outputModules[i].init();
-        }
-        lastOutputSend[i] = 0;  // Initialize timing
-    }
-}
-
-// Send data to all outputs at their configured intervals
 void sendToOutputs(uint32_t now) {
-    for (int i = 0; i < numOutputModules; i++) {
-        if (outputModules[i].name == nullptr) continue;  // Placeholder slot
-        if (!outputModules[i].enabled) continue;
-        if (outputModules[i].send == nullptr) continue;  // Owns its own cadence
-
-        // Check if enough time has elapsed for this output
-        if (now - lastOutputSend[i] >= systemConfig.outputInterval[i]) {
-            // Send all enabled inputs to this output
-            for (uint8_t j = 0; j < MAX_INPUTS; j++) {
-                if (inputs[j].flags.isEnabled && !isnan(inputs[j].value)) {
-                    // For data outputs (CAN/RealDash/Serial/SD), check per-input mask
-                    if (i <= OUTPUT_SD && !(inputs[j].routeMask & (1 << i))) continue;
-                    outputModules[i].send(&inputs[j]);
-                }
-            }
-            lastOutputSend[i] = now;
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+        const uint8_t fmt = liveFormat[id];
+        if (fmt != FMT_CSV && fmt != FMT_REALDASH) continue;
+        if (liveTransport[id] == OT_SD) continue;   // the SD log paces itself
+        const OutputRecord* r = outputRecord(id);
+        if (!r || now - lastSend[id] < r->interval) continue;
+        lastSend[id] = now;
+        // CSV stays quiet in CONFIG: it shares its stream with the console
+        if (fmt == FMT_CSV && isInConfigMode()) continue;
+        Print* out = streamFor(r->transport);
+        if (!out) continue;
+        const RouteMask bit = (RouteMask)(1u << id);
+        for (uint8_t j = 0; j < MAX_INPUTS; j++) {
+            Input& in = inputs[j];
+            if (!in.flags.isEnabled || isnan(in.value) || !(in.routeMask & bit)) continue;
+            if (fmt == FMT_CSV) sendCsvLine(&in, *out);
+            else                sendRealdashFrame(&in, *out);
         }
     }
 }
 
-// Housekeeping - called every loop (drain buffers, handle RX, etc.)
 void updateOutputs() {
-    for (int i = 0; i < numOutputModules; i++) {
-        if (outputModules[i].name == nullptr) continue;  // Placeholder slot
-        if (outputModules[i].enabled && outputModules[i].update != nullptr) {
-            outputModules[i].update();
-        }
-    }
-}
-
-// ===== RUNTIME CONFIGURATION API =====
-
-/**
- * Find output module by name
- * @param name Output name (case-insensitive)
- * @return Pointer to OutputModule, or nullptr if not found
- */
-OutputModule* getOutputByName(const char* name) {
-    for (int i = 0; i < numOutputModules; i++) {
-        if (outputModules[i].name == nullptr) continue;
-        if (strcasecmp(outputModules[i].name, name) == 0) {
-            return &outputModules[i];
-        }
-    }
-    return nullptr;
-}
-
-/**
- * Find an output module's index by name
- * @param name Output name (case-insensitive)
- * @return OutputID index, or -1 if not found
- *
- * Lets callers outside this TU identify a specific slot (e.g. OUTPUT_SD for the
- * SD-only FORMAT verb) without the outputModules array having to be extern'd.
- */
-int getOutputIndexByName(const char* name) {
-    OutputModule* output = getOutputByName(name);
-    return output ? (int)(output - outputModules) : -1;
-}
-
-// The one place an output's live state changes: OUTPUT <id> ENABLE/DISABLE,
-// a JSON IMPORT and LOAD all come here, so each takes effect immediately
-// (#610). Live state only — systemConfig is the caller's (setOutputEnabled
-// writes it; the sync reads it). Enabling runs init() even when the output is
-// already on: OUTPUT <id> ENABLE is how a user retries a faulted SD log or
-// an ELM327 whose port wasn't up. The sync only calls this on a change.
-static FLASHMEM void applyOutputEnabled(int index, bool enabled) {
-    OutputModule* output = &outputModules[index];
-    const bool wasEnabled = output->enabled;
-    output->enabled = enabled;
-
-    if (enabled && output->init != nullptr) {
-        output->init();
-    }
-    if (enabled || !wasEnabled) return;
-
-    // Teardown on disable is called directly rather than through a per-module
-    // deinit hook: a function pointer on every OutputModule costs 14 bytes of
-    // SRAM on the mega, which has 182 bytes free.
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+        switch (liveFormat[id]) {
 #if INCLUDE_CAN
-    // Detach from the bus; it keeps running for CAN input
-    if (index == OUTPUT_CAN) stopCAN();
+        case FMT_OBD: updateCAN(); break;
+#endif
+#if INCLUDE_ELM327
+        case FMT_ELM327: if (liveTransport[id] != OT_BLE) updateELM327(); break;
 #endif
 #if INCLUDE_SD_LOGGING
-    // Close the log file, or it stays open and unflushed for the session.
-    if (index == OUTPUT_SD) closeSDLog();
+        case FMT_CSV: if (liveTransport[id] == OT_SD) updateSDLog(); break;
 #endif
-    // Silence the buzzer and blank the LED, or they hold their last state
-    // once updateAlarmOutput() stops running (#610).
-    if (index == OUTPUT_ALARM) stopAlarmOutput();
-#if INCLUDE_ELM327
-    // Unbind from its serial port
-    if (index == OUTPUT_ELM327) stopELM327();
-#endif
-}
-
-/**
- * Enable or disable an output module
- * @param name Output name
- * @param enabled true to enable, false to disable
- * @return true if successful
- */
-bool setOutputEnabled(const char* name, bool enabled) {
-    OutputModule* output = getOutputByName(name);
-    if (!output) return false;
-    systemConfig.outputEnabled[output - outputModules] = enabled ? 1 : 0;
-    applyOutputEnabled(output - outputModules, enabled);
-    return true;
-}
-
-// After a JSON IMPORT or LOAD: every output to the state the config asks for,
-// at once (#610). An output that stays on but whose transport changed (OBD to
-// another CAN bus, ELM327 to another serial port) is re-attached.
-FLASHMEM void syncOutputsToConfig() {
-    for (int i = 0; i < numOutputModules; i++) {
-        if (outputModules[i].name == nullptr) continue;  // not in this build
-        const bool want = slotWanted(i);
-        if (outputModules[i].enabled != want) {
-            applyOutputEnabled(i, want);
-#if INCLUDE_ELM327
-            // initELM327() skips a port that isn't running yet, so say so
-            if (want && i == OUTPUT_ELM327) noteELM327PortState();
-#endif
-            continue;
+        default: break;
         }
-        if (!want) continue;
-#if INCLUDE_CAN
-        if (i == OUTPUT_CAN && canOutputAttachedBus() != systemConfig.buses.obdBus) initCAN();
-#endif
-#if INCLUDE_ELM327
-        if (i == OUTPUT_ELM327 && elm327BoundPort() != systemConfig.buses.elm327_serial_port) {
-            initELM327();
-            noteELM327PortState();
-        }
-#endif
     }
+    if (alarmLive) updateAlarmOutput();
 }
 
-/**
- * Set a paced output's send interval
- * @return false for an unknown output, one without an interval, or a value
- *         outside outputIntervalValid() — nothing changes then
- */
-bool setOutputInterval(uint8_t outputId, long interval) {
-    // Every writer is held to the same rule (#608): a 0 here would make the
-    // SD log write a row every loop and Serial flood its port.
-    if (outputId >= NUM_OUTPUTS || !outputIntervalValid(outputId, interval)) return false;
-    systemConfig.outputInterval[outputId] = (uint16_t)interval;  // valid => fits
-    return true;
-}
-
-// ===== The outputs you add, by id (#612) =====
-// The table itself is output_table.cpp (a view over systemConfig); these are
-// the parts that start and stop the modules behind it.
-
-static int slotOfId(uint8_t id) {
-    const uint8_t slot = outputLegacySlot(id);
-    return slot == 0xFF ? -1 : (int)slot;
-}
+// ===== Changes by id =====
 
 FLASHMEM bool outputSetEnabledById(uint8_t id, bool enabled) {
-    if (!outputExists(id)) return false;
-    const int slot = slotOfId(id);
-    systemConfig.outputEnabled[slot] = enabled ? 1 : 0;
-    applyOutputEnabled(slot, enabled);
+    OutputRecord* r = outputRecord(id);
+    if (!r) return false;
+    r->enabled = enabled ? 1 : 0;
+    // ENABLE always restarts: it is how a user retries a faulted SD log or an
+    // ELM327 whose port wasn't up (#610)
+    stopOutput(id);
+    if (enabled) startOutput(id);
     return true;
 }
 
 FLASHMEM bool outputSetIntervalById(uint8_t id, long ms) {
-    if (!outputExists(id)) return false;
-    return setOutputInterval((uint8_t)slotOfId(id), ms);
+    OutputRecord* r = outputRecord(id);
+    if (!r || !outputIntervalValid((OutputFormat)r->format, r->transport, ms)) return false;
+    r->interval = (uint16_t)ms;
+    return true;
 }
 
-FLASHMEM bool outputLiveById(uint8_t id) {
-    const int slot = slotOfId(id);
-    return slot >= 0 && outputModules[slot].name != nullptr && outputModules[slot].enabled;
+FLASHMEM bool outputSetTransportById(uint8_t id, uint8_t transport) {
+    OutputRecord* r = outputRecord(id);
+    if (!r || outputTransportKind(transport) != outputTransportKind(r->transport)) return false;
+    r->transport = transport;
+    // Restart an enabled one, also one that wasn't running: the new port may be up
+    if (r->enabled) { stopOutput(id); startOutput(id); }
+    return true;
 }
 
-// Sets route bit <id> on every input (ADD: a new output is sent everything,
-// as each output always was) or clears it (DEL).
+FLASHMEM bool outputSetOptionById(uint8_t id, uint8_t option) {
+    OutputRecord* r = outputRecord(id);
+    if (!r || !(r->format == FMT_CSV && r->transport == OT_SD)) return false;
+    r->option = option;
+    return true;
+}
+
+bool outputLiveById(uint8_t id) { return isLive(id); }
+
+// Route bit <id> on every input: set on ADD (a new output is sent everything),
+// cleared on DEL (a later output at this id starts clean)
 static FLASHMEM void routeEveryInput(uint8_t id, bool on) {
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         if (inputs[i].pin == 0xFF) continue;
@@ -311,71 +259,73 @@ static FLASHMEM void routeEveryInput(uint8_t id, bool on) {
     }
 }
 
+FLASHMEM uint8_t outputAddRecord(OutputFormat format, uint8_t transport) {
+    const uint8_t id = outputCreate(format, transport, true);
+    if (id == OUT_ID_NONE) return OUT_ID_NONE;
+    routeEveryInput(id, true);
+    startOutput(id);
+    return id;
+}
+
 FLASHMEM void outputDeleteById(uint8_t id) {
     if (!outputExists(id)) return;
-    outputSetEnabledById(id, false);   // stops it, as DISABLE does
-    outputMarkAbsent(id, true);
+    stopOutput(id);
     routeEveryInput(id, false);
+    outputErase(id);
 }
 
-FLASHMEM bool outputAddById(uint8_t id) {
-    if (!outputIdBuilt(id) || outputExists(id)) return false;
-    outputMarkAbsent(id, false);
-    routeEveryInput(id, true);
-    // On, through the same path as OUTPUT <id> ENABLE
-    outputSetEnabledById(id, true);
-    return true;
+FLASHMEM void syncOutputsToConfig() {
+    // Two passes: every stop before any start. The one-per-kind formats run
+    // from one set of state each, so a stop at a higher id after a start at a
+    // lower one (an import or LOAD that moved OBD from id 1 to id 0) would
+    // tear down what was just started.
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+        const OutputRecord* r = outputRecord(id);
+        if (!isLive(id)) continue;
+        bool stop = !r || !r->enabled || liveFormat[id] != r->format || liveTransport[id] != r->transport;
+        // ... or that no longer fits where it runs: a LOAD or import that moved
+        // the console, the log or a framed port onto its stream, or turned
+        // OBD's bus off or to LISTEN (the start pass then says why)
+        if (!stop && outputAdmitReason(id, (OutputFormat)r->format, r->transport, systemConfig, outputRecords)) stop = true;
+#if INCLUDE_CAN
+        if (!stop && r->format == FMT_OBD) {
+            const uint8_t bus = outputTransportCanBus(r->transport);
+            if (bus != 0xFF && systemConfig.buses.can[bus].mode != CAN_BUS_NORMAL) stop = true;
+        }
+#endif
+        if (stop) stopOutput(id);
+    }
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+        const OutputRecord* r = outputRecord(id);
+        if (!r || !r->enabled || isLive(id)) continue;
+        startOutput(id);
+#if INCLUDE_ELM327
+        // initELM327() skips a port that isn't running yet, so say so
+        if (r->format == FMT_ELM327 && r->transport != OT_BLE) noteELM327PortState(id);
+#endif
+    }
+    const bool alarmWant = systemConfig.alarmEnabled != 0;
+    if (alarmWant != alarmLive) setAlarmEnabled(alarmWant);
 }
 
-// Transport text for an output, e.g. "CAN1", "USB", "USB+SERIAL1", "SD",
-// "SERIAL2", or "NONE" when the setting it comes from has none.
-static const char* const TRANSPORT_TOKENS[NUM_TRANSPORTS] = {
-    "NONE", "USB", "SERIAL1", "SERIAL2", "SERIAL3", "SERIAL4",
-    "SERIAL5", "SERIAL6", "SERIAL7", "SERIAL8", "ESP32_BT"};
-
-static const char* transportToken(uint8_t t) {
-    return t < NUM_TRANSPORTS ? TRANSPORT_TOKENS[t] : "NONE";
+FLASHMEM void setAlarmEnabled(bool enabled) {
+    systemConfig.alarmEnabled = enabled ? 1 : 0;
+    if (enabled) {
+        alarmLive = true;
+        initAlarmOutput();
+    } else if (alarmLive) {
+        alarmLive = false;
+        // Silence the buzzer and blank the LED, or they hold their last state
+        // once updateAlarmOutput() stops running (#610)
+        stopAlarmOutput();
+    }
 }
 
-FLASHMEM size_t outputTransportText(uint8_t id, char* buf, size_t n) {
-    if (n == 0) return 0;
-    buf[0] = '\0';
-    switch (outputKindOf(id)) {
-    case OTK_CAN: {
-        const uint8_t bus = systemConfig.buses.obdBus;
-        if (bus == 0xFF) snprintf(buf, n, "NONE");
-        else             snprintf(buf, n, "CAN%u", (unsigned)(bus + 1));
-        break;
-    }
-    case OTK_STREAM: {
-        const uint8_t p = systemConfig.router.data_primary;
-        const uint8_t s = systemConfig.router.data_secondary;
-        if (s != TRANSPORT_NONE && s != p)
-            snprintf(buf, n, "%s+%s", transportToken(p), transportToken(s));
-        else
-            snprintf(buf, n, "%s", transportToken(p));
-        break;
-    }
-    case OTK_SD:
-        snprintf(buf, n, "SD");
-        break;
-    case OTK_SERIAL: {
-        const uint8_t port = systemConfig.buses.elm327_serial_port;
-        if (port == 0xFF || port == 0) snprintf(buf, n, "NONE");
-        else                           snprintf(buf, n, "SERIAL%u", (unsigned)port);
-        break;
-    }
-    case OTK_BLE:
-        // The phone-facing channel of the framed nRF link
-        snprintf(buf, n, "BLE");
-        break;
-    }
-    return strlen(buf);
-}
+// ===== Printing =====
 
 FLASHMEM void printOutputLabel(uint8_t id) {
-    char t[24];
-    outputTransportText(id, t, sizeof(t));
+    char t[12];
+    outputTransportName(outputTransportOf(id), t, sizeof(t));
     msg.control.print(outputFormatName(outputFormatOf(id)));
     msg.control.print(F(" on "));
     msg.control.print(t);
@@ -383,23 +333,30 @@ FLASHMEM void printOutputLabel(uint8_t id) {
 
 // One line of OUTPUT LIST, also the head of OUTPUT <id>
 static FLASHMEM void printOutputLine(uint8_t id) {
+    const OutputRecord* r = outputRecord(id);
+    if (!r) return;
     msg.control.print(id);
     msg.control.print(F(": "));
     printOutputLabel(id);
     msg.control.print(F(" - "));
-    msg.control.print(outputIsEnabled(id) ? F("enabled") : F("disabled"));
-    if (outputKindOf(id) == OTK_BLE && !systemConfig.serial.framed_enabled_mask) {
+    msg.control.print(r->enabled ? F("enabled") : F("disabled"));
+    // Enabled but stopped: its transport isn't up, or it wasn't admitted
+    // (OUTPUT <id> ENABLE retries and says why)
+    if (r->enabled && !isLive(id)) msg.control.print(F(", not running"));
+#if INCLUDE_FRAMED_TRANSPORT
+    if (r->transport == OT_BLE && !systemConfig.serial.framed_enabled_mask) {
         msg.control.print(F(" (no framed port: BUS SERIAL <n> FRAMED ENABLE)"));
     }
-    if (outputTakesIntervalId(id)) {
+#endif
+    if (outputFormatPaced((OutputFormat)r->format)) {
         msg.control.print(F(", interval "));
-        msg.control.print(outputIntervalOf(id));
+        msg.control.print(r->interval);
         msg.control.print(F(" ms"));
     }
 #if INCLUDE_SD_LOGGING
-    if (id == OUT_ID_SDLOG) {
+    if (r->format == FMT_CSV && r->transport == OT_SD) {
         msg.control.print(F(", "));
-        msg.control.print(sdLogFormatName(systemConfig.sdLogFormat));
+        msg.control.print(sdLogFormatName(r->option));
     }
 #endif
     msg.control.println();
@@ -408,13 +365,13 @@ static FLASHMEM void printOutputLine(uint8_t id) {
 FLASHMEM void listOutputTable() {
     msg.control.println(F("=== Outputs ==="));
     if (outputCount() == 0) msg.control.println(F("(none - OUTPUT ADD <format> <transport>)"));
-    for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
         if (outputExists(id)) printOutputLine(id);
     }
     // Built-in outputs: always present, no id, no routes (ARCHITECTURE.md §14.3)
     msg.control.println(F("Built-in (no routes):"));
     msg.control.print(F("  Alarm - "));
-    msg.control.println(systemConfig.outputEnabled[OUTPUT_ALARM] ? F("enabled") : F("disabled"));
+    msg.control.println(systemConfig.alarmEnabled ? F("enabled") : F("disabled"));
 #if INCLUDE_LCD || INCLUDE_OLED
     msg.control.println(F("  Display - see DISPLAY STATUS"));
 #endif

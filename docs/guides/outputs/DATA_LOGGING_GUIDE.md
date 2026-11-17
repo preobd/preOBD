@@ -35,15 +35,14 @@ wiring, lower it with `-D SD_SPI_MAX_HZ=4000000`.
 
 ```
 CONFIG
-OUTPUT 3 ENABLE                # Output 3: CSV on SD (OUTPUT LIST)
-OUTPUT 3 INTERVAL 1000         # One row per second (default 5000)
-OUTPUT 3 CSV WIDE              # or LONG — see below (default WIDE)
+OUTPUT ADD CSV SD INTERVAL 1000 WIDE   # one row per second (default 5000); or LONG — see below
 SAVE
 RUN
 ```
 
-Only inputs routed to SD are logged — see `SET <pin> ROUTE 3 ENABLE|DISABLE`
-(all data outputs are on by default).
+`OUTPUT ADD` prints the output's id (`OUTPUT LIST` shows it too); the commands
+below use 3 as an example. Only inputs routed to it are logged — see
+`SET <pin> ROUTE <id> ENABLE|DISABLE` (a new output gets every input).
 
 ### File format
 
@@ -96,7 +95,7 @@ each row names its own sensor. Switching between `LONG` and `WIDE` always starts
 ### Durability
 
 Rows are flushed at least once a second, so an abrupt power cut
-loses at most about a second of data. `OUTPUT 3 DISABLE` closes the file
+loses at most about a second of data. `OUTPUT <id> DISABLE` closes the file
 cleanly.
 
 ### Checking on it
@@ -111,7 +110,7 @@ state:
 ```
 
 `OUTPUT LIST` also shows the active format, and it round-trips through
-`SYSTEM DUMP JSON` / `JSON IMPORT` as `csv` on output 3 in `system.outputs`.
+`SYSTEM DUMP JSON` / `JSON IMPORT` as `csv` on the SD output in `system.outputs`.
 
 ---
 
@@ -119,8 +118,8 @@ state:
 
 ```
 CONFIG
-OUTPUT 2 ENABLE                # Output 2: CSV on the data stream
-OUTPUT 2 INTERVAL 1000         # one set of lines per second (default)
+OUTPUT ADD CSV USB             # CSV lines on USB, beside the console
+OUTPUT ADD CSV SERIAL1 INTERVAL 1000   # or on a serial port (one set of lines per second)
 SAVE
 RUN
 ```
@@ -136,12 +135,13 @@ BAT,13.80,V
 `name,value,unit` — the input's short label (`SET <pin> ABBR`), the value in its
 display units, and the unit. A failed sensor prints `ERROR` as the value.
 
-The lines go to preOBD's **data channel** — USB by default. `TRANSPORT DATA SERIAL1`
-sends them to a Bluetooth module on Serial1 instead (see `TRANSPORT STATUS`).
-RealDash output uses the same channel, so enable one or the other.
+The lines go to the output's own transport: `OUTPUT ADD CSV USB` on USB beside
+the console, or `OUTPUT ADD CSV SERIAL1` to a Bluetooth module on Serial1. Each
+CSV output is its own stream, so a RealDash output can run beside it on another
+port.
 
-Choose which inputs appear with `SET <pin> ROUTE 2 ENABLE|DISABLE`
-(all are on by default).
+Choose which inputs appear with `SET <pin> ROUTE <id> ENABLE|DISABLE`, the
+output's id from `OUTPUT LIST` (all are on by default).
 
 ---
 

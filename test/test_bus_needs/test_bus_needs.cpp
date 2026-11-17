@@ -36,7 +36,8 @@
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/config/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
-#include "../../src/outputs/table/output_table.cpp"   // the outputs view (#612)
+#include "../../src/outputs/table/output_table.cpp"   // the stored outputs (#612)
+#include "../../src/outputs/table/output_admission.cpp"   // one per kind on load (#612)
 #include "../../src/inputs/measurement_compat.cpp"  // units check on load (#458)
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
 #include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"  // obdLengthFor (#516)
@@ -165,7 +166,7 @@ static void writeValidStore(const char* const* sensorNames, const uint8_t* pins,
         EEPROM.put(EEPROM_HEADER_SIZE + (size_t)i * EEPROM_INPUT_SIZE, rec);
         checksum ^= xorBytes(&rec, sizeof(rec));
     }
-    header.checksum = checksum;
+    header.checksum = (uint8_t)(checksum ^ arenaChecksumSeed(header));   // layout + counts (#612)
     EEPROM.put(0, header);
 }
 
@@ -482,8 +483,128 @@ static void test_loadInputConfig_still_catches_a_genuine_duplicate_pin(void) {
     TEST_ASSERT_EQUAL_UINT8(1, occupied);
 }
 
+// saveInputConfig() in this binary (the outputs tests below): the watchdog
+// and the control-engine counts it reads
+void watchdogReset() {}
+WatchdogScope::WatchdogScope(uint16_t, const char*) {}
+WatchdogScope::~WatchdogScope() {}
+#if INCLUDE_RULES_ENGINE
+uint8_t rulesRuleCount() { return 0; }
+uint8_t rulesActionCount() { return 0; }
+uint8_t rulesActionLinkCount() { return 0; }
+#endif
+
+// #612 phase 2b-1: the outputs section rides in the same store. Saved last,
+// budgeted first, each record checked on load, and the counts and layout
+// fold into the checksum so an earlier layout under the same version is
+// rejected instead of read with the wrong shape.
+static void test_outputs_survive_save_and_load(void) {
+    outputsClear();
+    outputCreate(FMT_ELM327, OT_BLE, true);
+    const uint8_t rd = outputCreate(FMT_REALDASH, OT_USB, false);
+    outputRecord(rd)->interval = 250;
+    TEST_ASSERT_TRUE(saveInputConfig());
+    outputsClear();
+    TEST_ASSERT_TRUE(loadInputConfig());
+    TEST_ASSERT_EQUAL_UINT8(2, outputCount());
+    TEST_ASSERT_EQUAL(FMT_ELM327, outputFormatOf(0));
+    TEST_ASSERT_TRUE(outputIsEnabled(0));
+    TEST_ASSERT_EQUAL_UINT16(250, outputRecord(rd)->interval);
+    outputsClear();
+}
+
+static void test_a_stored_output_this_board_cant_run_is_dropped(void) {
+    outputsClear();
+    outputCreate(FMT_CSV, OT_USB, true);
+    TEST_ASSERT_TRUE(saveInputConfig());
+    // Corrupt the record in place to an OBD output (not built here), and
+    // re-checksum so only the record check can catch it
+    ConfigStoreHeader h;
+    EEPROM.get(0, h);
+    const size_t at = EEPROM_HEADER_SIZE + (size_t)h.numInputs * EEPROM_INPUT_SIZE
+#if INCLUDE_RULES_ENGINE
+                      + (size_t)h.numRules * sizeof(Rule) + (size_t)h.numActions * sizeof(Action)
+                      + (size_t)h.numLinks * sizeof(ActionLink)
+#endif
+                      ;
+    OutputRecord r;
+    EEPROM.get(at, r);
+    h.checksum ^= xorBytes(&r, sizeof(r));
+    r.format = FMT_OBD;
+    r.transport = OT_CAN1;
+    r.interval = 0;
+    h.checksum ^= xorBytes(&r, sizeof(r));
+    EEPROM.put(at, r);
+    EEPROM.put(0, h);
+    outputsClear();
+    TEST_ASSERT_TRUE(loadInputConfig());
+    TEST_ASSERT_EQUAL_UINT8(0, outputCount());
+}
+
+static void test_a_store_of_an_earlier_layout_is_rejected(void) {
+    outputsClear();
+    TEST_ASSERT_TRUE(saveInputConfig());
+    ConfigStoreHeader h;
+    EEPROM.get(0, h);
+    h.checksum ^= (uint8_t)(ARENA_LAYOUT ^ 0x2A);   // as if written by another layout
+    EEPROM.put(0, h);
+    TEST_ASSERT_FALSE(loadInputConfig());
+}
+
+// One per kind on load: a store with two ELM327-on-BLE records (a hand-edited
+// or merged store; OUTPUT ADD can't make one) keeps the lower id only
+static void test_a_second_one_per_kind_output_is_dropped_on_load(void) {
+    outputsClear();
+    outputCreate(FMT_ELM327, OT_BLE, true);           // id 0
+    outputCreate(FMT_CSV, OT_USB, true);              // id 1
+    OutputRecord twin = *outputRecord(0);
+    twin.id = 2;
+    outputRecords[2] = twin;                          // a second ELM327 on BLE
+    TEST_ASSERT_TRUE(saveInputConfig());
+    outputsClear();
+    TEST_ASSERT_TRUE(loadInputConfig());
+    TEST_ASSERT_EQUAL_UINT8(2, outputCount());
+    TEST_ASSERT_EQUAL(FMT_ELM327, outputFormatOf(0));
+    TEST_ASSERT_EQUAL(FMT_CSV, outputFormatOf(1));
+    TEST_ASSERT_FALSE(outputExists(2));
+    outputsClear();
+}
+
+// ... and when the lower one is disabled, the enabled one keeps the slot
+static void test_the_enabled_one_per_kind_output_wins_on_load(void) {
+    outputsClear();
+    outputCreate(FMT_ELM327, OT_BLE, false);          // id 0, disabled
+    OutputRecord twin = *outputRecord(0);
+    twin.id = 2;
+    twin.enabled = 1;
+    outputRecords[2] = twin;                          // id 2, enabled
+    TEST_ASSERT_TRUE(saveInputConfig());
+    outputsClear();
+    TEST_ASSERT_TRUE(loadInputConfig());
+    TEST_ASSERT_FALSE(outputExists(0));
+    TEST_ASSERT_TRUE(outputIsEnabled(2));
+    outputsClear();
+}
+
+// A store of the earlier layout was checksummed from 0, so the seed must never
+// be 0, whatever the counts: here they XOR to ARENA_LAYOUT
+static void test_the_checksum_seed_is_never_zero(void) {
+    ConfigStoreHeader h;
+    memset(&h, 0, sizeof(h));
+    h.numRules = 0x20;
+    h.numInputs = (uint8_t)(ARENA_LAYOUT ^ 0x20);     // counts that cancel the layout
+    TEST_ASSERT_EQUAL_HEX8(ARENA_LAYOUT, (uint8_t)(h.numInputs ^ h.numRules));
+    TEST_ASSERT_NOT_EQUAL(0, arenaChecksumSeed(h));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_outputs_survive_save_and_load);
+    RUN_TEST(test_a_second_one_per_kind_output_is_dropped_on_load);
+    RUN_TEST(test_the_enabled_one_per_kind_output_wins_on_load);
+    RUN_TEST(test_the_checksum_seed_is_never_zero);
+    RUN_TEST(test_a_stored_output_this_board_cant_run_is_dropped);
+    RUN_TEST(test_a_store_of_an_earlier_layout_is_rejected);
     RUN_TEST(test_i2c_claim_refused_when_an_input_holds_a_bus_pin);
     RUN_TEST(test_spi_claim_refused_when_an_input_holds_a_bus_pin);
     RUN_TEST(test_can_claim_refused_when_an_input_holds_a_bus_pin);

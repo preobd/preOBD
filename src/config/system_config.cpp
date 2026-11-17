@@ -3,6 +3,7 @@
  */
 
 #include "system_config.h"
+#include "../outputs/table/output_table.h"   // outputsSeedDefaults (#612)
 #include "../core/watchdog.h"
 
 #ifndef FLASHMEM
@@ -153,7 +154,9 @@ void printSystemStatus() {
  * Calculate XOR checksum for SystemConfig structure
  */
 uint8_t calculateChecksum(SystemConfig* cfg) {
-    uint8_t checksum = 0;
+    // Salted with the layout: an image of an earlier layout under the same
+    // SYSTEM_CONFIG_VERSION fails here and loads defaults (#612 phase 2b-1)
+    uint8_t checksum = SYSTEM_CONFIG_LAYOUT;
     uint8_t* bytes = (uint8_t*)cfg;
 
     // XOR all bytes except the checksum field itself
@@ -190,25 +193,14 @@ void resetSystemConfig(uint8_t keep) {
     systemConfig.magic = SYSTEM_CONFIG_MAGIC;
     systemConfig.version = SYSTEM_CONFIG_VERSION;
 
-    // Output defaults. INCLUDE_* only says the module is in the image; these
-    // outputEnabled[] values are what actually turns it on at runtime.
-    // Data outputs default OFF to keep USB clean - user must explicitly enable
-    // Safety outputs default ON when compiled in
-
-    // Intervals (#608): see defaultOutputInterval() for the unpaced slots
-    for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
-        systemConfig.outputInterval[i] = defaultOutputInterval(i);
-    }
-    systemConfig.outputEnabled[OUTPUT_CAN] = 0;       // OFF - data plane output
-    systemConfig.outputEnabled[OUTPUT_REALDASH] = 0;  // OFF - data plane output
-    systemConfig.outputEnabled[OUTPUT_SERIAL] = 0;    // OFF - clogs USB serial
-    systemConfig.outputEnabled[OUTPUT_SD] = 0;        // OFF - requires SD card hardware
-    #if INCLUDE_ALARMS
-    systemConfig.outputEnabled[OUTPUT_ALARM] = 1;     // ON - safety critical
-    #else
-    systemConfig.outputEnabled[OUTPUT_ALARM] = 0;
-    #endif
-    systemConfig.outputEnabled[OUTPUT_ELM327_BLE] = 1;  // ON - phone OBD apps over the nRF (#612)
+    // The outputs you add are the config-store arena's (output_table.h):
+    // a reset seeds their defaults there. The alarm is built in, on when built.
+#if INCLUDE_ALARMS
+    systemConfig.alarmEnabled = 1;   // ON - safety critical
+#else
+    systemConfig.alarmEnabled = 0;
+#endif
+    outputsSeedDefaults();
 
     // Display defaults.
     //
@@ -235,40 +227,21 @@ void resetSystemConfig(uint8_t keep) {
     systemConfig.defaultElevUnits = getUnitsIndexByName(DEFAULT_ELEVATION_UNITS);
     systemConfig.defaultSpeedUnits = getUnitsIndexByName(DEFAULT_SPEED_UNITS);
 
-    // Retired intervals (#601, DISPLAY INTERVAL): kept only so the bytes are defined
-    systemConfig.sensorReadInterval = SENSOR_READ_INTERVAL_MS;
-    systemConfig.alarmCheckInterval = ALARM_CHECK_INTERVAL_MS;
-    systemConfig.lcdUpdateInterval = LCD_UPDATE_INTERVAL_MS;
-    systemConfig.sdLogFormat = SDLOG_FORMAT_WIDE;
     systemConfig.alarmSilence = 0;   // buzzer only, SILENCE_DURATION (#433)
 
     // Physical constants
     systemConfig.seaLevelPressure = SEA_LEVEL_PRESSURE_HPA;
 
-    // Transport Router Configuration (NEW in v4)
-    // Default: All planes → USB Serial. Part of the link: the router only reads
-    // CLI input from the control-plane transports, so a bridge on Serial2+
-    // with control routed to it would go deaf if this were reset (#549).
+    // The console and the log (§14.7). The console on USB and Serial1, the
+    // log on USB. Part of the link: the console reads commands only from its
+    // transports, so a bridge on Serial2+ carrying it would go deaf if this
+    // were reset (#549).
     if (!(keep & RESET_KEEP_LINK)) {
-    systemConfig.router.control_primary = TRANSPORT_USB_SERIAL;
-    systemConfig.router.control_secondary = TRANSPORT_SERIAL1;
-    systemConfig.router.data_primary = TRANSPORT_USB_SERIAL;
-    systemConfig.router.data_secondary = TRANSPORT_NONE;
-    systemConfig.router.debug_primary = TRANSPORT_USB_SERIAL;
-    systemConfig.router.debug_secondary = TRANSPORT_NONE;
-
-    // Bluetooth defaults (disabled)
-    systemConfig.router.bt_type = 0;  // BT_TYPE_NONE
-    systemConfig.router.bt_auth_required = 0;  // Disabled by default
-    systemConfig.router.bt_pin = 0;  // Not set
-
-    // Reserved router space
-    for (int i = 0; i < 5; i++) {
-        systemConfig.router.reserved_router[i] = 0;
-    }
-    }  // RESET_KEEP_LINK (router)
-    // Outputs are configuration, not the link: a reset brings every one back
-    systemConfig.router.outputsAbsent = 0;
+    systemConfig.console.primary = TRANSPORT_USB_SERIAL;
+    systemConfig.console.secondary = TRANSPORT_SERIAL1;
+    systemConfig.log.primary = TRANSPORT_USB_SERIAL;
+    systemConfig.log.secondary = TRANSPORT_NONE;
+    }  // RESET_KEEP_LINK (console, log)
 
     // NB (v13): the control-engine Rule/Action tables are no longer part of
     // SystemConfig — they are reset via rulesResetTables() and persisted by the
@@ -283,9 +256,10 @@ void resetSystemConfig(uint8_t keep) {
     systemConfig.buses.spi_clock = DEFAULT_SPI_CLOCK;
 
     // CAN: one set of settings per bus (#612 phase 2a). The wired bus
-    // (CAN_WIRED_BUS, wiring.ini) is on at 500k with the OBD output on it;
-    // nothing is assumed about an unwired bus (#377). A bus that is on starts
-    // only when something attaches, so this alone never ACKs on a car's bus.
+    // (CAN_WIRED_BUS, wiring.ini) is on at 500k, with a (disabled) OBD output
+    // on it in the outputs' defaults; nothing is assumed about an unwired bus
+    // (#377). A bus that is on starts only when something attaches, so this
+    // alone never ACKs on a car's bus.
     for (uint8_t b = 0; b < CAN_BUS_SLOTS; b++) {
         systemConfig.buses.can[b].mode = CAN_BUS_OFF;
         systemConfig.buses.can[b].baudIndex = CAN_BAUD_500K;
@@ -293,11 +267,7 @@ void resetSystemConfig(uint8_t keep) {
     systemConfig.buses.canInputBus = 0xFF;
 #if BUS_WIRED_CAN_ID != 0xFF
     systemConfig.buses.can[BUS_WIRED_CAN_ID].mode = CAN_BUS_NORMAL;
-    systemConfig.buses.obdBus = BUS_WIRED_CAN_ID;
-#else
-    systemConfig.buses.obdBus = 0xFF;
 #endif
-    systemConfig.buses.elm327_serial_port = 0xFF;  // Disabled by default
     }  // RESET_KEEP_HARDWARE (buses)
 
     // Serial Port Configuration defaults
@@ -315,13 +285,9 @@ void resetSystemConfig(uint8_t keep) {
 
     // Log Filter Configuration defaults
     // Default to INFO level (show ERROR, WARN, INFO but not DEBUG)
-    systemConfig.logFilter.control_level = 3;  // LOG_LEVEL_INFO
-    systemConfig.logFilter.data_level = 3;     // LOG_LEVEL_INFO
+    systemConfig.logFilter.console_level = 3;  // LOG_LEVEL_INFO
     systemConfig.logFilter.debug_level = 3;    // LOG_LEVEL_INFO
     systemConfig.logFilter.enabledTags = 0xFFFFFFFF;  // All tags enabled
-    for (int i = 0; i < 5; i++) {
-        systemConfig.logFilter.reserved[i] = 0;
-    }
 
     // Calculate checksum
     systemConfig.checksum = calculateChecksum(&systemConfig);
@@ -375,14 +341,11 @@ FLASHMEM bool saveSystemConfig(bool verbose) {
 // ---------------------------------------------------------------------------
 
 void MessageRouter::loadConfig() {
-    // Load from SystemConfig.router (persisted in EEPROM)
-    setTransportUnchecked(PLANE_CONTROL, (TransportID)systemConfig.router.control_primary, false);
-    setTransportUnchecked(PLANE_DATA,    (TransportID)systemConfig.router.data_primary,    false);
-    setTransportUnchecked(PLANE_DEBUG,   (TransportID)systemConfig.router.debug_primary,   false);
-
-    setTransportUnchecked(PLANE_CONTROL, (TransportID)systemConfig.router.control_secondary, true);
-    setTransportUnchecked(PLANE_DATA,    (TransportID)systemConfig.router.data_secondary,    true);
-    setTransportUnchecked(PLANE_DEBUG,   (TransportID)systemConfig.router.debug_secondary,   true);
+    // The console's and the log's transports from SystemConfig (EEPROM)
+    setTransportUnchecked(PLANE_CONTROL, (TransportID)systemConfig.console.primary,   false);
+    setTransportUnchecked(PLANE_DEBUG,   (TransportID)systemConfig.log.primary,       false);
+    setTransportUnchecked(PLANE_CONTROL, (TransportID)systemConfig.console.secondary, true);
+    setTransportUnchecked(PLANE_DEBUG,   (TransportID)systemConfig.log.secondary,     true);
 
     // Load log filter configuration from SystemConfig.logFilter
     applyLogFilterConfig();
@@ -393,24 +356,20 @@ void MessageRouter::loadConfig() {
 // import that set only the stored copy would be undone by the next LOG command.
 void applyLogFilterConfig() {
     LogFilter& f = router.getLogFilter();
-    f.setLevel(PLANE_CONTROL, (LogLevel)systemConfig.logFilter.control_level);
-    f.setLevel(PLANE_DATA,    (LogLevel)systemConfig.logFilter.data_level);
+    f.setLevel(PLANE_CONTROL, (LogLevel)systemConfig.logFilter.console_level);
     f.setLevel(PLANE_DEBUG,   (LogLevel)systemConfig.logFilter.debug_level);
     f.setEnabledTags(systemConfig.logFilter.enabledTags);
 }
 
 void MessageRouter::syncConfig() {
-    // Copy router state to SystemConfig.router (does NOT save to EEPROM)
-    systemConfig.router.control_primary   = getPrimaryTransportId(PLANE_CONTROL);
-    systemConfig.router.control_secondary = getSecondaryTransportId(PLANE_CONTROL);
-    systemConfig.router.data_primary      = getPrimaryTransportId(PLANE_DATA);
-    systemConfig.router.data_secondary    = getSecondaryTransportId(PLANE_DATA);
-    systemConfig.router.debug_primary     = getPrimaryTransportId(PLANE_DEBUG);
-    systemConfig.router.debug_secondary   = getSecondaryTransportId(PLANE_DEBUG);
+    // Copy the router's state to SystemConfig.console/log (does NOT save to EEPROM)
+    systemConfig.console.primary   = getPrimaryTransportId(PLANE_CONTROL);
+    systemConfig.console.secondary = getSecondaryTransportId(PLANE_CONTROL);
+    systemConfig.log.primary       = getPrimaryTransportId(PLANE_DEBUG);
+    systemConfig.log.secondary     = getSecondaryTransportId(PLANE_DEBUG);
 
     // Copy log filter state to SystemConfig.logFilter
-    systemConfig.logFilter.control_level = getLogFilter().getLevel(PLANE_CONTROL);
-    systemConfig.logFilter.data_level    = getLogFilter().getLevel(PLANE_DATA);
+    systemConfig.logFilter.console_level = getLogFilter().getLevel(PLANE_CONTROL);
     systemConfig.logFilter.debug_level   = getLogFilter().getLevel(PLANE_DEBUG);
     systemConfig.logFilter.enabledTags   = getLogFilter().getEnabledTags();
 }
@@ -663,16 +622,6 @@ bool loadSystemConfig() {
     // export all see the address that is actually used.
     if (!isValidLcdI2CAddress(systemConfig.lcdI2CAddress)) {
         systemConfig.lcdI2CAddress = LCD_I2C_ADDRESS_DEFAULT;
-    }
-    // Same for a paced output's interval saved before #608's range check
-    // (0 sent every loop; 70000 was stored as 4464), compiled in or not, so
-    // the export is clean too.
-    // clampOutputInterval(): a RealDash 10 saved when the docs allowed it
-    // becomes 50, not the 100 ms default. JSON IMPORT repairs the same way.
-    for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
-        if (outputTakesInterval(i)) {
-            systemConfig.outputInterval[i] = clampOutputInterval(i, systemConfig.outputInterval[i]);
-        }
     }
     return true;
 }

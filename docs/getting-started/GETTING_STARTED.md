@@ -191,8 +191,8 @@ RUN mode by itself.
 
 To change anything later, type `CONFIG`, make the change, `SAVE`, `RUN`.
 
-**See the numbers stream:** in RUN mode, `OUTPUT 2 ENABLE` (from CONFIG
-mode, then `SAVE`) prints a line of comma-separated readings every second.
+**See the numbers stream:** `OUTPUT ADD CSV USB` (from CONFIG mode, then
+`SAVE`) prints a line of comma-separated readings every second in RUN mode.
 
 ---
 

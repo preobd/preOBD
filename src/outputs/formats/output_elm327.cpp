@@ -23,20 +23,21 @@
 
 // ===== SINGLETON =====
 
-ELM327Output elm327Output(OUT_ID_ELM327);   // the ELM327 output on a serial port (#612)
+ELM327Output elm327Output(OUT_ID_NONE);   // the ELM327 output on a serial port; route id set at bind (#612)
 
 // ===== OUTPUT MODULE FREE FUNCTIONS (called by output_manager) =====
 
 static uint8_t boundPort = 0xFF;   // the port elm327Output is bound to
 
-// Bind to systemConfig.buses.elm327_serial_port, unbinding from any other
-// first: OUTPUT ADD, OUTPUT <id> ENABLE and an imported port change all
-// take effect at once (#611, #612)
-void initELM327() {
+// Bind ELM327 output <id> to its record's serial port, unbinding from any
+// other first: OUTPUT ADD, OUTPUT <id> ENABLE | TRANSPORT and an imported
+// port change all take effect at once (#611, #612)
+void initELM327(uint8_t id) {
     elm327Output.end();
     boundPort = 0xFF;
-    const uint8_t port = systemConfig.buses.elm327_serial_port;
+    const uint8_t port = outputTransportSerialPort(outputTransportOf(id));
     if (port == 0xFF) return;
+    elm327Output.setRouteId(id);
 
     Stream* ser = getSerialPort(port);
     if (ser && isSerialPortActive(port)) {
@@ -57,11 +58,9 @@ void updateELM327() {
 
 // After an ELM327 enable: say why it isn't answering yet, if it isn't. One
 // copy of the text for the sync and BUS SERIAL (F() is RAM1 on Teensy 4).
-void noteELM327PortState() {
-    const uint8_t port = systemConfig.buses.elm327_serial_port;
-    if (port == 0xFF) {
-        msg.control.println(F("NOTE: ELM327 has no serial port: OUTPUT DEL 4, then OUTPUT ADD ELM327 SERIAL<n>"));
-    } else if (!isSerialPortActive(port)) {
+void noteELM327PortState(uint8_t id) {
+    const uint8_t port = outputTransportSerialPort(outputTransportOf(id));
+    if (port != 0xFF && !isSerialPortActive(port)) {
         msg.control.println(F("NOTE: ELM327 answers once its serial port is running (BUS SERIAL <n> ENABLE)"));
     }
 }

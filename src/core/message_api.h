@@ -2,16 +2,14 @@
  * message_api.h - High-Level Messaging API
  *
  * Provides convenient logging interface that routes to appropriate transports:
- * - msg.control - Interactive commands, configuration responses (user-facing)
- * - msg.data - Sensor data output (CSV, RealDash binary)
- * - msg.debug - Debug/diagnostic messages with log levels and tags
+ * - msg.control - the console: commands' replies (user-facing)
+ * - msg.debug - the log: diagnostic messages with log levels and tags
+ * Sensor data is not a message stream: each output writes to its own
+ * transport (outputs/table/output_manager.cpp, #612).
  *
  * Usage:
  *   // Control plane - user feedback with F() macro
  *   msg.control.println(F("✓ Configuration saved"));
- *
- *   // Data plane - sensor output
- *   msg.data.print(ptr->abbrName);
  *
  *   // Debug plane - structured logging (NO F() macro - printf uses RAM strings)
  *   msg.debug.error(TAG_SD, "Mount failed");
@@ -386,7 +384,6 @@ public:
 // Global message API instance
 struct MessageAPI {
     MessageStream control;
-    MessageStream data;
 
 #ifdef DISABLE_DEBUG_MESSAGES
     MessageStreamStub debug;  // Stub version - compiles to no-ops
@@ -394,7 +391,7 @@ struct MessageAPI {
     MessageStream debug;      // Full version
 #endif
 
-    MessageAPI() : control(PLANE_CONTROL, /*routeToActive=*/true), data(PLANE_DATA), debug(PLANE_DEBUG) {}
+    MessageAPI() : control(PLANE_CONTROL, /*routeToActive=*/true), debug(PLANE_DEBUG) {}
 };
 
 extern MessageAPI msg;

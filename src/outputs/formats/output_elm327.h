@@ -33,8 +33,9 @@
 class ELM327Output {
 public:
     // routeId: whose route bit decides what it answers (obd_query.h, #612):
-    // OUT_ID_ELM327 for the serial port, OUT_ID_ELM327_BLE over BLE.
+    // its output's id, set when the output starts (ids are assigned by OUTPUT ADD)
     explicit ELM327Output(uint8_t routeId);
+    void setRouteId(uint8_t id) { _routeId = id; }
 
     // Assign the stream it answers on: initELM327() for the serial port,
     // Elm327Framed::init() for BLE. Pass nullptr to detach.
@@ -80,8 +81,8 @@ extern ELM327Output elm327Output;
 
 // Unbind from its serial port: the output disabled at runtime (#610)
 void stopELM327();
-// After an enable, print why ELM327 isn't answering yet (no port / port not up)
-void noteELM327PortState();
+// After an enable, print why ELM327 output <id> isn't answering yet (port not up)
+void noteELM327PortState(uint8_t id);
 
 #endif // INCLUDE_ELM327
 #endif // OUTPUT_ELM327_H

@@ -53,6 +53,7 @@
 #define RULES_RAM_ACTIONS_MAX 2
 #define RULES_RAM_LINKS_MAX   2    // 2 B/row; enough for one 2-rule action at cap 2 (#343)
 #define MAX_INPUTS              8
+#define MAX_OUTPUTS             2     // OBD and CSV are the only formats built here (#612)
 #define MAX_PID_ENTRIES         8
 #define MAX_PIN_REGISTRY        24
 #define CAN_CACHE_SIZE          8

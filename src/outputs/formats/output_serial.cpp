@@ -1,31 +1,19 @@
 /*
- * output_serial.cpp - Serial CSV output for data plane
+ * output_serial.cpp - CSV lines on a stream (#612: the output's own transport)
  */
 
 #include "../table/output_base.h"
 #include "../../config.h"
 #include "../../sensors/sensor_library.h"
 #include "../../sensors/units_registry.h"
-#include "../../core/message_api.h"
-#include "../../core/log_tags.h"
 #include "output_format.h"
 
 #if INCLUDE_SERIAL_OUTPUT
 
-#include "../../core/system_mode.h"
-
-void initSerialOutput() {
-    msg.debug.info(TAG_SERIAL, "Serial output initialized");
-}
-
-void sendSerialOutput(Input *ptr) {
-    // In CONFIG mode, suppress serial output
-    if (isInConfigMode()) {
-        return;
-    }
-
-    // Shared with the SD logger so the two recording outputs can't drift on how
-    // a reading renders (see output_format.h).
+// One input as `ABBR,value,units`. Shared with the SD logger's rendering so
+// the two recording outputs can't drift on how a reading looks
+// (output_format.h). The caller paces it and keeps it quiet in CONFIG.
+void sendCsvLine(Input* ptr, Print& out) {
     char valBuf[VALUE_FIELD_LEN];
     formatValueField(valBuf, sizeof(valBuf),
                      convertFromBaseUnits(ptr->value, ptr->unitsIndex));
@@ -33,22 +21,16 @@ void sendSerialOutput(Input *ptr) {
     char unitBuf[UNIT_FIELD_LEN];
     formatUnitSymbol(unitBuf, sizeof(unitBuf), getUnitStringByIndex(ptr->unitsIndex));
 
-    msg.data.print(ptr->abbrName);
-    msg.data.print(",");
-    msg.data.print(valBuf);
-    msg.data.print(",");
-    msg.data.print(unitBuf);
-    msg.data.println();
-}
-
-void updateSerialOutput() {
-    // Can add header row every N seconds if desired
+    out.print(ptr->abbrName);
+    out.print(',');
+    out.print(valBuf);
+    out.print(',');
+    out.print(unitBuf);
+    out.println();
 }
 
 #else
 
-void initSerialOutput() {}
-void sendSerialOutput(Input *ptr) {}
-void updateSerialOutput() {}
+void sendCsvLine(Input*, Print&) {}
 
 #endif

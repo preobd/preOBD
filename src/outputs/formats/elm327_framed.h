@@ -29,10 +29,11 @@ class MuxTransport;  // forward decl; .cpp includes transport_mux.h for the full
 
 namespace Elm327Framed {
 
-// Bind the dedicated parser instance to the bridge Stream and start it.
-// Call once in setup() after obdQuery_buildLookupTable() -- the framed parser
-// shares the same OBD lookup table as the CAN/serial paths.
-void init();
+// The ELM327-on-BLE output starts (output_manager.cpp, #612): bind the
+// dedicated parser to the bridge Stream with a fresh session; it answers the
+// inputs routed to `routeId`. stop(): 0x30 frames go unanswered.
+void start(uint8_t routeId);
+void stop();
 
 // Called by MuxTransport::handleFrame() when a type 0x30 frame arrives. Runs
 // the ELM327 parser synchronously on the payload and emits the response as

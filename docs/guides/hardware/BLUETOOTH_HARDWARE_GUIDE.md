@@ -24,7 +24,7 @@ This guide focuses on **UART Bluetooth modules** for platforms that don't have b
 ### What you can do over Bluetooth
 
 - **Type commands wirelessly** — a BLE module on a serial port can carry the same
-  command line as USB (`TRANSPORT CONTROL SERIAL1 SECONDARY`), so a phone terminal
+  command line as USB (`CONSOLE TRANSPORT SERIAL1 SECONDARY`), so a phone terminal
   app or laptop works in the car.
 - **Use OBD-II apps with no adapter** — the ELM327 emulator; see the
   [Direct BLE OBD Guide](../outputs/DIRECT_BLE_OBD_GUIDE.md).
@@ -49,7 +49,7 @@ To use both at the same time, wire two separate modules to two different UARTs:
 
 With the nRF52840 coprocessor on a framed port, one module carries both: the
 webapp and a phone OBD app connect to it at the same time, and the OBD app is
-output 5 (`OUTPUT ADD ELM327 BLE`).
+an ELM327 output on `BLE` (on by default; `OUTPUT ADD ELM327 BLE` re-adds it).
 
 The webapp does not require a specific baud rate beyond what the BLE module is configured for; the ELM327 port's baud must match its module. See [DIRECT_BLE_OBD_GUIDE.md](../outputs/DIRECT_BLE_OBD_GUIDE.md) for ELM327 setup details.
 
@@ -353,24 +353,24 @@ SAVE                           # Persist to EEPROM
 Teensy 4.x supports up to 8 serial ports. You can use any available port for Bluetooth:
 ```
 BUS SERIAL 5 ENABLE 9600         # Enable Serial5 for Bluetooth
-TRANSPORT DATA SERIAL5           # Route data output to Serial5
+OUTPUT ADD REALDASH SERIAL5      # e.g. RealDash frames to it (or CSV, or ELM327)
 SAVE
 ```
 
 **Keeping USB Active Alongside Bluetooth (Simultaneous Control)**
 
-By default, switching the CONTROL plane to Bluetooth drops USB. Use the `SECONDARY` keyword to keep both ports active — both accept commands and receive all responses:
+By default, moving the console to Bluetooth drops USB. Use the `SECONDARY` keyword to keep both ports active — both accept commands, and each gets the replies to its own commands:
 
 ```
 BUS SERIAL 7 ENABLE 9600                  # Enable Serial7 for HM-10
-TRANSPORT CONTROL SERIAL7                 # HM-10 as primary control port
-TRANSPORT CONTROL USB_SERIAL SECONDARY    # Laptop USB stays active too
+CONSOLE TRANSPORT SERIAL7                 # HM-10 as the console's primary
+CONSOLE TRANSPORT USB SECONDARY           # Laptop USB stays a console too
 SAVE
 ```
 
-To revert to USB-only: `TRANSPORT CONTROL NONE SECONDARY` then `SAVE`.
+To revert to USB-only: `CONSOLE TRANSPORT USB`, `CONSOLE TRANSPORT NONE SECONDARY`, then `SAVE`.
 
-See [Transport Configuration](../../reference/SERIAL_COMMANDS.md#transport-configuration) for the full TRANSPORT command reference.
+See [Console and Log](../../reference/SERIAL_COMMANDS.md#console-and-log) for the full reference.
 
 ## Troubleshooting
 

@@ -22,7 +22,7 @@ int cmd_clear(int argc, const char* const* argv);
 int cmd_info(int argc, const char* const* argv);
 int cmd_output(int argc, const char* const* argv);
 int cmd_display(int argc, const char* const* argv);
-int cmd_transport(int argc, const char* const* argv);
+int cmd_console(int argc, const char* const* argv);
 int cmd_system(int argc, const char* const* argv);
 int cmd_save(int argc, const char* const* argv);
 int cmd_load(int argc, const char* const* argv);

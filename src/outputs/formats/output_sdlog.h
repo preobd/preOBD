@@ -15,7 +15,7 @@
 // Output-module lifecycle. There is deliberately no per-input send hook: a wide
 // CSV row needs the whole sample at once, so updateSDLog() owns the cadence and
 // walks inputs[] itself (see the comment in output_sdlog.cpp).
-void initSDLog();
+void initSDLog(uint8_t id);   // the CSV-on-SD output <id> starts (#612)
 void updateSDLog();
 void closeSDLog();
 

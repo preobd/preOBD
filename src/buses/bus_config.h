@@ -5,7 +5,7 @@
  * Select which bus to use for each type and set its speed.
  * All sensors/outputs of a given type use the selected bus.
  *
- * Also configures hardware serial ports (Serial1-Serial8) for TRANSPORT use.
+ * Also configures hardware serial ports (Serial1-Serial8).
  *
  * Sizes: BusConfig ~19 bytes (platform padding varies) + 16 bytes for SerialPortConfig
  */
@@ -74,10 +74,8 @@ struct BusConfig {
     // CAN: one set of settings per bus, and what attaches to each (§14.7)
     CanBusSettings can[CAN_BUS_SLOTS];
     uint8_t canInputBus;        // the bus CAN input reads: 0..2, 0xFF = CAN input off
-    uint8_t obdBus;             // the OBD output's bus (its transport): 0..2, 0xFF = none
-
-    // The serial ELM327 output's port: 1-8 = Serial1-Serial8, 0xFF = none
-    uint8_t elm327_serial_port;
+    // (The OBD output's bus and the ELM327 output's port are their output
+    // records' transports, output_table.h.)
 };
 
 /**

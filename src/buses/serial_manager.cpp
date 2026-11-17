@@ -395,11 +395,6 @@ FLASHMEM void displaySerialStatus() {
             msg.control.print(F("disabled"));
         }
 
-#if INCLUDE_ELM327
-        if (systemConfig.buses.elm327_serial_port == port_id) {
-            msg.control.print(F(" [ELM327]"));
-        }
-#endif
 #if INCLUDE_FRAMED_TRANSPORT
         if (systemConfig.serial.framed_enabled_mask & (1u << (port_id - 1))) {
             msg.control.print(F(" [FRAMED]"));
@@ -432,11 +427,6 @@ FLASHMEM void displaySerialPortStatus(uint8_t port_id) {
     msg.control.println(F(":"));
     msg.control.print(F("  Status: "));
     msg.control.print(enabled ? F("ENABLED") : F("disabled"));
-#if INCLUDE_ELM327
-    if (systemConfig.buses.elm327_serial_port == port_id) {
-        msg.control.print(F(" [ELM327]"));
-    }
-#endif
     msg.control.println();
     msg.control.print(F("  Baud:   "));
     msg.control.print(getBaudRateString(baud_idx));

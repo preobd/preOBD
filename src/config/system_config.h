@@ -12,11 +12,16 @@
 #include "eeprom_store.h"   // EEPROM: the core library, or a flash-backed image on STM32
 #include <stddef.h>   // offsetof, for the layout static_asserts below
 #include "../buses/bus_config.h"
-#include "../config.h"   // *_INTERVAL_MS factory defaults (defaultOutputInterval)
+#include "../config.h"
 
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
-#define SYSTEM_CONFIG_VERSION 14        // Increment when struct changes (v14: one set of CAN settings per bus, ELM327 over BLE is output slot 5, #612 phase 2a; clean reset from v13)
+#define SYSTEM_CONFIG_VERSION 14        // Increment when struct changes (v14: one set of CAN settings per bus, #612 phase 2a; clean reset from v13)
+// Unreleased layout changes under one version number (EEPROM_VERSION = public
+// + 1, collapsed): the checksum is salted with the layout, so an image of an
+// earlier layout with the same version fails it and loads defaults instead of
+// being misread field by field. Change it with every layout change.
+#define SYSTEM_CONFIG_LAYOUT 0x2B       // #612 phase 2b-1: outputs left SystemConfig, console/log replace the router
 #define SYSTEM_CONFIG_SIZE sizeof(SystemConfig)
 
 // Total EEPROM bytes available on this platform.
@@ -34,74 +39,6 @@
 // exist: OUTPUT ADD routes every input to the new output anyway.
 #define ROUTE_MASK_ALL 0xFF
 
-// Output module IDs
-// Always define all IDs so EEPROM layout (outputEnabled[], outputInterval[])
-// is stable regardless of compile flags. Unused slots are harmless zeros.
-enum OutputID {
-    OUTPUT_CAN      = 0,
-    OUTPUT_REALDASH = 1,
-    OUTPUT_SERIAL   = 2,
-    OUTPUT_SD       = 3,
-    OUTPUT_ALARM    = 4,
-    OUTPUT_ELM327_BLE = 5,   // ELM327 over the framed nRF link (was the retired RELAY slot)
-    OUTPUT_ELM327   = 6,
-    NUM_OUTPUTS     = 7
-};
-
-// Only these outputs pace on outputInterval[] (#608). CAN and ELM327 answer
-// requests as they arrive and Alarm runs every loop; their slots stay in the
-// EEPROM layout but are neither read nor exported. Keep this list in step
-// with outputModules[] (output_manager.cpp): a paced output has a non-null
-// send, or owns its cadence from outputInterval[] like SD_Log.
-constexpr bool outputTakesInterval(uint8_t id) {
-    return id == OUTPUT_REALDASH || id == OUTPUT_SERIAL || id == OUTPUT_SD;
-}
-// Floors are per output (#608), set by what a 115200-baud data link (UART or
-// the BLE bridge) carries, ~11.5 KB/s: a CSV line per input stalls the loop
-// below ~100 ms; RealDash's 16-byte frames for 20 inputs are 6.4 KB/s at
-// 50 ms. The SD log buffers its rows, and 1 ms rows are the #537 watchdog
-// soak load (tools/watchdog_bench.py), so 1 ms only costs card space.
-static const uint16_t OUTPUT_INTERVAL_MAX_MS = 60000;
-constexpr uint16_t outputIntervalMinMs(uint8_t id) {
-    return id == OUTPUT_REALDASH ? 50 : id == OUTPUT_SD ? 1 : 100;
-}
-// The one validity rule for outputInterval[id]: setOutputInterval(), the CLI,
-// JSON IMPORT and EEPROM load all go through it.
-inline bool outputIntervalValid(uint8_t id, long ms) {
-    return outputTakesInterval(id) && ms >= outputIntervalMinMs(id) && ms <= OUTPUT_INTERVAL_MAX_MS;
-}
-// Factory interval of every slot: the one source for resetSystemConfig() and
-// both repairs below. The unpaced slots are never read here, but keep their
-// pre-#608 values, which an older build flashed over this config paces its
-// no-op sends on (0 would walk every input each loop; ELM327's UINT16_MAX is
-// that build's own table value).
-constexpr uint16_t defaultOutputInterval(uint8_t id) {
-    return id == OUTPUT_REALDASH ? REALDASH_INTERVAL_MS
-         : id == OUTPUT_SERIAL   ? SERIAL_CSV_INTERVAL_MS
-         : id == OUTPUT_SD       ? SD_LOG_INTERVAL_MS
-         : id == OUTPUT_ELM327   ? UINT16_MAX : 100;
-}
-// The config.h factory values must be valid, or reset and the next load would
-// disagree (load clamps)
-constexpr bool defaultIntervalValid(uint8_t id) {
-    return defaultOutputInterval(id) >= outputIntervalMinMs(id) && defaultOutputInterval(id) <= OUTPUT_INTERVAL_MAX_MS;
-}
-static_assert(defaultIntervalValid(OUTPUT_REALDASH), "REALDASH_INTERVAL_MS outside RealDash's range (#608)");
-static_assert(defaultIntervalValid(OUTPUT_SERIAL), "SERIAL_CSV_INTERVAL_MS outside Serial's range (#608)");
-static_assert(defaultIntervalValid(OUTPUT_SD), "SD_LOG_INTERVAL_MS outside SD_Log's range (#608)");
-// An interval stored or exported before #608's check, made valid the same way
-// on EEPROM load and JSON IMPORT: clamped to the nearest end of the range,
-// and 0 (which sent every loop, or meant "default" to the SD log) to the
-// default. Only meaningful for outputTakesInterval(id).
-// Takes a double so JSON IMPORT can pass any number (5e9, -5, 1e12) without a
-// narrowing step; EEPROM load passes its uint16_t.
-inline uint16_t clampOutputInterval(uint8_t id, double ms) {
-    if (ms == 0) return defaultOutputInterval(id);
-    if (ms < outputIntervalMinMs(id)) return outputIntervalMinMs(id);
-    if (ms > OUTPUT_INTERVAL_MAX_MS) return OUTPUT_INTERVAL_MAX_MS;
-    return (uint16_t)ms;
-}
-
 // Display types
 enum DisplayType {
     DISPLAY_NONE = 0,
@@ -109,9 +46,6 @@ enum DisplayType {
     DISPLAY_OLED = 2
 };
 
-#if INCLUDE_ELM327
-#include "../outputs/formats/output_elm327.h"
-#endif
 #include "../rules/rules_types.h"  // Rule/Action records + INCLUDE_RULES_ENGINE
 
 // System configuration structure
@@ -121,10 +55,9 @@ struct SystemConfig {
     uint8_t version;             // Schema version
     uint8_t checksum;            // XOR checksum
 
-    // Output Modules (12 bytes)
-    uint8_t outputEnabled[NUM_OUTPUTS];    // 5 bytes (bool per output)
-    uint16_t outputInterval[NUM_OUTPUTS];  // 10 bytes (interval ms)
-
+    // The outputs you add live in the config-store arena (output_table.h,
+    // #612 phase 2b-1). The alarm is a built-in output: its switch is here.
+    uint8_t alarmEnabled;        // ALARM ENABLE|DISABLE
     // Display Settings (7 bytes)
     uint8_t displayEnabled;      // Display on/off (bool)
     uint8_t displayType;         // LCD/OLED/None (DisplayType enum)
@@ -134,25 +67,7 @@ struct SystemConfig {
     uint8_t defaultElevUnits;    // Unit index: 9=Meters, 10=Feet
     uint8_t defaultSpeedUnits;   // Unit index: 11=KPH, 12=MPH
 
-    // Timing Intervals (8 bytes)
-    // sensorReadInterval / alarmCheckInterval are RETIRED (#601): nothing ever
-    // read them (sensors use their own minReadInterval, the control engine
-    // ALARM_CHECK_INTERVAL_MS). Kept so the EEPROM layout doesn't change; not
-    // set, shown or exported. Don't wire them back up without a reason.
-    uint16_t sensorReadInterval;
-    uint16_t alarmCheckInterval;
-    // RETIRED too (DISPLAY INTERVAL): the LCD always redrew on
-    // LCD_UPDATE_INTERVAL_MS; kept for the EEPROM layout like the two above.
-    uint16_t lcdUpdateInterval;
-    // These two bytes were a single `uint16_t reserved1`. Splitting them keeps
-    // the struct's size, field offsets, alignment, and XOR checksum byte-for-byte
-    // identical, so an EEPROM image written before this field existed stays
-    // valid and SYSTEM_CONFIG_VERSION does NOT need a bump (a bump resets the
-    // arena to defaults and would wipe the user's configured inputs).
-    // A legacy image reads back 0 here, which is why SDLOG_FORMAT_WIDE is 0.
-    uint8_t sdLogFormat;         // SdLogFormat enum (output_format.h)
-    // Alarm acknowledgement policy (#433) — the former spare byte, same rule:
-    // a legacy image reads 0, which decodes to the built-in default (buzzer
+    // Alarm acknowledgement policy (#433). 0 is the built-in default (buzzer
     // only, SILENCE_DURATION). Encoded, see ALARM_SILENCE_* in outputs/annunciator/output_alarm.h:
     //   bit 7      SCOPE ALL — an acknowledged alarm also stops the LED blink
     //   bits 0..6  duration code: 0 = default, 1..126 = n*5 s, 127 = until clear
@@ -161,26 +76,17 @@ struct SystemConfig {
     // Physical Constants (4 bytes)
     float seaLevelPressure;      // hPa for altitude
 
-    // Transport Router Configuration (16 bytes) - NEW in v4
+    // Where the console and the log go (#612 phase 2b-1, §14.7): a primary
+    // and an optional secondary transport each (TransportID). The console reads
+    // commands from both and answers on the one a command came from.
     struct {
-        uint8_t control_primary;     // TransportID for CONTROL plane
-        uint8_t control_secondary;   // Multi-cast target or TRANSPORT_NONE
-        uint8_t data_primary;        // TransportID for DATA plane
-        uint8_t data_secondary;      // Multi-cast target or TRANSPORT_NONE
-        uint8_t debug_primary;       // TransportID for DEBUG plane
-        uint8_t debug_secondary;     // Multi-cast target or TRANSPORT_NONE
-        // UNUSED since they were added (Dec 2025): meant for a PIN-pairing
-        // Bluetooth module, superseded by the nRF52840 BLE bridge, which does
-        // its own security. No command sets them and nothing reads them; kept
-        // only for the EEPROM layout (always 0). Free for reuse.
-        uint8_t bt_type;
-        uint8_t bt_auth_required;
-        uint16_t bt_pin;
-        // Outputs deleted with OUTPUT DEL, one bit per output id (#612,
-        // outputs/table/output_table.h)
-        uint8_t outputsAbsent;
-        uint8_t reserved_router[5];  // Future expansion
-    } router;
+        uint8_t primary;
+        uint8_t secondary;
+    } console;
+    struct {
+        uint8_t primary;
+        uint8_t secondary;
+    } log;
 
     // NB (v13): the control-engine Rule/Action tables are NO LONGER embedded
     // here. They are standalone RAM globals (rules_manager.cpp) persisted by
@@ -194,26 +100,13 @@ struct SystemConfig {
     // Serial Port Configuration (16 bytes) - Which serial ports are enabled
     SerialPortConfig serial;
 
-    // Log Filter Configuration (12 bytes) - NEW in v6
+    // Log levels and tags (LOG LEVEL / LOG TAG)
     struct {
-        uint8_t control_level;    // LogLevel for CONTROL plane
-        uint8_t data_level;       // LogLevel for DATA plane
-        uint8_t debug_level;      // LogLevel for DEBUG plane (default: INFO)
+        uint8_t console_level;    // LogLevel for the console's own messages
+        uint8_t debug_level;      // LogLevel for the log (default: INFO)
         uint32_t enabledTags;     // 32-bit bitmap for tag filtering (all enabled by default)
-        uint8_t reserved[5];      // Future expansion
     } logFilter;
 };
-
-// sdLogFormat and alarmSilence replaced a single `uint16_t reserved1` in place, so
-// that no SYSTEM_CONFIG_VERSION bump (and therefore no EEPROM reset of the
-// user's configured inputs) was needed to add the field. That only holds while
-// the two stay a contiguous pair at the original 2-aligned offset — separating
-// them, or inserting anything between, shifts every field below and silently
-// invalidates existing images while the version number still claims v13.
-static_assert(offsetof(SystemConfig, alarmSilence) == offsetof(SystemConfig, sdLogFormat) + 1,
-              "sdLogFormat and alarmSilence must stay adjacent (they replace one uint16_t)");
-static_assert(offsetof(SystemConfig, sdLogFormat) % 2 == 0,
-              "sdLogFormat must sit at the replaced uint16_t's aligned offset");
 
 // SystemConfig is anchored at the end of EEPROM so its address adapts to the
 // platform automatically. The input block grows from address 0; a static_assert
@@ -251,8 +144,8 @@ bool loadSystemConfig();         // Load from EEPROM
 // SYSTEM RESET keeps the link it may have arrived over (#549).
 enum ResetKeep : uint8_t {
     RESET_KEEP_NONE = 0,
-    RESET_KEEP_LINK = 0x01,       // serial ports (enabled, baud, framed) + transport router
-    RESET_KEEP_HARDWARE = 0x02,   // buses (I2C/SPI/CAN, ELM327 port) + display (#551)
+    RESET_KEEP_LINK = 0x01,       // serial ports (enabled, baud, framed) + console and log transports
+    RESET_KEEP_HARDWARE = 0x02,   // buses (I2C/SPI/CAN) + display (#551)
 };
 void resetSystemConfig(uint8_t keep = RESET_KEEP_NONE);  // Reset to defaults, except `keep`
 void applyLogFilterConfig();      // Make the live log filter match systemConfig.logFilter (#561)

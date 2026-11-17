@@ -38,7 +38,7 @@ enum SdStatusState : uint8_t {
 struct SdStatusSnapshot {
     bool        supported;      // false: no SD logging in this build (zero the rest)
     bool        mounted;        // isSDInitialized()
-    bool        enabled;        // outputEnabled[OUTPUT_SD]
+    bool        enabled;        // the CSV-on-SD output is enabled
     bool        configMode;     // the logger pauses in CONFIG (#268)
     bool        cardRemoved;    // sdLogCardRemoved()
     bool        faulted;        // sdLogIsFaulted()

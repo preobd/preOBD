@@ -54,8 +54,8 @@ bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen, 
 // msg/systemConfig/getSerialPort, but they're unreferenced here and dropped by
 // the linker's dead-strip (see [env:native]), so no stubs for those are needed.
 Input inputs[MAX_INPUTS];
-// The output table's live flags: elm327_framed.cpp answers only while output 5's is set
-OutputModule outputModules[NUM_OUTPUTS];
+// The output id ELM327-on-BLE runs as (ids are assigned by OUTPUT ADD, #612)
+static const uint8_t kBleId = 3;
 
 // ---- capturing transport ----
 static uint8_t  g_cap[1024];   // concatenated payloads of all 0x30 frames
@@ -93,9 +93,7 @@ void setUp(void) {
     g_sendOk = true;
     g_maxFrameLen = 0;
     memset(inputs, 0, sizeof(inputs));
-    memset(outputModules, 0, sizeof(outputModules));
-    outputModules[OUTPUT_ELM327_BLE].enabled = true;
-    Elm327Framed::init();  // re-bind + reset parser session (echo on, etc.)
+    Elm327Framed::start(kBleId);  // the output starts: re-bind + reset parser session (echo on, etc.)
 }
 void tearDown(void) {}
 
@@ -109,18 +107,18 @@ static bool capContains(const char* needle) {
     return strstr(reinterpret_cast<char*>(g_cap), needle) != nullptr;
 }
 
-// Output 5 (ELM327 over BLE) disabled or deleted: no answer at all (#612)
+// The ELM327-on-BLE output stopped (disabled or deleted): no answer at all (#612)
 static void test_disabled_output_does_not_answer(void) {
-    outputModules[OUTPUT_ELM327_BLE].enabled = false;
+    Elm327Framed::stop();
     feed("ATZ\r");
     feed("010C\r");
     TEST_ASSERT_EQUAL_INT(0, g_frameCnt);
 }
 
-// It answers as output 5, so only the inputs routed to id 5 (#612)
+// It answers as its output's id, so only the inputs routed to that id (#612)
 static void test_answers_with_its_own_route_id(void) {
     feed("010C\r");
-    TEST_ASSERT_EQUAL_UINT8(OUT_ID_ELM327_BLE, g_lastRouteId);
+    TEST_ASSERT_EQUAL_UINT8(kBleId, g_lastRouteId);
 }
 
 // ATZ returns the version banner, on a 0x30 frame.

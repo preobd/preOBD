@@ -312,18 +312,18 @@ void MessageRouter::processIncomingCommands() {
 
 ### Multi-Port Simultaneous Control
 
-Setting a secondary transport on the CONTROL plane allows two ports to share control without either losing connectivity. All `msg.control` output (responses, prompts, CLI echo) goes to both primary and secondary automatically.
+Setting a secondary console transport allows two ports to share control without either losing connectivity. Replies go to the transport a command came from; unsolicited console output goes to both.
 
 **User command (runtime configurable):**
 ```
-TRANSPORT CONTROL SERIAL7                 # HM-10 Bluetooth as primary
-TRANSPORT CONTROL USB_SERIAL SECONDARY    # Laptop USB stays active too
+CONSOLE TRANSPORT SERIAL7                 # HM-10 Bluetooth as primary
+CONSOLE TRANSPORT USB SECONDARY           # Laptop USB stays active too
 SAVE
 ```
 
 **Clear secondary:**
 ```
-TRANSPORT CONTROL NONE SECONDARY
+CONSOLE TRANSPORT NONE SECONDARY
 SAVE
 ```
 
@@ -552,7 +552,7 @@ public:
 
 ### For Debugging
 
-1. **Check transport state** - Use `LIST TRANSPORTS` command (if implemented)
+1. **Check transport state** - Use `LIST TRANSPORTS` and `CONSOLE STATUS`
 2. **Monitor tagged debug logs** - Connect USB Serial and use appropriate log tags
 3. **Test one transport at a time** - Verify each works independently
 4. **Test simultaneous connections** - Verify broadcasting works

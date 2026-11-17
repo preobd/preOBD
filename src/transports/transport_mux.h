@@ -247,7 +247,7 @@ public:
     const char* getName() const override { return name; }
 
     uint8_t getCapabilities() const override {
-        return CAP_READ | CAP_WRITE | CAP_BINARY | CAP_HARDWARE_SERIAL;
+        return CAP_READ | CAP_WRITE | CAP_BINARY | CAP_HARDWARE_SERIAL | (framedEnabled ? CAP_FRAMED : 0);
     }
 
     TransportState getState() const override { return TRANSPORT_CONNECTED; }

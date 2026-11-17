@@ -40,26 +40,30 @@ To connect preOBD to RealDash, you need one of the following:
 
 ### Step 1: Enable RealDash Output in preOBD
 
-RealDash frames are sent on preOBD's **data channel** — USB by default. In the
-serial console:
+RealDash frames go to the RealDash output's own transport, which carries
+nothing else (they are binary). Over USB, move the console off USB first. In
+the serial console:
 
 ```
 CONFIG
-OUTPUT 1 ENABLE
-OUTPUT 2 DISABLE        # the CSV output shares the data channel; turn it off
+CONSOLE TRANSPORT SERIAL1       # the console on another port (or the nRF link)
+LOG TRANSPORT SERIAL1
+OUTPUT ADD REALDASH USB
 SAVE
 ```
 
-For a **Bluetooth module** (e.g. an HM-10 on Serial1), also route the data
-channel to it:
+For a **Bluetooth module** (e.g. an HC-05 on Serial5), put the RealDash output
+on its port. RealDash frames are binary, so that port carries nothing else:
+not the console, not the log, not another output.
 
 ```
-BUS SERIAL 1 ENABLE 115200
-TRANSPORT DATA SERIAL1
+BUS SERIAL 5 ENABLE 115200
+OUTPUT ADD REALDASH SERIAL5
 SAVE
 ```
 
-`TRANSPORT STATUS` shows where each channel goes.
+`OUTPUT LIST` shows each output and its transport; `OUTPUT <id> TRANSPORT
+SERIAL2` moves it.
 
 ### Step 2: Install preOBD XML Channel Description
 

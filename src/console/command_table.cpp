@@ -5,6 +5,7 @@
 #include "../config.h"
 
 #include "command_table.h"
+#include "../outputs/table/output_admission.h"   // outputOnStream (#612)
 #include "command_dispatch.h"
 #include "command_helpers.h"
 #include "serial_config.h"
@@ -114,7 +115,7 @@ const Command COMMANDS[] = {
     // RUN; every changing verb is gated in cmd_output.cpp (#612).
     {"OUTPUT", cmd_output, "Outputs: list, add, configure, delete", false},
     {"DISPLAY", cmd_display, "Configure display", true},
-    {"TRANSPORT", cmd_transport, "Configure message routing", true},
+    {"CONSOLE", cmd_console, "Console transports (STATUS works in RUN)", false},
     // SYSTEM: configModeOnly=false; per-subcommand runModeAllowed flags in
     // SYSTEM_SUBCOMMANDS (cmd_system.cpp) gate the destructive verbs (RESET,
     // REBOOT, SEA_LEVEL, UNITS, INTERVAL) while leaving STATUS / PINS / DUMP
@@ -445,9 +446,14 @@ static int loadConfigFromEEPROM() {
     }
 #endif
 
-    // The loaded outputEnabled[] reaches the live outputs, as a JSON IMPORT's
+    // The loaded output table reaches the live outputs, as a JSON IMPORT's
     // does (#610): an OUTPUT ENABLE that was never SAVEd is undone here.
-    if (sysOk) {
+    // Outputs live in the input store since #612 phase 2b-1, buses in SystemConfig
+    if (sysOk || inputsOk) {
+        // The loaded console and log transports go live too: admission checks
+        // them (#612), and the next CONSOLE/LOG command copies the live ones
+        // back over systemConfig, which would undo the LOAD
+        if (sysOk) router.loadConfig();
 #if INCLUDE_CAN
         syncCanToConfig();   // buses first, so OBD attaches to the loaded mode (#612)
 #endif
@@ -822,98 +828,102 @@ int cmd_display(int argc, const char* const* argv) {
     return 1;
 }
 
-int cmd_transport(int argc, const char* const* argv) {
-    if (argc < 2) {
-        msg.control.println(F("ERROR: TRANSPORT requires a subcommand"));
-        msg.control.println(F("  Usage: TRANSPORT STATUS | <plane> <transport> [SECONDARY]"));
-        msg.control.println(F("  (Use LIST TRANSPORTS to see available transports)"));
+// Put the console's or the log's primary/secondary on `tok` (#612 phase 2b-1,
+// §14.7). NONE clears a secondary. A stream a RealDash or ELM327 output needs
+// to itself can't take it; the log stays off the framed nRF link's port (its
+// text would land in the app's replies).
+static FLASHMEM int setPlaneTransport(MessagePlane plane, const char* tok, bool secondary) {
+    uint8_t t;
+    if (!parseOutputTransport(tok, &t) ||
+        !(t == OT_NONE || outputTransportKind(t) == OTK_STREAM)) {
+        msg.control.print(F("ERROR: Unknown transport '"));
+        msg.control.print(tok);
+        msg.control.println(F("' (USB, SERIAL1-8, ESP32_BT, NONE)"));
         return 1;
     }
+    if (t == OT_NONE && !secondary) {
+        msg.control.println(F("ERROR: the primary can't be NONE"));
+        return 1;
+    }
+    const uint8_t owner = outputOnStream(t, false, outputRecords);
+    if (owner != OUT_ID_NONE) {
+        msg.control.print(F("ERROR: "));
+        msg.control.print(tok);
+        msg.control.print(F(" carries output "));
+        msg.control.print(owner);
+        msg.control.print(F(" ("));
+        printOutputLabel(owner);
+        msg.control.println(F("), which needs it to itself"));
+        return 1;
+    }
+    const uint8_t port = outputTransportSerialPort(t);
+    if (plane == PLANE_DEBUG && port != 0xFF &&
+        (systemConfig.serial.framed_enabled_mask & (1u << (port - 1)))) {
+        msg.control.println(F("ERROR: the log can't share the framed nRF link's port"));
+        return 1;
+    }
+    if (!router.setTransport(plane, (TransportID)t, secondary)) {
+        if (port != 0xFF) {
+            msg.control.print(F("ERROR: Serial"));
+            msg.control.print(port);
+            msg.control.print(F(" is not enabled. Run: BUS SERIAL "));
+            msg.control.print(port);
+            msg.control.println(F(" ENABLE first"));
+        } else {
+            msg.control.print(F("ERROR: "));
+            msg.control.print(tok);
+            msg.control.println(F(" is not available"));
+        }
+        return 1;
+    }
+    router.syncConfig();   // persisted on SAVE
+    msg.control.print(plane == PLANE_CONTROL ? F("Console") : F("Log"));
+    msg.control.print(secondary ? F(" secondary: ") : F(": "));
+    msg.control.println(tok);
+    printSaveReminder();
+    return 0;
+}
 
-    if (streq_P(argv[1], PSTR("STATUS"))) {
-        router.printTransportStatus();
+// "<primary>[ + <secondary>]"
+static FLASHMEM void printPlaneTransports(MessagePlane plane) {
+    char t[12];
+    outputTransportName(router.getPrimaryTransportId(plane), t, sizeof(t));
+    msg.control.print(t);
+    const uint8_t sec = router.getSecondaryTransportId(plane);
+    if (sec != TRANSPORT_NONE) {
+        outputTransportName(sec, t, sizeof(t));
+        msg.control.print(F(" + "));
+        msg.control.print(t);
+    }
+    msg.control.println();
+}
+
+// CONSOLE STATUS (RUN ok) | CONSOLE TRANSPORT <t> [SECONDARY]
+FLASHMEM int cmd_console(int argc, const char* const* argv) {
+    if (argc >= 2 && streq_P(argv[1], PSTR("STATUS"))) {
+        msg.control.print(F("Console: "));
+        printPlaneTransports(PLANE_CONTROL);
+        if (router.consoleOnUsbFallback()) {
+            msg.control.println(F("  (neither is usable: answering on USB)"));
+        }
+        msg.control.print(F("Log:     "));
+        printPlaneTransports(PLANE_DEBUG);
         return 0;
     }
-
-    // All other subcommands require a plane and transport
-    if (argc < 3) {
-        msg.control.println(F("ERROR: Subcommand requires a plane and transport"));
-        msg.control.println(F("  Usage: TRANSPORT <plane> <transport> [SECONDARY]"));
-        return 1;
-    }
-
-    bool planeValid = false;
-    MessagePlane plane = parsePlane(argv[1], &planeValid);
-    if (!planeValid) {
-        msg.control.print(F("ERROR: Unknown plane '"));
-        msg.control.print(argv[1]);
-        msg.control.println(F("'"));
-        return 1;
-    }
-
-    bool transportValid = false;
-    TransportID transport = parseTransport(argv[2], &transportValid);
-    if (!transportValid) {
-        msg.control.print(F("ERROR: Unknown transport '"));
-        msg.control.print(argv[2]);
-        msg.control.println(F("'"));
-        return 1;
-    }
-
-    // Optional SECONDARY keyword: TRANSPORT <plane> <transport> SECONDARY
-    // Sets this as the secondary (listen-on + multicast-to) transport for the plane,
-    // leaving the primary unchanged. Both primary and secondary are polled for input
-    // and receive all output, enabling simultaneous control from two ports.
-    if (argc >= 4 && !streq_P(argv[3], PSTR("SECONDARY"))) {
-        msg.control.print(F("ERROR: Unknown option '"));
-        msg.control.print(argv[3]);
-        msg.control.println(F("' (did you mean SECONDARY?)"));
-        return 1;
-    }
-    bool isSecondary = (argc >= 4);
-
-    // Conflict: refuse to assign a serial port that is owned by ELM327
-#if INCLUDE_ELM327
-    if (transport >= TRANSPORT_SERIAL1 && transport <= TRANSPORT_SERIAL8) {
-        uint8_t port_id = transport - TRANSPORT_SERIAL1 + 1;
-        if (systemConfig.buses.elm327_serial_port == port_id) {
-            msg.control.print(F("ERROR: Serial"));
-            msg.control.print(port_id);
-            msg.control.println(F(" is owned by ELM327: OUTPUT DEL 4 first"));
+    if (argc >= 3 && streq_P(argv[1], PSTR("TRANSPORT"))) {
+        if (isInRunMode()) {
+            msg.control.println(F("ERROR: CONSOLE TRANSPORT requires CONFIG mode"));
             return 1;
         }
-    }
-#endif
-
-    if (router.setTransport(plane, transport, isSecondary)) {
-        msg.control.print(F("Set "));
-        msg.control.print(argv[1]);
-        if (isSecondary) msg.control.print(F(" secondary"));
-        msg.control.print(F(" → "));
-        msg.control.println(argv[2]);
-
-        // Sync router state to systemConfig (will be persisted on SAVE)
-        router.syncConfig();
-        printSaveReminder();
-    } else {
-        // Provide specific error for disabled serial ports
-        if (transport >= TRANSPORT_SERIAL1 && transport <= TRANSPORT_SERIAL8) {
-            uint8_t port_id = transport - TRANSPORT_SERIAL1 + 1;
-            msg.control.print(F("ERROR: Serial"));
-            msg.control.print(port_id);
-            msg.control.println(F(" is not enabled"));
-            msg.control.print(F("  Run: BUS SERIAL "));
-            msg.control.print(port_id);
-            msg.control.println(F(" ENABLE"));
-        } else {
-            msg.control.print(F("ERROR: Transport '"));
-            msg.control.print(argv[2]);
-            msg.control.println(F("' not available"));
+        configGenerationBump();
+        if (argc >= 4 && !streq_P(argv[3], PSTR("SECONDARY"))) {
+            msg.control.println(F("ERROR: expected SECONDARY"));
+            return 1;
         }
-        return 1;
+        return setPlaneTransport(PLANE_CONTROL, argv[2], argc >= 4);
     }
-
-    return 0;
+    msg.control.println(F("ERROR: Usage: CONSOLE STATUS | CONSOLE TRANSPORT <transport> [SECONDARY]"));
+    return 1;
 }
 
 #if INCLUDE_RELAY_OUTPUT
@@ -1117,11 +1127,12 @@ int cmd_log(int argc, const char* const* argv) {
         msg.control.println(F("Usage: LOG <subcommand>"));
         msg.control.println(F("  LOG STATUS              - Show current log configuration"));
         msg.control.println(F("  LOG TAGS                - List all available tags"));
-        msg.control.println(F("  LOG LEVEL <plane> <lvl> - Set log level for plane"));
+        msg.control.println(F("  LOG LEVEL <CONSOLE|DEBUG> <lvl> - Set a log level"));
+        msg.control.println(F("  LOG TRANSPORT <t> [SECONDARY]  - Where the log goes"));
         msg.control.println(F("  LOG TAG <tag> <state>   - Enable/disable a tag"));
         msg.control.println();
         msg.control.println(F("Examples:"));
-        msg.control.println(F("  LOG LEVEL DEBUG INFO    - Show INFO and above on debug plane"));
+        msg.control.println(F("  LOG LEVEL DEBUG INFO    - Show INFO and above in the log"));
         msg.control.println(F("  LOG TAG SD DISABLE      - Hide all SD card messages"));
         msg.control.println(F("  LOG TAG ALL ENABLE      - Enable all tags"));
         return 1;
@@ -1140,16 +1151,13 @@ int cmd_log(int argc, const char* const* argv) {
         msg.control.println(F("  Log Filter Status"));
         msg.control.println(F("========================================"));
 
-        // Show log levels for each plane
+        msg.control.print(F("Transport: "));
+        printPlaneTransports(PLANE_DEBUG);
         msg.control.println(F("Log Levels:"));
-        const char* planeNames[] = {"CONTROL", "DATA", "DEBUG"};
-        for (int i = 0; i < 3; i++) {
-            msg.control.print(F("  "));
-            msg.control.print(planeNames[i]);
-            msg.control.print(F(": "));
-            LogLevel level = router.getLogFilter().getLevel(i);
-            msg.control.println(router.getLogFilter().getLevelName(level));
-        }
+        msg.control.print(F("  CONSOLE: "));
+        msg.control.println(router.getLogFilter().getLevelName(router.getLogFilter().getLevel(PLANE_CONTROL)));
+        msg.control.print(F("  DEBUG: "));
+        msg.control.println(router.getLogFilter().getLevelName(router.getLogFilter().getLevel(PLANE_DEBUG)));
 
         msg.control.println();
         msg.control.println(F("Enabled Tags:"));
@@ -1199,7 +1207,21 @@ int cmd_log(int argc, const char* const* argv) {
         return 0;
     }
 
-    // LOG LEVEL <plane> <level> - set log level
+    // LOG TRANSPORT <t> [SECONDARY] (#612 phase 2b-1)
+    if (streq_P(subcmd, PSTR("TRANSPORT"))) {
+        if (isInRunMode()) {
+            msg.control.println(F("ERROR: LOG TRANSPORT requires CONFIG mode"));
+            return 1;
+        }
+        configGenerationBump();
+        if (argc < 3 || (argc >= 4 && !streq_P(argv[3], PSTR("SECONDARY")))) {
+            msg.control.println(F("ERROR: Usage: LOG TRANSPORT <transport> [SECONDARY]"));
+            return 1;
+        }
+        return setPlaneTransport(PLANE_DEBUG, argv[2], argc >= 4);
+    }
+
+    // LOG LEVEL <CONSOLE|DEBUG> <level> - set log level
     if (streq_P(subcmd, PSTR("LEVEL"))) {
         if (isInRunMode()) {
             msg.control.println(F("ERROR: LOG LEVEL requires CONFIG mode (mutates log filter)"));
@@ -1208,9 +1230,9 @@ int cmd_log(int argc, const char* const* argv) {
         configGenerationBump();   // logFilter is in SYSTEM DUMP JSON (#455)
         if (argc < 4) {
             msg.control.println(F("ERROR: LEVEL requires plane and level"));
-            msg.control.println(F("  Usage: LOG LEVEL <CONTROL|DATA|DEBUG> <NONE|ERROR|WARN|INFO|DEBUG>"));
+            msg.control.println(F("  Usage: LOG LEVEL <CONSOLE|DEBUG> <NONE|ERROR|WARN|INFO|DEBUG>"));
             msg.control.println(F("  Examples:"));
-            msg.control.println(F("    LOG LEVEL DEBUG ERROR  - Only show errors on debug plane"));
+            msg.control.println(F("    LOG LEVEL DEBUG ERROR  - Only show errors in the log"));
             msg.control.println(F("    LOG LEVEL DEBUG INFO   - Show INFO and above (INFO, WARN, ERROR)"));
             msg.control.println(F("    LOG LEVEL DEBUG DEBUG  - Show all messages (maximum verbosity)"));
             return 1;
@@ -1223,14 +1245,12 @@ int cmd_log(int argc, const char* const* argv) {
         for (char* p = planeName; *p; p++) *p = toupper(*p);
 
         int plane = -1;
-        if (streq_P(planeName, PSTR("CONTROL"))) plane = PLANE_CONTROL;
-        else if (streq_P(planeName, PSTR("DATA"))) plane = PLANE_DATA;
+        if (streq_P(planeName, PSTR("CONSOLE"))) plane = PLANE_CONTROL;
         else if (streq_P(planeName, PSTR("DEBUG"))) plane = PLANE_DEBUG;
         else {
-            msg.control.print(F("ERROR: Unknown plane '"));
+            msg.control.print(F("ERROR: Unknown log '"));
             msg.control.print(planeName);
-            msg.control.println(F("'"));
-            msg.control.println(F("  Valid planes: CONTROL, DATA, DEBUG"));
+            msg.control.println(F("' (CONSOLE or DEBUG)"));
             return 1;
         }
 
@@ -1255,7 +1275,7 @@ int cmd_log(int argc, const char* const* argv) {
 
         msg.control.print(F("✓ "));
         msg.control.print(planeName);
-        msg.control.print(F(" plane log level set to "));
+        msg.control.print(F(" log level set to "));
         msg.control.println(router.getLogFilter().getLevelName(level));
         printSaveReminder();
         return 0;

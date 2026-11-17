@@ -1,48 +1,29 @@
 /*
- * output_realdash.cpp - RealDash binary CAN output for data plane
+ * output_realdash.cpp - RealDash binary CAN frames on a stream (#612: the
+ * output's own transport, which it has to itself: no text may land in it)
  */
 
 #include "../table/output_base.h"
 #include "../../config.h"
-#include "../../core/message_api.h"
 
 #if INCLUDE_REALDASH
 
-void initRealdash() {
-    // Serial initialization happens in main.cpp
-    msg.data.println("✓ RealDash output initialized");
-}
-
-void sendRealdash(Input *ptr) {
-    if (isnan(ptr->value)) {
-        return;
-    }
-
-    // RealDash requires specific framing
-    byte preamble[4] = {0x44, 0x33, 0x22, 0x11};
-    unsigned long canFrameId = 0x0C80;  // Base frame ID
-
-    byte frameData[8];
-
-    // Build OBDII frame using shared helper (fixes length byte and endianness)
-    if (!buildOBD2Frame(frameData, ptr)) {
-        return;  // Invalid data size
-    }
-
-    // Send RealDash frame to data plane
-    msg.data.write(preamble, 4);
-    msg.data.write((const byte*)&canFrameId, 4);
-    msg.data.write(frameData, 8);
-}
-
-void updateRealdash() {
-    // Handle any incoming RealDash commands if needed
+// One input as a RealDash "CAN over serial" frame: 44 33 22 11, the frame ID
+// (0x0C80, little-endian), then the input's Mode 01 answer as 8 bytes
+// (buildOBD2Frame). The baseline these bytes must match is in #612.
+void sendRealdashFrame(Input* ptr, Print& out) {
+    if (isnan(ptr->value)) return;
+    static const uint8_t preamble[4] = {0x44, 0x33, 0x22, 0x11};
+    static const uint8_t frameId[4]  = {0x80, 0x0C, 0x00, 0x00};   // 0x0C80, LE
+    uint8_t frameData[8];
+    if (!buildOBD2Frame(frameData, ptr)) return;   // no answerable PID
+    out.write(preamble, 4);
+    out.write(frameId, 4);
+    out.write(frameData, 8);
 }
 
 #else
 
-void initRealdash() {}
-void sendRealdash(Input *ptr) {}
-void updateRealdash() {}
+void sendRealdashFrame(Input*, Print&) {}
 
 #endif

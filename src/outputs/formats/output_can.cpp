@@ -7,7 +7,7 @@
  * every input on 0x7E8 as well. That is the response ID a tester reads after
  * each request, so the extra frames reached tools as stray answers, and nothing
  * consumed them: RealDash reads 0x0C80 from output_realdash (#528).
- * A consumer of one CAN bus (systemConfig.buses.obdBus, its transport): the
+ * A consumer of one CAN bus (its output record's transport, #612): the
  * bus manager starts and reads the bus and hands it the OBD requests
  * (buses/can_bus.h, #612 phase 2a).
  */
@@ -33,6 +33,8 @@
 // The bus OBD is attached to; 0xFF while detached
 static uint8_t canOutputBus = 0xFF;
 void stopCAN();
+// Its output id: whose route bit decides what it answers (#612)
+static uint8_t obdRouteId = 0xFF;
 
 // ===== PLATFORM ABSTRACTION =====
 
@@ -54,7 +56,7 @@ static void sendCANFrame(uint32_t canId, const byte* data, uint8_t len) {
  */
 static void sendSupportedPIDsResponse(uint8_t basePID) {
     uint8_t bitmap[4];
-    obdQuery_getSupportedPIDBitmap(bitmap, basePID, OUT_ID_OBD);
+    obdQuery_getSupportedPIDBitmap(bitmap, basePID, obdRouteId);
 
     byte frameData[8] = {
         0x06,         // Length: 6 bytes (mode + PID + 4 bitmap bytes)
@@ -275,7 +277,7 @@ static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
     }
 
     // Lookup PID in active inputs
-    Input* input = obdQuery_findByPID(pid, OUT_ID_OBD);
+    Input* input = obdQuery_findByPID(pid, obdRouteId);
     if (input == nullptr || isnan(input->value)) {
         // PID not supported or no valid data
         sendNegativeResponse(canId, mode, 0x31);  // Request out of range
@@ -299,12 +301,13 @@ static void onCanReset() { isotp.state = isotp.IDLE; }
 static bool onCanBusy() { return isotp.state != isotp.IDLE; }
 
 /**
- * Attach the OBD output to its bus (systemConfig.buses.obdBus). Called when
+ * Attach OBD output <id> to its bus (its record's transport). Called when
  * the output is enabled; a bus already running is never re-begun.
  */
-FLASHMEM void initCAN() {
+FLASHMEM void initCAN(uint8_t id) {
     stopCAN();
-    const uint8_t bus = systemConfig.buses.obdBus;
+    const uint8_t bus = outputTransportCanBus(outputTransportOf(id));
+    obdRouteId = id;
     if (bus == 0xFF) return;   // no bus: OUTPUT ADD OBD CAN<n>
     canSetHandlers(CANC_OBD, onCanFrame, onCanReset, onCanBusy);
     const CanAttach r = canAttach(bus, CANC_OBD);
@@ -336,7 +339,7 @@ void updateCAN() {
 #else
 
 // Dummy functions if CAN is disabled
-void initCAN() {}
+void initCAN(uint8_t) {}
 void stopCAN() {}
 void updateCAN() {}
 uint8_t canOutputAttachedBus() { return 0xFF; }

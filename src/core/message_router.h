@@ -18,10 +18,9 @@
 
 // Message plane enumeration
 enum MessagePlane {
-    PLANE_CONTROL = 0,  // Interactive commands, configuration responses
-    PLANE_DATA    = 1,  // Sensor data streams (CSV, RealDash binary)
-    PLANE_DEBUG   = 2,  // Debug/diagnostic messages
-    NUM_PLANES    = 3
+    PLANE_CONTROL = 0,  // The console: commands and their replies (CONSOLE TRANSPORT)
+    PLANE_DEBUG   = 1,  // The log (LOG TRANSPORT). Sensor data is the outputs' (#612)
+    NUM_PLANES    = 2
 };
 
 // Registered predicate: is a hardware serial port's transport currently
@@ -195,14 +194,22 @@ public:
     // configuration -- see loadConfig() note above.
     void setTransportUnchecked(MessagePlane plane, TransportID transportId, bool secondary = false);
 
+    // A stream output's transport (#612): registered and its port started
+    // (#558: writing to a UART that never began faults on Teensy 4), else nullptr
+    TransportInterface* streamTransport(uint8_t transportId) const { return usableTransport(transportId); }
+    // Neither console transport is usable, so the console answers on USB (#558):
+    // a binary output on USB pauses meanwhile
+    bool consoleOnUsbFallback() const {
+        return usableTransport(primaryTransport[PLANE_CONTROL]) == nullptr &&
+               usableTransport(secondaryTransport[PLANE_CONTROL]) == nullptr;
+    }
+
     // Query current transport routing (STATUS)
-    void printTransportStatus();
 
     // List available transports (LIST)
     void listAvailableTransports();
 
     // List all transports and their current assignments (old function, kept for compatibility)
-    void listTransports();
 
     // ========== Update Loop ==========
 

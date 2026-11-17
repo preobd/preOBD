@@ -78,7 +78,6 @@ uint8_t parsePin(const char* pinStr, bool* isValid);
 void resetVirtualPinCounters();  // Reset CAN/I2C virtual pin allocation counters
 
 // Transport parsing (returns valid enum + sets isValid flag)
-MessagePlane parsePlane(const char* str, bool* isValid);
 TransportID parseTransport(const char* str, bool* isValid);
 
 // File path parsing for SAVE/LOAD commands
@@ -121,7 +120,7 @@ void printHelpControl();
 void printHelpOutput();
 void printHelpBus();
 void printHelpDisplay();
-void printHelpTransport();
+void printHelpConsole();
 void printHelpSystem();
 void printHelpConfig();
 void printHelpExamples();

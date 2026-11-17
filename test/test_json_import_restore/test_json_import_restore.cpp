@@ -4,7 +4,7 @@
 // backup kept every input added since, and a pin the file carried at another
 // idx could end up live in two slots. It now replaces the table, as "rules"
 // and "actions" already did.
-// #561: system.logFilter was exported and never read back. (system.serial is
+// #561: the log filter (system.log since #612) was exported and never read back. (system.serial is
 // imported too, but the native platform has no serial ports: bench-tested.)
 // #567: a file must fit this board -- every physical pin it uses exists here,
 // and an input it labels A<n> is on this board's A<n> -- or nothing changes.
@@ -20,7 +20,8 @@
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/config/input_store.cpp"
-#include "../../src/outputs/table/output_table.cpp"   // the outputs view (#612)
+#include "../../src/outputs/table/output_table.cpp"   // the stored outputs (#612)
+#include "../../src/outputs/table/output_admission.cpp"   // import admission (#612)
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"
@@ -75,8 +76,7 @@ void setUp(void) {
 #if INCLUDE_RULES_ENGINE
     g_rulesInitCalls = 0;
 #endif
-    systemConfig.logFilter.control_level = 3;
-    systemConfig.logFilter.data_level = 3;
+    systemConfig.logFilter.console_level = 3;
     systemConfig.logFilter.debug_level = 3;
     systemConfig.logFilter.enabledTags = 0xFFFFFFFF;
 }
@@ -180,7 +180,8 @@ static void test_outputs_follow_a_committed_system_block_even_if_inputs_fail(voi
         "{\"schemaVersion\":1,\"mode\":\"runtime\","
         "\"system\":{\"outputs\":[{\"id\":2,\"format\":\"CSV\",\"transport\":\"USB\",\"enabled\":true}]},\"inputs\":"
         "[{\"idx\":0,\"pin\":6,\"app\":\"NO_SUCH_APP\",\"sensor\":\"NO_SUCH_SENSOR\"}]}"));
-    TEST_ASSERT_EQUAL_UINT8(1, systemConfig.outputEnabled[OUTPUT_SERIAL]);
+    TEST_ASSERT_TRUE(outputIsEnabled(2));
+    TEST_ASSERT_EQUAL(FMT_CSV, outputFormatOf(2));
     TEST_ASSERT_EQUAL_INT(1, g_syncOutputsCalls);
 }
 
@@ -286,12 +287,12 @@ static void test_an_out_of_range_stored_lcd_address_drives_the_default(void) {
 
 static void test_log_filter_is_imported_and_applied_live(void) {
     TEST_ASSERT_TRUE(loadConfigFromJSON(
-        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"logFilter\":"
-        "{\"controlLevel\":\"WARN\",\"dataLevel\":\"NONE\",\"debugLevel\":\"DEBUG\","
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"log\":"
+        "{\"consoleLevel\":\"WARN\",\"debugLevel\":\"DEBUG\",\"transport\":\"SERIAL2\","
         "\"enabledTags\":\"0x0000F00F\"}}}"));
-    TEST_ASSERT_EQUAL_UINT8(2, systemConfig.logFilter.control_level);
-    TEST_ASSERT_EQUAL_UINT8(0, systemConfig.logFilter.data_level);
+    TEST_ASSERT_EQUAL_UINT8(2, systemConfig.logFilter.console_level);
     TEST_ASSERT_EQUAL_UINT8(4, systemConfig.logFilter.debug_level);
+    TEST_ASSERT_NOT_EQUAL(OT_SERIAL1 + 1, systemConfig.log.primary);   // transports are export-only
     TEST_ASSERT_EQUAL_HEX32(0x0000F00F, systemConfig.logFilter.enabledTags);
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, g_applyLogFilterCalls, "imported filter never reached the live one");
 }
@@ -300,10 +301,10 @@ static void test_log_filter_is_imported_and_applied_live(void) {
 // tags string is a hand edit: neither may become NONE / 0.
 static void test_unreadable_log_filter_values_keep_the_current_ones(void) {
     TEST_ASSERT_TRUE(loadConfigFromJSON(
-        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"logFilter\":"
-        "{\"controlLevel\":\"UNKNOWN\",\"dataLevel\":7,\"enabledTags\":\"zz\"}}}"));
-    TEST_ASSERT_EQUAL_UINT8(3, systemConfig.logFilter.control_level);
-    TEST_ASSERT_EQUAL_UINT8(3, systemConfig.logFilter.data_level);
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"log\":"
+        "{\"consoleLevel\":\"UNKNOWN\",\"debugLevel\":7,\"enabledTags\":\"zz\"}}}"));
+    TEST_ASSERT_EQUAL_UINT8(3, systemConfig.logFilter.console_level);
+    TEST_ASSERT_EQUAL_UINT8(3, systemConfig.logFilter.debug_level);
     TEST_ASSERT_EQUAL_HEX32(0xFFFFFFFF, systemConfig.logFilter.enabledTags);
 }
 
@@ -314,7 +315,7 @@ static void test_malformed_tag_masks_are_refused(void) {
     for (const char* t : bad) {
         char json[200];
         snprintf(json, sizeof(json),
-                 "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"logFilter\":"
+                 "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"log\":"
                  "{\"enabledTags\":\"%s\"}}}", t);
         systemConfig.logFilter.enabledTags = 0x12345678;
         TEST_ASSERT_TRUE(loadConfigFromJSON(json));
@@ -326,43 +327,62 @@ static void test_malformed_tag_masks_are_refused(void) {
 // committed import hands the live outputs the new flags; a refused one
 // leaves them alone.
 static void test_imported_output_enables_reach_the_live_outputs(void) {
-    systemConfig.outputEnabled[OUTPUT_SERIAL] = 0;
+    outputsClear();
     TEST_ASSERT_TRUE(loadConfigFromJSON(
         "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"outputs\":"
         "[{\"id\":2,\"format\":\"CSV\",\"transport\":\"USB\",\"enabled\":true}]}}"));
-    TEST_ASSERT_EQUAL_UINT8(1, systemConfig.outputEnabled[OUTPUT_SERIAL]);
+    TEST_ASSERT_TRUE(outputIsEnabled(2));
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, g_syncOutputsCalls, "imported enable never reached the live outputs");
 }
 
-// #612 phase 2a: ELM327's serial port is its output record's transport. One
-// on a port that is not on is imported switched off (with a NOTE), so the rest
-// of the file still restores. ELM327 over BLE is id 5, and a deleted ELM327
-// output loses its port.
-static void test_elm327_ports_come_from_the_outputs_array(void) {
+// #612 phase 2b-1: the outputs array replaces the stored table, ids kept. An
+// enabled output that can't run on the file's own settings (here: ELM327 on
+// a serial port this file doesn't turn on) is imported switched off; a record
+// this board can't hold is skipped; and with no inputs in the file, an id
+// that now means another output is routed to every input, as ADD does.
+static void test_the_outputs_array_replaces_the_table(void) {
     systemConfig.serial.enabled_mask = 0;
-    systemConfig.serial.framed_enabled_mask = 0;
-    systemConfig.buses.elm327_serial_port = 0xFF;
-    systemConfig.outputEnabled[OUTPUT_ELM327] = 0;
-    systemConfig.outputEnabled[OUTPUT_ELM327_BLE] = 0;
+    systemConfig.console.primary = OT_ESP32_BT;
+    outputsClear();
+    configure(4);
+    getInputByPin(4)->routeMask = 0x00;
+    outputCreate(FMT_CSV, OT_USB, true);   // id 0, about to become something else
     TEST_ASSERT_TRUE(loadConfigFromJSON(
         "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"outputs\":"
-        "[{\"id\":4,\"format\":\"ELM327\",\"transport\":\"SERIAL2\",\"enabled\":true}]}}"));
-    TEST_ASSERT_EQUAL_UINT8(2, systemConfig.buses.elm327_serial_port);    // the transport is kept
-    TEST_ASSERT_EQUAL_UINT8(0, systemConfig.outputEnabled[OUTPUT_ELM327]);   // but off: Serial2 isn't on
+        "[{\"id\":0,\"format\":\"ELM327\",\"transport\":\"BLE\",\"enabled\":true},"
+        "{\"id\":3,\"format\":\"REALDASH\",\"transport\":\"USB\",\"enabled\":true,\"interval\":50},"
+        "{\"id\":7,\"format\":\"OBD\",\"transport\":\"CAN1\",\"enabled\":true}]}}"));
+    TEST_ASSERT_EQUAL(FMT_ELM327, outputFormatOf(0));
+    TEST_ASSERT_TRUE(outputIsEnabled(0));
+    TEST_ASSERT_EQUAL(FMT_REALDASH, outputFormatOf(3));
+    TEST_ASSERT_EQUAL_UINT16(50, outputRecord(3)->interval);
+    TEST_ASSERT_FALSE(outputExists(7));                            // OBD isn't built here: skipped
+    TEST_ASSERT_EQUAL_UINT8(2, outputCount());
+    TEST_ASSERT_EQUAL_HEX8(0x09, getInputByPin(4)->routeMask);     // ids 0 and 3 now mean new outputs
 
-    // (A port the file turns on is bench-tested: this binary has no serial ports.)
-    systemConfig.buses.elm327_serial_port = 2;   // as OUTPUT ADD ELM327 SERIAL2 left it
-    systemConfig.outputEnabled[OUTPUT_ELM327] = 1;
-
-    // A file without output 4 deletes it, and its port goes with it
+    // A RealDash on the console's stream is imported off: the console wins
+    systemConfig.console.primary = OT_USB;
     TEST_ASSERT_TRUE(loadConfigFromJSON(
         "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"outputs\":"
-        "[{\"id\":5,\"format\":\"ELM327\",\"transport\":\"BLE\",\"enabled\":true}]}}"));
-    TEST_ASSERT_EQUAL_UINT8(1, systemConfig.outputEnabled[OUTPUT_ELM327_BLE]);
-    TEST_ASSERT_FALSE(outputExists(OUT_ID_ELM327));
-    TEST_ASSERT_EQUAL_UINT8(0, systemConfig.outputEnabled[OUTPUT_ELM327]);
-    TEST_ASSERT_EQUAL_UINT8(0xFF, systemConfig.buses.elm327_serial_port);
-    systemConfig.router.outputsAbsent = 0;
+        "[{\"id\":1,\"format\":\"REALDASH\",\"transport\":\"USB\",\"enabled\":true}]}}"));
+    TEST_ASSERT_TRUE(outputExists(1));
+    TEST_ASSERT_FALSE(outputIsEnabled(1));
+    systemConfig.console.primary = OT_ESP32_BT;
+    outputsClear();
+}
+
+// One per kind on import: a file with two ELM327-on-BLE outputs keeps the
+// lower id; the second is skipped with a NOTE, not imported to fight the first
+static void test_a_second_one_per_kind_output_is_skipped_on_import(void) {
+    outputsClear();
+    TEST_ASSERT_TRUE(loadConfigFromJSON(
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"outputs\":"
+        "[{\"id\":4,\"format\":\"ELM327\",\"transport\":\"BLE\",\"enabled\":true},"
+        "{\"id\":1,\"format\":\"ELM327\",\"transport\":\"BLE\",\"enabled\":true}]}}"));
+    TEST_ASSERT_EQUAL(FMT_ELM327, outputFormatOf(1));
+    TEST_ASSERT_FALSE(outputExists(4));
+    TEST_ASSERT_EQUAL_UINT8(1, outputCount());
+    outputsClear();
 }
 
 static void test_no_log_filter_key_leaves_the_live_filter_alone(void) {
@@ -506,7 +526,8 @@ int main(int, char**) {
     RUN_TEST(test_an_analog_input_must_land_on_the_same_a_pin);
     RUN_TEST(test_a_relay_on_a_pin_this_board_lacks_is_refused);
     RUN_TEST(test_a_file_from_another_board_that_fits_is_imported);
-    RUN_TEST(test_elm327_ports_come_from_the_outputs_array);
+    RUN_TEST(test_the_outputs_array_replaces_the_table);
+    RUN_TEST(test_a_second_one_per_kind_output_is_skipped_on_import);
     RUN_TEST(test_analog_pins_past_the_digital_range_exist);
     RUN_TEST(test_an_unreadable_pin_is_refused);
     return UNITY_END();

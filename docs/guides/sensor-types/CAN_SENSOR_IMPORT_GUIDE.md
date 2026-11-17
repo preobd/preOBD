@@ -473,8 +473,9 @@ RULE ADD CAN:0 OUTSIDE 500 6000              # RPM alarm
 RULE ADD A0 OUTSIDE 50 130                   # Oil temp alarm
 RULE ADD A1 OUTSIDE 1.0 6.0                  # Oil pressure alarm
 
-# Enable outputs
-OUTPUT 0 ENABLE                     # Answer OBD-II requests
+# Answer OBD-II requests on CAN2
+BUS CAN CAN2 ENABLE
+OUTPUT ADD OBD CAN2
 
 # Save configuration
 SAVE

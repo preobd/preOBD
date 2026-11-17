@@ -25,7 +25,8 @@
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/config/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
-#include "../../src/outputs/table/output_table.cpp"   // the outputs view (#612)
+#include "../../src/outputs/table/output_table.cpp"   // the stored outputs (#612)
+#include "../../src/outputs/table/output_admission.cpp"   // import admission (#612)
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
@@ -513,100 +514,29 @@ static void test_import_display_object_without_type_preserves_current_type(void)
     TEST_ASSERT_TRUE(systemConfig.displayEnabled);
 }
 
-// sensorRead/alarmCheck are retired (#601): every older dump carries them, so
-// the import must still accept the file and leave the values alone.
-//
-// MUTANT TARGET: restoring either `staged.X = timing["X"];` must fail this test.
-static void test_import_timing_retired_keys_are_ignored(void) {
-    systemConfig.sensorReadInterval = 250;
-    systemConfig.alarmCheckInterval = 500;
-    systemConfig.lcdUpdateInterval = 500;
-    JsonDocument doc;
-    JsonObject sys = doc.to<JsonObject>();
-    JsonObject timing = sys["timing"].to<JsonObject>();
-    timing["sensorRead"] = 100;
-    timing["alarmCheck"] = 0;
-    timing["lcdUpdate"] = 7;                 // its old location
-    sys["display"]["updateInterval"] = 9;    // DISPLAY INTERVAL, retired too
-
-    TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
-    TEST_ASSERT_EQUAL_UINT16(250, systemConfig.sensorReadInterval);
-    TEST_ASSERT_EQUAL_UINT16(500, systemConfig.alarmCheckInterval);
-    TEST_ASSERT_EQUAL_UINT16(500, systemConfig.lcdUpdateInterval);
-}
-
-// #608: JSON IMPORT holds intervals to the same per-output ranges as the CLI
-// (RealDash 50, CSV 100, CSV on SD 1 .. 60000 ms), and repairs an older
-// file's out-of-range value the way EEPROM load does: clamped, 0 to the
-// default. Only the paced outputs take an interval at all.
+// #608 / #612 phase 2b-1: JSON IMPORT holds intervals to the same per-format
+// ranges as the CLI (RealDash 50, CSV 100 .. 60000 ms); an out-of-range or
+// non-numeric value gets the format's default with a NOTE. Answer formats
+// take no interval. The array replaces the table, ids kept.
 static void test_import_output_intervals_are_range_checked(void) {
-    systemConfig.outputInterval[OUTPUT_REALDASH] = 100;
-    systemConfig.outputInterval[OUTPUT_SERIAL]   = 1000;
-    systemConfig.outputInterval[OUTPUT_SD]       = 5000;
-    systemConfig.outputInterval[OUTPUT_ALARM]    = 0;
-    systemConfig.outputInterval[OUTPUT_ELM327]   = UINT16_MAX;
+    outputsClear();
     JsonDocument doc;
     JsonObject sys = doc.to<JsonObject>();
-    JsonArray out = sys["outputs"].to<JsonArray>();   // the #612 array
+    JsonArray out = sys["outputs"].to<JsonArray>();
     auto add = [&](int id, const char* fmt, const char* tr, long iv) {
         JsonObject o = out.add<JsonObject>();
-        o["id"] = id; o["format"] = fmt; o["transport"] = tr; o["interval"] = iv;
+        o["id"] = id; o["format"] = fmt; o["transport"] = tr; o["interval"] = iv; o["enabled"] = false;
     };
-    add(OUT_ID_REALDASH, "REALDASH", "USB", 60);   // valid: taken
-    add(OUT_ID_CSV,      "CSV",      "USB", 0);    // sent every loop: the default
-    add(OUT_ID_ELM327,   "ELM327",   "NONE", 9);   // no interval: ignored
+    add(3, "REALDASH", "USB", 60);    // valid: taken, at id 3
+    add(6, "CSV",      "USB", 0);     // out of range: the default
+    add(1, "ELM327",   "BLE", 9);     // no interval: ignored
+    add(9, "CSV",      "USB", 500);   // id past MAX_OUTPUTS: skipped
     TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
-    TEST_ASSERT_EQUAL_UINT16(60,    systemConfig.outputInterval[OUTPUT_REALDASH]);
-    TEST_ASSERT_EQUAL_UINT16(1000,  systemConfig.outputInterval[OUTPUT_SERIAL]);
-    TEST_ASSERT_EQUAL_UINT16(5000,  systemConfig.outputInterval[OUTPUT_SD]);   // not in this build
-    TEST_ASSERT_EQUAL_UINT16(0,     systemConfig.outputInterval[OUTPUT_ALARM]);
-    TEST_ASSERT_EQUAL_UINT16(UINT16_MAX, systemConfig.outputInterval[OUTPUT_ELM327]);
-
-    // out[0] is RealDash, out[1] is CSV on the stream. (SD logging isn't in
-    // the native build; its 1 ms floor is outputIntervalMinMs(OUTPUT_SD).)
-    // Each floor and the ceiling are inclusive
-    out[0]["interval"] = 50;
-    out[1]["interval"] = 100;
-    TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
-    TEST_ASSERT_EQUAL_UINT16(50,  systemConfig.outputInterval[OUTPUT_REALDASH]);
-    TEST_ASSERT_EQUAL_UINT16(100, systemConfig.outputInterval[OUTPUT_SERIAL]);
-
-    // Just outside: clamped to the nearest end, as on EEPROM load
-    out[0]["interval"] = 10;       // valid in the old 10-60000 docs
-    out[1]["interval"] = 60001;
-    TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
-    TEST_ASSERT_EQUAL_UINT16(50,    systemConfig.outputInterval[OUTPUT_REALDASH]);
-    TEST_ASSERT_EQUAL_UINT16(60000, systemConfig.outputInterval[OUTPUT_SERIAL]);
-
-    // Too big for long, or negative: still numbers, clamped to the near end
-    out[0]["interval"] = 5000000000LL;
-    out[1]["interval"] = -5;
-    TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
-    TEST_ASSERT_EQUAL_UINT16(60000, systemConfig.outputInterval[OUTPUT_REALDASH]);
-    TEST_ASSERT_EQUAL_UINT16(100,   systemConfig.outputInterval[OUTPUT_SERIAL]);
-
-    // A whole-number float in range (Python's json.dumps of a float) is that
-    // value, not "too big"
-    out[0]["interval"] = 75.0;
-    out[1]["interval"] = 1e3;
-    TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
-    TEST_ASSERT_EQUAL_UINT16(75,   systemConfig.outputInterval[OUTPUT_REALDASH]);
-    TEST_ASSERT_EQUAL_UINT16(1000, systemConfig.outputInterval[OUTPUT_SERIAL]);
-
-    // Not an integer: a coercing read would take "abc" as 0 and 250.5 as 250;
-    // ignored, the current value stays
-    out[0]["interval"] = "abc";
-    out[1]["interval"] = 250.5;
-    TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
-    TEST_ASSERT_EQUAL_UINT16(75,   systemConfig.outputInterval[OUTPUT_REALDASH]);
-    TEST_ASSERT_EQUAL_UINT16(1000, systemConfig.outputInterval[OUTPUT_SERIAL]);
-
-    // Leave the shared global as the other tests expect it (factory values)
-    systemConfig.outputInterval[OUTPUT_REALDASH] = 100;
-    systemConfig.outputInterval[OUTPUT_SERIAL]   = 1000;
-    systemConfig.outputInterval[OUTPUT_SD]       = 5000;
-    systemConfig.outputInterval[OUTPUT_ALARM]    = 100;
-    systemConfig.outputInterval[OUTPUT_ELM327]   = UINT16_MAX;
+    TEST_ASSERT_EQUAL_UINT16(60, outputRecord(3)->interval);
+    TEST_ASSERT_EQUAL_UINT16(SERIAL_CSV_INTERVAL_MS, outputRecord(6)->interval);
+    TEST_ASSERT_EQUAL_UINT16(0, outputRecord(1)->interval);
+    TEST_ASSERT_EQUAL_UINT8(3, outputCount());
+    outputsClear();
 }
 
 static void test_pressure_table_custom_is_refused(void) {
@@ -807,7 +737,6 @@ int main(int, char**) {
     RUN_TEST(test_import_with_absent_bus_keys_selects_no_bus);
     RUN_TEST(test_import_preserves_an_explicit_bus_selection);
     RUN_TEST(test_import_display_object_without_type_preserves_current_type);
-    RUN_TEST(test_import_timing_retired_keys_are_ignored);
     RUN_TEST(test_import_output_intervals_are_range_checked);
     RUN_TEST(test_divider_ratio_round_trips);
     RUN_TEST(test_divider_ratio_default_is_implicit);

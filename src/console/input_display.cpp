@@ -122,7 +122,7 @@ FLASHMEM void printInputRouteInfo(uint8_t pin) {
     printPin(pin);
     msg.control.println(F("] ====="));
     uint8_t n = 0;
-    for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
         if (!outputExists(id)) continue;
         msg.control.print(F("  "));
         msg.control.print(id);

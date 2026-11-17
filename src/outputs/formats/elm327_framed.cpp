@@ -16,7 +16,6 @@
 #include "../../transports/transport_mux.h"
 #include "output_elm327.h"
 #include "../table/output_table.h"   // OUT_ID_* route bits (#612)
-#include "../table/output_base.h"   // outputModules[]: the output's live flag
 
 namespace Elm327Framed {
 
@@ -90,7 +89,7 @@ private:
 };
 
 FramedElmStream g_bridge;
-ELM327Output    g_elm(OUT_ID_ELM327_BLE);  // output id 5 (#612); dedicated instance: per-channel session state, kept
+ELM327Output    g_elm(OUT_ID_NONE);  // route id set by start() (#612); dedicated instance: per-channel session state, kept
                         // independent of the serial-bound elm327Output singleton
 
 // Largest 0x30 payload we send. MuxTransport::sendFrame refuses a frame
@@ -121,18 +120,27 @@ void drainOut(MuxTransport& out) {
 
 } // namespace
 
-// Also output 5's init (output_manager.cpp): enabling it starts a fresh
-// session, so a half-sent command or an unsent reply from before is dropped
-void init() {
+static bool s_active = false;   // an enabled ELM327-on-BLE output is running
+
+// The output starts (output_manager.cpp): a fresh session, so a half-sent
+// command or an unsent reply from before is dropped
+void start(uint8_t routeId) {
     g_bridge.clear();
+    g_elm.setRouteId(routeId);
     g_elm.setSerial(&g_bridge);
     g_elm.begin();
+    s_active = true;
+}
+
+void stop() {
+    s_active = false;
+    g_bridge.clear();
 }
 
 void handleInbound(const uint8_t* payload, uint16_t len, MuxTransport& out) {
-    // Output 5 disabled or deleted: the request goes unanswered, as with no
+    // No enabled ELM327-on-BLE output: the request goes unanswered, as with no
     // adapter on the far end
-    if (!outputModules[OUTPUT_ELM327_BLE].enabled) return;
+    if (!s_active) return;
     // Flush anything a prior call couldn't send before generating more output,
     // so responses stay in order on the wire.
     drainOut(out);
@@ -157,7 +165,8 @@ void poll(MuxTransport& out) {
 #else  // INCLUDE_FRAMED_TRANSPORT && INCLUDE_ELM327
 
 namespace Elm327Framed {
-void init() {}
+void start(uint8_t) {}
+void stop() {}
 void handleInbound(const uint8_t*, uint16_t, MuxTransport&) {}
 void poll(MuxTransport&) {}
 }  // namespace Elm327Framed

@@ -34,6 +34,7 @@ extern MuxTransport hwSerial1;   // main.cpp -- the nRF coprocessor link
 #include "../buses/pinctrl/pin_registry.h"
 #include "../outputs/table/output_base.h"
 #include "../outputs/table/output_table.h"
+#include "../outputs/table/output_admission.h"
 #include "../outputs/formats/obd_query.h"
 #include "../outputs/display/display_manager.h"
 #if INCLUDE_RELAY_OUTPUT
@@ -223,10 +224,12 @@ static FLASHMEM void printCanApply(uint8_t bus, CanAttach r) {
     else                              msg.control.println(F(": starts when CAN input or OBD attaches"));
 }
 
-// The OBD output sends on this bus (it is enabled with this bus as transport)
-static bool obdUsesBus(uint8_t bus) {
-    return systemConfig.buses.obdBus == bus && outputIsEnabled(OUT_ID_OBD);
+// The enabled OBD output on this bus, OUT_ID_NONE if none (it sends)
+static uint8_t obdOnBus(uint8_t bus) {
+    const uint8_t id = outputFind(FMT_OBD, OTK_CAN);
+    return (outputIsEnabled(id) && outputTransportCanBus(outputTransportOf(id)) == bus) ? id : OUT_ID_NONE;
 }
+static bool obdUsesBus(uint8_t bus) { return obdOnBus(bus) != OUT_ID_NONE; }
 #endif
 
 // BUS CAN <CAN1|CAN2|CAN3> ENABLE|LISTEN|DISABLE | BAUDRATE <bps> | INPUT ENABLE|DISABLE
@@ -260,7 +263,7 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
         const uint8_t mode = streq_P(verb, PSTR("LISTEN")) ? CAN_BUS_LISTEN : CAN_BUS_NORMAL;
         if (mode == CAN_BUS_LISTEN && obdUsesBus(bus)) {
             msg.control.println(F("ERROR: the OBD output sends on this bus, and LISTEN never transmits"));
-            msg.control.println(F("  OUTPUT 0 DISABLE first, or keep the bus at ENABLE"));
+            msg.control.println(F("  OUTPUT <id> DISABLE first, or keep the bus at ENABLE"));
             return 1;
         }
         // Pin ownership last, so a refusal leaves systemConfig untouched (#390, #563)
@@ -271,7 +274,7 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
         // Something set to use this bus but not attached (it was off, or its
         // start failed) attaches now
         if (systemConfig.buses.canInputBus == bus && canInputAttachedBus() != bus) initCANInput();
-        if (obdUsesBus(bus) && canOutputAttachedBus() != bus) outputSetEnabledById(OUT_ID_OBD, true);
+        if (obdUsesBus(bus) && canOutputAttachedBus() != bus) outputSetEnabledById(obdOnBus(bus), true);
         printSaveReminder();
         return 0;
     }
@@ -284,7 +287,7 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
             if (in && obdUsesBus(bus)) msg.control.print(F(" and"));
             if (obdUsesBus(bus)) msg.control.print(F(" the OBD output"));
             msg.control.println();
-            msg.control.println(F("  BUS CAN <bus> INPUT DISABLE / OUTPUT 0 DISABLE first"));
+            msg.control.println(F("  BUS CAN <bus> INPUT DISABLE / OUTPUT <id> DISABLE first"));
             return 1;
         }
         cs.mode = CAN_BUS_OFF;
@@ -347,6 +350,21 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
     msg.control.println(F("ERROR: Usage: BUS CAN <CAN1|CAN2|CAN3> ENABLE|LISTEN|DISABLE|BAUDRATE <bps>|INPUT ENABLE|DISABLE"));
     return 1;
 #endif
+}
+
+// An enabled output writes to Serial<port> (OUTPUT LIST): refuse a change
+// that would pull the port from under it, naming it (#612, one validator)
+static FLASHMEM bool refuseUnderOutput(uint8_t port) {
+    const uint8_t id = outputOnStream((uint8_t)(OT_SERIAL1 + port - 1), true, outputRecords);
+    if (id == OUT_ID_NONE) return false;
+    msg.control.print(F("ERROR: output "));
+    msg.control.print(id);
+    msg.control.print(F(" ("));
+    printOutputLabel(id);
+    msg.control.print(F(") uses Serial"));
+    msg.control.print(port);
+    msg.control.println(F("; OUTPUT <id> DISABLE or TRANSPORT first"));
+    return true;
 }
 
 // BUS SERIAL subcommand handler
@@ -422,6 +440,7 @@ static FLASHMEM int bus_serial(int argc, const char* const* argv, int /*tokenInd
                 msg.control.print(F(", TX="));
                 msg.control.print(getDefaultSerialTX(port_id));
                 msg.control.println(F(")"));
+                syncOutputsToConfig();   // an output waiting for this port starts now (#612)
                 printSaveReminder();
             } else {
                 msg.control.print(F("ERROR: Failed to enable Serial"));
@@ -432,6 +451,7 @@ static FLASHMEM int bus_serial(int argc, const char* const* argv, int /*tokenInd
 
         // BUS SERIAL <port> DISABLE
         if (streq_P(argv[3], PSTR("DISABLE"))) {
+            if (refuseUnderOutput(port_id)) return 1;
             if (disableSerialPort(port_id)) {
                 msg.control.print(F("Serial"));
                 msg.control.print(port_id);
@@ -486,6 +506,17 @@ static FLASHMEM int bus_serial(int argc, const char* const* argv, int /*tokenInd
             }
             const uint8_t port_bit = (1 << (port_id - 1));
             if (streq_P(argv[4], PSTR("ENABLE"))) {
+                // A framed port carries the console and ELM327 over BLE, never
+                // a raw stream output (#612)
+                if (refuseUnderOutput(port_id)) return 1;
+                // ... nor the log, as LOG TRANSPORT refuses the other way round
+                const uint8_t tid = (uint8_t)(TRANSPORT_SERIAL1 + port_id - 1);
+                if (router.getPrimaryTransportId(PLANE_DEBUG) == tid || router.getSecondaryTransportId(PLANE_DEBUG) == tid) {
+                    msg.control.print(F("ERROR: the log uses Serial"));
+                    msg.control.print(port_id);
+                    msg.control.println(F("; LOG TRANSPORT first"));
+                    return 1;
+                }
                 systemConfig.serial.framed_enabled_mask |= port_bit;
                 msg.control.print(F("Serial"));
                 msg.control.print(port_id);

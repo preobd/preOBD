@@ -1,13 +1,15 @@
 /*
- * output_table.cpp - The outputs you add, as a view over systemConfig
- * (#612). See output_table.h for why ids are fixed per format.
- *
- * Dependency-light on purpose (system_config.h only): the native tests
- * build it on its own.
+ * output_table.cpp - The stored output table (#612 phase 2b-1).
+ * See output_table.h. Dependency-light (system_config.h, board sizing): the
+ * native tests build it on its own.
  */
 
 #include "output_table.h"
+#include "../../hal/bus_defaults.h"          // NUM_SERIAL_PORTS, NUM_CAN_BUSES
+#include "../../buses/pinctrl/bus_wiring.h"  // BUS_WIRED_CAN_ID
+#include "../formats/output_format.h"        // SDLOG_FORMAT_WIDE
 #include <string.h>
+#include <stdio.h>
 #ifndef __AVR__
 #include <strings.h>   // strcasecmp (AVR has it in string.h)
 #endif
@@ -16,123 +18,224 @@
 #define FLASHMEM
 #endif
 
-// Per id: format, transport kind, legacy slot. Indexed by id.
-struct OutputIdInfo {
-    OutputFormat format;
-    OutputTransportKind kind;
-    uint8_t legacySlot;
-};
-static const OutputIdInfo ID_INFO[NUM_OUTPUT_IDS] = {
-    { FMT_OBD,      OTK_CAN,    OUTPUT_CAN      },
-    { FMT_REALDASH, OTK_STREAM, OUTPUT_REALDASH },
-    { FMT_CSV,      OTK_STREAM, OUTPUT_SERIAL   },
-    { FMT_CSV,      OTK_SD,     OUTPUT_SD       },
-    { FMT_ELM327,   OTK_SERIAL, OUTPUT_ELM327   },
-    { FMT_ELM327,   OTK_BLE,    OUTPUT_ELM327_BLE },
-};
+OutputRecord outputRecords[MAX_OUTPUTS];
 
-OutputFormat outputFormatOf(uint8_t id) {
-    return id < NUM_OUTPUT_IDS ? ID_INFO[id].format : FMT_NONE;
+// ---- the table ----
+
+OutputRecord* outputRecord(uint8_t id) {
+    if (id >= MAX_OUTPUTS || outputRecords[id].format == FMT_NONE) return nullptr;
+    return &outputRecords[id];
 }
 
-OutputTransportKind outputKindOf(uint8_t id) {
-    return id < NUM_OUTPUT_IDS ? ID_INFO[id].kind : OTK_STREAM;
-}
-
-uint8_t outputLegacySlot(uint8_t id) {
-    return id < NUM_OUTPUT_IDS ? ID_INFO[id].legacySlot : 0xFF;
-}
-
-bool outputIdBuilt(uint8_t id) {
-    switch (id) {
-#if INCLUDE_CAN
-    case OUT_ID_OBD:      return true;
-#endif
-#if INCLUDE_REALDASH
-    case OUT_ID_REALDASH: return true;
-#endif
-#if INCLUDE_SERIAL_OUTPUT
-    case OUT_ID_CSV:      return true;
-#endif
-#if INCLUDE_SD_LOGGING
-    case OUT_ID_SDLOG:    return true;
-#endif
-#if INCLUDE_ELM327
-    case OUT_ID_ELM327:   return true;
-#endif
-#if INCLUDE_ELM327 && INCLUDE_FRAMED_TRANSPORT
-    case OUT_ID_ELM327_BLE: return true;
-#endif
-    default:              return false;
-    }
-}
-
-bool outputTakesIntervalId(uint8_t id) {
-    return id < NUM_OUTPUT_IDS && outputTakesInterval(ID_INFO[id].legacySlot);
-}
-
-uint16_t outputIntervalMinId(uint8_t id) {
-    return id < NUM_OUTPUT_IDS ? outputIntervalMinMs(ID_INFO[id].legacySlot) : 0;
-}
-
-bool outputExists(uint8_t id) {
-    return outputIdBuilt(id) && !(systemConfig.router.outputsAbsent & (1u << id));
-}
+bool outputExists(uint8_t id) { return outputRecord(id) != nullptr; }
 
 bool outputIsEnabled(uint8_t id) {
-    return outputExists(id) && systemConfig.outputEnabled[ID_INFO[id].legacySlot] != 0;
+    const OutputRecord* r = outputRecord(id);
+    return r && r->enabled;
 }
 
-uint16_t outputIntervalOf(uint8_t id) {
-    return id < NUM_OUTPUT_IDS ? systemConfig.outputInterval[ID_INFO[id].legacySlot] : 0;
+OutputFormat outputFormatOf(uint8_t id) {
+    const OutputRecord* r = outputRecord(id);
+    return r ? (OutputFormat)r->format : FMT_NONE;
+}
+
+uint8_t outputTransportOf(uint8_t id) {
+    const OutputRecord* r = outputRecord(id);
+    return r ? r->transport : (uint8_t)OT_NONE;
 }
 
 uint8_t outputCount() {
     uint8_t n = 0;
-    for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++)
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++)
         if (outputExists(id)) n++;
     return n;
 }
 
 RouteMask outputsExistingMask() {
     RouteMask m = 0;
-    for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++)
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++)
         if (outputExists(id)) m |= (RouteMask)(1u << id);
     return m;
 }
 
-uint8_t outputIdFor(OutputFormat format, OutputTransportKind kind) {
-    for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
-        if (ID_INFO[id].format != format) continue;
-        // CSV (stream / SD) and ELM327 (serial port / BLE) have two ids each
-        if ((format == FMT_CSV || format == FMT_ELM327) && ID_INFO[id].kind != kind) continue;
-        return id;
+uint8_t outputFind(OutputFormat format, OutputTransportKind kind) {
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+        const OutputRecord* r = outputRecord(id);
+        if (r && r->format == format && outputTransportKind(r->transport) == kind) return id;
     }
     return OUT_ID_NONE;
 }
 
-void outputMarkAbsent(uint8_t id, bool absent) {
-    if (id >= NUM_OUTPUT_IDS) return;
-    if (absent) systemConfig.router.outputsAbsent |= (uint8_t)(1u << id);
-    else        systemConfig.router.outputsAbsent &= (uint8_t)~(1u << id);
+uint8_t outputFreeId() {
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++)
+        if (outputRecords[id].format == FMT_NONE) return id;
+    return OUT_ID_NONE;
 }
 
-bool outputTransportKindOk(uint8_t id, const char* tok) {
-    if (tok == nullptr || id >= NUM_OUTPUT_IDS) return false;
-    const bool none = strcasecmp(tok, "NONE") == 0;
-    const bool can  = strncasecmp(tok, "CAN", 3) == 0 && tok[3] >= '1' && tok[3] <= '3' && tok[4] == '\0';
-    const bool sd   = strcasecmp(tok, "SD") == 0;
-    const bool ser  = strncasecmp(tok, "SERIAL", 6) == 0 && tok[6] >= '1' && tok[6] <= '8' && tok[7] == '\0';
-    const bool ble  = strcasecmp(tok, "BLE") == 0;
-    switch (ID_INFO[id].kind) {
-    case OTK_CAN:    return can || none;
-    case OTK_SERIAL: return ser || none;
-    case OTK_SD:     return sd;
-    case OTK_BLE:    return ble;
-    case OTK_STREAM: return tok[0] != '\0' && !can && !sd && !none && !ble;
-    }
-    return false;
+// ---- changes ----
+
+FLASHMEM uint8_t outputCreate(OutputFormat format, uint8_t transport, bool enabled) {
+    const uint8_t id = outputFreeId();
+    if (id == OUT_ID_NONE) return OUT_ID_NONE;
+    OutputRecord& r = outputRecords[id];
+    r.id = id;
+    r.format = format;
+    r.transport = transport;
+    r.enabled = enabled ? 1 : 0;
+    r.option = (format == FMT_CSV && transport == OT_SD) ? (uint8_t)SDLOG_FORMAT_WIDE : 0;
+    r.spare = 0;
+    r.interval = outputIntervalDefault(format, transport);
+    return id;
 }
+
+void outputErase(uint8_t id) {
+    if (id < MAX_OUTPUTS) memset(&outputRecords[id], 0, sizeof(OutputRecord));
+}
+
+void outputsClear() {
+    memset(outputRecords, 0, sizeof(outputRecords));
+}
+
+FLASHMEM void outputsSeedDefaults() {
+    outputsClear();
+#if INCLUDE_CAN && BUS_WIRED_CAN_ID != 0xFF
+    // Off: enabling it attaches to the bus, which then ACKs on a car's network
+    outputCreate(FMT_OBD, (uint8_t)(OT_CAN1 + BUS_WIRED_CAN_ID), false);
+#endif
+#if INCLUDE_ELM327 && INCLUDE_FRAMED_TRANSPORT
+    outputCreate(FMT_ELM327, OT_BLE, true);
+#endif
+}
+
+FLASHMEM bool outputRecordValid(const OutputRecord& r, uint8_t slot) {
+    if (r.format == FMT_NONE) return true;   // a free slot
+    if (r.id != slot || r.format >= NUM_FORMATS) return false;
+    if (!outputFormatBuilt((OutputFormat)r.format)) return false;
+    if (!outputTransportAllowed((OutputFormat)r.format, r.transport)) return false;
+    if (r.enabled > 1) return false;
+    if (outputFormatPaced((OutputFormat)r.format)) {
+        if (!outputIntervalValid((OutputFormat)r.format, r.transport, r.interval)) return false;
+    } else if (r.interval != 0) {
+        return false;
+    }
+    if (r.format == FMT_CSV && r.transport == OT_SD) {
+        if (r.option > SDLOG_FORMAT_LONG) return false;
+    } else if (r.option != 0) {
+        return false;
+    }
+    return true;
+}
+
+// ---- formats and transports ----
+
+bool outputFormatBuilt(OutputFormat format) {
+    switch (format) {
+#if INCLUDE_SERIAL_OUTPUT || INCLUDE_SD_LOGGING
+    case FMT_CSV:      return true;
+#endif
+#if INCLUDE_REALDASH
+    case FMT_REALDASH: return true;
+#endif
+#if INCLUDE_CAN
+    case FMT_OBD:      return true;
+#endif
+#if INCLUDE_ELM327
+    case FMT_ELM327:   return true;
+#endif
+    default:           return false;
+    }
+}
+
+OutputTransportKind outputTransportKind(uint8_t t) {
+    if (t == OT_USB || t == OT_ESP32_BT || (t >= OT_SERIAL1 && t < OT_SERIAL1 + 8)) return OTK_STREAM;
+    if (t >= OT_CAN1 && t < OT_CAN1 + 3) return OTK_CAN;
+    if (t == OT_SD) return OTK_SD;
+    if (t == OT_BLE) return OTK_BLE;
+    return OTK_NONE;
+}
+
+uint8_t outputTransportSerialPort(uint8_t t) {
+    return (t >= OT_SERIAL1 && t < OT_SERIAL1 + 8) ? (uint8_t)(t - OT_SERIAL1 + 1) : 0xFF;
+}
+
+uint8_t outputTransportCanBus(uint8_t t) {
+    return (t >= OT_CAN1 && t < OT_CAN1 + 3) ? (uint8_t)(t - OT_CAN1) : 0xFF;
+}
+
+// Does this board have the transport at all?
+static bool transportOnBoard(uint8_t t) {
+    const uint8_t port = outputTransportSerialPort(t);
+    if (port != 0xFF) return port <= NUM_SERIAL_PORTS;
+    const uint8_t bus = outputTransportCanBus(t);
+    if (bus != 0xFF) return bus < NUM_CAN_BUSES;
+    switch (t) {
+    case OT_USB: return true;
+#if defined(ESP32)
+    case OT_ESP32_BT: return true;
+#endif
+#if INCLUDE_SD_LOGGING
+    case OT_SD: return true;
+#endif
+#if INCLUDE_FRAMED_TRANSPORT
+    case OT_BLE: return true;
+#endif
+    default: return false;
+    }
+}
+
+bool outputTransportAllowed(OutputFormat format, uint8_t t) {
+    if (!transportOnBoard(t)) return false;
+    const OutputTransportKind k = outputTransportKind(t);
+    switch (format) {
+    case FMT_CSV:
+#if !INCLUDE_SERIAL_OUTPUT
+        if (k == OTK_STREAM) return false;
+#endif
+#if !INCLUDE_SD_LOGGING
+        if (k == OTK_SD) return false;
+#endif
+        return k == OTK_STREAM || k == OTK_SD;
+    case FMT_REALDASH: return k == OTK_STREAM;
+    case FMT_OBD:      return k == OTK_CAN;
+    // ELM327 runs on a serial port or BLE (USB is the console's; ESP32 BT has
+    // no ELM327 binding)
+    case FMT_ELM327:   return (k == OTK_STREAM && outputTransportSerialPort(t) != 0xFF) ||
+                              k == OTK_BLE;   // OT_BLE is on the board only with the framed link
+    default:           return false;
+    }
+}
+
+bool outputFormatPaced(OutputFormat format) {
+    return format == FMT_CSV || format == FMT_REALDASH;
+}
+
+// Floors (#608), set by what a 115200-baud link (UART or the BLE bridge)
+// carries, ~11.5 KB/s: a CSV line per input stalls the loop below ~100 ms;
+// RealDash's 16-byte frames for 20 inputs are 6.4 KB/s at 50 ms. The SD log
+// buffers its rows, and 1 ms rows are the #537 watchdog soak load
+// (tools/watchdog_bench.py), so 1 ms only costs card space.
+uint16_t outputIntervalMin(OutputFormat format, uint8_t transport) {
+    if (format == FMT_REALDASH) return 50;
+    if (format == FMT_CSV) return transport == OT_SD ? 1 : 100;
+    return 0;
+}
+
+uint16_t outputIntervalDefault(OutputFormat format, uint8_t transport) {
+    if (format == FMT_REALDASH) return REALDASH_INTERVAL_MS;
+    if (format == FMT_CSV) return transport == OT_SD ? SD_LOG_INTERVAL_MS : SERIAL_CSV_INTERVAL_MS;
+    return 0;
+}
+
+bool outputIntervalValid(OutputFormat format, uint8_t transport, long ms) {
+    return outputFormatPaced(format) && ms >= outputIntervalMin(format, transport) &&
+           ms <= OUTPUT_INTERVAL_MAX_MS;
+}
+
+static_assert(REALDASH_INTERVAL_MS >= 50 && REALDASH_INTERVAL_MS <= 60000, "REALDASH_INTERVAL_MS outside RealDash's range (#608)");
+static_assert(SERIAL_CSV_INTERVAL_MS >= 100 && SERIAL_CSV_INTERVAL_MS <= 60000, "SERIAL_CSV_INTERVAL_MS outside CSV's range (#608)");
+static_assert(SD_LOG_INTERVAL_MS >= 1 && SD_LOG_INTERVAL_MS <= 60000, "SD_LOG_INTERVAL_MS outside the SD log's range (#608)");
+
+// ---- names ----
 
 const char* outputFormatName(OutputFormat format) {
     switch (format) {
@@ -151,4 +254,35 @@ OutputFormat parseOutputFormat(const char* s) {
     if (strcasecmp(s, "OBD") == 0)      return FMT_OBD;
     if (strcasecmp(s, "ELM327") == 0)   return FMT_ELM327;
     return FMT_NONE;
+}
+
+size_t outputTransportName(uint8_t t, char* buf, size_t n) {
+    if (n == 0) return 0;
+    const uint8_t port = outputTransportSerialPort(t);
+    const uint8_t bus = outputTransportCanBus(t);
+    if (port != 0xFF)          snprintf(buf, n, "SERIAL%u", (unsigned)port);
+    else if (bus != 0xFF)      snprintf(buf, n, "CAN%u", (unsigned)(bus + 1));
+    else if (t == OT_USB)      snprintf(buf, n, "USB");
+    else if (t == OT_ESP32_BT) snprintf(buf, n, "ESP32_BT");
+    else if (t == OT_SD)       snprintf(buf, n, "SD");
+    else if (t == OT_BLE)      snprintf(buf, n, "BLE");
+    else                       snprintf(buf, n, "NONE");
+    return strlen(buf);
+}
+
+bool parseOutputTransport(const char* s, uint8_t* out) {
+    if (s == nullptr) return false;
+    uint8_t t = 0xFF;
+    if (strcasecmp(s, "USB") == 0)           t = OT_USB;
+    else if (strcasecmp(s, "ESP32_BT") == 0) t = OT_ESP32_BT;
+    else if (strcasecmp(s, "SD") == 0)       t = OT_SD;
+    else if (strcasecmp(s, "BLE") == 0)      t = OT_BLE;
+    else if (strcasecmp(s, "NONE") == 0)     t = OT_NONE;
+    else if (strncasecmp(s, "SERIAL", 6) == 0 && s[6] >= '1' && s[6] <= '8' && s[7] == '\0')
+        t = (uint8_t)(OT_SERIAL1 + (s[6] - '1'));
+    else if (strncasecmp(s, "CAN", 3) == 0 && s[3] >= '1' && s[3] <= '3' && s[4] == '\0')
+        t = (uint8_t)(OT_CAN1 + (s[3] - '1'));
+    if (t == 0xFF) return false;
+    *out = t;
+    return true;
 }

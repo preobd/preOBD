@@ -18,6 +18,8 @@
 #include "../config.h"
 #include "../version.h"
 #include "input_store.h"
+#include "../outputs/table/output_table.h"   // the outputs section (#612)
+#include "../outputs/table/output_admission.h"   // outputSingletonHolder (one per kind on load)
 #include "../core/watchdog.h"
 #include "../inputs/input_manager.h"   // inputs[] / numActiveInputs / Input, inputManagerTableIsLive()
 #include "system_config.h"
@@ -52,7 +54,15 @@
 // One arena holds every persisted record table, packed after a single header at
 // address 0:
 //   [ConfigStoreHeader] [InputEEPROM × numInputs] [Rule × numRules] [Action × numActions]
-//   [ActionLink × numLinks]
+//   [ActionLink × numLinks] [OutputRecord × numOutputs]
+//
+// The outputs you add (#612 phase 2b-1, output_table.h) are stored last but
+// budgeted FIRST: at most MAX_OUTPUTS × 8 bytes, and losing OBD or ELM327 to a
+// full store would be worse than losing an input. numOutputs is reserved[0].
+//
+// The checksum starts from ARENA_LAYOUT and covers the header's counts too, so
+// a store of an earlier layout under the same EEPROM_VERSION (unreleased
+// breaks share one number) is rejected rather than read with the wrong shape.
 //
 // The SystemConfig block is anchored at the BACK of EEPROM (system_config.h); the
 // arena grows forward toward it. All record tables draw from ONE shared budget —
@@ -74,6 +84,7 @@
 // PIN and stable record ids, not registry indices, so they round-trip as PODs.
 
 #define EEPROM_MAGIC 0x4F454D53            // "OEMS" in ASCII - validates the arena is ours
+#define ARENA_LAYOUT 0x2B                  // #612 phase 2b-1: the outputs section; change with every layout change
 #define EEPROM_HEADER_SIZE sizeof(ConfigStoreHeader)
 #define EEPROM_INPUT_SIZE sizeof(InputEEPROM)    // size varies by platform alignment (AVR vs ARM)
 
@@ -89,7 +100,7 @@ struct ConfigStoreHeader {
     uint8_t  checksum;     // XOR over every persisted record byte (all sections)
     uint8_t  numLinks;     // ActionLink rows (#343) — a former reserved byte, always
                            // zeroed by prior firmware, so old stores read 0 (see above)
-    uint8_t  reserved[5];  // future record-type counts; fills the struct to exactly 16 bytes
+    uint8_t  reserved[5];  // [0] = numOutputs (#612); the rest future record-type counts; fills the struct to exactly 16 bytes
                            // (4+2+5+5) so there are NO indeterminate pad bytes on any platform
 };
 
@@ -274,6 +285,15 @@ static FLASHMEM void applyInputRecord(const InputEEPROM& rec, Input& in) {
     // min/max are retained as dead fields for layout stability, not evaluated.)
 }
 
+// The checksum's seed: the layout and every section count (see the layout
+// note). Never 0: a store of the earlier layout was checksummed from 0, so a
+// zero seed (counts that XOR to ARENA_LAYOUT, e.g. 11 inputs and 32 rules)
+// would accept it.
+static uint8_t arenaChecksumSeed(const ConfigStoreHeader& h) {
+    const uint8_t seed = (uint8_t)(ARENA_LAYOUT ^ h.numInputs ^ h.numRules ^ h.numActions ^ h.numLinks ^ h.reserved[0]);
+    return seed != 0 ? seed : ARENA_LAYOUT;
+}
+
 FLASHMEM bool saveInputConfig() {
     // EEPROM writes are slow on AVR (~3.3 ms per changed byte) and the watchdog
     // runs in CONFIG now (#541): one scope for the save, plus a feed per record
@@ -287,9 +307,12 @@ FLASHMEM bool saveInputConfig() {
     for (uint8_t i = 0; i < MAX_INPUTS; i++)
         if (inputs[i].pin != 0xFF) wantInputs++;
 
-    // Fit each section into the shared budget, priority inputs > rules > actions
-    // (a rule needs its source input to evaluate; an action needs its rule).
+    // Fit each section into the shared budget: the outputs first (a few bytes,
+    // and the unit's OBD/ELM327 must survive a full store), then inputs > rules
+    // > actions (a rule needs its source input; an action needs its rule).
     size_t remaining = budget;
+    const uint8_t persistOutputs = fitSection(remaining, outputCount(), sizeof(OutputRecord), F("outputs"));
+    remaining -= (size_t)persistOutputs * sizeof(OutputRecord);
     uint8_t persistInputs = fitSection(remaining, wantInputs, EEPROM_INPUT_SIZE, F("inputs"));
     remaining -= (size_t)persistInputs * EEPROM_INPUT_SIZE;
 #if INCLUDE_RULES_ENGINE
@@ -347,6 +370,15 @@ FLASHMEM bool saveInputConfig() {
     }
 #endif
 
+    uint8_t savedOutputs = 0;
+    for (uint8_t id = 0; id < MAX_OUTPUTS && savedOutputs < persistOutputs; id++) {
+        if (!outputExists(id)) continue;
+        EEPROM.put(addr, outputRecords[id]);
+        checksum ^= xorBytes(&outputRecords[id], sizeof(OutputRecord));
+        addr += sizeof(OutputRecord);
+        savedOutputs++;
+    }
+
     ConfigStoreHeader header;
     header.magic = EEPROM_MAGIC;
     header.version = EEPROM_VERSION;
@@ -354,8 +386,9 @@ FLASHMEM bool saveInputConfig() {
     header.numRules = savedRules;
     header.numActions = savedActions;
     header.numLinks = savedLinks;
-    header.checksum = checksum;
     memset(header.reserved, 0, sizeof(header.reserved));
+    header.reserved[0] = savedOutputs;
+    header.checksum = (uint8_t)(checksum ^ arenaChecksumSeed(header));
     EEPROM.put(0, header);
 
     msg.control.print(F("✓ Saved "));
@@ -515,6 +548,7 @@ FLASHMEM bool loadInputConfig() {
                        + (size_t)header.numActions * sizeof(Action)
                        + (size_t)header.numLinks   * sizeof(ActionLink)
 #endif
+                       + (size_t)header.reserved[0] * sizeof(OutputRecord)
                        ;
     if (storedBytes > SYSTEM_CONFIG_ADDRESS) return false;
 
@@ -522,7 +556,7 @@ FLASHMEM bool loadInputConfig() {
     // BEFORE clamping into this firmware's RAM caps — a build with smaller caps
     // must still validate a store written by a larger one (#296 S2). Sections are
     // contiguous, so a single running address walks all three. Read-only.
-    uint8_t checksum = 0;
+    uint8_t checksum = arenaChecksumSeed(header);
     {
         uint16_t a = EEPROM_HEADER_SIZE;
         for (uint8_t i = 0; i < header.numInputs; i++) {
@@ -541,13 +575,17 @@ FLASHMEM bool loadInputConfig() {
             checksum ^= xorBytes(&ac, sizeof(Action));
             a += sizeof(Action);
         }
-        // numLinks is 0 in any store written before #343 — see the layout note.
         for (uint8_t i = 0; i < header.numLinks; i++) {
             ActionLink l; EEPROM.get(a, l);
             checksum ^= xorBytes(&l, sizeof(ActionLink));
             a += sizeof(ActionLink);
         }
 #endif
+        for (uint8_t i = 0; i < header.reserved[0]; i++) {
+            OutputRecord r; EEPROM.get(a, r);
+            checksum ^= xorBytes(&r, sizeof(OutputRecord));
+            a += sizeof(OutputRecord);
+        }
     }
     if (checksum != header.checksum) {
         msg.control.println(F("ERROR: EEPROM checksum mismatch! Configuration corrupted."));
@@ -649,6 +687,41 @@ FLASHMEM bool loadInputConfig() {
     // does it via rulesManagerInit; LOAD via the re-arm trio in cmd_load.)
     rulesSweepActionRules();
 #endif
+
+    // --- outputs (#612): each record checked before it is used (a valid
+    // checksum over all-zero bytes proves nothing) ---
+    {
+        size_t outBase = EEPROM_HEADER_SIZE + (size_t)header.numInputs * EEPROM_INPUT_SIZE;
+#if INCLUDE_RULES_ENGINE
+        outBase += (size_t)header.numRules * sizeof(Rule) + (size_t)header.numActions * sizeof(Action) +
+                   (size_t)header.numLinks * sizeof(ActionLink);
+#endif
+        outputsClear();
+        bool dropped = false;
+        for (uint8_t i = 0; i < header.reserved[0]; i++) {
+            OutputRecord r;
+            EEPROM.get(outBase + (size_t)i * sizeof(OutputRecord), r);
+            if (r.format == FMT_NONE || r.id >= MAX_OUTPUTS || outputExists(r.id) || !outputRecordValid(r, r.id)) {
+                dropped = true;   // another board's output, a duplicate id, a bad record
+                continue;
+            }
+            outputRecords[r.id] = r;
+        }
+        // One per kind (one OBD, one CSV on SD, one ELM327 per transport kind):
+        // the lowest id keeps it, as JSON IMPORT and OUTPUT ADD would have
+        for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+            const OutputRecord& r = outputRecords[id];
+            if (r.format == FMT_NONE) continue;
+            if (outputSingletonHolder(id, (OutputFormat)r.format, r.transport, outputRecords) != OUT_ID_NONE) {
+                outputErase(id);
+                for (uint8_t i = 0; i < MAX_INPUTS; i++) inputs[i].routeMask &= (RouteMask)~(1u << id);
+                msg.control.print(F("NOTE: stored output "));
+                msg.control.print(id);
+                msg.control.println(F(" is a second output of a one-per-kind format; dropped"));
+            }
+        }
+        if (dropped) msg.control.println(F("NOTE: some stored outputs don't fit this board and were dropped"));
+    }
 
     // Terse info string (RAM-resident on AVR); the SAVE confirmation already
     // reports rule/action counts via flash F() strings.

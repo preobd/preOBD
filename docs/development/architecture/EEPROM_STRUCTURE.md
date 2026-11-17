@@ -28,7 +28,7 @@ preOBD uses EEPROM (Electrically Erasable Programmable Read-Only Memory) to pers
 - **Hash-based:** Sensor/application names stored as hashes, not indices
 - **Checksum validation:** Detects corruption from power loss or wear
 - **Auto-reset:** Incompatible versions trigger clean reset
-- **Config-store arena:** inputs + control-engine Rules + Actions share one front-growing region behind a single header; `SystemConfig` is a separate block anchored at the end
+- **Config-store arena:** inputs, control-engine Rules + Actions + links, and the outputs share one front-growing region behind a single header; `SystemConfig` is a separate block anchored at the end
 
 ---
 
@@ -38,7 +38,7 @@ preOBD uses EEPROM (Electrically Erasable Programmable Read-Only Memory) to pers
 
 preOBD splits EEPROM into two blocks that grow toward each other:
 
-- **Config-store arena** grows up from address 0: one `ConfigStoreHeader` followed by three packed record sections — `InputEEPROM[]`, then control-engine `Rule[]`, then `Action[]` (the latter two present on `INCLUDE_RULES_ENGINE` builds). All three sections draw from one shared budget.
+- **Config-store arena** grows up from address 0: one `ConfigStoreHeader` followed by packed record sections — `InputEEPROM[]`, then control-engine `Rule[]`, `Action[]` and `ActionLink[]` (present on `INCLUDE_RULES_ENGINE` builds), then the outputs' `OutputRecord[]` (8 bytes each, at most `MAX_OUTPUTS` from board.h). All sections draw from one shared budget.
 - **SystemConfig** is anchored at the **end** of EEPROM, so its address adapts to the platform automatically.
 
 ```
@@ -47,6 +47,8 @@ preOBD splits EEPROM into two blocks that grow toward each other:
 │ 0x0010 …        InputEEPROM[0 … numInputs−1]                 │
 │                 Rule[0 … numRules−1]                         │
 │                 Action[0 … numActions−1]                     │
+│                 ActionLink[0 … numLinks−1]                   │
+│                 OutputRecord[0 … numOutputs−1]               │
 │                 (free space)                                 │
 │ END − sizeof(SystemConfig)                                   │
 │                 SystemConfig (~140 bytes, grows with schema) │
@@ -66,7 +68,7 @@ constexpr size_t MAX_EEPROM_INPUTS =
 
 A compile-time `static_assert` prevents the two regions from overlapping.
 
-**Shared budget + loud truncation.** Because inputs, rules and actions compete for the same space, `saveInputConfig()` fits the sections in priority order **inputs > rules > actions** (a rule needs its source input to evaluate; an action needs its rule) and warns on the control plane for any section it has to truncate — never a silent drop. This generalizes the original input-only truncation to the whole store.
+**Shared budget + loud truncation.** Because inputs, rules and actions compete for the same space, `saveInputConfig()` reserves room for the outputs first (losing the OBD or ELM327 output to a full store would be worse than losing an input), then fits the sections in priority order **inputs > rules > actions > links** (a rule needs its source input to evaluate; an action needs its rule) and warns on the control plane for any section it has to truncate — never a silent drop. This generalizes the original input-only truncation to the whole store.
 
 **Why anchored at the end?** Earlier firmware used a hardcoded `SYSTEM_CONFIG_ADDRESS`. On platforms with smaller EEPROM than expected (Teensy 4.0, 1080 bytes) the hardcoded address fell past `E2END` and writes silently failed. Anchoring SystemConfig at the end makes the layout self-adjust per platform.
 
@@ -97,8 +99,10 @@ The extra inputs continue to function until reboot — they're configured in RAM
 
 There are two independent version numbers:
 
-- **`EEPROM_VERSION`** (currently `7`) — config-store arena schema (`ConfigStoreHeader` + `InputEEPROM[]` + `Rule[]` + `Action[]`).
-- **`SYSTEM_CONFIG_VERSION`** (currently `13`) — `SystemConfig` schema. Bumped whenever the struct's layout or address changes.
+- **`EEPROM_VERSION`** (currently `8`) — config-store arena schema (`ConfigStoreHeader` + `InputEEPROM[]` + `Rule[]` + `Action[]` + `ActionLink[]` + `OutputRecord[]`).
+- **`SYSTEM_CONFIG_VERSION`** (currently `14`) — `SystemConfig` schema. Bumped whenever the struct's layout or address changes.
+
+Unreleased layout breaks share one version number (the public release's + 1). So that a store written by an earlier unreleased layout under the same number is still rejected, each checksum starts from a layout tag that changes with every layout change: `SYSTEM_CONFIG_LAYOUT` (system_config.h) and `ARENA_LAYOUT` (input_store.cpp), which the arena checksum also XORs with the header's counts.
 
 A version mismatch on either block is non-fatal: the affected block resets to defaults on next boot, the user re-saves, and operation continues. The two blocks version independently — bumping `SYSTEM_CONFIG_VERSION` does not invalidate the arena and vice versa.
 
@@ -112,7 +116,7 @@ A version mismatch on either block is non-fatal: the affected block resets to de
 | **v4** | — | Added `divider_ratio` to the per-input record |
 | **v5** | — | `CalibrationOverride` AVR union size corrected (18→16 bytes) |
 | **v6** | — | Header became `ConfigStoreHeader`; the arena now also packs control-engine `Rule[]` + `Action[]` after the inputs (single checksum over all records) |
-| **v7** | current | `Rule` grows `warnLo`/`warnHi` (per-side configurable warning/"approach tier" edge, `RuleWarnMode` packed into `Rule.flags`) |
+| **v7** | v0.14.x | `Rule` grows `warnLo`/`warnHi` (per-side configurable warning/"approach tier" edge, `RuleWarnMode` packed into `Rule.flags`) |
 
 ### SystemConfig Version Progression
 
@@ -127,6 +131,7 @@ A version mismatch on either block is non-fatal: the affected block resets to de
 | **v11** | Removed system pin fields (`modeButtonPin`, `buzzerPin`, `canCSPin`, `canIntPin`, `sdCSPin`, `testModePin`) — pins are compile-time constants in the board profile, not runtime state |
 | **v12** | Control engine — embedded `Rule rules[]` / `Action actions[]` tables (replaced `RelayConfig relays[]`) |
 | **v13** | Removed those tables again — Rule/Action moved OUT to the front config-store arena; `SystemConfig` now holds only scalar settings |
+| **v14** | Unreleased breaks (#612): one set of CAN settings per bus; the output enables/intervals left for the arena's outputs section; `console` and `log` transports replace the router (under `SYSTEM_CONFIG_LAYOUT`) |
 
 > **Note:** v9→v10 is a pure address change, not a struct change. T4.1 users who upgrade past v10 will see SystemConfig reset to defaults on first boot and need to re-`SAVE`. Input configs are unaffected.
 >
@@ -295,20 +300,20 @@ On `INCLUDE_RULES_ENGINE` builds, the `Rule[]` and `Action[]` sections follow th
 struct SystemConfig {
     // Header (4 bytes)
     uint16_t magic;              // 0x5343 ("SC")
-    uint8_t version;             // SYSTEM_CONFIG_VERSION (currently 13)
-    uint8_t checksum;            // XOR checksum
+    uint8_t version;             // SYSTEM_CONFIG_VERSION (currently 14)
+    uint8_t checksum;            // XOR checksum, seeded with SYSTEM_CONFIG_LAYOUT
 
-    // Output Modules (NUM_OUTPUTS = 7: CAN, RealDash, Serial, SD, Alarm, Relay, ELM327)
-    uint8_t outputEnabled[NUM_OUTPUTS];
-    uint16_t outputInterval[NUM_OUTPUTS];
+    // The outputs are NOT here since #612 phase 2b-1 — they are records in the
+    // config-store arena. Only the alarm switch stays.
+    uint8_t alarmEnabled;
 
     // Display, units, intervals, sea-level pressure
     // (see src/config/system_config.h for the full layout)
     // Note: hardware pin assignments are NOT stored here — they are compile-time
     // constants defined in the board definition (boards/<board>/board.h)
 
-    // Transport router (v4+) — control/data/debug primary+secondary, BT
-    struct { /* ... */ } router;
+    // Where the console and the log go — primary + secondary transport each
+    struct { uint8_t primary, secondary; } console, log;
 
     // NB (v13): the control-engine Rule/Action tables are NO LONGER here —
     // they live in the front config-store arena (see Control-Engine Tables
@@ -319,7 +324,7 @@ struct SystemConfig {
     BusConfig buses;
     SerialPortConfig serial;
 
-    // Log filter (v6+) — per-plane log levels and tag bitmap
+    // Log filter — console and debug levels and the tag bitmap
     struct { /* ... */ } logFilter;
 };
 ```
@@ -502,7 +507,7 @@ if (temp.magic != SYSTEM_CONFIG_MAGIC ||
 
 ### Output enable flags reset to defaults each boot
 
-Symptom: `OUTPUT 2 ENABLE` + `SAVE` works for the session, but the output reverts to its default state on reboot.
+Symptom: an output enabled and `SAVE`d works for the session, but the output reverts to its default state on reboot.
 
 This was a real bug fixed in `SYSTEM_CONFIG_VERSION` 9 and 10:
 

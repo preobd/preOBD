@@ -40,7 +40,8 @@
 #include "../outputs/formats/output_format.h"   // SdLogFormat / parseSdLogFormat
 #include "../outputs/annunciator/output_alarm.h"   // alarmSilence* policy accessors (#433)
 #include "../outputs/table/output_base.h"    // syncOutputsToConfig (#610)
-#include "../outputs/table/output_table.h"   // the outputs you add (#612)
+#include "../outputs/table/output_table.h"
+#include "../outputs/table/output_admission.h"   // import admission (#612)
 #if INCLUDE_RULES_ENGINE
 #include "../rules/rules_json.h"
 #include "../rules/rules_manager.h"
@@ -467,31 +468,33 @@ FLASHMEM void exportActionsToJSON(JsonArray& actionsArray) {
 // One output you add, as SYSTEM DUMP JSON's system.outputs[] and OUTPUT LIST
 // JSON carry it (#612): {id, format, transport, enabled, interval?, csv?}.
 FLASHMEM void outputToJson(JsonObject obj, uint8_t id) {
-    char t[24];
-    outputTransportText(id, t, sizeof(t));
+    const OutputRecord* r = outputRecord(id);
+    if (!r) return;
+    char t[12];
+    outputTransportName(r->transport, t, sizeof(t));
     obj["id"]        = id;
-    obj["format"]    = outputFormatName(outputFormatOf(id));
+    obj["format"]    = outputFormatName((OutputFormat)r->format);
     obj["transport"] = t;
-    obj["enabled"]   = outputIsEnabled(id);
+    obj["enabled"]   = r->enabled != 0;
     // Only paced outputs have an interval (#608)
-    if (outputTakesIntervalId(id)) obj["interval"] = outputIntervalOf(id);
+    if (outputFormatPaced((OutputFormat)r->format)) obj["interval"] = r->interval;
 #if INCLUDE_SD_LOGGING
-    if (id == OUT_ID_SDLOG) obj["csv"] = sdLogFormatName(systemConfig.sdLogFormat);
+    if (r->format == FMT_CSV && r->transport == OT_SD) obj["csv"] = sdLogFormatName(r->option);
 #endif
 }
 
 // Export system configuration to JSON
 FLASHMEM void exportSystemConfigToJSON(JsonObject& systemObj) {
-    // The outputs you add (#612): an array, ids per output_table.h
+    // The outputs you add (#612): the stored table, ids assigned by OUTPUT ADD
     JsonArray outputs = systemObj["outputs"].to<JsonArray>();
-    for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
         if (outputExists(id)) outputToJson(outputs.add<JsonObject>(), id);
     }
 
     // The alarm is a built-in output: on/off and its acknowledgement policy
     // (#433). Was system.outputs.alarm before #612.
     JsonObject alarm = systemObj["alarm"].to<JsonObject>();
-    alarm["enabled"] = (bool)systemConfig.outputEnabled[OUTPUT_ALARM];
+    alarm["enabled"] = systemConfig.alarmEnabled != 0;
 #if INCLUDE_RULES_ENGINE
     alarm["silenceSeconds"] = (uint16_t)(alarmSilenceDurationMs() / 1000UL);
     alarm["silenceLed"]     = alarmSilenceIncludesLed();
@@ -562,16 +565,27 @@ FLASHMEM void exportSystemConfigToJSON(JsonObject& systemObj) {
         port["framed"] = (bool)(systemConfig.serial.framed_enabled_mask & (1 << i));
     }
 
-    // Log Filter Configuration
-    JsonObject logFilter = systemObj["logFilter"].to<JsonObject>();
-    const char* levelNames[] = {"NONE", "ERROR", "WARN", "INFO", "DEBUG"};
-    logFilter["controlLevel"] = systemConfig.logFilter.control_level <= 4 ? levelNames[systemConfig.logFilter.control_level] : "UNKNOWN";
-    logFilter["dataLevel"] = systemConfig.logFilter.data_level <= 4 ? levelNames[systemConfig.logFilter.data_level] : "UNKNOWN";
-    logFilter["debugLevel"] = systemConfig.logFilter.debug_level <= 4 ? levelNames[systemConfig.logFilter.debug_level] : "UNKNOWN";
+    // The console and the log (#612 phase 2b-1, §14.7). The console's
+    // transports are shown for information: an import never moves the
+    // console, which could cut the link the import arrives on (#561).
+    char tbuf[12];
+    JsonObject console = systemObj["console"].to<JsonObject>();
+    outputTransportName(systemConfig.console.primary, tbuf, sizeof(tbuf));
+    console["transport"] = tbuf;
+    outputTransportName(systemConfig.console.secondary, tbuf, sizeof(tbuf));
+    console["secondary"] = tbuf;
 
+    JsonObject logObj = systemObj["log"].to<JsonObject>();
+    outputTransportName(systemConfig.log.primary, tbuf, sizeof(tbuf));
+    logObj["transport"] = tbuf;
+    outputTransportName(systemConfig.log.secondary, tbuf, sizeof(tbuf));
+    logObj["secondary"] = tbuf;
+    const char* levelNames[] = {"NONE", "ERROR", "WARN", "INFO", "DEBUG"};
+    logObj["consoleLevel"] = systemConfig.logFilter.console_level <= 4 ? levelNames[systemConfig.logFilter.console_level] : "UNKNOWN";
+    logObj["debugLevel"] = systemConfig.logFilter.debug_level <= 4 ? levelNames[systemConfig.logFilter.debug_level] : "UNKNOWN";
     char tagsBuf[11];  // "0xFFFFFFFF" + null terminator
     snprintf(tagsBuf, sizeof(tagsBuf), "0x%08lX", (unsigned long)systemConfig.logFilter.enabledTags);
-    logFilter["enabledTags"] = tagsBuf;
+    logObj["enabledTags"] = tagsBuf;
 }
 
 // JSON Schema Version
@@ -1229,11 +1243,11 @@ FLASHMEM bool importInputsFromJSON(JsonArray& inputsArray) {
 // A serial port that is running and routed for commands may be the link this
 // import arrived on, so the import never changes it (#561) -- the same reason
 // SYSTEM RESET CONFIRM keeps serial settings (RESET_KEEP_LINK, #549). Read from
-// systemConfig.router, which every routing command keeps in step (syncConfig).
+// systemConfig.console, which every CONSOLE TRANSPORT keeps in step (syncConfig).
 FLASHMEM static bool serialPortCarriesCommands(uint8_t port_id) {
     if (!isSerialPortActive(port_id)) return false;
     const uint8_t t = (uint8_t)(TRANSPORT_SERIAL1 + (port_id - 1));
-    return systemConfig.router.control_primary == t || systemConfig.router.control_secondary == t;
+    return systemConfig.console.primary == t || systemConfig.console.secondary == t;
 }
 #endif
 
@@ -1255,27 +1269,12 @@ FLASHMEM static uint8_t parseLogLevelName(const char* name) {
 static const char kSerialKept1[] PROGMEM = "NOTE: Serial";
 static const char kDisplayAddrIgnored[] PROGMEM = "NOTE: display address ignored: valid 0x20-0x27 or 0x38-0x3F";
 static const char kIntervalNoteA[] PROGMEM = "NOTE: outputs: id ";
-static const char kIntervalNoteClamped[] PROGMEM = ".interval out of range; using ";
-static const char kIntervalNoteIgnored[] PROGMEM = ".interval is not a number; ignored";
+static const char kIntervalNoteIgnored[] PROGMEM = ".interval is out of range or not a number; the default is used";
 static const char kSerialKept2[] PROGMEM = " kept its settings: it carries commands (BUS SERIAL to change it)";
 static const char kSerialReboot[] PROGMEM = "NOTE: serial port changes take effect after SAVE and a reboot";
 #define JSON_FSTR(a) (reinterpret_cast<const __FlashStringHelper*>(a))
 
-#if INCLUDE_ELM327
-// OUTPUT ADD ELM327 SERIAL<n>'s rule, against a staged config: an enabled,
-// unframed port the router does not use
-static bool elm327PortOkIn(const SystemConfig& c, uint8_t port) {
-    if (port < 1 || port > NUM_SERIAL_PORTS) return false;
-    const uint8_t bit = (uint8_t)(1u << (port - 1));
-    if (!(c.serial.enabled_mask & bit) || (c.serial.framed_enabled_mask & bit)) return false;
-    const uint8_t t = (uint8_t)(TRANSPORT_SERIAL1 + (port - 1));
-    const auto& r = c.router;
-    return !(r.control_primary == t || r.control_secondary == t || r.data_primary == t ||
-             r.data_secondary == t || r.debug_primary == t || r.debug_secondary == t);
-}
-#endif
-
-FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
+FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasInputs) {
     // ---- ADMISSION PHASE -------------------------------------------------
     SystemConfig staged = systemConfig;
 
@@ -1283,7 +1282,7 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
     if (systemObj["alarm"].isNull() == false) {
         JsonObject alarmObj = systemObj["alarm"];
         if (alarmObj["enabled"].isNull() == false) {
-            staged.outputEnabled[OUTPUT_ALARM] = alarmObj["enabled"] ? 1 : 0;
+            staged.alarmEnabled = alarmObj["enabled"] ? 1 : 0;
         }
 #if INCLUDE_RULES_ENGINE
         // Acknowledgement policy (#433). Absent keys keep the current byte; an
@@ -1474,121 +1473,98 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
     }
 #endif
 
-    // The outputs you add (#612): the array replaces the table, as rules and
-    // actions do. One output per format and transport kind at a fixed id; a
-    // record whose id, format and transport kind disagree is skipped. OBD's
-    // CAN bus and ELM327's serial port are read from the record (after the
-    // buses and serial ports above, which they are checked against); the
-    // data stream RealDash and CSV share is the router's (phase 2b).
+    // The outputs you add (#612 phase 2b-1): the array replaces the stored
+    // table, ids kept. A record this board can't hold (id >= MAX_OUTPUTS, a
+    // duplicate id, an unbuilt format, a transport the format can't use) is
+    // skipped with a NOTE. An enabled one that couldn't run here, judged by
+    // this file's own buses and serial ports (one format per stream, the
+    // console's ports, the framed link, an off port or CAN bus), is imported
+    // switched off with a NOTE, so the rest of the file still restores.
     JsonVariant outputsVar = systemObj["outputs"];
-    if (outputsVar.is<JsonArray>()) {
-        // Every output this build has is deleted unless the array lists it;
-        // the bits of outputs it doesn't have keep their value
-        uint8_t absent = staged.router.outputsAbsent;
-        for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++)
-            if (outputIdBuilt(id)) absent |= (uint8_t)(1u << id);
+    const bool outputsPresent = outputsVar.is<JsonArray>();
+    OutputRecord stagedOut[MAX_OUTPUTS];
+    memcpy(stagedOut, outputRecords, sizeof(stagedOut));
+    if (outputsPresent) {
+        memset(stagedOut, 0, sizeof(stagedOut));
         for (JsonObject o : outputsVar.as<JsonArray>()) {
             const int id = o["id"] | -1;
             const OutputFormat fmt = parseOutputFormat(o["format"] | "");
-            const char* tr = o["transport"] | "";
-            if (id < 0 || id >= NUM_OUTPUT_IDS || !outputIdBuilt((uint8_t)id) ||
-                outputFormatOf((uint8_t)id) != fmt || !outputTransportKindOk((uint8_t)id, tr)) {
+            uint8_t t = OT_NONE;
+            const bool tOk = parseOutputTransport(o["transport"] | "", &t);
+            if (id < 0 || id >= MAX_OUTPUTS || stagedOut[id].format != FMT_NONE || fmt == FMT_NONE ||
+                !outputFormatBuilt(fmt) || !tOk || !outputTransportAllowed(fmt, t)) {
                 msg.control.print(F("NOTE: outputs: id "));
                 msg.control.print(id);
                 msg.control.print(F(" ("));
                 msg.control.print(o["format"] | "?");
-                msg.control.println(F(") is not an output this firmware has; skipped"));
+                msg.control.println(F(") is not an output this board can hold; skipped"));
                 continue;
             }
-            // OBD's bus and ELM327's port are the record's transport. One
-            // that can't run on it (checked below, after every record) is
-            // imported switched off, so the rest of the file still restores.
-            if (id == OUT_ID_OBD) {
-                const uint8_t bus = (strncasecmp(tr, "CAN", 3) == 0) ? (uint8_t)(tr[3] - '1') : 0xFF;
-                staged.buses.obdBus = bus < NUM_CAN_BUSES ? bus : 0xFF;
-            }
-#if INCLUDE_ELM327
-            if (id == OUT_ID_ELM327) {
-                const uint8_t port = (strncasecmp(tr, "SERIAL", 6) == 0) ? (uint8_t)(tr[6] - '0') : 0xFF;
-                staged.buses.elm327_serial_port = port;
-            }
-#endif
-            absent &= (uint8_t)~(1u << id);
-            const uint8_t slot = outputLegacySlot((uint8_t)id);
-            if (o["enabled"].isNull() == false) staged.outputEnabled[slot] = o["enabled"] ? 1 : 0;
-            // Out of range: clamped, as EEPROM load does, so restoring an
-            // older backup keeps the nearest rate it can. Not a number:
-            // ignored. Either way a NOTE says so (#608).
-            if (o["interval"].isNull() == false && outputTakesInterval(slot)) {
-                JsonVariant iv = o["interval"];
-                const double d = iv.is<double>() ? iv.as<double>() : NAN;
-                const bool isNumber = !isnan(d) && d == floor(d);
-                if (isNumber && d >= outputIntervalMinMs(slot) && d <= OUTPUT_INTERVAL_MAX_MS) {
-                    staged.outputInterval[slot] = (uint16_t)d;
+            OutputRecord& r = stagedOut[id];
+            r.id = (uint8_t)id;
+            r.format = fmt;
+            r.transport = t;
+            r.enabled = (o["enabled"] | false) ? 1 : 0;
+            r.interval = outputIntervalDefault(fmt, t);
+            if (outputFormatPaced(fmt) && o["interval"].isNull() == false) {
+                const long ms = o["interval"] | -1L;
+                if (outputIntervalValid(fmt, t, ms)) {
+                    r.interval = (uint16_t)ms;
                 } else {
                     msg.control.print(JSON_FSTR(kIntervalNoteA));
                     msg.control.print(id);
-                    if (isNumber) {
-                        staged.outputInterval[slot] = clampOutputInterval(slot, d);
-                        msg.control.print(JSON_FSTR(kIntervalNoteClamped));
-                        msg.control.println(staged.outputInterval[slot]);
-                    } else {
-                        msg.control.println(JSON_FSTR(kIntervalNoteIgnored));
-                    }
+                    msg.control.println(JSON_FSTR(kIntervalNoteIgnored));
                 }
             }
 #if INCLUDE_SD_LOGGING
-            if (id == OUT_ID_SDLOG && o["csv"].isNull() == false) {
-                const char* layoutName = o["csv"];
-                SdLogFormat format;
-                if (parseSdLogFormat(layoutName, format)) staged.sdLogFormat = (uint8_t)format;
+            if (fmt == FMT_CSV && t == OT_SD && o["csv"].isNull() == false) {
+                SdLogFormat layout;
+                if (parseSdLogFormat(o["csv"] | "", layout)) r.option = (uint8_t)layout;
             }
 #endif
         }
-        // A deleted output is off and has no transport
-        for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
-            if (!outputIdBuilt(id) || !(absent & (1u << id))) continue;
-            staged.outputEnabled[outputLegacySlot(id)] = 0;
-            if (id == OUT_ID_OBD) staged.buses.obdBus = 0xFF;
-            if (id == OUT_ID_ELM327) staged.buses.elm327_serial_port = 0xFF;
-        }
-        staged.router.outputsAbsent = absent;
     }
-
-    // An enabled OBD or ELM327 output must be able to run on its transport in
-    // this config (the file's buses and ports, or the current ones it left
-    // alone): OBD on a NORMAL bus, ELM327 on an enabled, unframed port the
-    // router doesn't use. Otherwise it is imported off, with a NOTE, as
-    // OUTPUT <id> ENABLE would refuse it.
-    {
-        const uint8_t bus = staged.buses.obdBus;
-        if (staged.outputEnabled[OUTPUT_CAN] && bus != 0xFF &&
-            (bus >= CAN_BUS_SLOTS || staged.buses.can[bus].mode != CAN_BUS_NORMAL)) {
-            staged.outputEnabled[OUTPUT_CAN] = 0;
-            msg.control.print(F("NOTE: outputs: OBD imported off: CAN"));
-            msg.control.print(bus + 1);
-            msg.control.println(F(" is off or LISTEN (BUS CAN <bus> ENABLE, then OUTPUT 0 ENABLE)"));
-        }
-#if INCLUDE_ELM327
-        const uint8_t port = staged.buses.elm327_serial_port;
-        if (staged.outputEnabled[OUTPUT_ELM327] && port != 0xFF && !elm327PortOkIn(staged, port)) {
-            staged.outputEnabled[OUTPUT_ELM327] = 0;
-            msg.control.print(F("NOTE: outputs: ELM327 imported off: Serial"));
-            msg.control.print(port);
-            msg.control.println(F(" is off, framed or a TRANSPORT port (BUS SERIAL <n> ENABLE, then OUTPUT 4 ENABLE)"));
+    // One per kind (one OBD, one CSV on SD, one ELM327 per transport kind):
+    // the lowest id keeps it, as the EEPROM load does
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+        OutputRecord& r = stagedOut[id];
+        if (r.format == FMT_NONE) continue;
+        if (outputSingletonHolder(id, (OutputFormat)r.format, r.transport, stagedOut) == OUT_ID_NONE) continue;
+        msg.control.print(F("NOTE: outputs: id "));
+        msg.control.print(id);
+        msg.control.println(F(" is a second output of a one-per-kind format; skipped"));
+        memset(&r, 0, sizeof(r));
+    }
+    // Every enabled output in the staged table, against the staged config.
+    // Also covers a file with no outputs array that moves a bus or a port
+    // from under an existing output.
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+        OutputRecord& r = stagedOut[id];
+        if (r.format == FMT_NONE || !r.enabled) continue;
+        const __FlashStringHelper* why = outputAdmitReason(id, (OutputFormat)r.format, r.transport, staged, stagedOut);
+        const uint8_t port = outputTransportSerialPort(r.transport);
+        if (!why && port != 0xFF && !(staged.serial.enabled_mask & (1u << (port - 1)))) why = F("needs its serial port enabled");
+#if INCLUDE_CAN
+        const uint8_t bus = outputTransportCanBus(r.transport);
+        if (!why && r.format == FMT_OBD && bus != 0xFF && staged.buses.can[bus].mode != CAN_BUS_NORMAL) {
+            why = F("needs its CAN bus on and not LISTEN");
         }
 #endif
+        if (!why) continue;
+        r.enabled = 0;
+        msg.control.print(F("NOTE: outputs: id "));
+        msg.control.print(id);
+        msg.control.print(F(" imported off: "));
+        msg.control.println(why);
     }
 
-
-    // Log filter (#561). Levels by name; an unreadable value keeps the current one.
-    const bool logFilterPresent = systemObj["logFilter"].is<JsonObject>();
+    // The log's levels and tags (#561). Levels by name; an unreadable value
+    // keeps the current one. Its transports are export-only, like the console's.
+    const bool logFilterPresent = systemObj["log"].is<JsonObject>();
     if (logFilterPresent) {
-        JsonObject lf = systemObj["logFilter"];
-        uint8_t lvl = parseLogLevelName(lf["controlLevel"]);
-        if (lvl != 0xFF) staged.logFilter.control_level = lvl;
-        lvl = parseLogLevelName(lf["dataLevel"]);
-        if (lvl != 0xFF) staged.logFilter.data_level = lvl;
+        JsonObject lf = systemObj["log"];
+        uint8_t lvl = parseLogLevelName(lf["consoleLevel"]);
+        if (lvl != 0xFF) staged.logFilter.console_level = lvl;
         lvl = parseLogLevelName(lf["debugLevel"]);
         if (lvl != 0xFF) staged.logFilter.debug_level = lvl;
         const char* tags = lf["enabledTags"];
@@ -1607,8 +1583,27 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
     // ---- COMMIT PHASE ----------------------------------------------------
     // Nothing above this line may fail past this point; one write.
     systemConfig = staged;
+    if (outputsPresent) {
+        // Without the file's own inputs, a route bit can't keep meaning the
+        // output it used to: an id that changed format or transport kind, or
+        // is new, is routed to every input (as OUTPUT ADD does); a removed one
+        // is cleared (as OUTPUT DEL does). With inputs, their routeMask rules.
+        for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+            const OutputRecord& was = outputRecords[id];
+            const OutputRecord& now = stagedOut[id];
+            const bool same = was.format == now.format &&
+                              outputTransportKind(was.transport) == outputTransportKind(now.transport);
+            if (same || importHasInputs) continue;
+            for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+                if (inputs[i].pin == 0xFF) continue;
+                if (now.format != FMT_NONE) inputs[i].routeMask |= (uint8_t)(1u << id);
+                else                        inputs[i].routeMask &= (uint8_t)~(1u << id);
+            }
+        }
+        memcpy(outputRecords, stagedOut, sizeof(stagedOut));
+    }
     if (logFilterPresent) applyLogFilterConfig();
-    // The live outputs follow the committed outputEnabled[], as OUTPUT <id>
+    // The live outputs follow the committed records, as OUTPUT <id>
     // ENABLE/DISABLE would (until #610 that waited for a reboot). Here, not at
     // the end of the whole load: once systemConfig commits, the rest of it is
     // live too and a SAVE persists it, so a later stage failing must not leave
@@ -1799,7 +1794,7 @@ bool loadConfigFromJSON(const char* jsonString) {
     // Import system config
     if (doc["system"].isNull() == false) {
         JsonObject system = doc["system"];
-        if (!importSystemConfigFromJSON(system)) {
+        if (!importSystemConfigFromJSON(system, doc["inputs"].isNull() == false)) {
             msg.control.println(F("ERROR: Failed to import system config"));
             return false;
         }

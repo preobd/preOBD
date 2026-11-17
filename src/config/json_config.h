@@ -46,7 +46,9 @@ void exportInputToJSON(JsonObject& inputObj, const Input* input);
 
 // JSON import functions
 bool loadConfigFromJSON(const char* jsonString);
-bool importSystemConfigFromJSON(JsonObject& systemObj);
+// importHasInputs: the same file carries an inputs array (their routeMask
+// then decides the routes; otherwise a changed output id is re-routed, #612)
+bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasInputs = false);
 bool importInputsFromJSON(JsonArray& inputsArray);
 bool importInputFromJSON(JsonObject& inputObj, uint8_t index);
 

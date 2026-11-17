@@ -95,8 +95,8 @@ best reference; the overall shape is:
   "firmware": { "version": "0.13.0-beta", "platform": "...", "maxInputs": 40, "...": "..." },
   "system": {
     "outputs":   [ { "id": 0, "format": "OBD", "transport": "CAN1", "enabled": true },
-                   { "id": 3, "format": "CSV", "transport": "SD", "enabled": true, "interval": 5000, "csv": "WIDE" },
-                   { "id": 5, "format": "ELM327", "transport": "BLE", "enabled": true } ],
+                   { "id": 1, "format": "ELM327", "transport": "BLE", "enabled": true },
+                   { "id": 2, "format": "CSV", "transport": "SD", "enabled": true, "interval": 5000, "csv": "WIDE" } ],
     "alarm":     { "enabled": true, "silenceSeconds": 30, "silenceLed": false },
     "display":   { "enabled": true, "type": "LCD", "address": "0x27",
                    "defaultUnits": { "temperature": "CELSIUS", "pressure": "BAR", "elevation": "METERS", "speed": "KPH" } },
@@ -104,7 +104,9 @@ best reference; the overall shape is:
     "buses":     { "i2c": 0, "spi": 0, "...": "...",
                    "can": [ { "bus": 0, "mode": "NORMAL", "baudrate": 500000, "input": true } ] },
     "serial":    { "ports": [ { "port": 1, "enabled": true, "baudrate": 9600, "framed": false } ] },
-    "logFilter": { "controlLevel": "INFO", "dataLevel": "INFO", "debugLevel": "WARN", "enabledTags": "0xFFFFFFFF" }
+    "console":   { "transport": "USB", "secondary": "SERIAL1" },
+    "log":       { "transport": "USB", "secondary": "NONE",
+                   "consoleLevel": "INFO", "debugLevel": "WARN", "enabledTags": "0xFFFFFFFF" }
   },
   "inputs": [
     {
@@ -136,19 +138,30 @@ best reference; the overall shape is:
 
 ### Outputs and the alarm
 
-`system.outputs` lists the outputs you added (`OUTPUT LIST`), each with its
-`id`, `format`, `transport` and `enabled`, plus `interval` for CSV and
-RealDash and `csv` (`LONG` or `WIDE`) for the CSV output on SD. On import the
-array **replaces** the outputs: an output it leaves out is deleted, as
-`OUTPUT DEL` would. Import reads the transport of OBD (`CAN1`–`CAN3`) and of
-the ELM327 output on a serial port (`SERIAL1`–`SERIAL8`), and checks it against
-the buses and serial ports in the same file. An enabled OBD on a bus that is
-off or `LISTEN`, or an enabled ELM327 on a port that is off, framed or used by
-`TRANSPORT`, is imported switched off with a NOTE that says what to run; the
-rest of the file is imported as usual. RealDash and CSV use the data
-stream (`TRANSPORT DATA`), so their transport is shown for reference only.
-A record for an output this firmware doesn't have is skipped with a NOTE.
-Changes apply at once: a bus changes rate or mode, OBD and ELM327 move.
+`system.outputs` is the output table (`OUTPUT LIST`): each output's `id`,
+`format`, `transport` and `enabled`, plus `interval` for CSV and RealDash and
+`csv` (`LONG` or `WIDE`) for the CSV output on SD. On import the array
+**replaces** the table, ids kept: an output it leaves out is deleted, as
+`OUTPUT DEL` would.
+
+- A record this board can't hold is skipped with a NOTE: an id past its
+  `MAX_OUTPUTS`, a duplicate id, a format the build lacks, a transport the
+  format can't use.
+- An enabled output that couldn't run on the file's own settings is imported
+  switched off with a NOTE: two outputs on one stream, RealDash or ELM327 on a
+  stream the console or log uses, a port that is off or framed, OBD on a bus
+  that is off or `LISTEN`. The rest of the file still imports.
+- Without an `inputs` array in the same file, an id that now means a different
+  output is routed to every input (as `OUTPUT ADD` does); with one, the
+  inputs' `routeMask` decides.
+- Changes apply at once: outputs start, stop and move, and buses change rate
+  or mode.
+
+`system.console` (`transport`, `secondary`) is exported for information only:
+an import never moves the console, which could cut the link the import
+arrives on. `system.log` carries `consoleLevel`, `debugLevel` and
+`enabledTags`, which import, and its `transport` and `secondary`, which are
+export-only too.
 
 `system.buses.can` has one entry per CAN bus: `mode` (`OFF`, `NORMAL`,
 `LISTEN`), `baudrate`, and `input` (`true` on the bus CAN input reads). On
@@ -265,7 +278,7 @@ frame decoding (`CAN_IMPORT`). The others can also be set with `SET <pin> CAL ..
   `BUS SERIAL` changes it. Because the new port settings only start after the
   reboot, imported inputs are checked against the ports running now: an input
   on the pins of a port the file turns off is refused until that reboot.
-- **Log levels** (`logFilter`) apply straight away.
+- **Log levels and tags** (`log`: `consoleLevel`, `debugLevel`, `enabledTags`) apply straight away. The `console` and `log` transports are export-only: an import never moves them, since that could cut the link the import arrives on (use `CONSOLE TRANSPORT` / `LOG TRANSPORT`).
 - **Missing fields take defaults**, so an older export still imports on newer firmware.
 - **`schemaVersion` must be 1** and `mode` must be `"runtime"`; anything else is refused.
 - **Import doesn't save.** Run `SAVE` afterwards.

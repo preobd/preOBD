@@ -40,7 +40,7 @@ void readCANSensor(Input*) {}
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/config/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
-#include "../../src/outputs/table/output_table.cpp"   // the outputs view (#612)
+#include "../../src/outputs/table/output_table.cpp"   // the stored outputs (#612)
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
@@ -670,13 +670,13 @@ static void test_can_import_units_survive_eeprom(void) {
 static void test_route_mask_survives_eeprom(void) {
     Input* in = makeCanImport(0xC2, 0x0C, 1.0f);
     TEST_ASSERT_NOT_NULL(in);
-    in->routeMask = (uint8_t)((1u << OUT_ID_CSV) | (1u << OUT_ID_ELM327) | (1u << OUT_ID_ELM327_BLE));
+    in->routeMask = (uint8_t)((1u << 2) | (1u << 4) | (1u << 5));
     InputEEPROM rec;
     buildInputRecord(*in, rec);
     Input loaded;
     memset(&loaded, 0, sizeof(loaded));
     applyInputRecord(rec, loaded);
-    TEST_ASSERT_EQUAL_HEX8((1u << OUT_ID_CSV) | (1u << OUT_ID_ELM327) | (1u << OUT_ID_ELM327_BLE),
+    TEST_ASSERT_EQUAL_HEX8((1u << 2) | (1u << 4) | (1u << 5),
                            loaded.routeMask);
     freeInputSlot(0xC2);
 }
@@ -809,31 +809,31 @@ static void rpmInput(uint8_t slot, uint8_t pin, bool canOn) {
     in->flags.isEnabled = true;
     in->obd2pid = 0x0C;
     in->measurementType = MEASURE_RPM;
-    in->routeMask = canOn ? ROUTE_MASK_ALL : (ROUTE_MASK_ALL & ~(1 << OUTPUT_CAN));
+    in->routeMask = canOn ? ROUTE_MASK_ALL : (ROUTE_MASK_ALL & ~(1 << 0));
 }
 static bool bitmapHas0C() {
     uint8_t bitmap[4];
-    obdQuery_getSupportedPIDBitmap(bitmap, 0x00, OUT_ID_OBD);
+    obdQuery_getSupportedPIDBitmap(bitmap, 0x00, 0);
     return bitmap[1] & 0x10;   // PID 0x0C: byte 1 (PIDs 0x09-0x10), bit 4
 }
 static void test_can_toggle_gates_obd_answers(void) {
     rpmInput(0, 10, true);
     obdQuery_buildLookupTable();
-    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OUT_ID_OBD));
+    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, 0));
     TEST_ASSERT_TRUE(bitmapHas0C());
 
-    inputs[0].routeMask &= ~(1 << OUTPUT_CAN);
+    inputs[0].routeMask &= ~(1 << 0);
     obdQuery_buildLookupTable();
-    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, OUT_ID_OBD));
+    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, 0));
     TEST_ASSERT_FALSE(bitmapHas0C());
 
     rpmInput(1, 11, true);                 // same PID, toggle on: it answers now
     obdQuery_buildLookupTable();
-    TEST_ASSERT_EQUAL_PTR(&inputs[1], obdQuery_findByPID(0x0C, OUT_ID_OBD));
+    TEST_ASSERT_EQUAL_PTR(&inputs[1], obdQuery_findByPID(0x0C, 0));
 
-    inputs[0].routeMask |= (1 << OUTPUT_CAN);   // first one back: first wins again
+    inputs[0].routeMask |= (1 << 0);   // first one back: first wins again
     obdQuery_buildLookupTable();
-    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OUT_ID_OBD));
+    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, 0));
 }
 
 
@@ -843,12 +843,12 @@ static void test_can_toggle_gates_obd_answers(void) {
 static void test_a_stale_pid_table_rebuilds_on_the_next_request(void) {
     obdQuery_buildLookupTable();               // nothing routed yet
     rpmInput(0, 10, true);
-    inputs[0].routeMask = (uint8_t)(1u << OUT_ID_ELM327_BLE);
-    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, OUT_ID_ELM327_BLE));   // stale table
+    inputs[0].routeMask = (uint8_t)(1u << 5);
+    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, 5));   // stale table
     obdQuery_markStale();
-    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OUT_ID_ELM327_BLE));
+    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, 5));
     uint8_t bitmap[4];
-    obdQuery_getSupportedPIDBitmap(bitmap, 0x00, OUT_ID_ELM327_BLE);
+    obdQuery_getSupportedPIDBitmap(bitmap, 0x00, 5);
     TEST_ASSERT_TRUE(bitmap[1] & 0x10);        // PID 0x0C listed as supported
 }
 
@@ -856,30 +856,30 @@ static void test_a_stale_pid_table_rebuilds_on_the_next_request(void) {
 // a serial port and ELM327 over BLE have a bit each.
 static void test_obd_and_elm327_answer_their_own_routes(void) {
     rpmInput(0, 10, true);
-    inputs[0].routeMask = (uint8_t)(1u << OUT_ID_ELM327);   // ELM327 only
+    inputs[0].routeMask = (uint8_t)(1u << 4);   // ELM327 only
     obdQuery_buildLookupTable();
-    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, OUT_ID_OBD));
-    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OUT_ID_ELM327));
-    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, OUT_ID_ELM327_BLE));   // BLE has its own bit
-    inputs[0].routeMask |= (uint8_t)(1u << OUT_ID_ELM327_BLE);
-    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OUT_ID_ELM327_BLE));
+    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, 0));
+    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, 4));
+    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, 5));   // BLE has its own bit
+    inputs[0].routeMask |= (uint8_t)(1u << 5);
+    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, 5));
     uint8_t bitmap[4];
-    obdQuery_getSupportedPIDBitmap(bitmap, 0x00, OUT_ID_OBD);
+    obdQuery_getSupportedPIDBitmap(bitmap, 0x00, 0);
     TEST_ASSERT_FALSE(bitmap[1] & 0x10);
-    obdQuery_getSupportedPIDBitmap(bitmap, 0x00, OUT_ID_ELM327);
+    obdQuery_getSupportedPIDBitmap(bitmap, 0x00, 4);
     TEST_ASSERT_TRUE(bitmap[1] & 0x10);
 
     inputs[0].routeMask = 0;                                  // routed nowhere
-    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, OUT_ID_ELM327));
-    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, OUT_ID_ELM327_BLE));
+    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, 4));
+    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, 5));
 
     // Two inputs on one PID: each responder takes the first routed to it
     rpmInput(1, 11, true);
-    inputs[0].routeMask = (uint8_t)(1u << OUT_ID_ELM327);
-    inputs[1].routeMask = (uint8_t)(1u << OUT_ID_OBD);
+    inputs[0].routeMask = (uint8_t)(1u << 4);
+    inputs[1].routeMask = (uint8_t)(1u << 0);
     obdQuery_buildLookupTable();
-    TEST_ASSERT_EQUAL_PTR(&inputs[1], obdQuery_findByPID(0x0C, OUT_ID_OBD));
-    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OUT_ID_ELM327));
+    TEST_ASSERT_EQUAL_PTR(&inputs[1], obdQuery_findByPID(0x0C, 0));
+    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, 4));
 }
 
 // #528: PID 01 and the no-codes modes answer for a car with no ECU, whatever
@@ -888,23 +888,23 @@ static void test_fixed_obd_answers(void) {
     uint8_t out[OBD_ANSWER_MAX];
     uint8_t n = 0;
     obdQuery_buildLookupTable();                 // no inputs at all
-    TEST_ASSERT_TRUE(obdQuery_resolve(0x01, 0x01, out, &n, OUT_ID_OBD));
+    TEST_ASSERT_TRUE(obdQuery_resolve(0x01, 0x01, out, &n, 0));
     const uint8_t pid01[] = {0x41, 0x01, 0x00, 0x00, 0x00, 0x00};
     TEST_ASSERT_EQUAL_UINT8(6, n);
     TEST_ASSERT_EQUAL_HEX8_ARRAY(pid01, out, 6);
     const uint8_t modes[] = {0x03, 0x07, 0x0A};
     for (uint8_t m : modes) {
-        TEST_ASSERT_TRUE(obdQuery_resolve(m, 0x00, out, &n, OUT_ID_OBD));
+        TEST_ASSERT_TRUE(obdQuery_resolve(m, 0x00, out, &n, 0));
         TEST_ASSERT_EQUAL_UINT8(2, n);
         TEST_ASSERT_EQUAL_HEX8(m + 0x40, out[0]);
         TEST_ASSERT_EQUAL_HEX8(0x00, out[1]);       // no codes
     }
-    TEST_ASSERT_FALSE(obdQuery_resolve(0x09, 0x02, out, &n, OUT_ID_OBD));   // VIN: not answered
-    TEST_ASSERT_FALSE(obdQuery_resolve(0x04, 0x00, out, &n, OUT_ID_OBD));   // clear codes: not answered
+    TEST_ASSERT_FALSE(obdQuery_resolve(0x09, 0x02, out, &n, 0));   // VIN: not answered
+    TEST_ASSERT_FALSE(obdQuery_resolve(0x04, 0x00, out, &n, 0));   // clear codes: not answered
     uint8_t bitmap[4];
-    obdQuery_getSupportedPIDBitmap(bitmap, 0x00, OUT_ID_OBD);
+    obdQuery_getSupportedPIDBitmap(bitmap, 0x00, 0);
     TEST_ASSERT_EQUAL_HEX8(0x80, bitmap[0]);                    // PID 01 only
-    obdQuery_getSupportedPIDBitmap(bitmap, 0x20, OUT_ID_OBD);
+    obdQuery_getSupportedPIDBitmap(bitmap, 0x20, 0);
     TEST_ASSERT_EQUAL_HEX8(0x00, bitmap[0]);                    // not in later ranges
 }
 

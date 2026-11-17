@@ -223,25 +223,6 @@ bool streq(const char* a, const char* b) {
     return *a == *b;
 }
 
-// Helper: Parse message plane name
-MessagePlane parsePlane(const char* str, bool* isValid) {
-    if (streq(str, "CONTROL")) {
-        if (isValid) *isValid = true;
-        return PLANE_CONTROL;
-    }
-    if (streq(str, "DATA")) {
-        if (isValid) *isValid = true;
-        return PLANE_DATA;
-    }
-    if (streq(str, "DEBUG")) {
-        if (isValid) *isValid = true;
-        return PLANE_DEBUG;
-    }
-
-    if (isValid) *isValid = false;
-    return PLANE_CONTROL;  // Safe default (but isValid=false indicates error)
-}
-
 // Helper: Parse transport ID
 TransportID parseTransport(const char* str, bool* isValid) {
     if (streq(str, "USB_SERIAL") || streq(str, "USB") || streq(str, "SERIAL")) {
@@ -391,8 +372,8 @@ static const char PSTR_HELP_TEST_DESC[] PROGMEM = "Test Mode - Simulate sensor i
 static const char PSTR_HELP_DISPLAY[] PROGMEM = "DISPLAY";
 static const char PSTR_HELP_DISPLAY_DESC[] PROGMEM = "Display Config - LCD settings";
 
-static const char PSTR_HELP_TRANSPORT[] PROGMEM = "TRANSPORT";
-static const char PSTR_HELP_TRANSPORT_DESC[] PROGMEM = "Message Routing - Route control, data, and debug messages";
+static const char PSTR_HELP_CONSOLE[] PROGMEM = "CONSOLE";
+static const char PSTR_HELP_CONSOLE_DESC[] PROGMEM = "Console and log transports - where commands, replies and the log go";
 
 static const char PSTR_HELP_SYSTEM[] PROGMEM = "SYSTEM";
 static const char PSTR_HELP_SYSTEM_DESC[] PROGMEM = "System Config - Sea level pressure, read intervals (advanced)";
@@ -416,7 +397,7 @@ void printHelpRelay();
 void printHelpTest();
 #endif
 void printHelpDisplay();
-void printHelpTransport();
+void printHelpConsole();
 void printHelpSystem();
 void printHelpConfig();
 void printHelpExamples();
@@ -437,7 +418,7 @@ static const HelpCategory HELP_CATEGORIES[] PROGMEM = {
     {PSTR_HELP_TEST, PSTR_HELP_TEST_DESC, printHelpTest},
 #endif
     {PSTR_HELP_DISPLAY, PSTR_HELP_DISPLAY_DESC, printHelpDisplay},
-    {PSTR_HELP_TRANSPORT, PSTR_HELP_TRANSPORT_DESC, printHelpTransport},
+    {PSTR_HELP_CONSOLE, PSTR_HELP_CONSOLE_DESC, printHelpConsole},
     {PSTR_HELP_SYSTEM, PSTR_HELP_SYSTEM_DESC, printHelpSystem},
     {PSTR_HELP_CONFIG, PSTR_HELP_CONFIG_DESC, printHelpConfig},
     {PSTR_HELP_EXAMPLES, PSTR_HELP_EXAMPLES_DESC, printHelpExamples}
@@ -465,14 +446,12 @@ void printSystemConfig() {
     msg.control.print(systemConfig.seaLevelPressure);
     msg.control.println(F(" hPa"));
 
-    // Log Filter Configuration
+    // Log levels (LOG LEVEL CONSOLE|DEBUG)
     msg.control.println();
     msg.control.println(F("=== Log Filter Configuration ==="));
     const char* levelNames[] = {"NONE", "ERROR", "WARN", "INFO", "DEBUG"};
-    msg.control.print(F("Control Level: "));
-    msg.control.println(systemConfig.logFilter.control_level <= 4 ? levelNames[systemConfig.logFilter.control_level] : "UNKNOWN");
-    msg.control.print(F("Data Level: "));
-    msg.control.println(systemConfig.logFilter.data_level <= 4 ? levelNames[systemConfig.logFilter.data_level] : "UNKNOWN");
+    msg.control.print(F("Console Level: "));
+    msg.control.println(systemConfig.logFilter.console_level <= 4 ? levelNames[systemConfig.logFilter.console_level] : "UNKNOWN");
     msg.control.print(F("Debug Level: "));
     msg.control.println(systemConfig.logFilter.debug_level <= 4 ? levelNames[systemConfig.logFilter.debug_level] : "UNKNOWN");
     msg.control.print(F("Enabled Tags: 0x"));
@@ -649,28 +628,24 @@ void printHelpDisplay() {
     msg.control.println();
 }
 
-void printHelpTransport() {
+void printHelpConsole() {
     msg.control.println();
-    msg.control.println(F("=== TRANSPORT Commands ==="));
-    msg.control.println(F("Route control, data, and debug messages"));
+    msg.control.println(F("=== CONSOLE and LOG transports ==="));
+    msg.control.println(F("Where commands are read and replies go, and where the log goes"));
     msg.control.println();
-    msg.control.println(F("  TRANSPORT STATUS  - Show current transport routing"));
-    msg.control.println(F("  TRANSPORT <plane> <transport>  - Set primary transport"));
-    msg.control.println(F("  TRANSPORT <plane> <transport> SECONDARY  - Set secondary"));
+    msg.control.println(F("  CONSOLE STATUS                          - Show the console's and the log's transports"));
+    msg.control.println(F("  CONSOLE TRANSPORT <transport> [SECONDARY] - Set the console's (primary) transport"));
+    msg.control.println(F("  LOG TRANSPORT <transport> [SECONDARY]     - Set the log's transport"));
+    msg.control.println(F("  ... NONE SECONDARY                        - Clear the secondary"));
     msg.control.println();
-    msg.control.println(F("  Planes: CONTROL, DATA, DEBUG"));
-    msg.control.println(F("  (Use LIST TRANSPORTS to see available transports)"));
+    msg.control.println(F("  Transports: USB, SERIAL1-8, ESP32_BT (LIST TRANSPORTS shows what is up)"));
+    msg.control.println(F("  The console reads commands from both of its transports and answers on the"));
+    msg.control.println(F("  one a command came from. A stream that a RealDash or ELM327 output uses"));
+    msg.control.println(F("  can't carry the console or the log."));
     msg.control.println();
-    msg.control.println(F("  Both primary and secondary are polled for input and"));
-    msg.control.println(F("  receive all output, enabling simultaneous control from"));
-    msg.control.println(F("  two ports (e.g. USB + Bluetooth HM-10)."));
-    msg.control.println();
-    msg.control.println(F("  Example:"));
-    msg.control.println(F("    TRANSPORT CONTROL SERIAL7"));
-    msg.control.println(F("    TRANSPORT CONTROL USB_SERIAL SECONDARY"));
-    msg.control.println(F("    SAVE"));
-    msg.control.println();
-    msg.control.println(F("  Clear secondary: TRANSPORT CONTROL NONE SECONDARY"));
+    msg.control.println(F("  Example: an HM-10 on Serial7 with USB kept"));
+    msg.control.println(F("    CONSOLE TRANSPORT SERIAL7"));
+    msg.control.println(F("    CONSOLE TRANSPORT USB SECONDARY"));
     msg.control.println();
 }
 
@@ -746,9 +721,9 @@ void printHelpExamples() {
     msg.control.println();
     msg.control.println(F("Output and control:"));
     msg.control.println(F("  SET A2 INPUT ENABLE"));
-    msg.control.println(F("  OUTPUT LIST  (ids: 0 is OBD on the CAN output bus)"));
-    msg.control.println(F("  OUTPUT 0 ENABLE"));
-    msg.control.println(F("  OUTPUT 2 INTERVAL 1000  (CSV on the data stream)"));
+    msg.control.println(F("  OUTPUT LIST  (each output's id)"));
+    msg.control.println(F("  OUTPUT ADD CSV USB INTERVAL 1000"));
+    msg.control.println(F("  OUTPUT 1 DISABLE"));
     msg.control.println(F("  SAVE"));
     msg.control.println();
 }
@@ -872,9 +847,10 @@ void printHelpQuick() {
 #endif
     msg.control.println(F("  DISPLAY ADDRESS <hex>"));
     msg.control.println();
-    msg.control.println(F("Transport:"));
-    msg.control.println(F("  TRANSPORT STATUS|LIST"));
-    msg.control.println(F("  TRANSPORT CONTROL|DATA|DEBUG <transport>"));
+    msg.control.println(F("Console and log:"));
+    msg.control.println(F("  CONSOLE STATUS"));
+    msg.control.println(F("  CONSOLE TRANSPORT <transport> [SECONDARY]"));
+    msg.control.println(F("  LOG TRANSPORT <transport> [SECONDARY]"));
     msg.control.println();
     msg.control.println(F("System:"));
     msg.control.println(F("  SYSTEM STATUS"));
