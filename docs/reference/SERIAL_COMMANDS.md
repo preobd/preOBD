@@ -20,7 +20,8 @@ USB, a second console port and the app over Bluetooth can all send commands
 at once: each has its own line, so they never mix.
 
 Commands are case-insensitive. Pin names can be `A0`, `a0`, `6`, etc.
-`<COMMAND> -h` prints that command's one-line help.
+`HELP` lists the help pages, and `HELP <category>` (for example `HELP SET`)
+shows one.
 
 ### Quick Connection Guide
 

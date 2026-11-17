@@ -16,9 +16,8 @@ typedef int (*CommandHandler)(int argc, const char* const* argv);
 
 // Command registration structure
 struct Command {
-    const char* name;          // Command name (uppercase, stored in PROGMEM on AVR)
+    const char* name;          // Command name, upper-case; in RAM (CLAUDE.md, Command Dispatch)
     CommandHandler handler;    // Function pointer to handler
-    const char* help;          // Short help text (PROGMEM on AVR)
     bool configModeOnly;       // true = only available in CONFIG mode
 };
 
@@ -26,8 +25,7 @@ struct Command {
 extern const Command COMMANDS[];
 extern const uint8_t NUM_COMMANDS;
 
-// Main command dispatcher
-// Called by microrl execute callback
+// Main command dispatcher: one tokenized console line (console_input.cpp)
 int dispatchCommand(int argc, const char* const* argv);
 
 //-----------------------------------------------------------------------------

@@ -29,7 +29,4 @@ void dispatchReportUnknownSubcommand(const char* commandName, const char* token)
 // Subcommand matched but carries runModeAllowed=false while in RUN mode.
 void dispatchReportSubcmdConfigRequired(const char* commandName, const char* token);
 
-// `<COMMAND> -h` / `--help`: the command's one-line help (COMMANDS[i].help).
-void dispatchReportCommandHelp(const char* help);
-
 #endif // _COMMAND_DISPATCH_H_

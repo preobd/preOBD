@@ -101,58 +101,58 @@ void platformReboot() {
 // Command table
 const Command COMMANDS[] = {
     // Mode commands (always available)
-    {"CONFIG", cmd_config, "Enter configuration mode", false},
-    {"RUN", cmd_run, "Enter run mode", false},
+    {"CONFIG", cmd_config, false},
+    {"RUN", cmd_run, false},
 
     // Query commands (read-only, available in both modes)
-    {"HELP", cmd_help, "Show help", false},
-    {"?", cmd_help, "Show help (alias)", false},
-    {"H", cmd_help, "Show help (alias)", false},
-    {"LIST", cmd_list, "List inputs/applications/sensors", false},
-    {"INFO", cmd_info, "Show input details", false},
-    {"VERSION", cmd_version, "Show firmware version", false},
+    {"HELP", cmd_help, false},
+    {"?", cmd_help, false},
+    {"H", cmd_help, false},
+    {"LIST", cmd_list, false},
+    {"INFO", cmd_info, false},
+    {"VERSION", cmd_version, false},
 
     // Configuration commands (CONFIG mode only)
-    {"SET", cmd_set, "Configure input", true},
-    {"CLEAR", cmd_clear, "Clear input", true},
+    {"SET", cmd_set, true},
+    {"CLEAR", cmd_clear, true},
     // OUTPUT: configModeOnly=false so OUTPUT LIST and OUTPUT <id> answer in
     // RUN; every changing verb is gated in cmd_output.cpp (#612).
-    {"OUTPUT", cmd_output, "Outputs: list, add, configure, delete", false},
-    {"DISPLAY", cmd_display, "Configure display", true},
-    {"CONSOLE", cmd_console, "Console transports (STATUS works in RUN)", false},
+    {"OUTPUT", cmd_output, false},
+    {"DISPLAY", cmd_display, true},
+    {"CONSOLE", cmd_console, false},
     // SYSTEM: configModeOnly=false; per-subcommand runModeAllowed flags in
     // SYSTEM_SUBCOMMANDS (cmd_system.cpp) gate the destructive verbs (RESET,
     // REBOOT, SEA_LEVEL, UNITS, INTERVAL) while leaving STATUS / PINS / DUMP
     // available in RUN mode.
-    {"SYSTEM", cmd_system, "System configuration", false},
-    {"SAVE", cmd_save, "Save configuration", true},
-    {"LOAD", cmd_load, "Load configuration", true},
+    {"SYSTEM", cmd_system, false},
+    {"SAVE", cmd_save, true},
+    {"LOAD", cmd_load, true},
 #if SUPPORTS_JSON_IMPORT_STREAM
-    {"JSON", cmd_json, "Import JSON configuration over serial", true},
+    {"JSON", cmd_json, true},
 #endif
-    {"REBOOT", cmd_reboot, "", true},  // Undocumented alias for SYSTEM REBOOT
+    {"REBOOT", cmd_reboot, true},  // Alias for SYSTEM REBOOT (not in HELP)
     // BUS / SCAN: configModeOnly=false so their read-only JSON forms (BUS CAN
     // JSON, SCAN STATUS|RESULTS JSON) answer in RUN and never bump
     // configGeneration -- the app re-reads the whole dump on every bump
     // (#510). Every mutating form is still gated: BUS by its subcommand
     // table's runModeAllowed=false, SCAN inline in cmd_scan().
-    {"BUS", cmd_bus, "Configure I2C/SPI/CAN buses", false},
-    {"LOG", cmd_log, "Configure log levels and tags", false},
-    {"AT", cmd_at, "Send raw AT command to a serial port", false},
+    {"BUS", cmd_bus, false},
+    {"LOG", cmd_log, false},
+    {"AT", cmd_at, false},
 
 #if INCLUDE_RELAY_OUTPUT
-    {"RELAY", cmd_relay, "Deprecated - use RULE / ACTION", false},  // prints a migration pointer; relays are now control-engine Actions
+    {"RELAY", cmd_relay, false},  // prints a migration pointer; relays are now control-engine Actions
 #endif
 #if INCLUDE_RULES_ENGINE
-    {"RULE", cmd_rule, "Configure control-engine rules", false},  // gated per-subcommand: RUN allows LIST/<id>; ADD/DEL/RESET config-only
-    {"ACTION", cmd_action, "Configure control-engine actions", false},  // gated per-subcommand: RUN allows LIST/<id>/ON/OFF/AUTO; ADD/DEL/RULE config-only
-    {"ALARM", cmd_alarm, "Acknowledge alarms", false},  // gated per-subcommand: RUN allows STATUS/SILENCE; DURATION/SCOPE config-only
+    {"RULE", cmd_rule, false},  // gated per-subcommand: RUN allows LIST/<id>; ADD/DEL/RESET config-only
+    {"ACTION", cmd_action, false},  // gated per-subcommand: RUN allows LIST/<id>/ON/OFF/AUTO; ADD/DEL/RULE config-only
+    {"ALARM", cmd_alarm, false},  // gated per-subcommand: RUN allows STATUS/SILENCE; DURATION/SCOPE config-only
 #endif
 #if INCLUDE_TEST_MODE
-    {"TEST", cmd_test, "Test mode control", false},
+    {"TEST", cmd_test, false},
 #endif
 #if INCLUDE_CAN
-    {"SCAN", cmd_scan, "Scan CAN bus for PIDs", false},
+    {"SCAN", cmd_scan, false},
 #endif
     // NOTE: the former top-level SELFTEST command is retired; its dispatch-table
     // validation is now `SYSTEM DIAG INTEGRITY` (see runDiagIntegrity / cmd_system.cpp).
@@ -164,12 +164,6 @@ const uint8_t NUM_COMMANDS = sizeof(COMMANDS) / sizeof(Command);
 // command_dispatch.cpp so the routing mechanism is unit-testable on the host
 // without the heavy message subsystem. That TU reaches user-facing error
 // output through the command_dispatch.h reporter seam, defined here:
-
-void dispatchReportCommandHelp(const char* help) {
-    msg.control.write('\t');
-    msg.control.print(help);
-    msg.control.print(F("\r\n"));
-}
 
 void dispatchReportUnknownCommand(const char* name) {
     msg.control.print(F("ERROR: Unknown command '"));

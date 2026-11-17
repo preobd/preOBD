@@ -92,12 +92,6 @@ int dispatchCommand(int argc, const char* const* argv) {
     // Look up command in table; gate before dispatch.
     for (uint8_t i = 0; i < NUM_COMMANDS; i++) {
         if (streq(cmdUpper, COMMANDS[i].name)) {
-            // `<COMMAND> -h` / `--help` (any case, first argument only): the
-            // command's one-line help, in any mode
-            if (argc > 1 && (streq(argv[1], "-h") || streq(argv[1], "--help"))) {
-                if (COMMANDS[i].help != nullptr) dispatchReportCommandHelp(COMMANDS[i].help);
-                return 0;
-            }
             if (COMMANDS[i].configModeOnly && isInRunMode()) {
                 dispatchReportConfigRequired(cmdUpper);
                 return 1;
