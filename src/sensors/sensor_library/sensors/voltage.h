@@ -14,9 +14,9 @@ static const char PSTR_VOLTAGE_DIVIDER[] PROGMEM = "VOLTAGE_DIVIDER";
 static const char PSTR_VOLTAGE_DIVIDER_LABEL[] PROGMEM = "Battery voltage (12V divider)";
 
 // ===== SENSOR ENTRIES (X-MACRO) =====
-// X_SENSOR(name, label, description, readFunc, initFunc, measType, calType, defaultCal, minInterval, minVal, maxVal, hash, pinType)
+// X_SENSOR(name, label, description, readFunc, initFunc, measType, calType, defaultCal, minInterval, minVal, maxVal, hash, pinType, ref)
 #define VOLTAGE_SENSORS \
     X_SENSOR(PSTR_VOLTAGE_DIVIDER, PSTR_VOLTAGE_DIVIDER_LABEL, nullptr, readVoltageDivider, nullptr, \
-             MEASURE_VOLTAGE, CAL_VOLTAGE_DIVIDER, nullptr, SENSOR_READ_INTERVAL_MS, 0.0, 30.0, 0x311D, PIN_ANALOG)
+             MEASURE_VOLTAGE, CAL_VOLTAGE_DIVIDER, nullptr, SENSOR_READ_INTERVAL_MS, 0.0, 30.0, 0x311D, PIN_ANALOG, REF_NONE)
 
 #endif // SENSOR_LIBRARY_SENSORS_VOLTAGE_H

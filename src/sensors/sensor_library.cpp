@@ -38,8 +38,8 @@
 
 // ===== SENSOR LIBRARY ASSEMBLY (PROGMEM) =====
 // Assemble SENSOR_LIBRARY[] from X-macros defined in each category file
-#define X_SENSOR(name, label, desc, readFn, initFn, measType, calType, defCal, minInt, minVal, maxVal, hash, pinType) \
-    { name, label, desc, readFn, initFn, measType, calType, defCal, minInt, minVal, maxVal, hash, pinType },
+#define X_SENSOR(name, label, desc, readFn, initFn, measType, calType, defCal, minInt, minVal, maxVal, hash, pinType, ref) \
+    { name, label, desc, readFn, initFn, measType, calType, defCal, minInt, minVal, maxVal, hash, pinType, ref },
 
 const PROGMEM SensorInfo SENSOR_LIBRARY[] = {
     NONE_SENSORS

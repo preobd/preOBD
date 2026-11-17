@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The app says when a `FAILSAFE ON` relay is on only because of the failsafe, and why: its rule is still waiting for a reading it trusts after a start, or its sensor has failed
 
 ### Fixed
+- `GENERIC_BOOST` reports its real range, 0-5 bar gauge, instead of -1 to 3 bar, so the app's gauge for it reaches 5 bar
 - A `FAILSAFE ON` relay no longer switches off for the rule's debounce time when a failed sensor comes back reading past the limit: the failsafe holds it until the rule trips, or until the reading has stayed clear for the debounce time (#676)
 - On the ESP32-S3 the pin checks now guard the pins the hardware really uses: I2C on 8 and 9 (not 21 and 22) and Serial1 on 15 and 16 (not 9 and 10, which Serial1 never drove). While I2C is in use a sensor can't be set on 8 or 9, and a sensor already saved there keeps it and I2C stays down until it's moved; anything you wired to 9 and 10 for Serial1 belongs on 15 and 16. Serial2 is on 17 and 18, where before it was checked on 16 and 17 but driven on the USB pins (#595)
 - Clearing or changing an RPM or speed input now stops it counting pulses on its pin, so a relay later put on that pin no longer shows up as RPM or speed; and a `LOAD`, import or `SYSTEM RESET` now says when it releases a relay you had forced off, since its rule may then switch it on

@@ -1,7 +1,7 @@
 /*
  * obd_answer.cpp - obd_encode.h's answer builder: reads the live input table
- * (barometric pressure) and keeps the legacy encoding for PIDs no table
- * defines.
+ * and the barometric reference (inputs/pressure_reference), and keeps the
+ * legacy encoding for PIDs no table defines.
  */
 
 #include <Arduino.h>
@@ -9,27 +9,13 @@
 #include "obd_encode.h"
 #include "../../inputs/input.h"
 #include "../../inputs/input_manager.h"
+#include "../../inputs/pressure_reference.h"
 #include "../../sensors/sensor_library.h"
 #include "../../sensors/generated/registry_enums.h"
 
 #ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
 #define FLASHMEM
 #endif
-
-// The lowest-pin barometric input, as layouts pick instances (#636): a wired
-// sensor (pins below CAN:0) wins over an imported PID 0x33, whatever slots they sit in
-FLASHMEM float obdBaroBar() {
-    const Input* best = nullptr;
-    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-        const Input& in = inputs[i];
-        if (in.pin != 0xFF && in.flags.isEnabled && in.applicationIndex == APP_BAROMETRIC_PRESSURE &&
-            isfinite(in.value) && in.value > 0.5f && in.value < 1.2f &&   // bar; outside it is a fault, not weather
-            (best == nullptr || in.pin < best->pin)) {
-            best = &in;
-        }
-    }
-    return best ? best->value : OBD_STD_BARO_BAR;
-}
 
 FLASHMEM uint8_t obdBuildAnswer(const Input& in, uint8_t* out) {
     if (in.obd2pid == 0 || !isfinite(in.value)) return 0;
@@ -40,7 +26,7 @@ FLASHMEM uint8_t obdBuildAnswer(const Input& in, uint8_t* out) {
     if (obdOutputSpec(in.obd2pid, spec)) {
         if (!obdSpecAccepts(spec, (MeasurementType)in.measurementType)) return 0;
         const bool gauge = obdGaugeApplication(in.applicationIndex);
-        float baro = (gauge && (spec.flags & OBD_OUT_ABSOLUTE)) ? obdBaroBar() : 0.0f;
+        float baro = (gauge && (spec.flags & OBD_OUT_ABSOLUTE)) ? baroReferenceBar() : 0.0f;
         uint8_t n = obdEncodeValue(spec, in.value, gauge, baro, &out[2]);
         return n ? (uint8_t)(2 + n) : 0;
     }

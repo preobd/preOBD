@@ -16,11 +16,11 @@ static const char PSTR_MAX31855[] PROGMEM = "MAX31855";
 static const char PSTR_MAX31855_LABEL[] PROGMEM = "K-Type Thermocouple (-270-1372" "\xC2\xB0" "C)";
 
 // ===== SENSOR ENTRIES (X-MACRO) =====
-// X_SENSOR(name, label, description, readFunc, initFunc, measType, calType, defaultCal, minInterval, minVal, maxVal, hash, pinType)
+// X_SENSOR(name, label, description, readFunc, initFunc, measType, calType, defaultCal, minInterval, minVal, maxVal, hash, pinType, ref)
 #define THERMOCOUPLE_SENSORS \
     X_SENSOR(PSTR_MAX6675, PSTR_MAX6675_LABEL, nullptr, readMAX6675, initThermocoupleCS, \
-             MEASURE_TEMPERATURE, CAL_NONE, nullptr, 250, 0.0, 1024.0, 0x2A23, PIN_DIGITAL) \
+             MEASURE_TEMPERATURE, CAL_NONE, nullptr, 250, 0.0, 1024.0, 0x2A23, PIN_DIGITAL, REF_NONE) \
     X_SENSOR(PSTR_MAX31855, PSTR_MAX31855_LABEL, nullptr, readMAX31855, initThermocoupleCS, \
-             MEASURE_TEMPERATURE, CAL_NONE, nullptr, 100, -200.0, 1350.0, 0x6B91, PIN_DIGITAL)
+             MEASURE_TEMPERATURE, CAL_NONE, nullptr, 100, -200.0, 1350.0, 0x6B91, PIN_DIGITAL, REF_NONE)
 
 #endif // SENSOR_LIBRARY_SENSORS_THERMOCOUPLES_H

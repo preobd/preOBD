@@ -20,6 +20,7 @@
 #include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"
 #include "../../src/outputs/formats/field_encode.cpp"
 #include "../../src/outputs/formats/obd_encode.cpp"
+#include "../../src/inputs/pressure_reference.cpp"
 #include "../../src/outputs/formats/obd_answer.cpp"
 Input inputs[MAX_INPUTS];
 #include <vector>
@@ -286,13 +287,13 @@ static void test_units_helpers(void) {
 static void test_baro_lowest_pin(void) {
     memset(inputs, 0, sizeof(inputs));
     for (uint8_t i = 0; i < MAX_INPUTS; i++) inputs[i].pin = 0xFF;
-    TEST_ASSERT_EQUAL_FLOAT(OBD_STD_BARO_BAR, obdBaroBar());
+    TEST_ASSERT_EQUAL_FLOAT(STD_BARO_BAR, baroReferenceBar());
     inputs[0].pin = 0xC1; inputs[0].flags.isEnabled = true;
     inputs[0].applicationIndex = APP_BAROMETRIC_PRESSURE; inputs[0].value = 0.98f;
-    TEST_ASSERT_EQUAL_FLOAT(0.98f, obdBaroBar());
+    TEST_ASSERT_EQUAL_FLOAT(0.98f, baroReferenceBar());
     inputs[3].pin = 7; inputs[3].flags.isEnabled = true;
     inputs[3].applicationIndex = APP_BAROMETRIC_PRESSURE; inputs[3].value = 1.01f;
-    TEST_ASSERT_EQUAL_FLOAT(1.01f, obdBaroBar());
+    TEST_ASSERT_EQUAL_FLOAT(1.01f, baroReferenceBar());
 }
 
 int main(int, char**) {

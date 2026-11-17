@@ -33,11 +33,11 @@ static const PROGMEM CANSensorCalibration default_can_cal = {
 };
 
 // ===== SENSOR ENTRIES (X-MACRO) =====
-// X_SENSOR(name, label, description, readFunc, initFunc, measType, calType, defaultCal, minInterval, minVal, maxVal, hash, pinType)
+// X_SENSOR(name, label, description, readFunc, initFunc, measType, calType, defaultCal, minInterval, minVal, maxVal, hash, pinType, ref)
 #define CAN_SENSORS \
     X_SENSOR(PSTR_CAN_IMPORT, PSTR_CAN_IMPORT_LABEL, PSTR_CAN_IMPORT_DESC, readCANSensor, nullptr, \
              MEASURE_TEMPERATURE, CAL_CAN_IMPORT, &default_can_cal, \
-             100, -273.0, 1000.0, 0x2251, PIN_ANALOG)
+             100, -273.0, 1000.0, 0x2251, PIN_ANALOG, REF_NONE)
 
 // Note:
 // - measurementType defaults to MEASURE_TEMPERATURE but is overridden when imported from standard PID table

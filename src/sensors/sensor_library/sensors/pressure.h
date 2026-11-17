@@ -62,51 +62,51 @@ static const char PSTR_VDO_80PSI_TABLE[] PROGMEM = "VDO_80PSI_TABLE";
 static const char PSTR_VDO_80PSI_TABLE_LABEL[] PROGMEM = "VDO 80 PSI Oil (US, descending, table)";
 
 // ===== SENSOR ENTRIES (X-MACRO) =====
-// X_SENSOR(name, label, description, readFunc, initFunc, measType, calType, defaultCal, minInterval, minVal, maxVal, hash, pinType)
+// X_SENSOR(name, label, description, readFunc, initFunc, measType, calType, defaultCal, minInterval, minVal, maxVal, hash, pinType, ref)
 #define PRESSURE_SENSORS \
     /* Linear pressure sensors */ \
     X_SENSOR(PSTR_GENERIC_BOOST, PSTR_GENERIC_BOOST_LABEL, nullptr, readLinearSensor, nullptr, \
-             MEASURE_PRESSURE, CAL_LINEAR, &generic_boost_linear_cal, SENSOR_READ_INTERVAL_MS, -1.0, 3.0, 0x59C8, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_LINEAR, &generic_boost_linear_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.0, 0x59C8, PIN_ANALOG, REF_GAUGE) \
     X_SENSOR(PSTR_GENERIC_PRESSURE_150PSI, PSTR_GENERIC_PRESSURE_150PSI_LABEL, nullptr, readLinearSensor, nullptr, \
-             MEASURE_PRESSURE, CAL_LINEAR, &generic_pressure_150psi_cal, SENSOR_READ_INTERVAL_MS, 0.0, 10.34, 0xA67B, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_LINEAR, &generic_pressure_150psi_cal, SENSOR_READ_INTERVAL_MS, 0.0, 10.34, 0xA67B, PIN_ANALOG, REF_GAUGE) \
     X_SENSOR(PSTR_AEM_30_2130_150, PSTR_AEM_30_2130_150_LABEL, nullptr, readLinearSensor, nullptr, \
-             MEASURE_PRESSURE, CAL_LINEAR, &aem_30_2130_150_cal, SENSOR_READ_INTERVAL_MS, 0.0, 10.34, 0x31B4, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_LINEAR, &aem_30_2130_150_cal, SENSOR_READ_INTERVAL_MS, 0.0, 10.34, 0x31B4, PIN_ANALOG, REF_GAUGE) \
     X_SENSOR(PSTR_MPX4250AP, PSTR_MPX4250AP_LABEL, nullptr, readLinearSensor, nullptr, \
-             MEASURE_PRESSURE, CAL_LINEAR, &mpx4250ap_linear_cal, SENSOR_READ_INTERVAL_MS, 0.2, 2.5, 0xDF76, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_LINEAR, &mpx4250ap_linear_cal, SENSOR_READ_INTERVAL_MS, 0.2, 2.5, 0xDF76, PIN_ANALOG, REF_ABSOLUTE) \
     X_SENSOR(PSTR_MPX5700AP, PSTR_MPX5700AP_LABEL, nullptr, readLinearSensor, nullptr, \
-             MEASURE_PRESSURE, CAL_LINEAR, &mpx5700ap_linear_cal, SENSOR_READ_INTERVAL_MS, 0.15, 7.0, 0xC4B7, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_LINEAR, &mpx5700ap_linear_cal, SENSOR_READ_INTERVAL_MS, 0.15, 7.0, 0xC4B7, PIN_ANALOG, REF_ABSOLUTE) \
     /* VDO polynomial (curve fit) */ \
     X_SENSOR(PSTR_VDO_2BAR_CURVE, PSTR_VDO_2BAR_CURVE_LABEL, nullptr, readPressurePolynomial, nullptr, \
-             MEASURE_PRESSURE, CAL_PRESSURE_POLYNOMIAL, &vdo2bar_polynomial_cal, SENSOR_READ_INTERVAL_MS, 0.0, 2.0, 0x6FB8, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_PRESSURE_POLYNOMIAL, &vdo2bar_polynomial_cal, SENSOR_READ_INTERVAL_MS, 0.0, 2.0, 0x6FB8, PIN_ANALOG, REF_GAUGE) \
     X_SENSOR(PSTR_VDO_5BAR_CURVE, PSTR_VDO_5BAR_CURVE_LABEL, nullptr, readPressurePolynomial, nullptr, \
-             MEASURE_PRESSURE, CAL_PRESSURE_POLYNOMIAL, &vdo5bar_polynomial_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.0, 0x231B, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_PRESSURE_POLYNOMIAL, &vdo5bar_polynomial_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.0, 0x231B, PIN_ANALOG, REF_GAUGE) \
     /* VDO table-based */ \
     X_SENSOR(PSTR_VDO_2BAR_TABLE, PSTR_VDO_2BAR_TABLE_LABEL, nullptr, readPressureTable, nullptr, \
-             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo2bar_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 2.0, 0xD35B, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo2bar_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 2.0, 0xD35B, PIN_ANALOG, REF_GAUGE) \
     X_SENSOR(PSTR_VDO_5BAR_TABLE, PSTR_VDO_5BAR_TABLE_LABEL, nullptr, readPressureTable, nullptr, \
-             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo5bar_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.0, 0x86BE, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo5bar_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.0, 0x86BE, PIN_ANALOG, REF_GAUGE) \
     /* VDO extended range table-based */ \
     X_SENSOR(PSTR_VDO_10BAR_TABLE, PSTR_VDO_10BAR_TABLE_LABEL, nullptr, readPressureTable, nullptr, \
-             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo10bar_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 10.0, 0x682A, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo10bar_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 10.0, 0x682A, PIN_ANALOG, REF_GAUGE) \
     X_SENSOR(PSTR_VDO_10BAR_CURVE, PSTR_VDO_10BAR_CURVE_LABEL, nullptr, readPressurePolynomial, nullptr, \
-             MEASURE_PRESSURE, CAL_PRESSURE_POLYNOMIAL, &vdo10bar_polynomial_cal, SENSOR_READ_INTERVAL_MS, 0.0, 10.0, 0x0487, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_PRESSURE_POLYNOMIAL, &vdo10bar_polynomial_cal, SENSOR_READ_INTERVAL_MS, 0.0, 10.0, 0x0487, PIN_ANALOG, REF_GAUGE) \
     X_SENSOR(PSTR_VDO_25BAR_TABLE, PSTR_VDO_25BAR_TABLE_LABEL, nullptr, readPressureTable, nullptr, \
-             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo25bar_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 25.0, 0xF310, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo25bar_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 25.0, 0xF310, PIN_ANALOG, REF_GAUGE) \
     /* VDO US-market descending pressure */ \
     X_SENSOR(PSTR_VDO_80PSI_TABLE, PSTR_VDO_80PSI_TABLE_LABEL, nullptr, readPressureTableDescending, nullptr, \
-             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo80psi_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x6008, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &vdo80psi_table_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x6008, PIN_ANALOG, REF_GAUGE) \
     /* Smiths (British classics) */ \
     X_SENSOR(PSTR_SMITHS_OIL_PRESSURE_BP, PSTR_SMITHS_OIL_PRESSURE_BP_LABEL, PSTR_SMITHS_OIL_PRESSURE_BP_DESC, readPressureTable, nullptr, \
-             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &smiths_oil_bp_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x0D29, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &smiths_oil_bp_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x0D29, PIN_ANALOG, REF_GAUGE) \
     /* Stewart-Warner */ \
     X_SENSOR(PSTR_SW_OIL_PRESSURE, PSTR_SW_OIL_PRESSURE_LABEL, PSTR_SW_OIL_PRESSURE_DESC, readPressureTable, nullptr, \
-             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &sw_oil_pressure_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x436A, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &sw_oil_pressure_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x436A, PIN_ANALOG, REF_GAUGE) \
     /* Jeep/AMC */ \
     X_SENSOR(PSTR_JEEP_4_0_OIL_GAUGE, PSTR_JEEP_4_0_OIL_GAUGE_LABEL, nullptr, readPressureTable, nullptr, \
-             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &jeep40_oil_gauge_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x0156, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &jeep40_oil_gauge_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x0156, PIN_ANALOG, REF_GAUGE) \
     X_SENSOR(PSTR_JEEP_CJ_OIL_THIN, PSTR_JEEP_CJ_OIL_THIN_LABEL, nullptr, readPressureTable, nullptr, \
-             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &jeep_cj_oil_thin_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0xF9AA, PIN_ANALOG) \
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &jeep_cj_oil_thin_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0xF9AA, PIN_ANALOG, REF_GAUGE) \
     X_SENSOR(PSTR_JEEP_CJ_OIL_DEEP, PSTR_JEEP_CJ_OIL_DEEP_LABEL, nullptr, readPressureTable, nullptr, \
-             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &jeep_cj_oil_deep_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x2655, PIN_ANALOG)
+             MEASURE_PRESSURE, CAL_PRESSURE_TABLE, &jeep_cj_oil_deep_cal, SENSOR_READ_INTERVAL_MS, 0.0, 5.52, 0x2655, PIN_ANALOG, REF_GAUGE)
 
 #endif // SENSOR_LIBRARY_SENSORS_PRESSURE_H

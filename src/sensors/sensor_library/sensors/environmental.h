@@ -20,15 +20,15 @@ static const char PSTR_BME280_ELEVATION[] PROGMEM = "BME280_ELEVATION";
 static const char PSTR_BME280_ELEVATION_LABEL[] PROGMEM = "BME280 altitude (I2C)";
 
 // ===== SENSOR ENTRIES (X-MACRO) =====
-// X_SENSOR(name, label, description, readFunc, initFunc, measType, calType, defaultCal, minInterval, minVal, maxVal, hash, pinType)
+// X_SENSOR(name, label, description, readFunc, initFunc, measType, calType, defaultCal, minInterval, minVal, maxVal, hash, pinType, ref)
 #define ENVIRONMENTAL_SENSORS \
     X_SENSOR(PSTR_BME280_TEMP, PSTR_BME280_TEMP_LABEL, nullptr, readBME280Temp, initBME280, \
-             MEASURE_TEMPERATURE, CAL_NONE, nullptr, SENSOR_READ_INTERVAL_MS, -40.0, 85.0, 0x72A8, PIN_I2C) \
+             MEASURE_TEMPERATURE, CAL_NONE, nullptr, SENSOR_READ_INTERVAL_MS, -40.0, 85.0, 0x72A8, PIN_I2C, REF_NONE) \
     X_SENSOR(PSTR_BME280_PRESSURE, PSTR_BME280_PRESSURE_LABEL, nullptr, readBME280Pressure, initBME280, \
-             MEASURE_PRESSURE, CAL_NONE, nullptr, SENSOR_READ_INTERVAL_MS, 0.3, 1.1, 0x454B, PIN_I2C) \
+             MEASURE_PRESSURE, CAL_NONE, nullptr, SENSOR_READ_INTERVAL_MS, 0.3, 1.1, 0x454B, PIN_I2C, REF_ABSOLUTE) \
     X_SENSOR(PSTR_BME280_HUMIDITY, PSTR_BME280_HUMIDITY_LABEL, nullptr, readBME280Humidity, initBME280, \
-             MEASURE_HUMIDITY, CAL_NONE, nullptr, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x381F, PIN_I2C) \
+             MEASURE_HUMIDITY, CAL_NONE, nullptr, SENSOR_READ_INTERVAL_MS, 0.0, 100.0, 0x381F, PIN_I2C, REF_NONE) \
     X_SENSOR(PSTR_BME280_ELEVATION, PSTR_BME280_ELEVATION_LABEL, nullptr, readBME280Elevation, initBME280, \
-             MEASURE_ELEVATION, CAL_NONE, nullptr, SENSOR_READ_INTERVAL_MS, -500.0, 9000.0, 0x2619, PIN_I2C)
+             MEASURE_ELEVATION, CAL_NONE, nullptr, SENSOR_READ_INTERVAL_MS, -500.0, 9000.0, 0x2619, PIN_I2C, REF_NONE)
 
 #endif // SENSOR_LIBRARY_SENSORS_ENVIRONMENTAL_H

@@ -18,8 +18,6 @@ struct Input;
 // 0x41, PID, then up to OBD_OUT_MAX_LENGTH payload bytes
 #define OBD_ANSWER_MAX (2 + OBD_OUT_MAX_LENGTH)
 
-#define OBD_STD_BARO_BAR 1.01325f   // barometric pressure when no baro input is fitted
-
 /**
  * Payload for `spec` from a value in the input's BASE unit (degC, bar, V ...).
  * `gaugeInput`: the value is gauge pressure (a boost input) and an absolute
@@ -52,8 +50,5 @@ bool obdInputAnswerable(const Input& in);
  * longer than 7 bytes needs a multi-frame (ISO-TP) reply.
  */
 uint8_t obdBuildAnswer(const Input& in, uint8_t* out);
-
-/** Barometric pressure (bar) from a BAROMETRIC_PRESSURE input, else standard. */
-float obdBaroBar();
 
 #endif // OBD_ENCODE_H

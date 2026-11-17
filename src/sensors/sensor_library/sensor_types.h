@@ -11,10 +11,13 @@
 #include <Arduino.h>
 #include "../../inputs/input.h"
 #include "../calibration_types.h"
+#include "../../inputs/pressure_reference.h"
 
 // ===== PIN TYPE REQUIREMENT ENUMERATION =====
 // Defines what type of pin a sensor requires for operation
-enum PinTypeRequirement {
+// One byte (#639): with PressureReference beside it the AVR row stays the
+// size it was, and every reader already takes it with pgm_read_byte
+enum PinTypeRequirement : uint8_t {
     PIN_ANALOG,     // Sensor requires analog pin (uses analogRead)
     PIN_DIGITAL,    // Sensor requires digital pin (uses digitalWrite, digitalRead, interrupts)
     PIN_I2C         // Sensor uses I2C bus (pin field must be "I2C")
@@ -35,6 +38,7 @@ struct SensorInfo {
     float maxValue;                  // Sensor's physical maximum (in standard units)
     uint16_t nameHash;               // Precomputed djb2_hash(name) for fast lookup
     PinTypeRequirement pinTypeRequirement;  // What type of pin this sensor requires
+    PressureReference reference;     // A pressure sensor's zero: REF_GAUGE or REF_ABSOLUTE; REF_NONE otherwise (#639)
 };
 
 // ===== FORWARD DECLARATIONS: READ FUNCTIONS =====

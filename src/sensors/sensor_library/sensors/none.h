@@ -13,9 +13,9 @@
 static const char PSTR_NONE[] PROGMEM = "NONE";
 
 // ===== SENSOR ENTRIES (X-MACRO) =====
-// X_SENSOR(name, label, description, readFunc, initFunc, measType, calType, defaultCal, minInterval, minVal, maxVal, hash, pinType)
+// X_SENSOR(name, label, description, readFunc, initFunc, measType, calType, defaultCal, minInterval, minVal, maxVal, hash, pinType, ref)
 #define NONE_SENSORS \
     X_SENSOR(PSTR_NONE, nullptr, nullptr, nullptr, nullptr, \
-             MEASURE_TEMPERATURE, CAL_NONE, nullptr, 0, 0.0, 0.0, 0x2F75, PIN_ANALOG)
+             MEASURE_TEMPERATURE, CAL_NONE, nullptr, 0, 0.0, 0.0, 0x2F75, PIN_ANALOG, REF_NONE)
 
 #endif // SENSOR_LIBRARY_SENSORS_NONE_H

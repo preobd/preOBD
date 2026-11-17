@@ -149,7 +149,7 @@ def _parse_structs(struct_content: str, pstr_macros: Dict[str, str], enum_consta
 def _parse_x_macro_sensors(content: str, pstr_macros: Dict[str, str], base_dir: str) -> List[Dict[str, Any]]:
     """
     Parses sensors defined using X-macro pattern.
-    X_SENSOR(name, label, desc, readFn, initFn, measType, calType, defCal, minInt, minVal, maxVal, hash, pinType)
+    X_SENSOR(name, label, desc, readFn, initFn, measType, calType, defCal, minInt, minVal, maxVal, hash, pinType, ref)
     """
     sensors = []
 
@@ -170,7 +170,8 @@ def _parse_x_macro_sensors(content: str, pstr_macros: Dict[str, str], base_dir: 
         r'([^,]+),\s*'   # minValue
         r'([^,]+),\s*'   # maxValue
         r'(0x[0-9A-Fa-f]+),\s*'   # nameHash - must be hex
-        r'(PIN_\w+)\s*\)', # pinTypeRequirement - must be PIN_xxx
+        r'(PIN_\w+),\s*'   # pinTypeRequirement - must be PIN_xxx
+        r'(REF_\w+)\s*\)', # pressure reference - must be REF_xxx (#639)
         re.MULTILINE
     )
 
@@ -186,6 +187,7 @@ def _parse_x_macro_sensors(content: str, pstr_macros: Dict[str, str], base_dir: 
         cal_type = args[6]
         hash_str = args[11]
         pin_type = args[12]
+        reference = args[13]
 
         # Resolve PSTR macros to actual strings
         name = pstr_macros.get(name_macro, name_macro.replace('PSTR_', ''))
@@ -207,6 +209,7 @@ def _parse_x_macro_sensors(content: str, pstr_macros: Dict[str, str], base_dir: 
             'calibrationType': cal_type,
             'nameHash': name_hash,
             'pinTypeRequirement': pin_type,
+            'reference': reference,
             'is_implemented': label is not None,
             'raw_c_block': match.group(0),
             'used_pstr_macros': [name_macro] + ([label_macro] if label_macro != 'nullptr' else [])

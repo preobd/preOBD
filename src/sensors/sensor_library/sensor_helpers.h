@@ -82,6 +82,15 @@ inline MeasurementType getSensorMeasurementType(uint8_t index) {
 }
 
 /**
+ * A pressure sensor's reference, gauge or absolute (#639); REF_NONE for
+ * anything else, an out-of-range index, and CAN_IMPORT (its PID decides).
+ */
+inline PressureReference getSensorReference(uint8_t index) {
+    if (index >= NUM_SENSORS) return REF_NONE;
+    return (PressureReference)pgm_read_byte(&SENSOR_LIBRARY[index].reference);
+}
+
+/**
  * Get sensor name by index (reverse lookup for JSON export)
  *
  * @param index  Sensor index (0-NUM_SENSORS)

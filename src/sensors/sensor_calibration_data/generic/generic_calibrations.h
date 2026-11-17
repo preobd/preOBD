@@ -15,9 +15,9 @@
 
 // ===== PRESSURE SENSOR CALIBRATIONS =====
 
-// Generic 0.5-4.5V linear sensor, 0-5 bar range
-// Common automotive MAP/boost sensor specification
-// Source: Industry standard for 3-wire pressure sensors
+// Generic 0.5-4.5V linear sensor, 0-5 bar GAUGE (0 at atmosphere): the cheap
+// stainless 3-wire transducers sold for oil/fuel/air/boost (owner, #639). It
+// cannot read vacuum; an absolute MAP-style sensor is MPX4250AP/MPX5700AP.
 // WARNING: Designed for 5V systems. For 3.3V systems, use voltage divider
 static const PROGMEM LinearCalibration generic_boost_linear_cal = {
     .voltage_min = 0.5,
