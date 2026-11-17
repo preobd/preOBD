@@ -50,7 +50,7 @@ END JSON
 ```
 
 The imported configuration takes effect immediately but is **not saved** until
-you run `SAVE`. Check it first with `LIST INPUTS`, `RULE LIST` and `OUTPUT STATUS`.
+you run `SAVE`. Check it first with `LIST INPUTS`, `RULE LIST` and `OUTPUT LIST`.
 
 Tools that send the file programmatically can use `JSON IMPORT <byte-count>` and
 stream exactly that many bytes, with no `END JSON` line.
@@ -94,7 +94,9 @@ best reference; the overall shape is:
   "mode": "runtime",
   "firmware": { "version": "0.13.0-beta", "platform": "...", "maxInputs": 40, "...": "..." },
   "system": {
-    "outputs":   { "can": { "enabled": true }, "sd": { "enabled": true, "interval": 5000, "format": "WIDE" }, "...": {} },
+    "outputs":   [ { "id": 0, "format": "OBD", "transport": "CAN1", "enabled": true },
+                   { "id": 3, "format": "CSV", "transport": "SD", "enabled": true, "interval": 5000, "csv": "WIDE" } ],
+    "alarm":     { "enabled": true, "silenceSeconds": 30, "silenceLed": false },
     "display":   { "enabled": true, "type": "LCD", "address": "0x27",
                    "defaultUnits": { "temperature": "CELSIUS", "pressure": "BAR", "elevation": "METERS", "speed": "KPH" } },
     "constants": { "seaLevelPressure": 1013.25 },
@@ -115,7 +117,7 @@ best reference; the overall shape is:
       "alarm": { "ruleId": 0, "min": -1.0, "max": 100.0 },
       "enabled": true,
       "displayEnabled": true,
-      "outputMask": 15
+      "routeMask": 31
     }
   ],
   "rules": [
@@ -130,6 +132,23 @@ best reference; the overall shape is:
 }
 ```
 
+### Outputs and the alarm
+
+`system.outputs` lists the outputs you added (`OUTPUT LIST`), each with its
+`id`, `format`, `transport` and `enabled`, plus `interval` for CSV and
+RealDash and `csv` (`LONG` or `WIDE`) for the CSV output on SD. On import the
+array **replaces** the outputs: an output it leaves out is deleted, as
+`OUTPUT DEL` would. The transport is shown for reference; it comes from the
+bus and stream settings (`buses`, `TRANSPORT DATA`), so import doesn't read it.
+A record for an output this firmware doesn't have is skipped with a NOTE.
+
+`system.alarm` is the built-in alarm output: `enabled` (`ALARM ENABLE|DISABLE`)
+and its acknowledgement policy (`ALARM DURATION`, `ALARM SCOPE`).
+
+A file saved before outputs had ids has `outputs` as an object keyed by name,
+and `outputMask` on each input. Import ignores both with a NOTE: your outputs
+stay as they are, and the imported inputs are routed to every output.
+
 ### Inputs
 
 | Field | Meaning |
@@ -140,7 +159,7 @@ best reference; the overall shape is:
 | `units` | Display units |
 | `abbr`, `name` | Short (LCD) and full labels |
 | `enabled`, `displayEnabled` | Input on/off; shown on the LCD or not |
-| `outputMask` | Which data outputs carry this input (CAN, RealDash, Serial, SD) |
+| `routeMask` | Which outputs this input is routed to: bit *n* is output *n* (`OUTPUT LIST`), as `SET <pin> ROUTE` sets them |
 | `divider` | Voltage-divider ratio, present only when one is set (`SET <pin> DIVIDER`) |
 | `obd2` | `{ "pid", "length" }` when the input reports as an OBD-II PID |
 | `alarm` | Read-only summary of the input's alarm Rule — edit the `rules` array instead |

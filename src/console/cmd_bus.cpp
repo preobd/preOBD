@@ -32,6 +32,7 @@ extern MuxTransport hwSerial1;   // main.cpp -- the nRF coprocessor link
 #endif
 #include "../buses/pinctrl/pin_registry.h"
 #include "../outputs/table/output_base.h"
+#include "../outputs/table/output_table.h"
 #include "../outputs/formats/obd_query.h"
 #include "../outputs/display/display_manager.h"
 #if INCLUDE_RELAY_OUTPUT
@@ -695,56 +696,13 @@ static FLASHMEM int bus_serial(int argc, const char* const* argv, int /*tokenInd
             }
 
             if (streq_P(argv[4], PSTR("ENABLE"))) {
-                if (!isSerialPortActive(port_id)) {
-                    msg.control.print(F("ERROR: Serial"));
-                    msg.control.print(port_id);
-                    msg.control.println(F(" is not enabled"));
-                    msg.control.print(F("  Run: BUS SERIAL "));
-                    msg.control.print(port_id);
-                    msg.control.println(F(" ENABLE <baud> first"));
-                    return 1;
-                }
-
-                // Conflict: refuse if this port is used by the message router
-                uint8_t routerTransportId = TRANSPORT_SERIAL1 + (port_id - 1);
-                const char* conflictPlane = nullptr;
-                if (systemConfig.router.control_primary == routerTransportId ||
-                    systemConfig.router.control_secondary == routerTransportId)
-                    conflictPlane = "CONTROL";
-                else if (systemConfig.router.data_primary == routerTransportId ||
-                         systemConfig.router.data_secondary == routerTransportId)
-                    conflictPlane = "DATA";
-                else if (systemConfig.router.debug_primary == routerTransportId ||
-                         systemConfig.router.debug_secondary == routerTransportId)
-                    conflictPlane = "DEBUG";
-
-                if (conflictPlane) {
-                    msg.control.print(F("ERROR: Serial"));
-                    msg.control.print(port_id);
-                    msg.control.print(F(" is in use by the router ("));
-                    msg.control.print(conflictPlane);
-                    msg.control.println(F(" plane) — reassign first"));
-                    return 1;
-                }
-
-                // Conflict: refuse if another port is already the ELM327 port
-                if (systemConfig.buses.elm327_serial_port != 0xFF &&
-                    systemConfig.buses.elm327_serial_port != port_id) {
-                    msg.control.print(F("ERROR: Serial"));
-                    msg.control.print(systemConfig.buses.elm327_serial_port);
-                    msg.control.println(F(" is already the ELM327 port"));
-                    msg.control.print(F("  Run: BUS SERIAL "));
-                    msg.control.print(systemConfig.buses.elm327_serial_port);
-                    msg.control.println(F(" ELM327 DISABLE first"));
-                    return 1;
-                }
-
+                if (!elm327PortUsable(port_id)) return 1;
                 // The port first, then the one on/off path (#610): it binds and
                 // begins via initELM327() and sets the live flag as well as
-                // systemConfig. Setting only systemConfig, as this did, left
-                // updateELM327() unpolled until a reboot.
+                // systemConfig. A deleted ELM327 output (OUTPUT DEL) comes back.
                 systemConfig.buses.elm327_serial_port = port_id;
-                setOutputEnabled("ELM327", true);   // the port was checked active above
+                if (outputExists(OUT_ID_ELM327)) outputSetEnabledById(OUT_ID_ELM327, true);
+                else                             outputAddById(OUT_ID_ELM327);
 
                 msg.control.print(F("ELM327 emulator assigned to Serial"));
                 msg.control.println(port_id);
@@ -913,6 +871,58 @@ static FLASHMEM void emitBusCanJson() {
     WatchdogKickingPrint out(msg.control);
     serializeJson(doc, out);
     msg.control.println();
+}
+#endif
+
+#if INCLUDE_ELM327
+// Can ELM327 take Serial<port_id>? Prints why not. One check for BUS SERIAL
+// <n> ELM327 ENABLE and OUTPUT ADD ELM327 SERIAL<n> (#612).
+FLASHMEM bool elm327PortUsable(uint8_t port_id) {
+    if (!isSerialPortActive(port_id)) {
+        msg.control.print(F("ERROR: Serial"));
+        msg.control.print(port_id);
+        msg.control.println(F(" is not enabled"));
+        msg.control.print(F("  Run: BUS SERIAL "));
+        msg.control.print(port_id);
+        msg.control.println(F(" ENABLE <baud> first"));
+        return false;
+    }
+
+    // Conflict: refuse if this port is used by the message router
+    uint8_t routerTransportId = TRANSPORT_SERIAL1 + (port_id - 1);
+    const char* conflictPlane = nullptr;
+    if (systemConfig.router.control_primary == routerTransportId ||
+        systemConfig.router.control_secondary == routerTransportId)
+        conflictPlane = "CONTROL";
+    else if (systemConfig.router.data_primary == routerTransportId ||
+             systemConfig.router.data_secondary == routerTransportId)
+        conflictPlane = "DATA";
+    else if (systemConfig.router.debug_primary == routerTransportId ||
+             systemConfig.router.debug_secondary == routerTransportId)
+        conflictPlane = "DEBUG";
+
+    if (conflictPlane) {
+        msg.control.print(F("ERROR: Serial"));
+        msg.control.print(port_id);
+        msg.control.print(F(" is in use by the router ("));
+        msg.control.print(conflictPlane);
+        msg.control.println(F(" plane) — reassign first"));
+        return false;
+    }
+
+    // Conflict: refuse if another port is already the ELM327 port
+    if (systemConfig.buses.elm327_serial_port != 0xFF &&
+        systemConfig.buses.elm327_serial_port != port_id) {
+        msg.control.print(F("ERROR: Serial"));
+        msg.control.print(systemConfig.buses.elm327_serial_port);
+        msg.control.println(F(" is already the ELM327 port"));
+        msg.control.print(F("  Run: BUS SERIAL "));
+        msg.control.print(systemConfig.buses.elm327_serial_port);
+        msg.control.println(F(" ELM327 DISABLE first"));
+        return false;
+    }
+
+    return true;
 }
 #endif
 

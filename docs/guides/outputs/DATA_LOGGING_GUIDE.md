@@ -35,14 +35,14 @@ wiring, lower it with `-D SD_SPI_MAX_HZ=4000000`.
 
 ```
 CONFIG
-OUTPUT SD_Log ENABLE
-OUTPUT SD_Log INTERVAL 1000     # One row per second (default 5000)
-OUTPUT SD_Log FORMAT WIDE       # or LONG — see below (default WIDE)
+OUTPUT 3 ENABLE                # Output 3: CSV on SD (OUTPUT LIST)
+OUTPUT 3 INTERVAL 1000         # One row per second (default 5000)
+OUTPUT 3 CSV WIDE              # or LONG — see below (default WIDE)
 SAVE
 RUN
 ```
 
-Only inputs routed to SD are logged — see `SET <pin> OUTPUT SD_LOG ENABLE|DISABLE`
+Only inputs routed to SD are logged — see `SET <pin> ROUTE 3 ENABLE|DISABLE`
 (all data outputs are on by default).
 
 ### File format
@@ -91,12 +91,12 @@ In `WIDE`, the column set is fixed when a file is opened. Changing what gets
 logged mid-session — adding or clearing an input, toggling its SD routing,
 changing its units — closes the current file and starts the next one, so a
 header always describes the rows beneath it. `LONG` needs no such roll, since
-each row names its own sensor. Switching `FORMAT` always starts a new file.
+each row names its own sensor. Switching between `LONG` and `WIDE` always starts a new file.
 
 ### Durability
 
 Rows are flushed at least once a second, so an abrupt power cut
-loses at most about a second of data. `OUTPUT SD_Log DISABLE` closes the file
+loses at most about a second of data. `OUTPUT 3 DISABLE` closes the file
 cleanly.
 
 ### Checking on it
@@ -110,8 +110,8 @@ state:
 [hardware]    SD logging ........... OK (LOG0007.CSV, WIDE, 412 rows, 0 errors)
 ```
 
-`OUTPUT STATUS` also shows the active format, and it round-trips through
-`SYSTEM DUMP JSON` / `JSON IMPORT` as `system.outputs.sd.format`.
+`OUTPUT LIST` also shows the active format, and it round-trips through
+`SYSTEM DUMP JSON` / `JSON IMPORT` as `csv` on output 3 in `system.outputs`.
 
 ---
 
@@ -119,8 +119,8 @@ state:
 
 ```
 CONFIG
-OUTPUT Serial ENABLE
-OUTPUT Serial INTERVAL 1000     # one set of lines per second (default)
+OUTPUT 2 ENABLE                # Output 2: CSV on the data stream
+OUTPUT 2 INTERVAL 1000         # one set of lines per second (default)
 SAVE
 RUN
 ```
@@ -140,7 +140,7 @@ The lines go to preOBD's **data channel** — USB by default. `TRANSPORT DATA SE
 sends them to a Bluetooth module on Serial1 instead (see `TRANSPORT STATUS`).
 RealDash output uses the same channel, so enable one or the other.
 
-Choose which inputs appear with `SET <pin> OUTPUT SERIAL ENABLE|DISABLE`
+Choose which inputs appear with `SET <pin> ROUTE 2 ENABLE|DISABLE`
 (all are on by default).
 
 ---

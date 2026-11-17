@@ -15,6 +15,8 @@
 #include "../../transports/frame_codec.h"
 #include "../../transports/transport_mux.h"
 #include "output_elm327.h"
+#include "../table/output_table.h"   // OUT_ID_* route bits (#612)
+#include "obd_query.h"   // OBDQ_ANY_ROUTE (#612)
 
 namespace Elm327Framed {
 
@@ -86,7 +88,7 @@ private:
 };
 
 FramedElmStream g_bridge;
-ELM327Output    g_elm;  // dedicated instance: per-channel session state, kept
+ELM327Output    g_elm(OBDQ_ANY_ROUTE);  // built-in: answers every input with a PID (#612); dedicated instance: per-channel session state, kept
                         // independent of the serial-bound elm327Output singleton
 
 // Largest 0x30 payload we send. MuxTransport::sendFrame refuses a frame

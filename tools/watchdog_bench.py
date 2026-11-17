@@ -21,7 +21,7 @@ Two jobs, both over USB serial:
   soak    Counts unexpected resets under load: polls a command once a second
           for N minutes, reconnects after every drop, and prints each reset's
           VERSION "Last reset:" line. Any build. The #537 regression check is
-          1 ms SD rows (OUTPUT SD_Log INTERVAL 1) plus the default poll for
+          1 ms SD rows (OUTPUT 3 INTERVAL 1) plus the default poll for
           10 minutes: expect 0 resets.
 
   where   Maps a PC from VERSION's "hung at PC 0x..." (#542) to a function,

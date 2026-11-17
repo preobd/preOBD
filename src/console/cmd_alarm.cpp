@@ -28,6 +28,7 @@
 
 #include "command_handlers.h"
 #include "command_helpers.h"
+#include "../outputs/table/output_base.h"   // setOutputEnabled: ALARM ENABLE|DISABLE (#612)
 #include "../core/system_mode.h"
 #include "../core/message_api.h"
 #include "../config/system_config.h"
@@ -178,7 +179,8 @@ FLASHMEM int cmd_alarm(int argc, const char* const* argv) {
     if (argc < 2 || streq_P(argv[1], PSTR("STATUS"))) return alarmStatus();
     if (streq_P(argv[1], PSTR("SILENCE")))            return alarmSilence();
 
-    const bool policy = streq_P(argv[1], PSTR("DURATION")) || streq_P(argv[1], PSTR("SCOPE"));
+    const bool policy = streq_P(argv[1], PSTR("DURATION")) || streq_P(argv[1], PSTR("SCOPE")) ||
+                        streq_P(argv[1], PSTR("ENABLE")) || streq_P(argv[1], PSTR("DISABLE"));
     if (policy && isInRunMode()) {
         msg.control.print(F("ERROR: ALARM "));
         msg.control.print(argv[1]);
@@ -188,10 +190,19 @@ FLASHMEM int cmd_alarm(int argc, const char* const* argv) {
     if (policy) configGenerationBump();   // past the CONFIG gate (#455)
     if (streq_P(argv[1], PSTR("DURATION"))) return alarmDuration(argc, argv);
     if (streq_P(argv[1], PSTR("SCOPE")))    return alarmScope(argc, argv);
+    // The alarm is a built-in output (#612): on/off here, not under OUTPUT.
+    // Off silences the buzzer and blanks the LED, as it always has.
+    if (streq_P(argv[1], PSTR("ENABLE")) || streq_P(argv[1], PSTR("DISABLE"))) {
+        const bool on = streq_P(argv[1], PSTR("ENABLE"));
+        setOutputEnabled("Alarm", on);
+        msg.control.println(on ? F("Alarm output enabled") : F("Alarm output disabled"));
+        printSaveReminder();
+        return 0;
+    }
 
     msg.control.print(F("ERROR: unknown ALARM verb: "));
     msg.control.println(argv[1]);
-    msg.control.println(F("  Usage: ALARM [STATUS] | SILENCE | DURATION <secs|CLEAR> | SCOPE <BUZZER|ALL>"));
+    msg.control.println(F("  Usage: ALARM [STATUS] | SILENCE | DURATION <secs|CLEAR> | SCOPE <BUZZER|ALL> | ENABLE | DISABLE"));
     return 1;
 }
 

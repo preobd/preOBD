@@ -204,7 +204,7 @@ SET 4 COOLANT_LEVEL FLOAT_SWITCH
 
 ```
 BUS CAN OUTPUT CAN1 ENABLE 500000   # Bring up the CAN bus your transceiver is on
-OUTPUT CAN ENABLE                   # Answer OBD-II requests on it
+OUTPUT 0 ENABLE                     # Output 0, OBD: answer OBD-II requests on it
 # Plug in ELM327 Bluetooth adapter to OBD-II port
 # Open Torque app → Settings → OBD/ECU → Connection → Bluetooth
 # Select your ELM327 adapter
@@ -218,8 +218,8 @@ See [OBD-II Scanner Guide](../guides/outputs/OBD2_SCANNER_GUIDE.md) for details.
 ### RealDash Dashboard
 
 ```
-OUTPUT RealDash ENABLE              # RealDash frames on the data channel (USB or BLE module)
-OUTPUT Serial DISABLE               # CSV shares that channel
+OUTPUT 1 ENABLE                     # Output 1: RealDash frames on the data channel (USB or BLE module)
+OUTPUT 2 DISABLE                    # Output 2, CSV, shares that channel
 ```
 
 See [RealDash Setup Guide](../guides/outputs/REALDASH_SETUP_GUIDE.md) for details.
@@ -284,11 +284,11 @@ HELP EXAMPLES           # Show worked examples
 
 | Command | Description |
 |---------|-------------|
-| `LIST OUTPUTS` | Show all output modules |
-| `OUTPUT STATUS` | Show which outputs are enabled |
+| `OUTPUT LIST` | Show the outputs, their ids, and which are enabled |
+| `SET <pin> ROUTE <id> ENABLE\|DISABLE` | Send an input to an output, or not |
 | `OUTPUT <n> ENABLE` | Enable output |
 | `OUTPUT <n> DISABLE` | Disable output |
-| `OUTPUT <n> INTERVAL <ms>` | Set send interval: RealDash 50-60000 ms, Serial 100-60000 ms, SD_Log 1-60000 ms |
+| `OUTPUT <id> INTERVAL <ms>` | Set send interval: RealDash 50-60000 ms, CSV 100-60000 ms (CSV on SD 1-60000 ms) |
 
 ### Display Commands
 

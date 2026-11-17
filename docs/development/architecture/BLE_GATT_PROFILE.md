@@ -205,13 +205,13 @@ All existing preOBD serial commands work over BLE. Key commands for BLE control:
 | `LIST INPUTS` | Any | Show all configured inputs |
 | `LIST APPLICATIONS` | Any | Show available sensor type presets |
 | `LIST SENSORS` | Any | Show available sensor hardware |
-| `LIST OUTPUTS` | Any | Show output module status |
+| `OUTPUT LIST` | Any | Show the outputs and their status |
 | `INFO <pin>` | Any | Show input details for a pin |
 | `SET <pin> ...` | CONFIG | Configure an input |
 | `RULE LIST` / `ACTION LIST` | Any | Show rules and actions (relays) |
 | `ACTION <id> ON\|OFF\|AUTO` | Any | Drive or release an action |
-| `OUTPUT <name> ENABLE` | CONFIG | Enable an output module |
-| `OUTPUT <name> DISABLE` | CONFIG | Disable an output module |
+| `OUTPUT <id> ENABLE` | CONFIG | Turn an output on (ids: `OUTPUT LIST`) |
+| `OUTPUT <id> DISABLE` | CONFIG | Turn an output off |
 | `SAVE` | CONFIG | Save configuration to EEPROM |
 
 See `docs/reference/SERIAL_COMMANDS.md` for the complete command reference.

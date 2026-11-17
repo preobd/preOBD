@@ -148,7 +148,7 @@ once, from the serial console:
 ```
 CONFIG
 BUS CAN OUTPUT CAN1 ENABLE 500000   # the bus your transceiver is wired to, at 500 kbps
-OUTPUT CAN ENABLE                   # answer OBD-II requests on it
+OUTPUT 0 ENABLE                   # answer OBD-II requests on it
 SAVE
 SYSTEM REBOOT
 ```
@@ -157,7 +157,7 @@ preOBD never guesses which CAN bus you wired. Instead of `BUS CAN OUTPUT ...` yo
 can declare it in `boards/<board>/wiring.ini` with `-D CAN_WIRED_BUS=0` (0 = CAN1).
 On the Arduino Mega the single MCP2515 module is `CAN1`.
 
-`BUS CAN` shows the bus state and `OUTPUT STATUS` shows the output.
+`BUS CAN` shows the bus state and `OUTPUT LIST` shows the output.
 
 ### Step 2: Configure Sensors
 
@@ -356,7 +356,7 @@ A PID no table defines gets preOBD's own encoding, with `SET <pin> OBD_LENGTH <1
 - **RealDash** reads its own output: frame `0x0C80`, sent periodically over Bluetooth/USB serial.
 - **Scanners** get OBD-II request/response: preOBD answers on `0x7E8` the way an engine ECU does, and sends nothing on CAN unasked, so a scan tool only ever sees answers to its own requests.
 
-Each input's CAN output toggle decides whether it's published to OBD-II tools at all (over CAN and over the ELM327 emulator): `SET <pin> OUTPUT CAN DISABLE` stops it being answered or advertised.
+Each input's route to output 0 (OBD) decides whether it's published to OBD-II tools on CAN at all, and its route to output 4 does the same for the ELM327 emulator on a serial port: `SET <pin> ROUTE 0 DISABLE` stops it being answered or advertised.
 
 **Typical setup:**
 - RealDash on tablet (permanent dash)

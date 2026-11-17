@@ -28,7 +28,9 @@ void writeApplicationsJson(Print& out);
 void writeSensorsJson(Print& out, const char* filter = nullptr);  // filter: category name or nullptr
 void writeUnitsJson(Print& out);
 void writeCategoriesJson(Print& out);
-void writeOutputsJson(Print& out);
+void writeOutputsJson(Print& out);        // OUTPUT LIST JSON: the outputs you add (#612)
+void writeOutputFormatsJson(Print& out);  // registry "formats": what OUTPUT ADD can add
+
 void writePidsJson(Print& out);
 // Registry name of a measurement type ("PRESSURE"), as LIST UNITS JSON and
 // LIST PIDS JSON print it

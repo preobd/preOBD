@@ -39,6 +39,8 @@ struct SystemConfig;
 // JSON export functions
 void dumpConfigToJSON(Print& output);
 void exportSystemConfigToJSON(JsonObject& systemObj);
+// One output you add, as system.outputs[] and OUTPUT LIST JSON carry it (#612)
+void outputToJson(JsonObject obj, uint8_t id);
 void exportInputsToJSON(JsonArray& inputsArray);
 void exportInputToJSON(JsonObject& inputObj, const Input* input);
 

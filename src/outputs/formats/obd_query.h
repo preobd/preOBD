@@ -19,14 +19,19 @@ struct Input;  // Forward declaration
 // Build (or rebuild) the PID lookup table from currently enabled inputs.
 void obdQuery_buildLookupTable();
 
-// Resolve a PID to an Input pointer. Returns nullptr if not found.
-Input* obdQuery_findByPID(uint8_t pid);
+// Each responder answers the inputs routed to it (#612): routeId is its output
+// id (output_table.h: OBD 0, ELM327 4), or OBDQ_ANY_ROUTE for a built-in that
+// takes no routes (ELM327 over BLE answers every input with a PID).
+static const uint8_t OBDQ_ANY_ROUTE = 0xFF;
+
+// Resolve a PID to the first Input routed to routeId. nullptr if none.
+Input* obdQuery_findByPID(uint8_t pid, uint8_t routeId);
 
 // Fill a 4-byte bitmap of supported PIDs for the given base range.
 // baseRange 0x00 → PIDs 0x01–0x20, 0x20 → 0x21–0x40, etc.
 // The LSB of bitmap4[3] (continuation bit) is set if any PIDs exist in the next range.
 // PID 01 is always listed (obdQuery_fixedAnswer).
-void obdQuery_getSupportedPIDBitmap(uint8_t* bitmap4, uint8_t baseRange);
+void obdQuery_getSupportedPIDBitmap(uint8_t* bitmap4, uint8_t baseRange, uint8_t routeId);
 
 // The answers a car with no ECU gives truthfully, whatever its inputs: Mode 01
 // PID 01 (MIL off, no codes, no readiness monitors) and Modes 03/07/0A (no
@@ -39,6 +44,6 @@ bool obdQuery_fixedAnswer(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outL
 // On success: fills out[] with response bytes (0x41, pid, data...) and sets *outLen.
 // Returns false if mode/PID unsupported or no valid data. out[] must hold
 // OBD_ANSWER_MAX (obd_encode.h) bytes; more than 7 needs a multi-frame reply.
-bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen);
+bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen, uint8_t routeId);
 
 #endif // OBD_QUERY_H

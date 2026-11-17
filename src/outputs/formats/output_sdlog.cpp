@@ -81,12 +81,12 @@ static void handleCardRemoved();
  * Occupied, enabled, and routed to SD by its per-input mask. sendToOutputs()
  * used to apply the mask for us; now that the logger owns its own cadence
  * (see updateSDLog) it has to apply the mask itself, or
- * `SET <pin> OUTPUT SD_LOG DISABLE` would stop working.
+ * `SET <pin> ROUTE 3 DISABLE` would stop working.
  */
 static inline bool logsThisInput(uint8_t slot) {
     return inputs[slot].pin != 0xFF &&
            inputs[slot].flags.isEnabled &&
-           (inputs[slot].outputMask & (1 << OUTPUT_SD));
+           (inputs[slot].routeMask & (1 << OUTPUT_SD));
 }
 
 static uint8_t countLoggedInputs() {
@@ -239,7 +239,7 @@ static FLASHMEM void openLogFile() {
  *
  * Previously nothing checked at all: print() return values were ignored and
  * getWriteError() was never read, so a full or removed card meant the logger
- * wrote nothing for the rest of the drive while OUTPUT STATUS still reported
+ * wrote nothing for the rest of the drive while OUTPUT LIST still reported
  * "Enabled".
  */
 static FLASHMEM void handleWriteError() {
@@ -417,7 +417,7 @@ void updateSDLog() {
     // Honour the configured interval. The old code gated rows on a hardcoded
     // 1000 ms const measured against a timestamp only ever updated inside the
     // 5 s flush branch — which suppressed rows for 1 s after each flush and
-    // capped throughput at ~1 Hz, so OUTPUT SD_Log INTERVAL did nothing.
+    // capped throughput at ~1 Hz, so OUTPUT 3 INTERVAL did nothing.
     // outputIntervalValid() (1-60000 ms) holds for every writer (#608); the
     // 0 guard costs nothing and keeps a future direct write off the hot path
     uint16_t interval = systemConfig.outputInterval[OUTPUT_SD];

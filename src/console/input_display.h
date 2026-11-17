@@ -15,7 +15,7 @@ void printInputInfo(uint8_t pin);    // Print detailed input information
 // printInputAlarmInfo() lives in cmd_rule.cpp (declared in command_handlers.h):
 // the per-input alarm view renders the input's canonical alarm Rule, not the
 // retired legacy Input alarm fields (#338).
-void printInputOutputInfo(uint8_t pin);
+void printInputRouteInfo(uint8_t pin);   // INFO <pin> ROUTE (#612)
 void printInputCalibration(uint8_t pin);
 void listAllInputs();                // List all active inputs
 

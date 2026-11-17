@@ -180,8 +180,7 @@ static int system_dump(int argc, const char* const* argv, int /*tokenIndex*/) {
     msg.control.println();
 
     // Show outputs
-    extern void listOutputs();
-    listOutputs();
+    listOutputTable();
     msg.control.println();
 
     // Show display config
@@ -528,7 +527,7 @@ static void diagSectionHw() {
 #if INCLUDE_SD_LOGGING
     // A mounted card says nothing about whether rows are actually landing: a
     // full card, or one pulled mid-drive, fails every write while the output
-    // still reports "Enabled" in OUTPUT STATUS.
+    // still reports "enabled" in OUTPUT LIST.
     msg.control.print(F("[hardware]    SD logging ........... "));
     if (sdLogCardRemoved()) {
         // Detected by the pre-write probe, so no write was ever attempted and

@@ -32,6 +32,7 @@
 #include "../buses/pinctrl/pin_owner.h"
 #include "../buses/bus_needs.h"
 #include "../rules/rules_manager.h"    // rulesResetTables + rule/action table helpers
+#include "../outputs/table/output_table.h"  // routeMaskFromLegacy (#612)
 
 // input_store.cpp is a COLD path: saveInputConfig/loadInputConfig/
 // resetInputConfig/storedInputBusNeeds/storedInputHoldsPin run only at boot,
@@ -93,6 +94,11 @@ struct ConfigStoreHeader {
                            // (4+2+5+5) so there are NO indeterminate pad bytes on any platform
 };
 
+// flagsByte bit 4: routeMask is in the per-output-id layout (#612). Bits 0-3
+// are the input flags; older builds write only those, so 0 here means an old
+// mask (routeMaskFromLegacy).
+static const uint8_t FLAG_ROUTES_BY_ID = 0x10;
+
 // InputEEPROM - Compact struct for EEPROM storage
 // Only stores user-configurable fields (not runtime data or function pointers)
 // Uses hashes instead of indices for stability across registry reordering
@@ -123,7 +129,8 @@ struct InputEEPROM {
     uint8_t flagsByte;              // Packed flags
 
     // === Output Routing ===
-    uint8_t outputMask;             // Per-input output routing (bits 0-3: CAN, RealDash, Serial, SD)
+    uint8_t routeMask;             // Routes, one bit per output id (#612). Written before
+                                    // phase 1 as the 4-bit output mask: flagsByte bit 4 says which
 
     // === Calibration ===
     uint8_t calibrationType;
@@ -197,8 +204,9 @@ static FLASHMEM void buildInputRecord(const Input& in, InputEEPROM& out) {
         (in.flags.isEnabled ? 0x01 : 0) |
         (in.flags.alarm ? 0x02 : 0) |
         (in.flags.display ? 0x04 : 0) |
-        (in.flags.useCustomCalibration ? 0x08 : 0);
-    out.outputMask = in.outputMask;
+        (in.flags.useCustomCalibration ? 0x08 : 0) |
+        FLAG_ROUTES_BY_ID;
+    out.routeMask = in.routeMask;
     out.divider_ratio = in.divider_ratio;
     const ApplicationPreset* appPreset = getApplicationByIndex(in.applicationIndex);
     if (appPreset) out.applicationHash = pgm_read_word(&appPreset->nameHash);
@@ -231,7 +239,12 @@ static FLASHMEM void applyInputRecord(const InputEEPROM& rec, Input& in) {
     in.flags.alarm = (rec.flagsByte & 0x02) != 0;
     in.flags.display = (rec.flagsByte & 0x04) != 0;
     in.flags.useCustomCalibration = (rec.flagsByte & 0x08) != 0;
-    in.outputMask = rec.outputMask;
+    // A record saved before #612 phase 1 holds the old output mask: same bits
+    // 0-3, and its CAN bit also covered ELM327, which now has a bit of its own.
+    // An older build saves without the flag, so a round trip through one
+    // upgrades again from the bits it kept.
+    in.routeMask = (rec.flagsByte & FLAG_ROUTES_BY_ID) ? rec.routeMask
+                                                       : routeMaskFromLegacy(rec.routeMask);
     in.divider_ratio = rec.divider_ratio;  // 0 from older EEPROMs treated as 1.0 by reader
     in.applicationIndex = getApplicationIndexByHash(rec.applicationHash);
     in.sensorIndex = getSensorIndexByHash(rec.sensorHash);

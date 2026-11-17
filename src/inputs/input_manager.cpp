@@ -8,7 +8,7 @@
 #include "input_manager.h"
 #include "../config/input_store.h"    // inputStoreSetProbeExclusion (#402 step 2)
 #include "measurement_compat.h"
-#include "../config/system_config.h"  // OUTPUT_MASK_ALL_DATA / OutputId enum
+#include "../config/system_config.h"  // ROUTE_MASK_ALL / OutputId enum
 #include "../buses/pinctrl/board_pins.h"
 #include "../core/message_router.h"  // For msg.control
 #include "../core/message_api.h"
@@ -240,7 +240,7 @@ Input* createCanImportInput(uint8_t pin) {
         if (isNew) freeInputSlot(pin);
         return nullptr;
     }
-    input->outputMask = OUTPUT_MASK_ALL_DATA;
+    input->routeMask = ROUTE_MASK_ALL;
     input->flags.display = true;
     input->flags.alarm = false;
     input->flags.isEnabled = true;
@@ -374,7 +374,7 @@ bool setInputApplication(uint8_t pin, uint8_t appIndex) {
     input->flags.display = preset.defaultDisplayEnabled;
     input->flags.isEnabled = true;
     input->flags.useCustomCalibration = false;  // Use preset calibration
-    input->outputMask = OUTPUT_MASK_ALL_DATA;   // All data outputs enabled by default
+    input->routeMask = ROUTE_MASK_ALL;   // routed to every output by default
     input->divider_ratio = 1.0f;                // Default to no divider
 
     // (Legacy alarm context removed — set_application seeds a control-engine
@@ -631,16 +631,16 @@ bool setInputAlarmPersist(uint8_t pin, uint16_t persistTime_ms) {
     return true;
 }
 
-bool setInputOutputMask(uint8_t pin, uint8_t outputId, bool enable) {
+bool setInputRoute(uint8_t pin, uint8_t outputId, bool enable) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
 
-    if (outputId > OUTPUT_SD) return false;  // Only data outputs (0-3)
+    if (outputId >= 8 * sizeof(input->routeMask)) return false;  // one bit per output id
 
     if (enable) {
-        input->outputMask |= (1 << outputId);
+        input->routeMask |= (1 << outputId);
     } else {
-        input->outputMask &= ~(1 << outputId);
+        input->routeMask &= ~(1 << outputId);
     }
     return true;
 }

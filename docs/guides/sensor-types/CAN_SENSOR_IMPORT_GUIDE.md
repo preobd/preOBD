@@ -458,7 +458,7 @@ RULE ADD A0 OUTSIDE 50 130                   # Oil temp alarm
 RULE ADD A1 OUTSIDE 1.0 6.0                  # Oil pressure alarm
 
 # Enable outputs
-OUTPUT CAN ENABLE                     # Answer OBD-II requests
+OUTPUT 0 ENABLE                     # Answer OBD-II requests
 
 # Save configuration
 SAVE
@@ -622,7 +622,7 @@ SET 6 EGT MAX6675
 
 # Broadcast everything to dashboard
 BUS CAN OUTPUT CAN2 ENABLE
-OUTPUT CAN ENABLE
+OUTPUT 0 ENABLE
 
 SAVE
 RUN

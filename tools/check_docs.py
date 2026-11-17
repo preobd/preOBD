@@ -82,7 +82,6 @@ def load_catalog():
     subs = {}
     for name, src in [
         ("LIST", ("src/console/command_table.cpp", "int cmd_list(")),
-        ("OUTPUT", ("src/console/command_table.cpp", "int cmd_output(")),
         ("DISPLAY", ("src/console/command_table.cpp", "int cmd_display(")),
         ("TRANSPORT", ("src/console/command_table.cpp", "int cmd_transport(")),
         ("TEST", ("src/console/command_table.cpp", "int cmd_test(")),
@@ -91,7 +90,8 @@ def load_catalog():
         ("SCAN", ("src/console/command_table.cpp", "int cmd_scan(")),
     ]:
         subs[name] = upper_tokens(function_body(read(src[0]), src[1]))
-    for name, path in [("RULE", "src/console/cmd_rule.cpp"),
+    for name, path in [("OUTPUT", "src/console/cmd_output.cpp"),   # LIST, ADD, DEL, <id> (#612)
+                       ("RULE", "src/console/cmd_rule.cpp"),
                        ("ACTION", "src/console/cmd_action.cpp"),
                        ("ALARM", "src/console/cmd_alarm.cpp")]:
         subs[name] = upper_tokens(read(path)) | {"#"}
@@ -100,10 +100,6 @@ def load_catalog():
     bus = read("src/console/cmd_bus.cpp")
     subs["BUS"] = {v for k, v in pstr_defs(bus).items() if k.startswith("PSTR_BUS_")} \
         | {"I2C", "SPI", "CAN", "SERIAL"}
-    # OUTPUT <module>: module names from the output table (case-insensitive).
-    outputs = read("src/outputs/table/output_manager.cpp")
-    subs["OUTPUT"] |= {n.upper() for n in re.findall(r'\{"(\w+)",\s*(?:true|false)', outputs)}
-    subs["OUTPUT"] |= {"STATUS"}
     subs["TEST"] |= {"#"}
     # TRANSPORT <plane> ...: plane names come from parsePlane(), not the handler.
     helpers = read("src/console/command_helpers.cpp")

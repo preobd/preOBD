@@ -29,8 +29,11 @@
 // Watchdog scope around an EEPROM save (#541). AVR caps every timeout at 8 s.
 #define EEPROM_WDT_WINDOW_MS 20000
 
-// Per-input output mask: all 4 data outputs enabled by default
-#define OUTPUT_MASK_ALL_DATA 0x0F
+// Per-input routes (Input::routeMask, one bit per output id, #612): a new
+// input is routed to every output, as before. Every bit, not just the
+// outputs that exist: OUTPUT ADD routes every input to the new output anyway,
+// and an older build reads bits 0-3 as it always did.
+#define ROUTE_MASK_ALL 0xFF
 
 // Output module IDs
 // Always define all IDs so EEPROM layout (outputEnabled[], outputInterval[])
@@ -174,7 +177,12 @@ struct SystemConfig {
         uint8_t bt_type;
         uint8_t bt_auth_required;
         uint16_t bt_pin;
-        uint8_t reserved_router[6];  // Future expansion
+        // Outputs deleted with OUTPUT DEL, one bit per output id (#612 phase 1,
+        // outputs/table/output_table.h). The first reserved byte: every older
+        // build wrote 0 here, so an older image reads "nothing deleted", and
+        // an older build flashed back ignores it.
+        uint8_t outputsAbsent;
+        uint8_t reserved_router[5];  // Future expansion
     } router;
 
     // NB (v13): the control-engine Rule/Action tables are NO LONGER embedded

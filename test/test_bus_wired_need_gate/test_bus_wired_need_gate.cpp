@@ -32,6 +32,7 @@
 #include "../../src/buses/pinctrl/pin_owner.cpp"
 #include "../../src/buses/bus_manager.cpp"
 #include "../../src/config/system_config.cpp"
+#include "../../src/outputs/table/output_table.cpp"   // outputsReconcileAbsent (#612)
 
 // ---------------------------------------------------------------------------
 // Firmware symbols these TUs expect from elsewhere.

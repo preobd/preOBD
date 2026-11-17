@@ -37,6 +37,7 @@
 #include "../outputs/formats/output_format.h"   // SdLogFormat / parseSdLogFormat
 #include "../outputs/annunciator/output_alarm.h"   // alarmSilence* policy accessors (#433)
 #include "../outputs/table/output_base.h"    // syncOutputsToConfig (#610)
+#include "../outputs/table/output_table.h"   // the outputs you add (#612)
 #if INCLUDE_RULES_ENGINE
 #include "../rules/rules_json.h"
 #include "../rules/rules_manager.h"
@@ -376,7 +377,7 @@ FLASHMEM void exportInputToJSON(JsonObject& inputObj, const Input* input) {
     inputObj["enabled"] = (bool)input->flags.isEnabled;
     inputObj["alarmEnabled"] = (bool)input->flags.alarm;
     inputObj["displayEnabled"] = (bool)input->flags.display;
-    inputObj["outputMask"] = input->outputMask;
+    inputObj["routeMask"] = (uint8_t)(input->routeMask & outputsExistingMask());  // routes to outputs that exist (#612)
 
     // Voltage-divider ratio at the ADC pin (#445). Emitted only when one is set:
     // 1.0 is "no divider" and 0 is the pre-field EEPROM default the reader
@@ -460,37 +461,40 @@ FLASHMEM void exportActionsToJSON(JsonArray& actionsArray) {
 }
 #endif // INCLUDE_RULES_ENGINE
 
+// One output you add, as SYSTEM DUMP JSON's system.outputs[] and OUTPUT LIST
+// JSON carry it (#612): {id, format, transport, enabled, interval?, csv?}.
+FLASHMEM void outputToJson(JsonObject obj, uint8_t id) {
+    char t[24];
+    outputTransportText(id, t, sizeof(t));
+    obj["id"]        = id;
+    obj["format"]    = outputFormatName(outputFormatOf(id));
+    obj["transport"] = t;
+    obj["enabled"]   = outputIsEnabled(id);
+    // A CAN enable from an import/LOAD waiting for the reboot (#610)
+    if (id == OUT_ID_OBD && canOutputPendingReboot()) obj["pendingReboot"] = true;
+    // Only paced outputs have an interval (#608)
+    if (outputTakesIntervalId(id)) obj["interval"] = outputIntervalOf(id);
+#if INCLUDE_SD_LOGGING
+    if (id == OUT_ID_SDLOG) obj["csv"] = sdLogFormatName(systemConfig.sdLogFormat);
+#endif
+}
+
 // Export system configuration to JSON
 FLASHMEM void exportSystemConfigToJSON(JsonObject& systemObj) {
-    // Output modules
-    JsonObject outputs = systemObj["outputs"].to<JsonObject>();
-
-    // OUTPUT_RELAY (index 5) is retired — a relay is now a control-engine Action,
-    // not an output module. Its enum/EEPROM slot stays for index stability but is
-    // no longer surfaced in config JSON (nullptr name → skipped below).
-    const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm", nullptr, "elm327"};
-    for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
-        if (outputNames[i] == nullptr) continue;  // retired slot (OUTPUT_RELAY)
-        JsonObject output = outputs[outputNames[i]].to<JsonObject>();
-        output["enabled"] = (bool)systemConfig.outputEnabled[i];
-        // Only a paced output has an interval (#608); an older dump's
-        // CAN/Alarm/ELM327 interval still imports, and is ignored.
-        if (outputTakesInterval(i)) output["interval"] = systemConfig.outputInterval[i];
-        // SD alone carries a file layout. Additive key, no schema bump (#230).
-#if INCLUDE_SD_LOGGING
-        if (i == OUTPUT_SD) {
-            output["format"] = sdLogFormatName(systemConfig.sdLogFormat);
-        }
-#endif
-        // The annunciator's acknowledgement policy rides on the alarm output
-        // (#433). Additive keys: silenceSeconds 0 = hold until the rule clears.
-#if INCLUDE_RULES_ENGINE
-        if (i == OUTPUT_ALARM) {
-            output["silenceSeconds"] = (uint16_t)(alarmSilenceDurationMs() / 1000UL);
-            output["silenceLed"]     = alarmSilenceIncludesLed();
-        }
-#endif
+    // The outputs you add (#612): an array, ids per output_table.h
+    JsonArray outputs = systemObj["outputs"].to<JsonArray>();
+    for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
+        if (outputExists(id)) outputToJson(outputs.add<JsonObject>(), id);
     }
+
+    // The alarm is a built-in output: on/off and its acknowledgement policy
+    // (#433). Was system.outputs.alarm before #612.
+    JsonObject alarm = systemObj["alarm"].to<JsonObject>();
+    alarm["enabled"] = (bool)systemConfig.outputEnabled[OUTPUT_ALARM];
+#if INCLUDE_RULES_ENGINE
+    alarm["silenceSeconds"] = (uint16_t)(alarmSilenceDurationMs() / 1000UL);
+    alarm["silenceLed"]     = alarmSilenceIncludesLed();
+#endif
 
     // Display settings
     JsonObject display = systemObj["display"].to<JsonObject>();
@@ -1105,7 +1109,14 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     enableInput(pin, inputObj["enabled"] | true);  // Default to true if missing
     enableInputAlarm(pin, inputObj["alarmEnabled"] | false);  // Default to false if missing
     enableInputDisplay(pin, inputObj["displayEnabled"] | true);  // Default to true if missing
-    input->outputMask = inputObj["outputMask"] | OUTPUT_MASK_ALL_DATA;  // Default to all enabled for old configs
+    // Routes (#612): one bit per output id. A file from before #612 carries
+    // "outputMask" instead, which is ignored: the input keeps every route.
+    input->routeMask = inputObj["routeMask"] | ROUTE_MASK_ALL;
+    if (inputObj["routeMask"].isNull() && inputObj["outputMask"].isNull() == false) {
+        msg.control.print(F("NOTE: input "));
+        msg.control.print(pin);
+        msg.control.println(F(": outputMask is the old form; ignored, routed to every output"));
+    }
 
     // OBD2
     if (inputObj["obd2"].isNull() == false) {
@@ -1243,7 +1254,7 @@ FLASHMEM static uint8_t parseLogLevelName(const char* name) {
 
 static const char kSerialKept1[] PROGMEM = "NOTE: Serial";
 static const char kDisplayAddrIgnored[] PROGMEM = "NOTE: display address ignored: valid 0x20-0x27 or 0x38-0x3F";
-static const char kIntervalNoteA[] PROGMEM = "NOTE: outputs.";
+static const char kIntervalNoteA[] PROGMEM = "NOTE: outputs: id ";
 static const char kIntervalNoteClamped[] PROGMEM = ".interval out of range; using ";
 static const char kIntervalNoteIgnored[] PROGMEM = ".interval is not a number; ignored";
 static const char kSerialKept2[] PROGMEM = " kept its settings: it carries commands (BUS SERIAL to change it)";
@@ -1254,86 +1265,99 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
     // ---- ADMISSION PHASE -------------------------------------------------
     SystemConfig staged = systemConfig;
 
-    // Output modules
-    if (systemObj["outputs"].isNull() == false) {
-        JsonObject outputs = systemObj["outputs"];
-        // OUTPUT_RELAY (index 5) retired — see exportSystemConfigToJSON.
-        const char* outputNames[] = {"can", "realdash", "serial", "sd", "alarm", nullptr, "elm327"};
-
-        for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
-            if (outputNames[i] == nullptr) continue;  // retired slot (OUTPUT_RELAY)
-            if (outputs[outputNames[i]].isNull() == false) {
-                JsonObject output = outputs[outputNames[i]];
-                if (output["enabled"].isNull() == false) {
-                    staged.outputEnabled[i] = output["enabled"];
-                }
-                // Only a paced output's interval is read (#608); dumps from
-                // before #608 carry CAN/Alarm/ELM327's too, ignored silently.
-                if (output["interval"].isNull() == false && outputTakesInterval(i)) {
-                    // Out of range: clamped, as EEPROM load does, so restoring
-                    // an older backup keeps the nearest rate it can (a RealDash
-                    // 10 -> 50) rather than whatever the unit had. Not a number:
-                    // ignored. Either way a NOTE says so.
-                    JsonVariant iv = output["interval"];
-                    // Any whole number, read as a double (is<double> is true for
-                    // integers too, so 5e9 and 1000.0 both land here) and
-                    // clamped before any narrowing. 250.5 is not whole.
-                    const double d = iv.is<double>() ? iv.as<double>() : NAN;
-                    const bool isNumber = !isnan(d) && d == floor(d);
-                    if (isNumber && d >= outputIntervalMinMs(i) && d <= OUTPUT_INTERVAL_MAX_MS) {
-                        staged.outputInterval[i] = (uint16_t)d;
-                    } else {
-                        msg.control.print(JSON_FSTR(kIntervalNoteA));
-                        msg.control.print(outputNames[i]);
-                        if (isNumber) {
-                            staged.outputInterval[i] = clampOutputInterval(i, d);
-                            msg.control.print(JSON_FSTR(kIntervalNoteClamped));
-                            msg.control.println(staged.outputInterval[i]);
-                        } else {
-                            msg.control.println(JSON_FSTR(kIntervalNoteIgnored));
-                        }
-                    }
-                }
-                // Optional: a dump from an older firmware has no "format" key,
-                // and an unparseable value leaves the current setting alone.
-#if INCLUDE_SD_LOGGING
-                if (i == OUTPUT_SD && output["format"].isNull() == false) {
-                    // Named const char* rather than the variant inline: that is
-                    // this file's convention, and it yields nullptr for a
-                    // non-string value, which parseSdLogFormat rejects safely.
-                    const char* formatName = output["format"];
-                    SdLogFormat format;
-                    if (parseSdLogFormat(formatName, format)) {
-                        staged.sdLogFormat = (uint8_t)format;
-                    }
-                }
-#endif
-                // Acknowledgement policy (#433). Absent keys (older dump) keep
-                // the current byte; an out-of-range duration is dropped rather
-                // than failing the import, same posture as "format" above.
-#if INCLUDE_RULES_ENGINE
-                if (i == OUTPUT_ALARM) {
-                    uint8_t byte = staged.alarmSilence;
-                    if (output["silenceSeconds"].is<long>()) {   // a non-number must not coerce to 0 (= CLEAR)
-                        const long secs = output["silenceSeconds"];
-                        uint8_t code = ALARM_SILENCE_DUR_DEFAULT;
-                        bool ok = true;
-                        if (secs == 0) code = ALARM_SILENCE_DUR_CLEAR;
-                        else if (secs < 0 || secs > ALARM_SILENCE_DUR_MAX_S ||
-                                 secs % ALARM_SILENCE_DUR_STEP_S != 0) ok = false;
-                        else code = (uint8_t)(secs / ALARM_SILENCE_DUR_STEP_S);
-                        if (ok) byte = (uint8_t)((byte & ALARM_SILENCE_LED_BIT) | code);
-                    }
-                    if (output["silenceLed"].isNull() == false) {
-                        const bool led = output["silenceLed"];
-                        byte = led ? (uint8_t)(byte | ALARM_SILENCE_LED_BIT)
-                                   : (uint8_t)(byte & ~ALARM_SILENCE_LED_BIT);
-                    }
-                    staged.alarmSilence = byte;
-                }
-#endif
+    // The outputs you add (#612): the array replaces the table, as rules and
+    // actions do. Phase 1 has one output per format at a fixed id; a record
+    // whose id and format disagree is skipped. Its transport comes from the
+    // bus and stream settings (also in this file), so it isn't read here.
+    JsonVariant outputsVar = systemObj["outputs"];
+    if (outputsVar.is<JsonArray>()) {
+        // Every output this build has is deleted unless the array lists it;
+        // the bits of outputs it doesn't have keep their value
+        uint8_t absent = staged.router.outputsAbsent;
+        for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++)
+            if (outputIdBuilt(id)) absent |= (uint8_t)(1u << id);
+        for (JsonObject o : outputsVar.as<JsonArray>()) {
+            const int id = o["id"] | -1;
+            const OutputFormat fmt = parseOutputFormat(o["format"] | "");
+            const char* tr = o["transport"] | "";
+            if (id < 0 || id >= NUM_OUTPUT_IDS || !outputIdBuilt((uint8_t)id) ||
+                outputFormatOf((uint8_t)id) != fmt || !outputTransportKindOk((uint8_t)id, tr)) {
+                msg.control.print(F("NOTE: outputs: id "));
+                msg.control.print(id);
+                msg.control.print(F(" ("));
+                msg.control.print(o["format"] | "?");
+                msg.control.println(F(") is not an output this firmware has; skipped"));
+                continue;
             }
+            absent &= (uint8_t)~(1u << id);
+            const uint8_t slot = outputLegacySlot((uint8_t)id);
+            if (o["enabled"].isNull() == false) staged.outputEnabled[slot] = o["enabled"] ? 1 : 0;
+            // Out of range: clamped, as EEPROM load does, so restoring an
+            // older backup keeps the nearest rate it can. Not a number:
+            // ignored. Either way a NOTE says so (#608).
+            if (o["interval"].isNull() == false && outputTakesInterval(slot)) {
+                JsonVariant iv = o["interval"];
+                const double d = iv.is<double>() ? iv.as<double>() : NAN;
+                const bool isNumber = !isnan(d) && d == floor(d);
+                if (isNumber && d >= outputIntervalMinMs(slot) && d <= OUTPUT_INTERVAL_MAX_MS) {
+                    staged.outputInterval[slot] = (uint16_t)d;
+                } else {
+                    msg.control.print(JSON_FSTR(kIntervalNoteA));
+                    msg.control.print(id);
+                    if (isNumber) {
+                        staged.outputInterval[slot] = clampOutputInterval(slot, d);
+                        msg.control.print(JSON_FSTR(kIntervalNoteClamped));
+                        msg.control.println(staged.outputInterval[slot]);
+                    } else {
+                        msg.control.println(JSON_FSTR(kIntervalNoteIgnored));
+                    }
+                }
+            }
+#if INCLUDE_SD_LOGGING
+            if (id == OUT_ID_SDLOG && o["csv"].isNull() == false) {
+                const char* layoutName = o["csv"];
+                SdLogFormat format;
+                if (parseSdLogFormat(layoutName, format)) staged.sdLogFormat = (uint8_t)format;
+            }
+#endif
         }
+        // A deleted output is off too, so an older build flashed back keeps it off
+        for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
+            if (outputIdBuilt(id) && (absent & (1u << id))) staged.outputEnabled[outputLegacySlot(id)] = 0;
+        }
+        staged.router.outputsAbsent = absent;
+    } else if (outputsVar.isNull() == false) {
+        // A file from before #612 (an object keyed by module name)
+        msg.control.println(F("NOTE: outputs is in the old form (before OUTPUT ADD); ignored, outputs unchanged"));
+    }
+
+    // The alarm, a built-in output (system.alarm since #612)
+    if (systemObj["alarm"].isNull() == false) {
+        JsonObject alarmObj = systemObj["alarm"];
+        if (alarmObj["enabled"].isNull() == false) {
+            staged.outputEnabled[OUTPUT_ALARM] = alarmObj["enabled"] ? 1 : 0;
+        }
+#if INCLUDE_RULES_ENGINE
+        // Acknowledgement policy (#433). Absent keys keep the current byte; an
+        // out-of-range duration is dropped rather than failing the import.
+        uint8_t byte = staged.alarmSilence;
+        if (alarmObj["silenceSeconds"].is<long>()) {   // a non-number must not coerce to 0 (= CLEAR)
+            const long secs = alarmObj["silenceSeconds"];
+            uint8_t code = ALARM_SILENCE_DUR_DEFAULT;
+            bool ok = true;
+            if (secs == 0) code = ALARM_SILENCE_DUR_CLEAR;
+            else if (secs < 0 || secs > ALARM_SILENCE_DUR_MAX_S ||
+                     secs % ALARM_SILENCE_DUR_STEP_S != 0) ok = false;
+            else code = (uint8_t)(secs / ALARM_SILENCE_DUR_STEP_S);
+            if (ok) byte = (uint8_t)((byte & ALARM_SILENCE_LED_BIT) | code);
+        }
+        if (alarmObj["silenceLed"].isNull() == false) {
+            const bool led = alarmObj["silenceLed"];
+            byte = led ? (uint8_t)(byte | ALARM_SILENCE_LED_BIT)
+                       : (uint8_t)(byte & ~ALARM_SILENCE_LED_BIT);
+        }
+        staged.alarmSilence = byte;
+#endif
     }
 
     // Display settings
@@ -1572,7 +1596,7 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
     // Nothing above this line may fail past this point; one write.
     systemConfig = staged;
     if (logFilterPresent) applyLogFilterConfig();
-    // The live outputs follow the committed outputEnabled[], as OUTPUT <name>
+    // The live outputs follow the committed outputEnabled[], as OUTPUT <id>
     // ENABLE/DISABLE would (until #610 that waited for a reboot). Here, not at
     // the end of the whole load: once systemConfig commits, the rest of it is
     // live too and a SAVE persists it, so a later stage failing must not leave

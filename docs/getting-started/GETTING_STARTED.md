@@ -191,7 +191,7 @@ RUN mode by itself.
 
 To change anything later, type `CONFIG`, make the change, `SAVE`, `RUN`.
 
-**See the numbers stream:** in RUN mode, `OUTPUT Serial ENABLE` (from CONFIG
+**See the numbers stream:** in RUN mode, `OUTPUT 2 ENABLE` (from CONFIG
 mode, then `SAVE`) prints a line of comma-separated readings every second.
 
 ---

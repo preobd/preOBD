@@ -56,6 +56,12 @@ int cmd_scan(int argc, const char* const* argv);
 int cmd_json(int argc, const char* const* argv);
 #endif
 
+#if INCLUDE_ELM327
+// Can ELM327 take Serial<port_id>? Prints why not (cmd_bus.cpp). Shared by
+// BUS SERIAL <n> ELM327 ENABLE and OUTPUT ADD ELM327 SERIAL<n> (#612).
+bool elm327PortUsable(uint8_t port_id);
+#endif
+
 // Platform-specific reboot helper (shared by REBOOT and SYSTEM REBOOT/RESET).
 void platformReboot();
 

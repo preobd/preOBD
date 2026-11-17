@@ -24,6 +24,7 @@
 #include "../../hal/hal_can.h"
 #include "../../buses/bus_manager.h"
 #include "../../sensors/can/input_can.h"
+#include "../table/output_table.h"   // OUT_ID_* route bits (#612)
 
 // Which bus we're outputting on (set during init)
 static uint8_t canOutputBus = 0xFF;   // 0xFF until initCAN() starts a bus (#610)
@@ -48,7 +49,7 @@ static void sendCANFrame(uint32_t canId, const byte* data, uint8_t len) {
  */
 static void sendSupportedPIDsResponse(uint8_t basePID) {
     uint8_t bitmap[4];
-    obdQuery_getSupportedPIDBitmap(bitmap, basePID);
+    obdQuery_getSupportedPIDBitmap(bitmap, basePID, OUT_ID_OBD);
 
     byte frameData[8] = {
         0x06,         // Length: 6 bytes (mode + PID + 4 bitmap bytes)
@@ -269,7 +270,7 @@ static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
     }
 
     // Lookup PID in active inputs
-    Input* input = obdQuery_findByPID(pid);
+    Input* input = obdQuery_findByPID(pid, OUT_ID_OBD);
     if (input == nullptr || isnan(input->value)) {
         // PID not supported or no valid data
         sendNegativeResponse(canId, mode, 0x31);  // Request out of range

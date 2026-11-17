@@ -73,7 +73,7 @@ Input* createCanImportInput(uint8_t pin);
 //     input leaves no half-built slot behind (an enabled slot with a null
 //     readFunction is the #361/#353 board fault);
 //   * an EXISTING input at `pin` keeps *every* field it had — application,
-//     names, unitsIndex, min/max, obd2pid/length, outputMask, divider_ratio,
+//     names, unitsIndex, min/max, obd2pid/length, routeMask, divider_ratio,
 //     flags.display / flags.alarm / flags.useCustomCalibration, and in
 //     particular flags.isEnabled, which a refusal must never flip on (#364).
 // It is guaranteed structurally, by validating the candidate before writing
@@ -107,7 +107,7 @@ bool enableInputAlarm(uint8_t pin, bool enable);
 bool enableInputDisplay(uint8_t pin, bool enable);
 bool setInputAlarmWarmup(uint8_t pin, uint16_t warmupTime_ms);
 bool setInputAlarmPersist(uint8_t pin, uint16_t persistTime_ms);
-bool setInputOutputMask(uint8_t pin, uint8_t outputId, bool enable);
+bool setInputRoute(uint8_t pin, uint8_t outputId, bool enable);  // route bit <outputId> (#612)
 bool clearInput(uint8_t pin);
 
 // ===== CALIBRATION OVERRIDES =====
@@ -145,7 +145,7 @@ uint8_t getInputIndex(uint8_t pin);  // Get array index for pin
 void readAllInputs();                 // Read all enabled inputs
 
 // ===== INFO =====
-// Presentation over inputs[] (printInputInfo, printInputOutputInfo,
+// Presentation over inputs[] (printInputInfo, printInputRouteInfo,
 // printInputCalibration, listAllInputs) lives in console/input_display.h, and the
 // pin-label decoder (formatPinLabel) lives in buses/pinctrl/pin_label.h, and the
 // sensor/application registry listers (listApplicationPresets, listSensors)

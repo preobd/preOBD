@@ -110,7 +110,9 @@ const Command COMMANDS[] = {
     // Configuration commands (CONFIG mode only)
     {"SET", cmd_set, "Configure input", true},
     {"CLEAR", cmd_clear, "Clear input", true},
-    {"OUTPUT", cmd_output, "Configure outputs", true},
+    // OUTPUT: configModeOnly=false so OUTPUT LIST and OUTPUT <id> answer in
+    // RUN; every changing verb is gated in cmd_output.cpp (#612).
+    {"OUTPUT", cmd_output, "Outputs: list, add, configure, delete", false},
     {"DISPLAY", cmd_display, "Configure display", true},
     {"TRANSPORT", cmd_transport, "Configure message routing", true},
     // SYSTEM: configModeOnly=false; per-subcommand runModeAllowed flags in
@@ -248,8 +250,8 @@ int cmd_help(int argc, const char* const* argv) {
 int cmd_list(int argc, const char* const* argv) {
     if (argc == 1) {
         msg.control.println(F("ERROR: LIST requires a subcommand"));
-        msg.control.println(F("  Usage: LIST INPUTS | APPLICATIONS | SENSORS [category] | OUTPUTS | TRANSPORTS"));
-        msg.control.println(F("         LIST APPLICATIONS JSON | SENSORS [category] JSON | OUTPUTS JSON"));
+        msg.control.println(F("  Usage: LIST INPUTS | APPLICATIONS | SENSORS [category] | TRANSPORTS"));
+        msg.control.println(F("         LIST APPLICATIONS JSON | SENSORS [category] JSON"));
         msg.control.println(F("         LIST UNITS JSON | CATEGORIES JSON | PIDS JSON"));
         msg.control.println(F("         LIST MEASUREMENT_TYPES JSON | CALIBRATION_TYPES JSON"));
         return 1;
@@ -282,9 +284,6 @@ int cmd_list(int argc, const char* const* argv) {
             const char* filter = (argc >= 3) ? argv[2] : NULL;
             listSensors(filter);
         }
-    } else if (streq_P(argv[1], PSTR("OUTPUTS"))) {
-        if (asJson) { EMIT_JSON(writeOutputsJson(msg.control)); }
-        else { listOutputModules(); }
     } else if (streq_P(argv[1], PSTR("UNITS"))) {
         if (asJson) { EMIT_JSON(writeUnitsJson(msg.control)); }
         else { msg.control.println(F("JSON-only subcommand. Usage: LIST UNITS JSON")); }
@@ -306,7 +305,7 @@ int cmd_list(int argc, const char* const* argv) {
         msg.control.print(F("ERROR: Unknown LIST subcommand '"));
         msg.control.print(argv[1]);
         msg.control.println(F("'"));
-        msg.control.println(F("  Valid: INPUTS, APPLICATIONS, SENSORS, OUTPUTS, TRANSPORTS,"));
+        msg.control.println(F("  Valid: INPUTS, APPLICATIONS, SENSORS, TRANSPORTS,"));
         msg.control.println(F("         UNITS, CATEGORIES, PIDS, MEASUREMENT_TYPES, CALIBRATION_TYPES"));
         return 1;
     }
@@ -648,7 +647,7 @@ int cmd_clear(int argc, const char* const* argv) {
 int cmd_info(int argc, const char* const* argv) {
         if (argc < 2) {
         msg.control.println(F("ERROR: INFO requires a pin"));
-        msg.control.println(F("  Usage: INFO <pin> [ALARM|OUTPUT|CALIBRATION]"));
+        msg.control.println(F("  Usage: INFO <pin> [ALARM|ROUTE|CALIBRATION]"));
         return 1;
     }
 
@@ -656,7 +655,7 @@ int cmd_info(int argc, const char* const* argv) {
     uint8_t pin = parsePin(argv[1], &valid);
     if (!valid) return 1;
 
-    // Check for subcommands (ALARM, CALIBRATION, OUTPUT)
+    // Check for subcommands (ALARM, CALIBRATION, ROUTE)
     if (argc == 3) {
         if (streq_P(argv[2], PSTR("ALARM"))) {
 #if INCLUDE_RULES_ENGINE
@@ -664,8 +663,8 @@ int cmd_info(int argc, const char* const* argv) {
 #else
             msg.control.println(F("ERROR: alarms are not enabled in this build"));
 #endif
-        } else if (streq_P(argv[2], PSTR("OUTPUT"))) {
-            printInputOutputInfo(pin);
+        } else if (streq_P(argv[2], PSTR("ROUTE"))) {
+            printInputRouteInfo(pin);
         } else if (streq_P(argv[2], PSTR("CALIBRATION"))) {
             printInputCalibration(pin);
         } else {
@@ -676,152 +675,6 @@ int cmd_info(int argc, const char* const* argv) {
     } else {
         // Default: INFO <pin>
         printInputInfo(pin);
-    }
-
-    return 0;
-}
-
-// FORMAT is SD-only, so it disappears from the usage text on a board that
-// vetoes SD logging (mega2560) rather than being advertised and then rejected.
-#if INCLUDE_SD_LOGGING
-#define OUTPUT_USAGE_FORMAT " | FORMAT <LONG|WIDE>"
-#define OUTPUT_VALID_FORMAT "|FORMAT"
-#else
-#define OUTPUT_USAGE_FORMAT ""
-#define OUTPUT_VALID_FORMAT ""
-#endif
-
-int cmd_output(int argc, const char* const* argv) {
-    if (argc < 2) {
-        msg.control.println(F("ERROR: OUTPUT requires a subcommand"));
-        msg.control.println(F("  Usage: OUTPUT STATUS | <name> ENABLE | DISABLE | INTERVAL <ms>" OUTPUT_USAGE_FORMAT));
-        return 1;
-    }
-
-    if (streq_P(argv[1], PSTR("STATUS"))) {
-        listOutputs();
-        return 0;
-    }
-
-    // All other subcommands require a name
-    if (argc < 3) {
-        msg.control.println(F("ERROR: Subcommand requires an output name"));
-        msg.control.println(F("  Usage: OUTPUT <name> ENABLE | DISABLE | INTERVAL <ms>" OUTPUT_USAGE_FORMAT));
-        return 1;
-    }
-
-    const char* outputName = argv[1];
-    const char* subcommand = argv[2];
-
-    if (streq_P(subcommand, PSTR("ENABLE"))) {
-        if (setOutputEnabled(outputName, true)) {
-            msg.control.print(outputName);
-            msg.control.println(F(" enabled"));
-            printSaveReminder();
-        } else {
-            msg.control.print(F("ERROR: Unknown output '"));
-            msg.control.print(outputName);
-            msg.control.println(F("'"));
-            return 1;
-        }
-    } else if (streq_P(subcommand, PSTR("DISABLE"))) {
-        if (setOutputEnabled(outputName, false)) {
-            msg.control.print(outputName);
-            msg.control.println(F(" disabled"));
-            printSaveReminder();
-        } else {
-            msg.control.print(F("ERROR: Unknown output '"));
-            msg.control.print(outputName);
-            msg.control.println(F("'"));
-            return 1;
-        }
-#if INCLUDE_SD_LOGGING
-    } else if (streq_P(subcommand, PSTR("FORMAT"))) {
-        // SD-only: the other outputs have no file layout to choose.
-        int outputIndex = getOutputIndexByName(outputName);
-        if (outputIndex < 0) {
-            msg.control.print(F("ERROR: Unknown output '"));
-            msg.control.print(outputName);
-            msg.control.println(F("'"));
-            return 1;
-        }
-        if (outputIndex != OUTPUT_SD) {
-            msg.control.print(F("ERROR: FORMAT applies to SD_Log only, not '"));
-            msg.control.print(outputName);
-            msg.control.println(F("'"));
-            return 1;
-        }
-        if (argc < 4) {
-            msg.control.println(F("ERROR: FORMAT requires LONG or WIDE"));
-            msg.control.println(F("  WIDE: one row per sample, a column per input"));
-            msg.control.println(F("  LONG: one row per reading (Time,Sensor,Value,Units)"));
-            return 1;
-        }
-        SdLogFormat format;
-        if (!parseSdLogFormat(argv[3], format)) {
-            msg.control.print(F("ERROR: Unknown format '"));
-            msg.control.print(argv[3]);
-            msg.control.println(F("' (expected LONG or WIDE)"));
-            return 1;
-        }
-        systemConfig.sdLogFormat = (uint8_t)format;
-        msg.control.print(F("SD log format set to "));
-        msg.control.println(sdLogFormatName(systemConfig.sdLogFormat));
-        printSaveReminder();
-#endif
-    } else if (streq_P(subcommand, PSTR("INTERVAL"))) {
-        if (argc < 4) {
-            msg.control.println(F("ERROR: INTERVAL requires a time in ms"));
-            return 1;
-        }
-        const int outputIdx = getOutputIndexByName(outputName);
-        if (outputIdx < 0) {
-            msg.control.print(F("ERROR: Unknown output '"));
-            msg.control.print(outputName);
-            msg.control.println(F("'"));
-            return 1;
-        }
-        if (!outputTakesInterval(outputIdx)) {
-            // Why it has none: CAN since the 0x7E8 broadcast went (#528),
-            // the other two never used theirs (#608)
-            if (outputIdx == OUTPUT_CAN) {
-                msg.control.println(F("ERROR: CAN output answers OBD-II requests as they arrive; it has no interval"));
-            } else {
-                // One message for ELM327 (answers requests) and Alarm (runs
-                // every loop): F() text is RAM1 on Teensy 4
-                msg.control.print(F("ERROR: "));
-                msg.control.print(outputModules[outputIdx].name);  // canonical case
-                msg.control.println(F(" output doesn't send on a timer; it has no interval"));
-            }
-            return 1;
-        }
-        // Digits only: atoi into a uint16_t wrapped 70000 to 4464 and read
-        // "abc" as 0, which floods the data channel (#608). strtoul would
-        // take a leading '+', '-' or space, hence the first-digit check; an
-        // overflow returns ULONG_MAX, past the max like any other big value.
-        const char* arg = argv[3];
-        char* end = nullptr;
-        const unsigned long parsed = isdigit((unsigned char)arg[0]) ? strtoul(arg, &end, 10) : 0;
-        if (end == nullptr || *end != '\0' || parsed > OUTPUT_INTERVAL_MAX_MS ||
-            !setOutputInterval((uint8_t)outputIdx, (long)parsed)) {
-            msg.control.print(F("ERROR: Interval must be "));
-            msg.control.print(outputIntervalMinMs(outputIdx));
-            msg.control.print(F("-"));
-            msg.control.print(OUTPUT_INTERVAL_MAX_MS);
-            msg.control.println(F(" ms"));
-            return 1;
-        }
-        msg.control.print(outputModules[outputIdx].name);
-        msg.control.print(F(" interval set to "));
-        msg.control.print(parsed);
-        msg.control.println(F("ms"));
-        printSaveReminder();
-    } else {
-        msg.control.print(F("ERROR: Unknown subcommand '"));
-        msg.control.print(subcommand);
-        msg.control.println(F("'"));
-        msg.control.println(F("Valid commands: STATUS, or <module> ENABLE|DISABLE|INTERVAL" OUTPUT_VALID_FORMAT));
-        return 1;
     }
 
     return 0;

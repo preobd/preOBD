@@ -35,21 +35,32 @@ void updateOutputs();              // Housekeeping (drain buffers, etc.)
 // Runtime configuration API
 bool setOutputEnabled(const char* name, bool enabled);
 // Turn each output on or off to match systemConfig.outputEnabled[], through
-// the same path as OUTPUT <name> ENABLE/DISABLE (init on enable, teardown on
+// the same path as OUTPUT <id> ENABLE/DISABLE (init on enable, teardown on
 // disable). Only outputs whose state differs are touched. JSON IMPORT and LOAD
 // call it, so changes apply without a reboot (#610). The exception is turning
 // CAN output on when its bus wasn't started this session: that waits for the
-// reboot (NOTE; STATUS and LIST OUTPUTS JSON show it pending).
+// reboot (NOTE; OUTPUT LIST and its JSON show it pending).
 void syncOutputsToConfig();
 // CAN output is enabled in the config, configured to start (a bus selected
 // and on), but not running: an import/LOAD enable waiting for SAVE + reboot
-// (#610). One predicate for the sync's NOTE, OUTPUT STATUS and LIST OUTPUTS JSON.
+// (#610). One predicate for the sync's NOTE and OUTPUT LIST (text and JSON).
 bool canOutputPendingReboot();
 bool setOutputInterval(uint8_t outputId, long interval);  // false unless outputIntervalValid(); nothing changes
 OutputModule* getOutputByName(const char* name);
 int getOutputIndexByName(const char* name);  // OutputID index, or -1 if unknown
-void listOutputs();          // Show output status (enabled/disabled + intervals)
-void listOutputModules();    // Show available output module names
+
+// ===== The outputs you add, by id (#612 phase 1, output_table.h) =====
+// Start/stop and print; the table itself (which exist, intervals, names) is
+// output_table.h. Each returns false when there is no output <id>.
+bool outputSetEnabledById(uint8_t id, bool enabled);   // also starts or stops it
+bool outputSetIntervalById(uint8_t id, long ms);       // false: no output, or outputIntervalValid() fails
+bool outputLiveById(uint8_t id);                       // running now
+bool outputAddById(uint8_t id);                        // ADD: routes every input to it and turns it on
+void outputDeleteById(uint8_t id);                     // DEL: turns it off, removes it and its routes
+size_t outputTransportText(uint8_t id, char* buf, size_t n);  // "CAN1", "USB", "SD", "SERIAL2", "NONE"
+void printOutputLabel(uint8_t id);                     // "CSV on USB"
+void listOutputTable();                                // OUTPUT LIST
+bool printOutputDetail(uint8_t id);                    // OUTPUT <id>
 
 // ===== OBDII FRAME BUILDING =====
 

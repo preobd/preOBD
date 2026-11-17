@@ -45,8 +45,8 @@ serial console:
 
 ```
 CONFIG
-OUTPUT RealDash ENABLE
-OUTPUT Serial DISABLE        # the CSV output shares the data channel; turn it off
+OUTPUT 1 ENABLE
+OUTPUT 2 DISABLE        # the CSV output shares the data channel; turn it off
 SAVE
 ```
 

@@ -225,7 +225,7 @@ struct Input {
     uint8_t obd2length;            // OBD-II response length
 
     // === Output Routing ===
-    uint8_t outputMask;            // Per-input output routing (bits 0-3: CAN, RealDash, Serial, SD)
+    uint8_t routeMask;            // Routes: bit <id> set = sent to output <id> (outputs/table/output_table.h, #612)
 
     // === Runtime Data ===
     float value;                    // Current sensor reading

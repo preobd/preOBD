@@ -24,6 +24,7 @@
 #include "../../src/buses/pinctrl/pin_owner.cpp"
 #include "../../src/buses/bus_manager.cpp"
 #include "../../src/config/system_config.cpp"
+#include "../../src/outputs/table/output_table.cpp"   // outputsReconcileAbsent (#612)
 // resetSystemConfig() resolves default unit names to indices.
 #include "../../src/sensors/units_registry.cpp"
 // saveSystemConfig() holds a WatchdogScope (#541); the HAL is a no-op stub here.

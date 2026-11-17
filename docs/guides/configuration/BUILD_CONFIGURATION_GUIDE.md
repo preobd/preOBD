@@ -147,12 +147,12 @@ A feature flag controls whether output code is *compiled in*; once in, outputs
 toggle at runtime via EEPROM:
 
 ```
-OUTPUT CAN ENABLE            # runtime enable
-OUTPUT SERIAL INTERVAL 1000  # periodic outputs take an interval
+OUTPUT 0 ENABLE            # runtime enable (output 0: OBD on CAN)
+OUTPUT 2 INTERVAL 1000     # periodic outputs take an interval (output 2: CSV)
 SAVE
 ```
 
-`LIST OUTPUTS` shows what's compiled in.
+`OUTPUT LIST` shows the outputs this build has.
 
 ## Troubleshooting
 

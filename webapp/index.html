@@ -1180,7 +1180,7 @@
       <div class="quick-actions" id="quickActions">
         <button class="btn" data-cmd="VERSION" disabled>VERSION</button>
         <button class="btn" data-cmd="LIST INPUTS" disabled>LIST INPUTS</button>
-        <button class="btn" data-cmd="LIST OUTPUTS" disabled>LIST OUTPUTS</button>
+        <button class="btn" data-cmd="OUTPUT LIST" disabled>OUTPUT LIST</button>
         <button class="btn" data-cmd="ACTION LIST" disabled>ACTION LIST</button>
         <button class="btn" data-cmd="CONFIG" disabled>CONFIG</button>
         <button class="btn" data-cmd="RUN" disabled>RUN</button>
@@ -3470,7 +3470,7 @@ function buildEditorHTML(pinStr, inp, isAdd) {
   // start blank (openAddEditor then pre-fills from the app defaults).
   const alarmEnabled = alarmMin !== '' || alarmMax !== '';
   const enabled = inp ? inp.enabled !== false : true;
-  const mask = inp?.outputMask ?? 0x0F;
+  const mask = inp?.routeMask ?? 0xFF;   // a new input is routed to every output (#612)
   const obdPid = inp?.obd2?.pid ? '0x' + inp.obd2.pid.toString(16).toUpperCase().padStart(2, '0') : '';
   const obdLength = inp?.obd2?.length || 1;
 
@@ -3523,10 +3523,7 @@ function buildEditorHTML(pinStr, inp, isAdd) {
     <div class="editor-toggle-row">
       <label><input type="checkbox" id="edEnabled" ${enabled ? 'checked' : ''}> Input Enabled</label>
       <span class="editor-toggle-divider"></span>
-      <label title="Answer OBD-II scan tools for this input, over CAN and the ELM327 emulator (SET <pin> OUTPUT CAN)"><input type="checkbox" id="edOutCAN"      ${mask & 1 ? 'checked' : ''}> OBD-II</label>
-      <label><input type="checkbox" id="edOutRealDash" ${mask & 2 ? 'checked' : ''}> RealDash</label>
-      <label><input type="checkbox" id="edOutSerial"   ${mask & 4 ? 'checked' : ''}> Serial</label>
-      <label><input type="checkbox" id="edOutSD"       ${mask & 8 ? 'checked' : ''}> SD Log</label>
+      ${routeOutputs().map(o => `<label title="Send this input to output ${o.id} (SET &lt;pin&gt; ROUTE ${o.id})"><input type="checkbox" class="edRoute" data-id="${o.id}" ${mask & (1 << o.id) ? 'checked' : ''}> ${escHtml(routeOutputLabel(o))}</label>`).join('')}
     </div>
   </div>
 </div>
@@ -3534,6 +3531,21 @@ function buildEditorHTML(pinStr, inp, isAdd) {
   <button class="btn primary" onclick="saveEditorLocal()">Save</button>
   <button class="btn secondary" onclick="closeEditor()">Cancel</button>
 </div>`;
+}
+
+// The outputs inputs can be routed to (#612), from the dump's system.outputs
+// array. A dump from older firmware has an object there: no route editing.
+function routeOutputs() {
+  const outs = (localConfig || originalConfig)?.system?.outputs;
+  return Array.isArray(outs) ? outs : [];
+}
+// The input the editor has open (null when adding one)
+function editingInput() {
+  return editingPin === null ? null
+    : (localConfig?.inputs || []).find(i => pinNumToStr(i.pin) === editingPin) || null;
+}
+function routeOutputLabel(o) {
+  return o.id + ': ' + o.format + ' on ' + o.transport;
 }
 
 function escHtml(s) {
@@ -3772,11 +3784,11 @@ function saveEditorLocal() {
     units: document.getElementById('edUnits').value,
     alarm: { min: alarmMin, max: alarmMax },
     enabled: document.getElementById('edEnabled').checked,
-    outputMask:
-      (document.getElementById('edOutCAN').checked      ? 1 : 0) |
-      (document.getElementById('edOutRealDash').checked ? 2 : 0) |
-      (document.getElementById('edOutSerial').checked   ? 4 : 0) |
-      (document.getElementById('edOutSD').checked       ? 8 : 0),
+    // Routes (#612): one bit per output id; bits for outputs not shown keep their value
+    routeMask: [...document.querySelectorAll('.edRoute')].reduce((m, el) => {
+      const bit = 1 << Number(el.dataset.id);
+      return el.checked ? (m | bit) : (m & ~bit);
+    }, (editingInput()?.routeMask ?? 0xFF)),
     obd2: obdPid ? { pid: obdPid, length: obdLength } : { pid: 0, length: 0 },
   };
 
@@ -3897,13 +3909,14 @@ async function applyInput(pinStr) {
     if (!orig || cur.enabled !== orig.enabled)
       await sendChecked('SET ' + pinStr + ' INPUT ' + (cur.enabled ? 'ENABLE' : 'DISABLE'));
 
-    const OUTPUT_TARGETS = ['CAN', 'REALDASH', 'SERIAL', 'SD_LOG'];
-    const curMask  = cur.outputMask  ?? 0x0F;
-    const origMask = orig?.outputMask ?? 0x0F;
+    // Routes (#612): SET <pin> ROUTE <id> for each output whose bit changed
+    const curMask  = cur.routeMask  ?? 0xFF;
+    const origMask = orig?.routeMask ?? 0xFF;
     if (curMask !== origMask) {
-      for (let bit = 0; bit < 4; bit++) {
+      for (const o of routeOutputs()) {
+        const bit = o.id;
         if (((curMask >> bit) & 1) !== ((origMask >> bit) & 1)) {
-          await sendChecked(`SET ${pinStr} OUTPUT ${OUTPUT_TARGETS[bit]} ${(curMask >> bit) & 1 ? 'ENABLE' : 'DISABLE'}`);
+          await sendChecked(`SET ${pinStr} ROUTE ${bit} ${(curMask >> bit) & 1 ? 'ENABLE' : 'DISABLE'}`);
         }
       }
     }
@@ -3923,7 +3936,7 @@ async function applyInput(pinStr) {
     if (orig) {
       Object.assign(orig, { app: cur.app, sensor: cur.sensor, units: cur.units,
         alarm: { min: cur.alarm?.min ?? null, max: cur.alarm?.max ?? null },
-        enabled: cur.enabled, outputMask: curMask, obd2: { ...curObd } });
+        enabled: cur.enabled, routeMask: curMask, obd2: { ...curObd } });
     } else if (originalConfig?.inputs) {
       originalConfig.inputs.push(JSON.parse(JSON.stringify(cur)));
     }
@@ -4347,7 +4360,7 @@ function renderCanStatus() {
   const outOn = out.enabled && out.bus !== 255;
   const outTile = tile('Output',
     outOn ? canBusName(out.bus) : 'Off',
-    outOn ? (out.module ? 'OBD-II responder on' : 'responder off (OUTPUT CAN)') : 'OBD-II responder');
+    outOn ? (out.module ? 'OBD-II responder on' : 'responder off (OUTPUT 0)') : 'OBD-II responder');
 
   document.getElementById('canStatusGrid').innerHTML = inputTile + trafficTile + pollTile + outTile;
   document.getElementById('canRebootBadge').style.display = inp.rebootPending ? '' : 'none';

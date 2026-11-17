@@ -40,6 +40,7 @@ void readCANSensor(Input*) {}
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/config/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
+#include "../../src/outputs/table/output_table.cpp"   // routeMaskFromLegacy, the outputs view (#612)
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
@@ -139,7 +140,7 @@ static void test_refused_existing_input_is_byte_identical(void) {
     in->obd2pid = 0x5C;
     in->obd2length = 2;
     in->flags.useCustomCalibration = true;
-    in->outputMask = 0x02;
+    in->routeMask = 0x02;
     Input before = *in;
 
     // Now the pin gets reserved out from under it and a re-application is tried.
@@ -665,6 +666,34 @@ static void test_can_import_units_survive_eeprom(void) {
 }
 
 
+// #612: routeMask round-trips through the EEPROM record, and a record saved
+// before phase 1 (no FLAG_ROUTES_BY_ID) is read as the old 4-bit output mask,
+// its CAN bit also routing the input to the ELM327 output.
+static void test_route_mask_survives_eeprom_and_old_masks_upgrade(void) {
+    Input* in = makeCanImport(0xC2, 0x0C, 1.0f);
+    TEST_ASSERT_NOT_NULL(in);
+    in->routeMask = (uint8_t)((1u << OUT_ID_CSV) | (1u << OUT_ID_ELM327));
+    InputEEPROM rec;
+    buildInputRecord(*in, rec);
+    TEST_ASSERT_TRUE(rec.flagsByte & FLAG_ROUTES_BY_ID);
+    Input loaded;
+    memset(&loaded, 0, sizeof(loaded));
+    applyInputRecord(rec, loaded);
+    TEST_ASSERT_EQUAL_HEX8((1u << OUT_ID_CSV) | (1u << OUT_ID_ELM327), loaded.routeMask);
+
+    // An older build's record: flag clear, bits 0-3 = CAN, RealDash, Serial, SD
+    rec.flagsByte &= (uint8_t)~FLAG_ROUTES_BY_ID;
+    rec.routeMask = 0x0D;                    // CAN + Serial + SD, RealDash off
+    memset(&loaded, 0, sizeof(loaded));
+    applyInputRecord(rec, loaded);
+    TEST_ASSERT_EQUAL_HEX8(0x0D | (1u << OUT_ID_ELM327), loaded.routeMask);
+    rec.routeMask = 0xFE;                    // CAN off; stray high bits dropped
+    memset(&loaded, 0, sizeof(loaded));
+    applyInputRecord(rec, loaded);
+    TEST_ASSERT_EQUAL_HEX8(0x0E, loaded.routeMask);
+    freeInputSlot(0xC2);
+}
+
 // #499: a CAN input (app NONE + CAN_IMPORT) survives SYSTEM DUMP JSON ->
 // JSON IMPORT with its calibration and units; import used to reject app NONE.
 static void test_json_import_restores_can_input(void) {
@@ -740,12 +769,12 @@ static void test_json_import_refuses_app_none_elsewhere(void) {
 }
 
 // #501: a CAN input gets the defaults every new input gets from
-// setInputApplication() — before, SET CAN left outputMask 0 (no CAN,
+// setInputApplication() — before, SET CAN left routeMask 0 (no CAN,
 // RealDash, serial or SD output) and display off.
 static void test_can_import_input_gets_new_input_defaults(void) {
     Input* in = createCanImportInput(0xC3);
     TEST_ASSERT_NOT_NULL(in);
-    TEST_ASSERT_EQUAL_HEX8(OUTPUT_MASK_ALL_DATA, in->outputMask);
+    TEST_ASSERT_EQUAL_HEX8(ROUTE_MASK_ALL, in->routeMask);
     TEST_ASSERT_TRUE(in->flags.display);
     TEST_ASSERT_TRUE(in->flags.isEnabled);
     TEST_ASSERT_FALSE(in->flags.alarm);
@@ -755,10 +784,10 @@ static void test_can_import_input_gets_new_input_defaults(void) {
     TEST_ASSERT_EQUAL_INT(CAL_CAN_IMPORT, in->calibrationType);
 
     // Rebuilding over an existing input resets it to that shape in place
-    in->outputMask = 0;
+    in->routeMask = 0;
     in->obd2pid = 0x0C;
     TEST_ASSERT_EQUAL_PTR(in, createCanImportInput(0xC3));
-    TEST_ASSERT_EQUAL_HEX8(OUTPUT_MASK_ALL_DATA, in->outputMask);
+    TEST_ASSERT_EQUAL_HEX8(ROUTE_MASK_ALL, in->routeMask);
     TEST_ASSERT_EQUAL_UINT8(0, in->obd2pid);
 }
 
@@ -784,42 +813,71 @@ static void test_json_import_mismatch_leaves_existing_input_intact(void) {
 }
 
 
-// #528: an input's CAN output toggle decides whether OBD-II tools get it at all
-// (CAN responder and ELM327 share this table). Off -> neither answered nor
-// advertised; a second input on the same PID then takes it.
+// #528, #612: an input's route to the OBD output decides whether OBD-II tools
+// on CAN get it at all. Off -> neither answered nor advertised; a second input
+// on the same PID then takes it.
 static void rpmInput(uint8_t slot, uint8_t pin, bool canOn) {
     Input* in = &inputs[slot];
     in->pin = pin;
     in->flags.isEnabled = true;
     in->obd2pid = 0x0C;
     in->measurementType = MEASURE_RPM;
-    in->outputMask = canOn ? OUTPUT_MASK_ALL_DATA : (OUTPUT_MASK_ALL_DATA & ~(1 << OUTPUT_CAN));
+    in->routeMask = canOn ? ROUTE_MASK_ALL : (ROUTE_MASK_ALL & ~(1 << OUTPUT_CAN));
 }
 static bool bitmapHas0C() {
     uint8_t bitmap[4];
-    obdQuery_getSupportedPIDBitmap(bitmap, 0x00);
+    obdQuery_getSupportedPIDBitmap(bitmap, 0x00, OUT_ID_OBD);
     return bitmap[1] & 0x10;   // PID 0x0C: byte 1 (PIDs 0x09-0x10), bit 4
 }
 static void test_can_toggle_gates_obd_answers(void) {
     rpmInput(0, 10, true);
     obdQuery_buildLookupTable();
-    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C));
+    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OUT_ID_OBD));
     TEST_ASSERT_TRUE(bitmapHas0C());
 
-    inputs[0].outputMask &= ~(1 << OUTPUT_CAN);
+    inputs[0].routeMask &= ~(1 << OUTPUT_CAN);
     obdQuery_buildLookupTable();
-    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C));
+    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, OUT_ID_OBD));
     TEST_ASSERT_FALSE(bitmapHas0C());
 
     rpmInput(1, 11, true);                 // same PID, toggle on: it answers now
     obdQuery_buildLookupTable();
-    TEST_ASSERT_EQUAL_PTR(&inputs[1], obdQuery_findByPID(0x0C));
+    TEST_ASSERT_EQUAL_PTR(&inputs[1], obdQuery_findByPID(0x0C, OUT_ID_OBD));
 
-    inputs[0].outputMask |= (1 << OUTPUT_CAN);   // first one back: first wins again
+    inputs[0].routeMask |= (1 << OUTPUT_CAN);   // first one back: first wins again
     obdQuery_buildLookupTable();
-    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C));
+    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OUT_ID_OBD));
 }
 
+
+// #612: each responder answers the inputs routed to it. OBD (CAN) and the
+// ELM327 output on a serial port have a bit each; ELM327 over BLE is built in
+// and answers every input with a PID.
+static void test_obd_and_elm327_answer_their_own_routes(void) {
+    rpmInput(0, 10, true);
+    inputs[0].routeMask = (uint8_t)(1u << OUT_ID_ELM327);   // ELM327 only
+    obdQuery_buildLookupTable();
+    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, OUT_ID_OBD));
+    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OUT_ID_ELM327));
+    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OBDQ_ANY_ROUTE));
+    uint8_t bitmap[4];
+    obdQuery_getSupportedPIDBitmap(bitmap, 0x00, OUT_ID_OBD);
+    TEST_ASSERT_FALSE(bitmap[1] & 0x10);
+    obdQuery_getSupportedPIDBitmap(bitmap, 0x00, OUT_ID_ELM327);
+    TEST_ASSERT_TRUE(bitmap[1] & 0x10);
+
+    inputs[0].routeMask = 0;                                  // routed nowhere
+    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, OUT_ID_ELM327));
+    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OBDQ_ANY_ROUTE));
+
+    // Two inputs on one PID: each responder takes the first routed to it
+    rpmInput(1, 11, true);
+    inputs[0].routeMask = (uint8_t)(1u << OUT_ID_ELM327);
+    inputs[1].routeMask = (uint8_t)(1u << OUT_ID_OBD);
+    obdQuery_buildLookupTable();
+    TEST_ASSERT_EQUAL_PTR(&inputs[1], obdQuery_findByPID(0x0C, OUT_ID_OBD));
+    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OUT_ID_ELM327));
+}
 
 // #528: PID 01 and the no-codes modes answer for a car with no ECU, whatever
 // its inputs, and PID 01 is always in the 0x00 bitmap
@@ -827,23 +885,23 @@ static void test_fixed_obd_answers(void) {
     uint8_t out[OBD_ANSWER_MAX];
     uint8_t n = 0;
     obdQuery_buildLookupTable();                 // no inputs at all
-    TEST_ASSERT_TRUE(obdQuery_resolve(0x01, 0x01, out, &n));
+    TEST_ASSERT_TRUE(obdQuery_resolve(0x01, 0x01, out, &n, OUT_ID_OBD));
     const uint8_t pid01[] = {0x41, 0x01, 0x00, 0x00, 0x00, 0x00};
     TEST_ASSERT_EQUAL_UINT8(6, n);
     TEST_ASSERT_EQUAL_HEX8_ARRAY(pid01, out, 6);
     const uint8_t modes[] = {0x03, 0x07, 0x0A};
     for (uint8_t m : modes) {
-        TEST_ASSERT_TRUE(obdQuery_resolve(m, 0x00, out, &n));
+        TEST_ASSERT_TRUE(obdQuery_resolve(m, 0x00, out, &n, OUT_ID_OBD));
         TEST_ASSERT_EQUAL_UINT8(2, n);
         TEST_ASSERT_EQUAL_HEX8(m + 0x40, out[0]);
         TEST_ASSERT_EQUAL_HEX8(0x00, out[1]);       // no codes
     }
-    TEST_ASSERT_FALSE(obdQuery_resolve(0x09, 0x02, out, &n));   // VIN: not answered
-    TEST_ASSERT_FALSE(obdQuery_resolve(0x04, 0x00, out, &n));   // clear codes: not answered
+    TEST_ASSERT_FALSE(obdQuery_resolve(0x09, 0x02, out, &n, OUT_ID_OBD));   // VIN: not answered
+    TEST_ASSERT_FALSE(obdQuery_resolve(0x04, 0x00, out, &n, OUT_ID_OBD));   // clear codes: not answered
     uint8_t bitmap[4];
-    obdQuery_getSupportedPIDBitmap(bitmap, 0x00);
+    obdQuery_getSupportedPIDBitmap(bitmap, 0x00, OUT_ID_OBD);
     TEST_ASSERT_EQUAL_HEX8(0x80, bitmap[0]);                    // PID 01 only
-    obdQuery_getSupportedPIDBitmap(bitmap, 0x20);
+    obdQuery_getSupportedPIDBitmap(bitmap, 0x20, OUT_ID_OBD);
     TEST_ASSERT_EQUAL_HEX8(0x00, bitmap[0]);                    // not in later ranges
 }
 
@@ -930,6 +988,7 @@ static void test_json_import_repairs_bad_units_to_the_system_default(void) {
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_can_toggle_gates_obd_answers);
+    RUN_TEST(test_obd_and_elm327_answer_their_own_routes);
     RUN_TEST(test_fixed_obd_answers);
     RUN_TEST(test_registry_available);
     RUN_TEST(test_accepts_a_valid_new_input);
@@ -965,6 +1024,7 @@ int main(int, char**) {
     RUN_TEST(test_eeprom_load_repairs_wrong_type_units);
     RUN_TEST(test_can_import_measurement_type);
     RUN_TEST(test_can_import_units_survive_eeprom);
+    RUN_TEST(test_route_mask_survives_eeprom_and_old_masks_upgrade);
     RUN_TEST(test_json_import_restores_can_input);
     RUN_TEST(test_can_import_input_gets_new_input_defaults);
     RUN_TEST(test_json_import_refuses_app_none_elsewhere);

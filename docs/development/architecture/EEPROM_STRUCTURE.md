@@ -502,7 +502,7 @@ if (temp.magic != SYSTEM_CONFIG_MAGIC ||
 
 ### Output enable flags reset to defaults each boot
 
-Symptom: `OUTPUT SERIAL ENABLE` + `SAVE` works for the session, but the output reverts to its default state on reboot.
+Symptom: `OUTPUT 2 ENABLE` + `SAVE` works for the session, but the output reverts to its default state on reboot.
 
 This was a real bug fixed in `SYSTEM_CONFIG_VERSION` 9 and 10:
 

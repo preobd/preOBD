@@ -3,6 +3,7 @@
  */
 
 #include "output_base.h"
+#include "output_table.h"
 
 #ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
 #define FLASHMEM
@@ -33,7 +34,7 @@ extern void sendSerialOutput(Input*);
 extern void updateSerialOutput();
 
 #include "../formats/output_sdlog.h"   // initSDLog / updateSDLog / closeSDLog
-#include "../formats/output_format.h"  // sdLogFormatName for OUTPUT STATUS
+#include "../formats/output_format.h"  // sdLogFormatName for OUTPUT LIST
 
 extern void initAlarmOutput();
 extern void updateAlarmOutput();
@@ -83,12 +84,29 @@ const int numOutputModules = 7;
 // Track last send time for each output module
 static uint32_t lastOutputSend[sizeof(outputModules) / sizeof(outputModules[0])];
 
+// A module slot's output id (#612 phase 1): slots 0-3 are ids 0-3, ELM327's
+// slot 6 is id 4. Alarm is a built-in output (no id), and so is the retired
+// RELAY slot.
+static uint8_t idOfSlot(int slot) {
+    if (slot <= OUTPUT_SD) return (uint8_t)slot;
+    if (slot == OUTPUT_ELM327) return OUT_ID_ELM327;
+    return OUT_ID_NONE;
+}
+
+// What a slot's live state should be: switched on in the config, and for the
+// outputs you add, not deleted (OUTPUT DEL). Built-ins only need the switch.
+static bool slotWanted(int slot) {
+    if (!systemConfig.outputEnabled[slot]) return false;
+    const uint8_t id = idOfSlot(slot);
+    return id == OUT_ID_NONE || outputExists(id);
+}
+
 void initOutputModules() {
     // Apply runtime configuration from system config
     for (int i = 0; i < numOutputModules; i++) {
         if (outputModules[i].name == nullptr) continue;  // Placeholder slot
 
-        outputModules[i].enabled = systemConfig.outputEnabled[i];
+        outputModules[i].enabled = slotWanted(i);
 
         if (outputModules[i].enabled && outputModules[i].init != nullptr) {
             outputModules[i].init();
@@ -110,7 +128,7 @@ void sendToOutputs(uint32_t now) {
             for (uint8_t j = 0; j < MAX_INPUTS; j++) {
                 if (inputs[j].flags.isEnabled && !isnan(inputs[j].value)) {
                     // For data outputs (CAN/RealDash/Serial/SD), check per-input mask
-                    if (i <= OUTPUT_SD && !(inputs[j].outputMask & (1 << i))) continue;
+                    if (i <= OUTPUT_SD && !(inputs[j].routeMask & (1 << i))) continue;
                     outputModules[i].send(&inputs[j]);
                 }
             }
@@ -159,11 +177,11 @@ int getOutputIndexByName(const char* name) {
     return output ? (int)(output - outputModules) : -1;
 }
 
-// The one place an output's live state changes: OUTPUT <name> ENABLE/DISABLE,
+// The one place an output's live state changes: OUTPUT <id> ENABLE/DISABLE,
 // a JSON IMPORT and LOAD all come here, so each takes effect immediately
 // (#610). Live state only — systemConfig is the caller's (setOutputEnabled
 // writes it; the sync reads it). Enabling runs init() even when the output is
-// already on: OUTPUT <name> ENABLE is how a user retries a faulted SD log or
+// already on: OUTPUT <id> ENABLE is how a user retries a faulted SD log or
 // an ELM327 whose port wasn't up. The sync only calls this on a change.
 static FLASHMEM void applyOutputEnabled(int index, bool enabled) {
     OutputModule* output = &outputModules[index];
@@ -206,20 +224,20 @@ bool setOutputEnabled(const char* name, bool enabled) {
 }
 
 FLASHMEM bool canOutputPendingReboot() {
-    return !outputModules[OUTPUT_CAN].enabled && systemConfig.outputEnabled[OUTPUT_CAN] &&
+    return !outputModules[OUTPUT_CAN].enabled && slotWanted(OUTPUT_CAN) &&
            canOutputConfigured();
 }
 
 FLASHMEM void syncOutputsToConfig() {
     for (int i = 0; i < numOutputModules; i++) {
         if (outputModules[i].name == nullptr) continue;  // not in this build
-        const bool want = systemConfig.outputEnabled[i] != 0;
+        const bool want = slotWanted(i);
         if (outputModules[i].enabled == want) continue;
         // CAN buses are brought up at boot from this config: starting CAN
         // output now would re-begin a bus CAN input set up (its mode, baud and
         // filters). If initCAN() already started it this session, turning it
         // back on is just the flag; otherwise it starts at the next reboot,
-        // says so, and OUTPUT STATUS shows it pending. Stopping touches no bus.
+        // says so, and OUTPUT LIST shows it pending. Stopping touches no bus.
         if (want && i == OUTPUT_CAN) {
             if (canOutputBusStarted()) {
                 outputModules[i].enabled = true;
@@ -251,44 +269,167 @@ bool setOutputInterval(uint8_t outputId, long interval) {
     return true;
 }
 
-/**
- * List all outputs with their status
- */
-void listOutputs() {
-    msg.control.println(F("=== Output Modules ==="));
-    for (int i = 0; i < numOutputModules; i++) {
-        if (outputModules[i].name == nullptr) continue;
-        msg.control.print(outputModules[i].name);
-        msg.control.print(F(": "));
-        if (i == OUTPUT_CAN && canOutputPendingReboot()) {
-            msg.control.println(F("Disabled (on after SAVE and reboot)"));
-        } else if (outputModules[i].enabled) {
-            msg.control.print(F("Enabled"));
-            if (outputTakesInterval(i)) {   // the others have none (#608)
-                msg.control.print(F(", Interval: "));
-                msg.control.print(systemConfig.outputInterval[i]);
-                msg.control.print(F("ms"));
-            }
-#if INCLUDE_SD_LOGGING
-            if (i == OUTPUT_SD) {
-                msg.control.print(F(", Format: "));
-                msg.control.print(sdLogFormatName(systemConfig.sdLogFormat));
-            }
-#endif
-            msg.control.println();
-        } else {
-            msg.control.println(F("Disabled"));
-        }
+// ===== The outputs you add, by id (#612 phase 1) =====
+// The table itself is output_table.cpp (a view over systemConfig); these are
+// the parts that start and stop the modules behind it.
+
+static int slotOfId(uint8_t id) {
+    const uint8_t slot = outputLegacySlot(id);
+    return slot == 0xFF ? -1 : (int)slot;
+}
+
+FLASHMEM bool outputSetEnabledById(uint8_t id, bool enabled) {
+    if (!outputExists(id)) return false;
+    const int slot = slotOfId(id);
+    systemConfig.outputEnabled[slot] = enabled ? 1 : 0;
+    applyOutputEnabled(slot, enabled);
+    return true;
+}
+
+FLASHMEM bool outputSetIntervalById(uint8_t id, long ms) {
+    if (!outputExists(id)) return false;
+    return setOutputInterval((uint8_t)slotOfId(id), ms);
+}
+
+FLASHMEM bool outputLiveById(uint8_t id) {
+    const int slot = slotOfId(id);
+    return slot >= 0 && outputModules[slot].name != nullptr && outputModules[slot].enabled;
+}
+
+// Sets route bit <id> on every input (ADD: a new output is sent everything,
+// as each output always was) or clears it (DEL).
+static FLASHMEM void routeEveryInput(uint8_t id, bool on) {
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        if (inputs[i].pin == 0xFF) continue;
+        if (on) inputs[i].routeMask |= (uint8_t)(1u << id);
+        else    inputs[i].routeMask &= (uint8_t)~(1u << id);
     }
 }
 
-/**
- * List available output module names
- */
-void listOutputModules() {
-    msg.control.println(F("=== Available Output Modules ==="));
-    for (int i = 0; i < numOutputModules; i++) {
-        if (outputModules[i].name == nullptr) continue;
-        msg.control.println(outputModules[i].name);
+FLASHMEM void outputDeleteById(uint8_t id) {
+    if (!outputExists(id)) return;
+    outputSetEnabledById(id, false);   // stops it, as DISABLE does
+    outputMarkAbsent(id, true);
+    routeEveryInput(id, false);
+}
+
+FLASHMEM bool outputAddById(uint8_t id) {
+    if (!outputIdBuilt(id) || outputExists(id)) return false;
+    outputMarkAbsent(id, false);
+    routeEveryInput(id, true);
+    // On, through the same path as OUTPUT <id> ENABLE
+    outputSetEnabledById(id, true);
+    return true;
+}
+
+// Transport text for an output, e.g. "CAN1", "USB", "USB+SERIAL1", "SD",
+// "SERIAL2", or "NONE" when the setting it comes from has none.
+static const char* const TRANSPORT_TOKENS[NUM_TRANSPORTS] = {
+    "NONE", "USB", "SERIAL1", "SERIAL2", "SERIAL3", "SERIAL4",
+    "SERIAL5", "SERIAL6", "SERIAL7", "SERIAL8", "ESP32_BT"};
+
+static const char* transportToken(uint8_t t) {
+    return t < NUM_TRANSPORTS ? TRANSPORT_TOKENS[t] : "NONE";
+}
+
+FLASHMEM size_t outputTransportText(uint8_t id, char* buf, size_t n) {
+    if (n == 0) return 0;
+    buf[0] = '\0';
+    switch (outputKindOf(id)) {
+    case OTK_CAN: {
+        const uint8_t bus = systemConfig.buses.output_can_bus;
+        if (bus == 0xFF) snprintf(buf, n, "NONE");
+        else             snprintf(buf, n, "CAN%u", (unsigned)(bus + 1));
+        break;
     }
+    case OTK_STREAM: {
+        const uint8_t p = systemConfig.router.data_primary;
+        const uint8_t s = systemConfig.router.data_secondary;
+        if (s != TRANSPORT_NONE && s != p)
+            snprintf(buf, n, "%s+%s", transportToken(p), transportToken(s));
+        else
+            snprintf(buf, n, "%s", transportToken(p));
+        break;
+    }
+    case OTK_SD:
+        snprintf(buf, n, "SD");
+        break;
+    case OTK_SERIAL: {
+        const uint8_t port = systemConfig.buses.elm327_serial_port;
+        if (port == 0xFF || port == 0) snprintf(buf, n, "NONE");
+        else                           snprintf(buf, n, "SERIAL%u", (unsigned)port);
+        break;
+    }
+    }
+    return strlen(buf);
+}
+
+FLASHMEM void printOutputLabel(uint8_t id) {
+    char t[24];
+    outputTransportText(id, t, sizeof(t));
+    msg.control.print(outputFormatName(outputFormatOf(id)));
+    msg.control.print(F(" on "));
+    msg.control.print(t);
+}
+
+// One line of OUTPUT LIST, also the head of OUTPUT <id>
+static FLASHMEM void printOutputLine(uint8_t id) {
+    msg.control.print(id);
+    msg.control.print(F(": "));
+    printOutputLabel(id);
+    msg.control.print(F(" - "));
+    if (id == OUT_ID_OBD && canOutputPendingReboot()) {
+        msg.control.print(F("disabled (on after SAVE and reboot)"));
+    } else {
+        msg.control.print(outputIsEnabled(id) ? F("enabled") : F("disabled"));
+    }
+    if (outputTakesIntervalId(id)) {
+        msg.control.print(F(", interval "));
+        msg.control.print(outputIntervalOf(id));
+        msg.control.print(F(" ms"));
+    }
+#if INCLUDE_SD_LOGGING
+    if (id == OUT_ID_SDLOG) {
+        msg.control.print(F(", "));
+        msg.control.print(sdLogFormatName(systemConfig.sdLogFormat));
+    }
+#endif
+    msg.control.println();
+}
+
+FLASHMEM void listOutputTable() {
+    msg.control.println(F("=== Outputs ==="));
+    if (outputCount() == 0) msg.control.println(F("(none - OUTPUT ADD <format> <transport>)"));
+    for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
+        if (outputExists(id)) printOutputLine(id);
+    }
+    // Built-in outputs: always present, no id, no routes (ARCHITECTURE.md §14.3)
+    msg.control.println(F("Built-in (no routes):"));
+    msg.control.print(F("  Alarm - "));
+    msg.control.println(systemConfig.outputEnabled[OUTPUT_ALARM] ? F("enabled") : F("disabled"));
+#if INCLUDE_LCD || INCLUDE_OLED
+    msg.control.println(F("  Display - see DISPLAY STATUS"));
+#endif
+#if INCLUDE_FRAMED_TRANSPORT
+    msg.control.println(F("  App link (BLE)"));
+#if INCLUDE_ELM327
+    msg.control.println(F("  ELM327 over BLE - answers every input with a PID"));
+#endif
+#endif
+}
+
+FLASHMEM bool printOutputDetail(uint8_t id) {
+    if (!outputExists(id)) return false;
+    printOutputLine(id);
+    msg.control.print(F("  Routed inputs:"));
+    uint8_t n = 0;
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        if (inputs[i].pin == 0xFF || !(inputs[i].routeMask & (1u << id))) continue;
+        msg.control.print(' ');
+        msg.control.print(inputs[i].abbrName);
+        n++;
+    }
+    if (n == 0) msg.control.print(F(" none"));
+    msg.control.println();
+    return true;
 }

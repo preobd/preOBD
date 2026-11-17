@@ -27,44 +27,42 @@ void obdQuery_buildLookupTable() {
 
     for (uint8_t i = 0; i < MAX_INPUTS && pidLookupCount < MAX_PID_ENTRIES; i++) {
         // Only inputs that can answer on their PID: a J1979 PID carrying the
-        // wrong quantity is neither advertised nor answered (#516). The
-        // input's CAN output toggle decides whether it is published to OBD-II
-        // tools at all, over CAN and ELM327 alike (#528).
-        if (inputs[i].flags.isEnabled && inputs[i].obd2pid != 0x00 &&
-            (inputs[i].outputMask & (1 << OUTPUT_CAN)) && obdInputAnswerable(inputs[i])) {
-            bool isDuplicate = false;
-            for (uint8_t j = 0; j < pidLookupCount; j++) {
-                if (pidLookupTable[j].pid == inputs[i].obd2pid) {
-                    isDuplicate = true;
-                    msg.debug.warn(TAG_CAN, "Duplicate PID 0x%02X - using first (%s)",
-                                   inputs[i].obd2pid, pidLookupTable[j].inputPtr->abbrName);
-                    break;
-                }
-            }
-            if (!isDuplicate) {
-                pidLookupTable[pidLookupCount].pid      = inputs[i].obd2pid;
-                pidLookupTable[pidLookupCount].inputPtr = &inputs[i];
-                pidLookupCount++;
-            }
+        // wrong quantity is neither advertised nor answered (#516). Which
+        // responder publishes which input is its route bit, checked per
+        // request (#612), so every answerable input is listed here, two
+        // inputs on one PID included: each responder answers with the first
+        // one routed to it.
+        if (inputs[i].flags.isEnabled && inputs[i].obd2pid != 0x00 && obdInputAnswerable(inputs[i])) {
+            pidLookupTable[pidLookupCount].pid      = inputs[i].obd2pid;
+            pidLookupTable[pidLookupCount].inputPtr = &inputs[i];
+            pidLookupCount++;
         }
     }
 
     msg.debug.info(TAG_CAN, "OBD-II PID table: %d PIDs", pidLookupCount);
 }
 
-Input* obdQuery_findByPID(uint8_t pid) {
+// Is this entry published by the responder whose output id is routeId?
+// OBDQ_ANY_ROUTE (ELM327 over BLE, a built-in) takes every input.
+static bool routedTo(const PIDMapping& m, uint8_t routeId) {
+    return routeId == OBDQ_ANY_ROUTE || (m.inputPtr->routeMask & (1u << routeId));
+}
+
+Input* obdQuery_findByPID(uint8_t pid, uint8_t routeId) {
     for (uint8_t i = 0; i < pidLookupCount; i++) {
-        if (pidLookupTable[i].pid == pid) return pidLookupTable[i].inputPtr;
+        if (pidLookupTable[i].pid == pid && routedTo(pidLookupTable[i], routeId))
+            return pidLookupTable[i].inputPtr;
     }
     return nullptr;
 }
 
-void obdQuery_getSupportedPIDBitmap(uint8_t* bitmap, uint8_t baseRange) {
+void obdQuery_getSupportedPIDBitmap(uint8_t* bitmap, uint8_t baseRange, uint8_t routeId) {
     memset(bitmap, 0, 4);
     uint16_t rangeStart = (uint16_t)baseRange + 1;
     uint16_t rangeEnd   = (uint16_t)baseRange + 0x20;
 
     for (uint8_t i = 0; i < pidLookupCount; i++) {
+        if (!routedTo(pidLookupTable[i], routeId)) continue;
         uint16_t pid = pidLookupTable[i].pid;
         if (pid >= rangeStart && pid <= rangeEnd) {
             uint8_t offset  = (uint8_t)(pid - rangeStart);  // 0–31
@@ -81,7 +79,7 @@ void obdQuery_getSupportedPIDBitmap(uint8_t* bitmap, uint8_t baseRange) {
     // even if the immediately next 32-PID window is empty.
     if (baseRange < 0xE0) {
         for (uint8_t i = 0; i < pidLookupCount; i++) {
-            if ((uint16_t)pidLookupTable[i].pid > rangeEnd) {
+            if (routedTo(pidLookupTable[i], routeId) && (uint16_t)pidLookupTable[i].pid > rangeEnd) {
                 bitmap[3] |= 0x01;
                 break;
             }
@@ -109,14 +107,14 @@ bool obdQuery_fixedAnswer(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outL
     return false;
 }
 
-bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen) {
+bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen, uint8_t routeId) {
     if (obdQuery_fixedAnswer(mode, pid, out, outLen)) return true;
     if (mode != 0x01) return false;
 
     // Discovery PIDs are 0x00, 0x20, 0x40 … 0xE0 (multiples of 32)
     if ((pid & 0x1F) == 0x00) {
         uint8_t bitmap[4];
-        obdQuery_getSupportedPIDBitmap(bitmap, pid);
+        obdQuery_getSupportedPIDBitmap(bitmap, pid, routeId);
         out[0] = 0x41; out[1] = pid;
         out[2] = bitmap[0]; out[3] = bitmap[1];
         out[4] = bitmap[2]; out[5] = bitmap[3];
@@ -124,7 +122,7 @@ bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen) 
         return true;
     }
 
-    Input* input = obdQuery_findByPID(pid);
+    Input* input = obdQuery_findByPID(pid, routeId);
     if (input == nullptr || isnan(input->value)) return false;
 
     uint8_t n = obdBuildAnswer(*input, out);   // 0x41, pid, payload (may exceed 7: multi-frame)

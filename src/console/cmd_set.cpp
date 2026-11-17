@@ -32,6 +32,7 @@
 #include "../buses/serial_manager.h"
 #include "../buses/pinctrl/pin_registry.h"
 #include "../outputs/table/output_base.h"
+#include "../outputs/table/output_table.h"
 #include "../outputs/formats/obd_query.h"
 #include "../outputs/display/display_manager.h"
 #include "../rules/rules_engine.h"    // rulesParseWarnToken (#428)
@@ -578,25 +579,14 @@ static int set_divider(uint8_t pin, int argc, const char* const* argv) {
     return 0;
 }
 
-// SET <pin> OUTPUT <target> ENABLE|DISABLE | ALL ENABLE|DISABLE | STATUS
-static int set_output(uint8_t pin, int argc, const char* const* argv) {
-    if (argc < 4) {
-        msg.control.println(F("ERROR: OUTPUT requires a target"));
-        msg.control.println(F("  Usage: SET <pin> OUTPUT <CAN|RealDash|Serial|SD_Log|ALL> <ENABLE|DISABLE>"));
-        msg.control.println(F("         SET <pin> OUTPUT STATUS"));
-        return 1;
-    }
-
-    if (streq_P(argv[3], PSTR("STATUS"))) {
-        printInputOutputInfo(pin);
-        return 0;
-    }
-
+// SET <pin> ROUTE ALL|<id> ENABLE|DISABLE (#612): which outputs this input is
+// sent to, one route bit per output id (OUTPUT LIST). Replaces SET <pin> OUTPUT.
+static int set_route(uint8_t pin, int argc, const char* const* argv) {
     if (argc < 5) {
-        msg.control.println(F("ERROR: OUTPUT requires ENABLE or DISABLE"));
+        msg.control.println(F("ERROR: ROUTE requires an output and ENABLE or DISABLE"));
+        msg.control.println(F("  Usage: SET <pin> ROUTE <id|ALL> <ENABLE|DISABLE>   (ids: OUTPUT LIST)"));
         return 1;
     }
-
     bool enable;
     if (streq_P(argv[4], PSTR("ENABLE"))) {
         enable = true;
@@ -606,45 +596,35 @@ static int set_output(uint8_t pin, int argc, const char* const* argv) {
         msg.control.println(F("ERROR: Expected ENABLE or DISABLE"));
         return 1;
     }
+    Input* input = requireInput(pin);
+    if (!input) return 1;
 
     if (streq_P(argv[3], PSTR("ALL"))) {
-        Input* input = requireInput(pin);
-        if (!input) return 1;
-        input->outputMask = enable ? OUTPUT_MASK_ALL_DATA : 0x00;
-        obdQuery_buildLookupTable();   // the CAN bit decides what OBD-II answers
-        printInputFlag(argv[1], F("all data outputs"), enable);
+        input->routeMask = enable ? ROUTE_MASK_ALL : 0x00;
+        printInputFlag(argv[1], F("routes to every output"), enable);
         return 0;
     }
 
-    uint8_t outputId;
-    if (streq_P(argv[3], PSTR("CAN"))) {
-        outputId = OUTPUT_CAN;
-    } else if (streq_P(argv[3], PSTR("REALDASH"))) {
-        outputId = OUTPUT_REALDASH;
-    } else if (streq_P(argv[3], PSTR("SERIAL"))) {
-        outputId = OUTPUT_SERIAL;
-    } else if (streq_P(argv[3], PSTR("SD_LOG")) || streq_P(argv[3], PSTR("SD"))) {
-        outputId = OUTPUT_SD;
-    } else {
-        msg.control.print(F("ERROR: Unknown output '"));
-        msg.control.print(argv[3]);
+    const char* tok = argv[3];
+    const bool digit = isdigit((unsigned char)tok[0]) && tok[1] == '\0';
+    const uint8_t id = digit ? (uint8_t)(tok[0] - '0') : OUT_ID_NONE;
+    if (id == OUT_ID_NONE || !outputExists(id)) {
+        msg.control.print(F("ERROR: No output '"));
+        msg.control.print(tok);
         msg.control.println(F("'"));
-        msg.control.println(F("  Valid outputs: CAN, RealDash, Serial, SD_Log, ALL"));
+        msg.control.println(F("  OUTPUT LIST shows the outputs and their ids"));
         return 1;
     }
-
-    if (setInputOutputMask(pin, outputId, enable)) {
-        if (outputId == OUTPUT_CAN) obdQuery_buildLookupTable();
-        msg.control.print(F("Input "));
-        msg.control.print(argv[1]);
-        msg.control.print(F(" output "));
-        msg.control.print(argv[3]);
-        msg.control.println(enable ? F(" enabled") : F(" disabled"));
-        printSaveReminder();
-        return 0;
-    }
-    msg.control.println(F("ERROR: Input not configured"));
-    return 1;
+    setInputRoute(pin, id, enable);
+    msg.control.print(F("Input "));
+    msg.control.print(argv[1]);
+    msg.control.print(enable ? F(" routed to output ") : F(" no longer routed to output "));
+    msg.control.print(id);
+    msg.control.print(F(" ("));
+    printOutputLabel(id);
+    msg.control.println(F(")"));
+    printSaveReminder();
+    return 0;
 }
 
 // SET <pin> CAL PRESET — clear custom calibration, restore preset.
@@ -1387,7 +1367,7 @@ static const char PSTR_SET_DISPLAY[]         PROGMEM = "DISPLAY";
 static const char PSTR_SET_UNITS[]           PROGMEM = "UNITS";
 static const char PSTR_SET_ALARM[]           PROGMEM = "ALARM";
 static const char PSTR_SET_DIVIDER[]         PROGMEM = "DIVIDER";
-static const char PSTR_SET_OUTPUT[]          PROGMEM = "OUTPUT";
+static const char PSTR_SET_ROUTE[]           PROGMEM = "ROUTE";
 static const char PSTR_SET_CAL[]             PROGMEM = "CAL";
 static const char PSTR_SET_OBD_PID[]         PROGMEM = "OBD_PID";
 static const char PSTR_SET_OBD_LENGTH[]      PROGMEM = "OBD_LENGTH";
@@ -1420,10 +1400,9 @@ static const char PSTR_HELP_SET_ALARM[] PROGMEM =
     "  (INFO/WARNING-severity alarms: RULE ADD <pin> ABOVE|BELOW ... ; status: RULE LIST)";
 static const char PSTR_HELP_SET_DIVIDER[] PROGMEM =
     "  SET <pin> DIVIDER <ratio>     Set voltage divider ratio (0-1)";
-static const char PSTR_HELP_SET_OUTPUT[] PROGMEM =
-    "  SET <pin> OUTPUT STATUS       Show this input's output mask\n"
-    "  SET <pin> OUTPUT <tgt> ENABLE|DISABLE  tgt = CAN, RealDash, Serial, SD_Log\n"
-    "  SET <pin> OUTPUT ALL ENABLE|DISABLE";
+static const char PSTR_HELP_SET_ROUTE[] PROGMEM =
+    "  SET <pin> ROUTE <id> ENABLE|DISABLE  send this input to output <id> or not (OUTPUT LIST)\n"
+    "  SET <pin> ROUTE ALL ENABLE|DISABLE";
 // SET <pin> CAL — the help block lists every profile so HELP SET stays a
 // single source of truth. PROGMEM-resident multi-line string built from the
 // per-profile help fields would require runtime concat; since the profile
@@ -1451,7 +1430,7 @@ static const SetField SET_FIELDS[] PROGMEM = {
     { PSTR_SET_UNITS,           set_units,           PSTR_HELP_SET_UNITS           },
     { PSTR_SET_ALARM,           set_alarm,           PSTR_HELP_SET_ALARM           },
     { PSTR_SET_DIVIDER,         set_divider,         PSTR_HELP_SET_DIVIDER         },
-    { PSTR_SET_OUTPUT,          set_output,          PSTR_HELP_SET_OUTPUT          },
+    { PSTR_SET_ROUTE,           set_route,           PSTR_HELP_SET_ROUTE           },
     { PSTR_SET_CAL,             set_cal,             PSTR_HELP_SET_CAL             },
     { PSTR_SET_OBD_PID,         set_obd_pid,         PSTR_HELP_SET_OBD_PID         },
     { PSTR_SET_OBD_LENGTH,      set_obd_length,      PSTR_HELP_SET_OBD_LENGTH      },
@@ -1709,7 +1688,7 @@ int cmd_set(int argc, const char* const* argv) {
         }
 
         // Slot + sensor + the defaults every new input gets (outputs, display):
-        // allocateInputSlot() alone left outputMask 0, so a SET CAN input
+        // allocateInputSlot() alone left routeMask 0, so a SET CAN input
         // reached no output and never displayed (#501)
         Input* input = createCanImportInput(virtualPin);
         if (!input) {

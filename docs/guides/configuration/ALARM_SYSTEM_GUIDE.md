@@ -196,7 +196,7 @@ ALARM SCOPE <BUZZER|ALL>      # CONFIG: silence just the buzzer, or the LED blin
 
 `ALARM DURATION` and `ALARM SCOPE` need `SAVE`.
 
-`OUTPUT Alarm DISABLE` turns off the buzzer and LED alarm output entirely (Rules
+`ALARM DISABLE` turns off the buzzer and LED alarm output entirely (Rules
 still evaluate and Bluetooth clients still see them).
 
 ---
@@ -248,7 +248,7 @@ In CONFIG mode the buzzer stays silent, so bench testing can't set it off.
 - Are the limits in base units? `SET A1 ALARM MIN 10` on oil pressure means 10 **bar**.
 - Are you in RUN mode? The buzzer is silent in CONFIG mode.
 - Is the reading valid? A sensor showing `ERR` never trips a Rule.
-- Is the alarm output on? `OUTPUT STATUS` should show `Alarm` enabled.
+- Is the alarm output on? `OUTPUT LIST` should show `Alarm` enabled.
 - Has it been acknowledged? `ALARM STATUS`.
 
 **An alarm sounds at start-up**

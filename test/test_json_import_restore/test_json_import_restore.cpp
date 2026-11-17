@@ -20,6 +20,7 @@
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/config/input_store.cpp"
+#include "../../src/outputs/table/output_table.cpp"   // routeMaskFromLegacy, the outputs view (#612)
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"
@@ -176,7 +177,7 @@ static void test_outputs_follow_a_committed_system_block_even_if_inputs_fail(voi
     configure(4);
     TEST_ASSERT_FALSE(loadConfigFromJSON(
         "{\"schemaVersion\":1,\"mode\":\"runtime\","
-        "\"system\":{\"outputs\":{\"serial\":{\"enabled\":true}}},\"inputs\":"
+        "\"system\":{\"outputs\":[{\"id\":2,\"format\":\"CSV\",\"transport\":\"USB\",\"enabled\":true}]},\"inputs\":"
         "[{\"idx\":0,\"pin\":6,\"app\":\"NO_SUCH_APP\",\"sensor\":\"NO_SUCH_SENSOR\"}]}"));
     TEST_ASSERT_EQUAL_UINT8(1, systemConfig.outputEnabled[OUTPUT_SERIAL]);
     TEST_ASSERT_EQUAL_INT(1, g_syncOutputsCalls);
@@ -327,7 +328,7 @@ static void test_imported_output_enables_reach_the_live_outputs(void) {
     systemConfig.outputEnabled[OUTPUT_SERIAL] = 0;
     TEST_ASSERT_TRUE(loadConfigFromJSON(
         "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"outputs\":"
-        "{\"serial\":{\"enabled\":true}}}}"));
+        "[{\"id\":2,\"format\":\"CSV\",\"transport\":\"USB\",\"enabled\":true}]}}"));
     TEST_ASSERT_EQUAL_UINT8(1, systemConfig.outputEnabled[OUTPUT_SERIAL]);
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, g_syncOutputsCalls, "imported enable never reached the live outputs");
 }

@@ -61,7 +61,6 @@ LIST APPLICATIONS        # Show available application presets
 LIST SENSORS             # Show sensor categories
 LIST SENSORS <category>  # Show sensors in category (e.g., THERMISTOR)
 LIST SENSORS TEMPERATURE # Show all temperature sensors
-LIST OUTPUTS             # Show available output modules
 LIST TRANSPORTS          # Show available transports
 ```
 
@@ -71,7 +70,7 @@ LIST TRANSPORTS          # Show available transports
 LIST APPLICATIONS JSON         # Export application catalog as JSON
 LIST SENSORS JSON              # Export full sensor catalog as JSON
 LIST SENSORS <category> JSON   # Export sensors in one category as JSON
-LIST OUTPUTS JSON              # Export output module list as JSON
+OUTPUT LIST JSON               # Export the outputs you added as JSON
 LIST UNITS JSON                # Export units registry as JSON
 LIST CATEGORIES JSON           # Export sensor categories as JSON
 LIST PIDS JSON                 # Export standard OBD-II PID table as JSON
@@ -116,13 +115,14 @@ INFO A0 ALARM        # Show alarm status
 INFO A0 CALIBRATION  # Show calibration details
 ```
 
-### Output Module Commands
-Pattern: `OUTPUT <name> <action> [parameters]`
+### Output Commands
+Pattern: `OUTPUT <id> <action> [parameters]` — see [Output Configuration](#output-configuration)
 
 ```
-OUTPUT STATUS                # Show all outputs
-OUTPUT CAN ENABLE            # Enable CAN output
-OUTPUT SD_Log INTERVAL 1000  # One SD log row per second
+OUTPUT LIST                # The outputs, their ids, and the built-in outputs
+OUTPUT 0 ENABLE            # Turn on output 0 (OBD on the CAN output bus)
+OUTPUT 3 INTERVAL 1000     # One SD log row per second (output 3: CSV on SD)
+SET A0 ROUTE 2 DISABLE     # Don't send A0 to output 2
 ```
 
 ### System Commands
@@ -176,16 +176,14 @@ SYSTEM UNITS TEMP F              # New temperature inputs start in Fahrenheit
 SYSTEM UNITS PRESSURE PSI        # New pressure inputs start in PSI
 ```
 
-### Output Module Settings (use OUTPUT command)
-Control output modules independently:
-- Enable/disable individual outputs
-- Output-specific intervals
-- Output-specific parameters
+### Output Settings (use the OUTPUT command)
+Each output has its own on/off, interval and options — see
+[Output Configuration](#output-configuration).
 
 **Example:**
 ```
-OUTPUT CAN ENABLE
-OUTPUT RealDash INTERVAL 50      # RealDash at 50ms (faster)
+OUTPUT 0 ENABLE
+OUTPUT 1 INTERVAL 50      # output 1, RealDash, at 50 ms (faster)
 ```
 
 **Note:** `SYSTEM UNITS` is what an input starts in when its application is
@@ -470,14 +468,16 @@ sensor that stays tripped on a long drive, `CLEAR` makes it one press; for one
 that flaps in and out, use a longer timed duration or `SET <pin> ALARM DISABLE`. `ALARM SILENCE` and `ALARM STATUS` work
 in RUN mode; the two policy verbs are CONFIG-only and need `SAVE`.
 
-### Output Module Control (Global Alarm Hardware)
+### Alarm Output On/Off (Global Alarm Hardware)
 
 ```
-OUTPUT Alarm ENABLE              # Enable alarm hardware (buzzer, LED)
-OUTPUT Alarm DISABLE             # Disable alarm hardware (silent mode)
+ALARM ENABLE              # Enable alarm hardware (buzzer, LED)
+ALARM DISABLE             # Disable alarm hardware (silent mode)
 ```
 
-The alarm output checks on every loop pass, so it takes no interval.
+The alarm is a built-in output: it has no id, takes no routes and no
+interval (it checks on every loop pass). Both verbs are CONFIG-only and need
+`SAVE`.
 
 ### Practical Examples
 
@@ -512,7 +512,7 @@ SET A3 ALARM DISABLE                 # Remove the input's alarm Rule
 
 **Global Alarm Hardware Control:**
 ```
-OUTPUT Alarm DISABLE                 # Silent mode (no buzzer)
+ALARM DISABLE                 # Silent mode (no buzzer)
 # Alarms still check and log, but buzzer won't sound
 ```
 
@@ -534,79 +534,109 @@ See **[Alarm System Guide](../guides/configuration/ALARM_SYSTEM_GUIDE.md)** for 
 
 ## Output Configuration
 
-Control output modules at runtime.
+An **output** is a *format* on a *transport*: OBD-II answers on a CAN bus,
+CSV lines on USB, CSV rows in a file on the SD card. Each has an **id**, and
+each input is **routed** to the outputs it should go to.
 
-### Output Module Availability
+The **built-in outputs** — the alarm (buzzer and LED), the display, the app
+link over BLE, and ELM327 over BLE — are always there, take no routes and
+aren't added or deleted. ELM327 over BLE answers every input that has a PID.
 
-Output modules must be compiled into the firmware to be available. Which ones are included depends on the board (see `boards/<board>/board.h`).
+### Listing and changing outputs
 
-**Check which outputs are available**:
 ```
-LIST OUTPUTS           # List available output modules
-OUTPUT STATUS          # Show current configuration (enabled/disabled + intervals)
+OUTPUT LIST [JSON]                    # The outputs, their ids, and the built-ins (RUN ok)
+OUTPUT <id>                           # One output and the inputs routed to it (RUN ok)
+OUTPUT ADD <format> <transport> [INTERVAL <ms>] [LONG|WIDE]
+OUTPUT <id> ENABLE | DISABLE
+OUTPUT <id> INTERVAL <ms>             # RealDash 50-60000 ms, CSV 100-60000 ms (CSV on SD 1-60000 ms)
+OUTPUT <id> CSV LONG | WIDE           # The CSV output on SD
+OUTPUT DEL <id>                       # Remove it, and every route to it
 ```
 
-**Runtime control** (for compiled-in outputs):
+Formats: `CSV`, `REALDASH`, `OBD`, `ELM327`. Only the push formats (CSV,
+REALDASH) have an interval; OBD and ELM327 answer requests as they arrive, so
+`INTERVAL` on them is refused, as is a value outside the output's range. The
+CSV and RealDash floors are what a 115200-baud link (a UART or the Bluetooth
+bridge) carries with about 20 inputs. `OUTPUT ADD` turns the new output on
+and routes every input to it; `SAVE` keeps it.
+
+### Ids and transports in this firmware
+
+This firmware has one output of each kind, so each has a fixed id, and each
+uses the transport that kind has always used. `OUTPUT ADD` names the
+transport, and refuses another one with the command that changes it:
+
+| Id | Output | Transport | Set by |
+|----|--------|-----------|--------|
+| 0 | `OBD` — answers OBD-II scan tools and gauges | the CAN output bus (`CAN1`–`CAN3`) | `BUS CAN OUTPUT <bus> ENABLE` |
+| 1 | `REALDASH` — RealDash frames | the data stream (`USB`, `SERIAL<n>`) | `TRANSPORT DATA <transport>` |
+| 2 | `CSV` — CSV lines | the data stream | `TRANSPORT DATA <transport>` |
+| 3 | `CSV` on `SD` — a log file | the SD card | — |
+| 4 | `ELM327` — ELM327 emulator on a serial port | `SERIAL1`–`SERIAL8` | `OUTPUT ADD ELM327 SERIAL<n>` or `BUS SERIAL <n> ELM327 ENABLE` |
+
+RealDash and CSV on the stream share it, so they go to the same transport.
+An output that a board's build leaves out (for example SD logging on the
+Mega) isn't listed. See the [Build Configuration Guide](../guides/configuration/BUILD_CONFIGURATION_GUIDE.md)
+for builds with other outputs.
+
+### Routes
+
 ```
-OUTPUT <name> ENABLE             # Enable output module
-OUTPUT <name> DISABLE            # Disable output module
-OUTPUT <name> INTERVAL <ms>      # Set send interval: RealDash 50-60000 ms, Serial 100-60000 ms, SD_Log 1-60000 ms
+SET <pin> ROUTE <id> ENABLE|DISABLE   # Send this input to output <id>, or not
+SET <pin> ROUTE ALL ENABLE|DISABLE    # To every output, or none
+INFO <pin> ROUTE                      # This input's routes
 ```
 
-Only RealDash, Serial and SD_Log send on a timer. CAN and ELM327 answer
-requests as they arrive and Alarm checks every loop pass, so `INTERVAL` on
-those is refused, as is a value outside the output's range. The Serial and
-RealDash floors are what a 115200-baud link (a UART or the Bluetooth bridge)
-carries with about 20 inputs.
-
-**Note**: If an output is not listed by `LIST OUTPUTS`, it wasn't compiled into your build. See [Build Configuration Guide](../guides/configuration/BUILD_CONFIGURATION_GUIDE.md) to create a custom environment with the outputs you need.
-
-### Available Outputs
-
-| Name | Description |
-|------|-------------|
-| `CAN` | CAN bus output (OBDII PIDs) |
-| `RealDash` | RealDash frames on the data channel (USB or a serial/BLE module) |
-| `Serial` | CSV lines on the data channel |
-| `SD_Log` | SD card data logging |
-| `Alarm` | Alarm system (buzzer, LED) |
+A new input is routed to every output. Routing an input away from output 0
+stops OBD-II tools on CAN seeing it at all: it is neither answered nor listed
+as supported.
 
 ### Examples
 
 ```
-# Enable CAN output (the CAN bus itself must be up — see Bus Configuration)
+# OBD-II answers on CAN1 (the CAN bus itself must be up — see Bus Configuration)
 BUS CAN OUTPUT CAN1 ENABLE 500000
-OUTPUT CAN ENABLE
+OUTPUT 0 ENABLE
 
-# Enable RealDash at 50ms for smooth gauges
-OUTPUT RealDash ENABLE
-OUTPUT RealDash INTERVAL 50
+# RealDash at 50 ms for smooth gauges
+OUTPUT 1 ENABLE
+OUTPUT 1 INTERVAL 50
 
-# Disable SD logging
-OUTPUT SD_Log DISABLE
+# One SD row per reading, and keep coolant (A2) out of the log
+OUTPUT 3 CSV LONG
+SET A2 ROUTE 3 DISABLE
 
-# Check status
-OUTPUT STATUS
+# Check
+OUTPUT LIST
 ```
 
-### Output Status Display
+### Output List
 
 ```
-OUTPUT STATUS
+OUTPUT LIST
 ```
 Shows:
 ```
-=== Output Modules ===
-CAN: Enabled
-RealDash: Enabled, Interval: 50ms
-Serial: Disabled
-SD_Log: Enabled, Interval: 5000ms, Format: WIDE
-Alarm: Enabled
+=== Outputs ===
+0: OBD on CAN1 - enabled
+1: REALDASH on USB - enabled, interval 50 ms
+2: CSV on USB - disabled, interval 1000 ms
+3: CSV on SD - enabled, interval 5000 ms, WIDE
+4: ELM327 on NONE - disabled
+Built-in (no routes):
+  Alarm - enabled
+  Display - see DISPLAY STATUS
+  App link (BLE)
+  ELM327 over BLE - answers every input with a PID
 ```
+
+`NONE` means the setting the transport comes from has none yet (here, no
+ELM327 serial port).
 
 ### SD Logging Status
 
-`OUTPUT STATUS` says whether SD logging is *enabled*. `SYSTEM SD` says whether it is *working*:
+`OUTPUT LIST` says whether SD logging is *enabled*. `SYSTEM SD` says whether it is *working*:
 
 ```
 SYSTEM SD                    # One line of text
@@ -625,7 +655,7 @@ SYSTEM SD JSON
   - `none`: this board or build has no SD logging (for example a Teensy 4.0 without an SD module wired).
   - `nocard`: no card was found at boot. Cards are only detected at boot, so insert one and restart.
   - `removed`: the card was pulled while logging. Logging has stopped until a restart. Only Teensy boards can detect a pulled card; elsewhere it shows as `error`.
-  - `off`: SD logging is disabled (`OUTPUT SD_Log ENABLE` turns it on).
+  - `off`: SD logging is disabled (`OUTPUT 3 ENABLE` turns it on).
   - `error`: logging stopped after write errors (usually a full or failing card), or no log file could be created.
   - `idle`: enabled but not writing, because preOBD is in CONFIG mode or no input is routed to SD.
   - `logging`: writing rows.
@@ -843,7 +873,7 @@ BUS CAN JSON
 - In `SCAN SUPPORTED JSON`, `canId` is each answering ECU's response ID (`2024` = `0x7E8`, the engine) and `pids` its supported PIDs in decimal, without the bitmap PIDs `0x00`/`0x20`/…. It is `[]` after a `SCAN CAN`.
 - `pid` is the OBD-II PID for an OBD response (`obd: true`, CAN ID `0x7E8`-`0x7EF`), otherwise the frame's first byte. `data` is the last payload in hex. Look up names and units in `LIST PIDS JSON`.
 - Each import's `dataOffset` is where its value starts in the reply, counted from the first byte after the PID. It tells apart the sensors of a multi-sensor PID: match it against the PID's `dataOffset` (sensor 1) and its `sensors` list in `LIST PIDS JSON`, e.g. `{"sensor":2,"name":"EGT Bank 1 Sensor 2","abbr":"EGT12","dataOffset":3,"supportBit":1}`. `supportBit` (on a multi-sensor PID's row and each of its sensors) is the value's bit in the reply's first byte, which says whether the ECU has that sensor.
-- Buses are indexes (`0` = CAN1), and `255` means none, as in `SYSTEM DUMP JSON`. `mode` is `OFF`, `NORMAL` or `LISTEN`. `output.enabled` is the bus setting and `output.module` is `OUTPUT CAN ENABLE`.
+- Buses are indexes (`0` = CAN1), and `255` means none, as in `SYSTEM DUMP JSON`. `mode` is `OFF`, `NORMAL` or `LISTEN`. `output.enabled` is the bus setting and `output.module` is `OUTPUT 0 ENABLE`.
 - `input.bus`, `mode` and `baudrate` are the *configured* values. `BUS CAN INPUT` changes take effect after `SAVE` and a reboot, and until then `rebootPending` is `true` and `running` describes the old settings.
 - `lastFrameAgeMs` and each import's `ageMs` are `null` until a frame has been received. `poll.backoff` is `true` while nothing answers the poller (it has slowed to one request per second). `poll.answers` counts an ECU's "PID not supported" reply as an answer, so `answers` matching `requests` doesn't mean every imported PID has a value: check each import's `ageMs`.
 - These are not available on the Arduino Mega (JSON is compiled out there).
@@ -1220,7 +1250,7 @@ SYSTEM UNITS SPEED <KPH|MPH>               # Speed units
 SYSTEM SEA_LEVEL <hPa>                     # Sea level pressure for altitude calculations
 ```
 
-**Timing:** sensors are read at the rate their sensor type sets (50 ms for most), and rules are checked every 50 ms; shape an alarm's timing with the rule's debounce and warmup. The old interval setting was removed: it never changed either rate (#601). Per-output intervals are configured with `OUTPUT <name> INTERVAL`.
+**Timing:** sensors are read at the rate their sensor type sets (50 ms for most), and rules are checked every 50 ms; shape an alarm's timing with the rule's debounce and warmup. The old interval setting was removed: it never changed either rate (#601). Per-output intervals are configured with `OUTPUT <id> INTERVAL`.
 
 ### Examples
 
@@ -1409,7 +1439,7 @@ ERROR: Failed to save configuration
 ### What Gets Saved
 
 - All input configurations (pins, applications, sensors, names, alarms, calibrations)
-- Output module enable/disable states and intervals
+- The outputs (on/off, intervals) and each input's routes
 - Display type and unit preferences
 - System parameters (sea level pressure, intervals)
 
@@ -1442,7 +1472,7 @@ HELP QUICK                       # Show compact command reference
 - `HELP LIST` - Discovery commands (list inputs, applications, sensors)
 - `HELP SET` - Input configuration (application, sensor, names, units, alarms, calibration)
 - `HELP CONTROL` - Input control (enable, disable, clear, info)
-- `HELP OUTPUT` - Output module configuration (CAN, RealDash, Serial, SD logging)
+- `HELP OUTPUT` - Outputs, their ids, and routes
 - `HELP BUS` - I2C / SPI / CAN / serial bus selection
 - `HELP DISPLAY` - Display settings (LCD)
 - `HELP TRANSPORT` - Message routing (control, data, debug messages)
@@ -1566,7 +1596,7 @@ SET A6 PRIMARY_BATTERY VOLTAGE_DIVIDER
 RULE ADD A2 OUTSIDE 60 120
 RULE ADD A3 OUTSIDE 0.5 7.0
 BUS CAN OUTPUT CAN1 ENABLE 500000
-OUTPUT CAN ENABLE
+OUTPUT 0 ENABLE
 SAVE
 RUN
 ```
@@ -1575,8 +1605,8 @@ RUN
 
 ```
 CONFIG
-OUTPUT SD_Log INTERVAL 1000      # Log a row every second
-OUTPUT RealDash INTERVAL 50      # Speed up RealDash (fastest allowed)
+OUTPUT 3 INTERVAL 1000      # Log a row every second
+OUTPUT 1 INTERVAL 50      # Speed up RealDash (fastest allowed)
 SAVE
 RUN
 ```

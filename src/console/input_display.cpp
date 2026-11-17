@@ -9,6 +9,8 @@
 #include <string.h>
 
 #include "input_display.h"
+#include "../outputs/table/output_base.h"   // printOutputLabel (#612)
+#include "../outputs/table/output_table.h"
 #include "../inputs/input_manager.h"
 #include "../buses/pinctrl/board_pins.h"
 #include "../buses/pinctrl/pin_label.h"
@@ -85,9 +87,10 @@ FLASHMEM void printInputInfo(uint8_t pin) {
 
     msg.control.println(F("  Alarms: managed by Rules — see RULE LIST"));
 
-    msg.control.print(F("  Output Mask: 0x"));
-    if (input->outputMask < 0x10) msg.control.print('0');
-    msg.control.println(input->outputMask, HEX);
+    msg.control.print(F("  Routes: 0x"));
+    const uint8_t routes = (uint8_t)(input->routeMask & outputsExistingMask());
+    if (routes < 0x10) msg.control.print('0');
+    msg.control.println(routes, HEX);
 
     msg.control.print(F("  Current Value: "));
     if (isnan(input->value)) {
@@ -101,11 +104,11 @@ FLASHMEM void printInputInfo(uint8_t pin) {
     msg.control.println();
     msg.control.println(F("To see alarm config:  INFO <pin> ALARM"));
     msg.control.println(F("To see calibration:   INFO <pin> CALIBRATION"));
-    msg.control.println(F("To see output routing: INFO <pin> OUTPUT"));
+    msg.control.println(F("To see its routes:     INFO <pin> ROUTE"));
     msg.control.println();
 }
 
-FLASHMEM void printInputOutputInfo(uint8_t pin) {
+FLASHMEM void printInputRouteInfo(uint8_t pin) {
     Input* input = getInputByPin(pin);
     if (!input) {
         msg.control.print(F("ERROR: Input for pin "));
@@ -115,21 +118,22 @@ FLASHMEM void printInputOutputInfo(uint8_t pin) {
     }
 
     msg.control.println();
-    msg.control.print(F("===== Output Routing ["));
+    msg.control.print(F("===== Routes ["));
     printPin(pin);
-    msg.control.print(F("] ====="));
-    msg.control.println();
-
-    msg.control.print(F("  CAN:      "));
-    msg.control.print((input->outputMask & (1 << OUTPUT_CAN)) ? F("ENABLED") : F("DISABLED"));
-    msg.control.println(F("  (answered to OBD-II tools, CAN and ELM327)"));
-    msg.control.print(F("  RealDash: "));
-    msg.control.println((input->outputMask & (1 << OUTPUT_REALDASH)) ? F("ENABLED") : F("DISABLED"));
-    msg.control.print(F("  Serial:   "));
-    msg.control.println((input->outputMask & (1 << OUTPUT_SERIAL)) ? F("ENABLED") : F("DISABLED"));
-    msg.control.print(F("  SD_Log:   "));
-    msg.control.println((input->outputMask & (1 << OUTPUT_SD)) ? F("ENABLED") : F("DISABLED"));
-
+    msg.control.println(F("] ====="));
+    uint8_t n = 0;
+    for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
+        if (!outputExists(id)) continue;
+        msg.control.print(F("  "));
+        msg.control.print(id);
+        msg.control.print(F(": "));
+        printOutputLabel(id);
+        msg.control.print(F(" - "));
+        msg.control.println((input->routeMask & (1u << id)) ? F("routed") : F("not routed"));
+        n++;
+    }
+    if (n == 0) msg.control.println(F("  (no outputs - OUTPUT ADD <format> <transport>)"));
+    msg.control.println(F("  Built-in outputs (display, app link, alarm, ELM327 over BLE) take no routes"));
     msg.control.println();
 }
 

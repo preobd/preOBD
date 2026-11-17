@@ -20,6 +20,10 @@
 #define INCLUDE_FRAMED_TRANSPORT 1
 #define INCLUDE_RELAY_OUTPUT     1
 #define INCLUDE_ELM327           1
+// RealDash and serial CSV: so the outputs table (output_table.cpp, #612) has
+// more than ELM327 to test with. Nothing else tests either flag.
+#define INCLUDE_REALDASH         1
+#define INCLUDE_SERIAL_OUTPUT    1
 #define INCLUDE_SELFTEST         1
 #define SUPPORTS_JSON_CONFIG    1  // host round-trip of control_json leaf converters
 

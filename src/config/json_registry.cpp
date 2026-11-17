@@ -28,6 +28,9 @@
 #include "../sensors/sensor_library/sensor_helpers.h"
 #include "../sensors/can_sensor_library/standard_pids.h"
 #include "../outputs/table/output_base.h"
+#include "../outputs/table/output_table.h"
+#include "../outputs/formats/output_format.h"
+#include "json_config.h"   // outputToJson
 #include "system_config.h"
 #include "../version.h"
 
@@ -258,15 +261,26 @@ FLASHMEM void writeApplicationsJson(Print& out) {
 FLASHMEM void writeOutputsJson(Print& out) {
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
-    for (int i = 0; i < NUM_OUTPUTS; i++) {
-        if (outputModules[i].name == nullptr) continue;  // placeholder/disabled slot
+    for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
+        if (outputExists(id)) outputToJson(arr.add<JsonObject>(), id);
+    }
+    WatchdogKickingPrint wdOut(out);
+    serializeJson(doc, wdOut);
+}
+
+// The formats this build can add, and the transport kind each uses in this
+// firmware (SYSTEM DUMP REGISTRY JSON "formats"). A deleted output's format
+// is still listed: OUTPUT ADD brings it back.
+FLASHMEM void writeOutputFormatsJson(Print& out) {
+    JsonDocument doc;
+    JsonArray arr = doc.to<JsonArray>();
+    for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
+        if (!outputIdBuilt(id)) continue;
         JsonObject obj = arr.add<JsonObject>();
-        obj["name"]       = outputModules[i].name;
-        obj["enabled"]    = outputModules[i].enabled;
-        // A CAN enable from an import/LOAD waiting for the reboot (#610)
-        if (i == OUTPUT_CAN && canOutputPendingReboot()) obj["pendingReboot"] = true;
-        // Only paced outputs have an interval (#608)
-        if (outputTakesInterval(i)) obj["intervalMs"] = systemConfig.outputInterval[i];
+        obj["format"] = outputFormatName(outputFormatOf(id));
+        const OutputTransportKind k = outputKindOf(id);
+        obj["transport"] = k == OTK_CAN ? "CAN" : k == OTK_SD ? "SD" : k == OTK_SERIAL ? "SERIAL" : "STREAM";
+        obj["id"] = id;
     }
     WatchdogKickingPrint wdOut(out);
     serializeJson(doc, wdOut);
@@ -357,7 +371,7 @@ FLASHMEM void dumpRegistryToJson(Print& out) {
     out.print(F(",\"categories\":"));       writeCategoriesJson(out);
     out.print(F(",\"sensors\":"));          writeSensorsJson(out);
     out.print(F(",\"applications\":"));     writeApplicationsJson(out);
-    out.print(F(",\"outputs\":"));          writeOutputsJson(out);
+    out.print(F(",\"formats\":"));          writeOutputFormatsJson(out);
     out.print(F(",\"standardPids\":"));     writePidsJson(out);
     out.println('}');
 }

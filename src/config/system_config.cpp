@@ -3,6 +3,7 @@
  */
 
 #include "system_config.h"
+#include "../outputs/table/output_table.h"   // outputsReconcileAbsent (#612)
 #include "../core/watchdog.h"
 
 #ifndef FLASHMEM
@@ -265,10 +266,12 @@ void resetSystemConfig(uint8_t keep) {
     systemConfig.router.bt_pin = 0;  // Not set
 
     // Reserved router space
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 5; i++) {
         systemConfig.router.reserved_router[i] = 0;
     }
     }  // RESET_KEEP_LINK (router)
+    // Outputs are configuration, not the link: a reset brings every one back
+    systemConfig.router.outputsAbsent = 0;
 
     // NB (v13): the control-engine Rule/Action tables are no longer part of
     // SystemConfig — they are reset via rulesResetTables() and persisted by the
@@ -666,6 +669,8 @@ bool loadSystemConfig() {
 
     // Valid config - copy to global
     memcpy(&systemConfig, &temp, sizeof(SystemConfig));
+    // An output deleted here that an older build switched back on (#612)
+    outputsReconcileAbsent();
     // An EEPROM written before #590 could hold any 0x03-0x77 LCD address.
     // Correct it here, once, so the driver, DISPLAY STATUS, DIAG HW and JSON
     // export all see the address that is actually used.

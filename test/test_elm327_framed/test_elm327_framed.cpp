@@ -21,7 +21,7 @@
 
 // ---- canned OBD layer (real obd_query.cpp deliberately not compiled) ----
 #include "../../src/outputs/formats/obd_query.h"
-bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen) {
+bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen, uint8_t /*routeId*/) {
     if (mode == 0x03) {  // no stored codes (#528)
         out[0] = 0x43; out[1] = 0x00; *outLen = 2; return true;
     }

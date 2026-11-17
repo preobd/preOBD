@@ -31,7 +31,10 @@
 
 class ELM327Output {
 public:
-    ELM327Output();
+    // routeId: whose route bit decides what it answers (obd_query.h, #612):
+    // the ELM327 output's id for the serial port, OBDQ_ANY_ROUTE for the
+    // built-in over BLE.
+    explicit ELM327Output(uint8_t routeId);
 
     // Assign serial port. Called by BUS SERIAL n ELM327 ENABLE command
     // and by initELM327() on boot. Pass nullptr to detach.
@@ -49,6 +52,7 @@ public:
     bool isActive() const { return _active; }
 
 private:
+    uint8_t  _routeId;
     Stream*  _serial;
     bool     _active;
     bool     _connected;    // true after first AT command received

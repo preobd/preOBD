@@ -19,10 +19,11 @@
 #include "../../inputs/input.h"
 #include "../../inputs/input_manager.h"
 #include "../../sensors/generated/registry_enums.h"  // APP_PRIMARY_BATTERY, APP_AUXILIARY_BATTERY
+#include "../table/output_table.h"   // OUT_ID_* route bits (#612)
 
 // ===== SINGLETON =====
 
-ELM327Output elm327Output;
+ELM327Output elm327Output(OUT_ID_ELM327);   // the ELM327 output on a serial port (#612)
 
 // ===== OUTPUT MODULE FREE FUNCTIONS (called by output_manager) =====
 
@@ -62,8 +63,8 @@ void stopELM327() {
 
 // ===== ELM327Output IMPLEMENTATION =====
 
-ELM327Output::ELM327Output()
-    : _serial(nullptr), _active(false), _connected(false), _rxLen(0)
+ELM327Output::ELM327Output(uint8_t routeId)
+    : _routeId(routeId), _serial(nullptr), _active(false), _connected(false), _rxLen(0)
 {
     _resetState();
 }
@@ -321,7 +322,7 @@ void ELM327Output::_handleOBDQuery(const char* hex) {
     uint8_t responseBytes[OBD_ANSWER_MAX];
     uint8_t responseLen = 0;
 
-    if (!obdQuery_resolve(mode, pid, responseBytes, &responseLen)) {
+    if (!obdQuery_resolve(mode, pid, responseBytes, &responseLen, _routeId)) {
         _sendString("NO DATA\r\r>");
         return;
     }

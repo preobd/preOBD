@@ -373,7 +373,7 @@ static const char PSTR_HELP_CONTROL[] PROGMEM = "CONTROL";
 static const char PSTR_HELP_CONTROL_DESC[] PROGMEM = "Input commands - CLEAR, INFO (use SET <pin> INPUT for ENABLE/DISABLE)";
 
 static const char PSTR_HELP_OUTPUT[] PROGMEM = "OUTPUT";
-static const char PSTR_HELP_OUTPUT_DESC[] PROGMEM = "Output Modules - Configure CAN, RealDash, Serial, and SD logging";
+static const char PSTR_HELP_OUTPUT_DESC[] PROGMEM = "Outputs - A format on a transport: OBD, ELM327, CSV, RealDash";
 
 static const char PSTR_HELP_BUS[] PROGMEM = "BUS";
 static const char PSTR_HELP_BUS_DESC[] PROGMEM = "Bus Config - Configure I2C, SPI, and CAN buses";
@@ -550,7 +550,6 @@ void printHelpList() {
     msg.control.println(F("  LIST INPUTS         - Show all configured inputs"));
     msg.control.println(F("  LIST APPLICATIONS   - Show available Type presets"));
     msg.control.println(F("  LIST SENSORS        - Show available Sensor Types"));
-    msg.control.println(F("  LIST OUTPUTS        - Show available output modules"));
     msg.control.println(F("  LIST TRANSPORTS     - Show available transports"));
     msg.control.println();
 }
@@ -570,12 +569,14 @@ void printHelpControl() {
     msg.control.println(F("  INFO <pin>               - Show detailed pin info"));
     msg.control.println(F("  INFO <pin> ALARM         - Show alarm status and configuration"));
     msg.control.println(F("  INFO <pin> CALIBRATION   - Show calibration details"));
+    msg.control.println(F("  INFO <pin> ROUTE         - Show which outputs it is routed to"));
 #if INCLUDE_RULES_ENGINE
     msg.control.println();
     msg.control.println(F("  ALARM STATUS             - Severity, acknowledged alarms, silence policy"));
     msg.control.println(F("  ALARM SILENCE            - Acknowledge sounding alarm(s) (= user button)"));
     msg.control.println(F("  ALARM DURATION <s|CLEAR> - Re-arm after 5..630 s, or hold until it clears"));
     msg.control.println(F("  ALARM SCOPE <BUZZER|ALL> - ALL: acknowledged alarm also stops LED blink"));
+    msg.control.println(F("  ALARM ENABLE|DISABLE     - The alarm output (buzzer, LED) on or off"));
 #endif
     msg.control.println();
 }
@@ -583,16 +584,22 @@ void printHelpControl() {
 void printHelpOutput() {
     msg.control.println();
     msg.control.println(F("=== OUTPUT Commands ==="));
-    msg.control.println(F("Configure CAN, RealDash, Serial, and SD logging"));
+    msg.control.println(F("An output is a format on a transport; inputs are routed to it"));
     msg.control.println();
-    msg.control.println(F("  OUTPUT STATUS  - Show current output states"));
-    msg.control.println(F("  OUTPUT <name> ENABLE  - Enable output (CAN, RealDash, Serial, SD_Log)"));
-    msg.control.println(F("  OUTPUT <name> DISABLE  - Disable output"));
+    msg.control.println(F("  OUTPUT LIST [JSON]            - The outputs, their ids and built-ins"));
+    msg.control.println(F("  OUTPUT <id>                   - One output, with the inputs routed to it"));
+    msg.control.println(F("  OUTPUT ADD <format> <transport> [INTERVAL <ms>]"));
+    msg.control.println(F("                                  formats: CSV, REALDASH, OBD, ELM327"));
+    msg.control.println(F("  OUTPUT <id> ENABLE|DISABLE"));
 #if INCLUDE_SD_LOGGING
-    msg.control.println(F("  OUTPUT <name> INTERVAL <ms>  - RealDash 50+, Serial 100+, SD_Log 1+ (max 60000)"));
+    msg.control.println(F("  OUTPUT <id> INTERVAL <ms>     - RealDash 50+, CSV 100+ (SD 1+), max 60000"));
+    msg.control.println(F("  OUTPUT <id> CSV LONG|WIDE     - The CSV output on SD"));
 #else
-    msg.control.println(F("  OUTPUT <name> INTERVAL <ms>  - RealDash 50+, Serial 100+ (max 60000)"));
+    msg.control.println(F("  OUTPUT <id> INTERVAL <ms>     - RealDash 50+, CSV 100+, max 60000"));
 #endif
+    msg.control.println(F("  OUTPUT DEL <id>               - Remove it, and every route to it"));
+    msg.control.println(F("  SET <pin> ROUTE <id|ALL> ENABLE|DISABLE - Which outputs an input goes to"));
+    msg.control.println(F("  INFO <pin> ROUTE              - An input's routes"));
     msg.control.println();
 }
 
@@ -739,8 +746,9 @@ void printHelpExamples() {
     msg.control.println();
     msg.control.println(F("Output and control:"));
     msg.control.println(F("  SET A2 INPUT ENABLE"));
-    msg.control.println(F("  OUTPUT CAN ENABLE"));
-    msg.control.println(F("  OUTPUT Serial INTERVAL 1000"));
+    msg.control.println(F("  OUTPUT LIST  (ids: 0 is OBD on the CAN output bus)"));
+    msg.control.println(F("  OUTPUT 0 ENABLE"));
+    msg.control.println(F("  OUTPUT 2 INTERVAL 1000  (CSV on the data stream)"));
     msg.control.println(F("  SAVE"));
     msg.control.println();
 }
@@ -802,13 +810,13 @@ void printHelpQuick() {
     msg.control.println(F("Notation: <required> <option1|option2> [optional]"));
     msg.control.println();
     msg.control.println(F("Discovery:"));
-    msg.control.println(F("  LIST INPUTS|APPLICATIONS|SENSORS|OUTPUTS|TRANSPORTS"));
+    msg.control.println(F("  LIST INPUTS|APPLICATIONS|SENSORS|TRANSPORTS"));
     msg.control.println();
     msg.control.println(F("Input Control:"));
     msg.control.println(F("  SET <pin> INPUT ENABLE|DISABLE"));
     msg.control.println(F("  CLEAR <pin> [SAVE]"));
     msg.control.println(F("  CLEAR <pin> CALIBRATION [SAVE]"));
-    msg.control.println(F("  INFO [<pin>] [ALARM|CALIBRATION]"));
+    msg.control.println(F("  INFO [<pin>] [ALARM|ROUTE|CALIBRATION]"));
     msg.control.println();
     msg.control.println(F("Input Configuration:"));
     msg.control.println(F("  SET <pin> <app> <sensor>"));
@@ -825,13 +833,10 @@ void printHelpQuick() {
     msg.control.println(F("  SET <pin> CAL <STEINHART|BETA|RPM|SPEED|PRESSURE_LINEAR|PRESSURE_POLY|VOLTAGE_DIVIDER|BIAS> ..."));
     msg.control.println();
     msg.control.println(F("Outputs:"));
-    msg.control.println(F("  OUTPUT STATUS"));
-    msg.control.println(F("  OUTPUT <module> ENABLE|DISABLE"));
-#if INCLUDE_SD_LOGGING
-    msg.control.println(F("  OUTPUT RealDash|Serial|SD_Log INTERVAL <ms>"));
-#else
-    msg.control.println(F("  OUTPUT RealDash|Serial INTERVAL <ms>"));
-#endif
+    msg.control.println(F("  OUTPUT LIST | <id>"));
+    msg.control.println(F("  OUTPUT ADD <format> <transport> | DEL <id>"));
+    msg.control.println(F("  OUTPUT <id> ENABLE|DISABLE | INTERVAL <ms>"));
+    msg.control.println(F("  SET <pin> ROUTE <id|ALL> ENABLE|DISABLE"));
     msg.control.println();
     msg.control.println(F("Bus Configuration:"));
     msg.control.println(F("  BUS I2C|SPI|CAN"));

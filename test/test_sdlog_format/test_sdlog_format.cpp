@@ -189,7 +189,7 @@ static void test_signature_changes_on_rename(void) {
     TEST_ASSERT_NOT_EQUAL(signatureOf(a, 3), signatureOf(b, 3));
 }
 
-// SET <pin> OUTPUT SD_LOG DISABLE drops a column mid-log.
+// SET <pin> ROUTE 3 DISABLE (off the SD log) drops a column mid-log.
 static void test_signature_changes_on_routing_toggle(void) {
     FakeColumn a[3], b[3];
     baseline(a);

@@ -25,6 +25,7 @@
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/config/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
+#include "../../src/outputs/table/output_table.cpp"   // routeMaskFromLegacy, the outputs view (#612)
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
@@ -534,7 +535,7 @@ static void test_import_timing_retired_keys_are_ignored(void) {
 }
 
 // #608: JSON IMPORT holds intervals to the same per-output ranges as the CLI
-// (RealDash 50, Serial 100, SD_Log 1 .. 60000 ms), and repairs an older
+// (RealDash 50, CSV 100, CSV on SD 1 .. 60000 ms), and repairs an older
 // file's out-of-range value the way EEPROM load does: clamped, 0 to the
 // default. Only the paced outputs take an interval at all.
 static void test_import_output_intervals_are_range_checked(void) {
@@ -545,62 +546,58 @@ static void test_import_output_intervals_are_range_checked(void) {
     systemConfig.outputInterval[OUTPUT_ELM327]   = UINT16_MAX;
     JsonDocument doc;
     JsonObject sys = doc.to<JsonObject>();
-    JsonObject out = sys["outputs"].to<JsonObject>();
-    out["realdash"]["interval"] = 60;       // valid: taken
-    out["serial"]["interval"]   = 0;        // sent every loop: the default
-    out["sd"]["interval"]       = 70000;    // wrapped to 4464 before: the ceiling
-    out["alarm"]["interval"]    = 7;        // no interval: ignored
-    out["elm327"]["interval"]   = 9;
+    JsonArray out = sys["outputs"].to<JsonArray>();   // the #612 array
+    auto add = [&](int id, const char* fmt, const char* tr, long iv) {
+        JsonObject o = out.add<JsonObject>();
+        o["id"] = id; o["format"] = fmt; o["transport"] = tr; o["interval"] = iv;
+    };
+    add(OUT_ID_REALDASH, "REALDASH", "USB", 60);   // valid: taken
+    add(OUT_ID_CSV,      "CSV",      "USB", 0);    // sent every loop: the default
+    add(OUT_ID_ELM327,   "ELM327",   "NONE", 9);   // no interval: ignored
     TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
     TEST_ASSERT_EQUAL_UINT16(60,    systemConfig.outputInterval[OUTPUT_REALDASH]);
     TEST_ASSERT_EQUAL_UINT16(1000,  systemConfig.outputInterval[OUTPUT_SERIAL]);
-    TEST_ASSERT_EQUAL_UINT16(60000, systemConfig.outputInterval[OUTPUT_SD]);
+    TEST_ASSERT_EQUAL_UINT16(5000,  systemConfig.outputInterval[OUTPUT_SD]);   // not in this build
     TEST_ASSERT_EQUAL_UINT16(0,     systemConfig.outputInterval[OUTPUT_ALARM]);
     TEST_ASSERT_EQUAL_UINT16(UINT16_MAX, systemConfig.outputInterval[OUTPUT_ELM327]);
 
+    // out[0] is RealDash, out[1] is CSV on the stream. (SD logging isn't in
+    // the native build; its 1 ms floor is outputIntervalMinMs(OUTPUT_SD).)
     // Each floor and the ceiling are inclusive
-    out["realdash"]["interval"] = 50;
-    out["serial"]["interval"]   = 100;
-    out["sd"]["interval"]       = 1;        // the #537 soak's 1 ms rows
+    out[0]["interval"] = 50;
+    out[1]["interval"] = 100;
     TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
     TEST_ASSERT_EQUAL_UINT16(50,  systemConfig.outputInterval[OUTPUT_REALDASH]);
     TEST_ASSERT_EQUAL_UINT16(100, systemConfig.outputInterval[OUTPUT_SERIAL]);
-    TEST_ASSERT_EQUAL_UINT16(1,   systemConfig.outputInterval[OUTPUT_SD]);
 
     // Just outside: clamped to the nearest end, as on EEPROM load
-    out["realdash"]["interval"] = 10;       // valid in the old 10-60000 docs
-    out["serial"]["interval"]   = 99;
-    out["sd"]["interval"]       = 60001;
+    out[0]["interval"] = 10;       // valid in the old 10-60000 docs
+    out[1]["interval"] = 60001;
     TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
     TEST_ASSERT_EQUAL_UINT16(50,    systemConfig.outputInterval[OUTPUT_REALDASH]);
-    TEST_ASSERT_EQUAL_UINT16(100,   systemConfig.outputInterval[OUTPUT_SERIAL]);
-    TEST_ASSERT_EQUAL_UINT16(60000, systemConfig.outputInterval[OUTPUT_SD]);
+    TEST_ASSERT_EQUAL_UINT16(60000, systemConfig.outputInterval[OUTPUT_SERIAL]);
 
     // Too big for long, or negative: still numbers, clamped to the near end
-    out["realdash"]["interval"] = 5000000000LL;
-    out["serial"]["interval"]   = -5;
-    out["sd"]["interval"]       = 1e12;
+    out[0]["interval"] = 5000000000LL;
+    out[1]["interval"] = -5;
     TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
     TEST_ASSERT_EQUAL_UINT16(60000, systemConfig.outputInterval[OUTPUT_REALDASH]);
     TEST_ASSERT_EQUAL_UINT16(100,   systemConfig.outputInterval[OUTPUT_SERIAL]);
-    TEST_ASSERT_EQUAL_UINT16(60000, systemConfig.outputInterval[OUTPUT_SD]);
 
     // A whole-number float in range (Python's json.dumps of a float) is that
     // value, not "too big"
-    out["realdash"]["interval"] = 75.0;
-    out["serial"]["interval"]   = 1000.0;
-    out["sd"]["interval"]       = 1e3;
+    out[0]["interval"] = 75.0;
+    out[1]["interval"] = 1e3;
     TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
     TEST_ASSERT_EQUAL_UINT16(75,   systemConfig.outputInterval[OUTPUT_REALDASH]);
     TEST_ASSERT_EQUAL_UINT16(1000, systemConfig.outputInterval[OUTPUT_SERIAL]);
-    TEST_ASSERT_EQUAL_UINT16(1000, systemConfig.outputInterval[OUTPUT_SD]);
 
     // Not an integer: a coercing read would take "abc" as 0 and 250.5 as 250;
     // ignored, the current value stays
-    out["sd"]["interval"]     = "abc";
-    out["serial"]["interval"] = 250.5;
+    out[0]["interval"] = "abc";
+    out[1]["interval"] = 250.5;
     TEST_ASSERT_TRUE(importSystemConfigFromJSON(sys));
-    TEST_ASSERT_EQUAL_UINT16(1000, systemConfig.outputInterval[OUTPUT_SD]);
+    TEST_ASSERT_EQUAL_UINT16(75,   systemConfig.outputInterval[OUTPUT_REALDASH]);
     TEST_ASSERT_EQUAL_UINT16(1000, systemConfig.outputInterval[OUTPUT_SERIAL]);
 
     // Leave the shared global as the other tests expect it (factory values)
