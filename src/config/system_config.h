@@ -171,4 +171,19 @@ float seaLevelPressureHpa();
 void registerSystemPins(uint8_t busNeeds);   // Register system pins in pin registry
 bool sdCsClaimRefusedTableFull();             // registerSystemPins() refused SD CS for a full pin table (#599)
 
+// The builtins registerSystemPins() claims, one bit each.
+enum BuiltinPinKind : uint8_t {
+    BPK_USER_BUTTON = 0, BPK_BUZZER, BPK_CAN_CS, BPK_CAN_INT,
+    BPK_SD, BPK_TEST_MODE, BPK_I2C_WIRED, BPK_SPI_WIRED, BPK_RESERVED,
+};
+
+// Does this builtin hold its pin? Its driver touches the pin only while this
+// is true (§12.5). Settled once, by registerSystemPins() at boot: a builtin
+// claim is never released or re-made, so a refused builtin stays off its pin
+// until the next boot. That is also why "not driven" is reported where the
+// claim fails, at boot, and by TEST OUTPUT, and not as a status line: the
+// state cannot change in between, SYSTEM PINS names the pin's real holder,
+// and on mega2560 every new string is near-PROGMEM it doesn't have (#646).
+bool builtinPinHeld(BuiltinPinKind kind);
+
 #endif // SYSTEM_CONFIG_H

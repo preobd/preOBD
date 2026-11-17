@@ -365,6 +365,15 @@ bool initCANBus(uint8_t bus_id) {
         if (bus_id < 8) can_refused_mask |= (uint8_t)(1u << bus_id);
         return false;
     }
+#if !PROFILE_HAS_NATIVE_CAN && defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)
+    // An SPI controller's pin is its CS, claimed at boot by
+    // registerSystemPins(). Its driver is built, and first touches CS, only
+    // once this bus starts, so a refused CS stops it here (§12.5, #646).
+    if (bus_id == 0 && !builtinPinHeld(BPK_CAN_CS)) {
+        can_refused_mask |= 1u;
+        return false;
+    }
+#endif
     if (bus_id < 8) can_refused_mask &= (uint8_t)~(1u << bus_id);
 
     // The controller is started by can_bus.cpp on the first attach
@@ -928,7 +937,15 @@ FLASHMEM void displayCANStatus() {
 #endif
         msg.control.println();
         if (st == CAN_STATE_NO_PINS || (cs.mode != CAN_BUS_OFF && !canBusClaimed(b))) {
+#if !PROFILE_HAS_NATIVE_CAN && defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)
+            // SPI controller: TX/RX are 0xFF, the pin that can be taken is CS.
+            // Named only when its claim failed: held, CS is ours, and the
+            // registry's "CAN CS" must not read as what's in the way.
+            const uint8_t pins[2] = { (b == 0 && !builtinPinHeld(BPK_CAN_CS)) ? (uint8_t)CAN_CS_0
+                                                                            : (uint8_t)0xFF, 0xFF };
+#else
             const uint8_t pins[2] = { getDefaultCANTX(b), getDefaultCANRX(b) };
+#endif
             printBusNotStarted(BK_CAN, getCANBusName(b), false, pins, 2, (can_refused_mask >> b) & 1);
         }
     }

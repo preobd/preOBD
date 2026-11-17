@@ -45,6 +45,7 @@
 #if INCLUDE_LED
 #include "../outputs/annunciator/rgb_led.h"   // TEST OUTPUT actuator
 #endif
+#include "../outputs/annunciator/output_alarm.h"   // alarmBuzzerChirp (TEST OUTPUT)
 #include "../core/watchdog.h"
 #if INCLUDE_CAN
 #include "../sensors/can/input_can.h"   // canInputIsRunning (SCAN CAN)
@@ -1065,9 +1066,14 @@ int cmd_test(int argc, const char* const* argv) {
         rgbLedRelease(PRIORITY_ALARM);          updateRGBLed();
 #endif
 #if INCLUDE_ALARMS && defined(BUZZER_PIN)
-        any = true;
-        msg.control.println(F("Buzzer -> chirp"));
-        tone(BUZZER_PIN, 700); watchdogReset(); delay(250); platformNoTone(BUZZER_PIN);
+        // Only a buzzer that holds its pin (§12.5, #646)
+        if (builtinPinHeld(BPK_BUZZER)) {
+            any = true;
+            msg.control.println(F("Buzzer -> chirp"));
+            alarmBuzzerChirp();
+        } else {
+            msg.control.println(F("Buzzer skipped: not driven"));
+        }
 #endif
 #if INCLUDE_RULES_ENGINE
         // Each relay through the engine's own gates (§12.5, #649): INVERT

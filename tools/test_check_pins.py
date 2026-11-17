@@ -168,5 +168,12 @@ target_sites = RELAY_SITES.replace("guarded  digitalWrite  r.pin   # CLAIMED: te
 expect("ratchet targets may not rise above main", *run_args({"src/r.cpp": RELAY}, target_sites, "--max-targets", "0"), 1, "MORE TARGETS")
 expect("ratchet targets at main's count pass", *run_args({"src/r.cpp": RELAY}, target_sites, "--max-targets", "1"), 0, "OK:")
 
+expect("status groups open targets by reason", *run_args({"src/r.cpp": RELAY}, target_sites, "--status"), 0,
+       "§12 conformance", "RATCHET TARGET 1", "test (#1)  [1 site(s)]", "src/r.cpp: guarded")
+expect("status with nothing open says so", *run_args({"src/r.cpp": RELAY}, RELAY_SITES, "--status"), 0,
+       "Nothing open here")
+rc, out = run_args({"src/r.cpp": RELAY + "void extra(){ digitalWrite(9, 1); }\n"}, RELAY_SITES, "--status")
+expect("status is refused when the check fails", rc, out, 1, "STATUS NOT PRINTED")
+
 print(f"\ntest_check_pins.py: {len(FAILS)} failure(s)")
 sys.exit(1 if FAILS else 0)

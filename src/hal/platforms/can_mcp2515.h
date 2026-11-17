@@ -26,10 +26,17 @@ namespace detail {
     // One driver object and one "started" flag per controller for the whole
     // image, defined in can_mcp2515.cpp. As `static`s here every including
     // file had its own copy (see there).
-    extern MCP2515 canBus0;
+    // nullptr until begin() builds it (makeBusN(), can_mcp2515.cpp); every
+    // other use sits behind busNInitialized, which only begin() sets.
+    extern MCP2515* canBus0;
+    MCP2515& makeBus0();
 
     #if defined(CAN_CS_1) && (CAN_CS_1 != 0xFF)
-        extern MCP2515 canBus1;
+        // Nothing claims CAN_CS_1 (registerSystemPins() claims CAN_CS_0
+        // only), so a second MCP2515 would drive an unheld pin (§12.5).
+        #error "CAN_CS_1: add its claim in registerSystemPins() and the check in initCANBus() first (#646)"
+        extern MCP2515* canBus1;
+        MCP2515& makeBus1();
         static constexpr bool hasBus1 = true;
     #else
         static constexpr bool hasBus1 = false;
@@ -84,29 +91,35 @@ inline bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
 
     switch (bus) {
         case 0:
-            detail::canBus0.reset();
-            if (detail::canBus0.setBitrate(speed, clock) != MCP2515::ERROR_OK) {
+        {
+            MCP2515& m = detail::makeBus0();
+            m.reset();
+            if (m.setBitrate(speed, clock) != MCP2515::ERROR_OK) {
                 return false;
             }
             if (listenOnly) {
-                if (detail::canBus0.setListenOnlyMode() != MCP2515::ERROR_OK) return false;
+                if (m.setListenOnlyMode() != MCP2515::ERROR_OK) return false;
             } else {
-                if (detail::canBus0.setNormalMode() != MCP2515::ERROR_OK) return false;
+                if (m.setNormalMode() != MCP2515::ERROR_OK) return false;
             }
+        }
             detail::bus0Initialized = true;
             return true;
 
         case 1:
             #if defined(CAN_CS_1) && (CAN_CS_1 != 0xFF)
-                detail::canBus1.reset();
-                if (detail::canBus1.setBitrate(speed, clock) != MCP2515::ERROR_OK) {
+            {
+                MCP2515& m = detail::makeBus1();
+                m.reset();
+                if (m.setBitrate(speed, clock) != MCP2515::ERROR_OK) {
                     return false;
                 }
                 if (listenOnly) {
-                    if (detail::canBus1.setListenOnlyMode() != MCP2515::ERROR_OK) return false;
+                    if (m.setListenOnlyMode() != MCP2515::ERROR_OK) return false;
                 } else {
-                    if (detail::canBus1.setNormalMode() != MCP2515::ERROR_OK) return false;
+                    if (m.setNormalMode() != MCP2515::ERROR_OK) return false;
                 }
+            }
                 detail::bus1Initialized = true;
                 return true;
             #else
@@ -136,12 +149,12 @@ inline bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, 
     switch (bus) {
         case 0:
             if (!detail::bus0Initialized) return false;
-            return detail::canBus0.sendMessage(&frame) == MCP2515::ERROR_OK;
+            return detail::canBus0->sendMessage(&frame) == MCP2515::ERROR_OK;
 
         case 1:
             #if defined(CAN_CS_1) && (CAN_CS_1 != 0xFF)
                 if (!detail::bus1Initialized) return false;
-                return detail::canBus1.sendMessage(&frame) == MCP2515::ERROR_OK;
+                return detail::canBus1->sendMessage(&frame) == MCP2515::ERROR_OK;
             #else
                 return false;
             #endif
@@ -158,13 +171,13 @@ inline bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint
     switch (bus) {
         case 0:
             if (!detail::bus0Initialized) return false;
-            result = detail::canBus0.readMessage(&frame);
+            result = detail::canBus0->readMessage(&frame);
             break;
 
         case 1:
             #if defined(CAN_CS_1) && (CAN_CS_1 != 0xFF)
                 if (!detail::bus1Initialized) return false;
-                result = detail::canBus1.readMessage(&frame);
+                result = detail::canBus1->readMessage(&frame);
                 break;
             #else
                 return false;
@@ -216,10 +229,10 @@ namespace detail {
 inline bool abortUnackedTx(uint8_t bus = 0) {
     switch (bus) {
         case 0:
-            return detail::bus0Initialized && detail::abortUnacked(detail::canBus0, CAN_CS_0);
+            return detail::bus0Initialized && detail::abortUnacked(*detail::canBus0, CAN_CS_0);
         #if defined(CAN_CS_1) && (CAN_CS_1 != 0xFF)
         case 1:
-            return detail::bus1Initialized && detail::abortUnacked(detail::canBus1, CAN_CS_1);
+            return detail::bus1Initialized && detail::abortUnacked(*detail::canBus1, CAN_CS_1);
         #endif
         default:
             return false;

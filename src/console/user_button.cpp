@@ -14,6 +14,7 @@
 
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
+#include "../config/system_config.h"   // builtinPinHeld()
 
 // Button timing constants
 #define DEBOUNCE_MS 50              // Debounce delay (50ms)
@@ -26,9 +27,18 @@ static uint32_t lastDebounceTime = 0;
 static uint32_t pressStartTime = 0;
 static bool pressHandled = false;
 
+// The button configures and reads its pin only while it holds the claim
+// (§12.5). Refused, the pin is a sensor's: a pull-up would skew it, and its
+// transitions would read as presses that silence alarms (#646).
+static bool held = false;
+
 void initUserButton() {
-    pinMode(USER_BUTTON_PIN, INPUT_PULLUP);
-    buttonState = digitalRead(USER_BUTTON_PIN) == LOW;
+    held = builtinPinHeld(BPK_USER_BUTTON);
+    buttonState = false;
+    if (held) {
+        pinMode(USER_BUTTON_PIN, INPUT_PULLUP);
+        buttonState = digitalRead(USER_BUTTON_PIN) == LOW;
+    }
     lastRawState = buttonState;
     lastDebounceTime = millis();
     pressStartTime = 0;
@@ -37,6 +47,7 @@ void initUserButton() {
 }
 
 ButtonPress updateUserButton() {
+    if (!held) return BUTTON_NONE;
     uint32_t now = millis();
 
     bool rawState = (digitalRead(USER_BUTTON_PIN) == LOW);
@@ -81,6 +92,10 @@ ButtonPress updateUserButton() {
 
 bool isUserButtonPressed() {
     return buttonState;
+}
+
+bool userButtonDownNow() {
+    return held && digitalRead(USER_BUTTON_PIN) == LOW;
 }
 
 #endif // INCLUDE_USER_BUTTON

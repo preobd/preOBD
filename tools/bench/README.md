@@ -8,8 +8,10 @@
 | `obdlink_send.py` | Sends commands to the daemon and prints the replies; `--monitor <s>` captures traffic (ATMA). |
 | `can_decode.py` | Decodes a capture against a DBC (`docs/can/preOBD.dbc`). |
 | `can_application_override.sh` | #640: `SET CAN:n APPLICATION` on CAN imports (allowed, refused, Rule re-seed); reboots at the end instead of SAVE. |
+| `mega_cmd.py` | As `serial_cmd.py`, for the Mega: waits out the reset that opening its port causes. |
 | `serial_cmd.py` | Runs preOBD console commands over USB with a fixed time per command. |
 | `relay_release.py` | #648/#649: relay actions claim before they configure (registry count), a manual-ON relay survives TEST OUTPUT, an inverted one pulses, a JSON import that moves an ON relay reports it off and releases the old pin, ACTION DEL releases; restores the baseline by import, never SAVEs. Default pins 6, 19, 18 (must be free and unwired). |
+| `builtin_pins.py` | #646: `stage` (on a build with `-UBUZZER_PIN -UUSER_BUTTON_PIN`) snapshots the saved config and stores float switches on the buzzer and button pins; `check` on the build under test (pins held by the inputs, TEST OUTPUT skips the buzzer, the switches read their own pull-up); `check --hold` (an operator holds the button: boots in RUN, no long press); `restore` re-imports the snapshot, SAVEs, and checks the dump and that the buzzer chirps. SAVEs on purpose: a stored input wins only at boot. |
 | `json_import_cases.py` | #567/#603: JSON IMPORT all-or-nothing cases from the unit's own dump (another board, no platform, a bad record, held/bus/serial pins, a rule without its input, a full table of other pins); each refusal must leave the dump identical; re-imports the baseline after each accepted case, never SAVEs. `--replies DIR` keeps each reply verbatim for the app fixtures. |
 
 **Long-running holders are started by a person, in their own terminal, and left

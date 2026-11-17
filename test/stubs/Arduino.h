@@ -70,13 +70,14 @@ inline void delayMicroseconds(uint32_t) {}
 // pinMode/digitalWrite record per-pin state and an ordered event log, so a
 // test can prove the order of a configure (OFF latched before OUTPUT, §12.5)
 // or that a pin was never touched. digitalRead returns stubPinInput[], which
-// a test sets; it is not the write latch. Call stubPinReset() in setUp().
+// a test sets; it is not the write latch, and counts reads in stubPinReads[]. Call stubPinReset() in setUp().
 struct StubPinEvent { uint8_t pin; char kind; uint8_t value; };   // kind 'M' mode, 'W' write
 inline uint8_t      stubPinMode[256];
 inline bool         stubPinModeSet[256];
 inline uint8_t      stubPinLatch[256];
 inline bool         stubPinWritten[256];
 inline uint8_t      stubPinInput[256];
+inline uint16_t     stubPinReads[256];   // digitalRead() calls per pin (not in the event log)
 inline StubPinEvent stubPinLog[128];
 inline int          stubPinLogN = 0;
 inline void stubPinReset() {
@@ -85,6 +86,7 @@ inline void stubPinReset() {
     memset(stubPinLatch, 0, sizeof(stubPinLatch));
     memset(stubPinWritten, 0, sizeof(stubPinWritten));
     memset(stubPinInput, 0, sizeof(stubPinInput));
+    memset(stubPinReads, 0, sizeof(stubPinReads));
     stubPinLogN = 0;
 }
 inline bool stubPinTouched(uint8_t p) { return stubPinModeSet[p] || stubPinWritten[p]; }
@@ -94,7 +96,7 @@ inline void stubPinRecord(uint8_t p, char kind, uint8_t v) {
 inline void pinMode(uint8_t p, uint8_t m) { stubPinMode[p] = m; stubPinModeSet[p] = true; stubPinRecord(p, 'M', m); }
 inline void digitalWrite(uint8_t p, uint8_t v) { stubPinLatch[p] = v; stubPinWritten[p] = true; stubPinRecord(p, 'W', v); }
 inline void digitalWriteFast(uint8_t p, uint8_t v) { digitalWrite(p, v); }
-inline int  digitalRead(uint8_t p) { return stubPinInput[p]; }
+inline int  digitalRead(uint8_t p) { stubPinReads[p]++; return stubPinInput[p]; }
 inline int  analogRead(uint8_t) { return 0; }
 inline void analogWrite(uint8_t, int) {}
 inline void yield() {}

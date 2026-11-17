@@ -52,6 +52,12 @@ The TAG is the first word(s) of the comment, one of:
                     claim. Cites the issue that removes it.
   MACRO          -- the body of a helper macro; its callers are listed too.
 
+--status prints the §12 conformance report after the checks: every RATCHET
+TARGET grouped by its reason, with the functions it names. It is the status
+layer of §12 (architecture/README.md): true because the checks above passed,
+so it is refused when they fail. The section and its map hold the rules; this
+report and the GitHub milestone "§12 conformance" hold what is not yet met.
+
 Exit status: 0 when both checks pass, 1 otherwise.
 """
 
@@ -70,7 +76,7 @@ PIN_CALLS = (
     "attachInterrupt", "detachInterrupt", "ledcAttachPin",
     # preOBD wrappers
     "platformNoTone", "platformAnalogRead",
-    "driveAction", "writeLatch", "configureHeldPin", "releaseActionPin",
+    "driveAction", "pinWriteLatch", "pinOutputAt", "configureHeldPin", "releaseActionPin",
     "rulesSyncActionPins", "rulesActionsQuiesce", "rulesActionDelete",
     "rulesActionTestPulse",
     "readAnalogPin", "diagSamplePin", "writePWM", "clearTxRequests", "abortUnacked",
@@ -415,6 +421,46 @@ def load_sites(path, root):
     return listed, problems, targets
 
 
+def site_entries(path):
+    """(path, function, tag, why) for each tagged line of a sites file."""
+    entries = []
+    with open(path, encoding="utf-8") as f:
+        for raw in f:
+            if not raw.strip() or raw.lstrip().startswith("#"):
+                continue
+            body, _, comment = raw.rstrip("\n").partition("#")
+            parts = body.split()
+            m = TAG_RE.match("#" + comment)
+            if len(parts) == 4 and m:
+                entries.append((parts[0], parts[1], m.group(1), comment[m.end() - 1:].strip()))
+    return entries
+
+
+def print_status(sites_path, root, tag_counts):
+    """The §12 conformance report: open RATCHET TARGETs, grouped by reason."""
+    groups = collections.OrderedDict()
+    for path, fn, tag, why in sorted(site_entries(sites_path), key=lambda e: (e[3], e[0], e[1])):
+        if tag == "RATCHET TARGET":
+            groups.setdefault(why, collections.OrderedDict()).setdefault(path, collections.Counter())[fn] += 1
+    open_sites = tag_counts["RATCHET TARGET"]
+    print()
+    print(f"§12 conformance, from {os.path.relpath(sites_path, root)}")
+    print("  " + " · ".join(f"{t} {tag_counts[t]}" for t in TAGS))
+    if not groups:
+        print("  Every listed pin site touches only a pin it holds. Nothing open here;")
+        print("  check the milestone \"§12 conformance\" for the gaps this file can't list.")
+        return
+    print(f"  Open: {open_sites} site(s) in {len(groups)} group(s). §12 is met here when this list is empty.")
+    for why, files in groups.items():
+        n = sum(sum(c.values()) for c in files.values())
+        print()
+        print(f"  {why}  [{n} site(s)]")
+        for path, fns in files.items():
+            print(f"      {path}: {', '.join(fns)}")
+    print()
+    print("  Gaps this file can't list (readers, BLE, docs) are in the milestone \"§12 conformance\".")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--root", default=ROOT, help="repo root (tests)")
@@ -424,6 +470,8 @@ def main(argv=None):
     ap.add_argument("--max-targets", type=int, default=None,
                     help="fail if the RATCHET TARGET count is above this (CI: the count on main)")
     ap.add_argument("--count-targets", metavar="FILE", help="print the RATCHET TARGET count in a sites file and exit")
+    ap.add_argument("--status", action="store_true",
+                    help="after the checks, print the §12 conformance report (open RATCHET TARGETs by reason)")
     args = ap.parse_args(argv)
     root = os.path.abspath(args.root)
     src = os.path.join(root, "src")
@@ -485,6 +533,11 @@ def main(argv=None):
           f"({', '.join(f'{t} {tag_counts[t]}' for t in TAGS)})")
     if not failed and not args.quiet:
         print("OK: every pin site is listed, and only pin_owner.cpp writes the registry unchecked.")
+    if args.status:
+        if failed:
+            print("STATUS NOT PRINTED: the sites file doesn't match src/, so it can't report conformance. Fix the lines above.")
+        else:
+            print_status(sites_path, root, tag_counts)
     return 1 if failed else 0
 
 

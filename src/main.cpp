@@ -667,11 +667,20 @@ void setup() {
     // Boot-time hardware trigger is optional — only when a profile defines
     // TEST_MODE_PIN. CLI-driven injection works regardless.
     #ifdef TEST_MODE_PIN
-    // Check if test mode trigger pin is pulled LOW
-    pinMode(TEST_MODE_PIN, INPUT_PULLUP);
-    delay(10);  // Allow pin to stabilize
+    // Only a trigger that holds its pin is read (§12.5, #646): refused, the
+    // pin is a sensor's, and one that sits LOW would start simulated data in
+    // RUN with the relays following it. The refusal was reported at boot.
+    const bool triggerHeld = builtinPinHeld(BPK_TEST_MODE);
+    bool triggered = false;
+    if (triggerHeld) {
+        pinMode(TEST_MODE_PIN, INPUT_PULLUP);   // pulled LOW = trigger
+        delay(10);  // Allow pin to stabilize
+        triggered = digitalRead(TEST_MODE_PIN) == LOW;
+    }
 
-    if (digitalRead(TEST_MODE_PIN) == LOW) {
+    if (!triggerHeld) {
+        msg.debug.info(TAG_SYSTEM, "Test mode available (CLI injection; TEST_MODE_PIN refused, not read)");
+    } else if (triggered) {
         msg.debug.info(TAG_SYSTEM, "TEST MODE TRIGGER DETECTED!");
 
         // List available scenarios
@@ -707,7 +716,12 @@ void setup() {
     // silently drops the LCD clear / LED colour for that transition (#411).
     setSystemModeObserver(onSystemModeChange);
     initSystemMode();
-    SystemMode bootMode = detectBootMode(eepromConfigLoaded);
+#if INCLUDE_USER_BUTTON
+    const bool buttonDown = userButtonDownNow();
+#else
+    const bool buttonDown = false;
+#endif
+    SystemMode bootMode = detectBootMode(eepromConfigLoaded, buttonDown);
     setMode(bootMode);
 
     msg.debug.info(TAG_SYSTEM, "Watchdog %u ms (%s)", (unsigned)watchdogTimeoutMs(),

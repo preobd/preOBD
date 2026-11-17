@@ -18,13 +18,7 @@ void setSystemModeObserver(SystemModeObserver observer) {
     modeObserver = observer;
 }
 
-// Timing constants
-#define BOOT_DETECT_DELAY_MS 10  // Stabilization delay for boot detection
-
 void initSystemMode() {
-#if INCLUDE_USER_BUTTON
-    pinMode(USER_BUTTON_PIN, INPUT_PULLUP);
-#endif
     currentMode = MODE_RUN;  // Default to RUN mode for safety
 }
 
@@ -79,7 +73,7 @@ bool isInRunMode() {
     return currentMode == MODE_RUN;
 }
 
-SystemMode detectBootMode(bool eepromValid) {
+SystemMode detectBootMode(bool eepromValid, bool buttonDown) {
     // If EEPROM invalid/empty, automatically enter CONFIG mode
     if (!eepromValid) {
         msg.control.println();
@@ -91,14 +85,13 @@ SystemMode detectBootMode(bool eepromValid) {
         return MODE_CONFIG;
     }
 
-    // Check if button held during boot (LOW = active)
-#if INCLUDE_USER_BUTTON
-    delay(BOOT_DETECT_DELAY_MS);
-    if (digitalRead(USER_BUTTON_PIN) == LOW) {
+    // Button held during boot. main.cpp reads it (userButtonDownNow()), so
+    // this file never touches a pin, and a button that lost its pin to a
+    // sensor can't boot the unit into CONFIG (§12.5, #646).
+    if (buttonDown) {
         msg.debug.info(TAG_SYSTEM, "CONFIG button detected - entering CONFIG mode");
         return MODE_CONFIG;
     }
-#endif
 
     // Default: RUN mode
     msg.debug.info(TAG_SYSTEM, "Starting in RUN mode (config locked)");

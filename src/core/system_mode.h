@@ -34,7 +34,8 @@ typedef void (*SystemModeObserver)(SystemMode oldMode, SystemMode newMode);
  */
 void setSystemModeObserver(SystemModeObserver observer);
 
-// Boot-time mode detection (call once in setup)
-SystemMode detectBootMode(bool eepromValid);
+// Boot-time mode detection (call once in setup). buttonDown: the user button
+// is held right now (main.cpp passes userButtonDownNow(); false without one).
+SystemMode detectBootMode(bool eepromValid, bool buttonDown);
 
 #endif

@@ -1,6 +1,6 @@
 /*
  * user_button.h - The user button: held at boot it selects CONFIG mode
- * (core/system_mode.cpp); a short press acknowledges alarms and a long press
+ * (main.cpp -> core/system_mode.cpp); a short press acknowledges alarms and a long press
  * toggles the display (main.cpp).
  * Only compiled when INCLUDE_USER_BUTTON is nonzero (boards/resolve.h).
  */
@@ -26,5 +26,9 @@ ButtonPress updateUserButton();
 
 // Get current button state (for debugging)
 bool isUserButtonPressed();
+
+// Is the button down right now? The boot-time CONFIG check (main.cpp ->
+// detectBootMode). False when the button doesn't hold its pin (§12.5).
+bool userButtonDownNow();
 
 #endif // USER_BUTTON_H

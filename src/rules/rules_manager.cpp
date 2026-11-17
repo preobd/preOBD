@@ -3,6 +3,7 @@
  */
 
 #include "rules_manager.h"
+#include "../core/pin_level.h"   // pinOutputAt(): OFF level before OUTPUT (§12.5)
 
 #if INCLUDE_RULES_ENGINE
 
@@ -911,34 +912,10 @@ static void driveAction(const Action& a, bool on) {
     digitalWrite(a.target, (on != invert) ? HIGH : LOW);  // (on XOR invert)
 }
 
-// The first write of a newly held pin must reach the output latch while the
-// driver is still off, so the pin never passes through the energized level
-// (§12.5). On Teensy 3.x/4.x digitalWrite() on an input sets a pull instead, so
-// it must be digitalWriteFast(). arduino-esp32 3.x refuses digitalWrite()
-// before pinMode(); this relies on the 2.x core the board uses today.
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
-#error "arduino-esp32 3.x refuses digitalWrite() before pinMode(): writeLatch() needs a gpio_set_level() path (§12.5)"
-#endif
-static void writeLatch(uint8_t pin, uint8_t level) {
-#if defined(TEENSYDUINO)
-    // Teensy 3's runtime digitalWriteFast() has no range check: a virtual pin
-    // (I2C, CAN: 0xC0+) would index past the pin table and write anywhere.
-    if (pin >= CORE_NUM_DIGITAL) return;
-    digitalWriteFast(pin, level);
-#else
-    digitalWrite(pin, level);
-#endif
-}
-
-// Configure a pin this slot has just claimed: INPUT first (no electrical change
-// on a pin nobody drove; enables the STM32 port clock; drops a stale pull-up),
-// then the OFF latch, then OUTPUT, then OFF again.
+// Configure a pin this slot has just claimed, the OFF level reaching the latch
+// before the driver turns on (pin_level.h, §12.5).
 static FLASHMEM void configureHeldPin(const Action& a) {
-    const uint8_t off = offLevel(a);
-    pinMode(a.target, INPUT);
-    writeLatch(a.target, off);
-    pinMode(a.target, OUTPUT);
-    digitalWrite(a.target, off);
+    pinOutputAt(a.target, offLevel(a));
 }
 
 // Another slot also records `pin` as held: the registry can't say which of

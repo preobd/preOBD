@@ -19,6 +19,12 @@
  */
 void initAlarmOutput();
 
+#if INCLUDE_ALARMS && defined(BUZZER_PIN)
+// TEST OUTPUT's buzzer step: a 250 ms chirp. False, and the pin untouched,
+// when the buzzer doesn't hold its pin (§12.5).
+bool alarmBuzzerChirp();
+#endif
+
 // Silence the buzzer and release the alarm/warning LED (output disabled, #610)
 void stopAlarmOutput();
 

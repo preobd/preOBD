@@ -22,6 +22,7 @@
 #include "../outputs/formats/output_format.h"  // SdLogFormat
 #include "../sensors/can/can_poll.h"   // canPollMsValid, CAN_POLL_MS_DEFAULT (#633)
 #include "eeprom_store.h"
+#include "../core/pin_level.h"          // pinOutputAt(): CS deselect, level first (§12.5)
 #include "../transports/sd_manager.h"   // SD_CS_OWNER: initSD() looks the claim up by this name (#594)
 
 // Global system config instance
@@ -56,10 +57,16 @@ static struct {
     uint16_t pinCollisionInputFlags = 0;
 } bootDiag;
 
-enum BuiltinPinKind : uint8_t {
-    BPK_USER_BUTTON = 0, BPK_BUZZER, BPK_CAN_CS, BPK_CAN_INT,
-    BPK_SD, BPK_TEST_MODE, BPK_I2C_WIRED, BPK_SPI_WIRED, BPK_RESERVED,
-};
+// BuiltinPinKind lives in system_config.h: builtinPinHeld() takes it.
+
+// Which builtin claims registerSystemPins() won (one bit per BuiltinPinKind).
+// Set once at boot and never cleared: a builtin claim is never released or
+// re-made, so this is the claim's state for the whole run (§12.5).
+static uint16_t builtinHeldFlags = 0;
+
+bool builtinPinHeld(BuiltinPinKind kind) {
+    return (builtinHeldFlags & (uint16_t)(1u << kind)) != 0;
+}
 
 // Forward declaration: the definition (below, beside registerSystemPins())
 // always prints immediately — flushSystemConfigBootDiagnostics() (here) is
@@ -438,14 +445,18 @@ FLASHMEM void registerSystemPins(uint8_t busNeeds) {
 #endif
 #if INCLUDE_USER_BUTTON
     { const uint8_t p = USER_BUTTON_PIN;
-      if (!claimPins(&p, 1, PIN_BUTTON, PIN_RANK_BUILTIN, TAG_SYSTEM, "User Button"))
+      if (claimPins(&p, 1, PIN_BUTTON, PIN_RANK_BUILTIN, TAG_SYSTEM, "User Button"))
+          builtinHeldFlags |= (uint16_t)(1u << BPK_USER_BUTTON);
+      else
           reportBuiltinPinCollision(F("USER_BUTTON_PIN"), BPK_USER_BUTTON, pinHeldByConfiguredInput(p)); }
 #endif
 
 #if INCLUDE_ALARMS
     #ifdef BUZZER_PIN
     { const uint8_t p = BUZZER_PIN;
-      if (!claimPins(&p, 1, PIN_BUZZER, PIN_RANK_BUILTIN, TAG_SYSTEM, "Buzzer"))
+      if (claimPins(&p, 1, PIN_BUZZER, PIN_RANK_BUILTIN, TAG_SYSTEM, "Buzzer"))
+          builtinHeldFlags |= (uint16_t)(1u << BPK_BUZZER);
+      else
           reportBuiltinPinCollision(F("BUZZER_PIN"), BPK_BUZZER, pinHeldByConfiguredInput(p)); }
     #endif
 #endif
@@ -453,8 +464,16 @@ FLASHMEM void registerSystemPins(uint8_t busNeeds) {
 #if !PROFILE_HAS_NATIVE_CAN
     #if defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)
     { const uint8_t p = CAN_CS_0;
-      if (!claimPins(&p, 1, PIN_CS, PIN_RANK_BUILTIN, TAG_SYSTEM, "CAN CS"))
-          reportBuiltinPinCollision(F("CAN_CS_0"), BPK_CAN_CS, pinHeldByConfiguredInput(p)); }
+      if (claimPins(&p, 1, PIN_CS, PIN_RANK_BUILTIN, TAG_SYSTEM, "CAN CS")) {
+          builtinHeldFlags |= (uint16_t)(1u << BPK_CAN_CS);
+          // Deselect the MCP2515 now, as SD CS below: an SPI sensor can talk
+          // before the CAN bus starts, and a floating CS would let the
+          // controller answer. Its driver is built only when the bus starts
+          // (can_mcp2515.h), and only once this claim has held.
+          pinOutputAt(p, HIGH);
+      } else {
+          reportBuiltinPinCollision(F("CAN_CS_0"), BPK_CAN_CS, pinHeldByConfiguredInput(p));
+      } }
     #endif
     #if defined(CAN_INT_0) && (CAN_INT_0 != 0xFF)
     { const uint8_t p = CAN_INT_0;
@@ -476,9 +495,10 @@ FLASHMEM void registerSystemPins(uint8_t busNeeds) {
       else {
           // Deselect the card now: other devices on the same SPI bus may
           // talk before initSD() runs, and a floating CS would let the
-          // card answer them.
-          pinMode(p, OUTPUT);
-          digitalWrite(p, HIGH);
+          // card answer them. HIGH reaches the latch before the driver
+          // turns on, so CS never passes through LOW (§12.5).
+          builtinHeldFlags |= (uint16_t)(1u << BPK_SD);
+          pinOutputAt(p, HIGH);
       } }
     #endif
 #endif
@@ -486,7 +506,9 @@ FLASHMEM void registerSystemPins(uint8_t busNeeds) {
 #if INCLUDE_TEST_MODE
     #ifdef TEST_MODE_PIN
     { const uint8_t p = TEST_MODE_PIN;
-      if (!claimPins(&p, 1, PIN_BUTTON, PIN_RANK_BUILTIN, TAG_SYSTEM, "Test Mode Trigger"))
+      if (claimPins(&p, 1, PIN_BUTTON, PIN_RANK_BUILTIN, TAG_SYSTEM, "Test Mode Trigger"))
+          builtinHeldFlags |= (uint16_t)(1u << BPK_TEST_MODE);
+      else
           reportBuiltinPinCollision(F("TEST_MODE_PIN"), BPK_TEST_MODE, pinHeldByConfiguredInput(p)); }
     #endif
 #endif

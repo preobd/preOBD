@@ -22,7 +22,16 @@
 #include "../../core/system_mode.h"
 #include "../../core/platform.h"       // platformNoTone()
 #include "../../rules/rules_manager.h"   // annunciator: fold Rule severity into the rollup
-#include "../../config/system_config.h" // alarmSilence policy byte (#433)
+#include "../../config/system_config.h" // alarmSilence policy byte (#433); builtinPinHeld()
+#include "../../core/pin_level.h"       // pinOutputAt()
+#include "../../core/watchdog.h"        // watchdogReset() in the TEST OUTPUT chirp
+
+#if INCLUDE_ALARMS && defined(BUZZER_PIN)
+// The buzzer touches its pin only while its claim holds (§12.5). Asked at each
+// touch, not cached by initAlarmOutput(): that runs only while the alarm output
+// is on, and TEST OUTPUT chirps whatever that state is (#646).
+static inline bool buzzerHeld() { return builtinPinHeld(BPK_BUZZER); }
+#endif
 
 #if INCLUDE_RULES_ENGINE
 // RuleSeverity and AlarmSeverity are DISTINCT ordinal domains: RuleSeverity
@@ -94,8 +103,10 @@ uint8_t alarmAcknowledge() {
 
 void initAlarmOutput() {
 #if INCLUDE_ALARMS && defined(BUZZER_PIN)
-    pinMode(BUZZER_PIN, OUTPUT);
-    platformNoTone(BUZZER_PIN);
+    if (buzzerHeld()) {
+        pinOutputAt(BUZZER_PIN, LOW);   // silent before the driver turns on
+        platformNoTone(BUZZER_PIN);
+    }
 #endif
 
 #if INCLUDE_LED
@@ -111,7 +122,7 @@ void initAlarmOutput() {
 // is watching. The mode slot (CONFIG indication) is not the alarm's and stays.
 void stopAlarmOutput() {
 #if INCLUDE_ALARMS && defined(BUZZER_PIN)
-    platformNoTone(BUZZER_PIN);
+    if (buzzerHeld()) platformNoTone(BUZZER_PIN);
 #endif
 #if INCLUDE_LED
     rgbLedRelease(PRIORITY_ALARM);
@@ -221,13 +232,23 @@ void updateAlarmOutput() {
     // otherwise sound spurious alarms). The LED above is informative, not
     // physical actuation, so it is left running in both modes.
 #if INCLUDE_ALARMS && defined(BUZZER_PIN)
-    if (unackedSeverity == SEVERITY_ALARM && !isInConfigMode()) {
+    if (!buzzerHeld()) {
+        // Refused at boot: the pin is another function's (§12.5)
+    } else if (unackedSeverity == SEVERITY_ALARM && !isInConfigMode()) {
         tone(BUZZER_PIN, 700);
     } else {
         platformNoTone(BUZZER_PIN);
     }
 #endif
 }
+
+#if INCLUDE_ALARMS && defined(BUZZER_PIN)
+bool alarmBuzzerChirp() {
+    if (!buzzerHeld()) return false;
+    tone(BUZZER_PIN, 700); watchdogReset(); delay(250); platformNoTone(BUZZER_PIN);
+    return true;
+}
+#endif
 
 // ===== QUERY FUNCTIONS =====
 
