@@ -228,7 +228,18 @@ JSON import (`warmupMs`, `debounceMs`); see the
 ### When the sensor fails
 
 If the Rule's input stops producing a trustworthy reading (disconnected,
-shorted, pegged at the rail), the Action goes to its **failsafe** state:
+shorted, pegged at the rail) for **2 seconds**, the Action goes to its
+**failsafe** state. A shorter dropout (one bad sample, a missed CAN frame)
+leaves the relay as it was: a running fan keeps running. The 2 seconds also
+apply at startup, so a relay whose sensor is dead from power-on reaches its
+failsafe about 2 seconds after the first reading. During a Rule's warmup the
+app may not yet show a sensor fault for that input (it waits out the warmup so
+a CAN sensor that hasn't started sending isn't flagged), but the relay is
+already in its failsafe state.
+
+A sensor whose normal output reaches a supply rail (a 0-5 V sender reading
+0 V, a float switch) can't be told apart from a fault, so it never triggers
+the failsafe.
 
 - `FAILSAFE OFF` (default) — the relay turns off. Right for a fuel pump.
 - `FAILSAFE ON` — the relay turns on. Right for a cooling fan: if you lose the

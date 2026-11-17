@@ -104,12 +104,12 @@ float thresholdFor(const Rule& r, uint8_t kind) {
 // past the debounce):
 //
 //   Window 1 — fault PENDING: the reading is NAN and ctx.nanSince is
-//   stamped, but the FAULT debounce hasn't elapsed. rulesManagerUpdate()
-//   runs every 50ms and de-asserts an ACTIVE rule to READY on the FIRST NaN
-//   tick (NaN never asserts, §11.3), so evalSlot()'s truthful key right now
-//   is NONE/CLEAR. Without this, a rule's source dying goes
-//   ALARM -> CLEAR (<=50ms) -> FAULT (+2s) instead of the correct
-//   ALARM -> FAULT.
+//   stamped, but the FAULT debounce hasn't elapsed. An ACTIVE rule is held
+//   ACTIVE through that gap (#650), but a READY rule in its approach tier
+//   reads NONE (the warn band needs a real value), and in WARMUP the FAULT
+//   debounce is stretched past the 2 s at which the engine gives up on the
+//   reading. Holding the last key keeps the wire at ALARM/WARNING -> FAULT,
+//   never a CLEAR in between.
 //
 //   Window 2 — fault CLEARING while re-tripping: the reading has returned
 //   and is (still) past the limit, so the rule sits READY with its
@@ -159,9 +159,9 @@ AlarmKey evalSlot(int i, const AlarmKey& last, float& value, float& threshold) {
         if (in != nullptr) {
             // A source reading that's been NAN past the debounce is announced
             // as FAULT/INFO instead of whatever rulesRuleAnnunciatorSeverity
-            // would say (#443). This matters most for an ACTIVE rule: NAN
-            // de-asserts it (rulesRuleConditionAsserted never asserts on NAN,
-            // by design — a failsafe intent, §11.3), so without this branch
+            // would say (#443). This matters most for an ACTIVE rule: past the
+            // debounce NAN de-asserts it (held only through a shorter gap,
+            // #650, §11.3), so without this branch
             // the broadcaster would emit NORMAL/CLEAR for a sensor that just
             // died mid-alarm — the opposite of what happened, and a false
             // "all clear" for the driver. INFO on purpose: a fault must

@@ -105,6 +105,13 @@ static uint8_t addRule(uint8_t id, uint8_t pin, bool active, bool enabled = true
     r.flags = enabled ? RULE_FLAG_ENABLED : 0;
     g_ruleContexts[slot].state = !enabled ? RULE_DISABLED
                                           : (active ? RULE_ACTIVE : RULE_READY);
+    // A source already reading NaN is a sensor that has been dead for longer
+    // than the fault debounce, as rulesManagerUpdate() would have stamped it
+    // (#650): the action path faults only past RULES_FAULT_DEBOUNCE_MS.
+    Input* in = getInputByPin(pin);
+    g_ruleContexts[slot].nanSince = (in && isnan(in->value)) ? 1 : 0;
+    if (g_ruleContexts[slot].nanSince && g_test_now < 1 + RULES_FAULT_DEBOUNCE_MS)
+        g_test_now = 1 + RULES_FAULT_DEBOUNCE_MS;
     return id;
 }
 
@@ -636,6 +643,33 @@ static void test_configured_nan_source_still_faults(void) {
     TEST_ASSERT_TRUE(rulesActionSourceFaulted(0));
 }
 
+// #650: a NaN gap shorter than the fault debounce is not a fault on the action
+// path. The member rule is still ACTIVE (the engine holds it, see
+// test_rules_engine), so a FAILSAFE OFF relay it drives stays ON; past the
+// debounce the source faults and the failsafe takes over.
+static void test_short_nan_gap_holds_the_relay(void) {
+    addInput(10, 120.0f);
+    addRule(0, 10, /*active*/true);
+    addAction(0, 23, ACT_FAILSAFE_OFF);
+    rulesActionAddRule(0, 0);
+    rulesSyncActionPins();
+    g_test_now = 10000;
+    rulesActionsUpdate(false);
+    TEST_ASSERT_TRUE(rulesActionState(0));
+
+    g_inputs[0].value = NAN;                                  // the gap starts
+    g_ruleContexts[rulesRuleSlot(0)].nanSince = 10000;        // as the engine stamps it
+    g_test_now = 10000 + RULES_FAULT_DEBOUNCE_MS - 1;
+    rulesActionsUpdate(false);
+    TEST_ASSERT_TRUE_MESSAGE(rulesActionState(0), "a short gap holds the relay");
+    TEST_ASSERT_FALSE(rulesActionSourceFaulted(0));
+
+    g_test_now = 10000 + RULES_FAULT_DEBOUNCE_MS;
+    rulesActionsUpdate(false);
+    TEST_ASSERT_TRUE(rulesActionSourceFaulted(0));
+    TEST_ASSERT_FALSE_MESSAGE(rulesActionState(0), "past the debounce the failsafe (OFF) wins");
+}
+
 // CLEAR <pin> takes the pin's rules with it, through the RULE DEL path: every
 // referring action loses that membership (and an action left with none reverts
 // to manual-only), so no orphan is created in the first place.
@@ -1040,6 +1074,7 @@ int main(int, char**) {
     RUN_TEST(test_dangling_members_do_not_fall_back_to_the_latch);
     RUN_TEST(test_orphan_member_cannot_force_the_failsafe);
     RUN_TEST(test_configured_nan_source_still_faults);
+    RUN_TEST(test_short_nan_gap_holds_the_relay);
     RUN_TEST(test_remove_rules_for_input_drops_memberships);
     RUN_TEST(test_remove_rules_for_input_reports_released_drive);
     RUN_TEST(test_rule_disable_parks_it_and_enable_rearms);

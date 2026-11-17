@@ -26,8 +26,9 @@ void rulesRuleInit(RuleContext& ctx, const Rule& rule, uint32_t now) {
 }
 
 bool rulesRuleConditionAsserted(const Rule& rule, float value, bool currentlyActive) {
-    // Safety: an untrustworthy (NaN) reading never asserts. An already-active
-    // rule therefore de-asserts when its source goes NaN.
+    // Safety: an untrustworthy (NaN) reading never asserts. rulesRuleUpdate()
+    // keeps an ACTIVE rule through a NaN gap shorter than the fault debounce
+    // (#650) and only then lets this de-assert it.
     if (isnan(value)) {
         return false;
     }
@@ -108,6 +109,16 @@ void rulesRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t n
     }
 
     // ===== Qualification (READY / ACTIVE) =====
+    // An ACTIVE rule rides out a NaN gap shorter than the fault debounce
+    // (#650, §11.3): one dropped conversion or CAN frame must not drop a
+    // running fan and make it re-qualify for persistTime. Past the debounce
+    // the source is faulted and the rule de-asserts below, as before. A READY
+    // rule is not held: its persist timer counts observed samples only, so a
+    // gap restarts it (spike, NaN, spike is not a sustained condition).
+    if (isnan(value) && ctx.state == RULE_ACTIVE &&
+        !rulesRuleSourceUntrusted(ctx, now)) {
+        return;
+    }
     const bool asserted = rulesRuleConditionAsserted(rule, value, ctx.state == RULE_ACTIVE);
     if (asserted) {
         if (ctx.faultStartTime == 0) {
@@ -127,6 +138,12 @@ void rulesRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t n
 
 bool rulesRuleIsActive(const RuleContext& ctx) {
     return ctx.state == RULE_ACTIVE;
+}
+
+bool rulesRuleSourceUntrusted(const RuleContext& ctx, uint32_t now) {
+    if (ctx.state == RULE_DISABLED) return false;
+    if (ctx.nanSince == 0) return false;
+    return (now - ctx.nanSince) >= RULES_FAULT_DEBOUNCE_MS;
 }
 
 bool rulesRuleSourceFaulted(const RuleContext& ctx, uint32_t now) {

@@ -155,9 +155,77 @@ static void test_nan_never_asserts_and_clears_active(void) {
     rulesRuleUpdate(r, ctx, 120.0f, 2000);
     rulesRuleUpdate(r, ctx, 120.0f, 2200);
     TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
-    // sensor goes NaN -> de-asserts (failsafe intent)
+    // sensor goes NaN: held for the fault debounce (#650), then de-asserts
+    // (failsafe intent, §11.3)
     rulesRuleUpdate(r, ctx, NAN, 2300);
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, NAN, 2300 + RULES_FAULT_DEBOUNCE_MS - 1);
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
+    rulesRuleUpdate(r, ctx, NAN, 2300 + RULES_FAULT_DEBOUNCE_MS);
     TEST_ASSERT_FALSE(rulesRuleIsActive(ctx));
+    TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
+    TEST_ASSERT_EQUAL_UINT32(0, ctx.faultStartTime);
+    // A READY rule never asserts on NaN however long it lasts.
+    rulesRuleUpdate(r, ctx, NAN, 9000);
+    TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
+}
+
+// #650: a gap shorter than the debounce leaves an ACTIVE rule ACTIVE the whole
+// way through -- it never passes through READY, so it never re-qualifies
+// for persistTime when the reading returns.
+static void test_active_rule_rides_out_a_short_nan_gap(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f, 0.0f, 2.0f, 500, /*debounce*/1000);
+    RuleContext ctx{};
+    toReady(r, ctx, 50.0f);
+    rulesRuleUpdate(r, ctx, 120.0f, 2000);
+    rulesRuleUpdate(r, ctx, 120.0f, 3000);
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
+    for (uint32_t t = 3050; t < 3050 + RULES_FAULT_DEBOUNCE_MS - 100; t += 50) {
+        rulesRuleUpdate(r, ctx, NAN, t);
+        TEST_ASSERT_EQUAL_MESSAGE(RULE_ACTIVE, ctx.state, "held through the gap");
+    }
+    rulesRuleUpdate(r, ctx, 120.0f, 3050 + RULES_FAULT_DEBOUNCE_MS - 50);
+    TEST_ASSERT_EQUAL_MESSAGE(RULE_ACTIVE, ctx.state, "no re-qualification after the gap");
+    TEST_ASSERT_EQUAL_UINT32(0, ctx.nanSince);
+    // A value back on the clear side still de-asserts as before.
+    rulesRuleUpdate(r, ctx, 50.0f, 6000);
+    TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
+}
+
+// #650: a READY rule's persist timer counts observed samples only: a NaN in
+// the middle restarts it, so spike, NaN, spike is not a sustained condition.
+static void test_nan_gap_restarts_a_ready_rules_persist_timer(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f, 0.0f, 2.0f, 500, /*debounce*/1000);
+    RuleContext ctx{};
+    toReady(r, ctx, 50.0f);
+    rulesRuleUpdate(r, ctx, 120.0f, 2000);       // timer starts
+    rulesRuleUpdate(r, ctx, NAN, 2500);          // gap
+    TEST_ASSERT_EQUAL_UINT32(0, ctx.faultStartTime);
+    rulesRuleUpdate(r, ctx, 120.0f, 3100);       // 1100 ms after the first spike
+    TEST_ASSERT_EQUAL_MESSAGE(RULE_READY, ctx.state, "the gap is not counted as persistence");
+    rulesRuleUpdate(r, ctx, 120.0f, 4100);
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, ctx.state);
+}
+
+// #650 option B: the action path's test is 2 s from the first NaN in every
+// armed state, with no warmup stretch; the alarm channel's keeps the stretch.
+static void test_source_untrusted_has_no_warmup_stretch(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f, 0.0f, 2.0f, /*warmup*/30000);
+    RuleContext ctx{};
+    rulesRuleInit(ctx, r, 0);
+    rulesRuleUpdate(r, ctx, NAN, 10);            // INIT, dead from boot
+    TEST_ASSERT_FALSE(rulesRuleSourceUntrusted(ctx, 10 + RULES_FAULT_DEBOUNCE_MS - 1));
+    TEST_ASSERT_TRUE_MESSAGE(rulesRuleSourceUntrusted(ctx, 10 + RULES_FAULT_DEBOUNCE_MS),
+                             "even in INIT");
+    TEST_ASSERT_FALSE(rulesRuleSourceFaulted(ctx, 10 + RULES_FAULT_DEBOUNCE_MS));  // INIT: not reported
+    rulesRuleUpdate(r, ctx, NAN, 1100);          // -> WARMUP
+    TEST_ASSERT_EQUAL(RULE_WARMUP, ctx.state);
+    TEST_ASSERT_TRUE(rulesRuleSourceUntrusted(ctx, 5000));
+    TEST_ASSERT_FALSE_MESSAGE(rulesRuleSourceFaulted(ctx, 5000), "reporting waits out the 30 s warmup");
+    TEST_ASSERT_TRUE(rulesRuleSourceFaulted(ctx, 10 + 30000));
+    // A disabled rule is never untrusted.
+    ctx.state = RULE_DISABLED;
+    TEST_ASSERT_FALSE(rulesRuleSourceUntrusted(ctx, 60000));
 }
 
 // --- nanSince / rulesRuleSourceFaulted (#443) --------------------------
@@ -760,6 +828,9 @@ int main(int, char**) {
     RUN_TEST(test_below_asserts_and_clears);
     RUN_TEST(test_outside_band_both_edges);
     RUN_TEST(test_nan_never_asserts_and_clears_active);
+    RUN_TEST(test_active_rule_rides_out_a_short_nan_gap);
+    RUN_TEST(test_nan_gap_restarts_a_ready_rules_persist_timer);
+    RUN_TEST(test_source_untrusted_has_no_warmup_stretch);
     RUN_TEST(test_nansince_stamps_on_nan_and_clears_on_finite);
     RUN_TEST(test_nansince_clears_on_disable);
     RUN_TEST(test_nansince_now_zero_stamps_one);

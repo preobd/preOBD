@@ -508,6 +508,29 @@ static void test_fault_a_no_clear_before_debounce_then_one_fault(void) {
     }
 }
 
+// (a2) #650: a NaN gap SHORTER than the fault debounce, on the real engine.
+// The rule stays ACTIVE throughout (held, not re-qualified), so the wire
+// carries nothing new at all: no CLEAR, no FAULT, no second ALARM.
+static void test_fault_a2_short_gap_emits_nothing(void) {
+    configRealRule(RULE_SEV_ALARM, -1.0f, 100.0f);
+    armRuleToReady(50.0f);
+    g_srcInput.value = 120.0f;
+    stepEngine(10);
+    stepEngine(rules[0].debounceMs + 1);
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, g_ruleContexts[0].state);
+    const int histBefore = g_histCount;
+
+    g_srcInput.value = NAN;
+    for (uint32_t t = 0; t < RULES_FAULT_DEBOUNCE_MS - 200; t += 50) {
+        stepEngine(50);
+        TEST_ASSERT_EQUAL(RULE_ACTIVE, g_ruleContexts[0].state);
+    }
+    g_srcInput.value = 120.0f;                  // back, still tripped
+    for (int i = 0; i < 10; ++i) stepEngine(50);
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, g_ruleContexts[0].state);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(histBefore, g_histCount, "a short gap puts nothing on the wire");
+}
+
 // Shared setup for (b)/(c): real-arm, real-trip to ALARM, then drive the
 // source to NAN until the real engine (via the broadcaster's hold) reports
 // FAULT.
@@ -697,6 +720,7 @@ int main(int, char**) {
     RUN_TEST(test_none_severity_rule_nan_is_silent);
     RUN_TEST(test_rule_init_state_nan_past_debounce_is_silent);
     RUN_TEST(test_fault_a_no_clear_before_debounce_then_one_fault);
+    RUN_TEST(test_fault_a2_short_gap_emits_nothing);
     RUN_TEST(test_fault_b_reading_returns_tripped_then_alarm);
     RUN_TEST(test_fault_c_reading_returns_normal_then_clear);
     RUN_TEST(test_fault_d_orphan_rule_never_faults);

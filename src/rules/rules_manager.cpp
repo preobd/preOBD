@@ -185,9 +185,10 @@ void rulesAckExpire(uint32_t now, uint32_t durationMs) {
         if (durationMs) {
             // Timed: "mute THIS rule for N seconds", full stop. It deliberately
             // survives a clear-and-retrip inside the window — a flaky sensor
-            // (NaN glitch de-asserts an ACTIVE rule instantly, then it
-            // re-trips after debounce) would otherwise re-sound on every
-            // glitch, which is exactly what the old global window rode through.
+            // (a NaN dropout past the 2 s fault debounce de-asserts an ACTIVE
+            // rule, #650, then it re-trips after debounce) would otherwise
+            // re-sound on every dropout, which is exactly what the old global
+            // window rode through.
             lapsed = (uint32_t)(now - g_ackAtMs[i]) >= durationMs;
         } else {
             // Until clear: lapse the moment the rule stops sounding, so a
@@ -1089,8 +1090,13 @@ static bool sourceFaultedForRuleSlot(int rslot) {
     // nothing in ACTION LIST naming the culprit (#345).
     if (in == nullptr) return false;
     // A CONFIGURED input reading NaN is the real sensor-loss case — open/shorted
-    // probe, dead bus — and that is exactly what the failsafe exists for.
-    return isnan(in->value);
+    // probe, dead bus — and that is exactly what the failsafe exists for. But
+    // only once it has lasted the fault debounce (§11.3, #650): a shorter gap
+    // holds the rule (rulesRuleUpdate) and so the relay. The rule's nanSince is
+    // stamped by rulesManagerUpdate(), which runs in the same 50 ms step just
+    // before rulesActionsUpdate(); a read between steps (CLI, BLE) can see a
+    // fresh NaN as not yet faulted for at most that step, which is the debounce.
+    return rulesRuleSourceUntrusted(g_ruleContexts[rslot], millis());
 }
 
 // Resolve an action's Rule membership into the aggregate the pure resolver takes.

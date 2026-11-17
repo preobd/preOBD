@@ -205,8 +205,10 @@ still evaluate and Bluetooth clients still see them).
 
 A disconnected or shorted sensor reads `NaN`, shown as `ERR` on the LCD. A Rule
 never fires on `NaN` — a broken wire shouldn't sound the "oil pressure low"
-alarm. Instead, after 2 seconds of invalid readings (or the warmup time, if
-longer), Bluetooth clients are told the input has a **sensor fault**.
+alarm. An alarm that is already firing keeps firing through a dropout shorter
+than 2 seconds, so one bad sample doesn't stop and restart it. After 2 seconds
+of invalid readings (or the warmup time, if longer), the alarm stops and
+Bluetooth clients are told the input has a **sensor fault**.
 
 So a failed sensor does **not** sound the buzzer. Watch for `ERR` on the display,
 and use `SYSTEM DIAG INPUTS` to see why an input is failing.

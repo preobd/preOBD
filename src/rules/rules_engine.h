@@ -42,8 +42,9 @@ void rulesRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t n
 /**
  * Pure condition test with hysteresis. `currentlyActive` selects the assert vs.
  * clear threshold band (clear band is inset by `hysteresis` from each limit).
- * NaN never asserts — an untrustworthy reading must not trip a rule, and an
- * already-active rule de-asserts (failsafe intent, §11.3).
+ * NaN never asserts — an untrustworthy reading must not trip a rule. An
+ * already-active rule is held through a NaN gap shorter than
+ * RULES_FAULT_DEBOUNCE_MS by rulesRuleUpdate(), then de-asserts (§11.3, #650).
  */
 bool rulesRuleConditionAsserted(const Rule& rule, float value, bool currentlyActive);
 
@@ -69,6 +70,18 @@ bool rulesRuleIsActive(const RuleContext& ctx);
  * reporting real values, so a NAN there really is news.
  */
 bool rulesRuleSourceFaulted(const RuleContext& ctx, uint32_t now);
+
+/**
+ * The ACTION path's fault test (§11.3, #650): the source has read NAN for
+ * RULES_FAULT_DEBOUNCE_MS, from the first NaN tick, in any armed state
+ * (INIT and WARMUP included) and WITHOUT the warmup stretch above. A
+ * FAILSAFE ON relay with a dead sensor must not wait out a CAN rule's long
+ * warmup (up to 65 s); the stretch only keeps the alarm channel from
+ * announcing FAULT for a source that hasn't sent its first frame yet. Same
+ * timestamp and constant as rulesRuleSourceFaulted(), so past WARMUP the two
+ * always agree.
+ */
+bool rulesRuleSourceUntrusted(const RuleContext& ctx, uint32_t now);
 
 /**
  * True while an ARMED-and-READY rule has an assertion currently debouncing
