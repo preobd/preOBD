@@ -11,7 +11,6 @@
 #include "../config/input_store.h"  // resetInputConfig (#402 step 2)
 #include "input_display.h"
 #include "../inputs/input.h"
-#include "serial_config.h"
 #include "../version.h"
 #include "../core/system_mode.h"
 #include "../core/reset_reason.h"

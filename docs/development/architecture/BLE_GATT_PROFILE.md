@@ -158,7 +158,7 @@ Responses are multi-line ASCII text terminated by the prompt string:
 preOBD>
 ```
 
-The client buffers incoming notifications until it detects `preOBD> ` (8 characters including trailing space), which marks the end of the response. This is the same prompt that the embedded-cli library prints after every command.
+The client buffers incoming notifications until it detects `preOBD> ` (8 characters including trailing space), which marks the end of the response. This is the same prompt the console prints after every command, on every link.
 
 **Example exchange:**
 

@@ -1240,14 +1240,17 @@ FLASHMEM bool importInputsFromJSON(JsonArray& inputsArray) {
 // guarded before use, and the live config is only overwritten once, at the
 // very end -- one assignment nothing above this line can fail past.
 #if NUM_SERIAL_PORTS > 0
-// A serial port that is running and routed for commands may be the link this
-// import arrived on, so the import never changes it (#561) -- the same reason
-// SYSTEM RESET CONFIRM keeps serial settings (RESET_KEEP_LINK, #549). Read from
-// systemConfig.console, which every CONSOLE TRANSPORT keeps in step (routingCaptureConfig).
+// A serial port that is running and carries commands keeps its settings, so an
+// import can't cut off a link the board is talked to over (#561) -- the same
+// reason SYSTEM RESET CONFIRM keeps serial settings (RESET_KEEP_LINK, #549).
+// That is the console's ports (systemConfig.console, which every CONSOLE
+// TRANSPORT keeps in step) and a framed port (the app's link, always a console
+// source, #612). Every JSON IMPORT arrives on one of these (#624).
 FLASHMEM static bool serialPortCarriesCommands(uint8_t port_id) {
     if (!isSerialPortActive(port_id)) return false;
     const uint8_t t = (uint8_t)(TRANSPORT_SERIAL1 + (port_id - 1));
-    return systemConfig.console.primary == t || systemConfig.console.secondary == t;
+    const bool framed = systemConfig.serial.framed_enabled_mask & (1u << (port_id - 1));
+    return systemConfig.console.primary == t || systemConfig.console.secondary == t || framed;
 }
 #endif
 

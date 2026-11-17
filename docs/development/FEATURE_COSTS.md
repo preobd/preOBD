@@ -60,7 +60,6 @@ much (and several would overflow the 90 B RAM headroom — see notes).
 | `SUPPORTS_FRAMED_TRANSPORT` | +5,192 B | **+1,691 B** | would overflow RAM ~19× over; real ceiling |
 | `SUPPORTS_ELM327` | +4,202 B | +301 B | would overflow RAM headroom |
 | `SUPPORTS_TEST_MODE` | +7,568 B | +238 B | would overflow RAM headroom |
-| `SUPPORTS_CLI_EDITING` | ≈ +3.1 KB | **≈ +690 B** | embedded-cli editor; the stack can't spare it (#147, measured 2026-10-01 below) |
 | `SUPPORTS_RELAY_OUTPUT` | +1,194 B | +32 B | cheap (deprecated → Actions) |
 | `SUPPORTS_REALDASH` | +222 B | +36 B | **nearly free** — disabled by choice, not a RAM limit |
 | `INCLUDE_SD_LOGGING` | — | — | won't build: `SD.h` not in mega `lib_deps` (lib + RAM ceiling) |
@@ -79,7 +78,7 @@ much (and several would overflow the 90 B RAM headroom — see notes).
 | Knob | ΔFlash | ΔStatic RAM | Per-unit |
 |---|---|---|---|
 | `MAX_INPUTS` 8→16 / 8→4 | ~0 | +880 B / −440 B | **≈110 B / input** |
-| `CLI_CMD_BUFFER_SIZE` | 0 | 1 B / char | longest command line; `CLI_BUFFER_SIZE` only applies with `SUPPORTS_CLI_EDITING` |
+| `CLI_CMD_BUFFER_SIZE` | 0 | 1 B / char, per console source | longest command line (two sources on mega, #624) |
 | `CAN_CACHE_SIZE` 8→16 | ~0 | +128 B | 16 B / entry |
 | `MAX_PIN_REGISTRY` 24→16 | 0 | −40 B | 5 B / entry |
 | `MAX_PID_ENTRIES` 8→16 | 0 | +24 B | 3 B / entry |
@@ -131,7 +130,6 @@ so the deltas below are unaffected. CCM is unused.
 | `SUPPORTS_TEST_MODE` | −12,048 B | −584 B | |
 | `SUPPORTS_BME280` | −7,972 B | −28 B | |
 | `SUPPORTS_ELM327` | −3,744 B | −440 B | |
-| `SUPPORTS_CLI_EDITING` | −3,256 B | −1,168 B | |
 | `SUPPORTS_LCD` | −3,052 B | −424 B | |
 | `SUPPORTS_ALARMS` | −3,056 B | −16 B | the control engine itself stays in (it's only gated on AVR) |
 | `SUPPORTS_SERIAL_OUTPUT` | −456 B | 0 | |
@@ -160,9 +158,10 @@ Negative = saved by commenting the line out of `boards/feather_f405/board.h`.
   (2026-10-01, #523) by painting free RAM at reset: boot peaks at 501 B of stack,
   `SAVE` at ~630 B. At 97.4% static RAM (≈210 B left) the board crash-looped
   before printing anything, so keep **≥ ~900 B** free (≲ 89% static). It was
-  the embedded-cli editor's 820 B arena that ate the margin: mega now drops
-  `SUPPORTS_CLI_EDITING` for a 128 B line reader (#147) and sits at 86.4%,
-  with 492 B of stack never touched.
+  the embedded-cli editor's 820 B arena that ate the margin: mega dropped it
+  for a 128 B line reader (#147) and sat at 86.4%, with 492 B of stack never
+  touched. Since #624 no board has the editor; mega has a line per console
+  source (primary and secondary).
 - **PROGMEM must end below 64 KB.** Near `pgm_read_*` only addresses
   0x0000–0xFFFF, so a table or `F()` string above it reads garbage.
   `scripts/avr_progmem_guard.py` fails the build past the line, and

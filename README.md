@@ -64,7 +64,7 @@ Type `HELP` on the device for the full command list.
 | Teensy 4.0 / 3.6 | Every feature; native CAN |
 | ESP32-S3 | Every feature; native CAN (TWAI) |
 | Feather STM32F405 | Every feature; native CAN (bxCAN), built-in SD slot |
-| Arduino Mega 2560 | 5V; up to 8 inputs; no SD logging, RealDash, Bluetooth OBD or CLI history (8 KB RAM) |
+| Arduino Mega 2560 | 5V; up to 8 inputs; no SD logging, RealDash or Bluetooth OBD (8 KB RAM) |
 
 See [Choosing Hardware](docs/getting-started/CHOOSING_HARDWARE.md) for the full comparison.
 

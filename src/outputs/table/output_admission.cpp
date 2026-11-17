@@ -39,7 +39,7 @@ FLASHMEM const __FlashStringHelper* outputAdmitReason(uint8_t selfId, OutputForm
     if (!outputFormatBuilt(format)) return F("is not in this build");
     if (!outputTransportAllowed(format, transport)) return F("can't use that transport");
     // BLE is the nRF's one data channel (the phone's FFE1): one enabled
-    // output on it, ELM327 or RealDash (#612 2c; a second channel is #620)
+    // output on it, ELM327 or RealDash (#612 2c; a second channel, #620, is not planned)
 #if INCLUDE_FRAMED_TRANSPORT   // BLE exists only with the nRF link
     if (outputTransportKind(transport) == OTK_BLE) {
         for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {

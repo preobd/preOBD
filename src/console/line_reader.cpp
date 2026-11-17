@@ -1,28 +1,34 @@
 /*
- * line_reader.cpp - see line_reader.h. Behaviour mirrors embedded-cli's
- * embeddedCliProcess / onControlInput / onCharInput (embedded_cli.c) for
- * everything except history and cursor movement.
+ * line_reader.cpp - see line_reader.h
  */
 #include "line_reader.h"
 
-static void writeStr(LineReaderWriteFn write, const char* s) {
+#ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
+#define FLASHMEM
+#endif
+
+FLASHMEM static void writeStr(LineReaderWriteFn write, const char* s) {
     while (*s) write(*s++);
 }
 
-void lineReaderInit(LineReader& r, char* buf, uint16_t cap) {
+FLASHMEM void lineReaderInit(LineReader& r, char* buf, uint16_t cap) {
     r.buf = buf;
     r.cap = cap;
+    lineReaderReset(r);
+}
+
+FLASHMEM void lineReaderReset(LineReader& r) {
     r.lastChar = '\0';
     r.escape = false;
     lineReaderClear(r);
 }
 
-void lineReaderClear(LineReader& r) {
+FLASHMEM void lineReaderClear(LineReader& r) {
     r.len = 0;
     if (r.cap > 0) r.buf[0] = '\0';
 }
 
-bool lineReaderFeed(LineReader& r, char c, LineReaderWriteFn write) {
+FLASHMEM bool lineReaderFeed(LineReader& r, char c, LineReaderWriteFn write) {
     const char last = r.lastChar;
     r.lastChar = c;
 
@@ -49,8 +55,7 @@ bool lineReaderFeed(LineReader& r, char c, LineReaderWriteFn write) {
         return false;
     }
     if ((uint8_t)c >= 32 && (uint8_t)c <= 126) {
-        // Two bytes of slack stay free for in-place tokenizing (header comment)
-        if (r.len + 2 >= r.cap) return false;
+        if (r.len + 1 >= r.cap) return false;           // room for the NUL
         r.buf[r.len++] = c;
         r.buf[r.len] = '\0';
         write(c);

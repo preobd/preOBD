@@ -237,7 +237,7 @@ const char* name = (const char*)pgm_read_ptr(&SENSOR_LIBRARY[i].name);
 SET A0 OIL_PRESSURE VDO_5BAR_CURVE
 ```
 
-**1. Parse command** (`src/console/serial_config.cpp`)
+**1. Parse command** (`src/console/console_input.cpp`, `cli_tokenize.cpp`)
 ```cpp
 const char* pinStr = "A0";
 const char* appName = "OIL_PRESSURE";

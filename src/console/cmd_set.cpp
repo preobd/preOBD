@@ -13,7 +13,6 @@
 #include "../inputs/calibration_apply.h"
 #include "../inputs/measurement_compat.h"
 #include "../sensors/can_sensor_library/obd_output_pids.h"
-#include "serial_config.h"
 #include "../version.h"
 #include "../core/system_mode.h"
 #include "../config/system_config.h"

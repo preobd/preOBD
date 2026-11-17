@@ -56,7 +56,7 @@ ENVS = {
         "struct": [
             ("MAX_INPUTS 8->4",          "MAX_INPUTS", "4"),
             ("MAX_INPUTS 8->16",         "MAX_INPUTS", "16"),
-            ("CLI_BUFFER_SIZE 820->512", "CLI_BUFFER_SIZE", "512"),
+            ("CLI_CMD_BUFFER_SIZE 128->96", "CLI_CMD_BUFFER_SIZE", "96"),
             ("MAX_PID_ENTRIES 8->16",    "MAX_PID_ENTRIES", "16"),
             ("MAX_PIN_REGISTRY 24->16",  "MAX_PIN_REGISTRY", "16"),
             ("CAN_CACHE_SIZE 8->16",     "CAN_CACHE_SIZE", "16"),

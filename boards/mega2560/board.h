@@ -31,8 +31,6 @@
 //   SUPPORTS_ELM327 (+301 B), SUPPORTS_FRAMED_TRANSPORT (+1689 B),
 //   SUPPORTS_TEST_MODE (+238 B) — each exceeds the 8 KB headroom.
 //   SUPPORTS_REALDASH (+36 B) would fit; it is omitted by preference, not ceiling.
-//   SUPPORTS_CLI_EDITING (+~690 B: embedded-cli's 820 B arena vs a 128 B line)
-//   — would leave the stack too little room to boot (#147, #523).
 
 // ===== FEATURE CAPABILITY (what this board CAN do) =====
 // Declared by presence: a board that can't simply omits the line. Never 0.
@@ -59,14 +57,11 @@
 #define CAN_CACHE_SIZE          8
 #define MAX_SCAN_RESULTS        4
 
-// ===== CLI BUFFER SIZES =====
-// No SUPPORTS_CLI_EDITING: the CLI is the plain line reader (#147), so none of
-// embedded-cli's CLI_BUFFER_SIZE / RX / HISTORY / BINDINGS sizes apply. Its
-// 820 B arena was the board's largest allocation, and without it the stack
-// had ~210 B against a measured 633 B peak (SAVE): the board couldn't boot (#523).
-#define CLI_CMD_BUFFER_SIZE     128   // one line, incl. 2 B tokenizer slack
+// ===== CLI SIZES =====
+// One line per console source (#624: two here, primary and secondary). The
+// stack peaks at a measured 633 B (SAVE), so keep static RAM ≲ 89% (#523).
+#define CLI_CMD_BUFFER_SIZE     128   // one line: 127 chars + NUL
 #define CLI_MAX_ARGS            9     // longest cmd: set <name> rpm 4 <4 pairs> <max>
-#define CLI_MAX_ARG_LEN         20
 
 // ===== JSON CAPABILITY (CEILING — AVR RAM can't host it) =====
 #define SUPPORTS_JSON_CONFIG        0

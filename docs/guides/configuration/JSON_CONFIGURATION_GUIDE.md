@@ -53,7 +53,15 @@ The imported configuration takes effect immediately but is **not saved** until
 you run `SAVE`. Check it first with `LIST INPUTS`, `RULE LIST` and `OUTPUT LIST`.
 
 Tools that send the file programmatically can use `JSON IMPORT <byte-count>` and
-stream exactly that many bytes, with no `END JSON` line.
+stream exactly that many bytes, with no `END JSON` line. Wait for the reply
+`Ready for <n> bytes` before sending them.
+
+An import belongs to the link it was started on (USB, a serial port or
+Bluetooth). Commands from the other links keep working while it runs. A
+second import is refused (`ERROR: JSON import already in progress on <link>`),
+and the import never changes the settings of the serial port it arrives on.
+It is cancelled if its link stops being a console link, and ends after 45 s
+with no data.
 
 ---
 

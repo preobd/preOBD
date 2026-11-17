@@ -11,9 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - RealDash can connect over Bluetooth LE through the nRF52840 link (`OUTPUT ADD REALDASH BLE`), instead of ELM327 over BLE; it needs the updated nRF firmware
 
 ### Fixed
+- Commands and JSON imports from two links at once (USB, a second serial console and Bluetooth) no longer get mixed together: each link has its own command line, and an import belongs to the link that started it; an import or `LOAD` no longer changes the serial settings of the nRF Bluetooth port (use `BUS SERIAL 1` for that)
 - Teensy 4.0/4.1 builds could fail to boot at all (no USB, the program button needed) depending on how the code happened to lay out; the Teensy core is now pinned at 1.60, which fixes its startup clock setup (#621)
 
 ### Changed
+- The serial console no longer has command history, cursor editing or command-name completion (`VERS` no longer runs `VERSION`); it now behaves the same on every board and link
 - The mode button is now the user button: rename `MODE_BUTTON_PIN` to `USER_BUTTON_PIN` in your `wiring.ini` (the build stops with a message until you do), and `SYSTEM PINS` lists it as "User Button"
 - Outputs have ids, and inputs are routed to them: `OUTPUT LIST`, `OUTPUT ADD|DEL`, `OUTPUT <id> ENABLE|DISABLE|INTERVAL`, `SET <pin> ROUTE` and `ALARM ENABLE|DISABLE` replace `OUTPUT <name> …`, `OUTPUT STATUS`, `LIST OUTPUTS`, `SET <pin> OUTPUT` and `OUTPUT Alarm`, and the JSON `outputs` is now an array
 - Each CAN bus has one set of settings and changes apply without a reboot: `BUS CAN <bus> ENABLE|LISTEN|DISABLE|BAUDRATE` and `BUS CAN <bus> INPUT` replace `BUS CAN INPUT|OUTPUT|BAUDRATE|NONE`, OBD and ELM327 bind with `OUTPUT ADD OBD CAN<n>` / `OUTPUT ADD ELM327 SERIAL<n>` (replacing `BUS SERIAL <n> ELM327`), and ELM327 over Bluetooth is output 5 with its own routes — upgrading resets saved settings and inputs, so take a `SYSTEM DUMP JSON` first, re-import it, and run `SET <pin> ROUTE 5 ENABLE` for inputs a phone OBD app should see

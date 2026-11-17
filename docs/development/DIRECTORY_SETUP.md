@@ -64,7 +64,11 @@ preOBD/
 │   │   ├── cmd_bus.cpp         # BUS command
 │   │   ├── cmd_system.cpp      # SYSTEM command
 │   │   ├── command_helpers.*   # Parsing and HELP text
-│   │   └── serial_config.*     # Line input / embedded-cli glue
+│   │   ├── console_input.*     # A line per console source, the pump (#624)
+│   │   ├── console_routing.*   # Where console and log text goes
+│   │   ├── line_reader.*       # Assembles one source's line
+│   │   ├── cli_tokenize.*      # Splits a line into words (quotes, escapes)
+│   │   └── json_import_stream.* # JSON IMPORT, bound to its source
 │   ├── config/                 # EEPROM config store, JSON import/export
 │   └── core/                   # Messaging, logging, system mode, platform, watchdog
 │
@@ -191,8 +195,8 @@ This directory contains the input-based architecture for sensor configuration.
 - Shared helper functions used by the command processor
 - **Edit:** RARELY
 
-**serial_config.h / serial_config.cpp**
-- Serial input buffering and dispatch (feeds input to the command processor)
+**console_input.h / console_input.cpp**
+- Reads every console source (USB, a second serial console, the nRF link), a line each, and runs completed lines through the command table (#624)
 - **Edit:** RARELY
 
 ---

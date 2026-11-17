@@ -8,11 +8,19 @@
 
 preOBD is configured via serial commands at 115200 baud using an interactive command-line interface.
 
-Any serial monitor works for typing commands. A terminal emulator (screen,
-minicom, picocom, PuTTY, etc.) additionally gives you tab completion, command
-history and arrow-key editing.
+Any serial monitor works for typing commands. The board reads one line at a
+time: Backspace works, but there is no command history, cursor editing or
+name completion, so type each command name in full. For editing and history,
+use a tool that edits the line on your computer and sends it on Enter: the
+Arduino IDE or VS Code serial monitor, PuTTY with *Local line editing* on, or
+`socat READLINE,history=$HOME/.preobd_history /dev/cu.usbmodemXXXX,b115200,raw,echo=0`
+(the board echoes what it receives, so the line appears twice).
+
+USB, a second console port and the app over Bluetooth can all send commands
+at once: each has its own line, so they never mix.
 
 Commands are case-insensitive. Pin names can be `A0`, `a0`, `6`, etc.
+`<COMMAND> -h` prints that command's one-line help.
 
 ### Quick Connection Guide
 

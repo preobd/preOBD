@@ -356,8 +356,9 @@ static FLASHMEM int actionAuto(uint8_t id) {
 }
 
 // `name == nullptr` / "" clears the label back to unnamed. There is no way to
-// spell an empty string as a CLI token — embedded_cli's tokenizer collapses `""`
-// to no token at all — so the ARGUMENT-LESS form is the clear form (#336).
+// spell an empty string as a CLI token — the console's tokenizer
+// (cli_tokenize.h) collapses `""` to no token at all — so the ARGUMENT-LESS
+// form is the clear form (#336).
 // The reference webapp is fixed by this alone (`saveActionForm` already sends
 // `NAME ""`, which arrives here as argc == 3). The mobile app is NOT: it routes
 // a name-clear to DEL+ADD because no clear form existed, so it needs an app-side

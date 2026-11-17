@@ -1,23 +1,21 @@
 /*
- * line_reader.h - Minimal CLI line editor for boards without INCLUDE_CLI_EDITING (#147)
+ * line_reader.h - The console's line reader: one per console source (#147, #624)
  *
- * Assembles typed bytes into a command line the way embedded-cli does, without
- * its history, cursor editing, completion or 820 B buffer. (embedded-cli
- * completes a unique command prefix on Enter even with autocomplete off, so
- * `VERS` ran VERSION and echoed a trailing space. Here `VERS` is an unknown
- * command, and the echo is exactly what was typed.)
+ * Assembles received bytes into a command line. There is no history, cursor
+ * editing or completion: a terminal that wants them edits the line on the
+ * host and sends it whole. The echo is exactly what was typed, and a command
+ * name must be typed in full (`VERS` is an unknown command).
  *
  *   - printable ASCII (32-126) is stored and echoed; any other byte is dropped
- *     (embedded-cli's isDisplayableChar)
  *   - '\r' or '\n' ends the line and echoes "\r\n"; a CRLF or LFCR pair counts
  *     once
- *   - '\b' / 0x7F deletes the last char, echoing the same escape sequence as
- *     embedded-cli
+ *   - '\b' / 0x7F deletes the last char, echoing ESC [ D, ESC [ P (cursor
+ *     left, delete char)
  *   - an `ESC [ ... <final 0x40-0x7E>` sequence (arrow keys, Home, Del, ...)
  *     is ignored
- *   - a line keeps two bytes of slack, because embeddedCliTokenizeArgs()
- *     writes one byte past the NUL when it tokenizes in place, so cap 128
- *     holds 126 chars; further chars are dropped silently, as embedded-cli does
+ *   - a line holds cap - 1 chars plus its NUL (127 in 128 bytes); further
+ *     chars are dropped silently. cliTokenize() splits it in place without
+ *     writing past the NUL, so no slack is kept
  *
  * Pure (no Arduino dependency), so test/test_line_reader runs it on the host.
  */
@@ -45,6 +43,10 @@ void lineReaderInit(LineReader& r, char* buf, uint16_t cap);
  */
 bool lineReaderFeed(LineReader& r, char c, LineReaderWriteFn write);
 
+/** Drop the line, ready for the next one; a CR/LF pair split across it still counts once. */
 void lineReaderClear(LineReader& r);
+
+/** Back to the state lineReaderInit() left it in: no line, no pending CR or ESC sequence. */
+void lineReaderReset(LineReader& r);
 
 #endif // LINE_READER_H

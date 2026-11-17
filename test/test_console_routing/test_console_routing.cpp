@@ -1,15 +1,13 @@
-// Native unit test: the transport registry, the console pump and msg's sinks
-// (#612 phase 2b-2, which split the old MessageRouter into these three). It
-// carries the router's invariants over unchanged and pins the behaviour the
-// split must not drift from:
+// Native unit test: the transport registry and msg's sinks (#612 phase 2b-2,
+// which split the old MessageRouter up). Where commands come from -- the
+// console pump, a line per source -- is test_console_input (#624). This pins:
 //   - a hardware serial transport whose port was never started is never
 //     touched (#558: on Teensy 4 reading an unclocked UART is a hard fault;
 //     BUS SERIAL 1 DISABLE + SAVE on a FRAMED port boot-looped the board);
 //   - the console falls back to USB when neither of its transports is usable,
 //     the log never does;
-//   - a framed port is always a console source (#623);
-//   - a reply goes to the source of the command only, unsolicited output to
-//     the console's primary and secondary;
+//   - a reply goes to the source of the command only (consoleSetActive),
+//     unsolicited output to the console's primary and secondary;
 //   - msg with no sink registered writes nowhere; a disconnected primary
 //     skips the secondary (today's behaviour, kept);
 //   - LIST TRANSPORTS prints exactly what the router printed.
@@ -49,17 +47,6 @@ public:
     void clearOut() { outLen = 0; out[0] = '\0'; }
 };
 
-// The CLI, stubbed: count bytes; a dispatch with bytes buffered replies "R"
-static int g_bytes = 0, g_dispatches = 0, g_buffered = 0;
-static bool g_echo = false;      // the CLI echoes each byte as it is fed
-void handleCommandInput(char c) { g_bytes++; g_buffered++; if (g_echo) msg.control.write((uint8_t)c); }
-void processSerialCommands() {
-    if (g_buffered == 0) return;
-    g_buffered = 0;
-    g_dispatches++;
-    msg.control.print("R");
-}
-
 static bool g_portActive[9];
 static bool probe(uint8_t port_id) { return port_id < 9 && g_portActive[port_id]; }
 
@@ -79,8 +66,6 @@ static void reset() {
     planeSetUnchecked(PLANE_DEBUG, TRANSPORT_NONE, true);
     setMessageSinkResolver(PLANE_CONTROL, consoleSink);
     setMessageSinkResolver(PLANE_DEBUG, logSink);
-    g_bytes = g_dispatches = g_buffered = 0;
-    g_echo = false;
 }
 
 void setUp(void) { reset(); }
@@ -89,7 +74,6 @@ void tearDown(void) { setSerialPortActiveProbe(nullptr); }
 static void test_an_unstarted_serial_port_is_never_touched(void) {
     planeSetUnchecked(PLANE_CONTROL, TRANSPORT_SERIAL1, false);
     transportsUpdate();
-    consolePump();
     TEST_ASSERT_EQUAL_INT(0, s1.touches);
     TEST_ASSERT_NULL(transportGet(TRANSPORT_SERIAL1));
     msg.debug.print("x");                          // the log on an unstarted port: nothing
@@ -126,12 +110,12 @@ static void test_the_console_falls_back_to_usb_and_the_log_never_does(void) {
 static void test_a_reply_goes_to_its_source_and_unsolicited_output_to_both(void) {
     g_portActive[1] = true;
     planeSetUnchecked(PLANE_CONTROL, TRANSPORT_SERIAL1, true);     // console USB + SERIAL1
-    s1.pending = 3;
-    consolePump();
-    TEST_ASSERT_EQUAL_INT(3, g_bytes);
+    consoleSetActive(&s1);                         // a command from SERIAL1 is running
+    msg.control.print("R");
     TEST_ASSERT_EQUAL_STRING("R", s1.out);         // answered on the sender
     TEST_ASSERT_EQUAL_STRING("", usb.out);         // not on the other console port
-    TEST_ASSERT_NULL(consoleActiveSource());       // cleared after dispatch
+    consoleSetActive(nullptr);
+    TEST_ASSERT_NULL(consoleActiveSource());
 
     s1.clearOut();
     msg.control.print("A");                        // unsolicited: primary and secondary
@@ -139,14 +123,13 @@ static void test_a_reply_goes_to_its_source_and_unsolicited_output_to_both(void)
     TEST_ASSERT_EQUAL_STRING("A", s1.out);
 }
 
-static void test_the_echo_while_a_command_is_fed_goes_to_its_source(void) {
+static void test_console_transport_is_what_the_console_reads(void) {
+    TEST_ASSERT_EQUAL_PTR(&usb, consoleTransport(false));
+    TEST_ASSERT_NULL(consoleTransport(true));
+    planeSetUnchecked(PLANE_CONTROL, TRANSPORT_SERIAL1, false);   // a port that is off
+    TEST_ASSERT_EQUAL_PTR(&usb, consoleTransport(false));         // USB stands in (#558)
     g_portActive[1] = true;
-    planeSetUnchecked(PLANE_CONTROL, TRANSPORT_SERIAL1, true);     // console USB + SERIAL1
-    g_echo = true;
-    s1.pending = 2;
-    consolePump();
-    TEST_ASSERT_EQUAL_STRING("xxR", s1.out);       // the echo and the reply, the sender only
-    TEST_ASSERT_EQUAL_STRING("", usb.out);
+    TEST_ASSERT_EQUAL_PTR(&s1, consoleTransport(false));
 }
 
 static void test_a_transport_can_be_registered_and_replaced(void) {
@@ -167,22 +150,6 @@ static void test_the_log_multicasts_to_its_secondary(void) {
     TEST_ASSERT_EQUAL_STRING("L", usb.out);
     TEST_ASSERT_EQUAL_STRING("L", s2.out);
     TEST_ASSERT_EQUAL_STRING("", s1.out);
-}
-
-static void test_a_framed_port_is_always_a_console_source(void) {
-    s1.caps |= CAP_FRAMED;
-    s1.pending = 3; s2.pending = 3;
-    consolePump();                                 // ports not started: nothing read
-    TEST_ASSERT_EQUAL_INT(0, s1.touches);
-    TEST_ASSERT_EQUAL_INT(0, g_bytes);
-
-    g_portActive[1] = g_portActive[2] = true;
-    consolePump();
-    TEST_ASSERT_EQUAL_INT(0, s1.pending);          // the framed port was drained
-    TEST_ASSERT_EQUAL_INT(3, g_bytes);
-    TEST_ASSERT_EQUAL_INT(1, g_dispatches);
-    TEST_ASSERT_EQUAL_STRING("R", s1.out);         // and answered on
-    TEST_ASSERT_EQUAL_INT(3, s2.pending);          // the unframed one was not read
 }
 
 static void test_the_setters_refuse_an_unstarted_port_and_the_apply_path_does_not(void) {
@@ -236,10 +203,9 @@ int main(int, char**) {
     RUN_TEST(test_an_unstarted_serial_port_is_never_touched);
     RUN_TEST(test_the_console_falls_back_to_usb_and_the_log_never_does);
     RUN_TEST(test_a_reply_goes_to_its_source_and_unsolicited_output_to_both);
-    RUN_TEST(test_the_echo_while_a_command_is_fed_goes_to_its_source);
+    RUN_TEST(test_console_transport_is_what_the_console_reads);
     RUN_TEST(test_a_transport_can_be_registered_and_replaced);
     RUN_TEST(test_the_log_multicasts_to_its_secondary);
-    RUN_TEST(test_a_framed_port_is_always_a_console_source);
     RUN_TEST(test_the_setters_refuse_an_unstarted_port_and_the_apply_path_does_not);
     RUN_TEST(test_msg_with_no_sink_writes_nowhere);
     RUN_TEST(test_a_disconnected_primary_skips_the_secondary);

@@ -26,7 +26,6 @@
 #define SUPPORTS_CAN              1
 #define SUPPORTS_REALDASH         1
 #define SUPPORTS_SERIAL_OUTPUT    1
-#define SUPPORTS_CLI_EDITING      1    // embedded-cli: history + in-line editing (#147)
 #define SUPPORTS_FRAMED_TRANSPORT 1    // nRF52840 coprocessor framed link + broadcasters
 #define SUPPORTS_LCD              1
 #define SUPPORTS_ALARMS           1    // control engine (Rules/Actions/Annunciator) — NOT the buzzer
@@ -44,14 +43,9 @@
 #define CAN_CACHE_SIZE          16
 #define MAX_SCAN_RESULTS        32
 
-// ===== CLI BUFFER SIZES =====
-#define CLI_RX_BUFFER_SIZE      128
-#define CLI_CMD_BUFFER_SIZE     128
-#define CLI_HISTORY_BUFFER_SIZE 64
-#define CLI_MAX_BINDINGS        32
-#define CLI_BUFFER_SIZE         1280
-#define CLI_MAX_ARGS            16
-#define CLI_MAX_ARG_LEN         32
+// ===== CLI SIZES =====
+#define CLI_CMD_BUFFER_SIZE     128   // one line: 127 chars + NUL, per console source (#624)
+#define CLI_MAX_ARGS            16    // words per command line
 
 // ===== JSON CAPABILITY =====
 #define SUPPORTS_JSON_CONFIG        1

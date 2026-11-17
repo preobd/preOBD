@@ -64,6 +64,12 @@ static int  g_subCfgRequiredCount;
 static char g_subCfgCmd[32];
 static char g_subCfgTok[32];
 
+static int  g_helpCount;
+static char g_helpText[48];
+void dispatchReportCommandHelp(const char* help) {
+    g_helpCount++;
+    strncpy(g_helpText, help, sizeof(g_helpText) - 1);
+}
 void dispatchReportUnknownCommand(const char* name) {
     g_unknownCmdCount++;
     strncpy(g_unknownCmdName, name, sizeof(g_unknownCmdName) - 1);
@@ -111,7 +117,7 @@ static int handlerMode(int argc, const char* const* argv) {
 const Command COMMANDS[] = {
     {"CONFIG", handlerMode,   "", false},
     {"LIST",   handlerRead,   "", false},
-    {"SET",    handlerConfig, "", true},
+    {"SET",    handlerConfig, "Configure input", true},
 };
 const uint8_t NUM_COMMANDS = sizeof(COMMANDS) / sizeof(Command);
 
@@ -151,6 +157,7 @@ void setUp(void) {
     g_unknownSubCmd[0] = g_unknownSubTok[0] = '\0';
     g_subCfgCmd[0] = g_subCfgTok[0] = '\0';
     g_lastArgc = -1; g_lastArgv = nullptr;
+    g_helpCount = 0; g_helpText[0] = '\0';
     g_lastSubArgc = -1; g_lastSubArgv = nullptr; g_lastTokenIndex = -1;
 }
 void tearDown(void) {}
@@ -214,6 +221,28 @@ static void test_cmd_forwards_argc_argv_verbatim(void) {
     TEST_ASSERT_EQUAL_INT(RET_READ, dispatchCommand(3, argv));
     TEST_ASSERT_EQUAL_INT(3, g_lastArgc);
     TEST_ASSERT_EQUAL_PTR(argv, g_lastArgv);
+}
+
+// `<COMMAND> -h` / `--help`, any case, prints the one-line help instead of
+// running the command -- in RUN mode too, for a config-only command (#624:
+// moved here from the console's line parser)
+static void test_cmd_dash_h_prints_help_not_the_command(void) {
+    g_runMode = true;
+    const char* a1[] = {"SET", "-h"};
+    TEST_ASSERT_EQUAL_INT(0, dispatchCommand(2, a1));
+    const char* a2[] = {"set", "--HELP", "extra"};
+    TEST_ASSERT_EQUAL_INT(0, dispatchCommand(3, a2));
+    TEST_ASSERT_EQUAL_INT(2, g_helpCount);
+    TEST_ASSERT_EQUAL_STRING("Configure input", g_helpText);
+    TEST_ASSERT_EQUAL_INT(0, g_cfgRequiredCount);
+    TEST_ASSERT_EQUAL_INT(-1, g_lastArgc);          // the handler never ran
+}
+
+// Only the first argument counts: `-h` further along is the command's business
+static void test_cmd_dash_h_later_is_an_argument(void) {
+    const char* argv[] = {"LIST", "SENSORS", "-h"};
+    TEST_ASSERT_EQUAL_INT(RET_READ, dispatchCommand(3, argv));
+    TEST_ASSERT_EQUAL_INT(0, g_helpCount);
 }
 
 // ===================== dispatchSubcommand =================================
@@ -332,6 +361,8 @@ int main(int, char**) {
     RUN_TEST(test_cmd_configonly_runs_in_config_mode);
     RUN_TEST(test_cmd_match_is_case_insensitive);
     RUN_TEST(test_cmd_forwards_argc_argv_verbatim);
+    RUN_TEST(test_cmd_dash_h_prints_help_not_the_command);
+    RUN_TEST(test_cmd_dash_h_later_is_an_argument);
     RUN_TEST(test_sub_unknown_reports_and_returns_1);
     RUN_TEST(test_sub_runmode_verb_runs_in_run_mode);
     RUN_TEST(test_sub_destructive_verb_blocked_in_run_mode);

@@ -3,7 +3,6 @@
  */
 
 #include "console_routing.h"
-#include "serial_config.h"                  // handleCommandInput, processSerialCommands
 #include "../transports/transport_registry.h"
 #include "../config/system_config.h"        // systemConfig, applyLogFilterConfig
 #include "../core/message_api.h"            // msg.filter
@@ -44,6 +43,10 @@ TransportInterface* logSink(bool secondary) {
 
 TransportInterface* consoleActiveSource() { return s_active; }
 
+void consoleSetActive(TransportInterface* t) { s_active = t; }
+
+TransportInterface* consoleTransport(bool secondary) { return planeTransport(PLANE_CONTROL, secondary); }
+
 bool consoleOnUsbFallback() { return consoleUnusable(); }
 
 TransportID planeTransportId(MessagePlane plane, bool secondary) {
@@ -64,40 +67,6 @@ bool planeSetTransport(MessagePlane plane, TransportID id, bool secondary) {
     if (id != TRANSPORT_NONE && (transportRegistered(id) == nullptr || !transportPortStarted(id))) return false;
     planeSetUnchecked(plane, id, secondary);
     return true;
-}
-
-// Feed one source to the CLI and dispatch, answering on it. The console's own
-// transports must be connected; a framed port is read whatever its state says
-static void pumpSource(TransportInterface* t, bool needConnected) {
-    if (!t || (needConnected && !t->isConnected()) || !t->available()) return;
-    s_active = t;
-    while (t->available()) handleCommandInput((char)t->read());
-    processSerialCommands();
-}
-
-void consolePump() {
-    // Each source in turn, dispatched before the next, so a reply always goes
-    // to its sender even when two ports have bytes in the same tick. The
-    // secondary is looked up after the primary's command ran: that command
-    // may have changed it (CONSOLE TRANSPORT ... SECONDARY, BUS SERIAL ... DISABLE)
-    TransportInterface* ctrl = planeTransport(PLANE_CONTROL, false);
-    pumpSource(ctrl, true);
-    TransportInterface* ctrl2 = planeTransport(PLANE_CONTROL, true);
-    pumpSource(ctrl2, true);
-
-    // A framed port (the nRF link) is a console source whatever CONSOLE
-    // TRANSPORT says, so the app and the webapp can't be cut off (#612):
-    // they are answered on it; unsolicited output still goes to the console
-    for (uint8_t i = 0; i < NUM_TRANSPORTS; i++) {
-        TransportInterface* t = transportGet(i);
-        if (t == nullptr || t == ctrl || t == ctrl2) continue;
-        if (!(t->getCapabilities() & CAP_FRAMED)) continue;
-        pumpSource(t, false);
-    }
-
-    // Unsolicited msg.control output (alarms, notes) goes to primary +
-    // secondary again, not to whoever sent the last command
-    s_active = nullptr;
 }
 
 FLASHMEM void routingApplyConfig() {

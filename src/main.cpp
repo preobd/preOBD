@@ -30,7 +30,7 @@
 #include "inputs/input_manager.h"
 #include "config/input_store.h"
 #include "outputs/table/output_table.h"   // outputsSeedDefaults (#612)  // saveInputConfig/loadInputConfig/inputHoldsPin/storedInputBusNeeds (#402 step 2)
-#include "console/serial_config.h"
+#include "console/console_input.h"
 #include "rules/rules_manager.h"   // Control engine runtime (Rules)
 #include "core/system_mode.h"        // System mode (CONFIG/RUN)
 #if INCLUDE_USER_BUTTON
@@ -692,7 +692,7 @@ void setup() {
     #endif
 #endif
 
-    initSerialConfig();
+    consoleInputInit();   // the console's line per source, the banner and the first prompt
 
 #if INCLUDE_RULES_ENGINE
     // Register action target pins LAST — after every hardware-fixed pin (system,
@@ -735,18 +735,8 @@ void loop() {
 
     platformLoopService();   // per-loop core workarounds (STM32 USB receive)
 
-#if SUPPORTS_JSON_IMPORT_STREAM
-    // Unconditional every tick — a JSON IMPORT abandoned mid-paste (or an
-    // uncleanly dropped link) would otherwise hold its malloc'd buffer
-    // forever, since consolePump() only feeds the CLI when a transport
-    // actually has bytes available(). Ran inside the old router's update()
-    // until #418: it needs a heartbeat, not a router. Stays immediately before
-    // transportsUpdate()/consolePump() so the tick order is unchanged.
-    serialConfig_checkJsonImportIdle();
-#endif
-
     transportsUpdate();   // housekeeping for every started transport (the mux pumps frames)
-    consolePump();        // then commands from every console source
+    consolePump();        // then commands from every console source (and a JSON IMPORT's timeout)
 
     // Push system status to framed peers (nRF coprocessor). Cheap no-op when
     // the transport is in transparent mode; placed before the CONFIG-mode

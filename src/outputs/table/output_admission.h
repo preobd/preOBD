@@ -13,7 +13,7 @@
  *   - a framed port (the nRF link) carries the console and ELM327 over BLE,
  *     never a raw stream output (2c adds RealDash's BLE channel);
  *   - BLE (the nRF's data channel, the phone's FFE1) carries one enabled
- *     output: ELM327 or RealDash (#612 2c; a second channel is #620);
+ *     output: ELM327 or RealDash (#612 2c; a second channel, #620, is not planned);
  *   - one OBD output, one CSV on SD, one ELM327 on a serial port, one on BLE,
  *     one RealDash on BLE (the code that runs them exists once each).
  * Disabled outputs may coexist; they are checked when enabled.

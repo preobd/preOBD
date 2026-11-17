@@ -20,7 +20,6 @@ CAN, and has room to grow.
 | ELM327 emulator over Bluetooth | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
 | JSON backup/restore | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Test mode (simulated sensors) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| CLI history and line editing | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ (plain line input) |
 
 Every native CAN port needs an external **CAN transceiver** chip or module
 (SN65HVD230 on 3.3V boards, MCP2551/TJA1050 on 5V) — see the

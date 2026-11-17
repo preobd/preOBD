@@ -8,7 +8,9 @@
 #include "../outputs/table/output_admission.h"   // outputOnStream (#612)
 #include "command_dispatch.h"
 #include "command_helpers.h"
-#include "serial_config.h"
+#include "json_import_stream.h"
+#include "console_input.h"
+#include "../transports/transport_registry.h"
 #include "../inputs/input_manager.h"
 #include "../config/input_store.h"  // saveInputConfig/loadInputConfig (#402 step 2)
 #include "input_display.h"
@@ -105,6 +107,7 @@ const Command COMMANDS[] = {
     // Query commands (read-only, available in both modes)
     {"HELP", cmd_help, "Show help", false},
     {"?", cmd_help, "Show help (alias)", false},
+    {"H", cmd_help, "Show help (alias)", false},
     {"LIST", cmd_list, "List inputs/applications/sensors", false},
     {"INFO", cmd_info, "Show input details", false},
     {"VERSION", cmd_version, "Show firmware version", false},
@@ -161,6 +164,12 @@ const uint8_t NUM_COMMANDS = sizeof(COMMANDS) / sizeof(Command);
 // command_dispatch.cpp so the routing mechanism is unit-testable on the host
 // without the heavy message subsystem. That TU reaches user-facing error
 // output through the command_dispatch.h reporter seam, defined here:
+
+void dispatchReportCommandHelp(const char* help) {
+    msg.control.write('\t');
+    msg.control.print(help);
+    msg.control.print(F("\r\n"));
+}
 
 void dispatchReportUnknownCommand(const char* name) {
     msg.control.print(F("ERROR: Unknown command '"));
@@ -530,6 +539,18 @@ int cmd_load(int argc, const char* const* argv) {
 }
 
 #if SUPPORTS_JSON_IMPORT_STREAM
+// The import belongs to the link this command came from (#624); a second one,
+// from any link, is refused while it runs
+static int beginJsonImport(size_t target) {
+    if (jsonImportActive()) {
+        TransportInterface* t = transportRegistered(jsonImportSource());
+        msg.control.print(F("ERROR: JSON import already in progress on "));
+        msg.control.println(t != nullptr ? t->getName() : "another link");
+        return 1;
+    }
+    return jsonImportBegin(consoleActiveSourceId(), target) ? 0 : 1;
+}
+
 int cmd_json(int argc, const char* const* argv) {
     if (argc < 2 || !streq_P(argv[1], PSTR("IMPORT"))) {
         msg.control.println(F("Usage: JSON IMPORT [<byte-count>]"));
@@ -548,17 +569,9 @@ int cmd_json(int argc, const char* const* argv) {
             msg.control.println(JSON_IMPORT_MAX_BYTES - 1);
             return 1;
         }
-        if (!serialConfig_beginJsonImport((size_t)n)) {
-            msg.control.println(F("ERROR: JSON import already in progress"));
-            return 1;
-        }
-        return 0;
+        return beginJsonImport((size_t)n);
     }
-    if (!serialConfig_beginJsonImport()) {
-        msg.control.println(F("ERROR: JSON import already in progress"));
-        return 1;
-    }
-    return 0;
+    return beginJsonImport(0);
 }
 #endif
 

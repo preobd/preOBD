@@ -54,7 +54,7 @@ The transport system is an abstraction layer that allows preOBD to communicate o
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                       Application Layer                      │
-│  (main.cpp, serial_config.cpp, output_realdash.cpp, etc.)  │
+│  (main.cpp, console_input.cpp, output_realdash.cpp, etc.)  │
 └───────────────────────┬─────────────────────────────────────┘
                         │
                         ▼

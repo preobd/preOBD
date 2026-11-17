@@ -137,7 +137,7 @@ cp -r boards/teensy41 boards/my_board
 ## Library dependencies
 
 Modular groups in `platformio.ini` (`[display_libs]`, `[can_libs]`,
-`[sensor_libs]`, `[eeprom_libs]`, `[cli_libs]`), referenced from each board's
+`[sensor_libs]`, `[eeprom_libs]`), referenced from each board's
 `board.ini` `lib_deps`. Platform CAN libs: FlexCAN_T4 (Teensy), ESP32-TWAI-CAN
 (ESP32), autowp-mcp2515 (SPI).
 

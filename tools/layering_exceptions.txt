@@ -139,7 +139,7 @@ config -> sensors           # was storage -> sensors (16; now from input_store.c
                             #   #401 -- json_config/json_registry serialize sensor/application selections.
 config -> transports        # #612 -- the move split a folder; these sites are unchanged.
                             # was inside storage/ (4 site(s))
-console -> (root)           # was cli -> (root) (17; now from cmd_action.cpp, cmd_alarm.cpp, cmd_bus.cpp, cmd_rule.cpp, cmd_set.cpp, cmd_system.cpp, command_handlers.h, command_helpers.cpp, command_table.cpp, serial_config.cpp, serial_config.h):
+console -> (root)           # was cli -> (root) (17; now from cmd_action.cpp, cmd_alarm.cpp, cmd_bus.cpp, cmd_rule.cpp, cmd_set.cpp, cmd_system.cpp, command_handlers.h, command_helpers.cpp, command_table.cpp, console_input.cpp, json_import_stream.h):
                             #   #401 -- CLI handlers read config.h constants and version.h.
                             # was drivers -> (root) (1; now from user_button.cpp):
                             #   #401 -- bus/serial drivers read config.h.
@@ -147,9 +147,9 @@ console -> buses            # was cli -> pinctrl (16; now from cmd_action.cpp, c
                             #   #401 -- SYSTEM PINS / pin diagnostics leaves.
                             # was cli -> drivers (9; now from cmd_bus.cpp, cmd_set.cpp, cmd_system.cpp, command_helpers.cpp, command_table.cpp):
                             #   #401 -- cmd_bus.cpp drives bus_manager; button/RGB status leaves.
-console -> config           # was cli -> storage (20; now from cmd_action.cpp, cmd_alarm.cpp, cmd_bus.cpp, cmd_rule.cpp, cmd_set.cpp, cmd_system.cpp, command_helpers.cpp, command_table.cpp, input_display.cpp, serial_config.cpp):
+console -> config           # was cli -> storage (20; now from cmd_action.cpp, cmd_alarm.cpp, cmd_bus.cpp, cmd_rule.cpp, cmd_set.cpp, cmd_system.cpp, command_helpers.cpp, command_table.cpp, input_display.cpp, json_import_stream.cpp):
                             #   #401 -- SET / SYSTEM DUMP read and write system_config/json_config.
-console -> core             # was cli -> core (53; now from cmd_action.cpp, cmd_alarm.cpp, cmd_bus.cpp, cmd_rule.cpp, cmd_set.cpp, cmd_system.cpp, command_dispatch.cpp, command_helpers.cpp, command_helpers.h, command_table.cpp, input_display.cpp, registry_display.cpp, serial_config.cpp, serial_config.h):
+console -> core             # was cli -> core (53; now from cmd_action.cpp, cmd_alarm.cpp, cmd_bus.cpp, cmd_rule.cpp, cmd_set.cpp, cmd_system.cpp, command_dispatch.cpp, command_helpers.cpp, command_helpers.h, command_table.cpp, input_display.cpp, registry_display.cpp, console_input.cpp, json_import_stream.h):
                             #   #401 -- CLI is the widest consumer of core/message_api and logging.
                             # was drivers -> core (2; now from user_button.cpp):
                             #   #401 -- drivers use core/message_api and logging.
