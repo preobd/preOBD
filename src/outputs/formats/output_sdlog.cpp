@@ -35,7 +35,7 @@
 #include "../../core/hash.h"
 #include "../../inputs/input_manager.h"
 #include "output_format.h"
-#include "sd_status_json.h"
+#include "../../transports/sd_status_json.h"
 
 #ifndef FLASHMEM
 #define FLASHMEM

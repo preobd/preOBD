@@ -308,3 +308,18 @@ transports -> core          # was storage -> core (4; now from sd_manager.cpp):
                             # was inside core/ (2 site(s))
 transports -> outputs       # #612 -- the move split a folder; these sites are unchanged.
                             # was inside comms/ (1 site(s))
+
+# ---------------------------------------------------------------------------
+# FORMATS -- ARCHITECTURE.md §14.10: outputs/formats/ may not include hal/ or
+# transports/ internals (a format never starts hardware). One line per file
+# and target layer, as measured by check_layering.py on 2026-11-16 (#616);
+# the file's other sites to the same layer are covered by the same line.
+# Like the pairs above this is a ratchet: delete a line when its file stops
+# including that layer (the check prints a NOTE for a line that matches
+# nothing). Format: FORMATS <path under src/> -> <hal|transports>
+# ---------------------------------------------------------------------------
+
+FORMATS outputs/formats/can_layout_output.cpp -> hal         # #616: hal/bus_defaults.h (default bus numbers).
+FORMATS outputs/formats/elm327_framed.cpp -> transports      # #616: frame_codec.h, transport_mux.h -- the framed ELM327 sender.
+FORMATS outputs/formats/realdash_framed.cpp -> transports    # #616: frame_codec.h, transport_mux.h -- the framed RealDash sender.
+FORMATS outputs/formats/output_sdlog.cpp -> transports       # #616: sd_fs.h, sd_manager.h, sd_status_json.h (the status report moved here from formats/ in #616).

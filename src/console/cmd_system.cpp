@@ -36,7 +36,7 @@
 #include "../buses/pinctrl/pin_registry.h"
 #include "../outputs/table/output_base.h"
 #include "../outputs/formats/output_sdlog.h"
-#include "../outputs/formats/sd_status_json.h"
+#include "../transports/sd_status_json.h"
 #include "../outputs/formats/output_format.h"   // sdLogFormatName
 #include "../outputs/formats/obd_query.h"
 #include "../outputs/display/display_manager.h"
@@ -49,7 +49,7 @@
 #include "../sensors/simulate/test_mode.h"
 #endif
 #if INCLUDE_CAN
-#include "../sensors/can/can_scan.h"
+#include "../sensors/can/readers/can_scan.h"
 #include "../sensors/can_sensor_library/standard_pids.h"
 #endif
 #include <string.h>

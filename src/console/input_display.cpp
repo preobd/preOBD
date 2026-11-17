@@ -20,7 +20,7 @@
 #include "../sensors/sensor_library.h"
 #include "../config/system_config.h"
 #if INCLUDE_CAN
-#include "../sensors/can/can_frame_cache.h"
+#include "../sensors/can/readers/can_frame_cache.h"
 #endif
 
 // These are COLD paths: they run only when a CLI command asks for them, never

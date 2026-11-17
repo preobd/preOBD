@@ -50,9 +50,11 @@ python3 tools/check_layering.py --quiet
 if [ $? -ne 0 ]; then
     echo ""
     echo "❌ Layering check failed!"
-    echo "A new cross-directory dependency was introduced that isn't listed"
-    echo "in tools/layering_exceptions.txt. Either fix the dependency, or if"
-    echo "it's a deliberate, reviewed addition, add a cited line to that file."
+    echo "Either a new cross-directory dependency isn't listed in"
+    echo "tools/layering_exceptions.txt, or a file in outputs/formats/ includes"
+    echo "hal/ or transports/ without a FORMATS line there (ARCHITECTURE.md 14.10)."
+    echo "Fix the dependency, or if it's a deliberate, reviewed addition, add a"
+    echo "cited line to that file."
     exit 1
 fi
 
@@ -62,9 +64,9 @@ echo "✓ Layering check passed"
 # listed in tools/pin_drive_sites.txt, and only pin_owner.cpp writes the
 # registry unchecked. A ratchet: a new drive site fails the commit.
 echo "🔍 Checking pin drives..."
-python3 tools/test_check_pins.py >/dev/null && python3 tools/test_check_maps.py >/dev/null
+python3 tools/test_check_pins.py >/dev/null && python3 tools/test_check_maps.py >/dev/null && python3 tools/test_check_layering.py >/dev/null
 if [ $? -ne 0 ]; then
-    echo "❌ The pin/map checkers' self-tests failed (run tools/test_check_pins.py, tools/test_check_maps.py)"
+    echo "❌ The pin/map/layering checkers' self-tests failed (run tools/test_check_pins.py, tools/test_check_maps.py, tools/test_check_layering.py)"
     exit 1
 fi
 python3 tools/check_pins.py --quiet

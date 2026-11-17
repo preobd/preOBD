@@ -60,7 +60,7 @@
 #include "../sensors/simulate/test_mode.h"
 #endif
 #if INCLUDE_CAN
-#include "../sensors/can/can_scan.h"
+#include "../sensors/can/readers/can_scan.h"
 #include "../sensors/can_sensor_library/standard_pids.h"
 #endif
 #include "../core/config_generation.h"

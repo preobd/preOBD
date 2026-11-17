@@ -6,7 +6,7 @@
 A directory listing sorts alphabetically. This is the order the data flows in:
 
 ```
-sensors/      ACQUIRE       wired sensor drivers, CAN input (can/), test mode (simulate/)
+sensors/      ACQUIRE       wired sensor drivers, CAN input (can/, readers in can/readers/), test mode (simulate/)
    │
 inputs/       STATE         the value table: inputs[], each input's value, units, health
    │
@@ -39,8 +39,9 @@ Rules of thumb:
 - A file goes in the layer whose noun describes it. A CAN signal is a sensor,
   so CAN input lives in `sensors/can/`. A shared peripheral is a bus, even
   when an output is its only user today.
-- Dependencies should point down the list. Today the only enforced rule is
-  that `core/` may include only `hal/` (`tools/check_layering.py`). Every
+- Dependencies should point down the list. Today the enforced rules are
+  that `core/` may include only `hal/`, and that files in `outputs/formats/`
+  may not include `hal/` or `transports/` (`tools/check_layering.py`). Every
   other edge that crosses folders, including the ones that point up, is
   listed with its reason in `tools/layering_exceptions.txt`, and the list may
   only shrink.

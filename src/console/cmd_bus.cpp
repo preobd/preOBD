@@ -45,14 +45,14 @@ extern MuxTransport hwSerial1;   // main.cpp -- the nRF coprocessor link
 #include "../sensors/simulate/test_mode.h"
 #endif
 #if INCLUDE_CAN
-#include "../sensors/can/can_scan.h"
+#include "../sensors/can/readers/can_scan.h"
 #include "../sensors/can/can_poll.h"   // BUS CAN POLL range (#633)
 #include "../sensors/can/input_can.h"
 #include "../sensors/can_sensor_library/standard_pids.h"
 #if INCLUDE_CAN && SUPPORTS_JSON_EXPORT
 #include "../sensors/can/input_can.h"
 #include "../sensors/can/can_status_json.h"
-#include "../sensors/can/can_frame_cache.h"
+#include "../sensors/can/readers/can_frame_cache.h"
 #include "../buses/pinctrl/pin_label.h"
 #include "../core/watchdog.h"
 #endif

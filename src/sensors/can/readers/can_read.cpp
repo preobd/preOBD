@@ -6,10 +6,10 @@
  */
 
 #include <Arduino.h>
-#include "../../inputs/input.h"
-#include "../calibration_types.h"
+#include "../../../inputs/input.h"
+#include "../../calibration_types.h"
 #include "can_frame_cache.h"
-#include "../can_sensor_library/standard_pids.h"
+#include "../../can_sensor_library/standard_pids.h"
 
 /**
  * Read CAN-imported sensor

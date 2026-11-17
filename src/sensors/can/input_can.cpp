@@ -14,7 +14,7 @@
 #include "can_frame_parse.h"
 #include "can_poll.h"
 #include "isotp_rx.h"
-#include "can_scan.h"
+#include "readers/can_scan.h"
 #if SUPPORTS_JSON_EXPORT
 #include "can_status_json.h"
 #endif
@@ -23,7 +23,7 @@
 #include "../../buses/bus_config.h"
 #include "../../core/message_api.h"
 #include "../../core/log_tags.h"
-#include "can_frame_cache.h"
+#include "readers/can_frame_cache.h"
 #include "../../buses/can_bus.h"
 
 #ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1

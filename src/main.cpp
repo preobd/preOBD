@@ -46,7 +46,7 @@
 #if INCLUDE_CAN
     #include "sensors/can/input_can.h"
     #include "buses/can_bus.h"
-    #include "sensors/can/can_scan.h"
+    #include "sensors/can/readers/can_scan.h"
 #endif
 
 // Transport abstraction layer

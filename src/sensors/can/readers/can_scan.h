@@ -85,7 +85,7 @@ uint32_t getCANScanRemainingMs(uint32_t now);
 void cancelCANScan();
 
 #if SUPPORTS_JSON_EXPORT || defined(NATIVE_TEST)
-#include "can_discovery.h"
+#include "../can_discovery.h"
 
 /**
  * SCAN PIDS (#511): ask the ECUs which Mode 01 PIDs they support. Shares the

@@ -22,7 +22,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Checker self-tests
-        run: python3 tools/test_check_pins.py && python3 tools/test_check_maps.py
+        run: python3 tools/test_check_pins.py && python3 tools/test_check_maps.py && python3 tools/test_check_layering.py
       - name: Layering
         run: python3 tools/check_layering.py --quiet
       - name: Pin drives (no new ratchet targets over main)

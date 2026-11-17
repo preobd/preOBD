@@ -19,8 +19,24 @@ analysis alone has a blind spot:
       both defined in src/outputs/display/display_grid.cpp. An include-only
       checker misses this edge entirely.
 
+Two further rules come from src/README.md and ARCHITECTURE.md 14.10:
+
+  * LAYER ORDER. The flow layers rank sensors > inputs > rules > outputs >
+    transports > buses > hal (data flows down the list); core/ is under all
+    of them; console/, config/ and (root) sit beside. Every measured pair is
+    labelled "down", "UP" (against the flow), "beside" or "same" so the
+    report says which listed exceptions point the wrong way. The label is
+    information; the fail condition stays "pair not listed", so the check is
+    still a ratchet.
+  * FORMATS. Files under outputs/formats/ may not include (or extern into)
+    hal/ or transports/ -- a format never starts hardware (14.10). Existing
+    sites are listed one file per line in the exceptions file as
+    `FORMATS <path under src/> -> <hal|transports>`, and the list may only
+    shrink.
+
 Usage:
     python3 tools/check_layering.py [--exceptions PATH] [--verbose] [--json]
+                                    [--root DIR]
 
 Exit status: 0 if every cross-directory edge found is listed in the
 exceptions file (or is a same-component edge, which is never a violation);
@@ -36,13 +52,56 @@ from collections import defaultdict
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC_ROOT = os.path.join(REPO_ROOT, "src")
-DEFAULT_EXCEPTIONS = os.path.join(REPO_ROOT, "tools", "layering_exceptions.txt")
 
 SOURCE_EXTS = (".h", ".hpp", ".cpp")
 ROOT_COMPONENT = "(root)"
 
 # core/ is allowed to include only <Arduino.h> and hal/ -- see #401.
 CORE_ALLOWED_COMPONENTS = {"core", "hal"}
+
+# Layer order from src/README.md, top (upstream) to bottom. Dependencies
+# should point down this list.
+FLOW_LAYERS = ["sensors", "inputs", "rules", "outputs", "transports", "buses", "hal"]
+# Beside the flow: may be used from, and may use, any layer.
+BESIDE = {"console", "config", ROOT_COMPONENT}
+# Under all: everything may use it; it may use only hal (CORE_ALLOWED_COMPONENTS).
+UNDER = "core"
+
+# ARCHITECTURE.md section 14.10: outputs/formats/ may not include hal/ or
+# transports/ internals.
+FORMATS_DIR = "outputs/formats"
+FORMATS_FORBIDDEN = {"hal", "transports"}
+
+
+def pair_direction(a, b):
+    """Label a cross-component pair: 'down', 'UP', 'beside' or 'same'."""
+    if a == b:
+        return "same"
+    if b == UNDER:
+        return "down"  # everything, console/config/(root) included, may use core/
+    if a in BESIDE or b in BESIDE:
+        return "beside"
+    if a == UNDER:
+        # core/ may use only hal/; hal is the one downward target it has.
+        return "down" if b in CORE_ALLOWED_COMPONENTS else "UP"
+    if a in FLOW_LAYERS and b in FLOW_LAYERS:
+        return "down" if FLOW_LAYERS.index(b) > FLOW_LAYERS.index(a) else "UP"
+    return "beside"  # a folder the table doesn't know: src/README.md must name it
+
+
+def is_formats_file(rel_path):
+    return rel_path.replace(os.sep, "/").startswith("src/" + FORMATS_DIR + "/")
+
+
+def find_formats_violations(cross_edges):
+    """Edges from outputs/formats/ files into hal/ or transports/, as
+    {(file under src/, target component): [edge sites]}."""
+    out = defaultdict(list)
+    for e in cross_edges:
+        if is_formats_file(e["from_file"]) and e["to_component"] in FORMATS_FORBIDDEN:
+            key = (e["from_file"].replace(os.sep, "/")[len("src/"):], e["to_component"])
+            out[key].append(e)
+    return out
 
 
 def all_source_files():
@@ -72,7 +131,12 @@ def rel(path):
 # (a) #include edges
 # ---------------------------------------------------------------------------
 
-INCLUDE_RE = re.compile(r'^\s*#\s*include\s*"([^"]+)"')
+# Quoted and angle-bracket includes both count: PlatformIO puts src/ on the
+# include path, so `#include "transports/x.h"` and `#include <transports/x.h>`
+# compile. A quoted include is tried relative to the including file first,
+# then against src/; an angle include only against src/. Anything that
+# resolves nowhere under src/ (system and library headers) is ignored.
+INCLUDE_RE = re.compile(r'^\s*#\s*include\s*([<"])([^>"]+)[>"]')
 
 
 def find_include_edges(files):
@@ -86,15 +150,20 @@ def find_include_edges(files):
                 m = INCLUDE_RE.match(line)
                 if not m:
                     continue
-                inc = m.group(1)
-                target = os.path.normpath(os.path.join(d, inc))
-                if not os.path.isfile(target):
+                quoted = m.group(1) == '"'
+                inc = m.group(2)
+                target = os.path.normpath(os.path.join(d, inc)) if quoted else ""
+                if not (target and os.path.isfile(target)):
+                    alt = os.path.normpath(os.path.join(SRC_ROOT, inc))
+                    if os.path.isfile(alt) and alt.startswith(SRC_ROOT):
+                        target = alt
+                if not (target and os.path.isfile(target)):
                     # Not resolvable relative to the including file (system/lib
                     # header, or a path resolved via a build -I flag). Only
                     # report as unresolved if it looks like it was meant to be
                     # a same-tree (src/) header, i.e. starts inside src/ or
                     # has no directory separator suggesting a foreign root.
-                    if target.startswith(SRC_ROOT):
+                    if quoted and target.startswith(SRC_ROOT):
                         unresolved.append((rel(f), lineno, inc))
                     continue
                 if not target.startswith(SRC_ROOT):
@@ -249,6 +318,21 @@ def load_exceptions(path):
     return pairs
 
 
+def load_formats_exceptions(path):
+    """Returns set of (file under src/, target component) from
+    `FORMATS <file> -> <hal|transports>` lines."""
+    entries = set()
+    if not os.path.isfile(path):
+        return entries
+    with open(path, "r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.split("#", 1)[0].strip()
+            m = re.match(r'^FORMATS\s+(\S+)\s*->\s*(\S+)$', line)
+            if m:
+                entries.add((m.group(1), m.group(2)))
+    return entries
+
+
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
@@ -278,16 +362,23 @@ def find_single_includer_violations(files):
     return out
 
 
-def main():
+def main(argv=None):
+    global REPO_ROOT, SRC_ROOT
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--exceptions", default=DEFAULT_EXCEPTIONS)
+    ap.add_argument("--exceptions", default=None)
+    ap.add_argument("--root", default=None, help="repo root to scan (default: this checkout; the self-test passes a temp tree)")
     ap.add_argument("--verbose", action="store_true", help="print every edge site found, not just the summary")
     ap.add_argument("--json", action="store_true", help="print machine-readable JSON summary instead of text")
     ap.add_argument("--quiet", action="store_true",
                     help="print only a one-line summary plus any violations; "
                          "intended for the pre-commit hook, where dumping the whole "
                          "graph on every commit trains people to ignore it")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
+    if args.root:
+        REPO_ROOT = os.path.abspath(args.root)
+        SRC_ROOT = os.path.join(REPO_ROOT, "src")
+    if args.exceptions is None:
+        args.exceptions = os.path.join(REPO_ROOT, "tools", "layering_exceptions.txt")
 
     files = all_source_files()
     include_edges, include_unresolved = find_include_edges(files)
@@ -305,6 +396,12 @@ def main():
 
     violations = {pair: sites for pair, sites in by_pair.items() if pair not in exceptions}
 
+    formats_listed = load_formats_exceptions(args.exceptions)
+    formats_all = find_formats_violations(cross_edges)
+    formats_violations = {k: v for k, v in formats_all.items() if k not in formats_listed}
+    formats_stale = sorted(formats_listed - set(formats_all))
+    upward = sorted(pair for pair in by_pair if pair_direction(*pair) == "UP")
+
     # core/ ratchet: core/ may include only <Arduino.h> and hal/. Any
     # cross-component edge FROM core TO something other than hal is a
     # violation of the target property -- even if it is (for now) listed in
@@ -320,6 +417,8 @@ def main():
         print(_json.dumps({
             "edges_by_pair": {f"{a} -> {b}": len(v) for (a, b), v in sorted(by_pair.items())},
             "violations": {f"{a} -> {b}": len(v) for (a, b), v in sorted(violations.items())},
+            "upward_pairs": [f"{a} -> {b}" for a, b in upward],
+            "formats_violations": {f"{f} -> {t}": len(v) for (f, t), v in sorted(formats_violations.items())},
             "core_ratchet_targets": {f"{a} -> {b}": len(v) for (a, b), v in sorted(core_violations.items())},
             "unresolved_includes": include_unresolved,
             "unresolved_externs": extern_unresolved,
@@ -337,7 +436,7 @@ def main():
             for (a, b), sites in sorted(by_pair.items()):
                 flag = "" if (a, b) in exceptions else "  <-- NOT IN EXCEPTIONS FILE"
                 kinds = sorted(set(s["kind"] for s in sites))
-                print(f"  {a} -> {b}  ({len(sites)} site(s), {'/'.join(kinds)}){flag}")
+                print(f"  {a} -> {b}  [{pair_direction(a, b)}]  ({len(sites)} site(s), {'/'.join(kinds)}){flag}")
                 if args.verbose:
                     for s in sites:
                         if s["kind"] == "include":
@@ -382,13 +481,28 @@ def main():
         else:
             print("OK: every cross-directory edge is accounted for in the exceptions file.")
 
+        if upward and not args.quiet:
+            print(f"  ({len(upward)} listed pair(s) point UP the layer order: "
+                  + ", ".join(f"{a} -> {b}" for a, b in upward) + ")")
+
+        if formats_violations:
+            print(f"FAIL: {len(formats_violations)} outputs/formats/ file(s) include hal/ or transports/ (ARCHITECTURE.md 14.10), not listed in {rel(args.exceptions)}:")
+            for (f, t), sites in sorted(formats_violations.items()):
+                print(f"  {f} -> {t}  ({len(sites)} site(s))")
+                for s2 in sites[:5]:
+                    print(f"      {s2['from_file']}:{s2['line']} -> {s2['to_file']}")
+        if formats_stale:
+            print("NOTE: these FORMATS lines no longer match any site; remove them (the list only shrinks):")
+            for f, t in formats_stale:
+                print(f"  FORMATS {f} -> {t}")
+
     single = find_single_includer_violations(files)
     if single and not args.json:
         print(f"FAIL: {len(single)} include(s) of a single-includer library:")
         for f, ln, inc, owner in single:
             print(f"  {f}:{ln} includes <{inc}>; only {owner} may (see SINGLE_INCLUDER)")
 
-    return 1 if (violations or single) else 0
+    return 1 if (violations or single or formats_violations) else 0
 
 
 if __name__ == "__main__":

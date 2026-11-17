@@ -21,7 +21,7 @@
 #define CAN_FRAME_CACHE_H
 
 #include <Arduino.h>
-#include "../calibration_types.h"
+#include "../../calibration_types.h"
 
 // ===== CONFIGURATION =====
 // CAN_CACHE_SIZE must be a power of 2; set per board in boards/<board>/board.h.
