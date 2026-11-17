@@ -12,6 +12,9 @@ OUTPUT ADD PREOBD CAN1 [INTERVAL <ms>]      # 20-60000 ms, default 100
 
 Not on every board: the Mega 2560 doesn't have it.
 
+For a gauge or dash that listens to a Haltech ECU instead, see
+[`HALTECH`](HALTECH.md): the same rules, Haltech's frames, at 1 Mbit/s.
+
 ## Gauge network, not car network
 
 A CAN bus does one job (#632). `PREOBD` transmits, so it goes on the **gauge

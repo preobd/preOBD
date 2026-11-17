@@ -228,14 +228,14 @@ static FLASHMEM void printCanApply(uint8_t bus, CanAttach r) {
     else                              msg.control.println(F(": starts when CAN input or an output attaches"));
 }
 
-// The enabled CAN-sending outputs on this bus (OBD, PREOBD): a bit per output id
+// The enabled CAN-sending outputs on this bus (OBD, the layouts): a bit per output id
 static bool canSenderUsesBus(uint8_t bus) { return outputCanSendersOnBus(bus) != 0; }
 static uint8_t firstSender(RouteMask m) {
     for (uint8_t id = 0; id < MAX_OUTPUTS; id++) if (m & (1u << id)) return id;
     return OUT_ID_NONE;
 }
 
-// "the OBD output", or "output <id> (PREOBD)", one per sender, joined by " and "
+// "the OBD output", or "output <id> (HALTECH)", one per sender, joined by " and "
 static FLASHMEM void printSenderNames(uint8_t bus) {
     const RouteMask m = outputCanSendersOnBus(bus);
     bool first = true;
@@ -373,6 +373,26 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
             msg.control.println(F("ERROR: CAN baudrate must be 125000, 250000, 500000, or 1000000"));
             return 1;
         }
+#if INCLUDE_CAN_LAYOUTS
+        // A sender whose protocol fixes the rate (HALTECH: 1 Mbit/s) keeps it:
+        // refused before anything changes (§14.7 item 3, the same rule as admission)
+        const RouteMask senders = outputCanSendersOnBus(bus);
+        for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+            if (!(senders & (1u << id))) continue;
+            const uint32_t need = outputFormatCanBaud(outputFormatOf(id));
+            if (need == 0 || need == canBaudFromIndex(idx)) continue;
+            msg.control.print(F("ERROR: output "));
+            msg.control.print(id);
+            msg.control.print(F(" ("));
+            msg.control.print(outputFormatName(outputFormatOf(id)));
+            msg.control.print(F(") needs "));
+            msg.control.print(need / 1000);
+            msg.control.print(F(" kbit/s on this bus: OUTPUT "));
+            msg.control.print(id);
+            msg.control.println(F(" DISABLE first"));
+            return 1;
+        }
+#endif
         cs.baudIndex = idx;
         if (cs.mode == CAN_BUS_OFF) {
             msg.control.print(getCANBusName(bus));

@@ -31,6 +31,9 @@
 #include "../../src/outputs/formats/obd_encode.cpp"
 #include "../../src/outputs/formats/can_layout.cpp"
 #include "../../src/outputs/formats/layout_preobd.cpp"
+#include "../../src/outputs/formats/layout_haltech.cpp"
+#include "../../src/outputs/formats/can_layout_ids.cpp"
+#include "../../src/inputs/pressure_reference.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"
 #include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"
@@ -295,6 +298,7 @@ struct Fake {
     std::vector<uint32_t> ids;        // every frame written, in order
     std::vector<uint8_t> buses;
     uint8_t fill = 0;                 // build() output value
+    uint16_t skip = 0;                // frames build() leaves out of the pass
 };
 
 static bool fWrite(void* c, uint8_t bus, uint32_t id, const uint8_t*) {
@@ -305,7 +309,10 @@ static bool fWrite(void* c, uint8_t bus, uint32_t id, const uint8_t*) {
     f->buses.push_back(bus);
     return true;
 }
-static void fBuild(void* c, uint8_t frame, uint8_t* out8) { memset(out8, ((Fake*)c)->fill + frame, 8); }
+static bool fBuild(void* c, uint8_t frame, uint8_t* out8) {
+    memset(out8, ((Fake*)c)->fill + frame, 8);
+    return !(((Fake*)c)->skip & (1u << frame));
+}
 static bool fAbort(void* c, uint8_t) { Fake* f = (Fake*)c; f->aborts++; return f->abortOk; }
 
 static LayoutIO ioFor(Fake& f) { return { fWrite, fBuild, fAbort, &f }; }
@@ -570,6 +577,235 @@ static void test_set_can_inputs_map(void) {
     }
 }
 
+
+// ---- HALTECH (#612 phase 4) ----
+// Expected bytes are worked by hand from Haltech ECU Broadcast CAN Protocol
+// v2.0: temperatures K x10, pressures absolute kPa x10 (brake: x1), speed
+// km/h x10, battery V x10, percentages x10. No data is 0; a frame with no
+// input routed to the output is not sent.
+
+static const CanLayout& H = HALTECH_LAYOUT;
+
+static bool hFrame(const Input* in, uint8_t route, uint8_t frame, uint8_t* out, float baro = STD_BARO_BAR) {
+    uint8_t map[CAN_LAYOUT_MAX_SIGNALS];
+    canLayoutBuildMap(H, in, MAX_INPUTS, map);
+    return canLayoutBuildFrame(H, map, in, MAX_INPUTS, route, frame, out, baro);
+}
+
+static void test_haltech_table_is_well_formed(void) {
+    TEST_ASSERT_EQUAL_UINT8(HALTECH_FRAMES, H.frames);
+    TEST_ASSERT_EQUAL_UINT8(CAN_LAYOUT_ZERO_NO_DATA, H.flags);
+    TEST_ASSERT_NOT_NULL(H.frameIds);
+    for (uint8_t f = 0; f < H.frames; f++) {
+        TEST_ASSERT_EQUAL_HEX16(layoutFormatFrameId(FMT_HALTECH, f), canLayoutFrameId(H, f));
+        TEST_ASSERT_TRUE(canLayoutFrameId(H, f) <= 0x7FF);   // 11-bit
+    }
+    bool frameUsed[LAYOUT_MAX_FRAMES] = {false};
+    for (uint8_t i = 0; i < H.count; i++) {
+        CanLayoutSignal s; canLayoutSignalAt(H, i, s);
+        const char* name = getApplicationNameByIndex(s.app);
+        TEST_ASSERT_TRUE_MESSAGE(s.frame < H.frames, name);
+        TEST_ASSERT_TRUE_MESSAGE(s.startByte + s.length <= 8 && s.length == 2, name);
+        TEST_ASSERT_TRUE_MESSAGE(s.startByte % 2 == 0, name);   // Haltech's fields are byte pairs
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(getApplicationExpectedMeasurementType(s.app), s.measurementType, name);
+        // Absolute is set exactly on the pressure rows: Haltech's pressures are all absolute
+        TEST_ASSERT_EQUAL_MESSAGE(s.measurementType == MEASURE_PRESSURE, (s.flags & LAYOUT_ABSOLUTE) != 0, name);
+        frameUsed[s.frame] = true;
+        for (uint8_t j = (uint8_t)(i + 1); j < H.count; j++) {
+            CanLayoutSignal t; canLayoutSignalAt(H, j, t);
+            TEST_ASSERT_FALSE_MESSAGE(t.app == s.app && t.instance == s.instance, "duplicate signal");
+            if (t.frame == s.frame) {
+                const bool apart = s.startByte + s.length <= t.startByte || t.startByte + t.length <= s.startByte;
+                TEST_ASSERT_TRUE_MESSAGE(apart, "signals overlap in a frame");
+            }
+        }
+    }
+    for (uint8_t f = 0; f < H.frames; f++) TEST_ASSERT_TRUE_MESSAGE(frameUsed[f], "a frame with no signal");
+}
+
+static void test_haltech_known_values(void) {
+    Input in[MAX_INPUTS]; clearInputs(in, MAX_INPUTS);
+    uint8_t f[8];
+    // 0x360: RPM, MAP (absolute already), TPS; bytes 6-7 coolant pressure: none, 0
+    setInput(in[0], 1, APP_ENGINE_RPM, 3000);
+    setInput(in[1], 2, APP_MAP_PRESSURE, 1.0f);           // 100.0 kPa abs
+    setInput(in[2], 3, APP_THROTTLE_POSITION, 45.6f);     // the spec's own example: 456
+    TEST_ASSERT_TRUE(hFrame(in, 1, 0, f));
+    TEST_ASSERT_EQUAL_HEX16(3000, be16(f + 0));
+    TEST_ASSERT_EQUAL_HEX16(1000, be16(f + 2));
+    TEST_ASSERT_EQUAL_HEX16(456, be16(f + 4));
+    TEST_ASSERT_EQUAL_HEX16(0, be16(f + 6));
+
+    // 0x361: gauge oil and fuel pressure + baro (§14.8). 3.0 bar + 1.01325 = 401.325 kPa
+    clearInputs(in, MAX_INPUTS);
+    setInput(in[0], 1, APP_FUEL_PRESSURE, 3.0f);
+    setInput(in[1], 2, APP_OIL_PRESSURE, 0.0f);           // engine off: atmosphere, 101.3 on the dash's abs scale
+    TEST_ASSERT_TRUE(hFrame(in, 1, 1, f));
+    TEST_ASSERT_EQUAL_HEX16(4013, be16(f + 0));
+    TEST_ASSERT_EQUAL_HEX16(1013, be16(f + 2));           // the dash shows 1013/10 - 101.3 = 0 kPa
+    TEST_ASSERT_EQUAL_HEX16(0, be16(f + 4));              // engine demand: none
+    // The baro the caller passes is the one used: 0.9 bar at altitude
+    TEST_ASSERT_TRUE(hFrame(in, 1, 1, f, 0.9f));
+    TEST_ASSERT_EQUAL_HEX16(3900, be16(f + 0));
+    TEST_ASSERT_EQUAL_HEX16(900, be16(f + 2));
+
+    // 0x36B: brake pressure front is 1 kPa per bit (y = x - 101.3): 10 bar gauge = 1101.325 kPa abs
+    clearInputs(in, MAX_INPUTS);
+    setInput(in[0], 1, APP_BRAKE_PRESSURE, 10.0f);
+    TEST_ASSERT_TRUE(hFrame(in, 1, 2, f));
+    TEST_ASSERT_EQUAL_HEX16(1101, be16(f + 0));
+
+    // 0x370 speed; 0x372 battery and baro (baro is absolute: no offset added)
+    clearInputs(in, MAX_INPUTS);
+    setInput(in[0], 1, APP_VEHICLE_SPEED, 100.5f);
+    setInput(in[1], 2, APP_PRIMARY_BATTERY, 13.8f);
+    setInput(in[2], 3, APP_BAROMETRIC_PRESSURE, 1.013f);
+    TEST_ASSERT_TRUE(hFrame(in, 1, 3, f));
+    TEST_ASSERT_EQUAL_HEX16(1005, be16(f + 0));
+    TEST_ASSERT_TRUE(hFrame(in, 1, 4, f, 1.013f));
+    TEST_ASSERT_EQUAL_HEX16(138, be16(f + 0));
+    TEST_ASSERT_EQUAL_HEX16(0, be16(f + 4));              // target boost: none
+    TEST_ASSERT_EQUAL_HEX16(1013, be16(f + 6));
+
+    // 0x373 / 0x374: EGT 1-8 in pin order, K x10. 800 degC = 1073.15 K
+    clearInputs(in, MAX_INPUTS);
+    for (uint8_t i = 0; i < 8; i++) setInput(in[i], (uint8_t)(10 + i), APP_EGT, 800.0f + 10.0f * i);
+    TEST_ASSERT_TRUE(hFrame(in, 1, 5, f));
+    TEST_ASSERT_EQUAL_HEX16(10732, be16(f + 0));          // 10731.5 rounds half up
+    TEST_ASSERT_EQUAL_HEX16(10832, be16(f + 2));
+    TEST_ASSERT_TRUE(hFrame(in, 1, 6, f));
+    TEST_ASSERT_EQUAL_HEX16(11132, be16(f + 0));          // EGT 5: 840 degC
+    TEST_ASSERT_EQUAL_HEX16(11432, be16(f + 6));          // EGT 8: 870 degC
+
+    // 0x376 ambient, humidity (signed)
+    clearInputs(in, MAX_INPUTS);
+    setInput(in[0], 1, APP_AMBIENT_TEMP, -10.0f);         // 263.15 K
+    setInput(in[1], 2, APP_HUMIDITY, 45.0f);
+    TEST_ASSERT_TRUE(hFrame(in, 1, 7, f));
+    TEST_ASSERT_EQUAL_HEX16(2632, be16(f + 0));
+    TEST_ASSERT_EQUAL_HEX16(450, be16(f + 2));
+
+    // 0x3E0: coolant, IAT, (fuel temperature: 0), oil
+    clearInputs(in, MAX_INPUTS);
+    setInput(in[0], 1, APP_COOLANT_TEMP, 90.0f);          // 363.15 K
+    setInput(in[1], 2, APP_INTAKE_AIR_TEMP, 25.0f);       // 298.15 K
+    setInput(in[2], 3, APP_OIL_TEMP, 110.0f);             // 383.15 K
+    TEST_ASSERT_TRUE(hFrame(in, 1, 8, f));
+    TEST_ASSERT_EQUAL_HEX16(3632, be16(f + 0));
+    TEST_ASSERT_EQUAL_HEX16(2982, be16(f + 2));
+    TEST_ASSERT_EQUAL_HEX16(0, be16(f + 4));
+    TEST_ASSERT_EQUAL_HEX16(3832, be16(f + 6));
+
+    // 0x3E1 gearbox (TRANS_TEMP), diff; 0x6F8 fuel level % in bytes 6-7, bytes 0-5 0 (enums: Disabled)
+    clearInputs(in, MAX_INPUTS);
+    setInput(in[0], 1, APP_TRANS_TEMP, 80.0f);
+    setInput(in[1], 2, APP_DIFF_TEMP, 70.0f);
+    setInput(in[2], 3, APP_FUEL_LEVEL, 42.5f);
+    TEST_ASSERT_TRUE(hFrame(in, 1, 9, f));
+    TEST_ASSERT_EQUAL_HEX16(3532, be16(f + 0));
+    TEST_ASSERT_EQUAL_HEX16(3432, be16(f + 2));
+    TEST_ASSERT_TRUE(hFrame(in, 1, 10, f));
+    for (int i = 0; i < 6; i++) TEST_ASSERT_EQUAL_HEX8(0, f[i]);
+    TEST_ASSERT_EQUAL_HEX16(425, be16(f + 6));
+}
+
+// Decision 2: no data is 0, a frame with nothing routed here stays off the bus,
+// a real value uses the full range
+static void test_haltech_no_data_and_frame_skip(void) {
+    Input in[MAX_INPUTS]; clearInputs(in, MAX_INPUTS);
+    uint8_t f[8];
+    // Nothing configured: no frame is sent
+    for (uint8_t fr = 0; fr < H.frames; fr++) TEST_ASSERT_FALSE(hFrame(in, 1, fr, f));
+
+    // A mapped input with no reading, or disabled: the frame is sent, its field is 0
+    setInput(in[0], 1, APP_COOLANT_TEMP, 90.0f);
+    in[0].flags.hasReading = 0;
+    memset(f, 0xAA, sizeof(f));
+    TEST_ASSERT_TRUE(hFrame(in, 1, 8, f));
+    for (int i = 0; i < 8; i++) TEST_ASSERT_EQUAL_HEX8(0, f[i]);
+    in[0].flags.hasReading = 1;
+    in[0].flags.isEnabled = 0;
+    TEST_ASSERT_TRUE(hFrame(in, 1, 8, f));
+    TEST_ASSERT_EQUAL_HEX16(0, be16(f + 0));
+    in[0].flags.isEnabled = 1;
+    in[0].value = NAN;                                     // a faulted reading: 0, still sent
+    TEST_ASSERT_TRUE(hFrame(in, 1, 8, f));
+    TEST_ASSERT_EQUAL_HEX16(0, be16(f + 0));
+
+    // Routed to another output only: switched off here, and the frame with it
+    in[0].value = 90.0f;
+    in[0].routeMask = 0x02;
+    TEST_ASSERT_FALSE(hFrame(in, 1, 8, f));
+    TEST_ASSERT_TRUE(hFrame(in, 2, 8, f));
+    TEST_ASSERT_EQUAL_HEX16(3632, be16(f + 0));
+
+    // The wrong measurement type: 0 (the frame is still sent: the input is there)
+    in[0].routeMask = 0xFF;
+    in[0].measurementType = MEASURE_PRESSURE;
+    TEST_ASSERT_TRUE(hFrame(in, 1, 8, f));
+    TEST_ASSERT_EQUAL_HEX16(0, be16(f + 0));
+
+    // Full range: a real value may reach 0xFFFF (no all-ones reserved), and clamps at 0
+    clearInputs(in, MAX_INPUTS);
+    setInput(in[0], 1, APP_ENGINE_RPM, 1e9f);
+    setInput(in[1], 2, APP_THROTTLE_POSITION, -5.0f);
+    setInput(in[2], 3, APP_OIL_PRESSURE, 3.0e38f);        // overflows to inf in kPa, still clamps
+    TEST_ASSERT_TRUE(hFrame(in, 1, 0, f));
+    TEST_ASSERT_EQUAL_HEX16(0xFFFF, be16(f + 0));
+    TEST_ASSERT_EQUAL_HEX16(0x0000, be16(f + 4));
+    TEST_ASSERT_TRUE(hFrame(in, 1, 1, f));
+    TEST_ASSERT_EQUAL_HEX16(0xFFFF, be16(f + 2));
+
+    // PREOBD is unchanged: a frame with nothing mapped is still sent, all-ones
+    clearInputs(in, MAX_INPUTS);
+    uint8_t map[CAN_LAYOUT_MAX_SIGNALS];
+    canLayoutBuildMap(L, in, MAX_INPUTS, map);
+    TEST_ASSERT_TRUE(canLayoutBuildFrame(L, map, in, MAX_INPUTS, 1, 1, f));
+    for (int i = 0; i < 8; i++) TEST_ASSERT_EQUAL_HEX8(0xFF, f[i]);
+}
+
+// The alarm defaults (base units, through the row's reference and units) fit
+// each row's stated range, and the range fits the field
+static void test_haltech_ranges(void) {
+    for (uint8_t i = 0; i < H.count; i++) {
+        CanLayoutSignal s; canLayoutSignalAt(H, i, s);
+        const char* name = getApplicationNameByIndex(s.app);
+        const double top = (s.flags & LAYOUT_SIGNED) ? 32767.0 : 65535.0;
+        const double bottom = (s.flags & LAYOUT_SIGNED) ? -32768.0 : 0.0;
+        TEST_ASSERT_TRUE_MESSAGE(s.rangeMin < s.rangeMax, name);
+        TEST_ASSERT_TRUE_MESSAGE((double)s.rangeMin >= bottom * s.scale + s.offset - 1e-3, name);
+        TEST_ASSERT_TRUE_MESSAGE((double)s.rangeMax <= top * s.scale + s.offset + 1e-3, name);
+        const ApplicationPreset* p = getApplicationByIndex(s.app);
+        float lo = pgm_read_float(&p->defaultMinValue), hi = pgm_read_float(&p->defaultMaxValue);
+        if (s.flags & LAYOUT_ABSOLUTE) {
+            const float off = pressureReferenceOffset(applicationReference(s.app), REF_ABSOLUTE, STD_BARO_BAR);
+            lo += off; hi += off;
+        }
+        TEST_ASSERT_TRUE_MESSAGE(obdConvertUnits(hi, s.unitsIndex) <= s.rangeMax, name);
+        TEST_ASSERT_TRUE_MESSAGE(obdConvertUnits(lo, s.unitsIndex) >= s.rangeMin, name);
+    }
+}
+
+// The pass sends only the frames build() kept, on the layout's own IDs, in order
+static void test_pass_skips_frames_and_uses_frame_ids(void) {
+    Fake f; LayoutPass p;
+    layoutPassInit(p, H.frames, H.baseId, H.frameIds);
+    f.skip = (uint16_t)((1u << 2) | (1u << 6) | (1u << 10));   // 0x36B, 0x374, 0x6F8 have nothing
+    tickOne(p, f, 0, 100);
+    TEST_ASSERT_FALSE(p.pending);
+    TEST_ASSERT_EQUAL_UINT32(8, f.ids.size());
+    static const uint32_t want[] = {0x360, 0x361, 0x370, 0x372, 0x373, 0x376, 0x3E0, 0x3E1};
+    for (size_t i = 0; i < 8; i++) TEST_ASSERT_EQUAL_HEX32(want[i], f.ids[i]);
+    // A refused write resumes at the same frame, skipping still holds
+    f.ids.clear();
+    tickOne(p, f, 100, 3);
+    TEST_ASSERT_TRUE(p.pending);
+    tickOne(p, f, 110, 100);
+    TEST_ASSERT_FALSE(p.pending);
+    TEST_ASSERT_EQUAL_UINT32(8, f.ids.size());
+    for (size_t i = 0; i < 8; i++) TEST_ASSERT_EQUAL_HEX32(want[i], f.ids[i]);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_map_pin_order_and_holes);
@@ -592,5 +828,10 @@ int main(int, char**) {
     RUN_TEST(test_bus_reset_drops_the_pass);
     RUN_TEST(test_bus_load_estimate);
     RUN_TEST(test_dbc_matches_the_firmware_table);
+    RUN_TEST(test_haltech_table_is_well_formed);
+    RUN_TEST(test_haltech_known_values);
+    RUN_TEST(test_haltech_no_data_and_frame_skip);
+    RUN_TEST(test_haltech_ranges);
+    RUN_TEST(test_pass_skips_frames_and_uses_frame_ids);
     return UNITY_END();
 }

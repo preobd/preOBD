@@ -12,11 +12,24 @@
  * %, m); `unitsIndex` converts to the unit the signal carries (pressures go
  * out in kPa), resolved to a registry index once, in the row.
  *
- * No data: all-ones in the field (fieldAllOnes), when the signal is not mapped
- * to an input, the input is disabled, has no reading yet, is not routed to
- * this output, is not finite, or measures a different quantity than the row.
- * Layouts never look at rules state (FAULT / STALE): that is not an output's
- * business. A real value clamps to max-1 so it can never read as no data.
+ * No data: when the signal is not mapped to an input, the input is disabled,
+ * has no reading yet, is not routed to this output, is not finite, or measures
+ * a different quantity than the row. Layouts never look at rules state (FAULT /
+ * STALE): that is not an output's business. How no data is written is the
+ * layout's (CanLayout::flags):
+ *   default (PREOBD)        all-ones in the field (fieldAllOnes); a real value
+ *                           clamps to max-1 so it can never read as no data;
+ *   CAN_LAYOUT_ZERO_NO_DATA 0 in the field, a real value uses the field's full
+ *   (HALTECH)               range, and a frame none of whose signals maps to an
+ *                           input routed to this output is not sent at all
+ *                           (Haltech's own convention: "0 if there's an
+ *                           error", #612 phase 4).
+ *
+ * Pressure reference (ARCHITECTURE.md §14.8): a value in the table is in its
+ * application's reference (MAP and baro absolute, every other pressure gauge).
+ * A row flagged LAYOUT_ABSOLUTE carries absolute pressure, so a gauge
+ * application gets the barometric reference added, the same conversion the
+ * OBD export makes. The engine stays pure: the caller passes the baro in.
  */
 
 #ifndef CAN_LAYOUT_H
@@ -31,7 +44,12 @@ struct Input;
 #define LAYOUT_SIGNED         FIELD_SIGNED
 #define LAYOUT_LITTLE_ENDIAN  FIELD_LITTLE_ENDIAN
 
+#define LAYOUT_ABSOLUTE       0x80   // the field carries absolute pressure (§14.8)
+#define LAYOUT_FIELD_FLAGS    (FIELD_SIGNED | FIELD_LITTLE_ENDIAN)   // the bits field_encode reads
+
 #define LAYOUT_UNITS_NONE     0xFF   // no conversion from the base unit
+
+#define CAN_LAYOUT_ZERO_NO_DATA 0x01   // CanLayout::flags: see the top of this file
 
 // One signal. 24 bytes, PROGMEM. The array is append-only after release.
 struct CanLayoutSignal {
@@ -40,29 +58,34 @@ struct CanLayoutSignal {
     uint8_t  instance;         // 1-based: the n-th configured input of that application, in pin order
     uint8_t  startByte;        // 0..7
     uint8_t  length;           // 1 or 2 (4 works too)
-    uint8_t  flags;            // LAYOUT_*
+    uint8_t  flags;            // LAYOUT_* (FIELD_SIGNED, FIELD_LITTLE_ENDIAN, LAYOUT_ABSOLUTE)
     uint8_t  measurementType;  // MeasurementType: the input must measure exactly this
     uint8_t  unitsIndex;       // UNITS_REGISTRY index the value is carried in, or LAYOUT_UNITS_NONE
     float    scale, offset;    // physical = raw * scale + offset
     float    rangeMin, rangeMax;   // the physical range the signal promises to carry
 };
 
-// A layout: its rows, with the frame count and base ID
+// A layout: its rows, with the frame count and its CAN IDs
 struct CanLayout {
     const CanLayoutSignal* signals;   // PROGMEM
     uint8_t  count;
     uint8_t  frames;
-    uint16_t baseId;
+    uint16_t baseId;                  // frame f is baseId + f ...
+    const uint16_t* frameIds;         // ... unless this PROGMEM table (frames entries) names each
+    uint8_t  flags;                   // CAN_LAYOUT_*
 };
 
 #define CAN_LAYOUT_MAX_SIGNALS 40
 #define LAYOUT_NO_INPUT 0xFF   // a map entry with no input
 
-// The PREOBD layout (layout_preobd.cpp)
+// The PREOBD layout (layout_preobd.cpp) and the HALTECH layout (layout_haltech.cpp)
 extern const CanLayout PREOBD_LAYOUT;
+extern const CanLayout HALTECH_LAYOUT;
 
 // Row i, copied out of PROGMEM
 void canLayoutSignalAt(const CanLayout& layout, uint8_t i, CanLayoutSignal& out);
+// The CAN ID of frame f
+uint16_t canLayoutFrameId(const CanLayout& layout, uint8_t f);
 
 // ---- The map (B3) ----
 
@@ -87,23 +110,34 @@ bool canLayoutMapFresh(CanLayoutMap& m, const CanLayout& layout, const Input* in
 
 // ---- Frame encoding (B1/B4) ----
 
-/** What a signal sends for one input; false: no data (the caller writes all-ones). */
-bool canLayoutEncodeSignal(const CanLayoutSignal& sig, const Input& in, uint8_t routeBit, uint8_t* out);
+#define LAYOUT_STD_BARO_BAR 1.01325f   // = STD_BARO_BAR (pressure_reference.h), the default below
+
+/**
+ * What a signal sends for one input; false: no data (the caller writes the
+ * layout's no-data pattern). baroBar: the barometric reference for a
+ * LAYOUT_ABSOLUTE row. reserveAllOnes: clamp a real value below all-ones (PREOBD).
+ */
+bool canLayoutEncodeSignal(const CanLayoutSignal& sig, const Input& in, uint8_t routeBit, uint8_t* out,
+                           float baroBar = LAYOUT_STD_BARO_BAR, bool reserveAllOnes = true);
 
 /**
  * The 8 bytes of frame `frame`: each signal in it from the input its map entry
- * names, all-ones where there is no data; bytes no signal covers are 0.
- * routeBit: the output's route bit (1 << id); an input not routed to it sends no data.
+ * names, the layout's no-data pattern where there is none; bytes no signal
+ * covers are 0. routeBit: the output's route bit (1 << id); an input not
+ * routed to it sends no data. Returns whether the frame is sent: always, except
+ * in a CAN_LAYOUT_ZERO_NO_DATA layout when no signal in it maps to an input
+ * routed to this output (a disabled or faulted one still counts: it sends 0).
  */
-void canLayoutBuildFrame(const CanLayout& layout, const uint8_t* map, const Input* inputs,
-                         uint8_t nInputs, uint8_t routeBit, uint8_t frame, uint8_t* out8);
+bool canLayoutBuildFrame(const CanLayout& layout, const uint8_t* map, const Input* inputs,
+                         uint8_t nInputs, uint8_t routeBit, uint8_t frame, uint8_t* out8,
+                         float baroBar = LAYOUT_STD_BARO_BAR);
 
 // ---- Pacing and the TX path (B5) ----
 
 // Sends one frame; false: the bus took none now (queue full or bus down)
 typedef bool (*LayoutWriteFn)(void* ctx, uint8_t bus, uint32_t id, const uint8_t* data);
-// Snapshots frame `frame` into 8 bytes (at the start of a pass)
-typedef void (*LayoutBuildFn)(void* ctx, uint8_t frame, uint8_t* out8);
+// Snapshots frame `frame` into 8 bytes (at the start of a pass); false: skip it this pass
+typedef bool (*LayoutBuildFn)(void* ctx, uint8_t frame, uint8_t* out8);
 // Abort the bus's unACKed transmits; false: refused (another consumer's exchange is in flight)
 typedef bool (*LayoutAbortFn)(void* ctx, uint8_t bus);
 
@@ -119,6 +153,8 @@ struct LayoutPass {
     bool     primed;      // lastSend is valid
     uint32_t lastSend;    // when the last pass was due (advances by exactly one interval)
     uint32_t baseId;
+    const uint16_t* frameIds;   // PROGMEM, or nullptr: frame f is baseId + f
+    uint16_t sendMask;    // frames of this pass to send (bit per frame)
     uint16_t skipped;     // passes not started because the last was still leaving
     uint16_t unacked;     // stalled passes dropped (nobody ACKing, queue full)
     uint32_t passes;      // passes started
@@ -131,7 +167,7 @@ struct LayoutIO {
     void* ctx;
 };
 
-void layoutPassInit(LayoutPass& p, uint8_t frames, uint32_t baseId);
+void layoutPassInit(LayoutPass& p, uint8_t frames, uint32_t baseId, const uint16_t* frameIds = nullptr);
 /** The bus restarted: whatever was in flight is gone. Counters stay. */
 void layoutPassReset(LayoutPass& p);
 
@@ -145,7 +181,8 @@ void layoutPassReset(LayoutPass& p);
  */
 void layoutPassPace(LayoutPass& p, uint32_t now, uint16_t intervalMs, uint8_t bus, const LayoutIO& io);
 
-/** Send frames until the bus refuses one or the pass is done. True when the pass finished. */
+/** Send frames until the bus refuses one or the pass is done (frames the build
+ *  skipped are passed over). True when the pass finished. */
 bool layoutPassDrain(LayoutPass& p, uint8_t bus, const LayoutIO& io);
 
 // A set of outputs ticking together

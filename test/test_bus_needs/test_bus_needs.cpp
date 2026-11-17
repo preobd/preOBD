@@ -38,6 +38,7 @@
 #include "../../src/config/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
 #include "../../src/outputs/table/output_table.cpp"   // the stored outputs (#612)
 #include "../../src/outputs/table/output_admission.cpp"   // one per kind on load (#612)
+#include "../../src/outputs/formats/can_layout_ids.cpp"   // the layouts' CAN IDs (#612 phase 4)
 #include "../../src/inputs/measurement_compat.cpp"  // units check on load (#458)
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
 #include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"  // obdLengthFor (#516)

@@ -117,6 +117,23 @@ capability.
 Stack left: 80,032 B without, 78,368 B with. On teensy40 the branch-vs-main
 flash delta was about +6 KB and the stack went 80,288 to 79,648 B.
 
+The `HALTECH` output (#612 phase 4) adds to the same knob. Measured 2026-11-17,
+branch `feature/can-layout-haltech` against main `22d9c05`, every env built
+in each tree:
+
+| Board | ΔFlash | ΔRAM | Stack left (Teensy 4) |
+|---|---|---|---|
+| teensy40 | +3,092 B | +768 B | 116,160 → 115,392 B |
+| teensy41 | +3,084 B | +768 B | 77,664 → 76,896 B |
+| teensy36 | +2,260 B | +512 B | — |
+| esp32s3dev | +1,984 B | +248 B | — |
+| feather_f405 | +1,928 B | +256 B | — |
+| mega2560 | +20 B | 0 | near PROGMEM unchanged, 34 B left |
+
+Most of the RAM is a layout port per CAN bus per layout (a pass buffer of
+16 frames). On teensy41 RAM1 code has 1,752 B of padding left before the
+next 32 KB ITCM block, which would cost 32 KB of stack.
+
 ## feather_f405
 
 STM32F405RG (128 KB SRAM + 64 KB CCM, 1 MB flash), every capability declared,

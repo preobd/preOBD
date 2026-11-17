@@ -1,6 +1,6 @@
 /*
- * can_layout_output.cpp - The PREOBD output on the live system (see
- * can_layout_output.h): lifecycle, the input map, pacing and the bus.
+ * can_layout_output.cpp - The layout outputs (PREOBD, HALTECH) on the live
+ * system (see can_layout_output.h): lifecycle, the input map, pacing and the bus.
  *
  * The pure parts (map, frame encoding, pass pacing) are can_layout.{h,cpp};
  * this file feeds them the input table and the bus manager. FlexCAN headers
@@ -17,6 +17,7 @@
 #include "../../buses/can_bus.h"
 #include "../../hal/bus_defaults.h"   // NUM_CAN_BUSES: a layout port per bus
 #include "../../inputs/input.h"
+#include "../../inputs/pressure_reference.h"   // baroReferenceBar: absolute fields (§14.8)
 #include "../../inputs/input_manager.h"
 #include "../../sensors/application_presets.h"
 #include "../../buses/pinctrl/pin_label.h"
@@ -27,13 +28,24 @@
 #define FLASHMEM
 #endif
 
-// PREOBD's IDs are fixed, so admission allows one per CAN bus: a port per bus
-#define LAYOUT_PORTS NUM_CAN_BUSES
+// A layout's IDs are fixed, so admission allows one output of each layout per
+// CAN bus: a port per bus per layout
+#define LAYOUT_FORMATS 2   // PREOBD, HALTECH
+#define LAYOUT_PORTS (NUM_CAN_BUSES * LAYOUT_FORMATS)
 
 struct LayoutSlot {
-    uint8_t outputId;     // 0xFF: free
-    CanLayoutMap map;     // signal -> inputs[] slot
+    uint8_t outputId;          // 0xFF: free
+    const CanLayout* layout;   // the format's table
+    float   baroBar;           // the barometric reference, read once per pass
+    CanLayoutMap map;          // signal -> inputs[] slot
 };
+
+// The table a layout format sends; nullptr for any other format
+static const CanLayout* layoutOf(uint8_t format) {
+    if (format == FMT_PREOBD) return &PREOBD_LAYOUT;
+    if (format == FMT_HALTECH) return &HALTECH_LAYOUT;
+    return nullptr;
+}
 
 static LayoutPort port[LAYOUT_PORTS];
 static LayoutIO   portIo[LAYOUT_PORTS];
@@ -63,10 +75,11 @@ static bool ioAbort(void*, uint8_t bus) {
     return canBusAbortUnackedTx(bus, CANC_LAYOUT);
 }
 
-static void ioBuild(void* ctx, uint8_t frame, uint8_t* out8) {
+static bool ioBuild(void* ctx, uint8_t frame, uint8_t* out8) {
     const uint8_t s = (uint8_t)(uintptr_t)ctx;
-    canLayoutBuildFrame(PREOBD_LAYOUT, slot[s].map.slot, inputs, MAX_INPUTS,
-                        (uint8_t)(1u << slot[s].outputId), frame, out8);
+    if (frame == 0) slot[s].baroBar = baroReferenceBar();   // one reading for the whole pass
+    return canLayoutBuildFrame(*slot[s].layout, slot[s].map.slot, inputs, MAX_INPUTS,
+                               (uint8_t)(1u << slot[s].outputId), frame, out8, slot[s].baroBar);
 }
 
 // The bus restarted: whatever was queued is gone, start a pass afresh
@@ -81,7 +94,7 @@ static void onLayoutReset() {
 static void rebuildMaps() {
     anyStale = false;
     for (uint8_t i = 0; i < LAYOUT_PORTS; i++) {
-        if (slot[i].outputId != 0xFF) canLayoutMapFresh(slot[i].map, PREOBD_LAYOUT, inputs, MAX_INPUTS);
+        if (slot[i].outputId != 0xFF) canLayoutMapFresh(slot[i].map, *slot[i].layout, inputs, MAX_INPUTS);
     }
 }
 
@@ -94,6 +107,8 @@ FLASHMEM bool canLayoutStart(uint8_t id) {
     if (id >= MAX_OUTPUTS) return false;
     initSlots();
     canLayoutStop(id);
+    const CanLayout* layout = layoutOf(outputFormatOf(id));
+    if (layout == nullptr) return false;
     uint8_t s = 0xFF;
     for (uint8_t i = 0; i < LAYOUT_PORTS; i++) if (slot[i].outputId == 0xFF) { s = i; break; }
     if (s == 0xFF) return false;
@@ -103,18 +118,20 @@ FLASHMEM bool canLayoutStart(uint8_t id) {
     const CanAttach r = canAttach(bus, CANC_LAYOUT);
     if (r == CAN_ATTACH_BUS_OFF || r == CAN_ATTACH_NO_BUS || r == CAN_ATTACH_LISTEN_ONLY ||
         r == CAN_ATTACH_INPUT_BUS) {
-        msg.debug.error(TAG_CAN, "PREOBD output: CAN%u is off, listen-only or CAN input's", (unsigned)bus + 1);
+        msg.debug.error(TAG_CAN, "layout output: CAN%u is off, listen-only or CAN input's", (unsigned)bus + 1);
         return false;
     }
     slot[s].outputId = id;   // attached, also while the bus waits
+    slot[s].layout = layout;
+    slot[s].baroBar = STD_BARO_BAR;
     port[s].live = true;
     port[s].bus = bus;
     const OutputRecord* rec = outputRecord(id);
     port[s].interval = rec ? rec->interval : 100;
-    layoutPassInit(port[s].pass, PREOBD_LAYOUT.frames, PREOBD_LAYOUT.baseId);
+    layoutPassInit(port[s].pass, layout->frames, layout->baseId, layout->frameIds);
     portIo[s] = { ioWrite, ioBuild, ioAbort, (void*)(uintptr_t)s };
     canLayoutMapMarkStale(slot[s].map);
-    canLayoutMapFresh(slot[s].map, PREOBD_LAYOUT, inputs, MAX_INPUTS);
+    canLayoutMapFresh(slot[s].map, *layout, inputs, MAX_INPUTS);
     anyStale = true;   // inputs may still be loading at boot: look again on the first tick
     canLayoutMapMarkStale(slot[s].map);
     return true;
@@ -146,40 +163,56 @@ void canLayoutTick() {
 // ---- OUTPUT <id> ----
 
 // Is signal i's application used by the next row too (EGT#1, EGT#2 ...)?
-static FLASHMEM bool appRepeats(uint8_t i) {
-    if (i + 1 >= PREOBD_LAYOUT.count) return false;
+static FLASHMEM bool appRepeats(const CanLayout& L, uint8_t i) {
+    if (i + 1 >= L.count) return false;
     CanLayoutSignal a, b;
-    canLayoutSignalAt(PREOBD_LAYOUT, i, a);
-    canLayoutSignalAt(PREOBD_LAYOUT, i + 1, b);
+    canLayoutSignalAt(L, i, a);
+    canLayoutSignalAt(L, i + 1, b);
     return a.app == b.app;
 }
 
 FLASHMEM void canLayoutPrintDetail(uint8_t id) {
     initSlots();
     const OutputRecord* rec = outputRecord(id);
-    if (!rec) return;
+    const CanLayout* lp = rec ? layoutOf(rec->format) : nullptr;
+    if (!lp) return;
+    const CanLayout& L = *lp;
     msg.control.print(F("  Frames: "));
-    msg.control.print(PREOBD_LAYOUT.frames);
-    msg.control.print(F(" from 0x"));
-    msg.control.print(PREOBD_LAYOUT.baseId, HEX);
-    msg.control.print(F(" (11-bit), every interval; see docs/can/README.md"));
-    msg.control.println();
+    msg.control.print(L.frames);
+    if (L.frameIds) {
+        // Haltech's IDs: listed, and a frame with nothing mapped stays off the bus
+        msg.control.print(F(" at"));
+        for (uint8_t f = 0; f < L.frames; f++) {
+            // Upper case, as the docs and Haltech's table write them (print(HEX) is lower case on Teensy)
+            const uint16_t fid = canLayoutFrameId(L, f);
+            char hex[6] = {' ', '0', 'x', 0, 0, 0};
+            static const char D[] = "0123456789ABCDEF";
+            hex[3] = D[(fid >> 8) & 0xF]; hex[4] = D[(fid >> 4) & 0xF]; hex[5] = D[fid & 0xF];
+            for (uint8_t c = 0; c < 6; c++) msg.control.print(hex[c]);
+        }
+        msg.control.println(F(" (11-bit, 1 Mbit/s), every interval; see docs/can/HALTECH.md"));
+        msg.control.println(F("  A frame with no input routed here is not sent; a field with no data is 0"));
+    } else {
+        msg.control.print(F(" from 0x"));
+        msg.control.print(L.baseId, HEX);
+        msg.control.println(F(" (11-bit), every interval; see docs/can/README.md"));
+    }
 
     const uint8_t s = slotOf(id);
     // The map as the live engine has it; a stopped output shows what it would be
     uint8_t map[CAN_LAYOUT_MAX_SIGNALS];
     if (s != 0xFF) memcpy(map, slot[s].map.slot, sizeof(map));
-    else           canLayoutBuildMap(PREOBD_LAYOUT, inputs, MAX_INPUTS, map);
+    else           canLayoutBuildMap(L, inputs, MAX_INPUTS, map);
     msg.control.print(F("  Signals:"));
     uint8_t col = 0;
-    for (uint8_t i = 0; i < PREOBD_LAYOUT.count; i++) {
+    for (uint8_t i = 0; i < L.count; i++) {
         CanLayoutSignal sg;
-        canLayoutSignalAt(PREOBD_LAYOUT, i, sg);
+        canLayoutSignalAt(L, i, sg);
         if (col == 0) msg.control.print(F("\n   "));
         msg.control.print(' ');
         msg.control.print(getApplicationNameByIndex(sg.app));
         // Repeated applications carry their instance (EGT#2)
-        if (sg.instance > 1 || appRepeats(i)) {
+        if (sg.instance > 1 || appRepeats(L, i)) {
             msg.control.print('#');
             msg.control.print(sg.instance);
         }
@@ -200,7 +233,7 @@ FLASHMEM void canLayoutPrintDetail(uint8_t id) {
     const uint8_t bus = outputTransportCanBus(rec->transport);
     const uint32_t baud = bus != 0xFF ? canBusRunningBaud(bus) : 0;
     if (baud) {
-        const uint16_t load = canLayoutBusLoadX10(PREOBD_LAYOUT.frames, rec->interval, baud);
+        const uint16_t load = canLayoutBusLoadX10(L.frames, rec->interval, baud);
         msg.control.print(F("  Bus load: about "));
         msg.control.print(load / 10);
         msg.control.print('.');

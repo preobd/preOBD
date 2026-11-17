@@ -16,6 +16,7 @@
 
 #include "../../src/outputs/table/output_table.cpp"
 #include "../../src/outputs/table/output_admission.cpp"
+#include "../../src/outputs/formats/can_layout_ids.cpp"
 
 SystemConfig systemConfig;
 
@@ -220,6 +221,60 @@ static void test_can_id_overlap(void) {
     TEST_ASSERT_FALSE(outputCanIdsOverlap(FMT_CSV, FMT_PREOBD));
     TEST_ASSERT_TRUE(outputFormatSendsCan(FMT_PREOBD));
     TEST_ASSERT_FALSE(outputFormatSendsCan(FMT_CSV));
+    // HALTECH owns 0x360-0x6F8 (11 IDs): beside OBD and PREOBD, never beside another HALTECH
+    TEST_ASSERT_FALSE(outputCanIdsOverlap(FMT_HALTECH, FMT_PREOBD));
+    TEST_ASSERT_FALSE(outputCanIdsOverlap(FMT_PREOBD, FMT_HALTECH));
+    TEST_ASSERT_FALSE(outputCanIdsOverlap(FMT_HALTECH, FMT_OBD));
+    TEST_ASSERT_FALSE(outputCanIdsOverlap(FMT_OBD, FMT_HALTECH));
+    TEST_ASSERT_TRUE(outputCanIdsOverlap(FMT_HALTECH, FMT_HALTECH));
+    TEST_ASSERT_TRUE(outputFormatSendsCan(FMT_HALTECH));
+}
+
+// The IDs come from one table: the spec's, in frame order
+static void test_haltech_ids(void) {
+    static const uint16_t spec[] = {0x360, 0x361, 0x36B, 0x370, 0x372, 0x373, 0x374, 0x376, 0x3E0, 0x3E1, 0x6F8};
+    TEST_ASSERT_EQUAL_UINT8(sizeof(spec) / sizeof(spec[0]), layoutFormatFrames(FMT_HALTECH));
+    for (uint8_t f = 0; f < HALTECH_FRAMES; f++) {
+        TEST_ASSERT_EQUAL_HEX16(spec[f], layoutFormatFrameId(FMT_HALTECH, f));
+        TEST_ASSERT_TRUE(layoutFormatOwnsCanId(FMT_HALTECH, spec[f]));
+    }
+    TEST_ASSERT_FALSE(layoutFormatOwnsCanId(FMT_HALTECH, 0x362));   // a Haltech ID preOBD doesn't send
+    TEST_ASSERT_EQUAL_UINT8(9, layoutFormatFrames(FMT_PREOBD));
+    TEST_ASSERT_EQUAL_HEX16(0x508, layoutFormatFrameId(FMT_PREOBD, 8));
+    TEST_ASSERT_EQUAL_UINT8(0, layoutFormatFrames(FMT_OBD));
+}
+
+static void test_haltech_format_table(void) {
+    TEST_ASSERT_EQUAL(FMT_HALTECH, parseOutputFormat("haltech"));
+    TEST_ASSERT_EQUAL_STRING("HALTECH", outputFormatName(FMT_HALTECH));
+    TEST_ASSERT_TRUE(outputFormatBuilt(FMT_HALTECH));
+    TEST_ASSERT_TRUE(outputFormatPaced(FMT_HALTECH));
+    TEST_ASSERT_TRUE(outputFormatIsLayout(FMT_HALTECH));
+    TEST_ASSERT_FALSE(outputFormatIsLayout(FMT_OBD));
+    TEST_ASSERT_EQUAL_UINT16(20, outputIntervalDefault(FMT_HALTECH, OT_CAN1));
+    TEST_ASSERT_EQUAL_UINT16(20, outputIntervalMin(FMT_HALTECH, OT_CAN1));
+    TEST_ASSERT_EQUAL_UINT32(1000000UL, outputFormatCanBaud(FMT_HALTECH));
+    TEST_ASSERT_EQUAL_UINT32(0, outputFormatCanBaud(FMT_PREOBD));
+    TEST_ASSERT_FALSE(outputTransportAllowed(FMT_HALTECH, OT_USB));   // CAN only (native has no CAN bus)
+    // Stored as a number: appended after PREOBD, never renumbered
+    TEST_ASSERT_EQUAL_UINT8(6, (uint8_t)FMT_HALTECH);
+}
+
+// §14.7 item 3: Haltech's protocol is 1 Mbit/s, so HALTECH is refused on a bus
+// at another rate (outputAdmitReason asks this; the native build has no CAN bus
+// to reach it through, the bench does)
+static void test_haltech_needs_a_1mbit_bus(void) {
+    systemConfig.buses.can[0].baudIndex = CAN_BAUD_500K;
+    systemConfig.buses.can[1].baudIndex = CAN_BAUD_1M;
+    TEST_ASSERT_FALSE(outputCanRateFits(FMT_HALTECH, OT_CAN1, systemConfig));
+    TEST_ASSERT_TRUE(outputCanRateFits(FMT_HALTECH, OT_CAN1 + 1, systemConfig));
+    TEST_ASSERT_TRUE(outputCanRateFits(FMT_PREOBD, OT_CAN1, systemConfig));   // any rate
+    TEST_ASSERT_TRUE(outputCanRateFits(FMT_OBD, OT_CAN1, systemConfig));
+    TEST_ASSERT_TRUE(outputCanRateFits(FMT_HALTECH, OT_USB, systemConfig));   // not CAN: not this rule's
+    for (uint8_t b = CAN_BAUD_125K; b < NUM_CAN_BAUDS; b++) {
+        systemConfig.buses.can[2].baudIndex = b;
+        TEST_ASSERT_EQUAL(b == CAN_BAUD_1M, outputCanRateFits(FMT_HALTECH, OT_CAN1 + 2, systemConfig));
+    }
 }
 
 static void test_preobd_format_table(void) {
@@ -239,6 +294,9 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_a_can_output_cannot_share_can_inputs_bus);
     RUN_TEST(test_can_id_overlap);
+    RUN_TEST(test_haltech_ids);
+    RUN_TEST(test_haltech_format_table);
+    RUN_TEST(test_haltech_needs_a_1mbit_bus);
     RUN_TEST(test_preobd_format_table);
     RUN_TEST(test_add_takes_the_lowest_free_id);
     RUN_TEST(test_a_full_table_takes_nothing);

@@ -992,7 +992,7 @@ FLASHMEM void displayCANStatus() {
         if (who & (1u << CANC_INPUT)) msg.control.print(F(", CAN input"));
         if (who & (1u << CANC_OBD)) msg.control.print(F(", OBD output"));
 #if INCLUDE_CAN_LAYOUTS
-        if (who & (1u << CANC_LAYOUT)) msg.control.print(F(", PREOBD output"));
+        if (who & (1u << CANC_LAYOUT)) msg.control.print(F(", layout output"));
 #endif
         msg.control.println();
         if (noSpi) {

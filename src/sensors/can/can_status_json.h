@@ -66,7 +66,7 @@ struct CanBusEntrySnapshot {
     bool     input;             // CAN input attached
     bool     obd;               // the OBD output attached
     bool     pinsFree;          // its pins are free to bring it up (BUS CAN <bus> ENABLE would not refuse)
-    bool     layout;            // a layout output (PREOBD) attached; emitted with INCLUDE_CAN_LAYOUTS
+    bool     layout;            // a layout output (PREOBD, HALTECH) attached; emitted with INCLUDE_CAN_LAYOUTS
 };
 
 struct CanBusSnapshot {

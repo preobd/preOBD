@@ -10,7 +10,7 @@
  *                              transport, every `interval` ms
  *   CSV on SD                  one; output_sdlog.cpp owns its cadence
  *   OBD                        one; attaches to its CAN bus (output_can.cpp)
- *   PREOBD                     pushes our own CAN frames (can_layout_output.cpp)
+ *   PREOBD, HALTECH            push CAN frames from a layout (can_layout_output.cpp)
  *   ELM327 on a serial port    one; binds the port (output_elm327.cpp)
  *   ELM327 on BLE              one; the framed link's 0x30 channel (elm327_framed.cpp)
  *   the alarm                  built in, no record (systemConfig.alarmEnabled)
@@ -106,6 +106,7 @@ static FLASHMEM bool startOutput(uint8_t id) {
 #endif
 #if INCLUDE_CAN_LAYOUTS
     case FMT_PREOBD:
+    case FMT_HALTECH:
         running = canLayoutStart(id);
         break;
 #endif
@@ -156,7 +157,8 @@ static FLASHMEM void stopOutput(uint8_t id) {
     case FMT_OBD: stopCAN(); break;
 #endif
 #if INCLUDE_CAN_LAYOUTS
-    case FMT_PREOBD: canLayoutStop(id); break;
+    case FMT_PREOBD:
+    case FMT_HALTECH: canLayoutStop(id); break;
 #endif
 #if INCLUDE_ELM327
     case FMT_ELM327:
@@ -432,7 +434,7 @@ FLASHMEM void listOutputTable() {
 }
 
 #if INCLUDE_CAN_LAYOUTS
-static bool r_isPreobd(uint8_t id) { return outputFormatOf(id) == FMT_PREOBD; }
+static bool r_isLayout(uint8_t id) { return outputFormatIsLayout(outputFormatOf(id)); }
 #endif
 
 FLASHMEM bool printOutputDetail(uint8_t id) {
@@ -449,7 +451,7 @@ FLASHMEM bool printOutputDetail(uint8_t id) {
     if (n == 0) msg.control.print(F(" none"));
     msg.control.println();
 #if INCLUDE_CAN_LAYOUTS
-    if (r_isPreobd(id)) canLayoutPrintDetail(id);
+    if (r_isLayout(id)) canLayoutPrintDetail(id);
 #endif
 #if INCLUDE_FRAMED_TRANSPORT && INCLUDE_REALDASH
     // Passes skipped because the phone wasn't keeping up (realdash_framed.h)

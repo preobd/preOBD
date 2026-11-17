@@ -41,7 +41,7 @@
 #endif
 
 #if INCLUDE_CAN_LAYOUTS
-#define FORMATS_EXTRA ", PREOBD"
+#define FORMATS_EXTRA ", PREOBD, HALTECH"
 #else
 #define FORMATS_EXTRA ""
 #endif
@@ -93,6 +93,7 @@ static FLASHMEM void printTransportsFor(OutputFormat fmt) {
     case FMT_OBD:      msg.control.println(F("CAN1-CAN3")); break;
 #if INCLUDE_CAN_LAYOUTS
     case FMT_PREOBD:   msg.control.println(F("CAN1-CAN3")); break;
+    case FMT_HALTECH:  msg.control.println(F("CAN1-CAN3, at 1 Mbit/s")); break;
 #endif
     case FMT_ELM327:   msg.control.println(F("SERIAL1-8 or BLE")); break;
     default:           msg.control.println(F("nothing in this build")); break;

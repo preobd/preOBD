@@ -28,7 +28,7 @@
 enum CanConsumer : uint8_t {
     CANC_INPUT = 0,   // CAN input (sensors/can/input_can.cpp)
     CANC_OBD   = 1,   // the OBD output (outputs/formats/output_can.cpp)
-    CANC_LAYOUT = 2,  // the layout outputs, PREOBD (outputs/formats/can_layout_output.cpp)
+    CANC_LAYOUT = 2,  // the layout outputs, PREOBD and HALTECH (outputs/formats/can_layout_output.cpp)
     NUM_CAN_CONSUMERS = 3
 };
 

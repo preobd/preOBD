@@ -7,6 +7,8 @@
 | `obdlink_daemon.py` | Holds the OBDLink LX's Bluetooth port open: closing it costs a manual re-pair. Commands through `~/.preobd/obdlink_fifo`. |
 | `obdlink_send.py` | Sends commands to the daemon and prints the replies; `--monitor <s>` captures traffic (ATMA). |
 | `can_decode.py` | Decodes a capture against a DBC (`docs/can/preOBD.dbc`). |
+| `haltech_decode.py` | Decodes a `HALTECH` output capture with the conversions copied from Haltech's protocol document (not the firmware's table), so a match checks the firmware against the spec. |
+| `haltech_bench.py` | #612 phase 4: the `HALTECH` output on CAN1 at 1 Mbit/s, decoded with `haltech_decode.py`: the refusals (CAN input's bus, 500 kbit/s, a second HALTECH, `BAUDRATE 500000` under it), every injected value on the wire (pressures with the baro added), only frames with an input sent, unfilled fields 0, a route off, a NaN, PREOBD beside it, 50 passes/s at 20 ms. **Needs the ECU sim flashed at 1 Mbit/s** (`PLATFORMIO_BUILD_FLAGS='-D CAN_BITRATE_KBPS=1000'`), and back at 500 kbit/s after. Opens the Mega's port itself. Restores by import, never SAVEs; `--replies FILE` keeps each reply verbatim for the app fixtures. |
 | `can_application_override.sh` | #640: `SET CAN:n APPLICATION` on CAN imports (allowed, refused, Rule re-seed); reboots at the end instead of SAVE. |
 | `mega_cmd.py` | As `serial_cmd.py`, for the Mega: waits out the reset that opening its port causes. |
 | `serial_cmd.py` | Runs preOBD console commands over USB with a fixed time per command. |

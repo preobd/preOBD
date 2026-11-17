@@ -32,7 +32,7 @@
 
 #include <Arduino.h>
 #include "can_layout.h"
-#include "can_layout_output.h"
+#include "can_layout_ids.h"
 #include "../../sensors/calibration_types.h"
 #include "../../sensors/generated/registry_enums.h"
 
@@ -94,6 +94,8 @@ const CanLayout PREOBD_LAYOUT = {
     (uint8_t)(sizeof(PREOBD_SIGNALS) / sizeof(PREOBD_SIGNALS[0])),
     PREOBD_FRAMES,
     PREOBD_BASE_ID,
+    nullptr,   // IDs base + frame
+    0,         // no data: all-ones
 };
 
 static_assert(sizeof(CanLayoutSignal) == 24, "a signal row is 24 bytes");

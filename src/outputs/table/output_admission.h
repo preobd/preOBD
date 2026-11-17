@@ -14,6 +14,9 @@
  *     never a raw stream output (2c adds RealDash's BLE channel);
  *   - BLE (the nRF's data channel, the phone's FFE1) carries one enabled
  *     output: ELM327 or RealDash (#612 2c; a second channel, #620, is not planned);
+ *   - a CAN sender: not on LISTEN, not on CAN input's bus, no CAN ID shared
+ *     with another enabled sender on its bus, and at the rate its format needs
+ *     (HALTECH: 1 Mbit/s; §14.7 item 3);
  *   - one OBD output, one CSV on SD, one ELM327 on a serial port, one on BLE,
  *     one RealDash on BLE (the code that runs them exists once each).
  * Disabled outputs may coexist; they are checked when enabled.
@@ -62,8 +65,13 @@ uint8_t outputSingletonHolder(uint8_t selfId, OutputFormat format, uint8_t trans
 bool outputOnCanInputBus(uint8_t transport, const SystemConfig& cfg);
 
 #if INCLUDE_CAN_LAYOUTS
+// Is `transport`'s CAN bus at the rate `format` needs (outputFormatCanBaud)?
+// True for a format that takes any rate or a transport that isn't CAN.
+// outputAdmitReason refuses an output where it isn't; separate to be testable.
+bool outputCanRateFits(uint8_t format, uint8_t transport, const SystemConfig& cfg);
+
 // Do two CAN-sending formats own a CAN ID in common? OBD owns 0x7DF, 0x7E0 and
-// 0x7E8; PREOBD owns PREOBD_BASE_ID .. +PREOBD_FRAMES-1. Two enabled outputs
+// 0x7E8; a layout (PREOBD, HALTECH) the IDs of its frames (can_layout_ids.h). Two enabled outputs
 // on one bus with overlapping IDs are refused by outputAdmitReason, at every
 // door (CLI, JSON staging, EEPROM load/start, syncOutputsToConfig).
 bool outputCanIdsOverlap(OutputFormat a, OutputFormat b);

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `SET CAN` gives a standard OBD-II PID its application (0x0C Engine RPM, 0x05 coolant, ...), so the `PREOBD` output carries inputs imported from the car's network
 - A `PREOBD` output (`OUTPUT ADD PREOBD CAN<n>`) broadcasts every input on CAN IDs 0x500-0x508 for gauges and dashes that read a DBC, with the DBC published in `docs/can/preOBD.dbc`; available on every board except the Mega
+- A `HALTECH` output (`OUTPUT ADD HALTECH CAN<n>`, on a 1 Mbit/s bus) sends preOBD's sensors as a Haltech ECU's CAN broadcast, so a gauge or dash made for a Haltech ECU shows them with no setup; available on every board except the Mega
 - The rate at which CAN input asks the ECU is a setting (`BUS CAN POLL`, 50-1000 ms), so a scan tool on the same plug gets room
 - RealDash can connect over Bluetooth LE through the nRF52840 link (`OUTPUT ADD REALDASH BLE`), instead of ELM327 over BLE; it needs the updated nRF firmware
 - The app shows a relay whose pin is taken by something else as `NOT DRIVEN` instead of OFF, and the Relay Control Guide explains how to wire a relay so it stays off while preOBD starts or resets (pull resistor, 3.3 V relay modules, NO or NC contact, pins to avoid)

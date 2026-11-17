@@ -37,6 +37,7 @@ enum OutputFormat : uint8_t {
     FMT_OBD,
     FMT_ELM327,
     FMT_PREOBD,   // our own CAN frames for gauges (#612 phase 3); INCLUDE_CAN_LAYOUTS
+    FMT_HALTECH,  // Haltech's ECU broadcast (#612 phase 4); INCLUDE_CAN_LAYOUTS. Stored: append only
     NUM_FORMATS
 };
 
@@ -105,9 +106,14 @@ void      outputsSeedDefaults();
 // transport allowed for the format, interval in range). Used on load.
 bool      outputRecordValid(const OutputRecord& r, uint8_t slot);
 
-// Does this format transmit on its CAN bus? (OBD answers, PREOBD pushes.) Such
-// outputs are refused on LISTEN and on the bus CAN input reads (#632).
-inline bool outputFormatSendsCan(uint8_t format) { return format == FMT_OBD || format == FMT_PREOBD; }
+// Is this format a CAN layout (PREOBD, HALTECH: pushes fixed frames)?
+inline bool outputFormatIsLayout(uint8_t format) { return format == FMT_PREOBD || format == FMT_HALTECH; }
+// Does this format transmit on its CAN bus? (OBD answers, the layouts push.)
+// Such outputs are refused on LISTEN and on the bus CAN input reads (#632).
+inline bool outputFormatSendsCan(uint8_t format) { return format == FMT_OBD || outputFormatIsLayout(format); }
+// The CAN baud rate a format needs on its bus, 0 for any: HALTECH is 1 Mbit/s
+// (Haltech's protocol; refused elsewhere at admission, ARCHITECTURE §14.7 item 3)
+inline uint32_t outputFormatCanBaud(uint8_t format) { return format == FMT_HALTECH ? 1000000UL : 0; }
 // The enabled CAN-sending outputs on this bus: a bit per output id (live table)
 RouteMask outputCanSendersOnBus(uint8_t bus);
 

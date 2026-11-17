@@ -154,6 +154,7 @@ bool outputFormatBuilt(OutputFormat format) {
 #endif
 #if INCLUDE_CAN_LAYOUTS
     case FMT_PREOBD:   return true;
+    case FMT_HALTECH:  return true;
 #endif
     default:           return false;
     }
@@ -216,7 +217,8 @@ bool outputTransportAllowed(OutputFormat format, uint8_t t) {
     case FMT_ELM327:   return (k == OTK_STREAM && outputTransportSerialPort(t) != 0xFF) ||
                               k == OTK_BLE;   // OT_BLE is on the board only with the framed link
 #if INCLUDE_CAN_LAYOUTS
-    case FMT_PREOBD:   return k == OTK_CAN;
+    case FMT_PREOBD:
+    case FMT_HALTECH:  return k == OTK_CAN;
 #endif
     default:           return false;
     }
@@ -224,7 +226,7 @@ bool outputTransportAllowed(OutputFormat format, uint8_t t) {
 
 bool outputFormatPaced(OutputFormat format) {
 #if INCLUDE_CAN_LAYOUTS
-    if (format == FMT_PREOBD) return true;   // pushed every interval
+    if (outputFormatIsLayout(format)) return true;   // pushed every interval
 #endif
     return format == FMT_CSV || format == FMT_REALDASH;
 }
@@ -239,6 +241,7 @@ bool outputFormatPaced(OutputFormat format) {
 uint16_t outputIntervalMin(OutputFormat format, uint8_t transport) {
 #if INCLUDE_CAN_LAYOUTS
     if (format == FMT_PREOBD) return 20;   // 9 frames (34 signals): ~40% of a 125 kbit/s bus
+    if (format == FMT_HALTECH) return 20;  // 11 frames: ~6% of its 1 Mbit/s bus (Haltech's fastest is 50 Hz)
 #endif
     if (format == FMT_REALDASH) return transport == OT_BLE ? 100 : 50;
     if (format == FMT_CSV) return transport == OT_SD ? 1 : 100;
@@ -248,6 +251,7 @@ uint16_t outputIntervalMin(OutputFormat format, uint8_t transport) {
 uint16_t outputIntervalDefault(OutputFormat format, uint8_t transport) {
 #if INCLUDE_CAN_LAYOUTS
     if (format == FMT_PREOBD) return 100;
+    if (format == FMT_HALTECH) return 20;  // 50 Hz, Haltech's rate for RPM and MAP (decision 1)
 #endif
     if (format == FMT_REALDASH) return REALDASH_INTERVAL_MS;
     if (format == FMT_CSV) return transport == OT_SD ? SD_LOG_INTERVAL_MS : SERIAL_CSV_INTERVAL_MS;
@@ -273,6 +277,7 @@ const char* outputFormatName(OutputFormat format) {
     case FMT_ELM327:   return "ELM327";
 #if INCLUDE_CAN_LAYOUTS
     case FMT_PREOBD:   return "PREOBD";
+    case FMT_HALTECH:  return "HALTECH";
 #endif
     default:           return "NONE";
     }
@@ -286,6 +291,7 @@ OutputFormat parseOutputFormat(const char* s) {
     if (strcasecmp(s, "ELM327") == 0)   return FMT_ELM327;
 #if INCLUDE_CAN_LAYOUTS
     if (strcasecmp(s, "PREOBD") == 0)   return FMT_PREOBD;
+    if (strcasecmp(s, "HALTECH") == 0)  return FMT_HALTECH;
 #endif
     return FMT_NONE;
 }

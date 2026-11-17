@@ -5,7 +5,7 @@
 #include "output_admission.h"
 #include "../../hal/bus_defaults.h"   // NUM_CAN_BUSES: the refusal's hint
 #if INCLUDE_CAN_LAYOUTS
-#include "../formats/can_layout_output.h"   // PREOBD_BASE_ID, PREOBD_FRAMES
+#include "../formats/can_layout_ids.h"   // the layouts' CAN IDs
 #include "../../buses/bus_config.h"         // CAN_BUS_LISTEN, CAN_BUS_SLOTS
 #endif
 
@@ -45,12 +45,20 @@ FLASHMEM bool outputOnCanInputBus(uint8_t transport, const SystemConfig& cfg) {
 }
 
 #if INCLUDE_CAN_LAYOUTS
+// A protocol with a fixed rate (Haltech: 1 Mbit/s) is refused on a bus at
+// another rate: its receivers would never see a frame (§14.7 item 3)
+FLASHMEM bool outputCanRateFits(uint8_t format, uint8_t transport, const SystemConfig& cfg) {
+    const uint32_t need = outputFormatCanBaud(format);
+    const uint8_t bus = outputTransportCanBus(transport);
+    if (need == 0 || bus >= CAN_BUS_SLOTS) return true;
+    return canBaudFromIndex(cfg.buses.can[bus].baudIndex) == need;
+}
+
 // The CAN IDs each sending format owns on its bus: OBD 0x7DF/0x7E0/0x7E8,
-// PREOBD [PREOBD_BASE_ID, +PREOBD_FRAMES)
+// a layout the IDs of its frames (can_layout_ids.h)
 static bool ownsCanId(uint8_t format, uint16_t id) {
     if (format == FMT_OBD) return id == 0x7DF || id == 0x7E0 || id == 0x7E8;
-    if (format == FMT_PREOBD) return id >= PREOBD_BASE_ID && id < PREOBD_BASE_ID + PREOBD_FRAMES;
-    return false;
+    return layoutFormatOwnsCanId(format, id);
 }
 
 FLASHMEM bool outputCanIdsOverlap(OutputFormat a, OutputFormat b) {
@@ -58,8 +66,10 @@ FLASHMEM bool outputCanIdsOverlap(OutputFormat a, OutputFormat b) {
     for (uint8_t i = 0; i < sizeof(kObdIds) / sizeof(kObdIds[0]); i++) {
         if (ownsCanId(a, kObdIds[i]) && ownsCanId(b, kObdIds[i])) return true;
     }
-    for (uint16_t id = PREOBD_BASE_ID; id < PREOBD_BASE_ID + PREOBD_FRAMES; id++) {
-        if (ownsCanId(a, id) && ownsCanId(b, id)) return true;
+    // Every ID of a's frames (OBD's are covered above)
+    const uint8_t n = layoutFormatFrames(a);
+    for (uint8_t f = 0; f < n; f++) {
+        if (ownsCanId(b, layoutFormatFrameId(a, f))) return true;
     }
     return false;
 }
@@ -98,6 +108,9 @@ FLASHMEM const __FlashStringHelper* outputAdmitReason(uint8_t selfId, OutputForm
             if (bus < CAN_BUS_SLOTS && cfg.buses.can[bus].mode == CAN_BUS_LISTEN) {
                 return F("sends on a LISTEN bus, which never transmits (BUS CAN <bus> ENABLE)");
             }
+            if (!outputCanRateFits(format, transport, cfg)) {
+                return F("needs a 1 Mbit/s bus (BUS CAN <bus> BAUDRATE 1000000)");
+            }
             const bool selfOn = !yieldToAll && selfId < MAX_OUTPUTS && table[selfId].enabled;
             for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
                 if (id == selfId) continue;
@@ -105,7 +118,7 @@ FLASHMEM const __FlashStringHelper* outputAdmitReason(uint8_t selfId, OutputForm
                 if (r.format == FMT_NONE || !r.enabled || outputTransportCanBus(r.transport) != bus) continue;
                 if (selfOn && id > selfId) continue;
                 if (outputCanIdsOverlap((OutputFormat)r.format, format)) {
-                    return F("shares CAN IDs with another enabled output on this bus (one PREOBD per bus)");
+                    return F("shares CAN IDs with another enabled output on this bus (one of each layout per bus)");
                 }
             }
 #endif

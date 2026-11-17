@@ -555,10 +555,10 @@ link over BLE — are always there, take no routes and aren't added or deleted.
 
 ```
 OUTPUT LIST [JSON]                    # The outputs, their ids, and the built-ins (RUN ok)
-OUTPUT <id>                           # One output and the inputs routed to it (RUN ok); PREOBD adds its signal map, bus load and skipped/unACKed counts
+OUTPUT <id>                           # One output and the inputs routed to it (RUN ok); PREOBD and HALTECH add their signal map, bus load and skipped/unACKed counts
 OUTPUT ADD <format> <transport> [INTERVAL <ms>] [LONG|WIDE]
 OUTPUT <id> ENABLE | DISABLE
-OUTPUT <id> INTERVAL <ms>             # RealDash 50-60000 ms (on BLE 100-60000), CSV 100-60000 ms (CSV on SD 1-60000 ms), PREOBD 20-60000 ms
+OUTPUT <id> INTERVAL <ms>             # RealDash 50-60000 ms (on BLE 100-60000), CSV 100-60000 ms (CSV on SD 1-60000 ms), PREOBD and HALTECH 20-60000 ms
 OUTPUT <id> TRANSPORT <transport>     # Move it to another transport of the same kind
 OUTPUT <id> CSV LONG | WIDE           # The CSV output on SD
 OUTPUT DEL <id>                       # Remove it, and every route to it
@@ -568,7 +568,7 @@ OUTPUT DEL <id>                       # Remove it, and every route to it
 input to it; the id stays the output's until `OUTPUT DEL` frees it. `SAVE`
 keeps the table. A board holds up to `MAX_OUTPUTS` outputs (8; 2 on the Mega).
 
-Only the push formats (CSV, REALDASH, PREOBD) have an interval; OBD and ELM327 answer
+Only the push formats (CSV, REALDASH, PREOBD, HALTECH) have an interval; OBD and ELM327 answer
 requests as they arrive, so `INTERVAL` on them is refused, as is a value
 outside the format's range. The CSV and RealDash floors are what a 115200-baud
 link (a UART or the Bluetooth bridge) carries with about 20 inputs.
@@ -585,6 +585,7 @@ stream to `SD`) is `OUTPUT DEL` and `OUTPUT ADD`.
 | `REALDASH` | `USB`, `SERIAL1`–`SERIAL8`, `ESP32_BT`, or `BLE` | Binary frames: needs the stream to itself. On `BLE` (the nRF coprocessor) RealDash connects as a Bluetooth LE device; at 100 ms or slower, since the link also carries the app |
 | `OBD` | `CAN1`–`CAN3` | Answers OBD-II scan tools and gauges. The bus must be on and not `LISTEN` (`BUS CAN <bus> ENABLE`) |
 | `PREOBD` | `CAN1`–`CAN3` | preOBD's own CAN frames for gauges (CAN IDs 0x500-0x508, every 100 ms by default; frames, DBC and gauge-network rules in [CAN layouts](../can/README.md)). Never on the bus CAN input reads, or a `LISTEN` bus; not on every board (not the Mega) |
+| `HALTECH` | `CAN1`–`CAN3` | Haltech's ECU broadcast, for gauges and dashes that listen to a Haltech ECU (every 20 ms by default; frames and rules in [HALTECH](../can/HALTECH.md)). Only on a 1 Mbit/s bus (`BUS CAN <bus> BAUDRATE 1000000`); otherwise as `PREOBD` |
 | `ELM327` | `SERIAL1`–`SERIAL8`, or `BLE` | An ELM327 emulator for phone OBD apps (Torque, OBD Fusion). On a serial port it needs the port to itself; `BLE` needs the nRF coprocessor on a framed port |
 
 **One format per stream.** A stream can't tell formats apart, so two enabled
@@ -601,8 +602,8 @@ phone's one BLE data channel, so only one of them is enabled at a time
 carries one data output; OUTPUT LIST shows it)`): disable one to enable the
 other.
 
-`OBD` and `PREOBD` can share a CAN bus; two outputs that use the same CAN IDs
-can't, so there is one `PREOBD` per bus. There is one `OBD` output, one `CSV` on `SD`, one `ELM327` on a serial port,
+`OBD`, `PREOBD` and `HALTECH` can share a CAN bus; two outputs that use the
+same CAN IDs can't, so there is one `PREOBD` and one `HALTECH` per bus. There is one `OBD` output, one `CSV` on `SD`, one `ELM327` on a serial port,
 one `ELM327` and one `REALDASH` on `BLE`; CSV and RealDash on streams can be
 several, one per stream.
 
@@ -863,7 +864,7 @@ BUS CAN JSON                           # Live CAN status as JSON (works in RUN m
 BUS CAN <CAN1|CAN2|CAN3> ENABLE        # Bus on, normal (ACKs, may transmit)
 BUS CAN <CAN1|CAN2|CAN3> LISTEN        # Bus on, listen-only (never transmits)
 BUS CAN <CAN1|CAN2|CAN3> DISABLE       # Bus off (refused while CAN input or OBD uses it)
-BUS CAN <CAN1|CAN2|CAN3> BAUDRATE <bps>   # 125000, 250000, 500000 or 1000000
+BUS CAN <CAN1|CAN2|CAN3> BAUDRATE <bps>   # 125000, 250000, 500000 or 1000000 (refused under an enabled HALTECH output, which needs 1000000)
 BUS CAN <CAN1|CAN2|CAN3> INPUT ENABLE|DISABLE   # CAN input reads this bus (one bus at a time)
 BUS CAN POLL <ms>                      # CAN input asks the ECU at most this often, 50-1000 ms (default 50)
 BUS SERIAL                       # Show all serial port status

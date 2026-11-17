@@ -61,6 +61,17 @@
  *                negative responses only there; 0x7DF gets silence)
  *   b <mode>     a one-byte request (`01 <mode>`) to 0x7DF, as an ELM327
  *                sends for a bare `03`, or `01` with no PID (#528)
+ *   m            toggle the frame monitor: every other standard frame prints
+ *                as `<ID> <B0> .. <B7>` (hex, the ELM327 ATMA form, so
+ *                tools/bench/haltech_decode.py reads a capture as it is).
+ *                115200 baud carries ~350 such lines/s: slow the sender down
+ *                (OUTPUT <id> INTERVAL 200) while it is on, or lines drop
+ *   k            print, then zero, the count of every other frame by ID
+ *                since the last `k` and over how long (a sender's rate;
+ *                the MCP2515's two receive buffers can drop frames of a fast
+ *                burst while the loop is busy, so a count is a floor)
+ * Build at 1 Mbit/s for a HALTECH output (#612 phase 4):
+ *   PLATFORMIO_BUILD_FLAGS='-D CAN_BITRATE_KBPS=1000' pio run -t upload
  *                A multi-frame answer (First Frame 1x) gets Flow Control
  *                30 00 00 on 0x7E0, and its Consecutive Frames print too (#516).
  * Stats print every 5 s: requests per PID, overall rate, min/avg gap.
@@ -169,6 +180,33 @@ static void countRequest(uint8_t pid, uint32_t now) {
     }
 }
 
+// The frame monitor and per-ID counts (m, k): frames that aren't OBD traffic
+static bool monitorOn = false;
+#define FRAME_IDS 24
+static uint16_t frameId[FRAME_IDS];
+static uint32_t frameCount[FRAME_IDS];
+static uint8_t  frameIdsN = 0;
+static uint32_t frameSinceMs = 0;
+static void countFrame(uint16_t id) {
+    for (uint8_t i = 0; i < frameIdsN; i++) if (frameId[i] == id) { frameCount[i]++; return; }
+    if (frameIdsN < FRAME_IDS) { frameId[frameIdsN] = id; frameCount[frameIdsN++] = 1; }
+}
+static void printFrameCounts() {
+    const uint32_t ms = millis() - frameSinceMs;
+    Serial.print(F("[count] "));
+    Serial.print(ms);
+    Serial.print(F(" ms:"));
+    for (uint8_t i = 0; i < frameIdsN; i++) {
+        Serial.print(' ');
+        Serial.print(frameId[i], HEX);
+        Serial.print('=');
+        Serial.print(frameCount[i]);
+    }
+    Serial.println();
+    frameIdsN = 0;
+    frameSinceMs = millis();
+}
+
 static void printHex2(uint8_t v) {
     if (v < 0x10) Serial.print('0');
     Serial.print(v, HEX);
@@ -230,6 +268,7 @@ static void printHelp() {
     Serial.println(F("n toggle unsupported: silence/NRC | s toggle ECU silent | e toggle 2nd ECU 0x7E9"));
     Serial.println(F("l toggle listen-only (no ACK: unpowered ECU) | x toggle bad multi-frame sequence | r stats | z zero"));
     Serial.println(F("q [<mode>] <pid> tester request to 0x7DF, print 0x7E8 answers | p ... same to 0x7E0"));
+    Serial.println(F("m toggle frame monitor (other IDs, ATMA form) | k print+zero per-ID counts of other frames"));
     printSettings();
 }
 
@@ -442,6 +481,8 @@ static void handleSerial() {
         while (*arg == ' ') arg++;
         switch (line[0]) {
             case 'h': printHelp(); break;
+            case 'm': monitorOn = !monitorOn; Serial.println(monitorOn ? F("[monitor] on") : F("[monitor] off")); break;
+            case 'k': printFrameCounts(); break;
             case 'd': answerDelayMs = (uint16_t)atoi(arg); printSettings(); break;
             case 'u': unsupportedPid = (uint8_t)strtoul(arg, nullptr, 16); printSettings(); break;
             case 'n': unsupportedSendsNrc = !unsupportedSendsNrc; printSettings(); break;
@@ -554,7 +595,15 @@ void loop() {
             }
             continue;
         }
-        if (id != 0x7DF && id != 0x7E0 && id != 0x7E1) continue;
+        if (id != 0x7DF && id != 0x7E0 && id != 0x7E1) {
+            countFrame((uint16_t)id);
+            if (monitorOn) {
+                Serial.print(id, HEX);
+                for (uint8_t i = 0; i < rx.can_dlc; i++) { Serial.print(' '); printHex2(rx.data[i]); }
+                Serial.println();
+            }
+            continue;
+        }
         // The tester's Flow Control for our First Frame (#527)
         if (id == 0x7E0 && mfAwaitFc && rx.can_dlc >= 3 && (rx.data[0] & 0xF0) == 0x30) {
             if (rx.data[0] != 0x30) {   // 31 wait / 32 overflow: give up
