@@ -34,8 +34,12 @@
 #include <string.h>
 
 struct FakeHardwareSerial : public Stream {
-    int begins = 0;
+    int begins = 0, ends = 0;
+    uint8_t txPin = 0xFF;          // the pin end() must find still claimed
+    bool endWhileHeld = false;     // was it, at the last end()?
+    bool endAfterFlowOff = false;  // had the flow hook been given -1 by then?
     void begin(unsigned long) { begins++; }
+    void end();
     int available() override { return 0; }
     int read() override { return -1; }
     int peek() override { return -1; }
@@ -65,6 +69,11 @@ size_t MessageStream::debug(const char*, const char*, ...) { return 0; }
 // Fixture
 // ---------------------------------------------------------------------------
 static int16_t g_flowPin = 0x7FFF;   // last value the hook was given
+void FakeHardwareSerial::end() {
+    ends++;
+    endWhileHeld = txPin != 0xFF && getPinDescription(txPin) != nullptr;
+    endAfterFlowOff = g_flowPin == -1;
+}
 static int     g_flowCalls = 0;
 static void flowHook(int16_t pin) { g_flowPin = pin; g_flowCalls++; }
 
@@ -80,6 +89,8 @@ void setUp(void) {
     disableSerialPort(1);
     disableSerialPort(2);
     g_flowCalls = 0;
+    Serial1.ends = Serial2.ends = 0;
+    Serial1.txPin = Serial2.txPin = 0xFF;
 }
 void tearDown(void) {}
 
@@ -202,6 +213,33 @@ static void test_a_console_or_framed_port_carries_commands(void) {
     TEST_ASSERT_FALSE(serialPortCarriesCommands(1));   // not running: nothing to cut off
 }
 
+// #660: DISABLE stops the UART of a port that was running, so TX is left
+// undriven before its pins are released; a port that never ran is left alone
+static void test_disable_ends_a_running_uart(void) {
+    TEST_ASSERT_TRUE(disableSerialPort(2));
+    TEST_ASSERT_EQUAL_INT(0, Serial2.ends);
+    TEST_ASSERT_TRUE(enableSerialPort(2, BAUD_115200));
+    Serial2.txPin = getDefaultSerialTX(2);
+    TEST_ASSERT_TRUE(disableSerialPort(2));
+    TEST_ASSERT_EQUAL_INT(1, Serial2.ends);
+    TEST_ASSERT_TRUE(Serial2.endWhileHeld);          // stopped before the release
+    TEST_ASSERT_FALSE(isSerialPortActive(2));
+    TEST_ASSERT_NULL(getPinDescription(Serial2.txPin));
+    // RX and TX left inputs, whatever the core's end() did with the pads
+    TEST_ASSERT_EQUAL_UINT8(INPUT, stubPinMode[getDefaultSerialTX(2)]);
+    TEST_ASSERT_EQUAL_UINT8(INPUT, stubPinMode[getDefaultSerialRX(2)]);
+}
+
+// Serial1: the transport stops reading CTS before the UART stops
+static void test_serial1_flow_off_before_end(void) {
+    TEST_ASSERT_TRUE(enableSerialPort(1, BAUD_115200));
+    Serial1.txPin = getDefaultSerialTX(1);
+    TEST_ASSERT_TRUE(disableSerialPort(1));
+    TEST_ASSERT_EQUAL_INT(1, Serial1.ends);
+    TEST_ASSERT_TRUE(Serial1.endAfterFlowOff);
+    TEST_ASSERT_TRUE(Serial1.endWhileHeld);
+}
+
 int main(int /*argc*/, char** /*argv*/) {
     UNITY_BEGIN();
     RUN_TEST(test_refused_enable_is_byte_identical);
@@ -213,5 +251,7 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_serial1_flow_pin_follows_the_claim);
     RUN_TEST(test_repeat_enable_adds_no_entries);
     RUN_TEST(test_a_console_or_framed_port_carries_commands);
+    RUN_TEST(test_disable_ends_a_running_uart);
+    RUN_TEST(test_serial1_flow_off_before_end);
     return UNITY_END();
 }

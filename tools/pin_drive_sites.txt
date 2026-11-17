@@ -47,6 +47,8 @@ src/transports/transport_mux.cpp  MuxTransport::sendFrame  digitalRead  flowInPi
 src/transports/transport_mux.cpp  MuxTransport::sendFramePair  digitalRead  flowInPin   # CLAIMED: flowInPin is -1 until serial_manager's flow-pin hook passes HOST_NRF_CTS_PIN after Serial1's claim held, and -1 again before release (§12.5, #646)
 src/transports/transport_mux.h  awaitFlowClear  digitalRead  flowInPin   # CLAIMED: flowInPin is -1 until serial_manager's flow-pin hook passes HOST_NRF_CTS_PIN after Serial1's claim held, and -1 again before release (§12.5, #646)
 src/transports/transport_serial.h  awaitFlowClear  digitalRead  flowInPin   # CLAIMED: flowInPin is -1 until serial_manager's flow-pin hook passes HOST_NRF_CTS_PIN after Serial1's claim held, and -1 again before release (§12.5, #646)
+src/buses/serial_manager.cpp  disableSerialPort  pinMode  pins[0],INPUT   # CLAIMED: RX left an input after end(), while the port still holds it, just before releasePins() (§12.5, #660)
+src/buses/serial_manager.cpp  disableSerialPort  pinMode  pins[1],INPUT   # CLAIMED: TX left an input after end(), while the port still holds it, just before releasePins() (§12.5, #660)
 src/buses/serial_manager.cpp  disableSerialPort  pinMode  HOST_NRF_RTS_PIN,INPUT   # CLAIMED: RTS left undriven while Serial1 still holds it, just before releasePins() (§12.5: a released pin is not left an output, #646)
 src/config/json_config.cpp  loadConfigFromJSON  rulesActionsQuiesce  -   # CLAIMED: relay release/claim through the action helpers, after admission (§12.5, #648)
 src/config/json_config.cpp  loadConfigFromJSON  rulesSyncActionPins  -   # CLAIMED: relay release/claim through the action helpers, after admission (§12.5, #648)

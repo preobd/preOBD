@@ -303,6 +303,41 @@ bool enableSerialPort(uint8_t port_id, uint8_t baud_index) {
     return true;
 }
 
+// Stop a running port's UART. Teensy 4's end() sets the pads back to GPIO
+// (its clock stays on, so a stray read can't fault), Teensy 3's to a pulled-up
+// input, AVR clears TXEN/RXEN, ESP32 detaches the pins, STM32 de-initialises
+// the USART. The caller then makes RX/TX inputs, since not all of these leave
+// the pads undriven.
+static void endSerialPort(uint8_t port_id) {
+    switch (port_id) {
+#if NUM_SERIAL_PORTS >= 1
+        case 1: HW_SERIAL1.end(); break;
+#endif
+#if NUM_SERIAL_PORTS >= 2
+        case 2: HW_SERIAL2.end(); break;
+#endif
+#if NUM_SERIAL_PORTS >= 3
+        case 3: HW_SERIAL3.end(); break;
+#endif
+#if NUM_SERIAL_PORTS >= 4
+        case 4: HW_SERIAL4.end(); break;
+#endif
+#if NUM_SERIAL_PORTS >= 5
+        case 5: HW_SERIAL5.end(); break;
+#endif
+#if NUM_SERIAL_PORTS >= 6
+        case 6: HW_SERIAL6.end(); break;
+#endif
+#if NUM_SERIAL_PORTS >= 7
+        case 7: HW_SERIAL7.end(); break;
+#endif
+#if NUM_SERIAL_PORTS >= 8
+        case 8: HW_SERIAL8.end(); break;
+#endif
+        default: (void)port_id; break;
+    }
+}
+
 bool disableSerialPort(uint8_t port_id) {
     if (port_id < 1 || port_id > NUM_SERIAL_PORTS) return false;
 
@@ -329,10 +364,19 @@ bool disableSerialPort(uint8_t port_id) {
             pinMode(HOST_NRF_RTS_PIN, INPUT);
         }
 #endif
+        // Stop the UART while it still holds its pins, so TX is left undriven
+        // before anything else can claim it (§12.5, #660). Safe now: DISABLE
+        // is refused while the port carries an output, a console or the framed
+        // link (cmd_bus.cpp), and the console and log resolve a port only
+        // while it is active (transportGet), which the mask above has ended.
+        endSerialPort(port_id);
+        // Not every core's end() lets go of the pads (STM32 leaves TX in
+        // alternate-function push-pull, ESP32 may keep the output enable), so
+        // make them inputs while the port still holds them
+        pinMode(pins[0], INPUT);
+        pinMode(pins[1], INPUT);
         releasePins(pins, 4, getSerialPortName(port_id));
     }
-
-    // Note: We don't call Serial.end() as it might be in use by transport layer
 
     msg.debug.info(TAG_SERIAL, "Serial%d disabled", port_id);
 
