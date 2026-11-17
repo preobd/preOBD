@@ -94,6 +94,13 @@ ActionDrive rulesActionDrive(int slot) {
     return d;
 }
 
+// rulesActionDriven() — whether the slot holds its pin (§12.5, #653). The real
+// claim/refusal path is covered in test_membership; here it is set truth.
+static bool g_notDriven[MAX_ACTIONS];
+bool rulesActionDriven(int slot) {
+    return slot >= 0 && slot < MAX_ACTIONS && actions[slot].id != RULES_ID_NONE && !g_notDriven[slot];
+}
+
 // ---- Capturing transport (records every frame this tick) ----
 struct CapturedFrame { uint8_t type; uint16_t len; uint8_t payload[32]; };
 static CapturedFrame g_frames[8];
@@ -158,6 +165,7 @@ void setUp(void) {
     memset(g_override, 0, sizeof(g_override));
     memset(g_sourceFaulted, 0, sizeof(g_sourceFaulted));
     memset(g_ruleActive, 0, sizeof(g_ruleActive));
+    memset(g_notDriven, 0, sizeof(g_notDriven));
     g_driveCalls = 0;
     memset(g_extraMembers, 0, sizeof(g_extraMembers));
     setInputsTableLive(true);  // every test but the boot-order one below
@@ -378,6 +386,38 @@ static void test_pack_resolves_membership_once_per_slot(void) {
                             frameState(0).overrideFlags);
 }
 
+// A relay whose claim was refused reports NOT_DRIVEN beside its state (#653),
+// and gaining or losing the pin pushes a frame (byte 11 is in the change key).
+static void test_not_driven_bit_reported_and_pushes(void) {
+    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, /*ruleRef*/5, 0, 0);
+    g_notDriven[0] = true;
+    g_override[0] = ACT_OVR_FORCE_ON;               // an override can't hide it
+    ActionBroadcaster::tick();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_OVR_FORCE_ON | PREOBD_ACTION_OVR_NOT_DRIVEN,
+                            frameState(0).overrideFlags);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_STATE_OFF, frameState(0).state);
+
+    g_frameCount = 0;
+    g_notDriven[0] = false;                          // the pin is freed and claimed
+    ActionBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_OVR_FORCE_ON, frameState(0).overrideFlags);
+
+    g_frameCount = 0;
+    g_notDriven[0] = true;                           // …and losing it pushes too
+    ActionBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_TRUE(frameState(0).overrideFlags & PREOBD_ACTION_OVR_NOT_DRIVEN);
+}
+
+// Only a RELAY holds a pin; other action types never carry the bit.
+static void test_not_driven_bit_relay_only(void) {
+    configureAction(0, 7, ACT_BEEPER, 9, /*ruleRef*/5, 0, 0);
+    g_notDriven[0] = true;
+    ActionBroadcaster::tick();
+    TEST_ASSERT_EQUAL_UINT8(0, frameState(0).overrideFlags & PREOBD_ACTION_OVR_NOT_DRIVEN);
+}
+
 // An emptied slot must not grow a demand bit: bytes past actionId stay zero.
 static void test_rule_active_bit_absent_on_empty_slot(void) {
     configureAction(0, 3, PREOBD_ACTION_TYPE_RELAY, 9, /*ruleRef*/5, 0, 0);
@@ -592,6 +632,8 @@ int main(int, char**) {
     RUN_TEST(test_override_flags_reported_and_push_on_change);
     RUN_TEST(test_rule_active_bit_reported_under_held_force);
     RUN_TEST(test_rule_active_bit_absent_on_empty_slot);
+    RUN_TEST(test_not_driven_bit_reported_and_pushes);
+    RUN_TEST(test_not_driven_bit_relay_only);
     RUN_TEST(test_pack_resolves_membership_once_per_slot);
     RUN_TEST(test_handle_inbound_none_is_noop);
     RUN_TEST(test_handle_inbound_unknown_id);

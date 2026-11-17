@@ -86,6 +86,10 @@ void packState(int i, PreobdActionState& s) {
     // bit 2 (#329) and byte 12 (#343) each had to fix cannot recur for a bit
     // added to a byte already in the comparison.
     if (drive.anyActive)  s.overrideFlags |= PREOBD_ACTION_OVR_RULE_ACTIVE;
+    // A relay that doesn't hold its pin (#653, §12.5): `state` reads OFF, but
+    // the pin is not ours, so say so. Same predicate as ACTION LIST's marker.
+    if (a.type == ACT_RELAY && !rulesActionDriven(i))
+        s.overrideFlags |= PREOBD_ACTION_OVR_NOT_DRIVEN;
     // sequence stamped at emit time
 }
 

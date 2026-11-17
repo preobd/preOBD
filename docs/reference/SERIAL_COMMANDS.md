@@ -821,10 +821,10 @@ A relay is now an **Action** of type `RELAY` driven by a **Rule** (see
 | Back to automatic | `ACTION <id> AUTO` |
 | `RELAY LIST` | `ACTION LIST` (and `RULE LIST`) |
 
-**Cooling fan example** (coolant on A2, fan relay on pin 23):
+**Cooling fan example** (coolant on A2, fan relay on pin 9):
 ```
 RULE ADD A2 ABOVE 90 HYST 5 NONE      # fan demand: on above 90°C, off below 85°C
-ACTION ADD RELAY 23                   # the relay output
+ACTION ADD RELAY 9                    # the relay output
 ACTION 0 RULE 0                       # link them (use the ids printed above)
 SAVE
 ```

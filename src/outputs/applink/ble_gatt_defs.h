@@ -338,6 +338,7 @@ static_assert(sizeof(PreobdRelayState) == PREOBD_RELAY_STATE_SIZE,
 #define PREOBD_ACTION_OVR_FORCE_OFF      2
 #define PREOBD_ACTION_OVR_SOURCE_FAULTED 0x04  // bit 2: a member rule's source untrustworthy
 #define PREOBD_ACTION_OVR_RULE_ACTIVE    0x08  // bit 3: a member rule is demanding ON (#348)
+#define PREOBD_ACTION_OVR_NOT_DRIVEN     0x10  // bit 4: a RELAY that doesn't hold its pin (#653)
 
 // PREOBD_ACTION_OVR_RULE_ACTIVE lets a client tell a force that is COUNTERMANDING
 // a live demand ("FORCE OFF while the fan rule wants the fan on") from an idle
@@ -346,6 +347,15 @@ static_assert(sizeof(PreobdRelayState) == PREOBD_RELAY_STATE_SIZE,
 // client cannot derive it from the alarm feed, which carries only WARNING/ALARM
 // and so never mentions a RULE_SEV_NONE control-only rule. A pre-#348 device
 // leaves the bit clear.
+
+// PREOBD_ACTION_OVR_NOT_DRIVEN: the action is a RELAY whose pin claim was refused
+// (another owner holds the pin, §12.5), so this unit never drives it. `state`
+// then reads OFF whatever the rules or an override ask for, and the firmware
+// refuses ON/OFF for the slot (CLI "not driven"; AUTO still releases an
+// override). The pin may carry another function's signal, so a client must not
+// show the relay as OFF either: show it as not driven. Same test as ACTION
+// LIST's NOT DRIVEN marker (rulesActionDriven()), so the two can't disagree. A
+// pre-#653 device leaves the bit clear.
 
 // ruleCount — how many Rules OR-drive this Action (§11.6, #343). Additive into a
 // previously-reserved byte, so the protocol version stays 2. `ruleRef` remains the

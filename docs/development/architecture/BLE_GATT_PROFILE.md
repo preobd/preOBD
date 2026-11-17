@@ -301,6 +301,8 @@ Offset  Size  Type       Field
 10      1     uint8      command      PREOBD_ACTION_CMD_* (WRITABLE; reads back NONE)
 11      1     uint8      overrideFlags bits0-1 = 0=AUTO, 1=FORCE_ON, 2=FORCE_OFF
                                        bit2 (0x04) = rule source faulted
+                                       bit3 (0x08) = a member rule is demanding ON
+                                       bit4 (0x10) = relay not driven (see below)
 12      4     uint8[4]   reserved
 ------  ----
 Total:  16 bytes
@@ -323,6 +325,16 @@ An **operator override** outranks both the Rule and the failsafe, is RAM-only
 (reverts to `AUTO` on reboot), and is sticky until released. When it is being
 held while the rule's source input is untrustworthy, bit 2 of `overrideFlags` is
 set so a client can flag it rather than showing an ordinary forced state.
+
+Bit 3 reports whether a member rule is demanding the output right now, whatever
+an override is doing: under `FORCE_OFF` it can be set while `state` reads OFF.
+
+Bit 4 (**not driven**) is set on a RELAY whose pin is held by another function,
+so this unit never drives it (`ACTION LIST` shows `NOT DRIVEN`). Its `state`
+reads OFF, but the pin may carry another signal, so show the relay as not
+driven rather than OFF. The device refuses ON/OFF for it (AUTO still releases
+an override). Fix it by moving the relay or the other function to a free pin
+(`SYSTEM PINS`).
 
 `CMD_AUTO` and `overrideFlags` are **additive** into a previously-reserved byte:
 the frame stays 16 bytes and the protocol version stays 2, so older clients

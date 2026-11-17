@@ -1148,7 +1148,8 @@ void rulesActionsUpdate(bool configMode) {
         const bool on = actionComputedOn(i, configMode);
         if (a.type == ACT_RELAY) {
             // A relay that doesn't hold its pin is reported OFF: it is, as far
-            // as this unit can make it (#653 adds the BLE "not driven" bit).
+            // as this unit can make it; ACTION LIST and the BLE frame say
+            // "not driven" (#653).
             const bool driven = rulesActionDriven(i);
             g_actionState[i] = on && driven;
             if (driven) driveAction(a, on);

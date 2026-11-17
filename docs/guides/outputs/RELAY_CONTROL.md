@@ -27,7 +27,32 @@ The same engine runs alarms, so a Rule can drive a relay, sound the buzzer, or b
 
 ## Hardware Setup
 
-### Relay Module Connection
+### Keep the relay OFF while the pin floats
+
+From power-up until preOBD claims the pin, and again after a reset or after you
+delete the Action, the MCU pin is **not driven**: it floats (high impedance).
+Nothing in software can hold a relay off during that time, so the wiring has to.
+**The relay driver must be OFF while its input pin floats.**
+
+- **Pull the driver's input to its OFF level, with 10 kΩ or less.**
+  - Low-side switch (N-channel MOSFET, NPN transistor, most bare relay drivers):
+    a **pull-down** from the input to GND.
+  - High-side switch (P-channel MOSFET or PNP switching +12 V): **don't wire it
+    to the pin directly.** A 3.3 V or 5 V pin can't pull a 12 V P-FET's gate
+    high enough to turn it off, and its gate pull-up goes to 12 V. Put an NPN
+    or N-channel stage between them: the pin drives that stage (low-side, so
+    it gets the pull-down above), and the P-FET's own gate pull-up to its
+    source stays on the 12 V side, never on the pin.
+  - Some pins have a pull of their own at reset. ESP32-S3 GPIO0 has a ~45 kΩ
+    pull-up, so even a 10 kΩ pull-down leaves about 0.6 V on it, enough to
+    partly turn on a transistor or an opto input. Avoid the pins in the table
+    below.
+- **Never pull an MCU pin above its own supply.** Teensy, ESP32 and STM32 pins are
+  3.3 V; a pull-up to 5 V (or 12 V) damages them. The Mega is a 5 V part.
+- Many relay modules already have this pull resistor on board. Check your module
+  before adding one.
+
+### Relay modules
 
 **Typical relay module** (like common 5V/12V relay boards):
 
@@ -35,58 +60,113 @@ The same engine runs alarms, so a Rule can drive a relay, sound the buzzer, or b
 ┌─────────────────────┐
 │   Relay Module      │
 ├─────────────────────┤
-│ VCC  ──→ 5V/12V    │  Power supply (check your module)
-│ GND  ──→ GND       │  Ground
-│ IN   ──→ GPIO Pin  │  Control signal (e.g., pin 23)
+│ VCC  ──→ see below  │  Input-side power
+│ GND  ──→ GND        │  Ground
+│ IN   ──→ GPIO Pin   │  Control signal (e.g., pin 9)
 │                     │
-│ COM  ──┐            │  Common (to +12V battery)
-│ NO   ──┼──→ Load   │  Normally Open (to fan, pump, etc.)
-│ NC   ──┘            │  Normally Closed (not used typically)
+│ COM  ──┐            │  Common (to fused +12V)
+│ NO   ──┼──→ Load    │  Normally Open: load ON while the coil is energized
+│ NC   ──┘            │  Normally Closed: load ON while the coil is off
 └─────────────────────┘
 ```
 
 Many relay modules are **active-low** (the relay turns on when `IN` is pulled to
 GND). Add `INVERT` to `ACTION ADD RELAY` for those.
 
+**Active-low optocoupler modules on a 3.3 V board** (Teensy, ESP32, Feather
+STM32): the module's `IN` is pulled up to its `VCC`. If `VCC` is 5 V, the module
+puts 5 V on your 3.3 V pin, and a 3.3 V "high" may not turn the opto fully off.
+
+- If the module has a **`JD-VCC` jumper**: remove it, power `VCC` from the
+  board's **3.3 V**, and power `JD-VCC` (the coil side) from 5 V or 12 V as the
+  module requires.
+- If it has **no `JD-VCC` jumper**: drive `IN` through an NPN transistor or a
+  level shifter, not straight from the pin.
+
+On the Mega (5 V) the module can be powered from 5 V directly.
+
+### NO or NC: OFF is de-energized, not necessarily safe
+
+When preOBD resets or loses power, every relay drops to **de-energized**. On the
+**NO** contact that switches the load **off**. Decide per load whether that is
+what you want:
+
+- Most loads (a warning light, a heater): wire to **NO**; de-energized is off.
+- A load that must **keep running** when the controller resets or loses power
+  (a cooling fan, a fuel or water pump): wire to **NC**, so de-energized leaves
+  it on. The relay is then energized to switch the load *off*, so the Action's
+  sense is reversed: add `INVERT` (or, for an active-low module that already
+  needs `INVERT`, leave it off).
+
+This is separate from `FAILSAFE`, which only covers a failed *sensor* while
+preOBD is running.
+
 ### Example: Cooling Fan Wiring
 
 **Components needed:**
-- 12V electric cooling fan
-- 5V relay module (with optocoupler isolation)
-- preOBD running on Teensy/Arduino
+- 12V electric cooling fan (with an automotive relay or a module rated for it)
+- Relay module with optocoupler isolation and a `JD-VCC` jumper
+- preOBD running on a Teensy 4.1
 
 **Wiring:**
-1. **Relay module power**: VCC → 5V, GND → GND
-2. **Control signal**: IN → Teensy GPIO pin 23
+1. **Relay module power**: remove the `JD-VCC` jumper; `VCC` → Teensy 3.3 V,
+   `JD-VCC` → 5 V, `GND` → GND
+2. **Control signal**: `IN` → Teensy pin 9 (an active-low module: `INVERT` on `NO`, no `INVERT` on `NC`)
 3. **Fan power**:
-   - Connect +12V battery (fused) → Relay COM terminal
-   - Connect Relay NO → Fan positive wire
-   - Connect Fan negative → Battery ground
+   - Fused +12V → relay `COM`
+   - Relay `NC` → fan positive (so the fan runs if preOBD resets; see above),
+     or `NO` if you'd rather it stopped
+   - Fan negative → battery ground
 
-When the relay activates, it completes the circuit powering the fan.
+With `NC` and an active-low module the two inversions cancel:
+`ACTION ADD RELAY 9 FAILSAFE ON` without `INVERT`. The coil is then energized
+whenever the fan is off, so the module draws coil current most of the time, and
+the fan also stops whenever preOBD holds the Action OFF: when it claims the pin
+at boot, and in CONFIG mode for a rule-driven Action.
 
 ### GPIO Pin Selection
 
-**Available pins** (platform-dependent):
-- **Teensy 4.1**: Most digital pins (2-41)
-- **Arduino Mega**: Digital pins (22-53 recommended to avoid conflicts)
-- **Avoid**: Pins already used for sensors, CAN, I2C, SPI — `SYSTEM PINS` shows what is taken
+Use a pin nothing else uses: **`SYSTEM PINS`** lists every pin and what holds it.
+If you pick a pin another function already holds, the Action is refused and
+shows **`NOT DRIVEN`** in `ACTION LIST` (and in the app): preOBD never touches
+that pin for it. Move the relay (or the other function) to a free pin.
+
+**Avoid pins the chip drives or pulls at reset**, before preOBD runs:
+
+| Board | Avoid | Why |
+|---|---|---|
+| Arduino Mega | 13 | The bootloader blinks the LED on it at reset |
+| Arduino Mega | 0, 1 | USB serial |
+| Arduino Mega | 50–53 | SPI (53 is SS, held by the SPI bus) |
+| ESP32-S3 | 0, 3, 45, 46 | Strapping pins, pulled or sampled by the chip at reset |
+| ESP32-S3 | 43, 44 | Boot UART: the ROM prints on it at reset |
+| ESP32-S3 | 19, 20 | USB |
+| ESP32-S3 | 26–32 (and 33–37 with octal PSRAM) | Flash and PSRAM |
+| Feather STM32F405 | PA13, PA14, PA15, PB3, PB4 (chip pin names) | JTAG/SWD: pulled or driven at reset |
+| Teensy | 13 | The on-board LED, and SPI SCK |
+
+On Teensy 4.x the remaining pins reset to an input with a weak *keeper* that
+holds whatever level the pin last had, and a released pin is a plain input; a
+10 kΩ pull to the OFF level sets it either way.
 
 **Recommended pins** for relays:
-- Teensy 4.1: 23, 24, 25, 26 (not used by other peripherals)
-- Arduino Mega: 22, 24, 26, 28 (avoid 50-53 for SPI)
+- Teensy 4.x: 9, and 32, 33, 36, 37 on a 4.1. Avoid 2–6 and 8 (the buzzer,
+  button, RGB LED, nRF flow control and test-mode pins in the reference
+  `wiring.ini.example`), 7/8 (Serial2), 10–13 (SPI), 22/23 (CAN1), 24/25
+  (Wire2) and 26/27 (SPI1). Your own wiring may differ: check `SYSTEM PINS`
+- Arduino Mega: 22, 24, 26, 28
 
 ---
 
 ## Quick Start: Cooling Fan
 
-Fan on above 90°C, off again below 85°C. Coolant sensor on A2, relay on pin 23.
+Fan on above 90°C, off again below 85°C. Coolant sensor on A2, relay on pin 9.
 
 ```
 CONFIG
 SET A2 COOLANT_TEMP VDO_120C_STEINHART   # the sensor (also creates its default alarm Rule)
 RULE ADD A2 ABOVE 90 HYST 5 NONE         # prints: Rule #<r> added
-ACTION ADD RELAY 23                      # prints: Action #<a> added
+ACTION ADD RELAY 9                      # prints: Action #<a> added
 ACTION <a> RULE <r>                      # the relay now follows the Rule
 SAVE
 RUN
@@ -100,8 +180,8 @@ show every id.
 the relay but does not light the warning LED or sound the buzzer. The input's
 own alarm (from `SET <pin> ALARM`) is unaffected.
 
-**Relays only switch in RUN mode.** In CONFIG mode all Actions are held off so a
-sensor on the bench can't start a fan or pump while you are wiring it.
+**Rules only switch relays in RUN mode.** In CONFIG mode rule-driven Actions are
+held off so a sensor on the bench can't start a fan or pump while you are wiring it.
 
 ---
 
@@ -155,7 +235,7 @@ shorted, pegged at the rail), the Action goes to its **failsafe** state:
   temperature sensor, you'd rather the fan ran.
 
 ```
-ACTION ADD RELAY 23 FAILSAFE ON
+ACTION ADD RELAY 9 FAILSAFE ON
 ```
 
 ### Several Rules, one relay
@@ -227,7 +307,7 @@ and each input's default alarm counts as one Rule.
 ```
 SET A2 COOLANT_TEMP VDO_120C_STEINHART
 RULE ADD A2 ABOVE 90 HYST 5 NONE           # Rule #r
-ACTION ADD RELAY 23 FAILSAFE ON            # Action #a
+ACTION ADD RELAY 9 FAILSAFE ON            # Action #a
 ACTION <a> RULE <r>
 ACTION <a> NAME Cooling Fan
 SAVE
@@ -243,7 +323,7 @@ SAVE
 ```
 SET A3 OIL_PRESSURE VDO_5BAR_CURVE
 RULE ADD A3 BELOW 0.5 HYST 0.5 NONE        # on below 0.5 bar, off above 1.0 bar
-ACTION ADD RELAY 24
+ACTION ADD RELAY 32
 ACTION <a> RULE <r>
 SAVE
 ```
@@ -253,7 +333,7 @@ SAVE
 ```
 SET A2 COOLANT_TEMP VDO_120C_STEINHART
 RULE ADD A2 ABOVE 80 HYST 5 NONE           # on above 80°C, off below 75°C
-ACTION ADD RELAY 23 FAILSAFE ON
+ACTION ADD RELAY 9 FAILSAFE ON
 ACTION <a> RULE <r>
 SAVE
 ```
@@ -265,8 +345,8 @@ Two relays on the same sensor at different temperatures:
 ```
 RULE ADD A2 ABOVE 85 HYST 5 NONE           # low speed, Rule #r1
 RULE ADD A2 ABOVE 95 HYST 5 NONE           # high speed, Rule #r2
-ACTION ADD RELAY 23 FAILSAFE ON            # low-speed relay, Action #a1
-ACTION ADD RELAY 24 FAILSAFE ON            # high-speed relay, Action #a2
+ACTION ADD RELAY 9 FAILSAFE ON            # low-speed relay, Action #a1
+ACTION ADD RELAY 32 FAILSAFE ON            # high-speed relay, Action #a2
 ACTION <a1> RULE <r1>
 ACTION <a2> RULE <r2>
 SAVE
@@ -279,7 +359,7 @@ Fan on if coolant is above 95°C **or** transmission fluid is above 110°C:
 ```
 RULE ADD A2 ABOVE 95 HYST 5 NONE           # coolant, Rule #r1
 RULE ADD A4 ABOVE 110 HYST 5 NONE          # trans temp, Rule #r2
-ACTION ADD RELAY 23 FAILSAFE ON            # Action #a
+ACTION ADD RELAY 9 FAILSAFE ON            # Action #a
 ACTION <a> RULE <r1>
 ACTION <a> RULE ADD <r2>
 SAVE
@@ -293,7 +373,7 @@ anyway:
 ```
 SET A2 ALARM MAX 110                       # the input's alarm (buzzer)
 RULE ADD A2 ABOVE 90 HYST 5 NONE           # the fan (silent)
-ACTION ADD RELAY 23 FAILSAFE ON
+ACTION ADD RELAY 9 FAILSAFE ON
 ACTION <a> RULE <r>
 SAVE
 ```
@@ -314,7 +394,7 @@ ACTION <a> AUTO        # back to Rule control
 
 ### Relay doesn't activate
 
-1. **Are you in RUN mode?** Actions are held off in CONFIG mode. Type `RUN`.
+1. **Are you in RUN mode?** Rule-driven Actions are held off in CONFIG mode. Type `RUN`.
 2. **Is the Action linked?** `ACTION <a>` should list the Rule it follows.
 3. **Is the Rule active?** `RULE <r>` shows its state. `WARMUP` means it is still
    waiting after power-up; `READY` means the condition isn't met yet; `ACTIVE`
@@ -324,6 +404,18 @@ ACTION <a> AUTO        # back to Rule control
    in its failsafe state.
 6. **Is it wiring?** `ACTION <a> ON` in RUN mode. If the relay doesn't click,
    check the wiring and whether the module needs `INVERT`.
+
+### `ACTION LIST` shows `NOT DRIVEN`
+
+Another function holds the Action's pin, so preOBD never drives it: the relay
+reads OFF and `ACTION <a> ON` is refused. `SYSTEM PINS` shows what holds the
+pin. Delete the Action and add it on a free pin (or move the other function).
+
+### Relay clicks at power-up or reset
+
+The driver input floats before preOBD claims the pin. Add a pull resistor to the
+OFF level and check the pin isn't one the chip drives at reset; see
+[Keep the relay OFF while the pin floats](#keep-the-relay-off-while-the-pin-floats).
 
 ### Relay is on when it should be off (or the other way round)
 
@@ -345,14 +437,18 @@ Run `SAVE` after changes. Manual `ON`/`OFF` overrides are intentionally never sa
 ## Safety Considerations
 
 ### Electrical
-1. **Use isolated relay modules** with optocouplers
-2. **Fuse the load circuit** appropriately for the fan/pump
-3. **Check relay ratings** (10A+ relays for high-current loads, or drive a
+1. **Wire every relay OFF while its pin floats**, and choose NO or NC per load
+   ([see above](#keep-the-relay-off-while-the-pin-floats))
+2. **Use isolated relay modules** with optocouplers
+3. **Fuse the load circuit** appropriately for the fan/pump
+4. **Check relay ratings** (10A+ relays for high-current loads, or drive an
    automotive relay from the module)
-4. **Suppress back-EMF** from inductive loads (flyback diodes)
+5. **Suppress back-EMF** from inductive loads (flyback diodes)
 
 ### Software
-1. Relays start OFF at boot and stay off in CONFIG mode
+1. Once preOBD claims a relay pin it sets it OFF before enabling the output, and
+   holds rule-driven relays off in CONFIG mode. Before that, and across a reset, only your
+   wiring keeps the relay off
 2. Rules wait out their warmup before switching anything
 3. Choose `FAILSAFE ON` or `OFF` per load for what should happen if a sensor fails
 4. Manual overrides are RAM-only and cleared by a reboot

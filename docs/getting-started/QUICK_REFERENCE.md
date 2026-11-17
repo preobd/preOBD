@@ -346,7 +346,7 @@ the full surface. (`RELAY` is deprecated and prints a pointer here.)
 **Example - Cooling fan (coolant > 90°C, 5° hysteresis):**
 ```
 RULE ADD A2 ABOVE 90 HYST 5 NONE     # control Rule (no annunciation), id e.g. 0
-ACTION ADD RELAY 23                   # relay on pin 23, id e.g. 0
+ACTION ADD RELAY 9                    # relay on pin 9, id e.g. 0
 ACTION 0 RULE 0                       # fan follows the Rule
 ```
 

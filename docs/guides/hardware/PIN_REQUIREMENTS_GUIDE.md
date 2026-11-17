@@ -204,6 +204,9 @@ Certain pins are **reserved** for critical system functions and cannot be used f
 **Important notes:**
 - Attempting to assign a reserved pin will result in validation error
 - I2C sensors (BME280) use `"I2C"` as pin identifier, not "20" or "21"
+- **Relay outputs** have their own wiring rules (a pull resistor to the OFF
+  level, pins the chip drives at reset): see the
+  [Relay Control Guide](../outputs/RELAY_CONTROL.md#keep-the-relay-off-while-the-pin-floats).
 
 ---
 
