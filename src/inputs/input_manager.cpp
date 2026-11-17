@@ -492,6 +492,10 @@ bool setInputSensor(uint8_t pin, uint8_t sensorIndex) {
     // Check if sensor is actually changing (to avoid redundant init)
     bool sensorChanged = (input->sensorIndex != sensorIndex);
 
+    // The old sensor lets go of the pin first (#652): read before sensorIndex
+    // is overwritten, and whether or not the new sensor has an init.
+    if (sensorChanged) releaseSensorPin(input);
+
     // Apply sensor info to input
     input->sensorIndex = sensorIndex;
     input->readFunction = info.readFunction;
@@ -691,10 +695,18 @@ bool setInputRoute(uint8_t pin, uint8_t outputId, bool enable) {
     return true;
 }
 
+// Every live input lets go of its pin's hardware (#652), before a LOAD or
+// SYSTEM RESET wipes the whole table without going through clearInput().
+void releaseAllInputPins() {
+    for (uint8_t i = 0; i < MAX_INPUTS; i++)
+        if (inputs[i].pin != 0xFF) releaseSensorPin(&inputs[i]);
+}
+
 bool clearInput(uint8_t pin) {
     Input* input = getInputByPin(pin);
     if (input == nullptr) return false;
 
+    releaseSensorPin(input);   // an RPM/speed input's interrupt goes with it (#652)
     memset(input, 0, sizeof(Input));
     input->pin = 0xFF;
 

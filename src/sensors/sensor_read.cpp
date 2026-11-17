@@ -78,6 +78,26 @@
 // Note: thermistors/linear.cpp and pressure/linear.cpp are wrapper files
 // that point to linear/linear_sensor.cpp (already included above)
 
+// ===== RELEASE =====
+
+/**
+ * Undo what the input's sensor init did to its pin (#652).
+ *
+ * Call it while the input still holds the pin: before its slot is wiped
+ * (CLEAR, LOAD, SYSTEM RESET, an import dropping it) or its sensor changes.
+ * Only the pulse sensors leave anything behind, an attached interrupt.
+ *
+ * Keyed on the sensor's init function, not on readFunction: test mode and
+ * TEST INJECT swap readFunction out. A slot with no sensor finds no init.
+ */
+void releaseSensorPin(Input* in) {
+    const SensorInfo* info = getSensorByIndex(in->sensorIndex);
+    if (info == nullptr) return;
+    void (*init)(Input*) = (void (*)(Input*))pgm_read_ptr(&info->initFunction);
+    if (init == initWPhaseRPM) releaseWPhaseRPM(in);
+    else if (init == initHallSpeed) releaseHallSpeed(in);
+}
+
 // ===== CONVERSION FUNCTIONS =====
 // Registry-based conversion - uses data from UNITS_REGISTRY
 

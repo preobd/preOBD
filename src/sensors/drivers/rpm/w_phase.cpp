@@ -57,6 +57,17 @@ void initWPhaseRPM(Input* ptr) {
     msg.debug.info(TAG_SENSOR, "RPM sensing on pin %d for %s", ptr->pin, ptr->abbrName);
 }
 
+/**
+ * Undo initWPhaseRPM(): detach the pin's interrupt (#652).
+ *
+ * Called through releaseSensorPin() while the input still holds the pin, before
+ * its slot is wiped or its sensor changes. Without it the ISR stays attached
+ * after CLEAR, and whatever drives the pin next (a relay) feeds the RPM counters.
+ */
+void releaseWPhaseRPM(Input* ptr) {
+    detachInterrupt(digitalPinToInterrupt(ptr->pin));
+}
+
 // ===== READING =====
 
 /**

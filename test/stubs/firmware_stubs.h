@@ -165,4 +165,12 @@ STUB_READ(initHallSpeed)        STUB_READ(initWPhaseRPM)
 STUB_READ(initBME280)
 #undef STUB_READ
 
+// releaseSensorPin (#652): the real one is in sensor_read.cpp beside every
+// driver. This records which pins let go, in order, for a test to check.
+static uint8_t g_releasedPins[32];
+static uint8_t g_releasedCount = 0;
+void releaseSensorPin(Input* in) {
+    if (g_releasedCount < sizeof(g_releasedPins)) g_releasedPins[g_releasedCount++] = in->pin;
+}
+
 #endif // TEST_FIRMWARE_STUBS_H

@@ -148,6 +148,13 @@ void initHallSpeed(Input* ptr) {
     msg.debug.info(TAG_SENSOR, "Speed sensing on pin %d for %s", ptr->pin, ptr->abbrName);
 }
 
+/**
+ * Undo initHallSpeed(): detach the pin's interrupt (#652). See releaseWPhaseRPM().
+ */
+void releaseHallSpeed(Input* ptr) {
+    detachInterrupt(digitalPinToInterrupt(ptr->pin));
+}
+
 // ===== READING =====
 
 /**

@@ -455,6 +455,39 @@ static void test_eeprom_load_drops_mismatched_custom_cal(void) {
 }
 
 // ---------------------------------------------------------------------------
+// #652 — an input lets go of its pin's hardware (a pulse sensor's interrupt)
+// before its slot is wiped or its sensor changes. releaseSensorPin() is a
+// recording stub here (firmware_stubs.h); the real one detaches only for the
+// pulse sensors, keyed on the sensor's init function.
+// ---------------------------------------------------------------------------
+
+static void test_clear_releases_the_pin_first(void) {
+    TEST_ASSERT_TRUE(setInputApplication(4, appOIL_P()));
+    g_releasedCount = 0;
+    TEST_ASSERT_TRUE(clearInput(4));
+    TEST_ASSERT_EQUAL_UINT8(1, g_releasedCount);
+    TEST_ASSERT_EQUAL_UINT8(4, g_releasedPins[0]);   // read before the wipe
+}
+
+static void test_sensor_change_releases_the_old_sensor(void) {
+    TEST_ASSERT_TRUE(setInputApplication(4, appOIL_P()));
+    TEST_ASSERT_TRUE(setInputSensor(4, getSensorIndexByName("MPX4250AP")));
+    g_releasedCount = 0;
+    TEST_ASSERT_TRUE(setInputSensor(4, getSensorIndexByName("MPX4250AP")));
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, g_releasedCount, "same sensor: nothing to release");
+    TEST_ASSERT_TRUE(setInputSensor(4, getSensorIndexByName("AEM_30_2130_150")));
+    TEST_ASSERT_EQUAL_UINT8(1, g_releasedCount);
+}
+
+static void test_release_all_skips_empty_slots(void) {
+    TEST_ASSERT_TRUE(setInputApplication(4, appOIL_P()));
+    TEST_ASSERT_TRUE(setInputApplication(5, appCHT()));
+    g_releasedCount = 0;
+    releaseAllInputPins();
+    TEST_ASSERT_EQUAL_UINT8(2, g_releasedCount);
+}
+
+// ---------------------------------------------------------------------------
 // #458 — units must exist and match the input's measurement type.
 // ---------------------------------------------------------------------------
 
@@ -1227,6 +1260,9 @@ int main(int, char**) {
     RUN_TEST(test_json_import_refusal_leaves_earlier_records_intact);
     RUN_TEST(test_out_of_range_indices_fail_closed);
     RUN_TEST(test_unset_indices_are_compatible);
+    RUN_TEST(test_clear_releases_the_pin_first);
+    RUN_TEST(test_sensor_change_releases_the_old_sensor);
+    RUN_TEST(test_release_all_skips_empty_slots);
     RUN_TEST(test_cal_linear_pairs_with_read_linear_sensor);
     RUN_TEST(test_divider_honored_only_by_linear_sensors);
     RUN_TEST(test_divider_follows_sensor_not_custom_cal);

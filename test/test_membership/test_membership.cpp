@@ -29,12 +29,43 @@
 #include "../../src/buses/pinctrl/pin_registry.cpp"
 #include "../../src/buses/pinctrl/pin_owner.cpp"
 
-// ---- messaging: the sweep logs a repair; nothing else here prints ----------
-// Just enough of the message plane to link: no transport is registered, so every
-// stream resolves to nullptr and writes go nowhere.
+// ---- messaging: the control plane is captured --------------------------------
+// The sweep logs a repair and a release prints a NOTE (#652); the control plane
+// lands in g_capture so a test can assert on what was reported. Every other
+// stream resolves to nullptr and goes nowhere.
 MessageAPI    msg;
 LogFilter::LogFilter() {}
-TransportInterface* messageSink(MessagePlane, bool) { return nullptr; }
+
+class CaptureTransport : public TransportInterface {
+public:
+    char buf[512];
+    size_t len = 0;
+    size_t write(uint8_t c) override {
+        if (len < sizeof(buf) - 1) buf[len++] = (char)c;
+        buf[len] = '\0';
+        return 1;
+    }
+    size_t write(const uint8_t* b, size_t n) override {
+        for (size_t i = 0; i < n; i++) write(b[i]);
+        return n;
+    }
+    int available() override { return 0; }
+    int read() override { return -1; }
+    int peek() override { return -1; }
+    void flush() override {}
+    const char* getName() const override { return "CAP"; }
+    uint8_t getCapabilities() const override { return CAP_WRITE; }
+    TransportState getState() const override { return TRANSPORT_CONNECTED; }
+    bool begin() override { return true; }
+    void end() override {}
+    void update() override {}
+    void reset() { len = 0; buf[0] = '\0'; }
+};
+static CaptureTransport g_capture;
+
+TransportInterface* messageSink(MessagePlane plane, bool secondary) {
+    return (plane == PLANE_CONTROL && !secondary) ? &g_capture : nullptr;
+}
 size_t MessageStream::warn(const char* tag, const char* fmt, ...) {
     (void)tag; (void)fmt; return 0;
 }
@@ -116,6 +147,7 @@ void setUp(void) {
     memset(g_inputs, 0, sizeof(g_inputs));
     g_inputCount = 0;
     g_test_now = 0;
+    g_capture.reset();
 }
 void tearDown(void) {}
 
@@ -802,6 +834,41 @@ static void test_quiesce_switches_off_then_releases(void) {
     TEST_ASSERT_FALSE(rulesActionDriven(0));
 }
 
+// A rule-driven relay forced OFF is already off, but a release (LOAD, import,
+// SYSTEM RESET all quiesce) loses the force: once re-armed, its rule may switch
+// it on. That is reported, like a release that switches a relay off (#652).
+static void test_quiesce_reports_a_released_force_off(void) {
+    addInput(10, 50.0f);
+    addRule(0, 10, true);
+    addAction(0, 23);
+    TEST_ASSERT_TRUE(rulesActionAddRule(0, 0));
+    rulesSyncActionPins();
+    TEST_ASSERT_TRUE(rulesActionCommand(0, false));          // FORCE_OFF
+    g_capture.reset();
+    rulesActionsQuiesce();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(g_capture.buf, "Action #0 override released, pin 23"),
+                                 g_capture.buf);
+}
+
+static void test_quiesce_reports_a_relay_it_switches_off(void) {
+    addAction(0, 23);
+    rulesSyncActionPins();
+    TEST_ASSERT_TRUE(rulesActionCommand(0, true));           // manual ON
+    rulesActionsUpdate(true);
+    g_capture.reset();
+    rulesActionsQuiesce();
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(g_capture.buf, "Action #0 off, pin 23"), g_capture.buf);
+    TEST_ASSERT_NULL(strstr(g_capture.buf, "override released"));
+}
+
+static void test_quiesce_of_an_idle_relay_says_nothing(void) {
+    addAction(0, 23);
+    rulesSyncActionPins();
+    g_capture.reset();
+    rulesActionsQuiesce();
+    TEST_ASSERT_EQUAL_size_t(0, g_capture.len);
+}
+
 static void test_reset_tables_releases_an_energized_relay(void) {
     addAction(0, 23);
     rulesSyncActionPins();
@@ -985,6 +1052,9 @@ int main(int, char**) {
     RUN_TEST(test_refused_action_claims_once_its_pin_frees);
     RUN_TEST(test_resync_leaves_a_running_relay_alone);
     RUN_TEST(test_quiesce_switches_off_then_releases);
+    RUN_TEST(test_quiesce_reports_a_released_force_off);
+    RUN_TEST(test_quiesce_reports_a_relay_it_switches_off);
+    RUN_TEST(test_quiesce_of_an_idle_relay_says_nothing);
     RUN_TEST(test_reset_tables_releases_an_energized_relay);
     RUN_TEST(test_reset_tables_with_nothing_held_touches_nothing);
     RUN_TEST(test_action_delete_releases_its_pin);

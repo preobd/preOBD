@@ -87,6 +87,7 @@ STUB_READ(readBME280Elevation)
 STUB_READ(initThermocoupleCS)   STUB_READ(initFloatSwitch)
 STUB_READ(initHallSpeed)        STUB_READ(initWPhaseRPM)
 STUB_READ(initBME280)
+STUB_READ(releaseSensorPin)     // #652: the real one is in sensor_read.cpp
 #undef STUB_READ
 
 // ---------------------------------------------------------------------------

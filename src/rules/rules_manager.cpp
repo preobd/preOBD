@@ -944,6 +944,7 @@ static FLASHMEM bool releaseActionPin(int slot) {
     const uint8_t pin = g_heldPin[slot] - 1;
     const bool wasOn = g_actionState[slot] || g_actionManual[slot] ||
                        g_actionOverride[slot] == ACT_OVR_FORCE_ON;
+    const bool forcedOff = g_actionOverride[slot] == ACT_OVR_FORCE_OFF;
     const char* holder = getPinDescription(pin);
     // Still the action's entry; or no entry at all (something unregistered it
     // by number) AND nothing else holds the pin -- pinsFree() asks every source,
@@ -966,10 +967,12 @@ static FLASHMEM bool releaseActionPin(int slot) {
     g_actionState[slot] = false;
     g_actionManual[slot] = false;
     g_actionOverride[slot] = ACT_OVR_AUTO;
-    if (wasOn && actions[slot].id != RULES_ID_NONE) {
+    // A forced-OFF relay is already off, but losing the force is a change too:
+    // once the action is re-armed its rule may switch it on (#652, §11.3).
+    if ((wasOn || forcedOff) && actions[slot].id != RULES_ID_NONE) {
         msg.control.print(F("NOTE: "));
         rulesPrintActionId(actions[slot].id);
-        msg.control.print(F(" off, pin "));
+        msg.control.print(wasOn ? F(" off, pin ") : F(" override released, pin "));
         msg.control.println(pin);
     }
     return ours && relay;   // a relay pin was switched off and released
@@ -996,6 +999,8 @@ bool rulesActionDelete(uint8_t id, bool* heldOut) {
 void rulesActionsInit() {
     // State only. Pins are configured by rulesSyncActionPins(), which claims
     // first (§12.5): at boot that runs late, after every fixed pin is held.
+    // LOAD, import and SYSTEM RESET release every held slot first (quiesce,
+    // which reports what it releases, #652), so this reset finds nothing live.
     for (int i = 0; i < MAX_ACTIONS; i++) {
         g_actionManual[i] = false;
         g_actionState[i] = false;

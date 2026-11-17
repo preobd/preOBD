@@ -621,6 +621,7 @@ FLASHMEM bool loadInputConfig() {
     }
 
     // ===== store validated — COMMIT (the only point past here that mutates RAM) =====
+    releaseAllInputPins();   // the old inputs let go of their pins first (#652)
     memset(inputs, 0, sizeof(inputs));
     for (uint8_t i = 0; i < MAX_INPUTS; i++) inputs[i].pin = 0xFF;
     numActiveInputs = 0;
@@ -764,6 +765,7 @@ FLASHMEM void resetInputConfig() {
     inputStoreForgetValidity();   // the store just changed (#598)
 
     // Clear inputs
+    releaseAllInputPins();   // (#652)
     memset(inputs, 0, sizeof(inputs));
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         inputs[i].pin = 0xFF;

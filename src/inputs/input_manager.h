@@ -134,6 +134,7 @@ bool setInputAlarmWarmup(uint8_t pin, uint16_t warmupTime_ms);
 bool setInputAlarmPersist(uint8_t pin, uint16_t persistTime_ms);
 bool setInputRoute(uint8_t pin, uint8_t outputId, bool enable);  // route bit <outputId> (#612)
 bool clearInput(uint8_t pin);
+void releaseAllInputPins();      // before wiping inputs[] wholesale (LOAD, SYSTEM RESET; #652)
 
 // ===== CALIBRATION OVERRIDES =====
 bool setInputCalibrationSteinhart(uint8_t pin, float bias, float a, float b, float c);

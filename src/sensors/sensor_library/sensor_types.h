@@ -64,6 +64,13 @@ extern void initFloatSwitch(Input*);
 extern void initBME280(Input*);
 extern void initHallSpeed(Input*);
 
+// ===== FORWARD DECLARATIONS: RELEASE FUNCTIONS =====
+// Undo an init that changed the pin's hardware state (an attached interrupt).
+// Reached only through releaseSensorPin() (sensor_read.cpp, #652).
+extern void releaseWPhaseRPM(Input*);
+extern void releaseHallSpeed(Input*);
+extern void releaseSensorPin(Input*);
+
 // ===== FORWARD DECLARATIONS: UNIT CONVERSION =====
 extern float convertFromBaseUnits(float baseValue, uint8_t unitsIndex);
 extern float convertToBaseUnits(float displayValue, uint8_t unitsIndex);
