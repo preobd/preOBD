@@ -23,6 +23,7 @@ void rulesRuleInit(RuleContext& ctx, const Rule& rule, uint32_t now) {
     ctx.nanSince = 0;
     ctx.warmupTime_ms = rule.warmupMs;
     ctx.persistTime_ms = rule.debounceMs;
+    ctx.verdictPending = enabled ? 1 : 0;   // armed: no verdict yet (#669)
 }
 
 bool rulesRuleConditionAsserted(const Rule& rule, float value, bool currentlyActive) {
@@ -66,6 +67,7 @@ void rulesRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t n
         ctx.state = RULE_DISABLED;
         ctx.faultStartTime = 0;
         ctx.nanSince = 0;
+        ctx.verdictPending = 0;
         return;
     }
 
@@ -120,12 +122,21 @@ void rulesRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t n
         return;
     }
     const bool asserted = rulesRuleConditionAsserted(rule, value, ctx.state == RULE_ACTIVE);
+    // The first trusted verdict since arming (#669, §11.3). "Not asserted" only
+    // counts once the reading also clears the ACTIVE (hysteresis-inset) test:
+    // after a reset the rule can't know an actuator was running, and a reading
+    // inside the band is what a running fan leaves behind. A NaN is no verdict.
+    if (ctx.verdictPending && !isnan(value) && !asserted &&
+        !rulesRuleConditionAsserted(rule, value, true)) {
+        ctx.verdictPending = 0;
+    }
     if (asserted) {
         if (ctx.faultStartTime == 0) {
             ctx.faultStartTime = now;  // start debounce timer
         }
         if (now - ctx.faultStartTime >= ctx.persistTime_ms) {
             ctx.state = RULE_ACTIVE;
+            ctx.verdictPending = 0;    // qualified: a verdict (#669)
         }
         // else: asserted but not yet debounced — wait
     } else {
@@ -138,6 +149,13 @@ void rulesRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t n
 
 bool rulesRuleIsActive(const RuleContext& ctx) {
     return ctx.state == RULE_ACTIVE;
+}
+
+bool rulesRuleUnsettled(const RuleContext& ctx) {
+    // ACTIVE is a verdict by definition (qualifying clears the flag too); the
+    // state test keeps a demanding rule from ever reading as unsettled.
+    return ctx.state != RULE_DISABLED && ctx.state != RULE_ACTIVE &&
+           ctx.verdictPending != 0;
 }
 
 bool rulesRuleSourceUntrusted(const RuleContext& ctx, uint32_t now) {
@@ -340,9 +358,11 @@ bool rulesActionDesired(const Action& action, const ActionDrive& drive,
     if (drive.anyActive) {
         return true;
     }
-    // No live demand, and at least one member can't be evaluated → a RELAY assumes
-    // its failsafe state (§11.3); other action types simply de-assert.
-    if (drive.anyFaulted) {
+    // No live demand, and at least one member can't be evaluated (its source is
+    // faulted) or hasn't given its first verdict yet (#669: not sure yet counts
+    // as failed) → a RELAY assumes its failsafe state (§11.3); other action
+    // types simply de-assert.
+    if (drive.anyFaulted || drive.anyUnsettled) {
         if (action.type == ACT_RELAY) {
             return action.failsafe == ACT_FAILSAFE_ON;
         }

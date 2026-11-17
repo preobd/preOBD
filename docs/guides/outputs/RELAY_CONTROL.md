@@ -121,8 +121,12 @@ preOBD is running.
 With `NC` and an active-low module the two inversions cancel:
 `ACTION ADD RELAY 9 FAILSAFE ON` without `INVERT`. The coil is then energized
 whenever the fan is off, so the module draws coil current most of the time, and
-the fan also stops whenever preOBD holds the Action OFF: when it claims the pin
-at boot, and in CONFIG mode for a rule-driven Action.
+the fan also stops whenever preOBD holds the Action OFF: in CONFIG mode for a
+rule-driven Action, and briefly when the Action's pin is released (`LOAD`, a
+JSON import, `SYSTEM RESET`). At boot it keeps running: with `FAILSAFE ON` the
+pin is claimed at its failsafe level and held there until the Rule has a
+reading it trusts (see [After a reset](#after-a-reset)), so on `NC` the fan
+runs without a break from power-on until then.
 
 ### GPIO Pin Selection
 
@@ -248,6 +252,39 @@ the failsafe.
 ```
 ACTION ADD RELAY 9 FAILSAFE ON
 ```
+
+A relay is also in its failsafe state **until its Rule has a reading it
+trusts**: preOBD treats "not sure yet" like "sensor failed". After every boot
+(and whenever a Rule is re-armed) a `FAILSAFE ON` relay is on until its Rule's
+first real answer: a reading that is below the limit by the full hysteresis
+(for an `ABOVE` Rule), or the Rule tripping. A reading inside the hysteresis
+band is not an answer, because after a reset preOBD can't know whether the fan
+was running; so with `ABOVE 95 HYST 5` and the engine at 92 the fan keeps
+running until the engine drops below 90, or stays above 95 long enough for the
+Rule to trip. `ACTION LIST` shows
+such a relay as `-> ON  FAILSAFE`.
+
+### After a reset
+
+What a relay does from power-on (or a reset) until its Rule takes over:
+
+1. **Until preOBD claims the pin**, late in startup, the pin floats: the
+   wiring holds the relay de-energized (see
+   [Keep the relay OFF while the pin floats](#keep-the-relay-off-while-the-pin-floats)).
+   A load on `NC` runs; one on `NO` is off.
+2. **At the claim** a `FAILSAFE OFF` relay is set OFF, and a `FAILSAFE ON` relay
+   is set ON. In CONFIG mode both start OFF, as a rule-driven relay always is
+   there.
+3. **The Rule settles**: 1 s, then its warmup (3 s for `RULE ADD`; an
+   application's own, which for a CAN sensor can be up to about a minute), then
+   its debounce. A `FAILSAFE ON` relay stays on throughout, and goes straight
+   to following the Rule; if the engine is hot it never switches off.
+4. **A dead sensor** keeps a `FAILSAFE ON` relay on; it is reported as a fault
+   2 s after the first bad reading.
+
+A reset from the watchdog restarts in RUN mode. **`ACTION <id> ON|OFF` is lost
+on every reset** (an override or a manual relay is not saved), so a relay that
+must come back on after a reset should be driven by a Rule.
 
 ### Several Rules, one relay
 
@@ -432,6 +469,10 @@ OFF level and check the pin isn't one the chip drives at reset; see
 
 - Active-low relay module: delete and re-add the Action with `INVERT`.
 - A manual override is still in effect: `ACTION <a> AUTO`.
+- `ACTION LIST` shows `FAILSAFE`: a `FAILSAFE ON` relay is on because its
+  sensor has failed, or because its Rule hasn't settled yet after power-up
+  (see [After a reset](#after-a-reset)). `RULE <r>` shows `WARMUP`, or a
+  reading inside the hysteresis band.
 - The sensor has failed and the Action is `FAILSAFE ON`: check `INFO <pin>`.
 
 ### Relay chatters (rapid ON/OFF)

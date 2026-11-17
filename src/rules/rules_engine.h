@@ -84,6 +84,18 @@ bool rulesRuleSourceFaulted(const RuleContext& ctx, uint32_t now);
 bool rulesRuleSourceUntrusted(const RuleContext& ctx, uint32_t now);
 
 /**
+ * True while an armed rule has not yet given its first trusted verdict
+ * (§11.3, #669): from arming (INIT, WARMUP) until, in READY, a finite reading
+ * either clears the condition by the ACTIVE test (hysteresis included) or the
+ * rule qualifies to ACTIVE. A pending trip on the first readings is therefore
+ * still unsettled, so a FAILSAFE ON relay is not dropped for the persist time
+ * on a hot restart. A NaN is never a verdict; past the fault debounce the
+ * source is untrusted instead. Steady-state debounce is unaffected: once a
+ * verdict is given, later pending trips are ordinary persist.
+ */
+bool rulesRuleUnsettled(const RuleContext& ctx);
+
+/**
  * True while an ARMED-and-READY rule has an assertion currently debouncing
  * toward RULE_ACTIVE (ctx.faultStartTime != 0 while ctx.state == RULE_READY)
  * — i.e. the condition is asserted right now but hasn't held past
@@ -181,6 +193,8 @@ struct ActionDrive {
                           //   so losing a rule can never fall back to the latch.
     bool    anyActive;    // OR over members whose source is trustworthy AND active
     bool    anyFaulted;   // any member's CONFIGURED source reads NaN (§11.3; #345)
+    bool    anyUnsettled; // any member (same exclusions) has no trusted verdict yet,
+                          //   and its source is not faulted (§11.3, #669)
 };
 
 /**
@@ -195,8 +209,9 @@ struct ActionDrive {
  *    is surfaced (with a source-faulted flag) on the CLI and the BLE frame.
  *  - Manual action (`memberCount == 0`): follows `manualState`.
  *  - Any member Rule active on a trustworthy source: asserted (OR, §11.6).
- *  - Otherwise, with a faulted member source: a RELAY assumes its `failsafe`
- *    state — the wire/sensor is gone, so the reading is meaningless (§11.3).
+ *  - Otherwise, with a faulted member source, or a member that has not given
+ *    its first trusted verdict since it was armed (#669): a RELAY assumes its
+ *    `failsafe` state — the reading is gone or not yet trusted (§11.3).
  *    Only RELAY has a failsafe; other types de-assert.
  *
  * ORDER MATTERS with several members: a live member's ACTIVE verdict is checked

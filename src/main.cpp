@@ -716,25 +716,30 @@ void setup() {
 
     consoleInputInit();   // the console's line per source, the banner and the first prompt
 
-#if INCLUDE_RULES_ENGINE
-    // Register action target pins LAST — after every hardware-fixed pin (system,
-    // bus, RGB, serial) is in the registry — so a stray action target is flagged
-    // as a conflict rather than silently winning a pin those subsystems need.
-    rulesSyncActionPins();
-#endif
-
-    // Initialize system mode and detect boot mode.
-    // setSystemModeObserver() MUST run before the first setMode() call below
-    // (the boot-time transition) -- registering later finds no observer and
-    // silently drops the LCD clear / LED colour for that transition (#411).
-    setSystemModeObserver(onSystemModeChange);
-    initSystemMode();
+    // The boot mode is decided before the action pins are claimed: a relay's
+    // starting level depends on it (#669 — CONFIG holds rule-driven relays
+    // OFF, #268). detectBootMode() only reads its arguments and prints.
 #if INCLUDE_USER_BUTTON
     const bool buttonDown = userButtonDownNow();
 #else
     const bool buttonDown = false;
 #endif
     SystemMode bootMode = detectBootMode(eepromConfigLoaded, buttonDown);
+
+#if INCLUDE_RULES_ENGINE
+    // Register action target pins LAST — after every hardware-fixed pin (system,
+    // bus, RGB, serial) is in the registry — so a stray action target is flagged
+    // as a conflict rather than silently winning a pin those subsystems need.
+    // isInConfigMode() isn't set up yet: pass the mode the loop will run in.
+    rulesSyncActionPins(bootMode == MODE_CONFIG);
+#endif
+
+    // Initialize system mode.
+    // setSystemModeObserver() MUST run before the first setMode() call below
+    // (the boot-time transition) -- registering later finds no observer and
+    // silently drops the LCD clear / LED colour for that transition (#411).
+    setSystemModeObserver(onSystemModeChange);
+    initSystemMode();
     setMode(bootMode);
 
     msg.debug.info(TAG_SYSTEM, "Watchdog %u ms (%s)", (unsigned)watchdogTimeoutMs(),

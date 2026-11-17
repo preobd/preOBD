@@ -228,6 +228,21 @@ static void test_rule_import_outside_inverted_band_rejected(void) {
     TEST_ASSERT_FALSE(rulesImportRule(doc.as<JsonObjectConst>(), out));
 }
 
+static void test_rule_import_outside_hysteresis_wider_than_band_rejected(void) {
+    JsonDocument doc;
+    JsonObject o = doc.to<JsonObject>();
+    o["id"] = 1;
+    o["input"] = 14;
+    o["condition"] = "OUTSIDE";
+    o["limitLo"] = 10.0f;
+    o["limitHi"] = 20.0f;
+    o["hysteresis"] = 5.0f;   // 2*5 >= 10: the clear insets cross, never clears (#669)
+    Rule out{};
+    TEST_ASSERT_FALSE(rulesImportRule(doc.as<JsonObjectConst>(), out));
+    o["hysteresis"] = 4.9f;   // just inside: accepted
+    TEST_ASSERT_TRUE(rulesImportRule(doc.as<JsonObjectConst>(), out));
+}
+
 static void test_action_import_sentinel_id_rejected(void) {
     JsonDocument doc;
     JsonObject o = doc.to<JsonObject>();
@@ -548,6 +563,7 @@ int main(int, char**) {
     RUN_TEST(test_rule_import_sentinel_id_rejected);
     RUN_TEST(test_rule_import_outside_missing_hi_rejected);
     RUN_TEST(test_rule_import_outside_inverted_band_rejected);
+    RUN_TEST(test_rule_import_outside_hysteresis_wider_than_band_rejected);
     RUN_TEST(test_action_import_sentinel_id_rejected);
     RUN_TEST(test_rule_import_defaults);
     RUN_TEST(test_rule_warn_outside_both_set_roundtrip);

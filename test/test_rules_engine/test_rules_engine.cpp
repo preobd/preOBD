@@ -817,6 +817,132 @@ static void test_action_dangling_member_stays_off_not_manual(void) {
     TEST_ASSERT_FALSE(rulesActionDesired(a, members(1, false, false), /*manual*/true, ACT_OVR_AUTO));
 }
 
+// --- First verdict: "not sure yet" counts as failed (#669, §11.3) ------------
+
+static void test_unsettled_from_arming_through_warmup(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    rulesRuleInit(ctx, r, 0);
+    TEST_ASSERT_TRUE(rulesRuleUnsettled(ctx));                 // INIT
+    rulesRuleUpdate(r, ctx, 20.0f, 1001);
+    TEST_ASSERT_EQUAL(RULE_WARMUP, ctx.state);
+    TEST_ASSERT_TRUE(rulesRuleUnsettled(ctx));                 // WARMUP
+    r.flags = 0;
+    RuleContext off{};
+    rulesRuleInit(off, r, 0);
+    TEST_ASSERT_FALSE_MESSAGE(rulesRuleUnsettled(off), "a disabled rule is inert, not unsettled");
+}
+
+static void test_dead_sensor_never_settles(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    rulesRuleInit(ctx, r, 0);
+    for (uint32_t t = 0; t <= 60000; t += 50) rulesRuleUpdate(r, ctx, NAN, t);
+    TEST_ASSERT_EQUAL_MESSAGE(RULE_WARMUP, ctx.state, "WARMUP is only left on a real reading");
+    TEST_ASSERT_TRUE(rulesRuleUnsettled(ctx));
+}
+
+static void test_cold_first_reading_settles(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    toReady(r, ctx, 20.0f);
+    TEST_ASSERT_TRUE_MESSAGE(rulesRuleUnsettled(ctx), "READY alone is not a verdict");
+    rulesRuleUpdate(r, ctx, 20.0f, 1650);
+    TEST_ASSERT_FALSE(rulesRuleUnsettled(ctx));
+}
+
+// The hot restart: the first readings assert, and the rule waits out its
+// persist. That wait is still unsettled, so a FAILSAFE ON fan isn't dropped.
+static void test_hot_first_trip_stays_unsettled_until_active(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    toReady(r, ctx, 120.0f);
+    rulesRuleUpdate(r, ctx, 120.0f, 1650);                     // trip pending
+    TEST_ASSERT_TRUE(rulesRuleTripPending(ctx));
+    TEST_ASSERT_TRUE(rulesRuleUnsettled(ctx));
+    rulesRuleUpdate(r, ctx, 120.0f, 1850);                     // 200 ms persist
+    TEST_ASSERT_TRUE(rulesRuleIsActive(ctx));
+    TEST_ASSERT_FALSE(rulesRuleUnsettled(ctx));
+}
+
+// A reading inside the hysteresis band is what a fan that was running leaves
+// behind: it doesn't settle the rule; only clearing the ACTIVE test does.
+static void test_reading_in_hysteresis_band_does_not_settle(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f, 0.0f, /*hyst*/5.0f);
+    RuleContext ctx{};
+    toReady(r, ctx, 97.0f);
+    for (uint32_t t = 1650; t < 9000; t += 50) rulesRuleUpdate(r, ctx, 97.0f, t);
+    TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
+    TEST_ASSERT_TRUE_MESSAGE(rulesRuleUnsettled(ctx), "95 < 97 <= 100: not a verdict");
+    rulesRuleUpdate(r, ctx, 94.0f, 9000);
+    TEST_ASSERT_FALSE(rulesRuleUnsettled(ctx));
+}
+
+static void test_noisy_sample_during_first_trip_does_not_settle(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f, 0.0f, /*hyst*/5.0f);
+    RuleContext ctx{};
+    toReady(r, ctx, 101.0f);
+    rulesRuleUpdate(r, ctx, 101.0f, 1650);
+    rulesRuleUpdate(r, ctx, 99.0f, 1700);                      // one sample under the limit
+    TEST_ASSERT_TRUE(rulesRuleUnsettled(ctx));
+}
+
+static void test_hysteresis_zero_settles_on_first_clear(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f, 0.0f, /*hyst*/0.0f);
+    RuleContext ctx{};
+    toReady(r, ctx, 99.0f);
+    rulesRuleUpdate(r, ctx, 99.0f, 1650);
+    TEST_ASSERT_FALSE(rulesRuleUnsettled(ctx));
+}
+
+static void test_nan_in_ready_is_no_verdict(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    toReady(r, ctx, 20.0f);
+    rulesRuleUpdate(r, ctx, NAN, 1650);
+    TEST_ASSERT_TRUE(rulesRuleUnsettled(ctx));
+}
+
+// Once settled, a later pending trip is ordinary debounce: no failsafe.
+static void test_settled_rule_stays_settled_through_later_trips(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    toReady(r, ctx, 20.0f);
+    rulesRuleUpdate(r, ctx, 20.0f, 1650);
+    rulesRuleUpdate(r, ctx, 150.0f, 1700);
+    TEST_ASSERT_TRUE(rulesRuleTripPending(ctx));
+    TEST_ASSERT_FALSE(rulesRuleUnsettled(ctx));
+}
+
+static void test_disable_clears_and_rearm_sets_again(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    rulesRuleInit(ctx, r, 0);
+    r.flags = 0;
+    rulesRuleUpdate(r, ctx, 20.0f, 100);
+    TEST_ASSERT_FALSE(rulesRuleUnsettled(ctx));
+    TEST_ASSERT_EQUAL_UINT8(0, ctx.verdictPending);
+    r.flags = RULE_FLAG_ENABLED;
+    rulesRuleUpdate(r, ctx, 20.0f, 200);                       // DISABLED case re-arms
+    TEST_ASSERT_EQUAL(RULE_INIT, ctx.state);
+    TEST_ASSERT_TRUE(rulesRuleUnsettled(ctx));
+}
+
+static void test_action_failsafe_while_unsettled(void) {
+    Action aOn  = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
+    Action aOff = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_OFF);
+    Action led  = makeAction(ACT_LED, 5, ACT_FAILSAFE_ON);
+    ActionDrive d{};
+    d.memberCount = 2;
+    d.anyUnsettled = true;
+    TEST_ASSERT_TRUE(rulesActionDesired(aOn, d, false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(rulesActionDesired(aOff, d, false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(rulesActionDesired(led, d, false, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE_MESSAGE(rulesActionDesired(aOn, d, false, ACT_OVR_FORCE_OFF), "a force outranks");
+    d.anyActive = true;
+    TEST_ASSERT_TRUE(rulesActionDesired(aOff, d, false, ACT_OVR_AUTO));   // a live demand outranks
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_init_enabled_arms);
@@ -883,5 +1009,16 @@ int main(int, char**) {
     RUN_TEST(test_action_failsafe_applies_when_no_member_demands);
     RUN_TEST(test_action_override_beats_all_members);
     RUN_TEST(test_action_dangling_member_stays_off_not_manual);
+    RUN_TEST(test_unsettled_from_arming_through_warmup);
+    RUN_TEST(test_dead_sensor_never_settles);
+    RUN_TEST(test_cold_first_reading_settles);
+    RUN_TEST(test_hot_first_trip_stays_unsettled_until_active);
+    RUN_TEST(test_reading_in_hysteresis_band_does_not_settle);
+    RUN_TEST(test_noisy_sample_during_first_trip_does_not_settle);
+    RUN_TEST(test_hysteresis_zero_settles_on_first_clear);
+    RUN_TEST(test_nan_in_ready_is_no_verdict);
+    RUN_TEST(test_settled_rule_stays_settled_through_later_trips);
+    RUN_TEST(test_disable_clears_and_rearm_sets_again);
+    RUN_TEST(test_action_failsafe_while_unsettled);
     return UNITY_END();
 }

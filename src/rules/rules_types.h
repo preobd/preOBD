@@ -300,6 +300,9 @@ struct RuleContext {
                                  // is a live sensor condition, not configuration (#443).
     uint16_t  warmupTime_ms;    // effective warmup (from the Rule)
     uint16_t  persistTime_ms;   // effective debounce (from the Rule)
+    uint8_t   verdictPending;   // 1 from arming until the first trusted verdict
+                                 // (rulesRuleUnsettled(), #669). Zero = settled, so a
+                                 // context nobody armed (BSS) counts as settled.
 };
 
 #endif // RULES_TYPES_H

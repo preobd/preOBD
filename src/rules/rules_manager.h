@@ -197,13 +197,18 @@ void rulesActionsInit();
 // Claim and configure each action target that isn't held yet, and release any
 // hold that went stale. Incremental: a slot already holding its unchanged
 // target is not touched, so a running relay never glitches. A newly held
-// RELAY pin is configured OFF level first, then OUTPUT. A refused slot is
-// reported ("Action #n not driven"), never touches its pin, and is retried at
-// the next sync (boot, LOAD, import, ACTION ADD). Returns the refusals.
+// RELAY pin gets its starting level first, then OUTPUT: the level the engine
+// computes now, so OFF, except a FAILSAFE ON relay whose rules haven't given a
+// trusted verdict yet, which starts ON (§12.5, #669). `configMode` is the mode
+// the loop will run in (the #268 suppression holds rule-driven relays OFF in
+// CONFIG); no default, so a caller can't claim ON by forgetting it. A refused
+// slot is reported ("Action #n not driven"), never touches its pin, and is
+// retried at the next sync (boot, LOAD, import, ACTION ADD). Returns the refusals.
 //
 // ORDERING: at boot, call it LAST, after every fixed bus / serial / system /
-// RGB pin is held, so an action never takes a pin those need.
-uint8_t rulesSyncActionPins();
+// RGB pin is held, so an action never takes a pin those need; pass the boot
+// mode decided by detectBootMode(), not isInConfigMode() (not set up yet).
+uint8_t rulesSyncActionPins(bool configMode);
 
 // Switch off and release every pin the actions hold: a relay goes to its OFF
 // level (its INVERT bit as claimed), then INPUT, then leaves the registry; an

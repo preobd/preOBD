@@ -37,6 +37,7 @@
 #include "../core/log_tags.h"
 #include "../buses/pinctrl/pin_registry.h"
 #include "../core/watchdog.h"
+#include "../core/system_mode.h"   // isInConfigMode(): the action claim level (#669)
 #include "../transports/sd_manager.h"
 #include "../outputs/formats/obd_query.h"     // PID table rebuilt after an inputs import (#562)
 #include "../outputs/formats/output_format.h"   // SdLogFormat / parseSdLogFormat
@@ -2359,7 +2360,7 @@ FLASHMEM bool loadConfigFromJSON(const char* jsonString) {
     // array is present, then both are re-armed once — boot-load semantics
     // (#251): rulesManagerInit arms rule contexts, rulesActionsInit resets
     // the actions' run state, and rulesSyncActionPins claims each target and
-    // only then configures it OFF (§12.5).
+    // only then configures it at its starting level (§12.5, #669).
     if (hasRules) importRulesFromJSON(doc["rules"].as<JsonArrayConst>());
     if (hasActions) importActionsFromJSON(doc["actions"].as<JsonArrayConst>());
     if (rulesChanged) {
@@ -2368,7 +2369,7 @@ FLASHMEM bool loadConfigFromJSON(const char* jsonString) {
         rulesSweepActionRules();
         rulesManagerInit(millis());
         rulesActionsInit();
-        rulesSyncActionPins();  // re-claim the action pins (registry already populated)
+        rulesSyncActionPins(isInConfigMode());  // re-claim the action pins (registry already populated)
     }
 #endif
 

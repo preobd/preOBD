@@ -103,6 +103,7 @@ static uint8_t addRule(uint8_t id, uint8_t pin, bool active, bool enabled = true
     r.severity = RULE_SEV_NONE;
     r.limitLo = 100.0f;
     r.flags = enabled ? RULE_FLAG_ENABLED : 0;
+    memset(&g_ruleContexts[slot], 0, sizeof(g_ruleContexts[slot]));   // settled (#669)
     g_ruleContexts[slot].state = !enabled ? RULE_DISABLED
                                           : (active ? RULE_ACTIVE : RULE_READY);
     // A source already reading NaN is a sensor that has been dead for longer
@@ -445,7 +446,7 @@ static void test_drive_or_combines_live_members(void) {
     rulesActionAddRule(0, 0);
     rulesActionAddRule(0, 1);
 
-    rulesSyncActionPins();   // the actions hold their pins (§12.5)
+    rulesSyncActionPins(false);   // the actions hold their pins (§12.5)
     rulesActionsUpdate(/*configMode*/false);
     TEST_ASSERT_TRUE_MESSAGE(rulesActionState(0), "one active member must assert");
 
@@ -465,7 +466,7 @@ static void test_drive_live_member_beats_faulted_sibling(void) {
     rulesActionAddRule(0, 0);
     rulesActionAddRule(0, 1);
 
-    rulesSyncActionPins();   // the actions hold their pins (§12.5)
+    rulesSyncActionPins(false);   // the actions hold their pins (§12.5)
     rulesActionsUpdate(false);
     TEST_ASSERT_TRUE_MESSAGE(rulesActionState(0),
                              "a dead sibling sensor must not cut a demanded output");
@@ -482,7 +483,7 @@ static void test_rule_active_tracks_demand_not_the_pin(void) {
     addAction(0, 23, ACT_FAILSAFE_OFF);
     rulesActionAddRule(0, 0);
 
-    rulesSyncActionPins();   // the actions hold their pins (§12.5)
+    rulesSyncActionPins(false);   // the actions hold their pins (§12.5)
     rulesActionsUpdate(false);
     TEST_ASSERT_TRUE(rulesActionState(0));
     TEST_ASSERT_TRUE(rulesActionRuleActive(0));
@@ -507,7 +508,7 @@ static void test_rule_active_false_for_members_that_cannot_assert(void) {
     addAction(0, 23, ACT_FAILSAFE_ON);
     rulesActionAddRule(0, 0);
 
-    rulesSyncActionPins();   // the actions hold their pins (§12.5)
+    rulesSyncActionPins(false);   // the actions hold their pins (§12.5)
     rulesActionsUpdate(false);
     TEST_ASSERT_TRUE_MESSAGE(rulesActionState(0), "failsafe drives the pin on");
     TEST_ASSERT_TRUE(rulesActionSourceFaulted(0));
@@ -542,7 +543,7 @@ static void test_rule_active_matches_the_drive_for_an_orphan_member(void) {
     addAction(0, 23, ACT_FAILSAFE_OFF);
     rulesActionAddRule(0, 0);
 
-    rulesSyncActionPins();   // the actions hold their pins (§12.5)
+    rulesSyncActionPins(false);   // the actions hold their pins (§12.5)
     rulesActionsUpdate(false);
     TEST_ASSERT_FALSE(rulesActionState(0));
     TEST_ASSERT_FALSE(rulesActionRuleActive(0));
@@ -558,7 +559,7 @@ static void test_rule_active_matches_the_drive_for_an_orphan_member(void) {
 // while its latch is holding the pin on.
 static void test_rule_active_false_for_manual_only_action(void) {
     addAction(0, 23);
-    rulesSyncActionPins();   // claim first: a claim starts the slot de-asserted
+    rulesSyncActionPins(false);   // claim first: a claim starts the slot de-asserted
     rulesActionSetManual(actions[0].id, true);
     rulesActionsUpdate(false);
     TEST_ASSERT_TRUE(rulesActionState(0));
@@ -574,7 +575,7 @@ static void test_drive_failsafe_applies_when_no_member_demands(void) {
     rulesActionAddRule(0, 0);
     rulesActionAddRule(0, 1);
 
-    rulesSyncActionPins();   // the actions hold their pins (§12.5)
+    rulesSyncActionPins(false);   // the actions hold their pins (§12.5)
     rulesActionsUpdate(false);
     TEST_ASSERT_TRUE(rulesActionState(0));
 }
@@ -637,7 +638,7 @@ static void test_configured_nan_source_still_faults(void) {
     addAction(0, 23, ACT_FAILSAFE_ON);
     rulesActionAddRule(0, 0);
 
-    rulesSyncActionPins();   // the actions hold their pins (§12.5)
+    rulesSyncActionPins(false);   // the actions hold their pins (§12.5)
     rulesActionsUpdate(false);
     TEST_ASSERT_TRUE(rulesActionState(0));
     TEST_ASSERT_TRUE(rulesActionSourceFaulted(0));
@@ -652,7 +653,7 @@ static void test_short_nan_gap_holds_the_relay(void) {
     addRule(0, 10, /*active*/true);
     addAction(0, 23, ACT_FAILSAFE_OFF);
     rulesActionAddRule(0, 0);
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     g_test_now = 10000;
     rulesActionsUpdate(false);
     TEST_ASSERT_TRUE(rulesActionState(0));
@@ -704,7 +705,7 @@ static void test_remove_rules_for_input_reports_released_drive(void) {
     addRule(0, 10, false);
     addAction(0, 23);
     rulesActionAddRule(0, 0);
-    rulesSyncActionPins();                  // the action holds its pin (§12.5)
+    rulesSyncActionPins(false);                  // the action holds its pin (§12.5)
     TEST_ASSERT_TRUE(rulesActionCommand(0, true));   // operator override held
 
     uint8_t released = 0;
@@ -756,7 +757,7 @@ static void test_parked_rule_stops_driving_its_action(void) {
     addRule(0, 10, /*active*/true);
     addAction(0, 23);
     rulesActionAddRule(0, 0);
-    rulesSyncActionPins();   // the actions hold their pins (§12.5)
+    rulesSyncActionPins(false);   // the actions hold their pins (§12.5)
     rulesActionsUpdate(false);
     TEST_ASSERT_TRUE(rulesActionState(0));
 
@@ -790,7 +791,7 @@ static void test_init_touches_no_pin(void) {
 
 static void test_sync_claims_then_latches_off_before_output(void) {
     addInvertedAction(0, 23);                 // active-low: OFF is HIGH
-    TEST_ASSERT_EQUAL_UINT8(0, rulesSyncActionPins());
+    TEST_ASSERT_EQUAL_UINT8(0, rulesSyncActionPins(false));
     TEST_ASSERT_TRUE(rulesActionDriven(0));
     const int input  = pinEvent(23, 'M', INPUT);
     const int latch  = pinEvent(23, 'W', HIGH);
@@ -806,7 +807,7 @@ static void test_refused_action_never_touches_its_pin(void) {
     const uint8_t p = 23;
     TEST_ASSERT_TRUE(claimPins(&p, 1, PIN_OUTPUT, PIN_RANK_BUILTIN, TAG_SYSTEM, "TEST RGB"));
     addAction(0, 23);
-    TEST_ASSERT_EQUAL_UINT8(1, rulesSyncActionPins());
+    TEST_ASSERT_EQUAL_UINT8(1, rulesSyncActionPins(false));
     TEST_ASSERT_FALSE(rulesActionDriven(0));
     TEST_ASSERT_FALSE(rulesActionCommand(0, true));     // refused, nothing latched
     rulesActionsUpdate(false);
@@ -818,7 +819,7 @@ static void test_refused_action_never_touches_its_pin(void) {
 static void test_two_actions_on_one_pin_only_the_winner_drives(void) {
     addAction(0, 23);
     addAction(1, 23);
-    TEST_ASSERT_EQUAL_UINT8(1, rulesSyncActionPins());
+    TEST_ASSERT_EQUAL_UINT8(1, rulesSyncActionPins(false));
     TEST_ASSERT_TRUE(rulesActionDriven(0));
     TEST_ASSERT_FALSE(rulesActionDriven(1));
 }
@@ -827,23 +828,23 @@ static void test_refused_action_claims_once_its_pin_frees(void) {
     const uint8_t p = 23;
     claimPins(&p, 1, PIN_OUTPUT, PIN_RANK_BUILTIN, TAG_SYSTEM, "TEST RGB");
     addAction(0, 23);
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     TEST_ASSERT_FALSE(rulesActionDriven(0));
     unregisterPin(23);                         // the holder lets go
-    TEST_ASSERT_EQUAL_UINT8(0, rulesSyncActionPins());
+    TEST_ASSERT_EQUAL_UINT8(0, rulesSyncActionPins(false));
     TEST_ASSERT_TRUE(rulesActionDriven(0));
     TEST_ASSERT_FALSE_MESSAGE(rulesActionState(0), "starts de-asserted");
 }
 
 static void test_resync_leaves_a_running_relay_alone(void) {
     addAction(0, 23);
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     TEST_ASSERT_TRUE(rulesActionCommand(0, true));    // manual ON
     rulesActionsUpdate(true);
     TEST_ASSERT_EQUAL_UINT8(HIGH, stubPinLatch[23]);
     stubPinLogN = 0;
     addAction(1, 24);                          // ACTION ADD of another
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     TEST_ASSERT_EQUAL_INT_MESSAGE(-1, pinEvent(23, 'W', LOW), "the running relay must not glitch");
     TEST_ASSERT_TRUE(rulesActionState(0));
     TEST_ASSERT_TRUE(rulesActionDriven(1));
@@ -852,7 +853,7 @@ static void test_resync_leaves_a_running_relay_alone(void) {
 static void test_quiesce_switches_off_then_releases(void) {
     addAction(0, 23);
     addInvertedAction(1, 24);
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     rulesActionCommand(0, true);
     rulesActionCommand(1, true);
     rulesActionsUpdate(true);                  // manual relays actuate in CONFIG
@@ -876,8 +877,9 @@ static void test_quiesce_reports_a_released_force_off(void) {
     addRule(0, 10, true);
     addAction(0, 23);
     TEST_ASSERT_TRUE(rulesActionAddRule(0, 0));
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     TEST_ASSERT_TRUE(rulesActionCommand(0, false));          // FORCE_OFF
+    rulesActionsUpdate(false);   // the claim started it ON (its rule is ACTIVE); the force switches it off
     g_capture.reset();
     rulesActionsQuiesce();
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(g_capture.buf, "Action #0 override released, pin 23"),
@@ -886,7 +888,7 @@ static void test_quiesce_reports_a_released_force_off(void) {
 
 static void test_quiesce_reports_a_relay_it_switches_off(void) {
     addAction(0, 23);
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     TEST_ASSERT_TRUE(rulesActionCommand(0, true));           // manual ON
     rulesActionsUpdate(true);
     g_capture.reset();
@@ -897,7 +899,7 @@ static void test_quiesce_reports_a_relay_it_switches_off(void) {
 
 static void test_quiesce_of_an_idle_relay_says_nothing(void) {
     addAction(0, 23);
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     g_capture.reset();
     rulesActionsQuiesce();
     TEST_ASSERT_EQUAL_size_t(0, g_capture.len);
@@ -905,7 +907,7 @@ static void test_quiesce_of_an_idle_relay_says_nothing(void) {
 
 static void test_reset_tables_releases_an_energized_relay(void) {
     addAction(0, 23);
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     rulesActionCommand(0, true);
     rulesActionsUpdate(true);
     rulesResetTables();                        // LOAD / SYSTEM RESET path
@@ -923,7 +925,7 @@ static void test_reset_tables_with_nothing_held_touches_nothing(void) {
 
 static void test_action_delete_releases_its_pin(void) {
     addInvertedAction(0, 23);
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     bool held = false;
     TEST_ASSERT_TRUE(rulesActionDelete(0, &held));
     TEST_ASSERT_TRUE(held);
@@ -941,7 +943,7 @@ static void test_loop_never_drives_an_unclaimed_slot(void) {
 
 static void test_test_pulse_inverts_and_restores(void) {
     addInvertedAction(0, 23);
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     TEST_ASSERT_EQUAL(ACT_TEST_OK, rulesActionTestPulse(0, true, true));
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(LOW, stubPinLatch[23], "logical ON energizes an active-low relay");
     TEST_ASSERT_EQUAL(ACT_TEST_OK, rulesActionTestPulse(0, false, true));
@@ -953,7 +955,7 @@ static void test_test_pulse_restores_rule_driven_relay_off_in_config(void) {
     addRule(0, 10, /*active*/true);
     addAction(0, 23);
     rulesActionAddRule(0, 0);
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     rulesActionsUpdate(false);                 // RUN: the rule drives it ON
     TEST_ASSERT_TRUE(rulesActionState(0));
     rulesActionTestPulse(0, true, true);
@@ -967,7 +969,7 @@ static void test_test_pulse_skips_forced_and_unheld(void) {
     const uint8_t p = 25;
     claimPins(&p, 1, PIN_OUTPUT, PIN_RANK_BUILTIN, TAG_SYSTEM, "TEST RGB");
     addAction(2, 25);
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     addRule(0, 10, false);
     rulesActionAddRule(0, 0);
     rulesActionCommand(0, false);              // FORCE_OFF on a rule-driven relay
@@ -984,7 +986,7 @@ static void test_test_pulse_skips_forced_and_unheld(void) {
 // (a serial port's disable did this). The relay must still be switchable off.
 static void test_entry_removed_by_another_still_switches_off(void) {
     addAction(0, 23);
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     rulesActionCommand(0, true);
     rulesActionsUpdate(true);
     TEST_ASSERT_EQUAL_UINT8(HIGH, stubPinLatch[23]);
@@ -1000,7 +1002,7 @@ static void test_entry_removed_by_another_still_switches_off(void) {
 // ...but a pin another function took in the meantime is left alone
 static void test_entry_taken_by_another_is_left_alone(void) {
     addAction(0, 23);
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     unregisterPin(23);
     const uint8_t p = 23;
     TEST_ASSERT_TRUE(claimPins(&p, 1, PIN_OUTPUT, PIN_RANK_BUILTIN, TAG_SYSTEM, "TEST RGB"));
@@ -1015,14 +1017,14 @@ static void test_entry_taken_by_another_is_left_alone(void) {
 static void test_stale_hold_and_new_claim_settle_to_one_owner(void) {
     addAction(9, 24);                           // slot 0
     addAction(1, 23);                           // slot 1 holds 23
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     TEST_ASSERT_TRUE(rulesActionDriven(1));
     unregisterPin(23);                          // outside removal: slot 1 still records 23
     TEST_ASSERT_TRUE(rulesActionDelete(9));     // frees slot 0 properly
     addAction(2, 23);                           // lands in slot 0, BELOW the stale holder
     TEST_ASSERT_EQUAL_INT(0, rulesActionSlot(2));
     stubPinLogN = 0;
-    rulesSyncActionPins();
+    rulesSyncActionPins(false);
     TEST_ASSERT_TRUE_MESSAGE(rulesActionDriven(0), "the new claimant drives");
     TEST_ASSERT_FALSE_MESSAGE(rulesActionDriven(1), "the stale holder doesn't");
     // slot 1's release must not have written 23 behind slot 0's back: every
@@ -1031,7 +1033,7 @@ static void test_stale_hold_and_new_claim_settle_to_one_owner(void) {
     for (int k = 0; k < stubPinLogN; k++) if (stubPinLog[k].pin == 23 && stubPinLog[k].kind == 'W') writes++;
     TEST_ASSERT_EQUAL_INT(2, writes);
     stubPinLogN = 0;
-    TEST_ASSERT_EQUAL_UINT8_MESSAGE(1, rulesSyncActionPins(), "slot 1 stays refused");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(1, rulesSyncActionPins(false), "slot 1 stays refused");
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, stubPinLogN, "and is re-checked without touching the pin");
     int owners = 0;
     for (int k = 0; k < MAX_ACTIONS; k++) if (rulesActionDriven(k) && actions[k].target == 23) owners++;
@@ -1040,8 +1042,186 @@ static void test_stale_hold_and_new_claim_settle_to_one_owner(void) {
 
 static void test_sync_refuses_a_virtual_pin(void) {
     addAction(0, 0xF0);                         // I2C virtual pin from parsePin()
-    TEST_ASSERT_EQUAL_UINT8(1, rulesSyncActionPins());
+    TEST_ASSERT_EQUAL_UINT8(1, rulesSyncActionPins(false));
     TEST_ASSERT_FALSE(rulesActionDriven(0));
+}
+
+// ---- #669: a FAILSAFE ON relay starts ON until its rule has a verdict --------
+// These drive the real state machine (rulesManagerUpdate), not hand-pinned
+// contexts (#443 lesson).
+
+// An ARMED rule (INIT), as boot-load leaves it: ABOVE 100, hysteresis 5,
+// warmup 3 s, persist 500 ms.
+static uint8_t armRule(uint8_t id, uint8_t pin) {
+    addRule(id, pin, false);
+    const int slot = rulesRuleSlot(id);
+    rules[slot].hysteresis = 5.0f;
+    rules[slot].warmupMs = 3000;
+    rules[slot].debounceMs = 500;
+    rulesRuleInit(g_ruleContexts[slot], rules[slot], g_test_now);
+    return id;
+}
+
+// No write of `offLevel` to `pin` in the log since the last reset of it.
+static bool noWriteOf(uint8_t pin, uint8_t level) {
+    for (int i = 0; i < stubPinLogN; i++)
+        if (stubPinLog[i].pin == pin && stubPinLog[i].kind == 'W' && stubPinLog[i].value == level)
+            return false;
+    return true;
+}
+
+// The claim: INPUT, latch, OUTPUT, latch, with `level` in both latch writes.
+static void assertClaimedAt(uint8_t pin, uint8_t level) {
+    int outAt = -1, latchAt = -1;
+    for (int i = 0; i < stubPinLogN; i++) {
+        if (stubPinLog[i].pin != pin) continue;
+        if (stubPinLog[i].kind == 'W' && latchAt < 0) latchAt = i;
+        if (stubPinLog[i].kind == 'M' && stubPinLog[i].value == OUTPUT) outAt = i;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(latchAt >= 0 && outAt > latchAt, "latch written before OUTPUT");
+    TEST_ASSERT_TRUE_MESSAGE(noWriteOf(pin, level == HIGH ? LOW : HIGH), "no other level at the claim");
+    TEST_ASSERT_EQUAL_UINT8(level, stubPinLatch[pin]);
+}
+
+static void stepEngine(uint32_t now, bool configMode = false) {
+    g_test_now = now;
+    rulesManagerUpdate(now);
+    rulesActionsUpdate(configMode);
+}
+
+static void test_failsafe_on_claims_on_and_holds_through_a_hot_start(void) {
+    addInput(10, 120.0f);                      // hot from boot
+    armRule(0, 10);
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    rulesActionAddRule(0, 0);
+    g_test_now = 1200;                         // the claim runs after the 1 s stabilize wait
+    stubPinReset();
+    rulesSyncActionPins(false);
+    assertClaimedAt(23, HIGH);
+    TEST_ASSERT_TRUE_MESSAGE(rulesActionState(0), "reported ON from the claim");
+    for (uint32_t t = 1250; t <= 10000; t += 50) {
+        stubPinLogN = 0;
+        stepEngine(t);
+        TEST_ASSERT_TRUE_MESSAGE(noWriteOf(23, LOW), "never OFF between the claim and the verdict");
+    }
+    TEST_ASSERT_TRUE(rulesRuleIsActive(g_ruleContexts[rulesRuleSlot(0)]));
+    TEST_ASSERT_TRUE(rulesActionRuleActive(0));
+}
+
+static void test_failsafe_on_inverted_claims_low(void) {
+    addInput(10, 120.0f);
+    armRule(0, 10);
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    actions[rulesActionSlot(0)].behavior |= ACT_BEHAVIOR_INVERT;
+    rulesActionAddRule(0, 0);
+    stubPinReset();
+    rulesSyncActionPins(false);
+    assertClaimedAt(23, LOW);                  // logical ON on an active-low relay
+}
+
+static void test_failsafe_on_cold_start_goes_off_at_the_verdict(void) {
+    addInput(10, 20.0f);                       // cold
+    armRule(0, 10);
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    rulesActionAddRule(0, 0);
+    g_test_now = 1200;
+    rulesSyncActionPins(false);
+    uint32_t offAt = 0;
+    for (uint32_t t = 1250; t <= 10000 && !offAt; t += 50) {
+        stepEngine(t);
+        if (!rulesActionState(0)) offAt = t;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(offAt > 4000, "ON through INIT (1 s) and WARMUP (3 s)");
+    TEST_ASSERT_EQUAL_UINT8(LOW, stubPinLatch[23]);
+}
+
+static void test_failsafe_on_dead_sensor_stays_on(void) {
+    addInput(10, NAN);
+    armRule(0, 10);
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    rulesActionAddRule(0, 0);
+    g_test_now = 1200;
+    rulesSyncActionPins(false);
+    for (uint32_t t = 1250; t <= 70000; t += 50) stepEngine(t);
+    TEST_ASSERT_TRUE(rulesActionState(0));
+    TEST_ASSERT_TRUE(rulesActionSourceFaulted(0));
+}
+
+static void test_failsafe_on_claims_off_in_config(void) {
+    addInput(10, 120.0f);
+    armRule(0, 10);
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    rulesActionAddRule(0, 0);
+    stubPinReset();
+    rulesSyncActionPins(true);                 // the #268 suppression holds it OFF
+    assertClaimedAt(23, LOW);
+    TEST_ASSERT_FALSE(rulesActionState(0));
+    stepEngine(1250, true);
+    TEST_ASSERT_TRUE(noWriteOf(23, HIGH));
+}
+
+static void test_failsafe_off_and_manual_still_claim_off(void) {
+    addInput(10, 120.0f);
+    armRule(0, 10);
+    addAction(0, 23, ACT_FAILSAFE_OFF);
+    rulesActionAddRule(0, 0);
+    addAction(1, 24, ACT_FAILSAFE_ON);         // manual-only: no members
+    stubPinReset();
+    rulesSyncActionPins(false);
+    assertClaimedAt(23, LOW);
+    assertClaimedAt(24, LOW);
+}
+
+static void test_disabled_and_orphan_members_do_not_hold_failsafe_on(void) {
+    addInput(10, 120.0f);
+    armRule(0, 10);
+    rulesRuleSetEnabled(0, false, 0);          // parked
+    armRule(1, 11);                            // orphan: pin 11 has no input
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    rulesActionAddRule(0, 0);
+    rulesActionAddRule(0, 1);
+    stubPinReset();
+    rulesSyncActionPins(false);
+    assertClaimedAt(23, LOW);
+}
+
+// A settled, quiet sibling doesn't cancel the unknown of an unsettled one (the
+// same rule as a faulted sibling, §11.6).
+static void test_unsettled_member_holds_failsafe_beside_a_quiet_sibling(void) {
+    addInput(10, 20.0f);
+    addInput(11, 20.0f);
+    addRule(0, 10, false);                     // settled, READY, quiet
+    armRule(1, 11);                            // just armed
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    rulesActionAddRule(0, 0);
+    rulesActionAddRule(0, 1);
+    rulesSyncActionPins(false);
+    rulesActionsUpdate(false);
+    TEST_ASSERT_TRUE(rulesActionState(0));
+    TEST_ASSERT_FALSE(rulesActionSourceFaulted(0));   // unsettled is not "faulted"
+    TEST_ASSERT_FALSE(rulesActionRuleActive(0));
+}
+
+static void test_test_pulse_during_warmup_restores_failsafe_on(void) {
+    addInput(10, 20.0f);
+    armRule(0, 10);
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    rulesActionAddRule(0, 0);
+    rulesSyncActionPins(false);
+    TEST_ASSERT_EQUAL(ACT_TEST_OK, rulesActionTestPulse(0, false, false));
+    TEST_ASSERT_EQUAL_UINT8(HIGH, stubPinLatch[23]);
+}
+
+static void test_release_of_failsafe_on_still_drives_off(void) {
+    addInput(10, 20.0f);
+    armRule(0, 10);
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    rulesActionAddRule(0, 0);
+    rulesSyncActionPins(false);
+    TEST_ASSERT_EQUAL_UINT8(HIGH, stubPinLatch[23]);
+    rulesActionsQuiesce();
+    TEST_ASSERT_EQUAL_UINT8(LOW, stubPinLatch[23]);
+    TEST_ASSERT_EQUAL_UINT8(INPUT, stubPinMode[23]);
 }
 
 int main(int, char**) {
@@ -1101,5 +1281,15 @@ int main(int, char**) {
     RUN_TEST(test_entry_taken_by_another_is_left_alone);
     RUN_TEST(test_stale_hold_and_new_claim_settle_to_one_owner);
     RUN_TEST(test_sync_refuses_a_virtual_pin);
+    RUN_TEST(test_failsafe_on_claims_on_and_holds_through_a_hot_start);
+    RUN_TEST(test_failsafe_on_inverted_claims_low);
+    RUN_TEST(test_failsafe_on_cold_start_goes_off_at_the_verdict);
+    RUN_TEST(test_failsafe_on_dead_sensor_stays_on);
+    RUN_TEST(test_failsafe_on_claims_off_in_config);
+    RUN_TEST(test_failsafe_off_and_manual_still_claim_off);
+    RUN_TEST(test_disabled_and_orphan_members_do_not_hold_failsafe_on);
+    RUN_TEST(test_unsettled_member_holds_failsafe_beside_a_quiet_sibling);
+    RUN_TEST(test_test_pulse_during_warmup_restores_failsafe_on);
+    RUN_TEST(test_release_of_failsafe_on_still_drives_off);
     return UNITY_END();
 }

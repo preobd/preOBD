@@ -122,6 +122,13 @@ FLASHMEM bool rulesImportRule(JsonObjectConst obj, Rule& out) {
     out.limitLo     = limitLo;
     out.limitHi     = limitHi;
     out.hysteresis  = obj["hysteresis"] | 0.0f;
+    // A band whose hysteresis insets cross (2*HYST >= hi-lo) never clears, so
+    // the rule wedges asserted, and since #669 a FAILSAFE ON relay it drives
+    // never settles either: ON forever with a healthy sensor. RULE ADD refuses
+    // it and applyAlarmShape() zeroes it; an import refuses the record.
+    if (condition == RULE_OUTSIDE_BAND && out.hysteresis * 2.0f >= (limitHi - limitLo)) {
+        return false;
+    }
     out.warmupMs    = obj["warmupMs"]   | (uint16_t)RULE_DEFAULT_WARMUP_MS;
     out.debounceMs  = obj["debounceMs"] | (uint16_t)RULE_DEFAULT_DEBOUNCE_MS;
     out.flags       = (obj["enabled"] | true) ? RULE_FLAG_ENABLED : 0;

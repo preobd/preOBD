@@ -92,6 +92,12 @@ static FLASHMEM void printActionRow(int i) {
     }
     msg.control.print(F("  -> "));
     msg.control.print(rulesActionState(i) ? F("ON") : F("OFF"));
+    // ON with no force and no member demanding it: the failsafe holds it, for a
+    // dead sensor or one with no trusted reading yet (#669). Without this a fan
+    // reads ON for no visible reason through a warmup of up to a minute.
+    if (rulesActionState(i) && members > 0 && rulesActionOverride(i) == ACT_OVR_AUTO &&
+        !rulesActionRuleActive(i))
+        msg.control.print(F("  FAILSAFE"));
     rulesPrintNotDriven(i);
     msg.control.println();
 }
@@ -177,7 +183,7 @@ static FLASHMEM int actionAdd(int argc, const char* const* argv) {
     // the app reads as the new id; the sync may report other slots.
     rulesPrintActionId(id);
     msg.control.println(F(" added (manual). Link with ACTION <id> RULE <ruleId>. SAVE to persist."));
-    rulesSyncActionPins();           // claim, then configure the pin OFF (§12.5)
+    rulesSyncActionPins(isInConfigMode());   // claim, then configure the pin (§12.5)
     return 0;
 }
 

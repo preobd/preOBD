@@ -50,7 +50,8 @@ bool rulesActionAddRule(uint8_t, uint8_t, bool*) { return false; }
 uint8_t rulesSweepActionRules() { return 0; }
 void rulesManagerInit(uint32_t) { g_rulesInitCalls++; }
 void rulesActionsInit() {}
-uint8_t rulesSyncActionPins() { return 0; }
+uint8_t rulesSyncActionPins(bool) { return 0; }
+bool isInConfigMode() { return true; }   // the import's claim level (#669)
 #endif
 
 // ---------------------------------------------------------------------------

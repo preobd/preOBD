@@ -915,10 +915,12 @@ static void driveAction(const Action& a, bool on) {
     digitalWrite(a.target, (on != invert) ? HIGH : LOW);  // (on XOR invert)
 }
 
-// Configure a pin this slot has just claimed, the OFF level reaching the latch
-// before the driver turns on (pin_level.h, §12.5).
-static FLASHMEM void configureHeldPin(const Action& a) {
-    pinOutputAt(a.target, offLevel(a));
+// Configure a pin this slot has just claimed at its starting level, which
+// reaches the latch before the driver turns on (pin_level.h, §12.5): OFF,
+// except a FAILSAFE ON relay whose rules haven't given a trusted verdict yet,
+// which starts ON (#669).
+static FLASHMEM void configureHeldPin(const Action& a, bool on) {
+    pinOutputAt(a.target, on ? (uint8_t)!offLevel(a) : offLevel(a));
 }
 
 // Another slot also records `pin` as held: the registry can't say which of
@@ -1013,7 +1015,9 @@ bool rulesIsActionPinEntry(const PinUsage* u) {
     return u != nullptr && u->description == ACTION_PIN_DESC;
 }
 
-uint8_t rulesSyncActionPins() {
+static bool actionComputedOn(int i, bool configMode);
+
+uint8_t rulesSyncActionPins(bool configMode) {
     // Incremental (§12.5): a slot that already holds its unchanged target is
     // left alone, so a running relay never glitches when another action is
     // added. A stale hold is released; an unheld live slot claims, and only on
@@ -1044,8 +1048,17 @@ uint8_t rulesSyncActionPins() {
             // A slot that starts driving starts de-asserted (#294).
             g_actionManual[s] = false;
             g_actionOverride[s] = ACT_OVR_AUTO;
-            g_actionState[s] = false;
-            if (a.type == ACT_RELAY) configureHeldPin(a);
+            // The starting level is what the engine computes now, rules alone
+            // deciding: OFF, or ON for a FAILSAFE ON relay not yet trusted
+            // (#669). In CONFIG the #268 suppression holds it OFF, as the loop
+            // would, so the claim and the first update never disagree.
+            if (a.type == ACT_RELAY) {
+                const bool on = actionComputedOn(s, configMode);
+                configureHeldPin(a, on);
+                g_actionState[s] = on;
+            } else {
+                g_actionState[s] = false;
+            }
             if (g_refused[s]) {
                 rulesPrintActionId(a.id);
                 msg.control.println(F(" now driven"));
@@ -1073,14 +1086,18 @@ uint8_t rulesSyncActionPins() {
 // operator can never be shown a fault state that differs from the one that drove
 // the pin. `rslot < 0` (dangling ref) is deliberately NOT a fault: it matches the
 // loop's `sourceTrustworthy = true` branch for that case.
-static bool sourceFaultedForRuleSlot(int rslot) {
-    if (rslot < 0) return false;
+enum MemberTrust : uint8_t { MEMBER_INERT, MEMBER_TRUSTED, MEMBER_UNSETTLED, MEMBER_FAULTED };
+
+// One walk of the exclusions for both questions, so "faulted" and "unsettled"
+// (#669) can't disagree about which members count.
+static MemberTrust memberTrust(int rslot) {
+    if (rslot < 0) return MEMBER_INERT;
     // A DISABLED rule can never assert, so it must not be able to force a
     // failsafe either — otherwise it is pure downside: with M:N membership (#343)
     // `anyFaulted` ORs across members, so one parked rule watching an unconfigured
     // pin would latch a fail-ON relay on forever, and "disable the rule" (the
     // natural way to park a member) would not remove its influence.
-    if (!(rules[rslot].flags & RULE_FLAG_ENABLED)) return false;
+    if (!(rules[rslot].flags & RULE_FLAG_ENABLED)) return MEMBER_INERT;
     Input* in = getInputByPin(rules[rslot].sourceInput);
     // No input configured on the source pin at all (an ORPHAN rule — CLEAR <pin>
     // used to leave these behind) is INERT, not faulted: it can never assert, so
@@ -1088,7 +1105,7 @@ static bool sourceFaultedForRuleSlot(int rslot) {
     // not be able to force a failsafe either. Otherwise one forgotten orphan
     // holds every FAILSAFE ON relay it is a member of energized forever, with
     // nothing in ACTION LIST naming the culprit (#345).
-    if (in == nullptr) return false;
+    if (in == nullptr) return MEMBER_INERT;
     // A CONFIGURED input reading NaN is the real sensor-loss case — open/shorted
     // probe, dead bus — and that is exactly what the failsafe exists for. But
     // only once it has lasted the fault debounce (§11.3, #650): a shorter gap
@@ -1096,7 +1113,11 @@ static bool sourceFaultedForRuleSlot(int rslot) {
     // stamped by rulesManagerUpdate(), which runs in the same 50 ms step just
     // before rulesActionsUpdate(); a read between steps (CLI, BLE) can see a
     // fresh NaN as not yet faulted for at most that step, which is the debounce.
-    return rulesRuleSourceUntrusted(g_ruleContexts[rslot], millis());
+    const RuleContext& ctx = g_ruleContexts[rslot];
+    if (rulesRuleSourceUntrusted(ctx, millis())) return MEMBER_FAULTED;
+    // Armed but no trusted verdict yet (INIT, WARMUP, the first pending trip):
+    // not sure yet counts as failed (#669, §11.3).
+    return rulesRuleUnsettled(ctx) ? MEMBER_UNSETTLED : MEMBER_TRUSTED;
 }
 
 // Resolve an action's Rule membership into the aggregate the pure resolver takes.
@@ -1108,10 +1129,14 @@ static ActionDrive resolveActionDrive(int slot) {
         if (rslot < 0) continue;   // dangling ref (cleared on rule delete): inert,
                                    // and deliberately NOT a fault — mirrors the
                                    // pre-#343 sourceTrustworthy=true branch.
-        if (sourceFaultedForRuleSlot(rslot)) {
-            d.anyFaulted = true;   // a faulted source can't assert (NaN never does)
-        } else if (rulesRuleIsActive(g_ruleContexts[rslot])) {
-            d.anyActive = true;
+        switch (memberTrust(rslot)) {
+            case MEMBER_FAULTED:   d.anyFaulted = true; break;   // NaN never asserts
+            case MEMBER_UNSETTLED: d.anyUnsettled = true; break; // never ACTIVE either
+            default:
+                // Trusted, or inert (disabled, orphan): whatever its context says
+                // drives the pin, and is reported, exactly as before #669.
+                if (rulesRuleIsActive(g_ruleContexts[rslot])) d.anyActive = true;
+                break;
         }
     }
     return d;

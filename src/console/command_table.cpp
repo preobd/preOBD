@@ -447,7 +447,7 @@ static int loadConfigFromEEPROM() {
         // successful input/control load so a failed LOAD can't reset the engine.
         rulesManagerInit(millis());
         rulesActionsInit();
-        rulesSyncActionPins();
+        rulesSyncActionPins(isInConfigMode());
     }
 #endif
 
