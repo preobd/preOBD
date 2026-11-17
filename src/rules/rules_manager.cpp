@@ -16,6 +16,10 @@
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
 
+#ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
+#define FLASHMEM
+#endif
+
 // Shared, stable description pointer for every Action-owned pin registry entry.
 // claimPins() stores the pointer (no copy), and rulesSyncActionPins()
 // identifies its own prior entries by pointer equality against this — so it
@@ -901,19 +905,28 @@ void rulesActionsInit() {
     // all fixed pins are registered (see main.cpp setup + the JSON import path).
 }
 
-uint8_t rulesSyncActionPins() {
-    // 1. Drop registry entries this engine previously added (identified by our
-    //    shared description pointer) so a runtime config reload doesn't leave a
-    //    stale action pin claimed. Collect first, then unregister — unregister
-    //    shifts the array, which would corrupt an in-progress index walk.
+bool rulesIsActionPinEntry(const PinUsage* u) {
+    return u != nullptr && u->description == ACTION_PIN_DESC;
+}
+
+FLASHMEM void rulesReleaseActionPins() {
+    // Drop registry entries this engine previously added (identified by our
+    // shared description pointer) so a runtime config reload doesn't leave a
+    // stale action pin claimed. Collect first, then unregister — unregister
+    // shifts the array, which would corrupt an in-progress index walk.
     uint8_t stale[MAX_ACTIONS];
     uint8_t nStale = 0;
     uint8_t regSize = getPinRegistrySize();
     for (uint8_t i = 0; i < regSize && nStale < MAX_ACTIONS; i++) {
         const PinUsage* u = getPinUsageByIndex(i);
-        if (u && u->description == ACTION_PIN_DESC) stale[nStale++] = u->pin;
+        if (rulesIsActionPinEntry(u)) stale[nStale++] = u->pin;
     }
     for (uint8_t i = 0; i < nStale; i++) unregisterPin(stale[i]);
+}
+
+uint8_t rulesSyncActionPins() {
+    // 1. Release the targets this engine claimed before (see above).
+    rulesReleaseActionPins();
 
     // 2. Register each configured action target as PIN_OUTPUT. claimPins()
     //    rejects a pin already claimed (by a bus, system pin, RGB output, a

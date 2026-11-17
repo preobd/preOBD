@@ -23,6 +23,7 @@
 #include "../sensors/can/can_poll.h"    // canPollMsValid (#633); pure, so not behind INCLUDE_CAN
 #include "../buses/pinctrl/bus_wiring.h"
 #include "../buses/serial_manager.h"
+#include "../buses/bus_manager.h"      // busConfigHoldsPin: the import pin check (#567)
 #include "../inputs/input.h"
 #include "../inputs/input_manager.h"
 #include "../buses/pinctrl/pin_label.h"
@@ -834,13 +835,47 @@ static FLASHMEM bool importCalibration(Input* input, JsonObject& calObj, uint8_t
 // This matters because "N of M inputs imported" is a claim about the table: a
 // record that failed on its calibration used to leave an enabled input behind,
 // reading a live sensor, while the summary said it had imported nothing (#373).
-FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
-    if (index >= MAX_INPUTS) {
+// What admitting one input record decided: everything the commit needs, so
+// it writes exactly the bytes admission approved (#567: an import checks every
+// record before it writes any).
+struct InputAdmission {
+    uint8_t pin;
+    uint8_t appIdx;
+    uint8_t sensorIdx;
+    uint8_t unitsIdx;
+    bool canImportRecord;
+    bool haveCalibration;
+    bool stagedCustom;
+    CalibrationType stagedType;
+    CalibrationOverride stagedOverride;
+    float dividerRatio;
+};
+
+// Judge one input record, writing nothing. `notes` prints the units NOTE (an
+// import admits each record twice, to check and then to write: once is
+// enough). Refusals print either way; the second pass never meets one.
+static FLASHMEM bool admitInputRecord(JsonObject& inputObj, uint8_t index, bool notes,
+                                      InputAdmission& out) {
+    // A pin that isn't a whole number 0..255 would read as pin 0
+    if (!inputObj["pin"].is<uint8_t>()) {
+        msg.control.print(F("ERROR: Failed to import input "));
+        msg.control.print(index);
+        msg.control.println(F(" - pin is not a pin number"));
         return false;
     }
-
     // Extract values
     uint8_t pin = inputObj["pin"];
+    // Only a hardware pin, CAN:n or I2C:n holds an input: 0xFF is the free-slot
+    // marker, and the commit could not find an input written there
+    if (!(pin <= PIN_PHYSICAL_MAX || (pin >= PIN_CAN_BASE && pin <= PIN_CAN_MAX) ||
+          (pin >= PIN_I2C_BASE && pin <= PIN_I2C_MAX))) {
+        msg.control.print(F("ERROR: Failed to import input "));
+        msg.control.print(index);
+        msg.control.print(F(" (pin "));
+        msg.control.print(pin);
+        msg.control.println(F(") - not a pin an input can use"));
+        return false;
+    }
 
     // Support both "app" (runtime) and "application" (static/legacy) field names
     const char* appName = inputObj["app"];
@@ -900,6 +935,16 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     const bool canImportRecord = (appIdx != 0 || strcasecmp(appName, "NONE") == 0) &&
                                  pin >= PIN_CAN_BASE && pin <= PIN_CAN_MAX &&
                                  sensorIdx != 0 && sensorIdx == getSensorIndexByName("CAN_IMPORT");
+    // A CAN:n pin holds only a CAN import (setInputApplication() refuses any
+    // other there, #640): judged here so the commit can't meet the refusal
+    if (!canImportRecord && pin >= PIN_CAN_BASE && pin <= PIN_CAN_MAX) {
+        msg.control.print(F("ERROR: Failed to import input "));
+        msg.control.print(index);
+        msg.control.print(F(" (pin "));
+        msg.control.print(pin);
+        msg.control.println(F(") - a CAN pin holds only a CAN_IMPORT input"));
+        return false;
+    }
     if ((appIdx == 0 && !canImportRecord) || sensorIdx == 0) {
         msg.control.print(F("ERROR: Failed to import input "));
         msg.control.print(index);
@@ -1046,6 +1091,7 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     if (!unitsMatchMeasurement(unitsIdx, measured)) {
         const ApplicationPreset* appPreset = getApplicationByIndex(appIdx);
         unitsIdx = preferredUnitsFor(measured, appPreset ? READ_APP_DEFAULT_UNITS(appPreset) : 0);
+        if (notes) {
         msg.control.print(F("  NOTE: input "));
         msg.control.print(index);
         msg.control.print(F(" (pin "));
@@ -1053,7 +1099,36 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         msg.control.print(F(") units '"));
         msg.control.print(unitsName ? unitsName : "");
         msg.control.println(F("' unknown or wrong type; using the default (SYSTEM UNITS)"));
+        }
     }
+
+    out.pin = pin;
+    out.appIdx = appIdx;
+    out.sensorIdx = sensorIdx;
+    out.unitsIdx = unitsIdx;
+    out.canImportRecord = canImportRecord;
+    out.haveCalibration = haveCalibration;
+    out.stagedCustom = stagedCustom;
+    out.stagedType = stagedType;
+    out.stagedOverride = stagedOverride;
+    out.dividerRatio = dividerRatio;
+    return true;
+}
+
+// Write one admitted record. Returns false only if the input manager refuses
+// what admission approved: a bus or registry conflict, which a whole-file
+// import has checked already (#567); importInputFromJSON() alone meets it.
+static FLASHMEM bool commitInputRecord(JsonObject& inputObj, uint8_t index, const InputAdmission& a) {
+    const uint8_t pin = a.pin;
+    const uint8_t appIdx = a.appIdx;
+    const uint8_t sensorIdx = a.sensorIdx;
+    const uint8_t unitsIdx = a.unitsIdx;
+    const bool canImportRecord = a.canImportRecord;
+    const bool haveCalibration = a.haveCalibration;
+    const bool stagedCustom = a.stagedCustom;
+    const CalibrationType stagedType = a.stagedType;
+    const CalibrationOverride& stagedOverride = a.stagedOverride;
+    const float dividerRatio = a.dividerRatio;
 
     // ===== COMMIT - from here on nothing may fail =====
     // Use input manager functions to properly configure the input
@@ -1191,42 +1266,41 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     return true;
 }
 
-// Import all inputs from JSON
-FLASHMEM bool importInputsFromJSON(JsonArray& inputsArray) {
-    uint8_t importedCount = 0;
-    uint8_t totalInputs = inputsArray.size();
+FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
+    InputAdmission a;
+    if (!admitInputRecord(inputObj, index, true, a)) return false;
+    return commitInputRecord(inputObj, index, a);
+}
 
-    // An "inputs" array REPLACES the input table, as "rules" and "actions" already
-    // replace theirs (#562): a dump describes the whole config, so restoring one
-    // must not keep inputs added since. The file's records are applied first (an
-    // input already on one of its pins is updated in place, so no pin ends up in
-    // two slots), and only then are inputs the file does not mention removed --
-    // and only if the import worked, so a file whose every record is refused
-    // leaves the table as it was rather than empty. Rules are left alone: the
-    // caller re-arms them, and rulesManagerInit() names any rule whose input
-    // the file did not bring back.
-    uint8_t filePins[32] = {0};   // bitmap of every pin the file names
-    for (JsonVariant v : inputsArray) {
-        const uint8_t pin = v["pin"] | 0xFF;
-        filePins[pin >> 3] |= (uint8_t)(1u << (pin & 7));
+// Pin bitmaps for the whole-file checks (#567): one bit per pin number.
+static inline bool pinBit(const uint8_t* bits, uint8_t pin) { return bits[pin >> 3] & (1u << (pin & 7)); }
+static inline void setPinBit(uint8_t* bits, uint8_t pin) { bits[pin >> 3] |= (uint8_t)(1u << (pin & 7)); }
+
+// Write the file's input records. An "inputs" array REPLACES the input table,
+// as "rules" and "actions" replace theirs (#562). Every record was admitted by
+// validateInputs() first, so here nothing is refused: inputs the file does not
+// name are removed FIRST, so the file's records always find a slot (#603: a
+// board holding 18 inputs refused 4 of a file's 18 new pins when the old ones
+// were still in their slots), then each record is written.
+static FLASHMEM bool commitInputsFromJSON(JsonArray& inputsArray, const uint8_t* filePins) {
+    bool all = true;
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+        const uint8_t pin = inputs[i].pin;
+        if (pin != 0xFF && !pinBit(filePins, pin)) clearInput(pin);
     }
-
-    msg.debug.info(TAG_JSON, "Processing %d inputs from JSON", totalInputs);
-
+    uint8_t position = 0;
     for (JsonVariant v : inputsArray) {
         JsonObject inputObj = v.as<JsonObject>();
-        uint8_t idx = inputObj["idx"];
-
-        if (importInputFromJSON(inputObj, idx)) {
-            importedCount++;
-            msg.debug.debug(TAG_JSON, "Successfully imported input %d", idx);
-        } else {
-            msg.debug.warn(TAG_JSON, "Failed to import input %d", idx);
-        }
+        const uint8_t idx = inputObj["idx"] | position;
+        position++;
+        InputAdmission a;
+        if (admitInputRecord(inputObj, idx, false, a) && commitInputRecord(inputObj, idx, a)) continue;
+        // Tripwire: validateInputs() admitted it and checked its pin
+        msg.control.print(F("ERROR: input "));
+        msg.control.print(idx);
+        msg.control.println(F(" passed the import checks but was not applied; check SYSTEM DUMP JSON"));
+        all = false;
     }
-
-    msg.debug.info(TAG_JSON, "Import complete: %d of %d inputs imported", importedCount, totalInputs);
-
     // Recount by the enabled rule (matching input_manager): the import set
     // may include disabled inputs, which don't count as active.
     numActiveInputs = 0;
@@ -1235,16 +1309,7 @@ FLASHMEM bool importInputsFromJSON(JsonArray& inputsArray) {
             numActiveInputs++;
         }
     }
-    // An empty array is a valid request for no inputs; otherwise at least one
-    // record must have made it before anything is removed.
-    const bool ok = totalInputs == 0 || importedCount > 0;
-    if (ok) {
-        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
-            const uint8_t pin = inputs[i].pin;
-            if (pin != 0xFF && !(filePins[pin >> 3] & (1u << (pin & 7)))) clearInput(pin);
-        }
-    }
-    return ok;
+    return all;
 }
 
 // Import system configuration from JSON.
@@ -1306,9 +1371,26 @@ static const char kSerialKept2[] PROGMEM = " kept its settings: it carries comma
 static const char kSerialReboot[] PROGMEM = "NOTE: serial port changes take effect after SAVE and a reboot";
 #define JSON_FSTR(a) (reinterpret_cast<const __FlashStringHelper*>(a))
 
-FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasInputs) {
+// The system block as staged: everything its commit writes. Staging prints
+// the block's NOTEs; it never refuses (absent or bad values keep the current
+// ones), so a whole-file import can stage it, check the rest of the file
+// against the staged buses, and commit it only once everything passed (#567).
+struct SystemStage {
+    SystemConfig cfg;
+    OutputRecord out[MAX_OUTPUTS];
+    bool outputsPresent;
+    bool logFilterPresent;
+    uint8_t serialKeptMask;
+    bool serialChanged;
+};
+
+// `notes` prints the block's NOTEs: a whole-file import stages once quietly
+// to check the file, then again with them once it will be applied, so no
+// NOTE describes a file that is then refused.
+static FLASHMEM void stageSystemConfigFromJSON(JsonObject& systemObj, SystemStage& st, bool notes) {
     // ---- ADMISSION PHASE -------------------------------------------------
-    SystemConfig staged = systemConfig;
+    SystemConfig& staged = st.cfg;
+    staged = systemConfig;
 
     // The alarm, a built-in output (system.alarm since #612)
     if (systemObj["alarm"].isNull() == false) {
@@ -1372,7 +1454,7 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasIn
             const long value = addr ? strtol(addr, &end, 16) : -1;  // base 16 accepts a 0x prefix
             if (addr && end != addr && *end == '\0' && isValidLcdI2CAddress(value)) {
                 staged.lcdI2CAddress = (uint8_t)value;
-            } else {
+            } else if (notes) {
                 msg.control.println(JSON_FSTR(kDisplayAddrIgnored));
             }
         }
@@ -1457,7 +1539,7 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasIn
         if (!poll.isUnbound()) {
             if (poll.is<long>() && canPollMsValid(poll.as<long>())) {
                 staged.buses.canPollMs = (uint16_t)poll.as<long>();
-            } else {
+            } else if (notes) {
                 msg.control.print(F("NOTE: buses.canPollMs out of range ("));
                 msg.control.print(CAN_POLL_MS_MIN);
                 msg.control.print('-');
@@ -1480,8 +1562,10 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasIn
     // or stopping a port mid-import would mean doing #558's ordering here. A
     // port that carries this command link keeps its settings (see
     // serialPortCarriesCommands). Absent keys keep the current value.
-    uint8_t serialKeptMask = 0;
-    bool serialChanged = false;
+    uint8_t& serialKeptMask = st.serialKeptMask;
+    bool& serialChanged = st.serialChanged;
+    serialKeptMask = 0;
+    serialChanged = false;
 #if NUM_SERIAL_PORTS > 0
     if (systemObj["serial"]["ports"].is<JsonArray>()) {
         for (JsonObject port : systemObj["serial"]["ports"].as<JsonArray>()) {
@@ -1530,10 +1614,11 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasIn
     // switched off with a NOTE, so the rest of the file still restores.
     JsonVariant outputsVar = systemObj["outputs"];
     const bool outputsPresent = outputsVar.is<JsonArray>();
-    OutputRecord stagedOut[MAX_OUTPUTS];
-    memcpy(stagedOut, outputRecords, sizeof(stagedOut));
+    st.outputsPresent = outputsPresent;
+    OutputRecord* stagedOut = st.out;
+    memcpy(stagedOut, outputRecords, sizeof(st.out));
     if (outputsPresent) {
-        memset(stagedOut, 0, sizeof(stagedOut));
+        memset(stagedOut, 0, sizeof(st.out));
         for (JsonObject o : outputsVar.as<JsonArray>()) {
             const int id = o["id"] | -1;
             const OutputFormat fmt = parseOutputFormat(o["format"] | "");
@@ -1541,11 +1626,13 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasIn
             const bool tOk = parseOutputTransport(o["transport"] | "", &t);
             if (id < 0 || id >= MAX_OUTPUTS || stagedOut[id].format != FMT_NONE || fmt == FMT_NONE ||
                 !outputFormatBuilt(fmt) || !tOk || !outputTransportAllowed(fmt, t)) {
+                if (notes) {
                 msg.control.print(F("NOTE: outputs: id "));
                 msg.control.print(id);
                 msg.control.print(F(" ("));
                 msg.control.print(o["format"] | "?");
                 msg.control.println(F(") is not an output this board can hold; skipped"));
+                }
                 continue;
             }
             OutputRecord& r = stagedOut[id];
@@ -1558,7 +1645,7 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasIn
                 const long ms = o["interval"] | -1L;
                 if (outputIntervalValid(fmt, t, ms)) {
                     r.interval = (uint16_t)ms;
-                } else {
+                } else if (notes) {
                     msg.control.print(JSON_FSTR(kIntervalNoteA));
                     msg.control.print(id);
                     msg.control.println(JSON_FSTR(kIntervalNoteIgnored));
@@ -1578,9 +1665,11 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasIn
         OutputRecord& r = stagedOut[id];
         if (r.format == FMT_NONE) continue;
         if (outputSingletonHolder(id, (OutputFormat)r.format, r.transport, stagedOut) == OUT_ID_NONE) continue;
-        msg.control.print(F("NOTE: outputs: id "));
-        msg.control.print(id);
-        msg.control.println(F(" is a second output of a one-per-kind format; skipped"));
+        if (notes) {
+            msg.control.print(F("NOTE: outputs: id "));
+            msg.control.print(id);
+            msg.control.println(F(" is a second output of a one-per-kind format; skipped"));
+        }
         memset(&r, 0, sizeof(r));
     }
     // Every enabled output in the staged table, against the staged config.
@@ -1605,15 +1694,18 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasIn
 #endif
         if (!why) { admitted[id].enabled = 1; continue; }
         r.enabled = 0;
-        msg.control.print(F("NOTE: outputs: id "));
-        msg.control.print(id);
-        msg.control.print(F(" imported off: "));
-        msg.control.println(why);
+        if (notes) {
+            msg.control.print(F("NOTE: outputs: id "));
+            msg.control.print(id);
+            msg.control.print(F(" imported off: "));
+            msg.control.println(why);
+        }
     }
 
     // The log's levels and tags (#561). Levels by name; an unreadable value
     // keeps the current one. Its transports are export-only, like the console's.
     const bool logFilterPresent = systemObj["log"].is<JsonObject>();
+    st.logFilterPresent = logFilterPresent;
     if (logFilterPresent) {
         JsonObject lf = systemObj["log"];
         uint8_t lvl = parseLogLevelName(lf["consoleLevel"]);
@@ -1633,9 +1725,17 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasIn
         }
     }
 
+}
+
+static FLASHMEM void commitSystemConfig(const SystemStage& st, bool importHasInputs) {
     // ---- COMMIT PHASE ----------------------------------------------------
-    // Nothing above this line may fail past this point; one write.
-    systemConfig = staged;
+    // Nothing may fail here; one write.
+    systemConfig = st.cfg;
+    const bool outputsPresent = st.outputsPresent;
+    const bool logFilterPresent = st.logFilterPresent;
+    const OutputRecord* stagedOut = st.out;
+    const uint8_t serialKeptMask = st.serialKeptMask;
+    const bool serialChanged = st.serialChanged;
     if (outputsPresent) {
         // Without the file's own inputs, a route bit can't keep meaning the
         // output it used to: an id that changed format or transport kind, or
@@ -1653,7 +1753,7 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasIn
                 else                        inputs[i].routeMask &= (uint8_t)~(1u << id);
             }
         }
-        memcpy(outputRecords, stagedOut, sizeof(stagedOut));
+        memcpy(outputRecords, stagedOut, sizeof(st.out));
     }
     if (logFilterPresent) applyLogFilterConfig();
     // The live outputs follow the committed records, as OUTPUT <id>
@@ -1678,6 +1778,12 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasIn
         msg.control.println(JSON_FSTR(kSerialReboot));
     }
 #endif
+}
+
+FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasInputs) {
+    SystemStage st;
+    stageSystemConfigFromJSON(systemObj, st, true);
+    commitSystemConfig(st, importHasInputs);
     return true;
 }
 
@@ -1747,9 +1853,37 @@ static const char kFitMissing[] PROGMEM = " does not exist on this board";
 static const char kFitInFile[] PROGMEM = " is ";
 static const char kFitButHere[] PROGMEM = " in the file but ";
 static const char kFitOnBoard[] PROGMEM = " on this board";
-static const char kFitFrom[] PROGMEM = "NOTE: The file is from ";
+static const char kFitFrom[] PROGMEM = "ERROR: The file is from ";
 static const char kFitThisBoard[] PROGMEM = "; this board is ";
-static const char kFitRefused[] PROGMEM = "ERROR: Config does not fit this board; nothing was changed";
+static const char kFitNoCross[] PROGMEM = " (a config is imported only on the board type it came from)";
+static const char kFitNoPlatform[] PROGMEM = "ERROR: The file does not say which board it is from (firmware.platform); this board is ";
+static const char kImportRefused[] PROGMEM = "ERROR: Config not imported; nothing was changed";
+static const char kTwice[] PROGMEM = " is in the file twice";
+static const char kUsedBy[] PROGMEM = " is used by ";
+#if INCLUDE_RULES_ENGINE
+static const char kAlsoInput[] PROGMEM = " is also an input";
+static const char kAlsoAction[] PROGMEM = " is also another action's output";
+#endif
+
+// No imports across hardware (owner, 2026-11-14): every file must say which
+// board it came from, and it must be this one. Pin numbers are board pin
+// numbers, so a file from another board type is a migration, not an import,
+// and the firmware never guesses (#567, #568).
+static FLASHMEM bool configFromThisBoard(JsonDocument& doc) {
+    const char* from = doc["firmware"]["platform"] | (const char*)nullptr;
+    if (from && strcmp(from, boardName()) == 0) return true;
+    if (!from) {
+        msg.control.print(JSON_FSTR(kFitNoPlatform));
+        msg.control.println(boardName());
+    } else {
+        msg.control.print(JSON_FSTR(kFitFrom));
+        msg.control.print(from);
+        msg.control.print(JSON_FSTR(kFitThisBoard));
+        msg.control.print(boardName());
+        msg.control.println(JSON_FSTR(kFitNoCross));
+    }
+    return false;
+}
 
 FLASHMEM static bool configFitsBoard(JsonDocument& doc) {
     bool fits = true;
@@ -1792,20 +1926,320 @@ FLASHMEM static bool configFitsBoard(JsonDocument& doc) {
         msg.control.println(JSON_FSTR(kFitMissing));
     }
 #endif
-    // Said whether or not the pins fit: a file from another board may be on
-    // the wrong copper even where every pin number exists.
-    const char* from = doc["firmware"]["platform"] | (const char*)nullptr;
-    if (from && strcmp(from, boardName()) != 0) {
-        msg.control.print(JSON_FSTR(kFitFrom));
-        msg.control.print(from);
-        msg.control.print(JSON_FSTR(kFitThisBoard));
-        msg.control.println(boardName());
-    }
-    if (!fits) msg.control.println(JSON_FSTR(kFitRefused));
     return fits;
 }
 
-bool loadConfigFromJSON(const char* jsonString) {
+// ===== Whole-file checks (#567 Part B, #603) =====
+
+// "not an action": a pin refusal about an input
+#define RULES_ID_NONE_JSON 0xFF
+// JSON IMPORT and LOAD SD: are all or nothing. Every check below runs before
+// the first write: the board, every input record, every rule and action
+// record, whether each rule and action still has what it follows, and every
+// pin the result would use. Any refusal prints its own ERROR line, then one
+// final kImportRefused line, and nothing changes. The writes after it cannot
+// be refused.
+
+// "ERROR: Pin <n> (input)" / "ERROR: Pin <n> (action <id>)" — the prefix the
+// board check above uses, so a client reads every pin refusal the same way.
+static FLASHMEM void printPinRefusal(uint8_t pin, uint8_t actionId) {
+    msg.control.print(JSON_FSTR(kFitPin));
+    msg.control.print(pin);
+    if (actionId == RULES_ID_NONE_JSON) {
+        msg.control.print(JSON_FSTR(kFitInput));
+    } else {
+        msg.control.print(JSON_FSTR(kFitAction));
+        msg.control.print(actionId);
+        msg.control.print(')');
+    }
+}
+
+// Admit every input record (nothing written) and collect the pins the file
+// names. A record refused on its own refuses the import: a mix of the old and
+// the new config is worse than either (#603).
+static FLASHMEM bool validateInputs(JsonArray& inputsArray, uint8_t* filePins) {
+    bool ok = true;
+    if (inputsArray.size() > MAX_INPUTS) {
+        msg.control.print(F("ERROR: The file has "));
+        msg.control.print((unsigned)inputsArray.size());
+        msg.control.print(F(" inputs; this board holds "));
+        msg.control.println(MAX_INPUTS);
+        ok = false;
+    }
+    uint8_t position = 0;
+    for (JsonVariant v : inputsArray) {
+        JsonObject inputObj = v.as<JsonObject>();
+        const uint8_t idx = inputObj["idx"] | position;
+        position++;
+        InputAdmission a;
+        if (!admitInputRecord(inputObj, idx, true, a)) { ok = false; continue; }
+        if (pinBit(filePins, a.pin)) {
+            printPinRefusal(a.pin, RULES_ID_NONE_JSON);
+            msg.control.println(JSON_FSTR(kTwice));
+            ok = false;
+        }
+        setPinBit(filePins, a.pin);
+    }
+    return ok;
+}
+
+// The serial ports a config enables hold their pins from the next boot (the
+// running ones are in the registry already); port 1 also holds the nRF link's
+// CTS/RTS on a board wired for it.
+static FLASHMEM const char* serialConfigHoldsPin(const SystemConfig& cfg, uint8_t pin) {
+#if NUM_SERIAL_PORTS > 0
+    for (uint8_t id = 1; id <= NUM_SERIAL_PORTS; id++) {
+        if (!(cfg.serial.enabled_mask & (1u << (id - 1)))) continue;
+        // Already enabled now: running, it is in the registry; not running (an
+        // input held its pins at boot), the file keeps it as it is
+        if (systemConfig.serial.enabled_mask & (1u << (id - 1))) continue;
+        bool holds = pin == getDefaultSerialRX(id) || pin == getDefaultSerialTX(id);
+#if defined(HOST_NRF_CTS_PIN) && defined(HOST_NRF_RTS_PIN)
+        if (id == 1) holds = holds || pin == HOST_NRF_CTS_PIN || pin == HOST_NRF_RTS_PIN;
+#endif
+        if (holds) return getSerialPortName(id);
+    }
+#else
+    (void)cfg; (void)pin;
+#endif
+    return nullptr;
+}
+
+// What will still hold `pin` while the file's inputs and relays are written:
+// the pin registry (built-in pins, running buses and serial ports — the
+// console's and the nRF link's included — SD's chip select), less the old
+// action targets, which the import releases first; and the buses the file
+// and serial ports the file selects, which claim their pins from the next
+// boot. A bus or port the file turns off
+// is still running, so its registry entry still counts (#567).
+static FLASHMEM const char* importPinHolder(uint8_t pin, const SystemConfig& cfg) {
+    const BusConfig& buses = cfg.buses;
+    const uint8_t n = getPinRegistrySize();
+    for (uint8_t i = 0; i < n; i++) {
+        const PinUsage* u = getPinUsageByIndex(i);
+        if (u == nullptr || u->pin != pin) continue;
+#if INCLUDE_RULES_ENGINE
+        if (rulesIsActionPinEntry(u)) continue;
+#endif
+        return u->description ? u->description : "a system function";
+    }
+    // A selection the current config already has holds its pins only if it
+    // came up (or is pending), as at commit and at boot: one refused this boot
+    // (#564) must not refuse a re-import of the board's own dump.
+    const char* bus = nullptr;
+    if (busConfigHoldsPin(buses, pin, nullptr, &bus, false)) {
+        const char* now = nullptr;
+        const bool unchanged = busConfigHoldsPin(systemConfig.buses, pin, nullptr, &now, false) &&
+                               strcmp(now, bus) == 0;
+        if (!unchanged || storedBusHoldsPin(pin, nullptr, nullptr)) return bus;
+    }
+    return serialConfigHoldsPin(cfg, pin);
+}
+
+#if INCLUDE_RULES_ENGINE
+// One target of the action table the import would leave. Every action's
+// target, not only a RELAY's: rulesSyncActionPins() claims each one as a pin,
+// so the check must judge what it will claim, or the re-claim after the write
+// could disagree with it.
+struct ImportRelay { uint8_t id; uint8_t target; };
+
+// The rule and action tables the import would leave — the file's, or the
+// current ones where the file has none — must be whole: every record converts,
+// ids are unique, they fit, every rule's input is in the resulting input table
+// and every action's rules are in the resulting rule table (owner, 2026-11-14:
+// refuse, rather than a NOTE and a rule that silently never fires). Collects
+// the RELAY outputs for the pin check.
+static FLASHMEM bool validateRulesActions(JsonDocument& doc, const uint8_t* resultInputs,
+                                          ImportRelay* relays, uint8_t& nRelays) {
+    bool ok = true;
+    char label[8];
+    uint8_t ruleIds[32] = {0};
+    nRelays = 0;
+
+    if (doc["rules"].is<JsonArrayConst>()) {
+        JsonArrayConst arr = doc["rules"].as<JsonArrayConst>();
+        if (arr.size() > MAX_RULES) {
+            msg.control.print(F("ERROR: The file has "));
+            msg.control.print((unsigned)arr.size());
+            msg.control.print(F(" rules; this board holds "));
+            msg.control.println(MAX_RULES);
+            ok = false;
+        }
+        uint8_t position = 0;
+        for (JsonObjectConst o : arr) {
+            Rule r{};
+            // The converter narrows "id" and "input" to a byte, so 300 or "A2"
+            // would read as a real id or pin 0: refuse them first
+            if (!o["id"].is<uint8_t>() || !o["input"].is<uint8_t>() || !rulesImportRule(o, r)) {
+                msg.control.print(F("ERROR: rule record "));
+                msg.control.print(position);
+                msg.control.println(F(" is not a valid rule"));
+                ok = false;
+            } else if (pinBit(ruleIds, r.id)) {
+                msg.control.print(F("ERROR: Rule "));
+                msg.control.print(r.id);
+                msg.control.println(JSON_FSTR(kTwice));
+                ok = false;
+            } else {
+                setPinBit(ruleIds, r.id);
+                if (!pinBit(resultInputs, r.sourceInput)) {
+                    formatPinLabel(r.sourceInput, label, sizeof(label));
+                    msg.control.print(F("ERROR: Rule "));
+                    msg.control.print(r.id);
+                    msg.control.print(F(" watches pin "));
+                    msg.control.print(label);
+                    msg.control.println(F(", which has no input (add one there, or leave the rule out)"));
+                    ok = false;
+                }
+            }
+            position++;
+        }
+    } else {
+        for (uint8_t i = 0; i < MAX_RULES; i++) {
+            const Rule& r = rules[i];
+            if (r.id == RULES_ID_NONE) continue;
+            setPinBit(ruleIds, r.id);
+            if (pinBit(resultInputs, r.sourceInput)) continue;
+            formatPinLabel(r.sourceInput, label, sizeof(label));
+            msg.control.print(F("ERROR: Rule "));
+            msg.control.print(r.id);
+            msg.control.print(F(" (kept: the file has no rules) watches pin "));
+            msg.control.print(label);
+            msg.control.println(F(", which the file has no input on (RULE DEL it first, or add the input)"));
+            ok = false;
+        }
+    }
+
+    // An action's rule that isn't in the resulting rule table
+    auto memberMissing = [&](uint8_t actionId, uint8_t ruleId) {
+        if (ruleId == RULES_ID_NONE || pinBit(ruleIds, ruleId)) return;
+        msg.control.print(F("ERROR: Action "));
+        msg.control.print(actionId);
+        msg.control.print(F(" follows rule "));
+        msg.control.print(ruleId);
+        msg.control.println(F(", which is not in the config"));
+        ok = false;
+    };
+
+    if (doc["actions"].is<JsonArrayConst>()) {
+        JsonArrayConst arr = doc["actions"].as<JsonArrayConst>();
+        if (arr.size() > MAX_ACTIONS) {
+            msg.control.print(F("ERROR: The file has "));
+            msg.control.print((unsigned)arr.size());
+            msg.control.print(F(" actions; this board holds "));
+            msg.control.println(MAX_ACTIONS);
+            ok = false;
+        }
+        uint8_t actionIds[32] = {0};
+        uint16_t links = 0;
+        uint8_t position = 0;
+        for (JsonObjectConst o : arr) {
+            Action act{};
+            uint8_t extra[MAX_ACTION_LINKS + 1];
+            uint8_t nExtra = 0;
+            // One more than the table holds, so an overflow shows in the count
+            if (!o["id"].is<uint8_t>() || !o["target"].is<uint8_t>() ||
+                !rulesImportAction(o, act, extra, MAX_ACTION_LINKS + 1, &nExtra)) {
+                msg.control.print(F("ERROR: action record "));
+                msg.control.print(position);
+                msg.control.println(F(" is not a valid action"));
+                ok = false;
+            } else if (pinBit(actionIds, act.id)) {
+                msg.control.print(F("ERROR: Action "));
+                msg.control.print(act.id);
+                msg.control.println(JSON_FSTR(kTwice));
+                ok = false;
+            } else {
+                setPinBit(actionIds, act.id);
+                // A member named twice, or again after the first, adds no link
+                // (rulesActionAddRule() is idempotent)
+                for (uint8_t e = 0; e < nExtra; e++) {
+                    bool seen = extra[e] == act.ruleRef;
+                    for (uint8_t k = 0; k < e && !seen; k++) seen = extra[k] == extra[e];
+                    if (!seen) links++;
+                }
+                memberMissing(act.id, act.ruleRef);
+                for (uint8_t e = 0; e < nExtra; e++) memberMissing(act.id, extra[e]);
+                if (nRelays < MAX_ACTIONS) relays[nRelays++] = { act.id, act.target };
+            }
+            position++;
+        }
+        if (links > MAX_ACTION_LINKS) {
+            msg.control.print(F("ERROR: The file's actions follow "));
+            msg.control.print(links);
+            msg.control.print(F(" extra rules; this board holds "));
+            msg.control.println(MAX_ACTION_LINKS);
+            ok = false;
+        }
+    } else {
+        for (uint8_t i = 0; i < MAX_ACTIONS; i++) {
+            const Action& act = actions[i];
+            if (act.id == RULES_ID_NONE) continue;
+            memberMissing(act.id, act.ruleRef);
+            if (nRelays < MAX_ACTIONS) relays[nRelays++] = { act.id, act.target };
+        }
+        for (uint8_t i = 0; i < MAX_ACTION_LINKS; i++) {
+            if (actionLinks[i].actionId == RULES_ID_NONE) continue;
+            memberMissing(actionLinks[i].actionId, actionLinks[i].ruleId);
+        }
+    }
+    return ok;
+}
+#endif
+
+// Every physical pin the result would drive — its inputs and its RELAY
+// outputs — against what holds pins while they are written, and against each
+// other (#567 Part B). The commit's own checks can then never refuse.
+static FLASHMEM bool validateImportPins(const uint8_t* resultInputs, const SystemConfig& buses
+#if INCLUDE_RULES_ENGINE
+                                        , const ImportRelay* relays, uint8_t nRelays
+#endif
+                                        ) {
+    bool ok = true;
+    for (uint16_t p = 0; p <= PIN_PHYSICAL_MAX; p++) {
+        const uint8_t pin = (uint8_t)p;
+        if (!pinBit(resultInputs, pin)) continue;
+        const char* holder = importPinHolder(pin, buses);
+        if (holder == nullptr) continue;
+        printPinRefusal(pin, RULES_ID_NONE_JSON);
+        msg.control.print(JSON_FSTR(kUsedBy));
+        msg.control.println(holder);
+        ok = false;
+    }
+#if INCLUDE_RULES_ENGINE
+    for (uint8_t i = 0; i < nRelays; i++) {
+        const uint8_t pin = relays[i].target;
+        const char* holder = importPinHolder(pin, buses);
+        bool otherAction = false;
+        for (uint8_t k = 0; k < i; k++) otherAction |= relays[k].target == pin;
+        if (holder == nullptr && !pinBit(resultInputs, pin) && !otherAction) continue;
+        printPinRefusal(pin, relays[i].id);
+        if (holder) {
+            msg.control.print(JSON_FSTR(kUsedBy));
+            msg.control.println(holder);
+        } else {
+            msg.control.println(JSON_FSTR(pinBit(resultInputs, pin) ? kAlsoInput : kAlsoAction));
+        }
+        ok = false;
+    }
+    // Every target is re-claimed into the pin registry after the write: it
+    // must have room for them, next to what stays there
+    uint8_t staying = 0;
+    const uint8_t n = getPinRegistrySize();
+    for (uint8_t i = 0; i < n; i++) staying += rulesIsActionPinEntry(getPinUsageByIndex(i)) ? 0 : 1;
+    if ((uint16_t)staying + nRelays > getPinRegistryCapacity()) {
+        msg.control.print(F("ERROR: The actions need "));
+        msg.control.print(nRelays);
+        msg.control.print(F(" pin registry entries; "));
+        msg.control.print(getPinRegistryCapacity() > staying ? getPinRegistryCapacity() - staying : 0);
+        msg.control.println(F(" are free"));
+        ok = false;
+    }
+#endif
+    return ok;
+}
+
+FLASHMEM bool loadConfigFromJSON(const char* jsonString) {
     // Allocate JSON document (same size as export)
     JsonDocument doc;
 
@@ -1815,6 +2249,7 @@ bool loadConfigFromJSON(const char* jsonString) {
     if (error) {
         msg.control.print(F("ERROR: JSON parse failed: "));
         msg.control.println(error.c_str());
+        msg.control.println(JSON_FSTR(kImportRefused));
         return false;
     }
 
@@ -1824,6 +2259,7 @@ bool loadConfigFromJSON(const char* jsonString) {
     if (schemaVer != JSON_SCHEMA_VERSION) {
         msg.control.print(F("ERROR: Only schemaVersion 1 is supported. Got: "));
         msg.control.println(schemaVer);
+        msg.control.println(JSON_FSTR(kImportRefused));
         return false;
     }
 
@@ -1832,11 +2268,64 @@ bool loadConfigFromJSON(const char* jsonString) {
     if (strcmp(mode, "runtime") != 0) {
         msg.control.print(F("ERROR: Only mode='runtime' configs can be imported. Got: "));
         msg.control.println(mode);
+        msg.control.println(JSON_FSTR(kImportRefused));
         return false;
     }
 
-    if (!configFitsBoard(doc)) return false;
+    // ---- CHECK: everything, before anything is written (#567, #603) ----
+    // Each check runs even after one fails, so one reply names every problem.
+    bool ok = configFromThisBoard(doc);
+    ok = configFitsBoard(doc) && ok;
 
+    const bool hasSystem = doc["system"].is<JsonObject>();
+    const bool hasInputs = doc["inputs"].is<JsonArray>();
+    if (!doc["inputs"].isNull() && !hasInputs) {
+        msg.control.println(F("ERROR: \"inputs\" is not a list"));
+        ok = false;
+    }
+    // The system block is staged here and committed only once the rest passes;
+    // the pin check reads its buses.
+    SystemStage st;
+    JsonObject system = doc["system"];
+    if (hasSystem) stageSystemConfigFromJSON(system, st, false);
+    const SystemConfig& stagedBuses = hasSystem ? st.cfg : systemConfig;
+
+    // The input table the import would leave: the file's, or the current one
+    uint8_t filePins[32] = {0};
+    uint8_t resultInputs[32] = {0};
+    JsonArray inputsArray = doc["inputs"];
+    if (hasInputs) {
+        ok = validateInputs(inputsArray, filePins) && ok;
+        memcpy(resultInputs, filePins, sizeof(resultInputs));
+    } else {
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].pin != 0xFF) setPinBit(resultInputs, inputs[i].pin);
+        }
+    }
+
+#if INCLUDE_RULES_ENGINE
+    for (const char* key : { "rules", "actions" }) {
+        if (!doc[key].isNull() && !doc[key].is<JsonArray>()) {
+            msg.control.print(F("ERROR: \""));
+            msg.control.print(key);
+            msg.control.println(F("\" is not a list"));
+            ok = false;
+        }
+    }
+    ImportRelay relays[MAX_ACTIONS];
+    uint8_t nRelays = 0;
+    ok = validateRulesActions(doc, resultInputs, relays, nRelays) && ok;
+    ok = validateImportPins(resultInputs, stagedBuses, relays, nRelays) && ok;
+#else
+    ok = validateImportPins(resultInputs, stagedBuses) && ok;
+#endif
+
+    if (!ok) {
+        msg.control.println(JSON_FSTR(kImportRefused));
+        return false;
+    }
+
+    // ---- WRITE: nothing below may refuse ----
     // Past validation, the apply below mutates the live config — tell BLE
     // clients (status-frame extension, #455). JSON IMPORT's handler
     // returns before its payload arrives, so the dispatcher's own bump fires
@@ -1844,57 +2333,50 @@ bool loadConfigFromJSON(const char* jsonString) {
     configGenerationBump();
     obdQuery_markStale();   // routes and the OBD outputs change too, not only inputs
 
-    // Import system config
-    if (doc["system"].isNull() == false) {
-        JsonObject system = doc["system"];
-        if (!importSystemConfigFromJSON(system, doc["inputs"].isNull() == false)) {
-            msg.control.println(F("ERROR: Failed to import system config"));
-            return false;
-        }
-    }
+#if INCLUDE_RULES_ENGINE
+    const bool hasRules = doc["rules"].is<JsonArray>();
+    const bool hasActions = doc["actions"].is<JsonArray>();
+    // Replacing the inputs (#562) touches the rules' inputs, so it re-arms too.
+    const bool rulesChanged = hasInputs || hasRules || hasActions;
+    // The old action targets stay claimed until the new actions re-claim
+    // theirs, so an input the file puts on an old relay's pin would be refused
+    // halfway through the import. Released first; re-claimed below.
+    if (rulesChanged) rulesReleaseActionPins();
+#endif
 
-    // Import inputs
-    if (doc["inputs"].isNull() == false) {
-        JsonArray inputsArray = doc["inputs"];
-        if (!importInputsFromJSON(inputsArray)) {
-            msg.control.println(F("ERROR: Failed to import inputs"));
-            return false;
-        }
+    // System first: the inputs' pin checks read its buses (#612 bus probe).
+    // Staged again, now with its NOTEs: nothing has changed since the check,
+    // so it stages the same bytes.
+    if (hasSystem) {
+        stageSystemConfigFromJSON(system, st, true);
+        commitSystemConfig(st, hasInputs);
     }
+    // A tripwire: the checks above make a refusal here impossible; if one
+    // ever fires, the rest still applies and the import reports failure.
+    const bool inputsApplied = !hasInputs || commitInputsFromJSON(inputsArray, filePins);
 
 #if INCLUDE_RULES_ENGINE
-    // Import Rules + Actions after inputs (rules reference input pins; the
-    // re-arm below evaluates against live inputs). Each table is replaced only
-    // if its array is present, then both are re-armed once — boot-load semantics
+    // Rules + Actions after inputs (rules reference input pins; the re-arm
+    // below evaluates against live inputs). Each table is replaced only if its
+    // array is present, then both are re-armed once — boot-load semantics
     // (#251): rulesManagerInit arms rule contexts, rulesActionsInit drives
     // the target pins to their initial state.
-    // Replacing the inputs (#562) can orphan a rule, so it re-arms the engine too.
-    bool rulesChanged = doc["inputs"].isNull() == false;
-    if (doc["rules"].isNull() == false) {
-        importRulesFromJSON(doc["rules"].as<JsonArrayConst>());
-        rulesChanged = true;
-    }
-    if (doc["actions"].isNull() == false) {
-        importActionsFromJSON(doc["actions"].as<JsonArrayConst>());
-        rulesChanged = true;
-    }
+    if (hasRules) importRulesFromJSON(doc["rules"].as<JsonArrayConst>());
+    if (hasActions) importActionsFromJSON(doc["actions"].as<JsonArrayConst>());
     if (rulesChanged) {
-        // Referential integrity: an Action may now reference a Rule id absent
-        // from the (possibly only partially re-imported) rule table — a
-        // rules-only / actions-only payload, or a hand-edited config. The shared
-        // sweep drops those references (and any dangling link rows, #343),
-        // promoting a surviving member where it can, before re-arm — so the
-        // engine never evaluates a dangling ref.
+        // Every reference was checked above; the sweep stays as the boot
+        // load's belt and braces.
         rulesSweepActionRules();
         rulesManagerInit(millis());
         rulesActionsInit();
-        rulesSyncActionPins();  // re-claim imported action pins (registry already populated)
+        rulesSyncActionPins();  // re-claim the action pins (registry already populated)
     }
 #endif
 
     // The OBD-II PID table points into inputs[], whose slots this import may
     // have rearranged; boot and SAVE rebuild it, and so must an import (#562).
-    if (doc["inputs"].isNull() == false) obdQuery_buildLookupTable();
+    if (hasInputs) obdQuery_buildLookupTable();
+    if (!inputsApplied) return false;
 
     msg.control.print(F("Successfully loaded config (schema v"));
     msg.control.print(schemaVer);

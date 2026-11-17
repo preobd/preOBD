@@ -204,6 +204,14 @@ void rulesActionsInit();
 // action table changes at runtime (ADD / DEL / config import), when the registry
 // is already fully populated.
 uint8_t rulesSyncActionPins();
+// The two halves a JSON import needs apart (#567): rulesReleaseActionPins()
+// drops every action target's registry claim (step 1 of the sync above), so
+// an import can place an input on a pin the old config used as a relay before
+// the new actions re-claim theirs; rulesIsActionPinEntry() tells an import's
+// pin check which registry entries those are.
+struct PinUsage;
+void rulesReleaseActionPins();
+bool rulesIsActionPinEntry(const PinUsage* u);
 
 // Evaluate every configured action and drive its target. Call each cycle after
 // rulesManagerUpdate(). Actuation is suppressed in CONFIG mode (bench safety,

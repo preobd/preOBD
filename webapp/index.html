@@ -4047,6 +4047,15 @@ document.getElementById('importFile').addEventListener('change', async e => {
     let parsed;
     try { parsed = JSON.parse(text); } catch { appendErr('Invalid JSON file.'); return; }
     if (!parsed.schemaVersion) { appendErr('Not a preOBD config file (missing schemaVersion).'); return; }
+    // No imports across hardware (#567): the device refuses a file from
+    // another board type, or one that doesn't say; say so before sending it.
+    // This board's name comes from the dump read on connect: without it, don't
+    // guess.
+    const here = originalConfig && originalConfig.firmware && originalConfig.firmware.platform;
+    const from = parsed.firmware && parsed.firmware.platform;
+    if (!here) { appendErr('Not imported: the board\'s configuration has not been read yet. Reconnect and try again.'); return; }
+    if (!from) { appendErr('Not imported: the file doesn\'t say which board it is from (firmware.platform); this board is ' + here + '.'); return; }
+    if (from !== here) { appendErr('Not imported: the file is from ' + from + '; this board is ' + here + '. A config imports only on the board type it came from.'); return; }
     if (!confirm('Import will overwrite current device RAM config. Continue?')) return;
 
     await withConfigMode(async () => {

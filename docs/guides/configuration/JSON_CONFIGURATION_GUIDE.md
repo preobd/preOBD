@@ -268,30 +268,42 @@ frame decoding (`CAN_IMPORT`). The others can also be set with `SET <pin> CAL ..
 
 ## Things to Know
 
-- **Pins are board pin numbers.** `A2` is pin 16 on a Teensy 4.x but a different
-  number on another board, so a file exported from one board type should not be
-  imported on a different one without editing the `pin`, `input` and `target`
-  numbers. The import checks the file against the board first: every input pin
-  and every `RELAY` target must exist on this board, and an input whose
-  `pinLabel` is an analog name (`A14`) must be on that analog pin here. If any
-  of them doesn't fit, nothing is changed and each one is named in an
-  `ERROR: Pin <n> ...` line. A file from another board type whose pins all fit
-  is imported, with a `NOTE:` naming both boards: check the wiring matches.
+- **All or nothing.** The import checks the whole file before it changes
+  anything. If any check fails, each problem gets its own `ERROR:` line, then
+  `ERROR: Config not imported; nothing was changed`, and the board keeps its
+  configuration exactly as it was. One input, rule or action the board refuses
+  refuses the whole file.
+- **A file imports only on the board type it came from.** Pins are board pin
+  numbers: `A2` is pin 16 on a Teensy 4.x but a different number on another
+  board. Every file must carry `firmware.platform` (every `SYSTEM DUMP JSON`
+  does) and it must name this board, or the file is refused. A hand-written
+  file needs it too: `"firmware": {"platform": "TEENSY40"}` (`VERSION` and
+  `SYSTEM DUMP JSON` show this board's name). Every input pin and every `RELAY`
+  target must also exist on this board, and an input whose `pinLabel` is an
+  analog name (`A14`) must be on that analog pin here; each one that doesn't is
+  named in an `ERROR: Pin <n> ...` line.
+- **Pins are checked against everything that holds them**: running buses and
+  serial ports (the one the import arrives over included), the SD card's chip
+  select, built-in pins, the buses the file itself selects, the file's other
+  inputs and its `RELAY` targets. A bus or port the file turns off keeps its
+  pins until the reboot, so an input on them is refused until then. A pin an
+  old relay used is free for the file's input when the file replaces the
+  actions.
 - **Missing sections are left alone.** A file with only `inputs` leaves the
   system settings, Rules and Actions as they were.
 - **An `inputs` array replaces all inputs**, just as a `rules` or `actions` array
   replaces that whole table. Inputs that aren't in the file are removed, so
-  restoring a backup gives you exactly the inputs it had. Their Rules stay
-  until the file's own `rules` replace them; a Rule left without an input is
-  named in a `WARNING:` line. Even an empty `"inputs": []` removes every input.
-  If every input in the file is refused, the import reports an error and
-  leaves your inputs as they were.
+  restoring a backup gives you exactly the inputs it had. Even an empty
+  `"inputs": []` removes every input.
+- **Rules and actions must still have what they follow.** Every Rule must watch
+  an input the result has (the file's inputs, or the current ones if the file
+  has none), and every Action must follow Rules the result has. A file with
+  inputs but no `rules` keeps the current Rules, so it is refused if it drops
+  an input one of them watches.
 - **Serial ports take effect after `SAVE` and a reboot**, as `BUS SERIAL <n>
   BAUDRATE` does. A port that is running and carries commands keeps its
   settings, since the import may be arriving over it; a `NOTE:` names it, and
-  `BUS SERIAL` changes it. Because the new port settings only start after the
-  reboot, imported inputs are checked against the ports running now: an input
-  on the pins of a port the file turns off is refused until that reboot.
+  `BUS SERIAL` changes it.
 - **Log levels and tags** (`log`: `consoleLevel`, `debugLevel`, `enabledTags`) apply straight away. The `console` and `log` transports are export-only: an import never moves them, since that could cut the link the import arrives on (use `CONSOLE TRANSPORT` / `LOG TRANSPORT`).
 - **Missing fields take defaults**, so an older export still imports on newer firmware.
 - **`schemaVersion` must be 1** and `mode` must be `"runtime"`; anything else is refused.

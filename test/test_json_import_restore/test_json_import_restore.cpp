@@ -28,12 +28,16 @@
 #include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"
 #include "../../src/buses/pinctrl/pin_label.cpp"
 #include "../../src/config/json_config.cpp"
+#include "../../src/rules/rules_engine.cpp"  // rulesNormalizeWarn, for the converter below
+#include "../../src/rules/rules_json.cpp"   // the real table-free converters (#567 checks them)
 
+#define TEST_LINKS_RULES_ENGINE
 #include "../stubs/firmware_stubs.h"
 
 // Control engine and config generation: not in this binary. The import calls
 // them on a rules/actions array, and since #562 on an inputs array (re-arm).
-void configGenerationBump() {}
+static int g_generationBumps = 0;
+void configGenerationBump() { g_generationBumps++; }
 // obd_query.cpp is not in this binary; count the rebuilds instead (#562).
 static int g_obdTableBuilds = 0;
 void obdQuery_buildLookupTable() { g_obdTableBuilds++; }
@@ -42,8 +46,6 @@ void obdQuery_markStale() {}
 Action actions[MAX_ACTIONS];
 ActionLink actionLinks[MAX_ACTION_LINKS];
 static int g_rulesInitCalls = 0;
-bool rulesImportRule(JsonObjectConst, Rule&) { return false; }
-bool rulesImportAction(JsonObjectConst, Action&, uint8_t*, uint8_t, uint8_t*) { return false; }
 bool rulesActionAddRule(uint8_t, uint8_t, bool*) { return false; }
 uint8_t rulesSweepActionRules() { return 0; }
 void rulesManagerInit(uint32_t) { g_rulesInitCalls++; }
@@ -73,9 +75,19 @@ void setUp(void) {
     g_stubAnalogFirst = 0xFF;
     g_stubAnalogCount = 0;
     g_obdTableBuilds = 0;
+    g_generationBumps = 0;
 #if INCLUDE_RULES_ENGINE
     g_rulesInitCalls = 0;
+    g_releaseActionPinsCalls = 0;
+    memset(g_pinAction, 0, sizeof(g_pinAction));
+    for (uint8_t i = 0; i < MAX_RULES; i++) rules[i].id = RULES_ID_NONE;
+    for (uint8_t i = 0; i < MAX_ACTIONS; i++) actions[i].id = RULES_ID_NONE;
+    for (uint8_t i = 0; i < MAX_ACTION_LINKS; i++) actionLinks[i].actionId = RULES_ID_NONE;
 #endif
+    systemConfig.buses.active_i2c = 0xFF;
+    systemConfig.serial.enabled_mask = 0;
+    g_stubBusRefused = false;
+    g_stubRegistryCapacity = 64;
     systemConfig.logFilter.console_level = 3;
     systemConfig.logFilter.debug_level = 3;
     systemConfig.logFilter.enabledTags = 0xFFFFFFFF;
@@ -114,6 +126,7 @@ static void buildDoc(const uint8_t* pins, uint8_t n, char* out, size_t outLen) {
     JsonDocument doc;
     doc["schemaVersion"] = 1;
     doc["mode"] = "runtime";
+    doc["firmware"]["platform"] = "NATIVE";   // this board (the stub's boardName())
     JsonArray arr = doc["inputs"].to<JsonArray>();
     for (uint8_t i = 0; i < n; i++) {
         const Input* in = getInputByPin(pins[i]);
@@ -164,37 +177,38 @@ static void test_a_file_whose_records_all_fail_leaves_the_inputs_alone(void) {
     configure(4);
     configure(5);
     TEST_ASSERT_FALSE(loadConfigFromJSON(
-        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"inputs\":"
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"inputs\":"
         "[{\"idx\":0,\"pin\":6,\"app\":\"NO_SUCH_APP\",\"sensor\":\"NO_SUCH_SENSOR\"}]}"));
     TEST_ASSERT_NOT_NULL(getInputByPin(4));
     TEST_ASSERT_NOT_NULL(getInputByPin(5));
     TEST_ASSERT_EQUAL_UINT8(2, occupiedSlots());
 }
 
-// #610: the live outputs follow the system block once it commits, even if a
-// later stage then fails: systemConfig (and so a SAVE) already holds the new
-// flags, and outputs left behind would stay out of step with it.
-static void test_outputs_follow_a_committed_system_block_even_if_inputs_fail(void) {
+// #567: all or nothing. A refused input refuses the system block too: the
+// live outputs (#610) and the stored settings stay as they were.
+static void test_a_refused_input_leaves_the_system_block_alone(void) {
     configure(4);
+    outputsClear();
     TEST_ASSERT_FALSE(loadConfigFromJSON(
-        "{\"schemaVersion\":1,\"mode\":\"runtime\","
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},"
         "\"system\":{\"outputs\":[{\"id\":2,\"format\":\"CSV\",\"transport\":\"USB\",\"enabled\":true}]},\"inputs\":"
         "[{\"idx\":0,\"pin\":6,\"app\":\"NO_SUCH_APP\",\"sensor\":\"NO_SUCH_SENSOR\"}]}"));
-    TEST_ASSERT_TRUE(outputIsEnabled(2));
-    TEST_ASSERT_EQUAL(FMT_CSV, outputFormatOf(2));
-    TEST_ASSERT_EQUAL_INT(1, g_syncOutputsCalls);
+    TEST_ASSERT_FALSE(outputExists(2));
+    TEST_ASSERT_EQUAL_INT(0, g_syncOutputsCalls);
+    TEST_ASSERT_EQUAL_INT(0, g_generationBumps);
+    TEST_ASSERT_NOT_NULL(getInputByPin(4));
 }
 
 // The OBD-II PID table points into inputs[]; an inputs import rebuilds it.
 static void test_an_inputs_import_rebuilds_the_pid_table(void) {
-    TEST_ASSERT_TRUE(loadConfigFromJSON("{\"schemaVersion\":1,\"mode\":\"runtime\",\"inputs\":[]}"));
+    TEST_ASSERT_TRUE(loadConfigFromJSON("{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"inputs\":[]}"));
     TEST_ASSERT_EQUAL_INT(1, g_obdTableBuilds);
 }
 
 static void test_an_empty_inputs_array_clears_the_table_and_succeeds(void) {
     configure(4);
     configure(5);
-    TEST_ASSERT_TRUE(loadConfigFromJSON("{\"schemaVersion\":1,\"mode\":\"runtime\",\"inputs\":[]}"));
+    TEST_ASSERT_TRUE(loadConfigFromJSON("{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"inputs\":[]}"));
     TEST_ASSERT_EQUAL_UINT8(0, occupiedSlots());
     TEST_ASSERT_EQUAL_UINT8(0, numActiveInputs);
 }
@@ -204,14 +218,14 @@ static void test_an_empty_inputs_array_clears_the_table_and_succeeds(void) {
 // where an orphan gets its WARNING (rulesManagerInit).
 static void test_replacing_inputs_re_arms_the_rules(void) {
 #if INCLUDE_RULES_ENGINE
-    TEST_ASSERT_TRUE(loadConfigFromJSON("{\"schemaVersion\":1,\"mode\":\"runtime\",\"inputs\":[]}"));
+    TEST_ASSERT_TRUE(loadConfigFromJSON("{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"inputs\":[]}"));
     TEST_ASSERT_EQUAL_INT(1, g_rulesInitCalls);
 #endif
 }
 
 static void test_a_document_without_inputs_leaves_them_alone(void) {
     configure(4);
-    TEST_ASSERT_TRUE(loadConfigFromJSON("{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{}}"));
+    TEST_ASSERT_TRUE(loadConfigFromJSON("{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"system\":{}}"));
     TEST_ASSERT_NOT_NULL(getInputByPin(4));
 }
 
@@ -222,7 +236,7 @@ static void test_a_document_without_inputs_leaves_them_alone(void) {
 static void test_sea_level_pressure_is_imported(void) {
     systemConfig.seaLevelPressure = 1013.25f;
     TEST_ASSERT_TRUE(loadConfigFromJSON(
-        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":"
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"system\":"
         "{\"constants\":{\"seaLevelPressure\":1025.5}}}"));
     TEST_ASSERT_EQUAL_FLOAT(1025.5f, systemConfig.seaLevelPressure);
 }
@@ -233,7 +247,7 @@ static void test_an_out_of_range_sea_level_pressure_keeps_the_current_one(void) 
     for (const char* v : bad) {
         char json[160];
         snprintf(json, sizeof(json),
-                 "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":"
+                 "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"system\":"
                  "{\"constants\":{\"seaLevelPressure\":%s}}}", v);
         systemConfig.seaLevelPressure = 1013.25f;
         TEST_ASSERT_TRUE(loadConfigFromJSON(json));
@@ -248,7 +262,7 @@ static void test_an_out_of_range_sea_level_pressure_keeps_the_current_one(void) 
 static bool importCanPoll(const char* value) {
     char text[160];
     snprintf(text, sizeof(text),
-             "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"buses\":{\"canPollMs\":%s}}}", value);
+             "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"system\":{\"buses\":{\"canPollMs\":%s}}}", value);
     return loadConfigFromJSON(text);
 }
 
@@ -298,7 +312,7 @@ static void test_a_bad_can_poll_rate_keeps_the_current_one(void) {
 static void test_a_buses_object_without_a_can_poll_rate_keeps_the_current_one(void) {
     systemConfig.buses.canPollMs = 300;
     TEST_ASSERT_TRUE(loadConfigFromJSON(
-        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"buses\":{\"i2c\":0}}}"));
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"system\":{\"buses\":{\"i2c\":0}}}"));
     TEST_ASSERT_EQUAL_UINT16(300, systemConfig.buses.canPollMs);
 }
 
@@ -312,7 +326,7 @@ static void test_an_lcd_address_in_either_backpack_range_is_imported(void) {
     for (size_t i = 0; i < sizeof(good) / sizeof(good[0]); i++) {
         char json[160];
         snprintf(json, sizeof(json),
-                 "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":"
+                 "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"system\":"
                  "{\"display\":{\"address\":\"%s\"}}}", good[i]);
         systemConfig.lcdI2CAddress = 0x21;
         TEST_ASSERT_TRUE(loadConfigFromJSON(json));
@@ -326,7 +340,7 @@ static void test_a_non_lcd_address_keeps_the_current_one(void) {
     for (const char* v : bad) {
         char json[160];
         snprintf(json, sizeof(json),
-                 "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":"
+                 "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"system\":"
                  "{\"display\":{\"address\":%s}}}", v);
         systemConfig.lcdI2CAddress = 0x27;
         TEST_ASSERT_TRUE(loadConfigFromJSON(json));
@@ -348,7 +362,7 @@ static void test_an_out_of_range_stored_lcd_address_drives_the_default(void) {
 
 static void test_log_filter_is_imported_and_applied_live(void) {
     TEST_ASSERT_TRUE(loadConfigFromJSON(
-        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"log\":"
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"system\":{\"log\":"
         "{\"consoleLevel\":\"WARN\",\"debugLevel\":\"DEBUG\",\"transport\":\"SERIAL2\","
         "\"enabledTags\":\"0x0000F00F\"}}}"));
     TEST_ASSERT_EQUAL_UINT8(2, systemConfig.logFilter.console_level);
@@ -362,7 +376,7 @@ static void test_log_filter_is_imported_and_applied_live(void) {
 // tags string is a hand edit: neither may become NONE / 0.
 static void test_unreadable_log_filter_values_keep_the_current_ones(void) {
     TEST_ASSERT_TRUE(loadConfigFromJSON(
-        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"log\":"
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"system\":{\"log\":"
         "{\"consoleLevel\":\"UNKNOWN\",\"debugLevel\":7,\"enabledTags\":\"zz\"}}}"));
     TEST_ASSERT_EQUAL_UINT8(3, systemConfig.logFilter.console_level);
     TEST_ASSERT_EQUAL_UINT8(3, systemConfig.logFilter.debug_level);
@@ -376,7 +390,7 @@ static void test_malformed_tag_masks_are_refused(void) {
     for (const char* t : bad) {
         char json[200];
         snprintf(json, sizeof(json),
-                 "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"log\":"
+                 "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"system\":{\"log\":"
                  "{\"enabledTags\":\"%s\"}}}", t);
         systemConfig.logFilter.enabledTags = 0x12345678;
         TEST_ASSERT_TRUE(loadConfigFromJSON(json));
@@ -390,7 +404,7 @@ static void test_malformed_tag_masks_are_refused(void) {
 static void test_imported_output_enables_reach_the_live_outputs(void) {
     outputsClear();
     TEST_ASSERT_TRUE(loadConfigFromJSON(
-        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"outputs\":"
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"system\":{\"outputs\":"
         "[{\"id\":2,\"format\":\"CSV\",\"transport\":\"USB\",\"enabled\":true}]}}"));
     TEST_ASSERT_TRUE(outputIsEnabled(2));
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, g_syncOutputsCalls, "imported enable never reached the live outputs");
@@ -409,7 +423,7 @@ static void test_the_outputs_array_replaces_the_table(void) {
     getInputByPin(4)->routeMask = 0x00;
     outputCreate(FMT_CSV, OT_USB, true);   // id 0, about to become something else
     TEST_ASSERT_TRUE(loadConfigFromJSON(
-        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"outputs\":"
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"system\":{\"outputs\":"
         "[{\"id\":0,\"format\":\"ELM327\",\"transport\":\"BLE\",\"enabled\":true},"
         "{\"id\":3,\"format\":\"REALDASH\",\"transport\":\"USB\",\"enabled\":true,\"interval\":50},"
         "{\"id\":7,\"format\":\"OBD\",\"transport\":\"CAN1\",\"enabled\":true}]}}"));
@@ -424,7 +438,7 @@ static void test_the_outputs_array_replaces_the_table(void) {
     // A RealDash on the console's stream is imported off: the console wins
     systemConfig.console.primary = OT_USB;
     TEST_ASSERT_TRUE(loadConfigFromJSON(
-        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"outputs\":"
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"system\":{\"outputs\":"
         "[{\"id\":1,\"format\":\"REALDASH\",\"transport\":\"USB\",\"enabled\":true}]}}"));
     TEST_ASSERT_TRUE(outputExists(1));
     TEST_ASSERT_FALSE(outputIsEnabled(1));
@@ -437,7 +451,7 @@ static void test_the_outputs_array_replaces_the_table(void) {
 static void test_a_second_one_per_kind_output_is_skipped_on_import(void) {
     outputsClear();
     TEST_ASSERT_TRUE(loadConfigFromJSON(
-        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"outputs\":"
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"system\":{\"outputs\":"
         "[{\"id\":4,\"format\":\"ELM327\",\"transport\":\"BLE\",\"enabled\":true},"
         "{\"id\":1,\"format\":\"ELM327\",\"transport\":\"BLE\",\"enabled\":true}]}}"));
     TEST_ASSERT_EQUAL(FMT_ELM327, outputFormatOf(1));
@@ -463,6 +477,7 @@ static void test_a_restore_onto_a_reset_unit_keeps_the_files_routes(void) {
     JsonDocument doc;
     doc["schemaVersion"] = 1;
     doc["mode"] = "runtime";
+    doc["firmware"]["platform"] = "NATIVE";   // this board (the stub's boardName())
     JsonArray outs = doc["system"]["outputs"].to<JsonArray>();
     for (uint8_t id = 0; id < MAX_OUTPUTS; id++) if (outputExists(id)) outputToJson(outs.add<JsonObject>(), id);
     JsonObject in = doc["inputs"].to<JsonArray>().add<JsonObject>();
@@ -486,7 +501,7 @@ static void test_a_restore_onto_a_reset_unit_keeps_the_files_routes(void) {
 static void test_ble_imports_one_enabled_data_output(void) {
     outputsClear();
     TEST_ASSERT_TRUE(loadConfigFromJSON(
-        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"outputs\":"
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"system\":{\"outputs\":"
         "[{\"id\":0,\"format\":\"ELM327\",\"transport\":\"BLE\",\"enabled\":true},"
         "{\"id\":1,\"format\":\"REALDASH\",\"transport\":\"BLE\",\"enabled\":true,\"interval\":100}]}}"));
     TEST_ASSERT_TRUE(outputIsEnabled(0));
@@ -497,7 +512,7 @@ static void test_ble_imports_one_enabled_data_output(void) {
 }
 
 static void test_no_log_filter_key_leaves_the_live_filter_alone(void) {
-    TEST_ASSERT_TRUE(loadConfigFromJSON("{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{}}"));
+    TEST_ASSERT_TRUE(loadConfigFromJSON("{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"system\":{}}"));
     TEST_ASSERT_EQUAL_INT(0, g_applyLogFilterCalls);
 }
 
@@ -555,11 +570,11 @@ static void test_a_relay_on_a_pin_this_board_lacks_is_refused(void) {
 #if INCLUDE_RULES_ENGINE
     useSmallBoard();
     TEST_ASSERT_FALSE(loadConfigFromJSON(
-        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"actions\":"
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"actions\":"
         "[{\"id\":1,\"type\":\"relay\",\"target\":60}]}"));
     TEST_ASSERT_EQUAL_INT(0, g_rulesInitCalls);
     TEST_ASSERT_TRUE(loadConfigFromJSON(
-        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"actions\":"
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"actions\":"
         "[{\"id\":1,\"type\":\"LED\",\"target\":60}]}"));
 #endif
 }
@@ -598,8 +613,9 @@ static void test_an_unreadable_pin_is_refused(void) {
     }
 }
 
-// Another board's file whose pins all fit is imported (with a NOTE naming both).
-static void test_a_file_from_another_board_that_fits_is_imported(void) {
+// No imports across hardware (owner, 2026-11-14): a file from another board
+// is refused even where every pin fits, and so is one that doesn't say.
+static void test_a_file_from_another_board_is_refused_even_if_it_fits(void) {
     useSmallBoard();
     configure(4);
     const uint8_t pins[1] = {4};
@@ -609,8 +625,381 @@ static void test_a_file_from_another_board_that_fits_is_imported(void) {
     TEST_ASSERT_FALSE(deserializeJson(d, json));
     d["firmware"]["platform"] = "TEENSY41";
     serializeJson(d, json, sizeof(json));
+    clearInput(4);
+    configure(6);
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    TEST_ASSERT_NULL(getInputByPin(4));
+    TEST_ASSERT_NOT_NULL(getInputByPin(6));
+}
+
+static void test_a_file_without_a_platform_is_refused(void) {
+    configure(4);
+    const uint8_t pins[1] = {4};
+    static char json[4096];
+    buildDoc(pins, 1, json, sizeof(json));
+    JsonDocument d;
+    TEST_ASSERT_FALSE(deserializeJson(d, json));
+    d.remove("firmware");
+    serializeJson(d, json, sizeof(json));
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    d["firmware"]["platform"] = "NATIVE";
+    serializeJson(d, json, sizeof(json));
     TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+}
+
+
+// ---------------------------------------------------------------------------
+// #567 Part B / #603: every check before the first write
+// ---------------------------------------------------------------------------
+
+// The file's inputs as a document, from inputs configured on `pins`, which
+// are then cleared again: the table the test starts from is its own.
+static void docFrom(const uint8_t* pins, uint8_t n, char* out, size_t outLen) {
+    for (uint8_t i = 0; i < n; i++) configure(pins[i]);
+    buildDoc(pins, n, out, outLen);
+    for (uint8_t i = 0; i < n; i++) clearInput(pins[i]);
+}
+
+// Insert `extra` (`"key":value,...`) as top-level members of a document
+static void addMembers(char* json, size_t len, const char* extra) {
+    JsonDocument d, e;
+    TEST_ASSERT_FALSE(deserializeJson(d, json));
+    char wrapped[2048];
+    snprintf(wrapped, sizeof(wrapped), "{%s}", extra);
+    TEST_ASSERT_FALSE_MESSAGE(deserializeJson(e, wrapped), wrapped);
+    for (JsonPairConst kv : e.as<JsonObjectConst>()) d[kv.key()] = kv.value();
+    TEST_ASSERT_TRUE(serializeJson(d, json, len) < len - 1);
+}
+
+// #603 item 3: one refused record refuses the file; the old table stays whole
+static void test_one_bad_record_refuses_the_whole_file(void) {
+    static char json[4096];
+    const uint8_t pins[2] = {7, 8};
+    docFrom(pins, 2, json, sizeof(json));
+    JsonDocument d;
+    TEST_ASSERT_FALSE(deserializeJson(d, json));
+    d["inputs"][1]["sensor"] = "NO_SUCH_SENSOR";
+    serializeJson(d, json, sizeof(json));
+    configure(4);
+    configure(8);                          // the bad record's pin: kept as it was
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    TEST_ASSERT_NULL(getInputByPin(7));
     TEST_ASSERT_NOT_NULL(getInputByPin(4));
+    TEST_ASSERT_NOT_NULL(getInputByPin(8));
+    TEST_ASSERT_EQUAL_INT(0, g_generationBumps);
+}
+
+// #603 item 2: the old inputs give up their slots before the new ones arrive
+static void test_a_full_table_takes_a_file_of_different_pins(void) {
+    static char json[16384];
+    uint8_t filePins[MAX_INPUTS], oldPins[MAX_INPUTS];
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) { filePins[i] = (uint8_t)(60 + i); oldPins[i] = i; }
+    docFrom(filePins, MAX_INPUTS, json, sizeof(json));
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) configure(oldPins[i]);
+    TEST_ASSERT_EQUAL_UINT8(MAX_INPUTS, occupiedSlots());
+    TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+    TEST_ASSERT_EQUAL_UINT8(MAX_INPUTS, occupiedSlots());
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) TEST_ASSERT_NOT_NULL(getInputByPin(filePins[i]));
+}
+
+static void test_more_inputs_than_slots_is_refused(void) {
+    static char json[16384];
+    uint8_t pins[MAX_INPUTS];
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) pins[i] = (uint8_t)(10 + i);
+    docFrom(pins, MAX_INPUTS, json, sizeof(json));
+    JsonDocument d;
+    TEST_ASSERT_FALSE(deserializeJson(d, json));
+    JsonObject extra = d["inputs"].add<JsonObject>();
+    extra.set(d["inputs"][0].as<JsonObjectConst>());
+    extra["pin"] = 100;
+    serializeJson(d, json, sizeof(json));
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    TEST_ASSERT_EQUAL_UINT8(0, occupiedSlots());
+}
+
+static void test_a_pin_named_twice_is_refused(void) {
+    static char json[4096];
+    const uint8_t pins[1] = {7};
+    docFrom(pins, 1, json, sizeof(json));
+    JsonDocument d;
+    TEST_ASSERT_FALSE(deserializeJson(d, json));
+    d["inputs"].add(d["inputs"][0].as<JsonObjectConst>());
+    serializeJson(d, json, sizeof(json));
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    TEST_ASSERT_NULL(getInputByPin(7));
+}
+
+// A pin something else holds (a running bus, a serial port, SD's chip
+// select) refuses the file before anything is written.
+static void test_an_input_on_a_held_pin_refuses_the_file(void) {
+    static char json[4096];
+    const uint8_t pins[2] = {7, 9};
+    docFrom(pins, 2, json, sizeof(json));
+    configure(4);
+    g_pinReserved[9] = true;
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    TEST_ASSERT_NOT_NULL(getInputByPin(4));
+    TEST_ASSERT_NULL(getInputByPin(7));
+    TEST_ASSERT_EQUAL_INT(0, g_generationBumps);
+}
+
+// The buses the file selects count, though they start only at the next boot
+static void test_an_input_on_the_files_own_bus_is_refused(void) {
+    static char json[4096];
+    const uint8_t pins[1] = {18};
+    docFrom(pins, 1, json, sizeof(json));
+    addMembers(json, sizeof(json), "\"system\":{\"buses\":{\"i2c\":0}}");
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    TEST_ASSERT_NULL(getInputByPin(18));
+    TEST_ASSERT_EQUAL_UINT8(0xFF, systemConfig.buses.active_i2c);   // not committed
+
+    docFrom(pins, 1, json, sizeof(json));
+    addMembers(json, sizeof(json), "\"system\":{\"buses\":{\"i2c\":255}}");
+    TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+    TEST_ASSERT_NOT_NULL(getInputByPin(18));
+}
+
+
+#if NUM_SERIAL_PORTS >= 2
+// A serial port the file turns on holds its pins from the next boot
+static void test_an_input_on_a_serial_port_the_file_enables_is_refused(void) {
+    const uint8_t rx = getDefaultSerialRX(2);
+    if (rx == 0xFF || rx > PIN_PHYSICAL_MAX) TEST_IGNORE_MESSAGE("no Serial2 pins on this build");
+    systemConfig.serial.enabled_mask = 0;
+    static char json[4096];
+    const uint8_t pins[1] = {rx};
+    docFrom(pins, 1, json, sizeof(json));
+    addMembers(json, sizeof(json), "\"system\":{\"serial\":{\"ports\":[{\"port\":2,\"enabled\":true}]}}");
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    TEST_ASSERT_NULL(getInputByPin(rx));
+    TEST_ASSERT_EQUAL_UINT8(0, systemConfig.serial.enabled_mask);
+}
+#endif
+
+#if INCLUDE_RULES_ENGINE
+// An old relay's pin is free for the file's input: the old action targets are
+// released before the inputs are written, not after.
+static void test_an_input_may_take_an_old_relays_pin(void) {
+    static char json[4096];
+    const uint8_t pins[1] = {7};
+    docFrom(pins, 1, json, sizeof(json));
+    addMembers(json, sizeof(json), "\"actions\":[]");
+    actions[0].id = 1;
+    actions[0].type = ACT_RELAY;
+    actions[0].target = 7;
+    actions[0].ruleRef = RULES_ID_NONE;
+    g_pinAction[7] = true;                 // its registry claim
+    TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+    TEST_ASSERT_NOT_NULL(getInputByPin(7));
+    TEST_ASSERT_EQUAL_INT(1, g_releaseActionPinsCalls);
+}
+
+// ...but not while that relay stays: the file has no actions, so it keeps it
+static void test_an_input_on_a_kept_relays_pin_is_refused(void) {
+    static char json[4096];
+    const uint8_t pins[1] = {7};
+    docFrom(pins, 1, json, sizeof(json));
+    actions[0].id = 1;
+    actions[0].type = ACT_RELAY;
+    actions[0].target = 7;
+    actions[0].ruleRef = RULES_ID_NONE;
+    g_pinAction[7] = true;
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    TEST_ASSERT_NULL(getInputByPin(7));
+    TEST_ASSERT_EQUAL_INT(0, g_releaseActionPinsCalls);
+}
+
+static void test_a_relay_on_an_input_or_another_relay_is_refused(void) {
+    static char json[4096];
+    const uint8_t pins[1] = {7};
+    docFrom(pins, 1, json, sizeof(json));
+    addMembers(json, sizeof(json), "\"actions\":[{\"id\":1,\"type\":\"RELAY\",\"target\":7}]");
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+
+    docFrom(pins, 1, json, sizeof(json));
+    addMembers(json, sizeof(json), "\"actions\":[{\"id\":1,\"type\":\"RELAY\",\"target\":30},"
+                                   "{\"id\":2,\"type\":\"RELAY\",\"target\":30}]");
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+
+    docFrom(pins, 1, json, sizeof(json));
+    addMembers(json, sizeof(json), "\"actions\":[{\"id\":1,\"type\":\"RELAY\",\"target\":30}]");
+    TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+}
+
+// Owner, 2026-11-14: a rule whose input the result won't have refuses the
+// file, rather than a NOTE and a rule that never fires.
+static void test_a_rule_without_its_input_is_refused(void) {
+    static char json[4096];
+    const uint8_t pins[1] = {7};
+    docFrom(pins, 1, json, sizeof(json));
+    addMembers(json, sizeof(json), "\"rules\":[{\"id\":1,\"input\":8,\"condition\":\"ABOVE\",\"limitLo\":100}]");
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+
+    docFrom(pins, 1, json, sizeof(json));
+    addMembers(json, sizeof(json), "\"rules\":[{\"id\":1,\"input\":7,\"condition\":\"ABOVE\",\"limitLo\":100}]");
+    TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+    TEST_ASSERT_EQUAL_UINT8(1, rules[0].id);
+}
+
+// A file with inputs but no rules keeps the current rules, so they must
+// still have their inputs; a file with only rules checks them against the
+// inputs already there.
+static void test_kept_rules_must_keep_their_inputs(void) {
+    static char json[4096];
+    const uint8_t pins[1] = {7};
+    docFrom(pins, 1, json, sizeof(json));
+    configure(8);
+    rules[0].id = 3;
+    rules[0].sourceInput = 8;
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));   // the file drops pin 8
+    TEST_ASSERT_NOT_NULL(getInputByPin(8));
+
+    TEST_ASSERT_TRUE(loadConfigFromJSON(
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},"
+        "\"rules\":[{\"id\":4,\"input\":8,\"condition\":\"BELOW\",\"limitLo\":1}]}"));
+    TEST_ASSERT_FALSE(loadConfigFromJSON(
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},"
+        "\"rules\":[{\"id\":4,\"input\":9,\"condition\":\"BELOW\",\"limitLo\":1}]}"));
+}
+
+static void test_an_action_following_a_missing_rule_is_refused(void) {
+    const char* head = "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},";
+    char json[512];
+    snprintf(json, sizeof(json), "%s\"rules\":[],\"actions\":[{\"id\":1,\"type\":\"LED\",\"target\":0,\"rule\":5}]}", head);
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    snprintf(json, sizeof(json), "%s\"rules\":[],\"actions\":[{\"id\":1,\"type\":\"LED\",\"target\":0}]}", head);
+    TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+    // Kept actions too: replacing the rules may not strand one
+    actions[0].id = 1;
+    actions[0].type = ACT_LED;
+    actions[0].ruleRef = 5;
+    snprintf(json, sizeof(json), "%s\"rules\":[]}", head);
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+}
+
+static void test_a_bad_or_duplicate_rule_record_is_refused(void) {
+    const char* head = "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},";
+    char json[512];
+    configure(8);
+    snprintf(json, sizeof(json), "%s\"rules\":[{\"id\":1,\"input\":8,\"condition\":\"SIDEWAYS\"}]}", head);
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    snprintf(json, sizeof(json), "%s\"rules\":[{\"id\":1,\"input\":8,\"condition\":\"ABOVE\"},"
+                                 "{\"id\":1,\"input\":8,\"condition\":\"BELOW\"}]}", head);
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    TEST_ASSERT_EQUAL_INT(0, g_generationBumps);
+}
+#endif
+
+
+// A bus the current config selects but that was refused this boot (#564)
+// holds nothing, as at commit: re-importing the board's own dump, input and
+// all, is not refused for it. A file that newly selects it still is.
+static void test_a_refused_bus_does_not_refuse_the_boards_own_dump(void) {
+    static char json[4096];
+    const uint8_t pins[1] = {18};
+    docFrom(pins, 1, json, sizeof(json));
+    addMembers(json, sizeof(json), "\"system\":{\"buses\":{\"i2c\":0}}");
+    systemConfig.buses.active_i2c = 0;     // selected now, but refused at boot
+    g_stubBusRefused = true;
+    TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+    TEST_ASSERT_NOT_NULL(getInputByPin(18));
+
+    systemConfig.buses.active_i2c = 0xFF;  // not selected now: the file asks for it
+    clearInput(18);
+    docFrom(pins, 1, json, sizeof(json));
+    addMembers(json, sizeof(json), "\"system\":{\"buses\":{\"i2c\":0}}");
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+}
+
+// The free-slot marker and the gaps between the pin ranges hold no input
+static void test_a_pin_no_input_can_use_is_refused(void) {
+    static char json[4096];
+    const uint8_t pins[1] = {7};
+    for (int bad : {0xFF, 0x80, 0xBF, 0xE0, 0xFD, 0xFE}) {
+        docFrom(pins, 1, json, sizeof(json));
+        JsonDocument d;
+        TEST_ASSERT_FALSE(deserializeJson(d, json));
+        d["inputs"][0]["pin"] = bad;
+        d["inputs"][0]["pinLabel"] = "";
+        serializeJson(d, json, sizeof(json));
+        configure(4);
+        ConsoleCapture cap;
+        g_testControlSink = &cap;
+        TEST_ASSERT_FALSE_MESSAGE(loadConfigFromJSON(json), "pin");
+        g_testControlSink = nullptr;
+        TEST_ASSERT_NOT_NULL_MESSAGE(strstr(cap.out, ") - not a pin an input can use"), cap.out);
+        TEST_ASSERT_NOT_NULL(getInputByPin(4));
+        TEST_ASSERT_EQUAL_INT(0, g_generationBumps);
+        clearInput(4);
+    }
+}
+
+#if INCLUDE_RULES_ENGINE
+// Every action's target is claimed as a pin after the write, not only a
+// RELAY's, so the check judges them all
+static void test_any_action_target_is_checked_as_a_pin(void) {
+    static char json[4096];
+    const uint8_t pins[1] = {7};
+    docFrom(pins, 1, json, sizeof(json));
+    addMembers(json, sizeof(json), "\"actions\":[{\"id\":1,\"type\":\"LED\",\"target\":7}]");
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    g_pinReserved[30] = true;
+    docFrom(pins, 1, json, sizeof(json));
+    addMembers(json, sizeof(json), "\"actions\":[{\"id\":1,\"type\":\"BEEPER\",\"target\":30}]");
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+}
+
+// The re-claim needs room in the pin registry
+static void test_actions_that_overflow_the_pin_registry_are_refused(void) {
+    const char* head = "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},";
+    char json[512];
+    g_pinReserved[40] = true;
+    g_pinReserved[41] = true;
+    g_stubRegistryCapacity = 3;            // 2 stay, room for 1
+    snprintf(json, sizeof(json), "%s\"actions\":[{\"id\":1,\"type\":\"RELAY\",\"target\":30},"
+                                 "{\"id\":2,\"type\":\"RELAY\",\"target\":31}]}", head);
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    snprintf(json, sizeof(json), "%s\"actions\":[{\"id\":1,\"type\":\"RELAY\",\"target\":30}]}", head);
+    TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+}
+
+// A rule id or input that isn't a byte would be read as a real one
+static void test_an_unreadable_rule_id_or_input_is_refused(void) {
+    const char* head = "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},";
+    char json[512];
+    configure(0);
+    snprintf(json, sizeof(json), "%s\"rules\":[{\"id\":300,\"input\":0,\"condition\":\"ABOVE\"}]}", head);
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    snprintf(json, sizeof(json), "%s\"rules\":[{\"id\":1,\"input\":\"A2\",\"condition\":\"ABOVE\"}]}", head);
+    TEST_ASSERT_FALSE(loadConfigFromJSON(json));
+    snprintf(json, sizeof(json), "%s\"rules\":[{\"id\":1,\"input\":0,\"condition\":\"ABOVE\"}]}", head);
+    TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+}
+#endif
+
+// The system block's NOTEs describe a file that is applied, never a refused
+// one: they print once, and only when the file passes
+static void test_system_notes_print_only_for_an_applied_file(void) {
+    const char* refused =
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},"
+        "\"system\":{\"buses\":{\"canPollMs\":5}},\"inputs\":[{\"idx\":0,\"pin\":6,\"app\":\"NO_SUCH_APP\",\"sensor\":\"X\"}]}";
+    const char* applied =
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},"
+        "\"system\":{\"buses\":{\"canPollMs\":5}}}";
+    ConsoleCapture a;
+    g_testControlSink = &a;
+    TEST_ASSERT_FALSE(loadConfigFromJSON(refused));
+    g_testControlSink = nullptr;
+    TEST_ASSERT_NULL_MESSAGE(strstr(a.out, "canPollMs"), a.out);
+    TEST_ASSERT_NOT_NULL(strstr(a.out, "ERROR: Config not imported; nothing was changed"));
+
+    ConsoleCapture b;
+    g_testControlSink = &b;
+    TEST_ASSERT_TRUE(loadConfigFromJSON(applied));
+    g_testControlSink = nullptr;
+    const char* first = strstr(b.out, "NOTE: buses.canPollMs");
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_NULL_MESSAGE(strstr(first + 1, "NOTE: buses.canPollMs"), "the NOTE printed twice");
 }
 
 int main(int, char**) {
@@ -635,16 +1024,41 @@ int main(int, char**) {
     RUN_TEST(test_malformed_tag_masks_are_refused);
     RUN_TEST(test_no_log_filter_key_leaves_the_live_filter_alone);
     RUN_TEST(test_imported_output_enables_reach_the_live_outputs);
-    RUN_TEST(test_outputs_follow_a_committed_system_block_even_if_inputs_fail);
+    RUN_TEST(test_a_refused_input_leaves_the_system_block_alone);
     RUN_TEST(test_a_pin_this_board_lacks_refuses_the_whole_file);
     RUN_TEST(test_an_analog_input_must_land_on_the_same_a_pin);
     RUN_TEST(test_a_relay_on_a_pin_this_board_lacks_is_refused);
-    RUN_TEST(test_a_file_from_another_board_that_fits_is_imported);
+    RUN_TEST(test_a_file_from_another_board_is_refused_even_if_it_fits);
+    RUN_TEST(test_a_file_without_a_platform_is_refused);
     RUN_TEST(test_the_outputs_array_replaces_the_table);
     RUN_TEST(test_a_second_one_per_kind_output_is_skipped_on_import);
     RUN_TEST(test_a_restore_onto_a_reset_unit_keeps_the_files_routes);
     RUN_TEST(test_ble_imports_one_enabled_data_output);
     RUN_TEST(test_analog_pins_past_the_digital_range_exist);
     RUN_TEST(test_an_unreadable_pin_is_refused);
+    RUN_TEST(test_one_bad_record_refuses_the_whole_file);
+    RUN_TEST(test_a_full_table_takes_a_file_of_different_pins);
+    RUN_TEST(test_more_inputs_than_slots_is_refused);
+    RUN_TEST(test_a_pin_named_twice_is_refused);
+    RUN_TEST(test_an_input_on_a_held_pin_refuses_the_file);
+    RUN_TEST(test_an_input_on_the_files_own_bus_is_refused);
+#if NUM_SERIAL_PORTS >= 2
+    RUN_TEST(test_an_input_on_a_serial_port_the_file_enables_is_refused);
+#endif
+    RUN_TEST(test_a_refused_bus_does_not_refuse_the_boards_own_dump);
+    RUN_TEST(test_a_pin_no_input_can_use_is_refused);
+    RUN_TEST(test_system_notes_print_only_for_an_applied_file);
+#if INCLUDE_RULES_ENGINE
+    RUN_TEST(test_any_action_target_is_checked_as_a_pin);
+    RUN_TEST(test_actions_that_overflow_the_pin_registry_are_refused);
+    RUN_TEST(test_an_unreadable_rule_id_or_input_is_refused);
+    RUN_TEST(test_an_input_may_take_an_old_relays_pin);
+    RUN_TEST(test_an_input_on_a_kept_relays_pin_is_refused);
+    RUN_TEST(test_a_relay_on_an_input_or_another_relay_is_refused);
+    RUN_TEST(test_a_rule_without_its_input_is_refused);
+    RUN_TEST(test_kept_rules_must_keep_their_inputs);
+    RUN_TEST(test_an_action_following_a_missing_rule_is_refused);
+    RUN_TEST(test_a_bad_or_duplicate_rule_record_is_refused);
+#endif
     return UNITY_END();
 }

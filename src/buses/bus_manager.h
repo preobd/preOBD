@@ -249,6 +249,13 @@ const char* getCANBusName(uint8_t bus_id);
  */
 bool storedBusHoldsPin(uint8_t pin, const char* excludeOwner, const char** descOut);
 
+// The same question for any bus settings, such as a JSON import's staged copy
+// before it is applied (#567): would these selections hold `pin`?
+// `skipRefused` drops a selection refused this boot, as storedBusHoldsPin()
+// does; a staged config passes false, so a refused bus still counts.
+bool busConfigHoldsPin(const BusConfig& buses, uint8_t pin, const char* excludeOwner,
+                       const char** descOut, bool skipRefused);
+
 // A BUS I2C/SPI/CAN selection that has just passed its pin check (cmd_bus.cpp)
 // is pending again, even if that bus was refused earlier this boot, so it must
 // defend its pins until the reboot (#564 review). `kind`: 0 = I2C, 1 = SPI, 2 = CAN.

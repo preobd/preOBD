@@ -9,6 +9,7 @@
 | `can_decode.py` | Decodes a capture against a DBC (`docs/can/preOBD.dbc`). |
 | `can_application_override.sh` | #640: `SET CAN:n APPLICATION` on CAN imports (allowed, refused, Rule re-seed); reboots at the end instead of SAVE. |
 | `serial_cmd.py` | Runs preOBD console commands over USB with a fixed time per command. |
+| `json_import_cases.py` | #567/#603: JSON IMPORT all-or-nothing cases from the unit's own dump (another board, no platform, a bad record, held/bus/serial pins, a rule without its input, a full table of other pins); each refusal must leave the dump identical; re-imports the baseline after each accepted case, never SAVEs. `--replies DIR` keeps each reply verbatim for the app fixtures. |
 
 **Long-running holders are started by a person, in their own terminal, and left
 running.** A session or script checks for them (`pgrep -f obdlink_daemon`,

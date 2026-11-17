@@ -42,6 +42,7 @@ size_t MessageStream::info(const char*, const char*, ...) { return 0; }
 size_t MessageStream::debug(const char*, const char*, ...) { return 0; }
 
 static bool g_pinReserved[256];
+static bool g_pinAction[256];   // registry entries that are Action targets (#567)
 bool isPinAvailable(uint8_t pin) { return !g_pinReserved[pin]; }
 // validateInputConfig() (#385) routes its WHOLE conflict check — registry AND
 // other configured inputs — through pinsConflict(). This stand-in reproduces
@@ -55,9 +56,56 @@ bool pinsConflict(const uint8_t* pins, uint8_t count, uint8_t /*rank*/, const ch
         if (pins[i] == 0xFF) continue;
         if (inputHoldsPin(pins[i])) return true;
         if (g_pinReserved[pins[i]]) return true;
+        if (g_pinAction[pins[i]]) return true;   // an Action target's claim (#567)
     }
     return false;
 }
+// The registry walk a JSON import's pin check makes (#567): each reserved pin
+// is an entry named "TEST BUS"; g_pinAction[] marks one as an Action target's.
+static PinUsage g_stubUsage;
+uint8_t getPinRegistrySize() {
+    uint8_t n = 0;
+    for (int p = 0; p < 256; p++) n += (g_pinReserved[p] || g_pinAction[p]) ? 1 : 0;
+    return n;
+}
+const PinUsage* getPinUsageByIndex(uint8_t index) {
+    for (int p = 0; p < 256; p++) {
+        if (!(g_pinReserved[p] || g_pinAction[p])) continue;
+        if (index-- != 0) continue;
+        g_stubUsage.pin = (uint8_t)p;
+        g_stubUsage.type = g_pinAction[p] ? PIN_OUTPUT : PIN_RESERVED;
+        g_stubUsage.description = g_pinAction[p] ? "Action output" : "TEST BUS";
+        return &g_stubUsage;
+    }
+    return nullptr;
+}
+// A staged bus selection (bus_manager.cpp is not in these binaries): I2C bus 0
+// holds pins 18/19, as on a Teensy.
+bool busConfigHoldsPin(const BusConfig& buses, uint8_t pin, const char*, const char** descOut, bool) {
+    if (buses.active_i2c == 0 && (pin == 18 || pin == 19)) {
+        if (descOut) *descOut = "I2C0";
+        return true;
+    }
+    return false;
+}
+// storedBusHoldsPin(): the current selection, unless the test marks it refused
+// this boot (#564), as bus_manager.cpp skips one
+static bool g_stubBusRefused = false;
+bool storedBusHoldsPin(uint8_t pin, const char* excludeOwner, const char** descOut) {
+    if (g_stubBusRefused) return false;
+    return busConfigHoldsPin(systemConfig.buses, pin, excludeOwner, descOut, true);
+}
+static uint8_t g_stubRegistryCapacity = 64;
+uint8_t getPinRegistryCapacity() { return g_stubRegistryCapacity; }
+#if INCLUDE_RULES_ENGINE
+bool rulesIsActionPinEntry(const PinUsage* u) { return u != nullptr && g_pinAction[u->pin]; }
+int g_releaseActionPinsCalls = 0;
+void rulesReleaseActionPins() {
+    g_releaseActionPinsCalls++;
+    memset(g_pinAction, 0, sizeof(g_pinAction));
+}
+#endif
+
 // Board pins and name (buses/pinctrl/board_pins.cpp, #570): a stand-in board named
 // NATIVE. By default no pin is analog and every pin exists; a test sets these
 // to stand in for a real board (JSON IMPORT's board check, #567).
@@ -95,7 +143,9 @@ int rulesAlarmRuleSlotForInput(uint8_t) { return -1; }
 // effective edge via the real engine function; rulesAlarmRuleSlotForInput()
 // above always answers "no rule", so this is never actually invoked at
 // runtime, but the call still needs a link-time definition.
+#ifndef TEST_LINKS_RULES_ENGINE   // a test that compiles rules_engine.cpp has the real one
 float rulesRuleWarnEdge(const Rule&, bool) { return NAN; }
+#endif
 #endif
 
 #define STUB_READ(fn) void fn(Input*) {}

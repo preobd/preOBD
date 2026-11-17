@@ -580,14 +580,15 @@ const char* getCANBusName(uint8_t bus_id) {
 // STORED-BUS-SELECTION PROBE (#379) — pinsConflict()'s third source
 // ============================================================================
 
-bool storedBusHoldsPin(uint8_t pin, const char* excludeOwner, const char** descOut) {
+FLASHMEM bool busConfigHoldsPin(const BusConfig& buses, uint8_t pin, const char* excludeOwner,
+                       const char** descOut, bool skipRefused) {
     if (pin == 0xFF) return false;
 
     // A selection refused this boot is not pending: it will not start until a
     // reboot, so it defends nothing (#564). Skipped per bus below.
-    if (systemConfig.buses.active_i2c != 0xFF && systemConfig.buses.active_i2c < NUM_I2C_BUSES &&
-        systemConfig.buses.active_i2c != i2c_refused_id) {
-        const uint8_t b = systemConfig.buses.active_i2c;
+    if (buses.active_i2c != 0xFF && buses.active_i2c < NUM_I2C_BUSES &&
+        (!skipRefused || buses.active_i2c != i2c_refused_id)) {
+        const uint8_t b = buses.active_i2c;
         if (pin == getDefaultI2CSDA(b) || pin == getDefaultI2CSCL(b)) {
             const char* d = getI2CBusName(b);
             if (!excludeOwner || strcmp(d, excludeOwner) != 0) {
@@ -597,9 +598,9 @@ bool storedBusHoldsPin(uint8_t pin, const char* excludeOwner, const char** descO
         }
     }
 
-    if (systemConfig.buses.active_spi != 0xFF && systemConfig.buses.active_spi < NUM_SPI_BUSES &&
-        systemConfig.buses.active_spi != spi_refused_id) {
-        const uint8_t b = systemConfig.buses.active_spi;
+    if (buses.active_spi != 0xFF && buses.active_spi < NUM_SPI_BUSES &&
+        (!skipRefused || buses.active_spi != spi_refused_id)) {
+        const uint8_t b = buses.active_spi;
         if (pin == getDefaultSPIMOSI(b) || pin == getDefaultSPIMISO(b) || pin == getDefaultSPISCK(b)) {
             const char* d = getSPIBusName(b);
             if (!excludeOwner || strcmp(d, excludeOwner) != 0) {
@@ -612,7 +613,7 @@ bool storedBusHoldsPin(uint8_t pin, const char* excludeOwner, const char** descO
 #if NUM_CAN_BUSES > 0
     // CAN: every bus that is on holds its pins, mirroring initConfiguredBuses()
     for (uint8_t b = 0; b < NUM_CAN_BUSES && b < CAN_BUS_SLOTS; b++) {
-        if (systemConfig.buses.can[b].mode == CAN_BUS_OFF || (can_refused_mask & (1u << b))) continue;
+        if (buses.can[b].mode == CAN_BUS_OFF || (skipRefused && (can_refused_mask & (1u << b)))) continue;
         if (pin == getDefaultCANTX(b) || pin == getDefaultCANRX(b)) {
             const char* d = getCANBusName(b);
             if (!excludeOwner || strcmp(d, excludeOwner) != 0) {
@@ -624,6 +625,10 @@ bool storedBusHoldsPin(uint8_t pin, const char* excludeOwner, const char** descO
 #endif
 
     return false;
+}
+
+bool storedBusHoldsPin(uint8_t pin, const char* excludeOwner, const char** descOut) {
+    return busConfigHoldsPin(systemConfig.buses, pin, excludeOwner, descOut, true);
 }
 
 void busSelectionAdmitted(uint8_t kind, uint8_t bus_id) {
