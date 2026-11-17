@@ -226,10 +226,15 @@ bool initSerialPort(uint8_t port_id, uint32_t baudrate) {
     }
 
 #elif defined(ESP32)
-    // ESP32: Serial1-Serial2
+    // ESP32: Serial1-Serial2. Serial1.begin() with no pins drives the variant's
+    // RX1/TX1, which the pins claimed above must match (#595). Serial2 is
+    // handed the pins claimed above: the S3 core's own RX2/TX2 are the USB
+    // data pins (19/20), so a bare begin() there would take the console down.
+    static_assert(DEFAULT_SERIAL1_RX == RX1 && DEFAULT_SERIAL1_TX == TX1,
+                  "bus_defaults.h DEFAULT_SERIAL1_* disagree with this ESP32 variant's Serial1 pins");
     switch (port_id) {
         case 1: Serial1.begin(baudrate); success = true; break;
-        case 2: Serial2.begin(baudrate); success = true; break;
+        case 2: Serial2.begin(baudrate, SERIAL_8N1, (int8_t)rx, (int8_t)tx); success = true; break;
     }
 
 #elif defined(__AVR_ATmega2560__)

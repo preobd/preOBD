@@ -253,8 +253,18 @@
 #elif defined(ESP32)
 
 // ----- I2C Default Pins -----
+// What Wire.begin() drives with no arguments: the variant's SDA/SCL. The S3
+// moved them (8/9; 21 is its CAN RX), so the registry reserved the wrong copper
+// while the bus drove 8/9 (#595). bus_manager.cpp static_asserts these against
+// the variant. Wire1 has no core default on any ESP32 variant: bus_manager.cpp
+// passes DEFAULT_I2C1_* to Wire1.begin() itself.
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#define DEFAULT_I2C0_SDA 8
+#define DEFAULT_I2C0_SCL 9
+#else
 #define DEFAULT_I2C0_SDA 21
 #define DEFAULT_I2C0_SCL 22
+#endif
 #define DEFAULT_I2C1_SDA 26
 #define DEFAULT_I2C1_SCL 27
 // No Wire2 on ESP32
@@ -285,10 +295,28 @@
 #endif
 
 // ----- Serial Port Default Pins -----
+// Serial1: what Serial1.begin(baud) drives with no pins, the variant's RX1/TX1.
+// The S3 moved them (15/16; 9/10 are the classic ESP32's), and 9 is its Wire
+// SCL (#595). serial_manager.cpp static_asserts these against the variant.
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#define DEFAULT_SERIAL1_RX  15
+#define DEFAULT_SERIAL1_TX  16
+#else
 #define DEFAULT_SERIAL1_RX  9
 #define DEFAULT_SERIAL1_TX  10
+#endif
+// Serial2: serial_manager.cpp passes these to Serial2.begin(), so they need not
+// be the variant's RX2/TX2. On the S3 those are 19/20 (USB D-/D+, and 20 is
+// DEFAULT_CAN1_TX), so it gets 17/18 instead (owner, 2026-11-16): free of every
+// other default and beside Serial1 on the DevKitC header. The classic ESP32
+// keeps its core's 16/17.
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#define DEFAULT_SERIAL2_RX  17
+#define DEFAULT_SERIAL2_TX  18
+#else
 #define DEFAULT_SERIAL2_RX  16
 #define DEFAULT_SERIAL2_TX  17
+#endif
 
 // ----- Platform Capabilities -----
 #define NUM_I2C_BUSES 2

@@ -208,20 +208,28 @@ bool initI2CBus(uint8_t bus_id, uint16_t clock_khz) {
     }
 
 #elif defined(ESP32)
-    // ESP32: Wire.begin() uses default pins
+    // ESP32: Wire.begin() drives the variant's SDA/SCL, which the pins claimed
+    // above must match or the registry guards the wrong copper (#595).
+    static_assert(DEFAULT_I2C0_SDA == SDA && DEFAULT_I2C0_SCL == SCL,
+                  "bus_defaults.h DEFAULT_I2C0_* disagree with this ESP32 variant's Wire pins");
     switch (bus_id) {
         case 0:
-            Wire.begin();
-            Wire.setClock(clock_khz * 1000UL);
-            active_i2c = &Wire;
-            success = true;
+            success = Wire.begin();
+            if (success) {
+                Wire.setClock(clock_khz * 1000UL);
+                active_i2c = &Wire;
+            }
             break;
 #if NUM_I2C_BUSES >= 2
         case 1:
-            Wire1.begin();
-            Wire1.setClock(clock_khz * 1000UL);
-            active_i2c = &Wire1;
-            success = true;
+            // Neither the esp32 nor the esp32s3 variant defines a default for Wire1 (no WIRE1_PIN_DEFINED:
+            // a bare begin() logs "no Default SDA Pin" and fails), so it is
+            // handed the pins claimed above.
+            success = Wire1.begin((int)i2c_pins[0], (int)i2c_pins[1]);
+            if (success) {
+                Wire1.setClock(clock_khz * 1000UL);
+                active_i2c = &Wire1;
+            }
             break;
 #endif
     }
@@ -241,8 +249,9 @@ bool initI2CBus(uint8_t bus_id, uint16_t clock_khz) {
         active_i2c_khz = clock_khz;
         msg.debug.info(TAG_I2C, BUS_STARTED, i2c_desc);
     } else {
-        // Unreachable bus id for this platform: hand the pins back rather than
-        // leaving them reserved to a bus that never started.
+        // Unreachable bus id for this platform, or a Wire.begin() that failed
+        // (ESP32): hand the pins back rather than leaving them reserved to a
+        // bus that never started.
         releasePins(i2c_pins, 2, i2c_desc);
     }
 

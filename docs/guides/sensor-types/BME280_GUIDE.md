@@ -86,6 +86,7 @@ BME280 Module:
 | Teensy 4.0/4.1 | 18 | 19 |
 | Arduino Due | 20 | 21 |
 | ESP32 | 21 | 22 |
+| ESP32-S3 | 8 | 9 |
 
 ### I2C Address
 
