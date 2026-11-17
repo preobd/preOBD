@@ -28,6 +28,7 @@
 #include "transports/sd_manager.h"
 #include "inputs/input.h"
 #include "inputs/input_manager.h"
+#include "inputs/pressure_reference.h"
 #include "config/input_store.h"
 #include "outputs/table/output_table.h"   // outputsSeedDefaults (#612)  // saveInputConfig/loadInputConfig/inputHoldsPin/storedInputBusNeeds (#402 step 2)
 #include "console/console_input.h"
@@ -240,8 +241,7 @@ static void updateSensors(uint32_t now) {
 
         // Check if enough time has elapsed for this sensor
         if (now - lastInputRead[i] >= interval) {
-            inputs[i].readFunction(&inputs[i]);
-            inputs[i].flags.hasReading = 1;
+            readInputNow(inputs[i]);   // + the pressure reference (#639)
             lastInputRead[i] = now;
         }
     }

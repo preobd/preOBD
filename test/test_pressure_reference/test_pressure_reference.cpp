@@ -96,20 +96,101 @@ static void test_baro_lowest_pin(void) {
     TEST_ASSERT_EQUAL_FLOAT(1.01f, baroReferenceBar());
 }
 
-// A faulted, out-of-range or disabled baro input is skipped; never NaN
-static void test_baro_faults_fall_through(void) {
-    addBaro(0, 5, NAN);
-    TEST_ASSERT_EQUAL_FLOAT(STD_BARO_BAR, baroReferenceBar());
-    addBaro(0, 5, 0.3f);
-    TEST_ASSERT_EQUAL_FLOAT(STD_BARO_BAR, baroReferenceBar());
-    addBaro(0, 5, 1.5f);
-    TEST_ASSERT_EQUAL_FLOAT(STD_BARO_BAR, baroReferenceBar());
+// A faulted or out-of-range baro input holds the last good reading while a
+// baro input is configured (decision 5A); a disabled one counts as removed
+static void test_baro_faults_hold_last_good(void) {
     addBaro(0, 5, 0.95f);
-    inputs[0].flags.isEnabled = false;
-    TEST_ASSERT_EQUAL_FLOAT(STD_BARO_BAR, baroReferenceBar());
+    TEST_ASSERT_EQUAL_FLOAT(0.95f, baroReferenceBar());
+    inputs[0].value = NAN;
+    TEST_ASSERT_EQUAL_FLOAT(0.95f, baroReferenceBar());
+    inputs[0].value = 0.3f;
+    TEST_ASSERT_EQUAL_FLOAT(0.95f, baroReferenceBar());
+    inputs[0].value = 1.5f;
+    TEST_ASSERT_EQUAL_FLOAT(0.95f, baroReferenceBar());
     addBaro(1, 9, 0.97f);      // a good one behind a bad lower pin
-    addBaro(0, 5, NAN);
     TEST_ASSERT_EQUAL_FLOAT(0.97f, baroReferenceBar());
+    inputs[0].flags.isEnabled = false;
+    inputs[1].pin = 0xFF;      // every baro input gone: back to standard
+    TEST_ASSERT_EQUAL_FLOAT(STD_BARO_BAR, baroReferenceBar());
+}
+
+static void test_application_reference(void) {
+    TEST_ASSERT_EQUAL_UINT8(REF_ABSOLUTE, applicationReference(APP_MAP_PRESSURE));
+    TEST_ASSERT_EQUAL_UINT8(REF_ABSOLUTE, applicationReference(APP_BAROMETRIC_PRESSURE));
+    TEST_ASSERT_EQUAL_UINT8(REF_GAUGE, applicationReference(APP_BOOST_PRESSURE));
+    TEST_ASSERT_EQUAL_UINT8(REF_GAUGE, applicationReference(APP_OIL_PRESSURE));
+    TEST_ASSERT_EQUAL_UINT8(REF_NONE, applicationReference(APP_NONE));
+    TEST_ASSERT_EQUAL_UINT8(REF_NONE, applicationReference(APP_COOLANT_TEMP));
+    // Every pressure application has a reference, every other none
+    for (uint8_t a = 1; a < NUM_APPLICATION_PRESETS; a++) {
+        bool pressure = getApplicationExpectedMeasurementType(a) == MEASURE_PRESSURE;
+        TEST_ASSERT_EQUAL_MESSAGE(pressure, applicationReference(a) != REF_NONE,
+                                  getApplicationNameByIndex(a));
+    }
+}
+
+static void test_offset_is_pure(void) {
+    TEST_ASSERT_EQUAL_FLOAT(0.9f, pressureReferenceOffset(REF_GAUGE, REF_ABSOLUTE, 0.9f));
+    TEST_ASSERT_EQUAL_FLOAT(-0.9f, pressureReferenceOffset(REF_ABSOLUTE, REF_GAUGE, 0.9f));
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, pressureReferenceOffset(REF_GAUGE, REF_GAUGE, 0.9f));
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, pressureReferenceOffset(REF_ABSOLUTE, REF_ABSOLUTE, 0.9f));
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, pressureReferenceOffset(REF_NONE, REF_ABSOLUTE, 0.9f));
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, pressureReferenceOffset(REF_GAUGE, REF_NONE, 0.9f));
+}
+
+// A wired pressure input on `sensor` + `app`, reading `raw` from its driver
+static float readThrough(const char* sensor, uint8_t app, float raw) {
+    uint8_t s = getSensorIndexByName(sensor);
+    TEST_ASSERT_NOT_EQUAL(0xFF, s);
+    Input& in = inputs[2];
+    in.pin = 14; in.flags.isEnabled = true;
+    in.sensorIndex = s; in.applicationIndex = app;
+    in.measurementType = MEASURE_PRESSURE;
+    in.readFunction = (void (*)(Input*))pgm_read_ptr(&SENSOR_LIBRARY[s].readFunction);
+    in.value = raw;            // the stub driver leaves it: this is "the reading"
+    readInputNow(in);
+    TEST_ASSERT_TRUE(in.flags.hasReading);
+    return in.value;
+}
+
+// The four cases from the plan, at rest, with a baro input at 0.95 bar
+static void test_cases_end_to_end(void) {
+    addBaro(0, 5, 0.95f);
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.0f, readThrough("VDO_2BAR_CURVE", APP_BOOST_PRESSURE, 0.0f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.0f, readThrough("MPX4250AP", APP_BOOST_PRESSURE, 0.95f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.95f, readThrough("MPX4250AP", APP_MAP_PRESSURE, 0.95f));
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.95f, readThrough("VDO_2BAR_CURVE", APP_MAP_PRESSURE, 0.0f));   // gauge on MAP
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.0f, readThrough("MPX5700AP", APP_OIL_PRESSURE, 0.95f));      // engine off
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, -0.6f, readThrough("MPX4250AP", APP_BOOST_PRESSURE, 0.35f));   // vacuum
+    TEST_ASSERT_TRUE(isnan(readThrough("MPX4250AP", APP_BOOST_PRESSURE, NAN)));                    // a fault stays a fault
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.95f, readThrough("MPX4250AP", APP_NONE, 0.95f));             // no application: as read
+}
+
+// Injected and test-mode values are already application values (decision 3A)
+static void readStub(Input* in) { in->value = 0.5f; }
+static void test_injected_not_converted(void) {
+    addBaro(0, 5, 0.95f);
+    Input& in = inputs[2];
+    in.pin = 14; in.flags.isEnabled = true;
+    in.sensorIndex = getSensorIndexByName("MPX4250AP");
+    in.applicationIndex = APP_BOOST_PRESSURE;
+    in.measurementType = MEASURE_PRESSURE;
+    in.readFunction = readStub;
+    readInputNow(in);
+    TEST_ASSERT_EQUAL_FLOAT(0.5f, in.value);
+}
+
+// The barometric input is never converted against itself
+static void test_baro_input_not_converted(void) {
+    Input& in = inputs[2];
+    uint8_t s = getSensorIndexByName("VDO_2BAR_CURVE");   // nonsense, but must not self-reference
+    in.pin = 14; in.flags.isEnabled = true;
+    in.sensorIndex = s; in.applicationIndex = APP_BAROMETRIC_PRESSURE;
+    in.measurementType = MEASURE_PRESSURE;
+    in.readFunction = (void (*)(Input*))pgm_read_ptr(&SENSOR_LIBRARY[s].readFunction);
+    in.value = 0.2f;
+    readInputNow(in);
+    TEST_ASSERT_EQUAL_FLOAT(0.2f, in.value);
 }
 
 int main(int, char**) {
@@ -118,6 +199,11 @@ int main(int, char**) {
     RUN_TEST(test_out_of_range_index);
     RUN_TEST(test_baro_default);
     RUN_TEST(test_baro_lowest_pin);
-    RUN_TEST(test_baro_faults_fall_through);
+    RUN_TEST(test_baro_faults_hold_last_good);
+    RUN_TEST(test_application_reference);
+    RUN_TEST(test_offset_is_pure);
+    RUN_TEST(test_cases_end_to_end);
+    RUN_TEST(test_injected_not_converted);
+    RUN_TEST(test_baro_input_not_converted);
     return UNITY_END();
 }

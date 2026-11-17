@@ -27,6 +27,7 @@
 #include "../sensors/sensor_library/sensor_categories.h"
 #include "../sensors/sensor_library/sensor_helpers.h"
 #include "../sensors/can_sensor_library/standard_pids.h"
+#include "../inputs/pressure_reference.h"
 #include "../outputs/table/output_base.h"
 #include "../outputs/table/output_table.h"
 #include "../outputs/formats/output_format.h"
@@ -157,6 +158,11 @@ FLASHMEM void writeCategoriesJson(Print& out) {
 }
 
 // filter: optional category name string (e.g. "THERMOCOUPLE"); nullptr = all sensors
+// "GAUGE" / "ABSOLUTE" for a pressure, nullptr (key left out) otherwise (#639)
+static FLASHMEM const char* referenceName(PressureReference r) {
+    return r == REF_GAUGE ? "GAUGE" : r == REF_ABSOLUTE ? "ABSOLUTE" : nullptr;
+}
+
 FLASHMEM void writeSensorsJson(Print& out, const char* filter) {
     // Resolve filter to a category enum up-front; CAT_COUNT means "no filter"
     SensorCategory filterCat = CAT_COUNT;
@@ -188,6 +194,7 @@ FLASHMEM void writeSensorsJson(Print& out, const char* filter) {
         obj["minValue"]        = s.minValue;
         obj["maxValue"]        = s.maxValue;
         obj["pinType"]         = pinTypeName(s.pinTypeRequirement);
+        if (const char* ref = referenceName(s.reference)) obj["reference"] = ref;
         SensorCategory cat = getSensorCategory(i);
         const SensorCategoryInfo* catInfo = getCategoryInfo(cat);
         obj["category"] = (const __FlashStringHelper*)READ_CATEGORY_NAME(catInfo);
@@ -223,6 +230,7 @@ FLASHMEM void writeApplicationsJson(Print& out) {
         obj["abbreviation"] = (const __FlashStringHelper*)p.abbreviation;
         obj["label"]        = (const __FlashStringHelper*)p.label;
         obj["group"]        = appGroupName(p.group);
+        if (const char* ref = referenceName(applicationReference(i))) obj["reference"] = ref;
         if (p.description) {
             obj["description"] = (const __FlashStringHelper*)p.description;
         } else {

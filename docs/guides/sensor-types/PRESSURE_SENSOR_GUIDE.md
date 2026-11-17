@@ -63,17 +63,27 @@ VDO pressure sensors are available with two calibration methods:
 
 ### Generic Linear Sensors
 
-| Sensor ID | Range | Voltage |
-|-----------|-------|---------|
-| `GENERIC_BOOST` | 0-5 bar | 0.5-4.5V |
-| `MPX4250AP` | 20-250 kPa | 0.2-4.7V |
-| `MPX5700AP` | 15-700 kPa | 0.2-4.7V |
+| Sensor ID | Range | Voltage | Reads |
+|-----------|-------|---------|-------|
+| `GENERIC_BOOST` | 0-5 bar | 0.5-4.5V | gauge |
+| `GENERIC_PRESSURE_150PSI` | 0-150 PSI | 0.5-4.5V | gauge |
+| `AEM_30_2130_150` | 0-150 PSI | 0.5-4.5V | gauge |
+| `MPX4250AP` | 20-250 kPa | 0.2-4.7V | absolute |
+| `MPX5700AP` | 15-700 kPa | 0.2-4.7V | absolute |
 
 **Characteristics:**
 - Three-wire voltage output sensors
 - Linear voltage-to-pressure relationship
 - Industry standard pinout
 - Available from many manufacturers
+
+### Absolute and gauge pressure
+
+A **gauge** sensor reads 0 with the engine off: it measures against the air around it. Every VDO, Smiths, Stewart-Warner and Jeep sender is gauge, and so are the generic and AEM transducers. An **absolute** sensor reads against a vacuum, so at rest it shows the air pressure (about 1 bar at sea level). The MPX sensors and the BME280 are absolute.
+
+Each application has its own: `MAP_PRESSURE` and `BAROMETRIC_PRESSURE` are absolute, every other pressure application (boost, oil, fuel, ...) is gauge. When the sensor and the application differ, preOBD converts the reading once by adding or subtracting the barometric pressure. It takes that from a `BAROMETRIC_PRESSURE` input if you have one, otherwise it uses the standard 1.013 bar. So `SET A5 BOOST_PRESSURE MPX4250AP` reads 0.00 bar at rest and goes negative under vacuum, and the display, rules, logs and outputs all see that value.
+
+If a `BAROMETRIC_PRESSURE` input stops reading, preOBD keeps using its last good reading. A custom `CAL LINEAR` takes the reference of the sensor it is set on.
 
 ---
 

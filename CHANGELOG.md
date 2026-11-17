@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Teensy 4.0/4.1 builds could fail to boot at all (no USB, the program button needed) depending on how the code happened to lay out; the Teensy core is now pinned at 1.60, which fixes its startup clock setup (#621)
 
 ### Changed
+- An absolute pressure sensor (MPX4250AP, MPX5700AP) on a gauge application such as boost or oil pressure now reads gauge pressure, 0 at rest, instead of about 1 bar more; a gauge sender on `MAP_PRESSURE` now reads absolute; and every pressure on an OBD-II PID is sent in that PID's reference
 - A Rule now waits its debounce before clearing as well as before tripping, and its warning comes on and goes off the same way, so a reading sitting at a limit no longer makes the relay, alarm and warning chatter; set the debounce with `RULE <id> DEBOUNCE <ms>` or `RULE ADD … DEBOUNCE <ms>`, and Rules seeded for RPM, speed and throttle now default to 250 ms instead of none
 - A `FAILSAFE ON` relay (a cooling fan) now starts on at boot and stays on until its rule has a reading it trusts, so after a reset a fan wired to NC keeps running instead of stopping through the rule's warmup; `ACTION LIST` marks a relay the failsafe is holding on with `FAILSAFE`, and a JSON import refuses an `OUTSIDE` rule whose hysteresis is too wide for it ever to clear
 - A relay or alarm driven by a Rule now rides out a sensor dropout shorter than 2 seconds instead of switching off and waiting out its debounce again, and a relay goes to its failsafe after 2 seconds of bad readings (from startup too, regardless of the Rule's warmup) instead of on the first one
@@ -44,6 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Each CAN bus has one set of settings and changes apply without a reboot: `BUS CAN <bus> ENABLE|LISTEN|DISABLE|BAUDRATE` and `BUS CAN <bus> INPUT` replace `BUS CAN INPUT|OUTPUT|BAUDRATE|NONE`, OBD and ELM327 bind with `OUTPUT ADD OBD CAN<n>` / `OUTPUT ADD ELM327 SERIAL<n>` (replacing `BUS SERIAL <n> ELM327`), and ELM327 over Bluetooth is output 5 with its own routes — upgrading resets saved settings and inputs, so take a `SYSTEM DUMP JSON` first, re-import it, and run `SET <pin> ROUTE 5 ENABLE` for inputs a phone OBD app should see
 - Each output has its own transport, so RealDash and CSV no longer share one stream: `OUTPUT ADD <format> <transport>` adds as many as you like (ids are assigned), `OUTPUT <id> TRANSPORT` moves one, one that would mix formats on a stream is refused with the reason, and `CONSOLE TRANSPORT`/`CONSOLE STATUS`, `LOG TRANSPORT` and `LOG LEVEL CONSOLE|DEBUG` replace `TRANSPORT` and `LOG LEVEL CONTROL|DATA` — upgrading resets saved settings and inputs again, so restore them from a `SYSTEM DUMP JSON`
 - After upgrading and restoring your settings from a `SYSTEM DUMP JSON` taken first, turn the nRF Bluetooth link back on with `BUS SERIAL 1 FRAMED ENABLE` and `SAVE`: an import doesn't change that port
+
+### Upgrading
+- If you raised a rule's limits to allow for an MPX sensor on boost or oil pressure reading about 1 bar high, lower them by that amount: the reading is now about 1 bar lower, so a raised limit trips late
+
 
 ## [0.16.0-beta] - 2026-11-04
 

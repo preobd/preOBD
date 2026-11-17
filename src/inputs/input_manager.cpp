@@ -6,6 +6,7 @@
 #include <string.h>
  #include "../config.h"
 #include "input_manager.h"
+#include "pressure_reference.h"
 #include "../config/input_store.h"    // inputStoreSetProbeExclusion (#402 step 2)
 #include "measurement_compat.h"
 #include "../config/system_config.h"  // ROUTE_MASK_ALL / OutputId enum
@@ -800,8 +801,7 @@ bool clearInputCalibration(uint8_t pin) {
 void readAllInputs() {
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled && inputs[i].readFunction != nullptr) {
-            inputs[i].readFunction(&inputs[i]);
-            inputs[i].flags.hasReading = 1;
+            readInputNow(inputs[i]);
         }
     }
 }

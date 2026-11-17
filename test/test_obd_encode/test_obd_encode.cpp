@@ -23,6 +23,9 @@
 #include "../../src/inputs/pressure_reference.cpp"
 #include "../../src/outputs/formats/obd_answer.cpp"
 Input inputs[MAX_INPUTS];
+// obdBuildAnswer's legacy path (a PID no table defines) lives in sensor_read.cpp;
+// these tests use table PIDs only
+ObdConvertFunc getObdConvertFunc(MeasurementType) { return nullptr; }
 #include <vector>
 #include <math.h>
 
@@ -282,18 +285,38 @@ static void test_units_helpers(void) {
     TEST_ASSERT_EQUAL_FLOAT(7.5f, obdConvertUnits(7.5f, UNITS_NOT_FOUND));
 }
 
-// The boost answer's barometric reference is the lowest-pin baro input (#636):
-// a wired sensor beats an imported PID 0x33, whichever slot each sits in
-static void test_baro_lowest_pin(void) {
+// The answer converts between the application's reference and the PID's,
+// one rule for every pressure (#639 decision 7). Baro input at 1.00 bar.
+static uint8_t answerFor(uint8_t pid, uint8_t app, float bar, uint8_t* out) {
+    Input& in = inputs[4];
+    memset(&in, 0, sizeof(in));
+    in.pin = 20; in.flags.isEnabled = true;
+    in.obd2pid = pid; in.applicationIndex = app;
+    in.measurementType = MEASURE_PRESSURE; in.value = bar;
+    return obdBuildAnswer(in, out);
+}
+
+static void test_answer_reference_rule(void) {
     memset(inputs, 0, sizeof(inputs));
     for (uint8_t i = 0; i < MAX_INPUTS; i++) inputs[i].pin = 0xFF;
-    TEST_ASSERT_EQUAL_FLOAT(STD_BARO_BAR, baroReferenceBar());
-    inputs[0].pin = 0xC1; inputs[0].flags.isEnabled = true;
-    inputs[0].applicationIndex = APP_BAROMETRIC_PRESSURE; inputs[0].value = 0.98f;
-    TEST_ASSERT_EQUAL_FLOAT(0.98f, baroReferenceBar());
-    inputs[3].pin = 7; inputs[3].flags.isEnabled = true;
-    inputs[3].applicationIndex = APP_BAROMETRIC_PRESSURE; inputs[3].value = 1.01f;
-    TEST_ASSERT_EQUAL_FLOAT(1.01f, baroReferenceBar());
+    inputs[0].pin = 7; inputs[0].flags.isEnabled = true;
+    inputs[0].applicationIndex = APP_BAROMETRIC_PRESSURE; inputs[0].value = 1.0f;
+    uint8_t out[OBD_ANSWER_MAX];
+    // BOOST (gauge) 0.5 bar on 0x70 (absolute): 150 kPa = 4800 /32 steps
+    TEST_ASSERT_TRUE(answerFor(0x70, APP_BOOST_PRESSURE, 0.5f, out) > 0);
+    TEST_ASSERT_EQUAL_UINT32(4800, ((uint32_t)out[2 + 3] << 8) | out[2 + 4]);
+    // MAP (absolute) 0.95 on 0x0B (absolute): as is
+    answerFor(0x0B, APP_MAP_PRESSURE, 0.95f, out);
+    TEST_ASSERT_EQUAL_UINT8(95, out[2]);
+    // OIL (gauge) 1.0 bar on 0x0B: baro added, 200 kPa (was 100 before #639)
+    answerFor(0x0B, APP_OIL_PRESSURE, 1.0f, out);
+    TEST_ASSERT_EQUAL_UINT8(200, out[2]);
+    // MAP 1.3 bar abs on 0x0A (fuel pressure, gauge, 3 kPa/step): baro off, 30 kPa
+    answerFor(0x0A, APP_MAP_PRESSURE, 1.3f, out);
+    TEST_ASSERT_EQUAL_UINT8(10, out[2]);
+    // No application: as is
+    answerFor(0x0B, APP_NONE, 0.95f, out);
+    TEST_ASSERT_EQUAL_UINT8(95, out[2]);
 }
 
 int main(int, char**) {
@@ -305,7 +328,7 @@ int main(int, char**) {
     RUN_TEST(test_clamping);
     RUN_TEST(test_type_gate);
     RUN_TEST(test_every_preset);
-    RUN_TEST(test_baro_lowest_pin);
+    RUN_TEST(test_answer_reference_rule);
     RUN_TEST(test_length_for);
     RUN_TEST(test_differential_vs_reference);
     RUN_TEST(test_units_helpers);

@@ -83,19 +83,11 @@ inline bool obdSpecAccepts(const ObdOutputPid& spec, MeasurementType type) {
 uint8_t obdLengthFor(uint8_t pid, uint8_t current);
 
 /**
- * Does this application hold GAUGE pressure (0 at atmosphere)? On an absolute
- * PID (OBD_OUT_ABSOLUTE) its answer adds the barometric pressure, and an
- * imported reading of that PID would need it taken off (#639). The export
- * (obd_answer.cpp) and the import (importApplicationForPid) share this.
- */
-inline bool obdGaugeApplication(uint8_t app) { return app == APP_BOOST_PRESSURE; }
-
-/**
  * Does this pressure application hold ABSOLUTE pressure (MAP, barometric)?
- * Every other pressure application is gauge (0 at atmosphere). Only the CAN
- * import admission (pidAdmitsApplication) asks this; the export still
- * converts BOOST_PRESSURE alone (obdGaugeApplication), so nothing changes on
- * the OBD output (#640).
+ * Every other pressure application is gauge (0 at atmosphere). The one
+ * source for applicationReference() (inputs/pressure_reference, #639), which
+ * the value table and the OBD export use; the CAN import admission
+ * (pidAdmitsApplication) asks it directly (#640).
  */
 inline bool absolutePressureApplication(uint8_t app) {
     return app == APP_MAP_PRESSURE || app == APP_BAROMETRIC_PRESSURE;

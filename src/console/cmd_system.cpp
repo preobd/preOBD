@@ -736,8 +736,12 @@ static FLASHMEM void diagProbe(Input* in, InputProbe* p) {
         else                    p->verdict = DV_IN_RANGE;
     } else {
         // Passive classes (v1): the runtime read's NaN is the only signal.
+        // The read writes the live value in the sensor's reference; put the
+        // table's value back so a pressure isn't left unconverted (#639).
+        float live = in->value;
         if (in->readFunction) in->readFunction(in);
         p->cooked = in->value;
+        in->value = live;
         bool bad = isnan(in->value);
         switch (p->cls) {
             case DC_THERMOCOUPLE: p->verdict = bad ? DV_OPEN_CIRCUIT : DV_IN_RANGE; break;
@@ -749,8 +753,11 @@ static FLASHMEM void diagProbe(Input* in, InputProbe* p) {
     }
 
     // Analog classes: capture the cooked value too (shown, but labeled).
+    // Restore the table's value afterwards, as above (#639).
+    float live = in->value;
     if (in->readFunction) in->readFunction(in);
     p->cooked = in->value;
+    in->value = live;
 
     // A non-finite display value (NaN or INF) means the calibration math blew
     // up — wrong bias/coefficients, or a resistance outside the curve's domain.

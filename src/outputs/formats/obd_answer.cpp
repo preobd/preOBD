@@ -25,9 +25,17 @@ FLASHMEM uint8_t obdBuildAnswer(const Input& in, uint8_t* out) {
     ObdOutputPid spec;
     if (obdOutputSpec(in.obd2pid, spec)) {
         if (!obdSpecAccepts(spec, (MeasurementType)in.measurementType)) return 0;
-        const bool gauge = obdGaugeApplication(in.applicationIndex);
-        float baro = (gauge && (spec.flags & OBD_OUT_ABSOLUTE)) ? baroReferenceBar() : 0.0f;
-        uint8_t n = obdEncodeValue(spec, in.value, gauge, baro, &out[2]);
+        // The value is in its application's reference (§14.8); the PID has
+        // its own: absolute (OBD_OUT_ABSOLUTE) or gauge. One rule, any
+        // pressure (#639 decision 7): BOOST on 0x70 adds baro, MAP on 0x0A
+        // takes it off.
+        float v = in.value;
+        if (spec.measurementType == MEASURE_PRESSURE) {
+            const PressureReference from = applicationReference(in.applicationIndex);
+            const PressureReference to = (spec.flags & OBD_OUT_ABSOLUTE) ? REF_ABSOLUTE : REF_GAUGE;
+            if (from != REF_NONE && from != to) v += pressureReferenceOffset(from, to, baroReferenceBar());
+        }
+        uint8_t n = obdEncodeValue(spec, v, false, 0.0f, &out[2]);
         return n ? (uint8_t)(2 + n) : 0;
     }
 

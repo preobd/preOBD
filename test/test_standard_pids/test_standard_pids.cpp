@@ -273,8 +273,6 @@ static void test_import_applications(void) {
     ObdOutputPid spec;
     TEST_ASSERT_TRUE(obdOutputSpec(0x70, spec));
     TEST_ASSERT_TRUE((spec.flags & OBD_OUT_ABSOLUTE) != 0);
-    TEST_ASSERT_TRUE(obdGaugeApplication(APP_BOOST_PRESSURE));
-    TEST_ASSERT_FALSE(obdGaugeApplication(APP_MAP_PRESSURE));
     TEST_ASSERT_EQUAL_UINT8(APP_NONE, importApplicationForPid(0x70));
     TEST_ASSERT_TRUE(obdOutputSpec(0x0B, spec));   // absolute PID, absolute application
     TEST_ASSERT_EQUAL_UINT8(APP_MAP_PRESSURE, importApplicationForPid(0x0B));

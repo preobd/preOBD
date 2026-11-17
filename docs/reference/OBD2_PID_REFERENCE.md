@@ -45,7 +45,7 @@ negative response only when it's addressed to preOBD (`0x7E0`): see
 | `0x70` | Boost pressure control | `BOOST_PRESSURE` | 10 | sensor A: (256D + E) / 32, absolute | 0 to 2047.97 kPa |
 | `0x78` | Exhaust gas temperature bank 1 | `EGT` | 9 | sensor 1: (256B + C) / 10 − 40 | −40 to 6513.5 °C |
 
-- **Boost (0x70)** is absolute pressure. preOBD adds barometric pressure to the boost sensor's gauge reading, taken from a `BAROMETRIC_PRESSURE` input if you have one, otherwise the standard 101.325 kPa. Byte A is `02` (boost sensor A present). Bytes B–C (commanded boost) and J (control status) are 0.
+- **Boost (0x70)** is absolute pressure. preOBD adds barometric pressure to the boost input's gauge value, taken from a `BAROMETRIC_PRESSURE` input if you have one, otherwise the standard 101.325 kPa. The same rule covers every pressure PID: a gauge application (boost, oil, fuel) on an absolute PID (0x0B, 0x33, 0x70) has barometric pressure added, and `MAP_PRESSURE` on a gauge PID (0x0A, 0x23) has it taken off. Byte A is `02` (boost sensor A present). Bytes B–C (commanded boost) and J (control status) are 0.
 - **EGT (0x78)**: byte A is `01` (sensor 1 present), and sensors 2–4 read 0.
 - **0x70 and 0x78 are multi-frame replies**, longer than one CAN frame. preOBD sends the First Frame, waits for the tool's Flow Control, then sends the rest (ISO 15765-2). The ELM327 emulation prints them the way an ELM327 does.
 - Any other single-value J1979 PID in preOBD's import table (`LIST PIDS JSON`) can be assigned with `SET <pin> OBD_PID`, as long as the input measures the same quantity.
