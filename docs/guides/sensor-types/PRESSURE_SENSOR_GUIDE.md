@@ -212,7 +212,7 @@ See [ADVANCED_CALIBRATION_GUIDE.md](../configuration/ADVANCED_CALIBRATION_GUIDE.
 
 Linear pressure sensors report **NaN** when the ADC voltage falls more than ~0.05V outside the calibrated `voltage_min`/`voltage_max` window. A NaN reading is preOBD's signal that the sensor is disconnected, unpowered, or shorted — distinct from a real low/high reading at the rails.
 
-For this to work reliably, a disconnected pin must rail rather than float to mid-scale. Built-in presets that ship with integrated signal conditioning (MPX4250, MPX5700, AEM 150 PSI, generic boost, generic 150 PSI) enable an internal pull-up automatically. Sensors with high output impedance (TPS, generic temp) leave it disabled to avoid skewing the reading.
+For this to work reliably, a disconnected pin must rail rather than float to mid-scale. Built-in presets that ship with integrated signal conditioning (MPX4250, MPX5700, AEM 150 PSI, generic boost, generic 150 PSI) enable an internal pull-up automatically, unless the input has a divider (`SET <pin> DIVIDER`): through a divider the pull-up would skew every reading and hold a disconnected sensor at a believable mid-scale value, while the divider's lower resistor already pulls an open pin to 0 V, which reads NaN. So set `DIVIDER` whenever one is wired. Sensors with high output impedance (TPS, generic temp) leave it disabled to avoid skewing the reading.
 
 **Custom calibrations (`SET <pin> CAL PRESSURE_LINEAR ...`) do not enable the internal pull-up.** Wire an external pull-down (e.g. 100kΩ from the analog pin to GND) if you want disconnect detection on a custom-calibrated linear sensor.
 

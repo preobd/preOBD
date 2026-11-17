@@ -66,7 +66,12 @@ void readLinearSensor(Input *ptr) {
 
     // Apply pin mode based on cal flag. Internal pull-up forces a disconnected
     // pin to rail high so the out-of-range check below catches it as NAN.
-    pinMode(ptr->pin, enable_pullup ? INPUT_PULLUP : INPUT);
+    // Not through a divider (#684): the pull-up and the divider's lower leg
+    // would hold an open sensor's pin mid-scale (a plausible reading, not a
+    // fault) and skew every real one. There the lower leg pulls an open pin
+    // to 0 V, below V_min, which is the same NAN.
+    const bool pullup = enable_pullup && divider_ratio == 1.0f;
+    pinMode(ptr->pin, pullup ? INPUT_PULLUP : INPUT);
 
     bool isValid;
     int reading = readAnalogPin(ptr->pin, &isValid);
