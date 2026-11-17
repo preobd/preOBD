@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The rate at which CAN input asks the ECU is a setting (`BUS CAN POLL`, 50-1000 ms), so a scan tool on the same plug gets room
 - RealDash can connect over Bluetooth LE through the nRF52840 link (`OUTPUT ADD REALDASH BLE`), instead of ELM327 over BLE; it needs the updated nRF firmware
 - The app shows a relay whose pin is taken by something else as `NOT DRIVEN` instead of OFF, and the Relay Control Guide explains how to wire a relay so it stays off while preOBD starts or resets (pull resistor, 3.3 V relay modules, NO or NC contact, pins to avoid)
+- The app says when a `FAILSAFE ON` relay is on only because of the failsafe, and why: its rule is still waiting for a reading it trusts after a start, or its sensor has failed
 
 ### Fixed
 - Clearing or changing an RPM or speed input now stops it counting pulses on its pin, so a relay later put on that pin no longer shows up as RPM or speed; and a `LOAD`, import or `SYSTEM RESET` now says when it releases a relay you had forced off, since its rule may then switch it on

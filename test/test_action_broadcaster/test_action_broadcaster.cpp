@@ -83,6 +83,7 @@ uint8_t rulesActionRuleCount(int slot) {
 // about. Counting the calls also pins the "one walk per slot" property.
 static bool g_sourceFaulted[MAX_ACTIONS];
 static bool g_ruleActive[MAX_ACTIONS];
+static bool g_unsettled[MAX_ACTIONS];     // a member with no trusted verdict yet (#669)
 static int  g_driveCalls = 0;
 ActionDrive rulesActionDrive(int slot) {
     ActionDrive d{};
@@ -91,6 +92,7 @@ ActionDrive rulesActionDrive(int slot) {
     d.memberCount = rulesActionRuleCount(slot);
     d.anyFaulted  = g_sourceFaulted[slot];
     d.anyActive   = g_ruleActive[slot];
+    d.anyUnsettled = g_unsettled[slot];
     return d;
 }
 
@@ -165,6 +167,7 @@ void setUp(void) {
     memset(g_override, 0, sizeof(g_override));
     memset(g_sourceFaulted, 0, sizeof(g_sourceFaulted));
     memset(g_ruleActive, 0, sizeof(g_ruleActive));
+    memset(g_unsettled, 0, sizeof(g_unsettled));
     memset(g_notDriven, 0, sizeof(g_notDriven));
     g_driveCalls = 0;
     memset(g_extraMembers, 0, sizeof(g_extraMembers));
@@ -410,6 +413,95 @@ static void test_not_driven_bit_reported_and_pushes(void) {
     TEST_ASSERT_TRUE(frameState(0).overrideFlags & PREOBD_ACTION_OVR_NOT_DRIVEN);
 }
 
+// Bit 5: a FAILSAFE ON relay that is ON with nothing but the failsafe holding
+// it (#672). The frames a cold boot and then a sensor loss put on the wire, in
+// order, with bit 2 telling the two reasons apart. (The real state machine
+// producing these inputs is driven in test_membership.)
+static void test_failsafe_bit_through_warmup_fault_and_recovery(void) {
+    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, /*ruleRef*/5, 0, PREOBD_ACTION_FAILSAFE_ON);
+    g_unsettled[0] = true;  g_actionState[0] = true;     // claimed ON, rule in warmup
+    ActionBroadcaster::tick();
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_STATE_ON, frameState(0).state);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_OVR_FAILSAFE, frameState(0).overrideFlags);
+
+    g_frameCount = 0;                                    // first verdict: clear
+    g_unsettled[0] = false; g_actionState[0] = false;
+    ActionBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_STATE_OFF, frameState(0).state);
+    TEST_ASSERT_EQUAL_UINT8(0, frameState(0).overrideFlags);
+
+    // The sensor dies. The fault is time-based, so a tick can see it before the
+    // 50 ms step has switched the relay: fault alone first, never "failsafe, OFF".
+    g_frameCount = 0;
+    g_sourceFaulted[0] = true;
+    ActionBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_STATE_OFF, frameState(0).state);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_OVR_SOURCE_FAULTED, frameState(0).overrideFlags);
+
+    g_frameCount = 0;
+    g_actionState[0] = true;                             // the step drives it ON
+    ActionBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_STATE_ON, frameState(0).state);
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_OVR_SOURCE_FAULTED | PREOBD_ACTION_OVR_FAILSAFE,
+                            frameState(0).overrideFlags);
+
+    g_frameCount = 0;                                    // the sensor is back, reading clear
+    g_sourceFaulted[0] = false; g_actionState[0] = false;
+    ActionBroadcaster::tick();
+    TEST_ASSERT_EQUAL_INT(1, g_frameCount);
+    TEST_ASSERT_EQUAL_UINT8(0, frameState(0).overrideFlags);
+}
+
+// The bit means "only the failsafe": an override, a live demand, a FAILSAFE OFF
+// relay, a relay held OFF (CONFIG, not driven) and a non-relay never carry it.
+// One tick that must push exactly one frame (the change under test).
+static int tickOneFrame(void) {
+    g_frameCount = 0;
+    ActionBroadcaster::tick();
+    return g_frameCount;
+}
+
+static void test_failsafe_bit_only_when_nothing_else_holds_it_on(void) {
+    configureAction(0, 7, PREOBD_ACTION_TYPE_RELAY, 9, /*ruleRef*/5, 0, PREOBD_ACTION_FAILSAFE_ON);
+    g_sourceFaulted[0] = true; g_actionState[0] = true;
+    TEST_ASSERT_EQUAL_UINT8(1, tickOneFrame());
+    TEST_ASSERT_TRUE(frameState(0).overrideFlags & PREOBD_ACTION_OVR_FAILSAFE);
+
+    g_override[0] = ACT_OVR_FORCE_ON;                    // an operator holds it ON
+    TEST_ASSERT_EQUAL_UINT8(1, tickOneFrame());
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_OVR_FORCE_ON | PREOBD_ACTION_OVR_SOURCE_FAULTED,
+                            frameState(0).overrideFlags);
+    g_override[0] = ACT_OVR_AUTO;
+
+    g_ruleActive[0] = true;                              // a healthy sibling demands it
+    TEST_ASSERT_EQUAL_UINT8(1, tickOneFrame());
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_OVR_SOURCE_FAULTED | PREOBD_ACTION_OVR_RULE_ACTIVE,
+                            frameState(0).overrideFlags);
+    g_ruleActive[0] = false;
+
+    g_actionState[0] = false;                            // held OFF in CONFIG (#268)
+    TEST_ASSERT_EQUAL_UINT8(1, tickOneFrame());
+    TEST_ASSERT_EQUAL_UINT8(PREOBD_ACTION_OVR_SOURCE_FAULTED, frameState(0).overrideFlags);
+
+    g_actionState[0] = true;
+    actions[0].failsafe = PREOBD_ACTION_FAILSAFE_OFF;    // not a failsafe-ON relay
+    TEST_ASSERT_EQUAL_UINT8(1, tickOneFrame());
+    TEST_ASSERT_EQUAL_UINT8(0, frameState(0).overrideFlags & PREOBD_ACTION_OVR_FAILSAFE);
+
+    actions[0].failsafe = PREOBD_ACTION_FAILSAFE_ON;
+    actions[0].type = ACT_BEEPER;
+    TEST_ASSERT_EQUAL_UINT8(1, tickOneFrame());
+    TEST_ASSERT_EQUAL_UINT8(0, frameState(0).overrideFlags & PREOBD_ACTION_OVR_FAILSAFE);
+
+    actions[0].type = ACT_RELAY;                         // a manual relay's latch
+    actions[0].ruleRef = RULES_ID_NONE;
+    TEST_ASSERT_EQUAL_UINT8(1, tickOneFrame());
+    TEST_ASSERT_EQUAL_UINT8(0, frameState(0).overrideFlags & PREOBD_ACTION_OVR_FAILSAFE);
+}
+
 // Only a RELAY holds a pin; other action types never carry the bit.
 static void test_not_driven_bit_relay_only(void) {
     configureAction(0, 7, ACT_BEEPER, 9, /*ruleRef*/5, 0, 0);
@@ -634,6 +726,8 @@ int main(int, char**) {
     RUN_TEST(test_rule_active_bit_absent_on_empty_slot);
     RUN_TEST(test_not_driven_bit_reported_and_pushes);
     RUN_TEST(test_not_driven_bit_relay_only);
+    RUN_TEST(test_failsafe_bit_through_warmup_fault_and_recovery);
+    RUN_TEST(test_failsafe_bit_only_when_nothing_else_holds_it_on);
     RUN_TEST(test_pack_resolves_membership_once_per_slot);
     RUN_TEST(test_handle_inbound_none_is_noop);
     RUN_TEST(test_handle_inbound_unknown_id);

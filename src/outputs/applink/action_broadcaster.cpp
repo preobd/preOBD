@@ -90,6 +90,12 @@ void packState(int i, PreobdActionState& s) {
     // the pin is not ours, so say so. Same predicate as ACTION LIST's marker.
     if (a.type == ACT_RELAY && !rulesActionDriven(i))
         s.overrideFlags |= PREOBD_ACTION_OVR_NOT_DRIVEN;
+    // ON only because the failsafe holds it (#672, §11.3): bit 2 then says
+    // whether a sensor is dead or a rule just hasn't settled. The terms of
+    // rulesActionFailsafeHeld(), on the drive resolved above (one walk).
+    if (s.state == PREOBD_ACTION_STATE_ON &&
+        rulesActionOnByFailsafe(a, drive, rulesActionOverride(i)))
+        s.overrideFlags |= PREOBD_ACTION_OVR_FAILSAFE;
     // sequence stamped at emit time
 }
 

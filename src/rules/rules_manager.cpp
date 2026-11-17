@@ -1159,6 +1159,12 @@ bool rulesActionSourceFaulted(int slot) { return rulesActionDrive(slot).anyFault
 
 bool rulesActionRuleActive(int slot) { return rulesActionDrive(slot).anyActive; }
 
+bool rulesActionFailsafeHeld(int slot) {
+    if (slot < 0 || slot >= MAX_ACTIONS || actions[slot].id == RULES_ID_NONE) return false;
+    return rulesActionState(slot) &&
+           rulesActionOnByFailsafe(actions[slot], resolveActionDrive(slot), rulesActionOverride(slot));
+}
+
 static bool actionComputedOn(int i, bool configMode) {
         const Action& a = actions[i];
         const ActionDrive drive = resolveActionDrive(i);

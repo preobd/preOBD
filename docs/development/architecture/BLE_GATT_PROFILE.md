@@ -303,6 +303,7 @@ Offset  Size  Type       Field
                                        bit2 (0x04) = rule source faulted
                                        bit3 (0x08) = a member rule is demanding ON
                                        bit4 (0x10) = relay not driven (see below)
+                                       bit5 (0x20) = ON only because the failsafe holds it
 12      4     uint8[4]   reserved
 ------  ----
 Total:  16 bytes
@@ -335,6 +336,16 @@ reads OFF, but the pin may carry another signal, so show the relay as not
 driven rather than OFF. The device refuses ON/OFF for it (AUTO still releases
 an override). Fix it by moving the relay or the other function to a free pin
 (`SYSTEM PINS`).
+
+Bit 5 (**failsafe**) is set on a `FAILSAFE ON` relay that is ON with nothing
+but the failsafe holding it: no override and no rule demanding it (`ACTION
+LIST` shows `FAILSAFE`). Bit 2 gives the reason. With bit 2 set, a sensor the
+relay's rule reads has failed. With bit 2 clear, the rule has no reading it
+trusts yet: after a boot, `LOAD`, import or re-arm, through the warmup and the
+first debounce (a few seconds, up to about a minute for a CAN source), and for
+as long as the reading then sits inside the rule's hysteresis band, which can
+be indefinitely. So word it as waiting for a reading, not as a warmup. It is
+never set with `state` OFF, with an override, or with bit 3.
 
 `CMD_AUTO` and `overrideFlags` are **additive** into a previously-reserved byte:
 the frame stays 16 bytes and the protocol version stays 2, so older clients

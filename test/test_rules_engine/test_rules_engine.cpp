@@ -716,6 +716,40 @@ static Action makeAction(uint8_t type, uint8_t ruleRef, uint8_t failsafe = ACT_F
     return a;
 }
 
+// rulesActionOnByFailsafe() (#672) is "rulesActionDesired() said ON, and only
+// its failsafe term can have": checked over every input, so the reported
+// reason can't drift from what drives the pin.
+static void test_on_by_failsafe_matches_the_resolver_everywhere(void) {
+    const ActionOverride ovrs[] = { ACT_OVR_AUTO, ACT_OVR_FORCE_ON, ACT_OVR_FORCE_OFF };
+    const uint8_t types[] = { ACT_RELAY, ACT_BEEPER };
+    int held = 0;
+    for (ActionOverride ovr : ovrs)
+    for (uint8_t type : types)
+    for (uint8_t fs = 0; fs < 2; fs++)
+    for (uint8_t n = 0; n < 3; n++)
+    for (uint8_t bits = 0; bits < 8; bits++) {
+        const Action a = makeAction(type, n ? 0 : RULES_ID_NONE, fs ? ACT_FAILSAFE_ON : ACT_FAILSAFE_OFF);
+        ActionDrive d{};
+        d.memberCount  = n;
+        d.anyActive    = n && (bits & 1);
+        d.anyFaulted   = n && (bits & 2);
+        d.anyUnsettled = n && (bits & 4);
+        // ON with the latch clear, no override and no demand leaves the failsafe.
+        const bool expect = rulesActionDesired(a, d, false, ovr) &&
+                            ovr == ACT_OVR_AUTO && !d.anyActive;
+        TEST_ASSERT_EQUAL(expect, rulesActionOnByFailsafe(a, d, ovr));
+        // The latch never matters to a rule-driven action.
+        if (n) TEST_ASSERT_EQUAL(rulesActionDesired(a, d, false, ovr), rulesActionDesired(a, d, true, ovr));
+        if (expect) held++;
+    }
+    // FAILSAFE ON relay, AUTO, 1 or 2 members, no demand, faulted and/or unsettled.
+    TEST_ASSERT_EQUAL_INT(2 * 3, held);
+    // A manual action's latch is not a failsafe.
+    const Action manual = makeAction(ACT_RELAY, RULES_ID_NONE, ACT_FAILSAFE_ON);
+    TEST_ASSERT_TRUE(rulesActionDesired(manual, manualOnly(), true, ACT_OVR_AUTO));
+    TEST_ASSERT_FALSE(rulesActionOnByFailsafe(manual, manualOnly(), ACT_OVR_AUTO));
+}
+
 static void test_action_manual_follows_manual_state(void) {
     Action a = makeAction(ACT_RELAY, RULES_ID_NONE);
     // rule state is ignored for a manual action
@@ -1274,6 +1308,7 @@ int main(int, char**) {
     RUN_TEST(test_normalize_warn_leaves_valid_side_alone);
     RUN_TEST(test_normalize_warn_both_sides_degrade_independently);
     RUN_TEST(test_warn_non_alarm_severity_ignores_modes);
+    RUN_TEST(test_on_by_failsafe_matches_the_resolver_everywhere);
     RUN_TEST(test_action_manual_follows_manual_state);
     RUN_TEST(test_action_follows_rule_when_trustworthy);
     RUN_TEST(test_action_relay_failsafe_on_untrustworthy);

@@ -92,11 +92,11 @@ static FLASHMEM void printActionRow(int i) {
     }
     msg.control.print(F("  -> "));
     msg.control.print(rulesActionState(i) ? F("ON") : F("OFF"));
-    // ON with no force and no member demanding it: the failsafe holds it, for a
-    // dead sensor or one with no trusted reading yet (#669). Without this a fan
-    // reads ON for no visible reason through a warmup of up to a minute.
-    if (rulesActionState(i) && members > 0 && rulesActionOverride(i) == ACT_OVR_AUTO &&
-        !rulesActionRuleActive(i))
+    // ON only because the failsafe holds it, for a dead sensor or one with no
+    // trusted reading yet (#669). Without this a fan reads ON for no visible
+    // reason through a warmup of up to a minute. Same test as the action
+    // frame's failsafe bit (#672).
+    if (rulesActionFailsafeHeld(i))
         msg.control.print(F("  FAILSAFE"));
     rulesPrintNotDriven(i);
     msg.control.println();

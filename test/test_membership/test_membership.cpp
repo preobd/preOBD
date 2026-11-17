@@ -1135,6 +1135,94 @@ static void test_failsafe_on_cold_start_goes_off_at_the_verdict(void) {
     TEST_ASSERT_EQUAL_UINT8(LOW, stubPinLatch[23]);
 }
 
+// ---- #672: "the failsafe holds it" is reported exactly while it is true -------
+// Real state machine. rulesActionFailsafeHeld() is ACTION LIST's marker and the
+// terms of the action frame's bit 5.
+
+// Cold start: held from the claim to the first verdict, and it ends in the
+// same step the relay goes OFF, never before or after it.
+static void test_failsafe_held_from_the_claim_to_the_verdict(void) {
+    addInput(10, 20.0f);
+    armRule(0, 10);
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    rulesActionAddRule(0, 0);
+    g_test_now = 1200;
+    rulesSyncActionPins(false);
+    TEST_ASSERT_TRUE_MESSAGE(rulesActionFailsafeHeld(0), "held from the claim");
+    TEST_ASSERT_FALSE(rulesActionSourceFaulted(0));           // unsettled, not faulted
+    bool sawOff = false;
+    for (uint32_t t = 1250; t <= 10000; t += 50) {
+        stepEngine(t);
+        TEST_ASSERT_EQUAL_MESSAGE(rulesActionState(0), rulesActionFailsafeHeld(0),
+                                  "held exactly while the relay is ON");
+        if (!rulesActionState(0)) sawOff = true;
+    }
+    TEST_ASSERT_TRUE(sawOff);
+}
+
+// A settled, clear rule whose sensor dies: not held through the fault debounce
+// (the relay is still OFF), held with the fault once the relay is ON, and
+// released when the sensor is back and has read clear for the debounce.
+static void test_failsafe_held_on_a_dead_sensor_and_released_on_recovery(void) {
+    addInput(10, 20.0f);
+    armRule(0, 10);
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    rulesActionAddRule(0, 0);
+    g_test_now = 1200;
+    rulesSyncActionPins(false);
+    for (uint32_t t = 1250; t <= 10000; t += 50) stepEngine(t);
+    TEST_ASSERT_FALSE(rulesActionState(0));
+    TEST_ASSERT_FALSE(rulesActionFailsafeHeld(0));
+
+    g_inputs[0].value = NAN;
+    uint32_t onAt = 0;
+    for (uint32_t t = 10050; t <= 15000; t += 50) {
+        stepEngine(t);
+        TEST_ASSERT_EQUAL_MESSAGE(rulesActionState(0), rulesActionFailsafeHeld(0),
+                                  "held exactly while the relay is ON");
+        if (rulesActionState(0) && !onAt) onAt = t;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(onAt >= 12000, "after the 2 s fault debounce (#650)");
+    TEST_ASSERT_TRUE(rulesActionSourceFaulted(0));            // bit 2 beside bit 5
+
+    g_inputs[0].value = 20.0f;
+    for (uint32_t t = 15050; t <= 25000; t += 50) {
+        stepEngine(t);
+        TEST_ASSERT_EQUAL(rulesActionState(0), rulesActionFailsafeHeld(0));
+    }
+    TEST_ASSERT_FALSE(rulesActionState(0));
+}
+
+// ON for another reason is not "the failsafe": a tripped rule, an override, a
+// healthy sibling's demand. And a relay held OFF in CONFIG is not held at all.
+static void test_failsafe_held_is_false_when_something_else_decides(void) {
+    addInput(10, 120.0f);                      // hot: the rule trips
+    armRule(0, 10);
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    rulesActionAddRule(0, 0);
+    g_test_now = 1200;
+    rulesSyncActionPins(false);
+    for (uint32_t t = 1250; t <= 10000; t += 50) stepEngine(t);
+    TEST_ASSERT_TRUE(rulesActionState(0));
+    TEST_ASSERT_TRUE(rulesActionRuleActive(0));
+    TEST_ASSERT_FALSE_MESSAGE(rulesActionFailsafeHeld(0), "the rule demands it");
+
+    g_inputs[0].value = NAN;                   // dead sensor, then an operator force
+    for (uint32_t t = 10050; t <= 15000; t += 50) stepEngine(t);
+    TEST_ASSERT_TRUE(rulesActionFailsafeHeld(0));
+    rulesActionSetOverride(0, ACT_OVR_FORCE_ON);
+    stepEngine(15050);
+    TEST_ASSERT_TRUE(rulesActionState(0));
+    TEST_ASSERT_FALSE_MESSAGE(rulesActionFailsafeHeld(0), "an override holds it");
+    rulesActionSetOverride(0, ACT_OVR_AUTO);
+    stepEngine(15100);
+    TEST_ASSERT_TRUE(rulesActionFailsafeHeld(0));
+
+    stepEngine(15150, /*configMode*/true);     // the #268 suppression: OFF
+    TEST_ASSERT_FALSE(rulesActionState(0));
+    TEST_ASSERT_FALSE_MESSAGE(rulesActionFailsafeHeld(0), "held OFF in CONFIG");
+}
+
 // ---- #668: a relay on a noisy rule holds each state for debounceMs ----------
 // The source flips between asserted and clear with random dwell times (some
 // shorter, some longer than the 500 ms debounce); the relay may only change
@@ -1321,6 +1409,9 @@ int main(int, char**) {
     RUN_TEST(test_failsafe_on_claims_on_and_holds_through_a_hot_start);
     RUN_TEST(test_failsafe_on_inverted_claims_low);
     RUN_TEST(test_failsafe_on_cold_start_goes_off_at_the_verdict);
+    RUN_TEST(test_failsafe_held_from_the_claim_to_the_verdict);
+    RUN_TEST(test_failsafe_held_on_a_dead_sensor_and_released_on_recovery);
+    RUN_TEST(test_failsafe_held_is_false_when_something_else_decides);
     RUN_TEST(test_relay_on_a_noisy_rule_holds_each_state_for_the_debounce);
     RUN_TEST(test_failsafe_on_dead_sensor_stays_on);
     RUN_TEST(test_failsafe_on_claims_off_in_config);

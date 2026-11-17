@@ -242,4 +242,21 @@ struct ActionDrive {
 bool rulesActionDesired(const Action& action, const ActionDrive& drive,
                           bool manualState, ActionOverride override);
 
+/**
+ * True when rulesActionDesired() answers ON through its failsafe term and
+ * nothing else: a rule-driven FAILSAFE ON relay, no operator override, no
+ * member demanding it, and at least one member faulted or unsettled (§11.3,
+ * #669). This is what ACTION LIST's FAILSAFE marker and the action frame's
+ * failsafe bit report (#672). It is derived from the same ActionDrive the pin
+ * is driven from, not from "ON and no rule active": that is also true for one
+ * step after a rule clears, when no failsafe is involved.
+ * test_rules_engine pins it against rulesActionDesired() over every input.
+ */
+inline bool rulesActionOnByFailsafe(const Action& action, const ActionDrive& drive,
+                                    ActionOverride override) {
+    return override == ACT_OVR_AUTO && drive.memberCount > 0 && !drive.anyActive &&
+           (drive.anyFaulted || drive.anyUnsettled) &&
+           action.type == ACT_RELAY && action.failsafe == ACT_FAILSAFE_ON;
+}
+
 #endif // RULES_ENGINE_H

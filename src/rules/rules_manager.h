@@ -277,6 +277,14 @@ bool rulesActionRuleActive(int slot);
 // frame does). Zero-valued for an out-of-range or unconfigured slot.
 ActionDrive rulesActionDrive(int slot);
 
+// True when the relay in `slot` is ON and only the failsafe holds it there: a
+// member's sensor is dead, or a member has no trusted verdict yet (§11.3, #669).
+// rulesActionOnByFailsafe() on the loop's own drive, and the reported state ON,
+// so a relay held OFF in CONFIG or one that doesn't hold its pin reports false.
+// ACTION LIST's FAILSAFE marker; the action frame applies the same two terms
+// to the drive it already resolved (#672).
+bool rulesActionFailsafeHeld(int slot);
+
 // --- Rule<->Action membership (M:N, §11.6 / #343) ---
 // An Action is OR-driven by its member Rules: active while ANY member is active.
 // The first member is stored inline in Action.ruleRef and the rest in

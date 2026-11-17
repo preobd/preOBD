@@ -265,7 +265,8 @@ band is not an answer, because after a reset preOBD can't know whether the fan
 was running; so with `ABOVE 95 HYST 5` and the engine at 92 the fan keeps
 running until the engine drops below 90, or stays above 95 long enough for the
 Rule to trip. `ACTION LIST` shows
-such a relay as `-> ON  FAILSAFE`.
+such a relay as `-> ON  FAILSAFE`, and the app labels it as held by the
+failsafe, saying whether it is waiting for a reading or the sensor has failed.
 
 ### After a reset
 

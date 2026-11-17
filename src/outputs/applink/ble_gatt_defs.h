@@ -339,6 +339,7 @@ static_assert(sizeof(PreobdRelayState) == PREOBD_RELAY_STATE_SIZE,
 #define PREOBD_ACTION_OVR_SOURCE_FAULTED 0x04  // bit 2: a member rule's source untrustworthy
 #define PREOBD_ACTION_OVR_RULE_ACTIVE    0x08  // bit 3: a member rule is demanding ON (#348)
 #define PREOBD_ACTION_OVR_NOT_DRIVEN     0x10  // bit 4: a RELAY that doesn't hold its pin (#653)
+#define PREOBD_ACTION_OVR_FAILSAFE       0x20  // bit 5: ON only because the failsafe holds it (#672)
 
 // PREOBD_ACTION_OVR_RULE_ACTIVE lets a client tell a force that is COUNTERMANDING
 // a live demand ("FORCE OFF while the fan rule wants the fan on") from an idle
@@ -356,6 +357,17 @@ static_assert(sizeof(PreobdRelayState) == PREOBD_RELAY_STATE_SIZE,
 // show the relay as OFF either: show it as not driven. Same test as ACTION
 // LIST's NOT DRIVEN marker (rulesActionDriven()), so the two can't disagree. A
 // pre-#653 device leaves the bit clear.
+
+// PREOBD_ACTION_OVR_FAILSAFE: a FAILSAFE ON relay is ON and nothing but the
+// failsafe holds it there (§11.3): no override, no member rule demanding it.
+// Bit 2 says why. Set: a member's sensor is dead. Clear: a member has no
+// trusted verdict yet (after boot, LOAD, an import or a re-arm, through the
+// warmup and the first debounce, up to about a minute on a CAN source, and
+// then for as long as the reading sits inside the rule's hysteresis band, #669).
+// Without the bit that relay reads as ON with nothing causing it. Same test as
+// ACTION LIST's FAILSAFE marker (rulesActionOnByFailsafe() and `state` ON), so
+// the two can't disagree. Never set with `state` OFF, with an override, or with
+// bit 3. A pre-#672 device leaves the bit clear.
 
 // ruleCount — how many Rules OR-drive this Action (§11.6, #343). Additive into a
 // previously-reserved byte, so the protocol version stays 2. `ruleRef` remains the
