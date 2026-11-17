@@ -195,6 +195,14 @@ void dumpPinRegistry();
 const char* getPinUsageTypeName(PinUsageType type);
 
 /**
+ * The owner name every Action's pin claim is made under (rules_manager.cpp).
+ * One pointer for all of them: the rules engine finds its own entries by
+ * pointer equality, and SYSTEM PINS uses it to tell an action's PIN_OUTPUT
+ * entry from the RGB LED's (#644).
+ */
+extern const char* const PIN_DESC_ACTION;
+
+/**
  * Get the number of registered pins
  *
  * @return Number of pins currently registered

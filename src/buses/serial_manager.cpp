@@ -10,6 +10,7 @@
 #include "../config/system_config.h"
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
+#include "../core/transport_interface.h"   // TRANSPORT_SERIAL1: serialPortCarriesCommands()
 
 #ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
 #define FLASHMEM
@@ -88,6 +89,36 @@ const char* getBaudRateString(uint8_t index) {
 // Track which ports have been initialized at runtime
 static uint8_t active_ports_mask = 0;
 
+#if defined(HOST_NRF_CTS_PIN) && defined(HOST_NRF_RTS_PIN)
+// Who reads HOST_NRF_CTS_PIN: Serial1's transport (main.cpp). It reads the pin
+// only while Serial1 holds it (§12.5, #646), so it is told the pin after the
+// claim holds and -1 before the claim is released.
+static SerialFlowPinHook flow_pin_hook = nullptr;
+#endif
+
+void setSerialFlowPinHook(SerialFlowPinHook hook) {
+#if defined(HOST_NRF_CTS_PIN) && defined(HOST_NRF_RTS_PIN)
+    flow_pin_hook = hook;
+#else
+    (void)hook;
+#endif
+}
+
+#if NUM_SERIAL_PORTS > 0
+// A serial port that is running and carries commands (#561): the console's
+// ports (systemConfig.console, which every CONSOLE TRANSPORT keeps in step) and
+// a framed port (the app's link, always a console source, #612). An import
+// keeps such a port's settings, and BUS SERIAL <n> DISABLE refuses it, so
+// neither can cut off a link the board is talked to over.
+FLASHMEM bool serialPortCarriesCommands(uint8_t port_id) {
+    if (port_id < 1 || port_id > NUM_SERIAL_PORTS) return false;
+    if (!isSerialPortActive(port_id)) return false;
+    const uint8_t t = (uint8_t)(TRANSPORT_SERIAL1 + (port_id - 1));
+    const bool framed = systemConfig.serial.framed_enabled_mask & (1u << (port_id - 1));
+    return systemConfig.console.primary == t || systemConfig.console.secondary == t || framed;
+}
+#endif
+
 // ============================================================================
 // MAIN INITIALIZATION
 // ============================================================================
@@ -117,9 +148,9 @@ bool initSerialPort(uint8_t port_id, uint32_t baudrate) {
     uint8_t rx = getDefaultSerialRX(port_id);
     uint8_t tx = getDefaultSerialTX(port_id);
 
-    // Check for pin conflicts BEFORE .begin() drives anything — the claim
-    // itself (registration) happens below, only once .begin() has succeeded,
-    // to match the platform-specific bring-up between the two.
+    // Claim BEFORE .begin() drives anything (§12.5: a claim is made before
+    // the peripheral starts). A refused claim begins nothing and touches none
+    // of the pins (#646); a port the switch below can't start releases it.
     uint8_t check_pins[4] = { rx, tx, 0xFF, 0xFF };
     uint8_t n_check_pins = 2;
 #if defined(HOST_NRF_CTS_PIN) && defined(HOST_NRF_RTS_PIN)
@@ -131,7 +162,8 @@ bool initSerialPort(uint8_t port_id, uint32_t baudrate) {
         check_pins[n_check_pins++] = HOST_NRF_RTS_PIN;
     }
 #endif
-    if (pinsConflict(check_pins, n_check_pins, PIN_RANK_SERIAL, getSerialPortName(port_id))) {
+    if (!claimPins(check_pins, n_check_pins, PIN_RESERVED, PIN_RANK_SERIAL,
+                   TAG_SERIAL, getSerialPortName(port_id))) {
         return false;
     }
 
@@ -234,15 +266,16 @@ bool initSerialPort(uint8_t port_id, uint32_t baudrate) {
         // Mark port as active
         active_ports_mask |= (1 << (port_id - 1));
 
-        // Claim the pins now that .begin() has actually succeeded. The
-        // conflict check already ran above (before .begin() touched anything);
-        // this re-check is idempotent — nothing else can have taken the pins
-        // in between — and folds the registration itself through the same
-        // door (#384).
-        claimPins(check_pins, n_check_pins, PIN_RESERVED, PIN_RANK_SERIAL,
-                 TAG_SERIAL, getSerialPortName(port_id));
+#if defined(HOST_NRF_CTS_PIN) && defined(HOST_NRF_RTS_PIN)
+        // The claim holds: Serial1's transport may read CTS from now on.
+        if (port_id == 1 && flow_pin_hook) flow_pin_hook(HOST_NRF_CTS_PIN);
+#endif
 
         msg.debug.info(TAG_SERIAL, "Serial%d initialized @ %lu baud", port_id, baudrate);
+    } else {
+        // Not started here: give the claim back (serial claims are
+        // PIN_RESERVED under the port's own name, so releasePins() finds them).
+        releasePins(check_pins, n_check_pins, getSerialPortName(port_id));
     }
 
     return success;
@@ -290,6 +323,10 @@ bool disableSerialPort(uint8_t port_id) {
         if (port_id == 1) {
             pins[2] = HOST_NRF_CTS_PIN;
             pins[3] = HOST_NRF_RTS_PIN;
+            // Stop reading CTS, and leave RTS undriven, while Serial1 still
+            // holds both: a released pin must not stay an output (§12.5).
+            if (flow_pin_hook) flow_pin_hook(-1);
+            pinMode(HOST_NRF_RTS_PIN, INPUT);
         }
 #endif
         releasePins(pins, 4, getSerialPortName(port_id));

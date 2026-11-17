@@ -181,6 +181,13 @@ void rgbLedOff();
 void updateRGBLed();
 
 /**
+ * Is the LED driven? False when any of its pin claims was refused at boot:
+ * it then never touches its pins (§12.5, #646), so every call above is a
+ * no-op. TEST OUTPUT reports it as skipped.
+ */
+bool rgbLedDriven();
+
+/**
  * Get current active priority
  * Useful for debugging or status checks
  */

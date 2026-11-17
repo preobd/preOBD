@@ -298,7 +298,9 @@ bool claimPins(const uint8_t* pins, uint8_t count, PinUsageType type, uint8_t ra
     if (reservePins_unchecked(pins, count, type, owner, rank)) return true;
 
     lastClaimRegistryFull = !fits;
-    msg.debug.error(tag, PIN_OWNER_BUSY, owner);
+    // A full table is not a claimed pin: reportDiag() says which it was, and
+    // "pins already claimed" would send the user looking for an owner (#599)
+    if (fits) msg.debug.error(tag, PIN_OWNER_BUSY, owner);
     reportDiag(0xFF, owner, nullptr, fits ? PDK_CLAIM_FAILED : PDK_REGISTRY_FULL);
     return false;
 }

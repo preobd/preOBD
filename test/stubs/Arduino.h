@@ -98,7 +98,7 @@ inline void digitalWrite(uint8_t p, uint8_t v) { stubPinLatch[p] = v; stubPinWri
 inline void digitalWriteFast(uint8_t p, uint8_t v) { digitalWrite(p, v); }
 inline int  digitalRead(uint8_t p) { stubPinReads[p]++; return stubPinInput[p]; }
 inline int  analogRead(uint8_t) { return 0; }
-inline void analogWrite(uint8_t, int) {}
+inline void analogWrite(uint8_t p, int v) { stubPinLatch[p] = (uint8_t)v; stubPinWritten[p] = true; stubPinRecord(p, 'A', (uint8_t)v); }
 inline void yield() {}
 
 // ----- Print base class (Arduino's Print) -----
@@ -132,6 +132,7 @@ public:
     virtual int available() = 0;
     virtual int read() = 0;
     virtual int peek() = 0;
+    virtual void flush() {}   // Arduino's Stream has it (SerialTransport calls it)
 };
 
 // ----- Number formatting used by TransportInterface's inline print() helpers.

@@ -84,21 +84,18 @@ SerialTransport usbSerial(&Serial, "USB", 115200);
 //   - framed: nRF coprocessor binary protocol (ARCHITECTURE.md §3)
 // Phase 3 software flow control (HOST_NRF_CTS_PIN) wraps both modes.
 #if INCLUDE_FRAMED_TRANSPORT
-#  if defined(HOST_NRF_CTS_PIN)
-MuxTransport hwSerial1(&HW_SERIAL1, "SERIAL1", 115200, HOST_NRF_CTS_PIN);
-#  else
+// Flow control starts off: initSerialPort() turns it on once Serial1 holds
+// HOST_NRF_CTS_PIN (setSerialFlowPinHook below, §12.5, #646).
 MuxTransport hwSerial1(&HW_SERIAL1, "SERIAL1", 115200);
-#  endif
 #else
 // No nRF coprocessor on this build — Serial1 is a plain transparent transport
 // (byte-for-byte equivalent to MuxTransport's transparent mode), saving the
 // ~1.6 KB of framed RX/TX/decoder buffers. See profile INCLUDE_FRAMED_TRANSPORT.
-#  if defined(HOST_NRF_CTS_PIN)
-SerialTransport hwSerial1(&HW_SERIAL1, "SERIAL1", 115200, HOST_NRF_CTS_PIN);
-#  else
 SerialTransport hwSerial1(&HW_SERIAL1, "SERIAL1", 115200);
-#  endif
 #endif
+// serial_manager owns Serial1's pin claim; this hands its transport the CTS
+// pin while the claim holds, and -1 otherwise.
+static void serial1FlowPin(int16_t pin) { hwSerial1.setFlowInPin(pin); }
 #endif
 #if NUM_SERIAL_PORTS >= 2
 SerialTransport hwSerial2(&HW_SERIAL2, "SERIAL2", 115200);
@@ -338,6 +335,10 @@ void setup() {
     // finishes, but this repo has a history of boot-order regressions here
     // (#352, #368, #369) so it is wired up as early as the driver exists.
     setSerialPortActiveProbe(isSerialPortActive);
+#if NUM_SERIAL_PORTS >= 1
+    // Before initConfiguredSerialPorts(): the claim it makes switches CTS on
+    setSerialFlowPinHook(serial1FlowPin);
+#endif
     // msg's two streams write where the console and the log say (#612 2b-2)
     setMessageSinkResolver(PLANE_CONTROL, consoleSink);
     setMessageSinkResolver(PLANE_DEBUG, logSink);

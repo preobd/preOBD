@@ -42,7 +42,29 @@
 MessageAPI msg;
 SystemConfig systemConfig;
 LogFilter::LogFilter() {}
-TransportInterface* messageSink(MessagePlane, bool) { return nullptr; }
+// The bus notes' text is checked word for word (#523 stores the I2C and SPI
+// notes once, with the bus kind filled in): capture the console
+#include <string>
+static std::string g_out;
+static bool g_capture = false;
+struct CaptureTransport : public TransportInterface {
+    size_t write(uint8_t c) override { g_out += (char)c; return 1; }
+    size_t write(const uint8_t* b, size_t n) override { g_out.append((const char*)b, n); return n; }
+    int available() override { return 0; }
+    int read() override { return -1; }
+    int peek() override { return -1; }
+    void flush() override {}
+    const char* getName() const override { return "CAPTURE"; }
+    uint8_t getCapabilities() const override { return 0; }
+    TransportState getState() const override { return TRANSPORT_CONNECTED; }
+    bool begin() override { return true; }
+    void end() override {}
+    void update() override {}
+};
+static CaptureTransport g_captureT;
+TransportInterface* messageSink(MessagePlane p, bool secondary) {
+    return (g_capture && p == PLANE_CONTROL && !secondary) ? &g_captureT : nullptr;
+}
 size_t MessageStream::error(const char*, const char*, ...) { return 0; }
 size_t MessageStream::warn(const char*, const char*, ...) { return 0; }
 size_t MessageStream::info(const char*, const char*, ...) { return 0; }
@@ -242,6 +264,36 @@ static void test_a_failed_selection_does_not_fall_back_to_bus_zero(void) {
     TEST_ASSERT_TRUE(reportNoI2CBus());
 }
 
+
+// The four notes print exactly the text they printed when each was its own
+// string (before #523's shared storage)
+static void test_bus_notes_print_their_exact_text(void) {
+    struct { bool (*fn)(); const char* want; } cases[] = {
+        { reportNoI2CBus,
+          "\r\nNote: no I2C bus declared or selected. Run: BUS I2C <n>\r\n"
+          "  (SAVE + reboot), or add -D I2C_WIRED_BUS=<n> to wiring.ini\r\n"
+          "  if I2C is permanently wired on this unit.\r\n" },
+        { reportNoSPIBus,
+          "\r\nNote: no SPI bus declared or selected. Run: BUS SPI <n>\r\n"
+          "  (SAVE + reboot), or add -D SPI_WIRED_BUS=<n> to wiring.ini\r\n"
+          "  if SPI is permanently wired on this unit.\r\n" },
+        { [] { return reportI2CBusUnavailable(0); },
+          "\r\nNote: the selected/declared I2C bus could not start (see above).\r\n"
+          "  Free the pin it needs, or choose another bus with BUS I2C <n>.\r\n" },
+        { [] { return reportSPIBusUnavailable(0); },
+          "\r\nNote: the selected/declared SPI bus could not start (see above).\r\n"
+          "  Free the pin it needs, or choose another bus with BUS SPI <n>.\r\n" },
+    };
+    g_capture = true;
+    for (auto& c : cases) {
+        rearmBusDiagnostics();
+        g_out.clear();
+        TEST_ASSERT_TRUE(c.fn());
+        TEST_ASSERT_EQUAL_STRING(c.want, g_out.c_str());
+    }
+    g_capture = false;
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_explicit_selection_wins_over_no_declaration);
@@ -266,5 +318,6 @@ int main(int, char**) {
 
     RUN_TEST(test_no_bus_guidance_is_rearmed_after_boot);
     RUN_TEST(test_no_bus_guidance_episode_is_per_bus_type);
+    RUN_TEST(test_bus_notes_print_their_exact_text);
     return UNITY_END();
 }

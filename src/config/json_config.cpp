@@ -1333,20 +1333,8 @@ static FLASHMEM bool commitInputsFromJSON(JsonArray& inputsArray, const uint8_t*
 // value" rather than "coerce to zero/null"), each string field is null-
 // guarded before use, and the live config is only overwritten once, at the
 // very end -- one assignment nothing above this line can fail past.
-#if NUM_SERIAL_PORTS > 0
-// A serial port that is running and carries commands keeps its settings, so an
-// import can't cut off a link the board is talked to over (#561) -- the same
-// reason SYSTEM RESET CONFIRM keeps serial settings (RESET_KEEP_LINK, #549).
-// That is the console's ports (systemConfig.console, which every CONSOLE
-// TRANSPORT keeps in step) and a framed port (the app's link, always a console
-// source, #612). Every JSON IMPORT arrives on one of these (#624).
-FLASHMEM static bool serialPortCarriesCommands(uint8_t port_id) {
-    if (!isSerialPortActive(port_id)) return false;
-    const uint8_t t = (uint8_t)(TRANSPORT_SERIAL1 + (port_id - 1));
-    const bool framed = systemConfig.serial.framed_enabled_mask & (1u << (port_id - 1));
-    return systemConfig.console.primary == t || systemConfig.console.secondary == t || framed;
-}
-#endif
+// serialPortCarriesCommands() (serial_manager.h): a running console or framed
+// port keeps its settings, so an import can't cut off its own link (#561).
 
 // "NONE".."DEBUG" -> 0..4, or 0xFF for anything else ("UNKNOWN", a typo, a
 // non-string): an unreadable level keeps the current one rather than becoming NONE.
@@ -2149,6 +2137,14 @@ static FLASHMEM bool validateRulesActions(JsonDocument& doc, const uint8_t* resu
                 msg.control.print(act.id);
                 msg.control.println(JSON_FSTR(kTwice));
                 ok = false;
+            } else if (act.type != ACT_RELAY) {
+                // As ACTION ADD (cmd_action.cpp): the other types are reserved,
+                // and their target is a channel, not a pin (#645). An action
+                // type that lands adds its import here.
+                msg.control.print(F("ERROR: Action "));
+                msg.control.print(act.id);
+                msg.control.println(F(": v1 supports RELAY only (BEEPER/LED/DISPLAY reserved)"));
+                ok = false;
             } else {
                 setPinBit(actionIds, act.id);
                 // A member named twice, or again after the first, adds no link
@@ -2176,7 +2172,8 @@ static FLASHMEM bool validateRulesActions(JsonDocument& doc, const uint8_t* resu
             const Action& act = actions[i];
             if (act.id == RULES_ID_NONE) continue;
             memberMissing(act.id, act.ruleRef);
-            if (nRelays < MAX_ACTIONS) relays[nRelays++] = { act.id, act.target };
+            if (act.type == ACT_RELAY && nRelays < MAX_ACTIONS)
+                relays[nRelays++] = { act.id, act.target };
         }
         for (uint8_t i = 0; i < MAX_ACTION_LINKS; i++) {
             if (actionLinks[i].actionId == RULES_ID_NONE) continue;

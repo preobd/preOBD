@@ -26,7 +26,9 @@
 // claimPins() stores the pointer (no copy), and rulesSyncActionPins()
 // identifies its own prior entries by pointer equality against this — so it
 // must be a single static string, not a per-call temporary.
-static const char* const ACTION_PIN_DESC = "Action output";
+// Defined beside the registry (PIN_DESC_ACTION) so SYSTEM PINS can tell an
+// action's entry from the LED's, which is PIN_OUTPUT too (#644).
+#define ACTION_PIN_DESC PIN_DESC_ACTION
 
 RuleContext g_ruleContexts[MAX_RULES];
 

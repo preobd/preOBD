@@ -425,7 +425,7 @@ void rearmBusDiagnostics() {
     spi_unavailable_reported = false;
 }
 
-// ONE print call site for all four notes, deliberately.
+// ONE body prints all four notes, deliberately.
 //
 // Every additional msg.control.print(F(...)) call site inlines a full copy of
 // MessageStream's Flash-string path (primary/secondary transport lookups), and
@@ -437,28 +437,38 @@ void rearmBusDiagnostics() {
 // no matter how many notes get added later. Not a micro-optimization: teensy41
 // RAM1 padding is measured in tens of bytes, and this is what keeps it linking.
 //
-// The text stays in F() rather than becoming a plain literal because mega2560
-// has ~140 B of RAM free; on AVR a non-F() string is RAM-resident.
+// The I2C and SPI notes are the same text with the bus kind in it, so each is
+// stored once with NUL-separated gaps where "I2C" or "SPI" goes: that halves
+// their flash, which mega2560's near PROGMEM needs (#523; it sat 12 B under
+// the 64 KB line). A named PROGMEM array, not F(): on Teensy 4 F() leaves the
+// text in RAM1, and on AVR a plain literal is RAM-resident (~140 B free).
+static const char BUS_NOTE_NONE[] PROGMEM =
+    "\r\nNote: no \0 bus declared or selected. Run: BUS \0 <n>\r\n"
+    "  (SAVE + reboot), or add -D \0_WIRED_BUS=<n> to wiring.ini\r\n"
+    "  if \0 is permanently wired on this unit.\r\n";
+static const char BUS_NOTE_UNAVAILABLE[] PROGMEM =
+    "\r\nNote: the selected/declared \0 bus could not start (see above).\r\n"
+    "  Free the pin it needs, or choose another bus with BUS \0 <n>.\r\n";
+
 __attribute__((noinline))
-static bool emitBusNote(bool& latch, const __FlashStringHelper* text) {
+static bool emitBusNote(bool& latch, const char* text, uint8_t gaps, const char* kind) {
     if (latch) return false;
     latch = true;
-    msg.control.print(text);
+    for (uint8_t i = 0;; i++) {
+        msg.control.print(reinterpret_cast<const __FlashStringHelper*>(text));
+        if (i == gaps) break;
+        msg.control.print(kind);
+        text += strlen_P(text) + 1;
+    }
     return true;
 }
 
 bool reportNoI2CBus() {
-    return emitBusNote(i2c_no_bus_reported,
-        F("\r\nNote: no I2C bus declared or selected. Run: BUS I2C <n>\r\n"
-          "  (SAVE + reboot), or add -D I2C_WIRED_BUS=<n> to wiring.ini\r\n"
-          "  if I2C is permanently wired on this unit.\r\n"));
+    return emitBusNote(i2c_no_bus_reported, BUS_NOTE_NONE, 4, "I2C");
 }
 
 bool reportNoSPIBus() {
-    return emitBusNote(spi_no_bus_reported,
-        F("\r\nNote: no SPI bus declared or selected. Run: BUS SPI <n>\r\n"
-          "  (SAVE + reboot), or add -D SPI_WIRED_BUS=<n> to wiring.ini\r\n"
-          "  if SPI is permanently wired on this unit.\r\n"));
+    return emitBusNote(spi_no_bus_reported, BUS_NOTE_NONE, 4, "SPI");
 }
 
 // The OTHER way acquire*() can hand back nullptr. Keeping it distinct from
@@ -470,16 +480,12 @@ bool reportNoSPIBus() {
 // which owner); this says what it means and what to do about it.
 bool reportI2CBusUnavailable(uint8_t bus_id) {
     (void)bus_id;
-    return emitBusNote(i2c_unavailable_reported,
-        F("\r\nNote: the selected/declared I2C bus could not start (see above).\r\n"
-          "  Free the pin it needs, or choose another bus with BUS I2C <n>.\r\n"));
+    return emitBusNote(i2c_unavailable_reported, BUS_NOTE_UNAVAILABLE, 2, "I2C");
 }
 
 bool reportSPIBusUnavailable(uint8_t bus_id) {
     (void)bus_id;
-    return emitBusNote(spi_unavailable_reported,
-        F("\r\nNote: the selected/declared SPI bus could not start (see above).\r\n"
-          "  Free the pin it needs, or choose another bus with BUS SPI <n>.\r\n"));
+    return emitBusNote(spi_unavailable_reported, BUS_NOTE_UNAVAILABLE, 2, "SPI");
 }
 
 TwoWire* acquireI2C() {

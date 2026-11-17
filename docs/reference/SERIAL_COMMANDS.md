@@ -868,7 +868,7 @@ BUS CAN POLL <ms>                      # CAN input asks the ECU at most this oft
 BUS SERIAL                       # Show all serial port status
 BUS SERIAL <1-8>                 # Show specific port status
 BUS SERIAL <1-8> ENABLE [baud]   # Enable serial port with optional baud rate
-BUS SERIAL <1-8> DISABLE         # Disable serial port
+BUS SERIAL <1-8> DISABLE         # Disable serial port (refused while it is a console or framed)
 BUS SERIAL <1-8> BAUDRATE <rate> # Set serial port baud rate
 ```
 
@@ -1054,6 +1054,19 @@ SAVE
 **Disable unused serial port:**
 ```
 BUS SERIAL 3 DISABLE             # Disable Serial3 to free pins
+SAVE
+```
+
+A port that is a console or framed can't be disabled until it stops being one,
+so the board is never cut off from the link it's being talked to over. A framed
+port (the nRF Bluetooth link) stays framed until a reboot after
+`BUS SERIAL <n> FRAMED DISABLE`, so `SAVE` and `SYSTEM REBOOT` before disabling
+it. On a Teensy 4, Serial1 is the secondary console by default; to give its
+pins (0 and 1) to CAN2:
+```
+CONSOLE TRANSPORT NONE SECONDARY # Serial1 stops being a console
+BUS SERIAL 1 DISABLE             # releases pins 0 and 1
+BUS CAN CAN2 ENABLE
 SAVE
 ```
 
@@ -1311,26 +1324,35 @@ log-filter and display settings.
 
 **SYSTEM DUMP REGISTRY JSON** exports the firmware's compile-time catalogs (available applications, sensors, units, etc.) as a single JSON object. Equivalent to calling all `LIST … JSON` commands in one round-trip.
 
-**SYSTEM PINS** displays pin allocation status organized by category:
+**SYSTEM PINS** lists every pin the firmware holds, by category. Each entry in
+the pin registry (`Registry: N`) appears exactly once; inputs are counted
+separately. A RELAY action whose pin claim was refused is listed as not driven,
+and anything no category names is listed under **Other Pins**:
 ```
 === Pin Allocation Status ===
-Registry: 8 | Inputs: 4 | Relays: 2
+Registry: 10 | Inputs: 3 | Actions: 2
 
 System Pins:
-  Pin  5: Button      - User Button
-  Pin  3: Buzzer      - Buzzer
+  Pin  4: Button  - User Button
+  Pin  5: Buzzer  - Buzzer
+  Pin  7: Output  - RGB LED Red
+  Pin  8: Output  - RGB LED Green
+  Pin  9: Output  - RGB LED Blue
 
 Bus Pins:
-  Pin 18: Reserved    - Wire SDA
-  Pin 19: Reserved    - Wire SCL
+  Pin  0: Reserved  - Serial1
+  Pin  1: Reserved  - Serial1
+  Pin 18: Reserved  - Wire
+  Pin 19: Reserved  - Wire
 
 Input Pins:
-  Pin A0: Input       - Oil Pressure (OIL)
-  Pin A1: Input       - Coolant Temp (CLT)
-  CAN:0:  Input       - Engine RPM (RPM)
+  Pin A0: Input     - Oil Pressure (OIL)
+  Pin A1: Input     - Coolant Temp (CLT)
+  CAN:0: Input     - Engine RPM (RPM)
 
-Relay Pins:
-  Pin 22: Output      - Relay 0
+Action Pins:
+  Pin 22: Output    - Action #1
+  Pin 23: Output    - Action #2 (not driven)
 ```
 
 **INFO <pin>** queries a specific pin to check if it's allocated:

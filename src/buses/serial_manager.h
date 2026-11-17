@@ -87,6 +87,23 @@ bool enableSerialPort(uint8_t port_id, uint8_t baud_index);
  */
 bool disableSerialPort(uint8_t port_id);
 
+/**
+ * Does this port carry commands: running, and a console transport or framed
+ * (#561)? An import keeps such a port's settings and BUS SERIAL <n> DISABLE
+ * refuses it, so neither cuts off the link the board is being talked to over.
+ */
+bool serialPortCarriesCommands(uint8_t port_id);
+
+/**
+ * Serial1's flow-control input (HOST_NRF_CTS_PIN) is read by its transport,
+ * which this layer can't see. The hook is called with the pin once Serial1's
+ * claim holds and with -1 before the claim is released, so the transport reads
+ * CTS only while Serial1 holds it (§12.5, #646). Registered from main.cpp;
+ * a no-op on boards without the nRF flow-control pins.
+ */
+typedef void (*SerialFlowPinHook)(int16_t pin);
+void setSerialFlowPinHook(SerialFlowPinHook hook);
+
 // ============================================================================
 // SERIAL PORT ACCESS
 // ============================================================================

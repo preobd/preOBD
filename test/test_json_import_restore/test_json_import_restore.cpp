@@ -565,7 +565,6 @@ static void test_an_analog_input_must_land_on_the_same_a_pin(void) {
     }
 }
 
-// A RELAY's target is a pin; the other action types name a channel.
 static void test_a_relay_on_a_pin_this_board_lacks_is_refused(void) {
 #if INCLUDE_RULES_ENGINE
     useSmallBoard();
@@ -573,9 +572,20 @@ static void test_a_relay_on_a_pin_this_board_lacks_is_refused(void) {
         "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"actions\":"
         "[{\"id\":1,\"type\":\"relay\",\"target\":60}]}"));
     TEST_ASSERT_EQUAL_INT(0, g_rulesInitCalls);
-    TEST_ASSERT_TRUE(loadConfigFromJSON(
+#endif
+}
+
+// RELAY is the only action type (as ACTION ADD): the others are reserved and
+// name a channel, not a pin, so the import refuses them whole (#645).
+static void test_a_non_relay_action_is_refused(void) {
+#if INCLUDE_RULES_ENGINE
+    const uint8_t before = getPinRegistrySize();
+    TEST_ASSERT_FALSE(loadConfigFromJSON(
         "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},\"actions\":"
-        "[{\"id\":1,\"type\":\"LED\",\"target\":60}]}"));
+        "[{\"id\":1,\"type\":\"LED\",\"target\":0}]}"));
+    TEST_ASSERT_EQUAL_INT(0, g_rulesInitCalls);
+    TEST_ASSERT_EQUAL_UINT8(RULES_ID_NONE, actions[0].id);
+    TEST_ASSERT_EQUAL_UINT8(before, getPinRegistrySize());
 #endif
 }
 
@@ -900,13 +910,14 @@ static void test_kept_rules_must_keep_their_inputs(void) {
 static void test_an_action_following_a_missing_rule_is_refused(void) {
     const char* head = "{\"schemaVersion\":1,\"mode\":\"runtime\",\"firmware\":{\"platform\":\"NATIVE\"},";
     char json[512];
-    snprintf(json, sizeof(json), "%s\"rules\":[],\"actions\":[{\"id\":1,\"type\":\"LED\",\"target\":0,\"rule\":5}]}", head);
+    snprintf(json, sizeof(json), "%s\"rules\":[],\"actions\":[{\"id\":1,\"type\":\"RELAY\",\"target\":5,\"rule\":5}]}", head);
     TEST_ASSERT_FALSE(loadConfigFromJSON(json));
-    snprintf(json, sizeof(json), "%s\"rules\":[],\"actions\":[{\"id\":1,\"type\":\"LED\",\"target\":0}]}", head);
+    snprintf(json, sizeof(json), "%s\"rules\":[],\"actions\":[{\"id\":1,\"type\":\"RELAY\",\"target\":5}]}", head);
     TEST_ASSERT_TRUE(loadConfigFromJSON(json));
     // Kept actions too: replacing the rules may not strand one
     actions[0].id = 1;
-    actions[0].type = ACT_LED;
+    actions[0].type = ACT_RELAY;
+    actions[0].target = 5;
     actions[0].ruleRef = 5;
     snprintf(json, sizeof(json), "%s\"rules\":[]}", head);
     TEST_ASSERT_FALSE(loadConfigFromJSON(json));
@@ -1063,6 +1074,7 @@ int main(int, char**) {
     RUN_TEST(test_a_pin_this_board_lacks_refuses_the_whole_file);
     RUN_TEST(test_an_analog_input_must_land_on_the_same_a_pin);
     RUN_TEST(test_a_relay_on_a_pin_this_board_lacks_is_refused);
+    RUN_TEST(test_a_non_relay_action_is_refused);
     RUN_TEST(test_a_file_from_another_board_is_refused_even_if_it_fits);
     RUN_TEST(test_a_file_without_a_platform_is_refused);
     RUN_TEST(test_the_outputs_array_replaces_the_table);

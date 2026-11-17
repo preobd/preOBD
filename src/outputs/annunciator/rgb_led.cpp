@@ -235,29 +235,23 @@ void initRGBLed() {
         return;
     }
 #else
-    // Validate all three before registering any (all-or-nothing): a conflict
-    // on G must not leave R claimed with the LED never actually enabled.
-    // Checked/claimed one channel at a time so a conflict names the specific
-    // pin at fault. RGB pins are wiring.ini physical facts (#288), BUILTIN rank.
-    const uint8_t r = RGB_PIN_R, g = RGB_PIN_G, b = RGB_PIN_B;
-    if (pinsConflict(&r, 1, PIN_RANK_BUILTIN, "RGB LED Red")) {
-        msg.debug.warn(TAG_SYSTEM, "RGB LED Red pin %d conflict - LED disabled", RGB_PIN_R);
+    // Each channel claims its own pin and keeps it if the claim holds, even
+    // when another channel is refused: the pins are wiring.ini physical facts
+    // (#288), copper wired to the LED, so a refused Blue must not hand Red and
+    // Green to a sensor or relay (owner, 2026-11-15; this reverses the old
+    // all-or-nothing, which claimed none). The LED is driven only when all three
+    // held; otherwise it reports and never touches any of its pins (§12.5, #646).
+    static const uint8_t pins[3] = { RGB_PIN_R, RGB_PIN_G, RGB_PIN_B };
+    static const char* const names[3] = { "RGB LED Red", "RGB LED Green", "RGB LED Blue" };
+    // claimPins() names each refused channel and why; this says what it means
+    bool allHeld = true;
+    for (uint8_t i = 0; i < 3; i++) {
+        if (!claimPins(&pins[i], 1, PIN_OUTPUT, PIN_RANK_BUILTIN, TAG_SYSTEM, names[i])) allHeld = false;
+    }
+    if (!allHeld) {
+        msg.debug.warn(TAG_SYSTEM, "RGB LED not driven");
         return;
     }
-    if (pinsConflict(&g, 1, PIN_RANK_BUILTIN, "RGB LED Green")) {
-        msg.debug.warn(TAG_SYSTEM, "RGB LED Green pin %d conflict - LED disabled", RGB_PIN_G);
-        return;
-    }
-    if (pinsConflict(&b, 1, PIN_RANK_BUILTIN, "RGB LED Blue")) {
-        msg.debug.warn(TAG_SYSTEM, "RGB LED Blue pin %d conflict - LED disabled", RGB_PIN_B);
-        return;
-    }
-
-    // All clear — claim each channel (re-check is idempotent; nothing else
-    // could have taken the pins between the check above and here).
-    claimPins(&r, 1, PIN_OUTPUT, PIN_RANK_BUILTIN, TAG_SYSTEM, "RGB LED Red");
-    claimPins(&g, 1, PIN_OUTPUT, PIN_RANK_BUILTIN, TAG_SYSTEM, "RGB LED Green");
-    claimPins(&b, 1, PIN_OUTPUT, PIN_RANK_BUILTIN, TAG_SYSTEM, "RGB LED Blue");
 
 #endif
 
@@ -324,6 +318,10 @@ void rgbLedOff() {
     }
 
     activateHighestPriority();
+}
+
+bool rgbLedDriven() {
+    return rgbState.initialized;
 }
 
 RGBPriority rgbLedGetPriority() {

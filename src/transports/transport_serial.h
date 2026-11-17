@@ -58,6 +58,11 @@ public:
         : serial(serialPort), name(transportName), baudRate(baud),
           flowInPin(flow_in_pin) {}
 
+    // Flow control follows the port's pin claim (§12.5, #646): serial_manager
+    // passes the CTS pin once Serial1 holds it and -1 before it lets it go,
+    // so the pin is never read while another function may hold it.
+    void setFlowInPin(int16_t pin) { flowInPin = pin; }
+
     // ========== TransportInterface Implementation ==========
 
     size_t write(uint8_t c) override {

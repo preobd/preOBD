@@ -449,6 +449,38 @@ static FLASHMEM bool refuseUnderOutput(uint8_t port) {
     return true;
 }
 
+// The port carries commands (a console transport or framed, #561): DISABLE
+// would release its pins and flow control while the console and the
+// broadcasters keep writing to it, unpaced (#646). Refuse, naming the step.
+static FLASHMEM bool refuseUnderCommands(uint8_t port) {
+#if INCLUDE_FRAMED_TRANSPORT
+    // FRAMED DISABLE clears the setting at once but the link stays framed
+    // until a reboot (main.cpp sets it at boot), and the broadcasters keep
+    // sending frames: still a live link, so still refused
+    if (port == 1 && isSerialPortActive(1) && hwSerial1.isFramedEnabled() &&
+        !serialPortCarriesCommands(1)) {
+        msg.control.println(F("ERROR: Serial1 is framed until a reboot: SAVE and SYSTEM REBOOT first"));
+        return true;
+    }
+#endif
+    if (!serialPortCarriesCommands(port)) return false;
+    msg.control.print(F("ERROR: Serial"));
+    msg.control.print(port);
+#if INCLUDE_FRAMED_TRANSPORT
+    if (systemConfig.serial.framed_enabled_mask & (1u << (port - 1))) {
+        msg.control.print(F(" is framed: BUS SERIAL "));
+        msg.control.print(port);
+        msg.control.println(F(" FRAMED DISABLE first"));
+        return true;
+    }
+#endif
+    // One string for both console cases (CONSOLE STATUS shows which): the
+    // mega2560's near PROGMEM is nearly full (#523)
+    msg.control.print(F(" is a console: move it with CONSOLE TRANSPORT"));
+    msg.control.println(F(" first"));
+    return true;
+}
+
 // BUS SERIAL subcommand handler
 static FLASHMEM int bus_serial(int argc, const char* const* argv, int /*tokenIndex*/) {
 #if NUM_SERIAL_PORTS == 0
@@ -534,6 +566,7 @@ static FLASHMEM int bus_serial(int argc, const char* const* argv, int /*tokenInd
         // BUS SERIAL <port> DISABLE
         if (streq_P(argv[3], PSTR("DISABLE"))) {
             if (refuseUnderOutput(port_id)) return 1;
+            if (refuseUnderCommands(port_id)) return 1;
             if (disableSerialPort(port_id)) {
                 msg.control.print(F("Serial"));
                 msg.control.print(port_id);

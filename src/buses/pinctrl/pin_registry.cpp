@@ -20,6 +20,8 @@
 // ============================================================================
 
 // Global pin registry array
+const char* const PIN_DESC_ACTION = "Action output";
+
 static PinUsage pinRegistry[MAX_PIN_REGISTRY];
 static uint8_t registrySize = 0;
 
@@ -306,6 +308,57 @@ static void printPinPadded(uint8_t pin, bool analogLabel = false) {
     msg.control.print(F(": "));
 }
 
+// SYSTEM PINS sections, each registry entry in exactly one (#644)
+enum PinSection : uint8_t { PSECT_SYSTEM, PSECT_BUS, PSECT_ACTION, PSECT_OTHER };
+
+#if INCLUDE_RULES_ENGINE
+// The RELAY action whose claim this pin's entry is: the first RELAY slot
+// targeting it, when the entry is an action's. -1 when none.
+static int actionSlotHolding(uint8_t pin) {
+    if (getPinDescription(pin) != PIN_DESC_ACTION) return -1;
+    for (int a = 0; a < MAX_ACTIONS; a++) {
+        if (actions[a].id != RULES_ID_NONE && actions[a].type == ACT_RELAY &&
+            actions[a].target == pin) return a;
+    }
+    return -1;
+}
+#endif
+
+static PinSection pinSection(uint8_t i) {
+    const PinUsage& u = pinRegistry[i];
+    // An if-chain, not a switch: avr-gcc puts a switch's jump table in the
+    // mega2560's near PROGMEM, which is nearly full (#523)
+    if (u.type == PIN_BUTTON || u.type == PIN_BUZZER || u.type == PIN_CS) return PSECT_SYSTEM;
+    if (u.type == PIN_RESERVED) return PSECT_BUS;
+    if (u.type != PIN_OUTPUT) return PSECT_OTHER;
+    if (u.description != PIN_DESC_ACTION) return PSECT_SYSTEM;   // the RGB LED
+    #if INCLUDE_RULES_ENGINE
+    if (actionSlotHolding(u.pin) >= 0) return PSECT_ACTION;
+    #endif
+    return PSECT_OTHER;   // an action entry no RELAY action owns
+}
+
+static void printRegistrySection(PinSection which) {
+    bool any = false;
+    for (uint8_t i = 0; i < registrySize; i++) {
+        if (pinSection(i) != which) continue;
+        if (!any) {
+            msg.control.println(which == PSECT_SYSTEM ? F("System Pins:")
+                              : which == PSECT_BUS    ? F("Bus Pins:")
+                                                      : F("Other Pins:"));
+            any = true;
+        }
+        printPinPadded(pinRegistry[i].pin);
+        msg.control.print(getPinUsageTypeName(pinRegistry[i].type));
+        if (pinRegistry[i].description) {
+            msg.control.print(F("  - "));
+            msg.control.print(pinRegistry[i].description);
+        }
+        msg.control.println();
+    }
+    if (any) msg.control.println();
+}
+
 void printPinStatus(uint8_t specificPin) {
     // Query specific pin mode
     if (specificPin != 0xFF) {
@@ -315,7 +368,8 @@ void printPinStatus(uint8_t specificPin) {
         // view carries the action id, which the generic registry entry doesn't.
         for (int i = 0; i < MAX_ACTIONS; i++) {
             const Action& a = actions[i];
-            if (a.id != RULES_ID_NONE && a.type == ACT_RELAY && a.target == specificPin) {
+            if (a.id != RULES_ID_NONE && a.type == ACT_RELAY && a.target == specificPin &&
+                getPinDescription(specificPin) == PIN_DESC_ACTION) {
                 printPinPadded(specificPin);
                 msg.control.print(F("Output    - Action #"));
                 msg.control.println(a.id);
@@ -342,6 +396,22 @@ void printPinStatus(uint8_t specificPin) {
 
         // Generic registry entry (buses, system pins, RGB output).
         PinUsageType usage = getPinUsage(specificPin);
+        #if INCLUDE_RULES_ENGINE
+        // A RELAY on a pin nothing holds: its claim was refused, so it is not
+        // driven (the full listing says the same)
+        if (usage == PIN_UNUSED) {
+            for (int i = 0; i < MAX_ACTIONS; i++) {
+                const Action& a = actions[i];
+                if (a.id != RULES_ID_NONE && a.type == ACT_RELAY && a.target == specificPin) {
+                    printPinPadded(specificPin);
+                    msg.control.print(F("Output    - Action #"));
+                    msg.control.print(a.id);
+                    msg.control.println(F(" (not driven)"));
+                    return;
+                }
+            }
+        }
+        #endif
         const char* desc = getPinDescription(specificPin);
 
         if (usage != PIN_UNUSED) {
@@ -388,44 +458,13 @@ void printPinStatus(uint8_t specificPin) {
     msg.control.println();
     msg.control.println();
 
-    // System Pins (buttons, buzzers, chip selects)
-    bool hasSystemPins = false;
-    for (uint8_t i = 0; i < registrySize; i++) {
-        if (pinRegistry[i].type == PIN_BUTTON ||
-            pinRegistry[i].type == PIN_BUZZER ||
-            pinRegistry[i].type == PIN_CS) {
-            if (!hasSystemPins) {
-                msg.control.println(F("System Pins:"));
-                hasSystemPins = true;
-            }
-            printPinPadded(pinRegistry[i].pin);
-            msg.control.print(getPinUsageTypeName(pinRegistry[i].type));
-            if (pinRegistry[i].description) {
-                msg.control.print(F("  - "));
-                msg.control.print(pinRegistry[i].description);
-            }
-            msg.control.println();
-        }
-    }
-    if (hasSystemPins) msg.control.println();
-
-    // Bus Pins (reserved for I2C, SPI, CAN hardware)
-    bool hasBusPins = false;
-    for (uint8_t i = 0; i < registrySize; i++) {
-        if (pinRegistry[i].type == PIN_RESERVED) {
-            if (!hasBusPins) {
-                msg.control.println(F("Bus Pins:"));
-                hasBusPins = true;
-            }
-            printPinPadded(pinRegistry[i].pin);
-            msg.control.print(F("Reserved  - "));
-            if (pinRegistry[i].description) {
-                msg.control.print(pinRegistry[i].description);
-            }
-            msg.control.println();
-        }
-    }
-    if (hasBusPins) msg.control.println();
+    // Every registry entry is printed exactly once (#644): System, Bus, Action
+    // or, for anything no section names, Other, so a new kind of claim can't
+    // go missing from the list. Inputs aren't in the registry (they
+    // self-track) and are listed from inputs[]; a RELAY action that holds no
+    // claim is listed as not held (§12.5: it reports itself as not driven).
+    printRegistrySection(PSECT_SYSTEM);
+    printRegistrySection(PSECT_BUS);
 
     // Input Pins (sensor inputs)
     bool hasInputs = false;
@@ -451,20 +490,27 @@ void printPinStatus(uint8_t specificPin) {
     if (hasInputs) msg.control.println();
 
     #if INCLUDE_RULES_ENGINE
-    // Action Pins (control-engine RELAY actuators)
+    // Action Pins: each held entry under its action's id, then the RELAY
+    // actions that hold nothing
     bool hasActions = false;
-    for (int i = 0; i < MAX_ACTIONS; i++) {
-        const Action& a = actions[i];
-        if (a.id != RULES_ID_NONE && a.type == ACT_RELAY) {
-            if (!hasActions) {
-                msg.control.println(F("Action Pins:"));
-                hasActions = true;
-            }
-            printPinPadded(a.target);
-            msg.control.print(F("Output    - Action #"));
-            msg.control.println(a.id);
-        }
+    for (uint8_t i = 0; i < registrySize; i++) {
+        if (pinSection(i) != PSECT_ACTION) continue;
+        if (!hasActions) { msg.control.println(F("Action Pins:")); hasActions = true; }
+        printPinPadded(pinRegistry[i].pin);
+        msg.control.print(F("Output    - Action #"));
+        msg.control.println(actions[actionSlotHolding(pinRegistry[i].pin)].id);
+    }
+    for (int a = 0; a < MAX_ACTIONS; a++) {
+        if (actions[a].id == RULES_ID_NONE || actions[a].type != ACT_RELAY) continue;
+        if (actionSlotHolding(actions[a].target) == a) continue;
+        if (!hasActions) { msg.control.println(F("Action Pins:")); hasActions = true; }
+        printPinPadded(actions[a].target);
+        msg.control.print(F("Output    - Action #"));
+        msg.control.print(actions[a].id);
+        msg.control.println(F(" (not driven)"));
     }
     if (hasActions) msg.control.println();
     #endif
+
+    printRegistrySection(PSECT_OTHER);
 }

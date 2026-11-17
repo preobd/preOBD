@@ -23,13 +23,19 @@
 // are minimal stand-ins with just enough surface (.begin()) for that switch
 // to link.
 #define __AVR_ATmega2560__ 1
+// nRF flow-control pins, as a wiring.ini would set them, so Serial1's claim
+// takes CTS/RTS with RX/TX and the flow-pin hook runs (#646). The Mega has no
+// nRF; these are free pins on it, and only the claim and the hook are tested.
+#define HOST_NRF_CTS_PIN 2
+#define HOST_NRF_RTS_PIN 3
 
 #include <unity.h>
 #include <Arduino.h>
 #include <string.h>
 
 struct FakeHardwareSerial : public Stream {
-    void begin(unsigned long) {}
+    int begins = 0;
+    void begin(unsigned long) { begins++; }
     int available() override { return 0; }
     int read() override { return -1; }
     int peek() override { return -1; }
@@ -58,9 +64,22 @@ size_t MessageStream::debug(const char*, const char*, ...) { return 0; }
 // ---------------------------------------------------------------------------
 // Fixture
 // ---------------------------------------------------------------------------
+static int16_t g_flowPin = 0x7FFF;   // last value the hook was given
+static int     g_flowCalls = 0;
+static void flowHook(int16_t pin) { g_flowPin = pin; g_flowCalls++; }
+
 void setUp(void) {
     initPinRegistry();
     memset(&systemConfig, 0, sizeof(systemConfig));
+    stubPinReset();
+    Serial1.begins = Serial2.begins = 0;
+    g_flowPin = 0x7FFF;
+    g_flowCalls = 0;
+    setSerialFlowPinHook(flowHook);
+    // disableSerialPort() releases only what the port held: start from "off"
+    disableSerialPort(1);
+    disableSerialPort(2);
+    g_flowCalls = 0;
 }
 void tearDown(void) {}
 
@@ -128,6 +147,61 @@ static void test_disabling_an_active_port_releases_only_its_own(void) {
     TEST_ASSERT_NULL(getPinDescription(17));
 }
 
+
+// #646: Serial1 claims RX/TX and the flow-control pins BEFORE begin(). A
+// refused claim begins nothing, holds nothing, and never turns CTS reading on.
+static void test_refused_serial1_claim_begins_nothing(void) {
+    uint8_t cts = HOST_NRF_CTS_PIN;
+    TEST_ASSERT_TRUE(claimPins(&cts, 1, PIN_OUTPUT, PIN_RANK_ACTION, "TEST", "Action output"));
+    const uint8_t before = getPinRegistrySize();
+
+    TEST_ASSERT_FALSE(initSerialPort(1, 115200));
+    TEST_ASSERT_EQUAL_INT(0, Serial1.begins);
+    TEST_ASSERT_EQUAL_UINT8(before, getPinRegistrySize());
+    TEST_ASSERT_NULL(getPinDescription(getDefaultSerialRX(1)));
+    TEST_ASSERT_NULL(getPinDescription(HOST_NRF_RTS_PIN));
+    TEST_ASSERT_EQUAL_INT(0, g_flowCalls);
+    TEST_ASSERT_FALSE(isSerialPortActive(1));
+}
+
+// A held claim begins the port and hands the transport the CTS pin; DISABLE
+// takes it back (-1) and leaves RTS an input before releasing it.
+static void test_serial1_flow_pin_follows_the_claim(void) {
+    TEST_ASSERT_TRUE(initSerialPort(1, 115200));
+    TEST_ASSERT_EQUAL_INT(1, Serial1.begins);
+    TEST_ASSERT_EQUAL_INT16(HOST_NRF_CTS_PIN, g_flowPin);
+    TEST_ASSERT_EQUAL_STRING("Serial1", getPinDescription(HOST_NRF_CTS_PIN));
+
+    TEST_ASSERT_TRUE(disableSerialPort(1));
+    TEST_ASSERT_EQUAL_INT16(-1, g_flowPin);
+    TEST_ASSERT_TRUE(stubPinModeSet[HOST_NRF_RTS_PIN]);
+    TEST_ASSERT_EQUAL_UINT8(INPUT, stubPinMode[HOST_NRF_RTS_PIN]);
+    TEST_ASSERT_NULL(getPinDescription(HOST_NRF_CTS_PIN));
+    TEST_ASSERT_NULL(getPinDescription(HOST_NRF_RTS_PIN));
+}
+
+// ENABLE on a port that is already up adds no second set of entries
+static void test_repeat_enable_adds_no_entries(void) {
+    TEST_ASSERT_TRUE(enableSerialPort(1, BAUD_115200));
+    const uint8_t once = getPinRegistrySize();
+    TEST_ASSERT_TRUE(enableSerialPort(1, BAUD_115200));
+    TEST_ASSERT_EQUAL_UINT8(once, getPinRegistrySize());
+}
+
+// Option A (#646): a port that carries commands can't be disabled from under
+// the console; serialPortCarriesCommands() is what BUS SERIAL DISABLE asks.
+static void test_a_console_or_framed_port_carries_commands(void) {
+    TEST_ASSERT_TRUE(enableSerialPort(1, BAUD_115200));
+    TEST_ASSERT_FALSE(serialPortCarriesCommands(1));
+    systemConfig.console.secondary = TRANSPORT_SERIAL1;
+    TEST_ASSERT_TRUE(serialPortCarriesCommands(1));
+    systemConfig.console.secondary = TRANSPORT_USB_SERIAL;
+    systemConfig.serial.framed_enabled_mask = 0x01;
+    TEST_ASSERT_TRUE(serialPortCarriesCommands(1));
+    TEST_ASSERT_TRUE(disableSerialPort(1));
+    TEST_ASSERT_FALSE(serialPortCarriesCommands(1));   // not running: nothing to cut off
+}
+
 int main(int /*argc*/, char** /*argv*/) {
     UNITY_BEGIN();
     RUN_TEST(test_refused_enable_is_byte_identical);
@@ -135,5 +209,9 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_unrefused_enable_does_change_config);
     RUN_TEST(test_disabling_an_idle_port_leaves_other_holders);
     RUN_TEST(test_disabling_an_active_port_releases_only_its_own);
+    RUN_TEST(test_refused_serial1_claim_begins_nothing);
+    RUN_TEST(test_serial1_flow_pin_follows_the_claim);
+    RUN_TEST(test_repeat_enable_adds_no_entries);
+    RUN_TEST(test_a_console_or_framed_port_carries_commands);
     return UNITY_END();
 }

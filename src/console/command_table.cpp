@@ -1057,13 +1057,19 @@ int cmd_test(int argc, const char* const* argv) {
         (void)any;
 #if INCLUDE_LED
         any = true;
-        msg.control.println(F("RGB LED -> RED"));
-        rgbLedSolid(RGB_RED, PRIORITY_ALARM);   updateRGBLed(); watchdogReset(); delay(600);
-        msg.control.println(F("RGB LED -> GREEN"));
-        rgbLedSolid(RGB_GREEN, PRIORITY_ALARM); updateRGBLed(); watchdogReset(); delay(600);
-        msg.control.println(F("RGB LED -> BLUE"));
-        rgbLedSolid(RGB_BLUE, PRIORITY_ALARM);  updateRGBLed(); watchdogReset(); delay(600);
-        rgbLedRelease(PRIORITY_ALARM);          updateRGBLed();
+        if (rgbLedDriven()) {
+            msg.control.print(F("RGB LED")); msg.control.println(F(" -> RED"));
+            rgbLedSolid(RGB_RED, PRIORITY_ALARM);   updateRGBLed(); watchdogReset(); delay(600);
+            msg.control.print(F("RGB LED")); msg.control.println(F(" -> GREEN"));
+            rgbLedSolid(RGB_GREEN, PRIORITY_ALARM); updateRGBLed(); watchdogReset(); delay(600);
+            msg.control.print(F("RGB LED")); msg.control.println(F(" -> BLUE"));
+            rgbLedSolid(RGB_BLUE, PRIORITY_ALARM);  updateRGBLed(); watchdogReset(); delay(600);
+            rgbLedRelease(PRIORITY_ALARM);          updateRGBLed();
+        } else {
+            // A refused pin claim at boot (§12.5): its pins are never touched
+            msg.control.print(F("RGB LED"));
+            msg.control.println(F(" skipped: not driven"));
+        }
 #endif
 #if INCLUDE_ALARMS && defined(BUZZER_PIN)
         // Only a buzzer that holds its pin (§12.5, #646)
@@ -1072,7 +1078,8 @@ int cmd_test(int argc, const char* const* argv) {
             msg.control.println(F("Buzzer -> chirp"));
             alarmBuzzerChirp();
         } else {
-            msg.control.println(F("Buzzer skipped: not driven"));
+            msg.control.print(F("Buzzer"));
+            msg.control.println(F(" skipped: not driven"));
         }
 #endif
 #if INCLUDE_RULES_ENGINE
