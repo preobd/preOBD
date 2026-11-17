@@ -29,6 +29,7 @@
 #include "../inputs/calibration_apply.h"
 #include "../sensors/units_registry.h"
 #include "../inputs/measurement_compat.h"  // units vs measurement type (#458)
+#include "../sensors/can_sensor_library/standard_pids.h"  // lookupStandardPID: a CAN record's application (#636)
 #include "../sensors/sensor_library.h"
 #include "../sensors/application_presets.h"
 #include "../version.h"
@@ -891,11 +892,13 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     // Validate registry lookups (index 0 = NONE for app/sensor). Units are
     // judged below, after the sensor resolves: a bad units key degrades, it
     // never fails the record.
-    // A CAN import has no application: SET CAN builds it as app NONE +
-    // CAN_IMPORT on a CAN:n virtual pin, and the dump exports it that way.
-    // Rejecting app NONE outright dropped every CAN input on restore (#499).
-    // Only the literal "NONE" counts: an unknown name also resolves to 0.
-    const bool canImportRecord = appIdx == 0 && strcasecmp(appName, "NONE") == 0 &&
+    // A CAN import: CAN_IMPORT on a CAN:n virtual pin. SET CAN gives it its
+    // standard PID's application, or NONE for a custom PID (#636); rejecting
+    // app NONE outright dropped every CAN input on restore (#499). Only the
+    // literal "NONE" counts as none: an unknown name also resolves to 0. Its
+    // application is judged against the PID's quantity once the calibration
+    // is staged, below.
+    const bool canImportRecord = (appIdx != 0 || strcasecmp(appName, "NONE") == 0) &&
                                  pin >= PIN_CAN_BASE && pin <= PIN_CAN_MAX &&
                                  sensorIdx != 0 && sensorIdx == getSensorIndexByName("CAN_IMPORT");
     if ((appIdx == 0 && !canImportRecord) || sensorIdx == 0) {
@@ -919,8 +922,9 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     // setInputSensor(): on an EXISTING input the commit phase runs
     // setInputApplication() first, so a refusal there would leave the input
     // half-rewritten with the new application (#502). App NONE (a CAN import)
-    // matches any sensor.
-    if (!sensorMatchesApplication(sensorIdx, appIdx)) {
+    // matches any sensor. A CAN import is judged after staging instead: the
+    // CAN_IMPORT preset says TEMPERATURE whatever the PID measures.
+    if (!canImportRecord && !sensorMatchesApplication(sensorIdx, appIdx)) {
         msg.control.print(F("ERROR: Failed to import input "));
         msg.control.print(index);
         msg.control.print(F(" (pin "));
@@ -1022,6 +1026,23 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         measured = canImportMeasurementType(stagedOverride.can.source_can_id,
                                             stagedOverride.can.source_pid, measured);
     }
+    // A CAN import's application must be what its PID measures (#636). Only
+    // a standard PID read from an OBD ECU has a known quantity: a record
+    // without its decode, or with a custom CAN ID or PID, would otherwise
+    // judge as the preset's TEMPERATURE and admit any temperature application,
+    // so it keeps only NONE (what SET CAN gives it).
+    const bool knownPid = stagedCustom && stagedType == CAL_CAN_IMPORT &&
+                          isObdResponseId(stagedOverride.can.source_can_id) &&
+                          lookupStandardPID(stagedOverride.can.source_pid) != nullptr;
+    if (canImportRecord && appIdx != 0 &&
+        (!knownPid || measured != getApplicationExpectedMeasurementType(appIdx))) {
+        msg.control.print(F("ERROR: Failed to import input "));
+        msg.control.print(index);
+        msg.control.print(F(" (pin "));
+        msg.control.print(pin);
+        msg.control.println(F(") - sensor measures a different quantity than the application"));
+        return false;
+    }
     if (!unitsMatchMeasurement(unitsIdx, measured)) {
         const ApplicationPreset* appPreset = getApplicationByIndex(appIdx);
         unitsIdx = preferredUnitsFor(measured, appPreset ? READ_APP_DEFAULT_UNITS(appPreset) : 0);
@@ -1107,6 +1128,9 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
         msg.control.println(F(" - configuration failed"));
         return false;
     }
+    // After the sensor, as SET CAN does: setInputSensor() judges the sensor
+    // against the app, and CAN_IMPORT's preset type is not the PID's (#636)
+    if (canImportRecord) input->applicationIndex = appIdx;
 
     // Set names
     if (inputObj["abbr"].isNull() == false) {

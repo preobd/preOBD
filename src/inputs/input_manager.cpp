@@ -728,6 +728,10 @@ bool clearInputCalibration(uint8_t pin) {
         input->calibrationType = info.calibrationType;
         input->presetCalibration = info.defaultCalibration;
     }
+    // A CAN import without its decode no longer reads the PID, so it no longer
+    // is the PID's application either (#636); kept, it would fail the next
+    // JSON IMPORT's quantity check once a reboot makes it TEMPERATURE again
+    if (input->calibrationType == CAL_CAN_IMPORT) input->applicationIndex = 0;
 
     return true;
 }

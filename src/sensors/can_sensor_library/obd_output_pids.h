@@ -39,6 +39,7 @@
 
 #include <Arduino.h>
 #include "../calibration_types.h"
+#include "../generated/registry_enums.h"   // APP_*
 
 #define OBD_OUT_PREOBD   0x01   // preOBD-defined PID (0xAA-0xBF), not J1979
 #define OBD_OUT_ABSOLUTE 0x02   // absolute pressure: a boost (gauge) input adds barometric
@@ -80,5 +81,28 @@ inline bool obdSpecAccepts(const ObdOutputPid& spec, MeasurementType type) {
  * otherwise `current` (the user's own OBD_LENGTH; 1 when it is 0 or above 5).
  */
 uint8_t obdLengthFor(uint8_t pid, uint8_t current);
+
+/**
+ * Does this application hold GAUGE pressure (0 at atmosphere)? On an absolute
+ * PID (OBD_OUT_ABSOLUTE) its answer adds the barometric pressure, and an
+ * imported reading of that PID would need it taken off (#639). The export
+ * (obd_answer.cpp) and the import (importApplicationForPid) share this.
+ */
+inline bool obdGaugeApplication(uint8_t app) { return app == APP_BOOST_PRESSURE; }
+
+/**
+ * The application SET CAN gives an imported standard PID (#636), from the one
+ * PID map there is: the application presets' `.obd2pid` (the PID preOBD
+ * answers for that application), read backwards. Also:
+ *   - import-only aliases for PIDs no preset answers on: 0x67 (coolant
+ *     sensors 1-2) is COOLANT_TEMP, 0x79 (EGT bank 2) is EGT;
+ *   - NONE when the export converts the PID for its application (a gauge
+ *     application on an absolute PID: 0x70 boost): it arrives absolute, the
+ *     application holds gauge (#639);
+ *   - NONE when the preset measures another quantity than the PID, or no
+ *     preset answers on it.
+ * APP_NONE (0) for a PID outside STANDARD_PID_TABLE.
+ */
+uint8_t importApplicationForPid(uint8_t pid);
 
 #endif // OBD_OUTPUT_PIDS_H

@@ -230,7 +230,8 @@ SET CAN 0x0F
 2. Looks up PID 0x0C in the standard OBD-II PID table
 3. Configures sensor with correct calibration (scale factor, offset, data length)
 4. Sets display name ("Engine RPM") and units (RPM) from table
-5. Enables the sensor automatically
+5. Gives the input the PID's application (`ENGINE_RPM`), so the `PREOBD` CAN output carries it (see below)
+6. Enables the sensor automatically
 
 **PID format:**
 - Hex: `0x0C`, `0x0D`, `0x05` (preferred)
@@ -335,6 +336,32 @@ text table, and `SCAN SUPPORTED JSON` returns the result:
 ---
 
 ## Standard OBD-II PIDs
+
+**Applications.** `SET CAN` gives these PIDs an application, so the `PREOBD` output (and other
+outputs that pick inputs by application) carries them. It is the application preOBD itself
+answers that PID for on its OBD-II output, so the two directions agree; 0x67 and 0x79, which
+preOBD doesn't answer on, are added as extra coolant and EGT sources:
+
+| PID | Application | PID | Application |
+|---|---|---|---|
+| 0x05, 0x67 | `COOLANT_TEMP` | 0x2F | `FUEL_LEVEL` |
+| 0x0A | `FUEL_PRESSURE` | 0x33 | `BAROMETRIC_PRESSURE` |
+| 0x0B | `MAP_PRESSURE` | 0x42 | `PRIMARY_BATTERY` |
+| 0x0C | `ENGINE_RPM` | 0x46 | `AMBIENT_TEMP` |
+| 0x0D | `VEHICLE_SPEED` | 0x5C | `OIL_TEMP` |
+| 0x0F | `INTAKE_AIR_TEMP` | 0x78, 0x79 | `EGT` |
+| 0x11 | `THROTTLE_POSITION` | | |
+
+Every other PID, and any PID outside the table, imports with the application `NONE`. That
+includes 0x70: it is an absolute boost pressure, and preOBD's `BOOST_PRESSURE` is gauge (until
+absolute and gauge pressures are converted, #639).
+`NONE` inputs read and log normally, but `PREOBD` has no signal for them. Notes:
+- When a wired input and an imported one have the same application, the wired one comes first
+  (lower pin), as do the barometric reference for OBD boost answers and ELM327's `ATRV`.
+- 0x42 is the ECU's own supply voltage, usually a few tenths of a volt below the battery.
+- `SET CAN` arms no alarm; set one with `SET CAN:<n> ALARM ...`.
+- An input imported before this keeps `NONE`: import it again.
+- `SET CAN:<n> CAL PRESET` (or `CLEAR CAN:<n> CALIBRATION`) drops the PID decode, and the application with it (an alarm Rule already set stays; remove it with `RULE`).
 
 preOBD knows how to decode 31 standard OBD-II PIDs (`LIST PIDS JSON` prints the full
 table). Each was checked against three references for SAE J1979: Wikipedia's "OBD-II PIDs",

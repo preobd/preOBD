@@ -991,6 +991,94 @@ static void test_json_import_repairs_bad_units_to_the_system_default(void) {
     TEST_ASSERT_EQUAL(getUnitsIndexByName("CELSIUS"), unitsOf(4));
 }
 
+// #636: a CAN input with its PID's application (what SET CAN now sets) keeps
+// it through SYSTEM DUMP JSON -> JSON IMPORT; one whose application is not
+// what the PID measures is refused, new or over an existing input (#502).
+static void canRecordText(Input* in, char* text, size_t n) {
+    JsonDocument out;
+    JsonObject e = out.to<JsonObject>();
+    exportInputToJSON(e, in);
+    serializeJson(out, text, n);
+}
+
+static void test_json_import_keeps_can_application(void) {
+    Input* in = makeCanImport(0xC3, 0x0C, 0.25f);
+    TEST_ASSERT_NOT_NULL(in);
+    in->applicationIndex = APP_ENGINE_RPM;
+    char text[1024];
+    canRecordText(in, text, sizeof(text));
+    TEST_ASSERT_NOT_NULL(strstr(text, "\"app\":\"ENGINE_RPM\""));
+    freeInputSlot(0xC3);
+
+    JsonDocument doc;
+    TEST_ASSERT_FALSE(deserializeJson(doc, text));
+    JsonObject o = doc.as<JsonObject>();
+    TEST_ASSERT_TRUE(importInputFromJSON(o, 0));
+    Input* back = getInputByPin(0xC3);
+    TEST_ASSERT_NOT_NULL(back);
+    TEST_ASSERT_EQUAL_UINT8(APP_ENGINE_RPM, back->applicationIndex);
+    TEST_ASSERT_EQUAL_UINT8(getSensorIndexByName("CAN_IMPORT"), back->sensorIndex);
+    TEST_ASSERT_EQUAL_INT(MEASURE_RPM, back->measurementType);
+    TEST_ASSERT_EQUAL_UINT8(0, back->obd2pid);   // not re-served by the OBD output
+
+    // Over the existing input: an application of another quantity is refused
+    // and the input is left exactly as it was
+    o["app"] = "COOLANT_TEMP";
+    TEST_ASSERT_FALSE(importInputFromJSON(o, 0));
+    TEST_ASSERT_EQUAL_PTR(back, getInputByPin(0xC3));
+    TEST_ASSERT_EQUAL_UINT8(APP_ENGINE_RPM, back->applicationIndex);
+    TEST_ASSERT_EQUAL_HEX8(0x0C, back->customCalibration.can.source_pid);
+    freeInputSlot(0xC3);
+
+    // ... and as a new input it leaves nothing behind
+    TEST_ASSERT_FALSE(importInputFromJSON(o, 0));
+    TEST_ASSERT_NULL(getInputByPin(0xC3));
+
+    // Without its decode a CAN record measures nothing in particular: NONE only
+    o["app"] = "ENGINE_RPM";
+    o.remove("calibration");
+    TEST_ASSERT_FALSE(importInputFromJSON(o, 0));
+    TEST_ASSERT_NULL(getInputByPin(0xC3));
+    o["app"] = "COOLANT_TEMP";          // the preset's TEMPERATURE must not let it through
+    TEST_ASSERT_FALSE(importInputFromJSON(o, 0));
+    TEST_ASSERT_NULL(getInputByPin(0xC3));
+    // Nor a custom (non-OBD) CAN ID: it has no PID quantity to judge against
+    Input* custom = createCanImportInput(0xC5);
+    TEST_ASSERT_NOT_NULL(custom);
+    TEST_ASSERT_EQUAL_INT(CAL_APPLY_OK, applyCalCanImport(custom, 0x400, 0x05, 0, 1, true, 1.0f, -40.0f, 2000));
+    char ctext[1024];
+    canRecordText(custom, ctext, sizeof(ctext));
+    freeInputSlot(0xC5);
+    JsonDocument cdoc;
+    TEST_ASSERT_FALSE(deserializeJson(cdoc, ctext));
+    JsonObject co = cdoc.as<JsonObject>();
+    co["app"] = "COOLANT_TEMP";
+    TEST_ASSERT_FALSE(importInputFromJSON(co, 0));
+    TEST_ASSERT_NULL(getInputByPin(0xC5));
+    co["app"] = "NONE";
+    TEST_ASSERT_TRUE(importInputFromJSON(co, 0));
+    freeInputSlot(0xC5);
+    o["app"] = "NONE";
+    TEST_ASSERT_TRUE(importInputFromJSON(o, 0));
+    freeInputSlot(0xC3);
+
+    // The CAN shape is still only for CAN pins
+    o["app"] = "ENGINE_RPM";
+    o["pin"] = 4;
+    TEST_ASSERT_FALSE(importInputFromJSON(o, 0));
+    TEST_ASSERT_NULL(getInputByPin(4));
+}
+
+// CAL CLEAR on a CAN import drops its decode, and with it the PID's application
+static void test_clear_calibration_drops_can_application(void) {
+    Input* in = makeCanImport(0xC4, 0x05, 1.0f);
+    TEST_ASSERT_NOT_NULL(in);
+    in->applicationIndex = APP_COOLANT_TEMP;
+    TEST_ASSERT_TRUE(clearInputCalibration(0xC4));
+    TEST_ASSERT_EQUAL_UINT8(0, in->applicationIndex);
+    freeInputSlot(0xC4);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_can_toggle_gates_obd_answers);
@@ -1035,6 +1123,8 @@ int main(int, char**) {
     RUN_TEST(test_json_import_restores_can_input);
     RUN_TEST(test_can_import_input_gets_new_input_defaults);
     RUN_TEST(test_json_import_refuses_app_none_elsewhere);
+    RUN_TEST(test_json_import_keeps_can_application);
+    RUN_TEST(test_clear_calibration_drops_can_application);
     RUN_TEST(test_factory_units_match_the_presets);
     RUN_TEST(test_new_input_takes_the_system_default);
     RUN_TEST(test_system_default_leaves_other_quantities_alone);

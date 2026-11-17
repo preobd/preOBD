@@ -265,21 +265,26 @@ void ELM327Output::_handleATCommand(const char* cmd) {
     if (strcmp(a, "RV") == 0) {
         char vbuf[24];
         bool found = false;
-        for (uint8_t i = 0; i < MAX_INPUTS && !found; i++) {
-            if (inputs[i].flags.isEnabled &&
+        // The lowest pin, as layouts pick instances (#636): a wired battery
+        // input wins over an imported PID 0x42 (the ECU's supply, after its relay)
+        const Input* best = nullptr;
+        for (uint8_t i = 0; i < MAX_INPUTS; i++) {
+            if (inputs[i].pin != 0xFF && inputs[i].flags.isEnabled &&
                 (inputs[i].applicationIndex == APP_PRIMARY_BATTERY ||
                  inputs[i].applicationIndex == APP_AUXILIARY_BATTERY) &&
-                !isnan(inputs[i].value))
-            {
-                // Format as "12.3V"
-                int whole = (int)inputs[i].value;
-                int frac  = (int)((inputs[i].value - whole) * 10 + 0.5f);
-                if (frac >= 10) { whole++; frac = 0; }
-                if (whole < 0)  { whole = 0; frac = 0; }
-                if (whole > 99) { whole = 99; frac = 9; }
-                snprintf(vbuf, sizeof(vbuf), "%d.%dV\r\r>", whole, frac);
-                found = true;
-            }
+                !isnan(inputs[i].value) && (best == nullptr || inputs[i].pin < best->pin))
+                best = &inputs[i];
+        }
+        if (best != nullptr) {
+            // Format as "12.3V"
+            const float v = best->value;
+            int whole = (int)v;
+            int frac  = (int)((v - whole) * 10 + 0.5f);
+            if (frac >= 10) { whole++; frac = 0; }
+            if (whole < 0)  { whole = 0; frac = 0; }
+            if (whole > 99) { whole = 99; frac = 9; }
+            snprintf(vbuf, sizeof(vbuf), "%d.%dV\r\r>", whole, frac);
+            found = true;
         }
         if (!found) snprintf(vbuf, sizeof(vbuf), "12.0V\r\r>");
         _sendString(vbuf);

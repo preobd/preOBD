@@ -240,6 +240,22 @@ static void test_poll_drains_backpressured_response(void) {
     TEST_ASSERT_TRUE(capContains("ELM327 v1.5"));
 }
 
+// ATRV reads the lowest-pin battery input (#636): a wired one beats an
+// imported PID 0x42 (pins from 0xC0), whichever slot each sits in
+static void test_atrv_lowest_pin(void) {
+    inputs[0].pin = 0xC0; inputs[0].flags.isEnabled = true;
+    inputs[0].applicationIndex = APP_PRIMARY_BATTERY; inputs[0].value = 13.9f;
+    inputs[1].pin = 5;    inputs[1].flags.isEnabled = true;
+    inputs[1].applicationIndex = APP_PRIMARY_BATTERY; inputs[1].value = 12.4f;
+    for (uint8_t i = 2; i < MAX_INPUTS; i++) inputs[i].pin = 0xFF;
+    feed("ATRV\r");
+    TEST_ASSERT_TRUE(capContains("12.4V"));
+    inputs[1].flags.isEnabled = false;   // only the import left
+    g_capLen = 0;
+    feed("ATRV\r");
+    TEST_ASSERT_TRUE(capContains("13.9V"));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_disabled_output_does_not_answer);
@@ -255,5 +271,6 @@ int main(int, char**) {
     RUN_TEST(test_command_split_across_frames);
     RUN_TEST(test_backpressure_retries);
     RUN_TEST(test_poll_drains_backpressured_response);
+    RUN_TEST(test_atrv_lowest_pin);
     return UNITY_END();
 }

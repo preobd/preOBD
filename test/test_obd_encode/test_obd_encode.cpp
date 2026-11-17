@@ -20,6 +20,8 @@
 #include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"
 #include "../../src/outputs/formats/field_encode.cpp"
 #include "../../src/outputs/formats/obd_encode.cpp"
+#include "../../src/outputs/formats/obd_answer.cpp"
+Input inputs[MAX_INPUTS];
 #include <vector>
 #include <math.h>
 
@@ -279,6 +281,20 @@ static void test_units_helpers(void) {
     TEST_ASSERT_EQUAL_FLOAT(7.5f, obdConvertUnits(7.5f, UNITS_NOT_FOUND));
 }
 
+// The boost answer's barometric reference is the lowest-pin baro input (#636):
+// a wired sensor beats an imported PID 0x33, whichever slot each sits in
+static void test_baro_lowest_pin(void) {
+    memset(inputs, 0, sizeof(inputs));
+    for (uint8_t i = 0; i < MAX_INPUTS; i++) inputs[i].pin = 0xFF;
+    TEST_ASSERT_EQUAL_FLOAT(OBD_STD_BARO_BAR, obdBaroBar());
+    inputs[0].pin = 0xC1; inputs[0].flags.isEnabled = true;
+    inputs[0].applicationIndex = APP_BAROMETRIC_PRESSURE; inputs[0].value = 0.98f;
+    TEST_ASSERT_EQUAL_FLOAT(0.98f, obdBaroBar());
+    inputs[3].pin = 7; inputs[3].flags.isEnabled = true;
+    inputs[3].applicationIndex = APP_BAROMETRIC_PRESSURE; inputs[3].value = 1.01f;
+    TEST_ASSERT_EQUAL_FLOAT(1.01f, obdBaroBar());
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_every_row_round_trips);
@@ -288,6 +304,7 @@ int main(int, char**) {
     RUN_TEST(test_clamping);
     RUN_TEST(test_type_gate);
     RUN_TEST(test_every_preset);
+    RUN_TEST(test_baro_lowest_pin);
     RUN_TEST(test_length_for);
     RUN_TEST(test_differential_vs_reference);
     RUN_TEST(test_units_helpers);

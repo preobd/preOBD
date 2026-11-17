@@ -1721,6 +1721,12 @@ int cmd_set(int argc, const char* const* argv) {
             // the CAN_IMPORT preset left every PID labelled CELSIUS.
             input->measurementType = pidInfo->measurementType;
             input->unitsIndex = u;
+            // The PID's application (#636), so layouts that pick inputs by
+            // application (PREOBD) carry it. Set directly, not through
+            // setInputApplication(): that would swap in the preset's sensor,
+            // OBD PID and alarm range. No Rule is seeded: with CAN the user
+            // is asked (the app's wizard), or sets one with SET CAN:n ALARM.
+            input->applicationIndex = importApplicationForPid(pid);
 
             // Set display name from standard table
             strncpy_P(input->displayName, pidInfo->name, sizeof(input->displayName) - 1);

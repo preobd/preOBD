@@ -31,6 +31,9 @@
 #include "../../src/outputs/formats/obd_encode.cpp"
 #include "../../src/outputs/formats/can_layout.cpp"
 #include "../../src/outputs/formats/layout_preobd.cpp"
+#include "../../src/inputs/measurement_compat.cpp"
+#include "../../src/sensors/can_sensor_library/standard_pids.cpp"
+#include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -539,9 +542,38 @@ static void test_dbc_matches_the_firmware_table(void) {
     TEST_ASSERT_TRUE_MESSAGE(fresh == committed, "docs/can/preOBD.dbc differs from the PREOBD table: run tools/gen_preobd_dbc.py");
 }
 
+// #636: every standard PID SET CAN gives an application lands in PREOBD,
+// built the way SET CAN builds it (a CAN:n pin above every wired one, the
+// PID's measurement type, the row's application)
+static void test_set_can_inputs_map(void) {
+    for (uint8_t i = 0; i < NUM_STANDARD_PIDS; i++) {
+        StandardPIDInfo r;
+        memcpy_P(&r, &STANDARD_PID_TABLE[i], sizeof(r));
+        const uint8_t app = importApplicationForPid(r.pid);
+        if (app == APP_NONE) continue;
+        char msg[24];
+        snprintf(msg, sizeof(msg), "PID 0x%02X", r.pid);
+        Input in[MAX_INPUTS]; clearInputs(in, MAX_INPUTS);
+        setInput(in[3], 0xC0, app, 1.0f);
+        in[3].measurementType = r.measurementType;
+        uint8_t map[CAN_LAYOUT_MAX_SIGNALS];
+        canLayoutBuildMap(L, in, MAX_INPUTS, map);
+        const uint8_t s = sigIndex(app, 1);
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(3, map[s], msg);
+        CanLayoutSignal sig; canLayoutSignalAt(L, s, sig);
+        uint8_t out[4];
+        TEST_ASSERT_TRUE_MESSAGE(canLayoutEncodeSignal(sig, in[3], 1, out), msg);   // its type passes the row's gate
+        // A wired input of the same application is instance 1, the import 2
+        setInput(in[9], 5, app, 1.0f);
+        canLayoutBuildMap(L, in, MAX_INPUTS, map);
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(9, map[s], msg);
+    }
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_map_pin_order_and_holes);
+    RUN_TEST(test_set_can_inputs_map);
     RUN_TEST(test_map_slot_reuse_does_not_move_instances);
     RUN_TEST(test_disabled_egt1_keeps_egt2);
     RUN_TEST(test_type_mismatch_route_and_no_reading);

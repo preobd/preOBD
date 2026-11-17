@@ -4,6 +4,8 @@
 
 #include "obd_output_pids.h"
 #include "standard_pids.h"
+#include "../application_presets.h"
+#include "../generated/registry_enums.h"   // APP_*
 #include <string.h>
 
 #ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
@@ -82,4 +84,26 @@ FLASHMEM uint8_t obdLengthFor(uint8_t pid, uint8_t current) {
     // A PID of the user's own takes 1-5 bytes; coming from a table PID
     // (boost 0x70 is 10) that length would leave the input silent
     return (current == 0 || current > 5) ? 1 : current;
+}
+
+FLASHMEM uint8_t importApplicationForPid(uint8_t pid) {
+    switch (pid) {   // import-only aliases: no preset answers on these PIDs
+        case 0x67: return APP_COOLANT_TEMP;   // ECT sensors 1-2
+        case 0x79: return APP_EGT;            // EGT bank 2, sensors 1-4
+        default: break;
+    }
+    const StandardPIDInfo* p = lookupStandardPID(pid);
+    if (p == nullptr) return APP_NONE;
+    StandardPIDInfo row;
+    memcpy_P(&row, p, sizeof(row));   // PROGMEM on AVR
+    for (uint8_t i = 1; i < NUM_APPLICATION_PRESETS; i++) {
+        if (pgm_read_byte(&APPLICATION_PRESETS[i].obd2pid) != pid ||
+            getApplicationExpectedMeasurementType(i) != row.measurementType) continue;
+        // The export converts this PID for this application (gauge on an
+        // absolute PID): an imported reading would be ~1 bar high (#639)
+        ObdOutputPid spec;
+        if (obdGaugeApplication(i) && obdOutputSpec(pid, spec) && (spec.flags & OBD_OUT_ABSOLUTE)) return APP_NONE;
+        return i;
+    }
+    return APP_NONE;
 }

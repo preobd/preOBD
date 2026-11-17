@@ -129,9 +129,12 @@ running. Pick the slowest interval your gauges tolerate.
 
 ## Inputs imported from CAN
 
-An input imported from the car's network (`SET CAN`) has the application NONE,
-so it does not map to any PREOBD signal yet and its signal reads as no data.
-Tracked in #636.
+An input imported from the car's network (`SET CAN`) gets its PID's
+application (0x0C `ENGINE_RPM`, 0x05 `COOLANT_TEMP`, ...) and maps like a wired
+input: instance n is the n-th input of that application in pin order, so a
+wired sensor (a lower pin than `CAN:0`) comes first. A PID with no application
+(including 0x70 boost, which is absolute) reads as no data. The full list is in
+the CAN sensor import guide.
 
 ## Known limitation
 

@@ -16,15 +16,19 @@
 #define FLASHMEM
 #endif
 
+// The lowest-pin barometric input, as layouts pick instances (#636): a wired
+// sensor (pins below CAN:0) wins over an imported PID 0x33, whatever slots they sit in
 FLASHMEM float obdBaroBar() {
+    const Input* best = nullptr;
     for (uint8_t i = 0; i < MAX_INPUTS; i++) {
         const Input& in = inputs[i];
         if (in.pin != 0xFF && in.flags.isEnabled && in.applicationIndex == APP_BAROMETRIC_PRESSURE &&
-            isfinite(in.value) && in.value > 0.5f && in.value < 1.2f) {
-            return in.value;   // bar; outside 0.5-1.2 it is a fault, not weather
+            isfinite(in.value) && in.value > 0.5f && in.value < 1.2f &&   // bar; outside it is a fault, not weather
+            (best == nullptr || in.pin < best->pin)) {
+            best = &in;
         }
     }
-    return OBD_STD_BARO_BAR;
+    return best ? best->value : OBD_STD_BARO_BAR;
 }
 
 FLASHMEM uint8_t obdBuildAnswer(const Input& in, uint8_t* out) {
@@ -35,7 +39,7 @@ FLASHMEM uint8_t obdBuildAnswer(const Input& in, uint8_t* out) {
     ObdOutputPid spec;
     if (obdOutputSpec(in.obd2pid, spec)) {
         if (!obdSpecAccepts(spec, (MeasurementType)in.measurementType)) return 0;
-        const bool gauge = in.applicationIndex == APP_BOOST_PRESSURE;
+        const bool gauge = obdGaugeApplication(in.applicationIndex);
         float baro = (gauge && (spec.flags & OBD_OUT_ABSOLUTE)) ? obdBaroBar() : 0.0f;
         uint8_t n = obdEncodeValue(spec, in.value, gauge, baro, &out[2]);
         return n ? (uint8_t)(2 + n) : 0;
