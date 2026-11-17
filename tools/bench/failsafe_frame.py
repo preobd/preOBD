@@ -16,7 +16,10 @@ A FAILSAFE ON relay follows RULE ABOVE 100 HYST 10. In RUN, in order:
   2. Reading 20: the rule settles clear, the relay goes OFF, flags 0.
   3. Reading NAN: OFF for about 2 s, then ON with bits 5 and 2 (0x24).
   4. ACTION <id> ON (operator force): ON, bit 5 clear. AUTO: bit 5 back.
-  5. Reading 120: the rule trips, ON with bit 3 (0x08), bit 5 clear.
+  5. Reading 120: the rule trips, ON with bit 3 (0x08), bit 5 clear, and the
+     relay never went OFF on the way from the dead sensor (#676). NAN again:
+     the failsafe takes over (0x24); reading 20: held (0x20), then OFF once
+     the rule has read clear for its debounce.
   6. CONFIG: rule-driven relays are held OFF, bit 5 clear.
 Over every frame captured: bit 5 never appears with state OFF, with an
 override, or with bit 3.
@@ -230,10 +233,14 @@ async def main():
             check("   AUTO: bit 5 back (0x24)",
                   f is not None and f[2] == 1 and f[3] == (FAILSAFE | FAULTED), show(f))
 
+            t_back = time.time()
             cmd(f"TEST INJECT {IN} 120", 0.3)
             f = await wait_frame(aid, lambda st, fl: fl & RULE_ACTIVE)
             check("5. the rule trips: ON, bit 3 only (0x08)",
                   f is not None and f[2] == 1 and f[3] == RULE_ACTIVE, show(f))
+            back = [x for x in frames if x[1] == aid and x[0] >= t_back and (f is None or x[0] <= f[0])]
+            check("   #676: the dead sensor came back hot and the relay never went OFF before the trip",
+                  all(x[2] == 1 for x in back), " -> ".join(show(x) for x in back))
             line = relay_line(aid)
             check("   ACTION LIST: ON without FAILSAFE", "-> ON" in line and not cli_failsafe(line), line)
 
@@ -241,6 +248,19 @@ async def main():
             f = await wait_frame(aid, lambda st, fl: fl & FAILSAFE, 6)
             check("   sensor dies while tripped: failsafe takes over (0x24), relay never OFF",
                   f is not None and f[2] == 1 and f[3] == (FAILSAFE | FAULTED), show(f))
+
+            t_back = time.time()
+            cmd(f"TEST INJECT {IN} 20", 0.3)
+            f = await wait_frame(aid, lambda st, fl: st == 0, 6)
+            back = [x for x in frames if x[1] == aid and x[0] >= t_back]
+            held = [x for x in back if x[2] == 1 and x[3] == FAILSAFE]
+            first_off = next((x for x in back if x[2] == 0), None)
+            check("   #676: back clear: held, no longer faulted (0x20), then OFF (0x00)",
+                  bool(held) and first_off is not None and first_off[3] == 0 and held[0][0] < first_off[0],
+                  " -> ".join(show(x) for x in back))
+            if first_off:
+                # host receive times: frames arrive on the broadcaster's tick, not at the change
+                print(f"     OFF frame {first_off[0] - t_back:.2f} s after TEST INJECT 20 (debounce 500 ms)")
 
             cmd("CONFIG", 1.5)
             f = await wait_frame(aid, lambda st, fl: st == 0)

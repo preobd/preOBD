@@ -995,6 +995,40 @@ static void test_disable_clears_and_rearm_sets_again(void) {
     TEST_ASSERT_TRUE(rulesRuleUnsettled(ctx));
 }
 
+// #676: a dead source past the fault debounce takes the verdict away; a
+// shorter gap does not.
+static void test_untrusted_source_unsettles_a_settled_rule(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    toReady(r, ctx, 20.0f);
+    rulesRuleUpdate(r, ctx, 20.0f, 1650);
+    rulesRuleUpdate(r, ctx, 20.0f, 1850);                      // settled
+    TEST_ASSERT_FALSE(rulesRuleUnsettled(ctx));
+    rulesRuleUpdate(r, ctx, NAN, 2000);
+    rulesRuleUpdate(r, ctx, NAN, 2000 + RULES_FAULT_DEBOUNCE_MS - 1);
+    TEST_ASSERT_FALSE_MESSAGE(rulesRuleUnsettled(ctx), "a short gap keeps the verdict (#650)");
+    rulesRuleUpdate(r, ctx, NAN, 2000 + RULES_FAULT_DEBOUNCE_MS);
+    TEST_ASSERT_TRUE(rulesRuleUnsettled(ctx));
+    rulesRuleUpdate(r, ctx, 150.0f, 5000);                     // back, hot: pending trip
+    TEST_ASSERT_TRUE_MESSAGE(rulesRuleUnsettled(ctx), "no verdict until it trips");
+    rulesRuleUpdate(r, ctx, 150.0f, 5300);
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, ctx.state);
+    TEST_ASSERT_FALSE(rulesRuleUnsettled(ctx));
+}
+
+static void test_untrusted_source_unsettles_an_active_rule(void) {
+    Rule r = makeRule(RULE_ABOVE, 100.0f);
+    RuleContext ctx{};
+    toReady(r, ctx, 150.0f);
+    rulesRuleUpdate(r, ctx, 150.0f, 1650);
+    rulesRuleUpdate(r, ctx, 150.0f, 1850);
+    TEST_ASSERT_EQUAL(RULE_ACTIVE, ctx.state);
+    rulesRuleUpdate(r, ctx, NAN, 2000);
+    rulesRuleUpdate(r, ctx, NAN, 2000 + RULES_FAULT_DEBOUNCE_MS);
+    TEST_ASSERT_EQUAL(RULE_READY, ctx.state);
+    TEST_ASSERT_TRUE(rulesRuleUnsettled(ctx));
+}
+
 static void test_action_failsafe_while_unsettled(void) {
     Action aOn  = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_ON);
     Action aOff = makeAction(ACT_RELAY, 5, ACT_FAILSAFE_OFF);
@@ -1333,6 +1367,8 @@ int main(int, char**) {
     RUN_TEST(test_nan_in_ready_is_no_verdict);
     RUN_TEST(test_settled_rule_stays_settled_through_later_trips);
     RUN_TEST(test_disable_clears_and_rearm_sets_again);
+    RUN_TEST(test_untrusted_source_unsettles_a_settled_rule);
+    RUN_TEST(test_untrusted_source_unsettles_an_active_rule);
     RUN_TEST(test_action_failsafe_while_unsettled);
     RUN_TEST(test_clear_noise_at_the_limit_never_leaves_active);
     RUN_TEST(test_clear_needs_debounce_of_continuous_clear_readings);

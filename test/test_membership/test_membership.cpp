@@ -1186,11 +1186,74 @@ static void test_failsafe_held_on_a_dead_sensor_and_released_on_recovery(void) {
     TEST_ASSERT_TRUE(rulesActionSourceFaulted(0));            // bit 2 beside bit 5
 
     g_inputs[0].value = 20.0f;
+    uint32_t offAt = 0;
     for (uint32_t t = 15050; t <= 25000; t += 50) {
         stepEngine(t);
         TEST_ASSERT_EQUAL(rulesActionState(0), rulesActionFailsafeHeld(0));
+        if (rulesActionState(0)) {
+            TEST_ASSERT_FALSE_MESSAGE(rulesActionSourceFaulted(0), "back: held, no longer faulted");
+        } else if (!offAt) {
+            offAt = t;
+        }
     }
     TEST_ASSERT_FALSE(rulesActionState(0));
+    // #676: unsettled again, so it waits for debounceMs (500) of clear readings
+    TEST_ASSERT_TRUE_MESSAGE(offAt >= 15550, "held until the clear verdict, not dropped at once");
+}
+
+// #676: a settled rule's sensor dies past the fault debounce, then comes back
+// hot. The relay never reads OFF: the failsafe holds it until the rule trips.
+static void test_failsafe_holds_when_a_dead_sensor_returns_hot(void) {
+    addInput(10, 20.0f);
+    armRule(0, 10);
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    rulesActionAddRule(0, 0);
+    g_test_now = 1200;
+    rulesSyncActionPins(false);
+    for (uint32_t t = 1250; t <= 10000; t += 50) stepEngine(t);
+    TEST_ASSERT_FALSE(rulesActionState(0));                   // settled clear
+
+    g_inputs[0].value = NAN;
+    for (uint32_t t = 10050; t <= 15000; t += 50) stepEngine(t);
+    TEST_ASSERT_TRUE(rulesActionState(0));                    // failsafe, faulted
+
+    g_inputs[0].value = 120.0f;
+    bool tripped = false;
+    for (uint32_t t = 15050; t <= 20000; t += 50) {
+        stepEngine(t);
+        TEST_ASSERT_TRUE_MESSAGE(rulesActionState(0), "never OFF between the fault and the trip");
+        if (!tripped && rulesActionRuleActive(0)) {
+            tripped = true;
+            TEST_ASSERT_TRUE_MESSAGE(t >= 15550, "the trip still waits for debounceMs");
+        }
+        TEST_ASSERT_EQUAL(!tripped, rulesActionFailsafeHeld(0));
+    }
+    TEST_ASSERT_TRUE(tripped);
+}
+
+// The same with the rule ACTIVE when the sensor died (§11.3: past the fault
+// debounce an ACTIVE rule de-asserts).
+static void test_failsafe_holds_when_a_tripped_rules_sensor_returns_hot(void) {
+    addInput(10, 120.0f);
+    armRule(0, 10);
+    addAction(0, 23, ACT_FAILSAFE_ON);
+    rulesActionAddRule(0, 0);
+    g_test_now = 1200;
+    rulesSyncActionPins(false);
+    for (uint32_t t = 1250; t <= 10000; t += 50) stepEngine(t);
+    TEST_ASSERT_TRUE(rulesActionRuleActive(0));
+
+    g_inputs[0].value = NAN;
+    for (uint32_t t = 10050; t <= 15000; t += 50) {
+        stepEngine(t);
+        TEST_ASSERT_TRUE(rulesActionState(0));
+    }
+    g_inputs[0].value = 120.0f;
+    for (uint32_t t = 15050; t <= 20000; t += 50) {
+        stepEngine(t);
+        TEST_ASSERT_TRUE_MESSAGE(rulesActionState(0), "never OFF across the fault and back");
+    }
+    TEST_ASSERT_TRUE(rulesActionRuleActive(0));
 }
 
 // ON for another reason is not "the failsafe": a tripped rule, an override, a
@@ -1411,6 +1474,8 @@ int main(int, char**) {
     RUN_TEST(test_failsafe_on_cold_start_goes_off_at_the_verdict);
     RUN_TEST(test_failsafe_held_from_the_claim_to_the_verdict);
     RUN_TEST(test_failsafe_held_on_a_dead_sensor_and_released_on_recovery);
+    RUN_TEST(test_failsafe_holds_when_a_dead_sensor_returns_hot);
+    RUN_TEST(test_failsafe_holds_when_a_tripped_rules_sensor_returns_hot);
     RUN_TEST(test_failsafe_held_is_false_when_something_else_decides);
     RUN_TEST(test_relay_on_a_noisy_rule_holds_each_state_for_the_debounce);
     RUN_TEST(test_failsafe_on_dead_sensor_stays_on);

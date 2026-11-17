@@ -197,7 +197,11 @@ void rulesRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t n
     // its warning (#650: one dropped conversion or CAN frame must not drop a
     // running fan). Past the fault debounce the source is untrusted: an ACTIVE
     // rule de-asserts at once (no clear timer: a NaN is no clear reading) and
-    // the warning drops (a dead sensor is approaching nothing).
+    // the warning drops (a dead sensor is approaching nothing). The rule is
+    // also unsettled again (#676, §11.3): its last verdict is from before the
+    // fault, so when the reading comes back it needs a new one, and a
+    // FAILSAFE ON relay holds until the rule trips or reads clear rather than
+    // dropping for the persist time.
     if (isnan(value)) {
         ctx.faultStartTime = 0;
         ctx.clearSince = 0;
@@ -205,6 +209,7 @@ void rulesRuleUpdate(const Rule& rule, RuleContext& ctx, float value, uint32_t n
         if (rulesRuleSourceUntrusted(ctx, now)) {
             ctx.state = RULE_READY;
             ctx.warnFlags = 0;
+            ctx.verdictPending = 1;
         }
         return;
     }

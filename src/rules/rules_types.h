@@ -313,7 +313,8 @@ struct RuleContext {
     uint16_t  warmupTime_ms;    // effective warmup (from the Rule)
     uint16_t  persistTime_ms;   // effective debounce (from the Rule), both directions (#668)
     RuleState state;            // current runtime state
-    uint8_t   verdictPending;   // 1 from arming until the first trusted verdict
+    uint8_t   verdictPending;   // 1 from arming, and again once the source is untrusted
+                                 // (#676), until the next trusted verdict
                                  // (rulesRuleUnsettled(), #669). Zero = settled, so a
                                  // context nobody armed (BSS) counts as settled.
     uint8_t   warnFlags;        // RULE_CTX_* above (#668)
