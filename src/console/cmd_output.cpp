@@ -21,7 +21,7 @@
 #include "../core/system_mode.h"
 #include "../core/config_generation.h"
 #include "../core/message_api.h"
-#include "../core/message_router.h"
+#include "../transports/transport_registry.h"
 #include "../config/system_config.h"
 #include "../outputs/table/output_base.h"
 #include "../outputs/table/output_table.h"
@@ -120,7 +120,7 @@ static FLASHMEM bool transportReady(OutputFormat fmt, uint8_t transport) {
         msg.control.println(F(" ENABLE <baud> first"));
         return false;
     }
-    if (transport == OT_ESP32_BT && router.streamTransport(transport) == nullptr) {
+    if (transport == OT_ESP32_BT && transportGet(transport) == nullptr) {
         msg.control.println(F("ERROR: ESP32_BT is not available (Bluetooth didn't start)"));
         return false;
     }

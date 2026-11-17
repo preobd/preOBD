@@ -385,6 +385,41 @@ static void test_a_second_one_per_kind_output_is_skipped_on_import(void) {
     outputsClear();
 }
 
+// A backup restored onto a freshly reset unit (whose table is the defaults)
+// keeps every input's routes as the file has them (bench 2026-11-09: a restore
+// onto a reset teensy40 came back with SD and ELM327-serial routes missing)
+static void test_a_restore_onto_a_reset_unit_keeps_the_files_routes(void) {
+    outputsClear();
+    outputCreate(FMT_ELM327, OT_BLE, true);            // 0
+    outputCreate(FMT_CSV, OT_USB, false);              // 1, deleted below
+    outputCreate(FMT_CSV, OT_USB, false);              // 2 (disabled outputs may share a stream)
+    outputCreate(FMT_REALDASH, OT_USB, false);         // 3
+    outputCreate(FMT_CSV, OT_USB, false);              // 4
+    outputCreate(FMT_REALDASH, OT_USB, false);         // 5
+    outputErase(1);
+    configure(4);
+    getInputByPin(4)->routeMask = 0x3D;                // 0, 2, 3, 4, 5
+    JsonDocument doc;
+    doc["schemaVersion"] = 1;
+    doc["mode"] = "runtime";
+    JsonArray outs = doc["system"]["outputs"].to<JsonArray>();
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) if (outputExists(id)) outputToJson(outs.add<JsonObject>(), id);
+    JsonObject in = doc["inputs"].to<JsonArray>().add<JsonObject>();
+    exportInputToJSON(in, getInputByPin(4));
+    in["idx"] = 0;
+    static char json[6144];
+    TEST_ASSERT_TRUE(serializeJson(doc, json, sizeof(json)) < sizeof(json) - 1);
+
+    clearInput(4);                                     // the reset unit: defaults only
+    outputsClear();
+    outputCreate(FMT_ELM327, OT_BLE, true);
+    TEST_ASSERT_TRUE(loadConfigFromJSON(json));
+    TEST_ASSERT_EQUAL_UINT8(5, outputCount());
+    TEST_ASSERT_NOT_NULL(getInputByPin(4));
+    TEST_ASSERT_EQUAL_HEX8(0x3D, getInputByPin(4)->routeMask);
+    outputsClear();
+}
+
 static void test_no_log_filter_key_leaves_the_live_filter_alone(void) {
     TEST_ASSERT_TRUE(loadConfigFromJSON("{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{}}"));
     TEST_ASSERT_EQUAL_INT(0, g_applyLogFilterCalls);
@@ -528,6 +563,7 @@ int main(int, char**) {
     RUN_TEST(test_a_file_from_another_board_that_fits_is_imported);
     RUN_TEST(test_the_outputs_array_replaces_the_table);
     RUN_TEST(test_a_second_one_per_kind_output_is_skipped_on_import);
+    RUN_TEST(test_a_restore_onto_a_reset_unit_keeps_the_files_routes);
     RUN_TEST(test_analog_pins_past_the_digital_range_exist);
     RUN_TEST(test_an_unreadable_pin_is_refused);
     return UNITY_END();

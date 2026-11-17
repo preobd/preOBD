@@ -26,7 +26,6 @@
 #include "../sensors/units_registry.h"
 #include "../inputs/measurement_compat.h"  // units repair on load (#458)
 #include "../sensors/can_sensor_library/obd_output_pids.h"  // obdLengthFor (#516)
-#include "../core/message_router.h"   // For msg.control
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
 #include "../sensors/application_presets.h"

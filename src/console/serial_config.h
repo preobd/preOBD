@@ -21,7 +21,7 @@ void processSerialCommands();
 // Handle a single command (char* to avoid String class RAM overhead)
 void handleSerialCommand(char* cmd);
 
-// Handle incoming character input (called by MessageRouter)
+// Handle incoming character input (called by consolePump(), console_routing.h)
 void handleCommandInput(char c);
 
 #if SUPPORTS_JSON_IMPORT_STREAM

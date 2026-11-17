@@ -6,7 +6,7 @@
  *
  * Usage:
  *   BLETransportESP32 ble("preOBD");
- *   router.registerTransport(TRANSPORT_ESP32_BT, &ble);
+ *   transportRegister(TRANSPORT_ESP32_BT, &ble);
  *
  * Note: Only available on ESP32-S3, ESP32-C3 (BLE-only chips)
  */

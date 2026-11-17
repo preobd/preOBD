@@ -18,7 +18,6 @@
 #include "../core/system_mode.h"
 #include "../config/system_config.h"
 #include "../config/json_config.h"
-#include "../core/message_router.h"
 #include "../core/message_api.h"
 #include "../core/log_filter.h"
 #include "../core/log_tags.h"

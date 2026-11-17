@@ -30,9 +30,7 @@
 // stream resolves to nullptr and writes go nowhere.
 MessageAPI    msg;
 LogFilter::LogFilter() {}
-MessageRouter::MessageRouter() {}
-MessageRouter router;
-TransportInterface* MessageRouter::getTransport(MessagePlane, bool) { return nullptr; }
+TransportInterface* messageSink(MessagePlane, bool) { return nullptr; }
 size_t MessageStream::warn(const char* tag, const char* fmt, ...) {
     (void)tag; (void)fmt; return 0;
 }

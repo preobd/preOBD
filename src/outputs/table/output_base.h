@@ -29,6 +29,11 @@ void syncOutputsToConfig();
 // the record and apply it live. The CLI and JSON IMPORT check admission first
 // (output_admission.h).
 bool    outputSetEnabledById(uint8_t id, bool enabled);  // ENABLE also retries a failed start
+// Registered by main.cpp: has the console fallen back to USB (#558)? Stream
+// outputs on USB pause meanwhile, so the console's replies stay readable
+typedef bool (*OutputConsoleFallbackProbe)();
+void setOutputConsoleFallbackProbe(OutputConsoleFallbackProbe probe);
+
 bool    outputSetIntervalById(uint8_t id, long ms);      // false unless outputIntervalValid()
 bool    outputSetTransportById(uint8_t id, uint8_t transport);  // OUTPUT <id> TRANSPORT (same kind)
 bool    outputSetOptionById(uint8_t id, uint8_t option); // CSV on SD: LONG/WIDE

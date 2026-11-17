@@ -5,7 +5,7 @@
 // per test binary, AFTER the firmware .cpp files under test.
 //
 // What it supplies:
-//   - a null-transport message router, so every msg.control/msg.debug print is a
+//   - a null msg sink (messageSink returns nullptr), so every msg.control/msg.debug print is a
 //     no-op instead of a link error;
 //   - a test-settable isPinAvailable() (g_pinReserved[]) — the lever the
 //     "reserved by a bus" refusal hangs off;
@@ -19,12 +19,10 @@
 #ifndef TEST_FIRMWARE_STUBS_H
 #define TEST_FIRMWARE_STUBS_H
 
-MessageRouter router;
 MessageAPI msg;
 SystemConfig systemConfig;
 LogFilter::LogFilter() {}
-MessageRouter::MessageRouter() {}
-TransportInterface* MessageRouter::getTransport(MessagePlane, bool) { return nullptr; }
+TransportInterface* messageSink(MessagePlane, bool) { return nullptr; }
 // JSON IMPORT applies an imported logFilter to the live filter (#561); system_config.cpp
 // is not in these binaries, so count the calls instead.
 int g_applyLogFilterCalls = 0;

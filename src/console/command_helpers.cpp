@@ -9,7 +9,6 @@
 #include "command_table.h"  // for Subcommand
 #include "command_handlers.h"  // cmd_relay (HELP RELAY reuses its pointer)
 #include "../config.h"
-#include "../core/message_router.h"
 #include "../core/message_api.h"
 #include "../config/system_config.h"
 #include "../core/platform.h"

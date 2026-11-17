@@ -14,8 +14,8 @@
 // it reads (APPLICATION_PRESETS / SENSOR_LIBRARY, defined in their own .cpp
 // per #400) are PROGMEM tables that the stub turns into plain RAM. What it
 // needs from the rest of the
-// firmware comes from test/stubs/firmware_stubs.h — a null-transport message
-// router (so every msg.control print is a no-op), a test-settable
+// firmware comes from test/stubs/firmware_stubs.h — a null msg sink
+// (so every msg.control print is a no-op), a test-settable
 // isPinAvailable(), and no-op bodies for the sensor read/init functions the
 // library tables point at (referenced as data, so -dead_strip can't drop them).
 //

@@ -13,7 +13,6 @@
 #include "serial_config.h"
 #include "command_table.h"
 #include "command_helpers.h"
-#include "../core/message_router.h"
 #include "../core/message_api.h"
 #include "../config/json_config.h"
 #include <string.h>
@@ -382,8 +381,8 @@ void initSerialConfig() {
 }
 
 /**
- * Handle incoming character input (called by MessageRouter)
- * This function is called character-by-character from router.update()
+ * Handle incoming character input (called by consolePump(), console_routing.cpp)
+ * This function is called character-by-character as each source is drained
  */
 void handleCommandInput(char c) {
 #if SUPPORTS_JSON_IMPORT_STREAM
@@ -454,7 +453,7 @@ void handleCommandInput(char c) {
         embeddedCliReceiveChar(cli, c);
     }
 #else
-    // Dispatched here, not deferred to processSerialCommands(): the router
+    // Dispatched here, not deferred to processSerialCommands(): the console pump
     // feeds this transport's bytes with it already set as the reply target,
     // and there is no rx FIFO to hold the bytes that follow the Enter.
     if (lineReaderFeed(lineReader, c, lineWriteChar)) {

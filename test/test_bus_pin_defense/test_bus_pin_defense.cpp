@@ -36,7 +36,6 @@
 // ---------------------------------------------------------------------------
 SystemConfig systemConfig;
 LogFilter::LogFilter() {}
-MessageRouter::MessageRouter() {}
 size_t MessageStream::error(const char*, const char*, ...) { return 0; }
 size_t MessageStream::warn(const char*, const char*, ...) { return 0; }
 size_t MessageStream::info(const char*, const char*, ...) { return 0; }
@@ -73,9 +72,8 @@ public:
 };
 static CaptureTransport g_capture;
 MessageAPI msg;
-MessageRouter router;
-TransportInterface* MessageRouter::getTransport(MessagePlane plane, bool primary) {
-    return (plane == PLANE_CONTROL && primary) ? &g_capture : nullptr;
+TransportInterface* messageSink(MessagePlane plane, bool secondary) {
+    return (plane == PLANE_CONTROL && !secondary) ? &g_capture : nullptr;
 }
 
 // A configured input on one pin, for the #564 tests.

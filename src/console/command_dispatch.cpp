@@ -10,7 +10,7 @@
  * Dependency discipline: this TU intentionally pulls only lightweight headers
  * (command_table.h, command_dispatch.h, system_mode.h). User-facing error text
  * is emitted through the command_dispatch.h reporter seam rather than `msg`,
- * which keeps the heavy message_router/message_api chain out of the test
+ * which keeps the heavy message_api chain out of the test
  * build. streq/streq_P are forward-declared here (their canonical declarations
  * live in command_helpers.h, definitions in command_helpers.cpp) for the same
  * reason — including command_helpers.h would drag in the message subsystem.

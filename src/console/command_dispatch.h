@@ -4,8 +4,8 @@
  * The routing logic (dispatchCommand / dispatchSubcommand, defined in
  * command_dispatch.cpp) is deliberately decoupled from the message subsystem:
  * it calls these four reporter hooks instead of touching `msg` directly. This
- * keeps the routing translation unit free of the heavy message_router /
- * message_api header chain, so the native routing test (test/test_dispatch)
+ * keeps the routing translation unit free of the heavy message_api
+ * header chain, so the native routing test (test/test_dispatch)
  * can compile command_dispatch.cpp against lightweight stubs and observe which
  * error path fired.
  *

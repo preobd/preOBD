@@ -14,8 +14,7 @@
 #include "../inputs/input_manager.h"
 #include "../buses/pinctrl/board_pins.h"
 #include "../buses/pinctrl/pin_label.h"
-#include "../core/message_router.h"  // For msg.control
-#include "../core/message_api.h"      // For msg
+#include "../core/message_api.h"
 #include "../sensors/units_registry.h"
 #include "../sensors/application_presets.h"
 #include "../sensors/sensor_library.h"

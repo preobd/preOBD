@@ -16,7 +16,7 @@
  * ELM327 over BLE (output id 5) is a second instance in elm327_framed.cpp.
  *
  * The port is exclusive to ELM327 — it is not available for
- * MessageRouter CONTROL/DATA/DEBUG plane routing while assigned.
+ * the console and the log while assigned.
  */
 
 #ifndef OUTPUT_ELM327_H

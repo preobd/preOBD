@@ -14,8 +14,8 @@
 #include "../core/system_mode.h"
 #include "../config/system_config.h"
 #include "../config/json_config.h"
-#include "../core/message_router.h"
 #include "../core/message_api.h"
+#include "console_routing.h"
 #include "../core/log_filter.h"
 #include "../core/log_tags.h"
 #include "../sensors/units_registry.h"
@@ -511,7 +511,7 @@ static FLASHMEM int bus_serial(int argc, const char* const* argv, int /*tokenInd
                 if (refuseUnderOutput(port_id)) return 1;
                 // ... nor the log, as LOG TRANSPORT refuses the other way round
                 const uint8_t tid = (uint8_t)(TRANSPORT_SERIAL1 + port_id - 1);
-                if (router.getPrimaryTransportId(PLANE_DEBUG) == tid || router.getSecondaryTransportId(PLANE_DEBUG) == tid) {
+                if (planeTransportId(PLANE_DEBUG, false) == tid || planeTransportId(PLANE_DEBUG, true) == tid) {
                     msg.control.print(F("ERROR: the log uses Serial"));
                     msg.control.print(port_id);
                     msg.control.println(F("; LOG TRANSPORT first"));

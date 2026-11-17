@@ -141,7 +141,7 @@ static void printDiag(uint8_t pin, const char* a, const char* b, uint8_t kind) {
     }
 }
 
-// Buffer while router has no transport yet, print immediately once it does
+// Buffer while the console has no transport yet, print immediately once it does
 // (or once boot has already flushed) — see pin_owner.h.
 static void reportDiag(uint8_t pin, const char* a, const char* b, uint8_t kind) {
     if (bootDiagBuffering) bufferDiag(pin, a, b, kind);
@@ -220,7 +220,7 @@ bool pinsConflict(const uint8_t* pins, uint8_t count, uint8_t rank, const char* 
 
         // No runtime eviction either way — this always refuses. Rank only
         // decides which explanation is true, and ONLY during boot (see below).
-        // reportDiag() buffers this during boot (before the router has a
+        // reportDiag() buffers this during boot (before the console has a
         // transport) and replays it once flushPinOwnerBootDiagnostics() runs,
         // rather than printing straight to msg.control where it would be
         // silently discarded (#396) — the message itself is unchanged.

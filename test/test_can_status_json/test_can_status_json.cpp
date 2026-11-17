@@ -19,13 +19,11 @@
 #include "../../src/sensors/can/can_scan.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
 
-// can_scan.cpp prints through msg.control; a null-transport router makes
+// can_scan.cpp prints through msg.control; a null msg sink makes
 // every print a no-op.
-MessageRouter router;
 MessageAPI msg;
 LogFilter::LogFilter() {}
-MessageRouter::MessageRouter() {}
-TransportInterface* MessageRouter::getTransport(MessagePlane, bool) { return nullptr; }
+TransportInterface* messageSink(MessagePlane, bool) { return nullptr; }
 size_t MessageStream::error(const char*, const char*, ...) { return 0; }
 size_t MessageStream::debug(const char*, const char*, ...) { return 0; }
 

@@ -50,8 +50,9 @@
 #endif
 
 // Transport abstraction layer
-#include "core/message_router.h"
 #include "core/message_api.h"
+#include "transports/transport_registry.h"
+#include "console/console_routing.h"
 #include "core/log_tags.h"
 #include "transports/transport_mux.h"
 #include "transports/transport_serial.h"
@@ -309,7 +310,7 @@ void setup() {
     while (!Serial && millis() < 3000) {};  // Wait up to 3 seconds for serial
 
     // Initialize system config (loads from EEPROM or uses defaults from config.h)
-    // MUST happen before router.begin() so router can load correct transport mappings
+    // MUST happen before routingApplyConfig() so it applies the stored transports
     initSystemConfig();
 
     // Initialize pin registry FIRST - before any code registers pins
@@ -330,19 +331,18 @@ void setup() {
     setPinOwnerInputProbe(inputHoldsPin);
     setPinOwnerBusProbe(storedBusHoldsPin);
 
-    // Router asks this instead of calling buses/serial_manager.h directly
-    // (#418). Registered early, alongside the other boot-order-sensitive
-    // probes above: the first possible use is a SET/BUS-driven setTransport()
+    // The transport registry asks this instead of calling buses/serial_manager.h
+    // directly (#418). Registered early, alongside the other boot-order-sensitive
+    // probes above: the first possible use is a CONSOLE/LOG TRANSPORT
     // or LIST TRANSPORTS, both CLI commands that can't run before setup()
     // finishes, but this repo has a history of boot-order regressions here
     // (#352, #368, #369) so it is wired up as early as the driver exists.
     setSerialPortActiveProbe(isSerialPortActive);
-
-    // Router pumps CLI command processing through this sink instead of
-    // calling console/serial_config.h directly (#418, item 4). MUST run before
-    // loop() first calls router.update() -- registered here alongside the
-    // probe above, for the same boot-order reasons (#352, #368, #369).
-    setCommandSink(handleCommandInput, processSerialCommands);
+    // msg's two streams write where the console and the log say (#612 2b-2)
+    setMessageSinkResolver(PLANE_CONTROL, consoleSink);
+    setMessageSinkResolver(PLANE_DEBUG, logSink);
+    // Stream outputs on USB pause while the console has fallen back to it
+    setOutputConsoleFallbackProbe(consoleOnUsbFallback);
 
     // ---- Bus need vote, computed here so registerSystemPins() (next) can
     // gate its Tier-1 *_WIRED_BUS reservation on it (#394) --------------------
@@ -408,56 +408,57 @@ void setup() {
     //   BUS SERIAL <port> FRAMED ENABLE
 #if INCLUDE_FRAMED_TRANSPORT && NUM_SERIAL_PORTS >= 1
     // Only on a port that started: the status/alarm/live broadcasters call
-    // hwSerial1.sendFrame() directly every loop, bypassing the router, and a
+    // hwSerial1.sendFrame() directly every loop, not through the console, and a
     // write to a never-begun Teensy 4 UART is a hard fault (#558).
     hwSerial1.setFramedEnabled((systemConfig.serial.framed_enabled_mask & (1 << 0)) &&
                                isSerialPortActive(1));
 #endif
 
-    // Initialize transport router - register USB serial (always available)
-    router.registerTransport(TRANSPORT_USB_SERIAL, &usbSerial);
+    // Register the transports (transports/transport_registry.h): USB serial always
+    transportRegister(TRANSPORT_USB_SERIAL, &usbSerial);
 
     // Register all available hardware serial transports
     // They will only be usable if enabled via BUS SERIAL command
 #if NUM_SERIAL_PORTS >= 1
-    router.registerTransport(TRANSPORT_SERIAL1, &hwSerial1);
+    transportRegister(TRANSPORT_SERIAL1, &hwSerial1);
 #endif
 #if NUM_SERIAL_PORTS >= 2
-    router.registerTransport(TRANSPORT_SERIAL2, &hwSerial2);
+    transportRegister(TRANSPORT_SERIAL2, &hwSerial2);
 #endif
 #if NUM_SERIAL_PORTS >= 3
-    router.registerTransport(TRANSPORT_SERIAL3, &hwSerial3);
+    transportRegister(TRANSPORT_SERIAL3, &hwSerial3);
 #endif
 #if NUM_SERIAL_PORTS >= 4
-    router.registerTransport(TRANSPORT_SERIAL4, &hwSerial4);
+    transportRegister(TRANSPORT_SERIAL4, &hwSerial4);
 #endif
 #if NUM_SERIAL_PORTS >= 5
-    router.registerTransport(TRANSPORT_SERIAL5, &hwSerial5);
+    transportRegister(TRANSPORT_SERIAL5, &hwSerial5);
 #endif
 #if NUM_SERIAL_PORTS >= 6
-    router.registerTransport(TRANSPORT_SERIAL6, &hwSerial6);
+    transportRegister(TRANSPORT_SERIAL6, &hwSerial6);
 #endif
 #if NUM_SERIAL_PORTS >= 7
-    router.registerTransport(TRANSPORT_SERIAL7, &hwSerial7);
+    transportRegister(TRANSPORT_SERIAL7, &hwSerial7);
 #endif
 #if NUM_SERIAL_PORTS >= 8
-    router.registerTransport(TRANSPORT_SERIAL8, &hwSerial8);
+    transportRegister(TRANSPORT_SERIAL8, &hwSerial8);
 #endif
 
 #ifdef ESP32
     if (btESP32.begin()) {
-        router.registerTransport(TRANSPORT_ESP32_BT, &btESP32);
+        transportRegister(TRANSPORT_ESP32_BT, &btESP32);
         msg.debug.info(TAG_BT, "ESP32 Bluetooth initialized");
     } else {
         msg.debug.warn(TAG_BT, "ESP32 Bluetooth failed to initialize");
     }
 #endif
-    router.begin();  // Load config from EEPROM
+    routingApplyConfig();   // the stored console and log transports, and the log filter
+    transportsBegin();      // then begin() every registered transport
     flushSystemConfigBootDiagnostics();
     // Every pin claim made above — registerSystemPins() (:289) and
-    // initConfiguredSerialPorts() (:293) both run before router.begin() has a
-    // transport — buffered its refusal, if any, instead of printing to a
-    // router with nowhere to send it (#396). Replay now that a transport
+    // initConfiguredSerialPorts() (:293) both run before the transports are
+    // begun — buffered its refusal, if any, instead of printing to a console
+    // with nowhere to send it (#396). Replay now that a transport
     // exists; every claim after this point prints immediately, as before.
     flushPinOwnerBootDiagnostics();
     // INVARIANT: every broadcaster's init() below runs BEFORE initInputManager()
@@ -737,16 +738,15 @@ void loop() {
 #if SUPPORTS_JSON_IMPORT_STREAM
     // Unconditional every tick — a JSON IMPORT abandoned mid-paste (or an
     // uncleanly dropped link) would otherwise hold its malloc'd buffer
-    // forever, since the router's processIncomingCommands() only runs when a
-    // transport actually has bytes available(). Ran inside MessageRouter::update()
-    // until #418: it needs a heartbeat, not a router, and keeping it there made
-    // transports/ depend upward on console/. Stays immediately before router.update() so
-    // the tick order is unchanged.
+    // forever, since consolePump() only feeds the CLI when a transport
+    // actually has bytes available(). Ran inside the old router's update()
+    // until #418: it needs a heartbeat, not a router. Stays immediately before
+    // transportsUpdate()/consolePump() so the tick order is unchanged.
     serialConfig_checkJsonImportIdle();
 #endif
 
-    // Update transport router (poll transports, handle housekeeping, process commands)
-    router.update();  // Now handles command input from ALL transports
+    transportsUpdate();   // housekeeping for every started transport (the mux pumps frames)
+    consolePump();        // then commands from every console source
 
     // Push system status to framed peers (nRF coprocessor). Cheap no-op when
     // the transport is in transparent mode; placed before the CONFIG-mode

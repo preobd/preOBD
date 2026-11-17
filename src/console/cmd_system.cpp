@@ -20,8 +20,8 @@
 #include "../buses/pinctrl/board_pins.h"     // the analog pins the DIAG PINS sweep walks (#570)
 #include "../config/system_config.h"
 #include "../config/json_config.h"
-#include "../core/message_router.h"
 #include "../core/message_api.h"
+#include "console_routing.h"
 #include "../core/log_filter.h"
 #include "../core/log_tags.h"
 #include "../sensors/units_registry.h"
@@ -329,7 +329,7 @@ static int system_reboot(int argc, const char* const* argv, int /*tokenIndex*/) 
 //   SYSTEM RESET CONFIRM          full factory reset
 //   SYSTEM RESET CONFIG CONFIRM   erase the configuration, keep the hardware setup (#551)
 //
-// Both keep the serial ports and the transport router: they are how this
+// Both keep the serial ports and the console/log transports: they are how this
 // board is wired, and the reset may have arrived over a BLE bridge (nRF on
 // Serial1 in framed mode, another port, another baud) — resetting them cuts
 // the very link it came over (#549). The CONFIG form also keeps the buses (I2C/SPI/CAN selection,
@@ -1210,7 +1210,7 @@ static FLASHMEM int diagWatchdogStall(int argc, const char* const* argv) {
         msg.control.println(F(" ms, not feeding"));
     }
     // Get the line out before a reset can eat it, on whichever transport asked.
-    if (TransportInterface* t = router.getActiveControlTransport()) t->flush();
+    if (TransportInterface* t = consoleActiveSource()) t->flush();
     // Fed once here, so the stall is measured from now, not from the last loop pass.
     watchdogReset();
     {

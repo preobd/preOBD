@@ -20,8 +20,8 @@
 #include "output_admission.h"
 #include "../../config.h"
 #include "../../inputs/input_manager.h"
-#include "../../core/message_router.h"
 #include "../../core/message_api.h"
+#include "../../transports/transport_registry.h"
 #include "../../core/system_mode.h"
 #include "../formats/output_sdlog.h"
 #include "../formats/output_format.h"   // sdLogFormatName for OUTPUT LIST
@@ -101,10 +101,10 @@ static FLASHMEM bool startOutput(uint8_t id) {
 #if INCLUDE_SD_LOGGING
         if (r->transport == OT_SD) { initSDLog(id); break; }
 #endif
-        running = router.streamTransport(r->transport) != nullptr;
+        running = transportGet(r->transport) != nullptr;
         break;
     case FMT_REALDASH:
-        running = router.streamTransport(r->transport) != nullptr;
+        running = transportGet(r->transport) != nullptr;
         break;
     default: break;
     }
@@ -161,11 +161,19 @@ public:
 };
 static TransportPrint streamOut;
 
+// Has the console fallen back to USB (#558)? Asked of the console through a
+// probe main.cpp registers (console/console_routing.h: consoleOnUsbFallback),
+// so the answer is the live console's, and outputs/ needn't include console/.
+// Unregistered: never.
+static OutputConsoleFallbackProbe s_consoleFallbackProbe = nullptr;
+void setOutputConsoleFallbackProbe(OutputConsoleFallbackProbe probe) { s_consoleFallbackProbe = probe; }
+static bool consoleFellBackToUsb() { return s_consoleFallbackProbe && s_consoleFallbackProbe(); }
+
 // Where a stream output writes: its transport if registered and started, and
 // not USB while the console has fallen back to it (#558): the console wins
 static Print* streamFor(uint8_t transport) {
-    if (transport == OT_USB && router.consoleOnUsbFallback()) return nullptr;
-    TransportInterface* t = router.streamTransport(transport);
+    if (transport == OT_USB && consoleFellBackToUsb()) return nullptr;
+    TransportInterface* t = transportGet(transport);
     if (!t) return nullptr;
     streamOut.t = t;
     return &streamOut;

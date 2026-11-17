@@ -48,7 +48,7 @@
 //       LOG_DEBUG(TAG_ADC, "%s", buf);
 //   }
 #ifndef DISABLE_DEBUG_MESSAGES
-    #define LOG_IS_ENABLED(level, tagId) (router.getLogFilter().shouldLog(PLANE_DEBUG, level, tagId))
+    #define LOG_IS_ENABLED(level, tagId) (msg.filter.shouldLog(PLANE_DEBUG, level, tagId))
 #else
     #define LOG_IS_ENABLED(level, tagId) (false)
 #endif

@@ -1243,7 +1243,7 @@ FLASHMEM bool importInputsFromJSON(JsonArray& inputsArray) {
 // A serial port that is running and routed for commands may be the link this
 // import arrived on, so the import never changes it (#561) -- the same reason
 // SYSTEM RESET CONFIRM keeps serial settings (RESET_KEEP_LINK, #549). Read from
-// systemConfig.console, which every CONSOLE TRANSPORT keeps in step (syncConfig).
+// systemConfig.console, which every CONSOLE TRANSPORT keeps in step (routingCaptureConfig).
 FLASHMEM static bool serialPortCarriesCommands(uint8_t port_id) {
     if (!isSerialPortActive(port_id)) return false;
     const uint8_t t = (uint8_t)(TRANSPORT_SERIAL1 + (port_id - 1));

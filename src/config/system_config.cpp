@@ -11,12 +11,11 @@
 #endif
 #include "../config.h"
 #include "../sensors/units_registry.h"
-#include "../core/message_router.h"  // For TransportID enum
+#include "../core/message_api.h"     // msg, msg.filter; TransportID
 #include "../hal/bus_defaults.h"
 #include "../buses/pinctrl/bus_wiring.h"
 #include "../buses/bus_manager.h"   // getI2CBusName()/getSPIBusName() — Tier-1 wired-bus reservation (#379)
 #include "../buses/bus_needs.h"     // BUS_NEED_I2C/BUS_NEED_SPI — Tier-1 gated on the stored vote (#394)
-#include "../core/message_api.h"
 #include "../core/log_tags.h"
 #include "../buses/pinctrl/pin_registry.h"
 #include "../buses/pinctrl/pin_owner.h"
@@ -27,9 +26,9 @@
 // Global system config instance
 SystemConfig systemConfig;
 
-// Boot diagnostics buffer — loadSystemConfig() runs before the message router is
-// up, so msg.* calls would be silently dropped. Store the events here and flush
-// them via flushSystemConfigBootDiagnostics() once router.begin() has been called.
+// Boot diagnostics buffer — loadSystemConfig() runs before the console has a
+// transport, so msg.* calls would be silently dropped. Store the events here and flush
+// them via flushSystemConfigBootDiagnostics() once the transports are begun (transportsBegin()).
 static struct {
     enum : uint8_t {
         DIAG_NONE             = 0x00,
@@ -45,7 +44,7 @@ static struct {
     uint8_t calcChecksum     = 0;
 
     // reportBuiltinPinCollision()'s annotation line (#396) — registerSystemPins()
-    // runs in the same pre-router-transport window as loadSystemConfig(), so its
+    // runs in the same no-transport-yet window as loadSystemConfig(), so its
     // context (a build-time duplicate, or since #594 a configured input on the
     // pin) is lost the same way. One bit per call
     // site below is enough (there are exactly 9, all fixed at compile time) —
@@ -325,60 +324,23 @@ FLASHMEM bool saveSystemConfig(bool verbose) {
 }
 
 // ---------------------------------------------------------------------------
-// MessageRouter config marshalling (#418).
-//
-// These are MessageRouter member functions -- declared in
-// core/message_router.h -- defined HERE instead of in
-// core/message_router.cpp so config/ owns the SystemConfig <-> router
-// shape and core/ stays free of any config/ dependency. Call sites
-// (router.loadConfig(), router.syncConfig(), router.saveConfig()) are unchanged.
-//
-// loadConfig() writes through setTransportUnchecked(), not setTransport():
-// setTransport() refuses a serial transport whose port isn't enabled yet
-// (isSerialPortActive()), and at load time that would silently drop a stored
-// routing choice for a port not yet brought up. Loading a persisted
-// configuration must never be refused this way.
+// The log filter (#561). The console's and the log's transports moved to
+// console/console_routing.cpp's routingApplyConfig()/routingCaptureConfig() in
+// #612 phase 2b-2 (as routingApplyConfig/routingCaptureConfig; they were MessageRouter::loadConfig/syncConfig, defined
+// here since #418); this file keeps applying the filter, which JSON IMPORT
+// calls on its own.
 // ---------------------------------------------------------------------------
 
-void MessageRouter::loadConfig() {
-    // The console's and the log's transports from SystemConfig (EEPROM)
-    setTransportUnchecked(PLANE_CONTROL, (TransportID)systemConfig.console.primary,   false);
-    setTransportUnchecked(PLANE_DEBUG,   (TransportID)systemConfig.log.primary,       false);
-    setTransportUnchecked(PLANE_CONTROL, (TransportID)systemConfig.console.secondary, true);
-    setTransportUnchecked(PLANE_DEBUG,   (TransportID)systemConfig.log.secondary,     true);
-
-    // Load log filter configuration from SystemConfig.logFilter
-    applyLogFilterConfig();
-}
-
-// Also called by JSON IMPORT (#561): the live filter is the router's, and the
-// LOG commands copy it back over systemConfig.logFilter (syncConfig), so an
+// Also called by JSON IMPORT (#561): the live filter is msg.filter, and the
+// LOG commands copy it back over systemConfig.logFilter (routingCaptureConfig), so an
 // import that set only the stored copy would be undone by the next LOG command.
 void applyLogFilterConfig() {
-    LogFilter& f = router.getLogFilter();
+    LogFilter& f = msg.filter;
     f.setLevel(PLANE_CONTROL, (LogLevel)systemConfig.logFilter.console_level);
     f.setLevel(PLANE_DEBUG,   (LogLevel)systemConfig.logFilter.debug_level);
     f.setEnabledTags(systemConfig.logFilter.enabledTags);
 }
 
-void MessageRouter::syncConfig() {
-    // Copy the router's state to SystemConfig.console/log (does NOT save to EEPROM)
-    systemConfig.console.primary   = getPrimaryTransportId(PLANE_CONTROL);
-    systemConfig.console.secondary = getSecondaryTransportId(PLANE_CONTROL);
-    systemConfig.log.primary       = getPrimaryTransportId(PLANE_DEBUG);
-    systemConfig.log.secondary     = getSecondaryTransportId(PLANE_DEBUG);
-
-    // Copy log filter state to SystemConfig.logFilter
-    systemConfig.logFilter.console_level = getLogFilter().getLevel(PLANE_CONTROL);
-    systemConfig.logFilter.debug_level   = getLogFilter().getLevel(PLANE_DEBUG);
-    systemConfig.logFilter.enabledTags   = getLogFilter().getEnabledTags();
-}
-
-void MessageRouter::saveConfig() {
-    // Sync state and persist to EEPROM
-    syncConfig();
-    saveSystemConfig();
-}
 
 // Gap 5 (pin ownership design audit): every claimPins() call below used to
 // discard its return value, so two build-time pins colliding in wiring.ini /
@@ -406,10 +368,10 @@ FLASHMEM static void reportBuiltinPinCollisionNow(const __FlashStringHelper* wha
     msg.control.println(F(" — check wiring.ini / board.h for a duplicate pin"));
 }
 
-// registerSystemPins() runs before router.begin() (main.cpp), same as
+// registerSystemPins() runs before transportsBegin() (main.cpp), same as
 // loadSystemConfig() — printing straight to msg.control here is the other
 // half of #396's silent-discard bug. pin_owner.h's pinOwnerBootDiagBuffering()
-// is the single source of truth for "is the router transport-less right now";
+// is the single source of truth for "does the console have no transport yet";
 // buffer here too so this annotation and pin_owner's own conflict message
 // (buffered separately, pin_owner.cpp) both survive to flush time instead of
 // only one of them being fixed.

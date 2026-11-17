@@ -33,8 +33,6 @@
 // refusal (stale-config vs. higher-precedence), not just its boolean outcome.
 MessageAPI    msg;
 LogFilter::LogFilter() {}
-MessageRouter::MessageRouter() {}
-MessageRouter router;
 size_t MessageStream::error(const char* tag, const char* fmt, ...) {
     (void)tag; (void)fmt; return 0;
 }
@@ -66,8 +64,8 @@ public:
 };
 static CaptureTransport g_capture;
 
-TransportInterface* MessageRouter::getTransport(MessagePlane plane, bool primary) {
-    return (plane == PLANE_CONTROL && primary) ? &g_capture : nullptr;
+TransportInterface* messageSink(MessagePlane plane, bool secondary) {
+    return (plane == PLANE_CONTROL && !secondary) ? &g_capture : nullptr;
 }
 
 static const char* OWNER_A = "Wire1";
@@ -80,7 +78,7 @@ void setUp(void)    {
     // reset it per test so wording tests can pick their phase deliberately.
     bootReconciling = true;
     // Same for the #396 boot-diagnostics buffer: flushPinOwnerBootDiagnostics()
-    // is one-way in the firmware too (router.begin() runs once). Reset the
+    // is one-way in the firmware too (transportsBegin() runs once). Reset the
     // module statics directly per test, mirroring bootReconciling above —
     // this test TU #includes pin_owner.cpp, so they're visible here. Default
     // to "not buffering" (post-flush/steady-state) so every existing test
@@ -376,16 +374,16 @@ static void test_reserved_owner_reclaim_still_self_skips(void) {
 }
 
 // ===========================================================================
-// Boot diagnostics buffer (#396): a refusal made before the router has a
+// Boot diagnostics buffer (#396): a refusal made before the console has a
 // transport must still reach the user, once it does. Mirrors the real boot
 // order: registerSystemPins()/initConfiguredSerialPorts() claim pins BEFORE
-// router.begin() runs (main.cpp :289/:293 vs ~:334) — g_capture stands in for
-// "the transport router.begin() eventually attaches".
+// transportsBegin() runs (main.cpp) — g_capture stands in for
+// "the transport the console eventually gets".
 // ===========================================================================
 
 // --- the actual bug: buffered while transport-less, visible after flush ----
 static void test_boot_refusal_is_buffered_then_visible_after_flush(void) {
-    bootDiagBuffering = true;   // mirrors main.cpp before router.begin()
+    bootDiagBuffering = true;   // mirrors main.cpp before transportsBegin()
     const uint8_t pin = 30;
     TEST_ASSERT_TRUE(registerPin_unchecked(pin, PIN_RESERVED, OWNER_B, PIN_RANK_BUS));
 
@@ -417,7 +415,7 @@ static void test_flush_is_idempotent(void) {
 // --- after boot (flush already ran), a refusal prints immediately ----------
 static void test_after_flush_refusal_prints_immediately_not_buffered(void) {
     bootDiagBuffering = true;         // start buffering, like early boot
-    flushPinOwnerBootDiagnostics();   // router now "has a transport"
+    flushPinOwnerBootDiagnostics();   // the console now "has a transport"
     g_capture.reset();
 
     const uint8_t pin = 32;

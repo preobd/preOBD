@@ -10,7 +10,6 @@
 #include "measurement_compat.h"
 #include "../config/system_config.h"  // ROUTE_MASK_ALL / OutputId enum
 #include "../buses/pinctrl/board_pins.h"
-#include "../core/message_router.h"  // For msg.control
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
 #include "../sensors/application_presets.h"

@@ -40,7 +40,7 @@ enum OutputFormat : uint8_t {
 };
 
 // Where an output runs, in one byte. Streams take the TransportID values
-// (core/message_router.h), so a stream output's transport is its TransportID.
+// (core/transport_interface.h), so a stream output's transport is its TransportID.
 enum OutputTransport : uint8_t {
     OT_NONE     = 0,
     OT_USB      = 1,     // TRANSPORT_USB_SERIAL

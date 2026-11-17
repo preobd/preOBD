@@ -7,12 +7,13 @@ This document describes preOBD's multi-transport communication architecture, whi
 1. [Overview](#overview)
 2. [Architecture Design](#architecture-design)
 3. [Transport Interface](#transport-interface)
-4. [Message Router](#message-router)
+4. [Registry, console and log](#registry-console-and-log)
 5. [Supported Transports](#supported-transports)
 6. [Command Routing](#command-routing)
-7. [Output Broadcasting](#output-broadcasting)
-8. [Implementation Details](#implementation-details)
-9. [Adding New Transports](#adding-new-transports)
+7. [Output](#output)
+8. [Future Enhancements](#future-enhancements)
+9. [CAN Controller Abstraction](#can-controller-abstraction)
+10. [References](#references)
 
 ## Overview
 
@@ -58,11 +59,11 @@ The transport system is an abstraction layer that allows preOBD to communicate o
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                      Message Router                          │
-│  - Manages all registered transports                        │
-│  - Polls for incoming commands                              │
-│  - Routes output to all connected transports                │
-│  - Provides msg.control, msg.debug, msg.data APIs           │
+│   msg (core/)  ·  console + log (console/)  ·  outputs     │
+│  - msg.control / msg.debug write where console/log say      │
+│  - the console pump reads commands from its sources         │
+│  - each output writes to its own transport (OUTPUT ADD)     │
+│   transport registry (transports/): which transports exist  │
 └───────────────────────┬─────────────────────────────────────┘
                         │
          ┌──────────────┼──────────────┬──────────────┐
@@ -83,8 +84,8 @@ The transport system is an abstraction layer that allows preOBD to communicate o
 
 1. **Abstract Interface** - All transports implement `TransportInterface`
 2. **Zero External Dependencies** - Transports don't know about each other
-3. **Centralized Routing** - MessageRouter handles all message distribution
-4. **Priority-Based Selection** - USB Serial takes priority for control responses
+3. **One owner per job** - the transport registry knows which transports exist; the console and the log each own their transports; `msg` only writes where they say
+4. **Replies go to the sender** - a command is answered on the transport it came from
 5. **Platform Agnostic** - Application code doesn't know which transport is used
 
 ## Transport Interface
@@ -121,36 +122,46 @@ enum TransportState {
 };
 ```
 
-## Message Router
+## Registry, console and log
 
-The `MessageRouter` class is the central hub for all communications.
+Three pieces share the work (#612 phase 2b-2 split them out of the old `MessageRouter`):
+
+| Piece | File | Job |
+|---|---|---|
+| Transport registry | `src/transports/transport_registry.{h,cpp}` | which transports exist; `transportGet(id)` only hands out a hardware serial transport whose port has started (#558) |
+| Console and log | `src/console/console_routing.{h,cpp}` | the console's and the log's transports (`CONSOLE`/`LOG TRANSPORT`), the command pump, where replies go, the USB fallback |
+| `msg` | `src/core/message_api.{h,cpp}` | `msg.control` (the console) and `msg.debug` (the log) write to the sinks main.cpp registers; `msg.filter` is the log filter |
 
 ### Registration
 
-Transports are registered at startup:
+At startup (main.cpp), in this order:
 
 ```cpp
-MessageRouter router;
+// Early, beside the other boot-order-sensitive probes
+setSerialPortActiveProbe(isSerialPortActive);         // the registry's started-port guard
+setMessageSinkResolver(PLANE_CONTROL, consoleSink);   // msg.control -> the console
+setMessageSinkResolver(PLANE_DEBUG, logSink);         // msg.debug   -> the log
+setOutputConsoleFallbackProbe(consoleOnUsbFallback);  // USB stream outputs pause on the fallback
 
-// Register transports
-router.registerTransport(TRANSPORT_USB_SERIAL, &usbSerial);
+// Then the transports
+transportRegister(TRANSPORT_USB_SERIAL, &usbSerial);
 
-// Register all available hardware serial transports (Serial1-Serial8)
-// Actual initialization is controlled by BUS SERIAL command configuration
+// Every hardware serial transport (Serial1-Serial8); whether each runs is
+// BUS SERIAL configuration
 #if NUM_SERIAL_PORTS >= 1
-router.registerTransport(TRANSPORT_SERIAL1, &hwSerial1);
-#endif
-#if NUM_SERIAL_PORTS >= 2
-router.registerTransport(TRANSPORT_SERIAL2, &hwSerial2);
+transportRegister(TRANSPORT_SERIAL1, &hwSerial1);
 #endif
 // ... up to Serial8 on Teensy 4.1
 
 #ifdef ESP32
-router.registerTransport(TRANSPORT_ESP32_BT, &btESP32);
+transportRegister(TRANSPORT_ESP32_BT, &btESP32);
 #endif
 
-router.begin();  // Initialize all transports
+routingApplyConfig();   // the stored CONSOLE/LOG transports and log filter
+transportsBegin();      // begin() every registered transport
 ```
+
+Each loop: `transportsUpdate()` (housekeeping; the framed mux pumps its frames) then `consolePump()` (commands).
 
 ### Transport IDs
 
@@ -175,29 +186,15 @@ Serial ports 3-8 availability depends on platform. Use `BUS SERIAL` command to e
 
 ### Message APIs
 
-The router provides three message channels:
-
 ```cpp
-// Control messages (commands, responses, configuration)
-msg.control.println("OK");  // Goes to active command transport
+// The console: replies to the command being run, else unsolicited output
+msg.control.println("OK");   // the sender while a command runs; else the console's transports
 
-// Debug messages (diagnostic info, warnings, errors) - use tagged logging
-msg.debug.info(TAG_SENSOR, "Sensor initialized");  // Goes to debug transport (usually USB)
-
-// Data messages (sensor values, RealDash frames, CSV output)
-msg.data.write(buffer, size);  // Broadcasts to all connected transports
+// The log: tagged, filtered by LOG LEVEL / LOG TAG, to the LOG TRANSPORT
+msg.debug.info(TAG_SENSOR, "Sensor initialized");
 ```
 
-### Priority System
-
-The router maintains a priority order for transport selection:
-
-1. **USB Serial** - Highest priority (always preferred for control)
-2. **Bluetooth** - Second priority
-3. **Serial1** - Third priority
-4. **Serial2** - Lowest priority
-
-When multiple transports have pending commands, USB Serial is processed first.
+Sensor data is not a `msg` stream: RealDash and CSV are outputs, each on its own transport (`OUTPUT ADD`, #612).
 
 ## Supported Transports
 
@@ -211,7 +208,7 @@ When multiple transports have pending commands, USB Serial is processed first.
 **Initialization:**
 ```cpp
 SerialTransportWrapper usbSerial(Serial);
-router.registerTransport(TRANSPORT_USB_SERIAL, &usbSerial);
+transportRegister(TRANSPORT_USB_SERIAL, &usbSerial);
 ```
 
 ### Hardware Serial 1 (Teensy, AVR, Mega)
@@ -230,7 +227,7 @@ router.registerTransport(TRANSPORT_USB_SERIAL, &usbSerial);
 #if defined(__MK66FX1M0__) || defined(__IMXRT1062__) || defined(__AVR_ATmega2560__)
 Serial1.begin(115200);
 SerialTransportWrapper hwSerial1(Serial1);
-router.registerTransport(TRANSPORT_SERIAL1, &hwSerial1);
+transportRegister(TRANSPORT_SERIAL1, &hwSerial1);
 #endif
 ```
 
@@ -250,7 +247,7 @@ router.registerTransport(TRANSPORT_SERIAL1, &hwSerial1);
 #if defined(__MK66FX1M0__) || defined(__IMXRT1062__) || defined(__AVR_ATmega2560__)
 Serial2.begin(9600);  // HC-05/HM-10 default baud
 SerialTransportWrapper hwSerial2(Serial2);
-router.registerTransport(TRANSPORT_SERIAL2, &hwSerial2);
+transportRegister(TRANSPORT_SERIAL2, &hwSerial2);
 #endif
 ```
 
@@ -272,7 +269,7 @@ router.registerTransport(TRANSPORT_SERIAL2, &hwSerial2);
 #ifdef ESP32
 BluetoothTransportESP32 btESP32("preOBD");
 if (btESP32.begin()) {
-    router.registerTransport(TRANSPORT_ESP32_BT, &btESP32);
+    transportRegister(TRANSPORT_ESP32_BT, &btESP32);
     msg.debug.info(TAG_BT, "ESP32 Bluetooth initialized");
 }
 #endif
@@ -287,28 +284,14 @@ if (btESP32.begin()) {
 
 ### How Commands Are Processed
 
-Each message plane has a **primary** and an optional **secondary** transport. The router polls both each loop iteration:
+`consolePump()` (console/console_routing.cpp) runs each loop:
 
-1. **Polling** - `processIncomingCommands()` checks primary, then secondary control transport
-2. **Detection** - Any transport with `available() > 0` is read
-3. **Processing** - Characters feed into the shared embedded-cli buffer
-4. **Response** - `msg.control` multicasts to **both** primary and secondary
+1. **Sources, in order:** the console's primary transport, its secondary, then every started framed port (the nRF link is always a console source, so the app can't be cut off).
+2. **Per source:** if it has bytes, it becomes the active source, its bytes feed the CLI (`handleCommandInput`), and the buffered command is dispatched (`processSerialCommands`) before the next source.
+3. **Replies:** while a command runs, `msg.control` writes to the active source only. Between commands, it writes to the console's primary and secondary.
+4. **USB fallback:** if neither console transport is usable (a serial port that was turned off), the console answers on USB (#558). The log never falls back.
 
-```cpp
-void MessageRouter::processIncomingCommands() {
-    TransportInterface* ctrl = getTransport(PLANE_CONTROL, true);   // primary
-    if (ctrl && ctrl->isConnected() && ctrl->available()) {
-        setActiveControlTransport(ctrl);
-        processCommandFromTransport(ctrl);
-    }
-    TransportInterface* ctrl2 = getTransport(PLANE_CONTROL, false); // secondary
-    if (ctrl2 && ctrl2->isConnected() && ctrl2->available()) {
-        setActiveControlTransport(ctrl2);
-        processCommandFromTransport(ctrl2);
-    }
-    processSerialCommands();
-}
-```
+All sources feed one CLI/JSON buffer, so a JSON IMPORT from one link can interleave with text from another (#624).
 
 ### Multi-Port Simultaneous Control
 
@@ -327,220 +310,27 @@ CONSOLE TRANSPORT NONE SECONDARY
 SAVE
 ```
 
-Both ports accept commands independently. Since responses always go to both, there is no exclusive ownership — any port that sends a command will receive the response.
+Both ports accept commands independently. A command is answered on the port it came from; unsolicited console output (alarms, notes) goes to both.
 
 ### Active Control Transport
 
-`activeControlTransport` tracks whichever port most recently sent a character. This is informational state; it does not affect output routing (which always multicasts to primary + secondary).
+The active source is the transport whose command is running; `msg.control` answers on it alone, and it is cleared after each dispatch.
 
-## Output Broadcasting
+## Output
 
-### Broadcast vs. Multicast
-
-All `msg.control`, `msg.data`, and `msg.debug` calls route to the **primary transport** for that plane and, if configured, the **secondary transport** simultaneously:
+`msg.control` writes to the active source while a command runs, else to the console's primary and secondary transports; `msg.debug` writes to the log's primary and secondary. If the primary isn't connected, the write is skipped, secondary included (kept as it was).
 
 ```cpp
-msg.control.println("SET RPM completed");
-// Goes to primary control transport AND secondary (if set)
+msg.control.println("SET RPM completed");   // to the sender of the command
 ```
 
-**Broadcast Example:**
-```cpp
-msg.data.println("CHT,EGT,OilP,OilT");  // CSV header
-msg.data.print("150,");  // CHT
-msg.data.print("450,");  // EGT
-msg.data.println("4.2,110");  // Oil pressure and temp
-// Goes to USB Serial, Bluetooth, Serial1, Serial2 (all connected transports)
-```
-
-### RealDash Broadcasting
-
-RealDash frames are broadcast to all transports:
-
-```cpp
-void sendRealDashFrame(uint32_t pid, const uint8_t* data, size_t len) {
-    uint8_t frame[16];
-    // ... build frame ...
-
-    // Broadcast to all connected transports
-    msg.data.write(frame, 16);
-    // Now visible on USB, Bluetooth, Serial1, Serial2 simultaneously
-}
-```
-
-This allows:
-- RealDash on phone via Bluetooth
-- Simultaneous data logging on PC via USB
-- External device monitoring via Serial1
-
-## Implementation Details
-
-### File Structure
-
-```
-src/core/
-├── transport_interface.h          # Abstract TransportInterface
-├── message_router.h/.cpp          # MessageRouter implementation
-└── transport_serial.h             # Wrapper for Serial/Serial1/Serial2
-src/transports/
-├── transport_ble_esp32.h          # ESP32 BLE transport
-└── transport_bluetooth_esp32.h    # ESP32 Bluetooth Classic transport
-```
-
-### Memory Footprint
-
-| Component | Flash (bytes) | RAM (bytes) |
-|-----------|---------------|-------------|
-| TransportInterface (vtable) | ~100 | 4 per instance |
-| MessageRouter | ~2KB | ~256 |
-| SerialTransportWrapper | ~500 | 8 per instance |
-| BluetoothTransportESP32 | ~1KB | ~32 |
-| **Total Overhead** | **~4KB** | **~300** |
-
-### Performance
-
-- **Command latency**: <1ms (polling every loop)
-- **Broadcast overhead**: ~10μs per transport
-- **Buffer size**: Uses underlying transport buffers (typically 64-256 bytes)
-
-### Thread Safety
-
-The transport system is **not thread-safe**. All operations must occur on the main loop thread. This is acceptable because:
-- Arduino framework is single-threaded
-- All I/O happens in `loop()`
-- No concurrent access to transports
-
-## Adding New Transports
-
-### Step 1: Implement TransportInterface
-
-Create a new class that implements `TransportInterface`:
-
-```cpp
-// transport_wifi_esp32.h
-#ifdef ESP32
-#include <WiFi.h>
-#include "transport_interface.h"
-
-class WiFiTransportESP32 : public TransportInterface {
-private:
-    WiFiClient client;
-    WiFiServer server;
-
-public:
-    WiFiTransportESP32(uint16_t port) : server(port) {}
-
-    bool begin() override {
-        WiFi.begin("SSID", "password");
-        server.begin();
-        return true;
-    }
-
-    void end() override {
-        server.end();
-    }
-
-    TransportState getState() const override {
-        if (!WiFi.isConnected()) return TRANSPORT_DISCONNECTED;
-        return client.connected() ? TRANSPORT_CONNECTED : TRANSPORT_DISCONNECTED;
-    }
-
-    int available() override {
-        if (!client || !client.connected()) {
-            client = server.available();
-        }
-        return client ? client.available() : 0;
-    }
-
-    int read() override { return client.read(); }
-    int peek() override { return client.peek(); }
-    size_t write(uint8_t b) override { return client.write(b); }
-    size_t write(const uint8_t* buf, size_t size) override {
-        return client.write(buf, size);
-    }
-    void flush() override { client.flush(); }
-};
-#endif
-```
-
-### Step 2: Add Transport ID
-
-Add to `TransportID` enum in [transport_interface.h](../../../src/core/transport_interface.h):
-
-```cpp
-enum TransportID {
-    // ... existing IDs ...
-    TRANSPORT_WIFI,
-    TRANSPORT_MAX
-};
-```
-
-### Step 3: Register in main.cpp
-
-Register the transport at startup:
-
-```cpp
-#ifdef ESP32
-WiFiTransportESP32 wifiTransport(23);  // Port 23 (telnet)
-#endif
-
-void setup() {
-    // ... existing registrations ...
-
-    #ifdef ESP32
-    if (wifiTransport.begin()) {
-        router.registerTransport(TRANSPORT_WIFI, &wifiTransport);
-        msg.debug.info(TAG_WIFI, "ESP32 WiFi initialized");
-    }
-    #endif
-}
-```
-
-### Step 4: Test
-
-1. Build and flash
-2. Connect via new transport (e.g., telnet to ESP32 IP)
-3. Send commands - should work like USB Serial
-4. Verify RealDash frames broadcast to new transport
-
-### Example: BLE Transport
-
-```cpp
-// transport_ble_esp32.h
-#ifdef ESP32
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include "transport_interface.h"
-
-class BLETransportESP32 : public TransportInterface {
-private:
-    BLECharacteristic* pCharacteristic;
-    bool deviceConnected = false;
-
-public:
-    BLETransportESP32(const char* deviceName) {
-        BLEDevice::init(deviceName);
-        BLEServer* pServer = BLEDevice::createServer();
-        // ... BLE setup ...
-    }
-
-    TransportState getState() const override {
-        return deviceConnected ? TRANSPORT_CONNECTED : TRANSPORT_DISCONNECTED;
-    }
-
-    // ... implement other methods ...
-};
-#endif
-```
-
-## Best Practices
+Sensor data goes through outputs, not `msg`: `OUTPUT ADD CSV USB`, `OUTPUT ADD REALDASH SERIAL5` and so on, one format per stream (ARCHITECTURE §14.4). A RealDash output needs its stream to itself, so it can't share USB with the console.
 
 ### For Application Code
 
 1. **Use msg.control for commands/config** - Goes to active control transport
 2. **Use msg.debug with tags for diagnostics** - Use `msg.debug.error()`, `msg.debug.warn()`, `msg.debug.info()`, `msg.debug.debug()` with appropriate tags
-3. **Use msg.data for sensor output** - Broadcasts to all transports
+3. **Sensor output is an output** - add one with `OUTPUT ADD`; there is no msg stream for data
 4. **Never call Serial directly** - Always use msg APIs
 
 ### For Transport Implementations
@@ -616,7 +406,8 @@ CAN output modules use the CAN HAL to send OBD-II frames and broadcast data, whi
 ## References
 
 - [TransportInterface API](../../../src/core/transport_interface.h)
-- [MessageRouter Implementation](../../../src/core/message_router.h)
+- [Transport registry](../../../src/transports/transport_registry.h)
+- [Console and log](../../../src/console/console_routing.h)
 - [Serial Transport Wrapper](../../../src/transports/transport_serial.h)
 - [ESP32 Bluetooth Transport](../../../src/transports/transport_bluetooth_esp32.h)
 - [CAN HAL Interface](../../../src/hal/hal_can.h)

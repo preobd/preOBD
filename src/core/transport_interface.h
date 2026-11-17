@@ -25,6 +25,24 @@ enum TransportCapabilities {
     CAP_FRAMED          = 0x40,  // Framed nRF link: its text channel is always a console source (#612)
 };
 
+// Where a transport sits in the registry (transports/transport_registry.h)
+// and how SystemConfig names the console's and the log's transports. The
+// stream OutputTransport values are these numbers (#612).
+enum TransportID {
+    TRANSPORT_NONE = 0,
+    TRANSPORT_USB_SERIAL = 1,   // Serial (USB)
+    TRANSPORT_SERIAL1 = 2,      // Hardware Serial1
+    TRANSPORT_SERIAL2 = 3,      // Hardware Serial2
+    TRANSPORT_SERIAL3 = 4,      // Hardware Serial3
+    TRANSPORT_SERIAL4 = 5,      // Hardware Serial4
+    TRANSPORT_SERIAL5 = 6,      // Hardware Serial5
+    TRANSPORT_SERIAL6 = 7,      // Hardware Serial6
+    TRANSPORT_SERIAL7 = 8,      // Hardware Serial7
+    TRANSPORT_SERIAL8 = 9,      // Hardware Serial8 (Teensy 4.1 only)
+    TRANSPORT_ESP32_BT = 10,    // ESP32 built-in Bluetooth Classic
+    NUM_TRANSPORTS = 11
+};
+
 // Transport connection state
 enum TransportState {
     TRANSPORT_DISCONNECTED = 0,

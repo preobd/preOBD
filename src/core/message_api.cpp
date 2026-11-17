@@ -8,6 +8,18 @@
 // Global message API instance
 MessageAPI msg;
 
+// The sink resolvers (setMessageSinkResolver). Zero-initialised: until main.cpp
+// registers them, writes go nowhere
+static MessageSinkFn s_sinkFn[NUM_PLANES] = {};
+
+void setMessageSinkResolver(MessagePlane plane, MessageSinkFn fn) {
+    if (plane < NUM_PLANES) s_sinkFn[plane] = fn;
+}
+
+TransportInterface* messageSink(MessagePlane plane, bool secondary) {
+    return (plane < NUM_PLANES && s_sinkFn[plane]) ? s_sinkFn[plane](secondary) : nullptr;
+}
+
 // ========== Level-Based Logging Implementation ==========
 
 #ifndef DISABLE_DEBUG_MESSAGES
@@ -16,7 +28,7 @@ MessageAPI msg;
 size_t MessageStream::logWithLevel(LogLevel level, const char* tag, const char* msg) {
     // Build prefix: [LEVEL][TAG]
     print("[");
-    print(router.getLogFilter().getLevelName(level));
+    print(::msg.filter.getLevelName(level));
     print("][");
     print(tag);
     print("] ");
@@ -31,7 +43,7 @@ size_t MessageStream::error(const char* tag, const char* fmt, ...) {
     uint8_t tagId = getTagID(tag);
 
     // Check filter first (early exit if filtered)
-    if (!router.getLogFilter().shouldLog(plane, LOG_LEVEL_ERROR, tagId)) {
+    if (!::msg.filter.shouldLog(plane, LOG_LEVEL_ERROR, tagId)) {
         return 0;
     }
 
@@ -52,7 +64,7 @@ size_t MessageStream::warn(const char* tag, const char* fmt, ...) {
     uint8_t tagId = getTagID(tag);
 
     // Check filter first (early exit if filtered)
-    if (!router.getLogFilter().shouldLog(plane, LOG_LEVEL_WARN, tagId)) {
+    if (!::msg.filter.shouldLog(plane, LOG_LEVEL_WARN, tagId)) {
         return 0;
     }
 
@@ -73,7 +85,7 @@ size_t MessageStream::info(const char* tag, const char* fmt, ...) {
     uint8_t tagId = getTagID(tag);
 
     // Check filter first (early exit if filtered)
-    if (!router.getLogFilter().shouldLog(plane, LOG_LEVEL_INFO, tagId)) {
+    if (!::msg.filter.shouldLog(plane, LOG_LEVEL_INFO, tagId)) {
         return 0;
     }
 
@@ -94,7 +106,7 @@ size_t MessageStream::debug(const char* tag, const char* fmt, ...) {
     uint8_t tagId = getTagID(tag);
 
     // Check filter first (early exit if filtered)
-    if (!router.getLogFilter().shouldLog(plane, LOG_LEVEL_DEBUG, tagId)) {
+    if (!::msg.filter.shouldLog(plane, LOG_LEVEL_DEBUG, tagId)) {
         return 0;
     }
 

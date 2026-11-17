@@ -20,8 +20,9 @@
 #include "../core/ram_stats.h"
 #include "../config/system_config.h"
 #include "../config/json_config.h"
-#include "../core/message_router.h"
 #include "../core/message_api.h"
+#include "console_routing.h"
+#include "../transports/transport_registry.h"
 #include "../core/log_filter.h"
 #include "../core/log_tags.h"
 #include "../sensors/units_registry.h"
@@ -301,7 +302,7 @@ int cmd_list(int argc, const char* const* argv) {
         if (asJson) { EMIT_JSON(writeCalibrationTypesJson(msg.control)); }
         else { msg.control.println(F("JSON-only subcommand. Usage: LIST CALIBRATION_TYPES JSON")); }
     } else if (streq_P(argv[1], PSTR("TRANSPORTS"))) {
-        router.listAvailableTransports();
+        transportListAvailable();
     } else {
         msg.control.print(F("ERROR: Unknown LIST subcommand '"));
         msg.control.print(argv[1]);
@@ -453,7 +454,7 @@ static int loadConfigFromEEPROM() {
         // The loaded console and log transports go live too: admission checks
         // them (#612), and the next CONSOLE/LOG command copies the live ones
         // back over systemConfig, which would undo the LOAD
-        if (sysOk) router.loadConfig();
+        if (sysOk) routingApplyConfig();
 #if INCLUDE_CAN
         syncCanToConfig();   // buses first, so OBD attaches to the loaded mode (#612)
 #endif
@@ -862,7 +863,7 @@ static FLASHMEM int setPlaneTransport(MessagePlane plane, const char* tok, bool 
         msg.control.println(F("ERROR: the log can't share the framed nRF link's port"));
         return 1;
     }
-    if (!router.setTransport(plane, (TransportID)t, secondary)) {
+    if (!planeSetTransport(plane, (TransportID)t, secondary)) {
         if (port != 0xFF) {
             msg.control.print(F("ERROR: Serial"));
             msg.control.print(port);
@@ -876,7 +877,7 @@ static FLASHMEM int setPlaneTransport(MessagePlane plane, const char* tok, bool 
         }
         return 1;
     }
-    router.syncConfig();   // persisted on SAVE
+    routingCaptureConfig();   // persisted on SAVE
     msg.control.print(plane == PLANE_CONTROL ? F("Console") : F("Log"));
     msg.control.print(secondary ? F(" secondary: ") : F(": "));
     msg.control.println(tok);
@@ -887,9 +888,9 @@ static FLASHMEM int setPlaneTransport(MessagePlane plane, const char* tok, bool 
 // "<primary>[ + <secondary>]"
 static FLASHMEM void printPlaneTransports(MessagePlane plane) {
     char t[12];
-    outputTransportName(router.getPrimaryTransportId(plane), t, sizeof(t));
+    outputTransportName(planeTransportId(plane, false), t, sizeof(t));
     msg.control.print(t);
-    const uint8_t sec = router.getSecondaryTransportId(plane);
+    const uint8_t sec = planeTransportId(plane, true);
     if (sec != TRANSPORT_NONE) {
         outputTransportName(sec, t, sizeof(t));
         msg.control.print(F(" + "));
@@ -903,7 +904,7 @@ FLASHMEM int cmd_console(int argc, const char* const* argv) {
     if (argc >= 2 && streq_P(argv[1], PSTR("STATUS"))) {
         msg.control.print(F("Console: "));
         printPlaneTransports(PLANE_CONTROL);
-        if (router.consoleOnUsbFallback()) {
+        if (consoleOnUsbFallback()) {
             msg.control.println(F("  (neither is usable: answering on USB)"));
         }
         msg.control.print(F("Log:     "));
@@ -1155,9 +1156,9 @@ int cmd_log(int argc, const char* const* argv) {
         printPlaneTransports(PLANE_DEBUG);
         msg.control.println(F("Log Levels:"));
         msg.control.print(F("  CONSOLE: "));
-        msg.control.println(router.getLogFilter().getLevelName(router.getLogFilter().getLevel(PLANE_CONTROL)));
+        msg.control.println(msg.filter.getLevelName(msg.filter.getLevel(PLANE_CONTROL)));
         msg.control.print(F("  DEBUG: "));
-        msg.control.println(router.getLogFilter().getLevelName(router.getLogFilter().getLevel(PLANE_DEBUG)));
+        msg.control.println(msg.filter.getLevelName(msg.filter.getLevel(PLANE_DEBUG)));
 
         msg.control.println();
         msg.control.println(F("Enabled Tags:"));
@@ -1165,7 +1166,7 @@ int cmd_log(int argc, const char* const* argv) {
         // List enabled tags
         bool anyEnabled = false;
         for (uint8_t i = 0; i < NUM_LOG_TAGS; i++) {
-            if (router.getLogFilter().isTagEnabled(i)) {
+            if (msg.filter.isTagEnabled(i)) {
                 const char* tagName = getTagName(i);
                 if (tagName) {
                     msg.control.print(F("  "));
@@ -1194,7 +1195,7 @@ int cmd_log(int argc, const char* const* argv) {
         for (uint8_t i = 0; i < NUM_LOG_TAGS; i++) {
             const char* tagName = getTagName(i);
             if (tagName) {
-                bool enabled = router.getLogFilter().isTagEnabled(i);
+                bool enabled = msg.filter.isTagEnabled(i);
                 msg.control.print(F("  "));
                 msg.control.print(reinterpret_cast<const __FlashStringHelper*>(tagName));
                 msg.control.print(F(": "));
@@ -1255,7 +1256,7 @@ int cmd_log(int argc, const char* const* argv) {
         }
 
         // Parse level name
-        LogLevel level = router.getLogFilter().parseLevelName(argv[3]);
+        LogLevel level = msg.filter.parseLevelName(argv[3]);
         // streq_P is case-insensitive, so PSTR("NONE") matches "none", "None", etc.
         // The pre-existing duplicate `!streq(argv[3], "none")` check that used to
         // sit on this line was redundant (same-case-insensitive compare twice).
@@ -1268,15 +1269,15 @@ int cmd_log(int argc, const char* const* argv) {
         }
 
         // Set the level
-        router.getLogFilter().setLevel(plane, level);
+        msg.filter.setLevel(plane, level);
 
         // Sync to systemConfig (so SAVE will persist it)
-        router.syncConfig();
+        routingCaptureConfig();
 
         msg.control.print(F("✓ "));
         msg.control.print(planeName);
         msg.control.print(F(" log level set to "));
-        msg.control.println(router.getLogFilter().getLevelName(level));
+        msg.control.println(msg.filter.getLevelName(level));
         printSaveReminder();
         return 0;
     }
@@ -1325,14 +1326,14 @@ int cmd_log(int argc, const char* const* argv) {
 
         if (streq_P(tagName, PSTR("ALL"))) {
             if (enable) {
-                router.getLogFilter().enableAllTags();
+                msg.filter.enableAllTags();
                 msg.control.println(F("✓ All tags enabled"));
             } else {
-                router.getLogFilter().disableAllTags();
+                msg.filter.disableAllTags();
                 msg.control.println(F("✓ All tags disabled"));
             }
             // Sync to systemConfig (so SAVE will persist it)
-            router.syncConfig();
+            routingCaptureConfig();
             printSaveReminder();
             return 0;
         }
@@ -1348,10 +1349,10 @@ int cmd_log(int argc, const char* const* argv) {
         }
 
         // Enable/disable the tag
-        router.getLogFilter().enableTag(tagId, enable);
+        msg.filter.enableTag(tagId, enable);
 
         // Sync to systemConfig (so SAVE will persist it)
-        router.syncConfig();
+        routingCaptureConfig();
 
         msg.control.print(F("✓ Tag "));
         msg.control.print(reinterpret_cast<const __FlashStringHelper*>(getTagName(tagId)));  // PROGMEM (log_tags.h)
@@ -1609,7 +1610,7 @@ int cmd_at(int argc, const char* const* argv) {
     port->print(argv[2]);
     port->flush();
 
-    // Read response for up to 500ms and print it here, before router.update() can
+    // Read response for up to 500ms and print it here, before consolePump() can
     // grab it and misinterpret it as a command.
     msg.control.print(F("Serial"));
     msg.control.print(port_id);

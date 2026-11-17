@@ -37,11 +37,9 @@
 // ---------------------------------------------------------------------------
 // Firmware symbols these TUs expect from elsewhere.
 // ---------------------------------------------------------------------------
-MessageRouter router;
 MessageAPI msg;
 LogFilter::LogFilter() {}
-MessageRouter::MessageRouter() {}
-TransportInterface* MessageRouter::getTransport(MessagePlane, bool) { return nullptr; }
+TransportInterface* messageSink(MessagePlane, bool) { return nullptr; }
 size_t MessageStream::error(const char*, const char*, ...) { return 0; }
 size_t MessageStream::warn(const char*, const char*, ...) { return 0; }
 size_t MessageStream::info(const char*, const char*, ...) { return 0; }

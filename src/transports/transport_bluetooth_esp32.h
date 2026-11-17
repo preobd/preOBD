@@ -6,7 +6,7 @@
  *
  * Usage:
  *   BluetoothTransportESP32 bt("preOBD");
- *   router.registerTransport(TRANSPORT_ESP32_BT, &bt);
+ *   transportRegister(TRANSPORT_ESP32_BT, &bt);
  *
  * Note: Only available on original ESP32 (not S3, C3, or other BLE-only variants)
  */

@@ -137,7 +137,7 @@ inline uint8_t effectiveLcdI2CAddress() {
 
 // Initialization and persistence
 void initSystemConfig();         // Load from EEPROM or set defaults
-void flushSystemConfigBootDiagnostics();  // Emit buffered boot messages (call after router.begin())
+void flushSystemConfigBootDiagnostics();  // Emit buffered boot messages (call after routingApplyConfig()/transportsBegin())
 bool saveSystemConfig(bool verbose = true);  // Save to EEPROM (verbose=false for background saves)
 bool loadSystemConfig();         // Load from EEPROM
 // Sections resetSystemConfig() leaves alone. Wiring, not configuration:

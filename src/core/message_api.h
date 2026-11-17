@@ -28,7 +28,8 @@
 #ifndef MESSAGE_API_H
 #define MESSAGE_API_H
 
-#include "message_router.h"
+#include "message_plane.h"
+#include "transport_interface.h"
 #include "log_filter.h"
 #include "log_tags.h"
 #include <Arduino.h>
@@ -37,6 +38,16 @@
 #include <api/itoa.h>  // ltoa/ultoa: declared by the core but not pulled in by Arduino.h
 #endif
 
+// Where a stream's writes go: the primary sink, then (multicast) the secondary.
+// Registered per plane by main.cpp (console/console_routing.h: consoleSink and
+// logSink, #612 phase 2b-2), so core/ never asks a transport layer itself.
+// Unregistered, writes go nowhere, as before the console is set up.
+typedef TransportInterface* (*MessageSinkFn)(bool secondary);
+void setMessageSinkResolver(MessagePlane plane, MessageSinkFn fn);
+// The registered sink for <plane>, nullptr if none (out of line: one call per
+// write, not inlined into every msg call site)
+TransportInterface* messageSink(MessagePlane plane, bool secondary);
+
 // Print stream wrapper that routes to a specific message plane.
 // Inherits from Print so MessageStream can be passed as Print& to ArduinoJson
 // and similar libraries. write(uint8_t) / write(const uint8_t*, size_t) already
@@ -44,32 +55,14 @@
 class MessageStream : public Print {
 private:
     MessagePlane plane;
-    // When true (used by msg.control): during command dispatch, route to the
-    // transport that sent the command (activeControlTransport) so responses
-    // return to the sender.  When activeControlTransport is nullptr (between
-    // dispatches), falls back to the configured primary transport so unsolicited
-    // output (alarms, boot banners, etc.) still reaches all configured ports.
-    bool routeToActive;
 
-    // Single source of truth for primary write target.
-    TransportInterface* primaryTransport() {
-        if (routeToActive) {
-            TransportInterface* a = router.getActiveControlTransport();
-            if (a) return a;
-        }
-        return router.getTransport(plane, true);
-    }
-
-    // Secondary multi-cast target.  Suppressed during active dispatch so the
-    // response goes only to the sender (not also to the other control port).
-    TransportInterface* secondaryTransport() {
-        if (routeToActive && router.getActiveControlTransport()) return nullptr;
-        return router.getTransport(plane, false);
-    }
+    // The console's sink resolves to the sender during a command and to the
+    // configured transports otherwise (console_routing.cpp); the log's to its own
+    TransportInterface* primaryTransport() { return messageSink(plane, false); }
+    TransportInterface* secondaryTransport() { return messageSink(plane, true); }
 
 public:
-    MessageStream(MessagePlane p, bool useActive = false)
-        : plane(p), routeToActive(useActive) {}
+    explicit MessageStream(MessagePlane p) : plane(p) {}
 
     // ========== Text Output ==========
 
@@ -383,6 +376,11 @@ public:
 
 // Global message API instance
 struct MessageAPI {
+    // The log filter (LOG LEVEL / LOG TAG): msg.debug consults it, the LOG
+    // commands set it, SystemConfig.logFilter persists it (#612 phase 2b-2:
+    // was the old MessageRouter's)
+    LogFilter filter;
+
     MessageStream control;
 
 #ifdef DISABLE_DEBUG_MESSAGES
@@ -391,7 +389,7 @@ struct MessageAPI {
     MessageStream debug;      // Full version
 #endif
 
-    MessageAPI() : control(PLANE_CONTROL, /*routeToActive=*/true), debug(PLANE_DEBUG) {}
+    MessageAPI() : control(PLANE_CONTROL), debug(PLANE_DEBUG) {}
 };
 
 extern MessageAPI msg;

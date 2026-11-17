@@ -114,8 +114,8 @@ void setPinOwnerBusProbe(PinOwnerBusProbe probe);
 // Boot diagnostics buffer (#396).
 //
 // registerSystemPins() and initConfiguredSerialPorts() both claim pins BEFORE
-// router.begin() has registered any transport (main.cpp: pin claims at
-// :289/:293, router.begin() at ~:334) — every pinsConflict()/claimPins()
+// the transports are begun (main.cpp: pin claims, then routingApplyConfig()
+// + transportsBegin()) — every pinsConflict()/claimPins()
 // refusal printed in that window goes to msg.control with nowhere to
 // deliver it and is silently discarded. That is exactly the "loser is
 // always reported, never a silent drop" rule (ARCHITECTURE.md §12.4)
@@ -135,7 +135,7 @@ bool pinOwnerBootDiagBuffering();
 /**
  * Emit every buffered boot-time pin-conflict diagnostic, then stop
  * buffering — every claim after this point prints immediately, same as
- * before this feature existed. Call once, right after router.begin()
+ * before this feature existed. Call once, right after transportsBegin()
  * (main.cpp, beside flushSystemConfigBootDiagnostics()). Idempotent: a
  * second call finds nothing buffered and emits nothing.
  */
