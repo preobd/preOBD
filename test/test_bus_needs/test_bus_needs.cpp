@@ -106,6 +106,7 @@ void setUp(void) {
     // the live table. Section 4 below flips this back off to exercise the
     // boot-window EEPROM path on its own.
     inputsTableIsLive = true;
+    inputStoreForgetValidity();
 }
 void tearDown(void) { setPinOwnerInputProbe(nullptr); }
 
@@ -124,28 +125,8 @@ static uint16_t hashOfSensor(const char* name) {
     return pgm_read_word(&SENSOR_LIBRARY[index].nameHash);
 }
 
-// Lay down a valid config store holding `n` records with the given sensors.
-// Only the fields storedInputBusNeeds() reads have to be right — it never
-// verifies the checksum (loadInputConfig() does, moments later).
-static void writeStore(const char* const* sensorNames, const uint8_t* pins, uint8_t n) {
-    ConfigStoreHeader header;
-    memset(&header, 0, sizeof(header));
-    header.magic = EEPROM_MAGIC;
-    header.version = EEPROM_VERSION;
-    header.numInputs = n;
-    EEPROM.put(0, header);
-
-    for (uint8_t i = 0; i < n; i++) {
-        InputEEPROM rec;
-        memset(&rec, 0, sizeof(rec));
-        rec.pin = pins[i];
-        rec.sensorHash = hashOfSensor(sensorNames[i]);
-        EEPROM.put(EEPROM_HEADER_SIZE + (size_t)i * EEPROM_INPUT_SIZE, rec);
-    }
-}
-
-// A FULLY valid store — checksummed, unlike writeStore() above — for exercising
-// loadInputConfig() end to end (initInputManager() calls it). xorBytes() is a
+// A FULLY valid store, checksummed: the boot probes answer only from a store
+// loadInputConfig() will accept (#598), so every fixture must be one. xorBytes() is a
 // static in input_manager.cpp, reachable here because this TU #includes that
 // .cpp directly (line 30).
 static void writeValidStore(const char* const* sensorNames, const uint8_t* pins, uint8_t n) {
@@ -166,6 +147,12 @@ static void writeValidStore(const char* const* sensorNames, const uint8_t* pins,
     }
     header.checksum = (uint8_t)(checksum ^ arenaChecksumSeed(header));   // layout + counts (#612)
     EEPROM.put(0, header);
+    inputStoreForgetValidity();   // a new store: the probes must re-check it
+}
+
+// The probes and the loader judge the same store.
+static void writeStore(const char* const* sensorNames, const uint8_t* pins, uint8_t n) {
+    writeValidStore(sensorNames, pins, n);
 }
 
 // ===========================================================================
@@ -381,6 +368,56 @@ static void test_impossible_record_count_asks_for_nothing(void) {
     TEST_ASSERT_EQUAL(BUS_NEED_NONE, storedInputBusNeeds());
 }
 
+// #598: a store whose header is fine but whose checksum fails is rejected by
+// loadInputConfig(), so its records must not ask for a bus either.
+static void flipStoredInputByte(uint8_t record) {
+    const size_t at = EEPROM_HEADER_SIZE + (size_t)record * EEPROM_INPUT_SIZE + 2;  // in abbrName
+    EEPROM.write(at, (uint8_t)(EEPROM.read(at) ^ 0x5A));
+}
+
+static void test_corrupt_store_asks_for_nothing(void) {
+    const char* sensors[] = { "BME280_TEMP" };
+    const uint8_t pins[]  = { 0xF0 };
+    writeStore(sensors, pins, 1);
+    flipStoredInputByte(0);
+    inputStoreForgetValidity();
+
+    TEST_ASSERT_EQUAL(BUS_NEED_NONE, storedInputBusNeeds());
+    TEST_ASSERT_FALSE(loadInputConfig());   // the loader agrees
+}
+
+#if INCLUDE_RULES_ENGINE
+// The checksum covers every section: a good inputs section with a corrupt rule
+// behind it still fails, and the probes say so too.
+static void test_store_corrupt_only_in_the_rules_section_asks_for_nothing(void) {
+    ConfigStoreHeader header;
+    memset(&header, 0, sizeof(header));
+    header.magic = EEPROM_MAGIC;
+    header.version = EEPROM_VERSION;
+    header.numInputs = 1;
+    header.numRules = 1;
+
+    InputEEPROM rec;
+    memset(&rec, 0, sizeof(rec));
+    rec.pin = 0xF0;
+    rec.sensorHash = hashOfSensor("BME280_TEMP");
+    EEPROM.put(EEPROM_HEADER_SIZE, rec);
+    Rule rule;
+    memset(&rule, 0, sizeof(rule));
+    const size_t ruleAt = EEPROM_HEADER_SIZE + EEPROM_INPUT_SIZE;
+    EEPROM.put(ruleAt, rule);
+    header.checksum = (uint8_t)(xorBytes(&rec, sizeof(rec)) ^ xorBytes(&rule, sizeof(rule)) ^
+                                arenaChecksumSeed(header));
+    EEPROM.put(0, header);
+    inputStoreForgetValidity();
+    TEST_ASSERT_EQUAL(BUS_NEED_I2C, storedInputBusNeeds());   // the fixture itself is sound
+
+    EEPROM.write(ruleAt, (uint8_t)(EEPROM.read(ruleAt) ^ 0x01));
+    inputStoreForgetValidity();
+    TEST_ASSERT_EQUAL(BUS_NEED_NONE, storedInputBusNeeds());
+}
+#endif
+
 // ===========================================================================
 // 4. The boot window: inputHoldsPin() before inputs[] is live (#385)
 //
@@ -417,6 +454,40 @@ static void test_bus_claim_refused_against_a_stored_input_before_load(void) {
     const uint8_t busPins[2] = { 18, 19 };
     TEST_ASSERT_FALSE(claimPins(busPins, 2, PIN_RESERVED, PIN_RANK_BUS, "I2C", OWNER_WIRE));
     TEST_ASSERT_EQUAL(0, getPinRegistrySize());
+}
+
+// #598: a stored input in a store that fails its checksum never loads, so it
+// holds no pin. Before, it did: SD's chip select on that pin was refused, the
+// card never mounted, and the advice to CLEAR the input couldn't be followed.
+static void test_corrupt_store_holds_no_pin_before_load(void) {
+    inputsTableIsLive = false;
+    const char* sensors[] = { "VDO_120C_TABLE" };
+    const uint8_t pins[]  = { 10 };   // say, SD_PIN
+    writeStore(sensors, pins, 1);
+    TEST_ASSERT_TRUE(inputHoldsPin(10));   // sound store: held
+
+    flipStoredInputByte(0);
+    inputStoreForgetValidity();
+    TEST_ASSERT_FALSE(inputHoldsPin(10));
+    const uint8_t cs = 10;
+    TEST_ASSERT_TRUE(claimPins(&cs, 1, PIN_RESERVED, PIN_RANK_BUILTIN, "SD CS", "SD card"));
+}
+
+// The remembered answer follows the store: SAVE and RESET forget it.
+static void test_save_and_reset_refresh_the_remembered_answer(void) {
+    inputsTableIsLive = false;
+    const char* sensors[] = { "VDO_120C_TABLE" };
+    const uint8_t pins[]  = { 7 };
+    writeStore(sensors, pins, 1);
+    TEST_ASSERT_TRUE(inputHoldsPin(7));    // remembered: valid
+
+    resetInputConfig();                    // header zeroed
+    TEST_ASSERT_FALSE(inputHoldsPin(7));
+
+    inputs[0].pin = 7;                     // one input in RAM, saved
+    TEST_ASSERT_TRUE(saveInputConfig());
+    inputs[0].pin = 0xFF;
+    TEST_ASSERT_TRUE(inputHoldsPin(7));    // the saved store, not the reset one
 }
 
 // pin 0xFF is BOTH "no such pin on this platform" (bus_defaults) and the
@@ -627,9 +698,15 @@ int main(int, char**) {
     RUN_TEST(test_blank_eeprom_asks_for_nothing);
     RUN_TEST(test_foreign_store_version_asks_for_nothing);
     RUN_TEST(test_impossible_record_count_asks_for_nothing);
+    RUN_TEST(test_corrupt_store_asks_for_nothing);
+#if INCLUDE_RULES_ENGINE
+    RUN_TEST(test_store_corrupt_only_in_the_rules_section_asks_for_nothing);
+#endif
 
     RUN_TEST(test_stored_input_is_seen_before_inputs_table_is_live);
     RUN_TEST(test_bus_claim_refused_against_a_stored_input_before_load);
+    RUN_TEST(test_corrupt_store_holds_no_pin_before_load);
+    RUN_TEST(test_save_and_reset_refresh_the_remembered_answer);
     RUN_TEST(test_boot_window_probe_does_not_misread_the_free_slot_sentinel);
 
     RUN_TEST(test_loadInputConfig_does_not_self_conflict_its_own_records);

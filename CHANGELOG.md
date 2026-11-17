@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - RealDash can connect over Bluetooth LE through the nRF52840 link (`OUTPUT ADD REALDASH BLE`), instead of ELM327 over BLE; it needs the updated nRF firmware
 
 ### Fixed
+- A corrupt stored configuration no longer reserves pins or brings up buses at boot for inputs that then don't load, which could leave the SD card unmounted with advice to `CLEAR` an input that didn't exist
 - `SET CAN:<n> APPLICATION` changes only a CAN input's application, and refuses one its PID can't carry, instead of replacing the PID decode so the input stopped reading the car; `SET CAN:<n> SENSOR` is refused for the same reason
 - `AT <port>` is refused on the nRF Bluetooth port, on the port it was typed on, and on a port a JSON import is arriving on, instead of reading bytes that belong to them
 - Commands and JSON imports from two links at once (USB, a second serial console and Bluetooth) no longer get mixed together: each link has its own command line, and an import belongs to the link that started it; an import or `LOAD` no longer changes the serial settings of the nRF Bluetooth port (use `BUS SERIAL 1` for that)

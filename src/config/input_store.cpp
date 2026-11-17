@@ -293,6 +293,89 @@ static uint8_t arenaChecksumSeed(const ConfigStoreHeader& h) {
     return seed != 0 ? seed : ARENA_LAYOUT;
 }
 
+// Why a stored config won't load. Silent: loadInputConfig() prints, the boot
+// probes don't (#598).
+enum StoreCheck : uint8_t {
+    STORE_OK = 0,
+    STORE_BAD_MAGIC,
+    STORE_BAD_VERSION,
+    STORE_TOO_BIG,
+    STORE_BAD_CHECKSUM,
+};
+
+// Read-only: the header (magic, version), the sections against the space
+// before the SystemConfig block, and the checksum over the bytes ACTUALLY
+// stored (the header's own counts), before any clamp to this firmware's RAM
+// caps — a build with smaller caps must still validate a store written by a
+// larger one (#296 S2). Sections are contiguous, so one running address walks
+// them all. loadInputConfig() and the boot probes share it, so the probes
+// never answer from records that won't load (#598).
+static FLASHMEM StoreCheck checkStore(ConfigStoreHeader& header, uint8_t* computed = nullptr) {
+    EEPROM.get(0, header);
+    if (header.magic != EEPROM_MAGIC) return STORE_BAD_MAGIC;
+    if (header.version != EEPROM_VERSION) return STORE_BAD_VERSION;
+
+    // Fails fast before the walk, so the scan can't read into the SystemConfig
+    // region (e.g. a chip moved from a larger-EEPROM board).
+    const size_t storedBytes = EEPROM_HEADER_SIZE
+                             + (size_t)header.numInputs  * EEPROM_INPUT_SIZE
+#if INCLUDE_RULES_ENGINE
+                             + (size_t)header.numRules   * sizeof(Rule)
+                             + (size_t)header.numActions * sizeof(Action)
+                             + (size_t)header.numLinks   * sizeof(ActionLink)
+#endif
+                             + (size_t)header.reserved[0] * sizeof(OutputRecord)
+                             ;
+    if (storedBytes > SYSTEM_CONFIG_ADDRESS) return STORE_TOO_BIG;
+
+    uint8_t checksum = arenaChecksumSeed(header);
+    uint16_t a = EEPROM_HEADER_SIZE;
+    for (uint8_t i = 0; i < header.numInputs; i++) {
+        InputEEPROM rec; EEPROM.get(a, rec);
+        checksum ^= xorBytes(&rec, sizeof(rec));
+        a += EEPROM_INPUT_SIZE;
+    }
+#if INCLUDE_RULES_ENGINE
+    for (uint8_t i = 0; i < header.numRules; i++) {
+        Rule r; EEPROM.get(a, r);
+        checksum ^= xorBytes(&r, sizeof(Rule));
+        a += sizeof(Rule);
+    }
+    for (uint8_t i = 0; i < header.numActions; i++) {
+        Action ac; EEPROM.get(a, ac);
+        checksum ^= xorBytes(&ac, sizeof(Action));
+        a += sizeof(Action);
+    }
+    for (uint8_t i = 0; i < header.numLinks; i++) {
+        ActionLink l; EEPROM.get(a, l);
+        checksum ^= xorBytes(&l, sizeof(ActionLink));
+        a += sizeof(ActionLink);
+    }
+#endif
+    for (uint8_t i = 0; i < header.reserved[0]; i++) {
+        OutputRecord r; EEPROM.get(a, r);
+        checksum ^= xorBytes(&r, sizeof(OutputRecord));
+        a += sizeof(OutputRecord);
+    }
+    if (computed) *computed = checksum;
+    return checksum == header.checksum ? STORE_OK : STORE_BAD_CHECKSUM;
+}
+
+// The boot probes' answer to checkStore(), worked out once: registerSystemPins()
+// and the bus claims call the probe once per pin, and loadInputConfig() once
+// per record, so walking the whole store each time adds up on AVR (#598).
+// One byte of RAM. Forgotten by every write to the store, and by a load, which
+// is the last moment the probes read the store (inputs[] is live after it).
+static uint8_t storedValidity = 0;   // 0 = not checked, 1 = valid, 2 = won't load
+
+void inputStoreForgetValidity() { storedValidity = 0; }
+
+static FLASHMEM bool storeWillLoad(ConfigStoreHeader& header) {
+    if (storedValidity == 0) storedValidity = checkStore(header) == STORE_OK ? 1 : 2;
+    else EEPROM.get(0, header);
+    return storedValidity == 1;
+}
+
 FLASHMEM bool saveInputConfig() {
     // EEPROM writes are slow on AVR (~3.3 ms per changed byte) and the watchdog
     // runs in CONFIG now (#541): one scope for the save, plus a feed per record
@@ -389,6 +472,7 @@ FLASHMEM bool saveInputConfig() {
     header.reserved[0] = savedOutputs;
     header.checksum = (uint8_t)(checksum ^ arenaChecksumSeed(header));
     EEPROM.put(0, header);
+    inputStoreForgetValidity();   // the store just changed (#598)
 
     msg.control.print(F("✓ Saved "));
     msg.control.print(savedInputs);
@@ -414,14 +498,14 @@ FLASHMEM bool saveInputConfig() {
 // from once inputs[] loads, for the WINDOW BEFORE THAT: registerSystemPins()
 // (main.cpp, before serial/buses) and the bus bring-up that follows it both
 // need a true answer, but loadInputConfig() has not populated inputs[] yet at
-// that point in setup() (#385). A direct sibling of storedInputBusNeeds() —
-// same header sanity, same bounded record walk, no checksum verification (a
-// store that fails full validation is rejected wholesale by loadInputConfig()
-// moments later; the worst case here is a false "held" for a config that then
-// doesn't load, never a false "free").
+// that point in setup() (#385). A direct sibling of storedInputBusNeeds(),
+// and like it, it answers only from a store loadInputConfig() will accept:
+// trusting records whose checksum fails gave a false "held" for an input that
+// never loads, which skipped the SD mount and advised a CLEAR nobody could
+// run (#598).
 //
 // One record read into a single stack local, same as storedInputBusNeeds() —
-// no RAM buffer, no cache: mega2560's 97%-full budget cannot pay for one.
+// no record buffer: mega2560's budget cannot pay for one.
 //
 // `excludeRecordIndex` (default 0xFF, "exclude nothing") is loadInputConfig()'s
 // own self-exclusion (see its call site): that function validates record i by
@@ -436,11 +520,7 @@ FLASHMEM bool saveInputConfig() {
 // nothing has a "self" to exclude there.
 static FLASHMEM bool storedInputHoldsPin(uint8_t pin, uint8_t excludeRecordIndex = 0xFF) {
     ConfigStoreHeader header;
-    EEPROM.get(0, header);
-    if (header.magic != EEPROM_MAGIC) return false;
-    if (header.version != EEPROM_VERSION) return false;
-    if ((size_t)EEPROM_HEADER_SIZE + (size_t)header.numInputs * EEPROM_INPUT_SIZE
-            > (size_t)SYSTEM_CONFIG_ADDRESS) return false;
+    if (!storeWillLoad(header)) return false;
 
     for (uint8_t i = 0; i < header.numInputs; i++) {
         if (i == excludeRecordIndex) continue;
@@ -492,17 +572,10 @@ FLASHMEM uint8_t storedInputBusNeeds() {
     // before it (and before initLCD()) so the buses those records need are up —
     // and their pins reserved — by the time any stored pin is validated (#358).
     //
-    // Header sanity only, no checksum walk: a store that fails the full
-    // validation is rejected wholesale by loadInputConfig() a moment later, so
-    // the worst case here is bringing up a bus for a config that then does not
-    // load — a spare peripheral, not a wrong pin assignment. The counts are
-    // bounds-checked because they drive this loop.
+    // Only a store loadInputConfig() will accept votes: a corrupt one would
+    // bring up a bus, and reserve its pins, for inputs that never load (#598).
     ConfigStoreHeader header;
-    EEPROM.get(0, header);
-    if (header.magic != EEPROM_MAGIC) return BUS_NEED_NONE;
-    if (header.version != EEPROM_VERSION) return BUS_NEED_NONE;
-    if ((size_t)EEPROM_HEADER_SIZE + (size_t)header.numInputs * EEPROM_INPUT_SIZE
-            > (size_t)SYSTEM_CONFIG_ADDRESS) return BUS_NEED_NONE;
+    if (!storeWillLoad(header)) return BUS_NEED_NONE;
 
     // Every stored record votes, not just the ones that will fit in RAM: a
     // record this build clamps away still describes hardware wired to the board.
@@ -525,68 +598,21 @@ FLASHMEM bool loadInputConfig() {
     // BSS-zeroed control tables is handled by rulesResetTables() in
     // initInputManager(), not here.
     ConfigStoreHeader header;
-    EEPROM.get(0, header);
+    uint8_t checksum = 0;
+    const StoreCheck check = checkStore(header, &checksum);
+    // Its own answer, freshly read: the probe's cached one is spent from here
+    // (it serves only the boot window before inputs[] goes live).
+    storedValidity = check == STORE_OK ? 1 : 2;
 
-    if (header.magic != EEPROM_MAGIC) return false;
-    if (header.version != EEPROM_VERSION) {
+    // Silent rejects — the caller (cmd_load) reports; no RAM-resident log on AVR.
+    if (check == STORE_BAD_MAGIC || check == STORE_TOO_BIG) return false;
+    if (check == STORE_BAD_VERSION) {
         // (debug string kept terse — it's RAM-resident on AVR, see message_api.h)
         msg.debug.warn(TAG_CONFIG, "EEPROM version mismatch (found %d, expected %d)",
                        header.version, EEPROM_VERSION);
         return false;
     }
-
-    // Reject a store whose sections wouldn't fit before the SystemConfig block
-    // (e.g. a chip physically moved from a larger-EEPROM board) BEFORE walking it,
-    // so the checksum scan below can't read into the SystemConfig region (review
-    // nit). The reads are bounded + read-only regardless; this just fails fast.
-    // Silent reject — the caller (cmd_load) reports; no RAM-resident log on AVR.
-    size_t storedBytes = EEPROM_HEADER_SIZE
-                       + (size_t)header.numInputs  * EEPROM_INPUT_SIZE
-#if INCLUDE_RULES_ENGINE
-                       + (size_t)header.numRules   * sizeof(Rule)
-                       + (size_t)header.numActions * sizeof(Action)
-                       + (size_t)header.numLinks   * sizeof(ActionLink)
-#endif
-                       + (size_t)header.reserved[0] * sizeof(OutputRecord)
-                       ;
-    if (storedBytes > SYSTEM_CONFIG_ADDRESS) return false;
-
-    // Verify the checksum over the bytes ACTUALLY stored (the header's own counts),
-    // BEFORE clamping into this firmware's RAM caps — a build with smaller caps
-    // must still validate a store written by a larger one (#296 S2). Sections are
-    // contiguous, so a single running address walks all three. Read-only.
-    uint8_t checksum = arenaChecksumSeed(header);
-    {
-        uint16_t a = EEPROM_HEADER_SIZE;
-        for (uint8_t i = 0; i < header.numInputs; i++) {
-            InputEEPROM rec; EEPROM.get(a, rec);
-            checksum ^= xorBytes(&rec, sizeof(rec));
-            a += EEPROM_INPUT_SIZE;
-        }
-#if INCLUDE_RULES_ENGINE
-        for (uint8_t i = 0; i < header.numRules; i++) {
-            Rule r; EEPROM.get(a, r);
-            checksum ^= xorBytes(&r, sizeof(Rule));
-            a += sizeof(Rule);
-        }
-        for (uint8_t i = 0; i < header.numActions; i++) {
-            Action ac; EEPROM.get(a, ac);
-            checksum ^= xorBytes(&ac, sizeof(Action));
-            a += sizeof(Action);
-        }
-        for (uint8_t i = 0; i < header.numLinks; i++) {
-            ActionLink l; EEPROM.get(a, l);
-            checksum ^= xorBytes(&l, sizeof(ActionLink));
-            a += sizeof(ActionLink);
-        }
-#endif
-        for (uint8_t i = 0; i < header.reserved[0]; i++) {
-            OutputRecord r; EEPROM.get(a, r);
-            checksum ^= xorBytes(&r, sizeof(OutputRecord));
-            a += sizeof(OutputRecord);
-        }
-    }
-    if (checksum != header.checksum) {
+    if (check == STORE_BAD_CHECKSUM) {
         msg.control.println(F("ERROR: EEPROM checksum mismatch! Configuration corrupted."));
         msg.control.println(F("Please reconfigure and run SAVE."));
         msg.debug.error(TAG_CONFIG, "Store checksum mismatch: stored 0x%02X, calc 0x%02X",
@@ -735,6 +761,7 @@ FLASHMEM void resetInputConfig() {
         EepromBatch batch;
         EEPROM.put(0, header);
     }
+    inputStoreForgetValidity();   // the store just changed (#598)
 
     // Clear inputs
     memset(inputs, 0, sizeof(inputs));

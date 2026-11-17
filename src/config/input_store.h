@@ -36,8 +36,17 @@ void resetInputConfig();              // Clear all inputs and EEPROM
 //     inputs[] live, this answers from the stored EEPROM records instead
 //     (§12.2 source 2) — same records, so the answer never changes across the
 //     boundary, only its speed (#385).
+//   Both answer only from a store loadInputConfig() will accept (magic,
+//   version, bounds, checksum): records that fail it never load, so they hold
+//   no pin and need no bus (#598).
 uint8_t storedInputBusNeeds();
 bool inputHoldsPin(uint8_t pin);
+
+// The stored-store validity the two answers above share is worked out once and
+// remembered (one byte). SAVE, RESET and LOAD forget it themselves; anything
+// else that rewrites the store before inputs[] goes live must call this (the
+// native tests do, between fixtures).
+void inputStoreForgetValidity();
 
 // Self-ownership exclusion for the live-table half of inputHoldsPin() — lets a
 // pin be re-claimed by the very Input already holding it, by pointer identity
