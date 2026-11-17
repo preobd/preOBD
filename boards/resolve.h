@@ -24,7 +24,7 @@
  * the macro.
  *
  * Inputs it reads: SUPPORTS_*, HAS_BUILTIN_SD, PLATFORM_NO_*, and the overlay
- * pins (RGB_PIN_*, MODE_BUTTON_PIN, SD_PIN, BUZZER_PIN, TEST_MODE_PIN).
+ * pins (RGB_PIN_*, USER_BUTTON_PIN, SD_PIN, BUZZER_PIN, TEST_MODE_PIN).
  * KNOWN EXCEPTION: SD and JSON predate this split and are still gated in src/
  * on SUPPORTS_SD / SUPPORTS_JSON_CONFIG / _EXPORT / _IMPORT_STREAM directly
  * (~55 sites, e.g. sd_manager.h:13, json_config.cpp:12) — those SUPPORTS_ names
@@ -55,10 +55,14 @@
 #  endif
 #endif
 
-// Mode / silence button.
-#if defined(MODE_BUTTON_PIN)
-#  ifndef INCLUDE_MODE_BUTTON
-#    define INCLUDE_MODE_BUTTON 1
+// User button: hold at boot for CONFIG mode, short press acknowledges
+// alarms, long press turns the display off and on.
+#if defined(MODE_BUTTON_PIN) || defined(INCLUDE_MODE_BUTTON)
+#  error "MODE_BUTTON_PIN / INCLUDE_MODE_BUTTON were renamed USER_BUTTON_PIN / INCLUDE_USER_BUTTON: update your boards/<board>/wiring.ini"
+#endif
+#if defined(USER_BUTTON_PIN)
+#  ifndef INCLUDE_USER_BUTTON
+#    define INCLUDE_USER_BUTTON 1
 #  endif
 #endif
 
@@ -133,7 +137,7 @@
 // was closed. (This is a claim about the DISPLAY's presence, not about which
 // I2C bus INSTANCE it runs on: that half moved to a build-time fact in #377 —
 // I2C_WIRED_BUS in wiring.ini/board.h — the same WIRED pattern this file uses
-// for LED/mode-button/SD. A declaration only grants permission, though: `BUS
+// for LED/user-button/SD. A declaration only grants permission, though: `BUS
 // I2C <n>` still decides, and remains the one place a display's bus is
 // actually selected.)
 #if SUPPORTS_LCD

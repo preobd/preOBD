@@ -2,7 +2,7 @@
  * bus_wiring.h - Build-time bus WIRING declarations (#377)
  *
  * Buses are the one peripheral class that used to skip the WIRED layer the
- * repo already documents for LED / mode button / SD (boards/resolve.h,
+ * repo already documents for LED / user button / SD (boards/resolve.h,
  * boards/teensy40/board.h): those jump straight from a pin/capability being
  * PRESENT to the feature being in the image. Bus INSTANCES had no equivalent —
  * "which I2C/SPI/CAN instance is physically wired on THIS unit" was never a

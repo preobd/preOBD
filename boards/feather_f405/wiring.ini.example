@@ -9,7 +9,7 @@
 [feather_f405]
 wiring =
 ;    -D BUZZER_PIN=11      ; alarm buzzer (tone output)
-;    -D MODE_BUTTON_PIN=12 ; CONFIG-on-boot / silence button
+;    -D USER_BUTTON_PIN=12 ; CONFIG-on-boot / silence button
 ;    -D TEST_MODE_PIN=13   ; hold LOW at boot to enter test mode (optional)
 ;    -D HOST_NRF_CTS_PIN=5 ; nRF52840 software flow control — define BOTH or neither.
 ;    -D HOST_NRF_RTS_PIN=6 ;   (the nRF link is Serial1 = D0/D1; these two then can't be Serial2)

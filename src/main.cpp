@@ -32,8 +32,8 @@
 #include "console/serial_config.h"
 #include "rules/rules_manager.h"   // Control engine runtime (Rules)
 #include "core/system_mode.h"        // System mode (CONFIG/RUN)
-#if INCLUDE_MODE_BUTTON
-#include "console/button_handler.h"
+#if INCLUDE_USER_BUTTON
+#include "console/user_button.h"
 #endif
 #include "outputs/display/display_manager.h"        // Display runtime state management
 #if INCLUDE_LED
@@ -41,7 +41,7 @@
 #endif
 #include "outputs/table/output_base.h"
 #include "outputs/formats/obd_query.h"
-#include "outputs/annunciator/output_alarm.h"                   // alarmAcknowledge() — mode button short press (#433)
+#include "outputs/annunciator/output_alarm.h"                   // alarmAcknowledge() — user button short press (#433)
 #if INCLUDE_CAN
     #include "sensors/can/input_can.h"
     #include "sensors/can/can_scan.h"
@@ -615,8 +615,8 @@ void setup() {
     rulesActionsInit();   // configure action target pins as outputs
 #endif
 
-#if INCLUDE_MODE_BUTTON
-    initButtonHandler();
+#if INCLUDE_USER_BUTTON
+    initUserButton();
 #endif
 
     initDisplayManager();
@@ -757,8 +757,8 @@ void loop() {
     // Process button events (short press = acknowledge the sounding alarm(s),
     // long press = toggle display). The short press and `ALARM SILENCE` share
     // alarmAcknowledge() so button and remote behave identically (#433).
-#if INCLUDE_MODE_BUTTON
-    ButtonPress buttonEvent = updateButtonHandler();
+#if INCLUDE_USER_BUTTON
+    ButtonPress buttonEvent = updateUserButton();
     if (buttonEvent == BUTTON_LONG_PRESS) {
         toggleDisplayRuntime();
     } else if (buttonEvent == BUTTON_SHORT_PRESS) {

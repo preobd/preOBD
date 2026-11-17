@@ -76,7 +76,7 @@ the command again. On a Mega, make sure no other program (such as the Arduino ID
 serial monitor) has the port open.
 
 You don't need to change any configuration files to follow this guide. Later,
-when you add an LCD, buzzer, status LED or mode button, you'll describe your
+when you add an LCD, buzzer, status LED or user button, you'll describe your
 wiring in `boards/<board>/wiring.ini` — see the
 [Build Configuration Guide](../guides/configuration/BUILD_CONFIGURATION_GUIDE.md).
 

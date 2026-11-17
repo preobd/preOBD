@@ -3811,7 +3811,7 @@ async function sendChecked(cmd) {
 // Returns 'CONFIG', 'RUN', or null when status isn't available (transparent
 // NUS/HM-10 link, or the status char is absent). A direct read of the 32-byte
 // cache, so it reflects the device's actual mode now — no dependence on the
-// last async status notify, which would race a just-pressed mode button.
+// last async status notify, which would race a just-pressed user button.
 async function readDeviceMode() {
   if (!statusChar) return null;
   try {

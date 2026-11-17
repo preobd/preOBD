@@ -59,6 +59,6 @@
 #define JSON_IMPORT_MAX_BYTES       16384
 
 // WIRED (set in wiring.ini, derived by boards/resolve.h):
-//   RGB_PIN_R/G/B → SUPPORTS_LED   BUZZER_PIN (buzzer)   external SD_PIN → SUPPORTS_SD_LOGGING
-//   MODE_BUTTON_PIN → SUPPORTS_MODE_BUTTON   TEST_MODE_PIN (trigger)
+//   RGB_PIN_R/G/B → INCLUDE_LED   BUZZER_PIN (buzzer)   external SD_PIN → INCLUDE_SD_LOGGING
+//   USER_BUTTON_PIN → INCLUDE_USER_BUTTON   TEST_MODE_PIN (trigger)
 //   HOST_NRF_CTS_PIN + HOST_NRF_RTS_PIN (nRF software flow control)

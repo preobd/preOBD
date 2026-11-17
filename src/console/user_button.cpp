@@ -1,15 +1,15 @@
 /*
- * button_handler.cpp - Multi-function button handler implementation
- * Only compiled when INCLUDE_MODE_BUTTON is defined in the board profile.
+ * user_button.cpp - The user button: debounce and short/long press detection
+ * Only compiled when INCLUDE_USER_BUTTON is nonzero (boards/resolve.h).
  */
 
-#include "button_handler.h"
+#include "user_button.h"
 #include "../config.h"
 
-#if INCLUDE_MODE_BUTTON
+#if INCLUDE_USER_BUTTON
 
-#if !defined(MODE_BUTTON_PIN)
-#error "MODE_BUTTON_PIN must be defined in the board profile when INCLUDE_MODE_BUTTON is set"
+#if !defined(USER_BUTTON_PIN)
+#error "USER_BUTTON_PIN must be defined in the board profile when INCLUDE_USER_BUTTON is set"
 #endif
 
 #include "../core/message_api.h"
@@ -26,20 +26,20 @@ static uint32_t lastDebounceTime = 0;
 static uint32_t pressStartTime = 0;
 static bool pressHandled = false;
 
-void initButtonHandler() {
-    pinMode(MODE_BUTTON_PIN, INPUT_PULLUP);
-    buttonState = digitalRead(MODE_BUTTON_PIN) == LOW;
+void initUserButton() {
+    pinMode(USER_BUTTON_PIN, INPUT_PULLUP);
+    buttonState = digitalRead(USER_BUTTON_PIN) == LOW;
     lastRawState = buttonState;
     lastDebounceTime = millis();
     pressStartTime = 0;
     pressHandled = false;
-    msg.debug.info(TAG_SYSTEM, "Button handler initialized");
+    msg.debug.info(TAG_SYSTEM, "User button initialized");
 }
 
-ButtonPress updateButtonHandler() {
+ButtonPress updateUserButton() {
     uint32_t now = millis();
 
-    bool rawState = (digitalRead(MODE_BUTTON_PIN) == LOW);
+    bool rawState = (digitalRead(USER_BUTTON_PIN) == LOW);
 
     if (rawState != lastRawState) {
         lastDebounceTime = now;
@@ -79,8 +79,8 @@ ButtonPress updateButtonHandler() {
     return BUTTON_NONE;
 }
 
-bool isButtonPressed() {
+bool isUserButtonPressed() {
     return buttonState;
 }
 
-#endif // INCLUDE_MODE_BUTTON
+#endif // INCLUDE_USER_BUTTON

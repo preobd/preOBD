@@ -54,7 +54,7 @@ much (and several would overflow the 90 B RAM headroom — see notes).
 | `INCLUDE_LED` | −2,206 B | −318 B | RGB status indicator (wiring-derived†) |
 | `SUPPORTS_LCD` | −4,746 B | −236 B | I²C LCD |
 | `SUPPORTS_BME280` | −7,766 B | −174 B | Adafruit BME280 |
-| `INCLUDE_MODE_BUTTON` | −808 B | −133 B | wiring-derived† |
+| `INCLUDE_USER_BUTTON` | −808 B | −133 B | wiring-derived† |
 | `SUPPORTS_SERIAL_OUTPUT` | −3,170 B | −28 B | cheap RAM, but a core output |
 | **Currently off** | | | |
 | `SUPPORTS_FRAMED_TRANSPORT` | +5,192 B | **+1,691 B** | would overflow RAM ~19× over; real ceiling |
@@ -65,7 +65,7 @@ much (and several would overflow the 90 B RAM headroom — see notes).
 | `SUPPORTS_REALDASH` | +222 B | +36 B | **nearly free** — disabled by choice, not a RAM limit |
 | `INCLUDE_SD_LOGGING` | — | — | won't build: `SD.h` not in mega `lib_deps` (lib + RAM ceiling) |
 
-> † `INCLUDE_LED` / `INCLUDE_MODE_BUTTON` are derived from `wiring.ini` pin presence,
+> † `INCLUDE_LED` / `INCLUDE_USER_BUTTON` are derived from `wiring.ini` pin presence,
 > not `board.h` flags, so the measurement tool (which toggles `board.h`) can't
 > re-measure them — values carried from a prior run.
 

@@ -7,7 +7,7 @@
  * boards/README.md.
  *
  * `-include`d before boards/resolve.h, which derives the INCLUDE_* flags src/ tests
- * (LED / mode button / SD) from pin presence + the capabilities declared here.
+ * (LED / user button / SD) from pin presence + the capabilities declared here.
  *
  * RAM budget: 512 KB — ample. (SERIAL_*_BUFFER_SIZE, if ever tuned, must be real
  * -D flags in platformio.ini — framework core TUs aren't reached by -include.)
@@ -61,5 +61,5 @@
 #define JSON_IMPORT_MAX_BYTES       16384
 
 // WIRED (set in boards/teensy41/wiring.ini, derived by boards/resolve.h):
-//   RGB_PIN_R/G/B → SUPPORTS_LED   MODE_BUTTON_PIN → SUPPORTS_MODE_BUTTON
+//   RGB_PIN_R/G/B → INCLUDE_LED   USER_BUTTON_PIN → INCLUDE_USER_BUTTON
 //   BUZZER_PIN (buzzer)          TEST_MODE_PIN (optional test-mode trigger)

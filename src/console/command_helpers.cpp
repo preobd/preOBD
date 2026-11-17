@@ -573,7 +573,7 @@ void printHelpControl() {
 #if INCLUDE_RULES_ENGINE
     msg.control.println();
     msg.control.println(F("  ALARM STATUS             - Severity, acknowledged alarms, silence policy"));
-    msg.control.println(F("  ALARM SILENCE            - Acknowledge sounding alarm(s) (= mode button)"));
+    msg.control.println(F("  ALARM SILENCE            - Acknowledge sounding alarm(s) (= user button)"));
     msg.control.println(F("  ALARM DURATION <s|CLEAR> - Re-arm after 5..630 s, or hold until it clears"));
     msg.control.println(F("  ALARM SCOPE <BUZZER|ALL> - ALL: acknowledged alarm also stops LED blink"));
 #endif

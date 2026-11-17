@@ -136,7 +136,7 @@ preOBD/
 ; boards/<board>/wiring.ini — your wiring
 [<board>]
 wiring =
-    -D MODE_BUTTON_PIN=5
+    -D USER_BUTTON_PIN=5
     -D BUZZER_PIN=3
 ```
 

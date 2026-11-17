@@ -453,7 +453,7 @@ alarm Rule — condition, limits, severity, and firing state (see the
 ### Acknowledging a Sounding Alarm
 
 ```
-ALARM SILENCE                    # Acknowledge every alarm sounding right now (= mode button press)
+ALARM SILENCE                    # Acknowledge every alarm sounding right now (= user button press)
 ALARM STATUS                     # Severity, which rules are acknowledged, time remaining, policy
 ALARM DURATION <secs|CLEAR>      # CONFIG: re-arm after 5..630 s (step 5), or hold until the rule clears
 ALARM SCOPE <BUZZER|ALL>         # CONFIG: ALL also stops the LED blink (steady red) while acknowledged
@@ -1166,7 +1166,7 @@ log-filter and display settings.
 Registry: 8 | Inputs: 4 | Relays: 2
 
 System Pins:
-  Pin  5: Button      - Mode Button
+  Pin  5: Button      - User Button
   Pin  3: Buzzer      - Buzzer
 
 Bus Pins:

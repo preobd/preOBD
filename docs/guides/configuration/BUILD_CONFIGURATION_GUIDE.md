@@ -67,7 +67,7 @@ wiring =
     -D RGB_PIN_G=5
     -D RGB_PIN_B=4
     -D BUZZER_PIN=3       ; alarm buzzer
-    -D MODE_BUTTON_PIN=2  ; CONFIG-on-boot / silence button
+    -D USER_BUTTON_PIN=2  ; CONFIG-on-boot / silence button
     -D SD_PIN=10          ; external SD CS (boards without a built-in slot)
     -D SPI_WIRED_BUS=0    ; ...and the SPI bus it is wired to (or BUS SPI <n>)
 ```

@@ -9,7 +9,7 @@
  *   ALARM SCOPE <BUZZER|ALL>    ALL: an acknowledged alarm also stops the LED  [CONFIG]
  *                               blink (steady red — fault still visible)
  *
- * SILENCE is the mode button's short press from a remote client (the app's
+ * SILENCE is the user button's short press from a remote client (the app's
  * Acknowledge): both call alarmAcknowledge(), so they cannot diverge. It is
  * RUN-allowed because it changes no configuration — only which currently
  * sounding rules are muted. An ack is per rule: a DIFFERENT rule tripping later

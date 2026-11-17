@@ -42,7 +42,7 @@ RuleSeverity rulesSystemSeverity();
 RuleSeverity rulesSystemSeverityUnacked();
 
 // --- annunciator acknowledgement (#433, ARCHITECTURE §11.4) ------------------
-// The mode button and `ALARM SILENCE` acknowledge every rule that is sounding
+// The user button and `ALARM SILENCE` acknowledge every rule that is sounding
 // the buzzer NOW (ACTIVE at severity ALARM). An acknowledged rule stops
 // driving the buzzer (and, under SCOPE ALL, the LED blink). Timed policy
 // (`durationMs` > 0): the mute holds for exactly that long, through a

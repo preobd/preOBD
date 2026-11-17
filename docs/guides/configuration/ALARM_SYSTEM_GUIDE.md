@@ -175,7 +175,7 @@ An explicit warning edge must be on the safe side of the limit.
 
 ## Acknowledging an Alarm
 
-A short press of the mode button — or `ALARM SILENCE` — acknowledges every alarm
+A short press of the user button — or `ALARM SILENCE` — acknowledges every alarm
 that is sounding at that moment. Acknowledgement is per alarm: a *different*
 alarm tripping afterwards still sounds.
 
@@ -227,7 +227,7 @@ optional hardware; each is enabled by wiring its pin in your
 [<board>]
 wiring =
     -D BUZZER_PIN=3
-    -D MODE_BUTTON_PIN=2
+    -D USER_BUTTON_PIN=2
     -D RGB_PIN_R=6
     -D RGB_PIN_G=5
     -D RGB_PIN_B=4
@@ -261,7 +261,7 @@ In CONFIG mode the buzzer stays silent, so bench testing can't set it off.
 
 **The buzzer doesn't stop when I press the button**
 - The button acknowledges only the alarms sounding at that moment; a new alarm
-  sounds again. Check `ALARM STATUS`, and `MODE_BUTTON_PIN` in your `wiring.ini`.
+  sounds again. Check `ALARM STATUS`, and `USER_BUTTON_PIN` in your `wiring.ini`.
 
 ---
 

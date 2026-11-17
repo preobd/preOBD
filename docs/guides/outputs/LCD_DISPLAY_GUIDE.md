@@ -105,7 +105,7 @@ SYSTEM UNITS PRESSURE PSI  # pressure inputs added from now on start in PSI
 
 A disabled input still keeps its cell (blank) — it doesn't make room for another.
 
-**Turning the screen off while driving:** hold the mode button for 2 seconds in
+**Turning the screen off while driving:** hold the user button for 2 seconds in
 RUN mode (if you've wired one). `DISPLAY DISABLE` turns it off permanently.
 
 ## Troubleshooting
@@ -124,7 +124,7 @@ RUN mode (if you've wired one). `DISPLAY DISABLE` turns it off permanently.
 ## See Also
 
 - [Serial Commands Reference](../../reference/SERIAL_COMMANDS.md#display-configuration)
-- [Config/Run Mode Guide](../configuration/CONFIG_RUN_MODE_GUIDE.md) — the mode button
+- [Config/Run Mode Guide](../configuration/CONFIG_RUN_MODE_GUIDE.md) — the user button
 
 ## OLED FeatherWing (Feather STM32F405)
 
@@ -149,5 +149,5 @@ The wing's buttons are on the Feather's pins: **A = D9, B = D6, C = D5**.
 D9 is also the CAN receive pin, so button A can't be used with CAN wired.
 D5/D6 are the usual nRF flow-control pins; to use buttons B or C, move flow
 control to other pins (e.g. D11/D12) in `boards/feather_f405/wiring.ini`.
-The mode button can then be one of them, e.g. `-D MODE_BUTTON_PIN=6` for
+The user button can then be one of them, e.g. `-D USER_BUTTON_PIN=6` for
 button B.

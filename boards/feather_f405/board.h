@@ -75,7 +75,7 @@
 #define JSON_IMPORT_MAX_BYTES       16384
 
 // WIRED (set in wiring.ini, derived by boards/resolve.h):
-//   (status LED: on-board NeoPixel above)   BUZZER_PIN (buzzer)   MODE_BUTTON_PIN → SUPPORTS_MODE_BUTTON
+//   (status LED: on-board NeoPixel above)   BUZZER_PIN (buzzer)   USER_BUTTON_PIN → INCLUDE_USER_BUTTON
 //   TEST_MODE_PIN (trigger)   HOST_NRF_CTS_PIN + HOST_NRF_RTS_PIN (nRF software flow control)
 
 // ===== CONFIG STORE (config/eeprom_store.h) =====

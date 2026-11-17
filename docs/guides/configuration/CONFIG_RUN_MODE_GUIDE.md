@@ -18,7 +18,7 @@ What CONFIG mode *does* hold back is anything physical or recorded — see
 | To enter | How |
 |----------|-----|
 | CONFIG | Type `CONFIG` |
-| CONFIG | Hold the mode button while powering on |
+| CONFIG | Hold the user button while powering on |
 | CONFIG | Automatic on first boot, or whenever no valid configuration is stored |
 | RUN | Type `RUN` |
 | RUN | Automatic on boot when a valid configuration is stored and the button isn't held |
@@ -120,9 +120,9 @@ Trying one of these in RUN mode names the command that was blocked:
 
 ---
 
-## The Mode Button
+## The User Button
 
-The mode button is optional. Its pin is `MODE_BUTTON_PIN`, set in your board's
+The user button is optional. Its pin is `USER_BUTTON_PIN`, set in your board's
 wiring file (`boards/<board>/wiring.ini`; copy `wiring.ini.example`). With no
 pin set, the feature is simply left out.
 
@@ -136,7 +136,7 @@ Acknowledgement is per alarm: a different alarm tripping later still sounds.
 `ALARM DURATION` and `ALARM SCOPE` change how long and how much is silenced; see
 the [Alarm System Guide](ALARM_SYSTEM_GUIDE.md).
 
-**Wiring:** a momentary push button between `MODE_BUTTON_PIN` and GND. The
+**Wiring:** a momentary push button between `USER_BUTTON_PIN` and GND. The
 firmware enables the pin's internal pull-up, so no external resistor is needed.
 
 ---
@@ -188,7 +188,7 @@ stored configuration is invalid. Configure, run `SAVE`, and check that it report
 success before rebooting.
 
 **Holding the button at power-on doesn't enter CONFIG mode** — check that
-`MODE_BUTTON_PIN` is set in your `wiring.ini`, that the firmware was rebuilt after
+`USER_BUTTON_PIN` is set in your `wiring.ini`, that the firmware was rebuilt after
 setting it, and that the button pulls the pin to GND. Typing `CONFIG` always works.
 
 **Relays or the buzzer don't work while testing** — they are held off in CONFIG

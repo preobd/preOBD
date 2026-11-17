@@ -50,7 +50,7 @@ bool isAnyAlarmActive();
 bool isAlarmSilenced();
 
 // ===== ACKNOWLEDGEMENT (#433, ARCHITECTURE §11.4) =====
-// The mode button's short press and the `ALARM SILENCE` command both land
+// The user button's short press and the `ALARM SILENCE` command both land
 // here, so the two cannot diverge. Acknowledges every rule sounding the buzzer
 // NOW; a rule that trips later still sounds. Returns how many rules are acked.
 uint8_t alarmAcknowledge();   // returns how many alarms were newly acknowledged

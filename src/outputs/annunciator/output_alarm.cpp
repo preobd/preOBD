@@ -188,7 +188,7 @@ void updateLEDs(AlarmSeverity severity, bool acked) {
 
 void updateAlarmOutput() {
     // ===== ACKNOWLEDGEMENT BOOKKEEPING =====
-    // The mode button's short press arrives via main.cpp -> alarmAcknowledge()
+    // The user button's short press arrives via main.cpp -> alarmAcknowledge()
     // (edge, same path as ALARM SILENCE); here we only expire (#433).
     alarmAckHousekeeping();
 

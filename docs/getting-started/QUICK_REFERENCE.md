@@ -34,7 +34,7 @@ Use `LIST SENSORS` to see sensor categories, then `LIST SENSORS <category>` for 
 
 ### Operate
 
-**MODE_BUTTON:**
+**User button:**
 - Hold during boot → Enter CONFIG mode
 - Press in RUN mode → Acknowledge the sounding alarm(s) (until that alarm clears by default; see `ALARM DURATION`)
 - Hold for 2 seconds in RUN mode → Toggle the display on/off

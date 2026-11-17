@@ -62,7 +62,7 @@ lists every command.
 ### Configuration
 | Guide | Covers |
 |-------|--------|
-| [Config/Run Mode](guides/configuration/CONFIG_RUN_MODE_GUIDE.md) | The two modes and the mode button |
+| [Config/Run Mode](guides/configuration/CONFIG_RUN_MODE_GUIDE.md) | The two modes and the user button |
 | [Alarms](guides/configuration/ALARM_SYSTEM_GUIDE.md) | Alarm limits, warnings, acknowledging |
 | [Advanced Calibration](guides/configuration/ADVANCED_CALIBRATION_GUIDE.md) | Custom calibration for unlisted sensors |
 | [JSON Backup and Restore](guides/configuration/JSON_CONFIGURATION_GUIDE.md) | Export, import, SD card backups |

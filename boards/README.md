@@ -136,5 +136,5 @@ named in `boardName()` fails the build until it is added there.
 PlatformIO does **not** track `-include`d headers as build dependencies, so always
 clean-build when checking sizes (`pio run -e <env> -t clean && pio run -e <env>`).
 `board.h` + `resolve.h` must resolve to the same `INCLUDE_*`/`MAX_*` set as
-before for capability-only features; WIRED features (LED, mode button, SD, bus instances) are
+before for capability-only features; WIRED features (LED, user button, SD, bus instances) are
 intentionally gated on their overlay pins.

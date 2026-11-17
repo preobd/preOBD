@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - For developers: `src/` is reorganised with one folder per layer (`sensors/`, `inputs/`, `rules/`, `outputs/`, `transports/`, `buses/`, `hal/`, `console/`, `config/`, `core/`, see `src/README.md`); no functional change, but local patches need their paths updated
+- The mode button is now the user button: rename `MODE_BUTTON_PIN` to `USER_BUTTON_PIN` in your `wiring.ini` (the build stops with a message until you do), and `SYSTEM PINS` lists it as "User Button"
 
 ## [0.16.0-beta] - 2026-11-04
 

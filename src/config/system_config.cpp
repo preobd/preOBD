@@ -56,7 +56,7 @@ static struct {
 } bootDiag;
 
 enum BuiltinPinKind : uint8_t {
-    BPK_MODE_BUTTON = 0, BPK_BUZZER, BPK_CAN_CS, BPK_CAN_INT,
+    BPK_USER_BUTTON = 0, BPK_BUZZER, BPK_CAN_CS, BPK_CAN_INT,
     BPK_SD, BPK_TEST_MODE, BPK_I2C_WIRED, BPK_SPI_WIRED, BPK_RESERVED,
 };
 
@@ -99,8 +99,8 @@ void flushSystemConfigBootDiagnostics() {
 #ifdef BOARD_RESERVED_PINS
     replayBuiltinPinCollision(BPK_RESERVED, F("BOARD_RESERVED_PINS"));
 #endif
-#if INCLUDE_MODE_BUTTON
-    replayBuiltinPinCollision(BPK_MODE_BUTTON, F("MODE_BUTTON_PIN"));
+#if INCLUDE_USER_BUTTON
+    replayBuiltinPinCollision(BPK_USER_BUTTON, F("USER_BUTTON_PIN"));
 #endif
 #if INCLUDE_ALARMS && defined(BUZZER_PIN)
     replayBuiltinPinCollision(BPK_BUZZER, F("BUZZER_PIN"));
@@ -431,7 +431,7 @@ void MessageRouter::saveConfig() {
 
 // Gap 5 (pin ownership design audit): every claimPins() call below used to
 // discard its return value, so two build-time pins colliding in wiring.ini /
-// board.h (e.g. BUZZER_PIN == MODE_BUTTON_PIN) was accepted in silence — the
+// board.h (e.g. BUZZER_PIN == USER_BUTTON_PIN) was accepted in silence — the
 // second claimant simply never existed, with no diagnostic pointing at why.
 // claimPins() already prints the generic pin-ownership refusal; this adds the
 // one thing that's missing — that the SOURCE was a build-time declaration, so
@@ -521,10 +521,10 @@ FLASHMEM void registerSystemPins(uint8_t busNeeds) {
       if (byInput) recordBuiltinPinCollision(F("BOARD_RESERVED_PINS"), BPK_RESERVED, true);
       if (byBuild) recordBuiltinPinCollision(F("BOARD_RESERVED_PINS"), BPK_RESERVED, false); }
 #endif
-#if INCLUDE_MODE_BUTTON
-    { const uint8_t p = MODE_BUTTON_PIN;
-      if (!claimPins(&p, 1, PIN_BUTTON, PIN_RANK_BUILTIN, TAG_SYSTEM, "Mode Button"))
-          reportBuiltinPinCollision(F("MODE_BUTTON_PIN"), BPK_MODE_BUTTON, pinHeldByConfiguredInput(p)); }
+#if INCLUDE_USER_BUTTON
+    { const uint8_t p = USER_BUTTON_PIN;
+      if (!claimPins(&p, 1, PIN_BUTTON, PIN_RANK_BUILTIN, TAG_SYSTEM, "User Button"))
+          reportBuiltinPinCollision(F("USER_BUTTON_PIN"), BPK_USER_BUTTON, pinHeldByConfiguredInput(p)); }
 #endif
 
 #if INCLUDE_ALARMS

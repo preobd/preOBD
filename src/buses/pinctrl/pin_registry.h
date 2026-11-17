@@ -190,7 +190,7 @@ void dumpPinRegistry();
  * Get human-readable name for a PinUsageType
  *
  * @param type Usage type enum value
- * @return String representation (e.g., "I2C SDA", "Mode Button")
+ * @return String representation (e.g., "I2C SDA", "User Button")
  */
 const char* getPinUsageTypeName(PinUsageType type);
 

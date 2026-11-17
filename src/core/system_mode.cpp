@@ -22,8 +22,8 @@ void setSystemModeObserver(SystemModeObserver observer) {
 #define BOOT_DETECT_DELAY_MS 10  // Stabilization delay for boot detection
 
 void initSystemMode() {
-#if INCLUDE_MODE_BUTTON
-    pinMode(MODE_BUTTON_PIN, INPUT_PULLUP);
+#if INCLUDE_USER_BUTTON
+    pinMode(USER_BUTTON_PIN, INPUT_PULLUP);
 #endif
     currentMode = MODE_RUN;  // Default to RUN mode for safety
 }
@@ -92,9 +92,9 @@ SystemMode detectBootMode(bool eepromValid) {
     }
 
     // Check if button held during boot (LOW = active)
-#if INCLUDE_MODE_BUTTON
+#if INCLUDE_USER_BUTTON
     delay(BOOT_DETECT_DELAY_MS);
-    if (digitalRead(MODE_BUTTON_PIN) == LOW) {
+    if (digitalRead(USER_BUTTON_PIN) == LOW) {
         msg.debug.info(TAG_SYSTEM, "CONFIG button detected - entering CONFIG mode");
         return MODE_CONFIG;
     }
