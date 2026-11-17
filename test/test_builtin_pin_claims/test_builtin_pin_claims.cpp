@@ -17,6 +17,7 @@
 #define USER_BUTTON_PIN     4
 #define INCLUDE_USER_BUTTON 1
 #define CAN_CS_0            9
+#define INCLUDE_CAN         1   // resolve.h's answer for a wired CAN_CS_0 (#658)
 
 #include <unity.h>
 #include <Arduino.h>

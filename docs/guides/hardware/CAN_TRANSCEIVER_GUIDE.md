@@ -29,8 +29,8 @@ preOBD uses a Hardware Abstraction Layer (HAL) that supports multiple CAN contro
 - **bxCAN** (STM32F4 native) - 1 bus on the Feather STM32F405 (`feather_f405`)
 
 Each build uses one controller type for all of its CAN buses. For more than
-one bus, use a board whose native controller has several (Teensy FlexCAN), or
-two MCP2515s (`CAN_CS_0` and `CAN_CS_1`) on a board without native CAN.
+one bus, use a board whose native controller has several (Teensy FlexCAN). A
+board without native CAN takes one MCP2515 (`CAN_CS_0`); a second is not supported yet.
 
 ### When Do You Need This?
 
@@ -226,7 +226,7 @@ GND          →  GND            GND
 ```
 
 **Configuration:**
-- Pin assignments for SPI CAN controllers (`CAN_CS_*`/`CAN_INT_*`) are in `boards/<board>/board.h`
+- Pin assignments for SPI CAN controllers (`CAN_CS_*`/`CAN_INT_*`) go in `boards/<board>/wiring.ini`, with `SPI_WIRED_BUS=<n>` for the SPI bus the controller sits on. Without the CS, SPI CAN isn't in the image; without the SPI declaration, CAN stays down and `BUS CAN` says what to add
 
 **Notes:**
 - Each bus requires its own CAN transceiver

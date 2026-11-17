@@ -134,7 +134,6 @@ preOBD/
 #define SUPPORTS_CAN             1
 #define SUPPORTS_LCD             1
 #define SUPPORTS_ALARMS          1
-#define CAN_CS_0               9    // intrinsic SPI-CAN pins (MCP2515 boards) stay here
 ```
 ```ini
 ; boards/<board>/wiring.ini — your wiring

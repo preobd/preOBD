@@ -92,9 +92,22 @@
 // mean off), defined() would silently read that as ON and pull the feature in.
 // Undefined still evaluates to 0 here, so presence-declaration is unaffected.
 
-#if SUPPORTS_CAN
+// CAN: a native controller is the chip's own, so capability is enough. An SPI
+// controller (MCP2515) is a shield or module someone wired, so it is a WIRED
+// peripheral like the SD card: in the image only when CAN_CS_0 is wired
+// (#658). It also needs the SPI bus, declared with SPI_WIRED_BUS or selected
+// with BUS SPI; without one the bus stays down and says why.
+#if SUPPORTS_CAN && (PROFILE_HAS_NATIVE_CAN || (defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)))
 #  ifndef INCLUDE_CAN
 #    define INCLUDE_CAN 1
+#  endif
+#endif
+#if SUPPORTS_CAN && !PROFILE_HAS_NATIVE_CAN && !(defined(CAN_CS_0) && (CAN_CS_0 != 0xFF))
+#  if defined(CAN_WIRED_BUS) || defined(CAN_INT_0)
+#    error "CAN_WIRED_BUS / CAN_INT_0 without CAN_CS_0: an SPI CAN controller is wired by its chip-select. Add -D CAN_CS_0=<pin> to wiring.ini (and -D SPI_WIRED_BUS=<n>)."
+#  endif
+#  if INCLUDE_CAN
+#    error "INCLUDE_CAN on a board without native CAN needs the MCP2515's chip-select: add -D CAN_CS_0=<pin> to wiring.ini."
 #  endif
 #endif
 

@@ -369,6 +369,12 @@ void setup() {
     #if SUPPORTS_SD
     busNeeds |= busNeedsForSdPin(SD_PIN);
     #endif
+    // So is an MCP2515 (wiring.ini CAN_CS_0, #658): its library starts SPI by
+    // itself, so the bus is owned first. initConfiguredCANBuses() below refuses
+    // the CAN bus if it didn't come up.
+    #if INCLUDE_CAN && !PROFILE_HAS_NATIVE_CAN
+    busNeeds |= busNeedsForCanCs(CAN_CS_0);
+    #endif
 
     // Register system pins in the pin registry. Includes the Tier-1 wired-bus
     // reservation (#379) when a *_WIRED_BUS declaration is in effect AND the
@@ -545,6 +551,12 @@ void setup() {
     // different vote.
     initConfiguredBuses();
     acquireRequiredBuses(busNeeds);
+#if !PROFILE_HAS_NATIVE_CAN
+    // An SPI CAN controller needs the SPI bus up first, so its CAN bus is
+    // claimed after the vote above is served (#658). Native CAN stays inside
+    // initConfiguredBuses(): its bus-vs-bus pin order is §12.4's.
+    initConfiguredCANBuses();
+#endif
 
     // storedInputBusNeeds() is not wasted work now that #377 removed the
     // DEFAULT_*_BUS guess: acquireRequiredBuses() can legitimately come back

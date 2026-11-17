@@ -50,7 +50,7 @@ something at all simply has no line for it — there is no negative to declare.
 - Capabilities: `SUPPORTS_CAN`, `SUPPORTS_ELM327`, `SUPPORTS_TEST_MODE`, … plus
   `PROFILE_HAS_NATIVE_CAN`, `HAS_BUILTIN_SD`, `EEPROM_TOTAL_BYTES`
 - Ceilings: `PLATFORM_NO_SD_LOGGING`, `SUPPORTS_JSON_CONFIG=0`, `MAX_INPUTS`, CLI buffer sizes
-- Intrinsic pins only: SPI-CAN `CAN_CS_*`/`CAN_INT_*`
+- No wired pins, not even an MCP2515's: its `CAN_CS_*`/`CAN_INT_*` are wiring (#658)
 
 ### `boards/<board>/wiring.ini` — your wiring (gitignored)
 

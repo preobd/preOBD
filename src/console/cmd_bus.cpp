@@ -353,7 +353,12 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
         cs.mode = CAN_BUS_OFF;
         canBusApply(bus);
         msg.control.print(getCANBusName(bus));
+#if INCLUDE_CAN && !PROFILE_HAS_NATIVE_CAN
+        // An MCP2515 keeps its CS and the SPI bus: they are wiring (#658)
+        msg.control.println(F(" off"));
+#else
         msg.control.println(F(" off (its pins are free after a reboot)"));
+#endif
         printSaveReminder();
         return 0;
     }

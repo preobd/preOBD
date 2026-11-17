@@ -18,7 +18,7 @@
     #undef DEFAULT_SPI_CLOCK
 #endif
 #include <mcp2515.h>
-#include "../../config.h"  // CAN_CS_x, CAN_INT_x now defined in board profile via -include
+#include "../../config.h"  // CAN_CS_x, CAN_INT_x come from wiring.ini (#658)
 
 namespace hal { namespace can {
 

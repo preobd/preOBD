@@ -395,7 +395,7 @@ namespace hal { namespace can {
 Platform capabilities are detected at compile-time via `src/hal/platform_caps.h`:
 - `PLATFORM_CAN_CONTROLLER` - String identifier ("FlexCAN", "TWAI", "SPI", "bxCAN")
 - `PLATFORM_HAS_NATIVE_CAN` - Boolean flag (1 = integrated peripheral, 0 = external)
-- `PLATFORM_NEEDS_SPI_CAN` - Boolean flag (1 = requires SPI CAN pins in board.h)
+- `PLATFORM_NEEDS_SPI_CAN` - Boolean flag (1 = requires SPI CAN pins in wiring.ini)
 
 ### Relationship to Transport System
 

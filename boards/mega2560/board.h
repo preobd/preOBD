@@ -15,14 +15,11 @@
 #pragma once
 #define PREOBD_BOARD_DEFINED 1
 
-// ===== CAN CONTROLLER (MCP2515 via SPI — no native CAN on AVR) =====
+// ===== CAN CONTROLLER (none native on AVR) =====
+// An MCP2515 shield or module is WIRING, not a fact of this board: its
+// chip-select (CAN_CS_0, plus CAN_INT_0) goes in wiring.ini with the SPI bus it
+// sits on (SPI_WIRED_BUS=0). No CAN_CS_0, no CAN in the image (#658).
 #define PROFILE_HAS_NATIVE_CAN 0
-#define CAN_CS_0               9
-#define CAN_INT_0              2
-#define CAN_CS_1               0xFF   // disabled — single MCP2515 on Mega
-#define CAN_INT_1              0xFF
-#define CAN_CS                 CAN_CS_0   // legacy aliases used by HAL/system code
-#define CAN_INT                CAN_INT_0
 
 // ===== CEILINGS (board genuinely can't — RAM/flash; see docs/development/FEATURE_COSTS.md) =====
 #define PLATFORM_NO_SD_LOGGING 1     // SD lib + buffers blow the 8 KB budget (and SD.h isn't in lib_deps)
@@ -40,7 +37,7 @@
 // build, put `-D INCLUDE_<X>=0` in your gitignored wiring.ini instead.)
 // Savings shown are what commenting the line out reclaims on THIS board
 // (flash / static RAM, measured — docs/development/FEATURE_COSTS.md).
-#define SUPPORTS_CAN             1     // −11,568 B / −691 B — largest RAM consumer
+#define SUPPORTS_CAN             1     // −11,568 B / −691 B — largest RAM consumer (needs CAN_CS_0 wired)
 #define SUPPORTS_SERIAL_OUTPUT   1     //  −3,170 B /  −28 B
 #define SUPPORTS_LCD             1     //  −4,746 B / −236 B
 #define SUPPORTS_ALARMS          1     // −16,426 B / −455 B — gates the whole control engine on AVR

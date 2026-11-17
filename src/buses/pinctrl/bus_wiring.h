@@ -39,7 +39,7 @@
  * NUM_CAN_BUSES are defined in bus_defaults.h, which resolve.h cannot see (it
  * is included from board.h, long before bus_defaults.h exists in the
  * translation unit). A declared CAN_WIRED_BUS on a board with NUM_CAN_BUSES==0
- * (e.g. mega2560) is a compile error here, not a silent no-op.
+ * (the native test host) is a compile error here, not a silent no-op.
  */
 
 #ifndef BUS_WIRING_H

@@ -97,15 +97,33 @@ void initConfiguredBuses() {
         }
     }
 
-    // CAN: claim the pins of every bus that is on. The controller itself is
-    // started by the first consumer to attach (can_bus.cpp), so a bus nothing
-    // uses never ACKs on a car's network, but its pins are defended from boot.
+#if PROFILE_HAS_NATIVE_CAN
+    initConfiguredCANBuses();
+#endif
+    // An SPI CAN controller's bus is claimed by main.cpp after
+    // acquireRequiredBuses(), once the SPI bus it sits on is up (#658)
+}
+
+// CAN: claim the pins of every bus that is on. The controller itself is
+// started by the first consumer to attach (can_bus.cpp), so a bus nothing
+// uses never ACKs on a car's network, but its pins are defended from boot.
+void initConfiguredCANBuses() {
     for (uint8_t b = 0; b < NUM_CAN_BUSES && b < CAN_BUS_SLOTS; b++) {
         if (systemConfig.buses.can[b].mode != CAN_BUS_OFF && !initCANBus(b)) {
             msg.debug.warn(TAG_CAN, "%s did not start; no substitute chosen", getCANBusName(b));
         }
     }
 }
+
+#if INCLUDE_CAN && !PROFILE_HAS_NATIVE_CAN
+bool spiCanControllerHeld() {
+    // Settled at boot in practice: the CS claim is made once at boot, and the
+    // SPI bus never goes down while the board runs (BUS SPI NONE applies at
+    // reboot). A later acquireSPI() can only turn this from false to true.
+    // The MCP2515 library always talks on SPI, bus 0.
+    return builtinPinHeld(BPK_CAN_CS) && active_spi != nullptr && active_spi_id == 0;
+}
+#endif
 
 // ============================================================================
 // I2C BUS INITIALIZATION
@@ -365,11 +383,14 @@ bool initCANBus(uint8_t bus_id) {
         if (bus_id < 8) can_refused_mask |= (uint8_t)(1u << bus_id);
         return false;
     }
-#if !PROFILE_HAS_NATIVE_CAN && defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)
-    // An SPI controller's pin is its CS, claimed at boot by
-    // registerSystemPins(). Its driver is built, and first touches CS, only
-    // once this bus starts, so a refused CS stops it here (§12.5, #646).
-    if (bus_id == 0 && !builtinPinHeld(BPK_CAN_CS)) {
+#if INCLUDE_CAN && !PROFILE_HAS_NATIVE_CAN
+    // An SPI controller holds its CS (claimed at boot by registerSystemPins())
+    // and the SPI bus (voted for by its CS, brought up by acquireRequiredBuses()).
+    // Its driver is built, and first touches CS and starts SPI, only once this
+    // bus starts, so a refused CS or a bus that isn't up stops it here (§12.5,
+    // #646, #658). Both are fixed for the boot, so nothing claims pins later and
+    // no stored CAN setting needs to defend MOSI/MISO/SCK.
+    if (bus_id == 0 && !spiCanControllerHeld()) {
         can_refused_mask |= 1u;
         return false;
     }
@@ -927,6 +948,12 @@ FLASHMEM void displayCANStatus() {
         const CanBusSettings& cs = systemConfig.buses.can[b];
         const CanBusState st = canBusState(b);
         const uint8_t who = canBusConsumers(b);
+#if INCLUDE_CAN && !PROFILE_HAS_NATIVE_CAN
+        // The MCP2515's CS is held but the SPI bus it sits on isn't up (#658)
+        const bool noSpi = b == 0 && builtinPinHeld(BPK_CAN_CS) && !spiCanControllerHeld();
+#else
+        const bool noSpi = false;
+#endif
         msg.control.print(getCANBusName(b));
         if (cs.mode == CAN_BUS_OFF) msg.control.print(F(": OFF"));
         else msg.control.print(cs.mode == CAN_BUS_LISTEN ? F(": LISTEN @ ") : F(": NORMAL @ "));
@@ -934,6 +961,7 @@ FLASHMEM void displayCANStatus() {
             msg.control.print(canBaudFromIndex(cs.baudIndex) / 1000);
             msg.control.print(F("kbps, "));
             msg.control.print(st == CAN_STATE_UP ? F("up") : st == CAN_STATE_WAITING ? F("did not start")
+                              : noSpi ? F("no SPI bus")
                               : st == CAN_STATE_NO_PINS ? F("pins taken") : F("idle (nothing attached)"));
         }
         if (who & (1u << CANC_INPUT)) msg.control.print(F(", CAN input"));
@@ -942,8 +970,16 @@ FLASHMEM void displayCANStatus() {
         if (who & (1u << CANC_LAYOUT)) msg.control.print(F(", PREOBD output"));
 #endif
         msg.control.println();
-        if (st == CAN_STATE_NO_PINS || (cs.mode != CAN_BUS_OFF && !canBusClaimed(b))) {
-#if !PROFILE_HAS_NATIVE_CAN && defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)
+        if (noSpi) {
+            // Said whether or not CAN is on: the controller can't run on any
+            // setting until SPI is up. What holds SPI's pins is BUS SPI's to say.
+            bool once = false;
+            if (resolveWiredBusId(systemConfig.buses.active_spi, BUS_WIRED_SPI_ID) == 0xFF)
+                emitBusNote(once, BUS_NOTE_NONE, 4, "SPI");
+            else
+                emitBusNote(once, BUS_NOTE_UNAVAILABLE, 2, "SPI");
+        } else if (st == CAN_STATE_NO_PINS || (cs.mode != CAN_BUS_OFF && !canBusClaimed(b))) {
+#if INCLUDE_CAN && !PROFILE_HAS_NATIVE_CAN
             // SPI controller: TX/RX are 0xFF, the pin that can be taken is CS.
             // Named only when its claim failed: held, CS is ours, and the
             // registry's "CAN CS" must not read as what's in the way.

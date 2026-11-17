@@ -49,7 +49,7 @@ much (and several would overflow the 90 B RAM headroom — see notes).
 | Knob | ΔFlash | ΔStatic RAM | Note |
 |---|---|---|---|
 | **Currently on** | | | |
-| `SUPPORTS_CAN` | −11,568 B | **−691 B** | largest RAM consumer (MCP2515 + frame cache) |
+| `SUPPORTS_CAN` | −11,568 B | **−691 B** | largest RAM consumer (MCP2515 + frame cache); only in the image with `CAN_CS_0` wired (#658) |
 | `SUPPORTS_ALARMS` | −16,426 B | **−455 B** | **gates the whole control engine on AVR** (see below) |
 | `INCLUDE_LED` | −2,206 B | −318 B | RGB status indicator (wiring-derived†) |
 | `SUPPORTS_LCD` | −4,746 B | −236 B | I²C LCD |

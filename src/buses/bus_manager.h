@@ -41,6 +41,21 @@ class SPIClass;
 void initConfiguredBuses();
 
 /**
+ * Claim every CAN bus that is on (the controller starts on first attach).
+ * Called by initConfiguredBuses() on native CAN; on an SPI CAN board main.cpp
+ * calls it after acquireRequiredBuses(), once the SPI bus is up (#658).
+ */
+void initConfiguredCANBuses();
+
+#if INCLUDE_CAN && !PROFILE_HAS_NATIVE_CAN
+/**
+ * The MCP2515 is usable this boot: its CS claim held and SPI bus 0 is up
+ * (#658). Fixed for the boot in practice; initCANBus() and BUS CAN ENABLE ask it.
+ */
+bool spiCanControllerHeld();
+#endif
+
+/**
  * Initialize a specific I2C bus
  *
  * @param bus_id Bus number (0-2 for Wire/Wire1/Wire2)

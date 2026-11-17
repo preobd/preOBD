@@ -1,7 +1,7 @@
 /*
  * bus_needs.cpp - Which buses does the stored configuration need?
  *
- * Only the display's vote lives here; the per-sensor mapping is inline in
+ * The display's, SD card's and SPI CAN controller's votes live here; the per-sensor mapping is inline in
  * sensor_library/sensor_helpers.h (see bus_needs.h for why).
  */
 
@@ -17,4 +17,8 @@ uint8_t busNeedsForDisplayType(uint8_t displayType) {
 
 uint8_t busNeedsForSdPin(uint8_t sdPin) {
     return sdPin == 254 ? BUS_NEED_NONE : BUS_NEED_SPI;   // 254 = BUILTIN_SDCARD (SDIO)
+}
+
+uint8_t busNeedsForCanCs(uint8_t csPin) {
+    return csPin == 0xFF ? BUS_NEED_NONE : BUS_NEED_SPI;
 }

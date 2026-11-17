@@ -10,10 +10,11 @@
  *   - the display type — one more voter with no special status. The LCD is an
  *     add-on peripheral; it must not be the thing that decides whether the
  *     board's I2C bus exists.
- *   - an SD card on an external chip-select (#381). Unlike the other two this
- *     is WIRING (SD_PIN, compile time), not stored configuration, but it votes
- *     the same way: the card shares MOSI/MISO/SCK with every other SPI device,
- *     so the bus manager has to own them before the SD library starts clocking.
+ *   - an SD card on an external chip-select (#381), and an SPI CAN controller
+ *     (CAN_CS_0, #658). Unlike the other two these are WIRING (compile time),
+ *     not stored configuration, but they vote the same way: each shares
+ *     MOSI/MISO/SCK with every other SPI device, so the bus manager has to own
+ *     them before the SD or MCP2515 library starts clocking.
  *
  * The masks are OR-ed and handed to acquireRequiredBuses() in ONE pass before
  * any client initializes, so pin reservations are in place before the record
@@ -54,5 +55,14 @@ uint8_t busNeedsForDisplayType(uint8_t displayType);
  * SDIO on every board that has one and needs no bus.
  */
 uint8_t busNeedsForSdPin(uint8_t sdPin);
+
+/**
+ * An SPI CAN controller's vote, from its wiring.ini CAN_CS_0 (#658): an MCP2515
+ * is an SPI device like the SD card, and the library starts SPI itself, so the
+ * bus must be owned before it can. Unconditional on the CAN bus's mode: the
+ * controller is copper on the SPI pins whether or not CAN is in use, as the
+ * SD card is. 0xFF (no controller) needs nothing.
+ */
+uint8_t busNeedsForCanCs(uint8_t csPin);
 
 #endif // BUS_NEEDS_H

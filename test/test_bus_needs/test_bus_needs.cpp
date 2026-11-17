@@ -280,6 +280,15 @@ static void test_sd_votes_spi_only_on_an_external_cs(void) {
     TEST_ASSERT_EQUAL(BUS_NEED_NONE, busNeedsForSdPin(254));
 }
 
+// An MCP2515's library starts SPI by itself, so a wired CAN_CS_0 votes for the
+// bus like the SD card (#658), whatever the CAN bus's mode: the controller is
+// copper on the SPI pins either way. No controller (0xFF) needs nothing.
+static void test_spi_can_cs_votes_spi(void) {
+    TEST_ASSERT_EQUAL(BUS_NEED_SPI,  busNeedsForCanCs(9));
+    TEST_ASSERT_EQUAL(BUS_NEED_SPI,  busNeedsForCanCs(53));
+    TEST_ASSERT_EQUAL(BUS_NEED_NONE, busNeedsForCanCs(0xFF));
+}
+
 // ===========================================================================
 // 3. The boot pre-scan: the stored records are read BEFORE anything loads
 // ===========================================================================
@@ -712,6 +721,7 @@ int main(int, char**) {
     RUN_TEST(test_unknown_sensor_hash_needs_no_bus);
     RUN_TEST(test_display_is_one_more_voter);
     RUN_TEST(test_sd_votes_spi_only_on_an_external_cs);
+    RUN_TEST(test_spi_can_cs_votes_spi);
 
     RUN_TEST(test_stored_i2c_sensor_asks_for_the_i2c_bus);
     RUN_TEST(test_stored_thermocouple_asks_for_the_spi_bus);

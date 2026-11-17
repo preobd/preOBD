@@ -113,10 +113,10 @@ void flushSystemConfigBootDiagnostics() {
 #if INCLUDE_ALARMS && defined(BUZZER_PIN)
     replayBuiltinPinCollision(BPK_BUZZER, F("BUZZER_PIN"));
 #endif
-#if !PROFILE_HAS_NATIVE_CAN && defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)
+#if INCLUDE_CAN && !PROFILE_HAS_NATIVE_CAN && defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)
     replayBuiltinPinCollision(BPK_CAN_CS, F("CAN_CS_0"));
 #endif
-#if !PROFILE_HAS_NATIVE_CAN && defined(CAN_INT_0) && (CAN_INT_0 != 0xFF)
+#if INCLUDE_CAN && !PROFILE_HAS_NATIVE_CAN && defined(CAN_INT_0) && (CAN_INT_0 != 0xFF)
     replayBuiltinPinCollision(BPK_CAN_INT, F("CAN_INT_0"));
 #endif
 #if SUPPORTS_SD
@@ -461,7 +461,9 @@ FLASHMEM void registerSystemPins(uint8_t busNeeds) {
     #endif
 #endif
 
-#if !PROFILE_HAS_NATIVE_CAN
+#if INCLUDE_CAN && !PROFILE_HAS_NATIVE_CAN
+    // An MCP2515 is wiring (wiring.ini CAN_CS_0, #658): claimed only when its
+    // driver is in the image, like every other wired peripheral.
     #if defined(CAN_CS_0) && (CAN_CS_0 != 0xFF)
     { const uint8_t p = CAN_CS_0;
       if (claimPins(&p, 1, PIN_CS, PIN_RANK_BUILTIN, TAG_SYSTEM, "CAN CS")) {

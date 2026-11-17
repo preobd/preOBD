@@ -317,8 +317,8 @@
 // Only SPI on Mega
 
 // ----- CAN Default Pins -----
-// No native CAN: one MCP2515 on SPI (board.h CAN_CS_0 / CAN_INT_0, which
-// system_config reserves). It has no TX/RX pins of its own to claim (#524).
+// No native CAN: one MCP2515 on SPI (wiring.ini CAN_CS_0 / CAN_INT_0, which
+// system_config reserves, #658). It has no TX/RX pins of its own to claim (#524).
 #define DEFAULT_CAN1_TX 0xFF
 #define DEFAULT_CAN1_RX 0xFF
 

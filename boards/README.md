@@ -6,7 +6,7 @@ Each supported board owns one folder here. A folder is the *whole* board:
 boards/
   <board>/
     board.h              # board definition: SUPPORTS_* capabilities, CEILING
-                         #   vetoes, sizing, intrinsic pins (tracked)
+                         #   vetoes, sizing; no wired pins (tracked)
     board.ini            # the PlatformIO [env:<board>] fragment (tracked)
     wiring.ini.example   # template for your physical wiring (tracked)
     wiring.ini           # YOUR pins, as -D flags (gitignored)
@@ -86,7 +86,9 @@ A pin number is a fact about *your* physical unit, not about the chip — there'
 no correct default for `RGB_PIN_R` or `BUZZER_PIN`. So `board.h` never names a
 wired pin; you put yours in `wiring.ini` (copy `wiring.ini.example`). A fresh
 clone builds with wired peripherals **off** until you fill in the overlay — the
-firmware boots fine, just without LED/buzzer/button/SD until wired. This is what
+firmware boots fine, just without LED/buzzer/button/SD until wired. An MCP2515
+CAN shield or module is wired the same way (`CAN_CS_0`, `CAN_INT_0`): without
+its CS, SPI CAN isn't in the image (#658). This is what
 keeps personal wiring out of the repo (and stops bench edits colliding with it).
 
 `resolve.h` derivations are `#ifndef`-guarded, so an explicit override still wins
