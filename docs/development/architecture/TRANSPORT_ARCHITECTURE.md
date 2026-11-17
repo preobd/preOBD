@@ -324,6 +324,8 @@ The active source is the transport whose command is running; `msg.control` answe
 msg.control.println("SET RPM completed");   // to the sender of the command
 ```
 
+RealDash and ELM327 can also run on `BLE`, the nRF's data channel (the phone's `FFE1`): one at a time, sent as framed `0x31` (RealDash, dropped by the nRF when busy) or `0x30` (ELM327). See `outputs/formats/realdash_framed.h` and ARCHITECTURE §4.8.
+
 Sensor data goes through outputs, not `msg`: `OUTPUT ADD CSV USB`, `OUTPUT ADD REALDASH SERIAL5` and so on, one format per stream (ARCHITECTURE §14.4). A RealDash output needs its stream to itself, so it can't share USB with the console.
 
 ### For Application Code

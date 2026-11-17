@@ -28,6 +28,20 @@
 #if INCLUDE_FRAMED_TRANSPORT && INCLUDE_ELM327
 #include "../formats/elm327_framed.h"
 #endif
+#include "../formats/realdash_framed.h"   // RealDash on BLE (#612 2c); stubs when not built
+#if INCLUDE_FRAMED_TRANSPORT
+#include "../../transports/transport_mux.h"
+extern MuxTransport hwSerial1;   // the framed port (main.cpp), as the applink broadcasters
+#endif
+
+// BLE outputs (ELM327, RealDash) run only while the framed nRF link is up
+static bool bleLinkUp() {
+#if INCLUDE_FRAMED_TRANSPORT
+    return hwSerial1.isFramedEnabled();
+#else
+    return false;
+#endif
+}
 
 #ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
 #define FLASHMEM
@@ -91,7 +105,8 @@ static FLASHMEM bool startOutput(uint8_t id) {
 #if INCLUDE_ELM327
     case FMT_ELM327:
 #if INCLUDE_FRAMED_TRANSPORT
-        if (r->transport == OT_BLE) { Elm327Framed::start(id); break; }
+        // BLE outputs run only while the framed link is up (#612 2c)
+        if (r->transport == OT_BLE) { Elm327Framed::start(id); running = bleLinkUp(); break; }
 #endif
         initELM327(id);
         running = elm327BoundPort() != 0xFF;
@@ -104,11 +119,19 @@ static FLASHMEM bool startOutput(uint8_t id) {
         running = transportGet(r->transport) != nullptr;
         break;
     case FMT_REALDASH:
+        if (r->transport == OT_BLE) { RealdashFramed::start(); running = bleLinkUp(); break; }
         running = transportGet(r->transport) != nullptr;
         break;
     default: break;
     }
-    if (!running) return false;
+    if (!running) {
+        // Undo a start that didn't take, so nothing runs that isn't live
+        if (r->transport == OT_BLE && fmt == FMT_REALDASH) RealdashFramed::stop();
+#if INCLUDE_FRAMED_TRANSPORT && INCLUDE_ELM327
+        if (r->transport == OT_BLE && fmt == FMT_ELM327) Elm327Framed::stop();
+#endif
+        return false;
+    }
     liveFormat[id] = r->format;
     liveTransport[id] = r->transport;
     lastSend[id] = 0;
@@ -138,6 +161,9 @@ static FLASHMEM void stopOutput(uint8_t id) {
         if (t == OT_SD) closeSDLog();
         break;
 #endif
+    case FMT_REALDASH:
+        if (t == OT_BLE) RealdashFramed::stop();
+        break;
     default: break;
     }
     (void)t;
@@ -189,7 +215,9 @@ void sendToOutputs(uint32_t now) {
         lastSend[id] = now;
         // CSV stays quiet in CONFIG: it shares its stream with the console
         if (fmt == FMT_CSV && isInConfigMode()) continue;
-        Print* out = streamFor(r->transport);
+        // RealDash on BLE: a whole pass, or none while the last one is still
+        // leaving (realdash_framed.h)
+        Print* out = r->transport == OT_BLE ? RealdashFramed::beginPass() : streamFor(r->transport);
         if (!out) continue;
         const RouteMask bit = (RouteMask)(1u << id);
         for (uint8_t j = 0; j < MAX_INPUTS; j++) {
@@ -198,6 +226,7 @@ void sendToOutputs(uint32_t now) {
             if (fmt == FMT_CSV) sendCsvLine(&in, *out);
             else                sendRealdashFrame(&in, *out);
         }
+        if (r->transport == OT_BLE) RealdashFramed::tick();
     }
 }
 
@@ -213,6 +242,7 @@ void updateOutputs() {
 #if INCLUDE_SD_LOGGING
         case FMT_CSV: if (liveTransport[id] == OT_SD) updateSDLog(); break;
 #endif
+        case FMT_REALDASH: if (liveTransport[id] == OT_BLE) RealdashFramed::tick(); break;
         default: break;
         }
     }
@@ -401,5 +431,12 @@ FLASHMEM bool printOutputDetail(uint8_t id) {
     }
     if (n == 0) msg.control.print(F(" none"));
     msg.control.println();
+#if INCLUDE_FRAMED_TRANSPORT && INCLUDE_REALDASH
+    // Passes skipped because the phone wasn't keeping up (realdash_framed.h)
+    if (isLive(id) && liveFormat[id] == FMT_REALDASH && liveTransport[id] == OT_BLE) {
+        msg.control.print(F("  Passes skipped (link busy): "));
+        msg.control.println(RealdashFramed::skippedPasses());
+    }
+#endif
     return true;
 }

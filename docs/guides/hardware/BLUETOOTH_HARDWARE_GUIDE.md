@@ -38,7 +38,7 @@ This guide focuses on **UART Bluetooth modules** for platforms that don't have b
 
 ### Running the webapp and ELM327 emulator concurrently
 
-Each UART Bluetooth module consumes one hardware serial port, and a port assigned to the ELM327 emulator (`OUTPUT ADD ELM327 SERIAL<n>`) cannot simultaneously carry preOBD CONTROL/DATA/DEBUG traffic. This means **you cannot share a single BLE module between the preOBD webapp and an ELM327 scanner app** — the port is exclusive to one role.
+Each UART Bluetooth module consumes one hardware serial port, and a port assigned to the ELM327 emulator (`OUTPUT ADD ELM327 SERIAL<n>`) cannot also carry the console or the log. This means **you cannot share a single BLE module between the preOBD webapp and an ELM327 scanner app** — the port is exclusive to one role.
 
 To use both at the same time, wire two separate modules to two different UARTs:
 
@@ -50,6 +50,9 @@ To use both at the same time, wire two separate modules to two different UARTs:
 With the nRF52840 coprocessor on a framed port, one module carries both: the
 webapp and a phone OBD app connect to it at the same time, and the OBD app is
 an ELM327 output on `BLE` (on by default; `OUTPUT ADD ELM327 BLE` re-adds it).
+BLE carries one data output: instead of ELM327 it can carry RealDash
+(`OUTPUT ADD REALDASH BLE`, see the [RealDash guide](../outputs/REALDASH_SETUP_GUIDE.md)),
+one at a time.
 
 The webapp does not require a specific baud rate beyond what the BLE module is configured for; the ELM327 port's baud must match its module. See [DIRECT_BLE_OBD_GUIDE.md](../outputs/DIRECT_BLE_OBD_GUIDE.md) for ELM327 setup details.
 

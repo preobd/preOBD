@@ -209,6 +209,25 @@ void bleServicesInit() {
     uint8_t zeros[PREOBD_STATUS_SIZE] = {};
     g_status.write(zeros, sizeof(zeros));
 
+    // --- HM-10 FFE0/FFE1: the BLE data channel for phone apps ---
+    // ELM327 (framed 0x30) or RealDash (0x31), whichever output owns it.
+    // Single FFE1 characteristic (Write + Notify), the HM-10 clone convention
+    // that OBD apps expect. 16-bit UUIDs set via the global ctors above.
+    //
+    // ORDER MATTERS: FFE0 is registered BEFORE NUS so it has the lower GATT
+    // handles. RealDash (Android, Bluetooth LE) takes whichever of NUS and
+    // FFE0 it finds first in discovery; with NUS first it subscribed to NUS TX,
+    // which carries only CLI text, and timed out (#612 phase 2c phone bench,
+    // 2026-11-10). Neither service is in the advertising packet (FFE0 is in
+    // the scan response), so this order is the only thing that decides it.
+    g_hm10Service.begin();
+    g_hm10Char.setProperties(CHR_PROPS_WRITE | CHR_PROPS_WRITE_WO_RESP |
+                             CHR_PROPS_NOTIFY);
+    g_hm10Char.setPermission(SECMODE_OPEN, SECMODE_OPEN);
+    g_hm10Char.setMaxLen(244);
+    g_hm10Char.setWriteCallback(hm10WriteCallback);
+    g_hm10Char.begin();
+
     // --- NUS: generic BLE terminal channel (text CLI, framed type 0x01) ---
     // Self-contained service.begin() -> char.begin() block; Bluefruit attaches
     // each characteristic to the most-recently-begun service, so this must not
@@ -238,17 +257,6 @@ void bleServicesInit() {
     g_nusTx.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
     g_nusTx.setMaxLen(244);
     g_nusTx.begin();
-
-    // --- HM-10 FFE0/FFE1: ELM327 channel for phone OBD apps (framed 0x30) ---
-    // Single FFE1 characteristic (Write + Notify), the HM-10 clone convention
-    // that OBD apps expect. 16-bit UUIDs set via the global ctors above.
-    g_hm10Service.begin();
-    g_hm10Char.setProperties(CHR_PROPS_WRITE | CHR_PROPS_WRITE_WO_RESP |
-                             CHR_PROPS_NOTIFY);
-    g_hm10Char.setPermission(SECMODE_OPEN, SECMODE_OPEN);
-    g_hm10Char.setMaxLen(244);
-    g_hm10Char.setWriteCallback(hm10WriteCallback);
-    g_hm10Char.begin();
 }
 
 bool bleServicesNotifyText(const uint8_t* data, size_t len, uint8_t& doneMask) {

@@ -31,7 +31,9 @@ constexpr uint8_t  FRAME_TYPE_STATUS_EXT = 0x07;  // 8 B PreobdStatusExt, sent j
 constexpr uint8_t  FRAME_TYPE_CONN_EVT  = 0x10;
 constexpr uint8_t  FRAME_TYPE_OTA_DATA  = 0x20;
 constexpr uint8_t  FRAME_TYPE_OTA_ACK   = 0x21;
-constexpr uint8_t  FRAME_TYPE_ELM327    = 0x30;
+constexpr uint8_t  FRAME_TYPE_HM10      = 0x30;  // the phone's HM-10 FFE1 channel, both ways; reliable (ELM327)
+constexpr uint8_t  FRAME_TYPE_HM10_STREAM = 0x31;  // FFE1 notifies, Teensy -> nRF only; the nRF drops one when the
+                                                   // FFE1 stash is busy, never stalls the link (RealDash, #612 2c)
 constexpr uint8_t  FRAME_TYPE_PING      = 0xFF;
 
 // CRC8 Dallas/Maxim across `len` bytes. Pure helper.

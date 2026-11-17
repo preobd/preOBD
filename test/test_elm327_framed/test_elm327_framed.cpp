@@ -125,7 +125,7 @@ static void test_answers_with_its_own_route_id(void) {
 static void test_atz_returns_version(void) {
     feed("ATZ\r");
     TEST_ASSERT_TRUE(g_frameCnt >= 1);
-    TEST_ASSERT_EQUAL_HEX8(FRAME_TYPE_ELM327, g_lastType);
+    TEST_ASSERT_EQUAL_HEX8(FRAME_TYPE_HM10, g_lastType);
     TEST_ASSERT_TRUE(capContains("ELM327 v1.5"));
 }
 
@@ -236,7 +236,7 @@ static void test_poll_drains_backpressured_response(void) {
     g_sendOk = true;
     Elm327Framed::poll(g_out);           // no inbound traffic needed
     TEST_ASSERT_TRUE(g_frameCnt >= 1);
-    TEST_ASSERT_EQUAL_HEX8(FRAME_TYPE_ELM327, g_lastType);
+    TEST_ASSERT_EQUAL_HEX8(FRAME_TYPE_HM10, g_lastType);
     TEST_ASSERT_TRUE(capContains("ELM327 v1.5"));
 }
 

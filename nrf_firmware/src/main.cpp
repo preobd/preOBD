@@ -136,6 +136,18 @@ void setup() {
     // (1+latency)*max_interval*2 = 60ms here, so 6000ms is well clear.)
     Bluefruit.Periph.setConnSupervisionTimeoutMS(6000);
 
+#if DEBUG_SERIAL
+    // Connection log with the HCI disconnect reason (0x08 supervision timeout,
+    // 0x13 the central closed it, 0x16 we closed it): the first thing to read
+    // when a phone app can't connect or keeps dropping.
+    Bluefruit.Periph.setConnectCallback([](uint16_t h) {
+        Serial.printf("[BLE] connect h=%u ms=%lu\n", h, millis());
+    });
+    Bluefruit.Periph.setDisconnectCallback([](uint16_t h, uint8_t r) {
+        Serial.printf("[BLE] disconnect h=%u reason=0x%02X ms=%lu\n", h, r, millis());
+    });
+#endif
+
     bleBridgeInit();
     bleServicesInit();
     // Begin the Extended Service ONCE before its tenants register their

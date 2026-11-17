@@ -38,7 +38,20 @@ FLASHMEM const __FlashStringHelper* outputAdmitReason(uint8_t selfId, OutputForm
                                                      const SystemConfig& cfg, const OutputRecord* table) {
     if (!outputFormatBuilt(format)) return F("is not in this build");
     if (!outputTransportAllowed(format, transport)) return F("can't use that transport");
-    if (outputTransportKind(transport) != OTK_STREAM) return nullptr;   // CAN, SD, BLE: no stream to share
+    // BLE is the nRF's one data channel (the phone's FFE1): one enabled
+    // output on it, ELM327 or RealDash (#612 2c; a second channel is #620)
+#if INCLUDE_FRAMED_TRANSPORT   // BLE exists only with the nRF link
+    if (outputTransportKind(transport) == OTK_BLE) {
+        for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+            if (id == selfId) continue;
+            const OutputRecord& r = table[id];
+            if (r.format == FMT_NONE || !r.enabled || outputTransportKind(r.transport) != OTK_BLE) continue;
+            return F("can't share BLE with another enabled output (BLE carries one data output; OUTPUT LIST shows it)");
+        }
+        return nullptr;
+    }
+#endif
+    if (outputTransportKind(transport) != OTK_STREAM) return nullptr;   // CAN, SD: no stream to share
 
     if (framedPort(transport, cfg)) {
         return format == FMT_ELM327 ? F("can't use the framed nRF link's port; ELM327 over it is OUTPUT ADD ELM327 BLE")
@@ -60,7 +73,8 @@ FLASHMEM const __FlashStringHelper* outputAdmitReason(uint8_t selfId, OutputForm
 // a serial port, ELM327 on BLE. Other outputs take none.
 static bool singletonSlot(uint8_t format, uint8_t transport) {
     const OutputTransportKind kind = outputTransportKind(transport);
-    return format == FMT_OBD || format == FMT_ELM327 || (format == FMT_CSV && kind == OTK_SD);
+    return format == FMT_OBD || format == FMT_ELM327 || (format == FMT_CSV && kind == OTK_SD) ||
+           (format == FMT_REALDASH && kind == OTK_BLE);
 }
 
 static bool sameSlot(const OutputRecord& r, uint8_t format, uint8_t transport) {

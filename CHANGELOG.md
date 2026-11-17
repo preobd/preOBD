@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- RealDash can connect over Bluetooth LE through the nRF52840 link (`OUTPUT ADD REALDASH BLE`), instead of ELM327 over BLE; it needs the updated nRF firmware
+
 ### Fixed
 - Teensy 4.0/4.1 builds could fail to boot at all (no USB, the program button needed) depending on how the code happened to lay out; the Teensy core is now pinned at 1.60, which fixes its startup clock setup (#621)
 

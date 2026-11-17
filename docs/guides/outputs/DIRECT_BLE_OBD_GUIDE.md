@@ -70,15 +70,16 @@ OUTPUT ADD ELM327 SERIAL2      # the ELM327 emulator on Serial2 (exclusive), at 
 SAVE
 ```
 
-Verify the assignment:
+Verify it: `BUS SERIAL 2` shows `ENABLED @ 9600 baud`, and `OUTPUT LIST`
+shows `<id>: ELM327 on SERIAL2 - enabled`. The emulator answers only the inputs
+routed to its output (a new input is routed to every output; `INFO <pin> ROUTE`
+shows it).
 
-```
-BUS SERIAL 2
-```
-
-Expected output includes `ENABLED @ 9600 baud [ELM327]`, and `OUTPUT LIST`
-shows `4: ELM327 on SERIAL2`. The emulator answers only the inputs routed to
-its output (a new input is routed to every output; `INFO <pin> ROUTE` shows it).
+**With the nRF52840 coprocessor** (on a framed port) no HM-10 is needed: an
+ELM327 output on `BLE` is on by default, and phone OBD apps find the device as
+"preOBD-xxxx". BLE carries one data output, so if a RealDash output holds `BLE`
+(see the [RealDash guide](REALDASH_SETUP_GUIDE.md)), disable it and enable the
+ELM327 one: `OUTPUT LIST` shows both ids.
 
 To remove it later (the port stays enabled):
 
@@ -89,9 +90,9 @@ SAVE
 
 ### Port exclusivity
 
-A port assigned to ELM327 cannot simultaneously carry preOBD CONTROL/DATA/DEBUG
-traffic. If you need both the preOBD webapp (CONTROL/DATA traffic over BLE UART)
-and ELM327, use two separate serial ports — typically one BLE module (e.g. HM-10
+A port assigned to ELM327 cannot also carry the console or the log. If you need
+both the preOBD webapp (the console over a BLE UART) and ELM327 on HM-10-style
+modules, use two separate serial ports — typically one BLE module (e.g. HM-10
 on Serial1) for the webapp and a second module (e.g. HM-10 or HC-05 on Serial2)
 dedicated to ELM327 for the scanner app.
 

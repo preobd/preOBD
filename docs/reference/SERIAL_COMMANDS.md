@@ -549,7 +549,7 @@ OUTPUT LIST [JSON]                    # The outputs, their ids, and the built-in
 OUTPUT <id>                           # One output and the inputs routed to it (RUN ok)
 OUTPUT ADD <format> <transport> [INTERVAL <ms>] [LONG|WIDE]
 OUTPUT <id> ENABLE | DISABLE
-OUTPUT <id> INTERVAL <ms>             # RealDash 50-60000 ms, CSV 100-60000 ms (CSV on SD 1-60000 ms)
+OUTPUT <id> INTERVAL <ms>             # RealDash 50-60000 ms (on BLE 100-60000), CSV 100-60000 ms (CSV on SD 1-60000 ms)
 OUTPUT <id> TRANSPORT <transport>     # Move it to another transport of the same kind
 OUTPUT <id> CSV LONG | WIDE           # The CSV output on SD
 OUTPUT DEL <id>                       # Remove it, and every route to it
@@ -573,7 +573,7 @@ stream to `SD`) is `OUTPUT DEL` and `OUTPUT ADD`.
 | Format | Transports | Notes |
 |--------|------------|-------|
 | `CSV` | `USB`, `SERIAL1`–`SERIAL8`, `ESP32_BT`, or `SD` (a log file) | On a stream, it may share the console's transport; quiet in CONFIG mode |
-| `REALDASH` | `USB`, `SERIAL1`–`SERIAL8`, `ESP32_BT` | Binary frames: needs the stream to itself |
+| `REALDASH` | `USB`, `SERIAL1`–`SERIAL8`, `ESP32_BT`, or `BLE` | Binary frames: needs the stream to itself. On `BLE` (the nRF coprocessor) RealDash connects as a Bluetooth LE device; at 100 ms or slower, since the link also carries the app |
 | `OBD` | `CAN1`–`CAN3` | Answers OBD-II scan tools and gauges. The bus must be on and not `LISTEN` (`BUS CAN <bus> ENABLE`) |
 | `ELM327` | `SERIAL1`–`SERIAL8`, or `BLE` | An ELM327 emulator for phone OBD apps (Torque, OBD Fusion). On a serial port it needs the port to itself; `BLE` needs the nRF coprocessor on a framed port |
 
@@ -585,8 +585,15 @@ BLE, never a raw stream output. Disabled outputs may coexist; they are checked
 when enabled. Each refusal says what to move (`CONSOLE TRANSPORT`, `LOG
 TRANSPORT`, `OUTPUT <id> TRANSPORT`).
 
-There is one `OBD` output, one `CSV` on `SD`, one `ELM327` on a serial port and
-one on `BLE`; CSV and RealDash on streams can be several, one per stream.
+**BLE carries one data output.** ELM327 and RealDash on `BLE` share the
+phone's one BLE data channel, so only one of them is enabled at a time
+(`ERROR: REALDASH on BLE can't share BLE with another enabled output (BLE
+carries one data output; OUTPUT LIST shows it)`): disable one to enable the
+other.
+
+There is one `OBD` output, one `CSV` on `SD`, one `ELM327` on a serial port,
+one `ELM327` and one `REALDASH` on `BLE`; CSV and RealDash on streams can be
+several, one per stream.
 
 **Defaults** (a fresh unit, `SYSTEM RESET`): `ELM327` on `BLE`, enabled, when
 the build has the nRF link; `OBD` on the wired CAN bus (`CAN_WIRED_BUS`),

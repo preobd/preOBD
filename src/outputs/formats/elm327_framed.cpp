@@ -110,7 +110,7 @@ void drainOut(MuxTransport& out) {
     while (g_bridge.outPending() > 0) {
         size_t n = g_bridge.outPending();
         if (n > kMaxElmFramePayload) n = kMaxElmFramePayload;
-        if (!out.sendFrame(FRAME_TYPE_ELM327, g_bridge.outPtr(),
+        if (!out.sendFrame(FRAME_TYPE_HM10, g_bridge.outPtr(),
                            static_cast<uint16_t>(n))) {
             return;
         }

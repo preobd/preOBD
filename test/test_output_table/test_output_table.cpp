@@ -90,7 +90,7 @@ static void test_formats_take_their_kinds_of_transport(void) {
     TEST_ASSERT_TRUE(outputTransportAllowed(FMT_CSV, OT_USB));
     TEST_ASSERT_FALSE(outputTransportAllowed(FMT_CSV, OT_SD));       // no SD in this build
     TEST_ASSERT_TRUE(outputTransportAllowed(FMT_REALDASH, OT_USB));
-    TEST_ASSERT_FALSE(outputTransportAllowed(FMT_REALDASH, OT_BLE)); // 2c
+    TEST_ASSERT_TRUE(outputTransportAllowed(FMT_REALDASH, OT_BLE));  // the nRF data channel (2c)
     TEST_ASSERT_TRUE(outputTransportAllowed(FMT_ELM327, OT_BLE));
     TEST_ASSERT_FALSE(outputTransportAllowed(FMT_ELM327, OT_USB));   // USB is the console's
     TEST_ASSERT_FALSE(outputTransportAllowed(FMT_CSV, OT_SERIAL1));  // no serial ports here
@@ -103,6 +103,8 @@ static void test_formats_take_their_kinds_of_transport(void) {
 
 static void test_intervals_per_format(void) {
     TEST_ASSERT_EQUAL_UINT16(50, outputIntervalMin(FMT_REALDASH, OT_USB));
+    TEST_ASSERT_EQUAL_UINT16(100, outputIntervalMin(FMT_REALDASH, OT_BLE)); // shares the nRF link (2c)
+    TEST_ASSERT_FALSE(outputIntervalValid(FMT_REALDASH, OT_BLE, 99));
     TEST_ASSERT_EQUAL_UINT16(100, outputIntervalMin(FMT_CSV, OT_USB));
     TEST_ASSERT_EQUAL_UINT16(1, outputIntervalMin(FMT_CSV, OT_SD));   // the SD log buffers its rows
     TEST_ASSERT_TRUE(outputIntervalValid(FMT_CSV, OT_USB, 60000));
@@ -173,6 +175,24 @@ static void test_one_of_each_singleton(void) {
     TEST_ASSERT_NULL(outputAddLimitReason(FMT_CSV, OT_USB, outputRecords));
 }
 
+// BLE is one data channel (the phone's FFE1): one enabled output on it, both
+// directions; disabled ones coexist; one RealDash on BLE (#612 2c)
+static void test_ble_carries_one_data_output(void) {
+    const uint8_t elm = outputCreate(FMT_ELM327, OT_BLE, true);
+    TEST_ASSERT_NOT_NULL(outputAdmitReason(OUT_ID_NONE, FMT_REALDASH, OT_BLE, systemConfig, outputRecords));
+    TEST_ASSERT_NULL(outputAdmitReason(elm, FMT_ELM327, OT_BLE, systemConfig, outputRecords));   // itself
+    outputRecord(elm)->enabled = 0;
+    TEST_ASSERT_NULL(outputAdmitReason(OUT_ID_NONE, FMT_REALDASH, OT_BLE, systemConfig, outputRecords));
+    const uint8_t rd = outputCreate(FMT_REALDASH, OT_BLE, true);
+    TEST_ASSERT_NOT_EQUAL(OUT_ID_NONE, rd);
+    TEST_ASSERT_NOT_NULL(outputAdmitReason(elm, FMT_ELM327, OT_BLE, systemConfig, outputRecords)); // re-enable refused
+    TEST_ASSERT_NOT_NULL(outputAddLimitReason(FMT_REALDASH, OT_BLE, outputRecords));   // one RealDash on BLE
+    TEST_ASSERT_NULL(outputAddLimitReason(FMT_REALDASH, OT_USB, outputRecords));       // streams: several
+    // Not a stream: the console and the log don't count against it
+    systemConfig.console.primary = OT_USB;
+    TEST_ASSERT_NULL(outputAdmitReason(rd, FMT_REALDASH, OT_BLE, systemConfig, outputRecords));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_add_takes_the_lowest_free_id);
@@ -187,5 +207,6 @@ int main(int, char**) {
     RUN_TEST(test_csv_shares_with_the_console_realdash_does_not);
     RUN_TEST(test_who_holds_a_stream);
     RUN_TEST(test_one_of_each_singleton);
+    RUN_TEST(test_ble_carries_one_data_output);
     return UNITY_END();
 }

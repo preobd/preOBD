@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   preOBD RealDash CAN Channel Description
-  Version: 2.0 (#516)
+  Version: 2.1 (#516, #612)
+
+  UPGRADING FROM 2.0: re-import this file. In 2.0 RealDash ignored every
+  conversion formula (values showed raw, e.g. coolant 114 C too high) and the
+  custom preOBD signals had no usable input.
 
   This file describes how to decode preOBD sensor data transmitted via
   RealDash-CAN protocol (Type 44 frames).
@@ -11,7 +15,9 @@
   2. Open RealDash app
   3. Go to Settings > Connections > Add Connection
   4. Select "RealDash CAN" protocol
-  5. Select your connection method (Bluetooth/USB serial at 115200 baud)
+  5. Select your connection method: Bluetooth LE to "preOBD-xxxx" (the
+     nRF52840 link, OUTPUT ADD REALDASH BLE), or a Bluetooth module / USB
+     serial at 115200 baud
   6. For "Custom Channel Description File", import this XML file
   7. Save and connect!
 
@@ -37,8 +43,14 @@
   TARGET ID CROSSWALK:
   Standard RealDash target IDs (see https://www.realdash.net/manuals/targetid.php)
   are used where a semantic match exists, so stock RealDash gauges and dashboards
-  light up automatically. Custom (non-standard) preOBD signals use target IDs in
-  the 1000+ range; bind them to gauges manually via "Custom value".
+  light up automatically. Custom (non-standard) preOBD signals have a name and
+  no target ID, which RealDash lists under the "ECU Specific" input category;
+  pick them there when you set up a gauge.
+
+  PIDs NOT HERE: an input on a PID you picked yourself (SET <pin> OBD_PID,
+  e.g. 0x6F) keeps preOBD's legacy encoding and needs its own frame entry;
+  0x6F is turbo compressor inlet pressure in J1979, so preOBD doesn't use it
+  for boost (boost is 0x70).
 
   ENCODING: every conversion below is the PID's own formula - SAE J1979 for
   standard PIDs, preOBD's documented formula for 0xAA-0xB7. The full table
@@ -52,208 +64,152 @@
 
     <!-- Coolant Temperature (J1979 0x05: A-40) -->
     <frame id="0x0c80:5,2,1">
-      <value targetId="14" units="C" offset="3" length="1">
-        <conversion>V-40</conversion>
-      </value>
+      <value targetId="14" units="C" offset="3" length="1" conversion="V-40"></value>
     </frame>
 
     <!-- Engine Oil Temperature (J1979 0x5C: A-40) -->
     <frame id="0x0c80:92,2,1">
-      <value targetId="152" units="C" offset="3" length="1">
-        <conversion>V-40</conversion>
-      </value>
+      <value targetId="152" units="C" offset="3" length="1" conversion="V-40"></value>
     </frame>
 
     <!-- Ambient Air Temperature (J1979 0x46: A-40) -->
     <frame id="0x0c80:70,2,1">
-      <value targetId="173" units="C" offset="3" length="1">
-        <conversion>V-40</conversion>
-      </value>
+      <value targetId="173" units="C" offset="3" length="1" conversion="V-40"></value>
     </frame>
 
     <!-- Intake Air Temperature (J1979 0x0F: A-40) -->
     <frame id="0x0c80:15,2,1">
-      <value targetId="27" units="C" offset="3" length="1">
-        <conversion>V-40</conversion>
-      </value>
+      <value targetId="27" units="C" offset="3" length="1" conversion="V-40"></value>
     </frame>
 
     <!-- EGT (J1979 0x78, bank 1 sensor 1). The J1979 answer is 9 bytes; RealDash gets its first frame: A = support byte (offset 3), sensor 1 at offset 4-5, (256B+C)/10-40. RealDash EGT1 = 106. -->
     <frame id="0x0c80:120,2,1">
-      <value targetId="106" units="C" offset="4" length="2" endianness="big">
-        <conversion>V/10-40</conversion>
-      </value>
+      <value targetId="106" units="C" offset="4" length="2" endianess="big" conversion="V/10-40"></value>
     </frame>
 
     <!-- CHT - Cylinder Head Temperature (preOBD 0xAA: (256A+B)/10-40). No RealDash target: custom 1000 -->
     <frame id="0x0c80:170,2,1">
-      <value targetId="1000" name="CHT: Cylinder Head Temp" units="C" offset="3" length="2" endianness="big">
-        <conversion>V/10-40</conversion>
-      </value>
+      <value name="CHT: Cylinder Head Temp" units="C" offset="3" length="2" endianess="big" conversion="V/10-40"></value>
     </frame>
 
     <!-- Transfer Case Temperature (preOBD 0xAB) -->
     <frame id="0x0c80:171,2,1">
-      <value targetId="1003" name="Transfer Case Temp" units="C" offset="3" length="2" endianness="big">
-        <conversion>V/10-40</conversion>
-      </value>
+      <value name="Transfer Case Temp" units="C" offset="3" length="2" endianess="big" conversion="V/10-40"></value>
     </frame>
 
     <!-- Transmission Temperature (preOBD 0xAC). RealDash 138 Transmission Oil Temperature -->
     <frame id="0x0c80:172,2,1">
-      <value targetId="138" units="C" offset="3" length="2" endianness="big">
-        <conversion>V/10-40</conversion>
-      </value>
+      <value targetId="138" units="C" offset="3" length="2" endianess="big" conversion="V/10-40"></value>
     </frame>
 
     <!-- Differential Temperature (preOBD 0xAD) -->
     <frame id="0x0c80:173,2,1">
-      <value targetId="1004" name="Differential Temp" units="C" offset="3" length="2" endianness="big">
-        <conversion>V/10-40</conversion>
-      </value>
+      <value name="Differential Temp" units="C" offset="3" length="2" endianess="big" conversion="V/10-40"></value>
     </frame>
 
     <!-- Gear Oil Temperature (preOBD 0xAE) -->
     <frame id="0x0c80:174,2,1">
-      <value targetId="1005" name="Gear Oil Temp" units="C" offset="3" length="2" endianness="big">
-        <conversion>V/10-40</conversion>
-      </value>
+      <value name="Gear Oil Temp" units="C" offset="3" length="2" endianess="big" conversion="V/10-40"></value>
     </frame>
 
     <!-- Intercooler / Charge Air Temperature (preOBD 0xAF) -->
     <frame id="0x0c80:175,2,1">
-      <value targetId="1006" name="Intercooler Temp" units="C" offset="3" length="2" endianness="big">
-        <conversion>V/10-40</conversion>
-      </value>
+      <value name="Intercooler Temp" units="C" offset="3" length="2" endianess="big" conversion="V/10-40"></value>
     </frame>
 
     <!-- ===== PRESSURES ===== -->
 
     <!-- Boost (J1979 0x70, boost pressure sensor A, absolute: (256D+E)/32 kPa). The J1979 answer is 10 bytes; RealDash gets its first frame, sensor A at offset 6-7. preOBD adds barometric pressure (a BAROMETRIC_PRESSURE input, else 1.01325 bar) to the boost sensor's gauge reading; this converts back to gauge bar with standard baro, so with a baro input at altitude it reads low by (1.01325 - baro) bar. RealDash Boost = 83. -->
     <frame id="0x0c80:112,2,1">
-      <value targetId="83" units="bar" offset="6" length="2" endianness="big">
-        <conversion>V/3200-1.01325</conversion>
-      </value>
+      <value targetId="83" units="bar" offset="6" length="2" endianess="big" conversion="V/3200-1.01325"></value>
     </frame>
 
     <!-- Manifold Absolute Pressure (J1979 0x0B: A kPa) -->
     <frame id="0x0c80:11,2,1">
-      <value targetId="31" units="kPa" offset="3" length="1">
-        <conversion>V</conversion>
-      </value>
+      <value targetId="31" units="kPa" offset="3" length="1" conversion="V"></value>
     </frame>
 
     <!-- Barometric Pressure (J1979 0x33: A kPa) -->
     <frame id="0x0c80:51,2,1">
-      <value targetId="11" units="kPa" offset="3" length="1">
-        <conversion>V</conversion>
-      </value>
+      <value targetId="11" units="kPa" offset="3" length="1" conversion="V"></value>
     </frame>
 
     <!-- Fuel Pressure, gauge (J1979 0x0A: 3A kPa) -->
     <frame id="0x0c80:10,2,1">
-      <value targetId="202" units="kPa" offset="3" length="1">
-        <conversion>V*3</conversion>
-      </value>
+      <value targetId="202" units="kPa" offset="3" length="1" conversion="V*3"></value>
     </frame>
 
     <!-- Engine Oil Pressure, gauge (preOBD 0xB0: (256A+B)-100 kPa) -->
     <frame id="0x0c80:176,2,1">
-      <value targetId="151" units="kPa" offset="3" length="2" endianness="big">
-        <conversion>V-100</conversion>
-      </value>
+      <value targetId="151" units="kPa" offset="3" length="2" endianess="big" conversion="V-100"></value>
     </frame>
 
     <!-- Hydraulic Pressure (preOBD 0xB1) -->
     <frame id="0x0c80:177,2,1">
-      <value targetId="1007" name="Hydraulic Pressure" units="kPa" offset="3" length="2" endianness="big">
-        <conversion>V-100</conversion>
-      </value>
+      <value name="Hydraulic Pressure" units="kPa" offset="3" length="2" endianess="big" conversion="V-100"></value>
     </frame>
 
     <!-- Brake Pressure (preOBD 0xB2) -->
     <frame id="0x0c80:178,2,1">
-      <value targetId="1008" name="Brake Pressure" units="kPa" offset="3" length="2" endianness="big">
-        <conversion>V-100</conversion>
-      </value>
+      <value name="Brake Pressure" units="kPa" offset="3" length="2" endianess="big" conversion="V-100"></value>
     </frame>
 
     <!-- ===== VOLTAGES ===== -->
 
     <!-- Primary Battery Voltage (J1979 0x42 control module voltage: (256A+B)/1000) -->
     <frame id="0x0c80:66,2,1">
-      <value targetId="12" units="V" offset="3" length="2" endianness="big">
-        <conversion>V/1000</conversion>
-      </value>
+      <value targetId="12" units="V" offset="3" length="2" endianess="big" conversion="V/1000"></value>
     </frame>
 
     <!-- Auxiliary Battery Voltage (preOBD 0xB3: (256A+B)/1000). Custom 1001 -->
     <frame id="0x0c80:179,2,1">
-      <value targetId="1001" name="Auxiliary Battery" units="V" offset="3" length="2" endianness="big">
-        <conversion>V/1000</conversion>
-      </value>
+      <value name="Auxiliary Battery" units="V" offset="3" length="2" endianess="big" conversion="V/1000"></value>
     </frame>
 
     <!-- ===== ENGINE / DRIVETRAIN ===== -->
 
     <!-- Engine RPM (J1979 0x0C: (256A+B)/4) -->
     <frame id="0x0c80:12,2,1">
-      <value targetId="37" units="rpm" offset="3" length="2" endianness="big">
-        <conversion>V/4</conversion>
-      </value>
+      <value targetId="37" units="rpm" offset="3" length="2" endianess="big" conversion="V/4"></value>
     </frame>
 
     <!-- Vehicle Speed (J1979 0x0D: A km/h) -->
     <frame id="0x0c80:13,2,1">
-      <value targetId="64" units="kph" offset="3" length="1">
-        <conversion>V</conversion>
-      </value>
+      <value targetId="64" units="kph" offset="3" length="1" conversion="V"></value>
     </frame>
 
     <!-- Throttle Position (J1979 0x11: 100A/255) -->
     <frame id="0x0c80:17,2,1">
-      <value targetId="42" units="%" offset="3" length="1">
-        <conversion>V/2.55</conversion>
-      </value>
+      <value targetId="42" units="%" offset="3" length="1" conversion="V/2.55"></value>
     </frame>
 
     <!-- ===== LEVELS / DIGITAL ===== -->
 
     <!-- Fuel Tank Level (J1979 0x2F: 100A/255) -->
     <frame id="0x0c80:47,2,1">
-      <value targetId="170" units="%" offset="3" length="1">
-        <conversion>V/2.55</conversion>
-      </value>
+      <value targetId="170" units="%" offset="3" length="1" conversion="V/2.55"></value>
     </frame>
 
     <!-- Coolant Level (preOBD 0xB6): float switch, 255 = OK, 0 = low. Binary, not a percent: bind 1010 to a warning lamp -->
     <frame id="0x0c80:182,2,1">
-      <value targetId="1010" name="Coolant Level OK" units="" offset="3" length="1">
-        <conversion>V/255</conversion>
-      </value>
+      <value name="Coolant Level OK" units="" offset="3" length="1" conversion="V/255"></value>
     </frame>
 
     <!-- Engine Oil Level (preOBD 0xB7): float switch, as above -->
     <frame id="0x0c80:183,2,1">
-      <value targetId="1009" name="Oil Level OK" units="" offset="3" length="1">
-        <conversion>V/255</conversion>
-      </value>
+      <value name="Oil Level OK" units="" offset="3" length="1" conversion="V/255"></value>
     </frame>
 
     <!-- ===== ENVIRONMENT ===== -->
 
     <!-- Relative Humidity (preOBD 0xB4: 100A/255). Custom 1011 -->
     <frame id="0x0c80:180,2,1">
-      <value targetId="1011" name="Humidity" units="%" offset="3" length="1">
-        <conversion>V/2.55</conversion>
-      </value>
+      <value name="Humidity" units="%" offset="3" length="1" conversion="V/2.55"></value>
     </frame>
 
     <!-- Elevation / Altitude (preOBD 0xB5: (256A+B)-500 m). Custom 1002 -->
     <frame id="0x0c80:181,2,1">
-      <value targetId="1002" name="Elevation" units="m" offset="3" length="2" endianness="big">
-        <conversion>V-500</conversion>
-      </value>
+      <value name="Elevation" units="m" offset="3" length="2" endianess="big" conversion="V-500"></value>
     </frame>
 
   </frames>

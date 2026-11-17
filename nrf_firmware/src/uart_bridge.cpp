@@ -382,11 +382,11 @@ bool handleFrame(const Frame& f) {
         tierStateOnPingFrame();
         return true;
     case FRAME_TYPE_TEXT_RESP:
-    case FRAME_TYPE_ELM327: {
+    case FRAME_TYPE_HM10: {
         // Text responses (0x02) -> CMD_RX + NUS TX; ELM327 responses (0x30)
         // -> HM-10 FFE1. Same stash + back-pressure path, per-type stash.
         if (f.len > FRAME_MAX_PAYLOAD) return true;  // defensive; shouldn't happen
-        const bool isElm = (f.type == FRAME_TYPE_ELM327);
+        const bool isElm = (f.type == FRAME_TYPE_HM10);
         NotifyStash& s = isElm ? g_elmStash : g_textStash;
         const NotifyDest dest = isElm ? DEST_ELM : DEST_TEXT;
         if (!s.empty()) {
@@ -404,6 +404,21 @@ bool handleFrame(const Frame& f) {
         }
         stashPayload(s, dest, f.payload, f.len);
         drainStash(s, dest);  // best-effort; leftover drains on later polls
+        return true;
+    }
+    case FRAME_TYPE_HM10_STREAM: {
+        // Streamed FFE1 notifies (RealDash, #612 2c): same destination as
+        // 0x30, but never parked. A stream to a slow phone would otherwise
+        // fill the hold slot and stop every Serial1 read -- status, live
+        // values and alarms included. A stale frame is worthless; the host
+        // sends the next pass. Busy: drop at once -- even one more drain can
+        // block ~15-30 ms per notify on a central that has stopped reading,
+        // which would slow Serial1 reads just the same (the poll-top drain
+        // retries the stash anyway).
+        if (f.len > FRAME_MAX_PAYLOAD) return true;
+        if (!g_elmStash.empty()) return true;
+        stashPayload(g_elmStash, DEST_ELM, f.payload, f.len);
+        drainStash(g_elmStash, DEST_ELM);  // best-effort; leftover drains next poll
         return true;
     }
     case FRAME_TYPE_STATUS_EXT:
@@ -461,7 +476,7 @@ void flushPendingBuf(uint8_t* buf, size_t& len, uint8_t frameType) {
 // tier resolves, each in its own frame type.
 void flushPendingTx() {
     flushPendingBuf(g_pendingTx, g_pendingTxLen, FRAME_TYPE_TEXT_CMD);
-    flushPendingBuf(g_pendingElm, g_pendingElmLen, FRAME_TYPE_ELM327);
+    flushPendingBuf(g_pendingElm, g_pendingElmLen, FRAME_TYPE_HM10);
 }
 
 } // namespace
@@ -537,7 +552,7 @@ void uartBridgePoll() {
             // Promote the held frame once its destination stash has freed;
             // until then keep the read loop stopped so the RX ring fills and
             // Phase 3 flow control asserts RTS to the host.
-            const bool isElm = (g_holdType == FRAME_TYPE_ELM327);
+            const bool isElm = (g_holdType == FRAME_TYPE_HM10);
             NotifyStash& s = isElm ? g_elmStash : g_textStash;
             if (!s.empty()) {
                 drainTx();
@@ -646,7 +661,7 @@ size_t uartBridgeWriteElm(const uint8_t* data, size_t len) {
         return n;
     }
     if (tierStateIsFramed()) {
-        return enqueueAsFrames(FRAME_TYPE_ELM327, data, len);
+        return enqueueAsFrames(FRAME_TYPE_HM10, data, len);
     }
     return enqueueTx(data, len);
 }

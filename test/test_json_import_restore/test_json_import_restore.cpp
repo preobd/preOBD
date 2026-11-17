@@ -420,6 +420,21 @@ static void test_a_restore_onto_a_reset_unit_keeps_the_files_routes(void) {
     outputsClear();
 }
 
+// BLE carries one data output (#612 2c): a file with ELM327 and RealDash both
+// enabled on BLE imports the second one switched off
+static void test_ble_imports_one_enabled_data_output(void) {
+    outputsClear();
+    TEST_ASSERT_TRUE(loadConfigFromJSON(
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"outputs\":"
+        "[{\"id\":0,\"format\":\"ELM327\",\"transport\":\"BLE\",\"enabled\":true},"
+        "{\"id\":1,\"format\":\"REALDASH\",\"transport\":\"BLE\",\"enabled\":true,\"interval\":100}]}}"));
+    TEST_ASSERT_TRUE(outputIsEnabled(0));
+    TEST_ASSERT_TRUE(outputExists(1));
+    TEST_ASSERT_FALSE(outputIsEnabled(1));
+    TEST_ASSERT_EQUAL_UINT16(100, outputRecord(1)->interval);
+    outputsClear();
+}
+
 static void test_no_log_filter_key_leaves_the_live_filter_alone(void) {
     TEST_ASSERT_TRUE(loadConfigFromJSON("{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{}}"));
     TEST_ASSERT_EQUAL_INT(0, g_applyLogFilterCalls);
@@ -564,6 +579,7 @@ int main(int, char**) {
     RUN_TEST(test_the_outputs_array_replaces_the_table);
     RUN_TEST(test_a_second_one_per_kind_output_is_skipped_on_import);
     RUN_TEST(test_a_restore_onto_a_reset_unit_keeps_the_files_routes);
+    RUN_TEST(test_ble_imports_one_enabled_data_output);
     RUN_TEST(test_analog_pins_past_the_digital_range_exist);
     RUN_TEST(test_an_unreadable_pin_is_refused);
     return UNITY_END();

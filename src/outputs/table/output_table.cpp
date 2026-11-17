@@ -195,7 +195,8 @@ bool outputTransportAllowed(OutputFormat format, uint8_t t) {
         if (k == OTK_SD) return false;
 #endif
         return k == OTK_STREAM || k == OTK_SD;
-    case FMT_REALDASH: return k == OTK_STREAM;
+    // RealDash on a stream, or on BLE: the nRF's data channel (FFE1, #612 2c)
+    case FMT_REALDASH: return k == OTK_STREAM || k == OTK_BLE;
     case FMT_OBD:      return k == OTK_CAN;
     // ELM327 runs on a serial port or BLE (USB is the console's; ESP32 BT has
     // no ELM327 binding)
@@ -213,9 +214,11 @@ bool outputFormatPaced(OutputFormat format) {
 // carries, ~11.5 KB/s: a CSV line per input stalls the loop below ~100 ms;
 // RealDash's 16-byte frames for 20 inputs are 6.4 KB/s at 50 ms. The SD log
 // buffers its rows, and 1 ms rows are the #537 watchdog soak load
-// (tools/watchdog_bench.py), so 1 ms only costs card space.
+// (tools/watchdog_bench.py), so 1 ms only costs card space. RealDash on BLE
+// shares the 115200-baud nRF link with the app's status, live values and
+// alarms, so its floor is 100 ms (#612 2c).
 uint16_t outputIntervalMin(OutputFormat format, uint8_t transport) {
-    if (format == FMT_REALDASH) return 50;
+    if (format == FMT_REALDASH) return transport == OT_BLE ? 100 : 50;
     if (format == FMT_CSV) return transport == OT_SD ? 1 : 100;
     return 0;
 }

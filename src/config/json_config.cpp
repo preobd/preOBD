@@ -1537,11 +1537,16 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasIn
     }
     // Every enabled output in the staged table, against the staged config.
     // Also covers a file with no outputs array that moves a bus or a port
-    // from under an existing output.
+    // from under an existing output. In id order, each against the ones
+    // already admitted, so where two conflict the lower id stays on (as for
+    // one-per-kind outputs above)
+    OutputRecord admitted[MAX_OUTPUTS];
+    memcpy(admitted, stagedOut, sizeof(admitted));
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) admitted[id].enabled = 0;
     for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
         OutputRecord& r = stagedOut[id];
         if (r.format == FMT_NONE || !r.enabled) continue;
-        const __FlashStringHelper* why = outputAdmitReason(id, (OutputFormat)r.format, r.transport, staged, stagedOut);
+        const __FlashStringHelper* why = outputAdmitReason(id, (OutputFormat)r.format, r.transport, staged, admitted);
         const uint8_t port = outputTransportSerialPort(r.transport);
         if (!why && port != 0xFF && !(staged.serial.enabled_mask & (1u << (port - 1)))) why = F("needs its serial port enabled");
 #if INCLUDE_CAN
@@ -1550,7 +1555,7 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasIn
             why = F("needs its CAN bus on and not LISTEN");
         }
 #endif
-        if (!why) continue;
+        if (!why) { admitted[id].enabled = 1; continue; }
         r.enabled = 0;
         msg.control.print(F("NOTE: outputs: id "));
         msg.control.print(id);

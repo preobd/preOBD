@@ -513,6 +513,8 @@ const device = await navigator.bluetooth.requestDevice({
 
 After connecting, the webapp probes for the preOBD service (full mode), then NUS (basic terminal mode), then HM-10 FFE0/FFE1 (HM-10 terminal mode). HM-10 devices cannot implement custom GATT services and rely on their proprietary `0xFFE0`/`0xFFE1` characteristic pair.
 
+preOBD's own nRF52840 also exposes `FFE0`/`FFE1`, as its **BLE data channel** for phone apps (ARCHITECTURE §4.8). It carries one output at a time: the ELM327 emulator (the default; phone OBD apps) or RealDash frames (`OUTPUT ADD REALDASH BLE`; framed `0x31`, dropped by the nRF when the channel is busy). **The FFE0 service is registered before NUS** (`ble_services.cpp`), so it has the lower GATT handles: RealDash on Android takes whichever of NUS and FFE0 it finds first, and with NUS first it subscribed to NUS TX (CLI text only) and timed out (phone bench, 2026-11-10). Keep this order.
+
 ### Auto-Detection
 
 ```

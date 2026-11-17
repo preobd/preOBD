@@ -531,6 +531,19 @@ static FLASHMEM int bus_serial(int argc, const char* const* argv, int /*tokenInd
                 msg.control.print(port_id);
                 msg.control.println(F(" framed mode DISABLED"));
                 msg.control.println(F("Note: Takes effect on next reboot"));
+                // BLE outputs ride the framed link on Serial1: allowed (ELM327
+                // over BLE is on by default), but say what stops (#612 2c)
+                if (port_id == 1) {
+                    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+                        const OutputRecord& r = outputRecords[id];
+                        if (r.format == FMT_NONE || !r.enabled || r.transport != OT_BLE) continue;
+                        msg.control.print(F("NOTE: output "));
+                        msg.control.print(id);
+                        msg.control.print(F(" ("));
+                        printOutputLabel(id);
+                        msg.control.println(F(") stops running then: BLE needs the framed link"));
+                    }
+                }
                 printSaveReminder();
                 return 0;
             }

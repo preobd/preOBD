@@ -15,13 +15,19 @@ RealDash is a customizable digital dashboard application for iOS and Android tha
 
 To connect preOBD to RealDash, you need one of the following:
 
-### Option 1: Bluetooth Serial Adapter (Recommended)
+### Option 1: The nRF52840 Bluetooth link
+- **Hardware**: the nRF52840 coprocessor on Serial1 in framed mode (see the [Bluetooth hardware guide](../hardware/BLUETOOTH_HARDWARE_GUIDE.md)), the same link the preOBD app uses. Its firmware must be from this release or later: an older nRF ignores the RealDash frames, and RealDash shows no data
+- **Connection**: RealDash connects to "preOBD-xxxx" as a Bluetooth LE device
+- **Pros**: no extra module; the app keeps working alongside RealDash
+- **Cons**: the BLE data channel carries one output, so ELM327 over BLE (Torque and similar) is off while RealDash uses it
+
+### Option 2: Bluetooth Serial Adapter
 - **Hardware**: HC-05 or HM-10 Bluetooth module
 - **Connection**: Connect to preOBD serial TX/RX pins
 - **Pros**: Wireless, easy to use, works while driving
 - **Cons**: Requires additional hardware (~$5-10)
 
-### Option 2: USB Serial Connection
+### Option 3: USB Serial Connection
 - **Hardware**: USB-OTG cable + USB-to-serial adapter
 - **Connection**: Connect Teensy USB port directly to phone/tablet
 - **Pros**: No additional hardware needed, reliable connection
@@ -51,6 +57,20 @@ LOG TRANSPORT SERIAL1
 OUTPUT ADD REALDASH USB
 SAVE
 ```
+
+Over the **nRF52840 link** (Option 1), put the RealDash output on `BLE`. BLE
+carries one data output, and ELM327 over BLE is on by default, so turn it off
+first:
+
+```
+OUTPUT LIST                     # find the "ELM327 on BLE" output's id
+OUTPUT <id> DISABLE
+OUTPUT ADD REALDASH BLE         # default 100 ms; INTERVAL <ms> sets it (100 or more on BLE)
+SAVE
+```
+
+To give BLE back to an OBD app: `OUTPUT <realdash-id> DISABLE`, then
+`OUTPUT <elm327-id> ENABLE`.
 
 For a **Bluetooth module** (e.g. an HC-05 on Serial5), put the RealDash output
 on its port. RealDash frames are binary, so that port carries nothing else:
@@ -89,7 +109,14 @@ The XML file tells RealDash how to decode preOBD sensor data.
 3. Tap **Connections**
 4. Tap **Add Connection** (+ button)
 
-**For Bluetooth:**
+**For the nRF52840 link (Bluetooth LE):**
+5. Select **Bluetooth LE** as connection type
+6. Select **preOBD-xxxx** from the list (no pairing needed)
+7. Select **Protocol**: `RealDash CAN`
+8. Tap **Custom Channel Description File** and select `preOBD.xml`
+9. Tap **Done**
+
+**For a Bluetooth module:**
 5. Select **Bluetooth** as connection type
 6. Select your Bluetooth module from the list
    - HM-10 usually shows as "HM-10"
@@ -171,6 +198,7 @@ Repeat for all sensors you want to display.
    - Use Arduino Serial Monitor to verify data is being sent (you should see binary data at 115200 baud)
 
 2. **Connection issues**
+   - Bluetooth LE (nRF52840): after updating the nRF firmware, remove preOBD-xxxx in RealDash's connections and add it again. The phone can keep the old service list, and RealDash then connects to the wrong one and times out. The first connection after re-adding can take a little while. If it still times out, turn the phone's Bluetooth off and on
    - Bluetooth: Ensure module is paired and connected
    - USB: Check USB-OTG cable and adapter work
    - Try disconnecting and reconnecting

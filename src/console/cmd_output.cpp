@@ -79,7 +79,11 @@ static FLASHMEM void printTransportsFor(OutputFormat fmt) {
     msg.control.print(F("  It uses "));
     switch (fmt) {
     case FMT_CSV:      msg.control.println(F("USB, SERIAL1-8, ESP32_BT or SD")); break;
+#if INCLUDE_FRAMED_TRANSPORT
+    case FMT_REALDASH: msg.control.println(F("USB, SERIAL1-8, ESP32_BT or BLE")); break;
+#else
     case FMT_REALDASH: msg.control.println(F("USB, SERIAL1-8 or ESP32_BT")); break;
+#endif
     case FMT_OBD:      msg.control.println(F("CAN1-CAN3")); break;
     case FMT_ELM327:   msg.control.println(F("SERIAL1-8 or BLE")); break;
     default:           msg.control.println(F("nothing in this build")); break;

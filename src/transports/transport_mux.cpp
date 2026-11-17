@@ -218,10 +218,12 @@ void MuxTransport::handleFrame(const Frame& f) {
         // item 4).
         dispatchMuxFrameHandler(FRAME_TYPE_RELAY, f.payload, f.len);
         break;
-    case FRAME_TYPE_ELM327:
+    case FRAME_TYPE_HM10:
         // ELM327 client traffic (e.g. Torque over a concurrent BLE central):
         // run the AT/OBD parser and emit the response as 0x30 frame(s) on this
         // same transport. No-op stub when INCLUDE_ELM327 is off on this profile.
+        // This is also the gate while RealDash holds BLE (#612 2c): admission
+        // keeps ELM327-on-BLE stopped then, and handleInbound drops the bytes.
         Elm327Framed::handleInbound(f.payload, f.len, *this);
         break;
     default:
