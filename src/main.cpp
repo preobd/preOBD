@@ -504,7 +504,16 @@ void setup() {
     // e.g.) still runs this line -- handleInbound()/resync() are no-op
     // stubs in that case (see action_broadcaster.h), matching the
     // unconditional direct calls this replaces.
-    setMuxFrameHandler(FRAME_TYPE_RELAY, ActionBroadcaster::handleInbound);
+    // Action writes don't reply on the link they came in on (the confirmation
+    // goes out with the broadcaster's next tick), so the transport is unused.
+    setMuxFrameHandler(FRAME_TYPE_RELAY, [](const uint8_t* p, uint16_t n, MuxTransport&) {
+        ActionBroadcaster::handleInbound(p, n);
+    });
+    // ELM327 over BLE (#616): 0x30 requests are answered on the same link, and
+    // a reply that had to wait for a frame boundary goes out at the next one.
+    // Both are no-op stubs when INCLUDE_ELM327 is off.
+    setMuxFrameHandler(FRAME_TYPE_HM10, Elm327Framed::handleInbound);
+    setMuxFrameBoundaryHandler(Elm327Framed::poll);
     addMuxResyncHandler(ActionBroadcaster::resync);
     addMuxResyncHandler(LiveValueBroadcaster::resync);
     addMuxResyncHandler(AlarmBroadcaster::resync);   // held alarms for a late central (#430)

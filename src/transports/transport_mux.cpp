@@ -6,8 +6,6 @@
 
 #include <string.h>
 
-#include "../outputs/formats/elm327_framed.h"
-
 namespace {
 
 // Frame-handler table (#411 item 4) -- see transport_mux.h for the
@@ -25,10 +23,13 @@ uint8_t muxFrameHandlerCount = 0;
 MuxResyncHandler muxResyncHandlers[kMaxMuxResyncHandlers] = {};
 uint8_t muxResyncHandlerCount = 0;
 
-void dispatchMuxFrameHandler(uint8_t frameType, const uint8_t* payload, uint16_t len) {
+MuxFrameBoundaryHandler muxFrameBoundaryHandler = nullptr;
+
+void dispatchMuxFrameHandler(uint8_t frameType, const uint8_t* payload, uint16_t len,
+                             MuxTransport& from) {
     for (uint8_t i = 0; i < muxFrameHandlerCount; ++i) {
         if (muxFrameHandlers[i].frameType == frameType) {
-            if (muxFrameHandlers[i].handler) muxFrameHandlers[i].handler(payload, len);
+            if (muxFrameHandlers[i].handler) muxFrameHandlers[i].handler(payload, len, from);
             return;
         }
     }
@@ -59,6 +60,10 @@ bool addMuxResyncHandler(MuxResyncHandler handler) {
     if (muxResyncHandlerCount >= kMaxMuxResyncHandlers) return false;
     muxResyncHandlers[muxResyncHandlerCount++] = handler;
     return true;
+}
+
+void setMuxFrameBoundaryHandler(MuxFrameBoundaryHandler handler) {
+    muxFrameBoundaryHandler = handler;
 }
 
 void MuxTransport::setFramedEnabled(bool enabled) {
@@ -216,15 +221,16 @@ void MuxTransport::handleFrame(const Frame& f) {
         // nothing registers for FRAME_TYPE_RELAY, so this is a no-op --
         // same behaviour as the direct no-op-stub call it replaces (#411
         // item 4).
-        dispatchMuxFrameHandler(FRAME_TYPE_RELAY, f.payload, f.len);
+        dispatchMuxFrameHandler(FRAME_TYPE_RELAY, f.payload, f.len, *this);
         break;
     case FRAME_TYPE_HM10:
         // ELM327 client traffic (e.g. Torque over a concurrent BLE central):
-        // run the AT/OBD parser and emit the response as 0x30 frame(s) on this
-        // same transport. No-op stub when INCLUDE_ELM327 is off on this profile.
-        // This is also the gate while RealDash holds BLE (#612 2c): admission
-        // keeps ELM327-on-BLE stopped then, and handleInbound drops the bytes.
-        Elm327Framed::handleInbound(f.payload, f.len, *this);
+        // dispatched to whoever registered (main.cpp: Elm327Framed, which runs
+        // the AT/OBD parser and answers in 0x30 frame(s) on this transport;
+        // a no-op stub when INCLUDE_ELM327 is off). That handler is also the
+        // gate while RealDash holds BLE (#612 2c): admission keeps
+        // ELM327-on-BLE stopped then, and the bytes are dropped (#616).
+        dispatchMuxFrameHandler(FRAME_TYPE_HM10, f.payload, f.len, *this);
         break;
     default:
         // Status/Alarm/OTA/etc are MCU-originated; clients don't send them.
@@ -260,9 +266,10 @@ void MuxTransport::serviceFrameBoundary() {
         const size_t n = frameEncode(FRAME_TYPE_PING, nullptr, 0, pong);
         if (n > 0) writeSerialChunked(pong, n);
     }
-    // Emit any ELM327 response bytes a mid-frame pump had to queue, then
-    // parse whatever arrived while the last frame was being written.
-    Elm327Framed::poll(*this);
+    // Let a channel send a reply a mid-frame pump had to queue (ELM327,
+    // registered by main.cpp), then parse whatever arrived while the last
+    // frame was being written.
+    if (muxFrameBoundaryHandler) muxFrameBoundaryHandler(*this);
     pumpInbound();
 }
 

@@ -306,8 +306,6 @@ transports -> core          # was storage -> core (4; now from sd_manager.cpp):
                             #   core/transport_interface.h and core/watchdog.h
                             #   (message_router itself moved into core/ in #418).
                             # was inside core/ (2 site(s))
-transports -> outputs       # #612 -- the move split a folder; these sites are unchanged.
-                            # was inside comms/ (1 site(s))
 
 # ---------------------------------------------------------------------------
 # FORMATS -- ARCHITECTURE.md §14.10: outputs/formats/ may not include hal/ or

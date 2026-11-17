@@ -48,15 +48,17 @@
 // ---------------------------------------------------------------------------
 // Frame-handler registration (#411 item 4).
 //
-// A claimed inbound frame type (today: FRAME_TYPE_RELAY, the webapp's Action
-// write) is dispatched to a handler registered for that type. Keyed by
-// frame type rather than a single fixed slot so a second claimed type
-// doesn't require another parallel mechanism later; only one type registers
-// today. Fixed-size table, no dynamic allocation (embedded firmware) --
-// registering past kMaxMuxFrameHandlers is silently dropped, which is the
-// same "table exhausted" contract MAX_ACTIONS/MAX_INPUTS use elsewhere, and
-// headroom (4 slots for the one user today) makes that a non-issue.
-typedef void (*MuxFrameHandler)(const uint8_t* payload, uint16_t len);
+// A claimed inbound frame type (FRAME_TYPE_RELAY, the webapp's Action write;
+// FRAME_TYPE_HM10, ELM327 client traffic) is dispatched to a handler
+// registered for that type, with the transport it arrived on so a handler
+// can reply on it. Keyed by frame type rather than a single fixed slot so a
+// new claimed type needs no parallel mechanism. Fixed-size table, no dynamic
+// allocation (embedded firmware) -- registering past kMaxMuxFrameHandlers is
+// silently dropped, which is the same "table exhausted" contract
+// MAX_ACTIONS/MAX_INPUTS use elsewhere, and headroom (4 slots for two users)
+// makes that a non-issue.
+class MuxTransport;
+typedef void (*MuxFrameHandler)(const uint8_t* payload, uint16_t len, MuxTransport& from);
 // Largest encoded frame (payload + FRAME_HEADER_BYTES + CRC) that
 // sendFrame()/sendFramePair() can ever send. They refuse until the whole frame
 // fits in the UART's free TX space, and Teensy 3.6/4.x Serial1 has a 64-byte
@@ -88,6 +90,14 @@ constexpr uint8_t kMaxMuxResyncHandlers = 6;
  * that could invoke them). Returns false if every slot is already taken.
  */
 bool addMuxResyncHandler(MuxResyncHandler handler);
+
+// Called at every frame boundary (after the mux finishes writing a frame, and
+// from update()), before inbound bytes are pumped: the point where a channel
+// that had to queue its reply mid-frame can send it (today: ELM327, #263).
+// One slot; setting it again replaces the handler. Same ordering rule as the
+// tables above: register in setup() before the transport pumps (#616).
+typedef void (*MuxFrameBoundaryHandler)(MuxTransport& out);
+void setMuxFrameBoundaryHandler(MuxFrameBoundaryHandler handler);
 
 class MuxTransport : public TransportInterface {
 private:
