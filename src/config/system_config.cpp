@@ -559,10 +559,10 @@ FLASHMEM void registerSystemPins(uint8_t busNeeds) {
 #if BUS_WIRED_SPI_ID != 0xFF
     if ((busNeeds & BUS_NEED_SPI) &&
         wiredBusIsInEffect(systemConfig.buses.active_spi, BUS_WIRED_SPI_ID)) {
-        const uint8_t p[3] = { getDefaultSPIMOSI(BUS_WIRED_SPI_ID), getDefaultSPIMISO(BUS_WIRED_SPI_ID),
-                               getDefaultSPISCK(BUS_WIRED_SPI_ID) };
-        if (!claimPins(p, 3, PIN_RESERVED, PIN_RANK_BUILTIN, TAG_SYSTEM, getSPIBusName(BUS_WIRED_SPI_ID)))
-            reportBuiltinPinsCollision(F("SPI_WIRED_BUS"), BPK_SPI_WIRED, p, 3);
+        uint8_t p[4];
+        const uint8_t n = getSPIBusPins(BUS_WIRED_SPI_ID, p);   // + SS on AVR (#663)
+        if (!claimPins(p, n, PIN_RESERVED, PIN_RANK_BUILTIN, TAG_SYSTEM, getSPIBusName(BUS_WIRED_SPI_ID)))
+            reportBuiltinPinsCollision(F("SPI_WIRED_BUS"), BPK_SPI_WIRED, p, n);
     }
 #endif
     // CAN_WIRED_BUS is deliberately NOT reserved here: unlike I2C/SPI, CAN has

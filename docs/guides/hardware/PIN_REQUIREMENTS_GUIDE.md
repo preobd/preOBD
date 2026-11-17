@@ -324,6 +324,7 @@ Input 4: Pin A0, Application OIL_TEMP, Sensor VDO_150C_TABLE
 **Why this works:**
 - MAX6675/MAX31855 require **digital pins** for SPI chip-select
 - Each thermocouple needs its own unique CS pin
+- Not pin 53 on the Mega (10 on an Uno): that's SPI's SS pin, which the SPI bus holds, so a CS there is refused
 - Thermistors use **analog pins** separately
 
 ---

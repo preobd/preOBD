@@ -50,10 +50,9 @@ bool i2cBusPinsConflict(uint8_t bus_id) {
 bool spiBusPinsConflict(uint8_t bus_id) {
     if (bus_id >= NUM_SPI_BUSES) return false;   // caller reports the bad bus id
 
-    const uint8_t pins[3] = { getDefaultSPIMOSI(bus_id),
-                              getDefaultSPIMISO(bus_id),
-                              getDefaultSPISCK(bus_id) };
-    return pinsConflict(pins, 3, PIN_RANK_BUS, getSPIBusName(bus_id));
+    uint8_t pins[4];
+    const uint8_t n = getSPIBusPins(bus_id, pins);   // + SS on AVR (#663)
+    return pinsConflict(pins, n, PIN_RANK_BUS, getSPIBusName(bus_id));
 }
 
 #if NUM_CAN_BUSES > 0

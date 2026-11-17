@@ -260,15 +260,15 @@ bool initSPIBus(uint8_t bus_id, uint32_t clock_hz) {
     }
 
     // Get default pins for this bus
-    const uint8_t spi_pins[3] = { getDefaultSPIMOSI(bus_id),
-                                  getDefaultSPIMISO(bus_id),
-                                  getDefaultSPISCK(bus_id) };
+    // MOSI/MISO/SCK, plus SS on AVR: SPI.begin() drives it too (#663).
+    uint8_t spi_pins[4];
+    const uint8_t spi_n = getSPIBusPins(bus_id, spi_pins);
     // See initI2CBus()'s comment: one canonical source, shared with
     // registerSystemPins() and storedBusHoldsPin() (#379).
     const char* spi_desc = getSPIBusName(bus_id);
 
     // Same contract as I2C: claim the bus pins before SPI.begin() drives them.
-    if (!claimPins(spi_pins, 3, PIN_RESERVED, PIN_RANK_BUS, TAG_SPI, spi_desc)) {
+    if (!claimPins(spi_pins, spi_n, PIN_RESERVED, PIN_RANK_BUS, TAG_SPI, spi_desc)) {
         spi_refused_id = bus_id;
         return false;
     }
@@ -338,6 +338,10 @@ bool initSPIBus(uint8_t bus_id, uint32_t clock_hz) {
         // 3.0.0; scripts/stm32_core_workarounds.py says when this can go.
         SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
 #endif
+#if defined(__AVR__)
+        static_assert(DEFAULT_SPI0_SS == SS,
+                      "bus_defaults.h DEFAULT_SPI0_SS disagrees with this AVR's SS: SPI.begin() drives SS, so SPI must claim it (#663)");
+#endif
         SPI.begin();
         active_spi = &SPI;
         success = true;
@@ -348,7 +352,7 @@ bool initSPIBus(uint8_t bus_id, uint32_t clock_hz) {
         active_spi_id = bus_id;
         msg.debug.info(TAG_SPI, BUS_STARTED, spi_desc);
     } else {
-        releasePins(spi_pins, 3, spi_desc);
+        releasePins(spi_pins, spi_n, spi_desc);
     }
 
     return success;
@@ -637,7 +641,11 @@ FLASHMEM bool busConfigHoldsPin(const BusConfig& buses, uint8_t pin, const char*
     if (buses.active_spi != 0xFF && buses.active_spi < NUM_SPI_BUSES &&
         (!skipRefused || buses.active_spi != spi_refused_id)) {
         const uint8_t b = buses.active_spi;
-        if (pin == getDefaultSPIMOSI(b) || pin == getDefaultSPIMISO(b) || pin == getDefaultSPISCK(b)) {
+        uint8_t sp[4];
+        const uint8_t sn = getSPIBusPins(b, sp);
+        bool hit = false;
+        for (uint8_t i = 0; i < sn; i++) if (pin == sp[i]) hit = true;
+        if (hit) {
             const char* d = getSPIBusName(b);
             if (!excludeOwner || strcmp(d, excludeOwner) != 0) {
                 if (descOut) *descOut = d;
@@ -908,10 +916,10 @@ FLASHMEM void displaySPIStatus() {
     msg.control.println();
     msg.control.println(F("=== SPI Bus Configuration ==="));
     if (!active_spi && bus_id != 0xFF) {
-        const uint8_t pins[3] = { getDefaultSPIMOSI(bus_id), getDefaultSPIMISO(bus_id),
-                                  getDefaultSPISCK(bus_id) };
+        uint8_t pins[4];
+        const uint8_t n = getSPIBusPins(bus_id, pins);
         printBusNotStarted(BK_SPI, getSPIBusName(bus_id),
-                           systemConfig.buses.active_spi == 0xFF, pins, 3,
+                           systemConfig.buses.active_spi == 0xFF, pins, n,
                            spi_refused_id == bus_id);
     } else {
     msg.control.print(F("Active: "));
@@ -923,9 +931,17 @@ FLASHMEM void displaySPIStatus() {
         // a %f here would emit "?" on mega2560.
         // %u not %lu: the quotient fits an unsigned int for any real SPI clock,
         // and %lu drags AVR's long-printf support in for nothing.
+#if DEFAULT_SPI0_SS != 0xFF
+        // AVR: one SPI bus, and SS is one of its pins (#663).
+        snprintf_P(b, sizeof(b), PSTR("%s (MOSI=%u, MISO=%u, SCK=%u, SS=%u) @ %u.%uMHz"),
+                   getSPIBusName(bus_id), (unsigned)getDefaultSPIMOSI(bus_id),
+                   (unsigned)getDefaultSPIMISO(bus_id), (unsigned)getDefaultSPISCK(bus_id),
+                   (unsigned)DEFAULT_SPI0_SS,
+#else
         snprintf_P(b, sizeof(b), PSTR("%s (MOSI=%u, MISO=%u, SCK=%u) @ %u.%uMHz"),
                    getSPIBusName(bus_id), (unsigned)getDefaultSPIMOSI(bus_id),
                    (unsigned)getDefaultSPIMISO(bus_id), (unsigned)getDefaultSPISCK(bus_id),
+#endif
                    (unsigned)(systemConfig.buses.spi_clock / 1000000UL),
                    (unsigned)((systemConfig.buses.spi_clock / 100000UL) % 10UL));
         msg.control.println(b);

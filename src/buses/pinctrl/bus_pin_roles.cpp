@@ -20,6 +20,9 @@ ROLE_LABEL(L_I2C0_SDA, "I2C0 SDA");  ROLE_LABEL(L_I2C0_SCL, "I2C0 SCL");
 ROLE_LABEL(L_I2C1_SDA, "I2C1 SDA");  ROLE_LABEL(L_I2C1_SCL, "I2C1 SCL");
 ROLE_LABEL(L_I2C2_SDA, "I2C2 SDA");  ROLE_LABEL(L_I2C2_SCL, "I2C2 SCL");
 ROLE_LABEL(L_SPI0_MOSI, "SPI0 MOSI"); ROLE_LABEL(L_SPI0_MISO, "SPI0 MISO"); ROLE_LABEL(L_SPI0_SCK, "SPI0 SCK");
+#if DEFAULT_SPI0_SS != 0xFF
+ROLE_LABEL(L_SPI0_SS, "SPI0 SS");   // AVR: SPI.begin() drives it (#663)
+#endif
 ROLE_LABEL(L_SPI1_MOSI, "SPI1 MOSI"); ROLE_LABEL(L_SPI1_MISO, "SPI1 MISO"); ROLE_LABEL(L_SPI1_SCK, "SPI1 SCK");
 ROLE_LABEL(L_SPI2_MOSI, "SPI2 MOSI"); ROLE_LABEL(L_SPI2_MISO, "SPI2 MISO"); ROLE_LABEL(L_SPI2_SCK, "SPI2 SCK");
 ROLE_LABEL(L_CAN0_TX, "CAN0 TX");    ROLE_LABEL(L_CAN0_RX, "CAN0 RX");
@@ -49,6 +52,9 @@ const __FlashStringHelper* busPinRole(uint8_t pin) {
     if (pin == getDefaultSPIMOSI(0)) return asLabel(L_SPI0_MOSI);
     if (pin == getDefaultSPIMISO(0)) return asLabel(L_SPI0_MISO);
     if (pin == getDefaultSPISCK(0))  return asLabel(L_SPI0_SCK);
+#if DEFAULT_SPI0_SS != 0xFF
+    if (pin == DEFAULT_SPI0_SS)      return asLabel(L_SPI0_SS);
+#endif
     if (pin == getDefaultSPIMOSI(1)) return asLabel(L_SPI1_MOSI);
     if (pin == getDefaultSPIMISO(1)) return asLabel(L_SPI1_MISO);
     if (pin == getDefaultSPISCK(1))  return asLabel(L_SPI1_SCK);

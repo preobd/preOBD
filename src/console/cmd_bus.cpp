@@ -202,6 +202,10 @@ static FLASHMEM int bus_spi(int argc, const char* const* argv, int /*tokenIndex*
     msg.control.print(getDefaultSPIMISO(bus_id));
     msg.control.print(F(", SCK="));
     msg.control.print(getDefaultSPISCK(bus_id));
+#if DEFAULT_SPI0_SS != 0xFF
+    msg.control.print(F(", SS="));            // AVR: SPI holds SS too (#663)
+    msg.control.print(DEFAULT_SPI0_SS);
+#endif
     msg.control.println(F(")"));
     msg.control.println(F("Note: Takes effect on next reboot"));
     printSaveReminder();

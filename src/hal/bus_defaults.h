@@ -314,6 +314,10 @@
 #define DEFAULT_SPI0_MOSI 51
 #define DEFAULT_SPI0_MISO 50
 #define DEFAULT_SPI0_SCK  52
+// SS: the AVR core's SPI.begin() makes it an OUTPUT and drives it HIGH (in
+// master mode a low SS input would flip the hardware to slave), so it is one
+// of the bus's pins and SPI claims it with the other three. Not a CS (#663).
+#define DEFAULT_SPI0_SS   53
 // Only SPI on Mega
 
 // ----- CAN Default Pins -----
@@ -353,6 +357,7 @@
 #define DEFAULT_SPI0_MOSI 11
 #define DEFAULT_SPI0_MISO 12
 #define DEFAULT_SPI0_SCK  13
+#define DEFAULT_SPI0_SS   10   // driven by SPI.begin(), see the Mega's note (#663)
 
 // ----- Serial Port Default Pins -----
 // No additional hardware serial on ATmega328P (Serial0 is USB)
@@ -524,6 +529,60 @@ inline uint8_t getDefaultSPISCK(uint8_t bus_id) {
 #endif
         default: return 0xFF;
     }
+}
+
+// A pin the core's SPI.begin() drives besides MOSI/MISO/SCK: AVR's SS. Every
+// other core leaves its CS pins alone, so 0xFF (none) there (#663).
+#ifndef DEFAULT_SPI0_SS
+#define DEFAULT_SPI0_SS 0xFF
+#else
+// SS belongs to the SPI bus, so no wired pin may sit on it: a chip-select
+// (guides often put one on 53 on a Mega) or any other built-in, which would
+// win the pin at boot and leave SPI, CAN and SD down. Say so at build time.
+// Numeric pins only: a pin written as a name (A0, SS) reads as 0 here and
+// slips past to the boot claim, which still refuses it.
+#  if defined(CAN_CS_0) && CAN_CS_0 == DEFAULT_SPI0_SS
+#    error "CAN_CS_0 is on SPI's SS pin (53 on the Mega), which the SPI bus drives and claims (#663): wire it to another pin."
+#  endif
+#  if defined(CAN_INT_0) && CAN_INT_0 == DEFAULT_SPI0_SS
+#    error "CAN_INT_0 is on SPI's SS pin (53 on the Mega), which the SPI bus drives and claims (#663): wire it to another pin."
+#  endif
+#  if defined(SD_PIN) && SD_PIN == DEFAULT_SPI0_SS
+#    error "SD_PIN is on SPI's SS pin (53 on the Mega), which the SPI bus drives and claims (#663): wire it to another pin."
+#  endif
+#  if defined(BUZZER_PIN) && BUZZER_PIN == DEFAULT_SPI0_SS
+#    error "BUZZER_PIN is on SPI's SS pin (53 on the Mega), which the SPI bus drives and claims (#663): wire it to another pin."
+#  endif
+#  if defined(USER_BUTTON_PIN) && USER_BUTTON_PIN == DEFAULT_SPI0_SS
+#    error "USER_BUTTON_PIN is on SPI's SS pin (53 on the Mega), which the SPI bus drives and claims (#663): wire it to another pin."
+#  endif
+#  if defined(TEST_MODE_PIN) && TEST_MODE_PIN == DEFAULT_SPI0_SS
+#    error "TEST_MODE_PIN is on SPI's SS pin (53 on the Mega), which the SPI bus drives and claims (#663): wire it to another pin."
+#  endif
+#  if (defined(RGB_PIN_R) && RGB_PIN_R == DEFAULT_SPI0_SS) || (defined(RGB_PIN_G) && RGB_PIN_G == DEFAULT_SPI0_SS) || (defined(RGB_PIN_B) && RGB_PIN_B == DEFAULT_SPI0_SS)
+#    error "An RGB_PIN_* is on SPI's SS pin (53 on the Mega), which the SPI bus drives and claims (#663): wire it to another pin."
+#  endif
+#  if (defined(HOST_NRF_RTS_PIN) && HOST_NRF_RTS_PIN == DEFAULT_SPI0_SS) || (defined(HOST_NRF_CTS_PIN) && HOST_NRF_CTS_PIN == DEFAULT_SPI0_SS)
+#    error "A HOST_NRF_* pin is on SPI's SS pin (53 on the Mega), which the SPI bus drives and claims (#663): wire it to another pin."
+#  endif
+#endif
+
+/**
+ * Every pin an SPI bus drives, which is every pin it claims: MOSI, MISO, SCK,
+ * and on AVR SS. The one list for the claim, the pre-check, the boot
+ * reservation and the status lines, so none of them can forget SS.
+ * @return the count written to pins (3 or 4); 0 for a bus this board lacks
+ */
+inline uint8_t getSPIBusPins(uint8_t bus_id, uint8_t pins[4]) {
+    pins[0] = getDefaultSPIMOSI(bus_id);
+    pins[1] = getDefaultSPIMISO(bus_id);
+    pins[2] = getDefaultSPISCK(bus_id);
+    if (pins[0] == 0xFF) return 0;
+    if (bus_id == 0 && DEFAULT_SPI0_SS != 0xFF) {
+        pins[3] = DEFAULT_SPI0_SS;
+        return 4;
+    }
+    return 3;
 }
 
 /**

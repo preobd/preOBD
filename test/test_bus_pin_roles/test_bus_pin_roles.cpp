@@ -46,6 +46,17 @@ static void test_known_spi_pin_returns_role(void) {
     TEST_ASSERT_EQUAL_STRING("SPI0 SCK", asStr(role));
 }
 
+static void test_spi_bus_pins_without_ss(void) {
+    // Off AVR the core never drives a CS, so the bus is its three data pins.
+    uint8_t p[4] = { 0, 0, 0, 0xAA };
+    TEST_ASSERT_EQUAL_UINT8(3, getSPIBusPins(0, p));
+    TEST_ASSERT_EQUAL_UINT8(DEFAULT_SPI0_MOSI, p[0]);
+    TEST_ASSERT_EQUAL_UINT8(DEFAULT_SPI0_MISO, p[1]);
+    TEST_ASSERT_EQUAL_UINT8(DEFAULT_SPI0_SCK,  p[2]);
+    TEST_ASSERT_EQUAL_UINT8(0xAA, p[3]);
+    TEST_ASSERT_EQUAL_UINT8(0, getSPIBusPins(7, p));   // no such bus
+}
+
 static void test_unrelated_pin_returns_null(void) {
     // Not any of this platform's I2C0/SPI0 default pins.
     TEST_ASSERT_NULL(busPinRole(5));
@@ -61,6 +72,7 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_known_i2c_pin_returns_role);
     RUN_TEST(test_known_spi_pin_returns_role);
+    RUN_TEST(test_spi_bus_pins_without_ss);
     RUN_TEST(test_unrelated_pin_returns_null);
     RUN_TEST(test_out_of_range_pin_returns_null);
     return UNITY_END();
