@@ -24,7 +24,7 @@ preOBD can import sensors from the CAN bus and use them alongside local analog/d
 > (to `0x7E0` for an ECU answering on `0x7E8`), so it can read the ECU with
 > nothing else on the bus. It waits for each answer (up to 50 ms; an ECU's
 > "not supported" reply counts as the answer), asks for each PID at most 20
-> times a second (the rate preOBD reads its inputs), and when
+> times a second by default (`BUS CAN POLL` slows that), and when
 > nothing answers ten requests in a row (ignition off, no ECU) it slows to one
 > request per second until something does. With `LISTEN`, preOBD never
 > transmits: an imported PID updates only when a *response* for it appears on
@@ -97,6 +97,79 @@ Import PIDs 0x0C, 0x0D, 0x05          Broadcast all sensors
 
 ---
 
+## Car network and gauge network
+
+preOBD works on two kinds of CAN network, and **each CAN bus does one job**:
+reading the car, or answering your gauges. Never both.
+
+| | Car network | Gauge network |
+|---|---|---|
+| What is on it | The car's ECU and its other modules | Your dash, RealDash, a phone's OBD-II app, a scan tool |
+| What preOBD does | CAN input reads it | The OBD output answers on it |
+| Bus mode | `ENABLE` (normal): preOBD asks the ECU for each imported value, for ECUs that only answer when asked. `LISTEN`: preOBD never transmits, for ECUs that broadcast on their own (Haltech, Link, ...) | `ENABLE`: the OBD output transmits, so a `LISTEN` bus is refused |
+
+```bash
+BUS CAN CAN1 ENABLE                # car network
+BUS CAN CAN1 INPUT ENABLE
+BUS CAN CAN3 ENABLE                # gauge network, a bus of its own
+OUTPUT ADD OBD CAN3
+```
+
+**Why one job per bus.** The OBD output replies on `0x7E8`, the same ID the
+engine ECU uses. On the car's own network a scan tool or app would get two
+answers to one request, and the two can collide on the wire. So preOBD
+refuses it:
+
+- `OUTPUT ADD`, `OUTPUT <id> ENABLE` or `OUTPUT <id> TRANSPORT` that would put
+  the OBD output on the bus CAN input reads is refused:
+  `ERROR: OBD on CAN1 can't share CAN input's bus (one job per bus): ...`.
+- `BUS CAN <bus> INPUT ENABLE` on a bus the OBD output uses is refused:
+  `ERROR: output 0 (OBD) uses CAN1 (one job per bus): OUTPUT 0 DISABLE first`.
+  CAN input stays where it was.
+- **When in doubt, preOBD reads.** A saved configuration (or a `LOAD`) that
+  has both on one bus keeps CAN input and does not start the OBD output:
+  `NOTE: output 0 not started: ...`. It stays enabled but not running
+  (`OUTPUT LIST` says so). Move it to another bus (`OUTPUT 0 TRANSPORT`), or
+  move or switch off CAN input, and it starts. A `JSON IMPORT` that has both imports the OBD output switched off.
+- **Boards with one CAN bus** (ESP32-S3, Feather STM32F405, Mega) do one job:
+  read the car with CAN input, or answer gauges with the OBD output. To show
+  readings on a phone or dash while CAN input reads the car, use the ELM327
+  output (serial or Bluetooth) or RealDash instead of the OBD output.
+
+### Poll rate
+
+On an `ENABLE` bus, CAN input asks the ECU for each imported PID once per
+polling round. `BUS CAN POLL <ms>` sets the least time between the starts of
+two rounds, 50 to 1000 ms (default 50, so each PID is asked for up to 20 times
+a second). A slower rate leaves room on the car's plug for a scan tool.
+
+```bash
+BUS CAN POLL 200                   # ask the ECU at most every 200 ms
+```
+
+It applies at once and `SAVE` keeps it. Within a round nothing changes: the
+next request goes out 10 ms after an answer, or after the 50 ms timeout, and a
+dead bus still backs off to one request per second. With many imported PIDs a
+round already takes longer than the setting, so only a short table notices it.
+`BUS CAN` shows the current rate, and `BUS CAN JSON` has it as `input.pollMs`
+(range in `caps.pollMs`). It is stored whether or not CAN input is on; on a
+`LISTEN` bus there is no polling to pace.
+
+### Which buses are free on each board
+
+| Board | CAN buses | Note |
+|---|---|---|
+| Teensy 4.1 | 3 | CAN2 is pins 0/1, which is Serial1: with the nRF link use CAN1 (22/23) and CAN3 (30/31) |
+| Teensy 4.0 | 3 | The same; CAN3 is the pair of pads on the underside, 30/31 |
+| Teensy 3.6 | 2 | CAN1 on 3/4, CAN2 on 33/34 |
+| ESP32-S3, Feather STM32F405, Arduino Mega | 1 | One job: CAN input or the OBD output |
+
+`BUS CAN JSON` reports `pinsFree` for each bus: whether its pins are free to
+bring it up, the same check `BUS CAN <bus> ENABLE` makes. On a Teensy 4 with
+the nRF link, CAN2 shows `pinsFree: false`.
+
+---
+
 ## Configuration Commands
 
 ### Enable CAN Input
@@ -118,6 +191,9 @@ OUTPUT ADD OBD CAN2
 
 # Stop CAN input (the OBD output keeps its bus)
 BUS CAN CAN1 INPUT DISABLE
+
+# How often CAN input asks the ECU, 50-1000 ms (default 50)
+BUS CAN POLL 200
 
 # Show each bus: mode, rate, state, and what is attached
 BUS CAN

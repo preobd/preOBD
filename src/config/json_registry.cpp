@@ -262,7 +262,7 @@ FLASHMEM void writeOutputsJson(Print& out) {
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
     for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
-        if (outputExists(id)) outputToJson(arr.add<JsonObject>(), id);
+        if (outputExists(id)) outputToJson(arr.add<JsonObject>(), id, true);
     }
     WatchdogKickingPrint wdOut(out);
     serializeJson(doc, wdOut);

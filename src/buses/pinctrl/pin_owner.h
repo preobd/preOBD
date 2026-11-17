@@ -154,6 +154,9 @@ void flushPinOwnerBootDiagnostics();
  */
 bool pinsConflict(const uint8_t* pins, uint8_t count, uint8_t rank, const char* owner);
 
+/** The same question asked silently: true when nothing holds these pins (#633). */
+bool pinsFree(const uint8_t* pins, uint8_t count, uint8_t rank, const char* owner);
+
 /**
  * Conflict check + all-or-nothing reservation, for a claimant about to start.
  *

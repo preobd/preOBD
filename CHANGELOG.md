@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- The rate at which CAN input asks the ECU is a setting (`BUS CAN POLL`, 50-1000 ms), so a scan tool on the same plug gets room
 - RealDash can connect over Bluetooth LE through the nRF52840 link (`OUTPUT ADD REALDASH BLE`), instead of ELM327 over BLE; it needs the updated nRF firmware
 
 ### Fixed
@@ -16,11 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Teensy 4.0/4.1 builds could fail to boot at all (no USB, the program button needed) depending on how the code happened to lay out; the Teensy core is now pinned at 1.60, which fixes its startup clock setup (#621)
 
 ### Changed
+- Each CAN bus does one job: the OBD output can't share the bus CAN input reads (the car's network). If yours did, the OBD output stays off after this update until you give it its own bus; on a board with one CAN bus (ESP32-S3, Feather F405, Mega), use the ELM327 output or RealDash for your gauges instead
 - The serial console no longer has command history, cursor editing or command-name completion (`VERS` no longer runs `VERSION`) and `<COMMAND> -h` is gone (use `HELP <category>`); it now behaves the same on every board and link
 - The mode button is now the user button: rename `MODE_BUTTON_PIN` to `USER_BUTTON_PIN` in your `wiring.ini` (the build stops with a message until you do), and `SYSTEM PINS` lists it as "User Button"
 - Outputs have ids, and inputs are routed to them: `OUTPUT LIST`, `OUTPUT ADD|DEL`, `OUTPUT <id> ENABLE|DISABLE|INTERVAL`, `SET <pin> ROUTE` and `ALARM ENABLE|DISABLE` replace `OUTPUT <name> …`, `OUTPUT STATUS`, `LIST OUTPUTS`, `SET <pin> OUTPUT` and `OUTPUT Alarm`, and the JSON `outputs` is now an array
 - Each CAN bus has one set of settings and changes apply without a reboot: `BUS CAN <bus> ENABLE|LISTEN|DISABLE|BAUDRATE` and `BUS CAN <bus> INPUT` replace `BUS CAN INPUT|OUTPUT|BAUDRATE|NONE`, OBD and ELM327 bind with `OUTPUT ADD OBD CAN<n>` / `OUTPUT ADD ELM327 SERIAL<n>` (replacing `BUS SERIAL <n> ELM327`), and ELM327 over Bluetooth is output 5 with its own routes — upgrading resets saved settings and inputs, so take a `SYSTEM DUMP JSON` first, re-import it, and run `SET <pin> ROUTE 5 ENABLE` for inputs a phone OBD app should see
 - Each output has its own transport, so RealDash and CSV no longer share one stream: `OUTPUT ADD <format> <transport>` adds as many as you like (ids are assigned), `OUTPUT <id> TRANSPORT` moves one, one that would mix formats on a stream is refused with the reason, and `CONSOLE TRANSPORT`/`CONSOLE STATUS`, `LOG TRANSPORT` and `LOG LEVEL CONSOLE|DEBUG` replace `TRANSPORT` and `LOG LEVEL CONTROL|DATA` — upgrading resets saved settings and inputs again, so restore them from a `SYSTEM DUMP JSON`
+- After upgrading and restoring your settings from a `SYSTEM DUMP JSON` taken first, turn the nRF Bluetooth link back on with `BUS SERIAL 1 FRAMED ENABLE` and `SAVE`: an import doesn't change that port
 
 ## [0.16.0-beta] - 2026-11-04
 

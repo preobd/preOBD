@@ -74,6 +74,7 @@ struct BusConfig {
     // CAN: one set of settings per bus, and what attaches to each (§14.7)
     CanBusSettings can[CAN_BUS_SLOTS];
     uint8_t canInputBus;        // the bus CAN input reads: 0..2, 0xFF = CAN input off
+    uint16_t canPollMs;         // BUS CAN POLL: least time between CAN input polling rounds (can_poll.h)
     // (The OBD output's bus and the ELM327 output's port are their output
     // records' transports, output_table.h.)
 };

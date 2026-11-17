@@ -91,6 +91,11 @@ FLASHMEM CanAttach canAttach(uint8_t bus, CanConsumer c) {
     const uint8_t mode = settingMode(bus);
     if (mode == CAN_BUS_OFF) return CAN_ATTACH_BUS_OFF;
     if (c == CANC_OBD && mode == CAN_BUS_LISTEN) return CAN_ATTACH_LISTEN_ONLY;
+    // One job per bus (#632), a guard behind output admission: OBD never joins
+    // CAN input. One-sided on purpose: CAN input is never refused, so where the
+    // two meet (a LOAD re-attaches input before it stops the old OBD) reading
+    // the car wins.
+    if (c == CANC_OBD && (rt[bus].consumers & (1u << CANC_INPUT))) return CAN_ATTACH_INPUT_BUS;
     rt[bus].consumers |= (uint8_t)(1u << c);
     if (rt[bus].state == CAN_STATE_UP) return CAN_ATTACH_OK;   // never re-begun
     return startBus(bus);

@@ -6,7 +6,8 @@
 //
 // What it supplies:
 //   - a null msg sink (messageSink returns nullptr), so every msg.control/msg.debug print is a
-//     no-op instead of a link error;
+//     no-op instead of a link error; a test may point g_testControlSink at a
+//     capturing transport to check what the console was told;
 //   - a test-settable isPinAvailable() (g_pinReserved[]) — the lever the
 //     "reserved by a bus" refusal hangs off;
 //   - a matching pinsConflict() stub (pin_owner.h): input_manager.cpp routes
@@ -22,7 +23,10 @@
 MessageAPI msg;
 SystemConfig systemConfig;
 LogFilter::LogFilter() {}
-TransportInterface* messageSink(MessagePlane, bool) { return nullptr; }
+TransportInterface* g_testControlSink = nullptr;
+TransportInterface* messageSink(MessagePlane plane, bool secondary) {
+    return (plane == PLANE_CONTROL && !secondary) ? g_testControlSink : nullptr;
+}
 // JSON IMPORT applies an imported logFilter to the live filter (#561); system_config.cpp
 // is not in these binaries, so count the calls instead.
 int g_applyLogFilterCalls = 0;
@@ -30,6 +34,8 @@ void applyLogFilterConfig() { g_applyLogFilterCalls++; }
 // ...and the live outputs (#610); output_manager.cpp is not in them either.
 int g_syncOutputsCalls = 0;
 void syncOutputsToConfig() { g_syncOutputsCalls++; }
+// OUTPUT LIST JSON's "running" (#632); nothing runs in these binaries
+bool outputLiveById(uint8_t) { return false; }
 size_t MessageStream::error(const char*, const char*, ...) { return 0; }
 size_t MessageStream::warn(const char*, const char*, ...) { return 0; }
 size_t MessageStream::info(const char*, const char*, ...) { return 0; }

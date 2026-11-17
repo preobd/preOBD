@@ -51,4 +51,9 @@ uint8_t outputOnStream(uint8_t transport, bool anyOutput, const OutputRecord* ta
 uint8_t outputSingletonHolder(uint8_t selfId, OutputFormat format, uint8_t transport,
                               const OutputRecord* table);
 
+// One job per CAN bus (#632): is `transport` the CAN bus CAN input reads?
+// (false for a non-CAN transport or with CAN input off). outputAdmitReason
+// refuses an output there; separate so the rule is testable without CAN.
+bool outputOnCanInputBus(uint8_t transport, const SystemConfig& cfg);
+
 #endif // OUTPUT_ADMISSION_H

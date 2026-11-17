@@ -143,7 +143,10 @@ static void printDiag(uint8_t pin, const char* a, const char* b, uint8_t kind) {
 
 // Buffer while the console has no transport yet, print immediately once it does
 // (or once boot has already flushed) — see pin_owner.h.
+static bool quietProbe = false;   // pinsFree(): ask without saying why
+
 static void reportDiag(uint8_t pin, const char* a, const char* b, uint8_t kind) {
+    if (quietProbe) return;
     if (bootDiagBuffering) bufferDiag(pin, a, b, kind);
     else printDiag(pin, a, b, kind);
 }
@@ -245,6 +248,13 @@ bool pinsConflict(const uint8_t* pins, uint8_t count, uint8_t rank, const char* 
         return true;
     }
     return false;
+}
+
+bool pinsFree(const uint8_t* pins, uint8_t count, uint8_t rank, const char* owner) {
+    quietProbe = true;
+    const bool conflict = pinsConflict(pins, count, rank, owner);
+    quietProbe = false;
+    return !conflict;
 }
 
 static bool lastClaimRegistryFull = false;

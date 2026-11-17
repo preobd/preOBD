@@ -227,8 +227,29 @@ static void test_an_image_of_another_layout_is_rejected(void) {
     resetSystemConfig();
 }
 
+// #633: the CAN poll rate defaults to 50 ms, and a stored value outside
+// 50-1000 (a corrupt block that still passes the checksum) loads as the default
+static void test_can_poll_rate_defaults_and_a_bad_stored_value_is_corrected(void) {
+    resetSystemConfig();   // its own starting point, whatever ran before
+    TEST_ASSERT_EQUAL_UINT16(CAN_POLL_MS_DEFAULT, systemConfig.buses.canPollMs);
+
+    systemConfig.buses.canPollMs = 250;
+    saveSystemConfig(false);
+    TEST_ASSERT_TRUE(loadSystemConfig());
+    TEST_ASSERT_EQUAL_UINT16(250, systemConfig.buses.canPollMs);
+
+    const uint16_t bad[] = {0, 49, 1001, 0xFFFF};
+    for (uint16_t v : bad) {
+        systemConfig.buses.canPollMs = v;
+        saveSystemConfig(false);
+        TEST_ASSERT_TRUE(loadSystemConfig());
+        TEST_ASSERT_EQUAL_UINT16_MESSAGE(CAN_POLL_MS_DEFAULT, systemConfig.buses.canPollMs, "bad value kept");
+    }
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_can_poll_rate_defaults_and_a_bad_stored_value_is_corrected);
     RUN_TEST(test_an_image_of_another_layout_is_rejected);
     RUN_TEST(test_checksum_of_all_zero_config_is_the_layout_tag);
     RUN_TEST(test_checksum_matches_independent_xor_of_defaults);

@@ -81,10 +81,10 @@ static void test_bus_can_json(void) {
     memset(&s, 0, sizeof(s));
     s.buses = 2; s.maxScanResults = 32;
     // CAN1 NORMAL 500k, up, CAN input and OBD on it; CAN2 LISTEN 250k, idle (#612)
-    s.bus[0] = {1, 500000, 2, true, true};
-    s.bus[1] = {2, 250000, 1, false, false};
-    s.bus[2] = {1, 1000000, 2, true, false};   // past s.buses: not written
-    s.inBus = 0; s.inRunning = true;
+    s.bus[0] = {1, 500000, 2, true, true, true};
+    s.bus[1] = {2, 250000, 1, false, false, false};   // pins used by another function (#633)
+    s.bus[2] = {1, 1000000, 2, true, false, true};   // past s.buses: not written
+    s.inBus = 0; s.inRunning = true; s.pollMs = 200;
     s.framesRx = 81234; s.haveFrame = true; s.lastFrameAgeMs = 12;
     s.pollActive = true; s.missStreak = 0; s.requests = 5120; s.answers = 5101;
 
@@ -99,6 +99,8 @@ static void test_bus_can_json(void) {
     TEST_ASSERT_EQUAL_UINT32(1000000, doc["caps"]["baudrates"][3]);
     TEST_ASSERT_TRUE(doc["caps"]["listenShared"].isNull());   // gone with the per-bus model
     TEST_ASSERT_EQUAL_UINT16(60000, doc["caps"]["scanMs"][1]);
+    TEST_ASSERT_EQUAL_UINT16(50, doc["caps"]["pollMs"][0]);     // BUS CAN POLL's range (#633)
+    TEST_ASSERT_EQUAL_UINT16(1000, doc["caps"]["pollMs"][1]);
 
     TEST_ASSERT_EQUAL_UINT32(2, doc["buses"].size());
     TEST_ASSERT_EQUAL_UINT8(0, doc["buses"][0]["bus"]);
@@ -110,9 +112,12 @@ static void test_bus_can_json(void) {
     TEST_ASSERT_EQUAL_STRING("LISTEN", doc["buses"][1]["mode"]);
     TEST_ASSERT_EQUAL_STRING("idle", doc["buses"][1]["state"]);
     TEST_ASSERT_FALSE(doc["buses"][1]["obd"]);
+    TEST_ASSERT_TRUE(doc["buses"][0]["pinsFree"]);
+    TEST_ASSERT_FALSE(doc["buses"][1]["pinsFree"]);
 
     TEST_ASSERT_EQUAL_UINT8(0, doc["input"]["bus"]);
     TEST_ASSERT_TRUE(doc["input"]["running"]);
+    TEST_ASSERT_EQUAL_UINT16(200, doc["input"]["pollMs"]);
     TEST_ASSERT_TRUE(doc["input"]["mode"].isNull());          // the bus's, in buses[]
     TEST_ASSERT_TRUE(doc["input"]["rebootPending"].isNull()); // changes apply at once
     TEST_ASSERT_EQUAL_UINT32(12, doc["input"]["lastFrameAgeMs"]);

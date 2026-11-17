@@ -20,6 +20,7 @@
 #include "../buses/pinctrl/pin_registry.h"
 #include "../buses/pinctrl/pin_owner.h"
 #include "../outputs/formats/output_format.h"  // SdLogFormat
+#include "../sensors/can/can_poll.h"   // canPollMsValid, CAN_POLL_MS_DEFAULT (#633)
 #include "eeprom_store.h"
 #include "../transports/sd_manager.h"   // SD_CS_OWNER: initSD() looks the claim up by this name (#594)
 
@@ -264,6 +265,7 @@ void resetSystemConfig(uint8_t keep) {
         systemConfig.buses.can[b].baudIndex = CAN_BAUD_500K;
     }
     systemConfig.buses.canInputBus = 0xFF;
+    systemConfig.buses.canPollMs = CAN_POLL_MS_DEFAULT;
 #if BUS_WIRED_CAN_ID != 0xFF
     systemConfig.buses.can[BUS_WIRED_CAN_ID].mode = CAN_BUS_NORMAL;
 #endif
@@ -584,6 +586,10 @@ bool loadSystemConfig() {
     // export all see the address that is actually used.
     if (!isValidLcdI2CAddress(systemConfig.lcdI2CAddress)) {
         systemConfig.lcdI2CAddress = LCD_I2C_ADDRESS_DEFAULT;
+    }
+    // Same for the CAN poll rate: a corrupt value would stall or flood the poller
+    if (!canPollMsValid(systemConfig.buses.canPollMs)) {
+        systemConfig.buses.canPollMs = CAN_POLL_MS_DEFAULT;
     }
     return true;
 }

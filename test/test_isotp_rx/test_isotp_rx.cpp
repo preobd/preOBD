@@ -15,6 +15,7 @@ void setUp(void) {}
 void tearDown(void) {}
 
 static const uint16_t ECU = 0x7E8;
+static const uint16_t POLL_MS = CAN_POLL_MS_DEFAULT;
 
 // 0x78 EGT: 41 78 + A..I = 11 bytes. Sensor 1 = 0x0FA0 -> 360.0 degC
 static const uint8_t EGT_FF[8] = {0x10, 0x0B, 0x41, 0x78, 0x01, 0x0F, 0xA0, 0x00};
@@ -142,13 +143,13 @@ static void test_first_frame_restarts(void) {
 // counted from the request, and its last frame answers it
 static void test_poll_held_open_by_progress(void) {
     CanPollState p;
-    canPollReset(p, 0);
+    canPollReset(p, 0, POLL_MS);
     canPollOnSent(p, ECU, 0x78, true, 100);
     TEST_ASSERT_FALSE(canPollOnProgress(p, 0x7E9, 0x78, 140));         // another ECU
     TEST_ASSERT_FALSE(canPollOnProgress(p, ECU, 0x70, 140));           // another tester's reply
     TEST_ASSERT_TRUE(p.pending);
     TEST_ASSERT_TRUE(canPollOnProgress(p, ECU, 0x78, 140));            // First Frame
-    TEST_ASSERT_FALSE(canPollReady(p, 100 + CAN_POLL_RESPONSE_TIMEOUT_MS + 5));
+    TEST_ASSERT_FALSE(canPollReady(p, 100 + CAN_POLL_RESPONSE_TIMEOUT_MS + 5, POLL_MS));
     TEST_ASSERT_TRUE(p.pending);                                        // not a miss
     TEST_ASSERT_TRUE(canPollOnResponse(p, ECU, 0x78, 160));            // reassembled reply
     TEST_ASSERT_FALSE(p.pending);
@@ -160,10 +161,10 @@ static void test_poll_held_open_by_progress(void) {
 // A reply that stalls still times out, counted from its last frame
 static void test_poll_stalled_reply_times_out(void) {
     CanPollState p;
-    canPollReset(p, 0);
+    canPollReset(p, 0, POLL_MS);
     canPollOnSent(p, ECU, 0x7F, true, 100);
     canPollOnProgress(p, ECU, 0x7F, 120);
-    canPollReady(p, 120 + CAN_POLL_RESPONSE_TIMEOUT_MS);
+    canPollReady(p, 120 + CAN_POLL_RESPONSE_TIMEOUT_MS, POLL_MS);
     TEST_ASSERT_FALSE(p.pending);
     TEST_ASSERT_EQUAL_UINT8(1, p.missStreak);
 }

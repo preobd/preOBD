@@ -68,6 +68,12 @@ bool canBusPinsConflict(uint8_t bus_id) {
     const uint8_t pins[2] = { getDefaultCANTX(bus_id), getDefaultCANRX(bus_id) };
     return pinsConflict(pins, 2, PIN_RANK_BUS, getCANBusName(bus_id));
 }
+
+bool canBusPinsFree(uint8_t bus_id) {
+    if (bus_id >= NUM_CAN_BUSES) return false;   // no such bus: nothing to bring up
+    const uint8_t pins[2] = { getDefaultCANTX(bus_id), getDefaultCANRX(bus_id) };
+    return pinsFree(pins, 2, PIN_RANK_BUS, getCANBusName(bus_id));
+}
 #endif
 
 void printSaveReminder() {

@@ -3,6 +3,7 @@
  */
 
 #include "output_admission.h"
+#include "../../hal/bus_defaults.h"   // NUM_CAN_BUSES: the refusal's hint
 
 #ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
 #define FLASHMEM
@@ -34,6 +35,11 @@ FLASHMEM uint8_t outputOnStream(uint8_t transport, bool anyOutput, const OutputR
     return OUT_ID_NONE;
 }
 
+FLASHMEM bool outputOnCanInputBus(uint8_t transport, const SystemConfig& cfg) {
+    if (outputTransportKind(transport) != OTK_CAN || cfg.buses.canInputBus == 0xFF) return false;
+    return outputTransportCanBus(transport) == cfg.buses.canInputBus;
+}
+
 FLASHMEM const __FlashStringHelper* outputAdmitReason(uint8_t selfId, OutputFormat format, uint8_t transport,
                                                      const SystemConfig& cfg, const OutputRecord* table) {
     if (!outputFormatBuilt(format)) return F("is not in this build");
@@ -51,7 +57,19 @@ FLASHMEM const __FlashStringHelper* outputAdmitReason(uint8_t selfId, OutputForm
         return nullptr;
     }
 #endif
-    if (outputTransportKind(transport) != OTK_STREAM) return nullptr;   // CAN, SD: no stream to share
+    // One job per CAN bus (#632): CAN input reads the car on its bus, and
+    // nothing that sends may run there. Keyed on the transport, not the format,
+    // so the #612 layouts inherit it. A disabled record there is fine (the
+    // default seed makes one); it is refused when it is enabled or started.
+    if (outputTransportKind(transport) == OTK_CAN) {
+        if (!outputOnCanInputBus(transport, cfg)) return nullptr;
+#if NUM_CAN_BUSES >= 2
+        return F("can't share CAN input's bus (one job per bus): OUTPUT <id> TRANSPORT, or BUS CAN <bus> INPUT DISABLE");
+#else
+        return F("can't share CAN input's bus (one job per bus)");   // nowhere to move it; mega near-PROGMEM is tight
+#endif
+    }
+    if (outputTransportKind(transport) != OTK_STREAM) return nullptr;   // SD: no stream to share
 
     if (framedPort(transport, cfg)) {
         return format == FMT_ELM327 ? F("can't use the framed nRF link's port; ELM327 over it is OUTPUT ADD ELM327 BLE")

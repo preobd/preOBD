@@ -681,10 +681,17 @@ while no serial port is framed, as it needs the nRF coprocessor link.
 An enabled output shows `, not running` when it couldn't start: its serial
 port or CAN bus isn't up yet, or it no longer fits next to the console, the log
 or the framed port (for example after a `LOAD` moved the console onto its
-stream). It starts by itself once its port or bus comes up (`BUS SERIAL <n>
-ENABLE`, `BUS CAN <bus> ENABLE`), on `LOAD` and `JSON IMPORT`, and on reboot;
-`OUTPUT <id> ENABLE` retries now and prints the reason, as does moving it with
-`OUTPUT <id> TRANSPORT`.
+stream). An OBD output on the bus CAN input reads shows it
+too (one job per bus). It starts by itself once its port or bus comes up (`BUS
+SERIAL <n> ENABLE`, `BUS CAN <bus> ENABLE`), once CAN input leaves its bus
+(`BUS CAN <bus> INPUT DISABLE`, or `INPUT ENABLE` on another bus), on `LOAD`
+and `JSON IMPORT`, and on reboot; `OUTPUT <id> ENABLE` retries now and prints
+the reason, as does moving it with `OUTPUT <id> TRANSPORT`.
+
+`OUTPUT LIST JSON` gives each output's `id`, `format`, `transport` and
+`enabled` (plus `interval` and `csv` where they apply, as in `SYSTEM DUMP
+JSON`), and `running`: whether it is running now. `running` is `false` for an
+enabled output that shows `, not running` above.
 
 ### SD Logging Status
 
@@ -855,6 +862,7 @@ BUS CAN <CAN1|CAN2|CAN3> LISTEN        # Bus on, listen-only (never transmits)
 BUS CAN <CAN1|CAN2|CAN3> DISABLE       # Bus off (refused while CAN input or OBD uses it)
 BUS CAN <CAN1|CAN2|CAN3> BAUDRATE <bps>   # 125000, 250000, 500000 or 1000000
 BUS CAN <CAN1|CAN2|CAN3> INPUT ENABLE|DISABLE   # CAN input reads this bus (one bus at a time)
+BUS CAN POLL <ms>                      # CAN input asks the ECU at most this often, 50-1000 ms (default 50)
 BUS SERIAL                       # Show all serial port status
 BUS SERIAL <1-8>                 # Show specific port status
 BUS SERIAL <1-8> ENABLE [baud]   # Enable serial port with optional baud rate
@@ -892,6 +900,24 @@ Modes:
 - **ENABLE** (normal) - ACKs and may transmit. CAN input polls the ECU: each imported OBD-II PID (source ID `0x7E8`-`0x7EF`) is requested in turn with a Mode 01 request, so a PID reads without a scan tool on the bus. The OBD output answers scan tools here.
 - **LISTEN** (passive) - Listen-only: no ACK bits, no error frames, no transmit of any kind, so no polling. Use it to read a car's existing OBD-II/ECU network without disturbing it. The OBD output transmits, so it is refused on a LISTEN bus, and `LISTEN` is refused while OBD uses the bus.
 - **DISABLE** - The bus is off; nothing can attach to it.
+
+`BUS CAN POLL <ms>` (CONFIG mode) sets the least time between the starts of
+two CAN input polling rounds, 50 to 1000 ms. A slower rate leaves room on the
+car's plug for a scan tool. It applies at once, is stored with `SAVE`, and is
+accepted with no CAN input or with the bus on LISTEN (it waits). Anything
+else gives `ERROR: POLL takes 50-1000 (ms)`. `BUS CAN` shows it, and
+`BUS CAN JSON` reports it as `input.pollMs` with the range in `caps.pollMs`
+and, for each bus, `pinsFree` (whether its pins are free to bring it up).
+
+Each CAN bus does one job: CAN input (reading the car) or the OBD output
+(answering gauges), never both. `OUTPUT ADD`, `OUTPUT <id> ENABLE` and
+`OUTPUT <id> TRANSPORT` that would put OBD on the bus CAN input reads are
+refused (`... can't share CAN input's bus (one job per bus): ...`), and so is
+`BUS CAN <bus> INPUT ENABLE` on a bus the OBD output uses
+(`ERROR: output 0 (OBD) uses CAN1 (one job per bus): OUTPUT 0 DISABLE first`).
+A saved configuration that has both keeps CAN input and leaves OBD not
+running. See the
+[CAN Sensor Import Guide](../guides/sensor-types/CAN_SENSOR_IMPORT_GUIDE.md#car-network-and-gauge-network).
 
 Refusals name the command that clears them, for example
 `ERROR: CAN2 is off: BUS CAN CAN2 ENABLE (or LISTEN) first`.
@@ -931,7 +957,7 @@ SCAN RESULTS JSON
 [{"canId":2024,"pid":5,"obd":true,"dataLength":1,"frames":201,"ageMs":4899,"data":"79"},{"canId":2024,"pid":12,"obd":true,"dataLength":2,"frames":200,"ageMs":4909,"data":"0F7C"}]
 
 BUS CAN JSON
-{"caps":{"buses":3,"baudrates":[125000,250000,500000,1000000],"maxScanResults":32,"scanMs":[1000,60000]},"buses":[{"bus":0,"mode":"NORMAL","baudrate":500000,"state":"up","input":true,"obd":true},{"bus":1,"mode":"OFF","baudrate":500000,"state":"off","input":false,"obd":false},{"bus":2,"mode":"OFF","baudrate":500000,"state":"off","input":false,"obd":false}],"input":{"bus":0,"running":true,"framesRx":1214,"lastFrameAgeMs":41,"poll":{"active":true,"backoff":false,"missStreak":0,"requests":1214,"answers":1214,"txFail":0}},"imports":[{"pin":192,"pinLabel":"CAN:0","sourceCanId":2024,"sourcePid":12,"dataOffset":0,"polled":true,"ageMs":41}]}
+{"caps":{"buses":3,"baudrates":[125000,250000,500000,1000000],"maxScanResults":32,"scanMs":[1000,60000],"pollMs":[50,1000]},"buses":[{"bus":0,"mode":"NORMAL","baudrate":500000,"state":"up","input":true,"obd":true,"pinsFree":true},{"bus":1,"mode":"OFF","baudrate":500000,"state":"off","input":false,"obd":false,"pinsFree":false},{"bus":2,"mode":"OFF","baudrate":500000,"state":"off","input":false,"obd":false,"pinsFree":true}],"input":{"bus":0,"running":true,"pollMs":50,"framesRx":1269,"lastFrameAgeMs":48,"poll":{"active":true,"backoff":false,"missStreak":0,"requests":1269,"answers":1269,"txFail":0}},"imports":[{"pin":192,"pinLabel":"CAN:0","sourceCanId":2024,"sourcePid":12,"dataOffset":0,"polled":true,"ageMs":48}]}
 ```
 
 - `state` is `idle`, `listening` (`SCAN CAN`), `querying` (`SCAN PIDS`) or `done`. `scanId` increases with every `SCAN CAN` or `SCAN PIDS`, so a client can tell that someone else restarted the scan. `found` changes when a new result appears.
@@ -940,7 +966,8 @@ BUS CAN JSON
 - `pid` is the OBD-II PID for an OBD response (`obd: true`, CAN ID `0x7E8`-`0x7EF`), otherwise the frame's first byte. `data` is the last payload in hex. Look up names and units in `LIST PIDS JSON`.
 - Each import's `dataOffset` is where its value starts in the reply, counted from the first byte after the PID. It tells apart the sensors of a multi-sensor PID: match it against the PID's `dataOffset` (sensor 1) and its `sensors` list in `LIST PIDS JSON`, e.g. `{"sensor":2,"name":"EGT Bank 1 Sensor 2","abbr":"EGT12","dataOffset":3,"supportBit":1}`. `supportBit` (on a multi-sensor PID's row and each of its sensors) is the value's bit in the reply's first byte, which says whether the ECU has that sensor.
 - `buses` has one entry per CAN bus on the board. `bus` is an index (`0` = CAN1); `mode` is `OFF`, `NORMAL` or `LISTEN`; `state` is `off`, `idle` (on, nothing attached, not started), `up`, `waiting` (something is attached but the bus did not start) or `pinsTaken` (another function holds its pins). `input` and `obd` say whether CAN input and the OBD output are attached.
-- `input.bus` is the bus CAN input reads (`255` = none), as in `SYSTEM DUMP JSON`. `running` is `true` while that bus is up.
+- `input.bus` is the bus CAN input reads (`255` = none), as in `SYSTEM DUMP JSON`. `running` is `true` while that bus is up. `input.pollMs` is `BUS CAN POLL` (the range is `caps.pollMs`).
+- Each bus's `pinsFree` is whether its pins are free to bring it up: `false` when another function holds them, for example CAN2 on a Teensy 4 with the nRF link on Serial1.
 - `lastFrameAgeMs` and each import's `ageMs` are `null` until a frame has been received. `poll.backoff` is `true` while nothing answers the poller (it has slowed to one request per second). `poll.answers` counts an ECU's "PID not supported" reply as an answer, so `answers` matching `requests` doesn't mean every imported PID has a value: check each import's `ageMs`.
 - These are not available on the Arduino Mega (JSON is compiled out there).
 

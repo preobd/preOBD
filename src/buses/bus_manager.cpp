@@ -924,6 +924,11 @@ FLASHMEM void displayCANStatus() {
             printBusNotStarted(BK_CAN, getCANBusName(b), false, pins, 2, (can_refused_mask >> b) & 1);
         }
     }
+#if INCLUDE_CAN
+    msg.control.print(F("CAN input polls at most every "));
+    msg.control.print(systemConfig.buses.canPollMs);
+    msg.control.println(F(" ms (BUS CAN POLL)"));
+#endif
 #if BUS_WIRED_CAN_ID != 0xFF
     printWiredBusLine(getCANBusName(BUS_WIRED_CAN_ID));
 #else

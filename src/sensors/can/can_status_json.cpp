@@ -68,6 +68,9 @@ FLASHMEM JsonArray canBusStatusToJson(const CanBusSnapshot& s, JsonObject out) {
     JsonArray scanMs = caps["scanMs"].to<JsonArray>();
     scanMs.add(1000);
     scanMs.add(60000);
+    JsonArray pollMs = caps["pollMs"].to<JsonArray>();
+    pollMs.add(CAN_POLL_MS_MIN);
+    pollMs.add(CAN_POLL_MS_MAX);
 
     // One entry per bus this board has (#612 phase 2a)
     JsonArray buses = out["buses"].to<JsonArray>();
@@ -80,11 +83,13 @@ FLASHMEM JsonArray canBusStatusToJson(const CanBusSnapshot& s, JsonObject out) {
         o["state"] = BUS_STATE_NAMES[e.state <= 4 ? e.state : 0];
         o["input"] = e.input;
         o["obd"] = e.obd;
+        o["pinsFree"] = e.pinsFree;
     }
 
     JsonObject in = out["input"].to<JsonObject>();
     in["bus"] = s.inBus;
     in["running"] = s.inRunning;
+    in["pollMs"] = s.pollMs;
     in["framesRx"] = s.framesRx;
     if (s.haveFrame) in["lastFrameAgeMs"] = s.lastFrameAgeMs;
     else             in["lastFrameAgeMs"] = nullptr;

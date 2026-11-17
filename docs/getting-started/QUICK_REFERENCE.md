@@ -373,6 +373,7 @@ See [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md) and
 | `BUS CAN <bus> ENABLE\|LISTEN\|DISABLE` | Turn a CAN bus on (LISTEN never transmits) or off |
 | `BUS CAN <bus> BAUDRATE <bps>` | Set a bus's rate (a running bus restarts) |
 | `BUS CAN <bus> INPUT ENABLE\|DISABLE` | CAN input reads this bus |
+| `BUS CAN POLL <ms>` | CAN input asks the ECU at most this often (50-1000 ms, default 50) |
 | `SCAN PIDS` | Ask the ECUs which OBD-II PIDs they support (CAN input on an ENABLE bus) |
 | `SCAN CAN [ms]` | Listen for OBD-II answers and other CAN frames already on the bus |
 | `SET CAN <pid> [ecu] [SENSOR <n>]` | Import a PID (ecu: `0x7E9`… for a second ECU; default engine `0x7E8`). `SENSOR` picks one value of a multi-sensor PID, e.g. `SET CAN 0x78 SENSOR 2` |

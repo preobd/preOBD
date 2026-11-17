@@ -46,6 +46,7 @@ extern MuxTransport hwSerial1;   // main.cpp -- the nRF coprocessor link
 #endif
 #if INCLUDE_CAN
 #include "../sensors/can/can_scan.h"
+#include "../sensors/can/can_poll.h"   // BUS CAN POLL range (#633)
 #include "../sensors/can/input_can.h"
 #include "../sensors/can_sensor_library/standard_pids.h"
 #if INCLUDE_CAN && SUPPORTS_JSON_EXPORT
@@ -229,6 +230,36 @@ static uint8_t obdOnBus(uint8_t bus) {
     return (outputIsEnabled(id) && outputTransportCanBus(outputTransportOf(id)) == bus) ? id : OUT_ID_NONE;
 }
 static bool obdUsesBus(uint8_t bus) { return obdOnBus(bus) != OUT_ID_NONE; }
+
+// An enabled OBD output on this bus that isn't running (the bus was off, or
+// CAN input held it, #632) starts now; ENABLE prints why if it still can't
+static void startWaitingObd(uint8_t bus) {
+    if (obdUsesBus(bus) && canOutputAttachedBus() != bus) outputSetEnabledById(obdOnBus(bus), true);
+}
+#endif
+
+#if INCLUDE_CAN
+// BUS CAN POLL <ms>: the least time between CAN input polling rounds (#633).
+// Takes effect at once (input_can.cpp reads it on every call); a value that
+// waits for CAN input or a NORMAL bus is still stored.
+static FLASHMEM int busCanPoll(int argc, const char* const* argv) {
+    char* end = nullptr;
+    const long ms = argc == 4 ? strtol(argv[3], &end, 10) : 0;
+    if (argc != 4 || end == argv[3] || *end != '\0' || !canPollMsValid(ms)) {
+        msg.control.print(F("ERROR: POLL takes "));
+        msg.control.print(CAN_POLL_MS_MIN);
+        msg.control.print('-');
+        msg.control.print(CAN_POLL_MS_MAX);
+        msg.control.println(F(" (ms)"));
+        return 1;
+    }
+    systemConfig.buses.canPollMs = (uint16_t)ms;
+    msg.control.print(F("CAN input asks the ECU at most every "));
+    msg.control.print(ms);
+    msg.control.println(F(" ms"));
+    printSaveReminder();
+    return 0;
+}
 #endif
 
 // BUS CAN <CAN1|CAN2|CAN3> ENABLE|LISTEN|DISABLE | BAUDRATE <bps> | INPUT ENABLE|DISABLE
@@ -244,6 +275,7 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
         displayCANStatus();
         return 0;
     }
+    if (streq_P(argv[2], PSTR("POLL"))) return busCanPoll(argc, argv);   // before the bus token: no bus here
     const uint8_t bus = parseCanBusToken(argv[2]);
     if (bus == 0xFF || argc < 4) {
         msg.control.println(F("ERROR: Usage: BUS CAN <CAN1|CAN2|CAN3> ENABLE|LISTEN|DISABLE|BAUDRATE <bps>|INPUT ENABLE|DISABLE"));
@@ -273,7 +305,7 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
         // Something set to use this bus but not attached (it was off, or its
         // start failed) attaches now
         if (systemConfig.buses.canInputBus == bus && canInputAttachedBus() != bus) initCANInput();
-        if (obdUsesBus(bus) && canOutputAttachedBus() != bus) outputSetEnabledById(obdOnBus(bus), true);
+        startWaitingObd(bus);
         printSaveReminder();
         return 0;
     }
@@ -324,11 +356,26 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
                 msg.control.println(F(" ENABLE (or LISTEN) first"));
                 return 1;
             }
+            // One job per CAN bus (#632): refused before anything changes, so
+            // CAN input stays where it was
+            const uint8_t obd = obdOnBus(bus);
+            if (obd != OUT_ID_NONE) {
+                msg.control.print(F("ERROR: output "));
+                msg.control.print(obd);
+                msg.control.print(F(" (OBD) uses "));
+                msg.control.print(getCANBusName(bus));
+                msg.control.print(F(" (one job per bus): OUTPUT "));
+                msg.control.print(obd);
+                msg.control.println(F(" DISABLE first"));
+                return 1;
+            }
+            const uint8_t was = systemConfig.buses.canInputBus;
             systemConfig.buses.canInputBus = bus;   // one bus; moving it detaches the old one
             initCANInput();
             msg.control.print(F("CAN input on "));
             printCanApply(bus, canBusUp(bus) ? CAN_ATTACH_OK : (CanAttach)(canBusState(bus) == CAN_STATE_NO_PINS
                                                                   ? CAN_ATTACH_NO_PINS : CAN_ATTACH_WAITING));
+            if (was != 0xFF && was != bus) startWaitingObd(was);   // OBD held on the bus input left
             printSaveReminder();
             return 0;
         }
@@ -341,6 +388,7 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
             systemConfig.buses.canInputBus = 0xFF;
             shutdownCANInput();
             msg.control.println(F("CAN input off"));
+            startWaitingObd(bus);   // an OBD output CAN input held (#632) starts
             printSaveReminder();
             return 0;
         }
@@ -600,6 +648,7 @@ static const char PSTR_HELP_BUS_CAN[] PROGMEM =
     "  BUS CAN <bus> ENABLE|LISTEN|DISABLE  Bus on (LISTEN: never transmits) or off\n"
     "  BUS CAN <bus> BAUDRATE <bps>  125000, 250000, 500000 or 1000000\n"
     "  BUS CAN <bus> INPUT ENABLE|DISABLE   CAN input reads this bus\n"
+    "  BUS CAN POLL <ms>             CAN input asks the ECU at most every <ms> ms (50-1000)\n"
     "  (<bus> = CAN1|CAN2|CAN3; OBD's bus: OUTPUT ADD OBD CAN<n>)";
 static const char PSTR_HELP_BUS_SERIAL[] PROGMEM =
     "  BUS SERIAL                    Show all serial port status\n"
@@ -639,8 +688,10 @@ static FLASHMEM void emitBusCanJson() {
         s.bus[b].state = canBusState(b);
         s.bus[b].input = (canBusConsumers(b) & (1u << CANC_INPUT)) != 0;
         s.bus[b].obd = (canBusConsumers(b) & (1u << CANC_OBD)) != 0;
+        s.bus[b].pinsFree = canBusPinsFree(b);
     }
     s.inBus = systemConfig.buses.canInputBus;
+    s.pollMs = systemConfig.buses.canPollMs;
     getCANInputStatus(s, now);
     // poll.active only when something is actually being requested
     bool anyPolled = false;

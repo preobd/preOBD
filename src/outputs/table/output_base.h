@@ -11,6 +11,7 @@
 #include "../formats/obd_encode.h"
 #include "../../config/system_config.h"
 #include "output_table.h"
+#include "../../hal/bus_defaults.h"   // NUM_CAN_BUSES
 #include <Arduino.h>   // Print
 
 // ===== The outputs, run from their records (#612 phase 2b-1) =====

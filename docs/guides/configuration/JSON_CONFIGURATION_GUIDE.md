@@ -110,7 +110,8 @@ best reference; the overall shape is:
                    "defaultUnits": { "temperature": "CELSIUS", "pressure": "BAR", "elevation": "METERS", "speed": "KPH" } },
     "constants": { "seaLevelPressure": 1013.25 },
     "buses":     { "i2c": 0, "spi": 0, "...": "...",
-                   "can": [ { "bus": 0, "mode": "NORMAL", "baudrate": 500000, "input": true } ] },
+                   "can": [ { "bus": 0, "mode": "NORMAL", "baudrate": 500000, "input": true } ],
+                   "canPollMs": 50 },
     "serial":    { "ports": [ { "port": 1, "enabled": true, "baudrate": 9600, "framed": false } ] },
     "console":   { "transport": "USB", "secondary": "SERIAL1" },
     "log":       { "transport": "USB", "secondary": "NONE",
@@ -158,7 +159,7 @@ best reference; the overall shape is:
 - An enabled output that couldn't run on the file's own settings is imported
   switched off with a NOTE: two outputs on one stream, RealDash or ELM327 on a
   stream the console or log uses, a port that is off or framed, OBD on a bus
-  that is off or `LISTEN`. The rest of the file still imports.
+  that is off or `LISTEN` or that CAN input reads (one job per bus). The rest of the file still imports.
 - Without an `inputs` array in the same file, an id that now means a different
   output is routed to every input (as `OUTPUT ADD` does); with one, the
   inputs' `routeMask` decides.
@@ -174,6 +175,11 @@ export-only too.
 `system.buses.can` has one entry per CAN bus: `mode` (`OFF`, `NORMAL`,
 `LISTEN`), `baudrate`, and `input` (`true` on the bus CAN input reads). On
 import it replaces the CAN settings: a bus it leaves out is off.
+
+`system.buses.canPollMs` is `BUS CAN POLL`: the least time between CAN input
+polling rounds, 50 to 1000. Left out, it keeps the current value. A value out
+of range or not a whole number keeps it too, with
+`NOTE: buses.canPollMs out of range (50-1000); kept <current>`.
 
 `system.alarm` is the built-in alarm output: `enabled` (`ALARM ENABLE|DISABLE`)
 and its acknowledgement policy (`ALARM DURATION`, `ALARM SCOPE`).

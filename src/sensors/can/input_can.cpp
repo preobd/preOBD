@@ -60,7 +60,7 @@ static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len, b
 
 // The bus restarted (new rate or mode): what was in flight is gone
 static void onCanReset() {
-    canPollReset(pollState, millis());
+    canPollReset(pollState, millis(), systemConfig.buses.canPollMs);
     isoTpRxReset(isoTpRx);
     initCANFrameCache();   // values read at the old rate or mode are not current
 }
@@ -86,7 +86,7 @@ FLASHMEM bool initCANInput() {
 
     canSetHandlers(CANC_INPUT, processCANFrame, onCanReset, nullptr);
     initCANFrameCache();
-    canPollReset(pollState, millis());
+    canPollReset(pollState, millis(), systemConfig.buses.canPollMs);
     pollCursor = 0;
     isoTpRxReset(isoTpRx);
 
@@ -396,7 +396,7 @@ static void pollCANInputs() {
         runCANDiscovery();
         // Answers to the poller's last request may still arrive; start its
         // next round clean once the scan ends
-        canPollReset(pollState, millis());
+        canPollReset(pollState, millis(), systemConfig.buses.canPollMs);
         return;
     }
 #endif
@@ -405,7 +405,7 @@ static void pollCANInputs() {
 
     uint32_t now = millis();
     bool wasPending = pollState.pending;
-    bool ready = canPollReady(pollState, now);
+    bool ready = canPollReady(pollState, now, systemConfig.buses.canPollMs);
 
     // The last request just timed out. If no node ACKed it (ignition off,
     // ECU unpowered) the controller is still retransmitting it back to
@@ -426,7 +426,7 @@ static void pollCANInputs() {
         // A new round waits out the round floor (#508). The cursor stays
         // put so the same slot is tried again once it is due.
         if (canPollOpensRound(pollCursor, n, MAX_INPUTS) &&
-            !canPollStartRound(pollState, now)) {
+            !canPollStartRound(pollState, now, systemConfig.buses.canPollMs)) {
             return;
         }
         pollCursor = (uint8_t)((slot + 1) % MAX_INPUTS);

@@ -106,11 +106,12 @@ static void test_an_on_bus_starts_on_the_first_attach_only(void) {
     systemConfig.buses.can[0].mode = CAN_BUS_NORMAL;
     TEST_ASSERT_EQUAL(CAN_STATE_IDLE, canBusState(0));   // on, nothing attached: not begun
     TEST_ASSERT_EQUAL_INT(0, fakehal::bus[0].begins);
-    TEST_ASSERT_EQUAL(CAN_ATTACH_OK, canAttach(0, CANC_INPUT));
+    TEST_ASSERT_EQUAL(CAN_ATTACH_OK, canAttach(0, CANC_OBD));
     TEST_ASSERT_EQUAL_INT(1, fakehal::bus[0].begins);
     TEST_ASSERT_EQUAL_UINT32(500000, fakehal::bus[0].baud);
-    // The #611 leftover: OBD enabled after CAN input must not re-begin the bus
-    TEST_ASSERT_EQUAL(CAN_ATTACH_OK, canAttach(0, CANC_OBD));
+    // The #611 leftover: a second consumer must not re-begin the bus. (CAN input
+    // after OBD: the one order #632 still lets them meet, a LOAD in passing)
+    TEST_ASSERT_EQUAL(CAN_ATTACH_OK, canAttach(0, CANC_INPUT));
     TEST_ASSERT_EQUAL_INT(1, fakehal::bus[0].begins);
     TEST_ASSERT_EQUAL_INT(0, fakehal::bus[0].restarts);
     TEST_ASSERT_EQUAL_HEX8(0x03, canBusConsumers(0));
@@ -129,6 +130,18 @@ static void test_listen_never_transmits(void) {
     TEST_ASSERT_EQUAL_INT(0, fakehal::bus[0].writes);
 }
 
+// One job per bus (#632), the guard behind output admission: OBD never joins
+// CAN input; CAN input is never refused (reading the car wins)
+static void test_obd_cannot_join_can_input(void) {
+    systemConfig.buses.can[0].mode = CAN_BUS_NORMAL;
+    TEST_ASSERT_EQUAL(CAN_ATTACH_OK, canAttach(0, CANC_INPUT));
+    TEST_ASSERT_EQUAL(CAN_ATTACH_INPUT_BUS, canAttach(0, CANC_OBD));
+    TEST_ASSERT_EQUAL_HEX8(0x01, canBusConsumers(0));   // OBD not attached
+    canDetach(0, CANC_INPUT);
+    TEST_ASSERT_EQUAL(CAN_ATTACH_OK, canAttach(0, CANC_OBD));
+    TEST_ASSERT_EQUAL(CAN_ATTACH_OK, canAttach(0, CANC_INPUT));   // input still joins
+}
+
 static void test_obd_requests_reach_only_obd(void) {
     systemConfig.buses.can[0].mode = CAN_BUS_NORMAL;
     canAttach(0, CANC_INPUT);
@@ -137,7 +150,10 @@ static void test_obd_requests_reach_only_obd(void) {
     canBusesUpdate();
     TEST_ASSERT_EQUAL_INT(1, g_inFrames);
 
+    // OBD then input (OBD can't join input, #632)
+    canDetach(0, CANC_INPUT);
     canAttach(0, CANC_OBD);
+    canAttach(0, CANC_INPUT);
     fakehal::push(0, 0x7DF);
     fakehal::push(0, 0x7E0);
     fakehal::push(0, 0x7E8);
@@ -150,8 +166,8 @@ static void test_obd_requests_reach_only_obd(void) {
 
 static void test_a_detached_consumer_gets_nothing(void) {
     systemConfig.buses.can[0].mode = CAN_BUS_NORMAL;
-    canAttach(0, CANC_INPUT);
     canAttach(0, CANC_OBD);
+    canAttach(0, CANC_INPUT);
     canDetach(0, CANC_OBD);
     fakehal::push(0, 0x7DF);
     canBusesUpdate();
@@ -162,8 +178,8 @@ static void test_a_detached_consumer_gets_nothing(void) {
 
 static void test_a_new_rate_restarts_and_resets_every_consumer(void) {
     systemConfig.buses.can[0].mode = CAN_BUS_NORMAL;
-    canAttach(0, CANC_INPUT);
     canAttach(0, CANC_OBD);
+    canAttach(0, CANC_INPUT);
     TEST_ASSERT_EQUAL(CAN_ATTACH_OK, canBusApply(0));   // nothing changed: nothing happens
     TEST_ASSERT_EQUAL_INT(0, fakehal::bus[0].restarts);
     TEST_ASSERT_EQUAL_INT(0, g_inResets);
@@ -218,8 +234,8 @@ static void test_taken_pins_never_start_a_controller(void) {
 
 static void test_abort_waits_for_obd_answer_in_flight(void) {
     systemConfig.buses.can[0].mode = CAN_BUS_NORMAL;
+    canAttach(0, CANC_OBD);     // OBD first: it can't join CAN input (#632)
     canAttach(0, CANC_INPUT);
-    canAttach(0, CANC_OBD);
     g_obdBusy = true;   // a multi-frame answer still going out
     TEST_ASSERT_FALSE(canBusAbortUnackedTx(0, CANC_INPUT));
     TEST_ASSERT_EQUAL_INT(0, fakehal::bus[0].aborts);
@@ -260,6 +276,7 @@ int main(int, char**) {
     RUN_TEST(test_attach_to_an_off_bus_is_refused);
     RUN_TEST(test_an_on_bus_starts_on_the_first_attach_only);
     RUN_TEST(test_listen_never_transmits);
+    RUN_TEST(test_obd_cannot_join_can_input);
     RUN_TEST(test_obd_requests_reach_only_obd);
     RUN_TEST(test_a_detached_consumer_gets_nothing);
     RUN_TEST(test_a_new_rate_restarts_and_resets_every_consumer);

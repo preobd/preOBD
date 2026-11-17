@@ -13,9 +13,9 @@
  * releases the request without waiting out the timeout (#507). ECUs
  * normally answer within 5-15 ms, so a round of N PIDs takes roughly
  * N * 25 ms — well inside the 2 s default stale timeout. A round never
- * starts sooner than CAN_POLL_MIN_PID_INTERVAL_MS after the previous one,
- * so with few PIDs each is requested at the sensor read rate rather than
- * every CAN_POLL_MIN_GAP_MS (#508). After
+ * starts sooner than the poll rate (BUS CAN POLL, `roundMs` below) after the
+ * previous one started, so with few PIDs each is requested at that rate
+ * rather than every CAN_POLL_MIN_GAP_MS (#508, #633). After
  * CAN_POLL_BACKOFF_AFTER consecutive unanswered or unsent requests (ignition
  * off, no ECU, bus down) the rate drops to one request per
  * CAN_POLL_BACKOFF_MS until an answer arrives. A multi-frame answer (#527)
@@ -32,10 +32,18 @@
 #define CAN_POLL_RESPONSE_TIMEOUT_MS 50    // Give up on an answer after this long (ISO 15765-4 P2)
 #define CAN_POLL_BACKOFF_AFTER       10    // Consecutive misses before slowing down
 #define CAN_POLL_BACKOFF_MS          1000  // Request interval while backed off
-// Floor on a round's length, so on each PID's request interval. Matched to
-// SENSOR_READ_INTERVAL_MS (config.h): polling faster than inputs are read
-// only loads the bus (#508).
-#define CAN_POLL_MIN_PID_INTERVAL_MS 50
+
+// BUS CAN POLL: the least time between the starts of two polling rounds, so
+// each PID's request interval. The default is matched to SENSOR_READ_INTERVAL_MS
+// (config.h): polling faster than inputs are read only loads the bus (#508).
+// A slower rate leaves room on the car's plug for a scan tool (#633).
+#define CAN_POLL_MS_MIN     50
+#define CAN_POLL_MS_MAX     1000
+#define CAN_POLL_MS_DEFAULT 50
+
+static inline bool canPollMsValid(long ms) {
+    return ms >= CAN_POLL_MS_MIN && ms <= CAN_POLL_MS_MAX;
+}
 
 /** True for the 11-bit OBD-II ECU response IDs 0x7E8-0x7EF. */
 static inline bool isObdResponseId(uint16_t id) {
@@ -65,9 +73,11 @@ struct CanPollState {
     bool     roundHeld;     // A new round is waiting for the round floor
 };
 
-static inline void canPollReset(CanPollState& s, uint32_t now) {
+// `roundMs` is the poll rate in force (systemConfig.buses.canPollMs); passed
+// on each call so a change applies at once and this header stays pure.
+static inline void canPollReset(CanPollState& s, uint32_t now, uint16_t roundMs) {
     s.lastTxMs = now;
-    s.roundStartMs = now - CAN_POLL_MIN_PID_INTERVAL_MS;   // first round not held
+    s.roundStartMs = now - roundMs;   // first round not held
     s.pendingId = 0;
     s.pendingPid = 0;
     s.missStreak = 0;
@@ -139,12 +149,12 @@ static inline bool canPollOpensRound(uint8_t cursor, uint8_t n, uint8_t tableSiz
 
 /**
  * The next request opens a new round (the round-robin wrapped). Returns true
- * and starts the round if CAN_POLL_MIN_PID_INTERVAL_MS has passed since the
+ * and starts the round if `roundMs` has passed since the
  * previous round started; otherwise holds canPollReady() until it has, so a
  * held round costs one comparison per call rather than a table scan (#508).
  */
-static inline bool canPollStartRound(CanPollState& s, uint32_t now) {
-    if (now - s.roundStartMs < CAN_POLL_MIN_PID_INTERVAL_MS) {
+static inline bool canPollStartRound(CanPollState& s, uint32_t now, uint16_t roundMs) {
+    if (now - s.roundStartMs < roundMs) {
         s.roundHeld = true;
         return false;
     }
@@ -159,10 +169,10 @@ static inline bool canPollStartRound(CanPollState& s, uint32_t now) {
  * counted as a miss here, whether or not the next one may go yet: the
  * caller sees `pending` drop and can abort the frame (#506).
  */
-static inline bool canPollReady(CanPollState& s, uint32_t now) {
+static inline bool canPollReady(CanPollState& s, uint32_t now, uint16_t roundMs) {
     // Set only with nothing pending (a round starts after canPollReady)
     if (s.roundHeld) {
-        if (now - s.roundStartMs < CAN_POLL_MIN_PID_INTERVAL_MS) return false;
+        if (now - s.roundStartMs < roundMs) return false;
         s.roundHeld = false;   // due; don't let a stale flag outlive a millis() wrap
     }
     uint32_t elapsed = now - s.lastTxMs;

@@ -108,6 +108,7 @@ bool i2cBusPinsConflict(uint8_t bus_id);
 bool spiBusPinsConflict(uint8_t bus_id);
 // CAN TX/RX, for BUS CAN <bus> ENABLE|LISTEN (#563). Only on boards with CAN buses.
 bool canBusPinsConflict(uint8_t bus_id);
+bool canBusPinsFree(uint8_t bus_id);   // the same check, silent (BUS CAN JSON pinsFree, #633)
 
 void printHelpOverview();
 void printHelpQuick();

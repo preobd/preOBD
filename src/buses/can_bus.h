@@ -45,7 +45,8 @@ enum CanAttach : uint8_t {
     CAN_ATTACH_BUS_OFF     = 2,   // BUS CAN <bus> ENABLE first
     CAN_ATTACH_LISTEN_ONLY = 3,   // a sending consumer on a LISTEN bus
     CAN_ATTACH_WAITING     = 4,   // attached, but the bus did not start
-    CAN_ATTACH_NO_PINS     = 5    // attached, but the bus's pins are taken
+    CAN_ATTACH_NO_PINS     = 5,   // attached, but the bus's pins are taken
+    CAN_ATTACH_INPUT_BUS   = 6    // a sending consumer where CAN input reads (#632)
 };
 
 typedef void (*CanFrameFn)(uint32_t id, const uint8_t* data, uint8_t len, bool extended);

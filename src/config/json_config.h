@@ -39,8 +39,10 @@ struct SystemConfig;
 // JSON export functions
 void dumpConfigToJSON(Print& output);
 void exportSystemConfigToJSON(JsonObject& systemObj);
-// One output you add, as system.outputs[] and OUTPUT LIST JSON carry it (#612)
-void outputToJson(JsonObject obj, uint8_t id);
+// One output you add, as system.outputs[] and OUTPUT LIST JSON carry it (#612).
+// withStatus adds "running" (OUTPUT LIST JSON only: it is state, not config,
+// so it stays out of SYSTEM DUMP JSON and the backups made from it)
+void outputToJson(JsonObject obj, uint8_t id, bool withStatus = false);
 void exportInputsToJSON(JsonArray& inputsArray);
 void exportInputToJSON(JsonObject& inputObj, const Input* input);
 

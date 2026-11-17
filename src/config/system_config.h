@@ -21,7 +21,7 @@
 // + 1, collapsed): the checksum is salted with the layout, so an image of an
 // earlier layout with the same version fails it and loads defaults instead of
 // being misread field by field. Change it with every layout change.
-#define SYSTEM_CONFIG_LAYOUT 0x2B       // #612 phase 2b-1: outputs left SystemConfig, console/log replace the router
+#define SYSTEM_CONFIG_LAYOUT 0x2C       // #633: BusConfig.canPollMs (0x2B: #612 phase 2b-1, outputs left SystemConfig)
 #define SYSTEM_CONFIG_SIZE sizeof(SystemConfig)
 
 // Total EEPROM bytes available on this platform.

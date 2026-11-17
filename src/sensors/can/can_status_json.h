@@ -65,6 +65,7 @@ struct CanBusEntrySnapshot {
     uint8_t  state;             // CanBusState: 0 off, 1 idle, 2 up, 3 waiting, 4 pinsTaken
     bool     input;             // CAN input attached
     bool     obd;               // the OBD output attached
+    bool     pinsFree;          // its pins are free to bring it up (BUS CAN <bus> ENABLE would not refuse)
 };
 
 struct CanBusSnapshot {
@@ -74,6 +75,7 @@ struct CanBusSnapshot {
     CanBusEntrySnapshot bus[3];
     // input
     uint8_t  inBus;             // 255 = none
+    uint16_t pollMs;            // BUS CAN POLL: least time between polling rounds
     bool     inRunning;
     uint32_t framesRx;
     bool     haveFrame;         // false: lastFrameAgeMs is null

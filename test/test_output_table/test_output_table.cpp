@@ -193,8 +193,26 @@ static void test_ble_carries_one_data_output(void) {
     TEST_ASSERT_NULL(outputAdmitReason(rd, FMT_REALDASH, OT_BLE, systemConfig, outputRecords));
 }
 
+// One job per CAN bus (#632): an output on the bus CAN input reads is refused
+// (outputAdmitReason asks this; OBD itself isn't built natively). One-bus
+// boards too: both on bus 0. CAN input off, another bus, or a non-CAN
+// transport: no conflict.
+static void test_a_can_output_cannot_share_can_inputs_bus(void) {
+    SystemConfig cfg = {};
+    cfg.buses.canInputBus = 0;                                        // CAN input on CAN1
+    TEST_ASSERT_TRUE(outputOnCanInputBus(OT_CAN1, cfg));
+    TEST_ASSERT_FALSE(outputOnCanInputBus(OT_CAN1 + 1, cfg));         // CAN2
+    TEST_ASSERT_FALSE(outputOnCanInputBus(OT_USB, cfg));              // not CAN
+    cfg.buses.canInputBus = 0xFF;                                     // CAN input off
+    TEST_ASSERT_FALSE(outputOnCanInputBus(OT_CAN1, cfg));
+    cfg.buses.canInputBus = 1;                                        // CAN input on CAN2
+    TEST_ASSERT_TRUE(outputOnCanInputBus(OT_CAN1 + 1, cfg));
+    TEST_ASSERT_FALSE(outputOnCanInputBus(OT_CAN1, cfg));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_a_can_output_cannot_share_can_inputs_bus);
     RUN_TEST(test_add_takes_the_lowest_free_id);
     RUN_TEST(test_a_full_table_takes_nothing);
     RUN_TEST(test_new_records_get_their_format_defaults);

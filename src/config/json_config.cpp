@@ -20,6 +20,7 @@
 #if INCLUDE_CAN
 #include "../sensors/can/input_can.h"   // syncCanToConfig (#612)
 #endif
+#include "../sensors/can/can_poll.h"    // canPollMsValid (#633); pure, so not behind INCLUDE_CAN
 #include "../buses/pinctrl/bus_wiring.h"
 #include "../buses/serial_manager.h"
 #include "../inputs/input.h"
@@ -467,7 +468,7 @@ FLASHMEM void exportActionsToJSON(JsonArray& actionsArray) {
 
 // One output you add, as SYSTEM DUMP JSON's system.outputs[] and OUTPUT LIST
 // JSON carry it (#612): {id, format, transport, enabled, interval?, csv?}.
-FLASHMEM void outputToJson(JsonObject obj, uint8_t id) {
+FLASHMEM void outputToJson(JsonObject obj, uint8_t id, bool withStatus) {
     const OutputRecord* r = outputRecord(id);
     if (!r) return;
     char t[12];
@@ -481,6 +482,9 @@ FLASHMEM void outputToJson(JsonObject obj, uint8_t id) {
 #if INCLUDE_SD_LOGGING
     if (r->format == FMT_CSV && r->transport == OT_SD) obj["csv"] = sdLogFormatName(r->option);
 #endif
+    // An enabled output can be not running: refused by admission (#632), or
+    // its transport down
+    if (withStatus) obj["running"] = outputLiveById(id);
 }
 
 // Export system configuration to JSON
@@ -551,6 +555,7 @@ FLASHMEM void exportSystemConfigToJSON(JsonObject& systemObj) {
         c["baudrate"] = canBaudFromIndex(systemConfig.buses.can[b].baudIndex);
         c["input"] = systemConfig.buses.canInputBus == b;
     }
+    buses["canPollMs"] = systemConfig.buses.canPollMs;   // BUS CAN POLL (#633)
 
     // Serial Port Configuration
     JsonObject serial = systemObj["serial"].to<JsonObject>();
@@ -1419,6 +1424,22 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasIn
                 const uint8_t idx = canBaudIndexOf(c["baudrate"] | 0UL);
                 if (idx != 0xFF) staged.buses.can[b].baudIndex = idx;
                 if ((c["input"] | false) && staged.buses.can[b].mode != CAN_BUS_OFF) staged.buses.canInputBus = (uint8_t)b;
+            }
+        }
+        // Poll rate (#633): absent keeps the current value; one that isn't a whole
+        // number in range keeps it too, with a NOTE
+        // isUnbound(), not isNull(): a key present as null is invalid, not absent
+        JsonVariantConst poll = buses["canPollMs"];
+        if (!poll.isUnbound()) {
+            if (poll.is<long>() && canPollMsValid(poll.as<long>())) {
+                staged.buses.canPollMs = (uint16_t)poll.as<long>();
+            } else {
+                msg.control.print(F("NOTE: buses.canPollMs out of range ("));
+                msg.control.print(CAN_POLL_MS_MIN);
+                msg.control.print('-');
+                msg.control.print(CAN_POLL_MS_MAX);
+                msg.control.print(F("); kept "));
+                msg.control.println(staged.buses.canPollMs);
             }
         }
     } else {

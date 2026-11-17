@@ -9,6 +9,9 @@
 #include "../../src/sensors/can/can_poll.h"
 #include "../../src/sensors/can/can_frame_parse.h"
 
+// The poll rate every test but the BUS CAN POLL ones runs at
+static const uint16_t POLL_MS = CAN_POLL_MS_DEFAULT;
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -34,41 +37,41 @@ static void test_addressing(void) {
 // First request goes out after the minimum gap from reset
 static void test_first_request_after_gap(void) {
     CanPollState s;
-    canPollReset(s, 1000);
-    TEST_ASSERT_FALSE(canPollReady(s, 1000 + CAN_POLL_MIN_GAP_MS - 1));
-    TEST_ASSERT_TRUE(canPollReady(s, 1000 + CAN_POLL_MIN_GAP_MS));
+    canPollReset(s, 1000, POLL_MS);
+    TEST_ASSERT_FALSE(canPollReady(s, 1000 + CAN_POLL_MIN_GAP_MS - 1, POLL_MS));
+    TEST_ASSERT_TRUE(canPollReady(s, 1000 + CAN_POLL_MIN_GAP_MS, POLL_MS));
 }
 
 // An answer lets the next request go out a short gap after the ANSWER, not
 // the timeout — an ECU slower than the gap must not get back-to-back requests
 static void test_answer_releases_early(void) {
     CanPollState s;
-    canPollReset(s, 0);
+    canPollReset(s, 0, POLL_MS);
     canPollOnSent(s, 0x7E8, 0x0C, true, 100);
-    TEST_ASSERT_FALSE(canPollReady(s, 115));          // waiting for the answer
+    TEST_ASSERT_FALSE(canPollReady(s, 115, POLL_MS));          // waiting for the answer
     canPollOnResponse(s, 0x7E8, 0x0C, 115);           // answered after 15 ms
-    TEST_ASSERT_FALSE(canPollReady(s, 115 + CAN_POLL_MIN_GAP_MS - 1));
-    TEST_ASSERT_TRUE(canPollReady(s, 115 + CAN_POLL_MIN_GAP_MS));
+    TEST_ASSERT_FALSE(canPollReady(s, 115 + CAN_POLL_MIN_GAP_MS - 1, POLL_MS));
+    TEST_ASSERT_TRUE(canPollReady(s, 115 + CAN_POLL_MIN_GAP_MS, POLL_MS));
     TEST_ASSERT_EQUAL_UINT8(0, s.missStreak);
 }
 
 // A different PID's answer does not release the outstanding request
 static void test_other_answer_does_not_release(void) {
     CanPollState s;
-    canPollReset(s, 0);
+    canPollReset(s, 0, POLL_MS);
     canPollOnSent(s, 0x7E8, 0x0C, true, 100);
     canPollOnResponse(s, 0x7E8, 0x05, 110);
     TEST_ASSERT_TRUE(s.pending);
-    TEST_ASSERT_FALSE(canPollReady(s, 100 + CAN_POLL_RESPONSE_TIMEOUT_MS - 1));
-    TEST_ASSERT_TRUE(canPollReady(s, 100 + CAN_POLL_RESPONSE_TIMEOUT_MS));
+    TEST_ASSERT_FALSE(canPollReady(s, 100 + CAN_POLL_RESPONSE_TIMEOUT_MS - 1, POLL_MS));
+    TEST_ASSERT_TRUE(canPollReady(s, 100 + CAN_POLL_RESPONSE_TIMEOUT_MS, POLL_MS));
 }
 
 // No answer: the request times out and counts as a miss
 static void test_timeout_counts_miss(void) {
     CanPollState s;
-    canPollReset(s, 0);
+    canPollReset(s, 0, POLL_MS);
     canPollOnSent(s, 0x7E8, 0x0C, true, 100);
-    TEST_ASSERT_TRUE(canPollReady(s, 100 + CAN_POLL_RESPONSE_TIMEOUT_MS));
+    TEST_ASSERT_TRUE(canPollReady(s, 100 + CAN_POLL_RESPONSE_TIMEOUT_MS, POLL_MS));
     TEST_ASSERT_FALSE(s.pending);
     TEST_ASSERT_EQUAL_UINT8(1, s.missStreak);
 }
@@ -77,64 +80,64 @@ static void test_timeout_counts_miss(void) {
 // and the first answer restores full rate
 static void test_backoff_and_recovery(void) {
     CanPollState s;
-    canPollReset(s, 0);
+    canPollReset(s, 0, POLL_MS);
     uint32_t t = 0;
     for (uint8_t i = 0; i < CAN_POLL_BACKOFF_AFTER; i++) {
         t += CAN_POLL_RESPONSE_TIMEOUT_MS;
-        TEST_ASSERT_TRUE(canPollReady(s, t));
+        TEST_ASSERT_TRUE(canPollReady(s, t, POLL_MS));
         canPollOnSent(s, 0x7E8, 0x0C, true, t);
     }
     // The last request's timeout pushes the streak to the threshold, and
     // the backoff starts there: no further full-rate request (#506)
     uint32_t lastSent = t;
     t += CAN_POLL_RESPONSE_TIMEOUT_MS;
-    TEST_ASSERT_FALSE(canPollReady(s, t));
+    TEST_ASSERT_FALSE(canPollReady(s, t, POLL_MS));
     TEST_ASSERT_EQUAL_UINT8(CAN_POLL_BACKOFF_AFTER, s.missStreak);
 
     // Backed off: the next request waits CAN_POLL_BACKOFF_MS from the last
-    TEST_ASSERT_FALSE(canPollReady(s, lastSent + CAN_POLL_BACKOFF_MS - 1));
-    TEST_ASSERT_TRUE(canPollReady(s, lastSent + CAN_POLL_BACKOFF_MS));
+    TEST_ASSERT_FALSE(canPollReady(s, lastSent + CAN_POLL_BACKOFF_MS - 1, POLL_MS));
+    TEST_ASSERT_TRUE(canPollReady(s, lastSent + CAN_POLL_BACKOFF_MS, POLL_MS));
     t = lastSent;
 
     uint32_t sent = t + CAN_POLL_BACKOFF_MS;
     canPollOnSent(s, 0x7E8, 0x0C, true, sent);
-    TEST_ASSERT_FALSE(canPollReady(s, sent + CAN_POLL_BACKOFF_MS - 1));
+    TEST_ASSERT_FALSE(canPollReady(s, sent + CAN_POLL_BACKOFF_MS - 1, POLL_MS));
     canPollOnResponse(s, 0x7E8, 0x0C, sent + 12);
     TEST_ASSERT_EQUAL_UINT8(0, s.missStreak);
-    TEST_ASSERT_TRUE(canPollReady(s, sent + 12 + CAN_POLL_MIN_GAP_MS));
+    TEST_ASSERT_TRUE(canPollReady(s, sent + 12 + CAN_POLL_MIN_GAP_MS, POLL_MS));
 }
 
 // A refused write (TX full / bus-off) counts as a miss and leaves nothing pending
 static void test_failed_write_counts_miss(void) {
     CanPollState s;
-    canPollReset(s, 0);
+    canPollReset(s, 0, POLL_MS);
     canPollOnSent(s, 0x7E8, 0x0C, false, 100);
     TEST_ASSERT_FALSE(s.pending);
     TEST_ASSERT_EQUAL_UINT8(1, s.missStreak);
-    TEST_ASSERT_TRUE(canPollReady(s, 100 + CAN_POLL_MIN_GAP_MS));
+    TEST_ASSERT_TRUE(canPollReady(s, 100 + CAN_POLL_MIN_GAP_MS, POLL_MS));
 }
 
 // millis() wrap: elapsed is computed unsigned, so pacing survives rollover
 static void test_millis_wrap(void) {
     CanPollState s;
-    canPollReset(s, 0);
+    canPollReset(s, 0, POLL_MS);
     canPollOnSent(s, 0x7E8, 0x0C, true, 0xFFFFFFF0u);
-    TEST_ASSERT_FALSE(canPollReady(s, 0x00000010u));  // 32 ms elapsed
-    TEST_ASSERT_TRUE(canPollReady(s, 0xFFFFFFF0u + CAN_POLL_RESPONSE_TIMEOUT_MS));
+    TEST_ASSERT_FALSE(canPollReady(s, 0x00000010u, POLL_MS));  // 32 ms elapsed
+    TEST_ASSERT_TRUE(canPollReady(s, 0xFFFFFFF0u + CAN_POLL_RESPONSE_TIMEOUT_MS, POLL_MS));
 }
 
 // #507: "PID not supported" (03 7F 01 31) from the polled ECU releases the
 // request a gap after the NRC, not after the timeout, and is no miss
 static void test_negative_response_releases(void) {
     CanPollState s;
-    canPollReset(s, 0);
+    canPollReset(s, 0, POLL_MS);
     s.missStreak = 3;
     canPollOnSent(s, 0x7E8, 0x0C, true, 100);
     TEST_ASSERT_TRUE(canPollOnNegative(s, 0x7E8, 108));
     TEST_ASSERT_FALSE(s.pending);
     TEST_ASSERT_EQUAL_UINT8(0, s.missStreak);
-    TEST_ASSERT_FALSE(canPollReady(s, 108 + CAN_POLL_MIN_GAP_MS - 1));
-    TEST_ASSERT_TRUE(canPollReady(s, 108 + CAN_POLL_MIN_GAP_MS));
+    TEST_ASSERT_FALSE(canPollReady(s, 108 + CAN_POLL_MIN_GAP_MS - 1, POLL_MS));
+    TEST_ASSERT_TRUE(canPollReady(s, 108 + CAN_POLL_MIN_GAP_MS, POLL_MS));
     TEST_ASSERT_EQUAL_UINT8(0, s.missStreak);
 }
 
@@ -142,7 +145,7 @@ static void test_negative_response_releases(void) {
 // but still proves an ECU is there and ends a backoff
 static void test_negative_from_other_ecu(void) {
     CanPollState s;
-    canPollReset(s, 0);
+    canPollReset(s, 0, POLL_MS);
     s.missStreak = CAN_POLL_BACKOFF_AFTER;
     canPollOnSent(s, 0x7E8, 0x0C, true, 100);
     TEST_ASSERT_FALSE(canPollOnNegative(s, 0x7E9, 105));
@@ -170,55 +173,55 @@ static void test_negative_frame_shape(void) {
 // The ECU answers in 5 ms, so without the floor it would go every 15 ms.
 static void test_round_floor_single_pid(void) {
     CanPollState s;
-    canPollReset(s, 0);
+    canPollReset(s, 0, POLL_MS);
     uint32_t sends[4];
     uint8_t n = 0;
     for (uint32_t t = 0; t < 200 && n < 4; t++) {
         if (s.pending && t == s.lastTxMs + 5) canPollOnResponse(s, 0x7E8, 0x0C, t);
-        if (!canPollReady(s, t)) continue;
-        if (!canPollStartRound(s, t)) continue;
+        if (!canPollReady(s, t, POLL_MS)) continue;
+        if (!canPollStartRound(s, t, POLL_MS)) continue;
         canPollOnSent(s, 0x7E8, 0x0C, true, t);
         sends[n++] = t;
     }
     TEST_ASSERT_EQUAL_UINT8(4, n);
     TEST_ASSERT_EQUAL_UINT32(CAN_POLL_MIN_GAP_MS, sends[0]);   // first round not held
     for (uint8_t i = 1; i < 4; i++) {
-        TEST_ASSERT_EQUAL_UINT32(CAN_POLL_MIN_PID_INTERVAL_MS, sends[i] - sends[i - 1]);
+        TEST_ASSERT_EQUAL_UINT32(POLL_MS, sends[i] - sends[i - 1]);
     }
 }
 
 // A held round blocks canPollReady() itself, and is released by the floor
 static void test_round_hold_blocks_ready(void) {
     CanPollState s;
-    canPollReset(s, 0);
-    TEST_ASSERT_TRUE(canPollStartRound(s, 100));
+    canPollReset(s, 0, POLL_MS);
+    TEST_ASSERT_TRUE(canPollStartRound(s, 100, POLL_MS));
     canPollOnSent(s, 0x7E8, 0x0C, true, 100);
     canPollOnResponse(s, 0x7E8, 0x0C, 105);
-    TEST_ASSERT_TRUE(canPollReady(s, 115));
-    TEST_ASSERT_FALSE(canPollStartRound(s, 115));
+    TEST_ASSERT_TRUE(canPollReady(s, 115, POLL_MS));
+    TEST_ASSERT_FALSE(canPollStartRound(s, 115, POLL_MS));
     TEST_ASSERT_TRUE(s.roundHeld);
-    TEST_ASSERT_FALSE(canPollReady(s, 100 + CAN_POLL_MIN_PID_INTERVAL_MS - 1));
-    TEST_ASSERT_TRUE(canPollReady(s, 100 + CAN_POLL_MIN_PID_INTERVAL_MS));
-    TEST_ASSERT_TRUE(canPollStartRound(s, 100 + CAN_POLL_MIN_PID_INTERVAL_MS));
+    TEST_ASSERT_FALSE(canPollReady(s, 100 + POLL_MS - 1, POLL_MS));
+    TEST_ASSERT_TRUE(canPollReady(s, 100 + POLL_MS, POLL_MS));
+    TEST_ASSERT_TRUE(canPollStartRound(s, 100 + POLL_MS, POLL_MS));
     TEST_ASSERT_FALSE(s.roundHeld);
 }
 
 // A round longer than the floor (many PIDs, slow ECU) is never held
 static void test_long_round_not_held(void) {
     CanPollState s;
-    canPollReset(s, 0);
-    TEST_ASSERT_TRUE(canPollStartRound(s, 100));
-    TEST_ASSERT_TRUE(canPollStartRound(s, 100 + CAN_POLL_MIN_PID_INTERVAL_MS + 30));
+    canPollReset(s, 0, POLL_MS);
+    TEST_ASSERT_TRUE(canPollStartRound(s, 100, POLL_MS));
+    TEST_ASSERT_TRUE(canPollStartRound(s, 100 + POLL_MS + 30, POLL_MS));
     TEST_ASSERT_FALSE(s.roundHeld);
 }
 
 // The floor survives millis() rollover
 static void test_round_floor_millis_wrap(void) {
     CanPollState s;
-    canPollReset(s, 0xFFFFFF00u);
-    TEST_ASSERT_TRUE(canPollStartRound(s, 0xFFFFFFF0u));
-    TEST_ASSERT_FALSE(canPollStartRound(s, 0x00000010u));   // 32 ms later
-    TEST_ASSERT_TRUE(canPollStartRound(s, 0xFFFFFFF0u + CAN_POLL_MIN_PID_INTERVAL_MS));
+    canPollReset(s, 0xFFFFFF00u, POLL_MS);
+    TEST_ASSERT_TRUE(canPollStartRound(s, 0xFFFFFFF0u, POLL_MS));
+    TEST_ASSERT_FALSE(canPollStartRound(s, 0x00000010u, POLL_MS));   // 32 ms later
+    TEST_ASSERT_TRUE(canPollStartRound(s, 0xFFFFFFF0u + POLL_MS, POLL_MS));
 }
 
 // Which searches open a round: the head of the table, or a wrap past its end
@@ -239,18 +242,18 @@ static void test_round_floor_multi_pid_table(void) {
     const uint8_t SIZE = 8;
     const bool target[SIZE] = {false, true, false, false, true, false, false, true};
     CanPollState s;
-    canPollReset(s, 0);
+    canPollReset(s, 0, POLL_MS);
     uint8_t cursor = 0;
     uint32_t sentAt[16];
     uint8_t sentSlot[16];
     uint8_t n = 0;
     for (uint32_t t = 0; t < 400 && n < 9; t++) {
         if (s.pending && t == s.lastTxMs + 2) canPollOnResponse(s, 0x7E8, s.pendingPid, t);
-        if (!canPollReady(s, t)) continue;
+        if (!canPollReady(s, t, POLL_MS)) continue;
         for (uint8_t k = 0; k < SIZE; k++) {
             uint8_t slot = (uint8_t)((cursor + k) % SIZE);
             if (!target[slot]) continue;
-            if (canPollOpensRound(cursor, k, SIZE) && !canPollStartRound(s, t)) break;
+            if (canPollOpensRound(cursor, k, SIZE) && !canPollStartRound(s, t, POLL_MS)) break;
             cursor = (uint8_t)((slot + 1) % SIZE);
             canPollOnSent(s, 0x7E8, slot, true, t);
             sentAt[n] = t;
@@ -262,7 +265,7 @@ static void test_round_floor_multi_pid_table(void) {
     TEST_ASSERT_EQUAL_UINT8(9, n);
     for (uint8_t i = 0; i < 9; i++) {
         TEST_ASSERT_EQUAL_UINT8(i % 3 == 0 ? 1 : i % 3 == 1 ? 4 : 7, sentSlot[i]);
-        if (i >= 3) TEST_ASSERT_EQUAL_UINT32(CAN_POLL_MIN_PID_INTERVAL_MS, sentAt[i] - sentAt[i - 3]);
+        if (i >= 3) TEST_ASSERT_EQUAL_UINT32(POLL_MS, sentAt[i] - sentAt[i - 3]);
         if (i % 3) TEST_ASSERT_EQUAL_UINT32(2 + CAN_POLL_MIN_GAP_MS, sentAt[i] - sentAt[i - 1]);
     }
 }
@@ -270,14 +273,14 @@ static void test_round_floor_multi_pid_table(void) {
 // canPollReset (run every loop during SCAN PIDS) drops a held round
 static void test_reset_clears_round_hold(void) {
     CanPollState s;
-    canPollReset(s, 0);
-    TEST_ASSERT_TRUE(canPollStartRound(s, 100));
-    TEST_ASSERT_FALSE(canPollStartRound(s, 110));
+    canPollReset(s, 0, POLL_MS);
+    TEST_ASSERT_TRUE(canPollStartRound(s, 100, POLL_MS));
+    TEST_ASSERT_FALSE(canPollStartRound(s, 110, POLL_MS));
     TEST_ASSERT_TRUE(s.roundHeld);
-    canPollReset(s, 120);
+    canPollReset(s, 120, POLL_MS);
     TEST_ASSERT_FALSE(s.roundHeld);
-    TEST_ASSERT_TRUE(canPollReady(s, 120 + CAN_POLL_MIN_GAP_MS));
-    TEST_ASSERT_TRUE(canPollStartRound(s, 120 + CAN_POLL_MIN_GAP_MS));
+    TEST_ASSERT_TRUE(canPollReady(s, 120 + CAN_POLL_MIN_GAP_MS, POLL_MS));
+    TEST_ASSERT_TRUE(canPollStartRound(s, 120 + CAN_POLL_MIN_GAP_MS, POLL_MS));
 }
 
 // #506: while backed off, a request still times out at the response
@@ -285,17 +288,61 @@ static void test_reset_clears_round_hold(void) {
 // request waits the full backoff
 static void test_backoff_times_out_early(void) {
     CanPollState s;
-    canPollReset(s, 0);
+    canPollReset(s, 0, POLL_MS);
     s.missStreak = CAN_POLL_BACKOFF_AFTER;
     canPollOnSent(s, 0x7E8, 0x0C, true, 1000);
-    TEST_ASSERT_FALSE(canPollReady(s, 1000 + CAN_POLL_RESPONSE_TIMEOUT_MS - 1));
+    TEST_ASSERT_FALSE(canPollReady(s, 1000 + CAN_POLL_RESPONSE_TIMEOUT_MS - 1, POLL_MS));
     TEST_ASSERT_TRUE(s.pending);
-    TEST_ASSERT_FALSE(canPollReady(s, 1000 + CAN_POLL_RESPONSE_TIMEOUT_MS));
+    TEST_ASSERT_FALSE(canPollReady(s, 1000 + CAN_POLL_RESPONSE_TIMEOUT_MS, POLL_MS));
     TEST_ASSERT_FALSE(s.pending);                       // timed out: abort now
     TEST_ASSERT_EQUAL_UINT8(CAN_POLL_BACKOFF_AFTER + 1, s.missStreak);
-    TEST_ASSERT_FALSE(canPollReady(s, 1000 + CAN_POLL_BACKOFF_MS - 1));
+    TEST_ASSERT_FALSE(canPollReady(s, 1000 + CAN_POLL_BACKOFF_MS - 1, POLL_MS));
     TEST_ASSERT_EQUAL_UINT8(CAN_POLL_BACKOFF_AFTER + 1, s.missStreak);   // counted once
-    TEST_ASSERT_TRUE(canPollReady(s, 1000 + CAN_POLL_BACKOFF_MS));
+    TEST_ASSERT_TRUE(canPollReady(s, 1000 + CAN_POLL_BACKOFF_MS, POLL_MS));
+}
+
+// BUS CAN POLL: the round floor is the configured rate, 50 up to 1000 ms.
+// One PID, answered in 5 ms, so the floor alone sets the request interval.
+static void test_poll_rate_sets_round_interval(void) {
+    const uint16_t rates[] = {CAN_POLL_MS_MIN, 200, CAN_POLL_MS_MAX};
+    for (uint16_t rate : rates) {
+        CanPollState s;
+        canPollReset(s, 0, rate);
+        uint32_t sends[3];
+        uint8_t n = 0;
+        for (uint32_t t = 0; t < 4000 && n < 3; t++) {
+            if (s.pending && t == s.lastTxMs + 5) canPollOnResponse(s, 0x7E8, 0x0C, t);
+            if (!canPollReady(s, t, rate) || !canPollStartRound(s, t, rate)) continue;
+            canPollOnSent(s, 0x7E8, 0x0C, true, t);
+            sends[n++] = t;
+        }
+        TEST_ASSERT_EQUAL_UINT8(3, n);
+        TEST_ASSERT_EQUAL_UINT32(rate, sends[1] - sends[0]);
+        TEST_ASSERT_EQUAL_UINT32(rate, sends[2] - sends[1]);
+    }
+}
+
+// A change applies at once, with no setter: the next round honours the new
+// rate, measured from the start of the last one.
+static void test_poll_rate_change_mid_run(void) {
+    CanPollState s;
+    canPollReset(s, 0, 50);
+    TEST_ASSERT_TRUE(canPollStartRound(s, 100, 50));
+    TEST_ASSERT_FALSE(canPollStartRound(s, 249, 200));   // slowed to 200 ms
+    TEST_ASSERT_FALSE(canPollReady(s, 299, 200));
+    TEST_ASSERT_TRUE(canPollReady(s, 300, 200));
+    TEST_ASSERT_TRUE(canPollStartRound(s, 300, 200));
+    TEST_ASSERT_TRUE(canPollStartRound(s, 350, 50));     // and back to 50 ms
+}
+
+static void test_poll_ms_valid(void) {
+    TEST_ASSERT_TRUE(canPollMsValid(CAN_POLL_MS_MIN));
+    TEST_ASSERT_TRUE(canPollMsValid(CAN_POLL_MS_MAX));
+    TEST_ASSERT_TRUE(canPollMsValid(CAN_POLL_MS_DEFAULT));
+    TEST_ASSERT_FALSE(canPollMsValid(CAN_POLL_MS_MIN - 1));
+    TEST_ASSERT_FALSE(canPollMsValid(CAN_POLL_MS_MAX + 1));
+    TEST_ASSERT_FALSE(canPollMsValid(0));
+    TEST_ASSERT_FALSE(canPollMsValid(-50));
 }
 
 int main(int, char**) {
@@ -320,5 +367,8 @@ int main(int, char**) {
     RUN_TEST(test_round_floor_multi_pid_table);
     RUN_TEST(test_reset_clears_round_hold);
     RUN_TEST(test_backoff_times_out_early);
+    RUN_TEST(test_poll_rate_sets_round_interval);
+    RUN_TEST(test_poll_rate_change_mid_run);
+    RUN_TEST(test_poll_ms_valid);
     return UNITY_END();
 }

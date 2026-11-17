@@ -242,6 +242,67 @@ static void test_an_out_of_range_sea_level_pressure_keeps_the_current_one(void) 
 }
 
 // ---------------------------------------------------------------------------
+// #633: buses.canPollMs is BUS CAN POLL
+// ---------------------------------------------------------------------------
+
+static bool importCanPoll(const char* value) {
+    char text[160];
+    snprintf(text, sizeof(text),
+             "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"buses\":{\"canPollMs\":%s}}}", value);
+    return loadConfigFromJSON(text);
+}
+
+static void test_a_can_poll_rate_is_imported(void) {
+    systemConfig.buses.canPollMs = 50;
+    TEST_ASSERT_TRUE(importCanPoll("200"));
+    TEST_ASSERT_EQUAL_UINT16(200, systemConfig.buses.canPollMs);
+    TEST_ASSERT_TRUE(importCanPoll("1000"));
+    TEST_ASSERT_EQUAL_UINT16(1000, systemConfig.buses.canPollMs);
+}
+
+// Captures what the console is told during one import
+class ConsoleCapture : public TransportInterface {
+public:
+    char out[1024] = {0};
+    size_t len = 0;
+    size_t write(uint8_t c) override { if (len < sizeof(out) - 1) out[len++] = (char)c; return 1; }
+    size_t write(const uint8_t* b, size_t n) override { for (size_t i = 0; i < n; i++) write(b[i]); return n; }
+    int available() override { return 0; }
+    int read() override { return -1; }
+    int peek() override { return -1; }
+    void flush() override {}
+    const char* getName() const override { return "CAPTURE"; }
+    uint8_t getCapabilities() const override { return 0; }
+    TransportState getState() const override { return TRANSPORT_CONNECTED; }
+    bool begin() override { return true; }
+    void end() override {}
+    void update() override {}
+};
+
+// Out of range, a fraction, not a number or an explicit null: the current
+// value stays, and the console is told (a present null is not "absent")
+static void test_a_bad_can_poll_rate_keeps_the_current_one(void) {
+    const char* bad[] = {"49", "1001", "0", "-50", "99999", "75.5", "\"200\"", "true", "null"};
+    for (const char* v : bad) {
+        ConsoleCapture cap;
+        g_testControlSink = &cap;
+        systemConfig.buses.canPollMs = 300;
+        TEST_ASSERT_TRUE(importCanPoll(v));
+        g_testControlSink = nullptr;
+        TEST_ASSERT_EQUAL_UINT16_MESSAGE(300, systemConfig.buses.canPollMs, v);
+        TEST_ASSERT_NOT_NULL_MESSAGE(strstr(cap.out, "NOTE: buses.canPollMs out of range (50-1000); kept 300"), v);
+    }
+}
+
+// buses without the key says nothing about the rate
+static void test_a_buses_object_without_a_can_poll_rate_keeps_the_current_one(void) {
+    systemConfig.buses.canPollMs = 300;
+    TEST_ASSERT_TRUE(loadConfigFromJSON(
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"buses\":{\"i2c\":0}}}"));
+    TEST_ASSERT_EQUAL_UINT16(300, systemConfig.buses.canPollMs);
+}
+
+// ---------------------------------------------------------------------------
 // #590: display.address is a PCF8574/PCF8574A address, like DISPLAY ADDRESS
 // ---------------------------------------------------------------------------
 
@@ -563,6 +624,9 @@ int main(int, char**) {
     RUN_TEST(test_a_document_without_inputs_leaves_them_alone);
     RUN_TEST(test_sea_level_pressure_is_imported);
     RUN_TEST(test_an_out_of_range_sea_level_pressure_keeps_the_current_one);
+    RUN_TEST(test_a_can_poll_rate_is_imported);
+    RUN_TEST(test_a_bad_can_poll_rate_keeps_the_current_one);
+    RUN_TEST(test_a_buses_object_without_a_can_poll_rate_keeps_the_current_one);
     RUN_TEST(test_an_lcd_address_in_either_backpack_range_is_imported);
     RUN_TEST(test_a_non_lcd_address_keeps_the_current_one);
     RUN_TEST(test_an_out_of_range_stored_lcd_address_drives_the_default);

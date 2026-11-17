@@ -311,8 +311,9 @@ FLASHMEM void initCAN(uint8_t id) {
     if (bus == 0xFF) return;   // no bus: OUTPUT ADD OBD CAN<n>
     canSetHandlers(CANC_OBD, onCanFrame, onCanReset, onCanBusy);
     const CanAttach r = canAttach(bus, CANC_OBD);
-    if (r == CAN_ATTACH_BUS_OFF || r == CAN_ATTACH_NO_BUS || r == CAN_ATTACH_LISTEN_ONLY) {
-        msg.debug.error(TAG_CAN, "OBD output: CAN%u is off or listen-only", (unsigned)bus + 1);
+    if (r == CAN_ATTACH_BUS_OFF || r == CAN_ATTACH_NO_BUS || r == CAN_ATTACH_LISTEN_ONLY ||
+        r == CAN_ATTACH_INPUT_BUS) {
+        msg.debug.error(TAG_CAN, "OBD output: CAN%u is off, listen-only or CAN input's", (unsigned)bus + 1);
         return;
     }
     canOutputBus = bus;   // attached, also while the bus waits
