@@ -84,6 +84,7 @@ static void test_bus_can_json(void) {
     s.bus[0] = {1, 500000, 2, true, true, true};
     s.bus[1] = {2, 250000, 1, false, false, false};   // pins used by another function (#633)
     s.bus[2] = {1, 1000000, 2, true, false, true};   // past s.buses: not written
+    s.bus[1].layout = true;   // a PREOBD output on CAN2
     s.inBus = 0; s.inRunning = true; s.pollMs = 200;
     s.framesRx = 81234; s.haveFrame = true; s.lastFrameAgeMs = 12;
     s.pollActive = true; s.missStreak = 0; s.requests = 5120; s.answers = 5101;
@@ -112,6 +113,8 @@ static void test_bus_can_json(void) {
     TEST_ASSERT_EQUAL_STRING("LISTEN", doc["buses"][1]["mode"]);
     TEST_ASSERT_EQUAL_STRING("idle", doc["buses"][1]["state"]);
     TEST_ASSERT_FALSE(doc["buses"][1]["obd"]);
+    TEST_ASSERT_TRUE(doc["buses"][1]["layout"]);
+    TEST_ASSERT_FALSE(doc["buses"][0]["layout"]);
     TEST_ASSERT_TRUE(doc["buses"][0]["pinsFree"]);
     TEST_ASSERT_FALSE(doc["buses"][1]["pinsFree"]);
 

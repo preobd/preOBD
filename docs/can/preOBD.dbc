@@ -1,0 +1,141 @@
+VERSION "preOBD PREOBD layout 1"
+
+NS_ :
+	CM_
+	BA_DEF_
+	BA_
+	VAL_
+
+BS_:
+
+BU_: PREOBD
+
+BO_ 1280 PREOBD_F0: 8 PREOBD
+ SG_ ENGINE_RPM : 7|16@0+ (1,0) [0|65534] "rpm" Vector__XXX
+ SG_ VEHICLE_SPEED : 23|16@0+ (0.01,0) [0|655.34] "km/h" Vector__XXX
+ SG_ MAP_PRESSURE : 39|16@0+ (0.1,0) [0|6553.4] "kPa" Vector__XXX
+ SG_ BOOST_PRESSURE : 55|16@0+ (0.1,-100) [-100|6453.4] "kPa" Vector__XXX
+
+BO_ 1281 PREOBD_F1: 8 PREOBD
+ SG_ COOLANT_TEMP : 7|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+ SG_ OIL_TEMP : 23|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+ SG_ INTAKE_AIR_TEMP : 39|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+ SG_ INTERCOOLER_TEMP : 55|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+
+BO_ 1282 PREOBD_F2: 8 PREOBD
+ SG_ OIL_PRESSURE : 7|16@0+ (0.1,0) [0|6553.4] "kPa" Vector__XXX
+ SG_ FUEL_PRESSURE : 23|16@0+ (0.1,0) [0|6553.4] "kPa" Vector__XXX
+ SG_ BRAKE_PRESSURE : 39|16@0+ (0.1,0) [0|6553.4] "kPa" Vector__XXX
+ SG_ HYDRAULIC_PRESSURE : 55|16@0+ (0.1,0) [0|6553.4] "kPa" Vector__XXX
+
+BO_ 1283 PREOBD_F3: 8 PREOBD
+ SG_ TRANS_TEMP : 7|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+ SG_ DIFF_TEMP : 23|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+ SG_ TCASE_TEMP : 39|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+ SG_ GEAR_OIL_TEMP : 55|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+
+BO_ 1284 PREOBD_F4: 8 PREOBD
+ SG_ EGT_1 : 7|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+ SG_ EGT_2 : 23|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+ SG_ EGT_3 : 39|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+ SG_ EGT_4 : 55|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+
+BO_ 1285 PREOBD_F5: 8 PREOBD
+ SG_ CHT_1 : 7|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+ SG_ CHT_2 : 23|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+ SG_ CHT_3 : 39|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+ SG_ CHT_4 : 55|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+
+BO_ 1286 PREOBD_F6: 8 PREOBD
+ SG_ PRIMARY_BATTERY : 7|16@0+ (0.001,0) [0|65.534] "V" Vector__XXX
+ SG_ AUXILIARY_BATTERY : 23|16@0+ (0.001,0) [0|65.534] "V" Vector__XXX
+ SG_ THROTTLE_POSITION : 39|16@0+ (0.1,0) [0|6553.4] "%" Vector__XXX
+ SG_ FUEL_LEVEL : 55|16@0+ (0.1,0) [0|6553.4] "%" Vector__XXX
+
+BO_ 1287 PREOBD_F7: 8 PREOBD
+ SG_ AMBIENT_TEMP : 7|16@0+ (0.1,-50) [-50|6503.4] "degC" Vector__XXX
+ SG_ BAROMETRIC_PRESSURE : 23|16@0+ (0.1,0) [0|6553.4] "kPa" Vector__XXX
+ SG_ HUMIDITY : 39|16@0+ (0.1,0) [0|6553.4] "%" Vector__XXX
+ SG_ ELEVATION : 55|16@0+ (1,-1000) [-1000|64534] "m" Vector__XXX
+
+BO_ 1288 PREOBD_F8: 8 PREOBD
+ SG_ COOLANT_LEVEL : 7|8@0+ (1,0) [0|254] "" Vector__XXX
+ SG_ OIL_LEVEL : 15|8@0+ (1,0) [0|254] "" Vector__XXX
+
+CM_ BO_ 1280 "preOBD gauge frame 0, pushed every interval. Fields are big-endian; all ones means no data.";
+CM_ BO_ 1281 "preOBD gauge frame 1, pushed every interval. Fields are big-endian; all ones means no data.";
+CM_ BO_ 1282 "preOBD gauge frame 2, pushed every interval. Fields are big-endian; all ones means no data.";
+CM_ BO_ 1283 "preOBD gauge frame 3, pushed every interval. Fields are big-endian; all ones means no data.";
+CM_ BO_ 1284 "preOBD gauge frame 4, pushed every interval. Fields are big-endian; all ones means no data.";
+CM_ BO_ 1285 "preOBD gauge frame 5, pushed every interval. Fields are big-endian; all ones means no data.";
+CM_ BO_ 1286 "preOBD gauge frame 6, pushed every interval. Fields are big-endian; all ones means no data.";
+CM_ BO_ 1287 "preOBD gauge frame 7, pushed every interval. Fields are big-endian; all ones means no data.";
+CM_ BO_ 1288 "preOBD gauge frame 8, pushed every interval. Fields are big-endian; all ones means no data.";
+CM_ SG_ 1280 ENGINE_RPM "ENGINE_RPM input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1280 VEHICLE_SPEED "VEHICLE_SPEED input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1280 MAP_PRESSURE "MAP_PRESSURE input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1280 BOOST_PRESSURE "BOOST_PRESSURE input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1281 COOLANT_TEMP "COOLANT_TEMP input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1281 OIL_TEMP "OIL_TEMP input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1281 INTAKE_AIR_TEMP "INTAKE_AIR_TEMP input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1281 INTERCOOLER_TEMP "INTERCOOLER_TEMP input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1282 OIL_PRESSURE "OIL_PRESSURE input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1282 FUEL_PRESSURE "FUEL_PRESSURE input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1282 BRAKE_PRESSURE "BRAKE_PRESSURE input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1282 HYDRAULIC_PRESSURE "HYDRAULIC_PRESSURE input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1283 TRANS_TEMP "TRANS_TEMP input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1283 DIFF_TEMP "DIFF_TEMP input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1283 TCASE_TEMP "TCASE_TEMP input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1283 GEAR_OIL_TEMP "GEAR_OIL_TEMP input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1284 EGT_1 "EGT input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1284 EGT_2 "EGT input 2 (in pin order); all ones = no data.";
+CM_ SG_ 1284 EGT_3 "EGT input 3 (in pin order); all ones = no data.";
+CM_ SG_ 1284 EGT_4 "EGT input 4 (in pin order); all ones = no data.";
+CM_ SG_ 1285 CHT_1 "CHT input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1285 CHT_2 "CHT input 2 (in pin order); all ones = no data.";
+CM_ SG_ 1285 CHT_3 "CHT input 3 (in pin order); all ones = no data.";
+CM_ SG_ 1285 CHT_4 "CHT input 4 (in pin order); all ones = no data.";
+CM_ SG_ 1286 PRIMARY_BATTERY "PRIMARY_BATTERY input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1286 AUXILIARY_BATTERY "AUXILIARY_BATTERY input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1286 THROTTLE_POSITION "THROTTLE_POSITION input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1286 FUEL_LEVEL "FUEL_LEVEL input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1287 AMBIENT_TEMP "AMBIENT_TEMP input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1287 BAROMETRIC_PRESSURE "BAROMETRIC_PRESSURE input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1287 HUMIDITY "HUMIDITY input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1287 ELEVATION "ELEVATION input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1288 COOLANT_LEVEL "COOLANT_LEVEL input 1 (in pin order); all ones = no data.";
+CM_ SG_ 1288 OIL_LEVEL "OIL_LEVEL input 1 (in pin order); all ones = no data.";
+VAL_ 1280 ENGINE_RPM 65535 "N/A" ;
+VAL_ 1280 VEHICLE_SPEED 65535 "N/A" ;
+VAL_ 1280 MAP_PRESSURE 65535 "N/A" ;
+VAL_ 1280 BOOST_PRESSURE 65535 "N/A" ;
+VAL_ 1281 COOLANT_TEMP 65535 "N/A" ;
+VAL_ 1281 OIL_TEMP 65535 "N/A" ;
+VAL_ 1281 INTAKE_AIR_TEMP 65535 "N/A" ;
+VAL_ 1281 INTERCOOLER_TEMP 65535 "N/A" ;
+VAL_ 1282 OIL_PRESSURE 65535 "N/A" ;
+VAL_ 1282 FUEL_PRESSURE 65535 "N/A" ;
+VAL_ 1282 BRAKE_PRESSURE 65535 "N/A" ;
+VAL_ 1282 HYDRAULIC_PRESSURE 65535 "N/A" ;
+VAL_ 1283 TRANS_TEMP 65535 "N/A" ;
+VAL_ 1283 DIFF_TEMP 65535 "N/A" ;
+VAL_ 1283 TCASE_TEMP 65535 "N/A" ;
+VAL_ 1283 GEAR_OIL_TEMP 65535 "N/A" ;
+VAL_ 1284 EGT_1 65535 "N/A" ;
+VAL_ 1284 EGT_2 65535 "N/A" ;
+VAL_ 1284 EGT_3 65535 "N/A" ;
+VAL_ 1284 EGT_4 65535 "N/A" ;
+VAL_ 1285 CHT_1 65535 "N/A" ;
+VAL_ 1285 CHT_2 65535 "N/A" ;
+VAL_ 1285 CHT_3 65535 "N/A" ;
+VAL_ 1285 CHT_4 65535 "N/A" ;
+VAL_ 1286 PRIMARY_BATTERY 65535 "N/A" ;
+VAL_ 1286 AUXILIARY_BATTERY 65535 "N/A" ;
+VAL_ 1286 THROTTLE_POSITION 65535 "N/A" ;
+VAL_ 1286 FUEL_LEVEL 65535 "N/A" ;
+VAL_ 1287 AMBIENT_TEMP 65535 "N/A" ;
+VAL_ 1287 BAROMETRIC_PRESSURE 65535 "N/A" ;
+VAL_ 1287 HUMIDITY 65535 "N/A" ;
+VAL_ 1287 ELEVATION 65535 "N/A" ;
+VAL_ 1288 COOLANT_LEVEL 255 "N/A" ;
+VAL_ 1288 OIL_LEVEL 255 "N/A" ;

@@ -31,6 +31,15 @@ uint8_t obdEncodeValue(const ObdOutputPid& spec, float baseValue, bool gaugeInpu
                        float baroBar, uint8_t* payload);
 
 /**
+ * Units helpers behind obdEncodeValue, so a caller encoding at a high rate can
+ * resolve once: obdResolveUnits() maps a PROGMEM registry name to a
+ * UNITS_REGISTRY index (0xFF = UNITS_NOT_FOUND for nullptr or a miss) and
+ * obdConvertUnits() applies it (0xFF leaves the value unchanged).
+ */
+uint8_t obdResolveUnits(const char* unitsName);
+float obdConvertUnits(float baseValue, uint8_t unitsIdx);
+
+/**
  * Can `in` answer on its obd2pid? A table-defined PID needs the input's exact
  * measurement type; any other PID needs an obd2length of 1-5.
  */

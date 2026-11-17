@@ -4,6 +4,10 @@
 
 #include "output_admission.h"
 #include "../../hal/bus_defaults.h"   // NUM_CAN_BUSES: the refusal's hint
+#if INCLUDE_CAN_LAYOUTS
+#include "../formats/can_layout_output.h"   // PREOBD_BASE_ID, PREOBD_FRAMES
+#include "../../buses/bus_config.h"         // CAN_BUS_LISTEN, CAN_BUS_SLOTS
+#endif
 
 #ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
 #define FLASHMEM
@@ -40,8 +44,31 @@ FLASHMEM bool outputOnCanInputBus(uint8_t transport, const SystemConfig& cfg) {
     return outputTransportCanBus(transport) == cfg.buses.canInputBus;
 }
 
+#if INCLUDE_CAN_LAYOUTS
+// The CAN IDs each sending format owns on its bus: OBD 0x7DF/0x7E0/0x7E8,
+// PREOBD [PREOBD_BASE_ID, +PREOBD_FRAMES)
+static bool ownsCanId(uint8_t format, uint16_t id) {
+    if (format == FMT_OBD) return id == 0x7DF || id == 0x7E0 || id == 0x7E8;
+    if (format == FMT_PREOBD) return id >= PREOBD_BASE_ID && id < PREOBD_BASE_ID + PREOBD_FRAMES;
+    return false;
+}
+
+FLASHMEM bool outputCanIdsOverlap(OutputFormat a, OutputFormat b) {
+    static const uint16_t kObdIds[] = {0x7DF, 0x7E0, 0x7E8};
+    for (uint8_t i = 0; i < sizeof(kObdIds) / sizeof(kObdIds[0]); i++) {
+        if (ownsCanId(a, kObdIds[i]) && ownsCanId(b, kObdIds[i])) return true;
+    }
+    for (uint16_t id = PREOBD_BASE_ID; id < PREOBD_BASE_ID + PREOBD_FRAMES; id++) {
+        if (ownsCanId(a, id) && ownsCanId(b, id)) return true;
+    }
+    return false;
+}
+#endif
+
 FLASHMEM const __FlashStringHelper* outputAdmitReason(uint8_t selfId, OutputFormat format, uint8_t transport,
-                                                     const SystemConfig& cfg, const OutputRecord* table) {
+                                                     const SystemConfig& cfg, const OutputRecord* table,
+                                                     bool yieldToAll) {
+    (void)yieldToAll;   // used only by the CAN-ID check (INCLUDE_CAN_LAYOUTS)
     if (!outputFormatBuilt(format)) return F("is not in this build");
     if (!outputTransportAllowed(format, transport)) return F("can't use that transport");
     // BLE is the nRF's one data channel (the phone's FFE1): one enabled
@@ -62,7 +89,28 @@ FLASHMEM const __FlashStringHelper* outputAdmitReason(uint8_t selfId, OutputForm
     // so the #612 layouts inherit it. A disabled record there is fine (the
     // default seed makes one); it is refused when it is enabled or started.
     if (outputTransportKind(transport) == OTK_CAN) {
-        if (!outputOnCanInputBus(transport, cfg)) return nullptr;
+        if (!outputOnCanInputBus(transport, cfg)) {
+#if INCLUDE_CAN_LAYOUTS
+            // Every CAN sender: not on a LISTEN bus (it never transmits), and no
+            // two enabled outputs on one bus with CAN IDs in common. The lowest
+            // id keeps the IDs where a loaded table holds two.
+            const uint8_t bus = outputTransportCanBus(transport);
+            if (bus < CAN_BUS_SLOTS && cfg.buses.can[bus].mode == CAN_BUS_LISTEN) {
+                return F("sends on a LISTEN bus, which never transmits (BUS CAN <bus> ENABLE)");
+            }
+            const bool selfOn = !yieldToAll && selfId < MAX_OUTPUTS && table[selfId].enabled;
+            for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+                if (id == selfId) continue;
+                const OutputRecord& r = table[id];
+                if (r.format == FMT_NONE || !r.enabled || outputTransportCanBus(r.transport) != bus) continue;
+                if (selfOn && id > selfId) continue;
+                if (outputCanIdsOverlap((OutputFormat)r.format, format)) {
+                    return F("shares CAN IDs with another enabled output on this bus (one PREOBD per bus)");
+                }
+            }
+#endif
+            return nullptr;
+        }
 #if NUM_CAN_BUSES >= 2
         return F("can't share CAN input's bus (one job per bus): OUTPUT <id> TRANSPORT, or BUS CAN <bus> INPUT DISABLE");
 #else

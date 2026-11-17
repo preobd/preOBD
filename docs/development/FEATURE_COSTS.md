@@ -103,6 +103,20 @@ From `avr-nm --size-sort -S -C`:
 > (`rules` 42 B + `actions` 12 B + `g_ruleContexts` 26 B at the AVR cap of 2),
 > no longer part of `systemConfig` (which dropped 163 → 109 B accordingly).
 
+## teensy41: CAN layouts
+
+`INCLUDE_CAN_LAYOUTS` (the `PREOBD` output, #612 phase 3a). Measured 2026-11-13
+on branch `feature/can-layout-preobd` with clean builds, once as is and once with
+`PLATFORMIO_BUILD_FLAGS='-D INCLUDE_CAN_LAYOUTS=0'`. The mega2560 omits the
+capability.
+
+| Knob | ΔFlash code | ΔFlash data | ΔRAM1 variables | ΔStack left |
+|---|---|---|---|---|
+| `INCLUDE_CAN_LAYOUTS` | +7,884 B | +1,840 B | +1,664 B | −1,664 B |
+
+Stack left: 80,032 B without, 78,368 B with. On teensy40 the branch-vs-main
+flash delta was about +6 KB and the stack went 80,288 to 79,648 B.
+
 ## feather_f405
 
 STM32F405RG (128 KB SRAM + 64 KB CCM, 1 MB flash), every capability declared,

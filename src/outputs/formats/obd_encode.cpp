@@ -6,14 +6,30 @@
 
 #include <Arduino.h>
 #include <math.h>
+#include <float.h>
 #include <string.h>
 #include "obd_encode.h"
+#include "field_encode.h"
 #include "../../inputs/input.h"
 #include "../../sensors/units_registry.h"
 
 #ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
 #define FLASHMEM
 #endif
+
+FLASHMEM uint8_t obdResolveUnits(const char* unitsName) {
+    if (!unitsName) return UNITS_NOT_FOUND;
+    char name[16];
+    strncpy_P(name, unitsName, sizeof(name) - 1);
+    name[sizeof(name) - 1] = '\0';
+    return findUnitsIndexByName(name);
+}
+
+float obdConvertUnits(float baseValue, uint8_t unitsIdx) {
+    if (unitsIdx == UNITS_NOT_FOUND) return baseValue;
+    return baseValue * pgm_read_float(&UNITS_REGISTRY[unitsIdx].conversionFactor)
+                     + pgm_read_float(&UNITS_REGISTRY[unitsIdx].conversionOffset);
+}
 
 FLASHMEM uint8_t obdEncodeValue(const ObdOutputPid& spec, float baseValue, bool gaugeInput,
                        float baroBar, uint8_t* payload) {
@@ -23,34 +39,18 @@ FLASHMEM uint8_t obdEncodeValue(const ObdOutputPid& spec, float baseValue, bool 
 
     float v = baseValue;
     if ((spec.flags & OBD_OUT_ABSOLUTE) && gaugeInput) v += baroBar;   // gauge -> absolute (bar)
-    if (spec.units) {
-        // The PID's J1979 unit (kPa, degC ...), from the input's base unit
-        char name[16];
-        strncpy_P(name, spec.units, sizeof(name) - 1);
-        name[sizeof(name) - 1] = '\0';
-        uint8_t u = findUnitsIndexByName(name);
-        if (u != UNITS_NOT_FOUND) {
-            v = v * pgm_read_float(&UNITS_REGISTRY[u].conversionFactor)
-                  + pgm_read_float(&UNITS_REGISTRY[u].conversionOffset);
-        }
-    }
-
-    // raw = (value - offset) / scale, rounded, clamped to the field in float
-    // before any integer cast (casting an out-of-range float is undefined)
-    float raw = (v - spec.offset) / spec.scale;
-    const float maxRaw = spec.valueLength >= 4 ? 4294967295.0f
-                                               : (float)((1UL << (8 * spec.valueLength)) - 1);
-    uint32_t r;
-    if (!(raw > 0.0f)) r = 0;                       // also NaN
-    else if (raw + 0.5f >= maxRaw) r = spec.valueLength >= 4 ? 0xFFFFFFFFUL
-                                                            : (uint32_t)maxRaw;
-    else r = (uint32_t)(raw + 0.5f);
+    // The PID's J1979 unit (kPa, degC ...), from the input's base unit
+    v = obdConvertUnits(v, obdResolveUnits(spec.units));
+    // A huge finite value can overflow to inf in the conversion; it must still
+    // clamp to the field's max (as it always has), not read as "no value"
+    if (v > FLT_MAX) v = FLT_MAX;
+    else if (v < -FLT_MAX) v = -FLT_MAX;
 
     memset(payload, 0, spec.length);
     if (spec.support) payload[0] = spec.support;
-    for (uint8_t i = 0; i < spec.valueLength; i++) {
-        payload[spec.valueOffset + i] = (uint8_t)(r >> (8 * (spec.valueLength - 1 - i)));
-    }
+    // valueLength is 1, 2 or 4 in every table row; an odd one encodes nothing
+    encodeScaledField(v, spec.scale, spec.offset, spec.valueLength, 0, false,
+                      payload + spec.valueOffset);
     return spec.length;
 }
 

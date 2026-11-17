@@ -31,8 +31,13 @@
 
 // May output `selfId` (OUT_ID_NONE for a new one) run as `format` on
 // `transport`, enabled, beside the other enabled outputs in `table`?
+// Where a loaded table holds two outputs with the same CAN IDs on one bus, the
+// lowest enabled id keeps them (boot, LOAD, sync). A command changing output
+// <selfId> passes yieldToAll: it is refused beside ANY other enabled output,
+// so OUTPUT <id> TRANSPORT can't move a lower id onto a bus a higher one runs on.
 const __FlashStringHelper* outputAdmitReason(uint8_t selfId, OutputFormat format, uint8_t transport,
-                                            const SystemConfig& cfg, const OutputRecord* table);
+                                            const SystemConfig& cfg, const OutputRecord* table,
+                                            bool yieldToAll = false);
 
 // Is there room for another output of this format/kind (the singletons)?
 const __FlashStringHelper* outputAddLimitReason(OutputFormat format, uint8_t transport,
@@ -55,5 +60,13 @@ uint8_t outputSingletonHolder(uint8_t selfId, OutputFormat format, uint8_t trans
 // (false for a non-CAN transport or with CAN input off). outputAdmitReason
 // refuses an output there; separate so the rule is testable without CAN.
 bool outputOnCanInputBus(uint8_t transport, const SystemConfig& cfg);
+
+#if INCLUDE_CAN_LAYOUTS
+// Do two CAN-sending formats own a CAN ID in common? OBD owns 0x7DF, 0x7E0 and
+// 0x7E8; PREOBD owns PREOBD_BASE_ID .. +PREOBD_FRAMES-1. Two enabled outputs
+// on one bus with overlapping IDs are refused by outputAdmitReason, at every
+// door (CLI, JSON staging, EEPROM load/start, syncOutputsToConfig).
+bool outputCanIdsOverlap(OutputFormat a, OutputFormat b);
+#endif
 
 #endif // OUTPUT_ADMISSION_H

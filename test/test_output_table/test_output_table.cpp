@@ -210,9 +210,36 @@ static void test_a_can_output_cannot_share_can_inputs_bus(void) {
     TEST_ASSERT_FALSE(outputOnCanInputBus(OT_CAN1, cfg));
 }
 
+// PREOBD owns 0x500-0x508 and OBD 0x7DF/0x7E0/0x7E8: OBD and PREOBD share a
+// bus, two PREOBD do not (the same function at every door)
+static void test_can_id_overlap(void) {
+    TEST_ASSERT_FALSE(outputCanIdsOverlap(FMT_OBD, FMT_PREOBD));
+    TEST_ASSERT_FALSE(outputCanIdsOverlap(FMT_PREOBD, FMT_OBD));
+    TEST_ASSERT_TRUE(outputCanIdsOverlap(FMT_PREOBD, FMT_PREOBD));
+    TEST_ASSERT_TRUE(outputCanIdsOverlap(FMT_OBD, FMT_OBD));
+    TEST_ASSERT_FALSE(outputCanIdsOverlap(FMT_CSV, FMT_PREOBD));
+    TEST_ASSERT_TRUE(outputFormatSendsCan(FMT_PREOBD));
+    TEST_ASSERT_FALSE(outputFormatSendsCan(FMT_CSV));
+}
+
+static void test_preobd_format_table(void) {
+    TEST_ASSERT_EQUAL(FMT_PREOBD, parseOutputFormat("preobd"));
+    TEST_ASSERT_EQUAL_STRING("PREOBD", outputFormatName(FMT_PREOBD));
+    TEST_ASSERT_TRUE(outputFormatBuilt(FMT_PREOBD));
+    TEST_ASSERT_TRUE(outputFormatPaced(FMT_PREOBD));
+    TEST_ASSERT_EQUAL_UINT16(100, outputIntervalDefault(FMT_PREOBD, OT_CAN1));
+    TEST_ASSERT_EQUAL_UINT16(20, outputIntervalMin(FMT_PREOBD, OT_CAN1));
+    TEST_ASSERT_TRUE(outputIntervalValid(FMT_PREOBD, OT_CAN1, 20));
+    TEST_ASSERT_FALSE(outputIntervalValid(FMT_PREOBD, OT_CAN1, 19));
+    TEST_ASSERT_TRUE(outputIntervalValid(FMT_PREOBD, OT_CAN1, 60000));
+    TEST_ASSERT_FALSE(outputIntervalValid(FMT_PREOBD, OT_CAN1, 60001));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_a_can_output_cannot_share_can_inputs_bus);
+    RUN_TEST(test_can_id_overlap);
+    RUN_TEST(test_preobd_format_table);
     RUN_TEST(test_add_takes_the_lowest_free_id);
     RUN_TEST(test_a_full_table_takes_nothing);
     RUN_TEST(test_new_records_get_their_format_defaults);

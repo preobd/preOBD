@@ -29,6 +29,7 @@ struct CanBusRuntime {
     uint8_t runMode;     // CanBusMode the controller runs in
     uint8_t runBaud;     // CanBaudIndex it runs at
     bool    begun;       // the controller was started once (later starts are restarts)
+    uint8_t layoutRefs;  // layout outputs attached (they share one CANC_LAYOUT bit)
 };
 
 CanBusRuntime rt[CAN_BUS_COUNT];
@@ -90,19 +91,24 @@ FLASHMEM CanAttach canAttach(uint8_t bus, CanConsumer c) {
     if (!validBus(bus) || c >= NUM_CAN_CONSUMERS) return CAN_ATTACH_NO_BUS;
     const uint8_t mode = settingMode(bus);
     if (mode == CAN_BUS_OFF) return CAN_ATTACH_BUS_OFF;
-    if (c == CANC_OBD && mode == CAN_BUS_LISTEN) return CAN_ATTACH_LISTEN_ONLY;
-    // One job per bus (#632), a guard behind output admission: OBD never joins
-    // CAN input. One-sided on purpose: CAN input is never refused, so where the
+    if (canConsumerSends(c) && mode == CAN_BUS_LISTEN) return CAN_ATTACH_LISTEN_ONLY;
+    // One job per bus (#632), a guard behind output admission: a sender never
+    // joins CAN input. One-sided on purpose: CAN input is never refused, so where the
     // two meet (a LOAD re-attaches input before it stops the old OBD) reading
     // the car wins.
-    if (c == CANC_OBD && (rt[bus].consumers & (1u << CANC_INPUT))) return CAN_ATTACH_INPUT_BUS;
+    if (canConsumerSends(c) && (rt[bus].consumers & (1u << CANC_INPUT))) return CAN_ATTACH_INPUT_BUS;
     rt[bus].consumers |= (uint8_t)(1u << c);
+    if (c == CANC_LAYOUT && rt[bus].layoutRefs < 255) rt[bus].layoutRefs++;
     if (rt[bus].state == CAN_STATE_UP) return CAN_ATTACH_OK;   // never re-begun
     return startBus(bus);
 }
 
 FLASHMEM void canDetach(uint8_t bus, CanConsumer c) {
     if (!validBus(bus) || c >= NUM_CAN_CONSUMERS) return;
+    if (c == CANC_LAYOUT) {
+        if (rt[bus].layoutRefs > 0) rt[bus].layoutRefs--;
+        if (rt[bus].layoutRefs > 0) return;   // other layout outputs remain
+    }
     rt[bus].consumers &= (uint8_t)~(1u << c);
     if (rt[bus].consumers == 0) silenceBus(bus);   // the next attach restarts it
 }

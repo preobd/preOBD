@@ -28,7 +28,8 @@
 enum CanConsumer : uint8_t {
     CANC_INPUT = 0,   // CAN input (sensors/can/input_can.cpp)
     CANC_OBD   = 1,   // the OBD output (outputs/formats/output_can.cpp)
-    NUM_CAN_CONSUMERS = 2
+    CANC_LAYOUT = 2,  // the layout outputs, PREOBD (outputs/formats/can_layout_output.cpp)
+    NUM_CAN_CONSUMERS = 3
 };
 
 enum CanBusState : uint8_t {
@@ -53,11 +54,17 @@ typedef void (*CanFrameFn)(uint32_t id, const uint8_t* data, uint8_t len, bool e
 typedef void (*CanResetFn)();     // the bus restarted: drop in-flight state
 typedef bool (*CanBusyFn)();      // an exchange is in flight (abort would cut it)
 
+// True for a consumer that transmits (OBD, layouts)
+inline bool canConsumerSends(CanConsumer c) { return c == CANC_OBD || c == CANC_LAYOUT; }
+
 // Register a consumer's handlers, once, before its first attach.
 void canSetHandlers(CanConsumer c, CanFrameFn onFrame, CanResetFn onReset, CanBusyFn busy);
 
 // Attach to / detach from a bus. Attaching to a bus that is on begins it if it
-// is not running yet. Only OBD sends, so only OBD is refused on LISTEN.
+// is not running yet. Every sending consumer (OBD, layouts) is refused on LISTEN
+// and on the bus CAN input reads (#632). Several layout outputs share the one
+// CANC_LAYOUT bit on a bus: attaches are counted, and the bit clears on the last
+// detach.
 CanAttach canAttach(uint8_t bus, CanConsumer c);
 void canDetach(uint8_t bus, CanConsumer c);
 

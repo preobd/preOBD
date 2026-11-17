@@ -271,12 +271,43 @@ static void test_turning_a_bus_off_stops_reading_it(void) {
     TEST_ASSERT_EQUAL(CAN_STATE_OFF, canBusState(0));
 }
 
+// A layout output (PREOBD) is a sender like OBD: refused on LISTEN and on the
+// bus CAN input reads; several share one bit, cleared by the last detach
+static void test_layout_is_a_sender(void) {
+    systemConfig.buses.can[0].mode = CAN_BUS_LISTEN;
+    TEST_ASSERT_EQUAL(CAN_ATTACH_LISTEN_ONLY, canAttach(0, CANC_LAYOUT));
+    TEST_ASSERT_EQUAL_HEX8(0, canBusConsumers(0));
+    systemConfig.buses.can[0].mode = CAN_BUS_NORMAL;
+    TEST_ASSERT_EQUAL(CAN_ATTACH_OK, canAttach(0, CANC_INPUT));
+    TEST_ASSERT_EQUAL(CAN_ATTACH_INPUT_BUS, canAttach(0, CANC_LAYOUT));
+    TEST_ASSERT_EQUAL_HEX8(0x01, canBusConsumers(0));
+    canDetach(0, CANC_INPUT);
+    TEST_ASSERT_EQUAL(CAN_ATTACH_OK, canAttach(0, CANC_LAYOUT));
+    TEST_ASSERT_EQUAL(CAN_ATTACH_OK, canAttach(0, CANC_OBD));   // OBD and layout share a bus
+    TEST_ASSERT_EQUAL_HEX8(0x06, canBusConsumers(0));
+    TEST_ASSERT_EQUAL(CAN_ATTACH_OK, canAttach(0, CANC_INPUT));   // input is never refused
+}
+
+static void test_layout_bit_is_refcounted(void) {
+    systemConfig.buses.can[0].mode = CAN_BUS_NORMAL;
+    canAttach(0, CANC_LAYOUT);
+    canAttach(0, CANC_LAYOUT);
+    canDetach(0, CANC_LAYOUT);
+    TEST_ASSERT_EQUAL_HEX8(0x04, canBusConsumers(0));   // one layout output remains
+    TEST_ASSERT_TRUE(canBusUp(0));
+    canDetach(0, CANC_LAYOUT);
+    TEST_ASSERT_EQUAL_HEX8(0, canBusConsumers(0));
+    TEST_ASSERT_TRUE(fakehal::bus[0].listen);   // the last one out silences the bus
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_attach_to_an_off_bus_is_refused);
     RUN_TEST(test_an_on_bus_starts_on_the_first_attach_only);
     RUN_TEST(test_listen_never_transmits);
     RUN_TEST(test_obd_cannot_join_can_input);
+    RUN_TEST(test_layout_is_a_sender);
+    RUN_TEST(test_layout_bit_is_refcounted);
     RUN_TEST(test_obd_requests_reach_only_obd);
     RUN_TEST(test_a_detached_consumer_gets_nothing);
     RUN_TEST(test_a_new_rate_restarts_and_resets_every_consumer);

@@ -918,6 +918,9 @@ FLASHMEM void displayCANStatus() {
         }
         if (who & (1u << CANC_INPUT)) msg.control.print(F(", CAN input"));
         if (who & (1u << CANC_OBD)) msg.control.print(F(", OBD output"));
+#if INCLUDE_CAN_LAYOUTS
+        if (who & (1u << CANC_LAYOUT)) msg.control.print(F(", PREOBD output"));
+#endif
         msg.control.println();
         if (st == CAN_STATE_NO_PINS || (cs.mode != CAN_BUS_OFF && !canBusClaimed(b))) {
             const uint8_t pins[2] = { getDefaultCANTX(b), getDefaultCANRX(b) };

@@ -10,6 +10,9 @@
 #include "../../inputs/input_manager.h"
 #include "../table/output_base.h"
 #include "obd_encode.h"
+#if INCLUDE_CAN_LAYOUTS
+#include "can_layout_output.h"   // canLayoutMarkStale
+#endif
 #include "../../core/message_api.h"
 #include "../../core/log_tags.h"
 
@@ -27,7 +30,12 @@ static uint8_t    pidLookupCount = 0;
 // one. Set at the CLI's CONFIG gate (command_dispatch.cpp).
 static bool       tableStale = false;
 
-void obdQuery_markStale() { tableStale = true; }
+void obdQuery_markStale() {
+    tableStale = true;
+#if INCLUDE_CAN_LAYOUTS
+    canLayoutMarkStale();   // the layout outputs' input map goes stale on the same changes
+#endif
+}
 static inline void freshen() { if (tableStale) obdQuery_buildLookupTable(); }
 
 void obdQuery_buildLookupTable() {

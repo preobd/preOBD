@@ -83,6 +83,9 @@ FLASHMEM JsonArray canBusStatusToJson(const CanBusSnapshot& s, JsonObject out) {
         o["state"] = BUS_STATE_NAMES[e.state <= 4 ? e.state : 0];
         o["input"] = e.input;
         o["obd"] = e.obd;
+#if INCLUDE_CAN_LAYOUTS
+        o["layout"] = e.layout;
+#endif
         o["pinsFree"] = e.pinsFree;
     }
 

@@ -10,6 +10,7 @@
  *                              transport, every `interval` ms
  *   CSV on SD                  one; output_sdlog.cpp owns its cadence
  *   OBD                        one; attaches to its CAN bus (output_can.cpp)
+ *   PREOBD                     pushes our own CAN frames (can_layout_output.cpp)
  *   ELM327 on a serial port    one; binds the port (output_elm327.cpp)
  *   ELM327 on BLE              one; the framed link's 0x30 channel (elm327_framed.cpp)
  *   the alarm                  built in, no record (systemConfig.alarmEnabled)
@@ -25,6 +26,7 @@
 #include "../../core/system_mode.h"
 #include "../formats/output_sdlog.h"
 #include "../formats/output_format.h"   // sdLogFormatName for OUTPUT LIST
+#include "../formats/can_layout_output.h"   // PREOBD (INCLUDE_CAN_LAYOUTS)
 #if INCLUDE_FRAMED_TRANSPORT && INCLUDE_ELM327
 #include "../formats/elm327_framed.h"
 #endif
@@ -102,6 +104,11 @@ static FLASHMEM bool startOutput(uint8_t id) {
         running = canOutputAttachedBus() != 0xFF;
         break;
 #endif
+#if INCLUDE_CAN_LAYOUTS
+    case FMT_PREOBD:
+        running = canLayoutStart(id);
+        break;
+#endif
 #if INCLUDE_ELM327
     case FMT_ELM327:
 #if INCLUDE_FRAMED_TRANSPORT
@@ -147,6 +154,9 @@ static FLASHMEM void stopOutput(uint8_t id) {
     switch (fmt) {
 #if INCLUDE_CAN
     case FMT_OBD: stopCAN(); break;
+#endif
+#if INCLUDE_CAN_LAYOUTS
+    case FMT_PREOBD: canLayoutStop(id); break;
 #endif
 #if INCLUDE_ELM327
     case FMT_ELM327:
@@ -246,6 +256,9 @@ void updateOutputs() {
         default: break;
         }
     }
+#if INCLUDE_CAN_LAYOUTS
+    canLayoutTick();
+#endif
     if (alarmLive) updateAlarmOutput();
 }
 
@@ -326,7 +339,7 @@ FLASHMEM void syncOutputsToConfig() {
         // OBD's bus off or to LISTEN (the start pass then says why)
         if (!stop && outputAdmitReason(id, (OutputFormat)r->format, r->transport, systemConfig, outputRecords)) stop = true;
 #if INCLUDE_CAN
-        if (!stop && r->format == FMT_OBD) {
+        if (!stop && outputFormatSendsCan(r->format)) {
             const uint8_t bus = outputTransportCanBus(r->transport);
             if (bus != 0xFF && systemConfig.buses.can[bus].mode != CAN_BUS_NORMAL) stop = true;
         }
@@ -418,6 +431,10 @@ FLASHMEM void listOutputTable() {
 #endif
 }
 
+#if INCLUDE_CAN_LAYOUTS
+static bool r_isPreobd(uint8_t id) { return outputFormatOf(id) == FMT_PREOBD; }
+#endif
+
 FLASHMEM bool printOutputDetail(uint8_t id) {
     if (!outputExists(id)) return false;
     printOutputLine(id);
@@ -431,6 +448,9 @@ FLASHMEM bool printOutputDetail(uint8_t id) {
     }
     if (n == 0) msg.control.print(F(" none"));
     msg.control.println();
+#if INCLUDE_CAN_LAYOUTS
+    if (r_isPreobd(id)) canLayoutPrintDetail(id);
+#endif
 #if INCLUDE_FRAMED_TRANSPORT && INCLUDE_REALDASH
     // Passes skipped because the phone wasn't keeping up (realdash_framed.h)
     if (isLive(id) && liveFormat[id] == FMT_REALDASH && liveTransport[id] == OT_BLE) {

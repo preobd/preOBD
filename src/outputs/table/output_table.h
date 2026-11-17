@@ -36,6 +36,7 @@ enum OutputFormat : uint8_t {
     FMT_REALDASH,
     FMT_OBD,
     FMT_ELM327,
+    FMT_PREOBD,   // our own CAN frames for gauges (#612 phase 3); INCLUDE_CAN_LAYOUTS
     NUM_FORMATS
 };
 
@@ -103,6 +104,12 @@ void      outputsSeedDefaults();
 // Is this record usable as stored? (id matches its slot, format built,
 // transport allowed for the format, interval in range). Used on load.
 bool      outputRecordValid(const OutputRecord& r, uint8_t slot);
+
+// Does this format transmit on its CAN bus? (OBD answers, PREOBD pushes.) Such
+// outputs are refused on LISTEN and on the bus CAN input reads (#632).
+inline bool outputFormatSendsCan(uint8_t format) { return format == FMT_OBD || format == FMT_PREOBD; }
+// The enabled CAN-sending outputs on this bus: a bit per output id (live table)
+RouteMask outputCanSendersOnBus(uint8_t bus);
 
 // ---- Formats and transports ----
 bool      outputFormatBuilt(OutputFormat format);   // the format's code is in this image

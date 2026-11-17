@@ -40,6 +40,12 @@
 #define FLASHMEM
 #endif
 
+#if INCLUDE_CAN_LAYOUTS
+#define FORMATS_EXTRA ", PREOBD"
+#else
+#define FORMATS_EXTRA ""
+#endif
+
 static FLASHMEM void printUsage() {
     msg.control.println(F("  Usage: OUTPUT LIST | <id> | ADD <format> <transport> [INTERVAL <ms>] | DEL <id>"));
     msg.control.println(F("         OUTPUT <id> ENABLE|DISABLE|INTERVAL <ms>|TRANSPORT <transport>"
@@ -85,6 +91,9 @@ static FLASHMEM void printTransportsFor(OutputFormat fmt) {
     case FMT_REALDASH: msg.control.println(F("USB, SERIAL1-8 or ESP32_BT")); break;
 #endif
     case FMT_OBD:      msg.control.println(F("CAN1-CAN3")); break;
+#if INCLUDE_CAN_LAYOUTS
+    case FMT_PREOBD:   msg.control.println(F("CAN1-CAN3")); break;
+#endif
     case FMT_ELM327:   msg.control.println(F("SERIAL1-8 or BLE")); break;
     default:           msg.control.println(F("nothing in this build")); break;
     }
@@ -130,12 +139,16 @@ static FLASHMEM bool transportReady(OutputFormat fmt, uint8_t transport) {
     }
 #if INCLUDE_CAN
     const uint8_t bus = outputTransportCanBus(transport);
-    if (fmt == FMT_OBD && bus != 0xFF) {
+    if (outputFormatSendsCan(fmt) && bus != 0xFF) {
         const uint8_t mode = systemConfig.buses.can[bus].mode;
         if (mode != CAN_BUS_NORMAL) {
             msg.control.print(F("ERROR: CAN"));
             msg.control.print(bus + 1);
+#if INCLUDE_CAN_LAYOUTS
+            msg.control.println(mode == CAN_BUS_OFF ? F(" is off") : F(" is LISTEN, and it transmits"));
+#else
             msg.control.println(mode == CAN_BUS_OFF ? F(" is off") : F(" is LISTEN, and OBD transmits"));
+#endif
             msg.control.print(F("  Run: BUS CAN CAN"));
             msg.control.print(bus + 1);
             msg.control.println(F(" ENABLE first"));
@@ -150,7 +163,7 @@ static FLASHMEM bool transportReady(OutputFormat fmt, uint8_t transport) {
 // Admission for output `selfId` (OUT_ID_NONE: a new one) enabled as fmt on
 // transport, then the runtime check. Prints the refusal.
 static FLASHMEM bool mayRun(uint8_t selfId, OutputFormat fmt, uint8_t transport) {
-    const __FlashStringHelper* why = outputAdmitReason(selfId, fmt, transport, systemConfig, outputRecords);
+    const __FlashStringHelper* why = outputAdmitReason(selfId, fmt, transport, systemConfig, outputRecords, true);
     if (why) { printRefusal(fmt, transport, why); return false; }
     return transportReady(fmt, transport);
 }
@@ -163,7 +176,7 @@ static FLASHMEM int outputAdd(int argc, const char* const* argv) {
                               " [LONG|WIDE]"
 #endif
                               ));
-        msg.control.println(F("  Formats: CSV, REALDASH, OBD, ELM327"));
+        msg.control.println(F("  Formats: CSV, REALDASH, OBD, ELM327" FORMATS_EXTRA));
         return 1;
     }
     const OutputFormat fmt = parseOutputFormat(argv[2]);
@@ -171,7 +184,7 @@ static FLASHMEM int outputAdd(int argc, const char* const* argv) {
         msg.control.print(F("ERROR: Unknown format '"));
         msg.control.print(argv[2]);
         msg.control.println(F("'"));
-        msg.control.println(F("  Formats: CSV, REALDASH, OBD, ELM327"));
+        msg.control.println(F("  Formats: CSV, REALDASH, OBD, ELM327" FORMATS_EXTRA));
         return 1;
     }
     if (!outputFormatBuilt(fmt)) {

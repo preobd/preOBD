@@ -45,11 +45,14 @@ void readCANSensor(Input*) {}
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
 #include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"  // obdLengthFor (#516)
+#include "../../src/outputs/formats/field_encode.cpp"
 #include "../../src/outputs/formats/obd_encode.cpp"                       // obdInputAnswerable
 #include "../../src/outputs/formats/obd_query.cpp"                        // PID table (#528)
 // obd_query's sensor-answer path; these tests only reach the table and the
 // fixed answers, so the real encoder (and its unit-conversion deps) stays out
 uint8_t obdBuildAnswer(const Input&, uint8_t*) { return 0; }
+// obdQuery_markStale() also marks the PREOBD input map stale (can_layout_output.cpp)
+void canLayoutMarkStale() {}
 #include "../../src/config/json_config.cpp"
 #include "../../src/buses/pinctrl/pin_label.cpp"   // exportInputToJSON (#499 round trip)
 

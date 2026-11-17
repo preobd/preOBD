@@ -221,20 +221,47 @@ static FLASHMEM void printCanApply(uint8_t bus, CanAttach r) {
     if (r == CAN_ATTACH_WAITING)      msg.control.println(F(": did not start; BUS CAN shows it waiting"));
     else if (r == CAN_ATTACH_NO_PINS) msg.control.println(F(": its pins are taken; see BUS CAN"));
     else if (canBusUp(bus))           msg.control.println(F(": running"));
-    else                              msg.control.println(F(": starts when CAN input or OBD attaches"));
+    else                              msg.control.println(F(": starts when CAN input or an output attaches"));
 }
 
-// The enabled OBD output on this bus, OUT_ID_NONE if none (it sends)
-static uint8_t obdOnBus(uint8_t bus) {
-    const uint8_t id = outputFind(FMT_OBD, OTK_CAN);
-    return (outputIsEnabled(id) && outputTransportCanBus(outputTransportOf(id)) == bus) ? id : OUT_ID_NONE;
+// The enabled CAN-sending outputs on this bus (OBD, PREOBD): a bit per output id
+static bool canSenderUsesBus(uint8_t bus) { return outputCanSendersOnBus(bus) != 0; }
+static uint8_t firstSender(RouteMask m) {
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) if (m & (1u << id)) return id;
+    return OUT_ID_NONE;
 }
-static bool obdUsesBus(uint8_t bus) { return obdOnBus(bus) != OUT_ID_NONE; }
 
-// An enabled OBD output on this bus that isn't running (the bus was off, or
-// CAN input held it, #632) starts now; ENABLE prints why if it still can't
-static void startWaitingObd(uint8_t bus) {
-    if (obdUsesBus(bus) && canOutputAttachedBus() != bus) outputSetEnabledById(obdOnBus(bus), true);
+// "the OBD output", or "output <id> (PREOBD)", one per sender, joined by " and "
+static FLASHMEM void printSenderNames(uint8_t bus) {
+    const RouteMask m = outputCanSendersOnBus(bus);
+    bool first = true;
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+        if (!(m & (1u << id))) continue;
+        if (!first) msg.control.print(F(" and"));
+        first = false;
+        msg.control.print(F(" "));
+#if INCLUDE_CAN_LAYOUTS
+        if (outputFormatOf(id) != FMT_OBD) {
+            msg.control.print(F("output "));
+            msg.control.print(id);
+            msg.control.print(F(" ("));
+            msg.control.print(outputFormatName(outputFormatOf(id)));
+            msg.control.print(F(")"));
+            continue;
+        }
+#endif
+        msg.control.print(F("the OBD output"));
+    }
+}
+
+// An enabled sender on this bus that isn't running (the bus was off, or CAN
+// input held it, #632) starts now; ENABLE prints why if it still can't
+static void startWaitingSenders(uint8_t bus) {
+    const RouteMask m = outputCanSendersOnBus(bus);
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+        if (!(m & (1u << id)) || outputLiveById(id)) continue;
+        outputSetEnabledById(id, true);
+    }
 }
 #endif
 
@@ -292,8 +319,10 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
 
     if (streq_P(verb, PSTR("ENABLE")) || streq_P(verb, PSTR("LISTEN"))) {
         const uint8_t mode = streq_P(verb, PSTR("LISTEN")) ? CAN_BUS_LISTEN : CAN_BUS_NORMAL;
-        if (mode == CAN_BUS_LISTEN && obdUsesBus(bus)) {
-            msg.control.println(F("ERROR: the OBD output sends on this bus, and LISTEN never transmits"));
+        if (mode == CAN_BUS_LISTEN && canSenderUsesBus(bus)) {
+            msg.control.print(F("ERROR:"));
+            printSenderNames(bus);
+            msg.control.println(F(" sends on this bus, and LISTEN never transmits"));
             msg.control.println(F("  OUTPUT <id> DISABLE first, or keep the bus at ENABLE"));
             return 1;
         }
@@ -305,18 +334,18 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
         // Something set to use this bus but not attached (it was off, or its
         // start failed) attaches now
         if (systemConfig.buses.canInputBus == bus && canInputAttachedBus() != bus) initCANInput();
-        startWaitingObd(bus);
+        startWaitingSenders(bus);
         printSaveReminder();
         return 0;
     }
 
     if (streq_P(verb, PSTR("DISABLE"))) {
-        if (systemConfig.buses.canInputBus == bus || obdUsesBus(bus)) {
+        if (systemConfig.buses.canInputBus == bus || canSenderUsesBus(bus)) {
             const bool in = systemConfig.buses.canInputBus == bus;
             msg.control.print(F("ERROR: in use by"));
             if (in) msg.control.print(F(" CAN input"));
-            if (in && obdUsesBus(bus)) msg.control.print(F(" and"));
-            if (obdUsesBus(bus)) msg.control.print(F(" the OBD output"));
+            if (in && canSenderUsesBus(bus)) msg.control.print(F(" and"));
+            printSenderNames(bus);
             msg.control.println();
             msg.control.println(F("  BUS CAN <bus> INPUT DISABLE / OUTPUT <id> DISABLE first"));
             return 1;
@@ -358,11 +387,17 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
             }
             // One job per CAN bus (#632): refused before anything changes, so
             // CAN input stays where it was
-            const uint8_t obd = obdOnBus(bus);
+            const uint8_t obd = firstSender(outputCanSendersOnBus(bus));
             if (obd != OUT_ID_NONE) {
                 msg.control.print(F("ERROR: output "));
                 msg.control.print(obd);
+#if INCLUDE_CAN_LAYOUTS
+                msg.control.print(F(" ("));
+                msg.control.print(outputFormatName(outputFormatOf(obd)));
+                msg.control.print(F(") uses "));
+#else
                 msg.control.print(F(" (OBD) uses "));
+#endif
                 msg.control.print(getCANBusName(bus));
                 msg.control.print(F(" (one job per bus): OUTPUT "));
                 msg.control.print(obd);
@@ -375,7 +410,7 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
             msg.control.print(F("CAN input on "));
             printCanApply(bus, canBusUp(bus) ? CAN_ATTACH_OK : (CanAttach)(canBusState(bus) == CAN_STATE_NO_PINS
                                                                   ? CAN_ATTACH_NO_PINS : CAN_ATTACH_WAITING));
-            if (was != 0xFF && was != bus) startWaitingObd(was);   // OBD held on the bus input left
+            if (was != 0xFF && was != bus) startWaitingSenders(was);   // senders held on the bus input left
             printSaveReminder();
             return 0;
         }
@@ -388,7 +423,7 @@ static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*
             systemConfig.buses.canInputBus = 0xFF;
             shutdownCANInput();
             msg.control.println(F("CAN input off"));
-            startWaitingObd(bus);   // an OBD output CAN input held (#632) starts
+            startWaitingSenders(bus);   // a sender CAN input held (#632) starts
             printSaveReminder();
             return 0;
         }
@@ -688,6 +723,9 @@ static FLASHMEM void emitBusCanJson() {
         s.bus[b].state = canBusState(b);
         s.bus[b].input = (canBusConsumers(b) & (1u << CANC_INPUT)) != 0;
         s.bus[b].obd = (canBusConsumers(b) & (1u << CANC_OBD)) != 0;
+#if INCLUDE_CAN_LAYOUTS
+        s.bus[b].layout = (canBusConsumers(b) & (1u << CANC_LAYOUT)) != 0;
+#endif
         s.bus[b].pinsFree = canBusPinsFree(b);
     }
     s.inBus = systemConfig.buses.canInputBus;

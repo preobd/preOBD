@@ -25,6 +25,8 @@
 #define INCLUDE_REALDASH         1
 #define INCLUDE_SERIAL_OUTPUT    1
 #define INCLUDE_SELFTEST         1
+// PREOBD's table entries and ID-overlap rule (nothing else of CAN is built here)
+#define INCLUDE_CAN_LAYOUTS      1
 #define SUPPORTS_JSON_CONFIG    1  // host round-trip of control_json leaf converters
 
 #endif // PROFILE_NATIVE_H

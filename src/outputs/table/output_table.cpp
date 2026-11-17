@@ -66,6 +66,16 @@ uint8_t outputFind(OutputFormat format, OutputTransportKind kind) {
     return OUT_ID_NONE;
 }
 
+RouteMask outputCanSendersOnBus(uint8_t bus) {
+    RouteMask m = 0;
+    for (uint8_t id = 0; id < MAX_OUTPUTS; id++) {
+        const OutputRecord* r = outputRecord(id);
+        if (r && r->enabled && outputFormatSendsCan(r->format) &&
+            outputTransportCanBus(r->transport) == bus) m |= (RouteMask)(1u << id);
+    }
+    return m;
+}
+
 uint8_t outputFreeId() {
     for (uint8_t id = 0; id < MAX_OUTPUTS; id++)
         if (outputRecords[id].format == FMT_NONE) return id;
@@ -142,6 +152,9 @@ bool outputFormatBuilt(OutputFormat format) {
 #if INCLUDE_ELM327
     case FMT_ELM327:   return true;
 #endif
+#if INCLUDE_CAN_LAYOUTS
+    case FMT_PREOBD:   return true;
+#endif
     default:           return false;
     }
 }
@@ -202,11 +215,17 @@ bool outputTransportAllowed(OutputFormat format, uint8_t t) {
     // no ELM327 binding)
     case FMT_ELM327:   return (k == OTK_STREAM && outputTransportSerialPort(t) != 0xFF) ||
                               k == OTK_BLE;   // OT_BLE is on the board only with the framed link
+#if INCLUDE_CAN_LAYOUTS
+    case FMT_PREOBD:   return k == OTK_CAN;
+#endif
     default:           return false;
     }
 }
 
 bool outputFormatPaced(OutputFormat format) {
+#if INCLUDE_CAN_LAYOUTS
+    if (format == FMT_PREOBD) return true;   // pushed every interval
+#endif
     return format == FMT_CSV || format == FMT_REALDASH;
 }
 
@@ -218,12 +237,18 @@ bool outputFormatPaced(OutputFormat format) {
 // shares the 115200-baud nRF link with the app's status, live values and
 // alarms, so its floor is 100 ms (#612 2c).
 uint16_t outputIntervalMin(OutputFormat format, uint8_t transport) {
+#if INCLUDE_CAN_LAYOUTS
+    if (format == FMT_PREOBD) return 20;   // 9 frames (34 signals): ~40% of a 125 kbit/s bus
+#endif
     if (format == FMT_REALDASH) return transport == OT_BLE ? 100 : 50;
     if (format == FMT_CSV) return transport == OT_SD ? 1 : 100;
     return 0;
 }
 
 uint16_t outputIntervalDefault(OutputFormat format, uint8_t transport) {
+#if INCLUDE_CAN_LAYOUTS
+    if (format == FMT_PREOBD) return 100;
+#endif
     if (format == FMT_REALDASH) return REALDASH_INTERVAL_MS;
     if (format == FMT_CSV) return transport == OT_SD ? SD_LOG_INTERVAL_MS : SERIAL_CSV_INTERVAL_MS;
     return 0;
@@ -246,6 +271,9 @@ const char* outputFormatName(OutputFormat format) {
     case FMT_REALDASH: return "REALDASH";
     case FMT_OBD:      return "OBD";
     case FMT_ELM327:   return "ELM327";
+#if INCLUDE_CAN_LAYOUTS
+    case FMT_PREOBD:   return "PREOBD";
+#endif
     default:           return "NONE";
     }
 }
@@ -256,6 +284,9 @@ OutputFormat parseOutputFormat(const char* s) {
     if (strcasecmp(s, "REALDASH") == 0) return FMT_REALDASH;
     if (strcasecmp(s, "OBD") == 0)      return FMT_OBD;
     if (strcasecmp(s, "ELM327") == 0)   return FMT_ELM327;
+#if INCLUDE_CAN_LAYOUTS
+    if (strcasecmp(s, "PREOBD") == 0)   return FMT_PREOBD;
+#endif
     return FMT_NONE;
 }
 

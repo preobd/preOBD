@@ -172,6 +172,14 @@
 #  endif
 #endif
 
+// CAN layouts (PREOBD output, #612): frames of our own on a gauge network.
+// Needs the CAN stack; the mega2560 omits the capability (near-PROGMEM).
+#if SUPPORTS_CAN_LAYOUTS && INCLUDE_CAN
+#  ifndef INCLUDE_CAN_LAYOUTS
+#    define INCLUDE_CAN_LAYOUTS 1
+#  endif
+#endif
+
 #if SUPPORTS_TEST_MODE
 #  ifndef INCLUDE_TEST_MODE
 #    define INCLUDE_TEST_MODE 1

@@ -1575,7 +1575,7 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj, bool importHasIn
         if (!why && port != 0xFF && !(staged.serial.enabled_mask & (1u << (port - 1)))) why = F("needs its serial port enabled");
 #if INCLUDE_CAN
         const uint8_t bus = outputTransportCanBus(r.transport);
-        if (!why && r.format == FMT_OBD && bus != 0xFF && staged.buses.can[bus].mode != CAN_BUS_NORMAL) {
+        if (!why && outputFormatSendsCan(r.format) && bus != 0xFF && staged.buses.can[bus].mode != CAN_BUS_NORMAL) {
             why = F("needs its CAN bus on and not LISTEN");
         }
 #endif

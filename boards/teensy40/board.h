@@ -32,6 +32,7 @@
 #define SUPPORTS_BME280           1
 #define SUPPORTS_RELAY_OUTPUT     1    // deprecated shim (→ control-engine Actions)
 #define SUPPORTS_ELM327           1
+#define SUPPORTS_CAN_LAYOUTS      1    // PREOBD output: fixed CAN frame layouts for gauges (#612)
 #define SUPPORTS_TEST_MODE        1    // CLI test injection (optional trigger pin lives in the overlay)
 
 // ===== SIZING =====

@@ -18,7 +18,10 @@
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"
 #include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"
+#include "../../src/outputs/formats/field_encode.cpp"
 #include "../../src/outputs/formats/obd_encode.cpp"
+#include <vector>
+#include <math.h>
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -192,6 +195,90 @@ static void test_length_for(void) {
     TEST_ASSERT_FALSE(obdOutputSpec(0xC8, s));             // pre-#516 CHT PID: legacy encoding now
 }
 
+// The pre-#612 obdEncodeValue body, verbatim, as the reference for the
+// differential test: the shared field encoder must not change one OBD byte.
+static uint8_t refObdEncodeValue(const ObdOutputPid& spec, float baseValue, bool gaugeInput,
+                                 float baroBar, uint8_t* payload) {
+    if (!isfinite(baseValue)) return 0;
+    if (spec.length == 0 || spec.length > OBD_OUT_MAX_LENGTH) return 0;
+    if (spec.valueOffset + spec.valueLength > spec.length) return 0;
+
+    float v = baseValue;
+    if ((spec.flags & OBD_OUT_ABSOLUTE) && gaugeInput) v += baroBar;
+    if (spec.units) {
+        char name[16];
+        strncpy_P(name, spec.units, sizeof(name) - 1);
+        name[sizeof(name) - 1] = '\0';
+        uint8_t u = findUnitsIndexByName(name);
+        if (u != UNITS_NOT_FOUND) {
+            v = v * pgm_read_float(&UNITS_REGISTRY[u].conversionFactor)
+                  + pgm_read_float(&UNITS_REGISTRY[u].conversionOffset);
+        }
+    }
+    float raw = (v - spec.offset) / spec.scale;
+    const float maxRaw = spec.valueLength >= 4 ? 4294967295.0f
+                                               : (float)((1UL << (8 * spec.valueLength)) - 1);
+    uint32_t r;
+    if (!(raw > 0.0f)) r = 0;
+    else if (raw + 0.5f >= maxRaw) r = spec.valueLength >= 4 ? 0xFFFFFFFFUL
+                                                            : (uint32_t)maxRaw;
+    else r = (uint32_t)(raw + 0.5f);
+
+    memset(payload, 0, spec.length);
+    if (spec.support) payload[0] = spec.support;
+    for (uint8_t i = 0; i < spec.valueLength; i++) {
+        payload[spec.valueOffset + i] = (uint8_t)(r >> (8 * (spec.valueLength - 1 - i)));
+    }
+    return spec.length;
+}
+
+// Every spec obdOutputSpec() resolves (OBD_OUTPUT_TABLE + STANDARD_PID_TABLE):
+// the new obdEncodeValue is byte-identical to the original over a dense sweep
+static void test_differential_vs_reference(void) {
+    std::vector<float> vals = {0.0f, -0.0f, 1.0f, -1.0f, 0.5f, 0.4999f, 1e-6f, -1e-6f,
+        1e6f, -1e6f, 1e30f, -1e30f, 3.4e38f, -3.4e38f, NAN, INFINITY, -INFINITY,
+        255.0f, 255.5f, 256.0f, 65535.0f, 65535.5f, 65536.0f, 4294967295.0f, 4294967296.0f};
+    for (int i = -4000; i <= 4000; i++) vals.push_back(i * 0.37f);
+    for (int i = -300; i <= 300; i++) { vals.push_back(i * 0.5f); vals.push_back(i * 0.05f); }
+    for (int i = 0; i <= 700; i++) vals.push_back(i * 100.0f);
+    const float baros[] = {1.01325f, 0.85f};
+    int specs = 0;
+    for (uint16_t pid = 0; pid <= 0xFF; pid++) {
+        ObdOutputPid s;
+        if (!obdOutputSpec((uint8_t)pid, s)) continue;
+        specs++;
+        // plus this spec's own field edges: +-1 step and +-half step around 0, 1, max-1, max
+        std::vector<float> mine = vals;
+        const uint32_t maxR = s.valueLength >= 4 ? 0xFFFFFFFFu : (1u << (8 * s.valueLength)) - 1;
+        for (uint32_t raw : {0u, 1u, 2u, maxR - 1, maxR}) {
+            for (float d : {-1.0f, -0.5f, -0.4999f, 0.0f, 0.4999f, 0.5f, 1.0f}) {
+                mine.push_back(baseForRaw(s, raw) + d * s.scale);
+            }
+        }
+        for (bool gauge : {false, true}) for (float baro : baros) for (float v : mine) {
+            uint8_t a[OBD_OUT_MAX_LENGTH], b[OBD_OUT_MAX_LENGTH];
+            memset(a, 0xA5, sizeof(a)); memset(b, 0xA5, sizeof(b));
+            uint8_t la = refObdEncodeValue(s, v, gauge, baro, a);
+            uint8_t lb = obdEncodeValue(s, v, gauge, baro, b);
+            char msg[48];
+            snprintf(msg, sizeof(msg), "PID 0x%02X v=%g gauge=%d", (unsigned)pid, (double)v, (int)gauge);
+            TEST_ASSERT_EQUAL_UINT8_MESSAGE(la, lb, msg);
+            TEST_ASSERT_EQUAL_MEMORY_MESSAGE(a, b, sizeof(a), msg);
+        }
+    }
+    TEST_ASSERT_TRUE(specs > 40);   // both tables really were walked
+}
+
+// The shared units helpers: resolve once, convert many
+static void test_units_helpers(void) {
+    ObdOutputPid s = spec(0x0B);   // MAP, kPa
+    uint8_t u = obdResolveUnits(s.units);
+    TEST_ASSERT_NOT_EQUAL(UNITS_NOT_FOUND, u);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 101.325f, obdConvertUnits(1.01325f, u));
+    TEST_ASSERT_EQUAL_UINT8(UNITS_NOT_FOUND, obdResolveUnits(nullptr));
+    TEST_ASSERT_EQUAL_FLOAT(7.5f, obdConvertUnits(7.5f, UNITS_NOT_FOUND));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_every_row_round_trips);
@@ -202,5 +289,7 @@ int main(int, char**) {
     RUN_TEST(test_type_gate);
     RUN_TEST(test_every_preset);
     RUN_TEST(test_length_for);
+    RUN_TEST(test_differential_vs_reference);
+    RUN_TEST(test_units_helpers);
     return UNITY_END();
 }

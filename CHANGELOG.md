@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A `PREOBD` output (`OUTPUT ADD PREOBD CAN<n>`) broadcasts every input on CAN IDs 0x500-0x508 for gauges and dashes that read a DBC, with the DBC published in `docs/can/preOBD.dbc`; available on every board except the Mega
 - The rate at which CAN input asks the ECU is a setting (`BUS CAN POLL`, 50-1000 ms), so a scan tool on the same plug gets room
 - RealDash can connect over Bluetooth LE through the nRF52840 link (`OUTPUT ADD REALDASH BLE`), instead of ELM327 over BLE; it needs the updated nRF firmware
 
