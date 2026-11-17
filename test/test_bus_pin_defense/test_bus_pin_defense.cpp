@@ -105,10 +105,9 @@ void setUp(void) {
     systemConfig.buses.active_spi = 0xFF;
     systemConfig.buses.spi_clock = 4000000;
 #if NUM_CAN_BUSES > 0
-    systemConfig.buses.output_can_bus = 0xFF;
-    systemConfig.buses.can_output_enabled = 0;
-    systemConfig.buses.input_can_bus = 0xFF;
-    systemConfig.buses.can_input_mode = CAN_INPUT_OFF;
+    for (uint8_t b = 0; b < CAN_BUS_SLOTS; b++) systemConfig.buses.can[b].mode = CAN_BUS_OFF;
+    systemConfig.buses.canInputBus = 0xFF;
+    systemConfig.buses.obdBus = 0xFF;
 #endif
 }
 void tearDown(void) { setPinOwnerBusProbe(nullptr); }

@@ -21,7 +21,9 @@
 
 // ---- canned OBD layer (real obd_query.cpp deliberately not compiled) ----
 #include "../../src/outputs/formats/obd_query.h"
-bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen, uint8_t /*routeId*/) {
+static uint8_t g_lastRouteId = 0xEE;   // the route id the parser asked with
+bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen, uint8_t routeId) {
+    g_lastRouteId = routeId;
     if (mode == 0x03) {  // no stored codes (#528)
         out[0] = 0x43; out[1] = 0x00; *outLen = 2; return true;
     }
@@ -52,6 +54,8 @@ bool obdQuery_resolve(uint8_t mode, uint8_t pid, uint8_t* out, uint8_t* outLen, 
 // msg/systemConfig/getSerialPort, but they're unreferenced here and dropped by
 // the linker's dead-strip (see [env:native]), so no stubs for those are needed.
 Input inputs[MAX_INPUTS];
+// The output table's live flags: elm327_framed.cpp answers only while output 5's is set
+OutputModule outputModules[NUM_OUTPUTS];
 
 // ---- capturing transport ----
 static uint8_t  g_cap[1024];   // concatenated payloads of all 0x30 frames
@@ -89,6 +93,8 @@ void setUp(void) {
     g_sendOk = true;
     g_maxFrameLen = 0;
     memset(inputs, 0, sizeof(inputs));
+    memset(outputModules, 0, sizeof(outputModules));
+    outputModules[OUTPUT_ELM327_BLE].enabled = true;
     Elm327Framed::init();  // re-bind + reset parser session (echo on, etc.)
 }
 void tearDown(void) {}
@@ -101,6 +107,20 @@ static void feed(const char* cmd) {
 static bool capContains(const char* needle) {
     g_cap[g_capLen < sizeof(g_cap) ? g_capLen : sizeof(g_cap) - 1] = '\0';
     return strstr(reinterpret_cast<char*>(g_cap), needle) != nullptr;
+}
+
+// Output 5 (ELM327 over BLE) disabled or deleted: no answer at all (#612)
+static void test_disabled_output_does_not_answer(void) {
+    outputModules[OUTPUT_ELM327_BLE].enabled = false;
+    feed("ATZ\r");
+    feed("010C\r");
+    TEST_ASSERT_EQUAL_INT(0, g_frameCnt);
+}
+
+// It answers as output 5, so only the inputs routed to id 5 (#612)
+static void test_answers_with_its_own_route_id(void) {
+    feed("010C\r");
+    TEST_ASSERT_EQUAL_UINT8(OUT_ID_ELM327_BLE, g_lastRouteId);
 }
 
 // ATZ returns the version banner, on a 0x30 frame.
@@ -224,6 +244,8 @@ static void test_poll_drains_backpressured_response(void) {
 
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_disabled_output_does_not_answer);
+    RUN_TEST(test_answers_with_its_own_route_id);
     RUN_TEST(test_atz_returns_version);
     RUN_TEST(test_ate0_ok_and_suppresses_echo);
     RUN_TEST(test_obd_pid00_supported_bitmap);

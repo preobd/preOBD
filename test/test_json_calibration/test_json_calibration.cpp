@@ -25,7 +25,7 @@
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/config/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
-#include "../../src/outputs/table/output_table.cpp"   // routeMaskFromLegacy, the outputs view (#612)
+#include "../../src/outputs/table/output_table.cpp"   // the outputs view (#612)
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
@@ -38,6 +38,7 @@
 // json_config.cpp rebuilds the OBD-II PID table after an inputs import (#562);
 // obd_query.cpp is not in this binary.
 void obdQuery_buildLookupTable() {}
+void obdQuery_markStale() {}
 
 // ---------------------------------------------------------------------------
 // Fixture

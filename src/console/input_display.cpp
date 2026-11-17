@@ -133,7 +133,7 @@ FLASHMEM void printInputRouteInfo(uint8_t pin) {
         n++;
     }
     if (n == 0) msg.control.println(F("  (no outputs - OUTPUT ADD <format> <transport>)"));
-    msg.control.println(F("  Built-in outputs (display, app link, alarm, ELM327 over BLE) take no routes"));
+    msg.control.println(F("  Built-in outputs (display, app link, alarm) take no routes"));
     msg.control.println();
 }
 

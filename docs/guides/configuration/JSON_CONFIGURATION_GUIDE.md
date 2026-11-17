@@ -95,13 +95,15 @@ best reference; the overall shape is:
   "firmware": { "version": "0.13.0-beta", "platform": "...", "maxInputs": 40, "...": "..." },
   "system": {
     "outputs":   [ { "id": 0, "format": "OBD", "transport": "CAN1", "enabled": true },
-                   { "id": 3, "format": "CSV", "transport": "SD", "enabled": true, "interval": 5000, "csv": "WIDE" } ],
+                   { "id": 3, "format": "CSV", "transport": "SD", "enabled": true, "interval": 5000, "csv": "WIDE" },
+                   { "id": 5, "format": "ELM327", "transport": "BLE", "enabled": true } ],
     "alarm":     { "enabled": true, "silenceSeconds": 30, "silenceLed": false },
     "display":   { "enabled": true, "type": "LCD", "address": "0x27",
                    "defaultUnits": { "temperature": "CELSIUS", "pressure": "BAR", "elevation": "METERS", "speed": "KPH" } },
     "constants": { "seaLevelPressure": 1013.25 },
-    "buses":     { "i2c": 0, "spi": 0, "canOutputBus": 0, "canOutputBaudrate": 500000, "...": "..." },
-    "serial":    { "ports": [ { "port": 1, "enabled": true, "baudrate": 9600, "framed": false, "elm327": false } ] },
+    "buses":     { "i2c": 0, "spi": 0, "...": "...",
+                   "can": [ { "bus": 0, "mode": "NORMAL", "baudrate": 500000, "input": true } ] },
+    "serial":    { "ports": [ { "port": 1, "enabled": true, "baudrate": 9600, "framed": false } ] },
     "logFilter": { "controlLevel": "INFO", "dataLevel": "INFO", "debugLevel": "WARN", "enabledTags": "0xFFFFFFFF" }
   },
   "inputs": [
@@ -138,16 +140,26 @@ best reference; the overall shape is:
 `id`, `format`, `transport` and `enabled`, plus `interval` for CSV and
 RealDash and `csv` (`LONG` or `WIDE`) for the CSV output on SD. On import the
 array **replaces** the outputs: an output it leaves out is deleted, as
-`OUTPUT DEL` would. The transport is shown for reference; it comes from the
-bus and stream settings (`buses`, `TRANSPORT DATA`), so import doesn't read it.
+`OUTPUT DEL` would. Import reads the transport of OBD (`CAN1`–`CAN3`) and of
+the ELM327 output on a serial port (`SERIAL1`–`SERIAL8`), and checks it against
+the buses and serial ports in the same file. An enabled OBD on a bus that is
+off or `LISTEN`, or an enabled ELM327 on a port that is off, framed or used by
+`TRANSPORT`, is imported switched off with a NOTE that says what to run; the
+rest of the file is imported as usual. RealDash and CSV use the data
+stream (`TRANSPORT DATA`), so their transport is shown for reference only.
 A record for an output this firmware doesn't have is skipped with a NOTE.
+Changes apply at once: a bus changes rate or mode, OBD and ELM327 move.
+
+`system.buses.can` has one entry per CAN bus: `mode` (`OFF`, `NORMAL`,
+`LISTEN`), `baudrate`, and `input` (`true` on the bus CAN input reads). On
+import it replaces the CAN settings: a bus it leaves out is off.
 
 `system.alarm` is the built-in alarm output: `enabled` (`ALARM ENABLE|DISABLE`)
 and its acknowledgement policy (`ALARM DURATION`, `ALARM SCOPE`).
 
-A file saved before outputs had ids has `outputs` as an object keyed by name,
-and `outputMask` on each input. Import ignores both with a NOTE: your outputs
-stay as they are, and the imported inputs are routed to every output.
+A file saved by older firmware (an `outputs` object keyed by name, the
+`canInputBus`-style bus keys, `outputMask` on inputs) is not read: those keys
+are ignored.
 
 ### Inputs
 

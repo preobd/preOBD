@@ -1,25 +1,23 @@
 /*
- * output_table.h - The outputs you add (#612 phase 1, ARCHITECTURE.md §14.5)
+ * output_table.h - The outputs you add (#612, ARCHITECTURE.md §14.5)
  *
- * An output is a format on a transport, with an id. Phase 1 keeps today's
- * modules, one per format, so each output's id is fixed by its format and
- * matches the per-input route bit it has always used:
+ * An output is a format on a transport, with an id. Today's modules are one
+ * per format and transport kind, so each output's id is fixed:
  *
- *   id 0  OBD       on the CAN output bus     (was the CAN module)
- *   id 1  REALDASH  on the data stream        (was RealDash)
- *   id 2  CSV       on the data stream        (was Serial)
- *   id 3  CSV       on the SD card            (was SD_Log)
- *   id 4  ELM327    on its serial port        (was ELM327; new route bit)
+ *   id 0  OBD       on a CAN bus              (BUS CAN <bus> / OUTPUT ADD OBD CAN<n>)
+ *   id 1  REALDASH  on the data stream
+ *   id 2  CSV       on the data stream
+ *   id 3  CSV       on the SD card
+ *   id 4  ELM327    on a serial port          (OUTPUT ADD ELM327 SERIAL<n>)
+ *   id 5  ELM327    over BLE (the framed nRF link; OUTPUT ADD ELM327 BLE)
  *
- * The table is a view over the settings that already hold this state:
- * systemConfig.outputEnabled[] / outputInterval[] / sdLogFormat, plus
- * router.outputsAbsent for the outputs that were deleted. Nothing new is
- * stored, so a unit flashed from an older build keeps every output, and an
- * older build flashed back keeps them too. Phase 2 (several outputs per
- * format) replaces the view with a stored table that starts from these ids.
+ * The table is a view over systemConfig: outputEnabled[] / outputInterval[] /
+ * sdLogFormat, the transport settings (buses.obdBus, buses.elm327_serial_port),
+ * and router.outputsAbsent for the outputs that were deleted. Several outputs
+ * per format (phase 2b) replace the view with a stored table.
  *
- * Built-in outputs (display, app link, alarm, ELM327 over BLE) are not in
- * this table and take no routes.
+ * Built-in outputs (display, app link, alarm) are not in this table and take
+ * no routes.
  */
 
 #ifndef OUTPUT_TABLE_H
@@ -39,27 +37,29 @@ enum OutputFormat : uint8_t {
     FMT_ELM327,
 };
 
-// Phase-1 ids, fixed per format (see the header comment)
-enum OutputIdPhase1 : uint8_t {
+// Fixed ids (see the header comment)
+enum OutputIdFixed : uint8_t {
     OUT_ID_OBD      = 0,
     OUT_ID_REALDASH = 1,
     OUT_ID_CSV      = 2,
     OUT_ID_SDLOG    = 3,
     OUT_ID_ELM327   = 4,
-    NUM_OUTPUT_IDS  = 5,
+    OUT_ID_ELM327_BLE = 5,
+    NUM_OUTPUT_IDS  = 6,
     OUT_ID_NONE     = 0xFF,
 };
 static_assert(NUM_OUTPUT_IDS <= 8 * sizeof(RouteMask), "every output id needs a route bit");
 static_assert(OUT_ID_OBD == OUTPUT_CAN && OUT_ID_REALDASH == OUTPUT_REALDASH &&
               OUT_ID_CSV == OUTPUT_SERIAL && OUT_ID_SDLOG == OUTPUT_SD,
-              "ids 0-3 are the old per-input output bits, so stored masks keep their meaning");
+              "ids 0-3 index outputEnabled[] directly (sendToOutputs' route check)");
 
-// Where an output's transport comes from in phase 1
+// The kind of transport an output runs on
 enum OutputTransportKind : uint8_t {
-    OTK_CAN,       // the CAN output bus (BUS CAN OUTPUT)
+    OTK_CAN,       // a CAN bus (buses.obdBus)
     OTK_STREAM,    // the data stream (TRANSPORT DATA)
     OTK_SD,        // the SD card
-    OTK_SERIAL,    // a serial port bound to ELM327 (BUS SERIAL <n> ELM327)
+    OTK_SERIAL,    // a serial port (buses.elm327_serial_port)
+    OTK_BLE,       // the phone-facing side of the framed nRF link
 };
 
 // Static facts about an id
@@ -80,22 +80,14 @@ uint8_t   outputIdFor(OutputFormat format, OutputTransportKind kind);  // OUT_ID
 
 // Changes (write systemConfig; live start/stop is output_manager's job)
 void outputMarkAbsent(uint8_t id, bool absent);     // DEL / ADD
-// A deleted output is always off. An older build ignores outputsAbsent, so it
-// can switch a deleted output back on and SAVE: that output is present again.
-// Run after every systemConfig load, before anything reads outputEnabled[].
-void outputsReconcileAbsent();
 // Is `tok` (a JSON "transport") the kind of transport output <id> uses?
-// CAN<n>/NONE for OBD, SERIAL<n>/NONE for ELM327, SD for the SD log, and a
-// stream (anything but CAN<n>, SD or NONE) for RealDash and CSV.
+// CAN<n>/NONE for OBD, SERIAL<n>/NONE for ELM327, BLE for ELM327 over BLE,
+// SD for the SD log, and a stream (anything but CAN<n>, SD, BLE or NONE) for
+// RealDash and CSV.
 bool outputTransportKindOk(uint8_t id, const char* tok);
 
 // Names: the CLI token and JSON value of a format ("CSV", "REALDASH", "OBD", "ELM327")
 const char*  outputFormatName(OutputFormat format);
 OutputFormat parseOutputFormat(const char* s);      // case-insensitive; FMT_NONE if unknown
-
-// An old (pre-phase-1) per-input mask in today's layout: bits 0-3 keep their
-// meaning, and the ELM327 output gets the bit the CAN module's had, because
-// the one CAN bit used to decide what both OBD-II responders answered.
-RouteMask routeMaskFromLegacy(uint8_t legacyMask);
 
 #endif // OUTPUT_TABLE_H

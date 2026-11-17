@@ -44,6 +44,7 @@
 #include "outputs/annunciator/output_alarm.h"                   // alarmAcknowledge() — user button short press (#433)
 #if INCLUDE_CAN
     #include "sensors/can/input_can.h"
+    #include "buses/can_bus.h"
     #include "sensors/can/can_scan.h"
 #endif
 
@@ -779,7 +780,8 @@ void loop() {
     // and SD logging (CONFIG is setup, not operation; don't persist bench
     // junk into the drive log) both self-silence in CONFIG.
     #if INCLUDE_CAN
-    updateCANInput();  // Poll CAN bus and populate frame cache
+    canBusesUpdate();  // The one CAN reader: frames to CAN input and OBD (#612)
+    updateCANInput();  // CAN input's polls
     updateCANScan();   // No-op unless a CONFIG-mode SCAN is active
     #endif
     updateSensors(now);

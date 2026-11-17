@@ -22,6 +22,9 @@
 #include "../../src/console/command_table.h"
 #include "../../src/console/command_dispatch.cpp"
 #include "../../src/core/config_generation.cpp"
+// obd_query.cpp is not in this binary: count the marks instead
+static int g_obdStaleMarks = 0;
+void obdQuery_markStale() { g_obdStaleMarks++; }
 
 // ---------------------------------------------------------------------------
 // Lightweight stand-ins for symbols command_dispatch.cpp expects from the rest
@@ -280,8 +283,13 @@ static void test_sub_match_is_case_insensitive(void) {
 static void test_gen_configonly_command_bumps(void) {
     const uint16_t g0 = configGeneration();
     const char* argv[] = {"SET", "3", "APPLICATION", "CHT"};
+    const int m0 = g_obdStaleMarks;
     dispatchCommand(4, argv);
     TEST_ASSERT_EQUAL_UINT16((uint16_t)(g0 + 1), configGeneration());
+    // ...and the OBD PID table is rebuilt before the next answer: an input
+    // added with SET <pin> <app> <sensor> was invisible to OBD/ELM327 until
+    // SAVE or a reboot (#612 phase 2a, found with Torque)
+    TEST_ASSERT_EQUAL_INT(m0 + 1, g_obdStaleMarks);
 }
 
 static void test_gen_readonly_and_mode_commands_do_not_bump(void) {

@@ -1115,7 +1115,6 @@
     <div class="panel-header" id="canPanelHeader" style="cursor:pointer">
       <div class="inputs-header">
         <span class="panel-title">CAN Bus</span>
-        <span class="badge badge-warning" id="canRebootBadge" style="display:none" title="BUS CAN INPUT changes take effect after SAVE and a reboot">Reboot pending</span>
       </div>
       <button class="panel-collapse-btn" id="btnCanToggle" title="Collapse CAN bus">▲</button>
     </div>
@@ -4198,6 +4197,13 @@ const canUi = {
 
 function canHex(n, width) { return '0x' + n.toString(16).toUpperCase().padStart(width || 2, '0'); }
 function canBusName(i) { return (i == null || i === 255) ? 'none' : 'CAN' + (i + 1); }
+// BUS CAN JSON has one entry per bus (#612 phase 2a): CAN input reads
+// input.bus, and the OBD output is on the bus whose entry has obd: true.
+function canBusEntry(b, i) { return (b?.buses || []).find(x => x.bus === i) || null; }
+function canInputView(b) {
+  const e = canBusEntry(b, b.input.bus);
+  return { ...b.input, mode: e ? e.mode : 'OFF', baudrate: e ? e.baudrate : 0, state: e ? e.state : 'off' };
+}
 function canEcuLabel(id) { return id === 0x7E8 ? 'Engine ' + canHex(id, 3) : 'ECU ' + canHex(id, 3); }
 function canAgeText(ms) {
   if (ms == null) return 'never';
@@ -4265,7 +4271,7 @@ async function canInit() {
   try {
     const bus = parseJsonResponse(await sendQueued('BUS CAN JSON', { quiet: true }));
     if (!txChar) return;   // disconnected meanwhile: canTeardown() already ran
-    if (!bus || !bus.input || !bus.caps) throw new Error('unexpected reply');
+    if (!bus || !bus.input || !bus.caps || !Array.isArray(bus.buses)) throw new Error('unexpected reply');
     canUi.bus = bus;
     canUi.available = true;
   } catch (_) {
@@ -4333,7 +4339,8 @@ function renderCanPanel() {
 function renderCanStatus() {
   const b = canUi.bus;
   if (!b) return;
-  const inp = b.input, out = b.output, poll = inp.poll || {};
+  const inp = canInputView(b), poll = inp.poll || {};
+  const obdEntry = (b.buses || []).find(x => x.obd);
   const tile = (label, value, sub, cls) =>
     `<div class="status-item"><label>${label}</label><span class="${cls || ''}">${escHtml(value)}</span>` +
     `<span class="can-sub">${escHtml(sub)}</span></div>`;
@@ -4357,19 +4364,18 @@ function renderCanStatus() {
   else { pollVal = (poll.answers || 0).toLocaleString() + ' / ' + (poll.requests || 0).toLocaleString(); pollSub = 'answered / requested'; }
   const pollTile = tile('ECU polling', pollVal, pollSub + (poll.txFail ? ' · ' + poll.txFail + ' TX fail' : ''), pollCls);
 
-  const outOn = out.enabled && out.bus !== 255;
   const outTile = tile('Output',
-    outOn ? canBusName(out.bus) : 'Off',
-    outOn ? (out.module ? 'OBD-II responder on' : 'responder off (OUTPUT 0)') : 'OBD-II responder');
+    obdEntry ? canBusName(obdEntry.bus) : 'Off',
+    obdEntry ? 'OBD-II responder on' : 'OBD-II responder (OUTPUT ADD OBD)');
 
   document.getElementById('canStatusGrid').innerHTML = inputTile + trafficTile + pollTile + outTile;
-  document.getElementById('canRebootBadge').style.display = inp.rebootPending ? '' : 'none';
 
   const notice = document.getElementById('canNotice');
   let msg = '';
-  if (inp.rebootPending) msg = '<b>Bus settings saved but not running yet.</b> Reboot preOBD to apply them (power-cycle it, or type <code>SYSTEM REBOOT</code> in CONFIG mode).';
-  else if (inOff) msg = 'CAN input is off. Open <b>Bus settings</b> to read sensors from the car’s CAN bus.';
-  else if (!inp.running) msg = 'CAN input is configured but did not start. Check the wiring and <b>Bus settings</b>.';
+  if (inOff) msg = 'CAN input is off. Open <b>Bus settings</b> to read sensors from the car’s CAN bus.';
+  else if (!inp.running) msg = inp.state === 'pinsTaken'
+    ? 'CAN input’s bus can’t start: another function holds its pins (<code>BUS CAN</code> shows which).'
+    : 'CAN input is configured but its bus did not start. Check the wiring and <b>Bus settings</b>.';
   notice.innerHTML = msg;
   notice.style.display = msg ? '' : 'none';
 }
@@ -4416,12 +4422,12 @@ function renderCanForm() {
 }
 
 function canAddFormHtml() {
-  const inp = canUi.bus.input;
+  const inp = canInputView(canUi.bus);
   const inOff = inp.mode === 'OFF' || inp.bus === 255;
   let h = '<div class="ctl-subhead">Add CAN sensor</div>';
-  if (inOff || !inp.running || inp.rebootPending) {
+  if (inOff || !inp.running) {
     return h + '<p class="editor-hint">CAN input has to be running before preOBD can find sensors on the bus. ' +
-      'Set it up in <b>Bus settings</b>, save, and reboot preOBD.</p>' +
+      'Set it up in <b>Bus settings</b>.</p>' +
       '<div class="editor-actions"><button class="btn primary" data-can="bus">Bus settings</button>' +
       '<button class="btn secondary" data-can="close">Close</button></div>';
   }
@@ -4613,10 +4619,10 @@ async function canReloadInputs(pins) {
 }
 
 function canBusFormHtml() {
-  const b = canUi.bus, inp = b.input;
+  const b = canUi.bus, inp = canInputView(b);
   const busOpts = [`<option value="255" ${inp.mode === 'OFF' || inp.bus === 255 ? 'selected' : ''}>None (input off)</option>`];
   for (let i = 0; i < b.caps.buses; i++) {
-    busOpts.push(`<option value="${i}" ${inp.mode !== 'OFF' && inp.bus === i ? 'selected' : ''}>CAN${i + 1}${b.output.enabled && b.output.bus === i ? ' (also output)' : ''}</option>`);
+    busOpts.push(`<option value="${i}" ${inp.mode !== 'OFF' && inp.bus === i ? 'selected' : ''}>CAN${i + 1}${canBusEntry(b, i)?.obd ? ' (also OBD output)' : ''}</option>`);
   }
   const mode = inp.mode === 'OFF' ? 'NORMAL' : inp.mode;
   const rates = b.caps.baudrates.map(r => `<option value="${r}" ${inp.baudrate === r ? 'selected' : ''}>${r / 1000} kbps</option>`).join('');
@@ -4630,7 +4636,7 @@ function canBusFormHtml() {
     '</div>' +
     '<p class="editor-hint" id="canBusHint" style="margin-top:10px">Most cars use 500 kbps on the OBD-II port. ' +
       'ENABLE polls the ECU for each imported PID; LISTEN only hears what another tool asks for. ' +
-      'The change is saved to EEPROM and takes effect after a reboot.</p>' +
+      'Mode and speed belong to the bus: they apply at once and are saved to EEPROM.</p>' +
     '<div class="editor-actions">' +
       '<button class="btn primary" data-can="bus-save">Save</button>' +
       '<button class="btn secondary" data-can="close">Cancel</button>' +
@@ -4642,9 +4648,8 @@ async function canSaveBus() {
   const bus = parseInt(document.getElementById('canBusSel').value, 10);
   const mode = document.getElementById('canModeSel').value;
   const rate = document.getElementById('canRateSel').value;
-  const out = canUi.bus.output;
-  if (bus !== 255 && mode === 'LISTEN' && out.enabled && out.bus === bus) {
-    alert('LISTEN can’t share the output bus: listen-only stops every transmit on it, including OBD-II output. Pick another bus or ENABLE.');
+  if (bus !== 255 && mode === 'LISTEN' && canBusEntry(canUi.bus, bus)?.obd) {
+    alert('LISTEN can’t share the OBD output’s bus: listen-only stops every transmit on it, including OBD-II answers. Pick another bus or ENABLE.');
     return;
   }
   // SAVE persists everything in device RAM. Unapplied Inputs edits aren't
@@ -4655,13 +4660,19 @@ async function canSaveBus() {
   }
   const anyApplied = [...inputState.values()].some(s => s === 'applied');
   if ((anyApplied || ctlDirty) && !confirm('Saving also writes your other applied-but-unsaved changes (inputs, rules, actions) to EEPROM. Continue?')) return;
-  const cmd = bus === 255
-    ? 'BUS CAN INPUT NONE DISABLE'
-    : `BUS CAN INPUT ${canBusName(bus)} ${mode === 'NORMAL' ? 'ENABLE' : 'LISTEN'} ${rate}`;
+  // One set of settings per bus (#612 phase 2a): the speed first, so a
+  // running bus never restarts in its new mode at the old speed; then the
+  // mode, then CAN input onto it (which moves it off any other bus)
+  const curBus = canUi.bus.input.bus;
+  const cmds = bus === 255
+    ? (curBus === 255 ? [] : [`BUS CAN ${canBusName(curBus)} INPUT DISABLE`])
+    : [`BUS CAN ${canBusName(bus)} BAUDRATE ${rate}`,
+       `BUS CAN ${canBusName(bus)} ${mode === 'NORMAL' ? 'ENABLE' : 'LISTEN'}`,
+       `BUS CAN ${canBusName(bus)} INPUT ENABLE`];
   canUi.busy = true;
   try {
     await withConfigMode(async () => {
-      await sendChecked(cmd);
+      for (const c of cmds) await sendChecked(c);
       await sendChecked('SAVE');
     });
     // Nothing was dirty (checked above), so localConfig is exactly what was saved
@@ -4670,7 +4681,7 @@ async function canSaveBus() {
     ctlDirty = false;
     renderInputsPanel();
     renderControlPanel();
-    appendInfo('CAN bus settings saved. Reboot preOBD to apply them.');
+    appendInfo('CAN bus settings applied and saved.');
     canUi.form = null;
   } catch (e) {
     appendErr('CAN bus settings failed: ' + canErrText(e.message));

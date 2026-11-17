@@ -203,8 +203,8 @@ SET 4 COOLANT_LEVEL FLOAT_SWITCH
 ### OBD-II Scanner Support (ELM327 / Torque)
 
 ```
-BUS CAN OUTPUT CAN1 ENABLE 500000   # Bring up the CAN bus your transceiver is on
-OUTPUT 0 ENABLE                     # Output 0, OBD: answer OBD-II requests on it
+BUS CAN CAN1 ENABLE                 # The CAN bus your transceiver is on (500 kbit/s default)
+OUTPUT ADD OBD CAN1                 # Output 0, OBD: answer OBD-II requests on it
 # Plug in ELM327 Bluetooth adapter to OBD-II port
 # Open Torque app → Settings → OBD/ECU → Connection → Bluetooth
 # Select your ELM327 adapter
@@ -369,10 +369,11 @@ See [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md) and
 | `BUS I2C CLOCK <kHz>` | Set I2C clock (100, 400, 1000) |
 | `BUS SPI [0\|1\|2]` | Show or select SPI bus (SPI/SPI1/SPI2) |
 | `BUS SPI CLOCK <Hz>` | Set SPI clock speed |
-| `BUS CAN` | Show CAN bus status |
-| `BUS CAN BAUDRATE <bps>` | Set CAN baudrate |
-| `BUS CAN INPUT\|OUTPUT <bus> ENABLE\|DISABLE` | Choose which CAN bus carries input and output |
-| `SCAN PIDS` | Ask the ECUs which OBD-II PIDs they support (CAN input in ENABLE mode) |
+| `BUS CAN` | Show each CAN bus and what uses it |
+| `BUS CAN <bus> ENABLE\|LISTEN\|DISABLE` | Turn a CAN bus on (LISTEN never transmits) or off |
+| `BUS CAN <bus> BAUDRATE <bps>` | Set a bus's rate (a running bus restarts) |
+| `BUS CAN <bus> INPUT ENABLE\|DISABLE` | CAN input reads this bus |
+| `SCAN PIDS` | Ask the ECUs which OBD-II PIDs they support (CAN input on an ENABLE bus) |
 | `SCAN CAN [ms]` | Listen for OBD-II answers and other CAN frames already on the bus |
 | `SET CAN <pid> [ecu] [SENSOR <n>]` | Import a PID (ecu: `0x7E9`… for a second ECU; default engine `0x7E8`). `SENSOR` picks one value of a multi-sensor PID, e.g. `SET CAN 0x78 SENSOR 2` |
 

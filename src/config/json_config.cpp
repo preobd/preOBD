@@ -17,6 +17,9 @@
 #if SUPPORTS_JSON_CONFIG
 #include "system_config.h"
 #include "../hal/bus_defaults.h"
+#if INCLUDE_CAN
+#include "../sensors/can/input_can.h"   // syncCanToConfig (#612)
+#endif
 #include "../buses/pinctrl/bus_wiring.h"
 #include "../buses/serial_manager.h"
 #include "../inputs/input.h"
@@ -470,8 +473,6 @@ FLASHMEM void outputToJson(JsonObject obj, uint8_t id) {
     obj["format"]    = outputFormatName(outputFormatOf(id));
     obj["transport"] = t;
     obj["enabled"]   = outputIsEnabled(id);
-    // A CAN enable from an import/LOAD waiting for the reboot (#610)
-    if (id == OUT_ID_OBD && canOutputPendingReboot()) obj["pendingReboot"] = true;
     // Only paced outputs have an interval (#608)
     if (outputTakesIntervalId(id)) obj["interval"] = outputIntervalOf(id);
 #if INCLUDE_SD_LOGGING
@@ -535,12 +536,18 @@ FLASHMEM void exportSystemConfigToJSON(JsonObject& systemObj) {
     buses["i2cClock"] = systemConfig.buses.i2c_clock;
     buses["spi"] = systemConfig.buses.active_spi;
     buses["spiClock"] = systemConfig.buses.spi_clock;
-    buses["canInputBus"] = systemConfig.buses.input_can_bus;
-    buses["canOutputBus"] = systemConfig.buses.output_can_bus;
-    buses["canInputMode"] = systemConfig.buses.can_input_mode;
-    buses["canOutputEnabled"] = systemConfig.buses.can_output_enabled;
-    buses["canInputBaudrate"] = systemConfig.buses.can_input_baudrate;
-    buses["canOutputBaudrate"] = systemConfig.buses.can_output_baudrate;
+    // One set of settings per CAN bus (#612 phase 2a). The OBD output's bus is
+    // its record's transport in system.outputs.
+    JsonArray canBuses = buses["can"].to<JsonArray>();
+    for (uint8_t b = 0; b < NUM_CAN_BUSES && b < CAN_BUS_SLOTS; b++) {
+        JsonObject c = canBuses.add<JsonObject>();
+        static const char* const CAN_MODE_NAMES[] = {"OFF", "NORMAL", "LISTEN"};
+        const uint8_t m = systemConfig.buses.can[b].mode;
+        c["bus"] = b;
+        c["mode"] = CAN_MODE_NAMES[m <= CAN_BUS_LISTEN ? m : 0];
+        c["baudrate"] = canBaudFromIndex(systemConfig.buses.can[b].baudIndex);
+        c["input"] = systemConfig.buses.canInputBus == b;
+    }
 
     // Serial Port Configuration
     JsonObject serial = systemObj["serial"].to<JsonObject>();
@@ -553,7 +560,6 @@ FLASHMEM void exportSystemConfigToJSON(JsonObject& systemObj) {
         port["enabled"] = (bool)(systemConfig.serial.enabled_mask & (1 << i));
         port["baudrate"] = getBaudRateFromIndex(systemConfig.serial.baudrate_index[i]);
         port["framed"] = (bool)(systemConfig.serial.framed_enabled_mask & (1 << i));
-        port["elm327"] = (systemConfig.buses.elm327_serial_port == port_id);
     }
 
     // Log Filter Configuration
@@ -1109,14 +1115,8 @@ FLASHMEM bool importInputFromJSON(JsonObject& inputObj, uint8_t index) {
     enableInput(pin, inputObj["enabled"] | true);  // Default to true if missing
     enableInputAlarm(pin, inputObj["alarmEnabled"] | false);  // Default to false if missing
     enableInputDisplay(pin, inputObj["displayEnabled"] | true);  // Default to true if missing
-    // Routes (#612): one bit per output id. A file from before #612 carries
-    // "outputMask" instead, which is ignored: the input keeps every route.
+    // Routes (#612): one bit per output id; absent, every route
     input->routeMask = inputObj["routeMask"] | ROUTE_MASK_ALL;
-    if (inputObj["routeMask"].isNull() && inputObj["outputMask"].isNull() == false) {
-        msg.control.print(F("NOTE: input "));
-        msg.control.print(pin);
-        msg.control.println(F(": outputMask is the old form; ignored, routed to every output"));
-    }
 
     // OBD2
     if (inputObj["obd2"].isNull() == false) {
@@ -1261,75 +1261,23 @@ static const char kSerialKept2[] PROGMEM = " kept its settings: it carries comma
 static const char kSerialReboot[] PROGMEM = "NOTE: serial port changes take effect after SAVE and a reboot";
 #define JSON_FSTR(a) (reinterpret_cast<const __FlashStringHelper*>(a))
 
+#if INCLUDE_ELM327
+// OUTPUT ADD ELM327 SERIAL<n>'s rule, against a staged config: an enabled,
+// unframed port the router does not use
+static bool elm327PortOkIn(const SystemConfig& c, uint8_t port) {
+    if (port < 1 || port > NUM_SERIAL_PORTS) return false;
+    const uint8_t bit = (uint8_t)(1u << (port - 1));
+    if (!(c.serial.enabled_mask & bit) || (c.serial.framed_enabled_mask & bit)) return false;
+    const uint8_t t = (uint8_t)(TRANSPORT_SERIAL1 + (port - 1));
+    const auto& r = c.router;
+    return !(r.control_primary == t || r.control_secondary == t || r.data_primary == t ||
+             r.data_secondary == t || r.debug_primary == t || r.debug_secondary == t);
+}
+#endif
+
 FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
     // ---- ADMISSION PHASE -------------------------------------------------
     SystemConfig staged = systemConfig;
-
-    // The outputs you add (#612): the array replaces the table, as rules and
-    // actions do. Phase 1 has one output per format at a fixed id; a record
-    // whose id and format disagree is skipped. Its transport comes from the
-    // bus and stream settings (also in this file), so it isn't read here.
-    JsonVariant outputsVar = systemObj["outputs"];
-    if (outputsVar.is<JsonArray>()) {
-        // Every output this build has is deleted unless the array lists it;
-        // the bits of outputs it doesn't have keep their value
-        uint8_t absent = staged.router.outputsAbsent;
-        for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++)
-            if (outputIdBuilt(id)) absent |= (uint8_t)(1u << id);
-        for (JsonObject o : outputsVar.as<JsonArray>()) {
-            const int id = o["id"] | -1;
-            const OutputFormat fmt = parseOutputFormat(o["format"] | "");
-            const char* tr = o["transport"] | "";
-            if (id < 0 || id >= NUM_OUTPUT_IDS || !outputIdBuilt((uint8_t)id) ||
-                outputFormatOf((uint8_t)id) != fmt || !outputTransportKindOk((uint8_t)id, tr)) {
-                msg.control.print(F("NOTE: outputs: id "));
-                msg.control.print(id);
-                msg.control.print(F(" ("));
-                msg.control.print(o["format"] | "?");
-                msg.control.println(F(") is not an output this firmware has; skipped"));
-                continue;
-            }
-            absent &= (uint8_t)~(1u << id);
-            const uint8_t slot = outputLegacySlot((uint8_t)id);
-            if (o["enabled"].isNull() == false) staged.outputEnabled[slot] = o["enabled"] ? 1 : 0;
-            // Out of range: clamped, as EEPROM load does, so restoring an
-            // older backup keeps the nearest rate it can. Not a number:
-            // ignored. Either way a NOTE says so (#608).
-            if (o["interval"].isNull() == false && outputTakesInterval(slot)) {
-                JsonVariant iv = o["interval"];
-                const double d = iv.is<double>() ? iv.as<double>() : NAN;
-                const bool isNumber = !isnan(d) && d == floor(d);
-                if (isNumber && d >= outputIntervalMinMs(slot) && d <= OUTPUT_INTERVAL_MAX_MS) {
-                    staged.outputInterval[slot] = (uint16_t)d;
-                } else {
-                    msg.control.print(JSON_FSTR(kIntervalNoteA));
-                    msg.control.print(id);
-                    if (isNumber) {
-                        staged.outputInterval[slot] = clampOutputInterval(slot, d);
-                        msg.control.print(JSON_FSTR(kIntervalNoteClamped));
-                        msg.control.println(staged.outputInterval[slot]);
-                    } else {
-                        msg.control.println(JSON_FSTR(kIntervalNoteIgnored));
-                    }
-                }
-            }
-#if INCLUDE_SD_LOGGING
-            if (id == OUT_ID_SDLOG && o["csv"].isNull() == false) {
-                const char* layoutName = o["csv"];
-                SdLogFormat format;
-                if (parseSdLogFormat(layoutName, format)) staged.sdLogFormat = (uint8_t)format;
-            }
-#endif
-        }
-        // A deleted output is off too, so an older build flashed back keeps it off
-        for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
-            if (outputIdBuilt(id) && (absent & (1u << id))) staged.outputEnabled[outputLegacySlot(id)] = 0;
-        }
-        staged.router.outputsAbsent = absent;
-    } else if (outputsVar.isNull() == false) {
-        // A file from before #612 (an object keyed by module name)
-        msg.control.println(F("NOTE: outputs is in the old form (before OUTPUT ADD); ignored, outputs unchanged"));
-    }
 
     // The alarm, a built-in output (system.alarm since #612)
     if (systemObj["alarm"].isNull() == false) {
@@ -1452,55 +1400,32 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
         staged.buses.active_spi = buses["spi"] | 0xFF;
         staged.buses.spi_clock = buses["spiClock"] | DEFAULT_SPI_CLOCK;
 
-        // CAN configuration - separate input/output buses
-        staged.buses.input_can_bus = buses["canInputBus"] | 0xFF;
-        // Same rule for CAN: absent means unstated, and unstated defers to the
-        // build-time WIRING declaration (0xFF when there is none).
-        staged.buses.output_can_bus = buses["canOutputBus"] | BUS_WIRED_CAN_ID;
-        // Backward compatibility: canInputEnabled (bool) -> canInputMode (enum)
-        if (buses["canInputMode"].is<uint8_t>()) {
-            staged.buses.can_input_mode = buses["canInputMode"] | CAN_INPUT_OFF;
-        } else {
-            // Old format: canInputEnabled=1 maps to NORMAL mode
-            staged.buses.can_input_mode = (buses["canInputEnabled"] | 0) ? CAN_INPUT_NORMAL : CAN_INPUT_OFF;
-        }
-        staged.buses.can_output_enabled =
-            buses["canOutputEnabled"] | (BUS_WIRED_CAN_ID != 0xFF ? 1 : 0);
-
-        // BUS refuses a LISTEN input on the output's bus (#495); an imported
-        // config can still carry one. It runs, but not listen-only: input
-        // never polls, while output opens the controller in TX mode and ACKs.
-        if (staged.buses.can_input_mode == CAN_INPUT_LISTEN &&
-            staged.buses.can_output_enabled &&
-            staged.buses.input_can_bus != 0xFF &&
-            staged.buses.input_can_bus == staged.buses.output_can_bus) {
-            msg.control.println(F("  NOTE: CAN input LISTEN shares the output bus; the bus will ACK and transmit"));
-        }
-
-        // Backward compatibility: if old canBaudrate exists but new ones don't, use it for both
-        if (buses["canBaudrate"].is<uint32_t>() && !buses["canInputBaudrate"].is<uint32_t>()) {
-            uint32_t baudrate = buses["canBaudrate"] | DEFAULT_CAN_BAUDRATE;
-            staged.buses.can_input_baudrate = baudrate;
-            staged.buses.can_output_baudrate = baudrate;
-        } else {
-            staged.buses.can_input_baudrate = buses["canInputBaudrate"] | DEFAULT_CAN_BAUDRATE;
-            staged.buses.can_output_baudrate = buses["canOutputBaudrate"] | DEFAULT_CAN_BAUDRATE;
+        // CAN (#612 phase 2a): one entry per bus. The array replaces the
+        // settings: a bus it doesn't list is off, and CAN input reads the bus
+        // marked "input" (none: off). A bad mode or rate keeps the current one.
+        if (buses["can"].is<JsonArray>()) {
+            for (uint8_t b = 0; b < CAN_BUS_SLOTS; b++) staged.buses.can[b].mode = CAN_BUS_OFF;
+            staged.buses.canInputBus = 0xFF;
+            for (JsonObject c : buses["can"].as<JsonArray>()) {
+                const int b = c["bus"] | -1;
+                if (b < 0 || b >= NUM_CAN_BUSES || b >= CAN_BUS_SLOTS) continue;
+                const char* mode = c["mode"] | "";
+                if (strcasecmp(mode, "NORMAL") == 0)      staged.buses.can[b].mode = CAN_BUS_NORMAL;
+                else if (strcasecmp(mode, "LISTEN") == 0) staged.buses.can[b].mode = CAN_BUS_LISTEN;
+                else if (strcasecmp(mode, "OFF") == 0)    staged.buses.can[b].mode = CAN_BUS_OFF;
+                else staged.buses.can[b].mode = systemConfig.buses.can[b].mode;
+                const uint8_t idx = canBaudIndexOf(c["baudrate"] | 0UL);
+                if (idx != 0xFF) staged.buses.can[b].baudIndex = idx;
+                if ((c["input"] | false) && staged.buses.can[b].mode != CAN_BUS_OFF) staged.buses.canInputBus = (uint8_t)b;
+            }
         }
     } else {
-        // No buses object (an old config). It states no bus selection, so it gets
-        // none — the same answer resetSystemConfig() now gives, for the same
-        // reason (#377): a default is not a user statement, and must not be
-        // written into the config as though it were.
+        // No buses object: it states no I2C/SPI selection, so it gets none,
+        // the answer resetSystemConfig() gives (#377). CAN is left as it is.
         staged.buses.active_i2c = 0xFF;
         staged.buses.i2c_clock = DEFAULT_I2C_CLOCK;
         staged.buses.active_spi = 0xFF;
         staged.buses.spi_clock = DEFAULT_SPI_CLOCK;
-        staged.buses.input_can_bus = 0xFF;  // Disabled by default
-        staged.buses.output_can_bus = BUS_WIRED_CAN_ID;
-        staged.buses.can_input_mode = CAN_INPUT_OFF;
-        staged.buses.can_output_enabled = (BUS_WIRED_CAN_ID != 0xFF) ? 1 : 0;
-        staged.buses.can_input_baudrate = DEFAULT_CAN_BAUDRATE;
-        staged.buses.can_output_baudrate = DEFAULT_CAN_BAUDRATE;
     }
 
     // Serial ports (#561). Applied to the stored config only, so they take
@@ -1544,30 +1469,117 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
                 else staged.serial.framed_enabled_mask &= (uint8_t)~bit;
             }
 #endif
-            if (port["elm327"].is<bool>()) {
-                if (port["elm327"].as<bool>()) staged.buses.elm327_serial_port = id;
-                else if (staged.buses.elm327_serial_port == id) staged.buses.elm327_serial_port = 0xFF;
-            }
         }
-        // BUS SERIAL <n> ELM327 ENABLE's own rule: the ELM327 port must be an
-        // enabled port the router does not use on any plane.
-        const uint8_t elm = staged.buses.elm327_serial_port;
-        bool elmRouted = false;
-        if (elm >= 1 && elm <= NUM_SERIAL_PORTS) {
-            const uint8_t t = (uint8_t)(TRANSPORT_SERIAL1 + (elm - 1));
-            const auto& r = systemConfig.router;
-            elmRouted = r.control_primary == t || r.control_secondary == t ||
-                        r.data_primary == t || r.data_secondary == t ||
-                        r.debug_primary == t || r.debug_secondary == t;
-        }
-        if (elm != 0xFF && (elm < 1 || elm > NUM_SERIAL_PORTS ||
-                            !(staged.serial.enabled_mask & (1u << (elm - 1))) || elmRouted)) {
-            staged.buses.elm327_serial_port = systemConfig.buses.elm327_serial_port;
-        }
-        serialChanged = memcmp(&staged.serial, &systemConfig.serial, sizeof(staged.serial)) != 0 ||
-                        staged.buses.elm327_serial_port != systemConfig.buses.elm327_serial_port;
+        serialChanged = memcmp(&staged.serial, &systemConfig.serial, sizeof(staged.serial)) != 0;
     }
 #endif
+
+    // The outputs you add (#612): the array replaces the table, as rules and
+    // actions do. One output per format and transport kind at a fixed id; a
+    // record whose id, format and transport kind disagree is skipped. OBD's
+    // CAN bus and ELM327's serial port are read from the record (after the
+    // buses and serial ports above, which they are checked against); the
+    // data stream RealDash and CSV share is the router's (phase 2b).
+    JsonVariant outputsVar = systemObj["outputs"];
+    if (outputsVar.is<JsonArray>()) {
+        // Every output this build has is deleted unless the array lists it;
+        // the bits of outputs it doesn't have keep their value
+        uint8_t absent = staged.router.outputsAbsent;
+        for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++)
+            if (outputIdBuilt(id)) absent |= (uint8_t)(1u << id);
+        for (JsonObject o : outputsVar.as<JsonArray>()) {
+            const int id = o["id"] | -1;
+            const OutputFormat fmt = parseOutputFormat(o["format"] | "");
+            const char* tr = o["transport"] | "";
+            if (id < 0 || id >= NUM_OUTPUT_IDS || !outputIdBuilt((uint8_t)id) ||
+                outputFormatOf((uint8_t)id) != fmt || !outputTransportKindOk((uint8_t)id, tr)) {
+                msg.control.print(F("NOTE: outputs: id "));
+                msg.control.print(id);
+                msg.control.print(F(" ("));
+                msg.control.print(o["format"] | "?");
+                msg.control.println(F(") is not an output this firmware has; skipped"));
+                continue;
+            }
+            // OBD's bus and ELM327's port are the record's transport. One
+            // that can't run on it (checked below, after every record) is
+            // imported switched off, so the rest of the file still restores.
+            if (id == OUT_ID_OBD) {
+                const uint8_t bus = (strncasecmp(tr, "CAN", 3) == 0) ? (uint8_t)(tr[3] - '1') : 0xFF;
+                staged.buses.obdBus = bus < NUM_CAN_BUSES ? bus : 0xFF;
+            }
+#if INCLUDE_ELM327
+            if (id == OUT_ID_ELM327) {
+                const uint8_t port = (strncasecmp(tr, "SERIAL", 6) == 0) ? (uint8_t)(tr[6] - '0') : 0xFF;
+                staged.buses.elm327_serial_port = port;
+            }
+#endif
+            absent &= (uint8_t)~(1u << id);
+            const uint8_t slot = outputLegacySlot((uint8_t)id);
+            if (o["enabled"].isNull() == false) staged.outputEnabled[slot] = o["enabled"] ? 1 : 0;
+            // Out of range: clamped, as EEPROM load does, so restoring an
+            // older backup keeps the nearest rate it can. Not a number:
+            // ignored. Either way a NOTE says so (#608).
+            if (o["interval"].isNull() == false && outputTakesInterval(slot)) {
+                JsonVariant iv = o["interval"];
+                const double d = iv.is<double>() ? iv.as<double>() : NAN;
+                const bool isNumber = !isnan(d) && d == floor(d);
+                if (isNumber && d >= outputIntervalMinMs(slot) && d <= OUTPUT_INTERVAL_MAX_MS) {
+                    staged.outputInterval[slot] = (uint16_t)d;
+                } else {
+                    msg.control.print(JSON_FSTR(kIntervalNoteA));
+                    msg.control.print(id);
+                    if (isNumber) {
+                        staged.outputInterval[slot] = clampOutputInterval(slot, d);
+                        msg.control.print(JSON_FSTR(kIntervalNoteClamped));
+                        msg.control.println(staged.outputInterval[slot]);
+                    } else {
+                        msg.control.println(JSON_FSTR(kIntervalNoteIgnored));
+                    }
+                }
+            }
+#if INCLUDE_SD_LOGGING
+            if (id == OUT_ID_SDLOG && o["csv"].isNull() == false) {
+                const char* layoutName = o["csv"];
+                SdLogFormat format;
+                if (parseSdLogFormat(layoutName, format)) staged.sdLogFormat = (uint8_t)format;
+            }
+#endif
+        }
+        // A deleted output is off and has no transport
+        for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
+            if (!outputIdBuilt(id) || !(absent & (1u << id))) continue;
+            staged.outputEnabled[outputLegacySlot(id)] = 0;
+            if (id == OUT_ID_OBD) staged.buses.obdBus = 0xFF;
+            if (id == OUT_ID_ELM327) staged.buses.elm327_serial_port = 0xFF;
+        }
+        staged.router.outputsAbsent = absent;
+    }
+
+    // An enabled OBD or ELM327 output must be able to run on its transport in
+    // this config (the file's buses and ports, or the current ones it left
+    // alone): OBD on a NORMAL bus, ELM327 on an enabled, unframed port the
+    // router doesn't use. Otherwise it is imported off, with a NOTE, as
+    // OUTPUT <id> ENABLE would refuse it.
+    {
+        const uint8_t bus = staged.buses.obdBus;
+        if (staged.outputEnabled[OUTPUT_CAN] && bus != 0xFF &&
+            (bus >= CAN_BUS_SLOTS || staged.buses.can[bus].mode != CAN_BUS_NORMAL)) {
+            staged.outputEnabled[OUTPUT_CAN] = 0;
+            msg.control.print(F("NOTE: outputs: OBD imported off: CAN"));
+            msg.control.print(bus + 1);
+            msg.control.println(F(" is off or LISTEN (BUS CAN <bus> ENABLE, then OUTPUT 0 ENABLE)"));
+        }
+#if INCLUDE_ELM327
+        const uint8_t port = staged.buses.elm327_serial_port;
+        if (staged.outputEnabled[OUTPUT_ELM327] && port != 0xFF && !elm327PortOkIn(staged, port)) {
+            staged.outputEnabled[OUTPUT_ELM327] = 0;
+            msg.control.print(F("NOTE: outputs: ELM327 imported off: Serial"));
+            msg.control.print(port);
+            msg.control.println(F(" is off, framed or a TRANSPORT port (BUS SERIAL <n> ENABLE, then OUTPUT 4 ENABLE)"));
+        }
+#endif
+    }
+
 
     // Log filter (#561). Levels by name; an unreadable value keeps the current one.
     const bool logFilterPresent = systemObj["logFilter"].is<JsonObject>();
@@ -1601,7 +1613,11 @@ FLASHMEM bool importSystemConfigFromJSON(JsonObject& systemObj) {
     // the end of the whole load: once systemConfig commits, the rest of it is
     // live too and a SAVE persists it, so a later stage failing must not leave
     // the outputs alone out of step. A file refused before this commit (board
-    // fit, bad JSON, a system-block error) touches nothing.
+    // fit, bad JSON, a system-block error) touches nothing. Buses first: OBD
+    // attaches to a bus that is already in its new mode (#612).
+#if INCLUDE_CAN
+    syncCanToConfig();
+#endif
     syncOutputsToConfig();
 #if NUM_SERIAL_PORTS > 0
     for (uint8_t id = 1; id <= NUM_SERIAL_PORTS; id++) {
@@ -1778,6 +1794,7 @@ bool loadConfigFromJSON(const char* jsonString) {
     // returns before its payload arrives, so the dispatcher's own bump fires
     // too early to cover it.
     configGenerationBump();
+    obdQuery_markStale();   // routes and the OBD outputs change too, not only inputs
 
     // Import system config
     if (doc["system"].isNull() == false) {

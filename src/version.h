@@ -55,7 +55,9 @@
 //            Clean reset from v5.
 // =============================================================================
 // v7: Rule grows warnLo/warnHi (#425)
-#define EEPROM_VERSION 7
+// v8: input routes are by output id only; the phase 1 upgrade of older
+//     records is gone (#612 phase 2a). Clean reset from v7.
+#define EEPROM_VERSION 8
 
 // =============================================================================
 // Helper functions (defined in version.cpp)

@@ -7,7 +7,9 @@
  * every input on 0x7E8 as well. That is the response ID a tester reads after
  * each request, so the extra frames reached tools as stray answers, and nothing
  * consumed them: RealDash reads 0x0C80 from output_realdash (#528).
- * Configurable output bus (supports dual-bus on Teensy).
+ * A consumer of one CAN bus (systemConfig.buses.obdBus, its transport): the
+ * bus manager starts and reads the bus and hands it the OBD requests
+ * (buses/can_bus.h, #612 phase 2a).
  */
 
 #include "../../config.h"
@@ -19,15 +21,18 @@
 #include "../../config/system_config.h"
 #include "obd_query.h"
 
+#ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
+#define FLASHMEM
+#endif
+
 #if INCLUDE_CAN
 
-#include "../../hal/hal_can.h"
-#include "../../buses/bus_manager.h"
-#include "../../sensors/can/input_can.h"
+#include "../../buses/can_bus.h"
 #include "../table/output_table.h"   // OUT_ID_* route bits (#612)
 
-// Which bus we're outputting on (set during init)
-static uint8_t canOutputBus = 0xFF;   // 0xFF until initCAN() starts a bus (#610)
+// The bus OBD is attached to; 0xFF while detached
+static uint8_t canOutputBus = 0xFF;
+void stopCAN();
 
 // ===== PLATFORM ABSTRACTION =====
 
@@ -38,7 +43,7 @@ static uint8_t canOutputBus = 0xFF;   // 0xFF until initCAN() starts a bus (#610
  * @param len Data length (usually 8)
  */
 static void sendCANFrame(uint32_t canId, const byte* data, uint8_t len) {
-    hal::can::write(canId, data, len, false, canOutputBus);  // Standard 11-bit ID
+    canBusWrite(canOutputBus, canId, data, len, false);  // Standard 11-bit ID
 }
 
 /**
@@ -281,96 +286,59 @@ static void processOBD2Request(uint32_t canId, const byte* data, uint8_t len) {
     sendOBD2Response(canId, input);
 }
 
-/**
- * OBD-II request drained by CAN input on a shared bus (#495). Output's own
- * read loop is skipped there, so this is the only way requests reach the
- * responder. The module can be disabled at runtime without a re-init.
- */
-static void onSharedBusRequest(uint32_t id, const uint8_t* data, uint8_t len) {
-    // The live flag, not systemConfig: an imported/loaded enable waiting for
-    // the reboot (#610) must not answer while updateCAN() — which paces
-    // multi-frame replies — isn't running.
-    if (!outputModules[OUTPUT_CAN].enabled || !systemConfig.buses.can_output_enabled) return;
+// The bus manager's reader hands OBD the requests (0x7DF / 0x7E0) only
+static void onCanFrame(uint32_t id, const uint8_t* data, uint8_t len, bool extended) {
+    if (extended) return;
     processOBD2Request(id, data, len);
 }
 
-void initCAN() {
-    // Check if output is enabled
-    if (!systemConfig.buses.can_output_enabled) {
+// The bus restarted: a multi-frame answer in flight is gone
+static void onCanReset() { isotp.state = isotp.IDLE; }
+
+// CAN input must not abort unACKed transmits under our multi-frame answer
+static bool onCanBusy() { return isotp.state != isotp.IDLE; }
+
+/**
+ * Attach the OBD output to its bus (systemConfig.buses.obdBus). Called when
+ * the output is enabled; a bus already running is never re-begun.
+ */
+FLASHMEM void initCAN() {
+    stopCAN();
+    const uint8_t bus = systemConfig.buses.obdBus;
+    if (bus == 0xFF) return;   // no bus: OUTPUT ADD OBD CAN<n>
+    canSetHandlers(CANC_OBD, onCanFrame, onCanReset, onCanBusy);
+    const CanAttach r = canAttach(bus, CANC_OBD);
+    if (r == CAN_ATTACH_BUS_OFF || r == CAN_ATTACH_NO_BUS || r == CAN_ATTACH_LISTEN_ONLY) {
+        msg.debug.error(TAG_CAN, "OBD output: CAN%u is off or listen-only", (unsigned)bus + 1);
         return;
     }
-
-    canOutputBus = systemConfig.buses.output_can_bus;
-    if (canOutputBus == 0xFF) {
-        return;  // No output bus configured
-    }
-
-    uint32_t baudrate = systemConfig.buses.can_output_baudrate;
-
-    // Initialize CAN bus via HAL
-    // canBusClaimed: the bus's pins may belong to another function (see bus_manager.h)
-    if (!canBusClaimed(canOutputBus) || !hal::can::begin(baudrate, canOutputBus)) {
-        msg.debug.error(TAG_CAN, "CAN output init failed on bus %d!", canOutputBus);
-        canOutputBus = 0xFF;  // updateCAN() must not poll a bus that never started
-        return;
-    }
-
-    // Configure RX filters for OBD-II requests
-    hal::can::setFilters(0x7DF, 0x7E0, canOutputBus);  // Functional and physical addressing
-
-    // Shared with CAN input: input drains the bus and hands requests over
-    setCANRequestHandler(canInputOwnsBus(canOutputBus) ? onSharedBusRequest : nullptr);
-
-    msg.debug.info(TAG_CAN, "CAN output initialized on bus %d (%lu bps)", canOutputBus, baudrate);
-    msg.debug.info(TAG_CAN, "OBD-II request/response enabled");
+    canOutputBus = bus;   // attached, also while the bus waits
+    if (r == CAN_ATTACH_OK) msg.debug.info(TAG_CAN, "OBD-II responder on CAN%u", (unsigned)bus + 1);
+    else                    msg.debug.error(TAG_CAN, "OBD output: CAN%u did not start", (unsigned)bus + 1);
     // PID lookup table built in main.cpp after initOutputModules()
 }
 
-// initCAN() brought the output bus up this session (#610): the sync may then
-// turn CAN output back on without re-beginning the bus.
-bool canOutputBusStarted() {
-    // ...and on the bus the config names now: an import that also moved or
-    // turned off the output bus needs the reboot like a first start
-    return canOutputBus != 0xFF && systemConfig.buses.can_output_enabled &&
-           canOutputBus == systemConfig.buses.output_can_bus;
+// Disabling the output detaches it; the bus keeps running for anything else
+FLASHMEM void stopCAN() {
+    if (canOutputBus != 0xFF) canDetach(canOutputBus, CANC_OBD);
+    canOutputBus = 0xFF;
+    isotp.state = isotp.IDLE;
 }
 
-// The config can start CAN output at boot at all (a bus selected and on), so
-// a deferred enable is really pending
-bool canOutputConfigured() {
-    return systemConfig.buses.can_output_enabled && systemConfig.buses.output_can_bus != 0xFF;
-}
+// The bus OBD is attached to (0xFF: none), for the output sync
+uint8_t canOutputAttachedBus() { return canOutputBus; }
 
 void updateCAN() {
-    if (!systemConfig.buses.can_output_enabled || canOutputBus == 0xFF) {
-        return;  // Output not configured
-    }
-
-    // Process incoming OBD-II requests (request/response mode)
-    uint32_t id;
-    uint8_t data[8];
-    uint8_t len;
-    bool extended;
-
+    if (canOutputBus == 0xFF) return;
     isotpTick();   // pace a multi-frame answer's Consecutive Frames
-
-    // Shared with CAN input: input is the only reader (see onSharedBusRequest)
-    if (canInputOwnsBus(canOutputBus)) return;
-
-    while (hal::can::read(id, data, len, extended, canOutputBus)) {
-        // Check if this is an OBD-II request
-        if (id == 0x7DF || id == 0x7E0) {
-            processOBD2Request(id, data, len);
-        }
-    }
 }
 
 #else
 
 // Dummy functions if CAN is disabled
 void initCAN() {}
+void stopCAN() {}
 void updateCAN() {}
-bool canOutputBusStarted() { return false; }
-bool canOutputConfigured() { return false; }
+uint8_t canOutputAttachedBus() { return 0xFF; }
 
 #endif

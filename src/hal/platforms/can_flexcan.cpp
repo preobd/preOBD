@@ -44,7 +44,7 @@
 namespace hal { namespace can {
 
 namespace detail {
-    // RX is polled straight from the mailboxes (see setFilters), so the
+    // RX is polled straight from the mailboxes (see read()), so the
     // library's RX ring is never filled: keep it at its smallest.
     static FlexCAN_T4<FLEXCAN_BUS0_DEV, RX_SIZE_2, TX_SIZE_16> canBus0;
     #ifdef FLEXCAN_BUS1_DEV
@@ -56,7 +56,7 @@ namespace detail {
 
     // Controllers begin() has started. A FlexCAN controller that was never
     // begun has its clock gated on Teensy 4, and touching its registers is a
-    // hard fault, so read/write/setFilters/abort refuse any other bus (#560).
+    // hard fault, so read/write/restart/abort refuse any other bus (#560).
     static bool started[3] = {false, false, false};
     inline bool isStarted(uint8_t bus) { return bus < 3 && started[bus]; }
 
@@ -109,6 +109,21 @@ FLASHMEM bool begin(uint32_t baudrate, uint8_t bus, bool listenOnly) {
     }
 }
 
+FLASHMEM bool restart(uint32_t baudrate, uint8_t bus, bool listenOnly) {
+    if (!detail::isStarted(bus)) return begin(baudrate, bus, listenOnly);
+    const FLEXCAN_RXTX mode = listenOnly ? LISTEN_ONLY : TX;
+    switch (bus) {
+        case 0: detail::canBus0.setBaudRate(baudrate, mode); return true;
+        #ifdef FLEXCAN_BUS1_DEV
+        case 1: detail::canBus1.setBaudRate(baudrate, mode); return true;
+        #endif
+        #ifdef FLEXCAN_BUS2_DEV
+        case 2: detail::canBus2.setBaudRate(baudrate, mode); return true;
+        #endif
+        default: return false;
+    }
+}
+
 bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t bus) {
     if (!detail::isStarted(bus)) return false;
     CAN_message_t msg;
@@ -135,6 +150,12 @@ bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t
     }
 }
 
+// Mailboxes stay POLLED: read() skips interrupt-enabled mailboxes, and with
+// no FlexCAN_T4 callbacks registered the ISR drops their frames. Enabling
+// the MB0/MB1 interrupts meant every 0x7DF/0x7E0 request vanished and the
+// OBD-II responder never answered over CAN (#495). Every RX mailbox accepts
+// every 11-bit frame; the bus manager sorts them in software (#612). The RX
+// mailboxes are STD-only, so a 29-bit (J1939) frame is never received here.
 bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint8_t bus) {
     if (!detail::isStarted(bus)) return false;
     CAN_message_t msg;
@@ -166,32 +187,6 @@ bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint8_t bus
         return true;
     }
     return false;
-}
-
-// Mailboxes stay POLLED: read() skips interrupt-enabled mailboxes, and with
-// no FlexCAN_T4 callbacks registered the ISR drops their frames. Enabling
-// the MB0/MB1 interrupts here meant every 0x7DF/0x7E0 request vanished and
-// the OBD-II responder never answered over CAN (#495).
-FLASHMEM void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus) {
-    if (!detail::isStarted(bus)) return;
-    switch (bus) {
-        case 0:
-            detail::canBus0.setMBFilter(MB0, filter1);
-            detail::canBus0.setMBFilter(MB1, filter2);
-            break;
-        #ifdef FLEXCAN_BUS1_DEV
-        case 1:
-            detail::canBus1.setMBFilter(MB0, filter1);
-            detail::canBus1.setMBFilter(MB1, filter2);
-            break;
-        #endif
-        #ifdef FLEXCAN_BUS2_DEV
-        case 2:
-            detail::canBus2.setMBFilter(MB0, filter1);
-            detail::canBus2.setMBFilter(MB1, filter2);
-            break;
-        #endif
-    }
 }
 
 namespace detail {

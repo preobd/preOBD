@@ -65,8 +65,9 @@ inline bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint
     return false;
 }
 
-inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
-    (void)filter1; (void)filter2; (void)bus;
+inline bool restart(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
+    (void)baudrate; (void)bus; (void)listenOnly;
+    return false;
 }
 
 inline bool abortUnackedTx(uint8_t bus = 0) {

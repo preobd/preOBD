@@ -147,15 +147,16 @@ once, from the serial console:
 
 ```
 CONFIG
-BUS CAN OUTPUT CAN1 ENABLE 500000   # the bus your transceiver is wired to, at 500 kbps
-OUTPUT 0 ENABLE                   # answer OBD-II requests on it
+BUS CAN CAN1 ENABLE               # the bus your transceiver is wired to (500 kbps by default)
+OUTPUT ADD OBD CAN1               # output 0: answer OBD-II requests on it, at once
 SAVE
-SYSTEM REBOOT
 ```
 
-preOBD never guesses which CAN bus you wired. Instead of `BUS CAN OUTPUT ...` you
-can declare it in `boards/<board>/wiring.ini` with `-D CAN_WIRED_BUS=0` (0 = CAN1).
-On the Arduino Mega the single MCP2515 module is `CAN1`.
+preOBD never guesses which CAN bus you wired. Instead of `BUS CAN CAN1 ENABLE` you
+can declare it in `boards/<board>/wiring.ini` with `-D CAN_WIRED_BUS=0` (0 = CAN1);
+a fresh config then has that bus on with the OBD output on it.
+On the Arduino Mega the single MCP2515 module is `CAN1`. A car's bus at another
+rate: `BUS CAN CAN1 BAUDRATE 250000`.
 
 `BUS CAN` shows the bus state and `OUTPUT LIST` shows the output.
 

@@ -16,7 +16,7 @@
 
 // EEPROM memory layout constants
 #define SYSTEM_CONFIG_MAGIC 0x5343      // "SC" in ASCII
-#define SYSTEM_CONFIG_VERSION 13        // Increment when struct changes (v13: Rule/Action tables moved OUT to the front config-store arena, #296; clean reset from v12)
+#define SYSTEM_CONFIG_VERSION 14        // Increment when struct changes (v14: one set of CAN settings per bus, ELM327 over BLE is output slot 5, #612 phase 2a; clean reset from v13)
 #define SYSTEM_CONFIG_SIZE sizeof(SystemConfig)
 
 // Total EEPROM bytes available on this platform.
@@ -30,9 +30,8 @@
 #define EEPROM_WDT_WINDOW_MS 20000
 
 // Per-input routes (Input::routeMask, one bit per output id, #612): a new
-// input is routed to every output, as before. Every bit, not just the
-// outputs that exist: OUTPUT ADD routes every input to the new output anyway,
-// and an older build reads bits 0-3 as it always did.
+// input is routed to every output. Every bit, not just the outputs that
+// exist: OUTPUT ADD routes every input to the new output anyway.
 #define ROUTE_MASK_ALL 0xFF
 
 // Output module IDs
@@ -44,7 +43,7 @@ enum OutputID {
     OUTPUT_SERIAL   = 2,
     OUTPUT_SD       = 3,
     OUTPUT_ALARM    = 4,
-    OUTPUT_RELAY    = 5,
+    OUTPUT_ELM327_BLE = 5,   // ELM327 over the framed nRF link (was the retired RELAY slot)
     OUTPUT_ELM327   = 6,
     NUM_OUTPUTS     = 7
 };
@@ -177,10 +176,8 @@ struct SystemConfig {
         uint8_t bt_type;
         uint8_t bt_auth_required;
         uint16_t bt_pin;
-        // Outputs deleted with OUTPUT DEL, one bit per output id (#612 phase 1,
-        // outputs/table/output_table.h). The first reserved byte: every older
-        // build wrote 0 here, so an older image reads "nothing deleted", and
-        // an older build flashed back ignores it.
+        // Outputs deleted with OUTPUT DEL, one bit per output id (#612,
+        // outputs/table/output_table.h)
         uint8_t outputsAbsent;
         uint8_t reserved_router[5];  // Future expansion
     } router;

@@ -27,19 +27,29 @@ ELM327Output elm327Output(OUT_ID_ELM327);   // the ELM327 output on a serial por
 
 // ===== OUTPUT MODULE FREE FUNCTIONS (called by output_manager) =====
 
+static uint8_t boundPort = 0xFF;   // the port elm327Output is bound to
+
+// Bind to systemConfig.buses.elm327_serial_port, unbinding from any other
+// first: OUTPUT ADD, OUTPUT <id> ENABLE and an imported port change all
+// take effect at once (#611, #612)
 void initELM327() {
-    uint8_t port = systemConfig.buses.elm327_serial_port;
+    elm327Output.end();
+    boundPort = 0xFF;
+    const uint8_t port = systemConfig.buses.elm327_serial_port;
     if (port == 0xFF) return;
 
     Stream* ser = getSerialPort(port);
     if (ser && isSerialPortActive(port)) {
         elm327Output.setSerial(ser);
         elm327Output.begin();
+        boundPort = port;
         msg.debug.info(TAG_ELM327, "ELM327 emulator active on Serial%d", port);
     } else {
-        msg.debug.warn(TAG_ELM327, "ELM327: Serial%d not active at boot", port);
+        msg.debug.warn(TAG_ELM327, "ELM327: Serial%d is not running", port);
     }
 }
+
+uint8_t elm327BoundPort() { return boundPort; }
 
 void updateELM327() {
     elm327Output.update();
@@ -50,15 +60,16 @@ void updateELM327() {
 void noteELM327PortState() {
     const uint8_t port = systemConfig.buses.elm327_serial_port;
     if (port == 0xFF) {
-        msg.control.println(F("NOTE: ELM327 has no serial port; assign one with BUS SERIAL <n> ELM327 ENABLE"));
+        msg.control.println(F("NOTE: ELM327 has no serial port: OUTPUT DEL 4, then OUTPUT ADD ELM327 SERIAL<n>"));
     } else if (!isSerialPortActive(port)) {
-        msg.control.println(F("NOTE: ELM327 answers once its serial port is running (next reboot)"));
+        msg.control.println(F("NOTE: ELM327 answers once its serial port is running (BUS SERIAL <n> ENABLE)"));
     }
 }
 
-// ELM327 output disabled at runtime (#610): unbind as BUS ... ELM327 DISABLE does
+// ELM327 output disabled or deleted: unbind from the port
 void stopELM327() {
     elm327Output.end();   // also clears its serial
+    boundPort = 0xFF;
 }
 
 // ===== ELM327Output IMPLEMENTATION =====

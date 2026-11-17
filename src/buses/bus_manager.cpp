@@ -11,6 +11,7 @@
 #include "pinctrl/pin_registry.h"
 #include "pinctrl/pin_owner.h"
 #include "bus_needs.h"
+#include "can_bus.h"
 #include "../config/system_config.h"
 #include "../core/message_api.h"
 #include "../core/log_tags.h"
@@ -36,11 +37,8 @@ static uint8_t active_i2c_id = 0;
 // already hold a pending `BUS I2C CLOCK` change that only applies at reboot.
 static uint16_t active_i2c_khz = 0;
 static uint8_t active_spi_id = 0;
-static uint8_t active_can_id = 0;
 
-// CAN ready flag (actual FlexCAN objects are in output_can.cpp)
-static bool can_ready = false;
-// Bit n: initCANBus(n) claimed bus n's pins. Input and output only start a
+// Bit n: initCANBus(n) claimed bus n's pins. can_bus.cpp only starts a
 // controller on a claimed bus: on Teensy 4, FlexCAN2's begin() remuxes pins
 // 0/1 even when Serial1 holds them (review of #560).
 static uint8_t can_claimed_mask = 0;
@@ -49,7 +47,7 @@ static uint8_t can_claimed_mask = 0;
 // until the next reboot, so its stored selection must stop defending its pins:
 // otherwise the input that blocked it is then dropped by storedBusHoldsPin(),
 // and the pin ends up held by nobody. One id per bus kind is enough, as only
-// the stored selection is ever brought up; CAN has two directions, so a mask.
+// the stored selection is ever brought up; CAN has one setting per bus, so a mask.
 static uint8_t i2c_refused_id = 0xFF;
 static uint8_t spi_refused_id = 0xFF;
 static uint8_t can_refused_mask = 0;
@@ -99,32 +97,12 @@ void initConfiguredBuses() {
         }
     }
 
-    // Initialize CAN output bus if enabled
-    if (systemConfig.buses.can_output_enabled && systemConfig.buses.output_can_bus != 0xFF) {
-        if (!initCANBus(systemConfig.buses.output_can_bus, systemConfig.buses.can_output_baudrate)) {
-            msg.debug.warn(TAG_CAN, "CAN output: bus %d did not start; no substitute chosen",
-                           systemConfig.buses.output_can_bus);
-        }
-    }
-
-    // Initialize CAN input bus if enabled
-    // Supports two modes:
-    // 1. SHARED BUS: input_can_bus == output_can_bus (same physical bus)
-    //    - Both input and output use same CAN peripheral (e.g., both on CAN1)
-    //    - Common on single-bus platforms (AVR with MCP2515, ESP32 with TWAI)
-    //    - HAL handles concurrent access safely (non-blocking reads, queued writes)
-    // 2. DUAL BUS: input_can_bus != output_can_bus (separate physical buses)
-    //    - Input on CAN1, output on CAN2 (Teensy 3.6/4.x only)
-    //    - Allows isolation of sensor import from OBD-II output traffic
-    if (systemConfig.buses.can_input_mode != CAN_INPUT_OFF && systemConfig.buses.input_can_bus != 0xFF) {
-        // Only initialize if different bus than output (avoid double-init in shared mode)
-        if (systemConfig.buses.input_can_bus != systemConfig.buses.output_can_bus) {
-            if (!initCANBus(systemConfig.buses.input_can_bus, systemConfig.buses.can_input_baudrate)) {
-                msg.debug.warn(TAG_CAN, "CAN input: Failed to initialize bus %d", systemConfig.buses.input_can_bus);
-            }
-        } else {
-            // Shared bus mode - already initialized by output, just log status
-            msg.debug.info(TAG_CAN, "CAN input sharing bus with output (bus %d)", systemConfig.buses.input_can_bus);
+    // CAN: claim the pins of every bus that is on. The controller itself is
+    // started by the first consumer to attach (can_bus.cpp), so a bus nothing
+    // uses never ACKs on a car's network, but its pins are defended from boot.
+    for (uint8_t b = 0; b < NUM_CAN_BUSES && b < CAN_BUS_SLOTS; b++) {
+        if (systemConfig.buses.can[b].mode != CAN_BUS_OFF && !initCANBus(b)) {
+            msg.debug.warn(TAG_CAN, "%s did not start; no substitute chosen", getCANBusName(b));
         }
     }
 }
@@ -362,10 +340,9 @@ bool initSPIBus(uint8_t bus_id, uint32_t clock_hz) {
 // CAN BUS INITIALIZATION
 // ============================================================================
 
-bool initCANBus(uint8_t bus_id, uint32_t baudrate) {
+bool initCANBus(uint8_t bus_id) {
 #if NUM_CAN_BUSES == 0
     (void)bus_id;
-    (void)baudrate;
     msg.debug.warn(TAG_CAN, "CAN not available on this platform");
     return false;
 #else
@@ -381,19 +358,16 @@ bool initCANBus(uint8_t bus_id, uint32_t baudrate) {
     // storedBusHoldsPin() (#379).
     const char* can_desc = getCANBusName(bus_id);
 
-    // Claim before declaring the bus ready: can_ready is what the rest of the
-    // firmware reads as "this bus is mine", so it must not be set over pins the
-    // registry attributes to another function.
+    // Claim before marking the bus claimed: can_bus.cpp reads that as "this
+    // bus is mine", so it must not be set over pins the registry attributes to
+    // another function.
     if (!claimPins(can_pins, 2, PIN_RESERVED, PIN_RANK_BUS, TAG_CAN, can_desc)) {
         if (bus_id < 8) can_refused_mask |= (uint8_t)(1u << bus_id);
         return false;
     }
     if (bus_id < 8) can_refused_mask &= (uint8_t)~(1u << bus_id);
 
-    // CAN buses are started by CAN input and output through the HAL (hal_can.h)
-    // Here we just mark the bus as ready
-    active_can_id = bus_id;
-    can_ready = true;
+    // The controller is started by can_bus.cpp on the first attach
     if (bus_id < 8) can_claimed_mask |= (uint8_t)(1u << bus_id);
 
     msg.debug.info(TAG_CAN, BUS_STARTED, can_desc);
@@ -571,10 +545,6 @@ uint8_t getActiveSPIId() {
     return active_spi_id;
 }
 
-uint8_t getActiveCANId() {
-    return active_can_id;
-}
-
 // ============================================================================
 // BUS NAME HELPERS
 // ============================================================================
@@ -640,27 +610,9 @@ bool storedBusHoldsPin(uint8_t pin, const char* excludeOwner, const char** descO
     }
 
 #if NUM_CAN_BUSES > 0
-    // CAN has two independent stored selections (input/output can legitimately
-    // be different buses) — check both, each only when its direction is
-    // actually enabled, mirroring initConfiguredBuses()'s own gating.
-    if (systemConfig.buses.can_output_enabled &&
-        systemConfig.buses.output_can_bus != 0xFF &&
-        systemConfig.buses.output_can_bus < NUM_CAN_BUSES &&
-        !(can_refused_mask & (1u << systemConfig.buses.output_can_bus))) {
-        const uint8_t b = systemConfig.buses.output_can_bus;
-        if (pin == getDefaultCANTX(b) || pin == getDefaultCANRX(b)) {
-            const char* d = getCANBusName(b);
-            if (!excludeOwner || strcmp(d, excludeOwner) != 0) {
-                if (descOut) *descOut = d;
-                return true;
-            }
-        }
-    }
-    if (systemConfig.buses.can_input_mode != CAN_INPUT_OFF &&
-        systemConfig.buses.input_can_bus != 0xFF &&
-        systemConfig.buses.input_can_bus < NUM_CAN_BUSES &&
-        !(can_refused_mask & (1u << systemConfig.buses.input_can_bus))) {
-        const uint8_t b = systemConfig.buses.input_can_bus;
+    // CAN: every bus that is on holds its pins, mirroring initConfiguredBuses()
+    for (uint8_t b = 0; b < NUM_CAN_BUSES && b < CAN_BUS_SLOTS; b++) {
+        if (systemConfig.buses.can[b].mode == CAN_BUS_OFF || (can_refused_mask & (1u << b))) continue;
         if (pin == getDefaultCANTX(b) || pin == getDefaultCANRX(b)) {
             const char* d = getCANBusName(b);
             if (!excludeOwner || strcmp(d, excludeOwner) != 0) {
@@ -946,47 +898,31 @@ FLASHMEM void displaySPIStatus() {
     printAvailableBuses(NUM_SPI_BUSES, getSPIBusName);
 }
 
-// Helper function to display CAN bus configuration
+// One line per bus: its settings, whether it runs, and who is attached
 FLASHMEM void displayCANStatus() {
     msg.control.println();
     msg.control.println(F("=== CAN Bus Configuration ==="));
 #if NUM_CAN_BUSES > 0
-    // Display input bus
-    msg.control.print(F("Input:  "));
-    if (systemConfig.buses.input_can_bus != 0xFF && systemConfig.buses.can_input_mode != CAN_INPUT_OFF) {
-        msg.control.print(getCANBusName(systemConfig.buses.input_can_bus));
-        if (systemConfig.buses.can_input_mode == CAN_INPUT_LISTEN) {
-            msg.control.print(F(" (LISTEN) @ "));
-        } else {
-            msg.control.print(F(" (NORMAL) @ "));
+    for (uint8_t b = 0; b < NUM_CAN_BUSES && b < CAN_BUS_SLOTS; b++) {
+        const CanBusSettings& cs = systemConfig.buses.can[b];
+        const CanBusState st = canBusState(b);
+        const uint8_t who = canBusConsumers(b);
+        msg.control.print(getCANBusName(b));
+        if (cs.mode == CAN_BUS_OFF) msg.control.print(F(": OFF"));
+        else msg.control.print(cs.mode == CAN_BUS_LISTEN ? F(": LISTEN @ ") : F(": NORMAL @ "));
+        if (cs.mode != CAN_BUS_OFF) {
+            msg.control.print(canBaudFromIndex(cs.baudIndex) / 1000);
+            msg.control.print(F("kbps, "));
+            msg.control.print(st == CAN_STATE_UP ? F("up") : st == CAN_STATE_WAITING ? F("did not start")
+                              : st == CAN_STATE_NO_PINS ? F("pins taken") : F("idle (nothing attached)"));
         }
-        msg.control.print(systemConfig.buses.can_input_baudrate / 1000);
-        msg.control.print(F("kbps"));
-    } else {
-        msg.control.print(F("DISABLED"));
-    }
-    msg.control.println();
-
-    // Display output bus
-    msg.control.print(F("Output: "));
-    if (systemConfig.buses.output_can_bus != 0xFF && systemConfig.buses.can_output_enabled) {
-        msg.control.print(getCANBusName(systemConfig.buses.output_can_bus));
-        msg.control.print(F(" (ENABLED) @ "));
-        msg.control.print(systemConfig.buses.can_output_baudrate / 1000);
-        msg.control.print(F("kbps"));
+        if (who & (1u << CANC_INPUT)) msg.control.print(F(", CAN input"));
+        if (who & (1u << CANC_OBD)) msg.control.print(F(", OBD output"));
         msg.control.println();
-        if (!can_ready) {
-            const uint8_t pins[2] = { getDefaultCANTX(systemConfig.buses.output_can_bus),
-                                      getDefaultCANRX(systemConfig.buses.output_can_bus) };
-            // A CAN declaration seeds output_can_bus at defaults time rather than
-            // being consulted at bring-up, so by here it is always a stored value.
-            printBusNotStarted(BK_CAN, getCANBusName(systemConfig.buses.output_can_bus),
-                               false, pins, 2,
-                               (can_refused_mask >> systemConfig.buses.output_can_bus) & 1);
+        if (st == CAN_STATE_NO_PINS || (cs.mode != CAN_BUS_OFF && !canBusClaimed(b))) {
+            const uint8_t pins[2] = { getDefaultCANTX(b), getDefaultCANRX(b) };
+            printBusNotStarted(BK_CAN, getCANBusName(b), false, pins, 2, (can_refused_mask >> b) & 1);
         }
-    } else {
-        msg.control.print(F("DISABLED"));
-        msg.control.println();
     }
 #if BUS_WIRED_CAN_ID != 0xFF
     printWiredBusLine(getCANBusName(BUS_WIRED_CAN_ID));

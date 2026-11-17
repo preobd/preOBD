@@ -538,9 +538,9 @@ An **output** is a *format* on a *transport*: OBD-II answers on a CAN bus,
 CSV lines on USB, CSV rows in a file on the SD card. Each has an **id**, and
 each input is **routed** to the outputs it should go to.
 
-The **built-in outputs** — the alarm (buzzer and LED), the display, the app
-link over BLE, and ELM327 over BLE — are always there, take no routes and
-aren't added or deleted. ELM327 over BLE answers every input that has a PID.
+The **built-in outputs** — the alarm (buzzer and LED), the display and the app
+link over BLE — are always there, take no routes and aren't added or deleted.
+ELM327 over BLE (for phone OBD apps) is an output like the others: id 5.
 
 ### Listing and changing outputs
 
@@ -563,17 +563,21 @@ and routes every input to it; `SAVE` keeps it.
 
 ### Ids and transports in this firmware
 
-This firmware has one output of each kind, so each has a fixed id, and each
-uses the transport that kind has always used. `OUTPUT ADD` names the
-transport, and refuses another one with the command that changes it:
+This firmware has one output of each format and transport kind, so each has
+a fixed id. `OUTPUT ADD` names the transport. OBD and ELM327 bind to the one
+you name at once; to move one, `OUTPUT DEL` it and add it again. On a fresh
+config OBD and the serial ELM327 exist with no transport (`NONE`): `OUTPUT ADD`
+binds it, and `OUTPUT <id> ENABLE` is refused until it has one it can run on
+(OBD needs its bus on and not `LISTEN`).
 
-| Id | Output | Transport | Set by |
-|----|--------|-----------|--------|
-| 0 | `OBD` — answers OBD-II scan tools and gauges | the CAN output bus (`CAN1`–`CAN3`) | `BUS CAN OUTPUT <bus> ENABLE` |
-| 1 | `REALDASH` — RealDash frames | the data stream (`USB`, `SERIAL<n>`) | `TRANSPORT DATA <transport>` |
-| 2 | `CSV` — CSV lines | the data stream | `TRANSPORT DATA <transport>` |
+| Id | Output | Transport | Notes |
+|----|--------|-----------|-------|
+| 0 | `OBD` — answers OBD-II scan tools and gauges | a CAN bus (`CAN1`–`CAN3`) | The bus must be on and not `LISTEN` (`BUS CAN <bus> ENABLE`) |
+| 1 | `REALDASH` — RealDash frames | the data stream (`USB`, `SERIAL<n>`) | `TRANSPORT DATA <transport>` moves the stream |
+| 2 | `CSV` — CSV lines | the data stream | as RealDash |
 | 3 | `CSV` on `SD` — a log file | the SD card | — |
-| 4 | `ELM327` — ELM327 emulator on a serial port | `SERIAL1`–`SERIAL8` | `OUTPUT ADD ELM327 SERIAL<n>` or `BUS SERIAL <n> ELM327 ENABLE` |
+| 4 | `ELM327` — ELM327 emulator on a serial port | `SERIAL1`–`SERIAL8` | The port must be enabled (`BUS SERIAL <n> ENABLE`), not framed and not a `TRANSPORT` port |
+| 5 | `ELM327` over BLE — phone OBD apps (Torque, OBD Fusion) | `BLE` | Needs the nRF coprocessor on a framed port (`BUS SERIAL <n> FRAMED ENABLE`) |
 
 RealDash and CSV on the stream share it, so they go to the same transport.
 An output that a board's build leaves out (for example SD logging on the
@@ -588,16 +592,22 @@ SET <pin> ROUTE ALL ENABLE|DISABLE    # To every output, or none
 INFO <pin> ROUTE                      # This input's routes
 ```
 
-A new input is routed to every output. Routing an input away from output 0
-stops OBD-II tools on CAN seeing it at all: it is neither answered nor listed
-as supported.
+A new input is routed to every output. OBD and both ELM327 outputs answer
+only the inputs routed to them: an input routed away from output 0 is neither
+answered nor listed as supported on CAN, and the same holds for output 5 and
+a phone app over BLE.
 
 ### Examples
 
 ```
-# OBD-II answers on CAN1 (the CAN bus itself must be up — see Bus Configuration)
-BUS CAN OUTPUT CAN1 ENABLE 500000
-OUTPUT 0 ENABLE
+# OBD-II answers on CAN1 at 500 kbit/s (see Bus Configuration)
+BUS CAN CAN1 ENABLE
+BUS CAN CAN1 BAUDRATE 500000
+OUTPUT ADD OBD CAN1
+
+# An ELM327 emulator on Serial2, for an OBD app over a Bluetooth serial module
+BUS SERIAL 2 ENABLE 38400
+OUTPUT ADD ELM327 SERIAL2
 
 # RealDash at 50 ms for smooth gauges
 OUTPUT 1 ENABLE
@@ -623,16 +633,17 @@ Shows:
 1: REALDASH on USB - enabled, interval 50 ms
 2: CSV on USB - disabled, interval 1000 ms
 3: CSV on SD - enabled, interval 5000 ms, WIDE
-4: ELM327 on NONE - disabled
+4: ELM327 on SERIAL5 - enabled
+5: ELM327 on BLE - enabled
 Built-in (no routes):
   Alarm - enabled
   Display - see DISPLAY STATUS
   App link (BLE)
-  ELM327 over BLE - answers every input with a PID
 ```
 
-`NONE` means the setting the transport comes from has none yet (here, no
-ELM327 serial port).
+An output that was deleted (`OUTPUT DEL`) isn't listed. Output 5 shows
+`(no framed port: BUS SERIAL <n> FRAMED ENABLE)` while no serial port is
+framed, as it needs the nRF coprocessor link.
 
 ### SD Logging Status
 
@@ -778,7 +789,7 @@ examples, see the [Relay Control Guide](../guides/outputs/RELAY_CONTROL.md).
 Select which I2C, SPI, CAN bus, or serial ports to use for sensors and outputs. This is useful when you want to use alternate bus pins (e.g., Wire1 instead of Wire on Teensy) or enable additional serial ports for communication.
 
 **preOBD never guesses which bus you wired.** An I2C, SPI or CAN bus is brought up
-only when you select it here (`BUS I2C 0`, `BUS SPI 0`, `BUS CAN OUTPUT CAN1 ENABLE`)
+only when you select it here (`BUS I2C 0`, `BUS SPI 0`, `BUS CAN CAN1 ENABLE`)
 or when your `boards/<board>/wiring.ini` declares it (`-D I2C_WIRED_BUS=0`,
 `SPI_WIRED_BUS`, `CAN_WIRED_BUS`). So an LCD or BME280 needs an I2C bus, a
 thermocouple needs an SPI bus, and the OBD-II CAN output needs a CAN bus
@@ -796,21 +807,18 @@ BUS SPI                          # Show current SPI bus configuration
 BUS SPI <0|1|2>                  # Select SPI bus (0=SPI, 1=SPI1, 2=SPI2)
 BUS SPI CLOCK <Hz>               # Set SPI clock speed in Hz
 BUS SPI NONE                     # Release the SPI bus
-BUS CAN                                               # Show current CAN bus configuration
-BUS CAN JSON                                          # Live CAN status as JSON (works in RUN mode)
-BUS CAN NONE                                          # Release the CAN bus
-BUS CAN BAUDRATE <bps>                                # Set CAN baudrate for both input/output (125000, 250000, 500000, 1000000)
-BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|LISTEN|DISABLE> [bps]  # Configure CAN input bus with mode and optional baudrate
-BUS CAN INPUT BAUDRATE <bps>                          # Set CAN input baudrate only
-BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [bps]  # Configure CAN output bus with optional baudrate
-BUS CAN OUTPUT BAUDRATE <bps>                         # Set CAN output baudrate only
+BUS CAN [STATUS]                       # Each CAN bus: mode, rate, state, what is attached (works in RUN mode)
+BUS CAN JSON                           # Live CAN status as JSON (works in RUN mode)
+BUS CAN <CAN1|CAN2|CAN3> ENABLE        # Bus on, normal (ACKs, may transmit)
+BUS CAN <CAN1|CAN2|CAN3> LISTEN        # Bus on, listen-only (never transmits)
+BUS CAN <CAN1|CAN2|CAN3> DISABLE       # Bus off (refused while CAN input or OBD uses it)
+BUS CAN <CAN1|CAN2|CAN3> BAUDRATE <bps>   # 125000, 250000, 500000 or 1000000
+BUS CAN <CAN1|CAN2|CAN3> INPUT ENABLE|DISABLE   # CAN input reads this bus (one bus at a time)
 BUS SERIAL                       # Show all serial port status
 BUS SERIAL <1-8>                 # Show specific port status
 BUS SERIAL <1-8> ENABLE [baud]   # Enable serial port with optional baud rate
 BUS SERIAL <1-8> DISABLE         # Disable serial port
 BUS SERIAL <1-8> BAUDRATE <rate> # Set serial port baud rate
-BUS SERIAL <1-8> ELM327 ENABLE   # Assign ELM327 emulator to serial port (boards with SUPPORTS_ELM327)
-BUS SERIAL <1-8> ELM327 DISABLE  # Remove ELM327 emulator from serial port
 ```
 
 ### Platform Availability
@@ -823,18 +831,35 @@ BUS SERIAL <1-8> ELM327 DISABLE  # Remove ELM327 emulator from serial port
 | ESP32-S3 | Wire, Wire1 | SPI | CAN1 (TWAI) | Serial1-Serial2 |
 | Arduino Mega | Wire | SPI | CAN1 (MCP2515 over SPI) | Serial1-Serial3 |
 
-### CAN Input Modes
+### CAN Buses
 
-CAN input supports three operating modes:
-- **DISABLE** - Input disabled, bus not initialized
-- **ENABLE** (Normal) - Active input with ACK. Also polls the ECU: each imported OBD-II PID (source ID `0x7E8`-`0x7EF`) is requested in turn with a Mode 01 request, so a PID reads without a scan tool on the bus
-- **LISTEN** (Passive) - Listen-only monitoring. No ACK bits, no error frames, no TX of any kind (no OBD-II polling). `BUS` refuses a LISTEN input on the CAN output's bus, in either order. A config imported or saved with that combination still runs, but the bus is not listen-only: input never polls, while output transmits and ACKs. Use when sniffing an existing CAN bus (e.g., reading from a car's OBD-II/ECU network) to avoid disrupting communication between other nodes
+Each CAN bus has one set of settings: a mode and a baud rate. What uses a bus
+attaches to it: CAN input (`BUS CAN <bus> INPUT ENABLE`) and the OBD output
+(`OUTPUT ADD OBD <bus>`). Changes apply at once, with no reboot:
+
+- A bus that is on starts when the first of them attaches, so a bus nothing
+  uses never ACKs on a car's network. A running bus is never restarted
+  because something else attached to it.
+- `BAUDRATE` or `ENABLE`/`LISTEN` on a running bus restarts it in the new
+  rate or mode. Whatever was in flight (a multi-frame answer, a poll) is
+  dropped and starts again. If the restart fails, `BUS CAN` says the bus
+  did not start and CAN input and OBD stay attached; nothing goes back to
+  the old setting.
+- `DISABLE` stops the bus. Its pins are free after a reboot.
+
+Modes:
+- **ENABLE** (normal) - ACKs and may transmit. CAN input polls the ECU: each imported OBD-II PID (source ID `0x7E8`-`0x7EF`) is requested in turn with a Mode 01 request, so a PID reads without a scan tool on the bus. The OBD output answers scan tools here.
+- **LISTEN** (passive) - Listen-only: no ACK bits, no error frames, no transmit of any kind, so no polling. Use it to read a car's existing OBD-II/ECU network without disturbing it. The OBD output transmits, so it is refused on a LISTEN bus, and `LISTEN` is refused while OBD uses the bus.
+- **DISABLE** - The bus is off; nothing can attach to it.
+
+Refusals name the command that clears them, for example
+`ERROR: CAN2 is off: BUS CAN CAN2 ENABLE (or LISTEN) first`.
 
 ### CAN Baud Rates
 
 Supported CAN baud rates: 125000, 250000, 500000, 1000000 (bps)
 
-Input and output buses can operate at different speeds to support mixed protocols (e.g., input from a 250kbps bus, OBD-II output at 500kbps).
+Each bus has its own rate, so mixed protocols use two buses (e.g., CAN input from a 250kbps bus on CAN2, OBD-II output at 500kbps on CAN1).
 
 ### CAN Scan and Status (JSON)
 
@@ -845,12 +870,12 @@ SCAN CANCEL            # CONFIG: stop and clear the results
 SCAN STATUS JSON       # Scan state and progress (any mode)
 SCAN RESULTS JSON      # What SCAN CAN found (any mode)
 SCAN SUPPORTED JSON    # What SCAN PIDS found, per ECU (any mode)
-BUS CAN JSON           # Live CAN input/output/poll state (any mode)
+BUS CAN JSON           # Live CAN bus/input/poll state (any mode)
 ```
 
 `SCAN CAN` only listens: it reports frames that appear on the bus, including the answers to preOBD's own polling of imported PIDs. It sends no requests of its own, so on an ECU bus with nothing imported and nothing else polling it finds nothing. The text table printed when the scan ends counts real frames per `(CAN ID, PID)`. A trailing `JSON` skips that table; read the results with `SCAN RESULTS JSON` instead.
 
-`SCAN PIDS` does transmit: it sends the OBD-II "supported PIDs" requests (Mode 01 PID 0x00, then 0x20, … while an ECU says there are more) to the functional address `0x7DF`, so every ECU answers, and collects each ECU's list. It takes under a second, needs CAN input in `ENABLE` mode (it is refused in `LISTEN`), and pauses the polling of imported PIDs while it runs. `SCAN PIDS` and `SCAN CAN` share one scan: starting either clears the other's results. Import a PID that only another ECU supports with `SET CAN <pid> <ecu>`, e.g. `SET CAN 0x05 0x7E9`. A PID with several sensors (0x78 EGT 1–4, …) takes `SENSOR <n>` after the ECU: `SET CAN 0x78 SENSOR 2`.
+`SCAN PIDS` does transmit: it sends the OBD-II "supported PIDs" requests (Mode 01 PID 0x00, then 0x20, … while an ECU says there are more) to the functional address `0x7DF`, so every ECU answers, and collects each ECU's list. It takes under a second, needs CAN input on an `ENABLE` bus (it is refused on `LISTEN`), and pauses the polling of imported PIDs while it runs. `SCAN PIDS` and `SCAN CAN` share one scan: starting either clears the other's results. Import a PID that only another ECU supports with `SET CAN <pid> <ecu>`, e.g. `SET CAN 0x05 0x7E9`. A PID with several sensors (0x78 EGT 1–4, …) takes `SENSOR <n>` after the ECU: `SET CAN 0x78 SENSOR 2`.
 
 The four `JSON` forms are read-only. They answer in RUN mode and don't count as configuration changes (they leave the BLE status frame's `configGeneration` alone), so a client can poll them. Each prints a blank line, then one line of JSON:
 
@@ -865,7 +890,7 @@ SCAN RESULTS JSON
 [{"canId":2024,"pid":5,"obd":true,"dataLength":1,"frames":201,"ageMs":4899,"data":"79"},{"canId":2024,"pid":12,"obd":true,"dataLength":2,"frames":200,"ageMs":4909,"data":"0F7C"}]
 
 BUS CAN JSON
-{"caps":{"buses":3,"baudrates":[125000,250000,500000,1000000],"listenShared":false,"maxScanResults":32,"scanMs":[1000,60000]},"input":{"bus":0,"mode":"NORMAL","baudrate":500000,"running":true,"sharedWithOutput":true,"rebootPending":false,"framesRx":229,"lastFrameAgeMs":8,"poll":{"active":true,"backoff":false,"missStreak":0,"requests":229,"answers":229,"txFail":0}},"output":{"bus":0,"enabled":true,"module":false,"baudrate":500000},"imports":[{"pin":192,"pinLabel":"CAN:0","sourceCanId":2024,"sourcePid":12,"dataOffset":0,"polled":true,"ageMs":8},{"pin":193,"pinLabel":"CAN:1","sourceCanId":2024,"sourcePid":120,"dataOffset":3,"polled":true,"ageMs":18}]}
+{"caps":{"buses":3,"baudrates":[125000,250000,500000,1000000],"maxScanResults":32,"scanMs":[1000,60000]},"buses":[{"bus":0,"mode":"NORMAL","baudrate":500000,"state":"up","input":true,"obd":true},{"bus":1,"mode":"OFF","baudrate":500000,"state":"off","input":false,"obd":false},{"bus":2,"mode":"OFF","baudrate":500000,"state":"off","input":false,"obd":false}],"input":{"bus":0,"running":true,"framesRx":1214,"lastFrameAgeMs":41,"poll":{"active":true,"backoff":false,"missStreak":0,"requests":1214,"answers":1214,"txFail":0}},"imports":[{"pin":192,"pinLabel":"CAN:0","sourceCanId":2024,"sourcePid":12,"dataOffset":0,"polled":true,"ageMs":41}]}
 ```
 
 - `state` is `idle`, `listening` (`SCAN CAN`), `querying` (`SCAN PIDS`) or `done`. `scanId` increases with every `SCAN CAN` or `SCAN PIDS`, so a client can tell that someone else restarted the scan. `found` changes when a new result appears.
@@ -873,8 +898,8 @@ BUS CAN JSON
 - In `SCAN SUPPORTED JSON`, `canId` is each answering ECU's response ID (`2024` = `0x7E8`, the engine) and `pids` its supported PIDs in decimal, without the bitmap PIDs `0x00`/`0x20`/…. It is `[]` after a `SCAN CAN`.
 - `pid` is the OBD-II PID for an OBD response (`obd: true`, CAN ID `0x7E8`-`0x7EF`), otherwise the frame's first byte. `data` is the last payload in hex. Look up names and units in `LIST PIDS JSON`.
 - Each import's `dataOffset` is where its value starts in the reply, counted from the first byte after the PID. It tells apart the sensors of a multi-sensor PID: match it against the PID's `dataOffset` (sensor 1) and its `sensors` list in `LIST PIDS JSON`, e.g. `{"sensor":2,"name":"EGT Bank 1 Sensor 2","abbr":"EGT12","dataOffset":3,"supportBit":1}`. `supportBit` (on a multi-sensor PID's row and each of its sensors) is the value's bit in the reply's first byte, which says whether the ECU has that sensor.
-- Buses are indexes (`0` = CAN1), and `255` means none, as in `SYSTEM DUMP JSON`. `mode` is `OFF`, `NORMAL` or `LISTEN`. `output.enabled` is the bus setting and `output.module` is `OUTPUT 0 ENABLE`.
-- `input.bus`, `mode` and `baudrate` are the *configured* values. `BUS CAN INPUT` changes take effect after `SAVE` and a reboot, and until then `rebootPending` is `true` and `running` describes the old settings.
+- `buses` has one entry per CAN bus on the board. `bus` is an index (`0` = CAN1); `mode` is `OFF`, `NORMAL` or `LISTEN`; `state` is `off`, `idle` (on, nothing attached, not started), `up`, `waiting` (something is attached but the bus did not start) or `pinsTaken` (another function holds its pins). `input` and `obd` say whether CAN input and the OBD output are attached.
+- `input.bus` is the bus CAN input reads (`255` = none), as in `SYSTEM DUMP JSON`. `running` is `true` while that bus is up.
 - `lastFrameAgeMs` and each import's `ageMs` are `null` until a frame has been received. `poll.backoff` is `true` while nothing answers the poller (it has slowed to one request per second). `poll.answers` counts an ECU's "PID not supported" reply as an answer, so `answers` matching `requests` doesn't mean every imported PID has a value: check each import's `ageMs`.
 - These are not available on the Arduino Mega (JSON is compiled out there).
 
@@ -905,30 +930,36 @@ Note that I2C **sensors** do not bring the bus up themselves — they need an
 explicit `BUS I2C <n>`, saved, followed by a reboot. Only the display acquires a
 bus on demand.
 
-**Configure dual CAN buses with different baud rates:**
+**Two CAN buses at different rates:**
 ```
-BUS CAN OUTPUT CAN1 ENABLE 500000   # OBD-II output on CAN1 at 500kbps
-BUS CAN INPUT CAN2 ENABLE 250000    # Input on CAN2 at 250kbps (active mode)
+BUS CAN CAN1 ENABLE                # CAN1 on, normal
+BUS CAN CAN1 BAUDRATE 500000
+OUTPUT ADD OBD CAN1                # OBD-II answers on CAN1
+BUS CAN CAN2 ENABLE
+BUS CAN CAN2 BAUDRATE 250000
+BUS CAN CAN2 INPUT ENABLE          # CAN input reads CAN2, and polls imported PIDs
 SAVE
 ```
 
-**Enable listen-only mode for passive vehicle bus monitoring:**
+**Listen-only on the car's bus:**
 ```
-BUS CAN OUTPUT CAN1 ENABLE 500000   # OBD-II output on CAN1
-BUS CAN INPUT CAN2 LISTEN 250000    # Passive monitoring on CAN2 (no ACK/TX)
+BUS CAN CAN2 LISTEN                # no ACK, no transmit
+BUS CAN CAN2 BAUDRATE 500000
+BUS CAN CAN2 INPUT ENABLE          # import what is already on the bus
 SAVE
 ```
 
-**Configure CAN with same baud rate (backward compatible):**
+**One bus for CAN input and OBD:**
 ```
-BUS CAN OUTPUT CAN1 ENABLE       # Enable CAN output on CAN1
-BUS CAN BAUDRATE 500000          # Set both input/output to 500kbps
+BUS CAN CAN1 ENABLE
+BUS CAN CAN1 INPUT ENABLE
+OUTPUT ADD OBD CAN1                # both share CAN1; the bus manager reads it once
 SAVE
 ```
 
-**Update just the input baud rate:**
+**Change a running bus's rate (it restarts, no reboot):**
 ```
-BUS CAN INPUT BAUDRATE 250000    # Change input to 250kbps
+BUS CAN CAN2 BAUDRATE 250000
 SAVE
 ```
 
@@ -956,16 +987,16 @@ BUS SERIAL 3 DISABLE             # Disable Serial3 to free pins
 SAVE
 ```
 
-**Enable ELM327 emulator on Serial2 (e.g., HM-10 BLE module):**
+**ELM327 emulator on Serial2 (e.g., HM-10 BLE module):**
 ```
 BUS SERIAL 2 ENABLE 115200       # Enable Serial2 at 115200 baud
-BUS SERIAL 2 ELM327 ENABLE       # Assign ELM327 emulator to Serial2
+OUTPUT ADD ELM327 SERIAL2        # ELM327 answers on Serial2, at once
 SAVE
 ```
 
-**Disable ELM327 on Serial2:**
+**Remove it (the port stays enabled):**
 ```
-BUS SERIAL 2 ELM327 DISABLE      # Remove ELM327 from Serial2 (port stays enabled)
+OUTPUT DEL 4
 SAVE
 ```
 
@@ -982,8 +1013,10 @@ Active: SPI (MOSI=11, MISO=12, SCK=13) @ 4.0MHz
 Available buses: 0=SPI, 1=SPI1, 2=SPI2
 
 === CAN Bus Configuration ===
-Input:  CAN2 (LISTEN) @ 250kbps
-Output: CAN1 (ENABLED) @ 500kbps
+CAN1: NORMAL @ 500kbps, up, CAN input, OBD output
+CAN2: OFF
+CAN3: OFF
+Wired (build-time): none declared
 Available buses: 0=CAN1, 1=CAN2, 2=CAN3
 ```
 
@@ -1008,27 +1041,30 @@ Platform supports Serial1-Serial8
 
 Use BUS SERIAL <port> ENABLE [baudrate] to enable a port
 Use BUS SERIAL <port> DISABLE to disable a port
-Use BUS SERIAL <port> ELM327 ENABLE to assign ELM327 emulator to a port
 ```
+
+`[ELM327]` marks the port the ELM327 output (`OUTPUT ADD ELM327 SERIAL<n>`) is on.
 
 ### Notes
 
-- Bus changes take effect on next reboot (use `SYSTEM REBOOT` after `SAVE`)
+- I2C and SPI changes take effect on next reboot (use `SYSTEM REBOOT` after `SAVE`); CAN bus changes apply at once
 - All sensors of a type use the selected bus (no per-sensor bus assignment)
-- The system will fall back to bus 0 if the selected bus fails to initialize
 - Bus configuration is saved to EEPROM and included in JSON exports
 - Serial ports can be assigned to TRANSPORT for message routing (see `TRANSPORT` command)
 - Enabled serial ports register their pins with the pin registry to prevent conflicts
 
 ### ELM327 Serial Emulator
 
-Available on boards whose `board.h` declares `SUPPORTS_ELM327`.
+Available on boards whose `board.h` declares `SUPPORTS_ELM327`. The ELM327
+emulator is an output: id 4 on a serial port, id 5 over BLE (see
+[Output Configuration](#output-configuration)).
 
-- The port must be enabled first: `BUS SERIAL <n> ENABLE <baud>` before running `ELM327 ENABLE`
-- Only one serial port may act as the ELM327 port at a time
-- A port assigned to ELM327 cannot simultaneously carry CONTROL/DATA/DEBUG router traffic; remove the transport assignment first
-- `ELM327 DISABLE` removes the emulator role but leaves the port enabled
+- `OUTPUT ADD ELM327 SERIAL<n>` binds it to a port; the port must be enabled first (`BUS SERIAL <n> ENABLE <baud>`)
+- One serial port at a time; to move it, `OUTPUT DEL 4` and add it on the other port
+- The port can't be the framed nRF link or carry CONTROL/DATA/DEBUG router traffic; remove the transport assignment first
+- `OUTPUT DEL 4` removes the emulator and leaves the port enabled
 - Changes take effect immediately; use `SAVE` to persist across reboots
+- It answers only the inputs routed to it (`SET <pin> ROUTE 4 ENABLE`)
 
 For full setup instructions (HM-10 wiring, phone app configuration), see
 [`docs/guides/outputs/DIRECT_BLE_OBD_GUIDE.md`](../guides/outputs/DIRECT_BLE_OBD_GUIDE.md).
@@ -1112,7 +1148,7 @@ SAVE
 ### Notes
 
 - Hardware serial ports must be enabled first (`BUS SERIAL <n> ENABLE <baud>`) before they can be assigned as a transport
-- A serial port owned by ELM327 cannot be assigned as a transport; use `BUS SERIAL <n> ELM327 DISABLE` first
+- A serial port owned by ELM327 cannot be assigned as a transport; use `OUTPUT DEL 4` first
 - Transport routing is persisted to EEPROM on `SAVE` and restored on boot
 
 ---
@@ -1595,8 +1631,8 @@ SET A3 OIL_PRESSURE GENERIC_PRESSURE_150PSI
 SET A6 PRIMARY_BATTERY VOLTAGE_DIVIDER
 RULE ADD A2 OUTSIDE 60 120
 RULE ADD A3 OUTSIDE 0.5 7.0
-BUS CAN OUTPUT CAN1 ENABLE 500000
-OUTPUT 0 ENABLE
+BUS CAN CAN1 ENABLE
+OUTPUT ADD OBD CAN1
 SAVE
 RUN
 ```

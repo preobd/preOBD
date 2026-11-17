@@ -59,18 +59,16 @@ bool initI2CBus(uint8_t bus_id, uint16_t clock_khz);
 bool initSPIBus(uint8_t bus_id, uint32_t clock_hz);
 
 /**
- * Initialize a specific CAN bus
- *
- * @param bus_id Bus number (0-2 for CAN1/CAN2/CAN3)
- * @param baudrate CAN baudrate in bps
- * @return true if successfully initialized, false on error
+ * Claim a CAN bus's pins (CAN1/CAN2/CAN3 = 0-2). The controller is started by
+ * can_bus.cpp when the first consumer attaches.
+ * @return true if the pins are now the bus's
  */
-bool initCANBus(uint8_t bus_id, uint32_t baudrate);
+bool initCANBus(uint8_t bus_id);
 
 /**
- * True if initCANBus() claimed this bus's pins at boot. CAN input/output must
- * not start a controller on a bus it didn't: the claim is refused when a
- * higher-ranked function (e.g. Serial1 on Teensy 4 CAN2's pins 0/1) holds them.
+ * True if initCANBus() claimed this bus's pins. can_bus.cpp must not start a
+ * controller on a bus it didn't: the claim is refused when a higher-ranked
+ * function (e.g. Serial1 on Teensy 4 CAN2's pins 0/1) holds them.
  */
 bool canBusClaimed(uint8_t bus_id);
 
@@ -205,12 +203,6 @@ uint8_t getActiveI2CId();
  */
 uint8_t getActiveSPIId();
 
-/**
- * Get the currently active CAN bus ID
- * @return Bus ID (0-2)
- */
-uint8_t getActiveCANId();
-
 // ============================================================================
 // BUS INFORMATION
 // ============================================================================
@@ -242,7 +234,7 @@ const char* getCANBusName(uint8_t bus_id);
  * Answers pinsConflict()'s third source: a stored `BUS I2C/SPI/CAN <n>`
  * selection whose bring-up is deferred to reboot still names pins nobody
  * should be able to steal in the meantime. Consults systemConfig.buses
- * directly (I2C, SPI, and both CAN directions) — NOT whether the bus has
+ * directly (I2C, SPI, and every CAN bus that is on) — NOT whether the bus has
  * actually started, since an already-started bus already appears in the pin
  * registry and is judged there instead; this probe only covers the gap
  * between "selected" and "started".

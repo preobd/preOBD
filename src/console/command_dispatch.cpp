@@ -24,6 +24,7 @@
 #include "command_dispatch.h"
 #include "../core/system_mode.h"
 #include "../core/config_generation.h"
+#include "../outputs/formats/obd_query.h"   // obdQuery_markStale
 
 // Case-insensitive compares — see command_helpers.h/.cpp for the definitions.
 // Forward-declared (not #included) to keep this TU lightweight; see header note.
@@ -57,7 +58,7 @@ int dispatchSubcommand(const Subcommand* table, uint8_t tableLen,
             // Past the CONFIG gate = a mutation; bump regardless of the
             // handler's result (a spurious client refresh is cheap, a missed
             // partial mutation is not).
-            if (!runOk) configGenerationBump();
+            if (!runOk) { configGenerationBump(); obdQuery_markStale(); }
             SubcommandHandler h = (SubcommandHandler)pgm_read_ptr(&table[i].handler);
             return h(argc, argv, tokenIndex);
         }
@@ -95,7 +96,7 @@ int dispatchCommand(int argc, const char* const* argv) {
                 dispatchReportConfigRequired(cmdUpper);
                 return 1;
             }
-            if (COMMANDS[i].configModeOnly) configGenerationBump();  // see dispatchSubcommand
+            if (COMMANDS[i].configModeOnly) { configGenerationBump(); obdQuery_markStale(); }  // see dispatchSubcommand
             return COMMANDS[i].handler(argc, argv);
         }
     }

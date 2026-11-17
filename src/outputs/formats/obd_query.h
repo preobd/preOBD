@@ -19,10 +19,12 @@ struct Input;  // Forward declaration
 // Build (or rebuild) the PID lookup table from currently enabled inputs.
 void obdQuery_buildLookupTable();
 
+// The inputs may have changed: rebuild before the next request is answered.
+// Called at every CLI configuration change (the CONFIG gate) and JSON IMPORT.
+void obdQuery_markStale();
+
 // Each responder answers the inputs routed to it (#612): routeId is its output
-// id (output_table.h: OBD 0, ELM327 4), or OBDQ_ANY_ROUTE for a built-in that
-// takes no routes (ELM327 over BLE answers every input with a PID).
-static const uint8_t OBDQ_ANY_ROUTE = 0xFF;
+// id (output_table.h: OBD 0, ELM327 4, ELM327 over BLE 5).
 
 // Resolve a PID to the first Input routed to routeId. nullptr if none.
 Input* obdQuery_findByPID(uint8_t pid, uint8_t routeId);

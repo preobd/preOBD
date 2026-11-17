@@ -24,6 +24,7 @@
 #include "../core/platform.h"
 #include "../config/json_registry.h"
 #include "../buses/bus_manager.h"
+#include "../buses/can_bus.h"
 #include "../hal/bus_defaults.h"
 #include "../buses/serial_manager.h"
 #if INCLUDE_FRAMED_TRANSPORT
@@ -45,6 +46,7 @@ extern MuxTransport hwSerial1;   // main.cpp -- the nRF coprocessor link
 #endif
 #if INCLUDE_CAN
 #include "../sensors/can/can_scan.h"
+#include "../sensors/can/input_can.h"
 #include "../sensors/can_sensor_library/standard_pids.h"
 #if INCLUDE_CAN && SUPPORTS_JSON_EXPORT
 #include "../sensors/can/input_can.h"
@@ -205,324 +207,144 @@ static FLASHMEM int bus_spi(int argc, const char* const* argv, int /*tokenIndex*
     return 0;
 }
 
-// BUS CAN subcommand handler
+#if INCLUDE_CAN
+// CAN1/CAN2/CAN3 -> 0..2; 0xFF otherwise
+static uint8_t parseCanBusToken(const char* t) {
+    if (strncasecmp(t, "CAN", 3) != 0 || t[3] < '1' || t[3] > '3' || t[4] != '\0') return 0xFF;
+    return (uint8_t)(t[3] - '1');
+}
+
+// What the bus manager did with a bus, after a change
+static FLASHMEM void printCanApply(uint8_t bus, CanAttach r) {
+    msg.control.print(getCANBusName(bus));
+    if (r == CAN_ATTACH_WAITING)      msg.control.println(F(": did not start; BUS CAN shows it waiting"));
+    else if (r == CAN_ATTACH_NO_PINS) msg.control.println(F(": its pins are taken; see BUS CAN"));
+    else if (canBusUp(bus))           msg.control.println(F(": running"));
+    else                              msg.control.println(F(": starts when CAN input or OBD attaches"));
+}
+
+// The OBD output sends on this bus (it is enabled with this bus as transport)
+static bool obdUsesBus(uint8_t bus) {
+    return systemConfig.buses.obdBus == bus && outputIsEnabled(OUT_ID_OBD);
+}
+#endif
+
+// BUS CAN <CAN1|CAN2|CAN3> ENABLE|LISTEN|DISABLE | BAUDRATE <bps> | INPUT ENABLE|DISABLE
+// One set of settings per bus (#612 phase 2a, ARCHITECTURE §14.7). Changes
+// apply at once: a running bus restarts in its new rate or mode.
 static FLASHMEM int bus_can(int argc, const char* const* argv, int /*tokenIndex*/) {
-#if NUM_CAN_BUSES == 0
+#if NUM_CAN_BUSES == 0 || !INCLUDE_CAN
+    (void)argc; (void)argv;
     msg.control.println(F("ERROR: No CAN buses available on this platform"));
     return 1;
 #else
-    // BUS CAN (no arguments) - display CAN status
-    if (argc == 2) {
+    if (argc == 2 || (argc == 3 && streq_P(argv[2], PSTR("STATUS")))) {
         displayCANStatus();
         return 0;
     }
+    const uint8_t bus = parseCanBusToken(argv[2]);
+    if (bus == 0xFF || argc < 4) {
+        msg.control.println(F("ERROR: Usage: BUS CAN <CAN1|CAN2|CAN3> ENABLE|LISTEN|DISABLE|BAUDRATE <bps>|INPUT ENABLE|DISABLE"));
+        return 1;
+    }
+    if (bus >= NUM_CAN_BUSES) {
+        msg.control.print(F("ERROR: "));
+        msg.control.print(argv[2]);
+        msg.control.println(F(" not available on this platform"));
+        return 1;
+    }
+    CanBusSettings& cs = systemConfig.buses.can[bus];
+    const char* verb = argv[3];
 
-    // BUS CAN NONE - Disable CAN entirely (both input and output).
-    // CAN pins are only reserved when a direction is active (see initCANBus in
-    // bus_manager.cpp), so clearing both the enable/mode flags AND the bus IDs
-    // frees the CAN pins on next reboot and makes the status display read NONE.
-    if (streq_P(argv[2], PSTR("NONE"))) {
-        systemConfig.buses.can_output_enabled = 0;
-        systemConfig.buses.output_can_bus     = 0xFF;
-        systemConfig.buses.can_input_mode     = CAN_INPUT_OFF;
-        systemConfig.buses.input_can_bus      = 0xFF;
-        msg.control.println(F("CAN bus set to NONE"));
-        msg.control.println(F("CAN pins will be free on next reboot"));
+    if (streq_P(verb, PSTR("ENABLE")) || streq_P(verb, PSTR("LISTEN"))) {
+        const uint8_t mode = streq_P(verb, PSTR("LISTEN")) ? CAN_BUS_LISTEN : CAN_BUS_NORMAL;
+        if (mode == CAN_BUS_LISTEN && obdUsesBus(bus)) {
+            msg.control.println(F("ERROR: the OBD output sends on this bus, and LISTEN never transmits"));
+            msg.control.println(F("  OUTPUT 0 DISABLE first, or keep the bus at ENABLE"));
+            return 1;
+        }
+        // Pin ownership last, so a refusal leaves systemConfig untouched (#390, #563)
+        if (cs.mode == CAN_BUS_OFF && canBusPinsConflict(bus)) return 1;
+        cs.mode = mode;
+        busSelectionAdmitted(2, bus);
+        printCanApply(bus, canBusApply(bus));
+        // Something set to use this bus but not attached (it was off, or its
+        // start failed) attaches now
+        if (systemConfig.buses.canInputBus == bus && canInputAttachedBus() != bus) initCANInput();
+        if (obdUsesBus(bus) && canOutputAttachedBus() != bus) outputSetEnabledById(OUT_ID_OBD, true);
         printSaveReminder();
         return 0;
     }
 
-    // BUS CAN BAUDRATE <bps> - Set both input and output (backward compatibility)
-    if (streq_P(argv[2], PSTR("BAUDRATE"))) {
-        if (argc < 4) {
-            msg.control.println(F("ERROR: BAUDRATE requires a speed in bps"));
-            msg.control.println(F("  Usage: BUS CAN BAUDRATE <125000|250000|500000|1000000>"));
+    if (streq_P(verb, PSTR("DISABLE"))) {
+        if (systemConfig.buses.canInputBus == bus || obdUsesBus(bus)) {
+            const bool in = systemConfig.buses.canInputBus == bus;
+            msg.control.print(F("ERROR: in use by"));
+            if (in) msg.control.print(F(" CAN input"));
+            if (in && obdUsesBus(bus)) msg.control.print(F(" and"));
+            if (obdUsesBus(bus)) msg.control.print(F(" the OBD output"));
+            msg.control.println();
+            msg.control.println(F("  BUS CAN <bus> INPUT DISABLE / OUTPUT 0 DISABLE first"));
             return 1;
         }
+        cs.mode = CAN_BUS_OFF;
+        canBusApply(bus);
+        msg.control.print(getCANBusName(bus));
+        msg.control.println(F(" off (its pins are free after a reboot)"));
+        printSaveReminder();
+        return 0;
+    }
 
-        uint32_t baudrate = atol(argv[3]);
-        if (baudrate != 125000 && baudrate != 250000 && baudrate != 500000 && baudrate != 1000000) {
+    if (streq_P(verb, PSTR("BAUDRATE"))) {
+        const uint8_t idx = argc >= 5 ? canBaudIndexOf((uint32_t)atol(argv[4])) : 0xFF;
+        if (idx == 0xFF) {
             msg.control.println(F("ERROR: CAN baudrate must be 125000, 250000, 500000, or 1000000"));
             return 1;
         }
-
-        systemConfig.buses.can_input_baudrate = baudrate;
-        systemConfig.buses.can_output_baudrate = baudrate;
-        msg.control.print(F("CAN baudrate set to "));
-        msg.control.print(baudrate / 1000);
-        msg.control.println(F("kbps (both input and output)"));
-        msg.control.println(F("Note: Takes effect on next reboot"));
+        cs.baudIndex = idx;
+        if (cs.mode == CAN_BUS_OFF) {
+            msg.control.print(getCANBusName(bus));
+            msg.control.println(F(" is off; the rate applies once it is enabled"));
+        } else {
+            printCanApply(bus, canBusApply(bus));
+        }
         printSaveReminder();
         return 0;
     }
 
-    // BUS CAN INPUT BAUDRATE <bps> or BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [bps]
-    if (streq_P(argv[2], PSTR("INPUT"))) {
-        // BUS CAN INPUT BAUDRATE <bps>
-        if (argc >= 4 && streq_P(argv[3], PSTR("BAUDRATE"))) {
-            if (argc < 5) {
-                msg.control.println(F("ERROR: BAUDRATE requires a speed in bps"));
-                msg.control.println(F("  Usage: BUS CAN INPUT BAUDRATE <125000|250000|500000|1000000>"));
+    if (streq_P(verb, PSTR("INPUT")) && argc >= 5) {
+        if (streq_P(argv[4], PSTR("ENABLE"))) {
+            if (cs.mode == CAN_BUS_OFF) {
+                msg.control.print(F("ERROR: "));
+                msg.control.print(getCANBusName(bus));
+                msg.control.print(F(" is off: BUS CAN "));
+                msg.control.print(getCANBusName(bus));
+                msg.control.println(F(" ENABLE (or LISTEN) first"));
                 return 1;
             }
-
-            uint32_t baudrate = atol(argv[4]);
-            if (baudrate != 125000 && baudrate != 250000 && baudrate != 500000 && baudrate != 1000000) {
-                msg.control.println(F("ERROR: CAN baudrate must be 125000, 250000, 500000, or 1000000"));
-                return 1;
-            }
-
-            systemConfig.buses.can_input_baudrate = baudrate;
-
-            // Shared-bus validation
-            if (systemConfig.buses.input_can_bus == systemConfig.buses.output_can_bus &&
-                systemConfig.buses.input_can_bus != 0xFF) {
-                systemConfig.buses.can_output_baudrate = baudrate;
-                msg.control.println(F("WARNING: Input and output share same bus - output baudrate also set to match"));
-            }
-
-            msg.control.print(F("CAN input baudrate set to "));
-            msg.control.print(baudrate / 1000);
-            msg.control.println(F("kbps"));
-            msg.control.println(F("Note: Takes effect on next reboot"));
+            systemConfig.buses.canInputBus = bus;   // one bus; moving it detaches the old one
+            initCANInput();
+            msg.control.print(F("CAN input on "));
+            printCanApply(bus, canBusUp(bus) ? CAN_ATTACH_OK : (CanAttach)(canBusState(bus) == CAN_STATE_NO_PINS
+                                                                  ? CAN_ATTACH_NO_PINS : CAN_ATTACH_WAITING));
             printSaveReminder();
             return 0;
         }
-
-        // BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|LISTEN|DISABLE> [baudrate]
-        if (argc < 5) {
-            msg.control.println(F("ERROR: Usage: BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|LISTEN|DISABLE> [baudrate]"));
-            return 1;
-        }
-
-        // Parse bus number (CAN1=0, CAN2=1, CAN3=2)
-        uint8_t bus_id = 0xFF;
-        if (streq_P(argv[3], PSTR("CAN1"))) bus_id = 0;
-        else if (streq_P(argv[3], PSTR("CAN2"))) bus_id = 1;
-        else if (streq_P(argv[3], PSTR("CAN3"))) bus_id = 2;
-        else if (streq_P(argv[3], PSTR("NONE")) || streq_P(argv[3], PSTR("DISABLE"))) bus_id = 0xFF;
-        else {
-            msg.control.println(F("ERROR: Bus must be CAN1, CAN2, CAN3, or NONE"));
-            return 1;
-        }
-
-        // Check bus availability
-        if (bus_id != 0xFF && bus_id >= NUM_CAN_BUSES) {
-            msg.control.print(F("ERROR: "));
-            msg.control.print(argv[3]);
-            msg.control.println(F(" not available on this platform"));
-            return 1;
-        }
-
-        // Parse mode: ENABLE (normal with ACK), LISTEN (listen-only), DISABLE
-        uint8_t mode = CAN_INPUT_OFF;
-        if (streq_P(argv[4], PSTR("ENABLE")) || streq_P(argv[4], PSTR("NORMAL"))) {
-            mode = CAN_INPUT_NORMAL;
-        } else if (streq_P(argv[4], PSTR("LISTEN"))) {
-            mode = CAN_INPUT_LISTEN;
-        } else if (streq_P(argv[4], PSTR("DISABLE"))) {
-            mode = CAN_INPUT_OFF;
-        } else {
-            msg.control.println(F("ERROR: Must be ENABLE/NORMAL, LISTEN, or DISABLE"));
-            msg.control.println(F("  ENABLE/NORMAL - Active input with ACK (for CAN sensor devices)"));
-            msg.control.println(F("  LISTEN        - Listen-only, no ACK/TX (for sniffing ECU bus)"));
-            msg.control.println(F("  DISABLE       - Turn off CAN input"));
-            return 1;
-        }
-
-        // Validate baudrate BEFORE applying any configuration
-        uint32_t baudrate = systemConfig.buses.can_input_baudrate; // default
-        if (argc >= 6) {
-            baudrate = atol(argv[5]);
-            if (baudrate != 125000 && baudrate != 250000 && baudrate != 500000 && baudrate != 1000000) {
-                msg.control.println(F("ERROR: CAN baudrate must be 125000, 250000, 500000, or 1000000"));
+        if (streq_P(argv[4], PSTR("DISABLE"))) {
+            if (systemConfig.buses.canInputBus != bus) {
+                msg.control.print(F("ERROR: CAN input is not on "));
+                msg.control.println(getCANBusName(bus));
                 return 1;
             }
-        }
-
-        // CRITICAL: Validate listen-only mode compatibility with shared bus
-        if (mode == CAN_INPUT_LISTEN) {
-            // Check if input bus will be shared with output
-            if (bus_id != 0xFF &&
-                bus_id == systemConfig.buses.output_can_bus &&
-                systemConfig.buses.can_output_enabled) {
-                msg.control.println(F("ERROR: LISTEN mode incompatible with shared output bus"));
-                msg.control.println(F("  Listen-only disables ALL TX including output"));
-                msg.control.println(F("  Options:"));
-                msg.control.println(F("    1. Use separate buses (e.g., input=CAN2, output=CAN1)"));
-                msg.control.println(F("    2. Disable CAN output first (BUS CAN OUTPUT CAN1 DISABLE)"));
-                msg.control.println(F("    3. Use ENABLE/NORMAL mode instead of LISTEN"));
-                return 1;
-            }
-        }
-
-        // Pin ownership last, so a refusal leaves systemConfig untouched (#390).
-        // Covers serial ports, inputs, Actions and other pending selections (#563).
-        if (mode != CAN_INPUT_OFF && bus_id != 0xFF && canBusPinsConflict(bus_id)) return 1;
-
-        // Apply configuration (all validation passed)
-        if (mode != CAN_INPUT_OFF) {
-            systemConfig.buses.input_can_bus = bus_id;
-            busSelectionAdmitted(2, bus_id);
-            systemConfig.buses.can_input_mode = mode;
-            systemConfig.buses.can_input_baudrate = baudrate;
-
-            msg.control.print(F("CAN input "));
-            msg.control.print(mode == CAN_INPUT_LISTEN ? F("listen-only") : F("normal"));
-            msg.control.print(F(" on "));
-            msg.control.println(argv[3]);
-            if (mode == CAN_INPUT_LISTEN) {
-                msg.control.println(F("  No ACK/TX - safe for passive bus monitoring"));
-            }
-
-            // Shared-bus baudrate synchronization
-            if (systemConfig.buses.input_can_bus == systemConfig.buses.output_can_bus &&
-                systemConfig.buses.input_can_bus != 0xFF) {
-                systemConfig.buses.can_output_baudrate = baudrate;
-                msg.control.println(F("WARNING: Input and output share same bus - output baudrate also set to match"));
-            }
-
-            msg.control.print(F("CAN input baudrate set to "));
-            msg.control.print(baudrate / 1000);
-            msg.control.println(F("kbps"));
-        } else {
-            systemConfig.buses.can_input_mode = CAN_INPUT_OFF;
-            msg.control.println(F("CAN input disabled"));
-        }
-
-        msg.control.println(F("Note: Takes effect on next reboot"));
-        printSaveReminder();
-        return 0;
-    }
-
-    // BUS CAN OUTPUT BAUDRATE <bps> or BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [bps]
-    if (streq_P(argv[2], PSTR("OUTPUT"))) {
-        // BUS CAN OUTPUT BAUDRATE <bps>
-        if (argc >= 4 && streq_P(argv[3], PSTR("BAUDRATE"))) {
-            if (argc < 5) {
-                msg.control.println(F("ERROR: BAUDRATE requires a speed in bps"));
-                msg.control.println(F("  Usage: BUS CAN OUTPUT BAUDRATE <125000|250000|500000|1000000>"));
-                return 1;
-            }
-
-            uint32_t baudrate = atol(argv[4]);
-            if (baudrate != 125000 && baudrate != 250000 && baudrate != 500000 && baudrate != 1000000) {
-                msg.control.println(F("ERROR: CAN baudrate must be 125000, 250000, 500000, or 1000000"));
-                return 1;
-            }
-
-            systemConfig.buses.can_output_baudrate = baudrate;
-
-            // Shared-bus validation
-            if (systemConfig.buses.input_can_bus == systemConfig.buses.output_can_bus &&
-                systemConfig.buses.output_can_bus != 0xFF) {
-                systemConfig.buses.can_input_baudrate = baudrate;
-                msg.control.println(F("WARNING: Input and output share same bus - input baudrate also set to match"));
-            }
-
-            msg.control.print(F("CAN output baudrate set to "));
-            msg.control.print(baudrate / 1000);
-            msg.control.println(F("kbps"));
-            msg.control.println(F("Note: Takes effect on next reboot"));
+            systemConfig.buses.canInputBus = 0xFF;
+            shutdownCANInput();
+            msg.control.println(F("CAN input off"));
             printSaveReminder();
             return 0;
         }
-
-        // BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [baudrate]
-        if (argc < 5) {
-            msg.control.println(F("ERROR: Usage: BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [baudrate]"));
-            return 1;
-        }
-
-        // Parse bus number (CAN1=0, CAN2=1, CAN3=2)
-        uint8_t bus_id = 0xFF;
-        if (streq_P(argv[3], PSTR("CAN1"))) bus_id = 0;
-        else if (streq_P(argv[3], PSTR("CAN2"))) bus_id = 1;
-        else if (streq_P(argv[3], PSTR("CAN3"))) bus_id = 2;
-        else if (streq_P(argv[3], PSTR("NONE")) || streq_P(argv[3], PSTR("DISABLE"))) bus_id = 0xFF;
-        else {
-            msg.control.println(F("ERROR: Bus must be CAN1, CAN2, CAN3, or NONE"));
-            return 1;
-        }
-
-        // Check bus availability
-        if (bus_id != 0xFF && bus_id >= NUM_CAN_BUSES) {
-            msg.control.print(F("ERROR: "));
-            msg.control.print(argv[3]);
-            msg.control.println(F(" not available on this platform"));
-            return 1;
-        }
-
-        // Parse enable/disable
-        bool enable = false;
-        if (streq_P(argv[4], PSTR("ENABLE"))) enable = true;
-        else if (streq_P(argv[4], PSTR("DISABLE"))) enable = false;
-        else {
-            msg.control.println(F("ERROR: Must be ENABLE or DISABLE"));
-            return 1;
-        }
-
-        // Validate baudrate BEFORE applying any configuration
-        uint32_t baudrate = systemConfig.buses.can_output_baudrate; // default
-        if (argc >= 6) {
-            baudrate = atol(argv[5]);
-            if (baudrate != 125000 && baudrate != 250000 && baudrate != 500000 && baudrate != 1000000) {
-                msg.control.println(F("ERROR: CAN baudrate must be 125000, 250000, 500000, or 1000000"));
-                return 1;
-            }
-        }
-
-        // Mirror of the INPUT-side check: a listen-only input can't share
-        // with an output (set in the other order, it slipped through, #495)
-        if (enable && bus_id != 0xFF && bus_id == systemConfig.buses.input_can_bus &&
-            systemConfig.buses.can_input_mode == CAN_INPUT_LISTEN) {
-            msg.control.println(F("ERROR: CAN input on this bus is LISTEN (listen-only)"));
-            msg.control.println(F("  Use another bus, or set input to ENABLE or DISABLE first"));
-            return 1;
-        }
-
-        // Pin ownership last, as for INPUT above (#563).
-        if (enable && bus_id != 0xFF && canBusPinsConflict(bus_id)) return 1;
-
-        // Apply configuration (all validation passed)
-        if (enable) {
-            systemConfig.buses.output_can_bus = bus_id;
-            busSelectionAdmitted(2, bus_id);
-            systemConfig.buses.can_output_enabled = 1;
-            systemConfig.buses.can_output_baudrate = baudrate;
-
-            msg.control.print(F("CAN output enabled on "));
-            msg.control.println(argv[3]);
-
-            // Shared-bus baudrate synchronization
-            if (systemConfig.buses.input_can_bus == systemConfig.buses.output_can_bus &&
-                systemConfig.buses.output_can_bus != 0xFF) {
-                systemConfig.buses.can_input_baudrate = baudrate;
-                msg.control.println(F("WARNING: Input and output share same bus - input baudrate also set to match"));
-            }
-
-            msg.control.print(F("CAN output baudrate set to "));
-            msg.control.print(baudrate / 1000);
-            msg.control.println(F("kbps"));
-        } else {
-            systemConfig.buses.can_output_enabled = 0;
-            msg.control.println(F("CAN output disabled"));
-        }
-
-        msg.control.println(F("Note: Takes effect on next reboot"));
-        printSaveReminder();
-        return 0;
     }
 
-    // Unknown CAN subcommand
-    msg.control.println(F("ERROR: Unknown CAN subcommand"));
-    msg.control.println(F("Valid: NONE, BAUDRATE, INPUT, OUTPUT"));
-    msg.control.println(F("  BUS CAN NONE"));
-    msg.control.println(F("  BUS CAN BAUDRATE <bps>"));
-    msg.control.println(F("  BUS CAN INPUT <CAN1|CAN2|CAN3> <ENABLE|LISTEN|DISABLE> [bps]"));
-    msg.control.println(F("  BUS CAN INPUT BAUDRATE <bps>"));
-    msg.control.println(F("  BUS CAN OUTPUT <CAN1|CAN2|CAN3> <ENABLE|DISABLE> [bps]"));
-    msg.control.println(F("  BUS CAN OUTPUT BAUDRATE <bps>"));
+    msg.control.println(F("ERROR: Usage: BUS CAN <CAN1|CAN2|CAN3> ENABLE|LISTEN|DISABLE|BAUDRATE <bps>|INPUT ENABLE|DISABLE"));
     return 1;
 #endif
 }
@@ -686,64 +508,11 @@ static FLASHMEM int bus_serial(int argc, const char* const* argv, int /*tokenInd
 #endif // INCLUDE_FRAMED_TRANSPORT
         }
 
-        // BUS SERIAL <port> ELM327 ENABLE|DISABLE
-#if INCLUDE_ELM327
-        if (streq_P(argv[3], PSTR("ELM327"))) {
-            if (argc < 5) {
-                msg.control.println(F("ERROR: ELM327 requires ENABLE or DISABLE"));
-                msg.control.println(F("  Usage: BUS SERIAL <port> ELM327 ENABLE|DISABLE"));
-                return 1;
-            }
-
-            if (streq_P(argv[4], PSTR("ENABLE"))) {
-                if (!elm327PortUsable(port_id)) return 1;
-                // The port first, then the one on/off path (#610): it binds and
-                // begins via initELM327() and sets the live flag as well as
-                // systemConfig. A deleted ELM327 output (OUTPUT DEL) comes back.
-                systemConfig.buses.elm327_serial_port = port_id;
-                if (outputExists(OUT_ID_ELM327)) outputSetEnabledById(OUT_ID_ELM327, true);
-                else                             outputAddById(OUT_ID_ELM327);
-
-                msg.control.print(F("ELM327 emulator assigned to Serial"));
-                msg.control.println(port_id);
-                printSaveReminder();
-                return 0;
-            }
-
-            if (streq_P(argv[4], PSTR("DISABLE"))) {
-                // Only the ELM327 port: on another port this would tear down a
-                // working emulator and clear its port (#610 review)
-                if (systemConfig.buses.elm327_serial_port != 0xFF &&
-                    systemConfig.buses.elm327_serial_port != port_id) {
-                    msg.control.print(F("ERROR: ELM327 is not on Serial"));
-                    msg.control.println(port_id);
-                    return 1;
-                }
-                const bool wasLive = outputModules[OUTPUT_ELM327].enabled;
-                setOutputEnabled("ELM327", false);   // live flag + config; unbinds if live (#610)
-                if (!wasLive) stopELM327();          // bound but never polled
-                systemConfig.buses.elm327_serial_port = 0xFF;
-
-                msg.control.print(F("ELM327 disabled on Serial"));
-                msg.control.println(port_id);
-                printSaveReminder();
-                return 0;
-            }
-
-            msg.control.println(F("ERROR: ELM327 requires ENABLE or DISABLE"));
-            return 1;
-        }
-#endif  // INCLUDE_ELM327
-
         // Unknown subcommand for port
         msg.control.print(F("ERROR: Unknown command '"));
         msg.control.print(argv[3]);
         msg.control.println(F("'"));
-#if INCLUDE_ELM327
-        msg.control.println(F("  Valid: ENABLE, DISABLE, BAUDRATE, ELM327"));
-#else
         msg.control.println(F("  Valid: ENABLE, DISABLE, BAUDRATE"));
-#endif
         return 1;
     }
 
@@ -751,11 +520,7 @@ static FLASHMEM int bus_serial(int argc, const char* const* argv, int /*tokenInd
     msg.control.print(F("ERROR: Unknown serial command '"));
     msg.control.print(argv[2]);
     msg.control.println(F("'"));
-#if INCLUDE_ELM327
-    msg.control.println(F("  Usage: BUS SERIAL [1-8] [ENABLE|DISABLE|BAUDRATE <rate>|ELM327 <ENABLE|DISABLE>]"));
-#else
     msg.control.println(F("  Usage: BUS SERIAL [1-8] [ENABLE|DISABLE|BAUDRATE <rate>]"));
-#endif
     return 1;
 #endif
 }
@@ -787,24 +552,18 @@ static const char PSTR_HELP_BUS_SPI[] PROGMEM =
     "  BUS SPI NONE                  Disable SPI bus (frees pins on next reboot)\n"
     "  BUS SPI CLOCK <Hz>            Set SPI clock (e.g. 4000000)";
 static const char PSTR_HELP_BUS_CAN[] PROGMEM =
-    "  BUS CAN                       Show CAN bus status\n"
+    "  BUS CAN [STATUS]              Show each CAN bus (any mode)\n"
     "  BUS CAN JSON                  Live CAN status as JSON (any mode)\n"
-    "  BUS CAN NONE                  Disable CAN bus (frees pins on next reboot)\n"
-    "  BUS CAN BAUDRATE <bps>        Set CAN baudrate (both buses)\n"
-    "  BUS CAN INPUT <bus> <ENABLE|LISTEN|DISABLE> [bps]\n"
-    "  BUS CAN INPUT BAUDRATE <bps>  Set CAN input baudrate\n"
-    "  BUS CAN OUTPUT <bus> <ENABLE|DISABLE> [bps]\n"
-    "  BUS CAN OUTPUT BAUDRATE <bps> Set CAN output baudrate";
+    "  BUS CAN <bus> ENABLE|LISTEN|DISABLE  Bus on (LISTEN: never transmits) or off\n"
+    "  BUS CAN <bus> BAUDRATE <bps>  125000, 250000, 500000 or 1000000\n"
+    "  BUS CAN <bus> INPUT ENABLE|DISABLE   CAN input reads this bus\n"
+    "  (<bus> = CAN1|CAN2|CAN3; OBD's bus: OUTPUT ADD OBD CAN<n>)";
 static const char PSTR_HELP_BUS_SERIAL[] PROGMEM =
     "  BUS SERIAL                    Show all serial port status\n"
     "  BUS SERIAL <1-8>              Show specific port status\n"
     "  BUS SERIAL <1-8> ENABLE [baud]   Enable serial port\n"
     "  BUS SERIAL <1-8> DISABLE      Disable serial port\n"
-    "  BUS SERIAL <1-8> BAUDRATE <rate> Set baud rate"
-#if INCLUDE_ELM327
-    "\n  BUS SERIAL <1-8> ELM327 <ENABLE|DISABLE>"
-#endif
-    ;
+    "  BUS SERIAL <1-8> BAUDRATE <rate> Set baud rate";
 
 static const Subcommand BUS_SUBCOMMANDS[] PROGMEM = {
     { PSTR_BUS_I2C,    bus_i2c,    false, PSTR_HELP_BUS_I2C    },
@@ -831,9 +590,14 @@ static FLASHMEM void emitBusCanJson() {
     memset(&s, 0, sizeof(s));
     s.buses = NUM_CAN_BUSES;
     s.maxScanResults = MAX_SCAN_RESULTS;
-    s.inBus = systemConfig.buses.input_can_bus;
-    s.inMode = systemConfig.buses.can_input_mode;
-    s.inBaudrate = systemConfig.buses.can_input_baudrate;
+    for (uint8_t b = 0; b < NUM_CAN_BUSES && b < 3; b++) {
+        s.bus[b].mode = systemConfig.buses.can[b].mode;
+        s.bus[b].baudrate = canBaudFromIndex(systemConfig.buses.can[b].baudIndex);
+        s.bus[b].state = canBusState(b);
+        s.bus[b].input = (canBusConsumers(b) & (1u << CANC_INPUT)) != 0;
+        s.bus[b].obd = (canBusConsumers(b) & (1u << CANC_OBD)) != 0;
+    }
+    s.inBus = systemConfig.buses.canInputBus;
     getCANInputStatus(s, now);
     // poll.active only when something is actually being requested
     bool anyPolled = false;
@@ -842,10 +606,6 @@ static FLASHMEM void emitBusCanJson() {
     }
     s.pollActive = s.pollActive && anyPolled;
     s.pollBackoff = s.pollBackoff && anyPolled;
-    s.outBus = systemConfig.buses.output_can_bus;
-    s.outEnabled = systemConfig.buses.can_output_enabled && s.outBus != 0xFF;
-    s.outModule = systemConfig.outputEnabled[OUTPUT_CAN];
-    s.outBaudrate = systemConfig.buses.can_output_baudrate;
 
     JsonDocument doc;
     JsonArray imports = canBusStatusToJson(s, doc.to<JsonObject>());
@@ -874,61 +634,13 @@ static FLASHMEM void emitBusCanJson() {
 }
 #endif
 
-#if INCLUDE_ELM327
-// Can ELM327 take Serial<port_id>? Prints why not. One check for BUS SERIAL
-// <n> ELM327 ENABLE and OUTPUT ADD ELM327 SERIAL<n> (#612).
-FLASHMEM bool elm327PortUsable(uint8_t port_id) {
-    if (!isSerialPortActive(port_id)) {
-        msg.control.print(F("ERROR: Serial"));
-        msg.control.print(port_id);
-        msg.control.println(F(" is not enabled"));
-        msg.control.print(F("  Run: BUS SERIAL "));
-        msg.control.print(port_id);
-        msg.control.println(F(" ENABLE <baud> first"));
-        return false;
-    }
-
-    // Conflict: refuse if this port is used by the message router
-    uint8_t routerTransportId = TRANSPORT_SERIAL1 + (port_id - 1);
-    const char* conflictPlane = nullptr;
-    if (systemConfig.router.control_primary == routerTransportId ||
-        systemConfig.router.control_secondary == routerTransportId)
-        conflictPlane = "CONTROL";
-    else if (systemConfig.router.data_primary == routerTransportId ||
-             systemConfig.router.data_secondary == routerTransportId)
-        conflictPlane = "DATA";
-    else if (systemConfig.router.debug_primary == routerTransportId ||
-             systemConfig.router.debug_secondary == routerTransportId)
-        conflictPlane = "DEBUG";
-
-    if (conflictPlane) {
-        msg.control.print(F("ERROR: Serial"));
-        msg.control.print(port_id);
-        msg.control.print(F(" is in use by the router ("));
-        msg.control.print(conflictPlane);
-        msg.control.println(F(" plane) — reassign first"));
-        return false;
-    }
-
-    // Conflict: refuse if another port is already the ELM327 port
-    if (systemConfig.buses.elm327_serial_port != 0xFF &&
-        systemConfig.buses.elm327_serial_port != port_id) {
-        msg.control.print(F("ERROR: Serial"));
-        msg.control.print(systemConfig.buses.elm327_serial_port);
-        msg.control.println(F(" is already the ELM327 port"));
-        msg.control.print(F("  Run: BUS SERIAL "));
-        msg.control.print(systemConfig.buses.elm327_serial_port);
-        msg.control.println(F(" ELM327 DISABLE first"));
-        return false;
-    }
-
-    return true;
-}
-#endif
-
 FLASHMEM int cmd_bus(int argc, const char* const* argv) {
-    // BUS CAN JSON: read-only, answers in RUN and never bumps configGeneration
-    // (every other BUS form is gated by BUS_SUBCOMMANDS below)
+    // BUS CAN and BUS CAN JSON: read-only, answer in RUN and never bump
+    // configGeneration (every other BUS form is gated by BUS_SUBCOMMANDS below)
+    if (argc >= 2 && streq_P(argv[1], PSTR("CAN")) && (argc == 2 || (argc == 3 && streq_P(argv[2], PSTR("STATUS"))))) {
+        displayCANStatus();
+        return 0;
+    }
     if (argc == 3 && streq_P(argv[1], PSTR("CAN")) && streq_P(argv[2], PSTR("JSON"))) {
 #if INCLUDE_CAN && SUPPORTS_JSON_EXPORT
         emitBusCanJson();

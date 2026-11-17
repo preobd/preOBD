@@ -20,7 +20,7 @@
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/config/input_store.cpp"
-#include "../../src/outputs/table/output_table.cpp"   // routeMaskFromLegacy, the outputs view (#612)
+#include "../../src/outputs/table/output_table.cpp"   // the outputs view (#612)
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"
@@ -36,6 +36,7 @@ void configGenerationBump() {}
 // obd_query.cpp is not in this binary; count the rebuilds instead (#562).
 static int g_obdTableBuilds = 0;
 void obdQuery_buildLookupTable() { g_obdTableBuilds++; }
+void obdQuery_markStale() {}
 #if INCLUDE_RULES_ENGINE
 Action actions[MAX_ACTIONS];
 ActionLink actionLinks[MAX_ACTION_LINKS];
@@ -333,6 +334,37 @@ static void test_imported_output_enables_reach_the_live_outputs(void) {
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, g_syncOutputsCalls, "imported enable never reached the live outputs");
 }
 
+// #612 phase 2a: ELM327's serial port is its output record's transport. One
+// on a port that is not on is imported switched off (with a NOTE), so the rest
+// of the file still restores. ELM327 over BLE is id 5, and a deleted ELM327
+// output loses its port.
+static void test_elm327_ports_come_from_the_outputs_array(void) {
+    systemConfig.serial.enabled_mask = 0;
+    systemConfig.serial.framed_enabled_mask = 0;
+    systemConfig.buses.elm327_serial_port = 0xFF;
+    systemConfig.outputEnabled[OUTPUT_ELM327] = 0;
+    systemConfig.outputEnabled[OUTPUT_ELM327_BLE] = 0;
+    TEST_ASSERT_TRUE(loadConfigFromJSON(
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"outputs\":"
+        "[{\"id\":4,\"format\":\"ELM327\",\"transport\":\"SERIAL2\",\"enabled\":true}]}}"));
+    TEST_ASSERT_EQUAL_UINT8(2, systemConfig.buses.elm327_serial_port);    // the transport is kept
+    TEST_ASSERT_EQUAL_UINT8(0, systemConfig.outputEnabled[OUTPUT_ELM327]);   // but off: Serial2 isn't on
+
+    // (A port the file turns on is bench-tested: this binary has no serial ports.)
+    systemConfig.buses.elm327_serial_port = 2;   // as OUTPUT ADD ELM327 SERIAL2 left it
+    systemConfig.outputEnabled[OUTPUT_ELM327] = 1;
+
+    // A file without output 4 deletes it, and its port goes with it
+    TEST_ASSERT_TRUE(loadConfigFromJSON(
+        "{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{\"outputs\":"
+        "[{\"id\":5,\"format\":\"ELM327\",\"transport\":\"BLE\",\"enabled\":true}]}}"));
+    TEST_ASSERT_EQUAL_UINT8(1, systemConfig.outputEnabled[OUTPUT_ELM327_BLE]);
+    TEST_ASSERT_FALSE(outputExists(OUT_ID_ELM327));
+    TEST_ASSERT_EQUAL_UINT8(0, systemConfig.outputEnabled[OUTPUT_ELM327]);
+    TEST_ASSERT_EQUAL_UINT8(0xFF, systemConfig.buses.elm327_serial_port);
+    systemConfig.router.outputsAbsent = 0;
+}
+
 static void test_no_log_filter_key_leaves_the_live_filter_alone(void) {
     TEST_ASSERT_TRUE(loadConfigFromJSON("{\"schemaVersion\":1,\"mode\":\"runtime\",\"system\":{}}"));
     TEST_ASSERT_EQUAL_INT(0, g_applyLogFilterCalls);
@@ -474,6 +506,7 @@ int main(int, char**) {
     RUN_TEST(test_an_analog_input_must_land_on_the_same_a_pin);
     RUN_TEST(test_a_relay_on_a_pin_this_board_lacks_is_refused);
     RUN_TEST(test_a_file_from_another_board_that_fits_is_imported);
+    RUN_TEST(test_elm327_ports_come_from_the_outputs_array);
     RUN_TEST(test_analog_pins_past_the_digital_range_exist);
     RUN_TEST(test_an_unreadable_pin_is_refused);
     return UNITY_END();

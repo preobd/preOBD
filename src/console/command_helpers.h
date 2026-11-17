@@ -107,7 +107,7 @@ bool displayI2CPinsConflict();
 // Prints the error itself; returns true when the bus must not be selected.
 bool i2cBusPinsConflict(uint8_t bus_id);
 bool spiBusPinsConflict(uint8_t bus_id);
-// CAN TX/RX, for BUS CAN INPUT/OUTPUT <bus> (#563). Only on boards with CAN buses.
+// CAN TX/RX, for BUS CAN <bus> ENABLE|LISTEN (#563). Only on boards with CAN buses.
 bool canBusPinsConflict(uint8_t bus_id);
 
 void printHelpOverview();

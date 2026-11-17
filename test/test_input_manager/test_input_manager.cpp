@@ -40,7 +40,7 @@ void readCANSensor(Input*) {}
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/config/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
-#include "../../src/outputs/table/output_table.cpp"   // routeMaskFromLegacy, the outputs view (#612)
+#include "../../src/outputs/table/output_table.cpp"   // the outputs view (#612)
 #include "../../src/inputs/calibration_apply.cpp"
 #include "../../src/inputs/measurement_compat.cpp"
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
@@ -666,31 +666,18 @@ static void test_can_import_units_survive_eeprom(void) {
 }
 
 
-// #612: routeMask round-trips through the EEPROM record, and a record saved
-// before phase 1 (no FLAG_ROUTES_BY_ID) is read as the old 4-bit output mask,
-// its CAN bit also routing the input to the ELM327 output.
-static void test_route_mask_survives_eeprom_and_old_masks_upgrade(void) {
+// #612: routeMask round-trips through the EEPROM record, every bit as stored
+static void test_route_mask_survives_eeprom(void) {
     Input* in = makeCanImport(0xC2, 0x0C, 1.0f);
     TEST_ASSERT_NOT_NULL(in);
-    in->routeMask = (uint8_t)((1u << OUT_ID_CSV) | (1u << OUT_ID_ELM327));
+    in->routeMask = (uint8_t)((1u << OUT_ID_CSV) | (1u << OUT_ID_ELM327) | (1u << OUT_ID_ELM327_BLE));
     InputEEPROM rec;
     buildInputRecord(*in, rec);
-    TEST_ASSERT_TRUE(rec.flagsByte & FLAG_ROUTES_BY_ID);
     Input loaded;
     memset(&loaded, 0, sizeof(loaded));
     applyInputRecord(rec, loaded);
-    TEST_ASSERT_EQUAL_HEX8((1u << OUT_ID_CSV) | (1u << OUT_ID_ELM327), loaded.routeMask);
-
-    // An older build's record: flag clear, bits 0-3 = CAN, RealDash, Serial, SD
-    rec.flagsByte &= (uint8_t)~FLAG_ROUTES_BY_ID;
-    rec.routeMask = 0x0D;                    // CAN + Serial + SD, RealDash off
-    memset(&loaded, 0, sizeof(loaded));
-    applyInputRecord(rec, loaded);
-    TEST_ASSERT_EQUAL_HEX8(0x0D | (1u << OUT_ID_ELM327), loaded.routeMask);
-    rec.routeMask = 0xFE;                    // CAN off; stray high bits dropped
-    memset(&loaded, 0, sizeof(loaded));
-    applyInputRecord(rec, loaded);
-    TEST_ASSERT_EQUAL_HEX8(0x0E, loaded.routeMask);
+    TEST_ASSERT_EQUAL_HEX8((1u << OUT_ID_CSV) | (1u << OUT_ID_ELM327) | (1u << OUT_ID_ELM327_BLE),
+                           loaded.routeMask);
     freeInputSlot(0xC2);
 }
 
@@ -850,16 +837,32 @@ static void test_can_toggle_gates_obd_answers(void) {
 }
 
 
-// #612: each responder answers the inputs routed to it. OBD (CAN) and the
-// ELM327 output on a serial port have a bit each; ELM327 over BLE is built in
-// and answers every input with a PID.
+// #612 phase 2a (found with Torque): an input added after the table was built
+// is answered once the configuration has changed (the CLI's CONFIG gate marks
+// the table stale), without a SAVE or reboot rebuilding it
+static void test_a_stale_pid_table_rebuilds_on_the_next_request(void) {
+    obdQuery_buildLookupTable();               // nothing routed yet
+    rpmInput(0, 10, true);
+    inputs[0].routeMask = (uint8_t)(1u << OUT_ID_ELM327_BLE);
+    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, OUT_ID_ELM327_BLE));   // stale table
+    obdQuery_markStale();
+    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OUT_ID_ELM327_BLE));
+    uint8_t bitmap[4];
+    obdQuery_getSupportedPIDBitmap(bitmap, 0x00, OUT_ID_ELM327_BLE);
+    TEST_ASSERT_TRUE(bitmap[1] & 0x10);        // PID 0x0C listed as supported
+}
+
+// #612: each responder answers the inputs routed to it. OBD (CAN), ELM327 on
+// a serial port and ELM327 over BLE have a bit each.
 static void test_obd_and_elm327_answer_their_own_routes(void) {
     rpmInput(0, 10, true);
     inputs[0].routeMask = (uint8_t)(1u << OUT_ID_ELM327);   // ELM327 only
     obdQuery_buildLookupTable();
     TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, OUT_ID_OBD));
     TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OUT_ID_ELM327));
-    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OBDQ_ANY_ROUTE));
+    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, OUT_ID_ELM327_BLE));   // BLE has its own bit
+    inputs[0].routeMask |= (uint8_t)(1u << OUT_ID_ELM327_BLE);
+    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OUT_ID_ELM327_BLE));
     uint8_t bitmap[4];
     obdQuery_getSupportedPIDBitmap(bitmap, 0x00, OUT_ID_OBD);
     TEST_ASSERT_FALSE(bitmap[1] & 0x10);
@@ -868,7 +871,7 @@ static void test_obd_and_elm327_answer_their_own_routes(void) {
 
     inputs[0].routeMask = 0;                                  // routed nowhere
     TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, OUT_ID_ELM327));
-    TEST_ASSERT_EQUAL_PTR(&inputs[0], obdQuery_findByPID(0x0C, OBDQ_ANY_ROUTE));
+    TEST_ASSERT_NULL(obdQuery_findByPID(0x0C, OUT_ID_ELM327_BLE));
 
     // Two inputs on one PID: each responder takes the first routed to it
     rpmInput(1, 11, true);
@@ -988,6 +991,7 @@ static void test_json_import_repairs_bad_units_to_the_system_default(void) {
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_can_toggle_gates_obd_answers);
+    RUN_TEST(test_a_stale_pid_table_rebuilds_on_the_next_request);
     RUN_TEST(test_obd_and_elm327_answer_their_own_routes);
     RUN_TEST(test_fixed_obd_answers);
     RUN_TEST(test_registry_available);
@@ -1024,7 +1028,7 @@ int main(int, char**) {
     RUN_TEST(test_eeprom_load_repairs_wrong_type_units);
     RUN_TEST(test_can_import_measurement_type);
     RUN_TEST(test_can_import_units_survive_eeprom);
-    RUN_TEST(test_route_mask_survives_eeprom_and_old_masks_upgrade);
+    RUN_TEST(test_route_mask_survives_eeprom);
     RUN_TEST(test_json_import_restores_can_input);
     RUN_TEST(test_can_import_input_gets_new_input_defaults);
     RUN_TEST(test_json_import_refuses_app_none_elsewhere);

@@ -7,7 +7,7 @@
  *
  * Also configures hardware serial ports (Serial1-Serial8) for TRANSPORT use.
  *
- * Total size: 26-28 bytes for BusConfig (platform dependent) + 16 bytes for SerialPortConfig
+ * Sizes: BusConfig ~19 bytes (platform padding varies) + 16 bytes for SerialPortConfig
  */
 
 #ifndef BUS_CONFIG_H
@@ -16,22 +16,44 @@
 #include <stdint.h>
 
 /**
- * CAN Input Mode
+ * CAN bus mode (#612 phase 2a: one set of settings per bus, §14.7)
  *
- * Controls how the CAN input bus operates:
- * - OFF:     Input disabled, bus not initialized
- * - NORMAL:  Active input with ACK. Use when communicating with CAN sensor
- *            devices that expect acknowledgment (e.g., external CAN sensors).
- * - LISTEN:  Listen-only / passive monitoring. No ACK bits, no error frames,
- *            no TX of any kind. Use when sniffing an existing CAN bus
- *            (e.g., reading from a car's OBD-II/ECU network) to avoid
- *            disrupting communication between other nodes.
+ * - OFF:     the bus is never started; nothing may attach to it.
+ * - NORMAL:  ACKs and may transmit (OBD answers, CAN input polling).
+ * - LISTEN:  listen-only: no ACK bits, no error frames, no TX of any kind. For
+ *            sniffing an existing bus (a car's OBD-II/ECU network) without
+ *            disturbing it. A consumer that sends (OBD) is refused here.
+ *
+ * A bus that is on is started only when its first consumer attaches, so an
+ * enabled bus nobody uses never ACKs on a car's network.
  */
-enum CanInputMode : uint8_t {
-    CAN_INPUT_OFF    = 0,   // Disabled
-    CAN_INPUT_NORMAL = 1,   // Active input with ACK
-    CAN_INPUT_LISTEN = 2    // Listen-only (passive, no ACK/TX)
+enum CanBusMode : uint8_t {
+    CAN_BUS_OFF    = 0,
+    CAN_BUS_NORMAL = 1,
+    CAN_BUS_LISTEN = 2
 };
+
+// Baud rates a CAN bus can be set to, stored as an index (CanBusSettings).
+enum CanBaudIndex : uint8_t { CAN_BAUD_125K = 0, CAN_BAUD_250K = 1, CAN_BAUD_500K = 2, CAN_BAUD_1M = 3,
+                              NUM_CAN_BAUDS = 4 };
+inline uint32_t canBaudFromIndex(uint8_t i) {
+    return i == CAN_BAUD_125K ? 125000UL : i == CAN_BAUD_250K ? 250000UL
+         : i == CAN_BAUD_1M ? 1000000UL : 500000UL;
+}
+// 0xFF for a rate the controllers don't run at
+inline uint8_t canBaudIndexOf(uint32_t bps) {
+    return bps == 125000UL ? CAN_BAUD_125K : bps == 250000UL ? CAN_BAUD_250K
+         : bps == 500000UL ? CAN_BAUD_500K : bps == 1000000UL ? CAN_BAUD_1M : 0xFF;
+}
+
+struct CanBusSettings {
+    uint8_t mode;        // CanBusMode
+    uint8_t baudIndex;   // CanBaudIndex
+};
+
+// CAN1..CAN3 in the stored layout on every board, so it doesn't depend on
+// NUM_CAN_BUSES; slots past a board's NUM_CAN_BUSES stay OFF.
+#define CAN_BUS_SLOTS 3
 
 /**
  * Bus Configuration Structure
@@ -49,20 +71,14 @@ struct BusConfig {
     uint8_t active_spi;         // 0=SPI, 1=SPI1, 2=SPI2
     uint32_t spi_clock;         // Hz (e.g., 4000000 = 4MHz)
 
-    // CAN configuration - supports input/output separation with per-bus baud rates
-    uint8_t input_can_bus;      // 0=CAN1, 1=CAN2, 2=CAN3, 0xFF=NONE (disabled)
-    uint8_t output_can_bus;     // 0=CAN1, 1=CAN2, 2=CAN3, 0xFF=NONE (disabled)
-    uint32_t can_input_baudrate;  // bps - input bus baud rate (125000, 250000, 500000, 1000000)
-    uint32_t can_output_baudrate; // bps - output bus baud rate (125000, 250000, 500000, 1000000)
+    // CAN: one set of settings per bus, and what attaches to each (§14.7)
+    CanBusSettings can[CAN_BUS_SLOTS];
+    uint8_t canInputBus;        // the bus CAN input reads: 0..2, 0xFF = CAN input off
+    uint8_t obdBus;             // the OBD output's bus (its transport): 0..2, 0xFF = none
 
-    // Runtime mode/enable flags
-    uint8_t can_input_mode;       // CanInputMode: OFF(0), NORMAL(1), LISTEN(2)
-    uint8_t can_output_enabled;   // Enable CAN output (0=disabled, 1=enabled)
-
-    // ELM327 serial output — port assigned as OBD-II ASCII emulator
-    // 0xFF = disabled; 1-8 = Serial1-Serial8 (exclusive to ELM327 when assigned)
+    // The serial ELM327 output's port: 1-8 = Serial1-Serial8, 0xFF = none
     uint8_t elm327_serial_port;
-};  // 27 bytes nominal (28 with ARM padding)
+};
 
 /**
  * Serial Port Baud Rate Index

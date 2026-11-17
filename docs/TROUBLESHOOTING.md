@@ -93,7 +93,9 @@ Try `DISPLAY ADDRESS 0x3F`, and adjust the contrast pot.
 See the [LCD Display Guide](guides/outputs/LCD_DISPLAY_GUIDE.md).
 
 **The OBD-II app connects but shows no data.**
-- The CAN bus must be brought up: `BUS CAN OUTPUT CAN1 ENABLE 500000`, then `OUTPUT 0 ENABLE`.
+- The CAN bus must be on and the OBD output on it: `BUS CAN CAN1 ENABLE`, then `OUTPUT ADD OBD CAN1`.
+  `BUS CAN` shows whether the bus is up and the OBD output attached.
+- An input answers only if it is routed to the OBD output (`INFO <pin> ROUTE`).
 - CAN needs a transceiver and 120 Ω termination at each end of the bus.
 - `LIST INPUTS` shows which PID each input answers on.
 - See the [OBD-II Scanner Guide](guides/outputs/OBD2_SCANNER_GUIDE.md) and

@@ -21,7 +21,10 @@ namespace hal { namespace can {
 bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false);
 bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t bus = 0);
 bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint8_t bus = 0);
-void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0);
+// begin() resets the controller first and reads as down on failure
+inline bool restart(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
+    return begin(baudrate, bus, listenOnly);
+}
 
 /**
  * If the controller is error-passive or bus-off (nothing has ACKed its

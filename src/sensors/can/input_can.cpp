@@ -1,12 +1,10 @@
 /*
  * input_can.cpp - CAN Input Subsystem
  *
- * Separate CAN input subsystem - independent from CAN output.
- * Receives frames from configured input CAN bus and populates frame cache.
+ * CAN input: a consumer of one CAN bus (systemConfig.buses.canInputBus).
+ * The bus manager starts the bus and reads it (buses/can_bus.h); input gets
+ * its frames through onCanFrame() and transmits through canBusWrite().
  * Supports OBD-II, J1939, and custom CAN protocols.
- *
- * Uses HAL for platform abstraction (FlexCAN, TWAI, MCP2515).
- * Supports dual-bus on Teensy (input on different bus than output).
  */
 
 #if INCLUDE_CAN
@@ -26,8 +24,7 @@
 #include "../../core/message_api.h"
 #include "../../core/log_tags.h"
 #include "can_frame_cache.h"
-#include "../../hal/hal_can.h"
-#include "../../buses/bus_manager.h"
+#include "../../buses/can_bus.h"
 
 #ifndef FLASHMEM   // Teensy-only attribute: cold code in flash, not RAM1
 #define FLASHMEM
@@ -37,12 +34,8 @@
 // INTERNAL STATE
 // ============================================================================
 
-static bool canInputInitialized = false;
-static uint8_t canInputBus = 0;  // Which bus we're reading from
-
-// On a bus shared with CAN output, input is the only reader; OBD-II requests
-// it drains are handed to output's responder through this (#495).
-static CANRequestHandler requestHandler = nullptr;
+static bool canInputInitialized = false;   // attached to canInputBus
+static uint8_t canInputBus = 0xFF;          // the bus it is attached to
 
 // Active Mode 01 polling (#476) — see can_poll.h for the pacing rules
 static CanPollState pollState;
@@ -61,124 +54,78 @@ static uint32_t statLastFrameMs = 0;
 static uint32_t statRequests = 0;
 static uint32_t statAnswers = 0;
 static uint32_t statTxFail = 0;
-static bool     statSharedBus = false;
-// What initCANInput() actually brought up: BUS CAN INPUT edits systemConfig
-// immediately but only take effect on reboot, so BUS CAN JSON reports
-// rebootPending when the two differ (#510 review).
-static uint8_t  statInitBus = 0xFF;
-static uint8_t  statInitMode = CAN_INPUT_OFF;
-static uint32_t statInitBaud = 0;
 #endif
+
+static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len, bool extended);
+
+// The bus restarted (new rate or mode): what was in flight is gone
+static void onCanReset() {
+    canPollReset(pollState, millis());
+    isoTpRxReset(isoTpRx);
+    initCANFrameCache();   // values read at the old rate or mode are not current
+}
+
+// Transmit only while attached to a NORMAL bus (canBusWrite refuses LISTEN)
+static bool canInputSends() {
+    return canInputInitialized && canBusUp(canInputBus) && !canBusListening(canInputBus);
+}
 
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
 
 /**
- * Initialize CAN input subsystem
- * Sets up input CAN bus based on systemConfig.buses.input_can_bus
- * Uses HAL for platform abstraction.
- *
- * @return true if initialized successfully, false otherwise
+ * Attach CAN input to its bus (systemConfig.buses.canInputBus). The bus
+ * manager starts the bus if it is on and not running yet.
+ * @return true if attached to a running bus
  */
-bool initCANInput() {
-    // Check if input is enabled (NORMAL or LISTEN mode)
-    uint8_t mode = systemConfig.buses.can_input_mode;
-#if SUPPORTS_JSON_EXPORT
-    // Recorded before any early return: "what boot tried to bring up"
-    statInitMode = mode;
-    statInitBus = systemConfig.buses.input_can_bus;
-    statInitBaud = systemConfig.buses.can_input_baudrate;
-#endif
-    if (mode == CAN_INPUT_OFF) {
-        canInputInitialized = false;
-        return false;
-    }
+FLASHMEM bool initCANInput() {
+    shutdownCANInput();
+    const uint8_t bus = systemConfig.buses.canInputBus;
+    if (bus == 0xFF) return false;
 
-    uint8_t bus = systemConfig.buses.input_can_bus;
-    if (bus == 0xFF) {
-        canInputInitialized = false;
-        return false;  // No input bus configured
-    }
-
-    uint32_t baudrate = systemConfig.buses.can_input_baudrate;
-    bool listenOnly = (mode == CAN_INPUT_LISTEN);
-
-    // Check if sharing bus with output
-    bool sharedBus = (bus == systemConfig.buses.output_can_bus &&
-                     systemConfig.buses.can_output_enabled &&
-                     bus != 0xFF);
-
-    // Output starts a shared bus only when its module is enabled; otherwise
-    // nothing would, and reading an unstarted FlexCAN stalls the loop into a
-    // watchdog reset (#495). Input starts it itself in that case.
-    bool outputStartsBus = sharedBus && systemConfig.outputEnabled[OUTPUT_CAN];
-#if SUPPORTS_JSON_EXPORT
-    statSharedBus = sharedBus;
-    statInitBaud = sharedBus ? systemConfig.buses.can_output_baudrate : baudrate;
-#endif
-
-    if (outputStartsBus) {
-        // Output subsystem will initialize the shared bus
-        // Just verify baudrates match
-        if (baudrate != systemConfig.buses.can_output_baudrate) {
-            msg.debug.warn(TAG_CAN, "Shared bus: using output baudrate %lu",
-                          systemConfig.buses.can_output_baudrate);
-        }
-        canInputBus = bus;
-        msg.debug.info(TAG_CAN, "CAN input using shared bus %d (initialized by output)", bus);
-    } else {
-        // Independent bus - initialize via HAL
-        if (!canBusClaimed(bus) || !hal::can::begin(baudrate, bus, listenOnly)) {
-            msg.debug.error(TAG_CAN, "CAN input init failed on bus %d", bus);
-            canInputInitialized = false;
-            return false;
-        }
-        canInputBus = bus;
-        const char* modeStr = listenOnly ? "listen-only" : "normal";
-        msg.debug.info(TAG_CAN, "CAN input initialized on bus %d (%lu bps, %s)", bus, baudrate, modeStr);
-    }
-
-    // Initialize CAN frame cache
+    canSetHandlers(CANC_INPUT, processCANFrame, onCanReset, nullptr);
     initCANFrameCache();
-
     canPollReset(pollState, millis());
     pollCursor = 0;
     isoTpRxReset(isoTpRx);
 
-    canInputInitialized = true;
+    const CanAttach r = canAttach(bus, CANC_INPUT);
+    if (r == CAN_ATTACH_BUS_OFF || r == CAN_ATTACH_NO_BUS) {
+        msg.debug.warn(TAG_CAN, "CAN input: CAN%u is off", (unsigned)bus + 1);
+        return false;
+    }
+    canInputBus = bus;
+    canInputInitialized = true;   // attached, also while the bus waits
+    if (r != CAN_ATTACH_OK) {
+        msg.debug.error(TAG_CAN, "CAN input: CAN%u did not start", (unsigned)bus + 1);
+        return false;
+    }
+    msg.debug.info(TAG_CAN, "CAN input on CAN%u", (unsigned)bus + 1);
     return true;
 }
 
-/**
- * Shutdown CAN input subsystem
- *
- * NOTE: This does NOT disable the CAN bus hardware peripheral for two reasons:
- * 1. Output subsystem may still be using the same physical bus
- * 2. HAL doesn't provide a bus-safe shutdown API (multiple subsystems per bus)
- *
- * This is intentional behavior - CAN hardware stays active but frame processing stops.
- * Power consumption: ~5-10mA (MCP2515) or ~2-3mA (FlexCAN standby mode).
- *
- * For true power-down, disable INCLUDE_CAN at compile time or power-cycle the board.
- */
-void shutdownCANInput() {
+FLASHMEM void shutdownCANInput() {
+    if (canInputInitialized) canDetach(canInputBus, CANC_INPUT);
     canInputInitialized = false;
+    canInputBus = 0xFF;
 }
 
 bool canInputIsRunning() {
-    return canInputInitialized && systemConfig.buses.can_input_mode != CAN_INPUT_OFF;
+    return canInputInitialized && canBusUp(canInputBus);
 }
 
-bool canInputOwnsBus(uint8_t bus) {
-    // The live mode, not just init state: BUS CAN INPUT DISABLE writes OFF at
-    // runtime and updateCANInput() stops reading, so output must resume.
-    return canInputInitialized && canInputBus == bus &&
-           systemConfig.buses.can_input_mode != CAN_INPUT_OFF;
+uint8_t canInputAttachedBus() {
+    return canInputInitialized ? canInputBus : 0xFF;
 }
 
-void setCANRequestHandler(CANRequestHandler handler) {
-    requestHandler = handler;
+// After a JSON IMPORT or LOAD: CAN input onto the bus the config names, then
+// every bus to its settings (a rate or mode change restarts a running bus).
+// The OBD output re-attaches in syncOutputsToConfig(), which runs next.
+FLASHMEM void syncCanToConfig() {
+    if (canInputAttachedBus() != systemConfig.buses.canInputBus) shutdownCANInput();
+    for (uint8_t b = 0; b < CAN_BUS_SLOTS; b++) canBusApply(b);
+    if (!canInputInitialized && systemConfig.buses.canInputBus != 0xFF) initCANInput();
 }
 
 #if SUPPORTS_JSON_EXPORT
@@ -186,28 +133,20 @@ FLASHMEM bool canInputIsPolled(const Input& in) {
     if (in.pin < PIN_CAN_BASE || in.pin > PIN_CAN_MAX) return false;
     if (!in.flags.isEnabled || !in.flags.useCustomCalibration) return false;
     if (in.calibrationType != CAL_CAN_IMPORT) return false;
-    return systemConfig.buses.can_input_mode == CAN_INPUT_NORMAL &&
-           isObdResponseId(in.customCalibration.can.source_can_id);
+    return canInputSends() && isObdResponseId(in.customCalibration.can.source_can_id);
 }
 
+// The bus input is attached to runs NORMAL (the mode it was started in)
 FLASHMEM bool canInputRunsNormal() {
-    // Both the setting and what boot brought up: BUS CAN INPUT edits the
-    // first at once, the controller follows only after a reboot
-    return canInputIsRunning() && statInitMode == CAN_INPUT_NORMAL &&
-           systemConfig.buses.can_input_mode == CAN_INPUT_NORMAL;
+    return canInputSends();
 }
 
 FLASHMEM void getCANInputStatus(CanBusSnapshot& s, uint32_t now) {
     s.inRunning = canInputIsRunning();
-    // Configured (systemConfig, what the dump shows) vs brought up at boot
-    s.rebootPending = s.inMode != statInitMode ||
-                      (s.inMode != CAN_INPUT_OFF &&
-                       (s.inBus != statInitBus || s.inBaudrate != statInitBaud));
-    s.inShared = canInputInitialized && statSharedBus;
     s.framesRx = statFramesRx;
     s.haveFrame = statFramesRx != 0;
     s.lastFrameAgeMs = s.haveFrame ? now - statLastFrameMs : 0;
-    s.pollActive = s.inRunning && systemConfig.buses.can_input_mode == CAN_INPUT_NORMAL;
+    s.pollActive = canInputSends();
     s.pollBackoff = s.pollActive && pollState.missStreak >= CAN_POLL_BACKOFF_AFTER;
     s.missStreak = pollState.missStreak;
     s.requests = statRequests;
@@ -238,11 +177,10 @@ static bool handleIsoTpFrame(uint16_t id, const uint8_t* data, uint8_t len, uint
     switch (isoTpRxFrame(isoTpRx, id, data, len, now)) {
     case ISOTP_RX_STARTED:
         if (pollState.pending && id == pollState.pendingId &&
-            isoTpRx.buf[1] == pollState.pendingPid &&
-            systemConfig.buses.can_input_mode == CAN_INPUT_NORMAL) {   // the poller's own guard
+            isoTpRx.buf[1] == pollState.pendingPid && canInputSends()) {   // the poller's own guard
             uint8_t fc[8];
             buildIsoTpFlowControl(fc);
-            bool ok = hal::can::write(obdRequestIdFor(id), fc, 8, false, canInputBus);
+            bool ok = canBusWrite(canInputBus, obdRequestIdFor(id), fc, 8, false);
             if (ok) canPollOnProgress(pollState, id, isoTpRx.buf[1], now);   // else it times out
 #if SUPPORTS_JSON_EXPORT
             if (!ok) statTxFail++;
@@ -275,11 +213,10 @@ static bool handleIsoTpFrame(uint16_t id, const uint8_t* data, uint8_t len, uint
  */
 static void processCANFrame(uint32_t can_id, const uint8_t* data, uint8_t len,
                            bool extended) {
-    // OBD-II request on a bus shared with output: output's responder owns it
-    if (requestHandler && !extended && (can_id == 0x7DF || can_id == 0x7E0)) {
-        requestHandler(can_id, data, len);
-        return;
-    }
+#if SUPPORTS_JSON_EXPORT
+    statFramesRx++;
+    statLastFrameMs = millis();
+#endif
 
     // Validate frame has minimum data
     if (len == 0) {
@@ -431,8 +368,7 @@ static bool pollTargetAt(uint8_t slot, uint16_t& responseId, uint8_t& pid) {
  * block, which describes the imported-PID poller.
  */
 static FLASHMEM void runCANDiscovery() {
-    // LISTEN must never transmit; the mode can change under a running scan,
-    // and the controller keeps its boot mode until a reboot
+    // LISTEN must never transmit; the bus can be switched under a running scan
     if (!canInputRunsNormal()) {
         canScanDiscoveryStop();
         return;
@@ -444,15 +380,14 @@ static FLASHMEM void runCANDiscovery() {
     buildMode01Request(base, frame);
     // A refused write still waits out its window (can_discovery.h); count it
     // so BUS CAN JSON shows a TX problem rather than only "no ECU answered"
-    if (!hal::can::write(0x7DF, frame, 8, false, canInputBus)) statTxFail++;
+    if (!canBusWrite(canInputBus, 0x7DF, frame, 8, false)) statTxFail++;
     canScanDiscoverySent(now);
 }
 #endif
 
 /**
  * Send the next Mode 01 request, round-robin over the imported PIDs.
- * NORMAL mode only: LISTEN must never transmit, and on a bus shared with
- * CAN output the hardware is in TX mode, so this check is the guard.
+ * Only on a NORMAL bus: LISTEN must never transmit.
  */
 
 static void pollCANInputs() {
@@ -465,7 +400,7 @@ static void pollCANInputs() {
         return;
     }
 #endif
-    if (systemConfig.buses.can_input_mode != CAN_INPUT_NORMAL) return;
+    if (!canInputSends()) return;
     if (!inputManagerTableIsLive()) return;
 
     uint32_t now = millis();
@@ -476,11 +411,9 @@ static void pollCANInputs() {
     // ECU unpowered) the controller is still retransmitting it back to
     // back: stop that, so the bus is quiet until the next request (#506).
     // The driver acts only while the controller is error-passive or
-    // bus-off, so on a healthy bus it never touches a frame output queued.
-    // On a failing one (TEC >= 128 from a bad wire, say) it also drops
-    // output's pending frames, e.g. the rest of an ISO-TP reply; the tester
-    // retries.
-    if (wasPending && !pollState.pending) hal::can::abortUnackedTx(canInputBus);
+    // bus-off, so on a healthy bus it never touches a frame OBD queued, and
+    // the bus manager skips it while OBD has a multi-frame answer in flight.
+    if (wasPending && !pollState.pending) canBusAbortUnackedTx(canInputBus, CANC_INPUT);
     if (!ready) return;
 
     for (uint8_t n = 0; n < MAX_INPUTS; n++) {
@@ -500,7 +433,7 @@ static void pollCANInputs() {
 
         uint8_t frame[8];
         buildMode01Request(pid, frame);
-        bool ok = hal::can::write(obdRequestIdFor(responseId), frame, 8, false, canInputBus);
+        bool ok = canBusWrite(canInputBus, obdRequestIdFor(responseId), frame, 8, false);
         canPollOnSent(pollState, responseId, pid, ok, now);
 #if SUPPORTS_JSON_EXPORT
         statRequests++;
@@ -513,38 +446,21 @@ static void pollCANInputs() {
 }
 
 /**
- * Update CAN input - poll for incoming frames and populate cache
- * Called from main loop - non-blocking
- * Uses HAL for platform abstraction.
+ * Update CAN input: send the next poll. Frames arrive through
+ * processCANFrame(), called by the bus manager's reader (canBusesUpdate).
  *
- * Supports:
+ * Accepts:
  * - OBD-II Mode 01 responses (0x41), 1-5 data bytes - PID is the identifier
  * - J1939 and custom protocols - uses byte[0] as identifier
  * - Any CAN ID (not limited to 0x7E8)
  */
 void updateCANInput() {
-    // Check if input is enabled and initialized
-    if (!canInputInitialized || systemConfig.buses.can_input_mode == CAN_INPUT_OFF) {
+    if (!canInputInitialized) {
 #if SUPPORTS_JSON_EXPORT
         canScanDiscoveryStop();   // input turned off under SCAN PIDS: end it, don't hang
 #endif
         return;
     }
-
-    // Poll for frames via HAL (handles all platforms)
-    uint32_t id;
-    uint8_t data[8];
-    uint8_t len;
-    bool extended;
-
-    while (hal::can::read(id, data, len, extended, canInputBus)) {
-#if SUPPORTS_JSON_EXPORT
-        statFramesRx++;
-        statLastFrameMs = millis();
-#endif
-        processCANFrame(id, data, len, extended);
-    }
-
     pollCANInputs();
 }
 

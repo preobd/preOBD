@@ -220,13 +220,6 @@ bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint8_t bus
     return true;
 }
 
-// Every frame is accepted (filter bank 0, mask 0): CAN input imports need
-// all of them, and the OBD-II responder picks out 0x7DF/0x7E0 in software.
-// That matches FlexCAN, where MB2-7 stay accept-all beside these filters.
-void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus) {
-    (void)filter1; (void)filter2; (void)bus;
-}
-
 bool abortUnackedTx(uint8_t bus) {
     if (bus != 0 || !detail::started) return false;
     // ESR: EPVF error-passive, BOFF bus-off. Error-active means frames are

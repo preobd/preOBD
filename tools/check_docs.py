@@ -14,7 +14,8 @@ application names, and checks them against the firmware source:
   - sensor / application names  <- src/sensors/sensor_library/sensors/*.h and
                                    src/sensors/application_presets.cpp, including
                                    the sensor-measures-what-the-application-expects check
-  - retired commands            <- RELAY (deprecated), SELFTEST (now SYSTEM DIAG INTEGRITY)
+  - retired commands            <- RELAY (deprecated), SELFTEST (now SYSTEM DIAG INTEGRITY),
+                                   and removed multi-word forms (RETIRED_FORMS: BUS CAN INPUT, ...)
 
 Everything is derived from the source each run, so the checker itself can't
 drift from the firmware. It's a text scan, not a parser: it only looks at
@@ -143,6 +144,18 @@ FORMER_COMMANDS = {"DUMP", "RESET", "RELOAD", "ENABLE", "DISABLE", "SHOW"}
 PLACEHOLDER = re.compile(r'^[<\[].*|.*\.\.\.$|^\.\.\.$')
 RETIRED = {"RELAY": "RELAY is deprecated; use RULE / ACTION",
            "SELFTEST": "SELFTEST was retired; use SYSTEM DIAG INTEGRITY"}
+# Multi-word forms removed with no alias (#612 phase 2a). check_command only
+# checks two words, so these are matched on the whole command.
+RETIRED_FORMS = [
+    (re.compile(r'^BUS CAN (INPUT|OUTPUT)\b', re.I),
+     "BUS CAN INPUT/OUTPUT were removed; use BUS CAN <bus> ENABLE|LISTEN|DISABLE, BUS CAN <bus> INPUT, OUTPUT ADD OBD CAN<n>"),
+    (re.compile(r'^BUS CAN (BAUDRATE|NONE)\b', re.I),
+     "BUS CAN BAUDRATE/NONE were removed; use BUS CAN <bus> BAUDRATE / BUS CAN <bus> DISABLE"),
+    (re.compile(r'^BUS CAN CAN[1-3]$', re.I),
+     "BUS CAN <bus> alone no longer selects a bus; use BUS CAN <bus> ENABLE"),
+    (re.compile(r'^BUS SERIAL \S+ ELM327\b', re.I),
+     "BUS SERIAL <n> ELM327 was removed; use OUTPUT ADD ELM327 SERIAL<n>"),
+]
 VENDOR = re.compile(r'\b(?:VDO|SMITHS|SW|ACDELCO|AC_DELCO|BOSCH|JEEP|GENERIC|MPX|AEM|BME280)_[A-Z0-9_]*[A-Z0-9]\b')
 
 
@@ -154,6 +167,10 @@ def check_command(cat, words, pinsens):
     cmd = words[0].upper()
     if cmd in RETIRED:
         return RETIRED[cmd]
+    line = " ".join(words)
+    for pat, why in RETIRED_FORMS:
+        if pat.search(line):
+            return why
     if cmd not in cat["commands"]:
         return f"unknown command {words[0]}"
     if len(words) < 2 or PLACEHOLDER.match(words[1]):

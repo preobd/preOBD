@@ -1,5 +1,5 @@
 /*
- * cmd_output.cpp - OUTPUT: the outputs you add (#612 phase 1, ARCHITECTURE.md §14.5)
+ * cmd_output.cpp - OUTPUT: the outputs you add (#612, ARCHITECTURE.md §14.5)
  *
  *   OUTPUT LIST [JSON]                         RUN ok
  *   OUTPUT <id>                                RUN ok
@@ -9,9 +9,9 @@
  *   OUTPUT <id> CSV LONG | WIDE                (the CSV output on SD)
  *   OUTPUT DEL <id>
  *
- * Phase 1 has one output per format (output_table.h), on the transport that
- * format uses today; OUTPUT ADD refuses any other and says which command
- * moves it. The old OUTPUT <name> forms are gone, with no aliases.
+ * The ids are fixed (output_table.h). OUTPUT ADD binds OBD to a CAN bus and
+ * ELM327 to a serial port or BLE at once; RealDash and CSV use the data
+ * stream (TRANSPORT DATA moves it) until phase 2b gives them their own.
  */
 
 #include "../config.h"
@@ -25,6 +25,11 @@
 #include "../outputs/table/output_base.h"
 #include "../outputs/table/output_table.h"
 #include "../outputs/formats/output_format.h"
+#include "../buses/bus_config.h"
+#include "../buses/serial_manager.h"
+#if INCLUDE_CAN
+#include "../hal/bus_defaults.h"   // NUM_CAN_BUSES
+#endif
 #if SUPPORTS_JSON_EXPORT
 #include "../config/json_registry.h"
 #endif
@@ -82,8 +87,42 @@ static FLASHMEM void printNoInterval(uint8_t id) {
     msg.control.println(F(" answers requests as they arrive; it has no interval"));
 }
 
-// Phase 1: the transport must be the one the format already uses. Prints the
-// reason and the command that changes it when it isn't.
+#if INCLUDE_ELM327
+// Can ELM327 take Serial<port_id>? Prints why not.
+static FLASHMEM bool elm327PortUsable(uint8_t port_id) {
+    if (!isSerialPortActive(port_id)) {
+        msg.control.print(F("ERROR: Serial"));
+        msg.control.print(port_id);
+        msg.control.print(F(" is not enabled. Run: BUS SERIAL "));
+        msg.control.print(port_id);
+        msg.control.println(F(" ENABLE <baud> first"));
+        return false;
+    }
+#if INCLUDE_FRAMED_TRANSPORT
+    if (systemConfig.serial.framed_enabled_mask & (1u << (port_id - 1))) {
+        msg.control.print(F("ERROR: Serial"));
+        msg.control.print(port_id);
+        msg.control.println(F(" is the framed nRF link; for ELM327 over it use OUTPUT ADD ELM327 BLE"));
+        return false;
+    }
+#endif
+    // The message router reads and writes its own ports
+    const uint8_t t = TRANSPORT_SERIAL1 + (port_id - 1);
+    const auto& r = systemConfig.router;
+    if (r.control_primary == t || r.control_secondary == t || r.data_primary == t ||
+        r.data_secondary == t || r.debug_primary == t || r.debug_secondary == t) {
+        msg.control.print(F("ERROR: Serial"));
+        msg.control.print(port_id);
+        msg.control.println(F(" carries the console, data or debug stream (TRANSPORT); move it first"));
+        return false;
+    }
+    return true;
+}
+#endif
+
+// The transport must suit the format. OBD and ELM327 bind to the one named;
+// RealDash and CSV must name the data stream they share. Prints the reason
+// and the command that changes it when it doesn't suit.
 static FLASHMEM bool transportAccepted(uint8_t id, const char* tok) {
     char current[24];
     outputTransportText(id, current, sizeof(current));
@@ -91,20 +130,35 @@ static FLASHMEM bool transportAccepted(uint8_t id, const char* tok) {
     case OTK_SD:
         if (strcasecmp(tok, "SD") == 0) return true;
         break;
-    case OTK_CAN:
-        if (strcmp(current, "NONE") == 0) {
-            msg.control.println(F("ERROR: No CAN output bus is set"));
-            msg.control.println(F("  Run: BUS CAN OUTPUT <CAN1|CAN2|CAN3> ENABLE first"));
+    case OTK_BLE:
+        if (strcasecmp(tok, "BLE") == 0) return true;
+        break;
+    case OTK_CAN: {
+#if INCLUDE_CAN
+        if (strncasecmp(tok, "CAN", 3) != 0 || tok[3] < '1' || tok[3] > '3' || tok[4] != '\0') break;
+        const uint8_t bus = (uint8_t)(tok[3] - '1');
+        if (bus >= NUM_CAN_BUSES) {
+            msg.control.print(F("ERROR: "));
+            msg.control.print(tok);
+            msg.control.println(F(" not available on this platform"));
             return false;
         }
-        if (strcasecmp(tok, current) == 0) return true;
-        if (strncasecmp(tok, "CAN", 3) != 0 || tok[3] < '1' || tok[3] > '3' || tok[4] != '\0') break;
-        msg.control.print(F("ERROR: OBD answers on the CAN output bus, which is "));
-        msg.control.println(current);
-        msg.control.print(F("  BUS CAN OUTPUT "));
-        msg.control.print(tok);
-        msg.control.println(F(" ENABLE moves it"));
-        return false;
+        const uint8_t mode = systemConfig.buses.can[bus].mode;
+        if (mode != CAN_BUS_NORMAL) {
+            msg.control.print(F("ERROR: "));
+            msg.control.print(tok);
+            msg.control.println(mode == CAN_BUS_OFF ? F(" is off") : F(" is LISTEN, and OBD transmits"));
+            msg.control.print(F("  Run: BUS CAN "));
+            msg.control.print(tok);
+            msg.control.println(F(" ENABLE first"));
+            return false;
+        }
+        systemConfig.buses.obdBus = bus;
+        return true;
+#else
+        break;
+#endif
+    }
     case OTK_STREAM: {
         bool ok = false;
         const TransportID t = parseTransport(tok, &ok);
@@ -121,11 +175,10 @@ static FLASHMEM bool transportAccepted(uint8_t id, const char* tok) {
     }
     case OTK_SERIAL:
 #if INCLUDE_ELM327
-        if (strncasecmp(tok, "SERIAL", 6) == 0 && isdigit((unsigned char)tok[6]) && tok[7] == '\0' &&
-            tok[6] >= '1' && tok[6] <= '8') {
+        if (strncasecmp(tok, "SERIAL", 6) == 0 && tok[6] >= '1' && tok[6] <= '8' && tok[7] == '\0') {
             const uint8_t port = (uint8_t)(tok[6] - '0');
             if (!elm327PortUsable(port)) return false;
-            systemConfig.buses.elm327_serial_port = port;   // the port binding today's BUS SERIAL <n> ELM327 sets
+            systemConfig.buses.elm327_serial_port = port;
             return true;
         }
 #endif
@@ -136,9 +189,51 @@ static FLASHMEM bool transportAccepted(uint8_t id, const char* tok) {
     msg.control.print(F(" can't use "));
     msg.control.println(tok);
     msg.control.print(F("  It uses "));
-    msg.control.println(outputKindOf(id) == OTK_SD ? "SD"
-                        : outputKindOf(id) == OTK_SERIAL ? "SERIAL1-SERIAL8" : current);
+    switch (outputKindOf(id)) {
+    case OTK_SD:     msg.control.println(F("SD")); break;
+    case OTK_SERIAL: msg.control.println(F("SERIAL1-SERIAL8")); break;
+    case OTK_CAN:    msg.control.println(F("CAN1-CAN3")); break;
+    case OTK_BLE:    msg.control.println(F("BLE")); break;
+    default:         msg.control.println(current); break;
+    }
     return false;
+}
+
+// OBD and ELM327 on a serial port exist from the start with no transport
+// (NONE) until OUTPUT ADD binds one; ADD on such an output binds it
+static bool outputUnbound(uint8_t id) {
+    if (id == OUT_ID_OBD)    return systemConfig.buses.obdBus == 0xFF;
+    if (id == OUT_ID_ELM327) return systemConfig.buses.elm327_serial_port == 0xFF;
+    return false;
+}
+
+// OUTPUT <id> ENABLE: an OBD or ELM327 output must have a transport it can
+// run on now, or the switch would read "enabled" over an output that answers
+// nothing. Prints why not.
+static FLASHMEM bool transportReady(uint8_t id) {
+    if (outputUnbound(id)) {
+        msg.control.print(F("ERROR: Output "));
+        msg.control.print(id);
+        msg.control.print(F(" has no transport: OUTPUT ADD "));
+        msg.control.println(id == OUT_ID_OBD ? F("OBD CAN<n>") : F("ELM327 SERIAL<n>"));
+        return false;
+    }
+#if INCLUDE_CAN
+    if (id == OUT_ID_OBD) {
+        const uint8_t bus = systemConfig.buses.obdBus;
+        const uint8_t mode = bus < CAN_BUS_SLOTS ? systemConfig.buses.can[bus].mode : CAN_BUS_OFF;
+        if (mode != CAN_BUS_NORMAL) {
+            msg.control.print(F("ERROR: CAN"));
+            msg.control.print(bus + 1);
+            msg.control.println(mode == CAN_BUS_OFF ? F(" is off") : F(" is LISTEN, and OBD transmits"));
+            msg.control.print(F("  Run: BUS CAN CAN"));
+            msg.control.print(bus + 1);
+            msg.control.println(F(" ENABLE first"));
+            return false;
+        }
+    }
+#endif
+    return true;
 }
 
 static FLASHMEM int outputAdd(int argc, const char* const* argv) {
@@ -160,22 +255,28 @@ static FLASHMEM int outputAdd(int argc, const char* const* argv) {
         msg.control.println(F("  Formats: " OUTPUT_FORMATS_TEXT));
         return 1;
     }
-    const OutputTransportKind kind = (fmt == FMT_CSV && strcasecmp(argv[3], "SD") == 0) ? OTK_SD : OTK_STREAM;
+    // Two formats have two ids each: CSV (stream / SD) and ELM327 (serial / BLE)
+    const OutputTransportKind kind =
+        fmt == FMT_CSV    ? (strcasecmp(argv[3], "SD") == 0 ? OTK_SD : OTK_STREAM)
+      : fmt == FMT_ELM327 ? (strcasecmp(argv[3], "BLE") == 0 ? OTK_BLE : OTK_SERIAL)
+      : fmt == FMT_OBD    ? OTK_CAN : OTK_STREAM;
     const uint8_t id = outputIdFor(fmt, kind);
     if (id == OUT_ID_NONE || !outputIdBuilt(id)) {
         msg.control.print(F("ERROR: "));
         msg.control.print(outputFormatName(fmt));
         if (fmt == FMT_CSV) msg.control.print(kind == OTK_SD ? F(" on SD") : F(" on a stream"));
+        if (fmt == FMT_ELM327) msg.control.print(kind == OTK_BLE ? F(" over BLE") : F(" on a serial port"));
         msg.control.println(F(" is not in this build"));
         return 1;
     }
-    if (outputExists(id)) {
+    const bool bindExisting = outputExists(id) && outputUnbound(id);
+    if (outputExists(id) && !bindExisting) {
         msg.control.print(F("ERROR: Output "));
         msg.control.print(id);
         msg.control.print(F(" is already "));
         printOutputLabel(id);
         msg.control.println();
-        msg.control.println(F("  This firmware has one output per format; OUTPUT DEL it first"));
+        msg.control.println(F("  One output per format and transport kind; OUTPUT DEL it first"));
         return 1;
     }
 
@@ -207,7 +308,8 @@ static FLASHMEM int outputAdd(int argc, const char* const* argv) {
 #if INCLUDE_SD_LOGGING
     if (layout >= 0) systemConfig.sdLogFormat = (uint8_t)layout;
 #endif
-    outputAddById(id);
+    if (bindExisting) outputSetEnabledById(id, true);   // binds and starts it
+    else              outputAddById(id);
     // After the add: an output that doesn't exist yet takes no interval
     if (haveInterval) outputSetIntervalById(id, (long)interval);
     msg.control.print(F("Output "));
@@ -227,10 +329,9 @@ static FLASHMEM int outputDel(int argc, const char* const* argv) {
     const uint8_t id = parseOutputIdToken(argv[2]);
     if (id == OUT_ID_NONE || !outputExists(id)) { printNoSuchOutput(argv[2]); return 1; }
     outputDeleteById(id);
-#if INCLUDE_ELM327
-    // The port goes too, as BUS SERIAL <n> ELM327 DISABLE does
+    // Its transport goes too: OUTPUT ADD binds a new one
     if (id == OUT_ID_ELM327) systemConfig.buses.elm327_serial_port = 0xFF;
-#endif
+    if (id == OUT_ID_OBD) systemConfig.buses.obdBus = 0xFF;
     msg.control.print(F("Output "));
     msg.control.print(id);
     msg.control.println(F(" deleted, and its routes"));
@@ -286,6 +387,7 @@ FLASHMEM int cmd_output(int argc, const char* const* argv) {
 
     if (streq_P(verb, PSTR("ENABLE")) || streq_P(verb, PSTR("DISABLE"))) {
         const bool on = streq_P(verb, PSTR("ENABLE"));
+        if (on && !transportReady(id)) return 1;
         outputSetEnabledById(id, on);
         msg.control.print(F("Output "));
         msg.control.print(id);

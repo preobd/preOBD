@@ -82,10 +82,13 @@ static void test_bus_can_json(void) {
     CanBusSnapshot s;
     memset(&s, 0, sizeof(s));
     s.buses = 2; s.maxScanResults = 32;
-    s.inBus = 0; s.inMode = 1; s.inBaudrate = 500000; s.inRunning = true;
+    // CAN1 NORMAL 500k, up, CAN input and OBD on it; CAN2 LISTEN 250k, idle (#612)
+    s.bus[0] = {1, 500000, 2, true, true};
+    s.bus[1] = {2, 250000, 1, false, false};
+    s.bus[2] = {1, 1000000, 2, true, false};   // past s.buses: not written
+    s.inBus = 0; s.inRunning = true;
     s.framesRx = 81234; s.haveFrame = true; s.lastFrameAgeMs = 12;
     s.pollActive = true; s.missStreak = 0; s.requests = 5120; s.answers = 5101;
-    s.outBus = 0xFF; s.outEnabled = false; s.outModule = false; s.outBaudrate = 500000;
 
     JsonDocument doc;
     JsonArray imports = canBusStatusToJson(s, doc.to<JsonObject>());
@@ -96,20 +99,28 @@ static void test_bus_can_json(void) {
 
     TEST_ASSERT_EQUAL_UINT8(2, doc["caps"]["buses"]);
     TEST_ASSERT_EQUAL_UINT32(1000000, doc["caps"]["baudrates"][3]);
-    TEST_ASSERT_FALSE(doc["caps"]["listenShared"]);
+    TEST_ASSERT_TRUE(doc["caps"]["listenShared"].isNull());   // gone with the per-bus model
     TEST_ASSERT_EQUAL_UINT16(60000, doc["caps"]["scanMs"][1]);
 
+    TEST_ASSERT_EQUAL_UINT32(2, doc["buses"].size());
+    TEST_ASSERT_EQUAL_UINT8(0, doc["buses"][0]["bus"]);
+    TEST_ASSERT_EQUAL_STRING("NORMAL", doc["buses"][0]["mode"]);
+    TEST_ASSERT_EQUAL_UINT32(500000, doc["buses"][0]["baudrate"]);
+    TEST_ASSERT_EQUAL_STRING("up", doc["buses"][0]["state"]);
+    TEST_ASSERT_TRUE(doc["buses"][0]["input"]);
+    TEST_ASSERT_TRUE(doc["buses"][0]["obd"]);
+    TEST_ASSERT_EQUAL_STRING("LISTEN", doc["buses"][1]["mode"]);
+    TEST_ASSERT_EQUAL_STRING("idle", doc["buses"][1]["state"]);
+    TEST_ASSERT_FALSE(doc["buses"][1]["obd"]);
+
     TEST_ASSERT_EQUAL_UINT8(0, doc["input"]["bus"]);
-    TEST_ASSERT_EQUAL_STRING("NORMAL", doc["input"]["mode"]);
-    TEST_ASSERT_EQUAL_UINT32(500000, doc["input"]["baudrate"]);
     TEST_ASSERT_TRUE(doc["input"]["running"]);
-    TEST_ASSERT_FALSE(doc["input"]["rebootPending"]);
+    TEST_ASSERT_TRUE(doc["input"]["mode"].isNull());          // the bus's, in buses[]
+    TEST_ASSERT_TRUE(doc["input"]["rebootPending"].isNull()); // changes apply at once
     TEST_ASSERT_EQUAL_UINT32(12, doc["input"]["lastFrameAgeMs"]);
     TEST_ASSERT_EQUAL_UINT32(5101, doc["input"]["poll"]["answers"]);
     TEST_ASSERT_FALSE(doc["input"]["poll"]["backoff"]);
-
-    TEST_ASSERT_EQUAL_UINT8(255, doc["output"]["bus"]);   // none, as in the dump
-    TEST_ASSERT_FALSE(doc["output"]["module"]);
+    TEST_ASSERT_TRUE(doc["output"].isNull());                 // OBD is buses[].obd
 
     TEST_ASSERT_EQUAL_STRING("CAN:0", doc["imports"][0]["pinLabel"]);
     TEST_ASSERT_EQUAL_UINT8(192, doc["imports"][0]["pin"]);
@@ -118,10 +129,9 @@ static void test_bus_can_json(void) {
     TEST_ASSERT_EQUAL_UINT32(35, doc["imports"][0]["ageMs"]);
     TEST_ASSERT_TRUE(doc["imports"][1]["ageMs"].isNull());   // never seen
 
-    s.inMode = 2; s.haveFrame = false; s.rebootPending = true;
+    s.haveFrame = false; s.bus[0].state = 3;
     canBusStatusToJson(s, doc.to<JsonObject>());
-    TEST_ASSERT_TRUE(doc["input"]["rebootPending"]);
-    TEST_ASSERT_EQUAL_STRING("LISTEN", doc["input"]["mode"]);
+    TEST_ASSERT_EQUAL_STRING("waiting", doc["buses"][0]["state"]);
     TEST_ASSERT_TRUE(doc["input"]["lastFrameAgeMs"].isNull());
 }
 

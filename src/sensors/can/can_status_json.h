@@ -58,17 +58,23 @@ void canScanEntryToJson(const CanScanEntrySnapshot& e, JsonObject out);
 void canScanSupportedToJson(uint16_t canId, const uint8_t bits[32], JsonObject out);
 
 // ---- BUS CAN JSON ----------------------------------------------------------
+// One entry per bus (#612 phase 2a): its settings, its state, who is attached
+struct CanBusEntrySnapshot {
+    uint8_t  mode;              // CanBusMode: 0 OFF, 1 NORMAL, 2 LISTEN
+    uint32_t baudrate;
+    uint8_t  state;             // CanBusState: 0 off, 1 idle, 2 up, 3 waiting, 4 pinsTaken
+    bool     input;             // CAN input attached
+    bool     obd;               // the OBD output attached
+};
+
 struct CanBusSnapshot {
     // caps
     uint8_t  buses;
     uint8_t  maxScanResults;
+    CanBusEntrySnapshot bus[3];
     // input
     uint8_t  inBus;             // 255 = none
-    uint8_t  inMode;            // CanInputMode: 0 OFF, 1 NORMAL, 2 LISTEN
-    uint32_t inBaudrate;
     bool     inRunning;
-    bool     inShared;
-    bool     rebootPending;     // bus/mode/baudrate differ from what is running
     uint32_t framesRx;
     bool     haveFrame;         // false: lastFrameAgeMs is null
     uint32_t lastFrameAgeMs;
@@ -78,11 +84,6 @@ struct CanBusSnapshot {
     uint32_t requests;
     uint32_t answers;
     uint32_t txFail;
-    // output
-    uint8_t  outBus;            // 255 = none
-    bool     outEnabled;        // buses.can_output_enabled
-    bool     outModule;         // outputEnabled[OUTPUT_CAN]
-    uint32_t outBaudrate;
 };
 
 struct CanImportSnapshot {
@@ -96,7 +97,7 @@ struct CanImportSnapshot {
     uint32_t ageMs;
 };
 
-// Writes caps/input/output; the caller appends one object per import to the
+// Writes caps/buses/input; the caller appends one object per import to the
 // returned "imports" array with canImportToJson().
 JsonArray canBusStatusToJson(const CanBusSnapshot& s, JsonObject out);
 void canImportToJson(const CanImportSnapshot& i, JsonObject out);

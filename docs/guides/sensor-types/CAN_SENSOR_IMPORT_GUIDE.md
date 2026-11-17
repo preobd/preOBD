@@ -42,8 +42,9 @@ preOBD can import sensors from the CAN bus and use them alongside local analog/d
 # Enter configuration mode
 > CONFIG
 
-# Enable CAN input on CAN1
-> BUS CAN INPUT CAN1 ENABLE
+# Turn CAN1 on and have CAN input read it
+> BUS CAN CAN1 ENABLE
+> BUS CAN CAN1 INPUT ENABLE
 
 # Import Engine RPM (OBD-II PID 0x0C)
 > SET CAN 0x0C
@@ -101,18 +102,30 @@ Import PIDs 0x0C, 0x0D, 0x05          Broadcast all sensors
 ### Enable CAN Input
 
 ```bash
-# Enable CAN input on CAN1
-BUS CAN INPUT CAN1 ENABLE
+# Turn CAN1 on (normal: ACKs, polls the ECU) and have CAN input read it
+BUS CAN CAN1 ENABLE
+BUS CAN CAN1 INPUT ENABLE
 
-# Enable CAN output on CAN2 (separate from input)
-BUS CAN OUTPUT CAN2 ENABLE
+# Or listen only: no ACK, no transmit (another tool must be polling)
+BUS CAN CAN1 LISTEN
 
-# Disable CAN input (keep output active)
-BUS CAN INPUT CAN1 DISABLE
+# A bus's rate (most cars 500 kbps; a running bus restarts at once)
+BUS CAN CAN1 BAUDRATE 500000
 
-# Show CAN bus status
+# The OBD-II output on CAN2 (separate from input)
+BUS CAN CAN2 ENABLE
+OUTPUT ADD OBD CAN2
+
+# Stop CAN input (the OBD output keeps its bus)
+BUS CAN CAN1 INPUT DISABLE
+
+# Show each bus: mode, rate, state, and what is attached
 BUS CAN
 ```
+
+Changes apply at once; `SAVE` keeps them. CAN input and the OBD output can
+also share one bus: the bus manager reads it once and hands OBD-II requests
+(`0x7DF`/`0x7E0`) to the OBD output and everything else to CAN input.
 
 ---
 
@@ -152,8 +165,9 @@ SET CAN 0x0F
 Use this when you **don't know what PIDs are available** on the bus.
 
 ```bash
-# Enable CAN input first
-BUS CAN INPUT CAN1 ENABLE
+# CAN input on a running bus first
+BUS CAN CAN1 ENABLE
+BUS CAN CAN1 INPUT ENABLE
 
 # Scan for 15 seconds
 SCAN CAN 15000
@@ -440,8 +454,10 @@ scheme. J1939 decoding is not supported yet.
 CONFIG
 
 # Poll the vehicle ECU on CAN1 (use LISTEN instead if a scan tool is already polling)
-BUS CAN INPUT CAN1 ENABLE 500000   # Requests the imported PIDs from the ECU
-BUS CAN OUTPUT CAN2 ENABLE 500000  # Broadcast to RealDash on CAN2
+BUS CAN CAN1 ENABLE                # 500 kbps by default
+BUS CAN CAN1 INPUT ENABLE          # Requests the imported PIDs from the ECU
+BUS CAN CAN2 ENABLE
+OUTPUT ADD OBD CAN2                # Answer the dash's OBD-II requests on CAN2
 
 # Import CAN sensors from vehicle ECU
 SET CAN 0x0C    # Engine RPM → CAN:0
@@ -501,14 +517,14 @@ Ensure CAN input is enabled and bus is active.
 
 3. **Check baud rate:**
    ```bash
-   BUS CAN INPUT BAUDRATE 500000   # Most vehicles use 500 kbps
-   BUS CAN INPUT BAUDRATE 250000   # Some buses run at 250 kbps
+   BUS CAN CAN1 BAUDRATE 500000    # Most vehicles use 500 kbps
+   BUS CAN CAN1 BAUDRATE 250000    # Some buses run at 250 kbps
    ```
 
-4. **Pick the input mode for what else is on the bus:**
+4. **Pick the bus mode for what else is on the bus:**
    ```bash
-   BUS CAN INPUT CAN1 ENABLE 500000   # preOBD polls the ECU itself
-   BUS CAN INPUT CAN1 LISTEN 500000   # No transmit; another tool must be polling
+   BUS CAN CAN1 ENABLE                # preOBD polls the ECU itself
+   BUS CAN CAN1 LISTEN                # No transmit; another tool must be polling
    ```
 
 5. **Verify vehicle ECU is active:**
@@ -550,19 +566,18 @@ BUS CAN
 SCAN CAN 10000
 ```
 
-### CAN Input and Output Interfere
+### CAN Input and Output on Different Buses
 
-**Symptoms:**
-- Bus errors when both enabled
-- Garbled data
-- Timeouts
-
-**Solution:** Use separate physical CAN buses
+CAN input and the OBD output can share one bus. Use two when they need
+different rates, or when the car's bus must stay listen-only (the OBD
+output transmits, so it is refused on a `LISTEN` bus):
 
 ```bash
-# Input on CAN1, output on CAN2
-BUS CAN INPUT CAN1 ENABLE
-BUS CAN OUTPUT CAN2 ENABLE
+# Input listens on the car's bus (CAN1), OBD answers a dash on CAN2
+BUS CAN CAN1 LISTEN
+BUS CAN CAN1 INPUT ENABLE
+BUS CAN CAN2 ENABLE
+OUTPUT ADD OBD CAN2
 ```
 
 **Hardware:**
@@ -594,7 +609,8 @@ Monitor essential vehicle parameters from ECU:
 
 ```bash
 CONFIG
-BUS CAN INPUT CAN1 ENABLE
+BUS CAN CAN1 ENABLE
+BUS CAN CAN1 INPUT ENABLE
 SET CAN 0x0C    # Engine RPM
 SET CAN 0x0D    # Vehicle Speed
 SET CAN 0x05    # Coolant Temperature
@@ -611,7 +627,8 @@ Combine vehicle ECU sensors with custom sensors:
 CONFIG
 
 # Import from ECU
-BUS CAN INPUT CAN1 ENABLE
+BUS CAN CAN1 ENABLE
+BUS CAN CAN1 INPUT ENABLE
 SET CAN 0x0C    # Engine RPM
 SET CAN 0x0D    # Vehicle Speed
 
@@ -620,9 +637,9 @@ SET A0 OIL_TEMP VDO_150C_STEINHART
 SET A1 OIL_PRESSURE VDO_5BAR_CURVE
 SET 6 EGT MAX6675
 
-# Broadcast everything to dashboard
-BUS CAN OUTPUT CAN2 ENABLE
-OUTPUT 0 ENABLE
+# Answer the dashboard's OBD-II requests on CAN2
+BUS CAN CAN2 ENABLE
+OUTPUT ADD OBD CAN2
 
 SAVE
 RUN
@@ -634,10 +651,12 @@ RUN
 CONFIG
 
 # Read the vehicle bus passively (no ACK, no transmit)
-BUS CAN INPUT CAN1 LISTEN 500000
+BUS CAN CAN1 LISTEN
+BUS CAN CAN1 INPUT ENABLE
 
-# Broadcast to the dashboard on its own bus
-BUS CAN OUTPUT CAN2 ENABLE 500000
+# Answer the dashboard on its own bus
+BUS CAN CAN2 ENABLE
+OUTPUT ADD OBD CAN2
 
 SET CAN 0x0C    # Engine RPM
 SET CAN 0x05    # Coolant Temperature

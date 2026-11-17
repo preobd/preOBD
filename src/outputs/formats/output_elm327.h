@@ -6,13 +6,14 @@
  * to preOBD via a BLE UART module (e.g. HM-10) without an ELM327 adapter.
  *
  * Architecture: output module parallel to output_can.cpp.
- *   output_can.cpp  — owns a CAN bus, responds to OBD-II frames
- *   output_elm327.cpp — owns a serial port, responds to ELM327 ASCII queries
+ *   output_can.cpp  — attached to a CAN bus, responds to OBD-II frames
+ *   output_elm327.cpp — bound to a serial port, responds to ELM327 ASCII queries
  *
- * Configuration (mirrors BUS CAN OUTPUT pattern):
+ * Configuration (output id 4, #612):
  *   BUS SERIAL 2 ENABLE 115200       # bring up the port
- *   BUS SERIAL 2 ELM327 ENABLE       # assign ELM327 role (exclusive)
+ *   OUTPUT ADD ELM327 SERIAL2        # bind ELM327 to it (exclusive), at once
  *   SAVE
+ * ELM327 over BLE (output id 5) is a second instance in elm327_framed.cpp.
  *
  * The port is exclusive to ELM327 — it is not available for
  * MessageRouter CONTROL/DATA/DEBUG plane routing while assigned.
@@ -32,12 +33,11 @@
 class ELM327Output {
 public:
     // routeId: whose route bit decides what it answers (obd_query.h, #612):
-    // the ELM327 output's id for the serial port, OBDQ_ANY_ROUTE for the
-    // built-in over BLE.
+    // OUT_ID_ELM327 for the serial port, OUT_ID_ELM327_BLE over BLE.
     explicit ELM327Output(uint8_t routeId);
 
-    // Assign serial port. Called by BUS SERIAL n ELM327 ENABLE command
-    // and by initELM327() on boot. Pass nullptr to detach.
+    // Assign the stream it answers on: initELM327() for the serial port,
+    // Elm327Framed::init() for BLE. Pass nullptr to detach.
     void setSerial(Stream* serial);
 
     void begin();   // Start listening

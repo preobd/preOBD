@@ -21,8 +21,17 @@ struct PIDMapping {
 
 static PIDMapping pidLookupTable[MAX_PID_ENTRIES];
 static uint8_t    pidLookupCount = 0;
+// A configuration change may have added, removed or re-typed an input (SET
+// <pin> <application> <sensor>, CLEAR, ENABLE ...): the next request rebuilds
+// the table first, so OBD and both ELM327 outputs never answer from a stale
+// one. Set at the CLI's CONFIG gate (command_dispatch.cpp).
+static bool       tableStale = false;
+
+void obdQuery_markStale() { tableStale = true; }
+static inline void freshen() { if (tableStale) obdQuery_buildLookupTable(); }
 
 void obdQuery_buildLookupTable() {
+    tableStale = false;
     pidLookupCount = 0;
 
     for (uint8_t i = 0; i < MAX_INPUTS && pidLookupCount < MAX_PID_ENTRIES; i++) {
@@ -43,12 +52,12 @@ void obdQuery_buildLookupTable() {
 }
 
 // Is this entry published by the responder whose output id is routeId?
-// OBDQ_ANY_ROUTE (ELM327 over BLE, a built-in) takes every input.
 static bool routedTo(const PIDMapping& m, uint8_t routeId) {
-    return routeId == OBDQ_ANY_ROUTE || (m.inputPtr->routeMask & (1u << routeId));
+    return (m.inputPtr->routeMask & (1u << routeId)) != 0;
 }
 
 Input* obdQuery_findByPID(uint8_t pid, uint8_t routeId) {
+    freshen();
     for (uint8_t i = 0; i < pidLookupCount; i++) {
         if (pidLookupTable[i].pid == pid && routedTo(pidLookupTable[i], routeId))
             return pidLookupTable[i].inputPtr;
@@ -57,6 +66,7 @@ Input* obdQuery_findByPID(uint8_t pid, uint8_t routeId) {
 }
 
 void obdQuery_getSupportedPIDBitmap(uint8_t* bitmap, uint8_t baseRange, uint8_t routeId) {
+    freshen();
     memset(bitmap, 0, 4);
     uint16_t rangeStart = (uint16_t)baseRange + 1;
     uint16_t rangeEnd   = (uint16_t)baseRange + 0x20;

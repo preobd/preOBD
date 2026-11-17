@@ -14,7 +14,8 @@
 #endif
 
 static const char* const SCAN_STATE_NAMES[] = {"idle", "listening", "done", "querying"};
-static const char* const INPUT_MODE_NAMES[] = {"OFF", "NORMAL", "LISTEN"};
+static const char* const BUS_MODE_NAMES[] = {"OFF", "NORMAL", "LISTEN"};
+static const char* const BUS_STATE_NAMES[] = {"off", "idle", "up", "waiting", "pinsTaken"};
 static const uint32_t CAN_BAUDRATES[] = {125000, 250000, 500000, 1000000};
 
 FLASHMEM void canScanStatusToJson(const CanScanSnapshot& s, JsonObject out) {
@@ -63,22 +64,27 @@ FLASHMEM JsonArray canBusStatusToJson(const CanBusSnapshot& s, JsonObject out) {
     caps["buses"] = s.buses;
     JsonArray rates = caps["baudrates"].to<JsonArray>();
     for (uint32_t r : CAN_BAUDRATES) rates.add(r);
-    caps["listenShared"] = false;   // BUS refuses a LISTEN input on the output's bus
     caps["maxScanResults"] = s.maxScanResults;
     JsonArray scanMs = caps["scanMs"].to<JsonArray>();
     scanMs.add(1000);
     scanMs.add(60000);
 
+    // One entry per bus this board has (#612 phase 2a)
+    JsonArray buses = out["buses"].to<JsonArray>();
+    for (uint8_t b = 0; b < s.buses && b < 3; b++) {
+        const CanBusEntrySnapshot& e = s.bus[b];
+        JsonObject o = buses.add<JsonObject>();
+        o["bus"] = b;
+        o["mode"] = BUS_MODE_NAMES[e.mode <= 2 ? e.mode : 0];
+        o["baudrate"] = e.baudrate;
+        o["state"] = BUS_STATE_NAMES[e.state <= 4 ? e.state : 0];
+        o["input"] = e.input;
+        o["obd"] = e.obd;
+    }
+
     JsonObject in = out["input"].to<JsonObject>();
     in["bus"] = s.inBus;
-    in["mode"] = INPUT_MODE_NAMES[s.inMode <= 2 ? s.inMode : 0];
-    in["baudrate"] = s.inBaudrate;
     in["running"] = s.inRunning;
-    in["sharedWithOutput"] = s.inShared;
-    // bus/mode/baudrate are the configured values (as in SYSTEM DUMP JSON);
-    // BUS CAN INPUT takes effect on reboot, so they can run ahead of the
-    // hardware until then.
-    in["rebootPending"] = s.rebootPending;
     in["framesRx"] = s.framesRx;
     if (s.haveFrame) in["lastFrameAgeMs"] = s.lastFrameAgeMs;
     else             in["lastFrameAgeMs"] = nullptr;
@@ -89,12 +95,6 @@ FLASHMEM JsonArray canBusStatusToJson(const CanBusSnapshot& s, JsonObject out) {
     poll["requests"] = s.requests;
     poll["answers"] = s.answers;
     poll["txFail"] = s.txFail;
-
-    JsonObject o = out["output"].to<JsonObject>();
-    o["bus"] = s.outBus;
-    o["enabled"] = s.outEnabled;
-    o["module"] = s.outModule;
-    o["baudrate"] = s.outBaudrate;
 
     return out["imports"].to<JsonArray>();
 }

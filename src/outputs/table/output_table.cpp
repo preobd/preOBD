@@ -1,6 +1,6 @@
 /*
  * output_table.cpp - The outputs you add, as a view over systemConfig
- * (#612 phase 1). See output_table.h for why ids are fixed per format.
+ * (#612). See output_table.h for why ids are fixed per format.
  *
  * Dependency-light on purpose (system_config.h only): the native tests
  * build it on its own.
@@ -28,6 +28,7 @@ static const OutputIdInfo ID_INFO[NUM_OUTPUT_IDS] = {
     { FMT_CSV,      OTK_STREAM, OUTPUT_SERIAL   },
     { FMT_CSV,      OTK_SD,     OUTPUT_SD       },
     { FMT_ELM327,   OTK_SERIAL, OUTPUT_ELM327   },
+    { FMT_ELM327,   OTK_BLE,    OUTPUT_ELM327_BLE },
 };
 
 OutputFormat outputFormatOf(uint8_t id) {
@@ -58,6 +59,9 @@ bool outputIdBuilt(uint8_t id) {
 #endif
 #if INCLUDE_ELM327
     case OUT_ID_ELM327:   return true;
+#endif
+#if INCLUDE_ELM327 && INCLUDE_FRAMED_TRANSPORT
+    case OUT_ID_ELM327_BLE: return true;
 #endif
     default:              return false;
     }
@@ -100,8 +104,8 @@ RouteMask outputsExistingMask() {
 uint8_t outputIdFor(OutputFormat format, OutputTransportKind kind) {
     for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
         if (ID_INFO[id].format != format) continue;
-        // CSV is the one format with two ids; the others match on format alone
-        if (format == FMT_CSV && ID_INFO[id].kind != kind) continue;
+        // CSV (stream / SD) and ELM327 (serial port / BLE) have two ids each
+        if ((format == FMT_CSV || format == FMT_ELM327) && ID_INFO[id].kind != kind) continue;
         return id;
     }
     return OUT_ID_NONE;
@@ -113,26 +117,19 @@ void outputMarkAbsent(uint8_t id, bool absent) {
     else        systemConfig.router.outputsAbsent &= (uint8_t)~(1u << id);
 }
 
-void outputsReconcileAbsent() {
-    for (uint8_t id = 0; id < NUM_OUTPUT_IDS; id++) {
-        if ((systemConfig.router.outputsAbsent & (1u << id)) &&
-            systemConfig.outputEnabled[ID_INFO[id].legacySlot]) {
-            outputMarkAbsent(id, false);
-        }
-    }
-}
-
 bool outputTransportKindOk(uint8_t id, const char* tok) {
     if (tok == nullptr || id >= NUM_OUTPUT_IDS) return false;
     const bool none = strcasecmp(tok, "NONE") == 0;
     const bool can  = strncasecmp(tok, "CAN", 3) == 0 && tok[3] >= '1' && tok[3] <= '3' && tok[4] == '\0';
     const bool sd   = strcasecmp(tok, "SD") == 0;
     const bool ser  = strncasecmp(tok, "SERIAL", 6) == 0 && tok[6] >= '1' && tok[6] <= '8' && tok[7] == '\0';
+    const bool ble  = strcasecmp(tok, "BLE") == 0;
     switch (ID_INFO[id].kind) {
     case OTK_CAN:    return can || none;
     case OTK_SERIAL: return ser || none;
     case OTK_SD:     return sd;
-    case OTK_STREAM: return tok[0] != '\0' && !can && !sd && !none;
+    case OTK_BLE:    return ble;
+    case OTK_STREAM: return tok[0] != '\0' && !can && !sd && !none && !ble;
     }
     return false;
 }
@@ -154,10 +151,4 @@ OutputFormat parseOutputFormat(const char* s) {
     if (strcasecmp(s, "OBD") == 0)      return FMT_OBD;
     if (strcasecmp(s, "ELM327") == 0)   return FMT_ELM327;
     return FMT_NONE;
-}
-
-RouteMask routeMaskFromLegacy(uint8_t legacyMask) {
-    RouteMask m = (RouteMask)(legacyMask & 0x0F);
-    if (legacyMask & (1u << OUT_ID_OBD)) m |= (RouteMask)(1u << OUT_ID_ELM327);
-    return m;
 }

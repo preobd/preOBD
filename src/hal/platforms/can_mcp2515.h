@@ -75,6 +75,13 @@ inline bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
     CAN_SPEED speed = detail::baudrateToSpeed(baudrate);
     CAN_CLOCK clock = detail::getClockSpeed();
 
+    // Down until this call succeeds: a failed restart must not leave read()
+    // and write() talking to a chip reset() left in config mode
+    if (bus == 0) detail::bus0Initialized = false;
+    #if defined(CAN_CS_1) && (CAN_CS_1 != 0xFF)
+    if (bus == 1) detail::bus1Initialized = false;
+    #endif
+
     switch (bus) {
         case 0:
             detail::canBus0.reset();
@@ -109,6 +116,11 @@ inline bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
         default:
             return false;  // Invalid bus
     }
+}
+
+// A new rate or mode on a running bus: reset() plus the setup, as begin()
+inline bool restart(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
+    return begin(baudrate, bus, listenOnly);
 }
 
 inline bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t bus = 0) {
@@ -170,15 +182,6 @@ inline bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint
         return true;
     }
     return false;
-}
-
-inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
-    // MCP2515 has complex filter configuration
-    // For simplicity, we'll accept all frames and do software filtering
-    // Full hardware filter support could be added later if needed
-    (void)filter1;
-    (void)filter2;
-    (void)bus;
 }
 
 namespace detail {

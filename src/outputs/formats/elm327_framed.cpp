@@ -16,7 +16,7 @@
 #include "../../transports/transport_mux.h"
 #include "output_elm327.h"
 #include "../table/output_table.h"   // OUT_ID_* route bits (#612)
-#include "obd_query.h"   // OBDQ_ANY_ROUTE (#612)
+#include "../table/output_base.h"   // outputModules[]: the output's live flag
 
 namespace Elm327Framed {
 
@@ -73,6 +73,8 @@ public:
 
     size_t   outPending() const { return outLen - outSent; }
     const uint8_t* outPtr() const { return outBuf + outSent; }
+    // A fresh session: nothing half-read, nothing queued (output 5 enabled again)
+    void     clear() { inLen = inPos = 0; outLen = outSent = 0; }
     void     outConsume(size_t n) {
         outSent += n;
         if (outSent >= outLen) { outSent = 0; outLen = 0; }  // fully drained
@@ -88,7 +90,7 @@ private:
 };
 
 FramedElmStream g_bridge;
-ELM327Output    g_elm(OBDQ_ANY_ROUTE);  // built-in: answers every input with a PID (#612); dedicated instance: per-channel session state, kept
+ELM327Output    g_elm(OUT_ID_ELM327_BLE);  // output id 5 (#612); dedicated instance: per-channel session state, kept
                         // independent of the serial-bound elm327Output singleton
 
 // Largest 0x30 payload we send. MuxTransport::sendFrame refuses a frame
@@ -119,12 +121,18 @@ void drainOut(MuxTransport& out) {
 
 } // namespace
 
+// Also output 5's init (output_manager.cpp): enabling it starts a fresh
+// session, so a half-sent command or an unsent reply from before is dropped
 void init() {
+    g_bridge.clear();
     g_elm.setSerial(&g_bridge);
     g_elm.begin();
 }
 
 void handleInbound(const uint8_t* payload, uint16_t len, MuxTransport& out) {
+    // Output 5 disabled or deleted: the request goes unanswered, as with no
+    // adapter on the far end
+    if (!outputModules[OUTPUT_ELM327_BLE].enabled) return;
     // Flush anything a prior call couldn't send before generating more output,
     // so responses stay in order on the wire.
     drainOut(out);

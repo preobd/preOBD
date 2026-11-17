@@ -36,7 +36,7 @@
 #include "../../src/sensors/application_presets.cpp"
 #include "../../src/inputs/input_manager.cpp"
 #include "../../src/config/input_store.cpp"   // EEPROM persistence, split out by #402 step 2
-#include "../../src/outputs/table/output_table.cpp"   // routeMaskFromLegacy, the outputs view (#612)
+#include "../../src/outputs/table/output_table.cpp"   // the outputs view (#612)
 #include "../../src/inputs/measurement_compat.cpp"  // units check on load (#458)
 #include "../../src/sensors/can_sensor_library/standard_pids.cpp"  // PID table (#509)
 #include "../../src/sensors/can_sensor_library/obd_output_pids.cpp"  // obdLengthFor (#516)

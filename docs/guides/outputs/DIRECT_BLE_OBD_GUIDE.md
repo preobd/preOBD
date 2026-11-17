@@ -66,9 +66,8 @@ Connect to preOBD via USB Serial and run:
 
 ```
 BUS SERIAL 2 ENABLE 9600       # bring up Serial2 at 9600 baud (HM-10 default)
-BUS SERIAL 2 ELM327 ENABLE     # assign ELM327 role to Serial2 (exclusive)
+OUTPUT ADD ELM327 SERIAL2      # output 4: the ELM327 emulator on Serial2 (exclusive), at once
 SAVE
-SYSTEM REBOOT
 ```
 
 Verify the assignment:
@@ -77,12 +76,14 @@ Verify the assignment:
 BUS SERIAL 2
 ```
 
-Expected output includes `ENABLED @ 9600 baud [ELM327]`.
+Expected output includes `ENABLED @ 9600 baud [ELM327]`, and `OUTPUT LIST`
+shows `4: ELM327 on SERIAL2`. The emulator answers only the inputs routed to
+output 4 (a new input is routed to every output; `INFO <pin> ROUTE` shows it).
 
-To disable later:
+To remove it later (the port stays enabled):
 
 ```
-BUS SERIAL 2 ELM327 DISABLE
+OUTPUT DEL 4
 SAVE
 ```
 

@@ -3,7 +3,6 @@
  */
 
 #include "system_config.h"
-#include "../outputs/table/output_table.h"   // outputsReconcileAbsent (#612)
 #include "../core/watchdog.h"
 
 #ifndef FLASHMEM
@@ -209,9 +208,7 @@ void resetSystemConfig(uint8_t keep) {
     #else
     systemConfig.outputEnabled[OUTPUT_ALARM] = 0;
     #endif
-    #if INCLUDE_RELAY_OUTPUT
-    systemConfig.outputEnabled[OUTPUT_RELAY] = 1;     // ON - user-configured relay control
-    #endif
+    systemConfig.outputEnabled[OUTPUT_ELM327_BLE] = 1;  // ON - phone OBD apps over the nRF (#612)
 
     // Display defaults.
     //
@@ -285,29 +282,21 @@ void resetSystemConfig(uint8_t keep) {
     systemConfig.buses.active_spi = 0xFF;  // NONE — not initialized until explicitly selected
     systemConfig.buses.spi_clock = DEFAULT_SPI_CLOCK;
 
-    // CAN configuration.
-    //
-    // Output used to default ON (output_can_bus = DEFAULT_CAN_BUS, bus 0) on
-    // every board unconditionally — an INFERENCE that a transceiver is
-    // attached (#377). On teensy40 that claimed pins 22/23 for CAN1 with
-    // nothing wired there, losing two analog pins to a guess. Now it is earned
-    // by a build-time CAN_WIRED_BUS declaration (boards/<board>/wiring.ini or
-    // board.h for a purpose-built PCB) — same rule as I2C/SPI (bus_wiring.h).
-    // A declaration GRANTS PERMISSION; `BUS CAN <n>` still overrides it either
-    // way. This is a DEFAULTS-only change (no BusConfig layout change), so no
-    // EEPROM version bump: a board with a stored config keeps whatever it has;
-    // only fresh boards and SYSTEM RESET see the new default.
-    systemConfig.buses.input_can_bus = 0xFF;  // Disabled by default
+    // CAN: one set of settings per bus (#612 phase 2a). The wired bus
+    // (CAN_WIRED_BUS, wiring.ini) is on at 500k with the OBD output on it;
+    // nothing is assumed about an unwired bus (#377). A bus that is on starts
+    // only when something attaches, so this alone never ACKs on a car's bus.
+    for (uint8_t b = 0; b < CAN_BUS_SLOTS; b++) {
+        systemConfig.buses.can[b].mode = CAN_BUS_OFF;
+        systemConfig.buses.can[b].baudIndex = CAN_BAUD_500K;
+    }
+    systemConfig.buses.canInputBus = 0xFF;
 #if BUS_WIRED_CAN_ID != 0xFF
-    systemConfig.buses.output_can_bus = BUS_WIRED_CAN_ID;
-    systemConfig.buses.can_output_enabled = 1;   // today's behavior, now earned
+    systemConfig.buses.can[BUS_WIRED_CAN_ID].mode = CAN_BUS_NORMAL;
+    systemConfig.buses.obdBus = BUS_WIRED_CAN_ID;
 #else
-    systemConfig.buses.output_can_bus = 0xFF;
-    systemConfig.buses.can_output_enabled = 0;
+    systemConfig.buses.obdBus = 0xFF;
 #endif
-    systemConfig.buses.can_input_baudrate = DEFAULT_CAN_BAUDRATE;
-    systemConfig.buses.can_output_baudrate = DEFAULT_CAN_BAUDRATE;
-    systemConfig.buses.can_input_mode = CAN_INPUT_OFF;  // Disabled by default
     systemConfig.buses.elm327_serial_port = 0xFF;  // Disabled by default
     }  // RESET_KEEP_HARDWARE (buses)
 
@@ -632,9 +621,9 @@ FLASHMEM void registerSystemPins(uint8_t busNeeds) {
     // CAN_WIRED_BUS is deliberately NOT reserved here: unlike I2C/SPI, CAN has
     // no resolveWiredBusId() fallback bring-up path (acquireI2C()/acquireSPI()
     // have one, there is no acquireCAN() equivalent) — the declaration is
-    // informational only (BUS CAN STATUS) until something explicitly selects
-    // input_can_bus/output_can_bus. Reserving it here would claim pins for a
-    // permission nothing has a mechanism to exercise.
+    // the default it seeds (the wired bus on, OBD on it) until a consumer
+    // attaches. Reserving it here would claim pins for a permission nothing
+    // has a mechanism to exercise.
 }
 
 /**
@@ -669,8 +658,6 @@ bool loadSystemConfig() {
 
     // Valid config - copy to global
     memcpy(&systemConfig, &temp, sizeof(SystemConfig));
-    // An output deleted here that an older build switched back on (#612)
-    outputsReconcileAbsent();
     // An EEPROM written before #590 could hold any 0x03-0x77 LCD address.
     // Correct it here, once, so the driver, DISPLAY STATUS, DIAG HW and JSON
     // export all see the address that is actually used.

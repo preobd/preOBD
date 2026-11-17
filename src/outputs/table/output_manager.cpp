@@ -21,9 +21,8 @@ static_assert(OUTPUT_CAN == 0 && OUTPUT_REALDASH == 1 &&
 
 // Declare external functions from output modules
 extern void initCAN();
+extern void stopCAN();
 extern void updateCAN();
-extern bool canOutputBusStarted();
-extern bool canOutputConfigured();
 
 extern void initRealdash();
 extern void sendRealdash(Input*);
@@ -40,16 +39,17 @@ extern void initAlarmOutput();
 extern void updateAlarmOutput();
 extern void stopAlarmOutput();
 
-// Relay output module removed: a relay is now a control-engine Action of type
-// RELAY, driven by rulesActionsUpdate() in the main loop (not an output
-// module). The OUTPUT_RELAY slot below stays nullptr for EEPROM index
-// stability (OutputID enum / outputEnabled[]).
-
+#if INCLUDE_FRAMED_TRANSPORT && INCLUDE_ELM327
+#include "../formats/elm327_framed.h"
+// Output 5's init: a fresh ELM327 session over BLE
+static void initELM327Ble() { Elm327Framed::init(); }
+#endif
 #if INCLUDE_ELM327
 extern void initELM327();
 extern void updateELM327();
 extern void stopELM327();
 extern void noteELM327PortState();
+extern uint8_t elm327BoundPort();
 #endif
 
 // Define output modules array - always compiled, controlled by runtime flags.
@@ -69,7 +69,13 @@ OutputModule outputModules[] = {
 #endif
     // Alarm: updateAlarmOutput() scans every input each loop (#608)
     {"Alarm",   true,  initAlarmOutput,   nullptr,           updateAlarmOutput},
-    {nullptr,   false, nullptr,           nullptr,           nullptr},  // OUTPUT_RELAY slot retired (control-engine Actions)
+#if INCLUDE_FRAMED_TRANSPORT && INCLUDE_ELM327
+    // ELM327 over BLE (#612 phase 2a): answers 0x30 frames from the nRF as
+    // they arrive (elm327_framed.cpp checks this entry's live flag)
+    {"ELM327_BLE", false, initELM327Ble,  nullptr,           nullptr},
+#else
+    {nullptr,   false, nullptr,           nullptr,           nullptr},
+#endif
 #if INCLUDE_ELM327
     // Pull-based: the phone asks, updateELM327() answers (#608)
     {"ELM327",  false, initELM327,        nullptr,           updateELM327},
@@ -84,12 +90,12 @@ const int numOutputModules = 7;
 // Track last send time for each output module
 static uint32_t lastOutputSend[sizeof(outputModules) / sizeof(outputModules[0])];
 
-// A module slot's output id (#612 phase 1): slots 0-3 are ids 0-3, ELM327's
-// slot 6 is id 4. Alarm is a built-in output (no id), and so is the retired
-// RELAY slot.
+// A module slot's output id (#612): slots 0-3 are ids 0-3, ELM327's slot 6
+// is id 4, ELM327 over BLE's slot 5 is id 5. Alarm is a built-in output (no id).
 static uint8_t idOfSlot(int slot) {
     if (slot <= OUTPUT_SD) return (uint8_t)slot;
     if (slot == OUTPUT_ELM327) return OUT_ID_ELM327;
+    if (slot == OUTPUT_ELM327_BLE) return OUT_ID_ELM327_BLE;
     return OUT_ID_NONE;
 }
 
@@ -196,6 +202,10 @@ static FLASHMEM void applyOutputEnabled(int index, bool enabled) {
     // Teardown on disable is called directly rather than through a per-module
     // deinit hook: a function pointer on every OutputModule costs 14 bytes of
     // SRAM on the mega, which has 182 bytes free.
+#if INCLUDE_CAN
+    // Detach from the bus; it keeps running for CAN input
+    if (index == OUTPUT_CAN) stopCAN();
+#endif
 #if INCLUDE_SD_LOGGING
     // Close the log file, or it stays open and unflushed for the session.
     if (index == OUTPUT_SD) closeSDLog();
@@ -204,7 +214,7 @@ static FLASHMEM void applyOutputEnabled(int index, bool enabled) {
     // once updateAlarmOutput() stops running (#610).
     if (index == OUTPUT_ALARM) stopAlarmOutput();
 #if INCLUDE_ELM327
-    // Unbind from the port, as BUS SERIAL <n> ELM327 DISABLE does.
+    // Unbind from its serial port
     if (index == OUTPUT_ELM327) stopELM327();
 #endif
 }
@@ -223,35 +233,30 @@ bool setOutputEnabled(const char* name, bool enabled) {
     return true;
 }
 
-FLASHMEM bool canOutputPendingReboot() {
-    return !outputModules[OUTPUT_CAN].enabled && slotWanted(OUTPUT_CAN) &&
-           canOutputConfigured();
-}
-
+// After a JSON IMPORT or LOAD: every output to the state the config asks for,
+// at once (#610). An output that stays on but whose transport changed (OBD to
+// another CAN bus, ELM327 to another serial port) is re-attached.
 FLASHMEM void syncOutputsToConfig() {
     for (int i = 0; i < numOutputModules; i++) {
         if (outputModules[i].name == nullptr) continue;  // not in this build
         const bool want = slotWanted(i);
-        if (outputModules[i].enabled == want) continue;
-        // CAN buses are brought up at boot from this config: starting CAN
-        // output now would re-begin a bus CAN input set up (its mode, baud and
-        // filters). If initCAN() already started it this session, turning it
-        // back on is just the flag; otherwise it starts at the next reboot,
-        // says so, and OUTPUT LIST shows it pending. Stopping touches no bus.
-        if (want && i == OUTPUT_CAN) {
-            if (canOutputBusStarted()) {
-                outputModules[i].enabled = true;
-            } else if (canOutputPendingReboot()) {
-                // Like the import's serial NOTE: nothing is saved until SAVE
-                msg.control.println(F("NOTE: CAN output turns on after SAVE and a reboot"));
-            }
+        if (outputModules[i].enabled != want) {
+            applyOutputEnabled(i, want);
+#if INCLUDE_ELM327
+            // initELM327() skips a port that isn't running yet, so say so
+            if (want && i == OUTPUT_ELM327) noteELM327PortState();
+#endif
             continue;
         }
-        applyOutputEnabled(i, want);
+        if (!want) continue;
+#if INCLUDE_CAN
+        if (i == OUTPUT_CAN && canOutputAttachedBus() != systemConfig.buses.obdBus) initCAN();
+#endif
 #if INCLUDE_ELM327
-        // initELM327() quietly skips a port that isn't running yet (one this
-        // same import enabled waits for the reboot), so say so
-        if (want && i == OUTPUT_ELM327) noteELM327PortState();
+        if (i == OUTPUT_ELM327 && elm327BoundPort() != systemConfig.buses.elm327_serial_port) {
+            initELM327();
+            noteELM327PortState();
+        }
 #endif
     }
 }
@@ -269,7 +274,7 @@ bool setOutputInterval(uint8_t outputId, long interval) {
     return true;
 }
 
-// ===== The outputs you add, by id (#612 phase 1) =====
+// ===== The outputs you add, by id (#612) =====
 // The table itself is output_table.cpp (a view over systemConfig); these are
 // the parts that start and stop the modules behind it.
 
@@ -337,7 +342,7 @@ FLASHMEM size_t outputTransportText(uint8_t id, char* buf, size_t n) {
     buf[0] = '\0';
     switch (outputKindOf(id)) {
     case OTK_CAN: {
-        const uint8_t bus = systemConfig.buses.output_can_bus;
+        const uint8_t bus = systemConfig.buses.obdBus;
         if (bus == 0xFF) snprintf(buf, n, "NONE");
         else             snprintf(buf, n, "CAN%u", (unsigned)(bus + 1));
         break;
@@ -360,6 +365,10 @@ FLASHMEM size_t outputTransportText(uint8_t id, char* buf, size_t n) {
         else                           snprintf(buf, n, "SERIAL%u", (unsigned)port);
         break;
     }
+    case OTK_BLE:
+        // The phone-facing channel of the framed nRF link
+        snprintf(buf, n, "BLE");
+        break;
     }
     return strlen(buf);
 }
@@ -378,10 +387,9 @@ static FLASHMEM void printOutputLine(uint8_t id) {
     msg.control.print(F(": "));
     printOutputLabel(id);
     msg.control.print(F(" - "));
-    if (id == OUT_ID_OBD && canOutputPendingReboot()) {
-        msg.control.print(F("disabled (on after SAVE and reboot)"));
-    } else {
-        msg.control.print(outputIsEnabled(id) ? F("enabled") : F("disabled"));
+    msg.control.print(outputIsEnabled(id) ? F("enabled") : F("disabled"));
+    if (outputKindOf(id) == OTK_BLE && !systemConfig.serial.framed_enabled_mask) {
+        msg.control.print(F(" (no framed port: BUS SERIAL <n> FRAMED ENABLE)"));
     }
     if (outputTakesIntervalId(id)) {
         msg.control.print(F(", interval "));
@@ -412,9 +420,6 @@ FLASHMEM void listOutputTable() {
 #endif
 #if INCLUDE_FRAMED_TRANSPORT
     msg.control.println(F("  App link (BLE)"));
-#if INCLUDE_ELM327
-    msg.control.println(F("  ELM327 over BLE - answers every input with a PID"));
-#endif
 #endif
 }
 

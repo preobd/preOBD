@@ -52,6 +52,11 @@ inline bool begin(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
     return ESP32Can.begin();
 }
 
+// The library's begin() ends and reinstalls the driver, so a restart is a begin
+inline bool restart(uint32_t baudrate, uint8_t bus = 0, bool listenOnly = false) {
+    return begin(baudrate, bus, listenOnly);
+}
+
 inline bool write(uint32_t id, const uint8_t* data, uint8_t len, bool extended, uint8_t bus = 0) {
     // ESP32 only supports a single CAN bus
     if (bus != 0) return false;
@@ -78,16 +83,6 @@ inline bool read(uint32_t& id, uint8_t* data, uint8_t& len, bool& extended, uint
         return true;
     }
     return false;
-}
-
-inline void setFilters(uint32_t filter1, uint32_t filter2, uint8_t bus = 0) {
-    // ESP32 only supports a single CAN bus
-    if (bus != 0) return;
-
-    // ESP32 TWAI filtering is more complex - software filtering recommended
-    // Hardware acceptance filter can be configured via ESP32Can if needed
-    (void)filter1;
-    (void)filter2;
 }
 
 /**

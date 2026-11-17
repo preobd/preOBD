@@ -447,7 +447,12 @@ static int loadConfigFromEEPROM() {
 
     // The loaded outputEnabled[] reaches the live outputs, as a JSON IMPORT's
     // does (#610): an OUTPUT ENABLE that was never SAVEd is undone here.
-    if (sysOk) syncOutputsToConfig();
+    if (sysOk) {
+#if INCLUDE_CAN
+        syncCanToConfig();   // buses first, so OBD attaches to the loaded mode (#612)
+#endif
+        syncOutputsToConfig();
+    }
 
     if (inputsOk && sysOk) {
         msg.control.println(F("Configuration loaded"));
@@ -874,10 +879,7 @@ int cmd_transport(int argc, const char* const* argv) {
         if (systemConfig.buses.elm327_serial_port == port_id) {
             msg.control.print(F("ERROR: Serial"));
             msg.control.print(port_id);
-            msg.control.println(F(" is owned by ELM327"));
-            msg.control.print(F("  Run: BUS SERIAL "));
-            msg.control.print(port_id);
-            msg.control.println(F(" ELM327 DISABLE first"));
+            msg.control.println(F(" is owned by ELM327: OUTPUT DEL 4 first"));
             return 1;
         }
     }
@@ -1496,18 +1498,10 @@ int cmd_scan(int argc, const char* const* argv) {
             duration = (uint16_t)ms;
         }
 
-        // Check if CAN input is enabled
-        if (systemConfig.buses.can_input_mode == CAN_INPUT_OFF) {
-            msg.control.println(F("ERROR: CAN input not enabled"));
-            msg.control.println(F("  Use 'BUS CAN INPUT CAN1 ENABLE' or 'BUS CAN INPUT CAN1 LISTEN' first"));
-            return 1;
-        }
-        // ...and actually running: BUS CAN INPUT takes effect on reboot, so
-        // an input enabled since boot would scan its whole window and find
-        // nothing, with no error (#510 review)
+        // CAN input attached to a running bus (BUS CAN shows why not)
         if (!canInputIsRunning()) {
             msg.control.println(F("ERROR: CAN input is not running"));
-            msg.control.println(F("  SAVE and reboot after 'BUS CAN INPUT ...' to start it"));
+            msg.control.println(F("  Use 'BUS CAN CAN1 ENABLE' and 'BUS CAN CAN1 INPUT ENABLE' first; BUS CAN shows each bus"));
             return 1;
         }
 
@@ -1524,16 +1518,10 @@ int cmd_scan(int argc, const char* const* argv) {
             return 1;
         }
 #if SUPPORTS_JSON_EXPORT
-        if (systemConfig.buses.can_input_mode != CAN_INPUT_NORMAL) {
-            msg.control.println(F("ERROR: SCAN PIDS needs CAN input in ENABLE mode"));
-            msg.control.println(F("  It sends requests to the ECU; LISTEN never transmits."));
-            msg.control.println(F("  Use SCAN CAN to listen, or 'BUS CAN INPUT CAN1 ENABLE' first"));
-            return 1;
-        }
         if (!canInputRunsNormal()) {
-            // Configured ENABLE but not running, or still in its boot mode
-            msg.control.println(F("ERROR: CAN input is not running in ENABLE mode yet"));
-            msg.control.println(F("  SAVE and reboot after 'BUS CAN INPUT ...' to apply it"));
+            msg.control.println(F("ERROR: SCAN PIDS needs CAN input on a running ENABLE bus"));
+            msg.control.println(F("  It sends requests to the ECU; LISTEN never transmits."));
+            msg.control.println(F("  Use SCAN CAN to listen, or 'BUS CAN CAN1 ENABLE' + 'BUS CAN CAN1 INPUT ENABLE'"));
             return 1;
         }
         startCANPidScan(quiet);
