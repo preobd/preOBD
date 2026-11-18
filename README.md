@@ -109,6 +109,13 @@ explains how the code is organised.
 When asking for help, include your board, the output of `VERSION`, `SYSTEM DUMP`
 and `SYSTEM DIAG`, and what you've already tried. See [Troubleshooting](docs/TROUBLESHOOTING.md).
 
+## Projects Built on preOBD
+
+- [OMOBD](https://github.com/maxhayim/OMOBD) — preOBD for classic Mercedes-Benz
+  OM diesel engines (OM617 first): ESP32-S3 Wi-Fi browser dashboard,
+  calculated boost/vacuum and engine hours, and OM engine profiles.
+  Non-commercial, under preOBD's licence.
+
 ## License
 
 preOBD is licensed under a custom **MIT + NonCommercial License**.
